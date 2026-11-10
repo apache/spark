@@ -17,32 +17,25 @@
 
 package org.apache.spark.sql.catalyst.expressions.ml
 
+import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.analysis.TypeCheckResult
 import org.apache.spark.sql.catalyst.analysis.TypeCheckResult.DataTypeMismatch
-import org.apache.spark.sql.catalyst.expressions.{Expression, TernaryExpression, UnsafeArrayData}
+import org.apache.spark.sql.catalyst.expressions.{Expression, UnaryExpression, UnsafeArrayData}
 import org.apache.spark.sql.catalyst.expressions.Cast._
 import org.apache.spark.sql.catalyst.expressions.codegen.{CodegenContext, CodeGenerator, ExprCode}
-import org.apache.spark.sql.catalyst.util.ArrayData
 import org.apache.spark.sql.types._
 
 /**
- * Expands a sparse MLlib vector's size, indices, and values into a dense array of doubles or
- * floats. This expression is dedicated only for Spark ML. The indices and values arrays must
- * have non-null elements. Null inputs produce a null result.
+ * Expands the SQL struct representation of a sparse MLlib vector into a dense array of doubles
+ * or floats. This expression is dedicated only for Spark ML and can be used with `unwrap_udt`.
+ * The input must match the vector SQL schema, including field and array element nullability.
+ * A null vector, size, indices, or values field produces a null result.
  */
-case class SparseVectorToArray(
-    size: Expression,
-    indices: Expression,
-    values: Expression,
-    elementType: DataType)
-  extends TernaryExpression {
+case class SparseVectorToArray(child: Expression, elementType: DataType)
+  extends UnaryExpression {
 
   require(elementType == DoubleType || elementType == FloatType,
     "SparseVectorToArray requires a double or float element type.")
-
-  override def first: Expression = size
-  override def second: Expression = indices
-  override def third: Expression = values
 
   override def nullIntolerant: Boolean = true
 
@@ -50,30 +43,31 @@ case class SparseVectorToArray(
 
   override def dataType: DataType = ArrayType(elementType, containsNull = false)
 
+  // The sparse vector fields are nullable in the vector SQL schema.
+  override def nullable: Boolean = true
+
   override def checkInputDataTypes(): TypeCheckResult = {
-    val inputTypes = Seq(
-      IntegerType,
-      ArrayType(IntegerType, containsNull = false),
-      ArrayType(DoubleType, containsNull = false))
-    children.zip(inputTypes).zipWithIndex.collectFirst {
-      case ((input, expected), index) if input.dataType != expected =>
-        DataTypeMismatch(
-          errorSubClass = "UNEXPECTED_INPUT_TYPE",
-          messageParameters = Map(
-            "paramIndex" -> ordinalNumber(index),
-            "requiredType" -> toSQLType(expected),
-            "inputSql" -> toSQLExpr(input),
-            "inputType" -> toSQLType(input.dataType)))
-    }.getOrElse(TypeCheckResult.TypeCheckSuccess)
+    if (child.dataType == VectorScaleShift.vectorSqlType) {
+      TypeCheckResult.TypeCheckSuccess
+    } else {
+      DataTypeMismatch(
+        errorSubClass = "UNEXPECTED_INPUT_TYPE",
+        messageParameters = Map(
+          "paramIndex" -> ordinalNumber(0),
+          "requiredType" -> toSQLType(VectorScaleShift.vectorSqlType),
+          "inputSql" -> toSQLExpr(child),
+          "inputType" -> toSQLType(child.dataType)))
+    }
   }
 
-  override protected def nullSafeEval(
-      sizeInput: Any,
-      indicesInput: Any,
-      valuesInput: Any): Any = {
-    val vectorSize = sizeInput.asInstanceOf[Int]
-    val vectorIndices = indicesInput.asInstanceOf[ArrayData]
-    val vectorValues = valuesInput.asInstanceOf[ArrayData]
+  override protected def nullSafeEval(input: Any): Any = {
+    val vector = input.asInstanceOf[InternalRow]
+    if (vector.isNullAt(1) || vector.isNullAt(2) || vector.isNullAt(3)) {
+      return null
+    }
+    val vectorSize = vector.getInt(1)
+    val vectorIndices = vector.getArray(2)
+    val vectorValues = vector.getArray(3)
     if (elementType == FloatType) {
       val result = new Array[Float](vectorSize)
       var i = 0
@@ -95,24 +89,30 @@ case class SparseVectorToArray(
 
   override protected def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
     val javaType = CodeGenerator.javaType(elementType)
+    val vectorSize = ctx.freshName("vectorSize")
+    val vectorIndices = ctx.freshName("vectorIndices")
+    val vectorValues = ctx.freshName("vectorValues")
     val result = ctx.freshName("result")
     val index = ctx.freshName("index")
     val unsafeArrayData = classOf[UnsafeArrayData].getName
-    nullSafeCodeGen(ctx, ev, (sizeInput, indicesInput, valuesInput) => {
+    nullSafeCodeGen(ctx, ev, vector => {
       s"""
-         |$javaType[] $result = new $javaType[$sizeInput];
-         |for (int $index = 0; $index < $indicesInput.numElements(); $index++) {
-         |  $result[$indicesInput.getInt($index)] = ($javaType) $valuesInput.getDouble($index);
+         |${ev.isNull} = $vector.isNullAt(1) || $vector.isNullAt(2) || $vector.isNullAt(3);
+         |if (!${ev.isNull}) {
+         |  int $vectorSize = $vector.getInt(1);
+         |  ArrayData $vectorIndices = $vector.getArray(2);
+         |  ArrayData $vectorValues = $vector.getArray(3);
+         |  $javaType[] $result = new $javaType[$vectorSize];
+         |  for (int $index = 0; $index < $vectorIndices.numElements(); $index++) {
+         |    $result[$vectorIndices.getInt($index)] = ($javaType) $vectorValues.getDouble($index);
+         |  }
+         |  ${ev.value} = $unsafeArrayData.fromPrimitiveArray($result);
          |}
-         |${ev.value} = $unsafeArrayData.fromPrimitiveArray($result);
        """.stripMargin
     })
   }
 
-  override protected def withNewChildrenInternal(
-      newSize: Expression,
-      newIndices: Expression,
-      newValues: Expression): SparseVectorToArray = {
-    copy(size = newSize, indices = newIndices, values = newValues)
+  override protected def withNewChildInternal(newChild: Expression): SparseVectorToArray = {
+    copy(child = newChild)
   }
 }
