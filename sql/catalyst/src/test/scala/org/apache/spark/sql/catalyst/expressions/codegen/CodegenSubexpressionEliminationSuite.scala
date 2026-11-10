@@ -82,6 +82,27 @@ class CodegenSubexpressionEliminationSuite extends SparkFunSuite with SQLHelper 
     }
   }
 
+  test("SPARK-60332: GeneratePredicate evaluates a common subexpression that one conjunct " +
+      "repeats after the conjuncts before it") {
+    // `Not(leaf)` is repeated only by the second conjunct, and evaluated just before it, so a
+    // FALSE first conjunct stops the evaluation of `leaf`, as `And.eval` does.
+    Seq(true, false).foreach { useSubexprElimination =>
+      Seq((false, 0, false), (true, 1, true), (null, 1, false)).foreach {
+        case (first, leafEvaluations, result) =>
+          val leaf = ExprWithEvaluatedState(id = 1)
+          val cond = And(ExprWithEvaluatedState(first, isNullable = first == null),
+            EqualTo(Not(leaf), Not(leaf)))
+          val instance = GeneratePredicate.generate(cond, useSubexprElimination)
+          instance.initialize(0)
+          withClue(s"useSubexprElimination = $useSubexprElimination, first = $first: ") {
+            assert(instance.eval(null) === result)
+            val expected = if (useSubexprElimination) leafEvaluations else 2 * leafEvaluations
+            assert(leaf.evaluations === expected)
+          }
+      }
+    }
+  }
+
   test("SPARK-60332: GeneratePredicate evaluates nested common subexpressions in the order of " +
       "the conjuncts that first reference them") {
     // The nested ANDs flatten into the conjuncts `first, inner, inner, outer, outer`, so
