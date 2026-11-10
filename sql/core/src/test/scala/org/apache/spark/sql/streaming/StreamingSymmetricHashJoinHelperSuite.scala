@@ -22,7 +22,7 @@ import org.apache.spark.sql.catalyst.expressions.{AttributeReference, Literal}
 import org.apache.spark.sql.catalyst.plans.logical.EventTimeWatermark
 import org.apache.spark.sql.execution.LocalTableScanExec
 import org.apache.spark.sql.execution.streaming.operators.stateful.join.StreamingSymmetricHashJoinHelper
-import org.apache.spark.sql.execution.streaming.operators.stateful.join.StreamingSymmetricHashJoinHelper.{JoinConditionSplitPredicates, JoinStateKeyWatermarkPredicate}
+import org.apache.spark.sql.execution.streaming.operators.stateful.join.StreamingSymmetricHashJoinHelper.{JoinConditionSplitPredicates, JoinStateKeyWatermarkPredicate, JoinStateValueWatermarkPredicate}
 import org.apache.spark.sql.types._
 
 class StreamingSymmetricHashJoinHelperSuite extends StreamTest {
@@ -152,6 +152,29 @@ class StreamingSymmetricHashJoinHelperSuite extends StreamTest {
         case JoinStateKeyWatermarkPredicate(_, 20000L, previous) => previous == expectedPrevious
         case _ => false
       })
+    }
+  }
+  for (boundEventTime <- Seq(false, true)) {
+    test(s"range eviction keeps the bounded column, event-time bound=$boundEventTime") {
+      val watermark = new MetadataBuilder().putLong(EventTimeWatermark.delayKey, 1000L).build()
+      val start = AttributeReference("start", TimestampType, metadata = watermark)()
+      val expiry = AttributeReference("expiry", TimestampType)()
+      val time = AttributeReference("time", TimestampType, metadata = watermark)()
+      val range = time >= start && time <= expiry
+      val condition = Some(if (boundEventTime) range && time <= start else range)
+      val predicates = StreamingSymmetricHashJoinHelper.getStateWatermarkPredicates(
+        Seq(start, expiry), Seq(time), Seq(leftAttributeA), Seq(rightAttributeC), condition,
+        Some(340000L), Some(100000L), false)
+      val expectedAttribute = if (boundEventTime) start else expiry
+      val predicate = predicates.left.get.asInstanceOf[JoinStateValueWatermarkPredicate]
+      assert(predicate.expr.references.toSeq == Seq(expectedAttribute))
+      assert(predicate.stateWatermark == 339999L)
+      assert(predicate.prevStateWatermark ==
+        (if (boundEventTime) Some(99999L) else None))
+      val (outputBound, _) = StreamingSymmetricHashJoinHelper.getStateWatermark(
+        Seq(start, expiry), Seq(time), Seq(leftAttributeA), Seq(rightAttributeC), condition,
+        Some(340000L), false)
+      assert(outputBound.contains(if (boundEventTime) 339999L else 0L))
     }
   }
 }

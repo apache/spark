@@ -8165,6 +8165,13 @@
     ],
     "sqlState" : "55019"
   },
+  "STREAMING_JOIN_CHECKPOINT_INCOMPATIBLE" : {
+    "message" : [
+      "Cannot reuse the checkpoint for the stream-stream join with condition <joinCondition>. Watermarked columns: left [<leftWatermarkColumns>], right [<rightWatermarkColumns>].",
+      "This Spark version changes how watermarks determine which rows can still match. Spark cannot verify that rows saved by the previous version can be reused safely for this join. Start the query with a new checkpoint and replay the required input, accounting for previously written results to avoid duplicates and correct any missing or incorrect output."
+    ],
+    "sqlState" : "0A000"
+  },
   "STREAMING_OUTPUT_MODE" : {
     "message" : [
       "Invalid streaming output mode: <outputMode>."

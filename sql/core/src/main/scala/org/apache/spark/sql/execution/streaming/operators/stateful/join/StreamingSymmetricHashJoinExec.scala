@@ -28,6 +28,7 @@ import org.apache.spark.sql.catalyst.analysis.StreamingJoinHelper
 import org.apache.spark.sql.catalyst.analysis.WidenStatefulOpNullability
 import org.apache.spark.sql.catalyst.expressions.{Attribute, AttributeSet, Expression, GenericInternalRow, JoinedRow, Literal, Predicate, UnsafeProjection, UnsafeRow}
 import org.apache.spark.sql.catalyst.plans._
+import org.apache.spark.sql.catalyst.plans.logical.EventTimeWatermark
 import org.apache.spark.sql.catalyst.plans.physical._
 import org.apache.spark.sql.catalyst.streaming.InternalOutputModes
 import org.apache.spark.sql.catalyst.types.DataTypeUtils
@@ -697,7 +698,12 @@ case class StreamingSymmetricHashJoinExec(
       stateFormatVersion = stateFormatVersion,
       skippedNullValueCount = skippedNullValueCount,
       joinStoreGenerator = joinStateManagerStoreGenerator,
-      joinKeyOrdinalForWatermark = joinKeyOrdinalForWatermark)
+      joinKeyOrdinalForWatermark = joinKeyOrdinalForWatermark,
+      // The predicate can constrain either the event-time column or another timestamp column.
+      stateValueWatermarkColumnOrdinal = stateWatermarkPredicate.collect {
+        case p: JoinStateValueWatermarkPredicate =>
+          inputAttributes.indexWhere(p.expr.references.contains)
+      })
 
     private[this] val keyGenerator = UnsafeProjection.create(joinKeys, inputAttributes)
 
@@ -726,12 +732,53 @@ case class StreamingSymmetricHashJoinExec(
     // offsets from the join condition using getStateValueWatermark(eventWatermark=0).
     // The -1 eviction adjustment widens range by ~1ms/side; postJoinFilter handles exact bounds.
     private[this] val scanRangeOffsets: Option[(Long, Long)] = {
+      // A row on this side probes the other side's state for the window
+      //   [thisEventTime + lowerOffset, thisEventTime + upperOffset]
+      // on the other side's event time. In V4, each side's timestamp index stores the column its
+      // own value-eviction predicate constrains, or its event-time column if it has no such
+      // predicate. The window can only select rows from an index on the event-time column.
+      //
+      // So a range scan requires both of the following:
+      // - isV4TimeIntervalJoin: V4 state, and this side evicts by value. An event-time equality
+      //   key makes both sides evict by key instead, so those joins never range scan.
+      // - indexesEventTimeColumns: no side indexes a column other than its event time. Each side
+      //   either has no value-eviction predicate, or its predicate constrains only its own
+      //   event-time column. This joiner probes only the other side's index; checking both
+      //   sides keeps the check identical for the two joiners.
+      //
+      // Examples, where leftTime and rightTime are the event-time columns and expiry is another
+      // timestamp column of the left input:
+      // - rightTime BETWEEN leftTime AND leftTime + INTERVAL 10 MINUTES: both sides evict on
+      //   their event-time columns, so both checks pass. A left row probes right rows with
+      //   rightTime in [leftTime, leftTime + 10 minutes], and a right row probes left rows with
+      //   leftTime in [rightTime - 10 minutes, rightTime].
+      // - rightTime <= leftTime + INTERVAL 10 MINUTES: the left side evicts on leftTime. The
+      //   right side has no value-eviction predicate, because a later left row can still match
+      //   any buffered right row, so its index falls back to rightTime. Both checks pass for
+      //   the left joiner. The condition gives only one bound, so the extraction below returns
+      //   None and the left joiner still reads all right rows for the key.
+      // - rightTime BETWEEN leftTime AND expiry: there is no cutoff on leftTime, because a later
+      //   right row can still match any buffered left row. The left side evicts on expiry
+      //   instead, so its index is ordered by expiry. A window on leftTime cannot select rows
+      //   from that index, so indexesEventTimeColumns is false and each joiner reads all rows
+      //   of the other side for the key.
       val isV4TimeIntervalJoin = stateFormatVersion >= 4 && (stateWatermarkPredicate match {
         case Some(_: JoinStateValueWatermarkPredicate) => true
         case _ => false
       })
 
-      if (!isV4TimeIntervalJoin) {
+      val indexesEventTimeColumns = Seq(
+        (stateWatermarkPredicates.left, left.output),
+        (stateWatermarkPredicates.right, right.output)).forall {
+        case (Some(p: JoinStateValueWatermarkPredicate), attributes) =>
+          attributes.find(_.metadata.contains(EventTimeWatermark.delayKey)).exists { eventTime =>
+            p.expr.references.forall(_.semanticEquals(eventTime))
+          }
+        // No value-eviction predicate: the index falls back to the event-time column, as in the
+        // second example. Key-eviction joins also reach here; isV4TimeIntervalJoin excludes them.
+        case _ => true
+      }
+      if (!isV4TimeIntervalJoin || !indexesEventTimeColumns) {
         None
       } else {
         val (thisSideAttrs, otherSideAttrs) = joinSide match {

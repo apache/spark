@@ -57,6 +57,10 @@ abstract class SymmetricHashJoinStateManagerBaseSuite extends StreamTest with Be
     inputValueGen.apply(new GenericInternalRow(Array[Any](key, value)))
   }
 
+  protected def toInputValueWithNullTime(key: Int): UnsafeRow = {
+    inputValueGen.apply(new GenericInternalRow(Array[Any](key, null)))
+  }
+
   protected def toJoinKeyRow(key: Int): UnsafeRow = {
     joinKeyGen.apply(new GenericInternalRow(Array[Any](false, key, 10.0)))
   }
@@ -1181,6 +1185,48 @@ class SymmetricHashJoinStateManagerEventTimeInValueSuite
       // evicted. Nothing can remain, so the scan returns an empty iterator immediately.
       assert(evictByTs.evictByTimestamp(50, Some(Long.MaxValue)) === 0)
       assert(get(40) === Seq(10, 20, 30))
+    }
+  }
+
+  versionsInTest.foreach { ver =>
+    test(s"StreamingJoinStateManager V$ver - null indexed time is not evicted") {
+      withJoinStateManager(inputValueAttributes, joinKeyExpressions, ver) { manager =>
+        implicit val mgr = manager
+        // `time <= threshold` is unknown for a null time, so value eviction keeps the row.
+        manager.append(toJoinKeyRow(40), toInputValueWithNullTime(40), matched = false)
+        append(40, 10)
+        assert(removeByValue(20) === 1)
+        assert(manager.get(toJoinKeyRow(40)).map(_.isNullAt(1)).toSeq === Seq(true))
+      }
+    }
+  }
+
+  test("StreamingJoinStateManager V4 - null indexed time survives evicting real rows") {
+    withJoinStateManager(inputValueAttributes, joinKeyExpressions, stateFormatVersion = 4) {
+      manager =>
+        implicit val mgr = manager
+        manager.append(toJoinKeyRow(40), toInputValueWithNullTime(40), matched = false)
+        // Put a real row at every timestamp that a random bucket for rows without a timestamp
+        // could use, so they would share a (key, timestamp) list.
+        (0 until 1024).foreach(append(40, _))
+        assert(removeByValue(1023) === 1024)
+        assert(manager.get(toJoinKeyRow(40)).map(_.isNullAt(1)).toSeq === Seq(true))
+    }
+  }
+
+  test("StreamingJoinStateManager V4 - null indexed window is not evicted") {
+    val windowType = new StructType().add("start", TimestampType).add("end", TimestampType)
+    val attributes = toAttributes(new StructType()
+      .add(StructField("key", IntegerType))
+      .add(StructField("window", windowType, metadata = watermarkMetadata)))
+    val keyExpressions = Seq[Expression](Literal(false), attributes(0), Literal(10.0))
+    val valueGen = UnsafeProjection.create(attributes.map(_.dataType).toArray)
+    withJoinStateManager(attributes, keyExpressions, stateFormatVersion = 4) { manager =>
+      val nullWindow = valueGen(new GenericInternalRow(Array[Any](40, null)))
+      manager.append(toJoinKeyRow(40), nullWindow, matched = false)
+      val evictByTs = manager.asInstanceOf[SupportsEvictByTimestamp]
+      assert(evictByTs.evictByTimestamp(Long.MaxValue) === 0)
+      assert(manager.get(toJoinKeyRow(40)).size === 1)
     }
   }
 

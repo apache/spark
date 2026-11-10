@@ -29,6 +29,7 @@ import org.apache.spark.sql.execution.SparkPlan
 import org.apache.spark.sql.execution.streaming.operators.stateful.{StatefulOperatorStateInfo, WatermarkSupport}
 import org.apache.spark.sql.execution.streaming.operators.stateful.WatermarkSupport.watermarkExpression
 import org.apache.spark.sql.execution.streaming.state.{StateStoreCheckpointInfo, StateStoreCoordinatorRef, StateStoreProviderId}
+import org.apache.spark.sql.types.TimestampType
 
 
 /**
@@ -158,6 +159,10 @@ object StreamingSymmetricHashJoinHelper extends Logging {
     }
   }
 
+  /**
+   * Get the state watermarks used to derive the join's output watermark. A value-eviction cutoff
+   * may constrain a different timestamp column and therefore not bound buffered event times.
+   */
   def getStateWatermark(
       leftAttributes: Seq[Attribute],
       rightAttributes: Seq[Attribute],
@@ -167,39 +172,33 @@ object StreamingSymmetricHashJoinHelper extends Logging {
       eventTimeWatermarkForEviction: Option[Long],
       allowMultipleEventTimeColumns: Boolean): (Option[Long], Option[Long]) = {
 
-    // Perform assertions against multiple event time columns in the same DataFrame. This method
-    // assumes there is only one event time column per each side (left / right) and it is not very
-    // clear to reason about the correctness if there are multiple event time columns. Disallow to
-    // be conservative.
-    WatermarkSupport.findEventTimeColumn(leftAttributes,
-      allowMultipleEventTimeColumns = allowMultipleEventTimeColumns)
-    WatermarkSupport.findEventTimeColumn(rightAttributes,
-      allowMultipleEventTimeColumns = allowMultipleEventTimeColumns)
-
-    val joinKeyOrdinalForWatermark: Option[Int] = findJoinKeyOrdinalForWatermark(
-      leftKeys, rightKeys)
+    val predicates = getStateWatermarkPredicates(leftAttributes, rightAttributes,
+      leftKeys, rightKeys, condition, eventTimeWatermarkForEviction, None,
+      allowMultipleEventTimeColumns)
 
     def getOneSideStateWatermark(
         oneSideInputAttributes: Seq[Attribute],
-        otherSideInputAttributes: Seq[Attribute]): Option[Long] = {
-      val isWatermarkDefinedOnInput = oneSideInputAttributes.exists(_.metadata.contains(delayKey))
-      val isWatermarkDefinedOnJoinKey = joinKeyOrdinalForWatermark.isDefined
-
-      if (isWatermarkDefinedOnJoinKey) { // case 1 and 3 in the StreamingSymmetricHashJoinExec docs
-        eventTimeWatermarkForEviction
-      } else if (isWatermarkDefinedOnInput) { // case 2 in the StreamingSymmetricHashJoinExec docs
-        StreamingJoinHelper.getStateValueWatermark(
-          attributesToFindStateWatermarkFor = AttributeSet(oneSideInputAttributes),
-          attributesWithEventWatermark = AttributeSet(otherSideInputAttributes),
-          condition,
-          eventTimeWatermarkForEviction)
-      } else {
-        None
+        oneSideKeys: Seq[Expression],
+        predicate: Option[JoinStateWatermarkPredicate]): Option[Long] = {
+      WatermarkSupport.findEventTimeColumn(oneSideInputAttributes,
+        allowMultipleEventTimeColumns).map { eventTime =>
+        predicate match {
+          case Some(JoinStateKeyWatermarkPredicate(expr, watermark, _))
+              if expr.collectFirst { case b: BoundReference => b.ordinal }
+                .exists(i => oneSideKeys(i).semanticEquals(eventTime)) => watermark
+          case Some(JoinStateValueWatermarkPredicate(expr, watermark, _))
+              if expr.references.contains(eventTime) => watermark
+          // Buffered rows can still emit old event times. Do not advance the output watermark
+          // using a bound on a different column, or on only the other side's state. Return 0
+          // rather than None: produceOutputWatermark takes the minimum of the defined bounds, so
+          // None would drop this side and let the output watermark advance past those rows.
+          case _ => 0L
+        }
       }
     }
 
-    val leftStateWatermark = getOneSideStateWatermark(leftAttributes, rightAttributes)
-    val rightStateWatermark = getOneSideStateWatermark(rightAttributes, leftAttributes)
+    val leftStateWatermark = getOneSideStateWatermark(leftAttributes, leftKeys, predicates.left)
+    val rightStateWatermark = getOneSideStateWatermark(rightAttributes, rightKeys, predicates.right)
 
     (leftStateWatermark, rightStateWatermark)
   }
@@ -262,27 +261,22 @@ object StreamingSymmetricHashJoinHelper extends Logging {
             prevStateKeyWatermark)
         }
       } else if (isWatermarkDefinedOnInput) { // case 2 in the StreamingSymmetricHashJoinExec docs
-        val stateValueWatermark = StreamingJoinHelper.getStateValueWatermark(
-          attributesToFindStateWatermarkFor = AttributeSet(oneSideInputAttributes),
-          attributesWithEventWatermark = AttributeSet(otherSideInputAttributes),
-          condition,
-          eventTimeWatermarkForEviction)
-        // A row can pass late-input filtering but already be eligible for eviction in this batch.
-        // When the previous join-derived state cutoff is ahead of the late-input watermark, a new
-        // row can fall at or below that cutoff. V4 must scan from the beginning to find such rows.
-        val prevStateValueWatermark = eventTimeWatermarkForLateEvents.flatMap { lateWatermark =>
-          StreamingJoinHelper.getStateValueWatermark(
-            attributesToFindStateWatermarkFor = AttributeSet(oneSideInputAttributes),
-            attributesWithEventWatermark = AttributeSet(otherSideInputAttributes),
-            condition,
-            eventTimeWatermarkForLateEvents).filter(_ <= lateWatermark)
-        }
-        val inputAttributeWithWatermark = oneSideInputAttributes.find(_.metadata.contains(delayKey))
-        val expr = watermarkExpression(inputAttributeWithWatermark, stateValueWatermark)
-        expr.map { e =>
-          // watermarkExpression only provides the expression when eventTimeWatermarkForEviction
-          // is defined
-          JoinStateValueWatermarkPredicate(e, stateValueWatermark.get, prevStateValueWatermark)
+        getStateValueWatermarkForInput(oneSideInputAttributes, otherSideInputAttributes,
+          condition, eventTimeWatermarkForEviction).flatMap { case (attribute, watermark) =>
+          // Late filtering only constrains the input's event-time column. A different indexed
+          // column can admit values below the previous cutoff and must be scanned from the start.
+          val prevStateValueWatermark = eventTimeWatermarkForLateEvents.filter { _ =>
+            oneSideInputAttributes.find(_.metadata.contains(delayKey))
+              .exists(_.semanticEquals(attribute))
+          }.flatMap { lateWatermark =>
+            // Also scan from the start if the derived cutoff exceeds the late-input watermark.
+            StreamingJoinHelper.getStateValueWatermark(AttributeSet(Seq(attribute)),
+              AttributeSet(otherSideInputAttributes), condition, Some(lateWatermark))
+              .filter(_ <= lateWatermark)
+          }
+          watermarkExpression(Some(attribute), Some(watermark)).map { e =>
+            JoinStateValueWatermarkPredicate(e, watermark, prevStateValueWatermark)
+          }
         }
       } else {
         None
@@ -294,6 +288,66 @@ object StreamingSymmetricHashJoinHelper extends Logging {
     val rightStateWatermarkPredicate =
       getOneSideStateWatermarkPredicate(rightAttributes, rightKeys, leftAttributes)
     JoinStateWatermarkPredicates(leftStateWatermarkPredicate, rightStateWatermarkPredicate)
+  }
+
+  /** Keep each cutoff attached to the column constrained by the join condition. */
+  private def getStateValueWatermarkForInput(
+      inputAttributes: Seq[Attribute],
+      otherInputAttributes: Seq[Attribute],
+      condition: Option[Expression],
+      eventWatermark: Option[Long]): Option[(Attribute, Long)] = {
+    val eventTime = inputAttributes.find(_.metadata.contains(delayKey))
+    // First try the watermarked column. If it has no inferable bound, try the other timestamp
+    // columns in input schema order and use the first with a bound. This makes the indexed column
+    // deterministic for a fixed input schema and join condition.
+    val candidates = eventTime.toSeq ++ inputAttributes.filter { attribute =>
+      attribute.dataType == TimestampType && !eventTime.exists(_.semanticEquals(attribute))
+    }
+    candidates.iterator.flatMap { attribute =>
+      StreamingJoinHelper.getStateValueWatermark(AttributeSet(Seq(attribute)),
+        AttributeSet(otherInputAttributes), condition, eventWatermark).map(attribute -> _)
+    }.take(1).toSeq.headOption
+  }
+
+  /**
+   * Conservatively prove that older state can use the current watermark semantics. Without
+   * watermarks there is no affected state. Otherwise each side must have exactly one event-time
+   * column, and its own event time must be the sole watermarked equality key at the same ordinal.
+   * This excludes range bounds and retained event times with no eviction bound.
+   */
+  private[sql] def isWatermarkCheckpointCompatible(
+      leftAttributes: Seq[Attribute],
+      rightAttributes: Seq[Attribute],
+      leftKeys: Seq[Expression],
+      rightKeys: Seq[Expression]): Boolean = {
+    val leftEventTime = leftAttributes.filter(_.metadata.contains(delayKey))
+    val rightEventTime = rightAttributes.filter(_.metadata.contains(delayKey))
+
+    def watermarkKeyOrdinals(keys: Seq[Expression]): Seq[Int] = {
+      keys.zipWithIndex.collect {
+        case (key: NamedExpression, index) if key.metadata.contains(delayKey) => index
+      }
+    }
+
+    def ownEventTimeKeyOrdinal(keys: Seq[Expression], eventTime: Attribute): Option[Int] = {
+      keys.zipWithIndex.collectFirst {
+        case (key: NamedExpression, index)
+            if key.metadata.contains(delayKey) && key.semanticEquals(eventTime) => index
+      }
+    }
+
+    val leftOrdinals = watermarkKeyOrdinals(leftKeys)
+    val rightOrdinals = watermarkKeyOrdinals(rightKeys)
+    if (leftEventTime.isEmpty && rightEventTime.isEmpty) {
+      leftOrdinals.isEmpty && rightOrdinals.isEmpty
+    } else if (leftEventTime.size == 1 && rightEventTime.size == 1) {
+      val leftOrdinal = ownEventTimeKeyOrdinal(leftKeys, leftEventTime.head)
+      val rightOrdinal = ownEventTimeKeyOrdinal(rightKeys, rightEventTime.head)
+      leftOrdinal.isDefined && leftOrdinal == rightOrdinal &&
+        leftOrdinals == leftOrdinal.toSeq && rightOrdinals == rightOrdinal.toSeq
+    } else {
+      false
+    }
   }
 
   private[join] def findJoinKeyOrdinalForWatermark(

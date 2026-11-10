@@ -37,7 +37,7 @@ import org.apache.spark.sql.catalyst.plans.physical.HashPartitioning
 import org.apache.spark.sql.execution.datasources.v2.state.StateSourceOptions
 import org.apache.spark.sql.execution.exchange.ShuffleExchangeExec
 import org.apache.spark.sql.execution.streaming.checkpointing.CheckpointFileManager
-import org.apache.spark.sql.execution.streaming.operators.stateful.StatefulOperatorStateInfo
+import org.apache.spark.sql.execution.streaming.operators.stateful.{StatefulOperatorStateInfo, StateStoreSaveExec}
 import org.apache.spark.sql.execution.streaming.operators.stateful.join.{StreamingSymmetricHashJoinExec, StreamingSymmetricHashJoinHelper}
 import org.apache.spark.sql.execution.streaming.runtime.{MemoryStream, StreamExecution}
 import org.apache.spark.sql.execution.streaming.state._
@@ -769,69 +769,9 @@ abstract class StreamingInnerJoinBase extends StreamingJoinSuite {
       })
   }
 
-  test(
-    "SPARK-26187 restore the stream-stream inner join query from Spark 2.4") {
-    val inputStream = MemoryStream[(Int, Long)]
-    val df = inputStream.toDS()
-      .select(col("_1").as("value"), timestamp_seconds($"_2").as("timestamp"))
-
-    val leftStream = df.select(col("value").as("leftId"), col("timestamp").as("leftTime"))
-
-    val rightStream = df
-      // Introduce misses for ease of debugging
-      .where(col("value") % 2 === 0)
-      .select(col("value").as("rightId"), col("timestamp").as("rightTime"))
-
-    val query = leftStream
-      .withWatermark("leftTime", "5 seconds")
-      .join(
-        rightStream.withWatermark("rightTime", "5 seconds"),
-        expr("rightId = leftId AND rightTime >= leftTime AND " +
-          "rightTime <= leftTime + interval 5 seconds"),
-        joinType = "inner")
-      .select(col("leftId"), col("leftTime").cast("int"),
-        col("rightId"), col("rightTime").cast("int"))
-
-    val resourceUri = this.getClass.getResource(
-      "/structured-streaming/checkpoint-version-2.4.0-streaming-join/").toURI
-    val checkpointDir = Utils.createTempDir().getCanonicalFile
-    // Copy the checkpoint to a temp dir to prevent changes to the original.
-    // Not doing this will lead to the test passing on the first run, but fail subsequent runs.
-    Utils.copyDirectory(new File(resourceUri), checkpointDir)
-    inputStream.addData((1, 1L), (2, 2L), (3, 3L), (4, 4L), (5, 5L))
-
-    testStream(query)(
-      StartStream(checkpointLocation = checkpointDir.getAbsolutePath),
-      /*
-      Note: The checkpoint was generated using the following input in Spark version 2.4.0
-      AddData(inputStream, (1, 1L), (2, 2L), (3, 3L), (4, 4L), (5, 5L)),
-      // batch 1 - global watermark = 0
-      // states
-      // left: (1, 1L), (2, 2L), (3, 3L), (4, 4L), (5, 5L)
-      // right: (2, 2L), (4, 4L)
-      CheckNewAnswer((2, 2L, 2, 2L), (4, 4L, 4, 4L)),
-      assertNumStateRows(7, 7),
-      */
-      AddData(inputStream, (6, 6L), (7, 7L), (8, 8L), (9, 9L), (10, 10L)),
-      // batch 2: same result as above test
-      CheckNewAnswer((6, 6L, 6, 6L), (8, 8L, 8, 8L), (10, 10L, 10, 10L)),
-      assertNumStateRows(11, 6),
-      Execute { query =>
-        // Verify state format = 1
-        val f = query.lastExecution.executedPlan.collect {
-          case f: StreamingSymmetricHashJoinExec => f
-        }
-        assert(f.size == 1)
-        assert(f.head.stateFormatVersion == 1)
-      }
-    )
-  }
-
-  test("SPARK-48687 - restore the stream-stream inner join query from Spark 3.5 and " +
+  test("SPARK-48687 - restore the stream-stream inner join query and " +
    "changing the join condition (key schema) should fail the query") {
-    // NOTE: We are also changing the schema of input compared to the checkpoint.
-    // In the checkpoint we define the input schema as (Int, Long), which does not have name
-    // in both left and right.
+    // The checkpoint input has (Int, Long); this query adds a name on both sides.
     val inputStream = MemoryStream[(Int, Long, String)]
     val df = inputStream.toDS()
       .select(col("_1").as("value"), timestamp_seconds($"_2").as("timestamp"),
@@ -858,29 +798,13 @@ abstract class StreamingInnerJoinBase extends StreamingJoinSuite {
         col("rightId"), col("rightTime").cast("int"),
         col("rightName"))
 
-    val resourceUri = this.getClass.getResource(
-      "/structured-streaming/checkpoint-version-3.5.1-streaming-join/").toURI
     val checkpointDir = Utils.createTempDir().getCanonicalFile
-    // Copy the checkpoint to a temp dir to prevent changes to the original.
-    // Not doing this will lead to the test passing on the first run, but fail subsequent runs.
-    Utils.copyDirectory(new File(resourceUri), checkpointDir)
+    createRangeJoinCheckpoint(checkpointDir)
     inputStream.addData((1, 1L, "a"), (2, 2L, "b"), (3, 3L, "c"), (4, 4L, "d"), (5, 5L, "e"))
 
     val ex = intercept[StreamingQueryException] {
       testStream(query)(
         StartStream(checkpointLocation = checkpointDir.getAbsolutePath),
-        /*
-        Note: The checkpoint was generated using the following input in Spark version 3.5.1
-        The base query is different because it does not use the leftName/rightName columns
-        as part of the join keys/condition that is used as part of the key schema.
-
-        AddData(inputStream, (1, 1L), (2, 2L), (3, 3L), (4, 4L), (5, 5L)),
-        // batch 1 - global watermark = 0
-        // states
-        // left: (1, 1L), (2, 2L), (3, 3L), (4, 4L), (5, 5L)
-        // right: (2, 2L), (4, 4L)
-        CheckNewAnswer((2, 2L, 2, 2L), (4, 4L, 4, 4L)),
-        */
         AddData(inputStream, (6, 6L, "a"), (7, 7L, "a"), (8, 8L, "a"), (9, 9L, "a"),
           (10, 10L, "a")),
         CheckNewAnswer((6, 6L, "a", 6, 6L, "a"), (8, 8L, "a", 8, 8L, "a"),
@@ -897,11 +821,9 @@ abstract class StreamingInnerJoinBase extends StreamingJoinSuite {
     )
   }
 
-  test("SPARK-48687 - restore the stream-stream inner join query from Spark 3.5 and " +
+  test("SPARK-48687 - restore the stream-stream inner join query and " +
    "changing the value schema should fail the query") {
-    // NOTE: We are also changing the schema of input compared to the checkpoint.
-    // In the checkpoint we define the input schema as (Int, Long), which does not have name
-    // in both left and right.
+    // The checkpoint input has (Int, Long); this query adds a name on both sides.
     val inputStream = MemoryStream[(Int, Long, String)]
     val df = inputStream.toDS()
       .select(col("_1").as("value"), timestamp_seconds($"_2").as("timestamp"),
@@ -928,29 +850,13 @@ abstract class StreamingInnerJoinBase extends StreamingJoinSuite {
         col("rightId"), col("rightTime").cast("int"),
         col("rightName"))
 
-    val resourceUri = this.getClass.getResource(
-      "/structured-streaming/checkpoint-version-3.5.1-streaming-join/").toURI
     val checkpointDir = Utils.createTempDir().getCanonicalFile
-    // Copy the checkpoint to a temp dir to prevent changes to the original.
-    // Not doing this will lead to the test passing on the first run, but fail subsequent runs.
-    Utils.copyDirectory(new File(resourceUri), checkpointDir)
+    createRangeJoinCheckpoint(checkpointDir)
     inputStream.addData((1, 1L, "a"), (2, 2L, "b"), (3, 3L, "c"), (4, 4L, "d"), (5, 5L, "e"))
 
     val ex = intercept[StreamingQueryException] {
       testStream(query)(
         StartStream(checkpointLocation = checkpointDir.getAbsolutePath),
-        /*
-        Note: The checkpoint was generated using the following input in Spark version 3.5.1
-        The base query is different because it does not use the leftName/rightName columns
-        as part of the generated output that is used as part of the value schema.
-
-        AddData(inputStream, (1, 1L), (2, 2L), (3, 3L), (4, 4L), (5, 5L)),
-        // batch 1 - global watermark = 0
-        // states
-        // left: (1, 1L), (2, 2L), (3, 3L), (4, 4L), (5, 5L)
-        // right: (2, 2L), (4, 4L)
-        CheckNewAnswer((2, 2L, 2, 2L), (4, 4L, 4, 4L)),
-        */
         AddData(inputStream, (6, 6L, "a"), (7, 7L, "a"), (8, 8L, "a"), (9, 9L, "a"),
           (10, 10L, "a")),
         CheckNewAnswer((6, 6L, "a", 6, 6L, "a"), (8, 8L, "a", 8, 8L, "a"),
@@ -1147,6 +1053,29 @@ abstract class StreamingInnerJoinBase extends StreamingJoinSuite {
           StopStream
         )
       }
+    }
+  }
+
+  private def createRangeJoinCheckpoint(checkpointDir: File): Unit = {
+    val input = MemoryStream[(Int, Long)]
+    val data = input.toDF().select($"_1".as("value"), timestamp_seconds($"_2").as("time"))
+    val left = data.select($"value".as("leftId"), $"time".as("leftTime"))
+      .withWatermark("leftTime", "5 seconds")
+    val right = data.where($"value" % 2 === 0)
+      .select($"value".as("rightId"), $"time".as("rightTime"))
+      .withWatermark("rightTime", "5 seconds")
+    val joined = left.join(right, expr(
+      "rightId = leftId AND rightTime >= leftTime AND " +
+        "rightTime <= leftTime + INTERVAL 5 SECONDS"))
+    // Schema validation needs a compatible checkpoint. Old range checkpoints now fail the
+    // watermark compatibility check before their schemas are opened.
+    withSQLConf(SQLConf.STREAMING_JOIN_STATE_FORMAT_VERSION.key -> "2",
+        SQLConf.STREAMING_NO_DATA_MICRO_BATCHES_ENABLED.key -> "false") {
+      testStream(joined)(
+        StartStream(checkpointLocation = checkpointDir.getCanonicalPath),
+        AddData(input, (1, 1L), (2, 2L), (3, 3L), (4, 4L), (5, 5L)),
+        ProcessAllAvailable(),
+        StopStream)
     }
   }
 
@@ -2489,6 +2418,42 @@ abstract class StreamingLeftSemiJoinBase extends StreamingJoinSuite {
           droppedByWatermark = Seq(1), removed = Some(Seq(0)))
       )
     }
+  }
+
+  test("left semi output watermark ignores unbounded right state") {
+    val leftInput = MemoryStream[(Int, Int)]
+    val rightInput = MemoryStream[(Int, Int)]
+    val left = leftInput.toDF()
+      .select($"_1".as("leftKey"), timestamp_seconds($"_2").as("leftTime"))
+      .withWatermark("leftTime", "0 seconds")
+    val right = rightInput.toDF()
+      .select($"_1".as("rightKey"), timestamp_seconds($"_2").as("rightTime"))
+      .withWatermark("rightTime", "0 seconds")
+    val result = left.join(right,
+      expr("leftKey = rightKey AND leftTime > rightTime - INTERVAL 5 SECONDS"), "left_semi")
+      .groupBy(window($"leftTime", "10 seconds"))
+      .count()
+      .select($"window.start".cast("long"), $"count")
+
+    testStream(result)(
+      MultiAddData(leftInput, (1, 5))(rightInput, (1, 5)),
+      CheckNewAnswer(),
+      MultiAddData(leftInput, (2, 20))(rightInput, (2, 20)),
+      // Left state is bounded at 15 seconds. Retained right timestamps are not output.
+      CheckNewAnswer(Row(0L, 1L)),
+      Execute { query =>
+        val plan = query.lastExecution.executedPlan
+        val join = plan.collect { case j: StreamingSymmetricHashJoinExec => j }.head
+        val aggregation = plan.collect { case s: StateStoreSaveExec => s }.head
+        assert(join.produceOutputWatermark(20000L) === Some(15000L))
+        assert(aggregation.eventTimeWatermarkForEviction === Some(15000L))
+      },
+      // A fresh left row can still match old right state without emitting its old timestamp.
+      AddData(leftInput, (1, 25)),
+      CheckNewAnswer(),
+      MultiAddData(leftInput, (3, 40))(rightInput, (3, 40)),
+      CheckNewAnswer(Row(20L, 2L))
+    )
   }
 
   testWithAppendAndUpdate("left semi early state exclusion on left") { outputMode =>
