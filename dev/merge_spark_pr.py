@@ -68,6 +68,9 @@ GITHUB_OAUTH_KEY = os.environ.get("GITHUB_OAUTH_KEY")
 
 GITHUB_BASE = "https://github.com/apache/spark/pull"
 GITHUB_API_BASE = "https://api.github.com/repos/apache/spark"
+# Items per page that get_json_pages asks GitHub list endpoints for: the most GitHub allows.
+# Without it, GitHub returns 30.
+GITHUB_PAGE_SIZE = 100
 JIRA_BASE = "https://issues.apache.org/jira/browse"
 JIRA_API_BASE = "https://issues.apache.org/jira"
 # Prefix added to temporary branches
@@ -82,12 +85,13 @@ def bold_input(prompt) -> str:
     return input("\033[1m%s\033[0m" % prompt)
 
 
-def get_json(url):
+def open_github_url(url):
+    """Open the GitHub API `url`, with GITHUB_OAUTH_KEY if set, and exit on an HTTP error."""
     try:
         request = Request(url)
         if GITHUB_OAUTH_KEY:
             request.add_header("Authorization", "token %s" % GITHUB_OAUTH_KEY)
-        return json.load(urlopen(request))
+        return urlopen(request)
     except HTTPError as e:
         if "X-RateLimit-Remaining" in e.headers and e.headers["X-RateLimit-Remaining"] == "0":
             print_error(
@@ -104,6 +108,65 @@ def get_json(url):
         else:
             print_error("Unable to fetch URL, exiting: %s" % url)
         sys.exit(-1)
+
+
+def get_json(url):
+    return json.load(open_github_url(url))
+
+
+def get_json_pages(url):
+    """Return every item of the GitHub list endpoint at `url`, reading all of its pages.
+
+    `get_json` reads only the first page, and GitHub fills it with 30 items unless asked for
+    more. On a PR with a long history, that misses the `closed` event that records the merge
+    commit, so a merged PR looks unmerged (#60129, with 38 events). It also drops the commits
+    after the 30th, so their authors get no Co-authored-by, and the release branches after
+    the 30th, so they cannot be picked into. Each page asks for GITHUB_PAGE_SIZE items, and
+    reading follows the `rel="next"` URL of each page's `Link` header until a page has none,
+    as `gh api --paginate` does, so a page with fewer items does not end the read early.
+
+    >>> import io
+    >>> from unittest.mock import patch
+    >>> base = "https://api.github.com/repos/apache/spark"
+    >>> def read(path, *pages):
+    ...     # Serve `pages` in order, with Link headers like the ones GitHub sends.
+    ...     requested = []
+    ...     def links(*rels):
+    ...         return ", ".join('<%s/p?page=%d>; rel="%s"' % (base, n, rel) for rel, n in rels)
+    ...     def open_page(page_url):
+    ...         requested.append(page_url[len(base) :])
+    ...         n = len(requested)
+    ...         page = io.BytesIO(json.dumps(pages[n - 1]).encode())
+    ...         page.headers = {}
+    ...         if n < len(pages):
+    ...             page.headers["Link"] = links(("next", n + 1), ("last", len(pages)))
+    ...         elif n > 1:
+    ...             page.headers["Link"] = links(("prev", n - 1), ("first", 1))
+    ...         return page
+    ...     with patch.dict(get_json_pages.__globals__, open_github_url=open_page):
+    ...         return get_json_pages(base + path), requested
+
+    Every page is read in order, including the page after one with fewer items, and the last
+    page's links back to earlier pages are not followed:
+
+    >>> read("/issues/1/events", ["a", "b"], ["c"], ["d", "e"])
+    (['a', 'b', 'c', 'd', 'e'], ['/issues/1/events?per_page=100', '/p?page=2', '/p?page=3'])
+
+    A list that fits on one page comes without a Link header and costs one request, and a URL
+    that already has a query string gets the page size appended to it:
+
+    >>> read("/branches?protected=false", ["master", "branch-4.x"])
+    (['master', 'branch-4.x'], ['/branches?protected=false&per_page=100'])
+    """
+    separator = "&" if "?" in url else "?"
+    url = "%s%sper_page=%d" % (url, separator, GITHUB_PAGE_SIZE)
+    items = []
+    while url is not None:
+        response = open_github_url(url)
+        items.extend(json.load(response))
+        next_link = re.search(r'<([^>]*)>;\s*rel="next"', response.headers.get("Link") or "")
+        url = next_link.group(1) if next_link else None
+    return items
 
 
 def close_pr(pr_num):
@@ -617,7 +680,7 @@ def main():
     os.chdir(SPARK_HOME)
     original_head = get_current_ref()
 
-    branches = get_json("%s/branches" % GITHUB_API_BASE)
+    branches = get_json_pages("%s/branches" % GITHUB_API_BASE)
     branch_names = list(filter(lambda x: x.startswith("branch-"), [x["name"] for x in branches]))
     # Assumes branch names can be sorted lexicographically
     branch_names = sorted(branch_names, reverse=True)
@@ -629,7 +692,7 @@ def main():
         pr_num = sys.argv[1]
         print("Start to merge pull request #%s" % (pr_num))
     pr = get_json("%s/pulls/%s" % (GITHUB_API_BASE, pr_num))
-    pr_events = get_json("%s/issues/%s/events" % (GITHUB_API_BASE, pr_num))
+    pr_events = get_json_pages("%s/issues/%s/events" % (GITHUB_API_BASE, pr_num))
 
     url = pr["url"]
 
@@ -682,7 +745,7 @@ def main():
     pr_author_info = get_json("https://api.github.com/users/%s" % user_login)
     pr_author_name = pr_author_info.get("name") or user_login
     pr_author_email = pr_author_info.get("email")
-    pr_commits = get_json("%s/pulls/%s/commits" % (GITHUB_API_BASE, pr_num))
+    pr_commits = get_json_pages("%s/pulls/%s/commits" % (GITHUB_API_BASE, pr_num))
     if not pr_author_email:
         # If the GitHub profile has no public email, find the author's email from the
         # PR's git commits. Only use it if GitHub links the commit to the PR author's
