@@ -21,7 +21,7 @@ name: "Build / Java21 (Scala 2.13, JDK 21)"
 
 on:
   schedule:
-    - cron: '17 8 1-31/3 * *'
+    - cron: '17 8 1-28/3 * *'
   workflow_dispatch:
 
 jobs:

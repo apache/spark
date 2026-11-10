@@ -21,7 +21,7 @@ name: "Build / Python-only (Minimum dependencies of PySpark)"
 
 on:
   schedule:
-    - cron: '17 9 * * THU'
+    - cron: '17 9 * * 4'
   workflow_dispatch:
 
 jobs:

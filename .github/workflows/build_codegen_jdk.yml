@@ -29,7 +29,7 @@ name: "Build / Codegen JDK backend (master, Scala 2.13, JDK 21)"
 
 on:
   schedule:
-    - cron: '17 6 1-31/3 * *'
+    - cron: '17 16 1-28/3 * *'
   workflow_dispatch:
 
 jobs:

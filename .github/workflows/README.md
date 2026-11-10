@@ -13,16 +13,9 @@ The Apache Software Foundation (ASF) imposes [resource usage limits][limit] on G
 
 ### Scheduled workflow cadence
 
-Use daily maintenance schedules and three-day or weekly build schedules to limit
-runner consumption while retaining regular coverage. Reserve 00 and 01 UTC for
-daily workflows and 03, 09, 15, and 21 UTC for weekly workflows; distribute
-three-day workflows across the remaining hours and three day-of-month phases.
-Spread weekly workflows across weekdays and use minute 17 for rescheduled builds
-to avoid GitHub Actions' busy [start-of-hour scheduling period][schedule-event];
-the specific minute is arbitrary. These assignments spread runner demand without
-ranking jobs by importance, and individual intervals can be shortened when
-faster feedback is needed. Day-of-month phases restart monthly, and delayed
-starts or long runs can still overlap.
+Use daily maintenance schedules and three-day or weekly build schedules to limit runner consumption while retaining regular coverage. Reserve 04 and 12 UTC for daily workflows and 03, 09, 15, and 21 UTC for weekly workflows; distribute three-day workflows across the remaining hours and day-of-month phases, and spread weekly workflows across the days of the week. Balance expensive builds across phases and start times, and use minute 17 for rescheduled builds to avoid GitHub Actions' busy [start-of-hour scheduling period][schedule-event]; the specific minute is arbitrary. The build-status updater keeps its separate 15-minute schedule.
+
+These assignments spread runner demand without ranking jobs by importance, and individual intervals can be shortened when faster feedback is needed. Day-of-month phases restart monthly, so intervals vary at month boundaries, and delayed starts or long runs can still overlap.
 
 [schedule-event]: https://docs.github.com/en/actions/reference/workflows-and-actions/events-that-trigger-workflows#schedule
 

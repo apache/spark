@@ -21,14 +21,14 @@ name: "Branch-4.2 CI Scheduler"
 
 on:
   schedule:
-    - cron: '17 2 1-31/3 * *'
-    - cron: '17 6 2-31/3 * *'
-    - cron: '17 7 2-31/3 * *'
-    - cron: '17 11 1-31/3 * *'
-    - cron: '17 13 2-31/3 * *'
-    - cron: '17 14 3-31/3 * *'
-    - cron: '17 18 2-31/3 * *'
-    - cron: '17 22 2-31/3 * *'
+    - cron: &java17_cron '17 11 1-28/3 * *'
+    - cron: &java25_cron '17 13 2-31/3 * *'
+    - cron: &python_3_11_cron '17 18 2-31/3 * *'
+    - cron: &maven_java21_cron '17 19 3-31/3 * *'
+    - cron: &python_3_14_cron '17 2 1-28/3 * *'
+    - cron: &non_ansi_cron '17 22 2-31/3 * *'
+    - cron: &maven_cron '17 6 2-31/3 * *'
+    - cron: &java21_cron '17 7 2-31/3 * *'
   workflow_dispatch:
     inputs:
       target:
@@ -53,6 +53,14 @@ jobs:
     runs-on: ubuntu-latest
     env:
       GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      MAVEN_CRON: *maven_cron
+      MAVEN_JAVA21_CRON: *maven_java21_cron
+      JAVA17_CRON: *java17_cron
+      JAVA21_CRON: *java21_cron
+      JAVA25_CRON: *java25_cron
+      NON_ANSI_CRON: *non_ansi_cron
+      PYTHON_3_11_CRON: *python_3_11_cron
+      PYTHON_3_14_CRON: *python_3_14_cron
     permissions:
       actions: write
       contents: read
@@ -63,56 +71,56 @@ jobs:
           sparse-checkout: dev
       - name: Maven Build
         if: >-
-          github.event.schedule == '17 6 2-31/3 * *' ||
+          github.event.schedule == env.MAVEN_CRON ||
           (github.event_name == 'workflow_dispatch' &&
             (inputs.target == 'maven' || inputs.target == 'all'))
         run: |
           ./dev/dispatch-if-changed.sh build_maven.yml branch-4.2
       - name: Maven Java 21 Build
         if: >-
-          github.event.schedule == '17 14 3-31/3 * *' ||
+          github.event.schedule == env.MAVEN_JAVA21_CRON ||
           (github.event_name == 'workflow_dispatch' &&
             (inputs.target == 'maven_java21' || inputs.target == 'all'))
         run: |
           ./dev/dispatch-if-changed.sh build_maven_java21.yml branch-4.2
       - name: Java 17 Build
         if: >-
-          github.event.schedule == '17 11 1-31/3 * *' ||
+          github.event.schedule == env.JAVA17_CRON ||
           (github.event_name == 'workflow_dispatch' &&
             (inputs.target == 'java17' || inputs.target == 'all'))
         run: |
           ./dev/dispatch-if-changed.sh build_java17.yml branch-4.2
       - name: Java 21 Build
         if: >-
-          github.event.schedule == '17 7 2-31/3 * *' ||
+          github.event.schedule == env.JAVA21_CRON ||
           (github.event_name == 'workflow_dispatch' &&
             (inputs.target == 'java21' || inputs.target == 'all'))
         run: |
           ./dev/dispatch-if-changed.sh build_java21.yml branch-4.2
       - name: Java 25 Build
         if: >-
-          github.event.schedule == '17 13 2-31/3 * *' ||
+          github.event.schedule == env.JAVA25_CRON ||
           (github.event_name == 'workflow_dispatch' &&
             (inputs.target == 'java25' || inputs.target == 'all'))
         run: |
           ./dev/dispatch-if-changed.sh build_java25.yml branch-4.2
       - name: Non-ANSI Build
         if: >-
-          github.event.schedule == '17 22 2-31/3 * *' ||
+          github.event.schedule == env.NON_ANSI_CRON ||
           (github.event_name == 'workflow_dispatch' &&
             (inputs.target == 'non_ansi' || inputs.target == 'all'))
         run: |
           ./dev/dispatch-if-changed.sh build_non_ansi.yml branch-4.2
       - name: Python 3.11 Build
         if: >-
-          github.event.schedule == '17 18 2-31/3 * *' ||
+          github.event.schedule == env.PYTHON_3_11_CRON ||
           (github.event_name == 'workflow_dispatch' &&
             (inputs.target == 'python_3.11' || inputs.target == 'all'))
         run: |
           ./dev/dispatch-if-changed.sh build_python_3.11.yml branch-4.2
       - name: Python 3.14 Build
         if: >-
-          github.event.schedule == '17 2 1-31/3 * *' ||
+          github.event.schedule == env.PYTHON_3_14_CRON ||
           (github.event_name == 'workflow_dispatch' &&
             (inputs.target == 'python_3.14' || inputs.target == 'all'))
         run: |

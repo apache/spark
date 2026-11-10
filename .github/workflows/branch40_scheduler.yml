@@ -21,13 +21,13 @@ name: "Branch-4.0 CI Scheduler"
 
 on:
   schedule:
-    - cron: '17 3 * * THU'
-    - cron: '17 9 * * WED'
-    - cron: '17 9 * * SAT'
-    - cron: '17 15 * * SAT'
-    - cron: '17 21 * * TUE'
-    - cron: '17 21 * * THU'
-    - cron: '17 21 * * SAT'
+    - cron: &java17_cron '17 15 * * 6'
+    - cron: &python_3_11_cron '17 21 * * 2'
+    - cron: &maven_java21_cron '17 21 * * 4'
+    - cron: &python_pypy3_10_cron '17 21 * * 6'
+    - cron: &non_ansi_cron '17 3 * * 4'
+    - cron: &java21_cron '17 9 * * 3'
+    - cron: &maven_cron '17 9 * * 6'
   workflow_dispatch:
     inputs:
       target:
@@ -51,6 +51,13 @@ jobs:
     runs-on: ubuntu-latest
     env:
       GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      MAVEN_CRON: *maven_cron
+      MAVEN_JAVA21_CRON: *maven_java21_cron
+      JAVA17_CRON: *java17_cron
+      JAVA21_CRON: *java21_cron
+      NON_ANSI_CRON: *non_ansi_cron
+      PYTHON_3_11_CRON: *python_3_11_cron
+      PYTHON_PYPY3_10_CRON: *python_pypy3_10_cron
     permissions:
       actions: write
       contents: read
@@ -61,49 +68,49 @@ jobs:
           sparse-checkout: dev
       - name: Maven Build
         if: >-
-          github.event.schedule == '17 9 * * SAT' ||
+          github.event.schedule == env.MAVEN_CRON ||
           (github.event_name == 'workflow_dispatch' &&
             (inputs.target == 'maven' || inputs.target == 'all'))
         run: |
           ./dev/dispatch-if-changed.sh build_maven.yml branch-4.0
       - name: Maven Java 21 Build
         if: >-
-          github.event.schedule == '17 21 * * THU' ||
+          github.event.schedule == env.MAVEN_JAVA21_CRON ||
           (github.event_name == 'workflow_dispatch' &&
             (inputs.target == 'maven_java21' || inputs.target == 'all'))
         run: |
           ./dev/dispatch-if-changed.sh build_maven_java21.yml branch-4.0
       - name: Java 17 Build
         if: >-
-          github.event.schedule == '17 15 * * SAT' ||
+          github.event.schedule == env.JAVA17_CRON ||
           (github.event_name == 'workflow_dispatch' &&
             (inputs.target == 'java17' || inputs.target == 'all'))
         run: |
           ./dev/dispatch-if-changed.sh build_java17.yml branch-4.0
       - name: Java 21 Build
         if: >-
-          github.event.schedule == '17 9 * * WED' ||
+          github.event.schedule == env.JAVA21_CRON ||
           (github.event_name == 'workflow_dispatch' &&
             (inputs.target == 'java21' || inputs.target == 'all'))
         run: |
           ./dev/dispatch-if-changed.sh build_java21.yml branch-4.0
       - name: Non-ANSI Build
         if: >-
-          github.event.schedule == '17 3 * * THU' ||
+          github.event.schedule == env.NON_ANSI_CRON ||
           (github.event_name == 'workflow_dispatch' &&
             (inputs.target == 'non_ansi' || inputs.target == 'all'))
         run: |
           ./dev/dispatch-if-changed.sh build_non_ansi.yml branch-4.0
       - name: Python 3.11 Build
         if: >-
-          github.event.schedule == '17 21 * * TUE' ||
+          github.event.schedule == env.PYTHON_3_11_CRON ||
           (github.event_name == 'workflow_dispatch' &&
             (inputs.target == 'python_3.11' || inputs.target == 'all'))
         run: |
           ./dev/dispatch-if-changed.sh build_python_3.11.yml branch-4.0
       - name: Python PyPy 3.10 Build
         if: >-
-          github.event.schedule == '17 21 * * SAT' ||
+          github.event.schedule == env.PYTHON_PYPY3_10_CRON ||
           (github.event_name == 'workflow_dispatch' &&
             (inputs.target == 'python_pypy3.10' || inputs.target == 'all'))
         run: |
