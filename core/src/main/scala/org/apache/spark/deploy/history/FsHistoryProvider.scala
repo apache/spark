@@ -20,7 +20,7 @@ package org.apache.spark.deploy.history
 import java.io.{ByteArrayInputStream, File, FileNotFoundException, InputStream, IOException, SequenceInputStream}
 import java.lang.{Long => JLong}
 import java.nio.charset.CharacterCodingException
-import java.util.{Date, NoSuchElementException}
+import java.util.{Date, NoSuchElementException, ServiceConfigurationError}
 import java.util.concurrent.{ConcurrentHashMap, ExecutorService, TimeUnit}
 import java.util.zip.ZipOutputStream
 
@@ -429,13 +429,18 @@ private[history] class FsHistoryProvider(conf: SparkConf, clock: Clock)
     val conf = this.conf.clone()
     val secManager = createSecurityManager(conf, attempt)
 
+    // Load the plugins once, skipping any that cannot be loaded, and use them both to rebuild an
+    // in-memory store and to set up the UI. A store persisted to disk is rebuilt with plugins
+    // that must all load, so that it is never saved without a plugin's data.
+    val plugins = AppHistoryServerPlugin.loadPlugins()
+
     val kvstore = try {
       diskManager match {
         case Some(sm) =>
           loadDiskStore(sm, appId, attempt)
 
         case _ =>
-          createInMemoryStore(attempt)
+          createInMemoryStore(attempt, plugins)
       }
     } catch {
       case _: FileNotFoundException =>
@@ -447,7 +452,7 @@ private[history] class FsHistoryProvider(conf: SparkConf, clock: Clock)
       attempt.info.startTime.getTime(), attempt.info.appSparkVersion)
 
     // place the tab in UI based on the display order
-    AppHistoryServerPlugin.loadPlugins().sortBy(_.displayOrder).foreach(_.setupUI(ui))
+    plugins.sortBy(_.displayOrder).foreach(_.setupUI(ui))
 
     val loadedUI = LoadedAppUI(ui)
     synchronized {
@@ -1424,11 +1429,17 @@ private[history] class FsHistoryProvider(conf: SparkConf, clock: Clock)
 
   /**
    * Rebuilds the application state store from its event log. Exposed for testing.
+   *
+   * By default a plugin that cannot be loaded makes the rebuild fail, so that a persisted store
+   * is never saved without that plugin's data. Pass `plugins` to override that, e.g. for a store
+   * that is not persisted.
    */
   private[spark] def rebuildAppStore(
       store: KVStore,
       reader: EventLogFileReader,
-      lastUpdated: Long): Unit = {
+      lastUpdated: Long,
+      plugins: Iterable[AppHistoryServerPlugin] =
+        AppHistoryServerPlugin.loadPluginsOrFail()): Unit = {
     // Disable async updates, since they cause higher memory usage, and it's ok to take longer
     // to parse the event logs in the SHS.
     val replayConf = conf.clone().set(ASYNC_TRACKING_ENABLED, false)
@@ -1438,12 +1449,20 @@ private[history] class FsHistoryProvider(conf: SparkConf, clock: Clock)
       lastUpdateTime = Some(lastUpdated))
     replayBus.addListener(listener)
 
-    for {
-      plugin <- AppHistoryServerPlugin.loadPluginsOrFail()
-      listener <- plugin.createListeners(conf, trackingStore)
-    } replayBus.addListener(listener)
-
     try {
+      try {
+        for {
+          plugin <- plugins
+          listener <- plugin.createListeners(conf, trackingStore)
+        } replayBus.addListener(listener)
+      } catch {
+        // An unloadable plugin makes the ServiceLoader throw an Error, which would skip the
+        // cleanup that only handles Exceptions. Rethrow it as an Exception so the cleanup runs.
+        case e @ (_: ServiceConfigurationError | _: LinkageError) =>
+          throw SparkException.internalError(
+            s"Failed to load an AppHistoryServerPlugin to re-build ${reader.rootPath}", e)
+      }
+
       val eventLogFiles = reader.listEventLogFiles
       logInfo(log"Parsing ${MDC(PATH, reader.rootPath)} to re-build UI...")
       parseAppEventLogs(eventLogFiles, replayBus, !reader.completed)
@@ -1692,7 +1711,9 @@ private[history] class FsHistoryProvider(conf: SparkConf, clock: Clock)
     KVUtils.open(newStorePath, metadata, conf, live = false)
   }
 
-  private def createInMemoryStore(attempt: AttemptInfoWrapper): KVStore = {
+  private def createInMemoryStore(
+      attempt: AttemptInfoWrapper,
+      plugins: Seq[AppHistoryServerPlugin]): KVStore = {
     var retried = false
     var store: KVStore = null
     while (store == null) {
@@ -1701,7 +1722,9 @@ private[history] class FsHistoryProvider(conf: SparkConf, clock: Clock)
         val (logFs, logPath) = resolveLogPath(attempt.logPath, attempt.logSourceFullPath)
         val reader = EventLogFileReader(logFs, logPath,
           attempt.lastIndex)
-        rebuildAppStore(s, reader, attempt.info.lastUpdated.getTime())
+        // This store is never persisted, so it is rebuilt with the plugins that loaded. A plugin
+        // that could not be loaded is picked up again the next time the application is loaded.
+        rebuildAppStore(s, reader, attempt.info.lastUpdated.getTime(), plugins)
         store = s
       } catch {
         case ioe: IOException if !retried =>

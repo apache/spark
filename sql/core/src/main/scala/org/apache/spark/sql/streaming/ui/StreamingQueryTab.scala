@@ -17,7 +17,7 @@
 package org.apache.spark.sql.streaming.ui
 
 import org.apache.spark.internal.Logging
-import org.apache.spark.sql.execution.ui.{SQLTab, StreamingQueryStatusStore}
+import org.apache.spark.sql.execution.ui.StreamingQueryStatusStore
 import org.apache.spark.ui.{SparkUI, SparkUITab}
 
 private[sql] class StreamingQueryTab(
@@ -31,9 +31,6 @@ private[sql] class StreamingQueryTab(
   attachPage(new StreamingQueryPage(this))
   attachPage(new StreamingQueryStatisticsPage(this))
   parent.attachTab(this)
-
-  // Not needed by this tab's pages (they load no files from /static/sql).
-  SQLTab.addStaticHandler(parent)
 
   override def displayOrder: Int = 2
 }

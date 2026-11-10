@@ -17,7 +17,7 @@
 
 package org.apache.spark.status
 
-import java.util.ServiceLoader
+import java.util.{ServiceConfigurationError, ServiceLoader}
 
 import scala.jdk.CollectionConverters._
 import scala.util.control.NonFatal
@@ -46,8 +46,10 @@ private[spark] trait AppHistoryServerPlugin {
 
   /**
    * Static resources (JS/CSS) to serve from the History Server's own UI, as (classpath resource
-   * directory, URL path) pairs. They are registered once at startup. The URL path must be under
-   * /static/; other paths are rejected so they cannot shadow the History Server's own routes.
+   * directory, URL path) pairs. They are registered once at startup. The URL path must be a
+   * single segment under /static/ made of letters, digits, `_` or `-` (e.g. /static/sql) that the
+   * History Server does not already serve; other paths are rejected so they cannot shadow its
+   * own routes or core static files.
    * The directory is resolved with Spark's class loader, not the plugin's, so it must be on
    * Spark's class path. Unlike a handler attached in [[setupUI]], which is torn down when the
    * application cache evicts that application, these live as long as the History Server.
@@ -71,12 +73,15 @@ private[spark] object AppHistoryServerPlugin extends Logging {
   /**
    * Loads the available plugins, skipping with a warning any that cannot be loaded, so that a
    * broken plugin does not take down the History Server or the loading of an application UI.
+   * Used where nothing is persisted: the History Server's startup, an application UI, and an
+   * in-memory store rebuilt from an event log.
    */
   def loadPlugins(): Seq[AppHistoryServerPlugin] = skipUnloadable(loadPluginsOrFail())
 
   /**
    * Lazily loads the available plugins. A plugin that cannot be loaded makes iteration throw.
-   * Use this where a missing plugin must not go unnoticed.
+   * Use this where a missing plugin must not go unnoticed, e.g. when rebuilding a store that is
+   * persisted to disk, which would otherwise keep missing that plugin's data.
    */
   def loadPluginsOrFail(): Iterable[AppHistoryServerPlugin] = {
     ServiceLoader.load(classOf[AppHistoryServerPlugin], Utils.getContextOrSparkClassLoader).asScala
@@ -93,7 +98,8 @@ private[spark] object AppHistoryServerPlugin extends Logging {
    * @note This method will stop loading after MAX_LOAD_FAILURES consecutive failures to prevent
    *       infinite loops or excessive error conditions
    * @note Successfully loading a plugin resets the consecutive failure counter
-   * @note Non-fatal exceptions and LinkageErrors are caught and logged as warnings
+   * @note Non-fatal exceptions and LinkageErrors are caught and logged as warnings. Fatal
+   *       errors such as OutOfMemoryError are not caught.
    */
   private[spark] def skipUnloadable(
       plugins: Iterable[AppHistoryServerPlugin]): Seq[AppHistoryServerPlugin] = {
@@ -110,6 +116,10 @@ private[spark] object AppHistoryServerPlugin extends Logging {
           keepLoading = false
         }
       } catch {
+        // The ServiceLoader wraps a fatal error from a constructor in a ServiceConfigurationError.
+        // Unwrap it so it stops the startup instead of being skipped.
+        case e: ServiceConfigurationError if e.getCause.isInstanceOf[VirtualMachineError] =>
+          throw e.getCause
         case t if NonFatal(t) || t.isInstanceOf[LinkageError] =>
           failuresInARow += 1
           logWarning("Skipping an AppHistoryServerPlugin that failed to load", t)

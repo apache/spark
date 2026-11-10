@@ -819,6 +819,26 @@ object HistoryServerSuite {
         "got code: " + code + " when getting " + path + " w/ error: " + error)
     }
   }
+
+  /** The URL of `path` on the given History Server. */
+  private[history] def url(server: HistoryServer, path: String): URL = {
+    new URI(s"http://${Utils.localHostNameForURI()}:${server.boundPort}$path").toURL
+  }
+
+  /** Runs `fn` with a History Server bound over `logDir`, and stops the server afterwards. */
+  private[history] def withHistoryServer(logDir: String)(
+      fn: (HistoryServer, FsHistoryProvider) => Unit): Unit = {
+    val conf = new SparkConf().set(HISTORY_LOG_DIR, logDir)
+    val provider = new FsHistoryProvider(conf)
+    val server = new HistoryServer(conf, provider, new SecurityManager(conf), 0)
+    try {
+      server.bind()
+      provider.checkForLogs()
+      fn(server, provider)
+    } finally {
+      server.stop()
+    }
+  }
 }
 
 /**
