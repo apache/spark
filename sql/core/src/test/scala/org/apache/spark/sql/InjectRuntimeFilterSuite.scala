@@ -1690,7 +1690,12 @@ class InjectRuntimeFilterSuite extends SharedSparkSession
         val query = "select v from testcat.cf where k in (select k from testcat.cd where flag = 1)"
         withDppTestConf(SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key -> "-1",
             SQLConf.RUNTIME_BLOOM_FILTER_APPLICATION_SIDE_SCAN_SIZE_THRESHOLD.key -> "0") {
-          assertBloomFilterWithoutDpp(query)
+          // Nothing wraps the semi join's keys in CollationKey, so they get no bloom filter
+          // without DPP either (SPARK-60871).
+          assertBloomFilterWithoutDpp(query, numBloomFilters = 0)
+          withSQLConf(SQLConf.DYNAMIC_PARTITION_PRUNING_ENABLED.key -> "false") {
+            checkAnswer(sql(query), Row(1))
+          }
           assert(bloomFilterKeys(query).isEmpty)
           checkAnswer(sql(query), Row(1))
         }
