@@ -22,6 +22,7 @@ import java.time.LocalTime
 import org.scalatest.concurrent.TimeLimits
 import org.scalatest.time.SpanSugar._
 
+import org.apache.spark.sql.catalyst.expressions.Expression
 import org.apache.spark.sql.catalyst.plans.physical.ClusteredDistribution
 import org.apache.spark.sql.execution.ColumnarToRowExec
 import org.apache.spark.sql.execution.adaptive.AdaptiveSparkPlanHelper
@@ -387,7 +388,18 @@ class DatasetCacheSuite extends SharedSparkSession
         case s: InMemoryTableScanExec => s
       }.get
       assert(scan.outputPartitioning.satisfies(ClusteredDistribution(scan.output)))
+      assert(scan.outputPartitioning.asInstanceOf[Expression].references === scan.outputSet)
       assert(scan.outputOrdering.map(_.references) === Seq(scan.outputSet))
     }
+
+    // A scan of a cache sorted by `a` and `b` pruned to `b` reports the ordering by `a` and `b`,
+    // which the cache of that scan cannot report even partially.
+    val c3 = src.select($"id".as("a"), ($"id" % 2).as("b"))
+      .sortWithinPartitions("a", "b").cache().select($"b").cache()
+    c3.collect()
+    val ordering = collectFirst(c3.queryExecution.executedPlan) {
+      case s: InMemoryTableScanExec => s.outputOrdering
+    }.get
+    assert(ordering.isEmpty)
   }
 }

@@ -118,8 +118,8 @@ case class InMemoryTableScanExec(
   // The cached version does not change the outputPartitioning of the original SparkPlan.
   // But the cached version could alias output, so we need to replace output. The original
   // SparkPlan can also report a partitioning over attributes it does not output, e.g.
-  // `SerializeFromObjectExec` reports the partitioning of its input, so drop such partitionings
-  // like `PartitioningPreservingUnaryExecNode` does.
+  // `SerializeFromObjectExec` reports the partitioning of its input, so drop such partitionings,
+  // leaf by leaf for a `PartitioningCollection`.
   override def outputPartitioning: Partitioning = {
     cachedPlan.outputPartitioning match {
       case e: Expression =>
@@ -141,7 +141,7 @@ case class InMemoryTableScanExec(
   // partitioning, keep only the leading sort orders over the output of the relation.
   override def outputOrdering: Seq[SortOrder] = {
     cachedPlan.outputOrdering.iterator.map { order =>
-      val validChildren = order.children.map(updateAttribute)
+      val validChildren = updateAttribute(order).children
         .filter(_.references.subsetOf(relation.outputSet))
       if (validChildren.nonEmpty) {
         Some(order.copy(child = validChildren.head, sameOrderExpressions = validChildren.tail))
