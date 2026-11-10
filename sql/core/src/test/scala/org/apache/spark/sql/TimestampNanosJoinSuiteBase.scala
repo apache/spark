@@ -24,9 +24,9 @@ import scala.jdk.CollectionConverters._
 import org.apache.spark.SparkConf
 import org.apache.spark.sql.catalyst.expressions.EqualTo
 import org.apache.spark.sql.catalyst.plans.logical.Join
-import org.apache.spark.sql.execution.SparkPlan
+import org.apache.spark.sql.execution.{InputAdapter, SparkPlan, WholeStageCodegenExec}
 import org.apache.spark.sql.execution.adaptive.AdaptiveSparkPlanHelper
-import org.apache.spark.sql.execution.joins.{BroadcastHashJoinExec, ShuffledHashJoinExec, SortMergeJoinExec}
+import org.apache.spark.sql.execution.joins.{BroadcastHashJoinExec, ShuffledHashJoinExec, SortMergeAsOfJoinExec, SortMergeJoinExec}
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.sql.types._
@@ -131,6 +131,16 @@ abstract class TimestampNanosJoinSuiteBase extends SharedSparkSession with Adapt
       assert(e.left.dataType == expected && e.right.dataType == expected,
         s"Join key not coerced to $expected: ${e.left.dataType} === ${e.right.dataType}")
     }
+  }
+
+  /** Whether a sort-merge ASOF join of `plan` runs in a codegen stage, not only in one below it. */
+  private def isAsOfJoinGenerated(plan: SparkPlan): Boolean = {
+    def inStage(node: SparkPlan): Boolean = node match {
+      case _: SortMergeAsOfJoinExec => true
+      case _: InputAdapter => false
+      case other => other.children.exists(inStage)
+    }
+    collect(plan) { case stage: WholeStageCodegenExec if inStage(stage.child) => stage }.nonEmpty
   }
 
   private def cgLabel(cgConf: Seq[(String, String)]): String =
@@ -434,16 +444,29 @@ abstract class TimestampNanosJoinSuiteBase extends SharedSparkSession with Adapt
             (leftKey, rightRows, (backward, forward, nearest)) <- cases
             (direction, expected) <-
               Seq("backward" -> backward, "forward" -> forward, "nearest" -> nearest)
-          } withSQLConf(SQLConf.SORT_MERGE_AS_OF_JOIN_ENABLED.key -> sortMerge) {
-            val l = df(s"2020-01-01T$leftKey" -> 0)
-            val r = df(rightRows.map { case (k, v) => s"2020-01-01T$k" -> v }: _*)
-            // The single-pass analyzer cannot resolve the deserializer `checkToRDD` adds.
-            QueryTest.checkAnswer(
-              df = l.joinAsOf(r, l("k"), r("k"), usingColumns = Seq.empty, joinType = "inner",
-                tolerance = null, allowExactMatches = true, direction = direction)
-                .select(r("v")),
-              expectedAnswer = Seq(Row(expected)),
-              checkToRDD = false)
+            // Only a backward or forward sort-merge join has a generated scan.
+            codegen <-
+              (if (sortMerge == "true" && direction != "nearest") Seq(false, true) else Seq(true))
+          } withClue(s"sort-merge $sortMerge, $direction, ASOF join codegen $codegen: ") {
+            withSQLConf(
+                SQLConf.SORT_MERGE_AS_OF_JOIN_ENABLED.key -> sortMerge,
+                SQLConf.ENABLE_SORT_MERGE_AS_OF_JOIN_CODEGEN.key -> codegen.toString) {
+              val l = df(s"2020-01-01T$leftKey" -> 0)
+              val r = df(rightRows.map { case (k, v) => s"2020-01-01T$k" -> v }: _*)
+              val joined = l.joinAsOf(r, l("k"), r("k"), usingColumns = Seq.empty,
+                joinType = "inner", tolerance = null, allowExactMatches = true,
+                direction = direction).select(r("v"))
+              // The single-pass analyzer cannot resolve the deserializer `checkToRDD` adds.
+              QueryTest.checkAnswer(
+                df = joined, expectedAnswer = Seq(Row(expected)), checkToRDD = false)
+              if (sortMerge == "true") {
+                val plan = joined.queryExecution.executedPlan
+                assert(collectFirst(plan) { case j: SortMergeAsOfJoinExec => j }.isDefined,
+                  s"Expected a sort-merge ASOF join in:\n$plan")
+                assert(isAsOfJoinGenerated(plan) == (codegen && direction != "nearest"),
+                  s"Unexpected ASOF join codegen in:\n$plan")
+              }
+            }
           }
           // A nanosecond subtraction in an as-of key or in the join condition is still rejected.
           Seq(

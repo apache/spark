@@ -57,6 +57,8 @@ trait CodegenSupport extends SparkPlan {
     case _: BroadcastHashJoinExec => "bhj"
     case _: ShuffledHashJoinExec => "shj"
     case _: SortMergeJoinExec => "smj"
+    // A skewed join is named "SortMergeAsOfJoin(skew=true)", which is not a valid Java name.
+    case _: SortMergeAsOfJoinExec => "smaj"
     case _: BroadcastNestedLoopJoinExec => "bnlj"
     case _: RDDScanExec => "rdd"
     case _: OneRowRelationExec => "orr"

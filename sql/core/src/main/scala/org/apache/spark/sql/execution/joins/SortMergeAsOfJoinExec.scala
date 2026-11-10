@@ -70,7 +70,7 @@ case class SortMergeAsOfJoinExec(
     condition: Option[Expression],
     left: SparkPlan,
     right: SparkPlan,
-    codegenEnabled: Boolean = false,
+    codegenEnabled: Boolean,
     isSkewJoin: Boolean = false) extends ShuffledJoin {
 
   // The sides may have different key counts: each side is sorted on its own, and only the
@@ -139,7 +139,8 @@ case class SortMergeAsOfJoinExec(
   // config is read once, when the join is planned.
   override def supportCodegen: Boolean = direction != Nearest && codegenEnabled
 
-  // Hides `codegenEnabled` in the plan string.
+  // ShuffledJoin already hides `isSkewJoin`, the last field. This also hides `codegenEnabled`,
+  // the field before it, in the plan string.
   override def stringArgs: Iterator[Any] = super.stringArgs.toSeq.dropRight(1).iterator
 
   override def inputRDDs(): Seq[RDD[InternalRow]] =
@@ -209,9 +210,10 @@ case class SortMergeAsOfJoinExec(
   }
 
   /**
-   * Generates the cursor scan of [[SortMergeAsOfJoinScanner]] (see `findWithCursor` there).
-   * Returns the function that finds the best right row for a left row, and the code that
-   * starts the scan.
+   * Generates the cursor scan, which reads the right side once and never steps back. The left
+   * rows of a group come in ascending as-of key order, so backward keeps its best row for the
+   * next left row, and forward drops each failing row. Returns the function that finds the best
+   * right row for a left row, and the code that starts the scan.
    */
   private def genCursorScan(
       ctx: CodegenContext,
@@ -316,7 +318,7 @@ case class SortMergeAsOfJoinExec(
   }
 
   /**
-   * Generates the buffered scan of [[SortMergeAsOfJoinScanner]]. Each right group stays in an
+   * Generates the buffered scan. Each right group stays in an
    * [[ExternalAppendOnlyUnsafeRowArray]], which can spill, and is scanned for every left row.
    * Returns the function that finds the best right row for a left row, and the code that
    * starts the scan.

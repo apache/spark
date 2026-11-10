@@ -707,6 +707,32 @@ class WholeStageCodegenSuite extends SharedSparkSession
     }
   }
 
+  test("A skewed sort-merge ASOF join should generate code that compiles") {
+    withSQLConf(SQLConf.SORT_MERGE_AS_OF_JOIN_ENABLED.key -> "true") {
+      val trades = Seq((5, 1), (11, 1)).toDF("ts", "k")
+      val quotes = Seq((0, 1, "a"), (10, 1, "c")).toDF("ts", "k", "v")
+      val df = trades.joinAsOf(
+        quotes, trades("ts"), quotes("ts"), usingColumns = Seq("k"), joinType = "inner",
+        tolerance = null, allowExactMatches = true, direction = "backward")
+      // No skew rule marks an ASOF join here, so mark it by hand. The skew changes its name.
+      val skewed = df.queryExecution.executedPlan.transform {
+        case j: SortMergeAsOfJoinExec => j.copy(isSkewJoin = true)
+      }
+      def inStage(plan: SparkPlan): Boolean = plan match {
+        case j: SortMergeAsOfJoinExec => j.isSkewJoin
+        case _: InputAdapter => false
+        case other => other.children.exists(inStage)
+      }
+      val stages = skewed.collect {
+        case stage: WholeStageCodegenExec if inStage(stage.child) => stage
+      }
+      assert(stages.length == 1, s"Expected the skewed join in one codegen stage:\n$skewed")
+      // Without its own variable prefix, the join names its variables after
+      // "SortMergeAsOfJoin(skew=true)" and the code does not compile.
+      CodeGenerator.compile(stages.head.doCodeGen()._2)
+    }
+  }
+
   test("Inner/Cross BroadcastNestedLoopJoinExec should be included in WholeStageCodegen") {
     val df1 = spark.range(4).select($"id".as("k1"))
     val df2 = spark.range(3).select($"id".as("k2"))

@@ -2863,7 +2863,8 @@ class EnsureRequirementsSuite extends SharedSparkSession {
         left = DummySparkPlan(outputPartitioning = KeyedPartitioning(Seq(exprA),
           Seq(InternalRow(1), InternalRow(1), InternalRow(1)))),
         right = DummySparkPlan(outputPartitioning = KeyedPartitioning(Seq(exprB),
-          Seq(InternalRow(1), InternalRow(2)))))
+          Seq(InternalRow(1), InternalRow(2)))),
+        codegenEnabled = false)
       EnsureRequirements.apply(asOf).children.foreach { child =>
         assert(groupPartitionsNodes(child).isEmpty,
           s"an as-of join builds no stamped side:\n$child")
