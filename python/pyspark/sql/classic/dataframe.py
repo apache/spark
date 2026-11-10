@@ -73,7 +73,12 @@ from pyspark.sql.types import (
     _first_timestamp_nanos_map_key_type,
     _parse_datatype_json_string,
 )
-from pyspark.sql.utils import get_active_spark_context, to_java_array, to_scala_map
+from pyspark.sql.utils import (
+    get_active_spark_context,
+    to_java_array,
+    to_scala_map,
+    validate_approx_quantile_relative_error,
+)
 from pyspark.storagelevel import StorageLevel
 from pyspark.traceback_utils import SCCallSiteSync
 from pyspark.util import (
@@ -1743,24 +1748,7 @@ class DataFrame(ParentDataFrame, PandasMapOpsMixin, PandasConversionMixin):
                 )
         probabilities = _to_list(self._sc, cast(List["ColumnOrName"], probabilities))
 
-        if not isinstance(relativeError, (float, int)):
-            raise PySparkTypeError(
-                errorClass="NOT_EXPECTED_TYPE",
-                messageParameters={
-                    "expected_type": "float or int",
-                    "arg_name": "relativeError",
-                    "arg_type": type(relativeError).__name__,
-                },
-            )
-        if relativeError < 0:
-            raise PySparkValueError(
-                errorClass="NEGATIVE_VALUE",
-                messageParameters={
-                    "arg_name": "relativeError",
-                    "arg_value": str(relativeError),
-                },
-            )
-        relativeError = float(relativeError)
+        relativeError = validate_approx_quantile_relative_error(relativeError)
 
         jaq = self._jdf.stat().approxQuantile(col, probabilities, relativeError)
         jaq_list = [list(j) for j in jaq]

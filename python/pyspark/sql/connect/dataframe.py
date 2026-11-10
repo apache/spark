@@ -90,6 +90,7 @@ from pyspark.sql.pandas.functions import _validate_vectorized_udf  # type: ignor
 from pyspark.sql.pandas.types import from_arrow_schema, to_arrow_schema
 from pyspark.sql.table_arg import TableArg
 from pyspark.sql.types import Row, StructType, _create_row
+from pyspark.sql.utils import validate_approx_quantile_relative_error
 from pyspark.storagelevel import StorageLevel
 from pyspark.util import PythonEvalType, is_remote_only
 
@@ -1797,24 +1798,7 @@ class DataFrame(ParentDataFrame):
                     },
                 )
 
-        if not isinstance(relativeError, (float, int)):
-            raise PySparkTypeError(
-                errorClass="NOT_EXPECTED_TYPE",
-                messageParameters={
-                    "expected_type": "float or int",
-                    "arg_name": "relativeError",
-                    "arg_type": type(relativeError).__name__,
-                },
-            )
-        if relativeError < 0:
-            raise PySparkValueError(
-                errorClass="NEGATIVE_VALUE",
-                messageParameters={
-                    "arg_name": "relativeError",
-                    "arg_value": str(relativeError),
-                },
-            )
-        relativeError = float(relativeError)
+        relativeError = validate_approx_quantile_relative_error(relativeError)
         table, _ = DataFrame(
             plan.StatApproxQuantile(
                 child=self._plan,
