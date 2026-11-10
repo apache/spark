@@ -102,6 +102,9 @@ DRY_RUN_ENV = bool(os.environ.get("DRY_RUN"))
 GITHUB_BASE = "https://github.com/apache/spark/pull"
 GITHUB_COMMIT_BASE = "https://github.com/apache/spark/commit"
 GITHUB_API_BASE = "https://api.github.com/repos/apache/spark"
+# Items per page that get_json_pages asks GitHub list endpoints for: the most GitHub allows.
+# Without it, GitHub returns 30.
+GITHUB_PAGE_SIZE = 100
 JIRA_BASE = "https://issues.apache.org/jira/browse"
 JIRA_API_BASE = "https://issues.apache.org/jira"
 # Prefix added to temporary branches
@@ -627,6 +630,51 @@ def get_json(url):
         else:
             print_error("Unable to fetch URL, exiting: %s" % url)
         sys.exit(-1)
+
+
+def get_json_pages(url):
+    """Return every item of the GitHub list endpoint at `url`, reading all of its pages.
+
+    `get_json` reads only the first page, and GitHub fills it with 30 items unless asked for
+    more. On a PR with a long history, that misses the `closed` event that records the merge
+    commit, so a merged PR looks unmerged (#60129, with 38 events). It also drops the commits
+    after the 30th, so their authors get no Co-authored-by, and the release branches after
+    the 30th, so they cannot be picked into. Each page asks for GITHUB_PAGE_SIZE items, and
+    reading stops at the first page that is not full.
+
+    >>> from unittest.mock import patch
+    >>> base = "https://api.github.com/repos/apache/spark"
+    >>> items, requested = list(range(250)), []
+    >>> def fake_get_json(page_url):
+    ...     requested.append(page_url)
+    ...     page = int(page_url.rsplit("page=", 1)[1])
+    ...     return items[(page - 1) * 100 : page * 100]
+    >>> with patch.dict(get_json_pages.__globals__, get_json=fake_get_json):
+    ...     get_json_pages(base + "/issues/1/events") == items
+    True
+    >>> requested[0][len(base):]
+    '/issues/1/events?per_page=100&page=1'
+    >>> [page_url.rsplit("?", 1)[1] for page_url in requested]
+    ['per_page=100&page=1', 'per_page=100&page=2', 'per_page=100&page=3']
+
+    A full last page costs one more request, which comes back empty, and a URL that already
+    has a query string gets the paging parameters appended to it:
+
+    >>> items, requested = list(range(200)), []
+    >>> with patch.dict(get_json_pages.__globals__, get_json=fake_get_json):
+    ...     count = len(get_json_pages(base + "/branches?protected=false"))
+    >>> count, len(requested), requested[-1][len(base):]
+    (200, 3, '/branches?protected=false&per_page=100&page=3')
+    """
+    separator = "&" if "?" in url else "?"
+    items = []
+    page = 1
+    while True:
+        batch = get_json("%s%sper_page=%d&page=%d" % (url, separator, GITHUB_PAGE_SIZE, page))
+        items.extend(batch)
+        if len(batch) < GITHUB_PAGE_SIZE:
+            return items
+        page += 1
 
 
 def merge_commit_candidates(pr_events):
@@ -3189,7 +3237,7 @@ def main():
     os.chdir(SPARK_HOME)
     original_head = get_current_ref()
 
-    branches = get_json("%s/branches" % GITHUB_API_BASE)
+    branches = get_json_pages("%s/branches" % GITHUB_API_BASE)
     branch_names = list(filter(lambda x: x.startswith("branch-"), [x["name"] for x in branches]))
     branch_names = sorted(branch_names, key=semver_branch_rank, reverse=True)
 
@@ -3199,7 +3247,7 @@ def main():
         pr_num = args.pr_num
         print("Start to merge pull request #%s" % (pr_num))
     pr = get_json("%s/pulls/%s" % (GITHUB_API_BASE, pr_num))
-    pr_events = get_json("%s/issues/%s/events" % (GITHUB_API_BASE, pr_num))
+    pr_events = get_json_pages("%s/issues/%s/events" % (GITHUB_API_BASE, pr_num))
 
     url = pr["url"]
     title = pr["title"]
@@ -3256,7 +3304,7 @@ def main():
     pr_author_info = get_json("https://api.github.com/users/%s" % user_login)
     pr_author_name = pr_author_info.get("name") or user_login
     pr_author_email = pr_author_info.get("email")
-    pr_commits = get_json("%s/pulls/%s/commits" % (GITHUB_API_BASE, pr_num))
+    pr_commits = get_json_pages("%s/pulls/%s/commits" % (GITHUB_API_BASE, pr_num))
     if not pr_author_email:
         # If the GitHub profile has no public email, find the author's email from the
         # PR's git commits. Only use it if GitHub links the commit to the PR author's
