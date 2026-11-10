@@ -807,23 +807,19 @@ class SparkSession:
         else:
             local_relation = LocalRelation(_table)
 
-        # get_config_dict throws [SQL_CONF_NOT_FOUND] if the key is not found.
-        cache_threshold = int(
-            configs["spark.sql.session.localRelationCacheThreshold"]  # type: ignore[arg-type]
-        )
-        local_relation_size_limit = int(
-            configs["spark.sql.session.localRelationSizeLimit"]  # type: ignore[arg-type]
-        )
-        max_chunk_size_rows = int(
-            configs["spark.sql.session.localRelationChunkSizeRows"]  # type: ignore[arg-type]
-        )
-        max_chunk_size_bytes = int(
-            configs["spark.sql.session.localRelationChunkSizeBytes"]  # type: ignore[arg-type]
-        )
-        max_batch_of_chunks_size_bytes = int(
-            configs[  # type: ignore[arg-type]
-                "spark.sql.session.localRelationBatchOfChunksSizeBytes"
-            ]
+        # get_config_dict throws [SQL_CONF_NOT_FOUND] if the key is not found,
+        # and these session configs always have a value.
+        def int_config(key: str) -> int:
+            value = configs[key]
+            assert value is not None, f"{key} is not set"
+            return int(value)
+
+        cache_threshold = int_config("spark.sql.session.localRelationCacheThreshold")
+        local_relation_size_limit = int_config("spark.sql.session.localRelationSizeLimit")
+        max_chunk_size_rows = int_config("spark.sql.session.localRelationChunkSizeRows")
+        max_chunk_size_bytes = int_config("spark.sql.session.localRelationChunkSizeBytes")
+        max_batch_of_chunks_size_bytes = int_config(
+            "spark.sql.session.localRelationBatchOfChunksSizeBytes"
         )
         plan: LogicalPlan = local_relation
         if cache_threshold <= _table.nbytes:
