@@ -393,16 +393,13 @@ object CharVarcharUtils extends Logging with SparkCharVarcharUtils {
 
   /**
    * Matches the read-side CHAR padding that [[addPaddingForScan]] wraps a column in (when
-   * standard semantics are off) and extracts the padded expression and the length argument.
+   * standard semantics are off) and extracts the padded expression and the CHAR length.
    */
   private[sql] object ReadSidePadding {
-    def unapply(e: Expression): Option[(Expression, Expression)] = e match {
-      case s: StaticInvoke
-          if s.scalarFunction.isEmpty &&
-            s.staticObject == classOf[CharVarcharCodegenUtils] &&
-            s.functionName == READ_SIDE_PADDING &&
-            s.arguments.length == 2 =>
-        Some((s.arguments.head, s.arguments(1)))
+    def unapply(e: Expression): Option[(Expression, Int)] = e match {
+      case s @ StaticInvoke(_, _, READ_SIDE_PADDING, Seq(child, Literal(n: Int, _)), _, _, _, _,
+          None) if s.staticObject == classOf[CharVarcharCodegenUtils] =>
+        Some((child, n))
       case _ => None
     }
   }

@@ -25,7 +25,6 @@ import org.apache.spark.sql.catalyst.expressions.{Alias, And, Attribute, Attribu
 import org.apache.spark.sql.catalyst.plans._
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.plans.logical.statsEstimation.EstimationUtils._
-import org.apache.spark.sql.catalyst.types.DataTypeUtils
 import org.apache.spark.sql.catalyst.util.{CharVarcharUtils, DateTimeUtils}
 import org.apache.spark.sql.types.{DateType, TimestampType, _}
 
@@ -580,11 +579,34 @@ class JoinEstimationSuite extends StatsEstimationTestBase {
     // CHAR keys reach the join through the read-side padding Project, which passes the
     // column's statistics, histogram included, to its alias.
     def paddedSide(name: String): LogicalPlan = {
-      val c = DataTypeUtils.toAttribute(CharVarcharUtils.replaceCharVarcharWithStringInSchema(
-        StructType(Seq(StructField(name, CharType(5))))).head)
+      val c = charAttr(name, 5)
       Project(Seq(Alias(CharVarcharUtils.addPaddingForScan(c), name)()), side(c))
     }
     assert(joinRows(paddedSide("l"), paddedSide("r")).contains(BigInt(10)))
+  }
+
+  test("SPARK-60810: join keys without non-null values match no rows") {
+    // ANALYZE stores a distinct count of 0 for a column of nulls, and an IS NULL filter sets
+    // it. Padded CHAR keys get the column's statistics through the padding Project.
+    val nullStat = ColumnStat(distinctCount = Some(0), nullCount = Some(10), avgLen = Some(5),
+      maxLen = Some(5))
+    def nullSide(key: Attribute): LogicalPlan =
+      StatsTestPlan(Seq(key), 10, AttributeMap(Seq(key -> nullStat)))
+    def paddedSide(name: String): LogicalPlan = {
+      val c = charAttr(name, 5)
+      Project(Seq(Alias(CharVarcharUtils.addPaddingForScan(c), name)()), nullSide(c))
+    }
+    def stringSide(name: String): LogicalPlan = nullSide(AttributeReference(name, StringType)())
+    Seq(
+      paddedSide("l") -> paddedSide("r"),
+      paddedSide("l") -> stringSide("r"),
+      stringSide("l") -> stringSide("r")).foreach { case (left, right) =>
+      val condition = Some(EqualTo(left.output.head, right.output.head))
+      assert(Join(left, right, Inner, condition, JoinHint.NONE).stats.rowCount
+        .contains(BigInt(0)))
+      assert(Join(left, right, FullOuter, condition, JoinHint.NONE).stats.rowCount
+        .contains(BigInt(20)))
+    }
   }
 
   test("SPARK-33018 Fix estimate statistics issue if child has 0 bytes") {

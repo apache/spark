@@ -234,6 +234,37 @@ class StatisticsCollectionSuite extends StatisticsCollectionTestBase with Shared
     }
   }
 
+  test("SPARK-60810: CBO plans an outer join on CHAR columns that hold only nulls") {
+    withSQLConf(
+        SQLConf.CBO_ENABLED.key -> "true",
+        SQLConf.READ_SIDE_CHAR_PADDING.key -> "true") {
+      withTable("char_nulls_a", "char_nulls_b", "char_nulls_c") {
+        Seq("char_nulls_a", "char_nulls_b").foreach { t =>
+          sql(s"CREATE TABLE $t(id INT, c CHAR(5)) USING parquet")
+          sql(s"INSERT INTO $t SELECT CAST(id AS INT), CAST(NULL AS STRING) FROM range(10)")
+          sql(s"ANALYZE TABLE $t COMPUTE STATISTICS FOR COLUMNS id, c")
+        }
+        sql("CREATE TABLE char_nulls_c(x INT) USING parquet")
+        sql("INSERT INTO char_nulls_c VALUES (1)")
+        sql("ANALYZE TABLE char_nulls_c COMPUTE STATISTICS FOR COLUMNS x")
+
+        // The padded keys carry a distinct count of 0 on both sides, so they match no rows and
+        // the full outer join keeps the rows of both sides.
+        val df = sql(
+          """SELECT * FROM (
+            |  SELECT a.id AS aid, b.id AS bid
+            |  FROM char_nulls_a a FULL OUTER JOIN char_nulls_b b ON a.c = b.c) j
+            |CROSS JOIN char_nulls_c""".stripMargin)
+        val plan = df.queryExecution.optimizedPlan
+        val fullOuter = plan.collectFirst {
+          case j: Join if j.joinType == org.apache.spark.sql.catalyst.plans.FullOuter => j
+        }.getOrElse(fail(s"no full outer join in\n${plan.treeString}"))
+        assert(fullOuter.stats.rowCount.contains(BigInt(20)), plan.treeString)
+        checkAnswer(df.selectExpr("count(*)"), Row(20))
+      }
+    }
+  }
+
   test("SPARK-60810: partition pruning estimates a filter on a CHAR partition column") {
     withSQLConf(
         SQLConf.CBO_ENABLED.key -> "true",

@@ -484,18 +484,17 @@ class V2ExpressionBuilder(e: Expression, isPredicate: Boolean = false) extends L
     }
   }
 
-  // Identity compile is only valid vs a literal Spark already padded to the CHAR length, so the
-  // callers below require the length argument to be an Int literal.
+  // Identity compile is only valid vs a literal Spark already padded to the CHAR length.
   private def isFoldableStringOfLen(expr: Expression, n: Int): Boolean = expr match {
     case Literal(s: UTF8String, _) => s.numChars() == n
     case _ => false
   }
 
   private def generateCharPadColumn(
-      child: Expression, length: Expression, dataType: DataType): Option[V2Expression] = {
+      child: Expression, length: Int, dataType: DataType): Option[V2Expression] = {
     generateExpressionWithNameByChildren(
       CharVarcharUtils.V2_CHAR_READ_SIDE_PADDING,
-      Seq(child, length, Literal.create(" ", StringType)),
+      Seq(child, Literal(length), Literal.create(" ", StringType)),
       dataType,
       isPredicate = false)
   }
@@ -503,9 +502,8 @@ class V2ExpressionBuilder(e: Expression, isPredicate: Boolean = false) extends L
   private def generateCharPadLiteralCmp(
       name: String, left: Expression, right: Expression): Option[V2Expression] = {
     def paddedVsLit(pad: Expression, lit: Expression): Option[V2Expression] = pad match {
-      case CharVarcharUtils.ReadSidePadding(child, length @ Literal(n: Int, _))
-          if isFoldableStringOfLen(lit, n) =>
-        generateCharPadColumn(child, length, pad.dataType).flatMap { col =>
+      case CharVarcharUtils.ReadSidePadding(child, n) if isFoldableStringOfLen(lit, n) =>
+        generateCharPadColumn(child, n, pad.dataType).flatMap { col =>
           generateExpression(lit).map { l =>
             new V2Predicate(name, Array[V2Expression](col, l))
           }
@@ -517,9 +515,9 @@ class V2ExpressionBuilder(e: Expression, isPredicate: Boolean = false) extends L
 
   private def generateCharPadIn(
       value: Expression, list: Seq[Expression]): Option[V2Expression] = value match {
-    case CharVarcharUtils.ReadSidePadding(child, length @ Literal(n: Int, _))
+    case CharVarcharUtils.ReadSidePadding(child, n)
         if list.nonEmpty && list.forall(isFoldableStringOfLen(_, n)) =>
-      generateCharPadColumn(child, length, value.dataType).flatMap { col =>
+      generateCharPadColumn(child, n, value.dataType).flatMap { col =>
         val lits = list.flatMap(generateExpression(_))
         if (lits.length == list.length) {
           Some(new V2Predicate("IN", (col +: lits).toArray[V2Expression]))
@@ -532,12 +530,12 @@ class V2ExpressionBuilder(e: Expression, isPredicate: Boolean = false) extends L
 
   private def generateCharPadInSet(
       child: Expression, hset: Set[Any]): Option[V2Expression] = child match {
-    case CharVarcharUtils.ReadSidePadding(grandChild, length @ Literal(n: Int, _))
+    case CharVarcharUtils.ReadSidePadding(grandChild, n)
         if hset.nonEmpty && hset.forall {
           case s: UTF8String => s.numChars() == n
           case _ => false
         } =>
-      generateCharPadColumn(grandChild, length, child.dataType).map { col =>
+      generateCharPadColumn(grandChild, n, child.dataType).map { col =>
         val lits = hset.toSeq.map(elem => LiteralValue(elem, child.dataType))
         new V2Predicate("IN", (col +: lits).toArray[V2Expression])
       }

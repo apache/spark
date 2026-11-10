@@ -25,7 +25,6 @@ import org.apache.spark.sql.catalyst.plans.LeftOuter
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.plans.logical.statsEstimation.ColumnStatsMap
 import org.apache.spark.sql.catalyst.plans.logical.statsEstimation.EstimationUtils._
-import org.apache.spark.sql.catalyst.types.DataTypeUtils
 import org.apache.spark.sql.catalyst.util.{CharVarcharUtils, DateTimeUtils}
 import org.apache.spark.sql.types._
 import org.apache.spark.unsafe.types.UTF8String
@@ -967,8 +966,7 @@ class FilterEstimationSuite extends StatsEstimationTestBase {
 
   test("SPARK-60810: predicates on a read-side padded CHAR column use the column's stats") {
     val padded = CharVarcharUtils.addPaddingForScan(
-      DataTypeUtils.toAttribute(CharVarcharUtils.replaceCharVarcharWithStringInSchema(
-        StructType(Seq(StructField("cstring", CharType(2))))).head).withExprId(attrString.exprId))
+      charAttr("cstring", 2).withExprId(attrString.exprId))
     assert(padded match {
       case CharVarcharUtils.ReadSidePadding(a: Attribute, _) => a.exprId == attrString.exprId
       case _ => false

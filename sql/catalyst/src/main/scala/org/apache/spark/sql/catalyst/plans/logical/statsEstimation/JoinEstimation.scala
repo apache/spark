@@ -198,7 +198,10 @@ case class JoinEstimation(join: Join) extends Logging {
       val rightKeyStat = rightStats.attributeStats(rightKey)
       val lInterval = ValueInterval(leftKeyStat.min, leftKeyStat.max, leftKey.dataType)
       val rInterval = ValueInterval(rightKeyStat.min, rightKeyStat.max, rightKey.dataType)
-      if (ValueInterval.isIntersected(lInterval, rInterval)) {
+      // A distinct count of 0 on both sides means neither has a non-null key value.
+      val noValues = leftKeyStat.distinctCount.contains(BigInt(0)) &&
+        rightKeyStat.distinctCount.contains(BigInt(0))
+      if (!noValues && ValueInterval.isIntersected(lInterval, rInterval)) {
         val (newMin, newMax) = ValueInterval.intersect(lInterval, rInterval, leftKey.dataType)
         val (card, joinStat) = (leftKeyStat.histogram, rightKeyStat.histogram) match {
           case (Some(l: Histogram), Some(r: Histogram))
@@ -216,7 +219,8 @@ case class JoinEstimation(join: Join) extends Logging {
         // Return cardinality estimated from the most selective join keys.
         if (card < joinCard) joinCard = card
       } else {
-        // One of the join key pairs is disjoint, thus the two sides of join is disjoint.
+        // One of the join key pairs is disjoint or has no non-null values, thus the two sides
+        // of join is disjoint.
         joinCard = 0
       }
       i += 1

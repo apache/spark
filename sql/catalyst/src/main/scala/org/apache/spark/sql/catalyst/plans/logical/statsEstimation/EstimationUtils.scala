@@ -20,7 +20,7 @@ package org.apache.spark.sql.catalyst.plans.logical.statsEstimation
 import scala.collection.mutable.ArrayBuffer
 import scala.math.BigDecimal.RoundingMode
 
-import org.apache.spark.sql.catalyst.expressions.{Alias, Attribute, AttributeMap, EmptyRow, Expression, Literal}
+import org.apache.spark.sql.catalyst.expressions.{Alias, Attribute, AttributeMap, EmptyRow, Expression}
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.util.CharVarcharUtils
 import org.apache.spark.sql.types.{DecimalType, _}
@@ -92,17 +92,14 @@ object EstimationUtils {
       // reads the table through it as well, so the statistics already describe padded values.
       // Statistics collected otherwise (with padding off, or reported by a connector) can
       // describe shorter values, and every non-null padded value has at least N characters.
-      // A distinct count of 0 or a null count covering every row means no non-null values, so
-      // there is nothing to pad (ANALYZE then stores the type's default size as the lengths).
-      // The distinct count is left as is.
+      // A distinct count of 0 means no non-null values, so there is nothing to pad (ANALYZE
+      // then stores the type's default size as the lengths). The distinct count is left as is.
       // It is too high only when stored values differ just in trailing spaces, which the
       // padding makes equal.
-      case alias @ Alias(CharVarcharUtils.ReadSidePadding(attr: Attribute, Literal(n: Int, _)), _)
+      case alias @ Alias(CharVarcharUtils.ReadSidePadding(attr: Attribute, n), _)
           if attributeStats.contains(attr) =>
         val stat = attributeStats(attr)
-        val noValues =
-          stat.distinctCount.contains(BigInt(0)) || stat.nullCount.exists(_ >= rowCount)
-        val padded = if (noValues) {
+        val padded = if (stat.distinctCount.contains(BigInt(0))) {
           stat
         } else {
           stat.copy(avgLen = stat.avgLen.map(_.max(n)), maxLen = stat.maxLen.map(_.max(n)))
@@ -150,13 +147,12 @@ object EstimationUtils {
   }
 
   /**
-   * Whether the histogram estimation paths apply to a column of this type. String and binary
-   * columns have no numeric bounds, which those paths need. ANALYZE TABLE builds no histogram for
-   * them, but a DSv2 connector can report one for any type.
+   * Whether a column of this type can be estimated with an equi-height histogram: the types
+   * whose values [[toDouble]] converts. A DSv2 connector can report a histogram for any type.
    */
   def canEstimateWithHistogram(dataType: DataType): Boolean = dataType match {
-    case _: StringType | BinaryType => false
-    case _ => true
+    case _: NumericType | DateType | TimestampType | BooleanType => true
+    case _ => false
   }
 
   /**
