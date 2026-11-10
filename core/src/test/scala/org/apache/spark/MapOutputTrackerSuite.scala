@@ -292,6 +292,48 @@ class MapOutputTrackerSuite extends SparkFunSuite with LocalSparkContext {
     assert(tracker.getNumAvailableOutputs(0) === 0)
     assert(tracker.getNumAvailableOutputs(1) === 1, "co-located shuffle must not be swept")
 
+    // A failed shuffle that was unregistered meanwhile removes nothing but still bumps the epoch.
+    val epochBefore = tracker.getEpoch
+    tracker.removeOutputsOnExecutor("a", respectReliablyStored = true, Some(5),
+      restrictToFailedShuffle = true)
+    assert(tracker.getNumAvailableOutputs(1) === 1)
+    assert(tracker.getEpoch > epochBefore)
+
+    tracker.stop()
+    rpcEnv.shutdown()
+  }
+
+  test("SPARK-59138: restrictToFailedShuffle on host loss cleans only the failed shuffle's map " +
+    "output and merge results") {
+    val pushConf = new SparkConf()
+    pushConf.set(PUSH_BASED_SHUFFLE_ENABLED, true)
+    pushConf.set(IS_TESTING, true)
+    pushConf.set(SERIALIZER, "org.apache.spark.serializer.KryoSerializer")
+    val rpcEnv = createRpcEnv("test")
+    val tracker = newTrackerMaster(pushConf)
+    tracker.trackerEndpoint = rpcEnv.setupEndpoint(MapOutputTracker.ENDPOINT_NAME,
+      new MapOutputTrackerMasterEndpoint(rpcEnv, tracker, pushConf))
+
+    val size = MapStatus.compressSize(1000L)
+    val merger = BlockManagerId(BlockManagerId.SHUFFLE_MERGER_IDENTIFIER, "hostA", 1000)
+    // Reliable shuffle 0 (the failed one) and local shuffle 1, each with a map and merge on hostA.
+    tracker.registerShuffle(0, 1, 1, isReliablyStored = true)
+    tracker.registerShuffle(1, 1, 1)
+    for (shuffleId <- 0 to 1) {
+      tracker.registerMapOutput(shuffleId, 0,
+        MapStatus(BlockManagerId("a", "hostA", 1000), Array(size), 5 + shuffleId))
+      val bitmap = new RoaringBitmap()
+      bitmap.add(0)
+      tracker.registerMergeResult(shuffleId, 0, MergeStatus(merger, 0, bitmap, 1000L))
+    }
+
+    tracker.removeOutputsOnHost("hostA", respectReliablyStored = true, Some(0),
+      restrictToFailedShuffle = true)
+    assert(tracker.getNumAvailableOutputs(0) === 0)
+    assert(tracker.getNumAvailableMergeResults(0) === 0)
+    assert(tracker.getNumAvailableOutputs(1) === 1)
+    assert(tracker.getNumAvailableMergeResults(1) === 1)
+
     tracker.stop()
     rpcEnv.shutdown()
   }

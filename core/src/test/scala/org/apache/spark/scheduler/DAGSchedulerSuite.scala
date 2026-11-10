@@ -1208,9 +1208,9 @@ class DAGSchedulerSuite extends SparkFunSuite with TempLocalSparkContext with Ti
   }
 
   /** Global flag on, two shuffles with empty reliablyStored, completed on hostA / hostB. */
-  private def submitGlobalReliableEmptyHandleJob()
+  private def submitGlobalReliableEmptyHandleJob(shuffleServiceEnabled: Boolean = false)
       : (ShuffleDependency[Int, Int, Nothing], ShuffleDependency[Int, Int, Nothing]) = {
-    conf.set(config.SHUFFLE_SERVICE_ENABLED.key, "false")
+    conf.set(config.SHUFFLE_SERVICE_ENABLED.key, shuffleServiceEnabled.toString)
     conf.set(config.SHUFFLE_IO_PLUGIN_CLASS.key,
       classOf[TestShuffleDataIOWithMockedComponents].getName)
     when(sc.shuffleDriverComponents.supportsReliableStorage()).thenReturn(true)
@@ -1576,6 +1576,99 @@ class DAGSchedulerSuite extends SparkFunSuite with TempLocalSparkContext with Ti
         shuffleId, -1L, -1, 0, "corruption"), null))
     assert(mapOutputTracker.getNumAvailableMergeResults(shuffleId) == 0)
     assert(mapOutputTracker.getNumAvailableOutputs(shuffleId) === 2)
+  }
+
+  test("SPARK-59138: a FetchFailed with no map index from a real executor still cleans the " +
+    "reliable shuffle there") {
+    // Only a merged-chunk failure at the push merger keeps the failed shuffle's map output.
+    val (_, shuffleDep) = submitReliableShuffleJob(numMaps = 2, numReduces = 1)
+    runEvent(makeCompletionEvent(taskSets(1).tasks(0),
+      FetchFailed(makeBlockManagerId("hostA"), shuffleDep.shuffleId, -1L, -1, 0, "ignored"),
+      null))
+    assert(mapOutputTracker.getNumAvailableOutputs(shuffleDep.shuffleId) === 1)
+  }
+
+  test("SPARK-59138: with the external shuffle service on, executor loss skips the shuffle " +
+    "registry walk") {
+    val (depA, _) = submitGlobalReliableEmptyHandleJob(shuffleServiceEnabled = true)
+    val epochBefore = mapOutputTracker.getEpoch
+    runEvent(ExecutorLost("hostA-exec", ExecutorKilled))
+    verify(mapOutputTracker, never()).hasUnreliablyStoredShuffle
+    verify(mapOutputTracker, never()).removeOutputsOnExecutor("hostA-exec", true)
+    assert(mapOutputTracker.getEpoch === epochBefore)
+    assert(mapOutputTracker.getNumAvailableOutputs(depA.shuffleId) === 2)
+  }
+
+  test("SPARK-59138: a host-scope reliable-shuffle FetchFailed bypass cleans only the failed " +
+    "shuffle on the host") {
+    // Same as the executor-scope bypass test, but the service is on and host-level unregister is
+    // set, so the bypass goes through removeOutputsOnHost.
+    conf.set(config.SHUFFLE_SERVICE_ENABLED.key, "true")
+    conf.set(config.UNREGISTER_OUTPUT_ON_HOST_ON_FETCH_FAILURE, true)
+    scheduler = new MyDAGScheduler(
+      sc, taskScheduler, sc.listenerBus, mapOutputTracker, blockManagerMaster, sc.env)
+    dagEventProcessLoopTester = new DAGSchedulerEventProcessLoopTester(scheduler)
+
+    val reliableDep =
+      new ReliablyStoredShuffleDependency(new MyRDD(sc, 2, Nil), new HashPartitioner(2))
+    val localDep = new ShuffleDependency(new MyRDD(sc, 2, Nil), new HashPartitioner(2))
+    val reduceRdd = new MyRDD(sc, 2, List(reliableDep, localDep), tracker = mapOutputTracker)
+    submit(reduceRdd, Array(0, 1))
+    val reliableStageId = scheduler.shuffleIdToMapStage(reliableDep.shuffleId).id
+    val localStageId = scheduler.shuffleIdToMapStage(localDep.shuffleId).id
+    completeShuffleMapStageSuccessfully(reliableStageId, 0, 2, hostNames = Seq("hostA", "hostA"))
+    completeShuffleMapStageSuccessfully(localStageId, 0, 2, hostNames = Seq("hostA", "hostA"))
+
+    // L's FetchFailed clears L on hostA and stamps the executor fence. L's retry re-registers
+    // map 0 on hostA.
+    runEvent(makeCompletionEvent(taskSets(2).tasks(0),
+      FetchFailed(makeBlockManagerId("hostA"), localDep.shuffleId, 0L, 0, 0, "ignored"), null))
+    assert(mapOutputTracker.getNumAvailableOutputs(localDep.shuffleId) === 0)
+    scheduler.resubmitFailedStages()
+    val retry = taskSets.last
+    assert(retry.stageId === localStageId)
+    runEvent(makeCompletionEvent(retry.tasks(0), Success,
+      makeMapStatus("hostA", reduceRdd.partitions.length)))
+    assert(mapOutputTracker.getNumAvailableOutputs(localDep.shuffleId) === 1)
+
+    // Delayed FetchFailed for R bypasses the fence and clears only R on hostA.
+    taskSets(2).tasks(1).epoch = 0
+    runEvent(makeCompletionEvent(taskSets(2).tasks(1),
+      FetchFailed(makeBlockManagerId("hostA"), reliableDep.shuffleId, 0L, 0, 1, "ignored"), null))
+    verify(mapOutputTracker, times(1))
+      .removeOutputsOnHost("hostA", true, Some(reliableDep.shuffleId), true)
+    assert(mapOutputTracker.getNumAvailableOutputs(reliableDep.shuffleId) === 0)
+    assert(mapOutputTracker.getNumAvailableOutputs(localDep.shuffleId) === 1)
+  }
+
+  test("SPARK-59138: a pipelined group's FetchFailed on a reliable regular prefix cleans that " +
+    "prefix on the executor") {
+    conf.set(config.SHUFFLE_SERVICE_ENABLED.key, "false")
+    // Materialize two reliable shuffles with map 0 on hostA. Only `prefixDep` feeds the group.
+    val prefixDep =
+      new ReliablyStoredShuffleDependency(new MyRDD(sc, 2, Nil), new HashPartitioner(3))
+    val otherDep =
+      new ReliablyStoredShuffleDependency(new MyRDD(sc, 2, Nil), new HashPartitioner(1))
+    submit(new MyRDD(sc, 1, List(prefixDep, otherDep), tracker = mapOutputTracker), Array(0))
+    completeShuffleMapStageSuccessfully(
+      scheduler.shuffleIdToMapStage(prefixDep.shuffleId).id, 0, 3)
+    completeShuffleMapStageSuccessfully(
+      scheduler.shuffleIdToMapStage(otherDep.shuffleId).id, 0, 1)
+    complete(taskSets(2), Seq((Success, 1)))
+    val taskSetsBefore = taskSets.size
+
+    val producerRdd = new MyRDD(sc, 3, List(prefixDep), tracker = mapOutputTracker)
+    val pipelinedDep = new PipelinedShuffleDependency(producerRdd, new HashPartitioner(2))
+    submit(new MyRDD(sc, 2, List(pipelinedDep), tracker = mapOutputTracker), Array(0, 1))
+    assert(taskSets.size === taskSetsBefore + 2, "producer and consumer gang-submitted")
+
+    // The producer fails fetching hostA's map 0 of the prefix: the group aborts, and the prefix's
+    // hostA output is unregistered while the other reliable shuffle's stays.
+    runEvent(makeCompletionEvent(taskSets(taskSetsBefore).tasks(0),
+      FetchFailed(makeBlockManagerId("hostA"), prefixDep.shuffleId, 0L, 0, 0, "ignored"), null))
+    assert(failure != null)
+    assert(mapOutputTracker.getNumAvailableOutputs(prefixDep.shuffleId) === 1)
+    assert(mapOutputTracker.getNumAvailableOutputs(otherDep.shuffleId) === 2)
   }
 
   test("SPARK-28967 properties must be cloned before posting to listener bus for 0 partition") {
