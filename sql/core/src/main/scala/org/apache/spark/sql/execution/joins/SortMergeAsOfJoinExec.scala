@@ -53,7 +53,8 @@ import org.apache.spark.unsafe.types.TimestampNanosVal
  * Backward and forward joins support whole-stage codegen. The generated code runs the cursor
  * scan or the buffered scan and checks the conditions. The right-side buffer stays a Scala
  * object, since it can spill to disk. Nearest joins keep the interpreted scan. `codegenEnabled`
- * is the codegen config as it was when the join was planned.
+ * is the codegen config as it was when the join was planned. A join built by hand, not by the
+ * planner, gets `false`.
  *
  * Note: When there are no equi-keys, both sides are collected into a
  * single partition (AllTuples) and, without a cursor scan, the entire
@@ -70,7 +71,7 @@ case class SortMergeAsOfJoinExec(
     condition: Option[Expression],
     left: SparkPlan,
     right: SparkPlan,
-    codegenEnabled: Boolean,
+    codegenEnabled: Boolean = false,
     isSkewJoin: Boolean = false) extends ShuffledJoin {
 
   // The sides may have different key counts: each side is sorted on its own, and only the
@@ -136,7 +137,7 @@ case class SortMergeAsOfJoinExec(
       direction, asOfCondition, condition, leftSortExprs, rightSortExprs)
 
   // Nearest joins keep the interpreted scan, as its distance compare is harder to generate. The
-  // config is read once, when the join is planned.
+  // codegen config is read once, when the join is planned.
   override def supportCodegen: Boolean = direction != Nearest && codegenEnabled
 
   // ShuffledJoin already hides `isSkewJoin`, the last field. This also hides `codegenEnabled`,
@@ -318,10 +319,9 @@ case class SortMergeAsOfJoinExec(
   }
 
   /**
-   * Generates the buffered scan. Each right group stays in an
-   * [[ExternalAppendOnlyUnsafeRowArray]], which can spill, and is scanned for every left row.
-   * Returns the function that finds the best right row for a left row, and the code that
-   * starts the scan.
+   * Generates the buffered scan. Each right group stays in an [[ExternalAppendOnlyUnsafeRowArray]],
+   * which can spill, and is scanned for every left row. Returns the function that finds the best
+   * right row for a left row, and the code that starts the scan.
    */
   private def genBufferedScan(
       ctx: CodegenContext,

@@ -758,8 +758,7 @@ class PlannerSuite extends SharedSparkSession with AdaptiveSparkPlanHelper {
       joinType = Inner,
       condition = None,
       left = planA,
-      right = planB,
-      codegenEnabled = false)
+      right = planB)
     assert(asOfExec.requiredChildDistribution == Seq(AllTuples, AllTuples))
     assert(asOfExec.requiredChildOrdering == Seq(Seq(orderingA), Seq(orderingB)))
     val outputPlan = EnsureRequirements.apply(asOfExec)
@@ -782,8 +781,7 @@ class PlannerSuite extends SharedSparkSession with AdaptiveSparkPlanHelper {
       joinType = Inner,
       condition = None,
       left = planA,
-      right = planB,
-      codegenEnabled = false)
+      right = planB)
     assert(asOfExec.requiredChildDistribution ==
       Seq(ClusteredDistribution(exprC :: Nil), ClusteredDistribution(exprC :: Nil)))
     assert(asOfExec.requiredChildOrdering ==

@@ -459,10 +459,10 @@ abstract class TimestampNanosJoinSuiteBase extends SharedSparkSession with Adapt
               // The single-pass analyzer cannot resolve the deserializer `checkToRDD` adds.
               QueryTest.checkAnswer(
                 df = joined, expectedAnswer = Seq(Row(expected)), checkToRDD = false)
+              val plan = joined.queryExecution.executedPlan
+              assert(collectFirst(plan) { case j: SortMergeAsOfJoinExec => j }.isDefined ==
+                (sortMerge == "true"), s"Unexpected sort-merge ASOF join choice in:\n$plan")
               if (sortMerge == "true") {
-                val plan = joined.queryExecution.executedPlan
-                assert(collectFirst(plan) { case j: SortMergeAsOfJoinExec => j }.isDefined,
-                  s"Expected a sort-merge ASOF join in:\n$plan")
                 assert(isAsOfJoinGenerated(plan) == (codegen && direction != "nearest"),
                   s"Unexpected ASOF join codegen in:\n$plan")
               }
