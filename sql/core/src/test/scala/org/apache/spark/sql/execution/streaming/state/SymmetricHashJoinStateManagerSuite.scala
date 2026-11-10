@@ -1323,8 +1323,9 @@ class SymmetricHashJoinStateManagerEventTimeInValueSuite
       manager =>
         implicit val mgr = manager
         manager.append(toJoinKeyRow(40), toInputValueWithNullTime(40), matched = false)
-        // Put a real row at every timestamp that a random bucket for rows without a timestamp
-        // could use, so they would share a (key, timestamp) list.
+        // Put a real row at every timestamp 0..1023, which a random bucket would use without the
+        // Long.MinValue offset. If the offset were lost, the null-time row would share a
+        // (key, timestamp) list with one of them and be evicted with it.
         (0 until 1024).foreach(append(40, _))
         assert(removeByValue(1023) === 1024)
         assert(manager.get(toJoinKeyRow(40)).map(_.isNullAt(1)).toSeq === Seq(true))
