@@ -3389,4 +3389,16 @@ class SubquerySuite extends SharedSparkSession
       }
     }
   }
+
+  test("SPARK-60983: Propagate a constant into a comparison with a correlated scalar subquery") {
+    withTempView("t1", "t2") {
+      Seq((1, 2), (2, 3)).toDF("a", "b").createOrReplaceTempView("t1")
+      Seq((1, 2), (1, 1), (2, 3)).toDF("a", "b").createOrReplaceTempView("t2")
+      // The constant of `t1.a` is not looked up for `t2.a` in the condition of the subquery.
+      checkAnswer(
+        sql("SELECT * FROM t1 WHERE t1.a = 1 AND " +
+          "t1.b = (SELECT max(t2.b) FROM t2 WHERE t2.a = t1.a)"),
+        Row(1, 2))
+    }
+  }
 }

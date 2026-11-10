@@ -1699,6 +1699,16 @@ class DataFrameSuite extends SharedSparkSession
     }
   }
 
+  test("SPARK-61254: LogicalRDD constraints should not reference the origin Dataset columns") {
+    val df = spark.range(16).as("t").where($"t.id" > 5)
+    // The optimizer removes the root alias, so the constraint `t.id > 5` differs from the
+    // optimized output `id` only in qualifier.
+    val cp = df.select($"id".as("id")).localCheckpoint()
+    checkAnswer(
+      df.join(cp, df("id") === cp("id") + 1, "right_outer").where(cp("id") > 0),
+      (6L to 14L).map(i => Row(i + 1, i)) :+ Row(null, 15L))
+  }
+
   test("SPARK-10656: completely support special chars") {
     val df = Seq(1 -> "a").toDF("i_$.a", "d^'a.")
     checkAnswer(df.select(df("*")), Row(1, "a"))
@@ -3019,6 +3029,49 @@ class DataFrameSuite extends SharedSparkSession
         .where($"id" >= 0)
         .where(rand(10) * 10 > 100 && lit(10L) / ($"id" - 3) > 0)
       checkAnswer(df, Nil)
+    }
+  }
+
+  test("SPARK-60985: an inferred filter does not raise an error the query does not raise") {
+    withTempPath { dir =>
+      // On (0, 6), neither `x = y` nor `10 / y` fails, whichever is evaluated first. On
+      // (3000000000, 1), neither does the cast of `y`, but the cast of `x` overflows.
+      Seq((0L, 6L), (6L, 6L), (3000000000L, 1L)).toDF("x", "y").write.parquet(dir.getCanonicalPath)
+      val df = spark.read.parquet(dir.getCanonicalPath)
+      withSQLConf(SQLConf.ANSI_ENABLED.key -> "true") {
+        checkAnswer(df.where($"x" === $"y" && lit(10L) / $"y" > 0), Row(6L, 6L))
+        checkAnswer(
+          df.select($"x").distinct().join(df.select($"y").distinct(), $"x" === $"y")
+            .where(lit(10L) / $"y" > 0),
+          Row(6L, 6L))
+        checkAnswer(
+          df.where($"x" === $"y" && $"y".cast("float").cast("int") > 0), Row(6L, 6L))
+        // The binding `a.y = 0` turns `b.y = 10 / a.y` into `b.y = 10 / 0`, which no row reaches.
+        checkAnswer(
+          df.as("a").join(df.as("b"), $"a.x" === $"b.x" && $"b.y" === lit(10L) / $"a.y")
+            .where($"a.y" === 0),
+          Seq.empty)
+      }
+    }
+  }
+
+  test("SPARK-60985: a correlated subquery is inferred with its correlation condition") {
+    withTempPath { dir =>
+      // `r.y` is 0 on one row, which the correlation condition `s.b = 10 / r.y` would divide by.
+      Seq(6L).toDF("x").write.parquet(s"${dir.getCanonicalPath}/l")
+      Seq(0L, 6L).toDF("y").write.parquet(s"${dir.getCanonicalPath}/r")
+      Seq((0L, 1L), (6L, 1L)).toDF("a", "b").write.parquet(s"${dir.getCanonicalPath}/s")
+      withTempView("l", "r", "s") {
+        Seq("l", "r", "s").foreach { t =>
+          spark.read.parquet(s"${dir.getCanonicalPath}/$t").createOrReplaceTempView(t)
+        }
+        withSQLConf(SQLConf.ANSI_ENABLED.key -> "true") {
+          checkAnswer(
+            sql("SELECT * FROM l LEFT JOIN r ON l.x = r.y AND " +
+              "l.x IN (SELECT a FROM s WHERE s.b = 10 / l.x)"),
+            Row(6L, null))
+        }
+      }
     }
   }
 

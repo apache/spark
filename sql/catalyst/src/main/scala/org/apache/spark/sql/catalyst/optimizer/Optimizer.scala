@@ -1524,9 +1524,10 @@ object ColumnPruning extends Rule[LogicalPlan] {
         child = a.copy(aggregateExpressions = a.aggregateExpressions.filter(p.references.contains)))
     case a @ Project(_, e @ Expand(_, _, grandChild)) if !e.outputSet.subsetOf(a.references) =>
       val newOutput = e.output.filter(a.references.contains(_))
+      val newOutputSet = AttributeSet(newOutput)
       val newProjects = e.projections.map { proj =>
         proj.zip(e.output).filter { case (_, a) =>
-          newOutput.contains(a)
+          newOutputSet.contains(a)
         }.map(_._1)
       }
       a.copy(child = Expand(newProjects, newOutput, grandChild))
@@ -1575,11 +1576,14 @@ object ColumnPruning extends Rule[LogicalPlan] {
     case p @ Project(_, u: Union) =>
       if (!u.outputSet.subsetOf(p.references)) {
         val firstChild = u.children.head
-        val newOutput = prunedChild(firstChild, p.references).output
+        // Compute these once, not per column of each child: `output` may create new attributes
+        // on each call (e.g. a `Project` with aliases), and a `Seq` lookup is linear.
+        val firstChildOutput = firstChild.output.toIndexedSeq
+        val newOutputSet = AttributeSet(prunedChild(firstChild, p.references).output)
         // pruning the columns of all children based on the pruned first child.
         val newChildren = u.children.map { p =>
           val selected = p.output.zipWithIndex.filter { case (a, i) =>
-            newOutput.contains(firstChild.output(i))
+            newOutputSet.contains(firstChildOutput(i))
           }.map(_._1)
           Project(selected, p)
         }
@@ -2271,8 +2275,8 @@ object InferFiltersFromConstraints extends Rule[LogicalPlan]
   private def inferFilters(plan: LogicalPlan): LogicalPlan = plan.transformWithPruning(
     _.containsAnyPattern(FILTER, JOIN)) {
     case filter @ Filter(condition, child) =>
-      val newFilters = filter.constraints --
-        (child.constraints ++ splitConjunctivePredicates(condition))
+      val newFilters = (filter.constraints --
+        (child.constraints ++ splitConjunctivePredicates(condition))).toSeq.filter(canBeFilter)
       if (newFilters.nonEmpty) {
         Filter(And(newFilters.reduce(And), condition), child)
       } else {
@@ -2317,16 +2321,47 @@ object InferFiltersFromConstraints extends Rule[LogicalPlan]
   }
 
   private def inferNewFilter(plan: LogicalPlan, constraints: ExpressionSet): LogicalPlan = {
-    val newPredicates = constraints
+    val newPredicates = (constraints
       .union(constructIsNotNullConstraints(constraints, plan.output))
       .filter { c =>
         c.references.nonEmpty && c.references.subsetOf(plan.outputSet) && c.deterministic
-      } -- plan.constraints
+      } -- plan.constraints).toSeq.filter(canBeFilter)
     if (newPredicates.isEmpty) {
       plan
     } else {
       Filter(newPredicates.reduce(And), plan)
     }
+  }
+
+  /**
+   * A constraint only says what holds on the rows an operator outputs. As a filter, it also runs
+   * on rows and values the query may never evaluate it on, e.g. `10 / x > 0` from `x = y AND
+   * 10 / y > 0` on a row where `x` is 0 and `y` is not, so only a constraint that cannot fail
+   * becomes a filter. Constant parts count as what they evaluate to, as they are folded right
+   * after this rule. An uncorrelated subquery counts as a constant, as it runs once whichever
+   * rows use it, and a correlated one by its values and its correlation condition. Callers pass
+   * the original expressions, because [[ExpressionSet.filter]] tests the canonicalized ones.
+   */
+  private def canBeFilter(constraint: Expression): Boolean = {
+    conf.legacyInferFailableFiltersFromConstraints || ExprUtils.canEvaluateUnconditionally(
+      stripCannotFail(ConstantFolding.constantFolding(constraint, isConditionalBranch = true)))
+  }
+
+  private def stripCannotFail(e: Expression): Expression = e match {
+    // An integral remainder by a non-zero constant, e.g. `x % 2 = 0`, never fails.
+    case r: Remainder if r.dataType.isInstanceOf[IntegralType] && isNonZeroIntegral(r.right) =>
+      stripCannotFail(r.left)
+    case i: InSubquery =>
+      (i.values.map(IsNotNull(_)) ++ i.query.joinCond).map(stripCannotFail).reduce[Expression](And)
+    case x: Exists =>
+      x.joinCond.map(stripCannotFail).foldLeft[Expression](Literal.TrueLiteral)(And)
+    case s: ScalarSubquery if !s.isCorrelated => Literal.create(null, s.dataType)
+    case other => other.mapChildren(stripCannotFail)
+  }
+
+  private def isNonZeroIntegral(e: Expression): Boolean = e match {
+    case Literal(v, _: IntegralType) => v != null && v != 0
+    case _ => false
   }
 }
 

@@ -1851,6 +1851,21 @@ object SQLConf {
     .booleanConf
     .createWithDefault(true)
 
+  val LEGACY_INFER_FAILABLE_FILTERS_FROM_CONSTRAINTS =
+    buildConf("spark.sql.legacy.inferFailableFiltersFromConstraints")
+      .internal()
+      .doc("When true, the query optimizer also infers a filter from data constraints when " +
+        "evaluating it can fail or is otherwise observable, such as `10 / x > 0` from " +
+        "`x = y AND 10 / y > 0` in ANSI mode, or a UDF. Such a filter runs on rows that the " +
+        "query does not evaluate the expression on, so the query can raise an error that it " +
+        "does not raise without the filter. When false, only a filter that `ExprUtils." +
+        "canEvaluateUnconditionally` accepts is inferred, which also leaves out some " +
+        "expressions that cannot fail, such as `upper(s) = 'A'`.")
+      .version("4.4.0")
+      .withBindingPolicy(ConfigBindingPolicy.NOT_APPLICABLE)
+      .booleanConf
+      .createWithDefault(false)
+
   val PROPAGATE_DISTINCT_KEYS_ENABLED =
     buildConf("spark.sql.optimizer.propagateDistinctKeys.enabled")
       .internal()
@@ -3529,8 +3544,8 @@ object SQLConf {
         "(including user-written FILTER on a plain column), so the first " +
         "aggregate's output cardinality stays bounded by the un-rewritten " +
         "plan. A child that is not safe to evaluate unconditionally (for example " +
-        "a division, which can throw) keeps the raw Expand key. When false, both " +
-        "the IF/CASE rewrite and the union-of-filters guard are disabled. The " +
+        "a division in ANSI mode, which can throw) keeps the raw Expand key. " +
+        "When false, both the IF/CASE rewrite and the union-of-filters guard are disabled. The " +
         "IF/CASE rewrite is only applied to base expressions that are safe to " +
         "evaluate unconditionally (e.g. plain columns), so the short-circuit " +
         "semantics of IF/CASE WHEN are preserved. A condition that contains a " +
@@ -6204,9 +6219,9 @@ object SQLConf {
 
   val PARSE_SQL_ENABLED =
     buildConf("spark.sql.function.parseSql.enabled")
-      .doc("When true, enables the parse_sql SQL function. This feature is under active " +
-        "development; the JSON contract may change across releases while the flag remains " +
-        "off by default.")
+      .doc("When true, enables the parse_sql SQL function (PARSE and ANALYZE). " +
+        "This feature is under active development; the JSON contract may change across " +
+        "releases while the flag remains off by default.")
       .version("4.4.0")
       .withBindingPolicy(ConfigBindingPolicy.SESSION)
       .booleanConf
@@ -6290,6 +6305,56 @@ object SQLConf {
       .version("2.4.0")
       .stringConf
       .createWithDefault("")
+
+  val STREAMING_V2_COLUMN_PRUNING_ENABLED =
+    buildConf("spark.sql.streaming.v2ColumnPruning.enabled")
+      .doc("When true, the scan of a Data Source V2 streaming source whose table has the " +
+        "capability STREAMING_COLUMN_PRUNING only reads the top-level columns that the streaming " +
+        "query reads from it, which Spark takes from the plan of the query optimized when the " +
+        "query starts, as it does for batch scans: Spark optimizes the query once more when it " +
+        "starts, as it optimizes each micro-batch. A query that reads other columns of the " +
+        "source later, for example, after the configuration of the optimizer changes in its " +
+        "session, fails with STREAMING_SCAN_MISSING_COLUMNS. When false, the scan reads all the " +
+        "columns of the source.")
+      .version("4.4.0")
+      .withBindingPolicy(ConfigBindingPolicy.NOT_APPLICABLE)
+      .booleanConf
+      .createWithDefault(false)
+
+  val STREAMING_V2_FILTER_PUSHDOWN_ENABLED =
+    buildConf("spark.sql.streaming.v2FilterPushdown.enabled")
+      .doc("When true, the scan of a Data Source V2 streaming source whose table has the " +
+        "capability STREAMING_FILTER_PUSHDOWN gets the filters that the streaming query applies " +
+        "to all the rows that it reads from the source, which Spark takes from the plan of the " +
+        "query optimized when the query starts, as it does for batch scans: Spark optimizes the " +
+        "query once more when it starts, as it optimizes each micro-batch, but without the rules " +
+        "that infer filters. A scan builder whose filters may fail on some rows, as a cast does " +
+        "with ANSI, gets the filters that the query applies before any other filter, in their " +
+        "order, and then those that cannot fail that it applies wherever they are. The filters " +
+        "on columns of floating types, of strings of a collation that is not binary, or of " +
+        "structs, arrays or user-defined types with such values are not pushed down. The query " +
+        "still applies the filters after the scan, and each micro-batch checks that its plan " +
+        "applies them to all the rows that it reads from the source before it reads them. " +
+        "Otherwise, as when the optimizer of a micro-batch rewrites a pushed filter in a way " +
+        "that Spark cannot follow, the micro-batch fails with STREAMING_SCAN_FILTERS_CHANGED, " +
+        "and so do the next ones: restart the query with this configuration set to false to " +
+        "read the source with no filter. When false, the scan gets no filter.")
+      .version("4.4.0")
+      .withBindingPolicy(ConfigBindingPolicy.NOT_APPLICABLE)
+      .booleanConf
+      .createWithDefault(false)
+
+  val STREAMING_V2_SCAN_PUSHDOWN_FAIL_ON_ERROR =
+    buildConf("spark.sql.streaming.v2ScanPushDown.failOnOptimizationError")
+      .internal()
+      .doc("When true, a failure of the optimization of a streaming query when it starts, which " +
+        "finds what the scans of its Data Source V2 sources read, fails the query. When false, " +
+        "the scans of its sources read all their columns with no filter instead, with a " +
+        "warning. It is true in the tests of Spark.")
+      .version("4.4.0")
+      .withBindingPolicy(ConfigBindingPolicy.NOT_APPLICABLE)
+      .booleanConf
+      .createWithDefault(Utils.isTesting)
 
   val DISABLE_MAP_KEY_NORMALIZATION =
     buildConf("spark.sql.legacy.disableMapKeyNormalization")
@@ -7422,6 +7487,17 @@ object SQLConf {
       .booleanConf
       .createWithDefault(false)
 
+  val LEGACY_MYSQL_TOP_N_OVER_GROUP_BY_EXPR_ENABLED =
+    buildConf("spark.sql.legacy.mysql.topNOverGroupByExpr.enabled")
+      .internal()
+      .doc("When true, push ORDER BY ... LIMIT to MySQL on top of a pushed GROUP BY even when " +
+        "a sort key is built over a GROUP BY expression, such as GROUP BY a + 1 ORDER BY " +
+        "(a + 1) * 2. MySQL rejects such queries under the default ONLY_FULL_GROUP_BY mode.")
+      .version("4.4.0")
+      .withBindingPolicy(ConfigBindingPolicy.NOT_APPLICABLE)
+      .booleanConf
+      .createWithDefault(false)
+
   val LEGACY_ORACLE_TIMESTAMP_MAPPING_ENABLED =
     buildConf("spark.sql.legacy.oracle.timestampMapping.enabled")
       .internal()
@@ -7541,6 +7617,18 @@ object SQLConf {
     .stringConf
     .toSequence
     .createWithDefault(Nil)
+
+  val NATIVE_DATA_SOURCE_FILTER_PUSHDOWN_ENABLED =
+    buildConf("spark.sql.dataSource.native.filterPushdown.enabled")
+      .doc("When true, Spark passes to native data sources the domains of the columns that the " +
+        "filters of a batch scan constrain, the values that these columns can have in the rows " +
+        "that match, so that a data source can skip data. Spark evaluates the filters after " +
+        "reading anyway, so turning it off only makes a data source read more data, for example " +
+        "to check whether a data source skips data that it must read.")
+      .version("4.4.0")
+      .withBindingPolicy(ConfigBindingPolicy.SESSION)
+      .booleanConf
+      .createWithDefault(true)
 
   val CSV_FILTER_PUSHDOWN_ENABLED = buildConf("spark.sql.csv.filterPushdown.enabled")
     .doc("When true, enable filter pushdown to CSV datasource.")
@@ -9773,6 +9861,9 @@ class SQLConf extends Serializable with Logging with SqlApiConf {
 
   def constraintPropagationEnabled: Boolean = getConf(CONSTRAINT_PROPAGATION_ENABLED)
 
+  def legacyInferFailableFiltersFromConstraints: Boolean =
+    getConf(LEGACY_INFER_FAILABLE_FILTERS_FROM_CONSTRAINTS)
+
   def escapedStringLiterals: Boolean = getConf(ESCAPED_STRING_LITERALS)
 
   def parserDfaCacheFlushRatio: Double = getConf(PARSER_DFA_CACHE_FLUSH_RATIO)
@@ -9811,6 +9902,9 @@ class SQLConf extends Serializable with Logging with SqlApiConf {
 
   def legacyMySqlTimestampNTZMappingEnabled: Boolean =
     getConf(LEGACY_MYSQL_TIMESTAMPNTZ_MAPPING_ENABLED)
+
+  def legacyMySqlTopNOverGroupByExprEnabled: Boolean =
+    getConf(LEGACY_MYSQL_TOP_N_OVER_GROUP_BY_EXPR_ENABLED)
 
   def legacyOracleTimestampMappingEnabled: Boolean =
     getConf(LEGACY_ORACLE_TIMESTAMP_MAPPING_ENABLED)
@@ -10305,6 +10399,10 @@ class SQLConf extends Serializable with Logging with SqlApiConf {
   def disabledV2StreamingMicroBatchReaders: String =
     getConf(DISABLED_V2_STREAMING_MICROBATCH_READERS)
 
+  def streamingV2ColumnPruningEnabled: Boolean = getConf(STREAMING_V2_COLUMN_PRUNING_ENABLED)
+
+  def streamingV2FilterPushdownEnabled: Boolean = getConf(STREAMING_V2_FILTER_PUSHDOWN_ENABLED)
+
   def fastFailFileFormatOutput: Boolean = getConf(FASTFAIL_ON_FILEFORMAT_OUTPUT)
 
   def concatBinaryAsString: Boolean = getConf(CONCAT_BINARY_AS_STRING)
@@ -10423,6 +10521,9 @@ class SQLConf extends Serializable with Logging with SqlApiConf {
   def pythonFilterPushDown: Boolean = getConf(PYTHON_FILTER_PUSHDOWN_ENABLED)
 
   def pythonLimitPushDown: Boolean = getConf(PYTHON_LIMIT_PUSHDOWN_ENABLED)
+
+  def nativeDataSourceFilterPushdownEnabled: Boolean =
+    getConf(NATIVE_DATA_SOURCE_FILTER_PUSHDOWN_ENABLED)
 
   def csvFilterPushDown: Boolean = getConf(CSV_FILTER_PUSHDOWN_ENABLED)
 
