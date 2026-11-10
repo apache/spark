@@ -4131,7 +4131,8 @@ org.apache.spark.sql.AnalysisException
 CREATE TEMPORARY FUNCTION foo3_5e(x INT) RETURNS INT
 RETURN (SELECT IDENTIFIER(foo3_5_col) FROM VALUES (1) AS T(a))
 -- !query analysis
-CreateSQLFunctionCommand foo3_5e, x INT, INT, (SELECT IDENTIFIER(foo3_5_col) FROM VALUES (1) AS T(a)), false, true, false, false
+CreateSQLFunctionCommand x INT, INT, (SELECT IDENTIFIER(foo3_5_col) FROM VALUES (1) AS T(a)), false, true, false, false
++- ResolvedIdentifier org.apache.spark.sql.catalyst.analysis.FakeSystemCatalog$@xxxxxxxx, session.foo3_5e
 
 
 -- !query
@@ -4219,7 +4220,8 @@ SetCommand (spark.sql.legacy.allowSessionVariableInPersistedView,Some(true))
 CREATE FUNCTION foo3_5f(x INT) RETURNS INT
 RETURN (SELECT IDENTIFIER(foo3_5_col) FROM VALUES (1) AS T(a))
 -- !query analysis
-CreateSQLFunctionCommand spark_catalog.default.foo3_5f, x INT, INT, (SELECT IDENTIFIER(foo3_5_col) FROM VALUES (1) AS T(a)), false, false, false, false
+CreateSQLFunctionCommand x INT, INT, (SELECT IDENTIFIER(foo3_5_col) FROM VALUES (1) AS T(a)), false, false, false, false
++- ResolvedIdentifier V2SessionCatalog(spark_catalog), default.foo3_5f
 
 
 -- !query
@@ -4242,7 +4244,8 @@ SetCommand (spark.sql.legacy.allowSessionVariableInPersistedView,Some(false))
 -- !query
 CREATE FUNCTION foo3_5g(x INT) RETURNS INT RETURN foo3_5f(x) + 1
 -- !query analysis
-CreateSQLFunctionCommand spark_catalog.default.foo3_5g, x INT, INT, foo3_5f(x) + 1, false, false, false, false
+CreateSQLFunctionCommand x INT, INT, foo3_5f(x) + 1, false, false, false, false
++- ResolvedIdentifier V2SessionCatalog(spark_catalog), default.foo3_5g
 
 
 -- !query

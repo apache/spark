@@ -4082,7 +4082,8 @@ DropVariable false
 CREATE TEMPORARY FUNCTION identifier_sql_function(arg1 STRING) RETURNS STRING
 RETURN arg1 || 'blah'
 -- !query analysis
-CreateSQLFunctionCommand identifier_sql_function, arg1 STRING, STRING, arg1 || 'blah', false, true, false, false
+CreateSQLFunctionCommand arg1 STRING, STRING, arg1 || 'blah', false, true, false, false
++- ResolvedIdentifier org.apache.spark.sql.catalyst.analysis.FakeSystemCatalog$@xxxxxxxx, session.identifier_sql_function
 
 
 -- !query
