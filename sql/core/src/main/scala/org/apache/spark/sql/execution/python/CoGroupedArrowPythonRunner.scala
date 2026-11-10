@@ -138,11 +138,13 @@ class CoGroupedArrowPythonRunner(
           } else {
             // All the input has been consumed.
             dataOut.writeInt(0)
+            pythonMetrics("pythonDataSent") += dataOut.size() - startData
             return false
           }
         }
 
         var numRowsInBatch: Int = 0
+        var groupWriterToClose: ArrowWriterWrapper = null
         if (nextBatchInLeftGroup != null) {
           if (leftGroupArrowWriter == null) {
             leftGroupArrowWriter = ArrowWriterWrapper.createAndStartArrowWriter(leftSchema,
@@ -161,8 +163,7 @@ class CoGroupedArrowPythonRunner(
             dataOut)
 
           if (!nextBatchInLeftGroup.hasNext) {
-            leftGroupArrowWriter.streamWriter.end()
-            leftGroupArrowWriter.close()
+            groupWriterToClose = leftGroupArrowWriter
             nextBatchInLeftGroup = null
             leftGroupArrowWriter = null
           }
@@ -183,8 +184,7 @@ class CoGroupedArrowPythonRunner(
             rightGroupArrowWriter.unloader,
             dataOut)
           if (!nextBatchInRightGroup.hasNext) {
-            rightGroupArrowWriter.streamWriter.end()
-            rightGroupArrowWriter.close()
+            groupWriterToClose = rightGroupArrowWriter
             nextBatchInRightGroup = null
             rightGroupArrowWriter = null
           }
@@ -195,7 +195,15 @@ class CoGroupedArrowPythonRunner(
         // key exists in one side but not in the other side.
         assert(0 <= numRowsInBatch && numRowsInBatch <= maxRecordsPerBatch, numRowsInBatch)
 
-        val deltaData = dataOut.size() - startData
+        var deltaData: Long = dataOut.size() - startData
+        if (groupWriterToClose != null) {
+          // `streamWriter` stays bound to the stream of the first batch of the group, while
+          // `dataOut` can be a new stream on later calls.
+          val endStart = groupWriterToClose.streamWriter.bytesWritten()
+          groupWriterToClose.streamWriter.end()
+          deltaData += groupWriterToClose.streamWriter.bytesWritten() - endStart
+          groupWriterToClose.close()
+        }
         pythonMetrics("pythonDataSent") += deltaData
         true
       }

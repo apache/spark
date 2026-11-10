@@ -287,6 +287,7 @@ private[python] trait GroupedPythonArrowInput { self: RowInputArrowPythonRunner 
       private var nextBatchStart: Iterator[InternalRow] = Iterator.empty
 
       override def writeNextInputToStream(dataOut: DataOutputStream): Boolean = {
+        val startData = dataOut.size()
         if (!nextBatchStart.hasNext) {
           if (inputIterator.hasNext) {
             dataOut.writeInt(1) // Notify that there is a group to read.
@@ -299,25 +300,29 @@ private[python] trait GroupedPythonArrowInput { self: RowInputArrowPythonRunner 
             nextBatchStart = inputIterator.next()
           }
         }
-        if (nextBatchStart.hasNext) {
-          val startData = dataOut.size()
+        val hasInput = if (nextBatchStart.hasNext) {
           val numRowsInBatch: Int = BatchedPythonArrowInput.writeSizedBatch(writer.arrowWriter,
             writer.streamWriter, nextBatchStart, maxBytesPerBatch, maxRecordsPerBatch,
             writer.unloader, dataOut)
-          if (!nextBatchStart.hasNext) {
-            writer.streamWriter.end()
-            // We don't need a try catch block here as the close() method is registered with
-            // the TaskCompletionListener.
-            writer.close()
-          }
           assert(0 < numRowsInBatch && numRowsInBatch <= maxRecordsPerBatch, numRowsInBatch)
-          val deltaData = dataOut.size() - startData
-          pythonMetrics("pythonDataSent") += deltaData
           true
         } else {
           dataOut.writeInt(0) // End of data is marked by sending 0.
           false
         }
+        var deltaData: Long = dataOut.size() - startData
+        if (hasInput && !nextBatchStart.hasNext) {
+          // `streamWriter` stays bound to the stream of the first batch of the group, while
+          // `dataOut` can be a new stream on later calls.
+          val endStart = writer.streamWriter.bytesWritten()
+          writer.streamWriter.end()
+          deltaData += writer.streamWriter.bytesWritten() - endStart
+          // We don't need a try catch block here as the close() method is registered with
+          // the TaskCompletionListener.
+          writer.close()
+        }
+        pythonMetrics("pythonDataSent") += deltaData
+        hasInput
       }
     }
   }
