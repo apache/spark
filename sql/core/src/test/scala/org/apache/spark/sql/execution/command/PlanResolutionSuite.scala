@@ -3511,7 +3511,7 @@ class PlanResolutionSuite extends SharedSparkSession with AnalysisTest {
       val ident = Identifier.of(Array.empty[String], "tab")
       val cachedRelation = DataSourceV2Relation.create(table, Some(testCat), Some(ident))
       var sharedRelationCacheLookups = 0
-      val sharedRelationCache: RelationCache = (_, _, _, _, _) => {
+      val sharedRelationCache: RelationCache = (_, _, _, _) => {
         sharedRelationCacheLookups += 1
         Some(cachedRelation)
       }
@@ -3549,7 +3549,7 @@ class PlanResolutionSuite extends SharedSparkSession with AnalysisTest {
         readOpts: java.util.Map[String, String]): DataSourceV2Relation = {
       AnalysisContext.withNewAnalysisContext {
         val sharedRelationCache: RelationCache =
-          (_, _, _, _, _) => Some(cachedRelationWith(cacheOpts))
+          (_, _, _, _) => Some(cachedRelationWith(cacheOpts))
         val rule = new RelationResolution(catalogManagerWithDefault, sharedRelationCache)
         val unresolved =
           UnresolvedRelation(Seq("testcat", "tab"), new CaseInsensitiveStringMap(readOpts))
@@ -3633,7 +3633,7 @@ class PlanResolutionSuite extends SharedSparkSession with AnalysisTest {
         sharedRelationCacheEntry(catalog, ident, currentTable, cachedTable)
       var sharedRelationCacheLookups = 0
       val sharedRelationCache: RelationCache =
-        (_, _, _, _, _) => {
+        (_, _, _, _) => {
           sharedRelationCacheLookups += 1
           sharedRelationCacheCandidate
         }
