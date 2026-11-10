@@ -456,7 +456,7 @@ class Analyzer(
 
   def getRelationResolution: RelationResolution = relationResolution
 
-  /** Whether a temporary function owns the unqualified `name` under the session's SQL path. */
+  /** Whether a temporary function owns the unqualified built-in `name` under the SQL path. */
   private[sql] def unqualifiedFunctionResolvesToTemp(name: String): Boolean =
     functionResolution.unqualifiedFunctionResolvesToTemp(name)
 
