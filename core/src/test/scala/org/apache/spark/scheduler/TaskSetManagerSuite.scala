@@ -785,16 +785,14 @@ class TaskSetManagerSuite
     mapOutputTracker.registerMapOutput(0, taskIndex,
       MapStatus(BlockManagerId("exec0", "host0", 8848), Array(1024), taskId))
 
-    // The shuffle is reliably stored off-executor, so losing exec0 must not rerun the map task,
-    // even without shuffle migration or an external shuffle service.
+    // Reliably-stored shuffle: losing exec0 must not rerun the map task.
     manager.executorLost("exec0", "host0", ExecutorDecommission())
     assert(manager.successful(taskIndex))
   }
 
   test("SPARK-59138: task reruns on executor lost for an explicitly unreliable shuffle") {
-    // Globally reliable manager, but this shuffle falls back to local disk (registered
-    // isReliablyStored = false), so losing exec0 must rerun the map task. Guards TaskSetManager's
-    // own successful / Resubmitted bookkeeping, which DAGSchedulerSuite does not.
+    // Global flag on, but this shuffle is explicitly unreliable, so losing exec0 must rerun the
+    // map task.
     val conf = new SparkConf().set(config.SHUFFLE_IO_PLUGIN_CLASS.key,
       classOf[TestShuffleDataIOWithReliableStorage].getName)
       .set(config.LOCALITY_WAIT.key, "0")
