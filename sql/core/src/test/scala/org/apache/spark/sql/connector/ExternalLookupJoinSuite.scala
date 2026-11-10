@@ -4058,6 +4058,50 @@ class ExternalLookupJoinSuite extends QueryTest with SharedSparkSession {
       spark.catalog.dropTempView(queryName)
     }
   }
+
+  test("a stream over a versioned lookup table keeps running after the table gains a column") {
+    // A micro-batch loads a versioned table again, and when the table has gained a column or a
+    // nested field, a projection to the analyzed columns sits above the relation. The catalog has
+    // a name of its own, as the session keeps the catalog that it loaded under a name.
+    withSQLConf(
+        "spark.sql.catalog.evolving_lookup_cat" ->
+          classOf[EvolvingExternalLookupTestCatalog].getName) {
+      for {
+        (table, hint) <- Seq("lookup" -> "", "dual" -> "/*+ EXTERNAL_LOOKUP(r) */")
+        change <- Seq("column", "nestedField")
+        joinType <- Seq("JOIN", "LEFT JOIN")
+      } {
+        EvolvingExternalLookupTable.schemaChange.set("none")
+        val input = MemoryStream[Int]
+        withTempView("badge_swipes") {
+          input.toDF().toDF("employee").createOrReplaceTempView("badge_swipes")
+          val queryName = s"external_lookup_stream_${streamRunCount.incrementAndGet()}"
+          val query = sql(
+            s"""SELECT $hint s.employee, r.info
+               |FROM badge_swipes s $joinType evolving_lookup_cat.ns.$table r
+               |  ON s.employee = r.id""".stripMargin)
+            .writeStream.format("memory").queryName(queryName).start()
+          try {
+            input.addData(1, 3)
+            query.processAllAvailable()
+            EvolvingExternalLookupTable.schemaChange.set(change)
+            input.addData(2, 4)
+            query.processAllAvailable()
+            val clue = s"$table, $change, $joinType"
+            val execution = query.asInstanceOf[StreamingQueryWrapper].streamingQuery.lastExecution
+            assert(execution.executedPlan.exists(_.isInstanceOf[ExternalLookupJoinExec]), clue)
+            val matched = Seq(Row(1, Row("pro")), Row(2, Row("basic")))
+            val unmatched = if (joinType == "JOIN") Nil else Seq(Row(3, null), Row(4, null))
+            QueryTest.sameRows(matched ++ unmatched, spark.table(queryName).collect().toSeq)
+              .foreach(error => fail(s"$clue: $error"))
+          } finally {
+            query.stop()
+            spark.catalog.dropTempView(queryName)
+          }
+        }
+      }
+    }
+  }
 }
 
 /**
@@ -5554,6 +5598,87 @@ object ReusedRowExternalLookupReaderFactory extends ExternalLookupReaderFactory 
         override def get(): InternalRow = row
         override def close(): Unit = {}
       }
+    }
+
+    override def close(): Unit = {}
+  }
+}
+
+/** A catalog serving `ns.lookup` and `ns.dual` as an [[EvolvingExternalLookupTable]]. */
+class EvolvingExternalLookupTestCatalog extends TableCatalog {
+  private var catalogName: String = _
+
+  override def initialize(name: String, options: CaseInsensitiveStringMap): Unit =
+    catalogName = name
+  override def name(): String = catalogName
+  override def listTables(namespace: Array[String]): Array[Identifier] =
+    Array("lookup", "dual").map(Identifier.of(Array("ns"), _))
+  override def loadTable(ident: Identifier): Table = (ident.namespace().toSeq, ident.name()) match {
+    case (Seq("ns"), "lookup") => EvolvingExternalLookupTable(lookupOnly = true)
+    case (Seq("ns"), "dual") => EvolvingExternalLookupTable(lookupOnly = false)
+    case _ => throw new NoSuchTableException(ident.namespace().mkString("."), ident.name())
+  }
+  override def alterTable(ident: Identifier, changes: TableChange*): Table =
+    throw new UnsupportedOperationException()
+  override def dropTable(ident: Identifier): Boolean = throw new UnsupportedOperationException()
+  override def renameTable(oldIdent: Identifier, newIdent: Identifier): Unit =
+    throw new UnsupportedOperationException()
+}
+
+object EvolvingExternalLookupTable {
+  // "none", "column" once a top-level column is added, or "nestedField" once the struct gains one.
+  val schemaChange = new AtomicReference("none")
+}
+
+/**
+ * A table whose schema grows while a query runs, as ALTER TABLE ADD COLUMNS grows it. It reports
+ * a version, so each micro-batch loads it again.
+ */
+case class EvolvingExternalLookupTable(lookupOnly: Boolean) extends Table with SupportsRead {
+  override def name(): String = "EvolvingExternalLookupTable"
+  override def schema(): StructType = EvolvingExternalLookupTable.schemaChange.get() match {
+    case "none" => StructType.fromDDL("id INT, info STRUCT<plan: STRING>")
+    case "column" => StructType.fromDDL("id INT, info STRUCT<plan: STRING>, seats INT")
+    case "nestedField" => StructType.fromDDL("id INT, info STRUCT<plan: STRING, seats: INT>")
+  }
+  override def version(): String = EvolvingExternalLookupTable.schemaChange.get()
+  override def capabilities(): java.util.Set[TableCapability] =
+    if (lookupOnly) java.util.EnumSet.of(EXTERNAL_LOOKUP)
+    else java.util.EnumSet.of(BATCH_READ, EXTERNAL_LOOKUP)
+
+  override def newScanBuilder(options: CaseInsensitiveStringMap): ScanBuilder =
+    new SupportsExternalLookup with SupportsPushDownRequiredColumns {
+      private var requiredSchema = schema()
+      override def pruneColumns(required: StructType): Unit = requiredSchema = required
+      override def selectLookupPredicates(candidates: Array[Predicate]): Array[Predicate] =
+        candidates.filter(_.name() == "=").take(1)
+      override def build(): Scan = EvolvingExternalLookupScan(requiredSchema)
+    }
+}
+
+case class EvolvingExternalLookupScan(readSchema: StructType) extends Scan {
+  override def toExternalLookup(): ExternalLookup =
+    TestExternalLookup(100, EvolvingExternalLookupReaderFactory(readSchema))
+}
+
+/** Returns a row of the read schema for ids 1 and 2, whatever columns the schema has. */
+case class EvolvingExternalLookupReaderFactory(readSchema: StructType)
+  extends ExternalLookupReaderFactory {
+  override def createReader(): ExternalLookupReader = new ExternalLookupReader {
+    override def lookupBatch(keys: Array[InternalRow]): ExternalLookupResultCursor = {
+      def value(name: String, dataType: DataType, id: Int): Any = (name, dataType) match {
+        case ("id", _) => id
+        case ("plan", _) => UTF8String.fromString(if (id == 1) "pro" else "basic")
+        case ("seats", _) => id * 10
+        case ("info", info: StructType) =>
+          new GenericInternalRow(info.fields.map(field => value(field.name, field.dataType, id)))
+      }
+      val results = keys.iterator.zipWithIndex.collect {
+        case (key, ordinal) if key.getInt(0) == 1 || key.getInt(0) == 2 =>
+          ordinal -> new GenericInternalRow(
+            readSchema.fields.map(field => value(field.name, field.dataType, key.getInt(0))))
+      }
+      new TestExternalLookupResultCursor(results)
     }
 
     override def close(): Unit = {}
