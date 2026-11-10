@@ -561,6 +561,23 @@ class UnsupportedOperationsSuite extends SparkFunSuite with SQLHelper {
     val left = new TestStreamingRelation(Seq(leftTime, leftOther))
     val right = new TestStreamingRelation(Seq(rightTime, rightOther))
 
+    Seq(LeftOuter, LeftSemi).foreach { joinType =>
+      Seq(
+        "static conjunct" -> (leftTime > rightTime - 10 && leftTime > 10)
+      ).foreach { case (name, condition) =>
+        assertSupportedInStreamingPlan(s"$joinType with $name",
+          left.join(right, joinType = joinType, condition = Some(condition)), OutputMode.Append())
+      }
+      // These bounds cannot establish safe finalization of unmatched state.
+      Seq(
+        "constant bound" -> (leftTime > 10)
+      ).foreach { case (name, condition) =>
+        assertNotSupportedInStreamingPlan(s"$joinType with $name",
+          left.join(right, joinType = joinType, condition = Some(condition)), OutputMode.Append(),
+          Seq("requires", "allow unmatched state to be finalized"))
+      }
+    }
+
     // Each side's state is evicted by the key that the opposite watermark bounds.
     assertSupportedInStreamingPlan("full outer with different watermark key ordinals",
       left.join(right, joinType = FullOuter,

@@ -1446,8 +1446,8 @@ Additional details on supported joins:
 
 - For stream-stream outer and semi joins, the time constraint that finalizes an input's rows must
   bound a timestamp column of that input by the other input's event time, through an equality key
-  or a range condition. A bound on a numeric column, such as `n > CAST(rightTime AS BIGINT)`, does
-  not qualify.
+  or a range condition. A bound that uses only constants, such as `leftTime > 10`, or a numeric
+  column, such as `n > CAST(rightTime AS BIGINT)`, does not qualify.
 
 - As of Spark 2.4, you can use joins only when the query is in Append output mode. Other output modes are not yet supported.
 
