@@ -22,6 +22,10 @@ license: |
 * Table of contents
 {:toc}
 
+## Upgrading from Spark SQL 4.0.5 to 4.0.6
+
+- Since Spark 4.0.6, Data Source V2 file scans correctly evaluate deterministic Python UDF filter predicates that reference only partition columns. Previously, these predicates could be dropped, returning rows that did not satisfy the filter (SPARK-60486). Data derived from affected query results may need to be recomputed.
+
 ## Upgrading from Spark SQL 3.5 to 4.0
 
 - Since Spark 4.0, `spark.sql.ansi.enabled` is on by default. To restore the previous behavior, set `spark.sql.ansi.enabled` to `false` or `SPARK_ANSI_SQL_MODE` to `false`.
