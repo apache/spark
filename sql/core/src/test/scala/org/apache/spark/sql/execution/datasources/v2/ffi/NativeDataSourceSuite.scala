@@ -951,6 +951,33 @@ class NativeDataSourceSuite extends QueryTest with SharedSparkSession {
     assert(new File(streamDir, "_EPOCH_0").isFile && !new File(streamDir, "_ABORTED_0").exists())
     assert(new File(streamDir, "_CLOSED_0").isFile)
 
+    // A writer whose abort fails is closed all the same.
+    def checkAbortError(abort: => Unit): Unit = checkError(
+      exception = findError(intercept[Exception](abort), "NATIVE_DATA_SOURCE_ERROR"),
+      condition = "NATIVE_DATA_SOURCE_ERROR",
+      parameters = Map(
+        "action" -> "abort a write to",
+        "name" -> "native_sink",
+        "msg" -> "injected failure in abort"))
+    val failingBatchDir = Utils.createTempDir()
+    val failingBatchWrite = new ColumnarBatchWrite(
+      () => dataSource("native_sink", "path" -> failingBatchDir.getPath, "fail" -> "abort")
+        .writer(schema, false),
+      schema)
+    failingBatchWrite.createBatchWriterFactory(PhysicalWriteInfoImpl(1))
+    checkAbortError(failingBatchWrite.abort(Array.empty))
+    assert(!new File(failingBatchDir, "_ABORTED").exists())
+    assert(new File(failingBatchDir, "_CLOSED").isFile)
+    val failingStreamDir = Utils.createTempDir()
+    val failingStreamWrite = new ColumnarStreamingWrite("native_sink",
+      () => dataSource("native_sink", "path" -> failingStreamDir.getPath, "fail" -> "abort")
+        .streamWriter(schema, false, UUID.randomUUID().toString),
+      schema)
+    failingStreamWrite.createStreamingWriterFactory(PhysicalWriteInfoImpl(1))
+    checkAbortError(failingStreamWrite.abort(0, Array.empty))
+    assert(!new File(failingStreamDir, "_ABORTED_0").exists())
+    assert(new File(failingStreamDir, "_CLOSED_0").isFile)
+
     // After a write fails, a data writer only aborts and closes the data writer of the library.
     val failingDir = Utils.createTempDir()
     val writer = dataSource("native_sink", "path" -> failingDir.getPath, "fail" -> "write")

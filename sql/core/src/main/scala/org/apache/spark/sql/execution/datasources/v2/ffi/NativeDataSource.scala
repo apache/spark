@@ -1433,7 +1433,7 @@ object NativeStreamWriters {
    * if that one is already closed.
    */
   def register(queryId: String, handle: NativeHandle): Unit = {
-    // Forgets the queries whose last stream writer was released.
+    // Forgets the queries whose last stream writer became unreachable.
     writers.values().removeIf(_.get() == null)
     Option(writers.put(queryId, new WeakReference(handle))).flatMap(r => Option(r.get()))
       .foreach(_.close())
