@@ -185,8 +185,8 @@ class SingleStatementExec(
    *   SQL query text.
    */
   def getText: String = {
-    assert(origin.sqlText.isDefined && origin.startIndex.isDefined && origin.stopIndex.isDefined)
-    origin.sqlText.get.substring(origin.startIndex.get, origin.stopIndex.get + 1)
+    assert(origin.sqlTextSlice.isDefined)
+    origin.sqlTextSlice.get
   }
 
   /**
@@ -826,7 +826,7 @@ class SimpleCaseStatementExec(
           condition,
           Origin(sqlText = Some(conditionText),
             startIndex = Some(0),
-            stopIndex = Some(conditionText.length - 1),
+            stopIndex = Some(conditionText.codePointCount(0, conditionText.length) - 1),
             line = caseVariableExec.origin.line),
           Map.empty,
           isInternal = true,

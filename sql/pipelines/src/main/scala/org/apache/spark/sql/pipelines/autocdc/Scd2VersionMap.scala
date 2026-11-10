@@ -93,8 +93,9 @@ private[pipelines] object Scd2VersionMap {
       schema: StructType,
       ignoreNullSelection: ColumnSelection,
       resolver: Resolver): Column = {
-    val ignoreNullLeafPaths =
-      resolveIgnoreNullLeafPaths(schema, ignoreNullSelection, resolver).toSet
+    val ignoreNullLeafPaths = AutoCdcSchemaUtils
+      .resolveIgnoreNullLeafPaths(schema, ignoreNullSelection, resolver)
+      .toSet
 
     // For each leaf, build a nullable struct (key, value). The struct is non-null only when
     // the leaf column's runtime value is null (meaning the leaf needs a version map entry).
@@ -117,29 +118,6 @@ private[pipelines] object Scd2VersionMap {
       val nonNullEntries = F.filter(F.array(candidateEntries: _*), (e: Column) => e.isNotNull)
       F.map_from_entries(nonNullEntries)
     }
-  }
-
-  /**
-   * Resolves an ignore-null selection against the top-level fields of `schema`, then flattens
-   * selected structs into leaf paths. Arrays and maps remain opaque leaves.
-   *
-   * @param schema Schema against which to resolve and canonicalize the selection.
-   * @param ignoreNullSelection Top-level columns selected for ignore-null handling.
-   * @param resolver Case-sensitivity resolver for column name matching.
-   * @return Raw, unquoted leaf-name parts in schema order, with spelling taken exactly from
-   *   `schema`.
-   */
-  private[autocdc] def resolveIgnoreNullLeafPaths(
-      schema: StructType,
-      ignoreNullSelection: ColumnSelection,
-      resolver: Resolver): Seq[Seq[String]] = {
-    val ignoreNullColumns = ColumnSelection.applyToSchema(
-      schemaName = "ignoreNullSelection",
-      schema = schema,
-      columnSelection = Some(ignoreNullSelection),
-      resolver = resolver
-    )
-    AutoCdcSchemaUtils.flattenStructFieldPaths(ignoreNullColumns)
   }
 
   /**

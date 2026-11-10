@@ -52,6 +52,7 @@ case class XmlFileFormat() extends TextBasedFileFormat with DataSourceRegister {
       path: Path): Boolean = {
     val xmlOptions = getXmlOptions(sparkSession, options)
     if (xmlOptions.archiveFormatEnabled && SupportsArchiveFormat.isArchivePath(path)) {
+      SupportsArchiveFormat.checkNoDecompressionCodec(path, xmlOptions.decompressionCodec)
       // A tar archive is read as one sequential stream (entry by entry), so it is never split.
       return false
     }

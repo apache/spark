@@ -77,7 +77,7 @@ def main(infile: IO, outfile: IO) -> None:
     listener._set_spark_session(spark_connect_session)
     assert listener.spark == spark_connect_session
 
-    def process(listener_event_str, listener_event_type):  # type: ignore[no-untyped-def]
+    def process(listener_event_str: str, listener_event_type: int) -> None:
         global spark
         listener_event = json.loads(listener_event_str)
         if listener_event_type == 0:

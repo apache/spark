@@ -33,7 +33,6 @@ import org.apache.spark.sql.catalyst.trees.TreePattern.CURRENT_LIKE
 import org.apache.spark.sql.classic.SparkSession
 import org.apache.spark.sql.connector.catalog.{SupportsRead, SupportsWrite, TableCapability}
 import org.apache.spark.sql.connector.distributions.UnspecifiedDistribution
-import org.apache.spark.sql.connector.read.SupportsPushDownRequiredColumns
 import org.apache.spark.sql.connector.read.streaming.{ContinuousStream, PartitionOffset, ReadLimit, SparkDataStream}
 import org.apache.spark.sql.connector.write.{RequiresDistributionAndOrdering, Write}
 import org.apache.spark.sql.errors.{QueryCompilationErrors, QueryExecutionErrors}
@@ -41,7 +40,7 @@ import org.apache.spark.sql.execution.SQLExecution
 import org.apache.spark.sql.execution.datasources.v2.{StreamingDataSourceV2Relation, StreamingDataSourceV2ScanRelation}
 import org.apache.spark.sql.execution.streaming._
 import org.apache.spark.sql.execution.streaming.checkpointing.{CommitMetadata, OffsetSeq}
-import org.apache.spark.sql.execution.streaming.runtime.{AcceptsLatestSeenOffsetHandler, ACTIVE, ContinuousExecutionContext, IncrementalExecution, ProcessingTimeExecutor, RECONFIGURING, State, StreamExecution, StreamExecutionContext, TERMINATED, WatermarkPropagator}
+import org.apache.spark.sql.execution.streaming.runtime.{AcceptsLatestSeenOffsetHandler, ACTIVE, ContinuousExecutionContext, IncrementalExecution, ProcessingTimeExecutor, RECONFIGURING, State, StreamExecution, StreamExecutionContext, StreamingV2ScanPushDown, TERMINATED, WatermarkPropagator}
 import org.apache.spark.sql.streaming.Trigger
 import org.apache.spark.util.ArrayImplicits._
 import org.apache.spark.util.Clock
@@ -66,6 +65,9 @@ class ContinuousExecution(
 
   @volatile protected var sources: Seq[ContinuousStream] = Seq()
 
+  // The rewrites of the filters that the scans of the sources got, which the epochs check.
+  private val pushedFilterRewrites = new StreamingV2ScanPushDown.PushedFilterRewrites
+
   def sourceToIdMap: Map[SparkDataStream, String] = Map.empty
 
   // For use only in test harnesses.
@@ -78,6 +80,9 @@ class ContinuousExecution(
     val v2ToRelationMap = MutableMap[StreamingRelationV2, StreamingDataSourceV2ScanRelation]()
     var nextSourceId = 0
     import org.apache.spark.sql.execution.datasources.v2.DataSourceV2Implicits._
+    val streamConf = sparkSessionForStream.sessionState.conf
+    lazy val columnsAndFiltersOfSources =
+      StreamingV2ScanPushDown.columnsAndFiltersOfSources(sparkSessionForStream, analyzedPlan, None)
     val _logicalPlan = analyzedPlan.transform {
       case s @ StreamingRelationV2(ds, sourceName, table: SupportsRead, options, output,
         catalog, identifier, _, _) =>
@@ -92,20 +97,17 @@ class ContinuousExecution(
           logInfo(log"Reading table [${MDC(STREAMING_TABLE, table)}] " +
             log"from DataSourceV2 named '${MDC(STREAMING_DATA_SOURCE_NAME, sourceName)}' " +
             log"${MDC(STREAMING_DATA_SOURCE_DESCRIPTION, dsStr)}")
-          // TODO: operator pushdown.
-          // Passes the full output schema (not a pruned subset) so that connectors
-          // implementing SupportsMetadataColumns can include metadata columns in readSchema().
-          val scanBuilder = table.newScanBuilder(options)
-          scanBuilder match {
-            case r: SupportsPushDownRequiredColumns =>
-              r.pruneColumns(output.toStructType)
-            case _ =>
-          }
-          val scan = scanBuilder.build()
-          val stream = scan.toContinuousStream(metadataPath)
+          // The scan gets the columns and the filters that the query reads from the source, see
+          // StreamingV2ScanPushDown. The output includes the metadata columns that the query
+          // reads, so that connectors implementing SupportsMetadataColumns include them in
+          // readSchema().
+          val streamingScan = StreamingV2ScanPushDown.buildScan(
+            table, options, output, streamConf, columnsAndFiltersOfSources.get(s),
+            StreamingV2ScanPushDown.sourceName(table, catalog, identifier))(
+            _.toContinuousStream(metadataPath))
           val relation = StreamingDataSourceV2Relation(
               table, output, catalog, identifier, options, metadataPath)
-          StreamingDataSourceV2ScanRelation(relation, scan, output, stream)
+          streamingScan.toRelation(relation, output)
         })
     }
 
@@ -252,7 +254,8 @@ class ContinuousExecution(
         None,
         execCtx.offsetSeqMetadata,
         WatermarkPropagator.noop(),
-        false)
+        false,
+        pushedFilterRewrites = pushedFilterRewrites)
       execCtx.executionPlan.executedPlan // Force the lazy generation of execution plan
     }
 
