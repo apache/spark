@@ -115,6 +115,38 @@ class QueryExecutionAnsiErrorsSuite extends SharedSparkSession {
       context = ExpectedContext(fragment = "interval 1 day / 0", start = 7, stop = 24))
   }
 
+  test("SPARK-XXXXX: an interval division error keeps its context without whole-stage codegen") {
+    // Without whole-stage codegen the projection is built on the executor from a deserialized
+    // copy of the expression. The divisions read a column, so that they are not constant-folded
+    // on the driver. The division raises in every mode, and keeps its context in both.
+    withSQLConf(SQLConf.WHOLESTAGE_CODEGEN_ENABLED.key -> "false") {
+      val ymDivide = "CAST(CAST(id - 2147483648 AS INT) AS INTERVAL MONTH) / -1"
+      Seq("true", "false").foreach { ansi =>
+        withSQLConf(SQLConf.ANSI_ENABLED.key -> ansi) {
+          checkError(
+            exception = intercept[SparkArithmeticException] {
+              sql(s"SELECT $ymDivide FROM range(1)").collect()
+            },
+            condition = "INTERVAL_ARITHMETIC_OVERFLOW.WITH_SUGGESTION",
+            sqlState = "22015",
+            parameters = Map("functionName" -> "`try_divide`"),
+            context =
+              ExpectedContext(fragment = ymDivide, start = 7, stop = 7 + ymDivide.length - 1))
+        }
+      }
+
+      val dtDivide = "CAST(id + 1 AS INTERVAL DAY) / CAST(id AS INT)"
+      checkError(
+        exception = intercept[SparkArithmeticException] {
+          sql(s"SELECT $dtDivide FROM range(1)").collect()
+        },
+        condition = "INTERVAL_DIVIDED_BY_ZERO",
+        sqlState = "22012",
+        parameters = Map.empty[String, String],
+        context = ExpectedContext(fragment = dtDivide, start = 7, stop = 7 + dtDivide.length - 1))
+    }
+  }
+
   test("INVALID_FRACTION_OF_SECOND: in the function make_timestamp") {
     checkError(
       exception = intercept[SparkDateTimeException] {

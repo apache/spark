@@ -24,6 +24,8 @@ import scala.language.implicitConversions
 
 import org.apache.spark.{SparkArithmeticException, SparkFunSuite}
 import org.apache.spark.sql.catalyst.analysis.TypeCoercion
+import org.apache.spark.sql.catalyst.trees.CurrentOrigin.withOrigin
+import org.apache.spark.sql.catalyst.trees.Origin
 import org.apache.spark.sql.catalyst.util.{DateTimeTestUtils, IntervalUtils}
 import org.apache.spark.sql.catalyst.util.DateTimeConstants._
 import org.apache.spark.sql.catalyst.util.IntervalUtils.{safeStringToInterval, stringToInterval}
@@ -510,6 +512,41 @@ class IntervalExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
         checkExceptionInExpression[SparkArithmeticException](
           DivideDTInterval(Literal(Duration.of(Long.MinValue, ChronoUnit.MICROS)), Literal(num)),
           intervalDivideOverflowErrMsg)
+      }
+    }
+  }
+
+  test("SPARK-XXXXX: an interval error keeps its query context after serialization") {
+    // The helpers evaluate a serialized copy of the expression, as an executor does. `TreeNode`
+    // does not serialize `origin`, so the copy must carry the context itself. Each expression is
+    // built inside `withOrigin` and evaluated outside it: evaluated inside, the copy would read
+    // the origin back from `CurrentOrigin` and the test could not fail.
+    def withQuery(query: String)(expr: => Expression): (Expression, String) = {
+      val o = Origin(
+        line = Some(1),
+        startPosition = Some(7),
+        startIndex = Some(7),
+        stopIndex = Some(7 + query.length - 1),
+        sqlText = Some(s"select $query"))
+      (withOrigin(o)(expr), s"== SQL (line 1, position 8) ==\nselect $query")
+    }
+    val ymMin = Literal(Period.ofMonths(Int.MinValue))
+    val dtMin = Literal(Duration.of(Long.MinValue, ChronoUnit.MICROS))
+    Seq(
+      withQuery("ym / -1")(DivideYMInterval(ymMin, Literal(-1))),
+      withQuery("ym / -1.0D")(DivideYMInterval(ymMin, Literal(-1.0d))),
+      withQuery("ym / 0")(DivideYMInterval(ymMin, Literal(0))),
+      withQuery("dt / -1L")(DivideDTInterval(dtMin, Literal(-1L))),
+      withQuery("dt / -1BD")(DivideDTInterval(dtMin, Literal(Decimal(-1)))),
+      withQuery("dt / 0")(DivideDTInterval(dtMin, Literal(0))),
+      withQuery("make_ym_interval(2147483647, 0)")(
+        MakeYMInterval(Literal(Int.MaxValue), Literal(0))),
+      withQuery("make_dt_interval(2147483647)")(
+        MakeDTInterval(Literal(Int.MaxValue), Literal(0), Literal(0),
+          Literal(Decimal(0, Decimal.MAX_LONG_DIGITS, 6))))
+    ).foreach { case (expr, context) =>
+      withClue(s"$expr: ") {
+        checkExceptionInExpression[SparkArithmeticException](expr, context)
       }
     }
   }
