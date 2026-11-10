@@ -67,9 +67,11 @@ manifest replacement is the commit point:
 - Previously published data files are retained, so an existing manifest snapshot stays readable
   and a failed overwrite cannot delete the old data.
 - Abort removes the entire operation, including files with no commit message and a sealed
-  directory whose manifest publication failed. It leaves the current manifest and its data
-  unchanged. Destroying an unfinished coordinator also performs best-effort cleanup. Destroying a
-  committed task writer leaves its file for the driver.
+  directory whose new manifest could not be written. It leaves the current manifest and its data
+  unchanged. If the manifest rename itself reports an error, the rename may still have taken
+  effect, so Abort keeps the sealed directory; readers ignore it unless the manifest lists it.
+  Destroying an unfinished coordinator also performs best-effort cleanup. Destroying a committed
+  task writer leaves its file for the driver.
 
 To inspect output, read only the files listed in `manifest.json`. Recursively reading the
 destination directory would also pick up data from previous truncate operations.

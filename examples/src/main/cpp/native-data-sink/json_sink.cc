@@ -365,6 +365,9 @@ arrow::Status Operation::Publish(const std::vector<CommitMessage>& messages,
   // truncate. No fallible work follows publication.
   fs::rename(temporary_manifest, root / "manifest.json", error);
   if (error) {
+    // A rename can take effect even though it reports an error, for example on a network file
+    // system. The outcome is unknown, so keep the sealed files for later recovery.
+    publication_unknown = true;
     return Error("Cannot publish", temporary_manifest, error);
   }
   committed = true;
@@ -389,7 +392,7 @@ arrow::Status Operation::Cleanup() const {
   if (error && status.ok()) {
     status = Error("Cannot remove", staging, error);
   }
-  if (sealed) {
+  if (sealed && !publication_unknown) {
     fs::remove_all(objects, error);
     if (error && status.ok()) {
       status = Error("Cannot remove", objects, error);

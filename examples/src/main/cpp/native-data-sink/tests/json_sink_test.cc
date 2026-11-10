@@ -268,6 +268,21 @@ TEST(FailedPublicationKeepsThePreviousManifestAndAbortRemovesSealedFiles) {
   CHECK_EQ(CommittedRows(directory.path()).size(), size_t{1});
 }
 
+TEST(AbortKeepsSealedFilesWhenTheManifestRenameFails) {
+  TempDirectory directory;
+  JsonSink sink = directory.Source();
+  auto [write, factory] = NewWrite(sink, WriteMode::kAppend);
+  CommitMessage message = Stage(factory, 0, {1});
+  const cpp_sdk_sink::Operation& operation = write.operation();
+  // Make the rename fail: a file cannot replace a non-empty directory.
+  fs::create_directories(directory.path() / "manifest.json" / "blocker");
+  CHECK(!write.Commit({message}).ok());
+  // The rename may have taken effect on another file system, so Abort keeps the sealed files.
+  CHECK_OK(write.Abort({std::nullopt}));
+  CHECK(fs::exists(operation.objects / message.filename));
+  CHECK(!fs::exists(directory.path() / ".write-lock"));
+}
+
 TEST(AConcurrentWriteIsRejectedAndDestructionReleasesStagingAndTheLock) {
   TempDirectory directory;
   JsonSink sink = directory.Source();

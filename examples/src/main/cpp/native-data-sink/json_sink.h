@@ -102,6 +102,8 @@ struct Operation {
   bool truncate = false;
   bool committed = false;
   bool sealed = false;
+  // Whether the rename of the manifest reported an error, so it may still have taken effect.
+  bool publication_unknown = false;
   std::optional<WriteLock> lock;
 
   Operation() = default;
@@ -119,7 +121,8 @@ struct Operation {
   /// staged, and releases the lock.
   arrow::Status Skip();
 
-  /// Removes what this operation staged or sealed, but never published data.
+  /// Removes what this operation staged or sealed, but never published data. Sealed files are
+  /// kept if the manifest rename failed, since the manifest may still reference them.
   arrow::Status Cleanup() const;
 };
 
