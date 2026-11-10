@@ -1743,6 +1743,52 @@ class DataFrameSetOperationsSuite extends SharedSparkSession with AdaptiveSparkP
     }
   }
 
+  test("SPARK-61356: union outputPartitioning when a child output repeats an ExprId") {
+    // `SELECT p, p, w` leaves two output positions with one ExprId. The analyzer normally replaces
+    // a repeated output column with a fresh ExprId (`DeduplicateUnionChildOutput`); these confs
+    // keep it so the physical union sees it.
+    withSQLConf(
+        SQLConf.UNION_IS_RESOLVED_WHEN_DUPLICATES_PER_CHILD_RESOLVED.key -> "false",
+        SQLConf.ENFORCE_TYPE_COERCION_BEFORE_UNION_DEDUPLICATION.key -> "false",
+        SQLConf.ANALYZER_DUAL_RUN_LEGACY_AND_SINGLE_PASS_RESOLVER.key -> "false",
+        SQLConf.ADAPTIVE_EXECUTION_ENABLED.key -> "false",
+        SQLConf.SHUFFLE_PARTITIONS.key -> "5") {
+      def repeated: DataFrame = spark.range(10).selectExpr("id p", "id w").select($"p", $"p", $"w")
+
+      // A later child repeats the ExprId. `r` is a union, so for `p2`'s rows its second position
+      // holds `r` while its first holds `q`, and its shuffle hashes the first one. Reading that
+      // partitioning as one on `c`, the second position, would let the aggregate skip its exchange
+      // and split a group over partitions.
+      val p1 = repeated
+      val p2 = spark.range(10, 110).selectExpr("id q", "id % 10 r", "id w2")
+      val r = p1.union(p2).repartition(p1.col("p"))
+      val x = spark.range(10).selectExpr("id x", "id c", "id u").repartition($"c")
+      // All three columns are referenced, so `ColumnPruning` adds no `Project` below the union.
+      val laterChild = x.union(r).groupBy($"c").agg(sum($"x"), sum($"u"))
+
+      // The first child repeats the ExprId, so this union's own output does. Its second child is
+      // hashed by `r`, the second position, while `p` is read from the first one.
+      val c0 = repeated
+      val c1 = spark.range(100).selectExpr("id % 10 q", "id r", "id w2").repartition($"r")
+      val firstChild = c0.repartition(c0.col("p")).union(c1).groupBy(c0.col("p")).agg(sum($"w"))
+
+      Seq(
+        laterChild -> (0 until 10).map(k => Row(k, 12 * k + 550, 12 * k + 550)),
+        firstChild -> (0 until 10).map(k => Row(k, 11 * k + 450))
+      ).foreach { case (df, expected) =>
+        val unionExec = df.queryExecution.executedPlan.collect { case u: UnionExec => u }.head
+        // The analyzer can drop this shape, so assert it survived rather than letting the test
+        // go vacuous: hash-partitioned children, one of them repeating an ExprId.
+        assert(unionExec.children.forall(_.outputPartitioning.isInstanceOf[HashPartitioning]) &&
+          unionExec.children.exists(c => c.output.map(_.exprId).distinct.size < c.output.size),
+          s"expected hash-partitioned children, one repeating an ExprId:\n$unionExec")
+        assert(unionExec.outputPartitioning.isInstanceOf[UnknownPartitioning],
+          s"expected no pass-through but got ${unionExec.outputPartitioning}")
+        checkAnswer(df, expected)
+      }
+    }
+  }
+
   test("SPARK-52921: union partitioning - range partitioning") {
     val df1 = Seq((1, 2, 4), (1, 3, 5), (2, 2, 3), (2, 4, 5)).toDF("a", "b", "c")
     val df2 = Seq((4, 1, 5), (2, 4, 6), (1, 4, 2), (3, 5, 1)).toDF("d", "e", "f")

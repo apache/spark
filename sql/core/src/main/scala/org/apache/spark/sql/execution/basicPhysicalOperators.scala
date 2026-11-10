@@ -1177,6 +1177,16 @@ case class UnionExec(children: Seq[SparkPlan]) extends SparkPlan with CodegenSup
    * reports unknown.
    */
   private def rawPartitioning: Partitioning = {
+    // An attribute is read from the first position that carries its `ExprId` (see
+    // `AttributeSeq.indexOf`), so the positions of an output that repeats one cannot be told
+    // apart by attribute, and they hold different values when a union sits below. A child's
+    // partitioning then has no reliable counterpart among this union's output attributes, whether
+    // the repeat is in that child's output or, through the first child, in this union's own.
+    // The analyzer normally leaves no such child (`DeduplicateUnionChildOutput`).
+    if (children.exists(c => c.output.map(_.exprId).distinct.size < c.output.size)) {
+      return super.outputPartitioning
+    }
+
     // Children's partitionings with attributes remapped to this union's output attributes.
     val partitionings = prepareOutputPartitioning()
 
