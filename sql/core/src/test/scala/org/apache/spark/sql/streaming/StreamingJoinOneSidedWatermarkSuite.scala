@@ -17,7 +17,7 @@
 
 package org.apache.spark.sql.streaming
 
-import org.apache.spark.sql.Row
+import org.apache.spark.sql.{AnalysisException, DataFrame, Row}
 import org.apache.spark.sql.execution.streaming.runtime.MemoryStream
 import org.apache.spark.sql.execution.streaming.state.RocksDBStateStoreProvider
 import org.apache.spark.sql.functions._
@@ -75,6 +75,97 @@ class StreamingJoinOneSidedWatermarkSuite extends StreamTest {
             // Opposite-side state must survive to match arbitrarily old unwatermarked input.
             AddData(stateInput, (2, 30)), CheckNewAnswer(Row(2, 2, 30, 30)))
         }
+      }
+    }
+  }
+
+  // Impression 2024-11-02T19:00Z, 12:00 PDT. One local day later is 2024-11-03T20:00Z, 25 hours
+  // later, because clocks fall back on 2024-11-03 in America/Los_Angeles.
+  private val impressionMs = 1730574000000L
+  private val watermarkMs = 1730661000000L // 2024-11-03T19:10Z
+  private val lateClickMs = 1730662200000L // 2024-11-03T19:30Z, inside the 25-hour day
+
+  private def impressionsJoinClicks(
+      impressions: MemoryStream[(Int, Long)],
+      clicks: MemoryStream[(Int, Long)],
+      joinType: String): DataFrame = {
+    val left = impressions.toDF().toDF("adId", "ms")
+      .select($"adId", timestamp_millis($"ms").as("impressionTime"))
+    val right = clicks.toDF().toDF("clickAdId", "ms")
+      .select($"clickAdId", timestamp_millis($"ms").as("clickTime"))
+      .withWatermark("clickTime", "0 seconds")
+    left.join(right, expr("adId = clickAdId AND " +
+      "clickTime BETWEEN impressionTime AND impressionTime + INTERVAL 1 DAY"), joinType)
+      .select($"adId", expr("unix_millis(impressionTime)"), expr("unix_millis(clickTime)"))
+  }
+
+  for {
+    version <- Seq(2, 3, 4)
+    zone <- Seq("America/Los_Angeles", "UTC")
+  } {
+    test(s"one-sided range bound of a whole day evicts only if the day is exact, V$version $zone") {
+      withSQLConf(
+        SQLConf.STREAMING_JOIN_STATE_FORMAT_VERSION.key -> version.toString,
+        SQLConf.STATE_STORE_PROVIDER_CLASS.key -> classOf[RocksDBStateStoreProvider].getName,
+        SQLConf.STREAMING_NO_DATA_MICRO_BATCHES_ENABLED.key -> "false",
+        SQLConf.SESSION_LOCAL_TIMEZONE.key -> zone) {
+        val impressions = MemoryStream[(Int, Long)]
+        val clicks = MemoryStream[(Int, Long)]
+        val daylightSaving = zone == "America/Los_Angeles"
+        val joinType = if (daylightSaving) "inner" else "left_outer"
+        testStream(impressionsJoinClicks(impressions, clicks, joinType))(
+          MultiAddData(impressions, (1, impressionMs))(clicks, (9, watermarkMs)),
+          CheckNewAnswer(),
+          // Eviction watermark 19:10Z. In UTC the impression matches clicks until 19:00Z only.
+          AddData(clicks, (8, watermarkMs + 60000L)),
+          if (daylightSaving) {
+            CheckNewAnswer()
+          } else {
+            CheckNewAnswer(Row(1, impressionMs, null))
+          },
+          AddData(clicks, (1, lateClickMs)),
+          if (daylightSaving) {
+            CheckNewAnswer(Row(1, impressionMs, lateClickMs))
+          } else {
+            CheckNewAnswer()
+          })
+        if (daylightSaving) {
+          // With no cutoff, an outer join could never emit its unmatched impressions.
+          val e = intercept[AnalysisException] {
+            impressionsJoinClicks(impressions, clicks, "left_outer").writeStream
+              .format("memory").queryName("unfinalizedOuterJoin").start()
+          }
+          assert(e.getMessage.contains("requires a watermark on the right input"))
+        }
+      }
+    }
+  }
+
+  for (version <- Seq(2, 3, 4)) {
+    test(s"one-sided range bound through a truncating cast gives no cutoff, V$version") {
+      withSQLConf(
+        SQLConf.STREAMING_JOIN_STATE_FORMAT_VERSION.key -> version.toString,
+        SQLConf.STATE_STORE_PROVIDER_CLASS.key -> classOf[RocksDBStateStoreProvider].getName,
+        SQLConf.STREAMING_NO_DATA_MICRO_BATCHES_ENABLED.key -> "false") {
+        val leftInput = MemoryStream[(Int, Long)]
+        val rightInput = MemoryStream[(Int, Long)]
+        val left = leftInput.toDF().toDF("lk", "ms")
+          .select($"lk", timestamp_millis($"ms").as("lt"))
+        val right = rightInput.toDF().toDF("rk", "ms")
+          .select($"rk", timestamp_millis($"ms").as("rt"))
+          .withWatermark("rt", "0 seconds")
+        val joined = left.join(right,
+          expr("lk = rk AND CAST(lt AS BIGINT) >= CAST(rt AS BIGINT) + 5"))
+          .select($"lk", expr("unix_millis(lt)"), expr("unix_millis(rt)"))
+        testStream(joined)(
+          MultiAddData(leftInput, (1, 15500L))(rightInput, (9, 10900L)),
+          CheckNewAnswer(),
+          AddData(rightInput, (8, 10910L)),
+          CheckNewAnswer(),
+          // CAST(15.5 s AS BIGINT) = 15 >= CAST(10.95 s AS BIGINT) + 5, and 10.95 s is above the
+          // 10.9 s watermark, so the left row must still be in state.
+          AddData(rightInput, (1, 10950L)),
+          CheckNewAnswer(Row(1, 15500L, 10950L)))
       }
     }
   }

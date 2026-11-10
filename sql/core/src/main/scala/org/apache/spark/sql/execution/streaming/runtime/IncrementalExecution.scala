@@ -21,6 +21,7 @@ import java.util.UUID
 import java.util.concurrent.atomic.AtomicInteger
 
 import scala.collection.mutable.{Map => MutableMap}
+import scala.util.Try
 
 import org.apache.hadoop.fs.Path
 
@@ -29,23 +30,24 @@ import org.apache.spark.internal.LogKeys.{BATCH_TIMESTAMP, ERROR}
 import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.QueryPlanningTracker
 import org.apache.spark.sql.catalyst.analysis.WidenStatefulOperatorAttributeNullability
-import org.apache.spark.sql.catalyst.expressions.{CurrentBatchTimestamp, ExpressionWithRandomSeed}
+import org.apache.spark.sql.catalyst.expressions.{Alias, Attribute, CurrentBatchTimestamp, ExpressionWithRandomSeed, TimeWindow}
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.rules.Rule
 import org.apache.spark.sql.catalyst.trees.TreePattern._
 import org.apache.spark.sql.classic.SparkSession
 import org.apache.spark.sql.errors.QueryExecutionErrors
-import org.apache.spark.sql.execution.{CommandExecutionMode, LocalLimitExec, QueryExecution, SerializeFromObjectExec, SparkPlan, SparkPlanner, SparkStrategy => Strategy, UnaryExecNode}
-import org.apache.spark.sql.execution.aggregate.{HashAggregateExec, MergingSessionsExec, ObjectHashAggregateExec, SortAggregateExec, UpdatingSessionsExec}
+import org.apache.spark.sql.execution.{CommandExecutionMode, FilterExec, LocalLimitExec, ProjectExec, QueryExecution, SerializeFromObjectExec, SortExec, SparkPlan, SparkPlanner, SparkStrategy => Strategy, UnaryExecNode}
+import org.apache.spark.sql.execution.aggregate.{BaseAggregateExec, HashAggregateExec, MergingSessionsExec, ObjectHashAggregateExec, SortAggregateExec, UpdatingSessionsExec}
 import org.apache.spark.sql.execution.datasources.v2.RealTimeStreamScanExec
 import org.apache.spark.sql.execution.datasources.v2.state.metadata.StateMetadataPartitionReader
 import org.apache.spark.sql.execution.exchange.{ShuffleExchangeExec, ShuffleExchangeLike}
 import org.apache.spark.sql.execution.python.streaming.{FlatMapGroupsInPandasWithStateExec, TransformWithStateInPySparkExec}
 import org.apache.spark.sql.execution.streaming.{ProjectAggregationBufferExec, StatefulStreamlineAggregateExec, StreamingErrors, StreamingQueryPlanTraverseHelper}
 import org.apache.spark.sql.execution.streaming.checkpointing.{CheckpointFileManager, OffsetSeqMetadata, OffsetSeqMetadataBase}
-import org.apache.spark.sql.execution.streaming.operators.stateful.{SessionWindowStateStoreRestoreExec, SessionWindowStateStoreSaveExec, StatefulOperator, StatefulOperatorStateInfo, StateStoreRestoreExec, StateStoreSaveExec, StateStoreWriter, StreamingDeduplicateExec, StreamingDeduplicateWithinWatermarkExec, StreamingGlobalLimitExec, StreamingLocalLimitExec, UpdateEventTimeColumnExec}
+import org.apache.spark.sql.execution.streaming.operators.stateful.{SessionWindowStateStoreRestoreExec, SessionWindowStateStoreSaveExec, StatefulOperator, StatefulOperatorStateInfo, StateStoreRestoreExec, StateStoreSaveExec, StateStoreWriter, StreamingDeduplicateExec, StreamingDeduplicateWithinWatermarkExec, StreamingGlobalLimitExec, StreamingLocalLimitExec, UpdateEventTimeColumnExec, WatermarkSupport}
 import org.apache.spark.sql.execution.streaming.operators.stateful.flatmapgroupswithstate.FlatMapGroupsWithStateExec
 import org.apache.spark.sql.execution.streaming.operators.stateful.join.{StreamingSymmetricHashJoinExec, StreamingSymmetricHashJoinHelper}
+import org.apache.spark.sql.execution.streaming.operators.stateful.join.StreamingSymmetricHashJoinHelper.{JoinSide, LeftSide, RightSide}
 import org.apache.spark.sql.execution.streaming.operators.stateful.transformwithstate.TransformWithStateExec
 import org.apache.spark.sql.execution.streaming.sources.WriteToMicroBatchDataSourceV1
 import org.apache.spark.sql.execution.streaming.state.{OperatorStateMetadata, OperatorStateMetadataReader, OperatorStateMetadataV1, OperatorStateMetadataV2, OperatorStateMetadataWriter, StateSchemaBroadcast, StateSchemaMetadata}
@@ -631,6 +633,71 @@ class IncrementalExecution(
       watermarkPropagator.propagate(currentBatchId, plan, watermarkForCurrBatch)
     }
 
+    /**
+     * Tell each stream-stream join which input's event time reaches the stateful operator that
+     * consumes its output watermark, so that the join holds back that watermark only for that
+     * input's state. The consumers below apply the watermark only to the event-time column of
+     * their input. The walk down to the join follows that column through nodes that pass it on
+     * unchanged, or turn it into a window that ends after it. Any other node or consumer leaves
+     * the join holding back for both inputs.
+     */
+    private def withJoinOutputWatermarkSides(plan: SparkPlan): SparkPlan = {
+      def eventTime(output: Seq[Attribute]): Option[Attribute] =
+        output.find(_.metadata.contains(EventTimeWatermark.delayKey))
+
+      def passThrough(child: SparkPlan, attribute: Attribute): Option[(Long, JoinSide)] =
+        child.output.find(_.exprId == attribute.exprId).flatMap(findJoinSide(child, _))
+
+      def findJoinSide(node: SparkPlan, attribute: Attribute): Option[(Long, JoinSide)] = {
+        node match {
+          case j: StreamingSymmetricHashJoinExec =>
+            val side = if (eventTime(j.left.output).exists(_.exprId == attribute.exprId)) {
+              Some(LeftSide)
+            } else if (eventTime(j.right.output).exists(_.exprId == attribute.exprId)) {
+              Some(RightSide)
+            } else {
+              None
+            }
+            j.stateInfo.map(_.operatorId).zip(side)
+          case p: ProjectExec =>
+            p.projectList.find(_.exprId == attribute.exprId).flatMap {
+              case a: Attribute => passThrough(p.child, a)
+              case Alias(a: Attribute, _) => passThrough(p.child, a)
+              case alias: Alias if alias.metadata.contains(TimeWindow.marker) =>
+                alias.child.references.toSeq match {
+                  case Seq(a) => passThrough(p.child, a)
+                  case _ => None
+                }
+              case _ => None
+            }
+          case a: BaseAggregateExec => passThrough(a.child, attribute)
+          case _: FilterExec | _: SortExec | _: ShuffleExchangeLike | _: StateStoreRestoreExec =>
+            passThrough(node.children.head, attribute)
+          case _ => None
+        }
+      }
+
+      val sides = plan.collect {
+        case consumer @ (_: StateStoreSaveExec | _: StreamingDeduplicateExec |
+            _: StreamingDeduplicateWithinWatermarkExec | _: StreamingSymmetricHashJoinExec) =>
+          consumer.children.flatMap { child =>
+            Try(WatermarkSupport.findEventTimeColumn(child.output,
+              allowMultipleEventTimeColumns = false)).toOption.flatten
+              .flatMap(findJoinSide(child, _))
+          }
+      }.flatten.toMap
+
+      if (sides.isEmpty) {
+        plan
+      } else {
+        plan transform {
+          case j: StreamingSymmetricHashJoinExec
+              if j.stateInfo.exists(info => sides.contains(info.operatorId)) =>
+            j.copy(outputWatermarkSides = Some(Set(sides(j.stateInfo.get.operatorId))))
+        }
+      }
+    }
+
     private lazy val composedRule: PartialFunction[SparkPlan, SparkPlan] = {
       // There should be no same pattern across rules in the list.
       val rulesToCompose = Seq(ShufflePartitionsRule, ConvertLocalLimitRule, StateOpIdRule)
@@ -737,8 +804,7 @@ class IncrementalExecution(
         planWithStateOpId.foreach {
           case j: StreamingSymmetricHashJoinExec
               if !StreamingSymmetricHashJoinHelper.isWatermarkCheckpointCompatible(
-                j.left.output, j.right.output, j.leftKeys, j.rightKeys,
-                j.stateFormatVersion) =>
+                j.left.output, j.right.output, j.leftKeys, j.rightKeys, j.condition.full) =>
             // Name the side of each equality key; both inputs often use the same column names.
             val keyConditions = j.leftKeys.zip(j.rightKeys).map { case (left, right) =>
               s"left.${left.sql} = right.${right.sql}"
@@ -761,7 +827,8 @@ class IncrementalExecution(
       }
 
       stateStoreWritersWithMetadata = Some(Seq.empty)
-      val planWithSchemas = planWithStateOpId transform StateSchemaAndOperatorMetadataRule.rule
+      val planWithSchemas = withJoinOutputWatermarkSides(
+        planWithStateOpId transform StateSchemaAndOperatorMetadataRule.rule)
 
       simulateWatermarkPropagation(planWithSchemas)
       planWithSchemas transform WatermarkPropagationRule.rule

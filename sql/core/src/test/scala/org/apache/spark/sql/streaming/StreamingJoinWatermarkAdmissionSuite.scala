@@ -17,9 +17,10 @@
 
 package org.apache.spark.sql.streaming
 
-import org.apache.spark.sql.AnalysisException
+import org.apache.spark.sql.{AnalysisException, Row}
 import org.apache.spark.sql.execution.streaming.runtime.MemoryStream
 import org.apache.spark.sql.functions._
+import org.apache.spark.sql.internal.SQLConf
 
 class StreamingJoinWatermarkAdmissionSuite extends StreamTest {
   import testImplicits._
@@ -48,6 +49,46 @@ class StreamingJoinWatermarkAdmissionSuite extends StreamTest {
         testStream(joined)(AddData(leftInput, (1, 5)), CheckNewAnswer())
       }
       assert(error.getMessage.contains("allow unmatched state to be finalized"))
+      val downstreamNote = joinType match {
+        case "left_outer" => Some("uses the right input's event time also needs a watermark " +
+          "on the left input")
+        case "right_outer" => Some("uses the left input's event time also needs a watermark " +
+          "on the right input")
+        case _ => None
+      }
+      downstreamNote.foreach(note => assert(error.getMessage.contains(note)))
+    }
+  }
+
+  // With the check disabled the join runs, but the left state is never finalized.
+  Seq("left_outer", "left_semi").foreach { joinType =>
+    test(s"run $joinType without a right watermark when the finalization check is disabled") {
+      val leftInput = MemoryStream[(Int, Int)]
+      val rightInput = MemoryStream[(Int, Int)]
+      val left = leftInput.toDF().toDF("lk", "time")
+        .select($"lk", timestamp_seconds($"time").as("lt"))
+        .withWatermark("lt", "10 seconds")
+      val right = rightInput.toDF().toDF("rk", "time")
+        .select($"rk", timestamp_seconds($"time").as("rt"))
+      val joined = left.join(right, expr("lk = rk AND lt = rt"), joinType)
+      val result = if (joinType == "left_semi") {
+        joined.select($"lk", $"lt".cast("long"))
+      } else {
+        joined.select($"lk", $"lt".cast("long"), $"rt".cast("long"))
+      }
+      def row(key: Int, time: Long): Row =
+        if (joinType == "left_semi") Row(key, time) else Row(key, time, time)
+
+      withSQLConf(SQLConf.STREAMING_JOIN_CHECK_FINALIZATION_ENABLED.key -> "false") {
+        testStream(result)(
+          MultiAddData(leftInput, (1, 5), (2, 6))(rightInput, (1, 5)),
+          CheckNewAnswer(row(1, 5L)),
+          // The left watermark passes the unmatched left row, which stays in state.
+          AddData(leftInput, (3, 100)),
+          CheckNewAnswer(),
+          AddData(rightInput, (2, 6)),
+          CheckNewAnswer(row(2, 6L)))
+      }
     }
   }
 }

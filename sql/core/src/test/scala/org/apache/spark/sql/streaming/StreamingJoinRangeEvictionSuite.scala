@@ -17,7 +17,10 @@
 
 package org.apache.spark.sql.streaming
 
+import org.apache.logging.log4j.Level
+
 import org.apache.spark.sql.Row
+import org.apache.spark.sql.catalyst.analysis.StreamingJoinHelper
 import org.apache.spark.sql.execution.streaming.operators.stateful.join.StreamingSymmetricHashJoinExec
 import org.apache.spark.sql.execution.streaming.runtime.MemoryStream
 import org.apache.spark.sql.execution.streaming.state.RocksDBStateStoreProvider
@@ -142,6 +145,39 @@ class StreamingJoinRangeEvictionSuite extends StreamTest {
           AddData(leftInput, (3, 460L, 200L)), CheckNewAnswer(Row(3, null, 460L)),
           AddData(rightInput, (9, 500L)), CheckNewAnswer())
       }
+    }
+  }
+
+  for (bound <- Seq("leftTime > rightTime + rightDelay",
+      "CAST(leftTime AS BIGINT) + leftOffset > CAST(rightTime AS BIGINT)")) {
+    test(s"range eviction does not log solver errors for other columns: $bound") {
+      val logAppender = new LogAppender("stream-stream join state constraints")
+      withLogAppender(logAppender,
+          loggerNames = Seq(StreamingJoinHelper.getClass.getName.stripSuffix("$")),
+          level = Some(Level.WARN)) {
+        withJoinConf(2) {
+          val leftInput = MemoryStream[(Int, Long, Long)]
+          val rightInput = MemoryStream[(Int, Long, Int)]
+          val left = leftInput.toDF().toDF("leftKey", "time", "leftOffset")
+            .select($"leftKey", timestamp_seconds($"time").as("leftTime"), $"leftOffset")
+            .withWatermark("leftTime", "0 seconds")
+          val right = rightInput.toDF().toDF("rightKey", "time", "delay")
+            .select($"rightKey", timestamp_seconds($"time").as("rightTime"),
+              ($"delay" * expr("INTERVAL 1 SECOND")).as("rightDelay"))
+            .withWatermark("rightTime", "0 seconds")
+          val joined = left.join(right, expr(s"leftKey = rightKey AND $bound"))
+            .select($"leftKey", $"leftTime".cast("long"), $"rightTime".cast("long"))
+          testStream(joined)(
+            StreamProgressLockedActions(Seq(
+              AddData(leftInput, (1, 20L, 0L)), AddData(rightInput, (1, 10L, 5)))),
+            CheckNewAnswer(Row(1, 20L, 10L)),
+            AddData(rightInput, (2, 30L, 1)),
+            CheckNewAnswer())
+        }
+      }
+      // A per-row column leaves the bound unknown, which is not an error.
+      assert(!logAppender.loggingEvents.exists(
+        _.getMessage.getFormattedMessage.contains("Error trying to extract state constraint")))
     }
   }
 }
