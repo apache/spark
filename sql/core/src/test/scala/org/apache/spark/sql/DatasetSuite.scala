@@ -1991,6 +1991,15 @@ class DatasetSuite extends SharedSparkSession
     val agg = broadcast(src).join(cp2, src("id") % 2 === cp2("value") % 2)
       .groupBy(src("id")).count()
     checkAnswer(agg, (0L until 16L).map(Row(_, 8L)))
+
+    // A column-pruned scan of a cache reports the ordering over `id`, which is not in its output.
+    val single = spark.range(0, 16, 1, 1)
+    val cached = single.select($"id", ($"id" % 2).as("p")).cache()
+    val cp3 = cached.select($"p").localCheckpoint()
+    val sorted = broadcast(single).join(cp3, single("id") % 2 === cp3("p"))
+      .orderBy(single("id")).select(single("id"))
+    checkAnswer(sorted, (0L until 16L).flatMap(i => Seq.fill(8)(Row(i))))
+    cached.unpersist()
   }
 
   test("Dataset().localCheckpoint() lazy with StorageLevel") {
