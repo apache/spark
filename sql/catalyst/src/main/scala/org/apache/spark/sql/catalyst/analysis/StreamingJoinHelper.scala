@@ -372,8 +372,9 @@ object StreamingJoinHelper extends PredicateHelper with Logging {
     }
     if (!hasTimestampStateAttribute) return None
 
-    // A bound must advance with the opposite watermark. The occurrence check above limits
-    // each input to one attribute, so there can be at most one opposite watermark term.
+    // A bound needs a term on the opposite input's watermarked event time; a conjunct that uses
+    // only constants does not follow the watermark. The occurrence check above limits each input
+    // to one attribute, so there can be at most one such term.
     val watermarkTerms = terms.filter(_.references.exists(attributesWithEventWatermark.contains))
     if (watermarkTerms.isEmpty ||
         !watermarkTerms.head.references.forall(_.metadata.contains(delayKey))) {
