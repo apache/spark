@@ -20,16 +20,16 @@ package org.apache.spark.sql.pipelines.autocdc
 import org.apache.spark.sql.{functions => F, Column, QueryTest, Row}
 import org.apache.spark.sql.classic.DataFrame
 import org.apache.spark.sql.test.SharedSparkSession
-import org.apache.spark.sql.types.LongType
+import org.apache.spark.sql.types.{IntegerType, LongType, StructType}
 
 class Scd1BatchProcessorSuite extends QueryTest with SharedSparkSession {
 
   private def versionMapOf(entries: (Seq[String], Option[Long])*): Column =
-    F.map(entries.flatMap { case (leafPath, sequence) =>
-      Seq(
-        F.lit(Scd1VersionMap.serializeKey(leafPath)),
-        sequence.map(value => F.lit(value)).getOrElse(F.lit(null)))
-    }: _*)
+    Scd1VersionMap.fromEntries(
+      entries.map { case (leafPath, sequence) =>
+        leafPath -> sequence.map(value => F.lit(value)).getOrElse(F.lit(null))
+      },
+      LongType)
 
   private def lastAuthoredIn(
       leafPaths: Seq[Seq[String]],
@@ -66,6 +66,25 @@ class Scd1BatchProcessorSuite extends QueryTest with SharedSparkSession {
         upsertSequence = F.lit(9L),
         versionMap = versionMap),
       Row(7L))
+  }
+
+  test("lastAuthoredIn orders composite sequencing values across leaves") {
+    val sequencingType = new StructType()
+      .add("timestamp", LongType)
+      .add("tieBreaker", IntegerType)
+    def sequence(timestamp: Long, tieBreaker: Int): Column =
+      F.struct(F.lit(timestamp).as("timestamp"), F.lit(tieBreaker).as("tieBreaker"))
+    val cdcMetadata = Scd1BatchProcessor.constructCdcMetadataCol(
+      deleteSequence = F.lit(null),
+      upsertSequence = sequence(10L, 3),
+      versionMap = Scd1VersionMap.fromEntries(
+        Seq(Seq("a") -> sequence(10L, 2), Seq("b") -> sequence(9L, 5)), sequencingType),
+      sequencingType = sequencingType)
+
+    checkAnswer(
+      spark.range(1).select(
+        Scd1BatchProcessor.lastAuthoredIn(cdcMetadata, Seq(Seq("a"), Seq("b")))),
+      Row(Row(10L, 2)))
   }
 
   test("lastAuthoredIn skips leaves that the version map records as unauthored") {

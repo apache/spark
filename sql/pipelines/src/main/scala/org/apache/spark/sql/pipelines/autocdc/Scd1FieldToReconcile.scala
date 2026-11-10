@@ -32,7 +32,9 @@ import org.apache.spark.util.ArrayImplicits._
  *                         an upsert with a version map authors only when the map records the
  *                         leaf as authored. If not, the field is a whole column outside the
  *                         selection, which an upsert authors in full, nulls included, unless the
- *                         microbatch omits all of its leaves.
+ *                         microbatch omits all of its leaves. A column without leaves, such as an
+ *                         empty struct, cannot be recorded as omitted, so an upsert always
+ *                         authors it.
  */
 private[autocdc] case class Scd1FieldToReconcile(
     path: Seq[String],

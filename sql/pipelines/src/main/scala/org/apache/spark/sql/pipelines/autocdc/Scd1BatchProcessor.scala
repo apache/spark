@@ -225,6 +225,10 @@ object Scd1BatchProcessor {
   private[autocdc] def upsertSequenceOf(cdcMetadataCol: Column): Column =
     cdcMetadataCol.getField(cdcUpsertSequenceFieldName)
 
+  /** Project the version map out of the CDC metadata column. */
+  private[autocdc] def versionMapOf(cdcMetadataCol: Column): Column =
+    cdcMetadataCol.getField(versionMapFieldName)
+
   /**
    * When a row last authored any of the user-data leaves at `leafPaths`, according to its CDC
    * metadata: the greatest sequence at which it authored one of them. A delete authors every leaf
@@ -242,10 +246,9 @@ object Scd1BatchProcessor {
       leafPaths: Seq[Seq[String]]): Column = {
     val deleteSequence = deleteSequenceOf(cdcMetadataCol)
     val upsertSequence = upsertSequenceOf(cdcMetadataCol)
-    val versionMap = cdcMetadataCol.getField(versionMapFieldName)
+    val versionMap = versionMapOf(cdcMetadataCol)
 
-    val leafSequences =
-      leafPaths.map(leafPath => versionMap(Scd1VersionMap.serializeKey(leafPath)))
+    val leafSequences = leafPaths.map(Scd1VersionMap.entry(versionMap, _))
     val greatestLeafSequence = leafSequences match {
       // An empty struct has no leaves, and so no version-map entries.
       case Seq() => upsertSequence
