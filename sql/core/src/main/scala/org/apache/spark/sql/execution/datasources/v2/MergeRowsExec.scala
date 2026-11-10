@@ -123,7 +123,7 @@ case class MergeRowsExec(
       constructConsumeParameters(ctx, child.output, input)
     val body = generateInstructionExecutionCode(ctx, paramExprs)
 
-    ctx.addNewFunction(funcName,
+    val funcFullName = ctx.addNewFunction(funcName,
       s"""
          |private void $funcName(${params.mkString(", ")})
          |    throws java.io.IOException {
@@ -131,7 +131,7 @@ case class MergeRowsExec(
          |}
        """.stripMargin)
 
-    s"$funcName(${args.mkString(", ")});"
+    s"$funcFullName(${args.mkString(", ")});"
   }
 
   /**

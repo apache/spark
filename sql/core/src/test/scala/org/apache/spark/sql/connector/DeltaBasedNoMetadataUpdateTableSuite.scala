@@ -17,6 +17,9 @@
 
 package org.apache.spark.sql.connector
 
+import org.apache.spark.sql.Row
+import org.apache.spark.sql.types.StructType
+
 class DeltaBasedNoMetadataUpdateTableSuite extends UpdateTableSuiteBase {
 
   override protected def deltaUpdate: Boolean = true
@@ -26,5 +29,27 @@ class DeltaBasedNoMetadataUpdateTableSuite extends UpdateTableSuiteBase {
     props.put("supports-deltas", "true")
     props.put("no-metadata", "true")
     props
+  }
+
+  test("SPARK-60673: update reads non-required metadata columns without writing them") {
+    createAndInitTable("pk INT NOT NULL, id INT, dep STRING",
+      """{ "pk": 1, "id": 1, "dep": "hr" }
+        |{ "pk": 2, "id": 2, "dep": "hr" }
+        |{ "pk": 3, "id": 1, "dep": "software" }
+        |""".stripMargin)
+
+    sql(s"UPDATE $tableNameAsString SET id = index + 10 WHERE _partition = 'hr' AND id < 2")
+
+    checkAnswer(
+      sql(s"SELECT * FROM $tableNameAsString"),
+      Row(1, 10, "hr") :: Row(2, 2, "hr") :: Row(3, 1, "software") :: Nil)
+
+    checkLastWriteInfo(
+      expectedRowSchema = StructType(table.schema.map {
+        case attr if attr.name == "id" => attr.copy(nullable = false) // input is not nullable
+        case attr => attr
+      }),
+      expectedRowIdSchema = Some(StructType(Array(PK_FIELD))))
+    checkLastWriteLog(updateWriteLogEntry(id = 1, metadata = null, data = Row(1, 10, "hr")))
   }
 }

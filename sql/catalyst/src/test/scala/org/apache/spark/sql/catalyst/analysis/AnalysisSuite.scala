@@ -17,6 +17,7 @@
 
 package org.apache.spark.sql.catalyst.analysis
 
+import java.lang.management.ManagementFactory
 import java.util.{TimeZone, UUID}
 
 import scala.jdk.CollectionConverters._
@@ -30,7 +31,7 @@ import org.apache.spark.SparkException
 import org.apache.spark.api.python.PythonEvalType
 import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.{AliasIdentifier, QueryPlanningTracker, TableIdentifier}
-import org.apache.spark.sql.catalyst.catalog.{InMemoryCatalog, SessionCatalog}
+import org.apache.spark.sql.catalyst.catalog.{InMemoryCatalog, SessionCatalog, VariableDefinition}
 import org.apache.spark.sql.catalyst.dsl.expressions._
 import org.apache.spark.sql.catalyst.dsl.plans._
 import org.apache.spark.sql.catalyst.encoders.ExpressionEncoder
@@ -42,7 +43,7 @@ import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.plans.physical.{HashPartitioning, Partitioning, RangePartitioning, RoundRobinPartitioning}
 import org.apache.spark.sql.catalyst.types.DataTypeUtils
 import org.apache.spark.sql.catalyst.util._
-import org.apache.spark.sql.connector.catalog.InMemoryTable
+import org.apache.spark.sql.connector.catalog.{Identifier, InMemoryTable}
 import org.apache.spark.sql.errors.QueryCompilationErrors
 import org.apache.spark.sql.execution.datasources.v2.DataSourceV2Relation
 import org.apache.spark.sql.internal.SQLConf
@@ -51,6 +52,62 @@ import org.apache.spark.sql.util.CaseInsensitiveStringMap
 
 class AnalysisSuite extends AnalysisTest with Matchers {
   import org.apache.spark.sql.catalyst.analysis.TestRelations._
+
+  test("resolve a table specification without changing option evaluation or other fields") {
+    val specification = UnresolvedTableSpec(
+      properties = Map("property" -> "value"),
+      provider = Some("parquet"),
+      optionExpression = OptionList(Seq(
+        "answer" -> Literal(1),
+        "answer" -> Add(Literal(40), Literal(2)),
+        "nullable" -> Literal(null))),
+      location = Some("/table"),
+      comment = Some("table comment"),
+      collation = Some("UTF8_BINARY"),
+      serde = None,
+      external = true,
+      constraints = Nil)
+
+    val expected = TableSpec(
+      properties = specification.properties,
+      provider = specification.provider,
+      options = Map("answer" -> "42", "nullable" -> null),
+      location = specification.location,
+      comment = specification.comment,
+      collation = specification.collation,
+      serde = specification.serde,
+      external = specification.external,
+      constraints = Nil)
+    assert(ResolveTableSpec.resolveTableSpec(specification) == expected)
+    assert(ResolveTableSpec.resolveTableSpec(expected) eq expected)
+    val unresolved = specification.copy(
+      optionExpression = OptionList(Seq("answer" -> UnresolvedAttribute("missing"))))
+    assert(ResolveTableSpec.resolveTableSpec(unresolved) eq unresolved)
+  }
+
+  gridTest("table specification rejects root subquery options before evaluation")(
+      Seq(false, true)) { resolved =>
+    val subqueryPlan = if (resolved) OneRowRelation() else UnresolvedRelation(Seq("missing"))
+    val specification = UnresolvedTableSpec(
+      properties = Map.empty,
+      provider = Some("parquet"),
+      optionExpression = OptionList(Seq("answer" -> ScalarSubquery(subqueryPlan))),
+      location = None,
+      comment = None,
+      collation = None,
+      serde = None,
+      external = false,
+      constraints = Nil)
+
+    val error = intercept[AnalysisException] {
+      ResolveTableSpec.resolveTableSpec(specification)
+    }
+    checkError(
+      exception = error,
+      condition = "INVALID_SQL_SYNTAX.OPTION_IS_INVALID",
+      parameters = Map("key" -> "answer", "supported" -> "constant expressions"))
+    assert(error.getCause == null)
+  }
 
   test("fail for unresolved plan") {
     intercept[AnalysisException] {
@@ -553,6 +610,114 @@ class AnalysisSuite extends AnalysisTest with Matchers {
     assertAnalysisSuccess(r2)
   }
 
+  test("DeduplicateRelations preserves union branch order and overlapping outputs") {
+    case class TestLeaf(label: String, override val output: Seq[Attribute]) extends LeafNode
+
+    val a = AttributeReference("a", IntegerType)()
+    val b = AttributeReference("b", IntegerType)()
+    val c = AttributeReference("c", IntegerType)()
+    val d = AttributeReference("d", IntegerType)()
+    val first = TestLeaf("first", Seq(a, b))
+    val second = TestLeaf("second", Seq(a, c))
+    val third = TestLeaf("third", Seq(c, d))
+
+    val result = DeduplicateRelations(Union(Seq(first, second, third))).asInstanceOf[Union]
+
+    assert(result.children.head eq first)
+    assert(result.children(1).asInstanceOf[Project].child eq second)
+    assert(result.children(2).asInstanceOf[Project].child eq third)
+    assert(result.children.tail.forall(_.getTagValue(
+      resolver.ResolverTag.PROJECT_FOR_EXPRESSION_ID_DEDUPLICATION).contains(())))
+    assert(result.children.flatMap(_.output).map(_.exprId).distinct.length == 6)
+  }
+
+  test("DeduplicateRelations preserves streaming union children under tagged projections") {
+    case class StreamingLeaf(override val output: Seq[Attribute]) extends LeafNode {
+      override def isStreaming: Boolean = true
+    }
+
+    val sharedOutput = Seq(AttributeReference("a", IntegerType)())
+    val first = StreamingLeaf(sharedOutput)
+    val second = StreamingLeaf(sharedOutput)
+
+    val result = DeduplicateRelations(Union(Seq(first, second))).asInstanceOf[Union]
+    val project = result.children(1).asInstanceOf[Project]
+
+    assert(result.children.head eq first)
+    assert(project.child eq second)
+    assert(project.getTagValue(
+      resolver.ResolverTag.PROJECT_FOR_EXPRESSION_ID_DEDUPLICATION).contains(()))
+  }
+
+  test("DeduplicateRelations union work scales linearly with branch count") {
+    case class TestLeaf(override val output: Seq[Attribute]) extends LeafNode
+
+    val bean = ManagementFactory.getThreadMXBean.asInstanceOf[com.sun.management.ThreadMXBean]
+    if (!bean.isThreadAllocatedMemoryEnabled) {
+      bean.setThreadAllocatedMemoryEnabled(true)
+    }
+    val threadId = Thread.currentThread().threadId
+    val sharedOutput = (0 until 26).map(i => AttributeReference(s"c$i", IntegerType)())
+
+    def allocatedBytes(branchCount: Int): Long = {
+      val union = Union(Seq.fill(branchCount)(TestLeaf(sharedOutput)))
+      val before = bean.getThreadAllocatedBytes(threadId)
+      DeduplicateRelations(union)
+      bean.getThreadAllocatedBytes(threadId) - before
+    }
+
+    allocatedBytes(10)
+    val small = Seq.fill(3)(allocatedBytes(100)).min
+    val large = Seq.fill(3)(allocatedBytes(500)).min
+
+    assert(large <= small * 7,
+      s"100 branches allocated $small bytes, while 500 branches allocated $large bytes")
+  }
+
+  test("deduplicateRight matches fake self-join semantics with less scaling overhead") {
+    def wideProject(width: Int): LogicalPlan = {
+      val relation = LocalRelation(AttributeReference("a", IntegerType)())
+      Project((0 until width).map(i => Alias(relation.output.head, s"c$i")()), relation)
+    }
+
+    val semanticPlan = wideProject(10)
+    val throughJoin = DeduplicateRelations(
+      Join(semanticPlan, semanticPlan, Inner, None, JoinHint.NONE)).children(1)
+    val direct = DeduplicateRelations.deduplicateRight(semanticPlan, semanticPlan)
+    comparePlans(direct, throughJoin, checkAnalysis = false)
+
+    val nestedUnion = Union(Seq(semanticPlan, semanticPlan))
+    val nestedUnionThroughJoin = DeduplicateRelations(
+      Join(nestedUnion, nestedUnion, Inner, None, JoinHint.NONE)).children(1)
+    val directNestedUnion = DeduplicateRelations.deduplicateRight(nestedUnion, nestedUnion)
+    comparePlans(directNestedUnion, nestedUnionThroughJoin, checkAnalysis = false)
+
+    val bean = ManagementFactory.getThreadMXBean.asInstanceOf[com.sun.management.ThreadMXBean]
+    if (!bean.isThreadAllocatedMemoryEnabled) {
+      bean.setThreadAllocatedMemoryEnabled(true)
+    }
+    val threadId = Thread.currentThread().threadId
+
+    def allocatedBytes(width: Int, useDirectPath: Boolean): Long = {
+      val plan = wideProject(width)
+      val before = bean.getThreadAllocatedBytes(threadId)
+      if (useDirectPath) {
+        DeduplicateRelations.deduplicateRight(plan, plan)
+      } else {
+        DeduplicateRelations(Join(plan, plan, Inner, None, JoinHint.NONE)).children(1)
+      }
+      bean.getThreadAllocatedBytes(threadId) - before
+    }
+
+    allocatedBytes(10, useDirectPath = true)
+    allocatedBytes(10, useDirectPath = false)
+    val directLarge = Seq.fill(3)(allocatedBytes(500, useDirectPath = true)).min
+    val throughJoinLarge = Seq.fill(3)(allocatedBytes(500, useDirectPath = false)).min
+
+    assert(directLarge * 3 < throughJoinLarge * 2,
+      s"direct path allocated $directLarge bytes, fake self-join allocated $throughJoinLarge bytes")
+  }
+
   test("resolve as with an already existed alias") {
     checkAnalysis(
       Project(Seq(UnresolvedAttribute("tbl2.a")),
@@ -859,6 +1024,23 @@ class AnalysisSuite extends AnalysisTest with Matchers {
     assertAnalysisErrorCondition(parsePlan("INSERT INTO test VALUES (1)"),
       "TABLE_OR_VIEW_NOT_FOUND", Map("relationName" -> "`test`"),
       Array(ExpectedContext("test", 12, 15)))
+  }
+
+  test("UnresolvedInsert that is not lowered during analysis is an internal error") {
+    // The parser never builds a resolved target here. It cannot be lowered to
+    // InsertIntoStatement, so the temporary INSERT plan would remain after analysis.
+    val insert = UnresolvedInsert(
+      table = testRelation,
+      partitionSpec = Map.empty,
+      userSpecifiedCols = Nil,
+      query = testRelation2,
+      overwrite = false,
+      ifPartitionNotExists = false)
+    checkError(
+      exception = intercept[SparkException](insert.analyze),
+      condition = "INTERNAL_ERROR",
+      parameters = Map(
+        "message" -> "UnresolvedInsert target was not lowered during analysis: LocalRelation"))
   }
 
   test("check CollectMetrics resolved") {
@@ -1794,6 +1976,37 @@ class AnalysisSuite extends AnalysisTest with Matchers {
         .where($"x" === 1)
       plan.join(plan).analyze
     }
+  }
+
+  test("collect temporary variables from expression roots, subqueries and plan children") {
+    def variable(name: String): VariableReference = {
+      val identifier = Identifier.of(Array("session"), name)
+      VariableReference(
+        originalNameParts = Seq("session", name),
+        catalog = FakeSystemCatalog,
+        identifier = identifier,
+        varDef = VariableDefinition(identifier, "1", Literal(1)))
+    }
+
+    val first = variable("first")
+    val second = variable("second")
+    val third = variable("third")
+    val subqueryPlan = Project(Seq(Alias(Add(second, first), "value")()), OneRowRelation())
+    val subquery = ScalarSubquery(subqueryPlan)
+    val expression = Add(first, subquery)
+    val childPlan = Project(Seq(Alias(third, "child_value")()), OneRowRelation())
+    val plan = Project(Seq(Alias(expression, "value")()), childPlan)
+    val expected = Seq(first.originalNameParts, second.originalNameParts)
+
+    assert(IdentifierResolution.collectTemporaryVariablesInExpressionTree(first) ==
+      Seq(first.originalNameParts))
+    assert(IdentifierResolution.collectTemporaryVariablesInExpressionTree(subquery) ==
+      Seq(second.originalNameParts, first.originalNameParts))
+    assert(IdentifierResolution.collectTemporaryVariablesInExpressionTree(expression) == expected)
+    assert(IdentifierResolution.collectTemporaryVariablesInLogicalPlan(plan) ==
+      Seq(first.originalNameParts, second.originalNameParts, third.originalNameParts))
+    assert(IdentifierResolution.collectTemporaryVariablesInExpressionTree(Literal(1)).isEmpty)
+    assert(IdentifierResolution.collectTemporaryVariablesInLogicalPlan(OneRowRelation()).isEmpty)
   }
 
   test("IDENTIFIER with alias and RuntimeReplaceable") {

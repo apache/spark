@@ -21,6 +21,7 @@ import java.io._
 import java.nio.file.{FileAlreadyExistsException, Files, Paths}
 
 import scala.reflect.ClassTag
+import scala.util.control.NonFatal
 
 import org.apache.spark.internal.Logging
 import org.apache.spark.internal.LogKeys._
@@ -63,24 +64,60 @@ private[master] class FileSystemPersistenceEngine(
 
   override def read[T: ClassTag](prefix: String): Seq[T] = {
     val files = new File(dir).listFiles().filter(_.getName.startsWith(prefix))
-    files.map(deserializeFromFile[T]).toImmutableArraySeq
+    files.flatMap { file =>
+      try {
+        Some(deserializeFromFile[T](file))
+      } catch {
+        case NonFatal(e) =>
+          // Skip an unreadable file, e.g. one left truncated by a crash, so that it cannot block
+          // recovery. Rename it, instead of deleting it, so that it is kept for inspection but no
+          // longer matches the app_, driver_ or worker_ prefix.
+          val corrupted = new File(dir, "corrupted_" + file.getName)
+          logWarning(log"Exception while reading persisted file ${MDC(PATH, file.getPath())}, " +
+            log"renaming it to ${MDC(NEW_PATH, corrupted.getPath())}", e)
+          if (!file.renameTo(corrupted)) {
+            logWarning(log"Error renaming ${MDC(PATH, file.getPath())}")
+          }
+          None
+      }
+    }.toImmutableArraySeq
   }
 
   private def serializeIntoFile(file: File, value: AnyRef): Unit = {
     if (file.exists()) { throw new IllegalStateException("File already exists: " + file) }
     val created = file.createNewFile()
     if (!created) { throw new IllegalStateException("Could not create file: " + file) }
-    var fileOut: OutputStream = new FileOutputStream(file)
-    codec.foreach { c => fileOut = c.compressedOutputStream(fileOut) }
-    var out: SerializationStream = null
-    Utils.tryWithSafeFinally {
-      out = serializer.newInstance().serializeStream(fileOut)
-      out.writeObject(value)
-    } {
-      if (out != null) {
-        out.close()
+    try {
+      val rawOut = new FileOutputStream(file)
+      var fileOut: OutputStream = rawOut
+      var out: SerializationStream = null
+      Utils.tryWithSafeFinally {
+        codec.foreach { c => fileOut = c.compressedOutputStream(fileOut) }
+        out = serializer.newInstance().serializeStream(fileOut)
+        out.writeObject(value)
+      } {
+        // Close the serializer and the codec before the file so that they flush first. Close
+        // each one even if the previous close fails, e.g. on a full disk, because some codec
+        // streams do not close the stream they wrap when their final write fails.
+        Utils.tryWithSafeFinally {
+          Utils.tryWithSafeFinally {
+            if (out != null) {
+              out.close()
+            }
+          } {
+            fileOut.close()
+          }
+        } {
+          rawOut.close()
+        }
       }
-      fileOut.close()
+    } catch {
+      case e: Throwable =>
+        // Remove the file created above so that a partially written file cannot block recovery.
+        if (!file.delete()) {
+          logWarning(log"Error deleting ${MDC(PATH, file.getPath())}")
+        }
+        throw e
     }
   }
 
@@ -89,16 +126,16 @@ private[master] class FileSystemPersistenceEngine(
   // still be shared across hosts (e.g. an NFS-mounted recovery directory).
   private def deserializeFromFile[T](file: File)(implicit m: ClassTag[T]): T = {
     var fileIn: InputStream = new FileInputStream(file)
-    codec.foreach { c => fileIn = c.compressedInputStream(new FileInputStream(file)) }
     var in: DeserializationStream = null
-    try {
+    Utils.tryWithSafeFinally {
+      codec.foreach { c => fileIn = c.compressedInputStream(fileIn) }
       in = serializer.newInstance().deserializeStream(fileIn)
       in.readObject[T]()
-    } finally {
-      fileIn.close()
+    } {
       if (in != null) {
         in.close()
       }
+      fileIn.close()
     }
   }
 

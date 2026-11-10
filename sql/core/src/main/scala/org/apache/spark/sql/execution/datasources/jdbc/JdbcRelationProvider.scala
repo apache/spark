@@ -37,8 +37,8 @@ class JdbcRelationProvider extends CreatableRelationProvider
     val resolver = sparkSession.sessionState.conf.resolver
     val timeZoneId = sparkSession.sessionState.conf.sessionLocalTimeZone
     val remoteSchemaFetchMetric = JdbcUtils.createSchemaFetchMetric(sparkSession.sparkContext)
-    val schema = SQLMetrics.withTimingNs(remoteSchemaFetchMetric) {
-      JDBCRelation.getSchema(resolver, jdbcOptions)
+    val (schema, databaseMetadata) = SQLMetrics.withTimingNs(remoteSchemaFetchMetric) {
+      JDBCRelation.getSchemaAndDatabaseMetadata(resolver, jdbcOptions)
     }
     val parts = JDBCRelation.columnPartition(schema, resolver, timeZoneId, jdbcOptions)
     JDBCRelation(
@@ -46,7 +46,7 @@ class JdbcRelationProvider extends CreatableRelationProvider
       parts,
       jdbcOptions,
       Map(JDBCRelation.schemaFetchKey -> remoteSchemaFetchMetric)
-    )(sparkSession)
+    )(sparkSession, Some(databaseMetadata))
   }
 
   override def createRelation(

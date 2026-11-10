@@ -66,11 +66,7 @@ case class TextScan(
 
   override def createReaderFactory(): PartitionReaderFactory = {
     verifyReadSchema(readDataSchema)
-    val hadoopConf = {
-      val caseSensitiveMap = options.asCaseSensitiveMap.asScala.toMap
-      // Hadoop Configurations are case sensitive.
-      sparkSession.sessionState.newHadoopConfWithOptions(caseSensitiveMap)
-    }
+    val hadoopConf = newReadHadoopConf()
     val broadcastedConf =
       SerializableConfiguration.broadcast(sparkSession.sparkContext, hadoopConf)
     TextPartitionReaderFactory(conf, broadcastedConf, readDataSchema,

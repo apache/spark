@@ -156,6 +156,20 @@ class ArithmeticExpressionSuite extends SparkFunSuite with ExpressionEvalHelper 
     }
   }
 
+  test("SPARK-45438: UnaryMinus and Abs keep every digit of a 38-digit decimal") {
+    Seq("12345678901234567890123456789012345.67", "-99999999999999999999999999999999999999")
+      .foreach { s =>
+        val value = new java.math.BigDecimal(s)
+        val input = Literal(Decimal(value, 38, value.scale), DecimalType(38, value.scale))
+        Seq("true", "false").foreach { ansi =>
+          withSQLConf(SQLConf.ANSI_ENABLED.key -> ansi) {
+            checkEvaluation(UnaryMinus(input), Decimal(value.negate(), 38, value.scale))
+            checkEvaluation(Abs(input), Decimal(value.abs(), 38, value.scale))
+          }
+        }
+      }
+  }
+
   test("- (Minus)") {
     testNumericDataTypes { convert =>
       val left = Literal(convert(1))
@@ -336,8 +350,13 @@ class ArithmeticExpressionSuite extends SparkFunSuite with ExpressionEvalHelper 
           val quotResult = Decimal(quotExact.setScale(quotType.scale, RoundingMode.HALF_UP))
           val quotExpected =
             if (quotResult.precision > DecimalType.MAX_PRECISION) null else quotResult
-          checkEvaluationOrException(quotActual,
-            if (quotExpected == null) null else quotExpected.toLong)
+          if (SQLConf.get.ansiEnabled && quotExpected != null &&
+              !BigInt(quotExact.toBigInteger).isValidLong) {
+            checkExceptionInExpression[SparkArithmeticException](quotActual, "ARITHMETIC_OVERFLOW")
+          } else {
+            checkEvaluationOrException(quotActual,
+              if (quotExpected == null) null else quotExpected.toLong)
+          }
         }
       }
 
@@ -565,6 +584,8 @@ class ArithmeticExpressionSuite extends SparkFunSuite with ExpressionEvalHelper 
       val left = Literal(convert(7))
       val right = Literal(convert(3))
       checkEvaluation(Pmod(left, right), convert(1))
+      // Exercises the integral `n > 0` fast path (`Byte`/`Short` via `Int`, and `Long`).
+      checkEvaluation(Pmod(Literal(convert(-7)), Literal(convert(3))), convert(2))
       checkEvaluation(Pmod(Literal.create(null, left.dataType), right), null)
       checkEvaluation(Pmod(left, Literal.create(null, right.dataType)), null)
       withSQLConf(SQLConf.ANSI_ENABLED.key -> "false") {
@@ -574,14 +595,32 @@ class ArithmeticExpressionSuite extends SparkFunSuite with ExpressionEvalHelper 
         checkExceptionInExpression[ArithmeticException](
           Pmod(left, Literal(convert(0))), "Remainder by zero")
       }
+      // Negative divisor (n < 0): `pmod` is only guaranteed non-negative for a positive divisor.
+      // These cases have negative dividends, so the expected values are <= 0 (released behavior).
+      // They guard the r < 0, n < 0 path where `r + n` still needs `% n` -- dropping it goes out
+      // of range (pmod(-3, -5) would be -8).
+      checkEvaluation(Pmod(Literal(convert(-3)), Literal(convert(-5))), convert(-3))
+      checkEvaluation(Pmod(Literal(convert(-7)), Literal(convert(-3))), convert(-1))
     }
-    checkEvaluation(Pmod(Literal(-7), Literal(3)), 2)
     checkEvaluation(Pmod(Literal(7.2D), Literal(4.1D)), 3.1000000000000005)
+    checkEvaluation(Pmod(Literal(-1e-20D), Literal(1.0D)), 0.0D)
+    checkEvaluation(Pmod(Literal(-1e-10f), Literal(1.0f)), 0.0f)
     checkEvaluation(Pmod(Literal(Decimal(0.7)), Literal(Decimal(0.2))), Decimal(0.1))
     checkEvaluation(Pmod(Literal(2L), Literal(Long.MaxValue)), 2L)
+    checkEvaluation(Pmod(Literal(-6), Literal(3)), 0)
+    checkEvaluation(Pmod(Literal(-6L), Literal(3L)), 0L)
+    // The remainder is below -2^62, so a wrong shift count or narrowing to Int changes it.
+    checkEvaluation(
+      Pmod(Literal(Long.MinValue / 2 - 1), Literal(Long.MaxValue)), 4611686018427387902L)
     checkEvaluation(Pmod(positiveShort, negativeShort), positiveShort.toShort)
     checkEvaluation(Pmod(positiveInt, negativeInt), positiveInt)
     checkEvaluation(Pmod(positiveLong, negativeLong), positiveLong)
+    // Pre-existing Int/Long wrap-around, pinned so the released results stay exact: the retained
+    // `(r + n) % n` overflows for n < -2^30 / n < -2^62. Without overflow `(r + n) % n == r`, so
+    // these are the only inputs that tell the two apart. These assertions characterize the current
+    // released behavior; fixing the wrap-around is tracked by SPARK-59934.
+    checkEvaluation(Pmod(Literal(-1), Literal(Int.MinValue)), Int.MaxValue)
+    checkEvaluation(Pmod(Literal(-1L), Literal(Long.MinValue)), Long.MaxValue)
 
     Seq("true", "false").foreach { failOnError =>
       withSQLConf(SQLConf.ANSI_ENABLED.key -> failOnError) {
@@ -744,15 +783,40 @@ class ArithmeticExpressionSuite extends SparkFunSuite with ExpressionEvalHelper 
       checkExceptionInExpression[ArithmeticException](
         IntegralDivide(Literal(Decimal(0.2)), Literal(Decimal(0.0))), "Division by zero")
     }
-    // overflows long and so returns a wrong result
+    // overflows long and so returns a wrong result in LEGACY mode
     checkEvaluation(IntegralDivide(
-      Literal(Decimal("99999999999999999999999999999999999")), Literal(Decimal(0.001))),
+      Literal(Decimal("99999999999999999999999999999999999")), Literal(Decimal(0.001)),
+      EvalMode.LEGACY),
       687399551400672280L)
     // overflow during promote precision
     withSQLConf(SQLConf.ANSI_ENABLED.key -> "false") {
       checkEvaluation(IntegralDivide(
         Literal(Decimal("99999999999999999999999999999999999999")), Literal(Decimal(0.00001))),
         null)
+    }
+  }
+
+  test("SPARK-61131: IntegralDivide of decimals fails when the quotient overflows long") {
+    val one = Literal(Decimal(1), DecimalType(1, 0))
+    def dividend(v: BigInt): Literal = Literal(Decimal(BigDecimal(v)), DecimalType(19, 0))
+    Seq(BigInt(Long.MaxValue), BigInt(Long.MinValue)).foreach { bound =>
+      checkEvaluation(IntegralDivide(dividend(bound), one, EvalMode.ANSI), bound.toLong)
+      checkExceptionInExpression[SparkArithmeticException](
+        IntegralDivide(dividend(bound + bound.signum), one, EvalMode.ANSI), "ARITHMETIC_OVERFLOW")
+    }
+  }
+
+  test("SPARK-61050: decimal Remainder, Pmod and IntegralDivide with a 40- or 76-digit quotient") {
+    val left = Literal(Decimal(BigDecimal("9" * 38)), DecimalType(38, 0))
+    Seq(("0.07", 2, "0.02"), ("7E-38", 38, "2E-38")).foreach { case (divisor, scale, rem) =>
+      val right = Literal(Decimal(BigDecimal(divisor), scale, scale), DecimalType(scale, scale))
+      Seq(EvalMode.LEGACY, EvalMode.ANSI).foreach { mode =>
+        checkEvaluation(Remainder(left, right, mode), Decimal(BigDecimal(rem), scale, scale))
+        checkEvaluation(Pmod(left, right, mode), Decimal(BigDecimal(rem), scale, scale))
+      }
+      checkEvaluation(IntegralDivide(left, right, EvalMode.LEGACY), null)
+      checkExceptionInExpression[SparkArithmeticException](
+        IntegralDivide(left, right, EvalMode.ANSI), "NUMERIC_VALUE_OUT_OF_RANGE")
     }
   }
 

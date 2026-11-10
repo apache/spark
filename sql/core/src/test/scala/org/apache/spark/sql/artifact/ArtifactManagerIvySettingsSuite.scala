@@ -84,4 +84,36 @@ class ArtifactManagerIvySettingsSuite extends SharedSparkSession {
     assert(spark.artifactManager.ivyConnectTimeoutMs == 7000)
     assert(spark.artifactManager.ivyReadTimeoutMs == 11000)
   }
+
+  test("SPARK-60012: cloning skips the Ivy cache and creates a fresh cache on resolution") {
+    val ivyUri = URI.create(s"ivy://${coordinate.toString}")
+    val jarName = s"${coordinate.groupId}_${coordinate.artifactId}-${coordinate.version}.jar"
+    val parentSession = spark.newSession()
+
+    try {
+      parentSession.addArtifact(ivyUri)
+      val parentArtifactPath = parentSession.artifactManager.artifactPath
+      val parentIvyCachePath = parentArtifactPath.resolve(".ivy-cache")
+      val parentCacheMarker = parentIvyCachePath.resolve("parent-only")
+      Files.writeString(parentCacheMarker, "parent cache")
+
+      val clonedSession = parentSession.cloneSession()
+      try {
+        val clonedArtifactPath = clonedSession.artifactManager.artifactPath
+        val clonedIvyCachePath = clonedArtifactPath.resolve(".ivy-cache")
+
+        assert(Files.exists(clonedArtifactPath.resolve("jars").resolve(jarName)))
+        assert(!Files.exists(clonedIvyCachePath))
+
+        clonedSession.addArtifact(ivyUri)
+
+        assert(Files.isDirectory(clonedIvyCachePath))
+        assert(!Files.exists(clonedIvyCachePath.resolve(parentCacheMarker.getFileName)))
+      } finally {
+        clonedSession.artifactManager.cleanUpResourcesForTesting()
+      }
+    } finally {
+      parentSession.artifactManager.cleanUpResourcesForTesting()
+    }
+  }
 }

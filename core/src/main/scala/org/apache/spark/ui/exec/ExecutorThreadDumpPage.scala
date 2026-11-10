@@ -23,6 +23,7 @@ import jakarta.servlet.http.HttpServletRequest
 
 import org.apache.spark.SparkContext
 import org.apache.spark.internal.config.UI.UI_FLAMEGRAPH_ENABLED
+import org.apache.spark.internal.config.UI.UI_THREAD_DUMP_DOWNLOAD_IN_BROWSER_ENABLED
 import org.apache.spark.status.api.v1.ThreadStackTrace
 import org.apache.spark.ui.{CspNonce, SparkUITab, UIUtils, WebUIPage}
 import org.apache.spark.ui.UIUtils.{formatImportJavaScript, prependBaseUri}
@@ -68,6 +69,22 @@ private[ui] class ExecutorThreadDumpPage(
         </tr>
       }
 
+      // A data: URI link with the dump inlined is truncated by browsers at the first '#' (the
+      // URL fragment delimiter), which thread names such as "Executor task idle worker#292"
+      // contain. So by default the button has no href: it builds the file in the browser from
+      // the hidden element (see downloadThreadDump in table.js), the same way the SQL plan
+      // download does.
+      val downloadButton: Seq[Node] =
+        if (sc.forall(_.getReadOnlyConf.get(UI_THREAD_DUMP_DOWNLOAD_IN_BROWSER_ENABLED))) {
+          <a class="downloadbutton" data-action="downloadThreadDump"
+             data-filename={"threaddump_" + executorId + ".txt"}>Download</a>
+          <pre id="thread-dump-text" class="d-none">{threadDump.map(_.toString).mkString}</pre>
+        } else {
+          <a class="downloadbutton"
+             href={"data:text/plain;charset=utf-8," + threadDump.map(_.toString).mkString}
+             download={"threaddump_" + executorId + ".txt"}>Download</a>
+        }
+
     <div class="row">
       <div class="col-12">
         <p>Updated at {UIUtils.formatDate(time)}</p>
@@ -97,7 +114,7 @@ private[ui] class ExecutorThreadDumpPage(
           <div class="thead-stack-trace-table-button d-flex align-items-center">
             <a class="expandbutton" data-action="expandAllThreadStackTrace">Expand All</a>
             <a class="expandbutton d-none" data-action="collapseAllThreadStackTrace">Collapse All</a>
-            <a class="downloadbutton" href={"data:text/plain;charset=utf-8," + threadDump.map(_.toString).mkString} download={"threaddump_" + executorId + ".txt"}>Download</a>
+            {downloadButton}
             <div class="d-flex">
               <div class="bs-example" data-example-id="simple-d-flex">
                 <div class="mb-3">

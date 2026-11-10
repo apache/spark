@@ -244,19 +244,24 @@ private[sql] object JDBCRelation extends Logging {
   /**
    * Takes a (schema, table) specification and returns the table's Catalyst schema.
    * If `customSchema` defined in the JDBC options, replaces the schema's dataType with the
-   * custom schema's type.
+   * custom schema's type. Also reads the database metadata over the same connection.
    *
    * @param resolver function used to determine if two identifiers are equal
    * @param jdbcOptions JDBC options that contains url, table and other information.
-   * @return resolved Catalyst schema of a JDBC table
+   * @return resolved Catalyst schema of a JDBC table and the database metadata
    */
-  def getSchema(resolver: Resolver, jdbcOptions: JDBCOptions): StructType = {
-    val tableSchema = JDBCRDD.resolveTable(jdbcOptions)
-    jdbcOptions.customSchema match {
+  def getSchemaAndDatabaseMetadata(
+      resolver: Resolver,
+      jdbcOptions: JDBCOptions): (StructType, JDBCDatabaseMetadata) = {
+    val (tableSchema, databaseMetadata) = JdbcUtils.withConnection(jdbcOptions) { conn =>
+      (JDBCRDD.resolveTable(jdbcOptions, conn), JDBCDatabaseMetadata.fromJDBCConnection(conn))
+    }
+    val schema = jdbcOptions.customSchema match {
       case Some(customSchema) => JdbcUtils.getCustomSchema(
         tableSchema, customSchema, resolver)
       case None => tableSchema
     }
+    (schema, databaseMetadata)
   }
 
   /**
@@ -267,11 +272,11 @@ private[sql] object JDBCRelation extends Logging {
       jdbcOptions: JDBCOptions)(
       sparkSession: SparkSession): JDBCRelation = {
     val remoteSchemaFetchMetric = JdbcUtils.createSchemaFetchMetric(sparkSession.sparkContext)
-    val schema = SQLMetrics.withTimingNs(remoteSchemaFetchMetric) {
-      JDBCRelation.getSchema(sparkSession.sessionState.conf.resolver, jdbcOptions)
+    val (schema, databaseMetadata) = SQLMetrics.withTimingNs(remoteSchemaFetchMetric) {
+      getSchemaAndDatabaseMetadata(sparkSession.sessionState.conf.resolver, jdbcOptions)
     }
     JDBCRelation(schema, parts, jdbcOptions,
-      Map(schemaFetchKey -> remoteSchemaFetchMetric))(sparkSession)
+      Map(schemaFetchKey -> remoteSchemaFetchMetric))(sparkSession, Some(databaseMetadata))
   }
 }
 
@@ -279,7 +284,9 @@ private[sql] case class JDBCRelation(
     override val schema: StructType,
     parts: Array[Partition],
     jdbcOptions: JDBCOptions,
-    additionalMetrics: Map[String, SQLMetric] = Map())(@transient val sparkSession: SparkSession)
+    additionalMetrics: Map[String, SQLMetric] = Map())(
+    @transient val sparkSession: SparkSession,
+    val databaseMetadata: Option[JDBCDatabaseMetadata] = None)
   extends BaseRelation
   with PrunedFilteredScan
   with InsertableRelation {
@@ -313,7 +320,8 @@ private[sql] case class JDBCRelation(
       pushedPredicates,
       parts,
       jdbcOptions,
-      additionalMetrics = additionalMetrics).asInstanceOf[RDD[Row]]
+      additionalMetrics = additionalMetrics,
+      databaseMetadata = databaseMetadata).asInstanceOf[RDD[Row]]
   }
 
   def buildScan(
@@ -339,7 +347,8 @@ private[sql] case class JDBCRelation(
       limit,
       sortOrders,
       offset,
-      additionalMetrics).asInstanceOf[RDD[Row]]
+      additionalMetrics,
+      databaseMetadata).asInstanceOf[RDD[Row]]
   }
 
   override def insert(data: DataFrame, overwrite: Boolean): Unit = {

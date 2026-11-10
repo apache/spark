@@ -18,6 +18,7 @@
 package org.apache.spark.memory;
 
 import java.io.IOException;
+import java.util.Objects;
 import java.util.concurrent.atomic.AtomicInteger;
 
 import org.junit.jupiter.api.Assertions;
@@ -184,6 +185,33 @@ public class TaskMemoryManagerSuite {
       spillAttempts++;
       nestedPage = taskMemoryManager.allocatePage(256, this);
       return 0;
+    }
+  }
+
+  /**
+   * A consumer with value-based equality and string representation: two instances on the same
+   * manager and memory mode are equal, share a hash code and print the same, even though they
+   * track memory independently.
+   */
+  private static final class ValueEqualConsumer extends TestMemoryConsumer {
+    ValueEqualConsumer(TaskMemoryManager memoryManager) {
+      super(memoryManager);
+    }
+
+    @Override
+    public boolean equals(Object other) {
+      return other instanceof ValueEqualConsumer that &&
+        taskMemoryManager == that.taskMemoryManager && getMode() == that.getMode();
+    }
+
+    @Override
+    public int hashCode() {
+      return Objects.hash(taskMemoryManager, getMode());
+    }
+
+    @Override
+    public String toString() {
+      return "ValueEqualConsumer";
     }
   }
 
@@ -859,6 +887,95 @@ public class TaskMemoryManagerSuite {
     c2.use(10);
     Assertions.assertEquals(10, c2.getUsed());  // spilled
     Assertions.assertEquals(80, c1.getUsed());  // not spilled
+  }
+
+  @Test
+  public void equalButDistinctConsumersAreAllSpilled() {
+    final TestMemoryManager memoryManager = new TestMemoryManager(new SparkConf());
+    memoryManager.limit(100);
+    final TaskMemoryManager manager = new TaskMemoryManager(memoryManager, 0);
+
+    ValueEqualConsumer c1 = new ValueEqualConsumer(manager);
+    ValueEqualConsumer c2 = new ValueEqualConsumer(manager);
+    Assertions.assertEquals(c1, c2);
+    TestMemoryConsumer c3 = new TestMemoryConsumer(manager);
+    c1.use(50);
+    c2.use(50);
+
+    // Both equal consumers must be offered for spilling to satisfy the request.
+    c3.use(100);
+    Assertions.assertEquals(0, c1.getUsed());
+    Assertions.assertEquals(0, c2.getUsed());
+    Assertions.assertEquals(100, c3.getUsed());
+
+    c3.free(100);
+    Assertions.assertEquals(0, manager.cleanUpAllAllocatedMemory());
+  }
+
+  @Test
+  public void equalButDistinctConsumerCanSelfSpill() {
+    final TestMemoryManager memoryManager = new TestMemoryManager(new SparkConf());
+    memoryManager.limit(100);
+    final TaskMemoryManager manager = new TaskMemoryManager(memoryManager, 0);
+
+    ValueEqualConsumer c1 = new ValueEqualConsumer(manager);
+    ValueEqualConsumer c2 = new ValueEqualConsumer(manager);
+    c1.use(50);
+    c1.free(50);
+    c2.use(100);
+
+    // The requesting consumer is spilled last, but it must still be spilled when no other
+    // consumer holds memory, even if an equal consumer was registered first.
+    c2.use(50);
+    Assertions.assertEquals(0, c1.getUsed());
+    Assertions.assertEquals(50, c2.getUsed());
+
+    c2.free(50);
+    Assertions.assertEquals(0, manager.cleanUpAllAllocatedMemory());
+  }
+
+  @Test
+  public void equalButDistinctConsumersAreAllSpilledForPageAllocation() {
+    final TestMemoryManager memoryManager = new TestMemoryManager(new SparkConf());
+    memoryManager.limit(5120);
+    final TestAllocator allocator = new TestAllocator(1);
+    final TaskMemoryManager manager = new TaskMemoryManager(memoryManager, 0, allocator);
+    ValueEqualConsumer c1 = new ValueEqualConsumer(manager);
+    ValueEqualConsumer c2 = new ValueEqualConsumer(manager);
+    final PageAllocatingConsumer requestingConsumer = new PageAllocatingConsumer(manager, 4096);
+    c1.use(512);
+    c2.use(512);
+
+    // The grant succeeds without spilling, so only the allocator-failure recovery path spills.
+    final MemoryBlock page = requestingConsumer.allocate(4096);
+    Assertions.assertNotNull(page);
+    Assertions.assertEquals(0, c1.getUsed());
+    Assertions.assertEquals(0, c2.getUsed());
+
+    requestingConsumer.freeAllocatedPage(page);
+    Assertions.assertEquals(0, manager.cleanUpAllAllocatedMemory());
+  }
+
+  @Test
+  public void equalButDistinctConsumersAreAllInMemoryConsumptionBreakdown() {
+    final TestMemoryManager memoryManager = new TestMemoryManager(new SparkConf());
+    memoryManager.limit(100);
+    final TaskMemoryManager manager = new TaskMemoryManager(memoryManager, 0);
+
+    ValueEqualConsumer c1 = new ValueEqualConsumer(manager);
+    ValueEqualConsumer c2 = new ValueEqualConsumer(manager);
+    c1.use(20);
+    c2.use(30);
+
+    String breakdown = manager.getMemoryConsumptionBreakdown();
+    Assertions.assertTrue(breakdown.contains("ValueEqualConsumer: 20.0 B"), breakdown);
+    Assertions.assertTrue(breakdown.contains("ValueEqualConsumer: 30.0 B"), breakdown);
+    Assertions.assertFalse(
+      breakdown.contains("(not attributed to a specific consumer)"), breakdown);
+
+    c1.free(20);
+    c2.free(30);
+    Assertions.assertEquals(0, manager.cleanUpAllAllocatedMemory());
   }
 
   @Test

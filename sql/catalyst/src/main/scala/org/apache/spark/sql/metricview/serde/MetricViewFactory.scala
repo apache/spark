@@ -20,18 +20,31 @@ package org.apache.spark.sql.metricview.serde
 import scala.util.control.NonFatal
 
 private[sql] object MetricViewFactory {
+  private case class YAMLVersionHandler(
+      deserialize: String => MetricView,
+      serialize: MetricView => String)
+
+  private val versionHandlers = Seq(
+    "0.1" -> YAMLVersionHandler(
+      yamlContent => MetricViewYAMLDeserializerV01.parseYaml(yamlContent).toCanonical,
+      metricView => MetricViewYAMLSerializerV01.toYaml(MetricViewV01.fromCanonical(metricView))))
+
+  private def invalidVersionMessage(version: String): String = {
+    s"Invalid YAML version: $version. " +
+      s"Supported YAML versions: ${versionHandlers.map(_._1).mkString(", ")}"
+  }
+
+  private def versionHandler(version: String): YAMLVersionHandler = {
+    versionHandlers.find(_._1 == version).map(_._2).getOrElse {
+      throw MetricViewValidationException(invalidVersionMessage(version))
+    }
+  }
+
   def fromYAML(yamlContent: String): MetricView = {
     try {
       val yamlVersion =
         YamlMapperProviderV01.mapperWithAllFields.readValue(yamlContent, classOf[YAMLVersion])
-      yamlVersion.version match {
-        case "0.1" =>
-          MetricViewYAMLDeserializerV01.parseYaml(yamlContent).toCanonical
-        case _ =>
-          throw MetricViewValidationException(
-            s"Invalid YAML version: ${yamlVersion.version}"
-          )
-      }
+      versionHandler(yamlVersion.version).deserialize(yamlContent)
     } catch {
       case e: MetricViewSerdeException =>
         throw e
@@ -45,17 +58,7 @@ private[sql] object MetricViewFactory {
 
   def toYAML(metricView: MetricView): String = {
     try {
-      val versionSpecific = MetricViewBase.fromCanonical(metricView)
-      versionSpecific.version match {
-        case "0.1" =>
-          MetricViewYAMLSerializerV01.toYaml(
-            versionSpecific.asInstanceOf[MetricViewV01]
-          )
-        case _ =>
-          throw MetricViewValidationException(
-            s"Invalid YAML version: ${metricView.version}"
-          )
-      }
+      versionHandler(metricView.version).serialize(metricView)
     } catch {
       case e: MetricViewSerdeException =>
         throw e

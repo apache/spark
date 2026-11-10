@@ -21,6 +21,7 @@ import java.io.{File, InterruptedIOException, UncheckedIOException}
 import java.nio.channels.ClosedByInterruptException
 import java.time.ZoneId
 import java.util.concurrent.{CountDownLatch, ExecutionException, TimeUnit}
+import java.util.concurrent.atomic.AtomicReference
 
 import scala.concurrent.TimeoutException
 import scala.reflect.ClassTag
@@ -50,6 +51,7 @@ import org.apache.spark.sql.expressions.Window
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.sources.StreamSourceProvider
+import org.apache.spark.sql.streaming.StreamingQueryListener.{QueryProgressEvent, QueryStartedEvent, QueryTerminatedEvent}
 import org.apache.spark.sql.streaming.util.{BlockOnStopSourceProvider, StreamManualClock}
 import org.apache.spark.sql.types.{IntegerType, LongType, StructField, StructType}
 import org.apache.spark.tags.SlowSQLTest
@@ -444,6 +446,75 @@ class StreamSuite extends StreamTest {
         ExpectFailure(isFatalError = true)(ClassTag(e.getClass))
       )
     }
+  }
+
+  /** Also returns the error, if any, rethrown to the query thread's `UncaughtExceptionHandler`. */
+  private def failWhileBuildingQueryException(
+      buildFailure: Throwable): (StreamingQueryException, Option[Throwable]) = {
+    val source = new Source {
+      @volatile private var failed = false
+
+      override def getOffset: Option[Offset] = Some(LongOffset(0))
+
+      override def getBatch(start: Option[Offset], end: Offset): DataFrame = {
+        failed = true
+        throw new IllegalStateException("getBatch failed")
+      }
+
+      override def schema: StructType = StructType(Array(StructField("value", IntegerType)))
+
+      override def stop(): Unit = {}
+
+      // The query debug string embeds the source, so this fails building the detailed exception.
+      override def toString: String = if (failed) throw buildFailure else "FailingSource"
+    }
+    val df = Dataset[Int](
+      sqlContext.sparkSession,
+      StreamingExecutionRelation(source, sqlContext.sparkSession))
+    val uncaught = new AtomicReference[Throwable]()
+    // Installed on the stream thread before `start()` returns, so an early fatal error reaches it.
+    val listener = new StreamingQueryListener {
+      override def onQueryStarted(event: QueryStartedEvent): Unit =
+        Thread.currentThread.setUncaughtExceptionHandler(
+          (_: Thread, e: Throwable) => uncaught.set(e))
+      override def onQueryProgress(event: QueryProgressEvent): Unit = {}
+      override def onQueryTerminated(event: QueryTerminatedEvent): Unit = {}
+    }
+    spark.streams.addListener(listener)
+    try {
+      val query = df.writeStream.format("noop").start()
+      val queryThread =
+        query.asInstanceOf[StreamingQueryWrapper].streamingQuery.queryExecutionThread
+      try {
+        val e = intercept[StreamingQueryException] {
+          query.awaitTermination(streamingTimeout.toMillis)
+        }
+        queryThread.join(streamingTimeout.toMillis)
+        assert(!queryThread.isAlive)
+        assert(query.exception.contains(e))
+        assert(e.cause.getMessage == "getBatch failed")
+        assert(e.getSuppressed.toSeq == Seq(buildFailure))
+        assert(e.getCondition == "STREAM_FAILED")
+        (e, Option(uncaught.get()))
+      } finally {
+        query.stop()
+      }
+    } finally {
+      spark.streams.removeListener(listener)
+    }
+  }
+
+  test("SPARK-60091: query failure is reported when building the detailed exception fails") {
+    val (_, uncaught) =
+      failWhileBuildingQueryException(new IllegalStateException("source toString failed"))
+    assert(uncaught.isEmpty)
+  }
+
+  test("SPARK-60091: query failure is reported when building the detailed exception fails " +
+      "fatally") {
+    val buildFailure = new StackOverflowError("source toString failed")
+    val (_, uncaught) = failWhileBuildingQueryException(buildFailure)
+    assert(uncaught.contains(buildFailure))
   }
 
   test("output mode API in Scala") {

@@ -20,19 +20,25 @@ package org.apache.spark.sql
 import java.time.{Duration, LocalDateTime, LocalTime, Period}
 import java.util.Locale
 
+import scala.collection.mutable.ArrayBuffer
 import scala.util.Random
 
+import org.apache.datasketches.memory.Memory
+import org.apache.datasketches.tuple.{Sketches => TupleSketches}
+import org.apache.datasketches.tuple.adouble.{DoubleSummary, DoubleSummaryDeserializer}
+import org.apache.datasketches.tuple.aninteger.{IntegerSummary, IntegerSummaryDeserializer}
 import org.scalacheck.Gen
 import org.scalatest.matchers.must.Matchers.the
 import org.scalatestplus.scalacheck.ScalaCheckDrivenPropertyChecks
 
 import org.apache.spark.{SparkArithmeticException, SparkRuntimeException}
-import org.apache.spark.sql.catalyst.plans.logical.Expand
+import org.apache.spark.sql.catalyst.expressions.aggregate.{Complete, Final, Partial}
+import org.apache.spark.sql.catalyst.plans.logical.{Aggregate, Expand}
 import org.apache.spark.sql.catalyst.util.AUTO_GENERATED_ALIAS
 import org.apache.spark.sql.errors.DataTypeErrors.toSQLId
-import org.apache.spark.sql.execution.WholeStageCodegenExec
+import org.apache.spark.sql.execution.{FileSourceScanExec, WholeStageCodegenExec}
 import org.apache.spark.sql.execution.adaptive.AdaptiveSparkPlanHelper
-import org.apache.spark.sql.execution.aggregate.{HashAggregateExec, ObjectHashAggregateExec, SortAggregateExec}
+import org.apache.spark.sql.execution.aggregate.{BaseAggregateExec, HashAggregateExec, ObjectHashAggregateExec, SortAggregateExec}
 import org.apache.spark.sql.execution.exchange.ShuffleExchangeExec
 import org.apache.spark.sql.expressions.Window
 import org.apache.spark.sql.functions._
@@ -1271,6 +1277,148 @@ class DataFrameAggregateSuite extends SharedSparkSession
     )
   }
 
+  test("SPARK-60150: filter above an aggregate sees normalized float/double grouping keys") {
+    // Two rows, so that OptimizeOneRowPlan does not remove the aggregate.
+    val df = Seq(-0.0d, -0.0d).toDF("x")
+    val isNegZero = col("x").cast("string") === "-0.0"
+
+    // The aggregate outputs -0.0 as 0.0, for which the predicate is false.
+    checkAnswer(df.distinct().where(isNegZero), Nil)
+    checkAnswer(df.groupBy("x").count().where(isNegZero), Nil)
+    checkAnswer(df.dropDuplicates().where(isNegZero), Nil)
+    checkAnswer(df.intersectAll(df).where(isNegZero), Nil)
+    checkAnswer(df.except(Seq(1.0d).toDF("x")).where(isNegZero), Nil)
+    checkAnswer(Seq(-0.0f, -0.0f).toDF("x").distinct().where(isNegZero), Nil)
+    checkAnswer(
+      df.select(struct(col("x")).as("s")).distinct().where(col("s.x").cast("string") === "-0.0"),
+      Nil)
+
+    withTempView("t") {
+      df.createOrReplaceTempView("t")
+      checkAnswer(
+        sql("SELECT * FROM (SELECT DISTINCT x FROM t) WHERE cast(x AS STRING) = '-0.0'"),
+        Nil)
+      // An alias computed from the key is also evaluated on the normalized value.
+      checkAnswer(
+        sql("SELECT * FROM (SELECT cast(x AS STRING) AS s FROM t GROUP BY x) WHERE s = '-0.0'"),
+        Nil)
+    }
+
+    // Reading the raw key below the aggregate would split the group and change the count.
+    val zeros = Seq(-0.0d, 0.0d).toDF("x")
+    checkAnswer(
+      zeros.groupBy("x").count().where(col("x").cast("string") === "0.0"),
+      Row(0.0d, 2))
+    // Comparisons treat -0.0 and 0.0 as equal, so they are pushed down without normalization.
+    checkAnswer(zeros.groupBy("x").count().where(col("x") === 0.0d), Row(0.0d, 2))
+  }
+
+  test("SPARK-60150: IN and NOT IN subqueries on a float/double grouping key") {
+    withTempView("t", "u") {
+      // Two rows, so that OptimizeOneRowPlan does not remove the aggregate. Nullable columns, so
+      // that NOT IN is planned as a null-aware anti join.
+      Seq(Some(0.0d), Some(0.0d)).toDF("x").createOrReplaceTempView("t")
+      Seq(Some(-0.0d)).toDF("y").createOrReplaceTempView("u")
+
+      // A float/double key is pushed unnormalized, and the join normalizes both sides.
+      checkAnswer(
+        sql("SELECT * FROM (SELECT DISTINCT x FROM t) WHERE x IN (SELECT y FROM u)"),
+        Row(0.0d))
+      checkAnswer(
+        sql("SELECT * FROM (SELECT DISTINCT x FROM t) WHERE x NOT IN (SELECT y FROM u)"),
+        Nil)
+      // A struct key is pushed normalized, so the subquery side of the join must be normalized too,
+      // so that 0.0 matches -0.0. The structs are nullable, like the columns above.
+      def struct(c: String): String = s"IF($c IS NULL, NULL, named_struct('a', $c))"
+      val structs = s"SELECT * FROM (SELECT DISTINCT ${struct("x")} AS s FROM t)"
+      val structY = s"(SELECT ${struct("y")} FROM u)"
+      checkAnswer(sql(s"$structs WHERE s IN $structY"), Row(Row(0.0d)))
+      checkAnswer(sql(s"$structs WHERE s NOT IN $structY"), Nil)
+    }
+  }
+
+  test("SPARK-60150: filter above a group only aggregate over at most one row or under LIMIT 1") {
+    withTempView("t") {
+      Seq(-0.0d).toDF("x").createOrReplaceTempView("t")
+      // The child has at most one row (OptimizeOneRowPlan). The aggregate outputs 0.0.
+      val oneRow =
+        "SELECT cast(x AS STRING) FROM (SELECT DISTINCT x FROM (SELECT x FROM t LIMIT 1))"
+      checkAnswer(sql(s"$oneRow WHERE cast(x AS STRING) = '0.0'"), Row("0.0"))
+      checkAnswer(sql(s"$oneRow WHERE cast(x AS STRING) = '-0.0'"), Nil)
+    }
+
+    // LIMIT 1 above the aggregate (LimitPushDown).
+    val distinct = Seq(-0.0d, -0.0d).toDF("x").distinct()
+    val isZero = col("x").cast("string") === "0.0"
+    checkAnswer(distinct.where(isZero).limit(1).select(col("x").cast("string")), Row("0.0"))
+    assert(distinct.where(col("x").cast("string") === "-0.0").limit(1).collect().isEmpty)
+    val first = distinct.where(isZero).first().getDouble(0)
+    assert(first == 0.0d && 1.0d / first > 0, s"$first is not 0.0")
+  }
+
+  test("SPARK-60150: filter pushed below a DISTINCT that an upper aggregate makes redundant") {
+    withTempView("t") {
+      Seq(-0.0d, -0.0d).toDF("x").createOrReplaceTempView("t")
+      // The DISTINCT outputs 0.0, which the filter keeps and the upper aggregate groups as '0.0'.
+      checkAnswer(
+        sql("SELECT cast(x AS STRING) AS k FROM (SELECT DISTINCT x FROM t) " +
+          "WHERE cast(x AS STRING) = '0.0' GROUP BY 1"),
+        Row("0.0"))
+      // Without a filter too (SPARK-60093): the upper aggregate reads the DISTINCT's 0.0.
+      checkAnswer(
+        sql("SELECT cast(x AS STRING) AS k, max(x) AS m FROM " +
+          "(SELECT DISTINCT x FROM VALUES (-0.0D), (0.0D) t(x)) GROUP BY 1"),
+        Row("0.0", 0.0d))
+    }
+
+    withTempView("u") {
+      Seq((-0.0d, 1), (0.0d, 2)).toDF("d", "a").createOrReplaceTempView("u")
+      // The upper aggregate groups by the key directly and normalizes it itself, so the DISTINCT
+      // is removed, with and without a filter pushed below it.
+      val distinct = "(SELECT DISTINCT d, a FROM u)"
+      val grouped = sql(s"SELECT cast(d AS STRING), max(a) FROM $distinct GROUP BY d")
+      checkAnswer(grouped, Row("0.0", 2))
+      assert(grouped.queryExecution.optimizedPlan.collect { case a: Aggregate => a }.size == 1)
+      // The filter reads the DISTINCT's normalized 0.0, so it keeps both rows for '0.0' and none
+      // for '-0.0'.
+      checkAnswer(
+        sql(s"SELECT cast(d AS STRING), max(a) FROM $distinct " +
+          "WHERE cast(d AS STRING) = '0.0' GROUP BY d"),
+        Row("0.0", 2))
+      checkAnswer(
+        sql(s"SELECT cast(d AS STRING), max(a) FROM $distinct " +
+          "WHERE cast(d AS STRING) = '-0.0' GROUP BY d"),
+        Nil)
+    }
+  }
+
+  test("SPARK-60150: filter pushed through two aggregates whose upper key is computed") {
+    withTempView("t") {
+      Seq(-0.0d, -0.0d).toDF("x").createOrReplaceTempView("t")
+      // The lower aggregate computes pow on the normalized key 0.0, so k is Infinity.
+      checkAnswer(
+        sql("SELECT * FROM (SELECT k, count(*) AS c FROM " +
+          "(SELECT pow(x, -1) AS k FROM t GROUP BY x) GROUP BY k) " +
+          "WHERE cast(k AS STRING) = 'Infinity'"),
+        Row(Double.PositiveInfinity, 1L))
+    }
+  }
+
+  test("SPARK-60150: comparisons on a FLOAT grouping key are pushed to the data source") {
+    withTempPath { path =>
+      Seq(-0.0f, 1.0f, 2.0f).toDF("f").write.parquet(path.getCanonicalPath)
+      val df = spark.read.parquet(path.getCanonicalPath)
+        .groupBy("f").count().where(col("f") > 1.5)
+      checkAnswer(df, Row(2.0f, 1L))
+      // The FLOAT key is compared with a DOUBLE value through a widening cast. That comparison is
+      // pushed below the aggregate without normalizing the key, so the scan can still use it.
+      val pushedFilters = df.queryExecution.sparkPlan.collectFirst {
+        case scan: FileSourceScanExec => scan.metadata("PushedFilters")
+      }
+      assert(pushedFilters.exists(_.contains("GreaterThan(f,1.5)")), pushedFilters)
+    }
+  }
+
   test("SPARK-57329: mode normalizes -0.0/0.0 in the frequency buffer") {
     checkAnswer(
       Seq(0.0d, 0.0d, -0.0d, -0.0d, 9.0d, 9.0d, 9.0d).toDF("d").select(expr("mode(d)")),
@@ -1319,6 +1467,40 @@ class DataFrameAggregateSuite extends SharedSparkSession
       Seq(nan1, nan1, nan2, nan2, 9.0d, 9.0d, 9.0d).toDF("v")
         .select(struct(col("v")).as("s")).select(expr("mode(s)")),
       Row(Row(Double.NaN)))
+  }
+
+  test("SPARK-60309: mode compares binary values by content") {
+    // X'02' occurs three times. Counting byte arrays by reference made every count 1, so mode()
+    // returned an arbitrary value and mode() WITHIN GROUP the smallest one, X'01'.
+    val values = Seq(2, 1, 1, 2, 2, 3).map(i => Array(i.toByte))
+    def checkModes(df: DataFrame): Unit = {
+      checkAnswer(
+        df.selectExpr("mode(b)", "mode() WITHIN GROUP (ORDER BY b)"),
+        Row(Array[Byte](2), Array[Byte](2)))
+      // pandas_mode is an internal expression, so invoke it via Column.internalFn.
+      checkAnswer(
+        df.select(Column.internalFn("pandas_mode", col("b"), lit(true))),
+        Row(Seq(Array[Byte](2))))
+    }
+
+    // One partition, aggregated in Complete mode (update only) or by adjacent Partial and Final
+    // aggregates (which also serialize, deserialize and merge the buffer).
+    val df = values.toDF("b").repartition(1)
+    Seq(true, false).foreach { combine =>
+      withSQLConf(SQLConf.COMBINE_ADJACENT_AGGREGATION_ENABLED.key -> combine.toString) {
+        checkModes(df)
+      }
+    }
+    // Three partitions [X'02', X'01'], [X'01', X'02'] and [X'02', X'03']: each one sees X'02'
+    // once, so only a merge that compares the deserialized keys by content counts it 3 times.
+    checkModes(spark.sparkContext.parallelize(values, 3).toDF("b"))
+
+    // X'7F' and X'80' tie as the most frequent values. Binary values compare as unsigned bytes,
+    // so X'7F' is the smaller one.
+    checkAnswer(
+      sql("SELECT mode() WITHIN GROUP (ORDER BY b), mode() WITHIN GROUP (ORDER BY b DESC) " +
+        "FROM VALUES (X'01'), (X'7F'), (X'7F'), (X'80'), (X'80'), (X'FF') AS t(b)"),
+      Row(Array(0x7F.toByte), Array(0x80.toByte)))
   }
 
   test("SPARK-27581: DataFrame count_distinct(\"*\") shouldn't fail with AnalysisException") {
@@ -5031,6 +5213,128 @@ class DataFrameAggregateSuite extends SharedSparkSession
     assert(estimateResult == 2.0)
   }
 
+  private val intersectionSketchFunctions = Map(
+    "theta_intersection_agg" ->
+      ("theta_sketch_agg(id)", "theta_intersection_agg", "theta_sketch_estimate"),
+    "tuple_intersection_agg_double" ->
+      ("tuple_sketch_agg_double(id, 1.0D)",
+        "tuple_intersection_agg_double", "tuple_sketch_estimate_double"),
+    "tuple_intersection_agg_integer" ->
+      ("tuple_sketch_agg_integer(id, 1)",
+        "tuple_intersection_agg_integer", "tuple_sketch_estimate_integer")
+  )
+
+  namedGridTest(
+    "SPARK-59975: intersection returns an empty sketch for all-null input")(
+    intersectionSketchFunctions) {
+    case (_, intersection, estimate) =>
+      val rows = spark.sparkContext.parallelize(Seq.fill(4)(Row(null)), 2)
+      val schema = new StructType().add("sketch", BinaryType)
+      withTempView("intersection_null_inputs") {
+        spark.createDataFrame(rows, schema).createOrReplaceTempView("intersection_null_inputs")
+        checkAnswer(
+          sql(s"""
+            |SELECT CAST($estimate($intersection(sketch)) AS DOUBLE)
+            |FROM intersection_null_inputs
+            |""".stripMargin),
+          Row(0.0))
+      }
+  }
+
+  namedGridTest(
+    "SPARK-59975: intersection skips null-only partials for mixed groups")(
+    intersectionSketchFunctions) {
+    case (buildSketch, intersection, estimate) =>
+      val sketch = sql(s"SELECT $buildSketch FROM range(1, 3)").head().getAs[Array[Byte]](0)
+      // Group 0 is all-null. Group 1 has a null-only partial and a populated partial.
+      val partitions = Seq(
+        Seq(Row(0, null), Row(1, null)),
+        Seq(Row(0, null), Row(1, sketch)))
+      val rows = spark.sparkContext.parallelize(partitions, partitions.size).flatMap(_.iterator)
+      val schema = new StructType().add("group_id", IntegerType).add("sketch", BinaryType)
+      withTempView("intersection_mixed_inputs") {
+        spark.createDataFrame(rows, schema).createOrReplaceTempView("intersection_mixed_inputs")
+        checkAnswer(
+          sql(s"""
+            |SELECT group_id, CAST($estimate($intersection(sketch)) AS DOUBLE)
+            |FROM intersection_mixed_inputs
+            |GROUP BY group_id
+            |""".stripMargin),
+          Seq(Row(0, 0.0), Row(1, 2.0)))
+      }
+  }
+
+  namedGridTest(
+    "SPARK-59975: intersection skips empty partitions in a global aggregate")(
+    intersectionSketchFunctions) {
+    case (buildSketch, intersection, estimate) =>
+      val sketch = sql(s"SELECT $buildSketch FROM range(1, 3)").head().getAs[Array[Byte]](0)
+      // The first partition is empty, but a global aggregate still emits and serializes
+      // a default partial buffer for it.
+      val rows = spark.sparkContext.parallelize(Seq(Row(sketch)), 2)
+      val schema = new StructType().add("sketch", BinaryType)
+      withTempView("intersection_empty_partition") {
+        spark.createDataFrame(rows, schema).createOrReplaceTempView("intersection_empty_partition")
+        checkAnswer(
+          sql(s"""
+            |SELECT CAST($estimate($intersection(sketch)) AS DOUBLE)
+            |FROM intersection_empty_partition
+            |""".stripMargin),
+          Row(2.0))
+        // Zero input rows return an empty sketch.
+        checkAnswer(
+          sql(s"""
+            |SELECT CAST($estimate($intersection(sketch)) AS DOUBLE)
+            |FROM intersection_empty_partition
+            |WHERE false
+            |""".stripMargin),
+          Row(0.0))
+      }
+  }
+
+  namedGridTest(
+    "SPARK-59975: intersection with multiple DISTINCT aggregates")(
+    intersectionSketchFunctions) {
+    case (buildSketch, intersection, estimate) =>
+      val sketch = sql(s"SELECT $buildSketch FROM range(1, 3)").head().getAs[Array[Byte]](0)
+      withTempView("intersection_distinct_inputs") {
+        Seq((1, 10, sketch), (2, 20, sketch)).toDF("a", "b", "sketch")
+          .createOrReplaceTempView("intersection_distinct_inputs")
+        // RewriteDistinctAggregates sets the intersection input to NULL on the expanded rows
+        // of each DISTINCT group, so the intersection sees all-NULL groups.
+        val df = sql(s"""
+          |SELECT
+          |  CAST($estimate($intersection(sketch)) AS DOUBLE),
+          |  count(DISTINCT a),
+          |  count(DISTINCT b)
+          |FROM intersection_distinct_inputs
+          |""".stripMargin)
+        assert(df.queryExecution.optimizedPlan.collectFirst { case e: Expand => e }.nonEmpty)
+        checkAnswer(df, Row(2.0, 2L, 2L))
+      }
+  }
+
+  namedGridTest(
+    "SPARK-59975: intersection window aggregate over a frame with only null sketches")(
+    intersectionSketchFunctions) {
+    case (buildSketch, intersection, estimate) =>
+      val sketch = sql(s"SELECT $buildSketch FROM range(1, 3)").head().getAs[Array[Byte]](0)
+      withTempView("intersection_window_inputs") {
+        Seq[(Int, Array[Byte])]((1, null), (2, sketch)).toDF("id", "sketch")
+          .createOrReplaceTempView("intersection_window_inputs")
+        // A window aggregate evaluates the frame buffer directly, without serializing it.
+        checkAnswer(
+          sql(s"""
+            |SELECT
+            |  id,
+            |  CAST($estimate($intersection(sketch) OVER (
+            |    ORDER BY id ROWS BETWEEN CURRENT ROW AND CURRENT ROW)) AS DOUBLE)
+            |FROM intersection_window_inputs
+            |""".stripMargin),
+          Seq(Row(1, 0.0), Row(2, 2.0)))
+      }
+  }
+
   test("SPARK-54179: tuple_sketch_agg + operations + estimate comprehensive test - double") {
     val df1 = Seq((1, "a", 1.0), (1, "a", 2.0), (1, "b", 3.0), (1, "c", 4.0))
       .toDF("id", "key", "summary")
@@ -5160,6 +5464,124 @@ class DataFrameAggregateSuite extends SharedSparkSession
       .collect()(0)(0)
     assert(estimate != null)
     assert(estimate.asInstanceOf[Double] == 2.0)
+  }
+
+  // The (theta, (hash, summary) entries sorted by hash) of a serialized tuple sketch.
+  private def tupleSketchContent(
+      flavor: String,
+      bytes: Array[Byte]): (Long, Seq[(Long, Double)]) = {
+    val mem = Memory.wrap(bytes)
+    val sketch = flavor match {
+      case "double" => TupleSketches.heapifySketch(mem, new DoubleSummaryDeserializer())
+      case "integer" => TupleSketches.heapifySketch(mem, new IntegerSummaryDeserializer())
+    }
+    val entries = ArrayBuffer.empty[(Long, Double)]
+    val it = sketch.iterator()
+    while (it.next()) {
+      val value = it.getSummary match {
+        case s: DoubleSummary => s.getValue
+        case s: IntegerSummary => s.getValue.toDouble
+      }
+      entries += ((it.getHash, value))
+    }
+    (sketch.getThetaLong, entries.sortBy(_._1).toSeq)
+  }
+
+  // A Complete-mode aggregate serializes the update sketch directly, while Partial + Final merges
+  // the partial sketches into a union, which trims to k entries. Both must return that sketch.
+  for ((flavor, summType) <- Seq("double" -> "double", "integer" -> "int"); lg <- Seq(5, 10);
+       completeConf <- Seq(
+         SQLConf.BYPASS_PARTIAL_AGGREGATION.key,
+         SQLConf.COMBINE_ADJACENT_AGGREGATION_ENABLED.key)) {
+    test(s"SPARK-60240: tuple_sketch_agg_$flavor with $completeConf returns the trimmed " +
+        s"sketch of Partial + Final mode [lg=$lg]") {
+      val k = 1 << lg
+      val keysPerGroup = 3 * k
+      // Each of the 3 groups gets keys 0 until keysPerGroup, each key twice. One input partition,
+      // so that combineAdjacentAggregation needs no shuffle to collapse Partial and Final.
+      val data = spark.range(0, 6L * keysPerGroup, 1, 1).toDF("id")
+        .withColumn("pk", $"id" % 3)
+        .withColumn("key", ($"id" / 3).cast("long") % keysPerGroup)
+        .withColumn("summ", ($"id" % 100 + 1).cast(summType))
+
+      def sketches(complete: Boolean): Map[Long, (Long, Seq[(Long, Double)])] = {
+        val confs = Map(
+          SQLConf.BYPASS_PARTIAL_AGGREGATION.key -> "false",
+          SQLConf.COMBINE_ADJACENT_AGGREGATION_ENABLED.key -> "false") +
+          (completeConf -> complete.toString)
+        withSQLConf(confs.toSeq: _*) {
+          val df = data.groupBy("pk").agg(expr(s"tuple_sketch_agg_$flavor(key, summ, $lg)"))
+          val rows = df.collect()
+          val modes = collect(df.queryExecution.executedPlan) {
+            case a: BaseAggregateExec => a.aggregateExpressions.map(_.mode)
+          }.flatten
+          val expectedModes = if (complete) Set(Complete) else Set(Partial, Final)
+          assert(modes.toSet == expectedModes,
+            s"expected modes $expectedModes:\n${df.queryExecution.executedPlan}")
+          rows.map(r => r.getLong(0) -> tupleSketchContent(flavor, r.getAs[Array[Byte]](1))).toMap
+        }
+      }
+
+      val expected = sketches(complete = false)
+      val actual = sketches(complete = true)
+      assert(expected.size == 3)
+      (expected.toSeq ++ actual.toSeq).foreach { case (pk, (theta, entries)) =>
+        val retained = entries.size
+        assert(theta < Long.MaxValue && retained == k,
+          s"pk=$pk: expected an estimation-mode sketch with k=$k entries, got theta=$theta " +
+            s"and $retained entries")
+      }
+      val same = actual == expected
+      assert(same, "Complete mode must return the sketch of Partial + Final mode")
+    }
+  }
+
+  // A window over the whole partition builds the same sketch as a GROUP BY of that partition.
+  // Key `keyv % 100` leaves 90 distinct keys per partition, each seen twice, so at lg=5
+  // distinct > 2 * 2^5 and both builds sample. The 3 partitions hold the same keys in different
+  // orders.
+  for ((flavor, summType) <- Seq("double" -> "double", "integer" -> "int");
+       mode <- Seq("sum", "min", "max", "alwaysone")) {
+    test(s"SPARK-60240: tuple_sketch_agg_$flavor window equals GROUP BY [estimation] mode=$mode") {
+      val lg = 5
+      withTempView("tuple_build_data") {
+        spark.range(600).toDF("id")
+          .withColumn("pk", $"id" % 3)
+          .withColumn("keyv",
+            when($"id" % 10 === 0, lit(null).cast("long")).otherwise($"id" % 400))
+          .withColumn("summ",
+            when($"id" % 7 === 0, lit(null).cast(summType))
+              .otherwise(($"id" % 100 + 1).cast(summType)))
+          .createOrReplaceTempView("tuple_build_data")
+
+        val agg = s"tuple_sketch_agg_$flavor(keyv % 100, summ, $lg, '$mode')"
+        val readBack =
+          s"tuple_sketch_estimate_$flavor(sk), tuple_sketch_theta_$flavor(sk), " +
+            s"CAST(tuple_sketch_summary_$flavor(sk, '$mode') AS DOUBLE)"
+        def byPk(query: String): Map[Long, Seq[(Double, Double, Double)]] =
+          sql(query).collect().toSeq
+            .map(r => (r.getLong(0), (r.getDouble(1), r.getDouble(2), r.getDouble(3))))
+            .groupBy(_._1).map { case (pk, rows) => pk -> rows.map(_._2).distinct }
+
+        val distinctPerPk = sql(
+          "SELECT pk, COUNT(DISTINCT keyv % 100) FROM tuple_build_data " +
+            "WHERE keyv IS NOT NULL AND summ IS NOT NULL GROUP BY pk").collect()
+        assert(
+          distinctPerPk.length == 3 && distinctPerPk.forall(_.getLong(1) > 2 * (1 << lg)),
+          s"expected > ${2 * (1 << lg)} distinct keys per pk, got ${distinctPerPk.mkString}")
+
+        val window = byPk(s"SELECT pk, $readBack FROM " +
+          s"(SELECT pk, $agg OVER (PARTITION BY pk) AS sk FROM tuple_build_data)")
+        val groupBy = byPk(s"SELECT pk, $readBack FROM " +
+          s"(SELECT pk, $agg AS sk FROM tuple_build_data GROUP BY pk)")
+        assert(window.size == 3 && window.values.forall(_.size == 1),
+          s"every row of a window partition must see the same sketch: $window")
+        assert((window.values ++ groupBy.values).forall(_.forall(_._2 < 1.0)),
+          "expected theta < 1 (estimation mode) for every sketch")
+        // (estimate, theta, summary) per pk.
+        assert(window == groupBy, s"window $window vs GROUP BY $groupBy")
+      }
+    }
   }
 
   // Numerical-equivalence property (sql-core layer).

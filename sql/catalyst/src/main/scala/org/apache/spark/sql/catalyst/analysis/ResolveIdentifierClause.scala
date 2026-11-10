@@ -20,7 +20,8 @@ package org.apache.spark.sql.catalyst.analysis
 import scala.collection.mutable
 
 import org.apache.spark.SparkException
-import org.apache.spark.sql.catalyst.expressions.{Expression, SubqueryExpression, VariableReference}
+import org.apache.spark.sql.catalyst.analysis.IdentifierResolution.{collectTemporaryVariablesInExpressionTree, collectTemporaryVariablesInLogicalPlan}
+import org.apache.spark.sql.catalyst.expressions.Expression
 import org.apache.spark.sql.catalyst.plans.logical.{AlterViewAs, CacheTableAsSelect, Command, CreateView, LogicalPlan, V2WriteCommand}
 import org.apache.spark.sql.catalyst.rules.{Rule, RuleExecutor}
 import org.apache.spark.sql.catalyst.trees.TreePattern._
@@ -114,8 +115,10 @@ class ResolveIdentifierClause(earlyBatches: Seq[RuleExecutor[LogicalPlan]#Batch]
         // `CREATE TEMPORARY VIEW IDENTIFIER(v) AS ...`), the evaluated plan is that command and `v`
         // names the object rather than a variable it refers to, so recording it would wrongly
         // persist it as a dependency. The recorded set is consumed by temporary-view create/ALTER
-        // and CACHE TABLE AS SELECT (stored as metadata) and by persisted CREATE/ALTER VIEW
-        // (rejected -- unless the legacy flag makes the persisted paths discard it instead).
+        // and CACHE TABLE AS SELECT (stored as metadata), by persisted CREATE/ALTER VIEW
+        // (rejected -- unless the legacy flag makes the persisted paths discard it instead), and
+        // by CREATE FUNCTION (a persistent function rejects or, under the legacy flag, discards
+        // it; a temporary function stores it as informational metadata).
         if (recordUnderIdentifier && !resolvedPlan.isInstanceOf[Command]) {
           recordTemporaryVariablesUnderIdentifier(p.identifierExpr)
         }
@@ -166,24 +169,5 @@ class ResolveIdentifierClause(earlyBatches: Seq[RuleExecutor[LogicalPlan]#Batch]
   private def recordTemporaryVariablesUnderIdentifier(identifierExpr: Expression): Unit = {
     AnalysisContext.get.referredTempVariableNamesUnderIdentifier ++=
       collectTemporaryVariablesInExpressionTree(identifierExpr)
-  }
-
-  private def collectTemporaryVariablesInLogicalPlan(child: LogicalPlan): Seq[Seq[String]] = {
-    def collectTempVars(child: LogicalPlan): Seq[Seq[String]] = {
-      child.flatMap { plan =>
-        plan.expressions.flatMap { e => collectTemporaryVariablesInExpressionTree(e) }
-      }.distinct
-    }
-    collectTempVars(child)
-  }
-
-  // Visits `child` itself as well as its descendants, so that an identifier expression which is
-  // just a variable reference is collected too.
-  private def collectTemporaryVariablesInExpressionTree(child: Expression): Seq[Seq[String]] = {
-    child.flatMap {
-      case e: SubqueryExpression => collectTemporaryVariablesInLogicalPlan(e.plan)
-      case r: VariableReference => Seq(r.originalNameParts)
-      case _ => Seq.empty
-    }.distinct
   }
 }
