@@ -17,12 +17,14 @@
 
 package org.apache.spark.sql.catalyst.analysis
 
+import org.apache.logging.log4j.Level
+
 import org.apache.spark.sql.catalyst.dsl.expressions._
-import org.apache.spark.sql.catalyst.expressions.{Attribute, AttributeReference, AttributeSet}
+import org.apache.spark.sql.catalyst.expressions.{Attribute, AttributeReference, AttributeSet, TimestampAddInterval}
 import org.apache.spark.sql.catalyst.optimizer.SimpleTestOptimizer
 import org.apache.spark.sql.catalyst.parser.CatalystSqlParser
 import org.apache.spark.sql.catalyst.plans.logical.{EventTimeWatermark, Filter, LeafNode, Statistics}
-import org.apache.spark.sql.types.{IntegerType, LongType, MetadataBuilder, TimestampType}
+import org.apache.spark.sql.types.{DayTimeIntervalType, IntegerType, LongType, MetadataBuilder, TimestampType}
 
 class StreamingJoinHelperSuite extends AnalysisTest {
 
@@ -46,6 +48,30 @@ class StreamingJoinHelperSuite extends AnalysisTest {
           Some(condition), Some(10000L)) === expected)
       }
     }
+  }
+
+  test("state watermark extraction ignores columns outside both attribute sets") {
+    val leftTime = AttributeReference("leftTime", TimestampType)()
+    val leftOffset = AttributeReference("leftOffset", LongType)()
+    val metadata = new MetadataBuilder().putLong(EventTimeWatermark.delayKey, 1000).build()
+    val rightTime = AttributeReference("rightTime", TimestampType, metadata = metadata)()
+    val rightDelay = AttributeReference("rightDelay", DayTimeIntervalType())()
+    val conditions = Seq(
+      leftTime > TimestampAddInterval(rightTime, rightDelay),
+      leftTime.cast(LongType) + leftOffset > rightTime.cast(LongType))
+    val logAppender = new LogAppender("state watermark extraction")
+    withLogAppender(logAppender, level = Some(Level.WARN)) {
+      conditions.foreach { condition =>
+        withClue(condition.sql) {
+          // Eviction passes only the constrained column and the opposite event time.
+          assert(StreamingJoinHelper.getStateValueWatermark(
+            AttributeSet(Seq(leftTime)), AttributeSet(Seq(rightTime)),
+            Some(condition), Some(10000L)) === None)
+        }
+      }
+    }
+    assert(!logAppender.loggingEvents.exists(
+      _.getMessage.getFormattedMessage.contains("Error trying to extract state constraint")))
   }
 
   test("extract watermark from time condition") {

@@ -26,6 +26,7 @@ import org.apache.spark.sql.catalyst.planning.ExtractEquiJoinKeys
 import org.apache.spark.sql.catalyst.plans.logical.{EventTimeWatermark, LogicalPlan}
 import org.apache.spark.sql.catalyst.plans.logical.EventTimeWatermark._
 import org.apache.spark.sql.catalyst.util.DateTimeConstants.MICROS_PER_DAY
+import org.apache.spark.sql.catalyst.util.DateTimeUtils
 import org.apache.spark.sql.types._
 import org.apache.spark.unsafe.types.CalendarInterval
 
@@ -47,6 +48,52 @@ object StreamingJoinHelper extends PredicateHelper with Logging {
           case a: AttributeReference => a.metadata.contains(EventTimeWatermark.delayKey)
           case _ => false
         }
+      case _ => false
+    }
+  }
+
+  /**
+   * Whether the expression is the event time plus or minus constant intervals that the join's
+   * interval arithmetic evaluates exactly. Other functions and casts from other types are not
+   * accepted: a truncation such as CAST(CAST(rightTime AS BIGINT) AS TIMESTAMP) can map a later
+   * event time below the watermark.
+   */
+  private[sql] def isIntervalShift(expr: Expression, eventTime: Attribute): Boolean = {
+    // Spark adds the whole days of an interval in the session time zone, where a day can be 23
+    // or 25 hours across a daylight saving change, but the solver counts a day as 24 hours.
+    // Accept whole days only in a fixed-offset time zone.
+    def isExactInterval(e: Expression, timeZoneId: Option[String]): Boolean = {
+      def fixedOffset: Boolean =
+        timeZoneId.exists(id => DateTimeUtils.getZoneId(id).getRules.isFixedOffset)
+      // An interval that fails to evaluate gives no bound; the query reports the error at run time.
+      def value: Option[Any] = try Option(e.eval()) catch { case NonFatal(_) => None }
+      e.foldable && (e.dataType match {
+        case _: DayTimeIntervalType =>
+          value.exists { v =>
+            val micros = v.asInstanceOf[Long]
+            -MICROS_PER_DAY < micros && micros < MICROS_PER_DAY || fixedOffset
+          }
+        case CalendarIntervalType =>
+          value.exists { v =>
+            val interval = v.asInstanceOf[CalendarInterval]
+            interval.months == 0 && (interval.days == 0 || fixedOffset)
+          }
+        case _ => false
+      })
+    }
+    expr match {
+      case a: Attribute => a.semanticEquals(eventTime)
+      // The analyzer wraps timestamp + interval in a cast to the same timestamp type.
+      case Cast(child, TimestampType, _, _) if child.dataType == TimestampType =>
+        isIntervalShift(child, eventTime)
+      case TimestampAddInterval(start, interval, timeZoneId) =>
+        isExactInterval(interval, timeZoneId) && isIntervalShift(start, eventTime)
+      case DatetimeSub(_, _, replacement) => isIntervalShift(replacement, eventTime)
+      case Add(left, right, _) =>
+        isExactInterval(right, None) && isIntervalShift(left, eventTime) ||
+          isExactInterval(left, None) && isIntervalShift(right, eventTime)
+      case Subtract(left, right, _) =>
+        isExactInterval(right, None) && isIntervalShift(left, eventTime)
       case _ => false
     }
   }
@@ -197,6 +244,13 @@ object StreamingJoinHelper extends PredicateHelper with Logging {
           Multiply(Literal(eventWatermark.get.toDouble), Literal(1000.0))
       }
     }.reduceLeft(Add(_, _))
+
+    // Callers can pass only the constrained column and the opposite event time, so a term on any
+    // other column passes the occurrence check above. Its value is unknown here.
+    if (exprWithWatermarkSubstituted.references.nonEmpty) {
+      logDebug(s"Failed to extract state constraint: unresolved $exprWithWatermarkSubstituted")
+      return None
+    }
 
     // Calculate the constraint value
     logInfo(log"Final expression to evaluate " +
