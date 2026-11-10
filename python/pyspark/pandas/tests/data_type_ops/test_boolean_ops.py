@@ -406,6 +406,29 @@ class BooleanOpsTestsMixin:
         self.assert_eq(pser >= other_pser, psser >= other_psser)
         self.assert_eq(pser >= pser, psser >= psser)
 
+    def test_compare_with_numeric(self):
+        # SPARK-60648: ordering comparisons between booleans and numbers, in both directions
+        pdf, psdf = self.pdf, self.psdf
+        b_pser, b_psser = pdf["bool"], psdf["bool"]
+        ops = [
+            lambda x, y: x < y,
+            lambda x, y: x <= y,
+            lambda x, y: x > y,
+            lambda x, y: x >= y,
+        ]
+        for op in ops:
+            for col in ["int32", "int", "float32", "float", "float_nan"]:
+                pser, psser = pdf[col], psdf[col]
+                self.assert_eq(op(b_pser, pser), op(b_psser, psser))
+                self.assert_eq(op(pser, b_pser), op(psser, b_psser))
+            for scalar in [1, 0.5]:
+                self.assert_eq(op(b_pser, scalar), op(b_psser, scalar))
+            self.assert_eq(op(pdf["float"], True), op(psdf["float"], True))
+            self.assert_eq(
+                op(b_pser.astype("boolean"), pdf["float_nan"]),
+                op(b_psser.astype("boolean"), psdf["float_nan"]),
+            )
+
 
 @unittest.skipIf(
     not extension_object_dtypes_available, "pandas extension object dtypes are not available"

@@ -46,7 +46,21 @@ from pyspark.pandas.typedef.typehints import (
 from pyspark.pandas.utils import is_ansi_mode_enabled
 from pyspark.sql import Column as PySparkColumn
 from pyspark.sql import functions as F
-from pyspark.sql.types import BooleanType, StringType
+from pyspark.sql.types import BooleanType, NumericType, StringType
+
+
+def _transform_for_numeric_comparison(left: IndexOpsLike, right: Any) -> IndexOpsLike:
+    """
+    Cast the boolean `left` to the numeric type of `right` when `right` is a non-boolean
+    number or numeric Series/Index, so that ordering comparisons such as `<` work like in
+    pandas, where True and False compare as 1 and 0.
+    """
+    if isinstance(right, numbers.Number) and not isinstance(right, bool):
+        return transform_boolean_operand_to_numeric(left, spark_type=as_spark_type(type(right)))
+    elif isinstance(right, IndexOpsMixin) and isinstance(right.spark.data_type, NumericType):
+        return transform_boolean_operand_to_numeric(left, spark_type=right.spark.data_type)
+    else:
+        return left
 
 
 class BooleanOps(DataTypeOps):
@@ -381,18 +395,22 @@ class BooleanOps(DataTypeOps):
 
     def lt(self, left: IndexOpsLike, right: Any) -> SeriesOrIndex:
         _sanitize_list_like(right)
+        left = _transform_for_numeric_comparison(left, right)
         return column_op(PySparkColumn.__lt__)(left, right)
 
     def le(self, left: IndexOpsLike, right: Any) -> SeriesOrIndex:
         _sanitize_list_like(right)
+        left = _transform_for_numeric_comparison(left, right)
         return column_op(PySparkColumn.__le__)(left, right)
 
     def ge(self, left: IndexOpsLike, right: Any) -> SeriesOrIndex:
         _sanitize_list_like(right)
+        left = _transform_for_numeric_comparison(left, right)
         return column_op(PySparkColumn.__ge__)(left, right)
 
     def gt(self, left: IndexOpsLike, right: Any) -> SeriesOrIndex:
         _sanitize_list_like(right)
+        left = _transform_for_numeric_comparison(left, right)
         return column_op(PySparkColumn.__gt__)(left, right)
 
     def invert(self, operand: IndexOpsLike) -> IndexOpsLike:
