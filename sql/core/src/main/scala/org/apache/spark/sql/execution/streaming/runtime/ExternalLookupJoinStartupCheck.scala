@@ -53,7 +53,6 @@ import org.apache.spark.sql.internal.SQLConf
 private[sql] object ExternalLookupJoinStartupCheck extends Logging {
   private val lookupErrorClasses = Set(
     "EXTERNAL_LOOKUP_JOIN_UNSUPPORTED",
-    "INVALID_EXTERNAL_LOOKUP_HINT",
     "DATA_SOURCE_INVALID_EXTERNAL_LOOKUP",
     // The default Scan.toExternalLookup() of a scan that does not override it.
     "DATA_SOURCE_EXTERNAL_LOOKUP_NOT_SUPPORTED")

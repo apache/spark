@@ -29,7 +29,8 @@ import org.apache.spark.sql.connector.metric.CustomTaskMetric;
  * <ul>
  *   <li>Calls to a reader and its cursors are sequential, but may come from different threads.
  *   Apart from the end of the task, Spark closes each cursor that it obtains, including one that
- *   it has read to its end, before its next call and before it closes the reader.</li>
+ *   it has read to its end, before its next request and before it closes the reader. It may read
+ *   {@link #currentMetricsValues()} while a cursor is open.</li>
  *   <li>At the end of the task, if another thread is still consuming the join, Spark closes the
  *   reader once, without waiting for that thread, and first closes the reader's open cursor if it
  *   finds one. It reads {@link #currentMetricsValues()} before it closes the reader. That thread
@@ -66,9 +67,9 @@ public interface ExternalLookupReader extends Closeable {
    * representation: an integral or BOOLEAN value as its Java primitive; DECIMAL as a
    * {@code Decimal} at the column's precision and scale; DATE as days since 1970-01-01 in the
    * proleptic Gregorian calendar; TIMESTAMP as microseconds since 1970-01-01 00:00:00 UTC;
-   * TIMESTAMP_NTZ as microseconds of the local date and time, with no time zone; BINARY as its
-   * bytes; and STRING as UTF-8 bytes, compared byte by byte. A conversion that loses precision,
-   * such as to milliseconds, can lose matches.
+   * TIMESTAMP_NTZ as microseconds since 1970-01-01 00:00:00 of the local date and time, with no
+   * time zone; BINARY as its bytes; and STRING as UTF-8 bytes, compared byte by byte. A conversion
+   * that loses precision, such as to milliseconds, can lose matches.
    * No two rows are equal; a null {@code <=>} parameter equals a null. Only {@code <=>} parameters
    * may be null at the top level.
    * <p>

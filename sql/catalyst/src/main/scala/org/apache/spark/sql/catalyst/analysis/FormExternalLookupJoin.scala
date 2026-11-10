@@ -24,7 +24,7 @@ import org.apache.spark.sql.catalyst.plans.logical.{ExternalLookupJoin, Join, Jo
   LogicalPlan, ResolvedHint}
 import org.apache.spark.sql.catalyst.rules.Rule
 import org.apache.spark.sql.catalyst.streaming.WriteToStream
-import org.apache.spark.sql.catalyst.trees.TreePattern.{DATA_SOURCE_V2_RELATION, JOIN}
+import org.apache.spark.sql.catalyst.trees.TreePattern.{JOIN, LOOKUP_ONLY_RELATION}
 import org.apache.spark.sql.connector.catalog.Table
 import org.apache.spark.sql.errors.{QueryCompilationErrors, QueryErrorsBase}
 import org.apache.spark.sql.execution.datasources.v2.ExternalLookupRelations
@@ -131,8 +131,9 @@ object ExternalLookupJoinEligibility extends QueryErrorsBase {
  */
 object CheckExternalLookupJoin extends (LogicalPlan => Unit) {
   override def apply(plan: LogicalPlan): Unit = {
-    // Only a DSv2 relation can be a lookup-only table, so other plans need no walk.
-    if (plan.containsAllPatterns(JOIN, DATA_SOURCE_V2_RELATION)) {
+    // Only a join over a lookup-only table can be an external lookup join, and the relation of
+    // such a table carries LOOKUP_ONLY_RELATION, so other plans need no walk.
+    if (plan.containsAllPatterns(JOIN, LOOKUP_ONLY_RELATION)) {
       val complete = plan.isInstanceOf[WriteToStream]
       plan.foreachUp {
         case join: Join if join.resolved =>
@@ -160,10 +161,10 @@ object CheckExternalLookupJoin extends (LogicalPlan => Unit) {
 object FormExternalLookupJoin extends Rule[LogicalPlan] {
   import ExternalLookupJoinEligibility._
 
-  // Only a DSv2 relation can be a lookup-only table, so a plan without one has no join to convert.
+  // Only a join over a lookup-only table converts, and the relation of such a table carries
+  // LOOKUP_ONLY_RELATION, so a subtree without it has no join to convert.
   override def apply(plan: LogicalPlan): LogicalPlan =
-    if (!plan.containsPattern(DATA_SOURCE_V2_RELATION)) plan
-    else plan.transformUpWithPruning(_.containsPattern(JOIN)) {
+    plan.transformUpWithPruning(_.containsAllPatterns(JOIN, LOOKUP_ONLY_RELATION)) {
       case join: Join =>
         ExternalLookupJoinEligibility(join) match {
           case Eligible =>

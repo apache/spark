@@ -35,7 +35,7 @@ import org.apache.spark.sql.connector.read.{ExternalLookupReader, ExternalLookup
 import org.apache.spark.sql.errors.QueryExecutionErrors
 import org.apache.spark.sql.execution.metric.{CustomMetrics, SQLMetric}
 import org.apache.spark.sql.types.{ArrayType, DataType, Decimal, DecimalType, MapType,
-  StructType}
+  StructType, UserDefinedType}
 import org.apache.spark.util.Utils
 
 /**
@@ -418,6 +418,8 @@ class ExternalLookupJoinEvaluatorFactory(
             keyCheck.foreach(eachElement(map.keyArray(), _))
             valueCheck.foreach(eachElement(map.valueArray(), _))
           }
+        // A value of a user-defined type is stored as a value of its underlying type.
+        case udt: UserDefinedType[_] => nonNullValueCheck(udt.sqlType, path)
         case _ => None
       }
 
@@ -524,7 +526,8 @@ class ExternalLookupJoinEvaluatorFactory(
   private class LookupReader {
     private val taskReaders = readerMetrics.forCurrentTask()
     private val closed = new AtomicBoolean(false)
-    // Each is taken by exactly one of the join and close(), so it is closed once.
+    // At most one of the join and close() takes each, so Spark closes each at most once. A cursor
+    // that neither takes is left to the reader's close.
     private val openReader = new AtomicReference[ExternalLookupReader]()
     private val activeCursor = new AtomicReference[ExternalLookupResultCursor]()
     private var resultRowsSinceMetricsUpdate = 0

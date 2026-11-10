@@ -176,7 +176,9 @@ public enum TableCapability {
    *   <li>{@code spark.read} and {@code CREATE TEMPORARY VIEW ... USING} fail for such a
    *   provider.</li>
    *   <li>A session catalog table created {@code USING} such a provider loads the lookup-only
-   *   table.</li>
+   *   table, unless the provider is a {@code FileDataSourceV2}: the session catalog loads such a
+   *   table as a V1 table, which Spark reads through the provider's fallback
+   *   {@code FileFormat}.</li>
    *   <li>A custom session catalog may return a V1 table, which Spark reads through the V1
    *   path.</li>
    *   <li>A provider listed in {@code spark.sql.sources.useV1SourceList} is read through the V1

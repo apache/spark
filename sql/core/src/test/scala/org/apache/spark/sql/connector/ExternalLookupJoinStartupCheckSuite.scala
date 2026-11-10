@@ -430,7 +430,7 @@ class ExternalLookupJoinStartupCheckSuite extends QueryTest with SharedSparkSess
       val queryEvents = events.asScala.toSeq.filter {
         case started: QueryStartedEvent => started.id == query.id
         case terminated: QueryTerminatedEvent => terminated.id == query.id
-        case _: QueryProgressEvent => true
+        case progress: QueryProgressEvent => progress.progress.id == query.id
       }
       assert(queryEvents.map(_.getClass) ===
         Seq(classOf[QueryStartedEvent], classOf[QueryTerminatedEvent]))
