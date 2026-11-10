@@ -374,7 +374,7 @@ case class CreateSQLFunctionCommand(
             case j: UnresolvedJsonConstructor
               if j.routeThroughResolution &&
                 catalog.isTemporaryFunction(FunctionIdentifier(j.prettyName)) &&
-                analyzer.functionResolution.unqualifiedFunctionResolvesToTemp(j.prettyName) =>
+                analyzer.unqualifiedFunctionResolvesToTemp(j.prettyName) =>
               Seq(j.prettyName)
             case _ => Seq.empty
           })
