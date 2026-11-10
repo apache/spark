@@ -1024,58 +1024,34 @@ class NativeDataSourceSuite extends QueryTest with SharedSparkSession {
     builder.build().toBatch.planInputPartitions()
   }
 
-  nativeTest("abort a micro-batch whose write failed") {
-    val session = newSession(defaultPackage)
-    val dir = Utils.createTempDir()
-    val e = intercept[Exception] {
-      val query = session.readStream.format("native_counter").option("max_offset", "4").load()
-        .writeStream
-        .format("native_sink")
-        .option("path", dir.getPath)
-        .option("fail", "write")
-        .option("checkpointLocation", Utils.createTempDir().getPath)
-        .start()
-      try query.processAllAvailable() finally query.stop()
-    }
-    checkError(
-      exception = findError(e, "NATIVE_DATA_SOURCE_ERROR"),
-      condition = "NATIVE_DATA_SOURCE_ERROR",
-      parameters = Map(
-        "action" -> "write to",
-        "name" -> "native_sink",
-        "msg" -> "injected failure in write"))
-    // Spark aborted the first epoch, with a null message for its task, which did not commit, and
-    // closed its writer.
-    assert(Files.readString(new File(dir, "_ABORTED_0").toPath) == "1,1,0")
-    assert(!new File(dir, "_EPOCH_0").exists())
-    assert(new File(dir, "_CLOSED_0").isFile)
-  }
-
-  nativeTest("abort a micro-batch whose commit failed") {
-    val session = newSession(defaultPackage)
-    val dir = Utils.createTempDir()
-    val e = intercept[Exception] {
-      val query = session.readStream.format("native_counter").option("max_offset", "4").load()
-        .writeStream
-        .format("native_sink")
-        .option("path", dir.getPath)
-        .option("fail", "commit")
-        .option("checkpointLocation", Utils.createTempDir().getPath)
-        .start()
-      try query.processAllAvailable() finally query.stop()
-    }
-    checkError(
-      exception = findError(e, "NATIVE_DATA_SOURCE_ERROR"),
-      condition = "NATIVE_DATA_SOURCE_ERROR",
-      parameters = Map(
-        "action" -> "commit a write to",
-        "name" -> "native_sink",
-        "msg" -> "injected failure in commit"))
-    // The failed commit left the stream writer open, so Spark aborted the first epoch with it, with
-    // the message of its task, which committed, and closed it afterwards.
-    assert(Files.readString(new File(dir, "_ABORTED_0").toPath) == "0,1,0")
-    assert(!new File(dir, "_EPOCH_0").exists())
-    assert(new File(dir, "_CLOSED_0").isFile)
+  Seq(("write", "write to", "1,1,0"), ("commit", "commit a write to", "0,1,0")).foreach {
+    case (fail, action, aborted) =>
+      nativeTest(s"abort a micro-batch whose $fail failed") {
+        val session = newSession(defaultPackage)
+        val dir = Utils.createTempDir()
+        val e = intercept[Exception] {
+          val query = session.readStream.format("native_counter").option("max_offset", "4").load()
+            .writeStream
+            .format("native_sink")
+            .option("path", dir.getPath)
+            .option("fail", fail)
+            .option("checkpointLocation", Utils.createTempDir().getPath)
+            .start()
+          try query.processAllAvailable() finally query.stop()
+        }
+        checkError(
+          exception = findError(e, "NATIVE_DATA_SOURCE_ERROR"),
+          condition = "NATIVE_DATA_SOURCE_ERROR",
+          parameters = Map(
+            "action" -> action,
+            "name" -> "native_sink",
+            "msg" -> s"injected failure in $fail"))
+        // Spark aborted the first epoch with its writer, which it closed afterwards: with a null
+        // message for a task that did not commit, or the message of one that did.
+        assert(Files.readString(new File(dir, "_ABORTED_0").toPath) == aborted)
+        assert(!new File(dir, "_EPOCH_0").exists())
+        assert(new File(dir, "_CLOSED_0").isFile)
+      }
   }
 
   nativeTest("continuous processing fails with a native data source") {
