@@ -567,6 +567,85 @@ object PullupCorrelatedPredicates extends Rule[LogicalPlan] with PredicateHelper
      nonEquivalentGroupbyCols(query, aggNode.get).isEmpty
    }
 
+  // Returns true if 'plan' returns exactly one row: an Aggregate without grouping expressions
+  // returns one row even on empty input. Unlike guaranteedToReturnOneRow, which allows at most
+  // one row, this must be exactly one, so it does not look through a Filter, a Limit or a Window.
+  private def returnsExactlyOneRow(plan: LogicalPlan): Boolean = plan match {
+    case Project(_, child) => returnsExactlyOneRow(child)
+    case a: Aggregate => a.groupingExpressions.isEmpty
+    case _ => false
+  }
+
+  /**
+   * Returns an expression that computes `ae` over a single input row, or None if it cannot.
+   * The expression applies the update expressions of the [[DeclarativeAggregate]] once to its
+   * initial values, and then its evaluate expression; a FILTER keeps the initial values when
+   * its condition does not hold. DISTINCT does not change the result over a single row.
+   *
+   * Only a [[DeclarativeAggregate]] can be computed this way, see the note in
+   * [[ImperativeAggregate]]. Returns None if an argument or the FILTER is non-deterministic,
+   * because the update expressions may evaluate an argument more than once and the FILTER is
+   * evaluated once per buffer value; CheckAnalysis rejects a non-deterministic argument, and SQL
+   * function resolution a non-deterministic FILTER, but a plan built another way may not. Also
+   * returns None if the result does not keep the data type and nullability of `ae`.
+   */
+  private def evalAggregateOnOneRow(ae: AggregateExpression): Option[Expression] = {
+    ae.aggregateFunction match {
+      case f: DeclarativeAggregate
+          if f.children.forall(_.deterministic) && ae.filter.forall(_.deterministic) =>
+        def bindBuffer(e: Expression, values: Seq[Expression]): Expression = {
+          val buffer = AttributeMap(f.aggBufferAttributes.zip(values))
+          e.transform { case a: AttributeReference if buffer.contains(a) => buffer(a) }
+        }
+        val updated = f.updateExpressions.map(bindBuffer(_, f.initialValues))
+        val filtered = ae.filter match {
+          case Some(cond) => updated.zip(f.initialValues).map { case (u, i) => If(cond, u, i) }
+          case None => updated
+        }
+        val result = bindBuffer(f.evaluateExpression, filtered)
+        if (result.dataType == ae.dataType && (ae.nullable || !result.nullable)) {
+          Some(result)
+        } else {
+          None
+        }
+      case _ => None
+    }
+  }
+
+  /**
+   * Rewrites each Aggregate without grouping expressions over a node that returns exactly one
+   * row (see `returnsExactlyOneRow`) into a Project, if `evalAggregateOnOneRow` can compute all
+   * of its aggregate expressions. This removes a nested Aggregate from a correlated scalar
+   * subquery, such as `SELECT MAX(c) FROM (SELECT SUM(b) AS c FROM t WHERE t.a = outer.a)`, so
+   * that its count bug can be handled in
+   * [[RewriteCorrelatedScalarSubquery#constructLeftJoins]] instead of in
+   * [[DecorrelateInnerQuery]], which joins with the domain of the outer columns.
+   */
+  private def collapseAggregatesOverOneRow(plan: LogicalPlan): LogicalPlan = plan.transformUp {
+    // An Aggregate that carries a hint (an extension point, see AggregateHint) is kept.
+    case a @ Aggregate(Nil, aggregateExpressions, child, None) if returnsExactlyOneRow(child) =>
+      val results = aggregateExpressions.flatMap(_.collect {
+        case ae: AggregateExpression => ae.canonicalized -> evalAggregateOnOneRow(ae)
+      }).toMap
+      if (results.values.forall(_.isDefined)) {
+        val projectList = aggregateExpressions.map(_.transformDown {
+          case ae: AggregateExpression => results(ae.canonicalized).get
+        }.asInstanceOf[NamedExpression])
+        Project(projectList, child)
+      } else {
+        a
+      }
+  }
+
+  // Strips the Projects without outer references at the top of 'plan', to find the node that
+  // decides how the count bug is handled. A Project with outer references stops the strip: it
+  // must be handled in DecorrelateInnerQuery, since constructLeftJoins evaluates the top node
+  // over zero rows and cannot evaluate an outer reference there.
+  private def stripTopProjects(plan: LogicalPlan): LogicalPlan = plan match {
+    case p @ Project(_, child) if !p.projectList.exists(containsOuter) => stripTopProjects(child)
+    case other => other
+  }
+
   private def rewriteSubQueries(plan: LogicalPlan): LogicalPlan = {
     /**
      * This function is used as a aid to enforce idempotency of pullUpCorrelatedPredicate rule.
@@ -592,7 +671,7 @@ object PullupCorrelatedPredicates extends Rule[LogicalPlan] with PredicateHelper
     }
 
     plan.transformExpressionsWithPruning(_.containsPattern(PLAN_EXPRESSION)) {
-      case ScalarSubquery(sub, children, exprId, conditions, hint,
+      case ScalarSubquery(originalSub, children, exprId, conditions, hint,
       mayHaveCountBugOld, needSingleJoinOld)
         if children.nonEmpty =>
 
@@ -607,6 +686,7 @@ object PullupCorrelatedPredicates extends Rule[LogicalPlan] with PredicateHelper
         // whether it is correlated or not.
         val legacyNestedAggregateCountBug =
           conf.getConf(SQLConf.LEGACY_SCALAR_SUBQUERY_NESTED_AGGREGATE_COUNT_BUG_BEHAVIOR)
+        val legacyCountBugHandling = conf.getConf(SQLConf.LEGACY_SCALAR_SUBQUERY_COUNT_BUG_HANDLING)
         def mayHaveCountBugAgg(a: Aggregate): Boolean = {
           a.groupingExpressions.isEmpty && (if (legacyNestedAggregateCountBug) {
             a.aggregateExpressions.exists(_.exists {
@@ -618,6 +698,22 @@ object PullupCorrelatedPredicates extends Rule[LogicalPlan] with PredicateHelper
           })
         }
 
+        // Collapsing an Aggregate over one row (see collapseAggregatesOverOneRow) and looking
+        // through the Projects at the top let constructLeftJoins handle the count bug of more
+        // subqueries. Neither is done when this rule runs again on a rewritten subquery
+        // (mayHaveCountBugOld is defined), or when the plans of earlier versions are kept:
+        // decorrelateInnerQuery is disabled, or LEGACY_SCALAR_SUBQUERY_COUNT_BUG_HANDLING or
+        // LEGACY_SCALAR_SUBQUERY_NESTED_AGGREGATE_COUNT_BUG_BEHAVIOR is enabled.
+        val simplifyForCountBug = mayHaveCountBugOld.isEmpty &&
+          SQLConf.get.decorrelateInnerQueryEnabled && !legacyCountBugHandling &&
+          !legacyNestedAggregateCountBug
+        val sub = if (simplifyForCountBug) {
+          collapseAggregatesOverOneRow(originalSub)
+        } else {
+          originalSub
+        }
+        val topNode = if (simplifyForCountBug) stripTopProjects(sub) else sub
+
         // The below logic controls handling count bug for scalar subqueries in
         // [[DecorrelateInnerQuery]], and if we don't handle it here, we handle it in
         // [[RewriteCorrelatedScalarSubquery#constructLeftJoins]]. Note that handling it in
@@ -625,7 +721,7 @@ object PullupCorrelatedPredicates extends Rule[LogicalPlan] with PredicateHelper
         // constructLeftJoins is an optimization, so that additional, redundant left outer joins are
         // not introduced.
         val handleCountBugInDecorrelate = SQLConf.get.decorrelateInnerQueryEnabled &&
-          !conf.getConf(SQLConf.LEGACY_SCALAR_SUBQUERY_COUNT_BUG_HANDLING) && !(sub match {
+          !legacyCountBugHandling && !(topNode match {
           // If the top level node is an Agg, handle count bug in DecorrelateInnerQuery only if
           // there exists a lower level Agg for which mayHaveCountBugAgg holds. Decorrelation
           // groups a correlated lower level Agg by the outer (domain) columns, so it returns no
@@ -633,9 +729,11 @@ object PullupCorrelatedPredicates extends Rule[LogicalPlan] with PredicateHelper
           // empty input. constructLeftJoins only handles the count bug of the top level Agg and
           // cannot bring back that row. It does not matter whether the top level Agg or the
           // aggregate functions of the lower level Agg are count bug vulnerable, e.g.
-          // COUNT(COUNT + COUNT), SUM(COUNT), COUNT(MAX) and SUM(COALESCE(SUM, 0)) all need it.
-          // Some shapes do not, e.g. SUM(MAX), but handling it in DecorrelateInnerQuery is still
-          // correct.
+          // COLLECT_LIST(COUNT) and COLLECT_LIST(MAX) over a correlated lower Agg both need it
+          // (COLLECT_LIST is not collapsed by collapseAggregatesOverOneRow, so the top Agg is
+          // kept). When the top Agg is collapsed, the lower Agg is often the top node here.
+          // Some shapes do not need it, e.g. COLLECT_LIST(MAX) when MAX is uncorrelated, but
+          // handling it in DecorrelateInnerQuery is still correct.
           case agg: Aggregate => !agg.child.exists {
             case lowerAgg: Aggregate => mayHaveCountBugAgg(lowerAgg)
             case _ => false

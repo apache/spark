@@ -8778,9 +8778,14 @@ object SQLConf {
         "default result on empty input, such as COUNT. Otherwise " +
         "only the result of the top Aggregate is fixed, which can return wrong results: for " +
         "example, COUNT(*) over a MAX without GROUP BY returns 0 instead of 1 for an outer row " +
-        "without matching rows. When false, the count bug is handled during decorrelation if " +
-        "some Aggregate without GROUP BY below it is correlated, i.e. it or a node below it " +
-        "references the outer query. Has no effect when " +
+        "without matching rows. When false, an Aggregate without GROUP BY over another one, " +
+        "with only Projects between them, is first rewritten into a Project when every " +
+        "aggregate function in it can be computed over that one row as an expression (a " +
+        "declarative function with deterministic inputs, keeping the data type and " +
+        "nullability), Projects at the top of the subquery that do not " +
+        "reference the outer query are skipped to find the top node, and the count bug is " +
+        "handled during decorrelation if some Aggregate without GROUP BY below the top one is " +
+        "correlated, i.e. it or a node below it references the outer query. Has no effect when " +
         s"${DECORRELATE_INNER_QUERY_ENABLED.key} is false or " +
         s"${LEGACY_SCALAR_SUBQUERY_COUNT_BUG_HANDLING.key} is true.")
       .version("4.4.0")

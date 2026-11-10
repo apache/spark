@@ -281,6 +281,11 @@ abstract class AggregateFunction extends Expression {
  * Correct ImperativeAggregate evaluation depends on the correctness of `mutableAggBufferOffset` and
  * `inputAggBufferOffset`, but not on the correctness of the attribute ids in `aggBufferAttributes`
  * and `inputAggBufferAttributes`.
+ *
+ * Note that an ImperativeAggregate updates its buffer imperatively, so, unlike a
+ * [[DeclarativeAggregate]], the optimizer cannot build an expression that computes its result
+ * over given input rows. Optimizations that evaluate an aggregate as an expression therefore
+ * apply only to a DeclarativeAggregate.
  */
 abstract class ImperativeAggregate extends AggregateFunction with CodegenFallback {
 
