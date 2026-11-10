@@ -72,6 +72,38 @@ class ChangedFilesSelectionTests(unittest.TestCase):
             with self.subTest(desc):
                 self.assertEqual(self._is_relevant(_TEST_MODULE, files), expected)
 
+    def test_entry_point_proxy_selectivity(self):
+        # JVM-launched worker/daemon scripts are never imported by a test, so they are mapped to the
+        # API module whose use triggers them. The shared worker files are relevant to every test;
+        # the data source / UDTF runners only to modules that reach their proxy module. _TEST_MODULE
+        # reaches both sql.datasource and sql.udtf; unrelated_module reaches neither.
+        worker_file = "python/pyspark/worker.py"
+        datasource_worker = "python/pyspark/sql/worker/create_data_source.py"
+        udtf_worker = "python/pyspark/sql/worker/analyze_udtf.py"
+        unrelated_module = "pyspark.loose_version"
+
+        cases = [
+            ("shared worker relevant to a reaching module", _TEST_MODULE, worker_file, True),
+            ("shared worker relevant to an unrelated module", unrelated_module, worker_file, True),
+            (
+                "data source worker relevant via sql.datasource",
+                _TEST_MODULE,
+                datasource_worker,
+                True,
+            ),
+            (
+                "data source worker irrelevant to a non-datasource module",
+                unrelated_module,
+                datasource_worker,
+                False,
+            ),
+            ("udtf worker relevant via sql.udtf", _TEST_MODULE, udtf_worker, True),
+            ("udtf worker irrelevant to a non-udtf module", unrelated_module, udtf_worker, False),
+        ]
+        for desc, module, file, expected in cases:
+            with self.subTest(desc):
+                self.assertEqual(self._is_relevant(module, [file]), expected)
+
     def test_skip_if_changed_files_irrelevant(self):
         class _Dummy(PySparkBaseTestCase):
             pass

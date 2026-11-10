@@ -32,7 +32,9 @@ trait RetainsOriginalJoinOutput {
    * changed when metadata columns are added to [[Project]] nodes below the [[Join]]. This is
    * necessary in order to stay compatible with fixed-point analyzer. Instead of doing this in
    * [[JoinResolver]] we must do this here, because while resolving [[Join]] we still don't know if
-   * we should add a [[Project]] or not. For example consider the following query:
+   * we should add a [[Project]] or not. A top-level [[Join]] has no operator above it, so
+   * [[JoinResolver]] wraps it itself (see `JoinResolver.retainTopLevelJoinOutput`). For example
+   * consider the following query:
    *
    * {{{
    * -- tables: nt1(k, v1), nt2(k, v2), nt3(k, v3)

@@ -115,12 +115,12 @@ abstract class TransformWithStateTTLTest
           Execute { q =>
             // Filter for idle progress events and then verify the custom metrics
             // for stateful operator
-            val progData = q.recentProgress.filter(prog => prog.stateOperators.size > 0)
+            val progData = q.recentProgress.filter(prog => prog.stateOperators.nonEmpty)
             assert(progData.filter(prog =>
-              prog.stateOperators(0).customMetrics.get(getStateTTLMetricName) > 0).size > 0)
+              prog.stateOperators(0).customMetrics.get(getStateTTLMetricName) > 0).nonEmpty)
             assert(progData.filter(prog =>
               prog.stateOperators(0).customMetrics
-                .get("numValuesRemovedDueToTTLExpiry") > 0).size > 0)
+                .get("numValuesRemovedDueToTTLExpiry") > 0).nonEmpty)
           }
         )
       }

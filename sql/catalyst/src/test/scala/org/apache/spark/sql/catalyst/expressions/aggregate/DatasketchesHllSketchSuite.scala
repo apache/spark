@@ -17,6 +17,8 @@
 
 package org.apache.spark.sql.catalyst.expressions.aggregate
 
+import java.time.LocalTime
+
 import scala.collection.immutable.NumericRange
 import scala.util.Random
 
@@ -26,7 +28,7 @@ import org.apache.datasketches.memory.Memory
 import org.apache.spark.{SparkFunSuite, SparkRuntimeException}
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.{BoundReference, HllSketchEstimate, HllUnion, Literal}
-import org.apache.spark.sql.types.{BinaryType, DataType, IntegerType, LongType, StringType}
+import org.apache.spark.sql.types.{BinaryType, DataType, IntegerType, LongType, StringType, TimeType, TypeCollection}
 import org.apache.spark.unsafe.types.UTF8String
 
 
@@ -86,6 +88,63 @@ class DatasketchesHllSketchSuite extends SparkFunSuite {
     val (binaryEstimate, binaryEstimateRange) = simulateUpdateMerge(BinaryType, binaryRange)
     assert(binaryEstimate == binaryRange.size ||
       binaryEstimateRange.contains(binaryRange.size.toLong))
+  }
+
+  test("Test hll_sketch_agg and hll_union_agg over the TIME type") {
+    // The analyzer admits TIME as a value to sketch.
+    assert(
+      new HllSketchAgg(BoundReference(0, TimeType(6), nullable = true), 12)
+        .checkInputDataTypes().isSuccess)
+
+    // TIME is physically a long of nanos-of-day, so distinct-counting a TIME column behaves
+    // exactly like counting the underlying longs.
+    val timeRange = (0 until 1000).map(_.toLong * 1000000000L) // 0s..999s of the day, in nanos
+    val (estimate, estimateRange) = simulateUpdateMerge(TimeType(), timeRange)
+    assert(estimate == timeRange.size || estimateRange.contains(timeRange.size.toLong))
+
+    val nineAm = LocalTime.of(9, 0, 0).toNanoOfDay
+    val noon = LocalTime.of(12, 0, 0).toNanoOfDay
+    val fivePm = LocalTime.of(17, 0, 0).toNanoOfDay
+
+    def timeSketch(precision: Int, values: Seq[Long]): Array[Byte] = {
+      val agg = new HllSketchAgg(BoundReference(0, TimeType(precision), nullable = true), 12)
+      val buf = values.foldLeft(agg.createAggregationBuffer())((b, v) =>
+        agg.update(b, InternalRow(v)))
+      agg.eval(buf).asInstanceOf[Array[Byte]]
+    }
+
+    // Repeated values are counted once (deduplication).
+    assert(estimateOf(timeSketch(9, Seq(noon, noon, noon, nineAm, nineAm))) == 2L)
+
+    // The full nanos-of-day is hashed: times that differ only in sub-microsecond digits are
+    // distinct. A regression that truncated to micros before hashing would under-count these.
+    assert(estimateOf(timeSketch(9, Seq(noon, noon + 1L, noon + 2L))) == 3L)
+
+    // Sketches built from TIME columns of different precisions round-trip through hll_union_agg,
+    // which only ever sees the serialized BINARY sketch and so needs no TIME-specific handling.
+    val merged = unionAgg(
+      Seq[Any](timeSketch(3, Seq(nineAm, noon)), timeSketch(9, Seq(noon, fivePm))),
+      allowDifferentLgConfigK = false)
+    assert(estimateOf(merged) == 3L) // distinct {09:00, 12:00, 17:00}
+  }
+
+  test("hll_sketch_agg keeps AnyTimeType last in its input TypeCollection (SPARK-59440)") {
+    // ANSI implicit coercion walks the value TypeCollection in order, casting a non-accepted input
+    // to the first member that canANSIStoreAssign permits. A TIMESTAMP/TIMESTAMP_NTZ store-assigns
+    // to both STRING and TIME, so the string member MUST precede AnyTimeType; otherwise a datetime
+    // would coerce to TIME (nanos-of-day only) and silently under-count distinct values. This locks
+    // in the ordering so a future reorder cannot reintroduce that regression with green CI.
+    val members = new HllSketchAgg(BoundReference(0, IntegerType, nullable = true), 12)
+      .inputTypes.head match {
+        case TypeCollection(types) => types
+        case other => fail(s"expected the value input type to be a TypeCollection, got $other")
+      }
+    val stringIdx = members.indexWhere(_.acceptsType(StringType))
+    val timeIdx = members.indexWhere(_.acceptsType(TimeType(6)))
+    assert(stringIdx >= 0, "no string-accepting member in the input TypeCollection")
+    assert(timeIdx >= 0, "no TIME-accepting member in the input TypeCollection")
+    assert(stringIdx < timeIdx,
+      "the string member must precede AnyTimeType so datetimes coerce to STRING, not TIME")
   }
 
   test("Test lgMaxK results in downsampling sketches with larger lgConfigK") {

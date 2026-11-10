@@ -24,7 +24,8 @@ import org.apache.spark.sql.catalyst.util.ArrayData
 import org.apache.spark.sql.types.{DataType, DoubleType, FloatType}
 import org.apache.spark.util.collection.OpenHashSet
 
-// A wrap of OpenHashSet that can handle null, Double.NaN and Float.NaN w.r.t. the SQL semantic.
+// A wrap of OpenHashSet that can handle null and special floating-point values according to SQL
+// semantics.
 @Private
 class SQLOpenHashSet[@specialized(Long, Int, Double, Float) T: ClassTag](
     initialCapacity: Int,
@@ -110,19 +111,24 @@ object SQLOpenHashSet {
     }
   }
 
+  /**
+   * Handles NaNs specially and normalizes negative zero before invoking `handleNotNaN`.
+   */
   def withNaNCheckFunc(
       dataType: DataType,
       hashSet: SQLOpenHashSet[Any],
       handleNotNaN: Any => Unit,
       handleNaN: Any => Unit): Any => Unit = {
-    val (isNaN, valueNaN) = dataType match {
+    val (isNaN, normalize, valueNaN) = dataType match {
       case DoubleType =>
         ((value: Any) => java.lang.Double.isNaN(value.asInstanceOf[java.lang.Double]),
+          (value: Any) => if (value.asInstanceOf[Double] == 0.0d) 0.0d else value,
           java.lang.Double.NaN)
       case FloatType =>
         ((value: Any) => java.lang.Float.isNaN(value.asInstanceOf[java.lang.Float]),
+          (value: Any) => if (value.asInstanceOf[Float] == 0.0f) 0.0f else value,
           java.lang.Float.NaN)
-      case _ => ((_: Any) => false, null)
+      case _ => ((_: Any) => false, (value: Any) => value, null)
     }
     (value: Any) =>
       if (isNaN(value)) {
@@ -131,10 +137,15 @@ object SQLOpenHashSet {
           handleNaN(valueNaN)
         }
       } else {
-        handleNotNaN(value)
+        handleNotNaN(normalize(value))
       }
   }
 
+  /**
+   * Handles NaNs specially and normalizes negative zero before invoking `handleNotNaN`.
+   * `valueName` must refer to a writable generated-code local because zero normalization assigns
+   * the canonical value back to it.
+   */
   def withNaNCheckCode(
       dataType: DataType,
       valueName: String,
@@ -143,12 +154,18 @@ object SQLOpenHashSet {
       handleNaN: String => String): String = {
     val ret = dataType match {
       case DoubleType =>
-        Some((s"java.lang.Double.isNaN((double)$valueName)", "java.lang.Double.NaN"))
+        Some((
+          s"java.lang.Double.isNaN((double)$valueName)",
+          s"if ($valueName == 0.0d) $valueName = 0.0d;",
+          "java.lang.Double.NaN"))
       case FloatType =>
-        Some((s"java.lang.Float.isNaN((float)$valueName)", "java.lang.Float.NaN"))
+        Some((
+          s"java.lang.Float.isNaN((float)$valueName)",
+          s"if ($valueName == 0.0f) $valueName = 0.0f;",
+          "java.lang.Float.NaN"))
       case _ => None
     }
-    ret.map { case (isNaN, valueNaN) =>
+    ret.map { case (isNaN, normalizeZero, valueNaN) =>
       s"""
          |if ($isNaN) {
          |  if (!$hashSet.containsNaN()) {
@@ -156,6 +173,7 @@ object SQLOpenHashSet {
          |     ${handleNaN(valueNaN)}
          |  }
          |} else {
+         |  $normalizeZero
          |  $handleNotNaN
          |}
        """.stripMargin

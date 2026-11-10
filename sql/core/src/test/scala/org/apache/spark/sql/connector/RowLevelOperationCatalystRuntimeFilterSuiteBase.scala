@@ -18,9 +18,12 @@
 package org.apache.spark.sql.connector
 
 import org.apache.spark.sql.Row
-import org.apache.spark.sql.catalyst.expressions.DynamicPruningExpression
+import org.apache.spark.sql.catalyst.expressions.{Attribute, CreateNamedStruct, DynamicPruningExpression, Expression, GetStructFieldObject}
 import org.apache.spark.sql.catalyst.types.DataTypeUtils
 import org.apache.spark.sql.connector.catalog.{BufferedRows, InMemoryRowLevelOperationTable}
+import org.apache.spark.sql.connector.expressions.Expressions.bucket
+import org.apache.spark.sql.connector.expressions.LogicalExpressions.{identity, reference}
+import org.apache.spark.sql.connector.expressions.Transform
 import org.apache.spark.sql.execution.InSubqueryExec
 import org.apache.spark.sql.execution.ReusedSubqueryExec
 import org.apache.spark.sql.execution.SparkPlan
@@ -67,7 +70,7 @@ abstract class RowLevelOperationCatalystRuntimeFilterSuiteBase
       }
       assertCatalystGroupFilter(
         executedPlan,
-        expectedFilterAttrs = Seq("dep"),
+        expectedFilterPaths = Seq(Seq("dep")),
         expectedFilter = GroupFilter(scanSchema = "id INT, dep STRING", groups = Seq("hr")))
 
       // software was never read, so its rows must come back untouched
@@ -105,7 +108,7 @@ abstract class RowLevelOperationCatalystRuntimeFilterSuiteBase
       }
       assertCatalystGroupFilter(
         executedPlan,
-        expectedFilterAttrs = Seq("dep"),
+        expectedFilterPaths = Seq(Seq("dep")),
         expectedFilter = GroupFilter(scanSchema = "pk INT, dep STRING", groups = Seq("hr")))
 
       // software was never read, so its rows must come back untouched
@@ -121,9 +124,62 @@ abstract class RowLevelOperationCatalystRuntimeFilterSuiteBase
     }
   }
 
+  test("merge runtime group filtering by a nested attribute") {
+    withTempView("source") {
+      val schema = "pk INT NOT NULL, id INT, salary INT, " +
+        "dep STRUCT<name: STRING, region: STRING>"
+      createTable(schema, Array[Transform](identity(reference(Seq("dep", "name")))))
+      append(schema,
+        """{"pk":1,"id":1,"salary":100,"dep":{"name":"hr","region":"west"}}
+          |{"pk":2,"id":2,"salary":200,"dep":{"name":"hr","region":"east"}}
+          |{"pk":3,"id":3,"salary":300,"dep":{"name":"software","region":"west"}}
+          |""".stripMargin)
+
+      Seq(1, 2).toDF("pk").createOrReplaceTempView("source")
+
+      val executedPlan = executeAndKeepPlan {
+        sql(
+          s"""MERGE INTO $tableNameAsString t
+             |USING source s
+             |ON t.pk = s.pk
+             |WHEN MATCHED THEN
+             | UPDATE SET t.salary = t.salary + 1
+             |""".stripMargin)
+      }
+      assertCatalystGroupFilter(
+        executedPlan,
+        expectedFilterPaths = Seq(Seq("dep", "name")),
+        expectedFilter = GroupFilter(
+          scanSchema = "pk INT, dep STRUCT<name: STRING>", groups = Seq("hr")))
+
+      checkAnswer(
+        sql(s"SELECT * FROM $tableNameAsString"),
+        Row(1, 1, 101, Row("hr", "west")) ::
+          Row(2, 2, 201, Row("hr", "east")) ::
+          Row(3, 3, 300, Row("software", "west")) :: Nil)
+    }
+  }
+
+  test("non-identity partition transform does not enable runtime group filtering") {
+    val schema = "pk INT NOT NULL, id INT, salary INT, dep STRING"
+    createTable(schema, Array[Transform](bucket(4, "dep")))
+    append(schema,
+      """{ "pk": 1, "id": 1, "salary": 100, "dep": "hr" }
+        |{ "pk": 2, "id": 2, "salary": 200, "dep": "software" }
+        |""".stripMargin)
+
+    val executedPlan = executeAndKeepPlan {
+      sql(s"UPDATE $tableNameAsString SET salary = -1 WHERE id = 1")
+    }
+    val batchScans = collect(executedPlan) { case s: BatchScanExec => s }
+    assert(batchScans.nonEmpty, "expected a batch scan for the row-level operation")
+    assert(batchScans.forall(_.runtimeFilters.isEmpty),
+      s"expected no runtime group filters, got ${batchScans.flatMap(_.runtimeFilters)}")
+  }
+
   /**
    * Asserts the injected group filter down to its contents: the scan declares
-   * `expectedFilterAttrs` in `filterAttributes`, every scan node carries one dynamic pruning
+   * `expectedFilterPaths` in `filterAttributes`, every scan node carries one dynamic pruning
    * filter matching `expectedFilter`, the connector received that same filter as a Catalyst
    * expression, and the scan then read only `expectedFilter.groups`.
    *
@@ -136,7 +192,7 @@ abstract class RowLevelOperationCatalystRuntimeFilterSuiteBase
    */
   protected def assertCatalystGroupFilter(
       executedPlan: SparkPlan,
-      expectedFilterAttrs: Seq[String],
+      expectedFilterPaths: Seq[Seq[String]],
       expectedFilter: GroupFilter): Unit = {
     val batchScans = collect(executedPlan) { case s: BatchScanExec => s }
     assert(batchScans.nonEmpty, "expected a batch scan for the row-level operation")
@@ -144,14 +200,14 @@ abstract class RowLevelOperationCatalystRuntimeFilterSuiteBase
     assert(batchScans.forall(_.scan eq scan),
       s"expected all ${batchScans.size} scan nodes to share one scan")
 
-    val filterAttrs = scan.filterAttributes().map(_.fieldNames.mkString(".")).toSeq
-    assert(filterAttrs === expectedFilterAttrs,
-      s"expected the scan to declare $expectedFilterAttrs as filter attributes, got $filterAttrs")
+    val filterPaths = scan.filterAttributes().map(_.fieldNames.toSeq).toSeq
+    assert(filterPaths === expectedFilterPaths,
+      s"expected the scan to declare $expectedFilterPaths as filter attributes, got $filterPaths")
 
     batchScans.foreach { batchScan =>
       batchScan.runtimeFilters match {
         case Seq(DynamicPruningExpression(inSubquery: InSubqueryExec)) =>
-          assertGroupFilter(inSubquery, expectedFilterAttrs, expectedFilter)
+          assertGroupFilter(inSubquery, expectedFilterPaths, expectedFilter)
         case other => fail(s"expected a single dynamic pruning group filter, got $other")
       }
     }
@@ -163,7 +219,7 @@ abstract class RowLevelOperationCatalystRuntimeFilterSuiteBase
       s"expected each of the ${batchScans.size} scan node(s) to push the filter once, got $pushed")
     pushed.foreach {
       case inSubquery: InSubqueryExec =>
-        assertGroupFilter(inSubquery, expectedFilterAttrs, expectedFilter)
+        assertGroupFilter(inSubquery, expectedFilterPaths, expectedFilter)
       case other =>
         fail(s"expected the group filter pushed as an InSubqueryExec, got $other")
     }
@@ -181,10 +237,11 @@ abstract class RowLevelOperationCatalystRuntimeFilterSuiteBase
 
   private def assertGroupFilter(
       filter: InSubqueryExec,
-      expectedFilterAttrs: Seq[String],
+      expectedFilterPaths: Seq[Seq[String]],
       expectedFilter: GroupFilter): Unit = {
-    assert(filter.child.references.toSeq.map(_.name) === expectedFilterAttrs,
-      s"expected the group filter keyed on $expectedFilterAttrs, got ${filter.child}")
+    assert(fieldPaths(filter.child).contains(expectedFilterPaths),
+      s"expected the group filter keyed on ${expectedFilterPaths.map(_.mkString("."))}, " +
+        s"got ${filter.child}")
 
     // the second branch of a group-based UPDATE reuses the first branch's subquery, and
     // ReusedSubqueryExec is a leaf node, so unwrap it to reach the plan underneath
@@ -203,6 +260,19 @@ abstract class RowLevelOperationCatalystRuntimeFilterSuiteBase
       .map(_.asInstanceOf[UTF8String].toString)
     assert(groups.toSeq.sorted === expectedFilter.groups.sorted,
       s"group filter must select the groups holding matching rows, got ${groups.mkString(", ")}")
+  }
+
+  private def fieldPath(expr: Expression): Option[Seq[String]] = expr match {
+    case attr: Attribute => Some(Seq(attr.name))
+    case GetStructFieldObject(child, field) => fieldPath(child).map(_ :+ field.name)
+    case _ => None
+  }
+
+  private def fieldPaths(expr: Expression): Option[Seq[Seq[String]]] = expr match {
+    case struct: CreateNamedStruct =>
+      val paths = struct.valExprs.map(fieldPath)
+      Option.when(paths.forall(_.isDefined))(paths.flatten)
+    case _ => fieldPath(expr).map(Seq(_))
   }
 
   /** Asserts no group filter was injected, e.g. because the scan does not read the group key. */

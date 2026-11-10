@@ -18,9 +18,11 @@
 package org.apache.spark.sql.catalyst.util
 
 import org.apache.spark.sql.catalyst.InternalRow
-import org.apache.spark.sql.catalyst.expressions.{BaseOrdering, Expression, Murmur3HashFunction, RowOrdering}
+import org.apache.spark.sql.catalyst.expressions.{
+  BaseOrdering, Expression, Literal, Murmur3HashFunction, RowOrdering}
 import org.apache.spark.sql.connector.read.{HasPartitionKey, InputPartition}
-import org.apache.spark.sql.types.{DataType, StructField, StructType}
+import org.apache.spark.sql.types.{
+  ArrayType, DataType, MapType, StructField, StructType, UserDefinedType}
 import org.apache.spark.util.NonFateSharingCache
 
 /**
@@ -29,7 +31,9 @@ import org.apache.spark.util.NonFateSharingCache
  * It uses Spark's internal murmur hash to compute hash code from an row, and uses [[RowOrdering]]
  * to perform equality checks.
  *
- * @param dataTypes the data types for the row
+ * @param dataTypes the types this row is compared at, always `comparableTypes` of the types the row
+ *                  was built from. No constructor can produce a raw list, and the two caches below
+ *                  are keyed by erased lists for the same reason.
  */
 class InternalRowComparableWrapper private (
     val row: InternalRow,
@@ -44,10 +48,8 @@ class InternalRowComparableWrapper private (
    */
   @deprecated
   def this(row: InternalRow, dataTypes: Seq[DataType]) = this(
-    row,
-    dataTypes,
-    InternalRowComparableWrapper.structTypeCache.get(dataTypes),
-    InternalRowComparableWrapper.orderingCache.get(dataTypes))
+    // Erases like the factory, so a wrapper built here compares with the ones the factory built.
+    row, InternalRowComparableWrapper.comparableTypes(dataTypes), null, null)
 
   // `structType` and `ordering` cannot cross the wire (the ordering may be generated code), so
   // they are transient and re-derived from the shared caches on first use after deserialization.
@@ -64,6 +66,11 @@ class InternalRowComparableWrapper private (
     }
     _ordering
   }
+
+  override def toString: String =
+    row.toSeq(dataTypes).zip(dataTypes)
+      .map { case (value, dataType) => InternalRowComparableWrapper.render(value, dataType) }
+      .mkString("[", ",", "]")
 
   override def hashCode(): Int = Murmur3HashFunction.hash(
     row,
@@ -105,21 +112,103 @@ object InternalRowComparableWrapper {
   def apply(
       partition: InputPartition with HasPartitionKey,
       partitionExpression: Seq[Expression]): InternalRowComparableWrapper = {
-    new InternalRowComparableWrapper(
-      partition.asInstanceOf[HasPartitionKey].partitionKey(), partitionExpression.map(_.dataType))
+    apply(partition.partitionKey(), partitionExpression)
   }
 
   def apply(
       partitionRow: InternalRow,
       partitionExpression: Seq[Expression]): InternalRowComparableWrapper = {
-    new InternalRowComparableWrapper(partitionRow, partitionExpression.map(_.dataType))
+    getInternalRowComparableWrapperFactory(partitionExpression.map(_.dataType))(partitionRow)
   }
 
-  /** Creates a shared factory method for a given row schema to avoid excessive cache lookups. */
-  def getInternalRowComparableWrapperFactory(
-      dataTypes: Seq[DataType]): InternalRow => InternalRowComparableWrapper = {
-    val structType = structTypeCache.get(dataTypes)
-    val ordering = orderingCache.get(dataTypes)
-    row: InternalRow => new InternalRowComparableWrapper(row, dataTypes, structType, ordering)
+  /**
+   * Renders a value the way a plan string shows it: by the value's type at every level. Atomic
+   * values go through the [[Literal]] constructor, whose `toString` formats dates, timestamps,
+   * decimals and binary; complex values are walked by type, because their own `toString` shows
+   * internal encodings, hex words or an object identity. The constructor is used rather than
+   * `Literal.create`, which runs the char/varchar write-side check and can reject a stored value
+   * while a plan is being printed.
+   */
+  private def render(value: Any, dataType: DataType): String = {
+    if (value == null) {
+      "null"
+    } else {
+      dataType match {
+        case s: StructType =>
+          val r = value.asInstanceOf[InternalRow]
+          s.fields.iterator.zipWithIndex
+            .map { case (field, i) => render(r.get(i, field.dataType), field.dataType) }
+            .mkString("[", ",", "]")
+        case ArrayType(elementType, _) =>
+          val a = value.asInstanceOf[ArrayData]
+          (0 until a.numElements()).map(i => render(a.get(i, elementType), elementType))
+            .mkString("[", ",", "]")
+        case MapType(keyType, valueType, _) =>
+          val m = value.asInstanceOf[MapData]
+          (0 until m.numElements()).map { i =>
+            s"${render(m.keyArray().get(i, keyType), keyType)} -> " +
+              render(m.valueArray().get(i, valueType), valueType)
+          }.mkString("{", ",", "}")
+        case udt: UserDefinedType[_] => render(value, udt.sqlType)
+        case _ => Literal(value, dataType).toString
+      }
+    }
   }
+
+  /**
+   * The types a row is compared at, which is the given types with their naming erased: struct field
+   * names and every nullability go, and nothing else does.
+   *
+   * Two rows of the same value belong together whatever the columns they came from were called. A
+   * storage-partitioned join relies on that: an equi-join across two structs whose fields are named
+   * differently is legal, `identity` carries that name into the key type, and
+   * `KeyedShuffleSpec.createPartitioning` puts one side's expressions over the other side's keys.
+   * So the naming is erased once, here, and every wrapper compares at these types.
+   *
+   * Everything else is kept exactly, since it decides where a value belongs: a collation and a
+   * decimal precision still tell two rows apart.
+   */
+  private[catalyst] def comparableTypes(dataTypes: Seq[DataType]): Seq[DataType] = {
+    val erased = dataTypes.map(t => erasePositionalNames(t.asNullable))
+    // Erasing is idempotent, and a list that was already erased is returned as it is rather than
+    // rebuilt. Callers pass their own types here and then hand the result back in, so keeping the
+    // instance is what lets `equals` settle two wrappers of one list by reference.
+    if (erased == dataTypes) dataTypes else erased
+  }
+
+  /**
+   * `asNullable` above is the nullability half. This is the naming half: positional field names, so
+   * two structs that agree field by field agree here. A field's metadata goes with its name, since
+   * nothing that compares or hashes a row reads either. `transformRecursively` stops at the first
+   * match, so a nested struct is reached by the recursive call rather than by the walk.
+   */
+  private def erasePositionalNames(dataType: DataType): DataType =
+    dataType.transformRecursively {
+      case s: StructType => StructType(s.fields.zipWithIndex.map { case (field, i) =>
+        StructField(i.toString, erasePositionalNames(field.dataType))
+      })
+    }
+
+  /**
+   * Builds wrappers over one row schema, holding the cache lookups that schema needs so a caller
+   * does not repeat them per row.
+   *
+   * It also answers for the schema it settled on. `dataTypes` is what the rows it builds compare
+   * at, which is `comparableTypes` of what it was given, and `ordering` sorts them. A caller
+   * reporting a type list beside those rows, or sorting them, takes it from here rather than
+   * deriving it again, so the two cannot answer differently.
+   */
+  final class Factory private[InternalRowComparableWrapper] (val dataTypes: Seq[DataType])
+    extends (InternalRow => InternalRowComparableWrapper) {
+
+    val ordering: BaseOrdering = orderingCache.get(dataTypes)
+    private[this] val structType = structTypeCache.get(dataTypes)
+
+    override def apply(row: InternalRow): InternalRowComparableWrapper =
+      new InternalRowComparableWrapper(row, dataTypes, structType, ordering)
+  }
+
+  /** Creates a shared factory for a given row schema to avoid excessive cache lookups. */
+  def getInternalRowComparableWrapperFactory(dataTypes: Seq[DataType]): Factory =
+    new Factory(comparableTypes(dataTypes))
 }

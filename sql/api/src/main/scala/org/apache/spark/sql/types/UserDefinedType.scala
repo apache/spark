@@ -154,9 +154,9 @@ private[sql] class PythonUserDefinedType(
   }
 
   override def equals(other: Any): Boolean = other match {
-    case that: PythonUserDefinedType => pyUDT == that.pyUDT
+    case that: PythonUserDefinedType => pyUDT == that.pyUDT && sqlType == that.sqlType
     case _ => false
   }
 
-  override def hashCode(): Int = Objects.hashCode(pyUDT)
+  override def hashCode(): Int = Objects.hash(pyUDT, sqlType)
 }

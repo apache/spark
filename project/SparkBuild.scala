@@ -73,10 +73,12 @@ object BuildCommons {
 
   val optionallyEnabledProjects@Seq(kubernetes, yarn,
     sparkGangliaLgpl, streamingKinesisAsl, profiler, credentialAws,
-    dockerIntegrationTests, hadoopCloud, kubernetesIntegrationTests) =
+    dockerIntegrationTests, hadoopCloud, kubernetesIntegrationTests,
+    credentialAwsIntegrationTests) =
     Seq("kubernetes", "yarn",
       "ganglia-lgpl", "streaming-kinesis-asl", "profiler", "credential-aws",
-      "docker-integration-tests", "hadoop-cloud", "kubernetes-integration-tests").map(ProjectRef(buildLocation, _))
+      "docker-integration-tests", "hadoop-cloud", "kubernetes-integration-tests",
+      "credential-aws-integration-tests").map(ProjectRef(buildLocation, _))
 
   val assemblyProjects@Seq(networkYarn, streamingKafka010Assembly, streamingKinesisAslAssembly) =
     Seq("network-yarn", "streaming-kafka-0-10-assembly", "streaming-kinesis-asl-assembly")
@@ -252,7 +254,7 @@ object SparkBuild extends PomBuild {
   // `(Compile / compile)` -- a violation in one module would otherwise abort
   // compile for that module and every transitive dependent, cascading style
   // failures into every job that recompiles those sources (Build modules,
-  // Documentation generation, Java 17/25 Maven build, sparkr, ...). Each
+  // Documentation generation, Java 21/25 Maven build, sparkr, ...). Each
   // cascaded job then surfaces only a generic "exit code 1" with no file/line.
   // After decoupling, the dedicated lint job is the single place style
   // violations surface, with file/line annotations from `dev/scalastyle`.
@@ -1308,11 +1310,11 @@ object KubernetesIntegrationTests {
  * Overrides to work around sbt's dependency resolution being different from Maven's.
  */
 object DependencyOverrides {
-  lazy val jacksonVersion = sys.props.get("fasterxml.jackson.version").getOrElse("2.22.1")
+  lazy val jacksonVersion = sys.props.get("fasterxml.jackson.version").getOrElse("2.22.4")
   lazy val jacksonDeps = Bom.dependencies("com.fasterxml.jackson" % "jackson-bom" % jacksonVersion)
   lazy val grpcVersion = sys.props.get("io.grpc.version").getOrElse("1.76.0")
   lazy val grpcDeps = Bom.dependencies("io.grpc" % "grpc-bom" % grpcVersion)
-  lazy val k8sClientVersion = sys.props.get("kubernetes-client.version").getOrElse("7.8.0")
+  lazy val k8sClientVersion = sys.props.get("kubernetes-client.version").getOrElse("7.9.0")
   lazy val k8sClientDeps = Bom.dependencies("io.fabric8" % "kubernetes-client-bom" % k8sClientVersion)
   lazy val settings = jacksonDeps ++ grpcDeps ++ k8sClientDeps ++ Seq(
     dependencyOverrides ++= {
@@ -1355,7 +1357,13 @@ object ExcludedDependencies {
       ExclusionRule("javax.servlet", "javax.servlet-api"),
       ExclusionRule("io.netty", "netty-codec-protobuf"),
       ExclusionRule("io.netty", "netty-codec-marshalling"),
-      ExclusionRule("junit", "junit"))
+      ExclusionRule("junit", "junit"),
+      // Parquet 1.18.0 test jars pull JUnit 5 vintage/migration support into the sbt build
+      // (Maven treats these as non-transitive test-scope deps). They clash with Spark's
+      // JUnit Jupiter platform, so exclude them here to mirror the Maven classpath.
+      ExclusionRule("org.junit.vintage", "junit-vintage-engine"),
+      ExclusionRule("org.junit.jupiter", "junit-jupiter-migrationsupport"),
+      ExclusionRule("com.carrotsearch", "junit-benchmarks"))
   )
 }
 
@@ -1595,9 +1603,8 @@ object PySparkAssembly {
   import java.util.zip.{ZipOutputStream, ZipEntry}
 
   lazy val settings = Seq(
-    // Use a resource generator to copy all .py files from python/pyspark into a managed directory
-    // to be included in the assembly. We can't just add "python/" to the assembly's resource dir
-    // list since that will copy unneeded / unwanted files.
+    // Use a resource generator to zip python/pyspark into python/lib/pyspark.zip. It returns no
+    // files, so nothing from python/ is added to the assembly jar.
     (Compile / resourceGenerators) += Def.macroValueI((Compile / resourceManaged) map { outDir: File =>
       val src = new File(BuildCommons.sparkHome, "python/pyspark")
       val zipFile = new File(BuildCommons.sparkHome , "python/lib/pyspark.zip")

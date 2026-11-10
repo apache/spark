@@ -32,6 +32,8 @@ import org.apache.spark.sql.classic.ClassicConversions._
 import org.apache.spark.sql.classic.DataFrame
 import org.apache.spark.sql.classic.ExpressionUtils.expression
 import org.apache.spark.sql.types._
+import org.apache.spark.unsafe.Platform
+import org.apache.spark.unsafe.hash.Murmur3_x86_32
 import org.apache.spark.util.Utils
 
 object FrequentItems extends Logging {
@@ -88,23 +90,41 @@ case class CollectFrequentItems(
   override def createAggregationBuffer(): mutable.Map[Any, Long] =
     mutable.Map.empty[Any, Long]
 
+  /**
+   * Returns the map key for `value`. A binary value (BinaryType, or a UDT whose sqlType is
+   * BinaryType) is wrapped in a [[BinaryKey]] so that the map compares it by content; any other
+   * value is its own key.
+   */
+  private def toKey(value: Any): Any = value match {
+    case bytes: Array[Byte] => new BinaryKey(bytes)
+    case _ => value
+  }
+
+  /** Returns the value that a map key stands for: the inverse of `toKey`. */
+  private def fromKey(key: Any): Any = key match {
+    case binaryKey: BinaryKey => binaryKey.bytes
+    case _ => key
+  }
+
   private def add(map: mutable.Map[Any, Long], key: Any, count: Long): mutable.Map[Any, Long] = {
-    if (map.contains(key)) {
-      map(key) += count
-    } else {
-      if (map.size < size) {
-        map += key -> count
-      } else {
-        val minCount = if (map.values.isEmpty) 0 else map.values.min
-        val remainder = count - minCount
-        if (remainder >= 0) {
-          map += key -> count // something will get kicked out, so we can add this
-          map.filterInPlace((k, v) => v > minCount)
-          map.mapValuesInPlace((k, v) => v - minCount)
+    map.get(key) match {
+      case Some(existing) =>
+        map(key) = existing + count
+      case None =>
+        if (map.size < size) {
+          map += key -> count
         } else {
-          map.mapValuesInPlace((k, v) => v - count)
+          // Non-empty here: this branch runs only when map.size >= size, and size > 0.
+          val minCount = map.values.min
+          val remainder = count - minCount
+          if (remainder >= 0) {
+            map += key -> count // something will get kicked out, so we can add this
+            map.filterInPlace((k, v) => v > minCount)
+            map.mapValuesInPlace((k, v) => v - minCount)
+          } else {
+            map.mapValuesInPlace((k, v) => v - count)
+          }
         }
-      }
     }
     map
   }
@@ -114,7 +134,7 @@ case class CollectFrequentItems(
       input: InternalRow): mutable.Map[Any, Long] = {
     val key = child.eval(input)
     if (key != null) {
-      this.add(buffer, InternalRow.copyValue(key), 1L)
+      this.add(buffer, toKey(InternalRow.copyValue(key)), 1L)
     } else {
       this.add(buffer, key, 1L)
     }
@@ -132,7 +152,7 @@ case class CollectFrequentItems(
   }
 
   override def eval(buffer: mutable.Map[Any, Long]): Any =
-    new GenericArrayData(buffer.keys.toArray)
+    new GenericArrayData(buffer.keys.iterator.map(fromKey).toArray[Any])
 
   private lazy val projection =
     UnsafeProjection.create(Array[DataType](child.dataType, LongType))
@@ -144,7 +164,7 @@ case class CollectFrequentItems(
     Utils.tryWithSafeFinally {
       // Write pairs in counts map to byte buffer.
       map.foreach { case (key, count) =>
-        val row = InternalRow.apply(key, count)
+        val row = InternalRow.apply(fromKey(key), count)
         val unsafeRow = projection.apply(row)
         out.writeInt(unsafeRow.getSizeInBytes)
         unsafeRow.writeToStream(out, buffer)
@@ -172,9 +192,10 @@ case class CollectFrequentItems(
         val row = new UnsafeRow(2)
         row.pointTo(bs, sizeOfNextRow)
         // Insert the pairs into counts map.
-        val key = row.get(0, child.dataType)
+        val key = toKey(row.get(0, child.dataType))
         val count = row.get(1, LongType).asInstanceOf[Long]
-        map.update(key, count)
+        // A buffer serialized before binary keys compared by content can hold equal keys.
+        map.update(key, map.getOrElse(key, 0L) + count)
         sizeOfNextRow = ins.readInt()
       }
 
@@ -193,4 +214,22 @@ case class CollectFrequentItems(
 
   override protected def withNewChildInternal(newChild: Expression): Expression =
     copy(child = newChild)
+}
+
+/**
+ * A [[CollectFrequentItems]] map key for a BinaryType value. Java byte arrays use referential
+ * equality and identity hash codes, so this compares and hashes the bytes by content instead. It
+ * wraps the array without copying it.
+ */
+private final class BinaryKey(val bytes: Array[Byte]) {
+  // Computed once: adding a key hashes it twice, to look it up and then to update or insert it.
+  private[this] val hash =
+    Murmur3_x86_32.hashUnsafeBytes2(bytes, Platform.BYTE_ARRAY_OFFSET, bytes.length, 42)
+
+  override def hashCode(): Int = hash
+
+  override def equals(other: Any): Boolean = other match {
+    case that: BinaryKey => java.util.Arrays.equals(bytes, that.bytes)
+    case _ => false
+  }
 }

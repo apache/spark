@@ -34,12 +34,13 @@ import org.apache.commons.compress.archivers.zip.ZipFile
 import org.apache.commons.io.ByteOrderMark
 import org.apache.commons.io.input.{BOMInputStream, CloseShieldInputStream}
 import org.apache.hadoop.conf.Configuration
-import org.apache.hadoop.fs.{FSDataInputStream, GlobPattern, Path}
+import org.apache.hadoop.fs.{FileStatus, FSDataInputStream, GlobPattern, Path}
 import org.apache.hadoop.io.Text
 import org.apache.hadoop.util.LineReader
 
 import org.apache.spark.{SparkEnv, TaskContext}
 import org.apache.spark.internal.Logging
+import org.apache.spark.io.HadoopCodecStreams
 import org.apache.spark.paths.SparkPath
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.errors.QueryExecutionErrors
@@ -208,6 +209,33 @@ object SupportsArchiveFormat {
       name.endsWith(".zip") || name.endsWith(".7z")
   }
 
+  /**
+   * Fails when the `decompression` read option is set for the archive at `path`. The option is
+   * not supported for archives (yet): a container is always decoded based on its file name
+   * extension, so fail rather than silently ignore the option. Called while planning the scan so
+   * the error is raised on the driver and is not swallowed by `ignoreCorruptFiles`.
+   */
+  def checkNoDecompressionCodec(path: Path, decompressionCodec: Option[String]): Unit = {
+    if (decompressionCodec.isDefined) {
+      throw QueryExecutionErrors.decompressionCodecForArchiveUnsupportedError(path.toString)
+    }
+  }
+
+  /**
+   * [[checkNoDecompressionCodec]] for every archive among `inputPaths`. Called by the
+   * archive-aware schema inference paths on the driver, before their inference tasks open any
+   * archive, so inference fails with the same error as the scan instead of a task failure that
+   * `ignoreCorruptFiles` could swallow.
+   */
+  def checkNoDecompressionCodecForArchives(
+      inputPaths: Seq[FileStatus],
+      decompressionCodec: Option[String]): Unit = {
+    if (decompressionCodec.isDefined) {
+      inputPaths.iterator.map(_.getPath).find(isArchivePath)
+        .foreach(checkNoDecompressionCodec(_, decompressionCodec))
+    }
+  }
+
   /** An archive's entries as lazy `(entry, stream)` pairs; closing releases the container. */
   private type ArchiveEntries = Iterator[(ArchiveEntry, InputStream)] with Closeable
 
@@ -216,6 +244,8 @@ object SupportsArchiveFormat {
    * `(entry, stream)` pairs.
    */
   private def openArchiveStream(path: Path, conf: Configuration): ArchiveEntries = {
+    // Backstop for any path that opens an archive without one of the driver-side checks above.
+    checkNoDecompressionCodec(path, Option(conf.get(HadoopCodecStreams.DECOMPRESSION_CODEC_CONF)))
     val name = path.getName.toLowerCase(Locale.ROOT)
     name match {
       case n if n.endsWith(".tar") || n.endsWith(".tar.gz") || n.endsWith(".tgz") =>

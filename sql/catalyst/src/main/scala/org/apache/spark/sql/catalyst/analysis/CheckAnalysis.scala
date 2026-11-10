@@ -264,6 +264,18 @@ trait CheckAnalysis extends LookupCatalog with QueryErrorsBase with PlanToString
     )
   }
 
+  private object ResolvedHigherOrderFunctionWithExternalUDF {
+    def unapply(expression: Expression): Option[(HigherOrderFunction, Expression)] = {
+      expression match {
+        case hof: HigherOrderFunction if hof.resolved =>
+          hof.functions.iterator.flatMap(_.collectFirst {
+            case udf: ExternalUserDefinedFunction => udf
+          }).take(1).toSeq.headOption.map(udf => (hof, udf))
+        case _ => None
+      }
+    }
+  }
+
   private def containsUnsupportedLCA(e: Expression, operator: LogicalPlan): Boolean = {
     e.containsPattern(LATERAL_COLUMN_ALIAS_REFERENCE) && operator.expressions.exists {
       case a: Alias
@@ -316,6 +328,9 @@ trait CheckAnalysis extends LookupCatalog with QueryErrorsBase with PlanToString
     }
     preemptedError.clear()
     try {
+      if (SQLConf.get.restrictedModeEnabled) {
+        checkRestrictedMode(inlinedPlan)
+      }
       checkAnalysis0(inlinedPlan)
       preemptedError.getErrorOpt().foreach(throw _) // throw preempted error if any
     } catch {
@@ -324,7 +339,54 @@ trait CheckAnalysis extends LookupCatalog with QueryErrorsBase with PlanToString
     } finally {
       preemptedError.clear()
     }
+    // Check MATERIALIZED CTE relations on the original plan, as `inlinedPlan` has them inlined.
+    // This runs after `checkAnalysis0`, so that resolution errors are reported first.
+    MaterializedCTECheck(plan)
     plan.setAnalyzed()
+  }
+
+  /**
+   * Rejects SQL features that load or execute externally provided code or scripts when the
+   * restricted execution mode is enabled. Unlike `checkAnalysis0`, which skips already-analyzed
+   * sub-plans (`case p if p.analyzed`), this walks the whole plan -- including analyzed sub-plans
+   * reused from a temporary view or a cached Dataset, and the bodies of analysis-only commands
+   * (CTAS, `CACHE TABLE ... AS SELECT`, `CREATE`/`ALTER VIEW`) which move into `innerChildren`
+   * once analyzed -- and descends into subquery plans, so these features cannot slip through.
+   */
+  private def checkRestrictedMode(plan: LogicalPlan): Unit = {
+    def checkExpression(expr: Expression): Unit = expr.foreach {
+      // A try_reflect call stays a RuntimeReplaceable wrapper until optimization, so match it
+      // before its CallMethodViaReflection replacement to report the right function name.
+      case t: TryReflect =>
+        throw QueryCompilationErrors.restrictedModeFeatureError(
+          s"The ${toSQLId(t.prettyName)} function")
+      case c: CallMethodViaReflection =>
+        throw QueryCompilationErrors.restrictedModeFeatureError(
+          s"The ${toSQLId(c.prettyName)} function")
+      case s: SubqueryExpression =>
+        checkPlan(s.plan)
+      case _ =>
+    }
+    def checkPlan(p: LogicalPlan): Unit = p.foreach {
+      case _: ScriptTransformation =>
+        throw QueryCompilationErrors.restrictedModeFeatureError(
+          "The TRANSFORM ... USING clause")
+      case node =>
+        node.expressions.foreach(checkExpression)
+        // `checkExpression` already descends into the node's subquery plans (via
+        // `SubqueryExpression`), which are also part of `innerChildren`. Recurse only into the
+        // inner plans that are not those subqueries -- the analyzed body of an analysis-only
+        // command (CTAS, `CACHE TABLE ... AS SELECT`, `CREATE`/`ALTER VIEW`) that moves from
+        // `children` into `innerChildren` once analyzed, which `foreach` (following `children`)
+        // would not otherwise reach. This keeps each subquery traversed exactly once, so
+        // validation stays linear instead of doubling at every nesting level.
+        val subqueryPlans = node.subqueries
+        node.innerChildren.foreach {
+          case inner: LogicalPlan if !subqueryPlans.exists(_ eq inner) => checkPlan(inner)
+          case _ =>
+        }
+    }
+    checkPlan(plan)
   }
 
   def checkAnalysis0(plan: LogicalPlan): Unit = {
@@ -354,6 +416,12 @@ trait CheckAnalysis extends LookupCatalog with QueryErrorsBase with PlanToString
         // Recursive CTEs have already substituted Union to UnionLoop at this stage.
         // Here we perform additional checks for them.
         checkIfSelfReferenceIsPlacedCorrectly(unionLoop, unionLoop.id)
+
+      // The child `Filter` holds the same condition. Check it first so that an error of the
+      // subquery in the `Filter` does not hide that the constraint cannot have a subquery. A
+      // missing table is still reported first, by the bottom-up traversal.
+      case AddCheckConstraint(Filter(_, relation), check, _) if relation.resolved =>
+        check.failIfContainsSubquery()
 
       case _ =>
     }
@@ -426,11 +494,13 @@ trait CheckAnalysis extends LookupCatalog with QueryErrorsBase with PlanToString
           context = u.origin.getQueryContext,
           summary = u.origin.context.summary)
 
-      case r: V2TableReference =>
+      case r: V2Reference =>
         throw SparkException.internalError(
-          s"V2TableReference should be resolved during analysis: ${r.name}")
+          s"V2Reference should be resolved during analysis: ${r.name}")
 
-      case u: UnresolvedInlineTable if unresolvedInlineTableContainsScalarSubquery(u) =>
+      case u: UnresolvedInlineTable
+          if !SQLConf.get.getConf(SQLConf.INLINE_TABLE_NON_FOLDABLE_EXPRESSIONS_ENABLED) &&
+            unresolvedInlineTableContainsScalarSubquery(u) =>
         throw QueryCompilationErrors.inlineTableContainsScalarSubquery(u)
 
       case command: V2PartitionCommand =>
@@ -460,6 +530,12 @@ trait CheckAnalysis extends LookupCatalog with QueryErrorsBase with PlanToString
           errorClass = "NOT_A_CONSTANT_STRING.NOT_CONSTANT",
           messageParameters = Map("name" -> "IDENTIFIER", "expr" -> p.identifierExpr.sql)
         )
+
+      // Invariant check: the temporary UnresolvedInsert is lowered to InsertIntoStatement once
+      // its target identifier is evaluated, so it must never survive analysis.
+      case insert: UnresolvedInsert =>
+        throw SparkException.internalError(
+          s"UnresolvedInsert target was not lowered during analysis: ${insert.table.nodeName}")
 
       case c: CacheTableAsSelect if c.tempViewName.resolved =>
         // The parser builds `tempViewName` as either a `Literal[StringType]` (for direct
@@ -528,6 +604,11 @@ trait CheckAnalysis extends LookupCatalog with QueryErrorsBase with PlanToString
               errorClass = "UNSUPPORTED_FEATURE.LAMBDA_FUNCTION_WITH_PYTHON_UDF",
               messageParameters = Map("funcName" -> toSQLExpr(u)))
 
+          case ResolvedHigherOrderFunctionWithExternalUDF(hof, udf) =>
+            hof.failAnalysis(
+              errorClass = "UNSUPPORTED_FEATURE.LAMBDA_FUNCTION_WITH_EXTERNAL_UDF",
+              messageParameters = Map("funcName" -> toSQLExpr(udf)))
+
           // If an attribute can't be resolved as a map key of string type, either the key should be
           // surrounded with single quotes, or there is a typo in the attribute name.
           case GetMapValue(map, key: Attribute) if isMapWithStringKey(map) && !key.resolved =>
@@ -576,6 +657,14 @@ trait CheckAnalysis extends LookupCatalog with QueryErrorsBase with PlanToString
             throw SparkException.internalError(
               s"Cannot resolve the runtime replaceable expression ${toSQLExpr(e)}. " +
               s"The replacement is unresolved: ${toSQLExpr(e.replacement)}.")
+
+          // Only the Spark Connect planner creates UnresolvedPlanId (a DataFrame subquery by plan
+          // id), and only its WithRelations transform resolves it. A survivor usually means the
+          // client never attached the referenced plan to the request, so report an invalid Spark
+          // Connect plan. If the planner analyzes the plan before substituting an attached plan
+          // id, it rethrows this error as an INTERNAL_ERROR.
+          case u: UnresolvedPlanId =>
+            throw QueryCompilationErrors.subqueryPlanNotAttached(u)
 
           // `Grouping` and `GroupingID` are considered as of having lower priority than the other
           // nodes which cause errors.
@@ -695,25 +784,16 @@ trait CheckAnalysis extends LookupCatalog with QueryErrorsBase with PlanToString
                 "joinCondition" -> toSQLExpr(condition),
                 "conditionType" -> toSQLType(condition.dataType)))
 
-          case j @ AsOfJoin(_, _, _, Some(condition), _, _, _, _, _, _, _, _, _, _)
-              if condition.dataType != BooleanType =>
+          case j: AsOfJoin if j.condition.exists(_.dataType != BooleanType) =>
+            val condition = j.condition.get
             j.failAnalysis(
               errorClass = "JOIN_CONDITION_IS_NOT_BOOLEAN_TYPE",
               messageParameters = Map(
                 "joinCondition" -> toSQLExpr(condition),
                 "conditionType" -> toSQLType(condition.dataType)))
 
-          case j @ AsOfJoin(_, _, _, _, _, _, Some(toleranceAssertion), _, _, _, _, _, _, _) =>
-            if (!toleranceAssertion.foldable) {
-              j.failAnalysis(
-                errorClass = "AS_OF_JOIN.TOLERANCE_IS_UNFOLDABLE",
-                messageParameters = Map.empty)
-            }
-            if (!toleranceAssertion.eval().asInstanceOf[Boolean]) {
-              j.failAnalysis(
-                errorClass = "AS_OF_JOIN.TOLERANCE_IS_NON_NEGATIVE",
-                messageParameters = Map.empty)
-            }
+          case j: AsOfJoin =>
+            AsOfJoinValidation.validateTolerance(j)
 
           // Reject streaming inputs early. The optimizer rewrite is built around an
           // unconditioned cross-product fed into a global `Aggregate` keyed by a per-row
@@ -907,55 +987,7 @@ trait CheckAnalysis extends LookupCatalog with QueryErrorsBase with PlanToString
             }
 
           case create: V2CreateTablePlan =>
-            val references = create.partitioning.flatMap(_.references).toSet
-            val badReferences = references.map(_.fieldNames).flatMap { column =>
-              create.tableSchema.findNestedField(column.toImmutableArraySeq) match {
-                case Some(_) =>
-                  None
-                case _ =>
-                  Some(column.quoted)
-              }
-            }
-
-            if (badReferences.nonEmpty) {
-              create.failAnalysis(
-                errorClass = "UNSUPPORTED_FEATURE.PARTITION_WITH_NESTED_COLUMN_IS_UNSUPPORTED",
-                messageParameters = Map(
-                  "cols" -> badReferences.map(r => toSQLId(r)).mkString(", ")))
-            }
-
-            create.tableSchema.foreach(f => TypeUtils.failWithIntervalType(f.dataType))
-            TypeUtils.failUnsupportedDataType(create.tableSchema, SQLConf.get)
-            SchemaUtils.checkIndeterminateCollationInSchema(create.tableSchema)
-
-            // Validate generated column expressions
-            create.columns.foreach { col =>
-              col.generationExpression.foreach { genExpr =>
-                def unsupportedExpressionError(reason: String): AnalysisException = {
-                  new AnalysisException(
-                    errorClass = "UNSUPPORTED_EXPRESSION_GENERATED_COLUMN",
-                    messageParameters = Map(
-                      "fieldName" -> col.name,
-                      "expressionStr" -> genExpr.originalSQL,
-                      "reason" -> reason
-                    )
-                  )
-                }
-                // Only built-in functions are allowed in generated columns. Functions that are
-                // not built-in already fail earlier in analysis: unknown functions with
-                // UNRESOLVED_ROUTINE and persistent SQL functions with UNSUPPORTED_SQL_UDF_USAGE.
-                // Here we only need to reject user-defined functions (Scala/Python/Java/Hive UDFs
-                // and v2 catalog functions, all of which are `UserDefinedExpression`), which
-                // resolve successfully.
-                genExpr.child.foreach {
-                  case udf: UserDefinedExpression =>
-                    throw unsupportedExpressionError(
-                      s"failed to resolve `${udf.name}` to a built-in function")
-                  case _ =>
-                }
-                genExpr.validate(col.name, col.dataType, create.columns)
-              }
-            }
+            CreateTableValidation.validateV2CreateTablePlan(create, SQLConf.get)
 
           case write: V2WriteCommand if write.resolved =>
             write.query.schema.foreach(f => TypeUtils.failWithIntervalType(f.dataType))
@@ -965,6 +997,9 @@ trait CheckAnalysis extends LookupCatalog with QueryErrorsBase with PlanToString
               errorClass = "NON_DETERMINISTIC_CHECK_CONSTRAINT",
               messageParameters = Map("checkCondition" -> a.checkConstraint.condition)
             )
+
+          case a: AddCheckConstraint =>
+            a.checkConstraint.failIfCallsUserDefinedFunction()
 
           case alter: AlterTableCommand =>
             checkAlterTableCommand(alter)
@@ -1148,6 +1183,8 @@ trait CheckAnalysis extends LookupCatalog with QueryErrorsBase with PlanToString
 
           case _ => // Analysis successful!
         }
+
+        NanosTimestampSubtractionCheck.checkOperator(operator)
     }
     checkCollectedMetrics(plan)
     extendedCheckRules.foreach(_(plan))

@@ -1,0 +1,384 @@
+================================================================================================
+view: 32 settings, 25% retained, warm
+================================================================================================
+
+OpenJDK 64-Bit Server VM 21.0.12+8-LTS on Linux 6.17.0-1022-azure
+AMD EPYC 7763 64-Core Processor
+view: 32 settings, 25% retained, warm:    Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
+------------------------------------------------------------------------------------------------------------------------
+memo disabled                                        16             16           0          0.3        3881.5       1.0X
+memo enabled                                          2              2           0          1.8         558.9       6.9X
+
+
+================================================================================================
+view: 32 settings, 25% retained, mutate every 16 builds
+================================================================================================
+
+OpenJDK 64-Bit Server VM 21.0.12+8-LTS on Linux 6.17.0-1022-azure
+AMD EPYC 7763 64-Core Processor
+view: 32 settings, 25% retained, mutate every 16 builds:  Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
+---------------------------------------------------------------------------------------------------------------------------------------
+memo disabled                                                       16             16           1          0.3        3899.8       1.0X
+memo enabled                                                         3              3           0          1.3         786.0       5.0X
+
+
+================================================================================================
+view: 32 settings, 25% retained, mutate every build
+================================================================================================
+
+OpenJDK 64-Bit Server VM 21.0.12+8-LTS on Linux 6.17.0-1022-azure
+AMD EPYC 7763 64-Core Processor
+view: 32 settings, 25% retained, mutate every build:  Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
+-----------------------------------------------------------------------------------------------------------------------------------
+memo disabled                                                   16             17           0          0.3        3987.0       1.0X
+memo enabled                                                    12             12           0          0.3        3005.9       1.3X
+
+
+================================================================================================
+view: 32 settings, 25% retained, cold
+================================================================================================
+
+OpenJDK 64-Bit Server VM 21.0.12+8-LTS on Linux 6.17.0-1022-azure
+AMD EPYC 7763 64-Core Processor
+view: 32 settings, 25% retained, cold:    Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
+------------------------------------------------------------------------------------------------------------------------
+memo disabled                                         1              1           0          0.2        4050.4       1.0X
+memo enabled                                          1              1           0          0.3        2996.8       1.4X
+
+
+================================================================================================
+function: 32 settings, 25% retained, warm
+================================================================================================
+
+OpenJDK 64-Bit Server VM 21.0.12+8-LTS on Linux 6.17.0-1022-azure
+AMD EPYC 7763 64-Core Processor
+function: 32 settings, 25% retained, warm:  Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
+-------------------------------------------------------------------------------------------------------------------------
+memo disabled                                         18             18           0          0.2        4385.2       1.0X
+memo enabled                                           5              5           0          0.9        1102.2       4.0X
+
+
+================================================================================================
+function: 32 settings, 25% retained, mutate every 16 builds
+================================================================================================
+
+OpenJDK 64-Bit Server VM 21.0.12+8-LTS on Linux 6.17.0-1022-azure
+AMD EPYC 7763 64-Core Processor
+function: 32 settings, 25% retained, mutate every 16 builds:  Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
+-------------------------------------------------------------------------------------------------------------------------------------------
+memo disabled                                                           18             18           0          0.2        4379.2       1.0X
+memo enabled                                                             5              5           0          0.8        1260.5       3.5X
+
+
+================================================================================================
+function: 32 settings, 25% retained, mutate every build
+================================================================================================
+
+OpenJDK 64-Bit Server VM 21.0.12+8-LTS on Linux 6.17.0-1022-azure
+AMD EPYC 7763 64-Core Processor
+function: 32 settings, 25% retained, mutate every build:  Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
+---------------------------------------------------------------------------------------------------------------------------------------
+memo disabled                                                       18             18           0          0.2        4437.3       1.0X
+memo enabled                                                        14             15           0          0.3        3499.8       1.3X
+
+
+================================================================================================
+function: 32 settings, 25% retained, cold
+================================================================================================
+
+OpenJDK 64-Bit Server VM 21.0.12+8-LTS on Linux 6.17.0-1022-azure
+AMD EPYC 7763 64-Core Processor
+function: 32 settings, 25% retained, cold:  Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
+-------------------------------------------------------------------------------------------------------------------------
+memo disabled                                          1              1           0          0.2        4495.5       1.0X
+memo enabled                                           1              1           0          0.3        3493.5       1.3X
+
+
+================================================================================================
+view: 128 settings, 25% retained, warm
+================================================================================================
+
+OpenJDK 64-Bit Server VM 21.0.12+8-LTS on Linux 6.17.0-1022-azure
+AMD EPYC 7763 64-Core Processor
+view: 128 settings, 25% retained, warm:   Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
+------------------------------------------------------------------------------------------------------------------------
+memo disabled                                        54             55           1          0.1       13104.2       1.0X
+memo enabled                                          5              5           0          0.8        1305.6      10.0X
+
+
+================================================================================================
+view: 128 settings, 25% retained, mutate every 16 builds
+================================================================================================
+
+OpenJDK 64-Bit Server VM 21.0.12+8-LTS on Linux 6.17.0-1022-azure
+AMD EPYC 7763 64-Core Processor
+view: 128 settings, 25% retained, mutate every 16 builds:  Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
+----------------------------------------------------------------------------------------------------------------------------------------
+memo disabled                                                        54             54           0          0.1       13084.6       1.0X
+memo enabled                                                          8              8           0          0.5        1942.1       6.7X
+
+
+================================================================================================
+view: 128 settings, 25% retained, mutate every build
+================================================================================================
+
+OpenJDK 64-Bit Server VM 21.0.12+8-LTS on Linux 6.17.0-1022-azure
+AMD EPYC 7763 64-Core Processor
+view: 128 settings, 25% retained, mutate every build:  Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
+------------------------------------------------------------------------------------------------------------------------------------
+memo disabled                                                    54             55           0          0.1       13163.0       1.0X
+memo enabled                                                     41             41           0          0.1        9909.7       1.3X
+
+
+================================================================================================
+view: 128 settings, 25% retained, cold
+================================================================================================
+
+OpenJDK 64-Bit Server VM 21.0.12+8-LTS on Linux 6.17.0-1022-azure
+AMD EPYC 7763 64-Core Processor
+view: 128 settings, 25% retained, cold:   Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
+------------------------------------------------------------------------------------------------------------------------
+memo disabled                                         3              4           0          0.1       13390.0       1.0X
+memo enabled                                          3              3           0          0.1       10003.4       1.3X
+
+
+================================================================================================
+function: 128 settings, 25% retained, warm
+================================================================================================
+
+OpenJDK 64-Bit Server VM 21.0.12+8-LTS on Linux 6.17.0-1022-azure
+AMD EPYC 7763 64-Core Processor
+function: 128 settings, 25% retained, warm:  Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
+--------------------------------------------------------------------------------------------------------------------------
+memo disabled                                          55             56           1          0.1       13433.7       1.0X
+memo enabled                                            8              8           0          0.5        1871.8       7.2X
+
+
+================================================================================================
+function: 128 settings, 25% retained, mutate every 16 builds
+================================================================================================
+
+OpenJDK 64-Bit Server VM 21.0.12+8-LTS on Linux 6.17.0-1022-azure
+AMD EPYC 7763 64-Core Processor
+function: 128 settings, 25% retained, mutate every 16 builds:  Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
+--------------------------------------------------------------------------------------------------------------------------------------------
+memo disabled                                                            55             56           1          0.1       13449.7       1.0X
+memo enabled                                                             10             10           0          0.4        2391.8       5.6X
+
+
+================================================================================================
+function: 128 settings, 25% retained, mutate every build
+================================================================================================
+
+OpenJDK 64-Bit Server VM 21.0.12+8-LTS on Linux 6.17.0-1022-azure
+AMD EPYC 7763 64-Core Processor
+function: 128 settings, 25% retained, mutate every build:  Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
+----------------------------------------------------------------------------------------------------------------------------------------
+memo disabled                                                        55             56           1          0.1       13496.9       1.0X
+memo enabled                                                         43             44           1          0.1       10401.1       1.3X
+
+
+================================================================================================
+function: 128 settings, 25% retained, cold
+================================================================================================
+
+OpenJDK 64-Bit Server VM 21.0.12+8-LTS on Linux 6.17.0-1022-azure
+AMD EPYC 7763 64-Core Processor
+function: 128 settings, 25% retained, cold:  Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
+--------------------------------------------------------------------------------------------------------------------------
+memo disabled                                           4              4           0          0.1       13734.7       1.0X
+memo enabled                                            3              3           0          0.1       10493.6       1.3X
+
+
+================================================================================================
+view: 512 settings, 25% retained, warm
+================================================================================================
+
+OpenJDK 64-Bit Server VM 21.0.12+8-LTS on Linux 6.17.0-1022-azure
+AMD EPYC 7763 64-Core Processor
+view: 512 settings, 25% retained, warm:   Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
+------------------------------------------------------------------------------------------------------------------------
+memo disabled                                       214            215           1          0.0       52364.3       1.0X
+memo enabled                                         18             19           0          0.2        4463.9      11.7X
+
+
+================================================================================================
+view: 512 settings, 25% retained, mutate every 16 builds
+================================================================================================
+
+OpenJDK 64-Bit Server VM 21.0.12+8-LTS on Linux 6.17.0-1022-azure
+AMD EPYC 7763 64-Core Processor
+view: 512 settings, 25% retained, mutate every 16 builds:  Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
+----------------------------------------------------------------------------------------------------------------------------------------
+memo disabled                                                       214            215           1          0.0       52262.8       1.0X
+memo enabled                                                         28             29           0          0.1        6845.8       7.6X
+
+
+================================================================================================
+view: 512 settings, 25% retained, mutate every build
+================================================================================================
+
+OpenJDK 64-Bit Server VM 21.0.12+8-LTS on Linux 6.17.0-1022-azure
+AMD EPYC 7763 64-Core Processor
+view: 512 settings, 25% retained, mutate every build:  Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
+------------------------------------------------------------------------------------------------------------------------------------
+memo disabled                                                   215            216           1          0.0       52548.1       1.0X
+memo enabled                                                    160            161           1          0.0       38969.7       1.3X
+
+
+================================================================================================
+view: 512 settings, 25% retained, cold
+================================================================================================
+
+OpenJDK 64-Bit Server VM 21.0.12+8-LTS on Linux 6.17.0-1022-azure
+AMD EPYC 7763 64-Core Processor
+view: 512 settings, 25% retained, cold:   Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
+------------------------------------------------------------------------------------------------------------------------
+memo disabled                                        14             16           1          0.0       55610.2       1.0X
+memo enabled                                         10             12           1          0.0       40680.2       1.4X
+
+
+================================================================================================
+function: 512 settings, 25% retained, warm
+================================================================================================
+
+OpenJDK 64-Bit Server VM 21.0.12+8-LTS on Linux 6.17.0-1022-azure
+AMD EPYC 7763 64-Core Processor
+function: 512 settings, 25% retained, warm:  Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
+--------------------------------------------------------------------------------------------------------------------------
+memo disabled                                         216            218           1          0.0       52798.1       1.0X
+memo enabled                                           20             21           0          0.2        4943.2      10.7X
+
+
+================================================================================================
+function: 512 settings, 25% retained, mutate every 16 builds
+================================================================================================
+
+OpenJDK 64-Bit Server VM 21.0.12+8-LTS on Linux 6.17.0-1022-azure
+AMD EPYC 7763 64-Core Processor
+function: 512 settings, 25% retained, mutate every 16 builds:  Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
+--------------------------------------------------------------------------------------------------------------------------------------------
+memo disabled                                                           217            218           3          0.0       52908.2       1.0X
+memo enabled                                                             30             30           0          0.1        7307.7       7.2X
+
+
+================================================================================================
+function: 512 settings, 25% retained, mutate every build
+================================================================================================
+
+OpenJDK 64-Bit Server VM 21.0.12+8-LTS on Linux 6.17.0-1022-azure
+AMD EPYC 7763 64-Core Processor
+function: 512 settings, 25% retained, mutate every build:  Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
+----------------------------------------------------------------------------------------------------------------------------------------
+memo disabled                                                       217            219           1          0.0       53015.5       1.0X
+memo enabled                                                        162            163           1          0.0       39493.4       1.3X
+
+
+================================================================================================
+function: 512 settings, 25% retained, cold
+================================================================================================
+
+OpenJDK 64-Bit Server VM 21.0.12+8-LTS on Linux 6.17.0-1022-azure
+AMD EPYC 7763 64-Core Processor
+function: 512 settings, 25% retained, cold:  Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
+--------------------------------------------------------------------------------------------------------------------------
+memo disabled                                          15             16           1          0.0       59559.0       1.0X
+memo enabled                                           11             12           1          0.0       42587.3       1.4X
+
+
+================================================================================================
+view: 128 settings, 75% retained, warm
+================================================================================================
+
+OpenJDK 64-Bit Server VM 21.0.12+8-LTS on Linux 6.17.0-1022-azure
+AMD EPYC 7763 64-Core Processor
+view: 128 settings, 75% retained, warm:   Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
+------------------------------------------------------------------------------------------------------------------------
+memo disabled                                        59             59           1          0.1       14311.1       1.0X
+memo enabled                                         15             15           0          0.3        3652.9       3.9X
+
+
+================================================================================================
+view: 128 settings, 75% retained, mutate every 16 builds
+================================================================================================
+
+OpenJDK 64-Bit Server VM 21.0.12+8-LTS on Linux 6.17.0-1022-azure
+AMD EPYC 7763 64-Core Processor
+view: 128 settings, 75% retained, mutate every 16 builds:  Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
+----------------------------------------------------------------------------------------------------------------------------------------
+memo disabled                                                        59             59           1          0.1       14309.2       1.0X
+memo enabled                                                         17             18           0          0.2        4222.5       3.4X
+
+
+================================================================================================
+view: 128 settings, 75% retained, mutate every build
+================================================================================================
+
+OpenJDK 64-Bit Server VM 21.0.12+8-LTS on Linux 6.17.0-1022-azure
+AMD EPYC 7763 64-Core Processor
+view: 128 settings, 75% retained, mutate every build:  Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
+------------------------------------------------------------------------------------------------------------------------------------
+memo disabled                                                    59             60           0          0.1       14372.2       1.0X
+memo enabled                                                     52             53           1          0.1       12771.3       1.1X
+
+
+================================================================================================
+view: 128 settings, 75% retained, cold
+================================================================================================
+
+OpenJDK 64-Bit Server VM 21.0.12+8-LTS on Linux 6.17.0-1022-azure
+AMD EPYC 7763 64-Core Processor
+view: 128 settings, 75% retained, cold:   Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
+------------------------------------------------------------------------------------------------------------------------
+memo disabled                                         4              4           0          0.1       14785.7       1.0X
+memo enabled                                          3              3           0          0.1       12858.5       1.1X
+
+
+================================================================================================
+function: 128 settings, 75% retained, warm
+================================================================================================
+
+OpenJDK 64-Bit Server VM 21.0.12+8-LTS on Linux 6.17.0-1022-azure
+AMD EPYC 7763 64-Core Processor
+function: 128 settings, 75% retained, warm:  Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
+--------------------------------------------------------------------------------------------------------------------------
+memo disabled                                          60             61           2          0.1       14720.1       1.0X
+memo enabled                                           17             17           0          0.2        4098.3       3.6X
+
+
+================================================================================================
+function: 128 settings, 75% retained, mutate every 16 builds
+================================================================================================
+
+OpenJDK 64-Bit Server VM 21.0.12+8-LTS on Linux 6.17.0-1022-azure
+AMD EPYC 7763 64-Core Processor
+function: 128 settings, 75% retained, mutate every 16 builds:  Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
+--------------------------------------------------------------------------------------------------------------------------------------------
+memo disabled                                                            60             61           1          0.1       14755.4       1.0X
+memo enabled                                                             19             20           0          0.2        4731.7       3.1X
+
+
+================================================================================================
+function: 128 settings, 75% retained, mutate every build
+================================================================================================
+
+OpenJDK 64-Bit Server VM 21.0.12+8-LTS on Linux 6.17.0-1022-azure
+AMD EPYC 7763 64-Core Processor
+function: 128 settings, 75% retained, mutate every build:  Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
+----------------------------------------------------------------------------------------------------------------------------------------
+memo disabled                                                        61             61           0          0.1       14796.4       1.0X
+memo enabled                                                         54             55           1          0.1       13240.0       1.1X
+
+
+================================================================================================
+function: 128 settings, 75% retained, cold
+================================================================================================
+
+OpenJDK 64-Bit Server VM 21.0.12+8-LTS on Linux 6.17.0-1022-azure
+AMD EPYC 7763 64-Core Processor
+function: 128 settings, 75% retained, cold:  Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
+--------------------------------------------------------------------------------------------------------------------------
+memo disabled                                           4              4           0          0.1       15180.5       1.0X
+memo enabled                                            3              4           0          0.1       13432.3       1.1X
+
+

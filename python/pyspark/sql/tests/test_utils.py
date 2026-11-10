@@ -43,6 +43,7 @@ from pyspark.sql.types import (
     StringType,
     StructField,
     StructType,
+    TimestampNTZNanosType,
 )
 from pyspark.testing.sqlutils import ReusedSQLTestCase
 from pyspark.testing.utils import (
@@ -1871,6 +1872,16 @@ class UtilsTestsMixin:
         # This should fail
         with self.assertRaises(PySparkAssertionError):
             assertSchemaEqual(s1, s2)
+
+    def test_assert_schema_equal_with_timestamp_nanos_types(self):
+        """Test assertSchemaEqual with nanosecond timestamp types of different precision
+        (SPARK-57462): the precision must be compared even under ignoreNullable, like decimal."""
+        s1 = StructType([StructField("ts", TimestampNTZNanosType(9), True)])
+        # Same precision - should pass, including with the ignoreNullable default.
+        assertSchemaEqual(s1, StructType([StructField("ts", TimestampNTZNanosType(9), False)]))
+        # Different precision - should fail rather than be treated as equal.
+        with self.assertRaises(PySparkAssertionError):
+            assertSchemaEqual(s1, StructType([StructField("ts", TimestampNTZNanosType(7), True)]))
 
 
 class UtilsTests(UtilsTestsMixin, ReusedSQLTestCase):

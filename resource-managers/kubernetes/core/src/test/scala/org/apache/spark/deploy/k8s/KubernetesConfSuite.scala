@@ -17,9 +17,13 @@
 
 package org.apache.spark.deploy.k8s
 
-import io.fabric8.kubernetes.api.model.{LocalObjectReferenceBuilder, PodBuilder}
+import java.util.{Map => JMap}
 
-import org.apache.spark.{SPARK_VERSION, SparkConf, SparkFunSuite}
+import scala.jdk.CollectionConverters._
+
+import io.fabric8.kubernetes.api.model.{LocalObjectReferenceBuilder, Pod, PodBuilder}
+
+import org.apache.spark.{SPARK_VERSION, SparkConf, SparkFunSuite, SSLOptions}
 import org.apache.spark.deploy.k8s.Config._
 import org.apache.spark.deploy.k8s.Constants._
 import org.apache.spark.deploy.k8s.submit._
@@ -156,10 +160,85 @@ class KubernetesConfSuite extends SparkFunSuite {
       new SparkConf(false),
       EXECUTOR_ID,
       KubernetesTestConf.APP_ID,
-      Some(DRIVER_POD))
+      Some(DRIVER_POD),
+      authSecret = None,
+      sslRpcPasswordEnvs = Map.empty)
     assert(conf.executorId === EXECUTOR_ID)
     assert(conf.driverPod.get === DRIVER_POD)
     assert(conf.resourceProfileId === DEFAULT_RESOURCE_PROFILE_ID)
+    assert(conf.authSecret.isEmpty)
+  }
+
+  test("Java-friendly KubernetesExecutorConf constructor with nullable arguments") {
+    val sparkConf = new SparkConf(false)
+    val conf = new KubernetesExecutorConf(
+      sparkConf,
+      KubernetesTestConf.APP_ID,
+      EXECUTOR_ID,
+      null: Pod,
+      DEFAULT_RESOURCE_PROFILE_ID,
+      null: String,
+      null: JMap[String, String])
+    assert(conf.appId === KubernetesTestConf.APP_ID)
+    assert(conf.executorId === EXECUTOR_ID)
+    assert(conf.driverPod === None)
+    assert(conf.resourceProfileId === DEFAULT_RESOURCE_PROFILE_ID)
+    assert(conf.authSecret === None)
+    assert(conf.sslRpcPasswordEnvs === Map.empty)
+
+    val confWithValues = new KubernetesExecutorConf(
+      sparkConf,
+      KubernetesTestConf.APP_ID,
+      EXECUTOR_ID,
+      DRIVER_POD,
+      3,
+      "custom-secret",
+      Map(SSLOptions.ENV_RPC_SSL_KEY_STORE_PASSWORD -> "keyStorePass").asJava)
+    assert(confWithValues.driverPod === Some(DRIVER_POD))
+    assert(confWithValues.resourceProfileId === 3)
+    assert(confWithValues.authSecret === Some("custom-secret"))
+    assert(confWithValues.sslRpcPasswordEnvs ===
+      Map(SSLOptions.ENV_RPC_SSL_KEY_STORE_PASSWORD -> "keyStorePass"))
+  }
+
+  test("KubernetesExecutorConf authSecret resolution.") {
+    val confWithoutSecret = KubernetesConf.createExecutorConf(
+      new SparkConf(false),
+      EXECUTOR_ID,
+      KubernetesTestConf.APP_ID,
+      Some(DRIVER_POD),
+      authSecret = None,
+      sslRpcPasswordEnvs = Map.empty)
+    assert(confWithoutSecret.authSecret.isEmpty)
+
+    val confWithCustomSecret = KubernetesConf.createExecutorConf(
+      new SparkConf(false),
+      EXECUTOR_ID,
+      KubernetesTestConf.APP_ID,
+      Some(DRIVER_POD),
+      authSecret = Some("custom-secret"),
+      sslRpcPasswordEnvs = Map.empty)
+    assert(confWithCustomSecret.authSecret === Some("custom-secret"))
+
+    val sparkConf = new SparkConf(false)
+      .set(org.apache.spark.internal.config.AUTH_SECRET, "conf-secret")
+    val confWithSparkConfSecret = KubernetesConf.createExecutorConf(
+      sparkConf,
+      EXECUTOR_ID,
+      KubernetesTestConf.APP_ID,
+      Some(DRIVER_POD),
+      authSecret = None,
+      sslRpcPasswordEnvs = Map.empty)
+    assert(confWithSparkConfSecret.authSecret === Some("conf-secret"))
+
+    val confWithOverride = KubernetesConf.createExecutorConf(
+      sparkConf,
+      EXECUTOR_ID,
+      KubernetesTestConf.APP_ID,
+      Some(DRIVER_POD),
+      authSecret = Some("override-secret"),
+      sslRpcPasswordEnvs = Map.empty)
+    assert(confWithOverride.authSecret === Some("override-secret"))
   }
 
   test("resource profile not default.") {
@@ -168,7 +247,9 @@ class KubernetesConfSuite extends SparkFunSuite {
       EXECUTOR_ID,
       KubernetesTestConf.APP_ID,
       Some(DRIVER_POD),
-      10)
+      10,
+      authSecret = None,
+      sslRpcPasswordEnvs = Map.empty)
     assert(conf.resourceProfileId === 10)
   }
 
@@ -178,7 +259,9 @@ class KubernetesConfSuite extends SparkFunSuite {
         .set(IMAGE_PULL_SECRETS, Seq("my-secret-1", "my-secret-2 ")),
       EXECUTOR_ID,
       KubernetesTestConf.APP_ID,
-      Some(DRIVER_POD))
+      Some(DRIVER_POD),
+      authSecret = None,
+      sslRpcPasswordEnvs = Map.empty)
     assert(conf.imagePullSecrets ===
       Seq(
         new LocalObjectReferenceBuilder().withName("my-secret-1").build(),
@@ -204,7 +287,9 @@ class KubernetesConfSuite extends SparkFunSuite {
       sparkConf,
       EXECUTOR_ID,
       KubernetesTestConf.APP_ID,
-      Some(DRIVER_POD))
+      Some(DRIVER_POD),
+      authSecret = None,
+      sslRpcPasswordEnvs = Map.empty)
     assert(conf.labels === Map(
       SPARK_VERSION_LABEL -> SPARK_VERSION,
       SPARK_EXECUTOR_ID_LABEL -> EXECUTOR_ID,
@@ -232,7 +317,9 @@ class KubernetesConfSuite extends SparkFunSuite {
       sparkConf,
       EXECUTOR_ID,
       KubernetesTestConf.APP_ID,
-      Some(DRIVER_POD))
+      Some(DRIVER_POD),
+      authSecret = None,
+      sslRpcPasswordEnvs = Map.empty)
     assert(conf.environment ===
       Map(
         "executorEnvVars3_var3" -> "executorEnvVars3",

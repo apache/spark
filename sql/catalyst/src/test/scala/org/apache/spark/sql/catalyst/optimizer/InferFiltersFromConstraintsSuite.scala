@@ -311,17 +311,142 @@ class InferFiltersFromConstraintsSuite extends PlanTest {
       testConstraintsAfterJoin(originalLeft, originalRight, left, right, Inner, condition)
     }
 
-    Seq(Some("left.a".attr === "right.b".attr.cast(IntegerType)),
-      Some("right.b".attr.cast(IntegerType) === "left.a".attr)).foreach { condition =>
-      testConstraintsAfterJoin(
-        originalLeft,
-        originalRight,
-        left,
-        testRelation2.where(IsNotNull($"b") && $"b".attr.cast(IntegerType) === 1)
-          .subquery("right"),
-        Inner,
-        condition)
+    // A narrowing cast can fail in ANSI mode, so it is not inferred.
+    withSQLConf(SQLConf.ANSI_ENABLED.key -> "true") {
+      Seq(Some("left.a".attr === "right.b".attr.cast(IntegerType)),
+        Some("right.b".attr.cast(IntegerType) === "left.a".attr)).foreach { condition =>
+        testConstraintsAfterJoin(originalLeft, originalRight, left, right, Inner, condition)
+      }
     }
+  }
+
+  private def failable(e: Expression): Expression =
+    Divide(Literal(10.0), e, EvalMode.ANSI) > 0.0
+
+  test("SPARK-60985: a constraint that can fail is not inferred as a filter") {
+    val relation = LocalRelation($"x".double, $"y".double)
+    val query = relation.where($"x" === $"y" && failable($"y")).analyze
+    val notNullAndQuery = IsNotNull($"x") && IsNotNull($"y") && $"x" === $"y" && failable($"y")
+
+    comparePlans(InferFiltersFromConstraints(query), relation.where(notNullAndQuery).analyze)
+    withSQLConf(SQLConf.LEGACY_INFER_FAILABLE_FILTERS_FROM_CONSTRAINTS.key -> "true") {
+      comparePlans(
+        InferFiltersFromConstraints(query),
+        relation.where(failable($"x") && notNullAndQuery).analyze)
+    }
+  }
+
+  test("SPARK-60985: a constraint that can fail is not inferred on the other side of a join") {
+    val left = LocalRelation($"x".double)
+    val right = LocalRelation($"y".double)
+    testConstraintsAfterJoin(
+      left.subquery("l"),
+      right.where(failable($"y")).subquery("r"),
+      left.where(IsNotNull($"x")).subquery("l"),
+      right.where(IsNotNull($"y") && failable($"y")).subquery("r"),
+      Inner,
+      Some("l.x".attr === "r.y".attr))
+  }
+
+  test("SPARK-60985: a constraint on an uncorrelated subquery is inferred as a filter") {
+    val relation = LocalRelation($"x".int, $"y".int)
+    val values = LocalRelation($"a".int).select($"a")
+    val scalar = ScalarSubquery(LocalRelation($"a".int).select(max($"a")))
+    def in(e: Expression): Expression = InSubquery(Seq(e), ListQuery(values))
+    val query = relation.where($"x" === $"y" && in($"y") && $"y" > scalar).analyze
+    val inferred = InferFiltersFromConstraints(query).collectFirst {
+      case Filter(condition, _) => splitConjunctivePredicates(condition)
+    }.get
+    assert(inferred.count(_.isInstanceOf[InSubquery]) === 2, inferred)
+    assert(inferred.count(_.isInstanceOf[GreaterThan]) === 2, inferred)
+  }
+
+  test("SPARK-60985: an integral remainder by a non-zero constant is inferred") {
+    val relation = LocalRelation($"x".int, $"y".int)
+    def even(e: Expression): Expression = Remainder(e, Literal(2), EvalMode.ANSI) === 0
+    val query = relation.where($"x" === $"y" && even($"y")).analyze
+    comparePlans(
+      InferFiltersFromConstraints(query),
+      relation.where(IsNotNull($"x") && IsNotNull($"y") && $"x" === $"y" &&
+        even($"y") && even($"x")).analyze)
+  }
+
+  test("SPARK-60985: a constraint whose canonical form is MultiCommutativeOp is inferred") {
+    val relation = LocalRelation($"x".int, $"y".int)
+    def anyOf(e: Expression): Expression = e === 1 || e === 2 || e === 3
+    val query = relation.where($"x" === $"y" && anyOf($"y")).analyze
+    comparePlans(
+      InferFiltersFromConstraints(query),
+      relation.where(IsNotNull($"x") && IsNotNull($"y") && $"x" === $"y" &&
+        anyOf($"y") && anyOf($"x")).analyze)
+  }
+
+  test("SPARK-60882: a constraint that can not fail is inferred as a filter") {
+    val legacy = NumericEvalContext(EvalMode.LEGACY)
+    val ansi = NumericEvalContext(EvalMode.ANSI)
+    val dates = LocalRelation($"x".date, $"y".date)
+    val strings = LocalRelation($"x".string, $"y".string)
+    val ints = LocalRelation($"x".int, $"y".int)
+    val doubles = LocalRelation($"x".double, $"y".double)
+    def infer(relation: LocalRelation, condition: Expression => Expression): LogicalPlan =
+      InferFiltersFromConstraints(
+        LikeSimplification(relation.where($"x" === $"y" && condition($"y")).analyze))
+    def notNullAnd(relation: LocalRelation, condition: Expression => Expression): LogicalPlan =
+      relation.where(IsNotNull($"x") && IsNotNull($"y") && $"x" === $"y" && condition($"y"))
+    // `LIKE 'a%'` is simplified to a `StartsWith` before this rule runs.
+    Seq[(LocalRelation, Expression => Expression, Expression => Expression)](
+        (dates, Year(_) === 2024, Year(_) === 2024),
+        (strings, Like(_, Literal("a%"), '\\'), StartsWith(_, Literal("a"))),
+        (ints, Add(_, Literal(1), legacy) > 5, Add(_, Literal(1), legacy) > 5),
+        (doubles, Multiply(_, Literal(1.1), ansi) > 100.0, Multiply(_, Literal(1.1), ansi) > 100.0)
+    ).foreach { case (relation, condition, simplified) =>
+      comparePlans(infer(relation, condition), relation.where(simplified($"x") && IsNotNull($"x") &&
+        IsNotNull($"y") && $"x" === $"y" && simplified($"y")).analyze)
+    }
+    // Not `upper`, which can not fail but is not accepted, nor an addition in ANSI mode, which can.
+    // Nor a cast of a DOUBLE to a string: on a row with `x` = 0.0 and `y` = -0.0, `x = y` holds,
+    // but `CAST(x AS STRING)` is '0.0'. Nor `length` of a string of a trim collation: on a row
+    // with `x` = 'a' and `y` = 'a ', `x = y` holds, but their lengths differ.
+    val trimmed = LocalRelation(AttributeReference("x", StringType("UTF8_BINARY_RTRIM"))(),
+      AttributeReference("y", StringType("UTF8_BINARY_RTRIM"))())
+    // Nor a `try_cast` of a UDT to a string: on a row with vectors (0.0) and (-0.0), `x = y`
+    // holds, but their strings differ.
+    val udt = new TestUDT.MyDenseVectorUDT()
+    val vectors = LocalRelation(AttributeReference("x", udt)(), AttributeReference("y", udt)())
+    Seq[(LocalRelation, Expression => Expression)](
+        (strings, Upper(_) === "A"), (ints, Add(_, Literal(1), ansi) > 5),
+        (doubles, Cast(_, StringType) === "-0.0"), (trimmed, Length(_) === 2),
+        (vectors, Cast(_, StringType, evalMode = EvalMode.TRY) === "(-0.0)")).foreach {
+      case (relation, condition) =>
+        comparePlans(infer(relation, condition), notNullAnd(relation, condition).analyze)
+    }
+  }
+
+  test("SPARK-60882: a constraint through a widening of a decimal of a negative scale is " +
+    "inferred") {
+    withSQLConf(SQLConf.LEGACY_ALLOW_NEGATIVE_SCALE_OF_DECIMAL_ENABLED.key -> "true") {
+      val relation = LocalRelation(AttributeReference("x", DecimalType(3, -2))(),
+        AttributeReference("y", DecimalType(10, 0))())
+      val query = relation.where($"x" === $"y" && $"y" > 5).analyze
+      val Filter(condition, _) = InferFiltersFromConstraints(query)
+      // Type coercion widens `x` to DECIMAL(10, 0), and `CAST(x AS DECIMAL(10, 0)) > 5` follows.
+      assert(splitConjunctivePredicates(condition).exists {
+        case GreaterThan(Cast(a: AttributeReference, _: DecimalType, _, _), _) => a.name == "x"
+        case _ => false
+      }, condition)
+    }
+  }
+
+  test("SPARK-60882: a constraint that can not fail is inferred on the other side of a join") {
+    val left = LocalRelation($"x".date)
+    val right = LocalRelation($"y".date)
+    testConstraintsAfterJoin(
+      left.subquery("l"),
+      right.where(Year($"y") === 2024).subquery("r"),
+      left.where(IsNotNull($"x") && Year($"x") === 2024).subquery("l"),
+      right.where(IsNotNull($"y") && Year($"y") === 2024).subquery("r"),
+      Inner,
+      Some("l.x".attr === "r.y".attr))
   }
 
   test("SPARK-36978: IsNotNull constraints on structs should apply at the member field " +
@@ -449,6 +574,20 @@ class InferFiltersFromConstraintsSuite extends PlanTest {
       case _ =>
     }
     assert(joinFound, "Expected a Join node in the optimized plan")
+  }
+
+  test("SPARK-59719: infer IsNotNull through null-intolerant CheckOverflow") {
+    val dt = DecimalType(18, 0)
+    val decimalRelation = LocalRelation($"d".decimal(18, 0))
+    val query = decimalRelation
+      .where(CheckOverflow($"d", dt, nullOnOverflow = true) > Literal.create(Decimal(0), dt))
+      .analyze
+    val optimized = Optimize.execute(query)
+    val correctAnswer = decimalRelation
+      .where(IsNotNull($"d") &&
+        (CheckOverflow($"d", dt, nullOnOverflow = true) > Literal.create(Decimal(0), dt)))
+      .analyze
+    comparePlans(optimized, correctAnswer)
   }
 
 }

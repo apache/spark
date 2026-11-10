@@ -18,7 +18,7 @@
 package org.apache.spark.sql.hive.orc
 
 import java.io.File
-import java.time.LocalDateTime
+import java.time.{Instant, LocalDateTime}
 
 import org.apache.spark.sql.{AnalysisException, Row}
 import org.apache.spark.sql.TestingUDT.{IntervalData, IntervalUDT}
@@ -453,6 +453,93 @@ class HiveOrcSourceSuite extends OrcSuite with TestHiveSingleton {
     }
   }
 
+  test("SPARK-60396: Hive ORC filter pushdown on nanosecond timestamps") {
+    // A pushed down predicate on a nanosecond timestamp reaches the Hive ORC reader with a wrong
+    // value: the Kryo round trip of the search argument truncates it to milliseconds, and a
+    // TIMESTAMP_LTZ(p) value is also shifted by the offset of the JVM time zone. For example,
+    // `ts = 1970-01-01 00:00:00.123456789` skips the stripe that holds the matching row.
+    withSQLConf(
+        SQLConf.TIMESTAMP_NANOS_TYPES_ENABLED.key -> "true",
+        SQLConf.ORC_IMPLEMENTATION.key -> "hive",
+        SQLConf.ORC_FILTER_PUSHDOWN_ENABLED.key -> "true",
+        SQLConf.SESSION_LOCAL_TIMEZONE.key -> "UTC") {
+      Seq(
+        "TIMESTAMP_LTZ" -> ((s: String) => Instant.parse(s"1970-01-01T${s}Z")),
+        "TIMESTAMP_NTZ" -> ((s: String) => LocalDateTime.parse(s"1970-01-01T$s"))
+      ).foreach { case (tsType, toValue) =>
+        foreachNanosPrecision { p =>
+          withTempPath { dir =>
+            sql(s"SELECT ts, named_struct('ts', ts) AS s FROM (SELECT CAST(c AS $tsType($p)) " +
+              "AS ts FROM VALUES ('1970-01-01 00:00:00.123456789'), ('1970-01-01 00:00:01'), " +
+              "(NULL) AS t(c))").coalesce(1).write.orc(dir.getCanonicalPath)
+            val df = spark.read.schema(s"ts $tsType($p), s STRUCT<ts: $tsType($p)>")
+              .orc(dir.getCanonicalPath)
+            // The stored value, e.g. 00:00:00.1234567 for p = 7.
+            val v = "00:00:00." + "123456789".take(p)
+            def lit(s: String): String = s"CAST('1970-01-01 $s' AS $tsType($p))"
+            def check(condition: String, expected: Seq[String]): Unit = {
+              checkAnswer(df.where(condition).select("ts"), expected.map(s => Row(toValue(s))))
+            }
+            // Both the top-level column and the nested field.
+            Seq("ts", "s.ts").foreach { c =>
+              check(s"$c = ${lit(v)}", Seq(v))
+              check(s"$c <=> ${lit(v)}", Seq(v))
+              check(s"$c != ${lit(v)}", Seq("00:00:01"))
+              check(s"$c < ${lit("00:00:00.1239")}", Seq(v))
+              check(s"$c <= ${lit(v)}", Seq(v))
+              check(s"$c > ${lit(v)}", Seq("00:00:01"))
+              check(s"$c >= ${lit(v)}", Seq(v, "00:00:01"))
+              check(s"$c IN (${lit(v)}, ${lit("00:00:02")})", Seq(v))
+              checkAnswer(df.where(s"$c IS NULL").select("ts"), Row(null))
+              check(s"$c IS NOT NULL", Seq(v, "00:00:01"))
+            }
+          }
+        }
+      }
+    }
+  }
+
+  test("SPARK-60423: Hive ORC filter pushdown on timestamps with sub-millisecond digits") {
+    // Each value is written to its own file, so a pushed down predicate that skips a file with a
+    // matching row changes the result. The Kryo round trip of the search argument truncates
+    // `00:00:00.123456` to `00:00:00.123`, the first value.
+    def ts(time: String): String = s"TIMESTAMP'2020-01-01 $time'"
+    val value = ts("00:00:00.123456")
+    withSQLConf(
+        SQLConf.ORC_IMPLEMENTATION.key -> "hive",
+        SQLConf.ORC_FILTER_PUSHDOWN_ENABLED.key -> "true") {
+      val input = sql(s"SELECT ${ts("00:00:00.123")} AS ts UNION ALL SELECT $value " +
+        s"UNION ALL SELECT ${ts("00:00:01")}")
+      withTempPath { dir =>
+        val path = dir.getCanonicalPath
+        input.coalesce(1).write.option("maxRecordsPerFile", 1).orc(path)
+        // The filter value is a java.sql.Timestamp or a java.time.Instant.
+        Seq(false, true).foreach { java8Api =>
+          withSQLConf(SQLConf.DATETIME_JAVA8API_ENABLED.key -> java8Api.toString) {
+            val df = spark.read.schema(input.schema).orc(path)
+            Seq(
+              s"ts = $value",
+              s"ts <=> $value",
+              s"ts IN ($value, ${ts("00:00:01")})",
+              s"ts < $value",
+              s"ts <= $value",
+              s"ts > $value",
+              s"ts >= $value",
+              s"ts != $value",
+              s"ts NOT IN ($value, ${ts("00:00:01")})",
+              s"ts = $value OR ts > ${ts("00:00:01")}"
+            ).foreach { condition =>
+              checkAnswer(df.where(condition), input.where(condition))
+            }
+            // A predicate with a millisecond value is still pushed down and skips the other files.
+            val condition = s"ts = ${ts("00:00:00.123")}"
+            checkAnswer(stripSparkFilter(df.where(condition)), input.where(condition))
+          }
+        }
+      }
+    }
+  }
+
   test("SPARK-31580: Read a file written before ORC-569") {
     // Test ORC file came from ORC-621
     val df = readResourceOrcFile("test-data/TestStringDictionary.testRowIndex.orc")
@@ -479,6 +566,130 @@ class HiveOrcSourceSuite extends OrcSuite with TestHiveSingleton {
             }
           }
         }
+      }
+    }
+  }
+
+  test("SPARK-60424: ORC TIMESTAMP is inferred as TIMESTAMP_LTZ regardless of " +
+      "spark.sql.timestampType") {
+    withSQLConf(SQLConf.ORC_IMPLEMENTATION.key -> "hive") {
+      withTempPath { dir =>
+        val df = sql("SELECT ts, named_struct('ts', ts) AS s, array(ts) AS a, map('k', ts) AS m " +
+          "FROM VALUES (TIMESTAMP_LTZ'1970-01-01 00:00:01') AS t(ts)")
+        df.write.orc(dir.getCanonicalPath)
+        withSQLConf(SQLConf.TIMESTAMP_TYPE.key -> "TIMESTAMP_NTZ") {
+          Seq("false", "true").foreach { mergeSchema =>
+            val readDf = spark.read.option("mergeSchema", mergeSchema).orc(dir.getCanonicalPath)
+            assert(readDf.schema === df.schema.asNullable)
+            checkAnswer(readDf, df)
+          }
+        }
+      }
+    }
+  }
+
+  test("SPARK-60642: Hive ORC writes and reads collated strings") {
+    // The Hive type parser rejects `string collate <name>`, which `catalogString` produces for a
+    // collated string, so the serializer must not put a collation in the type string.
+    val collations = Seq("UTF8_BINARY", "UTF8_LCASE", "UNICODE_CI")
+    withSQLConf(SQLConf.ORC_IMPLEMENTATION.key -> "hive") {
+      collations.foreach { collation =>
+        withTable("t") {
+          sql(s"CREATE TABLE t (i INT, c STRING COLLATE $collation) USING ORC")
+          sql("INSERT INTO t SELECT 1, 'a'")
+          checkAnswer(spark.table("t"), Row(1, "a"))
+          // The collation is kept by the catalog, not by the file.
+          assert(spark.table("t").schema("c").dataType === StringType(collation))
+          checkAnswer(
+            sql("SELECT i FROM t WHERE c = 'A'"),
+            if (collation == "UTF8_BINARY") Nil else Seq(Row(1)))
+        }
+      }
+    }
+  }
+
+  test("SPARK-60642: Hive ORC writes and reads collated strings in nested types") {
+    withSQLConf(SQLConf.ORC_IMPLEMENTATION.key -> "hive") {
+      withTable("t") {
+        sql(
+          """CREATE TABLE t (
+            |  a ARRAY<STRING COLLATE UNICODE_CI>,
+            |  s STRUCT<f: STRING COLLATE UTF8_LCASE, g: ARRAY<STRING COLLATE UNICODE_CI>>,
+            |  m MAP<STRING, STRING COLLATE UNICODE_CI>,
+            |  b MAP<STRING COLLATE UTF8_BINARY, ARRAY<STRING COLLATE UNICODE_CI>>
+            |) USING ORC""".stripMargin)
+        sql(
+          """INSERT INTO t SELECT
+            |  array('a'),
+            |  named_struct('f', 'b', 'g', array('c')),
+            |  map('k', 'd'),
+            |  map('k', array('e'))""".stripMargin)
+        checkAnswer(
+          spark.table("t"),
+          Row(Seq("a"), Row("b", Seq("c")), Map("k" -> "d"), Map("k" -> Seq("e"))))
+        checkAnswer(sql("SELECT a[0], s.f, s.g[0], m['k'], b['k'][0] FROM t"),
+          Row("a", "b", "c", "d", "e"))
+      }
+    }
+  }
+
+  test("SPARK-60642: Hive ORC data source writes collated strings through DataFrame") {
+    withSQLConf(SQLConf.ORC_IMPLEMENTATION.key -> "hive") {
+      withTempPath { dir =>
+        val path = dir.getCanonicalPath
+        // `StringType("UTF8_BINARY")` prints as `string collate UTF8_BINARY` unlike `StringType`.
+        // A DDL `COLLATE UTF8_BINARY` becomes the default `StringType`, so only this test covers
+        // an explicit `UTF8_BINARY` map key.
+        val schema = new StructType()
+          .add("b", StringType("UTF8_BINARY"))
+          .add("c", StringType("UNICODE_CI"))
+          .add("a", ArrayType(StringType("UTF8_LCASE")))
+          .add("s", new StructType().add("f", StringType("UNICODE_CI")))
+          .add("m", MapType(StringType("UTF8_BINARY"), StringType("UNICODE_CI")))
+        val rows = Seq(Row("a", "b", Seq("c"), Row("d"), Map("k" -> "v")))
+        val df = spark.createDataFrame(spark.sparkContext.parallelize(rows), schema)
+        df.write.orc(path)
+        // The file stores plain strings.
+        assert(spark.read.orc(path).schema === StructType.fromDDL(
+          "b STRING, c STRING, a ARRAY<STRING>, s STRUCT<f: STRING>, m MAP<STRING, STRING>"))
+        // A read with a collated schema decodes the same values.
+        checkAnswer(spark.read.schema(df.schema).orc(path), df)
+      }
+    }
+  }
+
+  test("SPARK-60642: Hive ORC writes and reads collated CHAR and VARCHAR") {
+    // CHAR and VARCHAR with a collation print as `char(3) collate <name>` under the last two
+    // confs, and as `string collate <name>` by default.
+    Seq(
+      Seq.empty[(String, String)],
+      Seq(SQLConf.PRESERVE_CHAR_VARCHAR_TYPE_INFO.key -> "true"),
+      Seq(SQLConf.CHAR_VARCHAR_STANDARD_SEMANTICS.key -> "true")).foreach { confs =>
+      withSQLConf((SQLConf.ORC_IMPLEMENTATION.key -> "hive") +: confs: _*) {
+        withTable("t") {
+          sql(
+            """CREATE TABLE t (
+              |  c CHAR(3) COLLATE UNICODE_CI,
+              |  v VARCHAR(3) COLLATE UTF8_LCASE,
+              |  b CHAR(3) COLLATE UTF8_BINARY,
+              |  a ARRAY<VARCHAR(3) COLLATE UNICODE_CI>
+              |) USING ORC""".stripMargin)
+          sql("INSERT INTO t SELECT 'a', 'b', 'c', array('d')")
+          checkAnswer(spark.table("t"), Row("a  ", "b", "c  ", Seq("d")))
+        }
+      }
+    }
+  }
+
+  test("SPARK-60642: Hive ORC writes collated strings through a converted Hive serde table") {
+    withSQLConf(
+        SQLConf.ORC_IMPLEMENTATION.key -> "hive",
+        HiveUtils.CONVERT_METASTORE_ORC.key -> "true") {
+      withTable("t") {
+        sql("CREATE TABLE t (i INT, c STRING COLLATE UNICODE_CI) STORED AS ORC")
+        sql("INSERT INTO t SELECT 1, 'a'")
+        checkAnswer(spark.table("t"), Row(1, "a"))
+        checkAnswer(sql("SELECT i FROM t WHERE c = 'A'"), Row(1))
       }
     }
   }

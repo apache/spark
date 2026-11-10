@@ -238,17 +238,22 @@ class RandomForestRegressionModel private[ml] (
     if ($(predictionCol).nonEmpty || $(leafCol).nonEmpty) {
       var predColNames = Seq.empty[String]
       var predCols = Seq.empty[Column]
-      val bcModel = dataset.sparkSession.sparkContext.broadcast(this)
+      val bcRootNodes = dataset.sparkSession.sparkContext.broadcast(_trees.map(_.rootNode))
 
       if ($(predictionCol).nonEmpty) {
-        val predUDF = udf { features: Vector => bcModel.value.predict(features) }
+        val predUDF = udf { features: Vector =>
+          val rootNodes = bcRootNodes.value
+          TreeEnsembleModel.predictRaw(features, rootNodes) / rootNodes.length
+        }
         predColNames :+= $(predictionCol)
         predCols :+= predUDF(col($(featuresCol)))
           .as($(predictionCol), outputSchema($(predictionCol)).metadata)
       }
 
       if ($(leafCol).nonEmpty) {
-        val leafUDF = udf { features: Vector => bcModel.value.predictLeaf(features) }
+        val leafUDF = udf { features: Vector =>
+          TreeEnsembleModel.predictLeaf(features, bcRootNodes.value)
+        }
         predColNames :+= $(leafCol)
         predCols :+= leafUDF(col($(featuresCol)))
           .as($(leafCol), outputSchema($(leafCol)).metadata)
@@ -262,12 +267,8 @@ class RandomForestRegressionModel private[ml] (
     }
   }
 
-  override def predict(features: Vector): Double = {
-    // TODO: When we add a generic Bagging class, handle transform there.  SPARK-7128
-    // Predict average of tree predictions.
-    // Ignore the weights since all are 1.0 for now.
-    _trees.map(_.rootNode.predictImpl(features).prediction).sum / getNumTrees
-  }
+  override def predict(features: Vector): Double =
+    TreeEnsembleModel.predictRaw(features, _trees) / getNumTrees
 
   @Since("1.4.0")
   override def copy(extra: ParamMap): RandomForestRegressionModel = {

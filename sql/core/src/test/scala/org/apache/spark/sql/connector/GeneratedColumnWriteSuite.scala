@@ -17,15 +17,31 @@
 
 package org.apache.spark.sql.connector
 
-import org.apache.spark.SparkRuntimeException
+import java.util.Collections
+
+import test.org.apache.spark.sql.connector.catalog.functions.JavaStrLen.JavaStrLenStaticMagic
+
+import org.apache.spark.{SparkRuntimeException, SparkThrowable}
 import org.apache.spark.sql.{AnalysisException, DataFrame, QueryTest, Row}
-import org.apache.spark.sql.catalyst.QueryPlanningTracker
+import org.apache.spark.sql.catalyst.{InternalRow, QueryPlanningTracker}
 import org.apache.spark.sql.catalyst.expressions.CheckInvariant
 import org.apache.spark.sql.catalyst.util.GeneratedColumn
-import org.apache.spark.sql.connector.catalog.{Identifier, InMemoryRowLevelOperationTableCatalog}
+import org.apache.spark.sql.connector.catalog.{Column, GenerationExpression, Identifier, InMemoryCatalog, InMemoryRowLevelOperationTableCatalog}
 import org.apache.spark.sql.connector.catalog.CatalogV2Implicits.CatalogHelper
+import org.apache.spark.sql.connector.catalog.functions.{ScalarFunction, UnboundFunction}
+import org.apache.spark.sql.connector.expressions.{Expression => V2Expression, GeneralScalarExpression, Transform}
 import org.apache.spark.sql.execution.streaming.runtime.MemoryStream
 import org.apache.spark.sql.internal.SQLConf
+import org.apache.spark.sql.types.{DataType, IntegerType, MetadataBuilder, StringType, StructType}
+import org.apache.spark.unsafe.types.UTF8String
+
+// A V2 function that a test binds to the name of a built-in function to shadow it.
+private object ConstantString extends ScalarFunction[UTF8String] {
+  override def inputTypes(): Array[DataType] = Array(StringType)
+  override def resultType(): DataType = StringType
+  override def name(): String = "constant_string"
+  override def produceResult(input: InternalRow): UTF8String = UTF8String.fromString("OK")
+}
 
 /**
  * Tests for generated column auto-fill and constraint enforcement during writes.
@@ -109,6 +125,15 @@ class GeneratedColumnWriteSuite extends QueryTest with DatasourceV2SQLBase {
     assert(!metadata.contains(GeneratedColumn.GENERATION_EXPRESSION_METADATA_KEY),
       s"generation expression leaked into the schema of $column: ${metadata.json}")
   }
+
+  private def assertWriteFails(condition: String)(write: => Unit): Unit = {
+    val ex = intercept[SparkThrowable](write)
+    assert(ex.getCondition == condition)
+  }
+
+  private val readsDifferentlyReason = "a write reads it with the default values of the parser " +
+    "configs, such as spark.sql.parser.escapedStringLiterals and " +
+    "spark.sql.ansi.enforceReservedKeywords, and this session reads it differently"
 
   testGeneratedColumnWrite("append_data_v2") { table =>
     import testImplicits._
@@ -322,6 +347,67 @@ class GeneratedColumnWriteSuite extends QueryTest with DatasourceV2SQLBase {
     }
   }
 
+  test("SPARK-60803: INSERT by name computes generated column from the stored (post-cast) " +
+    "struct field") {
+    val tblName = "my_tab"
+    withTable(s"testcat.$tblName") {
+      sql(s"""CREATE TABLE testcat.$tblName(
+             |  s STRUCT<f: INT>,
+             |  g INT GENERATED ALWAYS AS (s.f * 10)
+             |) USING foo""".stripMargin)
+      // 5.7 is cast to INT (= 5) when stored in `s.f`. The generated column must be computed from
+      // the stored value (5 * 10 = 50), not from the pre-cast value (5.7 * 10 = 57).
+      sql(s"INSERT INTO testcat.$tblName(s) SELECT named_struct('f', 5.7D)")
+      checkAnswer(spark.table(s"testcat.$tblName"), Row(Row(5), 50))
+    }
+  }
+
+  test("SPARK-60817: INSERT by name computes generated column from the stored (post-cast) " +
+    "value in a lambda") {
+    val tblName = "my_tab"
+    withTable(s"testcat.$tblName") {
+      sql(s"""CREATE TABLE testcat.$tblName(
+             |  a ARRAY<INT>,
+             |  i INT,
+             |  g1 ARRAY<INT> GENERATED ALWAYS AS (transform(a, x -> x + i * 10)),
+             |  g2 ARRAY<ARRAY<INT>> GENERATED ALWAYS AS (transform(a, i -> transform(a, x -> i)))
+             |) USING foo""".stripMargin)
+      // 5.7 is cast to INT (= 5) when stored in `i`. `g1` must read the stored value (1 + 5 * 10),
+      // not the pre-cast value (1 + 5.7 * 10). In `g2`, `i` is the lambda variable, not the column.
+      sql(s"INSERT INTO testcat.$tblName(a, i) SELECT array(1), 5.7D")
+      checkAnswer(spark.table(s"testcat.$tblName"), Row(Seq(1), 5, Seq(51), Seq(Seq(1))))
+    }
+  }
+
+  test("SPARK-60817: INSERT by name computes generated column in a lambda from a DEFAULT " +
+    "column declared after it") {
+    val tblName = "my_tab"
+    withTable(s"testcat.$tblName") {
+      sql(s"""CREATE TABLE testcat.$tblName(
+             |  a ARRAY<INT>,
+             |  g ARRAY<INT> GENERATED ALWAYS AS (transform(a, x -> x + d)),
+             |  d INT DEFAULT 5
+             |) USING foo""".stripMargin)
+      // `d` is filled with its default value, which `g` must read (1 + 5).
+      sql(s"INSERT INTO testcat.$tblName(a) SELECT array(1)")
+      checkAnswer(spark.table(s"testcat.$tblName"), Row(Seq(1), Seq(6), 5))
+    }
+  }
+
+  test("SPARK-60817: INSERT by name computes generated column from the stored (post-cast) " +
+    "value of a column referenced with IDENTIFIER") {
+    val tblName = "my_tab"
+    withTable(s"testcat.$tblName") {
+      sql(s"""CREATE TABLE testcat.$tblName(
+             |  i INT,
+             |  g INT GENERATED ALWAYS AS (IDENTIFIER('i') * 10)
+             |) USING foo""".stripMargin)
+      // 5.7 is cast to INT (= 5) when stored in `i`. `g` must read the stored value (5 * 10).
+      sql(s"INSERT INTO testcat.$tblName(i) SELECT 5.7D")
+      checkAnswer(spark.table(s"testcat.$tblName"), Row(5, 50))
+    }
+  }
+
   test("INSERT by position validates generated column against the stored (post-cast) value") {
     val tblName = "my_tab"
     withTable(s"testcat.$tblName") {
@@ -359,6 +445,92 @@ class GeneratedColumnWriteSuite extends QueryTest with DatasourceV2SQLBase {
         sql(s"INSERT INTO testcat.$tblName(eventDate, eventYear) VALUES (DATE'2024-06-15', 2025)")
       }
       assert(ex.getCondition == "CHECK_CONSTRAINT_VIOLATION")
+    }
+  }
+
+  test("SPARK-60764: INSERT by name with a double quote in the generation expression") {
+    val tblName = "my_tab"
+    withTable(s"testcat.$tblName") {
+      sql(s"""CREATE TABLE testcat.$tblName(
+             |  a STRING,
+             |  b STRING GENERATED ALWAYS AS (concat(a, '"'))
+             |) USING foo""".stripMargin)
+      // Read from `range` so that the check runs in whole-stage codegen.
+      sql(s"""INSERT INTO testcat.$tblName(a, b) SELECT 'p', concat('p', '"') FROM range(2)""")
+      val ex = intercept[SparkRuntimeException] {
+        sql(s"INSERT INTO testcat.$tblName(a, b) SELECT 'p', 'q' FROM range(2)")
+      }
+      checkError(
+        exception = ex,
+        condition = "CHECK_CONSTRAINT_VIOLATION",
+        sqlState = "23001",
+        parameters = Map(
+          "constraintName" -> "Generated Column",
+          "expression" -> """b <=> concat(a, '"')""",
+          "values" -> " - b : q"))
+    }
+  }
+
+  private def addFunction(name: String, function: UnboundFunction): Unit = {
+    catalog("testcat").asInstanceOf[InMemoryCatalog]
+      .createFunction(Identifier.of(Array("ns"), name), function)
+  }
+
+  test("SPARK-60866: generation expression cannot call a V2 function with a magic method") {
+    val tblName = "my_tab"
+    Seq(
+      StrLenMagic -> "`strlen_magic`",
+      new JavaStrLenStaticMagic -> "`strlen`"
+    ).foreach { case (function, functionName) =>
+      addFunction("strlen", StrLen(function))
+      withTable(s"testcat.$tblName") {
+        checkError(
+          exception = intercept[AnalysisException] {
+            sql(s"""CREATE TABLE testcat.$tblName(
+                   |  s STRING,
+                   |  g INT GENERATED ALWAYS AS (testcat.ns.strlen(s))
+                   |) USING foo""".stripMargin)
+          },
+          condition = "UNSUPPORTED_EXPRESSION_GENERATED_COLUMN",
+          parameters = Map(
+            "fieldName" -> "g",
+            "expressionStr" -> "testcat.ns.strlen(s)",
+            "reason" -> s"failed to resolve $functionName to a built-in function"))
+      }
+    }
+  }
+
+  test("SPARK-60866: SQL path does not shadow a built-in function of a generation expression") {
+    val tblName = "my_tab"
+    addFunction("upper", StrLen(ConstantString))
+    withTable(s"testcat.$tblName") {
+      sql(s"""CREATE TABLE testcat.$tblName(
+             |  s STRING,
+             |  g STRING GENERATED ALWAYS AS (upper(s))
+             |) USING foo""".stripMargin)
+      withSQLConf(SQLConf.PATH_ENABLED.key -> "true") {
+        sql("SET PATH = testcat.ns, system.builtin")
+        try {
+          // The path does shadow the built-in function outside of the generation expression.
+          checkAnswer(sql("SELECT upper('x')"), Row("OK"))
+          sql(s"INSERT INTO testcat.$tblName(s) VALUES ('x')")
+          checkAnswer(spark.table(s"testcat.$tblName"), Row("x", "X"))
+          sql(s"INSERT INTO testcat.$tblName VALUES ('y', 'Y')")
+          checkError(
+            exception = intercept[SparkRuntimeException] {
+              sql(s"INSERT INTO testcat.$tblName VALUES ('z', 'OK')")
+            },
+            condition = "CHECK_CONSTRAINT_VIOLATION",
+            sqlState = "23001",
+            parameters = Map(
+              "constraintName" -> "Generated Column",
+              "expression" -> "g <=> upper(s)",
+              "values" -> " - g : OK"))
+          checkAnswer(spark.table(s"testcat.$tblName"), Seq(Row("x", "X"), Row("y", "Y")))
+        } finally {
+          sql("SET PATH = DEFAULT_PATH")
+        }
+      }
     }
   }
 
@@ -453,6 +625,26 @@ class GeneratedColumnWriteSuite extends QueryTest with DatasourceV2SQLBase {
       checkAnswer(
         spark.table(s"testcat.$tblName"),
         Row(3, 5, 8))
+    }
+  }
+
+  test("SPARK-59962: CREATE and REPLACE TABLE with a generation expression reading a value twice") {
+    // NULLIF reads `a + b` twice. The table is created from the expression rather than evaluating
+    // it, so nothing may be pre-evaluated under the CREATE or REPLACE TABLE. The second statement
+    // replaces the table the first one created.
+    val tblName = "my_tab"
+    withTable(s"testcat.$tblName") {
+      Seq("CREATE TABLE", "CREATE OR REPLACE TABLE").foreach { create =>
+        sql(s"""$create testcat.$tblName(
+               |  a INT,
+               |  b INT,
+               |  c INT GENERATED ALWAYS AS (nullif(a + b, 3))
+               |) USING foo""".stripMargin)
+        sql(s"INSERT INTO testcat.$tblName(a, b) VALUES (1, 1), (1, 2)")
+        checkAnswer(
+          spark.table(s"testcat.$tblName"),
+          Seq(Row(1, 1, 2), Row(1, 2, null)))
+      }
     }
   }
 
@@ -992,6 +1184,43 @@ class GeneratedColumnWriteSuite extends QueryTest with DatasourceV2SQLBase {
     }
   }
 
+  test("SPARK-60857: CREATE TABLE rejects a struct generation expression with other field names") {
+    val tblName = "my_tab"
+    withTable(s"testcat.$tblName") {
+      // An auto-filled value lines up the struct fields with the column type by name under the
+      // writer's resolver, while the check of a provided value lines them up by position. So a row
+      // that Spark auto-filled from the first expression would fail the check when a later write
+      // carries it, and a case-sensitive writer could not auto-fill the second one.
+      Seq(
+        "named_struct('y', a, 'x', b)" -> "struct<y:int,x:int>",
+        "named_struct('X', b, 'Y', a)" -> "struct<X:int,Y:int>").foreach { case (expr, exprType) =>
+        checkError(
+          exception = intercept[AnalysisException] {
+            sql(s"""CREATE TABLE testcat.$tblName(
+                   |  a INT,
+                   |  b INT,
+                   |  s STRUCT<x: INT, y: INT> GENERATED ALWAYS AS ($expr)
+                   |) USING foo""".stripMargin)
+          },
+          condition = "UNSUPPORTED_EXPRESSION_GENERATED_COLUMN",
+          parameters = Map(
+            "fieldName" -> "s",
+            "expressionStr" -> expr,
+            "reason" -> (s"generation expression data type $exprType names its struct " +
+              "fields differently from column data type struct<x:int,y:int>")))
+      }
+
+      sql(s"""CREATE TABLE testcat.$tblName(
+             |  a INT,
+             |  b INT,
+             |  s STRUCT<x: INT, y: INT> GENERATED ALWAYS AS (named_struct('x', b, 'y', a))
+             |) USING foo""".stripMargin)
+      sql(s"INSERT INTO testcat.$tblName(a, b) VALUES (1, 2)")
+      sql(s"INSERT INTO testcat.$tblName SELECT * FROM testcat.$tblName")
+      checkAnswer(spark.table(s"testcat.$tblName"), Seq.fill(2)(Row(1, 2, Row(2, 1))))
+    }
+  }
+
   test("generation expression is not exposed in the read schema") {
     val tblName = "my_tab"
     withTable(s"testcat.$tblName") {
@@ -1245,6 +1474,561 @@ class GeneratedColumnWriteSuite extends QueryTest with DatasourceV2SQLBase {
       // No CheckInvariant is added to the plan for the generated column.
       assert(!hasCheckInvariant(s"INSERT INTO testcat.$tblName(a, b) VALUES (5, 6)"),
         "No CheckInvariant should be added when the table lacks the write capability")
+    }
+  }
+
+  test("SPARK-60757: an auto-filled value does not depend on the parser settings of the writer") {
+    import testImplicits._
+    val tblName = "my_tab"
+    withTable(s"testcat.$tblName") {
+      sql(s"""CREATE TABLE testcat.$tblName(
+             |  a STRING,
+             |  b STRING GENERATED ALWAYS AS (concat(a, 'x\\\\y'))
+             |) USING foo""".stripMargin)
+      sql(s"INSERT INTO testcat.$tblName(a) VALUES ('default')")
+      withSQLConf(SQLConf.ESCAPED_STRING_LITERALS.key -> "true") {
+        sql(s"INSERT INTO testcat.$tblName(a) VALUES ('insert')")
+        Seq("append").toDF("a").writeTo(s"testcat.$tblName").append()
+      }
+      checkAnswer(
+        spark.table(s"testcat.$tblName"),
+        Seq("default", "insert", "append").map(a => Row(a, a + "x\\y")))
+
+      withSQLConf(SQLConf.ESCAPED_STRING_LITERALS.key -> "true") {
+        sql(s"INSERT OVERWRITE testcat.$tblName(a) VALUES ('overwrite')")
+      }
+      checkAnswer(spark.table(s"testcat.$tblName"), Row("overwrite", "overwritex\\y"))
+    }
+  }
+
+  test("SPARK-60757: the validation of a provided value does not depend on the parser settings " +
+    "of the writer") {
+    val tblName = "my_tab"
+    withTable(s"testcat.$tblName") {
+      sql(s"""CREATE TABLE testcat.$tblName(
+             |  a STRING,
+             |  b STRING GENERATED ALWAYS AS (concat(a, 'x\\\\y'))
+             |) USING foo""".stripMargin)
+      withSQLConf(SQLConf.ESCAPED_STRING_LITERALS.key -> "true") {
+        sql(s"INSERT INTO testcat.$tblName(a, b) SELECT 'p', concat('p', 'x', chr(92), 'y')")
+        assertWriteFails("CHECK_CONSTRAINT_VIOLATION") {
+          sql(s"INSERT INTO testcat.$tblName(a, b) " +
+            "SELECT 'q', concat('q', 'x', chr(92), chr(92), 'y')")
+        }
+      }
+      checkAnswer(spark.table(s"testcat.$tblName"), Row("p", "px\\y"))
+    }
+  }
+
+  test("SPARK-60757: a later write carries a row that a non-ANSI writer auto-filled") {
+    val tblName = "my_tab"
+    withTable(s"testcat.$tblName") {
+      withSQLConf(SQLConf.ANSI_ENABLED.key -> "false") {
+        sql(s"""CREATE TABLE testcat.$tblName(
+               |  a STRING,
+               |  b DOUBLE GENERATED ALWAYS AS (a + 1)
+               |) USING foo""".stripMargin)
+        sql(s"INSERT INTO testcat.$tblName(a) VALUES ('9007199254740993')")
+        sql(s"INSERT INTO testcat.$tblName SELECT * FROM testcat.$tblName")
+      }
+      val row = Row("9007199254740993", 9007199254740994D)
+      checkAnswer(spark.table(s"testcat.$tblName"), Seq(row, row))
+    }
+  }
+
+  test("SPARK-60757: a DELETE does not check the rows that it carries") {
+    withRowLevelCatalog {
+      val tblName = "my_tab"
+      withTable(s"$rowLevelCat.$tblName") {
+        withSQLConf(SQLConf.ANSI_ENABLED.key -> "false") {
+          // Without the capability, the rows go in as a non-ANSI writer stored them before.
+          sql(s"""CREATE TABLE $rowLevelCat.$tblName(
+                 |  id INT,
+                 |  a STRING,
+                 |  b DOUBLE GENERATED ALWAYS AS (a + 1)
+                 |) USING foo TBLPROPERTIES ('$noWriteCapProp' = 'false')""".stripMargin)
+          sql(s"INSERT INTO $rowLevelCat.$tblName VALUES " +
+            "(1, 'abc', NULL), (2, '2', 3D), (3, '3', 4D)")
+          sql(s"ALTER TABLE $rowLevelCat.$tblName SET TBLPROPERTIES ('$noWriteCapProp' = 'true')")
+          sql(s"DELETE FROM $rowLevelCat.$tblName WHERE id >= 3")
+        }
+        withSQLConf(SQLConf.ANSI_ENABLED.key -> "true") {
+          sql(s"DELETE FROM $rowLevelCat.$tblName WHERE id >= 2")
+        }
+        checkAnswer(spark.table(s"$rowLevelCat.$tblName"), Row(1, "abc", null))
+        assertWriteFails("CAST_INVALID_INPUT") {
+          sql(s"INSERT INTO $rowLevelCat.$tblName SELECT * FROM $rowLevelCat.$tblName")
+        }
+      }
+    }
+  }
+
+  test("SPARK-60757: an explicit cast and arithmetic keep failing under a non-ANSI writer") {
+    val tblName = "my_tab"
+    withTable(s"testcat.$tblName") {
+      sql(s"""CREATE TABLE testcat.$tblName(
+             |  a STRING,
+             |  b INT GENERATED ALWAYS AS (CAST(a AS INT)),
+             |  c INT,
+             |  d INT GENERATED ALWAYS AS (c + 1)
+             |) USING foo""".stripMargin)
+      withSQLConf(SQLConf.ANSI_ENABLED.key -> "false") {
+        assertWriteFails("CAST_INVALID_INPUT") {
+          sql(s"INSERT INTO testcat.$tblName(a, c) VALUES ('abc', 1)")
+        }
+        assertWriteFails("ARITHMETIC_OVERFLOW") {
+          sql(s"INSERT INTO testcat.$tblName(a, c) VALUES ('1', ${Int.MaxValue})")
+        }
+        sql(s"INSERT INTO testcat.$tblName(a, c) VALUES ('1', 1)")
+      }
+      checkAnswer(spark.table(s"testcat.$tblName"), Row("1", 1, 1, 2))
+    }
+  }
+
+  test("SPARK-60757: the validation of a provided value keeps failing under a non-ANSI writer") {
+    val tblName = "my_tab"
+    withTable(s"testcat.$tblName") {
+      // UPPER has no way back from its V2 form, so the validation reads the SQL text.
+      sql(s"""CREATE TABLE testcat.$tblName(
+             |  a STRING,
+             |  b INT GENERATED ALWAYS AS (CAST(upper(a) AS INT))
+             |) USING foo""".stripMargin)
+      withSQLConf(SQLConf.ANSI_ENABLED.key -> "false") {
+        assertWriteFails("CAST_INVALID_INPUT") {
+          sql(s"INSERT INTO testcat.$tblName(a, b) VALUES ('abc', NULL)")
+        }
+      }
+      checkAnswer(spark.table(s"testcat.$tblName"), Nil)
+    }
+  }
+
+  test("SPARK-60757: a reserved keyword of an auto-filled column does not follow the settings " +
+    "of the writer") {
+    val tblName = "my_tab"
+    withTable(s"testcat.$tblName") {
+      sql(s"""CREATE TABLE testcat.$tblName(
+             |  `current_date` DATE,
+             |  b DATE GENERATED ALWAYS AS (current_date)
+             |) USING foo""".stripMargin)
+      withSQLConf(
+          SQLConf.ANSI_ENABLED.key -> "true",
+          SQLConf.ENFORCE_RESERVED_KEYWORDS.key -> "true") {
+        sql(s"INSERT INTO testcat.$tblName(`current_date`) VALUES (DATE'2024-06-15')")
+      }
+      val date = sqlDate("2024-06-15")
+      checkAnswer(spark.table(s"testcat.$tblName"), Row(date, date))
+    }
+  }
+
+  test("SPARK-60757: an implicit cast of an auto-filled column does not follow a non-ANSI writer") {
+    val tblName = "my_tab"
+    withTable(s"testcat.$tblName") {
+      withSQLConf(SQLConf.ANSI_ENABLED.key -> "true") {
+        sql(s"""CREATE TABLE testcat.$tblName(
+               |  a STRING,
+               |  b BIGINT GENERATED ALWAYS AS (a + 1)
+               |) USING foo""".stripMargin)
+      }
+      withSQLConf(SQLConf.ANSI_ENABLED.key -> "false") {
+        assertWriteFails("CAST_INVALID_INPUT") {
+          sql(s"INSERT INTO testcat.$tblName(a) VALUES ('abc')")
+        }
+        // A non-ANSI cast to DOUBLE would lose the last digit.
+        sql(s"INSERT INTO testcat.$tblName(a) VALUES ('9007199254740993')")
+      }
+      checkAnswer(
+        spark.table(s"testcat.$tblName"),
+        Row("9007199254740993", 9007199254740994L))
+    }
+  }
+
+  test("SPARK-60757: a function of an auto-filled column does not follow the settings of the " +
+    "writer") {
+    val tblName = "my_tab"
+    withTable(s"testcat.$tblName") {
+      sql(s"""CREATE TABLE testcat.$tblName(
+             |  a INT,
+             |  arr ARRAY<INT>,
+             |  b INT GENERATED ALWAYS AS (abs(a)),
+             |  c INT GENERATED ALWAYS AS (element_at(arr, 2)),
+             |  d INT GENERATED ALWAYS AS (size(arr))
+             |) USING foo""".stripMargin)
+      withSQLConf(SQLConf.ANSI_ENABLED.key -> "false") {
+        assertWriteFails("ARITHMETIC_OVERFLOW") {
+          sql(s"INSERT INTO testcat.$tblName(a, arr) VALUES (${Int.MinValue}, array(1, 2))")
+        }
+        assertWriteFails("INVALID_ARRAY_INDEX_IN_ELEMENT_AT") {
+          sql(s"INSERT INTO testcat.$tblName(a, arr) VALUES (1, array(1))")
+        }
+      }
+      withSQLConf(
+          SQLConf.ANSI_ENABLED.key -> "false",
+          SQLConf.LEGACY_SIZE_OF_NULL.key -> "true") {
+        sql(s"INSERT INTO testcat.$tblName(a, arr) VALUES (1, NULL)")
+      }
+      checkAnswer(spark.table(s"testcat.$tblName"), Row(1, null, 1, null, null))
+    }
+  }
+
+  test("SPARK-60757: a temporary function does not replace a function of an auto-filled column") {
+    val tblName = "my_tab"
+    withTable(s"testcat.$tblName") {
+      sql(s"""CREATE TABLE testcat.$tblName(
+             |  a STRING,
+             |  b STRING GENERATED ALWAYS AS (upper(a))
+             |) USING foo""".stripMargin)
+      spark.udf.register("upper", (s: String) => s + "-temp")
+      try {
+        withSQLConf(SQLConf.SESSION_FUNCTION_RESOLUTION_ORDER.key -> "first") {
+          sql(s"INSERT INTO testcat.$tblName(a) VALUES ('x')")
+        }
+      } finally {
+        sql("DROP TEMPORARY FUNCTION IF EXISTS upper")
+      }
+      checkAnswer(spark.table(s"testcat.$tblName"), Row("x", "X"))
+    }
+  }
+
+  test("SPARK-60757: an IDENTIFIER clause is not a different reading of a generation expression") {
+    val tblName = "my_tab"
+    withTable(s"testcat.$tblName") {
+      sql(s"""CREATE TABLE testcat.$tblName(
+             |  a INT,
+             |  b INT GENERATED ALWAYS AS (IDENTIFIER('a') + 1)
+             |) USING foo""".stripMargin)
+      sql(s"INSERT INTO testcat.$tblName(a) VALUES (1)")
+      checkAnswer(spark.table(s"testcat.$tblName"), Row(1, 2))
+    }
+  }
+
+  test("SPARK-60757: CREATE and REPLACE TABLE reject a generation expression the session reads " +
+    "differently") {
+    val tblName = "my_tab"
+    for {
+      (confs, genExpr) <- Seq(
+        (Seq(SQLConf.ESCAPED_STRING_LITERALS.key -> "true"), "concat(a, 'x\\\\y')"),
+        (Seq(SQLConf.ANSI_ENABLED.key -> "true", SQLConf.DOUBLE_QUOTED_IDENTIFIERS.key -> "true"),
+          "concat(\"a\", 'x')"))
+      create <- Seq("CREATE TABLE", "CREATE OR REPLACE TABLE")
+    } withSQLConf(confs: _*) {
+      checkError(
+        exception = intercept[AnalysisException] {
+          sql(s"""$create testcat.$tblName(
+                 |  a STRING,
+                 |  b STRING GENERATED ALWAYS AS ($genExpr)
+                 |) USING foo""".stripMargin)
+        },
+        condition = "UNSUPPORTED_EXPRESSION_GENERATED_COLUMN",
+        parameters = Map(
+          "fieldName" -> "b",
+          "expressionStr" -> genExpr,
+          "reason" -> readsDifferentlyReason))
+    }
+  }
+
+  test("SPARK-60757: createTable with a schema rejects a generation expression the session " +
+    "reads differently") {
+    val metadata = new MetadataBuilder()
+      .putString(GeneratedColumn.GENERATION_EXPRESSION_METADATA_KEY, "concat(a, 'x\\\\y')")
+      .build()
+    val schema = new StructType()
+      .add("a", StringType)
+      .add("b", StringType, nullable = true, metadata)
+    val tblName = "my_tab"
+    withSQLConf(SQLConf.ESCAPED_STRING_LITERALS.key -> "true") {
+      checkError(
+        exception = intercept[AnalysisException] {
+          spark.catalog.createTable(s"testcat.$tblName", "foo", schema, Map.empty[String, String])
+        },
+        condition = "UNSUPPORTED_EXPRESSION_GENERATED_COLUMN",
+        parameters = Map(
+          "fieldName" -> "b",
+          "expressionStr" -> "concat(a, 'x\\\\y')",
+          "reason" -> readsDifferentlyReason))
+    }
+  }
+
+  test("SPARK-60757: a stored text that is not a scalar expression fails the analysis of the " +
+    "write") {
+    val tblName = "my_tab"
+    withTable(s"testcat.$tblName") {
+      // A catalog can store a text that CREATE TABLE rejects.
+      catalog("testcat").asInstanceOf[InMemoryCatalog].createTable(
+        Identifier.of(Array(), tblName),
+        Array(
+          Column.create("i", IntegerType),
+          Column.create("b", IntegerType, true, null, "sum(i)", null)),
+        Array.empty[Transform],
+        Collections.emptyMap[String, String])
+      assertWriteFails("MISSING_GROUP_BY") {
+        sql(s"INSERT INTO testcat.$tblName(i) VALUES (1)")
+      }
+    }
+  }
+
+  test("SPARK-60757: a parser setting of the session does not reject an expression that reads " +
+    "the same") {
+    val tblName = "my_tab"
+    withTable(s"testcat.$tblName") {
+      withSQLConf(SQLConf.ESCAPED_STRING_LITERALS.key -> "true") {
+        sql(s"""CREATE TABLE testcat.$tblName(
+               |  a STRING,
+               |  b STRING GENERATED ALWAYS AS (concat(a, 'xy'))
+               |) USING foo""".stripMargin)
+        sql(s"INSERT INTO testcat.$tblName(a) VALUES ('v')")
+      }
+      checkAnswer(spark.table(s"testcat.$tblName"), Row("v", "vxy"))
+    }
+  }
+
+  test("SPARK-60757: the validation of a provided value reads the text of a table with a V2 form") {
+    val tblName = "my_tab"
+    withTable(s"testcat.$tblName") {
+      withSQLConf(SQLConf.ANSI_ENABLED.key -> "false") {
+        // The V2 form is COALESCE(s, '1'), with the implicit cast of a non-ANSI session.
+        sql(s"""CREATE TABLE testcat.$tblName(
+               |  s STRING,
+               |  b STRING GENERATED ALWAYS AS (coalesce(s, 1))
+               |) USING foo""".stripMargin)
+        val table = catalog("testcat").asTableCatalog.loadTable(Identifier.of(Array(), tblName))
+        val genExpr = table.columns().find(_.name == "b").get.columnGenerationExpression()
+        assert(genExpr.getExpression != null)
+        sql(s"INSERT INTO testcat.$tblName VALUES ('007', '7')")
+        sql(s"INSERT INTO testcat.$tblName(s) VALUES ('008')")
+        checkAnswer(spark.table(s"testcat.$tblName"), Seq(Row("007", "7"), Row("008", "8")))
+      }
+    }
+  }
+
+  test("SPARK-60757: the validation of a provided value does not substitute a variable") {
+    import testImplicits._
+    val tblName = "my_tab"
+    val variable = s"$${system:java.version}"
+    withTable(s"testcat.$tblName") {
+      withSQLConf(SQLConf.VARIABLE_SUBSTITUTE_ENABLED.key -> "false") {
+        sql(s"""CREATE TABLE testcat.$tblName(
+               |  a STRING,
+               |  b STRING GENERATED ALWAYS AS (concat(a, '$variable'))
+               |) USING foo""".stripMargin)
+        sql(s"INSERT INTO testcat.$tblName VALUES ('w', 'w$variable')")
+      }
+      // Substitution is on by default. A DataFrame write keeps the variable in its values.
+      Seq(("v", s"v$variable")).toDF("a", "b").writeTo(s"testcat.$tblName").append()
+      checkAnswer(
+        spark.table(s"testcat.$tblName"),
+        Seq(Row("w", s"w$variable"), Row("v", s"v$variable")))
+    }
+  }
+
+  test("SPARK-60757: a text the fixed settings cannot resolve is read under the session") {
+    val tblName = "my_tab"
+    withTable(s"testcat.$tblName") {
+      withSQLConf(SQLConf.ANSI_ENABLED.key -> "false") {
+        sql(s"""CREATE TABLE testcat.$tblName(
+               |  d DATE,
+               |  s STRING,
+               |  b BOOLEAN GENERATED ALWAYS AS (CAST(d AS BOOLEAN)),
+               |  c INT GENERATED ALWAYS AS (CAST(s AS INT))
+               |) USING foo""".stripMargin)
+        sql(s"INSERT INTO testcat.$tblName(d, s) VALUES (DATE'2024-01-01', '1')")
+        sql(s"INSERT INTO testcat.$tblName VALUES (DATE'2024-01-02', '2', NULL, 2)")
+        checkAnswer(
+          spark.table(s"testcat.$tblName"),
+          Seq(
+            Row(sqlDate("2024-01-01"), "1", null, 1),
+            Row(sqlDate("2024-01-02"), "2", null, 2)))
+        // The other column of the same write stays with the fixed settings.
+        assertWriteFails("CAST_INVALID_INPUT") {
+          sql(s"INSERT INTO testcat.$tblName(d, s) VALUES (DATE'2024-01-03', 'abc')")
+        }
+      }
+      withSQLConf(SQLConf.ANSI_ENABLED.key -> "true") {
+        assertWriteFails("DATATYPE_MISMATCH.CAST_WITH_CONF_SUGGESTION") {
+          sql(s"INSERT INTO testcat.$tblName(d, s) VALUES (DATE'2024-01-04', '4')")
+        }
+      }
+    }
+  }
+
+  test("SPARK-60757: a text the fixed settings cannot parse is read under the session") {
+    val tblName = "my_tab"
+    withTable(s"testcat.$tblName") {
+      // A table created before the DDL rejected this text.
+      catalog("testcat").asInstanceOf[InMemoryCatalog].createTable(
+        Identifier.of(Array(), tblName),
+        Array(
+          Column.create("s", new StructType().add("f", IntegerType)),
+          Column.create("b", IntegerType, true, null, "s.\"f\"", null)),
+        Array.empty[Transform],
+        Collections.emptyMap[String, String])
+      val autoFilled = s"INSERT INTO testcat.$tblName(s) VALUES (named_struct('f', 1))"
+      val provided = s"INSERT INTO testcat.$tblName VALUES (named_struct('f', 1), 1)"
+      withSQLConf(
+          SQLConf.ANSI_ENABLED.key -> "true",
+          SQLConf.DOUBLE_QUOTED_IDENTIFIERS.key -> "true") {
+        assert(!hasCheckInvariant(autoFilled))
+        assert(hasCheckInvariant(provided))
+      }
+      withSQLConf(SQLConf.DOUBLE_QUOTED_IDENTIFIERS.key -> "false") {
+        assertWriteFails("PARSE_SYNTAX_ERROR")(hasCheckInvariant(autoFilled))
+      }
+    }
+  }
+
+  test("SPARK-60757: a text the fixed settings cannot resolve keeps their parser settings") {
+    val tblName = "my_tab"
+    withTable(s"testcat.$tblName") {
+      withSQLConf(SQLConf.ANSI_ENABLED.key -> "false") {
+        sql(s"""CREATE TABLE testcat.$tblName(
+               |  d DATE,
+               |  s STRING,
+               |  b BOOLEAN GENERATED ALWAYS AS (CAST(d AS BOOLEAN) OR s = 'x\\\\y')
+               |) USING foo""".stripMargin)
+        withSQLConf(SQLConf.ESCAPED_STRING_LITERALS.key -> "true") {
+          sql(s"INSERT INTO testcat.$tblName(d, s) " +
+            "SELECT DATE'2024-01-01', concat('x', chr(92), 'y')")
+          sql(s"INSERT INTO testcat.$tblName " +
+            "SELECT DATE'2024-01-02', concat('x', chr(92), 'y'), true")
+        }
+        checkAnswer(
+          spark.table(s"testcat.$tblName"),
+          Seq(
+            Row(sqlDate("2024-01-01"), "x\\y", true),
+            Row(sqlDate("2024-01-02"), "x\\y", true)))
+      }
+    }
+  }
+
+  test("SPARK-60757: a text the fixed settings cannot analyze is read under the session") {
+    val tblName = "my_tab"
+    withTable(s"testcat.$tblName") {
+      withSQLConf(
+          SQLConf.ANSI_ENABLED.key -> "true",
+          SQLConf.DOUBLE_QUOTED_IDENTIFIERS.key -> "true") {
+        sql(s"""CREATE TABLE testcat.$tblName(
+               |  a INT,
+               |  b INT GENERATED ALWAYS AS (IDENTIFIER('"a"') + 1)
+               |) USING foo""".stripMargin)
+        assert(!hasCheckInvariant(s"INSERT INTO testcat.$tblName(a) VALUES (1)"))
+        assert(hasCheckInvariant(s"INSERT INTO testcat.$tblName VALUES (5, 6)"))
+      }
+    }
+  }
+
+  test("SPARK-60757: a V2 expression without a text that does not convert names its column") {
+    val tblName = "my_tab"
+    val genExpr = new GeneralScalarExpression("NOT_A_FUNCTION", Array.empty[V2Expression])
+    withTable(s"testcat.$tblName") {
+      catalog("testcat").asInstanceOf[InMemoryCatalog].createTable(
+        Identifier.of(Array(), tblName),
+        Array(
+          Column.create("a", IntegerType),
+          Column.builderFor("b", IntegerType)
+            .generationExpression(new GenerationExpression(genExpr)).build()),
+        Array.empty[Transform],
+        Collections.emptyMap[String, String])
+      checkError(
+        exception = intercept[AnalysisException] {
+          sql(s"INSERT INTO testcat.$tblName VALUES (1, 2)")
+        },
+        condition = "UNSUPPORTED_FEATURE.TABLE_OPERATION",
+        parameters = Map(
+          "tableName" -> "`testcat`.`my_tab`",
+          "operation" -> ("a value for the generated column `b`, because Spark cannot convert " +
+            s"its expression $genExpr")))
+    }
+  }
+
+  test("SPARK-60757: the validation of a provided value compares it with the stored value") {
+    val tblName = "my_tab"
+    Seq("false", "true").foreach { ansi =>
+      withTable(s"testcat.$tblName") {
+        withSQLConf(SQLConf.ANSI_ENABLED.key -> ansi) {
+          sql(s"""CREATE TABLE testcat.$tblName(
+                 |  s STRING,
+                 |  b STRING GENERATED ALWAYS AS (coalesce(s, 1))
+                 |) USING foo""".stripMargin)
+          sql(s"INSERT INTO testcat.$tblName VALUES ('007', '7')")
+          assertWriteFails("CHECK_CONSTRAINT_VIOLATION") {
+            sql(s"INSERT INTO testcat.$tblName VALUES ('007', '07')")
+          }
+          checkAnswer(spark.table(s"testcat.$tblName"), Row("007", "7"))
+        }
+      }
+    }
+  }
+
+  test("SPARK-60757: the check of a provided value reports the error of the expression") {
+    val tblName = "my_tab"
+    withTable(s"testcat.$tblName") {
+      sql(s"""CREATE TABLE testcat.$tblName(
+             |  a INT,
+             |  c DECIMAL(20, 0) GENERATED ALWAYS AS (a div 0)
+             |) USING foo""".stripMargin)
+      assertWriteFails("DIVIDE_BY_ZERO") {
+        sql(s"INSERT INTO testcat.$tblName VALUES (1, 0)")
+      }
+    }
+  }
+
+  test("SPARK-60757: a legacy config reads a generation expression under the session") {
+    val tblName = "my_tab"
+    withTable(s"testcat.$tblName") {
+      withSQLConf(
+          SQLConf.USE_CURRENT_SQL_CONFIGS_FOR_GENERATED_COLUMN.key -> "true",
+          SQLConf.ESCAPED_STRING_LITERALS.key -> "true") {
+        sql(s"""CREATE TABLE testcat.$tblName(
+               |  a STRING,
+               |  b STRING GENERATED ALWAYS AS (concat(a, 'x\\\\y'))
+               |) USING foo""".stripMargin)
+        sql(s"INSERT INTO testcat.$tblName(a) VALUES ('v')")
+        // The check of a provided value reads the text under the session too.
+        sql(s"INSERT INTO testcat.$tblName VALUES ('w', 'wx\\\\y')")
+      }
+      checkAnswer(
+        spark.table(s"testcat.$tblName"),
+        Seq(Row("v", "vx\\\\y"), Row("w", "wx\\\\y")))
+    }
+  }
+
+  test("SPARK-60757: a generation expression reads the timestamp type of the session") {
+    val tblName = "my_tab"
+    withTable(s"testcat.$tblName") {
+      withSQLConf(
+          SQLConf.SESSION_LOCAL_TIMEZONE.key -> "America/Los_Angeles",
+          SQLConf.TIMESTAMP_TYPE.key -> SQLConf.TimestampTypes.TIMESTAMP_NTZ.toString) {
+        sql(s"""CREATE TABLE testcat.$tblName(
+               |  a STRING,
+               |  b TIMESTAMP_NTZ GENERATED ALWAYS AS (to_timestamp(a))
+               |) USING foo""".stripMargin)
+        // This time does not exist in the time zone, so a TIMESTAMP_LTZ value would read 03:30.
+        sql(s"INSERT INTO testcat.$tblName(a) VALUES ('2024-03-10 02:30:00')")
+        checkAnswer(
+          spark.table(s"testcat.$tblName"),
+          Row("2024-03-10 02:30:00", java.time.LocalDateTime.parse("2024-03-10T02:30:00")))
+        assertWriteFails("CHECK_CONSTRAINT_VIOLATION") {
+          sql(s"INSERT INTO testcat.$tblName VALUES " +
+            "('2024-03-10 02:30:00', TIMESTAMP_NTZ'2024-03-10 03:30:00')")
+        }
+      }
+    }
+  }
+
+  test("SPARK-60757: a generation expression reads the decimal precision loss of the session") {
+    val tblName = "my_tab"
+    withTable(s"testcat.$tblName") {
+      withSQLConf(SQLConf.DECIMAL_OPERATIONS_ALLOW_PREC_LOSS.key -> "false") {
+        // Without the precision loss a * a is DECIMAL(38, 20), and with it DECIMAL(38, 17).
+        sql(s"""CREATE TABLE testcat.$tblName(
+               |  a DECIMAL(20, 10),
+               |  b DECIMAL(38, 20) GENERATED ALWAYS AS (a * a)
+               |) USING foo""".stripMargin)
+        sql(s"INSERT INTO testcat.$tblName(a) VALUES (1.1234567891)")
+        checkAnswer(
+          spark.table(s"testcat.$tblName"),
+          Row(new java.math.BigDecimal("1.1234567891"),
+            new java.math.BigDecimal("1.26215515697488187881")))
+      }
     }
   }
 }

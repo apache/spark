@@ -31,7 +31,7 @@ import org.apache.spark.sql.types.StringType
  *   2. Generate the result file:
  *      SPARK_GENERATE_BENCHMARK_FILES=1 build/sbt "sql/Test/runMain <this class>"
  *      Results will be written to
- *      "sql/core/benchmarks/SharedJsonParseBenchmark-results.txt" on JDK 17.
+ *      "sql/core/benchmarks/SharedJsonParseBenchmark-results.txt" on JDK 21.
  * }}}
  */
 object SharedJsonParseBenchmark extends SqlBasedBenchmark {

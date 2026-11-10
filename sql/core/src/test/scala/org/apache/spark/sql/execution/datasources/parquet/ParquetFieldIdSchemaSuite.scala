@@ -21,6 +21,7 @@ import scala.jdk.CollectionConverters._
 
 import org.apache.parquet.schema.{MessageType, MessageTypeParser}
 
+import org.apache.spark.SparkRuntimeException
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
 
@@ -526,4 +527,74 @@ class ParquetFieldIdSchemaSuite extends ParquetSchemaTest {
         |  }
         |}
       """.stripMargin)
+
+  test("SPARK-60262: clipping with field id fails on a Parquet field requested twice") {
+    val fileSchema = MessageTypeParser.parseMessageType(
+      """message root {
+        |  optional int32 A = 1;
+        |  optional group s = 2 {
+        |    optional int32 B = 3;
+        |  }
+        |  optional int32 C = 4;
+        |}
+      """.stripMargin)
+
+    def clip(catalystSchema: StructType, caseSensitive: Boolean = false): MessageType =
+      ParquetReadSupport.clipParquetSchema(
+        fileSchema,
+        catalystSchema,
+        caseSensitive = caseSensitive,
+        useFieldId = true,
+        returnNullStructIfAllFieldsMissing = false)
+
+    def checkFails(
+        catalystSchema: StructType,
+        requestedFields: String,
+        parquetField: String,
+        caseSensitive: Boolean = false): Unit = {
+      checkError(
+        exception = intercept[SparkRuntimeException](clip(catalystSchema, caseSensitive)),
+        condition = "PARQUET_FIELD_REQUESTED_MORE_THAN_ONCE",
+        parameters = Map(
+          "requestedFields" -> requestedFields,
+          "parquetField" -> parquetField,
+          "fieldIdReadConf" -> "\"spark.sql.parquet.fieldId.read.enabled\""))
+    }
+
+    // One field selects the Parquet field by id and the other by name, in either order.
+    checkFails(
+      new StructType().add("x", IntegerType, true, withId(1)).add("a", IntegerType, true),
+      "`x`, `a`", "`A`")
+    checkFails(
+      new StructType().add("a", IntegerType, true).add("x", IntegerType, true, withId(1)),
+      "`a`, `x`", "`A`")
+    checkFails(
+      new StructType().add("x", IntegerType, true, withId(1)).add("A", IntegerType, true),
+      "`x`, `A`", "`A`", caseSensitive = true)
+
+    // Both select it by id, with an unrelated field between them.
+    checkFails(
+      new StructType()
+        .add("x", IntegerType, true, withId(1))
+        .add("c", IntegerType, true)
+        .add("y", IntegerType, true, withId(1)),
+      "`x`, `y`", "`A`")
+    // A third field selects it by name as well, and all three are reported.
+    checkFails(
+      new StructType()
+        .add("x", IntegerType, true, withId(1))
+        .add("y", IntegerType, true, withId(1))
+        .add("a", IntegerType, true),
+      "`x`, `y`, `a`", "`A`")
+
+    // The fields of a nested struct are clipped on their own.
+    checkFails(
+      new StructType().add(
+        "s", new StructType().add("x", IntegerType, true, withId(3)).add("b", IntegerType), true),
+      "`x`, `b`", "`B`")
+
+    // Fields that select different Parquet fields, or none, are fine.
+    clip(new StructType().add("x", IntegerType, true, withId(1)).add("c", IntegerType, true))
+    clip(new StructType().add("x", IntegerType, true, withId(1)).add("z", IntegerType, true))
+  }
 }

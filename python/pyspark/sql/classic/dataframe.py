@@ -49,7 +49,7 @@ from pyspark.errors import (
 )
 from pyspark.resource import ResourceProfile
 from pyspark.serializers import BatchedSerializer, CPickleSerializer, UTF8Deserializer
-from pyspark.sql.classic.column import _to_java_column, _to_list, _to_seq
+from pyspark.sql.classic.column import _to_java_column, _to_java_column_opt, _to_list, _to_seq
 from pyspark.sql.column import Column
 from pyspark.sql.dataframe import (
     DataFrame as ParentDataFrame,
@@ -70,6 +70,7 @@ from pyspark.sql.table_arg import TableArg
 from pyspark.sql.types import (
     Row,
     StructType,
+    _first_timestamp_nanos_map_key_type,
     _parse_datatype_json_string,
 )
 from pyspark.sql.utils import get_active_spark_context, to_java_array, to_scala_map
@@ -506,13 +507,29 @@ class DataFrame(ParentDataFrame, PandasMapOpsMixin, PandasConversionMixin):
     def count(self) -> int:
         return int(self._jdf.count())
 
+    def _check_timestamp_nanos_map_key(self) -> None:
+        # SPARK-57462: a nanosecond timestamp map key collapses to a single microsecond
+        # datetime.datetime on the Python side, dropping an entry. The value conversion runs in a
+        # background serve thread, whose exception would surface to collect() as a normal EOF
+        # (empty/partial result, not an error), so reject the schema up front here instead.
+        key_type = _first_timestamp_nanos_map_key_type(self.schema)
+        if key_type is not None:
+            from pyspark.errors import PySparkTypeError
+
+            raise PySparkTypeError(
+                errorClass="TIMESTAMP_NANOS_PYTHON_MAP_KEY",
+                messageParameters={"type": key_type.simpleString()},
+            )
+
     def collect(self) -> List[Row]:
+        self._check_timestamp_nanos_map_key()
         with SCCallSiteSync(self._sc):
             sock_info = self._jdf.collectToPython()
         with _load_from_socket(sock_info, BatchedSerializer(CPickleSerializer())) as stream:
             return list(stream)
 
     def toLocalIterator(self, prefetchPartitions: bool = False) -> Iterator[Row]:
+        self._check_timestamp_nanos_map_key()
         with SCCallSiteSync(self._sc):
             sock_info = self._jdf.toPythonIterator(prefetchPartitions)
         return _local_iterator_from_socket(sock_info, BatchedSerializer(CPickleSerializer()))
@@ -529,6 +546,7 @@ class DataFrame(ParentDataFrame, PandasMapOpsMixin, PandasConversionMixin):
         return self.limit(num).collect()
 
     def tail(self, num: int) -> List[Row]:
+        self._check_timestamp_nanos_map_key()
         with SCCallSiteSync(self._sc):
             sock_info = self._jdf.tailToPython(num)
         with _load_from_socket(sock_info, BatchedSerializer(CPickleSerializer())) as stream:
@@ -1200,6 +1218,76 @@ class DataFrame(ParentDataFrame, PandasMapOpsMixin, PandasConversionMixin):
 
         jgd = self._jdf.groupingSets(jgrouping_sets, self._jcols_ordinal(*cols))
         return GroupedData(jgd, self)
+
+    def binBy(
+        self,
+        rangeStart: "ColumnOrName",
+        rangeEnd: "ColumnOrName",
+        binWidth: Column,
+        distributeUniform: Union[List["ColumnOrName"], Tuple["ColumnOrName", ...]],
+        *,
+        alignTo: Optional[Column] = None,
+        binStartName: Optional[str] = None,
+        binEndName: Optional[str] = None,
+        binDistributeRatioName: Optional[str] = None,
+    ) -> ParentDataFrame:
+        expressions = {"binWidth": binWidth}
+        if alignTo is not None:
+            expressions["alignTo"] = alignTo
+        for arg_name, expression in expressions.items():
+            if not isinstance(expression, Column):
+                raise PySparkTypeError(
+                    errorClass="NOT_EXPECTED_TYPE",
+                    messageParameters={
+                        "arg_name": arg_name,
+                        "expected_type": "Column",
+                        "arg_type": type(expression).__name__,
+                    },
+                )
+
+        if not isinstance(distributeUniform, (list, tuple)):
+            raise PySparkTypeError(
+                errorClass="NOT_EXPECTED_TYPE",
+                messageParameters={
+                    "arg_name": "distributeUniform",
+                    "expected_type": "list or tuple",
+                    "arg_type": type(distributeUniform).__name__,
+                },
+            )
+        aliases = {
+            "binStartName": binStartName,
+            "binEndName": binEndName,
+            "binDistributeRatioName": binDistributeRatioName,
+        }
+        for arg_name, name in aliases.items():
+            if name is not None and not isinstance(name, str):
+                raise PySparkTypeError(
+                    errorClass="NOT_EXPECTED_TYPE",
+                    messageParameters={
+                        "arg_name": arg_name,
+                        "expected_type": "str",
+                        "arg_type": type(name).__name__,
+                    },
+                )
+
+        assert self._sc._gateway is not None
+        assert self._sc._jvm is not None
+        columns = to_java_array(
+            self._sc._gateway,
+            self._sc._jvm.org.apache.spark.sql.Column,
+            [_to_java_column(column) for column in distributeUniform],
+        )
+        jdf = self._jdf.binBy(
+            _to_java_column(rangeStart),
+            _to_java_column(rangeEnd),
+            _to_java_column(binWidth),
+            columns,
+            _to_java_column_opt(alignTo),
+            binStartName,
+            binEndName,
+            binDistributeRatioName,
+        )
+        return DataFrame(jdf, self.sparkSession)
 
     def unpivot(
         self,

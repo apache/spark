@@ -63,6 +63,29 @@ class ErrorNotifierSuite extends SparkFunSuite {
     assert(err.getSuppressed.isEmpty)
   }
 
+  test("markError does not suppress an error whose graph contains the retained error") {
+    val notifier = new ErrorNotifier
+    val first = new RuntimeException("first")
+    val second = new RuntimeException("second", first)
+
+    notifier.markError(first)
+    notifier.markError(second)
+
+    assert(notifier.getError().contains(first))
+    assert(first.getSuppressed.isEmpty)
+  }
+
+  test("tryMarkError does not suppress an error when another error was retained first") {
+    val notifier = new ErrorNotifier
+    val first = new RuntimeException("first")
+    val second = new RuntimeException("second")
+
+    assert(notifier.tryMarkError(first))
+    assert(!notifier.tryMarkError(second))
+    assert(notifier.getError().contains(first))
+    assert(first.getSuppressed.isEmpty)
+  }
+
   test("concurrent markError retains exactly one error and suppresses the rest") {
     val notifier = new ErrorNotifier
     val numThreads = 8
@@ -83,5 +106,30 @@ class ErrorNotifierSuite extends SparkFunSuite {
     assert(errors.contains(winner.get))
     // Every losing error must be attached as suppressed on the winner, so none is lost.
     assert(winner.get.getSuppressed.toSet == errors.filterNot(_ eq winner.get).toSet)
+  }
+
+  test("concurrent markError suppresses only one error when losing graphs overlap") {
+    val notifier = new ErrorNotifier
+    val first = new RuntimeException("first")
+    val sharedCause = new RuntimeException("shared")
+    val numThreads = 8
+    val errors = (0 until numThreads).map { i =>
+      new RuntimeException(s"err-$i", sharedCause)
+    }
+    val barrier = new CyclicBarrier(numThreads)
+    notifier.markError(first)
+
+    val threads = errors.map { error =>
+      new Thread(() => {
+        barrier.await()
+        notifier.markError(error)
+      })
+    }
+    threads.foreach(_.start())
+    threads.foreach(_.join())
+
+    assert(first.getSuppressed.length === 1)
+    assert(errors.contains(first.getSuppressed.head))
+    assert(!SparkErrorUtils.stackTraceToString(first).contains("CIRCULAR REFERENCE"))
   }
 }

@@ -223,11 +223,8 @@ import org.apache.spark.sql.errors.QueryCompilationErrors
  *    plan. In this case we call [[pushMapping]] with `isSubqueryRoot = true` to pass the current
  *    mapping as outer mapping to the subquery branches. Any subquery branch may reference
  *    outer attributes, so if `isSubqueryRoot` is `false`, we pass the previous `outerMapping` to
- *    lower branches. For every subquery level, if
- *    `spark.sql.optimizer.supportNestedCorrelatedSubqueries.enabled` is set to `false`, only
- *    one level of correlation is supported and the current `mapping` becomes `outerMapping`
- *    for the next level. Otherwise, the current `mapping` is merged with existing
- *    `outerMapping` as the new `outerMapping` for the next level.
+ *    lower branches. For every subquery level, the current `mapping` becomes the new
+ *    `outerMapping` for the next level.
  *  - Continue remapping expressions until we reach the root of the operator tree.
  */
 class ExpressionIdAssigner {
@@ -244,10 +241,8 @@ class ExpressionIdAssigner {
    * @param isSubqueryRoot whether the new branch is related to a subquery root.
    *   If the new branch is not related to a subquery root, we propagate `outerMapping` itself,
    *   because any nested subquery operator may reference outer attributes.
-   *   If the new branch is related to a subquery root and
-   *   `spark.sql.optimizer.supportNestedCorrelatedSubqueries` is turned off, we propagate current
-   *   `mapping` as the new `outerMapping` for the next level. If the flag is turned on, we
-   *   merge current `mapping` with existing `outerMapping` as new `outerMapping`.
+   *   If the new branch is related to a subquery root, we propagate current `mapping` as the new
+   *   `outerMapping` for the next level.
    */
   def pushMapping(isSubqueryRoot: Boolean = false): Unit = {
     val currentStackEntry = mappingStack.peek()
@@ -270,10 +265,11 @@ class ExpressionIdAssigner {
    * @param collectChildMapping whether to collect a child mapping into the current stack entry.
    *   This is used in multi-child operators to automatically propagate mapped expression IDs
    *   upwards using [[createMappingFromChildMappings]].
-   * @param oldOutputSet a special parameter used when AssignNewExprIds is calling [[popMapping]]
-   *   for optimized plans. oldOutputSet contains the original output `ExprId`s for the current
-   *   child plan. If it is not empty, [[popMapping]] filters out Ids not related to the original
-   *   outputSet and only maintains the mapping from original oldId to new Id and new Id to itself.
+   * @param oldOutputSet a special parameter used when [[popMapping]] is called while reassigning
+   *   expression IDs in optimized plans. oldOutputSet contains the original output `ExprId`s for
+   *   the current child plan. If it is not empty, [[popMapping]] filters out Ids not related to the
+   *   original outputSet and only maintains the mapping from original oldId to new Id and new Id to
+   *   itself.
    *   This is useful because certain optimization plans may contain duplicated `ExprId`s covered
    *   with aliases from different branches. E.g:
    *   {{{
@@ -536,21 +532,16 @@ class ExpressionIdAssigner {
    * df.groupBy($"a", $"b".as("sum_d")).agg(Map.empty[String, String])
    * }}}
    *
-   * `alwaysUpdateAttributeReferences` and `alwaysMaintainAttributeReferences` are used in
-   * `AssignNewExprIds` when reassigning expression ids for optimized plans.
+   * `alwaysUpdateAttributeReferences` and `alwaysMaintainAttributeReferences` are used when
+   * reassigning expression ids for optimized plans.
    * Setting `alwaysUpdateAttributeReferences` to true ensures that a new expression id is assigned
    * to the input expression when it is not in the current mapping, regardless of whether it is in
    * `globalExpressionIds` or not. This is usually used for new attributes generated from special
    * operators like `Generate`, `Expand`, `UnionLoop`, etc.
-   * For example, when optimization rules duplicate plans and call `AssignNewExprIds` to reassign
-   * the expression ids in the duplicate plan, it expects all the attributes in the duplicate plan
-   * to get new expression ids except for AggregateExpressions used in Partial Aggregates.
+   * For example, when optimization rules duplicate plans and reassign the expression ids in the
+   * duplicate plan, they expect all the attributes in the duplicate plan to get new expression ids
+   * except for AggregateExpressions used in Partial Aggregates.
    * {{{
-   * caller:
-   *   // Some optimization rules which do self joins
-   *   val duplicate = AssignNewExprId(plan)
-   *   val res = Join(plan, duplicate)
-   *
    * plan:
    * Project [out#1, null AS NULL#2, 'column' AS column#3]
    * +- Generate explode(array(1, 2)), false, [out#1]
@@ -570,8 +561,7 @@ class ExpressionIdAssigner {
    * expression id, regardless of whether it is in `globalExpressionIds` or not. This is used to
    * keep the intermediate results of [[Partial]]/[[PartialMerge]] mode [[AggregateExpression]]s
    * unchanged. Analyzer usecase does not need this feature as [[Partial]]/[[PartialMerge]] mode
-   * [[AggregateExpression]] only appear after the optimization rule
-   * [[AggregatePushdownThroughJoins]].
+   * [[AggregateExpression]] only appear after optimization.
    */
   def mapExpression[NamedExpressionType <: NamedExpression](
       originalExpression: NamedExpressionType,
@@ -778,8 +768,8 @@ class ExpressionIdAssigner {
    * expression, or return a corresponding new instance of the same attribute, that was previously
    * reallocated and is present in the current [[mappingStack]] entry or the outer mapping.
    *
-   * This function is used in [[AssignNewExprIds]] when the originalAttribute can be either from
-   * the current mapping or from the outer mapping.
+   * This function is used when reassigning expression IDs in optimized plans, where the
+   * originalAttribute can be either from the current mapping or from the outer mapping.
    */
   def mapExpressionOrOuterReference(
       originalAttribute: AttributeReference): AttributeReference = {

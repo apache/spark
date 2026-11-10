@@ -27,7 +27,7 @@ import org.apache.spark.sql.catalyst.{QueryPlanningTracker, QueryPlanningTracker
 import org.apache.spark.sql.catalyst.analysis.{CurrentNamespace, UnresolvedFunction, UnresolvedRelation}
 import org.apache.spark.sql.catalyst.expressions.{Alias, NamedLambdaVariable, RegExpReplace, UnsafeRow}
 import org.apache.spark.sql.catalyst.plans.QueryPlan
-import org.apache.spark.sql.catalyst.plans.logical.{CommandResult, LogicalPlan, OneRowRelation, Project, ShowTables, SubqueryAlias}
+import org.apache.spark.sql.catalyst.plans.logical.{Command, CommandResult, LogicalPlan, OneRowRelation, Project, ShowTables, SubqueryAlias, Union, WithCTE}
 import org.apache.spark.sql.catalyst.trees.TreeNodeTag
 import org.apache.spark.sql.catalyst.util.StringUtils.PlanStringConcat
 import org.apache.spark.sql.classic.Dataset
@@ -542,6 +542,46 @@ class QueryExecutionSuite extends SharedSparkSession {
     mockCallback.assertAnalyzed()
   }
 
+  test("dynamic INSERT target analysis is tracked") {
+    withTable("target_table") {
+      sql("CREATE TABLE target_table (id INT) USING parquet")
+
+      val tracker = new QueryPlanningTracker
+      val plan = spark.sessionState.sqlParser.parsePlan(
+        "INSERT INTO IDENTIFIER(lower('TARGET_TABLE')) VALUES (1)")
+      new QueryExecution(spark, plan, tracker).assertAnalyzed()
+
+      val identifierResolution = tracker.rules.collectFirst {
+        case (name, summary) if name.endsWith("ResolveIdentifierClause") => summary
+      }.getOrElse(fail("ResolveIdentifierClause was not tracked"))
+      assert(identifierResolution.numEffectiveInvocations === 1)
+    }
+  }
+
+  test("dynamic INSERT target analysis failure is reported") {
+    var failedPlan: LogicalPlan = null
+    val callback = new QueryPlanningTrackerCallback {
+      override def analysisFailed(
+          tracker: QueryPlanningTracker,
+          parsedPlan: LogicalPlan): Unit = failedPlan = parsedPlan
+
+      override def analyzed(tracker: QueryPlanningTracker, analyzedPlan: LogicalPlan): Unit =
+        fail("analysis should fail")
+
+      override def readyForExecution(tracker: QueryPlanningTracker): Unit =
+        fail("query should not be ready for execution")
+    }
+    val plan = spark.sessionState.sqlParser.parsePlan(
+      "INSERT INTO IDENTIFIER(1) VALUES (1)")
+    val qe = new QueryExecution(
+      spark,
+      plan,
+      new QueryPlanningTracker(Some(callback)))
+
+    intercept[AnalysisException](qe.assertAnalyzed())
+    assert(failedPlan eq plan)
+  }
+
   test("SPARK-51265: IncrementalExecution should set the command execution code correctly") {
     withTempView("s") {
       val streamDf = spark.readStream.format("rate").load()
@@ -713,6 +753,29 @@ class QueryExecutionSuite extends SharedSparkSession {
       assert(trackerAnalyzed != null)
       assert(trackerReadyForExecution != null)
     }
+  }
+
+  test("SPARK-59689: isEagerlyExecutedCommand classifies eager-command plan shapes") {
+    val parser = spark.sessionState.sqlParser
+    // A bare command and a non-command query, obtained without executing them.
+    val command = parser.parsePlan("SET spark.sql.ansi.enabled=true")
+    assert(command.isInstanceOf[Command])
+    val query = parser.parsePlan("SELECT 1")
+    assert(!query.isInstanceOf[Command])
+
+    // The WithCTE-wrapped shapes cannot arise from SQL parsing (a CTE on a DML command is pushed
+    // into the command's query child), so build them directly. This is the classifier EXECUTE
+    // IMMEDIATE's deferral and INTO rejection both gate on.
+    assert(QueryExecution.isEagerlyExecutedCommand(command))
+    assert(QueryExecution.isEagerlyExecutedCommand(Union(Seq(command, command))))
+    assert(QueryExecution.isEagerlyExecutedCommand(WithCTE(command, Nil)))
+    assert(QueryExecution.isEagerlyExecutedCommand(WithCTE(Union(Seq(command, command)), Nil)))
+
+    // Queries -- including a Union or WithCTE that wraps them -- are not eager commands.
+    assert(!QueryExecution.isEagerlyExecutedCommand(query))
+    assert(!QueryExecution.isEagerlyExecutedCommand(Union(Seq(query, query))))
+    assert(!QueryExecution.isEagerlyExecutedCommand(WithCTE(query, Nil)))
+    assert(!QueryExecution.isEagerlyExecutedCommand(Union(Seq(command, query))))
   }
 }
 

@@ -62,6 +62,8 @@ import org.apache.spark.util.{SerializableConfiguration, Utils}
  *                             It is passed in by reference from MicrobatchExecution, so it is
  *                             populated during planning in the first batch, and passed in to the
  *                             StatefulOperatorStateInfo on every subsequent batch
+ * @param pushedFilterRewrites the rewrites of the pushed filters of the query, which its
+ *                             micro-batches share, see StreamingV2ScanPushDown.checkPushedFilters
  */
 class IncrementalExecution(
     sparkSession: SparkSession,
@@ -84,7 +86,9 @@ class IncrementalExecution(
       MutableMap[Long, StateSchemaBroadcast](),
     mode: CommandExecutionMode.Value = CommandExecutionMode.ALL,
     val isTerminatingTrigger: Boolean = false,
-    val isRealTimeMode: Boolean = false)
+    val isRealTimeMode: Boolean = false,
+    pushedFilterRewrites: StreamingV2ScanPushDown.PushedFilterRewrites =
+      new StreamingV2ScanPushDown.PushedFilterRewrites)
   extends QueryExecution(sparkSession, logicalPlan, mode = mode,
     shuffleCleanupModeOpt =
       Some(QueryExecution.determineShuffleCleanupMode(sparkSession.sessionState.conf)),
@@ -150,6 +154,10 @@ class IncrementalExecution(
         ts.toLiteral
       case e: ExpressionWithRandomSeed => e.withNewSeed(Utils.random.nextLong())
     }
+    // The scans of the sources may drop the rows that fail the filters that they got when the
+    // query started, which the plan must still apply to all the rows that it reads, see
+    // StreamingV2ScanPushDown.
+    StreamingV2ScanPushDown.checkPushedFilters(sparkSession, optimized, pushedFilterRewrites)
     WidenStatefulOperatorAttributeNullability(optimized)
   }
 
@@ -788,7 +796,7 @@ class IncrementalExecution(
    * Fan-out -- one shuffle read by more than one consumer -- is a limitation that marking a shuffle
    * here introduces, not one that was already there. A regular materialized shuffle serves any
    * number of consumers; a pipelined one is transient and read once, so the DAGScheduler rejects
-   * fan-out for a PipelinedShuffleDependency specifically (checkPipelinedGroupsSupportedInRDDGraph,
+   * fan-out for a PipelinedShuffleDependency specifically (checkPipelinedJobSupported,
    * inert for a regular ShuffleDependency). So a fan-out query that runs fine unmarked is rejected
    * once this rule marks it. The check runs in handleJobSubmitted, so it rejects the batch's job
    * rather than the query: such a query fails the same way on every batch instead of failing once

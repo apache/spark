@@ -499,6 +499,10 @@ class JoinEstimationSuite extends StatsEstimationTestBase {
           nullCount = Some(0), avgLen = Some(16), maxLen = Some(16)),
         AttributeReference("cstring", StringType)() -> ColumnStat(distinctCount = Some(1),
           min = None, max = None, nullCount = Some(0), avgLen = Some(3), maxLen = Some(3)),
+        AttributeReference("cchar", CharType(3))() -> ColumnStat(distinctCount = Some(1),
+          min = None, max = None, nullCount = Some(0), avgLen = Some(3), maxLen = Some(3)),
+        AttributeReference("cvarchar", VarcharType(3))() -> ColumnStat(distinctCount = Some(1),
+          min = None, max = None, nullCount = Some(0), avgLen = Some(3), maxLen = Some(3)),
         AttributeReference("cbinary", BinaryType)() -> ColumnStat(distinctCount = Some(1),
           min = None, max = None, nullCount = Some(0), avgLen = Some(3), maxLen = Some(3)),
         AttributeReference("cdate", DateType)() -> ColumnStat(distinctCount = Some(1),
@@ -531,6 +535,10 @@ class JoinEstimationSuite extends StatsEstimationTestBase {
           rowCount = Some(1),
           attributeStats = AttributeMap(Seq(key1 -> columnInfo1(key1), key2 -> columnInfo1(key1))))
         assert(join.stats == expectedStats)
+        if (key1.dataType.isInstanceOf[StringType]) {
+          // UTF8 rows include the average payload length plus base and offset overhead.
+          assert(join.stats.sizeInBytes == 38)
+        }
       }
     }
   }

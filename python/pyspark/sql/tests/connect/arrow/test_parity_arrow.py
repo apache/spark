@@ -24,14 +24,6 @@ from pyspark.testing.pandasutils import PandasOnSparkTestUtils
 
 
 class ArrowParityTests(ArrowTestsMixin, ReusedConnectTestCase, PandasOnSparkTestUtils):
-    @unittest.skip("Spark Connect does not support fallback.")
-    def test_createDataFrame_fallback_disabled(self):
-        super().test_createDataFrame_fallback_disabled()
-
-    @unittest.skip("Spark Connect does not support fallback.")
-    def test_createDataFrame_fallback_enabled(self):
-        super().test_createDataFrame_fallback_enabled()
-
     def test_createDataFrame_pandas_with_map_type(self):
         self.check_createDataFrame_pandas_with_map_type(True)
 
@@ -113,14 +105,6 @@ class ArrowParityTests(ArrowTestsMixin, ReusedConnectTestCase, PandasOnSparkTest
 
     def test_toPandas_with_array_type(self):
         self.check_toPandas_with_array_type(True)
-
-    @unittest.skip("Spark Connect does not support fallback.")
-    def test_toPandas_fallback_disabled(self):
-        super().test_toPandas_fallback_disabled()
-
-    @unittest.skip("Spark Connect does not support fallback.")
-    def test_toPandas_fallback_enabled(self):
-        super().test_toPandas_fallback_enabled()
 
     def test_toPandas_with_map_type(self):
         self.check_toPandas_with_map_type(True)

@@ -21,6 +21,7 @@ import org.apache.spark.sql.catalyst.analysis.FunctionRegistry
 import org.apache.spark.sql.catalyst.analysis.TypeCheckResult
 import org.apache.spark.sql.catalyst.util.ArrayBasedMapData
 import org.apache.spark.sql.errors.QueryCompilationErrors
+import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types.{MapType, NullType, StringType}
 import org.apache.spark.unsafe.types.UTF8String
 import org.apache.spark.util.Utils
@@ -57,16 +58,44 @@ import org.apache.spark.util.Utils
     is undefined: it may fail or return arbitrary result.
     To deserialize the data with a compatible and evolved schema, the expected Avro schema can be
     set via the corresponding option.
+    CHAR/VARCHAR come from the spark.sql.catalyst.type property on Avro string fields,
+    and for map keys from spark.sql.catalyst.mapKey.type on the Avro map schema
+    (both written by Spark's Avro writer). Assignment is accepted when CHAR/VARCHAR are
+    first-class (spark.sql.charVarchar.standardSemantics.enabled or
+    spark.sql.preserveCharVarcharTypeInfo). Then STRING values are assigned (CHAR padded).
+    Overflow is a malformed record: FAILFAST fails with EXCEED_LIMIT_LENGTH as the cause;
+    PERMISSIVE returns a struct with every field NULL (NULL for a non-struct schema).
+    When CHAR/VARCHAR are not first-class, CHAR/VARCHAR in the Avro schema are read as
+    STRING without padding or length checks. Avro ENUM symbols are not assigned.
+    CHAR/VARCHAR map-key length checks require
+    spark.sql.charVarchar.standardSemantics.enabled and do not pad or trim.
   """,
   group = "avro_funcs",
   since = "4.0.0"
 )
 // scalastyle:on line.size.limit
-case class FromAvro(child: Expression, jsonFormatSchema: Expression, options: Expression)
+case class FromAvro(
+    child: Expression,
+    jsonFormatSchema: Expression,
+    options: Expression,
+    // PERSISTED: copy()/views keep analysis-time CHAR/VARCHAR flags. FromAvro is
+    // RuntimeReplaceable, so a new replacement would otherwise re-read SQLConf.
+    // FunctionRegistry matches Expression-only ctors; keep 2-arg and 3-arg.
+    charVarcharStandardSemantics: Boolean,
+    charVarcharFirstClassTypes: Boolean)
   extends TernaryExpression with RuntimeReplaceable {
   override def first: Expression = child
   override def second: Expression = jsonFormatSchema
   override def third: Expression = options
+
+  // FunctionRegistry matches Expression-only ctors; keep 2-arg and 3-arg.
+  def this(child: Expression, jsonFormatSchema: Expression, options: Expression) =
+    this(
+      child,
+      jsonFormatSchema,
+      options,
+      SQLConf.get.charVarcharStandardSemantics,
+      SQLConf.get.charVarcharFirstClassTypes)
 
   def this(child: Expression, jsonFormatSchema: Expression) =
     this(child, jsonFormatSchema, Literal.create(null))
@@ -120,17 +149,30 @@ case class FromAvro(child: Expression, jsonFormatSchema: Expression, options: Ex
         Map.empty
     }
     val constructor = try {
-      Utils.classForName("org.apache.spark.sql.avro.AvroDataToCatalyst").getConstructors().head
+      // 5-arg primary: child, schema, options, plus the two persisted CHAR/VARCHAR flags.
+      Utils.classForName("org.apache.spark.sql.avro.AvroDataToCatalyst").getConstructors
+        .find { c =>
+          val t = c.getParameterTypes
+          t.length == 5 && t(3) == classOf[Boolean] && t(4) == classOf[Boolean]
+        }.get
     } catch {
       case _: java.lang.ClassNotFoundException =>
         throw QueryCompilationErrors.avroNotLoadedSqlFunctionsUnusable(functionName = "FROM_AVRO")
     }
-    val expr = constructor.newInstance(child, schemaValue, optionsValue)
+    val expr = constructor.newInstance(
+      child,
+      schemaValue,
+      optionsValue,
+      Boolean.box(charVarcharStandardSemantics),
+      Boolean.box(charVarcharFirstClassTypes))
     expr.asInstanceOf[Expression]
   }
 
   override def prettyName: String =
     getTagValue(FunctionRegistry.FUNC_ALIAS).getOrElse("from_avro")
+
+  // Persist flags are not user arguments; omit them from EXPLAIN / Connect goldens.
+  override protected def stringArgs: Iterator[Any] = super.stringArgs.take(3)
 }
 
 /**
@@ -160,6 +202,10 @@ case class FromAvro(child: Expression, jsonFormatSchema: Expression, options: Ex
        [true]
       > SELECT _FUNC_(s) IS NULL FROM (SELECT NULL AS s);
        [true]
+  """,
+  note = """
+    `_FUNC_` serializes the current string content. It does not pad CHAR values or trim
+    VARCHAR values.
   """,
   group = "avro_funcs",
   since = "4.0.0"

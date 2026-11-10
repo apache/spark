@@ -19,27 +19,28 @@ package org.apache.spark.sql.execution.datasources.v2
 
 import java.util.{Collections, Optional, OptionalLong}
 
-import org.apache.spark.SparkException
+import org.apache.spark.{SparkException, SparkIllegalArgumentException}
 import org.apache.spark.sql.catalyst.analysis.{MultiInstanceRelation, NamedRelation, TimeTravelSpec}
 import org.apache.spark.sql.catalyst.catalog.{CatalogColumnStat, CatalogStatistics}
-import org.apache.spark.sql.catalyst.expressions.{Attribute, AttributeMap, AttributeReference, AttributeSet, Expression, SortOrder, V2ExpressionUtils}
+import org.apache.spark.sql.catalyst.expressions.{And, Attribute, AttributeMap, AttributeReference, AttributeSeq, AttributeSet, Expression, ExpressionSet, Literal, ProjectionOverSchema, SortOrder, V2ExpressionUtils}
 import org.apache.spark.sql.catalyst.plans.QueryPlan
 import org.apache.spark.sql.catalyst.plans.logical.{ColumnStat, ExposesMetadataColumns, Histogram, HistogramBin, LeafNode, LogicalPlan, Statistics}
-import org.apache.spark.sql.catalyst.plans.logical.statsEstimation.EstimationUtils
+import org.apache.spark.sql.catalyst.plans.logical.statsEstimation.{EstimationUtils, FilterEstimation}
 import org.apache.spark.sql.catalyst.streaming.{StreamingSourceIdentifyingName, Unassigned}
 import org.apache.spark.sql.catalyst.trees.TreePattern.{DATA_SOURCE_V2_RELATION, DATA_SOURCE_V2_SCAN_RELATION, TreePattern}
-import org.apache.spark.sql.catalyst.types.DataTypeUtils.toAttributes
+import org.apache.spark.sql.catalyst.types.DataTypeUtils.{fromAttributes, toAttributes}
 import org.apache.spark.sql.catalyst.util.{removeInternalMetadata, truncatedString, CharVarcharUtils}
 import org.apache.spark.sql.connector.catalog.{CatalogPlugin, FunctionCatalog, Identifier, SupportsMetadataColumns, Table, TableCapability, TableCatalog, V2TableUtil}
 import org.apache.spark.sql.connector.catalog.CatalogV2Implicits.CatalogHelper
 import org.apache.spark.sql.connector.expressions.{FieldReference, NamedReference}
-import org.apache.spark.sql.connector.read.{Scan, Statistics => V2Statistics, SupportsReportStatistics, SupportsRuntimeV2Filtering}
+import org.apache.spark.sql.connector.read.{Scan, Statistics => V2Statistics, SupportsReportStatistics, SupportsRuntimeV2Filtering, SupportsStorageFilters}
 import org.apache.spark.sql.connector.read.colstats.{ColumnStatistics, Histogram => V2Histogram, HistogramBin => V2HistogramBin}
 import org.apache.spark.sql.connector.read.streaming.{Offset, SparkDataStream}
+import org.apache.spark.sql.errors.QueryCompilationErrors
+import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.internal.connector.{SupportsRuntimeCatalystFiltering, V2StatisticsUtils}
 import org.apache.spark.sql.types.{DataType, StructType}
 import org.apache.spark.sql.util.CaseInsensitiveStringMap
-import org.apache.spark.util.ArrayImplicits._
 import org.apache.spark.util.Utils
 
 /**
@@ -136,7 +137,9 @@ case class DataSourceV2Relation(
   def withMetadataColumns(): DataSourceV2Relation = {
     val newMetadata = metadataOutput.filterNot(outputSet.contains)
     if (newMetadata.nonEmpty) {
-      copy(output = output ++ newMetadata)
+      val newRelation = copy(output = output ++ newMetadata)
+      newRelation.copyTagsFrom(this)
+      newRelation
     } else {
       this
     }
@@ -170,6 +173,12 @@ case class DataSourceV2Relation(
  *                      complete set is what lets `PlanMerger` soundly compare and re-enforce a
  *                      scan's filters when fusing two scans via a Spark-side scan merge
  *                      (`TableCapability.SCAN_MERGING`).
+ * @param inferredFilters Source-guaranteed Catalyst expressions inferred from pushed query
+ *                        filters. Spark may add matching logical Filters for statistics adjustment.
+ *                        Scans that opt into `useInferredFilterEstimation` keep them as metadata
+ *                        and take the smaller estimate from the original and inferred predicates.
+ *                        They are discarded by join, aggregate, or variant extraction pushdown,
+ *                        and do not duplicate `pushedFilters`.
  * @param mergeableScan whether this scan may be fused with an equivalent scan by a Spark-side scan
  *                      merge (see `TableCapability.SCAN_MERGING`).
  *                      Default false (not mergeable): only the plain column-pruning + filter
@@ -179,6 +188,13 @@ case class DataSourceV2Relation(
  *                      offset, top-N, sample) or by any other rule stays not-mergeable by default,
  *                      so merging is safe by construction -- a new scan-relation build site need
  *                      not opt out.
+ * @param onlyRowWisePushdowns whether every operation pushed into the scan works on each row by
+ *                             itself, as filters, column pruning and variant extraction do. A
+ *                             reader may then evaluate a predicate on the rows the scan returns
+ *                             ahead of those operations, see [[SupportsStorageFilters]]. Default
+ *                             false: a pushed limit, offset, top-N, sample, aggregate or join
+ *                             decides which rows the scan returns, and a build site that does not
+ *                             set it keeps storage filters away from its scan.
  */
 case class DataSourceV2ScanRelation(
     relation: DataSourceV2Relation,
@@ -187,7 +203,9 @@ case class DataSourceV2ScanRelation(
     keyGroupedPartitioning: Option[Seq[Expression]] = None,
     ordering: Option[Seq[SortOrder]] = None,
     pushedFilters: Seq[Expression] = Seq.empty,
-    mergeableScan: Boolean = false) extends LeafNode with NamedRelation {
+    inferredFilters: Seq[Expression] = Seq.empty,
+    mergeableScan: Boolean = false,
+    onlyRowWisePushdowns: Boolean = false) extends LeafNode with NamedRelation {
 
   // TODO: Override validConstraints to return ExpressionSet(pushedFilters) so that pushed
   // filters participate in constraint propagation (InferFiltersFromConstraints, PruneFilters).
@@ -201,16 +219,37 @@ case class DataSourceV2ScanRelation(
    * Resolved attributes that the scan declares for runtime filtering via
    * [[SupportsRuntimeV2Filtering.filterAttributes]] or
    * [[SupportsRuntimeCatalystFiltering.filterAttributes]]. Empty when the scan
-   * implements neither interface or exposes no attributes.
+   * implements neither interface or exposes no attributes. Accessing this value also validates
+   * attributes returned by [[SupportsRuntimeCatalystFiltering.fullyPushedFilterAttributes]].
    */
   lazy val runtimeFilterAttrs: AttributeSet = {
     checkRuntimeFilteringInterfaces()
-    val filterAttrs = scan match {
-      case s: SupportsRuntimeV2Filtering => s.filterAttributes
-      case s: SupportsRuntimeCatalystFiltering => s.filterAttributes()
-      case _ => Array.empty[NamedReference]
-    }
-    resolveTopLevelFilterAttrs(filterAttrs)
+    resolvedFullyPushedRuntimeFilterAttrs
+    resolvedRuntimeFilterAttrs
+  }
+
+  private[sql] lazy val declaredRuntimeFilterAttrs: Array[NamedReference] = scan match {
+    case s: SupportsRuntimeV2Filtering => s.filterAttributes
+    case s: SupportsRuntimeCatalystFiltering => s.filterAttributes()
+    case _ => Array.empty
+  }
+
+  private lazy val declaredFullyPushedRuntimeFilterAttrs: Array[NamedReference] = scan match {
+    case s: SupportsRuntimeCatalystFiltering => s.fullyPushedFilterAttributes()
+    case _ => Array.empty
+  }
+
+  private lazy val resolvedRuntimeFilterAttrs: AttributeSet = {
+    resolveFilterAttrs(declaredRuntimeFilterAttrs, "filterAttributes()")
+  }
+
+  private lazy val resolvedFullyPushedRuntimeFilterAttrs: AttributeSet = {
+    checkFullyPushedFilterAttrsAreTopLevel()
+    val resolvedAttrs = resolveFilterAttrs(
+      declaredFullyPushedRuntimeFilterAttrs, "fullyPushedFilterAttributes()")
+    resolvedRuntimeFilterAttrs
+    checkFullyPushedFilterAttrsAreFilterable()
+    resolvedAttrs
   }
 
   /**
@@ -219,27 +258,36 @@ case class DataSourceV2ScanRelation(
    */
   lazy val fullyPushedRuntimeFilterAttrs: AttributeSet = {
     checkRuntimeFilteringInterfaces()
-    val filterAttrs = scan match {
-      case s: SupportsRuntimeCatalystFiltering => s.fullyPushedFilterAttributes()
-      case _ => Array.empty[NamedReference]
-    }
-    resolveTopLevelFilterAttrs(filterAttrs)
+    resolvedFullyPushedRuntimeFilterAttrs
   }
 
   /**
-   * Resolves the given runtime-filter references against this relation's output. Both runtime
-   * filtering interfaces require each reference to be a top-level attribute of the read schema,
-   * so a nested reference is rejected.
+   * Resolves runtime-filter references against this relation's output.
+   *
+   * [[AttributeSet]] reduces nested references to their root attributes. This is sufficient for
+   * ordinary runtime-filter eligibility because Spark retains the post-scan predicate.
    */
-  private def resolveTopLevelFilterAttrs(filterAttrs: Array[NamedReference]): AttributeSet = {
-    filterAttrs.find(_.fieldNames.length > 1).foreach { ref =>
-      throw SparkException.internalError(
-        s"Runtime filter attribute '${ref.fieldNames.mkString(".")}' declared by " +
-        s"${scan.getClass.getName} must be a top-level attribute of the scan read schema, " +
-        "but it is a nested reference.")
-    }
-    AttributeSet(V2ExpressionUtils.resolveRefs[Attribute](
-      filterAttrs.toImmutableArraySeq, this))
+  private def resolveFilterAttrs(
+      filterAttrs: Array[NamedReference],
+      method: String): AttributeSet = {
+    V2ExpressionUtils.resolveDataSourceRuntimeFilterRefs(
+      filterAttrs, output, method, scan.getClass.getName)
+  }
+
+  /**
+   * The output columns the scan declares for storage filtering via
+   * [[SupportsStorageFilters.storageFilterAttributes]], matched by name. Only top-level
+   * declarations count, and a declared column the scan does not read is left out, since no offered
+   * filter can reference it. Empty when the scan does not implement that interface. Unlike runtime
+   * filtering, there is no "fully pushed" set, since a storage filter always stays in the plan
+   * above the scan.
+   */
+  lazy val storageFilterAttrs: AttributeSet = scan match {
+    case s: SupportsStorageFilters =>
+      val declared = s.storageFilterAttributes().map(_.fieldNames).collect { case Array(n) => n }
+      val resolver = SQLConf.get.resolver
+      AttributeSet(output.filter(a => declared.exists(resolver(a.name, _))))
+    case _ => AttributeSet.empty
   }
 
   override val nodePatterns: Seq[TreePattern] = Seq(DATA_SOURCE_V2_SCAN_RELATION)
@@ -271,7 +319,58 @@ case class DataSourceV2ScanRelation(
     }
   }
 
+  // Keep the complete pushedFilters for scan merging, but estimate only expressions whose
+  // columns and nested fields survive pruning. A pruned nested field cannot be remapped.
+  private[sql] lazy val outputBoundPushedFilters: Seq[Expression] = {
+    val projection = ProjectionOverSchema(output.toStructType, outputSet)
+    pushedFilters.flatMap { filter =>
+      try {
+        val remapped = filter.transformDown {
+          case projection(expr) => expr
+        }
+        Option.when(remapped.references.subsetOf(outputSet))(remapped)
+      } catch {
+        case e: SparkIllegalArgumentException if e.getCondition == "FIELD_NOT_FOUND" => None
+      }
+    }
+  }
+
+  private[sql] def shouldEstimateInferredFilters: Boolean = {
+    inferredFilters.nonEmpty && (scan match {
+      case s: SupportsReportStatistics =>
+        !s.reflectsFullyPushedDownFilters() && s.useInferredFilterEstimation()
+      case _ => false
+    })
+  }
+
+  /**
+   * Include residual filters in the original predicate group before comparing it with the
+   * inferred group. Re-read the unadjusted scan statistics instead of filtering this node's
+   * already adjusted stats, which would count the inferred selectivity a second time.
+   */
+  private[sql] def estimateStatsWithFilters(filters: Seq[Expression]): Option[Statistics] = {
+    estimateStatsWithFilters(computeScanStats(), filters)
+  }
+
+  private def estimateStatsWithFilters(
+      scanStats: Statistics,
+      filters: Seq[Expression]): Option[Statistics] = {
+    val originalCondition = ExpressionSet(outputBoundPushedFilters ++ filters).toSeq
+      .reduceLeftOption(And).getOrElse(Literal.TrueLiteral)
+    FilterEstimation(originalCondition, scanStats, output, childIsLeaf = true)
+      .estimateWithInferredCondition(inferredFilters.reduceLeft(And))
+  }
+
   private def computeFullStats(): Statistics = {
+    val scanStats = computeScanStats()
+    if (conf.cboEnabled && shouldEstimateInferredFilters) {
+      estimateStatsWithFilters(scanStats, Nil).getOrElse(scanStats)
+    } else {
+      scanStats
+    }
+  }
+
+  private def computeScanStats(): Statistics = {
     V2StatisticsUtils.computeStats(scan) match {
       case Some(v2Stats) =>
         DataSourceV2Relation.transformV2Stats(v2Stats, conf.defaultSizeInBytes, output)
@@ -290,12 +389,37 @@ case class DataSourceV2ScanRelation(
     Statistics(sizeInBytes = conf.defaultSizeInBytes)
   }
 
-  private def checkRuntimeFilteringInterfaces(): Unit = scan match {
-    case _: SupportsRuntimeV2Filtering with SupportsRuntimeCatalystFiltering =>
-      throw SparkException.internalError(
-        "A scan must not implement both SupportsRuntimeV2Filtering and " +
-        s"SupportsRuntimeCatalystFiltering, but ${scan.getClass.getName} implements both.")
-    case _ =>
+  private def checkRuntimeFilteringInterfaces(): Unit = {
+    scan match {
+      case _: SupportsRuntimeV2Filtering with SupportsRuntimeCatalystFiltering =>
+        throw SparkException.internalError(
+          "A scan must not implement both SupportsRuntimeV2Filtering and " +
+          s"SupportsRuntimeCatalystFiltering, but ${scan.getClass.getName} implements both.")
+      case _ =>
+    }
+  }
+
+  private def checkFullyPushedFilterAttrsAreTopLevel(): Unit = {
+    declaredFullyPushedRuntimeFilterAttrs.find(_.fieldNames.length > 1).foreach { ref =>
+      throw QueryCompilationErrors.nestedDataSourceFullyPushedRuntimeFilterAttributeError(
+        attribute = ref.fieldNames,
+        scanClass = scan.getClass.getName,
+        relationOutput = fromAttributes(output))
+    }
+  }
+
+  private def checkFullyPushedFilterAttrsAreFilterable(): Unit = {
+    declaredFullyPushedRuntimeFilterAttrs.find { fullyPushedRef =>
+      !declaredRuntimeFilterAttrs.exists { filterRef =>
+        fullyPushedRef.fieldNames.length == filterRef.fieldNames.length &&
+          fullyPushedRef.fieldNames.lazyZip(filterRef.fieldNames).forall(conf.resolver)
+      }
+    }.foreach { ref =>
+      throw QueryCompilationErrors.fullyPushedDataSourceRuntimeFilterAttributeNotFilterableError(
+        attribute = ref.fieldNames,
+        scanClass = scan.getClass.getName,
+        relationOutput = fromAttributes(output))
+    }
   }
 
   override def doCanonicalize(): DataSourceV2ScanRelation = {
@@ -304,15 +428,27 @@ case class DataSourceV2ScanRelation(
         output = this.relation.output.map(QueryPlan.normalizeExpressions(_, this.relation.output))
       ),
       output = this.output.map(QueryPlan.normalizeExpressions(_, this.output)),
+      // keyGroupedPartitioning may reference columns pruned out of `output`, which is kept as long
+      // as any key survives. A pruned key carries no information for plan comparison, since the
+      // physical outputPartitioning projects it away, so drop it before normalizing; otherwise the
+      // dangling attribute's exprId would keep otherwise-equivalent scans unequal and defeat
+      // subplan merging.
       keyGroupedPartitioning = keyGroupedPartitioning.map(
-        _.map(QueryPlan.normalizeExpressions(_, output))
+        _.filter(_.references.subsetOf(outputSet))
+          .map(QueryPlan.normalizeExpressions(_, output))
       ),
+      // ordering may likewise reference columns pruned out of `output`. Ordering is prefix-based,
+      // so keep only the leading run of sort orders that reference output columns and drop the rest
+      // before normalizing, for the same reason as keyGroupedPartitioning above.
       ordering = ordering.map(
-        _.map(o => o.copy(child = QueryPlan.normalizeExpressions(o.child, output)))
+        _.takeWhile(_.references.subsetOf(outputSet))
+          .map(o => o.copy(child = QueryPlan.normalizeExpressions(o.child, output)))
       ),
       // pushedFilters may reference columns pruned out of `output` (see the field doc), so they are
-      // normalized against the relation's full output rather than `output`.
-      pushedFilters = pushedFilters.map(QueryPlan.normalizeExpressions(_, relation.output))
+      // normalized against the relation's full output rather than `output`. inferredFilters only
+      // reference `output` (pruneColumns drops the rest), so the same normalization is safe.
+      pushedFilters = pushedFilters.map(QueryPlan.normalizeExpressions(_, relation.output)),
+      inferredFilters = inferredFilters.map(QueryPlan.normalizeExpressions(_, relation.output))
     )
   }
 }
@@ -342,6 +478,18 @@ case class StreamingDataSourceV2Relation(
 /**
  * A specialization of [[DataSourceV2ScanRelation]] with the streaming bit set to true, as well
  * as start and end offsets for Microbatch processing.
+ *
+ * @param output the columns of the source that the query references, which the plan of each
+ *               micro-batch is optimized with
+ * @param scanOutput the columns of `output` that the scan reads, in the order of its read schema,
+ *                   unless these are all the columns of `output` in their order. The readers of
+ *                   the stream return these columns, so a planner must build the scan node from
+ *                   them rather than from `output`, and check that the plan reads no other column
+ *                   of `output`, as `DataSourceV2Strategy` does.
+ * @param pushedFilters the filters that the scan builder got, over `output`, which the scan may
+ *                      apply in any form. The plan of each micro-batch must apply them to all the
+ *                      rows of the relation too, so that the scan cannot drop a row that the plan
+ *                      keeps, which `StreamingV2ScanPushDown.checkPushedFilters` checks.
  */
 case class StreamingDataSourceV2ScanRelation(
     relation: StreamingDataSourceV2Relation,
@@ -349,7 +497,9 @@ case class StreamingDataSourceV2ScanRelation(
     output: Seq[AttributeReference],
     stream: SparkDataStream,
     startOffset: Option[Offset] = None,
-    endOffset: Option[Offset] = None)
+    endOffset: Option[Offset] = None,
+    scanOutput: Option[Seq[AttributeReference]] = None,
+    pushedFilters: Seq[Expression] = Nil)
   extends LeafNode with MultiInstanceRelation with NamedRelation  {
 
   val (catalog, identifier) = (relation.catalog, relation.identifier)
@@ -357,13 +507,43 @@ case class StreamingDataSourceV2ScanRelation(
   override def name: String = relation.table.name()
 
   override def simpleString(maxFields: Int): String = {
+    val scanned = scanOutput.map { columns =>
+      s", ScanOutput: ${truncatedString(columns, "[", ", ", "]", maxFields)}"
+    }
+    // The filters that the scan builder was given, which the plan of each micro-batch applies
+    // after the scan too. Unlike the PushedFilters of a batch scan, these are not the filters that
+    // the builder took.
+    val filters = if (pushedFilters.nonEmpty) {
+      s", FiltersOfScanBuilder: ${truncatedString(pushedFilters, "[", ", ", "]", maxFields)}"
+    } else {
+      ""
+    }
     statePrefix + "StreamingDataSourceV2ScanRelation" +
-      s"${truncatedString(output, "[", ", ", "]", maxFields)} $name"
+      s"${truncatedString(output, "[", ", ", "]", maxFields)} $name" + scanned.getOrElse("") +
+      filters
+  }
+
+  // The default canonicalization renumbers the attributes of `output` and `scanOutput`, but not
+  // those inside `pushedFilters`, which are over `output`: they are normalized against `output`,
+  // so that two copies of the same scan, such as the relation and its `newInstance()`, have the
+  // same result.
+  override def doCanonicalize(): StreamingDataSourceV2ScanRelation = {
+    super.doCanonicalize().asInstanceOf[StreamingDataSourceV2ScanRelation]
+      .copy(pushedFilters = pushedFilters.map(QueryPlan.normalizeExpressions(_, output)))
   }
 
   override def isStreaming: Boolean = true
 
-  override def newInstance(): LogicalPlan = copy(output = output.map(_.newInstance()))
+  override def newInstance(): LogicalPlan = {
+    val newOutput = output.map(_.newInstance())
+    val newAttributes = AttributeMap(output.zip(newOutput))
+    copy(
+      output = newOutput,
+      scanOutput = scanOutput.map(_.map(newAttributes)),
+      pushedFilters = pushedFilters.map(_.transform {
+        case a: AttributeReference => a.withExprId(newAttributes.getOrElse(a, a).exprId)
+      }))
+  }
 
   override def computeStats(): Statistics = scan match {
     case r: SupportsReportStatistics =>
@@ -379,7 +559,8 @@ case class StreamingDataSourceV2ScanRelation(
       case _ => None
     }
 
-    Seq(output, qualifiedTableName, scan, stream, startOffset, endOffset)
+    Seq(output, qualifiedTableName, scan, stream, startOffset, endOffset, scanOutput,
+      pushedFilters)
   }
 
   override protected def stringArgs: Iterator[Any] = stringArgsVal.iterator
@@ -524,12 +705,14 @@ object DataSourceV2Relation {
     }
 
     var colStats: Seq[(Attribute, ColumnStat)] = Seq.empty[(Attribute, ColumnStat)]
+    val resolver = SQLConf.get.resolver
     // columnStats() may be null even when numRows/sizeInBytes are present, so normalize it to an
     // empty map before conversion to avoid an NPE.
     val v2ColumnStats = Option(v2Statistics.columnStats()).getOrElse(EMPTY_V2_COLUMN_STATS)
     if (!v2ColumnStats.isEmpty) {
       val keys = v2ColumnStats.keySet()
-
+      val outputAttrs = AttributeSeq.fromNormalOutput(output)
+      var keyed = Seq.empty[(Attribute, String, ColumnStat)]
       keys.forEach(key => {
         val colStat = v2ColumnStats.get(key)
         val distinct: Option[BigInt] =
@@ -553,12 +736,32 @@ object DataSourceV2Relation {
 
         val catalystColStat = ColumnStat(distinct, min, max, nullCount, avgLen, maxLen, histogram)
 
-        output.foreach(attribute => {
-          if (attribute.name.equals(key.describe())) {
-            colStats = colStats :+ (attribute -> catalystColStat)
+        // Catalyst column statistics only support top-level attributes. Prefer a unique exact name
+        // when the configured resolver matches multiple output attributes.
+        val fieldNames = key.fieldNames
+        if (fieldNames.length == 1) {
+          val fieldName = fieldNames.head
+          val exprIds = outputAttrs
+            .getCandidatesForResolution(Seq(fieldName), resolver)._1
+            .map(_.exprId).toSet
+          output.filter(attr => exprIds.contains(attr.exprId)) match {
+            case Seq(single) => keyed = keyed :+ ((single, fieldName, catalystColStat))
+            case multiple => multiple.filter(_.name == fieldName) match {
+              case Seq(exact) => keyed = keyed :+ ((exact, fieldName, catalystColStat))
+              case _ =>
+            }
           }
-        })
+        }
       })
+      // Several keys can resolve to one attribute (e.g. "id" and "ID" when case-insensitive); keep
+      // a unique match, preferring an exact-name key, so the result is deterministic.
+      colStats = keyed.groupBy(_._1.exprId).values.toSeq.flatMap {
+        case Seq((attribute, _, stat)) => Some(attribute -> stat)
+        case many => many.filter { case (attr, fieldName, _) => fieldName == attr.name } match {
+          case Seq((attribute, _, stat)) => Some(attribute -> stat)
+          case _ => None
+        }
+      }
     }
     val attributeStats = AttributeMap(colStats)
     // Prefer the source-reported size. Otherwise infer a projection-aware size from the row count

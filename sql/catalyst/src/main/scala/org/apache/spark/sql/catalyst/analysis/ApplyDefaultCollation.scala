@@ -105,20 +105,22 @@ object ApplyDefaultCollation extends Rule[LogicalPlan] {
    */
   private def fetchDefaultCollation(plan: LogicalPlan): Option[String] = {
     plan match {
-      case CreateTable(_: ResolvedIdentifier, _, _, tableSpec: TableSpec, _) =>
+      case CreateTable(_: ResolvedIdentifier, _, _, tableSpec: TableSpec, _, _, _) =>
         tableSpec.collation
 
-      case CreateTableAsSelect(_: ResolvedIdentifier, _, _, tableSpec: TableSpec, _, _, _) =>
+      case CreateTableAsSelect(
+          _: ResolvedIdentifier, _, _, tableSpec: TableSpec, _, _, _, _, _) =>
         tableSpec.collation
 
-      case ReplaceTableAsSelect(_: ResolvedIdentifier, _, _, tableSpec: TableSpec, _, _, _) =>
+      case ReplaceTableAsSelect(
+          _: ResolvedIdentifier, _, _, tableSpec: TableSpec, _, _, _, _, _) =>
         tableSpec.collation
 
       // CreateView also handles CREATE OR REPLACE VIEW
       case createView: CreateView =>
         createView.collation
 
-      case ReplaceTable(_: ResolvedIdentifier, _, _, tableSpec: TableSpec, _) =>
+      case ReplaceTable(_: ResolvedIdentifier, _, _, tableSpec: TableSpec, _, _, _) =>
         tableSpec.collation
 
       // Temporary views are created via CreateViewCommand, which we can't import here.
@@ -173,38 +175,31 @@ object ApplyDefaultCollation extends Rule[LogicalPlan] {
     try {
       plan match {
         case createTable@CreateTable(ResolvedIdentifier(
-        catalog: SupportsNamespaces, identifier), _, _, tableSpec: TableSpec, _)
+        catalog: SupportsNamespaces, identifier), _, _, tableSpec: TableSpec, _, _, _)
           if tableSpec.collation.isEmpty =>
           createTable.copy(tableSpec = tableSpec.copy(
             collation = getCollationFromSchemaMetadata(catalog, identifier.namespace())))
 
         case createTableAsSelect@CreateTableAsSelect(ResolvedIdentifier(
-        catalog: SupportsNamespaces, identifier), _, _, tableSpec: TableSpec, _, _, _)
+        catalog: SupportsNamespaces, identifier), _, _, tableSpec: TableSpec, _, _, _, _, _)
           if tableSpec.collation.isEmpty =>
           createTableAsSelect.copy(tableSpec = tableSpec.copy(
             collation = getCollationFromSchemaMetadata(catalog, identifier.namespace())))
 
         case replaceTableAsSelect@ReplaceTableAsSelect(ResolvedIdentifier(
-        catalog: SupportsNamespaces, identifier), _, _, tableSpec: TableSpec, _, _, _)
+        catalog: SupportsNamespaces, identifier), _, _, tableSpec: TableSpec, _, _, _, _, _)
           if tableSpec.collation.isEmpty =>
           replaceTableAsSelect.copy(tableSpec = tableSpec.copy(
             collation = getCollationFromSchemaMetadata(catalog, identifier.namespace())))
 
         case replaceTable@ReplaceTable(ResolvedIdentifier(
-        catalog: SupportsNamespaces, identifier), _, _, tableSpec: TableSpec, _)
+        catalog: SupportsNamespaces, identifier), _, _, tableSpec: TableSpec, _, _, _)
           if tableSpec.collation.isEmpty =>
           replaceTable.copy(tableSpec = tableSpec.copy(
             collation = getCollationFromSchemaMetadata(catalog, identifier.namespace())))
 
-        case createView@CreateView(ResolvedIdentifier(
-        catalog: SupportsNamespaces, identifier), _, _, _, _, _, _, _, _, _, _, _)
-          if createView.collation.isEmpty =>
-          val newCreateView = CurrentOrigin.withOrigin(createView.origin) {
-            createView.copy(
-              collation = getCollationFromSchemaMetadata(catalog, identifier.namespace()))
-          }
-          newCreateView.copyTagsFrom(createView)
-          newCreateView
+        case createView: CreateView =>
+          resolveCreateViewCollation(createView)
 
         case createUserDefinedFunction@CreateUserDefinedFunction(
         ResolvedIdentifier(catalog: SupportsNamespaces, identifier),
@@ -223,6 +218,30 @@ object ApplyDefaultCollation extends Rule[LogicalPlan] {
     } catch {
       case NonFatal(_) =>
         plan
+    }
+  }
+
+  /**
+   * Fills an unspecified view collation from the target schema, preserving origin and tags.
+   * Returns the original command if the target is unresolved or metadata lookup fails.
+   */
+  def resolveCreateViewCollation(createView: CreateView): CreateView = {
+    try {
+      createView.child match {
+        case ResolvedIdentifier(catalog: SupportsNamespaces, identifier)
+            if createView.collation.isEmpty =>
+          val newCreateView = CurrentOrigin.withOrigin(createView.origin) {
+            createView.copy(
+              collation = getCollationFromSchemaMetadata(catalog, identifier.namespace()))
+          }
+          newCreateView.copyTagsFrom(createView)
+          newCreateView
+        case _ =>
+          createView
+      }
+    } catch {
+      case NonFatal(_) =>
+        createView
     }
   }
 
@@ -424,8 +443,12 @@ object ApplyDefaultCollation extends Rule[LogicalPlan] {
       case cast @ Cast(e: DefaultStringProducingExpression, dt, _, _) if newType == dt =>
         cast.copy(child = e.withNewChildren(e.children.map(inner)))
 
-      // Add cast on top of [[DefaultStringProducingExpression]].
-      case e: DefaultStringProducingExpression =>
+      // Add cast on top of [[DefaultStringProducingExpression]], unless it carries an explicitly
+      // collated string type -- e.g. `JSON_ARRAY(... RETURNING STRING COLLATE UTF8_BINARY)`, a
+      // distinct instance the user chose deliberately (even for the default UTF8_BINARY) that the
+      // object/view default must not override. A plain `RETURNING STRING` is the companion (see
+      // `hasExplicitStringCollation`), indistinguishable from omission, and correctly recolored.
+      case e: DefaultStringProducingExpression if !hasExplicitStringCollation(e.dataType) =>
         Cast(e.withNewChildren(e.children.map(inner)), newType)
 
       case other =>
@@ -439,6 +462,19 @@ object ApplyDefaultCollation extends Rule[LogicalPlan] {
 
   private def hasDefaultStringCharOrVarcharType(dataType: DataType): Boolean =
     dataType.existsRecursively(isDefaultStringCharOrVarcharType)
+
+  /**
+   * A [[StringType]] written with an explicit `COLLATE` clause -- a distinct instance rather than
+   * the `StringType` companion, told apart by reference identity (matching the single-pass
+   * resolver's `DefaultCollationTypeCoercion`), even for the default UTF8_BINARY. Only the explicit
+   * `COLLATE` form is distinct: `DataTypeAstBuilder` returns the companion for a plain `STRING`, so
+   * a plain `RETURNING STRING` is indistinguishable from omission and recolored like it. An
+   * explicit collation is a deliberate choice the object/view default must not overwrite.
+   */
+  private def hasExplicitStringCollation(dataType: DataType): Boolean = dataType match {
+    case st: StringType => !st.eq(StringType)
+    case _ => false
+  }
 
   private def replaceColumnTypes(
       colTypes: Seq[QualifiedColType],

@@ -20,6 +20,7 @@ package org.apache.spark.sql.collation
 import org.apache.spark.sql.{AnalysisException, Row}
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.plans.logical.Project
+import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.sql.types.{ArrayType, BooleanType, IntegerType, StringType}
 
@@ -320,6 +321,58 @@ class CollationSQLRegexpSuite
           stop = 63)
       )
     })
+  }
+
+  test("SPARK-59112: quantified LIKE preserves pattern-side collation") {
+    Seq("LIKE", "ILIKE").foreach { operator =>
+      Seq("ANY", "SOME", "ALL").foreach { quantifier =>
+        val pattern = "'foo%' COLLATE UTF8_LCASE"
+        val predicate =
+          s"'FOO' $operator $quantifier ($pattern)"
+        val expected = sql(s"SELECT 'FOO' $operator ($pattern)").head().getBoolean(0)
+        checkAnswer(sql(s"SELECT $predicate"), Row(expected))
+        checkAnswer(sql(s"SELECT NOT ($predicate)"), Row(!expected))
+
+        withSQLConf(SQLConf.CHAR_VARCHAR_STANDARD_SEMANTICS.key -> "true") {
+          Seq("CHAR(4)", "VARCHAR(4)").foreach { dataType =>
+            val charVarcharPattern =
+              s"CAST('foo%' AS $dataType COLLATE UTF8_LCASE)"
+            val charVarcharPredicate =
+              s"'FOO' $operator $quantifier " +
+                s"($charVarcharPattern)"
+            val charVarcharExpected =
+              sql(s"SELECT 'FOO' $operator ($charVarcharPattern)").head().getBoolean(0)
+            checkAnswer(sql(s"SELECT $charVarcharPredicate"), Row(charVarcharExpected))
+          }
+        }
+      }
+    }
+  }
+
+  test("SPARK-59112: quantified ILIKE preserves null CHAR/VARCHAR patterns") {
+    withSQLConf(SQLConf.CHAR_VARCHAR_STANDARD_SEMANTICS.key -> "true") {
+      Seq("CHAR(3)", "VARCHAR(3)").foreach { dataType =>
+        checkAnswer(
+          sql(s"SELECT 'foo' ILIKE ANY (CAST(NULL AS $dataType), 'f%')"),
+          Row(true))
+        checkAnswer(
+          sql(s"SELECT 'foo' ILIKE ALL ('f%', CAST(NULL AS $dataType))"),
+          Row(null))
+      }
+    }
+  }
+
+  test("SPARK-59112: explicit binary quantified patterns use balanced trees") {
+    val patterns = Seq.fill(2048)("'z%' COLLATE UTF8_BINARY").mkString(", ")
+    Seq("LIKE", "ILIKE").foreach { operator =>
+      Seq("ANY", "SOME", "ALL").foreach { quantifier =>
+        Seq("" -> false, "NOT " -> true).foreach { case (not, expected) =>
+          checkAnswer(
+            sql(s"SELECT 'foo' $not$operator $quantifier ($patterns)"),
+            Row(expected))
+        }
+      }
+    }
   }
 
   test("Support RLike string expression with collation") {

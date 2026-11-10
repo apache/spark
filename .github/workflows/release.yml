@@ -115,7 +115,7 @@ jobs:
       )
     steps:
       - name: Checkout Spark repository
-        uses: actions/checkout@v6
+        uses: actions/checkout@v7
         with:
           repository: apache/spark
           ref: "${{ inputs.branch }}"
@@ -127,10 +127,11 @@ jobs:
           git checkout origin/master -- dev/create-release/spark-rm/Dockerfile.base
           echo "Using master branch's Dockerfile.base for building release image"
       - name: Free up disk space
+        # Always use master's script, which is maintained against the current runner image.
+        # Old branch scripts may fail on newer images (e.g., packages missing from apt sources).
         run: |
-          if [ -f ./dev/free_disk_space ]; then
-            ./dev/free_disk_space
-          fi
+          git checkout origin/master -- dev/free_disk_space
+          ./dev/free_disk_space
       - name: Release Apache Spark
         env:
           GIT_BRANCH: "${{ inputs.branch }}"

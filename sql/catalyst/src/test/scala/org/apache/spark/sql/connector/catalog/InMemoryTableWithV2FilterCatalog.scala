@@ -22,6 +22,7 @@ import java.util
 import org.apache.spark.sql.connector.catalog.constraints.Constraint
 import org.apache.spark.sql.connector.distributions.Distribution
 import org.apache.spark.sql.connector.expressions.{SortOrder, Transform}
+import org.apache.spark.sql.internal.connector.SchemaAlignmentConfig
 
 class InMemoryTableWithV2FilterCatalog extends InMemoryTableCatalog {
   // scalastyle:off argcount
@@ -37,7 +38,9 @@ class InMemoryTableWithV2FilterCatalog extends InMemoryTableCatalog {
       advisoryPartitionSize: Option[Long],
       distributionStrictlyRequired: Boolean,
       numRowsPerSplit: Int,
-      id: String): InMemoryBaseTable = {
+      id: String,
+      // InMemoryTableWithV2Filter carries no schema-alignment config, so this is ignored.
+      schemaAlignmentConfig: SchemaAlignmentConfig): InMemoryBaseTable = {
     // scalastyle:on argcount
     new InMemoryTableWithV2Filter(
       name, columns, partitioning, properties, constraints, distribution, ordering,
