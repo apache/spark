@@ -313,6 +313,9 @@ object StreamingJoinHelper extends PredicateHelper with Logging {
       return None
     }
 
+    // A negative opposite-time term lets later input match old state instead of bounding it.
+    if (watermarkTerms.head.isInstanceOf[UnaryMinus]) return None
+
     // Replace watermark attribute with watermark value, and generate the resolved expression
     // from the other terms. That is,
     // rightTime-with-watermark, c1, -c2  =>  watermark, c1, -c2  =>  watermark + c1 + (-c2)

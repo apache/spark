@@ -257,6 +257,12 @@ class StreamingJoinHelperSuite extends AnalysisTest {
     assert(watermarkFrom("CAST(leftTime AS LONG) - 2.0 > CAST(rightTime AS LONG) + 1")
       === Some(13000))
 
+    // A later rightTime can still match an old leftTime when both terms have the same sign.
+    assert(watermarkFrom(
+      "CAST(leftTime AS LONG) + CAST(rightTime AS LONG) > 100") === None)
+    assert(watermarkFrom(
+      "100 < CAST(rightTime AS LONG) + CAST(leftTime AS LONG)") === None)
+
     // Test multiple conditions, should return minimum watermark
     assert(watermarkFrom(
       "leftTime > rightTime - interval 3 second AND rightTime < leftTime + interval 2 seconds") ===
@@ -282,6 +288,13 @@ class StreamingJoinHelperSuite extends AnalysisTest {
     assert(watermarkFrom("cast(leftTime AS LONG) > 10") === None)
     assert(watermarkFrom("leftTime > rightTime AND cast(leftTime AS LONG) > 10") === Some(10000))
     assert(watermarkFrom("leftTime > rightTime OR cast(leftTime AS LONG) > 10") === None)
+    assert(watermarkFrom(
+      "cast(leftTime AS LONG) + cast(leftTime AS LONG) > cast(rightTime AS LONG)") === None)
+    assert(watermarkFrom(
+      "cast(leftTime AS LONG) > cast(rightTime AS LONG) + cast(rightTime AS LONG)") === None)
+    assert(watermarkFrom(
+      "leftTime > rightTime AND cast(leftTime AS LONG) + cast(rightTime AS LONG) > 100") ===
+      Some(10000))
 
     // Test non-positive results
     assert(watermarkFrom("CAST(leftTime AS LONG) > CAST(rightTime AS LONG) - 10") === Some(0))

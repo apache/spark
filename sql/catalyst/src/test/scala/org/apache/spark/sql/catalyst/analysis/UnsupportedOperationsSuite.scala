@@ -563,19 +563,26 @@ class UnsupportedOperationsSuite extends SparkFunSuite with SQLHelper {
 
     Seq(LeftOuter, LeftSemi).foreach { joinType =>
       Seq(
-        "static conjunct" -> (leftTime > rightTime - 10 && leftTime > 10)
+        "unrelated left watermark" -> (leftTime > rightTime - 10),
+        "static conjunct" -> (leftTime > rightTime - 10 && leftTime > 10),
+        "non-advancing conjunct" -> (leftTime > rightTime - 10 && leftTime + rightTime > 100)
       ).foreach { case (name, condition) =>
         assertSupportedInStreamingPlan(s"$joinType with $name",
           left.join(right, joinType = joinType, condition = Some(condition)), OutputMode.Append())
       }
       // These bounds cannot establish safe finalization of unmatched state.
       Seq(
-        "constant bound" -> (leftTime > 10)
+        "constant bound" -> (leftTime > 10),
+        "non-advancing bound" -> (leftTime + rightTime > 100),
+        "repeated state attribute" -> (leftTime + leftTime > rightTime)
       ).foreach { case (name, condition) =>
         assertNotSupportedInStreamingPlan(s"$joinType with $name",
           left.join(right, joinType = joinType, condition = Some(condition)), OutputMode.Append(),
           Seq("requires", "allow unmatched state to be finalized"))
       }
+      assertNotSupportedInStreamingPlan(s"$joinType with unrelated right watermark",
+        left.join(right, joinType = joinType, condition = Some(leftTime > rightOther - 10)),
+        OutputMode.Append(), Seq("requires a watermark on the right input"))
     }
 
     // Each side's state is evicted by the key that the opposite watermark bounds.

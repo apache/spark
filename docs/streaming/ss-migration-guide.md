@@ -29,9 +29,9 @@ Please refer [Migration Guide: SQL, Datasets and DataFrame](../sql-migration-gui
   right input and a time condition that limits how late a matching right row can arrive.
   Right outer joins require the corresponding settings on the left; full outer joins require
   them on both sides. The time condition must bound a timestamp column of the finalized input
-  by the other input's event time; bounds that use only constants or a numeric column do not
-  qualify. Some previously accepted queries now fail if these requirements are not met. Update
-  their watermarks and join conditions using the
+  by the other input's event time; bounds that use only constants, a numeric column, or a sum
+  of both event times do not qualify. Some previously accepted queries now fail if these
+  requirements are not met. Update their watermarks and join conditions using the
   [join support table](apis-on-dataframes-and-datasets.html#support-matrix-for-joins-in-streaming-queries).
 
 - Spark 4.4 corrects cases where stream-stream equality joins could discard rows before their
