@@ -201,9 +201,10 @@ trait ColumnarWriter extends Serializable {
 }
 
 /**
- * Writes data to a [[ColumnarDataSource]] for a streaming write, one micro-batch at a time. Spark
- * does not abort a micro-batch once the writer committed it, but a restarted query may abort a
- * micro-batch that a writer of an earlier run of the query committed.
+ * Writes data to a [[ColumnarDataSource]] for a streaming write, for a single micro-batch: Spark
+ * creates a new writer for each micro-batch, and does not call a writer after it committed or
+ * aborted its micro-batch. Spark does not abort a micro-batch once the writer committed it, but a
+ * restarted query may abort a micro-batch that a writer of an earlier run of the query committed.
  */
 trait ColumnarStreamWriter extends Serializable {
   def createWriter(partitionId: Int, taskId: Long, epochId: Long): DataWriter[ColumnarBatch]
