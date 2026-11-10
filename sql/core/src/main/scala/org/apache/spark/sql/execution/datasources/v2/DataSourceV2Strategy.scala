@@ -227,7 +227,7 @@ class DataSourceV2Strategy(session: SparkSession) extends Strategy with Predicat
         project, postScanFilters.diff(fullyPushedRuntimeFilters),
         batchExec, !batchExec.supportsColumnar) :: Nil
 
-    // StreamingV2ScanPushDown takes the columns that each scan reads with the same match.
+    // StreamingV2ScanPushDown takes what each streaming scan reads with the same match.
     case ScanOfStream(p, f, r: StreamingDataSourceV2ScanRelation)
       if r.startOffset.isDefined && r.endOffset.isDefined =>
 
