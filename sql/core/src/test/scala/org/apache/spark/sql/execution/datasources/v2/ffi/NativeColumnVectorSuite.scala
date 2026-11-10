@@ -291,7 +291,9 @@ class NativeColumnVectorSuite extends SparkFunSuite {
 
   test("the decimals of the fields of a struct still hold BigDecimals") {
     // ArrowColumnVector reads the fields of a struct, so that their decimals, unlike those of a
-    // top-level column, hold BigDecimals, which Decimal rounds to ints through doubles.
+    // top-level column, hold BigDecimals. Decimal rounds those to integers through doubles until
+    // SPARK-60843, so that the nested decimal then rounds to 123456790, a known inconsistency,
+    // which this test does not pin.
     withAllocator { allocator =>
       Using.resource(StructVector.empty("struct", allocator)) { struct =>
         val field = FieldType.nullable(new ArrowType.Decimal(18, 9, 128))
@@ -306,9 +308,6 @@ class NativeColumnVectorSuite extends SparkFunSuite {
         assert(top.toDebugString === "Decimal(compact, 123456789999999999, 18, 9)")
         assert(top.roundToInt() === 123456789)
         assert(nested.toDebugString === "Decimal(expanded, 123456789.999999999, 18, 9)")
-        // A known inconsistency rather than the intended result, which is the exact 123456789 of
-        // the top-level column: it is the rounding of the BigDecimals of every ArrowColumnVector.
-        assert(nested.roundToInt() === 123456790)
       }
     }
   }

@@ -460,9 +460,14 @@ abstract class BaseScriptTransformationSuite extends QueryTest {
       }
     }
     // The interrupt of the writer thread does not escape it, and its failure to write to the
-    // destroyed script is not logged as an error.
+    // destroyed script is not logged as an error. The writer threads of earlier tests, which have
+    // the same name, may still log, so only those of this test are checked.
     assert(uncaughtExceptionHandler.exception.isEmpty)
-    val errors = logAppender.loggingEvents.filter(_.getThreadName.endsWith("WriterThread-Feed"))
+    val earlierThreads = before.map(_.threadId())
+    val errors = logAppender.loggingEvents.filter { event =>
+      event.getThreadName.endsWith("WriterThread-Feed") &&
+        !earlierThreads.contains(event.getThreadId)
+    }
     assert(errors.isEmpty, errors.map(_.getMessage.getFormattedMessage).mkString("\n"))
   }
 
