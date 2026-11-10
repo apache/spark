@@ -500,6 +500,12 @@ Data source options of Protobuf can be set via:
     <td>read</td>
   </tr>
   <tr>
+    <td><code>convert.timestamp.duration.to.native</code></td>
+    <td><code>true</code></td>
+    <td>Whether to convert Protobuf <code>Timestamp</code> and <code>Duration</code> fields to Spark's native <code>TimestampType</code> and <code>DayTimeIntervalType</code>, respectively, when deserializing. When set to <code>false</code>, these fields are deserialized as structs with <code>seconds</code> (<code>LongType</code>) and <code>nanos</code> (<code>IntegerType</code>) fields.</td>
+    <td>read</td>
+  </tr>
+  <tr>
     <td><code>retain.empty.message.types</code></td>
     <td><code>false</code></td>
     <td>Whether to retain fields of the empty proto message type in Schema. Since Spark doesn't allow writing empty <code>StructType</code>, the empty proto message type will be dropped by default. Setting this option to <code>true</code> will insert a dummy column(<code>__dummy_field_in_empty_struct</code>) to the empty proto message so that the empty message fields will be retained.</td>

@@ -24,10 +24,13 @@ import org.apache.spark.sql.catalyst.analysis.{caseInsensitiveResolution, caseSe
 import org.apache.spark.sql.catalyst.expressions.{Alias, AttributeReference, AttributeSeq, CreateNamedStruct, Expression, ExpressionEvalHelper, ExtractValue, GetStructField, Literal, MetadataAttribute}
 import org.apache.spark.sql.catalyst.optimizer.FoldablePropagation
 import org.apache.spark.sql.catalyst.plans.logical.{LocalRelation, Project}
-import org.apache.spark.sql.catalyst.util.{GenericArrayData, MetadataColumnHelper}
+import org.apache.spark.sql.catalyst.util.{CharVarcharUtils, GenericArrayData, MetadataColumnHelper}
 import org.apache.spark.sql.connector.catalog.{Column, MetadataColumn, SupportsMetadataColumns, Table, TableCapability}
 import org.apache.spark.sql.internal.SQLConf
-import org.apache.spark.sql.types.{ArrayType, DataType, IntegerType, MapType, Metadata, MetadataBuilder, StringType, StructField, StructType, VariantType}
+import org.apache.spark.sql.types.{
+  ArrayType, CharType, DataType, IntegerType, MapType, Metadata, MetadataBuilder, StringType,
+  StructField, StructType, VariantType
+}
 import org.apache.spark.sql.util.{CaseInsensitiveStringMap, SchemaUtils, SchemaValidationMode}
 import org.apache.spark.types.variant.VariantBuilder
 import org.apache.spark.unsafe.types.VariantVal
@@ -66,6 +69,32 @@ class AnalyzedSchemaProjectionSuite extends SparkFunSuite with ExpressionEvalHel
 
     // No projection is added, so an unchanged table keeps the plan it was analyzed with.
     assert(AnalyzedSchemaProjection.rebindToAnalyzedSchema(captured) eq captured)
+  }
+
+  test("keep a CHAR-padded relation when refresh only re-stamps padding metadata") {
+    val table = new TestTable(Array(Column.create("c", CharType(5))))
+    val captured = DataSourceV2Relation.create(table, None, None)
+    assert(CharVarcharUtils.getRawType(captured.output.head.metadata).isDefined)
+    val padded = captured.copy(output = captured.output.map(CharVarcharUtils.cleanAttrMetadata))
+    val rebound = AnalyzedSchemaProjection.rebindToAnalyzedSchema(padded)
+    assert(rebound eq padded)
+    assert(CharVarcharUtils.getRawType(rebound.output.head.metadata).isEmpty)
+  }
+
+  test("keep cleaned CHAR metadata when rebinding around a new column") {
+    val capturedTable = new TestTable(Array(Column.create("c", CharType(5))))
+    val currentTable = new TestTable(Array(
+      Column.create("c", CharType(5)),
+      Column.create("added", IntegerType)))
+    val captured = DataSourceV2Relation.create(capturedTable, None, None)
+    val padded = captured.copy(output = captured.output.map(CharVarcharUtils.cleanAttrMetadata))
+    val project = AnalyzedSchemaProjection
+      .rebindToAnalyzedSchema(padded.copy(table = currentTable))
+      .asInstanceOf[Project]
+    val childC = project.child.output.find(_.name == "c").get
+    assert(childC.exprId == padded.output.head.exprId)
+    assert(CharVarcharUtils.getRawType(childC.metadata).isEmpty)
+    assert(CharVarcharUtils.getRawType(project.output.head.metadata).isEmpty)
   }
 
   test("rebind an already rebound relation without stacking a second projection") {

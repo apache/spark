@@ -102,6 +102,91 @@ class CodeGenerationSuite extends SparkFunSuite with ExpressionEvalHelper {
     assert(actual.head == cases)
   }
 
+  /**
+   * Runs `body` and fails if the code it generates has a method past the 8000 bytes HotSpot
+   * compiles, which `CodeGenerator` logs as it compiles the class.
+   */
+  private def assertJitCompilable(body: => Unit): Unit = {
+    val appender = new LogAppender("methods too long to be JIT compiled")
+    withLogAppender(appender,
+        loggerNames = Seq(classOf[CodeGenerator[_, _]].getName), level = Some(Level.INFO)) {
+      body
+    }
+    val tooLong = appender.loggingEvents.map(_.getMessage.getFormattedMessage)
+      .filter(_.contains("too long to be JIT compiled"))
+    assert(tooLong.isEmpty, tooLong.mkString("\n"))
+  }
+
+  // The tests below pin SPARK-59783: an expression split into hundreds of functions left one call
+  // per function in the method holding them, and the calls alone took that method past the
+  // 8000 bytes HotSpot compiles, so every row ran it interpreted. Each test covers one caller of
+  // `splitExpressions`, with as many children as it takes for that method to cross the limit
+  // without the grouping: fewer where one child generates more code.
+
+  test("SPARK-59783: the calls to the functions CASE WHEN splits into are JIT-compilable") {
+    val wide = 3000
+    val input = BoundReference(0, IntegerType, nullable = false)
+    val expression = CaseWhen(
+      (1 to wide).map(k => (EqualTo(input, Literal(k)), Multiply(input, Literal(k)))), Literal(0))
+    assertJitCompilable {
+      val projection = GenerateMutableProjection.generate(Seq(expression))
+      Seq(7 -> 49, wide -> wide * wide, wide + 1 -> 0).foreach { case (in, out) =>
+        assert(projection(new GenericInternalRow(Array[Any](in))).getInt(0) == out)
+      }
+    }
+  }
+
+  test("SPARK-59783: the calls to the functions COALESCE splits into are JIT-compilable") {
+    val wide = 10000
+    val expression = Coalesce((0 until wide).map(i => BoundReference(i, IntegerType, true)))
+    assertJitCompilable {
+      val projection = GenerateMutableProjection.generate(Seq(expression))
+      val values = new Array[Any](wide)
+      assert(projection(new GenericInternalRow(values)).isNullAt(0))
+      values(wide - 1) = 42
+      assert(projection(new GenericInternalRow(values)).getInt(0) == 42)
+    }
+  }
+
+  test("SPARK-59783: the calls to the functions IN splits into are JIT-compilable") {
+    val wide = 10000
+    val input = BoundReference(0, IntegerType, nullable = false)
+    val expression = In(input, (1 to wide).map(k => Literal(k * 2)))
+    assertJitCompilable {
+      val projection = GenerateMutableProjection.generate(Seq(expression))
+      Seq(2 -> true, wide * 2 -> true, 3 -> false).foreach { case (in, out) =>
+        assert(projection(new GenericInternalRow(Array[Any](in))).getBoolean(0) == out)
+      }
+    }
+  }
+
+  test("SPARK-59783: the calls to the functions a hash splits into are JIT-compilable") {
+    val wide = 30000
+    val children = (0 until wide).map(i => BoundReference(i, IntegerType, true))
+    val row = new GenericInternalRow(Array.tabulate[Any](wide)(identity))
+    Seq(Murmur3Hash(children, 42), XxHash64(children, 42L)).foreach { expression =>
+      assertJitCompilable {
+        val projection = GenerateMutableProjection.generate(Seq(expression))
+        assert(projection(row).get(0, expression.dataType) == expression.eval(row))
+      }
+    }
+  }
+
+  test("SPARK-59783: the calls to the functions an ordering splits into are JIT-compilable") {
+    val wide = 3000
+    val sortOrder = (0 until wide).map(i => SortOrder(BoundReference(i, IntegerType, true),
+      Ascending))
+    val small = new GenericInternalRow(Array.tabulate[Any](wide)(identity))
+    val large = new GenericInternalRow(
+      Array.tabulate[Any](wide)(i => if (i == wide - 1) i + 1 else i))
+    assertJitCompilable {
+      val ordering = GenerateOrdering.generate(sortOrder)
+      assert(ordering.compare(small, large) < 0)
+      assert(ordering.compare(large, small) > 0)
+      assert(ordering.compare(small, small) == 0)
+    }
+  }
+
   test("SPARK-22543: split large if expressions into blocks due to JVM code size limit") {
     var strExpr: Expression = Literal("abc")
     for (_ <- 1 to 150) {

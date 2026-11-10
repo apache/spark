@@ -120,6 +120,12 @@ ASOF JOIN VALUES
     (named_struct('a', CAST(4 AS BIGINT))) AS r(k)
   MATCH_CONDITION (t.k >= r.k);
 
+-- FVT-ASOF-4-012c: empty STRUCT operands (SPARK-59749); two empty structs are equal
+SELECT t.id, r.tag AS matched
+FROM VALUES (1, named_struct()) AS t(id, k) ASOF JOIN
+     VALUES (named_struct(), 'hit') AS r(k, tag)
+  MATCH_CONDITION (t.k >= r.k);
+
 -- FVT-ASOF-4-013: coercion TINYINT vs BIGINT
 SELECT t.k, r.k AS matched_k
 FROM VALUES (CAST(10 AS TINYINT)) AS t(k) ASOF JOIN VALUES (CAST(5 AS BIGINT)) AS r(k)
@@ -136,11 +142,40 @@ FROM VALUES (DATE '2026-06-29') AS t(d) ASOF JOIN
      VALUES (TIMESTAMP '2026-06-29 10:00:00'), (TIMESTAMP '2026-06-28 08:00:00') AS r(ts)
   MATCH_CONDITION (t.d >= r.ts);
 
--- FVT-ASOF-4-016: coercion TIMESTAMP vs TIMESTAMP_NTZ
-SELECT t.ts, r.ts_ntz AS matched_ts_ntz
-FROM VALUES (TIMESTAMP '2026-06-29 10:00:00') AS t(ts) ASOF JOIN
-     VALUES (TIMESTAMP_NTZ '2026-06-29 09:00:00') AS r(ts_ntz)
-  MATCH_CONDITION (t.ts >= r.ts_ntz);
+-- FVT-ASOF-4-016: coercion TIMESTAMP vs TIMESTAMP_NTZ across a DST gap
+SET spark.sql.session.timeZone=America/Los_Angeles;
+
+-- The DST gap maps 02:50 to 10:50Z, after 03:00 (10:00Z) and 03:15 (10:15Z).
+SELECT l.id, r.id
+FROM VALUES
+  (TIMESTAMP_LTZ '2024-03-10 10:05:00Z', 1),
+  (TIMESTAMP_LTZ '2024-03-10 10:55:00Z', 2) AS l(ts, id)
+LEFT ASOF JOIN VALUES
+  (TIMESTAMP_NTZ '2024-03-10 02:50:00', 1),
+  (TIMESTAMP_NTZ '2024-03-10 03:00:00', 2),
+  (TIMESTAMP_NTZ '2024-03-10 03:15:00', 3) AS r(ts, id)
+MATCH_CONDITION (l.ts <= r.ts);
+
+SELECT l.id, r.id
+FROM VALUES
+  (TIMESTAMP_LTZ '2024-03-10 10:05:00Z', 1),
+  (TIMESTAMP_LTZ '2024-03-10 10:55:00Z', 2) AS l(ts, id)
+LEFT ASOF JOIN VALUES
+  (TIMESTAMP_NTZ '2024-03-10 02:50:00', 1),
+  (TIMESTAMP_NTZ '2024-03-10 03:00:00', 2),
+  (TIMESTAMP_NTZ '2024-03-10 03:15:00', 3) AS r(ts, id)
+MATCH_CONDITION (l.ts >= r.ts);
+
+-- Timestamp coercion also applies within a tuple that widens INT to BIGINT.
+SELECT r.id
+FROM VALUES (TIMESTAMP_LTZ '2024-03-10 10:15:00Z', 2L) AS l(ts, n)
+LEFT ASOF JOIN VALUES
+  (TIMESTAMP_NTZ '2024-03-10 02:50:00', 1, 1),
+  (TIMESTAMP_NTZ '2024-03-10 03:15:00', 1, 2),
+  (TIMESTAMP_NTZ '2024-03-10 03:15:00', 3, 3) AS r(ts, n, id)
+MATCH_CONDITION ((l.ts, l.n) <= (r.ts, r.n));
+
+RESET spark.sql.session.timeZone;
 
 -- FVT-ASOF-4-016a: coercion DATE vs STRING (SPARK-59527), coerced like the >= operator
 SELECT t.d, r.s AS matched_s
@@ -206,6 +241,39 @@ ASOF JOIN (
 SELECT r.c1, r.c2
 FROM VALUES (1, 2) AS t(c1, c2) ASOF JOIN VALUES (1, 1) AS r(c1, c2)
   MATCH_CONDITION ((t.c1, t.c2) >= (r.c1, r.c2));
+
+-- FVT-ASOF-4-018b: ARRAY of empty STRUCT (SPARK-59749) with >=. The elements tie, so length
+-- orders the arrays. Sizes 1 and 2 pass; the closest is size 2.
+SELECT size(r.a) AS matched_size
+FROM VALUES (ARRAY(named_struct(), named_struct())) AS t(a) ASOF JOIN
+     VALUES (ARRAY(named_struct())),
+            (ARRAY(named_struct(), named_struct())),
+            (ARRAY(named_struct(), named_struct(), named_struct())) AS r(a)
+  MATCH_CONDITION (t.a >= r.a);
+
+-- FVT-ASOF-4-018c: ARRAY of empty STRUCT with >. Only size 1 passes.
+SELECT size(r.a) AS matched_size
+FROM VALUES (ARRAY(named_struct(), named_struct())) AS t(a) ASOF JOIN
+     VALUES (ARRAY(named_struct())),
+            (ARRAY(named_struct(), named_struct())),
+            (ARRAY(named_struct(), named_struct(), named_struct())) AS r(a)
+  MATCH_CONDITION (t.a > r.a);
+
+-- FVT-ASOF-4-018d: ARRAY of empty STRUCT with <=. Sizes 2 and 3 pass; the closest is size 2.
+SELECT size(r.a) AS matched_size
+FROM VALUES (ARRAY(named_struct(), named_struct())) AS t(a) ASOF JOIN
+     VALUES (ARRAY(named_struct())),
+            (ARRAY(named_struct(), named_struct())),
+            (ARRAY(named_struct(), named_struct(), named_struct())) AS r(a)
+  MATCH_CONDITION (t.a <= r.a);
+
+-- FVT-ASOF-4-018e: ARRAY of empty STRUCT with <. Only size 3 passes.
+SELECT size(r.a) AS matched_size
+FROM VALUES (ARRAY(named_struct(), named_struct())) AS t(a) ASOF JOIN
+     VALUES (ARRAY(named_struct())),
+            (ARRAY(named_struct(), named_struct())),
+            (ARRAY(named_struct(), named_struct(), named_struct())) AS r(a)
+  MATCH_CONDITION (t.a < r.a);
 
 -- FVT-ASOF-4-019: MAP operand rejection — covered by FVT-ASOF-3-010
 

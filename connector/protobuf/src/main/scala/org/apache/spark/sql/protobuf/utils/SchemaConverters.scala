@@ -100,13 +100,15 @@ object SchemaConverters extends Logging {
       case BYTE_STRING => Some(BinaryType)
       case ENUM => if (protobufOptions.enumsAsInts) Some(IntegerType) else Some(StringType)
       case MESSAGE
-        if (fd.getMessageType.getName == "Duration" &&
+        if (protobufOptions.convertTimestampDurationToNative &&
+          fd.getMessageType.getName == "Duration" &&
           fd.getMessageType.getFields.size() == 2 &&
           fd.getMessageType.getFields.get(0).getName.equals("seconds") &&
           fd.getMessageType.getFields.get(1).getName.equals("nanos")) =>
         Some(DayTimeIntervalType.defaultConcreteType)
       case MESSAGE
-        if (fd.getMessageType.getName == "Timestamp" &&
+        if (protobufOptions.convertTimestampDurationToNative &&
+          fd.getMessageType.getName == "Timestamp" &&
           fd.getMessageType.getFields.size() == 2 &&
           fd.getMessageType.getFields.get(0).getName.equals("seconds") &&
           fd.getMessageType.getFields.get(1).getName.equals("nanos")) =>

@@ -833,7 +833,7 @@ class PersistedViewTestSuite extends SQLViewTestSuite with SharedSparkSession {
       condition = "INVALID_TEMP_OBJ_REFERENCE",
       parameters = Map(
         "obj" -> "VIEW",
-        "objName" -> "`unknown`",
+        "objName" -> "`spark_catalog`.`default`.`v_table_3`",
         "tempObj" -> "VARIABLE",
         "tempObjName" -> "`table_name`"
       )
@@ -848,7 +848,7 @@ class PersistedViewTestSuite extends SQLViewTestSuite with SharedSparkSession {
       condition = "INVALID_TEMP_OBJ_REFERENCE",
       parameters = Map(
         "obj" -> "VIEW",
-        "objName" -> "`unknown`",
+        "objName" -> "`v_table_4`",
         "tempObj" -> "VARIABLE",
         "tempObjName" -> "`table_name`"
       )

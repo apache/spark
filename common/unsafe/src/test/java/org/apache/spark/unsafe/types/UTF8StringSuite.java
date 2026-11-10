@@ -71,6 +71,36 @@ public class UTF8StringSuite {
   }
 
   @Test
+  public void numCharsCachesAsciiness() {
+    // numChars() determines ASCII-ness as a byproduct of its scan and caches it. Verify it
+    // agrees with getIsFullAscii() (reached via a fresh isFullAscii()), including for invalid
+    // UTF-8 where the code-point count equals the byte count but a byte is >= 0x80 (not ASCII).
+    byte[][] inputs = new byte[][] {
+      {0x68, 0x65, 0x6c, 0x6c, 0x6f},                     // "hello" - full ASCII
+      {},                                                 // empty
+      {0x61, (byte) 0x80},                                // 'a' + stray continuation (invalid)
+      {(byte) 0x80},                                      // lone continuation byte (invalid)
+      {(byte) 0xC3, (byte) 0xA9},                         // valid 2-byte char U+00E9
+      {0x61, (byte) 0xE5, (byte) 0xA4, (byte) 0xA7, 0x62} // 'a' + 3-byte char + 'b'
+    };
+    for (byte[] bytes : inputs) {
+      // Reference: a fresh string computes ASCII-ness via getIsFullAscii().
+      boolean expected = fromBytes(bytes).isFullAscii();
+      // Under test: numChars() runs first and must cache the identical answer.
+      UTF8String s = fromBytes(bytes);
+      s.numChars();
+      assertEquals(expected, s.isFullAscii(),
+        "numChars() cached wrong ASCII flag for " + Arrays.toString(bytes));
+    }
+
+    // The specific invalid case a naive `numChars == numBytes` test would misflag as ASCII:
+    // the count equals the byte count, but the 0x80 byte is not ASCII.
+    UTF8String invalid = fromBytes(new byte[] {0x61, (byte) 0x80});
+    assertEquals(invalid.numBytes(), invalid.numChars());
+    assertFalse(invalid.isFullAscii());
+  }
+
+  @Test
   public void emptyStringTest() {
     assertEquals(EMPTY_UTF8, fromString(""));
     assertEquals(EMPTY_UTF8, fromBytes(new byte[0]));
@@ -226,6 +256,44 @@ public class UTF8StringSuite {
     assertEquals(fromString("据砖"), fromString("数据砖头").substring(1, 3));
     assertEquals(fromString("头"), fromString("数据砖头").substring(3, 5));
     assertEquals(fromString("ߵ梷"), fromString("ߵ梷").substring(0, 2));
+  }
+
+  @Test
+  public void asciiLocateFastPathMatchesScan() {
+    // substring, getChar, charPosToByte and bytePosToChar take an ASCII fast-path when the
+    // isFullAscii flag is already FULL_ASCII. For each input, compare a cold instance (flag
+    // UNKNOWN -> general scan) against a warmed instance (isFullAscii() called -> fast-path for
+    // ASCII) and assert identical results. Covers ASCII, empty, multi-byte, and invalid UTF-8.
+    byte[][] inputs = new byte[][] {
+      "hello world".getBytes(StandardCharsets.UTF_8), // full ASCII -> exercises the fast-path
+      {}, // empty (vacuously ASCII)
+      {0x61, (byte) 0xC3, (byte) 0xA9, 0x62}, // 'a' + U+00E9 (2-byte) + 'b' (not ASCII)
+      {0x61, (byte) 0x80, 0x62} // invalid UTF-8, stray continuation (not ASCII)
+    };
+    int[] positions = {Integer.MIN_VALUE, -3, -1, 0, 1, 2, 3, 5, 100, Integer.MAX_VALUE};
+
+    for (byte[] bytes : inputs) {
+      UTF8String cold = fromBytes(bytes);
+      UTF8String warm = fromBytes(bytes);
+      warm.isFullAscii(); // warm the cached flag; fast-path branches read it without recomputing
+      String label = Arrays.toString(bytes);
+
+      for (int a : positions) {
+        for (int b : positions) {
+          assertEquals(cold.substring(a, b), warm.substring(a, b),
+            "substring(" + a + ", " + b + ") on " + label);
+        }
+        assertEquals(cold.charPosToByte(a), warm.charPosToByte(a),
+          "charPosToByte(" + a + ") on " + label);
+        assertEquals(cold.bytePosToChar(a), warm.bytePosToChar(a),
+          "bytePosToChar(" + a + ") on " + label);
+      }
+
+      for (int idx = 0; idx < warm.numChars(); idx++) {
+        assertEquals(cold.getChar(idx), warm.getChar(idx),
+          "getChar(" + idx + ") on " + label);
+      }
+    }
   }
 
   @Test

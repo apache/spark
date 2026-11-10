@@ -1136,6 +1136,41 @@ select 3 as x, 4 as y
 select 3 as x, 4 as y
 |> aggregate sum(y) group by 0;
 
+-- An integer-literal ordinal in the AGGREGATE GROUP BY clause cannot be aliased.
+select 3 as x, 4 as y
+|> aggregate sum(y) group by 2 as grp;
+
+select 3 as x, 4 as y
+|> aggregate sum(y) group by x, 2 grp;
+
+select 3 as x, 4 as y
+|> aggregate sum(y) group by (2) as grp;
+
+select 3 as x, 4 as y
+|> aggregate sum(y) group by -1 as grp;
+
+-- Aliases are allowed on grouping expressions other than integer literals.
+select 3 as x, 4 as y
+|> aggregate sum(y) group by x as grp;
+
+select 3 as x, 4 as y
+|> aggregate sum(y) group by 1 + 1 as grp;
+
+select 3 as x, 4 as y
+|> aggregate sum(y) group by 2L as grp;
+
+-- The legacy config restores grouping by an aliased integer literal as a constant.
+set spark.sql.legacy.allowAliasedPipeAggregateOrdinals=true;
+select 3 as x, 4 as y
+|> aggregate sum(y) group by 2 as grp;
+set spark.sql.legacy.allowAliasedPipeAggregateOrdinals=false;
+
+-- An aliased integer literal is a constant grouping key when GROUP BY ordinals are disabled.
+set spark.sql.groupByOrdinal=false;
+select 3 as x, 4 as y
+|> aggregate sum(y) group by 2 as grp;
+set spark.sql.groupByOrdinal=true;
+
 -- GROUP BY ROLLUP is not supported yet.
 table courseSales
 |> aggregate sum(earnings) group by rollup(course, `year`)
@@ -1917,6 +1952,53 @@ table other
 -- The |> AGGREGATE keyword also works for aggregation.
 table other
 |> aggregate sum(a) as total_a;
+
+-- A pipe projection does not expose a removed struct through star or field resolution.
+from values (1, named_struct('a', 10, 'b', 20)) as tab(id, h)
+|> select id
+|> select h.*;
+
+from values (1, named_struct('a', 10, 'b', 20)) as tab(id, h)
+|> select id
+|> select h.a;
+
+-- The removed struct is also not exposed after DROP or AGGREGATE, or to WHERE and EXTEND, but
+-- stays visible when it is kept, renamed, or qualified through a relation alias.
+from values (1, named_struct('a', 10, 'b', 20)) as tab(id, h)
+|> drop h
+|> select h.*;
+
+from values (1, named_struct('a', 10, 'b', 20)) as tab(id, h)
+|> drop h
+|> select h.a;
+
+from values (1, named_struct('a', 10, 'b', 20)) as tab(id, h)
+|> aggregate count(*) as c group by id
+|> select h.a;
+
+from values (1, named_struct('a', 10, 'b', 20)) as tab(id, h)
+|> select id
+|> where h.a > 0;
+
+from values (1, named_struct('a', 10, 'b', 20)) as tab(id, h)
+|> select id
+|> extend h.a as z;
+
+from values (1, named_struct('a', 10, 'b', 20)) as tab(id, h)
+|> select id, h
+|> select h.*;
+
+from values (1, named_struct('a', 10, 'b', 20)) as tab(id, h)
+|> select h as g
+|> select g.*, g.a;
+
+from values (1, named_struct('a', 10, 'b', 20)) as tab(id, h)
+|> select h as g
+|> select h.a;
+
+from values (1, named_struct('a', 10, 'b', 20)) as tab(id, h)
+|> as x
+|> select x.h.a;
 
 -- Cleanup.
 -----------

@@ -20,13 +20,14 @@ package org.apache.spark.sql.execution
 import java.util.Locale
 
 import org.apache.spark.{SparkException, SparkUnsupportedOperationException}
+import org.apache.spark.api.python.PythonEvalType
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.{execution, AnalysisException}
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.analysis.{EliminateSubqueryAliases, NamedRelation}
 import org.apache.spark.sql.catalyst.encoders.ExpressionEncoder
 import org.apache.spark.sql.catalyst.expressions._
-import org.apache.spark.sql.catalyst.optimizer.{BuildLeft, BuildRight, BuildSide, JoinSelectionHelper, NormalizeFloatingNumbers}
+import org.apache.spark.sql.catalyst.optimizer.{BuildRight, BuildSide, JoinSelectionHelper, NormalizeFloatingNumbers}
 import org.apache.spark.sql.catalyst.planning._
 import org.apache.spark.sql.catalyst.plans._
 import org.apache.spark.sql.catalyst.plans.logical._
@@ -115,6 +116,11 @@ abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
           CollectLimitExec(limit = offset + limit, child = planLater(child), offset = offset)
         case Limit(IntegerLiteral(limit), child) =>
           CollectLimitExec(limit = limit, child = planLater(child))
+        case logical.Offset(IntegerLiteral(0), child) =>
+          // OFFSET 0 is a no-op. It is normally removed by the EliminateOffsets optimizer rule,
+          // but that rule is excludable, so handle it defensively here to avoid constructing a
+          // CollectLimitExec with no limit and a zero offset (which fails its assertion).
+          planLater(child)
         case logical.Offset(IntegerLiteral(offset), child) =>
           CollectLimitExec(child = planLater(child), offset = offset)
         case Tail(IntegerLiteral(limit), child) =>
@@ -361,75 +367,14 @@ abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
       //   3. Pick broadcast nested loop join as the final solution. It may OOM but we don't have
       //      other choice. It broadcasts the smaller side for inner and full joins, broadcasts the
       //      left side for right join, and broadcasts right side for left join.
-      case logical.Join(left, right, joinType, condition, hint) =>
+      case j @ logical.Join(left, right, joinType, condition, hint) =>
         checkHintNonEquiJoin(hint)
-        val desiredBuildSide = if (joinType.isInstanceOf[InnerLike] || joinType == FullOuter) {
-          getSmallerSide(left, right)
-        } else {
-          // For perf reasons, `BroadcastNestedLoopJoinExec` prefers to broadcast left side if
-          // it's a right join, and broadcast right side if it's a left join.
-          // TODO: revisit it. If left side is much smaller than the right side, it may be better
-          // to broadcast the left side even if it's a left join.
-          if (canBuildBroadcastLeft(joinType)) BuildLeft else BuildRight
-        }
-
-        def createBroadcastNLJoin(onlyLookingAtHint: Boolean) = {
-          val buildLeft = if (onlyLookingAtHint) {
-            hintToBroadcastLeft(hint)
-          } else {
-            canBroadcastBySize(left, conf) && !hintToNotBroadcastAndReplicateLeft(hint)
-          }
-
-          val buildRight = if (onlyLookingAtHint) {
-            hintToBroadcastRight(hint)
-          } else {
-            canBroadcastBySize(right, conf) && !hintToNotBroadcastAndReplicateRight(hint)
-          }
-
-          val maybeBuildSide = if (buildLeft && buildRight) {
-            Some(desiredBuildSide)
-          } else if (buildLeft) {
-            Some(BuildLeft)
-          } else if (buildRight) {
-            Some(BuildRight)
-          } else {
-            None
-          }
-
-          maybeBuildSide.map { buildSide =>
+        getNonEquiJoinBuildSide(j, conf) match {
+          case Some(buildSide) =>
             Seq(joins.BroadcastNestedLoopJoinExec(
               planLater(left), planLater(right), buildSide, joinType, condition))
-          }
-        }
-
-        def createCartesianProduct() = {
-          if (joinType.isInstanceOf[InnerLike] && !hintToNotBroadcastAndReplicate(hint)) {
-            Some(Seq(joins.CartesianProductExec(planLater(left), planLater(right), condition)))
-          } else {
-            None
-          }
-        }
-
-        def createJoinWithoutHint() = {
-          createBroadcastNLJoin(false)
-            .orElse(createCartesianProduct())
-            .getOrElse {
-              // This join could be very slow or OOM
-              // Build the desired side unless the join requires a particular build side
-              // (e.g. NO_BROADCAST_AND_REPLICATION hint)
-              val requiredBuildSide = getBroadcastNestedLoopJoinBuildSide(hint, joinType)
-              val buildSide = requiredBuildSide.getOrElse(desiredBuildSide)
-              Seq(joins.BroadcastNestedLoopJoinExec(
-                planLater(left), planLater(right), buildSide, joinType, condition))
-            }
-        }
-
-        if (hint.isEmpty) {
-          createJoinWithoutHint()
-        } else {
-          createBroadcastNLJoin(true)
-            .orElse { if (hintToShuffleReplicateNL(hint)) createCartesianProduct() else None }
-            .getOrElse(createJoinWithoutHint())
+          case None =>
+            Seq(joins.CartesianProductExec(planLater(left), planLater(right), condition))
         }
 
       // --- Cases where this strategy does not apply ---------------------------------------------
@@ -437,29 +382,27 @@ abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
     }
   }
 
-  /**
-   * Plans AS-OF joins using a dedicated sort-merge operator when enabled for the
-   * DataFrame API, or implicitly for SQL ASOF JOIN (`requiresSortMergeAsOfJoin`).
-   */
+  /** Plans AS-OF joins whose analyzed node selects the sort-merge operator. */
   object AsOfJoinSelection extends Strategy with PredicateHelper {
     def apply(plan: LogicalPlan): Seq[SparkPlan] = plan match {
-      case j: AsOfJoin if conf.useSortMergeAsOfJoinOperator(j.requiresSortMergeAsOfJoin) =>
+      case j: AsOfJoin if j.requiresSortMergeAsOfJoin =>
         val (leftKeys, rightKeys, residual) = j.condition match {
           case Some(cond) => extractEquiJoinKeys(cond, j.left, j.right)
           case None => (Seq.empty[Expression], Seq.empty[Expression], None)
         }
-        val (leftSort, rightSort) =
-          if (j.leftSortExprs.nonEmpty && j.rightSortExprs.nonEmpty) {
-            (j.leftSortExprs, j.rightSortExprs)
-          } else {
-            val (leftAsOf, rightAsOf) = extractAsOfExprs(j.orderExpression, j.left, j.right)
-            (Seq(leftAsOf), Seq(rightAsOf))
-          }
 
         joins.SortMergeAsOfJoinExec(
-          leftKeys, rightKeys, leftSort, rightSort,
-          j.asOfCondition, j.orderExpression, j.joinType, residual,
-          planLater(j.left), planLater(j.right)) :: Nil
+          leftKeys = leftKeys,
+          rightKeys = rightKeys,
+          leftSortExprs = j.leftSortExprs,
+          rightSortExprs = j.rightSortExprs,
+          asOfCondition = j.asOfCondition,
+          direction = j.direction,
+          joinType = j.joinType,
+          condition = residual,
+          left = planLater(j.left),
+          right = planLater(j.right)
+        ) :: Nil
       case _ => Nil
     }
 
@@ -497,51 +440,6 @@ abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
       }
       val residual = residuals.reduceOption(And)
       (leftKeys.toSeq, rightKeys.toSeq, residual)
-    }
-
-    /**
-     * Extract the left and right as-of key expressions.
-     *
-     * We always extract from orderExpression rather than asOfCondition
-     * because orderExpression is direction-unique by construction
-     * (Subtract(left, right) for Backward, Subtract(right, left) for
-     * Forward, If(...) for Nearest) and is unaffected by tolerance or
-     * allowExactMatches variations that complicate asOfCondition's shape.
-     */
-    private def extractAsOfExprs(
-        orderExpression: Expression,
-        left: LogicalPlan,
-        right: LogicalPlan): (Expression, Expression) = {
-      val leftAttrs = left.outputSet
-      val rightAttrs = right.outputSet
-
-      findFromOrder(orderExpression, leftAttrs, rightAttrs).getOrElse {
-        throw new IllegalStateException(
-          "Cannot extract as-of keys from order expression: " +
-          s"$orderExpression")
-      }
-    }
-
-    /** Extract as-of key pair from orderExpression (distance metric). */
-    private def findFromOrder(
-        expr: Expression,
-        leftAttrs: AttributeSet,
-        rightAttrs: AttributeSet): Option[(Expression, Expression)] = {
-      expr match {
-        // Backward: Subtract(leftAsOf, rightAsOf)
-        // Forward: Subtract(rightAsOf, leftAsOf)
-        case Subtract(l, r, _)
-            if l.references.subsetOf(leftAttrs) &&
-              r.references.subsetOf(rightAttrs) =>
-          Some((l, r))
-        case Subtract(l, r, _)
-            if l.references.subsetOf(rightAttrs) &&
-              r.references.subsetOf(leftAttrs) =>
-          Some((r, l))
-        // Nearest: If(GT(left, right), Sub(left, right), Sub(right, left))
-        case If(_, thenExpr, _) => findFromOrder(thenExpr, leftAttrs, rightAttrs)
-        case _ => None
-      }
     }
   }
 
@@ -619,7 +517,8 @@ abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
             // A Real-Time Mode batch runs until its duration elapses rather than until its input
             // is exhausted, so an aggregation that only emits once the batch ends would hold every
             // result back for the whole batch. Plan the streamline operator instead, which merges
-            // each input row against state and emits immediately.
+            // each input row against state; Update mode can emit an intermediate result per
+            // input.
             if (isRealTimeMode(child) ||
               conf.getConf(SQLConf.STREAMING_USE_STREAMLINE_AGGREGATOR)) {
               AggUtils.planStreamlineStreamingAggregation(
@@ -1027,6 +926,9 @@ abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
    */
   object PythonEvals extends Strategy {
     override def apply(plan: LogicalPlan): Seq[SparkPlan] = plan match {
+      case ArrowEvalPython(udfs, output, child, PythonEvalType.SQL_SCALAR_ARROW_INPROCESS_UDF) =>
+        InProcessPythonUDFBuilder.checkConfiguration(conf)
+        InProcessArrowEvalPythonExec(udfs, output, planLater(child)) :: Nil
       case ArrowEvalPython(udfs, output, child, evalType) =>
         ArrowEvalPythonExec(udfs, output, planLater(child), evalType) :: Nil
       case BatchEvalPython(udfs, output, child) =>
@@ -1242,6 +1144,11 @@ abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
         execution.LocalLimitExec(limit, planLater(child)) :: Nil
       case logical.GlobalLimit(IntegerLiteral(limit), child) =>
         execution.GlobalLimitExec(limit, planLater(child)) :: Nil
+      case logical.Offset(IntegerLiteral(0), child) =>
+        // OFFSET 0 is a no-op; see the note in SpecialLimits. Excluding EliminateOffsets leaves
+        // the Offset node in place, so avoid building a GlobalLimitExec with no limit and a zero
+        // offset (which fails its assertion).
+        planLater(child) :: Nil
       case logical.Offset(IntegerLiteral(offset), child) =>
         GlobalLimitExec(child = planLater(child), offset = offset) :: Nil
       case union: logical.Union =>

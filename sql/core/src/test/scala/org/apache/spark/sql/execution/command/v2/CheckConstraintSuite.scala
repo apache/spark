@@ -17,15 +17,33 @@
 
 package org.apache.spark.sql.execution.command.v2
 
+import test.org.apache.spark.sql.connector.catalog.functions.JavaAverage
+import test.org.apache.spark.sql.connector.catalog.functions.JavaStrLen.JavaStrLenStaticMagic
+
 import org.apache.spark.SparkRuntimeException
-import org.apache.spark.sql.{AnalysisException, QueryTest, Row}
+import org.apache.spark.sql.{AnalysisException, MapTypeBufferAgg, QueryTest, Row}
+import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.plans.logical.Filter
 import org.apache.spark.sql.catalyst.util.AttributeNameParser
 import org.apache.spark.sql.catalyst.util.QuotingUtils.quoteNameParts
-import org.apache.spark.sql.connector.catalog.Table
-import org.apache.spark.sql.connector.catalog.constraints.Check
+import org.apache.spark.sql.connector.{StrLen, StrLenDefault, StrLenMagic}
+import org.apache.spark.sql.connector.catalog.{Identifier, InMemoryCatalog, Table, TableCatalog, TableChange}
+import org.apache.spark.sql.connector.catalog.constraints.{Check, Constraint}
+import org.apache.spark.sql.connector.catalog.functions.{ScalarFunction, UnboundFunction}
 import org.apache.spark.sql.execution.command.DDLCommandTestUtils
+import org.apache.spark.sql.functions.udaf
 import org.apache.spark.sql.internal.SQLConf
+import org.apache.spark.sql.metricview.serde.{AssetSource, Column, DimensionExpression, MeasureExpression, MetricView, MetricViewFactory}
+import org.apache.spark.sql.types.{DataType, StringType}
+import org.apache.spark.unsafe.types.UTF8String
+
+// A V2 function that a test binds to the name of a built-in function to shadow it.
+private object ConstantString extends ScalarFunction[UTF8String] {
+  override def inputTypes(): Array[DataType] = Array(StringType)
+  override def resultType(): DataType = StringType
+  override def name(): String = "constant_string"
+  override def produceResult(input: InternalRow): UTF8String = UTF8String.fromString("OK")
+}
 
 class CheckConstraintSuite extends QueryTest with CommandSuiteBase with DDLCommandTestUtils {
   override protected def command: String = "Check CONSTRAINT"
@@ -126,6 +144,65 @@ class CheckConstraintSuite extends QueryTest with CommandSuiteBase with DDLComma
     }
   }
 
+  private def checkSubqueryError(query: String, condition: String): Unit = {
+    checkError(
+      exception = intercept[AnalysisException] {
+        sql(query)
+      },
+      condition = "SUBQUERY_IN_CHECK_CONSTRAINT",
+      sqlState = "42621",
+      parameters = Map("checkCondition" -> condition),
+      context = ExpectedContext(fragment = condition))
+  }
+
+  test("SPARK-60781: Subquery in check constraint -- alter table") {
+    withNamespaceAndTable("ns", "tbl", nonPartitionCatalog) { t =>
+      sql(s"CREATE TABLE $t (id INT) $defaultUsing")
+      // An unresolved subquery, one that needs no resolution, and one that fails in the child
+      // `Filter` of the command.
+      Seq("id > (SELECT 0)", "id > (SELECT 0 AS a)", "id > (SELECT 1 FROM missing)").foreach { c =>
+        checkSubqueryError(s"ALTER TABLE $t ADD CONSTRAINT c1 CHECK ($c)", c)
+      }
+      assert(loadTable(nonPartitionCatalog, "ns", "tbl").constraints.isEmpty)
+      // A missing table is reported first.
+      val missing = s"$nonPartitionCatalog.ns.missing"
+      checkError(
+        exception = intercept[AnalysisException] {
+          sql(s"ALTER TABLE $missing ADD CONSTRAINT c1 CHECK (id > (SELECT 0))")
+        },
+        condition = "TABLE_OR_VIEW_NOT_FOUND",
+        parameters = Map("relationName" -> s"`$nonPartitionCatalog`.`ns`.`missing`"),
+        context = ExpectedContext(fragment = missing))
+    }
+  }
+
+  test("SPARK-60781: Subquery in check constraint -- create and replace table") {
+    // An unresolved subquery and one that needs no resolution.
+    Seq("id > (SELECT 0)", "id > (SELECT 0 AS a)").foreach { c =>
+      withNamespaceAndTable("ns", "tbl", nonPartitionCatalog) { t =>
+        val schema = s"(id INT, CONSTRAINT c1 CHECK ($c)) $defaultUsing"
+        checkSubqueryError(s"CREATE TABLE $t $schema", c)
+        sql(s"CREATE TABLE $t (id INT) $defaultUsing")
+        checkSubqueryError(s"REPLACE TABLE $t $schema", c)
+        assert(loadTable(nonPartitionCatalog, "ns", "tbl").constraints.isEmpty)
+      }
+    }
+  }
+
+  test("SPARK-60823: Alter table add check constraint on a path") {
+    withTempPath { dir =>
+      spark.range(1).write.parquet(dir.getCanonicalPath)
+      val path = s"parquet.`${dir.getCanonicalPath}`"
+      checkError(
+        exception = intercept[AnalysisException] {
+          sql(s"ALTER TABLE $path ADD CONSTRAINT c1 CHECK (id > 0)")
+        },
+        condition = "TABLE_OR_VIEW_NOT_FOUND",
+        parameters = Map("relationName" -> s"`parquet`.`${dir.getCanonicalPath}`"),
+        context = ExpectedContext(fragment = path))
+    }
+  }
+
   private def getCheckConstraint(table: Table): Check = {
     assert(table.constraints.length == 1)
     assert(table.constraints.head.isInstanceOf[Check])
@@ -144,6 +221,242 @@ class CheckConstraintSuite extends QueryTest with CommandSuiteBase with DDLComma
         "CONSTRAINT c1 CHECK (from_json(j, 'a INT').a > 1) ENFORCED NORELY")
       assert(constraint.predicateSql() == "from_json(j, 'a INT').a > 1")
       assert(constraint.predicate() == null)
+    }
+  }
+
+  test("SPARK-59962: Check added by ALTER TABLE reading a computed value twice") {
+    // NULLIF reads `id + 1` twice. A predicate stored with a column pre-evaluated under the ALTER
+    // TABLE would make every later write fail to resolve it.
+    withNamespaceAndTable("ns", "tbl", nonPartitionCatalog) { t =>
+      sql(s"CREATE TABLE $t (id bigint, data string) $defaultUsing")
+      sql(s"ALTER TABLE $t ADD CONSTRAINT c1 CHECK (nullif(id + 1, 3) > 0)")
+      // `nullif(3, 3)` is NULL, which a check accepts.
+      sql(s"INSERT INTO $t VALUES (2, 'a')")
+      val error = intercept[SparkRuntimeException] {
+        sql(s"INSERT INTO $t VALUES (-5, 'b')")
+      }
+      checkError(
+        exception = error,
+        condition = "CHECK_CONSTRAINT_VIOLATION",
+        sqlState = "23001",
+        parameters = Map(
+          "constraintName" -> "c1",
+          "expression" -> "nullif(id + 1, 3) > 0",
+          "values" -> " - id : -5"))
+      checkAnswer(sql(s"SELECT * FROM $t"), Row(2, "a"))
+    }
+  }
+
+  private def withV2Function(name: String, function: UnboundFunction)(f: => Unit): Unit = {
+    val funCatalog = spark.sessionState.catalogManager.catalog(s"fun_$catalog")
+      .asInstanceOf[InMemoryCatalog]
+    val ident = Identifier.of(Array("ns"), name)
+    withNamespace(s"fun_$catalog.ns") {
+      sql(s"CREATE NAMESPACE fun_$catalog.ns")
+      funCatalog.createFunction(ident, function)
+      try f finally funCatalog.dropFunction(ident)
+    }
+  }
+
+  // CREATE TABLE, REPLACE TABLE and, if `inAlter`, ALTER TABLE fail at the call in the condition.
+  private def checkUserDefinedFunctionRejected(
+      cond: String,
+      call: String,
+      functionName: String,
+      inAlter: Boolean = true): Unit = {
+    withNamespaceAndTable("ns", "tbl", nonPartitionCatalog) { t =>
+      sql(s"CREATE TABLE $t (id INT, name STRING) $defaultUsing")
+      val alter = if (inAlter) Seq(s"ALTER TABLE $t ADD CONSTRAINT c1 CHECK ($cond)") else Nil
+      (alter ++ Seq(
+        s"CREATE TABLE ${t}_2 (id INT, name STRING, CONSTRAINT c1 CHECK ($cond)) $defaultUsing",
+        s"REPLACE TABLE $t (id INT, name STRING, CONSTRAINT c1 CHECK ($cond)) $defaultUsing"
+      )).foreach { query =>
+        checkError(
+          exception = intercept[AnalysisException](sql(query)),
+          condition = "USER_DEFINED_FUNCTION_IN_CHECK_CONSTRAINT",
+          sqlState = "42621",
+          parameters = Map("checkCondition" -> cond, "functionName" -> functionName),
+          context = ExpectedContext(fragment = call))
+      }
+    }
+  }
+
+  test("SPARK-60777: Check constraint cannot call a user-defined function") {
+    val strlen = s"fun_$catalog.ns.strlen"
+    Seq(
+      (StrLenDefault, s"$strlen(name) < 10", s"$strlen(name)", "`strlen_default`"),
+      // The optimizer folds a call with constant arguments, but the DDL does not.
+      (StrLenDefault, s"id < $strlen('abc')", s"$strlen('abc')", "`strlen_default`"),
+      (StrLenMagic, s"$strlen(name) < 10", s"$strlen(name)", "`strlen_magic`"),
+      (new JavaStrLenStaticMagic, s"$strlen(name) < 10", s"$strlen(name)", "`strlen`")
+    ).foreach { case (function, cond, call, functionName) =>
+      withV2Function("strlen", StrLen(function)) {
+        checkUserDefinedFunctionRejected(cond, call, functionName)
+      }
+    }
+
+    withUserDefinedFunction("tmp_len" -> true, "tmp_sql_len" -> true, "sql_len" -> false) {
+      spark.udf.register("tmp_len", (s: String) => s.length)
+      checkUserDefinedFunctionRejected("tmp_len(name) < 10", "tmp_len(name)", "`tmp_len`")
+      // ALTER TABLE keeps failing with UNSUPPORTED_SQL_UDF_USAGE on a SQL function.
+      sql("CREATE TEMPORARY FUNCTION tmp_sql_len(x STRING) RETURNS INT RETURN length(x)")
+      checkUserDefinedFunctionRejected(
+        "tmp_sql_len(name) < 10", "tmp_sql_len(name)", "`tmp_sql_len`", inAlter = false)
+      sql("CREATE FUNCTION sql_len(x STRING) RETURNS INT RETURN length(x)")
+      checkUserDefinedFunctionRejected(
+        "sql_len(name) < 10",
+        "sql_len(name)",
+        "`spark_catalog`.`default`.`sql_len`",
+        inAlter = false)
+    }
+  }
+
+  test("SPARK-60800: Check constraint cannot call an aggregate or window function") {
+    def checkRejected(call: String): Unit = {
+      withNamespaceAndTable("ns", "tbl", nonPartitionCatalog) { t =>
+        sql(s"CREATE TABLE $t (id INT) $defaultUsing")
+        val cond = s"$call > 0"
+        Seq(
+          s"CREATE TABLE ${t}_2 (id INT, CONSTRAINT c1 CHECK ($cond)) $defaultUsing",
+          s"REPLACE TABLE $t (id INT, CONSTRAINT c1 CHECK ($cond)) $defaultUsing"
+        ).foreach { query =>
+          checkError(
+            exception = intercept[AnalysisException](sql(query)),
+            condition = "AGGREGATE_OR_WINDOW_FUNCTION_IN_CHECK_CONSTRAINT",
+            sqlState = "42621",
+            parameters = Map("checkCondition" -> cond),
+            context = ExpectedContext(fragment = call))
+        }
+      }
+    }
+
+    checkRejected("max(id)")
+    // These are aggregate functions, but not an `AggregateExpression`.
+    checkRejected("grouping(id)")
+    checkRejected("grouping_id()")
+    checkRejected("row_number() OVER (ORDER BY id)")
+    // `row_number()` has no `WindowExpression`, and `abs(id)` is not a `WindowFunction`.
+    checkRejected("row_number()")
+    checkRejected("abs(id) OVER ()")
+    // A user-defined aggregate function fails in the same way as a built-in one.
+    withUserDefinedFunction("tmp_agg" -> true) {
+      spark.udf.register("tmp_agg", udaf(MapTypeBufferAgg))
+      checkRejected("tmp_agg(id)")
+    }
+    withV2Function("avg", new JavaAverage) {
+      checkRejected(s"fun_$catalog.ns.avg(CAST(id AS DOUBLE))")
+    }
+  }
+
+  test("SPARK-60821: Check constraint cannot call a generator function") {
+    withNamespaceAndTable("ns", "tbl", nonPartitionCatalog) { t =>
+      sql(s"CREATE TABLE $t (id INT) $defaultUsing")
+      val call = "explode(array(id))"
+      val cond = s"$call IS NOT NULL"
+      Seq(
+        s"CREATE TABLE ${t}_2 (id INT, CONSTRAINT c1 CHECK ($cond)) $defaultUsing",
+        s"REPLACE TABLE $t (id INT, CONSTRAINT c1 CHECK ($cond)) $defaultUsing"
+      ).foreach { query =>
+        checkError(
+          exception = intercept[AnalysisException](sql(query)),
+          condition = "GENERATOR_IN_CHECK_CONSTRAINT",
+          sqlState = "42621",
+          parameters = Map("checkCondition" -> cond),
+          context = ExpectedContext(fragment = call))
+      }
+    }
+  }
+
+  test("SPARK-60777: Existing check constraint calling a user-defined function still works") {
+    withUserDefinedFunction("tmp_len" -> true) {
+      spark.udf.register("tmp_len", (s: String) => s.length)
+      withNamespaceAndTable("ns", "tbl", nonPartitionCatalog) { t =>
+        sql(s"CREATE TABLE $t (id INT, name STRING) $defaultUsing")
+        val check = Constraint.check("c1").predicateSql("tmp_len(name) < 10").build()
+        spark.sessionState.catalogManager.catalog(nonPartitionCatalog).asInstanceOf[TableCatalog]
+          .alterTable(Identifier.of(Array("ns"), "tbl"), TableChange.addConstraint(check, null))
+        sql(s"INSERT INTO $t VALUES (1, 'abc')")
+        checkError(
+          exception = intercept[SparkRuntimeException] {
+            sql(s"INSERT INTO $t VALUES (2, 'abcdefghijklmnop')")
+          },
+          condition = "CHECK_CONSTRAINT_VIOLATION",
+          sqlState = "23001",
+          parameters = Map(
+            "constraintName" -> "c1",
+            "expression" -> "tmp_len(name) < 10",
+            "values" -> " - name : abcdefghijklmnop"))
+        checkAnswer(spark.table(t).select("id"), Row(1))
+      }
+    }
+  }
+
+  test("SPARK-60777: Check constraint is not shadowed in the session of a write") {
+    def checkEnforced(t: String): Unit = {
+      // The settings of the write do shadow the built-in function outside of the constraint.
+      checkAnswer(sql("SELECT upper('x')"), Row("OK"))
+      checkError(
+        exception = intercept[SparkRuntimeException] {
+          sql(s"INSERT INTO $t VALUES (1, 'x')")
+        },
+        condition = "CHECK_CONSTRAINT_VIOLATION",
+        sqlState = "23001",
+        parameters = Map(
+          "constraintName" -> "c1",
+          "expression" -> "UPPER(s) <> 'X'",
+          "values" -> " - s : x"))
+      checkAnswer(spark.table(t), Nil)
+    }
+
+    withV2Function("upper", StrLen(ConstantString)) {
+      withNamespaceAndTable("ns", "tbl", nonPartitionCatalog) { t =>
+        sql(s"CREATE TABLE $t (id INT, s STRING) $defaultUsing")
+        sql(s"ALTER TABLE $t ADD CONSTRAINT c1 CHECK (UPPER(s) <> 'X')")
+        withSQLConf(SQLConf.PATH_ENABLED.key -> "true") {
+          sql(s"SET PATH = fun_$catalog.ns, system.builtin")
+          try checkEnforced(t) finally sql("SET PATH = DEFAULT_PATH")
+        }
+        spark.udf.register("upper", (_: String) => "OK")
+        try {
+          withSQLConf(SQLConf.SESSION_FUNCTION_RESOLUTION_ORDER.key -> "first") {
+            checkEnforced(t)
+          }
+        } finally {
+          sql("DROP TEMPORARY FUNCTION upper")
+        }
+      }
+    }
+  }
+
+  test("SPARK-60777: Check constraint calling built-in functions is enforced") {
+    Seq(
+      "exists(a, x -> upper(CAST(x AS STRING)) = '2')",
+      "struct(id AS x).x > 0",
+      "extract(YEAR FROM d) < 2100"
+    ).foreach { cond =>
+      withNamespaceAndTable("ns", "tbl", nonPartitionCatalog) { t =>
+        sql(s"CREATE TABLE $t (id INT, a ARRAY<INT>, d DATE) $defaultUsing")
+        sql(s"ALTER TABLE $t ADD CONSTRAINT c1 CHECK ($cond)")
+        sql(s"INSERT INTO $t VALUES (1, array(2), DATE'2020-01-01')")
+        val error = intercept[SparkRuntimeException] {
+          sql(s"INSERT INTO $t VALUES (-1, array(-1), DATE'2999-01-01')")
+        }
+        assert(error.getCondition == "CHECK_CONSTRAINT_VIOLATION", cond)
+        checkAnswer(spark.table(t).select("id"), Row(1))
+      }
+    }
+  }
+
+  test("SPARK-60856: Check constraint with a subscript of a lambda variable") {
+    withNamespaceAndTable("ns", "tbl", nonPartitionCatalog) { t =>
+      sql(s"CREATE TABLE $t (id INT, a ARRAY<ARRAY<INT>>, " +
+        s"CONSTRAINT c1 CHECK (forall(a, x -> x[0] > 0))) $defaultUsing")
+      sql(s"INSERT INTO $t VALUES (1, array(array(1)))")
+      val error = intercept[SparkRuntimeException] {
+        sql(s"INSERT INTO $t VALUES (2, array(array(-1)))")
+      }
+      assert(error.getCondition == "CHECK_CONSTRAINT_VIOLATION")
+      checkAnswer(spark.table(t), Row(1, Seq(Seq(1))))
     }
   }
 
@@ -255,6 +568,19 @@ class CheckConstraintSuite extends QueryTest with CommandSuiteBase with DDLComma
     }
   }
 
+  test("SPARK-60824: Alter table add check constraint that always holds") {
+    withNamespaceAndTable("ns", "tbl", nonPartitionCatalog) { t =>
+      sql(s"CREATE TABLE $t (id INT NOT NULL, data STRING) $defaultUsing")
+      sql(s"INSERT INTO $t VALUES (1, 'a')")
+      // The optimizer replaces the scan that validates the existing rows with an empty relation.
+      sql(s"ALTER TABLE $t ADD CONSTRAINT c1 CHECK (id IS NOT NULL)")
+      val table = loadTable(nonPartitionCatalog, "ns", "tbl")
+      assert(table.validatedVersion() == "1")
+      assert(getCheckConstraint(table).toDDL ==
+        "CONSTRAINT c1 CHECK (id IS NOT NULL) ENFORCED NORELY")
+    }
+  }
+
   test("Alter table add new check constraint with nested column") {
     withNamespaceAndTable("ns", "tbl", nonPartitionCatalog) { t =>
       sql(s"CREATE TABLE $t (id INT, s STRUCT<num INT, str STRING>) $defaultUsing")
@@ -359,6 +685,52 @@ class CheckConstraintSuite extends QueryTest with CommandSuiteBase with DDLComma
           parameters = Map("constraintName" -> "abc",
             "oldConstraint" -> "CONSTRAINT abc CHECK (id > 0) ENFORCED NORELY")
         )
+      }
+    }
+  }
+
+  private def checkAddToViewError(view: String, viewName: String): Unit = {
+    val query = s"ALTER TABLE $view ADD CONSTRAINT c1 CHECK (id > 0)"
+    checkError(
+      exception = intercept[AnalysisException] {
+        sql(query)
+      },
+      condition = "EXPECT_TABLE_NOT_VIEW.NO_ALTERNATIVE",
+      sqlState = "42809",
+      parameters = Map("viewName" -> viewName, "operation" -> "ALTER TABLE ... ADD CONSTRAINT"),
+      context = ExpectedContext(fragment = query, start = 0, stop = query.length - 1))
+  }
+
+  test("SPARK-60822: Check constraint cannot be added to a view") {
+    withNamespaceAndTable("ns", "tbl", nonPartitionCatalog) { t =>
+      sql(s"CREATE TABLE $t (id INT) $defaultUsing")
+      sql(s"INSERT INTO $t VALUES (-1), (10)")
+      withTempView("tv") {
+        withView("v") {
+          // A view that hides the violating row of its table, and one that no table backs.
+          sql(s"CREATE TEMPORARY VIEW tv AS SELECT * FROM $t WHERE id > 5")
+          sql("CREATE VIEW v AS SELECT id FROM range(3)")
+          checkAddToViewError("tv", "`tv`")
+          checkAddToViewError("v", "`spark_catalog`.`default`.`v`")
+        }
+      }
+      assert(loadTable(nonPartitionCatalog, "ns", "tbl").constraints.isEmpty)
+    }
+  }
+
+  test("SPARK-60822: Check constraint cannot be added to a metric view") {
+    withNamespaceAndTable("ns", "tbl", nonPartitionCatalog) { t =>
+      sql(s"CREATE TABLE $t (id INT) $defaultUsing")
+      val yaml = MetricViewFactory.toYAML(MetricView(
+        "0.1",
+        AssetSource(t),
+        None,
+        Seq(
+          Column("id", DimensionExpression("id"), 0),
+          Column("cnt", MeasureExpression("count(1)"), 1))))
+      withView("mv") {
+        sql(s"CREATE VIEW mv WITH METRICS LANGUAGE YAML AS $$$$\n$yaml\n$$$$")
+        checkAddToViewError("mv", "`spark_catalog`.`default`.`mv`")
       }
     }
   }
@@ -695,6 +1067,62 @@ class CheckConstraintSuite extends QueryTest with CommandSuiteBase with DDLComma
           "values" -> " - a[1] : -2"
         )
       )
+    }
+  }
+
+  test("SPARK-60764: Check constraint violation on table insert - " +
+    "special characters in the condition") {
+    Seq(
+      """id > 0 OR s = "x"""",
+      """id > 0 OR s = 'x"y'""",
+      "id > 0 OR\n s = 'xy'",
+      """id > 0 OR s = 'x\\y'""",
+      """id > 0 OR s = 'x\qy'"""
+    ).foreach { condition =>
+      withNamespaceAndTable("ns", "tbl", nonPartitionCatalog) { t =>
+        sql(s"CREATE TABLE $t (id INT, s STRING) $defaultUsing")
+        sql(s"ALTER TABLE $t ADD CONSTRAINT c1 CHECK ($condition)")
+        // Read from `range` so that the check runs in whole-stage codegen.
+        sql(s"INSERT INTO $t SELECT id + 1, 'ok' FROM range(2)")
+        val error = intercept[SparkRuntimeException] {
+          sql(s"INSERT INTO $t SELECT id, 'ok' FROM range(2)")
+        }
+        checkError(
+          exception = error,
+          condition = "CHECK_CONSTRAINT_VIOLATION",
+          sqlState = "23001",
+          parameters = Map(
+            "constraintName" -> "c1",
+            "expression" -> condition,
+            "values" -> " - id : 0\n - s : ok"
+          )
+        )
+      }
+    }
+  }
+
+  test("SPARK-60764: Check constraint violation on table insert - " +
+    "special characters in the names") {
+    Seq("a\"b", "a\nb", "a\\b").foreach { name =>
+      withNamespaceAndTable("ns", "tbl", nonPartitionCatalog) { t =>
+        sql(s"CREATE TABLE $t (id INT, `$name` STRING) $defaultUsing")
+        sql(s"ALTER TABLE $t ADD CONSTRAINT `$name` CHECK (id > 0 OR `$name` = 'x')")
+        // Read from `range` so that the check runs in whole-stage codegen.
+        sql(s"INSERT INTO $t SELECT id + 1, 'ok' FROM range(2)")
+        val error = intercept[SparkRuntimeException] {
+          sql(s"INSERT INTO $t SELECT id, 'ok' FROM range(2)")
+        }
+        checkError(
+          exception = error,
+          condition = "CHECK_CONSTRAINT_VIOLATION",
+          sqlState = "23001",
+          parameters = Map(
+            "constraintName" -> name,
+            "expression" -> s"id > 0 OR `$name` = 'x'",
+            "values" -> s" - $name : ok\n - id : 0"
+          )
+        )
+      }
     }
   }
 

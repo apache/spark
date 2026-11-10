@@ -97,6 +97,8 @@ object PivotTransformer extends AliasHelper with SQLConfHelper {
       aggregates: Seq[Expression],
       childOutput: Seq[Attribute],
       newAlias: (Expression, Option[String]) => Alias): LogicalPlan = {
+    // The values are evaluated here, before the analyzed plan is checked.
+    pivotValues.foreach(NanosTimestampSubtractionCheck.checkExpression)
     val evalPivotValues = pivotValues.map { value =>
       val foldable = trimAliases(value).foldable
       if (!foldable) {

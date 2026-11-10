@@ -23,7 +23,7 @@ import org.apache.spark.sql.catalyst.parser.ParseException
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSparkSession
-import org.apache.spark.sql.types.{BinaryType, StringType}
+import org.apache.spark.sql.types.{ArrayType, BinaryType, DoubleType, FloatType, StringType}
 
 class MiscFunctionsSuite extends SharedSparkSession {
   import testImplicits._
@@ -287,7 +287,7 @@ class MiscFunctionsSuite extends SharedSparkSession {
   }
 
   test("vector functions") {
-    import org.apache.spark.sql.types.{ArrayType, FloatType, StructField, StructType}
+    import org.apache.spark.sql.types.{StructField, StructType}
     val schema = StructType(Seq(
       StructField("a", ArrayType(FloatType)),
       StructField("b", ArrayType(FloatType))))
@@ -318,6 +318,27 @@ class MiscFunctionsSuite extends SharedSparkSession {
     val sum = df3.select(vector_sum($"v")).first().getSeq[Float](0)
     assert(math.abs(sum(0) - 4.0f) < 0.01f)
     assert(math.abs(sum(1) - 6.0f) < 0.01f)
+  }
+
+  test("SPARK-60245: vector_sum preserves double precision in DataFrames") {
+    val df = Seq(Seq(16777216.0d, 1.0d), Seq(1.0d, 1e-8d)).toDF("v").repartition(2)
+    val result = df.select(vector_sum($"v"))
+    assertResult(ArrayType(DoubleType, containsNull = false))(result.schema.head.dataType)
+    assertResult(Seq(16777217.0d, 1.00000001d))(result.head().getSeq[Double](0))
+  }
+
+  gridTest("SPARK-60245: observe vector aggregates")(Seq(
+      ("float", "vector_sum"),
+      ("double", "vector_sum"),
+      ("float", "vector_avg"))) { case (elementType, functionName) =>
+    val df = spark.range(0, 8, 1, 4).select(
+      array($"id".cast(elementType), lit(1).cast(elementType)).as("v"))
+    val aggregate = if (functionName == "vector_sum") vector_sum($"v") else vector_avg($"v")
+    val expected = if (functionName == "vector_sum") Seq(28.0, 8.0) else Seq(3.5, 1.0)
+    val observation = Observation(s"${functionName}_$elementType")
+
+    assertResult(8)(df.observe(observation, aggregate.as("value")).collect().length)
+    assertResult(Map("value" -> expected))(observation.get)
   }
 }
 
