@@ -25,6 +25,7 @@ import scala.collection.mutable
 import org.apache.spark.SparkException
 import org.apache.spark.sql.catalyst.analysis.{
   withPosition,
+  CollationTypeCoercion,
   ExpressionWithUnresolvedIdentifier,
   FunctionResolution,
   GetViewColumnByNameAndOrdinal,
@@ -347,6 +348,8 @@ class ExpressionResolver(
             lambdaFunctionResolver.resolve(lambdaFunction)
           case pipeExpression: PipeExpression =>
             resolvePipeExpression(pipeExpression)
+          case withExpression: With =>
+            resolveWith(withExpression)
           case expression: Expression =>
             resolveExpressionGenericallyWithTypeCoercion(expression)
         }
@@ -1494,6 +1497,20 @@ class ExpressionResolver(
     ResolvedCollation(
       CollationFactory.resolveFullyQualifiedName(unresolvedCollation.collationName.toArray)
     )
+  }
+
+  /**
+   * Resolves a [[With]], which comes from the replacement of a [[RuntimeReplaceable]] such as
+   * [[NullIf]] or [[Between]]. Its [[CommonExpressionRef]]s are tagged with the collation context
+   * of their definitions before the child is resolved, because type coercion of the child (e.g.
+   * `EqualTo(ref, 'a')`) runs bottom-up and would otherwise not know the collation strength of
+   * the refs. The fixed-point Analyzer does the same in [[CollationTypeCasts]]. The definitions
+   * are already resolved here, because the [[RuntimeReplaceable]] builds the [[With]] from
+   * function arguments that [[FunctionResolver]] resolves first.
+   */
+  private def resolveWith(withExpression: With): Expression = {
+    CollationTypeCoercion.preTagCommonExpressionRefs(withExpression)
+    resolveExpressionGenericallyWithTypeCoercion(withExpression)
   }
 
   /**

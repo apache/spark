@@ -20,7 +20,11 @@ package org.apache.spark.sql.catalyst.analysis.resolver
 import java.util.Locale
 
 import org.apache.spark.sql.catalyst.SQLConfHelper
-import org.apache.spark.sql.catalyst.analysis.{CoalesceHintUtils, UnresolvedAttribute}
+import org.apache.spark.sql.catalyst.analysis.{
+  CoalesceHintUtils,
+  UnresolvedAttribute,
+  UnresolvedRelation
+}
 import org.apache.spark.sql.catalyst.expressions.{Attribute, Expression, StringLiteral}
 import org.apache.spark.sql.catalyst.plans.logical.{
   HintErrorHandler,
@@ -326,9 +330,28 @@ class HintResolver(resolver: Resolver, expressionResolver: ExpressionResolver)
    * Resolves a [[ResolvedHint]] by recursing into its child. This handles the case where a
    * [[ResolvedHint]] appears in an already-partially-resolved plan (e.g. DataFrame programs).
    * Called by [[Resolver.resolve]] when it encounters a [[ResolvedHint]] operator.
+   *
+   * When the [[ResolvedHint]] is directly over an [[UnresolvedRelation]] or [[SubqueryAlias]],
+   * enclosing hints stay visible to that child (see
+   * [[OperatorResolutionContext.enclosingHintApplicationContextsForChild]]), so
+   * [[maybeApplyHint]] may wrap the resolved child with a new [[ResolvedHint]]. Like the
+   * fixed-point [[ResolveHints.ResolveJoinStrategyHints]] rule, merge the new hint into the
+   * existing one instead of nesting two [[ResolvedHint]]s.
    */
   def handleResolvedHint(resolvedHint: ResolvedHint): LogicalPlan = {
-    resolvedHint.copy(child = resolver.resolve(resolvedHint.child))
+    val isHintApplicationTarget = resolvedHint.child match {
+      case _: UnresolvedRelation | _: SubqueryAlias => true
+      case _ => false
+    }
+    resolver.resolve(resolvedHint.child) match {
+      case ResolvedHint(hintedChild, newHintInfo) if isHintApplicationTarget =>
+        resolvedHint.copy(
+          child = hintedChild,
+          hints = newHintInfo.merge(resolvedHint.hints, activeHintErrorHandler)
+        )
+      case resolvedChild =>
+        resolvedHint.copy(child = resolvedChild)
+    }
   }
 }
 

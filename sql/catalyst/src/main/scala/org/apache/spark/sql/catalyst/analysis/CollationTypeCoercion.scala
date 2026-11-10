@@ -566,17 +566,27 @@ object CollationTypeCoercion extends SQLConfHelper {
   private[analysis] def preTagCommonExpressionRefs(plan: LogicalPlan): LogicalPlan = {
     plan.resolveExpressionsDown {
       case withExpression: With =>
-        withExpression.child.foreach {
-          case ref: CommonExpressionRef =>
-            withExpression.defs.find(d => d.id == ref.id && d.child.resolved)
-              .foreach { definition =>
-                findCollationContext(definition.child).foreach { context =>
-                  ref.setTagValue(COLLATION_CONTEXT_TAG, context)
-                }
-              }
-          case _ =>
-        }
+        preTagCommonExpressionRefs(withExpression)
         withExpression
+    }
+  }
+
+  /**
+   * Pre-tags the [[CommonExpressionRef]]s of a single [[With]] expression with the collation
+   * context of their definitions. The single-pass resolver calls this before resolving the
+   * [[With]] child, for the same reason [[preTagCommonExpressionRefs]] runs before the bottom-up
+   * transformation in the fixed-point Analyzer.
+   */
+  private[analysis] def preTagCommonExpressionRefs(withExpression: With): Unit = {
+    withExpression.child.foreach {
+      case ref: CommonExpressionRef =>
+        withExpression.defs.find(d => d.id == ref.id && d.child.resolved)
+          .foreach { definition =>
+            findCollationContext(definition.child).foreach { context =>
+              ref.setTagValue(COLLATION_CONTEXT_TAG, context)
+            }
+          }
+      case _ =>
     }
   }
 }

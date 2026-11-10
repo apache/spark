@@ -245,6 +245,16 @@ class ExplicitlyUnsupportedResolverFeatureSuite extends SharedSparkSession {
     }
   }
 
+  test("SQL table function falls back") {
+    withUserDefinedFunction("sql_tvf" -> false) {
+      sql("CREATE FUNCTION sql_tvf(n INT) RETURNS TABLE(id INT) RETURN SELECT n")
+      checkResolution(
+        "SELECT * FROM sql_tvf(1)",
+        expectedMessage = Some("SQL table function")
+      )
+    }
+  }
+
   private def checkResolution(
       sqlText: String,
       shouldPass: Boolean = false,

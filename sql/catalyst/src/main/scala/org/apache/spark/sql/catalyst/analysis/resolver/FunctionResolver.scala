@@ -200,10 +200,14 @@ class FunctionResolver(
   /**
    * Rejects a resolved function single-pass does not support, throwing
    * [[ExplicitlyUnsupportedResolverFeature]]: a builtin/session function ([[Some]]) whose source is
-   * neither `sql_udf` nor `built-in` (e.g. a temp Scala or Python UDF), or a catalog function
-   * ([[None]]) that did not resolve to a [[SQLFunctionExpression]], since a catalog function can
-   * resolve to an arbitrary expression via a custom builder. [[SQLFunctionExpression]]s are
-   * rejected later in [[handlePartiallyResolvedFunction]].
+   * neither `sql_udf`, `built-in` nor empty (e.g. a temp Scala or Python UDF), or a catalog
+   * function ([[None]]) that did not resolve to a [[SQLFunctionExpression]], since a catalog
+   * function can resolve to an arbitrary expression via a custom builder.
+   * [[SQLFunctionExpression]]s are rejected later in [[handlePartiallyResolvedFunction]].
+   *
+   * An empty source is accepted because it is not a UDF: functions injected through
+   * [[org.apache.spark.sql.SparkSessionExtensions]] and builtin expressions without an
+   * [[ExpressionDescription]] are registered with an empty source.
    *
    * [[ResolverGuard]] also screens non-SQL session functions before resolution, so the [[Some]]
    * branch is redundant in the full pipeline; it stays as the resolver's own fail-safe so a direct
@@ -212,7 +216,9 @@ class FunctionResolver(
   private def checkSupportedFunctionType(
       expressionInfo: Option[ExpressionInfo],
       partiallyResolved: Expression): Unit = expressionInfo match {
-    case Some(info) if info.getSource == "sql_udf" || info.getSource == "built-in" =>
+    case Some(info)
+        if info.getSource == "sql_udf" || info.getSource == "built-in" ||
+          info.getSource.isEmpty =>
     case Some(info) =>
       throw new ExplicitlyUnsupportedResolverFeature(
         ResolutionGap.NonSQLFunction,

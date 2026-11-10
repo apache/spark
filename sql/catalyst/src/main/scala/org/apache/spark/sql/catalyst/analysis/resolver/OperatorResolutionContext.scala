@@ -22,8 +22,8 @@ import java.util.{ArrayDeque, ArrayList, HashMap, LinkedHashMap}
 import scala.jdk.CollectionConverters._
 
 import org.apache.spark.SparkException
+import org.apache.spark.sql.catalyst.analysis.{UnresolvedHaving, UnresolvedRelation}
 import org.apache.spark.sql.catalyst.analysis.ApplyLimitAll.propagatesLimitAll
-import org.apache.spark.sql.catalyst.analysis.UnresolvedHaving
 import org.apache.spark.sql.catalyst.expressions.{
   Alias,
   Attribute,
@@ -34,6 +34,7 @@ import org.apache.spark.sql.catalyst.expressions.{
 import org.apache.spark.sql.catalyst.plans.logical.{
   LimitAll,
   LogicalPlan,
+  ResolvedHint,
   SetVariable,
   SubqueryAlias,
   UnresolvedWith,
@@ -242,6 +243,12 @@ class OperatorResolutionContextStack {
    * outer hint does not leak into the plan of a scalar/IN/EXISTS subquery. This matches the
    * fixed-point [[ResolveHints.ResolveJoinStrategyHints]] rule, which only traverses logical plan
    * children and therefore never descends into subquery expressions.
+   *
+   * The chain also resets below an existing [[ResolvedHint]], because the fixed-point rule does
+   * not traverse past it either. The exception is a [[ResolvedHint]] directly over an
+   * [[UnresolvedRelation]] or [[SubqueryAlias]]: the fixed-point rule merges a matching hint
+   * into it, so the chain stays visible to that child and [[HintResolver.handleResolvedHint]]
+   * performs the merge.
    */
   private def enclosingHintApplicationContextsForChild(
       isSubqueryRoot: Boolean): Seq[HintApplicationContext] = {
@@ -250,6 +257,10 @@ class OperatorResolutionContextStack {
       case _ if isSubqueryRoot =>
         Nil
       case Some(_: SubqueryAlias) | Some(_: View) | Some(_: UnresolvedWith) =>
+        Nil
+      case Some(ResolvedHint(_: UnresolvedRelation | _: SubqueryAlias, _)) =>
+        parentContext.enclosingHintApplicationContexts
+      case Some(_: ResolvedHint) =>
         Nil
       case _ =>
         parentContext.hintApplicationContext match {
