@@ -376,6 +376,14 @@ class ICUCollationSortKeyGoldenSuite extends SparkFunSuite {
       s"variation selector sort-key hex is empty " +
         s"(vs15='$vs15Hex', vs16='$vs16Hex')")
   }
+  test("ICU locale tailorings for sr, zh, ja, sv, de, hi and ko are recorded") {
+    // One block per locale tailoring; inputs are exemplar characters whose
+    // sort keys differ between ICU4J 78.3 and 79.1 (sr/sr_Latn are a baseline).
+    val missing = localeTailoringInputs.filterNot { case (collation, input) =>
+      rowFor(collation, input).exists(row => hexOf(row).nonEmpty)
+    }
+    assert(missing.isEmpty, s"golden rows missing for $missing; $REGEN_HINT")
+  }
 }
 
 object ICUCollationSortKeyGoldenSuite {
@@ -387,6 +395,18 @@ object ICUCollationSortKeyGoldenSuite {
 
   private val REGEN_HINT: String =
     "regenerate with SPARK_GENERATE_GOLDEN_FILES=1 after extending cells"
+
+  /** (collation, input) pairs for the locale-tailoring block of the golden. */
+  private[sql] val localeTailoringInputs: Seq[(String, String)] = Seq(
+    "sr" -> "\u0431", "sr" -> "\u0452",
+    "sr_Latn" -> "\u010d", "sr_Latn" -> "\u0111",
+    "zh" -> "\u5319", "zh" -> "\u5566", "zh" -> "\u54c7",
+    "zh_Hant" -> "\u4e01",
+    "ja" -> "\u3005", "ja" -> "\u30fc",
+    "sv" -> "\u00e5", "sv" -> "\u00f6",
+    "de" -> "\u00df",
+    "hi" -> "\u0922",
+    "ko" -> "\u90ce")
 
   /** A single golden cell: (collation name, input string) -> ICU sort-key bytes. */
   private[sql] case class GoldenCell(collation: String, input: String)
@@ -504,7 +524,7 @@ object ICUCollationSortKeyGoldenSuite {
     // UNICODE. Escapes used because these are invisible format characters.
     GoldenCell("UNICODE", "\ufe0e"),
     GoldenCell("UNICODE", "\ufe0f")
-  )
+  ) ++ localeTailoringInputs.map { case (c, i) => GoldenCell(c, i) }
 
   /** Render a byte[] as space-separated lowercase 2-digit hex (e.g. `26 02 5c`). */
   private def toHex(bytes: Array[Byte]): String =
