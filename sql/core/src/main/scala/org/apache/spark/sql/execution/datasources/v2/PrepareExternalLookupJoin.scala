@@ -154,8 +154,9 @@ object PrepareExternalLookupJoin extends Rule[LogicalPlan] with PredicateHelper
     // Filters are pushed before the lookup predicates are selected, as
     // V2ScanRelationPushDown.pushDownFilters pushes them before it prunes the columns of a scan.
     // Unlike a batch scan, Spark evaluates every pushed filter again on the returned rows, not only
-    // the ones that the source rejects, so a source that accepts a filter but applies it in another
-    // way, or not at all, cannot change the result.
+    // the ones that the source rejects, so a source that accepts a filter but applies it more
+    // loosely, or not at all, cannot change the result. The connector contract lets a source omit
+    // only the rows that fail a filter that it reports as pushed.
     PushDownUtils.pushFilters(
       scanBuilder,
       DataSourceStrategy.normalizeExprs(lookupPlan.filtersPushDown, relation.output),
@@ -204,8 +205,7 @@ object PrepareExternalLookupJoin extends Rule[LogicalPlan] with PredicateHelper
     // selected lookup predicate reads is kept, because Spark checks the predicate itself on every
     // row that the connector returns. V2ScanRelationPushDown.pruneColumns prunes a scan the same
     // way, through PushDownUtils.pruneColumns, which this rule cannot call: it can pass
-    // nested-pruned columns, while a lookup scan receives only whole top-level columns, and it
-    // binds the read schema by the resolver, while a lookup scan binds it by exact name.
+    // nested-pruned columns, while a lookup scan receives only whole top-level columns.
     val (prunedUpperStages, requiredBySegment) =
       pruneLookupTransforms(lookupOutput ++ residualLookupReferences, lookupPlan.upperStages)
     val segmentFields =
@@ -274,16 +274,13 @@ object PrepareExternalLookupJoin extends Rule[LogicalPlan] with PredicateHelper
     }
     val readerFactory =
       nonNull(externalLookup.createReaderFactory(), "ExternalLookup.createReaderFactory()")
-    val selectsRange = ExternalLookupJoinShapes.oneParameterRowPerRequest(
-      selectedPredicates.map(_.parameter), selectedPredicates.map(_.comparison))
-    val parameterRowsPerRequest = if (selectsRange) 1 else maxParameterRowsPerRequest
 
     val prepared = PreparedExternalLookupJoin(
       join.left,
       tableName,
       scan,
       readerFactory,
-      parameterRowsPerRequest,
+      maxParameterRowsPerRequest,
       lookupInput,
       lookupOutput,
       rebindLookupTransforms(segmentStages ++ prunedUpperStages, lookupInput),

@@ -73,16 +73,18 @@ case class ExternalLookupJoinExec(
   // The lookup-side attributes are not in the child's output, so the default canonicalization
   // gives each top-level one the next id, whichever column it is: `output` could then not find a
   // lookup column in the read schema, and nodes that keep different lookup columns of one type
-  // would canonicalize alike. Each is normalized by its place in the child's output and the read
-  // schema instead.
+  // would canonicalize alike. Each is normalized by its place in the child's output, the read
+  // schema and the outputs of the lookup-side stages instead.
   override protected def doCanonicalize(): SparkPlan = {
-    val attributes: AttributeSeq = child.output ++ lookupInput
+    val attributes: AttributeSeq =
+      child.output ++ ExternalLookupTransform.attributes(lookupInput, lookupTransforms)
     def normalize[T <: Expression](expression: T): T =
       QueryPlan.normalizeExpressions(expression, attributes)
     copy(
       lookupParameters = lookupParameters.map(normalize),
       lookupInput = lookupInput.map(normalize),
       lookupOutput = lookupOutput.map(normalize),
+      lookupTransforms = lookupTransforms.map(ExternalLookupTransform.canonicalized(_, attributes)),
       lookupKeys = lookupKeys.map(normalize),
       residualCondition = residualCondition.map(normalize),
       child = child.canonicalized)
@@ -217,8 +219,9 @@ case class ExternalLookupJoinExec(
 
 object ExternalLookupJoinExec {
   /**
-   * Spark's cap on the parameter rows of one request, whatever the connector allows: it bounds
-   * the stream rows that a task buffers while one request is in flight.
+   * Spark's cap on the stream rows of one request, whatever the connector allows, and so on its
+   * parameter rows. It bounds the stream rows that a task buffers while one request is in flight,
+   * also when they share one parameter row, as the rows of a range request do.
    */
   val MAX_PARAMETER_ROWS_PER_REQUEST = 1000
 

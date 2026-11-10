@@ -18,10 +18,10 @@
 package org.apache.spark.sql.catalyst.plans.logical
 
 import org.apache.spark.SparkException
-import org.apache.spark.sql.catalyst.expressions.{Attribute, AttributeSeq, AttributeSet,
-  BinaryComparison, Cast, CurrentBatchTimestamp, EqualNullSafe, EqualTo, Expression, ExprUtils,
-  ExternalUserDefinedFunction, GreaterThan, GreaterThanOrEqual, LessThan, LessThanOrEqual, Literal,
-  NamedExpression, PythonUDF, SubqueryExpression}
+import org.apache.spark.sql.catalyst.expressions.{Alias, Attribute, AttributeSeq, AttributeSet,
+  BinaryComparison, Cast, CurrentBatchTimestamp, EqualNullSafe, EqualTo, Expression, ExprId,
+  ExprUtils, ExternalUserDefinedFunction, GreaterThan, GreaterThanOrEqual, LessThan,
+  LessThanOrEqual, Literal, NamedExpression, PythonUDF, SubqueryExpression}
 import org.apache.spark.sql.catalyst.plans.{Inner, JoinType, LeftAnti, LeftOuter, LeftSemi,
   QueryPlan}
 import org.apache.spark.sql.catalyst.trees.TreePattern.{CURRENT_LIKE, EXTERNAL_LOOKUP_HINT,
@@ -155,10 +155,10 @@ object ExternalLookupJoinShapes {
   /**
    * Whether Spark offers the comparison on this lookup column, with this parameter.
    *
-   * Spark evaluates every parameter on every stream row, before the other join conditions. That
-   * is safe for an equality, as a hash join evaluates its keys on every row too. A range is a
-   * join condition, which a join evaluates only after its keys match, so its parameter must be
-   * one that cannot fail, as `cannotFail` decides.
+   * Spark evaluates the parameters on each stream row that passes the stream condition, before
+   * the other join conditions. That is safe for an equality, as a hash join evaluates its keys on
+   * every row too. A range is a join condition, which a join evaluates only after its keys match,
+   * so its parameter must be one that cannot fail, as `cannotFail` decides.
    */
   private def isOfferedOn(
       comparison: LookupKeyComparison,
@@ -328,6 +328,39 @@ case class ExternalLookupFilter(
   override def output: Seq[Attribute] = input
 }
 
+object ExternalLookupTransform {
+  /**
+   * The lookup-side attributes of a lookup join, which canonicalization normalizes by their place
+   * here, after the stream side's: the read schema, then the attributes that each projection of
+   * `stages` makes.
+   */
+  def attributes(
+      lookupInput: Seq[Attribute],
+      stages: Seq[ExternalLookupTransform]): Seq[Attribute] =
+    lookupInput ++ stages.collect { case project: ExternalLookupProject => project.output }.flatten
+
+  /**
+   * `stage` with each attribute normalized by its place in `attributes`, and each alias given the
+   * id of its attribute's place, so that the stages after it read the attributes that it makes.
+   */
+  def canonicalized(
+      stage: ExternalLookupTransform,
+      attributes: AttributeSeq): ExternalLookupTransform = {
+    def normalize[T <: Expression](expression: T): T =
+      QueryPlan.normalizeExpressions(expression, attributes)
+    stage match {
+      case ExternalLookupProject(projectList, input) =>
+        ExternalLookupProject(projectList.map {
+          case alias: Alias =>
+            Alias(normalize(alias.child), "")(ExprId(attributes.indexOf(alias.exprId)))
+          case other => normalize(other)
+        }, input.map(normalize))
+      case ExternalLookupFilter(condition, input) =>
+        ExternalLookupFilter(normalize(condition), input.map(normalize))
+    }
+  }
+}
+
 /**
  * A lookup join after its optimized lookup side has been converted to an external operation.
  *
@@ -370,15 +403,17 @@ case class PreparedExternalLookupJoin(
   // The lookup-side attributes are not in the child's output, so the default canonicalization
   // gives each top-level one the next id, whichever column it is: two joins that keep different
   // lookup columns of one type would canonicalize alike. Each is normalized by its place in the
-  // child's output and the read schema instead.
+  // child's output, the read schema and the outputs of the lookup-side stages instead.
   override protected def doCanonicalize(): LogicalPlan = {
-    val attributes: AttributeSeq = child.output ++ lookupInput
+    val attributes: AttributeSeq =
+      child.output ++ ExternalLookupTransform.attributes(lookupInput, lookupTransforms)
     def normalize[T <: Expression](expression: T): T =
       QueryPlan.normalizeExpressions(expression, attributes)
     copy(
       child = child.canonicalized,
       lookupInput = lookupInput.map(normalize),
       lookupOutput = lookupOutput.map(normalize),
+      lookupTransforms = lookupTransforms.map(ExternalLookupTransform.canonicalized(_, attributes)),
       lookupParameters = lookupParameters.map(normalize),
       lookupKeys = lookupKeys.map(normalize),
       residualCondition = residualCondition.map(normalize))
@@ -391,9 +426,9 @@ case class PreparedExternalLookupJoin(
 
   // The product of the stream side's size and spark.sql.defaultSizeInBytes, as the lookup side is
   // read by lookups rather than scanned. It can differ from the estimate before preparation, when
-  // the scan of the lookup side reports statistics. The stream side's size alone would ignore the
-  // lookup columns and the rows that a stream row can match. A semi or anti join returns at most
-  // its stream rows.
+  // the scan of the lookup side reports statistics, or when column pruning has projected the
+  // lookup side. The stream side's size alone would ignore the lookup columns and the rows that a
+  // stream row can match. A semi or anti join returns at most its stream rows.
   override def stats: Statistics = joinType match {
     case LeftSemi | LeftAnti => child.stats
     case _ => statsCache.getOrElse {
@@ -417,9 +452,10 @@ object ExternalLookupKeyTypes {
    * VARCHAR whose collation compares bytes, such as UTF8_BINARY. FLOAT and DOUBLE are not
    * offered, because stores treat NaN and -0.0 in different ways, nor CHAR, which Spark pads on
    * read, nor strings with another collation, nor complex types, nor any other type. VARCHAR is
-   * not offered under `spark.sql.charVarchar.standardSemantics.enabled` either, because Spark
-   * then trims trailing blanks on read, so a store that compares the stored value could miss a
-   * row.
+   * not offered under `spark.sql.charVarchar.standardSemantics.enabled` either. Spark then reads a
+   * value within the declared length unchanged, but drops the trailing blanks past that length
+   * from a longer value, and fails if it is still too long. So a store that compares such a longer
+   * value as stored could miss a row that Spark's comparison matches.
    *
    * Analysis reads a CHAR or VARCHAR column as a STRING and keeps its declared type in the
    * metadata, so the column's data type alone does not tell.

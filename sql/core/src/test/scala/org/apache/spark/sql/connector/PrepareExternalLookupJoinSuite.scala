@@ -41,8 +41,8 @@ import org.apache.spark.sql.execution.datasources.v2.{DataSourceV2Relation,
   ExternalLookupRelation, PrepareExternalLookupJoin}
 import org.apache.spark.sql.execution.externalUDF.PlanExternalUDFs
 import org.apache.spark.sql.internal.{SQLConf, StaticSQLConf}
-import org.apache.spark.sql.types.{ArrayType, BooleanType, IntegerType, LongType, MapType,
-  StringType, StructType, TimestampNTZType, TimestampType}
+import org.apache.spark.sql.types.{ArrayType, BooleanType, DecimalType, IntegerType, LongType,
+  MapType, StringType, StructType, TimestampNTZType, TimestampType}
 import org.apache.spark.sql.util.CaseInsensitiveStringMap
 import org.apache.spark.udf.worker.UDFWorkerSpecification
 import org.apache.spark.unsafe.types.UTF8String
@@ -333,35 +333,44 @@ class PrepareExternalLookupJoinSuite extends PlanTest {
   test("a range is a lookup candidate only when its parameter cannot fail") {
     var offered = Seq.empty[String]
     val lookup = lookupRelation(PlanningExternalLookupTable(
-      "id INT, value INT, total BIGINT, localTime TIMESTAMP_NTZ, time TIMESTAMP",
+      "id INT, value INT, total BIGINT, localTime TIMESTAMP_NTZ, time TIMESTAMP, " +
+        "price DECIMAL(12, 2), rate DECIMAL(38, 10)",
       select = { candidates =>
         offered = candidates.map(_.toString).toSeq
         candidates.take(1)
       }))
-    val Seq(lookupId, lookupValue, lookupTotal, lookupLocalTime, lookupTime) = lookup.output
+    val Seq(lookupId, lookupValue, lookupTotal, lookupLocalTime, lookupTime, lookupPrice,
+      lookupRate) = lookup.output
     val Seq(streamId, streamLabel) = stream.output
-    val (streamDay, streamLocalTime, streamAmount) =
-      ($"streamDay".date, $"streamLocalTime".timestampNTZ, $"streamAmount".decimal(19, 0))
-    // Spark evaluates every parameter on every stream row, but a join evaluates a range only after
-    // its keys match. A widening numeric cast, as of the INT `streamId` to BIGINT, cannot fail, so
-    // a range with one is offered. Other casts stay in the residual, as each can fail on some
+    val (streamDay, streamLocalTime, streamAmount, streamBid, streamUnits) =
+      ($"streamDay".date, $"streamLocalTime".timestampNTZ, $"streamAmount".decimal(19, 0),
+        $"streamBid".decimal(10, 2), $"streamUnits".decimal(38, 0))
+    // Spark evaluates the parameters on each stream row that passes the stream condition, but a
+    // join evaluates a range only after its keys match. A widening numeric cast cannot fail, so a
+    // range with one is offered: of the INT `streamId` to BIGINT or to DECIMAL(12, 2), and of a
+    // DECIMAL(10, 2) to DECIMAL(12, 2). Other casts stay in the residual, as each can fail on some
     // values: a string that is not a number, a far-future DATE or a TIMESTAMP_NTZ near the limits
-    // as a timestamp, and DECIMAL(19, 0) as BIGINT under ANSI. An equality with a cast that can
-    // fail is still offered, as a hash join evaluates its keys on every row too.
+    // as a timestamp, DECIMAL(19, 0) as BIGINT under ANSI, and DECIMAL(38, 0) as DECIMAL(38, 10),
+    // which has room for only 28 integer digits. An equality with a cast that can fail is still
+    // offered, as a hash join evaluates its keys on every row too.
     val labelNumber = streamLabel.cast(IntegerType)
     val conjuncts = Seq(
       lookupId === labelNumber,
       lookupValue >= streamId,
       lookupValue < labelNumber,
       lookupTotal >= streamId.cast(LongType),
+      lookupPrice >= streamId.cast(DecimalType(12, 2)),
+      lookupPrice <= streamBid.cast(DecimalType(12, 2)),
       lookupLocalTime >= Cast(streamDay, TimestampNTZType),
       lookupTime >= Cast(streamDay, TimestampType, Some("UTC")),
       lookupTime >= Cast(streamLocalTime, TimestampType, Some("UTC")),
-      lookupTotal >= streamAmount.cast(LongType))
+      lookupTotal >= streamAmount.cast(LongType),
+      lookupRate >= streamUnits.cast(DecimalType(38, 10)))
     val left = LocalRelation(
-      Seq(streamId, streamLabel, streamDay, streamLocalTime, streamAmount), isStreaming = true)
+      Seq(streamId, streamLabel, streamDay, streamLocalTime, streamAmount, streamBid, streamUnits),
+      isStreaming = true)
     val prepared = prepare(lookupJoin(lookup, conjuncts.reduce(_ && _), left = left))
-    assert(offered === Seq("id = ?", "value >= ?", "total >= ?"))
+    assert(offered === Seq("id = ?", "value >= ?", "total >= ?", "price >= ?", "price <= ?"))
     assert(prepared.lookupParameters === Seq(labelNumber))
     // The other conjuncts stay in the residual, those that go first under a NULL guard. Which ones
     // go first depends on what ExprUtils.canEvaluateUnconditionally takes as unable to fail, which
@@ -546,8 +555,9 @@ class PrepareExternalLookupJoinSuite extends PlanTest {
     }
   }
 
-  test("a prepared lookup join keeps the size estimate of the join it replaces") {
-    // Two stream rows, and a lookup side of Spark's default size.
+  test("a prepared lookup join reports the stream side's size times Spark's default size") {
+    // Two stream rows, and a lookup side of Spark's default size. The lookup side is the table, not
+    // a projection of it, so the estimate is also the one before preparation.
     withSQLConf(SQLConf.DEFAULT_SIZE_IN_BYTES.key -> "1000") {
       val rows = Seq(1, 2).map(id => InternalRow(id, UTF8String.fromString("a")))
       val sizedStream = LocalRelation(stream.output, rows, isStreaming = true)
