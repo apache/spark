@@ -1299,8 +1299,8 @@ regarding watermark delays and whether data will be dropped or not.
 
 Unmatched output and state removal use the same cutoff, derived from the opposite input's
 watermark and the time constraint. In the example above, the `clickTime` watermark finalizes
-impressions. Full outer joins require watermarks and time constraints in both directions to
-finalize both sides.
+impressions; no watermark on `impressionTime` is needed for this. Full outer joins require
+watermarks and time constraints in both directions to finalize both sides.
 
 ###### Caveats
 There are a few important characteristics to note regarding how the outer results are generated.

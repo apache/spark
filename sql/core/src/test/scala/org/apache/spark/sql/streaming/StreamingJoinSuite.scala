@@ -1357,7 +1357,7 @@ abstract class StreamingOuterJoinBase extends StreamingJoinSuite {
     (joinType, leftWatermark, rightWatermark, expected) <- Seq(
       ("left_outer", false, true, Row(1, null, 5, null)),
       ("right_outer", true, false, Row(null, 1, null, 5)))
-    joinOnTime <- Seq(true)
+    joinOnTime <- Seq(false, true)
   } {
     test(s"$joinType with one watermark, equality=$joinOnTime") {
       val (leftInput, rightInput, joined) = setupJoinWithRangeCondition(
@@ -1403,6 +1403,62 @@ abstract class StreamingOuterJoinBase extends StreamingJoinSuite {
     }
   }
 
+  Seq("left_outer", "right_outer").foreach { joinType =>
+    test(s"$joinType preserves boundary matches with one watermark") {
+      val (leftInput, rightInput, joined) = setupJoinWithRangeCondition(
+        joinType, leftWatermark = joinType == "right_outer",
+        rightWatermark = joinType == "left_outer")
+      val stateInput = if (joinType == "left_outer") leftInput else rightInput
+      val watermarkInput = if (joinType == "left_outer") rightInput else leftInput
+      val matches = if (joinType == "left_outer") {
+        Seq(Row(1, 1, 20, 15), Row(1, 1, 20, 25))
+      } else {
+        Seq(Row(1, 1, 15, 20), Row(1, 1, 25, 20))
+      }
+      val unmatched = if (joinType == "left_outer") {
+        Row(2, null, 20, null)
+      } else {
+        Row(null, 2, null, 20)
+      }
+      withSQLConf(SQLConf.STREAMING_NO_DATA_MICRO_BATCHES_ENABLED.key -> "false") {
+        testStream(joined)(
+          AddData(stateInput, (1, 20), (2, 20)),
+          CheckNewAnswer(),
+          AddData(watermarkInput, (1, 15), (1, 25), (3, 50)),
+          CheckNewAnswer(matches: _*),
+          AddData(watermarkInput, (3, 60)),
+          CheckNewAnswer(unmatched),
+          assertNumStateRows(total = 4, updated = 6)
+        )
+      }
+    }
+  }
+
+  test("range eviction uses the bound's timestamp, not an unrelated watermark") {
+    val leftInput = MemoryStream[(Int, Int, Int)]
+    val rightInput = MemoryStream[(Int, Int)]
+    val left = leftInput.toDF().toDF("leftKey", "time", "other")
+      .select($"leftKey", timestamp_seconds($"time").as("leftTime"),
+        timestamp_seconds($"other").as("otherTime"))
+      .withWatermark("otherTime", "10 seconds")
+    val right = rightInput.toDF().toDF("rightKey", "time")
+      .select($"rightKey", timestamp_seconds($"time").as("rightTime"))
+      .withWatermark("rightTime", "10 seconds")
+    val joined = left.join(right, expr("leftKey = rightKey AND " +
+      "leftTime BETWEEN rightTime - interval 5 seconds AND rightTime + interval 5 seconds"),
+      "left_outer").select($"leftKey", $"rightKey", $"leftTime".cast("int"),
+      $"otherTime".cast("int"), $"rightTime".cast("int"))
+    withSQLConf(SQLConf.STREAMING_NO_DATA_MICRO_BATCHES_ENABLED.key -> "false") {
+      testStream(joined)(
+        AddData(leftInput, (1, 5, 100)),
+        CheckNewAnswer(),
+        AddData(rightInput, (2, 30)),
+        CheckNewAnswer(),
+        AddData(rightInput, (2, 40)),
+        CheckNewAnswer(Row(1, null, 5, 100, null))
+      )
+    }
+  }
   Seq("left_outer", "right_outer").foreach { joinType =>
     test(s"stream-stream $joinType join does not support Update mode") {
       val input1 = MemoryStream[Int]
@@ -2140,6 +2196,21 @@ abstract class StreamingFullOuterJoinBase extends StreamingJoinSuite {
 
   import testImplicits._
 
+  Seq((false, true), (true, false)).foreach { case (leftWatermark, rightWatermark) =>
+    val watermarkSide = if (leftWatermark) "left" else "right"
+    test(s"full outer range join rejects only $watermarkSide watermark") {
+      val (leftInput, rightInput, joined) = setupJoinWithRangeCondition(
+        "full_outer", leftWatermark = leftWatermark, rightWatermark = rightWatermark)
+      val error = intercept[AnalysisException] {
+        testStream(joined)(
+          MultiAddData(leftInput, (1, 5))(rightInput, (2, 30)),
+          CheckNewAnswer()
+        )
+      }
+      assert(error.getMessage.contains("watermarks on both inputs"))
+    }
+  }
+
   test("full outer equality join uses different watermark key ordinals") {
     val leftInput = MemoryStream[(Int, Int)]
     val rightInput = MemoryStream[(Int, Int)]
@@ -2171,7 +2242,6 @@ abstract class StreamingFullOuterJoinBase extends StreamingJoinSuite {
       )
     }
   }
-
 
   test("stream-stream full outer join does not support Update mode") {
     val input1 = MemoryStream[Int]
@@ -2558,7 +2628,7 @@ abstract class StreamingLeftSemiJoinBase extends StreamingJoinSuite {
     )
   }
 
-  Seq(true).foreach { joinOnTime =>
+  Seq(false, true).foreach { joinOnTime =>
     test(s"left semi with right watermark, equality=$joinOnTime") {
       val (leftInput, rightInput, joined) = setupJoinWithRangeCondition(
         "left_semi", leftWatermark = false, joinOnTime = joinOnTime)

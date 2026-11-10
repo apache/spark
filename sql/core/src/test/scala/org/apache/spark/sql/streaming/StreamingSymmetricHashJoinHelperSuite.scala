@@ -219,4 +219,71 @@ class StreamingSymmetricHashJoinHelperSuite extends StreamTest {
       (Some(0L), Some(0L)))
   }
 
+
+  test("range timestamp selection stays stable as the watermark advances") {
+    val first = AttributeReference("first", TimestampType)()
+    val second = AttributeReference("second", TimestampType)()
+    val metadata = new MetadataBuilder().putLong(EventTimeWatermark.delayKey, 1000).build()
+    val right = AttributeReference("right", TimestampType, metadata = metadata)()
+    val condition = Some(first > right - 0.0001 && second > right + 0.0001)
+    Seq(0L, 1L, 10000L).foreach { watermark =>
+      val predicates = StreamingSymmetricHashJoinHelper.getStateWatermarkPredicates(
+        Seq(first, second), Seq(right), Nil, Nil, condition, Some(watermark), None, false)
+      assert(predicates.left.get.expr.references.toSeq == Seq(first))
+    }
+  }
+
+  test("range eviction prefers event time in either conjunct order") {
+    val metadata = new MetadataBuilder().putLong(EventTimeWatermark.delayKey, 1000).build()
+    val eventTime = AttributeReference("eventTime", TimestampType, metadata = metadata)()
+    val other = AttributeReference("other", TimestampType)()
+    val right = AttributeReference("right", TimestampType, metadata = metadata)()
+    Seq(other > right && eventTime > right,
+      eventTime > right && other > right).foreach { condition =>
+      val predicates = StreamingSymmetricHashJoinHelper.getStateWatermarkPredicates(
+        Seq(other, eventTime), Seq(right), Nil, Nil, Some(condition), Some(20000L), None, false)
+      assert(predicates.left.exists {
+        case JoinStateValueWatermarkPredicate(expr, 20000L, _) =>
+          expr.references.toSeq == Seq(eventTime)
+        case _ => false
+      })
+    }
+  }
+
+  test("crossed ranges bound a different timestamp on each side") {
+    val metadata = new MetadataBuilder().putLong(EventTimeWatermark.delayKey, 1000).build()
+    val leftTime = AttributeReference("leftTime", TimestampType, metadata = metadata)()
+    val leftOther = AttributeReference("leftOther", TimestampType)()
+    val rightTime = AttributeReference("rightTime", TimestampType, metadata = metadata)()
+    val rightOther = AttributeReference("rightOther", TimestampType)()
+    val leftInterval = leftOther > rightTime - 5 && leftOther < rightTime + 10
+    val rightInterval = rightOther > leftTime - 7 && rightOther < leftTime + 12
+    Seq(leftInterval && rightInterval, rightInterval && leftInterval).foreach { condition =>
+      val predicates = StreamingSymmetricHashJoinHelper.getStateWatermarkPredicates(
+        Seq(leftTime, leftOther), Seq(rightTime, rightOther), Nil, Nil, Some(condition),
+        Some(20000L), None, false)
+      assert(predicates.left.exists {
+        case JoinStateValueWatermarkPredicate(expr, 15000L, _) =>
+          expr.references.toSeq == Seq(leftOther)
+        case _ => false
+      })
+      assert(predicates.right.exists {
+        case JoinStateValueWatermarkPredicate(expr, 13000L, _) =>
+          expr.references.toSeq == Seq(rightOther)
+        case _ => false
+      })
+    }
+  }
+
+  test("range eviction uses the event time selected for late input filtering") {
+    val metadata = new MetadataBuilder().putLong(EventTimeWatermark.delayKey, 1000).build()
+    val left = AttributeReference("left", TimestampType, metadata = metadata)()
+    val first = AttributeReference("first", TimestampType, metadata = metadata)()
+    val second = AttributeReference("second", TimestampType, metadata = metadata)()
+    val predicates = StreamingSymmetricHashJoinHelper.getStateWatermarkPredicates(
+      Seq(left), Seq(first, second), Nil, Nil, Some(left > second), Some(20000L),
+      Some(10000L), useFirstEventTimeColumn = true)
+    // Only first is filtered for lateness; an old second can arrive in a future row.
+    assert(predicates.left.isEmpty)
+  }
 }

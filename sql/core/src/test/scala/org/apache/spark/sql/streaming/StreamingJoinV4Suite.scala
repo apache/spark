@@ -360,7 +360,7 @@ class StreamingInnerJoinV4Suite
   }
 
   testWithVirtualColumnFamilyJoins(
-    "SPARK-56406: secondary index only populated on watermarked side for time interval join") {
+    "SPARK-56406: secondary index supports one-sided watermark time interval joins") {
     withTempDir { checkpointDir =>
       val leftInput = MemoryStream[(Int, Int)]
       val rightInput = MemoryStream[(Int, Int)]
@@ -372,11 +372,8 @@ class StreamingInnerJoinV4Suite
       val df2 = rightInput.toDF().toDF("rightKey", "time")
         .select($"rightKey", timestamp_seconds($"time") as "rightTime",
           ($"rightKey" * 3) as "rightValue")
-      // Only left side has watermark; watermark is on a value column, not the join key.
-      // joinKeyOrdinalForWatermark is None -> only left has hasTimestampForEviction = true.
-      // Neither side can actually evict: the left state watermark is derived from the right
-      // side's watermark via the join condition, which is absent here. The left secondary
-      // index is populated but never used for eviction.
+      // The left watermark and range condition permit right-state eviction. The right
+      // secondary index must be populated even though rightTime has no watermark metadata.
 
       val joined = df1.join(df2,
         expr("leftKey = rightKey AND " +
@@ -401,9 +398,8 @@ class StreamingInnerJoinV4Suite
           // secondary index populated.
           assert(readStateStore(checkpointLoc, "left-tsWithKey") > 0,
             "left secondary index should be populated (watermark on left value column)")
-          // Right has no watermark -> hasTimestampForEviction = false, secondary index empty.
-          assert(readStateStore(checkpointLoc, "right-tsWithKey") === 0,
-            "right secondary index should be empty (no watermark on right side)")
+          assert(readStateStore(checkpointLoc, "right-tsWithKey") > 0,
+            "right secondary index should be populated for range eviction")
         },
         StopStream
       )
