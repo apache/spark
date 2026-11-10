@@ -35,7 +35,7 @@ case class VectorDotProduct(left: Expression, right: Expression)
   override def prettyName: String = "ml_vector_dot_product"
 
   override def inputTypes: Seq[AbstractDataType] =
-    Seq(VectorDotProduct.vectorSqlType, VectorDotProduct.vectorSqlType)
+    Seq(VectorDotProduct.VectorInputType, VectorDotProduct.VectorInputType)
 
   override def dataType: DataType = DoubleType
 
@@ -113,4 +113,14 @@ object VectorDotProduct {
     StructField("size", IntegerType, nullable = true),
     StructField("indices", ArrayType(IntegerType, containsNull = false), nullable = true),
     StructField("values", ArrayType(DoubleType, containsNull = false), nullable = true)))
+
+  private object VectorInputType extends AbstractDataType {
+    override private[sql] def defaultConcreteType: DataType = vectorSqlType
+
+    override private[sql] def acceptsType(other: DataType): Boolean = {
+      DataType.equalsIgnoreCompatibleNullability(other, vectorSqlType)
+    }
+
+    override private[spark] def simpleString: String = vectorSqlType.simpleString
+  }
 }
