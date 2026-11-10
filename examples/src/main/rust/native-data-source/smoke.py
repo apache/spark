@@ -14,14 +14,15 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-"""Run with Java 22+ and spark-submit from a distribution that includes PR #59424."""
+"""Run with Java 22+ and spark-submit from a distribution with native data sources (4.4.0+)."""
 
 import argparse
-from pathlib import Path
 import tempfile
+from pathlib import Path
 
 from pyspark.errors import AnalysisException
-from pyspark.sql import SparkSession, functions as F
+from pyspark.sql import SparkSession
+from pyspark.sql import functions as F
 
 
 def main():
@@ -49,7 +50,7 @@ def main():
             (i, f"row-{i}") for i in range(31)
         ]
 
-        # The native framework pushes limits only for scans without residual filters.
+        # Spark pushes a limit only to a scan whose rows it does not filter.
         unfiltered_limit = df.limit(4).collect()
         assert len(unfiltered_limit) == 4
         assert all(0 <= row.id < 31 for row in unfiltered_limit)
@@ -66,8 +67,7 @@ def main():
         assert df.select().count() == 31
         assert df.where(F.col("id") < 0).count() == 0
 
-        # Spark rechecks every predicate, including those the connector evaluates exactly.
-        # These expressions also exercise filters the connector does not evaluate.
+        # Spark evaluates the filters after reading, as the source pushes none down.
         arithmetic = df.where((F.col("id") % 3) == 1).select("id").orderBy("id").collect()
         assert [row.id for row in arithmetic] == list(range(1, 31, 3))
         labels = df.where(F.col("label").endswith("3")).select("id").orderBy("id").collect()
@@ -76,24 +76,32 @@ def main():
         assert [row.id for row in residual_limit] == [21]
 
         # A streaming read of the fixed range reads all its rows in its first micro-batch, with
-        # the reader of batch scans.
-        with tempfile.TemporaryDirectory(prefix="rust-native-range-stream-") as checkpoint:
-            query = (
-                spark.readStream.format("rust_sdk_range")
-                .option("start", 0)
-                .option("end", 31)
-                .option("numpartitions", 4)
-                .option("batchsize", 3)
-                .load()
-                .writeStream.format("memory")
-                .queryName("rust_sdk_range_stream")
-                .option("checkpointLocation", checkpoint)
-                .trigger(availableNow=True)
-                .start()
-            )
-            query.awaitTermination()
-            streamed = spark.table("rust_sdk_range_stream").orderBy("id").collect()
-            assert [tuple(row) for row in streamed] == [(i, f"row-{i}") for i in range(31)]
+        # the reader of batch scans, or with maxRowsPerTrigger, in micro-batches of at most that
+        # many rows, also with Trigger.AvailableNow.
+        for name, options, batches in [
+            ("rust_sdk_range_stream", {}, [31]),
+            ("rust_sdk_range_limited", {"maxRowsPerTrigger": 10}, [10, 10, 10, 1]),
+        ]:
+            with tempfile.TemporaryDirectory(prefix="rust-native-range-stream-") as checkpoint:
+                query = (
+                    spark.readStream.format("rust_sdk_range")
+                    .option("start", 0)
+                    .option("end", 31)
+                    .option("numpartitions", 4)
+                    .option("batchsize", 3)
+                    .options(**options)
+                    .load()
+                    .writeStream.format("memory")
+                    .queryName(name)
+                    .option("checkpointLocation", checkpoint)
+                    .trigger(availableNow=True)
+                    .start()
+                )
+                query.awaitTermination()
+                rows = [p["numInputRows"] for p in query.recentProgress if p["numInputRows"]]
+                assert rows == batches, rows
+                streamed = spark.table(name).orderBy("id").collect()
+                assert [tuple(row) for row in streamed] == [(i, f"row-{i}") for i in range(31)]
 
         # Analysis must reject both modes before AQE can run the input shuffle.
         failing_input = (

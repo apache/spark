@@ -98,6 +98,19 @@ public final class OnHeapColumnVector extends WritableColumnVector {
     super.close();
   }
 
+  @Override
+  public boolean isFree() {
+    return nulls == null &&
+        byteData == null &&
+        shortData == null &&
+        intData == null &&
+        longData == null &&
+        floatData == null &&
+        doubleData == null &&
+        arrayLengths == null &&
+        arrayOffsets == null;
+  }
+
   //
   // APIs dealing with nulls
   //
@@ -665,7 +678,7 @@ public final class OnHeapColumnVector extends WritableColumnVector {
   }
 
   @Override
-  public OnHeapColumnVector reserveNewColumn(int capacity, DataType type) {
+  protected OnHeapColumnVector reserveNewInternalColumn(int capacity, DataType type) {
     return new OnHeapColumnVector(capacity, type);
   }
 }

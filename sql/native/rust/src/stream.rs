@@ -14,25 +14,28 @@
 // limitations under the License.
 
 use std::ffi::{c_char, c_int, c_void, CString};
-use std::panic::{catch_unwind, AssertUnwindSafe};
 use std::sync::Arc;
 
 use arrow_array::ffi::FFI_ArrowArray;
 use arrow_array::ffi_stream::FFI_ArrowArrayStream;
-use arrow_array::{Array, StructArray};
+use arrow_array::types::{Decimal128Type, DecimalType};
+use arrow_array::{Array, RecordBatch, StructArray};
 use arrow_data::ArrayData;
-use arrow_schema::{ffi::FFI_ArrowSchema, DataType, Field, Fields, SchemaRef, TimeUnit};
+use arrow_schema::{ffi::FFI_ArrowSchema, DataType, Field, Fields, Schema, SchemaRef, TimeUnit};
 
-use super::{describe, panic_message};
+use super::{c_message, drop_provider, provider_call};
 use crate::{PartitionReader, Result};
 
 struct StreamState<'task> {
     reader: Option<PartitionReader<'task>>,
-    // The negotiated schema, whose Spark types and nullability each batch must respect.
+    // The schema to read, whose columns, Spark types, and nullability each batch must have.
     expected: SchemaRef,
     // The schema of the stream: that of the first batch, which every batch must have, or
-    // the negotiated schema of a reader without batches. Unknown until either is read.
+    // the schema to read of a reader without batches. Unknown until either is read.
     schema: Option<SchemaRef>,
+    // The schema of the last batch that the reader returned, with the indices of the columns
+    // to read in it, or None when it has exactly those columns.
+    projection: Option<(SchemaRef, Option<Vec<usize>>)>,
     // The first batch, when get_schema read it to learn the schema.
     pending: Option<ArrayData>,
     last_error: Option<CString>,
@@ -48,19 +51,17 @@ impl StreamState<'_> {
             self.schema.get_or_insert_with(|| self.expected.clone());
             return Ok(None);
         };
-        let batch = batch?;
+        let batch = self.project(batch?)?;
         match &self.schema {
             Some(schema) if batch.schema() != *schema => {
-                return Err("reader returned a batch with a different schema".into());
+                return Err(schema_change(schema, &batch.schema()).into());
             }
             Some(_) => {}
             None => {
                 if canonical_fields(batch.schema().fields())?
                     != canonical_fields(self.expected.fields())?
                 {
-                    return Err(
-                        "executor reader schema does not match the negotiated schema".into(),
-                    );
+                    return Err("executor reader schema does not match the schema to read".into());
                 }
                 self.schema = Some(batch.schema());
             }
@@ -68,19 +69,65 @@ impl StreamState<'_> {
         let data = StructArray::from(batch).to_data();
         validate_layout(&data)?;
         for (column, field) in data.child_data().iter().zip(self.expected.fields()) {
-            check_nulls(column, field, field.name(), None)?;
+            check_values(column, field, field.name(), None)?;
         }
         Ok(Some(data))
     }
+
+    /// Keeps the columns of the schema to read, in its order, from a batch that may have more,
+    /// such as all the columns of the source. Resolves the columns once for each schema.
+    fn project(&mut self, batch: RecordBatch) -> Result<RecordBatch> {
+        let schema = batch.schema();
+        if !matches!(&self.projection, Some((last, _)) if *last == schema) {
+            self.projection = Some((schema.clone(), projection(&schema, &self.expected)?));
+        }
+        match &self.projection {
+            Some((_, Some(indices))) => Ok(batch.project(indices)?),
+            _ => Ok(batch),
+        }
+    }
+}
+
+/// Describes how the schema of a batch differs from that of the stream. Both have the
+/// columns of the schema to read, so either a column or the metadata of the schema differs.
+fn schema_change(stream: &Schema, batch: &Schema) -> String {
+    let mut fields = stream.fields().iter().zip(batch.fields());
+    match fields.find(|(first, field)| first != field) {
+        Some((first, field)) => format!(
+            "reader returned a batch with a different schema: the column {} is {first:?} in \
+             the first batch and {field:?} in this one",
+            first.name()
+        ),
+        None => "reader returned a batch with a different schema: its metadata differs".to_owned(),
+    }
+}
+
+/// The indices of the columns of the schema to read, in its order, in the schema of a batch
+/// that may have more, or None when the batch has exactly those columns.
+fn projection(schema: &Schema, expected: &Schema) -> Result<Option<Vec<usize>>> {
+    let names = |fields: &Fields| fields.iter().map(|field| field.name().clone()).collect();
+    let actual: Vec<String> = names(schema.fields());
+    let wanted: Vec<String> = names(expected.fields());
+    if actual == wanted {
+        return Ok(None);
+    }
+    let indices =
+        wanted
+            .iter()
+            .map(|name| {
+                actual.iter().position(|actual| actual == name).ok_or_else(|| {
+                format!("reader returned a batch without the column {name} of the schema to read")
+            })
+            })
+            .collect::<std::result::Result<Vec<_>, _>>()?;
+    Ok(Some(indices))
 }
 
 impl Drop for StreamState<'_> {
     fn drop(&mut self) {
         // release has no error return channel, but it must never unwind into C.
         if let Some(reader) = self.reader.take() {
-            if let Err(payload) = catch_unwind(AssertUnwindSafe(|| drop(reader))) {
-                let _ = panic_message(payload);
-            }
+            drop_provider(reader);
         }
     }
 }
@@ -99,6 +146,7 @@ pub(super) unsafe fn export<'task>(
         reader: Some(reader),
         expected: expected_schema.clone(),
         schema: None,
+        projection: None,
         pending: None,
         last_error: None,
         finished: false,
@@ -116,17 +164,15 @@ fn callback(
     state: &mut StreamState<'_>,
     action: impl FnOnce(&mut StreamState<'_>) -> Result<()>,
 ) -> c_int {
-    let result = catch_unwind(AssertUnwindSafe(|| {
-        action(state).map_err(|e| describe(&*e))
-    }));
-    let message = match result {
-        Ok(Ok(())) => return 0,
-        Ok(Err(message)) => message,
-        Err(payload) => panic_message(payload),
+    // A failed stream stays failed, with its error: an engine that calls it again must not
+    // read a failed partition as complete.
+    if state.last_error.is_some() {
+        return 5;
+    }
+    let Err(message) = provider_call(|| action(state)) else {
+        return 0;
     };
-    state.finished = true;
-    // Error text is a C string. A provider error may contain embedded NULs.
-    state.last_error = Some(CString::new(message.replace('\0', "\\0")).expect("NULs removed"));
+    state.last_error = Some(c_message(message));
     5 // EIO; get_last_error supplies the provider's actual error message.
 }
 
@@ -179,9 +225,7 @@ unsafe extern "C" fn release(stream: *mut FFI_ArrowArrayStream) {
     let state = unsafe { (*stream).private_data.cast::<StreamState<'_>>() };
     // Mark released before destruction. The consumer owns the stream structure.
     unsafe { stream.write(FFI_ArrowArrayStream::empty()) };
-    if let Err(payload) = catch_unwind(AssertUnwindSafe(|| unsafe { drop(Box::from_raw(state)) })) {
-        let _ = panic_message(payload);
-    }
+    drop_provider(unsafe { Box::from_raw(state) });
 }
 
 // Compare the Spark logical types of version 1 of the ABI, ignoring Arrow
@@ -242,10 +286,11 @@ fn canonical_type(data_type: &DataType) -> Result<DataType> {
     })
 }
 
-/// Rejects a null where the negotiated schema declares a column, a field, an element,
-/// or a map value not nullable, unless its parent is null, as Spark does after reading.
-/// `referenced` tells which values belong to a parent value that is not null.
-fn check_nulls(
+/// Rejects a null where the schema to read declares a column, a field, an element, or a map
+/// value not nullable, unless its parent is null, as Spark does after reading, and a decimal
+/// value that does not fit in the precision of its type, as Spark does when it converts the
+/// value to a row. `referenced` tells which values belong to a parent value that is not null.
+fn check_values(
     data: &ArrayData,
     field: &Field,
     column: &str,
@@ -261,19 +306,40 @@ fn check_nulls(
         )
         .into());
     }
+    if !needs_check(field.data_type()) {
+        return Ok(());
+    }
     let valid = |index: usize| data.is_valid(index) && is_referenced(index);
     match field.data_type() {
+        DataType::Decimal128(precision, scale) => {
+            let values = data.buffer::<i128>(0);
+            for index in (0..data.len()).filter(|index| valid(*index)) {
+                let value = values[index];
+                if Decimal128Type::validate_decimal_precision(value, *precision, *scale).is_err() {
+                    return Err(format!(
+                        "The column {column} has the value {}, which does not fit in the \
+                         precision {precision} of its decimal type in the schema to read",
+                        Decimal128Type::format_decimal(
+                            value,
+                            Decimal128Type::MAX_PRECISION,
+                            *scale
+                        )
+                    )
+                    .into());
+                }
+            }
+        }
         DataType::Struct(fields) => {
             let mask: Vec<bool> = (0..data.len()).map(valid).collect();
             for (child, field) in data.child_data().iter().zip(fields) {
                 let name = format!("{column}.{}", field.name());
-                check_nulls(child, field, &name, Some(&mask))?;
+                check_values(child, field, &name, Some(&mask))?;
             }
         }
         DataType::List(element) => {
             let mask = elements(data, valid)?;
             let name = format!("{column}.element");
-            check_nulls(&data.child_data()[0], element, &name, Some(&mask))?;
+            check_values(&data.child_data()[0], element, &name, Some(&mask))?;
         }
         DataType::Map(entries, _) => {
             let DataType::Struct(fields) = entries.data_type() else {
@@ -284,13 +350,26 @@ fn check_nulls(
             // Spark does not allow null keys.
             let key = fields[0].as_ref().clone().with_nullable(false);
             let name = format!("{column}.key");
-            check_nulls(&entries.child_data()[0], &key, &name, Some(&mask))?;
+            check_values(&entries.child_data()[0], &key, &name, Some(&mask))?;
             let name = format!("{column}.value");
-            check_nulls(&entries.child_data()[1], &fields[1], &name, Some(&mask))?;
+            check_values(&entries.child_data()[1], &fields[1], &name, Some(&mask))?;
         }
         _ => {}
     }
     Ok(())
+}
+
+/// Whether a type has values to check under it: a decimal, a field, an element, or a map value
+/// that is not nullable, or a map, whose keys are never null.
+fn needs_check(data_type: &DataType) -> bool {
+    let required = |field: &Field| !field.is_nullable() || needs_check(field.data_type());
+    match data_type {
+        DataType::Decimal128(..) => true,
+        DataType::Struct(fields) => fields.iter().any(|field| required(field.as_ref())),
+        DataType::List(element) => required(element.as_ref()),
+        DataType::Map(..) => true,
+        _ => false,
+    }
 }
 
 /// Whether each element of a list or map belongs to a value that `valid` accepts.
@@ -330,11 +409,13 @@ mod tests {
     use std::sync::atomic::{AtomicUsize, Ordering};
 
     use arrow_array::builder::{
-        BooleanBuilder, Int32Builder, ListBuilder, MapBuilder, StringBuilder, StructBuilder,
+        BooleanBuilder, Decimal128Builder, Int32Builder, ListBuilder, MapBuilder, StringBuilder,
+        StructBuilder,
     };
     use arrow_array::ffi_stream::ArrowArrayStreamReader;
     use arrow_array::{
-        BooleanArray, Int32Array, Int64Array, LargeStringArray, RecordBatch, RecordBatchReader,
+        ArrayRef, BooleanArray, Decimal128Array, Int32Array, Int64Array, LargeStringArray,
+        RecordBatch, RecordBatchReader,
     };
     use arrow_schema::{ArrowError, DataType, Field, Schema};
 
@@ -415,6 +496,20 @@ mod tests {
         status == 0 && array.is_released()
     }
 
+    /// Checks that a failed stream fails again, with the same error, instead of reporting the
+    /// end of its batches.
+    fn stays_failed(stream: &mut FFI_ArrowArrayStream, error: &str) {
+        let mut array = FFI_ArrowArray::empty();
+        assert_ne!(unsafe { stream.get_next.unwrap()(stream, &mut array) }, 0);
+        let mut schema = FFI_ArrowSchema::empty();
+        assert_ne!(
+            unsafe { stream.get_schema.unwrap()(stream, &mut schema) },
+            0
+        );
+        let again = unsafe { CStr::from_ptr(stream.get_last_error.unwrap()(stream)) };
+        assert_eq!(again.to_str().unwrap(), error);
+    }
+
     #[test]
     fn imported_batch_survives_early_stream_release() {
         let reader = reader();
@@ -444,7 +539,7 @@ mod tests {
     }
 
     #[test]
-    fn a_reader_without_batches_has_the_negotiated_schema() {
+    fn a_reader_without_batches_has_the_schema_to_read() {
         let mut stream = ArrowArrayStreamReader::try_new(export(reader_of(vec![]))).unwrap();
         assert_eq!(stream.schema(), schema());
         assert!(stream.next().is_none());
@@ -452,7 +547,7 @@ mod tests {
 
     #[test]
     fn the_first_batch_determines_the_arrow_types_of_the_stream() {
-        // The negotiated schema has a Utf8 string, which the reader returns as LargeUtf8.
+        // The schema to read has a Utf8 string, which the reader returns as LargeUtf8.
         let expected = Arc::new(Schema::new(vec![Field::new("label", DataType::Utf8, true)]));
         let actual = Arc::new(Schema::new(vec![Field::new(
             "label",
@@ -472,6 +567,35 @@ mod tests {
             .unwrap();
         assert_eq!(labels.value(1), "b");
         assert!(stream.next().is_none());
+    }
+
+    #[test]
+    fn the_sdk_keeps_the_columns_of_the_schema_to_read_by_name() {
+        // The reader ignores pruning and returns all the columns of the source, in its order.
+        let all = Arc::new(Schema::new(vec![
+            Field::new("id", DataType::Int64, false),
+            Field::new("flag", DataType::Boolean, false),
+        ]));
+        let ids = Arc::new(Int64Array::from(vec![3, 5]));
+        let flags = Arc::new(BooleanArray::from(vec![true, false]));
+        let batch = RecordBatch::try_new(all, vec![ids, flags]).unwrap();
+        for (columns, rows) in [(vec!["flag", "id"], 2), (vec![], 2)] {
+            let fields: Vec<_> = columns
+                .iter()
+                .map(|name| match *name {
+                    "id" => Field::new("id", DataType::Int64, false),
+                    _ => Field::new("flag", DataType::Boolean, false),
+                })
+                .collect();
+            let expected = Arc::new(Schema::new(fields));
+            let exported = export_with(reader_of(vec![batch.clone()]), &expected);
+            let mut stream = ArrowArrayStreamReader::try_new(exported).unwrap();
+            assert_eq!(stream.schema(), expected);
+            let read = stream.next().unwrap().unwrap();
+            assert_eq!(read.schema(), expected);
+            assert_eq!(read.num_rows(), rows, "{columns:?}");
+            assert!(stream.next().is_none());
+        }
     }
 
     #[test]
@@ -513,7 +637,8 @@ mod tests {
         assert_eq!(stream.next().unwrap().unwrap().num_rows(), 2);
         let error = stream.next().unwrap().unwrap_err().to_string();
         assert!(error.contains("late failure"), "{error}");
-        assert!(stream.next().is_none());
+        // The stream stays failed, with the same error.
+        assert_eq!(stream.next().unwrap().unwrap_err().to_string(), error);
     }
 
     #[test]
@@ -534,17 +659,17 @@ mod tests {
     }
 
     #[test]
-    fn negotiated_schema_mismatch_drops_the_reader() {
+    fn a_schema_mismatch_drops_the_reader() {
         let reader = reader();
         let drops = reader.drops.clone();
         let expected = Arc::new(Schema::new(vec![Field::new("id", DataType::Utf8, false)]));
         let mut stream = export_with(reader, &expected);
         let error = first_batch_error(&mut stream).unwrap();
         assert!(
-            error.contains("does not match the negotiated schema"),
+            error.contains("does not match the schema to read"),
             "{error}"
         );
-        assert!(at_end(&mut stream), "a failed stream has no more batches");
+        stays_failed(&mut stream, &error);
         drop(stream);
         assert_eq!(drops.load(Ordering::SeqCst), 1);
     }
@@ -649,7 +774,7 @@ mod tests {
         let error = first_batch_error(&mut stream).unwrap();
         assert!(error.contains("zero Arrow array offsets"), "{error}");
         assert!(error.contains("offset 1"), "{error}");
-        assert!(at_end(&mut stream));
+        stays_failed(&mut stream, &error);
         drop(stream);
         assert_eq!(drops.load(Ordering::SeqCst), 1);
     }
@@ -668,7 +793,7 @@ mod tests {
     }
 
     #[test]
-    fn nulls_must_respect_the_nullability_of_the_negotiated_schema() {
+    fn nulls_must_respect_the_nullability_of_the_schema_to_read() {
         let values = Arc::new(Int64Array::from(vec![Some(1), None]));
         let nullable = Arc::new(Schema::new(vec![Field::new("id", DataType::Int64, true)]));
         let required = Arc::new(Schema::new(vec![Field::new("id", DataType::Int64, false)]));
@@ -768,6 +893,56 @@ mod tests {
     }
 
     #[test]
+    fn decimal_values_must_fit_the_precision_of_the_schema_to_read() {
+        let schema = Arc::new(Schema::new(vec![Field::new(
+            "amount",
+            DataType::Decimal128(5, 2),
+            true,
+        )]));
+        let amounts = |values: Vec<Option<i128>>| -> ArrayRef {
+            let array = Decimal128Array::from(values);
+            Arc::new(array.with_precision_and_scale(5, 2).unwrap())
+        };
+        let fitting = amounts(vec![Some(12345), None, Some(-99999)]);
+        let batch = RecordBatch::try_new(schema.clone(), vec![fitting]).unwrap();
+        assert_eq!(batch_error(batch, &schema), None);
+        let overflowing = amounts(vec![Some(12345), Some(123456)]);
+        let batch = RecordBatch::try_new(schema.clone(), vec![overflowing]).unwrap();
+        let error = batch_error(batch, &schema).unwrap();
+        assert!(
+            error.contains("The column amount has the value 1234.56"),
+            "{error}"
+        );
+        assert!(error.contains("precision 5"), "{error}");
+    }
+
+    #[test]
+    fn decimal_values_under_a_null_parent_are_not_checked() {
+        let fields = Fields::from(vec![Field::new("amount", DataType::Decimal128(5, 2), true)]);
+        let schema = Arc::new(Schema::new(vec![Field::new(
+            "nested",
+            DataType::Struct(fields.clone()),
+            true,
+        )]));
+        for (parent_is_valid, rejected) in [(false, false), (true, true)] {
+            let amounts = Decimal128Builder::new().with_data_type(DataType::Decimal128(5, 2));
+            let mut builder = StructBuilder::new(fields.clone(), vec![Box::new(amounts)]);
+            builder
+                .field_builder::<Decimal128Builder>(0)
+                .unwrap()
+                .append_value(123456);
+            builder.append(parent_is_valid);
+            let batch =
+                RecordBatch::try_new(schema.clone(), vec![Arc::new(builder.finish())]).unwrap();
+            let error = batch_error(batch, &schema);
+            assert_eq!(error.is_some(), rejected, "{error:?}");
+            if let Some(error) = error {
+                assert!(error.contains("nested.amount"), "{error}");
+            }
+        }
+    }
+
+    #[test]
     fn a_batch_cannot_change_the_schema_of_the_stream() {
         let mut reader = reader();
         let first = reader.batches.next().unwrap();
@@ -779,13 +954,9 @@ mod tests {
         let drops = reader.drops.clone();
         let mut stream = ArrowArrayStreamReader::try_new(export(reader)).unwrap();
         assert_eq!(stream.next().unwrap().unwrap().num_rows(), 2);
-        assert!(stream
-            .next()
-            .unwrap()
-            .unwrap_err()
-            .to_string()
-            .contains("different schema"));
-        assert!(stream.next().is_none());
+        let error = stream.next().unwrap().unwrap_err().to_string();
+        assert!(error.contains("different schema"), "{error}");
+        assert_eq!(stream.next().unwrap().unwrap_err().to_string(), error);
         drop(stream);
         assert_eq!(drops.load(Ordering::SeqCst), 1);
     }

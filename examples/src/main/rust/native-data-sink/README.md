@@ -25,10 +25,9 @@ and its batch and streaming writes declare truncation support with
 implements no read traits. The SDK supplies the C ABI entry point, typed factory and commit
 message serialization, Arrow batch import, capability checks, and error handling.
 
-The example targets C ABI version 1 from [Spark PR #59424][native-source-pr], pinned
-to `74aa0dffc53463034fa6549796c4dd599e9705de`. Running it in Spark requires that
-framework and Java 22 or later on the driver and executors. The standalone Rust
-tests do not need Spark or a JVM.
+The example targets version 1 of the C ABI of native data sources, `spark_datasource.h`,
+which Spark 4.4.0 introduces. Running it in Spark requires Java 22 or later on the driver
+and executors. The standalone Rust tests do not need Spark or a JVM.
 
 ## Supported data and options
 
@@ -40,13 +39,13 @@ file-format dependency in this small example.
 | Option | Default | Meaning |
 | --- | --- | --- |
 | `path` | Required | Absolute directory shared by the driver and every executor |
-| `readonly` | `false` | Remove all the write and truncate capabilities when `true` |
+| `readonly` | `false` | Remove all the capabilities, which are those of writes, when `true` |
 
-Unknown options are rejected, except `checkpointLocation`, which Spark passes to the sink of
-a streaming query. Source creation and capability discovery do not create files. The default
-instance advertises only native `BATCH_WRITE`, `STREAMING_WRITE`, and `TRUNCATE`; it does not
-advertise reads. Spark performs its native capability check again with the operation's effective
-options.
+Unknown options are rejected, except `checkpointLocation` and `queryName`, which Spark passes
+to the sink of a streaming query. Source creation and capability discovery do not create
+files. The default instance advertises only native `BATCH_WRITE`, `STREAMING_WRITE`, `BATCH_TRUNCATE`, and
+`STREAMING_TRUNCATE`; it does not advertise reads. Spark performs its native capability check
+again with the operation's effective options.
 
 ## Commit and abort protocol
 
@@ -70,11 +69,26 @@ That one manifest replacement is the commit point:
   stays readable and a failed overwrite cannot delete the old data.
 - Abort removes the entire operation, including files with no commit message and
   a sealed directory whose manifest publication failed. It leaves the current
-  manifest and its data unchanged. Dropping an unfinished coordinator also performs
-  best-effort cleanup. Dropping a committed task writer leaves its file for the driver.
+  manifest and its data unchanged. If the final rename itself reports an error, the
+  outcome is unknown, so abort keeps the sealed directory that the new manifest may
+  list. Dropping an unfinished coordinator also performs best-effort cleanup.
+  Dropping a committed task writer leaves its file for the driver.
 
 To inspect output, read only the files listed in `manifest.json`. Recursively reading
 the destination directory would also pick up data from previous truncate operations.
+
+For example, after a successful write:
+
+```python
+import json
+from pathlib import Path
+
+root = Path("/absolute/shared/path/native-sink")
+manifest = json.loads((root / "manifest.json").read_text())
+files = [str(root / entry["path"]) for entry in manifest["files"]]
+if files:
+    spark.read.schema("id LONG, label STRING").json(files).show()
+```
 
 ## Streaming writes
 
@@ -89,22 +103,11 @@ epoch again after a restart, so a micro-batch whose epoch the manifest already r
 query publishes nothing: it removes what it staged and leaves the manifest unchanged. Each epoch
 of a query is therefore published once, and the queries that write to the same destination keep
 their epochs apart.
-For example, after a successful write:
-
-```python
-import json
-from pathlib import Path
-
-root = Path("/absolute/shared/path/native-sink")
-manifest = json.loads((root / "manifest.json").read_text())
-files = [str(root / entry["path"]) for entry in manifest["files"]]
-if files:
-    spark.read.schema("id LONG, label STRING").json(files).show()
-```
 
 ## Build, package, and run
 
-From the repository root:
+The example builds only in the Spark source tree, not from the copy in a binary distribution,
+since it depends on the SDK under `sql/native/rust`. From the repository root:
 
 ```sh
 cargo build --manifest-path sql/native/rust/Cargo.toml --workspace --locked
@@ -162,4 +165,3 @@ also need garbage collection with an appropriate reader-retention policy; this d
 does not implement that policy.
 
 [sdk]: ../../../../../sql/native/rust/README.md
-[native-source-pr]: https://github.com/apache/spark/pull/59424

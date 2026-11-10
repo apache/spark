@@ -14,7 +14,6 @@
 // limitations under the License.
 
 use std::marker::PhantomData;
-use std::mem::size_of;
 use std::sync::atomic::{AtomicBool, Ordering};
 
 use crate::abi::{self, Interrupted, SparkDsTaskContext};
@@ -27,7 +26,7 @@ use crate::Result;
 /// Blocking I/O still needs its own timeouts.
 ///
 /// ```compile_fail
-/// use spark_native_source::TaskContext;
+/// use spark_datasource::TaskContext;
 ///
 /// fn retain_forever(task: TaskContext<'_>) -> TaskContext<'static> {
 ///     task
@@ -124,15 +123,7 @@ impl<'task> TaskContext<'task> {
     /// other threads. Spark keeps it alive until the Arrow stream is released or
     /// data writer closes.
     pub(crate) unsafe fn from_raw(pointer: *const SparkDsTaskContext) -> Result<Self> {
-        let size = unsafe { abi::struct_size(pointer)? };
-        // Fields are only appended to the structure, so every host has those of version 1.
-        if size < size_of::<SparkDsTaskContext>() as i64 {
-            return Err(format!(
-                "the task context has {size} bytes, fewer than in version 1 of the native ABI"
-            )
-            .into());
-        }
-        let context = unsafe { pointer.read_unaligned() };
+        let context = unsafe { abi::input(pointer)? };
         Ok(Self {
             stage_id: context.stage_id,
             stage_attempt_number: context.stage_attempt_number,
@@ -160,7 +151,9 @@ impl<'task> TaskContext<'task> {
         self.stage_attempt_number
     }
 
-    /// The partition that the task reads or writes.
+    /// For a reader, the index of its partition in the plan of its scan or micro-batch, which
+    /// is not the partition of the task when a task reads several partitions, for example
+    /// after a coalesce or a union. For a writer, the partition of the task.
     pub fn partition_id(&self) -> i32 {
         self.partition_id
     }
@@ -176,7 +169,8 @@ impl<'task> TaskContext<'task> {
         self.task_attempt_id
     }
 
-    /// Whether Spark killed this task, read from Spark each time.
+    /// Whether Spark killed this task, read from Spark each time. For a reader, also whether
+    /// the task failed or completed: a native engine may read a stream after its task ended.
     pub fn is_interrupted(&self) -> bool {
         match self.interruption {
             Interruption::Never => false,

@@ -133,6 +133,7 @@ object DataType {
   private val STRING_WITH_COLLATION = """string\s+collate\s+(\w+)""".r
   private val TIMESTAMP_LTZ_NANOS_TYPE = """timestamp_ltz\(\s*(\d+)\s*\)""".r
   private val TIMESTAMP_NTZ_NANOS_TYPE = """timestamp_ntz\(\s*(\d+)\s*\)""".r
+  private val FILE_TYPE = """file(?:\s+(external|unknown))?""".r
   private val GEOMETRY_TYPE = """geometry\(\s*([\w]+:-?[\w]+)\s*\)""".r
   private val GEOGRAPHY_TYPE_CRS = """geography\(\s*(\w+:-?\w+)\s*\)""".r
   private val GEOGRAPHY_TYPE_ALG = """geography\(\s*(\w+)\s*\)""".r
@@ -267,7 +268,7 @@ object DataType {
   }
 
   /** Given the string representation of a type, return its DataType */
-  private def nameToType(name: String): DataType = {
+  private def nameToType(name: String, inStructField: Boolean = false): DataType = {
     name match {
       case "decimal" => DecimalType.USER_DEFAULT
       case FIXED_DECIMAL(precision, scale) =>
@@ -344,6 +345,16 @@ object DataType {
           TimestampNTZNanosType(p)
         }
       case "timestamp_ltz" => TimestampType
+      case FILE_TYPE(mode) =>
+        // A bare `"file"` has no mode, as in a schema written without one, for example by
+        // another engine: inside a StructField it is an external file, elsewhere an unknown
+        // one. Spark itself writes a bare `"file"` only for an external file in a field.
+        mode match {
+          case "external" => FileType.external
+          case "unknown" => FileType()
+          case _ if inStructField => FileType.external
+          case _ => FileType()
+        }
       case other =>
         otherTypes.getOrElse(
           other,
@@ -369,14 +380,16 @@ object DataType {
       json: JValue,
       fieldPath: String,
       collationsMap: Map[String, String],
-      charVarcharCollationsMap: Map[String, String] = Map.empty): DataType = {
+      charVarcharCollationsMap: Map[String, String] = Map.empty,
+      inStructField: Boolean = false): DataType = {
     val remainingCharVarcharPaths = mutable.Set.from(charVarcharCollationsMap.keySet)
     val parsedType = parseDataType(
       json,
       fieldPath,
       collationsMap,
       charVarcharCollationsMap,
-      remainingCharVarcharPaths)
+      remainingCharVarcharPaths,
+      inStructField)
     if (remainingCharVarcharPaths.nonEmpty) {
       throw new SparkIllegalArgumentException(
         errorClass = "INVALID_CHAR_VARCHAR_COLLATION_METADATA.UNRECOGNIZED_PATH",
@@ -390,7 +403,8 @@ object DataType {
       fieldPath: String,
       collationsMap: Map[String, String],
       charVarcharCollationsMap: Map[String, String],
-      remainingCharVarcharPaths: mutable.Set[String]): DataType = json match {
+      remainingCharVarcharPaths: mutable.Set[String],
+      inStructField: Boolean): DataType = json match {
     case JString(name) =>
       val stringCollation = collationsMap.get(fieldPath)
       val charVarcharCollation = charVarcharCollationsMap.get(fieldPath)
@@ -407,7 +421,7 @@ object DataType {
           assertValidTypeForCollations(fieldPath, name, collationsMap)
           StringType(CollationFactory.collationNameToId(collation))
         case (None, None) =>
-          nameToType(name)
+          nameToType(name, inStructField)
       }
 
     case JSortedObject(
@@ -421,7 +435,8 @@ object DataType {
         appendFieldToPath(fieldPath, "element"),
         collationsMap,
         charVarcharCollationsMap,
-        remainingCharVarcharPaths)
+        remainingCharVarcharPaths,
+        inStructField)
       ArrayType(elementType, n)
 
     case JSortedObject(
@@ -436,13 +451,15 @@ object DataType {
         appendFieldToPath(fieldPath, "key"),
         collationsMap,
         charVarcharCollationsMap,
-        remainingCharVarcharPaths)
+        remainingCharVarcharPaths,
+        inStructField)
       val valueType = parseDataType(
         v,
         appendFieldToPath(fieldPath, "value"),
         collationsMap,
         charVarcharCollationsMap,
-        remainingCharVarcharPaths)
+        remainingCharVarcharPaths,
+        inStructField)
       MapType(keyType, valueType, n)
 
     case JSortedObject(("fields", JArray(fields)), ("type", JString("struct"))) =>
@@ -510,7 +527,12 @@ object DataType {
       })
       StructField(
         name,
-        parseDataType(dataType, name, collationsMap, charVarcharCollationsMap),
+        parseDataType(
+          dataType,
+          name,
+          collationsMap,
+          charVarcharCollationsMap,
+          inStructField = true),
         nullable,
         Metadata.fromJObject(metadataWithoutCollations))
     // Support reading schema when 'metadata' is missing.
@@ -518,10 +540,10 @@ object DataType {
           ("name", JString(name)),
           ("nullable", JBool(nullable)),
           ("type", dataType: JValue)) =>
-      StructField(name, parseDataType(dataType), nullable)
+      StructField(name, parseDataType(dataType, name, Map.empty, inStructField = true), nullable)
     // Support reading schema when 'nullable' is missing.
     case JSortedObject(("name", JString(name)), ("type", dataType: JValue)) =>
-      StructField(name, parseDataType(dataType))
+      StructField(name, parseDataType(dataType, name, Map.empty, inStructField = true))
     case other =>
       throw new SparkIllegalArgumentException(
         errorClass = "INVALID_JSON_DATA_TYPE",

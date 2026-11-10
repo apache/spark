@@ -23,30 +23,34 @@ use arrow_array::StringArray;
 use arrow_array::{ArrayRef, Int64Array, RecordBatch, RecordBatchOptions};
 use arrow_schema::{ArrowError, DataType, Field, Schema, SchemaRef};
 use serde::{Deserialize, Serialize};
-use spark_native_source::{
-    CreateInfo, DataSource, FilterSupport, LimitSupport, LiteralValue, MicroBatchStream,
-    MicroBatchStreamInfo, Options, PartitionReader, PartitionReaderFactory, Predicate,
+use spark_datasource::{
+    CreateInfo, DataSource, LatestOffsetInfo, LimitSupport, MicroBatchInfo, MicroBatchStream,
+    MicroBatchStreamInfo, Options, PartitionReader, PartitionReaderFactory, ReadLimit,
     ReaderContext, Result, ScanBuilder, ScanInfo, ScanPlan, Unsupported,
 };
+
+// The largest values of numPartitions and batchSize.
+const MAX_PARTITIONS: usize = 100_000;
+const MAX_BATCH_SIZE: usize = 1_000_000;
 
 pub struct RangeSource {
     start: i64,
     end: i64,
     num_partitions: usize,
     batch_size: usize,
+    max_rows_per_trigger: Option<u64>,
 }
 
 pub struct RangeScan {
-    lower: i128,
-    upper: i128,
+    start: i64,
+    end: i64,
     num_partitions: usize,
     limit: Option<usize>,
-    columns: Vec<String>,
     factory: RangeReaderFactory,
 }
 
 /// Reader configuration travels to each executor; it contains no live objects.
-/// The SDK passes the negotiated columns to the reader, so the factory omits them.
+/// Spark passes the columns to read to the reader, so the factory omits them.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct RangeReaderFactory {
     batch_size: usize,
@@ -59,11 +63,13 @@ pub struct RangePartition {
 }
 
 /// A streaming read of the range. The range is fixed, so all its rows are available when
-/// the query starts: the first micro-batch reads them, and later ones find no new data.
+/// the query starts: the first micro-batch reads them, unless `maxRowsPerTrigger` limits each
+/// micro-batch, and later ones find no new data.
 pub struct RangeStream {
     start: i64,
     end: i64,
     num_partitions: usize,
+    max_rows_per_trigger: Option<u64>,
     factory: RangeReaderFactory,
 }
 
@@ -86,7 +92,7 @@ impl DataSource for RangeSource {
         for key in options.keys() {
             if !matches!(
                 key.as_str(),
-                "start" | "end" | "numpartitions" | "batchsize"
+                "start" | "end" | "numpartitions" | "batchsize" | "maxrowspertrigger"
             ) {
                 return Err(format!("Unknown range option: {key}").into());
             }
@@ -95,31 +101,44 @@ impl DataSource for RangeSource {
         let end = option(&options, "end", 100_i64)?;
         let num_partitions = option(&options, "numpartitions", 2_usize)?;
         let batch_size = option(&options, "batchsize", 1024_usize)?;
+        let max_rows_per_trigger = options
+            .get("maxrowspertrigger")
+            .map(|_| option(&options, "maxrowspertrigger", 0_u64))
+            .transpose()?;
         if end < start {
             return Err("end must be greater than or equal to start".into());
         }
-        if num_partitions == 0 || batch_size == 0 {
-            return Err("numPartitions and batchSize must be positive".into());
+        if num_partitions == 0 || batch_size == 0 || max_rows_per_trigger == Some(0) {
+            return Err("numPartitions, batchSize and maxRowsPerTrigger must be positive".into());
+        }
+        // A failed allocation aborts the process, so bound the sizes that the reads allocate.
+        if num_partitions > MAX_PARTITIONS || batch_size > MAX_BATCH_SIZE {
+            return Err(format!(
+                "numPartitions must be at most {MAX_PARTITIONS}, and batchSize at most \
+                 {MAX_BATCH_SIZE}"
+            )
+            .into());
         }
         Ok(Self {
             start,
             end,
             num_partitions,
             batch_size,
+            max_rows_per_trigger,
         })
     }
 
-    fn schema(&self) -> Result<SchemaRef> {
+    fn infer_schema(&self) -> Result<SchemaRef> {
         output_schema(&["id".into(), "label".into()])
     }
 
     fn new_scan(&self, info: ScanInfo) -> Result<Self::ScanBuilder> {
+        read_columns(&info.schema)?;
         Ok(RangeScan {
-            lower: i128::from(self.start),
-            upper: i128::from(self.end),
+            start: self.start,
+            end: self.end,
             num_partitions: self.num_partitions,
             limit: None,
-            columns: read_columns(&info.schema)?,
             factory: RangeReaderFactory {
                 batch_size: self.batch_size,
             },
@@ -132,6 +151,7 @@ impl DataSource for RangeSource {
             start: self.start,
             end: self.end,
             num_partitions: self.num_partitions,
+            max_rows_per_trigger: self.max_rows_per_trigger,
             factory: RangeReaderFactory {
                 batch_size: self.batch_size,
             },
@@ -151,8 +171,8 @@ impl PartitionReaderFactory for RangeReaderFactory {
         if batch_size == 0 || partition.start > partition.end {
             return Err("Invalid serialized range plan".into());
         }
-        // The negotiated schema has the requested columns in order, with the types
-        // that the scan validated.
+        // The schema to read has the columns that the query needs, in order, with the
+        // types that the scan validated.
         let schema = context.schema;
         let columns: Vec<String> = schema.fields().iter().map(|f| f.name().clone()).collect();
         output_schema(&columns)?;
@@ -193,44 +213,23 @@ impl PartitionReaderFactory for RangeReaderFactory {
     }
 }
 
+// The readers get the columns to read in their context, so the scan does not prune columns.
 impl ScanBuilder for RangeScan {
     type Factory = RangeReaderFactory;
 
-    fn push_filters(&mut self, filters: &[Predicate]) -> Result<Vec<FilterSupport>> {
-        Ok(filters
-            .iter()
-            .map(|filter| {
-                if let Some((lower, upper)) = predicate_bounds(filter) {
-                    self.lower = self.lower.max(lower);
-                    self.upper = self.upper.min(upper);
-                    FilterSupport::Exact
-                } else {
-                    FilterSupport::Unsupported
-                }
-            })
-            .collect())
-    }
-
     fn push_limit(&mut self, limit: usize) -> Result<LimitSupport> {
-        self.limit = Some(self.limit.map_or(limit, |previous| previous.min(limit)));
+        self.limit = Some(limit);
         Ok(LimitSupport::Global)
     }
 
-    fn prune_columns(&mut self, columns: &[String]) -> Result<bool> {
-        if columns.iter().any(|column| !self.columns.contains(column)) {
-            return Err("Projection contains a column outside the read schema".into());
-        }
-        output_schema(columns)?;
-        self.columns = columns.to_vec();
-        Ok(true)
-    }
-
     fn plan(self) -> Result<ScanPlan<RangeReaderFactory>> {
-        // Filter before applying a global limit, then split the selected interval.
-        let upper = self.limit.map_or(self.upper, |limit| {
-            self.upper.min(self.lower + limit as i128)
-        });
-        let partitions = split(self.lower, upper, self.num_partitions);
+        // Apply a global limit by shortening the range, then split it.
+        let lower = i128::from(self.start);
+        let upper = i128::from(self.end);
+        let upper = self
+            .limit
+            .map_or(upper, |limit| upper.min(lower + limit as i128));
+        let partitions = split(lower, upper, self.num_partitions);
         Ok(ScanPlan::new(self.factory, partitions))
     }
 }
@@ -244,15 +243,36 @@ impl MicroBatchStream for RangeStream {
         Ok(RangeOffset { next: self.start })
     }
 
-    fn latest_offset(&mut self) -> Result<RangeOffset> {
-        Ok(RangeOffset { next: self.end })
+    fn default_read_limit(&self) -> Result<ReadLimit> {
+        Ok(self
+            .max_rows_per_trigger
+            .map_or(ReadLimit::AllAvailable, ReadLimit::MaxRows))
     }
 
-    fn plan(
-        &mut self,
-        start: RangeOffset,
-        end: RangeOffset,
-    ) -> Result<ScanPlan<RangeReaderFactory>> {
+    fn latest_offset(&mut self, info: LatestOffsetInfo<RangeOffset>) -> Result<RangeOffset> {
+        // The offsets of a checkpoint may come from a query with other options. Reject them
+        // here, before Spark logs the latest offset, which it would plan again on restart.
+        if info.start.next < self.start || info.start.next > self.end {
+            return Err(format!(
+                "The offset {} is not in the range [{}, {}]",
+                info.start.next, self.start, self.end
+            )
+            .into());
+        }
+        // All the rows of the range are available, within the limit and the end of the run.
+        let mut next = self.end;
+        if let ReadLimit::MaxRows(rows) = info.limit {
+            let rows = i64::try_from(rows).unwrap_or(i64::MAX);
+            next = next.min(info.start.next.saturating_add(rows));
+        }
+        if let Some(run_end) = info.run_end {
+            next = next.min(run_end.next);
+        }
+        Ok(RangeOffset { next })
+    }
+
+    fn plan(&mut self, info: MicroBatchInfo<RangeOffset>) -> Result<ScanPlan<RangeReaderFactory>> {
+        let (start, end) = (info.start, info.end);
         // The offsets of a checkpoint may come from a query with other options.
         if start.next < self.start || end.next > self.end || start.next > end.next {
             return Err(format!(
@@ -339,66 +359,12 @@ fn output_schema(columns: &[String]) -> Result<SchemaRef> {
     Ok(Arc::new(Schema::new(fields?)))
 }
 
-/// Closed-open bounds use i128 so strict comparisons never overflow at i64 extrema.
-fn predicate_bounds(predicate: &Predicate) -> Option<(i128, i128)> {
-    let Predicate::Function { name, children } = predicate else {
-        return None;
-    };
-    if children.len() != 2 {
-        return None;
-    }
-    if name == "AND" {
-        // Do not mutate the scan when only one side of an AND is supported.
-        let left = predicate_bounds(&children[0])?;
-        let right = predicate_bounds(&children[1])?;
-        return Some((left.0.max(right.0), left.1.min(right.1)));
-    }
-    let (value, reversed) = if is_id(&children[0]) {
-        (integer_literal(&children[1])?, false)
-    } else if is_id(&children[1]) {
-        (integer_literal(&children[0])?, true)
-    } else {
-        return None;
-    };
-    let name = match (name.as_str(), reversed) {
-        (">", true) => "<",
-        (">=", true) => "<=",
-        ("<", true) => ">",
-        ("<=", true) => ">=",
-        (name, _) => name,
-    };
-    let min = i128::from(i64::MIN);
-    let max = i128::from(i64::MAX) + 1;
-    let value = i128::from(value);
-    match name {
-        "=" | "<=>" => Some((value, value + 1)),
-        ">" => Some((value + 1, max)),
-        ">=" => Some((value, max)),
-        "<" => Some((min, value)),
-        "<=" => Some((min, value + 1)),
-        _ => None,
-    }
-}
-
-fn is_id(predicate: &Predicate) -> bool {
-    matches!(predicate, Predicate::Column { name } if name.len() == 1 && name[0] == "id")
-}
-
-/// A non-null tinyint, smallint, int, or bigint literal, decoded by the SDK.
-fn integer_literal(predicate: &Predicate) -> Option<i64> {
-    match predicate.literal_value()? {
-        LiteralValue::Integer(value) => Some(value),
-        _ => None,
-    }
-}
-
-spark_native_source::export_data_source!(RangeSource);
+spark_datasource::export_data_source!(RangeSource);
 
 #[cfg(test)]
 mod tests {
     use super::*;
-    use serde_json::json;
-    use spark_native_source::TaskContext;
+    use spark_datasource::TaskContext;
 
     fn info(values: &[(&str, &str)]) -> CreateInfo {
         let options: Options = values
@@ -414,30 +380,17 @@ mod tests {
 
     fn scan(source: &RangeSource) -> RangeScan {
         source
-            .new_scan(ScanInfo::new(source.schema().unwrap()))
+            .new_scan(ScanInfo::new(source.infer_schema().unwrap()))
             .unwrap()
     }
 
-    fn comparison(name: &str, value: i64, reversed: bool) -> Predicate {
-        let mut children = vec![
-            Predicate::Column {
-                name: vec!["id".into()],
-            },
-            Predicate::Literal {
-                data_type: "bigint".into(),
-                value: json!(value),
-            },
-        ];
-        if reversed {
-            children.reverse();
-        }
-        Predicate::Function {
-            name: name.into(),
-            children,
-        }
+    fn stream(source: &RangeSource) -> RangeStream {
+        let info =
+            MicroBatchStreamInfo::new(source.infer_schema().unwrap(), "file:/tmp/checkpoint");
+        source.new_micro_batch_stream(info).unwrap()
     }
 
-    /// Reads every partition with the schema that the SDK negotiated for `columns`.
+    /// Reads every partition with `columns` as the schema to read, as Spark passes it.
     fn read(plan: ScanPlan<RangeReaderFactory>, columns: &[&str]) -> Vec<RecordBatch> {
         let columns: Vec<String> = columns.iter().map(|column| column.to_string()).collect();
         let schema = output_schema(&columns).unwrap();
@@ -474,7 +427,7 @@ mod tests {
     }
 
     #[test]
-    fn filters_before_global_limit_and_preserves_projected_order() {
+    fn applies_a_global_limit_and_reads_the_columns_in_their_order() {
         let source = source(&[
             ("start", "10"),
             ("end", "25"),
@@ -482,17 +435,11 @@ mod tests {
             ("batchsize", "2"),
         ]);
         let mut scan = scan(&source);
-        assert_eq!(
-            scan.push_filters(&[comparison(">=", 13, false), comparison("<", 22, false),])
-                .unwrap(),
-            vec![FilterSupport::Exact; 2]
-        );
         assert_eq!(scan.push_limit(5).unwrap(), LimitSupport::Global);
-        assert!(scan.prune_columns(&["label".into(), "id".into()]).unwrap());
         let plan = scan.plan().unwrap();
         assert_eq!(plan.partitions.len(), 3);
         let batches = read(plan, &["label", "id"]);
-        assert_eq!(ids(&batches), (13..18).collect::<Vec<_>>());
+        assert_eq!(ids(&batches), (10..15).collect::<Vec<_>>());
         for batch in &batches {
             assert!(batch.num_rows() <= 2);
             assert_eq!(batch.schema().field(0).name(), "label");
@@ -508,110 +455,22 @@ mod tests {
     }
 
     #[test]
-    fn comparisons_handle_reversed_operands_and_int64_boundaries() {
-        for (start, end) in [(-2, 3), (i64::MIN, i64::MIN + 3), (i64::MAX - 3, i64::MAX)] {
-            let source = source(&[("start", &start.to_string()), ("end", &end.to_string())]);
-            for literal in [i64::MIN, -1, 0, 1, i64::MAX] {
-                for op in ["=", "<=>", ">", ">=", "<", "<="] {
-                    for reversed in [false, true] {
-                        let mut scan = scan(&source);
-                        assert_eq!(
-                            scan.push_filters(&[comparison(op, literal, reversed)])
-                                .unwrap(),
-                            vec![FilterSupport::Exact]
-                        );
-                        let expected: Vec<_> = (start..end)
-                            .filter(|id| {
-                                let (left, right) = if reversed {
-                                    (literal, *id)
-                                } else {
-                                    (*id, literal)
-                                };
-                                match op {
-                                    "=" | "<=>" => left == right,
-                                    ">" => left > right,
-                                    ">=" => left >= right,
-                                    "<" => left < right,
-                                    "<=" => left <= right,
-                                    _ => unreachable!(),
-                                }
-                            })
-                            .collect();
-                        assert_eq!(
-                            ids(&read(scan.plan().unwrap(), ALL)),
-                            expected,
-                            "range={start}..{end}, op={op}, value={literal}, reverse={reversed}"
-                        );
-                    }
-                }
-            }
+    fn limits_near_the_end_of_the_int64_range_do_not_overflow() {
+        let source = source(&[
+            ("start", &(i64::MAX - 3).to_string()),
+            ("end", &i64::MAX.to_string()),
+        ]);
+        for (limit, expected) in [(2, 2), (usize::MAX, 3)] {
+            let mut scan = scan(&source);
+            scan.push_limit(limit).unwrap();
+            assert_eq!(ids(&read(scan.plan().unwrap(), ALL)).len(), expected);
         }
-    }
-
-    #[test]
-    fn unsupported_filters_remain_residual_without_mutating_the_scan() {
-        let source = source(&[("end", "10")]);
-        let mut scan = scan(&source);
-        let unsupported_and = Predicate::Function {
-            name: "AND".into(),
-            children: vec![comparison(">", 5, false), Predicate::Unknown],
-        };
-        let null: Predicate = serde_json::from_value(json!({
-            "type": "function", "name": "<=>", "children": [
-                {"type": "column", "name": ["id"]},
-                {"type": "literal", "dataType": "bigint", "value": null}
-            ]
-        }))
-        .unwrap();
-        let double: Predicate = serde_json::from_value(json!({
-            "type": "function", "name": "=", "children": [
-                {"type": "column", "name": ["id"]},
-                {"type": "literal", "dataType": "double", "value": 1.5}
-            ]
-        }))
-        .unwrap();
-        assert_eq!(
-            scan.push_filters(&[
-                unsupported_and,
-                null,
-                double,
-                comparison("FUTURE_COMPARISON", 0, false),
-            ])
-            .unwrap(),
-            vec![FilterSupport::Unsupported; 4]
-        );
-        assert_eq!(
-            ids(&read(scan.plan().unwrap(), ALL)),
-            (0..10).collect::<Vec<_>>()
-        );
-    }
-
-    #[test]
-    fn conjunctions_and_contradictory_predicates_form_exact_intersections() {
-        let source = source(&[("end", "10")]);
-        let mut first = scan(&source);
-        let and = Predicate::Function {
-            name: "AND".into(),
-            children: vec![comparison(">=", 3, false), comparison("<=", 6, false)],
-        };
-        assert_eq!(
-            first.push_filters(&[and]).unwrap(),
-            vec![FilterSupport::Exact]
-        );
-        assert_eq!(ids(&read(first.plan().unwrap(), ALL)), vec![3, 4, 5, 6]);
-        let mut empty = scan(&source);
-        empty
-            .push_filters(&[comparison(">", 5, false), comparison("<", 3, false)])
-            .unwrap();
-        assert!(empty.plan().unwrap().partitions.is_empty());
     }
 
     #[test]
     fn serialized_plans_preserve_zero_column_row_counts_and_batch_sizes() {
         let source = source(&[("end", "7"), ("numpartitions", "1"), ("batchsize", "3")]);
-        let mut scan = scan(&source);
-        scan.prune_columns(&[]).unwrap();
-        let plan = scan.plan().unwrap();
+        let plan = scan(&source).plan().unwrap();
         let factory = serde_json::from_slice(&serde_json::to_vec(&plan.factory).unwrap()).unwrap();
         let partitions = plan
             .partitions
@@ -620,6 +479,7 @@ mod tests {
                 serde_json::from_slice(&serde_json::to_vec(partition).unwrap()).unwrap()
             })
             .collect();
+        // SELECT count(*) reads no columns.
         let batches = read(ScanPlan::new(factory, partitions), &[]);
         assert_eq!(
             batches
@@ -632,14 +492,13 @@ mod tests {
     }
 
     #[test]
-    fn zero_limit_empty_range_and_repeated_limits_do_not_add_rows() {
+    fn zero_limit_and_empty_range_do_not_add_rows() {
         let provider = source(&[("end", "10"), ("numpartitions", "20")]);
         let mut zero = scan(&provider);
         zero.push_limit(0).unwrap();
         assert!(zero.plan().unwrap().partitions.is_empty());
         let mut limited = scan(&provider);
         limited.push_limit(2).unwrap();
-        limited.push_limit(5).unwrap();
         let plan = limited.plan().unwrap();
         assert_eq!(plan.partitions.len(), 2);
         assert_eq!(ids(&read(plan, ALL)), vec![0, 1]);
@@ -652,7 +511,10 @@ mod tests {
         for (key, value) in [
             ("batchsize", "0"),
             ("batchsize", "-1"),
+            ("batchsize", "1000001"),
             ("numpartitions", "0"),
+            ("numpartitions", "100001"),
+            ("maxrowspertrigger", "0"),
             ("end", "-1"),
             ("start", "not-an-integer"),
             ("unknown", "1"),
@@ -661,10 +523,9 @@ mod tests {
         }
         let source = source(&[]);
         let invalid = Arc::new(Schema::new(vec![Field::new("id", DataType::Int32, false)]));
-        assert!(source.new_scan(ScanInfo::new(invalid)).is_err());
-        let labels = output_schema(&["label".into()]).unwrap();
-        let mut scan = source.new_scan(ScanInfo::new(labels)).unwrap();
-        assert!(scan.prune_columns(&["id".into()]).is_err());
+        assert!(source.new_scan(ScanInfo::new(invalid.clone())).is_err());
+        let info = MicroBatchStreamInfo::new(invalid, "file:/tmp/checkpoint");
+        assert!(source.new_micro_batch_stream(info).is_err());
         assert!(output_schema(&["id".into(), "id".into()]).is_err());
     }
 
@@ -676,28 +537,69 @@ mod tests {
             ("numpartitions", "2"),
             ("batchsize", "4"),
         ]);
-        let mut stream = source
-            .new_micro_batch_stream(MicroBatchStreamInfo::new(source.schema().unwrap()))
-            .unwrap();
+        let mut stream = stream(&source);
+        assert_eq!(
+            stream.default_read_limit().unwrap(),
+            ReadLimit::AllAvailable
+        );
         let initial = stream.initial_offset().unwrap();
-        let latest = stream.latest_offset().unwrap();
+        let latest = stream
+            .latest_offset(LatestOffsetInfo::new(initial))
+            .unwrap();
         assert_eq!(serde_json::to_string(&initial).unwrap(), r#"{"next":10}"#);
         assert_eq!(serde_json::to_string(&latest).unwrap(), r#"{"next":25}"#);
         // As if an earlier query had planned a micro-batch up to an offset of its checkpoint.
         let middle: RangeOffset = serde_json::from_str(r#"{"next":13}"#).unwrap();
-        let first = stream.plan(initial, middle).unwrap();
+        let first = stream.plan(MicroBatchInfo::new(initial, middle)).unwrap();
         assert_eq!(first.partitions.len(), 2);
         assert_eq!(ids(&read(first, ALL)), (10..13).collect::<Vec<_>>());
-        let second = stream.plan(middle, latest).unwrap();
+        let second = stream.plan(MicroBatchInfo::new(middle, latest)).unwrap();
         assert_eq!(ids(&read(second, ALL)), (13..25).collect::<Vec<_>>());
-        assert!(stream.plan(latest, latest).unwrap().partitions.is_empty());
+        assert!(stream
+            .plan(MicroBatchInfo::new(latest, latest))
+            .unwrap()
+            .partitions
+            .is_empty());
         let outside: RangeOffset = serde_json::from_str(r#"{"next":30}"#).unwrap();
-        assert!(stream.plan(initial, outside).is_err());
-        assert!(stream.plan(latest, initial).is_err());
-        let invalid = Arc::new(Schema::new(vec![Field::new("id", DataType::Int32, false)]));
-        assert!(source
-            .new_micro_batch_stream(MicroBatchStreamInfo::new(invalid))
+        assert!(stream.plan(MicroBatchInfo::new(initial, outside)).is_err());
+        assert!(stream.plan(MicroBatchInfo::new(latest, initial)).is_err());
+        assert!(stream
+            .latest_offset(LatestOffsetInfo::new(outside))
             .is_err());
+    }
+
+    #[test]
+    fn a_stream_limits_its_micro_batches_to_max_rows_per_trigger() {
+        let source = source(&[("start", "10"), ("end", "25"), ("maxrowspertrigger", "4")]);
+        let mut stream = stream(&source);
+        let limit = stream.default_read_limit().unwrap();
+        assert_eq!(limit, ReadLimit::MaxRows(4));
+        let request = |start: i64, limit: ReadLimit, run_end: Option<i64>| {
+            let mut info = LatestOffsetInfo::new(RangeOffset { next: start });
+            info.limit = limit;
+            info.run_end = run_end.map(|next| RangeOffset { next });
+            info
+        };
+        let mut ends = vec![];
+        let mut start = 10;
+        loop {
+            let end = stream
+                .latest_offset(request(start, limit, None))
+                .unwrap()
+                .next;
+            if end == start {
+                break;
+            }
+            ends.push(end);
+            start = end;
+        }
+        assert_eq!(ends, vec![14, 18, 22, 25]);
+        // A run of Trigger.AvailableNow does not read beyond its end.
+        let end = stream.latest_offset(request(18, limit, Some(20))).unwrap();
+        assert_eq!(end.next, 20);
+        // Spark asks without a limit, for the progress of the query or with Trigger.Once.
+        let end = stream.latest_offset(request(10, ReadLimit::AllAvailable, None));
+        assert_eq!(end.unwrap().next, 25);
     }
 
     #[test]
@@ -709,7 +611,8 @@ mod tests {
             ("batchsize", "2"),
         ]);
         let plan = scan(&source).plan().unwrap();
-        let context = ReaderContext::new(source.schema().unwrap(), TaskContext::for_testing());
+        let context =
+            ReaderContext::new(source.infer_schema().unwrap(), TaskContext::for_testing());
         let mut reader = plan
             .factory
             .open(plan.partitions[0].clone(), context)

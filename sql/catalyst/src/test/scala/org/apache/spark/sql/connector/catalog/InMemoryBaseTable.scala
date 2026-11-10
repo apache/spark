@@ -28,11 +28,11 @@ import scala.collection.mutable
 import scala.collection.mutable.{ArrayBuffer, ListBuffer}
 import scala.jdk.CollectionConverters._
 
-import org.apache.spark.sql.catalyst.InternalRow
+import org.apache.spark.sql.catalyst.{InternalRow, ProjectingInternalRow}
 import org.apache.spark.sql.catalyst.expressions.{AttributeReference, BoundReference, Cast, EvalMode, Expression => CatalystExpression, GenericInternalRow, GetStructField, JoinedRow, Literal, MetadataStructFieldWithLogicalName, Predicate => CatalystPredicate}
 import org.apache.spark.sql.catalyst.util.{ArrayBasedMapData, ArrayData, CaseInsensitiveMap, CharVarcharUtils, DateTimeUtils, GenericArrayData, MapData, ResolveDefaultColumns}
 import org.apache.spark.sql.connector.catalog.constraints.Constraint
-import org.apache.spark.sql.connector.catalog.functions.FlipLowBitFunction
+import org.apache.spark.sql.connector.catalog.functions.{FlipLowBitFunction, SelfReduceFunction}
 import org.apache.spark.sql.connector.distributions.{Distribution, Distributions}
 import org.apache.spark.sql.connector.expressions._
 import org.apache.spark.sql.connector.expressions.{Literal => V2Literal}
@@ -76,6 +76,8 @@ abstract class InMemoryBaseTable(
   // Stores the table version validated during the last `ALTER TABLE ... ADD CONSTRAINT` operation.
   private var validatedTableVersion: String = null
 
+  private var tableDisplayProperties: util.Map[String, String] = null
+
   // Assign column IDs to columns that do not have one, including nested struct fields within
   // arrays and maps. This simulates connectors that support column identity tracking.
   private var tableColumns: Array[Column] = InMemoryBaseTable.assignMissingIds(initialColumns)
@@ -86,6 +88,15 @@ abstract class InMemoryBaseTable(
     tableColumns = newColumns
   }
 
+  override def displayProperties(): util.Map[String, String] = {
+    Option(tableDisplayProperties).map(util.Collections.unmodifiableMap(_))
+      .getOrElse(super.displayProperties())
+  }
+
+  def setDisplayProperties(displayProperties: util.Map[String, String]): Unit = {
+    tableDisplayProperties = new util.HashMap[String, String](displayProperties)
+  }
+
   override def version(): String = tableVersion.toString
 
   def setVersion(version: String): Unit = {
@@ -93,7 +104,7 @@ abstract class InMemoryBaseTable(
   }
 
   /**
-   * Copies version and validated version from another table.
+   * Copies version, validated version and display-only metadata from another table.
    *
    * Some test catalogs (e.g. [[NullColumnIdInMemoryTableCatalog]],
    * [[NullTableIdAndNullColumnIdInMemoryTableCatalog]]) create a new table object
@@ -104,7 +115,8 @@ abstract class InMemoryBaseTable(
    * [[InMemoryTable]].copy, validated-version propagation, and the join-refresh
    * tests in [[DSv2IncrementallyConstructedQueryTests]]).
    */
-  def setVersionAndValidatedVersionFrom(sourceTable: InMemoryBaseTable): Unit = {
+  def copyTableStateFrom(sourceTable: InMemoryBaseTable): Unit = {
+    setDisplayProperties(sourceTable.displayProperties())
     setVersion(sourceTable.version())
     if (sourceTable.validatedVersion() != null) {
       setValidatedVersion(sourceTable.validatedVersion())
@@ -199,6 +211,21 @@ abstract class InMemoryBaseTable(
   private val simulatePartialColumnPruning = properties
     .getOrDefault(InMemoryBaseTable.SIMULATE_PARTIAL_COLUMN_PRUNING, "false").toBoolean
 
+  private val simulateIncompleteColumnPruning = properties
+    .getOrDefault(InMemoryBaseTable.SIMULATE_INCOMPLETE_COLUMN_PRUNING, "false").toBoolean
+
+  private val simulateReorderedColumnPruning = properties
+    .getOrDefault(InMemoryBaseTable.SIMULATE_REORDERED_COLUMN_PRUNING, "false").toBoolean
+
+  private val simulateRetypedColumnPruning = properties
+    .getOrDefault(InMemoryBaseTable.SIMULATE_RETYPED_COLUMN_PRUNING, "false").toBoolean
+
+  private val simulateNonNullableColumnPruning = properties
+    .getOrDefault(InMemoryBaseTable.SIMULATE_NON_NULLABLE_COLUMN_PRUNING, "false").toBoolean
+
+  private val streamingColumnPruning = properties
+    .getOrDefault(InMemoryBaseTable.STREAMING_COLUMN_PRUNING, "false").toBoolean
+
   private val acceptAnySchema = properties.getOrDefault("accept-any-schema", "false").toBoolean
   private val autoSchemaEvolution = properties.getOrDefault("auto-schema-evolution", "true")
     .toBoolean
@@ -217,6 +244,7 @@ abstract class InMemoryBaseTable(
     case NamedTransform("truncate", Seq(_: NamedReference, _: V2Literal[_])) =>
     case NamedTransform("signed_zeros", Seq(_: NamedReference)) =>
     case NamedTransform("flip_low_bit", Seq(_: NamedReference)) =>
+    case NamedTransform("self_reduce", Seq(_: NamedReference)) =>
     case t if !allowUnsupportedTransforms =>
       throw new IllegalArgumentException(s"Transform $t is not a supported transform")
   }
@@ -350,6 +378,12 @@ abstract class InMemoryBaseTable(
       case NamedTransform("flip_low_bit", Seq(ref: NamedReference)) =>
         extractor(ref.fieldNames, cleanedSchema, row) match {
           case (value: Long, LongType) => FlipLowBitFunction.produceResult(InternalRow(value))
+          case (v, t) =>
+            throw new IllegalArgumentException(s"Match: unsupported argument(s) type - ($v, $t)")
+        }
+      case NamedTransform("self_reduce", Seq(ref: NamedReference)) =>
+        extractor(ref.fieldNames, cleanedSchema, row) match {
+          case (value: Long, LongType) => SelfReduceFunction.produceResult(InternalRow(value))
           case (v, t) =>
             throw new IllegalArgumentException(s"Match: unsupported argument(s) type - ($v, $t)")
         }
@@ -520,6 +554,7 @@ abstract class InMemoryBaseTable(
   override def capabilities(): util.Set[TableCapability] =
     (baseCapabiilities ++
       (if (acceptAnySchema) Seq(TableCapability.ACCEPT_ANY_SCHEMA) else Seq.empty) ++
+      (if (streamingColumnPruning) Seq(TableCapability.STREAMING_COLUMN_PRUNING) else Seq.empty) ++
       (if (autoSchemaEvolution) Seq(TableCapability.AUTOMATIC_SCHEMA_EVOLUTION) else Seq.empty) ++
       (if (generateColumnValuesOnWrite) {
         Seq(TableCapability.GENERATE_COLUMN_VALUES_ON_WRITE)
@@ -589,10 +624,27 @@ abstract class InMemoryBaseTable(
         case MetadataStructFieldWithLogicalName(_, name) => metadataColumnNames.contains(name)
         case f => schemaNames.contains(f.name)
       }
+      lazy val dataFields = prunedFields.filterNot(isRequiredMetadataField)
       schema = if (simulatePartialColumnPruning) {
         // Prune the metadata columns as required, but report every data column back from
         // `Scan.readSchema()` regardless of what was required.
         StructType(tableSchema ++ prunedFields.filter(isRequiredMetadataField))
+      } else if (simulateIncompleteColumnPruning && dataFields.length < tableSchema.length) {
+        // Drop the first required data column when only some of them are required.
+        StructType(prunedFields.filterNot(dataFields.headOption.contains))
+      } else if (simulateRetypedColumnPruning && dataFields.length < tableSchema.length) {
+        // Report the required data columns as binary columns when only some of them are required.
+        StructType(prunedFields.map { field =>
+          if (isRequiredMetadataField(field)) field else field.copy(dataType = BinaryType)
+        })
+      } else if (simulateNonNullableColumnPruning) {
+        // Report the required data columns as not nullable.
+        StructType(prunedFields.map { field =>
+          if (isRequiredMetadataField(field)) field else field.copy(nullable = false)
+        })
+      } else if (simulateReorderedColumnPruning) {
+        // Return the required data columns in the reverse order.
+        StructType(dataFields.reverse ++ prunedFields.filter(isRequiredMetadataField))
       } else {
         StructType(prunedFields)
       }
@@ -632,6 +684,9 @@ abstract class InMemoryBaseTable(
     override def json(): String = rowCount.toString
   }
 
+  // The number of the micro-batch streams that the scans of the table created.
+  val createdMicroBatchStreams = new AtomicLong()
+
   class InMemoryMicroBatchStream(readSchema: StructType, tableSchema: StructType)
       extends MicroBatchStream {
     override def initialOffset(): Offset = new InMemoryTableOffset(0)
@@ -644,11 +699,22 @@ abstract class InMemoryBaseTable(
     }
     override def createReaderFactory(): PartitionReaderFactory = {
       val metadataColNames = new mutable.ArrayBuffer[String]()
+      val dataColumns = new mutable.ArrayBuffer[StructField]()
       readSchema.foreach {
         case MetadataStructFieldWithLogicalName(_, name) => metadataColNames += name
-        case _ =>
+        case field => dataColumns += field
       }
-      new InMemoryMicroBatchReaderFactory(metadataColNames.toArray)
+      // With STREAMING_COLUMN_PRUNING, the readers return the data columns of the read schema,
+      // which Spark may prune, by their position in the rows of the table. Otherwise, they return
+      // the rows of the table, as the streaming reads of in-memory tables did before the pruning.
+      val dataOrdinals = if (streamingColumnPruning) {
+        Some(dataColumns.map(field => tableSchema.fieldIndex(field.name)).toSeq)
+          .filterNot(_ == tableSchema.indices)
+      } else {
+        None
+      }
+      new InMemoryMicroBatchReaderFactory(
+        metadataColNames.toArray, dataOrdinals.map(_.toArray), StructType(dataColumns.toSeq))
     }
     override def deserializeOffset(json: String): Offset = new InMemoryTableOffset(json.toLong)
     override def commit(end: Offset): Unit = {}
@@ -747,8 +813,10 @@ abstract class InMemoryBaseTable(
       Array(new RowsReadCustomMetric)
     }
 
-    override def toMicroBatchStream(checkpointLocation: String): MicroBatchStream =
+    override def toMicroBatchStream(checkpointLocation: String): MicroBatchStream = {
+      createdMicroBatchStreams.incrementAndGet()
       new InMemoryMicroBatchStream(readSchema, tableSchema)
+    }
   }
 
   /**
@@ -1091,6 +1159,31 @@ object InMemoryBaseTable {
   // `SupportsMetadataColumns` makes the read schema the only channel that delivers them.
   val SIMULATE_PARTIAL_COLUMN_PRUNING = "simulate-partial-column-pruning"
 
+  // Test table property that simulates a connector whose pruning drops a column that was required,
+  // which `SupportsPushDownRequiredColumns` does not permit: when only some of the data columns
+  // are required, `Scan.readSchema()` does not have the first of them.
+  val SIMULATE_INCOMPLETE_COLUMN_PRUNING = "simulate-incomplete-column-pruning"
+
+  // Test table property that simulates a connector that returns the required columns in another
+  // order than they were asked in, which `SupportsPushDownRequiredColumns` permits:
+  // `Scan.readSchema()` has the required data columns in the reverse order, also when all of them
+  // are required.
+  val SIMULATE_REORDERED_COLUMN_PRUNING = "simulate-reordered-column-pruning"
+
+  // Test table property that simulates a connector whose pruning reports a required column with
+  // another type, which `SupportsPushDownRequiredColumns` does not permit: when only some of the
+  // data columns are required, `Scan.readSchema()` has them as binary columns.
+  val SIMULATE_RETYPED_COLUMN_PRUNING = "simulate-retyped-column-pruning"
+
+  // Test table property that simulates a connector whose pruning reports the required data columns
+  // as not nullable, whatever the nullability of the columns of the table is.
+  val SIMULATE_NON_NULLABLE_COLUMN_PRUNING = "simulate-non-nullable-column-pruning"
+
+  // Test table property: whether the table declares STREAMING_COLUMN_PRUNING, so that the scans of
+  // its streaming reads only read the columns that the queries read. Its streams then return the
+  // columns of their read schemas. It does not by default.
+  val STREAMING_COLUMN_PRUNING = "streaming-column-pruning"
+
   /**
    * Assigns fresh IDs to any top-level column or nested struct field that does not already
    * have one. Recurses into struct fields within ArrayType and MapType so that every field
@@ -1197,15 +1290,28 @@ class BufferedRows(val key: Seq[Any], val schema: StructType)
   def clear(): Unit = rows.clear()
 }
 
+/**
+ * @param dataOrdinals the positions in the rows of the table of the data columns to read, unless
+ *                     the readers return the rows of the table
+ * @param dataSchema the data columns to read
+ */
 private class InMemoryMicroBatchReaderFactory(
-    metaNames: Array[String]) extends PartitionReaderFactory with Serializable {
+    metaNames: Array[String],
+    dataOrdinals: Option[Array[Int]],
+    dataSchema: StructType) extends PartitionReaderFactory with Serializable {
   override def createReader(partition: InputPartition): PartitionReader[InternalRow] = {
     val rows = partition.asInstanceOf[InMemoryMicroBatchPartition].rows
     new PartitionReader[InternalRow] {
       private var idx = -1
+      private val projection =
+        dataOrdinals.map(ordinals => ProjectingInternalRow(dataSchema, ordinals.toSeq))
       override def next(): Boolean = { idx += 1; idx < rows.size }
       override def get(): InternalRow = {
-        val rawRow = rows(idx)
+        val tableRow = rows(idx)
+        val rawRow = projection.map { projection =>
+          projection.project(tableRow)
+          projection
+        }.getOrElse(tableRow)
         if (metaNames.isEmpty) rawRow
         else {
           val metaRow = new GenericInternalRow(metaNames.map {

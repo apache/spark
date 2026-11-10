@@ -45,7 +45,7 @@ class NullColumnIdInMemoryTableCatalog extends InMemoryTableCatalog {
       constraints = table.constraints,
       id = table.id)
     nullColIdTable.alterTableWithData(table.data, table.schema)
-    nullColIdTable.setVersionAndValidatedVersionFrom(table)
+    nullColIdTable.copyTableStateFrom(table)
     nullColIdTable
   }
 
@@ -101,7 +101,7 @@ class NullColumnIdInMemoryTable(
     dataMap.synchronized {
       copiedTable.alterTableWithData(data, schema)
     }
-    copiedTable.setVersionAndValidatedVersionFrom(this)
+    copiedTable.copyTableStateFrom(this)
     copiedTable
   }
 }

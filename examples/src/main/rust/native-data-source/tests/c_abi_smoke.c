@@ -43,9 +43,10 @@ typedef struct ByteList {
   size_t length;
 } ByteList;
 
+/* What a planning call returns: its partitions, and the state of its reader, set once. */
 typedef struct Plan {
   ByteList partitions;
-  Bytes state;
+  ByteList states;
 } Plan;
 
 static const SparkDsLibrary* library;
@@ -63,6 +64,10 @@ static void check_status(int status) {
 
 static void log_message(int32_t level, const char* message) {
   fprintf(stderr, "Native log %d: %s\n", level, message);
+}
+
+static bool is_log_enabled(int32_t level) {
+  return level <= SPARK_DS_LOG_INFO;
 }
 
 static bool is_interrupted(const SparkDsTaskContext* task) {
@@ -94,8 +99,7 @@ static SparkDsTaskContext task_context(void) {
 }
 
 /* Sink callbacks copy opaque bytes during the call, as required by the ABI. */
-static void add_bytes(void* sink, const uint8_t* data, int64_t length) {
-  ByteList* list = sink;
+static void append(ByteList* list, const uint8_t* data, int64_t length) {
   CHECK(length >= 0, "A sink received a negative length");
   CHECK(length == 0 || data != NULL, "A nonempty sink value must have data");
   Bytes* values = realloc(list->values, (list->length + 1) * sizeof(Bytes));
@@ -110,17 +114,72 @@ static void add_bytes(void* sink, const uint8_t* data, int64_t length) {
   }
 }
 
+static void add_bytes(void* sink, const uint8_t* data, int64_t length) {
+  append(sink, data, length);
+}
+
+/* The sinks of a planning call share its sink argument, a Plan. */
+static void add_partition(void* sink, const uint8_t* data, int64_t length) {
+  append(&((Plan*) sink)->partitions, data, length);
+}
+
+static void set_state(void* sink, const uint8_t* data, int64_t length) {
+  append(&((Plan*) sink)->states, data, length);
+}
+
 static void free_list(ByteList* list) {
   for (size_t i = 0; i < list->length; i++) {
     free(list->values[i].data);
   }
   free(list->values);
+  list->values = NULL;
+  list->length = 0;
 }
 
-static void check_bytes(const Bytes* left, const Bytes* right) {
-  CHECK(left->length == right->length, "Repeated planning changed the serialized size");
-  CHECK(memcmp(left->data, right->data, (size_t) left->length) == 0,
-      "Repeated planning changed the serialized data");
+static void free_plan(Plan* plan) {
+  free_list(&plan->partitions);
+  free_list(&plan->states);
+}
+
+static void release_field(struct ArrowSchema* schema) {
+  schema->release = NULL;
+}
+
+static void release_schema(struct ArrowSchema* schema) {
+  for (int64_t i = 0; i < schema->n_children; i++) {
+    free(schema->children[i]);
+  }
+  free(schema->children);
+  schema->release = NULL;
+}
+
+/* The schema to read that Spark passes for these columns of the Range source. */
+static struct ArrowSchema read_schema(const char* const* columns, int64_t count) {
+  struct ArrowSchema schema = {
+    .format = "+s",
+    .name = "",
+    .n_children = count,
+    .children = calloc(count == 0 ? 1 : (size_t) count, sizeof(struct ArrowSchema*)),
+    .release = release_schema
+  };
+  CHECK(schema.children != NULL, "Cannot allocate a schema");
+  for (int64_t i = 0; i < count; i++) {
+    struct ArrowSchema* field = calloc(1, sizeof(struct ArrowSchema));
+    CHECK(field != NULL, "Cannot allocate a field");
+    bool id = strcmp(columns[i], "id") == 0;
+    field->format = id ? "l" : "u";
+    field->name = id ? "id" : "label";
+    field->release = release_field;
+    schema.children[i] = field;
+  }
+  return schema;
+}
+
+/* Releases an input schema unless the library moved it, as Spark does after a call. */
+static void release_input(struct ArrowSchema* schema) {
+  if (schema->release != NULL) {
+    schema->release(schema);
+  }
 }
 
 static void* create_source(const char* const* keys, const char* const* values, int64_t count) {
@@ -135,8 +194,9 @@ static void* create_source(const char* const* keys, const char* const* values, i
   void* source = NULL;
   check_status(library->create(&info, &capabilities, &source));
   CHECK(source != NULL, "create returned a null source");
-  CHECK(capabilities == (SPARK_DS_BATCH_READ | SPARK_DS_MICRO_BATCH_READ),
-      "The Range source must declare batch and micro-batch reads");
+  CHECK(capabilities ==
+      (SPARK_DS_BATCH_READ | SPARK_DS_MICRO_BATCH_READ | SPARK_DS_ADMISSION_CONTROL),
+      "The Range source must declare batch and micro-batch reads, with admission control");
   return source;
 }
 
@@ -161,35 +221,20 @@ static void* create_planner(
   CHECK(strcmp(schema.children[1]->name, "label") == 0, "Missing label field");
   CHECK(strcmp(schema.children[1]->format, "u") == 0, "label must be UTF-8");
 
+  SparkDsReaderInfo info = {.size = sizeof(SparkDsReaderInfo)};
   void* reader = NULL;
-  check_status(library->create_reader(source, &schema, &reader));
+  check_status(library->create_reader(source, &schema, &info, &reader));
   CHECK(reader != NULL, "create_reader returned a null reader");
-  if (schema.release != NULL) {
-    schema.release(&schema);
-  }
+  release_input(&schema);
   library->close(source);
   return reader;
 }
 
 static Plan finish_plan(void* reader) {
   Plan plan = {0};
-  check_status(library->partitions(reader, add_bytes, &plan.partitions));
-  ByteList repeated = {0};
-  check_status(library->partitions(reader, add_bytes, &repeated));
-  CHECK(repeated.length == plan.partitions.length, "Repeated planning changed partition count");
-  for (size_t i = 0; i < repeated.length; i++) {
-    check_bytes(&plan.partitions.values[i], &repeated.values[i]);
-  }
-  free_list(&repeated);
-
-  ByteList state = {0};
-  check_status(library->serialize_reader(reader, add_bytes, &state));
-  check_status(library->serialize_reader(reader, add_bytes, &state));
-  CHECK(state.length == 2, "Each serialization must emit exactly one state value");
-  check_bytes(&state.values[0], &state.values[1]);
-  plan.state = state.values[0];
-  free(state.values[1].data);
-  free(state.values);
+  SparkDsPartitionsInfo info = {.size = sizeof(SparkDsPartitionsInfo)};
+  check_status(library->partitions(reader, &info, add_partition, set_state, &plan));
+  CHECK(plan.states.length == 1, "partitions must set exactly one state");
   library->close_reader(reader);
   return plan;
 }
@@ -198,49 +243,42 @@ static Plan plan_scan(
     const char* const* keys,
     const char* const* values,
     int64_t option_count,
-    const char* const* predicates,
-    const int32_t* expected_uses,
-    int64_t predicate_count,
     int32_t limit,
     const char* const* projection,
     int64_t projection_count) {
   void* reader = create_planner(keys, values, option_count);
-
-  if (predicate_count != 0) {
-    int32_t* uses = calloc((size_t) predicate_count, sizeof(int32_t));
-    CHECK(uses != NULL, "Cannot allocate predicate results");
-    check_status(library->push_predicates(reader, predicates, predicate_count, uses));
-    for (int64_t i = 0; i < predicate_count; i++) {
-      CHECK(uses[i] == expected_uses[i], "Incorrect C predicate-use enum value");
-    }
-    free(uses);
-  }
+  /* Spark calls each pushdown function at most once, in this order. */
   if (limit >= 0) {
-    CHECK(predicate_count == 0, "Spark only pushes a limit without predicates");
     bool applied = false;
     check_status(library->push_limit(reader, limit, &applied));
     CHECK(applied, "The Range source must apply its global limit");
   }
-  if (projection_count >= 0) {
-    bool pruned = false;
-    check_status(library->prune_columns(reader, projection, projection_count, &pruned));
-    CHECK(pruned, "The Range source must apply its projection");
-  }
-
+  check_status(library->prune_columns(reader, projection, projection_count));
   return finish_plan(reader);
 }
 
-static void free_plan(Plan* plan) {
-  free_list(&plan->partitions);
-  free(plan->state.data);
-}
-
 static struct ArrowArrayStream open_stream(
-    const Plan* plan, size_t partition, const SparkDsTaskContext* task) {
+    const Plan* plan,
+    int32_t kind,
+    size_t partition,
+    const char* const* columns,
+    int64_t column_count,
+    const SparkDsTaskContext* task) {
   struct ArrowArrayStream stream = {0};
+  struct ArrowSchema schema = read_schema(columns, column_count);
+  const Bytes* state = &plan->states.values[0];
   const Bytes* bytes = &plan->partitions.values[partition];
-  check_status(library->read(task, plan->state.data, plan->state.length,
-      bytes->data, bytes->length, &stream));
+  SparkDsReadInfo info = {
+    .size = sizeof(SparkDsReadInfo),
+    .kind = kind,
+    .schema = &schema,
+    .reader_state = state->data,
+    .reader_state_length = state->length,
+    .partition = bytes->data,
+    .partition_length = bytes->length
+  };
+  check_status(library->read(task, &info, &stream));
+  release_input(&schema);
   CHECK(stream.release != NULL && stream.get_schema != NULL && stream.get_next != NULL,
       "read returned an incomplete Arrow stream");
   return stream;
@@ -282,6 +320,7 @@ static void check_batch(
 
 static void consume_plan(
     const Plan* plan,
+    int32_t kind,
     int64_t first_id,
     int64_t expected_rows,
     const char* const* columns,
@@ -291,13 +330,14 @@ static void consume_plan(
     SparkDsTaskContext task = task_context();
     expected_task = &task;
     interrupted = false;
-    struct ArrowArrayStream stream = open_stream(plan, partition, &task);
+    struct ArrowArrayStream stream =
+        open_stream(plan, kind, partition, columns, column_count, &task);
     struct ArrowSchema schema = {0};
     CHECK(stream.get_schema(&stream, &schema) == 0, "Cannot read the stream schema");
     CHECK(schema.n_children == column_count, "Unexpected projected column count");
     for (int64_t i = 0; i < column_count; i++) {
       CHECK(strcmp(schema.children[i]->name, columns[i]) == 0,
-          "Projection did not preserve the requested column order");
+          "The stream does not have the columns of the schema to read, in order");
     }
 
     struct ArrowArray* batches = NULL;
@@ -346,25 +386,45 @@ static void* create_stream_reader(
   void* source = create_source(keys, values, count);
   struct ArrowSchema schema = {0};
   check_status(library->schema(source, &schema));
+  SparkDsStreamReaderInfo info = {
+    .size = sizeof(SparkDsStreamReaderInfo),
+    .checkpoint_location = "file:/tmp/checkpoint/sources/0"
+  };
   void* stream = NULL;
-  check_status(library->create_stream_reader(source, &schema, &stream));
+  check_status(library->create_stream_reader(source, &schema, &info, &stream));
   CHECK(stream != NULL, "create_stream_reader returned a null reader");
-  if (schema.release != NULL) {
-    schema.release(&schema);
-  }
+  release_input(&schema);
   /* Spark closes the source right after it creates the stream reader. */
   library->close(source);
   return stream;
 }
 
+/* The latest offset after start, within a limit and the end of a run, which may be NULL. */
+static char* latest_offset(
+    void* stream, const char* start, const SparkDsReadLimit* limit, const char* run_end) {
+  SparkDsLatestOffsetInfo info = {
+    .size = sizeof(SparkDsLatestOffsetInfo),
+    .start = start,
+    .limit = limit,
+    .run_end = run_end
+  };
+  ByteList offsets = {0};
+  check_status(library->latest_offset(stream, &info, add_bytes, &offsets));
+  CHECK(offsets.length == 1, "latest_offset must emit exactly one offset");
+  char* offset = copy_string(&offsets.values[0]);
+  free_list(&offsets);
+  return offset;
+}
+
 static Plan plan_micro_batch(void* stream, const char* start, const char* end) {
   Plan plan = {0};
-  check_status(library->stream_partitions(stream, start, end, add_bytes, &plan.partitions));
-  ByteList state = {0};
-  check_status(library->serialize_stream_reader(stream, add_bytes, &state));
-  CHECK(state.length == 1, "serialize_stream_reader must emit exactly one state value");
-  plan.state = state.values[0];
-  free(state.values);
+  SparkDsStreamPartitionsInfo info = {
+    .size = sizeof(SparkDsStreamPartitionsInfo),
+    .start = start,
+    .end = end
+  };
+  check_status(library->stream_partitions(stream, &info, add_partition, set_state, &plan));
+  CHECK(plan.states.length == 1, "stream_partitions must set exactly one state");
   return plan;
 }
 
@@ -376,84 +436,104 @@ static Plan plan_micro_batch(void* stream, const char* start, const char* end) {
 static void check_micro_batch_read(
     const char* const* keys, const char* const* values, int64_t count) {
   void* stream = create_stream_reader(keys, values, count);
+  SparkDsReadLimit limit = {.size = sizeof(SparkDsReadLimit), .kind = SPARK_DS_READ_ALL_AVAILABLE};
+  check_status(library->default_read_limit(stream, &limit));
+  CHECK(limit.kind == SPARK_DS_READ_ALL_AVAILABLE, "The Range source has no limit by default");
+
+  SparkDsInitialOffsetInfo initial_info = {.size = sizeof(SparkDsInitialOffsetInfo)};
   ByteList offsets = {0};
-  check_status(library->initial_offset(stream, add_bytes, &offsets));
-  check_status(library->latest_offset(stream, add_bytes, &offsets));
-  CHECK(offsets.length == 2, "Each offset function must emit exactly one offset");
+  check_status(library->initial_offset(stream, &initial_info, add_bytes, &offsets));
+  CHECK(offsets.length == 1, "initial_offset must emit exactly one offset");
   char* initial = copy_string(&offsets.values[0]);
-  char* latest = copy_string(&offsets.values[1]);
+  free_list(&offsets);
   CHECK(strcmp(initial, "{\"next\":10}") == 0, "Unexpected initial offset");
+  char* latest = latest_offset(stream, initial, &limit, NULL);
   CHECK(strcmp(latest, "{\"next\":25}") == 0, "Unexpected latest offset");
 
   /* Two micro-batches, split at an offset as if from the checkpoint of an earlier query. */
   const char* columns[] = {"id", "label"};
   Plan first = plan_micro_batch(stream, initial, "{\"next\":13}");
-  consume_plan(&first, 10, 3, columns, 2);
+  consume_plan(&first, SPARK_DS_READ_MICRO_BATCH, 10, 3, columns, 2);
   free_plan(&first);
   Plan second = plan_micro_batch(stream, "{\"next\":13}", latest);
-  consume_plan(&second, 13, 12, columns, 2);
+  consume_plan(&second, SPARK_DS_READ_MICRO_BATCH, 13, 12, columns, 2);
   free_plan(&second);
-  check_status(library->commit_offset(stream, latest));
+  SparkDsCommitOffsetInfo commit_info = {.size = sizeof(SparkDsCommitOffsetInfo), .end = latest};
+  check_status(library->commit_offset(stream, &commit_info));
   library->close_stream_reader(stream);
 
-  /* An offset that does not decode fails the query, and then every call on its reader. */
+  /* An offset that does not decode fails its call, after which Spark closes the reader. */
   stream = create_stream_reader(keys, values, count);
-  ByteList partitions = {0};
-  CHECK(library->stream_partitions(stream, initial, "not an offset", add_bytes, &partitions) != 0,
+  Plan failed = {0};
+  SparkDsStreamPartitionsInfo invalid = {
+    .size = sizeof(SparkDsStreamPartitionsInfo),
+    .start = initial,
+    .end = "not an offset"
+  };
+  CHECK(library->stream_partitions(stream, &invalid, add_partition, set_state, &failed) != 0,
       "An offset that does not decode must fail");
+  CHECK(failed.partitions.length == 0 && failed.states.length == 0,
+      "A failed plan must not return partitions or a state");
   const char* error = library->last_error();
   CHECK(error != NULL && strstr(error, "cannot decode the offset") != NULL,
       "Missing offset error");
-  ByteList offset = {0};
-  CHECK(library->latest_offset(stream, add_bytes, &offset) != 0 && offset.length == 0,
-      "A failed stream must not be called again");
   library->close_stream_reader(stream);
   free(initial);
   free(latest);
-  free_list(&offsets);
+}
+
+/* Admission control: each micro-batch reads at most maxRowsPerTrigger rows. */
+static void check_admission_control(void) {
+  const char* keys[] = {"start", "end", "maxrowspertrigger"};
+  const char* values[] = {"10", "25", "4"};
+  void* stream = create_stream_reader(keys, values, 3);
+  SparkDsReadLimit limit = {.size = sizeof(SparkDsReadLimit), .kind = SPARK_DS_READ_ALL_AVAILABLE};
+  check_status(library->default_read_limit(stream, &limit));
+  CHECK(limit.kind == SPARK_DS_READ_MAX_ROWS && limit.max_rows == 4, "Unexpected read limit");
+  char* first = latest_offset(stream, "{\"next\":10}", &limit, NULL);
+  CHECK(strcmp(first, "{\"next\":14}") == 0, "The limit must end the micro-batch");
+  /* With Trigger.AvailableNow, the latest offset does not go beyond the end of the run. */
+  char* last = latest_offset(stream, "{\"next\":14}", &limit, "{\"next\":16}");
+  CHECK(strcmp(last, "{\"next\":16}") == 0, "The end of the run must end the micro-batch");
+  SparkDsReadLimit all = {.size = sizeof(SparkDsReadLimit), .kind = SPARK_DS_READ_ALL_AVAILABLE};
+  char* latest = latest_offset(stream, "{\"next\":14}", &all, NULL);
+  CHECK(strcmp(latest, "{\"next\":25}") == 0, "Without a limit, all the rows are available");
+  free(first);
+  free(last);
+  free(latest);
+  library->close_stream_reader(stream);
 }
 
 static void check_independent_planners(
-    const char* const* keys,
-    const char* const* values,
-    int64_t count,
-    const char* lower,
-    const char* upper) {
+    const char* const* keys, const char* const* values, int64_t count) {
   void* first = create_planner(keys, values, count);
   void* second = create_planner(keys, values, count);
-  int32_t use = SPARK_DS_PREDICATE_UNUSED;
-  check_status(library->push_predicates(first, &upper, 1, &use));
-  CHECK(use == SPARK_DS_PREDICATE_COMPLETE, "The first planner did not accept its filter");
+  bool applied = false;
+  check_status(library->push_limit(first, 4, &applied));
+  CHECK(applied, "The first planner did not accept its limit");
   const char* label_only[] = {"label"};
-  bool pruned = false;
-  check_status(library->prune_columns(first, label_only, 1, &pruned));
-  CHECK(pruned, "The first planner did not accept its projection");
+  check_status(library->prune_columns(first, label_only, 1));
   Plan first_plan = finish_plan(first);
 
-  /* The second planner must neither inherit the first filter nor change its serialized plan. */
-  use = SPARK_DS_PREDICATE_UNUSED;
-  check_status(library->push_predicates(second, &lower, 1, &use));
-  CHECK(use == SPARK_DS_PREDICATE_COMPLETE, "The second planner did not accept its filter");
+  /* The second planner must neither inherit the first limit nor change its serialized plan. */
   const char* id_only[] = {"id"};
-  pruned = false;
-  check_status(library->prune_columns(second, id_only, 1, &pruned));
-  CHECK(pruned, "The second planner did not accept its projection");
+  check_status(library->prune_columns(second, id_only, 1));
   Plan second_plan = finish_plan(second);
 
   /* Both driver planners are already closed; executor reads only get the copied bytes. */
-  consume_plan(&second_plan, 13, 12, id_only, 1);
-  consume_plan(&first_plan, 10, 12, label_only, 1);
+  consume_plan(&second_plan, SPARK_DS_READ_BATCH, 10, 15, id_only, 1);
+  consume_plan(&first_plan, SPARK_DS_READ_BATCH, 10, 4, label_only, 1);
   free_plan(&second_plan);
   free_plan(&first_plan);
 }
 
-static void check_cancellation(const Plan* plan) {
+static void check_cancellation(const Plan* plan, const char* const* columns) {
   CHECK(plan->partitions.length == 1, "Cancellation test requires one partition");
   SparkDsTaskContext task = task_context();
   expected_task = &task;
   interrupted = false;
   interruption_checks = 0;
-  struct ArrowArrayStream stream = open_stream(plan, 0, &task);
+  struct ArrowArrayStream stream = open_stream(plan, SPARK_DS_READ_BATCH, 0, columns, 2, &task);
   struct ArrowSchema schema = {0};
   CHECK(stream.get_schema(&stream, &schema) == 0, "Cannot read the stream schema");
   struct ArrowArray first = {0};
@@ -523,26 +603,48 @@ static void stream_call_on_thread(StreamCall* call) {
   CHECK(pthread_join(thread, NULL) == 0, "Cannot join a stream callback thread");
 }
 
-/* Every host has the fields of version 1: a shorter context is an error, not partly read. */
-static void check_short_task_context(const Plan* plan) {
+/* Every host has the fields of version 1: a shorter structure is an error, not partly read. */
+static void check_short_structures(const Plan* plan, const char* const* columns) {
   SparkDsTaskContext task = task_context();
   task.size = offsetof(SparkDsTaskContext, is_interrupted);
   task.is_interrupted = unavailable_callback;
-  struct ArrowArrayStream stream = {0};
+  struct ArrowSchema schema = read_schema(columns, 2);
+  const Bytes* state = &plan->states.values[0];
   const Bytes* bytes = &plan->partitions.values[0];
-  CHECK(library->read(&task, plan->state.data, plan->state.length, bytes->data, bytes->length,
-      &stream) != 0, "A task context shorter than version 1 must be rejected");
+  SparkDsReadInfo info = {
+    .size = sizeof(SparkDsReadInfo),
+    .kind = SPARK_DS_READ_BATCH,
+    .schema = &schema,
+    .reader_state = state->data,
+    .reader_state_length = state->length,
+    .partition = bytes->data,
+    .partition_length = bytes->length
+  };
+  struct ArrowArrayStream stream = {0};
+  CHECK(library->read(&task, &info, &stream) != 0,
+      "A task context shorter than version 1 must be rejected");
   const char* error = library->last_error();
   CHECK(error != NULL && strstr(error, "version 1") != NULL, "Missing task context error");
   CHECK(stream.release == NULL, "A failed read must not initialize the stream");
+  release_input(&schema);
+
+  task = task_context();
+  schema = read_schema(columns, 2);
+  info.size = offsetof(SparkDsReadInfo, partition);
+  CHECK(library->read(&task, &info, &stream) != 0,
+      "A read info shorter than version 1 must be rejected");
+  error = library->last_error();
+  CHECK(error != NULL && strstr(error, "SparkDsReadInfo") != NULL, "Missing read info error");
+  CHECK(stream.release == NULL, "A failed read must not initialize the stream");
+  release_input(&schema);
 }
 
-static void check_cross_thread_stream(const Plan* plan) {
+static void check_cross_thread_stream(const Plan* plan, const char* const* columns) {
   SparkDsTaskContext task = task_context();
   expected_task = &task;
   interrupted = false;
   interruption_checks = 0;
-  struct ArrowArrayStream stream = open_stream(plan, 0, &task);
+  struct ArrowArrayStream stream = open_stream(plan, SPARK_DS_READ_BATCH, 0, columns, 2, &task);
 
   /* Callbacks do not overlap, but each worker has a different lifetime and thread-local state. */
   StreamCall schema = {.stream = &stream, .operation = STREAM_SCHEMA};
@@ -589,7 +691,7 @@ static void check_error_message(void) {
   CHECK(library->create(&info, &capabilities, &source) != 0,
       "Invalid options must return an error");
   const char* error = library->last_error();
-  CHECK(error != NULL && strstr(error, "batchSize must be positive") != NULL,
+  CHECK(error != NULL && strstr(error, "must be positive") != NULL,
       "The C error channel did not preserve the provider's message");
   CHECK(source == NULL, "Failed creation must not return a source handle");
 }
@@ -601,19 +703,18 @@ static void check_function_table(void) {
   CHECK(library->last_error != NULL, "Missing last_error function");
   CHECK(library->create != NULL && library->schema != NULL && library->close != NULL,
       "Missing source functions");
-  CHECK(library->create_reader != NULL && library->push_predicates != NULL &&
-      library->push_limit != NULL && library->prune_columns != NULL &&
-      library->partitions != NULL && library->serialize_reader != NULL &&
+  CHECK(library->create_reader != NULL && library->push_limit != NULL &&
+      library->prune_columns != NULL && library->partitions != NULL &&
       library->close_reader != NULL && library->read != NULL, "Missing batch read functions");
   CHECK(library->create_stream_reader != NULL && library->initial_offset != NULL &&
       library->latest_offset != NULL && library->stream_partitions != NULL &&
-      library->serialize_stream_reader != NULL && library->commit_offset != NULL &&
-      library->close_stream_reader != NULL, "Missing micro-batch read functions");
-  CHECK(library->create_writer == NULL && library->serialize_writer == NULL &&
-      library->commit == NULL && library->abort == NULL && library->close_writer == NULL &&
-      library->create_data_writer == NULL && library->write == NULL &&
-      library->commit_data_writer == NULL && library->abort_data_writer == NULL &&
-      library->close_data_writer == NULL, "A read-only source must not export writes");
+      library->commit_offset != NULL && library->close_stream_reader != NULL &&
+      library->default_read_limit != NULL, "Missing micro-batch read functions");
+  CHECK(library->create_writer == NULL && library->commit == NULL && library->abort == NULL &&
+      library->close_writer == NULL && library->create_data_writer == NULL &&
+      library->write == NULL && library->commit_data_writer == NULL &&
+      library->abort_data_writer == NULL && library->close_data_writer == NULL,
+      "A read-only source must not export writes");
 }
 
 int main(int argc, char** argv) {
@@ -632,64 +733,49 @@ int main(int argc, char** argv) {
     .size = sizeof(SparkDsHost),
     .abi_version = SPARK_DS_ABI_VERSION,
     .spark_version = "4.4.0-c-abi-test",
-    .log = log_message
+    .log = log_message,
+    .is_log_enabled = is_log_enabled
   };
   CHECK(init(&host, &library) == 0, "spark_ds_init failed");
   check_function_table();
 
   const char* keys[] = {"start", "end", "numpartitions", "batchsize"};
   const char* values[] = {"10", "25", "3", "2"};
-  const char* lower = "{\"type\":\"function\",\"name\":\">=\",\"children\":["
-      "{\"type\":\"column\",\"name\":[\"id\"]},"
-      "{\"type\":\"literal\",\"dataType\":\"bigint\",\"value\":13}]}";
-  const char* upper = "{\"type\":\"function\",\"name\":\"<\",\"children\":["
-      "{\"type\":\"column\",\"name\":[\"id\"]},"
-      "{\"type\":\"literal\",\"dataType\":\"bigint\",\"value\":22}]}";
-  const char* label = "{\"type\":\"function\",\"name\":\"=\",\"children\":["
-      "{\"type\":\"column\",\"name\":[\"label\"]},"
-      "{\"type\":\"literal\",\"dataType\":\"string\",\"value\":\"row-21\"}]}";
-  const char* predicates[] = {lower, upper, label};
-  const int32_t uses[] = {
-    SPARK_DS_PREDICATE_COMPLETE, SPARK_DS_PREDICATE_COMPLETE, SPARK_DS_PREDICATE_UNUSED
-  };
   const char* reordered[] = {"label", "id"};
   const char* id_only[] = {"id"};
   const char* original[] = {"id", "label"};
 
   check_capability_discovery(keys, values, 4);
   check_capability_discovery(NULL, NULL, 0);
-  check_independent_planners(keys, values, 4, lower, upper);
+  check_independent_planners(keys, values, 4);
   check_micro_batch_read(keys, values, 4);
+  check_admission_control();
 
-  Plan filtered = plan_scan(keys, values, 4, predicates, uses, 2, -1, reordered, 2);
-  consume_plan(&filtered, 13, 9, reordered, 2);
-  free_plan(&filtered);
+  Plan projected = plan_scan(keys, values, 4, -1, reordered, 2);
+  consume_plan(&projected, SPARK_DS_READ_BATCH, 10, 15, reordered, 2);
+  free_plan(&projected);
 
-  Plan residual = plan_scan(keys, values, 4, predicates, uses, 3, -1, id_only, 1);
-  consume_plan(&residual, 13, 9, id_only, 1);
-  free_plan(&residual);
-
-  Plan limited = plan_scan(keys, values, 4, NULL, NULL, 0, 5, id_only, 1);
-  consume_plan(&limited, 10, 5, id_only, 1);
+  Plan limited = plan_scan(keys, values, 4, 5, id_only, 1);
+  consume_plan(&limited, SPARK_DS_READ_BATCH, 10, 5, id_only, 1);
   free_plan(&limited);
 
   const char* short_keys[] = {"end", "numpartitions", "batchsize"};
   const char* short_values[] = {"7", "2", "2"};
-  Plan empty = plan_scan(short_keys, short_values, 3, NULL, NULL, 0, -1, NULL, 0);
-  consume_plan(&empty, 0, 7, NULL, 0);
+  Plan empty = plan_scan(short_keys, short_values, 3, -1, NULL, 0);
+  consume_plan(&empty, SPARK_DS_READ_BATCH, 0, 7, NULL, 0);
   free_plan(&empty);
 
   const char* one_partition[] = {"20", "1", "2"};
-  Plan cancellable = plan_scan(short_keys, one_partition, 3, NULL, NULL, 0, -1, NULL, -1);
-  consume_plan(&cancellable, 0, 20, original, 2);
-  check_short_task_context(&cancellable);
-  check_cancellation(&cancellable);
-  check_cross_thread_stream(&cancellable);
+  Plan cancellable = plan_scan(short_keys, one_partition, 3, -1, original, 2);
+  consume_plan(&cancellable, SPARK_DS_READ_BATCH, 0, 20, original, 2);
+  check_short_structures(&cancellable, original);
+  check_cancellation(&cancellable, original);
+  check_cross_thread_stream(&cancellable, original);
   free_plan(&cancellable);
   check_error_message();
 
   CHECK(dlclose(module) == 0, "Cannot close the Range library");
-  puts("C ABI, capabilities, planning, streaming, Arrow ownership, and cancellation checks "
-      "passed.");
+  puts("C ABI, capabilities, planning, streaming, admission control, Arrow ownership, and "
+      "cancellation checks passed.");
   return 0;
 }

@@ -349,6 +349,32 @@ class DataSourceV2CatalystRuntimeFilterSuite extends SharedSparkSession {
     }
   }
 
+  test("SPARK-60569: field read out of a merged scalar subquery -> literalized as a whole") {
+    val tbl = s"$catalogName.tbl_merged"
+    val dim = s"$catalogName.dim_merged"
+    withTable(tbl, dim) {
+      sql(s"CREATE TABLE $tbl (id INT, part INT) USING $v2Source PARTITIONED BY (part)")
+      for (i <- 0 until 5) {
+        sql(s"INSERT INTO $tbl VALUES ($i, $i)")
+      }
+      sql(s"CREATE TABLE $dim (val INT) USING $v2Source")
+      sql(s"INSERT INTO $dim VALUES (1), (3)")
+
+      // `MergeSubplans` merges the two subqueries into one, and each filter reads its result out
+      // of the struct the merged one returns. The scan gets that result, not the whole struct.
+      val df = sql(s"SELECT * FROM $tbl " +
+        s"WHERE part = (SELECT max(val) FROM $dim) AND id > (SELECT min(val) FROM $dim)")
+      checkAnswer(df, Row(3, 3))
+
+      assertScalarSubqueryRuntimeFilters(df)
+      val runtimeFilter = collectBatchScan(df).runtimeFilters.head
+      assert(runtimeFilter.exists(_.isInstanceOf[GetStructField]),
+        s"Expected a runtime filter on a merged scalar subquery, got $runtimeFilter")
+      val part = AttributeReference("part", IntegerType, nullable = false)()
+      assertPushedCatalystPredicatesEqual(df, EqualTo(part, Literal(3)))
+    }
+  }
+
   test("filter with no V2 translation -> pushed instead of dropped") {
     val tbl = s"$catalogName.tbl_untranslatable"
     val dim = s"$catalogName.dim_untranslatable"

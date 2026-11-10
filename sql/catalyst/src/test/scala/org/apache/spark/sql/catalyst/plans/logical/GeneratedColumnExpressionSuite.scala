@@ -26,7 +26,7 @@ import org.apache.spark.sql.types.{TimestampNTZType, TimestampType}
 class GeneratedColumnExpressionSuite extends SparkFunSuite {
 
   private def genExpr(childType: DataType): GeneratedColumnExpression =
-    GeneratedColumnExpression(Literal.create(null, childType), "<gen expr>")
+    GeneratedColumnExpression(Literal.create(null, childType), "NULL")
 
   test("SPARK-57303: validate accepts a lossless widening to a nanosecond timestamp column") {
     // The generation expression's type is up-castable to the column type, so validate() succeeds:

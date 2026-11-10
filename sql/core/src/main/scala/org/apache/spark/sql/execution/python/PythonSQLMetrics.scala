@@ -22,18 +22,33 @@ import org.apache.spark.sql.execution.metric.{SQLMetric, SQLMetrics}
 
 trait PythonSQLMetrics { self: SparkPlan =>
   protected val pythonMetrics: Map[String, SQLMetric] = {
-    PythonSQLMetrics.pythonSizeMetricsDesc.map { case (k, v) =>
+    sizeMetricsDesc.map { case (k, v) =>
       k -> SQLMetrics.createSizeMetric(sparkContext, v)
-    } ++ PythonSQLMetrics.pythonTimingMetricsDesc.map { case (k, v) =>
+    } ++ timingMetricsDesc.map { case (k, v) =>
       k -> SQLMetrics.createTimingMetric(sparkContext, v)
-    } ++ PythonSQLMetrics.pythonOtherMetricsDesc.map { case (k, v) =>
+    } ++ otherMetricsDesc.map { case (k, v) =>
       k -> SQLMetrics.createMetric(sparkContext, v)
     } ++ additionalMetrics
   }
 
+  // The metrics and their descriptions, by kind. An operator may override them, e.g. to leave
+  // out metrics it never records. They are read during construction, so an override must not
+  // depend on the operator's own fields.
+  protected def sizeMetricsDesc: Map[String, String] = PythonSQLMetrics.pythonSizeMetricsDesc
+  protected def timingMetricsDesc: Map[String, String] = PythonSQLMetrics.pythonTimingMetricsDesc
+  protected def otherMetricsDesc: Map[String, String] = PythonSQLMetrics.pythonOtherMetricsDesc
+
   // Hook for subtraits to add operator-specific metrics on top of the shared ones above. Default
   // empty so the shared trait stays minimal; see [[PythonPickleBatchMetrics]].
   protected def additionalMetrics: Map[String, SQLMetric] = Map.empty
+
+  protected def createPythonPhaseMetrics(): Map[String, SQLMetric] = {
+    PythonSQLMetrics.pythonPhaseTimingMetricsDesc.map { case (k, v) =>
+      k -> SQLMetrics.createTimingMetric(sparkContext, v)
+    } ++ PythonSQLMetrics.pythonPhaseCountMetricsDesc.map { case (k, v) =>
+      k -> SQLMetrics.createMetric(sparkContext, v)
+    }
+  }
 
   override lazy val metrics: Map[String, SQLMetric] = pythonMetrics
 }
@@ -56,7 +71,24 @@ object PythonSQLMetrics {
   }
 
   val pythonOtherMetricsDesc: Map[String, String] = {
-    Map("pythonNumRowsReceived" -> "number of output rows")
+    Map(
+      "pythonNumRowsReceived" -> "number of output rows",
+      "pythonNumPipelinedTasks" -> "number of pipelined Python worker tasks")
+  }
+
+  val pythonPhaseTimingMetricsDesc: Map[String, String] = {
+    Map(
+      "pythonDataReadTime" -> "time to read and deserialize Arrow data",
+      "pythonInputPreparationTime" -> "time to prepare Python UDF input",
+      "pythonUDFExecutionTime" -> "time to evaluate Python UDFs",
+      "pythonOutputPreparationTime" -> "time to prepare Python UDF output",
+      "pythonDataWriteTime" -> "time to serialize and write Arrow data")
+  }
+
+  val pythonPhaseCountMetricsDesc: Map[String, String] = {
+    Map(
+      "pythonNumTimingReports" -> "number of Python tasks with detailed timing",
+      "pythonNumTimedBatches" -> "number of Python batches with detailed timing")
   }
 }
 

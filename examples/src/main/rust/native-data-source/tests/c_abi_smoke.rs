@@ -38,11 +38,16 @@ fn c_abi_arrow_round_trip() -> Result<(), Box<dyn Error>> {
     fs::create_dir(&directory.0)?;
 
     let manifest = Path::new(env!("CARGO_MANIFEST_DIR"));
-    let header = manifest.join("../../../../../sql/native/rust/tests/fixtures");
+    // The header of the Spark source tree, as a library would copy it.
+    let header =
+        manifest.join("../../../../../sql/core/src/main/resources/org/apache/spark/sql/datasource");
     let harness = directory.0.join("c_abi_smoke");
-    let compiler = std::env::var_os("CC").unwrap_or_else(|| "cc".into());
-    let mut command = Command::new(compiler);
+    // Like make, take `CC` as a program followed by its leading arguments, as in `ccache cc`.
+    let compiler = std::env::var("CC").unwrap_or_default();
+    let mut words = compiler.split_whitespace();
+    let mut command = Command::new(words.next().unwrap_or("cc"));
     command
+        .args(words)
         .args(["-std=c11", "-Wall", "-Wextra", "-Werror", "-pthread"])
         .arg("-I")
         .arg(header)
@@ -59,19 +64,18 @@ fn c_abi_arrow_round_trip() -> Result<(), Box<dyn Error>> {
         String::from_utf8_lossy(&compiled.stderr)
     );
 
+    // cargo test rebuilds the library in the deps directory of this test, not in the
+    // directory of its profile, which only cargo build refreshes.
     let executable = std::env::current_exe()?;
-    let profile = executable
-        .parent()
-        .and_then(Path::parent)
-        .ok_or("Missing Cargo profile directory")?;
-    let library = profile.join(format!(
+    let deps = executable.parent().ok_or("Missing Cargo deps directory")?;
+    let library = deps.join(format!(
         "{}spark_datasource_rust_sdk_range{}",
         std::env::consts::DLL_PREFIX,
         std::env::consts::DLL_SUFFIX
     ));
     assert!(
         library.is_file(),
-        "Run cargo build --workspace first: {}",
+        "Missing the library: {}",
         library.display()
     );
 

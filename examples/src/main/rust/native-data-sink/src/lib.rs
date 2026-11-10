@@ -30,13 +30,14 @@ use std::time::{SystemTime, UNIX_EPOCH};
 use arrow_array::{Array, Int64Array, RecordBatch, StringArray};
 use arrow_schema::{DataType, Field, Schema, SchemaRef};
 use serde::{Deserialize, Serialize};
-use spark_native_source::{
-    BatchWrite, Capabilities, CreateInfo, DataSource, DataWriter, DataWriterFactory,
-    PartitionWriter, Result, StreamingWrite, StreamingWriteInfo, TaskContext, Unsupported,
-    WriteInfo, WriteMode, WriterContext,
+use spark_datasource::{
+    AbortInfo, BatchWrite, Capabilities, CommitInfo, CreateInfo, DataSource, DataWriter,
+    DataWriterFactory, PartitionWriter, Result, StreamingAbortInfo, StreamingCommitInfo,
+    StreamingWrite, StreamingWriteInfo, TaskContext, Unsupported, WriteInfo, WriteMode,
+    WriterContext,
 };
 
-spark_native_source::export_data_source!(JsonSink);
+spark_datasource::export_data_source!(JsonSink);
 
 static NEXT_ID: AtomicU64 = AtomicU64::new(0);
 
@@ -68,8 +69,10 @@ impl DataSource for JsonSink {
             Some("true") => true,
             _ => return Err("The readonly option must be true or false".into()),
         };
-        // Spark passes the checkpoint of a streaming query among the options of its sink.
+        // Spark passes the checkpoint and the name of a streaming query among the options of
+        // its sink.
         options.remove("checkpointlocation");
+        options.remove("queryname");
         if !options.is_empty() {
             return Err(
                 format!("Unknown options: {:?}", options.keys().collect::<Vec<_>>()).into(),
@@ -78,14 +81,14 @@ impl DataSource for JsonSink {
         Ok(Self { path, readonly })
     }
 
-    fn schema(&self) -> Result<SchemaRef> {
+    fn infer_schema(&self) -> Result<SchemaRef> {
         Ok(sink_schema())
     }
 
     fn capabilities(&self) -> Capabilities {
         if self.readonly {
-            // Also removes Truncate, which requires a write.
-            Capabilities::all().without(Capabilities::BATCH_WRITE | Capabilities::STREAMING_WRITE)
+            // A write-only sink without its writes.
+            Capabilities::empty()
         } else {
             Capabilities::all()
         }
@@ -100,12 +103,8 @@ impl DataSource for JsonSink {
     }
 
     fn new_streaming_write(&self, info: StreamingWriteInfo) -> Result<JsonStreamingWrite> {
-        if self.readonly {
-            return Err("This sink is readonly".into());
-        }
-        validate_schema(&info.schema)?;
         Ok(JsonStreamingWrite {
-            write: JsonWrite::new(self.path.clone(), info.mode)?,
+            write: self.new_write(WriteInfo::new(info.schema, info.mode))?,
             query_id: info.query_id,
         })
     }
@@ -251,7 +250,6 @@ impl JsonWrite {
         epoch: Option<(String, i64)>,
     ) -> Result<()> {
         let mut filenames = BTreeSet::new();
-        let mut partitions = BTreeSet::new();
         for (index, message) in messages.iter().enumerate() {
             if message.operation != self.operation
                 || !is_filename(&message.filename)
@@ -260,9 +258,7 @@ impl JsonWrite {
                 return Err("Invalid or duplicate task commit message".into());
             }
             // Spark passes the message of partition i at position i.
-            if usize::try_from(message.partition).ok() != Some(index)
-                || !partitions.insert(message.partition)
-            {
+            if usize::try_from(message.partition).ok() != Some(index) {
                 return Err("A commit message does not match its partition".into());
             }
             if !self.staging.join(&message.filename).is_file() {
@@ -312,7 +308,13 @@ impl JsonWrite {
 
         // This single rename is the commit point. No existing data is deleted,
         // including during truncate. No fallible work follows publication.
-        fs::rename(&self.temporary_manifest, self.root.join("manifest.json"))?;
+        if let Err(error) = fs::rename(&self.temporary_manifest, self.root.join("manifest.json")) {
+            // A rename that reports an error, for example on a network filesystem that loses
+            // the reply, may still have taken effect, and then the new manifest lists the
+            // objects. Abort and Drop keep them: unlisted objects are invisible to readers.
+            self.sealed = false;
+            return Err(error.into());
+        }
         self.committed = true;
         self.lock.take();
         Ok(())
@@ -354,8 +356,8 @@ impl JsonWrite {
     }
 }
 
-// The SDK calls each method at most once, never after a successful commit or an
-// abort, so this coordinator does not track its own phase.
+// Spark calls each method at most once, and never aborts a successful commit, so this
+// coordinator does not track its own phase.
 impl BatchWrite for JsonWrite {
     type Factory = JsonWriterFactory;
     type Message = CommitMessage;
@@ -363,18 +365,18 @@ impl BatchWrite for JsonWrite {
     // The sink also supports overwrites.
     const SUPPORTS_TRUNCATE: bool = true;
 
-    fn writer_factory(&self) -> Result<JsonWriterFactory> {
+    fn new_writer_factory(&self) -> Result<JsonWriterFactory> {
         Ok(JsonWriterFactory {
             staging: self.staging.clone(),
             operation: self.operation.clone(),
         })
     }
 
-    fn commit(&mut self, messages: Vec<CommitMessage>) -> Result<()> {
-        self.publish(messages, None)
+    fn commit(&mut self, info: CommitInfo<CommitMessage>) -> Result<()> {
+        self.publish(info.messages, None)
     }
 
-    fn abort(&mut self, _messages: Vec<Option<CommitMessage>>) -> Result<()> {
+    fn abort(&mut self, _info: AbortInfo<CommitMessage>) -> Result<()> {
         let result = self.cleanup();
         self.lock.take();
         result
@@ -396,27 +398,27 @@ impl StreamingWrite for JsonStreamingWrite {
     // The output mode complete replaces the output of the previous micro-batches.
     const SUPPORTS_TRUNCATE: bool = true;
 
-    fn writer_factory(&self) -> Result<JsonWriterFactory> {
-        self.write.writer_factory()
+    fn new_writer_factory(&self) -> Result<JsonWriterFactory> {
+        self.write.new_writer_factory()
     }
 
-    fn commit(&mut self, epoch_id: i64, messages: Vec<CommitMessage>) -> Result<()> {
+    fn commit(&mut self, info: StreamingCommitInfo<CommitMessage>) -> Result<()> {
         // The write holds the lock, so the manifest that it read is still the latest one.
         let committed = self.write.previous.epochs.get(&self.query_id);
-        if committed.is_some_and(|last| *last >= epoch_id) {
+        if committed.is_some_and(|last| *last >= info.epoch_id) {
             return self.write.skip();
         }
         self.write
-            .publish(messages, Some((self.query_id.clone(), epoch_id)))
+            .publish(info.messages, Some((self.query_id.clone(), info.epoch_id)))
     }
 
-    fn abort(&mut self, _epoch_id: i64, messages: Vec<Option<CommitMessage>>) -> Result<()> {
-        self.write.abort(messages)
+    fn abort(&mut self, info: StreamingAbortInfo<CommitMessage>) -> Result<()> {
+        self.write.abort(AbortInfo::new(info.messages))
     }
 }
 
-// Spark can close a write without abort, for example when serializing its factory
-// fails, so an unfinished write also cleans up here.
+// A write can be dropped without abort, for example when creating or serializing its
+// factory fails, so an unfinished write also cleans up here.
 impl Drop for JsonWrite {
     fn drop(&mut self) {
         if !self.committed {
@@ -447,7 +449,7 @@ impl DataWriterFactory for JsonWriterFactory {
         &self,
         context: WriterContext<'task>,
     ) -> Result<PartitionWriter<'task, Self::Message>> {
-        // The SDK checks that each batch has this schema, so the writer checks it once.
+        // Each batch has this schema, so the writer checks it once.
         validate_schema(&context.schema)?;
         let task = context.task;
         if task.is_interrupted() {
@@ -510,8 +512,9 @@ impl JsonTaskWriter<'_> {
     }
 }
 
-// The SDK never writes after a failure, commit, or abort, commits at most once,
-// and never aborts a committed writer, so this writer does not track its phase.
+// Spark never writes after a failure, a commit, or an abort, and commits at most once, so this
+// writer does not track its phase. Abort may follow a commit whose message the SDK could not
+// serialize, so it removes the file in every case.
 impl DataWriter for JsonTaskWriter<'_> {
     type Message = CommitMessage;
 
@@ -635,7 +638,7 @@ mod tests {
 
     fn new_write(source: &JsonSink, mode: WriteMode) -> Result<(JsonWrite, JsonWriterFactory)> {
         let write = source.new_write(WriteInfo::new(sink_schema(), mode))?;
-        let factory = write.writer_factory()?;
+        let factory = write.new_writer_factory()?;
         Ok((write, factory))
     }
 
@@ -698,7 +701,7 @@ mod tests {
     ) -> Result<(JsonStreamingWrite, JsonWriterFactory)> {
         let info = StreamingWriteInfo::new(sink_schema(), mode, query_id);
         let write = source.new_streaming_write(info)?;
-        let factory = write.writer_factory()?;
+        let factory = write.new_writer_factory()?;
         Ok((write, factory))
     }
 
@@ -711,13 +714,15 @@ mod tests {
     ) {
         let (mut write, factory) = new_streaming_write(source, query_id, mode).unwrap();
         let message = stage(&factory, 0, ids);
-        write.commit(epoch_id, vec![message]).unwrap();
+        write
+            .commit(StreamingCommitInfo::new(epoch_id, vec![message]))
+            .unwrap();
     }
 
     fn commit_ids(source: &JsonSink, mode: WriteMode, ids: Vec<Option<i64>>) {
         let (mut write, factory) = new_write(source, mode).unwrap();
         let message = stage(&factory, 0, ids);
-        write.commit(vec![message]).unwrap();
+        write.commit(CommitInfo::new(vec![message])).unwrap();
     }
 
     #[test]
@@ -762,7 +767,7 @@ mod tests {
         let _losing = stage(&factory, 0, vec![Some(2)]);
         let _missing_message = stage(&factory, 1, vec![Some(3)]);
         assert_eq!(fs::read_dir(&write.staging).unwrap().count(), 3);
-        write.commit(vec![winning]).unwrap();
+        write.commit(CommitInfo::new(vec![winning])).unwrap();
         assert!(!write.staging.exists());
         assert_eq!(fs::read_dir(&write.objects).unwrap().count(), 1);
         assert_eq!(
@@ -780,7 +785,7 @@ mod tests {
         let directory = TempDirectory::new();
         let (mut write, factory) = new_write(&directory.source(), WriteMode::Append).unwrap();
         let message = stage(&factory, 1, vec![Some(1)]);
-        assert!(write.commit(vec![message]).is_err());
+        assert!(write.commit(CommitInfo::new(vec![message])).is_err());
         assert!(!directory.0.join("manifest.json").exists());
     }
 
@@ -795,7 +800,9 @@ mod tests {
         let _missing = stage(&factory, 1, vec![Some(3)]);
         let mut incomplete = open(&factory, 2);
         incomplete.write(batch(vec![Some(4)])).unwrap();
-        write.abort(vec![Some(message), None]).unwrap();
+        write
+            .abort(AbortInfo::new(vec![Some(message), None]))
+            .unwrap();
         assert!(!write.staging.exists());
         assert!(!write.objects.exists());
         assert!(!directory.0.join(".write-lock").exists());
@@ -817,10 +824,10 @@ mod tests {
         let message = stage(&factory, 0, vec![Some(2)]);
         // Force create_new to fail after the operation directory has been sealed.
         fs::write(&write.temporary_manifest, b"publication failure").unwrap();
-        assert!(write.commit(vec![message]).is_err());
+        assert!(write.commit(CommitInfo::new(vec![message])).is_err());
         assert!(write.objects.exists());
         assert_eq!(fs::read(directory.0.join("manifest.json")).unwrap(), before);
-        write.abort(vec![None]).unwrap();
+        write.abort(AbortInfo::new(vec![None])).unwrap();
         assert!(!write.objects.exists());
         assert!(!write.temporary_manifest.exists());
         assert_eq!(committed_rows(&directory.0).len(), 1);
@@ -852,7 +859,9 @@ mod tests {
             new_streaming_write(&source, "query", WriteMode::Append).unwrap();
         let message = stage(&factory, 0, vec![Some(3)]);
         let staging = write.write.staging.clone();
-        write.commit(1, vec![message]).unwrap();
+        write
+            .commit(StreamingCommitInfo::new(1, vec![message]))
+            .unwrap();
         assert!(!staging.exists());
         assert!(!directory.0.join(".write-lock").exists());
         let rows = |ids: &[i64]| {
@@ -874,7 +883,9 @@ mod tests {
         let (mut write, factory) =
             new_streaming_write(&source, "query", WriteMode::Append).unwrap();
         let message = stage(&factory, 0, vec![Some(5)]);
-        write.abort(2, vec![Some(message)]).unwrap();
+        write
+            .abort(StreamingAbortInfo::new(2, vec![Some(message)]))
+            .unwrap();
         assert_eq!(committed_rows(&directory.0), rows(&[1, 2, 4]));
 
         // The output mode complete replaces the output of the previous micro-batches.
@@ -884,10 +895,15 @@ mod tests {
     }
 
     #[test]
-    fn streaming_queries_pass_their_checkpoint_among_the_options() {
+    fn streaming_queries_pass_their_checkpoint_and_name_among_the_options() {
         let directory = TempDirectory::new();
         let path = directory.0.to_str().unwrap();
-        assert!(JsonSink::new(info(&[("path", path), ("checkpointlocation", "/tmp/c")])).is_ok());
+        assert!(JsonSink::new(info(&[
+            ("path", path),
+            ("checkpointlocation", "/tmp/c"),
+            ("queryname", "events"),
+        ]))
+        .is_ok());
         assert!(JsonSink::new(info(&[("path", path), ("unknown", "1")])).is_err());
     }
 
@@ -903,7 +919,8 @@ mod tests {
         let capabilities = source.capabilities();
         assert!(!capabilities.contains(Capabilities::BATCH_WRITE));
         assert!(!capabilities.contains(Capabilities::STREAMING_WRITE));
-        assert!(!capabilities.contains(Capabilities::TRUNCATE));
+        assert!(!capabilities.contains(Capabilities::BATCH_TRUNCATE));
+        assert!(!capabilities.contains(Capabilities::STREAMING_TRUNCATE));
         assert!(new_write(&source, WriteMode::Append).is_err());
         assert!(new_streaming_write(&source, "query", WriteMode::Append).is_err());
         assert!(!path.exists());

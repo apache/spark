@@ -13,31 +13,32 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-//! Driver-only handles, planners, and streams, with stateless executor plan restoration.
+//! Driver-only handles of sources, scans, streams, and writes, and executor readers restored
+//! from serialized values.
 
 use std::any::Any;
 use std::collections::HashMap;
+use std::ffi::CString;
 use std::panic::{catch_unwind, AssertUnwindSafe};
 use std::sync::atomic::{AtomicI64, Ordering};
 use std::sync::{Arc, Mutex, MutexGuard};
 
 use arrow_array::ffi_stream::FFI_ArrowArrayStream;
-use arrow_schema::{Schema, SchemaRef};
+use arrow_schema::{Fields, SchemaRef};
 use serde::{de::DeserializeOwned, Deserialize, Serialize};
 
+use crate::write::{Batch, DriverWrite, DriverWriter};
 use crate::{
-    BatchWrite, Capabilities, CreateInfo, DataSource, FilterSupport, LimitSupport,
-    MicroBatchStream, MicroBatchStreamInfo, PartitionReaderFactory, Predicate, ReaderContext,
-    Result, ScanBuilder, ScanInfo, StreamingWrite, StreamingWriteInfo, TaskContext, Unsupported,
-    WriteInfo, WriteMode,
+    abi, BatchWrite, Capabilities, CommitOffsetInfo, CreateInfo, DataSource, Domain,
+    LatestOffsetInfo, LimitSupport, MicroBatchInfo, MicroBatchStream, MicroBatchStreamInfo,
+    PartitionReaderFactory, ReadLimit, ReaderContext, Result, ScanBuilder, ScanInfo, ScanPlan,
+    StreamingWrite, StreamingWriteInfo, TaskContext, WriteInfo, WriteMode,
 };
-
-use crate::write::{Batch, DriverWriter, Streaming};
 
 #[path = "stream.rs"]
 pub(crate) mod stream;
 
-const STATE_VERSION: u32 = 2;
+const STATE_VERSION: u32 = 4;
 
 type HandleMap<T> = Mutex<HashMap<i64, Arc<Mutex<T>>>>;
 
@@ -46,9 +47,9 @@ type HandleMap<T> = Mutex<HashMap<i64, Arc<Mutex<T>>>>;
 pub struct Bridge<S: DataSource> {
     next_handle: AtomicI64,
     sources: HandleMap<SourceState<S>>,
-    planners: HandleMap<Planner<S::ScanBuilder>>,
-    streams: HandleMap<StreamReader<S::MicroBatchStream>>,
-    writers: HandleMap<Write<S>>,
+    scans: HandleMap<ScanState<S::ScanBuilder>>,
+    streams: HandleMap<S::MicroBatchStream>,
+    writers: HandleMap<Box<dyn DriverWrite>>,
 }
 
 impl<S: DataSource> Default for Bridge<S> {
@@ -56,11 +57,17 @@ impl<S: DataSource> Default for Bridge<S> {
         Self {
             next_handle: AtomicI64::new(1),
             sources: Mutex::new(HashMap::new()),
-            planners: Mutex::new(HashMap::new()),
+            scans: Mutex::new(HashMap::new()),
             streams: Mutex::new(HashMap::new()),
             writers: Mutex::new(HashMap::new()),
         }
     }
+}
+
+/// The partitions of a scan or a micro-batch, and the state of its reader: its factory.
+pub struct EncodedPlan {
+    pub state: Vec<u8>,
+    pub partitions: Vec<Vec<u8>>,
 }
 
 impl<S: DataSource> Bridge<S> {
@@ -74,20 +81,18 @@ impl<S: DataSource> Bridge<S> {
 
     pub const STREAMING_WRITE: bool = <S::StreamingWrite as StreamingWrite>::SUPPORTED;
 
-    // Whether each write supports truncation, which Unsupported does not.
-
-    const BATCH_TRUNCATE: bool = <S::BatchWrite as BatchWrite>::SUPPORTS_TRUNCATE;
-
-    const STREAMING_TRUNCATE: bool = <S::StreamingWrite as StreamingWrite>::SUPPORTS_TRUNCATE;
-
     const CAPABILITIES: Capabilities = Capabilities::implemented(&[
         (Capabilities::BATCH_READ, Self::READ),
         (Capabilities::MICRO_BATCH_READ, Self::MICRO_BATCH_READ),
         (Capabilities::BATCH_WRITE, Self::WRITE),
         (Capabilities::STREAMING_WRITE, Self::STREAMING_WRITE),
         (
-            Capabilities::TRUNCATE,
-            Self::BATCH_TRUNCATE || Self::STREAMING_TRUNCATE,
+            Capabilities::BATCH_TRUNCATE,
+            <S::BatchWrite as BatchWrite>::SUPPORTS_TRUNCATE,
+        ),
+        (
+            Capabilities::STREAMING_TRUNCATE,
+            <S::StreamingWrite as StreamingWrite>::SUPPORTS_TRUNCATE,
         ),
     ]);
 
@@ -113,26 +118,37 @@ impl<S: DataSource> Bridge<S> {
                 capabilities,
             },
         )?;
-        Ok((handle, capabilities.bits()))
+        // Every stream supports admission control: its default read limit is all the
+        // available data unless it overrides MicroBatchStream::default_read_limit.
+        let admission_control = if capabilities.contains(Capabilities::MICRO_BATCH_READ) {
+            abi::ADMISSION_CONTROL
+        } else {
+            0
+        };
+        Ok((handle, capabilities.bits() | admission_control))
     }
 
     /// Keeps the implemented operations of a declaration, so that a source can narrow its
-    /// operations but never add one, and truncation only while a write that supports it
-    /// remains.
+    /// operations but never add one, and each truncation only with its write.
     fn effective(declared: Capabilities) -> Capabilities {
-        let capabilities = declared.intersection(Self::CAPABILITIES);
-        let truncates = (Self::BATCH_TRUNCATE && capabilities.contains(Capabilities::BATCH_WRITE))
-            || (Self::STREAMING_TRUNCATE && capabilities.contains(Capabilities::STREAMING_WRITE));
-        if truncates {
-            capabilities
-        } else {
-            capabilities.without(Capabilities::TRUNCATE)
+        let mut capabilities = declared.intersection(Self::CAPABILITIES);
+        for (write, truncate) in [
+            (Capabilities::BATCH_WRITE, Capabilities::BATCH_TRUNCATE),
+            (
+                Capabilities::STREAMING_WRITE,
+                Capabilities::STREAMING_TRUNCATE,
+            ),
+        ] {
+            if !capabilities.contains(write) {
+                capabilities = capabilities.without(truncate);
+            }
         }
+        capabilities
     }
 
     pub fn schema(&self, handle: i64) -> Result<SchemaRef> {
         let source = get(&self.sources, handle)?;
-        let schema = lock(&source).source.schema()?;
+        let schema = lock(&source).source.infer_schema()?;
         stream::validate_schema(&schema)?;
         Ok(schema)
     }
@@ -142,120 +158,132 @@ impl<S: DataSource> Bridge<S> {
         let source = get(&self.sources, handle)?;
         let builder = {
             let source = lock(&source);
-            if !source.capabilities.contains(Capabilities::BATCH_READ) {
-                return Err("source does not support batch reads".into());
-            }
+            require(source.capabilities, Capabilities::BATCH_READ, "batch reads")?;
             source.source.new_scan(ScanInfo::new(schema.clone()))?
         };
-        self.insert(&self.planners, Planner::new(builder, schema))
+        let scan = ScanState {
+            builder: Some(builder),
+            fields: schema.fields().clone(),
+        };
+        self.insert(&self.scans, scan)
     }
 
-    /// Pushes parsed predicates; None stands for one that did not parse, which the
-    /// connector receives as Unknown and which stays unsupported whatever it returns.
-    pub fn push_predicates(
-        &self,
-        handle: i64,
-        predicates: Vec<Option<Predicate>>,
-    ) -> Result<Vec<FilterSupport>> {
-        let reader = get(&self.planners, handle)?;
-        let mut reader = lock(&reader);
-        let parsed: Vec<bool> = predicates.iter().map(Option::is_some).collect();
-        let predicates: Vec<Predicate> = predicates
-            .into_iter()
-            .map(|predicate| predicate.unwrap_or(Predicate::Unknown))
-            .collect();
-        let mut support = reader.negotiate(|builder| {
-            let support = builder.push_filters(&predicates)?;
-            if support.len() != predicates.len() {
-                return Err("push_filters must return one result per predicate".into());
-            }
-            Ok(support)
-        })?;
-        for (support, parsed) in support.iter_mut().zip(parsed) {
-            if !parsed {
-                *support = FilterSupport::Unsupported;
+    /// Pushes the domains that Spark passes down to a scan, except those of the columns whose
+    /// values have no [`Value`](crate::Value), and returns whether the scan uses each.
+    pub fn push_domains(&self, handle: i64, pushed: Vec<abi::PushedDomain>) -> Result<Vec<bool>> {
+        let scan = get(&self.scans, handle)?;
+        let mut scan = lock(&scan);
+        let mut positions = Vec::new();
+        let mut domains = Vec::new();
+        for (position, domain) in pushed.iter().enumerate() {
+            let domain = Domain::from_abi(
+                &scan.fields,
+                &domain.path,
+                domain.null_allowed,
+                domain.nan_allowed,
+                domain.ranges.as_ref(),
+            )?;
+            if let Some(domain) = domain {
+                positions.push(position);
+                domains.push(domain);
             }
         }
-        reader.has_residual |= support.iter().any(|s| *s != FilterSupport::Exact);
-        Ok(support)
+        let mut used = vec![false; pushed.len()];
+        if domains.is_empty() {
+            return Ok(used);
+        }
+        let uses = builder(&mut scan.builder)?.push_domains(&domains)?;
+        if uses.len() != domains.len() {
+            return Err(format!(
+                "ScanBuilder::push_domains returned {} results for {} domains",
+                uses.len(),
+                domains.len()
+            )
+            .into());
+        }
+        for (position, uses) in positions.into_iter().zip(uses) {
+            used[position] = uses;
+        }
+        Ok(used)
     }
 
     pub fn push_limit(&self, handle: i64, limit: usize) -> Result<bool> {
-        let reader = get(&self.planners, handle)?;
-        let mut reader = lock(&reader);
-        let has_residual = reader.has_residual;
-        reader.negotiate(|builder| {
-            if has_residual {
-                Ok(false)
-            } else {
-                Ok(builder.push_limit(limit)? == LimitSupport::Global)
-            }
-        })
+        let scan = get(&self.scans, handle)?;
+        let mut scan = lock(&scan);
+        Ok(builder(&mut scan.builder)?.push_limit(limit)? == LimitSupport::Global)
     }
 
-    pub fn prune_columns(&self, handle: i64, columns: &[String]) -> Result<bool> {
-        let reader = get(&self.planners, handle)?;
-        let mut reader = lock(&reader);
-        let indices: Vec<_> = columns
-            .iter()
-            .map(|column| reader.schema.index_of(column))
-            .collect::<std::result::Result<_, _>>()?;
-        let schema = Arc::new(reader.schema.project(&indices)?);
-        let pruned = reader.negotiate(|builder| builder.prune_columns(columns))?;
-        if pruned {
-            reader.schema = schema;
-        }
-        Ok(pruned)
+    pub fn prune_columns(&self, handle: i64, columns: &[String]) -> Result<()> {
+        let scan = get(&self.scans, handle)?;
+        let mut scan = lock(&scan);
+        builder(&mut scan.builder)?.prune_columns(columns)
     }
 
-    pub fn planned(&self, handle: i64) -> Result<Arc<EncodedPlan>> {
-        let reader = get(&self.planners, handle)?;
-        let result = lock(&reader).plan();
-        result
+    /// Plans a scan, which consumes its builder.
+    pub fn plan(&self, handle: i64) -> Result<EncodedPlan> {
+        let scan = get(&self.scans, handle)?;
+        let builder = lock(&scan)
+            .builder
+            .take()
+            .ok_or("the scan has already been planned")?;
+        encode_plan(builder.plan()?)
     }
 
-    pub fn create_stream_reader(&self, handle: i64, schema: SchemaRef) -> Result<i64> {
-        stream::validate_schema(&schema)?;
+    pub fn close_reader(&self, handle: i64) -> Result<()> {
+        remove(&self.scans, handle);
+        Ok(())
+    }
+
+    pub fn create_stream_reader(&self, handle: i64, info: MicroBatchStreamInfo) -> Result<i64> {
+        stream::validate_schema(&info.schema)?;
         let source = get(&self.sources, handle)?;
         let stream = {
             let source = lock(&source);
-            if !source.capabilities.contains(Capabilities::MICRO_BATCH_READ) {
-                return Err("source does not support micro-batch streaming reads".into());
-            }
-            source
-                .source
-                .new_micro_batch_stream(MicroBatchStreamInfo::new(schema.clone()))?
+            require(
+                source.capabilities,
+                Capabilities::MICRO_BATCH_READ,
+                "micro-batch streaming reads",
+            )?;
+            source.source.new_micro_batch_stream(info)?
         };
-        self.insert(&self.streams, StreamReader::new(stream, schema))
+        self.insert(&self.streams, stream)
     }
 
     pub fn initial_offset(&self, handle: i64) -> Result<String> {
         let stream = get(&self.streams, handle)?;
-        let result = lock(&stream).call(|stream| encode_offset(&stream.initial_offset()?));
-        result
+        let offset = lock(&stream).initial_offset()?;
+        encode_offset(&offset)
     }
 
-    pub fn latest_offset(&self, handle: i64) -> Result<String> {
+    pub fn default_read_limit(&self, handle: i64) -> Result<ReadLimit> {
         let stream = get(&self.streams, handle)?;
-        let result = lock(&stream).call(|stream| encode_offset(&stream.latest_offset()?));
-        result
+        let limit = lock(&stream).default_read_limit();
+        limit
     }
 
-    pub fn stream_partitions(&self, handle: i64, start: &str, end: &str) -> Result<Vec<Vec<u8>>> {
+    /// Decodes the offsets of a request, and encodes the latest offset.
+    pub fn latest_offset(&self, handle: i64, info: LatestOffsetInfo<String>) -> Result<String> {
         let stream = get(&self.streams, handle)?;
-        let result = lock(&stream).plan(start, end);
-        result
+        let info = LatestOffsetInfo {
+            start: decode_offset(&info.start)?,
+            limit: info.limit,
+            run_end: info.run_end.as_deref().map(decode_offset).transpose()?,
+        };
+        let offset = lock(&stream).latest_offset(info)?;
+        encode_offset(&offset)
     }
 
-    pub fn serialized_stream_reader(&self, handle: i64) -> Result<Arc<Vec<u8>>> {
+    pub fn stream_partitions(&self, handle: i64, start: &str, end: &str) -> Result<EncodedPlan> {
         let stream = get(&self.streams, handle)?;
-        let result = lock(&stream).serialized();
-        result
+        let info = MicroBatchInfo::new(decode_offset(start)?, decode_offset(end)?);
+        let plan = lock(&stream).plan(info)?;
+        encode_plan(plan)
     }
 
     pub fn commit_offset(&self, handle: i64, end: &str) -> Result<()> {
         let stream = get(&self.streams, handle)?;
-        let result = lock(&stream).call(|stream| stream.commit(decode_offset(end)?));
+        let info = CommitOffsetInfo::new(decode_offset(end)?);
+        let result = lock(&stream).commit(info);
         result
     }
 
@@ -264,60 +292,48 @@ impl<S: DataSource> Bridge<S> {
         Ok(())
     }
 
-    /// Creates a batch write, or the write of a micro-batch of the streaming query `query_id`.
+    /// Creates a batch write, or the write of a micro-batch of the streaming query `query_id`,
+    /// with the state of its task writers.
     pub fn create_writer(
         &self,
         handle: i64,
         schema: SchemaRef,
         mode: WriteMode,
         query_id: Option<String>,
-    ) -> Result<i64> {
+    ) -> Result<(i64, Vec<u8>)> {
         stream::validate_schema(&schema)?;
         let source = get(&self.sources, handle)?;
-        let writer = {
+        let (writer, state) = {
             let source = lock(&source);
             let capabilities = source.capabilities;
             let truncate = mode == WriteMode::Truncate;
             match query_id {
                 None => {
-                    if !capabilities.contains(Capabilities::BATCH_WRITE) {
-                        return Err("source does not support batch writes".into());
+                    require(capabilities, Capabilities::BATCH_WRITE, "batch writes")?;
+                    if truncate {
+                        let overwrite = "the save mode overwrite";
+                        require(capabilities, Capabilities::BATCH_TRUNCATE, overwrite)?;
                     }
-                    if truncate
-                        && !(Self::BATCH_TRUNCATE && capabilities.contains(Capabilities::TRUNCATE))
-                    {
-                        return Err("source does not support truncate".into());
-                    }
-                    let write = source
-                        .source
-                        .new_write(WriteInfo::new(schema.clone(), mode))?;
-                    Write::Batch(DriverWriter::new(Batch(write), schema))
+                    let write = source.source.new_write(WriteInfo::new(schema, mode))?;
+                    DriverWriter::create(Batch(write))?
                 }
                 Some(query_id) => {
-                    if !capabilities.contains(Capabilities::STREAMING_WRITE) {
-                        return Err("source does not support streaming writes".into());
+                    require(
+                        capabilities,
+                        Capabilities::STREAMING_WRITE,
+                        "streaming writes",
+                    )?;
+                    if truncate {
+                        let complete = "the output mode complete";
+                        require(capabilities, Capabilities::STREAMING_TRUNCATE, complete)?;
                     }
-                    if truncate
-                        && !(Self::STREAMING_TRUNCATE
-                            && capabilities.contains(Capabilities::TRUNCATE))
-                    {
-                        return Err("source does not support truncate in streaming writes \
-                                    (the output mode complete)"
-                            .into());
-                    }
-                    let info = StreamingWriteInfo::new(schema.clone(), mode, query_id);
+                    let info = StreamingWriteInfo::new(schema, mode, query_id);
                     let write = source.source.new_streaming_write(info)?;
-                    Write::Streaming(DriverWriter::new(Streaming(write), schema))
+                    DriverWriter::create(write)?
                 }
             }
         };
-        self.insert(&self.writers, writer)
-    }
-
-    pub fn serialized_writer(&self, handle: i64) -> Result<Arc<Vec<u8>>> {
-        let writer = get(&self.writers, handle)?;
-        let result = lock(&writer).serialized();
-        result
+        Ok((self.insert(&self.writers, writer)?, state))
     }
 
     pub fn commit(&self, handle: i64, epoch_id: i64, messages: &[Option<&[u8]>]) -> Result<()> {
@@ -341,45 +357,48 @@ impl<S: DataSource> Bridge<S> {
         remove(&self.sources, handle);
         Ok(())
     }
-
-    pub fn close_reader(&self, handle: i64) -> Result<()> {
-        remove(&self.planners, handle);
-        Ok(())
-    }
 }
 
-/// Restores the executor reader of a batch scan, with factory `B`, or of a micro-batch, with
-/// factory `S`, using only serialized values. No source, planner, stream, or driver handle
-/// registry is created or consulted.
+/// Opens the executor reader of a partition with factory `F`, using only serialized values.
+/// No source, scan, stream, or driver handle registry is created or consulted.
 ///
 /// # Safety
 /// `task` must satisfy TaskContext::from_raw and remain valid until the
 /// returned stream is released. The stream's consumer must follow the
 /// Arrow C Stream ownership protocol and keep the plugin loaded.
-pub unsafe fn open_reader<B: PartitionReaderFactory, S: PartitionReaderFactory>(
-    task: *const crate::abi::SparkDsTaskContext,
+pub unsafe fn open_reader<F: PartitionReaderFactory>(
+    task: *const abi::SparkDsTaskContext,
+    schema: SchemaRef,
     state: &[u8],
     partition: &[u8],
 ) -> Result<FFI_ArrowArrayStream> {
-    match decode::<Kind<ReaderState<B>, ReaderState<S>>>(state)? {
-        Kind::Batch(state) => unsafe { open_partition(task, state, partition) },
-        Kind::Streaming(state) => unsafe { open_partition(task, state, partition) },
-    }
-}
-
-/// # Safety
-/// As for open_reader.
-unsafe fn open_partition<F: PartitionReaderFactory>(
-    task: *const crate::abi::SparkDsTaskContext,
-    state: ReaderState<F>,
-    partition: &[u8],
-) -> Result<FFI_ArrowArrayStream> {
-    let ReaderState { factory, schema } = state;
-    let schema = Arc::new(schema);
     stream::validate_schema(&schema)?;
+    let factory: F = decode(state)?;
     let task = unsafe { TaskContext::from_raw(task)? };
     let reader = factory.open(decode(partition)?, ReaderContext::new(schema.clone(), task))?;
     Ok(unsafe { stream::export(reader, &schema) })
+}
+
+fn require(capabilities: Capabilities, capability: Capabilities, operation: &str) -> Result<()> {
+    if capabilities.contains(capability) {
+        Ok(())
+    } else {
+        Err(format!("source does not support {operation}").into())
+    }
+}
+
+/// The builder of a scan that is not planned yet.
+fn builder<B>(scan: &mut Option<B>) -> Result<&mut B> {
+    scan.as_mut()
+        .ok_or_else(|| "the scan has already been planned".into())
+}
+
+/// Encodes the factory of a plan, as the state of its reader, and each of its partitions.
+fn encode_plan<F: PartitionReaderFactory>(plan: ScanPlan<F>) -> Result<EncodedPlan> {
+    Ok(EncodedPlan {
+        state: encode(&plan.factory)?,
+        partitions: plan.partitions.iter().map(encode).collect::<Result<_>>()?,
+    })
 }
 
 fn lock<T>(mutex: &Mutex<T>) -> MutexGuard<'_, T> {
@@ -399,7 +418,7 @@ fn remove<T>(handles: &HandleMap<T>, handle: i64) {
     let value = lock(handles).remove(&handle);
     // Provider destructors run after releasing the registry lock. Repeated
     // closes are harmless, and IDs are never reused.
-    drop(value);
+    drop_provider(value);
 }
 
 struct SourceState<S> {
@@ -407,190 +426,11 @@ struct SourceState<S> {
     capabilities: Capabilities,
 }
 
-/// The driver writer of a batch write, or of the write of a micro-batch, which share the
-/// writer handles of the ABI.
-enum Write<S: DataSource> {
-    Batch(DriverWriter<Batch<S::BatchWrite>>),
-    Streaming(DriverWriter<Streaming<S::StreamingWrite>>),
-}
-
-impl<S: DataSource> Write<S> {
-    fn serialized(&mut self) -> Result<Arc<Vec<u8>>> {
-        match self {
-            Self::Batch(writer) => writer.serialized(),
-            Self::Streaming(writer) => writer.serialized(),
-        }
-    }
-
-    fn commit(&mut self, epoch_id: i64, messages: &[Option<&[u8]>]) -> Result<()> {
-        match self {
-            Self::Batch(writer) => writer.commit(epoch_id, messages),
-            Self::Streaming(writer) => writer.commit(epoch_id, messages),
-        }
-    }
-
-    fn abort(&mut self, epoch_id: i64, messages: &[Option<&[u8]>]) -> Result<()> {
-        match self {
-            Self::Batch(writer) => writer.abort(epoch_id, messages),
-            Self::Streaming(writer) => writer.abort(epoch_id, messages),
-        }
-    }
-}
-
-struct Planner<B: ScanBuilder> {
-    phase: Phase<B>,
-    schema: SchemaRef,
-    has_residual: bool,
-}
-
-enum Phase<B: ScanBuilder> {
-    Negotiating(B),
-    Planned(Arc<EncodedPlan>),
-    Failed(String),
-}
-
-pub struct EncodedPlan {
-    pub state: Vec<u8>,
-    pub partitions: Vec<Vec<u8>>,
-}
-
-#[derive(Serialize, Deserialize)]
-struct ReaderState<F> {
-    factory: F,
-    schema: Schema,
-}
-
-/// A value of a batch operation or of a streaming one, which share the executor entry points
-/// of the ABI, `read` and `create_data_writer`: the restored state tells them apart.
-#[derive(Serialize, Deserialize)]
-pub(crate) enum Kind<B, S> {
-    Batch(B),
-    Streaming(S),
-}
-
-impl<B: ScanBuilder> Planner<B> {
-    fn new(builder: B, schema: SchemaRef) -> Self {
-        Self {
-            phase: Phase::Negotiating(builder),
-            schema,
-            has_residual: false,
-        }
-    }
-
-    fn negotiate<T>(&mut self, action: impl FnOnce(&mut B) -> Result<T>) -> Result<T> {
-        let builder = match &mut self.phase {
-            Phase::Negotiating(builder) => builder,
-            Phase::Planned(_) => return Err("scan has already been planned".into()),
-            Phase::Failed(error) => return Err(error.clone().into()),
-        };
-        match provider_call(|| action(builder)) {
-            Ok(value) => Ok(value),
-            Err(error) => {
-                // A partially mutated builder must never be reused after failure.
-                let previous = std::mem::replace(&mut self.phase, Phase::Failed(error.clone()));
-                // Install the failure before dropping provider state. Preserve
-                // the original cause even if its destructor also panics.
-                let _ = provider_call(|| {
-                    drop(previous);
-                    Ok(())
-                });
-                Err(error.into())
-            }
-        }
-    }
-
-    fn plan(&mut self) -> Result<Arc<EncodedPlan>> {
-        match &self.phase {
-            Phase::Planned(plan) => return Ok(plan.clone()),
-            Phase::Failed(error) => return Err(error.clone().into()),
-            Phase::Negotiating(_) => {}
-        }
-        let phase = std::mem::replace(
-            &mut self.phase,
-            Phase::Failed("scan planning did not complete".into()),
-        );
-        let Phase::Negotiating(builder) = phase else {
-            unreachable!("only a negotiating scan reaches this transition")
-        };
-        let result = provider_call(|| {
-            let plan = builder.plan()?;
-            Ok(Arc::new(EncodedPlan {
-                state: encode(&Kind::<_, Unsupported>::Batch(ReaderState {
-                    factory: plan.factory,
-                    schema: self.schema.as_ref().clone(),
-                }))?,
-                partitions: plan.partitions.iter().map(encode).collect::<Result<_>>()?,
-            }))
-        });
-        match result {
-            Ok(plan) => {
-                self.phase = Phase::Planned(plan.clone());
-                Ok(plan)
-            }
-            Err(error) => {
-                self.phase = Phase::Failed(error.clone());
-                Err(error.into())
-            }
-        }
-    }
-}
-
-/// The driver state of the stream of a streaming query.
-struct StreamReader<M: MicroBatchStream> {
-    stream: M,
-    schema: SchemaRef,
-    // The state of the last planned micro-batch, which serialize_stream_reader returns.
-    planned: Option<Arc<Vec<u8>>>,
-    // The first failure, which stops the query: every later call returns it.
-    failed: Option<String>,
-}
-
-impl<M: MicroBatchStream> StreamReader<M> {
-    fn new(stream: M, schema: SchemaRef) -> Self {
-        Self {
-            stream,
-            schema,
-            planned: None,
-            failed: None,
-        }
-    }
-
-    /// Calls the stream, unless an earlier call failed, and keeps the first failure.
-    fn call<T>(&mut self, action: impl FnOnce(&mut M) -> Result<T>) -> Result<T> {
-        if let Some(error) = &self.failed {
-            return Err(error.clone().into());
-        }
-        let stream = &mut self.stream;
-        provider_call(|| action(stream)).map_err(|error| {
-            self.failed = Some(error.clone());
-            error.into()
-        })
-    }
-
-    /// Plans a micro-batch, and keeps its encoded state for serialize_stream_reader.
-    fn plan(&mut self, start: &str, end: &str) -> Result<Vec<Vec<u8>>> {
-        let schema = self.schema.as_ref().clone();
-        let (state, partitions) = self.call(|stream| {
-            let plan = stream.plan(decode_offset(start)?, decode_offset(end)?)?;
-            let partitions = plan.partitions.iter().map(encode).collect::<Result<_>>()?;
-            let state = encode(&Kind::<Unsupported, _>::Streaming(ReaderState {
-                factory: plan.factory,
-                schema,
-            }))?;
-            Ok((state, partitions))
-        })?;
-        self.planned = Some(Arc::new(state));
-        Ok(partitions)
-    }
-
-    fn serialized(&self) -> Result<Arc<Vec<u8>>> {
-        if let Some(error) = &self.failed {
-            return Err(error.clone().into());
-        }
-        self.planned
-            .clone()
-            .ok_or_else(|| "no micro-batch has been planned".into())
-    }
+/// A scan: its builder, until Spark plans the scan, and the columns of the schema that
+/// create_reader got, which the paths of the domains that Spark pushes index.
+struct ScanState<B> {
+    builder: Option<B>,
+    fields: Fields,
 }
 
 /// Offsets are compact JSON on a single line, which Spark stores in the checkpoint as they
@@ -604,6 +444,14 @@ fn decode_offset<T: DeserializeOwned>(json: &str) -> Result<T> {
         .map_err(|error| format!("cannot decode the offset {json}: {error}").into())
 }
 
+/// The state of a reader or a writer, the partitions and the commit messages are MessagePack
+/// in a versioned envelope. MessagePack is self-describing, and the SDK writes structs as maps
+/// with the names of their fields, so the serde attributes that need them, such as `untagged`,
+/// `flatten` and `default`, work, and floats, including NaN and the infinities, round-trip as
+/// they are. A `Vec<u8>` stays a sequence: serde buffers the values of `untagged` and `flatten`
+/// before deserializing them, and its buffer cannot read MessagePack binary as a sequence.
+/// These values never outlive the application, and the same build of the library reads them,
+/// so the format is an implementation detail; see the README.
 #[derive(Serialize, Deserialize)]
 struct Envelope<T> {
     version: u32,
@@ -611,14 +459,18 @@ struct Envelope<T> {
 }
 
 pub(crate) fn encode<T: Serialize>(value: &T) -> Result<Vec<u8>> {
-    Ok(serde_json::to_vec(&Envelope {
+    let mut bytes = Vec::new();
+    let mut serializer = rmp_serde::Serializer::new(&mut bytes).with_struct_map();
+    Envelope {
         version: STATE_VERSION,
         value,
-    })?)
+    }
+    .serialize(&mut serializer)?;
+    Ok(bytes)
 }
 
 pub(crate) fn decode<T: DeserializeOwned>(bytes: &[u8]) -> Result<T> {
-    let envelope: Envelope<T> = serde_json::from_slice(bytes)?;
+    let envelope: Envelope<T> = rmp_serde::from_slice(bytes)?;
     if envelope.version != STATE_VERSION {
         return Err(format!("unsupported native state version: {}", envelope.version).into());
     }
@@ -632,6 +484,13 @@ pub(crate) fn provider_call<T>(
         action().map_err(|error| describe(&*error))
     }))
     .unwrap_or_else(|payload| Err(panic_message(payload)))
+}
+
+pub(crate) fn drop_provider<T>(value: T) {
+    // Close has no error channel and must never unwind across the native ABI, so log the panic.
+    if let Err(payload) = catch_unwind(AssertUnwindSafe(|| drop(value))) {
+        log::warn!("Ignoring a panic during a drop: {}", panic_message(payload));
+    }
 }
 
 /// The message of an error followed by those of its sources, which `Display` of many
@@ -663,19 +522,9 @@ pub(crate) fn panic_message(payload: Box<dyn Any + Send>) -> String {
     format!("native provider panicked: {message}")
 }
 
-/// Parses each predicate on its own. One that does not parse, for example because a
-/// later Spark encodes it differently, stays unused instead of failing the scan.
-pub fn parse_predicates(predicates: &[String]) -> Vec<Option<Predicate>> {
-    predicates
-        .iter()
-        .map(|text| match serde_json::from_str(text) {
-            Ok(predicate) => Some(predicate),
-            Err(error) => {
-                log::warn!("Leaving unused a predicate that cannot be parsed ({error}): {text}");
-                None
-            }
-        })
-        .collect()
+/// Error and log text is a C string. A provider message may contain embedded NULs.
+pub(crate) fn c_message(message: String) -> CString {
+    CString::new(message.replace('\0', "\\0")).expect("NULs removed")
 }
 
 #[cfg(test)]
@@ -684,10 +533,10 @@ mod tests {
 
     use arrow_array::ffi_stream::ArrowArrayStreamReader;
     use arrow_array::{Int64Array, RecordBatch};
-    use arrow_schema::{DataType, Field};
+    use arrow_schema::{DataType, Field, Schema};
 
     use super::*;
-    use crate::{PartitionReader, ScanPlan, Unsupported};
+    use crate::{PartitionReader, Unsupported};
 
     #[derive(Clone, Copy)]
     enum FailureMode {
@@ -711,7 +560,6 @@ mod tests {
         limits: Arc<AtomicUsize>,
         drops: Arc<AtomicUsize>,
         builder_drops: Arc<AtomicUsize>,
-        filter_support: FilterSupport,
         limit_support: LimitSupport,
         failure: FailureMode,
     }
@@ -726,7 +574,6 @@ mod tests {
         builds: Arc<AtomicUsize>,
         limits: Arc<AtomicUsize>,
         drops: Arc<AtomicUsize>,
-        filter_support: FilterSupport,
         limit_support: LimitSupport,
         failure: FailureMode,
         value: u64,
@@ -750,14 +597,13 @@ mod tests {
                 limits: Arc::default(),
                 drops: Arc::default(),
                 builder_drops: Arc::default(),
-                filter_support: FilterSupport::Unsupported,
                 limit_support: LimitSupport::Unsupported,
                 failure: FailureMode::None,
             })
         }
 
-        fn schema(&self) -> Result<SchemaRef> {
-            Ok(Arc::new(Schema::empty()))
+        fn infer_schema(&self) -> Result<SchemaRef> {
+            Ok(id_schema())
         }
 
         fn new_scan(&self, _: ScanInfo) -> Result<Builder> {
@@ -765,7 +611,6 @@ mod tests {
                 builds: self.builds.clone(),
                 limits: self.limits.clone(),
                 drops: self.builder_drops.clone(),
-                filter_support: self.filter_support,
                 limit_support: self.limit_support,
                 failure: self.failure,
                 value: 42,
@@ -779,26 +624,20 @@ mod tests {
     impl PartitionReaderFactory for Factory {
         type Partition = u64;
 
-        // Ignores the negotiated schema of the context, to test that the SDK checks it.
+        // Ignores the schema of the context, to test that the SDK checks it.
         fn open<'task>(
             &self,
             partition: u64,
             _: ReaderContext<'task>,
         ) -> Result<PartitionReader<'task>> {
-            let schema = Arc::new(Schema::new(vec![Field::new("id", DataType::Int64, false)]));
             let values = Arc::new(Int64Array::from(vec![(self.0 + partition) as i64]));
-            let batch = RecordBatch::try_new(schema, vec![values])?;
+            let batch = RecordBatch::try_new(id_schema(), vec![values])?;
             Ok(Box::new(std::iter::once(Ok(batch))))
         }
     }
 
     impl ScanBuilder for Builder {
         type Factory = Factory;
-
-        fn push_filters(&mut self, filters: &[Predicate]) -> Result<Vec<FilterSupport>> {
-            self.failure.fail("negotiation failed")?;
-            Ok(vec![self.filter_support; filters.len()])
-        }
 
         fn push_limit(&mut self, limit: usize) -> Result<LimitSupport> {
             self.limits.fetch_add(1, Ordering::SeqCst);
@@ -814,15 +653,23 @@ mod tests {
         }
     }
 
+    fn id_schema() -> SchemaRef {
+        Arc::new(Schema::new(vec![Field::new("id", DataType::Int64, false)]))
+    }
+
     fn info() -> CreateInfo {
         CreateInfo::new("bridge_test", Default::default())
     }
 
-    /// The factory in the serialized state of a planned batch scan.
-    fn batch_factory(state: &[u8]) -> Factory {
-        match decode::<Kind<ReaderState<Factory>, Unsupported>>(state).unwrap() {
-            Kind::Batch(state) => state.factory,
-            Kind::Streaming(never) => match never {},
+    fn task(partition: i32, attempt: i32) -> abi::SparkDsTaskContext {
+        abi::SparkDsTaskContext {
+            size: std::mem::size_of::<abi::SparkDsTaskContext>() as i64,
+            stage_id: 1,
+            stage_attempt_number: 0,
+            partition_id: partition,
+            attempt_number: attempt,
+            task_attempt_id: i64::from(attempt) * 2 + i64::from(partition),
+            is_interrupted: None,
         }
     }
 
@@ -834,11 +681,12 @@ mod tests {
     }
 
     #[test]
-    fn source_can_close_before_planning_and_plan_is_built_once() {
+    fn source_can_close_before_planning_and_a_scan_is_planned_once() {
         let bridge = Bridge::<Source>::default();
         let source = Source::new(info()).unwrap();
         let builds = source.builds.clone();
         let drops = source.drops.clone();
+        let builder_drops = source.builder_drops.clone();
         let (handle, _) = bridge.register_source(source).unwrap();
         let schema = bridge.schema(handle).unwrap();
         let reader = bridge.create_reader(handle, schema).unwrap();
@@ -847,70 +695,17 @@ mod tests {
         assert_eq!(drops.load(Ordering::SeqCst), 1);
         assert!(bridge.schema(handle).is_err());
 
-        let plan = bridge.planned(reader).unwrap();
-        assert!(Arc::ptr_eq(&bridge.planned(reader).unwrap(), &plan));
+        let plan = bridge.plan(reader).unwrap();
         assert_eq!(decode::<u64>(&plan.partitions[0]).unwrap(), 2);
         assert_eq!(decode::<u64>(&plan.partitions[1]).unwrap(), 7);
-        assert_eq!(batch_factory(&plan.state).0, 42);
+        assert_eq!(decode::<Factory>(&plan.state).unwrap().0, 42);
         assert_eq!(builds.load(Ordering::SeqCst), 1);
+        // Planning consumed the builder: no other call reaches it.
+        assert_eq!(builder_drops.load(Ordering::SeqCst), 1);
+        assert!(error_message(bridge.plan(reader)).contains("already been planned"));
         assert!(bridge.prune_columns(reader, &[]).is_err());
         bridge.close_reader(reader).unwrap();
-        assert!(bridge.planned(reader).is_err());
-    }
-
-    #[test]
-    fn residual_filters_prevent_calling_the_providers_limit_method() {
-        for support in [FilterSupport::PruningOnly, FilterSupport::Unsupported] {
-            let bridge = Bridge::<Source>::default();
-            let mut source = Source::new(info()).unwrap();
-            source.filter_support = support;
-            source.limit_support = LimitSupport::Global;
-            let limits = source.limits.clone();
-            let (handle, _) = bridge.register_source(source).unwrap();
-            let reader = bridge
-                .create_reader(handle, bridge.schema(handle).unwrap())
-                .unwrap();
-            assert_eq!(
-                bridge
-                    .push_predicates(reader, vec![Some(Predicate::Unknown)])
-                    .unwrap(),
-                vec![support]
-            );
-            assert!(!bridge.push_limit(reader, 1).unwrap());
-            assert_eq!(limits.load(Ordering::SeqCst), 0);
-        }
-    }
-
-    #[test]
-    fn predicates_that_do_not_parse_stay_unsupported_and_residual() {
-        let bridge = Bridge::<Source>::default();
-        let mut source = Source::new(info()).unwrap();
-        source.filter_support = FilterSupport::Exact;
-        source.limit_support = LimitSupport::Global;
-        let limits = source.limits.clone();
-        let (handle, _) = bridge.register_source(source).unwrap();
-        let reader = bridge
-            .create_reader(handle, bridge.schema(handle).unwrap())
-            .unwrap();
-        let predicates = parse_predicates(&[
-            r#"{"type":"function","name":"IS_NULL","children":[{"type":"column","name":"id"}]}"#
-                .into(),
-            r#"{"type":"function","name":"IS_NULL","children":[
-                {"type":"column","name":["id"]}]}"#
-                .into(),
-        ]);
-        assert!(
-            predicates[0].is_none(),
-            "a column name must be an array of parts"
-        );
-        assert!(predicates[1].is_some());
-        // The connector reports every predicate as exact, including the Unknown placeholder.
-        assert_eq!(
-            bridge.push_predicates(reader, predicates).unwrap(),
-            vec![FilterSupport::Unsupported, FilterSupport::Exact]
-        );
-        assert!(!bridge.push_limit(reader, 1).unwrap());
-        assert_eq!(limits.load(Ordering::SeqCst), 0);
+        assert!(bridge.plan(reader).is_err());
     }
 
     #[test]
@@ -933,13 +728,10 @@ mod tests {
     }
 
     #[test]
-    fn planning_errors_and_panics_preserve_the_first_failure_without_retrying() {
+    fn negotiation_and_planning_errors_and_panics_are_reported() {
         for (failure, expected) in [
-            (FailureMode::Error, "planning failed"),
-            (
-                FailureMode::Panic,
-                "native provider panicked: planning failed",
-            ),
+            (FailureMode::Error, "failed"),
+            (FailureMode::Panic, "native provider panicked: "),
         ] {
             let bridge = Bridge::<Source>::default();
             let mut source = Source::new(info()).unwrap();
@@ -947,61 +739,36 @@ mod tests {
             let builds = source.builds.clone();
             let drops = source.builder_drops.clone();
             let (handle, _) = bridge.register_source(source).unwrap();
-            let reader = bridge
-                .create_reader(handle, bridge.schema(handle).unwrap())
-                .unwrap();
+            let schema = bridge.schema(handle).unwrap();
+            let negotiated = bridge.create_reader(handle, schema.clone()).unwrap();
+            let planned = bridge.create_reader(handle, schema).unwrap();
             bridge.close_source(handle).unwrap();
 
-            assert_eq!(error_message(bridge.planned(reader)), expected);
-            assert_eq!(error_message(bridge.planned(reader)), expected);
-            assert_eq!(error_message(bridge.push_limit(reader, 1)), expected);
+            let call = |action: &dyn Fn() -> Result<()>| {
+                let status = abi::call(action);
+                assert_ne!(status, 0);
+                let error = unsafe { std::ffi::CStr::from_ptr(abi::last_error()) };
+                error.to_str().unwrap().to_owned()
+            };
+            let error = call(&|| bridge.push_limit(negotiated, 1).map(drop));
+            assert!(error.contains(expected), "{error}");
+            assert!(error.contains("negotiation failed"), "{error}");
+            let error = call(&|| bridge.plan(planned).map(drop));
+            assert!(error.contains(expected), "{error}");
+            assert!(error.contains("planning failed"), "{error}");
             assert_eq!(builds.load(Ordering::SeqCst), 1);
+            // The failed plan consumed its builder; Spark only closes the other scan.
             assert_eq!(drops.load(Ordering::SeqCst), 1);
-            bridge.close_reader(reader).unwrap();
-            assert_eq!(drops.load(Ordering::SeqCst), 1);
+            bridge.close_reader(negotiated).unwrap();
+            bridge.close_reader(planned).unwrap();
+            assert_eq!(drops.load(Ordering::SeqCst), 2);
         }
     }
 
     #[test]
-    fn failed_negotiation_discards_the_partially_mutated_builder() {
-        for (failure, expected) in [
-            (FailureMode::Error, "negotiation failed"),
-            (
-                FailureMode::Panic,
-                "native provider panicked: negotiation failed",
-            ),
-        ] {
-            let bridge = Bridge::<Source>::default();
-            let mut source = Source::new(info()).unwrap();
-            source.failure = failure;
-            let builds = source.builds.clone();
-            let limits = source.limits.clone();
-            let drops = source.builder_drops.clone();
-            let (handle, _) = bridge.register_source(source).unwrap();
-            let reader = bridge
-                .create_reader(handle, bridge.schema(handle).unwrap())
-                .unwrap();
-
-            assert_eq!(error_message(bridge.push_limit(reader, 5)), expected);
-            assert_eq!(error_message(bridge.push_limit(reader, 1)), expected);
-            assert_eq!(
-                error_message(bridge.push_predicates(reader, vec![])),
-                expected
-            );
-            assert_eq!(error_message(bridge.planned(reader)), expected);
-            assert_eq!(limits.load(Ordering::SeqCst), 1);
-            assert_eq!(builds.load(Ordering::SeqCst), 0);
-            assert_eq!(drops.load(Ordering::SeqCst), 1);
-            bridge.close_reader(reader).unwrap();
-            bridge.close_source(handle).unwrap();
-        }
-    }
-
-    #[test]
-    fn scans_of_one_source_keep_pushdown_and_cached_plans_independent() {
+    fn scans_of_one_source_keep_pushdown_and_plans_independent() {
         let bridge = Bridge::<Source>::default();
         let mut source = Source::new(info()).unwrap();
-        source.filter_support = FilterSupport::PruningOnly;
         source.limit_support = LimitSupport::Global;
         let builds = source.builds.clone();
         let limits = source.limits.clone();
@@ -1014,20 +781,14 @@ mod tests {
             .unwrap();
         bridge.close_source(handle).unwrap();
 
-        bridge
-            .push_predicates(second, vec![Some(Predicate::Unknown)])
-            .unwrap();
         assert!(bridge.push_limit(first, 5).unwrap());
-        assert!(!bridge.push_limit(second, 1).unwrap());
-        let first_plan = bridge.planned(first).unwrap();
-        let second_plan = bridge.planned(second).unwrap();
-        assert_eq!(batch_factory(&first_plan.state).0, 5);
-        assert_eq!(batch_factory(&second_plan.state).0, 42);
-        assert!(!Arc::ptr_eq(&first_plan, &second_plan));
+        let first_plan = bridge.plan(first).unwrap();
+        let second_plan = bridge.plan(second).unwrap();
+        assert_eq!(decode::<Factory>(&first_plan.state).unwrap().0, 5);
+        assert_eq!(decode::<Factory>(&second_plan.state).unwrap().0, 42);
         assert_eq!(builds.load(Ordering::SeqCst), 2);
         assert_eq!(limits.load(Ordering::SeqCst), 1);
         bridge.close_reader(first).unwrap();
-        assert!(Arc::ptr_eq(&second_plan, &bridge.planned(second).unwrap()));
         bridge.close_reader(second).unwrap();
     }
 
@@ -1039,15 +800,11 @@ mod tests {
         let source_drops = source.drops.clone();
         let builder_drops = source.builder_drops.clone();
         let (handle, _) = bridge.register_source(source).unwrap();
-        let schema = Arc::new(Schema::new(vec![Field::new("id", DataType::Int64, false)]));
-        let planner = bridge.create_reader(handle, schema).unwrap();
+        let reader = bridge.create_reader(handle, id_schema()).unwrap();
         bridge.close_source(handle).unwrap();
-        let plan = bridge.planned(planner).unwrap();
         // Model Spark copying the factory and partition descriptors out of the plugin.
-        let state = plan.state.clone();
-        let partitions = plan.partitions.clone();
-        drop(plan);
-        bridge.close_reader(planner).unwrap();
+        let EncodedPlan { state, partitions } = bridge.plan(reader).unwrap();
+        bridge.close_reader(reader).unwrap();
         drop(bridge);
         assert_eq!(builds.load(Ordering::SeqCst), 1);
         assert_eq!(source_drops.load(Ordering::SeqCst), 1);
@@ -1055,18 +812,10 @@ mod tests {
 
         for attempt in 0..2 {
             for (index, partition) in partitions.iter().enumerate() {
-                let task = crate::abi::SparkDsTaskContext {
-                    size: std::mem::size_of::<crate::abi::SparkDsTaskContext>() as i64,
-                    stage_id: 1,
-                    stage_attempt_number: 0,
-                    partition_id: index as i32,
-                    attempt_number: attempt,
-                    task_attempt_id: i64::from(attempt) * 2 + index as i64,
-                    is_interrupted: None,
-                };
+                let task = task(index as i32, attempt);
                 // The executor entry point depends only on Factory, not Source or Builder.
                 let stream =
-                    unsafe { open_reader::<Factory, Unsupported>(&task, &state, partition) }
+                    unsafe { open_reader::<Factory>(&task, id_schema(), &state, partition) }
                         .unwrap();
                 let mut reader = ArrowArrayStreamReader::try_new(stream).unwrap();
                 let batch = reader.next().unwrap().unwrap();
@@ -1082,41 +831,43 @@ mod tests {
     }
 
     #[test]
-    fn executor_rejects_a_factory_schema_different_from_the_negotiated_schema() {
+    fn executor_rejects_batches_that_do_not_have_the_schema_to_read() {
         let bridge = Bridge::<Source>::default();
         let (handle, _) = bridge.create(info()).unwrap();
         let reader = bridge
             .create_reader(handle, bridge.schema(handle).unwrap())
             .unwrap();
-        let plan = bridge.planned(reader).unwrap();
+        let plan = bridge.plan(reader).unwrap();
         bridge.close_reader(reader).unwrap();
         bridge.close_source(handle).unwrap();
-
-        let task = crate::abi::SparkDsTaskContext {
-            size: std::mem::size_of::<crate::abi::SparkDsTaskContext>() as i64,
-            stage_id: 1,
-            stage_attempt_number: 0,
-            partition_id: 0,
-            attempt_number: 0,
-            task_attempt_id: 1,
-            is_interrupted: None,
-        };
-        // The factory returns one id column, but the driver negotiated an empty schema.
-        // The expected schema must survive serialization and the removal of driver handles.
         drop(bridge);
-        let mut stream =
-            unsafe { open_reader::<Factory, Unsupported>(&task, &plan.state, &plan.partitions[0]) }
-                .unwrap();
-        // The first batch, which get_schema reads, does not have the negotiated schema.
-        let mut schema = arrow_schema::ffi::FFI_ArrowSchema::empty();
-        assert_ne!(
-            unsafe { stream.get_schema.unwrap()(&mut stream, &mut schema) },
-            0
-        );
-        let error =
-            unsafe { std::ffi::CStr::from_ptr(stream.get_last_error.unwrap()(&mut stream)) };
-        let error = error.to_str().unwrap();
-        assert!(error.contains("negotiated schema"), "{error}");
+
+        // The factory returns a bigint id column, but Spark reads a string id or a label.
+        for (schema, expected) in [
+            (DataType::Utf8, "does not match the schema to read"),
+            (DataType::Int64, "without the column label"),
+        ] {
+            let name = if schema == DataType::Utf8 {
+                "id"
+            } else {
+                "label"
+            };
+            let schema = Arc::new(Schema::new(vec![Field::new(name, schema, false)]));
+            let task = task(0, 0);
+            let mut stream =
+                unsafe { open_reader::<Factory>(&task, schema, &plan.state, &plan.partitions[0]) }
+                    .unwrap();
+            // get_schema reads the first batch, which does not have the schema to read.
+            let mut schema = arrow_schema::ffi::FFI_ArrowSchema::empty();
+            assert_ne!(
+                unsafe { stream.get_schema.unwrap()(&mut stream, &mut schema) },
+                0
+            );
+            let error =
+                unsafe { std::ffi::CStr::from_ptr(stream.get_last_error.unwrap()(&mut stream)) };
+            let error = error.to_str().unwrap();
+            assert!(error.contains(expected), "{error}");
+        }
     }
 
     #[test]
@@ -1140,7 +891,7 @@ mod tests {
 
         let bridge = Bridge::<Narrowing>::default();
         for (declared, expected) in [
-            (Capabilities::all(), crate::abi::BATCH_READ),
+            (Capabilities::all(), abi::BATCH_READ),
             (Capabilities::empty(), 0),
             (Capabilities::all().without(Capabilities::BATCH_READ), 0),
         ] {
@@ -1179,10 +930,61 @@ mod tests {
 
     #[test]
     fn rejects_a_different_wire_version() {
-        let other = format!(r#"{{"version":{},"value":42}}"#, STATE_VERSION + 1);
-        let error = decode::<u64>(other.as_bytes()).unwrap_err();
+        let other = rmp_serde::to_vec_named(&Envelope {
+            version: STATE_VERSION + 1,
+            value: 42_u64,
+        })
+        .unwrap();
+        let error = decode::<u64>(&other).unwrap_err();
         assert!(error
             .to_string()
             .contains("unsupported native state version"));
+        assert_eq!(decode::<u64>(&encode(&42_u64).unwrap()).unwrap(), 42);
+    }
+
+    #[test]
+    fn state_keeps_floats_and_bytes_and_supports_self_describing_serde_attributes() {
+        #[derive(Serialize, Deserialize, Debug, PartialEq)]
+        #[serde(untagged)]
+        enum Split {
+            Rows { first: i64 },
+            Files { paths: Vec<String>, footer: Vec<u8> },
+        }
+
+        #[derive(Serialize, Deserialize, Debug, PartialEq)]
+        struct Statistics {
+            min: f64,
+            #[serde(default, skip_serializing_if = "Option::is_none")]
+            max: Option<f64>,
+            sketch: Vec<u8>,
+        }
+
+        #[derive(Serialize, Deserialize, Debug, PartialEq)]
+        struct Partition {
+            footer: Vec<u8>,
+            split: Split,
+            #[serde(flatten)]
+            statistics: Statistics,
+        }
+
+        let partition = Partition {
+            footer: (0..=255).collect(),
+            // Serde buffers the values of untagged enums and flattened fields.
+            split: Split::Files {
+                paths: vec!["a".into()],
+                footer: vec![1, 2],
+            },
+            statistics: Statistics {
+                min: f64::NEG_INFINITY,
+                max: Some(f64::NAN),
+                sketch: vec![255, 0],
+            },
+        };
+        let decoded: Partition = decode(&encode(&partition).unwrap()).unwrap();
+        assert_eq!(decoded.footer, partition.footer);
+        assert_eq!(decoded.split, partition.split);
+        assert_eq!(decoded.statistics.min, f64::NEG_INFINITY);
+        assert!(decoded.statistics.max.unwrap().is_nan());
+        assert_eq!(decoded.statistics.sketch, partition.statistics.sketch);
     }
 }

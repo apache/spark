@@ -37,17 +37,20 @@ impl Capabilities {
     pub const MICRO_BATCH_READ: Self = Self(abi::MICRO_BATCH_READ);
     pub const BATCH_WRITE: Self = Self(abi::BATCH_WRITE);
     pub const STREAMING_WRITE: Self = Self(abi::STREAMING_WRITE);
-    /// Writes that replace the existing data: batch writes with the save mode "overwrite",
-    /// and micro-batches with the output mode "complete". Requires `BATCH_WRITE` or
-    /// `STREAMING_WRITE`: the SDK removes it from a set without them.
-    pub const TRUNCATE: Self = Self(abi::TRUNCATE);
+    /// Batch writes with the save mode "overwrite", which replace the existing data. Requires
+    /// `BATCH_WRITE`: the SDK does not declare it without it.
+    pub const BATCH_TRUNCATE: Self = Self(abi::BATCH_TRUNCATE);
+    /// Micro-batches with the output mode "complete", which replace the output of the previous
+    /// ones. Requires `STREAMING_WRITE`: the SDK does not declare it without it.
+    pub const STREAMING_TRUNCATE: Self = Self(abi::STREAMING_TRUNCATE);
 
-    const NAMES: [(Self, &'static str); 5] = [
+    const NAMES: [(Self, &'static str); 6] = [
         (Self::BATCH_READ, "BATCH_READ"),
         (Self::MICRO_BATCH_READ, "MICRO_BATCH_READ"),
         (Self::BATCH_WRITE, "BATCH_WRITE"),
         (Self::STREAMING_WRITE, "STREAMING_WRITE"),
-        (Self::TRUNCATE, "TRUNCATE"),
+        (Self::BATCH_TRUNCATE, "BATCH_TRUNCATE"),
+        (Self::STREAMING_TRUNCATE, "STREAMING_TRUNCATE"),
     ];
 
     /// No operations. A source without capabilities still supports schema discovery.
@@ -64,7 +67,8 @@ impl Capabilities {
                 | abi::MICRO_BATCH_READ
                 | abi::BATCH_WRITE
                 | abi::STREAMING_WRITE
-                | abi::TRUNCATE,
+                | abi::BATCH_TRUNCATE
+                | abi::STREAMING_TRUNCATE,
         )
     }
 
@@ -73,10 +77,10 @@ impl Capabilities {
         self.0 & other.0 == other.0
     }
 
-    /// Removes the operations of `other`, and also `TRUNCATE` when no write remains.
+    /// Removes the operations of `other`.
     #[must_use]
     pub const fn without(self, other: Self) -> Self {
-        Self::from_bits(self.0 & !other.0)
+        Self(self.0 & !other.0)
     }
 
     /// The operations that a source implements: those paired with true.
@@ -89,26 +93,17 @@ impl Capabilities {
             }
             index += 1;
         }
-        Self::from_bits(bits)
+        Self(bits)
     }
 
     /// The operations in both sets.
     pub(crate) const fn intersection(self, other: Self) -> Self {
-        Self::from_bits(self.0 & other.0)
+        Self(self.0 & other.0)
     }
 
     /// The native capability mask, a combination of the SPARK_DS_* flags.
     pub(crate) const fn bits(self) -> u64 {
         self.0
-    }
-
-    // Truncation requires a write, so a set never keeps it without one.
-    const fn from_bits(bits: u64) -> Self {
-        if bits & (abi::BATCH_WRITE | abi::STREAMING_WRITE) == 0 {
-            Self(bits & !abi::TRUNCATE)
-        } else {
-            Self(bits)
-        }
     }
 }
 
@@ -117,7 +112,7 @@ impl BitOr for Capabilities {
     type Output = Self;
 
     fn bitor(self, other: Self) -> Self {
-        Self::from_bits(self.0 | other.0)
+        Self(self.0 | other.0)
     }
 }
 
@@ -138,41 +133,29 @@ mod tests {
     use super::Capabilities;
 
     #[test]
-    fn truncate_never_remains_without_writes() {
+    fn sets_combine_and_remove_operations() {
         let all = Capabilities::all();
-        // Truncation remains while either write does.
-        assert!(all
-            .without(Capabilities::BATCH_WRITE)
-            .contains(Capabilities::TRUNCATE));
-        let reads = all
-            .without(Capabilities::BATCH_WRITE)
-            .without(Capabilities::STREAMING_WRITE);
-        assert!(reads.contains(Capabilities::BATCH_READ));
-        assert!(reads.contains(Capabilities::MICRO_BATCH_READ));
-        assert!(!reads.contains(Capabilities::TRUNCATE));
+        let truncations = Capabilities::BATCH_TRUNCATE | Capabilities::STREAMING_TRUNCATE;
+        let append_only = all.without(truncations);
+        assert!(append_only.contains(Capabilities::BATCH_WRITE | Capabilities::STREAMING_WRITE));
+        assert!(!append_only.contains(Capabilities::BATCH_TRUNCATE));
+        assert!(!append_only.contains(Capabilities::STREAMING_TRUNCATE));
+        let reads = Capabilities::BATCH_READ | Capabilities::MICRO_BATCH_READ;
         assert_eq!(
-            all.without(Capabilities::BATCH_WRITE | Capabilities::STREAMING_WRITE),
-            reads
+            all.without(reads).without(truncations),
+            all.without(reads | truncations)
         );
-        // A set of truncation alone has no write to truncate.
-        assert_eq!(
-            Capabilities::TRUNCATE | Capabilities::empty(),
-            Capabilities::empty()
-        );
-        let append_only = all.without(Capabilities::TRUNCATE);
-        assert!(append_only.contains(Capabilities::BATCH_WRITE));
-        assert!(!append_only.contains(Capabilities::TRUNCATE));
         assert_eq!(
             Capabilities::implemented(&[
                 (Capabilities::BATCH_READ, true),
                 (Capabilities::BATCH_WRITE, false),
-                (Capabilities::TRUNCATE, true),
+                (Capabilities::BATCH_TRUNCATE, true),
             ]),
-            Capabilities::BATCH_READ
+            Capabilities::BATCH_READ | Capabilities::BATCH_TRUNCATE
         );
         assert_eq!(
-            Capabilities::TRUNCATE.intersection(all),
-            Capabilities::empty()
+            truncations.intersection(Capabilities::BATCH_TRUNCATE),
+            Capabilities::BATCH_TRUNCATE
         );
         assert!(all.contains(Capabilities::empty()));
     }
@@ -181,7 +164,8 @@ mod tests {
     fn debug_lists_operation_names() {
         assert_eq!(
             format!("{:?}", Capabilities::all()),
-            "{BATCH_READ, MICRO_BATCH_READ, BATCH_WRITE, STREAMING_WRITE, TRUNCATE}"
+            "{BATCH_READ, MICRO_BATCH_READ, BATCH_WRITE, STREAMING_WRITE, BATCH_TRUNCATE, \
+             STREAMING_TRUNCATE}"
         );
         assert_eq!(format!("{:?}", Capabilities::empty()), "{}");
     }

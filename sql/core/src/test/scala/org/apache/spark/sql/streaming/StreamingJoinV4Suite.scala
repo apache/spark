@@ -21,6 +21,7 @@ import org.apache.hadoop.fs.Path
 import org.scalatest.Tag
 
 import org.apache.spark.SparkIllegalArgumentException
+import org.apache.spark.sql.Row
 import org.apache.spark.sql.execution.datasources.v2.state.StateSourceOptions
 import org.apache.spark.sql.execution.streaming.checkpointing.CheckpointFileManager
 import org.apache.spark.sql.execution.streaming.operators.stateful.join.StreamingSymmetricHashJoinExec
@@ -542,7 +543,52 @@ class StreamingInnerJoinV4Suite
 @SlowSQLTest
 class StreamingOuterJoinV4Suite
   extends StreamingOuterJoinBase
-  with TestWithV4StateFormat
+  with TestWithV4StateFormat {
+
+  import testImplicits._
+
+  for (history <- Seq("continuous", "restart")) {
+    test(s"V4 eviction includes newly admitted rows below the previous bound, $history") {
+      val leftInput = MemoryStream[(Int, Int)]
+      val rightInput = MemoryStream[(Int, Int)]
+      val left = leftInput.toDF().toDF("leftKey", "time")
+        .select($"leftKey", timestamp_seconds($"time").as("leftTime"))
+        .withWatermark("leftTime", "0 seconds")
+      val right = rightInput.toDF().toDF("rightKey", "time")
+        .select($"rightKey", timestamp_seconds($"time").as("rightTime"))
+        .withWatermark("rightTime", "0 seconds")
+      val joined = left.join(right,
+        expr("leftKey = rightKey AND leftTime > rightTime + INTERVAL 5 SECONDS"),
+        "left_outer")
+        .select($"leftKey", $"rightKey", $"leftTime".cast("long"), $"rightTime".cast("long"))
+
+      withSQLConf(SQLConf.STREAMING_NO_DATA_MICRO_BATCHES_ENABLED.key -> "false") {
+        withTempDir { checkpointDir =>
+          val start = StartStream(checkpointLocation = checkpointDir.getCanonicalPath)
+          // All watermarks below are in seconds. inputW is the minimum of the two sides'
+          // maximum event times before the batch and drives eviction. Late input uses the
+          // previous batch's inputW. The condition gives leftStateW = inputW + 5, but no
+          // rightStateW: old right rows can still match future left rows.
+          val setup = Seq(start,
+            // Batch 1: inputW = 0, leftStateW = 5, rightStateW = None.
+            MultiAddData(leftInput, (9, 20))(rightInput, (9, 10)),
+            CheckNewAnswer(Row(9, 9, 20, 10)),
+            // Batch 2: inputW = 10, leftStateW = 15, rightStateW = None.
+            AddData(rightInput, (2, 20)), CheckNewAnswer()) ++
+            (if (history == "restart") Seq(StopStream, start) else Nil)
+          // Batch 3: inputW = 20, leftStateW = 25, rightStateW = None.
+          // Late input uses inputW = 10 from batch 2, so the 12-second row is accepted.
+          // The old scan started above batch 2's leftStateW = 15, skipping this row.
+          testStream(joined)((setup ++ Seq(
+            MultiAddData(leftInput, (1, 12))(rightInput, (2, 30)),
+            CheckNewAnswer(Row(1, null, 12, null)),
+            // Batch 4: inputW = 20, leftStateW = 25, rightStateW = None. No duplicate output.
+            AddData(rightInput, (2, 50)), CheckNewAnswer(), StopStream)): _*)
+        }
+      }
+    }
+  }
+}
 
 @SlowSQLTest
 class StreamingFullOuterJoinV4Suite

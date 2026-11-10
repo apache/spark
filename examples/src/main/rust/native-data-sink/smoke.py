@@ -14,12 +14,12 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-"""Run with Java 22+ and local spark-submit from a build that includes PR #59424."""
+"""Run with Java 22+ and local spark-submit from a build with native data sources (4.4.0+)."""
 
 import argparse
 import json
-from pathlib import Path
 import tempfile
+from pathlib import Path
 
 from pyspark.errors import AnalysisException
 from pyspark.sql import SparkSession

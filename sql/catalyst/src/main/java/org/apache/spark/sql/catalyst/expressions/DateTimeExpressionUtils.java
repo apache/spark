@@ -31,6 +31,7 @@ import org.apache.spark.sql.catalyst.util.TimestampFormatter;
 import org.apache.spark.sql.errors.QueryExecutionErrors;
 import org.apache.spark.sql.types.Decimal;
 import org.apache.spark.unsafe.types.CalendarInterval;
+import org.apache.spark.unsafe.types.TimestampNanosVal;
 import org.apache.spark.unsafe.types.UTF8String;
 
 /**
@@ -161,6 +162,28 @@ public final class DateTimeExpressionUtils {
         return formatter.parseWithoutTimeZone(input);
       } else {
         return formatter.parse(input) / downScaleFactor;
+      }
+    } catch (DateTimeException | ParseException e) {
+      throw QueryExecutionErrors.ansiDateTimeParseError(e, suggestedFuncOnFail);
+    }
+  }
+
+  /**
+   * Nanosecond counterpart of {@link #parseToTimestampExact}: parses {@code input}
+   * to a TIMESTAMP_NTZ(precision) / TIMESTAMP_LTZ(precision) value, flooring the
+   * fraction to {@code precision}, with the same ANSI error translation.
+   */
+  public static TimestampNanosVal parseToTimestampNanosExact(
+      TimestampFormatter formatter,
+      String input,
+      int precision,
+      boolean forTimestampNTZ,
+      String suggestedFuncOnFail) {
+    try {
+      if (forTimestampNTZ) {
+        return formatter.parseWithoutTimeZoneNanos(input, precision);
+      } else {
+        return formatter.parseNanos(input, precision);
       }
     } catch (DateTimeException | ParseException e) {
       throw QueryExecutionErrors.ansiDateTimeParseError(e, suggestedFuncOnFail);

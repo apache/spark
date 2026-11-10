@@ -69,6 +69,34 @@ class ShowTablesSuite extends command.ShowTablesSuiteBase with CommandSuiteBase 
     }
   }
 
+  gridTest("show table extended preserves reserved metadata with display properties")(
+      Seq((false, false), (true, true))) {
+    case (external, withLocation) =>
+      withNamespaceAndTable("ns", "tbl") { _ =>
+        createTableWithDisplayProperties("ns", "tbl", external, withLocation)
+
+        val information = sql(s"SHOW TABLE EXTENDED IN $catalog.ns LIKE 'tbl'")
+          .head().getString(3)
+        val tableType = if (external) "EXTERNAL" else "MANAGED"
+        val locationRow = if (withLocation) "Location: file:/tmp/display-properties\n" else ""
+        val properties =
+          "[catalog-label=catalog-value, password=*********(redacted), persisted=stored]"
+        assert(information ===
+          s"""Catalog: $catalog
+             |Namespace: ns
+             |Table: tbl
+             |Type: $tableType
+             |Comment: table comment
+             |${locationRow}Provider: _
+             |Owner: ${Utils.getCurrentUserName()}
+             |Table Properties: $properties
+             |Schema: root
+             | |-- id: long (nullable = true)
+             |
+             |""".stripMargin)
+      }
+  }
+
   test("show table extended omits empty table properties") {
     withNamespaceAndTable("ns", "tbl") { t =>
       sql(s"CREATE TABLE $t (id bigint) $defaultUsing")

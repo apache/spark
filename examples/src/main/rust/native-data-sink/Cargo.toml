@@ -18,6 +18,7 @@ name = "spark-native-sink-demo"
 workspace = "../../../../../sql/native/rust"
 version.workspace = true
 edition.workspace = true
+rust-version.workspace = true
 license.workspace = true
 publish.workspace = true
 
@@ -27,7 +28,7 @@ path = "src/lib.rs"
 crate-type = ["cdylib", "rlib"]
 
 [dependencies]
-spark-native-source = { path = "../../../../../sql/native/rust" }
+spark-datasource = { path = "../../../../../sql/native/rust" }
 arrow-array.workspace = true
 arrow-schema.workspace = true
 serde.workspace = true

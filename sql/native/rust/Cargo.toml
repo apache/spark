@@ -14,12 +14,13 @@
 # limitations under the License.
 
 [package]
-name = "spark-native-source"
+name = "spark-datasource"
 version.workspace = true
 edition.workspace = true
+rust-version.workspace = true
 license.workspace = true
 publish.workspace = true
-description = "Experimental Rust batch data source SDK for Apache Spark PR #59424"
+description = "Experimental Rust SDK for native data sources of Apache Spark"
 
 [workspace]
 members = [
@@ -33,14 +34,17 @@ resolver = "2"
 [workspace.package]
 version = "0.1.0"
 edition = "2021"
+# The version of Arrow 58, which also requires Rust 1.85.
+rust-version = "1.85"
 license = "Apache-2.0"
 publish = false
 
 [workspace.dependencies]
 arrow-array = { version = "58", features = ["ffi"] }
-arrow-schema = { version = "58", features = ["ffi", "serde"] }
+arrow-schema = { version = "58", features = ["ffi"] }
 arrow-data = "58"
 log = "0.4"
+rmp-serde = "1"
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
 
@@ -49,6 +53,7 @@ arrow-array.workspace = true
 arrow-schema.workspace = true
 arrow-data.workspace = true
 log.workspace = true
+rmp-serde.workspace = true
 serde.workspace = true
 serde_json.workspace = true
 

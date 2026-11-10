@@ -17,19 +17,21 @@ use std::ffi::{c_int, c_void, CStr, CString};
 use std::mem::size_of;
 use std::ptr;
 use std::sync::atomic::{AtomicBool, Ordering};
-use std::sync::{Arc, Mutex};
+use std::sync::{Arc, Mutex, PoisonError};
 
-use arrow_array::ffi::to_ffi;
-use arrow_array::{Array, Int32Array, Int64Array, RecordBatch, StructArray};
+use arrow_array::ffi::FFI_ArrowArray;
+use arrow_array::{Array, Int64Array, RecordBatch, StructArray};
 use arrow_schema::{DataType, Field, Schema, SchemaRef};
 use serde::{Deserialize, Serialize, Serializer};
-use spark_native_source::__private::abi::{
-    ArrowSchema, SparkDsCreateInfo, SparkDsHost, SparkDsLibrary, SparkDsTaskContext,
-    SparkDsWriteInfo, ABI_VERSION,
+use spark_datasource::__private::abi::{
+    ArrowSchema, SparkDsCreateInfo, SparkDsDataWriterInfo, SparkDsFinishDataWriterInfo,
+    SparkDsFinishWriteInfo, SparkDsHost, SparkDsLibrary, SparkDsTaskContext, SparkDsWriteInfo,
+    ABI_VERSION,
 };
-use spark_native_source::{
-    BatchWrite, Capabilities, CreateInfo, DataSource, DataWriter, DataWriterFactory,
-    PartitionWriter, Result, TaskContext, Unsupported, WriteInfo, WriteMode, WriterContext,
+use spark_datasource::{
+    AbortInfo, BatchWrite, Capabilities, CommitInfo, CreateInfo, DataSource, DataWriter,
+    DataWriterFactory, PartitionWriter, Result, TaskContext, Unsupported, WriteInfo, WriteMode,
+    WriterContext,
 };
 
 // Each test exercises the actual exported table; this lock isolates fixture observations.
@@ -46,6 +48,7 @@ enum Event {
     TaskDropped(bool),
     DriverCommit(Vec<Message>),
     DriverAbort(Vec<Option<Message>>),
+    DriverDropped,
 }
 
 fn record(event: Event) {
@@ -92,7 +95,7 @@ impl DataSource for Source {
     fn capabilities(&self) -> Capabilities {
         match self.capabilities.as_str() {
             "none" => Capabilities::empty(),
-            "append" => Capabilities::all().without(Capabilities::TRUNCATE),
+            "append" => Capabilities::all().without(Capabilities::BATCH_TRUNCATE),
             _ => Capabilities::all(),
         }
     }
@@ -118,7 +121,7 @@ impl BatchWrite for Driver {
 
     const SUPPORTS_TRUNCATE: bool = true;
 
-    fn writer_factory(&self) -> Result<Factory> {
+    fn new_writer_factory(&self) -> Result<Factory> {
         record(Event::FactoryCreated);
         if self.failure == "writer_factory_error" {
             return Err("creating the writer factory failed".into());
@@ -128,8 +131,8 @@ impl BatchWrite for Driver {
         })
     }
 
-    fn commit(&mut self, messages: Vec<Message>) -> Result<()> {
-        record(Event::DriverCommit(messages));
+    fn commit(&mut self, info: CommitInfo<Message>) -> Result<()> {
+        record(Event::DriverCommit(info.messages));
         match self.failure.as_str() {
             "driver_commit_error" => Err("driver commit failed".into()),
             "driver_commit_panic" => panic!("driver commit panicked"),
@@ -137,9 +140,15 @@ impl BatchWrite for Driver {
         }
     }
 
-    fn abort(&mut self, messages: Vec<Option<Message>>) -> Result<()> {
-        record(Event::DriverAbort(messages));
+    fn abort(&mut self, info: AbortInfo<Message>) -> Result<()> {
+        record(Event::DriverAbort(info.messages));
         Ok(())
+    }
+}
+
+impl Drop for Driver {
+    fn drop(&mut self) {
+        record(Event::DriverDropped);
     }
 }
 
@@ -263,7 +272,7 @@ impl Drop for Writer<'_> {
     }
 }
 
-spark_native_source::export_data_source!(Source);
+spark_datasource::export_data_source!(Source);
 
 extern "C" {
     fn spark_ds_init(host: *const SparkDsHost, library: *mut *const SparkDsLibrary) -> c_int;
@@ -276,6 +285,7 @@ fn library() -> &'static SparkDsLibrary {
         abi_version: ABI_VERSION,
         spark_version: c"test".as_ptr(),
         log: None,
+        is_log_enabled: None,
     }));
     let mut table = ptr::null();
     assert_eq!(unsafe { spark_ds_init(host, &mut table) }, 0);
@@ -332,11 +342,12 @@ fn source(library: &'static SparkDsLibrary, failure: &str, capabilities: &str) -
     )
 }
 
+/// Creates a writer, with the state that create_writer returns for its data writers.
 fn create_driver(
     source: &Handle,
     mode: i32,
     query: *const std::ffi::c_char,
-) -> (c_int, *mut c_void) {
+) -> (c_int, *mut c_void, Vec<Vec<u8>>) {
     let mut input = ArrowSchema::try_from(schema().as_ref()).unwrap();
     let info = SparkDsWriteInfo {
         size: size_of::<SparkDsWriteInfo>() as i64,
@@ -344,45 +355,36 @@ fn create_driver(
         query_id: query,
     };
     let mut pointer = ptr::null_mut();
+    let mut states = Vec::<Vec<u8>>::new();
     let status = unsafe {
-        source.library.create_writer.unwrap()(source.pointer, &mut input, &info, &mut pointer)
+        source.library.create_writer.unwrap()(
+            source.pointer,
+            &mut input,
+            &info,
+            Some(collect),
+            (&mut states as *mut Vec<Vec<u8>>).cast(),
+            &mut pointer,
+        )
     };
-    (status, pointer)
+    (status, pointer, states)
 }
 
-fn driver(source: &Handle, mode: i32) -> Handle {
-    let (status, pointer) = create_driver(source, mode, ptr::null());
+fn driver(source: &Handle, mode: i32) -> (Handle, Vec<u8>) {
+    let (status, pointer, mut states) = create_driver(source, mode, ptr::null());
     success(source.library, status);
     assert!(!pointer.is_null());
-    Handle {
+    assert_eq!(states.len(), 1, "a writer returns a single state");
+    let driver = Handle {
         library: source.library,
         pointer,
         close: source.library.close_writer.unwrap(),
-    }
+    };
+    (driver, states.pop().unwrap())
 }
 
 unsafe extern "C" fn collect(sink: *mut c_void, bytes: *const u8, length: i64) {
     let output = unsafe { &mut *sink.cast::<Vec<Vec<u8>>>() };
     output.push(unsafe { std::slice::from_raw_parts(bytes, length as usize) }.to_vec());
-}
-
-fn serialize(driver: &Handle) -> (c_int, Vec<Vec<u8>>) {
-    let mut output = Vec::<Vec<u8>>::new();
-    let status = unsafe {
-        driver.library.serialize_writer.unwrap()(
-            driver.pointer,
-            Some(collect),
-            (&mut output as *mut Vec<Vec<u8>>).cast(),
-        )
-    };
-    (status, output)
-}
-
-fn state(driver: &Handle) -> Vec<u8> {
-    let (status, mut output) = serialize(driver);
-    success(driver.library, status);
-    assert_eq!(output.len(), 1);
-    output.pop().unwrap()
 }
 
 #[repr(C)]
@@ -410,8 +412,8 @@ impl Drop for Task {
     }
 }
 
-fn task(library: &'static SparkDsLibrary, state: &[u8], partition: i32) -> Task {
-    let host = Box::new(HostTask {
+fn host_task(partition: i32) -> Box<HostTask> {
+    Box::new(HostTask {
         context: SparkDsTaskContext {
             size: size_of::<SparkDsTaskContext>() as i64,
             stage_id: 3,
@@ -422,17 +424,31 @@ fn task(library: &'static SparkDsLibrary, state: &[u8], partition: i32) -> Task 
             is_interrupted: Some(interrupted),
         },
         cancelled: AtomicBool::new(false),
-    });
-    let mut pointer = ptr::null_mut();
-    let status = unsafe {
-        library.create_data_writer.unwrap()(
-            &host.context,
-            state.as_ptr(),
-            state.len() as i64,
-            -1,
-            &mut pointer,
-        )
+    })
+}
+
+fn create_data_writer(
+    library: &SparkDsLibrary,
+    host: &HostTask,
+    state: &[u8],
+    epoch_id: i64,
+) -> (c_int, *mut c_void) {
+    let mut input = ArrowSchema::try_from(schema().as_ref()).unwrap();
+    let info = SparkDsDataWriterInfo {
+        size: size_of::<SparkDsDataWriterInfo>() as i64,
+        schema: &mut input,
+        writer_state: state.as_ptr(),
+        writer_state_length: state.len() as i64,
+        epoch_id,
     };
+    let mut pointer = ptr::null_mut();
+    let status = unsafe { library.create_data_writer.unwrap()(&host.context, &info, &mut pointer) };
+    (status, pointer)
+}
+
+fn task(library: &'static SparkDsLibrary, state: &[u8], partition: i32) -> Task {
+    let host = host_task(partition);
+    let (status, pointer) = create_data_writer(library, &host, state, -1);
     success(library, status);
     assert!(!pointer.is_null());
     Task {
@@ -447,24 +463,27 @@ fn batch(values: Vec<i64>) -> RecordBatch {
 }
 
 fn write(task: &Task, batch: RecordBatch) -> c_int {
-    let data = StructArray::from(batch).to_data();
-    let (mut array, mut schema) = to_ffi(&data).unwrap();
-    let status = unsafe { task.library.write.unwrap()(task.pointer, &mut array, &mut schema) };
+    let mut array = FFI_ArrowArray::new(&StructArray::from(batch).to_data());
+    let status = unsafe { task.library.write.unwrap()(task.pointer, &mut array) };
     if status == 0 {
         assert!(
             array.is_released(),
             "retained input must be moved from the caller"
         );
-        assert!(schema.release.is_none());
     }
     status
 }
+
+const FINISH_DATA_WRITER: SparkDsFinishDataWriterInfo = SparkDsFinishDataWriterInfo {
+    size: size_of::<SparkDsFinishDataWriterInfo>() as i64,
+};
 
 fn task_commit(task: &Task) -> (c_int, Vec<Vec<u8>>) {
     let mut output = Vec::<Vec<u8>>::new();
     let status = unsafe {
         task.library.commit_data_writer.unwrap()(
             task.pointer,
+            &FINISH_DATA_WRITER,
             Some(collect),
             (&mut output as *mut Vec<Vec<u8>>).cast(),
         )
@@ -479,6 +498,10 @@ fn task_message(task: &Task) -> Vec<u8> {
     messages.pop().unwrap()
 }
 
+fn task_abort(task: &Task) -> c_int {
+    unsafe { task.library.abort_data_writer.unwrap()(task.pointer, &FINISH_DATA_WRITER) }
+}
+
 fn driver_finish(driver: &Handle, abort: bool, messages: &[Option<&[u8]>]) -> c_int {
     let pointers: Vec<_> = messages
         .iter()
@@ -488,25 +511,25 @@ fn driver_finish(driver: &Handle, abort: bool, messages: &[Option<&[u8]>]) -> c_
         .iter()
         .map(|message| message.map_or(0, |bytes| bytes.len() as i64))
         .collect();
+    let info = SparkDsFinishWriteInfo {
+        size: size_of::<SparkDsFinishWriteInfo>() as i64,
+        epoch_id: -1,
+        messages: pointers.as_ptr(),
+        message_lengths: lengths.as_ptr(),
+        num_messages: messages.len() as i64,
+        rejected: 0,
+    };
     let callback = if abort {
         driver.library.abort.unwrap()
     } else {
         driver.library.commit.unwrap()
     };
-    unsafe {
-        callback(
-            driver.pointer,
-            -1,
-            pointers.as_ptr(),
-            lengths.as_ptr(),
-            messages.len() as i64,
-        )
-    }
+    unsafe { callback(driver.pointer, &info) }
 }
 
 #[test]
 fn write_types_and_options_control_capabilities() {
-    let _guard = TEST_LOCK.lock().unwrap();
+    let _guard = TEST_LOCK.lock().unwrap_or_else(PoisonError::into_inner);
     EVENTS.lock().unwrap().clear();
     let library = library();
     assert!(
@@ -514,8 +537,10 @@ fn write_types_and_options_control_capabilities() {
         "INFERS_SCHEMA = false leaves schema inference to Spark's error"
     );
     assert!(library.create_reader.is_none());
+    assert!(library.push_domains.is_none());
     assert!(library.read.is_none());
     assert!(library.create_stream_reader.is_none());
+    assert!(library.default_read_limit.is_none());
     assert!(library.create_writer.is_some());
     assert!(library.write.is_some());
 
@@ -523,14 +548,14 @@ fn write_types_and_options_control_capabilities() {
         let (source, mask) = source(library, "", capabilities);
         assert_eq!(mask, expected);
         for mode in [0, 1] {
-            let (status, pointer) = create_driver(&source, mode, ptr::null());
+            let (status, pointer, states) = create_driver(&source, mode, ptr::null());
             let supported = expected & 4 != 0 && (mode == 0 || expected & 16 != 0);
             if supported {
                 success(library, status);
                 unsafe { library.close_writer.unwrap()(pointer) };
             } else {
                 assert_ne!(status, 0);
-                assert!(pointer.is_null());
+                assert!(pointer.is_null() && states.is_empty());
                 assert!(error(library).contains("support"));
             }
         }
@@ -539,14 +564,20 @@ fn write_types_and_options_control_capabilities() {
         events(),
         vec![
             Event::WriteCreated(false),
+            Event::FactoryCreated,
+            Event::DriverDropped,
             Event::WriteCreated(true),
-            Event::WriteCreated(false)
+            Event::FactoryCreated,
+            Event::DriverDropped,
+            Event::WriteCreated(false),
+            Event::FactoryCreated,
+            Event::DriverDropped,
         ]
     );
 
     let (source, _) = source(library, "", "");
     for (mode, query) in [(99, ptr::null()), (0, c"streaming-query".as_ptr())] {
-        let (status, pointer) = create_driver(&source, mode, query);
+        let (status, pointer, _) = create_driver(&source, mode, query);
         assert_ne!(status, 0);
         assert!(pointer.is_null());
     }
@@ -554,14 +585,12 @@ fn write_types_and_options_control_capabilities() {
 
 #[test]
 fn serialized_factory_and_messages_roundtrip_without_driver_source_or_input_buffers() {
-    let _guard = TEST_LOCK.lock().unwrap();
+    let _guard = TEST_LOCK.lock().unwrap_or_else(PoisonError::into_inner);
     EVENTS.lock().unwrap().clear();
     let library = library();
     let (source, _) = source(library, "", "");
-    let driver = driver(&source, 1);
+    let (driver, state) = driver(&source, 1);
     drop(source);
-    let state = state(&driver);
-    assert_eq!(state, self::state(&driver));
 
     let first = task(library, &state, 7);
     let input = batch(vec![2, 5, 9]);
@@ -573,7 +602,6 @@ fn serialized_factory_and_messages_roundtrip_without_driver_source_or_input_buff
     );
     success(library, write(&first, batch(vec![])));
     let first_message = task_message(&first);
-    assert_eq!(first_message, task_message(&first));
     drop(first);
     assert_eq!(
         buffer.strong_count(),
@@ -589,7 +617,7 @@ fn serialized_factory_and_messages_roundtrip_without_driver_source_or_input_buff
         Some(second_message.as_slice()),
     ];
     success(library, driver_finish(&driver, false, &messages));
-    success(library, driver_finish(&driver, false, &messages));
+    // The coordinator is dropped as soon as its commit succeeds, before Spark closes the writer.
     assert_eq!(
         events(),
         vec![
@@ -617,44 +645,30 @@ fn serialized_factory_and_messages_roundtrip_without_driver_source_or_input_buff
                     failure: String::new(),
                 },
             ]),
+            Event::DriverDropped,
         ]
     );
+    drop(driver);
 }
 
 #[test]
-fn input_schema_and_live_task_cancellation_are_checked() {
-    let _guard = TEST_LOCK.lock().unwrap();
+fn task_writers_see_live_task_cancellation() {
+    let _guard = TEST_LOCK.lock().unwrap_or_else(PoisonError::into_inner);
     let library = library();
     for cancelled in [false, true] {
         EVENTS.lock().unwrap().clear();
         let (source, _) = source(library, "", "");
-        let driver = driver(&source, 0);
-        let task = task(library, &state(&driver), 0);
+        let (driver, state) = driver(&source, 0);
+        let task = task(library, &state, 0);
+        success(library, write(&task, batch(vec![1])));
         if cancelled {
-            success(library, write(&task, batch(vec![1])));
             task.host.cancelled.store(true, Ordering::SeqCst);
             let (status, messages) = task_commit(&task);
             assert_ne!(status, 0);
             assert!(messages.is_empty());
             assert!(error(library).contains("cancelled"));
-        } else {
-            let wrong_schema = Arc::new(Schema::new(vec![Field::new(
-                "value",
-                DataType::Int32,
-                false,
-            )]));
-            let input =
-                RecordBatch::try_new(wrong_schema, vec![Arc::new(Int32Array::from(vec![1]))])
-                    .unwrap();
-            assert_ne!(write(&task, input), 0);
-            assert!(error(library).contains("schema"));
-            assert!(!events()
-                .iter()
-                .any(|event| matches!(event, Event::Batch(_))));
         }
-        success(library, unsafe {
-            library.abort_data_writer.unwrap()(task.pointer)
-        });
+        success(library, task_abort(&task));
         drop(task);
         assert!(events().contains(&Event::TaskAbort(cancelled)));
         assert!(events().contains(&Event::TaskDropped(cancelled)));
@@ -664,7 +678,7 @@ fn input_schema_and_live_task_cancellation_are_checked() {
 
 #[test]
 fn task_failures_and_message_serialization_failures_remain_abortable() {
-    let _guard = TEST_LOCK.lock().unwrap();
+    let _guard = TEST_LOCK.lock().unwrap_or_else(PoisonError::into_inner);
     let library = library();
     for failure in [
         "write_error",
@@ -675,76 +689,54 @@ fn task_failures_and_message_serialization_failures_remain_abortable() {
     ] {
         EVENTS.lock().unwrap().clear();
         let (source, _) = source(library, failure, "");
-        let driver = driver(&source, 0);
-        let task = task(library, &state(&driver), 0);
+        let (driver, state) = driver(&source, 0);
+        let task = task(library, &state, 0);
         let status = write(&task, batch(vec![4]));
         let write_failed = failure.starts_with("write_");
         assert_eq!(status != 0, write_failed, "{failure}");
-        let (status, messages) = task_commit(&task);
-        assert_ne!(status, 0, "{failure}");
-        assert!(messages.is_empty());
+        // Spark commits only after successful writes, and aborts after any failure.
+        if !write_failed {
+            let (status, messages) = task_commit(&task);
+            assert_ne!(status, 0, "{failure}");
+            assert!(messages.is_empty());
+        }
         let message = error(library);
         assert!(
             message.contains("failed") || message.contains("panicked"),
             "{message}"
         );
-        let before_retry = events();
-        let (status, messages) = task_commit(&task);
-        assert_ne!(status, 0);
-        assert!(messages.is_empty());
-        assert_eq!(
-            events(),
-            before_retry,
-            "failed commit cannot run provider commit twice"
-        );
         // A commit whose message cannot be serialized counts as failed, so abort follows
         // a provider commit that returned a message.
-        success(library, unsafe {
-            library.abort_data_writer.unwrap()(task.pointer)
-        });
-        success(library, unsafe {
-            library.abort_data_writer.unwrap()(task.pointer)
-        });
+        success(library, task_abort(&task));
         drop(task);
-        assert_eq!(
-            events()
-                .iter()
-                .filter(|event| **event == Event::TaskAbort(false))
-                .count(),
-            1,
-        );
-        assert_eq!(
-            events()
-                .iter()
-                .filter(|event| **event == Event::TaskCommit)
-                .count(),
-            usize::from(!write_failed),
-        );
+        let count = |expected: Event| events().iter().filter(|e| **e == expected).count();
+        assert_eq!(count(Event::TaskAbort(false)), 1);
+        assert_eq!(count(Event::TaskCommit), usize::from(!write_failed));
         success(library, driver_finish(&driver, true, &[None]));
     }
 }
 
 #[test]
 fn driver_failures_preserve_messages_and_missing_task_positions_for_abort() {
-    let _guard = TEST_LOCK.lock().unwrap();
+    let _guard = TEST_LOCK.lock().unwrap_or_else(PoisonError::into_inner);
     let library = library();
     for failure in ["driver_commit_error", "driver_commit_panic"] {
         EVENTS.lock().unwrap().clear();
         let (source, _) = source(library, failure, "");
-        let driver = driver(&source, 0);
-        let task = task(library, &state(&driver), 1);
+        let (driver, state) = driver(&source, 0);
+        let task = task(library, &state, 1);
         success(library, write(&task, batch(vec![42])));
         let message = task_message(&task);
         drop(task);
         let committed = [Some(message.as_slice())];
         assert_ne!(driver_finish(&driver, false, &committed), 0);
         assert!(error(library).contains("driver commit"));
-        let before_retry = events();
-        assert_ne!(driver_finish(&driver, false, &committed), 0);
-        assert_eq!(events(), before_retry);
+        // Spark aborts a write whose commit failed, so the coordinator is kept for the abort,
+        // after which it is dropped, before Spark closes the writer.
+        assert!(!events().contains(&Event::DriverDropped));
         let aborted = [None, Some(message.as_slice()), None];
         success(library, driver_finish(&driver, true, &aborted));
-        success(library, driver_finish(&driver, true, &aborted));
+        assert_eq!(events().last(), Some(&Event::DriverDropped));
         let expected = Message {
             partition: 1,
             attempt: 101,
@@ -753,20 +745,13 @@ fn driver_failures_preserve_messages_and_missing_task_positions_for_abort() {
             failure: failure.to_owned(),
         };
         assert!(events().contains(&Event::DriverCommit(vec![expected.clone()])));
-        assert_eq!(
-            events()
-                .iter()
-                .filter(|event| matches!(event, Event::DriverAbort(_)))
-                .count(),
-            1,
-        );
         assert!(events().contains(&Event::DriverAbort(vec![None, Some(expected), None])));
     }
 }
 
 #[test]
-fn writer_factory_failures_are_cached_and_driver_can_abort() {
-    let _guard = TEST_LOCK.lock().unwrap();
+fn writer_factory_failures_fail_the_creation_of_the_writer() {
+    let _guard = TEST_LOCK.lock().unwrap_or_else(PoisonError::into_inner);
     let library = library();
     for (failure, expected) in [
         ("writer_factory_error", "creating the writer factory failed"),
@@ -774,80 +759,58 @@ fn writer_factory_failures_are_cached_and_driver_can_abort() {
     ] {
         EVENTS.lock().unwrap().clear();
         let (source, _) = source(library, failure, "");
-        let driver = driver(&source, 0);
-        for _ in 0..2 {
-            let (status, output) = serialize(&driver);
-            assert_ne!(status, 0);
-            assert!(output.is_empty());
-            assert!(error(library).contains(expected));
-        }
-        // Commit never follows a failed call.
-        assert_ne!(driver_finish(&driver, false, &[]), 0);
-        success(library, driver_finish(&driver, true, &[]));
+        let (status, pointer, states) = create_driver(&source, 0, ptr::null());
+        assert_ne!(status, 0);
+        assert!(pointer.is_null() && states.is_empty());
+        assert!(error(library).contains(expected));
+        // The coordinator is dropped without abort, as the write never started.
         assert_eq!(
             events(),
             vec![
                 Event::WriteCreated(false),
                 Event::FactoryCreated,
-                Event::DriverAbort(vec![])
+                Event::DriverDropped
             ],
         );
     }
 }
 
 #[test]
-fn batch_writes_reject_the_epochs_of_micro_batches() {
-    let _guard = TEST_LOCK.lock().unwrap();
+fn the_epoch_of_a_data_writer_selects_its_write() {
+    let _guard = TEST_LOCK.lock().unwrap_or_else(PoisonError::into_inner);
     EVENTS.lock().unwrap().clear();
     let library = library();
     let (source, _) = source(library, "", "");
-    let driver = driver(&source, 0);
-    let state = state(&driver);
-    let context = SparkDsTaskContext {
-        size: size_of::<SparkDsTaskContext>() as i64,
-        stage_id: 3,
-        stage_attempt_number: 0,
-        partition_id: 0,
-        attempt_number: 0,
-        task_attempt_id: 100,
-        is_interrupted: None,
-    };
-    let mut pointer = ptr::null_mut();
-    let status = unsafe {
-        library.create_data_writer.unwrap()(
-            &context,
-            state.as_ptr(),
-            state.len() as i64,
-            0,
-            &mut pointer,
-        )
-    };
-    assert_ne!(status, 0);
-    assert!(error(library).contains("epoch ID -1"));
-    assert!(pointer.is_null());
-    let status = unsafe { library.commit.unwrap()(driver.pointer, 3, ptr::null(), ptr::null(), 0) };
-    assert_ne!(status, 0);
-    assert!(error(library).contains("epoch ID -1"));
-    // The rejected call did not change the write, which can still abort.
+    let (driver, state) = driver(&source, 0);
+    let host = host_task(0);
+    // A micro-batch, which this source does not write, and an invalid epoch.
+    for epoch_id in [0, -2] {
+        let (status, pointer) = create_data_writer(library, &host, &state, epoch_id);
+        assert_ne!(status, 0);
+        assert!(pointer.is_null());
+    }
+    assert!(error(library).contains("invalid epoch ID -2"));
     success(library, driver_finish(&driver, true, &[]));
     assert_eq!(
         events(),
         vec![
             Event::WriteCreated(false),
             Event::FactoryCreated,
-            Event::DriverAbort(vec![])
+            Event::DriverAbort(vec![]),
+            // Dropped right after the abort, before Spark closes the writer.
+            Event::DriverDropped,
         ],
     );
 }
 
 #[test]
 fn undecodable_messages_fail_commit_but_abort_still_cleans_up() {
-    let _guard = TEST_LOCK.lock().unwrap();
+    let _guard = TEST_LOCK.lock().unwrap_or_else(PoisonError::into_inner);
     EVENTS.lock().unwrap().clear();
     let library = library();
     let (source, _) = source(library, "", "");
-    let driver = driver(&source, 0);
-    let task = task(library, &state(&driver), 2);
+    let (driver, state) = driver(&source, 0);
+    let task = task(library, &state, 2);
     success(library, write(&task, batch(vec![6])));
     let message = task_message(&task);
     drop(task);

@@ -17,7 +17,7 @@
 
 """Verification helpers for a UDF's result before it is written back to the JVM.
 
-Used by the eval type handlers and by the worker's ``read_udfs``.
+Used by the eval type handlers.
 """
 
 from collections.abc import Iterator

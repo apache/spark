@@ -650,7 +650,7 @@ object FunctionRegistry {
     expressionBuilder("now", NowExpressionBuilder),
     expression[Quarter]("quarter"),
     expressionBuilder("second", SecondExpressionBuilder),
-    expression[ParseToTimestamp]("to_timestamp"),
+    expressionBuilder("to_timestamp", ParseToTimestampExpressionBuilder),
     expression[ParseToDate]("to_date"),
     expression[TimeDiff]("time_diff"),
     expression[ToTime]("to_time"),
@@ -944,12 +944,14 @@ object FunctionRegistry {
   // Built-in forms of the SQL:2016 JSON constructor and path functions. `AstBuilder` routes the
   // eligible flat clause-free calls here so a same-named routine can shadow them. Clause-bearing
   // forms, and the nested/implicit-JSON clause-free forms (routing deferred to SPARK-59243), are
-  // still built directly by the grammar.
+  // still built directly by the grammar -- except the `json_object` comma form, whose nested
+  // producer value also routes here (carrying a `JsonImplicitFormatCarrier`).
   private val routedSqlJsonFunctionEntries: Seq[FunctionRegistryEntry] = Seq(
     expressionBuilder("json_value", JsonValueExpressionBuilder),
     expressionBuilder("json_query", JsonQueryExpressionBuilder),
     expressionBuilder("json_exists", JsonExistsExpressionBuilder),
-    expressionBuilder("json_array", JsonArrayExpressionBuilder)
+    expressionBuilder("json_array", JsonArrayExpressionBuilder),
+    expressionBuilder("json_object", JsonObjectExpressionBuilder)
   )
 
   private def jsonExpressions: Seq[FunctionRegistryEntry] = Seq(

@@ -16,16 +16,16 @@
 use std::ffi::{c_char, c_int, c_void, CStr, CString};
 use std::mem::size_of;
 use std::ptr;
-use std::sync::atomic::{AtomicUsize, Ordering};
+use std::sync::atomic::{AtomicI32, AtomicUsize, Ordering};
 use std::sync::{Arc, Mutex};
 
 use arrow_schema::{Schema, SchemaRef};
 use serde::{Deserialize, Serialize};
-use spark_native_source::__private::abi::{
-    ArrowSchema, SparkDsCreateInfo, SparkDsHost, SparkDsLibrary, ABI_VERSION,
+use spark_datasource::__private::abi::{
+    ArrowSchema, SparkDsCreateInfo, SparkDsHost, SparkDsLibrary, SparkDsReaderInfo, ABI_VERSION,
 };
-use spark_native_source::log::{self, LevelFilter};
-use spark_native_source::{
+use spark_datasource::log;
+use spark_datasource::{
     Capabilities, CreateInfo, DataSource, HostInfo, PartitionReader, PartitionReaderFactory,
     ReaderContext, Result, ScanBuilder, ScanInfo, ScanPlan, Unsupported,
 };
@@ -36,6 +36,8 @@ static SCANS: AtomicUsize = AtomicUsize::new(0);
 static DROPS: AtomicUsize = AtomicUsize::new(0);
 static INITIALIZED: Mutex<Vec<Option<String>>> = Mutex::new(Vec::new());
 static LOGS: Mutex<Vec<(i32, String)>> = Mutex::new(Vec::new());
+// The most verbose level that the log of the host writes, as a SPARK_DS_LOG_* value.
+static LEVEL: AtomicI32 = AtomicI32::new(3);
 
 struct Source {
     mode: String,
@@ -78,7 +80,7 @@ impl DataSource for Source {
         }
     }
 
-    fn schema(&self) -> Result<SchemaRef> {
+    fn infer_schema(&self) -> Result<SchemaRef> {
         SCHEMAS.fetch_add(1, Ordering::SeqCst);
         Ok(Arc::new(Schema::empty()))
     }
@@ -116,7 +118,7 @@ impl PartitionReaderFactory for Factory {
     }
 }
 
-spark_native_source::export_data_source!(Source);
+spark_datasource::export_data_source!(Source);
 
 extern "C" {
     fn spark_ds_init(host: *const SparkDsHost, library: *mut *const SparkDsLibrary) -> c_int;
@@ -130,6 +132,10 @@ unsafe extern "C" fn record_log(level: i32, message: *const c_char) {
     LOGS.lock().unwrap().push((level, message));
 }
 
+unsafe extern "C" fn is_log_enabled(level: i32) -> bool {
+    level <= LEVEL.load(Ordering::SeqCst)
+}
+
 /// A host that, like Spark's, stays valid until the process exits.
 fn host(spark_version: &'static CStr) -> &'static SparkDsHost {
     Box::leak(Box::new(SparkDsHost {
@@ -137,6 +143,7 @@ fn host(spark_version: &'static CStr) -> &'static SparkDsHost {
         abi_version: ABI_VERSION,
         spark_version: spark_version.as_ptr(),
         log: Some(record_log),
+        is_log_enabled: Some(is_log_enabled),
     }))
 }
 
@@ -206,10 +213,17 @@ fn initialization_logging_and_capabilities_follow_the_source_lifecycle() {
         ],
     );
     log::warn!("a message with a \0 byte");
-    // The default level drops debug messages, until the library raises it.
+    // The SDK follows the level of the log of Spark, which drops debug messages.
     log::debug!("a dropped debug message");
-    log::set_max_level(LevelFilter::Debug);
+    // The level of Spark changes while it runs: the SDK asks again when an operation starts.
+    LEVEL.store(4, Ordering::SeqCst);
+    log::debug!("a debug message before an operation starts");
+    let (status, _, pointer) = create(library, "capability_test", "all");
+    assert_eq!(status, 0);
     log::debug!("a debug message");
+    log::trace!("a dropped trace message");
+    drop(SourceHandle { library, pointer });
+    LEVEL.store(3, Ordering::SeqCst);
     assert_eq!(
         LOGS.lock().unwrap()[1..],
         [
@@ -225,10 +239,10 @@ fn initialization_logging_and_capabilities_follow_the_source_lifecycle() {
     assert_eq!(mask, 1);
     assert!(!pointer.is_null());
     drop(SourceHandle { library, pointer });
-    assert_eq!(DECLARATIONS.load(Ordering::SeqCst), 1);
+    assert_eq!(DECLARATIONS.load(Ordering::SeqCst), 2);
     assert_eq!(SCHEMAS.load(Ordering::SeqCst), 0);
     assert_eq!(SCANS.load(Ordering::SeqCst), 0);
-    assert_eq!(DROPS.load(Ordering::SeqCst), 1);
+    assert_eq!(DROPS.load(Ordering::SeqCst), 2);
 
     // Keep all instances alive together: the last declaration must not affect earlier sources.
     let sources: Vec<_> = [("empty", 0), ("read", 1), ("all", 1), ("without_read", 0)]
@@ -241,8 +255,11 @@ fn initialization_logging_and_capabilities_follow_the_source_lifecycle() {
             (expected, SourceHandle { library, pointer })
         })
         .collect();
-    assert_eq!(DECLARATIONS.load(Ordering::SeqCst), 5);
+    assert_eq!(DECLARATIONS.load(Ordering::SeqCst), 6);
 
+    let info = SparkDsReaderInfo {
+        size: size_of::<SparkDsReaderInfo>() as i64,
+    };
     for (mask, source) in sources {
         let mut schema = ArrowSchema::empty();
         assert_eq!(
@@ -251,8 +268,9 @@ fn initialization_logging_and_capabilities_follow_the_source_lifecycle() {
         );
         let scans_before = SCANS.load(Ordering::SeqCst);
         let mut reader = ptr::null_mut();
-        let status =
-            unsafe { library.create_reader.unwrap()(source.pointer, &mut schema, &mut reader) };
+        let status = unsafe {
+            library.create_reader.unwrap()(source.pointer, &mut schema, &info, &mut reader)
+        };
         if mask == 0 {
             assert_ne!(status, 0);
             assert_eq!(error(library), "source does not support batch reads");
@@ -264,11 +282,11 @@ fn initialization_logging_and_capabilities_follow_the_source_lifecycle() {
             assert_eq!(SCANS.load(Ordering::SeqCst), scans_before + 1);
             unsafe { library.close_reader.unwrap()(reader) };
         }
-        assert_eq!(DECLARATIONS.load(Ordering::SeqCst), 5);
+        assert_eq!(DECLARATIONS.load(Ordering::SeqCst), 6);
     }
     assert_eq!(SCHEMAS.load(Ordering::SeqCst), 4);
     assert_eq!(SCANS.load(Ordering::SeqCst), 2);
-    assert_eq!(DROPS.load(Ordering::SeqCst), 5);
+    assert_eq!(DROPS.load(Ordering::SeqCst), 6);
 
     // The source receives the name that Spark passes, so it can reject other names.
     let (status, mask, source) = create(library, "other_source", "all");
