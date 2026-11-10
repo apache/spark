@@ -142,10 +142,10 @@ class PythonWorkerEnvMixin:
         # PYTHONPATH is neither reserved nor overridden: PythonWorkerFactory folds the session's
         # value into the path it computes, so the entry reaches the worker rather than being
         # dropped. That is the whole guarantee. The relative order is deliberately not asserted:
-        # `sparkPythonPath` is empty when SPARK_HOME is unset and Spark's classes did not come from
-        # a jar, and `mergePythonPaths` drops empty entries, so the session's path can legitimately
-        # come first. Leaving the name settable rests on the session already choosing the code its
-        # own worker runs, not on Spark's entries winning.
+        # `sparkPythonPath` is empty when SPARK_HOME is unset, and `mergePythonPaths` drops empty
+        # entries, so the session's path can legitimately come first. Leaving the name settable
+        # rests on the session already choosing the code its own worker runs, not on Spark's
+        # entries winning.
         marker = "/tmp/spark-58752-extra-modules"
         self._set_env("PYTHONPATH", marker)
         try:

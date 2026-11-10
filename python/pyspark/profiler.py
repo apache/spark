@@ -161,6 +161,29 @@ class Profiler:
         raise NotImplementedError
 
 
+class SamplingResultParam(AccumulatorParam[Dict[str, Any]]):
+    """SamplingResultParam is used to merge sampling results"""
+
+    @staticmethod
+    def zero(value: Dict[str, Any]) -> Dict[str, Any]:
+        return {}
+
+    @staticmethod
+    def addInPlace(value1: Dict[str, Any], value2: Dict[str, Any]) -> Dict[str, Any]:
+        # Combine recursively
+        for key, value in value2.items():
+            if key not in value1:
+                value1[key] = value
+            else:
+                if isinstance(value, int):
+                    value1[key] += value
+                elif isinstance(value, dict):
+                    value1[key] = SamplingResultParam.addInPlace(value1[key], value)
+                else:
+                    raise ValueError(f"Unsupported value type: {type(value)}")
+        return value1
+
+
 class PStatsParam(AccumulatorParam[Optional[pstats.Stats]]):
     """PStatsParam is used to merge pstats.Stats"""
 
