@@ -845,16 +845,19 @@ class UDFProfiler2Tests(UDFProfiler2TestsMixin, ReusedSQLTestCase):
             return add_in_place(value1, value2)
 
         def clear():
-            merging.wait()
-            self.spark.profile.clear()
-            cleared.set()
+            # Skip the clear if the merge never pauses, so it can't affect later tests.
+            if merging.wait(timeout=10):
+                self.spark.profile.clear()
+                cleared.set()
 
         accumulator += {"id": {"sampling": {"count": 1}}}
         with mock.patch.object(SamplingResultParam, "addInPlace", paused_add_in_place):
-            thread = threading.Thread(target=clear)
+            thread = threading.Thread(target=clear, daemon=True)
             thread.start()
             accumulator += {"id": {"sampling": {"count": 1}}}
-            thread.join()
+            thread.join(timeout=10)
+        self.assertTrue(merging.is_set(), "The merge did not reach the pause")
+        self.assertFalse(thread.is_alive())
         self.assertEqual({}, self.spark._profiler_collector._profile_results)
 
 
