@@ -37,11 +37,14 @@ import org.apache.spark.sql.connector.metric.CustomTaskMetric;
  *   makes no call once it has seen the close, but the one call that has already passed its check
  *   for the close may still run during or after {@code close()}: a request may reach a closed
  *   reader, and Spark may close that thread's cursor before the reader, after it, or not at all.
- *   So closing a reader must release every cursor of it that is still open and tolerate one that
- *   Spark has closed or closes later; a cursor's {@code close()} must work after its reader is
- *   closed; a request on a closed reader must fail; and a call in progress must tolerate the
- *   close, for example by being cancelled or by failing. Spark closes each reader and cursor at
- *   most once.</li>
+ *   Spark may also still read the row that the cursor's {@code get()} returned last while or after
+ *   the cursor and the reader close, as it copies that row after its last check for the close. So
+ *   closing a reader must release every cursor of it that is still open and tolerate one that Spark
+ *   has closed or closes later; a cursor's {@code close()} must work after its reader is closed; a
+ *   request on a closed reader must fail; a call in progress must tolerate the close, for example
+ *   by being cancelled or by failing; and a connector that frees the memory of its rows in
+ *   {@code close()} must keep the row that {@code get()} returned last readable. Spark closes each
+ *   reader and cursor at most once.</li>
  *   <li>Requests are not snapshot boundaries: results may mix source versions.</li>
  *   <li>Retried or speculative tasks may send the same request again, so a source must
  *   tolerate repeated requests. Within one request, matches are returned as
