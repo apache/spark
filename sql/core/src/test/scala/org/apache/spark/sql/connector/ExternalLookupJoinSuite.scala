@@ -40,7 +40,7 @@ import org.apache.spark.sql.catalyst.analysis.{CheckExternalLookupJoin,
   ExternalLookupJoinEligibility, FormExternalLookupJoin, NoSuchTableException}
 import org.apache.spark.sql.catalyst.expressions.{Add, Alias, Attribute, AttributeMap,
   AttributeReference, Cast, EqualTo, Expression, GenericInternalRow, LessThan, Literal,
-  NamedExpression, Rand, UnsafeProjection, Upper}
+  NamedExpression, Rand, SubqueryExpression, UnsafeProjection, Upper}
 import org.apache.spark.sql.catalyst.optimizer.{EliminateOuterJoin, PushDownPredicates}
 import org.apache.spark.sql.catalyst.plans.{Inner, LeftOuter, QueryPlan}
 import org.apache.spark.sql.catalyst.plans.logical.{Deduplicate, ExternalLookupCacheOptions,
@@ -692,14 +692,11 @@ class ExternalLookupJoinSuite extends QueryTest with SharedSparkSession {
         "relation" -> "`DualCapabilityExternalLookupTable`",
         "supportedJoinTypes" -> SUPPORTED_JOIN_TYPES))
 
-    // A cross join fails with its join type while it is analyzed, before its missing condition.
+    // A cross join is an inner join, which fails without a key when the query starts.
     checkError(
-      exception = intercept[AnalysisException](left.crossJoin(lookup.hint("external_lookup"))),
-      condition = "EXTERNAL_LOOKUP_JOIN_UNSUPPORTED.JOIN_TYPE",
-      parameters = Map(
-        "joinType" -> "CROSS",
-        "relation" -> "`DualCapabilityExternalLookupTable`",
-        "supportedJoinTypes" -> SUPPORTED_JOIN_TYPES))
+      exception = streamFailure[AnalysisException](left.crossJoin(lookup.hint("external_lookup"))),
+      condition = "EXTERNAL_LOOKUP_JOIN_UNSUPPORTED.MISSING_JOIN_CONDITION",
+      parameters = Map.empty)
 
     // A strategy hint on the same join conflicts before the join type is checked.
     checkError(
@@ -728,10 +725,10 @@ class ExternalLookupJoinSuite extends QueryTest with SharedSparkSession {
       .hint("external_lookup")
     val left = streamOf(Seq(1).toDF("id"))
 
-    // A cross join fails with its join type too, although it has no condition.
     Seq[(() => DataFrame, String)](
       (() => left.join(dual, left("id") === dual("id"), "right_outer"), "RIGHT OUTER"),
-      (() => left.crossJoin(dual), "CROSS")).foreach { case (joined, joinType) =>
+      (() => left.join(dual, left("id") === dual("id"), "full_outer"), "FULL OUTER")).foreach {
+      case (joined, joinType) =>
       val error = intercept[AnalysisException](joined())
       assert(error.getCondition === "EXTERNAL_LOOKUP_JOIN_UNSUPPORTED.JOIN_TYPE")
       assert(error.getMessageParameters.get("joinType") === joinType)
@@ -1445,18 +1442,17 @@ class ExternalLookupJoinSuite extends QueryTest with SharedSparkSession {
         "tableName" -> "`SimpleExternalLookupTable`",
         "operation" -> "batch scan"))
     // A join that reads it but cannot be a lookup join fails with the reason.
-    // An unsupported join type fails when the DataFrame is built, with or without a condition.
-    Seq[(() => DataFrame, String)](
+    // An unsupported join type fails when the DataFrame is built.
+    val unsupported = Seq[(() => DataFrame, String)](
       (() => left.join(lookup, left("id") === lookup("id"), "full_outer"), "FULL OUTER"),
-      (() => left.crossJoin(lookup), "CROSS"),
-      (() => left.crossJoin(lookup).where(left("id") === lookup("id")), "CROSS")).foreach {
-      case (joined, joinType) =>
-        val error = intercept[AnalysisException](joined())
-        assert(error.getCondition === "EXTERNAL_LOOKUP_JOIN_UNSUPPORTED.JOIN_TYPE")
-        assert(error.getMessageParameters.asScala.toMap === Map(
-          "joinType" -> joinType,
-          "relation" -> "`SimpleExternalLookupTable`",
-          "supportedJoinTypes" -> SUPPORTED_JOIN_TYPES))
+      (() => left.join(lookup, left("id") === lookup("id"), "right_outer"), "RIGHT OUTER"))
+    unsupported.foreach { case (joined, joinType) =>
+      val error = intercept[AnalysisException](joined())
+      assert(error.getCondition === "EXTERNAL_LOOKUP_JOIN_UNSUPPORTED.JOIN_TYPE")
+      assert(error.getMessageParameters.asScala.toMap === Map(
+        "joinType" -> joinType,
+        "relation" -> "`SimpleExternalLookupTable`",
+        "supportedJoinTypes" -> SUPPORTED_JOIN_TYPES))
     }
   }
 
@@ -1567,9 +1563,11 @@ class ExternalLookupJoinSuite extends QueryTest with SharedSparkSession {
           classOf[ExternalLookupTestCatalog].getName) {
       val table = s"$EXTERNAL_LOOKUP_CATALOG_NAME.ns.lookup"
       val left = streamOf(Seq(1).toDF("id"))
-      val crossJoin = intercept[AnalysisException](left.crossJoin(spark.read.table(table)))
-      assert(crossJoin.getCondition === "EXTERNAL_LOOKUP_JOIN_UNSUPPORTED.JOIN_TYPE")
-      assert(crossJoin.getMessageParameters.asScala.toMap === Map("joinType" -> "CROSS",
+      val lookup = spark.read.table(table)
+      val rightOuter =
+        intercept[AnalysisException](left.join(lookup, left("id") === lookup("id"), "right_outer"))
+      assert(rightOuter.getCondition === "EXTERNAL_LOOKUP_JOIN_UNSUPPORTED.JOIN_TYPE")
+      assert(rightOuter.getMessageParameters.asScala.toMap === Map("joinType" -> "RIGHT OUTER",
         "relation" -> "`SimpleExternalLookupTable`", "supportedJoinTypes" -> SUPPORTED_JOIN_TYPES))
       withTempView("external_lookup_left") {
         left.createOrReplaceTempView("external_lookup_left")
@@ -3493,21 +3491,37 @@ class ExternalLookupJoinSuite extends QueryTest with SharedSparkSession {
         .createOrReplaceTempView("badge_swipes")
       directory.createOrReplaceTempView("employee_directory")
       // Predicate pushdown moves the key from WHERE into the join, in a comma join as in a join
-      // with a condition that holds no key.
+      // with a condition that holds no key, and in a cross join, which is an inner join.
+      val swipes = spark.table("badge_swipes")
       Seq(
-        "FROM badge_swipes s, employee_directory d WHERE s.employee = d.id",
-        "FROM badge_swipes s JOIN employee_directory d ON TRUE WHERE s.employee = d.id")
-        .foreach { from =>
-          val query = sql(s"SELECT s.door, d.department $from")
-          assert(runStream(query).plan.exists(_.isInstanceOf[PreparedExternalLookupJoin]), from)
-          checkStream(query, Seq(Row("lobby", "engineering"), Row("lobby", "research")))
-        }
+        sql("SELECT s.door, d.department " +
+          "FROM badge_swipes s, employee_directory d WHERE s.employee = d.id"),
+        sql("SELECT s.door, d.department " +
+          "FROM badge_swipes s JOIN employee_directory d ON TRUE WHERE s.employee = d.id"),
+        sql("SELECT s.door, d.department " +
+          "FROM badge_swipes s CROSS JOIN employee_directory d WHERE s.employee = d.id"),
+        swipes.crossJoin(directory).where(swipes("employee") === directory("id"))
+          .select(swipes("door"), directory("department")),
+        swipes.join(directory, swipes("employee") === directory("id"), "cross")
+          .select(swipes("door"), directory("department"))).foreach { query =>
+        assert(runStream(query).plan.exists(_.isInstanceOf[PreparedExternalLookupJoin]))
+        checkStream(query, Seq(Row("lobby", "engineering"), Row("lobby", "research")))
+      }
+      // So does a hinted table that also supports batch reads.
+      val dual = spark.read.format(classOf[DualCapabilityExternalLookupDataSource].getName).load()
+        .hint("external_lookup")
+      checkStream(
+        swipes.crossJoin(dual).where(swipes("employee") === dual("id"))
+          .select(swipes("door"), dual("department")),
+        Seq(Row("lobby", "engineering"), Row("lobby", "research")))
       // A join that gets no key from its condition or from WHERE fails when it starts.
-      checkError(
-        exception = streamFailure[AnalysisException](
-          sql("SELECT s.door, d.department FROM badge_swipes s, employee_directory d")),
-        condition = "EXTERNAL_LOOKUP_JOIN_UNSUPPORTED.MISSING_JOIN_CONDITION",
-        parameters = Map.empty)
+      Seq("FROM badge_swipes s, employee_directory d",
+          "FROM badge_swipes s CROSS JOIN employee_directory d").foreach { from =>
+        checkError(
+          exception = streamFailure[AnalysisException](sql(s"SELECT s.door, d.department $from")),
+          condition = "EXTERNAL_LOOKUP_JOIN_UNSUPPORTED.MISSING_JOIN_CONDITION",
+          parameters = Map.empty)
+      }
     }
   }
 
@@ -4712,6 +4726,13 @@ class ExternalLookupJoinSuite extends QueryTest with SharedSparkSession {
           .groupBy(swipes("door")).agg(max(swipes("minute")))
         QueryTest.sameRows(expected, runStream(latestByDoor, "complete").rows).foreach(fail(_))
     }
+    // Also with a filter on a lookup column that keeps the rows without a match, which stays above
+    // a left outer join.
+    val withoutSales = swipes.join(lookup, swipes("employee") === lookup("id"), "left_outer")
+      .where(lookup("department").isNull || lookup("department") =!= "sales")
+      .groupBy(swipes("door")).agg(max(swipes("minute")))
+    QueryTest.sameRows(Seq(Row("lobby", 10), Row("garage", 40), Row("dock", 30)),
+      runStream(withoutSales, "complete").rows).foreach(fail(_))
     // Also with a lookup-side stage that computes a column, which a filter above the join reads.
     val teams = lookup.select(lookup("id"), upper(lookup("department")).as("team"))
     val latestByTeam = swipes.join(teams, swipes("employee") === teams("id"))
@@ -4724,6 +4745,31 @@ class ExternalLookupJoinSuite extends QueryTest with SharedSparkSession {
     // The canonical node finds its lookup columns among the stages' outputs.
     assert(run.lookupJoin.canonicalized.output.map(_.dataType) ===
       run.lookupJoin.output.map(_.dataType))
+  }
+
+  test("a subquery without references in WHERE runs in an inner lookup join's residual") {
+    val lookup = spark.read.format(classOf[SimpleExternalLookupDataSource].getName).load()
+    val swipes = streamOf(Seq((1, "lobby"), (2, "garage")).toDF("employee", "door"))
+    val limits = Seq(5).toDF("limit")
+    val all = Seq(Row(1, "lobby", 1, "engineering"), Row(1, "lobby", 1, "research"),
+      Row(2, "garage", 2, "sales"))
+    Seq[(Column, Seq[Row])](
+      (limits.select(max("limit")).scalar() > 0) -> all,
+      (limits.select(max("limit")).scalar() > 10) -> Nil,
+      limits.exists() -> all,
+      limits.where($"limit" > 10).exists() -> Nil).foreach { case (condition, expected) =>
+      val joined = swipes.join(lookup, swipes("employee") === lookup("id")).where(condition)
+      val run = runStream(joined)
+      QueryTest.sameRows(expected, run.rows).foreach(fail(_))
+      // Predicate pushdown moves it into the residual of the join. The micro-batch runs it with
+      // adaptive execution, for the shuffle of the subquery.
+      val residual = run.plan.collectFirst { case join: PreparedExternalLookupJoin => join }
+        .flatMap(_.residualCondition)
+      assert(residual.exists(SubqueryExpression.hasSubquery), condition)
+      withSQLConf(SQLConf.OPTIMIZER_EXCLUDED_RULES.key -> PushDownPredicates.ruleName) {
+        QueryTest.sameRows(expected, runStream(joined).rows).foreach(fail(_))
+      }
+    }
   }
 
   test("the command check walks each subquery of a command once") {
@@ -5978,9 +6024,15 @@ object ValidityExternalLookupTable extends Table with SupportsRead {
 
   override def newScanBuilder(options: CaseInsensitiveStringMap): ScanBuilder =
     new SupportsExternalLookup {
+      // With requireValidFrom, the source serves a lookup only with a predicate on validFrom.
+      private val requireValidFrom = options.getBoolean("requireValidFrom", false)
       override def selectLookupPredicates(candidates: Array[Predicate]): Array[Predicate] = {
         offered.set(candidates.map(_.toString).toSeq)
-        candidates
+        if (requireValidFrom && !candidates.exists(_.toString.startsWith("validFrom"))) {
+          Array.empty
+        } else {
+          candidates
+        }
       }
       override def build(): Scan = new Scan {
         override def readSchema(): StructType = schema()

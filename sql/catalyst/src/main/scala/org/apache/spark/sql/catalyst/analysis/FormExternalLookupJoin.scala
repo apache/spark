@@ -22,7 +22,7 @@ import scala.collection.mutable
 
 import org.apache.spark.sql.catalyst.expressions.SubqueryExpression
 import org.apache.spark.sql.catalyst.optimizer.{EliminateResolvedHint, InlineCTE}
-import org.apache.spark.sql.catalyst.plans.{Inner, LeftAnti, LeftOuter, LeftSemi}
+import org.apache.spark.sql.catalyst.plans.{Cross, Inner, JoinType, LeftAnti, LeftOuter, LeftSemi}
 import org.apache.spark.sql.catalyst.plans.logical.{AsOfJoin, CTERelationDef, CTERelationRef,
   ExternalLookupCacheOptions, ExternalLookupHint, ExternalLookupHintCacheOptions,
   ExternalLookupJoin, ExternalLookupJoinShapes, Filter, Join, JoinStrategyHint, LateralJoin,
@@ -135,8 +135,8 @@ object ExternalLookupJoinEligibility extends QueryErrorsBase {
           Map("strategy" -> toSQLStmt(strategy.displayName)))
       // No physical join was asked for: the join runs as an external lookup join unless a check
       // below fails.
-      // Checked before the condition, so that a cross join fails while it is analyzed.
-      case None if !SUPPORTED_JOIN_TYPES.contains(join.joinType) =>
+      // Checked before the condition, so that a join of another type fails while it is analyzed.
+      case None if !SUPPORTED_JOIN_TYPES.contains(lookupJoinType(join)) =>
         ineligible("JOIN_TYPE", relation, Map(
           "joinType" -> toSQLStmt(join.joinType.sql),
           "supportedJoinTypes" -> SUPPORTED_JOIN_TYPES.map(t => toSQLStmt(t.sql)).mkString(", ")))
@@ -189,6 +189,15 @@ object ExternalLookupJoinEligibility extends QueryErrorsBase {
   def mayHaveHintOrLookupJoin(plan: LogicalPlan): Boolean =
     mayHaveLookupJoin(plan) || plan.containsPattern(EXTERNAL_LOOKUP_HINT) &&
       plan.containsAnyPattern(HintableJoin.patterns: _*)
+
+  /**
+   * The join type that a lookup join runs `join` with. A cross join is an inner join, as for an
+   * ordinary join, so that predicate pushdown can move a key into it from a filter above.
+   */
+  def lookupJoinType(join: Join): JoinType = join.joinType match {
+    case Cross => Inner
+    case other => other
+  }
 
   /**
    * Whether `plan` can have a join that must run as an external lookup join: one over a lookup-only
@@ -409,7 +418,7 @@ object ExternalLookupJoinEligibility extends QueryErrorsBase {
  *
  * A missing join condition is not reported here: as for an ordinary join, predicate pushdown can
  * move a key from a later filter into the condition. Lookup planning reports a join that still
- * has no key, and the planning of a streaming query at its start reports it from `start()`.
+ * has no key, and the planning of a streaming query when it starts stops the query with it.
  *
  * The hint on an input of an ASOF, NEAREST BY or lateral join fails here too, because none of
  * them can run as an external lookup join: see [[ExternalLookupJoinEligibility.HintableJoin]].
@@ -508,7 +517,7 @@ object FormExternalLookupJoin extends Rule[LogicalPlan] {
             ExternalLookupJoin(
               join.left,
               lookupPlan,
-              join.joinType,
+              lookupJoinType(join),
               join.condition,
               cacheOptions(inlined),
               lookupPlan.output)

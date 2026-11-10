@@ -56,7 +56,8 @@ class PushPredicateThroughExternalLookupJoinSuite extends PlanTest {
   private val bothSidesConjunct = streamKey + lookupValue > 0
   // A filter conjunct that is not deterministic never moves.
   private val nonDeterministic = Rand(1L) > 0.5
-  // A lookup-side conjunct that is not a lookup candidate, so it can move onto the lookup side.
+  // A lookup-side conjunct that is not a lookup candidate, which moves onto the lookup side as any
+  // deterministic lookup-side conjunct does.
   private val lookupNonCandidate = lookupValue + 1 > 2
   private val lookupJoinTypes = Seq(Inner, LeftOuter, LeftSemi, LeftAnti)
   private val booleanPythonUDF = (args: Seq[Expression]) =>
@@ -219,6 +220,12 @@ class PushPredicateThroughExternalLookupJoinSuite extends PlanTest {
       val above = lookupJoin(joinType, keysEqual).where(conjunct)
       assert(Optimize.execute(above) eq above)
     }
+    // A subquery that reads no column moves into the condition of an inner join.
+    val referenceless = scalarSubquery > 0
+    val inner = lookupJoin(Inner, keysEqual)
+    comparePlans(
+      Optimize.execute(inner.where(referenceless)),
+      expectedJoin(inner, conjuncts = Seq(keysEqual, referenceless)))
     // Over the stream side alone, they are ordinary conjuncts.
     val streamUDF = booleanPythonUDF(Seq(streamKey))
     val join = lookupJoin(Inner, keysEqual, streamUDF)

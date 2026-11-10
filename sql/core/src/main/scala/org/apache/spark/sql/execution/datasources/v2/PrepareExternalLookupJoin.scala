@@ -154,8 +154,8 @@ object PrepareExternalLookupJoin extends Rule[LogicalPlan] with PredicateHelper
       (candidate.projectedField.exprId, candidate.comparison, candidate.parameter)
     }
     if (offeredCandidates.isEmpty) {
-      // Without a condition, the join has no key at all: none was written in it, and predicate
-      // pushdown moved none into it from a filter above.
+      // Without a condition, the join has nothing to look up by: predicate pushdown left it no
+      // conjunct, of the written condition or of a filter above.
       throw QueryCompilationErrors.unsupportedExternalLookupJoinError(
         if (conjuncts.isEmpty) "MISSING_JOIN_CONDITION" else "NO_LOOKUP_CANDIDATE",
         if (conjuncts.isEmpty) Map.empty else Map("table" -> toSQLFreeFormId(tableName)))
