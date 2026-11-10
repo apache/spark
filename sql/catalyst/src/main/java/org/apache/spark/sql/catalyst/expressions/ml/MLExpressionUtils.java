@@ -77,35 +77,6 @@ public class MLExpressionUtils {
     }
   }
 
-  public static ArrayData vectorToArray(InternalRow vector, boolean toFloat) {
-    if (vector == null) {
-      throw new IllegalArgumentException(
-        "function vector_to_array requires a non-null input argument and input type must be " +
-          "`org.apache.spark.ml.linalg.Vector` or `org.apache.spark.mllib.linalg.Vector`, " +
-          "but got null.");
-    }
-    byte vectorType = vector.getByte(0);
-    ArrayData values = vector.getArray(3);
-    int size = vectorSize(vector, vectorType, values);
-    ArrayData indices = vectorType == SPARSE_VECTOR_TYPE ? vector.getArray(2) : null;
-    if (toFloat) {
-      float[] result = new float[size];
-      for (int i = 0; i < values.numElements(); i++) {
-        int index = indices == null ? i : indices.getInt(i);
-        result[index] = (float) values.getDouble(i);
-      }
-      return UnsafeArrayData.fromPrimitiveArray(result);
-    } else if (vectorType == DENSE_VECTOR_TYPE) {
-      return values;
-    } else {
-      double[] result = new double[size];
-      for (int i = 0; i < values.numElements(); i++) {
-        result[indices.getInt(i)] = values.getDouble(i);
-      }
-      return UnsafeArrayData.fromPrimitiveArray(result);
-    }
-  }
-
   private static int vectorSize(InternalRow vector, byte vectorType, ArrayData values) {
     if (vectorType == SPARSE_VECTOR_TYPE) {
       return vector.getInt(1);
