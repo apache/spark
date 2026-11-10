@@ -1168,6 +1168,13 @@ case class UnionExec(children: Seq[SparkPlan]) extends SparkPlan with CodegenSup
     }
   }
 
+  // Whether the output of a child repeats an `ExprId`. Fixed for the given children, so it is
+  // derived once rather than on every read of the partitioning.
+  @transient private lazy val childOutputRepeatsExprId: Boolean = children.exists { child =>
+    val exprIds = child.output.map(_.exprId)
+    exprIds.distinct.size < exprIds.size
+  }
+
   /**
    * The SPARK-52921 candidate partitioning derived from the children, which `outputPartitioning`
    * reports when the decision says this union is not a plain concatenation. That decision comes out
@@ -1177,6 +1184,16 @@ case class UnionExec(children: Seq[SparkPlan]) extends SparkPlan with CodegenSup
    * reports unknown.
    */
   private def rawPartitioning: Partitioning = {
+    // An attribute is read from the first position that carries its `ExprId` (see
+    // `AttributeSeq.indexOf`), so the positions of an output that repeats one cannot be told
+    // apart by attribute, and they hold different values when a union sits below. A child's
+    // partitioning then has no reliable counterpart among this union's output attributes, whether
+    // the repeat is in that child's output or, through the first child, in this union's own.
+    // The analyzer normally leaves no such child (`DeduplicateUnionChildOutput`).
+    if (childOutputRepeatsExprId) {
+      return super.outputPartitioning
+    }
+
     // Children's partitionings with attributes remapped to this union's output attributes.
     val partitionings = prepareOutputPartitioning()
 
