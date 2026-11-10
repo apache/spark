@@ -896,7 +896,9 @@ case class StreamingSymmetricHashJoinExec(
         //   is done at this point. That said, input can be skipped to be added to the state store
         //   if input is going to be evicted in this batch. Though, input should be added to the
         //   state store if it's right outer join or full outer join, as unmatched output is
-        //   handled during state eviction.
+        //   handled during state eviction. A left semi join processes the right side first, so
+        //   the left input of this batch has not probed it yet: the input is added, and the
+        //   eviction at the end of the batch removes it.
         val isLeftSemiWithMatch = joinType == LeftSemi && joinSide == LeftSide && iteratorNotEmpty
         val shouldAddToState = if (isLeftSemiWithMatch) {
           false
@@ -910,6 +912,8 @@ case class StreamingSymmetricHashJoinExec(
             !stateKeyWatermarkPredicateFunc(key) && !stateValueWatermarkPredicateFunc(thisRow)
 
           isNotEvictingInThisBatch ||
+            // if the left input of this batch still has to probe the input
+            joinType == LeftSemi ||
             // if the input is producing "unmatched row" in this batch
             (
               (joinType == RightOuter && !iteratorNotEmpty) ||

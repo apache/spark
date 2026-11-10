@@ -2425,6 +2425,45 @@ abstract class StreamingLeftSemiJoinBase extends StreamingJoinSuite {
     }
   }
 
+  // A left semi join processes the right input before the left input. A right row at or below
+  // its eviction cutoff passes late filtering when it is above the late-events watermark, and
+  // the left rows of the same batch must still find it. Each case runs a batch whose
+  // late-events watermark is 100 seconds and whose eviction watermark is `watermark` seconds.
+  // (name, condition, left time, right time, watermark, state rows after the second batch and
+  // after the third)
+  for ((name, condition, leftTime, rightTime, watermark, rowsBefore, rowsAfter) <- Seq(
+      ("equal event times", "leftTime = rightTime", 102, 102, 105, 2L, 0L),
+      // The left key leftTime + 10 seconds of (7, 100) stays above the 100-second cutoff.
+      ("a key shifted by less than the watermark step",
+        "leftTime + INTERVAL 10 SECONDS = rightTime", 120, 130, 150, 3L, 1L))) {
+    test(s"left semi join keeps a same-batch match between the watermarks: $name") {
+      withSQLConf(SQLConf.STREAMING_NO_DATA_MICRO_BATCHES_ENABLED.key -> "false") {
+        val leftInput = MemoryStream[(Int, Int)]
+        val rightInput = MemoryStream[(Int, Int)]
+        val left = leftInput.toDF()
+          .select($"_1".as("leftKey"), timestamp_seconds($"_2").as("leftTime"))
+          .withWatermark("leftTime", "0 seconds")
+        val right = rightInput.toDF()
+          .select($"_1".as("rightKey"), timestamp_seconds($"_2").as("rightTime"))
+          .withWatermark("rightTime", "0 seconds")
+        val joined = left.join(right, expr(s"leftKey = rightKey AND $condition"), "left_semi")
+          .select($"leftKey", $"leftTime".cast("int"))
+
+        testStream(joined)(
+          MultiAddData(leftInput, (7, 100))(rightInput, (8, 100)),
+          CheckNewAnswer(),
+          MultiAddData(leftInput, (7, watermark))(rightInput, (8, watermark)),
+          CheckNewAnswer(),
+          assertNumStateRows(total = rowsBefore, updated = 4),
+          MultiAddData(leftInput, (1, leftTime))(rightInput, (1, rightTime)),
+          CheckNewAnswer((1, leftTime)),
+          // The right row is stored for the left row to probe and removed at the end of the
+          // batch, together with the other rows at or below the cutoffs.
+          assertNumStateRows(total = rowsAfter, updated = 1))
+      }
+    }
+  }
+
   testWithAppendAndUpdate("windowed left semi join") { outputMode =>
     withTempDir { checkpointDir =>
       val (leftInput, rightInput, joined) = setupWindowedJoin("left_semi")
