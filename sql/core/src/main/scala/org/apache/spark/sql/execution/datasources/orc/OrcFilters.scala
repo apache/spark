@@ -19,6 +19,7 @@ package org.apache.spark.sql.execution.datasources.orc
 
 import java.sql.Timestamp
 import java.time.{Duration, Instant, LocalDate, LocalDateTime, Period}
+import java.util.TimeZone
 
 import org.apache.hadoop.hive.common.`type`.HiveDecimal
 import org.apache.hadoop.hive.ql.io.sarg.{PredicateLeaf, SearchArgument}
@@ -29,7 +30,6 @@ import org.apache.hadoop.hive.serde2.io.HiveDecimalWritable
 import org.apache.spark.sql.catalyst.util.DateTimeConstants.MILLIS_PER_DAY
 import org.apache.spark.sql.catalyst.util.DateTimeUtils.{instantToMicros, localDateTimeToMicros, localDateToDays, toJavaDate, toJavaTimestamp}
 import org.apache.spark.sql.catalyst.util.IntervalUtils
-import org.apache.spark.sql.catalyst.util.RebaseDateTime.lastSwitchGregorianDay
 import org.apache.spark.sql.errors.QueryExecutionErrors
 import org.apache.spark.sql.execution.datasources.orc.types.ops.OrcTypeOps
 import org.apache.spark.sql.internal.SQLConf
@@ -184,9 +184,10 @@ private[sql] object OrcFilters extends OrcFiltersBase {
       .getOrElse(throw QueryExecutionErrors.unsupportedOperationForDataTypeError(dt))
   }
 
-  // 1582-10-15 00:00:00 UTC in milliseconds, before which ORC converts TIMESTAMP statistics from
-  // the hybrid Julian/Gregorian calendar to the proleptic Gregorian calendar.
-  private val GregorianSwitchMillis: Long = lastSwitchGregorianDay * MILLIS_PER_DAY
+  // ORC's `DateUtils.SWITCHOVER_MILLIS`, 1582-10-15 00:00:00 in milliseconds. ORC converts the
+  // TIMESTAMP statistics whose wall clock is before it from the hybrid Julian/Gregorian calendar
+  // to the proleptic Gregorian calendar.
+  private val GregorianSwitchMillis: Long = LocalDate.of(1582, 10, 15).toEpochDay * MILLIS_PER_DAY
 
   /**
    * Cast literal values for filters.
@@ -293,17 +294,23 @@ private[sql] object OrcFilters extends OrcFiltersBase {
     import org.apache.spark.sql.sources._
 
     // Spark writes TimestampType values to ORC in the hybrid Julian/Gregorian calendar, and
-    // `castLiteralValue` converts a pushed down value the same way. ORC compares the value with
-    // the bloom filters as stored, but with the statistics after converting the ones before
-    // 1582-10-15 to the proleptic Gregorian calendar (see `DateUtils.convertTimeToProleptic`),
-    // which moves them by up to 10 days. So a value before 1582-10-15 can't be right for both,
-    // and a predicate with such a value is not pushed down. A later value compares the same with
-    // a statistic before and after the conversion, as both are earlier than it.
+    // `castLiteralValue` converts a pushed down value the same way. But ORC compares the value
+    // with the statistics after converting the ones whose wall clock is before 1582-10-15 to the
+    // proleptic Gregorian calendar (see `DateUtils.convertTimeToProleptic`), which moves them by
+    // up to 10 days. So a predicate with a value whose wall clock is before 1582-10-15 is not
+    // pushed down. A later value compares the same with a converted statistic as with the stored
+    // one, as both are earlier than it. ORC compares wall clocks in the JVM default time zone,
+    // and its wall clock is computed here as in `SerializationUtils.convertToUtc`.
     def hasValueBeforeCalendarSwitch(attribute: String, values: Seq[Any]): Boolean =
-      dataTypeMap.get(attribute).exists(_.fieldType == TimestampType) && values.exists { v =>
-        castLiteralValue(v, TimestampType) match {
-          case ts: Timestamp => ts.getTime < GregorianSwitchMillis
-          case _ => false
+      dataTypeMap.get(attribute).exists(_.fieldType == TimestampType) && {
+        val timeZone = TimeZone.getDefault
+        values.exists { v =>
+          castLiteralValue(v, TimestampType) match {
+            case ts: Timestamp =>
+              val millis = ts.getTime
+              millis + timeZone.getOffset(millis) < GregorianSwitchMillis
+            case _ => false
+          }
         }
       }
 
