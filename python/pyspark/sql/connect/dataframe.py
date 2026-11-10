@@ -90,6 +90,7 @@ from pyspark.sql.pandas.functions import _validate_vectorized_udf  # type: ignor
 from pyspark.sql.pandas.types import from_arrow_schema, to_arrow_schema
 from pyspark.sql.table_arg import TableArg
 from pyspark.sql.types import Row, StructType, _create_row
+from pyspark.sql.utils import validate_approx_quantile_probabilities
 from pyspark.storagelevel import StorageLevel
 from pyspark.util import PythonEvalType, is_remote_only
 
@@ -1775,36 +1776,7 @@ class DataFrame(ParentDataFrame):
                     },
                 )
 
-        if not isinstance(probabilities, (list, tuple)):
-            raise PySparkTypeError(
-                errorClass="NOT_EXPECTED_TYPE",
-                messageParameters={
-                    "arg_name": "probabilities",
-                    "expected_type": "list or tuple",
-                    "arg_type": type(probabilities).__name__,
-                },
-            )
-        if isinstance(probabilities, tuple):
-            probabilities = list(probabilities)
-        for p in probabilities:
-            if not isinstance(p, (float, int)):
-                raise PySparkTypeError(
-                    errorClass="NOT_EXPECTED_TYPE",
-                    messageParameters={
-                        "arg_name": "probabilities",
-                        "expected_type": "list[float, int]",
-                        "arg_type": type(p).__name__,
-                    },
-                )
-            if p < 0 or p > 1:
-                raise PySparkValueError(
-                    errorClass="VALUE_NOT_BETWEEN",
-                    messageParameters={
-                        "arg_name": "probabilities",
-                        "min": "0",
-                        "max": "1",
-                    },
-                )
+        probabilities = validate_approx_quantile_probabilities(probabilities)
 
         if not isinstance(relativeError, (float, int)):
             raise PySparkTypeError(

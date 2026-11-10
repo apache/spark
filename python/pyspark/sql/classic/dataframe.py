@@ -73,7 +73,12 @@ from pyspark.sql.types import (
     _first_timestamp_nanos_map_key_type,
     _parse_datatype_json_string,
 )
-from pyspark.sql.utils import get_active_spark_context, to_java_array, to_scala_map
+from pyspark.sql.utils import (
+    get_active_spark_context,
+    to_java_array,
+    to_scala_map,
+    validate_approx_quantile_probabilities,
+)
 from pyspark.storagelevel import StorageLevel
 from pyspark.traceback_utils import SCCallSiteSync
 from pyspark.util import (
@@ -1720,36 +1725,7 @@ class DataFrame(ParentDataFrame, PandasMapOpsMixin, PandasConversionMixin):
                 )
         col = _to_list(self._sc, cast(List["ColumnOrName"], col))
 
-        if not isinstance(probabilities, (list, tuple)):
-            raise PySparkTypeError(
-                errorClass="NOT_EXPECTED_TYPE",
-                messageParameters={
-                    "arg_name": "probabilities",
-                    "expected_type": "list or tuple",
-                    "arg_type": type(probabilities).__name__,
-                },
-            )
-        if isinstance(probabilities, tuple):
-            probabilities = list(probabilities)
-        for p in probabilities:
-            if not isinstance(p, (float, int)):
-                raise PySparkTypeError(
-                    errorClass="NOT_EXPECTED_TYPE",
-                    messageParameters={
-                        "arg_name": "probabilities",
-                        "expected_type": "list[float, int]",
-                        "arg_type": type(p).__name__,
-                    },
-                )
-            if p < 0 or p > 1:
-                raise PySparkValueError(
-                    errorClass="VALUE_NOT_BETWEEN",
-                    messageParameters={
-                        "arg_name": "probabilities",
-                        "min": "0",
-                        "max": "1",
-                    },
-                )
+        probabilities = validate_approx_quantile_probabilities(probabilities)
         probabilities = _to_list(self._sc, cast(List["ColumnOrName"], probabilities))
 
         if not isinstance(relativeError, (float, int)):
