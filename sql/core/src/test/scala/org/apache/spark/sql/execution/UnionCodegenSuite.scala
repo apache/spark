@@ -387,16 +387,22 @@ class UnionCodegenSuite extends SharedSparkSession with AdaptiveSparkPlanHelper 
       }
       val fused = build()
       val answer = fused.collect().toSeq
-      // The bug needs a union child whose output repeats an ExprId. The analyzer can drop
-      // that shape, so assert it survived rather than letting the test go vacuous.
+      // The bug needs the union that fuses over query stages to read a child whose output
+      // repeats an ExprId. The analyzer can drop that shape, so assert it survived rather than
+      // letting the test go vacuous. The check is on the InputAdapter child: the inner union
+      // below `r` repeats an ExprId too, but it has no InputAdapter child, so it cannot satisfy
+      // the guard on its own.
+      val fusedUnionExecs = fusedUnions(fused)
       assert(
-        collect(fused.queryExecution.executedPlan) { case u: UnionExec => u }
-          .exists(_.children.exists(c => c.output.map(_.exprId).distinct.size < c.output.size)),
-        s"expected a union child with a repeated ExprId:\n" +
+        fusedUnionExecs.exists(_.children.exists { c =>
+          c.isInstanceOf[InputAdapter] &&
+            c.output.map(_.exprId).distinct.size < c.output.size
+        }),
+        s"expected the fused union's staged child to repeat an ExprId:\n" +
           fused.queryExecution.executedPlan)
       // Without AQE the nested union below `r` keeps this union out of codegen; AQE turns the
       // children into query stages, and that is the shape the fused union consumes.
-      assert(fusedUnions(fused).exists(_.children.exists(_.isInstanceOf[InputAdapter])),
+      assert(fusedUnionExecs.exists(_.children.exists(_.isInstanceOf[InputAdapter])),
         s"expected the outer union to fuse over its query stages:\n" +
           fused.queryExecution.executedPlan)
       assert(answer.length == 12000)

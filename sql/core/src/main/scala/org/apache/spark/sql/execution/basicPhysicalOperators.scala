@@ -1485,7 +1485,7 @@ case class UnionExec(children: Seq[SparkPlan]) extends SparkPlan with CodegenSup
   // Per-emission codegen state, set in `doProduce` and read in `doConsume`.
   // `numOutputRowsTerm` is registered once per stage so the metric appears in
   // `references[]` exactly once instead of once per child; `currentEmittingChild`
-  // tells `doConsume` which child's projection to bind.
+  // tells `doConsume` which child's output it reads by position.
   //
   // A single `UnionExec` instance can have its codegen driven by more than one
   // thread at the same time: a reused exchange/subquery stage is generated
