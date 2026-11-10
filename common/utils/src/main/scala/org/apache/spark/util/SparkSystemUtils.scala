@@ -40,11 +40,6 @@ private[spark] trait SparkSystemUtils {
   val javaVersion = JavaUtils.javaVersion
 
   /**
-   * Whether the underlying Java version is at least 21.
-   */
-  val isJavaVersionAtLeast21 = Runtime.version().feature() >= 21
-
-  /**
    * Whether the underlying operating system is Windows.
    */
   val isWindows = JavaUtils.isWindows
