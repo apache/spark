@@ -177,12 +177,22 @@ case class AnalysisContext(
     // in a scalar subquery) by persisted-view validation: `verifyTemporaryObjectsNotExists`, which
     // the v1 runnable commands call while executing and the v2 commands reach during analysis via
     // `CheckViewReferences`. When `spark.sql.legacy.allowSessionVariableInPersistedView` is set,
-    // the persisted paths simply discard the set. The single-pass resolver has no IDENTIFIER-clause
+    // the persisted paths simply discard the set. SQL function creation consumes it the same way
+    // (SPARK-59970): a persistent function rejects the names, or discards them under the legacy
+    // flag, and a temporary function stores them as informational metadata in its
+    // `referredTempVariableNames` property. The single-pass resolver has no IDENTIFIER-clause
     // resolution of its own, so there is no second writer to keep in sync. LinkedHashSet keeps
     // insertion order so the recorded names (and any error naming them) are deterministic when more
     // than one variable is read via an IDENTIFIER clause.
     referredTempVariableNamesUnderIdentifier: mutable.Set[Seq[String]] =
       mutable.LinkedHashSet.empty,
+    // Whether a SQL function expanded during this analysis shares the accumulator above with the
+    // enclosing object. A view or CACHE TABLE AS SELECT body owns the dependencies of every
+    // function it expands (functions persist no IDENTIFIER-variable metadata of their own that is
+    // consulted on resolution), so they share. A SQL function body being created does not: a
+    // variable that an already existing function reads is that function's dependency, and
+    // attributing it to the new function would reject or record it there. See SPARK-59970.
+    shareIdentifierVariablesWithNestedSQLFunctions: Boolean = true,
     outerPlan: Option[LogicalPlan] = None,
     collation: Option[String] = None,
 
@@ -292,13 +302,20 @@ object AnalysisContext {
       resolutionPathEntries = function.functionStoredResolutionPath
         .map(CatalogManager.deserializePathEntriesOrFail(
           _, "SQL function", function.name.unquotedString)),
-      // Unlike `withAnalysisContext(viewDesc)`, do NOT reset this accumulator. A SQL function has
-      // no IDENTIFIER-variable metadata of its own, so a variable its body reads through IDENTIFIER
-      // clause is part of the enclosing object's definition (e.g. the temporary view or CACHE TABLE
-      // AS SELECT that selects the function), and must be recorded there. Sharing the caller's set
-      // records it; a nested view, by contrast, stores its own and so is reset.
+      // Unlike `withAnalysisContext(viewDesc)`, do NOT reset this accumulator by default. A SQL
+      // function has no IDENTIFIER-variable metadata of its own that is consulted on resolution, so
+      // a variable its body reads through an IDENTIFIER clause is part of the enclosing object's
+      // definition (e.g. the temporary view or CACHE TABLE AS SELECT that selects the function),
+      // and must be recorded there. Sharing the caller's set records it; a nested view, by
+      // contrast, stores its own and so is reset. The exception is a SQL function body under
+      // creation, which must not inherit the dependencies of the functions it calls; see
+      // `shareIdentifierVariablesWithNestedSQLFunctions`.
       referredTempVariableNamesUnderIdentifier =
-        originContext.referredTempVariableNamesUnderIdentifier,
+        if (originContext.shareIdentifierVariablesWithNestedSQLFunctions) {
+          originContext.referredTempVariableNamesUnderIdentifier
+        } else {
+          mutable.LinkedHashSet.empty
+        },
       collation = function.collation)
     set(context)
     try f finally { set(originContext) }
@@ -314,6 +331,17 @@ object AnalysisContext {
   def withOuterPlan[A](outerPlan: LogicalPlan)(f: => A): A = {
     val originContext = value.get()
     val context = originContext.copy(isDefault = false, outerPlan = Some(outerPlan))
+    set(context)
+    try f finally { set(originContext) }
+  }
+
+  /**
+   * Runs `f` with `shareIdentifierVariablesWithNestedSQLFunctions` set to `share`; see that field.
+   */
+  def withSharingIdentifierVariablesWithNestedSQLFunctions[A](share: Boolean)(f: => A): A = {
+    val originContext = value.get()
+    val context = originContext.copy(shareIdentifierVariablesWithNestedSQLFunctions = share)
+    context.setSinglePassResolverBridgeState(originContext.getSinglePassResolverBridgeState)
     set(context)
     try f finally { set(originContext) }
   }
@@ -427,6 +455,10 @@ class Analyzer(
   }
 
   def getRelationResolution: RelationResolution = relationResolution
+
+  /** Whether a temporary function owns the unqualified built-in `name` under the SQL path. */
+  private[sql] def unqualifiedFunctionResolvesToTemp(name: String): Boolean =
+    functionResolution.unqualifiedFunctionResolvesToTemp(name)
 
   /** Resolves only the dynamic identifier of an INSERT so transaction detection can inspect it. */
   private[sql] def resolveUnresolvedInsert(insert: UnresolvedInsert): LogicalPlan = {
@@ -569,6 +601,30 @@ class Analyzer(
         AnalysisContext.withNewAnalysisContext {
           analyze()
         }
+      }
+    }
+  }
+
+  /**
+   * Like [[execute]], but also returns the temporary variables recorded via IDENTIFIER clauses
+   * during this analysis (`AnalysisContext.referredTempVariableNamesUnderIdentifier`).
+   *
+   * SQL function creation analyzes the body, inspects it, and only then runs `checkAnalysis`, so
+   * it cannot go through [[executeAndCheckReferredTempVariablesUnderIdentifier]]. It still needs
+   * the recorded variables, which [[execute]] discards with its analysis context: a persistent
+   * function must reject them and a temporary one stores them in its metadata.
+   *
+   * Only the variables read by the body itself are returned. A SQL function that the body calls
+   * is expanded in a context of its own, so a variable it reads through an IDENTIFIER clause stays
+   * that function's dependency rather than becoming one of the function under creation.
+   */
+  def executeWithReferredTempVariablesUnderIdentifier(
+      plan: LogicalPlan): (LogicalPlan, Seq[Seq[String]]) = {
+    AnalysisContext.withNewAnalysisContext {
+      AnalysisContext.withSharingIdentifierVariablesWithNestedSQLFunctions(share = false) {
+        val analyzed = executeSameContext(plan)
+        // Read the accumulator before the context is restored on exit.
+        (analyzed, AnalysisContext.get.referredTempVariableNamesUnderIdentifier.toSeq)
       }
     }
   }
@@ -745,6 +801,7 @@ class Analyzer(
       BindParameters ::
       typeCoercionRules() ++
       Seq(
+        ResolveStockJsonConstructors,
         ResolveWithCTE,
         ExtractDistributedSequenceID,
         ResolveAsOfJoin,
@@ -2239,6 +2296,13 @@ class Analyzer(
      * Expands the matching attribute.*'s in `child`'s output.
      */
     def expandStarExpression(expr: Expression, child: LogicalPlan): Expression = {
+      def expandDirectStars(arguments: Seq[Expression]): Seq[Expression] = {
+        arguments.flatMap {
+          case s: Star => expand(s, child)
+          case o => o :: Nil
+        }
+      }
+
       expr.transformUp {
         case f: UnresolvedFunction if containsStar(f.arguments) =>
           // Only a direct star (bare `*` or qualified `t.*`) reaches here: a star nested in another
@@ -2287,6 +2351,23 @@ class Analyzer(
                   case o => o :: Nil
                 })
               }
+          }
+        case j: UnresolvedJsonConstructor if containsStar(j.arguments) =>
+          // Decide the owner as for `UnresolvedFunction`: the built-in rejects a direct star, while
+          // a routine owning the call receives the expanded arguments.
+          def rejectStar(): Nothing = throw QueryCompilationErrors.invalidStarUsageError(
+            s"expression `${j.prettyName}`", extractStar(j.arguments))
+          def routed: UnresolvedFunction =
+            UnresolvedFunction(j.prettyName, expandDirectStars(j.arguments), isDistinct = false)
+          if (!j.routeThroughResolution) {
+            rejectStar()
+          } else {
+            functionResolution.selectRoutedSqlJsonDirectStarOwner(Seq(j.prettyName)) match {
+              case RoutedSqlJsonStarOwner.RejectStockBuiltin => rejectStar()
+              case RoutedSqlJsonStarOwner.BindShadowOwner(candidate) =>
+                routed.copy(boundOwner = Some(candidate))
+              case RoutedSqlJsonStarOwner.NoBinding => routed
+            }
           }
         case c: CreateNamedStruct if containsStar(c.valExprs) =>
           val newChildren = c.children.grouped(2).flatMap {
@@ -2514,11 +2595,13 @@ class Analyzer(
    * Replaces [[UnresolvedFunction]]s with concrete [[Expression]]s.
    * Replaces [[UnresolvedGenerator]]s with concrete [[Expression]]s.
    * Replaces [[UnresolvedTableValuedFunction]]s with concrete [[LogicalPlan]]s.
+   * Replaces [[UnresolvedJsonConstructor]]s with the owning call or the stock built-in.
    */
   object ResolveFunctions extends Rule[LogicalPlan] {
     def apply(plan: LogicalPlan): LogicalPlan = plan.resolveOperatorsUpWithPruning(
       _.containsAnyPattern(UNRESOLVED_FUNC, UNRESOLVED_FUNCTION, GENERATOR,
-        UNRESOLVED_TABLE_VALUED_FUNCTION, UNRESOLVED_TVF_ALIASES), ruleId) {
+        UNRESOLVED_TABLE_VALUED_FUNCTION, UNRESOLVED_TVF_ALIASES, UNRESOLVED_JSON_CONSTRUCTOR),
+      ruleId) {
       // Resolve scalar/table functions and get the function metadata for DESCRIBE FUNCTION.
       case u @ UnresolvedFunctionName(nameParts, _, _) =>
         functionResolution.lookupBuiltinOrTempFunction(nameParts, None)
@@ -2630,18 +2713,45 @@ class Analyzer(
 
       case q: LogicalPlan =>
         q.transformExpressionsUpWithPruning(
-          _.containsAnyPattern(UNRESOLVED_FUNCTION, GENERATOR),
+          _.containsAnyPattern(UNRESOLVED_FUNCTION, GENERATOR, UNRESOLVED_JSON_CONSTRUCTOR),
           ruleId) {
-          case u @ UnresolvedFunction(nameParts, arguments, _, _, _, _, _, _)
-              if functionResolution.hasLambdaAndResolvedArguments(arguments) => withPosition(u) {
-            functionResolution.resolveFunction(u) match {
-              case func: HigherOrderFunction => func
-              case other => other.failAnalysis(
-                errorClass = "INVALID_LAMBDA_FUNCTION_CALL.NON_HIGHER_ORDER_FUNCTION",
-                messageParameters = Map(
-                  "class" -> other.getClass.getCanonicalName))
+          case u @ UnresolvedFunction(_, arguments, _, _, _, _, _, _)
+              if functionResolution.hasLambdaAndResolvedArguments(arguments) =>
+            resolveHigherOrderFunction(u)
+
+          // Handle JSON constructors in this same bottom-up pass, so nesting them inside other
+          // calls does not cost extra analyzer iterations.
+          case j: UnresolvedJsonConstructor
+              if functionResolution.routesJsonConstructorToFunction(j) =>
+            // A routine owns the name: resolve like the equivalent flat call.
+            val u = j.toUnresolvedFunction
+            if (functionResolution.hasLambdaAndResolvedArguments(u.arguments)) {
+              resolveHigherOrderFunction(u)
+            } else if (!u.childrenResolved) {
+              u
+            } else {
+              functionResolution.resolveFunction(u)
             }
-          }
+
+          case j: UnresolvedJsonConstructor =>
+            val directStars = j.arguments.collect { case s: Star => s }
+            if (directStars.nonEmpty) {
+              throw QueryCompilationErrors.invalidStarUsageError(
+                s"expression `${j.prettyName}`", directStars)
+            }
+            // The built-in owns it. Switch to the built-in form so the owner is checked only once.
+            val stock = j match {
+              case r: RoutedJsonConstructor => r.toStock
+              case s: StockJsonConstructor => s
+            }
+            stock match {
+              // Set the time zone now, so the parent sees a resolved child in this pass.
+              case s: StockJsonConstructor if s.childrenResolved =>
+                ResolveStockJsonConstructors.materialize(s)
+              // A child may still become a JSON producer (e.g. inside a lambda), so wait. A
+              // built-in JSON_QUERY resolves on its own.
+              case other => other
+            }
 
           case u if !u.childrenResolved => u // Skip until children are resolved.
 
@@ -2678,6 +2788,34 @@ class Analyzer(
           }
         }
     }
+
+    private def resolveHigherOrderFunction(u: UnresolvedFunction): Expression = withPosition(u) {
+      functionResolution.resolveFunction(u) match {
+        case func: HigherOrderFunction => func
+        case other => other.failAnalysis(
+          errorClass = "INVALID_LAMBDA_FUNCTION_CALL.NON_HIGHER_ORDER_FUNCTION",
+          messageParameters = Map(
+            "class" -> other.getClass.getCanonicalName))
+      }
+    }
+  }
+
+  /**
+   * Materializes a [[StockJsonConstructor]] whose children resolved after [[ResolveFunctions]] in
+   * this iteration (e.g. in [[ResolveTimeZone]], [[ResolveSubquery]] or type coercion), so it
+   * resolves in the same iteration as its children. Routed wrappers wait for [[ResolveFunctions]].
+   */
+  object ResolveStockJsonConstructors extends Rule[LogicalPlan] {
+    def apply(plan: LogicalPlan): LogicalPlan = plan.resolveOperatorsUpWithPruning(
+      _.containsPattern(UNRESOLVED_JSON_CONSTRUCTOR)) {
+      case q: LogicalPlan =>
+        q.transformExpressionsUpWithPruning(_.containsPattern(UNRESOLVED_JSON_CONSTRUCTOR)) {
+          case s: StockJsonConstructor if s.childrenResolved => materialize(s)
+        }
+    }
+
+    def materialize(s: StockJsonConstructor): Expression =
+      s.toBuiltin.withTimeZone(conf.sessionLocalTimeZone)
   }
 
   /**

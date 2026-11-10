@@ -39,7 +39,6 @@ import org.apache.spark.sql.catalyst.util.truncatedString
 import org.apache.spark.sql.classic.{Dataset, SparkSession}
 import org.apache.spark.sql.classic.ClassicConversions.castToImpl
 import org.apache.spark.sql.connector.catalog.{SupportsRead, SupportsWrite, TableCapability, TransactionalCatalogPlugin}
-import org.apache.spark.sql.connector.read.SupportsPushDownRequiredColumns
 import org.apache.spark.sql.connector.read.streaming.{MicroBatchStream, Offset => OffsetV2, ReadLimit, SparkDataStream, SupportsAdmissionControl, SupportsRealTimeMode, SupportsTriggerAvailableNow}
 import org.apache.spark.sql.errors.QueryExecutionErrors
 import org.apache.spark.sql.execution.{SparkPlan, SQLExecution}
@@ -196,6 +195,9 @@ class MicroBatchExecution(
   // into every subsequent batch's query plan.
   private val stateSchemaMetadatas = MutableMap[Long, StateSchemaBroadcast]()
 
+  // The rewrites of the filters that the scans of the sources got, which the micro-batches check.
+  private val pushedFilterRewrites = new StreamingV2ScanPushDown.PushedFilterRewrites
+
   /**
    * Cached result of the first `offsetLog.getLatest()` call. Reused by both
    * `logicalPlan` (to determine `enforceNamed`) and `initializeExecution` (to seed
@@ -261,6 +263,8 @@ class MicroBatchExecution(
     }
 
     import org.apache.spark.sql.execution.datasources.v2.DataSourceV2Implicits._
+    lazy val columnsAndFiltersOfSources = StreamingV2ScanPushDown.columnsAndFiltersOfSources(
+      sparkSessionForStream, planWithDedupKeys, initialLatestOffsetSeq.flatMap(_._2.metadataOpt))
     val _logicalPlan = planWithDedupKeys.transform {
       case streamingRelation @ StreamingRelation(
           dataSourceV1, sourceName, output, sourceIdentifyingName) =>
@@ -288,17 +292,14 @@ class MicroBatchExecution(
             logInfo(log"Reading table [${MDC(LogKeys.STREAMING_TABLE, table)}] " +
               log"from DataSourceV2 named '${MDC(LogKeys.STREAMING_DATA_SOURCE_NAME, srcName)}' " +
               log"${MDC(LogKeys.STREAMING_DATA_SOURCE_DESCRIPTION, dsStr)}")
-            // TODO: operator pushdown.
-            // Passes the full output schema (not a pruned subset) so that connectors
-            // implementing SupportsMetadataColumns can include metadata columns in readSchema().
-            val scanBuilder = table.newScanBuilder(options)
-            scanBuilder match {
-              case r: SupportsPushDownRequiredColumns =>
-                r.pruneColumns(output.toStructType)
-              case _ =>
-            }
-            val scan = scanBuilder.build()
-            val stream = scan.toMicroBatchStream(metadataPath)
+            // The scan gets the columns and the filters that the query reads from the source, see
+            // StreamingV2ScanPushDown. The output includes the metadata columns that the query
+            // reads, so that connectors implementing SupportsMetadataColumns include them in
+            // readSchema().
+            val streamingScan = StreamingV2ScanPushDown.buildScan(
+              table, options, output, streamConf, columnsAndFiltersOfSources.get(s),
+              StreamingV2ScanPushDown.sourceName(table, catalog, identifier))(
+              _.toMicroBatchStream(metadataPath))
             val relation = StreamingDataSourceV2Relation(
                 table,
                 output,
@@ -312,7 +313,7 @@ class MicroBatchExecution(
                 },
                 sourceIdentifyingName
               )
-            StreamingDataSourceV2ScanRelation(relation, scan, output, stream)
+            streamingScan.toRelation(relation, output)
           })
         } else if (v1.isEmpty) {
           throw QueryExecutionErrors.microBatchUnsupportedByDataSourceError(
@@ -1376,7 +1377,8 @@ class MicroBatchExecution(
         currentStateStoreCkptId,
         stateSchemaMetadatas,
         isTerminatingTrigger = trigger.isInstanceOf[AvailableNowTrigger.type],
-        isRealTimeMode = trigger.isInstanceOf[RealTimeTrigger])
+        isRealTimeMode = trigger.isInstanceOf[RealTimeTrigger],
+        pushedFilterRewrites = pushedFilterRewrites)
       execCtx.executionPlan.executedPlan // Force the lazy generation of execution plan
     }
     // Set up StateStore commit tracking before execution begins

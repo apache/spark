@@ -28,10 +28,11 @@ import org.scalatest.time.SpanSugar._
 
 import org.apache.spark.{SparkArithmeticException, SparkException, SparkNumberFormatException}
 import org.apache.spark.metrics.source.CodegenMetrics
-import org.apache.spark.rdd.MapPartitionsWithEvaluatorRDD
+import org.apache.spark.rdd.{MapPartitionsWithEvaluatorRDD, RDD}
 import org.apache.spark.sql.{DataFrame, Dataset, Row, SaveMode}
+import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.{And, Attribute, Cast, CodegenObjectFactoryMode, Expression, IsNotNull, Literal, With}
-import org.apache.spark.sql.catalyst.expressions.codegen.{ByteCodeStats, CodeAndComment, CodegenContext, CodeGenerator, WholeStageSplit, WholeStageSplitKey}
+import org.apache.spark.sql.catalyst.expressions.codegen.{ByteCodeStats, CodeAndComment, CodegenContext, CodeGenerator, ExprCode, ExprValue, GlobalValue, JavaCode, WholeStageSplit, WholeStageSplitKey}
 import org.apache.spark.sql.catalyst.plans.logical.MergeRows
 import org.apache.spark.sql.catalyst.plans.logical.MergeRows.{Keep, Update}
 import org.apache.spark.sql.classic
@@ -40,7 +41,7 @@ import org.apache.spark.sql.execution.adaptive.DisableAdaptiveExecutionSuite
 import org.apache.spark.sql.execution.aggregate.{HashAggregateExec, SortAggregateExec}
 import org.apache.spark.sql.execution.columnar.InMemoryTableScanExec
 import org.apache.spark.sql.execution.debug.{codegenString, codegenStringSeq}
-import org.apache.spark.sql.execution.joins.{BroadcastHashJoinExec, BroadcastNestedLoopJoinExec, ShuffledHashJoinExec, SortMergeJoinExec}
+import org.apache.spark.sql.execution.joins.{BroadcastHashJoinExec, BroadcastNestedLoopJoinExec, CartesianProductExec, ShuffledHashJoinExec, SortMergeJoinExec}
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSparkSession
@@ -889,8 +890,10 @@ class WholeStageCodegenSuite extends SharedSparkSession
     wholeStageCodeGenExec.get.asInstanceOf[WholeStageCodegenExec].doCodeGen()._2
   }
 
-  def genCode(ds: Dataset[_]): Seq[CodeAndComment] = {
-    val plan = ds.queryExecution.executedPlan
+  def genCode(
+      ds: Dataset[_],
+      transform: SparkPlan => SparkPlan = identity): Seq[CodeAndComment] = {
+    val plan = transform(ds.queryExecution.executedPlan)
     val wholeStageCodeGenExecs = plan.collect { case p: WholeStageCodegenExec => p }
     assert(wholeStageCodeGenExecs.nonEmpty, "WholeStageCodegenExec is expected")
     wholeStageCodeGenExecs.map(_.doCodeGen()._2)
@@ -1747,6 +1750,19 @@ class WholeStageCodegenSuite extends SharedSparkSession
       "sinh(v) should be evaluated only once per input row without function splitting")
   }
 
+  test("SPARK-59589: a subexpression method reads an Expand's varying output as a field") {
+    // `ExpandExec` holds an UNPIVOT's string output in a slot of a compacted mutable state array,
+    // such as `expand_mutableStateArray_0[1]`. A large common subexpression reading it is computed
+    // in a method of its own, which takes the local variables it reads as parameters. Taken for a
+    // local variable, the slot became a parameter `UTF8String expand_mutableStateArray_0[1]` and
+    // the stage did not compile. Handed out as a field, it is read as one, split on or off.
+    val f = "concat(upper(v), lower(v), reverse(v), trim(v), ltrim(v), rtrim(v), initcap(v), " +
+      "repeat(v, 2), lpad(v, 10, 'x'), rpad(v, 10, 'y'))"
+    val stringParameter = "private void \\w*subExpr_\\d+\\([^)]*UTF8String ".r
+    checkExpandSlotRead("subExpr", unpivot => s"SELECT c, $f AS x, concat($f, 'z') AS y $unpivot",
+      code => assert(code.forall(c => stringParameter.findFirstIn(c.body).isEmpty)))
+  }
+
   test("SPARK-60398: Expand compiles with its switch case functions spilled to nested classes") {
     // A sliding window has its Expand generate a row for each window a time can fall in: 360 rows
     // for a window of an hour sliding by 10 seconds. Without subexpression elimination the code
@@ -1771,6 +1787,22 @@ class WholeStageCodegenSuite extends SharedSparkSession
       withSQLConf(SQLConf.WHOLESTAGE_SPLIT_CONSUME_FUNC_BY_OPERATOR.key -> "false") {
         check(times.select(window($"ts", "1 hour", "10 seconds")))
       }
+    }
+  }
+
+  test("SPARK-59589: split switch cases and aggregate functions read an Expand's output as a " +
+      "field") {
+    // With the consume functions not split by operator, the consumer reads the UNPIVOT's output
+    // directly, and a tiny threshold moves its code into methods: the switch cases of the Expand
+    // that `RewriteDistinctAggregates` adds, and the aggregate functions.
+    withSQLConf(
+        SQLConf.WHOLESTAGE_SPLIT_CONSUME_FUNC_BY_OPERATOR.key -> "false",
+        SQLConf.CODEGEN_METHOD_SPLIT_THRESHOLD.key -> "1") {
+      checkExpandSlotRead("switchCaseCode", unpivot =>
+        s"SELECT count(DISTINCT lpad(v, 10, 'x')), count(DISTINCT rpad(v, 10, 'y')) $unpivot")
+      checkExpandSlotRead("doAggregate_sum", unpivot =>
+        s"SELECT c, sum(length(lpad(v, 10, 'x'))), sum(length(rpad(v, 10, 'y'))) $unpivot " +
+          "GROUP BY c")
     }
   }
 
@@ -1931,6 +1963,46 @@ class WholeStageCodegenSuite extends SharedSparkSession
     withSQLConf(SQLConf.WHOLESTAGE_CODEGEN_ENABLED.key -> "false") {
       query.collect().toSeq
     }
+
+  /**
+   * Checks the query `query` builds from a FROM clause that UNPIVOTs two string columns into
+   * `v`, with the whole stage split on and off: a method named like `method` calls `lpad` on the
+   * slot of the compacted mutable state array that `ExpandExec` holds `v` in, `check` holds of
+   * the code, the code compiles, and the rows match those computed without whole stage codegen.
+   * With the slot handed out as a local variable instead, building that method fails the testing
+   * check on its parameters.
+   */
+  private def checkExpandSlotRead(
+      method: String,
+      query: String => String,
+      check: Seq[CodeAndComment] => Unit = _ => ()): Unit = {
+    withTempView("t") {
+      spark.range(10).selectExpr("concat('a', CAST(id AS STRING)) AS a",
+        "concat('b', CAST(id AS STRING)) AS b").createOrReplaceTempView("t")
+      def df: DataFrame = sql(query("FROM t UNPIVOT (v FOR c IN (a, b))"))
+      val expected = withoutWholeStage(df)
+      Seq("true", "false").foreach { split =>
+        withSQLConf(SQLConf.WHOLESTAGE_SPLIT_EXPRESSIONS.key -> split) {
+          val code = genCode(df)
+          // A subexpression method or a switch case also writes into a slot of the same array,
+          // so the array's name alone does not show a read.
+          assert(code.exists(c => methodsHolding(c, "].lpad(").exists(_.contains(method))),
+            s"$method $split")
+          withClue(s"$method $split: ")(check(code))
+          code.foreach(CodeGenerator.compile)
+          checkAnswer(df, expected)
+        }
+      }
+      withSQLConf(SQLConf.WHOLESTAGE_SPLIT_EXPRESSIONS.key -> "false") {
+        // The bottom `ExpandExec` hands out its output as local variables, as before SPARK-59589.
+        val e = intercept[AssertionError](genCode(df, _.transformUp {
+          case x: ExpandExec if !x.child.exists(_.isInstanceOf[ExpandExec]) => LocalOutputExec(x)
+        }))
+        assert(s"\\w*$method\\w* takes \\w+\\[\\d+\\]".r.findFirstIn(e.getMessage).isDefined,
+          e.getMessage)
+      }
+    }
+  }
 
   test("SPARK-33301: a CASE WHEN too large for one method is split under whole stage codegen") {
     // Inside a stage the inputs are local variables of the stage's method, and the branches were
@@ -2800,11 +2872,10 @@ class WholeStageCodegenSuite extends SharedSparkSession
   test("SPARK-33301: a split method reads a slot of a compacted mutable state array as a field") {
     withSplitAlways {
       // `ExpandExec` holds an output of a type that is not primitive in a slot of a compacted
-      // mutable state array, such as `expand_mutableStateArray_0[0]`: a field, though not a name.
+      // mutable state array, such as `expand_mutableStateArray_0[0]`, and hands it out as a field.
       // An UNPIVOT of string columns gives such an output, which the projection above reads
       // directly when the operators' consume functions are not split into methods of their own.
-      // Every block reads it, the ELSE too, and each reads it as the field it is, taking no
-      // argument for it.
+      // Every block reads it, the ELSE too, and each reads it as the field it is.
       withSQLConf(SQLConf.WHOLESTAGE_SPLIT_CONSUME_FUNC_BY_OPERATOR.key -> "false") {
         withTempView("t") {
           spark.range(100).selectExpr("id", "concat('a', CAST(id % 50 AS STRING)) AS a",
@@ -2816,34 +2887,8 @@ class WholeStageCodegenSuite extends SharedSparkSession
           assert(genCode(df).exists { c =>
             methodsHolding(c, "expand_mutableStateArray").exists(_.contains("caseWhen"))
           })
-          assert(splitCaseWhenParameters(df).flatten.forall(!_.contains("mutableStateArray")))
           checkAnswer(df, withoutWholeStage(df))
         }
-      }
-    }
-  }
-
-  test("SPARK-33301: with the split on, a subexpression method reads a compacted slot as a field") {
-    // `ExpandExec` holds an UNPIVOT's string output in a slot of a compacted mutable state array.
-    // A large common subexpression reading it is computed in a method of its own, which takes its
-    // inputs as parameters. No parameter can be named `array[i]`, so with the split off, as before
-    // it, that method takes the slot as one and does not compile; with it on, in every stage,
-    // CASE WHEN or not, the method reads the slot as the field it is.
-    withTempView("t") {
-      spark.range(10).selectExpr("concat('a', CAST(id AS STRING)) AS a",
-        "concat('b', CAST(id AS STRING)) AS b").createOrReplaceTempView("t")
-      val f = "concat(upper(v), lower(v), reverse(v), trim(v), ltrim(v), rtrim(v), initcap(v), " +
-        "repeat(v, 2), lpad(v, 10, 'x'), rpad(v, 10, 'y'))"
-      def df: DataFrame =
-        sql(s"SELECT c, $f AS x, concat($f, 'z') AS y FROM t UNPIVOT (v FOR c IN (a, b))")
-      // A parameter named for the slot's string, whatever its name: the slot is read as a field.
-      val stringParameter = "private void \\w*subExpr_\\d+\\([^)]*UTF8String ".r
-      val code = genCode(df)
-      assert(code.forall(c => stringParameter.findFirstIn(c.body).isEmpty))
-      code.foreach(CodeGenerator.compile)
-      checkAnswer(df, withoutWholeStage(df))
-      withSQLConf(SQLConf.WHOLESTAGE_SPLIT_EXPRESSIONS.key -> "false") {
-        assert(genCode(df).exists(c => stringParameter.findFirstIn(c.body).nonEmpty))
       }
     }
   }
@@ -3015,10 +3060,17 @@ class WholeStageCodegenSuite extends SharedSparkSession
       val noRaise = "SELECT a FROM t WHERE (a > 0 OR b > 0) AND x = 1 AND y = 0"
       checkAnswer(sql(noRaise), Row(0))
       assert(!hasNullConjunctFlag(noRaise))
-      // `y + 1 > 0` can raise, so the flag is generated.
+      // `y + 1 > 0` can raise in ANSI mode, so the flag is generated.
       val raise = "SELECT a FROM t WHERE (a > 0 OR b > 0) AND x = 1 AND y + 1 > 0"
-      checkAnswer(sql(raise), Row(0))
-      assert(hasNullConjunctFlag(raise))
+      withSQLConf(SQLConf.ANSI_ENABLED.key -> "true") {
+        checkAnswer(sql(raise), Row(0))
+        assert(hasNullConjunctFlag(raise))
+      }
+      // With ANSI mode off, it can not, so no flag is generated.
+      withSQLConf(SQLConf.ANSI_ENABLED.key -> "false") {
+        checkAnswer(sql(raise), Row(0))
+        assert(!hasNullConjunctFlag(raise))
+      }
     }
   }
 
@@ -3029,8 +3081,8 @@ class WholeStageCodegenSuite extends SharedSparkSession
       // generated just before the first conjunct that references `x`, or after all of them, so
       // after a NULL conjunct it has to be generated before the conjuncts it precedes.
       //
-      // The common `b * 2` takes the CSE path of FilterExec. The overflowing `y + 1` is not
-      // common because `GeneratePredicate` (codegen off) evaluates common subexpressions first.
+      // The common `b * 2` takes the CSE path of FilterExec, while the overflowing `y + 1` is
+      // not common, so it is evaluated at its conjunct in both modes.
       val cseQuery = "SELECT a FROM t WHERE x IS NOT NULL AND NOT (a > 0 AND b > 0) AND " +
         "y + 1 > 0 AND b * 2 > 0 AND b * 2 > -1"
       def multiplyExactCount(filterExecCSE: Boolean): Int = {
@@ -3156,6 +3208,86 @@ class WholeStageCodegenSuite extends SharedSparkSession
     }
   }
 
+  test("SPARK-60332: a filter evaluates a common subexpression after the conjuncts before it") {
+    withNullConjunctTable(Int.MaxValue) {
+      // With codegen off, the condition is evaluated by a generated predicate with subexpression
+      // elimination, where `y + 1`, common to the last two conjuncts, overflows on the first row.
+      // The predicate evaluates it just before the first conjunct that references it, as the CSE
+      // branch of FilterExec does with codegen on, so the FALSE `isnotnull(x)`, or `b < 0`, drops
+      // the row first in every combination, as `And.eval` does.
+      withNullConjunctConfs(SQLConf.ANSI_ENABLED.key -> "true") { skipsAtNull =>
+        checkAnswer(
+          sql("SELECT a FROM t WHERE x IS NOT NULL AND NOT (a > 0 AND b > 0) AND y + 1 > 0 AND " +
+            "y + 1 > -1"),
+          Row(0))
+        checkAnswer(sql("SELECT a FROM t WHERE b < 0 AND y + 1 > 0 AND y + 1 > -1"), Seq.empty)
+        // A NULL conjunct does not stop the evaluation, so the common `y + 1` is evaluated,
+        // unless the legacy behavior skips the row at the NULL conjunct.
+        val nullConjunct =
+          "SELECT a FROM t WHERE NOT (a > 0 AND b > 0) AND y + 1 > 0 AND y + 1 > -1"
+        if (skipsAtNull) {
+          checkAnswer(sql(nullConjunct), Row(0))
+        } else {
+          checkArithmeticOverflow(nullConjunct)
+        }
+      }
+      // A join condition is evaluated by the same generated predicate on the join paths without
+      // whole-stage codegen, here a cartesian product. Every conjunct references both sides, so
+      // none is pushed down into a filter, and the FALSE `b < k` stops the evaluation before
+      // the common `y + 1` overflows, whatever the whole-stage codegen config.
+      withTempView("u") {
+        Seq(0).toDF("k").createOrReplaceTempView("u")
+        val join = "SELECT a FROM t JOIN u ON b < k AND y + 1 > k AND y + 1 > k - 1"
+        Seq(true, false).foreach { codegen =>
+          withSQLConf(
+              SQLConf.ANSI_ENABLED.key -> "true",
+              SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key -> "-1",
+              SQLConf.PARQUET_FILTER_PUSHDOWN_ENABLED.key -> "false",
+              SQLConf.WHOLESTAGE_CODEGEN_ENABLED.key -> codegen.toString) {
+            val df = sql(join)
+            assert(df.queryExecution.executedPlan.exists(_.isInstanceOf[CartesianProductExec]))
+            checkAnswer(df, Seq.empty)
+          }
+        }
+      }
+    }
+    // `(a + c) + b` in the IF branch of the first conjunct is `(a + b) + c`, common to the next
+    // two conjuncts, under the canonicalization of `+`, but holds no `a + b`, common to the last
+    // three. `a + b` is evaluated before the first conjunct, which the function of `(a + b) + c`
+    // reads, not before the second, or `(a + b) + c` would read the previous row's `a + b`, -5,
+    // and drop the last row. The filter runs through the generated predicate both when the
+    // optimizer filters the local data, with `ConvertToLocalRelation`, which the shared session
+    // excludes, and in `FilterExec` without whole-stage codegen.
+    val localData = "SELECT a FROM VALUES (3, 3, 1, 1, 0), (-5, 0, 1, 1, 0), (3, 3, 1, 1, 1) " +
+      "AS t(a, b, c, d, x) WHERE IF(x > 0, a + c + b, d) > 0 AND a + b + c > 1 AND " +
+      "a + b + c < 10 AND a + b > 5"
+    Seq(
+      SQLConf.OPTIMIZER_EXCLUDED_RULES.key -> "",
+      SQLConf.WHOLESTAGE_CODEGEN_ENABLED.key -> "false").foreach { conf =>
+      withSQLConf(
+          conf,
+          SQLConf.CODEGEN_FACTORY_MODE.key -> CodegenObjectFactoryMode.CODEGEN_ONLY.toString) {
+        checkAnswer(sql(localData), Seq(Row(3), Row(3)))
+      }
+    }
+    // The common subexpressions are found in the whole predicate, as before, so that a predicate
+    // with a subquery gets no elimination inside a task (SPARK-38333), and the conjuncts are not
+    // compared with a subquery plan on an executor.
+    withSQLConf(
+        SQLConf.WHOLESTAGE_CODEGEN_ENABLED.key -> "false",
+        SQLConf.CODEGEN_FACTORY_MODE.key -> CodegenObjectFactoryMode.CODEGEN_ONLY.toString) {
+      withTempView("u") {
+        spark.range(10).toDF("k").cache().createOrReplaceTempView("u")
+        spark.table("u").collect()
+        checkAnswer(
+          spark.range(10).selectExpr("id AS x", "id AS y")
+            .where("x > (SELECT max(k) - 20 FROM u) AND y + 1 > 0 AND y + 1 < 100")
+            .selectExpr("count(*)"),
+          Row(10))
+      }
+    }
+  }
+
   test("SPARK-60403: full outer joins compile with their functions spilled to nested classes") {
     // A full outer join outputs its rows through a function of its own, and generates the code of
     // the operators above it, for the body of that function, before adding the function: here a
@@ -3249,4 +3381,28 @@ class WholeStageCodegenSuite extends SharedSparkSession
       assert(CodegenMetrics.METRIC_COMPILATION_TIME.getCount == compiles)
     }
   }
+}
+
+/** Hands out the values and null flags its child hands out as fields as local variables. */
+private case class LocalOutputExec(child: SparkPlan) extends UnaryExecNode with CodegenSupport {
+  override def output: Seq[Attribute] = child.output
+
+  override def inputRDDs(): Seq[RDD[InternalRow]] =
+    child.asInstanceOf[CodegenSupport].inputRDDs()
+
+  override protected def doProduce(ctx: CodegenContext): String =
+    child.asInstanceOf[CodegenSupport].produce(ctx, this)
+
+  override def doConsume(ctx: CodegenContext, input: Seq[ExprCode], row: ExprCode): String =
+    consume(ctx, input.map(e => e.copy(isNull = local(e.isNull), value = local(e.value))))
+
+  private def local(v: ExprValue): ExprValue = v match {
+    case GlobalValue(name, javaType) => JavaCode.variable(name, javaType)
+    case _ => v
+  }
+
+  override protected def doExecute(): RDD[InternalRow] = child.execute()
+
+  override protected def withNewChildInternal(newChild: SparkPlan): LocalOutputExec =
+    copy(child = newChild)
 }

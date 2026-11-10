@@ -179,6 +179,27 @@ private[hive] class HiveClientImpl(
       log"${MDC(HIVE_CLIENT_VERSION, version.fullVersion)}) is " +
     log"${MDC(PATH, conf.getVar(HiveConf.getConfVars("hive.metastore.warehouse.dir")))}")
 
+  // Hive 4 creates its metastore connection pool without a JDBC driver class name, so the pool
+  // gets the driver from java.sql.DriverManager. DriverManager loads the drivers listed in
+  // META-INF/services only once per JVM, through the context class loader of its first caller,
+  // and returns only drivers that the caller's class loader resolves to the same class. When an
+  // isolated client opens the metastore database itself, load the configured JDBC driver through
+  // the client class loader so that the driver registers itself with DriverManager.
+  if (clientLoader.isolationOn) {
+    val msUri = conf.getVar(HiveConf.getConfVars("hive.metastore.uris"))
+    if (msUri == null || msUri.trim.isEmpty) {
+      val driver = conf.getVar(HiveConf.getConfVars("javax.jdo.option.ConnectionDriverName"))
+      try {
+        // scalastyle:off classforname
+        Class.forName(driver, true, clientLoader.classLoader)
+        // scalastyle:on classforname
+      } catch {
+        case NonFatal(e) =>
+          logWarning(log"Failed to load the metastore JDBC driver ${MDC(CLASS_NAME, driver)}", e)
+      }
+    }
+  }
+
   private def newState(): SessionState = {
     val hiveConf = newHiveConf(sparkConf, hadoopConf, extraConfig, Some(initClassLoader))
     val state = new SessionState(hiveConf)

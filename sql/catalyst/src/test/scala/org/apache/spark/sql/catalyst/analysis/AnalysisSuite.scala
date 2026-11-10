@@ -53,6 +53,62 @@ import org.apache.spark.sql.util.CaseInsensitiveStringMap
 class AnalysisSuite extends AnalysisTest with Matchers {
   import org.apache.spark.sql.catalyst.analysis.TestRelations._
 
+  test("resolve a table specification without changing option evaluation or other fields") {
+    val specification = UnresolvedTableSpec(
+      properties = Map("property" -> "value"),
+      provider = Some("parquet"),
+      optionExpression = OptionList(Seq(
+        "answer" -> Literal(1),
+        "answer" -> Add(Literal(40), Literal(2)),
+        "nullable" -> Literal(null))),
+      location = Some("/table"),
+      comment = Some("table comment"),
+      collation = Some("UTF8_BINARY"),
+      serde = None,
+      external = true,
+      constraints = Nil)
+
+    val expected = TableSpec(
+      properties = specification.properties,
+      provider = specification.provider,
+      options = Map("answer" -> "42", "nullable" -> null),
+      location = specification.location,
+      comment = specification.comment,
+      collation = specification.collation,
+      serde = specification.serde,
+      external = specification.external,
+      constraints = Nil)
+    assert(ResolveTableSpec.resolveTableSpec(specification) == expected)
+    assert(ResolveTableSpec.resolveTableSpec(expected) eq expected)
+    val unresolved = specification.copy(
+      optionExpression = OptionList(Seq("answer" -> UnresolvedAttribute("missing"))))
+    assert(ResolveTableSpec.resolveTableSpec(unresolved) eq unresolved)
+  }
+
+  gridTest("table specification rejects root subquery options before evaluation")(
+      Seq(false, true)) { resolved =>
+    val subqueryPlan = if (resolved) OneRowRelation() else UnresolvedRelation(Seq("missing"))
+    val specification = UnresolvedTableSpec(
+      properties = Map.empty,
+      provider = Some("parquet"),
+      optionExpression = OptionList(Seq("answer" -> ScalarSubquery(subqueryPlan))),
+      location = None,
+      comment = None,
+      collation = None,
+      serde = None,
+      external = false,
+      constraints = Nil)
+
+    val error = intercept[AnalysisException] {
+      ResolveTableSpec.resolveTableSpec(specification)
+    }
+    checkError(
+      exception = error,
+      condition = "INVALID_SQL_SYNTAX.OPTION_IS_INVALID",
+      parameters = Map("key" -> "answer", "supported" -> "constant expressions"))
+    assert(error.getCause == null)
+  }
+
   test("fail for unresolved plan") {
     intercept[AnalysisException] {
       // `testRelation` does not have column `b`.
@@ -600,7 +656,7 @@ class AnalysisSuite extends AnalysisTest with Matchers {
     if (!bean.isThreadAllocatedMemoryEnabled) {
       bean.setThreadAllocatedMemoryEnabled(true)
     }
-    val threadId = Thread.currentThread().getId
+    val threadId = Thread.currentThread().threadId
     val sharedOutput = (0 until 26).map(i => AttributeReference(s"c$i", IntegerType)())
 
     def allocatedBytes(branchCount: Int): Long = {
@@ -640,7 +696,7 @@ class AnalysisSuite extends AnalysisTest with Matchers {
     if (!bean.isThreadAllocatedMemoryEnabled) {
       bean.setThreadAllocatedMemoryEnabled(true)
     }
-    val threadId = Thread.currentThread().getId
+    val threadId = Thread.currentThread().threadId
 
     def allocatedBytes(width: Int, useDirectPath: Boolean): Long = {
       val plan = wideProject(width)
