@@ -38,11 +38,12 @@ import org.apache.spark.deploy.k8s.Fabric8Aliases._
 import org.apache.spark.internal.config.SCHEDULER_MAX_RETAINED_UNKNOWN_EXECUTORS
 import org.apache.spark.resource.{ResourceProfile, ResourceProfileManager}
 import org.apache.spark.rpc.{RpcAddress, RpcCallContext, RpcEndpoint, RpcEndpointRef, RpcEnv}
-import org.apache.spark.scheduler.{ExecutorDecommissionInfo, ExecutorKilled, ExecutorLossReason, LiveListenerBus, TaskSchedulerImpl}
+import org.apache.spark.scheduler.{ExecutorDecommissionInfo, ExecutorExited, ExecutorKilled, ExecutorLossReason, LiveListenerBus, TaskSchedulerImpl}
 import org.apache.spark.scheduler.cluster.CoarseGrainedClusterMessages.{DecommissionExecutor, RegisterExecutor, RemoveExecutor, StopDriver, StopExecutors}
 import org.apache.spark.scheduler.cluster.CoarseGrainedSchedulerBackend
 import org.apache.spark.scheduler.cluster.k8s.ExecutorLifecycleTestUtils.TEST_SPARK_APP_ID
 import org.apache.spark.storage.{BlockManager, BlockManagerMaster}
+import org.apache.spark.util.SparkExitCode
 
 class KubernetesClusterSchedulerBackendSuite extends SparkFunSuite with BeforeAndAfter {
 
@@ -248,7 +249,26 @@ class KubernetesClusterSchedulerBackendSuite extends SparkFunSuite with BeforeAn
     verify(driverEndpointRef).send(RemoveExecutor("2", ExecutorKilled))
   }
 
-  test("SPARK-55639: doRemoveExecutor triggers setRecoveryMode on OOM") {
+  for ((name, code, causedByApp, tagged, message, expected) <- Seq(
+      ("JVM OOM", SparkExitCode.OOM, true, false, "Executor failed", true),
+      ("container OOM", 137, true, true, "Executor failed", true),
+      ("plain SIGKILL", 137, true, false, "exit code 137 (possible container OOM)", false),
+      ("non-application exit", 137, false, true, "OOMKilled", false),
+      ("sidecar OOM message", 1, true, false, "Sidecar was OOMKilled", false))) {
+    test(s"SPARK-55639: Kubernetes recovery uses the typed OOM signal for $name") {
+      val backend = spy[KubernetesClusterSchedulerBackend](schedulerBackendUnderTest)
+      when(backend.isExecutorActive(any())).thenReturn(false)
+      backend.start()
+      val reason = ExecutorExited(code, causedByApp, message)
+      if (tagged) reason.isOutOfMemoryError = true
+
+      backend.doRemoveExecutor("1", reason)
+      verify(driverEndpointRef).send(RemoveExecutor("1", reason))
+      verify(podAllocator, times(if (expected) 1 else 0)).setRecoveryMode()
+    }
+  }
+
+  test("Kubernetes recovery ignores an untyped executor loss message containing OOM") {
     val backend = spy[KubernetesClusterSchedulerBackend](schedulerBackendUnderTest)
     when(backend.isExecutorActive(any())).thenReturn(false)
     backend.start()
@@ -258,7 +278,7 @@ class KubernetesClusterSchedulerBackendSuite extends SparkFunSuite with BeforeAn
 
     backend.doRemoveExecutor("1", reason)
     verify(driverEndpointRef).send(RemoveExecutor("1", reason))
-    verify(podAllocator).setRecoveryMode()
+    verify(podAllocator, never()).setRecoveryMode()
   }
 
   test("Kill executors") {

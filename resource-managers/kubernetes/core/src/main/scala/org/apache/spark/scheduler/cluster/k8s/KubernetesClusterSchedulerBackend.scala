@@ -37,7 +37,7 @@ import org.apache.spark.internal.LogKeys.{COUNT, TOTAL}
 import org.apache.spark.internal.config.SCHEDULER_MIN_REGISTERED_RESOURCES_RATIO
 import org.apache.spark.resource.ResourceProfile
 import org.apache.spark.rpc.{RpcAddress, RpcCallContext}
-import org.apache.spark.scheduler.{ExecutorDecommission, ExecutorDecommissionInfo, ExecutorKilled, ExecutorLossReason,
+import org.apache.spark.scheduler.{ExecutorDecommission, ExecutorDecommissionInfo, ExecutorExited, ExecutorKilled, ExecutorLossReason,
   TaskSchedulerImpl}
 import org.apache.spark.scheduler.cluster.{CoarseGrainedSchedulerBackend, SchedulerBackendUtils}
 import org.apache.spark.scheduler.cluster.CoarseGrainedClusterMessages.RegisterExecutor
@@ -76,8 +76,9 @@ private[spark] class KubernetesClusterSchedulerBackend(
 
   private[k8s] def doRemoveExecutor(executorId: String, reason: ExecutorLossReason): Unit = {
     removeExecutor(executorId, reason)
-    podAllocator match {
-      case allocator: ExecutorPodsAllocator if reason.message.contains("OOM") =>
+    (podAllocator, reason) match {
+      case (allocator: ExecutorPodsAllocator, exited: ExecutorExited)
+          if exited.exitCausedByApp && exited.isOutOfMemoryError =>
         logWarning("OOM is detected.")
         allocator.setRecoveryMode()
       case _ => // no-op

@@ -813,6 +813,24 @@ class ExecutorAllocationManagerSuite extends SparkFunSuite {
     assert(manager.maxNumExecutorsNeededPerResourceProfile(rpId) === 0)
   }
 
+  test("decommissioning before TaskStart preserves the running OOM retry's coverage") {
+    val conf = createConf().set(config.EXECUTOR_CORES, 4)
+      .set(config.SCHEDULER_OOM_RETRY_ENABLED, true)
+    val rpId = DEFAULT_RESOURCE_PROFILE_ID
+    val reservation = Some(OomRetryReservationInfo(rpId, "reserved", 0, 0, 0))
+    val manager = createManager(conf, oomRetryReservationInfo = () => reservation)
+    onExecutorAdded(manager, "reserved", rpManager.defaultResourceProfile)
+    post(SparkListenerStageSubmitted(createStageInfo(0, 1)))
+    post(SparkListenerStageSubmitted(createStageInfo(1, 4)))
+
+    // The backend stops offering the executor before the listener sees the isolated launch.
+    when(client.isExecutorActive("reserved")).thenReturn(false)
+    post(SparkListenerTaskStart(0, 0, createTaskInfo(0, 0, "reserved")))
+    assert(totalRunningTasksPerResourceProfile(manager) === 1)
+    assert(manager.listener.pendingTasksPerResourceProfile(rpId) === 4)
+    assert(manager.maxNumExecutorsNeededPerResourceProfile(rpId) === 2)
+  }
+
   test("executor removal clears OOM reservation coverage even if TaskEnd was dropped") {
     val manager = createManager(createConf().set(config.SCHEDULER_OOM_RETRY_ENABLED, true))
     val reservation = OomRetryReservationInfo(DEFAULT_RESOURCE_PROFILE_ID, "lost", 0, 0, 0)

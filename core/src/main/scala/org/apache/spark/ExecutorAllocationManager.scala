@@ -919,8 +919,10 @@ private[spark] class ExecutorAllocationManager(
       val stageAttempt = StageAttempt(stageId, stageAttemptId)
       val taskIndex = taskStart.taskInfo.index
       val executorId = taskStart.taskInfo.executorId
-      // Ignore late starts on removed executors when tracking OOM retry coverage (SPARK-26927).
-      val trackForOomRetry = oomRetryEnabled && client.isExecutorActive(executorId)
+      // A decommissioning executor can still be running its isolated retry. Executor loss
+      // clears the reservation before the executor-removed event, so late starts stay ignored.
+      val trackForOomRetry = oomRetryEnabled && (client.isExecutorActive(executorId) ||
+        oomRetryReservationInfo().exists(_.executorId == executorId))
       allocationManager.synchronized {
         if (trackForOomRetry) {
           executorToRunningTasks.getOrElseUpdate(executorId,
