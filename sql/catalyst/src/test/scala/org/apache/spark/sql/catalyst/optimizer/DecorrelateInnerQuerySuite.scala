@@ -23,7 +23,7 @@ import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.plans._
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.internal.SQLConf
-import org.apache.spark.sql.types.IntegerType
+import org.apache.spark.sql.types.{DecimalType, IntegerType, LongType}
 
 class DecorrelateInnerQuerySuite extends PlanTest {
 
@@ -164,6 +164,22 @@ class DecorrelateInnerQuerySuite extends PlanTest {
         Filter(x === y + a,
           DomainJoin(Seq(x, y), testRelation)))
     check(innerPlan, outerPlan, correctAnswer, Seq(x <=> x, y <=> y))
+  }
+
+  test("SPARK-60969: pull up a cast from a scale-0 decimal depending on the eval mode") {
+    val d = AttributeReference("d", DecimalType(19, 0))()
+    val d1 = AttributeReference("d1", DecimalType(19, 1))()
+    def cast(attr: Attribute, mode: EvalMode.Value): Expression =
+      Cast(attr, LongType, None, mode)
+    val k = OuterReference(AttributeReference("k", LongType)())
+    // ANSI is 1:1 under both equalities, TRY only under `=`, and LEGACY wraps around.
+    assert(DecorrelateInnerQuery.canPullUpOverAgg(cast(d, EvalMode.ANSI) === k))
+    assert(DecorrelateInnerQuery.canPullUpOverAgg(cast(d, EvalMode.ANSI) <=> k))
+    assert(DecorrelateInnerQuery.canPullUpOverAgg(cast(d, EvalMode.TRY) === k))
+    assert(!DecorrelateInnerQuery.canPullUpOverAgg(cast(d, EvalMode.TRY) <=> k))
+    assert(!DecorrelateInnerQuery.canPullUpOverAgg(cast(d, EvalMode.LEGACY) === k))
+    // A non-zero scale truncates, so it is not 1:1.
+    assert(!DecorrelateInnerQuery.canPullUpOverAgg(cast(d1, EvalMode.ANSI) === k))
   }
 
   test("aggregate with correlated equality predicates that has no attribute") {

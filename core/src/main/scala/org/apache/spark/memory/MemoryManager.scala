@@ -58,7 +58,8 @@ private[spark] abstract class MemoryManager(
   onHeapStorageMemoryPool.incrementPoolSize(onHeapStorageMemory)
   onHeapExecutionMemoryPool.incrementPoolSize(onHeapExecutionMemory)
 
-  protected[this] val maxOffHeapMemory = conf.get(MEMORY_OFFHEAP_SIZE)
+  protected[this] val maxOffHeapMemory =
+    if (conf.get(MEMORY_OFFHEAP_ENABLED))  conf.get(MEMORY_OFFHEAP_SIZE) else 0
   protected[this] val offHeapStorageMemory =
     (maxOffHeapMemory * conf.get(MEMORY_STORAGE_FRACTION)).toLong
 
@@ -241,6 +242,9 @@ private[spark] abstract class MemoryManager(
         "No support for unaligned Unsafe. Set spark.memory.offHeap.enabled to false.")
       MemoryMode.OFF_HEAP
     } else {
+      if (conf.get(MEMORY_OFFHEAP_SIZE) > 0) {
+        logWarning(s"spark.memory.offHeap.size is > 0 when spark.memory.offHeap.enabled == false")
+      }
       MemoryMode.ON_HEAP
     }
   }
@@ -255,6 +259,8 @@ private[spark] abstract class MemoryManager(
    * SPARK-37593 If we are using G1GC, ZGC or ShenandoahGC, it's better to take the
    * LONG_ARRAY_OFFSET into consideration so that the requested memory size is power of 2
    * and can be divided by heap region size to reduce memory waste.
+   * `TaskMemoryManager.growingPageHeaderBytes` recognizes such a page size, so that the growing
+   * pages of hash join maps leave the same room.
    */
   private lazy val defaultPageSizeBytes = {
     val minPageSize = 1L * 1024 * 1024   // 1MB

@@ -142,7 +142,7 @@ The tests are tagged, and the set of tests to run can be controlled via the foll
 
 ## Customising the Build
 
-* `--java-version <version>` - Java version to build Spark and the tests with. The default is `17`.
+* `--java-version <version>` - Java version to build Spark and the tests with. The default is `21`.
 * `--hadoop-profile <profile>` - Hadoop Maven profile to build with. The default is `hadoop-3`.
 * `--skip-building-dependencies` - skip rebuilding the modules the integration tests depend on
   (drops Maven's `-am` flag). Useful for iterating when the current tree is already built.
