@@ -172,7 +172,6 @@ fn callback(
     let Err(message) = provider_call(|| action(state)) else {
         return 0;
     };
-    state.finished = true;
     state.last_error = Some(c_message(message));
     5 // EIO; get_last_error supplies the provider's actual error message.
 }
