@@ -375,10 +375,11 @@ abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
       // If there is no hint, or none of those hints apply:
       //   1. When range join is enabled and a side is small enough to broadcast,
       //      pick a broadcast range join on a side BroadcastRangeJoinExec
-      //      supports. Both sides small: the smaller side when it is supported.
-      //      The preserved side of an outer, semi, or anti join is not built.
-      //      A last-resort nested-loop build side that was never confirmed
-      //      broadcastable by hint or size is not upgraded to a range join.
+      //      supports. Both sides small: an inner join builds the smaller side,
+      //      left outer, semi, and anti joins build the right side, and a right
+      //      outer join builds the left side. A last-resort nested-loop build
+      //      side that was never confirmed broadcastable by hint or size is not
+      //      upgraded to a range join.
       //   2. Pick broadcast nested loop join if one side is small enough to
       //      broadcast. If only the left side is broadcastable and it is a left
       //      join, or only the right side is broadcastable and it is a right

@@ -143,8 +143,7 @@ object RangeJoinBenchmark extends SqlBasedBenchmark {
   // M approx 1, 10, 100, 1000, 5000, and 10000. The build side still has to be
   // sorted to answer a few streamed probes, so this weighs that one-time O(N log N)
   // cost against one O(N) nested-loop scan of the same build side, and shows how
-  // fast that cost amortizes
-  // as M grows just past one.
+  // fast that cost amortizes as M grows just past one.
   private val tinyProbeRowCounts = Seq(1, 10, 100, 1000, 5000, 10000)
   private lazy val tinyPoints: Map[Int, DataFrame] = tinyProbeRowCounts.map { n =>
     n -> cached(spark.range(n).select((col("id") % (buildRows.toLong * width)).as("p")))

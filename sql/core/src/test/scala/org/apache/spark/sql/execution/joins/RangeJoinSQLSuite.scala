@@ -228,22 +228,30 @@ class RangeJoinSQLSuite extends QueryTest with SharedSparkSession with AdaptiveS
     // cast does), and DECIMAL(2, 1) maps to LongIntervalIndex too, defeating the point of
     // this view. The `D` suffix keeps these columns typed DOUBLE, which routes here through
     // `RangeIndex.longKey`'s `DoublePrefixComparator` bridge rather than DECIMAL's unscaled
-    // long. -0.0D/0.0D and NaN rows pin that build and probe agree on the long encoding of
-    // those special values; `<` is false for any NaN pair under real SQL comparison, so they
-    // add no matches in either the range join or the nested-loop baseline it is checked
-    // against, but a prefix mismatch between the two conversions would still surface as a
-    // missed match on the finite rows sharing a tree path with them.
+    // long.
+    //
+    // Under `a.lo < b.hi AND b.lo < a.hi`, three rows pin that bridge against real SQL
+    // comparison by making a match's outcome hinge on a special value rather than just
+    // tolerating its presence:
+    //   - a's (-0.0D, 100.0D) against b's (-100.0D, 0.0D): SQL's `-0.0 = 0.0` makes the
+    //     `a.lo < b.hi` clause false, so no match is expected; an encoding that sorts
+    //     -0.0 strictly below 0.0 instead of folding it would wrongly produce one.
+    //   - a's (-200.0D, 0.0D) against b's (-0.0D, 200.0D) pins the same -0.0/0.0 equality
+    //     on the other clause, `b.lo < a.hi`.
+    //   - a's (0.0D, DOUBLE('NaN')): every b row whose `lo` clears 0.0 must still match
+    //     through `b.lo < NaN`, since NaN is the SQL maximum; an encoding that does not
+    //     order NaN above every finite double would drop those matches.
     sql(
       """
         |CREATE OR REPLACE TEMP VIEW dbl_ranges_a(lo, hi) AS VALUES
         |  (-1.0D, 0.0D), (0.0D, 1.0D), (0.0D, 2.0D), (1.0D, 5.0D),
-        |  (-0.0D, 0.0D), (DOUBLE('NaN'), DOUBLE('NaN'))
+        |  (-0.0D, 100.0D), (-200.0D, 0.0D), (0.0D, DOUBLE('NaN'))
         |""".stripMargin)
     sql(
       """
         |CREATE OR REPLACE TEMP VIEW dbl_ranges_b(lo, hi) AS VALUES
         |  (-2.0D, -1.0D), (-4.0D, -2.0D), (1.0D, 3.0D), (5.0D, 7.0D),
-        |  (0.0D, 0.0D), (DOUBLE('NaN'), DOUBLE('NaN'))
+        |  (-100.0D, 0.0D), (-0.0D, 200.0D), (50.0D, 60.0D)
         |""".stripMargin)
     assert(sql("SELECT lo, hi FROM dbl_ranges_a").schema.fields.forall(_.dataType == DoubleType))
     assert(sql("SELECT lo, hi FROM dbl_ranges_b").schema.fields.forall(_.dataType == DoubleType))
@@ -325,11 +333,17 @@ class RangeJoinSQLSuite extends QueryTest with SharedSparkSession with AdaptiveS
   }
 
   private def setupFloatPartialViews(): Unit = {
+    // CAST(-0.0 AS FLOAT) would cast the unsuffixed literal -0.0, a DECIMAL whose zero
+    // carries no sign, producing +0.0F; CAST(-0.0D AS FLOAT) casts the signed DOUBLE
+    // literal instead, so the row is genuine negative zero. Paired with the 0.0F bound
+    // below, `p.f < b.lo` pins that: SQL treats -0.0F = 0.0F, so the strict comparison
+    // is false, and an encoding that sorts -0.0F strictly below 0.0F instead of folding
+    // it would wrongly match.
     sql(
       """
         |CREATE OR REPLACE TEMP VIEW flt_partial_points(f) AS VALUES
         |  (CAST(0.5 AS FLOAT)), (CAST(1.0 AS FLOAT)), (CAST(4.0 AS FLOAT)),
-        |  (CAST(-0.0 AS FLOAT)), (FLOAT('NaN'))
+        |  (CAST(-0.0D AS FLOAT)), (FLOAT('NaN'))
         |""".stripMargin)
     sql(
       """
@@ -507,6 +521,39 @@ class RangeJoinSQLSuite extends QueryTest with SharedSparkSession with AdaptiveS
     }
   }
 
+  test("a BROADCAST hint alone, with by-size qualification disabled, still plans a " +
+      "range join that builds the hinted side") {
+    // Every hinted range-join query elsewhere in this suite hints a side that also
+    // qualifies by size under the default broadcast threshold, so sideBroadcastQualified's
+    // size-based disjunct alone would plan the same range join either way, and the hint
+    // disjunct's own contribution goes untested. With the threshold disabled here, only
+    // hintToBroadcastLeft/hintToBroadcastRight can still qualify a side: deleting either
+    // one would silently replan a BROADCAST-hinted range join over a large table (such as
+    // an IP range table) as a broadcast nested loop join instead, with correct but slower
+    // results that only the (CI-skipped) benchmark would notice.
+    setupIpLookupViews()
+    val unhinted = sql(
+      s"SELECT s.id, l.zip_id FROM signin_ip s JOIN ip_lookup l ON $pointCond")
+    withRangeJoin(SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key -> "-1") {
+      val hintedRight = sql(
+        "SELECT /*+ BROADCAST(l) */ s.id, l.zip_id FROM signin_ip s JOIN ip_lookup l " +
+          s"ON $pointCond")
+      val rightJoins = findRangeJoin(hintedRight.queryExecution.executedPlan)
+      assert(rightJoins.size == 1 && rightJoins.head.buildSide == BuildRight)
+      checkAnswer(hintedRight, unhinted)
+
+      // Same query and hinted table, with the join order swapped so `l` -- the interval
+      // side the hint targets -- is now the physically left input, pinning the
+      // hintToBroadcastLeft arm instead.
+      val hintedLeft = sql(
+        "SELECT /*+ BROADCAST(l) */ s.id, l.zip_id FROM ip_lookup l JOIN signin_ip s " +
+          s"ON $pointCond")
+      val leftJoins = findRangeJoin(hintedLeft.queryExecution.executedPlan)
+      assert(leftJoins.size == 1 && leftJoins.head.buildSide == BuildLeft)
+      checkAnswer(hintedLeft, unhinted)
+    }
+  }
+
   test("full outer does not plan a range join") {
     setupIpLookupViews()
     val fullOuter =
@@ -533,6 +580,51 @@ class RangeJoinSQLSuite extends QueryTest with SharedSparkSession with AdaptiveS
       assert(planned.head.rangeJoinKind == LessPartialRangeJoin(strict = true))
       checkAnswer(df, expected)
     }
+  }
+
+  test("a null streamed key in a partial range join is not a match, not a crash") {
+    // The LongPointIndex scan arm's null guard (and the null term the generated probe
+    // shares with it) keep a NULL streamed key away from `points.toLong`: for a compact
+    // decimal, `toLong(null)` calls `toUnscaledLong` on a null Decimal and throws, while
+    // an int key would instead quietly probe with 0. wide_dec_partial_points' NULL row
+    // only reaches an inner join, where the inferred not-null filter strips it before it
+    // gets here; left outer and left anti preserve a null-keyed streamed row instead of
+    // filtering it, so they are what actually reaches the guard.
+    sql("CREATE OR REPLACE TEMP VIEW null_key_ints(a) AS VALUES (CAST(NULL AS INT)), (1), (10)")
+    sql("CREATE OR REPLACE TEMP VIEW int_bounds(b) AS VALUES (5)")
+    sql(
+      """
+        |CREATE OR REPLACE TEMP VIEW null_key_decimals(a) AS VALUES
+        |  (CAST(NULL AS DECIMAL(10, 2))), (CAST(1.0 AS DECIMAL(10, 2))),
+        |  (CAST(10.0 AS DECIMAL(10, 2)))
+        |""".stripMargin)
+    sql("CREATE OR REPLACE TEMP VIEW decimal_bounds(b) AS VALUES (CAST(5.0 AS DECIMAL(10, 2)))")
+    assert(sql("SELECT a FROM null_key_decimals").schema.fields.head.dataType
+      .asInstanceOf[DecimalType].precision <= Decimal.MAX_LONG_DIGITS)
+
+    Seq("null_key_ints" -> "int_bounds", "null_key_decimals" -> "decimal_bounds")
+      .foreach { case (points, bounds) =>
+        val outerQuery = s"SELECT p.a, b.b FROM $points p LEFT JOIN $bounds b ON p.a < b.b"
+        val antiQuery = s"SELECT p.a FROM $points p LEFT ANTI JOIN $bounds b ON p.a < b.b"
+        val expectedOuter = sql(outerQuery).collect()
+        val expectedAnti = sql(antiQuery).collect()
+        assert(expectedOuter.exists(_.anyNull), points)
+        assert(expectedAnti.exists(_.anyNull), points)
+
+        Seq(true, false).foreach { codegen =>
+          withRangeJoin(
+            SQLConf.WHOLESTAGE_CODEGEN_ENABLED.key -> codegen.toString,
+            SQLConf.CODEGEN_FALLBACK.key -> "false") {
+            val outer = sql(outerQuery)
+            assert(findRangeJoin(outer.queryExecution.executedPlan).size == 1, (points, codegen))
+            checkAnswer(outer, expectedOuter)
+
+            val anti = sql(antiQuery)
+            assert(findRangeJoin(anti.queryExecution.executedPlan).size == 1, (points, codegen))
+            checkAnswer(anti, expectedAnti)
+          }
+        }
+      }
   }
 
   test("strict inequalities over duplicated build keys match the nested loop join") {
@@ -617,6 +709,33 @@ class RangeJoinSQLSuite extends QueryTest with SharedSparkSession with AdaptiveS
     assert(expected.exists(r => r.getInt(2) == 3 && r.getInt(3) == 1), expected.toSeq)
     assert(expected.length == 3, expected.toSeq)
     // Broadcast each side in turn so the inverted interval lands on the index once.
+    Seq("/*+ BROADCAST(a) */", "/*+ BROADCAST(b) */").foreach { hint =>
+      val hinted = query.replace("SELECT ", s"SELECT $hint ")
+      withRangeJoin() {
+        val df = sql(hinted)
+        assert(findRangeJoin(df.queryExecution.executedPlan).size == 1, hinted)
+        checkAnswer(df, expected)
+      }
+    }
+  }
+
+  test("an inclusive interval overlap treats -0.0 and 0.0 as equal on either build side") {
+    // dbl_ranges_a/b (setupDoubleIntervalViews) pin -0.0/0.0 equality under the suite's
+    // strict `<` interval-overlap query: a comparator that sorts -0.0 strictly below 0.0
+    // wrongly turns a false clause true there. This is the complementary direction under
+    // an inclusive `<=` overlap: +0.0 and -0.0 here touch only at that shared point, so
+    // the match holds only if -0.0 <= 0.0 and 0.0 <= -0.0 both hold, i.e. only if they
+    // compare equal; a comparator that instead orders them as distinct values would drop
+    // the match. Broadcasting each side in turn puts +0.0 and -0.0 on the build side once
+    // each, so the index conversion and the streamed probe's conversion are each checked
+    // on both values.
+    sql("CREATE OR REPLACE TEMP VIEW inc_zero_pos(lo, hi) AS VALUES (0.0D, 0.0D)")
+    sql("CREATE OR REPLACE TEMP VIEW inc_zero_neg(lo, hi) AS VALUES (-0.0D, -0.0D)")
+    val query =
+      "SELECT a.lo, a.hi, b.lo, b.hi FROM inc_zero_pos a JOIN inc_zero_neg b " +
+        "ON a.lo <= b.hi AND b.lo <= a.hi"
+    val expected = sql(query).collect()
+    assert(expected.length == 1, expected.toSeq)
     Seq("/*+ BROADCAST(a) */", "/*+ BROADCAST(b) */").foreach { hint =>
       val hinted = query.replace("SELECT ", s"SELECT $hint ")
       withRangeJoin() {

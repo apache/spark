@@ -257,7 +257,7 @@ class RangeJoinSuite extends QueryTest with SharedSparkSession {
       (left, right) => GreaterThan(left.output.head, right.output(1)),
       Seq((0, 1, -2, -1), (0, 2, -2, -1), (1, 5, -2, -1)).map(Row.fromTuple))
     // Same join, built from the other side: GreaterPartialRangeJoin + BuildLeft takes the
-    // opposite PointIndex scan arm (from, not upTo) from the BuildRight case above.
+    // opposite LongPointIndex scan arm (from, not upTo) from the BuildRight case above.
     check(
       GreaterPartialRangeJoin(strict = true),
       (left, right) => GreaterThan(left.output.head, right.output(1)),

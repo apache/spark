@@ -372,20 +372,35 @@ class RangeRelationSuite extends SparkFunSuite {
       val ordering = PhysicalDataType.ordering(dataType)
       assert(leftKey != rightKey)
       assert(ordering.compare(leftKey, rightKey) == 0)
+      // Padding points at `high`, which sorts after both leftKey and rightKey by
+      // construction (it is the interval build's upper bound below), push every
+      // build past SMALL_BUILD_OVERLAP_ROWS without changing either probe's
+      // expected answer. That forces the probes below onto the sorted-lows/
+      // maxHighIdx walk (OverlapIterator) instead of the small-build linear scan,
+      // so a comparator that silently fell back to binary order (instead of this
+      // key type's collation-aware one) while sorting lows or filling maxHighIdx
+      // would still be caught.
+      val padding =
+        (0 until RangeIndex.SMALL_BUILD_OVERLAP_ROWS).map(i => (high, high, row(90 + i)))
+
       val points = Array(
         (leftKey, leftKey, row(0)),
-        (rightKey, rightKey, row(1)))
+        (rightKey, rightKey, row(1))) ++ padding
       val pointIdx = buildIntervals(dataType, points.toSeq)
+      assert(pointIdx.overlapping(leftKey, leftKey).isInstanceOf[OverlapIterator])
       assert(ids(pointIdx.overlapping(leftKey, leftKey)).toSet == Set(0, 1))
+      assert(pointIdx.overlapping(rightKey, rightKey).isInstanceOf[OverlapIterator])
       assert(ids(pointIdx.overlapping(rightKey, rightKey)).toSet == Set(0, 1))
 
       val intervals = earlier.zipWithIndex.map { case (key, i) =>
         (key, key, row(10 + i))
       }.toArray ++ Array(
         (low, leftKey, row(0)),
-        (rightKey, high, row(1)))
+        (rightKey, high, row(1))) ++ padding
       val index = buildIntervals(dataType, intervals.toSeq)
+      assert(index.overlapping(leftKey, leftKey).isInstanceOf[OverlapIterator])
       assert(ids(index.overlapping(leftKey, leftKey)).sorted == List(0, 1))
+      assert(index.overlapping(rightKey, rightKey).isInstanceOf[OverlapIterator])
       assert(ids(index.overlapping(rightKey, rightKey)).sorted == List(0, 1))
     }
 
@@ -914,18 +929,30 @@ class RangeRelationSuite extends SparkFunSuite {
     // [0, 10], [5, 15], and [8, 20] share the core [8, 10] (1-D Helly). Any
     // window that reaches it overlaps every interval, so the index returns
     // all rows directly; windows outside keep the walk's selective answer.
-    val index = buildIntervals(Seq(span(0, 10, 0), span(5, 15, 1), span(8, 20, 2)))
-    assert(probeIds(index, 9, 9).sorted == List(0, 1, 2))
-    assert(probeIds(index, 8, 10).sorted == List(0, 1, 2))
-    assert(probeIds(index, 6, 12).sorted == List(0, 1, 2))
+    // Padded past SMALL_BUILD_OVERLAP_ROWS with copies of the shared core [8, 10]
+    // itself, so coreLow/coreHigh stay [8, 10] and the build is still a genuine
+    // Helly core, not three rows that merely fit the linear-scan fallback: the
+    // short-cut check below then exercises the real RowSlice bypass, and the
+    // windows outside the core exercise the walk (OverlapIterator) rather than
+    // passing either way because the build was too small to walk at all.
+    val corePadding = (3 until 3 + RangeIndex.SMALL_BUILD_OVERLAP_ROWS).map(id => span(8, 10, id))
+    val coreIds = (0 to 2 + RangeIndex.SMALL_BUILD_OVERLAP_ROWS).toSet
+    val index = buildIntervals(Seq(span(0, 10, 0), span(5, 15, 1), span(8, 20, 2)) ++ corePadding)
+    assert(probeIds(index, 9, 9).toSet == coreIds)
+    assert(probeIds(index, 8, 10).toSet == coreIds)
+    assert(probeIds(index, 6, 12).toSet == coreIds)
     // Endpoints are normalized first, so a reversed window reaches the core too.
-    assert(probeIds(index, 12, 6).sorted == List(0, 1, 2))
+    assert(probeIds(index, 12, 6).toSet == coreIds)
     // The short cut skips the walk's iterator for a core window, and only there.
     assert(!index.overlapping(9, 9).isInstanceOf[OverlapIterator])
     assert(probeIds(index, 0, 2) == List(0))
+    assert(index.overlapping(0, 2).isInstanceOf[OverlapIterator])
     assert(probeIds(index, 6, 7).sorted == List(0, 1))
+    assert(index.overlapping(6, 7).isInstanceOf[OverlapIterator])
     assert(probeIds(index, 11, 12).sorted == List(1, 2))
+    assert(index.overlapping(11, 12).isInstanceOf[OverlapIterator])
     assert(probeIds(index, 16, 30) == List(2))
+    assert(index.overlapping(16, 30).isInstanceOf[OverlapIterator])
   }
 
   test("overlapping short circuits all-covering windows over builds without a common core") {
