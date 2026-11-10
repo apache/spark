@@ -57,16 +57,6 @@ class InProcessUDFTests(ReusedSQLTestCase):
     shutdown must use the same dedicated interpreter thread.
     """
 
-    @staticmethod
-    def _java_command(jvm, java_home):
-        """
-        The start of a command line for a fresh probe JVM: this test's java and the module
-        options Spark's own launcher passes (JavaModuleOptions), so a probe starts the way
-        Spark's JVMs do on every Java version, e.g. with Unsafe allowed for Netty on Java 25+.
-        """
-        options = jvm.org.apache.spark.launcher.JavaModuleOptions.defaultModuleOptionArray()
-        return [str(Path(java_home) / "bin" / "java")] + list(options)
-
     @classmethod
     def master(cls):
         return "local[2]"
@@ -312,6 +302,21 @@ class InProcessUDFTests(ReusedSQLTestCase):
         self.assertTrue(
             self.spark.range(1).select(inprocess_udf("boolean")(flags)("id")).first()[0]
         )
+
+    @staticmethod
+    def _java_command(jvm, java_home):
+        """
+        The start of a command line for a fresh probe JVM: this test's java and the module
+        options Spark's own launcher passes (JavaModuleOptions), so a probe gets the same module
+        options as Spark's JVMs on every Java version, e.g. with Unsafe allowed for Netty on
+        Java 25+. Only the module options are shared: the other options python/run-tests.py
+        gives the test JVM, such as java.io.tmpdir, are not.
+
+        The options start with -XX:+IgnoreUnrecognizedVMOptions, which also applies to the
+        options a probe appends, so a misspelled -XX option does not fail the launch.
+        """
+        options = jvm.org.apache.spark.launcher.JavaModuleOptions.defaultModuleOptions()
+        return [str(Path(java_home) / "bin" / "java")] + options.split(" ")
 
     def test_missing_cdi_dependency_fails_plugin_startup(self):
         import subprocess
