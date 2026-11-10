@@ -608,12 +608,13 @@ def get_input(prompt, options, bold=True, ignore_case=True):
                     return option
 
 
-def get_json(url):
+def open_github_url(url):
+    """Open the GitHub API `url`, with GITHUB_OAUTH_KEY if set, and exit on an HTTP error."""
     try:
         request = Request(url)
         if GITHUB_OAUTH_KEY:
             request.add_header("Authorization", "token %s" % GITHUB_OAUTH_KEY)
-        return json.load(urlopen(request))
+        return urlopen(request)
     except HTTPError as e:
         if "X-RateLimit-Remaining" in e.headers and e.headers["X-RateLimit-Remaining"] == "0":
             print_error(
@@ -632,6 +633,10 @@ def get_json(url):
         sys.exit(-1)
 
 
+def get_json(url):
+    return json.load(open_github_url(url))
+
+
 def get_json_pages(url):
     """Return every item of the GitHub list endpoint at `url`, reading all of its pages.
 
@@ -640,41 +645,51 @@ def get_json_pages(url):
     commit, so a merged PR looks unmerged (#60129, with 38 events). It also drops the commits
     after the 30th, so their authors get no Co-authored-by, and the release branches after
     the 30th, so they cannot be picked into. Each page asks for GITHUB_PAGE_SIZE items, and
-    reading stops at the first page that is not full.
+    reading follows the `rel="next"` URL of each page's `Link` header until a page has none,
+    as `gh api --paginate` does, so a page with fewer items does not end the read early.
 
+    >>> import io
     >>> from unittest.mock import patch
     >>> base = "https://api.github.com/repos/apache/spark"
-    >>> items, requested = list(range(250)), []
-    >>> def fake_get_json(page_url):
-    ...     requested.append(page_url)
-    ...     page = int(page_url.rsplit("page=", 1)[1])
-    ...     return items[(page - 1) * 100 : page * 100]
-    >>> with patch.dict(get_json_pages.__globals__, get_json=fake_get_json):
-    ...     get_json_pages(base + "/issues/1/events") == items
-    True
-    >>> requested[0][len(base):]
-    '/issues/1/events?per_page=100&page=1'
-    >>> [page_url.rsplit("?", 1)[1] for page_url in requested]
-    ['per_page=100&page=1', 'per_page=100&page=2', 'per_page=100&page=3']
+    >>> def read(path, *pages):
+    ...     # Serve `pages` in order, with Link headers like the ones GitHub sends.
+    ...     requested = []
+    ...     def links(*rels):
+    ...         return ", ".join('<%s/p?page=%d>; rel="%s"' % (base, n, rel) for rel, n in rels)
+    ...     def open_page(page_url):
+    ...         requested.append(page_url[len(base) :])
+    ...         n = len(requested)
+    ...         page = io.BytesIO(json.dumps(pages[n - 1]).encode())
+    ...         page.headers = {}
+    ...         if n < len(pages):
+    ...             page.headers["Link"] = links(("next", n + 1), ("last", len(pages)))
+    ...         elif n > 1:
+    ...             page.headers["Link"] = links(("prev", n - 1), ("first", 1))
+    ...         return page
+    ...     with patch.dict(get_json_pages.__globals__, open_github_url=open_page):
+    ...         return get_json_pages(base + path), requested
 
-    A full last page costs one more request, which comes back empty, and a URL that already
-    has a query string gets the paging parameters appended to it:
+    Every page is read in order, including the page after one with fewer items, and the last
+    page's links back to earlier pages are not followed:
 
-    >>> items, requested = list(range(200)), []
-    >>> with patch.dict(get_json_pages.__globals__, get_json=fake_get_json):
-    ...     count = len(get_json_pages(base + "/branches?protected=false"))
-    >>> count, len(requested), requested[-1][len(base):]
-    (200, 3, '/branches?protected=false&per_page=100&page=3')
+    >>> read("/issues/1/events", ["a", "b"], ["c"], ["d", "e"])
+    (['a', 'b', 'c', 'd', 'e'], ['/issues/1/events?per_page=100', '/p?page=2', '/p?page=3'])
+
+    A list that fits on one page comes without a Link header and costs one request, and a URL
+    that already has a query string gets the page size appended to it:
+
+    >>> read("/branches?protected=false", ["master", "branch-4.x"])
+    (['master', 'branch-4.x'], ['/branches?protected=false&per_page=100'])
     """
     separator = "&" if "?" in url else "?"
+    url = "%s%sper_page=%d" % (url, separator, GITHUB_PAGE_SIZE)
     items = []
-    page = 1
-    while True:
-        batch = get_json("%s%sper_page=%d&page=%d" % (url, separator, GITHUB_PAGE_SIZE, page))
-        items.extend(batch)
-        if len(batch) < GITHUB_PAGE_SIZE:
-            return items
-        page += 1
+    while url is not None:
+        response = open_github_url(url)
+        items.extend(json.load(response))
+        next_link = re.search(r'<([^>]*)>;\s*rel="next"', response.headers.get("Link") or "")
+        url = next_link.group(1) if next_link else None
+    return items
 
 
 def merge_commit_candidates(pr_events):
@@ -772,9 +787,9 @@ def committed_title(pr_num: Union[int, str], message: Optional[str]) -> Optional
 class GitHub:
     """GitHub REST writes used by the merge script -- the single seam for PR mutations.
 
-    Reads go through the module-level get_json(); only the two mutations (closing the PR and
-    posting a comment) live here, so DryRunGitHub can override them without touching any read
-    path. main() constructs GitHub() normally and DryRunGitHub() for a dry run.
+    Reads go through the module-level get_json() and get_json_pages(); only the two mutations
+    (closing the PR and posting a comment) live here, so DryRunGitHub can override them without
+    touching any read path. main() constructs GitHub() normally and DryRunGitHub() for a dry run.
     """
 
     def close_pr(self, pr_num):
@@ -3247,7 +3262,6 @@ def main():
         pr_num = args.pr_num
         print("Start to merge pull request #%s" % (pr_num))
     pr = get_json("%s/pulls/%s" % (GITHUB_API_BASE, pr_num))
-    pr_events = get_json_pages("%s/issues/%s/events" % (GITHUB_API_BASE, pr_num))
 
     url = pr["url"]
     title = pr["title"]
@@ -3264,6 +3278,7 @@ def main():
     # merge as it could have been reverted earlier.
     merge_hash, message = (None, None)
     if pr["state"] == "closed":
+        pr_events = get_json_pages("%s/issues/%s/events" % (GITHUB_API_BASE, pr_num))
         merge_hash, message = find_merge_commit(pr_num, pr_events)
     if merge_hash is not None:
         print("Pull request %s has already been merged, assuming you want to backport" % pr_num)
@@ -3299,37 +3314,6 @@ def main():
     user_login = pr["user"]["login"]
     base_ref = pr["head"]["ref"]
     pr_repo_desc = "%s/%s" % (user_login, base_ref)
-
-    # Fetch PR author's GitHub profile and PR commits for commit attribution
-    pr_author_info = get_json("https://api.github.com/users/%s" % user_login)
-    pr_author_name = pr_author_info.get("name") or user_login
-    pr_author_email = pr_author_info.get("email")
-    pr_commits = get_json_pages("%s/pulls/%s/commits" % (GITHUB_API_BASE, pr_num))
-    if not pr_author_email:
-        # If the GitHub profile has no public email, find the author's email from the
-        # PR's git commits. Only use it if GitHub links the commit to the PR author's
-        # account (meaning the email is verified on their GitHub account).
-        for c in pr_commits:
-            commit_author = c.get("author")
-            if commit_author and commit_author.get("login") == user_login:
-                pr_author_email = c["commit"]["author"]["email"]
-                break
-    if not pr_author_email:
-        pr_author_email = "%s+%s@users.noreply.github.com" % (pr_author_info["id"], user_login)
-    pr_author = "%s <%s>" % (pr_author_name, pr_author_email)
-
-    # Collect co-authors: commit authors whose GitHub login differs from the PR author.
-    # This deduplicates the PR author (who may use multiple emails across commits) by login.
-    co_authors = []
-    seen = set()
-    for c in pr_commits:
-        gh_author = c.get("author")
-        if gh_author and gh_author.get("login") == user_login:
-            continue
-        raw = "%s <%s>" % (c["commit"]["author"]["name"], c["commit"]["author"]["email"])
-        if raw not in seen:
-            seen.add(raw)
-            co_authors.append(raw)
 
     if merge_hash is not None:
         # The change is already on target_ref and on any branch a previous run backported it
@@ -3372,6 +3356,37 @@ def main():
                 title = jira_title_for_backport(subject, pr["title"])
             update_jira_for_pr(pr_num, title, picked_refs)
         sys.exit(0)
+
+    # Fetch PR author's GitHub profile and PR commits for commit attribution
+    pr_author_info = get_json("https://api.github.com/users/%s" % user_login)
+    pr_author_name = pr_author_info.get("name") or user_login
+    pr_author_email = pr_author_info.get("email")
+    pr_commits = get_json_pages("%s/pulls/%s/commits" % (GITHUB_API_BASE, pr_num))
+    if not pr_author_email:
+        # If the GitHub profile has no public email, find the author's email from the
+        # PR's git commits. Only use it if GitHub links the commit to the PR author's
+        # account (meaning the email is verified on their GitHub account).
+        for c in pr_commits:
+            commit_author = c.get("author")
+            if commit_author and commit_author.get("login") == user_login:
+                pr_author_email = c["commit"]["author"]["email"]
+                break
+    if not pr_author_email:
+        pr_author_email = "%s+%s@users.noreply.github.com" % (pr_author_info["id"], user_login)
+    pr_author = "%s <%s>" % (pr_author_name, pr_author_email)
+
+    # Collect co-authors: commit authors whose GitHub login differs from the PR author.
+    # This deduplicates the PR author (who may use multiple emails across commits) by login.
+    co_authors = []
+    seen = set()
+    for c in pr_commits:
+        gh_author = c.get("author")
+        if gh_author and gh_author.get("login") == user_login:
+            continue
+        raw = "%s <%s>" % (c["commit"]["author"]["name"], c["commit"]["author"]["email"])
+        if raw not in seen:
+            seen.add(raw)
+            co_authors.append(raw)
 
     if not bool(pr["mergeable"]):
         msg = (
@@ -3999,7 +4014,9 @@ __test__ = {
     ...     pr = {"url": "u", "title": pr_title, "draft": False, "body": "b",
     ...           "base": {"ref": "master"}, "user": {"login": "x"}, "head": {"ref": "h"},
     ...           "state": "open" if message is None else "closed", "mergeable": True}
+    ...     requested = []
     ...     def get_json(url):
+    ...         requested.append(url)
     ...         if url.endswith("/branches"):
     ...             return [{"name": "master"}, {"name": "branch-4.x"}]
     ...         if url.endswith("/pulls/1"):
@@ -4019,17 +4036,19 @@ __test__ = {
     ...     merge, check = Mock(return_value="abc"), Mock()
     ...     pick = Mock(side_effect=lambda *a, **k: print("picked") or [("branch-4.x", "d")])
     ...     found = (None, None) if message is None else ("abc", message)
+    ...     pick_default = Mock(return_value="branch-4.x")
     ...     with (
     ...         patch.object(sys, "argv", ["merge_spark_pr.py", "1"]), patch("os.chdir"),
     ...         patch.dict(main.__globals__, DRY_RUN_ENV=False, check_script_up_to_date=Mock(),
     ...                    initialize_jira=Mock(), asf_jira=Mock(), jira_disabled=False,
     ...                    clean_up=Mock(), get_current_ref=Mock(return_value="master"),
-    ...                    get_json=get_json, find_merge_commit=Mock(return_value=found),
+    ...                    get_json=get_json, get_json_pages=get_json,
+    ...                    find_merge_commit=Mock(return_value=found),
     ...                    git=Mock(), github=Mock(), check_linked_jira_issues=check,
     ...                    continue_maybe=Mock(), get_input=ask, merge_pr=merge,
     ...                    post_merge_comment=Mock(), prompt_for_components=prompt,
     ...                    branches_with_merge_footer=Mock(return_value=[]),
-    ...                    default_pick_branch=Mock(return_value="branch-4.x"),
+    ...                    default_pick_branch=pick_default,
     ...                    cherry_pick=pick, update_jira_for_pr=update, print=Mock(),
     ...                    print_error=lambda msg: print(msg.splitlines()[0])),
     ...     ):
@@ -4040,6 +4059,10 @@ __test__ = {
     ...             code = e.code
     ...     committed = merge.call_args.args[2] if merge.called else None
     ...     assert committed == (check.call_args.args[1] if check.called else None)
+    ...     assert all(c.args[0] == ["branch-4.x"] for c in pick_default.call_args_list)
+    ...     # A merge reads no events, and a backport reads neither commits nor the author.
+    ...     unused = ("/issues/1/events",) if message is None else ("/pulls/1/commits", "/users/x")
+    ...     assert not [url for url in requested if url.endswith(unused)], requested
     ...     return update.call_args.args[1], committed, prompt.called, code
 
     A merge commits, checks, and updates JIRA from the prepared title:
