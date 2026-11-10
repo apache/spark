@@ -26,10 +26,11 @@ import org.apache.spark.sql.catalyst.optimizer.{ComputeCurrentTime, ReplaceExpre
 import org.apache.spark.sql.catalyst.parser.ParseException
 import org.apache.spark.sql.catalyst.trees.CurrentOrigin
 import org.apache.spark.sql.catalyst.trees.TreePattern.{CURRENT_LIKE, VARIABLE_REFERENCE}
-import org.apache.spark.sql.catalyst.util.{CharVarcharUtils, DateTimeUtils, V2ExpressionBuilder}
+import org.apache.spark.sql.catalyst.util.{CharVarcharUtils, DateTimeUtils, StoredExpressionText, V2ExpressionBuilder}
 import org.apache.spark.sql.connector.catalog.constraints.Constraint
 import org.apache.spark.sql.connector.expressions.FieldReference
 import org.apache.spark.sql.errors.QueryExecutionErrors
+import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types.{AbstractDataType, BooleanType, CharType, DataType, TimestampLTZNanosType, TimestampType}
 
 trait TableConstraint extends Expression with Unevaluable {
@@ -123,8 +124,7 @@ case class CheckConstraint(
     override val userProvidedName: String = null,
     override val tableName: String = null,
     override val userProvidedCharacteristic: ConstraintCharacteristic = ConstraintCharacteristic.empty,
-    keepPredicate: Boolean = false,
-    omitPredicate: Boolean = false)
+    omitPredicate: Option[Boolean] = None)
   extends UnaryExpression
   with TableConstraint
   with ImplicitCastInputTypes {
@@ -155,33 +155,39 @@ case class CheckConstraint(
     }
   }
 
-  // The two flags are printed only when set, so that the plan string of a constraint without
-  // them stays as it was.
+  // The decision is printed only once made, so that the plan string of a constraint without one
+  // stays as it was.
   override def stringArgs: Iterator[Any] =
     Iterator(child, condition, userProvidedName, tableName, userProvidedCharacteristic) ++
-      Iterator("keepPredicate").filter(_ => keepPredicate) ++
-      Iterator("omitPredicate").filter(_ => omitPredicate)
+      omitPredicate.iterator.map(omit => s"omitPredicate=$omit")
 
   /**
    * Decides from the analyzed condition whether to store the constraint without a predicate
-   * (`omitPredicate`). `AddCheckConstraint.storeAnalyzedQuery` calls this at the end of the
-   * analysis of an ALTER TABLE.
+   * (`omitPredicate`), unless the parser has already decided to keep it.
+   * `AddCheckConstraint.storeAnalyzedQuery` calls this at the end of the analysis of an ALTER
+   * TABLE. CREATE and REPLACE TABLE never decide, and store the predicate if there is one.
    *
    * A write parses `condition` again, with its own settings. It cannot bind a parameter marker
    * that the legacy parameter substitution leaves there, resolves an IDENTIFIER clause in its own
    * session, and does not resolve a column qualified by the table name the way ALTER TABLE does.
    * It also resolves a name such as `current_date` or `user` to the function or to a column,
    * depending on its case sensitivity, its reserved keywords and the columns of the table at that
-   * time. None of them can be told apart after analysis, so the parser sets `keepPredicate` for
+   * time. None of them can be told apart after analysis, so the parser keeps the predicate for
    * them, and for any name with more than one part, since it cannot tell a table qualifier from a
-   * struct column. Such a condition, or one that `resolvesDifferentlyOnWrite`, keeps the predicate
-   * built from the optimized plan, as before. So does one that calls a user-defined function,
-   * which the analysis rejects next and which is not evaluated here.
+   * struct column. Such a condition, one that `resolvesDifferentlyOnWrite`, and one that a write
+   * with the default parser settings reads differently (`readsAsOnWrite`) keep the predicate built
+   * from the optimized plan, as before. So does one that calls a user-defined function, which the
+   * analysis rejects next and which is not evaluated here, and every condition under
+   * `spark.sql.legacy.freezeCurrentValuesInCheckConstraint`.
    */
-  def withPredicateDecision(): CheckConstraint = copy(omitPredicate =
-    !keepPredicate && StoredExpressionFunctions.findUserDefinedFunctionCall(child).isEmpty &&
-      !CheckConstraint.resolvesDifferentlyOnWrite(child) &&
-      CheckConstraint.readsCurrentContext(child))
+  def withPredicateDecision(): CheckConstraint = if (omitPredicate.isDefined) this else {
+    copy(omitPredicate = Some(
+      !SQLConf.get.getConf(SQLConf.FREEZE_CURRENT_VALUES_IN_CHECK_CONSTRAINT) &&
+        StoredExpressionFunctions.findUserDefinedFunctionCall(child).isEmpty &&
+        !CheckConstraint.resolvesDifferentlyOnWrite(child) &&
+        CheckConstraint.readsCurrentContext(child) &&
+        CheckConstraint.readsAsOnWrite(condition)))
+  }
 
   // ALTER TABLE calls this on the optimized plan, where the current time, date, catalog, user and
   // the like are replaced by their values at the time of the ALTER TABLE. A condition that
@@ -192,7 +198,7 @@ case class CheckConstraint(
   // folding still happens (SPARK-60451). Only `AddCheckConstraint` decides, so they always store
   // the predicate if there is one.
   def toV2Constraint: Constraint = {
-    val predicate = if (omitPredicate) {
+    val predicate = if (omitPredicate.contains(true)) {
       null
     } else {
       new V2ExpressionBuilder(child, true).buildPredicate().orNull
@@ -276,16 +282,46 @@ object CheckConstraint {
   }
 
   /**
+   * Whether a write with the default parser settings reads `condition` as this session does, which
+   * `StoredExpressionText` decides for a generation expression too, so ANSI mode, the timestamp
+   * type and the session time zone are those of this session. A `${...}` placeholder counts as
+   * read differently, since a write with `spark.sql.variable.substitute` may replace it.
+   */
+  private def readsAsOnWrite(condition: String): Boolean = !condition.contains("${") && {
+    val conf = SQLConf.get.clone()
+    // Under its legacy config, `StoredExpressionText` would compare the session with itself.
+    conf.setConf(SQLConf.USE_CURRENT_SQL_CONFIGS_FOR_GENERATED_COLUMN, false)
+    SQLConf.withExistingConf(conf)(StoredExpressionText.readsAsInSession(condition))
+  }
+
+  /**
    * Whether a write that parses the condition resolves `e` differently: `e` reads a variable, which
-   * the write looks up in its own session, or a column whose type is or contains CHAR, which the
-   * write reads without the CHAR type that pads the literals compared with it. A user-defined
-   * function is rejected by `failIfCallsUserDefinedFunction`.
+   * the write looks up in its own session, a column whose type is or contains CHAR, which the
+   * write reads without the CHAR type that pads the literals compared with it, or a constant that
+   * may depend on the session time zone and reads no current value, such as a typed `TIMESTAMP`
+   * literal or `'2024-01-01 00:00:00'` cast to a timestamp, which the write computes in its own
+   * time zone. Apart from a cast, which counts only if it needs the time zone, a foldable
+   * expression of a timestamp type that reads no current value counts whether or not it depends on
+   * the time zone, such as `timestamp_seconds(0)`, and then keeps its predicate as before. A
+   * user-defined function is rejected by `failIfCallsUserDefinedFunction`.
    */
   private def resolvesDifferentlyOnWrite(e: Expression): Boolean = {
     e.containsPattern(VARIABLE_REFERENCE) ||
       e.references.exists { a =>
         val rawType = CharVarcharUtils.getRawType(a.metadata)
         rawType.exists(_.existsRecursively(_.isInstanceOf[CharType]))
+      } ||
+      ReplaceExpressions.replace(e).exists {
+        case c: Cast => c.foldable && c.needsTimeZone && !readsCurrentContext(c)
+        case t: TimeZoneAwareExpression => t.foldable && !readsCurrentContext(t)
+        // A typed literal, or a function such as `make_timestamp(DATE'2024-01-01', TIME'00:00')`
+        // that the replacement turns into a call with the session time zone as an argument.
+        case x if x.foldable && x.dataType.existsRecursively {
+            case TimestampType | _: TimestampLTZNanosType => true
+            case _ => false
+          } =>
+          !readsCurrentContext(x)
+        case _ => false
       }
   }
 }

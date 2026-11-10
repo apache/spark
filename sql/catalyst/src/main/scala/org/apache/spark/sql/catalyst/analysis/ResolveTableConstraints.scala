@@ -71,16 +71,6 @@ class ResolveTableConstraints(
         case _ =>
           v2Write
       }
-    // Once the analysis resolves the names of a parsed condition, drop the ones that are not a
-    // value of the row, such as `current_user` without parentheses or a variable, from the values
-    // that the violation message lists.
-    case v2Write: V2WriteCommand if containsCheckInvariant(v2Write.query) =>
-      val query = v2Write.query.transformExpressions {
-        case c: CheckInvariant
-            if c.resolved && c.columnExtractors.exists(_._2.references.isEmpty) =>
-          c.copy(columnExtractors = c.columnExtractors.filter(_._2.references.nonEmpty))
-      }
-      if (query eq v2Write.query) v2Write else v2Write.withNewQuery(query)
   }
 
   private def containsCheckInvariant(plan: LogicalPlan): Boolean = {

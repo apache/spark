@@ -391,7 +391,7 @@ case class AddCheckConstraint(
   // this, on parsed and optimized plans too, so the decision is made only once, on a resolved
   // constraint.
   override def storeAnalyzedQuery(): Command = {
-    val check = if (analyzedQuery.isEmpty && checkConstraint.resolved) {
+    val check = if (checkConstraint.resolved) {
       checkConstraint.withPredicateDecision()
     } else {
       checkConstraint

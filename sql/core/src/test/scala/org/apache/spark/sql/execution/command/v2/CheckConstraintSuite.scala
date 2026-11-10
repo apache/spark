@@ -308,7 +308,7 @@ class CheckConstraintSuite extends QueryTest with CommandSuiteBase with DDLComma
         s"ALTER TABLE $t ADD CONSTRAINT c1 CHECK (created <= current_timestamp())")
       val qe = spark.sessionState.executePlan(plan, CommandExecutionMode.SKIP)
       def omitsPredicate(p: LogicalPlan): Boolean = p.collectFirst {
-        case a: AddCheckConstraint => a.checkConstraint.omitPredicate
+        case a: AddCheckConstraint => a.checkConstraint.omitPredicate.contains(true)
       }.getOrElse(fail(s"Expected AddCheckConstraint, but got: $p"))
       assert(omitsPredicate(qe.analyzed))
       assert(omitsPredicate(NormalizePlan(qe.optimizedPlan)))
@@ -575,25 +575,88 @@ class CheckConstraintSuite extends QueryTest with CommandSuiteBase with DDLComma
     }
   }
 
-  test("SPARK-60032: Check constraint violation lists only the values of the row") {
-    // A write that parses `predicateSql` resolves `current_user` without parentheses and a
-    // variable to values that are not columns of the row.
-    withSessionVariable("v") {
-      sql("DECLARE VARIABLE v STRING DEFAULT 'x'")
+  test("SPARK-60032: Check constraint added by ALTER TABLE in a session that reads its text " +
+      "differently") {
+    // A write with the default settings reads `"ts"` as a string and `'C:\temp'` with a tab, so
+    // such a condition keeps the predicate built from the optimized plan.
+    val escaped = "path <> 'C:\\temp' OR ts <= current_timestamp()"
+    Seq(
+      (Seq(SQLConf.DOUBLE_QUOTED_IDENTIFIERS.key -> "true"), "\"ts\" <= current_timestamp()",
+        "'a'"),
+      (Seq(SQLConf.ESCAPED_STRING_LITERALS.key -> "true"), escaped, "'C:\\\\temp'"),
+      // The legacy config of generated columns does not change how a write reads the text.
+      (Seq(SQLConf.ESCAPED_STRING_LITERALS.key -> "true",
+        SQLConf.USE_CURRENT_SQL_CONFIGS_FOR_GENERATED_COLUMN.key -> "true"), escaped,
+        "'C:\\\\temp'")
+    ).foreach { case (confs, cond, path) =>
       withNamespaceAndTable("ns", "tbl", nonPartitionCatalog) { t =>
-        sql(s"CREATE TABLE $t (id INT, owner STRING, " +
-          s"CONSTRAINT c1 CHECK (owner = current_user OR owner = v)) $defaultUsing")
-        checkError(
-          exception = intercept[SparkRuntimeException] {
-            sql(s"INSERT INTO $t VALUES (1, '')")
-          },
-          condition = "CHECK_CONSTRAINT_VIOLATION",
-          sqlState = "23001",
-          parameters = Map(
-            "constraintName" -> "c1",
-            "expression" -> "owner = current_user OR owner = v",
-            "values" -> " - owner : "))
+        sql(s"CREATE TABLE $t (id INT, path STRING, ts TIMESTAMP) $defaultUsing")
+        withSQLConf((SQLConf.ANSI_ENABLED.key -> "true") +: confs: _*) {
+          sql(s"ALTER TABLE $t ADD CONSTRAINT c1 CHECK ($cond)")
+        }
+        assert(getCheckConstraint(loadTable(nonPartitionCatalog, "ns", "tbl")).predicate() != null,
+          cond)
+        val error = intercept[SparkRuntimeException] {
+          sql(s"INSERT INTO $t VALUES (1, $path, current_timestamp() + INTERVAL 1 DAY)")
+        }
+        assert(error.getCondition == "CHECK_CONSTRAINT_VIOLATION", cond)
       }
+    }
+    // A write with `spark.sql.variable.substitute` replaces the placeholder.
+    withNamespaceAndTable("ns", "tbl", nonPartitionCatalog) { t =>
+      sql(s"CREATE TABLE $t (id INT, path STRING, ts TIMESTAMP) $defaultUsing")
+      withSQLConf(SQLConf.VARIABLE_SUBSTITUTE_ENABLED.key -> "false") {
+        sql(s"ALTER TABLE $t ADD CONSTRAINT c1 CHECK " +
+          "(path <> '${spark.sql.session.timeZone}' OR ts <= current_timestamp())")
+      }
+      assert(getCheckConstraint(loadTable(nonPartitionCatalog, "ns", "tbl")).predicate() != null)
+    }
+  }
+
+  test("SPARK-60032: Check constraint added by ALTER TABLE with a constant in the session time " +
+      "zone") {
+    // A write that parses `predicateSql` would read the bound in its own time zone.
+    Seq(
+      "ts >= '2024-01-01 00:00:00'",
+      "ts >= TIMESTAMP '2024-01-01 00:00:00'",
+      "ts >= to_timestamp('2024-01-01 00:00:00', 'yyyy-MM-dd HH:mm:ss')",
+      "ts >= make_timestamp(DATE'2024-01-01', TIME'00:00:00')"
+    ).foreach { bound =>
+      withNamespaceAndTable("ns", "tbl", nonPartitionCatalog) { t =>
+        sql(s"CREATE TABLE $t (id INT, ts TIMESTAMP) $defaultUsing")
+        withSQLConf(SQLConf.SESSION_LOCAL_TIMEZONE.key -> "UTC") {
+          sql(s"ALTER TABLE $t ADD CONSTRAINT c1 CHECK ($bound AND ts <= current_timestamp())")
+        }
+        assert(getCheckConstraint(loadTable(nonPartitionCatalog, "ns", "tbl")).predicate() != null,
+          bound)
+        // 2024-01-01 00:30:00 UTC is before the bound read in America/Los_Angeles.
+        withSQLConf(SQLConf.SESSION_LOCAL_TIMEZONE.key -> "America/Los_Angeles") {
+          sql(s"INSERT INTO $t VALUES (1, timestamp_seconds(1704069000))")
+        }
+        checkAnswer(spark.table(t).select("id"), Row(1))
+      }
+    }
+    // A date constant and a timestamp without time zone depend on no time zone.
+    Seq(
+      ("d DATE", "d >= DATE '2024-01-01' AND d <= current_date()"),
+      ("ts TIMESTAMP_NTZ", "ts >= '2024-01-01 00:00:00' AND ts <= localtimestamp()")
+    ).foreach { case (column, cond) =>
+      withNamespaceAndTable("ns", "tbl", nonPartitionCatalog) { t =>
+        sql(s"CREATE TABLE $t (id INT, $column) $defaultUsing")
+        sql(s"ALTER TABLE $t ADD CONSTRAINT c1 CHECK ($cond)")
+        assert(getCheckConstraint(loadTable(nonPartitionCatalog, "ns", "tbl")).predicate() == null,
+          cond)
+      }
+    }
+  }
+
+  test("SPARK-60032: Check constraint added by ALTER TABLE under the legacy config") {
+    withNamespaceAndTable("ns", "tbl", nonPartitionCatalog) { t =>
+      sql(s"CREATE TABLE $t (id INT, ts TIMESTAMP) $defaultUsing")
+      withSQLConf(SQLConf.FREEZE_CURRENT_VALUES_IN_CHECK_CONSTRAINT.key -> "true") {
+        sql(s"ALTER TABLE $t ADD CONSTRAINT c1 CHECK (ts <= current_timestamp())")
+      }
+      assert(getCheckConstraint(loadTable(nonPartitionCatalog, "ns", "tbl")).predicate() != null)
     }
   }
 

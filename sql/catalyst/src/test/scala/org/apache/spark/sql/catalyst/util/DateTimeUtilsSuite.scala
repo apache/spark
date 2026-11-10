@@ -1103,12 +1103,12 @@ class DateTimeUtilsSuite extends SparkFunSuite with Matchers with SQLHelper {
     }
   }
 
-  test("SPARK-60032: special values and time-only strings that read the current date") {
-    Seq("now", " Today ", "TOMORROW", "yesterday", "tomorrow CET").foreach { s =>
-      assert(isCurrentSpecialValue(s), s)
+  test("SPARK-60032: 'epoch' and time-only strings") {
+    Seq("epoch", " Epoch ", "EPOCH UTC").foreach { s =>
+      assert(isEpochSpecialValue(s), s)
     }
-    Seq("epoch", "Epoch", "now UTC", "2020-01-01", "12:00:00", "").foreach { s =>
-      assert(!isCurrentSpecialValue(s), s)
+    Seq("now", "today", "2020-01-01", "12:00:00", "", "abc").foreach { s =>
+      assert(!isEpochSpecialValue(s), s)
     }
     Seq("12:00:00", " 23:59:59.999999 ", "T12:00", "12:00:00 UTC").foreach { s =>
       assert(isTimeOnlyTimestamp(UTF8String.fromString(s)), s)

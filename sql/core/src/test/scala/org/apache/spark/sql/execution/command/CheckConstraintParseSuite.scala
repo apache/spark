@@ -214,7 +214,7 @@ class CheckConstraintParseSuite extends ConstraintParseSuiteBase {
   test("SPARK-60032: only ALTER TABLE marks a condition that a write can resolve differently") {
     def keepsPredicate(condition: String): Boolean =
       parsePlan(s"ALTER TABLE a.b.t ADD CONSTRAINT c1 CHECK ($condition)") match {
-        case a: AddCheckConstraint => a.checkConstraint.keepPredicate
+        case a: AddCheckConstraint => a.checkConstraint.omitPredicate.contains(false)
         case other => fail(s"Expected AddCheckConstraint, but got: $other")
       }
     Seq("a.b > 0", "a = user", "a = `current_date`", "IDENTIFIER(v) > 0",
@@ -234,13 +234,13 @@ class CheckConstraintParseSuite extends ConstraintParseSuiteBase {
       assert(!keepsPredicate("a = current_path"))
     }
 
-    // Nothing reads the flag of a CREATE TABLE constraint, which always stores its predicate.
+    // A CREATE TABLE constraint gets no decision, and always stores its predicate.
     val created = parsePlan("CREATE TABLE t (a STRUCT<b: INT>, s ARRAY<STRING>, " +
       "CONSTRAINT c1 CHECK (a.b > 0 AND exists(s, x -> x = user))) USING parquet")
     val constraints = created.collectFirst {
       case c: CreateTable => c.tableSpec.asInstanceOf[UnresolvedTableSpec].constraints
     }.getOrElse(fail(s"Expected CreateTable, but got: $created"))
-    assert(constraints.map(_.asInstanceOf[CheckConstraint].keepPredicate) == Seq(false))
+    assert(constraints.map(_.asInstanceOf[CheckConstraint].omitPredicate) == Seq(None))
   }
 
   test("Add invalid check constraint name") {

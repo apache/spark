@@ -322,10 +322,11 @@ object SpecialDatetimeValues extends Rule[LogicalPlan] {
 
   /**
    * Whether this rule replaces a cast of `s` to `dt` with a value that reads the current date, that
-   * is, the value of 'now', 'today', 'tomorrow' or 'yesterday' rather than of 'epoch'.
+   * is, the value of a special value other than 'epoch'.
    */
   private[sql] def readsCurrentDate(s: UTF8String, dt: DataType): Boolean =
-    rewrites(dt) && DateTimeUtils.isCurrentSpecialValue(s.toString)
+    conv.get(dt).exists(_(s.toString, java.time.ZoneOffset.UTC).isDefined) &&
+      !DateTimeUtils.isEpochSpecialValue(s.toString)
 
   /**
    * The constant string that `cast` casts, or None if it casts something else or evaluating the

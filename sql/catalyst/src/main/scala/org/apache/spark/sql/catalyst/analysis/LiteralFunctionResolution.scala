@@ -29,9 +29,7 @@ object LiteralFunctionResolution {
    * When an attributes is not resolvable, we try to resolve it as a literal function.
    */
   def resolve(nameParts: Seq[String]): Option[NamedExpression] = {
-    if (nameParts.length != 1) return None
-    val name = nameParts.head
-    literalFunctions.find(func => caseInsensitiveResolution(func._1, name)).map {
+    find(nameParts).map {
       case (_, getFuncExpr, getAliasName) =>
         val funcExpr = getFuncExpr()
         Alias(funcExpr, getAliasName(funcExpr))()
@@ -39,9 +37,12 @@ object LiteralFunctionResolution {
   }
 
   /** Whether `nameParts` is the name of a literal function, which `resolve` resolves. */
-  def isLiteralFunction(nameParts: Seq[String]): Boolean = {
-    nameParts.length == 1 &&
-      literalFunctions.exists(func => caseInsensitiveResolution(func._1, nameParts.head))
+  def isLiteralFunction(nameParts: Seq[String]): Boolean = find(nameParts).isDefined
+
+  private def find(
+      nameParts: Seq[String]): Option[(String, () => Expression, Expression => String)] = {
+    if (nameParts.length != 1) return None
+    literalFunctions.find(func => caseInsensitiveResolution(func._1, nameParts.head))
   }
 
   // support CURRENT_DATE, CURRENT_TIMESTAMP, CURRENT_TIME,

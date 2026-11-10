@@ -7202,15 +7202,18 @@ class AstBuilder extends DataTypeAstBuilder
    * `spark.sql.ansi.enforceReservedKeywords`, which is the only way the parser builds these
    * functions.
    */
-  private def keepsCheckPredicate(condition: Expression): Boolean =
-    condition.containsAnyPattern(PARAMETER, UNRESOLVED_IDENTIFIER) || condition.exists {
-      case u: UnresolvedAttribute =>
-        u.nameParts.length > 1 || LiteralFunctionResolution.isLiteralFunction(u.nameParts)
-      case v: UnresolvedNamedLambdaVariable =>
-        v.nameParts.length > 1 || LiteralFunctionResolution.isLiteralFunction(v.nameParts)
-      case _: CurrentDate | _: CurrentTimestamp | _: CurrentTime | _: CurrentUser => true
-      case _ => false
+  private def keepsCheckPredicate(condition: Expression): Boolean = {
+    val names = condition.collect {
+      case u: UnresolvedAttribute => u.nameParts
+      case v: UnresolvedNamedLambdaVariable => v.nameParts
     }
+    condition.containsAnyPattern(PARAMETER, UNRESOLVED_IDENTIFIER) ||
+      names.exists(n => n.length > 1 || LiteralFunctionResolution.isLiteralFunction(n)) ||
+      condition.exists {
+        case _: CurrentDate | _: CurrentTimestamp | _: CurrentTime | _: CurrentUser => true
+        case _ => false
+      }
+  }
 
   override def visitUniqueConstraint(ctx: UniqueConstraintContext): TableConstraint =
     withOrigin(ctx) {
@@ -7273,7 +7276,8 @@ class AstBuilder extends DataTypeAstBuilder
           case c: CheckConstraint =>
             val relation = createUnresolvedRelation(ctx.identifierReference)
             val child = Filter(Not(c.child), relation)
-            AddCheckConstraint(child, c.copy(keepPredicate = keepsCheckPredicate(c.child)))
+            val check = if (keepsCheckPredicate(c.child)) c.copy(omitPredicate = Some(false)) else c
+            AddCheckConstraint(child, check)
           case _ =>
             val child = UnresolvedTable(identifiers, "ALTER TABLE ... ADD CONSTRAINT")
             AddConstraint(child, namedConstraint)
