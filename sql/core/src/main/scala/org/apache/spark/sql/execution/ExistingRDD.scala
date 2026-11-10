@@ -30,7 +30,6 @@ import org.apache.spark.sql.catalyst.util.truncatedString
 import org.apache.spark.sql.classic.{Dataset, SparkSession}
 import org.apache.spark.sql.connector.read.streaming.SparkDataStream
 import org.apache.spark.sql.execution.metric.SQLMetrics
-import org.apache.spark.util.collection.Utils
 
 object ExternalRDD {
 
@@ -117,7 +116,9 @@ case class LogicalRDD(
     session :: originStats :: originConstraints :: Boolean.box(fromCheckpoint) :: Nil
 
   override def newInstance(): LogicalRDD.this.type = {
-    val rewrite = Utils.toMap(output, output.map(_.newInstance()))
+    // Keyed by exprId, because the attributes in the partitioning, the ordering, the stats and
+    // the constraints can differ from `output` in qualifier or nullability.
+    val rewrite = AttributeMap(output.zip(output.map(_.newInstance())))
 
     val rewrittenPartitioning = outputPartitioning match {
       case p: Expression =>
@@ -136,7 +137,8 @@ case class LogicalRDD(
     val rewrittenConstraints = originConstraints.map(rewriteConstraints(_, rewrite))
 
     LogicalRDD(
-      output.map(rewrite),
+      // Swap only the exprId, so that the columns sharing an exprId keep their own names.
+      output.map(a => a.withExprId(rewrite(a).exprId)),
       rdd,
       rewrittenPartitioning,
       rewrittenOrdering,
@@ -227,7 +229,9 @@ object LogicalRDD extends Logging {
     }.toMap
 
     if (rewrite.size == source.size) {
-      Some(rewrite)
+      // Keyed by exprId, because the attributes in the stats and the constraints can differ from
+      // `source` in qualifier or nullability.
+      Some(AttributeMap(rewrite))
     } else {
       None
     }
@@ -248,7 +252,8 @@ object LogicalRDD extends Logging {
     }.toMap
 
     if (rewrite.size == source.size) {
-      Some(rewrite)
+      // Keyed by exprId, for the same reason as in `buildOutputAssocForRewrite`.
+      Some(AttributeMap(rewrite))
     } else {
       None
     }

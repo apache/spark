@@ -55,7 +55,7 @@ import org.apache.spark.util._
 private[classification] trait LogisticRegressionParams extends ProbabilisticClassifierParams
   with HasRegParam with HasElasticNetParam with HasMaxIter with HasFitIntercept with HasTol
   with HasStandardization with HasWeightCol with HasThreshold with HasAggregationDepth
-  with HasMaxBlockSizeInMB {
+  with HasMaxBlockSizeInMB with HasIntermediateStorageLevel {
 
   import org.apache.spark.ml.classification.LogisticRegression.supportedFamilyNames
 
@@ -451,6 +451,10 @@ class LogisticRegression @Since("1.2.0") (
   @Since("3.1.0")
   def setMaxBlockSizeInMB(value: Double): this.type = set(maxBlockSizeInMB, value)
 
+  /** @group expertSetParam */
+  @Since("4.4.0")
+  def setIntermediateStorageLevel(value: String): this.type = set(intermediateStorageLevel, value)
+
   private def assertBoundConstrainedOptimizationParamsValid(
       numCoefficientSets: Int,
       numFeatures: Int): Unit = {
@@ -510,7 +514,7 @@ class LogisticRegression @Since("1.2.0") (
     instr.logDataset(dataset)
     instr.logParams(this, labelCol, weightCol, featuresCol, predictionCol, rawPredictionCol,
       probabilityCol, regParam, elasticNetParam, standardization, threshold, thresholds, maxIter,
-      tol, fitIntercept, maxBlockSizeInMB)
+      tol, fitIntercept, maxBlockSizeInMB, intermediateStorageLevel)
 
     if (dataset.storageLevel != StorageLevel.NONE) {
       instr.logWarning("Input instances will be standardized, blockified to blocks, and " +
@@ -962,7 +966,7 @@ class LogisticRegression @Since("1.2.0") (
 
     val maxMemUsage = (actualBlockSizeInMB * 1024L * 1024L).ceil.toLong
     val blocks = InstanceBlock.blokifyWithMaxMemUsage(scaled, maxMemUsage)
-      .persist(StorageLevel.MEMORY_AND_DISK)
+      .persist(StorageLevel.fromString($(intermediateStorageLevel)))
       .setName(s"$uid: training blocks (blockSizeInMB=$actualBlockSizeInMB)")
 
     val costFun = if (multinomial) {

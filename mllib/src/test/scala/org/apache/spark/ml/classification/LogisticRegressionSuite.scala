@@ -179,7 +179,11 @@ class LogisticRegressionSuite extends MLTest with DefaultReadWriteTest {
   }
 
   test("params") {
-    ParamsSuite.checkParams(new LogisticRegression)
+    val classifier = new LogisticRegression
+    ParamsSuite.checkParams(classifier)
+    assert(classifier.getIntermediateStorageLevel === "MEMORY_AND_DISK")
+    classifier.setIntermediateStorageLevel("DISK_ONLY")
+    assert(classifier.getIntermediateStorageLevel === "DISK_ONLY")
     val model = new LogisticRegressionModel("logReg", Vectors.dense(0.0), 0.0)
     ParamsSuite.checkParams(model)
   }

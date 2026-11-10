@@ -23,6 +23,12 @@ import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.atomic.AtomicInteger
 import java.util.zip.{ZipEntry, ZipOutputStream}
 
+import scala.util.control.NonFatal
+
+import org.scalatest.concurrent.Eventually._
+import org.scalatest.time.SpanSugar._
+
+import org.apache.spark.SparkContext
 import org.apache.spark.util.Utils
 
 /**
@@ -36,6 +42,51 @@ object NativeDataSourceTestUtils {
   private lazy val buildDir = Utils.createTempDir(namePrefix = "native-datasource-test")
 
   private val libraries = new ConcurrentHashMap[String, File]()
+
+  /**
+   * The file to which the test libraries append the calls that the order of the calls of the
+   * header rules out, one per line. It does not exist as long as there are none.
+   */
+  lazy val orderViolations: File = new File(buildDir, "order_violations")
+
+  /**
+   * Runs a test that uses the test libraries, and fails it if the libraries got calls that the
+   * order of the calls of the header rules out. It waits until no task runs before it checks, so
+   * that the late calls of the tasks of the test, such as of a task of a failed job that is still
+   * being killed, fail the test that made them. If the test fails, the calls are added to its
+   * error as suppressed.
+   */
+  def checkingOrderOfCalls[T](f: => T): T = {
+    orderViolations.delete()
+    val result = try f catch {
+      case e: Throwable =>
+        try {
+          violations().foreach(v => e.addSuppressed(new AssertionError(v)))
+        } catch {
+          case NonFatal(check) => e.addSuppressed(check)
+        }
+        throw e
+    }
+    violations().foreach(org.scalatest.Assertions.fail(_))
+    result
+  }
+
+  // The calls that the test libraries recorded as violations of the order of the calls, once no
+  // task runs.
+  private def violations(): Option[String] = {
+    SparkContext.getActive.foreach { sc =>
+      eventually(timeout(1.minute), interval(10.milliseconds)) {
+        assert(sc.statusTracker.getExecutorInfos.forall(_.numRunningTasks() == 0))
+      }
+    }
+    if (orderViolations.exists()) {
+      val violations = Files.readString(orderViolations.toPath)
+      orderViolations.delete()
+      Some(s"The test library got calls that the header rules out:\n$violations")
+    } else {
+      None
+    }
+  }
 
   // The executors store the files of the sessions that are not isolated in the same directory, so
   // each package has its own name.
@@ -75,7 +126,9 @@ object NativeDataSourceTestUtils {
     val library = new File(buildDir, System.mapLibraryName(name))
     // The symbols are hidden, as libraries are often built, so only spark_ds_init is exported.
     run(Seq(compiler, "-std=c++17", "-O1", "-shared", "-fPIC", "-fvisibility=hidden") ++
-      includes.map("-I" + _) ++ defines ++ Seq("-o", library.getPath, source.getPath))
+      includes.map("-I" + _) ++ defines ++
+      Seq(s"-DORDER_VIOLATIONS_PATH=\"${orderViolations.getPath}\"", "-o", library.getPath,
+        source.getPath))
     library
   }
 

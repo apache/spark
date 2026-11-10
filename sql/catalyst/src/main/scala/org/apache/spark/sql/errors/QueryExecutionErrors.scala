@@ -1928,18 +1928,6 @@ private[sql] object QueryExecutionErrors extends QueryErrorsBase with ExecutionE
         "key" -> key))
   }
 
-  def unsupportedHiveMetastoreVersionForJavaError(
-      version: String,
-      requiredJavaVersion: Int,
-      currentJavaVersion: Int): SparkUnsupportedOperationException = {
-    new SparkUnsupportedOperationException(
-      errorClass = "UNSUPPORTED_HIVE_METASTORE_VERSION_FOR_JAVA",
-      messageParameters = Map(
-        "version" -> version,
-        "requiredJavaVersion" -> requiredJavaVersion.toString,
-        "currentJavaVersion" -> currentJavaVersion.toString))
-  }
-
   def loadHiveClientCausesNoClassDefFoundError(
       cnf: NoClassDefFoundError,
       execJars: Seq[URL],
@@ -2527,6 +2515,42 @@ private[sql] object QueryExecutionErrors extends QueryErrorsBase with ExecutionE
         "batchId" -> batchId.toString,
         "lastCommittedBatchId" -> lastCommittedBatchId.toString),
       cause = null)
+  }
+
+  def streamingScanMissingColumnsError(source: Seq[String], columns: Seq[String]): Throwable = {
+    new SparkException(
+      errorClass = "STREAMING_SCAN_MISSING_COLUMNS",
+      messageParameters = Map(
+        "columns" -> columns.map(column => toSQLId(Seq(column))).mkString(", "),
+        "source" -> toSQLId(source),
+        "config" -> toSQLConf(SQLConf.STREAMING_V2_COLUMN_PRUNING_ENABLED.key)),
+      cause = null)
+  }
+
+  def streamingScanFiltersChangedError(
+      source: Seq[String],
+      filters: Seq[Expression],
+      cause: Throwable = null): Throwable = {
+    new SparkException(
+      errorClass = "STREAMING_SCAN_FILTERS_CHANGED",
+      messageParameters = Map(
+        "filters" -> filters.map(toSQLExpr).mkString(", "),
+        "source" -> toSQLId(source),
+        "config" -> toSQLConf(SQLConf.STREAMING_V2_FILTER_PUSHDOWN_ENABLED.key)),
+      cause = cause)
+  }
+
+  def streamingScanInvalidReadSchemaError(
+      source: Seq[String],
+      reason: String,
+      cause: Throwable = null): Throwable = {
+    new SparkException(
+      errorClass = "STREAMING_SCAN_INVALID_READ_SCHEMA",
+      messageParameters = Map(
+        "source" -> toSQLId(source),
+        "reason" -> reason,
+        "config" -> toSQLConf(SQLConf.STREAMING_V2_COLUMN_PRUNING_ENABLED.key)),
+      cause = cause)
   }
 
   def cannotPurgeAsBreakInternalStateError(): SparkUnsupportedOperationException = {
@@ -3789,5 +3813,17 @@ private[sql] object QueryExecutionErrors extends QueryErrorsBase with ExecutionE
       messageParameters = Map("operation" -> "compute BIN BY bucket boundaries"),
       context = Array.empty,
       summary = "")
+  }
+
+  def parseSqlAnalyzeRequiresSession(): SparkRuntimeException = {
+    new SparkRuntimeException(
+      errorClass = "PARSE_SQL_ANALYZE_REQUIRES_SESSION",
+      messageParameters = Map("functionName" -> toSQLId("parse_sql")))
+  }
+
+  def parseSqlAnalyzeUnsupportedScript(): SparkRuntimeException = {
+    new SparkRuntimeException(
+      errorClass = "PARSE_SQL_ANALYZE_UNSUPPORTED_SCRIPT",
+      messageParameters = Map("functionName" -> toSQLId("parse_sql")))
   }
 }

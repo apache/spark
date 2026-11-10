@@ -27,6 +27,7 @@ import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.trees.TreePattern.OUTER_REFERENCE
 import org.apache.spark.sql.errors.{QueryCompilationErrors, QueryExecutionErrors}
 import org.apache.spark.sql.internal.SQLConf
+import org.apache.spark.sql.types.{DecimalType, IntegralType}
 import org.apache.spark.util.collection.Utils
 
 /**
@@ -104,10 +105,21 @@ object DecorrelateInnerQuery extends PredicateHelper {
    *   (a = outer(c) - b) -> false
    */
   def canPullUpOverAgg(expression: Expression): Boolean = {
+    // Whether the equality ignores NULL keys (`=`) or matches them (`<=>`).
+    val nullSafe = expression.isInstanceOf[EqualNullSafe]
+
     def isSupported(e: Expression): Boolean = e match {
       case _: Attribute => true
       // Allow Cast expressions that guarantee 1:1 mapping.
-      case Cast(a: Attribute, dataType, _, _) => Cast.canUpCast(a.dataType, dataType)
+      case Cast(a: Attribute, dataType, _, evalMode) =>
+        Cast.canUpCast(a.dataType, dataType) || (a.dataType match {
+          // A cast from a scale-0 decimal to an integral type is exact or fails (ANSI), or
+          // also yields NULL (TRY). The NULLs never match under `=`, so the cast is still
+          // 1:1 on the rows that can match. LEGACY wraps around, so it is not 1:1.
+          case DecimalType.Fixed(_, 0) if dataType.isInstanceOf[IntegralType] =>
+            evalMode == EvalMode.ANSI || (evalMode == EvalMode.TRY && !nullSafe)
+          case _ => false
+        })
       case _ => false
     }
 

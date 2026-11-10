@@ -796,10 +796,10 @@ class RocksDBStateStoreLockHardeningSuite extends SparkFunSuite
     val threadInfo = stateMachineObj.asInstanceOf[RocksDBStateMachine].getAcquiredThreadInfo
     assert(threadInfo.isDefined,
       "acquired thread info should not be null after load")
-    val threadId = threadInfo.get.threadRef.get.get.getId
+    val threadId = threadInfo.get.threadRef.get.get.threadId
     assert(
-      threadId == Thread.currentThread().getId,
-      s"acquired thread should be current thread ${Thread.currentThread().getId} " +
+      threadId == Thread.currentThread().threadId,
+      s"acquired thread should be current thread ${Thread.currentThread().threadId} " +
         s"after load but was $threadId")
   }
 }
