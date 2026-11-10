@@ -8866,7 +8866,8 @@ object SQLConf {
         "are retained; other children are retargeted or receive a new exchange. The target " +
         "partition count must be at least the smaller of the replaced exchange's count and " +
         "the effective initial shuffle count, including " +
-        s"${COALESCE_PARTITIONS_INITIAL_PARTITION_NUM.key} when set. Requires " +
+        s"${COALESCE_PARTITIONS_INITIAL_PARTITION_NUM.key} when set, and at most a bounded " +
+        "multiple of the larger of the two. Requires " +
         s"${UNION_OUTPUT_PARTITIONING.key} to be enabled. Removing the union's direct shuffle " +
         "stage can reduce AQE skew handling and join conversion opportunities. Retaining a " +
         "shuffled join's layout can make skew optimization or local reads violate ancestor " +
@@ -8897,6 +8898,22 @@ object SQLConf {
       .booleanConf
       .createWithDefault(false)
 
+  val PUSH_DOWN_SHUFFLE_THROUGH_UNION_MAX_TARGET_PARTITION_NUM_FACTOR =
+    buildConf(
+      "spark.sql.adaptive.pushDownShuffleThroughUnion.maxTargetPartitionNumFactor")
+      .internal()
+      .doc("The maximum target partition count is this factor times the larger of the replaced " +
+        "exchange's partition count and the effective initial shuffle count. One keeps a target " +
+        "within the plan's own scale; a larger factor lets a branch retain a modestly larger " +
+        "layout instead of being shuffled. Requires " +
+        s"${PUSH_DOWN_SHUFFLE_THROUGH_UNION_ENABLED.key} to be enabled.")
+      .version("4.4.0")
+      .withBindingPolicy(ConfigBindingPolicy.SESSION)
+      .doubleConf
+      .checkValue(f => f >= 1.0 && f < Double.PositiveInfinity,
+        "The target partition count factor must be finite and at least one.")
+      .createWithDefault(1.0)
+
   val PUSH_DOWN_SHUFFLE_THROUGH_UNION_KEEP_NON_COALESCIBLE_BRANCHES_ENABLED =
     buildConf(
       "spark.sql.adaptive.pushDownShuffleThroughUnion.keepNonCoalescibleBranches.enabled")
@@ -8907,7 +8924,8 @@ object SQLConf {
         "Rebalance shuffles remain ineligible. This only restricts targets when " +
         s"${COALESCE_PARTITIONS_ENABLED.key} is on and every consumer input path reaches an " +
         "exchange boundary. A non-exchange input already prevents the compatible group from " +
-        "coalescing, so these targets remain eligible in that case. Requires " +
+        "coalescing, so these targets remain eligible in that case. Targets are still bounded " +
+        s"by ${PUSH_DOWN_SHUFFLE_THROUGH_UNION_MAX_TARGET_PARTITION_NUM_FACTOR.key}. Requires " +
         s"${PUSH_DOWN_SHUFFLE_THROUGH_UNION_ENABLED.key} to be enabled.")
       .version("4.4.0")
       .withBindingPolicy(ConfigBindingPolicy.SESSION)

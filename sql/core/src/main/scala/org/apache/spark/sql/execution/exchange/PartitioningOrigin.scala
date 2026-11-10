@@ -17,7 +17,7 @@
 
 package org.apache.spark.sql.execution.exchange
 
-import org.apache.spark.sql.catalyst.plans.physical.{CoalescedHashPartitioning, HashPartitioning, PartitioningCollection}
+import org.apache.spark.sql.catalyst.plans.physical.{CoalescedHashPartitioning, HashPartitioning, Partitioning, PartitioningCollection}
 import org.apache.spark.sql.catalyst.trees.TreeNodeTag
 import org.apache.spark.sql.execution.SparkPlan
 
@@ -59,13 +59,26 @@ private[execution] object PartitioningOrigin {
   }
 
   /**
+   * Whether `partitioning` is the hash layout `expected`, either directly or as a member of a
+   * collection. `EnsureRequirements` records an origin under this condition and validation checks
+   * it here, so recording and validation cannot drift.
+   */
+  def matchesHashLayout(partitioning: Partitioning, expected: HashPartitioning): Boolean =
+    partitioning match {
+      case hash: HashPartitioning => expected.semanticEquals(hash)
+      case collection: PartitioningCollection =>
+        collection.partitionings.exists(matchesHashLayout(_, expected))
+      case _ => false
+    }
+
+  /**
    * Preserve the hash layout that justified elision. Coalesced layouts retain the same keys
    * in order without requiring the original reducer count; explicit output counts still hold.
    */
   def validateNode(plan: SparkPlan): Boolean = {
     plan.getTagValue(ORIGIN).forall { origin =>
       PartitioningCollection.flatten(plan.outputPartitioning).exists {
-        case hash: HashPartitioning => hash.semanticEquals(origin.partitioning)
+        case hash: HashPartitioning => matchesHashLayout(hash, origin.partitioning)
         case hash: CoalescedHashPartitioning =>
           hash.expressions.length == origin.partitioning.expressions.length &&
             hash.expressions.zip(origin.partitioning.expressions).forall {

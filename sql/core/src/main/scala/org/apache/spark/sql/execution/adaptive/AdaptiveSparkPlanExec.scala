@@ -110,6 +110,20 @@ case class AdaptiveSparkPlanExec(
     AQEUtils.getRequiredDistribution(inputPlan)
   }
 
+  // Read once for this execution so that the union barriers in the lists below, which run per
+  // re-planning round and per stage created, cannot answer from different values. Taken from the
+  // same session conf this query's `QueryExecution.preparations` reads.
+  @transient private val unionConf = UnionConfSnapshot(context.session.sessionState.conf)
+
+  // One value for the rule, EnsureRequirements and the cost evaluator: a rule gated off adds no
+  // marks, and treating those unions as pushed would skew the plan comparison.
+  @transient private val pushDownShuffleThroughUnionEnabled = {
+    unionConf.outputPartitioning &&
+      conf.pushDownShuffleThroughUnionEnabled &&
+      (!context.queryContainsSubqueries || conf.getConf(
+        SQLConf.PUSH_DOWN_SHUFFLE_THROUGH_UNION_ALLOW_WITH_SUBQUERIES_ENABLED))
+  }
+
   @transient private val costEvaluator =
     conf.getConf(SQLConf.ADAPTIVE_CUSTOM_COST_EVALUATOR_CLASS) match {
       case Some(className) =>
@@ -117,13 +131,8 @@ case class AdaptiveSparkPlanExec(
       case _ => SimpleCostEvaluator(
         conf.getConf(SQLConf.ADAPTIVE_FORCE_OPTIMIZE_SKEWED_JOIN),
         conf.costEvaluatorCountLocalSortEnabled,
-        conf.pushDownShuffleThroughUnionEnabled)
+        pushDownShuffleThroughUnionEnabled)
     }
-
-  // Read once for this execution so that the union barriers in the lists below, which run per
-  // re-planning round and per stage created, cannot answer from different values. Taken from the
-  // same session conf this query's `QueryExecution.preparations` reads.
-  @transient private val unionConf = UnionConfSnapshot(context.session.sessionState.conf)
 
   // The same record the listed passes write, for the two places that need it between two rules
   // rather than as a pass of their own. See `SnapshotUnionPreparationConf`.
@@ -134,10 +143,6 @@ case class AdaptiveSparkPlanExec(
   // Exchange nodes) after running these rules.
   // Visible in the package so that a test can assert where the two union barriers below sit.
   @transient private[adaptive] val queryStagePreparationRules: Seq[Rule[SparkPlan]] = {
-    val pushDownShuffleThroughUnionEnabled = unionConf.outputPartitioning &&
-      conf.pushDownShuffleThroughUnionEnabled &&
-      (!context.queryContainsSubqueries || conf.getConf(
-        SQLConf.PUSH_DOWN_SHUFFLE_THROUGH_UNION_ALLOW_WITH_SUBQUERIES_ENABLED))
     // For cases like `df.repartition(a, b).select(c)`, there is no distribution requirement for
     // the final plan, but we do need to respect the user-specified repartition. Here we ask
     // `EnsureRequirements` to not optimize out the user-specified repartition-by-col to work
@@ -1296,7 +1301,13 @@ object AdaptiveSparkPlanExec {
  * The execution context shared between the main query and all sub-queries.
  */
 case class AdaptiveExecutionContext(session: SparkSession, qe: QueryExecution) {
-  @volatile private[adaptive] var queryContainsSubqueries: Boolean = false
+  /**
+   * Whether the query contains an adaptive subquery. Derived from the pre-preparation physical
+   * plan, which still carries the subquery expressions, so it does not depend on `apply` running
+   * before the first adaptive plan is built.
+   */
+  lazy val queryContainsSubqueries: Boolean =
+    qe.sparkPlan.containsAnyPattern(PlanAdaptiveSubqueries.patterns: _*)
 
   /**
    * The subquery-reuse map shared across the entire query.

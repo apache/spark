@@ -1450,15 +1450,7 @@ case class EnsureRequirements(
       case operator @ ShuffleExchangeExec(upper: HashPartitioning, child, shuffleOrigin, _, _)
           if optimizeOutRepartition &&
             (shuffleOrigin == REPARTITION_BY_COL || shuffleOrigin == REPARTITION_BY_NUM) =>
-        def hasSemanticEqualPartitioning(partitioning: Partitioning): Boolean = {
-          partitioning match {
-            case lower: HashPartitioning if upper.semanticEquals(lower) => true
-            case lower: PartitioningCollection =>
-              lower.partitionings.exists(hasSemanticEqualPartitioning)
-            case _ => false
-          }
-        }
-        if (hasSemanticEqualPartitioning(child.outputPartitioning)) {
+        if (PartitioningOrigin.matchesHashLayout(child.outputPartitioning, upper)) {
           if (pushDownShuffleThroughUnionEnabled) {
             PartitioningOrigin.record(child, upper, shuffleOrigin)
           }

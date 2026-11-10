@@ -53,13 +53,16 @@ case class SimpleCost(numSkewJoins: Int, numShuffles: Int, numLocalSorts: Int) e
 /**
  * A skew join aware implementation of [[CostEvaluator]], which counts the number of
  * [[ShuffleExchangeLike]] nodes, skew join nodes and (optionally) local [[SortExec]] nodes in the
- * plan. With union shuffle push-down enabled, tagged new exchanges are excluded and each union
- * identified by [[PushDownShuffleExchangeThroughUnion.hasPushedShuffle]] counts as one shuffle.
- * Query-stage contents are not visited. Inspecting the same shape in current and re-planned unions
- * keeps an equivalent re-plan from gaining a shuffle-cost credit when a moved branch finishes.
+ * plan. With union shuffle push-down enabled, the exchanges the rewrite inserted in place of the
+ * union exchange are excluded, while a retargeted exchange stays counted as new work. A union
+ * whose direct child is an exchange the rewrite marked counts as one shuffle through
+ * [[PushDownShuffleExchangeThroughUnion.hasPushedShuffle]].
+ * Query-stage contents are not visited. Staging keeps the mark, since the stage wraps the marked
+ * exchange. A branch served by reuse of an already materialized stage keeps that stage's own
+ * exchange: reuse of an unmarked exchange adds no work, while a marked one still counts.
  * Ordinary exchanges and recognized unions have equal weight, with no separate tie-breaker.
- * This is shape-based compensation, not a record of executed work: pruning the only qualifying
- * branch can remove the union cost even while the union survives. That decrease can offset an
+ * This follows the rewrite, not a record of executed work: pruning the only qualifying branch can
+ * remove the union cost even while the union survives. That decrease can offset an
  * additional exchange elsewhere, so adoption need not match the push-down-disabled plan.
  * See [[SimpleCost]] for how the components are compared.
  */

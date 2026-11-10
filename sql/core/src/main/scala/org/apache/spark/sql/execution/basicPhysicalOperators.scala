@@ -1111,7 +1111,9 @@ case class UnionExec(children: Seq[SparkPlan]) extends SparkPlan with CodegenSup
   /** Whether any child has repeated exprIds, making its positional attribute mapping ambiguous. */
   private[execution] def hasDuplicateChildOutputs: Boolean = {
     children.exists { child =>
-      child.output.map(_.exprId).distinct.size != child.output.size
+      // `child.output` walks the child's subtree, so read it once.
+      val out = child.output
+      out.map(_.exprId).distinct.size != out.size
     }
   }
 
