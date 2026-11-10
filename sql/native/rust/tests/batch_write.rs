@@ -537,6 +537,7 @@ fn write_types_and_options_control_capabilities() {
         "INFERS_SCHEMA = false leaves schema inference to Spark's error"
     );
     assert!(library.create_reader.is_none());
+    assert!(library.push_domains.is_none());
     assert!(library.read.is_none());
     assert!(library.create_stream_reader.is_none());
     assert!(library.default_read_limit.is_none());

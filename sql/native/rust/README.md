@@ -73,8 +73,8 @@ Read support uses three pieces:
 
 * `DataSource::new_scan`: create an independent scan builder from a `ScanInfo`, which
   carries the schema to read.
-* `ScanBuilder`: negotiate the limit and the columns to read, then consume itself
-  in `plan()` to return a typed `ScanPlan<Factory>`.
+* `ScanBuilder`: negotiate the domains of the filtered columns, the limit, and the columns to
+  read, then consume itself in `plan()` to return a typed `ScanPlan<Factory>`.
 * `PartitionReaderFactory`: serialize executor configuration and open one lazy reader,
   an iterator of Arrow batches, from a typed partition and a `ReaderContext`, which
   carries the schema to read and a borrowed `TaskContext`.
@@ -131,11 +131,11 @@ The Rust API maps to the framework's driver-only `ColumnarBatchPlanner` and its
 ownership; it does not plan partitions. `ColumnarBatchScan` plans on the first
 request for partitions or a reader factory and caches success or failure.
 
-For a native source, `NativeBatchPlanner` pushes the limit and the columns to read,
-each at most once and in this order, then calls `partitions` once, which returns the
-partitions and the state of the reader, and closes the native planner handle. The Rust
-`ScanBuilder::plan()` consumes its builder in that call, and the SDK encodes the factory
-as the state. After a call fails, Spark calls no other function on the handle than its
+For a native source, `NativeBatchPlanner` pushes the domains of the filtered columns, the
+limit, and the columns to read, each at most once and in this order, then calls `partitions`
+once, which returns the partitions and the state of the reader, and closes the native planner
+handle. The Rust `ScanBuilder::plan()` consumes its builder in that call, and the SDK encodes the
+factory as the state. After a call fails, Spark calls no other function on the handle than its
 close function. Batch planner creation remains lazy for scans that do not read in batch.
 
 The JVM's `NativePartitionReaderFactory` carries only the library location,
@@ -447,11 +447,30 @@ so that the scan can plan to read only them. The readers get them as the schema 
 whether or not the scan implements it, and return exactly them, so a connector can add
 pruning to the planning of its scans incrementally.
 
-SPARK-61200 added `push_domains` to version 1 of the ABI: the domains of the columns that the
-filters of a query constrain, with which a scan can skip data, such as a file whose statistics
-exclude every value of a domain. The SDK binds the function but does not expose it yet: it leaves
-it unset, so Spark pushes no filters down and evaluates them after reading. SPARK-61306 will add
-it to `ScanBuilder`, with a default that uses no domain, so existing connectors keep building.
+`ScanBuilder::push_domains` gets the domains of the columns that the filters of the query
+constrain: for each column, whether null and NaN are in its domain, and the ranges of its other
+values, sorted and without overlaps, or none for all of them. A scan can skip the data that has
+no value in the domain of a column, such as a file or a row group whose statistics exclude every
+value of the domain, but never a row whose values are all in their domains. Spark evaluates all
+the filters after reading anyway, so the rows of a scan need not match them. The method returns
+whether the scan uses each domain: Spark shows the filters of the used domains as pushed in the
+formatted plan of the query. The default uses none, so a connector can ignore the method.
+
+| `Domain` field | ABI field | Meaning |
+| --- | --- | --- |
+| `path` | `path` | The names of the column and of its fields in structs, from the indices of the ABI |
+| `null_allowed` | `null_allowed` | Whether null is in the domain; never for a field of a struct |
+| `nan_allowed` | `nan_allowed` | Whether NaN is in the domain, for `float` and `double` columns |
+| `ranges` | `ranges` | The ranges of the other values, with `Bound` limits, or `None` for all |
+
+The SDK resolves the path of a domain in `ScanInfo::schema`, the schema that `create_reader`
+got, because Spark prunes the columns after it pushes the domains, so their indices in the
+schema to read of the readers may differ. It converts the bounds of the ranges, an Arrow struct
+array, to `Value`s, which hold the types that version 1 passes domains for, and skips a domain of
+another type, which a later version of Spark may pass, as unused. `Domain`, `ValueRange` and
+`Value` are serializable, so that a reader factory can carry the domains to the executors.
+Values compare as Spark compares them: compare floats with `<` and `==`, under which -0.0 equals
+0.0, not with `f64::total_cmp`, strings by their UTF-8 bytes, and binary values as unsigned bytes.
 
 ## Build and test without Spark
 
@@ -489,7 +508,9 @@ initialization, and logging that follows the level of the host, and panics durin
 capability discovery. They also cover planning failures, retries after the driver registry
 is dropped, schema, layout, and nullability validation, the columns of the schema to read
 that the SDK keeps from a batch, sized ABI structures, task-context lifetimes, integer
-boundaries, projections, and deterministic partition plans. Write ABI tests cover typed
+boundaries, projections, deterministic partition plans, and the domains that Spark pushes: the
+names of their columns, the values and bounds of each type, the ranges that the SDK moves to own,
+invalid paths, and the number of results. Write ABI tests cover typed
 factory/message round trips, retained Arrow buffers, cancellation, failed writes and
 commits, factory creation and serialization failures, missing and undecodable messages,
 and the epoch IDs that select the task writers. Streaming ABI tests cover single-line JSON
@@ -524,11 +545,11 @@ or panics in custom Arrow buffer destructors cannot be recovered. A reader's or
 writer's background work must stop before its task context expires. Native memory
 is not reserved through Spark's memory manager.
 
-This prototype does not include continuous processing, filter pushdown, nested
-projection, custom metrics, memory accounting, or C++ bindings, and does not extend the
-ABI. The versioned MessagePack envelope of the serialized state, partitions and messages is an
-SDK implementation detail: Spark loads the same build of the library on the driver and the
-executors, which it checks with its checksum.
+This prototype does not include continuous processing, filters that a source evaluates in
+place of Spark, nested projection, custom metrics, memory accounting, or C++ bindings, and does
+not extend the ABI. The versioned MessagePack envelope of the serialized state, partitions and
+messages is an SDK implementation detail: Spark loads the same build of the library on the
+driver and the executors, which it checks with its checksum.
 
 [header]: ../../core/src/main/resources/org/apache/spark/sql/datasource/spark_datasource.h
 [guide]: ../../../docs/sql-native-data-sources.md

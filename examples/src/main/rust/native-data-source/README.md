@@ -63,7 +63,8 @@ options. A source created just for capability discovery is closed without creati
 Spark normalizes option names to lower case. Unknown options are rejected.
 
 Spark pushes a limit only to a scan whose rows it does not filter, and evaluates filters after
-reading, since version 1 of the ABI does not push them down. The connector applies a global
+reading. The connector uses none of the domains of the filtered columns that Spark pushes to
+`ScanBuilder::push_domains`, so it reads all its rows. It applies a global
 limit by shortening the range before splitting it into partitions. The readers return the
 columns of the schema to read, in its order, including zero-column batches for operations such
 as `COUNT(*)`.

@@ -24,15 +24,15 @@ use std::sync::atomic::{AtomicI64, Ordering};
 use std::sync::{Arc, Mutex, MutexGuard};
 
 use arrow_array::ffi_stream::FFI_ArrowArrayStream;
-use arrow_schema::SchemaRef;
+use arrow_schema::{Fields, SchemaRef};
 use serde::{de::DeserializeOwned, Deserialize, Serialize};
 
 use crate::write::{Batch, DriverWrite, DriverWriter};
 use crate::{
-    abi, BatchWrite, Capabilities, CommitOffsetInfo, CreateInfo, DataSource, LatestOffsetInfo,
-    LimitSupport, MicroBatchInfo, MicroBatchStream, MicroBatchStreamInfo, PartitionReaderFactory,
-    ReadLimit, ReaderContext, Result, ScanBuilder, ScanInfo, ScanPlan, StreamingWrite,
-    StreamingWriteInfo, TaskContext, WriteInfo, WriteMode,
+    abi, BatchWrite, Capabilities, CommitOffsetInfo, CreateInfo, DataSource, Domain,
+    LatestOffsetInfo, LimitSupport, MicroBatchInfo, MicroBatchStream, MicroBatchStreamInfo,
+    PartitionReaderFactory, ReadLimit, ReaderContext, Result, ScanBuilder, ScanInfo, ScanPlan,
+    StreamingWrite, StreamingWriteInfo, TaskContext, WriteInfo, WriteMode,
 };
 
 #[path = "stream.rs"]
@@ -47,8 +47,7 @@ type HandleMap<T> = Mutex<HashMap<i64, Arc<Mutex<T>>>>;
 pub struct Bridge<S: DataSource> {
     next_handle: AtomicI64,
     sources: HandleMap<SourceState<S>>,
-    // The builder of each scan, until Spark plans the scan.
-    scans: HandleMap<Option<S::ScanBuilder>>,
+    scans: HandleMap<ScanState<S::ScanBuilder>>,
     streams: HandleMap<S::MicroBatchStream>,
     writers: HandleMap<Box<dyn DriverWrite>>,
 }
@@ -160,27 +159,71 @@ impl<S: DataSource> Bridge<S> {
         let builder = {
             let source = lock(&source);
             require(source.capabilities, Capabilities::BATCH_READ, "batch reads")?;
-            source.source.new_scan(ScanInfo::new(schema))?
+            source.source.new_scan(ScanInfo::new(schema.clone()))?
         };
-        self.insert(&self.scans, Some(builder))
+        let scan = ScanState {
+            builder: Some(builder),
+            fields: schema.fields().clone(),
+        };
+        self.insert(&self.scans, scan)
+    }
+
+    /// Pushes the domains that Spark passes down to a scan, except those of the columns whose
+    /// values have no [`Value`](crate::Value), and returns whether the scan uses each.
+    pub fn push_domains(&self, handle: i64, pushed: Vec<abi::PushedDomain>) -> Result<Vec<bool>> {
+        let scan = get(&self.scans, handle)?;
+        let mut scan = lock(&scan);
+        let mut positions = Vec::new();
+        let mut domains = Vec::new();
+        for (position, domain) in pushed.iter().enumerate() {
+            let domain = Domain::from_abi(
+                &scan.fields,
+                &domain.path,
+                domain.null_allowed,
+                domain.nan_allowed,
+                domain.ranges.as_ref(),
+            )?;
+            if let Some(domain) = domain {
+                positions.push(position);
+                domains.push(domain);
+            }
+        }
+        let mut used = vec![false; pushed.len()];
+        if domains.is_empty() {
+            return Ok(used);
+        }
+        let uses = builder(&mut scan.builder)?.push_domains(&domains)?;
+        if uses.len() != domains.len() {
+            return Err(format!(
+                "ScanBuilder::push_domains returned {} results for {} domains",
+                uses.len(),
+                domains.len()
+            )
+            .into());
+        }
+        for (position, uses) in positions.into_iter().zip(uses) {
+            used[position] = uses;
+        }
+        Ok(used)
     }
 
     pub fn push_limit(&self, handle: i64, limit: usize) -> Result<bool> {
         let scan = get(&self.scans, handle)?;
         let mut scan = lock(&scan);
-        Ok(builder(&mut scan)?.push_limit(limit)? == LimitSupport::Global)
+        Ok(builder(&mut scan.builder)?.push_limit(limit)? == LimitSupport::Global)
     }
 
     pub fn prune_columns(&self, handle: i64, columns: &[String]) -> Result<()> {
         let scan = get(&self.scans, handle)?;
         let mut scan = lock(&scan);
-        builder(&mut scan)?.prune_columns(columns)
+        builder(&mut scan.builder)?.prune_columns(columns)
     }
 
     /// Plans a scan, which consumes its builder.
     pub fn plan(&self, handle: i64) -> Result<EncodedPlan> {
         let scan = get(&self.scans, handle)?;
         let builder = lock(&scan)
+            .builder
             .take()
             .ok_or("the scan has already been planned")?;
         encode_plan(builder.plan()?)
@@ -381,6 +424,13 @@ fn remove<T>(handles: &HandleMap<T>, handle: i64) {
 struct SourceState<S> {
     source: S,
     capabilities: Capabilities,
+}
+
+/// A scan: its builder, until Spark plans the scan, and the columns of the schema that
+/// create_reader got, which the paths of the domains that Spark pushes index.
+struct ScanState<B> {
+    builder: Option<B>,
+    fields: Fields,
 }
 
 /// Offsets are compact JSON on a single line, which Spark stores in the checkpoint as they
