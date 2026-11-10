@@ -28,8 +28,8 @@ import com.google.common.cache.{Cache, CacheBuilder, Weigher}
 import org.apache.spark.{PartitionEvaluator, PartitionEvaluatorFactory, SparkException,
   SparkIllegalStateException, TaskContext}
 import org.apache.spark.sql.catalyst.InternalRow
-import org.apache.spark.sql.catalyst.expressions.{Attribute, Expression, GenericInternalRow,
-  JoinedRow, Predicate, SpecializedGetters, UnsafeProjection, UnsafeRow}
+import org.apache.spark.sql.catalyst.expressions.{Attribute, AttributeSet, Expression,
+  GenericInternalRow, JoinedRow, Predicate, SpecializedGetters, UnsafeProjection, UnsafeRow}
 import org.apache.spark.sql.catalyst.plans.{Inner, JoinType, LeftAnti, LeftOuter, LeftSemi}
 import org.apache.spark.sql.catalyst.plans.logical.{ExternalLookupCacheOptions,
   ExternalLookupFilter, ExternalLookupProject, ExternalLookupTransform}
@@ -92,6 +92,12 @@ class ExternalLookupJoinEvaluatorFactory(
 
   require(lookupParameters.length == nullSafeParameters.length,
     "Every external lookup parameter must define its null semantics")
+
+  // Any row that a key returns gives a left semi or left anti join whose residual condition reads
+  // no lookup column the same answer, so its cache keeps one row per key, and an empty entry for a
+  // miss, as a shuffled hash join keeps one build row per key then.
+  private val cachesOneRowPerKey = (joinType == LeftSemi || joinType == LeftAnti) &&
+    residualCondition.forall(_.references.subsetOf(AttributeSet(streamOutput)))
 
   override def createEvaluator(): PartitionEvaluator[InternalRow, InternalRow] =
     new ExternalLookupJoinEvaluator
@@ -331,12 +337,13 @@ class ExternalLookupJoinEvaluatorFactory(
       else connectorCall(reader.lookup(keyEntries.map(_.requestRow)))
 
     // A semi or anti join decides a stream row at its first match. Once every requested row has
-    // matched, no later result row can change the output, so the join reads no further, unless it
-    // fills the cache, which keeps only complete results for later batches.
+    // matched, no later result row can change the output, so the join reads no further, unless a
+    // later row can still change what it caches: a cache that keeps every row of a key keeps only
+    // complete results, while each key has its one row by then when the cache keeps one per key.
     private var undecidedRows = keyEntries.iterator.map(_.rowIndexes.length).sum
 
     private def decided: Boolean =
-      joinOutput.answeredByFirstMatch && undecidedRows == 0 && cacheWriter.isEmpty
+      joinOutput.answeredByFirstMatch && undecidedRows == 0 && cacheWriter.forall(_.isFull)
 
     override def hasNext: Boolean = {
       tryFillPending()
@@ -386,8 +393,8 @@ class ExternalLookupJoinEvaluatorFactory(
           }
         }
         // A decided batch closes its cursor before the end. Its rows have all matched, so none is
-        // waiting for its results.
-        if (pending.isEmpty) finishCursor(completed = !decided)
+        // waiting for its results, and no later row could change what it caches.
+        if (pending.isEmpty) finishCursor(completed = true)
       } catch {
         case error: Throwable =>
           Utils.tryWithSafeFinally(throw error) {
@@ -444,13 +451,13 @@ class ExternalLookupJoinEvaluatorFactory(
     }
 
     /**
-     * Closes the cursor once. After a complete read, caches the results and finishes every stream
-     * row that was waiting for them. After a failure or a close, the results may be partial, so it
-     * caches nothing and finishes no row: a row without a match could be a row whose match was
-     * never read. Nor does a semi or anti join that closes the cursor once every stream row has
-     * matched. A failure fails the task, which discards the cache, and the join never retries a
-     * request. Once the reader is closed, its close owns the cursor and the reader's metrics, so
-     * the join makes no further connector call.
+     * Closes the cursor once. After a complete read, or once a semi or anti join has decided every
+     * stream row and no later row could change what it caches, caches the results and finishes
+     * every stream row that was waiting for them. After a failure or a close, the results may be
+     * partial, so it caches nothing and finishes no row: a row without a match could be a row
+     * whose match was never read. A failure fails the task, which discards the cache, and the join
+     * never retries a request. Once the reader is closed, its close owns the cursor and the
+     * reader's metrics, so the join makes no further connector call.
      */
     private def finishCursor(completed: Boolean): Unit = if (cursor ne EmptyLookupCursor) {
       cursor = EmptyLookupCursor
@@ -518,7 +525,8 @@ class ExternalLookupJoinEvaluatorFactory(
   /**
    * Collects the result rows of one request by key, and caches them once the cursor is done. It
    * receives only the rows that satisfy the selected lookup predicates, so the cache never holds a
-   * row that Spark's check dropped. A key whose rows take more than a
+   * row that Spark's check dropped. When the cache keeps one row per key, it keeps each key's first
+   * row. A key whose rows take more than a
    * [[ExternalLookupJoinEvaluatorFactory.CACHE_KEY_SHARE]]th of `maxBytes` is not cached, so that
    * one large result cannot evict most of the cache, and the request holds at most `maxBytes` of
    * rows for the cache, which could keep no more; a key whose rows would pass that is not cached
@@ -533,21 +541,31 @@ class ExternalLookupJoinEvaluatorFactory(
       mutable.HashMap.from(keys.map(_ -> new KeyResults(mutable.ArrayBuffer.empty, 0L)))
     private val uncacheable = mutable.HashSet.empty[UnsafeRow]
     private var bufferedBytes = 0L
+    // The keys whose entry a later row can still change: each key until it is uncacheable or,
+    // when the cache keeps one row per key, until it has that row.
+    private var openKeys = keys.length
 
-    def add(key: UnsafeRow, lookupRow: UnsafeRow): Unit = if (!uncacheable.contains(key)) {
+    def add(key: UnsafeRow, lookupRow: UnsafeRow): Unit = {
       val results = resultsByKey(key)
-      val rowBytes = ExternalLookupJoinEvaluatorFactory.cachedBytes(lookupRow)
-      if (results.bytes + rowBytes > maxKeyBytes ||
-          bufferedBytes + rowBytes > cacheOptions.maxBytes) {
-        uncacheable += key
-        bufferedBytes -= results.bytes
-        results.rows.clear()
-      } else {
-        results.rows += lookupRow
-        results.bytes += rowBytes
-        bufferedBytes += rowBytes
+      if (!uncacheable.contains(key) && !(cachesOneRowPerKey && results.rows.nonEmpty)) {
+        val rowBytes = ExternalLookupJoinEvaluatorFactory.cachedBytes(lookupRow)
+        if (results.bytes + rowBytes > maxKeyBytes ||
+            bufferedBytes + rowBytes > cacheOptions.maxBytes) {
+          uncacheable += key
+          bufferedBytes -= results.bytes
+          results.rows.clear()
+          openKeys -= 1
+        } else {
+          results.rows += lookupRow
+          results.bytes += rowBytes
+          bufferedBytes += rowBytes
+          if (cachesOneRowPerKey) openKeys -= 1
+        }
       }
     }
+
+    /** Whether no later result row can change what it caches. */
+    def isFull: Boolean = openKeys == 0
 
     def write(): Unit = keys.foreach { key =>
       if (!uncacheable.contains(key)) cache.put(key, resultsByKey(key).rows.toArray)

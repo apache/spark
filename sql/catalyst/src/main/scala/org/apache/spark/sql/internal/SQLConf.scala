@@ -2566,12 +2566,13 @@ object SQLConf {
       .doc("When true, external lookup join caches the complete lookup result of each key, " +
         "including a key with no result, within a task, per input partition (a task that reads " +
         "several input partitions, e.g. after coalesce, has one cache per partition). A cached " +
-        "result is reused as it was read. This configuration can be overridden per join with " +
-        "the EXTERNAL_LOOKUP hint option 'cache_enabled', a string parameter of the form " +
-        "key=value such as 'cache_enabled=false'. A string parameter of the hint that does not " +
-        "contain '=' names a relation. At present, a join whose source serves a range " +
-        "comparison (<, <=, >, >=) with a stream-side value caches nothing, whatever this " +
-        "configuration or the hint option says.")
+        "result is reused as it was read. A left semi or left anti join caches one row of a " +
+        "key instead when any row of the key gives its answer. This configuration can be " +
+        "overridden per join with the EXTERNAL_LOOKUP hint option 'cache_enabled', a string " +
+        "parameter of the form key=value such as 'cache_enabled=false'. A string parameter of " +
+        "the hint that does not contain '=' names a relation. At present, a join whose source " +
+        "serves a range comparison (<, <=, >, >=) with a stream-side value caches nothing, " +
+        "whatever this configuration or the hint option says.")
       .version("4.4.0")
       .booleanConf
       .createWithDefault(true)
