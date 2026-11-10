@@ -15,15 +15,50 @@
 
 #include <cstddef>
 #include <cstdint>
+#include <iterator>
 #include <stdexcept>
 #include <thread>
 
 #include <arrow/api.h>
+#include <arrow/c/abi.h>
 
 #include "spark/native/data_source.h"
 #include "test_util.h"
 
 namespace internal = spark::native::internal;
+
+extern "C" const size_t* SparkNativeCAbiLayout(size_t* count);
+
+TEST(CAndCppAbiLayoutsMatch) {
+  // Arrow's C ABI header is included before the SDK: compare Arrow's definitions here
+  // with the standalone Spark header's definitions in the separately compiled C source.
+  struct LayoutValue {
+    const char* name;
+    size_t value;
+  };
+#define SPARK_NATIVE_ABI_TYPE(type) \
+  {#type " size", sizeof(type)}, {#type " alignment", alignof(type)},
+#define SPARK_NATIVE_ABI_FIELD(type, field) {#type "." #field " offset", offsetof(type, field)},
+
+  const LayoutValue expected[] = {
+#include "abi_layout_fields.inc"
+  };
+
+#undef SPARK_NATIVE_ABI_TYPE
+#undef SPARK_NATIVE_ABI_FIELD
+
+  size_t count = 0;
+  const size_t* actual = SparkNativeCAbiLayout(&count);
+  CHECK_EQ(count, std::size(expected));
+  for (size_t i = 0; i < count; ++i) {
+    if (actual[i] != expected[i].value) {
+      spark::native::testing::Fail(__FILE__, __LINE__,
+                                   std::string(expected[i].name) +
+                                       ": C = " + std::to_string(actual[i]) +
+                                       ", C++ = " + std::to_string(expected[i].value));
+    }
+  }
+}
 
 TEST(ErrorsAndExceptionsAreThreadLocalCStrings) {
   CHECK(internal::Call(

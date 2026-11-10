@@ -489,8 +489,7 @@ struct WriterContext {
 
 /// The writer of one task attempt. Spark destroys it after commit or abort.
 ///
-/// Lifecycle: Spark calls the methods in this order, so implementations need not track their own
-/// phase or guard against repeated calls.
+/// Lifecycle: Spark guarantees the following callback order.
 ///
 /// - Write runs zero or more times, before Commit or Abort, and never after a call has failed.
 /// - Commit runs at most once, never after a failed Write or after Abort.
@@ -560,8 +559,7 @@ class DataWriterFactory {
 /// Keep irreversible publication, including removing overwritten data, in Commit. The destructor
 /// releases resources; it must not publish data or perform fallible flushing.
 ///
-/// Lifecycle: Spark calls the methods in this order, so implementations need not track their own
-/// phase or guard against repeated calls.
+/// Lifecycle: Spark guarantees the following callback order.
 ///
 /// - NewWriterFactory runs once, right after the NewWrite method of the source, before any task
 ///   opens a writer. When it fails, or the SDK cannot serialize its factory, the write fails and
@@ -573,6 +571,13 @@ class DataWriterFactory {
 ///   failed task, also when computing the data to write failed.
 /// - The destructor runs exactly once, possibly without Commit or Abort.
 /// - An exception in any method is reported as that method's failure.
+///
+/// These guarantees do not determine the outcome of a remote transaction. A destination may
+/// publish the write even when Commit returns an error, for example if its acknowledgement is
+/// lost. Use a durable operation identity to check the destination's outcome and make commit and
+/// cleanup idempotent. After an uncertain driver commit, Abort and the destructor must preserve
+/// data that the destination may have published. Resolve the outcome before deleting that data;
+/// if it remains unknown, leave the data intact for later recovery.
 ///
 /// Message i of Commit and Abort belongs to input partition i.
 template <typename FactoryT>
@@ -648,6 +653,11 @@ struct StreamingWriteInfo {
 /// only remove what the task writers of its own write wrote. The ID of the query,
 /// StreamingWriteInfo::query_id, and the epoch ID identify the output of a micro-batch, also when
 /// other queries write to the same destination.
+///
+/// The remote transaction contract of BatchWrite applies here too: Abort and the destructor must
+/// preserve an epoch published by the current write if its commit acknowledgement was lost.
+/// Record the query and epoch identity atomically with publication so a restarted query can
+/// determine whether that epoch is already committed.
 template <typename FactoryT>
 class StreamingWrite {
  public:

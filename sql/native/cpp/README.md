@@ -253,9 +253,17 @@ message did not arrive or cannot be decoded, so a corrupted message cannot preve
 failed task or driver commit leaves the same object available for abort. A task commit whose
 message cannot be serialized counts as failed, so `Abort` can follow a `Commit` that returned a
 message. Spark calls each method at most once, never writes after a failure or a commit, and
-never aborts a successful commit, as the header documents, so connectors do not need to track
-their own phase; the documentation of `BatchWrite` and `DataWriter` lists the exact call-order
-guarantees. Destructors only release resources.
+never aborts a successful commit, as the header documents; the documentation of `BatchWrite`
+and `DataWriter` lists the exact call-order guarantees. Destructors only release resources.
+
+The callback order does not determine the outcome of a remote transaction. A destination can
+publish a write successfully but lose its acknowledgement, so the driver's `Commit` returns an
+error and Spark calls `Abort`. Connectors must track that outcome with a durable operation
+identity and make commit and cleanup idempotent. After an uncertain driver commit, `Abort`
+and the destructor must preserve data that the destination may have published. Resolve the
+outcome before deleting that data; if it remains unknown, leave the data for later recovery.
+The file sink avoids this ambiguity during normal execution by doing no fallible work after
+its manifest rename; a remote sink needs its own outcome checks and recovery protocol.
 
 Stage data per task attempt and publish it only at driver commit. In particular,
 `WriteMode::kTruncate` must leave existing data intact until that commit. Retries and
@@ -322,9 +330,13 @@ micro-batch holds, such as a lock on the destination, in `Commit` and `Abort` ra
 destructor. Spark may commit an epoch again after a restart, with a new write, so
 a write must skip an epoch that is already committed: the query ID and the epoch ID identify the
 output of a micro-batch. A restarted query may also abort an epoch that an earlier run
-committed, so an abort removes only what its own task writers wrote. The [file sink][sink]
-records the last epoch of each query in its manifest for this. Continuous processing is not
-supported.
+committed, so an abort must leave that earlier output intact.
+
+As with batch writes, `Abort` and the destructor must also preserve an epoch published by the
+current write if its commit acknowledgement was lost. Record the query ID and epoch ID
+atomically with publication, so a restarted query can recognize a committed epoch even if the
+earlier write did not receive its acknowledgement. The [file sink][sink] records the last epoch
+of each query in its manifest for this. Continuous processing is not supported.
 
 ## Arrow contract
 
@@ -406,6 +418,13 @@ the project builds, and `SPARK_DATASOURCE_HEADER_DIR` the directory of `spark_da
 `libspark_datasource_<name>.so` on Linux, with hidden symbols and a version script (an exported
 symbol list on macOS), so that it exports only `spark_ds_init`. Format the code with
 `clang-format --style=file:sql/native/cpp/.clang-format`.
+
+`sdk_test` also compares the size, alignment, and every field offset of the ABI structs
+between independently compiled C and C++ sources. The C source includes only Spark's
+standalone header; the C++ source includes Arrow's C ABI header before the SDK, so the check
+also compares Spark's Arrow declarations with those supplied by Arrow C++. Both use one field
+inventory, without copied numeric layouts. This checks agreement between the compilers and
+the Arrow definitions; the SDK itself already uses the C header directly.
 
 The tests need no test framework. The SDK tests cover error and exception conversion, sized ABI
 structures, read limits, task contexts, capabilities, serialization, and the exported Arrow

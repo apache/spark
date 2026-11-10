@@ -18,11 +18,13 @@ find_package(Threads REQUIRED)
 # Unit tests of the SDK, which export no data source.
 add_executable(sdk_test
   test_main.cc
+  abi_layout.c
   abi_test.cc
   capabilities_test.cc
   stream_test.cc
   task_context_test.cc)
 target_link_libraries(sdk_test PRIVATE spark::native_source Threads::Threads)
+target_compile_features(sdk_test PRIVATE c_std_11)
 target_compile_options(sdk_test PRIVATE ${SPARK_NATIVE_WARNINGS})
 add_test(NAME sdk_test COMMAND sdk_test)
 
