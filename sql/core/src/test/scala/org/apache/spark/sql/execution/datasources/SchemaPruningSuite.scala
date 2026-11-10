@@ -1300,7 +1300,7 @@ abstract class SchemaPruningSuite
     val query1 = spark.table("contacts")
       .select(explode(col("friends")).as("friend"))
       .select("friend.first")
-    checkGeneratorScan(query1, "struct<friends:array<struct<first:string>>>")
+    checkScan(query1, "struct<friends:array<struct<first:string>>>")
     checkAnswer(query1, Row("Susan") :: Nil)
 
     val query2 = spark.table("contacts")
@@ -1312,7 +1312,7 @@ abstract class SchemaPruningSuite
     val query3 = spark.table("contacts")
       .select(explode(col("friends")).as("friend"))
       .select("friend.first", "friend.middle", "friend")
-    checkGeneratorScan(query3,
+    checkScan(query3,
       "struct<friends:array<struct<first:string,middle:string,last:string>>>")
     checkAnswer(query3, Row("Susan", "Z.", Row("Susan", "Z.", "Smith")) :: Nil)
   }
@@ -1335,7 +1335,7 @@ abstract class SchemaPruningSuite
 
   testSchemaPruning("SPARK-41961: nested schema pruning on table-valued generator functions") {
     val query1 = sql("select friend.first from contacts, lateral explode(friends) t(friend)")
-    checkGeneratorScan(query1, "struct<friends:array<struct<first:string>>>")
+    checkScan(query1, "struct<friends:array<struct<first:string>>>")
     checkAnswer(query1, Row("Susan") :: Nil)
 
     val query2 = sql(
@@ -1348,7 +1348,7 @@ abstract class SchemaPruningSuite
         |select friend.first, friend.middle, friend
         |from contacts, lateral explode(friends) t(friend)
         |""".stripMargin)
-    checkGeneratorScan(query3,
+    checkScan(query3,
       "struct<friends:array<struct<first:string,middle:string,last:string>>>")
     checkAnswer(query3, Row("Susan", "Z.", Row("Susan", "Z.", "Smith")) :: Nil)
   }

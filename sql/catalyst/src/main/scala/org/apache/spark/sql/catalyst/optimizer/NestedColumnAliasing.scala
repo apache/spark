@@ -410,7 +410,8 @@ object GeneratorNestedColumnAliasing {
 
       // Pruning on `Generator`'s output. We only process single field case: a single field
       // extractor can be moved into the generator expression. Multiple fields of a generator's
-      // output are pruned at the scan by `SchemaPruning` instead (SPARK-34956).
+      // output are pruned at the scan by `SchemaPruning` and `V2ScanRelationPushDown` instead
+      // (SPARK-34956), except for ORC scans for now.
       val nestedFieldsOnGenerator = attrToExtractValuesOnGenerator.values.flatten.toSet
       if (nestedFieldsOnGenerator.size > 1 || nestedFieldsOnGenerator.isEmpty) {
         Some(pushedThrough)

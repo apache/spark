@@ -51,7 +51,9 @@ object SchemaPruning extends Rule[LogicalPlan] {
     plan transformDown {
       case op @ GeneratorsOverScan(_, _,
           l @ LogicalRelationWithTable(hadoopFsRelation: HadoopFsRelation, _))
-          if !hadoopFsRelation.fileFormat.isInstanceOf[OrcFileFormat] =>
+          if hadoopFsRelation.fileFormat.isInstanceOf[ParquetFileFormat] =>
+        // Only Parquet: other formats but ORC never prune their data schema, and ORC is not
+        // pruned through generators yet (see `GeneratorsOverScan`).
         // Fields read from the generators' elements above them narrow the scan below them.
         pruneThroughGenerators(op, l) { (scan, otherProjects, inputRootFields) =>
           val allFilters = scan.filtersPushDown.reduceOption(And).toSeq ++ scan.filtersStayUp
