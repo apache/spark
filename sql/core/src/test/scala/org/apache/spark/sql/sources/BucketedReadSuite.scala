@@ -658,6 +658,136 @@ abstract class BucketedReadSuite extends QueryTest with AdaptiveSparkPlanHelper 
     }
   }
 
+  test("SPARK-60610: the frozen bucketing flag stays in a bucketed scan's canonical form " +
+    "but is scoped out of a non-bucketed scan's") {
+    // The scan freezes spark.sql.sources.bucketing.enabled as a field, so the flag feeds
+    // sameResult. For a bucketed relation the flag changes outputPartitioning, so two scans planned
+    // under different bucketing configs must not be sameResult, or exchange/broadcast reuse could
+    // swap a bucketed scan for a non-bucketed one. For a non-bucketed relation the flag changes
+    // nothing, so the two scans must stay sameResult, which dynamic partition pruning relies on to
+    // reuse a broadcast across a config change. doCanonicalize scopes the flag with
+    // relation.bucketSpec.isDefined to get both directions right.
+    def scanOf(table: String): FileSourceScanExec =
+      collect(spark.table(table).queryExecution.sparkPlan) {
+        case f: FileSourceScanExec => f
+      }.head
+
+    withTable("bucketed_t", "plain_t") {
+      spark.range(0, 100).selectExpr("id", "cast(id % 8 as int) as k")
+        .write.bucketBy(8, "k").sortBy("k").format("parquet").mode("overwrite")
+        .saveAsTable("bucketed_t")
+      spark.range(0, 100).selectExpr("id", "cast(id % 8 as int) as k")
+        .write.format("parquet").mode("overwrite").saveAsTable("plain_t")
+
+      val bucketed = scanOf("bucketed_t")
+      assert(bucketed.relation.bucketSpec.isDefined)
+      assert(!bucketed.copy(bucketingEnabled = true)
+          .sameResult(bucketed.copy(bucketingEnabled = false)),
+        "two scans of a bucketed table planned with bucketing on vs off must not be sameResult")
+
+      val plain = scanOf("plain_t")
+      assert(plain.relation.bucketSpec.isEmpty)
+      assert(plain.copy(bucketingEnabled = true)
+          .sameResult(plain.copy(bucketingEnabled = false)),
+        "two scans of a non-bucketed table must stay sameResult across a bucketing-config change")
+    }
+  }
+
+  test("SPARK-60610: dynamic partition pruning still reuses a broadcast for a non-bucketed " +
+    "table when bucketing is disabled after planning") {
+    // Freezing the flag put it in every scan's canonical form, including non-bucketed tables where
+    // it changes nothing. Two scans of such a table built across a bucketing-config change then
+    // stopped being sameResult, so when AQE re-planned the broadcast side under the new config
+    // PlanAdaptiveDynamicPruningFilters could no longer reuse the broadcast and the DPP filter
+    // degraded to a no-op true. The fact table here is partitioned but not bucketed.
+    withTable("fact", "dimA", "dimB") {
+      spark.range(0, 1000).selectExpr("id", "cast(id % 4 as int) as p")
+        .write.partitionBy("p").format("parquet").mode("overwrite").saveAsTable("fact")
+      Seq((0, 2), (1, 0)).toDF("x", "p")
+        .write.format("parquet").mode("overwrite").saveAsTable("dimA")
+      Seq((0, "x"), (1, "y")).toDF("x", "f")
+        .write.format("parquet").mode("overwrite").saveAsTable("dimB")
+
+      val query =
+        """SELECT /*+ BROADCAST(d) */ f.id, f.p
+          |FROM fact f JOIN (
+          |  SELECT /*+ BROADCAST(b) */ a.p FROM dimA a JOIN dimB b ON a.x = b.x WHERE b.f = 'x') d
+          |ON f.p = d.p""".stripMargin
+
+      withSQLConf(
+          SQLConf.ADAPTIVE_EXECUTION_ENABLED.key -> "true",
+          SQLConf.DYNAMIC_PARTITION_PRUNING_ENABLED.key -> "true",
+          SQLConf.DYNAMIC_PARTITION_PRUNING_USE_STATS.key -> "false",
+          SQLConf.DYNAMIC_PARTITION_PRUNING_FALLBACK_FILTER_RATIO.key -> "10",
+          // reuseBroadcastOnly is left at its default (true) on purpose: the regression only shows
+          // up when the DPP filter must reuse an existing broadcast.
+          SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key -> "100MB",
+          SQLConf.BUCKETING_ENABLED.key -> "true") {
+
+        val expected = sql(query).collect().toSeq
+        assert(expected.nonEmpty)
+
+        val df = sql(query)
+        // Commit the plan with bucketing on: the DPP subquery is built reusing the broadcast.
+        df.queryExecution.executedPlan
+        withSQLConf(SQLConf.BUCKETING_ENABLED.key -> "false") {
+          // checkToRDD = false runs the committed plan (and AQE re-plans the broadcast side under
+          // bucketing off) rather than a fresh plan that would hide the regression.
+          QueryTest.checkAnswer(df, expected, checkToRDD = false)
+          val executed = df.queryExecution.executedPlan
+          val dppChildren = collect(executed) { case f: FileSourceScanExec => f }
+            .flatMap(_.partitionFilters)
+            .collect { case d: DynamicPruningExpression => d.child }
+          assert(dppChildren.nonEmpty,
+            s"expected the fact scan to keep a dynamic partition pruning filter:\n$executed")
+          assert(dppChildren.forall(_ != Literal.TrueLiteral),
+            s"dynamic partition pruning degraded to a no-op after the config change:\n$executed")
+        }
+      }
+    }
+  }
+
+  test("SPARK-60610: an unnecessary bucketed scan is disabled when bucketing is turned off " +
+    "after planning") {
+    // The scan's bucketing decision is frozen at planning, but DisableUnnecessaryBucketedScan used
+    // to bail out on the live config. A scan planned bucketed and then prepared with bucketing off
+    // stayed bucketed and was never disabled. hasBucketedScan already reads each scan's frozen
+    // flag, so the rule now runs on it regardless of the live config.
+    withTable("t") {
+      spark.range(0, 1000).selectExpr("id", "cast(id % 8 as int) as k")
+        .write.bucketBy(8, "k").sortBy("k").format("parquet").mode("overwrite").saveAsTable("t")
+
+      withSQLConf(
+          SQLConf.ADAPTIVE_EXECUTION_ENABLED.key -> "false",
+          SQLConf.AUTO_BUCKETED_SCAN_ENABLED.key -> "true",
+          SQLConf.BUCKETING_ENABLED.key -> "true") {
+        // No operator above the scan needs the bucketed layout, so the rule should disable it once
+        // it runs. sparkPlan (before the preparation rules) is still bucketed.
+        val df = sql("SELECT * FROM t WHERE id > 3")
+        val planned = collect(df.queryExecution.sparkPlan) { case f: FileSourceScanExec => f }.head
+        assert(planned.bucketedScan,
+          s"scan should be planned as a bucketed scan:\n${df.queryExecution.sparkPlan}")
+
+        val expected = sql("SELECT id, k FROM t WHERE id > 3").collect().toSeq
+        withSQLConf(SQLConf.BUCKETING_ENABLED.key -> "false") {
+          // checkToRDD = false runs the committed plan, so the preparation rules (including
+          // DisableUnnecessaryBucketedScan) run with bucketing off against the frozen bucketed
+          // scan.
+          QueryTest.checkAnswer(df, expected, checkToRDD = false)
+          val scan = collect(df.queryExecution.executedPlan) {
+            case f: FileSourceScanExec => f
+          }.head
+          assert(!scan.bucketedScan,
+            s"the stale bucketed scan should have been disabled by the rule:\n" +
+              s"${df.queryExecution.executedPlan}")
+          assert(!scan.outputPartitioning.isInstanceOf[HashPartitioning],
+            s"the disabled scan must not report a bucketed HashPartitioning:\n" +
+              s"${df.queryExecution.executedPlan}")
+        }
+      }
+    }
+  }
+
   test("check sort and shuffle when bucket and sort columns are join keys") {
     // In case of bucketing, its possible to have multiple files belonging to the
     // same bucket in a given relation. Each of these files are locally sorted

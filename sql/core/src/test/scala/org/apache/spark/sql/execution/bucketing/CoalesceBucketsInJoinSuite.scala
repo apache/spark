@@ -74,7 +74,7 @@ class CoalesceBucketsInJoinSuite extends SharedSparkSession {
       fileFormat = new ParquetFileFormat(),
       options = Map.empty)(spark)
     FileSourceScanExec(relation, None, setting.cols, relation.dataSchema, Nil, None, None, Nil,
-      None)
+      None, bucketingEnabled = true)
   }
 
   private def run(setting: JoinSetting): Unit = {
