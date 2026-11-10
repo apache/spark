@@ -26,7 +26,7 @@ import org.apache.spark.sql.catalyst.rules._
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
 
-class InferFiltersFromConstraintsSuite extends PlanTest with PredicateHelper {
+class InferFiltersFromConstraintsSuite extends PlanTest {
 
   object Optimize extends RuleExecutor[LogicalPlan] {
     val batches =
@@ -86,6 +86,22 @@ class InferFiltersFromConstraintsSuite extends PlanTest with PredicateHelper {
     // Otherwise the inferred predicates are at the front of the condition.
     assert(conjuncts(conf = false).takeRight(3).map(_.canonicalized) ===
       Seq(b + 1 > 0, a > 0, c === a).map(_.canonicalized))
+  }
+
+  test("SPARK-60329: evaluateNotNullChecksInOrder places an inferred predicate that shares no " +
+      "column with the conjuncts at the end") {
+    // The nondeterministic child filter is not combined, and `c > 0` is inferred from `a > 0`
+    // through its `a = c`.
+    val originalQuery = testRelation.where($"a" === $"c" && Rand(0) < 2)
+      .where($"b" + 1 > 0 && $"a" > 0).analyze
+    val Seq(a, b, c) = originalQuery.output
+    withSQLConf(SQLConf.EVALUATE_NOT_NULL_CHECKS_IN_ORDER.key -> "true") {
+      val Filter(condition, _) = Optimize.execute(originalQuery)
+      val conjuncts = splitConjunctivePredicates(condition).map(_.canonicalized)
+      val Seq(written1, written2, inferredC) =
+        Seq(b + 1 > 0, a > 0, c > 0).map(e => conjuncts.indexOf(e.canonicalized))
+      assert(written1 >= 0 && written1 < written2 && written2 < inferredC, conjuncts)
+    }
   }
 
   test("single inner join: filter out values on either side on equi-join keys") {

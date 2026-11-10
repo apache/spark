@@ -3343,6 +3343,17 @@ class WholeStageCodegenSuite extends SharedSparkSession
           spark.table("t").selectExpr("a", "cast(s AS INT) AS c", "x")
             .sample(1.0).where("x IS NOT NULL AND c > 0").select("a"),
           Row(0))
+        // The shared `c * 2` would take the CSE branch, which evaluates `c` before the checks, so
+        // the filter falls back to the other branch, and the check on `x` drops the first row
+        // with and without the CSE branch enabled.
+        Seq("true", "false").foreach { cse =>
+          withSQLConf(SQLConf.SUBEXPRESSION_ELIMINATION_FILTER_EXEC_ENABLED.key -> cse) {
+            checkAnswer(
+              spark.table("t").selectExpr("a", "cast(s AS INT) AS c", "x").sample(1.0)
+                .where("x IS NOT NULL AND c * 2 > 0 AND c * 2 > -1").select("a"),
+              Row(0))
+          }
+        }
       }
       withNullConjunctTable(Int.MaxValue) {
         // A sample forwards the column `x` of the scan, which cannot raise, so the check on it

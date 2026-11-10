@@ -1843,13 +1843,18 @@ object SQLConf {
         "error is evaluated at its position before a conjunct that can raise one, is " +
         "nondeterministic or calls a user-defined function, instead of just before the first " +
         "conjunct that references its column; a check whose column the same stage has not " +
-        "computed yet, by an expression that can raise, keeps the latter placement. A check " +
-        "that the optimizer infers from a conjunct is placed just before the first conjunct " +
-        "that references its columns, instead of at the front of the condition. When false, " +
-        "with whole-stage codegen, a check is evaluated just before the first conjunct that " +
-        "references its column, or after all conjuncts, except after a conjunct that can be " +
-        s"NULL (see ${LEGACY_FILTER_SHORT_CIRCUIT_ON_NULL_CONJUNCT.key}), so a conjunct " +
-        "before that position can raise an error on a row that the check rejects.")
+        "computed yet, by an expression that can raise, keeps the latter placement, except " +
+        "after a conjunct that can be NULL, as when false. A predicate that the optimizer " +
+        "infers from a conjunct is placed just before the first conjunct that references its " +
+        "columns, or at the end if there is none, instead of at the front of the condition, so " +
+        "with whole-stage codegen off it is evaluated after the nondeterministic or " +
+        "user-defined function conjuncts that precede that one. A predicate pushed down to a " +
+        "data source is still evaluated before the others, by the source or after the scan. " +
+        "When false, with whole-stage codegen, a check is evaluated just before the first " +
+        "conjunct that references its column, or after all conjuncts, except after a " +
+        s"conjunct that can be NULL (see ${LEGACY_FILTER_SHORT_CIRCUIT_ON_NULL_CONJUNCT.key}), " +
+        "so a conjunct before that position can raise an error on a row that the check " +
+        "rejects.")
       .version("4.4.0")
       .withBindingPolicy(ConfigBindingPolicy.NOT_APPLICABLE)
       .booleanConf

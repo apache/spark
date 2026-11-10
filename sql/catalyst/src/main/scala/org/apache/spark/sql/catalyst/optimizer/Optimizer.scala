@@ -2310,7 +2310,9 @@ object InferFiltersFromConstraints extends Rule[LogicalPlan]
    * `spark.sql.optimizer.evaluateNotNullChecksInOrder`, each just before the first conjunct that
    * references one of its columns, from which it is inferred, so that evaluating the condition
    * in its order does not evaluate it before the conjuncts that precede that one, whose errors
-   * it would hide, e.g. `isnotnull(x)` from `x > 0` in `y + 1 > 0 AND x > 0`.
+   * it would hide, e.g. `isnotnull(x)` from `x > 0` in `y + 1 > 0 AND x > 0`. A predicate that
+   * shares no column with the conjuncts, inferred through a constraint of the child, goes to the
+   * end, after all of them.
    */
   private def withInferredPredicates(
       inferred: Seq[Expression],
@@ -2320,9 +2322,9 @@ object InferFiltersFromConstraints extends Rule[LogicalPlan]
       val byPosition = inferred.groupBy { p =>
         conjuncts.indexWhere(c => c.references.intersect(p.references).nonEmpty)
       }
-      (byPosition.getOrElse(-1, Nil) ++ conjuncts.zipWithIndex.flatMap { case (c, k) =>
+      (conjuncts.zipWithIndex.flatMap { case (c, k) =>
         byPosition.getOrElse(k, Nil) :+ c
-      }).reduce(And)
+      } ++ byPosition.getOrElse(-1, Nil)).reduce(And)
     } else {
       And(inferred.reduce(And), condition)
     }
