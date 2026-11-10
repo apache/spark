@@ -56,8 +56,6 @@ object InjectRuntimeFilter extends Rule[LogicalPlan] with PredicateHelper with J
 
   private def hintErrorHandler = conf.hintErrorHandler
 
-  private val AmbiguousHint = "the runtime filter source is ambiguous as both join sides are hinted"
-
   // The optimizer runs this rule on a subquery before hoisting it into the main plan, where the
   // join is visited again, possibly rebuilt by another rule in between. The join's hint records
   // that its runtime filter hint was applied or reported, so it is not decided again.
@@ -661,7 +659,8 @@ object InjectRuntimeFilter extends Rule[LogicalPlan] with PredicateHelper with J
         var newLeft = left
         var newRight = right
         if (isRuntimeFilterHintAmbiguous(hint)) {
-          reportHintNotApplied(join, AmbiguousHint)
+          reportHintNotApplied(join,
+            "the runtime filter source is ambiguous as both join sides are hinted")
         }
         // A side hinted as the runtime filter source is the creation side, so the filter is
         // applied to the other side. An ambiguous hint is ignored, leaving the heuristics to
@@ -870,8 +869,11 @@ object InjectRuntimeFilter extends Rule[LogicalPlan] with PredicateHelper with J
       case join @ Join(_, _, _, _, hint) if hasRuntimeFilterHint(hint) =>
         // A runtime filter is built from the join keys, so a join without equi-join keys has
         // nothing to build from.
-        reportHintNotApplied(join,
-          if (isRuntimeFilterHintAmbiguous(hint)) AmbiguousHint else "no equi-join keys")
+        reportHintNotApplied(join, if (isRuntimeFilterHintAmbiguous(hint)) {
+          "the runtime filter source is ambiguous as both join sides are hinted"
+        } else {
+          "no equi-join keys"
+        })
         markRuntimeFilterHintDecided(join)
     }
   }
