@@ -25,8 +25,7 @@ import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.BindReferences.bindReference
-import org.apache.spark.sql.catalyst.expressions.codegen.{CodegenContext, GenerateOrdering,
-  GeneratePredicate}
+import org.apache.spark.sql.catalyst.expressions.codegen.{CodegenContext, GeneratePredicate}
 import org.apache.spark.sql.catalyst.plans._
 import org.apache.spark.sql.catalyst.plans.logical.AsOfJoin
 import org.apache.spark.sql.catalyst.plans.physical._
@@ -195,13 +194,10 @@ private[joins] class SortMergeAsOfJoinScanner(
   private lazy val boundResidualCond =
     residualCondition.map(ShortCircuitPredicate.create(_, joinedOutput))
 
+  // A right key can be NULL even when the left key is NOT NULL, so every key is nullable here.
   private val equiKeyOrdering: Option[BaseOrdering] =
     if (leftKeys.nonEmpty) {
-      val keyAttributes = leftKeys.zipWithIndex.map { case (key, i) =>
-        AttributeReference(s"key_$i", key.dataType, key.nullable)()
-      }
-      Some(GenerateOrdering.generate(
-        keyAttributes.map(SortOrder(_, Ascending)), keyAttributes))
+      Some(RowOrdering.createNaturalAscendingOrdering(leftKeys.map(_.dataType)))
     } else {
       None
     }
