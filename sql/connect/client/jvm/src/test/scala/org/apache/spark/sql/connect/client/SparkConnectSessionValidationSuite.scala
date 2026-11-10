@@ -38,15 +38,53 @@ class SparkConnectSessionValidationSuite extends ConnectFunSuite with TimeLimits
   private class ValidationService
       extends proto.SparkConnectServiceGrpc.SparkConnectServiceImplBase {
     val calls = new AtomicInteger()
+    val configCalls = new AtomicInteger()
+    val sessionsCreated = new AtomicInteger()
     @volatile var failure: Option[Status] = None
     @volatile var respond = true
     @volatile var lastRequest: proto.ConfigRequest = _
+    @volatile var lastStatusRequest: proto.GetStatusRequest = _
     @volatile var serverSessionId = UUID.randomUUID().toString
+    @volatile var sessionExists = false
 
     override def config(
         request: proto.ConfigRequest,
         observer: StreamObserver[proto.ConfigResponse]): Unit = {
       lastRequest = request
+      configCalls.incrementAndGet()
+      respondWith(observer) {
+        if (!sessionExists) {
+          sessionExists = true
+          serverSessionId = UUID.randomUUID().toString
+          sessionsCreated.incrementAndGet()
+        }
+        proto.ConfigResponse
+          .newBuilder()
+          .setSessionId(request.getSessionId)
+          .setServerSideSessionId(serverSessionId)
+          .build()
+      }
+    }
+
+    override def getStatus(
+        request: proto.GetStatusRequest,
+        observer: StreamObserver[proto.GetStatusResponse]): Unit = {
+      lastStatusRequest = request
+      respondWith(observer) {
+        if (!sessionExists) {
+          throw Status.INTERNAL
+            .withDescription("[INVALID_HANDLE.SESSION_NOT_FOUND] Session not found.")
+            .asRuntimeException()
+        }
+        proto.GetStatusResponse
+          .newBuilder()
+          .setSessionId(request.getSessionId)
+          .setServerSideSessionId(serverSessionId)
+          .build()
+      }
+    }
+
+    private def respondWith[T](observer: StreamObserver[T])(response: => T): Unit = {
       calls.incrementAndGet()
       if (respond) {
         failure match {
@@ -55,13 +93,12 @@ class SparkConnectSessionValidationSuite extends ConnectFunSuite with TimeLimits
             failure = None
             observer.onError(status.asRuntimeException())
           case None =>
-            observer.onNext(
-              proto.ConfigResponse
-                .newBuilder()
-                .setSessionId(request.getSessionId)
-                .setServerSideSessionId(serverSessionId)
-                .build())
-            observer.onCompleted()
+            try {
+              observer.onNext(response)
+              observer.onCompleted()
+            } catch {
+              case e: StatusRuntimeException => observer.onError(e)
+            }
         }
       }
     }
@@ -80,13 +117,36 @@ class SparkConnectSessionValidationSuite extends ConnectFunSuite with TimeLimits
     }
   }
 
-  test("validateSession checks the server, including when the timeout is zero") {
+  test("validateSession initializes once and checks existing sessions with GetStatus") {
     withClient { (client, service) =>
       assert(client.validateSession(0))
+      assert(client.validateSession(0))
       assert(client.validateSession(5))
-      assert(service.calls.get() == 2)
-      assert(service.lastRequest.getSessionId == client.sessionId)
-      assert(service.lastRequest.getClientObservedServerSideSessionId == service.serverSessionId)
+      assert(service.calls.get() == 3)
+      assert(service.configCalls.get() == 1)
+      assert(service.lastStatusRequest.getSessionId == client.sessionId)
+      assert(
+        service.lastStatusRequest.getClientObservedServerSideSessionId ==
+          service.serverSessionId)
+      assert(service.lastStatusRequest.getUserContext == service.lastRequest.getUserContext)
+      assert(service.lastStatusRequest.getClientType == service.lastRequest.getClientType)
+      assert(!service.lastStatusRequest.hasOperationStatus)
+    }
+  }
+
+  test("validateSession uses GetStatus without recreating a missing session") {
+    withClient { (client, service) =>
+      assert(client.validateSession(5))
+      service.sessionExists = false
+
+      assert(!client.validateSession(5))
+      assert(service.sessionsCreated.get() == 1)
+      assert(!service.sessionExists)
+      assert(!client.isSessionValid)
+
+      val callsAfterFailure = service.calls.get()
+      assert(!client.validateSession(5))
+      assert(service.calls.get() == callsAfterFailure)
     }
   }
 

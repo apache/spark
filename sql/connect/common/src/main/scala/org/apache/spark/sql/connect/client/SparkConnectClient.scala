@@ -186,7 +186,8 @@ private[sql] class SparkConnectClient(
 
   /**
    * Validates the session with a server request, unless the local state already marks it invalid.
-   * Returns false if the session is locally invalid or server validation fails.
+   * Initializes an unobserved session with Config; otherwise, GetStatus only looks up the
+   * session. Returns false if the session is locally invalid or server validation fails.
    *
    * @param timeout
    *   Validation timeout in seconds. Zero means no deadline.
@@ -199,19 +200,16 @@ private[sql] class SparkConnectClient(
     if (!isSessionValid) {
       return false
     }
-    // An empty config read validates the session without running a Spark job.
-    val request = proto.ConfigRequest
-      .newBuilder()
-      .setOperation(
-        proto.ConfigRequest.Operation
-          .newBuilder()
-          .setGet(proto.ConfigRequest.Get.getDefaultInstance))
-      .setSessionId(sessionId)
-      .setClientType(userAgent)
-      .setUserContext(userContext)
-    serverSideSessionId.foreach(request.setClientObservedServerSideSessionId)
     try {
-      bstub.validateSession(request.build(), timeout)
+      if (serverSideSessionId.isEmpty) {
+        val operation = proto.ConfigRequest.Operation
+          .newBuilder()
+          .setGet(proto.ConfigRequest.Get.getDefaultInstance)
+          .build()
+        bstub.validateSession(buildConfigRequest(operation), timeout)
+      } else {
+        bstub.validateSession(getStatusRequestBuilder().build(), timeout)
+      }
       true
     } catch {
       case NonFatal(e) =>
@@ -400,6 +398,11 @@ private[sql] class SparkConnectClient(
    *   A [[proto.ConfigResponse]] from the Spark Connect server.
    */
   def config(operation: proto.ConfigRequest.Operation): proto.ConfigResponse = {
+    bstub.config(buildConfigRequest(operation))
+  }
+
+  private def buildConfigRequest(
+      operation: proto.ConfigRequest.Operation): proto.ConfigRequest = {
     val request = proto.ConfigRequest
       .newBuilder()
       .setOperation(operation)
@@ -407,7 +410,7 @@ private[sql] class SparkConnectClient(
       .setClientType(userAgent)
       .setUserContext(userContext)
     serverSideSessionId.foreach(session => request.setClientObservedServerSideSessionId(session))
-    bstub.config(request.build())
+    request.build()
   }
 
   /**
@@ -576,15 +579,7 @@ private[sql] class SparkConnectClient(
       operationIds: Seq[String] = Seq.empty,
       operationExtensions: Seq[protobuf.Any] = Seq.empty,
       requestExtensions: Seq[protobuf.Any] = Seq.empty): proto.GetStatusResponse = {
-    val requestBuilder = proto.GetStatusRequest
-      .newBuilder()
-      .setUserContext(userContext)
-      .setSessionId(sessionId)
-      .setClientType(userAgent)
-
-    serverSideSessionId.foreach(session =>
-      requestBuilder.setClientObservedServerSideSessionId(session))
-
+    val requestBuilder = getStatusRequestBuilder()
     val opStatusRequest = proto.GetStatusRequest.OperationStatusRequest.newBuilder()
     operationIds.foreach(opStatusRequest.addOperationIds)
     operationExtensions.foreach(opStatusRequest.addExtensions)
@@ -593,6 +588,16 @@ private[sql] class SparkConnectClient(
     requestExtensions.foreach(requestBuilder.addExtensions)
 
     bstub.getStatus(requestBuilder.build())
+  }
+
+  private def getStatusRequestBuilder(): proto.GetStatusRequest.Builder = {
+    val builder = proto.GetStatusRequest
+      .newBuilder()
+      .setUserContext(userContext)
+      .setSessionId(sessionId)
+      .setClientType(userAgent)
+    serverSideSessionId.foreach(builder.setClientObservedServerSideSessionId)
+    builder
   }
 
   private[this] val tags = new InheritableThreadLocal[mutable.Set[String]] {

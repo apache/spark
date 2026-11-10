@@ -40,6 +40,15 @@ private[connect] class CustomSparkConnectBlockingStub(
     d.map(dur => stub.withDeadline(Deadline.after(dur.toMillis, TimeUnit.MILLISECONDS)))
       .getOrElse(stub)
 
+  private def validationStub(
+      timeout: Int): SparkConnectServiceGrpc.SparkConnectServiceBlockingStub = {
+    if (timeout > 0) {
+      stub.withDeadlineAfter(timeout.toLong, TimeUnit.SECONDS)
+    } else {
+      stub
+    }
+  }
+
   private val retryHandler = stubState.retryHandler
 
   // GrpcExceptionConverter with a GRPC stub for fetching error details from server.
@@ -130,14 +139,16 @@ private[connect] class CustomSparkConnectBlockingStub(
   }
 
   def validateSession(request: ConfigRequest, timeout: Int): Unit = {
-    val validationStub = if (timeout > 0) {
-      stub.withDeadlineAfter(timeout.toLong, TimeUnit.SECONDS)
-    } else {
-      stub
-    }
     // Do not retry or fetch error details: validation must respect its own timeout.
     stubState.responseValidator.verifyResponse {
-      validationStub.config(request)
+      validationStub(timeout).config(request)
+    }
+  }
+
+  def validateSession(request: GetStatusRequest, timeout: Int): Unit = {
+    // Do not retry or fetch error details: validation must respect its own timeout.
+    stubState.responseValidator.verifyResponse {
+      validationStub(timeout).getStatus(request)
     }
   }
 
