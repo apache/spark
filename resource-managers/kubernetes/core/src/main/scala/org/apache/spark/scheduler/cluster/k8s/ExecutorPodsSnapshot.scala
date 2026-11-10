@@ -18,12 +18,11 @@ package org.apache.spark.scheduler.cluster.k8s
 
 import java.util.Locale
 
-import scala.jdk.CollectionConverters._
-
 import io.fabric8.kubernetes.api.model.ContainerStateTerminated
 import io.fabric8.kubernetes.api.model.Pod
 
 import org.apache.spark.deploy.k8s.Constants._
+import org.apache.spark.deploy.k8s.KubernetesUtils.executorContainerTermination
 import org.apache.spark.internal.Logging
 import org.apache.spark.internal.LogKeys.{POD_NAME, POD_NAMESPACE, POD_PHASE}
 
@@ -91,10 +90,8 @@ object ExecutorPodsSnapshot extends Logging {
             PodFailed(pod)
           } else {
             // Otherwise look for the Spark container and get the exit code if present.
-            val sparkContainerExitCode = pod.getStatus.getContainerStatuses.asScala
-              .find(_.getName() == sparkContainerName).flatMap(x => Option(x.getState))
-              .flatMap(x => Option(x.getTerminated)).flatMap(x => Option(x.getExitCode))
-              .map(_.toInt)
+            val sparkContainerExitCode = executorContainerTermination(pod, sparkContainerName)
+              .flatMap(x => Option(x.getExitCode)).map(_.toInt)
             sparkContainerExitCode match {
               case Some(t) =>
                 t match {

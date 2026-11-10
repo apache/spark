@@ -527,6 +527,26 @@ class TaskSchedulerImplSuite extends SparkFunSuite with LocalSparkContext
       IndexedSeq(WorkerOffer("a", "host-a", 2))).flatten.size === 2)
   }
 
+  test("an expired OOM retry follows ordinary task-set priority") {
+    val clock = new ManualClock(1)
+    val scheduler = setupOomRetryScheduler(clock,
+      config.SCHEDULER_OOM_RETRY_ISOLATION_TIMEOUT.key -> "1s")
+    val manager = prepareOomRetries()
+    scheduler.submitTasks(FakeTask.createTaskSet(1, stageId = 0, stageAttemptId = 0))
+
+    clock.advance(1000)
+    val ordinary = scheduler.resourceOffers(
+      IndexedSeq(WorkerOffer("a", "host-a", 1))).flatten
+    assert(ordinary.size === 1)
+    assert(scheduler.taskIdToTaskSetManager.get(ordinary.head.taskId) ne manager)
+    assert(manager.pendingOomRetries.isEmpty)
+    val retry = scheduler.resourceOffers(
+      IndexedSeq(WorkerOffer("b", "host-b", 1))).flatten
+    assert(retry.size === 1)
+    assert(scheduler.taskIdToTaskSetManager.get(retry.head.taskId) eq manager)
+    assert(scheduler.oomRetryReservationInfo.isEmpty)
+  }
+
   test("late offers after stop do not re-arm an OOM isolation wakeup") {
     val scheduler = setupOomRetryScheduler(new ManualClock(1))
     prepareOomRetries()
@@ -751,6 +771,30 @@ class TaskSchedulerImplSuite extends SparkFunSuite with LocalSparkContext
     val ordinaryManager = scheduler.taskSetManagerForAttempt(0, 0).get
     assert(ordinaryManager.taskInfos(ordinary.head.taskId).taskLocality ===
       TaskLocality.PROCESS_LOCAL)
+  }
+
+  test("an OOM retry preserves the locality deadline of ordinary tasks in its task set") {
+    val clock = new ManualClock(1)
+    val scheduler = setupOomRetryScheduler(clock, config.LOCALITY_WAIT.key -> "60s")
+    scheduler.resourceOffers(IndexedSeq(
+      WorkerOffer("a", "host-a", 0), WorkerOffer("b", "host-b", 0),
+      WorkerOffer("c", "host-c", 0)))
+    val locations = Seq(TaskLocation("host-a"))
+    scheduler.submitTasks(FakeTask.createTaskSet(2, 1, 0, locations, locations))
+    val original = scheduler.resourceOffers(
+      IndexedSeq(WorkerOffer("a", "host-a", 1))).flatten.head
+    failTaskWithOom(original)
+
+    // Recovery consumes the only offered slot just before the ordinary locality wait expires.
+    clock.advance(59000)
+    val retry = scheduler.resourceOffers(
+      IndexedSeq(WorkerOffer("b", "host-b", 1))).flatten
+    assert(retry.map(_.index) === Seq(original.index))
+    clock.advance(2000)
+    val ordinary = scheduler.resourceOffers(
+      IndexedSeq(WorkerOffer("c", "host-c", 1))).flatten
+    assert(ordinary.size === 1)
+    assert(ordinary.head.index !== original.index)
   }
 
   test("OOM-affected tasks are not speculated but ordinary tasks still are") {

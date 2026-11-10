@@ -135,16 +135,25 @@ private[spark] class TaskSetManager(
   val successful = new Array[Boolean](numTasks)
   private val numFailures = new Array[Int](numTasks)
 
-  // Sparse state for OOM-affected partitions: failure count and time of the latest OOM. The
-  // deadline also bounds retries waiting behind another task's executor reservation.
-  private val oomRetries = new HashMap[Int, (Int, Long)]
+  // Keep OOM history for speculation and escalation, but consume each placement request on launch.
+  private val oomAffectedPartitions = new HashSet[Int]
+  // None requests idle placement. Some(failedAt) withholds the retry until isolation or timeout.
+  private val oomRetryRequests = new HashMap[Int, Option[Long]]
 
   private[scheduler] def isPendingOomRetry(index: Int): Boolean = {
-    !isZombie && oomRetries.contains(index) && !successful(index) && copiesRunning(index) == 0
+    !isZombie && oomRetryRequests.contains(index) && !successful(index) && copiesRunning(index) == 0
   }
 
   private[scheduler] def pendingOomRetries: Seq[Int] = {
-    oomRetries.keysIterator.filter(isPendingOomRetry).toSeq.sorted
+    oomRetryRequests.keysIterator.filter(isPendingOomRetry).toSeq.sorted
+  }
+
+  private[scheduler] def oomRetryPrefersIdle(index: Int): Boolean = {
+    oomRetryRequests.get(index).contains(None)
+  }
+
+  private def waitingForOomIsolation(index: Int): Boolean = {
+    oomRetryRequests.nonEmpty && oomRetryRequests.get(index).flatten.isDefined
   }
 
   private[scheduler] def oomRetryNeedsIsolation(index: Int): Boolean = {
@@ -152,10 +161,33 @@ private[spark] class TaskSetManager(
   }
 
   private[scheduler] def oomRetryIsolationTimeRemaining(index: Int): Long = {
-    if (!sched.oomRetryEnabled) return 0L
-    oomRetries.get(index).collect { case (failures, failedAt) if failures >= 2 =>
+    oomRetryRequests.get(index).flatten.map { failedAt =>
       sched.oomRetryIsolationTimeoutMs - (clock.getTimeMillis() - failedAt)
     }.getOrElse(0L)
+  }
+
+  /** Requeue expired isolation requests and return the shortest remaining wait. */
+  private[scheduler] def requeueExpiredOomRetries(): Option[Long] = {
+    var nextDelay: Option[Long] = None
+    var requeued = false
+    // Snapshot the indices because requeueing removes requests from the map.
+    val waiting = oomRetryRequests.iterator.collect {
+      case (index, Some(_)) if isPendingOomRetry(index) => index
+    }.toArray
+    waiting.foreach { index =>
+      val remaining = oomRetryIsolationTimeRemaining(index)
+      if (remaining > 0) {
+        nextDelay = Some(nextDelay.fold(remaining)(_ min remaining))
+      } else {
+        oomRetryRequests.remove(index)
+        addPendingTask(index)
+        requeued = true
+      }
+    }
+    if (requeued) {
+      recomputeLocality()
+    }
+    nextDelay
   }
 
   // Add the tid of task into this HashSet when the task is killed by other attempt tasks.
@@ -367,9 +399,11 @@ private[spark] class TaskSetManager(
     while (indexOffset > 0) {
       indexOffset -= 1
       val index = list(indexOffset)
-      if (!isTaskExcludededOnExecOrNode(index, execId, host) &&
-          !(speculative && (hasAttemptOnHost(index, host) || oomRetries.contains(index))) &&
-          !oomRetryNeedsIsolation(index)) {
+      if (waitingForOomIsolation(index) || (speculative && oomAffectedPartitions.contains(index))) {
+        // Earlier attempts can leave entries on multiple lists. Discard each stale entry once.
+        list.remove(indexOffset)
+      } else if (!isTaskExcludededOnExecOrNode(index, execId, host) &&
+          !(speculative && hasAttemptOnHost(index, host))) {
         // This should almost always be list.trimEnd(1) to remove tail
         list.remove(indexOffset)
         // Speculatable task should only be launched when at most one copy of the
@@ -595,6 +629,9 @@ private[spark] class TaskSetManager(
     val task = tasks(index)
     val taskId = sched.newTaskId()
     // Do various bookkeeping
+    if (oomRetryRequests.nonEmpty) {
+      oomRetryRequests.remove(index)
+    }
     copiesRunning(index) += 1
     val attemptNum = taskAttempts(index).size
     val info = new TaskInfo(
@@ -684,7 +721,7 @@ private[spark] class TaskSetManager(
       while (indexOffset > 0) {
         indexOffset -= 1
         val index = pendingTaskIds(indexOffset)
-        if (copiesRunning(index) == 0 && !successful(index)) {
+        if (copiesRunning(index) == 0 && !successful(index) && !waitingForOomIsolation(index)) {
           return true
         } else {
           pendingTaskIds.remove(indexOffset)
@@ -787,7 +824,7 @@ private[spark] class TaskSetManager(
             copiesRunning(indexInTaskSet) == 0 && !successful(indexInTaskSet)
           }
           if (indexOffset == -1) {
-            None
+            oomRetryRequests.keysIterator.find(isPendingOomRetry)
           } else {
             Some(pendingTasks.all(indexOffset))
           }
@@ -933,7 +970,8 @@ private[spark] class TaskSetManager(
       // Mark successful and stop if all the tasks have succeeded.
       successful(index) = true
       numFailures(index) = 0
-      oomRetries.remove(index)
+      oomAffectedPartitions.remove(index)
+      oomRetryRequests.remove(index)
       if (tasksSuccessful == numTasks) {
         isZombie = true
       }
@@ -1026,7 +1064,8 @@ private[spark] class TaskSetManager(
         tasksSuccessful += 1
         successful(index) = true
         numFailures(index) = 0
-        oomRetries.remove(index)
+        oomAffectedPartitions.remove(index)
+        oomRetryRequests.remove(index)
         if (tasksSuccessful == numTasks) {
           isZombie = true
         }
@@ -1062,8 +1101,8 @@ private[spark] class TaskSetManager(
     }
     if (sched.oomRetryEnabled && !isBarrier && !taskSet.isPipelined &&
         !successful(index) && isOom) {
-      val failures = oomRetries.get(index).map(_._1).getOrElse(0) + 1
-      oomRetries(index) = (failures, clock.getTimeMillis())
+      val firstOom = oomAffectedPartitions.add(index)
+      oomRetryRequests(index) = if (firstOom) None else Some(clock.getTimeMillis())
       speculatableTasks -= index
     }
     var accumUpdates: Seq[AccumulatorV2[_, _]] = Seq.empty
@@ -1209,7 +1248,7 @@ private[spark] class TaskSetManager(
         log" be re-executed (either because the task failed with a shuffle data fetch failure," +
         log" so the previous stage needs to be re-run, or because a different copy of the task" +
         log" has already succeeded).")
-    } else {
+    } else if (!waitingForOomIsolation(index)) {
       addPendingTask(index)
     }
 
@@ -1255,7 +1294,8 @@ private[spark] class TaskSetManager(
   }
 
   override def isSchedulable: Boolean = !isZombie &&
-    (pendingTasks.all.nonEmpty || pendingSpeculatableTasks.all.nonEmpty)
+    (pendingTasks.all.nonEmpty || pendingSpeculatableTasks.all.nonEmpty ||
+      oomRetryRequests.nonEmpty)
 
   override def addSchedulable(schedulable: Schedulable): Unit = {}
 
@@ -1372,7 +1412,7 @@ private[spark] class TaskSetManager(
       val info = taskInfos(tid)
       val index = info.index
       if (!successful(index) && copiesRunning(index) == 1 && !speculatableTasks.contains(index) &&
-          !oomRetries.contains(index)) {
+          !oomAffectedPartitions.contains(index)) {
         val runtimeMs = info.timeRunning(currentTimeMillis)
 
         def checkMaySpeculate(): Boolean = {

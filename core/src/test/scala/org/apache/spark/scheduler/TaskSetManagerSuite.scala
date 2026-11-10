@@ -784,6 +784,53 @@ class TaskSetManagerSuite
     }
   }
 
+  test("a non-OOM failure after an isolated attempt retries ordinarily") {
+    val conf = new SparkConf().set(config.SCHEDULER_OOM_RETRY_ENABLED, true)
+    sc = new SparkContext("local", "test", conf)
+    val clock = new ManualClock(1)
+    sched = new FakeTaskScheduler(sc, clock, ("exec1", "host1"))
+    val manager = new TaskSetManager(sched, FakeTask.createTaskSet(1), 5, clock = clock)
+    val oom = new ExceptionFailure(new OutOfMemoryError("test OOM"), Nil)
+    (1 to 2).foreach { _ =>
+      val attempt = manager.resourceOffer("exec1", "host1", ANY)._1.get
+      manager.handleFailedTask(attempt.taskId, TaskState.FAILED, oom)
+    }
+
+    val isolated = manager.resourceOfferOomRetry(0, "exec1", "host1", 1, Map.empty).get
+    manager.handleFailedTask(isolated.taskId, TaskState.FAILED,
+      new ExceptionFailure(new IllegalStateException("ordinary failure"), Nil))
+    assert(manager.pendingOomRetries.isEmpty)
+    val ordinary = manager.resourceOffer("exec1", "host1", ANY)._1.get
+    manager.handleFailedTask(ordinary.taskId, TaskState.FAILED, oom)
+    assert(manager.oomRetryNeedsIsolation(0))
+  }
+
+  test("ordinary offers discard stale entries for a retry waiting for isolation") {
+    val conf = new SparkConf().set(config.SCHEDULER_OOM_RETRY_ENABLED, true)
+      .set(config.SCHEDULER_OOM_RETRY_ISOLATION_TIMEOUT, 1000L)
+    sc = new SparkContext("local", "test", conf)
+    val clock = new ManualClock(1)
+    sched = new FakeTaskScheduler(sc, clock, ("exec1", "host1"))
+    val manager = new TaskSetManager(sched, FakeTask.createTaskSet(1), MAX_TASK_FAILURES,
+      clock = clock)
+    val oom = new ExceptionFailure(new OutOfMemoryError("test OOM"), Nil)
+    val original = manager.resourceOffer("exec1", "host1", ANY)._1.get
+    manager.handleFailedTask(original.taskId, TaskState.FAILED, oom)
+    val retry = manager.resourceOfferOomRetry(0, "exec1", "host1", 1, Map.empty).get
+    manager.handleFailedTask(retry.taskId, TaskState.FAILED, oom)
+
+    assert(manager.resourceOffer("exec1", "host1", ANY)._1.isEmpty)
+    assert(manager.pendingTasks.noPrefs.isEmpty && manager.pendingTasks.all.isEmpty)
+    assert(manager.isSchedulable)
+    assert(manager.requeueExpiredOomRetries() === Some(1000L))
+    clock.advance(1000)
+    assert(manager.requeueExpiredOomRetries().isEmpty)
+    assert(manager.requeueExpiredOomRetries().isEmpty)
+    assert(manager.pendingOomRetries.isEmpty && !manager.oomRetryPrefersIdle(0))
+    assert(manager.pendingTasks.all.toSeq === Seq(0))
+    assert(manager.resourceOffer("exec1", "host1", ANY)._1.get.index === 0)
+  }
+
   test("SPARK-31837: Shift to the new highest locality level if there is when recomputeLocality") {
     sc = new SparkContext("local", "test")
     sched = new FakeTaskScheduler(sc)

@@ -21,6 +21,7 @@ import io.fabric8.kubernetes.client.KubernetesClient
 
 import org.apache.spark.SparkConf
 import org.apache.spark.deploy.k8s._
+import org.apache.spark.deploy.k8s.Constants.EXECUTOR_CONTAINER_NAME_ANNOTATION
 import org.apache.spark.deploy.k8s.features.KubernetesExecutorCustomFeatureConfigStep
 import org.apache.spark.internal.config.ConfigEntry
 import org.apache.spark.resource.ResourceProfile
@@ -88,6 +89,14 @@ class KubernetesExecutorBuilderSuite extends PodBuilderSuite {
     val spec = buildPod(sparkConf, client).pod.getSpec
     assert(spec.getServiceAccountName === "template-name")
     assert(spec.getServiceAccount === "template-name")
+  }
+
+  test("record the executor container selected from the pod template") {
+    val conf = baseConf.clone().set(templateFileConf.key, "template-file.yaml")
+    val pod = buildPod(conf, mockKubernetesClient())
+    assert(pod.container.getName === "executor-container")
+    assert(pod.pod.getMetadata.getAnnotations.get(EXECUTOR_CONTAINER_NAME_ANNOTATION) ===
+      pod.container.getName)
   }
 }
 

@@ -918,9 +918,12 @@ private[spark] class ExecutorAllocationManager(
       val stageAttemptId = taskStart.stageAttemptId
       val stageAttempt = StageAttempt(stageId, stageAttemptId)
       val taskIndex = taskStart.taskInfo.index
+      val executorId = taskStart.taskInfo.executorId
+      // Ignore late starts on removed executors when tracking OOM retry coverage (SPARK-26927).
+      val trackForOomRetry = oomRetryEnabled && client.isExecutorActive(executorId)
       allocationManager.synchronized {
-        if (oomRetryEnabled) {
-          executorToRunningTasks.getOrElseUpdate(taskStart.taskInfo.executorId,
+        if (trackForOomRetry) {
+          executorToRunningTasks.getOrElseUpdate(executorId,
             new mutable.HashMap)(taskStart.taskInfo.taskId) =
             (stageAttempt, taskIndex, taskStart.taskInfo.speculative)
         }
@@ -1001,6 +1004,13 @@ private[spark] class ExecutorAllocationManager(
               stageAttemptToTaskIndices.get(stageAttempt).foreach {_.remove(taskIndex)}
             }
         }
+      }
+    }
+
+    override def onExecutorRemoved(event: SparkListenerExecutorRemoved): Unit = {
+      allocationManager.synchronized {
+        // The listener queue may have dropped a TaskEnd for this executor.
+        executorToRunningTasks.remove(event.executorId)
       }
     }
 

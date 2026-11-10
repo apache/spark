@@ -602,7 +602,9 @@ private[spark] class TaskSchedulerImpl(
       }
     }
 
-    oomRetryReservation.filter(_.taskId.isEmpty).foreach { reservation =>
+    oomRetryReservation.filter { reservation =>
+      reservation.taskId.isEmpty && reservation.taskSet.oomRetryNeedsIsolation(reservation.index)
+    }.foreach { reservation =>
       offers.indices.find(i => offers(i).executorId == reservation.executorId).foreach { i =>
         launch(reservation.taskSet, reservation.index, i).foreach { tid =>
           setOomRetryReservation(Some(reservation.copy(taskId = Some(tid))))
@@ -617,7 +619,7 @@ private[spark] class TaskSchedulerImpl(
       })
       for {
         (taskSet, index) <- pendingRetries.iterator.takeWhile(_ => idleOffers.nonEmpty)
-        if !taskSet.oomRetryNeedsIsolation(index)
+        if taskSet.oomRetryPrefersIdle(index)
       } {
         idleOffers.find(i => launch(taskSet, index, i).isDefined).foreach(idleOffers.remove)
       }
@@ -625,10 +627,7 @@ private[spark] class TaskSchedulerImpl(
 
     // Capture deadlines before refreshing and masking: if one expires during this pass, either
     // its reservation is released below or the captured delay still guarantees another offer.
-    val nextDelay = pendingRetries.iterator.collect {
-      case (taskSet, index) if taskSet.isPendingOomRetry(index) =>
-        taskSet.oomRetryIsolationTimeRemaining(index)
-    }.filter(_ > 0).reduceOption(_ min _)
+    val nextDelay = taskSets.iterator.flatMap(_.requeueExpiredOomRetries()).reduceOption(_ min _)
 
     // A failed launch may have aborted its task set. Missing partial offers must not release an
     // otherwise valid reservation. Mask it for every task set, including barrier slot counting.
@@ -896,7 +895,7 @@ private[spark] class TaskSchedulerImpl(
 
         if (!legacyLocalityWaitReset) {
           if (noDelaySchedulingRejects) {
-            if (launchedAnyTask &&
+            if (globalMinLocality.isDefined &&
               (isAllFreeResources || noRejectsSinceLastReset.getOrElse(taskSet.taskSet, true))) {
               taskSet.resetDelayScheduleTimer(globalMinLocality)
               noRejectsSinceLastReset.update(taskSet.taskSet, true)

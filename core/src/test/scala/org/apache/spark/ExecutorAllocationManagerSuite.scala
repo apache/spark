@@ -813,6 +813,21 @@ class ExecutorAllocationManagerSuite extends SparkFunSuite {
     assert(manager.maxNumExecutorsNeededPerResourceProfile(rpId) === 0)
   }
 
+  test("executor removal clears OOM reservation coverage even if TaskEnd was dropped") {
+    val manager = createManager(createConf().set(config.SCHEDULER_OOM_RETRY_ENABLED, true))
+    val reservation = OomRetryReservationInfo(DEFAULT_RESOURCE_PROFILE_ID, "lost", 0, 0, 0)
+    onExecutorAddedDefaultProfile(manager, "lost")
+    post(SparkListenerStageSubmitted(createStageInfo(0, 2)))
+    post(SparkListenerTaskStart(0, 0, createTaskInfo(0, 0, "lost")))
+    assert(manager.listener.oomRetryAllocation(reservation)._1 === 1)
+
+    when(client.isExecutorActive("lost")).thenReturn(false)
+    onExecutorRemoved(manager, "lost")
+    assert(manager.listener.oomRetryAllocation(reservation)._1 === 0)
+    post(SparkListenerTaskStart(0, 0, createTaskInfo(1, 1, "lost")))
+    assert(manager.listener.oomRetryAllocation(reservation)._1 === 0)
+  }
+
   test("OOM retry isolation does not subtract late tasks from a canceled stage") {
     val clock = new ManualClock(1)
     val conf = createConf(0, 5, 1)

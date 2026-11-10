@@ -259,6 +259,38 @@ class ExecutorPodsLifecycleManagerSuite extends SparkFunSuite with BeforeAndAfte
     }
   }
 
+  test("detect the selected executor's OOM while its sidecar keeps the pod running") {
+    val pod = finishedExecutorWithRunningSidecar(1, 137)
+    val actualContainer = "worker"
+    pod.getMetadata.getAnnotations.put(EXECUTOR_CONTAINER_NAME_ANNOTATION, actualContainer)
+    val statuses = pod.getStatus.getContainerStatuses
+    statuses.get(0).setName(actualContainer)
+    statuses.get(0).getState.getTerminated.setReason("OOMKilled")
+    statuses.get(1).setName(DEFAULT_EXECUTOR_CONTAINER_NAME)
+
+    snapshotsStore.updatePod(pod)
+    snapshotsStore.notifySubscribers()
+    val lossReason = ArgumentCaptor.forClass(classOf[ExecutorExited])
+    verify(schedulerBackend).doRemoveExecutor(meq("1"), lossReason.capture())
+    assert(lossReason.getValue.isOutOfMemoryError)
+  }
+
+  test("ignore a sidecar OOM when its name matches the configured executor container") {
+    val pod = failedExecutorWithSidecarStatusListedFirst(1)
+    val actualContainer = "worker"
+    pod.getMetadata.getAnnotations.put(EXECUTOR_CONTAINER_NAME_ANNOTATION, actualContainer)
+    val statuses = pod.getStatus.getContainerStatuses
+    statuses.get(0).setName(TEST_SPARK_EXECUTOR_CONTAINER_NAME)
+    statuses.get(0).getState.getTerminated.setReason("OOMKilled")
+    statuses.get(1).setName(actualContainer)
+
+    snapshotsStore.updatePod(pod)
+    snapshotsStore.notifySubscribers()
+    val lossReason = ArgumentCaptor.forClass(classOf[ExecutorExited])
+    verify(schedulerBackend).doRemoveExecutor(meq("1"), lossReason.capture())
+    assert(!lossReason.getValue.isOutOfMemoryError)
+  }
+
   test("Don't delete pod from K8s if deletionTimestamp is already set.") {
     // Create a failed pod with deletionTimestamp already in the past
     val basePod = failedExecutorWithoutDeletion(1)

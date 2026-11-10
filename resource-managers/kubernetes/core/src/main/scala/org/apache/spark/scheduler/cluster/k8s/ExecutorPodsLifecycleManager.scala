@@ -19,10 +19,9 @@ package org.apache.spark.scheduler.cluster.k8s
 import java.util.concurrent.TimeUnit
 
 import scala.collection.mutable
-import scala.jdk.CollectionConverters._
 
 import com.google.common.cache.CacheBuilder
-import io.fabric8.kubernetes.api.model.{ContainerStateTerminated, Pod, PodBuilder}
+import io.fabric8.kubernetes.api.model.{Pod, PodBuilder}
 import io.fabric8.kubernetes.client.KubernetesClient
 import io.fabric8.kubernetes.client.dsl.base.{PatchContext, PatchType}
 
@@ -269,7 +268,7 @@ private[spark] class ExecutorPodsLifecycleManager(
   }
 
   private def findExitReason(podState: FinalPodState, execId: Long): ExecutorExited = {
-    val executorTermination = findExecutorTermination(podState)
+    val executorTermination = executorContainerTermination(podState.pod, sparkContainerName)
     val exitCode = executorTermination.map(_.getExitCode.toInt).getOrElse(UNKNOWN_EXIT_CODE)
     val (exitCausedByApp, exitMessage) = podState match {
       case PodDeleted(_) =>
@@ -304,14 +303,6 @@ private[spark] class ExecutorPodsLifecycleManager(
        |
        |${containersDescription(pod)}
       """.stripMargin
-  }
-
-  private def findExecutorTermination(podState: FinalPodState): Option[ContainerStateTerminated] = {
-    podState.pod.getStatus.getContainerStatuses.asScala.find { containerStatus =>
-      containerStatus.getName == sparkContainerName
-    }.flatMap { containerStatus =>
-      Option(containerStatus.getState).flatMap(state => Option(state.getTerminated))
-    }
   }
 
   private def isPodInactive(pod: Pod): Boolean = {
