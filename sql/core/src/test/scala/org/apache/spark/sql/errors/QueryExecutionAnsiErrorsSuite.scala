@@ -115,7 +115,7 @@ class QueryExecutionAnsiErrorsSuite extends SharedSparkSession {
       context = ExpectedContext(fragment = "interval 1 day / 0", start = 7, stop = 24))
   }
 
-  test("SPARK-XXXXX: an interval division error keeps its context without whole-stage codegen") {
+  test("SPARK-61352: an interval division error keeps its context without whole-stage codegen") {
     // Without whole-stage codegen the projection is built on the executor from a deserialized
     // copy of the expression. The divisions read a column, so that they are not constant-folded
     // on the driver. The division raises in every mode, and keeps its context in both.

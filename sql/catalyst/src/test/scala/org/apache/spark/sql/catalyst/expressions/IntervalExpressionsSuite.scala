@@ -516,7 +516,7 @@ class IntervalExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
     }
   }
 
-  test("SPARK-XXXXX: an interval error keeps its query context after serialization") {
+  test("SPARK-61352: an interval error keeps its query context after serialization") {
     // The helpers evaluate a serialized copy of the expression, as an executor does. `TreeNode`
     // does not serialize `origin`, so the copy must carry the context itself. Each expression is
     // built inside `withOrigin` and evaluated outside it: evaluated inside, the copy would read
