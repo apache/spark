@@ -1018,17 +1018,9 @@ class Dataset[T] private[sql](
   /** @inheritdoc */
   @scala.annotation.varargs
   def groupBy(cols: Column*): RelationalGroupedDataset = {
-    // Replace top-level integer literals in grouping expressions with ordinals, if
-    // `groupByOrdinal` is enabled.
-    val groupingExpressionsWithOrdinals = cols.map { col => col.expr match {
-      case literal @ Literal(value: Int, IntegerType)
-          if sparkSession.sessionState.conf.groupByOrdinal =>
-        CurrentOrigin.withOrigin(literal.origin) { UnresolvedOrdinal(value) }
-      case other => other
-    }}
     RelationalGroupedDataset(
       df = toDF(),
-      groupingExprs = groupingExpressionsWithOrdinals,
+      groupingExprs = groupingExpressionsWithOrdinals(cols),
       groupType = RelationalGroupedDataset.GroupByType
     )
   }
@@ -1036,13 +1028,15 @@ class Dataset[T] private[sql](
   /** @inheritdoc */
   @scala.annotation.varargs
   def rollup(cols: Column*): RelationalGroupedDataset = {
-    RelationalGroupedDataset(toDF(), cols.map(_.expr), RelationalGroupedDataset.RollupType)
+    RelationalGroupedDataset(
+      toDF(), groupingExpressionsWithOrdinals(cols), RelationalGroupedDataset.RollupType)
   }
 
   /** @inheritdoc */
   @scala.annotation.varargs
   def cube(cols: Column*): RelationalGroupedDataset = {
-    RelationalGroupedDataset(toDF(), cols.map(_.expr), RelationalGroupedDataset.CubeType)
+    RelationalGroupedDataset(
+      toDF(), groupingExpressionsWithOrdinals(cols), RelationalGroupedDataset.CubeType)
   }
 
   /** @inheritdoc */
@@ -1050,8 +1044,8 @@ class Dataset[T] private[sql](
   def groupingSets(groupingSets: Seq[Seq[Column]], cols: Column*): RelationalGroupedDataset = {
     RelationalGroupedDataset(
       toDF(),
-      cols.map(_.expr),
-      RelationalGroupedDataset.GroupingSetsType(groupingSets.map(_.map(_.expr))))
+      groupingExpressionsWithOrdinals(cols),
+      RelationalGroupedDataset.GroupingSetsType(groupingSets.map(groupingExpressionsWithOrdinals)))
   }
 
   /** @inheritdoc */
@@ -2403,6 +2397,19 @@ class Dataset[T] private[sql](
   private def collectFromPlan(plan: SparkPlan): Array[T] = {
     val fromRow = resolvedEnc.createDeserializer()
     plan.executeCollect().map(fromRow)
+  }
+
+  /**
+   * Replaces top-level integer literals in grouping expressions with ordinals, if
+   * `groupByOrdinal` is enabled.
+   */
+  private def groupingExpressionsWithOrdinals(cols: Seq[Column]): Seq[Expression] = {
+    val groupByOrdinal = sparkSession.sessionState.conf.groupByOrdinal
+    cols.map { col => col.expr match {
+      case literal @ Literal(value: Int, IntegerType) if groupByOrdinal =>
+        CurrentOrigin.withOrigin(literal.origin) { UnresolvedOrdinal(value) }
+      case other => other
+    }}
   }
 
   protected def sortInternal(global: Boolean, sortExprs: Seq[Column]): Dataset[T] = {
