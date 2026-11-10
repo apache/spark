@@ -17,12 +17,20 @@
 
 """Experimental PySpark functions for remote model inference."""
 
-from typing import TYPE_CHECKING, Dict, Optional, Union
+from typing import TYPE_CHECKING, Dict, Iterator, Optional, Tuple, Union
 
-from pyspark.sql._ai_client import _AgentEndpoint, _ModelEndpoint, _query_batches
+from pyspark.errors import PySparkTypeError, PySparkValueError
+from pyspark.sql._ai_client import (
+    _AgentEndpoint,
+    _ModelEndpoint,
+    _query_batches,
+    _validate_non_empty_string,
+)
 from pyspark.sql.column import Column
 
 if TYPE_CHECKING:
+    import pandas as pd
+
     from pyspark.sql._typing import ColumnOrName
 
 __all__ = ["ai_query", "register_agent", "register_model"]
@@ -46,15 +54,44 @@ def register_model(
 ) -> None:
     """Register a model alias for subsequent calls to :func:`ai_query`.
 
-    Use ``provider="databricks"`` with a serving endpoint name or ``provider="bedrock"`` with
-    a model or inference profile ID. Workers resolve credentials through the provider SDK.
-    Bedrock accepts an optional AWS region and profile. Databricks accepts a profile and
-    either ``oauth-m2m`` (the default) or ``databricks-cli`` for OAuth.
-    Concurrency is limited per Python task. Retries and repeated Spark actions can make
-    additional billable calls.
+    Workers resolve credentials through the provider SDK. Registering the same name
+    replaces its configuration for subsequently constructed columns.
+
+    .. versionadded:: 4.4.0
+
+    Parameters
+    ----------
+    name : str
+        Alias to use in :func:`ai_query`.
+    model_id : str
+        Databricks serving endpoint name or Bedrock model or inference profile ID.
+    provider : str
+        Either ``databricks`` or ``bedrock``.
+    profile : str, optional
+        Credential profile available on each worker.
+    region : str, optional
+        AWS region for Bedrock.
+    auth_type : str, optional
+        Databricks OAuth authentication type, either ``oauth-m2m`` (the default)
+        or ``databricks-cli``.
+    max_concurrency : int, optional
+        Maximum concurrent invocations per Python task.
+    timeout : float, optional
+        Databricks invocation time budget or Bedrock SDK connection and read
+        timeout, in seconds.
+    max_retries : int, optional
+        Maximum retries for a transient failure. Retries can incur additional charges.
+    max_tokens : int, optional
+        Maximum number of generated tokens.
+    temperature : float, optional
+        Sampling temperature. The maximum is 2 for Databricks and 1 for Bedrock.
+
+    Examples
+    --------
+    >>> from pyspark.sql.ai import register_model
+    >>> register_model("summarizer", "databricks-gpt-oss-20b", provider="databricks")
     """
-    if not isinstance(name, str) or not name.strip():
-        raise ValueError("name must be a non-empty string")
+    _validate_non_empty_string("name", name)
     _endpoints[name] = _ModelEndpoint(
         model_id=model_id,
         provider=provider,
@@ -80,24 +117,40 @@ def register_agent(
     max_retries: int = 2,
     auth_type: str = "oauth-m2m",
 ) -> None:
-    """Register an agent configuration in this Python process, without contacting Databricks.
+    """Register an agent alias for subsequent calls to :func:`ai_query`.
 
-    The model is configured in the deployed agent. Workers require ``databricks-sdk``,
-    ``requests``, and OAuth M2M credentials, supplied through their environment or a profile.
-    Credentials are resolved on the workers and are never stored in this registry.
-    Set ``auth_type="databricks-cli"`` to reuse a CLI OAuth login for local development;
-    the CLI and its authenticated profile must then be available on every worker.
-
-    ``output_field`` selects a top-level string field in a custom agent's output. Otherwise,
-    the agent must return a string or the assistant messages produced by AgentKit templates.
-    ``timeout`` is the invocation time budget in seconds, excluding initial client setup.
-    ``max_retries`` limits transient HTTP and connection retries. ``max_concurrency`` bounds
-    requests per active Python task; total concurrency grows with the number of Spark tasks.
-
+    Workers resolve credentials through the Databricks SDK. For CLI authentication,
+    the CLI and its authenticated profile must be available on every worker.
     Registering the same name replaces its configuration for subsequently constructed columns.
+
+    .. versionadded:: 4.4.0
+
+    Parameters
+    ----------
+    name : str
+        Alias to use in :func:`ai_query`.
+    app_name : str
+        Name of the Databricks app that hosts the agent.
+    profile : str, optional
+        Databricks credential profile available on each worker.
+    output_field : str, optional
+        Top-level string field to read from a custom agent's output. By default,
+        the agent must return a string or AgentKit assistant messages.
+    max_concurrency : int, optional
+        Maximum concurrent invocations per Python task.
+    timeout : float, optional
+        Invocation time budget in seconds, excluding client setup.
+    max_retries : int, optional
+        Maximum retries for a transient HTTP or connection failure.
+    auth_type : str, optional
+        Either ``oauth-m2m`` (the default) or ``databricks-cli``.
+
+    Examples
+    --------
+    >>> from pyspark.sql.ai import register_agent
+    >>> register_agent("summarizer", "my-agent")
     """
-    if not isinstance(name, str) or not name.strip():
-        raise ValueError("name must be a non-empty string")
+    _validate_non_empty_string("name", name)
     _endpoints[name] = _AgentEndpoint(
         app_name, profile, output_field, max_concurrency, timeout, max_retries, auth_type
     )
@@ -108,37 +161,78 @@ def ai_query(
 ) -> Column:
     """Return a text column by invoking a registered model or agent for each non-null request.
 
-    Direct model inference needs only ``endpoint`` and ``request``. ``invocation_id`` is required
-    only for agent endpoints and is rejected for direct models, which offer no deduplication.
+    The column captures the endpoint configuration when it is constructed. Spark may repeat
+    calls on task retries or subsequent actions. For agents, deduplication lasts as long as
+    Databricks retains the invocation record. This does not guarantee exactly-once tool execution.
+    The API supports synchronous text generation. Invalid identifiers and invocation errors
+    fail the task.
 
-    For agent endpoints, ``request`` and ``invocation_id`` are string columns or column names.
-    The latter must
-    contain stable, non-empty identifiers, unique per logical input within the job namespace.
-    Include a job or dataset version in these identifiers to control reuse across actions.
-    Do not generate them with a random expression or task/partition identifiers.
+    .. versionadded:: 4.4.0
 
-    The app name, input identifier, and request determine a stable UUID. Retries use this UUID
-    as the invocation ID and as an independent session ID. Idempotency applies only while
-    Databricks retains the invocation record; this is not an exactly-once guarantee for tools.
+    Parameters
+    ----------
+    endpoint : str
+        Alias registered with :func:`register_model` or :func:`register_agent`.
+    request : :class:`~pyspark.sql.Column` or str
+        String column or column name containing the prompt. Nulls produce null results
+        without a network call.
+    invocation_id : :class:`~pyspark.sql.Column` or str, optional
+        String column or column name required for agent endpoints. Values must be stable,
+        non-empty, and unique per logical input within the job namespace. Include a job
+        or dataset version when you need to control reuse across actions. Model endpoints
+        do not accept this argument.
 
-    Null requests return null without a network call. Invalid identifiers and invocation errors
-    fail the task. Spark may repeat calls on retries or subsequent actions. This prototype
-    supports synchronous text generation only, without conversational or human-input workflows.
+    Returns
+    -------
+    :class:`~pyspark.sql.Column`
+        String column containing the response to each request.
+
+    Examples
+    --------
+    >>> from pyspark.sql.ai import ai_query, register_model
+    >>> from pyspark.sql.functions import col, concat, lit
+    >>> register_model("summarizer", "databricks-gpt-oss-20b", provider="databricks")
+    >>> df = spark.createDataFrame([("A document",)], ["description"])
+    >>> result = df.withColumn(
+    ...     "summary",
+    ...     ai_query("summarizer", concat(lit("Summarize: "), col("description"))),
+    ... )
     """
     from pyspark.sql.functions import PandasUDFType, lit, pandas_udf
     from pyspark.sql.types import StringType
 
-    if not isinstance(endpoint, str) or endpoint not in _endpoints:
-        raise ValueError("Register the endpoint before ai_query")
+    if not isinstance(endpoint, str):
+        raise PySparkTypeError(
+            errorClass="NOT_EXPECTED_TYPE",
+            messageParameters={
+                "arg_name": "endpoint",
+                "expected_type": "str",
+                "arg_type": type(endpoint).__name__,
+            },
+        )
+    if endpoint not in _endpoints:
+        raise PySparkValueError(
+            errorClass="AI_QUERY_ENDPOINT_NOT_REGISTERED",
+            messageParameters={"endpoint": endpoint},
+        )
     config = _endpoints[endpoint]
     if isinstance(config, _ModelEndpoint):
         if invocation_id is not None:
-            raise ValueError("invocation_id is only supported by agent endpoints")
+            raise PySparkValueError(
+                errorClass="AI_QUERY_UNSUPPORTED_OPTION",
+                messageParameters={"arg_name": "invocation_id", "target": "model endpoints"},
+            )
         invocation_id = lit("")
     elif invocation_id is None:
-        raise ValueError("Agent endpoints require a stable invocation_id column")
+        raise PySparkValueError(
+            errorClass="ARGUMENT_REQUIRED",
+            messageParameters={
+                "arg_name": "invocation_id",
+                "condition": "the endpoint is an agent",
+            },
+        )
 
-    def query(batches):
+    def query(batches: Iterator[Tuple["pd.Series", "pd.Series"]]) -> Iterator["pd.Series"]:
         yield from _query_batches(config, batches)
 
     query_udf = pandas_udf(

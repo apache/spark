@@ -1,4 +1,75 @@
 {
+  "AI_QUERY_ENDPOINT_NOT_REGISTERED": {
+    "message": [
+      "Register endpoint `<endpoint>` before calling ai_query."
+    ],
+    "sqlState": "22023"
+  },
+  "AI_QUERY_INVALID_TIMEOUT": {
+    "message": [
+      "Argument `timeout` must be finite and greater than zero."
+    ],
+    "sqlState": "22023"
+  },
+  "AI_QUERY_INVOCATION_FAILED": {
+    "message": [
+      "Invocation of <target> failed."
+    ],
+    "sub_class": {
+      "AGENT_RUN_FAILED": {
+        "message": [
+          "The agent reported a failed invocation."
+        ]
+      },
+      "CONNECTION_ERROR": {
+        "message": [
+          "Connection retries were exhausted."
+        ]
+      },
+      "EMPTY_RESPONSE": {
+        "message": [
+          "The response contained no text."
+        ]
+      },
+      "HTTP_ERROR": {
+        "message": [
+          "The server returned HTTP status <status>."
+        ]
+      },
+      "HTTP_RETRIES_EXHAUSTED": {
+        "message": [
+          "Retries were exhausted after HTTP status <status>."
+        ]
+      },
+      "HUMAN_INPUT_REQUIRED": {
+        "message": [
+          "The agent requires human input."
+        ]
+      },
+      "INVALID_RESPONSE": {
+        "message": [
+          "The server returned an invalid response."
+        ]
+      },
+      "INVALID_URL": {
+        "message": [
+          "The endpoint must use an HTTPS URL without embedded credentials."
+        ]
+      },
+      "TIMEOUT": {
+        "message": [
+          "The invocation exceeded its time budget."
+        ]
+      }
+    },
+    "sqlState": "58000"
+  },
+  "AI_QUERY_UNSUPPORTED_OPTION": {
+    "message": [
+      "Argument `<arg_name>` is not supported for <target>."
+    ],
+    "sqlState": "22023"
+  },
   "APPLICATION_NAME_NOT_SET": {
     "message": [
       "An application name must be set in your configuration."

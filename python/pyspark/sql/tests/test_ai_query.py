@@ -23,6 +23,7 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from types import SimpleNamespace
 from unittest.mock import MagicMock, Mock, patch
 
+from pyspark.errors import PySparkRuntimeError, PySparkTypeError, PySparkValueError
 from pyspark.sql._ai_client import (
     _AgentClient,
     _AgentEndpoint,
@@ -33,6 +34,7 @@ from pyspark.sql._ai_client import (
     _request_id,
 )
 from pyspark.sql.ai import ai_query, register_agent, register_model
+from pyspark.testing.utils import PySparkErrorTestUtils
 
 try:
     import pandas as pd
@@ -44,7 +46,7 @@ else:
 
 
 @unittest.skipUnless(have_ai_query_dependencies, "AI query tests require pandas and requests")
-class AIQueryTests(unittest.TestCase):
+class AIQueryTests(unittest.TestCase, PySparkErrorTestUtils):
     def client(self, **options):
         client = object.__new__(_AgentClient)
         client.endpoint = _AgentEndpoint("agent", **options)
@@ -75,28 +77,52 @@ class AIQueryTests(unittest.TestCase):
         self.assertNotEqual(_request_id("a", "b:c", "d"), _request_id("a", "b", "c:d"))
 
     def test_invalid_inputs(self):
-        for row_id in (None, "", "  ", 1):
-            with self.subTest(row_id=row_id), self.assertRaises(ValueError):
+        for row_id in ("", "  "):
+            with self.subTest(row_id=row_id), self.assertRaises(PySparkValueError) as raised:
                 _request_id("agent", row_id, "hello")
-        with self.assertRaises(TypeError):
+            self.check_error(
+                raised.exception,
+                "VALUE_NOT_NON_EMPTY_STR",
+                {"arg_name": "invocation_id", "arg_value": row_id},
+            )
+        for row_id in (None, 1):
+            with self.subTest(row_id=row_id), self.assertRaises(PySparkTypeError) as raised:
+                _request_id("agent", row_id, "hello")
+            self.check_error(
+                raised.exception,
+                "NOT_EXPECTED_TYPE",
+                {
+                    "arg_name": "invocation_id",
+                    "expected_type": "str",
+                    "arg_type": type(row_id).__name__,
+                },
+            )
+        with self.assertRaises(PySparkTypeError) as raised:
             _request_id("agent", "id", 12)
+        self.check_error(
+            raised.exception,
+            "NOT_EXPECTED_TYPE",
+            {"arg_name": "request", "expected_type": "str", "arg_type": "int"},
+        )
 
     def test_invalid_configuration(self):
-        for options in (
-            {"app_name": ""},
-            {"profile": ""},
-            {"output_field": 12},
-            {"timeout": 0},
-            {"timeout": float("nan")},
-            {"timeout": float("inf")},
-            {"max_concurrency": 0},
-            {"max_concurrency": True},
-            {"max_retries": -1},
-            {"max_retries": 1.5},
-            {"auth_type": "pat"},
+        for options, condition in (
+            ({"app_name": ""}, "VALUE_NOT_NON_EMPTY_STR"),
+            ({"profile": ""}, "VALUE_NOT_NON_EMPTY_STR"),
+            ({"output_field": 12}, "NOT_EXPECTED_TYPE"),
+            ({"timeout": 0}, "AI_QUERY_INVALID_TIMEOUT"),
+            ({"timeout": float("nan")}, "AI_QUERY_INVALID_TIMEOUT"),
+            ({"timeout": float("inf")}, "AI_QUERY_INVALID_TIMEOUT"),
+            ({"max_concurrency": 0}, "VALUE_NOT_POSITIVE"),
+            ({"max_concurrency": True}, "NOT_EXPECTED_TYPE"),
+            ({"max_retries": -1}, "NEGATIVE_VALUE"),
+            ({"max_retries": 1.5}, "NOT_EXPECTED_TYPE"),
+            ({"auth_type": "pat"}, "VALUE_NOT_ALLOWED"),
         ):
-            with self.subTest(options=options), self.assertRaises(ValueError):
+            error_type = PySparkTypeError if condition == "NOT_EXPECTED_TYPE" else PySparkValueError
+            with self.subTest(options=options), self.assertRaises(error_type) as raised:
                 _AgentEndpoint(**{"app_name": "agent", **options})
+            self.assertEqual(raised.exception.getCondition(), condition)
 
     def test_text_and_custom_outputs(self):
         self.assertEqual(_extract_text("hello", None), "hello")
@@ -112,10 +138,20 @@ class AIQueryTests(unittest.TestCase):
         }
         self.assertEqual(_extract_text(output, None), "hello\nworld")
         for value in ({}, {"answer": 1}, {"answer": None}):
-            with self.assertRaises(ValueError):
+            with self.assertRaises(PySparkRuntimeError) as raised:
                 _extract_text(value, "answer")
-        with self.assertRaisesRegex(RuntimeError, "human input"):
+            self.check_error(
+                raised.exception,
+                "AI_QUERY_INVOCATION_FAILED.EMPTY_RESPONSE",
+                {"target": "Databricks agent"},
+            )
+        with self.assertRaises(PySparkRuntimeError) as raised:
             _extract_text({"status": "interrupted"}, None)
+        self.check_error(
+            raised.exception,
+            "AI_QUERY_INVOCATION_FAILED.HUMAN_INPUT_REQUIRED",
+            {"target": "Databricks agent"},
+        )
 
     def test_oauth_initialized_only_on_worker(self):
         workspace = Mock()
@@ -139,8 +175,13 @@ class AIQueryTests(unittest.TestCase):
                 client.close()
             for url in ("http://agent.example", "https://user:secret@agent.example", None):
                 workspace.apps.get.return_value.url = url
-                with self.subTest(url=url), self.assertRaises(ValueError):
+                with self.subTest(url=url), self.assertRaises(PySparkRuntimeError) as raised:
                     _AgentClient(_AgentEndpoint("agent"))
+                self.check_error(
+                    raised.exception,
+                    "AI_QUERY_INVOCATION_FAILED.INVALID_URL",
+                    {"target": "Databricks agent"},
+                )
 
     def test_transient_retry_keeps_body_and_refreshes_auth(self):
         client = self.client()
@@ -189,9 +230,16 @@ class AIQueryTests(unittest.TestCase):
             client.http.request.return_value = self.response(status)
             with (
                 self.subTest(status=status),
-                self.assertRaisesRegex(RuntimeError, f"^Databricks agent HTTP {status}$"),
+                self.assertRaises(PySparkRuntimeError) as raised,
             ):
                 client.invoke("private prompt", "id")
+            self.check_error(
+                raised.exception,
+                "AI_QUERY_INVOCATION_FAILED.HTTP_ERROR",
+                {"target": "Databricks agent", "status": str(status)},
+            )
+            self.assertEqual(raised.exception.getSqlState(), "58000")
+            self.assertNotIn("private prompt", str(raised.exception))
             self.assertEqual(client.http.request.call_count, 1)
 
     def test_direct_model_rejects_non_text_output(self):
@@ -201,8 +249,13 @@ class AIQueryTests(unittest.TestCase):
         client.url = "https://workspace.example/serving-endpoints/model/invocations"
         client.http = Mock()
         client.http.post.return_value = self.response(choices=[{"message": {"content": None}}])
-        with self.assertRaisesRegex(ValueError, "Model returned no text"):
+        with self.assertRaises(PySparkRuntimeError) as raised:
             client.invoke("hello")
+        self.check_error(
+            raised.exception,
+            "AI_QUERY_INVOCATION_FAILED.EMPTY_RESPONSE",
+            {"target": "Databricks model"},
+        )
         client.http.post.assert_called_once()
 
     def test_bedrock_registered_model_batches(self):
@@ -241,11 +294,15 @@ class AIQueryTests(unittest.TestCase):
         client.http.request.side_effect = requests.Timeout("private diagnostic")
         with (
             patch("pyspark.sql._ai_client.time.sleep"),
-            self.assertRaisesRegex(
-                RuntimeError, "^Databricks agent connection failed; retries exhausted$"
-            ),
+            self.assertRaises(PySparkRuntimeError) as raised,
         ):
             client.invoke("private prompt", "id")
+        self.check_error(
+            raised.exception,
+            "AI_QUERY_INVOCATION_FAILED.CONNECTION_ERROR",
+            {"target": "Databricks agent"},
+        )
+        self.assertNotIn("private diagnostic", str(raised.exception))
         self.assertEqual(client.http.request.call_count, 2)
 
     def test_polling_deadline(self):
@@ -255,21 +312,34 @@ class AIQueryTests(unittest.TestCase):
         with (
             patch("pyspark.sql._ai_client.time.monotonic", side_effect=[0, 0, 2, 2]),
             patch("pyspark.sql._ai_client.time.sleep"),
-            self.assertRaises(TimeoutError),
+            self.assertRaises(PySparkRuntimeError) as raised,
         ):
             client.invoke("hello", "id")
+        self.check_error(
+            raised.exception,
+            "AI_QUERY_INVOCATION_FAILED.TIMEOUT",
+            {"target": "Databricks agent"},
+        )
 
     def test_failed_or_malformed_invocations(self):
         identity = _request_id("agent", "id", "hello")
-        for body in (
-            {"id": identity, "status": "failed", "error": "private diagnostic"},
-            {"id": identity, "status": "interrupted"},
-            {"id": "wrong", "status": "completed", "output": "wrong"},
+        for body, condition in (
+            (
+                {"id": identity, "status": "failed", "error": "private diagnostic"},
+                "AGENT_RUN_FAILED",
+            ),
+            ({"id": identity, "status": "interrupted"}, "AGENT_RUN_FAILED"),
+            ({"id": "wrong", "status": "completed", "output": "wrong"}, "INVALID_RESPONSE"),
         ):
             client = self.client()
             client.http.request.return_value = self.response(**body)
-            with self.subTest(body=body), self.assertRaises((RuntimeError, ValueError)):
+            with self.subTest(body=body), self.assertRaises(PySparkRuntimeError) as raised:
                 client.invoke("hello", "id")
+            self.check_error(
+                raised.exception,
+                f"AI_QUERY_INVOCATION_FAILED.{condition}",
+                {"target": "Databricks agent"},
+            )
 
     def test_batch_order_nulls_concurrency_and_cleanup(self):
         clients = []
@@ -326,12 +396,17 @@ class AIQueryTests(unittest.TestCase):
                 _query_batches(_AgentEndpoint("agent"), [(pd.Series([None]), pd.Series([None]))])
             )
             self.assertEqual(result[0].tolist(), [None])
-            with self.assertRaises(ValueError):
+            with self.assertRaises(PySparkTypeError) as raised:
                 list(
                     _query_batches(
                         _AgentEndpoint("agent"), [(pd.Series(["hello"]), pd.Series([None]))]
                     )
                 )
+            self.check_error(
+                raised.exception,
+                "NOT_EXPECTED_TYPE",
+                {"arg_name": "invocation_id", "expected_type": "str", "arg_type": "NoneType"},
+            )
             client.assert_not_called()
 
     def test_registration_is_lazy_and_columns_snapshot_configuration(self):
@@ -347,8 +422,14 @@ class AIQueryTests(unittest.TestCase):
             with patch("pyspark.sql.ai._query_batches", return_value=iter([])) as batches:
                 list(query(iter([])))
                 self.assertEqual(batches.call_args.args[0].app_name, "original")
-        with self.assertRaisesRegex(ValueError, "Register"):
+        with self.assertRaises(PySparkValueError) as raised:
             ai_query("not-registered", "prompt", invocation_id="row_id")
+        self.check_error(
+            raised.exception,
+            "AI_QUERY_ENDPOINT_NOT_REGISTERED",
+            {"endpoint": "not-registered"},
+        )
+        self.assertEqual(raised.exception.getSqlState(), "22023")
 
     def test_http_contract_with_local_server(self):
         received = []

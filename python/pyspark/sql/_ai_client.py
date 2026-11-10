@@ -25,8 +25,13 @@ import uuid
 from concurrent.futures import ThreadPoolExecutor
 from dataclasses import dataclass
 from itertools import islice
-from typing import Any, Optional
+from typing import TYPE_CHECKING, Any, Iterator, Mapping, Optional, Tuple, Union
 from urllib.parse import quote, urlsplit
+
+from pyspark.errors import PySparkRuntimeError, PySparkTypeError, PySparkValueError
+
+if TYPE_CHECKING:
+    import pandas as pd
 
 
 @dataclass(frozen=True)
@@ -39,15 +44,13 @@ class _AgentEndpoint:
     max_retries: int = 2
     auth_type: str = "oauth-m2m"
 
-    def __post_init__(self):
+    def __post_init__(self) -> None:
         _validate_endpoint_options(self)
         _validate_oauth(self.auth_type)
         for name in ("app_name", "output_field"):
             value = getattr(self, name)
-            if (name == "app_name" or value is not None) and (
-                not isinstance(value, str) or not value.strip()
-            ):
-                raise ValueError(f"{name} must be a non-empty string")
+            if name == "app_name" or value is not None:
+                _validate_non_empty_string(name, value)
 
 
 @dataclass(frozen=True)
@@ -63,61 +66,116 @@ class _ModelEndpoint:
     max_tokens: int = 2048
     temperature: float = 0.0
 
-    def __post_init__(self):
+    def __post_init__(self) -> None:
         _validate_endpoint_options(self)
-        if not isinstance(self.model_id, str) or not self.model_id.strip():
-            raise ValueError("model_id must be a non-empty string")
+        _validate_non_empty_string("model_id", self.model_id)
         if self.provider == "databricks":
             if self.auth_type is not None:
                 _validate_oauth(self.auth_type)
             if self.region is not None:
-                raise ValueError("region is only supported by Bedrock")
+                raise PySparkValueError(
+                    errorClass="AI_QUERY_UNSUPPORTED_OPTION",
+                    messageParameters={"arg_name": "region", "target": "Databricks models"},
+                )
             max_temperature = 2
         elif self.provider == "bedrock":
             if self.auth_type is not None:
-                raise ValueError("Bedrock resolves authentication through the AWS SDK")
-            if self.region is not None and (
-                not isinstance(self.region, str) or not self.region.strip()
-            ):
-                raise ValueError("region must be a non-empty string")
+                raise PySparkValueError(
+                    errorClass="AI_QUERY_UNSUPPORTED_OPTION",
+                    messageParameters={"arg_name": "auth_type", "target": "Bedrock models"},
+                )
+            if self.region is not None:
+                _validate_non_empty_string("region", self.region)
             max_temperature = 1
         else:
-            raise ValueError("provider must be databricks or bedrock")
-        if type(self.max_tokens) is not int or self.max_tokens < 1:
-            raise ValueError("max_tokens must be a positive integer")
+            raise PySparkValueError(
+                errorClass="VALUE_NOT_ALLOWED",
+                messageParameters={"arg_name": "provider", "allowed_values": "databricks, bedrock"},
+            )
+        _validate_integer("max_tokens", self.max_tokens, 1)
         if (
             isinstance(self.temperature, bool)
             or not isinstance(self.temperature, (int, float))
             or not math.isfinite(self.temperature)
             or not 0 <= self.temperature <= max_temperature
         ):
-            raise ValueError(f"temperature must be a finite number between 0 and {max_temperature}")
+            raise PySparkValueError(
+                errorClass="VALUE_NOT_BETWEEN",
+                messageParameters={
+                    "arg_name": "temperature",
+                    "min": "0",
+                    "max": str(max_temperature),
+                },
+            )
 
 
-def _validate_oauth(auth_type):
+def _validate_non_empty_string(name: str, value: object) -> None:
+    if not isinstance(value, str):
+        raise PySparkTypeError(
+            errorClass="NOT_EXPECTED_TYPE",
+            messageParameters={
+                "arg_name": name,
+                "expected_type": "str",
+                "arg_type": type(value).__name__,
+            },
+        )
+    if not value.strip():
+        raise PySparkValueError(
+            errorClass="VALUE_NOT_NON_EMPTY_STR",
+            messageParameters={"arg_name": name, "arg_value": value},
+        )
+
+
+def _validate_integer(name: str, value: object, minimum: int) -> None:
+    if type(value) is not int:
+        raise PySparkTypeError(
+            errorClass="NOT_EXPECTED_TYPE",
+            messageParameters={
+                "arg_name": name,
+                "expected_type": "int",
+                "arg_type": type(value).__name__,
+            },
+        )
+    if value < minimum:
+        raise PySparkValueError(
+            errorClass="VALUE_NOT_POSITIVE" if minimum else "NEGATIVE_VALUE",
+            messageParameters={"arg_name": name, "arg_value": str(value)},
+        )
+
+
+def _invocation_error(target: str, condition: str, **parameters: str) -> PySparkRuntimeError:
+    return PySparkRuntimeError(
+        errorClass=f"AI_QUERY_INVOCATION_FAILED.{condition}",
+        messageParameters={"target": target, **parameters},
+    )
+
+
+def _validate_oauth(auth_type: str) -> None:
     if auth_type not in ("oauth-m2m", "databricks-cli"):
-        raise ValueError("auth_type must be oauth-m2m or databricks-cli")
+        raise PySparkValueError(
+            errorClass="VALUE_NOT_ALLOWED",
+            messageParameters={
+                "arg_name": "auth_type",
+                "allowed_values": "oauth-m2m, databricks-cli",
+            },
+        )
 
 
-def _validate_endpoint_options(endpoint):
-    if endpoint.profile is not None and (
-        not isinstance(endpoint.profile, str) or not endpoint.profile.strip()
-    ):
-        raise ValueError("profile must be a non-empty string")
+def _validate_endpoint_options(endpoint: Union[_AgentEndpoint, _ModelEndpoint]) -> None:
+    if endpoint.profile is not None:
+        _validate_non_empty_string("profile", endpoint.profile)
     for name, minimum in (("max_concurrency", 1), ("max_retries", 0)):
-        value = getattr(endpoint, name)
-        if type(value) is not int or value < minimum:
-            raise ValueError(f"{name} must be an integer >= {minimum}")
+        _validate_integer(name, getattr(endpoint, name), minimum)
     if (
         isinstance(endpoint.timeout, bool)
         or not isinstance(endpoint.timeout, (int, float))
         or not math.isfinite(endpoint.timeout)
         or endpoint.timeout <= 0
     ):
-        raise ValueError("timeout must be a finite positive number")
+        raise PySparkValueError(errorClass="AI_QUERY_INVALID_TIMEOUT", messageParameters={})
 
 
-def _retry_delay(headers, failures, deadline):
+def _retry_delay(headers: Mapping[str, str], failures: int, deadline: float) -> float:
     try:
         retry_after = float(headers.get("Retry-After", "0"))
         if not math.isfinite(retry_after):
@@ -131,7 +189,7 @@ def _retry_delay(headers, failures, deadline):
 
 
 class _ChatCompletionsClient:
-    def __init__(self, endpoint: _ModelEndpoint):
+    def __init__(self, endpoint: _ModelEndpoint) -> None:
         import requests
         from databricks.sdk import WorkspaceClient
 
@@ -141,18 +199,18 @@ class _ChatCompletionsClient:
         )
         host = self.workspace.config.host
         if urlsplit(host).scheme != "https":
-            raise ValueError("Databricks workspace URL must use HTTPS")
+            raise _invocation_error("Databricks model", "INVALID_URL")
         self.url = host.rstrip("/") + "/serving-endpoints/" + quote(endpoint.model_id, safe="")
         self.url += "/invocations"
         self.http = requests.Session()
 
-    def close(self):
+    def close(self) -> None:
         self.http.close()
 
-    def invoke(self, request: str, row_id=None) -> str:
+    def invoke(self, request: str, row_id: Optional[str] = None) -> str:
         import requests
 
-        body = {
+        body: dict[str, Any] = {
             "messages": [{"role": "user", "content": request}],
             "max_tokens": self.endpoint.max_tokens,
             "temperature": self.endpoint.temperature,
@@ -162,8 +220,8 @@ class _ChatCompletionsClient:
         while True:
             remaining = deadline - time.monotonic()
             if remaining <= 0:
-                raise TimeoutError("Databricks model invocation timed out")
-            retry_headers = {}
+                raise _invocation_error("Databricks model", "TIMEOUT")
+            retry_headers: Mapping[str, str] = {}
             try:
                 with self.http.post(
                     self.url,
@@ -175,29 +233,33 @@ class _ChatCompletionsClient:
                     status = response.status_code
                     if status == 429 or status in (500, 502, 503, 504):
                         if attempt == self.endpoint.max_retries:
-                            raise RuntimeError(f"Databricks model HTTP {status}; retries exhausted")
+                            raise _invocation_error(
+                                "Databricks model", "HTTP_RETRIES_EXHAUSTED", status=str(status)
+                            )
                         retry_headers = response.headers
                     elif not 200 <= status < 300:
-                        raise RuntimeError(f"Databricks model HTTP {status}")
+                        raise _invocation_error(
+                            "Databricks model", "HTTP_ERROR", status=str(status)
+                        )
                     else:
                         try:
                             text = response.json()["choices"][0]["message"]["content"]
                         except (KeyError, IndexError, TypeError, ValueError):
-                            raise ValueError("Invalid Databricks model response") from None
+                            raise _invocation_error(
+                                "Databricks model", "INVALID_RESPONSE"
+                            ) from None
                         if not isinstance(text, str) or not text.strip():
-                            raise ValueError("Model returned no text; check max_tokens")
+                            raise _invocation_error("Databricks model", "EMPTY_RESPONSE")
                         return text
             except (requests.Timeout, requests.ConnectionError):
                 if attempt == self.endpoint.max_retries:
-                    raise RuntimeError(
-                        "Databricks model connection failed; retries exhausted"
-                    ) from None
+                    raise _invocation_error("Databricks model", "CONNECTION_ERROR") from None
             time.sleep(_retry_delay(retry_headers, attempt, deadline))
             attempt += 1
 
 
 class _ConverseClient:
-    def __init__(self, endpoint: _ModelEndpoint):
+    def __init__(self, endpoint: _ModelEndpoint) -> None:
         import boto3
         from botocore.config import Config
 
@@ -212,10 +274,10 @@ class _ConverseClient:
             ),
         )
 
-    def close(self):
+    def close(self) -> None:
         self.client.close()
 
-    def invoke(self, request: str, row_id=None) -> str:
+    def invoke(self, request: str, row_id: Optional[str] = None) -> str:
         response = self.client.converse(
             modelId=self.endpoint.model_id,
             messages=[{"role": "user", "content": [{"text": request}]}],
@@ -227,15 +289,21 @@ class _ConverseClient:
         content = response.get("output", {}).get("message", {}).get("content", [])
         text = "".join(block["text"] for block in content if "text" in block)
         if not text.strip():
-            raise ValueError("Model returned no text; check max_tokens")
+            raise _invocation_error("Bedrock model", "EMPTY_RESPONSE")
         return text
 
 
 def _request_id(app_name: str, row_id: str, request: str) -> str:
-    if not isinstance(row_id, str) or not row_id.strip():
-        raise ValueError("invocation_id must contain non-empty stable strings")
+    _validate_non_empty_string("invocation_id", row_id)
     if not isinstance(request, str):
-        raise TypeError("request must contain strings or nulls")
+        raise PySparkTypeError(
+            errorClass="NOT_EXPECTED_TYPE",
+            messageParameters={
+                "arg_name": "request",
+                "expected_type": "str",
+                "arg_type": type(request).__name__,
+            },
+        )
     key = json.dumps([app_name, row_id, request], ensure_ascii=True, separators=(",", ":"))
     return str(uuid.uuid5(uuid.NAMESPACE_URL, key))
 
@@ -243,13 +311,13 @@ def _request_id(app_name: str, row_id: str, request: str) -> str:
 def _extract_text(output: Any, output_field: Optional[str]) -> str:
     if output_field is not None:
         if not isinstance(output, dict):
-            raise ValueError("Agent output must be an object when output_field is configured")
+            raise _invocation_error("Databricks agent", "INVALID_RESPONSE")
         output = output.get(output_field)
     if isinstance(output, str):
         return output
     if isinstance(output, dict) and output_field is None:
         if output.get("status") == "interrupted":
-            raise RuntimeError("Agent requires human input; ai_query cannot resume it")
+            raise _invocation_error("Databricks agent", "HUMAN_INPUT_REQUIRED")
         messages = output.get("output")
         if isinstance(messages, list):
             texts = []
@@ -269,11 +337,11 @@ def _extract_text(output: Any, output_field: Optional[str]) -> str:
                             texts.append(item["text"])
             if texts:
                 return "\n".join(texts)
-    raise ValueError("Agent did not return text; configure output_field for a custom output")
+    raise _invocation_error("Databricks agent", "EMPTY_RESPONSE")
 
 
 class _AgentClient:
-    def __init__(self, endpoint: _AgentEndpoint):
+    def __init__(self, endpoint: _AgentEndpoint) -> None:
         import requests
         from databricks.sdk import WorkspaceClient
 
@@ -283,25 +351,26 @@ class _AgentClient:
         app_url = self.workspace.apps.get(endpoint.app_name).url
         parsed = urlsplit(app_url or "")
         if (
-            parsed.scheme != "https"
+            not app_url
+            or parsed.scheme != "https"
             or not parsed.hostname
             or parsed.username
             or parsed.password
             or parsed.query
             or parsed.fragment
         ):
-            raise ValueError("Databricks must return an HTTPS app URL without credentials or query")
+            raise _invocation_error("Databricks agent", "INVALID_URL")
         self.url = app_url.rstrip("/") + "/api/invocations"
         self.http = requests.Session()
 
-    def close(self):
+    def close(self) -> None:
         self.http.close()
 
     def invoke(self, request: str, row_id: str) -> str:
         import requests
 
         invocation_id = _request_id(self.endpoint.app_name, row_id, request)
-        body = {
+        body: dict[str, Any] = {
             "id": invocation_id,
             "session_id": invocation_id,
             "input": {"messages": [{"role": "user", "content": request}]},
@@ -312,10 +381,10 @@ class _AgentClient:
         while True:
             remaining = deadline - time.monotonic()
             if remaining <= 0:
-                raise TimeoutError("Databricks agent invocation timed out")
+                raise _invocation_error("Databricks agent", "TIMEOUT")
             headers = self.workspace.config.authenticate()
             headers["X-Routing-Key"] = invocation_id
-            retry_headers = {}
+            retry_headers: Mapping[str, str] = {}
             try:
                 with self.http.request(
                     "GET" if poll else "POST",
@@ -328,56 +397,74 @@ class _AgentClient:
                     status = response.status_code
                     if status == 429 or status in (500, 502, 503, 504):
                         if failures >= self.endpoint.max_retries:
-                            raise RuntimeError(f"Databricks agent HTTP {status}; retries exhausted")
+                            raise _invocation_error(
+                                "Databricks agent", "HTTP_RETRIES_EXHAUSTED", status=str(status)
+                            )
                         retry_headers = response.headers
                     elif not 200 <= status < 300:
                         # Do not include response bodies, prompts, or credentials in task errors.
-                        raise RuntimeError(f"Databricks agent HTTP {status}")
+                        raise _invocation_error(
+                            "Databricks agent", "HTTP_ERROR", status=str(status)
+                        )
                     else:
-                        result = response.json()
+                        try:
+                            result = response.json()
+                        except ValueError:
+                            raise _invocation_error(
+                                "Databricks agent", "INVALID_RESPONSE"
+                            ) from None
                         if not isinstance(result, dict) or result.get("id") != invocation_id:
-                            raise ValueError("Invalid Databricks invocation response")
+                            raise _invocation_error("Databricks agent", "INVALID_RESPONSE")
                         state = result.get("status")
                         if state == "completed":
                             return _extract_text(result.get("output"), self.endpoint.output_field)
                         if state not in ("pending", "queued", "running"):
-                            raise RuntimeError("Databricks agent did not complete successfully")
+                            raise _invocation_error("Databricks agent", "AGENT_RUN_FAILED")
                         poll = True
                         time.sleep(min(0.2, max(0, deadline - time.monotonic())))
                         continue
             except (requests.Timeout, requests.ConnectionError):
                 if failures >= self.endpoint.max_retries:
-                    raise RuntimeError(
-                        "Databricks agent connection failed; retries exhausted"
-                    ) from None
+                    raise _invocation_error("Databricks agent", "CONNECTION_ERROR") from None
             delay = _retry_delay(retry_headers, failures, deadline)
             failures += 1
             time.sleep(delay)
 
 
-def _query_batches(endpoint, batches):
+def _query_batches(
+    endpoint: Union[_AgentEndpoint, _ModelEndpoint],
+    batches: Iterator[Tuple["pd.Series", "pd.Series"]],
+) -> Iterator["pd.Series"]:
     import pandas as pd
 
     local = threading.local()
-    clients = []
+    clients: list[Union[_ConverseClient, _ChatCompletionsClient, _AgentClient]] = []
     lock = threading.Lock()
-    if isinstance(endpoint, _ModelEndpoint):
-        factory = _ConverseClient if endpoint.provider == "bedrock" else _ChatCompletionsClient
-    else:
-        factory = _AgentClient
 
-    def invoke(row):
+    def invoke(row: Tuple[Any, Any]) -> Optional[str]:
         request, row_id = row
-        if pd.isna(request):
+        if pd.api.types.is_scalar(request) and pd.isna(request):
             return None
         # Validate before resolving credentials or making any request.
         if isinstance(endpoint, _ModelEndpoint):
             if not isinstance(request, str):
-                raise TypeError("request must contain strings or nulls")
+                raise PySparkTypeError(
+                    errorClass="NOT_EXPECTED_TYPE",
+                    messageParameters={
+                        "arg_name": "request",
+                        "expected_type": "str",
+                        "arg_type": type(request).__name__,
+                    },
+                )
         else:
             _request_id(endpoint.app_name, row_id, request)
         if not hasattr(local, "client"):
-            local.client = factory(endpoint)
+            if isinstance(endpoint, _AgentEndpoint):
+                local.client = _AgentClient(endpoint)
+            elif endpoint.provider == "bedrock":
+                local.client = _ConverseClient(endpoint)
+            else:
+                local.client = _ChatCompletionsClient(endpoint)
             with lock:
                 clients.append(local.client)
         return local.client.invoke(request, row_id)
@@ -387,7 +474,7 @@ def _query_batches(endpoint, batches):
             for requests, row_ids in batches:
                 # Chunk submission as well as execution to bound outstanding work.
                 rows = zip(requests, row_ids)
-                values = []
+                values: list[Optional[str]] = []
                 while True:
                     chunk = list(islice(rows, endpoint.max_concurrency))
                     if not chunk:
