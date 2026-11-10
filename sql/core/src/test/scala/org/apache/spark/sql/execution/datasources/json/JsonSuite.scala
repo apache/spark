@@ -2701,9 +2701,11 @@ abstract class JsonSuite
   test("SPARK-59629: columnNameOfCorruptRecord honors spark.sql.caseSensitive") {
     val columnNameOfCorruptRecord = "_unparsed"
     // The schema declares the corrupt record field in a different case to the option value.
+    // It comes before the data column, so that a reader which failed to leave it out of the
+    // parser schema would shift the value of `a`.
     val schema = new StructType()
-      .add("a", IntegerType)
       .add(columnNameOfCorruptRecord.toUpperCase(Locale.ROOT), StringType)
+      .add("a", IntegerType)
     val malformed = """{"a": 2, """
 
     withTempPath { dir =>
@@ -2720,15 +2722,54 @@ abstract class JsonSuite
       // Case-insensitive resolution is the default, so the malformed record is captured even
       // though the schema spells the field `_UNPARSED`.
       withSQLConf(SQLConf.CASE_SENSITIVE.key -> "false") {
-        checkAnswer(read(), Row(1, null) :: Row(null, malformed) :: Nil)
+        checkAnswer(read(), Row(null, 1) :: Row(malformed, null) :: Nil)
+        // A query for the corrupt record column alone is rejected, as for an exact name.
+        checkError(
+          exception = intercept[AnalysisException] {
+            read().select("_UNPARSED").collect()
+          },
+          condition = "UNSUPPORTED_FEATURE.QUERY_ONLY_CORRUPT_RECORD_COLUMN",
+          parameters = Map.empty)
       }
 
       // Under case-sensitive resolution the names genuinely differ, so `_UNPARSED` stays an
       // ordinary data column, absent from the input, and the malformed record is not captured.
       withSQLConf(SQLConf.CASE_SENSITIVE.key -> "true") {
-        checkAnswer(read(), Row(1, null) :: Row(null, null) :: Nil)
+        checkAnswer(read(), Row(null, 1) :: Row(null, null) :: Nil)
       }
     }
+  }
+
+  test("SPARK-59629: json(Dataset[String]) resolves the corrupt record column once") {
+    val malformed = """{"a": 2, """
+    val ds = Seq("""{"a": 1}""", malformed).toDS()
+    val schema = new StructType().add("_UNPARSED", StringType).add("a", IntegerType)
+    def read(): DataFrame =
+      spark.read.option("columnNameOfCorruptRecord", "_unparsed").schema(schema).json(ds)
+
+    checkAnswer(read(), Row(null, 1) :: Row(malformed, null) :: Nil)
+    withSQLConf(SQLConf.CASE_SENSITIVE.key -> "true") {
+      checkAnswer(read(), Row(null, 1) :: Row(null, null) :: Nil)
+    }
+
+    // The field is decided when the DataFrame is created, so running it under another setting
+    // cannot make the parser and the corrupt record handling disagree.
+    val df = read()
+    withSQLConf(SQLConf.CASE_SENSITIVE.key -> "true") {
+      checkAnswer(df, Row(null, 1) :: Row(malformed, null) :: Nil)
+    }
+  }
+
+  test("SPARK-59629: several case variants of the corrupt record column are ambiguous") {
+    checkError(
+      exception = intercept[AnalysisException] {
+        spark.read
+          .option("columnNameOfCorruptRecord", "error")
+          .json(Seq("""{"Error": "x", "ERROR": "y"}""").toDS())
+          .collect()
+      },
+      condition = "AMBIGUOUS_COLUMN_OR_FIELD",
+      parameters = Map("name" -> "`error`", "n" -> "2"))
   }
 
   test("SPARK-59629: corrupt record field requirements are checked case-insensitively") {

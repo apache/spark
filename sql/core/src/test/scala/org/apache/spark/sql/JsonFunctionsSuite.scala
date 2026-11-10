@@ -1889,6 +1889,30 @@ class JsonFunctionsSuite extends SharedSparkSession {
     }
   }
 
+  test("SPARK-59629: from_json resolves a case variant of the corrupt record column") {
+    Seq("true", "false").foreach { enabled =>
+      withSQLConf(SQLConf.JSON_EXPRESSION_OPTIMIZATION.key -> enabled) {
+        val malformed = """{"a": "x"}"""
+        // A non-local input, so that the pruning rule sees the extractions below.
+        def parsed(schema: String): DataFrame =
+          sparkContext.parallelize(Seq("""{"a": 1}""", malformed))
+            .toDF("value")
+            .selectExpr(s"from_json(value, '$schema') as p")
+
+        val df = parsed("_CORRUPT_RECORD string, a int")
+        checkAnswer(df, Row(Row(null, 1)) :: Row(Row(malformed, null)) :: Nil)
+        // Extracting the corrupt record column alone still returns the raw text.
+        checkAnswer(df.selectExpr("p._CORRUPT_RECORD"), Row(null) :: Row(malformed) :: Nil)
+        checkAnswer(df.selectExpr("p.a"), Row(1) :: Row(null) :: Nil)
+
+        // Under case-sensitive resolution the variant is an ordinary field, absent from the input.
+        withSQLConf(SQLConf.CASE_SENSITIVE.key -> "true") {
+          checkAnswer(df.selectExpr("p._CORRUPT_RECORD"), Row(null) :: Row(null) :: Nil)
+        }
+      }
+    }
+  }
+
   test("SPARK-58707: named_struct keeps the corrupt record column populated") {
     Seq("true", "false").foreach { enabled =>
       withSQLConf(SQLConf.JSON_EXPRESSION_OPTIMIZATION.key -> enabled) {

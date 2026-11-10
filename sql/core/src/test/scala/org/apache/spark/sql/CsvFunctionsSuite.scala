@@ -661,6 +661,36 @@ class CsvFunctionsSuite extends SharedSparkSession {
     }
   }
 
+  test("SPARK-59629: from_csv resolves a case variant of the corrupt record column") {
+    Seq("true", "false").foreach { enabled =>
+      withSQLConf(SQLConf.CSV_EXPRESSION_OPTIMIZATION.key -> enabled) {
+        // A non-local input, so that the pruning rule sees the extractions below.
+        def parsed(schema: String): DataFrame = sparkContext.parallelize(Seq("1,x", "y,z"))
+          .toDF("csv")
+          .selectExpr(s"from_csv(csv, '$schema') as parsed")
+        Seq("_corrupt_record", "_CORRUPT_RECORD").foreach { corrupt =>
+          val df = parsed(s"a int, b string, $corrupt string")
+          checkAnswer(df, Row(Row(1, "x", null)) :: Row(Row(null, "z", "y,z")) :: Nil)
+          // Extracting the corrupt record column alone still returns the raw line.
+          checkAnswer(df.selectExpr(s"parsed.$corrupt"), Row(null) :: Row("y,z") :: Nil)
+          // Extracting an ordinary field returns what the whole struct holds for it, wherever
+          // the corrupt record field is declared.
+          checkAnswer(df.selectExpr("parsed.b"), Row("x") :: Row("z") :: Nil)
+          checkAnswer(
+            parsed(s"$corrupt string, a int, b string").selectExpr("parsed.b"),
+            Row("x") :: Row("z") :: Nil)
+        }
+
+        // Under case-sensitive resolution the variant is an ordinary field.
+        withSQLConf(SQLConf.CASE_SENSITIVE.key -> "true") {
+          checkAnswer(
+            parsed("a string, _CORRUPT_RECORD string").selectExpr("parsed._CORRUPT_RECORD"),
+            Row("x") :: Row("z") :: Nil)
+        }
+      }
+    }
+  }
+
   test("SPARK-35998: Make from_csv/to_csv to handle year-month intervals properly") {
     val ymDF = Seq(Period.of(1, 2, 0)).toDF()
     Seq(

@@ -104,33 +104,33 @@ case class CSVFileFormat() extends TextBasedFileFormat with DataSourceRegister {
       hadoopConf: Configuration): (PartitionedFile) => Iterator[InternalRow] = {
     val broadcastedHadoopConf =
       SerializableConfiguration.broadcast(sparkSession.sparkContext, hadoopConf)
-    val parsedOptions = getCsvOptions(sparkSession, options)
+    // Resolve the corrupt record column once, here on the driver, also checking its type. The
+    // options carry the resolved name, so every later comparison, including the ones in the
+    // per-file closure and the parsers, is exact.
+    val parsedOptions = getCsvOptions(sparkSession,
+      ExprUtils.withResolvedColumnNameOfCorruptRecord(
+        options, dataSchema, getCsvOptions(sparkSession, options).columnNameOfCorruptRecord))
     val isColumnPruningEnabled = parsedOptions.isColumnPruningEnabled(requiredSchema)
     // The effective `ignoredPathSegmentRegex` for skipping hidden archive entries. Reused from the
     // options' lazily-compiled Pattern (Serializable) instead of re-compiling per file or entry.
     val ignoredPathSegmentRegex = parsedOptions.ignoredPathSegmentRegexPattern
 
-    // Check a field requirement for corrupt records here to throw an exception in a driver side
-    ExprUtils.verifyColumnNameOfCorruptRecord(dataSchema, parsedOptions.columnNameOfCorruptRecord)
-
     if (requiredSchema.length == 1 &&
-      ExprUtils.isCorruptRecordColumn(
-        requiredSchema.head.name, parsedOptions.columnNameOfCorruptRecord)) {
+      requiredSchema.head.name == parsedOptions.columnNameOfCorruptRecord) {
       throw QueryCompilationErrors.queryFromRawFilesIncludeCorruptRecordColumnError()
     }
 
     // Don't push any filter which refers to the "virtual" column which cannot present in the input.
     // Such filters will be applied later on the upper layer.
     val actualFilters =
-      filters.filterNot(_.references.exists(
-        ExprUtils.isCorruptRecordColumn(_, parsedOptions.columnNameOfCorruptRecord)))
+      filters.filterNot(_.references.contains(parsedOptions.columnNameOfCorruptRecord))
 
     (file: PartitionedFile) => {
       val conf = broadcastedHadoopConf.value.value
-      val actualDataSchema = ExprUtils.schemaWithoutCorruptRecordColumn(
-        dataSchema, parsedOptions.columnNameOfCorruptRecord)
-      val actualRequiredSchema = ExprUtils.schemaWithoutCorruptRecordColumn(
-        requiredSchema, parsedOptions.columnNameOfCorruptRecord)
+      val actualDataSchema = StructType(
+        dataSchema.filterNot(_.name == parsedOptions.columnNameOfCorruptRecord))
+      val actualRequiredSchema = StructType(
+        requiredSchema.filterNot(_.name == parsedOptions.columnNameOfCorruptRecord))
       // Use column pruning when specified by Catalyst, except when one or more columns have
       // existence default value(s), since in that case we instruct the CSV parser to disable column
       // pruning and instead read each entire row in order to correctly assign the default value(s).

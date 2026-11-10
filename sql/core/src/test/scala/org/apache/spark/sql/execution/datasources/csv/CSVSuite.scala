@@ -1623,6 +1623,13 @@ abstract class CSVSuite
           Row(0, null, "0,2013-111_11 12:13:14") ::
           Row(1, java.sql.Date.valueOf("1983-08-04"), null) ::
           Nil)
+        // A query for the corrupt record column alone is rejected, as for an exact name.
+        checkError(
+          exception = intercept[AnalysisException] {
+            read().select("_UNPARSED").collect()
+          },
+          condition = "UNSUPPORTED_FEATURE.QUERY_ONLY_CORRUPT_RECORD_COLUMN",
+          parameters = Map.empty)
       }
 
       // Under case-sensitive resolution the names genuinely differ, so `_UNPARSED` stays an
@@ -1633,6 +1640,30 @@ abstract class CSVSuite
           Row(1, java.sql.Date.valueOf("1983-08-04"), null) ::
           Nil)
       }
+    }
+  }
+
+  test("SPARK-59629: csv(Dataset[String]) resolves the corrupt record column once") {
+    val malformed = "0,2013-111_11 12:13:14"
+    val ds = Seq(malformed, "1,1983-08-04").toDS()
+    // The corrupt record field comes first, so that a reader which failed to leave it out of
+    // the parser schema would shift the data columns.
+    val schema = new StructType()
+      .add("_UNPARSED", StringType)
+      .add("a", IntegerType)
+      .add("b", DateType)
+    def read(): DataFrame =
+      spark.read.option("columnNameOfCorruptRecord", "_unparsed").schema(schema).csv(ds)
+
+    val captured =
+      Row(malformed, 0, null) :: Row(null, 1, java.sql.Date.valueOf("1983-08-04")) :: Nil
+    checkAnswer(read(), captured)
+
+    // The field is decided when the DataFrame is created, so running it under another setting
+    // cannot make the parser and the corrupt record handling disagree.
+    val df = read()
+    withSQLConf(SQLConf.CASE_SENSITIVE.key -> "true") {
+      checkAnswer(df, captured)
     }
   }
 

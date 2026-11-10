@@ -18,6 +18,7 @@
 package org.apache.spark.sql.catalyst.expressions
 
 import org.apache.spark.{SparkFunSuite, SparkRuntimeException}
+import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.codegen.GenerateUnsafeProjection
 import org.apache.spark.sql.catalyst.plans.SQLHelper
@@ -585,5 +586,79 @@ class ExprUtilsSuite extends SparkFunSuite with SQLHelper {
 
   test("canEvaluateUnconditionally: non-deterministic expressions are excluded") {
     assert(!ExprUtils.canEvaluateUnconditionally(LessThan(Rand(Literal(0L)), Literal(0.5))))
+  }
+
+  test("SPARK-59629: resolve the corrupt record column of a schema") {
+    def schema(names: String*): StructType = StructType(names.map(StructField(_, StringType)))
+    def resolve(s: StructType, name: String = "_corrupt_record"): String =
+      ExprUtils.resolveColumnNameOfCorruptRecord(s, name)
+
+    withSQLConf(SQLConf.CASE_SENSITIVE.key -> "false") {
+      // Without a matching field the name stays as it is.
+      assert(resolve(schema("a", "b")) === "_corrupt_record")
+      assert(resolve(schema("a", "_corrupt_record")) === "_corrupt_record")
+      // A single field that matches ignoring case is the corrupt record column.
+      assert(resolve(schema("a", "_CORRUPT_RECORD")) === "_CORRUPT_RECORD")
+      // An exactly named field wins over one that matches only ignoring case.
+      assert(resolve(schema("_Corrupt_Record", "_corrupt_record")) === "_corrupt_record")
+      // Several fields that match only ignoring case are ambiguous.
+      checkError(
+        exception = intercept[AnalysisException] {
+          resolve(schema("_Corrupt_Record", "_CORRUPT_RECORD"))
+        },
+        condition = "AMBIGUOUS_COLUMN_OR_FIELD",
+        parameters = Map("name" -> "`_corrupt_record`", "n" -> "2"))
+      // `from_csv` can pass a null name, which names no field.
+      assert(resolve(schema("a", "_CORRUPT_RECORD"), name = null) === null)
+    }
+
+    withSQLConf(SQLConf.CASE_SENSITIVE.key -> "true") {
+      assert(resolve(schema("a", "_CORRUPT_RECORD")) === "_corrupt_record")
+      assert(resolve(schema("_Corrupt_Record", "_CORRUPT_RECORD")) === "_corrupt_record")
+      assert(resolve(schema("a", "_corrupt_record")) === "_corrupt_record")
+    }
+  }
+
+  test("SPARK-59629: the resolved corrupt record column must be a nullable string") {
+    Seq(
+      StructField("_CORRUPT_RECORD", IntegerType),
+      StructField("_CORRUPT_RECORD", StringType, nullable = false)).foreach { field =>
+      val schema = StructType(Seq(StructField("a", StringType), field))
+      // The error names the column as the option spells it.
+      checkError(
+        exception = intercept[AnalysisException] {
+          ExprUtils.resolveColumnNameOfCorruptRecord(schema, "_corrupt_record")
+        },
+        condition = "INVALID_CORRUPT_RECORD_TYPE",
+        parameters = Map(
+          "columnName" -> "`_corrupt_record`",
+          "actualType" -> s"\"${field.dataType.sql}\""))
+      withSQLConf(SQLConf.CASE_SENSITIVE.key -> "true") {
+        assert(
+          ExprUtils.resolveColumnNameOfCorruptRecord(schema, "_corrupt_record") ===
+            "_corrupt_record")
+      }
+    }
+  }
+
+  test("SPARK-59629: fields the optimizer must treat as the corrupt record column") {
+    def schema(names: String*): StructType = StructType(names.map(StructField(_, StringType)))
+    def isCorrupt(s: StructType, ordinal: Int): Boolean =
+      ExprUtils.isCorruptRecordField(s, ordinal, "_corrupt_record")
+
+    withSQLConf(SQLConf.CASE_SENSITIVE.key -> "false") {
+      assert(!isCorrupt(schema("a", "_CORRUPT_RECORD"), 0))
+      assert(isCorrupt(schema("a", "_CORRUPT_RECORD"), 1))
+      // With an exactly named field, a case variant of it is ordinary data.
+      assert(!isCorrupt(schema("_CORRUPT_RECORD", "_corrupt_record"), 0))
+      assert(isCorrupt(schema("_CORRUPT_RECORD", "_corrupt_record"), 1))
+      // Ambiguous fields are all kept, leaving the error to the reader.
+      assert(isCorrupt(schema("_CORRUPT_RECORD", "_Corrupt_Record"), 0))
+      assert(isCorrupt(schema("_CORRUPT_RECORD", "_Corrupt_Record"), 1))
+    }
+    withSQLConf(SQLConf.CASE_SENSITIVE.key -> "true") {
+      assert(!isCorrupt(schema("a", "_CORRUPT_RECORD"), 1))
+      assert(isCorrupt(schema("a", "_corrupt_record"), 1))
+    }
   }
 }

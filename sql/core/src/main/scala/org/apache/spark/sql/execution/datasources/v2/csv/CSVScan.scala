@@ -47,11 +47,13 @@ case class CSVScan(
   extends TextBasedFileScan(sparkSession, options) {
 
   val columnPruning = conf.csvColumnPruning
-  private lazy val parsedOptions: CSVOptions = new CSVOptions(
-    options.asScala.toMap,
+  private def csvOptions(parameters: Map[String, String]): CSVOptions = new CSVOptions(
+    parameters,
     columnPruning = columnPruning,
     conf.sessionLocalTimeZone,
     conf.columnNameOfCorruptRecord)
+
+  private lazy val parsedOptions: CSVOptions = csvOptions(options.asScala.toMap)
 
   override def isSplitable(path: Path): Boolean = {
     CSVDataSource(parsedOptions).isSplitable && super.isSplitable(path)
@@ -67,20 +69,21 @@ case class CSVScan(
   }
 
   override def createReaderFactory(): PartitionReaderFactory = {
-    // Check a field requirement for corrupt records here to throw an exception in a driver side
-    ExprUtils.verifyColumnNameOfCorruptRecord(dataSchema, parsedOptions.columnNameOfCorruptRecord)
+    // Resolve the corrupt record column once, here on the driver, also checking its type. The
+    // options handed to the reader factory carry the resolved name, so every later comparison,
+    // including the ones on executors, is exact.
+    val readOptions = csvOptions(ExprUtils.withResolvedColumnNameOfCorruptRecord(
+      options.asScala.toMap, dataSchema, parsedOptions.columnNameOfCorruptRecord))
 
     if (readDataSchema.length == 1 &&
-      ExprUtils.isCorruptRecordColumn(
-        readDataSchema.head.name, parsedOptions.columnNameOfCorruptRecord)) {
+      readDataSchema.head.name == readOptions.columnNameOfCorruptRecord) {
       throw QueryCompilationErrors.queryFromRawFilesIncludeCorruptRecordColumnError()
     }
 
     // Don't push any filter which refers to the "virtual" column which cannot present in the input.
     // Such filters will be applied later on the upper layer.
     val actualFilters =
-      pushedFilters.filterNot(_.references.exists(
-        ExprUtils.isCorruptRecordColumn(_, parsedOptions.columnNameOfCorruptRecord)))
+      pushedFilters.filterNot(_.references.contains(readOptions.columnNameOfCorruptRecord))
 
     val hadoopConf = newReadHadoopConf()
     val broadcastedConf =
@@ -88,7 +91,7 @@ case class CSVScan(
     // The partition values are already truncated in `FileScan.partitions`.
     // We should use `readPartitionSchema` as the partition schema here.
     CSVPartitionReaderFactory(conf, broadcastedConf,
-      dataSchema, readDataSchema, readPartitionSchema, parsedOptions,
+      dataSchema, readDataSchema, readPartitionSchema, readOptions,
       actualFilters.toImmutableArraySeq)
   }
 

@@ -20,18 +20,20 @@ package org.apache.spark.sql.catalyst.expressions
 import java.text.{DecimalFormat, DecimalFormatSymbols, ParsePosition}
 import java.util.Locale
 
+import org.apache.spark.sql.catalyst.DataSourceOptions
 import org.apache.spark.sql.catalyst.analysis._
 import org.apache.spark.sql.catalyst.analysis.TypeCheckResult
 import org.apache.spark.sql.catalyst.analysis.TypeCheckResult.{DataTypeMismatch, TypeCheckSuccess}
 import org.apache.spark.sql.catalyst.expressions.aggregate.AggregateExpression
 import org.apache.spark.sql.catalyst.optimizer.ReplaceExpressions
 import org.apache.spark.sql.catalyst.plans.logical.Aggregate
+import org.apache.spark.sql.catalyst.trees.CurrentOrigin
 import org.apache.spark.sql.catalyst.trees.TreePattern.PLAN_EXPRESSION
-import org.apache.spark.sql.catalyst.util.{ArrayBasedMapData, CharVarcharUtils}
+import org.apache.spark.sql.catalyst.util.{ArrayBasedMapData, CaseInsensitiveMap, CharVarcharUtils}
 import org.apache.spark.sql.errors.{QueryCompilationErrors, QueryErrorsBase, QueryExecutionErrors}
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.internal.types.{AbstractMapType, StringTypeWithCollation}
-import org.apache.spark.sql.types.{BooleanType, DataType, DateType, DecimalType, DoubleType, FileType, FloatType, FractionalType, MapType, NumericType, StringHelper, StringType, StructType, TimestampNTZType, TimestampType, UserDefinedType, VariantType}
+import org.apache.spark.sql.types.{BooleanType, DataType, DateType, DecimalType, DoubleType, FileType, FloatType, FractionalType, MapType, NumericType, StringHelper, StringType, StructField, StructType, TimestampNTZType, TimestampType, UserDefinedType, VariantType}
 import org.apache.spark.unsafe.types.UTF8String
 
 object ExprUtils extends EvalHelper with QueryErrorsBase {
@@ -96,48 +98,90 @@ object ExprUtils extends EvalHelper with QueryErrorsBase {
   }
 
   /**
-   * Returns whether `fieldName` names the column a datasource writes corrupt records to.
-   *
-   * The comparison goes through `SQLConf.resolver`, so it honours `spark.sql.caseSensitive` like
-   * every other identifier comparison in the analyzer. Matching on `==` instead leaves the field
-   * unrecognised whenever the schema and the `columnNameOfCorruptRecord` option differ only in
-   * case: the column is then treated as ordinary data, and the record that should have been
-   * captured in it is lost.
+   * The fields of `schema` that `columnNameOfCorruptRecord` can refer to. A field named exactly
+   * like the option always wins, so a schema that already works keeps its meaning. Otherwise,
+   * under case-insensitive resolution, these are the fields the session resolver matches.
    */
-  def isCorruptRecordColumn(fieldName: String, columnNameOfCorruptRecord: String): Boolean = {
-    SQLConf.get.resolver(fieldName, columnNameOfCorruptRecord)
-  }
-
-  /**
-   * Returns `schema` without the column a datasource writes corrupt records to, which is the
-   * schema the underlying record parser is given. The corrupt record column holds the raw text
-   * of a record that failed to parse, so it is never read from the record itself.
-   */
-  def schemaWithoutCorruptRecordColumn(
+  private def corruptRecordCandidates(
       schema: StructType,
-      columnNameOfCorruptRecord: String): StructType = {
-    StructType(schema.filterNot(f => isCorruptRecordColumn(f.name, columnNameOfCorruptRecord)))
-  }
-
-  /**
-   * Resolves the field a datasource writes corrupt records to, honouring
-   * `spark.sql.caseSensitive` the same way the rest of schema resolution does. Returns None when
-   * the schema declares no such field, which is the normal case for a reader that does not ask
-   * for the corrupt record.
-   */
-  def corruptRecordFieldIndex(
-      schema: StructType,
-      columnNameOfCorruptRecord: String): Option[Int] = {
-    // The name can be null: `from_csv` and `from_json` hold it in a transient field, so it reads
-    // back as null after the expression is serialized. A null never names a field, and the
-    // case-insensitive lookup goes through a CaseInsensitiveMap, which would throw on it.
+      columnNameOfCorruptRecord: String): Seq[StructField] = {
     if (columnNameOfCorruptRecord == null) {
-      None
-    } else if (SQLConf.get.caseSensitiveAnalysis) {
-      schema.getFieldIndex(columnNameOfCorruptRecord)
+      // `from_csv` holds the name in a transient field, so it reads back as null after the
+      // expression is serialized. A null never names a field.
+      Nil
     } else {
-      schema.getFieldIndexCaseInsensitive(columnNameOfCorruptRecord)
+      val exact = schema.fields.filter(_.name == columnNameOfCorruptRecord)
+      if (exact.nonEmpty || SQLConf.get.caseSensitiveAnalysis) {
+        exact.toSeq
+      } else {
+        val resolver = SQLConf.get.resolver
+        schema.fields.filter(f => resolver(f.name, columnNameOfCorruptRecord)).toSeq
+      }
     }
+  }
+
+  /**
+   * Decides which field of `schema` is the corrupt record column of a CSV or JSON reader and
+   * returns that field's exact name, honouring `spark.sql.caseSensitive`. When no field matches,
+   * the name is returned unchanged. Several fields that match only ignoring case are ambiguous
+   * and are rejected.
+   *
+   * A reader has to make this decision once and compare field names exactly against the result
+   * everywhere else, including on executors: the record parser drops the column from its schema
+   * and [[org.apache.spark.sql.catalyst.util.FailureSafeParser]] copies the parsed row back by
+   * position, so the two must agree on the field or values land in the wrong columns.
+   *
+   * This also checks that the resolved field is a nullable string, as
+   * [[verifyColumnNameOfCorruptRecord]] does, reporting the name as the user spelled it.
+   *
+   * XML does not resolve the name this way yet and still matches it exactly.
+   */
+  def resolveColumnNameOfCorruptRecord(
+      schema: StructType,
+      columnNameOfCorruptRecord: String): String = {
+    val candidates = corruptRecordCandidates(schema, columnNameOfCorruptRecord)
+    val names = candidates.map(_.name).distinct
+    if (names.length > 1) {
+      throw QueryCompilationErrors.ambiguousColumnOrFieldError(
+        Seq(columnNameOfCorruptRecord), names.length, CurrentOrigin.get)
+    }
+    candidates.foreach { f =>
+      if (!f.dataType.isInstanceOf[StringType] || !f.nullable) {
+        throw QueryCompilationErrors.invalidFieldTypeForCorruptRecordError(
+          columnNameOfCorruptRecord, f.dataType)
+      }
+    }
+    names.headOption.getOrElse(columnNameOfCorruptRecord)
+  }
+
+  /**
+   * Returns the reader `options` with `columnNameOfCorruptRecord` set to the name
+   * [[resolveColumnNameOfCorruptRecord]] picks for `schema`, so that the options a reader hands
+   * to its parsers carry the resolved name.
+   */
+  def withResolvedColumnNameOfCorruptRecord(
+      options: Map[String, String],
+      schema: StructType,
+      columnNameOfCorruptRecord: String): Map[String, String] = {
+    val resolved = resolveColumnNameOfCorruptRecord(schema, columnNameOfCorruptRecord)
+    if (resolved == columnNameOfCorruptRecord) {
+      options
+    } else {
+      CaseInsensitiveMap(options) + (DataSourceOptions.COLUMN_NAME_OF_CORRUPT_RECORD -> resolved)
+    }
+  }
+
+  /**
+   * Whether the field at `ordinal` is one [[resolveColumnNameOfCorruptRecord]] can pick as the
+   * corrupt record column of `schema`. Unlike the resolution this never throws, so the optimizer
+   * can use it to keep such a field from being pruned.
+   */
+  def isCorruptRecordField(
+      schema: StructType,
+      ordinal: Int,
+      columnNameOfCorruptRecord: String): Boolean = {
+    val name = schema(ordinal).name
+    corruptRecordCandidates(schema, columnNameOfCorruptRecord).exists(_.name == name)
   }
 
   /**
@@ -147,7 +191,7 @@ object ExprUtils extends EvalHelper with QueryErrorsBase {
   def verifyColumnNameOfCorruptRecord(
       schema: StructType,
       columnNameOfCorruptRecord: String): Unit = {
-    corruptRecordFieldIndex(schema, columnNameOfCorruptRecord).foreach { corruptFieldIndex =>
+    schema.getFieldIndex(columnNameOfCorruptRecord).foreach { corruptFieldIndex =>
       val f = schema(corruptFieldIndex)
       if (!f.dataType.isInstanceOf[StringType] || !f.nullable) {
         throw QueryCompilationErrors.invalidFieldTypeForCorruptRecordError(

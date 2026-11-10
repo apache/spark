@@ -45,9 +45,13 @@ import org.apache.spark.unsafe.types.UTF8String
 object OptimizeCsvJsonExprs extends Rule[LogicalPlan] {
   private def nameOfCorruptRecord = conf.columnNameOfCorruptRecord
 
-  /** Whether the field this extracts is the corrupt record column of its `JsonToStructs`. */
+  /**
+   * Whether the field this extracts is the corrupt record column of its `JsonToStructs`. This
+   * follows the rule the evaluators resolve the column with, so a field that matches the name
+   * only ignoring case counts under case-insensitive resolution.
+   */
   private def selectsCorruptRecord(g: GetStructField): Boolean =
-    g.childSchema(g.ordinal).name == nameOfCorruptRecord
+    ExprUtils.isCorruptRecordField(g.childSchema, g.ordinal, nameOfCorruptRecord)
 
   private type SimpleJsonPath = Seq[GetJsonObject.SimpleJsonPathSegment]
   private type SharedJsonCandidate = (GetJsonObject, SimpleJsonPath, String)
@@ -491,7 +495,8 @@ object OptimizeCsvJsonExprs extends Rule[LogicalPlan] {
 
   private val csvOptimization: PartialFunction[Expression, Expression] = {
     case g @ GetStructField(c @ CsvToStructs(schema: StructType, _, _, _, None), ordinal, _)
-        if schema.length > 1 && c.options.isEmpty && schema(ordinal).name != nameOfCorruptRecord =>
+        if schema.length > 1 && c.options.isEmpty &&
+          !ExprUtils.isCorruptRecordField(schema, ordinal, nameOfCorruptRecord) =>
         // When the parse mode is permissive, and corrupt column is not selected, we can prune here
         // from `GetStructField`. To be more conservative, it does not optimize when any option
         // is set.
