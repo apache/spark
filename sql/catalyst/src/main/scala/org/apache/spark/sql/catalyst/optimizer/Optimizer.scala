@@ -2343,9 +2343,7 @@ object InferFiltersFromConstraints extends Rule[LogicalPlan]
       stripCannotFail(ConstantFolding.constantFolding(constraint, isConditionalBranch = true)))
   }
 
-  // Top-down, so that each cast is judged by the type of its original input.
   private def stripCannotFail(e: Expression): Expression = e match {
-    case c: Cast if isNumericUpCast(c.child.dataType, c.dataType) => stripCannotFail(c.child)
     // An integral remainder by a non-zero constant, e.g. `x % 2 = 0`, never fails.
     case r: Remainder if r.dataType.isInstanceOf[IntegralType] && isNonZeroIntegral(r.right) =>
       stripCannotFail(r.left)
@@ -2359,11 +2357,6 @@ object InferFiltersFromConstraints extends Rule[LogicalPlan]
 
   private def isNonZeroIntegral(e: Expression): Boolean = e match {
     case Literal(v, _: IntegralType) => v != null && v != 0
-    case _ => false
-  }
-
-  private def isNumericUpCast(from: DataType, to: DataType): Boolean = (from, to) match {
-    case (_: NumericType, _: NumericType) => Cast.canUpCast(from, to)
     case _ => false
   }
 }

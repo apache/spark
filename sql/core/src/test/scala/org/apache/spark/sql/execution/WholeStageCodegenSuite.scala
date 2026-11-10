@@ -3060,10 +3060,17 @@ class WholeStageCodegenSuite extends SharedSparkSession
       val noRaise = "SELECT a FROM t WHERE (a > 0 OR b > 0) AND x = 1 AND y = 0"
       checkAnswer(sql(noRaise), Row(0))
       assert(!hasNullConjunctFlag(noRaise))
-      // `y + 1 > 0` can raise, so the flag is generated.
+      // `y + 1 > 0` can raise in ANSI mode, so the flag is generated.
       val raise = "SELECT a FROM t WHERE (a > 0 OR b > 0) AND x = 1 AND y + 1 > 0"
-      checkAnswer(sql(raise), Row(0))
-      assert(hasNullConjunctFlag(raise))
+      withSQLConf(SQLConf.ANSI_ENABLED.key -> "true") {
+        checkAnswer(sql(raise), Row(0))
+        assert(hasNullConjunctFlag(raise))
+      }
+      // With ANSI mode off, it can not, so no flag is generated.
+      withSQLConf(SQLConf.ANSI_ENABLED.key -> "false") {
+        checkAnswer(sql(raise), Row(0))
+        assert(!hasNullConjunctFlag(raise))
+      }
     }
   }
 
