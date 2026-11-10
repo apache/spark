@@ -66,11 +66,15 @@ public interface SupportsExternalLookup extends ScanBuilder {
    * <p>
    * A comparison of a lookup column with a constant, such as {@code t.tier >= 2}, from the join
    * condition or from a filter above an inner join, goes onto the lookup side as for an ordinary
-   * join, so a source that supports filter pushdown receives it as a pushed filter before this
-   * method is called. Spark also offers it here, with a constant parameter, so that a source that
-   * needs it in its access path, as the constant tenant of a composite key, can select it whether
-   * or not it accepts the pushed filter. Either way, Spark evaluates it again on every returned
-   * row.
+   * join. A source that supports filter pushdown receives it as a pushed filter before this method
+   * is called when Spark can translate it into a source filter, as it can a comparison with a
+   * literal. Spark keeps one that it cannot translate, such as a comparison with a constant that a
+   * Scala UDF computes. Spark also offers an equality with a constant here, whatever form the
+   * constant takes, with a constant parameter, so that a source that needs it in its access path,
+   * as the constant tenant of a composite key, can select it whether or not it accepts the pushed
+   * filter. It offers a range only when its constant cannot fail to evaluate, as above, so a range
+   * with a constant that a Scala UDF computes is neither offered nor pushed. In every case, Spark
+   * evaluates the comparison again on every returned row.
    * <ul>
    *   <li>The result must be non-null and hold offered instances, unchanged, without nulls or
    *   duplicates. Spark matches them by identity, not {@code equals}.</li>
