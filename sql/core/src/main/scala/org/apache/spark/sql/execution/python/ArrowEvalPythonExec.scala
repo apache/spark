@@ -113,15 +113,17 @@ case class ArrowEvalPythonExec(
     }
   }
 
-  // When the child supports columnar output (e.g., Arrow-backed DSv2 connectors),
-  // accept columnar input to avoid the ColumnarToRow -> ArrowWriter round-trip.
-  // The Arrow FieldVectors are extracted directly from ArrowColumnVector and
-  // serialized to IPC, bypassing the row-based ArrowWriter conversion.
-  // This node then outputs only columnar batches, so the planner inserts a
-  // ColumnarToRowExec above it for a row-based parent, which releases each
-  // batch once its rows are consumed. Otherwise it reads rows from its child,
-  // even from one that also supports columnar, such as the scan of the Arrow
-  // cache. Either way, the choice is fixed when the plan is built.
+  // When the child supports columnar output (e.g., Arrow-backed DSv2 connectors)
+  // and columnar input is enabled, accept columnar input: the UDF inputs of a
+  // batch whose columns are ArrowColumnVectors are serialized to IPC directly,
+  // bypassing the ColumnarToRow -> ArrowWriter round-trip. Each input batch is
+  // released once it has been written to Python, and the pass-through columns
+  // are copied as rows and joined with the results, which are converted back to
+  // columnar batches. This node then outputs only columnar batches, so the
+  // planner inserts a ColumnarToRowExec above it for a row-based parent.
+  // Otherwise it reads rows from its child, even from one that also supports
+  // columnar, such as the scan of the Arrow cache. Either way, the choice is
+  // fixed when the plan is built.
   override def supportsColumnar: Boolean =
     child.supportsColumnar && conf.arrowPySparkUDFColumnarInputEnabled
 

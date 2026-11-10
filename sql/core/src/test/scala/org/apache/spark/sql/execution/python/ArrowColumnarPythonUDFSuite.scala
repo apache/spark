@@ -383,9 +383,13 @@ class ArrowColumnarPythonUDFSuite extends SharedSparkSession {
         assert(ArrowBackedDataSourceV2.releasedBatches.get == numBatches)
         assert(ArrowBackedDataSourceV2.maxUnreleasedBatches.get == 1)
 
-        // A limit stops consuming the output batches early, and the generated code of
-        // ColumnarToRowExec closes the current one.
-        assert(result.limit(10).selectExpr("count(*)").head().getLong(0) == 10)
+        // A limit stops consuming the output batches early, possibly before the input batches
+        // that have been read are all released: the source closes them when the task completes,
+        // and closing its allocator then fails the task if any of their buffers is referenced.
+        val limited = result.limit(10)
+        assert(collectNodes[ArrowEvalPythonExec](limited.queryExecution.executedPlan).nonEmpty)
+        assert(limited.collect().map(_.getString(4)).toSeq ==
+          (0 until 10).map(id => s"row_$id$suffix"))
       }
   }
 
