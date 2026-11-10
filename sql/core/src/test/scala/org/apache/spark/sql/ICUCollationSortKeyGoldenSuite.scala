@@ -376,9 +376,12 @@ class ICUCollationSortKeyGoldenSuite extends SparkFunSuite {
       s"variation selector sort-key hex is empty " +
         s"(vs15='$vs15Hex', vs16='$vs16Hex')")
   }
+
   test("ICU locale tailorings for sr, zh, ja, sv, de, hi and ko are recorded") {
-    // One block per locale tailoring; inputs are exemplar characters whose
-    // sort keys differ between ICU4J 78.3 and 79.1 (sr/sr_Latn are a baseline).
+    // One block per locale tailoring. Inputs are exemplar characters of each
+    // locale whose sort keys changed in a past ICU upgrade (78.3 to 79.1), so
+    // they are likely to move again; sr and sr_Latn did not change and serve
+    // as a baseline.
     val missing = localeTailoringInputs.filterNot { case (collation, input) =>
       rowFor(collation, input).exists(row => hexOf(row).nonEmpty)
     }
