@@ -269,7 +269,7 @@ final class Decimal extends Ordered[Decimal] with Serializable {
    *   if the decimal is too big to fit in Byte type.
    */
   private[sql] def roundToByte(): Byte =
-    roundToNumeric[Byte](ByteType, Byte.MaxValue, Byte.MinValue)(_.toByte)
+    roundToNumeric[Byte](ByteType)(_.toByte)
 
   /**
    * @return
@@ -278,7 +278,7 @@ final class Decimal extends Ordered[Decimal] with Serializable {
    *   if the decimal is too big to fit in Short type.
    */
   private[sql] def roundToShort(): Short =
-    roundToNumeric[Short](ShortType, Short.MaxValue, Short.MinValue)(_.toShort)
+    roundToNumeric[Short](ShortType)(_.toShort)
 
   /**
    * @return
@@ -287,45 +287,34 @@ final class Decimal extends Ordered[Decimal] with Serializable {
    *   if the decimal too big to fit in Int type.
    */
   private[sql] def roundToInt(): Int =
-    roundToNumeric[Int](IntegerType, Int.MaxValue, Int.MinValue)(_.toInt)
+    roundToNumeric[Int](IntegerType)(_.toInt)
 
   private def toSqlValue: String = this.toString + "BD"
 
-  private def roundToNumeric[T <: AnyVal](
-      integralType: IntegralType,
-      maxValue: Int,
-      minValue: Int)(f: Long => T): T = {
-    if (decimalVal.eq(null)) {
-      val numericVal = f(actualLongVal)
-      if (actualLongVal == numericVal) {
-        numericVal
-      } else {
-        throw DataTypeErrors.castingCauseOverflowError(
-          toSqlValue,
-          DecimalType(this.precision, this.scale),
-          integralType)
-      }
+  private def roundToNumeric[T <: AnyVal](integralType: IntegralType)(f: Long => T): T = {
+    val integralVal = if (decimalVal.eq(null)) {
+      actualLongVal
     } else {
       // Truncate exactly, as `roundToLong` does. Going through a Double would round a value
       // whose fraction is close enough to 1 up to the next integer, returning a value one too
       // high or, at a bound, overflowing.
       val truncated = decimalVal.bigDecimal.toBigInteger
-      // intValue() keeps only the low 32 bits, so it is exact only when bitLength() < 32.
-      val intVal = truncated.intValue()
-      if (truncated.bitLength() < 32 && intVal <= maxValue && intVal >= minValue) {
-        f(intVal)
-      } else {
-        throw DataTypeErrors.castingCauseOverflowError(
-          toSqlValue,
-          DecimalType(this.precision, this.scale),
-          integralType)
-      }
+      // longValue() keeps only the low 64 bits, so it is exact only when bitLength() < 64.
+      if (truncated.bitLength() < 64) truncated.longValue() else throw overflowError(integralType)
     }
+    val numericVal = f(integralVal)
+    if (integralVal == numericVal) numericVal else throw overflowError(integralType)
   }
+
+  private def overflowError(integralType: IntegralType): ArithmeticException =
+    DataTypeErrors.castingCauseOverflowError(
+      toSqlValue,
+      DecimalType(this.precision, this.scale),
+      integralType)
 
   /**
    * @return
-   *   the Long value that is equal to the rounded decimal.
+   *   the Long value of the decimal truncated toward zero.
    * @throws ArithmeticException
    *   if the decimal too big to fit in Long type.
    */
