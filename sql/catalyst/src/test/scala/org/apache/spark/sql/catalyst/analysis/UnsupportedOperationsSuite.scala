@@ -658,6 +658,43 @@ class UnsupportedOperationsSuite extends SparkFunSuite with SQLHelper {
     }
   }
 
+  {
+    val rightTime = AttributeReference("rightTime", TimestampType)()
+      .withMetadata(watermarkMetadata)
+    val unwatermarkedTime = AttributeReference("leftTime", TimestampType)()
+    val right = new TestStreamingRelation(rightTime)
+
+    // A range bound that counts a local day as 24 hours, or reads a truncated time as exact, can
+    // put the cutoff above a row that can still match. Only an input with its own watermark keeps
+    // such a bound, so an outer join of an input without one cannot finalize its rows.
+    for {
+      watermarked <- Seq(false, true)
+      zone <- Seq("UTC", "America/Los_Angeles")
+    } {
+      val leftTime = if (watermarked) {
+        unwatermarkedTime.withMetadata(watermarkMetadata)
+      } else {
+        unwatermarkedTime
+      }
+      val left = new TestStreamingRelation(leftTime)
+      val dayLater = TimestampAddInterval(leftTime, Literal(Duration.ofDays(1)), Some(zone))
+      val inputs = if (watermarked) "both inputs watermarked" else "only the right watermarked"
+      val plan = left.join(right, joinType = LeftOuter,
+        condition = Some(rightTime >= leftTime && rightTime <= dayLater))
+      val name = s"LeftOuter with a one-day range in $zone, $inputs"
+      if (watermarked || zone == "UTC") {
+        assertSupportedInStreamingPlan(name, plan, OutputMode.Append())
+      } else {
+        assertNotSupportedInStreamingPlan(name, plan, OutputMode.Append(),
+          Seq("requires a watermark on the right input"))
+      }
+    }
+    assertNotSupportedInStreamingPlan("LeftOuter with a range over a truncating cast",
+      new TestStreamingRelation(unwatermarkedTime).join(right, joinType = LeftOuter,
+        condition = Some(unwatermarkedTime.cast(LongType) >= rightTime.cast(LongType) + 5L)),
+      OutputMode.Append(), Seq("requires a watermark on the right input"))
+  }
+
   // multi-aggregations only supported in Append mode
   assertPassOnGlobalWatermarkLimit(
     "aggregate - multiple streaming aggregations - append",

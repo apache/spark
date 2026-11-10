@@ -319,7 +319,8 @@ object StreamingSymmetricHashJoinHelper extends Logging {
     }
     candidates.iterator.flatMap { attribute =>
       StreamingJoinHelper.getStateValueWatermark(AttributeSet(Seq(attribute)),
-        AttributeSet(otherEventTime.toSeq), condition, eventWatermark).map(attribute -> _)
+        AttributeSet(otherEventTime.toSeq), condition, eventWatermark,
+        exactForUnwatermarkedColumns = true).map(attribute -> _)
     }.take(1).toSeq.headOption
   }
 

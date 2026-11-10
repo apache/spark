@@ -718,7 +718,8 @@ object UnsupportedOperationChecker extends Logging {
       val eventTime = otherInput.output.find(_.metadata.contains(EventTimeWatermark.delayKey))
       StreamingJoinHelper.getStateKeyWatermarkOrdinal(otherKeys, otherInput.output).isDefined ||
         StreamingJoinHelper.getStateValueWatermark(stateInput.outputSet,
-          AttributeSet(eventTime.toSeq), join.condition, Some(1000000)).isDefined
+          AttributeSet(eventTime.toSeq), join.condition, Some(1000000),
+          exactForUnwatermarkedColumns = true).isDefined
     }
 
     val leftCanEvict = canEvictState(join.left, join.right, rightKeys)

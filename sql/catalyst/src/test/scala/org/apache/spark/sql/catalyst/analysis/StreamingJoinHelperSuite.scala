@@ -183,6 +183,58 @@ class StreamingJoinHelperSuite extends AnalysisTest {
       Literal(Long.MinValue, DayTimeIntervalType()), Some("UTC"))) === unbounded)
   }
 
+  test("inexact arithmetic gives no cutoff for a column without a watermark") {
+    val watermark = new MetadataBuilder().putLong(EventTimeWatermark.delayKey, 1000).build()
+    val leftTime = AttributeReference("leftTime", TimestampType)()
+    val leftEventTime = AttributeReference("leftEventTime", TimestampType, metadata = watermark)()
+    val rightTime = AttributeReference("rightTime", TimestampType, metadata = watermark)()
+
+    case class DummyLeafNode() extends LeafNode {
+      override def output: Seq[Attribute] = Seq(leftTime, leftEventTime, rightTime)
+      override def computeStats(): Statistics = Statistics(sizeInBytes = BigInt(0))
+    }
+
+    def cutoff(conditionStr: String, column: Attribute, exact: Boolean): Option[Long] = {
+      val plan = Filter(CatalystSqlParser.parseExpression(conditionStr), DummyLeafNode())
+      val condition = SimpleTestOptimizer.execute(SimpleAnalyzer.execute(plan))
+        .asInstanceOf[Filter].condition
+      StreamingJoinHelper.getStateValueWatermark(AttributeSet(Seq(column)),
+        AttributeSet(Seq(rightTime)), Some(condition), Some(100000000L),
+        exactForUnwatermarkedColumns = exact)
+    }
+
+    val day = 86400000L
+    val dayBound = Some(100000000L - day - 1)
+    val castBound = Some(100000000L + 5000L - 1)
+    // (condition, session time zone, column, cutoff with the flag, cutoff without it)
+    Seq(
+      // Spark adds whole days in the session time zone, where a day can be 23 or 25 hours.
+      ("rightTime <= leftTime + INTERVAL 1 DAY", "America/Los_Angeles", leftTime, None, dayBound),
+      ("rightTime <= leftTime + INTERVAL 1 DAY", "UTC", leftTime, dayBound, dayBound),
+      ("rightTime - INTERVAL 1 DAY <= leftTime", "America/Los_Angeles", leftTime, None, dayBound),
+      ("rightTime <= leftTime + INTERVAL 2 HOURS", "America/Los_Angeles", leftTime,
+        Some(100000000L - 7200000L - 1), Some(100000000L - 7200000L - 1)),
+      // CAST(ts AS BIGINT) drops the fraction of a second.
+      ("CAST(leftTime AS BIGINT) >= CAST(rightTime AS BIGINT) + 5", "UTC", leftTime, None,
+        castBound),
+      ("leftTime >= CAST(CAST(rightTime AS BIGINT) AS TIMESTAMP)", "UTC", leftTime, None,
+        Some(100000000L - 1)),
+      ("CAST(leftTime AS DOUBLE) >= CAST(rightTime AS DOUBLE) + 5", "UTC", leftTime, castBound,
+        castBound),
+      // A column with its own watermark keeps its cutoff.
+      ("rightTime <= leftEventTime + INTERVAL 1 DAY", "America/Los_Angeles", leftEventTime,
+        dayBound, dayBound),
+      ("CAST(leftEventTime AS BIGINT) >= CAST(rightTime AS BIGINT) + 5", "UTC", leftEventTime,
+        castBound, castBound)).foreach { case (conditionStr, zone, column, flagged, unflagged) =>
+      withSQLConf(SQLConf.SESSION_LOCAL_TIMEZONE.key -> zone) {
+        withClue(s"$conditionStr $zone") {
+          assert(cutoff(conditionStr, column, exact = true) === flagged)
+          assert(cutoff(conditionStr, column, exact = false) === unflagged)
+        }
+      }
+    }
+  }
+
   test("extract watermark from time condition") {
     val attributesToFindConstraintFor = Seq(
       AttributeReference("leftTime", TimestampType)(),

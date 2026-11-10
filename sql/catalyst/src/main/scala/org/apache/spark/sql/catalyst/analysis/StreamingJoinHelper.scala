@@ -24,6 +24,7 @@ import org.apache.spark.internal.LogKeys._
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.plans.logical.EventTimeWatermark._
 import org.apache.spark.sql.catalyst.util.DateTimeConstants.MICROS_PER_DAY
+import org.apache.spark.sql.catalyst.util.DateTimeUtils
 import org.apache.spark.sql.types._
 import org.apache.spark.unsafe.types.CalendarInterval
 
@@ -220,13 +221,18 @@ object StreamingJoinHelper extends PredicateHelper with Logging {
    * @param attributesWithEventWatermark  attributes of the other side which has a watermark column
    * @param joinCondition                 join condition
    * @param eventWatermark                watermark defined on the input event data
+   * @param exactForUnwatermarkedColumns  whether a column without its own watermark gets no
+   *                                      cutoff from a condition that the solver counts
+   *                                      inexactly. State eviction and the admission check set
+   *                                      it, so they agree.
    * @return state value watermark in milliseconds, is possible.
    */
   def getStateValueWatermark(
       attributesToFindStateWatermarkFor: AttributeSet,
       attributesWithEventWatermark: AttributeSet,
       joinCondition: Option[Expression],
-      eventWatermark: Option[Long]): Option[Long] = {
+      eventWatermark: Option[Long],
+      exactForUnwatermarkedColumns: Boolean = false): Option[Long] = {
 
     // If condition or event time watermark is not provided, then cannot calculate state watermark
     if (joinCondition.isEmpty || eventWatermark.isEmpty) return None
@@ -236,8 +242,8 @@ object StreamingJoinHelper extends PredicateHelper with Logging {
 
     def getStateWatermarkSafely(l: Expression, r: Expression): Option[Long] = {
       try {
-        getStateWatermarkFromLessThenPredicate(
-          l, r, attributesToFindStateWatermarkFor, attributesWithEventWatermark, eventWatermark)
+        getStateWatermarkFromLessThenPredicate(l, r, attributesToFindStateWatermarkFor,
+          attributesWithEventWatermark, eventWatermark, exactForUnwatermarkedColumns)
       } catch {
         case NonFatal(e) =>
           logWarning(log"Error trying to extract state constraint from condition " +
@@ -286,7 +292,8 @@ object StreamingJoinHelper extends PredicateHelper with Logging {
       rightExpr: Expression,
       attributesToFindStateWatermarkFor: AttributeSet,
       attributesWithEventWatermark: AttributeSet,
-      eventWatermark: Option[Long]): Option[Long] = {
+      eventWatermark: Option[Long],
+      exactForUnwatermarkedColumns: Boolean): Option[Long] = {
 
     val attributesInCondition =
       leftExpr.collect { case a: AttributeReference => a } ++
@@ -340,6 +347,23 @@ object StreamingJoinHelper extends PredicateHelper with Logging {
       return None
     }
 
+    // The terms count a whole day as 24 hours, although Spark adds days in the session time
+    // zone, where a day can be 23 or 25 hours, and read CAST(ts AS BIGINT) as ts, although the
+    // cast drops the fraction of a second. Either can put the cutoff above a row that can still
+    // match. A column with its own watermark keeps such a cutoff, as existing queries rely on
+    // it. With exactForUnwatermarkedColumns, any other column, such as the bounded column of an
+    // input without a watermark, gets no cutoff from such a condition.
+    val stateColumnHasWatermark = constraintTerm.exists {
+      case a: AttributeReference =>
+        attributesToFindStateWatermarkFor.contains(a) && a.metadata.contains(delayKey)
+      case _ => false
+    }
+    if (exactForUnwatermarkedColumns && !stateColumnHasWatermark &&
+        hasInexactArithmetic(allOnLeftExpr)) {
+      logDebug(s"Inexact arithmetic gives an unwatermarked column no cutoff: $allOnLeftExpr")
+      return None
+    }
+
     // Replace watermark attribute with watermark value, and generate the resolved expression
     // from the other terms. That is,
     // rightTime-with-watermark, c1, -c2  =>  watermark, c1, -c2  =>  watermark + c1 + (-c2)
@@ -364,6 +388,36 @@ object StreamingJoinHelper extends PredicateHelper with Logging {
       log"constraint:\t${MDC(WATERMARK_CONSTRAINT, exprWithWatermarkSubstituted)}")
     val constraintValue = exprWithWatermarkSubstituted.eval().asInstanceOf[java.lang.Double]
     Some((Double2double(constraintValue) / 1000.0).toLong)
+  }
+
+  /**
+   * Whether the solver counts part of the expression inexactly: whole days added in a time zone
+   * that is not fixed-offset, where a day can be 23 or 25 hours, or a cast that drops part of a
+   * time, such as CAST(ts AS BIGINT).
+   */
+  private def hasInexactArithmetic(expr: Expression): Boolean = {
+    def hasWholeDays(interval: Expression): Boolean = {
+      // An interval that cannot be evaluated here counts as inexact.
+      def value = try Option(interval.eval()) catch { case NonFatal(_) => None }
+      !interval.foldable || value.forall {
+        case micros: Long => micros <= -MICROS_PER_DAY || micros >= MICROS_PER_DAY
+        case calendarInterval: CalendarInterval => calendarInterval.days != 0
+        case _ => true
+      }
+    }
+    def isTruncatingCast(from: DataType, to: DataType): Boolean =
+      !from.isInstanceOf[IntegralType] && (to match {
+        case _: IntegralType | FloatType => true
+        case decimal: DecimalType => decimal.scale < 6
+        case _ => false
+      })
+    expr.exists {
+      case TimestampAddInterval(_, interval, timeZoneId) =>
+        !timeZoneId.exists(DateTimeUtils.getZoneId(_).getRules.isFixedOffset) &&
+          hasWholeDays(interval)
+      case Cast(child, dataType, _, _) => isTruncatingCast(child.dataType, dataType)
+      case _ => false
+    }
   }
 
   /**
