@@ -486,6 +486,10 @@ case class StreamingDataSourceV2Relation(
  *                   the stream return these columns, so a planner must build the scan node from
  *                   them rather than from `output`, and check that the plan reads no other column
  *                   of `output`, as `DataSourceV2Strategy` does.
+ * @param pushedFilters the filters that the scan builder got, over `output`, which the scan may
+ *                      apply in any form. The plan of each micro-batch must apply them to all the
+ *                      rows of the relation too, so that the scan cannot drop a row that the plan
+ *                      keeps, which `StreamingV2ScanPushDown.checkPushedFilters` checks.
  */
 case class StreamingDataSourceV2ScanRelation(
     relation: StreamingDataSourceV2Relation,
@@ -494,7 +498,8 @@ case class StreamingDataSourceV2ScanRelation(
     stream: SparkDataStream,
     startOffset: Option[Offset] = None,
     endOffset: Option[Offset] = None,
-    scanOutput: Option[Seq[AttributeReference]] = None)
+    scanOutput: Option[Seq[AttributeReference]] = None,
+    pushedFilters: Seq[Expression] = Nil)
   extends LeafNode with MultiInstanceRelation with NamedRelation  {
 
   val (catalog, identifier) = (relation.catalog, relation.identifier)
@@ -505,8 +510,26 @@ case class StreamingDataSourceV2ScanRelation(
     val scanned = scanOutput.map { columns =>
       s", ScanOutput: ${truncatedString(columns, "[", ", ", "]", maxFields)}"
     }
+    // The filters that the scan builder was given, which the plan of each micro-batch applies
+    // after the scan too. Unlike the PushedFilters of a batch scan, these are not the filters that
+    // the builder took.
+    val filters = if (pushedFilters.nonEmpty) {
+      s", FiltersOfScanBuilder: ${truncatedString(pushedFilters, "[", ", ", "]", maxFields)}"
+    } else {
+      ""
+    }
     statePrefix + "StreamingDataSourceV2ScanRelation" +
-      s"${truncatedString(output, "[", ", ", "]", maxFields)} $name" + scanned.getOrElse("")
+      s"${truncatedString(output, "[", ", ", "]", maxFields)} $name" + scanned.getOrElse("") +
+      filters
+  }
+
+  // The default canonicalization renumbers the attributes of `output` and `scanOutput`, but not
+  // those inside `pushedFilters`, which are over `output`: they are normalized against `output`,
+  // so that two copies of the same scan, such as the relation and its `newInstance()`, have the
+  // same result.
+  override def doCanonicalize(): StreamingDataSourceV2ScanRelation = {
+    super.doCanonicalize().asInstanceOf[StreamingDataSourceV2ScanRelation]
+      .copy(pushedFilters = pushedFilters.map(QueryPlan.normalizeExpressions(_, output)))
   }
 
   override def isStreaming: Boolean = true
@@ -516,7 +539,10 @@ case class StreamingDataSourceV2ScanRelation(
     val newAttributes = AttributeMap(output.zip(newOutput))
     copy(
       output = newOutput,
-      scanOutput = scanOutput.map(_.map(newAttributes)))
+      scanOutput = scanOutput.map(_.map(newAttributes)),
+      pushedFilters = pushedFilters.map(_.transform {
+        case a: AttributeReference => a.withExprId(newAttributes.getOrElse(a, a).exprId)
+      }))
   }
 
   override def computeStats(): Statistics = scan match {
@@ -533,7 +559,8 @@ case class StreamingDataSourceV2ScanRelation(
       case _ => None
     }
 
-    Seq(output, qualifiedTableName, scan, stream, startOffset, endOffset, scanOutput)
+    Seq(output, qualifiedTableName, scan, stream, startOffset, endOffset, scanOutput,
+      pushedFilters)
   }
 
   override protected def stringArgs: Iterator[Any] = stringArgsVal.iterator
