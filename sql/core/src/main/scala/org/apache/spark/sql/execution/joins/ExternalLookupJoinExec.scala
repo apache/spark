@@ -19,9 +19,9 @@ package org.apache.spark.sql.execution.joins
 
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.catalyst.InternalRow
-import org.apache.spark.sql.catalyst.expressions.{And, Attribute, AttributeMap, AttributeSet,
-  BoundReference, EqualNullSafe, EqualTo, Expression, ExprUtils, PredicateHelper}
-import org.apache.spark.sql.catalyst.plans.{JoinType, LeftOuter}
+import org.apache.spark.sql.catalyst.expressions.{And, Attribute, AttributeMap, AttributeSeq,
+  AttributeSet, BoundReference, EqualNullSafe, EqualTo, Expression, ExprUtils, PredicateHelper}
+import org.apache.spark.sql.catalyst.plans.{JoinType, LeftOuter, QueryPlan}
 import org.apache.spark.sql.catalyst.plans.physical.Partitioning
 import org.apache.spark.sql.catalyst.util.truncatedString
 import org.apache.spark.sql.connector.metric.CustomTaskMetric
@@ -60,6 +60,24 @@ case class ExternalLookupJoinExec(
   override def output: Seq[Attribute] = joinType match {
     case LeftOuter => child.output ++ lookupColumns.map(_.withNullability(true))
     case _ => child.output ++ lookupColumns
+  }
+
+  // The lookup-side attributes are not in the child's output, so the default canonicalization
+  // gives each top-level one the next id, whichever column it is: `output` could then not find a
+  // lookup column in the read schema, and nodes that keep different lookup columns of one type
+  // would canonicalize alike. Each is normalized by its place in the child's output and the read
+  // schema instead.
+  override protected def doCanonicalize(): SparkPlan = {
+    val attributes: AttributeSeq = child.output ++ lookupInput
+    def normalize[T <: Expression](expression: T): T =
+      QueryPlan.normalizeExpressions(expression, attributes)
+    copy(
+      lookupParameters = lookupParameters.map(normalize),
+      lookupInput = lookupInput.map(normalize),
+      lookupOutput = lookupOutput.map(normalize),
+      lookupKeys = lookupKeys.map(normalize),
+      residualCondition = residualCondition.map(normalize),
+      child = child.canonicalized)
   }
 
   // Each task joins its input rows where they are, so the stream side's partitioning holds.

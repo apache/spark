@@ -17,16 +17,20 @@
 
 package org.apache.spark.sql.connector
 
-import java.util.concurrent.atomic.AtomicInteger
+import java.util.concurrent.{ConcurrentLinkedQueue, CountDownLatch, TimeUnit}
+import java.util.concurrent.atomic.{AtomicInteger, AtomicReference}
+
+import scala.jdk.CollectionConverters._
+import scala.reflect.{classTag, ClassTag}
 
 import org.apache.logging.log4j.Level
 
-import org.apache.spark.SparkUnsupportedOperationException
+import org.apache.spark.{SparkRuntimeException, SparkUnsupportedOperationException}
 import org.apache.spark.sql.{AnalysisException, DataFrame, Row, SQLContext}
 import org.apache.spark.sql.QueryTest
-import org.apache.spark.sql.catalyst.expressions.{OuterReference, SubqueryExpression}
+import org.apache.spark.sql.catalyst.expressions.{CurrentBatchTimestamp, CurrentDate,
+  CurrentTimestamp, LocalTimestamp, OuterReference, SubqueryExpression}
 import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
-import org.apache.spark.sql.catalyst.streaming.WriteToStream
 import org.apache.spark.sql.connector.catalog.{SupportsRead, Table, TableCapability, TableProvider}
 import org.apache.spark.sql.connector.catalog.TableCapability.{BATCH_READ, EXTERNAL_LOOKUP}
 import org.apache.spark.sql.connector.expressions.Transform
@@ -34,19 +38,25 @@ import org.apache.spark.sql.connector.read.ScanBuilder
 import org.apache.spark.sql.execution.datasources.v2.{DataSourceV2Relation,
   ExternalLookupRelation}
 import org.apache.spark.sql.execution.streaming.runtime.{ExternalLookupJoinStartupCheck,
-  MemoryStream, StreamingV2ScanPushDown}
-import org.apache.spark.sql.functions.{col, lit, max}
+  MemoryStream, MicroBatchExecution, StreamingQueryCheckpointMetadata, StreamingQueryWrapper,
+  StreamingV2ScanPushDown}
+import org.apache.spark.sql.functions.{col, current_timestamp, lit, max}
 import org.apache.spark.sql.internal.SQLConf
-import org.apache.spark.sql.streaming.{OutputMode, StreamingQuery, StreamingQueryException}
+import org.apache.spark.sql.streaming.{StreamingQuery, StreamingQueryException,
+  StreamingQueryListener}
+import org.apache.spark.sql.streaming.StreamingQueryListener.{QueryProgressEvent,
+  QueryStartedEvent, QueryTerminatedEvent}
 import org.apache.spark.sql.test.SharedSparkSession
-import org.apache.spark.sql.types.StructType
+import org.apache.spark.sql.types.{DateType, StructType, TimestampNTZType, TimestampType}
 import org.apache.spark.sql.util.CaseInsensitiveStringMap
 
-/** Which errors of an external lookup join a streaming query reports when it starts. */
+/** Which errors of an external lookup join stop a streaming query when it starts. */
 class ExternalLookupJoinStartupCheckSuite extends QueryTest with SharedSparkSession {
   import testImplicits._
 
   private val queryCount = new AtomicInteger()
+
+  private val timeoutMs = 60000L
 
   private implicit def sqlContextOfStreams: SQLContext = spark.sqlContext
 
@@ -66,13 +76,35 @@ class ExternalLookupJoinStartupCheckSuite extends QueryTest with SharedSparkSess
     df.writeStream.format("memory").queryName(s"startup_check_${queryCount.incrementAndGet()}")
       .start()
 
-  /** The error that `start()` throws for `df`. */
+  /** The error that `start()` throws for `df`, which analysis reports. */
   private def startFailure(df: DataFrame): AnalysisException = {
     val e = intercept[AnalysisException](start(df).stop())
     // The connector served no lookup at the start.
     assert(SimpleExternalLookupDataSource.readerCount.get() === 0)
     e
   }
+
+  /**
+   * The error that stops the query of `df` when its execution starts: `start()` returns, and the
+   * query stops before it has any data.
+   */
+  private def queryFailure[T <: Throwable : ClassTag](df: DataFrame): T = {
+    val query = start(df)
+    val e = try {
+      intercept[StreamingQueryException](query.awaitTermination(timeoutMs))
+    } finally {
+      query.stop()
+    }
+    assert(query.exception.contains(e))
+    // The connector served no lookup at the start.
+    assert(SimpleExternalLookupDataSource.readerCount.get() === 0)
+    assert(classTag[T].runtimeClass.isInstance(e.getCause), e.getCause)
+    e.getCause.asInstanceOf[T]
+  }
+
+  /** Waits until `query` has planned its lookup joins and created its sources. */
+  private def awaitInitialization(query: StreamingQuery): Unit =
+    query.asInstanceOf[StreamingQueryWrapper].streamingQuery.awaitInitialization(timeoutMs)
 
   /** Runs `body`, and returns the warnings that the startup check logged meanwhile. */
   private def startupWarnings(body: => Unit): Seq[String] = {
@@ -106,6 +138,7 @@ class ExternalLookupJoinStartupCheckSuite extends QueryTest with SharedSparkSess
     val stream = input.toDF().toDF("id")
     val static = throwingStatic
     val query = start(stream.join(static, stream("id") === static("id")))
+    awaitInitialization(query)
     // Without data, no micro-batch runs, so the query keeps running.
     assert(ThrowingScanBuilderTable.scanBuilderCount.get() === 0)
     val e = firstBatchFailure(query, input, 1)
@@ -127,40 +160,42 @@ class ExternalLookupJoinStartupCheckSuite extends QueryTest with SharedSparkSess
     start(stream.join(lookup, Seq("id"))).stop()
   }
 
-  test("NO_LOOKUP_CANDIDATE fails start(), also before any data arrives") {
+  test("NO_LOOKUP_CANDIDATE stops the query when it starts, before any data arrives") {
     val stream = MemoryStream[Long].toDF().toDF("id")
     val lookup = lookupOnly
     // A BIGINT stream key casts the INT lookup column, so Spark has no candidate to offer.
     checkError(
-      exception = startFailure(stream.join(lookup, stream("id") === lookup("id"))),
+      exception = queryFailure[AnalysisException](
+        stream.join(lookup, stream("id") === lookup("id"))),
       condition = "EXTERNAL_LOOKUP_JOIN_UNSUPPORTED.NO_LOOKUP_CANDIDATE",
       parameters = Map("table" -> "`SimpleExternalLookupTable`"))
   }
 
-  test("NO_LOOKUP_PREDICATE fails start()") {
+  test("NO_LOOKUP_PREDICATE stops the query when it starts") {
     val stream = MemoryStream[Int].toDF().toDF("id")
     val lookup = lookupOnly
     checkError(
-      exception = startFailure(stream.join(lookup, lookup("department") === "sales")),
+      exception = queryFailure[AnalysisException](
+        stream.join(lookup, lookup("department") === "sales")),
       condition = "EXTERNAL_LOOKUP_JOIN_UNSUPPORTED.NO_LOOKUP_PREDICATE",
       parameters = Map("table" -> "`SimpleExternalLookupTable`"))
   }
 
-  test("connector contract errors fail start() when Spark prepares the lookup, not when it runs") {
+  test("connector contract errors stop the query when Spark prepares the lookup, not later") {
     val stream = MemoryStream[Int].toDF().toDF("id")
     def source(format: Class[_], option: String, value: String): DataFrame =
       spark.read.format(format.getName).option(option, value).load()
     val duplicate =
       source(classOf[SimpleExternalLookupDataSource], "selectionMode", "duplicate")
     checkError(
-      exception = startFailure(stream.join(duplicate, stream("id") === duplicate("id"))),
+      exception = queryFailure[AnalysisException](
+        stream.join(duplicate, stream("id") === duplicate("id"))),
       condition = "DATA_SOURCE_INVALID_EXTERNAL_LOOKUP.DUPLICATE_SELECTED_PREDICATE",
       parameters = Map("table" -> "`SimpleExternalLookupTable`", "predicate" -> "id = ?"))
     val noLookup =
       source(classOf[MisconfiguredExternalLookupDataSource], "kind", "noExternalLookup")
-    val e = intercept[SparkUnsupportedOperationException] {
-      start(stream.join(noLookup, stream("id") === noLookup("id"))).stop()
-    }
+    val e = queryFailure[SparkUnsupportedOperationException](
+      stream.join(noLookup, stream("id") === noLookup("id")))
     assert(e.getCondition === "DATA_SOURCE_EXTERNAL_LOOKUP_NOT_SUPPORTED")
 
     // A violation found while the join runs is reported by the tasks of a micro-batch.
@@ -174,33 +209,59 @@ class ExternalLookupJoinStartupCheckSuite extends QueryTest with SharedSparkSess
   }
 
   test("a connector exception while Spark plans the lookup is left to the micro-batch") {
-    val input = MemoryStream[Int]
-    val stream = input.toDF().toDF("id")
-    val lookup = spark.read.format(classOf[ThrowingLookupScanBuilderDataSource].getName).load()
-    var query: StreamingQuery = null
-    val warnings = startupWarnings {
-      query = start(stream.join(lookup, stream("id") === lookup("id")))
+    // Also a SparkThrowable that is not an error of the lookup join or of its connector contract.
+    Seq(classOf[ThrowingLookupScanBuilderDataSource],
+        classOf[SparkThrowingLookupScanBuilderDataSource]).foreach { format =>
+      val input = MemoryStream[Int]
+      val stream = input.toDF().toDF("id")
+      val lookup = spark.read.format(format.getName).load()
+      var query: StreamingQuery = null
+      val warnings = startupWarnings {
+        query = start(stream.join(lookup, stream("id") === lookup("id")))
+        awaitInitialization(query)
+      }
+      assert(warnings.exists(_.contains("Could not plan the external lookup joins")), format)
+      val e = firstBatchFailure(query, input, 1)
+      assert(e.getCause.getMessage.contains("The scan builder fails"), format)
     }
-    assert(warnings.exists(_.contains("Could not plan the external lookup joins")))
-    val e = firstBatchFailure(query, input, 1)
-    assert(e.getCause.getMessage.contains("The scan builder fails"))
   }
 
-  test("a lookup predicate that the optimizer finds does not fail start()") {
-    val input = MemoryStream[Int]
-    val stream = input.toDF().toDF("id")
+  test("a lookup predicate that the optimizer finds does not stop the query") {
     val lookup = lookupOnly
-    // The written condition offers no candidate until the optimizer simplifies it.
-    val joined = stream.join(lookup, stream("id") === lookup("id") || lit(false))
-    var query: StreamingQuery = null
-    assert(startupWarnings { query = start(joined.select("department")) }.isEmpty)
-    try {
-      input.addData(1, 3)
-      query.processAllAvailable()
-      checkAnswer(spark.table(query.name), Seq(Row("engineering"), Row("research")))
-    } finally {
-      query.stop()
+    // The written condition offers no candidate until the optimizer simplifies it: also through
+    // date conversions, which the start folds as each micro-batch does.
+    Seq(lit(false), lit("1999-01-01").cast("date") > lit("2000-01-01").cast("date")).foreach {
+      never =>
+        val input = MemoryStream[Int]
+        val stream = input.toDF().toDF("id")
+        val joined = stream.join(lookup, stream("id") === lookup("id") || never)
+        var query: StreamingQuery = null
+        assert(startupWarnings {
+          query = start(joined.select("department"))
+          awaitInitialization(query)
+        }.isEmpty, never)
+        try {
+          input.addData(1, 3)
+          query.processAllAvailable()
+          checkAnswer(spark.table(query.name), Seq(Row("engineering"), Row("research")))
+        } finally {
+          query.stop()
+        }
     }
+  }
+
+  test("the start reads the current time and date as the batch timestamp, as micro-batches do") {
+    val plan = sql("SELECT current_timestamp(), current_date(), localtimestamp()")
+      .queryExecution.analyzed
+    val rewritten = MicroBatchExecution.withBatchTimestamp(plan, 1234L)
+    val batchTimestamps = rewritten.expressions.flatMap(_.collect {
+      case timestamp: CurrentBatchTimestamp => timestamp
+    })
+    assert(batchTimestamps.map(t => (t.timestampMs, t.dataType)) ===
+      Seq((1234L, TimestampType), (1234L, DateType), (1234L, TimestampNTZType)))
+    assert(rewritten.expressions.forall(_.collect {
+      case _: CurrentTimestamp | _: CurrentDate | _: LocalTimestamp => true
+    }.isEmpty))
   }
 
   test("the start plans only the lookup sides") {
@@ -211,6 +272,7 @@ class ExternalLookupJoinStartupCheckSuite extends QueryTest with SharedSparkSess
     val joined = stream.join(static, stream("id") === static("id"))
       .join(lookup, stream("id") === lookup("id"))
     val query = start(joined)
+    awaitInitialization(query)
     assert(ThrowingScanBuilderTable.scanBuilderCount.get() === 0)
     val e = firstBatchFailure(query, input, 1)
     assert(e.getCause.getMessage.contains("The scan builder fails"))
@@ -250,7 +312,8 @@ class ExternalLookupJoinStartupCheckSuite extends QueryTest with SharedSparkSess
     // The start plans the lookup join through the subqueries, without their scans.
     val bigintStream = MemoryStream[Long].toDF().toDF("sid")
     checkError(
-      exception = startFailure(lookupJoin(withSubqueries(bigintStream, throwingStatic))),
+      exception = queryFailure[AnalysisException](
+        lookupJoin(withSubqueries(bigintStream, throwingStatic))),
       condition = "EXTERNAL_LOOKUP_JOIN_UNSUPPORTED.NO_LOOKUP_CANDIDATE",
       parameters = Map("table" -> "`SimpleExternalLookupTable`"))
     assert(ThrowingScanBuilderTable.scanBuilderCount.get() === 0)
@@ -259,7 +322,10 @@ class ExternalLookupJoinStartupCheckSuite extends QueryTest with SharedSparkSess
     val valid = lookupJoin(withSubqueries(input.toDF().toDF("sid"), Seq(1, 2).toDF("id")))
       .select("department")
     var query: StreamingQuery = null
-    assert(startupWarnings { query = start(valid) }.isEmpty)
+    assert(startupWarnings {
+      query = start(valid)
+      awaitInitialization(query)
+    }.isEmpty)
     try {
       input.addData(1, 3)
       query.processAllAvailable()
@@ -269,22 +335,24 @@ class ExternalLookupJoinStartupCheckSuite extends QueryTest with SharedSparkSess
     }
   }
 
-  test("foreachBatch and toTable fail at start too") {
+  test("foreachBatch and toTable stop the query when it starts too") {
     val stream = MemoryStream[Long].toDF().toDF("id")
     val lookup = lookupOnly
     val joined = stream.join(lookup, stream("id") === lookup("id"))
       .select(stream("id"), lookup("department"))
-    val e = intercept[AnalysisException] {
-      joined.writeStream.foreachBatch((_: DataFrame, _: Long) => ()).start().stop()
+    def failure(query: StreamingQuery): String = try {
+      intercept[StreamingQueryException](query.awaitTermination(timeoutMs))
+        .getCause.asInstanceOf[AnalysisException].getCondition
+    } finally {
+      query.stop()
     }
-    assert(e.getCondition === "EXTERNAL_LOOKUP_JOIN_UNSUPPORTED.NO_LOOKUP_CANDIDATE")
+    assert(failure(joined.writeStream.foreachBatch((_: DataFrame, _: Long) => ()).start()) ===
+      "EXTERNAL_LOOKUP_JOIN_UNSUPPORTED.NO_LOOKUP_CANDIDATE")
     withTempDir { dir =>
       withTable("startup_check_sink") {
-        val e = intercept[AnalysisException] {
-          joined.writeStream.option("checkpointLocation", dir.getCanonicalPath)
-            .toTable("startup_check_sink").stop()
-        }
-        assert(e.getCondition === "EXTERNAL_LOOKUP_JOIN_UNSUPPORTED.NO_LOOKUP_CANDIDATE")
+        val query = joined.writeStream.option("checkpointLocation", dir.getCanonicalPath)
+          .toTable("startup_check_sink")
+        assert(failure(query) === "EXTERNAL_LOOKUP_JOIN_UNSUPPORTED.NO_LOOKUP_CANDIDATE")
       }
     }
   }
@@ -297,10 +365,10 @@ class ExternalLookupJoinStartupCheckSuite extends QueryTest with SharedSparkSess
       val stream = input.toDF().toDF("id")
       val lookup = lookupOnly
       val joined = stream.join(lookup, stream("id") === lookup("id"))
-      // Only the checkpoint location of the write is read.
+      // The query thread passes the last entry of the offset log, which it reads anyway.
       def startupConf(): SQLConf = ExternalLookupJoinStartupCheck.startupConf(spark,
-        WriteToStream("q", None, checkpoint, ThrowingScanBuilderTable, OutputMode.Append(),
-          deleteCheckpointOnStop = false, joined.queryExecution.analyzed, None, None))
+        new StreamingQueryCheckpointMetadata(spark, checkpoint, readOnly = true)
+          .offsetLog.getLatest().flatMap(_._2.metadataOpt))
       withSQLConf(policy.key -> "max", SQLConf.CBO_ENABLED.key -> "true") {
         // A new query plans with the session's values, without CBO.
         assert(startupConf().getConf(policy) === "max")
@@ -319,6 +387,110 @@ class ExternalLookupJoinStartupCheckSuite extends QueryTest with SharedSparkSess
         assert(spark.conf.get(policy) === "min")
       }
     }
+  }
+
+  test("start() returns while a planning call to the lookup connector blocks") {
+    BlockingLookupTable.reset()
+    val input = MemoryStream[Int]
+    val stream = input.toDF().toDF("id")
+    val lookup = spark.read.format(classOf[BlockingLookupDataSource].getName).load()
+    val query = start(stream.join(lookup, stream("id") === lookup("id")).select("department"))
+    try {
+      // start() has returned, and the query thread is in the call, which waits to be released.
+      assert(BlockingLookupTable.entered.get().await(timeoutMs, TimeUnit.MILLISECONDS))
+      assert(query.isActive && query.exception.isEmpty)
+      BlockingLookupTable.release.get().countDown()
+      input.addData(1, 3)
+      query.processAllAvailable()
+      checkAnswer(spark.table(query.name), Seq(Row("engineering"), Row("research")))
+    } finally {
+      BlockingLookupTable.release.get().countDown()
+      query.stop()
+    }
+  }
+
+  test("the error stops the query for awaitTermination(), exception and the listeners") {
+    val events = new ConcurrentLinkedQueue[StreamingQueryListener.Event]()
+    val listener = new StreamingQueryListener {
+      override def onQueryStarted(event: QueryStartedEvent): Unit = events.add(event)
+      override def onQueryProgress(event: QueryProgressEvent): Unit = events.add(event)
+      override def onQueryTerminated(event: QueryTerminatedEvent): Unit = events.add(event)
+    }
+    spark.streams.addListener(listener)
+    try {
+      val stream = MemoryStream[Long].toDF().toDF("id")
+      val lookup = lookupOnly
+      val query = start(stream.join(lookup, stream("id") === lookup("id")))
+      val e = intercept[StreamingQueryException](query.awaitTermination(timeoutMs))
+      assert(e.getCause.asInstanceOf[AnalysisException].getCondition ===
+        "EXTERNAL_LOOKUP_JOIN_UNSUPPORTED.NO_LOOKUP_CANDIDATE")
+      assert(!query.isActive && query.exception.contains(e) && query.lastProgress == null)
+      spark.sparkContext.listenerBus.waitUntilEmpty()
+      // No micro-batch ran, so there is no progress event.
+      val queryEvents = events.asScala.toSeq.filter {
+        case started: QueryStartedEvent => started.id == query.id
+        case terminated: QueryTerminatedEvent => terminated.id == query.id
+        case _: QueryProgressEvent => true
+      }
+      assert(queryEvents.map(_.getClass) ===
+        Seq(classOf[QueryStartedEvent], classOf[QueryTerminatedEvent]))
+      val terminated = queryEvents(1).asInstanceOf[QueryTerminatedEvent]
+      assert(terminated.errorClassOnException ===
+        Some("EXTERNAL_LOOKUP_JOIN_UNSUPPORTED.NO_LOOKUP_CANDIDATE"))
+      assert(terminated.exception.exists(_.contains("NO_LOOKUP_CANDIDATE")))
+    } finally {
+      spark.streams.removeListener(listener)
+    }
+  }
+
+  test("a restarted query plans its lookup joins again and resumes") {
+    withTempDir { dir =>
+      val input = MemoryStream[Int]
+      val stream = input.toDF().toDF("id")
+      val lookup = lookupOnly
+      val joined = stream.join(lookup, stream("id") === lookup("id")).select("department")
+      val rows = new ConcurrentLinkedQueue[Row]()
+      def run(data: Int*): Unit = {
+        val query = joined.writeStream
+          .foreachBatch { (batch: DataFrame, _: Long) =>
+            rows.addAll(batch.collect().toSeq.asJava)
+            ()
+          }
+          .option("checkpointLocation", dir.getCanonicalPath)
+          .start()
+        try {
+          input.addData(data)
+          query.processAllAvailable()
+          assert(query.exception.isEmpty)
+        } finally {
+          query.stop()
+        }
+      }
+      run(1)
+      run(2)
+      assert(rows.asScala.toSeq.map(_.getString(0)).sorted ===
+        Seq("engineering", "research", "sales"))
+    }
+  }
+
+  test("a query that does not analyze with the batch timestamp is left to the micro-batch") {
+    // A micro-batch analyzes its plan again with its batch timestamp, which fails for the current
+    // time in a join condition, as for an ordinary stream-static join. The start leaves that
+    // error to the micro-batch, and does not report the lookup error that it would find.
+    val input = MemoryStream[Int]
+    val stream = input.toDF().toDF("id")
+    val lookup = lookupOnly
+    val joined = stream.join(lookup, lookup("department") === "sales" &&
+      current_timestamp() > lit("2000-01-01 00:00:00").cast("timestamp"))
+    var query: StreamingQuery = null
+    val warnings = startupWarnings {
+      query = start(joined)
+      awaitInitialization(query)
+    }
+    assert(warnings.exists(_.contains("does not pass analysis with the batch timestamp")))
+    val e = firstBatchFailure(query, input, 1)
+    assert(e.getCause.asInstanceOf[AnalysisException].getCondition ===
+      "INVALID_NON_DETERMINISTIC_EXPRESSIONS")
   }
 
   test("with the startup check disabled, the first micro-batch reports the error") {
@@ -392,6 +564,26 @@ class ThrowingLookupScanBuilderDataSource extends TableProvider {
       properties: java.util.Map[String, String]): Table = ThrowingLookupScanBuilderTable
 }
 
+class SparkThrowingLookupScanBuilderDataSource extends TableProvider {
+  override def inferSchema(options: CaseInsensitiveStringMap): StructType =
+    SparkThrowingLookupScanBuilderTable.schema()
+
+  override def getTable(
+      schema: StructType,
+      partitioning: Array[Transform],
+      properties: java.util.Map[String, String]): Table = SparkThrowingLookupScanBuilderTable
+}
+
+/** A lookup-only table whose scan builder fails with a SparkThrowable of its own. */
+object SparkThrowingLookupScanBuilderTable extends Table with SupportsRead {
+  override def name(): String = "SparkThrowingLookupScanBuilderTable"
+  override def schema(): StructType = new StructType().add("id", "int")
+  override def capabilities(): java.util.Set[TableCapability] =
+    java.util.EnumSet.of(EXTERNAL_LOOKUP)
+  override def newScanBuilder(options: CaseInsensitiveStringMap): ScanBuilder =
+    throw new SparkRuntimeException("INTERNAL_ERROR", Map("message" -> "The scan builder fails"))
+}
+
 object ThrowingLookupScanBuilderTable extends Table with SupportsRead {
   override def name(): String = "ThrowingLookupScanBuilderTable"
   override def schema(): StructType = new StructType().add("id", "int")
@@ -399,4 +591,36 @@ object ThrowingLookupScanBuilderTable extends Table with SupportsRead {
     java.util.EnumSet.of(EXTERNAL_LOOKUP)
   override def newScanBuilder(options: CaseInsensitiveStringMap): ScanBuilder =
     throw new IllegalStateException("The scan builder fails")
+}
+
+/** Serves the lookup-only table of SimpleExternalLookupDataSource after a call that blocks. */
+class BlockingLookupDataSource extends TableProvider {
+  override def inferSchema(options: CaseInsensitiveStringMap): StructType =
+    BlockingLookupTable.schema()
+
+  override def getTable(
+      schema: StructType,
+      partitioning: Array[Transform],
+      properties: java.util.Map[String, String]): Table = BlockingLookupTable
+}
+
+object BlockingLookupTable extends Table with SupportsRead {
+  // Counted down when a scan builder is requested; the request waits for `release`.
+  val entered = new AtomicReference(new CountDownLatch(1))
+  val release = new AtomicReference(new CountDownLatch(1))
+
+  def reset(): Unit = {
+    entered.set(new CountDownLatch(1))
+    release.set(new CountDownLatch(1))
+  }
+
+  override def name(): String = "BlockingLookupTable"
+  override def schema(): StructType = SimpleExternalLookupTable.schema()
+  override def capabilities(): java.util.Set[TableCapability] =
+    java.util.EnumSet.of(EXTERNAL_LOOKUP)
+  override def newScanBuilder(options: CaseInsensitiveStringMap): ScanBuilder = {
+    entered.get().countDown()
+    release.get().await(60, TimeUnit.SECONDS)
+    SimpleExternalLookupTable.newScanBuilder(options)
+  }
 }

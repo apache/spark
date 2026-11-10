@@ -28,13 +28,19 @@ import org.apache.spark.sql.connector.metric.CustomTaskMetric;
  * A task-local client that executes lookup requests.
  * <ul>
  *   <li>Calls to a reader and its cursors are sequential, but may come from different threads.
- *   The one exception is the end of the task: if another thread is still consuming the join,
- *   Spark may call {@link #close()} on the reader, and {@code close()} on its open cursor, while
- *   one call from that thread is in progress. Spark reads {@link #currentMetricsValues()} before
- *   it closes the reader, which may overlap that call too. Implementations must tolerate
- *   {@code close()} during an in-progress call, for example by cancelling or failing that call.
- *   Spark makes no further call once that thread has seen the close, and closes each reader and
- *   cursor at most once.</li>
+ *   Apart from the end of the task, Spark closes each cursor that it obtains, including one that
+ *   it has read to its end, before its next call and before it closes the reader.</li>
+ *   <li>At the end of the task, if another thread is still consuming the join, Spark closes the
+ *   reader once, without waiting for that thread, and first closes the reader's open cursor if it
+ *   finds one. It reads {@link #currentMetricsValues()} before it closes the reader. That thread
+ *   makes no call once it has seen the close, but the one call that has already passed its check
+ *   for the close may still run during or after {@code close()}: a request may reach a closed
+ *   reader, and Spark may close that thread's cursor before the reader, after it, or not at all.
+ *   So closing a reader must release every cursor of it that is still open and tolerate one that
+ *   Spark has closed or closes later; a cursor's {@code close()} must work after its reader is
+ *   closed; a request on a closed reader must fail; and a call in progress must tolerate the
+ *   close, for example by being cancelled or by failing. Spark closes each reader and cursor at
+ *   most once.</li>
  *   <li>Requests are not snapshot boundaries: results may mix source versions.</li>
  *   <li>Retried or speculative tasks may send the same request again, so a source must
  *   tolerate repeated requests. Within one request, matches are returned as
@@ -74,9 +80,8 @@ public interface ExternalLookupReader extends Closeable {
    * predicates on every returned row, but cannot find a missing one. The input is read-only and
    * must not be kept after the cursor closes.
    * <p>
-   * Spark closes every cursor it obtains, including one it has read to the end, before the next
-   * call and before closing this reader. A cursor that this method returns after the task-end
-   * close has started is not closed, so closing this reader must release it.
+   * When Spark closes the returned cursor, also at the end of the task, is stated in the
+   * documentation of this interface.
    */
   ExternalLookupResultCursor lookupBatch(InternalRow[] uniqueParameters) throws IOException;
 

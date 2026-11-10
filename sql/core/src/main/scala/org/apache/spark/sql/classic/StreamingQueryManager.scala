@@ -36,7 +36,7 @@ import org.apache.spark.sql.errors.QueryExecutionErrors
 import org.apache.spark.sql.execution.streaming._
 import org.apache.spark.sql.execution.streaming.checkpointing.OffsetSeqMetadata
 import org.apache.spark.sql.execution.streaming.continuous.ContinuousExecution
-import org.apache.spark.sql.execution.streaming.runtime.{AsyncProgressTrackingMicroBatchExecution, ExternalLookupJoinStartupCheck, MicroBatchExecution, ResolveWriteToStream, StreamingQueryCheckpointMetadata, StreamingQueryListenerBus, StreamingQueryWrapper}
+import org.apache.spark.sql.execution.streaming.runtime.{AsyncProgressTrackingMicroBatchExecution, MicroBatchExecution, ResolveWriteToStream, StreamingQueryCheckpointMetadata, StreamingQueryListenerBus, StreamingQueryWrapper}
 import org.apache.spark.sql.execution.streaming.state.{RocksDBStateStoreProvider, StateStoreCoordinatorRef}
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.internal.StaticSQLConf.STREAMING_QUERY_LISTENERS
@@ -326,7 +326,6 @@ class StreamingQueryManager private[sql] (
     val analyzedStreamWritePlan =
       streamWriteAnalysisSession.sessionState.executePlan(streamWriteAnalysisPlan).analyzed
         .asInstanceOf[WriteToStream]
-    ExternalLookupJoinStartupCheck(sparkSession, analyzedStreamWritePlan)
 
     (sink, trigger) match {
       case (_: SupportsWrite, trigger: ContinuousTrigger) =>

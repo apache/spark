@@ -104,6 +104,7 @@ case class PreparedExternalLookupJoin(
       lookupInput = lookupInput.map(normalize),
       lookupOutput = lookupOutput.map(normalize),
       lookupParameters = lookupParameters.map(normalize),
+      lookupKeys = lookupKeys.map(normalize),
       residualCondition = residualCondition.map(normalize))
   }
 

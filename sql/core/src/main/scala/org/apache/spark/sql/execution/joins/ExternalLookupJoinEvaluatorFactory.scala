@@ -129,20 +129,34 @@ class ExternalLookupJoinEvaluatorFactory(
 
     private lazy val toUnsafe = UnsafeProjection.create(streamOutput, streamOutput)
 
+    // An inner join emits nothing for a stream row that cannot match, because it fails the stream
+    // condition or has a null parameter that is not null-safe, as an ordinary inner join filters
+    // such a row out before it joins. So the row takes no place in a batch and is not copied: it
+    // counts only as an input row. A left outer join emits it, so a batch keeps it.
+    private val keepsRowsThatCannotMatch = joinType != Inner
+
+    private def canMatch(row: InternalRow): Boolean =
+      joinOutput.canMatch(row) && !parameters.matchesNothing(parameters.requestRow(row))
+
     // An array, because a batch's rows are read by position for every key, match and output row.
     // The batch holds its rows until its request is read, so it stops once their copies reach
     // maxBatchBytes, keeping the row that reaches it, as well as at maxParameterRowsPerRequest
-    // rows. It always takes one row.
+    // rows. It always keeps one row, when one remains.
     private def readBatch(): Array[InternalRow] = {
       val rows = mutable.ArrayBuffer.empty[InternalRow]
       var bytes = 0L
       while (rows.length < maxParameterRowsPerRequest && bytes < maxBatchBytes && input.hasNext) {
-        val row = input.next() match {
-          case unsafe: UnsafeRow => unsafe.copy()
-          case other => toUnsafe(other).copy()
+        val next = input.next()
+        if (keepsRowsThatCannotMatch || canMatch(next)) {
+          val row = next match {
+            case unsafe: UnsafeRow => unsafe.copy()
+            case other => toUnsafe(other).copy()
+          }
+          bytes += row.getSizeInBytes
+          rows += row
+        } else {
+          metrics.inputRows += 1
         }
-        bytes += row.getSizeInBytes
-        rows += row
       }
       rows.toArray
     }
@@ -416,10 +430,15 @@ class ExternalLookupJoinEvaluatorFactory(
     }
 
     /** Whether the decimal has its type's precision and scale without rounding. */
-    private def fits(value: Decimal, decimalType: DecimalType): Boolean = {
-      val rescaled = value.clone()
-      rescaled.changePrecision(decimalType.precision, decimalType.scale) && rescaled == value
-    }
+    private def fits(value: Decimal, decimalType: DecimalType): Boolean =
+      if (value.precision == decimalType.precision && value.scale == decimalType.scale) {
+        // changePrecision takes such a value as it is, but an UnsafeRow and a columnar row or
+        // array record the type's precision for a compact decimal without checking its digits.
+        value.toJavaBigDecimal.precision <= decimalType.precision
+      } else {
+        val rescaled = value.clone()
+        rescaled.changePrecision(decimalType.precision, decimalType.scale) && rescaled == value
+      }
   }
 
   /**
@@ -494,11 +513,13 @@ class ExternalLookupJoinEvaluatorFactory(
   /**
    * The connector reader of one partition and its active cursor. The reader is opened by the
    * first request, and closed once, after the last batch or when the task completes, as
-   * `DataSourceRDD` closes its readers. A thread other than the task's may still drive the join
-   * then, and the close may overlap the one connector call that it is making, which the close does
-   * not wait for. That thread checks for the close before each connector call, so it makes no
-   * further one. A cursor that a request returns after the close is not closed: closing the
-   * reader releases it.
+   * `DataSourceRDD` closes its readers, by the task-end rule of `ExternalLookupReader`. A thread
+   * other than the task's may still drive the join then. The close does not wait for it: it closes
+   * the open cursor that it finds, then the reader. That thread checks for the close before each
+   * connector call, so it makes no further one, but the one call that has passed its check may
+   * still run. So a cursor that a request publishes after the close took the empty slot, or
+   * obtains after the close returned, is left to the reader's close, and a finished cursor that
+   * the thread took before the close may be closed after the reader.
    */
   private class LookupReader {
     private val taskReaders = readerMetrics.forCurrentTask()
@@ -514,7 +535,9 @@ class ExternalLookupJoinEvaluatorFactory(
       ensureOpen()
       metrics.requests += 1
       metrics.parameterRows += requestRows.length
-      val reader = Option(openReader.get()).getOrElse(createReader())
+      // close() marks the reader closed before it takes the reader, so a reader that it took
+      // cannot be created again here.
+      val reader = Option(openReader.get()).getOrElse { ensureOpen(); createReader() }
       ensureOpen()
       val cursor = Option(reader.lookupBatch(requestRows.asInstanceOf[Array[InternalRow]]))
         .getOrElse {

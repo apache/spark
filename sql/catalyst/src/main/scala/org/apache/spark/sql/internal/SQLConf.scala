@@ -2546,10 +2546,10 @@ object SQLConf {
     buildConf("spark.sql.join.externalLookup.startupCheck.enabled")
       .internal()
       .withBindingPolicy(ConfigBindingPolicy.NOT_APPLICABLE)
-      .doc("When true, starting a streaming query plans its external lookup joins once, " +
-        "including the planning calls to their connectors, so that a join that cannot be " +
-        "planned fails the start instead of the first micro-batch. When false, such a join " +
-        "fails the first micro-batch that runs.")
+      .doc("When true, a streaming query plans its external lookup joins once when its " +
+        "execution starts, including the planning calls to their connectors, so that a join " +
+        "that cannot be planned stops the query before its first micro-batch, also without " +
+        "data. When false, such a join fails the first micro-batch that runs.")
       .version("4.4.0")
       .booleanConf
       .createWithDefault(true)
