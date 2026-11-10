@@ -64,7 +64,7 @@ class ICUCollationSortKeyGoldenSuite extends SparkFunSuite {
   private def rowFor(collation: String, input: String): Option[String] =
     goldenLines.find { line =>
       val cols = parseRow(line)
-      cols.length == 3 && cols(0) == collation && cols(1) == input
+      cols.length == 3 && cols(0) == collation && cols(1) == renderInput(input)
     }
 
   // Fetch hex column or fail with a regen hint.
@@ -106,6 +106,16 @@ class ICUCollationSortKeyGoldenSuite extends SparkFunSuite {
     val onDisk = Files.readAllBytes(goldenFile)
     assert(bytesA.sameElements(onDisk),
       s"on-disk golden differs from writeGoldenFile output; $REGEN_HINT")
+  }
+
+  test("golden file has no control characters, so diffs render as text") {
+    // Git and GitHub treat a file containing NUL as binary and hide its diff,
+    // which would hide sort-key drift from reviewers of an ICU upgrade.
+    val bad = Files.readString(goldenFile, StandardCharsets.UTF_8).zipWithIndex.collect {
+      case (c, i) if Character.isISOControl(c) && c != '\n' => f"U+${c.toInt}%04X@$i"
+    }
+    assert(bad.isEmpty, s"golden file contains control characters ${bad.mkString(", ")}; " +
+      REGEN_HINT)
   }
 
   test("UNICODE primary order separates basic-Latin letters") {
@@ -507,9 +517,19 @@ object ICUCollationSortKeyGoldenSuite {
     collation.sortKeyFunction.apply(UTF8String.fromString(cell.input))
   }
 
+  /**
+   * Render an input for the golden table. Control characters are written as
+   * backslash-u escapes (e.g. backslash u0000): a raw NUL makes git and GitHub treat the
+   * file as binary.
+   */
+  private[sql] def renderInput(input: String): String =
+    input.flatMap { c =>
+      if (Character.isISOControl(c)) f"\\u${c.toInt}%04x" else c.toString
+    }
+
   /** Render one cell as a markdown table row. */
   private def renderRow(cell: GoldenCell): String =
-    s"| ${cell.collation} | ${cell.input} | ${toHex(sortKeyBytes(cell))} |"
+    s"| ${cell.collation} | ${renderInput(cell.input)} | ${toHex(sortKeyBytes(cell))} |"
 
   /**
    * Emit the golden file payload to `file`. Line 1 is `GOLDEN_DISCLAIMER`
