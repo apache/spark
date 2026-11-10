@@ -604,6 +604,95 @@ class BasePythonStreamingDataSourceTestsMixin:
             "SIMPLE_STREAM_READER_OFFSET_DID_NOT_ADVANCE",
         )
 
+    def test_simple_stream_reader_returns_non_iterator_iterables(self):
+        """read() returning a non-iterator iterable (e.g. tuple, range) is handled like a list."""
+        from pyspark.sql.datasource_internal import _SimpleStreamReaderWrapper
+
+        class IterableOnly:
+            """An iterable that implements __iter__ but not __next__."""
+
+            def __init__(self, rows):
+                self._rows = rows
+
+            def __iter__(self):
+                return iter(self._rows)
+
+        class NextOnly:
+            """Implements only __next__ without __iter__, which next() accepts."""
+
+            def __init__(self, rows):
+                self._rows = iter(rows)
+
+            def __next__(self):
+                return next(self._rows)
+
+        class NonIteratorIterableReader(SimpleDataSourceStreamReader):
+            def __init__(self, rows, to_result, advance):
+                self.rows = rows
+                self.to_result = to_result
+                self.advance = advance
+
+            def initialOffset(self):
+                return {"offset": 0}
+
+            def read(self, start: dict):
+                end = {"offset": start["offset"] + len(self.rows)} if self.advance else start
+                return (self.to_result(self.rows), end)
+
+            def readBetweenOffsets(self, start: dict, end: dict):
+                return iter([])
+
+            def commit(self, end: dict):
+                pass
+
+        start = {"offset": 0}
+        # Every non-iterator iterable that read() may return instead of an iterator.
+        non_iterator_results = [tuple, lambda rows: range(len(rows)), IterableOnly]
+
+        for to_result in non_iterator_results:
+            # Non-empty iterable with an advanced end offset is cached and readable.
+            wrapper = _SimpleStreamReaderWrapper(
+                NonIteratorIterableReader([0, 1], to_result, advance=True)
+            )
+            end = wrapper.latestOffset(start, ReadAllAvailable())
+            self.assertEqual(end, {"offset": 2})
+            self.assertEqual(list(wrapper.getCache(start, end)), [0, 1])
+
+            # Empty iterable with end == start is allowed and not cached.
+            wrapper = _SimpleStreamReaderWrapper(
+                NonIteratorIterableReader([], to_result, advance=False)
+            )
+            end = wrapper.latestOffset(start, ReadAllAvailable())
+            self.assertEqual(end, start)
+            self.assertEqual(len(wrapper.cache), 0)
+
+            # Non-empty iterable with end == start raises the offset validation error.
+            wrapper = _SimpleStreamReaderWrapper(
+                NonIteratorIterableReader([0], to_result, advance=False)
+            )
+            with self.assertRaises(PySparkException) as cm:
+                wrapper.latestOffset(start, ReadAllAvailable())
+            self.assertEqual(
+                cm.exception.getCondition(),
+                "SIMPLE_STREAM_READER_OFFSET_DID_NOT_ADVANCE",
+            )
+
+        # Objects that implement only __next__ keep being accepted by next() directly.
+        wrapper = _SimpleStreamReaderWrapper(NonIteratorIterableReader([], NextOnly, advance=False))
+        end = wrapper.latestOffset(start, ReadAllAvailable())
+        self.assertEqual(end, start)
+        self.assertEqual(len(wrapper.cache), 0)
+
+        wrapper = _SimpleStreamReaderWrapper(
+            NonIteratorIterableReader([0], NextOnly, advance=False)
+        )
+        with self.assertRaises(PySparkException) as cm:
+            wrapper.latestOffset(start, ReadAllAvailable())
+        self.assertEqual(
+            cm.exception.getCondition(),
+            "SIMPLE_STREAM_READER_OFFSET_DID_NOT_ADVANCE",
+        )
+
     def test_stream_writer(self):
         input_dir = tempfile.TemporaryDirectory(prefix="test_data_stream_write_input")
         output_dir = tempfile.TemporaryDirectory(prefix="test_data_stream_write_output")
