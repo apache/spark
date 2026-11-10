@@ -85,9 +85,6 @@ ignored_file_patterns = (
     "/.github/workflows/update_build_status.yml",
     # Linters, formatters, and their configs. These are typically triggered by
     # the `precondition` job regardless of modifications to these files.
-    #   precondition job: https://github.com/apache/spark/blob/065397779ce409996abed999e1d6b46ee98a6c34/.github/workflows/build_and_test.yml#L106-L199
-    #   lint job: https://github.com/apache/spark/blob/065397779ce409996abed999e1d6b46ee98a6c34/.github/workflows/build_and_test.yml#L932-L935
-    #   buf job: https://github.com/apache/spark/blob/065397779ce409996abed999e1d6b46ee98a6c34/.github/workflows/build_and_test.yml#L895-L898
     ".pre-commit-config.yaml",
     "/dev/.rat-excludes",
     "/dev/.scalafmt.conf",
@@ -131,7 +128,7 @@ ignored_file_patterns = (
     "/dev/spark_jira_utils.py",
     "/dev/spark_merge_footer.py",
     "/dev/spark-test-image/connect-gen-protos/",
-    # Always run by the precondition job in build_and_test.yml.
+    # Always run by the `precondition` job in build_and_test.yml.
     "/dev/sparktestsupport/tests/",
     "/sql/create-docs.sh",
     # CLI wrappers and other user executables.
@@ -146,8 +143,6 @@ ignored_file_patterns = (
     "/binder/",
     # UI tests. These are typically triggered by the `precondition` job
     # regardless of modifications to these files.
-    #   precondition job: https://github.com/apache/spark/blob/065397779ce409996abed999e1d6b46ee98a6c34/.github/workflows/build_and_test.yml#L106-L199
-    #   ui job: https://github.com/apache/spark/blob/065397779ce409996abed999e1d6b46ee98a6c34/.github/workflows/build_and_test.yml#L1450-L1453
     "/ui-test/",
 )
 
