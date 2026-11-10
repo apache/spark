@@ -404,19 +404,19 @@ case class StreamingSymmetricHashJoinExec(
     // Create left and right side hash joiners and store in the joiner manager.
     // Both sides should use the same store generator if we are re-using the same store instance.
     val joinStateManagerStoreGenerator = new JoinStateManagerStoreGenerator()
-    val joinKeyOrdinalForWatermark =
-      StreamingSymmetricHashJoinHelper.findJoinKeyOrdinalForWatermark(leftKeys, rightKeys)
     val joinerManager = OneSideHashJoinerManager(
       new OneSideHashJoiner(
         LeftSide, left.output, leftKeys, leftInputIter,
         condition.leftSideOnly, postJoinFilter, stateWatermarkPredicates.left, partitionId,
         checkpointIds.left.keyToNumValues, checkpointIds.left.keyWithIndexToValue,
-        skippedNullValueCount, joinStateManagerStoreGenerator, joinKeyOrdinalForWatermark),
+        skippedNullValueCount, joinStateManagerStoreGenerator,
+        StreamingJoinHelper.getStateKeyWatermarkOrdinal(rightKeys, right.output)),
       new OneSideHashJoiner(
         RightSide, right.output, rightKeys, rightInputIter,
         condition.rightSideOnly, postJoinFilter, stateWatermarkPredicates.right, partitionId,
         checkpointIds.right.keyToNumValues, checkpointIds.right.keyWithIndexToValue,
-        skippedNullValueCount, joinStateManagerStoreGenerator, joinKeyOrdinalForWatermark))
+        skippedNullValueCount, joinStateManagerStoreGenerator,
+        StreamingJoinHelper.getStateKeyWatermarkOrdinal(leftKeys, left.output)))
 
     //  Join one side input using the other side's buffered/state rows. Here is how it is done.
     //
@@ -734,17 +734,19 @@ case class StreamingSymmetricHashJoinExec(
     private[this] val scanRangeOffsets: Option[(Long, Long)] = {
       // A row on this side probes the other side's state for the window
       //   [thisEventTime + lowerOffset, thisEventTime + upperOffset]
-      // on the other side's event time. In V4, each side's timestamp index stores the column its
-      // own value-eviction predicate constrains, or its event-time column if it has no such
-      // predicate. The window can only select rows from an index on the event-time column.
+      // on the other side's event time. In V4, a side that evicts by key indexes the selected
+      // equality key, and a lookup there uses the key's exact timestamp and ignores the window.
+      // Any other side indexes the column its own value-eviction predicate constrains, or its
+      // event-time column if it has no such predicate. The window can then only select rows from
+      // an index on the event-time column.
       //
       // So a range scan requires both of the following:
-      // - isV4TimeIntervalJoin: V4 state, and this side evicts by value. An event-time equality
-      //   key makes both sides evict by key instead, so those joins never range scan.
-      // - indexesEventTimeColumns: no side indexes a column other than its event time. Each side
-      //   either has no value-eviction predicate, or its predicate constrains only its own
-      //   event-time column. This joiner probes only the other side's index; checking both
-      //   sides keeps the check identical for the two joiners.
+      // - isV4TimeIntervalJoin: V4 state, and this side evicts by value. Each side chooses key
+      //   or value eviction from the opposite watermark, so the other side may evict by key.
+      // - indexesEventTimeColumns: no value-evicting side indexes a column other than its event
+      //   time. Each side either has no value-eviction predicate, or its predicate constrains
+      //   only its own event-time column. This joiner probes only the other side's index;
+      //   checking both sides keeps the check identical for the two joiners.
       //
       // Examples, where leftTime and rightTime are the event-time columns and expiry is another
       // timestamp column of the left input:
@@ -762,6 +764,10 @@ case class StreamingSymmetricHashJoinExec(
       //   instead, so its index is ordered by expiry. A window on leftTime cannot select rows
       //   from that index, so indexesEventTimeColumns is false and each joiner reads all rows
       //   of the other side for the key.
+      // - leftTime = rightKey AND rightTime BETWEEN leftTime AND leftTime + INTERVAL 10 MINUTES,
+      //   where rightKey has no watermark: the leftTime watermark bounds rightKey, so the right
+      //   side evicts by key while the left side evicts on leftTime. Both checks pass for the
+      //   left joiner, and its lookups into the key-indexed right state ignore the window.
       val isV4TimeIntervalJoin = stateFormatVersion >= 4 && (stateWatermarkPredicate match {
         case Some(_: JoinStateValueWatermarkPredicate) => true
         case _ => false
@@ -775,7 +781,7 @@ case class StreamingSymmetricHashJoinExec(
             p.expr.references.forall(_.semanticEquals(eventTime))
           }
         // No value-eviction predicate: the index falls back to the event-time column, as in the
-        // second example. Key-eviction joins also reach here; isV4TimeIntervalJoin excludes them.
+        // second example, or holds the selected key, whose lookups ignore the window.
         case _ => true
       }
       if (!isV4TimeIntervalJoin || !indexesEventTimeColumns) {

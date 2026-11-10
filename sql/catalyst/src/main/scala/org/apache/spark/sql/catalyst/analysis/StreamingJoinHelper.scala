@@ -22,10 +22,9 @@ import scala.util.control.NonFatal
 import org.apache.spark.internal.Logging
 import org.apache.spark.internal.LogKeys._
 import org.apache.spark.sql.catalyst.expressions._
-import org.apache.spark.sql.catalyst.planning.ExtractEquiJoinKeys
-import org.apache.spark.sql.catalyst.plans.logical.{EventTimeWatermark, LogicalPlan}
 import org.apache.spark.sql.catalyst.plans.logical.EventTimeWatermark._
 import org.apache.spark.sql.catalyst.util.DateTimeConstants.MICROS_PER_DAY
+import org.apache.spark.sql.catalyst.util.DateTimeUtils
 import org.apache.spark.sql.types._
 import org.apache.spark.unsafe.types.CalendarInterval
 
@@ -35,18 +34,130 @@ import org.apache.spark.unsafe.types.CalendarInterval
 object StreamingJoinHelper extends PredicateHelper with Logging {
 
   /**
-   * Check the provided logical plan to see if its join keys contain a watermark attribute.
-   *
-   * Will return false if the plan is not an equijoin.
-   * @param plan the logical plan to check
+   * Find the equality key filtered by this input's watermark. Its ordinal can be used to
+   * evict the opposite input's state, whose equality keys have the same ordering.
+   * For leftTime = rightTime, a watermark on rightTime bounds leftTime even when leftTime
+   * has no watermark. It does not bound right-side state without a watermark on leftTime.
+   * A key computed from the event time by adding a constant interval, such as
+   * leftTime = rightTime + INTERVAL 10 SECONDS, is bounded too; see [[getStateKeyWatermark]].
    */
-  def isWatermarkInJoinKeys(plan: LogicalPlan): Boolean = {
-    plan match {
-      case ExtractEquiJoinKeys(_, leftKeys, rightKeys, _, _, _, _, _) =>
-        (leftKeys ++ rightKeys).exists {
-          case a: AttributeReference => a.metadata.contains(EventTimeWatermark.delayKey)
-          case _ => false
-        }
+  def getStateKeyWatermarkOrdinal(
+      keys: Seq[Expression],
+      inputAttributes: Seq[Attribute]): Option[Int] = {
+    getEventTimeKeyOrdinal(keys, inputAttributes).orElse {
+      keys.indices.find(getStateKeyWatermark(keys, inputAttributes, _, Some(0L)).isDefined)
+    }
+  }
+
+  /** Find the equality key that is this input's event-time column itself. */
+  def getEventTimeKeyOrdinal(
+      keys: Seq[Expression],
+      inputAttributes: Seq[Attribute]): Option[Int] = {
+    // When multiple stateful operators are disabled, late filtering uses the first event-time
+    // column. Otherwise, execution rejects multiple distinct event-time columns.
+    inputAttributes.find(_.metadata.contains(delayKey)).flatMap { eventTime =>
+      keys.indexWhere(_.semanticEquals(eventTime)) match {
+        case ordinal if ordinal >= 0 => Some(ordinal)
+        case _ => None
+      }
+    }
+  }
+
+  /**
+   * Get the cutoff for the opposite input's equality key at `ordinal`, given this input's
+   * watermark. `keys` and `inputAttributes` belong to this input, whose future rows have an event
+   * time above the watermark. When the key is that event time, the equal key of any state row
+   * they can still match is above the watermark too. When the key is the event time shifted by
+   * an interval, solving `stateKey >= rightTime + INTERVAL 10 SECONDS` shifts the cutoff by that
+   * interval, less 1 ms as for range conditions. Returns None for any other key.
+   */
+  def getStateKeyWatermark(
+      keys: Seq[Expression],
+      inputAttributes: Seq[Attribute],
+      ordinal: Int,
+      eventWatermark: Option[Long]): Option[Long] = {
+    if (getEventTimeKeyOrdinal(keys, inputAttributes).contains(ordinal)) {
+      eventWatermark
+    } else {
+      eventTimeOfKey(keys(ordinal), inputAttributes).flatMap { eventTime =>
+        val stateKey = AttributeReference("stateKey", TimestampType)()
+        getStateValueWatermark(AttributeSet(Seq(stateKey)), AttributeSet(Seq(eventTime)),
+          Some(GreaterThanOrEqual(stateKey, keys(ordinal))), eventWatermark)
+      }
+    }
+  }
+
+  /**
+   * Get a bound on this input's event time for state rows whose equality key at `ordinal` is
+   * above `keyWatermark`. When the key is the event time, the bound is the key watermark. When
+   * the key is the event time shifted by an interval, solving
+   * `leftTime + INTERVAL 10 SECONDS >= keyWatermark` subtracts that constant, less 1 ms.
+   * Returns None for any other key.
+   */
+  def getEventTimeWatermarkFromKey(
+      keys: Seq[Expression],
+      inputAttributes: Seq[Attribute],
+      ordinal: Int,
+      keyWatermark: Long): Option[Long] = {
+    if (getEventTimeKeyOrdinal(keys, inputAttributes).contains(ordinal)) {
+      Some(keyWatermark)
+    } else {
+      eventTimeOfKey(keys(ordinal), inputAttributes).flatMap { eventTime =>
+        val keyWithWatermark = AttributeReference("stateKey", TimestampType,
+          metadata = new MetadataBuilder().putLong(delayKey, 0L).build())()
+        getStateValueWatermark(AttributeSet(Seq(eventTime)), AttributeSet(Seq(keyWithWatermark)),
+          Some(GreaterThanOrEqual(keys(ordinal), keyWithWatermark)), Some(keyWatermark))
+      }
+    }
+  }
+
+  /** The input's event-time column, if a timestamp key is that column shifted by intervals. */
+  private def eventTimeOfKey(key: Expression, inputAttributes: Seq[Attribute]): Option[Attribute] =
+    inputAttributes.find(_.metadata.contains(delayKey)).filter { eventTime =>
+      key.dataType == TimestampType && isIntervalShift(key, eventTime)
+    }
+
+  /**
+   * Whether the expression is the event time plus or minus constant intervals. Other functions
+   * and casts from other types are not accepted: a truncation such as
+   * CAST(CAST(rightTime AS BIGINT) AS TIMESTAMP) can map a later event time below the watermark.
+   */
+  private def isIntervalShift(expr: Expression, eventTime: Attribute): Boolean = {
+    // Spark adds the whole days of an interval in the session time zone, where a day can be 23
+    // or 25 hours across a daylight saving change, but the solver counts a day as 24 hours.
+    // Accept whole days only in a fixed-offset time zone.
+    def isExactInterval(e: Expression, timeZoneId: Option[String]): Boolean = {
+      def fixedOffset: Boolean =
+        timeZoneId.exists(id => DateTimeUtils.getZoneId(id).getRules.isFixedOffset)
+      // An interval that fails to evaluate gives no bound; the query reports the error at run time.
+      def value: Option[Any] = try Option(e.eval()) catch { case NonFatal(_) => None }
+      e.foldable && (e.dataType match {
+        case _: DayTimeIntervalType =>
+          value.exists { v =>
+            val micros = v.asInstanceOf[Long]
+            -MICROS_PER_DAY < micros && micros < MICROS_PER_DAY || fixedOffset
+          }
+        case CalendarIntervalType =>
+          value.exists { v =>
+            val interval = v.asInstanceOf[CalendarInterval]
+            interval.months == 0 && (interval.days == 0 || fixedOffset)
+          }
+        case _ => false
+      })
+    }
+    expr match {
+      case a: Attribute => a.semanticEquals(eventTime)
+      // The analyzer wraps timestamp + interval in a cast to the same timestamp type.
+      case Cast(child, TimestampType, _, _) if child.dataType == TimestampType =>
+        isIntervalShift(child, eventTime)
+      case TimestampAddInterval(start, interval, timeZoneId) =>
+        isExactInterval(interval, timeZoneId) && isIntervalShift(start, eventTime)
+      case DatetimeSub(_, _, replacement) => isIntervalShift(replacement, eventTime)
+      case Add(left, right, _) =>
+        isExactInterval(right, None) && isIntervalShift(left, eventTime) ||
+          isExactInterval(left, None) && isIntervalShift(right, eventTime)
+      case Subtract(left, right, _) =>
+        isExactInterval(right, None) && isIntervalShift(left, eventTime)
       case _ => false
     }
   }

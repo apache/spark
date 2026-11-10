@@ -17,6 +17,7 @@
 
 package org.apache.spark.sql.catalyst.analysis
 
+import java.time.Duration
 import java.util.Locale
 
 import org.apache.spark.SparkFunSuite
@@ -24,14 +25,14 @@ import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.dsl.expressions._
 import org.apache.spark.sql.catalyst.dsl.plans._
 import org.apache.spark.sql.catalyst.encoders.ExpressionEncoder
-import org.apache.spark.sql.catalyst.expressions.{Attribute, AttributeReference, Expression, MonotonicallyIncreasingID, NamedExpression}
+import org.apache.spark.sql.catalyst.expressions.{Attribute, AttributeReference, Expression, Literal, MonotonicallyIncreasingID, NamedExpression, TimestampAddInterval}
 import org.apache.spark.sql.catalyst.expressions.aggregate.Count
 import org.apache.spark.sql.catalyst.plans._
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.streaming.InternalOutputModes._
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.streaming.{GroupStateTimeout, OutputMode, StatefulProcessor, TimeMode, TimerValues}
-import org.apache.spark.sql.types.{IntegerType, LongType, MetadataBuilder, StructType}
+import org.apache.spark.sql.types.{IntegerType, LongType, MetadataBuilder, StructType, TimestampType}
 
 /** A dummy command for testing unsupported operations. */
 case class DummyCommand() extends LeafCommand
@@ -488,11 +489,14 @@ class UnsupportedOperationsSuite extends SparkFunSuite with SQLHelper {
   }
 
   // LeftSemi join: Update mode allowed (equivalent to Append mode for non-outer joins)
-  assertSupportedInStreamingPlan(
-    s"LeftSemi join with stream-stream relations and update mode",
-    streamRelation.join(streamRelation, joinType = LeftSemi,
-      condition = Some(attributeWithWatermark === attribute)),
-    OutputMode.Update())
+  {
+    val right = attributeWithWatermark.newInstance()
+    assertSupportedInStreamingPlan(
+      "LeftSemi join with stream-stream relations and update mode",
+      streamRelation.join(new TestStreamingRelation(right),
+        joinType = LeftSemi, condition = Some(attribute === right)),
+      OutputMode.Update())
+  }
 
   // Complete mode not allowed for stream-stream joins. The error message also indicates
   // which output modes are actually supported for the given join type.
@@ -511,52 +515,102 @@ class UnsupportedOperationsSuite extends SparkFunSuite with SQLHelper {
       Seq("is not supported in Complete output mode", allowedModesMsg))
   }
 
-  // Left outer, right outer, full outer, left semi joins
-  Seq(LeftOuter, RightOuter, FullOuter, LeftSemi).foreach { joinType =>
-    // Stream-stream allowed with join on watermark attribute
-    // Note that the attribute need not be watermarked on both sides.
-    assertSupportedInStreamingPlan(
-      s"$joinType join with stream-stream relations and join on attribute with left watermark",
-      streamRelation.join(streamRelation, joinType = joinType,
-        condition = Some(attributeWithWatermark === attribute)),
-      OutputMode.Append())
-    assertSupportedInStreamingPlan(
-      s"$joinType join with stream-stream relations and join on attribute with right watermark",
-      streamRelation.join(streamRelation, joinType = joinType,
-        condition = Some(attribute === attributeWithWatermark)),
-      OutputMode.Append())
-    assertNotSupportedInStreamingPlan(
-      s"$joinType join with stream-stream relations and join on non-watermarked attribute",
-      streamRelation.join(streamRelation, joinType = joinType,
-        condition = Some(attribute === attribute)),
-      OutputMode.Append(),
-      Seq("without a watermark in the join keys"))
+  for {
+    joinType <- Seq(LeftOuter, RightOuter, FullOuter, LeftSemi)
+    leftWatermark <- Seq(false, true)
+    rightWatermark <- Seq(false, true)
+    conditionType <- Seq("equality", "range", "left bound", "right bound")
+  } {
+    val leftTime = AttributeReference("leftTime", TimestampType)()
+    val rightTime = AttributeReference("rightTime", TimestampType)()
+    val left = if (leftWatermark) leftTime.withMetadata(watermarkMetadata) else leftTime
+    val right = if (rightWatermark) rightTime.withMetadata(watermarkMetadata) else rightTime
+    val condition = conditionType match {
+      case "equality" => left === right
+      case "range" => left > right - 10 && left < right + 10
+      case "left bound" => left > right - 10
+      case "right bound" => left < right + 10
+    }
+    val leftCanEvict = rightWatermark && conditionType != "right bound"
+    val rightCanEvict = leftWatermark && conditionType != "left bound"
+    val correctedSupported = joinType match {
+      case LeftOuter | LeftSemi => leftCanEvict
+      case RightOuter => rightCanEvict
+      case FullOuter => leftCanEvict && rightCanEvict
+      case _ => false
+    }
+    val plan = new TestStreamingRelation(left).join(new TestStreamingRelation(right),
+      joinType = joinType, condition = Some(condition))
+    val name = s"$joinType $conditionType with watermarks " +
+      s"left=$leftWatermark right=$rightWatermark"
+    if (correctedSupported) {
+      assertSupportedInStreamingPlan(name, plan, OutputMode.Append())
+    } else {
+      assertNotSupportedInStreamingPlan(name, plan, OutputMode.Append(),
+        Seq("requires", "allow unmatched state to be finalized"))
+    }
+  }
 
-    val timeWithWatermark =
-      AttributeReference("b", IntegerType)().withMetadata(watermarkMetadata)
-    val relationWithWatermark = new TestStreamingRelation(timeWithWatermark)
-    val (leftRelation, rightRelation) =
-      if (joinType == RightOuter) {
-        (relationWithWatermark, streamRelation)
-      } else {
-        (streamRelation, relationWithWatermark)
+  {
+    val leftTime = AttributeReference("leftTime", TimestampType)()
+    val leftOther = AttributeReference("leftOther", TimestampType)()
+      .withMetadata(watermarkMetadata)
+    val rightTime = AttributeReference("rightTime", TimestampType)()
+      .withMetadata(watermarkMetadata)
+    val rightOther = AttributeReference("rightOther", TimestampType)()
+    val left = new TestStreamingRelation(Seq(leftTime, leftOther))
+    val right = new TestStreamingRelation(Seq(rightTime, rightOther))
+
+    // Each side's state is evicted by the key that the opposite watermark bounds.
+    assertSupportedInStreamingPlan("full outer with different watermark key ordinals",
+      left.join(right, joinType = FullOuter,
+        condition = Some(leftTime === rightTime && leftOther === rightOther)), OutputMode.Append())
+  }
+
+  {
+    val leftTime = AttributeReference("leftTime", TimestampType)()
+      .withMetadata(watermarkMetadata)
+    val rightTime = AttributeReference("rightTime", TimestampType)()
+      .withMetadata(watermarkMetadata)
+    val rightOther = AttributeReference("rightOther", TimestampType)()
+    val left = new TestStreamingRelation(leftTime)
+    val right = new TestStreamingRelation(Seq(rightTime, rightOther))
+
+    def shift(time: Expression, seconds: Int): Expression =
+      TimestampAddInterval(time, Literal(Duration.ofSeconds(seconds)))
+
+    // A key computed from the opposite event time by a constant is bounded by its watermark.
+    Seq(10, -10).foreach { offset =>
+      Seq(LeftOuter, RightOuter, FullOuter, LeftSemi).foreach { joinType =>
+        assertSupportedInStreamingPlan(s"$joinType with a key shifted by $offset",
+          left.join(right, joinType = joinType,
+            condition = Some(leftTime === shift(rightTime, offset))), OutputMode.Append())
       }
+      assertNotSupportedInStreamingPlan(
+        s"LeftOuter with a key shifted by $offset from an unwatermarked column",
+        left.join(right, joinType = LeftOuter,
+          condition = Some(leftTime === shift(rightOther, offset))), OutputMode.Append(),
+        Seq("requires a watermark on the right input"))
+    }
 
-    // stream-stream allowed with range condition yielding state value watermark
-    assertSupportedInStreamingPlan(
-      s"$joinType join with stream-stream relations and state value watermark",
-      leftRelation.join(rightRelation, joinType = joinType,
-        condition = Some(attribute > timeWithWatermark + 10)),
-      OutputMode.Append())
+    // Whole days are added in the session time zone, where a day can be 23 or 25 hours.
+    Seq("UTC" -> true, "America/Los_Angeles" -> false).foreach { case (zone, supported) =>
+      val dayShift = TimestampAddInterval(rightTime, Literal(Duration.ofDays(1)), Some(zone))
+      val plan = left.join(right, joinType = LeftOuter, condition = Some(leftTime === dayShift))
+      val name = s"LeftOuter with a key shifted by one day in $zone"
+      if (supported) {
+        assertSupportedInStreamingPlan(name, plan, OutputMode.Append())
+      } else {
+        assertNotSupportedInStreamingPlan(name, plan, OutputMode.Append(),
+          Seq("requires a watermark on the right input"))
+      }
+    }
 
-    // stream-stream not allowed with insufficient range condition
-    assertNotSupportedInStreamingPlan(
-      s"$joinType join with stream-stream relations and state value watermark",
-      leftRelation.join(rightRelation, joinType = joinType,
-        condition = Some(attribute < timeWithWatermark + 10)),
-      OutputMode.Append(),
-      Seq("is not supported without a watermark in the join keys, or a watermark on " +
-        "the nullable side and an appropriate range condition"))
+    // Truncation can map a future right row below the watermark, so it does not bound the key.
+    assertNotSupportedInStreamingPlan("LeftOuter with a key truncated from the right event time",
+      left.join(right, joinType = LeftOuter,
+        condition = Some(leftTime === rightTime.cast(LongType).cast(TimestampType))),
+      OutputMode.Append(), Seq("requires a watermark on the right input"))
   }
 
   // multi-aggregations only supported in Append mode

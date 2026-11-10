@@ -1297,6 +1297,11 @@ joined <- join(
 Outer joins have the same guarantees as [inner joins](#semantic-guarantees-of-stream-stream-inner-joins-with-watermarking)
 regarding watermark delays and whether data will be dropped or not.
 
+Unmatched output and state removal use the same cutoff, derived from the opposite input's
+watermark and the time constraint. In the example above, the `clickTime` watermark finalizes
+impressions. Full outer joins require watermarks and time constraints in both directions to
+finalize both sides.
+
 ###### Caveats
 There are a few important characteristics to note regarding how the outer results are generated.
 
@@ -1398,29 +1403,33 @@ regarding watermark delays and whether data will be dropped or not.
   <tr>
     <td style="vertical-align: middle;">Left Outer</td>
     <td style="vertical-align: middle;">
-      Conditionally supported, must specify watermark on right + time constraints for correct
-      results, optionally specify watermark on left for all state cleanup
+      Conditionally supported, requires a watermark on the right and a time constraint that
+      limits how late a right row can match a left row. A watermark on the left and a reverse
+      time constraint also allow right-side state cleanup.
     </td>
   </tr>
   <tr>
     <td style="vertical-align: middle;">Right Outer</td>
     <td style="vertical-align: middle;">
-      Conditionally supported, must specify watermark on left + time constraints for correct
-      results, optionally specify watermark on right for all state cleanup
+      Conditionally supported, requires a watermark on the left and a time constraint that
+      limits how late a left row can match a right row. A watermark on the right and a reverse
+      time constraint also allow left-side state cleanup.
     </td>
   </tr>
   <tr>
     <td style="vertical-align: middle;">Full Outer</td>
     <td style="vertical-align: middle;">
-      Conditionally supported, must specify watermark on one side + time constraints for correct
-      results, optionally specify watermark on the other side for all state cleanup
+      Conditionally supported, requires watermarks on both inputs and time constraints that
+      limit how late matching rows can arrive on each side. These allow unmatched rows to be
+      output and state to be cleaned up on both sides.
     </td>
   </tr>
   <tr>
     <td style="vertical-align: middle;">Left Semi</td>
     <td style="vertical-align: middle;">
-      Conditionally supported, must specify watermark on right + time constraints for correct
-      results, optionally specify watermark on left for all state cleanup
+      Conditionally supported, requires a watermark on the right and a time constraint that
+      limits how late a right row can match a left row. A watermark on the left and a reverse
+      time constraint also allow right-side state cleanup.
     </td>
   </tr>
   <tr>

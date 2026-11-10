@@ -23,8 +23,9 @@ import org.apache.spark.internal.Logging
 import org.apache.spark.internal.LogKeys.{ANALYSIS_ERROR, QUERY_PLAN}
 import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.ExtendedAnalysisException
-import org.apache.spark.sql.catalyst.expressions.{Attribute, AttributeReference, CurrentDate, CurrentTimestampLike, Expression, GroupingSets, LocalTimestamp, LocalTimestampNanos, MonotonicallyIncreasingID, NamedExpression, SessionWindow, WindowExpression}
+import org.apache.spark.sql.catalyst.expressions.{Attribute, AttributeReference, AttributeSet, CurrentDate, CurrentTimestampLike, Expression, GroupingSets, LocalTimestamp, LocalTimestampNanos, MonotonicallyIncreasingID, NamedExpression, SessionWindow, WindowExpression}
 import org.apache.spark.sql.catalyst.expressions.aggregate.AggregateExpression
+import org.apache.spark.sql.catalyst.planning.ExtractEquiJoinKeys
 import org.apache.spark.sql.catalyst.plans._
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.streaming.InternalOutputModes
@@ -706,32 +707,44 @@ object UnsupportedOperationChecker extends Logging {
   }
 
   private def checkForStreamStreamJoinWatermark(join: Join): Unit = {
-    val watermarkInJoinKeys = StreamingJoinHelper.isWatermarkInJoinKeys(join)
+    val keys = ExtractEquiJoinKeys.unapply(join)
+    val leftKeys = keys.map(_._2).getOrElse(Nil)
+    val rightKeys = keys.map(_._3).getOrElse(Nil)
 
-    // Check if the nullable side has a watermark, and there's a range condition which
-    // implies a state value watermark on the first side.
-    val hasValidWatermarkRange = join.joinType match {
-      case LeftOuter | LeftSemi => StreamingJoinHelper.getStateValueWatermark(
-        join.left.outputSet, join.right.outputSet, join.condition, Some(1000000)).isDefined
-      case RightOuter => StreamingJoinHelper.getStateValueWatermark(
-        join.right.outputSet, join.left.outputSet, join.condition, Some(1000000)).isDefined
-      case FullOuter =>
-        Seq((join.left.outputSet, join.right.outputSet),
-          (join.right.outputSet, join.left.outputSet)).exists {
-          case (attributesToFindStateWatermarkFor, attributesWithEventWatermark) =>
-            StreamingJoinHelper.getStateValueWatermark(attributesToFindStateWatermarkFor,
-              attributesWithEventWatermark, join.condition, Some(1000000)).isDefined
-        }
+    def canEvictState(
+        stateInput: LogicalPlan,
+        otherInput: LogicalPlan,
+        otherKeys: Seq[Expression]): Boolean = {
+      val eventTime = otherInput.output.find(_.metadata.contains(EventTimeWatermark.delayKey))
+      StreamingJoinHelper.getStateKeyWatermarkOrdinal(otherKeys, otherInput.output).isDefined ||
+        StreamingJoinHelper.getStateValueWatermark(stateInput.outputSet,
+          AttributeSet(eventTime.toSeq), join.condition, Some(1000000)).isDefined
+    }
+
+    val leftCanEvict = canEvictState(join.left, join.right, rightKeys)
+    val rightCanEvict = canEvictState(join.right, join.left, leftKeys)
+    val hasRequiredWatermarks = join.joinType match {
+      case LeftOuter | LeftSemi => leftCanEvict
+      case RightOuter => rightCanEvict
+      case FullOuter => leftCanEvict && rightCanEvict
       case _ =>
         throwError(
           s"Join type ${join.joinType} is not supported with streaming DataFrame/Dataset")(join)
     }
 
-    if (!watermarkInJoinKeys && !hasValidWatermarkRange) {
+    if (!hasRequiredWatermarks) {
+      val requirement = join.joinType match {
+        case FullOuter => "watermarks on both inputs and time constraints in both directions"
+        case RightOuter => "a watermark on the left input and a time constraint"
+        case _ => "a watermark on the right input and a time constraint"
+      }
       throwError(
         s"Stream-stream ${join.joinType} join between two streaming DataFrame/Datasets " +
-          "is not supported without a watermark in the join keys, or a watermark on " +
-          "the nullable side and an appropriate range condition")(join)
+          s"is not supported: it requires $requirement " +
+          "that allow unmatched state to be finalized. " +
+          "The time constraint may be equality on event time or a time range condition. " +
+          "When upgrading an existing query, correct its watermarks and time constraints, " +
+          "then use a new checkpoint and replay the input, reconciling prior sink output.")(join)
     }
   }
 }

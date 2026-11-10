@@ -177,4 +177,46 @@ class StreamingSymmetricHashJoinHelperSuite extends StreamTest {
       assert(outputBound.contains(if (boundEventTime) 339999L else 0L))
     }
   }
+  test("equality eviction uses the opposite input's watermark") {
+    val metadata = new MetadataBuilder().putLong(EventTimeWatermark.delayKey, 1000).build()
+    val lt = AttributeReference("lt", TimestampType)()
+    val rt = AttributeReference("rt", TimestampType, metadata = metadata)()
+    val predicates = StreamingSymmetricHashJoinHelper.getStateWatermarkPredicates(
+      Seq(lt), Seq(rt), Seq(lt), Seq(rt), None, Some(20000), Some(10000), false)
+    assert(predicates.right.isEmpty)
+    assert(predicates.left.exists {
+      case JoinStateKeyWatermarkPredicate(_, 20000, None) => true
+      case _ => false
+    })
+    assert(StreamingSymmetricHashJoinHelper.getStateWatermark(
+      Seq(lt), Seq(rt), Seq(lt), Seq(rt), None, Some(20000), false) === (None, Some(0L)))
+
+    val watermarkedLeft = lt.withMetadata(metadata)
+    val both = StreamingSymmetricHashJoinHelper.getStateWatermarkPredicates(
+      Seq(watermarkedLeft), Seq(rt), Seq(watermarkedLeft), Seq(rt), None,
+      Some(20000), Some(10000), false)
+    assert(both.left.exists {
+      case JoinStateKeyWatermarkPredicate(_, 20000, Some(10000)) => true
+      case _ => false
+    })
+    assert(both.right.isDefined)
+  }
+
+  test("a bound on another timestamp does not advance the output watermark") {
+    val metadata = new MetadataBuilder().putLong(EventTimeWatermark.delayKey, 1000).build()
+    val lt = AttributeReference("lt", TimestampType)()
+    val other = AttributeReference("other", TimestampType, metadata = metadata)()
+    val rt = AttributeReference("rt", TimestampType, metadata = metadata)()
+    val condition = Some(lt > rt - 5)
+    val predicates = StreamingSymmetricHashJoinHelper.getStateWatermarkPredicates(
+      Seq(lt, other), Seq(rt), Nil, Nil, condition, Some(20000), Some(10000), false)
+    assert(predicates.left.exists {
+      case JoinStateValueWatermarkPredicate(expr, 15000, None) => expr.references.contains(lt)
+      case _ => false
+    })
+    assert(StreamingSymmetricHashJoinHelper.getStateWatermark(
+      Seq(lt, other), Seq(rt), Nil, Nil, condition, Some(20000), false) ===
+      (Some(0L), Some(0L)))
+  }
+
 }

@@ -492,7 +492,8 @@ class MultiStatefulOperatorsSuite
     )
   }
 
-  test("join with range join on non-time intervals -> window agg, append mode, shouldn't fail") {
+  testWithAppendAndUpdate(
+    "join with range join on non-time intervals -> window agg") { outputMode =>
     val input1 = MemoryStream[Int]
     val inputDF1 = input1.toDF()
       .withColumnRenamed("value", "value1")
@@ -514,11 +515,20 @@ class MultiStatefulOperatorsSuite
       .agg(count("*") as Symbol("count"))
       .select($"window".getField("start").cast("long").as[Long], $"count".as[Long])
 
-    testStream(stream)(
+    testStream(stream, outputMode)(
       AddData(input1, 1, 2, 3, 4),
       AddData(input2, (1, 2), (2, 3), (3, 4), (4, 5)),
-      CheckNewAnswer(),
-      assertNumStateRows(Seq(1, 0)),
+      if (outputMode == OutputMode.Update()) CheckNewAnswer((0, 4)) else CheckNewAnswer(),
+      // The right watermark column is projected away before the join. Its equality key
+      // does not filter late input, so left state and the aggregation window must stay open.
+      assertNumStateRows(Seq(1, 4)),
+      assertNumRowsDroppedByWatermark(Seq(0, 0)),
+      AddData(input1, 10),
+      AddData(input2, (10, 11)),
+      if (outputMode == OutputMode.Update()) CheckNewAnswer((10, 1)) else CheckNewAnswer(),
+      AddData(input2, (1, 2)),
+      if (outputMode == OutputMode.Update()) CheckNewAnswer((0, 5)) else CheckNewAnswer(),
+      assertNumStateRows(Seq(2, 5)),
       assertNumRowsDroppedByWatermark(Seq(0, 0))
     )
   }

@@ -26,7 +26,7 @@ import scala.util.Using
 import org.apache.hadoop.fs.Path
 
 import org.apache.spark.sql.{AnalysisException, DataFrame, Row}
-import org.apache.spark.sql.catalyst.expressions.{Alias, AttributeReference}
+import org.apache.spark.sql.catalyst.expressions.{Alias, Attribute, AttributeReference, Expression}
 import org.apache.spark.sql.catalyst.plans.logical.EventTimeWatermark
 import org.apache.spark.sql.execution.streaming.checkpointing.{OffsetMap, OffsetSeq, OffsetSeqLog}
 import org.apache.spark.sql.execution.streaming.operators.stateful.join.{StreamingSymmetricHashJoinExec, StreamingSymmetricHashJoinHelper}
@@ -34,7 +34,8 @@ import org.apache.spark.sql.execution.streaming.runtime.MemoryStream
 import org.apache.spark.sql.execution.streaming.state.RocksDBStateStoreProvider
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.internal.SQLConf
-import org.apache.spark.sql.types.{IntegerType, MetadataBuilder, TimestampType}
+import org.apache.spark.sql.types.{IntegerType, MetadataBuilder, StructField, StructType,
+  TimestampType}
 import org.apache.spark.tags.SlowSQLTest
 import org.apache.spark.util.Utils
 
@@ -90,6 +91,14 @@ class StreamingJoinCheckpointCompatibilitySuite extends StreamTest {
         SQLConf.STREAMING_NO_DATA_MICRO_BATCHES_ENABLED.key -> "false")(f)
   }
 
+  private def assertNonNullableOutput(dataFrame: DataFrame, columnNames: String*): Unit = {
+    val outputByName = dataFrame.queryExecution.analyzed.output.map(a => a.name -> a).toMap
+    columnNames.foreach { columnName =>
+      val attribute = outputByName(columnName)
+      assert(!attribute.nullable, s"Expected $columnName to be non-null in $attribute")
+    }
+  }
+
   private def joinInputs(shape: String): (MemoryStream[(Int, Int)],
       MemoryStream[(Int, Int)], DataFrame) = {
     val leftInput = MemoryStream[(Int, Int)]
@@ -127,6 +136,40 @@ class StreamingJoinCheckpointCompatibilitySuite extends StreamTest {
     (leftInput, rightInput, result)
   }
 
+  private def nullableAlignedJoinInputs(): (MemoryStream[Int], MemoryStream[Int], DataFrame) = {
+    val leftInput = MemoryStream[Int]
+    val rightInput = MemoryStream[Int]
+    val left = leftInput.toDF().toDF("value")
+      .select(when($"value" < 0, lit(null).cast(TimestampType))
+        .otherwise(timestamp_seconds($"value")).as("leftTime"))
+      .withWatermark("leftTime", "100 seconds")
+    val right = rightInput.toDF().toDF("value")
+      .select(timestamp_seconds($"value").as("rightTime"))
+      .withWatermark("rightTime", "100 seconds")
+    val joined = left.join(right, expr("leftTime = rightTime"), "full_outer")
+      .select($"leftTime".cast("long"), $"rightTime".cast("long"))
+    (leftInput, rightInput, joined)
+  }
+
+  private def nonNullableAlignedJoinInputs(): (MemoryStream[Long], MemoryStream[Long],
+      DataFrame) = {
+    val leftInput = MemoryStream[Long]
+    val rightInput = MemoryStream[Long]
+    val left = leftInput.toDF().toDF("value")
+      .select(coalesce(timestamp_seconds($"value"), lit(new java.sql.Timestamp(0L)))
+        .as("leftTime"))
+      .withWatermark("leftTime", "100 seconds")
+    val right = rightInput.toDF().toDF("value")
+      .select(coalesce(timestamp_seconds($"value"), lit(new java.sql.Timestamp(0L)))
+        .as("rightTime"))
+      .withWatermark("rightTime", "100 seconds")
+    assertNonNullableOutput(left, "leftTime")
+    assertNonNullableOutput(right, "rightTime")
+    val joined = left.join(right, expr("leftTime = rightTime"), "full_outer")
+      .select($"leftTime".cast("long"), $"rightTime".cast("long"))
+    (leftInput, rightInput, joined)
+  }
+
   test("checkpoint compatibility requires one aligned own-event-time equality key") {
     val watermarkMetadata = new MetadataBuilder()
       .putLong(EventTimeWatermark.delayKey, 0L).build()
@@ -136,7 +179,8 @@ class StreamingJoinCheckpointCompatibilitySuite extends StreamTest {
       metadata = watermarkMetadata)()
     val rightTime = AttributeReference("rightTime", TimestampType,
       metadata = watermarkMetadata)()
-    val compatible = StreamingSymmetricHashJoinHelper.isWatermarkCheckpointCompatible _
+    val compatible = StreamingSymmetricHashJoinHelper.isWatermarkCheckpointCompatible(
+      _: Seq[Attribute], _: Seq[Attribute], _: Seq[Expression], _: Seq[Expression], 3)
 
     assert(compatible(Seq(leftId), Seq(rightId), Seq(leftId), Seq(rightId)))
     assert(compatible(Seq(leftId, leftTime), Seq(rightId, rightTime),
@@ -160,6 +204,58 @@ class StreamingJoinCheckpointCompatibilitySuite extends StreamTest {
     assert(!compatible(Seq(leftTime), Seq(rightTime),
       Seq(computed, leftTime), Seq(rightTime, rightTime)))
     assert(!compatible(Seq(leftId), Seq(rightId), Seq(computed), Seq(rightId)))
+  }
+
+  test("checkpoint compatibility for old V4 requires non-null selected key timestamp") {
+    val watermarkMetadata = new MetadataBuilder()
+      .putLong(EventTimeWatermark.delayKey, 0L).build()
+    val nullableLeftTime = AttributeReference("leftTime", TimestampType,
+      metadata = watermarkMetadata)()
+    val nullableRightTime = AttributeReference("rightTime", TimestampType,
+      metadata = watermarkMetadata)()
+    val nonNullLeftTime = AttributeReference("leftTime", TimestampType, nullable = false,
+      metadata = watermarkMetadata)()
+    val nonNullRightTime = AttributeReference("rightTime", TimestampType, nullable = false,
+      metadata = watermarkMetadata)()
+    val nullableEndWindowType = StructType(Seq(
+      StructField("start", TimestampType, nullable = false),
+      StructField("end", TimestampType, nullable = true)))
+    val nonNullWindowType = StructType(Seq(
+      StructField("start", TimestampType, nullable = false),
+      StructField("end", TimestampType, nullable = false)))
+    val nullableEndWindow = AttributeReference("window", nullableEndWindowType,
+      nullable = false, metadata = watermarkMetadata)()
+    val nullableStructWindow = AttributeReference("window", nonNullWindowType,
+      nullable = true, metadata = watermarkMetadata)()
+    val nonNullWindow = AttributeReference("window", nonNullWindowType,
+      nullable = false, metadata = watermarkMetadata)()
+    val nonNullKeyNullableInput = nonNullLeftTime.withNullability(true)
+    val nullableInputNonNullKey = nullableLeftTime.withNullability(false)
+
+    def compatible(
+        leftAttribute: Attribute,
+        rightAttribute: Attribute,
+        stateFormatVersion: Int,
+        leftKey: Option[Attribute] = None,
+        rightKey: Option[Attribute] = None): Boolean = {
+      StreamingSymmetricHashJoinHelper.isWatermarkCheckpointCompatible(
+        Seq(leftAttribute), Seq(rightAttribute),
+        Seq(leftKey.getOrElse(leftAttribute)), Seq(rightKey.getOrElse(rightAttribute)),
+        stateFormatVersion)
+    }
+
+    assert(compatible(nullableLeftTime, nullableRightTime, stateFormatVersion = 2))
+    assert(compatible(nullableLeftTime, nullableRightTime, stateFormatVersion = 3))
+    assert(!compatible(nullableLeftTime, nonNullRightTime, stateFormatVersion = 4))
+    assert(!compatible(nonNullLeftTime, nullableRightTime, stateFormatVersion = 4))
+    assert(compatible(nonNullLeftTime, nonNullRightTime, stateFormatVersion = 4))
+    assert(!compatible(nullableEndWindow, nonNullWindow, stateFormatVersion = 4))
+    assert(!compatible(nullableStructWindow, nonNullWindow, stateFormatVersion = 4))
+    assert(compatible(nonNullWindow, nonNullWindow, stateFormatVersion = 4))
+    assert(compatible(nonNullLeftTime, nonNullRightTime, stateFormatVersion = 4,
+      leftKey = Some(nonNullKeyNullableInput), rightKey = Some(nonNullRightTime)))
+    assert(!compatible(nullableLeftTime, nonNullRightTime, stateFormatVersion = 4,
+      leftKey = Some(nullableInputNonNullKey), rightKey = Some(nonNullRightTime)))
   }
 
   for {
@@ -249,6 +345,105 @@ class StreamingJoinCheckpointCompatibilitySuite extends StreamTest {
           }
           assert(pinnedMarker(checkpoint).contains(expectedMarker))
         }
+      }
+    }
+  }
+
+  test("reject old V4 aligned checkpoint when own equality key can be null") {
+    withJoinConf(version = 4, logVersion = 2) {
+      val (leftInput, rightInput, joined) = nullableAlignedJoinInputs()
+      withTempDir { checkpointDir =>
+        val checkpoint = checkpointDir.getCanonicalPath
+        testStream(joined)(
+          StartStream(checkpointLocation = checkpoint),
+          MultiAddData(leftInput, -1, 10)(rightInput, 20),
+          CheckNewAnswer(),
+          StopStream)
+        setMarker(checkpoint, None)
+        val stateBefore = snapshot(new File(checkpoint, "state"))
+        val commitsBefore = snapshot(new File(checkpoint, "commits"))
+        testStream(joined)(
+          StartStream(checkpointLocation = checkpoint),
+          AddData(rightInput, 30),
+          ExpectFailure[AnalysisException](assertFailure = error => {
+            checkError(error.asInstanceOf[AnalysisException],
+              condition = "STREAMING_JOIN_CHECKPOINT_INCOMPATIBLE",
+              parameters = Map(
+                "joinCondition" -> ".*leftTime.*rightTime.*",
+                "leftWatermarkColumns" -> "leftTime",
+                "rightWatermarkColumns" -> "rightTime"),
+              matchPVals = true)
+          }))
+        assert(snapshot(new File(checkpoint, "state")) == stateBefore)
+        assert(snapshot(new File(checkpoint, "commits")) == commitsBefore)
+      }
+    }
+  }
+
+  test("resume old V4 aligned checkpoint when own equality keys are non-null") {
+    withJoinConf(version = 4, logVersion = 2) {
+      val (leftInput, rightInput, joined) = nonNullableAlignedJoinInputs()
+      withTempDir { checkpointDir =>
+        val checkpoint = checkpointDir.getCanonicalPath
+        testStream(joined)(
+          StartStream(checkpointLocation = checkpoint),
+          MultiAddData(leftInput, 10L)(rightInput, 20L),
+          CheckNewAnswer(),
+          StopStream)
+        setMarker(checkpoint, None)
+        withSQLConf(markerKey -> "0") {
+          testStream(joined)(
+            StartStream(checkpointLocation = checkpoint),
+            MultiAddData(leftInput, 30L)(rightInput, 30L),
+            CheckNewAnswer(Row(30L, 30L)),
+            Execute { query =>
+              val join = query.lastExecution.executedPlan.collect {
+                case j: StreamingSymmetricHashJoinExec => j
+              }.head
+              val leftEventTime = join.left.output
+                .filter(_.metadata.contains(EventTimeWatermark.delayKey)).head
+              val rightEventTime = join.right.output
+                .filter(_.metadata.contains(EventTimeWatermark.delayKey)).head
+              assert(!leftEventTime.nullable, s"Expected non-null left event time: $join")
+              assert(!rightEventTime.nullable, s"Expected non-null right event time: $join")
+              assert(join.leftKeys.head.nullable, s"Expected nullable physical left key: $join")
+              assert(join.rightKeys.head.nullable, s"Expected nullable physical right key: $join")
+            },
+            StopStream)
+        }
+        assert(pinnedMarker(checkpoint).contains("0"))
+      }
+    }
+  }
+
+  test("resume old V4 window equality checkpoint") {
+    withJoinConf(version = 4, logVersion = 2) {
+      val leftInput = MemoryStream[Int]
+      val rightInput = MemoryStream[Int]
+      def windowed(input: MemoryStream[Int]): DataFrame = input.toDF()
+        .select($"value".as("key"), timestamp_seconds($"value").as("time"))
+        .withWatermark("time", "10 seconds")
+        .select($"key", window($"time", "10 seconds"))
+      // TimeWindow declares the window end nullable, but window() computes it from a non-null
+      // event time, so old V4 state cannot contain a null selected key timestamp.
+      val joined = windowed(leftInput).join(windowed(rightInput), Seq("key", "window"))
+        .select($"key", $"window.end".cast("long"))
+      withTempDir { checkpointDir =>
+        val checkpoint = checkpointDir.getCanonicalPath
+        testStream(joined)(
+          StartStream(checkpointLocation = checkpoint),
+          MultiAddData(leftInput, 1)(rightInput, 2),
+          CheckNewAnswer(),
+          StopStream)
+        setMarker(checkpoint, None)
+        withSQLConf(markerKey -> "0") {
+          testStream(joined)(
+            StartStream(checkpointLocation = checkpoint),
+            MultiAddData(leftInput, 30)(rightInput, 30),
+            CheckNewAnswer(Row(30, 40L)),
+            StopStream)
+        }
+        assert(pinnedMarker(checkpoint).contains("0"))
       }
     }
   }

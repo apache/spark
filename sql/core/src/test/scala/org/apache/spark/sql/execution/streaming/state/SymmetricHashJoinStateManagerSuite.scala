@@ -171,7 +171,8 @@ abstract class SymmetricHashJoinStateManagerBaseSuite extends StreamTest with Be
       joinKeyExprs: Seq[Expression],
       stateFormatVersion: Int,
       skipNullsForStreamStreamJoins: Boolean = false,
-      metric: Option[SQLMetric] = None)
+      metric: Option[SQLMetric] = None,
+      joinKeyOrdinalForWatermark: Option[Int] = None)
     (f: SymmetricHashJoinStateManager => Unit): Unit = {
     // HDFS store providers do not support virtual column families
     val storeProvider = if (stateFormatVersion >= 3) {
@@ -191,7 +192,8 @@ abstract class SymmetricHashJoinStateManagerBaseSuite extends StreamTest with Be
         val manager = SymmetricHashJoinStateManager(
           LeftSide, inputValueAttribs, joinKeyExprs, Some(stateInfo), storeConf, new Configuration,
           partitionId = 0, None, None, stateFormatVersion, metric,
-          joinStoreGenerator = new JoinStateManagerStoreGenerator())
+          joinStoreGenerator = new JoinStateManagerStoreGenerator(),
+          joinKeyOrdinalForWatermark = joinKeyOrdinalForWatermark)
         try {
           f(manager)
         } finally {
@@ -210,7 +212,8 @@ abstract class SymmetricHashJoinStateManagerBaseSuite extends StreamTest with Be
       storeVersion: Int,
       changelogCheckpoint: Boolean,
       skipNullsForStreamStreamJoins: Boolean = false,
-      metric: Option[SQLMetric] = None)
+      metric: Option[SQLMetric] = None,
+      joinKeyOrdinalForWatermark: Option[Int] = None)
     (f: SymmetricHashJoinStateManager => Unit): Unit = {
     // HDFS store providers do not support virtual column families
     val storeProvider = if (stateFormatVersion >= 3) {
@@ -231,7 +234,8 @@ abstract class SymmetricHashJoinStateManagerBaseSuite extends StreamTest with Be
       val manager = SymmetricHashJoinStateManager(
         LeftSide, inputValueAttribs, joinKeyExprs, Some(stateInfo), storeConf, new Configuration,
         partitionId = 0, None, None, stateFormatVersion, metric,
-        joinStoreGenerator = new JoinStateManagerStoreGenerator())
+        joinStoreGenerator = new JoinStateManagerStoreGenerator(),
+        joinKeyOrdinalForWatermark = joinKeyOrdinalForWatermark)
       try {
         f(manager)
       } finally {
@@ -423,6 +427,119 @@ class SymmetricHashJoinStateManagerEventTimeInKeySuite
     test(s"StreamingJoinStateManager V$ver - all operations, with commit and load in between") {
       testAllOperationsWithCommitAndLoad(ver, changelogCheckpoint = false)
       testAllOperationsWithCommitAndLoad(ver, changelogCheckpoint = true)
+    }
+  }
+
+  test("StreamingJoinStateManager V4 - null event-time join keys stay unbounded") {
+    val watermarkMetadata = new MetadataBuilder()
+      .putLong(EventTimeWatermark.delayKey, 10).build()
+    val valueSchema = new StructType()
+      .add(StructField("time", TimestampType, metadata = watermarkMetadata))
+      .add(StructField("value", IntegerType))
+    val valueAttributes = toAttributes(valueSchema)
+    val windowType = new StructType()
+      .add(StructField("start", TimestampType))
+      .add(StructField("end", TimestampType))
+    val keyExpressions = Seq[Expression](
+      Literal(false),
+      AttributeReference("window", windowType, nullable = true)(),
+      Literal(10.0))
+    val valueGen = UnsafeProjection.create(valueAttributes.map(_.dataType).toArray)
+    val keyGen = UnsafeProjection.create(keyExpressions.map(_.dataType).toArray)
+
+    def micros(seconds: Long): Long = seconds * 1000000L
+
+    def window(startSeconds: Long, endSeconds: Option[Long]): GenericInternalRow = {
+      new GenericInternalRow(Array[Any](
+        micros(startSeconds),
+        endSeconds.map(seconds => Long.box(micros(seconds))).orNull))
+    }
+
+    def key(windowValue: Any): UnsafeRow = {
+      keyGen.apply(new GenericInternalRow(Array[Any](false, windowValue, 10.0))).copy()
+    }
+
+    def value(timeSeconds: Option[Long], value: Int): UnsafeRow = {
+      valueGen.apply(new GenericInternalRow(Array[Any](
+        timeSeconds.map(seconds => Long.box(micros(seconds))).orNull,
+        value))).copy()
+    }
+
+    def valuesFor(key: UnsafeRow)(implicit manager: SymmetricHashJoinStateManager): Seq[Int] = {
+      manager.get(key).map(_.getInt(1)).toSeq.sorted
+    }
+
+    val nullWindowKey = key(null)
+    val nullEndWindowKey = key(window(0, None))
+    val nonNullWindowKey = key(window(0, Some(5)))
+
+    withTempDir { checkpointDir =>
+      withJoinStateManagerWithCheckpointDir(
+        valueAttributes,
+        keyExpressions,
+        stateFormatVersion = 4,
+        checkpointDir,
+        storeVersion = 0,
+        changelogCheckpoint = false,
+        joinKeyOrdinalForWatermark = Some(1)) { manager =>
+        implicit val mgr = manager
+
+        manager.append(nullWindowKey, value(Some(100), 1), matched = false)
+        manager.append(nullEndWindowKey, value(Some(100), 2), matched = false)
+        manager.append(nonNullWindowKey, value(Some(100), 3), matched = false)
+
+        assert(valuesFor(nullWindowKey) === Seq(1))
+        assert(valuesFor(nullEndWindowKey) === Seq(2))
+        assert(valuesFor(nonNullWindowKey) === Seq(3))
+
+        manager.commit()
+      }
+
+      withJoinStateManagerWithCheckpointDir(
+        valueAttributes,
+        keyExpressions,
+        stateFormatVersion = 4,
+        checkpointDir,
+        storeVersion = 1,
+        changelogCheckpoint = false,
+        joinKeyOrdinalForWatermark = Some(1)) { manager =>
+        implicit val mgr = manager
+
+        val evictByTimestamp = manager.asInstanceOf[SupportsEvictByTimestamp]
+        assert(evictByTimestamp.evictByTimestamp(Long.MaxValue) === 1)
+
+        assert(valuesFor(nullWindowKey) === Seq(1))
+        assert(valuesFor(nullEndWindowKey) === Seq(2))
+        assert(valuesFor(nonNullWindowKey) === Seq.empty)
+
+        manager.commit()
+      }
+
+      withJoinStateManagerWithCheckpointDir(
+        valueAttributes,
+        keyExpressions,
+        stateFormatVersion = 4,
+        checkpointDir,
+        storeVersion = 2,
+        changelogCheckpoint = false,
+        joinKeyOrdinalForWatermark = Some(1)) { manager =>
+        implicit val mgr = manager
+
+        assert(valuesFor(nullWindowKey) === Seq(1))
+        assert(valuesFor(nullEndWindowKey) === Seq(2))
+
+        val dummyRow = new GenericInternalRow(0)
+        val removed = manager.getJoinedRowsAndRemoveMatched(
+          nullWindowKey,
+          row => new JoinedRow(row, dummyRow),
+          _ => true
+        ).map(_.getInt(1)).toSeq
+        assert(removed === Seq(1))
+        assert(valuesFor(nullWindowKey) === Seq.empty)
+        assert(valuesFor(nullEndWindowKey) === Seq(2))
+
+        manager.commit()
+      }
     }
   }
 

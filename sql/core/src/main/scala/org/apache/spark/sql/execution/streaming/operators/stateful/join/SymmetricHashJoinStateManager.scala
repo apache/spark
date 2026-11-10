@@ -295,13 +295,22 @@ class SymmetricHashJoinStateManagerV4(
   }
 
   private val extractTimestampFromKey: UnsafeRow => Option[Long] = { row =>
-    joinKeyOrdinalForWatermark.map { idx =>
-      val attr = keyAttributes(idx)
-      if (attr.dataType.isInstanceOf[StructType]) {
-        // NOTE: We assume this is window struct, as same as WatermarkSupport.watermarkExpression
-        row.getStruct(idx, 2).getLong(1)
+    joinKeyOrdinalForWatermark.flatMap { idx =>
+      if (row.isNullAt(idx)) {
+        None
       } else {
-        row.getLong(idx)
+        val attr = keyAttributes(idx)
+        if (attr.dataType.isInstanceOf[StructType]) {
+          // NOTE: We assume this is window struct, as same as WatermarkSupport.watermarkExpression
+          val window = row.getStruct(idx, 2)
+          if (window == null || window.isNullAt(1)) {
+            None
+          } else {
+            Some(window.getLong(1))
+          }
+        } else {
+          Some(row.getLong(idx))
+        }
       }
     }
   }
@@ -442,7 +451,13 @@ class SymmetricHashJoinStateManagerV4(
   private val tsWithKey = new TsWithKeyTypeStore
 
   override def append(key: UnsafeRow, value: UnsafeRow, matched: Boolean): Unit = {
-    val timestamp = extractTimestampFromKey(key).orElse(extractTimestampFromValue(value))
+    // A null selected key or indexed value timestamp makes the eviction predicate SQL-unknown.
+    // Keep such a row in a primary random bucket only, so timestamp eviction cannot remove it.
+    val timestamp = if (joinKeyOrdinalForWatermark.isDefined) {
+      extractTimestampFromKey(key)
+    } else {
+      extractTimestampFromValue(value)
+    }
     // When no timestamp is available, we will use random bucketing strategy to decide where the
     // new value will be stored. There is a trade-off between the bucket size and the number of
     // values in each bucket; we can tune the bucket size with the configuration if we figure out
