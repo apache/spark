@@ -757,6 +757,8 @@ object UnsupportedOperationChecker extends Logging {
           s"is not supported: it requires $requirement " +
           "that allow unmatched state to be finalized. " +
           "The time constraint may be equality on event time or a time range condition. " +
+          "A time range condition must bound a TIMESTAMP column of the finalized input by " +
+          "the other input's event time. " +
           "When upgrading an existing query, correct its watermarks and time constraints, " +
           "then use a new checkpoint and replay the input, reconciling prior sink output." +
           downstreamNote +

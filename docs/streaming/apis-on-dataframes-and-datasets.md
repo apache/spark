@@ -1452,9 +1452,11 @@ Additional details on supported joins:
 - Joins can be cascaded, that is, you can do `df1.join(df2, ...).join(df3, ...).join(df4, ....)`.
 
 - For stream-stream outer and semi joins, the time constraint that finalizes an input's rows must
-  bound a timestamp column of that input by the other input's event time, through an equality key
-  or a range condition. A bound on a numeric column, such as `n > CAST(rightTime AS BIGINT)`, does
-  not qualify.
+  bound that input by the other input's event time, either through an equality key on that event
+  time or its time window, or through a range condition on a timestamp column of the input. A
+  range condition on a column of another type does not qualify: a numeric column, such as
+  `n > CAST(rightTime AS BIGINT)`, a DATE or TIMESTAMP_NTZ column, or a time window, such as
+  `leftWindow > rightWindow`.
 
 - As of Spark 2.4, you can use joins only when the query is in Append output mode. Other output modes are not yet supported.
 

@@ -28,10 +28,12 @@ Please refer [Migration Guide: SQL, Datasets and DataFrame](../sql-migration-gui
 - Since Spark 4.4, left outer and left semi stream-stream joins require a watermark on the
   right input and a time condition that limits how late a matching right row can arrive.
   Right outer joins require the corresponding settings on the left; full outer joins require
-  them on both sides. The time condition must bound a timestamp column of the finalized input
-  by the other input's event time; a bound on a numeric column does not qualify. Some
-  previously accepted queries now fail if these requirements are not met. Update their
-  watermarks and join conditions using the
+  them on both sides. The time condition must be an equality on the other input's event time
+  or its time window, or a range condition that bounds a timestamp column of the finalized
+  input by the other input's event time; a range condition on a numeric, DATE or
+  TIMESTAMP_NTZ column, or on a time window, does not qualify. Some previously accepted
+  queries now fail if these requirements are not met. Update their watermarks and join
+  conditions using the
   [join support table](apis-on-dataframes-and-datasets.html#support-matrix-for-joins-in-streaming-queries).
   A stateful operator after such a join that uses the other input's event time also needs that
   input bounded: for example, a left outer join followed by an append-mode aggregation over the
