@@ -72,7 +72,8 @@ class SortMergeAsOfJoinSuite extends QueryTest
   }
 
   // Like checkAnswer, but also asserts the right-side buffer spilled (spillSize > 0). Runs with
-  // the ASOF join codegen off and on, so both paths must handle the spilled buffer.
+  // the ASOF join codegen off and on, so both paths must handle the spilled buffer, except for a
+  // nearest join, which runs the interpreted scan both times.
   private def checkAnswerAndSpill(df: => classic.DataFrame, expectedAnswer: Seq[Row]): Unit = {
     withAsOfJoinCodegenOffAndOn { codegen =>
       val query = df
