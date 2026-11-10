@@ -445,9 +445,11 @@ class Column(ParentColumn):
     def startswith(
         self, other: Union[ParentColumn, "LiteralType", "DecimalLiteral", "DateTimeLiteral"]
     ) -> ParentColumn:
-        # The JVM `startsWith` is overloaded for `Column` and `String`. Always pass a `Column` so
-        # that Py4J does not pick the `Column` overload with a null argument for `None`.
-        if not isinstance(other, ParentColumn):
+        # The JVM `startsWith` is overloaded for `Column` and `String`. A `str` can only bind the
+        # `String` overload, but for `None` (a JVM null) Py4J may pick the `Column` overload and
+        # fail with a NullPointerException, so pass other literals as a `Column`.
+        other = enum_to_value(other)
+        if not isinstance(other, (ParentColumn, str)):
             other = Column(_create_column_from_literal(other))
         return _bin_op("startsWith", self, other)
 
@@ -455,7 +457,8 @@ class Column(ParentColumn):
         self, other: Union[ParentColumn, "LiteralType", "DecimalLiteral", "DateTimeLiteral"]
     ) -> ParentColumn:
         # See the comment in `startswith`.
-        if not isinstance(other, ParentColumn):
+        other = enum_to_value(other)
+        if not isinstance(other, (ParentColumn, str)):
             other = Column(_create_column_from_literal(other))
         return _bin_op("endsWith", self, other)
 
