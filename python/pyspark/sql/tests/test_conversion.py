@@ -32,6 +32,7 @@ from pyspark.sql.conversion import (
 from pyspark.sql.types import (
     ArrayType,
     BinaryType,
+    DayTimeIntervalType,
     DecimalType,
     DoubleType,
     Geography,
@@ -824,6 +825,30 @@ class ArrowToPandasConversionTests(unittest.TestCase):
             spark_type = TimestampType() if pa_type.tz is not None else TimestampNTZType()
             result = ArrowToPandasConversion._convert_array_numpy(col, spark_type, timezone="UTC")
             self.assertEqual(result.name, "tscol", f"name lost for {pa_type}")
+
+    @unittest.skipIf(not have_pandas, pandas_requirement_message)
+    def test_day_time_interval_outside_timedelta64_ns_range(self):
+        # SPARK-60827: a DayTimeIntervalType value outside the range of timedelta64[ns] must
+        # fail rather than wrap around.
+        import pyarrow as pa
+
+        spark_type = DayTimeIntervalType()
+        max_days = datetime.timedelta(days=106751)
+        col = pa.RecordBatch.from_arrays(
+            [pa.array([max_days, -max_days, None], pa.duration("us"))], ["iv"]
+        ).column(0)
+        # The column's name survives the cast to nanoseconds.
+        self.assertEqual(ArrowToPandasConversion._convert_array(col, spark_type).name, "iv")
+        for arr in [col, pa.chunked_array([col])]:
+            result = ArrowToPandasConversion._convert_array(arr, spark_type)
+            self.assertEqual(result.iloc[0], max_days)
+            self.assertEqual(result.iloc[1], -max_days)
+            self.assertTrue(result.isna().iloc[2])
+
+        for days in [106752, 200000, -106752, -200000]:
+            arr = pa.array([datetime.timedelta(days=days)], pa.duration("us"))
+            with self.assertRaisesRegex(pa.ArrowInvalid, "out of bounds"):
+                ArrowToPandasConversion._convert_array(arr, spark_type)
 
     def test_udt_convert_array_numpy(self):
         import pyarrow as pa
