@@ -18,8 +18,9 @@
 package org.apache.spark.sql.catalyst.plans.logical
 
 import org.apache.spark.SparkException
-import org.apache.spark.sql.catalyst.expressions.{Attribute, AttributeSet, Expression}
-import org.apache.spark.sql.catalyst.plans.{Inner, JoinType, LeftOuter}
+import org.apache.spark.sql.catalyst.expressions.{Attribute, AttributeSeq, AttributeSet,
+  Expression}
+import org.apache.spark.sql.catalyst.plans.{Inner, JoinType, LeftOuter, QueryPlan}
 import org.apache.spark.sql.catalyst.trees.TreePattern.{EXTERNAL_LOOKUP_JOIN, TreePattern}
 import org.apache.spark.sql.catalyst.util.CharVarcharUtils
 import org.apache.spark.sql.connector.read.{ExternalLookupReaderFactory, Scan}
@@ -82,6 +83,22 @@ case class PreparedExternalLookupJoin(
   override protected def withNewChildInternal(newChild: LogicalPlan): PreparedExternalLookupJoin =
     copy(child = newChild)
 
+  // The lookup-side attributes are not in the child's output, so the default canonicalization
+  // gives each top-level one the next id, whichever column it is: two joins that keep different
+  // lookup columns of one type would canonicalize alike. Each is normalized by its place in the
+  // child's output and the read schema instead.
+  override protected def doCanonicalize(): LogicalPlan = {
+    val attributes: AttributeSeq = child.output ++ lookupInput
+    def normalize[T <: Expression](expression: T): T =
+      QueryPlan.normalizeExpressions(expression, attributes)
+    copy(
+      child = child.canonicalized,
+      lookupInput = lookupInput.map(normalize),
+      lookupOutput = lookupOutput.map(normalize),
+      lookupParameters = lookupParameters.map(normalize),
+      residualCondition = residualCondition.map(normalize))
+  }
+
   // Connector descriptions may contain secrets, so the scan and the reader factory are not shown.
   // The physical node renders a redacted description of them.
   override protected def stringArgs: Iterator[Any] =
@@ -111,8 +128,10 @@ object ExternalLookupKeyTypes {
    * collation compares bytes, such as UTF8_BINARY. FLOAT and DOUBLE are not offered, because
    * stores treat NaN and -0.0 in different ways, nor CHAR, which Spark pads on read, nor strings
    * with another collation, nor complex types, nor any other type. VARCHAR is not offered under
-   * `spark.sql.charVarchar.standardSemantics.enabled` either, because Spark then trims trailing
-   * blanks on read, so a store that compares the stored value could miss a row.
+   * `spark.sql.charVarchar.standardSemantics.enabled` either. Spark then reads a value within the
+   * declared length unchanged, but drops the trailing blanks past that length from a longer value,
+   * and fails if it is still too long. So a store that compares such a longer value as stored
+   * could miss a row that Spark's equality matches.
    *
    * Analysis reads a CHAR or VARCHAR column as a STRING and keeps its declared type in the
    * metadata, so the column's data type alone does not tell.

@@ -22,8 +22,8 @@ import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.analysis.FormExternalLookupJoin
 import org.apache.spark.sql.catalyst.dsl.expressions._
-import org.apache.spark.sql.catalyst.expressions.{Attribute, AttributeReference, AttributeSet,
-  BindReferences, Coalesce, Expression, Literal, Predicate => CatalystPredicate}
+import org.apache.spark.sql.catalyst.expressions.{Attribute, AttributeMap, AttributeReference,
+  AttributeSet, BindReferences, Coalesce, Expression, Literal, Predicate => CatalystPredicate}
 import org.apache.spark.sql.catalyst.optimizer.ColumnPruning
 import org.apache.spark.sql.catalyst.plans.{Inner, JoinType, LeftOuter, PlanTest}
 import org.apache.spark.sql.catalyst.plans.logical.{ExternalLookupJoin, Join, JoinHint,
@@ -111,14 +111,15 @@ class PrepareExternalLookupJoinSuite extends PlanTest {
     val offeredTypes = Seq("TINYINT", "SMALLINT", "INT", "BIGINT", "BOOLEAN", "DECIMAL(10, 2)",
       "DATE", "TIMESTAMP", "TIMESTAMP_NTZ", "BINARY", "STRING", "STRING COLLATE UTF8_BINARY",
       "VARCHAR(3)")
-    val notOfferedTypes = Seq("FLOAT", "DOUBLE", "CHAR(3)",
+    val notOfferedTypes = Seq("FLOAT", "DOUBLE", "CHAR(3)", "VARCHAR(3) COLLATE UTF8_LCASE",
       "STRING COLLATE UTF8_LCASE", "STRING COLLATE UNICODE", "STRING COLLATE UTF8_BINARY_RTRIM",
       "STRUCT<a: INT>", "ARRAY<INT>", "INTERVAL DAY TO SECOND")
     for ((codeType, offered) <- offeredTypes.map(_ -> true) ++ notOfferedTypes.map(_ -> false)) {
       assert(offeredCodeCandidate(codeType) === offered, codeType)
     }
-    // Standard CHAR/VARCHAR semantics trims trailing blanks from a VARCHAR value on read, so a
-    // store that compares the stored value could miss a row.
+    // Under standard CHAR/VARCHAR semantics, Spark reads a VARCHAR value longer than the declared
+    // length without the trailing blanks past that length, so a store that compares the value as
+    // stored could miss a row.
     withSQLConf(SQLConf.CHAR_VARCHAR_STANDARD_SEMANTICS.key -> "true") {
       assert(offeredCodeCandidate("VARCHAR(3)") === false)
       assert(offeredCodeCandidate("STRING"))
@@ -431,6 +432,26 @@ class PrepareExternalLookupJoinSuite extends PlanTest {
       assert(prepared.stats.sizeInBytes === sizedStream.stats.sizeInBytes * 1000)
       assert(prepared.stats.sizeInBytes === join.stats.sizeInBytes)
     }
+  }
+
+  test("a prepared lookup join canonicalizes each lookup column by its place in the read schema") {
+    val lookup = lookupRelation(PlanningExternalLookupTable("id INT, code INT"))
+    val Seq(lookupId, lookupCode) = lookup.output
+    val streamId = stream.output.head
+    val prepared = prepare(lookupJoin(lookup, streamId === lookupId && streamId > lookupCode))
+    assert(prepared.residualCondition.exists(_.references.contains(lookupCode)))
+    // Another analysis of the query gives the lookup columns other ids.
+    val newIds = AttributeMap(prepared.lookupInput.map(attr => attr -> attr.newInstance()))
+    val reanalyzed = prepared.transformExpressions {
+      case attr: Attribute if newIds.contains(attr) => newIds(attr)
+    }
+    assert(reanalyzed.lookupInput != prepared.lookupInput)
+    assert(reanalyzed.sameResult(prepared))
+    // Joins that keep different lookup columns of one type do not canonicalize alike.
+    val keepsId = prepared.copy(lookupOutput = Seq(lookupId))
+    val keepsCode = prepared.copy(lookupOutput = Seq(lookupCode))
+    assert(keepsId.sameResult(keepsCode) === false)
+    assert(keepsId.sameResult(prepared.copy(lookupOutput = Seq(lookupId))))
   }
 
   test("column pruning never projects the lookup relation under a lookup join") {
