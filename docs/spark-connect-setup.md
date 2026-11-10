@@ -221,7 +221,7 @@ The SPARK_REMOTE environment variable can be set on the client machine to custom
 connection that is initialized at REPL startup.
 
 ```bash
-export SPARK_REMOTE="sc://myhost.com:443/;token=ABCDEFG"
+export SPARK_REMOTE="sc://example.com:443/;token=ABCDEFG"
 ./bin/spark-shell
 ```
 
@@ -234,14 +234,14 @@ The connection may also be programmatically created using _SparkSession#builder_
 <div data-lang="python"  markdown="1">
 ```python
 from pyspark.sql import SparkSession
-spark = SparkSession.builder.remote("sc://myhost.com:443/;token=ABCDEFG").getOrCreate()
+spark = SparkSession.builder.remote("sc://example.com:443/;token=ABCDEFG").getOrCreate()
 ```
 </div>
 
 <div data-lang="scala"  markdown="1">
 ```scala
 @ import org.apache.spark.sql.SparkSession
-@ val spark = SparkSession.builder.remote("sc://myhost.com:443/;token=ABCDEFG").getOrCreate()
+@ val spark = SparkSession.builder.remote("sc://example.com:443/;token=ABCDEFG").getOrCreate()
 ```
 </div>
 </div>
@@ -479,7 +479,7 @@ The example below uses the Python client, which exposes gRPC channel options dir
 from pyspark.sql.connect.session import SparkSession
 from pyspark.sql.connect.client import DefaultChannelBuilder
 
-cb = DefaultChannelBuilder("sc://myhost.com:443")
+cb = DefaultChannelBuilder("sc://example.com:443")
 cb.setChannelOption("grpc.default_authority", "sparkconnect")  # routing tag
 spark = SparkSession.builder.channelBuilder(cb).getOrCreate()
 ```
@@ -510,8 +510,8 @@ real server hostname (used for certificate verification and SNI) and `grpc.defau
 to the routing tag.
 
 ```python
-cb = DefaultChannelBuilder("sc://myhost.com:443/;use_ssl=true")
-cb.setChannelOption("grpc.ssl_target_name_override", "myhost.com")  # certificate verification / SNI
+cb = DefaultChannelBuilder("sc://example.com:443/;use_ssl=true")
+cb.setChannelOption("grpc.ssl_target_name_override", "example.com")  # certificate verification / SNI
 cb.setChannelOption("grpc.default_authority", "sparkconnect")       # routing tag
 spark = SparkSession.builder.channelBuilder(cb).getOrCreate()
 ```
