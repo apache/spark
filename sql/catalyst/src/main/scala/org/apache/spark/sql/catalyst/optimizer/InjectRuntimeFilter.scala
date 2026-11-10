@@ -56,6 +56,8 @@ object InjectRuntimeFilter extends Rule[LogicalPlan] with PredicateHelper with J
 
   private def hintErrorHandler = conf.hintErrorHandler
 
+  private val AmbiguousHint = "the runtime filter source is ambiguous as both join sides are hinted"
+
   // The optimizer runs this rule on a subquery before hoisting it into the main plan, where the
   // join is visited again, possibly rebuilt by another rule in between. The join's hint records
   // that its runtime filter hint was applied or reported, so it is not decided again.
@@ -169,7 +171,12 @@ object InjectRuntimeFilter extends Rule[LogicalPlan] with PredicateHelper with J
   private def withoutUnreadOuterGenerates(plan: LogicalPlan): LogicalPlan = {
     def isRead(g: Generate): Boolean = {
       val generated = AttributeSet(g.generatorOutput)
-      plan.exists(node => !(node eq g) && node.references.intersect(generated).nonEmpty)
+      plan.exists {
+        case node if node eq g => false
+        // A union outputs its children's columns by position, without referencing them.
+        case u: Union => u.children.exists(_.outputSet.intersect(generated).nonEmpty)
+        case node => node.references.intersect(generated).nonEmpty
+      }
     }
     plan transformDown {
       case g: Generate if g.outer && !g.generator.deterministic && !isRead(g) => g.child
@@ -554,21 +561,23 @@ object InjectRuntimeFilter extends Rule[LogicalPlan] with PredicateHelper with J
    * The DPP filters on `applicationKey` built from `creationKey` that prune `plan`. This rule runs
    * after the DPP filters are pushed down and cleaned up, so only a surviving one is found,
    * wherever the pushdown left it; it is the one [[PartitionPruning]] inserted for the same join
-   * key pair, whose pruning key it rewrote on the way down as the lineage tracking does.
+   * key pair, whose pruning key it rewrote on the way down as the lineage tracking does. Pushdown
+   * takes it into every branch of a union, and cleanup can drop it from some branches only, so all
+   * the lineages of the key are followed.
    */
   private def dynamicPruningFilters(
       plan: LogicalPlan,
       applicationKey: Expression,
       creationKey: Expression): Seq[DynamicPruningSubquery] = {
     if (!plan.containsPattern(DYNAMIC_PRUNING_SUBQUERY)) return Nil
-    findExpressionAndTrackLineageDown(applicationKey, plan).toSeq.flatMap { case (trackedKey, _) =>
-      plan.flatMap {
-        case Filter(condition, _) => condition.collect {
-          case d: DynamicPruningSubquery if d.pruningKey.semanticEquals(trackedKey) &&
-            d.broadcastKeyIndices.exists(i => d.buildKeys(i).semanticEquals(creationKey)) => d
-        }
-        case _ => Nil
+    val trackedKeys = findExpressionAndTrackAllLineagesDown(applicationKey, plan).map(_._1)
+    if (trackedKeys.isEmpty) return Nil
+    plan.flatMap {
+      case Filter(condition, _) => condition.collect {
+        case d: DynamicPruningSubquery if trackedKeys.exists(_.semanticEquals(d.pruningKey)) &&
+          d.broadcastKeyIndices.exists(i => d.buildKeys(i).semanticEquals(creationKey)) => d
       }
+      case _ => Nil
     }
   }
 
@@ -644,14 +653,15 @@ object InjectRuntimeFilter extends Rule[LogicalPlan] with PredicateHelper with J
     lazy val cteDefs = cteDefinitions(plan)
     plan transformUp {
       case join: Join if isRuntimeFilterHintDecided(join.hint) => join
-      // Only a hinted join has anything to do with Bloom filters disabled.
-      case join: Join if !bloomFilterEnabled && !hasRuntimeFilterHint(join.hint) => join
+      // Only a hinted join has anything to do with Bloom filters disabled or once the number of
+      // filters is reached.
+      case join: Join if !hasRuntimeFilterHint(join.hint) &&
+          (!bloomFilterEnabled || filterCounter >= numFilterThreshold) => join
       case join @ ExtractEquiJoinKeys(joinType, leftKeys, rightKeys, _, _, left, right, hint) =>
         var newLeft = left
         var newRight = right
         if (isRuntimeFilterHintAmbiguous(hint)) {
-          reportHintNotApplied(join,
-            "the runtime filter source is ambiguous as both join sides are hinted")
+          reportHintNotApplied(join, AmbiguousHint)
         }
         // A side hinted as the runtime filter source is the creation side, so the filter is
         // applied to the other side. An ambiguous hint is ignored, leaving the heuristics to
@@ -860,11 +870,8 @@ object InjectRuntimeFilter extends Rule[LogicalPlan] with PredicateHelper with J
       case join @ Join(_, _, _, _, hint) if hasRuntimeFilterHint(hint) =>
         // A runtime filter is built from the join keys, so a join without equi-join keys has
         // nothing to build from.
-        reportHintNotApplied(join, if (isRuntimeFilterHintAmbiguous(hint)) {
-          "the runtime filter source is ambiguous as both join sides are hinted"
-        } else {
-          "no equi-join keys"
-        })
+        reportHintNotApplied(join,
+          if (isRuntimeFilterHintAmbiguous(hint)) AmbiguousHint else "no equi-join keys")
         markRuntimeFilterHintDecided(join)
     }
   }

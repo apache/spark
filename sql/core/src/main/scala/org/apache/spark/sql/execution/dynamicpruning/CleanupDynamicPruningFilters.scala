@@ -56,7 +56,7 @@ object CleanupDynamicPruningFilters extends Rule[LogicalPlan] with PredicateHelp
           case dynamicPruning: DynamicPruningSubquery
               if dynamicPruning.pruningKey.references.isEmpty ||
                 unnecessaryPruningKeys.contains(dynamicPruning.pruningKey) =>
-            // Not the shared `TrueLiteral`: the transform copies the filter's tags onto it.
+            // Not the shared `TrueLiteral`: the transform copies the DPP filter's tags onto it.
             Literal(true)
         }
         f.copy(condition = newCondition)
@@ -86,7 +86,7 @@ object CleanupDynamicPruningFilters extends Rule[LogicalPlan] with PredicateHelp
       case f @ Filter(condition, _) =>
         val newCondition = condition.transformWithPruning(
           _.containsAnyPattern(DYNAMIC_PRUNING_EXPRESSION, DYNAMIC_PRUNING_SUBQUERY)) {
-          // Not the shared `TrueLiteral`: the transform copies the filter's tags onto it.
+          // Not the shared `TrueLiteral`: the transform copies the DPP filter's tags onto it.
           case _: DynamicPruning => Literal(true)
         }
         f.copy(condition = newCondition)

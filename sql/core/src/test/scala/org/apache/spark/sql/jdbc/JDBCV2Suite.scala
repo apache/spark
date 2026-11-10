@@ -3437,8 +3437,8 @@ class JDBCV2Suite extends SharedSparkSession with ExplainSuiteHelper {
               Seq(limited, aggregated).foreach { query =>
                 assert(!hasRuntimeFilter(query))
                 assert(warnings(query).exists(_.contains("is not supported in the query: the " +
-                  "hinted side reads h2.test.employee with an aggregate, limit, offset, top-N or " +
-                  "sample pushed into the source")))
+                  "hinted side reads h2.test.employee, which may return different rows when " +
+                  "evaluated again")))
               }
               // A scan that absorbed only a filter returns the same rows again.
               val filtered = "SELECT /*+ RUNTIME_FILTER(d) */ * FROM " +

@@ -831,11 +831,12 @@ private[optimizer] class RuntimeFilterSourceAnalysis(
     case m: MaterializedLeafNode if m.materializedMetadata.isEmpty =>
       Left(s"the hinted side reads ${m.nodeName}, which is not materialized yet")
 
-    // The source may have absorbed an operator from the hinted side, so name that rather than the
-    // scan the user did not write.
+    // `V2ScanRelationPushDown` marks a scan repeatable unless the source absorbed an operator from
+    // the hinted side that picks its rows, which the reason names as the likely cause. A scan built
+    // elsewhere, such as the target scan of a copy-on-write DELETE, UPDATE or MERGE, is not marked.
     case s: DataSourceV2ScanRelation if !s.isOutputRepeatable =>
-      Left(s"the hinted side reads ${s.name} with an aggregate, limit, offset, top-N or sample " +
-        "pushed into the source, which may return different rows when evaluated again")
+      Left(s"the hinted side reads ${s.name}, which may return different rows when evaluated " +
+        "again, e.g. with an aggregate, limit, offset, top-N or sample pushed into the source")
 
     case r: CTERelationRef => cteDefs.get(r.cteId).filterNot(_ => r.recursive) match {
       case Some(cteDef) => analyze(cteDef.child).map { t =>

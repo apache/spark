@@ -1965,6 +1965,22 @@ class InjectRuntimeFilterSuite extends SharedSparkSession
     }
   }
 
+  test("Runtime bloom filter join: do not add bloom filter if a union branch other than the " +
+    "first keeps the dpp filter") {
+    // Pushdown takes the DPP filter on `t.f5` into both branches of the union. Cleanup drops it
+    // from the first, whose static filter on the partition column makes it unnecessary. The one
+    // in the second reuses the broadcast of `bf2`.
+    val query = "select /*+ broadcast(bf2) */ * from (select f5, sum(c5) from " +
+      "(select f5, c5 from bf5part where f5 = 1 union all select f5, c5 from bf5filtered) " +
+      "group by f5) t join bf2 on t.f5 = bf2.c2 where bf2.a2 = 62"
+    withDppTestConf() {
+      assert(hasDynamicPruning(query))
+      assert(bloomFilterKeys(query).isEmpty)
+      // Without DPP, the bloom filter is pushed into both branches.
+      assertBloomFilterWithoutDpp(query, 2)
+    }
+  }
+
   test("Runtime bloom filter join: do not add bloom filter if dpp filter exists " +
     "on the same column through a renaming projection") {
     withSQLConf(SQLConf.RUNTIME_BLOOM_FILTER_APPLICATION_SIDE_SCAN_SIZE_THRESHOLD.key -> "3000",
@@ -2577,6 +2593,22 @@ class InjectRuntimeFilterSuite extends SharedSparkSession
           checkAnswer(sql(query), Row(1, 10))
         }
       }
+    }
+  }
+
+  test("RUNTIME_FILTER hint keeps an outer generate whose output a union passes up") {
+    withSQLConf(SQLConf.RUNTIME_BLOOM_FILTER_APPLICATION_SIDE_SCAN_SIZE_THRESHOLD.key -> "3000",
+      SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key -> "-1") {
+      // The union outputs the generated column of its second branch by position, without
+      // referencing it, and the grouping reads it. So the filter's subquery keeps the generate,
+      // whose generator is not deterministic.
+      val query = "SELECT /*+ RUNTIME_FILTER(t) */ * FROM bf4 JOIN (SELECT k FROM " +
+        "(SELECT c2 AS k, b2 AS g FROM bf2 UNION ALL SELECT c3, v FROM bf3 " +
+        "LATERAL VIEW OUTER explode(shuffle(array(a3, b3))) x AS v) GROUP BY k, g) t " +
+        "ON bf4.c4 = t.k"
+      assertNoBloomFilters(query)
+      assertHintNotApplied(query,
+        "the runtime filter's subquery over the hinted side is not deterministic")
     }
   }
 
