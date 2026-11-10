@@ -23,9 +23,6 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from types import SimpleNamespace
 from unittest.mock import MagicMock, Mock, patch
 
-import pandas as pd
-import requests
-
 from pyspark.sql._ai_client import (
     _AgentClient,
     _AgentEndpoint,
@@ -37,7 +34,16 @@ from pyspark.sql._ai_client import (
 )
 from pyspark.sql.ai import ai_query, register_agent, register_model
 
+try:
+    import pandas as pd
+    import requests
+except ImportError:
+    have_ai_query_dependencies = False
+else:
+    have_ai_query_dependencies = True
 
+
+@unittest.skipUnless(have_ai_query_dependencies, "AI query tests require pandas and requests")
 class AIQueryTests(unittest.TestCase):
     def client(self, **options):
         client = object.__new__(_AgentClient)
