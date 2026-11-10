@@ -411,6 +411,8 @@ class ExternalLookupJoinSuite extends QueryTest with SharedSparkSession {
   test("a query without a lookup-only table or the hint is not searched for lookup joins") {
     // Classifying the joins of a plan inlines its CTE references, so a plan that can have no lookup
     // join is left alone, such as this self-join of a CTE over a table that supports batch reads.
+    // The pattern bits tell it, so the plan is not walked and its tables are not asked for their
+    // capabilities, also for a subquery, a micro-batch, cache substitution and each join.
     val dual = spark.read.format(classOf[DualCapabilityExternalLookupDataSource].getName).load()
     val lookupOnly = spark.read.format(classOf[SimpleExternalLookupDataSource].getName).load()
     withTempView("employee_directory", "lookup_directory", "badge_swipes") {
@@ -422,10 +424,38 @@ class ExternalLookupJoinSuite extends QueryTest with SharedSparkSession {
           |WITH d AS (TABLE employee_directory)
           |SELECT a.id, a.department, b.department FROM d a JOIN d b ON a.id = b.id
           |""".stripMargin)
-      val analyzed = ordinary.queryExecution.analyzed
-      assert(ExternalLookupJoinEligibility.mayHaveLookupJoin(analyzed) === false)
-      assert(ExternalLookupJoinEligibility.lookupSidePlans(analyzed).isEmpty)
-      assert(FormExternalLookupJoin(analyzed) eq analyzed)
+      val withSubquery = sql(
+        """
+          |SELECT id, department FROM employee_directory WHERE id IN (
+          |  SELECT a.id FROM employee_directory a JOIN employee_directory b ON a.id = b.id)
+          |""".stripMargin)
+      val microBatch = runStream(sql(
+        """
+          |SELECT s.door, d.department
+          |FROM badge_swipes s JOIN employee_directory d ON s.employee = d.id
+          |""".stripMargin)).execution.analyzed
+      // An entry in the cache makes cache substitution look for lookup sides.
+      val cached = spark.range(1).toDF("cached").cache()
+      try {
+        assert(cached.count() === 1)
+        Seq(ordinary.queryExecution.analyzed, withSubquery.queryExecution.analyzed, microBatch)
+          .foreach { plan =>
+            // Computes the pattern bits, with which each relation asks its table once.
+            assert(ExternalLookupJoinEligibility.mayHaveLookupJoin(plan) === false)
+            DualCapabilityExternalLookupTable.capabilityCalls.set(0)
+            assert(ExternalLookupJoinEligibility.lookupSidePlans(plan).isEmpty)
+            CheckExternalLookupJoin(plan)
+            assert(FormExternalLookupJoin(plan) eq plan)
+            spark.sharedState.cacheManager.useCachedData(plan)
+            plan.collectWithSubqueries { case join: Join => join }.foreach { join =>
+              assert(
+                ExternalLookupJoinEligibility(join) === ExternalLookupJoinEligibility.NotLookupJoin)
+            }
+            assert(DualCapabilityExternalLookupTable.capabilityCalls.get() === 0)
+          }
+      } finally {
+        cached.unpersist(blocking = true)
+      }
       checkAnswer(ordinary, Seq(
         Row(1, "engineering", "engineering"), Row(1, "engineering", "research"),
         Row(1, "research", "engineering"), Row(1, "research", "research"),
@@ -1316,6 +1346,42 @@ class ExternalLookupJoinSuite extends QueryTest with SharedSparkSession {
           "joinType" -> "FULL OUTER",
           "relation" -> "`SimpleExternalLookupTable`",
           "supportedJoinTypes" -> SUPPORTED_JOIN_TYPES))
+      }
+    }
+  }
+
+  test("a lookup side read through chained WITH definitions runs as an external lookup join") {
+    // The lookup side reads `a` through `b`, so classifying the join inlines both definitions, and
+    // cache substitution leaves both alone.
+    withSQLConf(
+        s"spark.sql.catalog.$EXTERNAL_LOOKUP_CATALOG_NAME" ->
+          classOf[ExternalLookupTestCatalog].getName) {
+      withTempView("badge_swipes") {
+        streamOf(Seq((1, "lobby"), (3, "garage")).toDF("employee", "door"))
+          .createOrReplaceTempView("badge_swipes")
+        def query(table: String, hint: String = ""): DataFrame = sql(
+          s"""
+            |WITH a AS (TABLE $EXTERNAL_LOOKUP_CATALOG_NAME.ns.$table), b AS (TABLE a)
+            |SELECT $hint s.employee, b.department FROM badge_swipes s JOIN b ON s.employee = b.id
+            |""".stripMargin)
+        def checkLookupJoin(df: DataFrame, expected: Seq[Row]): Unit = {
+          val run = runStream(df)
+          assert(run.plan.exists(_.isInstanceOf[PreparedExternalLookupJoin]))
+          QueryTest.sameRows(expected, run.rows).foreach(fail(_))
+        }
+        val directory = Seq(Row(1, "engineering"), Row(1, "research"))
+        checkLookupJoin(query("lookup"), directory)
+        checkLookupJoin(query("dual", "/*+ EXTERNAL_LOOKUP(b) */"), directory)
+        // Data that the cache read before the directory changed replaces neither definition.
+        val cached = spark.table(s"$EXTERNAL_LOOKUP_CATALOG_NAME.ns.dual").cache()
+        try {
+          assert(cached.count() === 3)
+          SimpleExternalLookupDataSource.departmentsById.set(
+            Map(1 -> Seq("legal"), 2 -> Seq("sales")))
+          checkLookupJoin(query("dual", "/*+ EXTERNAL_LOOKUP(b) */"), Seq(Row(1, "legal")))
+        } finally {
+          cached.unpersist(blocking = true)
+        }
       }
     }
   }
@@ -2929,7 +2995,10 @@ class ExternalLookupJoinSuite extends QueryTest with SharedSparkSession {
   }
 }
 
-/** A catalog serving `ns.lookup` (lookup-only) and `ns.dual` (dual-capability). */
+/**
+ * A catalog serving `ns.lookup` (lookup-only), `ns.dual` (dual-capability) and `ns.versioned`
+ * (lookup-only, with a `_version` metadata column).
+ */
 class ExternalLookupTestCatalog extends TableCatalog {
   private var catalogName: String = _
 

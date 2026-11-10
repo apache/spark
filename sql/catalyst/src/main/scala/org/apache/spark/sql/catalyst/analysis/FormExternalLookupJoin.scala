@@ -28,8 +28,8 @@ import org.apache.spark.sql.catalyst.plans.logical.{CTERelationDef, CTERelationR
   SetOperation, SubqueryAlias, UnaryNode, Union, View, WithCTE}
 import org.apache.spark.sql.catalyst.rules.Rule
 import org.apache.spark.sql.catalyst.streaming.WriteToStream
-import org.apache.spark.sql.catalyst.trees.TreePattern.{CTE, DATA_SOURCE_V2_RELATION,
-  EXTERNAL_LOOKUP_HINT, JOIN}
+import org.apache.spark.sql.catalyst.trees.TreePattern.{CTE, EXTERNAL_LOOKUP_HINT, JOIN,
+  LOOKUP_ONLY_RELATION}
 import org.apache.spark.sql.catalyst.util.MetadataColumnHelper
 import org.apache.spark.sql.connector.catalog.TableCapability
 import org.apache.spark.sql.errors.{QueryCompilationErrors, QueryErrorsBase}
@@ -69,6 +69,8 @@ object ExternalLookupJoinEligibility extends QueryErrorsBase {
   private val SUPPORTED_JOIN_TYPES = Seq(Inner, LeftOuter)
 
   def apply(join: Join): Eligibility = {
+    // Every other outcome needs the hint or a lookup-only relation on an input of the join.
+    if (!join.containsAnyPattern(EXTERNAL_LOOKUP_HINT, LOOKUP_ONLY_RELATION)) return NotLookupJoin
     if (lookupHints(join.left).nonEmpty) {
       return Ineligible(QueryCompilationErrors.invalidExternalLookupHintError("NOT_ON_LOOKUP_SIDE"))
     }
@@ -128,14 +130,14 @@ object ExternalLookupJoinEligibility extends QueryErrorsBase {
 
   /**
    * Whether `plan` can have a join that must run as an external lookup join: one over a lookup-only
-   * table, which is a DSv2 relation, or under the hint. Classifying the joins of a plan inlines its
-   * CTE references, so a plan without either is left alone, and an ordinary query does not pay
-   * for lookup joins.
+   * table, whose relation carries LOOKUP_ONLY_RELATION, or under the hint. Classifying the joins of
+   * a plan inlines its CTE references, so a plan without either is left alone. The pattern bits of
+   * a plan include those of its CTE definitions and subquery plans, so they tell this without a
+   * walk, and an ordinary query does not pay for lookup joins.
    */
   def mayHaveLookupJoin(plan: LogicalPlan): Boolean =
-    plan.containsPattern(JOIN) && (plan.containsPattern(EXTERNAL_LOOKUP_HINT) ||
-      plan.containsPattern(DATA_SOURCE_V2_RELATION) &&
-        plan.exists(ExternalLookupRelations.lookupOnlyTable(_).isDefined))
+    plan.containsPattern(JOIN) &&
+      plan.containsAnyPattern(EXTERNAL_LOOKUP_HINT, LOOKUP_ONLY_RELATION)
 
   /** The CTE definitions in `plan` by id, which [[inlineCTEs]] inlines. */
   def cteDefinitions(plan: LogicalPlan): Map[Long, CTERelationDef] =
