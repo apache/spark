@@ -19,12 +19,14 @@ package org.apache.spark.sql.catalyst.analysis
 
 import java.util.Locale
 
+import scala.annotation.tailrec
 import scala.collection.mutable
 import scala.util.control.NonFatal
 
 import org.apache.spark.sql.catalyst.expressions.{Expression, StringLiteral}
 import org.apache.spark.sql.catalyst.plans.logical.{ExternalLookupHint,
-  ExternalLookupHintCacheOptions, LogicalPlan, SubqueryAlias, UnresolvedHint, UnresolvedWith, View}
+  ExternalLookupHintCacheOptions, LogicalPlan, SubqueryAlias, UnaryNode, UnresolvedHint,
+  UnresolvedWith, View}
 import org.apache.spark.sql.catalyst.rules.Rule
 import org.apache.spark.sql.catalyst.trees.TreePattern.UNRESOLVED_HINT
 import org.apache.spark.sql.errors.{QueryCompilationErrors, QueryErrorsBase}
@@ -91,15 +93,29 @@ object ResolveExternalLookupHint extends Rule[LogicalPlan] with QueryErrorsBase 
         matched ++= names
         names.nonEmpty
       }
+      def named(plan: LogicalPlan): Boolean = plan match {
+        case relation: UnresolvedRelation => matches(relation.multipartIdentifier)
+        case alias: SubqueryAlias => matches(alias.identifier.qualifier :+ alias.identifier.name)
+        case _ => false
+      }
+      // Whether the operators with one child below `plan` lead to a relation that the hint names.
+      @tailrec
+      def leadsToNamed(plan: LogicalPlan): Boolean = plan match {
+        case _: UnresolvedRelation | _: SubqueryAlias => named(plan)
+        case _: View | _: UnresolvedWith => false
+        case unary: UnaryNode => leadsToNamed(unary.child)
+        case _ => false
+      }
       // Mirrors the target scoping of ResolveHints.ResolveJoinStrategyHints: a name matches an
       // unaliased (possibly multipart) table or an alias, and does not reach into a view,
-      // a WITH clause, or an aliased subquery.
+      // a WITH clause, or an aliased subquery. A marker that an inner hint put on the way to a
+      // named relation stays below this hint's marker, so that the outer hint's options win, as
+      // with join strategy hints.
       def applyHint(plan: LogicalPlan): LogicalPlan = plan match {
-        case relation: UnresolvedRelation if matches(relation.multipartIdentifier) =>
-          ExternalLookupHint(relation, cacheOptions)
-        case alias: SubqueryAlias
-            if matches(alias.identifier.qualifier :+ alias.identifier.name) =>
-          ExternalLookupHint(alias, cacheOptions)
+        case marker: ExternalLookupHint if leadsToNamed(marker.child) =>
+          ExternalLookupHint(marker, cacheOptions)
+        case _: UnresolvedRelation | _: SubqueryAlias if named(plan) =>
+          ExternalLookupHint(plan, cacheOptions)
         case _: View | _: UnresolvedWith | _: SubqueryAlias => plan
         case _ => plan.mapChildren(applyHint)
       }

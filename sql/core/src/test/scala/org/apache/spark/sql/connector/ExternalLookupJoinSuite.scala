@@ -43,8 +43,9 @@ import org.apache.spark.sql.catalyst.expressions.{Add, Alias, Attribute, Attribu
   NamedExpression, Rand, UnsafeProjection, Upper}
 import org.apache.spark.sql.catalyst.plans.{Inner, QueryPlan}
 import org.apache.spark.sql.catalyst.plans.logical.{Deduplicate, ExternalLookupCacheOptions,
-  ExternalLookupFilter, ExternalLookupJoin, ExternalLookupProject, ExternalLookupTransform, Join,
-  JoinHint, LeafNode, LogicalPlan, PreparedExternalLookupJoin, RepartitionByExpression}
+  ExternalLookupFilter, ExternalLookupHint, ExternalLookupHintCacheOptions, ExternalLookupJoin,
+  ExternalLookupProject, ExternalLookupTransform, Join, JoinHint, LeafNode, LogicalPlan,
+  PreparedExternalLookupJoin, RepartitionByExpression}
 import org.apache.spark.sql.catalyst.trees.TreePattern.LOOKUP_ONLY_RELATION
 import org.apache.spark.sql.catalyst.util.{ArrayBasedMapData, GenericArrayData}
 import org.apache.spark.sql.classic.Dataset
@@ -989,6 +990,27 @@ class ExternalLookupJoinSuite extends QueryTest with SharedSparkSession {
       "option as key=value, such as 'cache_enabled=false'."))
   }
 
+  test("external lookup hint options ignore the case of a name and blanks around it and a value") {
+    val lookup = spark.read.format(classOf[SimpleExternalLookupDataSource].getName).load()
+    def hintOptions(options: String*): ExternalLookupHintCacheOptions =
+      lookup.hint("external_lookup", options: _*).queryExecution.analyzed.collectFirst {
+        case marker: ExternalLookupHint => marker.cacheOptions
+      }.get
+    assert(hintOptions("CACHE_TTL = 5s").ttlMillis === Some(5000L))
+    assert(hintOptions("Cache_Max_Bytes=8k").maxBytes === Some(8192L))
+    // The size and duration parsers trim their input themselves, so only a boolean shows that the
+    // value is trimmed.
+    assert(hintOptions("cache_enabled = TRUE").enabled === Some(true))
+    assert(hintOptions("cache_enabled=False").enabled === Some(false))
+    // An option that differs from another only in case is the same option.
+    checkError(
+      exception = intercept[AnalysisException] {
+        lookup.hint("external_lookup", "cache_ttl=1s", "CACHE_TTL=2s").queryExecution.analyzed
+      },
+      condition = "INVALID_EXTERNAL_LOOKUP_HINT.DUPLICATE_OPTION",
+      parameters = Map("option" -> "\"cache_ttl\""))
+  }
+
   test("a hint can mix relation names and cache options given as strings") {
     withSQLConf(
         s"spark.sql.catalog.$EXTERNAL_LOOKUP_CATALOG_NAME" ->
@@ -1137,6 +1159,31 @@ class ExternalLookupJoinSuite extends QueryTest with SharedSparkSession {
       assert(overridden.enabled === true)
       assert(overridden.maxBytes === 7 * 1024)
     }
+    // Two hints that name one relation: the outer one wins, which is the first in a comment and
+    // the later of two Dataset calls.
+    val swipes = streamOf(Seq((1, "lobby")).toDF("employee", "door"))
+    def ttlMillis(df: DataFrame): Long = runStream(df).plan.collectFirst {
+      case join: PreparedExternalLookupJoin => join.cacheOptions.ttlMillis
+    }.get
+    withTempView("badge_swipes", "employee_directory") {
+      swipes.createOrReplaceTempView("badge_swipes")
+      dual.createOrReplaceTempView("employee_directory")
+      assert(ttlMillis(sql(
+        """
+          |SELECT /*+ EXTERNAL_LOOKUP(r, 'cache_ttl=5s'), EXTERNAL_LOOKUP(r, 'cache_ttl=10s') */
+          |  s.door, r.department
+          |FROM badge_swipes s JOIN employee_directory r ON s.employee = r.id
+          |""".stripMargin)) === 5000)
+    }
+    val directory = dual.as("r")
+    val joined = swipes.join(directory, swipes("employee") === $"r.id")
+    assert(ttlMillis(joined.hint("external_lookup", "r", "cache_ttl=5s")
+      .hint("external_lookup", "r", "cache_ttl=10s")) === 10000)
+    // The same when the inner hint marks a projection of the relation that the outer one names.
+    val projected = directory.select($"r.id", $"r.department")
+      .hint("external_lookup", "cache_ttl=5s")
+    assert(ttlMillis(swipes.join(projected, swipes("employee") === projected("id"))
+      .hint("external_lookup", "r", "cache_ttl=10s")) === 10000)
   }
 
   test("external lookup hint rejects invalid placement and relation targets") {
