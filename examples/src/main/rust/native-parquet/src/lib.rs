@@ -17,9 +17,10 @@
 //!
 //! The driver splits the files of a path into byte ranges, as Spark splits the files of its own
 //! sources, and each task reads the row groups whose middle falls in its range. Before it decodes,
-//! the reader skips the row groups and pages in which, by their statistics, no row passes the
-//! pushed predicates. It evaluates the predicates on the batches that it decodes, and returns only
-//! the rows that pass, in batches of the batch size.
+//! the reader skips the row groups and pages that, by their statistics, have no value in the domain
+//! of a column that the filters of the query constrain, which Spark pushes down. It evaluates the
+//! domains on the batches that it decodes, and returns only the rows whose values are in them, in
+//! batches of the batch size.
 
 mod filter;
 mod prune;
@@ -29,7 +30,8 @@ use std::fs::{self, File};
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
 
-use arrow_array::{RecordBatch, RecordBatchReader};
+use arrow_array::{BooleanArray, RecordBatch, RecordBatchReader};
+use arrow_buffer::BooleanBuffer;
 use arrow_schema::{ArrowError, SchemaRef};
 use arrow_select::coalesce::BatchCoalescer;
 use parquet::arrow::arrow_reader::{
@@ -37,10 +39,9 @@ use parquet::arrow::arrow_reader::{
 };
 use parquet::arrow::ProjectionMask;
 use serde::{Deserialize, Serialize};
-use spark_native_source::{
-    CreateInfo, DataSource, FilterSupport, LimitSupport, Options, PartitionReader,
-    PartitionReaderFactory, Predicate, ReaderContext, Result, ScanBuilder, ScanInfo, ScanPlan,
-    TaskContext, Unsupported,
+use spark_datasource::{
+    CreateInfo, DataSource, Domain, LimitSupport, Options, PartitionReader, PartitionReaderFactory,
+    ReaderContext, Result, ScanBuilder, ScanInfo, ScanPlan, TaskContext, Unsupported,
 };
 
 use crate::filter::Filter;
@@ -58,16 +59,16 @@ pub struct ParquetSource {
     batch_size: usize,
     max_partition_bytes: u64,
     open_cost_in_bytes: u64,
-    row_filter: bool,
+    filter_pushdown: bool,
 }
 
 pub struct ParquetScan {
     path: PathBuf,
-    // The schema to read, from which the pushed predicates take their column types.
+    // The schema to read, whose columns the domains that the scan uses must have.
     schema: SchemaRef,
     max_partition_bytes: u64,
     open_cost_in_bytes: u64,
-    row_filter: bool,
+    filter_pushdown: bool,
     factory: ParquetReaderFactory,
 }
 
@@ -75,8 +76,8 @@ pub struct ParquetScan {
 /// columns to read to each reader, so the factory omits them.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct ParquetReaderFactory {
-    // The predicates that the readers evaluate exactly, in the order that Spark pushed them.
-    predicates: Vec<Predicate>,
+    // The domains of the top-level columns that the readers evaluate.
+    domains: Vec<Domain>,
     batch_size: usize,
     // A limit on the rows of each task, which the scan as a whole may exceed.
     limit: Option<usize>,
@@ -108,7 +109,7 @@ impl DataSource for ParquetSource {
         for key in options.keys() {
             if !matches!(
                 key.as_str(),
-                "path" | "batchsize" | "maxpartitionbytes" | "opencostinbytes" | "rowfilter"
+                "path" | "batchsize" | "maxpartitionbytes" | "opencostinbytes" | "filterpushdown"
             ) {
                 return Err(format!("Unknown Parquet option: {key}").into());
             }
@@ -127,11 +128,11 @@ impl DataSource for ParquetSource {
             batch_size,
             max_partition_bytes,
             open_cost_in_bytes: option(&options, "opencostinbytes", 4_u64 << 20)?,
-            row_filter: option(&options, "rowfilter", true)?,
+            filter_pushdown: option(&options, "filterpushdown", true)?,
         })
     }
 
-    fn schema(&self) -> Result<SchemaRef> {
+    fn infer_schema(&self) -> Result<SchemaRef> {
         // As Spark does without mergeSchema, take the schema of one file for all of them.
         let (first, _) = &data_files(&self.path)?[0];
         let metadata = load(first)?;
@@ -145,9 +146,9 @@ impl DataSource for ParquetSource {
             schema: info.schema,
             max_partition_bytes: self.max_partition_bytes,
             open_cost_in_bytes: self.open_cost_in_bytes,
-            row_filter: self.row_filter,
+            filter_pushdown: self.filter_pushdown,
             factory: ParquetReaderFactory {
-                predicates: Vec::new(),
+                domains: Vec::new(),
                 batch_size: self.batch_size,
                 limit: None,
             },
@@ -158,30 +159,24 @@ impl DataSource for ParquetSource {
 impl ScanBuilder for ParquetScan {
     type Factory = ParquetReaderFactory;
 
-    fn push_filters(&mut self, filters: &[Predicate]) -> Result<Vec<FilterSupport>> {
-        Ok(filters
+    fn push_domains(&mut self, domains: &[Domain]) -> Result<Vec<bool>> {
+        Ok(domains
             .iter()
-            .map(|predicate| {
-                if self.row_filter && Filter::new(predicate, &self.schema).is_some() {
-                    self.factory.predicates.push(predicate.clone());
-                    FilterSupport::Exact
-                } else {
-                    FilterSupport::Unsupported
+            .map(|domain| {
+                let used = self.filter_pushdown && Filter::new(domain, &self.schema).is_some();
+                if used {
+                    self.factory.domains.push(domain.clone());
                 }
+                used
             })
             .collect())
     }
 
     fn push_limit(&mut self, limit: usize) -> Result<LimitSupport> {
-        // The SDK asks only when every predicate is exact, so a task can stop after the limit,
-        // which the reader counts after its filter. The tasks together may return more rows.
+        // Spark pushes a limit only to a scan whose rows it does not filter, so a task can stop
+        // after the limit. The tasks together may return more rows.
         self.factory.limit = Some(self.factory.limit.map_or(limit, |first| first.min(limit)));
         Ok(LimitSupport::Unsupported)
-    }
-
-    fn prune_columns(&mut self, _columns: &[String]) -> Result<bool> {
-        // Each reader returns the columns of its ReaderContext::schema, in that order.
-        Ok(true)
     }
 
     fn plan(self) -> Result<ScanPlan<ParquetReaderFactory>> {
@@ -267,8 +262,8 @@ impl PartitionReaderFactory for ParquetReaderFactory {
 }
 
 impl ParquetReaderFactory {
-    /// The batches of a range of a file, or `None` if no row group of the range may have rows that
-    /// pass the predicates.
+    /// The batches of a range of a file, or `None` if no row group of the range may have rows whose
+    /// values are in their domains.
     fn open_range<'task>(
         &self,
         range: &FileRange,
@@ -278,19 +273,17 @@ impl ParquetReaderFactory {
         let path = range.path.display().to_string();
         let in_file = |error: Box<dyn std::error::Error + Send + Sync>| format!("{path}: {error}");
         let file = File::open(&range.path).map_err(|error| in_file(error.into()))?;
-        let metadata = schema::load(&file, !self.predicates.is_empty()).map_err(in_file)?;
+        let metadata = schema::load(&file, !self.domains.is_empty()).map_err(in_file)?;
         let file_schema = metadata.schema().clone();
         let parquet_schema = metadata.parquet_schema().clone();
-        let filters = self
-            .predicates
+        // The domain of a column that the file lacks, or has with another type than the schema to
+        // read, is not a filter of the file, whose read then fails anyway: below, or when the SDK
+        // checks its batches.
+        let filters: Vec<Filter> = self
+            .domains
             .iter()
-            .map(|predicate| {
-                // The scan checked the predicates on the schema to read, which the file has.
-                Filter::new(predicate, &file_schema).ok_or_else(|| {
-                    format!("{path}: The predicate {predicate:?} does not apply to the file")
-                })
-            })
-            .collect::<std::result::Result<Vec<_>, _>>()?;
+            .filter_map(|domain| Filter::new(domain, &file_schema))
+            .collect();
         let row_groups = row_groups_in(&metadata, range.start, range.end);
         let (row_groups, selection) =
             prune::prune(&filters, &metadata, row_groups).map_err(|error| in_file(error.into()))?;
@@ -310,13 +303,9 @@ impl ParquetReaderFactory {
             .iter()
             .map(|field| index_of(field.name()))
             .collect::<std::result::Result<Vec<_>, _>>()?;
-        let mut filter_columns = Vec::new();
-        for filter in &filters {
-            filter.columns(&mut filter_columns);
-        }
         let mut read = columns.clone();
-        for column in filter_columns {
-            read.push(index_of(column)?);
+        for filter in &filters {
+            read.push(index_of(&filter.column)?);
         }
         read.sort_unstable();
         read.dedup();
@@ -332,7 +321,7 @@ impl ParquetReaderFactory {
         if let Some(selection) = selection {
             builder = builder.with_row_selection(selection);
         }
-        // With filters, the limit counts the rows that pass them, after the reader.
+        // With filters, the limit would count the rows that pass them, after the reader.
         if let Some(limit) = self.limit.filter(|_| filters.is_empty()) {
             builder = builder.with_limit(limit);
         }
@@ -344,9 +333,7 @@ impl ParquetReaderFactory {
             .with_biggest_coalesce_batch_size(Some(self.batch_size / 2));
         let batches = Batches {
             reader,
-            filter: filters
-                .into_iter()
-                .reduce(|left, right| Filter::And(Box::new(left), Box::new(right))),
+            filters,
             output,
             coalescer,
             spark_schema,
@@ -357,19 +344,19 @@ impl ParquetReaderFactory {
     }
 }
 
-/// The batches of a range of a file: those that the reader decodes, with the rows that pass the
-/// filter, and the columns that Spark reads, in its order. The filter evaluates the pushed
-/// predicates on each batch, rather than in an arrow-rs `RowFilter`, which decodes the columns of
-/// the predicates first, and the other columns only for the rows that pass. Spark checks the rows
-/// that a source returns against the pushed predicates again, so it also reads their columns,
-/// which a `RowFilter` decodes twice; and when the rows that pass are scattered over the pages,
-/// the selections of rows that it builds, with millions of ranges, cost more than decoding every
-/// row. The coalescer gathers the rows that pass into batches of the batch size, whose 64-bit
-/// decimals are widened to the 128 bits that Spark reads.
+/// The batches of a range of a file: those that the reader decodes, with the rows whose values are
+/// in their domains, and the columns that Spark reads, in its order. The filters evaluate the
+/// domains on each batch, rather than in an arrow-rs `RowFilter`, which decodes the columns of the
+/// filters first, and the other columns only for the rows that pass. Spark evaluates the filters
+/// of the query again on the rows that a source returns, so it also reads their columns, which a
+/// `RowFilter` decodes twice; and when the rows that pass are scattered over the pages, the
+/// selections of rows that it builds, with millions of ranges, cost more than decoding every row.
+/// The coalescer gathers the rows that pass into batches of the batch size, whose 64-bit decimals
+/// are widened to the 128 bits that Spark reads.
 struct Batches<'task> {
     reader: ParquetRecordBatchReader,
-    // The conjunction of the pushed predicates.
-    filter: Option<Filter>,
+    // The domains of the columns, all of which a row passes.
+    filters: Vec<Filter>,
     // The positions of the columns that Spark reads in the batches of the reader.
     output: Vec<usize>,
     coalescer: BatchCoalescer,
@@ -383,12 +370,21 @@ struct Batches<'task> {
 
 impl Batches<'_> {
     fn push(&mut self, batch: RecordBatch) -> std::result::Result<(), ArrowError> {
-        let Some(filter) = &self.filter else {
-            return self.coalescer.push_batch(batch.project(&self.output)?);
-        };
-        let passes = filter.evaluate(&batch)?;
-        let batch = batch.project(&self.output)?;
-        self.coalescer.push_batch_with_filter(batch, &passes)
+        let mut passes: Option<BooleanBuffer> = None;
+        for filter in &self.filters {
+            let matches = filter.evaluate(&batch)?;
+            passes = Some(match passes {
+                Some(passes) => &passes & &matches,
+                None => matches,
+            });
+        }
+        let output = batch.project(&self.output)?;
+        match passes {
+            Some(passes) => self
+                .coalescer
+                .push_batch_with_filter(output, &BooleanArray::new(passes, None)),
+            None => self.coalescer.push_batch(output),
+        }
     }
 
     fn next_batch(&mut self) -> std::result::Result<Option<RecordBatch>, ArrowError> {
@@ -426,7 +422,7 @@ impl Iterator for Batches<'_> {
     }
 }
 
-spark_native_source::export_data_source!(ParquetSource);
+spark_datasource::export_data_source!(ParquetSource);
 
 fn option<T>(options: &Options, name: &str, default: T) -> Result<T>
 where
@@ -499,14 +495,15 @@ fn row_groups_in(metadata: &ArrowReaderMetadata, start: u64, end: u64) -> Vec<us
 
 #[cfg(test)]
 mod tests {
+    use std::ops::Bound;
     use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
     use std::sync::Arc;
 
     use arrow_array::builder::{Int64Builder, ListBuilder, MapBuilder, StringBuilder};
     use arrow_array::cast::AsArray;
     use arrow_array::{
-        Array, ArrayRef, BinaryArray, BooleanArray, Date32Array, Decimal128Array, Float64Array,
-        Int16Array, Int32Array, Int64Array, StringArray, StructArray, TimestampMicrosecondArray,
+        Array, ArrayRef, BinaryArray, Date32Array, Decimal128Array, Float64Array, Int16Array,
+        Int32Array, Int64Array, StringArray, StructArray, TimestampMicrosecondArray,
         TimestampMillisecondArray, TimestampNanosecondArray, UInt32Array,
     };
     use arrow_schema::{DataType, Field, TimeUnit};
@@ -515,7 +512,7 @@ mod tests {
     use parquet::file::properties::WriterProperties;
     use parquet::file::writer::SerializedFileWriter;
     use parquet::schema::parser::parse_message_type;
-    use serde_json::{json, Value};
+    use spark_datasource::{Value, ValueRange};
 
     use super::*;
 
@@ -587,7 +584,8 @@ mod tests {
     }
 
     struct Read {
-        support: Vec<FilterSupport>,
+        // Whether the scan uses each domain.
+        used: Vec<bool>,
         // The batches of each partition.
         partitions: Vec<Vec<RecordBatch>>,
     }
@@ -610,21 +608,21 @@ mod tests {
         ids.values().to_vec()
     }
 
-    /// Scans as the SDK does: pushes the predicates and the limit, prunes the columns, plans,
-    /// and opens each serialized partition with the serialized factory.
+    /// Scans as Spark does: pushes the domains and the limit, prunes the columns, plans, and
+    /// opens each serialized partition with the serialized factory.
     fn read(
         source: &ParquetSource,
         columns: Option<&[&str]>,
-        predicates: &[Value],
+        domains: &[Domain],
         limit: Option<usize>,
     ) -> Result<Read> {
-        let schema = source.schema()?;
+        let schema = source.infer_schema()?;
         let mut scan = source.new_scan(ScanInfo::new(schema.clone()))?;
-        let predicates: Vec<Predicate> = predicates
-            .iter()
-            .map(|predicate| serde_json::from_value(predicate.clone()).unwrap())
-            .collect();
-        let support = scan.push_filters(&predicates)?;
+        // Spark pushes domains only when there are some.
+        let used = match domains {
+            [] => Vec::new(),
+            domains => scan.push_domains(domains)?,
+        };
         if let Some(limit) = limit {
             assert_eq!(scan.push_limit(limit)?, LimitSupport::Unsupported);
         }
@@ -632,7 +630,7 @@ mod tests {
             Some(columns) => {
                 let columns: Vec<String> =
                     columns.iter().map(|column| column.to_string()).collect();
-                assert!(scan.prune_columns(&columns)?);
+                scan.prune_columns(&columns)?;
                 let indices: Vec<usize> = columns
                     .iter()
                     .map(|column| schema.index_of(column).unwrap())
@@ -651,22 +649,30 @@ mod tests {
             let batches = factory.open(partition, context)?;
             partitions.push(batches.collect::<std::result::Result<_, _>>()?);
         }
-        Ok(Read {
-            support,
-            partitions,
-        })
+        Ok(Read { used, partitions })
     }
 
-    fn column(name: &str) -> Value {
-        json!({"type": "column", "name": [name]})
+    /// The domain of a column with the ranges, without null.
+    fn domain(column: &str, ranges: Option<Vec<ValueRange>>) -> Domain {
+        Domain::new(vec![column.into()], ranges)
     }
 
-    fn literal(data_type: &str, value: Value) -> Value {
-        json!({"type": "literal", "dataType": data_type, "value": value})
+    fn range(low: Bound<Value>, high: Bound<Value>) -> ValueRange {
+        ValueRange { low, high }
     }
 
-    fn function(name: &str, children: Vec<Value>) -> Value {
-        json!({"type": "function", "name": name, "children": children})
+    fn singles(values: impl IntoIterator<Item = Value>) -> Option<Vec<ValueRange>> {
+        Some(values.into_iter().map(ValueRange::single).collect())
+    }
+
+    /// The domain of the strings that start with a prefix: from the prefix to its successor.
+    fn starts_with(column: &str, prefix: &str, successor: &str) -> Domain {
+        let string = |value: &str| Value::String(value.into());
+        let low = Bound::Included(string(prefix));
+        domain(
+            column,
+            Some(vec![range(low, Bound::Excluded(string(successor)))]),
+        )
     }
 
     #[test]
@@ -734,7 +740,7 @@ mod tests {
         );
 
         let source = source(&directory.0, &[]);
-        let schema = source.schema().unwrap();
+        let schema = source.infer_schema().unwrap();
         assert_eq!(schema.fields().len(), batch.num_columns());
         for (field, written) in schema.fields().iter().zip(batch.schema().fields()) {
             assert_eq!(field.name(), written.name());
@@ -835,31 +841,30 @@ mod tests {
     }
 
     #[test]
-    fn returns_the_rows_that_pass_the_pushed_predicates() {
+    fn returns_the_rows_whose_values_are_in_the_domains() {
         let directory = TempDirectory::new();
         write(&directory.join("rows.parquet"), &[rows(0, 1000)], 100);
-        let predicates = [
-            function("=", vec![column("k"), literal("int", json!(3))]),
-            function(
-                "STARTS_WITH",
-                vec![column("label"), literal("string", json!("row-1"))],
-            ),
-            function("FUTURE", vec![column("id")]),
+        // k = 3, label LIKE 'row-1%', and the domains of a field of a struct and of a missing
+        // column, which the source does not use.
+        let domains = [
+            domain("k", singles([Value::Integer(3)])),
+            starts_with("label", "row-1", "row-2"),
+            Domain::new(vec!["point".into(), "x".into()], None),
+            domain("missing", None),
         ];
         let expected: Vec<i64> = (0..1000)
             .filter(|id| id % 10 == 3 && id % 7 != 0 && format!("row-{id}").starts_with("row-1"))
             .collect();
 
         let columns = Some(&["id", "k", "label"][..]);
-        let filtered = read(&source(&directory.0, &[]), columns, &predicates, None).unwrap();
-        let exact = FilterSupport::Exact;
-        assert_eq!(filtered.support, [exact, exact, FilterSupport::Unsupported]);
+        let filtered = read(&source(&directory.0, &[]), columns, &domains, None).unwrap();
+        assert_eq!(filtered.used, [true, true, false, false]);
         assert_eq!(filtered.ids(), expected);
 
-        // Without the row filter, Spark evaluates all the predicates.
-        let unfiltered = source(&directory.0, &[("rowfilter", "false")]);
-        let unfiltered = read(&unfiltered, columns, &predicates, None).unwrap();
-        assert_eq!(unfiltered.support, [FilterSupport::Unsupported; 3]);
+        // Without filter pushdown, the source returns every row, which Spark filters.
+        let unfiltered = source(&directory.0, &[("filterpushdown", "false")]);
+        let unfiltered = read(&unfiltered, columns, &domains, None).unwrap();
+        assert_eq!(unfiltered.used, [false; 4]);
         assert_eq!(unfiltered.ids(), (0..1000).collect::<Vec<_>>());
     }
 
@@ -876,45 +881,42 @@ mod tests {
             &[rows(0, 1000)],
             properties,
         );
-        let id = |op, value: i64| function(op, vec![column("id"), literal("bigint", json!(value))]);
-        let not = |child| function("NOT", vec![child]);
-        let label_is_not_null = function("IS_NOT_NULL", vec![column("label")]);
-        let k = function("=", vec![column("k"), literal("int", json!(3))]);
-        let in_list = function(
-            "IN",
-            vec![
-                column("id"),
-                literal("bigint", json!(5)),
-                literal("bigint", json!(512)),
-            ],
-        );
-        let label_starts = function(
-            "STARTS_WITH",
-            vec![column("label"), literal("string", json!("row-1"))],
-        );
-        // The predicates, and the ids that pass them.
-        type Case = (Vec<Value>, fn(i64) -> bool);
+        let int = Value::Integer;
+        let id = |ranges| domain("id", Some(ranges));
+        let below = |value| range(Bound::Unbounded, Bound::Excluded(int(value)));
+        let above = |value| range(Bound::Excluded(int(value)), Bound::Unbounded);
+        let label_is_not_null = domain("label", None);
+        // The domains, and the ids that are in them.
+        type Case = (Vec<Domain>, fn(i64) -> bool);
         let cases: [Case; 6] = [
-            (vec![id("<", 55)], |id| id < 55),
-            (vec![not(id(">=", 55)), label_is_not_null.clone()], |id| {
+            (vec![id(vec![below(55)])], |id| id < 55),
+            (vec![id(vec![below(55)]), label_is_not_null.clone()], |id| {
                 id < 55 && id % 7 != 0
             }),
-            (vec![function("OR", vec![id(">", 990), k])], |id| {
-                id > 990 || id % 10 == 3
+            (vec![id(vec![below(10), above(990)])], |id| {
+                !(10..=990).contains(&id)
             }),
-            (vec![in_list], |id| id == 5 || id == 512),
-            (vec![id(">", 300), id("<", 305)], |id| id > 300 && id < 305),
-            (vec![label_is_not_null.clone(), label_starts], |id| {
+            (vec![domain("id", singles([int(5), int(512)]))], |id| {
+                id == 5 || id == 512
+            }),
+            (
+                vec![id(vec![range(
+                    Bound::Excluded(int(300)),
+                    Bound::Excluded(int(305)),
+                )])],
+                |id| id > 300 && id < 305,
+            ),
+            (vec![starts_with("label", "row-1", "row-2")], |id| {
                 id % 7 != 0 && format!("row-{id}").starts_with("row-1")
             }),
         ];
         for batch_size in ["8192", "7"] {
             let source = source(&directory.0, &[("batchsize", batch_size)]);
-            for (predicates, passes) in &cases {
+            for (domains, passes) in &cases {
                 let columns = Some(&["label", "id", "k"][..]);
-                let read = read(&source, columns, predicates, None).unwrap();
+                let read = read(&source, columns, domains, None).unwrap();
                 let expected: Vec<i64> = (0..1000).filter(|&id| passes(id)).collect();
-                assert_eq!(read.ids(), expected, "{predicates:?}");
+                assert_eq!(read.ids(), expected, "{domains:?}");
                 for batch in read.batches() {
                     let labels = batch.column(0).as_string_view();
                     for (row, id) in ids(batch).into_iter().enumerate() {
@@ -988,7 +990,7 @@ mod tests {
 
         // Spark reads 128-bit decimals, which the reader returns.
         let source = source(&path, &[]);
-        let schema = source.schema().unwrap();
+        let schema = source.infer_schema().unwrap();
         for (index, precision) in [(1, 5), (2, 15), (3, 20)] {
             let expected = DataType::Decimal128(precision, 2);
             assert_eq!(schema.field(index).data_type(), &expected);
@@ -999,43 +1001,51 @@ mod tests {
         // The columns that Spark reads are nullable, as the written ones need not be.
         assert_eq!(all.columns(), batch.columns());
 
-        let decimal = |name: &str, op: &str, precision: u8, value: &str| {
-            let data_type = format!("decimal({precision},2)");
-            function(op, vec![column(name), literal(&data_type, json!(value))])
+        // The values of the domains have the precision and the scale of their columns.
+        let decimal = |precision: u8, unscaled: i128| Value::Decimal {
+            unscaled,
+            precision,
+            scale: 2,
         };
-        let filtered = |predicates: &[Value]| {
-            let read = read(&source, Some(&["id"]), predicates, None).unwrap();
-            assert!(read.support.iter().all(|s| *s == FilterSupport::Exact));
+        let filtered = |domains: &[Domain]| {
+            let read = read(&source, Some(&["id"]), domains, None).unwrap();
+            assert!(read.used.iter().all(|&used| used));
             read.ids()
         };
         let valid = |id: &i64| id % 11 != 0;
-        // The statistics of the row groups skip all but the first.
-        let small = decimal("small", "<", 5, "-4.00");
+        // The statistics of the row groups skip all but the first: small < -4.00.
+        let below = range(Bound::Unbounded, Bound::Excluded(decimal(5, -400)));
         assert_eq!(
-            filtered(&[small]),
+            filtered(&[domain("small", Some(vec![below]))]),
             (0..100).filter(valid).collect::<Vec<_>>()
         );
-        let medium = decimal("medium", "=", 15, "2770000.00");
+        // medium = 2770000.00, and wide IN (-4970000000000.00, 4970000000000.00).
+        let medium = domain("medium", singles([decimal(15, 277_000_000)]));
         assert_eq!(filtered(&[medium]), [777]);
-        let wide = function(
-            "IN",
-            vec![
-                column("wide"),
-                literal("decimal(20,2)", json!("-4970000000000.00")),
-                literal("decimal(20,2)", json!("4970000000000.00")),
-            ],
-        );
+        let wide = 497_000_000_000_000;
+        let wide = domain("wide", singles([decimal(20, -wide), decimal(20, wide)]));
         assert_eq!(filtered(&[wide]), [3, 997]);
-        let nulls = function("IS_NULL", vec![column("medium")]);
+        let mut nulls = domain("medium", Some(vec![]));
+        nulls.null_allowed = true;
         assert_eq!(
             filtered(&[nulls]),
             (0..1000).filter(|id| !valid(id)).collect::<Vec<_>>()
         );
-        // A literal outside the 64 bits of the decimals of 18 digits or fewer remains for Spark.
-        let huge = decimal("medium", "<", 30, "100000000000000000000.00");
-        let unsupported = read(&source, Some(&["id"]), &[huge], None).unwrap();
-        assert_eq!(unsupported.support, [FilterSupport::Unsupported]);
-        assert_eq!(unsupported.ids().len(), 1000);
+        // A value of another scale than its column is not of its type.
+        let scale = Value::Decimal {
+            unscaled: 1,
+            precision: 15,
+            scale: 3,
+        };
+        let unused = read(
+            &source,
+            Some(&["id"]),
+            &[domain("medium", singles([scale]))],
+            None,
+        );
+        let unused = unused.unwrap();
+        assert_eq!(unused.used, [false]);
+        assert_eq!(unused.ids().len(), 1000);
     }
 
     #[test]
@@ -1043,16 +1053,15 @@ mod tests {
         let directory = TempDirectory::new();
         write(&directory.join("rows.parquet"), &[rows(0, 1000)], 100);
         let source = source(&directory.0, &[]);
-        let count = |predicates: &[Value]| {
-            let read = read(&source, Some(&[]), predicates, None).unwrap();
+        let count = |domains: &[Domain]| {
+            let read = read(&source, Some(&[]), domains, None).unwrap();
             assert!(read.batches().all(|batch| batch.num_columns() == 0));
             read.batches().map(RecordBatch::num_rows).sum::<usize>()
         };
         assert_eq!(count(&[]), 1000);
-        assert_eq!(
-            count(&[function("<", vec![column("k"), literal("int", json!(2))])]),
-            200
-        );
+        // k < 2.
+        let below = range(Bound::Unbounded, Bound::Excluded(Value::Integer(2)));
+        assert_eq!(count(&[domain("k", Some(vec![below]))]), 200);
     }
 
     #[test]
@@ -1070,8 +1079,9 @@ mod tests {
         for batches in &limited.partitions {
             assert_eq!(batches.iter().map(RecordBatch::num_rows).sum::<usize>(), 5);
         }
-        // With predicates, the limit counts the rows that pass them, over batches.
-        let k = function("=", vec![column("k"), literal("int", json!(3))]);
+        // Spark pushes no limit to a scan whose rows it filters, but the reader would count it
+        // after its filters, over batches.
+        let k = domain("k", singles([Value::Integer(3)]));
         let filtered = read(&source, Some(&["id"]), &[k], Some(12)).unwrap();
         let mut tasks: Vec<Vec<i64>> = filtered
             .partitions
@@ -1117,7 +1127,7 @@ mod tests {
         let options: Vec<(&str, &str)> = options.iter().map(|(k, v)| (*k, v.as_str())).collect();
         let source = source(&directory.0, &options);
         let plan = source
-            .new_scan(ScanInfo::new(source.schema().unwrap()))
+            .new_scan(ScanInfo::new(source.infer_schema().unwrap()))
             .unwrap()
             .plan()
             .unwrap();
@@ -1185,7 +1195,7 @@ mod tests {
 
         let source = source(&path, &[]);
         let utc = DataType::Timestamp(TimeUnit::Microsecond, Some("UTC".into()));
-        let schema = source.schema().unwrap();
+        let schema = source.infer_schema().unwrap();
         assert_eq!(schema.field(0).data_type(), &utc);
         let DataType::Struct(event) = schema.field(1).data_type() else {
             panic!("event is a struct");
@@ -1231,7 +1241,7 @@ mod tests {
                 &[RecordBatch::try_from_iter([(name, array)]).unwrap()],
                 1024,
             );
-            let error = source(&path, &[]).schema().unwrap_err().to_string();
+            let error = source(&path, &[]).infer_schema().unwrap_err().to_string();
             assert!(
                 error.contains(&format!("The column {name} contains")),
                 "{error}"
@@ -1302,7 +1312,7 @@ mod tests {
         let directory = TempDirectory::new();
         write(&directory.join("rows.parquet"), &[rows(0, 100)], 1024);
         let source = source(&directory.0, &[]);
-        let schema = source.schema().unwrap();
+        let schema = source.infer_schema().unwrap();
         let plan = source
             .new_scan(ScanInfo::new(schema.clone()))
             .unwrap()
@@ -1341,8 +1351,8 @@ mod tests {
                 "must be positive",
             ),
             (
-                &[("path", "/tmp"), ("rowfilter", "maybe")][..],
-                "Invalid rowfilter",
+                &[("path", "/tmp"), ("filterpushdown", "maybe")][..],
+                "Invalid filterpushdown",
             ),
         ] {
             let error = info(options).err().unwrap().to_string();

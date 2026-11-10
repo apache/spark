@@ -13,42 +13,41 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-//! Skips the row groups and pages in which, by their statistics, no row passes the filters, as
-//! Spark's reader does with the statistics of row groups and the column indexes of pages.
+//! Skips the row groups and pages that have no value in the domain of a column, as Spark's reader
+//! does with the statistics of row groups and the column indexes of pages.
 //!
-//! The statistics of a row group or page bound its values and count its nulls. For each filter
-//! and each range of rows, pruning finds whether the filter may be true for some row of the range,
-//! and whether it may be false, so that it can also prune under NOT; a row for which a filter is
-//! null is neither. Unknown statistics may be anything. The reader still evaluates the filters on
-//! every row that it reads, so pruning changes what the reader decodes, but not what it returns.
+//! The statistics of a row group or page bound its values and count its nulls. A range of rows
+//! may have a value in the domain of a column if it may have nulls and the domain has null, or if
+//! it has other values and its bounds meet one of the ranges of the domain. Unknown statistics may
+//! be anything. The reader still evaluates the domains on every row that it reads, so pruning
+//! changes what the reader decodes, but not what it returns.
 
 use std::collections::HashMap;
-use std::ops::Range;
+use std::ops::{Bound, Range};
 
-use arrow_array::cast::AsArray;
 use arrow_array::{Array, ArrayRef, BooleanArray, Scalar, UInt64Array};
 use arrow_ord::cmp;
-use arrow_schema::{ArrowError, DataType};
+use arrow_schema::ArrowError;
 use parquet::arrow::arrow_reader::statistics::StatisticsConverter;
 use parquet::arrow::arrow_reader::{ArrowReaderMetadata, RowSelection};
 use parquet::basic::{ColumnOrder, Type as PhysicalType};
 
-use crate::filter::{Comparison, Filter, TextMatch};
+use crate::filter::Filter;
 
-/// The row groups that may have rows that pass all the filters, and the rows of these row groups
-/// to read, if the column indexes of their pages exclude some.
+/// The row groups that may have rows whose values are all in their domains, and the rows of these
+/// row groups to read, if the column indexes of their pages exclude some.
 pub(crate) fn prune(
     filters: &[Filter],
     metadata: &ArrowReaderMetadata,
     row_groups: Vec<usize>,
 ) -> Result<(Vec<usize>, Option<RowSelection>), ArrowError> {
-    let mut columns = Vec::new();
-    for filter in filters {
-        filter.columns(&mut columns);
-    }
-    let converters: Vec<(&str, StatisticsConverter)> = columns
-        .into_iter()
-        .filter_map(|column| Some((column, converter(column, metadata)?)))
+    // Spark passes at most one domain for each column.
+    let converters: Vec<(&str, StatisticsConverter)> = filters
+        .iter()
+        .filter_map(|filter| {
+            let column = filter.column.as_str();
+            Some((column, converter(column, metadata)?))
+        })
         .collect();
     if converters.is_empty() {
         return Ok((row_groups, None));
@@ -209,57 +208,21 @@ impl Stats {
             entries,
         }
     }
-
-    /// Whether the bound of each range may compare so with a value: an unknown bound may.
-    fn may(&self, compare: Result<BooleanArray, ArrowError>) -> Result<Vec<bool>, ArrowError> {
-        let compare = compare?;
-        let may = |entry: usize| compare.is_null(entry) || compare.value(entry);
-        Ok(self.entries.iter().map(|&entry| may(entry)).collect())
-    }
 }
 
-/// Whether each range of rows may have rows for which a filter is true, and rows for which it
-/// is false.
-struct Outcomes {
-    can_be_true: Vec<bool>,
-    can_be_false: Vec<bool>,
-}
-
-impl Outcomes {
-    fn all(ranges: usize, can_be_true: bool, can_be_false: bool) -> Self {
-        Self {
-            can_be_true: vec![can_be_true; ranges],
-            can_be_false: vec![can_be_false; ranges],
-        }
-    }
-
-    fn and(self, other: Self) -> Self {
-        Self {
-            can_be_true: zip(&self.can_be_true, &other.can_be_true, |a, b| a && b),
-            can_be_false: zip(&self.can_be_false, &other.can_be_false, |a, b| a || b),
-        }
-    }
-
-    fn or(self, other: Self) -> Self {
-        Self {
-            can_be_true: zip(&self.can_be_true, &other.can_be_true, |a, b| a || b),
-            can_be_false: zip(&self.can_be_false, &other.can_be_false, |a, b| a && b),
-        }
-    }
-
-    fn not(self) -> Self {
-        Self {
-            can_be_true: self.can_be_false,
-            can_be_false: self.can_be_true,
-        }
-    }
+/// Whether the bound of each row group or page may compare so with a value: an unknown bound may.
+fn may(compare: Result<BooleanArray, ArrowError>) -> Result<Vec<bool>, ArrowError> {
+    let compare = compare?;
+    Ok((0..compare.len())
+        .map(|entry| compare.is_null(entry) || compare.value(entry))
+        .collect())
 }
 
 fn zip(left: &[bool], right: &[bool], f: impl Fn(bool, bool) -> bool) -> Vec<bool> {
     left.iter().zip(right).map(|(&a, &b)| f(a, b)).collect()
 }
 
-/// Whether each of `ranges` ranges of rows may have rows that pass all the filters.
+/// Whether each of `ranges` ranges of rows may have rows whose values are all in their domains.
 fn passes(
     filters: &[Filter],
     ranges: usize,
@@ -267,175 +230,45 @@ fn passes(
 ) -> Result<Vec<bool>, ArrowError> {
     let mut passes = vec![true; ranges];
     for filter in filters {
-        passes = zip(
-            &passes,
-            &outcomes(filter, ranges, stats)?.can_be_true,
-            |a, b| a && b,
-        );
+        if let Some(stats) = stats.get(filter.column.as_str()) {
+            passes = zip(&passes, &may_have(filter, stats)?, |a, b| a && b);
+        }
     }
     Ok(passes)
 }
 
-fn outcomes(
-    filter: &Filter,
-    ranges: usize,
-    stats: &HashMap<&str, Stats>,
-) -> Result<Outcomes, ArrowError> {
-    let unknown = || Outcomes::all(ranges, true, true);
-    Ok(match filter {
-        Filter::Compare { column, op, value } => match stats.get(column.as_str()) {
-            Some(stats) => compare(stats, *op, value.as_ref())?,
-            None => unknown(),
-        },
-        Filter::IsNull { column, negated } => match stats.get(column.as_str()) {
-            Some(stats) => {
-                let is_null = is_null(stats);
-                if *negated {
-                    is_null.not()
-                } else {
-                    is_null
-                }
+/// Whether each range of rows may have a value in the domain of a filter.
+fn may_have(filter: &Filter, stats: &Stats) -> Result<Vec<bool>, ArrowError> {
+    // Whether each row group or page may have a value of the domain other than null and NaN: one
+    // in a range whose bounds its bounds meet.
+    let entries = stats.min.len();
+    let values = match &filter.ranges {
+        None => vec![true; entries],
+        Some(ranges) => {
+            let mut values = vec![false; entries];
+            for range in ranges {
+                let low = match &range.low {
+                    Bound::Included(value) => may(cmp::gt_eq(&stats.max, &Scalar::new(value)))?,
+                    Bound::Excluded(value) => may(cmp::gt(&stats.max, &Scalar::new(value)))?,
+                    Bound::Unbounded => vec![true; entries],
+                };
+                let high = match &range.high {
+                    Bound::Included(value) => may(cmp::lt_eq(&stats.min, &Scalar::new(value)))?,
+                    Bound::Excluded(value) => may(cmp::lt(&stats.min, &Scalar::new(value)))?,
+                    Bound::Unbounded => vec![true; entries],
+                };
+                values = zip(&values, &zip(&low, &high, |a, b| a && b), |a, b| a || b);
             }
-            None => unknown(),
-        },
-        Filter::In { column, values } => match stats.get(column.as_str()) {
-            Some(stats) => {
-                let mut result = Outcomes::all(ranges, false, true);
-                for value in values {
-                    result = result.or(compare(stats, Comparison::Equal, value.as_ref())?);
-                }
-                result
-            }
-            None => unknown(),
-        },
-        Filter::Text {
-            column,
-            op: TextMatch::StartsWith,
-            pattern,
-        } => match (stats.get(column.as_str()), bytes(pattern, 0)) {
-            (Some(stats), Some(prefix)) => starts_with(stats, prefix),
-            _ => unknown(),
-        },
-        Filter::Text { .. } => unknown(),
-        Filter::And(left, right) => {
-            outcomes(left, ranges, stats)?.and(outcomes(right, ranges, stats)?)
+            values
         }
-        Filter::Or(left, right) => {
-            outcomes(left, ranges, stats)?.or(outcomes(right, ranges, stats)?)
-        }
-        Filter::Not(child) => outcomes(child, ranges, stats)?.not(),
-    })
-}
-
-fn is_null(stats: &Stats) -> Outcomes {
-    let all_null = stats.entries.iter().map(|&entry| stats.all_null[entry]);
-    Outcomes {
-        can_be_true: stats
-            .entries
-            .iter()
-            .map(|&entry| stats.some_null[entry])
-            .collect(),
-        can_be_false: all_null.map(|all_null| !all_null).collect(),
-    }
-}
-
-/// The outcomes of STARTS_WITH. The strings that start with a prefix are those from the prefix to
-/// its successor, the prefix without its trailing 0xFF bytes and with its last byte incremented:
-/// a range of rows may have such strings if its bounds meet these, and others unless its bounds
-/// are within them. Without a successor, every string from the prefix on starts with it.
-fn starts_with(stats: &Stats, prefix: &[u8]) -> Outcomes {
-    let mut successor = prefix.to_vec();
-    while successor.last() == Some(&0xff) {
-        successor.pop();
-    }
-    let successor = match successor.last_mut() {
-        Some(last) => {
-            *last += 1;
-            Some(successor)
-        }
-        None => None,
     };
-    let below_successor = |value: &[u8]| successor.as_deref().is_none_or(|end| value < end);
-    let (can_be_true, can_be_false) = stats
-        .entries
-        .iter()
-        .map(|&entry| {
-            if stats.all_null[entry] {
-                return (false, false);
-            }
-            let (min, max) = (bytes(&stats.min, entry), bytes(&stats.max, entry));
-            let can_be_true =
-                max.is_none_or(|max| max >= prefix) && min.is_none_or(below_successor);
-            let within = min.is_some_and(|min| min >= prefix) && max.is_some_and(below_successor);
-            (can_be_true, !within)
-        })
-        .unzip();
-    Outcomes {
-        can_be_true,
-        can_be_false,
-    }
-}
-
-/// The bytes of a string, or `None` if it is null.
-fn bytes(array: &ArrayRef, index: usize) -> Option<&[u8]> {
-    if array.is_null(index) {
-        return None;
-    }
-    match array.data_type() {
-        DataType::Utf8 => Some(array.as_string::<i32>().value(index).as_bytes()),
-        DataType::Utf8View => Some(array.as_string_view().value(index).as_bytes()),
-        _ => None,
-    }
-}
-
-/// The outcomes of comparing a column with a value, or with null.
-fn compare(
-    stats: &Stats,
-    op: Comparison,
-    value: Option<&ArrayRef>,
-) -> Result<Outcomes, ArrowError> {
-    let Some(value) = value else {
-        // Null compares as null, except with <=>, which is IS NULL.
-        return Ok(match op {
-            Comparison::NullSafeEqual => is_null(stats),
-            _ => Outcomes::all(stats.entries.len(), false, false),
-        });
+    // The statistics of floats are not used, since they leave NaN out.
+    let may_have = |entry: usize| {
+        (filter.null_allowed && stats.some_null[entry])
+            || filter.nan_allowed
+            || (!stats.all_null[entry] && values[entry])
     };
-    let value = Scalar::new(value);
-    let (min, max) = (&stats.min, &stats.max);
-    // Some value of the range may be less than, or greater than, the value.
-    let below = || stats.may(cmp::lt(min, &value));
-    let above = || stats.may(cmp::gt(max, &value));
-    // Some value may be at most, or at least, the value.
-    let at_most = || stats.may(cmp::lt_eq(min, &value));
-    let at_least = || stats.may(cmp::gt_eq(max, &value));
-    let both = |left: Vec<bool>, right: Vec<bool>| zip(&left, &right, |a, b| a && b);
-    let either = |left: Vec<bool>, right: Vec<bool>| zip(&left, &right, |a, b| a || b);
-    // Some value may equal the value, or differ from it.
-    let equal = || Ok::<_, ArrowError>(both(at_most()?, at_least()?));
-    let differ = || Ok::<_, ArrowError>(either(below()?, above()?));
-    let (can_be_true, can_be_false) = match op {
-        Comparison::Equal => (equal()?, differ()?),
-        Comparison::NotEqual => (differ()?, equal()?),
-        // Null rows are false, so the comparison may be false for any range.
-        Comparison::NullSafeEqual => (equal()?, vec![true; stats.entries.len()]),
-        Comparison::Less => (below()?, at_least()?),
-        Comparison::LessOrEqual => (at_most()?, above()?),
-        Comparison::Greater => (above()?, at_most()?),
-        Comparison::GreaterOrEqual => (at_least()?, below()?),
-    };
-    let mut outcomes = Outcomes {
-        can_be_true,
-        can_be_false,
-    };
-    // A range of nulls is neither, or false for <=>.
-    for (i, &entry) in stats.entries.iter().enumerate() {
-        if stats.all_null[entry] {
-            outcomes.can_be_true[i] = false;
-            outcomes.can_be_false[i] = op == Comparison::NullSafeEqual;
-        }
-    }
-    Ok(outcomes)
+    Ok(stats.entries.iter().map(|&entry| may_have(entry)).collect())
 }
 
 #[cfg(test)]
@@ -447,29 +280,34 @@ mod tests {
     use arrow_array::{Int32Array, Int64Array, RecordBatch, StringArray};
     use parquet::arrow::ArrowWriter;
     use parquet::file::properties::WriterProperties;
-    use serde_json::{json, Value};
-    use spark_native_source::Predicate;
+    use spark_datasource::{Domain, Value, ValueRange};
 
     use super::*;
 
-    fn column(name: &str) -> Value {
-        json!({"type": "column", "name": [name]})
+    fn domain(column: &str, ranges: Option<Vec<ValueRange>>) -> Domain {
+        Domain::new(vec![column.into()], ranges)
     }
 
-    fn literal(data_type: &str, value: Value) -> Value {
-        json!({"type": "literal", "dataType": data_type, "value": value})
+    fn range(low: Bound<Value>, high: Bound<Value>) -> ValueRange {
+        ValueRange { low, high }
     }
 
-    fn function(name: &str, children: Vec<Value>) -> Value {
-        json!({"type": "function", "name": name, "children": children})
+    fn id(ranges: Vec<ValueRange>) -> Domain {
+        domain("id", Some(ranges))
     }
 
-    fn id(op: &str, value: i64) -> Value {
-        function(op, vec![column("id"), literal("bigint", json!(value))])
+    fn int(value: i64) -> Value {
+        Value::Integer(value)
     }
 
-    fn label(op: &str, value: &str) -> Value {
-        function(op, vec![column("label"), literal("string", json!(value))])
+    /// The domain of the labels that start with a prefix: from the prefix to its successor.
+    fn starts_with(prefix: &str, successor: &str) -> Domain {
+        let string = |value: &str| Value::String(value.into());
+        let low = Bound::Included(string(prefix));
+        domain(
+            "label",
+            Some(vec![range(low, Bound::Excluded(string(successor)))]),
+        )
     }
 
     /// 1000 rows in row groups of 200 and pages of 20: `id` from 0, `k` = id % 10, and `label`
@@ -515,14 +353,11 @@ mod tests {
         metadata
     }
 
-    /// The rows of the file that the reader reads with the predicates.
-    fn read(metadata: &ArrowReaderMetadata, predicates: &[Value]) -> Vec<usize> {
-        let filters: Vec<Filter> = predicates
+    /// The rows of the file that the reader reads with the domains.
+    fn read(metadata: &ArrowReaderMetadata, domains: &[Domain]) -> Vec<usize> {
+        let filters: Vec<Filter> = domains
             .iter()
-            .map(|predicate| {
-                let predicate: Predicate = serde_json::from_value(predicate.clone()).unwrap();
-                Filter::new(&predicate, metadata.schema()).unwrap()
-            })
+            .map(|domain| Filter::new(domain, metadata.schema()).unwrap())
             .collect();
         let row_groups = (0..metadata.metadata().num_row_groups()).collect();
         let (row_groups, selection) = prune(&filters, metadata, row_groups).unwrap();
@@ -555,115 +390,75 @@ mod tests {
     }
 
     #[test]
-    fn skips_the_row_groups_and_pages_that_no_row_passes() {
+    fn skips_the_row_groups_and_pages_without_values_in_the_domains() {
         let metadata = metadata();
+        let below = |value| range(Bound::Unbounded, Bound::Excluded(int(value)));
+        let above = |value| range(Bound::Excluded(int(value)), Bound::Unbounded);
         // The pages from 0 to 59 have values below 50.
-        assert_eq!(read(&metadata, &[id("<", 50)]), rows(&[(0, 60)]));
-        assert_eq!(read(&metadata, &[id(">=", 50)]), rows(&[(40, 1000)]));
-        assert_eq!(read(&metadata, &[id("=", 50)]), rows(&[(40, 60)]));
-        assert_eq!(read(&metadata, &[id("<>", 50)]), rows(&[(0, 1000)]));
+        assert_eq!(read(&metadata, &[id(vec![below(50)])]), rows(&[(0, 60)]));
+        let at_least = range(Bound::Included(int(50)), Bound::Unbounded);
+        assert_eq!(read(&metadata, &[id(vec![at_least])]), rows(&[(40, 1000)]));
+        let fifty = ValueRange::single(int(50));
+        assert_eq!(read(&metadata, &[id(vec![fifty])]), rows(&[(40, 60)]));
+        // id <> 50.
+        let other = id(vec![below(50), above(50)]);
+        assert_eq!(read(&metadata, &[other]), rows(&[(0, 1000)]));
+        // id > 0 AND id <= 19.
+        let small = range(Bound::Excluded(int(0)), Bound::Included(int(19)));
+        assert_eq!(read(&metadata, &[id(vec![small])]), rows(&[(0, 20)]));
+        // id IN (5, 950), and id < 50 OR id > 950.
+        let ids = id(vec![
+            ValueRange::single(int(5)),
+            ValueRange::single(int(950)),
+        ]);
+        assert_eq!(read(&metadata, &[ids]), rows(&[(0, 20), (940, 960)]));
+        let ends = id(vec![below(50), above(950)]);
+        assert_eq!(read(&metadata, &[ends]), rows(&[(0, 60), (940, 1000)]));
+        assert!(read(&metadata, &[id(vec![below(0)])]).is_empty());
+        assert!(read(&metadata, &[id(vec![])]).is_empty());
+        // `k` takes every value in every page, so only the domain of `id` skips pages.
+        let k = domain("k", Some(vec![ValueRange::single(int(3))]));
         assert_eq!(
-            read(&metadata, &[id("<=", 19), id(">", 0)]),
-            rows(&[(0, 20)])
-        );
-        let ids = |values: &[i64]| {
-            let mut children = vec![column("id")];
-            children.extend(values.iter().map(|&value| literal("bigint", json!(value))));
-            function("IN", children)
-        };
-        assert_eq!(
-            read(&metadata, &[ids(&[5, 950])]),
-            rows(&[(0, 20), (940, 960)])
-        );
-        assert!(read(&metadata, &[id("<", 0)]).is_empty());
-        assert!(read(&metadata, &[id("<", 50), id(">", 950)]).is_empty());
-        // `k` takes every value in every page.
-        let k = function("=", vec![column("k"), literal("int", json!(3))]);
-        assert_eq!(read(&metadata, &[k]), rows(&[(0, 1000)]));
-    }
-
-    #[test]
-    fn prunes_by_the_outcomes_of_not_and_or() {
-        let metadata = metadata();
-        let not = |child| function("NOT", vec![child]);
-        let or = |left, right| function("OR", vec![left, right]);
-        assert_eq!(read(&metadata, &[not(id(">=", 50))]), rows(&[(0, 60)]));
-        assert_eq!(read(&metadata, &[not(not(id("<", 50)))]), rows(&[(0, 60)]));
-        assert_eq!(
-            read(&metadata, &[or(id("<", 50), id(">", 950))]),
-            rows(&[(0, 60), (940, 1000)])
-        );
-        // NOT of a comparison with a null is null, as is the comparison.
-        let null = function("<", vec![column("id"), literal("bigint", Value::Null)]);
-        assert!(read(&metadata, std::slice::from_ref(&null)).is_empty());
-        assert!(read(&metadata, &[not(null)]).is_empty());
-        // The reader evaluates ENDS_WITH and CONTAINS on each row, but pruning does not bound them.
-        let ends = label("ENDS_WITH", "9");
-        assert_eq!(
-            read(&metadata, std::slice::from_ref(&ends)),
+            read(&metadata, std::slice::from_ref(&k)),
             rows(&[(0, 1000)])
         );
-        assert_eq!(read(&metadata, &[ends, id("<", 50)]), rows(&[(0, 60)]));
+        assert_eq!(read(&metadata, &[k, id(vec![below(50)])]), rows(&[(0, 60)]));
     }
 
     #[test]
     fn skips_the_pages_whose_bounds_exclude_a_prefix() {
         let metadata = metadata();
-        let not = |child| function("NOT", vec![child]);
         // The pages of 20 rows from 940 to 999.
-        assert_eq!(
-            read(&metadata, &[label("STARTS_WITH", "row-09")]),
-            rows(&[(900, 1000)])
-        );
-        assert_eq!(
-            read(&metadata, &[label("STARTS_WITH", "row-095")]),
-            rows(&[(940, 960)])
-        );
-        assert_eq!(
-            read(&metadata, &[label("STARTS_WITH", "row-00")]),
-            rows(&[(0, 100)])
-        );
-        assert!(read(&metadata, &[label("STARTS_WITH", "row-1")]).is_empty());
-        assert!(read(&metadata, &[label("STARTS_WITH", "rox")]).is_empty());
-        // Every label starts with "row-", so that no page passes the negation, except none: the
-        // row group of nulls passes neither.
-        assert!(read(&metadata, &[not(label("STARTS_WITH", "row-"))]).is_empty());
-        assert_eq!(
-            read(&metadata, &[label("STARTS_WITH", "")]),
-            rows(&[(0, 400), (600, 1000)])
-        );
-        assert_eq!(
-            read(&metadata, &[not(label("STARTS_WITH", "row-09"))]),
-            rows(&[(0, 400), (600, 900)])
-        );
+        let read = |domain| read(&metadata, &[domain]);
+        assert_eq!(read(starts_with("row-09", "row-0:")), rows(&[(900, 1000)]));
+        assert_eq!(read(starts_with("row-095", "row-096")), rows(&[(940, 960)]));
+        assert_eq!(read(starts_with("row-00", "row-01")), rows(&[(0, 100)]));
+        assert!(read(starts_with("row-1", "row-2")).is_empty());
+        assert!(read(starts_with("rox", "roy")).is_empty());
     }
 
     #[test]
-    fn a_comparison_is_neither_true_nor_false_for_nulls() {
+    fn skips_by_the_null_counts_whether_or_not_the_domain_has_null() {
         let metadata = metadata();
-        let not = |child| function("NOT", vec![child]);
-        let is_null = |name| function(name, vec![column("label")]);
-        assert_eq!(read(&metadata, &[label("<", "row-0050")]), rows(&[(0, 60)]));
-        // The row group of nulls passes neither the comparison nor its negation.
-        assert_eq!(
-            read(&metadata, &[not(label("<", "row-0900"))]),
-            rows(&[(900, 1000)])
-        );
-        assert_eq!(read(&metadata, &[is_null("IS_NULL")]), rows(&[(400, 600)]));
-        assert_eq!(
-            read(&metadata, &[is_null("IS_NOT_NULL")]),
-            rows(&[(0, 400), (600, 1000)])
-        );
-        let null_safe = |value| function("<=>", vec![column("label"), literal("string", value)]);
-        assert_eq!(
-            read(&metadata, &[null_safe(Value::Null)]),
-            rows(&[(400, 600)])
-        );
-        assert_eq!(
-            read(&metadata, &[null_safe(json!("row-0042"))]),
-            rows(&[(40, 60)])
-        );
+        let label = |ranges, null_allowed| {
+            let mut domain = domain("label", ranges);
+            domain.null_allowed = null_allowed;
+            read(&metadata, &[domain])
+        };
+        let string = |value: &str| Value::String(value.into());
+        // IS NULL, and IS NOT NULL.
+        assert_eq!(label(Some(vec![]), true), rows(&[(400, 600)]));
+        assert_eq!(label(None, false), rows(&[(0, 400), (600, 1000)]));
+        // The row group of nulls has no value below a bound.
+        let below = vec![range(Bound::Unbounded, Bound::Excluded(string("row-0050")))];
+        assert_eq!(label(Some(below), false), rows(&[(0, 60)]));
+        // label <=> 'row-0042', and label IS NULL OR label = 'row-0042'.
+        let value = || Some(vec![ValueRange::single(string("row-0042"))]);
+        assert_eq!(label(value(), false), rows(&[(40, 60)]));
+        assert_eq!(label(value(), true), rows(&[(40, 60), (400, 600)]));
         // `id` has no nulls.
-        assert!(read(&metadata, &[function("IS_NULL", vec![column("id")])]).is_empty());
+        let mut null = domain("id", Some(vec![]));
+        null.null_allowed = true;
+        assert!(read(&metadata, &[null]).is_empty());
     }
 }

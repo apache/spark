@@ -13,288 +13,169 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-//! The pushed predicates that the reader evaluates on the batches that it decodes.
+//! The domains that Spark pushes, which the reader evaluates on the batches that it decodes.
 
+use std::ops::Bound;
 use std::sync::Arc;
 
-use arrow_arith::boolean::{and_kleene, is_not_null, is_null, not, or_kleene};
 use arrow_array::cast::AsArray;
 use arrow_array::types::{Float32Type, Float64Type};
 use arrow_array::{
-    ArrayRef, BinaryArray, BinaryViewArray, BooleanArray, Date32Array, Decimal128Array,
+    Array, ArrayRef, BinaryArray, BinaryViewArray, BooleanArray, Date32Array, Decimal128Array,
     Decimal64Array, Float32Array, Float64Array, Int16Array, Int32Array, Int64Array, Int8Array,
     RecordBatch, Scalar, StringArray, StringViewArray, TimestampMicrosecondArray,
 };
 use arrow_buffer::{BooleanBuffer, Buffer};
 use arrow_ord::cmp;
-use arrow_schema::{ArrowError, DataType, Schema, TimeUnit, DECIMAL64_MAX_PRECISION};
-use arrow_string::like;
-use spark_native_source::{LiteralValue, Predicate};
+use arrow_schema::{ArrowError, DataType, Schema, TimeUnit};
+use spark_datasource::{Domain, Value};
 
-/// A predicate on the top-level columns of a file, which evaluates to what Spark SQL computes,
-/// including nulls, so that the reader drops exactly the rows that Spark drops.
+/// The domain of a top-level column, with bounds of the Arrow type of the column. A row whose
+/// value is not in the domain matches none of the rows that the filters of the query keep, so
+/// the reader drops it, and skips the row groups and pages that have no value in the domain.
 #[derive(Debug)]
-pub(crate) enum Filter {
-    /// A column compared with a literal of its type, or with null.
-    Compare {
-        column: String,
-        op: Comparison,
-        value: Option<ArrayRef>,
-    },
-    IsNull {
-        column: String,
-        negated: bool,
-    },
-    /// A column in a list of literals, which may contain null.
-    In {
-        column: String,
-        values: Vec<Option<ArrayRef>>,
-    },
-    /// A string column matched with a string literal.
-    Text {
-        column: String,
-        op: TextMatch,
-        pattern: ArrayRef,
-    },
-    And(Box<Filter>, Box<Filter>),
-    Or(Box<Filter>, Box<Filter>),
-    Not(Box<Filter>),
+pub(crate) struct Filter {
+    pub(crate) column: String,
+    pub(crate) null_allowed: bool,
+    pub(crate) nan_allowed: bool,
+    // The ranges of the other values in the domain, or None if they are all in it.
+    pub(crate) ranges: Option<Vec<Range>>,
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub(crate) enum Comparison {
-    Equal,
-    NotEqual,
-    NullSafeEqual,
-    Less,
-    LessOrEqual,
-    Greater,
-    GreaterOrEqual,
-}
-
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub(crate) enum TextMatch {
-    StartsWith,
-    EndsWith,
-    Contains,
+/// A range of the values of a domain, whose bounds are one-element arrays of the type of the
+/// column, with floats that Arrow compares as Spark does.
+#[derive(Debug)]
+pub(crate) struct Range {
+    pub(crate) low: Bound<ArrayRef>,
+    pub(crate) high: Bound<ArrayRef>,
+    // The value of a range of a single value, such as one of an IN list.
+    single: Option<ArrayRef>,
 }
 
 impl Filter {
-    /// The filter of a predicate on the columns of `schema`, or `None` if the reader does not
-    /// evaluate the predicate exactly as Spark does.
-    pub(crate) fn new(predicate: &Predicate, schema: &Schema) -> Option<Self> {
-        let Predicate::Function { name, children } = predicate else {
+    /// The filter of a domain on a top-level column of `schema`, the schema that Spark reads or
+    /// that of a file, or `None` if the reader does not evaluate it: for a field of a struct, a
+    /// column that the schema does not have, or values of another type than the column.
+    pub(crate) fn new(domain: &Domain, schema: &Schema) -> Option<Self> {
+        let [column] = domain.path.as_slice() else {
             return None;
         };
-        let filter = |child| Self::new(child, schema).map(Box::new);
-        Some(match (name.as_str(), children.as_slice()) {
-            ("AND", [left, right]) => Self::And(filter(left)?, filter(right)?),
-            ("OR", [left, right]) => Self::Or(filter(left)?, filter(right)?),
-            ("NOT", [child]) => Self::Not(filter(child)?),
-            ("IS_NULL" | "IS_NOT_NULL", [child]) => Self::IsNull {
-                column: column(child, schema)?.0,
-                negated: name == "IS_NOT_NULL",
-            },
-            ("IN", [child, values @ ..]) if !values.is_empty() => {
-                let (column, data_type) = comparable_column(child, schema)?;
-                let values = values
+        let data_type = comparable(schema.field_with_name(column).ok()?.data_type())?;
+        let ranges = match &domain.ranges {
+            None => None,
+            Some(ranges) => Some(
+                ranges
                     .iter()
-                    .map(|value| literal(value, data_type))
-                    .collect::<Option<_>>()?;
-                Self::In { column, values }
-            }
-            ("STARTS_WITH" | "ENDS_WITH" | "CONTAINS", [child, pattern]) => {
-                let (column, data_type) = column(child, schema)?;
-                if !matches!(data_type, DataType::Utf8 | DataType::Utf8View) {
-                    return None;
-                }
-                let op = match name.as_str() {
-                    "STARTS_WITH" => TextMatch::StartsWith,
-                    "ENDS_WITH" => TextMatch::EndsWith,
-                    _ => TextMatch::Contains,
-                };
-                Self::Text {
-                    column,
-                    op,
-                    pattern: literal(pattern, data_type)??,
-                }
-            }
-            (name, [left, right]) => {
-                let op = comparison(name)?;
-                // Spark may put the literal on either side.
-                let (column, data_type, value, op) = match comparable_column(left, schema) {
-                    Some((column, data_type)) => (column, data_type, right, op),
-                    None => {
-                        let (column, data_type) = comparable_column(right, schema)?;
-                        (column, data_type, left, op.reversed())
-                    }
-                };
-                Self::Compare {
-                    column,
-                    op,
-                    value: literal(value, data_type)?,
-                }
-            }
-            _ => return None,
+                    .map(|range| {
+                        let single = match (&range.low, &range.high) {
+                            (Bound::Included(low), Bound::Included(high)) if low == high => {
+                                Some(literal(low, data_type)?)
+                            }
+                            _ => None,
+                        };
+                        Some(Range {
+                            low: bound(&range.low, data_type)?,
+                            high: bound(&range.high, data_type)?,
+                            single,
+                        })
+                    })
+                    .collect::<Option<Vec<_>>>()?,
+            ),
+        };
+        Some(Self {
+            column: column.clone(),
+            null_allowed: domain.null_allowed,
+            nan_allowed: domain.nan_allowed,
+            ranges,
         })
     }
 
-    /// Adds the names of the columns that the filter reads to `columns`.
-    pub(crate) fn columns<'a>(&'a self, columns: &mut Vec<&'a str>) {
-        match self {
-            Self::Compare { column, .. }
-            | Self::IsNull { column, .. }
-            | Self::In { column, .. }
-            | Self::Text { column, .. } => {
-                if !columns.contains(&column.as_str()) {
-                    columns.push(column);
-                }
-            }
-            Self::And(left, right) | Self::Or(left, right) => {
-                left.columns(columns);
-                right.columns(columns);
-            }
-            Self::Not(child) => child.columns(columns),
+    /// Whether the value of each row of a batch that has the column is in the domain. A row that
+    /// is false matches no filter of the query.
+    pub(crate) fn evaluate(&self, batch: &RecordBatch) -> Result<BooleanBuffer, ArrowError> {
+        let array = column_of(batch, &self.column)?;
+        let mut matches = match &self.ranges {
+            Some(ranges) => in_ranges(&spark_ordered(array), ranges)?,
+            None => BooleanBuffer::new_set(array.len()),
+        };
+        if let Some(nans) = nans(array) {
+            matches = if self.nan_allowed {
+                &matches | &nans
+            } else {
+                &matches & &!&nans
+            };
         }
+        if let Some(nulls) = array.nulls() {
+            let valid = nulls.inner();
+            matches = if self.null_allowed {
+                &(&matches & valid) | &!valid
+            } else {
+                &matches & valid
+            };
+        }
+        Ok(matches)
     }
+}
 
-    /// Evaluates the filter on a batch that has the columns that it reads. A row is null when
-    /// Spark computes null, which the reader drops, as Spark drops it, unless a NOT changes it.
-    pub(crate) fn evaluate(&self, batch: &RecordBatch) -> Result<BooleanArray, ArrowError> {
-        match self {
-            Self::Compare { column, op, value } => {
-                let array = &spark_ordered(column_of(batch, column)?);
-                let Some(value) = value else {
-                    return Ok(match op {
-                        Comparison::NullSafeEqual => is_null(array)?,
-                        _ => BooleanArray::new_null(array.len()),
-                    });
+/// Whether each value of a column is in one of the ranges. The bits of nulls and NaNs are
+/// arbitrary.
+fn in_ranges(array: &ArrayRef, ranges: &[Range]) -> Result<BooleanBuffer, ArrowError> {
+    let singles: Option<Vec<&ArrayRef>> =
+        ranges.iter().map(|range| range.single.as_ref()).collect();
+    if let Some(matches) = singles.and_then(|values| equal_views(array, &values)) {
+        return Ok(matches);
+    }
+    let mut matches = BooleanBuffer::new_unset(array.len());
+    for range in ranges {
+        let in_range = match &range.single {
+            Some(value) => cmp::eq(array, &Scalar::new(value))?.values().clone(),
+            None => {
+                let low = match &range.low {
+                    Bound::Included(value) => Some(cmp::gt_eq(array, &Scalar::new(value))?),
+                    Bound::Excluded(value) => Some(cmp::gt(array, &Scalar::new(value))?),
+                    Bound::Unbounded => None,
                 };
-                let equality = matches!(
-                    op,
-                    Comparison::Equal | Comparison::NotEqual | Comparison::NullSafeEqual
-                );
-                if let Some(equal) = equality.then(|| equal_views(array, &[value])).flatten() {
-                    let nulls = array.nulls().cloned();
-                    return Ok(match (op, nulls) {
-                        (Comparison::NotEqual, nulls) => BooleanArray::new(!&equal, nulls),
-                        // A null is never equal to the value.
-                        (Comparison::NullSafeEqual, Some(nulls)) => {
-                            BooleanArray::new(&equal & nulls.inner(), None)
-                        }
-                        (_, nulls) => BooleanArray::new(equal, nulls),
-                    });
-                }
-                let value = Scalar::new(value);
-                match op {
-                    Comparison::Equal => cmp::eq(array, &value),
-                    Comparison::NotEqual => cmp::neq(array, &value),
-                    Comparison::NullSafeEqual => cmp::not_distinct(array, &value),
-                    Comparison::Less => cmp::lt(array, &value),
-                    Comparison::LessOrEqual => cmp::lt_eq(array, &value),
-                    Comparison::Greater => cmp::gt(array, &value),
-                    Comparison::GreaterOrEqual => cmp::gt_eq(array, &value),
+                let high = match &range.high {
+                    Bound::Included(value) => Some(cmp::lt_eq(array, &Scalar::new(value))?),
+                    Bound::Excluded(value) => Some(cmp::lt(array, &Scalar::new(value))?),
+                    Bound::Unbounded => None,
+                };
+                match (low, high) {
+                    (Some(low), Some(high)) => low.values() & high.values(),
+                    (Some(bound), None) | (None, Some(bound)) => bound.values().clone(),
+                    (None, None) => BooleanBuffer::new_set(array.len()),
                 }
             }
-            Self::IsNull { column, negated } => {
-                let array = column_of(batch, column)?;
-                if *negated {
-                    is_not_null(array)
-                } else {
-                    is_null(array)
-                }
-            }
-            Self::In { column, values } => {
-                // The disjunction of the equalities: null when no value matches, and the column
-                // or a value is null.
-                let array = &spark_ordered(column_of(batch, column)?);
-                let literals = values
-                    .iter()
-                    .map(Option::as_ref)
-                    .collect::<Option<Vec<_>>>();
-                if let Some(matches) = literals.and_then(|literals| equal_views(array, &literals)) {
-                    return Ok(BooleanArray::new(matches, array.nulls().cloned()));
-                }
-                let mut result: Option<BooleanArray> = None;
-                for value in values {
-                    let matches = match value {
-                        Some(value) => cmp::eq(array, &Scalar::new(value))?,
-                        None => BooleanArray::new_null(array.len()),
-                    };
-                    result = Some(match result {
-                        Some(result) => or_kleene(&result, &matches)?,
-                        None => matches,
-                    });
-                }
-                Ok(result.expect("an IN filter has values"))
-            }
-            Self::Text {
-                column,
-                op,
-                pattern,
-            } => {
-                let array = column_of(batch, column)?;
-                let pattern = Scalar::new(pattern);
-                match op {
-                    TextMatch::StartsWith => like::starts_with(array, &pattern),
-                    TextMatch::EndsWith => like::ends_with(array, &pattern),
-                    TextMatch::Contains => like::contains(array, &pattern),
-                }
-            }
-            Self::And(left, right) => and_kleene(&left.evaluate(batch)?, &right.evaluate(batch)?),
-            Self::Or(left, right) => or_kleene(&left.evaluate(batch)?, &right.evaluate(batch)?),
-            Self::Not(child) => not(&child.evaluate(batch)?),
+        };
+        matches = &matches | &in_range;
+    }
+    Ok(matches)
+}
+
+/// Whether each value of a float or double column is NaN, or `None` for another column.
+fn nans(array: &ArrayRef) -> Option<BooleanBuffer> {
+    match array.data_type() {
+        DataType::Float32 => {
+            let values = array.as_primitive::<Float32Type>().values();
+            Some(BooleanBuffer::collect_bool(values.len(), |row| {
+                values[row].is_nan()
+            }))
         }
+        DataType::Float64 => {
+            let values = array.as_primitive::<Float64Type>().values();
+            Some(BooleanBuffer::collect_bool(values.len(), |row| {
+                values[row].is_nan()
+            }))
+        }
+        _ => None,
     }
 }
 
-impl Comparison {
-    /// The comparison with its operands swapped: `5 < x` is `x > 5`.
-    fn reversed(self) -> Self {
-        match self {
-            Self::Less => Self::Greater,
-            Self::LessOrEqual => Self::GreaterOrEqual,
-            Self::Greater => Self::Less,
-            Self::GreaterOrEqual => Self::LessOrEqual,
-            symmetric => symmetric,
-        }
-    }
-}
-
-fn comparison(name: &str) -> Option<Comparison> {
-    Some(match name {
-        "=" => Comparison::Equal,
-        "<>" => Comparison::NotEqual,
-        "<=>" => Comparison::NullSafeEqual,
-        "<" => Comparison::Less,
-        "<=" => Comparison::LessOrEqual,
-        ">" => Comparison::Greater,
-        ">=" => Comparison::GreaterOrEqual,
-        _ => return None,
-    })
-}
-
-/// A top-level column of the schema.
-fn column<'a>(predicate: &Predicate, schema: &'a Schema) -> Option<(String, &'a DataType)> {
-    let Predicate::Column { name } = predicate else {
-        return None;
-    };
-    let [name] = name.as_slice() else {
-        return None;
-    };
-    let field = schema.field_with_name(name).ok()?;
-    Some((name.clone(), field.data_type()))
-}
-
-/// A top-level column of a type that Arrow compares as Spark does, in the schema that Spark
+/// The type of a column whose values Arrow compares as Spark does, in the schema that Spark
 /// reads or in the one that the reader reads, which has views of strings and binary values, and
 /// 64-bit decimals. Floats compare as Spark compares them once [`spark_ordered`] changes their
-/// zeros and NaNs.
-fn comparable_column<'a>(
-    predicate: &Predicate,
-    schema: &'a Schema,
-) -> Option<(String, &'a DataType)> {
-    let (name, data_type) = column(predicate, schema)?;
+/// zeros.
+fn comparable(data_type: &DataType) -> Option<&DataType> {
     match data_type {
         DataType::Boolean
         | DataType::Int8
@@ -310,97 +191,91 @@ fn comparable_column<'a>(
         | DataType::Date32
         | DataType::Decimal64(_, _)
         | DataType::Decimal128(_, _)
-        | DataType::Timestamp(TimeUnit::Microsecond, _) => Some((name, data_type)),
+        | DataType::Timestamp(TimeUnit::Microsecond, _) => Some(data_type),
         _ => None,
     }
 }
 
-/// A literal as a one-element array of `data_type`, `Some(None)` for null, or `None` if the
-/// literal is not a value of that type. Spark compares strings and binary by their bytes, as
-/// Arrow does.
-fn literal(predicate: &Predicate, data_type: &DataType) -> Option<Option<ArrayRef>> {
-    let array: ArrayRef = match (data_type, predicate.literal_value()?) {
-        (_, LiteralValue::Null) => return Some(None),
-        (DataType::Boolean, LiteralValue::Boolean(value)) => {
-            Arc::new(BooleanArray::from(vec![value]))
+fn bound(bound: &Bound<Value>, data_type: &DataType) -> Option<Bound<ArrayRef>> {
+    Some(match bound {
+        Bound::Included(value) => Bound::Included(literal(value, data_type)?),
+        Bound::Excluded(value) => Bound::Excluded(literal(value, data_type)?),
+        Bound::Unbounded => Bound::Unbounded,
+    })
+}
+
+/// A value as a one-element array of `data_type`, or `None` if it is not a value of that type.
+/// Spark compares strings and binary values by their bytes, as Arrow does.
+fn literal(value: &Value, data_type: &DataType) -> Option<ArrayRef> {
+    Some(match (data_type, value) {
+        (DataType::Boolean, Value::Boolean(value)) => Arc::new(BooleanArray::from(vec![*value])),
+        (DataType::Int8, Value::Integer(value)) => {
+            Arc::new(Int8Array::from(vec![i8::try_from(*value).ok()?]))
         }
-        (DataType::Int8, LiteralValue::Integer(value)) => {
-            Arc::new(Int8Array::from(vec![i8::try_from(value).ok()?]))
+        (DataType::Int16, Value::Integer(value)) => {
+            Arc::new(Int16Array::from(vec![i16::try_from(*value).ok()?]))
         }
-        (DataType::Int16, LiteralValue::Integer(value)) => {
-            Arc::new(Int16Array::from(vec![i16::try_from(value).ok()?]))
+        (DataType::Int32, Value::Integer(value)) => {
+            Arc::new(Int32Array::from(vec![i32::try_from(*value).ok()?]))
         }
-        (DataType::Int32, LiteralValue::Integer(value)) => {
-            Arc::new(Int32Array::from(vec![i32::try_from(value).ok()?]))
+        (DataType::Int64, Value::Integer(value)) => Arc::new(Int64Array::from(vec![*value])),
+        // The SDK holds the bound of a float column as the double of the same value.
+        (DataType::Float32, Value::Float(value)) if f64::from(*value as f32) == *value => {
+            Arc::new(Float32Array::from(vec![spark_f32(*value as f32)]))
         }
-        (DataType::Int64, LiteralValue::Integer(value)) => Arc::new(Int64Array::from(vec![value])),
-        // The SDK reads a float literal as the double of the same value.
-        (DataType::Float32, LiteralValue::Float(value)) if f64::from(value as f32) == value => {
-            Arc::new(Float32Array::from(vec![spark_f32(value as f32)]))
+        (DataType::Float64, Value::Float(value)) => {
+            Arc::new(Float64Array::from(vec![spark_f64(*value)]))
         }
-        (DataType::Float64, LiteralValue::Float(value)) => {
-            Arc::new(Float64Array::from(vec![spark_f64(value)]))
-        }
-        (DataType::Utf8, LiteralValue::String(value)) => Arc::new(StringArray::from(vec![value])),
-        (DataType::Utf8View, LiteralValue::String(value)) => {
+        (DataType::Utf8, Value::String(value)) => Arc::new(StringArray::from(vec![value.as_str()])),
+        (DataType::Utf8View, Value::String(value)) => {
             Arc::new(StringViewArray::from_iter_values([value]))
         }
-        (DataType::Binary, LiteralValue::Binary(value)) => {
+        (DataType::Binary, Value::Binary(value)) => {
             Arc::new(BinaryArray::from_vec(vec![value.as_slice()]))
         }
-        (DataType::BinaryView, LiteralValue::Binary(value)) => {
+        (DataType::BinaryView, Value::Binary(value)) => {
             Arc::new(BinaryViewArray::from_iter_values([value.as_slice()]))
         }
-        (DataType::Date32, LiteralValue::Date(value)) => Arc::new(Date32Array::from(vec![value])),
-        (
-            DataType::Timestamp(TimeUnit::Microsecond, Some(zone)),
-            LiteralValue::Timestamp(value),
-        ) => Arc::new(TimestampMicrosecondArray::from(vec![value]).with_timezone(zone.clone())),
-        (DataType::Timestamp(TimeUnit::Microsecond, None), LiteralValue::TimestampNtz(value)) => {
-            Arc::new(TimestampMicrosecondArray::from(vec![value]))
+        (DataType::Date32, Value::Date(value)) => Arc::new(Date32Array::from(vec![*value])),
+        (DataType::Timestamp(TimeUnit::Microsecond, Some(zone)), Value::Timestamp(value)) => {
+            Arc::new(TimestampMicrosecondArray::from(vec![*value]).with_timezone(zone.clone()))
         }
-        // Equal scales compare as their unscaled values. A file may store the decimals of up to 18
-        // digits as integers, which the reader reads as 64-bit decimals, so that the literal for
-        // such a column of the schema that Spark reads must fit 64 bits too: the scan checks the
-        // predicates on that schema, and the reader on the schema of each file.
+        (DataType::Timestamp(TimeUnit::Microsecond, None), Value::TimestampNtz(value)) => {
+            Arc::new(TimestampMicrosecondArray::from(vec![*value]))
+        }
+        // Equal scales compare as their unscaled values. A file may store the decimals of up to
+        // 18 digits as integers, which the reader reads as 64-bit decimals.
         (
             DataType::Decimal128(precision, scale),
-            LiteralValue::Decimal {
+            Value::Decimal {
                 unscaled,
-                scale: literal_scale,
+                scale: value_scale,
                 ..
             },
-        ) if literal_scale == *scale
-            && (*precision > DECIMAL64_MAX_PRECISION || i64::try_from(unscaled).is_ok()) =>
-        {
-            Arc::new(
-                Decimal128Array::from(vec![unscaled])
-                    .with_precision_and_scale(*precision, *scale)
-                    .ok()?,
-            )
-        }
+        ) if value_scale == scale => Arc::new(
+            Decimal128Array::from(vec![*unscaled])
+                .with_precision_and_scale(*precision, *scale)
+                .ok()?,
+        ),
         (
             DataType::Decimal64(precision, scale),
-            LiteralValue::Decimal {
+            Value::Decimal {
                 unscaled,
-                scale: literal_scale,
+                scale: value_scale,
                 ..
             },
-        ) if literal_scale == *scale => Arc::new(
-            Decimal64Array::from(vec![i64::try_from(unscaled).ok()?])
+        ) if value_scale == scale => Arc::new(
+            Decimal64Array::from(vec![i64::try_from(*unscaled).ok()?])
                 .with_precision_and_scale(*precision, *scale)
                 .ok()?,
         ),
         _ => return None,
-    };
-    Some(Some(array))
+    })
 }
 
 /// The values of a column, with floats that Arrow compares as Spark does. Arrow orders floats by
-/// the IEEE 754 total order, in which -0.0 is less than 0.0, and NaNs differ by their bits, those
-/// with the sign bit being less than all numbers. Spark equates the zeros and the NaNs, and orders
-/// NaN above all numbers, as the total order does once -0.0 is 0.0 and every NaN is the same
-/// positive NaN, as in the literals.
+/// the IEEE 754 total order, in which -0.0 is less than 0.0, which Spark equates, as the bounds of
+/// the ranges do once [`literal`] changes -0.0 to 0.0. The reader handles NaN by itself.
 fn spark_ordered(array: &ArrayRef) -> ArrayRef {
     match array.data_type() {
         DataType::Float32 => Arc::new(
@@ -418,10 +293,7 @@ fn spark_ordered(array: &ArrayRef) -> ArrayRef {
 }
 
 fn spark_f32(value: f32) -> f32 {
-    if value.is_nan() {
-        // The quiet NaN without the sign bit, whose bits f32::NAN does not guarantee.
-        f32::from_bits(0x7fc0_0000)
-    } else if value == 0.0 {
+    if value == 0.0 {
         0.0
     } else {
         value
@@ -429,9 +301,7 @@ fn spark_f32(value: f32) -> f32 {
 }
 
 fn spark_f64(value: f64) -> f64 {
-    if value.is_nan() {
-        f64::from_bits(0x7ff8_0000_0000_0000)
-    } else if value == 0.0 {
+    if value == 0.0 {
         0.0
     } else {
         value
@@ -483,146 +353,112 @@ fn column_of<'a>(batch: &'a RecordBatch, name: &str) -> Result<&'a ArrayRef, Arr
 
 #[cfg(test)]
 mod tests {
-    use arrow_array::Array;
     use arrow_schema::{Field, Fields};
-    use serde_json::{json, Value};
+    use spark_datasource::ValueRange;
 
     use super::*;
 
-    fn column(name: &str) -> Value {
-        json!({"type": "column", "name": [name]})
+    /// The domain of a column with the ranges, without null or NaN.
+    fn domain(column: &str, ranges: Option<Vec<ValueRange>>) -> Domain {
+        Domain::new(vec![column.into()], ranges)
     }
 
-    fn literal(data_type: &str, value: Value) -> Value {
-        json!({"type": "literal", "dataType": data_type, "value": value})
+    fn range(low: Bound<Value>, high: Bound<Value>) -> ValueRange {
+        ValueRange { low, high }
     }
 
-    fn function(name: &str, children: Vec<Value>) -> Value {
-        json!({"type": "function", "name": name, "children": children})
+    fn singles(values: impl IntoIterator<Item = Value>) -> Option<Vec<ValueRange>> {
+        Some(values.into_iter().map(ValueRange::single).collect())
     }
 
-    fn predicate(value: Value) -> Predicate {
-        serde_json::from_value(value).unwrap()
+    /// Whether each row of the batch is in the domain.
+    fn evaluate(domain: &Domain, batch: &RecordBatch) -> Vec<bool> {
+        let filter = Filter::new(domain, &batch.schema()).unwrap();
+        let matches = filter.evaluate(batch).unwrap();
+        matches.iter().collect()
     }
 
-    /// Rows with `i` 1, 2, null, 4 and `s` "apple", "banana", null, "cherry".
-    fn batch() -> RecordBatch {
-        RecordBatch::try_from_iter([
-            (
-                "i",
-                Arc::new(Int64Array::from(vec![Some(1), Some(2), None, Some(4)])) as ArrayRef,
-            ),
-            (
+    /// Rows with `i` 1, 2, null, 4.
+    fn ints() -> RecordBatch {
+        let i = Int64Array::from(vec![Some(1), Some(2), None, Some(4)]);
+        RecordBatch::try_from_iter([("i", Arc::new(i) as ArrayRef)]).unwrap()
+    }
+
+    #[test]
+    fn rows_match_when_their_value_is_in_a_range_or_null_is_allowed() {
+        let batch = ints();
+        let int = Value::Integer;
+        let (t, f) = (true, false);
+        // i < 2 OR i > 3, then with null.
+        let mut outside = domain(
+            "i",
+            Some(vec![
+                range(Bound::Unbounded, Bound::Excluded(int(2))),
+                range(Bound::Excluded(int(3)), Bound::Unbounded),
+            ]),
+        );
+        assert_eq!(evaluate(&outside, &batch), [t, f, f, t]);
+        outside.null_allowed = true;
+        assert_eq!(evaluate(&outside, &batch), [t, f, t, t]);
+        let between = domain(
+            "i",
+            Some(vec![range(
+                Bound::Included(int(2)),
+                Bound::Included(int(4)),
+            )]),
+        );
+        assert_eq!(evaluate(&between, &batch), [f, t, f, t]);
+        assert_eq!(
+            evaluate(&domain("i", singles([int(4), int(1)])), &batch),
+            [t, f, f, t]
+        );
+        // IS NOT NULL, and IS NULL, which allows no other value.
+        assert_eq!(evaluate(&domain("i", None), &batch), [t, t, f, t]);
+        let mut null = domain("i", Some(vec![]));
+        null.null_allowed = true;
+        assert_eq!(evaluate(&null, &batch), [f, f, t, f]);
+    }
+
+    #[test]
+    fn strings_and_binary_values_compare_by_their_bytes() {
+        let values = [
+            Some("apple"),
+            Some("banana"),
+            None,
+            Some("\u{e9}clair"),
+            Some("B"),
+        ];
+        let bytes: Vec<Option<&[u8]>> = values.iter().map(|v| v.map(str::as_bytes)).collect();
+        let columns: [ArrayRef; 4] = [
+            Arc::new(StringArray::from(values.to_vec())),
+            Arc::new(StringViewArray::from(values.to_vec())),
+            Arc::new(BinaryArray::from(bytes.clone())),
+            Arc::new(BinaryViewArray::from(bytes)),
+        ];
+        let (t, f) = (true, false);
+        for column in columns {
+            let binary = matches!(column.data_type(), DataType::Binary | DataType::BinaryView);
+            let value = |text: &str| match binary {
+                true => Value::Binary(text.as_bytes().to_vec()),
+                false => Value::String(text.into()),
+            };
+            let batch = RecordBatch::try_from_iter([("s", column)]).unwrap();
+            // STARTS_WITH 'ban', from the prefix to its successor.
+            let prefix = domain(
                 "s",
-                Arc::new(StringArray::from(vec![
-                    Some("apple"),
-                    Some("banana"),
-                    None,
-                    Some("cherry"),
-                ])) as ArrayRef,
-            ),
-            (
-                "f",
-                Arc::new(Float64Array::from(vec![0.0, -0.0, f64::NAN, 1.0])) as ArrayRef,
-            ),
-        ])
-        .unwrap()
-    }
-
-    /// What Spark computes for each row: true, false, or null.
-    fn evaluate(predicate: Value) -> Vec<Option<bool>> {
-        let batch = batch();
-        let filter = Filter::new(&self::predicate(predicate), &batch.schema()).unwrap();
-        let result = filter.evaluate(&batch).unwrap();
-        (0..result.len())
-            .map(|row| result.is_valid(row).then(|| result.value(row)))
-            .collect()
-    }
-
-    fn bigint(value: i64) -> Value {
-        literal("bigint", json!(value))
-    }
-
-    #[test]
-    fn comparisons_are_null_for_null_operands() {
-        let i = || column("i");
-        let (t, f, n) = (Some(true), Some(false), None);
-        assert_eq!(evaluate(function("=", vec![i(), bigint(2)])), [f, t, n, f]);
-        assert_eq!(evaluate(function("<>", vec![i(), bigint(2)])), [t, f, n, t]);
-        assert_eq!(evaluate(function("<", vec![i(), bigint(2)])), [t, f, n, f]);
-        assert_eq!(evaluate(function("<=", vec![i(), bigint(2)])), [t, t, n, f]);
-        assert_eq!(evaluate(function(">", vec![i(), bigint(2)])), [f, f, n, t]);
-        assert_eq!(evaluate(function(">=", vec![i(), bigint(2)])), [f, t, n, t]);
-        // Null-safe equality is never null.
-        assert_eq!(
-            evaluate(function("<=>", vec![i(), bigint(2)])),
-            [f, t, f, f]
-        );
-        let null = || literal("bigint", Value::Null);
-        assert_eq!(evaluate(function("<=>", vec![i(), null()])), [f, f, t, f]);
-        assert_eq!(evaluate(function("=", vec![i(), null()])), [n, n, n, n]);
-        assert_eq!(evaluate(function("IS_NULL", vec![i()])), [f, f, t, f]);
-        assert_eq!(evaluate(function("IS_NOT_NULL", vec![i()])), [t, t, f, t]);
-    }
-
-    #[test]
-    fn a_literal_on_the_left_reverses_the_comparison() {
-        let (t, f, n) = (Some(true), Some(false), None);
-        // 2 < i is i > 2.
-        assert_eq!(
-            evaluate(function("<", vec![bigint(2), column("i")])),
-            [f, f, n, t]
-        );
-        assert_eq!(
-            evaluate(function(">=", vec![bigint(2), column("i")])),
-            [t, t, n, f]
-        );
-        assert_eq!(
-            evaluate(function("=", vec![bigint(4), column("i")])),
-            [f, f, n, t]
-        );
-    }
-
-    #[test]
-    fn in_lists_and_logical_operators_use_three_valued_logic() {
-        let (t, f, n) = (Some(true), Some(false), None);
-        let in_list = |values: Vec<Value>| {
-            let mut children = vec![column("i")];
-            children.extend(values);
-            function("IN", children)
-        };
-        assert_eq!(evaluate(in_list(vec![bigint(1), bigint(4)])), [t, f, n, t]);
-        // A null value makes the rows that match no value null, which NOT keeps null.
-        let with_null = || in_list(vec![bigint(1), literal("bigint", Value::Null)]);
-        assert_eq!(evaluate(with_null()), [t, n, n, n]);
-        assert_eq!(evaluate(function("NOT", vec![with_null()])), [f, n, n, n]);
-
-        let less = || function("<", vec![column("i"), bigint(3)]);
-        let named = || function("=", vec![column("s"), literal("string", json!("cherry"))]);
-        // A null operand of AND and OR decides nothing when the other operand does.
-        assert_eq!(
-            evaluate(function("AND", vec![less(), named()])),
-            [f, f, n, f]
-        );
-        assert_eq!(
-            evaluate(function("OR", vec![less(), named()])),
-            [t, t, n, t]
-        );
-        assert_eq!(evaluate(function("NOT", vec![less()])), [f, f, n, t]);
-    }
-
-    #[test]
-    fn strings_match_by_their_bytes() {
-        let (t, f, n) = (Some(true), Some(false), None);
-        let text = |name: &str, pattern: &str| {
-            function(name, vec![column("s"), literal("string", json!(pattern))])
-        };
-        assert_eq!(evaluate(text("STARTS_WITH", "ban")), [f, t, n, f]);
-        assert_eq!(evaluate(text("ENDS_WITH", "rry")), [f, f, n, t]);
-        assert_eq!(evaluate(text("CONTAINS", "an")), [f, t, n, f]);
-        assert_eq!(evaluate(text(">", "b")), [f, t, n, t]);
-        // Uppercase letters sort before lowercase ones.
-        assert_eq!(evaluate(text("<", "B")), [f, f, n, f]);
+                Some(vec![range(
+                    Bound::Included(value("ban")),
+                    Bound::Excluded(value("bao")),
+                )]),
+            );
+            assert_eq!(evaluate(&prefix, &batch), [f, t, f, f, f]);
+            // Uppercase letters sort before lowercase ones, and the bytes of other letters after.
+            let above = domain(
+                "s",
+                Some(vec![range(Bound::Excluded(value("b")), Bound::Unbounded)]),
+            );
+            assert_eq!(evaluate(&above, &batch), [f, t, f, t, f]);
+        }
     }
 
     #[test]
@@ -643,63 +479,46 @@ mod tests {
             Arc::new(StringViewArray::from(values.to_vec())),
             Arc::new(BinaryViewArray::from(bytes)),
         ];
-        let rows = |column: &ArrayRef, predicate: Value| {
+        let rows = |column: &ArrayRef, texts: &[&str]| {
+            let binary = column.data_type() == &DataType::BinaryView;
+            let value = |text: &&str| match binary {
+                true => Value::Binary(text.as_bytes().to_vec()),
+                false => Value::String((*text).into()),
+            };
             let batch = RecordBatch::try_from_iter([("s", column.clone())]).unwrap();
-            let filter = Filter::new(&self::predicate(predicate), &batch.schema()).unwrap();
-            let result = filter.evaluate(&batch).unwrap();
-            (0..result.len())
-                .map(|row| result.is_valid(row).then(|| result.value(row)))
-                .collect::<Vec<_>>()
+            evaluate(&domain("s", singles(texts.iter().map(value))), &batch)
         };
-        // Each value, with its base64 for the binary column; the last one is not in its view.
-        let literals = [
-            ("AIR", "QUlS"),
-            ("", ""),
-            ("REG AIR", "UkVHIEFJUg=="),
-            ("AIRMAIL12345", "QUlSTUFJTDEyMzQ1"),
-            ("AIR\0", "QUlSAA=="),
-            ("AIR FREIGHT, LONG", "QUlSIEZSRUlHSFQsIExPTkc="),
+        // The last value is not in its view.
+        let texts = [
+            "AIR",
+            "",
+            "REG AIR",
+            "AIRMAIL12345",
+            "AIR\0",
+            "AIR FREIGHT, LONG",
         ];
-        let literal = |column: &ArrayRef, (text, base64): (&str, &str)| match column.data_type() {
-            DataType::BinaryView => literal("binary", json!(base64)),
-            _ => literal("string", json!(text)),
-        };
-        for op in ["=", "<>", "<=>"] {
-            for value in literals {
-                let compare = |column: &ArrayRef| {
-                    rows(
-                        column,
-                        function(op, vec![self::column("s"), literal(column, value)]),
-                    )
-                };
-                // Each value is in one row.
-                let expected = compare(&columns[0]);
-                let equal = expected
-                    .iter()
-                    .filter(|&&row| row == Some(op != "<>"))
-                    .count();
-                assert_eq!(equal, 1, "{op} {value:?}");
-                for column in &columns[1..] {
-                    assert_eq!(compare(column), expected, "{op} {value:?}");
-                }
+        for text in texts {
+            // Each value is in one row.
+            let expected = rows(&columns[0], &[text]);
+            assert_eq!(expected.iter().filter(|&&row| row).count(), 1, "{text:?}");
+            for column in &columns[1..] {
+                assert_eq!(rows(column, &[text]), expected, "{text:?}");
             }
         }
-        let (t, f, n) = (Some(true), Some(false), None);
-        let in_list = |column: &ArrayRef, values: &[(&str, &str)]| {
-            let mut children = vec![self::column("s")];
-            children.extend(values.iter().map(|&value| literal(column, value)));
-            rows(column, function("IN", children))
-        };
+        let (t, f) = (true, false);
         for column in &columns {
-            let short = in_list(column, &literals[..4]);
-            assert_eq!(short, [t, t, n, t, f, t, f], "{column:?}");
-            let long = in_list(column, &[literals[0], literals[5]]);
-            assert_eq!(long, [t, f, n, f, t, f, f], "{column:?}");
+            assert_eq!(
+                rows(column, &texts[..4]),
+                [t, t, f, t, f, t, f],
+                "{column:?}"
+            );
+            let long = [texts[0], texts[5]];
+            assert_eq!(rows(column, &long), [t, f, f, f, t, f, f], "{column:?}");
         }
     }
 
     #[test]
-    fn literals_take_the_type_of_their_column() {
+    fn values_take_the_type_of_their_column() {
         let schema = Schema::new(vec![
             Field::new("flag", DataType::Boolean, true),
             Field::new("tiny", DataType::Int8, true),
@@ -717,92 +536,92 @@ mod tests {
             ),
             Field::new("amount", DataType::Decimal128(10, 2), true),
             Field::new("cents", DataType::Decimal64(10, 2), true),
-            Field::new("wide", DataType::Decimal128(20, 2), true),
+            Field::new("ratio", DataType::Float32, true),
         ]);
-        let supported = |name: &str, data_type: &str, value: Value| {
-            let compare = function("=", vec![column(name), literal(data_type, value)]);
-            Filter::new(&predicate(compare), &schema).is_some()
+        let supported = |name: &str, value: Value| {
+            Filter::new(&domain(name, singles([value])), &schema).is_some()
         };
-        assert!(supported("flag", "boolean", json!(true)));
-        assert!(supported("tiny", "tinyint", json!(-128)));
-        // Spark unwraps casts into literals of the column type, but a value in range compares
-        // the same in any integer type.
-        assert!(supported("tiny", "bigint", json!(127)));
-        assert!(!supported("tiny", "bigint", json!(128)));
-        assert!(supported("bytes", "binary", json!("AP8=")));
-        assert!(supported("day", "date", json!(19000)));
-        assert!(supported("ts", "timestamp", json!(-1)));
-        assert!(!supported("ts", "timestamp_ntz", json!(-1)));
-        assert!(supported("ntz", "timestamp_ntz", json!(-1)));
-        assert!(!supported("ntz", "timestamp", json!(-1)));
-        assert!(supported("amount", "decimal(10,2)", json!("12.34")));
-        assert!(supported("amount", "decimal(12,2)", json!("12.34")));
-        assert!(!supported("amount", "decimal(10,3)", json!("12.345")));
-        // The reader reads decimals of up to 18 digits as 64-bit decimals, which wider literals
-        // may not fit.
-        assert!(supported("cents", "decimal(10,2)", json!("12.34")));
-        assert!(supported(
-            "cents",
-            "decimal(19,2)",
-            json!("92233720368547758.07")
-        ));
-        assert!(!supported(
-            "cents",
-            "decimal(19,2)",
-            json!("92233720368547758.08")
-        ));
-        assert!(!supported(
-            "amount",
-            "decimal(19,2)",
-            json!("92233720368547758.08")
-        ));
-        assert!(supported(
-            "wide",
-            "decimal(20,2)",
-            json!("92233720368547758.08")
-        ));
-        assert!(!supported("day", "string", json!("2022-01-08")));
+        let decimal = |unscaled, scale| Value::Decimal {
+            unscaled,
+            precision: 10,
+            scale,
+        };
+        assert!(supported("flag", Value::Boolean(true)));
+        assert!(supported("tiny", Value::Integer(-128)));
+        // A file may have a narrower column than the schema that Spark reads.
+        assert!(!supported("tiny", Value::Integer(128)));
+        assert!(supported("bytes", Value::Binary(vec![0, 0xff])));
+        assert!(!supported("bytes", Value::String("a".into())));
+        assert!(supported("day", Value::Date(19000)));
+        assert!(supported("ts", Value::Timestamp(-1)));
+        assert!(!supported("ts", Value::TimestampNtz(-1)));
+        assert!(supported("ntz", Value::TimestampNtz(-1)));
+        assert!(!supported("ntz", Value::Timestamp(-1)));
+        assert!(supported("amount", decimal(1234, 2)));
+        assert!(!supported("amount", decimal(12345, 3)));
+        assert!(supported("cents", decimal(i64::MAX.into(), 2)));
+        assert!(!supported("cents", decimal(i128::from(i64::MAX) + 1, 2)));
+        // A double that no float equals.
+        assert!(supported("ratio", Value::Float(0.5)));
+        assert!(!supported("ratio", Value::Float(0.1)));
+        assert!(!supported("day", Value::String("2022-01-08".into())));
     }
 
     #[test]
-    fn literals_compare_as_values_of_their_column() {
-        let day = Arc::new(Date32Array::from(vec![Some(18999), Some(19000), None])) as ArrayRef;
-        let ts = Arc::new(
-            TimestampMicrosecondArray::from(vec![Some(-1), Some(0), Some(1)]).with_timezone("UTC"),
-        ) as ArrayRef;
-        let amount = Arc::new(
-            Decimal128Array::from(vec![Some(1234), Some(-5), None])
-                .with_precision_and_scale(10, 2)
-                .unwrap(),
-        ) as ArrayRef;
-        let bytes = Arc::new(BinaryArray::from_vec(vec![b"\x00", b"\xff", b"a"])) as ArrayRef;
+    fn values_compare_as_values_of_their_column() {
+        let day = Date32Array::from(vec![Some(18999), Some(19000), None]);
+        let ts =
+            TimestampMicrosecondArray::from(vec![Some(-1), Some(0), Some(1)]).with_timezone("UTC");
+        let amount = Decimal128Array::from(vec![Some(1234), Some(-5), None])
+            .with_precision_and_scale(10, 2)
+            .unwrap();
+        let cents = Decimal64Array::from(vec![Some(1234), Some(-5), None])
+            .with_precision_and_scale(10, 2)
+            .unwrap();
+        let flags = BooleanArray::from(vec![Some(true), Some(false), None]);
         let batch = RecordBatch::try_from_iter([
-            ("day", day),
-            ("ts", ts),
-            ("amount", amount),
-            ("bytes", bytes),
+            ("day", Arc::new(day) as ArrayRef),
+            ("ts", Arc::new(ts) as ArrayRef),
+            ("amount", Arc::new(amount) as ArrayRef),
+            ("cents", Arc::new(cents) as ArrayRef),
+            ("flag", Arc::new(flags) as ArrayRef),
         ])
         .unwrap();
-        let rows = |value: Value| {
-            let filter = Filter::new(&predicate(value), &batch.schema()).unwrap();
-            let result = filter.evaluate(&batch).unwrap();
-            (0..result.len())
-                .map(|row| result.is_valid(row).then(|| result.value(row)))
-                .collect::<Vec<_>>()
+        let (t, f) = (true, false);
+        let below = |column: &str, value| {
+            domain(
+                column,
+                Some(vec![range(Bound::Unbounded, Bound::Excluded(value))]),
+            )
         };
-        let (t, f, n) = (Some(true), Some(false), None);
-        let date = literal("date", json!(19000));
-        assert_eq!(rows(function("<", vec![column("day"), date])), [t, f, n]);
-        let epoch = literal("timestamp", json!(0));
-        assert_eq!(rows(function(">=", vec![column("ts"), epoch])), [f, t, t]);
-        let cents = literal("decimal(10,2)", json!("-0.05"));
         assert_eq!(
-            rows(function("=", vec![column("amount"), cents])),
-            [f, t, n]
+            evaluate(&below("day", Value::Date(19000)), &batch),
+            [t, f, f]
         );
-        // Spark compares the bytes of binary values as unsigned.
-        let byte = literal("binary", json!("gA=="));
-        assert_eq!(rows(function(">", vec![column("bytes"), byte])), [f, t, f]);
+        let since_epoch = domain(
+            "ts",
+            Some(vec![range(
+                Bound::Included(Value::Timestamp(0)),
+                Bound::Unbounded,
+            )]),
+        );
+        assert_eq!(evaluate(&since_epoch, &batch), [f, t, t]);
+        let decimal = Value::Decimal {
+            unscaled: -5,
+            precision: 10,
+            scale: 2,
+        };
+        for column in ["amount", "cents"] {
+            assert_eq!(
+                evaluate(&domain(column, singles([decimal.clone()])), &batch),
+                [f, t, f]
+            );
+        }
+        // False is before true.
+        assert_eq!(
+            evaluate(&below("flag", Value::Boolean(true)), &batch),
+            [f, t, f]
+        );
     }
 
     #[test]
@@ -818,132 +637,63 @@ mod tests {
             f64::INFINITY,
             f64::NEG_INFINITY,
         ];
+        let doubles = Float64Array::from(values.to_vec());
+        let floats = Float32Array::from_iter_values(values.iter().map(|&v| v as f32));
         let batch = RecordBatch::try_from_iter([
-            (
-                "d",
-                Arc::new(Float64Array::from(values.to_vec())) as ArrayRef,
-            ),
-            (
-                "r",
-                Arc::new(Float32Array::from_iter_values(
-                    values.iter().map(|&v| v as f32),
-                )) as _,
-            ),
+            ("d", Arc::new(doubles) as ArrayRef),
+            ("r", Arc::new(floats) as ArrayRef),
         ])
         .unwrap();
-        let rows = |value: Value| {
-            let filter = Filter::new(&predicate(value), &batch.schema()).unwrap();
-            let result = filter.evaluate(&batch).unwrap();
-            (0..result.len())
-                .map(|row| result.value(row))
-                .collect::<Vec<_>>()
-        };
         let (t, f) = (true, false);
-        for (name, data_type) in [("d", "double"), ("r", "float")] {
-            let compare = |op: &str, value: f64| {
-                rows(function(
-                    op,
-                    vec![column(name), literal(data_type, json!(value))],
-                ))
+        let float = Value::Float;
+        for name in ["d", "r"] {
+            let rows = |ranges: Vec<ValueRange>, nan_allowed: bool| {
+                let mut domain = domain(name, Some(ranges));
+                domain.nan_allowed = nan_allowed;
+                evaluate(&domain, &batch)
             };
-            // Spark equates the zeros and the NaNs, and orders NaN above all numbers.
-            assert_eq!(compare("=", 0.0), [t, t, f, f, f, f, f]);
-            assert_eq!(compare("=", -0.0), [t, t, f, f, f, f, f]);
-            assert_eq!(compare("<>", 0.0), [f, f, t, t, t, t, t]);
-            assert_eq!(compare("<", 0.0), [f, f, f, f, f, f, t]);
-            assert_eq!(compare("<=", -0.0), [t, t, f, f, f, f, t]);
-            assert_eq!(compare(">", 1.0), [f, f, t, t, f, t, f]);
-            assert_eq!(compare(">=", f64::from(f32::MAX)), [f, f, t, t, f, t, f]);
-            assert_eq!(compare("<=>", -0.0), [t, t, f, f, f, f, f]);
-            let in_list = function(
-                "IN",
-                vec![
-                    column(name),
-                    literal(data_type, json!(-0.0)),
-                    literal(data_type, json!(1.0)),
-                ],
-            );
-            assert_eq!(rows(in_list), [t, t, f, f, t, f, f]);
+            // Spark equates the zeros, and orders NaN above all numbers, which its domains hold
+            // apart from the ranges.
+            let zero = |value| vec![ValueRange::single(float(value))];
+            assert_eq!(rows(zero(0.0), false), [t, t, f, f, f, f, f]);
+            assert_eq!(rows(zero(-0.0), false), [t, t, f, f, f, f, f]);
+            let below_zero = vec![range(Bound::Unbounded, Bound::Excluded(float(0.0)))];
+            assert_eq!(rows(below_zero, false), [f, f, f, f, f, f, t]);
+            let up_to_zero = vec![range(Bound::Unbounded, Bound::Included(float(-0.0)))];
+            assert_eq!(rows(up_to_zero, false), [t, t, f, f, f, f, t]);
+            // x > 1, which is true for NaN.
+            let above_one = vec![range(Bound::Excluded(float(1.0)), Bound::Unbounded)];
+            assert_eq!(rows(above_one.clone(), true), [f, f, t, t, f, t, f]);
+            assert_eq!(rows(above_one, false), [f, f, f, f, f, t, f]);
+            let ones = vec![
+                ValueRange::single(float(-0.0)),
+                ValueRange::single(float(1.0)),
+            ];
+            assert_eq!(rows(ones, false), [t, t, f, f, t, f, f]);
         }
     }
 
     #[test]
-    fn other_predicates_remain_for_spark() {
-        let nested = Field::new_struct(
-            "point",
-            Fields::from(vec![Field::new("x", DataType::Int64, true)]),
-            true,
-        );
+    fn domains_of_fields_and_of_other_columns_are_not_filters() {
+        let point = Fields::from(vec![Field::new("x", DataType::Int64, true)]);
         let schema = Schema::new(vec![
             Field::new("i", DataType::Int64, true),
-            Field::new("f", DataType::Float64, true),
-            Field::new("g", DataType::Float32, true),
-            Field::new("s", DataType::Utf8, true),
-            nested,
+            Field::new_struct("point", point, true),
+            Field::new(
+                "millis",
+                DataType::Timestamp(TimeUnit::Millisecond, None),
+                true,
+            ),
         ]);
-        let unsupported = |value: Value| Filter::new(&predicate(value), &schema).is_none();
-        // A double that no float equals.
-        assert!(unsupported(function(
-            "=",
-            vec![column("g"), literal("double", json!(0.1))]
+        let unsupported = |domain: Domain| Filter::new(&domain, &schema).is_none();
+        let x = Domain::new(vec!["point".into(), "x".into()], None);
+        assert!(unsupported(x));
+        assert!(unsupported(domain("missing", None)));
+        assert!(unsupported(domain("point", None)));
+        assert!(unsupported(domain(
+            "millis",
+            singles([Value::TimestampNtz(1)])
         )));
-        let nested_x = json!({"type": "column", "name": ["point", "x"]});
-        let nested = function("=", vec![nested_x, bigint(1)]);
-        assert!(unsupported(nested.clone()));
-        assert!(unsupported(function(
-            "=",
-            vec![column("missing"), bigint(1)]
-        )));
-        assert!(unsupported(function("=", vec![column("i"), column("i")])));
-        assert!(unsupported(function(
-            "FUTURE",
-            vec![column("i"), bigint(1)]
-        )));
-        assert!(unsupported(function("IN", vec![column("i")])));
-        assert!(unsupported(function(
-            "STARTS_WITH",
-            vec![column("i"), bigint(1)]
-        )));
-        let null_pattern = literal("string", Value::Null);
-        assert!(unsupported(function(
-            "STARTS_WITH",
-            vec![column("s"), null_pattern]
-        )));
-        assert!(unsupported(json!({"type": "future"})));
-        // A conjunct that is not exact makes the whole predicate residual.
-        let int = function("<", vec![column("i"), bigint(1)]);
-        assert!(unsupported(function(
-            "OR",
-            vec![int.clone(), nested.clone()]
-        )));
-        assert!(unsupported(function("AND", vec![int, nested])));
-        // IS_NULL compares nothing, so it applies to any column.
-        assert!(!unsupported(function("IS_NULL", vec![column("f")])));
-        assert!(!unsupported(function("IS_NOT_NULL", vec![column("point")])));
-    }
-
-    #[test]
-    fn lists_the_columns_that_it_reads_once() {
-        let batch = batch();
-        let both = function(
-            "OR",
-            vec![
-                function("=", vec![column("s"), literal("string", json!("a"))]),
-                function(
-                    "AND",
-                    vec![
-                        function("IS_NULL", vec![column("i")]),
-                        function(
-                            "STARTS_WITH",
-                            vec![column("s"), literal("string", json!("b"))],
-                        ),
-                    ],
-                ),
-            ],
-        );
-        let filter = Filter::new(&predicate(both), &batch.schema()).unwrap();
-        let mut columns = Vec::new();
-        filter.columns(&mut columns);
-        assert_eq!(columns, ["s", "i"]);
+        assert!(!unsupported(domain("i", None)));
     }
 }

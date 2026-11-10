@@ -16,8 +16,8 @@
 
 """Compares the queries of rust_sdk_parquet with those of Spark's Parquet reader.
 
-Run with Java 22+ and spark-submit from a build that includes PR #59424, with the package of a
-release build: a debug build of the library is many times slower.
+Run with Java 22+ and spark-submit from a distribution with native data sources (4.4.0+), with the
+package of a release build: a debug build of the library is many times slower.
 
 The runs of the readers alternate, in an order that rotates each round, so that a change in the
 load of the host or in the state of the JIT compiler affects all readers alike. For each reader,
@@ -103,7 +103,7 @@ DATASETS = {
     "lineitem": (LINEITEM_COLUMNS, LINEITEM_QUERIES),
 }
 
-TABLES = ["spark_reader", "rust_row_filter", "rust_no_filter"]
+TABLES = ["spark_reader", "rust_domains", "rust_no_domains"]
 
 
 def task_metrics(spark, group):
@@ -164,8 +164,9 @@ def main():
         rows = spark.read.parquet(data).count()
         spark.read.parquet(data).createOrReplaceTempView("spark_reader")
         native = spark.read.format("rust_sdk_parquet")
-        native.load(data).createOrReplaceTempView("rust_row_filter")
-        native.option("rowFilter", "false").load(data).createOrReplaceTempView("rust_no_filter")
+        native.load(data).createOrReplaceTempView("rust_domains")
+        no_domains = native.option("filterPushdown", "false").load(data)
+        no_domains.createOrReplaceTempView("rust_no_domains")
         print(f"{rows} rows, {spark.sparkContext.defaultParallelism} cores")
 
         sequence = 0

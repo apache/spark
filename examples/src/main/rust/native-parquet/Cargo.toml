@@ -18,6 +18,7 @@ name = "spark-native-parquet-demo"
 workspace = "../../../../../sql/native/rust"
 version.workspace = true
 edition.workspace = true
+rust-version.workspace = true
 license.workspace = true
 publish.workspace = true
 
@@ -27,14 +28,12 @@ path = "src/lib.rs"
 crate-type = ["cdylib", "rlib"]
 
 [dependencies]
-spark-native-source = { path = "../../../../../sql/native/rust" }
-arrow-arith = "58"
+spark-datasource = { path = "../../../../../sql/native/rust" }
 arrow-array.workspace = true
 arrow-buffer = "58"
 arrow-ord = "58"
 arrow-schema.workspace = true
 arrow-select = "58"
-arrow-string = "58"
 mimalloc = { version = "0.1", default-features = false, features = ["local_dynamic_tls"] }
 parquet = { version = "58", default-features = false, features = [
     "arrow",

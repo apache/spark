@@ -14,10 +14,10 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-"""Run with Java 22+ and local spark-submit from a build that includes PR #59424.
+"""Run with Java 22+ and local spark-submit from a distribution with native data sources (4.4.0+).
 
 Writes Parquet files with Spark, and checks that rust_sdk_parquet reads what Spark's own
-Parquet reader reads, with and without its row filter.
+Parquet reader reads, with and without filter pushdown.
 """
 
 import argparse
@@ -54,8 +54,8 @@ COLUMNS = [
     "map('a', id, 'b', if(id % 5 = 0, null, id * 2)) as attrs",
 ]
 
-# Queries over a view `t`, with predicates that the source evaluates and ones that it leaves
-# to Spark.
+# Queries over a view `t`, with filters whose domains the source uses, and others, from which
+# Spark derives no domain, or the domain of a field of a struct, which the source does not use.
 QUERIES = [
     "SELECT * FROM t",
     "SELECT label, id FROM t",
@@ -112,21 +112,24 @@ def rows(df):
     return sorted(repr(row) for row in df.collect())
 
 
-def pushed_predicates(df):
-    # The formatted plan shows the metadata of the scan, except empty values.
+def pushed_filters(df):
+    # The formatted plan shows the metadata of the scan, except empty values: the filters whose
+    # domains the source uses.
     plan = df._sc._jvm.PythonSQLUtils.explainString(df._jdf.queryExecution(), "formatted")
-    pushed = re.search(r"PushedPredicates: (\[.*\])", plan)
+    pushed = re.search(r"PushedFilters: (\[.*\])", plan)
     return pushed.group(1) if pushed else "[]"
 
 
 def check_reads(spark, path, read):
     spark.read.parquet(str(path)).createOrReplaceTempView("t")
     expected = {query: rows(spark.sql(query)) for query in QUERIES}
-    for options in [{}, {"rowFilter": "false"}]:
+    for options in [{}, {"filterPushdown": "false"}]:
         read(options).createOrReplaceTempView("t")
         for query in QUERIES:
             assert rows(spark.sql(query)) == expected[query], (options, query)
-        pushed = pushed_predicates(spark.sql("SELECT id FROM t WHERE k = 3 AND odd < 0"))
+        pushed = pushed_filters(spark.sql("SELECT id FROM t WHERE k = 3 AND odd < 0"))
+        nested = pushed_filters(spark.sql("SELECT id FROM t WHERE point.x = 5"))
+        assert nested == "[]", nested
         if options:
             assert pushed == "[]", pushed
         else:

@@ -29,7 +29,7 @@ use parquet::arrow::arrow_reader::{ArrowReaderMetadata, ArrowReaderOptions};
 use parquet::basic::Type as PhysicalType;
 use parquet::file::metadata::PageIndexPolicy;
 use parquet::schema::types::SchemaDescriptor;
-use spark_native_source::Result;
+use spark_datasource::Result;
 
 /// Loads the metadata of a file with the Arrow types that the source reads: the default
 /// conversion of its Parquet schema, ignoring any Arrow schema that a writer embedded, except
