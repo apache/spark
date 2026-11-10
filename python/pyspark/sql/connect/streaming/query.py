@@ -21,7 +21,7 @@ from threading import Lock, Thread
 from typing import TYPE_CHECKING, Any, Dict, Iterator, List, Optional, Union, cast
 
 import pyspark.sql.connect.proto as pb2
-from pyspark.errors import PySparkTypeError, PySparkValueError, StreamingQueryException
+from pyspark.errors import PySparkValueError, StreamingQueryException
 from pyspark.errors.exceptions.connect import (
     StreamingQueryException as CapturedStreamingQueryException,
 )
@@ -41,6 +41,7 @@ from pyspark.sql.streaming.query import (
 from pyspark.sql.streaming.query import (
     StreamingQueryManager as PySparkStreamingQueryManager,
 )
+from pyspark.sql.streaming.query import _validate_timeout_type
 
 if TYPE_CHECKING:
     from pyspark.sql.connect.client.core import _ExecutePlanResponseItem
@@ -83,15 +84,7 @@ class StreamingQuery:
     def awaitTermination(self, timeout: Optional[int] = None) -> Optional[bool]:
         cmd = pb2.StreamingQueryCommand()
         if timeout is not None:
-            if not isinstance(timeout, (int, float)):
-                raise PySparkTypeError(
-                    errorClass="NOT_EXPECTED_TYPE",
-                    messageParameters={
-                        "arg_name": "timeout",
-                        "expected_type": "int or float",
-                        "arg_type": type(timeout).__name__,
-                    },
-                )
+            _validate_timeout_type(timeout)
             if timeout <= 0:
                 raise PySparkValueError(
                     errorClass="VALUE_NOT_POSITIVE",
@@ -227,15 +220,7 @@ class StreamingQueryManager:
     def awaitAnyTermination(self, timeout: Optional[int] = None) -> Optional[bool]:
         cmd = pb2.StreamingQueryManagerCommand()
         if timeout is not None:
-            if not isinstance(timeout, (int, float)):
-                raise PySparkTypeError(
-                    errorClass="NOT_EXPECTED_TYPE",
-                    messageParameters={
-                        "arg_name": "timeout",
-                        "expected_type": "int or float",
-                        "arg_type": type(timeout).__name__,
-                    },
-                )
+            _validate_timeout_type(timeout)
             if timeout <= 0:
                 raise PySparkValueError(
                     errorClass="VALUE_NOT_POSITIVE",

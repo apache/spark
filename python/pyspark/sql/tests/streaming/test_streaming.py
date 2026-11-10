@@ -340,7 +340,7 @@ class StreamingTestsMixin:
                 errorClass="NOT_EXPECTED_TYPE",
                 messageParameters={
                     "arg_name": "timeout",
-                    "expected_type": "int or float",
+                    "expected_type": "float or int",
                     "arg_type": "str",
                 },
             )
@@ -433,7 +433,7 @@ class StreamingTestsMixin:
                 errorClass="NOT_EXPECTED_TYPE",
                 messageParameters={
                     "arg_name": "timeout",
-                    "expected_type": "int or float",
+                    "expected_type": "float or int",
                     "arg_type": "str",
                 },
             )

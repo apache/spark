@@ -35,6 +35,18 @@ if TYPE_CHECKING:
 __all__ = ["StreamingQuery", "StreamingQueryManager"]
 
 
+def _validate_timeout_type(timeout: Any) -> None:
+    if not isinstance(timeout, (int, float)):
+        raise PySparkTypeError(
+            errorClass="NOT_EXPECTED_TYPE",
+            messageParameters={
+                "arg_name": "timeout",
+                "expected_type": "float or int",
+                "arg_type": type(timeout).__name__,
+            },
+        )
+
+
 class StreamingQuery:
     """
     A handle to a query that is executing continuously in the background as new data arrives.
@@ -217,15 +229,7 @@ class StreamingQuery:
         >>> sq.stop()
         """
         if timeout is not None:
-            if not isinstance(timeout, (int, float)):
-                raise PySparkTypeError(
-                    errorClass="NOT_EXPECTED_TYPE",
-                    messageParameters={
-                        "arg_name": "timeout",
-                        "expected_type": "int or float",
-                        "arg_type": type(timeout).__name__,
-                    },
-                )
+            _validate_timeout_type(timeout)
             if timeout <= 0:
                 raise PySparkValueError(
                     errorClass="VALUE_NOT_POSITIVE",
@@ -604,15 +608,7 @@ class StreamingQueryManager:
         >>> sq.stop()
         """
         if timeout is not None:
-            if not isinstance(timeout, (int, float)):
-                raise PySparkTypeError(
-                    errorClass="NOT_EXPECTED_TYPE",
-                    messageParameters={
-                        "arg_name": "timeout",
-                        "expected_type": "int or float",
-                        "arg_type": type(timeout).__name__,
-                    },
-                )
+            _validate_timeout_type(timeout)
             if timeout < 0:
                 raise PySparkValueError(
                     errorClass="VALUE_NOT_POSITIVE",
