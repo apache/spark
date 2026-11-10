@@ -65,6 +65,8 @@ class KafkaRealTimeModeE2ESuite extends KafkaSourceTest with StreamRealTimeModeE
 
   test("Union two kafka streams, for each write to sink") {
     var q: StreamingQuery = null
+    var producer1: Producer[String, String] = null
+    var producer2: Producer[String, String] = null
     try {
       val topic1 = newTopic()
       val topic2 = newTopic()
@@ -72,8 +74,8 @@ class KafkaRealTimeModeE2ESuite extends KafkaSourceTest with StreamRealTimeModeE
       testUtils.createTopic(topic2, partitions = 2)
 
       val props: Properties = getKafkaConsumerProperties
-      val producer1: Producer[String, String] = new KafkaProducer[String, String](props)
-      val producer2: Producer[String, String] = new KafkaProducer[String, String](props)
+      producer1 = new KafkaProducer[String, String](props)
+      producer2 = new KafkaProducer[String, String](props)
 
       val readStream1 = spark.readStream
         .format("kafka")
@@ -143,6 +145,12 @@ class KafkaRealTimeModeE2ESuite extends KafkaSourceTest with StreamRealTimeModeE
       if (q != null) {
         q.stop()
       }
+      if (producer1 != null) {
+        producer1.close()
+      }
+      if (producer2 != null) {
+        producer2.close()
+      }
     }
   }
 }
@@ -188,6 +196,7 @@ class KafkaRealTimeIntegrationSuite
 
   test("e2e stateless") {
     var query: StreamingQuery = null
+    var producer: Producer[String, String] = null
     try {
       val inputTopic = newTopic()
       testUtils.createTopic(inputTopic, partitions = 5)
@@ -202,7 +211,7 @@ class KafkaRealTimeIntegrationSuite
       props.put("value.serializer", "org.apache.kafka.common.serialization.StringSerializer");
       props.put("compression.type", "snappy")
 
-      val producer: Producer[String, String] = new KafkaProducer[String, String](props)
+      producer = new KafkaProducer[String, String](props)
 
       query = spark.readStream
         .format("kafka")
@@ -287,6 +296,9 @@ class KafkaRealTimeIntegrationSuite
     } finally {
       if (query != null) {
         query.stop()
+      }
+      if (producer != null) {
+        producer.close()
       }
     }
   }
