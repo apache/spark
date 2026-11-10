@@ -40,9 +40,10 @@ abstract class ShuffleHandle(val shuffleId: Int) extends Serializable {
    * The driver reads this once, when it registers the shuffle with the map output tracker, before
    * any map output exists. Later loss handling and task-set checks use that recorded value.
    *
-   * Executor retirement does not consult this value yet: `SparkContext.executorHoldSupported` and
-   * the `ExecutorAllocationManager` `reliableShuffleStorage` argument read only the global flag.
-   * TODO(SPARK-59806, SPARK-59807): make executor retirement honor the per-shuffle value.
+   * Executor retirement only partly consults this value: `SparkContext.executorHoldSupported` and
+   * the `ExecutorAllocationManager` `reliableShuffleStorage` argument read only the global flag,
+   * while `SparkContext.holdExecutors` refuses when an active shuffle is not reliably stored.
+   * TODO(SPARK-59806): make dynamic allocation's shuffle tracking honor the per-shuffle value.
    */
   def reliablyStored: Optional[java.lang.Boolean] = Optional.empty()
 }
