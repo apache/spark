@@ -21,7 +21,7 @@ import org.apache.spark.ml.stat._
 import org.apache.spark.sql.{SparkSessionExtensions, SparkSessionExtensionsProvider}
 import org.apache.spark.sql.catalyst.FunctionIdentifier
 import org.apache.spark.sql.catalyst.analysis.FunctionRegistry
-import org.apache.spark.sql.catalyst.expressions.{Expression, StringLiteral, UnwrapUDT}
+import org.apache.spark.sql.catalyst.expressions.{Expression, StringLiteral}
 import org.apache.spark.sql.catalyst.expressions.ml.VectorToArray
 import org.apache.spark.sql.classic.UserDefinedFunctionUtils.toScalaUDF
 import org.apache.spark.sql.errors.QueryCompilationErrors
@@ -49,9 +49,9 @@ object InternalFunctionRegistration {
 
   registerFunction("vector_to_array") {
     case Seq(input, StringLiteral("float64")) =>
-      VectorToArray(UnwrapUDT(input), DoubleType)
+      VectorToArray(input, DoubleType)
     case Seq(input, StringLiteral("float32")) =>
-      VectorToArray(UnwrapUDT(input), FloatType)
+      VectorToArray(input, FloatType)
     case Seq(_, invalid @ StringLiteral(_)) =>
       throw QueryCompilationErrors.invalidParameter("DTYPE", "vector_to_array", "dtype", invalid)
     case Seq(_, invalid) =>

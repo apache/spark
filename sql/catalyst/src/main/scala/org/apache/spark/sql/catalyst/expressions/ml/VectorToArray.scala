@@ -27,23 +27,26 @@ import org.apache.spark.sql.catalyst.expressions.codegen.Block._
 import org.apache.spark.sql.types._
 
 /**
- * Converts the SQL struct representation of an MLlib vector to an array of doubles or floats.
- * This expression is dedicated only for Spark ML and should be used together with `unwrap_udt`.
- * The input must match the vector SQL schema, including field and array element nullability.
- * Null inputs are rejected.
+ * Converts an MLlib vector to an array of doubles or floats. This expression accepts a vector's
+ * SQL struct representation or a UDT with the same underlying SQL type, including field and
+ * array element nullability. Null inputs are rejected.
  */
 case class VectorToArray(child: Expression, elementType: DataType) extends UnaryExpression {
   require(elementType == DoubleType || elementType == FloatType,
     "VectorToArray requires a double or float element type.")
 
-  override def prettyName: String = "ml_vector_to_array"
+  override def prettyName: String = "vector_to_array"
 
   override def dataType: DataType = ArrayType(elementType, containsNull = false)
 
   override def nullable: Boolean = false
 
   override def checkInputDataTypes(): TypeCheckResult = {
-    if (child.dataType == VectorScaleShift.vectorSqlType) {
+    val inputType = child.dataType match {
+      case udt: UserDefinedType[_] => udt.sqlType
+      case other => other
+    }
+    if (inputType == VectorScaleShift.vectorSqlType) {
       TypeCheckResult.TypeCheckSuccess
     } else {
       DataTypeMismatch(

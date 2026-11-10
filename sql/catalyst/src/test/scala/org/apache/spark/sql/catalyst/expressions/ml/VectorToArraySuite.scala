@@ -60,16 +60,18 @@ class VectorToArraySuite extends SparkFunSuite with ExpressionEvalHelper {
     }
   }
 
-  test("vector to array requires UDT inputs to be unwrapped") {
+  test("vector to array accepts UDTs and their SQL struct representation") {
     val udt = new VectorToArrayTestUDT
     val vector = dense(1.1, 2.5)
     val input = BoundReference(0, udt, nullable = true)
     for (elementType <- Seq(DoubleType, FloatType)) {
-      assert(VectorToArray(input, elementType).checkInputDataTypes().isFailure)
-      val expression = VectorToArray(UnwrapUDT(input), elementType)
-      assert(expression.checkInputDataTypes().isSuccess)
       val expected = if (elementType == FloatType) Seq(1.1f, 2.5f) else Seq(1.1, 2.5)
-      checkEvaluation(expression, expected, InternalRow(vector))
+      for (child <- Seq(input, UnwrapUDT(input))) {
+        val expression = VectorToArray(child, elementType)
+        assert(expression.checkInputDataTypes().isSuccess)
+        assert(expression.prettyName === "vector_to_array")
+        checkEvaluation(expression, expected, InternalRow(vector))
+      }
     }
   }
 
@@ -85,9 +87,11 @@ class VectorToArraySuite extends SparkFunSuite with ExpressionEvalHelper {
         index, field.copy(dataType = ArrayType(elementType, containsNull = true))))
     }
     for (invalidSqlType <- fieldNullabilityMismatches ++ elementNullabilityMismatches;
+        inputType <- Seq(invalidSqlType, new VectorToArrayTestUDT {
+          override def sqlType: DataType = invalidSqlType
+        });
         elementType <- Seq(DoubleType, FloatType)) {
-      val expression = VectorToArray(
-        BoundReference(0, invalidSqlType, nullable = true), elementType)
+      val expression = VectorToArray(BoundReference(0, inputType, nullable = true), elementType)
       assert(expression.checkInputDataTypes().isFailure)
     }
   }

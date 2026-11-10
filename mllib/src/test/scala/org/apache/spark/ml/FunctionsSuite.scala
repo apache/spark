@@ -23,7 +23,6 @@ import org.apache.spark.ml.util.MLTest
 import org.apache.spark.mllib.linalg.{Matrices => OldMatrices, MatrixUDT => OldMatrixUDT,
   Vector => OldVector, Vectors => OldVectors, VectorUDT => OldVectorUDT}
 import org.apache.spark.sql.{AnalysisException, DataFrame, Row}
-import org.apache.spark.sql.catalyst.expressions.UnwrapUDT
 import org.apache.spark.sql.catalyst.expressions.ml.{VectorPosExplode, VectorScaleShift, VectorToArray}
 import org.apache.spark.sql.functions.{col, typedLit, unwrap_udt, wrap_udt}
 import org.apache.spark.sql.types.{ArrayType, DoubleType, FloatType, StructField, StructType, UserDefinedType}
@@ -131,7 +130,7 @@ class FunctionsSuite extends MLTest {
       "Unsupported dtype: \"float16\". Valid values: float64, float32."))
   }
 
-  test("vector_to_array uses a Catalyst expression with unwrapped vector inputs") {
+  test("vector_to_array uses a Catalyst expression with vector UDT inputs") {
     val df = Seq(
       (Vectors.dense(1.0, 2.5), OldVectors.dense(1.0, 2.5)),
       (Vectors.sparse(3, Seq((1, 2.5))), OldVectors.sparse(3, Seq((1, 2.5)))),
@@ -151,7 +150,9 @@ class FunctionsSuite extends MLTest {
         case v: VectorToArray => v
       })
       assert(expressions.size === 1)
-      assert(expressions.head.child.isInstanceOf[UnwrapUDT])
+      assert(expressions.head.child.dataType.isInstanceOf[UserDefinedType[_]])
+      assert(expressions.head.prettyName === "vector_to_array")
+      assert(converted.schema.head.name === s"vector_to_array($name)")
     }
 
     val error = intercept[AnalysisException] {
