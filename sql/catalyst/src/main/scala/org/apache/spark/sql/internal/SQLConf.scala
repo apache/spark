@@ -7496,6 +7496,17 @@ object SQLConf {
       .booleanConf
       .createWithDefault(false)
 
+  val LEGACY_MYSQL_TOP_N_OVER_GROUP_BY_EXPR_ENABLED =
+    buildConf("spark.sql.legacy.mysql.topNOverGroupByExpr.enabled")
+      .internal()
+      .doc("When true, push ORDER BY ... LIMIT to MySQL on top of a pushed GROUP BY even when " +
+        "a sort key is built over a GROUP BY expression, such as GROUP BY a + 1 ORDER BY " +
+        "(a + 1) * 2. MySQL rejects such queries under the default ONLY_FULL_GROUP_BY mode.")
+      .version("4.4.0")
+      .withBindingPolicy(ConfigBindingPolicy.NOT_APPLICABLE)
+      .booleanConf
+      .createWithDefault(false)
+
   val LEGACY_ORACLE_TIMESTAMP_MAPPING_ENABLED =
     buildConf("spark.sql.legacy.oracle.timestampMapping.enabled")
       .internal()
@@ -9900,6 +9911,9 @@ class SQLConf extends Serializable with Logging with SqlApiConf {
 
   def legacyMySqlTimestampNTZMappingEnabled: Boolean =
     getConf(LEGACY_MYSQL_TIMESTAMPNTZ_MAPPING_ENABLED)
+
+  def legacyMySqlTopNOverGroupByExprEnabled: Boolean =
+    getConf(LEGACY_MYSQL_TOP_N_OVER_GROUP_BY_EXPR_ENABLED)
 
   def legacyOracleTimestampMappingEnabled: Boolean =
     getConf(LEGACY_ORACLE_TIMESTAMP_MAPPING_ENABLED)
