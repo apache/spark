@@ -297,6 +297,14 @@ object StreamingJoinHelper extends PredicateHelper with Logging {
       return None
     }
 
+    // State eviction compares this cutoff in timestamp units against the constrained column.
+    val hasTimestampStateAttribute = constraintTerm.exists {
+      case a: AttributeReference =>
+        attributesToFindStateWatermarkFor.contains(a) && a.dataType == TimestampType
+      case _ => false
+    }
+    if (!hasTimestampStateAttribute) return None
+
     // Replace watermark attribute with watermark value, and generate the resolved expression
     // from the other terms. That is,
     // rightTime-with-watermark, c1, -c2  =>  watermark, c1, -c2  =>  watermark + c1 + (-c2)
