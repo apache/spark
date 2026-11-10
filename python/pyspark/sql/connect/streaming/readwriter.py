@@ -454,7 +454,9 @@ class DataStreamReader(OptionUtils):
     xml.__doc__ = PySparkDataStreamReader.xml.__doc__
 
     def table(self, tableName: str) -> "DataFrame":
-        return self._df(Read(tableName, self._options, is_streaming=True))
+        return self._df(
+            Read(tableName, self._options, is_streaming=True, source_name=self._source_name)
+        )
 
     table.__doc__ = PySparkDataStreamReader.table.__doc__
 

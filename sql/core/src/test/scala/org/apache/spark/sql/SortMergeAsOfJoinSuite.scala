@@ -2046,6 +2046,35 @@ class SortMergeAsOfJoinSuite extends QueryTest
     )
   }
 
+  test("nearest join never matches a NULL right equi-key against a NOT NULL left key") {
+    // The left key is NOT NULL and the right key nullable. The NULL right key sorts first, so a
+    // key compare that read it as 0 would match left key 0 and stop before the rows of key -1.
+    val left = spark.createDataFrame(
+      List(Row(-1, 10), Row(0, 10)).asJava,
+      StructType(
+        StructField("k", IntegerType, nullable = false) ::
+          StructField("ts", IntegerType, nullable = false) :: Nil))
+    val right = spark.createDataFrame(
+      List(Row(null, 1, "null key"), Row(-1, 2, "minus one")).asJava,
+      StructType(
+        StructField("k", IntegerType) ::
+          StructField("ts", IntegerType) ::
+          StructField("tag", StringType) :: Nil))
+    // One partition: with several, the NULL right row could land apart from the left rows and
+    // never be compared.
+    withSQLConf(SQLConf.SHUFFLE_PARTITIONS.key -> "1") {
+      val joined = left.joinAsOf(
+        right, left.col("ts"), right.col("ts"), usingColumns = Seq("k"),
+        joinType = "leftouter", tolerance = null,
+        allowExactMatches = true, direction = "nearest")
+        .select(left.col("k"), right.col("tag"))
+      checkAnswer(joined, Row(-1, "minus one") :: Row(0, null) :: Nil)
+      assert(collectFirst(joined.queryExecution.executedPlan) {
+        case j: SortMergeAsOfJoinExec => j
+      }.isDefined, s"Expected SortMergeAsOfJoinExec in plan:\n${joined.queryExecution}")
+    }
+  }
+
   test("null-safe equi-key (<=>) in ON matches null keys, unlike EqualTo") {
     // <=> is a residual (empty equi-keys), so null keys match, unlike EqualTo.
     val schema1 = StructType(
