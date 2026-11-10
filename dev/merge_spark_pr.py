@@ -895,15 +895,15 @@ def should_skip_post_merge_ci(target_ref, force_post_merge_ci=False):
     The branch history count matches the check formerly performed in ``build_main.yml``.
     ``force_post_merge_ci`` is set when the PR carries ``POST_MERGE_CI_FORCE_LABEL``.
     """
+    interval = POST_MERGE_CI_INTERVALS.get(target_ref)
+    if interval is None:
+        return False
+
     if force_post_merge_ci:
         print(
             "Post-merge CI will run on %s: the PR has the %r label."
             % (target_ref, POST_MERGE_CI_FORCE_LABEL)
         )
-        return False
-
-    interval = POST_MERGE_CI_INTERVALS.get(target_ref)
-    if interval is None:
         return False
 
     commit_count = int(git.run(["git", "rev-list", "--count", "HEAD"]).strip()) + 1
