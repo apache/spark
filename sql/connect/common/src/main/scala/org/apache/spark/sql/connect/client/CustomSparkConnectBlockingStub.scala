@@ -40,12 +40,12 @@ private[connect] class CustomSparkConnectBlockingStub(
     d.map(dur => stub.withDeadline(Deadline.after(dur.toMillis, TimeUnit.MILLISECONDS)))
       .getOrElse(stub)
 
-  private def validationStub(
-      timeout: Int): SparkConnectServiceGrpc.SparkConnectServiceBlockingStub = {
+  private def validationStub(timeout: Int, defaultDeadline: Option[FiniteDuration])
+      : SparkConnectServiceGrpc.SparkConnectServiceBlockingStub = {
     if (timeout > 0) {
       stub.withDeadlineAfter(timeout.toLong, TimeUnit.SECONDS)
     } else {
-      stub
+      withDeadline(defaultDeadline)
     }
   }
 
@@ -141,14 +141,14 @@ private[connect] class CustomSparkConnectBlockingStub(
   def validateSession(request: ConfigRequest, timeout: Int): Unit = {
     // Do not retry or fetch error details: validation must respect its own timeout.
     stubState.responseValidator.verifyResponse {
-      validationStub(timeout).config(request)
+      validationStub(timeout, stubState.rpcDeadlines.config).config(request)
     }
   }
 
   def validateSession(request: GetStatusRequest, timeout: Int): Unit = {
     // Do not retry or fetch error details: validation must respect its own timeout.
     stubState.responseValidator.verifyResponse {
-      validationStub(timeout).getStatus(request)
+      validationStub(timeout, stubState.rpcDeadlines.getStatus).getStatus(request)
     }
   }
 

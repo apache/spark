@@ -190,7 +190,7 @@ private[sql] class SparkConnectClient(
    * session. Returns false if the session is locally invalid or server validation fails.
    *
    * @param timeout
-   *   Validation timeout in seconds. Zero means no deadline.
+   *   Validation timeout in seconds. Zero uses the configured deadline for the validation RPC.
    * @throws IllegalArgumentException
    *   If the timeout is negative.
    */

@@ -104,10 +104,16 @@ class SparkConnectSessionValidationSuite extends ConnectFunSuite with TimeLimits
     }
   }
 
-  private def withClient(f: (SparkConnectClient, ValidationService) => Unit): Unit = {
+  private def withClient(
+      f: (SparkConnectClient, ValidationService) => Unit,
+      rpcDeadlines: RpcDeadlines = RpcDeadlines()): Unit = {
     val service = new ValidationService
     val server = NettyServerBuilder.forPort(0).addService(service).build().start()
-    val client = SparkConnectClient.builder().port(server.getPort).build()
+    val client = SparkConnectClient
+      .builder()
+      .port(server.getPort)
+      .rpcDeadlines(rpcDeadlines)
+      .build()
     try {
       f(client, service)
     } finally {
@@ -179,6 +185,30 @@ class SparkConnectSessionValidationSuite extends ConnectFunSuite with TimeLimits
       assert(client.validateSession(5))
       service.serverSessionId = UUID.randomUUID().toString
       assert(!client.validateSession(5))
+    }
+  }
+
+  Seq("Config", "GetStatus").foreach { rpc =>
+    test(s"validateSession with timeout zero honors the $rpc RPC deadline") {
+      val initialized = rpc == "GetStatus"
+      val deadlines = if (initialized) {
+        RpcDeadlines(config = Some(1.minute), getStatus = Some(1.second))
+      } else {
+        RpcDeadlines(config = Some(1.second), getStatus = Some(1.minute))
+      }
+      withClient(
+        (client, service) => {
+          if (initialized) {
+            assert(client.validateSession(5))
+          }
+          service.respond = false
+          failAfter(10.seconds) {
+            assert(!client.validateSession(0))
+          }
+          assert(service.calls.get() == (if (initialized) 2 else 1))
+          assert(service.configCalls.get() == 1)
+        },
+        deadlines)
     }
   }
 
