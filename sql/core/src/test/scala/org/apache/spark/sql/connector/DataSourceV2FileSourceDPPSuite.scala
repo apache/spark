@@ -480,10 +480,16 @@ abstract class DataSourceV2FileSourceDPPSuiteBase extends QueryTest
         assert(base.filterAttributes().isEmpty)
         var listings = 0
         val scan = withListingHook(base) { listings += 1 }
-        scan.planInputPartitions()
+        val planned = scan.planInputPartitions()
         scan.planInputPartitionsWithRuntimeFilters(
           Array(EqualTo(AttributeReference("part", IntegerType)(), Literal(3))))
         assert(listings === 2, s"expected the runtime-filtered call to list again, got $listings")
+        // A filter that prunes nothing gets the packing of the listing it filtered, not of the one
+        // planning packed.
+        val keepAll = scan.planInputPartitionsWithRuntimeFilters(
+          Array(GreaterThanOrEqual(AttributeReference("part", IntegerType)(), Literal(0))))
+        assert(keepAll.nonEmpty && !keepAll.toSeq.corresponds(planned.toSeq)(_ eq _),
+          "expected a packing of the runtime-filtered listing")
       }
     }
   }
@@ -761,26 +767,29 @@ abstract class DataSourceV2FileSourceDPPSuiteBase extends QueryTest
         val dimIntPath = new File(dir, "dim_int").getCanonicalPath
         spark.range(10).selectExpr("CAST(id AS INT) AS dim_id", "CAST(id AS INT) AS dim_val")
           .write.format("parquet").save(dimIntPath)
-        // (condition, the partitions it keeps, whether DPP stays, whether V1 is checked). The first
-        // six are the SPARK-38148 cases. The last two do not fix the key, so V2 keeps the DPP; they
-        // are checked under V2 only, because V1 reads an equality anywhere in its filter and drops
-        // the DPP.
-        Seq[(String, Int => Boolean, Boolean, Boolean)](
-          ("f.part = 3", _ == 3, false, true),
-          ("3 = f.part", _ == 3, false, true),
-          ("f.part <=> 3", _ == 3, false, true),
-          ("3 <=> f.part", _ == 3, false, true),
-          ("f.part > 3", _ > 3, true, true),
-          ("5 > f.part", _ < 5, true, true),
-          ("f.part <> 3", _ != 3, true, false),
-          ("(f.part = 3 OR f.part = 4)", p => p == 3 || p == 4, true, false)
+        // (condition, the rows it keeps by (id, part), whether DPP stays, whether V1 is checked).
+        // The first six are the SPARK-38148 cases. The rest do not fix the key, so V2 keeps the
+        // DPP; they are checked under V2 only, because V1 reads an equality anywhere in its filter
+        // and drops the DPP. The last two reference a data column, so they stay in the `Filter`
+        // above the scan rather than in its pushed filters.
+        Seq[(String, (Int, Int) => Boolean, Boolean, Boolean)](
+          ("f.part = 3", (_, p) => p == 3, false, true),
+          ("3 = f.part", (_, p) => p == 3, false, true),
+          ("f.part <=> 3", (_, p) => p == 3, false, true),
+          ("3 <=> f.part", (_, p) => p == 3, false, true),
+          ("f.part > 3", (_, p) => p > 3, true, true),
+          ("5 > f.part", (_, p) => p < 5, true, true),
+          ("f.part <> 3", (_, p) => p != 3, true, false),
+          ("(f.part = 3 OR f.part = 4)", (_, p) => p == 3 || p == 4, true, false),
+          ("(f.part = 3 OR f.id > 50)", (i, p) => p == 3 || i > 50, true, false),
+          ("(f.part <> 3 OR f.id > 50)", (i, p) => p != 3 || i > 50, true, false)
         ).foreach { case (condition, keeps, hasDpp, checkV1) =>
           val query =
             s"""SELECT /*+ broadcast(d) */ f.id FROM fact f JOIN dim_int d
                |ON f.part = d.dim_id WHERE $condition AND d.dim_val > 2""".stripMargin
           val expected = (0 until 100).filter { i =>
             val part = i % 10
-            part > 2 && keeps(part)
+            part > 2 && keeps(i, part)
           }.map(i => Row(i.toLong))
           (if (checkV1) Seq("parquet", "") else Seq("")).foreach { v1Sources =>
             withSQLConf(SQLConf.USE_V1_SOURCE_LIST.key -> v1Sources) {
@@ -845,45 +854,51 @@ abstract class DataSourceV2FileSourceDPPSuiteBase extends QueryTest
   test("DPP for a dimension whose filter a connector scan took in fully") {
     // The in-memory scan takes `dp IN (1, 3)` on its single identity partition column in fully,
     // so no `Filter` above it keeps a selective predicate.
-    withDppV2Conf {
-      withSQLConf("spark.sql.catalog.dpp_mem" -> classOf[InMemoryTableCatalog].getName) {
-        withTempDir { dir =>
-          writeFactAndDim(dir)
-          withTable("dpp_mem.dim_mem") {
-            sql("CREATE TABLE dpp_mem.dim_mem (k BIGINT, dp INT) PARTITIONED BY (dp)")
-            sql("INSERT INTO dpp_mem.dim_mem VALUES " +
-              (0 until 10).map(k => s"($k, ${k % 4})").mkString(", "))
-            val query =
-              """SELECT f.id FROM fact f JOIN dpp_mem.dim_mem d
-                |ON f.part = d.k WHERE d.dp IN (1, 3)""".stripMargin
-            val df = sql(query)
-            val optimized = df.queryExecution.optimizedPlan
-            val dimRelation = optimized.collectFirst {
-              case r: DataSourceV2ScanRelation if r.output.exists(_.name == "k") => r
-            }.getOrElse(fail(s"no dimension scan in:\n$optimized"))
-            assert(dimRelation.pushedFilters.exists(_.isInstanceOf[In]),
-              s"expected the pushed IN filter:\n$optimized")
-            assert(collectDppFilters(optimized).nonEmpty, s"expected DPP, got\n$optimized")
-            checkAnswer(df, (0 until 100).filter(_ % 2 == 1).map(i => Row(i.toLong)))
-            val numOutputRows = factScanOf(df).metrics("numOutputRows").value
-            assert(numOutputRows == 50,
-              s"expected the fact scan to read the 5 odd partitions, got $numOutputRows rows")
-            // A dimension scan with a row-selecting pushdown, such as a limit, may return other
-            // rows when a DPP subquery reads it again, so its pushed filters do not count.
-            val withoutDpp = withSQLConf(SQLConf.DYNAMIC_PARTITION_PRUNING_ENABLED.key -> "false") {
-              sql(query).queryExecution.optimizedPlan
-            }
-            Seq(true, false).foreach { rowWise =>
-              val plan = PartitionPruning(withoutDpp.transform {
-                case r: DataSourceV2ScanRelation if r.output.exists(_.name == "k") =>
-                  r.copy(onlyRowWisePushdowns = rowWise)
-              })
-              assert(collectDppFilters(plan).nonEmpty === rowWise,
-                s"onlyRowWisePushdowns = $rowWise: expected DPP $rowWise, got\n$plan")
+    // The catalog manager keeps `dpp_mem` loaded after the conf is restored.
+    try {
+      withDppV2Conf {
+        withSQLConf("spark.sql.catalog.dpp_mem" -> classOf[InMemoryTableCatalog].getName) {
+          withTempDir { dir =>
+            writeFactAndDim(dir)
+            withTable("dpp_mem.dim_mem") {
+              sql("CREATE TABLE dpp_mem.dim_mem (k BIGINT, dp INT) PARTITIONED BY (dp)")
+              sql("INSERT INTO dpp_mem.dim_mem VALUES " +
+                (0 until 10).map(k => s"($k, ${k % 4})").mkString(", "))
+              val query =
+                """SELECT f.id FROM fact f JOIN dpp_mem.dim_mem d
+                  |ON f.part = d.k WHERE d.dp IN (1, 3)""".stripMargin
+              val df = sql(query)
+              val optimized = df.queryExecution.optimizedPlan
+              val dimRelation = optimized.collectFirst {
+                case r: DataSourceV2ScanRelation if r.output.exists(_.name == "k") => r
+              }.getOrElse(fail(s"no dimension scan in:\n$optimized"))
+              assert(dimRelation.pushedFilters.exists(_.isInstanceOf[In]),
+                s"expected the pushed IN filter:\n$optimized")
+              assert(collectDppFilters(optimized).nonEmpty, s"expected DPP, got\n$optimized")
+              checkAnswer(df, (0 until 100).filter(_ % 2 == 1).map(i => Row(i.toLong)))
+              val numOutputRows = factScanOf(df).metrics("numOutputRows").value
+              assert(numOutputRows == 50,
+                s"expected the fact scan to read the 5 odd partitions, got $numOutputRows rows")
+              // A dimension scan with a row-selecting pushdown, such as a limit, may return other
+              // rows when a DPP subquery reads it again, so its pushed filters do not count.
+              val withoutDpp =
+                withSQLConf(SQLConf.DYNAMIC_PARTITION_PRUNING_ENABLED.key -> "false") {
+                  sql(query).queryExecution.optimizedPlan
+                }
+              Seq(true, false).foreach { rowWise =>
+                val plan = PartitionPruning(withoutDpp.transform {
+                  case r: DataSourceV2ScanRelation if r.output.exists(_.name == "k") =>
+                    r.copy(onlyRowWisePushdowns = rowWise)
+                })
+                assert(collectDppFilters(plan).nonEmpty === rowWise,
+                  s"onlyRowWisePushdowns = $rowWise: expected DPP $rowWise, got\n$plan")
+              }
             }
           }
         }
       }
+    } finally {
+      spark.sessionState.catalogManager.reset()
     }
   }
 

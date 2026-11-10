@@ -84,8 +84,9 @@ trait RuntimePartitionPruningFileScan extends FileScan with SupportsRuntimeCatal
     val partitionSchema = fileIndex.partitionSchema
     val fieldIndex = partitionSchema.fieldNames.zipWithIndex
       .map { case (name, i) => normalizePartitionColumnName(name) -> i }.toMap
+    // Compiled as V1 compiles its dynamic partition filters, falling back to interpreted.
     val predicates = expressions.toSeq.map { e =>
-      e -> Predicate.createInterpreted(e.transform {
+      e -> Predicate.create(e.transform {
         case a: Attribute =>
           // PushDownUtils passes only filters over `filterAttributes()`.
           val i = fieldIndex.getOrElse(normalizePartitionColumnName(a.name),
@@ -93,7 +94,7 @@ trait RuntimePartitionPruningFileScan extends FileScan with SupportsRuntimeCatal
               s"over its partition columns ${partitionSchema.fieldNames.mkString("[", ", ", "]")}" +
               s", got $e"))
           BoundReference(i, partitionSchema(i).dataType, nullable = true)
-      })
+      }, Nil)
     }
     var failedDirs = 0
     var firstFailure: Option[(Expression, Throwable)] = None
@@ -119,6 +120,11 @@ trait RuntimePartitionPruningFileScan extends FileScan with SupportsRuntimeCatal
         log"evaluated: ${MDC(LogKeys.COUNT, failedDirs)}. First failure: " +
         log"${MDC(LogKeys.EXPR, e)}.", t)
     }
-    if (kept.length == all.length) allPartitions().toArray else filePartitions(kept).toArray
+    // `allPartitions` packed this same listing only if the scan keeps it.
+    if (kept.length == all.length && filterAttributes().nonEmpty) {
+      allPartitions().toArray
+    } else {
+      filePartitions(kept).toArray
+    }
   }
 }

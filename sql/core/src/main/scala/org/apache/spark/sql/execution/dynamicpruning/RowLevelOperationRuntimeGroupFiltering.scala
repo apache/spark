@@ -38,7 +38,8 @@ import org.apache.spark.util.ArrayImplicits._
  * converted to data source filters. Since not all expressions can be pushed down that way, Spark
  * allows data sources to filter groups at runtime. If the primary scan in a row-level operation
  * supports runtime filtering, this rule will inject a subquery to find all rows that match the
- * condition so that data sources know exactly which groups have changes.
+ * condition so that data sources know exactly which groups have changes. A built-in file scan is
+ * the exception, see `canInjectGroupFilters`.
  *
  * Note that this rule is also beneficial for operations that deal with deltas of rows. Even if
  * the data source is capable of handling specific changes, it is useful to first discard entire

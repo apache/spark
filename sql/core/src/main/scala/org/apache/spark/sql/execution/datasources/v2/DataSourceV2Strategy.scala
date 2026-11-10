@@ -197,12 +197,13 @@ class DataSourceV2Strategy(session: SparkSession) extends Strategy with Predicat
         case _ => false
       }
 
-      // Extract scalar subquery filters on runtime-filterable columns for runtime pushdown.
-      // These filters stay in postScanFilters for correctness (FilterExec above scan),
-      // but are also routed into runtimeFilters so BatchScanExec can use them for
-      // partition pruning via SupportsRuntimeV2Filtering.filter(). The exceptions are filters
-      // that only reference attributes the scan fully evaluates, which are dropped from
-      // postScanFilters below.
+      // Extract scalar subquery filters on runtime-filterable columns for runtime pushdown. These
+      // filters stay in postScanFilters for correctness (FilterExec above scan), but are also
+      // routed into runtimeFilters so BatchScanExec can use them for partition pruning via
+      // SupportsRuntimeV2Filtering.filter(), or pass them as Catalyst expressions to
+      // SupportsRuntimeCatalystFiltering.planInputPartitionsWithRuntimeFilters, as the built-in
+      // file scans do. The exceptions are filters that only reference attributes the scan fully
+      // evaluates, which are dropped from postScanFilters below.
       // Non-deterministic filters are not routed: they would be pushed to the source for
       // pruning while the FilterExec above the scan re-evaluates them, so the two evaluations
       // may disagree and rows the source pruned away could not be recovered. This is the

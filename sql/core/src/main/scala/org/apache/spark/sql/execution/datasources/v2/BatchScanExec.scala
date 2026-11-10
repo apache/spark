@@ -170,11 +170,11 @@ case class BatchScanExec(
     redact(result)
   }
 
-  // A fully pushed runtime filter has no FilterExec above the scan, so this is the only place
-  // the formatted explain can show it.
+  // A DPP filter, and a fully pushed runtime filter, have no FilterExec above the scan, so the
+  // formatted explain shows them in full only here.
   override def verboseStringWithOperatorId(): String = {
     val runtimeFiltersDescription = Option.when(runtimeFilters.nonEmpty) {
-      s"RuntimeFilters: ${runtimeFilters.mkString("[", ", ", "]")}"
+      s"RuntimeFilters: ${runtimeFilters.mkString("[", ",", "]")}"
     }
     (runtimeFiltersDescription ++ storageFiltersDescription)
       .foldLeft(super.verboseStringWithOperatorId())((verbose, d) => verbose + redact(d) + "\n")

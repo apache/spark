@@ -50,19 +50,24 @@ object CleanupDynamicPruningFilters extends Rule[LogicalPlan] with PredicateHelp
    * filter can prune only when the build side lacks the fixed value, which this rule gives up. An
    * equality anywhere in a conjunct of `condition` counts, including one below `NOT` or `OR`.
    *
-   * For a built-in V2 file scan the equality may be in `pushedFilters` instead: the scan applies
-   * them to its file listing rather than leaving them to a `Filter` above it. Only their top-level
-   * `=` and `<=>` conjuncts count, so a pushed `part <> 3` or `part = 3 OR part = 4` keeps the DPP
-   * filter.
+   * With `topLevelOnly`, as for a built-in V2 file scan, only top-level `=` and `<=>` conjuncts
+   * count, so `part <> 3` or `part = 3 OR id > 5` keeps the DPP filter. For such a scan the
+   * equality may also be in `pushedFilters`: the scan applies them to its file listing rather than
+   * leaving them to a `Filter` above it.
    */
   private def removeUnnecessaryDynamicPruningSubquery(
       plan: LogicalPlan,
-      pushedFilters: Seq[Expression] = Seq.empty): LogicalPlan = {
+      pushedFilters: Seq[Expression] = Seq.empty,
+      topLevelOnly: Boolean = false): LogicalPlan = {
     plan.transformWithPruning(_.containsPattern(DYNAMIC_PRUNING_SUBQUERY)) {
       case f @ Filter(condition, _) =>
-        lazy val unnecessaryPruningKeys =
-          ExpressionSet(collectEqualityConditionExpressions(condition) ++
-            pushedFilters.flatMap(splitConjunctivePredicates).collect(equalityKey))
+        lazy val conditionKeys = if (topLevelOnly) {
+          splitConjunctivePredicates(condition).collect(equalityKey)
+        } else {
+          collectEqualityConditionExpressions(condition)
+        }
+        lazy val unnecessaryPruningKeys = ExpressionSet(conditionKeys ++
+          pushedFilters.flatMap(splitConjunctivePredicates).collect(equalityKey))
         val newCondition = condition.transformWithPruning(
           _.containsPattern(DYNAMIC_PRUNING_SUBQUERY)) {
           case dynamicPruning: DynamicPruningSubquery
@@ -94,11 +99,11 @@ object CleanupDynamicPruningFilters extends Rule[LogicalPlan] with PredicateHelp
       // took. Another DSv2 source may apply such a filter row by row and leave the pruning to DPP,
       // so this rule does not count its pushed filters.
       case p @ NodeWithOnlyDeterministicProjectAndFilter(r: DataSourceV2ScanRelation) =>
-        val pushedFilters = r.scan match {
-          case _: RuntimePartitionPruningFileScan => r.pushedFilters
-          case _ => Seq.empty
+        r.scan match {
+          case _: RuntimePartitionPruningFileScan =>
+            removeUnnecessaryDynamicPruningSubquery(p, r.pushedFilters, topLevelOnly = true)
+          case _ => removeUnnecessaryDynamicPruningSubquery(p)
         }
-        removeUnnecessaryDynamicPruningSubquery(p, pushedFilters)
       // remove any Filters with DynamicPruning that didn't get pushed down to PhysicalOperation.
       case f @ Filter(condition, _) =>
         val newCondition = condition.transformWithPruning(
