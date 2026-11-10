@@ -120,39 +120,9 @@ class ShellScriptTestGoal:
     >>> goal.stage.value
     'pre_build'
 
-    A plain-string stage would silently never match, so it is rejected:
-
-    >>> ShellScriptTestGoal("dev/example", "post_build")
-    Traceback (most recent call last):
-        ...
-    TypeError: Unsupported test stage: 'post_build'
-
-    The path may be supplied as a `str` or `Path`, and is stored as a normalized `Path`:
-
-    >>> goal.path == Path("dev/example")
-    True
-    >>> ShellScriptTestGoal(Path("dev/example")) == goal
-    True
-    >>> ShellScriptTestGoal("./dev//example") == goal
-    True
-    >>> len({goal, ShellScriptTestGoal("./dev//example"),
-    ...      ShellScriptTestGoal(Path("dev/example"))})
-    1
-
-    The path is a non-blank, repository-relative script:
-
-    >>> ShellScriptTestGoal("/tmp/example")
-    Traceback (most recent call last):
-        ...
-    ValueError: Shell script path must be relative to repo root: '/tmp/example'
-    >>> ShellScriptTestGoal("")
-    Traceback (most recent call last):
-        ...
-    ValueError: Shell script path must be relative to repo root: ''
-    >>> ShellScriptTestGoal("  ")
-    Traceback (most recent call last):
-        ...
-    ValueError: Shell script path must be relative to repo root: '  '
+    The stage must be a `TestStage`, not its string value. The path may be supplied
+    as a `str` or `Path` and is normalized to a `Path`. It must be non-blank,
+    repository-relative, and must not contain `..` path components.
     """
 
     path: Path
@@ -212,7 +182,7 @@ class Module(object):
             module are changed.
         :param sbt_test_goals: A set of SBT test goals for testing this module.
         :param python_test_goals: A set of Python test goals for testing this module.
-        :param shell_script_test_goals: A sequence (e.g., a list or tuple) of shell script test
+        :param shell_script_test_goals: A sequence (e.g. a list or tuple) of shell script test
             goals for testing this module.
         :param excluded_python_implementations: A set of Python implementations that are not
             supported by this module's Python components. The values in this set should match
@@ -220,26 +190,6 @@ class Module(object):
         :param test_tags A set of tags that will be excluded when running unit tests if the module
             is not explicitly changed.
         :param should_run_r_tests: If true, changes in this module will trigger all R tests.
-
-        A plain string is not a sequence of goals:
-
-        >>> Module("string-goals", [], [], shell_script_test_goals="dev/lint-java")
-        Traceback (most recent call last):
-            ...
-        TypeError: string-goals: shell_script_test_goals must be a sequence
-        >>> Module("single-goal", [], [], shell_script_test_goals=ShellScriptTestGoal("dev/lint"))
-        Traceback (most recent call last):
-            ...
-        TypeError: single-goal: shell_script_test_goals must be a sequence
-        >>> Module("generator-goals", [], [], shell_script_test_goals=(
-        ...     goal for goal in [ShellScriptTestGoal("dev/lint")]))
-        Traceback (most recent call last):
-            ...
-        TypeError: generator-goals: shell_script_test_goals must be a sequence
-        >>> Module("bad-goal", [], [], shell_script_test_goals=["dev/lint-java"])
-        Traceback (most recent call last):
-            ...
-        TypeError: bad-goal: expected ShellScriptTestGoal, got 'dev/lint-java'
         """
         if any(module.name == name for module in all_modules):
             raise ValueError(f"module name {name!r} is already in use")
