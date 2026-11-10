@@ -38,8 +38,10 @@ object StreamingJoinHelper extends PredicateHelper with Logging {
    * evict the opposite input's state, whose equality keys have the same ordering.
    * For leftTime = rightTime, a watermark on rightTime bounds leftTime even when leftTime
    * has no watermark. It does not bound right-side state without a watermark on leftTime.
-   * A key computed from the event time by adding a constant interval, such as
-   * leftTime = rightTime + INTERVAL 10 SECONDS, is bounded too; see [[getStateKeyWatermark]].
+   * A key computed from the event time by adding constant intervals, such as
+   * leftTime = rightTime + INTERVAL 10 SECONDS, is bounded too if the solver can count the
+   * intervals exactly or they never move a time backward; see [[getStateKeyWatermark]]. The
+   * result does not depend on the session time zone, so neither does the V4 state layout.
    */
   def getStateKeyWatermarkOrdinal(
       keys: Seq[Expression],
@@ -68,8 +70,11 @@ object StreamingJoinHelper extends PredicateHelper with Logging {
    * watermark. `keys` and `inputAttributes` belong to this input, whose future rows have an event
    * time above the watermark. When the key is that event time, the equal key of any state row
    * they can still match is above the watermark too. When the key is the event time shifted by
-   * an interval, solving `stateKey >= rightTime + INTERVAL 10 SECONDS` shifts the cutoff by that
-   * interval, less 1 ms as for range conditions. Returns None for any other key.
+   * exact intervals, solving `stateKey >= rightTime + INTERVAL 10 SECONDS` shifts the cutoff by
+   * that interval, less 1 ms as for range conditions. When the shift has whole days, months or
+   * years but never moves a time backward, the cutoff is the watermark itself. Returns None for
+   * any other key, including a shift with whole days, months or years that can move a time
+   * backward.
    */
   def getStateKeyWatermark(
       keys: Seq[Expression],
@@ -79,10 +84,15 @@ object StreamingJoinHelper extends PredicateHelper with Logging {
     if (getEventTimeKeyOrdinal(keys, inputAttributes).contains(ordinal)) {
       eventWatermark
     } else {
-      eventTimeOfKey(keys(ordinal), inputAttributes).flatMap { eventTime =>
-        val stateKey = AttributeReference("stateKey", TimestampType)()
-        getStateValueWatermark(AttributeSet(Seq(stateKey)), AttributeSet(Seq(eventTime)),
-          Some(GreaterThanOrEqual(stateKey, keys(ordinal))), eventWatermark)
+      shiftOfKey(keys(ordinal), inputAttributes).flatMap {
+        case KeyShift(eventTime, true, _) =>
+          val stateKey = AttributeReference("stateKey", TimestampType)()
+          getStateValueWatermark(AttributeSet(Seq(stateKey)), AttributeSet(Seq(eventTime)),
+            Some(GreaterThanOrEqual(stateKey, keys(ordinal))), eventWatermark)
+        // The solver cannot count this shift, but it keeps the key of every future row at or
+        // above that row's event time, which is above the watermark.
+        case KeyShift(_, false, true) => eventWatermark
+        case _ => None
       }
     }
   }
@@ -90,9 +100,9 @@ object StreamingJoinHelper extends PredicateHelper with Logging {
   /**
    * Get a bound on this input's event time for state rows whose equality key at `ordinal` is
    * above `keyWatermark`. When the key is the event time, the bound is the key watermark. When
-   * the key is the event time shifted by an interval, solving
+   * the key is the event time shifted by exact intervals, solving
    * `leftTime + INTERVAL 10 SECONDS >= keyWatermark` subtracts that constant, less 1 ms.
-   * Returns None for any other key.
+   * Returns None for any other key, including any shift with whole days, months or years.
    */
   def getEventTimeWatermarkFromKey(
       keys: Seq[Expression],
@@ -102,65 +112,99 @@ object StreamingJoinHelper extends PredicateHelper with Logging {
     if (getEventTimeKeyOrdinal(keys, inputAttributes).contains(ordinal)) {
       Some(keyWatermark)
     } else {
-      eventTimeOfKey(keys(ordinal), inputAttributes).flatMap { eventTime =>
+      shiftOfKey(keys(ordinal), inputAttributes).filter(_.exact).flatMap { shift =>
         val keyWithWatermark = AttributeReference("stateKey", TimestampType,
           metadata = new MetadataBuilder().putLong(delayKey, 0L).build())()
-        getStateValueWatermark(AttributeSet(Seq(eventTime)), AttributeSet(Seq(keyWithWatermark)),
+        getStateValueWatermark(AttributeSet(Seq(shift.eventTime)),
+          AttributeSet(Seq(keyWithWatermark)),
           Some(GreaterThanOrEqual(keys(ordinal), keyWithWatermark)), Some(keyWatermark))
       }
     }
   }
 
-  /** The input's event-time column, if a timestamp key is that column shifted by intervals. */
-  private def eventTimeOfKey(key: Expression, inputAttributes: Seq[Attribute]): Option[Attribute] =
-    inputAttributes.find(_.metadata.contains(delayKey)).filter { eventTime =>
-      key.dataType == TimestampType && isIntervalShift(key, eventTime)
-    }
+  /**
+   * A timestamp key computed from the input's event time by constant intervals. `exact` means
+   * the solver counts the shift exactly; `forward` means the shift never moves a time backward.
+   */
+  private case class KeyShift(eventTime: Attribute, exact: Boolean, forward: Boolean)
+
+  /** How a timestamp key shifts the input's event time, if the solver or its sign bounds it. */
+  private def shiftOfKey(key: Expression, inputAttributes: Seq[Attribute]): Option[KeyShift] =
+    inputAttributes.find(_.metadata.contains(delayKey)).filter(_ => key.dataType == TimestampType)
+      .flatMap { eventTime =>
+        intervalShift(key, eventTime).collect {
+          case (exact, forward) if exact || forward => KeyShift(eventTime, exact, forward)
+        }
+      }
 
   /**
-   * Whether the expression is the event time plus or minus constant intervals. Other functions
-   * and casts from other types are not accepted: a truncation such as
-   * CAST(CAST(rightTime AS BIGINT) AS TIMESTAMP) can map a later event time below the watermark.
+   * If the expression is the event time plus or minus constant intervals, whether the shift is
+   * exact and whether it never moves a time backward. Other functions and casts from other types
+   * are not accepted: a truncation such as CAST(CAST(rightTime AS BIGINT) AS TIMESTAMP) can map a
+   * later event time below the watermark.
    */
-  private def isIntervalShift(expr: Expression, eventTime: Attribute): Boolean = {
-    // Spark adds the whole days of an interval in the session time zone, where a day can be 23
-    // or 25 hours across a daylight saving change, but the solver counts a day as 24 hours.
-    // Accept whole days only in a fixed-offset time zone.
-    def isExactInterval(e: Expression, timeZoneId: Option[String]): Boolean = {
-      def fixedOffset: Boolean =
-        timeZoneId.exists(id => DateTimeUtils.getZoneId(id).getRules.isFixedOffset)
+  private def intervalShift(expr: Expression, eventTime: Attribute): Option[(Boolean, Boolean)] = {
+    // Spark adds whole days in the session time zone, where a day can be 23 or 25 hours across a
+    // daylight saving change, and months vary in length, but the solver counts a day as 24 hours.
+    // So only intervals without whole days or months are exact, in every time zone.
+    def interval(e: Expression, negate: Boolean): Option[(Boolean, Boolean)] = {
+      def forward(parts: Long*): Boolean =
+        if (negate) parts.forall(_ <= 0) else parts.forall(_ >= 0)
       // An interval that fails to evaluate gives no bound; the query reports the error at run time.
       def value: Option[Any] = try Option(e.eval()) catch { case NonFatal(_) => None }
-      e.foldable && (e.dataType match {
-        case _: DayTimeIntervalType =>
-          value.exists { v =>
-            val micros = v.asInstanceOf[Long]
-            -MICROS_PER_DAY < micros && micros < MICROS_PER_DAY || fixedOffset
-          }
-        case CalendarIntervalType =>
-          value.exists { v =>
-            val interval = v.asInstanceOf[CalendarInterval]
-            interval.months == 0 && (interval.days == 0 || fixedOffset)
-          }
-        case _ => false
-      })
+      if (!e.foldable) {
+        None
+      } else {
+        e.dataType match {
+          case _: DayTimeIntervalType =>
+            value.map { v =>
+              val micros = v.asInstanceOf[Long]
+              (-MICROS_PER_DAY < micros && micros < MICROS_PER_DAY, forward(micros))
+            }
+          case _: YearMonthIntervalType =>
+            value.map { v =>
+              val months = v.asInstanceOf[Int]
+              (months == 0, forward(months))
+            }
+          case CalendarIntervalType =>
+            value.map { v =>
+              val i = v.asInstanceOf[CalendarInterval]
+              (i.months == 0 && i.days == 0, forward(i.months, i.days, i.microseconds))
+            }
+          case _ => None
+        }
+      }
     }
+    def combine(
+        a: Option[(Boolean, Boolean)],
+        b: Option[(Boolean, Boolean)]): Option[(Boolean, Boolean)] =
+      for ((exactA, forwardA) <- a; (exactB, forwardB) <- b)
+        yield (exactA && exactB, forwardA && forwardB)
     expr match {
-      case a: Attribute => a.semanticEquals(eventTime)
+      case a: Attribute if a.semanticEquals(eventTime) => Some((true, true))
       // The analyzer wraps timestamp + interval in a cast to the same timestamp type.
       case Cast(child, TimestampType, _, _) if child.dataType == TimestampType =>
-        isIntervalShift(child, eventTime)
-      case TimestampAddInterval(start, interval, timeZoneId) =>
-        isExactInterval(interval, timeZoneId) && isIntervalShift(start, eventTime)
-      case DatetimeSub(_, _, replacement) => isIntervalShift(replacement, eventTime)
+        intervalShift(child, eventTime)
+      case TimestampAddInterval(start, i, _) =>
+        combine(interval(i, negate = false), intervalShift(start, eventTime))
+      case TimestampAddYMInterval(start, i, _) =>
+        combine(interval(i, negate = false), intervalShift(start, eventTime))
+      case DatetimeSub(_, _, replacement) => intervalShift(replacement, eventTime)
       case Add(left, right, _) =>
-        isExactInterval(right, None) && isIntervalShift(left, eventTime) ||
-          isExactInterval(left, None) && isIntervalShift(right, eventTime)
+        combine(interval(right, negate = false), intervalShift(left, eventTime)).orElse(
+          combine(interval(left, negate = false), intervalShift(right, eventTime)))
       case Subtract(left, right, _) =>
-        isExactInterval(right, None) && isIntervalShift(left, eventTime)
-      case _ => false
+        combine(interval(right, negate = true), intervalShift(left, eventTime))
+      case _ => None
     }
   }
+
+  /**
+   * Whether the expression is the event time plus or minus constant intervals that the solver
+   * counts exactly, so the intervals have no whole days or months.
+   */
+  private[sql] def isExactIntervalShift(expr: Expression, eventTime: Attribute): Boolean =
+    intervalShift(expr, eventTime).exists(_._1)
 
   /**
    * Get state value watermark (see [[StreamingSymmetricHashJoinExec]] for context about it)
@@ -177,13 +221,18 @@ object StreamingJoinHelper extends PredicateHelper with Logging {
    * @param attributesWithEventWatermark  attributes of the other side which has a watermark column
    * @param joinCondition                 join condition
    * @param eventWatermark                watermark defined on the input event data
+   * @param exactForUnwatermarkedColumns  whether a column without its own watermark gets no
+   *                                      cutoff from a condition that the solver counts
+   *                                      inexactly. State eviction and the admission check set
+   *                                      it, so they agree.
    * @return state value watermark in milliseconds, is possible.
    */
   def getStateValueWatermark(
       attributesToFindStateWatermarkFor: AttributeSet,
       attributesWithEventWatermark: AttributeSet,
       joinCondition: Option[Expression],
-      eventWatermark: Option[Long]): Option[Long] = {
+      eventWatermark: Option[Long],
+      exactForUnwatermarkedColumns: Boolean = false): Option[Long] = {
 
     // If condition or event time watermark is not provided, then cannot calculate state watermark
     if (joinCondition.isEmpty || eventWatermark.isEmpty) return None
@@ -193,8 +242,8 @@ object StreamingJoinHelper extends PredicateHelper with Logging {
 
     def getStateWatermarkSafely(l: Expression, r: Expression): Option[Long] = {
       try {
-        getStateWatermarkFromLessThenPredicate(
-          l, r, attributesToFindStateWatermarkFor, attributesWithEventWatermark, eventWatermark)
+        getStateWatermarkFromLessThenPredicate(l, r, attributesToFindStateWatermarkFor,
+          attributesWithEventWatermark, eventWatermark, exactForUnwatermarkedColumns)
       } catch {
         case NonFatal(e) =>
           logWarning(log"Error trying to extract state constraint from condition " +
@@ -243,7 +292,8 @@ object StreamingJoinHelper extends PredicateHelper with Logging {
       rightExpr: Expression,
       attributesToFindStateWatermarkFor: AttributeSet,
       attributesWithEventWatermark: AttributeSet,
-      eventWatermark: Option[Long]): Option[Long] = {
+      eventWatermark: Option[Long],
+      exactForUnwatermarkedColumns: Boolean): Option[Long] = {
 
     val attributesInCondition =
       leftExpr.collect { case a: AttributeReference => a } ++
@@ -297,6 +347,23 @@ object StreamingJoinHelper extends PredicateHelper with Logging {
       return None
     }
 
+    // The terms count a whole day as 24 hours, although Spark adds days in the session time
+    // zone, where a day can be 23 or 25 hours, and read CAST(ts AS BIGINT) as ts, although the
+    // cast drops the fraction of a second. Either can put the cutoff above a row that can still
+    // match. A column with its own watermark keeps such a cutoff, as existing queries rely on
+    // it. With exactForUnwatermarkedColumns, any other column, such as the bounded column of an
+    // input without a watermark, gets no cutoff from such a condition.
+    val stateColumnHasWatermark = constraintTerm.exists {
+      case a: AttributeReference =>
+        attributesToFindStateWatermarkFor.contains(a) && a.metadata.contains(delayKey)
+      case _ => false
+    }
+    if (exactForUnwatermarkedColumns && !stateColumnHasWatermark &&
+        hasInexactArithmetic(allOnLeftExpr)) {
+      logDebug(s"Inexact arithmetic gives an unwatermarked column no cutoff: $allOnLeftExpr")
+      return None
+    }
+
     // State eviction compares this cutoff in timestamp units against the constrained column.
     val hasTimestampStateAttribute = constraintTerm.exists {
       case a: AttributeReference =>
@@ -325,11 +392,48 @@ object StreamingJoinHelper extends PredicateHelper with Logging {
       }
     }.reduceLeft(Add(_, _))
 
+    // Callers can pass only the constrained column and the opposite event time, so a term on any
+    // other column passes the occurrence check above. Its value is unknown here.
+    if (exprWithWatermarkSubstituted.references.nonEmpty) {
+      logDebug(s"Failed to extract state constraint: unresolved $exprWithWatermarkSubstituted")
+      return None
+    }
+
     // Calculate the constraint value
     logInfo(log"Final expression to evaluate " +
       log"constraint:\t${MDC(WATERMARK_CONSTRAINT, exprWithWatermarkSubstituted)}")
     val constraintValue = exprWithWatermarkSubstituted.eval().asInstanceOf[java.lang.Double]
     Some((Double2double(constraintValue) / 1000.0).toLong)
+  }
+
+  /**
+   * Whether the solver counts part of the expression inexactly: whole days added in a time zone
+   * that is not fixed-offset, where a day can be 23 or 25 hours, or a cast that drops part of a
+   * time, such as CAST(ts AS BIGINT).
+   */
+  private def hasInexactArithmetic(expr: Expression): Boolean = {
+    def hasWholeDays(interval: Expression): Boolean = {
+      // An interval that cannot be evaluated here counts as inexact.
+      def value = try Option(interval.eval()) catch { case NonFatal(_) => None }
+      !interval.foldable || value.forall {
+        case micros: Long => micros <= -MICROS_PER_DAY || micros >= MICROS_PER_DAY
+        case calendarInterval: CalendarInterval => calendarInterval.days != 0
+        case _ => true
+      }
+    }
+    def isTruncatingCast(from: DataType, to: DataType): Boolean =
+      !from.isInstanceOf[IntegralType] && (to match {
+        case _: IntegralType | FloatType => true
+        case decimal: DecimalType => decimal.scale < 6
+        case _ => false
+      })
+    expr.exists {
+      case TimestampAddInterval(_, interval, timeZoneId) =>
+        !timeZoneId.exists(DateTimeUtils.getZoneId(_).getRules.isFixedOffset) &&
+          hasWholeDays(interval)
+      case Cast(child, dataType, _, _) => isTruncatingCast(child.dataType, dataType)
+      case _ => false
+    }
   }
 
   /**

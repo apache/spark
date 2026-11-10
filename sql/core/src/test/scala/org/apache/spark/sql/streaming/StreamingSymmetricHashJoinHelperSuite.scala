@@ -17,12 +17,14 @@
 
 package org.apache.spark.sql.streaming
 
+import java.time.Duration
+
 import org.apache.spark.sql.catalyst.dsl.expressions._
-import org.apache.spark.sql.catalyst.expressions.{AttributeReference, Literal}
+import org.apache.spark.sql.catalyst.expressions.{Attribute, AttributeReference, Expression, Literal, TimestampAddInterval}
 import org.apache.spark.sql.catalyst.plans.logical.EventTimeWatermark
 import org.apache.spark.sql.execution.LocalTableScanExec
 import org.apache.spark.sql.execution.streaming.operators.stateful.join.StreamingSymmetricHashJoinHelper
-import org.apache.spark.sql.execution.streaming.operators.stateful.join.StreamingSymmetricHashJoinHelper.{JoinConditionSplitPredicates, JoinStateKeyWatermarkPredicate, JoinStateValueWatermarkPredicate}
+import org.apache.spark.sql.execution.streaming.operators.stateful.join.StreamingSymmetricHashJoinHelper.{JoinConditionSplitPredicates, JoinStateKeyWatermarkPredicate, JoinStateValueWatermarkPredicate, JoinStateWatermarkPredicate}
 import org.apache.spark.sql.types._
 
 class StreamingSymmetricHashJoinHelperSuite extends StreamTest {
@@ -154,6 +156,30 @@ class StreamingSymmetricHashJoinHelperSuite extends StreamTest {
       })
     }
   }
+  for (offset <- Seq(10, -10)) {
+    test(s"previous key scan bound for a key shifted by $offset seconds") {
+      val watermark = new MetadataBuilder().putLong(EventTimeWatermark.delayKey, 1000L).build()
+      val lt = AttributeReference("lt", TimestampType, metadata = watermark)()
+      val rt = AttributeReference("rt", TimestampType, metadata = watermark)()
+      val rightKey = TimestampAddInterval(rt, Literal(Duration.ofSeconds(offset)), Some("UTC"))
+      def leftPredicate(lateWatermark: Option[Long]): Option[JoinStateWatermarkPredicate] =
+        StreamingSymmetricHashJoinHelper.getStateWatermarkPredicates(
+          Seq(lt), Seq(rt), Seq(lt), Seq(rightKey), None, Some(140000L), lateWatermark, false).left
+      val shift = offset * 1000L
+      // New keys at or below the late watermark fail late filtering, and the previous batch
+      // evicted keys up to the shifted cutoff at that watermark.
+      assert(leftPredicate(Some(90000L)).contains(JoinStateKeyWatermarkPredicate(
+        leftPredicate(None).get.expr, 140000L + shift - 1,
+        Some(math.min(90000L + shift - 1, 90000L)))))
+      // IncrementalExecution passes no late watermark on the first batch and in legacy mode.
+      assert(leftPredicate(None).exists {
+        case JoinStateKeyWatermarkPredicate(_, stateWatermark, None) =>
+          stateWatermark == 140000L + shift - 1
+        case _ => false
+      })
+    }
+  }
+
   for (boundEventTime <- Seq(false, true)) {
     test(s"range eviction keeps the bounded column, event-time bound=$boundEventTime") {
       val watermark = new MetadataBuilder().putLong(EventTimeWatermark.delayKey, 1000L).build()
@@ -219,6 +245,34 @@ class StreamingSymmetricHashJoinHelperSuite extends StreamTest {
       (Some(0L), Some(0L)))
   }
 
+  test("V4 lookups use the own event-time key when no opposite key bounds the state") {
+    val metadata = new MetadataBuilder().putLong(EventTimeWatermark.delayKey, 1000).build()
+    val lk = AttributeReference("lk", IntegerType)()
+    val lt = AttributeReference("lt", TimestampType, metadata = metadata)()
+    val expiry = AttributeReference("expiry", TimestampType)()
+    val rk = AttributeReference("rk", IntegerType)()
+    val rt = AttributeReference("rt", TimestampType)()
+    val left = Seq(lk, lt, expiry)
+    val leftKeys = Seq(lk, lt)
+    val rightKeys = Seq(rk, rt)
+    def lookupOrdinals(
+        right: Seq[Attribute],
+        condition: Option[Expression]): (Option[Int], Option[Int]) = {
+      val predicates = StreamingSymmetricHashJoinHelper.getStateWatermarkPredicates(
+        left, right, leftKeys, rightKeys, condition, Some(20000), Some(10000), false)
+      (StreamingSymmetricHashJoinHelper.getStateKeyOrdinalForLookup(
+        left, leftKeys, right, rightKeys, predicates.left),
+        StreamingSymmetricHashJoinHelper.getStateKeyOrdinalForLookup(
+          right, rightKeys, left, leftKeys, predicates.right))
+    }
+
+    // Only lt has a watermark. The right state is evicted on rt by key, and the left state is
+    // not evicted but still stores and looks up its rows at lt.
+    assert(lookupOrdinals(Seq(rk, rt), None) === (Some(1), Some(1)))
+    // A left state evicted on expiry indexes expiry, so lt cannot serve its lookups.
+    val rw = AttributeReference("rw", TimestampType, metadata = metadata)()
+    assert(lookupOrdinals(Seq(rk, rt, rw), Some(rw <= expiry)) === (None, Some(1)))
+  }
 
   test("range timestamp selection stays stable as the watermark advances") {
     val first = AttributeReference("first", TimestampType)()
