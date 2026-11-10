@@ -742,15 +742,6 @@ case class MultiplyDTInterval(
 trait IntervalDivide extends BinaryExpression with SupportQueryContext {
   override def initQueryContext(): Option[QueryContext] = Some(origin.context)
 
-  // A rule copies the context of the node it replaces, which is `None` for the non-ANSI `Divide`
-  // that the analyzer turns into this division. The division raises in every mode, so it keeps
-  // its own context then.
-  override def copyTagsFrom(other: Expression): Unit = {
-    val ownContext = queryContext
-    super.copyTagsFrom(other)
-    if (queryContext.isEmpty) queryContext = ownContext
-  }
-
   override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
     val errorContext = getContextOrNullCode(ctx)
     val mathUtils = IntervalMathUtils.getClass.getCanonicalName.stripSuffix("$")
@@ -768,7 +759,7 @@ trait IntervalDivide extends BinaryExpression with SupportQueryContext {
 case class DivideYMInterval(
     interval: Expression,
     num: Expression)
-  extends IntervalDivide with ImplicitCastInputTypes with Serializable {
+  extends IntervalDivide with ImplicitCastInputTypes {
   override def nullIntolerant: Boolean = true
   override def left: Expression = interval
   override def right: Expression = num
@@ -802,7 +793,7 @@ case class DivideYMInterval(
 case class DivideDTInterval(
     interval: Expression,
     num: Expression)
-  extends IntervalDivide with ImplicitCastInputTypes with Serializable {
+  extends IntervalDivide with ImplicitCastInputTypes {
   override def nullIntolerant: Boolean = true
 
   override def left: Expression = interval

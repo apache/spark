@@ -22,7 +22,8 @@ import java.time.temporal.ChronoUnit
 
 import scala.language.implicitConversions
 
-import org.apache.spark.{SparkArithmeticException, SparkFunSuite}
+import org.apache.spark.{SparkArithmeticException, SparkConf, SparkFunSuite}
+import org.apache.spark.serializer.JavaSerializer
 import org.apache.spark.sql.catalyst.analysis.TypeCoercion
 import org.apache.spark.sql.catalyst.trees.CurrentOrigin.withOrigin
 import org.apache.spark.sql.catalyst.trees.Origin
@@ -516,7 +517,7 @@ class IntervalExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
     }
   }
 
-  test("SPARK-61352: an interval error keeps its query context after serialization") {
+  test("SPARK-61352: an interval error keeps its query context") {
     // The helpers evaluate a serialized copy of the expression, as an executor does. `TreeNode`
     // does not serialize `origin`, so the copy must carry the context itself. Each expression is
     // built inside `withOrigin` and evaluated outside it: evaluated inside, the copy would read
@@ -530,6 +531,18 @@ class IntervalExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
         sqlText = Some(s"select $query"))
       (withOrigin(o)(expr), s"== SQL (line 1, position 8) ==\nselect $query")
     }
+    // A cast to the type of the expression, with a context of its own (ANSI) or none (LEGACY).
+    def sameTypeCast(expr: Expression, evalMode: EvalMode.Value): Expression = {
+      val o = Origin(
+        line = Some(1),
+        startPosition = Some(0),
+        startIndex = Some(0),
+        stopIndex = Some(3),
+        sqlText = Some("cast"))
+      withOrigin(o)(Cast(expr, expr.dataType, None, evalMode))
+    }
+    val ser = new JavaSerializer(new SparkConf()).newInstance()
+
     val ymMin = Literal(Period.ofMonths(Int.MinValue))
     val dtMin = Literal(Duration.of(Long.MinValue, ChronoUnit.MICROS))
     Seq(
@@ -545,8 +558,22 @@ class IntervalExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
         MakeDTInterval(Literal(Int.MaxValue), Literal(0), Literal(0),
           Literal(Decimal(0, Decimal.MAX_LONG_DIGITS, 6))))
     ).foreach { case (expr, context) =>
-      withClue(s"$expr: ") {
-        checkExceptionInExpression[SparkArithmeticException](expr, context)
+      // A rule that replaces a node calls `copyTagsFrom` on the replacement, as `SimplifyCasts`
+      // does when it replaces a cast to the same type with its child.
+      val replacingCasts = Seq(EvalMode.ANSI, EvalMode.LEGACY).map { evalMode =>
+        sameTypeCast(expr, evalMode).transformDown {
+          case Cast(child, dataType, _, _) if child.dataType == dataType => child
+        }
+      }
+      // A transform of a deserialized copy, as `BindReferences` runs on an executor, rebuilds the
+      // node with an empty `origin`, and the rebuilt node takes the context of the copy.
+      val deserialized = ser.deserialize[Expression](ser.serialize(expr))
+      val rebuilt = deserialized.makeCopy(deserialized.productIterator.map(_.asInstanceOf[AnyRef])
+        .toArray)
+      (expr +: rebuilt +: replacingCasts).foreach { e =>
+        withClue(s"$e: ") {
+          checkExceptionInExpression[SparkArithmeticException](e, context)
+        }
       }
     }
   }
