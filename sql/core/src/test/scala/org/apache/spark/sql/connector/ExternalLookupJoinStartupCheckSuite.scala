@@ -178,7 +178,8 @@ class ExternalLookupJoinStartupCheckSuite extends QueryTest with SharedSparkSess
         s"WITH lk AS (TABLE $table) SELECT $hint lk.department " +
           s"FROM $stream s JOIN lk ON s.id = lk.id")
       checkError(
-        exception = startFailure(withClause("startup_bigint_stream", "startup_lookup")),
+        exception = queryFailure[AnalysisException](
+          withClause("startup_bigint_stream", "startup_lookup")),
         condition = "EXTERNAL_LOOKUP_JOIN_UNSUPPORTED.NO_LOOKUP_CANDIDATE",
         parameters = Map("table" -> "`SimpleExternalLookupTable`"))
       Seq(("startup_lookup", ""), ("startup_dual", "/*+ EXTERNAL_LOOKUP(lk) */")).foreach {
@@ -188,6 +189,7 @@ class ExternalLookupJoinStartupCheckSuite extends QueryTest with SharedSparkSess
           var query: StreamingQuery = null
           assert(startupWarnings {
             query = start(withClause("startup_stream", table, hint))
+            awaitInitialization(query)
           }.isEmpty)
           try {
             input.addData(1, 3)

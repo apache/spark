@@ -25,7 +25,7 @@ import org.apache.spark.sql.catalyst.optimizer.{EliminateResolvedHint, InlineCTE
 import org.apache.spark.sql.catalyst.plans.{Inner, LeftOuter}
 import org.apache.spark.sql.catalyst.plans.logical.{CTERelationDef, CTERelationRef,
   ExternalLookupHint, ExternalLookupJoin, Join, JoinStrategyHint, LogicalPlan, ResolvedHint,
-  SubqueryAlias, UnaryNode, View, WithCTE}
+  SetOperation, SubqueryAlias, UnaryNode, Union, View, WithCTE}
 import org.apache.spark.sql.catalyst.rules.Rule
 import org.apache.spark.sql.catalyst.streaming.WriteToStream
 import org.apache.spark.sql.catalyst.trees.TreePattern.{CTE, DATA_SOURCE_V2_RELATION,
@@ -284,9 +284,10 @@ object CheckExternalLookupJoin extends (LogicalPlan => Unit) {
           }
         case _ =>
       }
-      // An `EXTERNAL_LOOKUP` hint over a join is on the lookup side of no join, so no join could
-      // read it. It fails, as a hint that the user wrote is never silently dropped. A hint without
-      // a join below it, such as one over a single table, is ignored.
+      // An `EXTERNAL_LOOKUP` hint over a join, or over a set operation such as UNION with a join
+      // below one of its inputs, is on the lookup side of no join, so no join could read it. It
+      // fails, as a hint that the user wrote is never silently dropped. A hint without a join
+      // below it, such as one over a single table, is ignored.
       if (plan.containsPattern(EXTERNAL_LOOKUP_HINT)) {
         plan.foreach {
           case marker: ExternalLookupHint if readsJoin(marker.child) =>
@@ -297,10 +298,11 @@ object CheckExternalLookupJoin extends (LogicalPlan => Unit) {
     }
   }
 
-  @tailrec
   private def readsJoin(plan: LogicalPlan): Boolean = plan match {
     case _: Join => true
     case unary: UnaryNode => readsJoin(unary.child)
+    case union: Union => union.children.exists(readsJoin)
+    case setOperation: SetOperation => setOperation.children.exists(readsJoin)
     case _ => false
   }
 }

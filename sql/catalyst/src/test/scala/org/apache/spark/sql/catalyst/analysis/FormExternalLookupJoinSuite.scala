@@ -124,6 +124,8 @@ class FormExternalLookupJoinSuite extends AnalysisTest {
     val stray = analyze(dual.hint("external_lookup"))
     assert(stray.isInstanceOf[ExternalLookupHint])
     assert(FormExternalLookupJoin(stray) == dual)
+    // A hint over a set operation without a join below it passes validation too.
+    CheckExternalLookupJoin(analyze(dual.union(dual).hint("external_lookup")))
   }
 
   test("validation rejects the hint on a join that reads no DSv2 table") {
@@ -136,6 +138,14 @@ class FormExternalLookupJoinSuite extends AnalysisTest {
       // A hint over the join, through any unary operator, is on the lookup side of no join.
       stream.join(other, Inner, Some(stream.output(1) === other.output(0)))
         .select(other.output(1)).hint("external_lookup")
+        -> "INVALID_EXTERNAL_LOOKUP_HINT.NOT_ON_LOOKUP_SIDE",
+      // So is a hint over a set operation with a join below one of its inputs.
+      stream.join(other, Inner, Some(stream.output(1) === other.output(0)))
+        .select(other.output(1)).union(other.select(other.output(1))).hint("external_lookup")
+        -> "INVALID_EXTERNAL_LOOKUP_HINT.NOT_ON_LOOKUP_SIDE",
+      other.select(other.output(1)).except(
+        stream.join(other, Inner, Some(stream.output(1) === other.output(0)))
+          .select(other.output(1)), isAll = false).hint("external_lookup")
         -> "INVALID_EXTERNAL_LOOKUP_HINT.NOT_ON_LOOKUP_SIDE").foreach { case (join, condition) =>
       val analyzed = analyze(join)
       checkError(

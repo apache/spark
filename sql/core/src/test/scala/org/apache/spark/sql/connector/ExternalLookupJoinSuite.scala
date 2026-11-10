@@ -1754,11 +1754,32 @@ class ExternalLookupJoinSuite extends QueryTest with SharedSparkSession {
           },
           condition = "INVALID_EXTERNAL_LOOKUP_HINT.NOT_ON_LOOKUP_SIDE",
           parameters = Map.empty)
+        checkError(
+          exception = intercept[AnalysisException] {
+            sql(s"""
+              |SELECT /*+ EXTERNAL_LOOKUP */ id FROM (
+              |  SELECT l.id FROM external_lookup_left l JOIN $right r ON l.id = r.id
+              |  UNION ALL
+              |  SELECT l.id FROM external_lookup_left l JOIN $right r ON l.id = r.id)
+              |""".stripMargin)
+          },
+          condition = "INVALID_EXTERNAL_LOOKUP_HINT.NOT_ON_LOOKUP_SIDE",
+          parameters = Map.empty)
       }
     }
     checkError(
       exception = intercept[AnalysisException] {
         left.join(dual, left("id") === dual("id")).hint("external_lookup").queryExecution.analyzed
+      },
+      condition = "INVALID_EXTERNAL_LOOKUP_HINT.NOT_ON_LOOKUP_SIDE",
+      parameters = Map.empty)
+    // A set operation passes the hint to no join below it either.
+    val returns = streamOf(Seq(2).toDF("id"))
+    checkError(
+      exception = intercept[AnalysisException] {
+        left.join(dual, left("id") === dual("id"))
+          .union(returns.join(dual, returns("id") === dual("id")))
+          .hint("external_lookup").queryExecution.analyzed
       },
       condition = "INVALID_EXTERNAL_LOOKUP_HINT.NOT_ON_LOOKUP_SIDE",
       parameters = Map.empty)
