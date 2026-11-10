@@ -17,7 +17,11 @@
 
 package org.apache.spark.sql.catalyst.analysis.resolver
 
-import org.apache.spark.sql.catalyst.analysis.{FunctionResolution, UnresolvedTableValuedFunction}
+import org.apache.spark.sql.catalyst.analysis.{
+  FunctionResolution,
+  SQLTableFunction,
+  UnresolvedTableValuedFunction
+}
 import org.apache.spark.sql.catalyst.expressions.Expression
 import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
 
@@ -36,7 +40,11 @@ class TableValuedFunctionResolver(
    * The resolution happens in several steps:
    *  - Resolve all the function arguments using [[ExpressionResolver]].
    *  - Resolve the function itself using [[FunctionResolution]] getting a [[LogicalPlan]].
-   *  - Recursively resolve the resulting [[LogicalPlan]].
+   *  - Recursively resolve the resulting [[LogicalPlan]]. A SQL table function
+   *    ([[SQLTableFunction]]) is not supported yet, so it throws
+   *    [[ExplicitlyUnsupportedResolverFeature]] to fall back to the fixed-point Analyzer.
+   *    [[ResolverGuard]] cannot reject it upfront because a builtin name such as `range` can
+   *    resolve to a persistent SQL table function through the SQL path.
    *
    * Examples:
    *  - `range(...)` resolves to [[Range]] operator.
@@ -74,7 +82,12 @@ class TableValuedFunctionResolver(
       unresolvedTVF.copy(functionArgs = resolvedArguments)
     val resolvedTVF =
       functionResolution.resolveTableValuedFunction(unresolvedTVFWithResolvedArguments)
-    resolver.resolve(resolvedTVF)
+    resolvedTVF match {
+      case _: SQLTableFunction =>
+        throw new ExplicitlyUnsupportedResolverFeature(ResolutionGap.SQLTableFunctions)
+      case _ =>
+        resolver.resolve(resolvedTVF)
+    }
   }
 
   /**

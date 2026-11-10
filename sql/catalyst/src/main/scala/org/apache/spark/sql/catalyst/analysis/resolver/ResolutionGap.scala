@@ -27,6 +27,7 @@ sealed abstract class ResolutionGap(val name: String)
 
 object ResolutionGap {
   case object SQLFunctions extends ResolutionGap("SQL function expression")
+  case object SQLTableFunctions extends ResolutionGap("SQL table function")
   case object ViewBody extends ResolutionGap("View body")
   case object NonSQLFunction extends ResolutionGap("non-SQL function")
   case object DefaultReferencesInSetVariable
