@@ -21,8 +21,8 @@ import org.apache.spark.api.python.PythonEvalType
 import org.apache.spark.sql.catalyst.analysis.FormExternalLookupJoin
 import org.apache.spark.sql.catalyst.dsl.expressions._
 import org.apache.spark.sql.catalyst.dsl.plans._
-import org.apache.spark.sql.catalyst.expressions.{Expression, Literal, PythonUDF, Rand,
-  ScalarSubquery}
+import org.apache.spark.sql.catalyst.expressions.{Cast, Expression, ExternalUserDefinedFunction, If,
+  Literal, PythonUDF, RaiseError, Rand, ScalarSubquery}
 import org.apache.spark.sql.catalyst.plans.{Inner, JoinType, LeftAnti, LeftOuter, LeftSemi,
   PlanTest}
 import org.apache.spark.sql.catalyst.plans.logical.{ExternalLookupJoin, Join, JoinHint,
@@ -30,8 +30,9 @@ import org.apache.spark.sql.catalyst.plans.logical.{ExternalLookupJoin, Join, Jo
 import org.apache.spark.sql.catalyst.rules.RuleExecutor
 import org.apache.spark.sql.connector.catalog.{Table, TableCapability}
 import org.apache.spark.sql.execution.datasources.v2.DataSourceV2Relation
-import org.apache.spark.sql.types.{BooleanType, DoubleType, StructType}
+import org.apache.spark.sql.types.{BooleanType, DoubleType, IntegerType, StructType}
 import org.apache.spark.sql.util.CaseInsensitiveStringMap
+import org.apache.spark.udf.worker.UDFWorkerSpecification
 
 class PushPredicateThroughExternalLookupJoinSuite extends PlanTest {
   private object Optimize extends RuleExecutor[LogicalPlan] {
@@ -204,14 +205,15 @@ class PushPredicateThroughExternalLookupJoinSuite extends PlanTest {
   }
 
   test("keep a conjunct that a lookup-side stage cannot evaluate where it is") {
-    // The conjuncts read lookup columns, so a lookup-side stage would have to evaluate them, and
-    // a stage with a Python UDF or a subquery cannot be planned.
+    // A conjunct over lookup columns alone would go onto the lookup side, and a stage with a
+    // Python UDF or a subquery cannot be planned. A conjunct over both sides can only go into the
+    // join condition, which plans a UDF but not a subquery over lookup columns: a subquery stays
+    // in a filter above the join. One that reads no column moves into the condition of an inner
+    // join, as any conjunct without references does.
     val pythonUDFs = Seq[Expression](
       booleanPythonUDF(Seq(lookupValue)), booleanPythonUDF(Seq(streamKey, lookupValue)))
-    // A subquery over lookup columns cannot be in the condition of a lookup join, only in a filter
-    // above it, where it stays. One that reads no column moves into the condition of an inner join,
-    // as any conjunct without references does.
-    val unsupported = pythonUDFs :+ (lookupValue > scalarSubquery)
+    val unsupported = Seq(booleanPythonUDF(Seq(lookupValue)), lookupValue > scalarSubquery,
+      streamKey + lookupValue > scalarSubquery)
     for (joinType <- lookupJoinTypes; conjunct <- pythonUDFs) {
       val inCondition = lookupJoin(joinType, keysEqual, conjunct)
       assert(Optimize.execute(inCondition) eq inCondition)
@@ -232,6 +234,45 @@ class PushPredicateThroughExternalLookupJoinSuite extends PlanTest {
     comparePlans(
       Optimize.execute(join),
       expectedJoin(join, streamSide = stream.where(streamUDF), conjuncts = Seq(keysEqual)))
+  }
+
+  test("move a conjunct over both sides with a UDF from a filter into an inner join") {
+    // Only the join condition can evaluate a conjunct over both sides, and lookup planning plans a
+    // Python or an external UDF there, as a stream-side lookup parameter, in the residual, or in a
+    // filter above the join. A left outer join moves nothing from a filter into its condition.
+    val streamPythonUDF =
+      PythonUDF("udf", null, IntegerType, Seq(streamKey), PythonEvalType.SQL_BATCHED_UDF, true)
+    val streamExternalUDF = ExternalUserDefinedFunction(
+      name = Some("udf"),
+      workerSpec = UDFWorkerSpecification.getDefaultInstance,
+      payload = Array.emptyByteArray,
+      dataType = IntegerType,
+      children = Seq(streamKey),
+      udfDeterministic = true,
+      udfNullable = true)
+    Seq[Expression](
+      booleanPythonUDF(Seq(streamKey, lookupValue)),
+      lookupValue === streamPythonUDF,
+      lookupValue === streamExternalUDF).foreach { conjunct =>
+      val inner = lookupJoin(Inner, keysEqual)
+      comparePlans(
+        Optimize.execute(inner.where(conjunct)),
+        expectedJoin(inner, conjuncts = Seq(keysEqual, conjunct)))
+      val outer = lookupJoin(LeftOuter, keysEqual).where(conjunct)
+      assert(Optimize.execute(outer) eq outer)
+    }
+  }
+
+  test("keep a throwing conjunct of a filter above an inner join out of its condition") {
+    // In the condition, it would be evaluated on every stream row, also one without a match, and
+    // could fail the query on it. A conjunct over both sides that cannot throw still moves.
+    val throwing = lookupValue ===
+      If(streamKey < 0, Cast(new RaiseError(Literal("bad")), IntegerType), streamKey)
+    assert(throwing.throwable)
+    val inner = lookupJoin(Inner, keysEqual)
+    comparePlans(
+      Optimize.execute(inner.where(throwing && bothSidesConjunct)),
+      expectedJoin(inner, conjuncts = Seq(keysEqual, bothSidesConjunct)).where(throwing))
   }
 
   test("a filter that rejects null lookup columns turns a left outer lookup join into inner") {

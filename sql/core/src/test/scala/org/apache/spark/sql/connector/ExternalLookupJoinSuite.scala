@@ -33,7 +33,8 @@ import org.apache.spark.{SparkException, SparkIllegalArgumentException, SparkRun
 import org.apache.spark.rdd.DeterministicLevel
 import org.apache.spark.sql.{AnalysisException, Column, DataFrame, Encoders, Row, SaveMode,
   SQLContext}
-import org.apache.spark.sql.IntegratedUDFTestUtils.{shouldTestPythonUDFs, TestPythonUDF}
+import org.apache.spark.sql.IntegratedUDFTestUtils.{registerTestUDF, shouldTestPythonUDFs,
+  TestPythonUDF}
 import org.apache.spark.sql.QueryTest
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.analysis.{CheckExternalLookupJoin,
@@ -226,10 +227,12 @@ class ExternalLookupJoinSuite extends QueryTest with SharedSparkSession {
             // A filter on both sides, which predicate pushdown can move into the join condition.
             runStream(swipes.join(lookup, onEmployee)
               .where(swipes("door") =!= lookup("department") && swipes("minute") < 35)),
-            // An aggregate that ignores duplicates needs no ordinary left outer join, which the
-            // optimizer removes, with its filters pushed to the stream. A lookup join stays.
+            // An aggregate over a left outer join that counts a lookup value, so that the join
+            // stays, with its filters pushed to the stream.
             runStream(swipes.join(lookup, onEmployee, "left_outer").where(swipes("minute") > 15)
-              .groupBy(swipes("door")).agg(max(swipes("minute"))), "complete"))
+              .groupBy(swipes("door")).agg(max(swipes("minute")), count(lookup("department"))),
+              "complete"))
+          assert(runs.forall(_.plan.exists(_.isInstanceOf[PreparedExternalLookupJoin])))
           val pushed = runs.map(_.execution.optimizedPlan.collect {
             case relation: StreamingDataSourceV2ScanRelation => relation.pushedFilters
           }.flatten)
@@ -3464,10 +3467,14 @@ class ExternalLookupJoinSuite extends QueryTest with SharedSparkSession {
     // plans, with the same rows as without predicate pushdown.
     val directory = spark.read.format(classOf[CompositeExternalLookupDataSource].getName).load()
     val people = streamOf(Seq((1, 1), (1, 2), (2, 3)).toDF("tenant", "id"))
+    // A deterministic Scala UDF over a literal is a constant that optimization leaves as written.
+    val tenantOf = udf((tenant: Int) => tenant)
+    val tenantOne = Seq(Row(1, 1, 1, 1, "one-one"), Row(2, 3, 1, 3, "one-three"))
     Seq(
       // A constant tenant with a stream-side id.
-      (directory("tenant") === 1 && directory("id") === people("id"),
-        Seq(Row(1, 1, 1, 1, "one-one"), Row(2, 3, 1, 3, "one-three")),
+      (directory("tenant") === 1 && directory("id") === people("id"), tenantOne,
+        Set(("=", "tenant"), ("=", "id"))),
+      (directory("tenant") === tenantOf(lit(1)) && directory("id") === people("id"), tenantOne,
         Set(("=", "tenant"), ("=", "id"))),
       // A stream-side tenant with a range on `id` with a constant bound.
       (directory("tenant") === people("tenant") && directory("id") >= 2,
@@ -3481,6 +3488,63 @@ class ExternalLookupJoinSuite extends QueryTest with SharedSparkSession {
             CompositeExternalLookupDataSource.selectedLookupPredicates.get().toSet === selected)
         }
       }
+    }
+    // In a filter above an inner join, only predicate pushdown moves the comparison onto the
+    // lookup side, from where it is offered.
+    CompositeExternalLookupDataSource.selectedLookupPredicates.set(Seq.empty)
+    checkStream(
+      people.join(directory, directory("id") === people("id"))
+        .where(directory("tenant") === tenantOf(lit(1))),
+      tenantOne)
+    assert(CompositeExternalLookupDataSource.selectedLookupPredicates.get().toSet ===
+      Set(("=", "tenant"), ("=", "id")))
+    // As the only key of a join, over a source that serves it alone.
+    val employees = spark.read.format(classOf[SimpleExternalLookupDataSource].getName).load()
+    Seq(Nil, withoutPredicatePushdown).foreach { conf =>
+      withSQLConf(conf: _*) {
+        checkStream(
+          people.join(employees, employees("id") === udf((id: Int) => id).apply(lit(2))),
+          Seq(Row(1, 1, 2, "sales"), Row(1, 2, 2, "sales"), Row(2, 3, 2, "sales")))
+      }
+    }
+  }
+
+  test("a lookup key in WHERE whose stream-side value calls a Python UDF plans as in ON") {
+    assume(shouldTestPythonUDFs)
+    // The UDF returns its input. The key reads both sides, so predicate pushdown moves it from
+    // WHERE into an inner join's condition, as into an ordinary join's, where lookup planning
+    // evaluates the UDF on the stream side as the lookup parameter.
+    val normalize = TestPythonUDF("normalize_badge")
+    registerTestUDF(normalize, spark)
+    val directory = spark.read.format(classOf[SimpleExternalLookupDataSource].getName).load()
+    withTempView("badge_swipes", "employee_directory") {
+      streamOf(Seq((1, "lobby"), (3, "garage")).toDF("employee", "door"))
+        .createOrReplaceTempView("badge_swipes")
+      directory.createOrReplaceTempView("employee_directory")
+      val swipes = spark.table("badge_swipes")
+      val expected = Seq(Row("lobby", "engineering"), Row("lobby", "research"))
+      val key = "d.id = normalize_badge(s.employee)"
+      Seq(
+        sql(s"SELECT s.door, d.department FROM badge_swipes s JOIN employee_directory d ON $key"),
+        sql(s"SELECT s.door, d.department FROM badge_swipes s, employee_directory d WHERE $key"),
+        sql("SELECT s.door, d.department " +
+          s"FROM badge_swipes s CROSS JOIN employee_directory d WHERE $key"),
+        sql("SELECT s.door, d.department " +
+          s"FROM badge_swipes s JOIN employee_directory d ON TRUE WHERE $key"),
+        swipes.crossJoin(directory).where(directory("id") === normalize(swipes("employee")))
+          .select(swipes("door"), directory("department"))).foreach { query =>
+        val run = runStream(query)
+        assert(run.plan.exists(_.isInstanceOf[PreparedExternalLookupJoin]))
+        QueryTest.sameRows(expected, run.rows).foreach(fail(_))
+      }
+      // With another key in ON, the one in WHERE is offered too.
+      SimpleExternalLookupDataSource.resetCounters()
+      checkStream(
+        sql("SELECT s.door, d.department FROM badge_swipes s JOIN employee_directory d " +
+          s"ON s.employee = d.id WHERE $key"),
+        expected)
+      assert(SimpleExternalLookupDataSource.lookupCandidates.get() ===
+        Seq(("=", "id", IntegerType), ("=", "id", IntegerType)))
     }
   }
 
@@ -4714,17 +4778,20 @@ class ExternalLookupJoinSuite extends QueryTest with SharedSparkSession {
 
   test("an aggregate over a filtered lookup join runs") {
     // Exchange reuse canonicalizes the shuffle of the aggregate, with the filter and the lookup
-    // join below it, and the filter reads the output of the canonical join.
+    // join below it, and the filter reads the output of the canonical join. The aggregate counts
+    // a lookup value, so that the optimizer keeps the left outer join.
     val lookup = spark.read.format(classOf[SimpleExternalLookupDataSource].getName).load()
     val swipes = streamOf(Seq((1, "lobby", 10), (2, "garage", 20), (3, "dock", 30),
       (1, "garage", 40)).toDF("employee", "door", "minute"))
-    Seq("inner" -> Seq(Row("garage", 40)),
-        "left_outer" -> Seq(Row("garage", 40), Row("dock", 30))).foreach {
+    Seq("inner" -> Seq(Row("garage", 40, 3L)),
+        "left_outer" -> Seq(Row("garage", 40, 3L), Row("dock", 30, 0L))).foreach {
       case (joinType, expected) =>
         val latestByDoor = swipes.join(lookup, swipes("employee") === lookup("id"), joinType)
           .where(swipes("minute") > 15)
-          .groupBy(swipes("door")).agg(max(swipes("minute")))
-        QueryTest.sameRows(expected, runStream(latestByDoor, "complete").rows).foreach(fail(_))
+          .groupBy(swipes("door")).agg(max(swipes("minute")), count(lookup("department")))
+        val run = runStream(latestByDoor, "complete")
+        assert(run.plan.exists(_.isInstanceOf[PreparedExternalLookupJoin]), joinType)
+        QueryTest.sameRows(expected, run.rows).foreach(fail(_))
     }
     // Also with a filter on a lookup column that keeps the rows without a match, which stays above
     // a left outer join.
@@ -4768,6 +4835,30 @@ class ExternalLookupJoinSuite extends QueryTest with SharedSparkSession {
       assert(residual.exists(SubqueryExpression.hasSubquery), condition)
       withSQLConf(SQLConf.OPTIMIZER_EXCLUDED_RULES.key -> PushDownPredicates.ruleName) {
         QueryTest.sameRows(expected, runStream(joined).rows).foreach(fail(_))
+      }
+    }
+  }
+
+  test("a lookup-side guard keeps a key equality from failing on the lookup rows it rejects") {
+    // The guard reads lookup columns only, so predicate pushdown moves it onto the lookup side, as
+    // it does for an ordinary join, and the key that casts the guarded column never sees `abc`.
+    withSQLConf(SQLConf.ANSI_ENABLED.key -> "true") {
+      SimpleExternalLookupDataSource.departmentsById.set(
+        Map(1 -> Seq("7", "abc"), 2 -> Seq("abc")))
+      val codes = spark.read.format(classOf[SimpleExternalLookupDataSource].getName).load()
+      val scans = streamOf(Seq((1, 7), (2, 5)).toDF("id", "x"))
+      val sameId = scans("id") === codes("id")
+      val guard = codes("department").rlike("^[0-9]+$")
+      val key = codes("department").cast("int") === scans("x")
+      val matched = Seq(Row(1, 7, 1, "7"))
+      for {
+        condition <- Seq(sameId && guard && key, sameId && key && guard)
+        (joinType, expected) <-
+          Seq("inner" -> matched, "left_outer" -> (matched :+ Row(2, 5, null, null)))
+      } {
+        val run = runStream(scans.join(codes, condition, joinType))
+        assert(run.plan.exists(_.isInstanceOf[PreparedExternalLookupJoin]), joinType)
+        QueryTest.sameRows(expected, run.rows).foreach(error => fail(s"$joinType: $error"))
       }
     }
   }

@@ -3221,24 +3221,42 @@ object PushPredicateThroughJoin extends Rule[LogicalPlan] with PredicateHelper {
   }
 
   /**
-   * [[split]] for an external lookup join. A conjunct over lookup columns that a lookup-side stage
-   * cannot evaluate, such as one with a Python UDF or a subquery, is neither pushed nor moved into
-   * the condition, so it is left out of the result. A conjunct without references, such as a
-   * literal, belongs to neither side. It stays with the common conditions, so that a condition
-   * that folds to false keeps its result without a lookup, instead of leaving a join whose stream
-   * side is empty. A comparison of a lookup column with a constant moves as for a join; lookup
-   * planning still offers it to the connector as a lookup candidate.
+   * [[split]] for an external lookup join. A conjunct over lookup columns alone goes onto the
+   * lookup side, so one that a lookup-side stage cannot evaluate, such as one with a Python UDF or
+   * a subquery, is neither pushed nor moved into the condition, and it is left out of the result.
+   * A conjunct over both sides can only go into the condition, which plans a UDF but not a
+   * subquery, so it is left out only when it holds a subquery. A conjunct without references,
+   * such as a literal, belongs to neither side. It stays with the common conditions, so that a
+   * condition that folds to false keeps its result without a lookup, instead of leaving a join
+   * whose stream side is empty. A comparison of a lookup column with a constant moves as for a
+   * join; lookup planning still offers it to the connector as a lookup candidate.
    *
    * @return (canEvaluateInLeft, canEvaluateInRight, haveToEvaluateInBoth)
    */
   private def splitLookupJoin(condition: Seq[Expression], join: ExternalLookupJoin) = {
     val movable = condition.filterNot { cond =>
-      cond.references.exists(join.right.outputSet.contains) &&
-        !ExternalLookupJoinShapes.canEvaluateInLookupStage(cond)
+      cond.references.exists(join.right.outputSet.contains) && (
+        if (cond.references.subsetOf(join.right.outputSet)) {
+          !ExternalLookupJoinShapes.canEvaluateInLookupStage(cond)
+        } else {
+          SubqueryExpression.hasSubquery(cond)
+        })
     }
     val (withoutReferences, withReferences) = movable.partition(_.references.isEmpty)
     val (left, right, common) = split(withReferences, join.left, join.right)
     (left, right, common ++ withoutReferences)
+  }
+
+  /**
+   * [[canEvaluateWithinJoin]] for the condition of an inner external lookup join, which also
+   * accepts an external UDF: lookup planning evaluates it on the stream side, or in a filter above
+   * the join, as it evaluates a Python UDF.
+   */
+  private def canEvaluateWithinLookupJoin(expr: Expression): Boolean = expr match {
+    case udf: ExternalUserDefinedFunction => udf.deterministic
+    case _: Unevaluable | _: SubqueryExpression | _: PythonUDF | _: AttributeReference =>
+      canEvaluateWithinJoin(expr)
+    case e => e.deterministic && e.children.forall(canEvaluateWithinLookupJoin)
   }
 
   private def canPushThrough(joinType: JoinType): Boolean = joinType match {
@@ -3343,8 +3361,8 @@ object PushPredicateThroughJoin extends Rule[LogicalPlan] with PredicateHelper {
       val (newJoinConditions, rightFilterConditionsToPush) = j.joinType match {
         case Inner =>
           // don't push throwable expressions into join condition
-          (commonFilterCondition.filter(cond => canEvaluateWithinJoin(cond) && !cond.throwable),
-            rightFilterConditions)
+          (commonFilterCondition.filter(cond =>
+            canEvaluateWithinLookupJoin(cond) && !cond.throwable), rightFilterConditions)
         // A filter on lookup columns above a left outer join also removes the null-padded rows of
         // stream rows without a match, so it stays above. EliminateOuterJoin first makes the join
         // inner when the filter rejects nulls. A semi or anti join outputs no lookup column.

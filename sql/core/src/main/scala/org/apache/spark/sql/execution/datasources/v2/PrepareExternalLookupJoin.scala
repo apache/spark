@@ -135,15 +135,16 @@ object PrepareExternalLookupJoin extends Rule[LogicalPlan] with PredicateHelper
         }
       }
     }
-    // Predicate pushdown moves a comparison of a lookup column with a constant onto the lookup
-    // side, as for an ordinary join, so the source receives it as a pushed filter. A source may
-    // need it in its access path, as the constant tenant of a composite key, so it is offered as
-    // well. The filter stays, and Spark evaluates it on the returned rows either way.
+    // Predicate pushdown moves a comparison of a lookup column with a value that reads no column
+    // onto the lookup side, as for an ordinary join, so the source receives it as a pushed filter
+    // when it translates. A source may need it in its access path, as the constant tenant of a
+    // composite key, so it is offered as well, as the same comparison is from the join condition,
+    // whatever form its value takes after optimization, such as a deterministic UDF over a
+    // literal. The filter stays, and Spark evaluates it on the returned rows either way.
     val lookupSideOutput = AttributeSet(lookupPlan.relation.output ++
       lookupPlan.fields.map(_.toAttribute) ++ lookupPlan.upperStages.flatMap(_.output))
     val filterCandidates = lookupFilterConjuncts(lookupPlan).flatMap { conjunct =>
       ExternalLookupJoinShapes.lookupComparison(conjunct, AttributeSet.empty, lookupSideOutput)
-        .filter(_.parameter.isInstanceOf[Literal])
         .flatMap { comparison =>
           tableColumn(comparison.lookupField, lookupPlan).map { column =>
             OfferedLookupPredicate(comparison.parameter, column, None, comparison.comparison)
