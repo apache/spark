@@ -344,6 +344,13 @@ class StreamingTestsMixin:
                     "arg_type": "str",
                 },
             )
+            with self.assertRaises(PySparkValueError) as pe:
+                q.awaitTermination(-1)
+            self.check_error(
+                pe.exception,
+                errorClass="VALUE_NOT_POSITIVE",
+                messageParameters={"arg_name": "timeout", "arg_value": "int"},
+            )
             now = time.time()
             # test should take at least 2 seconds
             res = q.awaitTermination(2.6)
@@ -436,6 +443,13 @@ class StreamingTestsMixin:
                     "expected_type": "float or int",
                     "arg_type": "str",
                 },
+            )
+            with self.assertRaises(PySparkValueError) as pe:
+                self.spark.streams.awaitAnyTermination(-1)
+            self.check_error(
+                pe.exception,
+                errorClass="VALUE_NOT_POSITIVE",
+                messageParameters={"arg_name": "timeout", "arg_value": "int"},
             )
             now = time.time()
             # test should take at least 2 seconds
