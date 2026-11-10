@@ -32,7 +32,7 @@ import org.apache.spark.api.python.PythonEvalType
 import org.apache.spark.sql.catalyst.{InternalRow, TableIdentifier}
 import org.apache.spark.sql.catalyst.analysis.MultiInstanceRelation
 import org.apache.spark.sql.catalyst.encoders.ExpressionEncoder
-import org.apache.spark.sql.catalyst.expressions.{Add, And, Attribute, AttributeReference, Cast, Contains, EndsWith, EqualTo, ExpressionSet, GreaterThan, Literal, PythonUDF, ScalarSubquery, StartsWith}
+import org.apache.spark.sql.catalyst.expressions.{Add, And, Attribute, AttributeReference, Cast, Contains, EndsWith, EqualTo, ExpressionSet, GreaterThan, Literal, PythonUDF, ScalarSubquery, StartsWith, Year}
 import org.apache.spark.sql.catalyst.optimizer.ConvertToLocalRelation
 import org.apache.spark.sql.catalyst.parser.ParseException
 import org.apache.spark.sql.catalyst.plans.logical.{Filter, LeafNode, LocalRelation, LogicalPlan, OneRowRelation, Project}
@@ -3084,7 +3084,7 @@ class DataFrameSuite extends SharedSparkSession
     def checkedQuery(): DataFrame = spark.range(0, 10, 1, 1)
       .select($"id", ($"id" % 3) as "b", f($"id") as "f", expr("try_divide(id, id % 3)") as "x")
       .where($"x".isNotNull && $"id" / $"b" > 1 && $"f" > 5 && $"x" < 10)
-    // With three expensive aliases, so the projection split is involved too. The division over
+    // With several expensive aliases, so the projection split is involved too. The division over
     // `g` can fail, so the projection is not split and the filter stays as written.
     val k = udf((i: Long) => i)
     def splitQuery(): DataFrame = spark.range(0, 10, 1, 1)
@@ -3157,7 +3157,7 @@ class DataFrameSuite extends SharedSparkSession
   }
 
   test("SPARK-60730: an expensive filter condition sees the rows a later condition drops " +
-    "unless that condition is a plain comparison") {
+    "unless that condition can not fail") {
     val p = udf((i: Long) => { require(i > 5, s"p called with $i"); i })
     // `p` only works for the ids the later conjunct keeps, so these queries depend on that
     // conjunct being pushed below the projection and evaluated first.
@@ -3165,20 +3165,35 @@ class DataFrameSuite extends SharedSparkSession
       .select($"id", p($"id") as "p")
       .where($"p" > 0 && later)
     val expected = (6L until 10L).map(i => Row(i, i))
-    // A plain comparison can not fail, so it is still pushed.
-    checkAnswer(query($"id" > 5), expected)
-    // An addition is not a plain comparison, so it now stays behind `p > 0` in the top filter,
-    // as in Spark 4.1.
-    val plan = query($"id" + 1 > 6).queryExecution.optimizedPlan
-    val heldBehind = plan.collectFirst {
-      case Filter(And(first, second), _: Project) =>
-        !first.exists(_.isInstanceOf[Add]) && second.exists(_.isInstanceOf[Add])
+    withSQLConf(SQLConf.ANSI_ENABLED.key -> "true") {
+      // A comparison can not fail, so it is still pushed.
+      checkAnswer(query($"id" > 5), expected)
+      // In ANSI mode, an addition can fail, so it now stays behind `p > 0` in the top filter,
+      // as in Spark 4.1.
+      val plan = query($"id" + 1 > 6).queryExecution.optimizedPlan
+      val heldBehind = plan.collectFirst {
+        case Filter(And(first, second), _: Project) =>
+          !first.exists(_.isInstanceOf[Add]) && second.exists(_.isInstanceOf[Add])
+      }
+      assert(heldBehind === Some(true), plan)
+      // The legacy config pushes it below the projection again, ahead of `p > 0`.
+      withSQLConf(SQLConf.LEGACY_PUSH_FILTER_AHEAD_OF_EXPENSIVE_CONJUNCT.key -> "true") {
+        checkAnswer(query($"id" + 1 > 6), expected)
+      }
     }
-    assert(heldBehind === Some(true), plan)
-    // The legacy config pushes it below the projection again, ahead of `p > 0`.
-    withSQLConf(SQLConf.LEGACY_PUSH_FILTER_AHEAD_OF_EXPENSIVE_CONJUNCT.key -> "true") {
+    // With ANSI mode off, it can not fail, so it is pushed.
+    withSQLConf(SQLConf.ANSI_ENABLED.key -> "false") {
       checkAnswer(query($"id" + 1 > 6), expected)
     }
+    // A field of a date can not fail either.
+    val d = udf((v: java.sql.Date) => v)
+    val datePlan = Seq(java.sql.Date.valueOf("2024-01-02")).toDF("v").select($"v", d($"v") as "d")
+      .where($"d" =!= java.sql.Date.valueOf("2000-01-01") && year($"v") === 2024)
+      .queryExecution.optimizedPlan
+    val datePushed = datePlan.collectFirst {
+      case Project(_, Filter(condition, _)) => condition.exists(_.isInstanceOf[Year])
+    }
+    assert(datePushed === Some(true), datePlan)
     // A LIKE without `_` becomes plain string checks, so it is pushed too.
     val s = udf((v: String) => v)
     Seq("1%", "%2", "%0%", "1%2").foreach { pattern =>
@@ -3192,8 +3207,8 @@ class DataFrameSuite extends SharedSparkSession
     }
   }
 
-  test("SPARK-60730: a filter condition that can fail is not evaluated ahead of a condition " +
-    "over a Python UDF") {
+  test("SPARK-60730: a filter condition that can fail over a UDF alias is not evaluated ahead " +
+    "of a condition over a Python UDF, and a non-deterministic one only sees the rows it keeps") {
     import IntegratedUDFTestUtils._
     assume(shouldTestPythonUDFs)
     val py1 = TestPythonUDF("py1", Some(LongType))

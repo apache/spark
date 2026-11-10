@@ -103,8 +103,12 @@ class OffsetSeqLogSuite extends SharedSparkSession {
   }
 
   test("SPARK-60730: old checkpoints push filters ahead of expensive conditions as before") {
-    val (_, offsetSeq) = readFromResource("offset-log-version-2.1.0")
+    // A checkpoint written before Spark 4.2 reads `avoidDoubleFilterEval` as false, which pushes
+    // every filter anyway, so take one of Spark 4.2.
+    val (_, offsetSeq) = readFromResource(
+      "checkpoint-version-4.2.0-deduplication-metadata-boundary/offsets")
     val metadata = offsetSeq.metadataOpt.get
+    assert(OffsetSeqMetadata.readValue(metadata, SQLConf.AVOID_DOUBLE_FILTER_EVAL) == "true")
     assert(!metadata.conf.contains(SQLConf.LEGACY_PUSH_FILTER_AHEAD_OF_EXPENSIVE_CONJUNCT.key))
     assert(OffsetSeqMetadata.readValue(
       metadata, SQLConf.LEGACY_PUSH_FILTER_AHEAD_OF_EXPENSIVE_CONJUNCT) == "true")
