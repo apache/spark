@@ -269,6 +269,7 @@ object StreamingSymmetricHashJoinHelper extends Logging {
           }
         }
       } else if (isWatermarkDefinedOnInput) { // case 2 in the StreamingSymmetricHashJoinExec docs
+        val otherSideEventTime = otherSideInputAttributes.find(_.metadata.contains(delayKey))
         getStateValueWatermarkForInput(oneSideInputAttributes, otherSideInputAttributes,
           condition, eventTimeWatermarkForEviction).flatMap { case (attribute, watermark) =>
           // Late filtering only constrains the input's event-time column. A different indexed
@@ -279,7 +280,7 @@ object StreamingSymmetricHashJoinHelper extends Logging {
           }.flatMap { lateWatermark =>
             // Also scan from the start if the derived cutoff exceeds the late-input watermark.
             StreamingJoinHelper.getStateValueWatermark(AttributeSet(Seq(attribute)),
-              AttributeSet(otherSideInputAttributes), condition, Some(lateWatermark))
+              AttributeSet(otherSideEventTime.toSeq), condition, Some(lateWatermark))
               .filter(_ <= lateWatermark)
           }
           watermarkExpression(Some(attribute), Some(watermark)).map { e =>
@@ -305,6 +306,8 @@ object StreamingSymmetricHashJoinHelper extends Logging {
       condition: Option[Expression],
       eventWatermark: Option[Long]): Option[(Attribute, Long)] = {
     val eventTime = inputAttributes.find(_.metadata.contains(delayKey))
+    // Only the first marked column is checked for late input in compatibility mode.
+    val otherEventTime = otherInputAttributes.find(_.metadata.contains(delayKey))
     // First try the watermarked column. If it has no inferable bound, try the other timestamp
     // columns in input schema order and use the first with a bound. This makes the indexed column
     // deterministic for a fixed input schema and join condition.
@@ -313,7 +316,7 @@ object StreamingSymmetricHashJoinHelper extends Logging {
     }
     candidates.iterator.flatMap { attribute =>
       StreamingJoinHelper.getStateValueWatermark(AttributeSet(Seq(attribute)),
-        AttributeSet(otherInputAttributes), condition, eventWatermark).map(attribute -> _)
+        AttributeSet(otherEventTime.toSeq), condition, eventWatermark).map(attribute -> _)
     }.take(1).toSeq.headOption
   }
 
