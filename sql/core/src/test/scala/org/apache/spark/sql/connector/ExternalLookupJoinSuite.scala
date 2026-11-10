@@ -38,9 +38,9 @@ import org.apache.spark.sql.catalyst.analysis.{CheckExternalLookupJoin, FormExte
   NoSuchTableException}
 import org.apache.spark.sql.catalyst.expressions.{Add, Attribute, AttributeMap, AttributeReference,
   Cast, EqualTo, Expression, GenericInternalRow, LessThan, Literal, Rand, UnsafeProjection}
-import org.apache.spark.sql.catalyst.plans.QueryPlan
-import org.apache.spark.sql.catalyst.plans.logical.{Deduplicate, LeafNode, LogicalPlan,
-  PreparedExternalLookupJoin}
+import org.apache.spark.sql.catalyst.plans.{Inner, QueryPlan}
+import org.apache.spark.sql.catalyst.plans.logical.{Deduplicate, ExternalLookupJoin, Join, JoinHint,
+  LeafNode, LogicalPlan, PreparedExternalLookupJoin}
 import org.apache.spark.sql.catalyst.trees.TreePattern.LOOKUP_ONLY_RELATION
 import org.apache.spark.sql.catalyst.util.{ArrayBasedMapData, GenericArrayData}
 import org.apache.spark.sql.classic.Dataset
@@ -1736,23 +1736,44 @@ class ExternalLookupJoinSuite extends QueryTest with SharedSparkSession {
   }
 
   test("a query without a lookup-only table is not searched for lookup joins") {
-    // The relation of a lookup-only table carries a tree pattern, so the analysis check and the
-    // formation leave any other plan alone, without asking its tables for their capabilities.
+    // The relation of a lookup-only table carries a tree pattern, so the analysis check, the
+    // formation and the preparation leave any other plan alone, without asking its tables for
+    // their capabilities.
     val dual = spark.read.format(classOf[DualCapabilityExternalLookupDataSource].getName).load()
     val swipes = streamOf(Seq((1, "lobby")).toDF("employee", "door"))
     val batch = dual.as("a").join(dual.as("b"), col("a.id") === col("b.id"))
       .select(col("a.id"), col("b.department"))
+    val withSubquery = batch.where(col("a.id") <= dual.select(max("id")).scalar())
     val stream = swipes.join(dual, swipes("employee") === dual("id"))
-    Seq(batch.queryExecution.analyzed, runStream(stream).execution.analyzed).foreach { plan =>
+    Seq(batch.queryExecution.analyzed, withSubquery.queryExecution.analyzed,
+        runStream(stream).execution.analyzed).foreach { plan =>
       // Computes the pattern bits, with which each relation asks its table once.
       assert(plan.containsPattern(LOOKUP_ONLY_RELATION) === false)
       DualCapabilityExternalLookupTable.capabilityCalls.set(0)
       CheckExternalLookupJoin(plan)
       assert(FormExternalLookupJoin(plan) eq plan)
+      assert(PrepareExternalLookupJoin(plan) eq plan)
       assert(DualCapabilityExternalLookupTable.capabilityCalls.get() === 0)
     }
     checkAnswer(batch, Seq(Row(1, "engineering"), Row(1, "engineering"), Row(1, "research"),
       Row(1, "research"), Row(2, "sales")))
+    // A lookup-only relation that no lookup join reads still fails as a batch scan when the
+    // lookup joins are prepared, alone and next to a lookup join.
+    def lookupOnly: DataFrame =
+      spark.read.format(classOf[SimpleExternalLookupDataSource].getName).load()
+    val lookup = lookupOnly
+    val lookupJoin = FormExternalLookupJoin(
+      swipes.join(lookup, swipes("employee") === lookup("id")).queryExecution.analyzed)
+    assert(lookupJoin.exists(_.isInstanceOf[ExternalLookupJoin]))
+    val unread = lookupOnly.queryExecution.analyzed
+    Seq(unread, Join(lookupJoin, unread, Inner, None, JoinHint.NONE)).foreach { plan =>
+      checkError(
+        exception = intercept[AnalysisException] { PrepareExternalLookupJoin(plan) },
+        condition = "UNSUPPORTED_FEATURE.TABLE_OPERATION",
+        parameters = Map(
+          "tableName" -> "`SimpleExternalLookupTable`",
+          "operation" -> "batch scan"))
+    }
   }
 
   test("external lookup sends the requests of a task through one reader") {
