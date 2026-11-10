@@ -2435,7 +2435,11 @@ abstract class StreamingLeftSemiJoinBase extends StreamingJoinSuite {
       ("equal event times", "leftTime = rightTime", 102, 102, 105, 2L, 0L),
       // The left key leftTime + 10 seconds of (7, 100) stays above the 100-second cutoff.
       ("a key shifted by less than the watermark step",
-        "leftTime + INTERVAL 10 SECONDS = rightTime", 120, 130, 150, 3L, 1L))) {
+        "leftTime + INTERVAL 10 SECONDS = rightTime", 120, 130, 150, 3L, 1L),
+      // A value cutoff of the watermark less 10 seconds: (1, 130) is at or below 140 seconds.
+      ("a time interval",
+        "leftTime BETWEEN rightTime - INTERVAL 10 SECONDS AND rightTime + INTERVAL 10 SECONDS",
+        125, 130, 150, 4L, 2L))) {
     test(s"left semi join keeps a same-batch match between the watermarks: $name") {
       withSQLConf(SQLConf.STREAMING_NO_DATA_MICRO_BATCHES_ENABLED.key -> "false") {
         val leftInput = MemoryStream[(Int, Int)]
@@ -2461,6 +2465,39 @@ abstract class StreamingLeftSemiJoinBase extends StreamingJoinSuite {
           // batch, together with the other rows at or below the cutoffs.
           assertNumStateRows(total = rowsAfter, updated = 1))
       }
+    }
+  }
+
+  // The right cutoff comes from a bound on rightExpiry but is applied to rightTime, so a right
+  // row can be at or below the cutoff at the late-events watermark and still match a left row
+  // of the same batch. Storing only the right rows above that cutoff would drop this match.
+  test("left semi join keeps a same-batch match bounded by another right column") {
+    withSQLConf(SQLConf.STREAMING_NO_DATA_MICRO_BATCHES_ENABLED.key -> "false") {
+      val leftInput = MemoryStream[(Int, Int, Int)]
+      val rightInput = MemoryStream[(Int, Int, Int)]
+      val left = leftInput.toDF()
+        .select($"_1".as("leftKey"), timestamp_seconds($"_2").as("leftTime"))
+        .withWatermark("leftTime", "0 seconds")
+      val right = rightInput.toDF()
+        .select($"_1".as("rightKey"), timestamp_seconds($"_2").as("rightTime"),
+          timestamp_seconds($"_3").as("rightExpiry"))
+        .withWatermark("rightTime", "0 seconds")
+      val joined = left.join(right, expr("leftKey = rightKey AND " +
+        "rightExpiry >= leftTime + INTERVAL 30 SECONDS AND " +
+        "leftTime >= rightTime - INTERVAL 1 HOUR"), "left_semi")
+        .select($"leftKey", $"leftTime".cast("int"))
+
+      testStream(joined)(
+        MultiAddData(leftInput, (7, 100, 0))(rightInput, (8, 100, 1000)),
+        CheckNewAnswer(),
+        MultiAddData(leftInput, (7, 150, 0))(rightInput, (8, 150, 1000)),
+        CheckNewAnswer(),
+        assertNumStateRows(total = 3, updated = 4),
+        // The late-events watermark is 100 seconds, and the right cutoff at it is 130 seconds
+        // less 1 ms, above the right row's 110 seconds.
+        MultiAddData(leftInput, (1, 120, 0))(rightInput, (1, 110, 1000)),
+        CheckNewAnswer((1, 120)),
+        assertNumStateRows(total = 2, updated = 1))
     }
   }
 

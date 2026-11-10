@@ -897,8 +897,13 @@ case class StreamingSymmetricHashJoinExec(
         //   if input is going to be evicted in this batch. Though, input should be added to the
         //   state store if it's right outer join or full outer join, as unmatched output is
         //   handled during state eviction. A left semi join processes the right side first, so
-        //   the left input of this batch has not probed it yet: the input is added, and the
-        //   eviction at the end of the batch removes it.
+        //   the left input of this batch has not probed it yet: every input is added, including
+        //   one this batch evicts, and the eviction at the end of the batch removes it. Skipping
+        //   the inputs that no left row passing late filtering can match would need a cutoff on
+        //   each right column that is exact for the late-events watermark. The cutoff derivation
+        //   does not give one: it can apply a bound on another right column to the right event
+        //   time, and it counts a day as 24 hours and reads truncating casts as exact.
+        //   TODO(SPARK-61344, SPARK-61381): skip such inputs once the cutoff is exact.
         val isLeftSemiWithMatch = joinType == LeftSemi && joinSide == LeftSide && iteratorNotEmpty
         val shouldAddToState = if (isLeftSemiWithMatch) {
           false
