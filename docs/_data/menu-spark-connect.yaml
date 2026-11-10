@@ -1,0 +1,52 @@
+- text: Setting up Spark Connect
+  url: spark-connect-setup.html
+  subitems:
+    - text: Starting a Spark Connect server
+      url: spark-connect-setup.html#starting-a-spark-connect-server
+    - text: Interactive analysis
+      url: spark-connect-setup.html#interactive-analysis-with-spark-connect
+    - text: Connection strings
+      url: spark-connect-setup.html#connection-strings
+    - text: Persistent local server
+      url: spark-connect-setup.html#faster-local-iteration-with-a-persistent-connect-server
+    - text: Standalone applications
+      url: spark-connect-setup.html#spark-connect-in-standalone-applications
+    - text: Switching between Spark Connect and Spark Classic
+      url: spark-connect-setup.html#switching-between-spark-connect-and-spark-classic
+    - text: Client application authentication
+      url: spark-connect-setup.html#client-application-authentication
+    - text: Routing through a shared ingress
+      url: spark-connect-setup.html#routing-through-a-shared-ingress-or-reverse-proxy
+- text: Spark Connect Programming Guide
+  url: spark-connect-programming-guide.html
+  subitems:
+    - text: Spark Connect and Spark Classic
+      url: spark-connect-programming-guide.html#spark-connect-and-spark-classic
+    - text: Installing the client
+      url: spark-connect-programming-guide.html#installing-the-client
+    - text: Starting a server
+      url: spark-connect-programming-guide.html#starting-a-server
+    - text: Connecting to a server
+      url: spark-connect-programming-guide.html#connecting-to-a-server
+    - text: Sessions
+      url: spark-connect-programming-guide.html#sessions
+    - text: Running an application
+      url: spark-connect-programming-guide.html#running-an-application
+    - text: Configuration
+      url: spark-connect-programming-guide.html#configuration
+    - text: Artifacts
+      url: spark-connect-programming-guide.html#artifacts
+    - text: Python UDFs
+      url: spark-connect-programming-guide.html#python-udfs
+    - text: Reading and writing data
+      url: spark-connect-programming-guide.html#reading-and-writing-data
+    - text: Migrating from Spark Classic
+      url: spark-connect-programming-guide.html#migrating-from-spark-classic
+    - text: Client and server versions
+      url: spark-connect-programming-guide.html#client-and-server-versions
+    - text: Troubleshooting
+      url: spark-connect-programming-guide.html#troubleshooting
+- text: "Eager vs Lazy: Spark Connect vs Spark Classic"
+  url: spark-connect-gotchas.html
+- text: Extending Spark with Spark Server Libraries
+  url: spark-connect-server-libs.html
