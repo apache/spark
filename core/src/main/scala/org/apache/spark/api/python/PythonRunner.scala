@@ -553,25 +553,15 @@ private[spark] object BasePythonRunner extends Logging {
     }
   }
 
-  private[python] case class InitResponse(
-      error: Option[PythonWorkerInitError],
-      receivedAtMs: Long)
-
-  private[python] def readInitResponseFrame(stream: DataInputStream): InitResponse = {
+  private[python] def readInitResponseFrame(
+      stream: DataInputStream): Option[PythonWorkerInitError] = {
     stream.readInt() match {
       case SpecialLengths.START_OF_INIT_RESPONSE =>
-        val error = readInitResponse(stream)
-        InitResponse(error, System.currentTimeMillis())
+        readInitResponse(stream)
       case other =>
         throw SparkException.internalError(
           s"Expected the Python worker init response, but got $other")
     }
-  }
-
-  private[python] class PythonWorkerInputStream(
-      input: InputStream,
-      receiveInit: DataInputStream => InitResponse) extends DataInputStream(input) {
-    lazy val initResponse: Try[InitResponse] = Try(receiveInit(this))
   }
 
   /**
@@ -813,31 +803,49 @@ private[spark] abstract class BasePythonRunner[IN, OUT](
       new MonitorThread(SparkEnv.get, worker, context, releasedOrClosed).start()
     }
 
-    // Return an iterator that read lines from the process's stdout
-    val dataIn = if (usePipelined) {
-      createPipelinedDataIn(worker, writer, handle, context)
+    val readerInput = if (usePipelined) {
+      None
     } else {
-      val input = new ReaderInputStream(worker, writer, handle,
-        idleTimeoutSeconds, killOnIdleTimeout, context)
-      new PythonWorkerInputStream(
-        new BufferedInputStream(input, bufferSize), input.readInitResponse)
+      Some(new ReaderInputStream(worker, writer, handle,
+        idleTimeoutSeconds, killOnIdleTimeout, context, inputEnabled = false))
+    }
+    val dataIn = readerInput match {
+      case Some(input) => new DataInputStream(new BufferedInputStream(input, bufferSize))
+      case None => createPipelinedDataIn(worker, handle, context)
     }
     val stdoutIterator = newReaderIterator(
-      dataIn, writer, startTime, env, worker, handle, releasedOrClosed, context)
+      dataIn, writer, startTime, env, worker, handle, releasedOrClosed, context, readerInput)
+    if (usePipelined) {
+      initializePipelinedWorker(worker, writer, stdoutIterator, context)
+    }
+    // Return an iterator that reads the process's stdout after initialization.
     new InterruptibleIterator(context, stdoutIterator)
+  }
+
+  /** Complete pipelined init on the task thread before starting row input. */
+  private[python] def initializePipelinedWorker(
+      worker: PythonWorker,
+      writer: Writer,
+      reader: ReaderIterator,
+      context: TaskContext): Unit = {
+    context.killTaskIfInterrupted()
+    writer.open(new DataOutputStream(
+      new BufferedOutputStream(Channels.newOutputStream(worker.channel), bufferSize)))
+    if (reader.initialize()) {
+      BasePythonRunner.startPipelinedWriter(
+        new PipelinedWriterRunnable(worker, writer, bufferSize, context), context)
+    }
   }
 
   /**
    * Sets up pipelined mode: switches the socket to blocking mode and configures idle timeout.
-   * Sends the command and reads the init response synchronously on the task thread.
-   * After successful init, starts the input writer thread and returns a DataInputStream
-   * for reading output.
+   * Returns a DataInputStream for reading output. The caller sends the command and reads init
+   * synchronously on the task thread before starting the input writer thread.
    */
   private[python] def createPipelinedDataIn(
       worker: PythonWorker,
-      writer: Writer,
       handle: Option[PythonWorkerHandle],
-      context: TaskContext): PythonWorkerInputStream = {
+      context: TaskContext): DataInputStream = {
     // Switch the channel to blocking mode for true full-duplex I/O.
     // The channel is left in blocking mode after the task completes; with worker reuse
     // enabled the worker is returned to the idle pool, so PythonWorkerFactory.create()
@@ -855,27 +863,13 @@ private[spark] abstract class BasePythonRunner[IN, OUT](
     worker.channel.configureBlocking(true)
     worker.refresh() // re-initializes (no selector in blocking mode)
 
-    context.killTaskIfInterrupted()
-    writer.open(new DataOutputStream(
-      new BufferedOutputStream(Channels.newOutputStream(worker.channel), bufferSize)))
-
-    def inputStream(input: InputStream): PythonWorkerInputStream = {
-      val stream = new PythonWorkerInputStream(
-        new BufferedInputStream(input, bufferSize), BasePythonRunner.readInitResponseFrame)
-      // Complete init before producing rows; report init failures on the consumer's first pull.
-      if (stream.initResponse.toOption.exists(_.error.isEmpty)) {
-        BasePythonRunner.startPipelinedWriter(
-          new PipelinedWriterRunnable(worker, writer, bufferSize, context), context)
-      }
-      stream
-    }
-
     // Unix domain socket channels expose no java.net.Socket, so socket() throws
     // UnsupportedOperationException and SO_TIMEOUT-based idle detection is unavailable.
     // Fall back to reading straight from the channel (no idle timeout), matching how sync
     // mode also guards its setSoTimeout calls behind !isUnixDomainSock.
     if (isUnixDomainSock) {
-      return inputStream(Channels.newInputStream(worker.channel))
+      return new DataInputStream(new BufferedInputStream(
+        Channels.newInputStream(worker.channel), bufferSize))
     }
 
     // Set socket read timeout for idle timeout detection in pipelined mode.
@@ -942,7 +936,7 @@ private[spark] abstract class BasePythonRunner[IN, OUT](
         result
       }
     }
-    inputStream(socketInput)
+    new DataInputStream(new BufferedInputStream(socketInput, bufferSize))
   }
 
   protected def newWriter(
@@ -960,7 +954,8 @@ private[spark] abstract class BasePythonRunner[IN, OUT](
       worker: PythonWorker,
       handle: Option[PythonWorkerHandle],
       releasedOrClosed: AtomicBoolean,
-      context: TaskContext): Iterator[OUT]
+      context: TaskContext,
+      readerInput: Option[ReaderInputStream]): ReaderIterator
 
   /**
    * Responsible for writing the data from the PythonRDD's parent iterator to the
@@ -1180,13 +1175,23 @@ private[spark] abstract class BasePythonRunner[IN, OUT](
       worker: PythonWorker,
       handle: Option[PythonWorkerHandle],
       releasedOrClosed: AtomicBoolean,
-      context: TaskContext)
+      context: TaskContext,
+      readerInput: Option[ReaderInputStream])
     extends Iterator[OUT] {
 
     private var nextObj: OUT = _
     private var eos = false
     private var initialized = false
     private var initResponseTimeMs = 0L
+
+    private lazy val initResponse = Try {
+      val error = BasePythonRunner.readInitResponseFrame(stream)
+      initResponseTimeMs = System.currentTimeMillis()
+      if (error.isEmpty) {
+        readerInput.foreach(_.enableInput())
+      }
+      error
+    }
 
     // Track batches and data size for logging
     protected var batchesProcessed: Long = 0
@@ -1221,6 +1226,9 @@ private[spark] abstract class BasePythonRunner[IN, OUT](
      */
     protected def read(): OUT
 
+    /** Complete init before row production; report failures on the consumer's first pull. */
+    private[python] def initialize(): Boolean = initResponse.toOption.exists(_.isEmpty)
+
     /**
      * Waits for the worker's init response, which precedes all of its output, and throws the
      * error the worker reports if it failed to initialize. No output follows an init error.
@@ -1230,16 +1238,11 @@ private[spark] abstract class BasePythonRunner[IN, OUT](
         throw writer.exception.get
       }
       try {
-        val response = stream match {
-          case input: PythonWorkerInputStream => input.initResponse.get
-          case _ => BasePythonRunner.readInitResponseFrame(stream)
-        }
-        response.error.foreach { error =>
+        initResponse.get.foreach { error =>
           logDebug(s"Python worker failed to initialize with ${error.errorClass} " +
             s"(payload error: ${error.isPayloadError}) - ${taskIdentifier(context)}")
           throw newPythonException(error.traceback)
         }
-        initResponseTimeMs = response.receivedAtMs
       } catch handleException
       initialized = true
     }
@@ -1409,7 +1412,8 @@ private[spark] abstract class BasePythonRunner[IN, OUT](
       handle: Option[PythonWorkerHandle],
       idleTimeoutSeconds: Long,
       killOnIdleTimeout: Boolean,
-      context: TaskContext) extends InputStream {
+      context: TaskContext,
+      private var inputEnabled: Boolean = true) extends InputStream {
     private[this] var writerIfbhThreadLocalValue: Object = null
     private[this] val temp = new Array[Byte](1)
     private[this] val bufferStream = new DirectByteBufferOutputStream()
@@ -1427,19 +1431,13 @@ private[spark] abstract class BasePythonRunner[IN, OUT](
      */
     private[this] var buffer: ByteBuffer = _
     private[this] var hasInput = true
-    private[this] var readingInitResponse = false
 
     writer.open(new DataOutputStream(writerStream))
     buffer = bufferStream.toByteBuffer
 
-    /** Send the buffered command and read init without producing row input. */
-    private[python] def readInitResponse(stream: DataInputStream): InitResponse = {
-      readingInitResponse = true
-      try {
-        BasePythonRunner.readInitResponseFrame(stream)
-      } finally {
-        readingInitResponse = false
-      }
+    /** Allow row production after the caller finishes reading the init response. */
+    private[python] def enableInput(): Unit = {
+      inputEnabled = true
     }
 
     override def read(): Int = {
@@ -1486,7 +1484,7 @@ private[spark] abstract class BasePythonRunner[IN, OUT](
       //
       // This issue is subtle and several other alternative approaches were considered
       val buf = ByteBuffer.wrap(b, off, len)
-      if (!readingInitResponse && hasInput &&
+      if (inputEnabled && hasInput &&
           (worker.selectionKey.interestOps() & SelectionKey.OP_WRITE) == 0) {
         worker.selectionKey.interestOps(SelectionKey.OP_READ | SelectionKey.OP_WRITE)
       }
@@ -1525,11 +1523,11 @@ private[spark] abstract class BasePythonRunner[IN, OUT](
         }
         if (worker.selectionKey.isReadable) {
           n = worker.channel.read(buf)
-          if (readingInitResponse && n != 0) {
+          if (!inputEnabled && n != 0) {
             worker.selectionKey.interestOps(SelectionKey.OP_READ)
           }
         }
-        if (worker.selectionKey.isWritable && (!readingInitResponse ||
+        if (worker.selectionKey.isWritable && (inputEnabled ||
             (n == 0 && (worker.selectionKey.interestOps() & SelectionKey.OP_WRITE) != 0))) {
           val mainIfbhThreadLocalValue = InputFileBlockHolder.getThreadLocalValue()
           // Check whether the writer's thread local value has diverged from its parent's value:
@@ -1609,7 +1607,7 @@ private[spark] abstract class BasePythonRunner[IN, OUT](
 
     private def writeAdditionalInputToPythonWorker(): Unit = {
       try {
-        if (readingInitResponse) {
+        if (!inputEnabled) {
           worker.channel.write(buffer)
           if (!buffer.hasRemaining) {
             worker.selectionKey.interestOps(SelectionKey.OP_READ)
@@ -1850,9 +1848,10 @@ private[spark] class PythonRunner(
       worker: PythonWorker,
       handle: Option[PythonWorkerHandle],
       releasedOrClosed: AtomicBoolean,
-      context: TaskContext): Iterator[Array[Byte]] = {
+      context: TaskContext,
+      readerInput: Option[ReaderInputStream]): ReaderIterator = {
     new ReaderIterator(
-      stream, writer, startTime, env, worker, handle, releasedOrClosed, context) {
+      stream, writer, startTime, env, worker, handle, releasedOrClosed, context, readerInput) {
 
       protected override def read(): Array[Byte] = {
         if (writer.exception.isDefined) {
