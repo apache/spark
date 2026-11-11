@@ -138,15 +138,19 @@ class ExternalLookupJoinEvaluatorFactory(
       batch.next()
     }
 
-    /** Reads more only when nothing is buffered; safe to call repeatedly. */
+    /**
+     * Reads more only when nothing is buffered; safe to call repeatedly. It looks for more input
+     * only after a batch's output is read: in real-time mode, the look waits for the next row or
+     * the end of the batch, and the output of a sent request, with its open cursor, would wait too.
+     */
     private def tryAdvance(): Unit = {
       while (!batch.hasNext && !inputExhausted) {
         val next = readBatch()
         if (next.rows.nonEmpty) {
-          batch = new BatchJoinIterator(next, parameters, resultRows, transforms, joinOutput,
-            cache, inputRemains = () => !inputExhausted, reader = reader)
+          batch = new BatchJoinIterator(
+            next, parameters, resultRows, transforms, joinOutput, cache, reader)
         }
-        inputExhausted = !hasInput
+        inputExhausted = next.endedInput
       }
       // No later batch reads the cache, so neither it nor the drained batch is kept.
       if (inputExhausted && !batch.hasNext) {
@@ -220,7 +224,9 @@ class ExternalLookupJoinEvaluatorFactory(
     // maxBatchBytes, keeping the row that reaches it, and at maxBatchRows rows. A batch of one key
     // also stops at another key. It always keeps one row, when one remains. It decides once for
     // each row whether the row can match, and groups the rows that can by their request row, a
-    // copy of which each group keeps.
+    // copy of which each group keeps. Last, it tells whether it stopped because the input ended.
+    // A batch that stops for another reason does not look for more input, so it is not known as
+    // the last even when no input remains.
     private def readBatch(): StreamBatch = {
       val rows = mutable.ArrayBuffer.empty[InternalRow]
       val keyEntries = mutable.LinkedHashMap.empty[UnsafeRow, KeyEntry]
@@ -253,7 +259,8 @@ class ExternalLookupJoinEvaluatorFactory(
           }
         }
       }
-      StreamBatch(rows.toArray, keyEntries.values.toArray, rowsThatCannotMatch.toArray)
+      val endedInput = !keyChanged && rows.length < maxBatchRows && bytes < maxBatchBytes
+      StreamBatch(rows.toArray, keyEntries.values.toArray, rowsThatCannotMatch.toArray, endedInput)
     }
   }
 
@@ -267,12 +274,13 @@ class ExternalLookupJoinEvaluatorFactory(
    * The stream rows of a batch, with one entry for each distinct request row that can match, in
    * the order of first occurrence, and the positions of the rows that a left outer or left anti
    * join keeps although they cannot match, because they fail the stream condition or have a null
-   * parameter that is not null-safe.
+   * parameter that is not null-safe, and whether the end of the input stopped the batch.
    */
   private case class StreamBatch(
       rows: Array[InternalRow],
       keyEntries: Array[KeyEntry],
-      rowsThatCannotMatch: Array[Int])
+      rowsThatCannotMatch: Array[Int],
+      endedInput: Boolean)
 
   /**
    * Joins one batch of stream rows. Rows whose parameters are equal under Spark equality share
@@ -290,7 +298,6 @@ class ExternalLookupJoinEvaluatorFactory(
       transforms: LookupTransforms,
       joinOutput: JoinOutput,
       cache: Option[LookupCache],
-      inputRemains: () => Boolean,
       reader: LookupReader) extends Iterator[InternalRow] {
     private val rows = batch.rows
     metrics.inputRows += rows.length
@@ -325,9 +332,9 @@ class ExternalLookupJoinEvaluatorFactory(
       }
 
     // Only a later batch of the partition reads what this one caches, so the last batch caches
-    // nothing. The partition knows whether input remains once the request is sent, before its
-    // results are read.
-    private lazy val cacheWriter = if (!inputRemains()) None else {
+    // nothing. A last batch that stopped full is not known as the last, and caches what no batch
+    // reads, within the cache's bounds.
+    private lazy val cacheWriter = if (batch.endedInput) None else {
       cache.map(new CacheWriter(_, keyEntries.map(_.requestRow)))
     }
 
