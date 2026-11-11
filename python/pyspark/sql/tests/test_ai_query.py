@@ -214,6 +214,39 @@ class AIQueryTests(unittest.TestCase, PySparkErrorTestUtils):
                             {"target": target},
                         )
 
+    def test_invalid_databricks_url_rejected_by_requests(self):
+        workspace = Mock()
+        workspace.config.host = "https://.example.test"
+        workspace.apps.get.return_value.url = workspace.config.host
+        workspace.config.authenticate.return_value = {"Authorization": "Bearer test"}
+        sdk = SimpleNamespace(WorkspaceClient=Mock(return_value=workspace))
+
+        with patch.dict("sys.modules", {"databricks.sdk": sdk}):
+            cases = (
+                (
+                    _ChatCompletionsClient,
+                    _ModelEndpoint("model", provider="databricks"),
+                    "Databricks model",
+                ),
+                (_AgentClient, _AgentEndpoint("agent"), "Databricks agent"),
+            )
+            for client_class, endpoint, target in cases:
+                with self.subTest(target=target):
+                    client = client_class(endpoint)
+                    try:
+                        with self.assertRaises(PySparkRuntimeError) as raised:
+                            client.invoke("hello", "row-1")
+                        self.check_error(
+                            raised.exception,
+                            "AI_QUERY_INVOCATION_FAILED.INVALID_URL",
+                            {"target": target},
+                        )
+                        self.assertNotIn(".example.test", str(raised.exception))
+                        workspace.config.authenticate.assert_called_once()
+                        workspace.config.authenticate.reset_mock()
+                    finally:
+                        client.close()
+
     def test_netrc_does_not_override_databricks_authentication(self):
         workspace = Mock()
         workspace.config.host = "https://example.test"

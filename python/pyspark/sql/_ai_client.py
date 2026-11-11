@@ -277,6 +277,10 @@ class _ChatCompletionsClient:
                         if not isinstance(text, str) or not text.strip():
                             raise _invocation_error("Databricks model", "EMPTY_RESPONSE")
                         return text
+            except requests.exceptions.InvalidProxyURL:
+                raise
+            except requests.exceptions.InvalidURL:
+                raise _invocation_error("Databricks model", "INVALID_URL") from None
             except (requests.Timeout, requests.ConnectionError):
                 if attempt == self.endpoint.max_retries:
                     raise _invocation_error("Databricks model", "CONNECTION_ERROR") from None
@@ -437,6 +441,10 @@ class _AgentClient:
                         poll = True
                         time.sleep(min(0.2, max(0, deadline - time.monotonic())))
                         continue
+            except requests.exceptions.InvalidProxyURL:
+                raise
+            except requests.exceptions.InvalidURL:
+                raise _invocation_error("Databricks agent", "INVALID_URL") from None
             except (requests.Timeout, requests.ConnectionError):
                 if failures >= self.endpoint.max_retries:
                     raise _invocation_error("Databricks agent", "CONNECTION_ERROR") from None

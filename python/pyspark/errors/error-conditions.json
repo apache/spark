@@ -53,7 +53,7 @@
       },
       "INVALID_URL": {
         "message": [
-          "The endpoint must use an HTTPS URL without embedded credentials."
+          "The endpoint must be a valid HTTPS URL without embedded credentials, a query, or a fragment."
         ]
       },
       "TIMEOUT": {
