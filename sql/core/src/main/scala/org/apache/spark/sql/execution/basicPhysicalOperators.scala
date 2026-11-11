@@ -36,7 +36,8 @@ import org.apache.spark.sql.catalyst.optimizer.CollapseProject
 import org.apache.spark.sql.catalyst.plans.logical.Sample
 import org.apache.spark.sql.catalyst.plans.physical._
 import org.apache.spark.sql.catalyst.trees.TreeNodeTag
-import org.apache.spark.sql.execution.joins.{ShuffledHashJoinExec, SortMergeJoinExec}
+import org.apache.spark.sql.execution.joins.{ShuffledHashJoinExec, SortMergeAsOfJoinExec,
+  SortMergeJoinExec}
 import org.apache.spark.sql.execution.metric.{SQLMetric, SQLMetrics}
 import org.apache.spark.sql.internal.{SQLConf, StaticSQLConf}
 import org.apache.spark.sql.types.{LongType, StructType}
@@ -535,7 +536,7 @@ case class FilterExec(condition: Expression, child: SparkPlan)
         // for the already-emitted dependencies.
         val statesByFirstUse: Map[Int, Seq[SubExprEliminationState]] =
           subExprs.states.toSeq.groupBy { case (exprEq, _) =>
-            boundOtherPreds.indexWhere(_.exists(e => ExpressionEquals(e) == exprEq))
+            ctx.firstReferencingExpression(boundOtherPreds, exprEq)
           }.map { case (idx, kvs) => idx -> kvs.map(_._2) }
 
         // Emit an IsNotNull check, binding against child.output so the inner expression
@@ -1109,7 +1110,9 @@ case class UnionExec(children: Seq[SparkPlan]) extends SparkPlan with CodegenSup
 
   /**
    * Returns the output partitionings of the children, with the attributes converted to this
-   * union's output attributes at the same position.
+   * union's output attributes at the same position. A member that does not map is dropped, and a
+   * child with no member left reports `UnknownPartitioning`. A partitioning that references no
+   * attribute, such as `SinglePartition`, passes through.
    */
   private def prepareOutputPartitioning(): Seq[Partitioning] = {
     // Map every child's partitioning attributes to this union's output attributes, so all
@@ -1121,18 +1124,39 @@ case class UnionExec(children: Seq[SparkPlan]) extends SparkPlan with CodegenSup
     // a partitioning built inside a view or subquery carries that relation's qualifier.
     // `AttributeMap` is keyed by `ExprId`, so remapping every child (including the first)
     // normalizes all of those.
+    //
+    // A member that references an attribute the child does not output, such as the key a
+    // `MapGroups` or a column-pruned cached scan passes through, is dropped: left unmapped, it
+    // could equal another child's real output attribute. A child with no member left reports
+    // unknown, which leaves the whole union unknown. A child that repeats an `ExprId` does not
+    // reach here (see `rawPartitioning`).
     val unionOutput = output
-    val attributesMap = children.map(_.output).map { childAttrs =>
-      AttributeMap(childAttrs.zip(unionOutput))
-    }
-    children.map(_.outputPartitioning).zip(attributesMap).map { case (p, attributeMap) =>
-      p match {
-        case e: Expression =>
-          e.transform {
-            case a: Attribute if attributeMap.contains(a) =>
-              attributeMap(a)
-          }.asInstanceOf[Partitioning]
-        case _ => p
+    children.map { child =>
+      child.outputPartitioning match {
+        case p: Expression =>
+          val attributeMap = AttributeMap(child.output.zip(unionOutput))
+          def remap(member: Partitioning): Partitioning = member match {
+            case e: Expression =>
+              e.transform {
+                case a: Attribute if attributeMap.contains(a) =>
+                  attributeMap(a)
+              }.asInstanceOf[Partitioning]
+            case _ => member
+          }
+          // The common case: keep the partitioning as it is, which also keeps its shape, so a
+          // single `KeyedPartitioning` stays one. Otherwise each member is checked on its own.
+          if (p.references.subsetOf(child.outputSet)) {
+            remap(p)
+          } else {
+            PartitioningCollection.flatten(p).filter {
+              case e: Expression => e.references.subsetOf(child.outputSet)
+              case _ => true
+            } match {
+              case Seq() => UnknownPartitioning(p.numPartitions)
+              case survivors => PartitioningCollection(survivors.map(remap))
+            }
+          }
+        case p => p
       }
     }
   }
@@ -1168,6 +1192,13 @@ case class UnionExec(children: Seq[SparkPlan]) extends SparkPlan with CodegenSup
     }
   }
 
+  // Whether the output of a child repeats an `ExprId`. Fixed for the given children, so it is
+  // derived once rather than on every read of the partitioning.
+  @transient private lazy val childOutputRepeatsExprId: Boolean = children.exists { child =>
+    val exprIds = child.output.map(_.exprId)
+    exprIds.distinct.size < exprIds.size
+  }
+
   /**
    * The SPARK-52921 candidate partitioning derived from the children, which `outputPartitioning`
    * reports when the decision says this union is not a plain concatenation. That decision comes out
@@ -1177,6 +1208,16 @@ case class UnionExec(children: Seq[SparkPlan]) extends SparkPlan with CodegenSup
    * reports unknown.
    */
   private def rawPartitioning: Partitioning = {
+    // An attribute is read from the first position that carries its `ExprId` (see
+    // `AttributeSeq.indexOf`), so the positions of an output that repeats one cannot be told
+    // apart by attribute, and they hold different values when a union sits below. A child's
+    // partitioning then has no reliable counterpart among this union's output attributes, whether
+    // the repeat is in that child's output or, through the first child, in this union's own.
+    // The analyzer normally leaves no such child (`DeduplicateUnionChildOutput`).
+    if (childOutputRepeatsExprId) {
+      return super.outputPartitioning
+    }
+
     // Children's partitionings with attributes remapped to this union's output attributes.
     val partitionings = prepareOutputPartitioning()
 
@@ -1377,22 +1418,6 @@ case class UnionExec(children: Seq[SparkPlan]) extends SparkPlan with CodegenSup
     if (isPlainUnion(raw)) super.outputPartitioning else raw
   }
 
-  // Per-child projection from the child's output to the union's output. The wrapped
-  // child is always the source `Attribute` (deterministic by construction); the Alias
-  // only remaps the exprId/name/metadata. `WidenSetOperationTypes` aligns top-level
-  // dataTypes, but nested nullability differences bypass it; those cases are caught
-  // by the `type-mismatch` gate below, which is the single source of truth for the
-  // `src.dataType == tgt.dataType` invariant `doConsume` relies on.
-  @transient private lazy val perChildProjections: IndexedSeq[Seq[NamedExpression]] =
-    children.toIndexedSeq.map { child =>
-      child.output.zip(output).map { case (src, tgt) =>
-        Alias(src, tgt.name)(
-          exprId = tgt.exprId,
-          qualifier = tgt.qualifier,
-          explicitMetadata = Some(tgt.metadata))
-      }
-    }
-
   // The confs the gate reads, taken from the record rather than live for the reason the plain-union
   // decision is stamped: `conf` is live, so the gate, `metrics` and the copy `insertInputAdapter`
   // puts inside the codegen shell would otherwise be free to read different values. When a child is
@@ -1501,7 +1526,7 @@ case class UnionExec(children: Seq[SparkPlan]) extends SparkPlan with CodegenSup
   // Per-emission codegen state, set in `doProduce` and read in `doConsume`.
   // `numOutputRowsTerm` is registered once per stage so the metric appears in
   // `references[]` exactly once instead of once per child; `currentEmittingChild`
-  // tells `doConsume` which child's projection to bind.
+  // tells `doConsume` which child's output it reads by position.
   //
   // A single `UnionExec` instance can have its codegen driven by more than one
   // thread at the same time: a reused exchange/subquery stage is generated
@@ -1596,12 +1621,17 @@ case class UnionExec(children: Seq[SparkPlan]) extends SparkPlan with CodegenSup
       ctx: CodegenContext, input: Seq[ExprCode], row: ExprCode): String = {
     val i = currentEmittingChild.get
     require(i >= 0, "UnionExec.doConsume invoked outside doProduce emission window")
-    // Route BoundReference reads through `currentVars` (the incoming row is
-    // delivered as variables under WSCG, not via ctx.INPUT_ROW).
-    val bound = BindReferences.bindReferences(perChildProjections(i), children(i).output)
+    // Read the incoming row (delivered as `currentVars` under WSCG) by position. Binding by
+    // `ExprId` would resolve a child output that repeats an `ExprId` (e.g. `SELECT a, a`) to
+    // the first occurrence, so the second union output column would take the first column's
+    // value and its declaration would be emitted twice. `doExecute` is positional too, since
+    // it concatenates child rows as they are.
     ctx.currentVars = input
     ctx.INPUT_ROW = null
-    val projectedExprCodes = bound.map(_.genCode(ctx))
+    val childOutput = children(i).output
+    val projectedExprCodes = childOutput.zipWithIndex.map { case (attr, pos) =>
+      BoundReference(pos, attr.dataType, attr.nullable).genCode(ctx)
+    }
 
     s"""
        |${numOutputRowsTerm.get}.add(1L);
@@ -1694,6 +1724,7 @@ object UnionExec {
   def isKnownMultiInputRDDCodegen(p: SparkPlan): Boolean = p match {
     case _: SortMergeJoinExec => true
     case _: ShuffledHashJoinExec => true
+    case j: SortMergeAsOfJoinExec => j.supportCodegen
     case _ => false
   }
 
