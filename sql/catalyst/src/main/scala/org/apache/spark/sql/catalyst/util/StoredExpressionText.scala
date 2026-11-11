@@ -18,7 +18,7 @@
 package org.apache.spark.sql.catalyst.util
 
 import org.apache.spark.sql.AnalysisException
-import org.apache.spark.sql.catalyst.analysis.{Analyzer, ExpressionWithUnresolvedIdentifier}
+import org.apache.spark.sql.catalyst.analysis.{Analyzer, ExpressionWithUnresolvedIdentifier, StoredExpressionFunctions}
 import org.apache.spark.sql.catalyst.expressions.{Alias, Attribute, Expression, ExprId, NamedExpression}
 import org.apache.spark.sql.catalyst.parser.{CatalystSqlParser, ParseException}
 import org.apache.spark.sql.catalyst.plans.logical.{LocalRelation, LogicalPlan, Project}
@@ -68,13 +68,15 @@ object StoredExpressionText {
   def parseWithSessionAnsi(text: String): Expression = parse(confWithSessionAnsi(SQLConf.get), text)
 
   private def parse(c: SQLConf, text: String): Expression = {
-    try {
+    val parsed = try {
       SQLConf.withExistingConf(c) {
         CatalystSqlParser.parseExpression(text)
       }
     } catch {
       case _: ParseException => CatalystSqlParser.parseExpression(text)
     }
+    // Neither the SQL path nor a temporary function of the session can shadow a built-in function.
+    StoredExpressionFunctions.qualifyBuiltinFunctions(parsed)
   }
 
   private def confWithSessionAnsi(session: SQLConf): SQLConf = {

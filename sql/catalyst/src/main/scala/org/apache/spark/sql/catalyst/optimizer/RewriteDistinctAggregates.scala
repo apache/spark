@@ -333,8 +333,8 @@ object RewriteDistinctAggregates extends Rule[LogicalPlan] {
           // occurrence, with no dedup, so copying the filter into the key would
           // join the input twice. The guard also evaluates the child only when the
           // union is true, so every child must pass canEvaluateUnconditionally. A
-          // child that fails, such as a division, stays raw and keeps today's
-          // evaluation count and error behavior. The guard shares the
+          // child that fails, such as a division in ANSI mode, stays raw and keeps
+          // today's evaluation count and error behavior. The guard shares the
           // rewriteCountDistinctConditional kill switch so conf=false restores the
           // pre-feature Expand key (raw child) for user-written FILTER distincts too.
           val canGuard = SQLConf.get.rewriteCountDistinctConditionalEnabled &&
@@ -494,10 +494,10 @@ object RewriteDistinctAggregates extends Rule[LogicalPlan] {
    * holds, which is a row whose original `IF(cond_i, base, NULL)` already evaluated
    * `base`. The guard does not apply when any filter is non-deterministic, contains
    * a subquery, or when a child fails that check (a user-written FILTER on a
-   * division, for example). Expand then projects the raw child on every row. A group
-   * that also has an unfiltered aggregate on the same base projects the raw base
-   * for every row too, matching the uncollapsed plan, which already evaluated it
-   * for that unfiltered member.
+   * division in ANSI mode, for example). Expand then projects the raw child on
+   * every row. A group that also has an unfiltered aggregate on the same base
+   * projects the raw base for every row too, matching the uncollapsed plan, which
+   * already evaluated it for that unfiltered member.
    *
    * A condition that itself contains a subquery is not normalized. Guarding that
    * group would duplicate the predicate into a second existence join, and collapsing

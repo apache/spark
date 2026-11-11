@@ -75,11 +75,21 @@ final class NativeLibrary {
   static final long MICRO_BATCH_READ = 2;
   static final long BATCH_WRITE = 4;
   static final long STREAMING_WRITE = 8;
-  static final long TRUNCATE = 16;
+  static final long BATCH_TRUNCATE = 16;
+  static final long STREAMING_TRUNCATE = 32;
+  static final long ADMISSION_CONTROL = 64;
 
   // The modes of a write, SPARK_DS_WRITE_APPEND and SPARK_DS_WRITE_TRUNCATE.
   static final int WRITE_APPEND = 0;
   static final int WRITE_TRUNCATE = 1;
+
+  // The kinds of a read, SPARK_DS_READ_BATCH and SPARK_DS_READ_MICRO_BATCH.
+  static final int READ_BATCH = 0;
+  static final int READ_MICRO_BATCH = 1;
+
+  // The kinds of read limits, SPARK_DS_READ_ALL_AVAILABLE and SPARK_DS_READ_MAX_ROWS.
+  static final int READ_ALL_AVAILABLE = 0;
+  static final int READ_MAX_ROWS = 1;
 
   // The C types of the parameters and the results of the functions.
   private enum C { VOID, BOOL, I32, I64, PTR }
@@ -89,31 +99,32 @@ final class NativeLibrary {
     LAST_ERROR("last_error", C.PTR),
     CREATE("create", C.I32, C.PTR, C.PTR, C.PTR),
     SCHEMA("schema", C.I32, C.PTR, C.PTR),
-    CREATE_READER("create_reader", C.I32, C.PTR, C.PTR, C.PTR),
-    CREATE_STREAM_READER("create_stream_reader", C.I32, C.PTR, C.PTR, C.PTR),
-    CREATE_WRITER("create_writer", C.I32, C.PTR, C.PTR, C.PTR, C.PTR),
+    CREATE_READER("create_reader", C.I32, C.PTR, C.PTR, C.PTR, C.PTR),
+    CREATE_STREAM_READER("create_stream_reader", C.I32, C.PTR, C.PTR, C.PTR, C.PTR),
+    CREATE_WRITER("create_writer", C.I32, C.PTR, C.PTR, C.PTR, C.PTR, C.PTR, C.PTR),
     CLOSE("close", C.VOID, C.PTR),
     PUSH_LIMIT("push_limit", C.I32, C.PTR, C.I32, C.PTR),
-    PRUNE_COLUMNS("prune_columns", C.I32, C.PTR, C.PTR, C.I64, C.PTR),
-    PARTITIONS("partitions", C.I32, C.PTR, C.PTR, C.PTR),
-    SERIALIZE_READER("serialize_reader", C.I32, C.PTR, C.PTR, C.PTR),
+    PRUNE_COLUMNS("prune_columns", C.I32, C.PTR, C.PTR, C.I64),
+    PARTITIONS("partitions", C.I32, C.PTR, C.PTR, C.PTR, C.PTR, C.PTR),
     CLOSE_READER("close_reader", C.VOID, C.PTR),
-    INITIAL_OFFSET("initial_offset", C.I32, C.PTR, C.PTR, C.PTR),
-    LATEST_OFFSET("latest_offset", C.I32, C.PTR, C.PTR, C.PTR),
+    INITIAL_OFFSET("initial_offset", C.I32, C.PTR, C.PTR, C.PTR, C.PTR),
+    LATEST_OFFSET("latest_offset", C.I32, C.PTR, C.PTR, C.PTR, C.PTR),
     STREAM_PARTITIONS("stream_partitions", C.I32, C.PTR, C.PTR, C.PTR, C.PTR, C.PTR),
-    SERIALIZE_STREAM_READER("serialize_stream_reader", C.I32, C.PTR, C.PTR, C.PTR),
     COMMIT_OFFSET("commit_offset", C.I32, C.PTR, C.PTR),
     CLOSE_STREAM_READER("close_stream_reader", C.VOID, C.PTR),
-    READ("read", C.I32, C.PTR, C.PTR, C.I64, C.PTR, C.I64, C.PTR),
-    SERIALIZE_WRITER("serialize_writer", C.I32, C.PTR, C.PTR, C.PTR),
-    COMMIT("commit", C.I32, C.PTR, C.I64, C.PTR, C.PTR, C.I64),
-    ABORT("abort", C.I32, C.PTR, C.I64, C.PTR, C.PTR, C.I64),
+    READ("read", C.I32, C.PTR, C.PTR, C.PTR),
+    COMMIT("commit", C.I32, C.PTR, C.PTR),
+    ABORT("abort", C.I32, C.PTR, C.PTR),
     CLOSE_WRITER("close_writer", C.VOID, C.PTR),
-    CREATE_DATA_WRITER("create_data_writer", C.I32, C.PTR, C.PTR, C.I64, C.I64, C.PTR),
-    WRITE("write", C.I32, C.PTR, C.PTR, C.PTR),
-    COMMIT_DATA_WRITER("commit_data_writer", C.I32, C.PTR, C.PTR, C.PTR),
-    ABORT_DATA_WRITER("abort_data_writer", C.I32, C.PTR),
-    CLOSE_DATA_WRITER("close_data_writer", C.VOID, C.PTR);
+    CREATE_DATA_WRITER("create_data_writer", C.I32, C.PTR, C.PTR, C.PTR),
+    WRITE("write", C.I32, C.PTR, C.PTR),
+    COMMIT_DATA_WRITER("commit_data_writer", C.I32, C.PTR, C.PTR, C.PTR, C.PTR),
+    ABORT_DATA_WRITER("abort_data_writer", C.I32, C.PTR, C.PTR),
+    CLOSE_DATA_WRITER("close_data_writer", C.VOID, C.PTR),
+    DEFAULT_READ_LIMIT("default_read_limit", C.I32, C.PTR, C.PTR),
+    // Appended after the other functions, so that the table of a library built against a header
+    // without it keeps its layout.
+    PUSH_DOMAINS("push_domains", C.I32, C.PTR, C.PTR, C.I64, C.PTR);
 
     /** The name of the field of the function in the table. */
     final String fieldName;
@@ -136,15 +147,40 @@ final class NativeLibrary {
   // struct starts with its size.
   private static final long TABLE_ABI_VERSION = 8;
   private static final long TABLE_FUNCTIONS = 16;
-  private static final long HOST_SIZE = 32;
+  private static final long HOST_SIZE = 40;
   private static final long HOST_ABI_VERSION = 8;
   private static final long HOST_SPARK_VERSION = 16;
   private static final long HOST_LOG = 24;
+  private static final long HOST_IS_LOG_ENABLED = 32;
   private static final long CREATE_INFO_SIZE = 40;
   private static final long CREATE_INFO_NAME = 8;
   private static final long CREATE_INFO_OPTION_KEYS = 16;
   private static final long CREATE_INFO_OPTION_VALUES = 24;
   private static final long CREATE_INFO_NUM_OPTIONS = 32;
+  private static final long READER_INFO_SIZE = 8;
+  private static final long PARTITIONS_INFO_SIZE = 8;
+  private static final long DOMAIN_SIZE = 48;
+  private static final long DOMAIN_PATH = 8;
+  private static final long DOMAIN_PATH_LENGTH = 16;
+  private static final long DOMAIN_NULL_ALLOWED = 24;
+  private static final long DOMAIN_NAN_ALLOWED = 25;
+  private static final long DOMAIN_RANGES = 32;
+  private static final long DOMAIN_RANGES_SCHEMA = 40;
+  private static final long INITIAL_OFFSET_INFO_SIZE = 8;
+  private static final long STREAM_PARTITIONS_INFO_SIZE = 24;
+  private static final long STREAM_PARTITIONS_INFO_START = 8;
+  private static final long STREAM_PARTITIONS_INFO_END = 16;
+  private static final long COMMIT_OFFSET_INFO_SIZE = 16;
+  private static final long COMMIT_OFFSET_INFO_END = 8;
+  private static final long STREAM_READER_INFO_SIZE = 16;
+  private static final long STREAM_READER_INFO_CHECKPOINT_LOCATION = 8;
+  private static final long LATEST_OFFSET_INFO_SIZE = 32;
+  private static final long LATEST_OFFSET_INFO_START = 8;
+  private static final long LATEST_OFFSET_INFO_LIMIT = 16;
+  private static final long LATEST_OFFSET_INFO_RUN_END = 24;
+  private static final long READ_LIMIT_SIZE = 24;
+  private static final long READ_LIMIT_KIND = 8;
+  private static final long READ_LIMIT_MAX_ROWS = 16;
   private static final long TASK_SIZE = 40;
   private static final long TASK_STAGE_ID = 8;
   private static final long TASK_STAGE_ATTEMPT_NUMBER = 12;
@@ -152,9 +188,48 @@ final class NativeLibrary {
   private static final long TASK_ATTEMPT_NUMBER = 20;
   private static final long TASK_ATTEMPT_ID = 24;
   private static final long TASK_IS_INTERRUPTED = 32;
+  private static final long READ_INFO_SIZE = 56;
+  private static final long READ_INFO_KIND = 8;
+  private static final long READ_INFO_SCHEMA = 16;
+  private static final long READ_INFO_READER_STATE = 24;
+  private static final long READ_INFO_READER_STATE_LENGTH = 32;
+  private static final long READ_INFO_PARTITION = 40;
+  private static final long READ_INFO_PARTITION_LENGTH = 48;
   private static final long WRITE_INFO_SIZE = 24;
   private static final long WRITE_INFO_MODE = 8;
   private static final long WRITE_INFO_QUERY_ID = 16;
+  private static final long DATA_WRITER_INFO_SIZE = 40;
+  private static final long DATA_WRITER_INFO_SCHEMA = 8;
+  private static final long DATA_WRITER_INFO_WRITER_STATE = 16;
+  private static final long DATA_WRITER_INFO_WRITER_STATE_LENGTH = 24;
+  private static final long DATA_WRITER_INFO_EPOCH_ID = 32;
+  private static final long FINISH_WRITE_INFO_SIZE = 48;
+  private static final long FINISH_WRITE_INFO_EPOCH_ID = 8;
+  private static final long FINISH_WRITE_INFO_MESSAGES = 16;
+  private static final long FINISH_WRITE_INFO_MESSAGE_LENGTHS = 24;
+  private static final long FINISH_WRITE_INFO_NUM_MESSAGES = 32;
+  private static final long FINISH_WRITE_INFO_REJECTED = 40;
+  private static final long FINISH_DATA_WRITER_INFO_SIZE = 8;
+  // struct ArrowArrayStream of the Arrow C stream interface, which Spark wraps for engines.
+  private static final long STREAM_GET_SCHEMA = 0;
+  private static final long STREAM_GET_NEXT = 8;
+  private static final long STREAM_GET_LAST_ERROR = 16;
+  private static final long STREAM_RELEASE = 24;
+  private static final long STREAM_PRIVATE_DATA = 32;
+  private static final long STREAM_SIZE = 40;
+
+  // The structs that only hold their size, which the library gets as const pointers. Until fields
+  // are added to them, a single struct of each kind is allocated once, and never freed.
+  private static final long READER_INFO = sizeOnlyInfo(READER_INFO_SIZE);
+  private static final long PARTITIONS_INFO = sizeOnlyInfo(PARTITIONS_INFO_SIZE);
+  private static final long INITIAL_OFFSET_INFO = sizeOnlyInfo(INITIAL_OFFSET_INFO_SIZE);
+  private static final long FINISH_DATA_WRITER_INFO = sizeOnlyInfo(FINISH_DATA_WRITER_INFO_SIZE);
+
+  private static long sizeOnlyInfo(long size) {
+    long info = Platform.allocateMemory(size);
+    Platform.putLong(null, info, size);
+    return info;
+  }
 
   /**
    * The offsets of the fields of the structs that Spark reads or writes, by {@code struct.field},
@@ -173,12 +248,47 @@ final class NativeLibrary {
     layout.put("SparkDsHost.abi_version", HOST_ABI_VERSION);
     layout.put("SparkDsHost.spark_version", HOST_SPARK_VERSION);
     layout.put("SparkDsHost.log", HOST_LOG);
+    layout.put("SparkDsHost.is_log_enabled", HOST_IS_LOG_ENABLED);
     layout.put("SparkDsCreateInfo", CREATE_INFO_SIZE);
     layout.put("SparkDsCreateInfo.size", 0L);
     layout.put("SparkDsCreateInfo.name", CREATE_INFO_NAME);
     layout.put("SparkDsCreateInfo.option_keys", CREATE_INFO_OPTION_KEYS);
     layout.put("SparkDsCreateInfo.option_values", CREATE_INFO_OPTION_VALUES);
     layout.put("SparkDsCreateInfo.num_options", CREATE_INFO_NUM_OPTIONS);
+    layout.put("SparkDsReaderInfo", READER_INFO_SIZE);
+    layout.put("SparkDsReaderInfo.size", 0L);
+    layout.put("SparkDsPartitionsInfo", PARTITIONS_INFO_SIZE);
+    layout.put("SparkDsPartitionsInfo.size", 0L);
+    layout.put("SparkDsDomain", DOMAIN_SIZE);
+    layout.put("SparkDsDomain.size", 0L);
+    layout.put("SparkDsDomain.path", DOMAIN_PATH);
+    layout.put("SparkDsDomain.path_length", DOMAIN_PATH_LENGTH);
+    layout.put("SparkDsDomain.null_allowed", DOMAIN_NULL_ALLOWED);
+    layout.put("SparkDsDomain.nan_allowed", DOMAIN_NAN_ALLOWED);
+    layout.put("SparkDsDomain.ranges", DOMAIN_RANGES);
+    layout.put("SparkDsDomain.ranges_schema", DOMAIN_RANGES_SCHEMA);
+    layout.put("SparkDsInitialOffsetInfo", INITIAL_OFFSET_INFO_SIZE);
+    layout.put("SparkDsInitialOffsetInfo.size", 0L);
+    layout.put("SparkDsStreamPartitionsInfo", STREAM_PARTITIONS_INFO_SIZE);
+    layout.put("SparkDsStreamPartitionsInfo.size", 0L);
+    layout.put("SparkDsStreamPartitionsInfo.start", STREAM_PARTITIONS_INFO_START);
+    layout.put("SparkDsStreamPartitionsInfo.end", STREAM_PARTITIONS_INFO_END);
+    layout.put("SparkDsCommitOffsetInfo", COMMIT_OFFSET_INFO_SIZE);
+    layout.put("SparkDsCommitOffsetInfo.size", 0L);
+    layout.put("SparkDsCommitOffsetInfo.end", COMMIT_OFFSET_INFO_END);
+    layout.put("SparkDsStreamReaderInfo", STREAM_READER_INFO_SIZE);
+    layout.put("SparkDsStreamReaderInfo.size", 0L);
+    layout.put(
+      "SparkDsStreamReaderInfo.checkpoint_location", STREAM_READER_INFO_CHECKPOINT_LOCATION);
+    layout.put("SparkDsLatestOffsetInfo", LATEST_OFFSET_INFO_SIZE);
+    layout.put("SparkDsLatestOffsetInfo.size", 0L);
+    layout.put("SparkDsLatestOffsetInfo.start", LATEST_OFFSET_INFO_START);
+    layout.put("SparkDsLatestOffsetInfo.limit", LATEST_OFFSET_INFO_LIMIT);
+    layout.put("SparkDsLatestOffsetInfo.run_end", LATEST_OFFSET_INFO_RUN_END);
+    layout.put("SparkDsReadLimit", READ_LIMIT_SIZE);
+    layout.put("SparkDsReadLimit.size", 0L);
+    layout.put("SparkDsReadLimit.kind", READ_LIMIT_KIND);
+    layout.put("SparkDsReadLimit.max_rows", READ_LIMIT_MAX_ROWS);
     layout.put("SparkDsTaskContext", TASK_SIZE);
     layout.put("SparkDsTaskContext.size", 0L);
     layout.put("SparkDsTaskContext.stage_id", TASK_STAGE_ID);
@@ -187,10 +297,41 @@ final class NativeLibrary {
     layout.put("SparkDsTaskContext.attempt_number", TASK_ATTEMPT_NUMBER);
     layout.put("SparkDsTaskContext.task_attempt_id", TASK_ATTEMPT_ID);
     layout.put("SparkDsTaskContext.is_interrupted", TASK_IS_INTERRUPTED);
+    layout.put("SparkDsReadInfo", READ_INFO_SIZE);
+    layout.put("SparkDsReadInfo.size", 0L);
+    layout.put("SparkDsReadInfo.kind", READ_INFO_KIND);
+    layout.put("SparkDsReadInfo.schema", READ_INFO_SCHEMA);
+    layout.put("SparkDsReadInfo.reader_state", READ_INFO_READER_STATE);
+    layout.put("SparkDsReadInfo.reader_state_length", READ_INFO_READER_STATE_LENGTH);
+    layout.put("SparkDsReadInfo.partition", READ_INFO_PARTITION);
+    layout.put("SparkDsReadInfo.partition_length", READ_INFO_PARTITION_LENGTH);
     layout.put("SparkDsWriteInfo", WRITE_INFO_SIZE);
     layout.put("SparkDsWriteInfo.size", 0L);
     layout.put("SparkDsWriteInfo.mode", WRITE_INFO_MODE);
     layout.put("SparkDsWriteInfo.query_id", WRITE_INFO_QUERY_ID);
+    layout.put("SparkDsDataWriterInfo", DATA_WRITER_INFO_SIZE);
+    layout.put("SparkDsDataWriterInfo.size", 0L);
+    layout.put("SparkDsDataWriterInfo.schema", DATA_WRITER_INFO_SCHEMA);
+    layout.put("SparkDsDataWriterInfo.writer_state", DATA_WRITER_INFO_WRITER_STATE);
+    layout.put(
+      "SparkDsDataWriterInfo.writer_state_length", DATA_WRITER_INFO_WRITER_STATE_LENGTH);
+    layout.put("SparkDsDataWriterInfo.epoch_id", DATA_WRITER_INFO_EPOCH_ID);
+    layout.put("SparkDsFinishWriteInfo", FINISH_WRITE_INFO_SIZE);
+    layout.put("SparkDsFinishWriteInfo.size", 0L);
+    layout.put("SparkDsFinishWriteInfo.epoch_id", FINISH_WRITE_INFO_EPOCH_ID);
+    layout.put("SparkDsFinishWriteInfo.messages", FINISH_WRITE_INFO_MESSAGES);
+    layout.put("SparkDsFinishWriteInfo.message_lengths", FINISH_WRITE_INFO_MESSAGE_LENGTHS);
+    layout.put("SparkDsFinishWriteInfo.num_messages", FINISH_WRITE_INFO_NUM_MESSAGES);
+    layout.put("SparkDsFinishWriteInfo.rejected", FINISH_WRITE_INFO_REJECTED);
+    layout.put("SparkDsFinishDataWriterInfo", FINISH_DATA_WRITER_INFO_SIZE);
+    layout.put("SparkDsFinishDataWriterInfo.size", 0L);
+    // The streams of engines, which Spark wraps, see EngineStream.
+    layout.put("ArrowArrayStream", STREAM_SIZE);
+    layout.put("ArrowArrayStream.get_schema", STREAM_GET_SCHEMA);
+    layout.put("ArrowArrayStream.get_next", STREAM_GET_NEXT);
+    layout.put("ArrowArrayStream.get_last_error", STREAM_GET_LAST_ERROR);
+    layout.put("ArrowArrayStream.release", STREAM_RELEASE);
+    layout.put("ArrowArrayStream.private_data", STREAM_PRIVATE_DATA);
     return layout;
   }
 
@@ -293,10 +434,14 @@ final class NativeLibrary {
     // NativeLibrary.log, which SparkDsHost.log calls with the path of its library.
     static final MethodHandle LOG;
     // The addresses of the C functions that call Java, which live as long as the JVM:
-    // SparkDsSink, which calls NativeLibrary.sink, and SparkDsTaskContext.is_interrupted, which
-    // calls NativeLibrary.isInterrupted.
+    // SparkDsSink, which calls NativeLibrary.sink, the SparkDsSink set_state of the functions
+    // that also return a state, which calls NativeLibrary.stateSink,
+    // SparkDsTaskContext.is_interrupted, which calls NativeLibrary.isInterrupted, and
+    // SparkDsHost.is_log_enabled, which calls NativeLibrary.isLogEnabled.
     static final long SINK;
+    static final long STATE_SINK;
     static final long IS_INTERRUPTED;
+    static final long IS_LOG_ENABLED;
 
     static {
       try {
@@ -347,10 +492,18 @@ final class NativeLibrary {
           lookup.findStatic(NativeLibrary.class, "sink",
             MethodType.methodType(void.class, long.class, long.class, long.class)),
           C.VOID, C.PTR, C.PTR, C.I64);
+        STATE_SINK = upcall(
+          lookup.findStatic(NativeLibrary.class, "stateSink",
+            MethodType.methodType(void.class, long.class, long.class, long.class)),
+          C.VOID, C.PTR, C.PTR, C.I64);
         IS_INTERRUPTED = upcall(
           lookup.findStatic(NativeLibrary.class, "isInterrupted",
             MethodType.methodType(boolean.class, long.class)),
           C.BOOL, C.PTR);
+        IS_LOG_ENABLED = upcall(
+          lookup.findStatic(NativeLibrary.class, "isLogEnabled",
+            MethodType.methodType(boolean.class, int.class)),
+          C.BOOL, C.I32);
       } catch (Throwable e) {
         // The message names the cause, because the JVM only keeps this message for the later
         // uses of the class.
@@ -388,15 +541,7 @@ final class NativeLibrary {
       MethodHandle handle = (MethodHandle) DOWNCALL.invoke(
         LINKER, address, descriptor(result, parameters), NO_OPTIONS);
       // Passes and returns the pointers, which are MemorySegments in the FFM API, as addresses.
-      for (int i = 0; i < parameters.length; i++) {
-        if (parameters[i] == C.PTR) {
-          handle = MethodHandles.filterArguments(handle, i, OF_ADDRESS);
-        }
-      }
-      if (result == C.PTR) {
-        handle = MethodHandles.filterReturnValue(handle, ADDRESS_OF);
-      }
-      return handle;
+      return convertPointers(handle, 0, OF_ADDRESS, ADDRESS_OF, result, parameters);
     }
 
     /**
@@ -405,14 +550,33 @@ final class NativeLibrary {
      * function lives as long as the JVM.
      */
     static long upcall(MethodHandle target, C result, C... parameters) throws Throwable {
-      for (int i = 0; i < parameters.length; i++) {
-        if (parameters[i] == C.PTR) {
-          target = MethodHandles.filterArguments(target, i, ADDRESS_OF);
-        }
-      }
+      target = convertPointers(target, 0, ADDRESS_OF, OF_ADDRESS, result, parameters);
       Object stub = UPCALL.invoke(
         LINKER, target, descriptor(result, parameters), GLOBAL_ARENA, NO_OPTIONS);
       return (long) ADDRESS_OF.invoke(stub);
+    }
+
+    /**
+     * Applies `parameterFilter` to the parameters of `handle` that are pointers, the C parameters
+     * starting at the parameter `first`, and `resultFilter` to a result that is a pointer: a
+     * downcall converts the addresses to MemorySegments and back, and an upcall the other way.
+     */
+    static MethodHandle convertPointers(
+        MethodHandle handle,
+        int first,
+        MethodHandle parameterFilter,
+        MethodHandle resultFilter,
+        C result,
+        C... parameters) {
+      for (int i = 0; i < parameters.length; i++) {
+        if (parameters[i] == C.PTR) {
+          handle = MethodHandles.filterArguments(handle, first + i, parameterFilter);
+        }
+      }
+      if (result == C.PTR) {
+        handle = MethodHandles.filterReturnValue(handle, resultFilter);
+      }
+      return handle;
     }
 
     /**
@@ -421,17 +585,14 @@ final class NativeLibrary {
      */
     static long host(String path, String sparkVersion) throws Throwable {
       long log = upcall(MethodHandles.insertArguments(LOG, 0, path), C.VOID, C.I32, C.PTR);
-      byte[] version = sparkVersion.getBytes(StandardCharsets.UTF_8);
-      long versionAddress = Platform.allocateMemory(version.length + 1L);
-      Platform.copyMemory(
-        version, Platform.BYTE_ARRAY_OFFSET, null, versionAddress, version.length);
-      Platform.putByte(null, versionAddress + version.length, (byte) 0);
+      long versionAddress = toCString(sparkVersion);
       long host = Platform.allocateMemory(HOST_SIZE);
       Platform.setMemory(host, (byte) 0, HOST_SIZE);
       Platform.putLong(null, host, HOST_SIZE);
       Platform.putInt(null, host + HOST_ABI_VERSION, ABI_VERSION);
       Platform.putLong(null, host + HOST_SPARK_VERSION, versionAddress);
       Platform.putLong(null, host + HOST_LOG, log);
+      Platform.putLong(null, host + HOST_IS_LOG_ENABLED, IS_LOG_ENABLED);
       return host;
     }
   }
@@ -470,24 +631,60 @@ final class NativeLibrary {
   }
 
   /**
+   * The SPARK_DS_LOG_* levels, which {@link #log} and {@link #isLogEnabled} share: a level that
+   * is not one of them is treated as SPARK_DS_LOG_INFO.
+   */
+  private enum LogLevel {
+    ERROR, WARN, INFO, DEBUG, TRACE;
+
+    static LogLevel of(int level) {
+      return switch (level) {
+        case 1 -> ERROR;
+        case 2 -> WARN;
+        case 4 -> DEBUG;
+        case 5 -> TRACE;
+        default -> INFO;
+      };
+    }
+  }
+
+  /**
    * Called by the library, through {@code SparkDsHost.log}, with the path of the library. It must
    * not throw: an exception thrown by an upcall crashes the JVM.
    */
   private static void log(String path, int level, long message) {
     try {
       String text = message == 0 ? "" : new String(readCString(message), StandardCharsets.UTF_8);
-      switch (level) {
-        case 1 -> LOGGER.error("Native data source library {}: {}",
+      switch (LogLevel.of(level)) {
+        case ERROR -> LOGGER.error("Native data source library {}: {}",
           MDC.of(LogKeys.PATH, path), MDC.of(LogKeys.MESSAGE, text));
-        case 2 -> LOGGER.warn("Native data source library {}: {}",
+        case WARN -> LOGGER.warn("Native data source library {}: {}",
           MDC.of(LogKeys.PATH, path), MDC.of(LogKeys.MESSAGE, text));
-        case 4 -> LOGGER.debug("Native data source library {}: {}", path, text);
-        case 5 -> LOGGER.trace("Native data source library {}: {}", path, text);
-        default -> LOGGER.info("Native data source library {}: {}",
+        case DEBUG -> LOGGER.debug("Native data source library {}: {}", path, text);
+        case TRACE -> LOGGER.trace("Native data source library {}: {}", path, text);
+        case INFO -> LOGGER.info("Native data source library {}: {}",
           MDC.of(LogKeys.PATH, path), MDC.of(LogKeys.MESSAGE, text));
       }
     } catch (Throwable e) {
       // The message is lost.
+    }
+  }
+
+  /**
+   * Called by the library, through {@code SparkDsHost.is_log_enabled}, with the level of the
+   * messages of {@link #log}. It must not throw: an exception thrown by an upcall crashes the JVM.
+   */
+  private static boolean isLogEnabled(int level) {
+    try {
+      return switch (LogLevel.of(level)) {
+        case ERROR -> LOGGER.isErrorEnabled();
+        case WARN -> LOGGER.isWarnEnabled();
+        case INFO -> LOGGER.isInfoEnabled();
+        case DEBUG -> LOGGER.isDebugEnabled();
+        case TRACE -> LOGGER.isTraceEnabled();
+      };
+    } catch (Throwable e) {
+      return false;
     }
   }
 
@@ -569,46 +766,134 @@ final class NativeLibrary {
   }
 
   long createReader(long dataSource, long schemaAddress) throws Throwable {
-    return createWithSchema(Function.CREATE_READER, dataSource, schemaAddress);
-  }
-
-  long createStreamReader(long dataSource, long schemaAddress) throws Throwable {
-    return createWithSchema(Function.CREATE_STREAM_READER, dataSource, schemaAddress);
-  }
-
-  private long createWithSchema(Function function, long dataSource, long schemaAddress)
-      throws Throwable {
-    MethodHandle f = function(function);
+    MethodHandle f = function(Function.CREATE_READER);
     try (Memory memory = new Memory()) {
       long out = memory.zeroed(8);
-      check((int) f.invokeExact(dataSource, schemaAddress, out), function);
-      return readHandle(out, function);
+      check((int) f.invokeExact(dataSource, schemaAddress, READER_INFO, out),
+        Function.CREATE_READER);
+      return readHandle(out, Function.CREATE_READER);
     }
   }
 
   /**
-   * Creates a writer.
+   * Creates a stream reader.
+   *
+   * @param checkpointLocation the location of the checkpoint of the source
+   */
+  long createStreamReader(long dataSource, long schemaAddress, String checkpointLocation)
+      throws Throwable {
+    MethodHandle f = function(Function.CREATE_STREAM_READER);
+    try (Memory memory = new Memory()) {
+      long info = memory.zeroed(STREAM_READER_INFO_SIZE);
+      Platform.putLong(null, info, STREAM_READER_INFO_SIZE);
+      Platform.putLong(
+        null, info + STREAM_READER_INFO_CHECKPOINT_LOCATION, memory.string(checkpointLocation));
+      long out = memory.zeroed(8);
+      check((int) f.invokeExact(dataSource, schemaAddress, info, out),
+        Function.CREATE_STREAM_READER);
+      return readHandle(out, Function.CREATE_STREAM_READER);
+    }
+  }
+
+  /** A writer handle, with the state of the writer that the data writers need. */
+  static final class WriterHandle {
+    final long handle;
+    /** The state of the writer, or null if it has none. */
+    final byte[] state;
+
+    WriterHandle(long handle, byte[] state) {
+      this.handle = handle;
+      this.state = state;
+    }
+  }
+
+  /**
+   * Creates a writer. If the library returns an invalid state, the writer is aborted, as rejected,
+   * and closed.
    *
    * @param mode {@link #WRITE_APPEND} or {@link #WRITE_TRUNCATE}
    * @param queryId the ID of the streaming query of a streaming write, or null for a batch write
    */
-  long createWriter(long dataSource, long schemaAddress, int mode, String queryId)
+  WriterHandle createWriter(long dataSource, long schemaAddress, int mode, String queryId)
       throws Throwable {
     MethodHandle f = function(Function.CREATE_WRITER);
-    try (Memory memory = new Memory()) {
+    try (Memory memory = new Memory(); Sink sink = new Sink()) {
       long info = memory.zeroed(WRITE_INFO_SIZE);
       Platform.putLong(null, info, WRITE_INFO_SIZE);
       Platform.putInt(null, info + WRITE_INFO_MODE, mode);
       Platform.putLong(
         null, info + WRITE_INFO_QUERY_ID, queryId == null ? 0 : memory.string(queryId));
       long out = memory.zeroed(8);
-      check((int) f.invokeExact(dataSource, schemaAddress, info, out), Function.CREATE_WRITER);
-      return readHandle(out, Function.CREATE_WRITER);
+      check((int) f.invokeExact(dataSource, schemaAddress, info, Ffm.STATE_SINK, sink.id, out),
+        Function.CREATE_WRITER);
+      long handle = readHandle(out, Function.CREATE_WRITER);
+      try {
+        return new WriterHandle(handle, state(sink, Function.CREATE_WRITER));
+      } catch (Throwable e) {
+        // So that the library can undo what create_writer prepared.
+        try {
+          finishWrite(Function.ABORT, handle, -1, new byte[0][], true);
+        } catch (Throwable abortError) {
+          e.addSuppressed(abortError);
+        }
+        try {
+          closeWriter(handle);
+        } catch (Throwable closeError) {
+          e.addSuppressed(closeError);
+        }
+        throw e;
+      }
     }
   }
 
   void closeDataSource(long dataSource) throws Throwable {
     function(Function.CLOSE).invokeExact(dataSource);
+  }
+
+  /** The domain of a column, as push_domains gets it in a {@code SparkDsDomain}. */
+  static final class Domain {
+    final int[] path;
+    final boolean nullAllowed;
+    final boolean nanAllowed;
+    // The addresses of the ArrowArray and the ArrowSchema of the ranges, or 0 for any value.
+    final long ranges;
+    final long rangesSchema;
+
+    Domain(int[] path, boolean nullAllowed, boolean nanAllowed, long ranges, long rangesSchema) {
+      this.path = path;
+      this.nullAllowed = nullAllowed;
+      this.nanAllowed = nanAllowed;
+      this.ranges = ranges;
+      this.rangesSchema = rangesSchema;
+    }
+  }
+
+  /** Pushes the domains down to the reader, and returns whether it uses each of them. */
+  boolean[] pushDomains(long reader, Domain[] domains) throws Throwable {
+    MethodHandle f = function(Function.PUSH_DOMAINS);
+    try (Memory memory = new Memory()) {
+      long pointers = memory.zeroed(8L * Math.max(1, domains.length));
+      for (int i = 0; i < domains.length; i++) {
+        Domain domain = domains[i];
+        long struct = memory.zeroed(DOMAIN_SIZE);
+        Platform.putLong(null, struct, DOMAIN_SIZE);
+        Platform.putLong(null, struct + DOMAIN_PATH, memory.ints(domain.path));
+        Platform.putLong(null, struct + DOMAIN_PATH_LENGTH, domain.path.length);
+        Platform.putByte(null, struct + DOMAIN_NULL_ALLOWED, (byte) (domain.nullAllowed ? 1 : 0));
+        Platform.putByte(null, struct + DOMAIN_NAN_ALLOWED, (byte) (domain.nanAllowed ? 1 : 0));
+        Platform.putLong(null, struct + DOMAIN_RANGES, domain.ranges);
+        Platform.putLong(null, struct + DOMAIN_RANGES_SCHEMA, domain.rangesSchema);
+        Platform.putLong(null, pointers + 8L * i, struct);
+      }
+      long used = memory.zeroed(Math.max(1, domains.length));
+      check((int) f.invokeExact(reader, pointers, (long) domains.length, used),
+        Function.PUSH_DOMAINS);
+      boolean[] result = new boolean[domains.length];
+      for (int i = 0; i < domains.length; i++) {
+        result[i] = Platform.getByte(null, used + i) != 0;
+      }
+      return result;
+    }
   }
 
   boolean pushLimit(long reader, int limit) throws Throwable {
@@ -620,26 +905,33 @@ final class NativeLibrary {
     }
   }
 
-  boolean pruneColumns(long reader, String[] columnNames) throws Throwable {
+  void pruneColumns(long reader, String[] columnNames) throws Throwable {
     MethodHandle f = function(Function.PRUNE_COLUMNS);
     try (Memory memory = new Memory()) {
-      long pruned = memory.zeroed(1);
-      check((int) f.invokeExact(reader, memory.strings(columnNames), (long) columnNames.length,
-        pruned), Function.PRUNE_COLUMNS);
-      return Platform.getByte(null, pruned) != 0;
+      check((int) f.invokeExact(reader, memory.strings(columnNames), (long) columnNames.length),
+        Function.PRUNE_COLUMNS);
     }
   }
 
-  byte[][] partitions(long reader) throws Throwable {
+  /** The partitions that a reader planned, with the state of the reader that reads them. */
+  static final class PlannedPartitions {
+    final byte[][] partitions;
+    /** The state of the reader, or null if it has none. */
+    final byte[] state;
+
+    PlannedPartitions(byte[][] partitions, byte[] state) {
+      this.partitions = partitions;
+      this.state = state;
+    }
+  }
+
+  PlannedPartitions partitions(long reader) throws Throwable {
     MethodHandle f = function(Function.PARTITIONS);
     try (Sink sink = new Sink()) {
-      check((int) f.invokeExact(reader, Ffm.SINK, sink.id), Function.PARTITIONS);
-      return sink.all();
+      check((int) f.invokeExact(reader, PARTITIONS_INFO, Ffm.SINK, Ffm.STATE_SINK, sink.id),
+        Function.PARTITIONS);
+      return new PlannedPartitions(sink.values(), state(sink, Function.PARTITIONS));
     }
-  }
-
-  byte[] serializeReader(long reader) throws Throwable {
-    return serialize(Function.SERIALIZE_READER, reader);
   }
 
   void closeReader(long reader) throws Throwable {
@@ -647,38 +939,100 @@ final class NativeLibrary {
   }
 
   String initialOffset(long streamReader) throws Throwable {
-    return offset(Function.INITIAL_OFFSET, streamReader);
+    MethodHandle f = function(Function.INITIAL_OFFSET);
+    try (Sink sink = new Sink()) {
+      check((int) f.invokeExact(streamReader, INITIAL_OFFSET_INFO, Ffm.SINK, sink.id),
+        Function.INITIAL_OFFSET);
+      return offset(Function.INITIAL_OFFSET, sink);
+    }
   }
 
-  String latestOffset(long streamReader) throws Throwable {
-    return offset(Function.LATEST_OFFSET, streamReader);
+  /** A limit on the data of a micro-batch, as in SparkDsReadLimit. */
+  static final class ReadLimitInfo {
+    /** {@link #READ_ALL_AVAILABLE} or {@link #READ_MAX_ROWS}, or what the library set. */
+    final int kind;
+    /** The maximum number of rows with {@link #READ_MAX_ROWS}. */
+    final long maxRows;
+
+    ReadLimitInfo(int kind, long maxRows) {
+      this.kind = kind;
+      this.maxRows = maxRows;
+    }
   }
 
-  private String offset(Function function, long streamReader) throws Throwable {
-    byte[] offset = serialize(function, streamReader);
+  /**
+   * Returns the latest offset.
+   *
+   * @param start the offset that the next micro-batch starts after
+   * @param limit the limit on the data after start
+   * @param runEnd the offset that a run of Trigger.AvailableNow reads up to, or null
+   */
+  String latestOffset(long streamReader, String start, ReadLimitInfo limit, String runEnd)
+      throws Throwable {
+    MethodHandle f = function(Function.LATEST_OFFSET);
+    try (Memory memory = new Memory(); Sink sink = new Sink()) {
+      long readLimit = memory.zeroed(READ_LIMIT_SIZE);
+      Platform.putLong(null, readLimit, READ_LIMIT_SIZE);
+      Platform.putInt(null, readLimit + READ_LIMIT_KIND, limit.kind);
+      Platform.putLong(null, readLimit + READ_LIMIT_MAX_ROWS, limit.maxRows);
+      long info = memory.zeroed(LATEST_OFFSET_INFO_SIZE);
+      Platform.putLong(null, info, LATEST_OFFSET_INFO_SIZE);
+      Platform.putLong(null, info + LATEST_OFFSET_INFO_START, memory.string(start));
+      Platform.putLong(null, info + LATEST_OFFSET_INFO_LIMIT, readLimit);
+      Platform.putLong(null, info + LATEST_OFFSET_INFO_RUN_END,
+        runEnd == null ? 0 : memory.string(runEnd));
+      check((int) f.invokeExact(streamReader, info, Ffm.SINK, sink.id), Function.LATEST_OFFSET);
+      return offset(Function.LATEST_OFFSET, sink);
+    }
+  }
+
+  /**
+   * Returns the default read limit of a stream reader, whose kind is {@link #READ_ALL_AVAILABLE}
+   * if the library sets nothing.
+   */
+  ReadLimitInfo defaultReadLimit(long streamReader) throws Throwable {
+    MethodHandle f = function(Function.DEFAULT_READ_LIMIT);
+    try (Memory memory = new Memory()) {
+      long limit = memory.zeroed(READ_LIMIT_SIZE);
+      Platform.putLong(null, limit, READ_LIMIT_SIZE);
+      Platform.putInt(null, limit + READ_LIMIT_KIND, READ_ALL_AVAILABLE);
+      check((int) f.invokeExact(streamReader, limit), Function.DEFAULT_READ_LIMIT);
+      return new ReadLimitInfo(
+        Platform.getInt(null, limit + READ_LIMIT_KIND),
+        Platform.getLong(null, limit + READ_LIMIT_MAX_ROWS));
+    }
+  }
+
+  /** Returns the offset that a function passed to the sink, which it must pass. */
+  private static String offset(Function function, Sink sink) throws Throwable {
+    byte[] offset = single(sink, function);
     if (offset == null) {
       throw new IllegalStateException(function.fieldName + " returned no offset.");
     }
     return new String(offset, StandardCharsets.UTF_8);
   }
 
-  byte[][] streamPartitions(long streamReader, String start, String end) throws Throwable {
+  PlannedPartitions streamPartitions(long streamReader, String start, String end)
+      throws Throwable {
     MethodHandle f = function(Function.STREAM_PARTITIONS);
     try (Memory memory = new Memory(); Sink sink = new Sink()) {
-      check((int) f.invokeExact(streamReader, memory.string(start), memory.string(end),
-        Ffm.SINK, sink.id), Function.STREAM_PARTITIONS);
-      return sink.all();
+      long info = memory.zeroed(STREAM_PARTITIONS_INFO_SIZE);
+      Platform.putLong(null, info, STREAM_PARTITIONS_INFO_SIZE);
+      Platform.putLong(null, info + STREAM_PARTITIONS_INFO_START, memory.string(start));
+      Platform.putLong(null, info + STREAM_PARTITIONS_INFO_END, memory.string(end));
+      check((int) f.invokeExact(streamReader, info, Ffm.SINK, Ffm.STATE_SINK, sink.id),
+        Function.STREAM_PARTITIONS);
+      return new PlannedPartitions(sink.values(), state(sink, Function.STREAM_PARTITIONS));
     }
-  }
-
-  byte[] serializeStreamReader(long streamReader) throws Throwable {
-    return serialize(Function.SERIALIZE_STREAM_READER, streamReader);
   }
 
   void commitOffset(long streamReader, String end) throws Throwable {
     MethodHandle f = function(Function.COMMIT_OFFSET);
     try (Memory memory = new Memory()) {
-      check((int) f.invokeExact(streamReader, memory.string(end)), Function.COMMIT_OFFSET);
+      long info = memory.zeroed(COMMIT_OFFSET_INFO_SIZE);
+      Platform.putLong(null, info, COMMIT_OFFSET_INFO_SIZE);
+      Platform.putLong(null, info + COMMIT_OFFSET_INFO_END, memory.string(end));
+      check((int) f.invokeExact(streamReader, info), Function.COMMIT_OFFSET);
     }
   }
 
@@ -686,30 +1040,52 @@ final class NativeLibrary {
     function(Function.CLOSE_STREAM_READER).invokeExact(streamReader);
   }
 
-  void read(Task task, byte[] readerState, byte[] partition, long streamAddress)
-      throws Throwable {
+  /**
+   * Reads a partition, into the stream at the given address.
+   *
+   * @param kind {@link #READ_BATCH} or {@link #READ_MICRO_BATCH}
+   * @param schemaAddress the address of the {@code ArrowSchema} of the schema to read
+   */
+  void read(
+      Task task,
+      int kind,
+      long schemaAddress,
+      byte[] readerState,
+      byte[] partition,
+      long streamAddress) throws Throwable {
     MethodHandle f = function(Function.READ);
     try (Memory memory = new Memory()) {
-      check((int) f.invokeExact(task.address, memory.bytes(readerState),
-        (long) readerState.length, memory.bytes(partition), (long) partition.length,
-        streamAddress), Function.READ);
+      long info = memory.zeroed(READ_INFO_SIZE);
+      Platform.putLong(null, info, READ_INFO_SIZE);
+      Platform.putInt(null, info + READ_INFO_KIND, kind);
+      Platform.putLong(null, info + READ_INFO_SCHEMA, schemaAddress);
+      Platform.putLong(null, info + READ_INFO_READER_STATE, memory.bytes(readerState));
+      Platform.putLong(null, info + READ_INFO_READER_STATE_LENGTH, readerState.length);
+      Platform.putLong(null, info + READ_INFO_PARTITION, memory.bytes(partition));
+      Platform.putLong(null, info + READ_INFO_PARTITION_LENGTH, partition.length);
+      check((int) f.invokeExact(task.address, info, streamAddress), Function.READ);
     }
   }
 
-  byte[] serializeWriter(long writer) throws Throwable {
-    return serialize(Function.SERIALIZE_WRITER, writer);
-  }
-
   void commit(long writer, long epochId, byte[][] messages) throws Throwable {
-    finishWrite(Function.COMMIT, writer, epochId, messages);
+    finishWrite(Function.COMMIT, writer, epochId, messages, false);
   }
 
   void abort(long writer, long epochId, byte[][] messages) throws Throwable {
-    finishWrite(Function.ABORT, writer, epochId, messages);
+    finishWrite(Function.ABORT, writer, epochId, messages, false);
   }
 
-  private void finishWrite(Function function, long writer, long epochId, byte[][] messages)
-      throws Throwable {
+  /**
+   * Commits or aborts a write.
+   *
+   * @param rejected whether Spark rejected what create_writer returned, for an abort
+   */
+  private void finishWrite(
+      Function function,
+      long writer,
+      long epochId,
+      byte[][] messages,
+      boolean rejected) throws Throwable {
     MethodHandle f = function(function);
     try (Memory memory = new Memory()) {
       long pointers = memory.zeroed(8L * Math.max(1, messages.length));
@@ -720,8 +1096,14 @@ final class NativeLibrary {
           Platform.putLong(null, lengths + 8L * i, messages[i].length);
         }
       }
-      check((int) f.invokeExact(writer, epochId, pointers, lengths, (long) messages.length),
-        function);
+      long info = memory.zeroed(FINISH_WRITE_INFO_SIZE);
+      Platform.putLong(null, info, FINISH_WRITE_INFO_SIZE);
+      Platform.putLong(null, info + FINISH_WRITE_INFO_EPOCH_ID, epochId);
+      Platform.putLong(null, info + FINISH_WRITE_INFO_MESSAGES, pointers);
+      Platform.putLong(null, info + FINISH_WRITE_INFO_MESSAGE_LENGTHS, lengths);
+      Platform.putLong(null, info + FINISH_WRITE_INFO_NUM_MESSAGES, messages.length);
+      Platform.putLong(null, info + FINISH_WRITE_INFO_REJECTED, rejected ? 1L : 0L);
+      check((int) f.invokeExact(writer, info), function);
     }
   }
 
@@ -729,19 +1111,31 @@ final class NativeLibrary {
     function(Function.CLOSE_WRITER).invokeExact(writer);
   }
 
-  long createDataWriter(Task task, byte[] writerState, long epochId) throws Throwable {
+  /**
+   * Creates a data writer.
+   *
+   * @param schemaAddress the address of the {@code ArrowSchema} of the data to write
+   * @param epochId the ID of the micro-batch of a streaming write, or -1 for a batch write
+   */
+  long createDataWriter(Task task, long schemaAddress, byte[] writerState, long epochId)
+      throws Throwable {
     MethodHandle f = function(Function.CREATE_DATA_WRITER);
     try (Memory memory = new Memory()) {
+      long info = memory.zeroed(DATA_WRITER_INFO_SIZE);
+      Platform.putLong(null, info, DATA_WRITER_INFO_SIZE);
+      Platform.putLong(null, info + DATA_WRITER_INFO_SCHEMA, schemaAddress);
+      Platform.putLong(null, info + DATA_WRITER_INFO_WRITER_STATE, memory.bytes(writerState));
+      Platform.putLong(null, info + DATA_WRITER_INFO_WRITER_STATE_LENGTH, writerState.length);
+      Platform.putLong(null, info + DATA_WRITER_INFO_EPOCH_ID, epochId);
       long out = memory.zeroed(8);
-      check((int) f.invokeExact(task.address, memory.bytes(writerState),
-        (long) writerState.length, epochId, out), Function.CREATE_DATA_WRITER);
+      check((int) f.invokeExact(task.address, info, out), Function.CREATE_DATA_WRITER);
       return readHandle(out, Function.CREATE_DATA_WRITER);
     }
   }
 
-  void write(long dataWriter, long arrayAddress, long schemaAddress) throws Throwable {
-    check((int) function(Function.WRITE).invokeExact(dataWriter, arrayAddress, schemaAddress),
-      Function.WRITE);
+  /** Writes the array at the given address, of the schema that the data writer got. */
+  void write(long dataWriter, long arrayAddress) throws Throwable {
+    check((int) function(Function.WRITE).invokeExact(dataWriter, arrayAddress), Function.WRITE);
   }
 
   /**
@@ -751,7 +1145,8 @@ final class NativeLibrary {
   byte[] commitDataWriter(long dataWriter, Runnable committed) throws Throwable {
     MethodHandle f = function(Function.COMMIT_DATA_WRITER);
     try (Sink sink = new Sink()) {
-      check((int) f.invokeExact(dataWriter, Ffm.SINK, sink.id), Function.COMMIT_DATA_WRITER);
+      check((int) f.invokeExact(dataWriter, FINISH_DATA_WRITER_INFO, Ffm.SINK, sink.id),
+        Function.COMMIT_DATA_WRITER);
       committed.run();
       byte[] message = single(sink, Function.COMMIT_DATA_WRITER);
       return message == null ? new byte[0] : message;
@@ -759,7 +1154,8 @@ final class NativeLibrary {
   }
 
   void abortDataWriter(long dataWriter) throws Throwable {
-    check((int) function(Function.ABORT_DATA_WRITER).invokeExact(dataWriter),
+    check(
+      (int) function(Function.ABORT_DATA_WRITER).invokeExact(dataWriter, FINISH_DATA_WRITER_INFO),
       Function.ABORT_DATA_WRITER);
   }
 
@@ -767,26 +1163,22 @@ final class NativeLibrary {
     function(Function.CLOSE_DATA_WRITER).invokeExact(dataWriter);
   }
 
-  /**
-   * Calls a function that returns a single byte array through a sink. Returns null if the
-   * function does not call the sink.
-   */
-  private byte[] serialize(Function function, long handle) throws Throwable {
-    MethodHandle f = function(function);
-    try (Sink sink = new Sink()) {
-      check((int) f.invokeExact(handle, Ffm.SINK, sink.id), function);
-      return single(sink, function);
-    }
-  }
-
   /** Returns the single byte array that a function passed to the sink, or null if none. */
   private static byte[] single(Sink sink, Function function) throws Throwable {
-    byte[][] values = sink.all();
-    if (values.length > 1) {
+    return atMostOne(sink.values(), function, "values");
+  }
+
+  /** Returns the state that a function passed to the set_state sink, or null if none. */
+  private static byte[] state(Sink sink, Function function) throws Throwable {
+    return atMostOne(sink.states(), function, "states");
+  }
+
+  private static byte[] atMostOne(byte[][] arrays, Function function, String what) {
+    if (arrays.length > 1) {
       throw new IllegalStateException(
-        function.fieldName + " returned " + values.length + " values instead of one.");
+        function.fieldName + " returned " + arrays.length + " " + what + " instead of one.");
     }
-    return values.length == 0 ? null : values[0];
+    return arrays.length == 0 ? null : arrays[0];
   }
 
   // ---------------------------------------------------------------------------------------------
@@ -813,9 +1205,17 @@ final class NativeLibrary {
 
     /** Copies the string as a NUL-terminated UTF-8 string. */
     long string(String value) {
-      byte[] bytes = value.getBytes(StandardCharsets.UTF_8);
-      long address = zeroed(bytes.length + 1L);
-      Platform.copyMemory(bytes, Platform.BYTE_ARRAY_OFFSET, null, address, bytes.length);
+      long address = toCString(value);
+      allocations.add(address);
+      return address;
+    }
+
+    /** Copies the ints. Empty ints are passed as a valid pointer too. */
+    long ints(int[] values) {
+      long address = zeroed(4L * Math.max(1, values.length));
+      for (int i = 0; i < values.length; i++) {
+        Platform.putInt(null, address + 4L * i, values[i]);
+      }
       return address;
     }
 
@@ -834,6 +1234,15 @@ final class NativeLibrary {
     }
   }
 
+  /** Copies a string to native memory, as a NUL-terminated UTF-8 string, which the caller frees. */
+  private static long toCString(String value) {
+    byte[] bytes = value.getBytes(StandardCharsets.UTF_8);
+    long address = Platform.allocateMemory(bytes.length + 1L);
+    Platform.copyMemory(bytes, Platform.BYTE_ARRAY_OFFSET, null, address, bytes.length);
+    Platform.putByte(null, address + bytes.length, (byte) 0);
+    return address;
+  }
+
   private static byte[] readCString(long address) {
     int length = 0;
     while (Platform.getByte(null, address + length) != 0) {
@@ -848,12 +1257,16 @@ final class NativeLibrary {
   // Task contexts
   // ---------------------------------------------------------------------------------------------
 
-  // Whether the task of each SparkDsTaskContext was killed, by the address of the struct.
+  // Whether the library should stop reading or writing with each SparkDsTaskContext, which
+  // is_interrupted answers, by the address of the struct.
   private static final ConcurrentHashMap<Long, BooleanSupplier> tasks = new ConcurrentHashMap<>();
 
   /**
    * The {@code SparkDsTaskContext} of a task that reads a partition or writes data. The reader or
-   * the data writer closes it once the library no longer uses it, which frees it.
+   * the data writer closes it once the library no longer uses it, which frees it. For the stream of
+   * a read that an engine got, the release of the stream closes it, on whichever thread the engine
+   * releases the stream: only the release that removes the stream from {@code engineStreams} does,
+   * so it is closed once (see {@link EngineStream}).
    */
   static final class Task implements AutoCloseable {
     final long address;
@@ -903,6 +1316,276 @@ final class NativeLibrary {
     }
   }
 
+  /** The number of task contexts that are not closed yet, for tests. */
+  static int openTaskContexts() {
+    return tasks.size();
+  }
+
+  // ---------------------------------------------------------------------------------------------
+  // Streams of engines
+  // ---------------------------------------------------------------------------------------------
+
+  // The errno values that the callbacks of a stream return.
+  private static final int EINVAL = 22;
+  private static final int EIO = 5;
+
+  /**
+   * The callbacks of the streams that Spark wraps for engines, see {@link EngineStream}, the
+   * method handles that call the callbacks of the wrapped streams, and what the callbacks return
+   * for a stream that Spark does not know. They are created when the first stream is wrapped, so
+   * that a JVM that wraps no stream does not create them, and a failure to create them only fails
+   * the streams of engines.
+   */
+  private static final class EngineStreamCallbacks {
+    // The addresses of the C functions that call Java, which live as long as the JVM.
+    static final long GET_SCHEMA;
+    static final long GET_NEXT;
+    static final long GET_LAST_ERROR;
+    static final long RELEASE;
+    // The callbacks of struct ArrowArrayStream, called with the address of the function first:
+    // get_schema and get_next, get_last_error, and release.
+    static final MethodHandle INT_CALLBACK;
+    static final MethodHandle POINTER_CALLBACK;
+    static final MethodHandle VOID_CALLBACK;
+    // The message of get_last_error for a stream that Spark does not know, which lives as long as
+    // the JVM.
+    static final long UNKNOWN_STREAM_ERROR;
+
+    static {
+      try {
+        MethodHandles.Lookup lookup = MethodHandles.lookup();
+        // Linker.downcallHandle(FunctionDescriptor, Linker.Option...), whose method handles take
+        // the address of the function to call as their first argument.
+        MethodHandle unboundDowncall = lookup.findVirtual(
+          Class.forName("java.lang.foreign.Linker"), "downcallHandle",
+          MethodType.methodType(MethodHandle.class,
+            Class.forName("java.lang.foreign.FunctionDescriptor"), Ffm.NO_OPTIONS.getClass()))
+          .asFixedArity();
+        GET_SCHEMA = Ffm.upcall(
+          lookup.findStatic(NativeLibrary.class, "engineStreamGetSchema",
+            MethodType.methodType(int.class, long.class, long.class)),
+          C.I32, C.PTR, C.PTR);
+        GET_NEXT = Ffm.upcall(
+          lookup.findStatic(NativeLibrary.class, "engineStreamGetNext",
+            MethodType.methodType(int.class, long.class, long.class)),
+          C.I32, C.PTR, C.PTR);
+        GET_LAST_ERROR = Ffm.upcall(
+          lookup.findStatic(NativeLibrary.class, "engineStreamGetLastError",
+            MethodType.methodType(long.class, long.class)),
+          C.PTR, C.PTR);
+        RELEASE = Ffm.upcall(
+          lookup.findStatic(NativeLibrary.class, "engineStreamRelease",
+            MethodType.methodType(void.class, long.class)),
+          C.VOID, C.PTR);
+        INT_CALLBACK = callback(unboundDowncall, C.I32, C.PTR, C.PTR);
+        POINTER_CALLBACK = callback(unboundDowncall, C.PTR, C.PTR);
+        VOID_CALLBACK = callback(unboundDowncall, C.VOID, C.PTR);
+        UNKNOWN_STREAM_ERROR = toCString("The stream was released, or is not a stream of Spark.");
+      } catch (Throwable e) {
+        // The message names the cause, because the JVM only keeps this message for the later
+        // uses of the class.
+        throw new IllegalStateException(
+          "Cannot create the callbacks of the streams of engines: " + rootCause(e), e);
+      }
+    }
+
+    /**
+     * Returns a method handle that calls the C function at the address of its first argument, a
+     * {@code long}, with the given types, as {@link Ffm#downcall} does for a fixed address.
+     */
+    private static MethodHandle callback(MethodHandle unboundDowncall, C result, C... parameters)
+        throws Throwable {
+      MethodHandle handle = (MethodHandle) unboundDowncall.invoke(
+        Ffm.LINKER, Ffm.descriptor(result, parameters), Ffm.NO_OPTIONS);
+      handle = MethodHandles.filterArguments(handle, 0, Ffm.OF_ADDRESS);
+      return Ffm.convertPointers(handle, 1, Ffm.OF_ADDRESS, Ffm.ADDRESS_OF, result, parameters);
+    }
+  }
+
+  private static final AtomicLong nextEngineStreamId = new AtomicLong(1);
+  // The streams wrapped for engines that are not released yet, by their private_data.
+  private static final ConcurrentHashMap<Long, EngineStream> engineStreams =
+    new ConcurrentHashMap<>();
+
+  /**
+   * The stream of a read that an engine got with {@code SupportsArrowStreamRead}, which ties the
+   * task context of the read to the stream: the context is closed once the library released the
+   * stream, whenever and on whichever thread the engine releases it, also after the task ended.
+   * The stream of the library is moved to memory of Spark, and the stream of the engine gets
+   * callbacks of Spark, which call the current callbacks of the library's stream, and a
+   * private_data that identifies the wrapped stream, so that the engine can move the stream too.
+   */
+  private static final class EngineStream {
+    final long inner;
+    final Task task;
+    // The name of the data source, for the errors.
+    final String name;
+    // The message of the last error of Spark, rather than of the library, or 0 if the last call
+    // returned an error of the library, or none. The callbacks never run concurrently, but may
+    // run on different threads one after the other.
+    volatile long sparkError;
+
+    EngineStream(long inner, Task task, String name) {
+      this.inner = inner;
+      this.task = task;
+      this.name = name;
+    }
+
+    long callback(long offset) {
+      return Platform.getLong(null, inner + offset);
+    }
+
+    /**
+     * Records an error of Spark in the given callback, which get_last_error then returns, and logs
+     * it. The message is built here, since building it can throw too, as a StackOverflowError on
+     * the small stack of a thread of an engine can.
+     */
+    int fail(String callback, Throwable e) {
+      try {
+        clearError();
+        sparkError = toCString("The " + callback + " of the stream of the native data source " +
+          name + " failed: " + rootCause(e));
+        LOGGER.error("The {} of the stream of the native data source {} failed", e,
+          MDC.of(LogKeys.FUNCTION_NAME, callback), MDC.of(LogKeys.DATA_SOURCE, name));
+      } catch (Throwable ignored) {
+        // An upcall must not throw.
+      }
+      return EIO;
+    }
+
+    void clearError() {
+      if (sparkError != 0) {
+        Platform.freeMemory(sparkError);
+        sparkError = 0;
+      }
+    }
+  }
+
+  /**
+   * Wraps the stream at the given address, which read initialized with non-NULL callbacks, so that
+   * releasing it closes the given task context (see {@link EngineStream}). If it fails, the stream
+   * is left as it is.
+   *
+   * @param name the name of the data source, for the errors of the stream
+   */
+  static void wrapEngineStream(long stream, Task task, String name) {
+    // Creates the callbacks first, so that the stream is left as it is if that fails.
+    long getSchema;
+    long getNext;
+    long getLastError;
+    long release;
+    try {
+      getSchema = EngineStreamCallbacks.GET_SCHEMA;
+      getNext = EngineStreamCallbacks.GET_NEXT;
+      getLastError = EngineStreamCallbacks.GET_LAST_ERROR;
+      release = EngineStreamCallbacks.RELEASE;
+    } catch (ExceptionInInitializerError | NoClassDefFoundError e) {
+      // The first use of a class that failed to initialize gets the error, and the later ones a
+      // NoClassDefFoundError, whose cause has its message: both name the root cause here, as the
+      // errors of load do.
+      throw new IllegalStateException(
+        "Cannot create the callbacks of the streams of engines: " + rootCause(e), e);
+    }
+    long inner = Platform.allocateMemory(STREAM_SIZE);
+    long id = nextEngineStreamId.getAndIncrement();
+    try {
+      Platform.copyMemory(null, stream, null, inner, STREAM_SIZE);
+      engineStreams.put(id, new EngineStream(inner, task, name));
+    } catch (Throwable e) {
+      engineStreams.remove(id);
+      Platform.freeMemory(inner);
+      throw e;
+    }
+    Platform.putLong(null, stream + STREAM_GET_SCHEMA, getSchema);
+    Platform.putLong(null, stream + STREAM_GET_NEXT, getNext);
+    Platform.putLong(null, stream + STREAM_GET_LAST_ERROR, getLastError);
+    Platform.putLong(null, stream + STREAM_RELEASE, release);
+    Platform.putLong(null, stream + STREAM_PRIVATE_DATA, id);
+  }
+
+  /** The number of streams wrapped for engines that are not released yet, for tests. */
+  static int openEngineStreams() {
+    return engineStreams.size();
+  }
+
+  private static EngineStream engineStream(long stream) {
+    return engineStreams.get(Platform.getLong(null, stream + STREAM_PRIVATE_DATA));
+  }
+
+  // The callbacks of the streams wrapped for engines. They must not throw: an exception thrown by
+  // an upcall crashes the JVM.
+
+  private static int engineStreamGetSchema(long stream, long out) {
+    return engineStreamCall(stream, out, STREAM_GET_SCHEMA, "get_schema");
+  }
+
+  private static int engineStreamGetNext(long stream, long out) {
+    return engineStreamCall(stream, out, STREAM_GET_NEXT, "get_next");
+  }
+
+  private static int engineStreamCall(long stream, long out, long offset, String callback) {
+    EngineStream wrapped = null;
+    try {
+      wrapped = engineStream(stream);
+      if (wrapped == null) {
+        return EINVAL;
+      }
+      wrapped.clearError();
+      return (int) EngineStreamCallbacks.INT_CALLBACK.invokeExact(
+        wrapped.callback(offset), wrapped.inner, out);
+    } catch (Throwable e) {
+      return wrapped == null ? EIO : wrapped.fail(callback, e);
+    }
+  }
+
+  private static long engineStreamGetLastError(long stream) {
+    try {
+      EngineStream wrapped = engineStream(stream);
+      if (wrapped == null) {
+        return EngineStreamCallbacks.UNKNOWN_STREAM_ERROR;
+      }
+      if (wrapped.sparkError != 0) {
+        return wrapped.sparkError;
+      }
+      return (long) EngineStreamCallbacks.POINTER_CALLBACK.invokeExact(
+        wrapped.callback(STREAM_GET_LAST_ERROR), wrapped.inner);
+    } catch (Throwable e) {
+      return 0;
+    }
+  }
+
+  private static void engineStreamRelease(long stream) {
+    EngineStream wrapped = null;
+    try {
+      wrapped = engineStreams.remove(Platform.getLong(null, stream + STREAM_PRIVATE_DATA));
+      if (wrapped != null) {
+        try {
+          EngineStreamCallbacks.VOID_CALLBACK.invokeExact(
+            wrapped.callback(STREAM_RELEASE), wrapped.inner);
+        } finally {
+          // The library no longer uses the task once it released its stream.
+          wrapped.clearError();
+          Platform.freeMemory(wrapped.inner);
+          wrapped.task.close();
+        }
+      }
+    } catch (Throwable e) {
+      try {
+        if (wrapped == null) {
+          LOGGER.error("The release of the stream of a native data source failed", e);
+        } else {
+          LOGGER.error("The {} of the stream of the native data source {} failed", e,
+            MDC.of(LogKeys.FUNCTION_NAME, "release"), MDC.of(LogKeys.DATA_SOURCE, wrapped.name));
+        }
+      } catch (Throwable ignored) {
+        // An upcall must not throw.
+      }
+    } finally {
+      // Marks the stream released, as the C stream interface requires of release.
+      Platform.putLong(null, stream + STREAM_RELEASE, 0);
+    }
+  }
+
   // ---------------------------------------------------------------------------------------------
   // Sink
   // ---------------------------------------------------------------------------------------------
@@ -911,23 +1594,35 @@ final class NativeLibrary {
   private static final ConcurrentHashMap<Long, Sink> sinks = new ConcurrentHashMap<>();
 
   /**
-   * Collects the byte arrays that a library returns during a call, through the C function
-   * {@link Ffm#SINK}. The library passes {@link #id} back to identify it.
+   * Collects the byte arrays that a library returns during a call, through the C functions
+   * {@link Ffm#SINK} and {@link Ffm#STATE_SINK}, which a function that returns values and a
+   * state gets with the same sink. The library passes {@link #id} back to identify it.
    */
   private static final class Sink implements AutoCloseable {
     final long id = nextSinkId.getAndIncrement();
     final List<byte[]> values = new ArrayList<>();
+    final List<byte[]> states = new ArrayList<>();
     Throwable error;
 
     Sink() {
       sinks.put(id, this);
     }
 
-    byte[][] all() throws Throwable {
+    /** The byte arrays passed to {@link Ffm#SINK}. */
+    byte[][] values() throws Throwable {
+      return collected(values);
+    }
+
+    /** The byte arrays passed to {@link Ffm#STATE_SINK}. */
+    byte[][] states() throws Throwable {
+      return collected(states);
+    }
+
+    private byte[][] collected(List<byte[]> arrays) throws Throwable {
       if (error != null) {
         throw error;
       }
-      return values.toArray(new byte[0][]);
+      return arrays.toArray(new byte[0][]);
     }
 
     @Override
@@ -941,6 +1636,18 @@ final class NativeLibrary {
    * It must not throw: an exception thrown by an upcall crashes the JVM.
    */
   private static void sink(long id, long data, long length) {
+    collect(id, data, length, false);
+  }
+
+  /**
+   * Called by the library, through the upcall stub {@link Ffm#STATE_SINK}, with a state to copy.
+   * It must not throw: an exception thrown by an upcall crashes the JVM.
+   */
+  private static void stateSink(long id, long data, long length) {
+    collect(id, data, length, true);
+  }
+
+  private static void collect(long id, long data, long length, boolean state) {
     Sink sink = null;
     try {
       sink = sinks.get(id);
@@ -953,7 +1660,7 @@ final class NativeLibrary {
       }
       byte[] bytes = new byte[(int) length];
       Platform.copyMemory(null, data, bytes, Platform.BYTE_ARRAY_OFFSET, length);
-      sink.values.add(bytes);
+      (state ? sink.states : sink.values).add(bytes);
     } catch (Throwable e) {
       if (sink != null) {
         sink.error = e;

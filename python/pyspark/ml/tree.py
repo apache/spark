@@ -22,6 +22,7 @@ from pyspark.ml.linalg import Vector
 from pyspark.ml.param import Params
 from pyspark.ml.param.shared import (
     HasCheckpointInterval,
+    HasIntermediateStorageLevel,
     HasMaxIter,
     HasSeed,
     HasStepSize,
@@ -72,7 +73,9 @@ class _DecisionTreeModel(JavaPredictionModel[T]):
         return self._call_java("predictLeaf", value)
 
 
-class _DecisionTreeParams(HasCheckpointInterval, HasSeed, HasWeightCol):
+class _DecisionTreeParams(
+    HasCheckpointInterval, HasSeed, HasWeightCol, HasIntermediateStorageLevel
+):
     """
     Mixin for Decision Tree parameters.
     """

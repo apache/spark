@@ -42,7 +42,11 @@ class FMClassifierSuite extends MLTest with DefaultReadWriteTest {
   }
 
   test("params") {
-    ParamsSuite.checkParams(new FMClassifier)
+    val classifier = new FMClassifier
+    ParamsSuite.checkParams(classifier)
+    assert(classifier.getIntermediateStorageLevel === "MEMORY_AND_DISK")
+    classifier.setIntermediateStorageLevel("DISK_ONLY")
+    assert(classifier.getIntermediateStorageLevel === "DISK_ONLY")
     val model = new FMClassificationModel("fmc_test", 0.0, Vectors.dense(0.0),
       new DenseMatrix(1, 8, new Array[Double](8)))
     ParamsSuite.checkParams(model)

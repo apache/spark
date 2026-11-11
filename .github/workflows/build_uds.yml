@@ -21,7 +21,7 @@ name: "Build / Unix Domain Socket (JDK 21, Scala 2.13)"
 
 on:
   schedule:
-    - cron: '0 1 */6 * *'
+    - cron: '17 3 * * 2'
   workflow_dispatch:
 
 jobs:
