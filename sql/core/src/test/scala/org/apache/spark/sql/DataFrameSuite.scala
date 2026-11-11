@@ -3054,6 +3054,23 @@ class DataFrameSuite extends SharedSparkSession
         checkAnswer(df.where($"a" > 0 && rand(10) < 0.5 && $"a" === 1), expected.toSeq)
       }
     }
+    // The equalities still go first ahead of deterministic conditions, so a condition that can
+    // fail does not run on the rows they drop, as on master. Released versions replace `d` with 5
+    // in `n / d` and `a > 3` with `true`.
+    withTempPath { dir =>
+      Seq((10L, 0L), (10L, 5L)).toDF("n", "d").coalesce(1).write.parquet(dir.getCanonicalPath)
+      val df = spark.read.parquet(dir.getCanonicalPath)
+      withSQLConf(SQLConf.ANSI_ENABLED.key -> "true") {
+        checkAnswer(df.where($"n" / $"d" > 1 && $"d" === 5), Row(10L, 5L))
+      }
+    }
+    withTempPath { dir =>
+      Seq((2L, 0L), (5L, 1L)).toDF("a", "c").coalesce(1).write.parquet(dir.getCanonicalPath)
+      val df = spark.read.parquet(dir.getCanonicalPath)
+      withSQLConf(SQLConf.ANSI_ENABLED.key -> "true") {
+        checkAnswer(df.where(($"a" > 3 || lit(10L) / $"c" > 1) && $"a" === 5), Row(5L, 1L))
+      }
+    }
   }
 
   test("SPARK-60985: an inferred filter does not raise an error the query does not raise") {
