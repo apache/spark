@@ -30,20 +30,25 @@ Please refer [Migration Guide: SQL, Datasets and DataFrame](../sql-migration-gui
   to finalize results, or stop making progress while the join has no event-time eviction bound.
   The join holds back only for an input whose event time reaches the next stateful operator: in
   a join on `clickTime <= impressionTime + INTERVAL 1 HOUR`, a window aggregation over
-  `impressionTime` makes progress, and one over `clickTime` does not. When Spark cannot tell
-  which input's event time the operator uses, for example after a union, before a sliding window
-  or before `transformWithState`, it holds back for both inputs.
+  `impressionTime` makes progress, and one over `clickTime` does not. Spark follows the event
+  time through projections, filters, unions, and time and session windows, to aggregations,
+  deduplication, stream-stream joins, and `flatMapGroupsWithState` or `transformWithState` with
+  event-time timeouts. When Spark cannot tell which input's event time the operator uses, for
+  example when the operator's event time is computed from the join output by a function, it
+  holds back for both inputs.
 
 - When restarting a stream-stream join from an older Spark version, Spark may reject the
   existing checkpoint with `STREAMING_JOIN_CHECKPOINT_INCOMPATIBLE`. Spark reuses the checkpoint
   of a join without watermarks, of a join with an equality condition between the two inputs'
-  event times, such as `leftTime = rightTime`, and of a join whose time condition bounds each
-  input's event time by the other's with constant intervals, such as
-  `rightTime BETWEEN leftTime AND leftTime + INTERVAL 1 HOUR`. It rejects other joins with
-  watermarks, for example when the time condition uses another column, bounds only one input,
-  or adds whole days in a time zone with daylight saving time. Spark cannot verify that their
-  saved rows can be reused safely after the correction, even if the query did not previously
-  produce incorrect results.
+  event times, such as `leftTime = rightTime`, and of a join whose time condition compares the
+  two inputs' event times, optionally cast, with constant intervals or numbers, such as
+  `rightTime BETWEEN leftTime AND leftTime + INTERVAL 1 HOUR`. When such a condition bounds only
+  one input, or the join has only equality conditions on columns other than event times, such as
+  `leftKey = rightKey`, Spark reuses the checkpoint only when no stateful operator after the join
+  uses the event time of an input without a bound. It rejects other joins with watermarks, for
+  example when the time condition uses another column or adds a month interval. Spark cannot
+  verify that their saved rows can be reused safely after the correction, even if the query did
+  not previously produce incorrect results.
 
   Before upgrading, check that the input history needed to rebuild the join is still available.
   If the checkpoint is rejected, start with a new checkpoint and replay that input. Account for

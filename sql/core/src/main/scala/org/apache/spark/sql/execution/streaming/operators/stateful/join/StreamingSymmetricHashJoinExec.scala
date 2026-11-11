@@ -731,17 +731,19 @@ case class StreamingSymmetricHashJoinExec(
     // so eviction never removes the row. The row cannot match either: that column is an equality
     // key, or a comparison in the join condition bounds it. Handle the row like one that fails
     // the pre-join filter.
-    private[this] val isEvictionColumnNull: UnsafeRow => Boolean = {
-      val isNull = stateWatermarkPredicate.map {
-        case JoinStateKeyWatermarkPredicate(expr, _, _) =>
+    // The check takes the generated key and the input row, so the key is computed only once.
+    private[this] val isEvictionColumnNull: (UnsafeRow, UnsafeRow) => Boolean =
+      stateWatermarkPredicate match {
+        case Some(JoinStateKeyWatermarkPredicate(expr, _, _)) =>
           // Only a NULL key fails equality. A struct key with a NULL field can still be equal.
           val ordinal = expr.collectFirst { case b: BoundReference => b.ordinal }.get
-          IsNull(joinKeys(ordinal))
-        case JoinStateValueWatermarkPredicate(expr, _, _) =>
-          IsNull(expr)
+          (key, _) => key.isNullAt(ordinal)
+        case Some(JoinStateValueWatermarkPredicate(expr, _, _)) =>
+          val isNull = Predicate.create(IsNull(expr), inputAttributes)
+          (_, row) => isNull.eval(row)
+        case None =>
+          (_, _) => false
       }
-      Predicate.create(isNull.getOrElse(Literal(false)), inputAttributes).eval _
-    }
 
     private[this] var updatedStateRowsCount = 0
     private[this] var numRemovedFromOtherSideDuringJoinCount = 0
@@ -928,8 +930,8 @@ case class StreamingSymmetricHashJoinExec(
         // never satisfy the full join condition no matter what other side row it's matched with.
         // This allows us to avoid adding it to the state, and generate an outer join row
         // immediately (or do nothing in the case of inner join).
-        if (preJoinFilter(thisRow) && !isEvictionColumnNull(thisRow)) {
-          val key = keyGenerator(thisRow)
+        val key = if (preJoinFilter(thisRow)) keyGenerator(thisRow) else null
+        if (key != null && !isEvictionColumnNull(key, thisRow)) {
           // If the join type is Left Semi and this is the right side, we can remove the matched
           // row from the other (left) side's state, since the row won't be produced anymore for
           // the following input rows.

@@ -26,7 +26,6 @@ import org.apache.spark.sql.catalyst.planning.ExtractEquiJoinKeys
 import org.apache.spark.sql.catalyst.plans.logical.{EventTimeWatermark, LogicalPlan}
 import org.apache.spark.sql.catalyst.plans.logical.EventTimeWatermark._
 import org.apache.spark.sql.catalyst.util.DateTimeConstants.MICROS_PER_DAY
-import org.apache.spark.sql.catalyst.util.DateTimeUtils
 import org.apache.spark.sql.types._
 import org.apache.spark.unsafe.types.CalendarInterval
 
@@ -53,47 +52,32 @@ object StreamingJoinHelper extends PredicateHelper with Logging {
   }
 
   /**
-   * Whether the expression is the event time plus or minus constant intervals that the join's
-   * interval arithmetic evaluates exactly. Other functions and casts from other types are not
-   * accepted: a truncation such as CAST(CAST(rightTime AS BIGINT) AS TIMESTAMP) can map a later
-   * event time below the watermark.
+   * Whether the expression is the event time, optionally cast to TIMESTAMP or a numeric type,
+   * plus or minus constants: intervals without months, or numbers. The solver reads such a cast
+   * as the column itself and counts such an interval as a fixed duration, a day as 24 hours, in
+   * every version and every time zone, so a range condition built from it derives the same
+   * cutoff before and after the stream-stream join corrections. Months have no fixed length.
    */
-  private[sql] def isIntervalShift(expr: Expression, eventTime: Attribute): Boolean = {
-    // Spark adds the whole days of an interval in the session time zone, where a day can be 23
-    // or 25 hours across a daylight saving change, but the solver counts a day as 24 hours.
-    // Accept whole days only in a fixed-offset time zone.
-    def isExactInterval(e: Expression, timeZoneId: Option[String]): Boolean = {
-      def fixedOffset: Boolean =
-        timeZoneId.exists(id => DateTimeUtils.getZoneId(id).getRules.isFixedOffset)
-      // An interval that fails to evaluate gives no bound; the query reports the error at run time.
+  private[sql] def isConstantOffsetOf(expr: Expression, eventTime: Attribute): Boolean = {
+    def isConstant(e: Expression): Boolean = {
+      // A constant that fails to evaluate gives no bound; the query reports the error at run time.
       def value: Option[Any] = try Option(e.eval()) catch { case NonFatal(_) => None }
       e.foldable && (e.dataType match {
-        case _: DayTimeIntervalType =>
-          value.exists { v =>
-            val micros = v.asInstanceOf[Long]
-            -MICROS_PER_DAY < micros && micros < MICROS_PER_DAY || fixedOffset
-          }
-        case CalendarIntervalType =>
-          value.exists { v =>
-            val interval = v.asInstanceOf[CalendarInterval]
-            interval.months == 0 && (interval.days == 0 || fixedOffset)
-          }
+        case _: DayTimeIntervalType | _: NumericType => value.isDefined
+        case CalendarIntervalType => value.exists(_.asInstanceOf[CalendarInterval].months == 0)
         case _ => false
       })
     }
     expr match {
       case a: Attribute => a.semanticEquals(eventTime)
-      // The analyzer wraps timestamp + interval in a cast to the same timestamp type.
-      case Cast(child, TimestampType, _, _) if child.dataType == TimestampType =>
-        isIntervalShift(child, eventTime)
-      case TimestampAddInterval(start, interval, timeZoneId) =>
-        isExactInterval(interval, timeZoneId) && isIntervalShift(start, eventTime)
-      case DatetimeSub(_, _, replacement) => isIntervalShift(replacement, eventTime)
+      case Cast(child, TimestampType | _: NumericType, _, _) => isConstantOffsetOf(child, eventTime)
+      case TimestampAddInterval(start, interval, _) =>
+        isConstant(interval) && isConstantOffsetOf(start, eventTime)
+      case DatetimeSub(_, _, replacement) => isConstantOffsetOf(replacement, eventTime)
       case Add(left, right, _) =>
-        isExactInterval(right, None) && isIntervalShift(left, eventTime) ||
-          isExactInterval(left, None) && isIntervalShift(right, eventTime)
-      case Subtract(left, right, _) =>
-        isExactInterval(right, None) && isIntervalShift(left, eventTime)
+        isConstant(right) && isConstantOffsetOf(left, eventTime) ||
+          isConstant(left) && isConstantOffsetOf(right, eventTime)
+      case Subtract(left, right, _) => isConstant(right) && isConstantOffsetOf(left, eventTime)
       case _ => false
     }
   }
