@@ -28,6 +28,7 @@ import org.apache.spark.sql.execution.adaptive.AdaptiveSparkPlanHelper
 import org.apache.spark.sql.execution.datasources.v2.{BatchScanExec, DeleteFromTableExec, ReplaceDataExec, WriteDeltaExec}
 import org.apache.spark.sql.execution.joins.BaseJoinExec
 import org.apache.spark.sql.functions.udf
+import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.sql.util.QueryExecutionListener
 
@@ -106,6 +107,27 @@ class DataSourceV2EnhancedDeleteFilterSuite extends SharedSparkSession
       checkAnswer(
         sql(s"SELECT * FROM $deleteTableName"),
         Row(3, "marketing", 300) :: Nil)
+    }
+  }
+
+  // The source cannot evaluate the read-side padding of a CHAR column in the first pass, but the
+  // second pass converts it to a PartitionPredicate that matches values stored without padding.
+  test("SPARK-61462: partition predicate with a CHAR column stored without padding") {
+    withTable(deleteTableName) {
+      sql(s"CREATE TABLE $deleteTableName (pk INT, dep CHAR(8)) " +
+        s"USING $v2Source PARTITIONED BY (dep)")
+      withSQLConf(SQLConf.LEGACY_CHAR_VARCHAR_AS_STRING.key -> "true") {
+        sql(s"INSERT INTO $deleteTableName VALUES (1, 'hr'), (2, 'software')")
+      }
+
+      assertDeleteWithFilters(
+        s"DELETE FROM $deleteTableName WHERE dep = 'hr'",
+        expectedNumConditions = 1,
+        expectedNumPartitionPredicates = 1,
+        expectedOrdinalsPerPredicate = Seq(Array(0)),
+        expectedPartitionFieldNames = Array("dep"))
+
+      checkAnswer(sql(s"SELECT * FROM $deleteTableName"), Row(2, "software") :: Nil)
     }
   }
 

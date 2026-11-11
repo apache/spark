@@ -22,12 +22,13 @@ import java.util.concurrent.atomic.AtomicBoolean
 import org.apache.spark.internal.LogKeys
 import org.apache.spark.sql.catalyst.analysis.ApplyCharTypePaddingHelper
 import org.apache.spark.sql.catalyst.catalog.HiveTableRelation
-import org.apache.spark.sql.catalyst.expressions.AttributeReference
-import org.apache.spark.sql.catalyst.plans.logical.{DeleteFromTable, LogicalPlan}
+import org.apache.spark.sql.catalyst.expressions.{Alias, AttributeMap, AttributeReference, Expression, NamedExpression, OuterReference, SubqueryExpression}
+import org.apache.spark.sql.catalyst.plans.logical.{DeleteFromTable, LogicalPlan, Project, ReplaceData, WriteDelta}
 import org.apache.spark.sql.catalyst.rules.Rule
-import org.apache.spark.sql.catalyst.trees.TreePattern.DELETE_FROM_TABLE
+import org.apache.spark.sql.catalyst.trees.TreePattern.{DELETE_FROM_TABLE, REPLACE_DATA, WRITE_DELTA}
 import org.apache.spark.sql.catalyst.util.CharVarcharUtils
-import org.apache.spark.sql.execution.datasources.v2.DataSourceV2Relation
+import org.apache.spark.sql.connector.write.RowLevelOperationTable
+import org.apache.spark.sql.execution.datasources.v2.{DataSourceV2Relation, ExtractV2Table}
 import org.apache.spark.sql.internal.SQLConf
 
 /**
@@ -79,8 +80,8 @@ object ApplyCharTypePadding extends Rule[LogicalPlan] {
             r.copy(dataCols = cleanedDataCols, partitionCols = cleanedPartCols)
           })
       }, skipCond = p => p.analyzed || p.isInstanceOf[DeleteFromTable], canGetOutput = _.resolved)
-      padDeleteConditions(
-        ApplyCharTypePaddingHelper.paddingForStringComparison(newPlan, padCharCol = false))
+      padRowLevelConditions(padDeleteConditions(
+        ApplyCharTypePaddingHelper.paddingForStringComparison(newPlan, padCharCol = false)))
     } else {
       ApplyCharTypePaddingHelper.paddingForStringComparison(
         plan, padCharCol = !conf.getConf(SQLConf.LEGACY_NO_CHAR_PADDING_IN_PREDICATE))
@@ -103,6 +104,65 @@ object ApplyCharTypePadding extends Rule[LogicalPlan] {
             CharVarcharUtils.addPaddingForScan(attr).transform {
               case a: AttributeReference => CharVarcharUtils.cleanAttrMetadata(a)
             }
+        })
+    }
+  }
+
+  /**
+   * The conditions of a row-level write are not evaluated on top of the padded read in its query:
+   * they are pushed down to the scan and to metadata-only deletes, and they select the groups to
+   * read at runtime. To compare padded values with the padded literals and columns, as the read
+   * does, they must apply the padding of the target columns themselves.
+   */
+  private def padRowLevelConditions(plan: LogicalPlan): LogicalPlan = {
+    plan.resolveOperatorsWithPruning(_.containsAnyPattern(REPLACE_DATA, WRITE_DELTA)) {
+      case rd: ReplaceData =>
+        val paddings = targetColumnPaddings(rd.query)
+        rd.copy(
+          condition = padColumns(rd.condition, paddings),
+          groupFilterCondition = rd.groupFilterCondition.map(padColumns(_, paddings)))
+      case wd: WriteDelta =>
+        val paddings = targetColumnPaddings(wd.query)
+        wd.copy(
+          condition = padColumns(wd.condition, paddings),
+          groupFilterCondition = wd.groupFilterCondition.map(padColumns(_, paddings)))
+    }
+  }
+
+  // Maps the stored and the padded attribute of each padded target column to the padded value.
+  // The aliases of the padding keep the raw type, unlike the new values that an UPDATE also
+  // projects directly on top of the read relation.
+  private def targetColumnPaddings(query: LogicalPlan): AttributeMap[Expression] = {
+    AttributeMap(query.collect {
+      case Project(projectList, ExtractV2Table(_: RowLevelOperationTable)) =>
+        projectList.collect {
+          case alias: Alias if hasRawType(alias) =>
+            val padded = alias.child.transform {
+              case attr: AttributeReference => CharVarcharUtils.cleanAttrMetadata(attr)
+            }
+            (alias.toAttribute +: alias.child.references.toSeq).map(_ -> padded)
+        }.flatten
+    }.flatten)
+  }
+
+  private def hasRawType(expr: NamedExpression): Boolean = {
+    CharVarcharUtils.getRawType(expr.metadata).isDefined
+  }
+
+  private def padColumns(cond: Expression, paddings: AttributeMap[Expression]): Expression = {
+    // The padded value refers to the attribute without the raw type, which is not padded again.
+    def isPadded(attr: AttributeReference): Boolean = paddings.contains(attr) && hasRawType(attr)
+
+    cond.transform {
+      case attr: AttributeReference if isPadded(attr) =>
+        paddings(attr)
+
+      // The analyzer pads the subqueries it resolves, but the group filter subquery of a MERGE is
+      // built from a resolved source, which only gets its read-side padding here.
+      case subquery: SubqueryExpression =>
+        subquery.withNewPlan(apply(subquery.plan).transformAllExpressionsWithSubqueries {
+          case OuterReference(attr: AttributeReference) if isPadded(attr) =>
+            paddings(attr).transform { case a: AttributeReference => OuterReference(a) }
         })
     }
   }

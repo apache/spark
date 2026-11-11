@@ -991,6 +991,22 @@ abstract class UpdateTableSuiteBase extends RowLevelOperationSuiteBase {
     checkUpdateMetrics(numUpdatedRows = 2, numCopiedRows = 0)
   }
 
+  test("SPARK-61462: update with a condition on a CHAR column") {
+    createTable("pk INT NOT NULL, c CHAR(3), id INT, dep STRING")
+
+    append("pk INT NOT NULL, c STRING, id INT, dep STRING",
+      """{ "pk": 1, "c": "a", "id": 1, "dep": "hr" }
+        |{ "pk": 2, "c": "x", "id": 2, "dep": "software" }
+        |{ "pk": 3, "c": "b", "id": 3, "dep": "hr" }
+        |""".stripMargin)
+
+    sql(s"UPDATE $tableNameAsString SET id = -1 WHERE c IN ('a', 'b', 'c')")
+
+    checkAnswer(
+      sql(s"SELECT * FROM $tableNameAsString"),
+      Row(1, "a  ", -1, "hr") :: Row(2, "x  ", 2, "software") :: Row(3, "b  ", -1, "hr") :: Nil)
+  }
+
   test("SPARK-60708: update char/varchar table with metadata columns") {
     createTable("pk INT NOT NULL, id INT, dep STRING, name VARCHAR(10)")
 

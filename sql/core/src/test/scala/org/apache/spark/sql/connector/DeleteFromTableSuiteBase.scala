@@ -377,6 +377,44 @@ abstract class DeleteFromTableSuiteBase extends RowLevelOperationSuiteBase {
     checkDeleteMetrics(numDeletedRows = 1, numCopiedRows = 0)
   }
 
+  test("SPARK-61462: delete with a condition on a CHAR column stored with and without padding") {
+    createTable("pk INT NOT NULL, id INT, dep CHAR(8)")
+    withSQLConf(SQLConf.LEGACY_CHAR_VARCHAR_AS_STRING.key -> "true") {
+      append("pk INT NOT NULL, id INT, dep STRING",
+        """{ "pk": 1, "id": 1, "dep": "hr" }
+          |{ "pk": 2, "id": 2, "dep": "software" }
+          |""".stripMargin)
+    }
+    append("pk INT NOT NULL, id INT, dep STRING", """{ "pk": 3, "id": 3, "dep": "hr" }""")
+
+    // the data source cannot delete these rows with filters that compare the padded literal with
+    // the stored values, so this delete must be executed as a row-level operation
+    sql(s"DELETE FROM $tableNameAsString WHERE dep = 'hr'")
+
+    checkAnswer(sql(s"SELECT * FROM $tableNameAsString"), Row(2, 2, "software") :: Nil)
+    checkDeleteMetrics(numDeletedRows = 2, numCopiedRows = 0)
+  }
+
+  test("SPARK-61462: delete with a correlated subquery on a CHAR column") {
+    withTempView("deleted") {
+      createTable("pk INT NOT NULL, c CHAR(3), dep STRING")
+      append("pk INT NOT NULL, c STRING, dep STRING",
+        """{ "pk": 1, "c": "a", "dep": "hr" }
+          |{ "pk": 2, "c": "b", "dep": "software" }
+          |{ "pk": 3, "c": "x", "dep": "hr" }
+          |""".stripMargin)
+
+      Seq("a  ", "z  ").toDF("v").createOrReplaceTempView("deleted")
+
+      sql(s"DELETE FROM $tableNameAsString t WHERE EXISTS (SELECT 1 FROM deleted WHERE v = t.c)")
+
+      checkAnswer(
+        sql(s"SELECT * FROM $tableNameAsString"),
+        Row(2, "b  ", "software") :: Row(3, "x  ", "hr") :: Nil)
+      checkDeleteMetrics(numDeletedRows = 1, numCopiedRows = 1)
+    }
+  }
+
   test("SPARK-60673: delete with metadata columns in the condition") {
     // the metadata columns must be read even if the operation does not require them
     createAndInitTable("pk INT NOT NULL, id INT, dep STRING",
