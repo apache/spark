@@ -69,6 +69,9 @@ trait EvalPythonExec extends UnaryExecNode {
 
   def resultAttrs: Seq[Attribute]
 
+  /** Returns a copy that passes through `requiredChildOutput` of the child. */
+  def withRequiredChildOutput(requiredChildOutput: Seq[Attribute]): EvalPythonExec
+
   protected def evaluatorFactory: EvalPythonEvaluatorFactory
 
   override def output: Seq[Attribute] = requiredChildOutput ++ resultAttrs

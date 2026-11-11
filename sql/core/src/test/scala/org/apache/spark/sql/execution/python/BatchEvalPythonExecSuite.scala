@@ -121,7 +121,8 @@ class BatchEvalPythonExecSuite extends SharedSparkSession
       val factory = new BatchEvalPythonEvaluatorFactory(
         childOutput = Seq(taskAttr),
         udfs = Seq(pythonUdf),
-        output = Seq.empty,
+        passThroughOutput = Seq.empty,
+        resultOutput = Seq.empty,
         batchSize = 1,
         maxBytesPerBatch = -1L,
         pythonMetrics = Map.empty,
@@ -203,7 +204,8 @@ class BatchEvalPythonExecSuite extends SharedSparkSession
       (new BatchEvalPythonEvaluatorFactory(
         childOutput = Seq(taskAttr),
         udfs = Seq.empty,
-        output = Seq.empty,
+        passThroughOutput = Seq.empty,
+        resultOutput = Seq.empty,
         batchSize = 1,
         maxBytesPerBatch = -1L,
         pythonMetrics = Map.empty,

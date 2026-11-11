@@ -145,8 +145,8 @@ case class ArrowEvalPythonExec(
     new ColumnarArrowEvalPythonEvaluatorFactory(
       child.output,
       udfs,
-      output,
-      output.toStructType,
+      requiredChildOutput,
+      resultAttrs,
       conf.arrowMaxRecordsPerBatch,
       conf.arrowMaxBytesPerBatch,
       evalType,
@@ -161,7 +161,8 @@ case class ArrowEvalPythonExec(
     new ArrowEvalPythonEvaluatorFactory(
       child.output,
       udfs,
-      output,
+      requiredChildOutput,
+      resultAttrs,
       conf.arrowMaxRecordsPerBatch,
       evalType,
       conf.sessionLocalTimeZone,
@@ -171,6 +172,10 @@ case class ArrowEvalPythonExec(
       jobArtifactUUID,
       sessionUUID)
   }
+
+  override def withRequiredChildOutput(
+      requiredChildOutput: Seq[Attribute]): ArrowEvalPythonExec =
+    copy(requiredChildOutput = requiredChildOutput)
 
   override protected def withNewChildInternal(newChild: SparkPlan): SparkPlan =
     copy(child = newChild)
@@ -192,7 +197,8 @@ case class ArrowEvalPythonExec(
 class ArrowEvalPythonEvaluatorFactory(
     childOutput: Seq[Attribute],
     udfs: Seq[PythonUDF],
-    output: Seq[Attribute],
+    passThroughOutput: Seq[Attribute],
+    resultOutput: Seq[Attribute],
     batchSize: Int,
     evalType: Int,
     sessionLocalTimeZone: String,
@@ -201,7 +207,7 @@ class ArrowEvalPythonEvaluatorFactory(
     pythonMetrics: Map[String, SQLMetric],
     jobArtifactUUID: Option[String],
     sessionUUID: Option[String])
-  extends EvalPythonEvaluatorFactory(childOutput, udfs, output) {
+  extends EvalPythonEvaluatorFactory(childOutput, udfs, passThroughOutput, resultOutput) {
 
   override def evaluate(
       funcs: Seq[(ChainedPythonFunctions, Long)],

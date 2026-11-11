@@ -71,8 +71,8 @@ import org.apache.spark.util.Utils
 private[python] class ColumnarArrowEvalPythonEvaluatorFactory(
     childOutput: Seq[Attribute],
     udfs: Seq[PythonUDF],
-    output: Seq[Attribute],
-    outputSchema: StructType,
+    passThroughOutput: Seq[Attribute],
+    resultOutput: Seq[Attribute],
     batchSize: Int,
     maxBytesPerBatch: Long,
     evalType: Int,
@@ -85,8 +85,8 @@ private[python] class ColumnarArrowEvalPythonEvaluatorFactory(
   extends PartitionEvaluatorFactory[ColumnarBatch, ColumnarBatch] {
 
   // The output is the pass-through columns of the child followed by the results of the UDFs.
-  private val passThroughOutput = output.dropRight(udfs.length)
-  private val resultOutput = output.takeRight(udfs.length)
+  private val output = passThroughOutput ++ resultOutput
+  private val outputSchema = output.toStructType
 
   override def createEvaluator()
       : PartitionEvaluator[ColumnarBatch, ColumnarBatch] =
@@ -160,6 +160,12 @@ private[python] class ColumnarArrowEvalPythonEvaluatorFactory(
       if (passThroughOutput.isEmpty) {
         // The vectors of a result batch are valid until the next one is requested, which a
         // consumer respecting the contract of ColumnVector does not rely on beyond that.
+        // The result batches are as large as the ones Python returns, unless
+        // maxRecordsPerOutputBatch or maxBytesPerOutputBatch slices them, and are not cut by
+        // maxRecordsPerBatch or maxBytesPerBatch as the rows converted back below are. So a
+        // parent that takes columnar input, e.g. a stacked evaluation or the Arrow cache, gets
+        // them at that size, as it gets the batches of any other columnar child. A stacked
+        // evaluation does not split its input batches yet either.
         evalPython(nonEmptyIter, context, pyFuncs, argMetas, allInputs.toSeq, udfInputSchema,
           inputColumnIndices, onInputRow = None).map { batch =>
           validateOutputTypes(batch, outputTypes)

@@ -58,10 +58,18 @@ case class InProcessArrowEvalPythonExec(
 
   override protected def evaluatorFactory: EvalPythonEvaluatorFactory = {
     new InProcessArrowEvalPythonEvaluatorFactory(
-      child.output, udfs, output, conf.arrowMaxRecordsPerBatch, conf.arrowMaxBytesPerBatch,
+      child.output, udfs, requiredChildOutput, resultAttrs, conf.arrowMaxRecordsPerBatch,
+      conf.arrowMaxBytesPerBatch,
       conf.sessionLocalTimeZone, conf.arrowUseLargeVarTypes, conf.pysparkHideTraceback,
       conf.pysparkSimplifiedTraceback, conf.pysparkTracebackWithLocals,
       conf.getConf(SQLConf.PYTHON_UDF_IN_PROCESS_FULL_VALIDATION), pythonMetrics)
+  }
+
+  // It passes through the whole child, which includes any required columns.
+  override def withRequiredChildOutput(
+      requiredChildOutput: Seq[Attribute]): InProcessArrowEvalPythonExec = {
+    assert(requiredChildOutput.forall(child.outputSet.contains))
+    this
   }
 
   override protected def withNewChildInternal(newChild: SparkPlan): SparkPlan =

@@ -1570,8 +1570,7 @@ object ColumnPruning extends Rule[LogicalPlan] {
     // the rule does not visit this Project again.
     case p @ Project(_, e: BaseEvalPython)
         if !e.requiredChildOutput.forall(p.references.contains) =>
-      val newEval = e.withRequiredChildOutput(
-        e.requiredChildOutput.filter(p.references.contains), e.child)
+      val newEval = e.withRequiredChildOutput(e.requiredChildOutput.filter(p.references.contains))
       p.copy(child = newEval.withNewChildren(Seq(prunedChild(e.child, newEval.references))))
 
     // Eliminate unneeded attributes from right side of a Left Existence Join.

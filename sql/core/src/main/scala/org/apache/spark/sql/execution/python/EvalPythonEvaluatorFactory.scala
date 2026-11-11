@@ -33,20 +33,18 @@ import org.apache.spark.util.Utils
 /**
  * @param childOutput the output of the child, which the input rows have
  * @param udfs the Python UDFs to evaluate
- * @param output the output rows: the columns of the child that are passed through, followed by
- *               one column for the result of each UDF
+ * @param passThroughOutput the columns of the child that are passed through to the output
+ * @param resultOutput the columns of the results of the UDFs, one for each UDF
  */
 abstract class EvalPythonEvaluatorFactory(
     childOutput: Seq[Attribute],
     udfs: Seq[PythonUDF],
-    output: Seq[Attribute])
+    protected val passThroughOutput: Seq[Attribute],
+    protected val resultOutput: Seq[Attribute])
   extends PartitionEvaluatorFactory[InternalRow, InternalRow] {
 
-  /** The columns of the child that are passed through to the output. */
-  protected val passThroughOutput: Seq[Attribute] = output.dropRight(udfs.length)
-
-  /** The columns of the results of the UDFs. */
-  protected val resultOutput: Seq[Attribute] = output.takeRight(udfs.length)
+  /** The output rows: the pass-through columns followed by the results of the UDFs. */
+  protected val output: Seq[Attribute] = passThroughOutput ++ resultOutput
 
   protected def evaluate(
       funcs: Seq[(ChainedPythonFunctions, Long)],

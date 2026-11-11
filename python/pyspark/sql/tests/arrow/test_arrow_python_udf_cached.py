@@ -76,10 +76,12 @@ class ArrowPythonUDFCachedInputTests(ReusedSQLTestCase):
         finally:
             super().tearDownClass()
 
-    def _assert_columnar_arrow_eval(self, df, expected_nodes):
+    def _assert_columnar_arrow_eval(self, df, expected_nodes, pass_through_columns=None):
         # Assert the executed plan contains exactly `expected_nodes` ArrowEvalPythonExec
         # operators and every one of them takes the columnar input path -- otherwise the
-        # test silently stops exercising the code this suite exists to pin.
+        # test silently stops exercising the code this suite exists to pin. If
+        # `pass_through_columns` is given, also assert that every one of them passes through
+        # the child columns of those names.
         nodes = []
         stack = [df._jdf.queryExecution().executedPlan()]
         while stack:
@@ -96,6 +98,10 @@ class ArrowPythonUDFCachedInputTests(ReusedSQLTestCase):
         self.assertEqual(len(nodes), expected_nodes, "unexpected number of ArrowEvalPythonExec")
         for node in nodes:
             self.assertTrue(node.supportsColumnar(), "expected the columnar input path")
+            if pass_through_columns is not None:
+                required = node.requiredChildOutput()
+                names = [required.apply(i).name() for i in range(required.size())]
+                self.assertEqual(names, pass_through_columns, "unexpected pass-through columns")
 
     def _assert_udf_on_cached_strings(self):
         df = self.spark.createDataFrame(
@@ -129,7 +135,7 @@ class ArrowPythonUDFCachedInputTests(ReusedSQLTestCase):
         df = self.spark.createDataFrame([(1, "a"), (2, "b")], schema="i long, s string").cache()
         try:
             result = df.select(col("s"), udf(lambda x: x + 1, "long")(col("i")))
-            self._assert_columnar_arrow_eval(result, expected_nodes=1)
+            self._assert_columnar_arrow_eval(result, expected_nodes=1, pass_through_columns=["s"])
             assertDataFrameEqual(result, [Row("a", 2), Row("b", 3)])
         finally:
             df.unpersist()
@@ -188,7 +194,6 @@ class ArrowPythonUDFCachedInputTests(ReusedSQLTestCase):
         finally:
             df.unpersist()
 
-
     def test_udfs_without_pass_through_columns(self):
         # Only the results are selected, so no column is passed through, and the result batches
         # of Python are the output batches, including those of iterator UDFs, which may return
@@ -228,7 +233,9 @@ class ArrowPythonUDFCachedInputTests(ReusedSQLTestCase):
                     with self.subTest(udf=name):
                         expected = [Row(r=g(i)) for i in range(num_rows)]
                         result = df.select(f(col("id")).alias("r"))
-                        self._assert_columnar_arrow_eval(result, expected_nodes=1)
+                        self._assert_columnar_arrow_eval(
+                            result, expected_nodes=1, pass_through_columns=[]
+                        )
                         assertDataFrameEqual(result, expected)
                         # With a filter on the result above.
                         filtered = result.where(col("r") % 7 == 0)
@@ -250,7 +257,7 @@ class ArrowPythonUDFCachedInputTests(ReusedSQLTestCase):
         try:
             with self.sql_conf({"spark.sql.execution.arrow.maxRecordsPerBatch": "1000"}):
                 result = df.select(pandas_times_two(plus_one(col("id"))).alias("r"))
-                self._assert_columnar_arrow_eval(result, expected_nodes=2)
+                self._assert_columnar_arrow_eval(result, expected_nodes=2, pass_through_columns=[])
                 assertDataFrameEqual(result, [Row(r=(i + 1) * 2) for i in range(10000)])
         finally:
             df.unpersist()
@@ -260,7 +267,7 @@ class ArrowPythonUDFCachedInputTests(ReusedSQLTestCase):
         df = self.spark.range(0, 10000, 1, 2).cache()
         try:
             result = df.select(udf(lambda x: x + 1, "long")(col("id")).alias("r"))
-            self._assert_columnar_arrow_eval(result, expected_nodes=1)
+            self._assert_columnar_arrow_eval(result, expected_nodes=1, pass_through_columns=[])
             cached = result.cache()
             try:
                 self.assertEqual(cached.count(), 10000)
@@ -269,6 +276,7 @@ class ArrowPythonUDFCachedInputTests(ReusedSQLTestCase):
                 cached.unpersist()
         finally:
             df.unpersist()
+
 
 if __name__ == "__main__":
     from pyspark.testing import main

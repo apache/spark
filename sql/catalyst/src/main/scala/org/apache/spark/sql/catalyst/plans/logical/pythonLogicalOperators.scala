@@ -295,9 +295,8 @@ trait BaseEvalPython extends UnaryNode {
 
   def resultAttrs: Seq[Attribute]
 
-  /** Returns a copy that passes through `requiredChildOutput` of `newChild`. */
-  def withRequiredChildOutput(
-      requiredChildOutput: Seq[Attribute], newChild: LogicalPlan): BaseEvalPython
+  /** Returns a copy that passes through `requiredChildOutput` of the child. */
+  def withRequiredChildOutput(requiredChildOutput: Seq[Attribute]): BaseEvalPython
 
   override def output: Seq[Attribute] = requiredChildOutput ++ resultAttrs
 
@@ -334,9 +333,8 @@ case class BatchEvalPython(
     requiredChildOutput: Seq[Attribute],
     resultAttrs: Seq[Attribute],
     child: LogicalPlan) extends BaseEvalPython {
-  override def withRequiredChildOutput(
-      requiredChildOutput: Seq[Attribute], newChild: LogicalPlan): BatchEvalPython =
-    copy(requiredChildOutput = requiredChildOutput, child = newChild)
+  override def withRequiredChildOutput(requiredChildOutput: Seq[Attribute]): BatchEvalPython =
+    copy(requiredChildOutput = requiredChildOutput)
 
   override protected def withNewChildInternal(newChild: LogicalPlan): BatchEvalPython =
     copy(child = newChild)
@@ -357,9 +355,8 @@ case class ArrowEvalPython(
     resultAttrs: Seq[Attribute],
     child: LogicalPlan,
     evalType: Int) extends BaseEvalPython {
-  override def withRequiredChildOutput(
-      requiredChildOutput: Seq[Attribute], newChild: LogicalPlan): ArrowEvalPython =
-    copy(requiredChildOutput = requiredChildOutput, child = newChild)
+  override def withRequiredChildOutput(requiredChildOutput: Seq[Attribute]): ArrowEvalPython =
+    copy(requiredChildOutput = requiredChildOutput)
 
   override protected def withNewChildInternal(newChild: LogicalPlan): ArrowEvalPython =
     copy(child = newChild)
