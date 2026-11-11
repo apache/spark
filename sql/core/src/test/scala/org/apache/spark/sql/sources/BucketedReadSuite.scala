@@ -665,8 +665,8 @@ abstract class BucketedReadSuite extends QueryTest with AdaptiveSparkPlanHelper 
     // under different bucketing configs must not be sameResult, or exchange/broadcast reuse could
     // swap a bucketed scan for a non-bucketed one. For a non-bucketed relation the flag changes
     // nothing, so the two scans must stay sameResult, which dynamic partition pruning relies on to
-    // reuse a broadcast across a config change. doCanonicalize scopes the flag with
-    // relation.bucketSpec.isDefined to get both directions right.
+    // reuse a broadcast across a config change. doCanonicalize scopes the flag with the frozen
+    // isBucketedRelation field (not the @transient relation) to get both directions right.
     def scanOf(table: String): FileSourceScanExec =
       collect(spark.table(table).queryExecution.sparkPlan) {
         case f: FileSourceScanExec => f
@@ -757,32 +757,38 @@ abstract class BucketedReadSuite extends QueryTest with AdaptiveSparkPlanHelper 
       spark.range(0, 1000).selectExpr("id", "cast(id % 8 as int) as k")
         .write.bucketBy(8, "k").sortBy("k").format("parquet").mode("overwrite").saveAsTable("t")
 
-      withSQLConf(
-          SQLConf.ADAPTIVE_EXECUTION_ENABLED.key -> "false",
-          SQLConf.AUTO_BUCKETED_SCAN_ENABLED.key -> "true",
-          SQLConf.BUCKETING_ENABLED.key -> "true") {
-        // No operator above the scan needs the bucketed layout, so the rule should disable it once
-        // it runs. sparkPlan (before the preparation rules) is still bucketed.
-        val df = sql("SELECT * FROM t WHERE id > 3")
-        val planned = collect(df.queryExecution.sparkPlan) { case f: FileSourceScanExec => f }.head
-        assert(planned.bucketedScan,
-          s"scan should be planned as a bucketed scan:\n${df.queryExecution.sparkPlan}")
+      // DisableUnnecessaryBucketedScan runs both in QueryExecution.preparations and as an AQE
+      // query-stage optimizer rule. The PR targets the AQE rebuild path, so exercise both.
+      Seq("true", "false").foreach { aqeEnabled =>
+        withSQLConf(
+            SQLConf.ADAPTIVE_EXECUTION_ENABLED.key -> aqeEnabled,
+            SQLConf.AUTO_BUCKETED_SCAN_ENABLED.key -> "true",
+            SQLConf.BUCKETING_ENABLED.key -> "true") {
+          // No operator above the scan needs the bucketed layout, so the rule should disable it
+          // once it runs. sparkPlan (before the preparation rules) is still bucketed.
+          val df = sql("SELECT * FROM t WHERE id > 3")
+          val planned =
+            collect(df.queryExecution.sparkPlan) { case f: FileSourceScanExec => f }.head
+          assert(planned.bucketedScan,
+            s"scan should be planned as a bucketed scan (AQE=$aqeEnabled):\n" +
+              s"${df.queryExecution.sparkPlan}")
 
-        val expected = sql("SELECT id, k FROM t WHERE id > 3").collect().toSeq
-        withSQLConf(SQLConf.BUCKETING_ENABLED.key -> "false") {
-          // checkToRDD = false runs the committed plan, so the preparation rules (including
-          // DisableUnnecessaryBucketedScan) run with bucketing off against the frozen bucketed
-          // scan.
-          QueryTest.checkAnswer(df, expected, checkToRDD = false)
-          val scan = collect(df.queryExecution.executedPlan) {
-            case f: FileSourceScanExec => f
-          }.head
-          assert(!scan.bucketedScan,
-            s"the stale bucketed scan should have been disabled by the rule:\n" +
-              s"${df.queryExecution.executedPlan}")
-          assert(!scan.outputPartitioning.isInstanceOf[HashPartitioning],
-            s"the disabled scan must not report a bucketed HashPartitioning:\n" +
-              s"${df.queryExecution.executedPlan}")
+          val expected = sql("SELECT id, k FROM t WHERE id > 3").collect().toSeq
+          withSQLConf(SQLConf.BUCKETING_ENABLED.key -> "false") {
+            // checkToRDD = false runs the committed plan, so the preparation rules (including
+            // DisableUnnecessaryBucketedScan) run with bucketing off against the frozen bucketed
+            // scan.
+            QueryTest.checkAnswer(df, expected, checkToRDD = false)
+            val scan = collect(df.queryExecution.executedPlan) {
+              case f: FileSourceScanExec => f
+            }.head
+            assert(!scan.bucketedScan,
+              s"the stale bucketed scan should have been disabled (AQE=$aqeEnabled):\n" +
+                s"${df.queryExecution.executedPlan}")
+            assert(!scan.outputPartitioning.isInstanceOf[HashPartitioning],
+              s"the disabled scan must not report a HashPartitioning (AQE=$aqeEnabled):\n" +
+                s"${df.queryExecution.executedPlan}")
+          }
         }
       }
     }

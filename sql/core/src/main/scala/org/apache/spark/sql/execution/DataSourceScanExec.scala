@@ -751,6 +751,11 @@ trait FileSourceScanLike extends DataSourceScanExec with SessionStateHelper {
  * @param bucketingEnabled The `spark.sql.sources.bucketing.enabled` value captured by the planner
  *                         (FileSourceStrategy) when the scan is created, frozen so a post-planning
  *                         rebuild keeps the planned bucketing decision.
+ * @param isBucketedRelation Whether `relation` carries a bucket spec, captured as a field at
+ *                           planning so `doCanonicalize` can scope the frozen `bucketingEnabled`
+ *                           flag (which only affects the layout of a bucketed relation) without
+ *                           reading `relation`, which is `@transient` and null on a (de)serialized
+ *                           scan (SPARK-23731).
  */
 case class FileSourceScanExec(
     @transient override val relation: HadoopFsRelation,
@@ -765,7 +770,8 @@ case class FileSourceScanExec(
     override val disableBucketedScan: Boolean = false,
     override val markedForSingleTaskExecution: Boolean = false,
     override val storageFilters: Seq[Expression] = Nil,
-    override val bucketingEnabled: Boolean)
+    override val bucketingEnabled: Boolean,
+    isBucketedRelation: Boolean)
   extends FileSourceScanLike {
 
   // Note that some vals referring the file-based relation are lazy intentionally
@@ -1046,14 +1052,16 @@ case class FileSourceScanExec(
       disableBucketedScan,
       markedForSingleTaskExecution,
       QueryPlan.normalizePredicates(storageFilters, output),
-      // Carry the frozen bucketing decision into the canonical form instead of re-reading the live
-      // config, so canonicalization preserves the partitioning the scan was planned with. Scope it
-      // to a bucketed relation: only there does the flag change the layout (`bucketedScan` already
-      // gates on `bucketSpec.isDefined`). For a non-bucketed relation the flag changes nothing, so
-      // keeping it out of the canonical form lets two such scans built across a bucketing-config
-      // change stay sameResult, which dynamic partition pruning relies on to reuse a broadcast
-      // across the change (SPARK-60610).
-      bucketingEnabled && relation.bucketSpec.isDefined)
+      // Scope the frozen bucketing flag to a bucketed relation in the canonical form: only there
+      // does it change the layout. For a non-bucketed relation it changes nothing, so keeping it
+      // out lets two such scans built across a bucketing-config change stay sameResult, which
+      // dynamic partition pruning relies on to reuse a broadcast across the change (SPARK-60610).
+      // Read the `isBucketedRelation` field, not `relation.bucketSpec`: `relation` is `@transient`
+      // and null on a (de)serialized scan, so touching it here threw while canonicalizing the
+      // readback (SPARK-23731). The field is frozen at planning, so the canonical form is stable
+      // across (de)serialization.
+      bucketingEnabled && isBucketedRelation,
+      isBucketedRelation)
   }
 
   override def getStream: Option[SparkDataStream] = stream

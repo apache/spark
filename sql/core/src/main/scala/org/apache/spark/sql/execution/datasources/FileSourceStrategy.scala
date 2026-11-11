@@ -392,7 +392,11 @@ object FileSourceStrategy extends Strategy with PredicateHelper with Logging {
           storageFilters = storageFilters,
           // Freeze `spark.sql.sources.bucketing.enabled` here, at planning, so a post-planning
           // rebuild of the scan keeps the planned bucketing decision (SPARK-60610).
-          bucketingEnabled = SQLConf.get.bucketingEnabled)
+          bucketingEnabled = SQLConf.get.bucketingEnabled,
+          // Capture whether the relation is bucketed so the canonical form can scope the frozen
+          // flag without reading the `@transient relation`, which is null after (de)serialization
+          // (SPARK-23731).
+          isBucketedRelation = fsRelation.bucketSpec.isDefined)
 
       // extra Project node: wrap flat metadata columns to a metadata struct
       val withMetadataProjections = metadataStructOpt.map { metadataStruct =>

@@ -447,7 +447,7 @@ class DataFrameJoinSuite extends SharedSparkSession
             }
             assert(broadcastExchanges.size == 1)
             val tables = broadcastExchanges.head.collect {
-              case FileSourceScanExec(_, _, _, _, _, _, _, _, Some(tableIdent), _, _, _, _) =>
+              case FileSourceScanExec(_, _, _, _, _, _, _, _, Some(tableIdent), _, _, _, _, _) =>
                 tableIdent
             }
             assert(tables.size == 1)
