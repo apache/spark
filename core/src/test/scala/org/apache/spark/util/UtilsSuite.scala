@@ -23,10 +23,11 @@ import java.lang.reflect.Field
 import java.net.{BindException, ServerSocket, URI}
 import java.nio.{ByteBuffer, ByteOrder}
 import java.nio.charset.StandardCharsets.UTF_8
-import java.nio.file.Files
+import java.nio.file.{Files, FileSystems}
+import java.nio.file.attribute.{PosixFilePermission, PosixFilePermissions}
 import java.text.DecimalFormatSymbols
 import java.util.Locale
-import java.util.concurrent.TimeUnit
+import java.util.concurrent.{CyclicBarrier, TimeUnit}
 import java.util.zip.{GZIPOutputStream, ZipEntry, ZipOutputStream}
 
 import scala.collection.mutable.ListBuffer
@@ -39,6 +40,7 @@ import org.apache.hadoop.fs.audit.CommonAuditContext.currentAuditContext
 import org.apache.hadoop.ipc.{CallerContext => HadoopCallerContext}
 import org.apache.logging.log4j.Level
 import org.mockito.Mockito.when
+import org.scalatest.time.SpanSugar._
 import org.scalatestplus.mockito.MockitoSugar.mock
 
 import org.apache.spark.{SparkConf, SparkException, SparkFunSuite, TaskContext}
@@ -551,14 +553,7 @@ class UtilsSuite extends SparkFunSuite with ResetSystemProperties {
     // 6. Symbolic link
     val scenario6 = Files.createSymbolicLink(new File(testDir, "scenario6")
       .toPath, scenario1.toPath).toFile
-    if (Utils.isJavaVersionAtLeast21) {
-      assert(Utils.createDirectory(scenario6))
-    } else if (Runtime.version().feature() == 17 && Runtime.version().update() >= 14) {
-      // SPARK-50946: Java 17.0.14 includes JDK-8294193, so scenario6 can succeed.
-      assert(Utils.createDirectory(scenario6))
-    } else {
-      assert(!Utils.createDirectory(scenario6))
-    }
+    assert(Utils.createDirectory(scenario6))
     assert(scenario6.exists())
 
     // 7. Directory exists
@@ -570,6 +565,70 @@ class UtilsSuite extends SparkFunSuite with ResetSystemProperties {
     val scenario8 = new File(testDir.getCanonicalPath + File.separator + "scenario8")
     assert(scenario8.createNewFile())
     assert(!Utils.createDirectory(scenario8))
+  }
+
+  test("chmod700 leaves rwx------ under concurrent calls on the same path") {
+    // Check both the final mode and samples taken during the race: with an atomic chmod every
+    // sample is the initial or the final mode, and anything else is a non-atomic interleaving.
+    assume(FileSystems.getDefault.supportedFileAttributeViews().contains("posix"))
+    withTempDir { dir =>
+      val initialPerms = PosixFilePermissions.fromString("rwxr-xr-x")
+      val expectedPerms = PosixFilePermissions.fromString("rwx------")
+      // Start from a permissive mode so the assertions cannot pass vacuously under umask 077.
+      Files.setPosixFilePermissions(dir.toPath, initialPerms)
+      assert(Utils.chmod700(dir))
+      Files.setPosixFilePermissions(dir.toPath, initialPerms)
+      @volatile var observing = true
+      // Written only by the observer and read after observer.join(), which synchronizes.
+      var brokenStates = Set.empty[java.util.Set[PosixFilePermission]]
+      var observerError: Throwable = null
+      val observer = new Thread(() => {
+        try {
+          while (observing) {
+            val perms = Files.getPosixFilePermissions(dir.toPath)
+            if (perms != initialPerms && perms != expectedPerms) {
+              brokenStates += perms
+            }
+          }
+        } catch {
+          case t: Throwable => observerError = t
+        }
+      })
+      observer.start()
+      try {
+        val numThreads = 4
+        (1 to 10).foreach { _ =>
+          // Align the thread starts to widen the race window.
+          val barrier = new CyclicBarrier(numThreads)
+          val threads = (1 to numThreads).map { _ =>
+            new Thread(() => {
+              barrier.await()
+              (1 to 20).foreach(_ => Utils.chmod700(dir))
+            })
+          }
+          threads.foreach(_.start())
+          threads.foreach(_.join())
+          assert(Files.getPosixFilePermissions(dir.toPath) === expectedPerms)
+          // Reset so the next round also races from the permissive mode.
+          Files.setPosixFilePermissions(dir.toPath, initialPerms)
+        }
+      } finally {
+        observing = false
+        observer.join()
+      }
+      assert(observerError == null, s"Observer thread failed: $observerError")
+      assert(brokenStates.isEmpty, s"Observed non-atomic permission states: $brokenStates")
+    }
+  }
+
+  test("chmod700 returns false instead of throwing for a nonexistent path") {
+    val missing = new File(System.getProperty("java.io.tmpdir"), "chmod700-" + System.nanoTime())
+    assert(!Utils.chmod700(missing))
+  }
+
+  test("chmod700 returns false for an empty path") {
+    // The NIO empty path resolves to the process working directory; chmod700 must not touch it.
+    assert(!Utils.chmod700(new File("")))
   }
 
   test("doesDirectoryContainFilesNewerThan") {
@@ -1900,6 +1959,80 @@ class UtilsSuite extends SparkFunSuite with ResetSystemProperties {
       assert(extracted.map(_.getName).toSet === Set("file1.txt", "file2.txt"))
       assert(new String(Files.readAllBytes(new File(dir, "file1.txt").toPath), UTF_8) === "hello")
       assert(new String(Files.readAllBytes(new File(dir, "file2.txt").toPath), UTF_8) === "world")
+    }
+  }
+
+  test("SPARK-48290: nthSmallest returns the same elements as sorting") {
+    val inputs = Seq(
+      Array(1L),
+      Array(2L, 1L),
+      Array(5L, 4L, 3L, 2L, 1L),
+      Array(1L, 1L, 1L, 1L),
+      Array.tabulate(1000)(i => i.toLong),
+      Array.tabulate(1000)(i => (1000 - i).toLong),
+      Array.tabulate(1000)(_ => 7L),
+      Array.tabulate(1000)(i => math.min(i, 999 - i).toLong),
+      Array.fill(1000)(Random.nextLong()))
+    inputs.foreach { input =>
+      val expected = input.sorted
+      for (n <- input.indices) {
+        assert(Utils.nthSmallest(input.clone(), n) === expected(n))
+      }
+    }
+  }
+
+  test("SPARK-48290: nthSmallest is not quadratic on an organ pipe distribution") {
+    // Sizes that rise and then fall defeat any fixed pivot choice, so a plain quickselect needs
+    // more than 10^11 comparisons for these selections and does not finish in any reasonable
+    // time. Sorting the range still under consideration keeps each selection in the millisecond
+    // range, so the time limit only has to be generous enough to be free of flakiness.
+    val length = 1 << 20
+    val input = Array.tabulate(length)(i => math.min(i, length - 1 - i).toLong)
+    val expected = input.sorted
+    failAfter(60.seconds) {
+      Seq(0, 1, length / 2 - 1, length / 2, length - 100, length - 1).foreach { n =>
+        assert(Utils.nthSmallest(input.clone(), n) === expected(n))
+      }
+    }
+  }
+
+  test("SPARK-48290: nthSmallest partitions the array around the returned element") {
+    // nthSmallest reorders the array in place and documents that no element before index n is
+    // larger and none after it is smaller than the returned value. Callers are allowed to rely on
+    // that much of the ordering, so pin it here rather than only the returned value.
+    val inputs = Seq(
+      Array.tabulate(1000)(i => i.toLong),
+      Array.tabulate(1000)(i => (1000 - i).toLong),
+      Array.tabulate(1000)(i => math.min(i, 999 - i).toLong),
+      Array.tabulate(1000)(i => (i % 7).toLong),
+      Array.fill(1000)(Random.nextLong()))
+    inputs.foreach { input =>
+      Seq(0, 1, 17, 500, 900, 998, 999).foreach { n =>
+        val sizes = input.clone()
+        val nth = Utils.nthSmallest(sizes, n)
+        assert(sizes(n) === nth)
+        assert(sizes.take(n).forall(_ <= nth), "no element below index n may be larger")
+        assert(sizes.drop(n + 1).forall(_ >= nth), "no element above index n may be smaller")
+      }
+    }
+  }
+
+  test("SPARK-48290: nthSmallest rejects an out of range index") {
+    intercept[IllegalArgumentException](Utils.nthSmallest(Array(1L, 2L), -1))
+    intercept[IllegalArgumentException](Utils.nthSmallest(Array(1L, 2L), 2))
+    intercept[IllegalArgumentException](Utils.nthSmallest(Array.empty[Long], 0))
+  }
+
+  test("SPARK-48290: medianInPlace agrees with median") {
+    val inputs = Seq(
+      Array(1L),
+      Array(2L, 1L),
+      Array(0L, 0L, 0L),
+      Array(5L, 4L, 3L, 2L, 1L),
+      Array.tabulate(999)(i => i.toLong),
+      Array.fill(1000)(Random.nextLong().abs))
+    inputs.foreach { input =>
+      assert(Utils.medianInPlace(input.clone()) === Utils.median(input, false))
     }
   }
 }

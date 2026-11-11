@@ -735,4 +735,81 @@ class RegexpExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
     assert(extractAllCopy ne extractAll,
       "freshCopyIfContainsStatefulExpression should return a new instance for RegExpExtractAll")
   }
+
+  test("SPARK-60632: LIKE and RLIKE expensive heuristic looks at the pattern") {
+    val str = $"s".string.at(0)
+    val pattern = $"p".string.at(1)
+
+    // The subject string is irrelevant; a constant pattern is checked. Two or more repeating
+    // quantifiers that can backtrack make an RLIKE expensive, and three or more when it is
+    // anchored at the start.
+    // scalastyle:off SingleSpaceBetweenRParenAndLCurlyBrace
+    Seq("^1", "magic", "a.b", "^a.*b", "2024-.*", "\\d{2,}", "a{3}b*", "(?i)^abc.*",
+      "a\\+b\\*", "[+*{]x+", "\\p{Lu}+", "\\x{41}.*", "\\Q.*+\\E.*", "[a-z&&[^b]]+x",
+      "\\(?x.*a", "[]a]*x",
+      // Possessive quantifiers and small ranges.
+      "a*+b", "a?+b?+", "a{3}+b", ".*+a.*+b", "a{1,9}b{1,9}", "(ab){3}.*",
+      ".{0,9}a.{0,9}a.{0,9}x",
+      // A quantifier that ends the pattern or an alternative, and alternatives on their own.
+      "a.*b.*", "a{2,}b+", "\\d+\\s*", "a+?b.*", "(foo.*bar.*)", "a.*b.*|x", "a.*b|a.*c",
+      "foo.*bar|baz.*qux", "colou?r.*x", "(.*)\\1", ".*.{1000}",
+      // Groups that hold a `|`, a long fixed repetition and a backreference on their own.
+      ".*(k1|k2|k3|k4|k5|k6|k7|k8).*", ".{1000}x", "\\d{4}-\\d{2}-\\d{2}.*", "(\\w)\\1x",
+      "^(\\w+)\\s\\1.*", ".*" + "(a|aa)" * 4 + "x",
+      // Anchored.
+      "^.*a.*b", "\\A.*a.*b", "(?i)^.*a.*b", "^v[0-9]+_.*", "^(a|b).*c.*").foreach { p =>
+      assert(!RLike(str, Literal(p)).expensive, p)
+    }
+    Seq(".*a.*b", "^.*a.*a.*b", "\\b.*a.*b", "a.*b.*$", ".{0,50}a.{0,50}b", "^a|.*b.*c",
+      "(?m)^.*a.*b", ".{0,9}a.{0,9}a.{0,9}a.{0,9}a.{0,9}a.{0,9}x", ".{0,9}a.{0,9}a.{0,8}a.*b",
+      "a?" * 24 + "b", "(a.*b.*)c", "x|a.*b.*c",
+      // Groups that hold a `|`, which multiply like `?`.
+      "(a|a)" * 24 + "b", "(a|)" * 24 + "b", "(?:a|aa)" * 24 + "b", "(\\w|\\d)" * 24 + "x",
+      ".*" + "(a|aa)" * 5 + "x", ".*" + "a?" * 5 + "x",
+      // An anchor that a quantifier makes optional.
+      "^?.*a.*b", "\\A?.*a.*b", "^{0,1}.*a.*b",
+      // A backreference, and a long repetition next to a quantifier.
+      "(.*)\\1x", "(.+)\\1\\1x", "(?<g>.*)\\k<g>x", ".*.{1000}x", ".*.{1000}+x",
+      ".*.{1000,1005}x",
+      // A repeated group that holds a quantifier or an alternation.
+      "(a+)+b", "^(a+)+b", "^(.*?,){11}P", "(.*a){3}x", "^((.*a)b){2}", "(a{1,9}){6}b",
+      "(a|aa){20}b", "^(\\d|\\w){24}x", "(a?a?){16}b", "^(.?.?){16}x",
+      "^(.*?,)\\Q\\E{11}P",
+      // COMMENTS mode.
+      "(?x) ^ (.*?,) {11} P", "(?x)(.*a) {3}x",
+      // A `[` that does not open a class, and a `]` that does not close one.
+      "\\c[.*a.*b", "(?x)a # [\n.*a.*b", "^[](]a|.*b.*c").foreach { p =>
+      assert(RLike(str, Literal(p)).expensive, p)
+    }
+    // scalastyle:on SingleSpaceBetweenRParenAndLCurlyBrace
+    // Three or more `%` that are not at the end make a LIKE expensive, since it must match the
+    // whole input.
+    Seq("1_", "%magic%", "%a%b", "%a%b%", "%a\\%b%", "a_b_c", "%a\\\\%b").foreach { p =>
+      assert(!Like(str, Literal(p), '\\').expensive, p)
+    }
+    assert(!Like(str, Literal("%a#%b#%c%"), '#').expensive)
+    Seq("%a%b%c%", "%a%a%a%b", "%(.*)%|%x").foreach { p =>
+      assert(Like(str, Literal(p), '\\').expensive, p)
+    }
+    // A pattern with an invalid escape is expensive rather than failing the optimizer.
+    assert(Like(str, Literal("a\\b"), '\\').expensive)
+
+    // A foldable pattern that is not yet a literal.
+    assert(!RLike(str, Concat(Seq(Literal("^"), Literal("a.*")))).expensive)
+    assert(RLike(str, Concat(Seq(Literal(".*a"), Literal(".*b")))).expensive)
+    assert(!RLike(str, Literal.create(null, StringType)).expensive)
+    // A foldable pattern that fails to evaluate is expensive rather than failing the optimizer.
+    withSQLConf(SQLConf.ANSI_ENABLED.key -> "true") {
+      assert(RLike(str, Cast(Divide(Literal(1), Literal(0)), StringType)).expensive)
+    }
+
+    // A non-foldable pattern is compiled for every row.
+    assert(RLike(str, pattern).expensive)
+    assert(Like(str, pattern, '\\').expensive)
+
+    // An expensive subject wins over a cheap pattern.
+    val udf = ScalaUDF((s: String) => s, StringType, Seq(str), Seq(None))
+    assert(RLike(udf, Literal("^1")).expensive)
+    assert(Like(udf, Literal("1_"), '\\').expensive)
+  }
 }

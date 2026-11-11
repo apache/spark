@@ -17,7 +17,7 @@
 
 package org.apache.spark.sql.execution.datasources
 
-import java.lang.{Double => JDouble, Long => JLong}
+import java.lang.{Byte => JByte, Double => JDouble, Long => JLong, Short => JShort}
 import java.math.{BigDecimal => JBigDecimal}
 import java.time.ZoneId
 import java.util.Locale
@@ -582,25 +582,24 @@ object PartitioningUtils extends SQLConfHelper {
     case _ if value == DEFAULT_PARTITION_NAME => null
     case NullType => null
     case _: StringType => UTF8String.fromString(unescapePathName(value))
-    case ByteType => Integer.parseInt(value).toByte
-    case ShortType => Integer.parseInt(value).toShort
+    case ByteType => JByte.parseByte(value)
+    case ShortType => JShort.parseShort(value)
     case IntegerType => Integer.parseInt(value)
     case LongType => JLong.parseLong(value)
     case FloatType => JDouble.parseDouble(value).toFloat
     case DoubleType => JDouble.parseDouble(value)
-    case _: DecimalType => Literal(new JBigDecimal(value)).value
+    // Cast in ANSI mode, here and in the datetime and interval cases below, so that a value that
+    // the type cannot hold fails in any session and `spark.sql.sources.validatePartitionColumns`
+    // alone decides between an error and null.
+    case dt: DecimalType => Cast(Literal(value), dt, ansiEnabled = true).eval()
     case DateType =>
-      Cast(Literal(value), DateType, Some(zoneId.getId)).eval()
-    case tt: TimeType => Cast(Literal(unescapePathName(value)), tt).eval()
+      Cast(Literal(value), DateType, Some(zoneId.getId), ansiEnabled = true).eval()
+    case tt: TimeType => Cast(Literal(unescapePathName(value)), tt, ansiEnabled = true).eval()
     // Timestamp types
     case dt if AnyTimestampType.acceptsType(dt) || AnyTimestampNanoType.acceptsType(dt) =>
-      Try {
-        Cast(Literal(unescapePathName(value)), dt, Some(zoneId.getId)).eval()
-      }.getOrElse {
-        Cast(Cast(Literal(value), DateType, Some(zoneId.getId)), dt).eval()
-      }
+      Cast(Literal(unescapePathName(value)), dt, Some(zoneId.getId), ansiEnabled = true).eval()
     case it: AnsiIntervalType =>
-      Cast(Literal(unescapePathName(value)), it).eval()
+      Cast(Literal(unescapePathName(value)), it, ansiEnabled = true).eval()
     case BinaryType => value.getBytes()
     case BooleanType => value.toBoolean
     case dt => throw SparkException.internalError(s"Unsupported partition type: $dt")
@@ -631,6 +630,8 @@ object PartitioningUtils extends SQLConfHelper {
     // non default collated strings should not be used as partition columns
     // as we cannot implement string collation semantic with directory names
     case st: StringType => st.supportsBinaryOrdering
+    // geospatial values cannot be cast to and from strings, which partition values are stored as
+    case _: GeometryType | _: GeographyType => false
     case a: AtomicType => !a.isInstanceOf[VariantType]
     case _ => false
   }

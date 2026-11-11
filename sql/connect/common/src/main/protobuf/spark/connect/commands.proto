@@ -522,6 +522,11 @@ message CheckpointCommand {
 
   // (Optional) For local checkpoint, the storage level to use.
   optional StorageLevel storage_level = 4;
+
+  // (Optional) ID to assign to the checkpointed DataFrame in the current session.
+  // If omitted, the server generates an ID. If provided, it must be non-empty and
+  // must not already identify a cached DataFrame in this session.
+  optional string relation_id = 5;
 }
 
 message MergeIntoTableCommand {

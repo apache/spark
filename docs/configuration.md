@@ -450,6 +450,17 @@ of the most common options to set are:
   <td>3.5.0</td>
 </tr>
 <tr>
+  <td><code>spark.log.level.&lt;logger&gt;</code></td>
+  <td>(none)</td>
+  <td>
+    When set, overrides the level of the named logger on the driver and the executors, for example
+    <code>spark.log.level.org.apache.spark.sql.execution=DEBUG</code>. Applied after
+    <code>spark.log.level</code>, which sets the root logger, so it wins for that logger. Valid log
+    levels include: "ALL", "DEBUG", "ERROR", "FATAL", "INFO", "OFF", "TRACE", "WARN".
+  </td>
+  <td>5.0.0</td>
+</tr>
+<tr>
   <td><code>spark.driver.supervise</code></td>
   <td>false</td>
   <td>
@@ -832,7 +843,10 @@ Apart from these, the following properties are also available, and may be useful
     cogrouped-map, grouped-aggregate and window functions; Python UDTFs, both row and Arrow;
     <code>applyInPandasWithState</code> and <code>transformWithState</code>;
     <code>writeStream.foreach</code>; and Python data sources, including the workers that plan them
-    and read a streaming source.
+    and read a streaming source. In-process Python UDFs share the executor process and reject
+    this configuration; set their environment before executor startup instead, using
+    <code>spark.executorEnv.[EnvironmentVariableName]</code>. In local mode, set these variables
+    in the launching environment instead, because the interpreter runs inside the driver JVM.
     <br /><br />
     A running streaming query holds a configuration snapshot, because its batches run on a cloned
     session whose configurations are copied when the query starts. A change made while a query is
@@ -862,9 +876,11 @@ Apart from these, the following properties are also available, and may be useful
     <code>PYTHON_UDF_BATCH_SIZE</code>, a session may still set it and Spark's value wins.
     <code>PYTHONPATH</code> is the one name that is neither reserved nor simply overridden: Spark
     merges the session's value into the path it computes for the worker, so a session adds to the
-    worker's import path. The relative order is not guaranteed -- Spark contributes no entries of
-    its own when <code>SPARK_HOME</code> is unset and its classes did not come from a jar, which can
-    leave the session's path first -- so do not rely on a session entry being shadowed by Spark's.
+    worker's import path. The relative order is not guaranteed -- Spark puts no entries of its own
+    ahead of the session's when <code>SPARK_HOME</code> is unset where the worker runs, as on YARN
+    executors, which receive Spark's <code>pyspark.zip</code> through the inherited
+    <code>PYTHONPATH</code> after the session's entries -- so do not rely on a session entry being
+    shadowed by Spark's.
     <br /><br />
     Each variable is a separate configuration, so setting several is not atomic: a client that sets
     a batch may have some applied and then one rejected, leaving the earlier ones in place. Read the
@@ -958,6 +974,21 @@ Apart from these, the following properties are also available, and may be useful
     from JVM to Python worker for every task.
   </td>
   <td>1.2.0</td>
+</tr>
+<tr>
+  <td><code>spark.python.inProcess.sitePackages</code></td>
+  <td>(none)</td>
+  <td>
+    Comma-separated executor directories for packages used by opt-in in-process Python UDFs.
+    JEP must be directly importable from these directories. Spark distribution paths and
+    process <code>PYTHONPATH</code> take precedence; <code>.pth</code> files are processed.
+    Paths cannot contain single quotes, newlines, NUL, surrogate characters (including
+    supplementary Unicode characters) or the platform path separator. Restart the executor
+    process before changing these directories, including after a failed Python bootstrap.
+    See the <a href="sql-pyspark-inprocess-udf.html">in-process Python UDF guide</a>
+    for plugin setup, native dependencies and limitations.
+  </td>
+  <td>4.4.0</td>
 </tr>
 <tr>
   <td><code>spark.python.factory.idleWorkerMaxPoolSize</code></td>
@@ -1076,10 +1107,10 @@ Apart from these, the following properties are also available, and may be useful
     For <code>spark.jars.packages</code>, additional repositories from
     <code>spark.jars.repositories</code> will also be included.
     The <code>spark-submit --repositories</code> option applies to submission-time resolution.
-    In Spark Connect, Ivy URIs with a <code>repos</code> query parameter or sent to a server without
-    server-side Maven resolution are resolved by the client and do not use this setting. Other Ivy
-    URIs are resolved by the server, so Maven and Ivy repositories local to the client, such as
-    <code>~/.m2/repository</code> and <code>~/.ivy2.5.2/local</code>, are not searched.
+    Spark Connect JVM clients use the server session's value only if Config RPC exposes it and
+    the file is readable locally; otherwise, they use the built-in defaults.
+    Enable <code>spark.connect.session.serverSideMavenResolution.enabled</code> to resolve Ivy URIs
+    without <code>repos</code> on a supporting server.
     Useful for allowing Spark to resolve artifacts from behind a firewall e.g. via an in-house
     artifact server like Artifactory. Details on the settings file format can be
     found at <a href="http://ant.apache.org/ivy/history/latest-milestone/settings.html">Settings Files</a>.
@@ -1413,14 +1444,18 @@ Apart from these, the following properties are also available, and may be useful
 </tr>
 <tr>
   <td><code>spark.shuffle.accurateBlockSkewedFactor</code></td>
-  <td>-1.0</td>
+  <td>5.0</td>
   <td>
     A shuffle block is considered as skewed and will be accurately recorded in
     <code>HighlyCompressedMapStatus</code> if its size is larger than this factor multiplying
-    the median shuffle block size or <code>spark.shuffle.accurateBlockThreshold</code>. It is
-    recommended to set this parameter to be the same as
-    <code>spark.sql.adaptive.skewJoin.skewedPartitionFactor</code>. Set to -1.0 to disable this
-    feature by default.
+    the median shuffle block size or <code>spark.shuffle.accurateBlockThreshold</code>.
+    Otherwise every block below <code>spark.shuffle.accurateBlockThreshold</code> is reported
+    as the average block size, which hides skew from adaptive query execution once a shuffle
+    has more than <code>spark.shuffle.minNumPartitionsToHighlyCompress</code> partitions. At
+    most <code>spark.shuffle.maxAccurateSkewedBlockNumber</code> block sizes are recorded
+    accurately per map task. The default matches
+    <code>spark.sql.adaptive.skewJoin.skewedPartitionFactor</code>. Set to -1.0 to disable
+    this feature.
   </td>
   <td>3.3.0</td>
 </tr>
@@ -1538,6 +1573,17 @@ Apart from these, the following properties are also available, and may be useful
     <code>spark.dynamicAllocation.executorIdleTimeout</code> and will be released accordingly.
   </td>
   <td>3.0.0</td>
+</tr>
+<tr>
+  <td><code>spark.shuffle.service.verifyBlockPathsAtRead</code></td>
+  <td>true</td>
+  <td>
+    Whether the ExternalShuffleService re-resolves the path of a shuffle or RDD block file when
+    serving it, and refuses the file if the resolved path is no longer under the executor's
+    registered local directories. Disabling it skips the path canonicalization done on each
+    block fetch.
+  </td>
+  <td>4.1.4</td>
 </tr>
 <tr>
   <td><code>spark.shuffle.service.db.enabled</code></td>
@@ -1848,7 +1894,7 @@ Apart from these, the following properties are also available, and may be useful
     If the Spark UI should be served through another front-end reverse proxy, this is the URL
     for accessing the Spark master UI through that reverse proxy.
     This is useful when running proxy for authentication e.g. an OAuth proxy. The URL may contain
-    a path prefix, like <code>http://mydomain.com/path/to/spark/</code>, allowing you to serve the
+    a path prefix, like <code>http://example.com/path/to/spark/</code>, allowing you to serve the
     UI for multiple Spark clusters and other web applications through the same virtual host and
     port.
     Normally, this should be an absolute URL including scheme (http/https), host and port.
@@ -1860,8 +1906,8 @@ Apart from these, the following properties are also available, and may be useful
     <ul>
       <li>stripping a path prefix before forwarding the request,</li>
       <li>rewriting redirects which point directly to the Spark master,</li>
-      <li>redirecting access from <code>http://mydomain.com/path/to/spark</code> to
-      <code>http://mydomain.com/path/to/spark/</code> (trailing slash after path prefix); otherwise
+      <li>redirecting access from <code>http://example.com/path/to/spark</code> to
+      <code>http://example.com/path/to/spark/</code> (trailing slash after path prefix); otherwise
       relative links on the master page do not work correctly.</li>
     </ul>
     This setting affects all the workers and application UIs running in the cluster and must be set
@@ -2124,6 +2170,7 @@ Apart from these, the following properties are also available, and may be useful
     is used. Lowering this size will lower the shuffle memory usage when Zstd is used, but it
     might increase the compression cost because of excessive JNI call overhead. This
     configuration only applies to <code>spark.io.compression.codec</code>.
+    The value must be positive and less than or equal to 2147483632 bytes.
   </td>
   <td>2.3.0</td>
 </tr>
@@ -3850,6 +3897,14 @@ Command types in proto.</td>
   </td>
   <td>The interval at which the progress of a query is reported to the client. If the value is set to a negative value the progress reports will be disabled.</td>
   <td>4.0.0</td>
+</tr>
+<tr>
+  <td><code>spark.connect.session.serverSideMavenResolution.enabled</code></td>
+  <td>
+    false
+  </td>
+  <td>When true, the Spark Connect JVM client resolves eligible Maven dependencies on the server when it advertises support. Dependencies that specify repositories are always resolved on the client. When false, the JVM client resolves all Maven dependencies locally. This is a client routing preference, not a server-side enforcement setting.</td>
+  <td>4.4.0</td>
 </tr>
 </table>
 

@@ -29,6 +29,7 @@ import org.apache.spark.internal.Logging
 import org.apache.spark.sql.catalyst.util.CaseInsensitiveMap
 import org.apache.spark.sql.errors.QueryExecutionErrors
 import org.apache.spark.sql.internal.SQLConf
+import org.apache.spark.sql.jdbc.JdbcDialects
 import org.apache.spark.sql.types.TimestampNTZType
 import org.apache.spark.util.Utils
 
@@ -265,6 +266,23 @@ class JDBCOptions(
       .map(_.toBoolean)
       .getOrElse(false)
 
+  private lazy val dialectTimestampNTZAsWallClock: Boolean =
+    JdbcDialects.get(url).timestampNTZAsWallClock
+
+  // Reads and writes TimestampNTZType values as java.time.LocalDateTime.
+  val timestampNTZAsWallClock: Boolean =
+    parameters
+      .get(JDBC_TIMESTAMP_NTZ_WALL_CLOCK)
+      .map(_.toBoolean)
+      .getOrElse(dialectTimestampNTZAsWallClock)
+
+  // Infers zoneless timestamp types as TimestampNTZType. Only honored by OracleDialect for now.
+  val zonelessTimestampAsNTZ: Boolean =
+    parameters
+      .get(JDBC_ZONELESS_TIMESTAMP_AS_NTZ)
+      .map(_.toBoolean)
+      .getOrElse(dialectTimestampNTZAsWallClock)
+
   val hint = parameters.get(JDBC_HINT_STRING).map(value => {
     require(value.matches("(?s)^/\\*\\+ .* \\*/$"),
       s"Invalid value `$value` for option `$JDBC_HINT_STRING`." +
@@ -379,4 +397,6 @@ object JDBCOptions {
   val JDBC_PREFER_TIMESTAMP_NTZ = newOption("preferTimestampNTZ")
   val JDBC_PREFER_TIMESTAMP_NANOS = newOption("preferTimestampNanos")
   val JDBC_HINT_STRING = newOption("hint")
+  val JDBC_TIMESTAMP_NTZ_WALL_CLOCK = newOption("timestampNTZAsWallClock")
+  val JDBC_ZONELESS_TIMESTAMP_AS_NTZ = newOption("zonelessTimestampAsNTZ")
 }

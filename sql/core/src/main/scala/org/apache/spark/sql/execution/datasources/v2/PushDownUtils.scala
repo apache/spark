@@ -35,13 +35,58 @@ import org.apache.spark.sql.connector.read.{HasPartitionKey, InputPartition, Sam
 import org.apache.spark.sql.execution.{InSubqueryExec, ScalarSubquery => ExecScalarSubquery}
 import org.apache.spark.sql.execution.datasources.{DataSourceStrategy, DataSourceUtils}
 import org.apache.spark.sql.internal.SQLConf
-import org.apache.spark.sql.internal.connector.{PartitionPredicateField, PartitionPredicateImpl, SupportsPushDownCatalystFilters, SupportsRuntimeCatalystFiltering}
+import org.apache.spark.sql.internal.connector.{EvaluatesAllPushedPredicates, PartitionPredicateField, PartitionPredicateImpl, SupportsPushDownCatalystFilters, SupportsRuntimeCatalystFiltering}
 import org.apache.spark.sql.sources
 import org.apache.spark.sql.types.{StructField, StructType}
 import org.apache.spark.util.ArrayImplicits.SparkArrayOps
 import org.apache.spark.util.collection.Utils
 
 object PushDownUtils extends Logging {
+
+  /** Returns whether [[pushFilters]] may push filters down to `scanBuilder`. */
+  def supportsFilters(scanBuilder: ScanBuilder): Boolean = scanBuilder match {
+    case _: SupportsPushDownFilters | _: SupportsPushDownV2Filters |
+        _: SupportsPushDownCatalystFilters => true
+    case _ => false
+  }
+
+  /**
+   * Returns whether [[pushFilters]] gives `filter` to `scanBuilder` in some form: whether it
+   * translates it to a data source filter or predicate, or whether it is deterministic for a
+   * [[SupportsPushDownCatalystFilters]] builder. The other filters are only evaluated after the
+   * scan. [[pushFilters]] decides with the same functions.
+   */
+  def getsFilter(scanBuilder: ScanBuilder, filter: Expression): Boolean = scanBuilder match {
+    case _: SupportsPushDownFilters => toDataSourceFilter(filter, None).isDefined
+    case _: SupportsPushDownV2Filters => toPredicate(filter, None).isDefined
+    case _: SupportsPushDownCatalystFilters => getsCatalystFilter(filter)
+    case _ => false
+  }
+
+  // The data source filter that a `SupportsPushDownFilters` builder gets for `filter`, if any, with
+  // the translated leaf filters mapped to their expressions in `mapping`.
+  private def toDataSourceFilter(
+      filter: Expression,
+      mapping: Option[mutable.HashMap[sources.Filter, Expression]]): Option[sources.Filter] = {
+    DataSourceStrategy.translateFilterWithMapping(filter, mapping,
+      nestedPredicatePushdownEnabled = true)
+  }
+
+  // The predicate that a `SupportsPushDownV2Filters` builder gets for `filter`, if any, with the
+  // translated leaf predicates mapped to their expressions in `mapping`. A nondeterministic filter
+  // is only evaluated after the scan, see `pushFilters`.
+  private def toPredicate(
+      filter: Expression,
+      mapping: Option[mutable.HashMap[Predicate, Expression]]): Option[Predicate] = {
+    if (filter.deterministic) {
+      DataSourceV2Strategy.translateFilterV2WithMapping(filter, mapping)
+    } else {
+      None
+    }
+  }
+
+  // Whether a `SupportsPushDownCatalystFilters` builder gets `filter`.
+  private def getsCatalystFilter(filter: Expression): Boolean = filter.deterministic
 
   /**
    * Pushes down filters to the data source reader.
@@ -74,9 +119,7 @@ object PushDownUtils extends Logging {
         val untranslatableExprs = mutable.ArrayBuffer.empty[Expression]
 
         for (filterExpr <- filters) {
-          val translated =
-            DataSourceStrategy.translateFilterWithMapping(filterExpr, Some(translatedFilterToExpr),
-              nestedPredicatePushdownEnabled = true)
+          val translated = toDataSourceFilter(filterExpr, Some(translatedFilterToExpr))
           if (translated.isEmpty) {
             untranslatableExprs += filterExpr
           } else {
@@ -106,9 +149,7 @@ object PushDownUtils extends Logging {
         val untranslatableExprs = mutable.ArrayBuffer.empty[Expression]
 
         for (filterExpr <- deterministicFilters) {
-          val translated =
-            DataSourceV2Strategy.translateFilterV2WithMapping(
-              filterExpr, Some(translatedFilterToExpr))
+          val translated = toPredicate(filterExpr, Some(translatedFilterToExpr))
           if (translated.isEmpty) {
             untranslatableExprs += filterExpr
           } else {
@@ -134,11 +175,17 @@ object PushDownUtils extends Logging {
               rebuildExpressions(pushedPostScanFilters, translatedFilterToExpr)
           }
 
-        val orderedPostScanFilters = prioritizeFilters(finalPostScanFilters,
-          ExpressionSet(untranslatableExprs)) ++ nonDeterministicFilters
+        val orderedPostScanFilters = r match {
+          // The builder returns all the predicates that it got, so Spark evaluates all the filters
+          // after the scan: they keep the order of the query.
+          case _: EvaluatesAllPushedPredicates => filters
+          case _ => prioritizeFilters(finalPostScanFilters,
+            ExpressionSet(untranslatableExprs)) ++ nonDeterministicFilters
+        }
         (Right(r.pushedPredicates.toImmutableArraySeq), orderedPostScanFilters)
       case r: SupportsPushDownCatalystFilters =>
-        val postScanFilters = r.pushFilters(deterministicFilters) ++ nonDeterministicFilters
+        val (pushedFilters, otherFilters) = filters.partition(getsCatalystFilter)
+        val postScanFilters = r.pushFilters(pushedFilters) ++ otherFilters
         (Right(r.pushedFilters.toImmutableArraySeq), postScanFilters)
       case _ => (Left(Nil), filters)
     }
@@ -506,7 +553,7 @@ object PushDownUtils extends Logging {
         None
       case DynamicPruningExpression(e) => Some(e)
       case _: DynamicPruning => None
-      case f => Some(f.transform { case s: ExecScalarSubquery => s.toLiteral })
+      case f => Some(ExecScalarSubquery.replaceWithLiterals(f))
     }
 
   /**
@@ -717,9 +764,22 @@ object PushDownUtils extends Logging {
       relation: DataSourceV2Relation): Seq[AttributeReference] = {
     val nameToAttr = Utils.toMap(relation.output.map(_.name), relation.output)
     val cleaned = CharVarcharUtils.replaceCharVarcharWithStringInSchema(schema)
-    toAttributes(cleaned).map {
-      // we have to keep the attribute id during transformation
-      a => a.withExprId(nameToAttr(a.name).exprId)
+    toAttributes(cleaned).map { a =>
+      val orig = nameToAttr(a.name)
+      // Keep exprId. Drop __CHAR_VARCHAR_TYPE_STRING only when the relation
+      // attribute already has none; keep it otherwise. This runs in the
+      // optimizer with no second padding pass, so re-stamping a cleaned
+      // attribute would look unpadded when a V2 scan readSchema() still
+      // surfaces CHAR/VARCHAR. File sources usually already substituted
+      // STRING, so the stamp was latent. AnalyzedSchemaProjection keeps
+      // cleaned metadata across versioned-table refresh, so a padded
+      // relation still arrives unstamped. Do not key off the session conf.
+      val metadata = if (CharVarcharUtils.getRawTypeString(orig.metadata).isEmpty) {
+        CharVarcharUtils.cleanMetadata(a.metadata)
+      } else {
+        a.metadata
+      }
+      a.withExprId(orig.exprId).withMetadata(metadata)
     }
   }
 }

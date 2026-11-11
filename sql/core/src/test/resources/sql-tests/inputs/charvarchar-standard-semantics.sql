@@ -15,6 +15,10 @@ SELECT CAST(12345 AS VARCHAR(4));
 SELECT CAST(12345 AS VARCHAR(5));
 SELECT try_cast(12345 AS VARCHAR(4));
 
+-- CAST CHAR to VARCHAR keeps the CHAR pad; CAST VARCHAR to CHAR pads to the target length.
+SELECT concat('<', CAST(CAST('a' AS CHAR(2)) AS VARCHAR(2)), '>');
+SELECT concat('<', CAST(CAST('a' AS VARCHAR(2)) AS CHAR(4)), '>');
+
 -- Explicit CAST inside LCT must keep inner truncation / overflow (do not retarget).
 SELECT coalesce(CAST('abcdef' AS VARCHAR(2)), CAST('x' AS VARCHAR(4)));
 SELECT CASE WHEN true THEN CAST('abcdef' AS VARCHAR(2)) ELSE CAST('x' AS VARCHAR(4)) END;

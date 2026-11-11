@@ -58,6 +58,9 @@ public interface VariantExtraction extends Serializable {
    * - "failOnError": whether the extraction to expected data type should throw an exception
    *                  or return null if the cast fails.
    * - "timeZoneId": a string identifier of a time zone. It is required by timestamp-related casts.
+   * - "legacyPathBackslashAsLiteral": whether backslashes in bracket-quoted keys are literal.
+   *   If false, decodes \\, \/, \b, \f, \n, \r, \t, Unicode and enclosing-quote escapes.
+   *   Unknown escapes and unpaired surrogate escapes stay literal. Dot-notation keys are unchanged.
    *
    */
   Metadata metadata();

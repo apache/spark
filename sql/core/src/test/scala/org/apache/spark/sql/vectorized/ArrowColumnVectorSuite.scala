@@ -25,6 +25,7 @@ import scala.util.{Failure, Random, Success, Try, Using}
 import org.apache.arrow.memory.RootAllocator
 import org.apache.arrow.vector._
 import org.apache.arrow.vector.complex._
+import org.apache.arrow.vector.types.TimeUnit
 import org.apache.arrow.vector.types.pojo.{ArrowType, FieldType}
 
 import org.apache.spark.SparkFunSuite
@@ -33,7 +34,7 @@ import org.apache.spark.sql.catalyst.expressions.codegen.UnsafeRowWriter
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
 import org.apache.spark.sql.util.ArrowUtils
-import org.apache.spark.unsafe.types.UTF8String
+import org.apache.spark.unsafe.types.{TimestampNanosVal, UTF8String}
 
 class ArrowColumnVectorSuite extends SparkFunSuite {
 
@@ -875,6 +876,98 @@ class ArrowColumnVectorSuite extends SparkFunSuite {
     assert(row0.get(0, TimestampNTZType) === 1000L)
 
     columnVector.close()
+    allocator.close()
+  }
+
+  test("timestamp nanos are floored to the column precision") {
+    // (epochNanos, epochMicros, nanosWithinMicro), with more digits than p = 7 / 8 allow.
+    val values = Seq(
+      (123456789L, 123456L, 789),
+      (123456712L, 123456L, 712),
+      (123456700L, 123456L, 700),
+      // Pre-epoch values floor toward -inf, not toward zero.
+      (-1L, -1L, 999),
+      (-123456211L, -123457L, 789),
+      (Long.MaxValue, 9223372036854775L, 807),
+      (Long.MinValue, -9223372036854776L, 192))
+    Seq(7, 8, 9).foreach { p =>
+      val grid = Map(7 -> 100, 8 -> 10, 9 -> 1)(p)
+      Seq[(DataType, String)](
+        (TimestampNTZNanosType(p), null),
+        (TimestampLTZNanosType(p), "UTC")).foreach { case (dt, timeZoneId) =>
+        val allocator = ArrowUtils.rootAllocator.newChildAllocator(s"$dt", 0, Long.MaxValue)
+        val vector = ArrowUtils.toArrowField("ts", dt, nullable = true, timeZoneId)
+          .createVector(allocator).asInstanceOf[TimeStampVector]
+        vector.allocateNew()
+        values.zipWithIndex.foreach { case ((epochNanos, _, _), i) =>
+          vector.setSafe(i, epochNanos)
+        }
+        vector.setNull(values.length)
+        vector.setValueCount(values.length + 1)
+
+        val columnVector = new ArrowColumnVector(vector)
+        assert(columnVector.dataType === dt)
+        values.zipWithIndex.foreach { case ((_, epochMicros, nanosWithinMicro), i) =>
+          val got = dt match {
+            case _: TimestampNTZNanosType => columnVector.getTimestampNTZNanos(i)
+            case _: TimestampLTZNanosType => columnVector.getTimestampLTZNanos(i)
+          }
+          assert(got.epochMicros === epochMicros)
+          assert(got.nanosWithinMicro === nanosWithinMicro / grid * grid)
+        }
+        assert(columnVector.isNullAt(values.length))
+
+        columnVector.close()
+        allocator.close()
+      }
+    }
+  }
+
+  test("timestamp nanos struct fields are floored to the field precision") {
+    val allocator = ArrowUtils.rootAllocator.newChildAllocator("struct", 0, Long.MaxValue)
+    val schema = new StructType().add("ts", TimestampNTZNanosType(7))
+    val vector = ArrowUtils.toArrowField("struct", schema, nullable = true, null)
+      .createVector(allocator).asInstanceOf[StructVector]
+    vector.allocateNew()
+    val timestampVector = vector.getChildByOrdinal(0).asInstanceOf[TimeStampNanoVector]
+
+    vector.setIndexDefined(0)
+    timestampVector.setSafe(0, 123456789L)
+
+    timestampVector.setValueCount(1)
+    vector.setValueCount(1)
+
+    val columnVector = new ArrowColumnVector(vector)
+    assert(columnVector.dataType === schema)
+    assert(columnVector.getStruct(0).getTimestampNTZNanos(0) ===
+      TimestampNanosVal.fromParts(123456L, 700.toShort))
+
+    columnVector.close()
+    allocator.close()
+  }
+
+  test("timestamp nanos vectors whose time zone disagrees with the vector class") {
+    val allocator = ArrowUtils.rootAllocator.newChildAllocator("mismatch", 0, Long.MaxValue)
+    // A TZ vector without a time zone reads as NTZ; a plain vector with one reads as LTZ.
+    val tzVector = new TimeStampNanoTZVector("ts", allocator, null)
+    val ntzVector = new TimeStampNanoVector(
+      "ts", FieldType.nullable(new ArrowType.Timestamp(TimeUnit.NANOSECOND, "UTC")), allocator)
+    Seq(tzVector, ntzVector).foreach { vector =>
+      vector.allocateNew()
+      vector.setSafe(0, 123456789L)
+      vector.setValueCount(1)
+    }
+    val expected = TimestampNanosVal.fromParts(123456L, 789.toShort)
+
+    val tzColumn = new ArrowColumnVector(tzVector)
+    assert(tzColumn.dataType === TimestampNTZNanosType(9))
+    assert(tzColumn.getTimestampNTZNanos(0) === expected)
+    val ntzColumn = new ArrowColumnVector(ntzVector)
+    assert(ntzColumn.dataType === TimestampLTZNanosType(9))
+    assert(ntzColumn.getTimestampLTZNanos(0) === expected)
+
+    tzColumn.close()
+    ntzColumn.close()
     allocator.close()
   }
 

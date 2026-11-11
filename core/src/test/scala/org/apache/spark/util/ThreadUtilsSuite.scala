@@ -132,6 +132,111 @@ class ThreadUtilsSuite extends SparkFunSuite {
     }
   }
 
+  test("SPARK-60466: shutdown interrupts running tasks and drops queued tasks after the " +
+      "grace period") {
+    val executor = ThreadUtils.newDaemonSingleThreadExecutor("ThreadUtilsSuite-shutdown")
+    try {
+      val started = new CountDownLatch(1)
+      val interrupted = new CountDownLatch(1)
+      @volatile var queuedTaskRan = false
+      executor.execute(() => {
+        started.countDown()
+        try {
+          new CountDownLatch(1).await()
+        } catch {
+          case _: InterruptedException => interrupted.countDown()
+        }
+      })
+      executor.execute(() => queuedTaskRan = true)
+      assert(started.await(10, TimeUnit.SECONDS))
+
+      ThreadUtils.shutdown(executor, 100.milliseconds)
+      assert(interrupted.await(10, TimeUnit.SECONDS))
+      eventually(timeout(10.seconds)) {
+        assert(executor.isTerminated)
+      }
+      assert(!queuedTaskRan)
+    } finally {
+      executor.shutdownNow()
+    }
+  }
+
+  test("SPARK-60466: shutdown drops pending delayed tasks after the grace period") {
+    val executor =
+      ThreadUtils.newDaemonSingleThreadScheduledExecutor("ThreadUtilsSuite-shutdown-delayed")
+    try {
+      // A scheduled executor still runs its delayed tasks after shutdown() by default, so only
+      // shutdownNow() can terminate it before the delay elapses.
+      executor.schedule(new Runnable {
+        override def run(): Unit = {}
+      }, 1, TimeUnit.HOURS)
+
+      ThreadUtils.shutdown(executor, 100.milliseconds)
+      eventually(timeout(10.seconds)) {
+        assert(executor.isTerminated)
+      }
+    } finally {
+      executor.shutdownNow()
+    }
+  }
+
+  test("SPARK-60466: shutdown waits for tasks that finish within the grace period") {
+    val executor = ThreadUtils.newDaemonSingleThreadExecutor("ThreadUtilsSuite-shutdown-graceful")
+    try {
+      @volatile var interrupted = false
+      @volatile var queuedTaskRan = false
+      executor.execute(() => {
+        try {
+          Thread.sleep(500)
+        } catch {
+          case _: InterruptedException => interrupted = true
+        }
+      })
+      executor.execute(() => queuedTaskRan = true)
+
+      ThreadUtils.shutdown(executor, 1.minute)
+      assert(executor.isTerminated)
+      assert(!interrupted)
+      assert(queuedTaskRan)
+    } finally {
+      executor.shutdownNow()
+    }
+  }
+
+  test("SPARK-60466: shutdown forces termination when the calling thread is interrupted") {
+    val executor =
+      ThreadUtils.newDaemonSingleThreadExecutor("ThreadUtilsSuite-shutdown-interrupted")
+    try {
+      val started = new CountDownLatch(1)
+      val interrupted = new CountDownLatch(1)
+      executor.execute(() => {
+        started.countDown()
+        try {
+          new CountDownLatch(1).await()
+        } catch {
+          case _: InterruptedException => interrupted.countDown()
+        }
+      })
+      assert(started.await(10, TimeUnit.SECONDS))
+
+      Thread.currentThread().interrupt()
+      try {
+        intercept[InterruptedException] {
+          ThreadUtils.shutdown(executor, 1.minute)
+        }
+      } finally {
+        // Do not leak the interrupt status to the following tests.
+        Thread.interrupted()
+      }
+      assert(interrupted.await(10, TimeUnit.SECONDS))
+      eventually(timeout(10.seconds)) {
+        assert(executor.isTerminated)
+      }
+    } finally {
+      executor.shutdownNow()
+    }
+  }
+
   test("sameThread") {
     val callerThreadName = Thread.currentThread().getName()
     val f = Future {

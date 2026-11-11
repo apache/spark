@@ -1,0 +1,71 @@
+/*
+ * Licensed to the Apache Software Foundation (ASF) under one or more
+ * contributor license agreements.  See the NOTICE file distributed with
+ * this work for additional information regarding copyright ownership.
+ * The ASF licenses this file to You under the Apache License, Version 2.0
+ * (the "License"); you may not use this file except in compliance with
+ * the License.  You may obtain a copy of the License at
+ *
+ *    http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
+package org.apache.spark.sql.catalyst.analysis
+
+import org.apache.spark.sql.catalyst.SQLConfHelper
+import org.apache.spark.sql.catalyst.expressions.{Attribute, AttributeReference}
+import org.apache.spark.sql.catalyst.plans.logical.ColumnDefinition
+import org.apache.spark.sql.catalyst.trees.CurrentOrigin
+import org.apache.spark.sql.catalyst.util.SparkCharVarcharUtils.replaceCharVarcharWithString
+import org.apache.spark.sql.connector.catalog.{CatalogManager, Identifier, LookupCatalog}
+
+/**
+ * Resolves command target names to a [[ResolvedIdentifier]] for [[ResolveCatalogs]].
+ */
+class CatalogIdentifierResolution(override val catalogManager: CatalogManager)
+    extends LookupCatalog with SQLConfHelper {
+
+  /** Resolves a command target without column output, preserving its origin and tags. */
+  def resolveUnresolvedIdentifier(
+      unresolvedIdentifier: UnresolvedIdentifier): ResolvedIdentifier = {
+    CurrentOrigin.withOrigin(unresolvedIdentifier.origin) {
+      val resolvedIdentifier = resolveIdentifier(
+        nameParts = unresolvedIdentifier.nameParts,
+        allowTemp = unresolvedIdentifier.allowTemp,
+        columnOutput = Nil)
+      resolvedIdentifier.copyTagsFrom(unresolvedIdentifier)
+      resolvedIdentifier
+    }
+  }
+
+  /** A temporary view resolves to [[FakeSystemCatalog]] when `allowTemp` is set. */
+  def resolveIdentifier(
+      nameParts: Seq[String],
+      allowTemp: Boolean,
+      columnOutput: Seq[Attribute]): ResolvedIdentifier = {
+    if (allowTemp && catalogManager.v1SessionCatalog.isTempView(nameParts)) {
+      val identifier = Identifier.of(nameParts.dropRight(1).toArray, nameParts.last)
+      ResolvedIdentifier(FakeSystemCatalog, identifier, columnOutput)
+    } else {
+      val CatalogAndIdentifier(catalog, identifier) = nameParts
+      ResolvedIdentifier(catalog, identifier, columnOutput)
+    }
+  }
+
+  /** Converts column definitions to output attributes, honoring CHAR/VARCHAR configuration. */
+  def columnsToOutput(columns: Seq[ColumnDefinition]): Seq[AttributeReference] = {
+    columns.map { col =>
+      val dataType = if (conf.charVarcharFirstClassTypes) {
+        col.dataType
+      } else {
+        replaceCharVarcharWithString(col.dataType)
+      }
+      AttributeReference(col.name, dataType, col.nullable, col.metadata)()
+    }
+  }
+}

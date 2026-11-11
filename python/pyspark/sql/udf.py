@@ -623,6 +623,7 @@ class UserDefinedFunction:
             # replace it with a function the worker cannot drive (it has no ``zero``/``reduce``/
             # ``bufferSchema``), and the memory profiler's ``inspect.getsourcelines(f.__code__)``
             # fails on the driver because an ``Aggregator`` instance has no ``__code__``.
+            assert sc.profiler_collector is not None
             if self.evalType == PythonEvalType.SQL_GROUPED_AGG_ARROW_INCREMENTAL_FINAL_UDF:
                 warnings.warn(
                     "Profiling incremental Python aggregators is not supported.",

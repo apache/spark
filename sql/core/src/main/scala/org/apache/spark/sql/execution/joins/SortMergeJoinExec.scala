@@ -23,7 +23,6 @@ import org.apache.spark.TaskContext
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions._
-import org.apache.spark.sql.catalyst.expressions.BindReferences.bindReferences
 import org.apache.spark.sql.catalyst.expressions.codegen._
 import org.apache.spark.sql.catalyst.expressions.codegen.Block._
 import org.apache.spark.sql.catalyst.plans._
@@ -185,42 +184,6 @@ case class SortMergeJoinExec(
 
   override def inputRDDs(): Seq[RDD[InternalRow]] = {
     streamedPlan.execute() :: bufferedPlan.execute() :: Nil
-  }
-
-  private def createJoinKey(
-      ctx: CodegenContext,
-      row: String,
-      keys: Seq[Expression],
-      input: Seq[Attribute]): Seq[ExprCode] = {
-    ctx.INPUT_ROW = row
-    ctx.currentVars = null
-    bindReferences(keys, input).map(_.genCode(ctx))
-  }
-
-  private def copyKeys(ctx: CodegenContext, vars: Seq[ExprCode]): Seq[ExprCode] = {
-    vars.zipWithIndex.map { case (ev, i) =>
-      ctx.addBufferedState(leftKeys(i).dataType, "value", ev.value)
-    }
-  }
-
-  private def genComparison(ctx: CodegenContext, a: Seq[ExprCode], b: Seq[ExprCode]): String = {
-    // The first key compare always runs, so emit it unguarded. Each subsequent key compare runs
-    // only when previous keys were equal (comp == 0).
-    val pairs = a.zip(b).zipWithIndex
-    val firstCompare = pairs.headOption.map { case ((l, r), i) =>
-      s"comp = ${ctx.genComp(leftKeys(i).dataType, l.value, r.value)};"
-    }.getOrElse("comp = 0;")
-    val restCompares = pairs.drop(1).map { case ((l, r), i) =>
-      s"""
-         |if (comp == 0) {
-         |  comp = ${ctx.genComp(leftKeys(i).dataType, l.value, r.value)};
-         |}
-       """.stripMargin.trim
-    }
-    s"""
-       |$firstCompare
-       |${restCompares.mkString("\n")}
-     """.stripMargin
   }
 
   /**
@@ -929,7 +892,7 @@ case class SortMergeJoinExec(
     // Generate code for result output in separate function, as we need to output result from
     // multiple places in join code.
     val consumeFullOuterJoinRow = ctx.freshName("consumeFullOuterJoinRow")
-    ctx.addNewFunction(consumeFullOuterJoinRow,
+    val consumeFullOuterJoinRowFuncName = ctx.addNewFunction(consumeFullOuterJoinRow,
       s"""
          |private void $consumeFullOuterJoinRow() throws java.io.IOException {
          |  ${metricTerm(ctx, "numOutputRows")}.add(1);
@@ -943,14 +906,14 @@ case class SortMergeJoinExec(
          |$leftOutputRow = $leftInputRow;
          |$rightOutputRow = null;
          |$leftInputRow = null;
-         |$consumeFullOuterJoinRow();
+         |$consumeFullOuterJoinRowFuncName();
        """.stripMargin
     val outputRightNoMatch =
       s"""
          |$rightOutputRow = $rightInputRow;
          |$leftOutputRow = null;
          |$rightInputRow = null;
-         |$consumeFullOuterJoinRow();
+         |$consumeFullOuterJoinRowFuncName();
        """.stripMargin
 
     // Generate a function to scan both sides to find rows with matched join keys.
@@ -993,7 +956,7 @@ case class SortMergeJoinExec(
     }
 
     val findNextJoinRowsFuncName = ctx.freshName("findNextJoinRows")
-    ctx.addNewFunction(findNextJoinRowsFuncName,
+    val findNextJoinRowsFuncFullName = ctx.addNewFunction(findNextJoinRowsFuncName,
       s"""
          |private void $findNextJoinRowsFuncName(
          |    scala.collection.Iterator leftIter,
@@ -1076,7 +1039,7 @@ case class SortMergeJoinExec(
          |  for ($rightIndex = 0; $rightIndex < $rightBuffer.size(); $rightIndex++) {
          |    $rightOutputRow = (InternalRow) $rightBuffer.get($rightIndex);
          |    $conditionCheck {
-         |      $consumeFullOuterJoinRow();
+         |      $consumeFullOuterJoinRowFuncName();
          |      $leftMatched.set($leftIndex);
          |      $rightMatched.set($rightIndex);
          |    }
@@ -1085,7 +1048,7 @@ case class SortMergeJoinExec(
          |  if (!$leftMatched.get($leftIndex)) {
          |
          |    $rightOutputRow = null;
-         |    $consumeFullOuterJoinRow();
+         |    $consumeFullOuterJoinRowFuncName();
          |  }
          |}
          |
@@ -1094,7 +1057,7 @@ case class SortMergeJoinExec(
          |  if (!$rightMatched.get($rightIndex)) {
          |    // The right row has never matched any left row, join it with null row
          |    $rightOutputRow = (InternalRow) $rightBuffer.get($rightIndex);
-         |    $consumeFullOuterJoinRow();
+         |    $consumeFullOuterJoinRowFuncName();
          |  }
          |}
        """.stripMargin
@@ -1102,7 +1065,7 @@ case class SortMergeJoinExec(
     s"""
        |while (($leftInputRow != null || $leftInput.hasNext()) &&
        |  ($rightInputRow != null || $rightInput.hasNext())) {
-       |  $findNextJoinRowsFuncName($leftInput, $rightInput);
+       |  $findNextJoinRowsFuncFullName($leftInput, $rightInput);
        |  $matchRowsInBuffer
        |  if (shouldStop()) return;
        |}

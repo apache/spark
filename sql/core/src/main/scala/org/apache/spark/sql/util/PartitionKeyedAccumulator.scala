@@ -51,7 +51,7 @@ class PartitionKeyedAccumulator[T] extends AccumulatorV2[(Int, T), java.util.Map
   // `getOrCreate`; see SPARK-20977, which fixed the same hazard in `CollectionAccumulator`.
   private var byPartition: ConcurrentHashMap[Int, T] = _
 
-  private def getOrCreate: ConcurrentHashMap[Int, T] = {
+  protected def getOrCreate: ConcurrentHashMap[Int, T] = {
     if (byPartition == null) {
       byPartition = new ConcurrentHashMap[Int, T]()
     }

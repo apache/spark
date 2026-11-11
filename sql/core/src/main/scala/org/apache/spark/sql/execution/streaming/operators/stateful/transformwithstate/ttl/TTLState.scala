@@ -485,25 +485,16 @@ abstract class OneToManyTTLState(
       getEntryCount(elementKey)
     }
 
-    // Manually keep track of the count so that we can update the count index. We don't
-    // want to call elementValues.size since that will try to re-read the iterator.
-    var numNewElements = 0
-
-    // If we're overwriting the primary index, then we only need to put the first value,
-    // and then we can merge the rest.
-    var isFirst = true
-    elementValues.foreach { value =>
-      numNewElements += 1
-      if (isFirst && overwritePrimaryIndex) {
-        isFirst = false
-        store.put(elementKey, value, stateName)
-      } else {
-        store.merge(elementKey, value, stateName)
-      }
+    // The values may be backed by a reused row, so copy each one before collecting them.
+    val values = elementValues.map(_.copy()).toArray
+    if (overwritePrimaryIndex) {
+      store.putList(elementKey, values, stateName)
+    } else {
+      store.mergeList(elementKey, values, stateName)
     }
 
-    TWSMetricsUtils.incrementMetric(metrics, "numUpdatedStateRows", numNewElements)
-    updateEntryCount(elementKey, initialEntryCount + numNewElements)
+    TWSMetricsUtils.incrementMetric(metrics, "numUpdatedStateRows", values.length)
+    updateEntryCount(elementKey, initialEntryCount + values.length)
   }
 
   private[sql] def updatePrimaryAndSecondaryIndices(
