@@ -21,7 +21,7 @@ import com.fasterxml.jackson.databind.ObjectMapper
 import org.json4s.{JArray, JBool, JObject, JString, JValue}
 import org.json4s.jackson.JsonMethods.parse
 
-import org.apache.spark.{SparkException, SparkFunSuite, SparkIllegalArgumentException}
+import org.apache.spark.{SparkException, SparkFunSuite, SparkIllegalArgumentException, SparkRuntimeException}
 import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.analysis.{caseInsensitiveResolution, caseSensitiveResolution}
 import org.apache.spark.sql.catalyst.expressions.Literal
@@ -1212,6 +1212,70 @@ class StructTypeSuite extends SparkFunSuite with SQLHelper {
       "PARSE_JSON('{\"k\":\"v\"}')")
     validateConvertedDefaults("c4", VariantType, "parse_json(null)", "CAST(NULL AS VARIANT)")
     validateConvertedDefaults("c5", IntegerType, "1 + 1", "2")
+  }
+
+  test("CHAR/VARCHAR defaults retain assignment values and target types") {
+    for {
+      legacy <- Seq(false, true)
+      preserve <- Seq(false, true)
+      standard <- Seq(false, true)
+    } {
+      withSQLConf(
+        SQLConf.LEGACY_CHAR_VARCHAR_AS_STRING.key -> legacy.toString,
+        SQLConf.PRESERVE_CHAR_VARCHAR_TYPE_INFO.key -> preserve.toString,
+        SQLConf.CHAR_VARCHAR_STANDARD_SEMANTICS.key -> standard.toString) {
+        val firstClass = preserve || standard
+        val checkLength = !legacy || firstClass
+        for {
+          dataType <- Seq(CharType(3), VarcharType(3))
+          default <- Seq("'EU'", "'EU  '", "NULL")
+        } {
+          val expr = ResolveDefaultColumns.analyze("c", dataType, default, "CREATE TABLE")
+          val expectedType = if (firstClass) dataType else StringType
+          val expectedValue = default match {
+            case "NULL" => null
+            case _ if !checkLength => default.stripPrefix("'").stripSuffix("'")
+            case "'EU  '" => "EU "
+            case _ if dataType.isInstanceOf[CharType] => "EU "
+            case _ => "EU"
+          }
+          assert(expr.dataType == expectedType)
+          assert(Option(expr.eval()).map(_.toString).orNull == expectedValue)
+          // Analyzer iterations must not wrap or otherwise change an already coerced default.
+          assert(ResolveDefaultColumns.coerceDefaultValue(
+            expr, dataType, "CREATE TABLE", "c", default) == expr)
+          val field = ColumnDefinition("c", dataType, true, None,
+            Some(DefaultValueExpression(expr, default))).toV1Column
+          assert(Option(ResolveDefaultColumns.getExistenceDefaultValue(field))
+            .map(_.toString).orNull == expectedValue)
+        }
+        Seq(CharType(3), VarcharType(3)).foreach { dataType =>
+          if (firstClass) {
+            checkError(
+              exception = intercept[AnalysisException] {
+                ResolveDefaultColumns.analyze("c", dataType, "'toolong'", "CREATE TABLE")
+              },
+              condition = "INVALID_DEFAULT_VALUE.DATA_TYPE",
+              parameters = Map(
+                "statement" -> "CREATE TABLE",
+                "colName" -> "`c`",
+                "expectedType" -> s"\"${dataType.sql}\"",
+                "defaultValue" -> "'toolong'",
+                "actualType" -> "\"STRING\""))
+          } else if (checkLength) {
+            checkError(
+              exception = intercept[SparkRuntimeException] {
+                ResolveDefaultColumns.analyze("c", dataType, "'toolong'", "CREATE TABLE")
+              },
+              condition = "EXCEED_LIMIT_LENGTH",
+              parameters = Map("limit" -> "3"))
+          } else {
+            assert(ResolveDefaultColumns.analyze("c", dataType, "'toolong'", "CREATE TABLE")
+              .eval().toString == "toolong")
+          }
+        }
+      }
+    }
   }
 
   test("SPARK-51119: Add fallback to process unresolved EXISTS_DEFAULT") {

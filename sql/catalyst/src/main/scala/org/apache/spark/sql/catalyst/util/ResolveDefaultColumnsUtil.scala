@@ -441,9 +441,11 @@ object ResolveDefaultColumns extends QueryErrorsBase
     }
     if (CharVarcharUtils.hasCharVarchar(dataType) &&
         CharVarcharUtils.shouldApplyWriteSideLengthCheck(conf) && ret.foldable) {
-      CharVarcharUtils.stringLengthCheck(ret, dataType).eval(EmptyRow)
+      val checked = CharVarcharUtils.stringLengthCheck(ret, dataType).eval(EmptyRow)
+      Literal(checked, supplanted)
+    } else {
+      ret
     }
-    ret
   }
 
   /**

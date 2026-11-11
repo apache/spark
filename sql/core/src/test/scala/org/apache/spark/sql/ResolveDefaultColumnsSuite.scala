@@ -23,6 +23,7 @@ import org.apache.spark.sql.catalyst.expressions.AttributeReference
 import org.apache.spark.sql.catalyst.expressions.objects.StaticInvoke
 import org.apache.spark.sql.catalyst.plans.logical.LocalRelation
 import org.apache.spark.sql.catalyst.util.{CharVarcharUtils, ResolveDefaultColumns}
+import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.sql.types.{IntegerType, MetadataBuilder, StringType}
 
@@ -260,6 +261,35 @@ class ResolveDefaultColumnsSuite extends SharedSparkSession {
       sql(ddl)
       sql("INSERT INTO t (key) VALUES(1)")
       checkAnswer(sql("select * from t"), Row(1, "apache", "spark "))
+    }
+  }
+
+  for {
+    format <- Seq("parquet", "orc", "json")
+    padding <- Seq(None, Some("false"), Some("true"))
+  } {
+    test(s"CHAR existence defaults use write-side values: $format, padding=$padding") {
+      val conf = padding.map(SQLConf.READ_SIDE_CHAR_PADDING.key -> _).toSeq
+      withSQLConf(conf: _*) {
+        assert(spark.sessionState.conf.readSideCharPadding == padding.getOrElse("true").toBoolean)
+        withTable("t") {
+          sql(s"CREATE TABLE t(id INT) USING $format")
+          sql("INSERT INTO t VALUES (1)")
+          sql("ALTER TABLE t ADD COLUMNS (" +
+            "region CHAR(3) DEFAULT 'EU', label VARCHAR(3) DEFAULT 'US', " +
+            "empty CHAR(3) DEFAULT '', missing CHAR(3) DEFAULT NULL, " +
+            "trimmed CHAR(3) DEFAULT 'EU  ', trimmed_v VARCHAR(3) DEFAULT 'US  ')")
+          sql("INSERT INTO t (id) VALUES (2)")
+
+          checkAnswer(sql("SELECT id, region, length(region), label, empty, missing, " +
+            "trimmed, trimmed_v FROM t"),
+            Seq(1, 2).map(Row(_, "EU ", 3, "US", "   ", null, "EU ", "US ")))
+          checkAnswer(sql("SELECT count(DISTINCT region) FROM t"), Row(1L))
+          checkAnswer(sql("SELECT region, count(*) FROM t GROUP BY region"), Row("EU ", 2L))
+          assert(spark.table("t").schema("region").getExistenceDefaultValue().contains("'EU '"))
+          assert(spark.table("t").schema("region").getCurrentDefaultValue().contains("'EU'"))
+        }
+      }
     }
   }
 
