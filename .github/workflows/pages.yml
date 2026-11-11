@@ -35,7 +35,6 @@ jobs:
     name: Build and deploy documentation
     runs-on: ubuntu-latest
     permissions:
-      actions: read
       id-token: write
       pages: write
     environment:
@@ -80,34 +79,6 @@ jobs:
           sed -i".tmp4" 's/__version__: str = .*$/__version__: str = "'"$RELEASE_VERSION"'"/' python/pyspark/version.py
           cd docs
           SKIP_RDOC=1 bundle exec jekyll build
-      - name: Find latest CI dashboard
-        id: dashboard
-        continue-on-error: true
-        uses: actions/github-script@v9
-        with:
-          retries: 3
-          script: |
-            const {data} = await github.rest.actions.listWorkflowRuns({
-              ...context.repo,
-              workflow_id: 'ci_dashboard.yml',
-              branch: 'master',
-              status: 'success',
-              per_page: 1
-            });
-            if (data.workflow_runs.length) {
-              core.setOutput('run_id', data.workflow_runs[0].id);
-            } else {
-              core.notice('No completed CI dashboard; publishing offline metadata.');
-            }
-      - name: Download CI dashboard
-        if: steps.dashboard.outputs.run_id != ''
-        continue-on-error: true
-        uses: actions/download-artifact@v8
-        with:
-          name: ci-dashboard
-          path: docs/_site
-          github-token: ${{ github.token }}
-          run-id: ${{ steps.dashboard.outputs.run_id }}
       - name: Setup Pages
         uses: actions/configure-pages@v6
       - name: Upload artifact

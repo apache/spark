@@ -179,7 +179,6 @@ internal_test = [
 ]
 
 internal_docs = [
-    "pyyaml>=3.11",
     "sphinx==8.2.3",
     "sphinx-plotly-directive",
     "sphinx-copybutton",

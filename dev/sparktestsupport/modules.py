@@ -1790,9 +1790,6 @@ docs = Module(
     source_file_regexes=[
         "docs/",
         "python/docs/",
-        r"dev/(generate-ci-dashboard|ci_dashboard_history)\.py$",
-        r"dev/test-ci-dashboard\.js$",
-        r"dev/tests/test_ci_dashboard.*\.py$",
     ],
 )
 
