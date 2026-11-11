@@ -92,21 +92,18 @@ impl Domain {
     pub(crate) fn from_abi(fields: &Fields, pushed: &abi::PushedDomain) -> Result<Option<Self>> {
         let path = &pushed.path;
         let invalid = || format!("the path {path:?} of a domain is not a column of the scan");
+        let (&last, parents) = path.split_last().ok_or_else(invalid)?;
         let mut names = Vec::with_capacity(path.len());
         let mut fields = fields;
-        for (depth, &index) in path.iter().enumerate() {
+        for &index in parents {
             let field = fields.get(index).ok_or_else(invalid)?;
+            let DataType::Struct(children) = field.data_type() else {
+                return Err(invalid().into());
+            };
             names.push(field.name().clone());
-            if depth + 1 < path.len() {
-                let DataType::Struct(children) = field.data_type() else {
-                    return Err(invalid().into());
-                };
-                fields = children;
-            }
+            fields = children;
         }
-        if names.is_empty() {
-            return Err(invalid().into());
-        }
+        names.push(fields.get(last).ok_or_else(invalid)?.name().clone());
         let ranges = match pushed.ranges.as_ref().map(value_ranges).transpose()? {
             Some(None) => return Ok(None),
             ranges => ranges.flatten(),
