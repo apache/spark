@@ -29,6 +29,7 @@ from pyspark.ml.param.shared import (
     HasElasticNetParam,
     HasFeaturesCol,
     HasFitIntercept,
+    HasIntermediateStorageLevel,
     HasLabelCol,
     HasLoss,
     HasMaxBlockSizeInMB,
@@ -158,6 +159,7 @@ class _LinearRegressionParams(
     HasAggregationDepth,
     HasLoss,
     HasMaxBlockSizeInMB,
+    HasIntermediateStorageLevel,
 ):
     """
     Params for :py:class:`LinearRegression` and :py:class:`LinearRegressionModel`.
@@ -316,12 +318,14 @@ class LinearRegression(
         loss: str = "squaredError",
         epsilon: float = 1.35,
         maxBlockSizeInMB: float = 0.0,
+        intermediateStorageLevel: str = "MEMORY_AND_DISK",
     ):
         """
         __init__(self, \\*, featuresCol="features", labelCol="label", predictionCol="prediction", \
                  maxIter=100, regParam=0.0, elasticNetParam=0.0, tol=1e-6, fitIntercept=True, \
                  standardization=True, solver="auto", weightCol=None, aggregationDepth=2, \
-                 loss="squaredError", epsilon=1.35, maxBlockSizeInMB=0.0)
+                 loss="squaredError", epsilon=1.35, maxBlockSizeInMB=0.0, \
+                 intermediateStorageLevel="MEMORY_AND_DISK")
         """
         super().__init__()
         self._java_obj = self._new_java_obj(
@@ -350,12 +354,14 @@ class LinearRegression(
         loss: str = "squaredError",
         epsilon: float = 1.35,
         maxBlockSizeInMB: float = 0.0,
+        intermediateStorageLevel: str = "MEMORY_AND_DISK",
     ) -> "LinearRegression":
         """
         setParams(self, \\*, featuresCol="features", labelCol="label", predictionCol="prediction", \
                   maxIter=100, regParam=0.0, elasticNetParam=0.0, tol=1e-6, fitIntercept=True, \
                   standardization=True, solver="auto", weightCol=None, aggregationDepth=2, \
-                  loss="squaredError", epsilon=1.35, maxBlockSizeInMB=0.0)
+                  loss="squaredError", epsilon=1.35, maxBlockSizeInMB=0.0, \
+                  intermediateStorageLevel="MEMORY_AND_DISK")
         Sets params for linear regression.
         """
         kwargs = self._input_kwargs
@@ -437,6 +443,13 @@ class LinearRegression(
         Sets the value of :py:attr:`maxBlockSizeInMB`.
         """
         return self._set(maxBlockSizeInMB=value)
+
+    @since("4.4.0")
+    def setIntermediateStorageLevel(self, value: str) -> "LinearRegression":
+        """
+        Sets the value of :py:attr:`intermediateStorageLevel`.
+        """
+        return self._set(intermediateStorageLevel=value)
 
 
 class LinearRegressionModel(
@@ -771,7 +784,9 @@ class LinearRegressionTrainingSummary(LinearRegressionSummary):
         return self._call_java("totalIterations")
 
 
-class _IsotonicRegressionParams(HasFeaturesCol, HasLabelCol, HasPredictionCol, HasWeightCol):
+class _IsotonicRegressionParams(
+    HasFeaturesCol, HasLabelCol, HasPredictionCol, HasWeightCol, HasIntermediateStorageLevel
+):
     """
     Params for :py:class:`IsotonicRegression` and :py:class:`IsotonicRegressionModel`.
 
@@ -866,10 +881,12 @@ class IsotonicRegression(
         weightCol: Optional[str] = None,
         isotonic: bool = True,
         featureIndex: int = 0,
+        intermediateStorageLevel: str = "MEMORY_AND_DISK",
     ):
         """
         __init__(self, \\*, featuresCol="features", labelCol="label", predictionCol="prediction", \
-                 weightCol=None, isotonic=True, featureIndex=0):
+                 weightCol=None, isotonic=True, featureIndex=0, \
+                 intermediateStorageLevel="MEMORY_AND_DISK"):
         """
         super().__init__()
         self._java_obj = self._new_java_obj(
@@ -888,10 +905,12 @@ class IsotonicRegression(
         weightCol: Optional[str] = None,
         isotonic: bool = True,
         featureIndex: int = 0,
+        intermediateStorageLevel: str = "MEMORY_AND_DISK",
     ) -> "IsotonicRegression":
         """
         setParams(self, \\*, featuresCol="features", labelCol="label", predictionCol="prediction", \
-                 weightCol=None, isotonic=True, featureIndex=0):
+                 weightCol=None, isotonic=True, featureIndex=0, \
+                 intermediateStorageLevel="MEMORY_AND_DISK"):
         Set the params for IsotonicRegression.
         """
         kwargs = self._input_kwargs
@@ -911,6 +930,13 @@ class IsotonicRegression(
         Sets the value of :py:attr:`featureIndex`.
         """
         return self._set(featureIndex=value)
+
+    @since("4.4.0")
+    def setIntermediateStorageLevel(self, value: str) -> "IsotonicRegression":
+        """
+        Sets the value of :py:attr:`intermediateStorageLevel`.
+        """
+        return self._set(intermediateStorageLevel=value)
 
     @since("1.6.0")
     def setFeaturesCol(self, value: str) -> "IsotonicRegression":
@@ -2057,7 +2083,13 @@ class GBTRegressionModel(
 
 
 class _AFTSurvivalRegressionParams(
-    _PredictorParams, HasMaxIter, HasTol, HasFitIntercept, HasAggregationDepth, HasMaxBlockSizeInMB
+    _PredictorParams,
+    HasMaxIter,
+    HasTol,
+    HasFitIntercept,
+    HasAggregationDepth,
+    HasMaxBlockSizeInMB,
+    HasIntermediateStorageLevel,
 ):
     """
     Params for :py:class:`AFTSurvivalRegression` and :py:class:`AFTSurvivalRegressionModel`.
@@ -2215,12 +2247,14 @@ class AFTSurvivalRegression(
         quantilesCol: Optional[str] = None,
         aggregationDepth: int = 2,
         maxBlockSizeInMB: float = 0.0,
+        intermediateStorageLevel: str = "MEMORY_AND_DISK",
     ):
         """
         __init__(self, \\*, featuresCol="features", labelCol="label", predictionCol="prediction", \
                  fitIntercept=True, maxIter=100, tol=1E-6, censorCol="censor", \
                  quantileProbabilities=[0.01, 0.05, 0.1, 0.25, 0.5, 0.75, 0.9, 0.95, 0.99], \
-                 quantilesCol=None, aggregationDepth=2, maxBlockSizeInMB=0.0)
+                 quantilesCol=None, aggregationDepth=2, maxBlockSizeInMB=0.0, \
+                 intermediateStorageLevel="MEMORY_AND_DISK")
         """
         super().__init__()
         self._java_obj = self._new_java_obj(
@@ -2255,12 +2289,14 @@ class AFTSurvivalRegression(
         quantilesCol: Optional[str] = None,
         aggregationDepth: int = 2,
         maxBlockSizeInMB: float = 0.0,
+        intermediateStorageLevel: str = "MEMORY_AND_DISK",
     ) -> "AFTSurvivalRegression":
         """
         setParams(self, \\*, featuresCol="features", labelCol="label", predictionCol="prediction", \
                   fitIntercept=True, maxIter=100, tol=1E-6, censorCol="censor", \
                   quantileProbabilities=[0.01, 0.05, 0.1, 0.25, 0.5, 0.75, 0.9, 0.95, 0.99], \
-                  quantilesCol=None, aggregationDepth=2, maxBlockSizeInMB=0.0):
+                  quantilesCol=None, aggregationDepth=2, maxBlockSizeInMB=0.0, \
+                  intermediateStorageLevel="MEMORY_AND_DISK"):
         """
         kwargs = self._input_kwargs
         return self._set(**kwargs)
@@ -2323,6 +2359,13 @@ class AFTSurvivalRegression(
         Sets the value of :py:attr:`maxBlockSizeInMB`.
         """
         return self._set(maxBlockSizeInMB=value)
+
+    @since("4.4.0")
+    def setIntermediateStorageLevel(self, value: str) -> "AFTSurvivalRegression":
+        """
+        Sets the value of :py:attr:`intermediateStorageLevel`.
+        """
+        return self._set(intermediateStorageLevel=value)
 
 
 class AFTSurvivalRegressionModel(
@@ -3103,6 +3146,7 @@ class FMRegressor(
     _FactorizationMachinesParams,
     JavaMLWritable,
     JavaMLReadable["FMRegressor"],
+    HasIntermediateStorageLevel,
 ):
     """
     Factorization Machines learning algorithm for regression.
@@ -3183,12 +3227,14 @@ class FMRegressor(
         tol: float = 1e-6,
         solver: str = "adamW",
         seed: Optional[int] = None,
+        intermediateStorageLevel: str = "MEMORY_AND_DISK",
     ):
         """
         __init__(self, \\*, featuresCol="features", labelCol="label", predictionCol="prediction", \
                  factorSize=8, fitIntercept=True, fitLinear=True, regParam=0.0, \
                  miniBatchFraction=1.0, initStd=0.01, maxIter=100, stepSize=1.0, \
-                 tol=1e-6, solver="adamW", seed=None)
+                 tol=1e-6, solver="adamW", seed=None, \
+                 intermediateStorageLevel="MEMORY_AND_DISK")
         """
         super().__init__()
         self._java_obj = self._new_java_obj("org.apache.spark.ml.regression.FMRegressor", self.uid)
@@ -3214,12 +3260,14 @@ class FMRegressor(
         tol: float = 1e-6,
         solver: str = "adamW",
         seed: Optional[int] = None,
+        intermediateStorageLevel: str = "MEMORY_AND_DISK",
     ) -> "FMRegressor":
         """
         setParams(self, \\*, featuresCol="features", labelCol="label", predictionCol="prediction", \
                   factorSize=8, fitIntercept=True, fitLinear=True, regParam=0.0, \
                   miniBatchFraction=1.0, initStd=0.01, maxIter=100, stepSize=1.0, \
-                  tol=1e-6, solver="adamW", seed=None)
+                  tol=1e-6, solver="adamW", seed=None, \
+                  intermediateStorageLevel="MEMORY_AND_DISK")
         Sets Params for FMRegressor.
         """
         kwargs = self._input_kwargs
@@ -3291,6 +3339,13 @@ class FMRegressor(
         """
         return self._set(seed=value)
 
+    @since("4.4.0")
+    def setIntermediateStorageLevel(self, value: str) -> "FMRegressor":
+        """
+        Sets the value of :py:attr:`intermediateStorageLevel`.
+        """
+        return self._set(intermediateStorageLevel=value)
+
     @since("3.0.0")
     def setFitIntercept(self, value: bool) -> "FMRegressor":
         """
@@ -3311,6 +3366,7 @@ class FMRegressionModel(
     _FactorizationMachinesParams,
     JavaMLWritable,
     JavaMLReadable["FMRegressionModel"],
+    HasIntermediateStorageLevel,
 ):
     """
     Model fitted by :class:`FMRegressor`.
