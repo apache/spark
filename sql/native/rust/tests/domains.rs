@@ -22,8 +22,11 @@ use std::ptr;
 use std::sync::{Arc, Mutex, PoisonError};
 
 use arrow_array::ffi::FFI_ArrowArray;
-use arrow_array::{Array, ArrayRef, BooleanArray, Int64Array, StringArray, StructArray};
-use arrow_schema::{DataType, Field, Fields, Schema};
+use arrow_array::{
+    Array, ArrayRef, BooleanArray, Float64Array, Int64Array, StringArray, StructArray,
+    Time64MicrosecondArray,
+};
+use arrow_schema::{DataType, Field, Fields, Schema, TimeUnit};
 use serde::{Deserialize, Serialize};
 use spark_datasource::__private::abi::{
     ArrowSchema, SparkDsCreateInfo, SparkDsDomain, SparkDsHost, SparkDsLibrary, SparkDsReaderInfo,
@@ -123,7 +126,8 @@ fn error(library: &SparkDsLibrary) -> String {
     unsafe { CStr::from_ptr(message) }.to_str().unwrap().into()
 }
 
-/// The columns `id BIGINT, label STRING, point STRUCT<x: INT, y: STRING>`.
+/// The columns `id BIGINT, label STRING, point STRUCT<x: INT, y: STRING>, score DOUBLE`, and
+/// `at`, of a time type that the SDK has no `Value` for.
 fn schema() -> Schema {
     let point = Fields::from(vec![
         Field::new("x", DataType::Int32, true),
@@ -133,6 +137,8 @@ fn schema() -> Schema {
         Field::new("id", DataType::Int64, true),
         Field::new("label", DataType::Utf8, true),
         Field::new("point", DataType::Struct(point), true),
+        Field::new("score", DataType::Float64, true),
+        Field::new("at", DataType::Time64(TimeUnit::Microsecond), true),
     ])
 }
 
@@ -168,6 +174,7 @@ fn ranges(low: ArrayRef, high: ArrayRef, inclusive: &[(bool, bool)]) -> StructAr
 struct Exported {
     path: Vec<i32>,
     null_allowed: bool,
+    nan_allowed: bool,
     ranges: Option<(Box<FFI_ArrowArray>, Box<ArrowSchema>)>,
 }
 
@@ -181,8 +188,15 @@ impl Exported {
         Self {
             path: path.to_vec(),
             null_allowed,
+            nan_allowed: false,
             ranges,
         }
+    }
+
+    /// The domain, with NaN in it.
+    fn with_nan(mut self) -> Self {
+        self.nan_allowed = true;
+        self
     }
 
     fn domain(&mut self) -> SparkDsDomain {
@@ -195,7 +209,7 @@ impl Exported {
             path: self.path.as_ptr(),
             path_length: self.path.len() as i64,
             null_allowed: self.null_allowed,
-            nan_allowed: false,
+            nan_allowed: self.nan_allowed,
             ranges,
             ranges_schema,
         }
@@ -311,12 +325,86 @@ fn passes_the_domains_by_the_names_of_their_columns_with_their_values() {
 }
 
 #[test]
+fn passes_nan_and_skips_the_domains_of_columns_without_values() {
+    let _guard = TEST_LOCK.lock().unwrap_or_else(PoisonError::into_inner);
+    let library = library();
+    // id = 3, at > 00:00:01, and score > 10.0, which NaN satisfies.
+    let ids = ranges(
+        Arc::new(Int64Array::from(vec![3])),
+        Arc::new(Int64Array::from(vec![3])),
+        &[(true, true)],
+    );
+    let times = ranges(
+        Arc::new(Time64MicrosecondArray::from(vec![Some(1_000_000)])),
+        Arc::new(Time64MicrosecondArray::from(vec![None::<i64>])),
+        &[(false, false)],
+    );
+    let scores = ranges(
+        Arc::new(Float64Array::from(vec![Some(10.0)])),
+        Arc::new(Float64Array::from(vec![None::<f64>])),
+        &[(false, false)],
+    );
+    let mut exported = [
+        Exported::new(&[0], false, Some(ids)),
+        Exported::new(&[4], false, Some(times)),
+        Exported::new(&[3], false, Some(scores)).with_nan(),
+    ];
+    let (used, failure) = push(library, "", &mut exported);
+    assert_eq!(failure, None);
+    assert_eq!(used, [true, false, true]);
+
+    let mut score = Domain::new(
+        vec!["score".into()],
+        Some(vec![ValueRange {
+            low: Bound::Excluded(Value::Float(10.0)),
+            high: Bound::Unbounded,
+        }]),
+    );
+    score.nan_allowed = true;
+    let expected = [
+        Domain::new(
+            vec!["id".into()],
+            Some(vec![ValueRange::single(Value::Integer(3))]),
+        ),
+        score,
+    ];
+    assert_eq!(*PUSHED.lock().unwrap(), expected);
+
+    // The scan is not called without a domain of a column that has values, such as that of
+    // `at IS NOT NULL`.
+    let unchanged = vec![Domain::new(vec!["unchanged".into()], None)];
+    *PUSHED.lock().unwrap() = unchanged.clone();
+    let (used, failure) = push(library, "", &mut [Exported::new(&[4], false, None)]);
+    assert_eq!((used, failure), (vec![false], None));
+    assert_eq!(*PUSHED.lock().unwrap(), unchanged);
+}
+
+#[test]
+fn the_default_push_domains_uses_no_domain() {
+    struct Ignoring;
+
+    impl ScanBuilder for Ignoring {
+        type Factory = Factory;
+
+        fn plan(self) -> Result<ScanPlan<Factory>> {
+            Ok(ScanPlan::new(Factory, vec![]))
+        }
+    }
+
+    let domains = [
+        Domain::new(vec!["id".into()], None),
+        Domain::new(vec!["label".into()], Some(vec![])),
+    ];
+    assert_eq!(Ignoring.push_domains(&domains).unwrap(), [false, false]);
+}
+
+#[test]
 fn rejects_invalid_paths_and_a_wrong_number_of_results() {
     let _guard = TEST_LOCK.lock().unwrap_or_else(PoisonError::into_inner);
     let library = library();
     for (path, message) in [
         (&[-1][..], "the path of a domain has a negative index -1"),
-        (&[3], "the path [3] of a domain is not a column of the scan"),
+        (&[5], "the path [5] of a domain is not a column of the scan"),
         (
             &[0, 0],
             "the path [0, 0] of a domain is not a column of the scan",

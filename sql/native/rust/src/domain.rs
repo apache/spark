@@ -69,7 +69,7 @@ pub struct Domain {
     /// and `double`.
     pub nan_allowed: bool,
     /// The ranges of the other values in the domain, sorted, and without overlaps, or `None` if
-    /// they are all in it. Without ranges, no other value than null or NaN is in the domain.
+    /// they are all in it. With an empty list, no value other than null or NaN is in the domain.
     pub ranges: Option<Vec<ValueRange>>,
 }
 
@@ -103,7 +103,11 @@ impl Domain {
             names.push(field.name().clone());
             fields = children;
         }
-        names.push(fields.get(last).ok_or_else(invalid)?.name().clone());
+        let field = fields.get(last).ok_or_else(invalid)?;
+        if !has_value(field.data_type()) {
+            return Ok(None);
+        }
+        names.push(field.name().clone());
         let ranges = match pushed.ranges.as_ref().map(value_ranges).transpose()? {
             Some(None) => return Ok(None),
             ranges => ranges.flatten(),
@@ -152,6 +156,7 @@ pub enum Value {
     /// A `decimal(precision, scale)` of the precision and scale of its column, whose value is
     /// `unscaled * 10^-scale`.
     Decimal {
+        #[serde(with = "decimal_string")]
         unscaled: i128,
         precision: u8,
         scale: i8,
@@ -164,6 +169,44 @@ pub enum Value {
     Timestamp(i64),
     /// A `timestamp_ntz`, as microseconds since 1970-01-01 00:00:00, without a time zone.
     TimestampNtz(i64),
+}
+
+/// Encodes the unscaled value of a decimal as its decimal string. serde buffers the values of
+/// `flatten` fields and of `untagged` and internally tagged enums before decoding them, and its
+/// buffer has no 128-bit integers, so it could not decode an `i128` in a factory that uses them.
+mod decimal_string {
+    use serde::de::Error;
+    use serde::{Deserialize, Deserializer, Serializer};
+
+    pub fn serialize<S: Serializer>(unscaled: &i128, serializer: S) -> Result<S::Ok, S::Error> {
+        serializer.collect_str(unscaled)
+    }
+
+    pub fn deserialize<'de, D: Deserializer<'de>>(deserializer: D) -> Result<i128, D::Error> {
+        String::deserialize(deserializer)?
+            .parse()
+            .map_err(D::Error::custom)
+    }
+}
+
+/// Whether the SDK has a [`Value`] for the values of a column of `data_type`: the types that
+/// [`values`] converts.
+fn has_value(data_type: &DataType) -> bool {
+    matches!(
+        data_type,
+        DataType::Boolean
+            | DataType::Int8
+            | DataType::Int16
+            | DataType::Int32
+            | DataType::Int64
+            | DataType::Float32
+            | DataType::Float64
+            | DataType::Decimal128(..)
+            | DataType::Utf8
+            | DataType::Binary
+            | DataType::Date32
+            | DataType::Timestamp(TimeUnit::Microsecond, _)
+    )
 }
 
 /// The ranges of a domain, from the struct array that Spark passes, with the fields `low`,
@@ -415,6 +458,11 @@ mod tests {
             Domain::from_abi(fields, &pushed(&[1, 1], false, Some(at))).unwrap(),
             None
         );
+        // As is a domain without ranges of such a column, such as that of `at IS NOT NULL`.
+        assert_eq!(
+            Domain::from_abi(fields, &pushed(&[1, 1], false, None)).unwrap(),
+            None
+        );
         for path in [&[][..], &[2], &[0, 0], &[1, 2]] {
             let error = Domain::from_abi(fields, &pushed(path, false, None)).unwrap_err();
             assert!(
@@ -467,5 +515,57 @@ mod tests {
             crate::bridge::decode::<Vec<Domain>>(&encoded).unwrap(),
             domains
         );
+    }
+
+    #[test]
+    fn decimal_domains_round_trip_in_buffered_values() {
+        // serde buffers the values of `flatten` fields and of `untagged` and internally tagged
+        // enums before decoding them, which a reader factory may use for its domains.
+        #[derive(Debug, PartialEq, Serialize, Deserialize)]
+        struct Pushed {
+            domains: Vec<Domain>,
+        }
+        #[derive(Debug, PartialEq, Serialize, Deserialize)]
+        struct Flattened {
+            #[serde(flatten)]
+            pushed: Pushed,
+        }
+        #[derive(Debug, PartialEq, Serialize, Deserialize)]
+        #[serde(untagged)]
+        enum Untagged {
+            Pushed(Pushed),
+        }
+        #[derive(Debug, PartialEq, Serialize, Deserialize)]
+        #[serde(tag = "kind")]
+        enum Tagged {
+            Pushed(Pushed),
+        }
+        fn round_trip<T>(value: T)
+        where
+            T: Serialize + serde::de::DeserializeOwned + PartialEq + std::fmt::Debug,
+        {
+            let encoded = crate::bridge::encode(&value).unwrap();
+            assert_eq!(crate::bridge::decode::<T>(&encoded).unwrap(), value);
+        }
+        let decimal = |unscaled| Value::Decimal {
+            unscaled,
+            precision: 38,
+            scale: 2,
+        };
+        let pushed = || Pushed {
+            domains: vec![Domain::new(
+                vec!["amount".into()],
+                Some(vec![
+                    ValueRange {
+                        low: Bound::Unbounded,
+                        high: Bound::Excluded(decimal(-(10_i128.pow(37)))),
+                    },
+                    ValueRange::single(decimal(i128::from(i64::MAX) + 1)),
+                ]),
+            )],
+        };
+        round_trip(Flattened { pushed: pushed() });
+        round_trip(Untagged::Pushed(pushed()));
+        round_trip(Tagged::Pushed(pushed()));
     }
 }
