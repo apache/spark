@@ -18,7 +18,7 @@ package org.apache.spark.sql.catalyst.optimizer
 
 import org.apache.spark.sql.catalyst.dsl.expressions._
 import org.apache.spark.sql.catalyst.dsl.plans._
-import org.apache.spark.sql.catalyst.expressions.{AttributeReference, CaseWhen, Cast, Coalesce, Exists, Expression, GetMapValue, GetStructField, If, InSubquery, ListQuery, Literal, Lower, Not, Or, Rand, Round}
+import org.apache.spark.sql.catalyst.expressions.{Add, AttributeReference, CaseWhen, Cast, Coalesce, Divide, EvalMode, Exists, Expression, GetMapValue, GetStructField, If, InSubquery, ListQuery, Literal, Lower, Not, NumericEvalContext, Or, Rand, Round, Substring}
 import org.apache.spark.sql.catalyst.expressions.aggregate.{AggregateExpression, CollectSet, Count, Sum}
 import org.apache.spark.sql.catalyst.plans.PlanTest
 import org.apache.spark.sql.catalyst.plans.logical.{Aggregate, Expand, LocalRelation, LogicalPlan}
@@ -482,9 +482,10 @@ class RewriteDistinctAggregatesSuite extends PlanTest {
   test("conditional: throwable distinct child keeps the raw key") {
     // Division can throw under ANSI on rows the filter rejects. Wrapping it in
     // the guard would skip those evaluations, so the Expand key stays raw.
+    val division = Divide(Symbol("c"), Symbol("b"), NumericEvalContext(EvalMode.ANSI))
     val input = conditionalTestRelation
       .groupBy(Symbol("a"))(
-        Count(Symbol("c") / Symbol("b")).toAggregateExpression(
+        Count(division).toAggregateExpression(
           isDistinct = true, filter = Some(Symbol("a") > 0)).as("cnt"))
       .analyze
     val child = input.collectFirst {
@@ -805,10 +806,10 @@ class RewriteDistinctAggregatesSuite extends PlanTest {
     val unsafeBases = Seq(
       // Division may throw (e.g. divide-by-zero under ANSI mode) on rows where the
       // original IF branch is not taken.
-      Symbol("c") / Symbol("b"),
+      Divide(Symbol("c"), Symbol("b"), NumericEvalContext(EvalMode.ANSI)),
       // Cast may throw under ANSI mode.
-      Cast(Symbol("c"), StringType),
-      // String functions are not in the branch-safe whitelist.
+      Cast(Symbol("d"), IntegerType, evalMode = EvalMode.ANSI),
+      // Lower is not in the branch-safe allowlist.
       Lower(Symbol("d")))
     unsafeBases.foreach { base =>
       assertNotCanonicalized(conditionalTestRelation, base)
@@ -819,7 +820,10 @@ class RewriteDistinctAggregatesSuite extends PlanTest {
     // Predicate and null-handling bases on the flat test relation.
     Seq(
       Symbol("b") > Symbol("c"),
-      Coalesce(Seq(Symbol("b"), Literal(0, IntegerType))))
+      Coalesce(Seq(Symbol("b"), Literal(0, IntegerType))),
+      // Arithmetic with ANSI mode off and a substring can not fail either.
+      Add(Symbol("b"), Symbol("c"), NumericEvalContext(EvalMode.LEGACY)),
+      Substring(Symbol("d"), Literal(1), Literal(2)))
       .foreach { base =>
         assertCanonicalized(conditionalTestRelation, base)
       }

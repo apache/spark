@@ -22,7 +22,7 @@ import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.plans.QueryPlan
 import org.apache.spark.sql.catalyst.plans.logical.Statistics
-import org.apache.spark.sql.catalyst.plans.physical.Partitioning
+import org.apache.spark.sql.catalyst.plans.physical.{Partitioning, PartitioningCollection, UnknownPartitioning}
 import org.apache.spark.sql.columnar.CachedBatch
 import org.apache.spark.sql.execution.{LeafExecNode, SparkPlan, WholeStageCodegenExec}
 import org.apache.spark.sql.execution.adaptive.AdaptiveSparkPlanExec
@@ -116,18 +116,40 @@ case class InMemoryTableScanExec(
   }
 
   // The cached version does not change the outputPartitioning of the original SparkPlan.
-  // But the cached version could alias output, so we need to replace output.
+  // But the cached version could alias output, so we need to replace output. The original
+  // SparkPlan can also report a partitioning over attributes it does not output, e.g.
+  // `SerializeFromObjectExec` reports the partitioning of its input, so drop such partitionings,
+  // leaf by leaf for a `PartitioningCollection`.
   override def outputPartitioning: Partitioning = {
     cachedPlan.outputPartitioning match {
-      case e: Expression => updateAttribute(e).asInstanceOf[Partitioning]
+      case e: Expression =>
+        val partitioning = updateAttribute(e).asInstanceOf[Partitioning]
+        PartitioningCollection.flatten(partitioning).filter {
+          case p: Expression => p.references.subsetOf(relation.outputSet)
+          case _ => true
+        } match {
+          case Seq() => UnknownPartitioning(partitioning.numPartitions)
+          case Seq(p) => p
+          case ps => PartitioningCollection.fromPartitionings(ps)
+        }
       case other => other
     }
   }
 
   // The cached version does not change the outputOrdering of the original SparkPlan.
-  // But the cached version could alias output, so we need to replace output.
-  override def outputOrdering: Seq[SortOrder] =
-    cachedPlan.outputOrdering.map(updateAttribute(_).asInstanceOf[SortOrder])
+  // But the cached version could alias output, so we need to replace output. Like the
+  // partitioning, keep only the leading sort orders over the output of the relation.
+  override def outputOrdering: Seq[SortOrder] = {
+    cachedPlan.outputOrdering.iterator.map { order =>
+      val validChildren = updateAttribute(order).children
+        .filter(_.references.subsetOf(relation.outputSet))
+      if (validChildren.nonEmpty) {
+        Some(order.copy(child = validChildren.head, sameOrderExpressions = validChildren.tail))
+      } else {
+        None
+      }
+    }.takeWhile(_.isDefined).flatten.toSeq
+  }
 
   lazy val enableAccumulatorsForTest: Boolean = conf.inMemoryTableScanStatisticsEnabled
 

@@ -1524,9 +1524,10 @@ object ColumnPruning extends Rule[LogicalPlan] {
         child = a.copy(aggregateExpressions = a.aggregateExpressions.filter(p.references.contains)))
     case a @ Project(_, e @ Expand(_, _, grandChild)) if !e.outputSet.subsetOf(a.references) =>
       val newOutput = e.output.filter(a.references.contains(_))
+      val newOutputSet = AttributeSet(newOutput)
       val newProjects = e.projections.map { proj =>
         proj.zip(e.output).filter { case (_, a) =>
-          newOutput.contains(a)
+          newOutputSet.contains(a)
         }.map(_._1)
       }
       a.copy(child = Expand(newProjects, newOutput, grandChild))
@@ -1575,11 +1576,14 @@ object ColumnPruning extends Rule[LogicalPlan] {
     case p @ Project(_, u: Union) =>
       if (!u.outputSet.subsetOf(p.references)) {
         val firstChild = u.children.head
-        val newOutput = prunedChild(firstChild, p.references).output
+        // Compute these once, not per column of each child: `output` may create new attributes
+        // on each call (e.g. a `Project` with aliases), and a `Seq` lookup is linear.
+        val firstChildOutput = firstChild.output.toIndexedSeq
+        val newOutputSet = AttributeSet(prunedChild(firstChild, p.references).output)
         // pruning the columns of all children based on the pruned first child.
         val newChildren = u.children.map { p =>
           val selected = p.output.zipWithIndex.filter { case (a, i) =>
-            newOutput.contains(firstChild.output(i))
+            newOutputSet.contains(firstChildOutput(i))
           }.map(_._1)
           Project(selected, p)
         }
@@ -2343,9 +2347,7 @@ object InferFiltersFromConstraints extends Rule[LogicalPlan]
       stripCannotFail(ConstantFolding.constantFolding(constraint, isConditionalBranch = true)))
   }
 
-  // Top-down, so that each cast is judged by the type of its original input.
   private def stripCannotFail(e: Expression): Expression = e match {
-    case c: Cast if isNumericUpCast(c.child.dataType, c.dataType) => stripCannotFail(c.child)
     // An integral remainder by a non-zero constant, e.g. `x % 2 = 0`, never fails.
     case r: Remainder if r.dataType.isInstanceOf[IntegralType] && isNonZeroIntegral(r.right) =>
       stripCannotFail(r.left)
@@ -2359,11 +2361,6 @@ object InferFiltersFromConstraints extends Rule[LogicalPlan]
 
   private def isNonZeroIntegral(e: Expression): Boolean = e match {
     case Literal(v, _: IntegralType) => v != null && v != 0
-    case _ => false
-  }
-
-  private def isNumericUpCast(from: DataType, to: DataType): Boolean = (from, to) match {
-    case (_: NumericType, _: NumericType) => Cast.canUpCast(from, to)
     case _ => false
   }
 }

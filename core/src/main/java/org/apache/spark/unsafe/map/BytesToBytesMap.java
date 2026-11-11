@@ -177,20 +177,28 @@ public final class BytesToBytesMap extends MemoryConsumer {
   private final long pageSizeBytes;
 
   /**
-   * The size of the first data page, at most {@link #pageSizeBytes}.
+   * The size of the first data page plus {@link #pageHeaderBytes}, at most {@link #pageSizeBytes}.
    */
   private final long initialPageSizeBytes;
 
   /**
-   * The size of the next data page while the map grows. It starts at
-   * {@link #initialPageSizeBytes} and doubles with every new page, up to {@link #pageSizeBytes}.
+   * The bytes that each growing data page leaves for the header of an on-heap page, see
+   * {@link TaskMemoryManager#growingPageHeaderBytes}. 0 if the data pages do not grow.
+   */
+  private final long pageHeaderBytes;
+
+  /**
+   * The size of the next data page plus {@link #pageHeaderBytes} while the map grows. It starts at
+   * {@link #initialPageSizeBytes} and doubles with every new page, up to {@link #pageSizeBytes}
+   * plus {@link #pageHeaderBytes}.
    */
   private long nextPageSizeBytes;
 
   /**
-   * The total size requested for the data pages so far. While it is below
-   * {@link #pageSizeBytes}, a new page is at most what is left to reach it, so the growing pages
-   * add up to exactly one page size before the pages of {@link #pageSizeBytes} begin.
+   * The total size requested for the data pages so far, plus {@link #pageHeaderBytes} for each
+   * of them. While it is below {@link #pageSizeBytes} plus {@link #pageHeaderBytes}, a new page is
+   * at most what is left to reach it, so the growing pages add up to exactly one page before the
+   * pages of {@link #pageSizeBytes} begin.
    */
   private long requestedDataPagesBytes;
 
@@ -302,6 +310,8 @@ public final class BytesToBytesMap extends MemoryConsumer {
       throw new IllegalArgumentException("Initial page size must be greater than 0");
     }
     this.initialPageSizeBytes = Math.min(initialPageSizeBytes, pageSizeBytes);
+    this.pageHeaderBytes = this.initialPageSizeBytes < pageSizeBytes ?
+      TaskMemoryManager.growingPageHeaderBytes(pageSizeBytes) : 0;
     this.nextPageSizeBytes = this.initialPageSizeBytes;
     this.initialCapacity = initialCapacity;
     allocate(initialCapacity);
@@ -312,6 +322,9 @@ public final class BytesToBytesMap extends MemoryConsumer {
    * whose later pages double in size until they add up to `pageSizeBytes`. The last of them is cut
    * to what is left, and all pages after them have `pageSizeBytes`. A map holding little data then
    * does not reserve a full page. A record larger than the next page gets a page of its size.
+   * If `pageSizeBytes` leaves room for the header of an on-heap page, each growing page leaves the
+   * same room, and the sizes above include it (see
+   * {@link TaskMemoryManager#growingPageHeaderBytes}).
    */
   public BytesToBytesMap(
       TaskMemoryManager taskMemoryManager,
@@ -1104,9 +1117,10 @@ public final class BytesToBytesMap extends MemoryConsumer {
    * @return whether there is enough space to allocate the new page.
    */
   private boolean acquireNewPage(long required) {
-    final long remainingGrowthBytes = pageSizeBytes - requestedDataPagesBytes;
+    final long remainingGrowthBytes = pageSizeBytes + pageHeaderBytes - requestedDataPagesBytes;
     final long size = Math.max(
-      remainingGrowthBytes > 0 ? Math.min(nextPageSizeBytes, remainingGrowthBytes) : pageSizeBytes,
+      remainingGrowthBytes > 0 ?
+        Math.min(nextPageSizeBytes, remainingGrowthBytes) - pageHeaderBytes : pageSizeBytes,
       required);
     final MemoryBlock page;
     try {
@@ -1120,8 +1134,8 @@ public final class BytesToBytesMap extends MemoryConsumer {
       freePage(page);
       return false;
     }
-    requestedDataPagesBytes += size;
-    nextPageSizeBytes = Math.min(pageSizeBytes, nextPageSizeBytes * 2);
+    requestedDataPagesBytes += size + pageHeaderBytes;
+    nextPageSizeBytes = Math.min(pageSizeBytes + pageHeaderBytes, nextPageSizeBytes * 2);
     currentPage = page;
     dataPages.add(currentPage);
     UnsafeAlignedOffset.putSize(currentPage.getBaseObject(), currentPage.getBaseOffset(), 0);

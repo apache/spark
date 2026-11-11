@@ -26,7 +26,6 @@ import org.apache.spark.sql.catalyst.trees.TreePattern.{INVOKE, JSON_TO_STRUCT, 
 import org.apache.spark.sql.catalyst.util.UnsafeRowUtils
 import org.apache.spark.sql.execution.datasources.v2.DataSourceV2ScanRelation
 import org.apache.spark.sql.internal.SQLConf
-import org.apache.spark.sql.types.NumericType
 
 /**
  * Insert a runtime filter on one side of the join (we call this side the application side) if
@@ -414,26 +413,19 @@ object InjectRuntimeFilter extends Rule[LogicalPlan] with PredicateHelper with J
   }
 
   // Whether evaluating `e` cannot fail, also on rows that the join does not read. It asks
-  // `ExprUtils.canEvaluateUnconditionally`, after it replaces, bottom-up, two wrappers that cannot
-  // fail either over a child that it takes: a numeric up-cast, and the normalization that
-  // `NormalizeFloatingNumbers` puts around a floating point join key. A stand-in keeps the type of
-  // what it replaces, so each wrapper is checked against a child of its own type. An
+  // `ExprUtils.canEvaluateUnconditionally`, after it replaces, bottom-up, a wrapper that cannot
+  // fail either over a child that it takes: the normalization that `NormalizeFloatingNumbers` puts
+  // around a floating point join key. The stand-in keeps the type of what it replaces. An
   // `onlyInBroadcast` DPP filter counts too, since it finds no broadcast in the bloom filter's
   // subquery and is `true` there.
   private def cannotFail(e: Expression): Boolean = e match {
     case dpp: DynamicPruningSubquery => dpp.onlyInBroadcast
     case _ => ExprUtils.canEvaluateUnconditionally(e.transformUp {
-      case c: Cast if isNumericUpCast(c) && ExprUtils.canEvaluateUnconditionally(c.child) =>
-        AttributeReference("upCast", c.dataType, c.nullable)()
       case n @ KnownFloatingPointNormalized(NormalizeNaNAndZero(child))
           if ExprUtils.canEvaluateUnconditionally(child) =>
         AttributeReference("normalized", n.dataType, n.nullable)()
     })
   }
-
-  private def isNumericUpCast(c: Cast): Boolean =
-    c.child.dataType.isInstanceOf[NumericType] && c.dataType.isInstanceOf[NumericType] &&
-      Cast.canUpCast(c.child.dataType, c.dataType)
 
   // Whether the bloom filter's subquery can evaluate `creationSide` again, apart from the join. The
   // plan it reads must give the same rows again (SPARK-60808). So it must read no CTE, whose

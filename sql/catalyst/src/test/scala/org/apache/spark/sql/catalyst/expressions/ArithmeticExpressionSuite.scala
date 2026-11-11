@@ -156,6 +156,20 @@ class ArithmeticExpressionSuite extends SparkFunSuite with ExpressionEvalHelper 
     }
   }
 
+  test("SPARK-45438: UnaryMinus and Abs keep every digit of a 38-digit decimal") {
+    Seq("12345678901234567890123456789012345.67", "-99999999999999999999999999999999999999")
+      .foreach { s =>
+        val value = new java.math.BigDecimal(s)
+        val input = Literal(Decimal(value, 38, value.scale), DecimalType(38, value.scale))
+        Seq("true", "false").foreach { ansi =>
+          withSQLConf(SQLConf.ANSI_ENABLED.key -> ansi) {
+            checkEvaluation(UnaryMinus(input), Decimal(value.negate(), 38, value.scale))
+            checkEvaluation(Abs(input), Decimal(value.abs(), 38, value.scale))
+          }
+        }
+      }
+  }
+
   test("- (Minus)") {
     testNumericDataTypes { convert =>
       val left = Literal(convert(1))
@@ -336,8 +350,13 @@ class ArithmeticExpressionSuite extends SparkFunSuite with ExpressionEvalHelper 
           val quotResult = Decimal(quotExact.setScale(quotType.scale, RoundingMode.HALF_UP))
           val quotExpected =
             if (quotResult.precision > DecimalType.MAX_PRECISION) null else quotResult
-          checkEvaluationOrException(quotActual,
-            if (quotExpected == null) null else quotExpected.toLong)
+          if (SQLConf.get.ansiEnabled && quotExpected != null &&
+              !BigInt(quotExact.toBigInteger).isValidLong) {
+            checkExceptionInExpression[SparkArithmeticException](quotActual, "ARITHMETIC_OVERFLOW")
+          } else {
+            checkEvaluationOrException(quotActual,
+              if (quotExpected == null) null else quotExpected.toLong)
+          }
         }
       }
 
@@ -764,15 +783,26 @@ class ArithmeticExpressionSuite extends SparkFunSuite with ExpressionEvalHelper 
       checkExceptionInExpression[ArithmeticException](
         IntegralDivide(Literal(Decimal(0.2)), Literal(Decimal(0.0))), "Division by zero")
     }
-    // overflows long and so returns a wrong result
+    // overflows long and so returns a wrong result in LEGACY mode
     checkEvaluation(IntegralDivide(
-      Literal(Decimal("99999999999999999999999999999999999")), Literal(Decimal(0.001))),
+      Literal(Decimal("99999999999999999999999999999999999")), Literal(Decimal(0.001)),
+      EvalMode.LEGACY),
       687399551400672280L)
     // overflow during promote precision
     withSQLConf(SQLConf.ANSI_ENABLED.key -> "false") {
       checkEvaluation(IntegralDivide(
         Literal(Decimal("99999999999999999999999999999999999999")), Literal(Decimal(0.00001))),
         null)
+    }
+  }
+
+  test("SPARK-61131: IntegralDivide of decimals fails when the quotient overflows long") {
+    val one = Literal(Decimal(1), DecimalType(1, 0))
+    def dividend(v: BigInt): Literal = Literal(Decimal(BigDecimal(v)), DecimalType(19, 0))
+    Seq(BigInt(Long.MaxValue), BigInt(Long.MinValue)).foreach { bound =>
+      checkEvaluation(IntegralDivide(dividend(bound), one, EvalMode.ANSI), bound.toLong)
+      checkExceptionInExpression[SparkArithmeticException](
+        IntegralDivide(dividend(bound + bound.signum), one, EvalMode.ANSI), "ARITHMETIC_OVERFLOW")
     }
   }
 
