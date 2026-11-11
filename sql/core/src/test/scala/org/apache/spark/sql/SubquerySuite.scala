@@ -3401,4 +3401,52 @@ class SubquerySuite extends SharedSparkSession
         Row(1, 2))
     }
   }
+
+  test("SPARK-61444: COUNT bug with a result on zero rows that fails to evaluate") {
+    withSQLConf(SQLConf.ANSI_ENABLED.key -> "true") {
+      withTempView("o", "o2", "i") {
+        Seq(1, 2).toDF("k").createOrReplaceTempView("o")
+        Seq(1, 2, 3).toDF("k").createOrReplaceTempView("o2")
+        Seq((1, 100), (1, 200), (2, 300)).toDF("k", "v").createOrReplaceTempView("i")
+        // Every outer row has matching rows, so the result on zero rows is not used, and the
+        // queries must not fail while the subquery is rewritten.
+        // The top Aggregate, handled in RewriteCorrelatedScalarSubquery.constructLeftJoins.
+        checkAnswer(
+          sql("SELECT k, (SELECT 10 / coalesce(max(v), 0) FROM i WHERE i.k = o.k) FROM o"),
+          Row(1, 0.05) :: Row(2, 10.0 / 300) :: Nil)
+        checkAnswer(
+          sql("SELECT k, (SELECT CAST(coalesce(max(CAST(v AS STRING)), 'x') AS INT) " +
+            "FROM i WHERE i.k = o.k) FROM o"),
+          Row(1, 200) :: Row(2, 300) :: Nil)
+        checkAnswer(
+          sql("SELECT k FROM o WHERE (SELECT 10 / coalesce(max(v), 0) FROM i WHERE i.k = o.k) " +
+            "> 0.04"),
+          Row(1) :: Nil)
+        // A HAVING clause whose condition fails to evaluate on zero rows.
+        checkAnswer(
+          sql("SELECT k, (SELECT count(*) FROM i WHERE i.k = o.k HAVING 10 / count(*) > 0) " +
+            "FROM o"),
+          Row(1, 2) :: Row(2, 1) :: Nil)
+        // A lower Aggregate, handled in DecorrelateInnerQuery.
+        checkAnswer(
+          sql("SELECT k, (SELECT max(c) FROM (SELECT 10 / count(*) c FROM i WHERE i.k = o.k)) " +
+            "FROM o"),
+          Row(1, 5.0) :: Row(2, 10.0) :: Nil)
+
+        // The outer row k = 3 of o2 has no matching rows and uses the result on zero rows, so
+        // the queries still fail, at runtime.
+        Seq(
+          "SELECT k, (SELECT 10 / coalesce(max(v), 0) FROM i WHERE i.k = o2.k) FROM o2",
+          "SELECT k, (SELECT count(*) FROM i WHERE i.k = o2.k HAVING 10 / count(*) > 0) FROM o2",
+          "SELECT k, (SELECT max(c) FROM (SELECT 10 / count(*) c FROM i WHERE i.k = o2.k)) " +
+            "FROM o2"
+        ).foreach { query =>
+          val e = intercept[SparkArithmeticException] {
+            sql(query).collect()
+          }
+          assert(e.getCondition === "DIVIDE_BY_ZERO")
+        }
+      }
+    }
+  }
 }
