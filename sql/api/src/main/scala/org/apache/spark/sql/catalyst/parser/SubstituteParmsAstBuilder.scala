@@ -85,12 +85,13 @@ class SubstituteParmsAstBuilder extends SqlBaseParserBaseVisitor[AnyRef] {
       val paramName = ctx.namedParameterMarker().simpleIdentifier().getText
       namedParams += paramName
 
-      // Calculate the location of the entire parameter (including the colon)
+      // Calculate the location of the entire parameter (including the colon, and the `?` of an
+      // optional named parameter marker)
       val startIndex = ctx.getStart.getStartIndex
       val stopIndex = ctx.getStop.getStopIndex + 1
       val locations =
         namedParamLocations.getOrElseUpdate(paramName, mutable.ListBuffer[ParameterLocation]())
-      locations += ParameterLocation(startIndex, stopIndex)
+      locations += ParameterLocation(startIndex, stopIndex, optional = ctx.optionalMarker != null)
 
       null // Return value not used
     }
@@ -247,5 +248,8 @@ case class ParameterLocationInfo(
 
 /**
  * Data class representing a parameter location in the source text.
+ *
+ * @param optional
+ *   Whether this is an optional named parameter marker `:name?`; its location spans the `?`.
  */
-case class ParameterLocation(start: Int, end: Int)
+case class ParameterLocation(start: Int, end: Int, optional: Boolean = false)

@@ -6856,6 +6856,24 @@
     ],
     "sqlState" : "HY008"
   },
+  "OPTIONAL_COLUMN_REFERENCE_NOT_SUPPORTED" : {
+    "message" : [
+      "The `?` optional-reference operator is not supported in <context>."
+    ],
+    "subClass" : {
+      "IN_DDL" : {
+        "message" : [
+          "Table definitions must not contain optional references."
+        ]
+      },
+      "IN_DML" : {
+        "message" : [
+          "Statements that modify table data must not contain optional references."
+        ]
+      }
+    },
+    "sqlState" : "0A000"
+  },
   "OPTION_VALUE_EXCEEDS_ONE_CHARACTER" : {
     "message" : [
       "The value of <paramName> cannot be more than one character, but got <actualValue>."

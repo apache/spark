@@ -173,8 +173,18 @@ abstract class LogicalPlan
   def resolveChildren(
       nameParts: Seq[String],
       resolver: Resolver): Option[NamedExpression] =
-    childAttributes.resolve(nameParts, resolver)
-      .orElse(childMetadataAttributes.resolve(nameParts, resolver))
+    resolveChildren(nameParts, resolver, optionalNamePartIndices = Set.empty[Int])
+
+  /**
+   * Same as `resolveChildren(nameParts, resolver)`, where `optionalNamePartIndices` are the indices
+   * of the name parts of `nameParts` that are optional references.
+   */
+  def resolveChildren(
+      nameParts: Seq[String],
+      resolver: Resolver,
+      optionalNamePartIndices: Set[Int]): Option[NamedExpression] =
+    childAttributes.resolve(nameParts, resolver, optionalNamePartIndices)
+      .orElse(childMetadataAttributes.resolve(nameParts, resolver, optionalNamePartIndices))
 
   /**
    * Optionally resolves the given strings to a [[NamedExpression]] based on the output of this
@@ -184,8 +194,18 @@ abstract class LogicalPlan
   def resolve(
       nameParts: Seq[String],
       resolver: Resolver): Option[NamedExpression] =
-    outputAttributes.resolve(nameParts, resolver)
-      .orElse(outputMetadataAttributes.resolve(nameParts, resolver))
+    resolve(nameParts, resolver, optionalNamePartIndices = Set.empty[Int])
+
+  /**
+   * Same as `resolve(nameParts, resolver)`, where `optionalNamePartIndices` are the indices of the
+   * name parts of `nameParts` that are optional references.
+   */
+  def resolve(
+      nameParts: Seq[String],
+      resolver: Resolver,
+      optionalNamePartIndices: Set[Int]): Option[NamedExpression] =
+    outputAttributes.resolve(nameParts, resolver, optionalNamePartIndices)
+      .orElse(outputMetadataAttributes.resolve(nameParts, resolver, optionalNamePartIndices))
 
   /**
    * Given an attribute name, split it to name parts by dot, but

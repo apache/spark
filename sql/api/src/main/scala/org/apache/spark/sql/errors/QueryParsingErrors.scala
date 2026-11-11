@@ -19,12 +19,13 @@ package org.apache.spark.sql.errors
 
 import java.util.Locale
 
-import org.antlr.v4.runtime.ParserRuleContext
+import org.antlr.v4.runtime.{ParserRuleContext, Token}
 
 import org.apache.spark.SparkException
 import org.apache.spark.sql.catalyst.parser.ParseException
 import org.apache.spark.sql.catalyst.parser.SqlBaseParser._
 import org.apache.spark.sql.catalyst.trees.Origin
+import org.apache.spark.sql.catalyst.util.SparkParserUtils
 
 /**
  * Object for grouping all error messages of the query parsing. Currently it includes all
@@ -1080,6 +1081,38 @@ private[sql] object QueryParsingErrors extends DataTypeErrorsBase {
       errorClass = "UNEXPECTED_USE_OF_PARAMETER_MARKER",
       messageParameters = Map("parameterMarker" -> ctx.getText),
       ctx = ctx)
+  }
+
+  def optionalReferenceInDmlNotSupportedError(
+      statement: String,
+      ctx: ParserRuleContext): Throwable = {
+    new ParseException(
+      errorClass = "OPTIONAL_COLUMN_REFERENCE_NOT_SUPPORTED.IN_DML",
+      messageParameters = Map("context" -> toSQLStmt(statement)),
+      ctx)
+  }
+
+  def optionalReferenceInDdlNotSupportedError(
+      clause: String,
+      ctx: ParserRuleContext): Throwable = {
+    new ParseException(
+      errorClass = "OPTIONAL_COLUMN_REFERENCE_NOT_SUPPORTED.IN_DDL",
+      messageParameters = Map("context" -> toSQLStmt(clause)),
+      ctx)
+  }
+
+  /**
+   * The syntax error for the `?` optional-reference marker `marker` of the reference `ctx` where
+   * the marker is not allowed, e.g. while optional references are disabled. Like the syntax error
+   * that the parser raises for any other unexpected token, it points at the token.
+   */
+  def unexpectedOptionalReferenceMarkerError(ctx: ParserRuleContext, marker: Token): Throwable = {
+    new ParseException(
+      command = Option(SparkParserUtils.command(ctx)),
+      start = SparkParserUtils.position(marker),
+      errorClass = "PARSE_SYNTAX_ERROR",
+      messageParameters = Map("error" -> "'?'", "hint" -> ""),
+      queryContext = Array.empty)
   }
 
   /**

@@ -36,6 +36,7 @@ import org.apache.spark.sql.connector.catalog.constraints.Constraint
 import org.apache.spark.sql.connector.distributions.Distribution
 import org.apache.spark.sql.connector.expressions.{SortOrder, Transform}
 import org.apache.spark.sql.functions._
+import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.internal.connector.SchemaAlignmentConfig
 import org.apache.spark.sql.types.{BooleanType, IntegerType, LongType, StringType, StructType}
 
@@ -278,6 +279,33 @@ class MergeIntoDataFrameSuite extends RowLevelOperationSuiteBase {
         Seq(
           Row(1, 100, "hr"), // unchanged
           Row(2, 200, "finance"))) // update
+    }
+  }
+
+  test("merge into fails if a condition has an optional reference") {
+    withTempView("source") {
+      createAndInitTable("pk INT NOT NULL, salary INT, dep STRING",
+        """{ "pk": 1, "salary": 100, "dep": "hr" }
+          |""".stripMargin)
+      Seq((1, 100, "software")).toDF("pk", "salary", "dep").createOrReplaceTempView("source")
+
+      // A column that the source does not have must not turn the condition into NULL IS NULL.
+      withSQLConf(SQLConf.OPTIONAL_REFERENCES_ENABLED.key -> "true") {
+        checkError(
+          exception = intercept[AnalysisException] {
+            spark.table("source")
+              .mergeInto(tableNameAsString, $"source.pk" === col(tableNameAsString + ".pk"))
+              .whenMatched(expr("source.archived? IS NULL"))
+              .delete()
+              .merge()
+          },
+          condition = "OPTIONAL_COLUMN_REFERENCE_NOT_SUPPORTED.IN_DML",
+          sqlState = "0A000",
+          parameters = Map("context" -> "MERGE"),
+          context = ExpectedContext(fragment = "source.archived?", start = 0, stop = 15))
+      }
+
+      checkAnswer(sql(s"SELECT * FROM $tableNameAsString"), Seq(Row(1, 100, "hr")))
     }
   }
 

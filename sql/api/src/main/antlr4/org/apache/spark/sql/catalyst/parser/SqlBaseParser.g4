@@ -1727,8 +1727,8 @@ primaryExpression
     | identifier ARROW expression                                                              #lambda
     | LEFT_PAREN identifier (COMMA identifier)+ RIGHT_PAREN ARROW expression                   #lambda
     | value=primaryExpression LEFT_BRACKET index=valueExpression RIGHT_BRACKET                 #subscript
-    | identifier                                                                               #columnReference
-    | base=primaryExpression DOT fieldName=identifier                                          #dereference
+    | leadingReferenceNamePart                                                                 #columnReference
+    | base=primaryExpression DOT fieldName=referenceNamePart                                   #dereference
     | LEFT_PAREN expression RIGHT_PAREN                                                        #parenthesizedExpression
     | EXTRACT LEFT_PAREN field=simpleIdentifier FROM source=valueExpression RIGHT_PAREN              #extract
     | (SUBSTR | SUBSTRING) LEFT_PAREN str=valueExpression (FROM | COMMA) pos=valueExpression
@@ -1737,6 +1737,20 @@ primaryExpression
        FROM srcStr=valueExpression RIGHT_PAREN                                                 #trim
     | OVERLAY LEFT_PAREN input=valueExpression PLACING replace=valueExpression
       FROM position=valueExpression (FOR length=valueExpression)? RIGHT_PAREN                  #overlay
+    ;
+
+// A name part of a column, field, or variable reference. A `?` after it makes it optional: the
+// reference is NULL if the name part is not found.
+// Kept out of `primaryExpression` so its generated method stays under the JIT size limit.
+referenceNamePart
+    : identifier optionalMarker=QUESTION?
+    ;
+
+// The first name part of a reference. The second alternative is an optional IDENTIFIER clause
+// with any expression as the name of a column, which is a `functionCall` without the `?`.
+leadingReferenceNamePart
+    : identifier optionalMarker=QUESTION?
+    | IDENTIFIER_KW LEFT_PAREN expression RIGHT_PAREN optionalMarker=QUESTION
     ;
 
 // The behavior selected by a JSON_VALUE `... ON EMPTY` / `... ON ERROR` clause. NULL and ERROR are
@@ -1879,7 +1893,7 @@ literalType
 constant
     : NULL                                                                                     #nullLiteral
     | QUESTION                                                                                 #posParameterLiteral
-    | namedParameterMarker                                                                     #namedParameterLiteral
+    | namedParameterMarker optionalMarker=QUESTION?                                            #namedParameterLiteral
     | interval                                                                                 #intervalLiteral
     | literalType singleStringLitWithoutMarker                                                     #typeConstructor
     | number                                                                                   #numericLiteral

@@ -633,6 +633,17 @@ object SQLConf {
       .booleanConf
       .createWithDefault(true)
 
+  val ANALYZER_SINGLE_PASS_RESOLVER_ENABLE_OPTIONAL_REFERENCE_RESOLUTION =
+    buildConf("spark.sql.analyzer.singlePassResolver.enableOptionalReferenceResolution")
+      .internal()
+      .doc("When true, enables resolution of optional column, field, and variable references " +
+        "(for example `col?`) in single-pass analyzer. Otherwise, resolution falls back to " +
+        "fixed-point analyzer.")
+      .version("4.4.0")
+      .withBindingPolicy(ConfigBindingPolicy.SESSION)
+      .booleanConf
+      .createWithDefault(true)
+
   val MULTI_COMMUTATIVE_OP_OPT_THRESHOLD =
     buildConf("spark.sql.analyzer.canonicalization.multiCommutativeOpMemoryOptThreshold")
       .internal()
@@ -8514,6 +8525,17 @@ object SQLConf {
       .version("3.4.0")
       .booleanConf
       .createWithDefault(true)
+
+  val OPTIONAL_REFERENCES_ENABLED =
+    buildConf("spark.sql.optionalReferences.enabled")
+      .internal()
+      .doc("When true, a `?` after an identifier of a column, field, or variable reference, or " +
+        "after a named parameter marker, makes that identifier optional: when it cannot be " +
+        "resolved, the reference evaluates to a NULL of type VOID instead of raising an error.")
+      .version("4.4.0")
+      .withBindingPolicy(ConfigBindingPolicy.SESSION)
+      .booleanConf
+      .createWithDefault(false)
 
   val STABLE_DERIVED_COLUMN_ALIAS_ENABLED =
     buildConf("spark.sql.stableDerivedColumnAlias.enabled")

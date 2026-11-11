@@ -83,6 +83,8 @@ class VariableResolution(
    *   When true, only variables explicitly referred to in the view definition are accessible.
    * @param referredTempVariableNames When resolving within a view, this contains the list of
    *   variable names that the view explicitly references and should have access to.
+   * @param optionalNamePartIndices The indices of the optional name parts of `nameParts`. A
+   *   missing nested field whose name part is optional resolves to a static NULL.
    *
    * @return Some(Expression) if a variable is successfully resolved, potentially wrapped in
    *   [[ExtractValue]] expressions for nested field access. None if no variable can be resolved
@@ -91,7 +93,8 @@ class VariableResolution(
   def resolveMultipartName(
       nameParts: Seq[String],
       resolvingView: Boolean,
-      referredTempVariableNames: Seq[Seq[String]]): Option[Expression] = {
+      referredTempVariableNames: Seq[Seq[String]],
+      optionalNamePartIndices: Set[Int] = Set.empty): Option[Expression] = {
     var resolvedVariable: Option[Expression] = None
     // We only support temp variables for now, so the variable name can at most have 3 parts.
     var numInnerFields: Int = math.max(0, nameParts.length - 3)
@@ -112,8 +115,18 @@ class VariableResolution(
     resolvedVariable.map { variable =>
       if (numInnerFields != 0) {
         val nestedFields = nameParts.takeRight(numInnerFields)
-        nestedFields.foldLeft(variable: Expression) { (e, name) =>
-          ExtractValue(e, Literal(name), conf.resolver)
+        if (optionalNamePartIndices.nonEmpty) {
+          OptionalReferences.extractNestedFields(
+            base = variable,
+            nestedFields = nestedFields,
+            firstNestedFieldIndex = nameParts.length - numInnerFields,
+            optionalNamePartIndices = optionalNamePartIndices,
+            resolver = conf.resolver,
+            voidBaseIsNull = false)
+        } else {
+          nestedFields.foldLeft(variable: Expression) { (e, name) =>
+            ExtractValue(e, Literal(name), conf.resolver)
+          }
         }
       } else {
         variable

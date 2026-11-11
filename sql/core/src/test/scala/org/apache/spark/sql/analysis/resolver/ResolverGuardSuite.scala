@@ -508,6 +508,40 @@ class ResolverGuardSuite extends ResolverGuardSuiteBase {
     }
   }
 
+  gridTest("Optional references")(Seq(true, false)) { enabled =>
+    val expectedReason = if (enabled) None else Some("optional reference")
+    withSQLConf(
+      SQLConf.OPTIONAL_REFERENCES_ENABLED.key -> "true",
+      SQLConf.ANALYZER_SINGLE_PASS_RESOLVER_ENABLE_OPTIONAL_REFERENCE_RESOLUTION.key ->
+      enabled.toString
+    ) {
+      checkResolverGuard("SELECT col1?, col2? FROM VALUES (1)", expectedReason)
+      checkResolverGuard(
+        "SELECT col1.a?, col1.b? FROM VALUES (named_struct('a', 1))",
+        expectedReason
+      )
+    }
+  }
+
+  test("Optional field extractions are unsupported") {
+    withSQLConf(SQLConf.OPTIONAL_REFERENCES_ENABLED.key -> "true") {
+      checkResolverGuard(
+        "SELECT named_struct('a', 1).b?",
+        unsupportedReason = Some("optional field extraction")
+      )
+      checkResolverGuard(
+        "SELECT col1 FROM VALUES (array(named_struct('a', 1))) ORDER BY col1[0].b?",
+        unsupportedReason = Some("optional field extraction")
+      )
+    }
+  }
+
+  test("Optional named parameters are unsupported") {
+    withSQLConf(SQLConf.OPTIONAL_REFERENCES_ENABLED.key -> "true") {
+      checkResolverGuard("SELECT :param?", unsupportedReason = Some("optional named parameter"))
+    }
+  }
+
 }
 
 trait ResolverGuardSuiteBase extends SharedSparkSession {

@@ -21,7 +21,7 @@ import java.util.Locale
 
 import com.google.common.collect.Maps
 
-import org.apache.spark.sql.catalyst.analysis.{Resolver, UnresolvedAttribute}
+import org.apache.spark.sql.catalyst.analysis.{OptionalReferences, Resolver, UnresolvedAttribute}
 import org.apache.spark.sql.catalyst.util.MetadataColumnHelper
 import org.apache.spark.sql.errors.QueryCompilationErrors
 import org.apache.spark.sql.types.{StructField, StructType}
@@ -351,9 +351,20 @@ package object expressions  {
      * - If there are no matches, return None.
      * - If there is more than one match, throw [[QueryCompilationErrors.ambiguousReferenceError]].
      */
-    def resolve(nameParts: Seq[String], resolver: Resolver): Option[NamedExpression] = {
+    def resolve(nameParts: Seq[String], resolver: Resolver): Option[NamedExpression] =
+      resolve(nameParts, resolver, optionalNamePartIndices = Set.empty[Int])
+
+    /**
+     * Same as `resolve(nameParts, resolver)`, where `optionalNamePartIndices` are the indices of
+     * the name parts of `nameParts` that are optional references.
+     */
+    def resolve(
+        nameParts: Seq[String],
+        resolver: Resolver,
+        optionalNamePartIndices: Set[Int]): Option[NamedExpression] = {
       val (candidates, nestedFields) = getCandidatesForResolution(nameParts, resolver)
-      val resolvedCandidates = resolveCandidates(nameParts, resolver, candidates, nestedFields)
+      val resolvedCandidates = resolveCandidates(
+        nameParts, resolver, candidates, nestedFields, optionalNamePartIndices)
       resolvedCandidates match {
         case Seq() => None
         case Seq(a) => Some(a)
@@ -383,11 +394,16 @@ package object expressions  {
       (prunedCandidates, nestedFields)
     }
 
+    /**
+     * `optionalNamePartIndices` are the indices of the name parts of `nameParts` that are optional
+     * references. A missing nested field whose name part is optional resolves to a static NULL.
+     */
     def resolveCandidates(
         nameParts: Seq[String],
         resolver: Resolver,
         candidates: Seq[Attribute],
-        nestedFields: Seq[String]): Seq[NamedExpression] = {
+        nestedFields: Seq[String],
+        optionalNamePartIndices: Set[Int] = Set.empty): Seq[NamedExpression] = {
       def name = UnresolvedAttribute(nameParts).name
       // We may have resolved the attributes from metadata columns. The resolved attributes will be
       // put in a logical plan node and becomes normal attributes. They can still keep the special
@@ -402,10 +418,20 @@ package object expressions  {
           // For example, consider "a.b.c", where "a" is resolved to an existing attribute.
           // Then this will add ExtractValue("c", ExtractValue("b", a)), and alias the final
           // expression as "c".
-          val fieldExprs = nestedFields.foldLeft(a: Expression) { (e, name) =>
-            // applyOrNull propagates NULL when the base is NullType (e.g. a NullType column from
-            // schema evolution) instead of throwing INVALID_EXTRACT_BASE_FIELD_TYPE.
-            ExtractValue.applyOrNull(e, Literal(name), resolver)
+          val fieldExprs = if (optionalNamePartIndices.nonEmpty) {
+            OptionalReferences.extractNestedFields(
+              base = a,
+              nestedFields = nestedFields,
+              firstNestedFieldIndex = nameParts.length - nestedFields.length,
+              optionalNamePartIndices = optionalNamePartIndices,
+              resolver = resolver,
+              voidBaseIsNull = true)
+          } else {
+            nestedFields.foldLeft(a: Expression) { (e, name) =>
+              // applyOrNull propagates NULL when the base is NullType (e.g. a NullType column
+              // from schema evolution) instead of throwing INVALID_EXTRACT_BASE_FIELD_TYPE.
+              ExtractValue.applyOrNull(e, Literal(name), resolver)
+            }
           }
           Seq(Alias(fieldExprs, nestedFields.last)())
 

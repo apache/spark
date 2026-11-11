@@ -639,6 +639,29 @@ class Analyzer(
       maxIterationsSetting = SQLConf.ANALYZER_MAX_ITERATIONS.key)
 
   /**
+   * Runs the rules of the "Resolution" batch on `plan` until it reaches a fixed point, e.g. after
+   * [[ResolveOptionalReferences]] replaced the optional references it could not resolve.
+   */
+  private def executeResolutionBatch(plan: LogicalPlan): LogicalPlan = {
+    val resolutionRules = batches
+      .find(_.name == "Resolution")
+      .getOrElse(throw SparkException.internalError("The analyzer has no Resolution batch."))
+      .rules
+    val maxIterations = conf.analyzerMaxIterations
+    val resolutionBatchExecutor = new RuleExecutor[LogicalPlan] {
+      override protected def batches: Seq[Batch] = Seq(
+        Batch(
+          "Resolution",
+          FixedPoint(
+            maxIterations,
+            errorOnExceed = true,
+            maxIterationsSetting = SQLConf.ANALYZER_MAX_ITERATIONS.key),
+          resolutionRules: _*))
+    }
+    resolutionBatchExecutor.execute(plan)
+  }
+
+  /**
    * Extensions for the single-pass analyzer.
    *
    * See [[ResolverExtension]] for more info.
@@ -717,7 +740,8 @@ class Analyzer(
         ResolveHints.ResolveCoalesceHints) ++
         hintResolutionRules: _*),
     Batch("Simple Sanity Check", Once,
-      LookupFunctions),
+      LookupFunctions,
+      CheckOptionalReferencesInDml),
     Batch("Keep Legacy Outputs", Once,
       KeepLegacyOutputs),
     Batch("Unresolve Relations", Once,
@@ -806,6 +830,8 @@ class Analyzer(
       Seq(ResolveUpdateEventTimeWatermarkColumn) ++
       extendedResolutionRules ++
       Seq(NameStreamingSources) : _*),
+    Batch("Resolve Optional References", fixedPoint,
+      new ResolveOptionalReferences(resolveAgain = executeResolutionBatch)),
     Batch("Remove TempResolvedColumn", Once, RemoveTempResolvedColumn),
     Batch("Post-Hoc Resolution", Once,
       Seq(ResolveCommandsWithIfExists) ++
@@ -4372,7 +4398,9 @@ class Analyzer(
         // can resolve against this node's output.
         val resolved = cond.transformUp {
           case u: UnresolvedAttribute =>
-            other.output.resolve(u.nameParts, conf.resolver).getOrElse(u)
+            other.output
+              .resolve(u.nameParts, conf.resolver, OptionalReferences.optionalNamePartIndices(u))
+              .getOrElse(u)
         }
         (resolved, other)
     }

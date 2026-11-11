@@ -28,6 +28,7 @@ import org.apache.spark.sql.catalyst.analysis.{
   withPosition,
   FunctionResolution,
   GetViewColumnByNameAndOrdinal,
+  OptionalReferences,
   Star,
   TypeCoercionValidation,
   UnresolvedAlias,
@@ -854,18 +855,24 @@ class ExpressionResolver(
     withPosition(unresolvedAttribute) {
       val expressionResolutionContext = expressionResolutionContextStack.peek()
 
-      val nameTarget: NameTarget = resolveMultipartName(unresolvedAttribute.nameParts)
+      val nameTarget: NameTarget = resolveMultipartName(
+        multipartName = unresolvedAttribute.nameParts,
+        optionalNamePartIndices = OptionalReferences.optionalNamePartIndices(unresolvedAttribute)
+      )
 
       val candidate = nameTarget.pickCandidate(unresolvedAttribute)
 
-      if (nameTarget.lateralAttributeReference.isEmpty) {
-        expressionResolutionContext.hasAttributeOutsideOfAggregateExpressions = true
-      }
+      // An optional reference that resolved to a static NULL does not reference any attribute.
+      if (!OptionalReferences.isNullReference(unresolvedAttribute, candidate)) {
+        if (nameTarget.lateralAttributeReference.isEmpty) {
+          expressionResolutionContext.hasAttributeOutsideOfAggregateExpressions = true
+        }
 
-      if (nameTarget.isOuterReference) {
-        expressionResolutionContext.hasOuterReferences = true
-      } else {
-        expressionResolutionContext.hasLocalReferences = true
+        if (nameTarget.isOuterReference) {
+          expressionResolutionContext.hasOuterReferences = true
+        } else {
+          expressionResolutionContext.hasLocalReferences = true
+        }
       }
 
       if (traversals.current.lcaEnabled && nameTarget.lateralAttributeReference.isDefined) {
@@ -897,7 +904,9 @@ class ExpressionResolver(
    *
    * See [[NameScope.resolveMultipartName]] for more details.
    */
-  private def resolveMultipartName(multipartName: Seq[String]): NameTarget = {
+  private def resolveMultipartName(
+      multipartName: Seq[String],
+      optionalNamePartIndices: Set[Int]): NameTarget = {
     val expressionResolutionContext = expressionResolutionContextStack.peek()
     val viewResolutionContext = resolver.getViewResolver.getViewResolutionContext
     val extractValueExtractionKey =
@@ -920,7 +929,8 @@ class ExpressionResolver(
         resolvingExecuteImmediate = false,
         referredTempVariableNames =
           viewResolutionContext.map(_.referredTempVariableNames).getOrElse(Seq.empty),
-        extractValueExtractionKey = extractValueExtractionKey
+        extractValueExtractionKey = extractValueExtractionKey,
+        optionalNamePartIndices = optionalNamePartIndices
       )
     )
   }

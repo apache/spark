@@ -1385,6 +1385,45 @@ class ParametersSuite extends SharedSparkSession {
     }
   }
 
+  test("optional named parameter markers") {
+    val optionalFilterQuery = "SELECT id FROM range(3) WHERE :low? IS NULL OR id >= :low?"
+    Seq(false, true).foreach { constantsOnly =>
+      withSQLConf(
+        SQLConf.OPTIONAL_REFERENCES_ENABLED.key -> "true",
+        SQLConf.LEGACY_PARAMETER_SUBSTITUTION_CONSTANTS_ONLY.key -> constantsOnly.toString
+      ) {
+        // A marker with a value is bound, and a marker without a value is NULL.
+        checkAnswer(spark.sql("SELECT :x?, :y?", Map("x" -> 1)), Row(1, null))
+        checkAnswer(spark.sql("SELECT :x ?, :x? + 1", Map("x" -> 1)), Row(1, 2))
+        checkAnswer(spark.sql(optionalFilterQuery, Map("low" -> 2L)), Row(2))
+        checkAnswer(
+          spark.sql(optionalFilterQuery, Map("unused" -> 1)),
+          Row(0) :: Row(1) :: Row(2) :: Nil)
+
+        // A marker in a subquery is bound like a marker in the query around it.
+        checkAnswer(spark.sql("SELECT (SELECT :x?) AS a, (SELECT :y?) AS b", Map("x" -> 1)),
+          Row(1, null))
+        checkAnswer(
+          spark.sql("SELECT id FROM range(3) WHERE id IN (SELECT :low? AS low)", Map("low" -> 2L)),
+          Row(2))
+        checkAnswer(
+          spark.sql(
+            "SELECT id FROM range(3) t WHERE EXISTS (SELECT 1 WHERE t.id >= :low?)",
+            Map("low" -> 1L)),
+          Row(1) :: Row(2) :: Nil)
+
+        // Each occurrence is independent: the occurrence without `?` still requires a value.
+        checkError(
+          exception = intercept[AnalysisException] {
+            spark.sql("SELECT :y?, :y", Map("x" -> 1))
+          },
+          condition = "UNBOUND_SQL_PARAMETER",
+          parameters = Map("name" -> "y"),
+          context = ExpectedContext(fragment = ":y", start = 12, stop = 13))
+      }
+    }
+  }
+
   // =============================================
   // Legacy Mode Comprehensive Tests
   // =============================================

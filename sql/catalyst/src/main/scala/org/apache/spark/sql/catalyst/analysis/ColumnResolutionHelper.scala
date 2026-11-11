@@ -111,7 +111,8 @@ trait ColumnResolutionHelper extends Logging with DataTypeErrorsBase {
    */
   private def resolveExpression(
       expr: Expression,
-      resolveColumnByName: Seq[String] => Option[Expression],
+      // Resolves a multipart name, given the indices of its optional name parts.
+      resolveColumnByName: (Seq[String], Set[Int]) => Option[Expression],
       getAttrCandidates: () => Seq[Attribute],
       throws: Boolean,
       includeLastResort: Boolean): Expression = {
@@ -155,7 +156,13 @@ trait ColumnResolutionHelper extends Logging with DataTypeErrorsBase {
             // Real columns from relations -- which don't carry the
             // SQL_FUNCTION_PARAMETER_ALIAS_METADATA_KEY -- continue to win as before.
             // Gated by a legacy kill-switch conf so the pre-fix behavior can be restored.
-            val column = resolveColumnByName(nameParts)
+            // A missing optional field is only NULL here if the error of the same name without
+            // `?` is final. Otherwise another resolution step can still resolve the name, e.g. as
+            // a column from below the SELECT list in ORDER BY, and `ResolveOptionalReferences`
+            // decides if none does.
+            val optionalNamePartIndices =
+              if (throws) OptionalReferences.optionalNamePartIndices(u) else Set.empty[Int]
+            val column = resolveColumnByName(nameParts, optionalNamePartIndices)
             val resolved = column match {
               case Some(c) if isSQLFunctionParameterAlias(c) && !conf.getConf(
                   SQLConf.LEGACY_ALLOW_UDF_PARAMETER_TO_SHADOW_PARAMETERLESS_FUNCTION) =>
@@ -194,7 +201,19 @@ trait ColumnResolutionHelper extends Logging with DataTypeErrorsBase {
           } else {
             field
           }
-          if (newChild.resolved) {
+          // Like a missing optional field of a name, see above.
+          val missingOptionalFieldAliasName = if (throws || OptionalReferences.isLastResort(u)) {
+            OptionalReferences.missingOptionalFieldAliasName(
+              unresolvedExtractValue = u,
+              child = newChild,
+              extraction = resolvedField,
+              resolver = resolver)
+          } else {
+            None
+          }
+          if (missingOptionalFieldAliasName.isDefined) {
+            Alias(OptionalReferences.nullReference(), missingOptionalFieldAliasName.get)()
+          } else if (newChild.resolved) {
             // applyOrNull propagates NULL when the base is NullType instead of throwing
             // INVALID_EXTRACT_BASE_FIELD_TYPE, consistent with multipart field access (col.a).
             val extracted = ExtractValue.applyOrNull(
@@ -288,11 +307,14 @@ trait ColumnResolutionHelper extends Logging with DataTypeErrorsBase {
     val variableResolution =
       new VariableResolution(catalogManager.tempVariableManager, catalogManager)
 
-    def resolve(nameParts: Seq[String]): Option[Expression] = {
+    def resolve(
+        nameParts: Seq[String],
+        optionalNamePartIndices: Set[Int] = Set.empty): Option[Expression] = {
       variableResolution.resolveMultipartName(
         nameParts = nameParts,
         resolvingView = AnalysisContext.get.catalogAndNamespace.nonEmpty,
-        referredTempVariableNames = AnalysisContext.get.referredTempVariableNames
+        referredTempVariableNames = AnalysisContext.get.referredTempVariableNames,
+        optionalNamePartIndices = optionalNamePartIndices
       ).map(e => Alias(e, nameParts.last)())
     }
 
@@ -301,7 +323,7 @@ trait ColumnResolutionHelper extends Logging with DataTypeErrorsBase {
       val resolved = e match {
         case u @ UnresolvedAttribute(nameParts) =>
           val result = withPosition(u) {
-            resolve(nameParts).getOrElse(u) match {
+            resolve(nameParts, OptionalReferences.optionalNamePartIndices(u)).getOrElse(u) match {
               // We trim unnecessary alias here. Note that, we cannot trim the alias at top-level,
               case Alias(child, _) if !isTopLevel => child
               case other => other
@@ -439,8 +461,8 @@ trait ColumnResolutionHelper extends Logging with DataTypeErrorsBase {
       includeLastResort: Boolean = false): Expression = {
     resolveExpression(
       tryResolveDataFrameColumns(expr, Seq(plan)),
-      resolveColumnByName = nameParts => {
-        plan.resolve(nameParts, conf.resolver)
+      resolveColumnByName = (nameParts, optionalNamePartIndices) => {
+        plan.resolve(nameParts, conf.resolver, optionalNamePartIndices)
       },
       getAttrCandidates = () => plan.output,
       throws = throws,
@@ -462,8 +484,8 @@ trait ColumnResolutionHelper extends Logging with DataTypeErrorsBase {
       throws: Boolean = true): Expression = {
     resolveExpression(
       tryResolveDataFrameColumns(e, q.children),
-      resolveColumnByName = nameParts => {
-        q.resolveChildren(nameParts, conf.resolver)
+      resolveColumnByName = (nameParts, optionalNamePartIndices) => {
+        q.resolveChildren(nameParts, conf.resolver, optionalNamePartIndices)
       },
       getAttrCandidates = () => {
         assert(q.children.length == 1)
@@ -488,8 +510,8 @@ trait ColumnResolutionHelper extends Logging with DataTypeErrorsBase {
     resolveDataFrameColumn(u, q.children).map { r =>
       resolveExpression(
         r,
-        resolveColumnByName = nameParts => {
-          q.resolveChildren(nameParts, conf.resolver)
+        resolveColumnByName = (nameParts, optionalNamePartIndices) => {
+          q.resolveChildren(nameParts, conf.resolver, optionalNamePartIndices)
         },
         getAttrCandidates = () => {
           assert(q.children.length == 1)
