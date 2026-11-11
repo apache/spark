@@ -878,6 +878,34 @@ object DateTimeUtils extends SparkDateTimeUtils {
   }
 
   /**
+   * Whether `input` is the special value 'epoch', the only one that `convertSpecialDate`,
+   * `convertSpecialTimestamp` and `convertSpecialTimestampNTZ` convert without reading the
+   * current date or time.
+   *
+   * @param input A string to check. It can contain trailing or leading whitespaces.
+   */
+  private[sql] def isEpochSpecialValue(input: String): Boolean =
+    extractSpecialValue(input.trim).contains("epoch")
+
+  /**
+   * Whether `input` is a valid timestamp string with only a time part, which a cast to a timestamp
+   * with local time zone completes with the current date.
+   */
+  private[sql] def isTimeOnlyTimestamp(input: UTF8String): Boolean = {
+    try {
+      val (segments, _, justTime) = parseTimestampString(input)
+      segments.nonEmpty && justTime && {
+        // Validates the time fields as `stringToTimestamp` does when it builds the time.
+        LocalTime.of(segments(3), segments(4), segments(5),
+          (MICROSECONDS.toNanos(segments(6)) + segments(9)).toInt)
+        true
+      }
+    } catch {
+      case NonFatal(_) => false
+    }
+  }
+
+  /**
    * Subtracts two dates expressed as days since 1970-01-01.
    *
    * @param endDay The end date, exclusive

@@ -77,7 +77,11 @@ class RandomForestClassifierSuite extends MLTest with DefaultReadWriteTest {
   }
 
   test("params") {
-    ParamsSuite.checkParams(new RandomForestClassifier)
+    val classifier = new RandomForestClassifier
+    ParamsSuite.checkParams(classifier)
+    assert(classifier.getIntermediateStorageLevel === "MEMORY_AND_DISK")
+    classifier.setIntermediateStorageLevel("DISK_ONLY")
+    assert(classifier.getIntermediateStorageLevel === "DISK_ONLY")
     val model = new RandomForestClassificationModel("rfc",
       Array(new DecisionTreeClassificationModel("dtc", new LeafNode(0.0, 0.0, null), 1, 2)), 2, 2)
     ParamsSuite.checkParams(model)

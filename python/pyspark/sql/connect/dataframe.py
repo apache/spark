@@ -86,7 +86,10 @@ from pyspark.sql.dataframe import (
 from pyspark.sql.dataframe import (
     DataFrameStatFunctions as ParentDataFrameStatFunctions,
 )
-from pyspark.sql.dataframe import _validate_approx_quantile_relative_error
+from pyspark.sql.dataframe import (
+    _validate_approx_quantile_probabilities,
+    _validate_approx_quantile_relative_error,
+)
 from pyspark.sql.pandas.functions import _validate_vectorized_udf  # type: ignore[attr-defined]
 from pyspark.sql.pandas.types import from_arrow_schema, to_arrow_schema
 from pyspark.sql.table_arg import TableArg
@@ -1776,27 +1779,7 @@ class DataFrame(ParentDataFrame):
                     },
                 )
 
-        if not isinstance(probabilities, (list, tuple)):
-            raise PySparkTypeError(
-                errorClass="NOT_EXPECTED_TYPE",
-                messageParameters={
-                    "arg_name": "probabilities",
-                    "expected_type": "list or tuple",
-                    "arg_type": type(probabilities).__name__,
-                },
-            )
-        if isinstance(probabilities, tuple):
-            probabilities = list(probabilities)
-        for p in probabilities:
-            if not isinstance(p, (float, int)) or p < 0 or p > 1:
-                raise PySparkTypeError(
-                    errorClass="NOT_EXPECTED_TYPE",
-                    messageParameters={
-                        "arg_name": "probabilities",
-                        "expected_type": "list[float, int]",
-                        "arg_type": type(p).__name__,
-                    },
-                )
+        probabilities = _validate_approx_quantile_probabilities(probabilities)
 
         relativeError = _validate_approx_quantile_relative_error(relativeError)
         table, _ = DataFrame(
