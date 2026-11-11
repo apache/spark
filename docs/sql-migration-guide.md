@@ -25,6 +25,7 @@ license: |
 ## Upgrading from Spark SQL 4.2.1 to 4.2.2
 
 - Since Spark 4.2.2, Data Source V2 file scans correctly evaluate deterministic Python UDF filter predicates that reference only partition columns. Previously, these predicates could be dropped, returning rows that did not satisfy the filter (SPARK-60486). Data derived from affected query results may need to be recomputed.
+- Since Spark 4.2.2, `spark.sql.execution.arrow.pythonUDF.columnarInput.enabled` is `false` by default: Arrow-based Python UDFs read rows from an Arrow-backed upstream operator, such as a Data Source V2 scan, as in Spark 4.1. With columnar input, they kept the columns that they pass through until the results of their batch came back from Python, and failed or returned wrong results when the operator reused or released the vectors of the batch in the meantime. To enable columnar input again, set `spark.sql.execution.arrow.pythonUDF.columnarInput.enabled` to `true`.
 
 ## Upgrading from Spark SQL 4.2.0 to 4.2.1
 
