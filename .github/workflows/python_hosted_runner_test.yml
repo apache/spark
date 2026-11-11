@@ -57,14 +57,10 @@ on:
         default: '{}'
 jobs:
   # Precompile Spark with SBT once and publish target/ as an artifact for the
-  # matrix entries below to consume. Optional: any failure here degrades the
-  # matrix to its original local SBT build path.
+  # matrix entries below to consume.
   precompile:
     name: "Precompile Spark"
     runs-on: ${{ inputs.os }}
-    # If this job fails or is cancelled, the matrix entries fall back to
-    # running the SBT build locally as before.
-    continue-on-error: true
     outputs:
       # Pinned so the build job checks out the same snapshot, even if the branch advances mid-run.
       head_sha: ${{ steps.checkout.outputs.head_sha }}
@@ -108,7 +104,6 @@ jobs:
   build:
     name: "Build modules: ${{ matrix.modules }}"
     needs: precompile
-    if: (!cancelled())
     runs-on: ${{ inputs.os }}
     strategy:
       fail-fast: false
@@ -180,15 +175,11 @@ jobs:
         run: python${{matrix.python}} -m pip list
       - name: Download precompiled artifact
         id: download-precompiled
-        if: needs.precompile.result == 'success'
-        continue-on-error: true
         uses: actions/download-artifact@v8
         with:
           name: spark-compile-${{ inputs.os }}-${{ inputs.branch }}-${{ github.run_id }}
       - name: Extract precompiled artifact
         id: extract-precompiled
-        if: steps.download-precompiled.outcome == 'success'
-        continue-on-error: true
         run: |
           zstd -dc compile-artifact.tar.zst | tar -xf -
           rm compile-artifact.tar.zst
@@ -196,10 +187,8 @@ jobs:
       - name: Run tests
         env: ${{ fromJSON(inputs.envs) }}
         run: |
-          if [ "${{ steps.extract-precompiled.outcome }}" = "success" ]; then
-            export SKIP_SCALA_BUILD=true
-            echo "Reusing precompiled artifact, skipping local SBT build."
-          fi
+          export SKIP_SCALA_BUILD=true
+          echo "Reusing precompiled artifact, skipping local SBT build."
           if [[ "$MODULES_TO_TEST" == *"pyspark-errors"* ]]; then
             export SKIP_PACKAGING=false
             echo "Python Packaging Tests Enabled!"
