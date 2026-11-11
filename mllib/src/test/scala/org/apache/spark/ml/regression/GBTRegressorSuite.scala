@@ -330,6 +330,9 @@ class GBTRegressorSuite extends MLTest with DefaultReadWriteTest {
       .setMaxDepth(2)
       .setCheckpointInterval(5)
       .setSeed(123)
+    assert(gbt.getIntermediateStorageLevel === "MEMORY_AND_DISK")
+    gbt.setIntermediateStorageLevel("DISK_ONLY")
+    assert(gbt.getIntermediateStorageLevel === "DISK_ONLY")
     val model = gbt.fit(trainData.toDF())
 
     model.trees.foreach (i => {

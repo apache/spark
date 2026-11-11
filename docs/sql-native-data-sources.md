@@ -33,11 +33,23 @@ package, and loads it when a query uses the data source. Spark adapts it to
 
 - batch and micro-batch streaming reads,
 - batch and streaming writes, appending to or overwriting the existing data,
-- column and limit pushdown.
+- filter, limit and column pushdown.
 
 Data is exchanged only as columnar batches, through the
 [Arrow C data interface](https://arrow.apache.org/docs/format/CDataInterface.html), so Spark reads
-the data that a library returns without copying it.
+the data that a library returns without copying it. When a write gets the batches of a scan as
+they are, as in a plain copy from one native data source to another, Spark writes them without
+converting them to rows: it copies the buffers of their columns, since a library may keep the data
+that it writes until it closes its data writer, and converts value by value the columns of other
+Arrow types than those of the schema, such as `utf8_view` strings, and those that Arrow Java cannot
+slice, such as a column of a fixed width with 2 GiB of values or more. The copied values are written
+as the scan returned them, without the checks of a conversion, such as the precision of a decimal.
+The batches that Spark copies end with the batches of the scan, so a library may get smaller
+batches than `spark.sql.execution.arrow.maxRecordsPerBatch` rows then. The data of a query in which
+Spark also filters, projects or shuffles the rows is still converted to rows, and with adaptive
+query execution, so is the data of a query with a subquery. So is the data of every query when an
+extension of the session (`spark.sql.extensions`) has columnar rules, which may replace the
+conversions to rows with their own, such as those of an engine that runs queries in native code.
 
 Spark calls native data sources with the
 [Foreign Function and Memory API](https://openjdk.org/jeps/454) of Java, which is final from Java
@@ -70,7 +82,9 @@ A native data source library exports a single C function, `spark_ds_init`, which
 of function pointers, a `SparkDsLibrary`, that implements the data source: it needs no JVM headers
 or bindings. Each library has its own table, so any number of native data sources can be loaded
 side by side. When Spark loads a library, it calls `spark_ds_init` with a `SparkDsHost`, which
-gives the library the version of Spark and a function to log messages to the log of Spark.
+gives the library the version of Spark, a function to log messages to the log of Spark, and a
+function that tells whether Spark logs the messages of a level, so that a library follows the log
+level of Spark.
 
 A Spark distribution contains the header in its `include` directory, as
 `$SPARK_HOME/include/spark_datasource.h`, and the `spark-sql` JAR contains it as
@@ -101,41 +115,92 @@ Spark calls the functions of the table as follows:
   that the data source does not support before it computes the data to write. When the user does
   not specify a schema, Spark asks for it with `schema`.
 - **Batch reads**: on the driver, Spark creates a reader with `create_reader`, pushes operations
-  down with `push_limit` and `prune_columns`, plans the partitions with `partitions`, and
-  serializes the state of the reader with `serialize_reader`. Then it calls `read` on the
-  executors, in one task for each partition, and `read` exports an `ArrowArrayStream`. Its
-  callbacks can be called from any thread, but never concurrently.
-- **Streaming reads**: on the driver, Spark creates a stream reader with `create_stream_reader`.
-  For each micro-batch, it asks for the `latest_offset`, plans the partitions with
-  `stream_partitions`, and calls `read` on the executors. Offsets are defined by the library, as
-  compact JSON on a single line: Spark stores each offset as a line of the offset log of the
-  checkpoint, and rejects an offset that is not valid JSON or contains a line break, such as
-  pretty-printed JSON.
+  down with `push_domains` (see [Filter Pushdown](#filter-pushdown)), `push_limit` and
+  `prune_columns`, and plans the partitions with `partitions`, which also returns the state of the
+  reader. Then it calls `read` on the executors for each partition, in tasks that may each read
+  several partitions, for example after a coalesce or a union, with a `SparkDsReadInfo` that has
+  the partition, the schema to read and the state of the reader, and `read` exports an
+  `ArrowArrayStream`. Its callbacks can be called from any thread, but never concurrently. The
+  schema to read has only the columns that the query needs, which `prune_columns` got, and the
+  arrays of the stream have exactly these columns, also when the library does not implement
+  `prune_columns`, which only lets it plan to read them.
+- **Streaming reads**: on the driver, Spark creates a stream reader with `create_stream_reader`,
+  which gets the columns to read, which may be only those that the query needs, and the location of
+  the checkpoint of the source in a `SparkDsStreamReaderInfo`. When the checkpoint does not have the
+  initial offset of the source yet, Spark asks for it with `initial_offset`, and keeps it in the
+  checkpoint, so a query that restarts before its first micro-batch is committed starts from the
+  same offset. For each micro-batch, it asks for the `latest_offset`, with the offset that the
+  micro-batch starts after, plans the partitions with `stream_partitions`, which also returns the
+  state of the stream reader, and calls `read` on the executors. With `Trigger.AvailableNow`, a run
+  reads the data that was available when it started: Spark asks for the `latest_offset` without a
+  limit once, before the first micro-batch that it plans, and reads up to it. Offsets are defined
+  by the library, as compact JSON on a single line: Spark stores each offset as a line of the
+  offset log of the checkpoint, and rejects an offset that is not valid JSON or contains a line
+  break, such as pretty-printed JSON. Spark finds new data by comparing the latest offset with the
+  start as strings, so the same position must always have the same JSON. Spark keeps what it needs
+  in the checkpoint of the source under the names that start with `_spark`, which the library must
+  not use. A data source with the capability
+  `SPARK_DS_ADMISSION_CONTROL` limits the data of each micro-batch, for example with an option for
+  a maximum number of rows: Spark asks for the limit once with `default_read_limit`, which sets a
+  `SparkDsReadLimit`, and passes it to the `latest_offset` that ends each micro-batch, in the
+  `limit` of its `SparkDsLatestOffsetInfo`, which then returns the end of the data of the next
+  micro-batch within the limit. When there is data after the start, the latest offset must be after
+  the start, even if the next unit of data, such as a file, is larger than the limit: Spark sees no
+  new data otherwise. With `Trigger.AvailableNow`, the latest offset without a limit that Spark asks
+  for first is the end of the run: Spark passes it as the `run_end` that the limited latest offsets
+  must not go beyond, so that the run reads the data that was available when it started in
+  micro-batches within the limit. A query that restarts starts a new run, with a new end. So with a
+  limit, Spark calls `latest_offset` twice for some micro-batches: with `Trigger.AvailableNow`, for
+  the first one, first without a limit for the end of the run, and with the other triggers, for each
+  one, first with `SPARK_DS_READ_ALL_AVAILABLE` only for the progress of the query. Spark does not
+  ask again with the limit when the latest offset without a limit is the same as the start, such as
+  while a query waits for new data: there is no data to limit then. So a library must not count the
+  calls as micro-batches. `Trigger.Once` ignores the limit, and so does `Trigger.AvailableNow` when
+  another source of the query does not support it and
+  `spark.sql.streaming.triggerAvailableNowWrapper.enabled` is false, as by default, where Spark
+  reads all the available data in a single micro-batch. Spark still asks for the limit then, and
+  fails the query if it is not valid.
 - **Writes**: on the driver, right before the tasks of the write (or of a micro-batch) start, Spark
   creates a writer with `create_writer`, which gets a `SparkDsWriteInfo` with the mode of the write,
   `SPARK_DS_WRITE_APPEND` or `SPARK_DS_WRITE_TRUNCATE`, and the ID of the query of a streaming
-  write. With adaptive query execution, it first runs the shuffle stages of the data to write, and
-  creates no writer if they fail, but the last stage runs in the tasks of the write, so a writer can
-  still be aborted because computing the data failed: do irreversible work, such as removing the
-  existing data for an overwrite, in `commit`. On the executors, each task creates a data writer
-  with `create_data_writer`, writes the batches of its data with `write`, and calls
-  `commit_data_writer`, or `abort_data_writer` if the task or the commit fails. Then the driver
-  calls `commit` with the messages of the tasks, or `abort` if the write failed. A streaming write
-  commits each micro-batch with its epoch ID, and the ID of the query stays the same when the query
-  restarts from its checkpoint: together, they identify the output of a micro-batch, so that a
-  library can skip an epoch that it already committed. A micro-batch streaming query creates a new
-  stream writer for each micro-batch, and Spark closes the previous one when it creates the next
-  one. Because Spark is not told when a streaming query stops, the last stream writer of a query is
-  closed once it is no longer referenced, or when the query is restarted.
+  write, and returns the state of the writer. With adaptive query execution, it first runs the
+  shuffle stages of the data to write, and creates no writer if they fail, but the last stage runs
+  in the tasks of the write, so a writer can still be aborted because computing the data failed: do
+  irreversible work, such as removing the existing data for an overwrite, in `commit`. On the
+  executors, each task creates a data writer with `create_data_writer`, which gets the schema of the
+  data and the state of the writer in a `SparkDsDataWriterInfo`, writes the batches of its data with
+  `write`, and calls `commit_data_writer`, or `abort_data_writer` if the task or the commit fails
+  before `commit_data_writer` succeeded. Then the driver calls `commit` with the messages of the
+  tasks, or `abort` if the write failed. A data writer whose task failed after
+  `commit_data_writer` succeeded is neither aborted nor passed to `commit`, so `commit` or `abort`
+  cleans up the output of the data writers whose messages it does not get.
+  When Spark rejects what `create_writer` returned, such as a state set more than once, it calls
+  `abort` with the field `rejected` of `SparkDsFinishWriteInfo` set to 1, and an epoch ID of -1 also
+  for a streaming write, before `close_writer`. A streaming write commits each micro-batch with its
+  epoch ID, and the ID of the query stays the same when the query restarts from its checkpoint:
+  together, they identify the output of a micro-batch, so that a library can skip an epoch that it
+  already committed. A restarted query may also abort such an epoch, so an abort only removes what
+  the data writers of its own writer wrote. A micro-batch streaming query creates a new stream
+  writer for each micro-batch, and Spark closes it with `close_writer` once it committed or aborted
+  the micro-batch. A stream writer that Spark neither commits nor aborts is closed before the
+  query creates its next one, or, because Spark is not told when a streaming query stops, once it
+  is no longer referenced.
 
 The library defines the format of the partitions, of the state of its readers and writers, and of
 the commit messages, which Spark sends to the executors and back as byte arrays. The library
 returns them, and the offsets, by passing them to a `SparkDsSink` callback, which copies them. A
+reader or a writer without a state does not call the `set_state` sink of `partitions`,
+`stream_partitions` or `create_writer`: `read` and `create_data_writer` then get an empty state. A
 function reports an error by returning a non-zero value, with the message returned by
 `last_error`, and Spark reports it as a `NATIVE_DATA_SOURCE_ERROR`. A C++ exception or a Rust panic
 must not cross the interface. Each handle that a `create` function returns is released exactly
 once, by the `close` function of its kind. The close functions cannot fail, and they can run after
-the query, so do the work that can fail, such as flushing data, in `commit`. Strings are UTF-8.
+the query, so do the work that can fail, such as flushing data, in `commit`. After a function on
+a handle fails, Spark only closes the handle, except that it aborts a writer whose commit failed
+and a data writer whose write or commit failed, and it never aborts one whose commit succeeded.
+Spark may read a partition more than once, also at the same time, in several attempts of its task,
+such as after a failure or with speculative execution. The header lists the order of the calls
+that a library can rely on. Strings are UTF-8.
 
 A library only sets the functions of the operations it supports, and leaves the others `NULL`. A
 data source must not declare a capability whose functions are `NULL`:
@@ -143,12 +208,14 @@ data source must not declare a capability whose functions are `NULL`:
 | Capability | Required functions | Optional functions |
 |-----------|--------------------|--------------------|
 | All | `create`, `close` | `last_error`, `schema` |
-| `SPARK_DS_BATCH_READ` | `create_reader`, `partitions`, `read`, `close_reader` | `push_limit`, `prune_columns`, `serialize_reader` |
-| `SPARK_DS_MICRO_BATCH_READ` | `create_stream_reader`, `initial_offset`, `latest_offset`, `stream_partitions`, `read`, `close_stream_reader` | `serialize_stream_reader`, `commit_offset` |
-| `SPARK_DS_BATCH_WRITE`, `SPARK_DS_STREAMING_WRITE` | `create_writer`, `commit`, `abort`, `close_writer`, `create_data_writer`, `write`, `commit_data_writer`, `abort_data_writer`, `close_data_writer` | `serialize_writer` |
+| `SPARK_DS_BATCH_READ` | `create_reader`, `partitions`, `read`, `close_reader` | `push_domains`, `push_limit`, `prune_columns` |
+| `SPARK_DS_MICRO_BATCH_READ` | `create_stream_reader`, `initial_offset`, `latest_offset`, `stream_partitions`, `read`, `close_stream_reader` | `commit_offset` |
+| `SPARK_DS_ADMISSION_CONTROL`, with `SPARK_DS_MICRO_BATCH_READ` | `default_read_limit` | |
+| `SPARK_DS_BATCH_WRITE`, `SPARK_DS_STREAMING_WRITE` | `create_writer`, `commit`, `abort`, `close_writer`, `create_data_writer`, `write`, `commit_data_writer`, `abort_data_writer`, `close_data_writer` | |
 
-`SPARK_DS_TRUNCATE` declares that a writer supports `SPARK_DS_WRITE_TRUNCATE`: the save mode
-`overwrite` of a batch write, and the output mode `complete` of a streaming write.
+`SPARK_DS_BATCH_TRUNCATE` declares that a data source supports `SPARK_DS_WRITE_TRUNCATE` in batch
+writes, for the save mode `overwrite`, and `SPARK_DS_STREAMING_TRUNCATE` in streaming writes, for
+the output mode `complete`.
 
 The comments of [`spark_datasource.h`]({{site.SPARK_GITHUB_URL}}/blob/v{{site.SPARK_VERSION_SHORT}}/sql/core/src/main/resources/org/apache/spark/sql/datasource/spark_datasource.h)
 specify each function, including the ownership of the Arrow structs.
@@ -161,28 +228,92 @@ to, but it cannot check that the buffers of the arrays hold those values, becaus
 interface does not carry the sizes of buffers: a library that exports a buffer that is too short
 makes Spark read past its end.
 
-`read` and `create_data_writer` get a `SparkDsTaskContext`, with the IDs of the task, and its
-partition and attempt, and an `is_interrupted` function that returns whether the task was killed,
-for example because its query was canceled. Spark cannot interrupt native code: when a task is
-killed, Spark stops reading only once the `get_next` function of the stream returns. So a read or
-a write that runs for long, or blocks, for example on network I/O, should check `is_interrupted`
-regularly and use timeouts. The task reaper, `spark.task.reaper.enabled` and
-`spark.task.reaper.killTimeout`, kills an executor whose killed task does not end.
+`read` and `create_data_writer` get a `SparkDsTaskContext`, with the IDs of the task, its
+attempt, and the partition: for `read`, the index of the partition in the list that the planning
+returned, which is unique within a scan but not across the scans that a task reads, and for
+`create_data_writer`, the partition of the task. It also has an `is_interrupted` function that
+returns whether the task was killed, for example because its query was canceled. Spark cannot
+interrupt native code: when a task is killed, Spark stops reading only once the `get_next` function
+of the stream returns. So a read or a write that runs for long, or blocks, for example on network
+I/O, should check `is_interrupted` regularly and use timeouts. The task reaper,
+`spark.task.reaper.enabled` and `spark.task.reaper.killTimeout`, kills an executor whose killed
+task does not end.
+
+### Filter Pushdown
+
+Spark does not pass the filters of a query to a library as expressions, which a library would have
+to evaluate with the exact semantics of Spark SQL. It passes the *domains* of the columns that the
+filters constrain instead: for each column, the values that it can have in the rows that match,
+which a library compares with the statistics of its data to skip what cannot match, such as files,
+row groups or blocks. With `push_domains`, a reader gets a `SparkDsDomain` for each column that the
+filters constrain, with:
+
+- `path`: the index of the column in the schema that `create_reader` got, and then the index of
+  the field in each struct, for a field of a struct. Spark prunes the columns after it pushes the
+  domains down, so the schema to read that `read` gets may have fewer columns, at other indices;
+- `null_allowed` and `nan_allowed`: whether null and NaN are in the domain;
+- `ranges`: the ranges of the other values in the domain, as a struct array whose fields are
+  `low` and `high`, of the Arrow type of the column, with a null bound for no bound, and
+  `low_inclusive` and `high_inclusive`. The ranges are sorted and do not overlap. A single value
+  is a range whose bounds are equal and inclusive, and `ranges` is `NULL` when all the other
+  values are in the domain.
+
+For example:
+
+| Filter | Domain |
+|--------|--------|
+| `id > 5 AND id <= 10` | `id`: `(5, 10]` |
+| `id IN (1, 3) OR id IS NULL` | `id`: null, `[1, 1]`, `[3, 3]` |
+| `NOT (id = 5)` | `id`: `(-inf, 5)`, `(5, +inf)` |
+| `value > 1.5`, for a `double` column | `value`: NaN, `(1.5, +inf)` |
+| `name LIKE 'ab%'`, which is `STARTS_WITH(name, 'ab')` | `name`: `['ab', 'ac')` |
+| `s.x = 1 AND name IS NOT NULL` | `s.x`: `[1, 1]`; `name`: all the values but null |
+| `id > 5 OR name = 'a'` | none: each side only constrains one of the columns |
+
+Spark derives the domains from the comparisons of a column with literals (`=`, `<>`, `<=>`, `<`,
+`<=`, `>`, `>=`), `IN`, `IS NULL`, `IS NOT NULL` and `STARTS_WITH`, combined with `AND`, `OR` and
+`NOT`, with the semantics of Spark SQL: comparisons with null are null, so that
+`NOT (id IN (1, NULL))` matches no row, NaN is equal to NaN and greater than any other value, and
+-0.0 is equal to 0.0. A domain has all the values of its column in the rows for which the filters
+are true, and may have others: a column that only one side of an `OR` constrains gets no domain
+from it, and the other filters, such as `id + 1 > 5`, `a = b` or `ENDS_WITH(name, 'x')`, constrain
+no column. Columns of strings with a non-binary collation, such as `UTF8_LCASE`, and arrays, maps
+and structs, get no domain. A field of a struct is null in the rows where the struct, or a struct
+that contains it, is null, whatever the Arrow child array of the field holds there, so statistics
+computed from that array may not count these rows as nulls: Spark only passes domains without null
+for the fields of structs.
+
+A library compares values with the order of Spark SQL: numbers, dates and timestamps by their
+values, with -0.0 equal to 0.0 (use IEEE 754 comparisons, not a total order such as
+`f64::total_cmp`), strings by their UTF-8 bytes, binary values as unsigned bytes, and false before
+true. It must never skip a row whose values are all in their domains, which Spark cannot detect,
+but it can return rows that are not: Spark evaluates all the filters again after reading. So a
+library only uses the domains to read less data, and Spark does not push a `LIMIT` down with a
+filter. The library sets `used` to whether it uses each domain, and the formatted plan of the query
+(`EXPLAIN FORMATTED`, or `df.explain("formatted")`) and the SQL tab of the Spark UI show the
+filters of the used domains as `PushedFilters`, and the domains as `PushedDomains`. Set
+`spark.sql.dataSource.native.filterPushdown.enabled` to false to read without passing the domains,
+for example to check whether a library skips data that matches.
 
 ### Compatibility
 
 The function table, `SparkDsLibrary`, and the structs that Spark passes to the library,
-`SparkDsHost`, `SparkDsCreateInfo`, `SparkDsTaskContext` and `SparkDsWriteInfo`, start with their
-size, so that they can grow. The version of the interface, 1, is `SPARK_DS_ABI_VERSION`, which the
-table and the manifest of a package declare. Within a version:
+`SparkDsHost`, `SparkDsTaskContext`, `SparkDsReadLimit`, `SparkDsDomain` and those whose names end
+with `Info`, such as `SparkDsCreateInfo`, start with their size, so that they can grow.
+`push_domains` was added this way, at the end of the table: Spark does not call it for a library
+built against a header without it. The version of the interface, 1, is `SPARK_DS_ABI_VERSION`,
+which the table and the manifest of a package declare. Within a version:
 
 - fields are only appended to these structs, and the existing fields and the semantics of the
   existing functions never change;
 - Spark only reads the functions that fit in the size of the table of a library, so a library built
   against an earlier header keeps working with later releases of Spark, with the functions that it
   does not know as `NULL`. A library must only read the fields that fit in the size of a struct
-  that Spark passes, so that it also runs on earlier releases of Spark that support its version;
-- Spark only uses a new capability or write mode with a data source that declares it.
+  that Spark passes, and only set those of a struct that it fills, such as the `SparkDsReadLimit`
+  of `default_read_limit`, so that it also runs on earlier releases of Spark that support its
+  version;
+- Spark only uses a new capability, write mode or kind of read with a data source that declares
+  it.
 
 An incompatible change comes with a new version: `spark_ds_init` gets the newest version that Spark
 supports, in `SparkDsHost`, and returns a table of a version that the library implements. Spark
@@ -193,14 +324,16 @@ supports version 1 at least in all the releases of Spark 4 from 4.4.0.
 Version 1 of the interface does not cover these features of Data Source V2 yet. They can be added
 later as functions or fields appended to the structs of the interface:
 
-- predicate pushdown: Spark filters the rows of a native scan after reading them, so a library
-  cannot use the filters of a query to skip data;
+- filters that a library applies itself: Spark evaluates the filters of a native scan after
+  reading, and only passes the domains of the columns that they constrain, which a library can use
+  to skip data (see [Filter Pushdown](#filter-pushdown)). So it does not push a limit down with a
+  filter, and a library cannot evaluate filters that are not domains, such as functions of
+  columns;
 - statistics: Spark estimates the size of a native scan with `spark.sql.defaultSizeInBytes`, so it
   does not plan a native scan as the broadcast side of a join, unless the query has a broadcast
   hint. Adaptive query execution can still broadcast it at run time, from the size of a shuffle of
   the scan;
 - custom metrics, shown in the Spark UI;
-- admission control for streaming reads, such as a maximum number of rows for each micro-batch;
 - continuous processing (`Trigger.Continuous`): a continuous query that reads from or writes to a
   native data source fails when it starts;
 - the pushdown of aggregates and of top-N queries (`ORDER BY` with `LIMIT`), and reporting the
@@ -219,12 +352,32 @@ Spark does not manage the memory of native data sources. The memory that a libra
 the Arrow buffers that it exports, which Spark reads without copying them, are not accounted by the
 memory manager of Spark, nor limited by `spark.memory.offHeap.size`. Neither are the Arrow batches
 that Spark writes, which end at `spark.sql.execution.arrow.maxRecordsPerBatch` rows or once they
-hold `spark.sql.execution.arrow.maxBytesPerBatch` bytes, while the size of the batches that a
-library reads is up to the library. This memory comes out of the memory overhead of the driver and
-the executors, `spark.driver.memoryOverhead` and `spark.executor.memoryOverhead`, which are 10% of
-their memory, and at least 384 MiB, by default. Increase it for libraries that use much memory, and
-bound the memory that a library uses, for example with the size of its batches: on YARN or
-Kubernetes, an executor that uses more memory than it requested is killed.
+hold `spark.sql.execution.arrow.maxBytesPerBatch` bytes, or earlier when Spark copies the batches of
+a scan, while the size of the batches that a library reads is up to the library. This memory comes
+out of the memory overhead of the driver and the executors, `spark.driver.memoryOverhead` and
+`spark.executor.memoryOverhead`, which are 10% of their memory, and at least 384 MiB, by default.
+Increase it for libraries that use much memory, and bound the memory that a library uses, for
+example with the size of its batches: on YARN or Kubernetes, an executor that uses more memory than
+it requested is killed.
+
+### Native Execution Engines
+
+An engine that runs queries in native code within Spark, such as Apache Gluten or Apache DataFusion
+Comet, can read a native data source without Spark importing its data on the JVM. The reader factory
+of a batch or micro-batch scan of a native data source implements
+`org.apache.spark.sql.connector.read.SupportsArrowStreamRead`: in the task that reads a partition,
+`openArrowStream` initializes an Arrow C stream that the engine allocated with the stream that
+`read` returns. The engine reads the stream in the task that opened it, and owns and releases the
+stream, which it may do after the task ended: Spark frees the `SparkDsTaskContext` of the read once
+the library released its stream. Once the task ended, `is_interrupted` returns true, so the library
+may stop reading then. The callbacks of the stream can be called from any thread, but never
+concurrently. Each call goes through the JVM, which then calls the callback of the stream of the
+library: this adds tens of nanoseconds to the call, while the import of a batch on the JVM takes
+microseconds. The first call on a native thread also attaches the thread to the JVM, which takes
+tens of microseconds, and the thread stays attached until it exits. Since the callbacks call into
+the JVM, the engine releases the stream before the JVM exits. Spark does not check the arrays of
+such a stream, unlike the streams that it reads itself, so the engine checks what its import of the
+arrays requires.
 
 ## Finding Native Data Sources
 
@@ -412,6 +565,19 @@ pub struct SparkDsCreateInfo {
     num_options: i64,
 }
 
+/// `SparkDsReadInfo` of `spark_datasource.h`: a partition to read, with the schema to read and
+/// the state of the reader.
+#[repr(C)]
+pub struct SparkDsReadInfo {
+    size: i64,
+    kind: i32,
+    schema: *mut FFI_ArrowSchema,
+    reader_state: *const u8,
+    reader_state_length: i64,
+    partition: *const u8,
+    partition_length: i64,
+}
+
 /// `SparkDsLibrary` of `spark_datasource.h`, up to `read`, the last function that this data
 /// source implements: Spark only reads the functions that fit in `size`.
 #[repr(C)]
@@ -428,6 +594,7 @@ pub struct SparkDsLibrary {
     create_reader: unsafe extern "C" fn(
         source: *mut c_void,
         schema: *mut FFI_ArrowSchema,
+        info: *const c_void,
         reader: *mut *mut c_void,
     ) -> c_int,
     create_stream_reader: Unused,
@@ -435,21 +602,22 @@ pub struct SparkDsLibrary {
     close: unsafe extern "C" fn(source: *mut c_void),
     push_limit: Unused,
     prune_columns: Unused,
-    partitions: unsafe extern "C" fn(reader: *mut c_void, add: Sink, sink: *mut c_void) -> c_int,
-    serialize_reader: Unused,
+    partitions: unsafe extern "C" fn(
+        reader: *mut c_void,
+        info: *const c_void,
+        add_partition: Sink,
+        set_state: Sink,
+        sink: *mut c_void,
+    ) -> c_int,
     close_reader: unsafe extern "C" fn(reader: *mut c_void),
     initial_offset: Unused,
     latest_offset: Unused,
     stream_partitions: Unused,
-    serialize_stream_reader: Unused,
     commit_offset: Unused,
     close_stream_reader: Unused,
     read: unsafe extern "C" fn(
         task: *const c_void,
-        reader_state: *const u8,
-        reader_state_length: i64,
-        partition: *const u8,
-        partition_length: i64,
+        info: *const SparkDsReadInfo,
         out: *mut FFI_ArrowArrayStream,
     ) -> c_int,
 }
@@ -469,12 +637,10 @@ static LIBRARY: SparkDsLibrary = SparkDsLibrary {
     push_limit: None,
     prune_columns: None,
     partitions,
-    serialize_reader: None,
     close_reader,
     initial_offset: None,
     latest_offset: None,
     stream_partitions: None,
-    serialize_stream_reader: None,
     commit_offset: None,
     close_stream_reader: None,
     read,
@@ -550,6 +716,7 @@ unsafe extern "C" fn schema(_source: *mut c_void, out: *mut FFI_ArrowSchema) -> 
 unsafe extern "C" fn create_reader(
     source: *mut c_void,
     _schema: *mut FFI_ArrowSchema,
+    _info: *const c_void,
     reader: *mut *mut c_void,
 ) -> c_int {
     call(|| {
@@ -563,12 +730,20 @@ unsafe extern "C" fn close(source: *mut c_void) {
     drop(Box::from_raw(source as *mut RangeSource));
 }
 
-unsafe extern "C" fn partitions(reader: *mut c_void, add: Sink, sink: *mut c_void) -> c_int {
+/// Plans two partitions. It needs nothing from its `SparkDsPartitionsInfo`, and the reader has no
+/// state, so it does not call `set_state`.
+unsafe extern "C" fn partitions(
+    reader: *mut c_void,
+    _info: *const c_void,
+    add_partition: Sink,
+    _set_state: Sink,
+    sink: *mut c_void,
+) -> c_int {
     call(|| {
         let end = (*(reader as *const RangeReader)).end;
         for (start, end) in [(0, end / 2), (end / 2, end)] {
             let bytes = [start.to_le_bytes(), end.to_le_bytes()].concat();
-            add(sink, bytes.as_ptr(), bytes.len() as i64);
+            add_partition(sink, bytes.as_ptr(), bytes.len() as i64);
         }
         Ok(())
     })
@@ -580,14 +755,12 @@ unsafe extern "C" fn close_reader(reader: *mut c_void) {
 
 unsafe extern "C" fn read(
     _task: *const c_void,
-    _reader_state: *const u8,
-    _reader_state_length: i64,
-    partition: *const u8,
-    partition_length: i64,
+    info: *const SparkDsReadInfo,
     out: *mut FFI_ArrowArrayStream,
 ) -> c_int {
     call(|| {
-        let bytes = std::slice::from_raw_parts(partition, partition_length as usize);
+        let info = &*info;
+        let bytes = std::slice::from_raw_parts(info.partition, info.partition_length as usize);
         let start = i64::from_le_bytes(bytes[0..8].try_into()?);
         let end = i64::from_le_bytes(bytes[8..16].try_into()?);
         let ids = Int64Array::from_iter_values(start..end);
@@ -707,13 +880,16 @@ int GetSchema(void*, struct ArrowSchema* out) {
   return Call([&] { Check(arrow::ExportSchema(*Schema(), out)); });
 }
 
-int CreateReader(void* source, struct ArrowSchema*, void** reader) {
+int CreateReader(void* source, struct ArrowSchema*, const SparkDsReaderInfo*, void** reader) {
   return Call([&] { *reader = new RangeReader{static_cast<RangeSource*>(source)->end}; });
 }
 
 void Close(void* source) { delete static_cast<RangeSource*>(source); }
 
-int Partitions(void* reader, SparkDsSink add_partition, void* sink) {
+// Plans two partitions. It needs nothing from its info, and the reader has no state, so it does
+// not call set_state.
+int Partitions(void* reader, const SparkDsPartitionsInfo*, SparkDsSink add_partition, SparkDsSink,
+               void* sink) {
   return Call([&] {
     int64_t end = static_cast<RangeReader*>(reader)->end;
     int64_t bounds[2][2] = {{0, end / 2}, {end / 2, end}};
@@ -725,11 +901,10 @@ int Partitions(void* reader, SparkDsSink add_partition, void* sink) {
 
 void CloseReader(void* reader) { delete static_cast<RangeReader*>(reader); }
 
-int Read(const SparkDsTaskContext*, const uint8_t*, int64_t, const uint8_t* partition, int64_t,
-         struct ArrowArrayStream* out) {
+int Read(const SparkDsTaskContext*, const SparkDsReadInfo* info, struct ArrowArrayStream* out) {
   return Call([&] {
     int64_t bounds[2];
-    std::memcpy(bounds, partition, sizeof(bounds));
+    std::memcpy(bounds, info->partition, sizeof(bounds));
     arrow::Int64Builder ids;
     for (int64_t id = bounds[0]; id < bounds[1]; id++) Check(ids.Append(id));
     std::shared_ptr<arrow::Array> array;
@@ -768,7 +943,7 @@ package it as above:
 
 ```bash
 c++ -std=c++20 -O2 -shared -fPIC -I"$SPARK_HOME/include" -I"$ARROW_HOME/include" \
-  -L"$ARROW_HOME/lib" -larrow -o libspark_datasource_cpp_range.dylib cpp_range.cc
+  -o libspark_datasource_cpp_range.dylib cpp_range.cc -L"$ARROW_HOME/lib" -larrow
 cp libspark_datasource_cpp_range.dylib /usr/local/lib/
 ```
 
@@ -781,6 +956,7 @@ statically, or install them on the nodes.
 |---------------|---------|---------|
 | `spark.sql.dataSource.native.enabled` | true | Whether Spark loads native data sources. It is a static configuration, so it can only be set when the Spark application starts. When false, `spark.addArtifact` adds a `.sparkpkg` file as a file of the session, without checking it as a package. |
 | `spark.sql.dataSource.native.paths` | (none) | Comma-separated list of native data source packages, and of directories that contain them, on the local file system of the driver. They take precedence over the installed libraries, and the packages that a session adds with `spark.addArtifact` take precedence over them. |
+| `spark.sql.dataSource.native.filterPushdown.enabled` | true | Whether Spark passes the domains of the filtered columns of a batch scan to native data sources, so that they can skip data: see [Filter Pushdown](#filter-pushdown). Spark evaluates the filters after reading anyway. |
 
 ## Security
 

@@ -24,7 +24,11 @@ import org.apache.spark.sql.connector.distributions.Distribution
 import org.apache.spark.sql.connector.expressions.{SortOrder, Transform}
 import org.apache.spark.sql.internal.connector.SchemaAlignmentConfig
 
-class InMemoryTableWithV2FilterCatalog extends InMemoryTableCatalog {
+/**
+ * Mix-in that constructs [[InMemoryTableWithV2Filter]] from the shared in-memory catalog factory
+ * used by both CREATE TABLE and ALTER TABLE.
+ */
+trait InMemoryTableWithV2FilterFactory { self: BasicInMemoryTableCatalog =>
   // scalastyle:off argcount
   override protected def newInMemoryTable(
       name: String,
@@ -47,3 +51,12 @@ class InMemoryTableWithV2FilterCatalog extends InMemoryTableCatalog {
       requiredNumPartitions, advisoryPartitionSize, distributionStrictlyRequired, numRowsPerSplit)
   }
 }
+
+class InMemoryTableWithV2FilterCatalog extends InMemoryTableCatalog
+    with InMemoryTableWithV2FilterFactory
+
+/**
+ * The [[InMemoryCatalog]] counterpart of [[InMemoryTableWithV2FilterCatalog]], whose scans filter
+ * themselves in place when Spark pushes runtime filters as connector predicates.
+ */
+class InMemoryWithV2FilterCatalog extends InMemoryCatalog with InMemoryTableWithV2FilterFactory

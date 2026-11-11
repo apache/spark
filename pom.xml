@@ -221,8 +221,8 @@
             SPARK-53327 workaround should be reverted.
      -->
     <datasketches.version>6.2.0</datasketches.version>
-    <netty.version>4.2.19.Final</netty.version>
-    <netty-tcnative.version>2.0.84.Final</netty-tcnative.version>
+    <netty.version>4.2.20.Final</netty.version>
+    <netty-tcnative.version>2.0.85.Final</netty-tcnative.version>
     <icu4j.version>78.3</icu4j.version>
     <junit.version>6.0.3</junit.version>
     <jline.version>2.14.6</jline.version>
@@ -347,7 +347,7 @@
       -XX:+EnableDynamicAgentLoading
     </extraJavaTestArgs>
     <mariadb.java.client.version>3.5.11</mariadb.java.client.version>
-    <mysql.connector.version>9.6.0</mysql.connector.version>
+    <mysql.connector.version>26.10.0</mysql.connector.version>
     <postgresql.version>42.7.14</postgresql.version>
     <db2.jcc.version>12.1.4.0</db2.jcc.version>
     <mssql.jdbc.version>13.2.1.jre11</mssql.jdbc.version>

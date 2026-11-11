@@ -643,11 +643,7 @@ class StandaloneRestSubmitSuite extends SparkFunSuite {
     server = Some(new StandaloneRestServer(localhost, 0, conf, fakeMasterRef, "spark://fake:7077"))
     server.get.start()
     val pool = server.get._server.get.getThreadPool.asInstanceOf[QueuedThreadPool]
-    if (Utils.isJavaVersionAtLeast21) {
-      assert(pool.getVirtualThreadsExecutor != null)
-    } else {
-      assert(pool.getVirtualThreadsExecutor == null)
-    }
+    assert(pool.getVirtualThreadsExecutor != null)
   }
 
   test("SPARK-58049: Reject an over-sized request body with SC_REQUEST_ENTITY_TOO_LARGE") {
