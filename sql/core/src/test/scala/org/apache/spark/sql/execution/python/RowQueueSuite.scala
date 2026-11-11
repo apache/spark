@@ -408,4 +408,36 @@ class RowQueueSuite extends SparkFunSuite with EncryptionFunSuite {
     drainAndClose(queue, n)
     assert(taskM.cleanUpAllAllocatedMemory() === 0)
   }
+
+  test("hybrid queue rotates disk segments and recovers to memory under default unlimited cap") {
+    val mem = new TestMemoryManager(smallPageConf)
+    mem.limit(0)
+    val taskM = new TaskMemoryManager(mem, 0)
+    val serManager = createSerializerManager(smallPageConf)
+    val tempDir = Utils.createTempDir().getCanonicalFile
+    val queue = HybridRowQueue(taskM, tempDir, 1, serManager)
+
+    val row = new UnsafeRow(1)
+    row.pointTo(new Array[Byte](16), 16)
+    val firstBatch = 200
+    (0 until firstBatch).foreach { i =>
+      row.setLong(0, i)
+      assert(queue.add(row) === QueueMode.DISK)
+    }
+    val spillFilesBeforeRecovery = tempDir.listFiles()
+    assert(spillFilesBeforeRecovery != null && spillFilesBeforeRecovery.length > 1)
+
+    // Once execution memory becomes available again, writing rotates back to in-memory pages.
+    mem.limit(smallPageSize)
+    val secondBatch = 80
+    val recoveryModes = (firstBatch until (firstBatch + secondBatch)).map { i =>
+      row.setLong(0, i)
+      queue.add(row)
+    }
+    assert(recoveryModes.contains(QueueMode.IN_MEMORY))
+
+    drainAndClose(queue, firstBatch + secondBatch)
+    assert(tempDir.listFiles().isEmpty)
+    assert(taskM.cleanUpAllAllocatedMemory() === 0)
+  }
 }

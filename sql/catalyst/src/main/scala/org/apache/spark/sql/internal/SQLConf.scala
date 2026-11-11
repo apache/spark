@@ -5879,19 +5879,20 @@ object SQLConf {
     buildConf("spark.sql.execution.python.udf.rowQueue.maxMemoryBytes")
       .internal()
       .doc("Maximum bytes of task execution memory that a single HybridRowQueue may hold at a " +
-        "time while buffering pass-through rows during Python UDF/UDTF evaluation. When a " +
-        "queue reaches this cap (for example when the JVM producer outpaces the Python worker " +
-        "or pass-through rows are large), additional rows spill directly to rolling disk " +
-        "segments without exhausting the executor ExecutionMemoryPool, and writing resumes " +
-        "in memory once queued pages are consumed and freed. 0 forces disk-only queuing; " +
-        "-1 disables the per-queue cap.")
-      .version("4.4.0")
+        "time while buffering pass-through rows during Python UDF/UDTF evaluation. When set to " +
+        "a positive value and a queue reaches this cap (for example when the JVM producer " +
+        "outpaces the Python worker or pass-through rows are large), additional rows spill " +
+        "directly to rolling disk segments without exhausting the executor ExecutionMemoryPool, " +
+        "and writing resumes in memory once queued pages are consumed and freed. 0 forces " +
+        "disk-only queuing; -1 (the default) imposes no per-queue cap beyond available task " +
+        "execution memory.")
+      .version("5.0.0")
       .withBindingPolicy(ConfigBindingPolicy.NOT_APPLICABLE)
       .bytesConf(ByteUnit.BYTE)
       .checkValue(_ >= -1,
         "The value of spark.sql.execution.python.udf.rowQueue.maxMemoryBytes must be " +
           "-1 (no limit) or non-negative.")
-      .createWithDefault(64L * 1024 * 1024)
+      .createWithDefault(-1L)
 
   val PYTHON_UDF_ARROW_WORKER_OUTPUT_BATCH_MAX_BYTES =
     buildConf("spark.sql.execution.pythonUDF.arrow.workerOutputBatchMaxBytes")
