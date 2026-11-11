@@ -635,6 +635,30 @@ trait JoinSelectionHelper extends Logging {
   }
 
   /**
+   * Whether an earlier pass has decided the [[RuntimeFilterHint]] of the join, see
+   * `HintInfo.runtimeFilterDecided`. The optimizer runs on a subquery before the query that it is
+   * later joined with, where the join is visited again.
+   */
+  def isRuntimeFilterHintDecided(hint: JoinHint): Boolean = {
+    hint.leftHint.exists(_.runtimeFilterDecided) || hint.rightHint.exists(_.runtimeFilterDecided)
+  }
+
+  /**
+   * Whether the pass over `plan` leaves a [[RuntimeFilterHint]] to the pass over the outer query,
+   * given the `rejections` of the hinted side on each join key: `plan` is a subquery, and the
+   * hinted side reads a CTE of the outer query, whose definition the subquery does not have. An
+   * uncorrelated IN subquery is joined with the rest of the query later, where the definition is
+   * visible and that pass decides the hint. Until then the join gets no runtime filter, which
+   * could prune the hinted side or stand next to the hinted one. A subquery that is planned on
+   * its own, such as a scalar subquery, is not visited again.
+   */
+  def leavesRuntimeFilterHintToOuterQuery(
+      plan: LogicalPlan,
+      rejections: Seq[Option[String]]): Boolean = {
+    plan.isInstanceOf[Subquery] && rejections.contains(Some(RuntimeFilterSourceAnalysis.OuterCte))
+  }
+
+  /**
    * Whether `plan` is a stream with a stateful operator, which a runtime filter must not prune:
    * the filter is built again in each micro-batch, so the rows it drops in one never reach the
    * state, though the filter's source can gain their keys in a later one.
@@ -774,6 +798,19 @@ private[optimizer] class RuntimeFilterSourceAnalysis(
 
   private lazy val sideTaint = analyze(side)
 
+  // Whether the side reads a CTE defined outside the plan being optimized, in its own plan, in a
+  // subquery of one of its expressions, or through the definition of another CTE. Nothing can be
+  // told about such a side that the analysis does not accept.
+  private lazy val readsOuterCte = {
+    def reads(plan: LogicalPlan, seen: Set[Long]): Boolean = {
+      val ids = plan.collectWithSubqueries { case r: CTERelationRef if !r.recursive => r.cteId }
+      ids.exists { id =>
+        cteDefs.get(id).forall(cteDef => !seen(id) && reads(cteDef.child, seen + id))
+      }
+    }
+    reads(side, Set.empty)
+  }
+
   override def rejection(
       applicationKey: Expression,
       creationKey: Expression,
@@ -787,11 +824,13 @@ private[optimizer] class RuntimeFilterSourceAnalysis(
         creationKey.containsAnyPattern(PYTHON_UDF, EXTERNAL_UDF)) {
       Some(ExtractedFunction)
     } else {
-      sideTaint match {
+      val reason = sideTaint match {
         case Left(reason) => Some(reason)
-        case Right(t) if !isStable(creationKey, t.unstable) => Some(NotRepeatable)
+        case Right(t) if !isStable(creationKey, t.unstable, t.representatives) =>
+          Some(NotRepeatable)
         case _ => None
       }
+      reason.map(r => if (readsOuterCte) OuterCte else r)
     }
   }
 
@@ -800,20 +839,41 @@ private[optimizer] class RuntimeFilterSourceAnalysis(
    * when its plan is, which is the very check this analysis replaces, so its plan is analyzed
    * too.
    */
-  private def isStable(e: Expression, unstable: AttributeSet): Boolean = {
-    e.deterministic && e.references.intersect(unstable).isEmpty && !e.exists {
+  private def isStable(
+      e: Expression,
+      unstable: AttributeSet,
+      representatives: AttributeSet = AttributeSet.empty): Boolean = {
+    // The collation key of a representative is the same whichever value of its group it is.
+    def readsUnstable(e: Expression): Boolean = e match {
+      case CollationKey(a: Attribute) if representatives.contains(a) => false
+      case a: Attribute => unstable.contains(a)
+      case _ => e.children.exists(readsUnstable)
+    }
+    val stableReferences =
+      if (representatives.isEmpty) e.references.intersect(unstable).isEmpty else !readsUnstable(e)
+    e.deterministic && stableReferences && !e.exists {
       case s: SubqueryExpression => !isRepeatableSubquery(s)
       case _ => false
     }
   }
 
+  /** The attribute that `e` passes on as it is, if it does. */
+  private def passedOn(e: NamedExpression): Option[Attribute] = e match {
+    case a: Attribute => Some(a)
+    case Alias(a: Attribute, _) => Some(a)
+    case _ => None
+  }
+
   /**
    * A subquery is repeatable when its row set is, and so is whatever of its output the subquery
    * exposes: the build keys of a DPP filter, nothing but existence for EXISTS, the output columns
-   * otherwise. A scalar subquery fails on more than one row, so its multiplicity counts too.
+   * otherwise. A scalar subquery fails on more than one row, so its multiplicity counts too. An
+   * `onlyInBroadcast` DPP filter evaluates no plan of its own: it reads the broadcast of a join,
+   * or physical planning drops it.
    */
-  private def isRepeatableSubquery(s: SubqueryExpression): Boolean = {
-    !s.plan.isStreaming && analyze(s.plan).exists { t =>
+  private def isRepeatableSubquery(s: SubqueryExpression): Boolean = s match {
+    case d: DynamicPruningSubquery if d.onlyInBroadcast => true
+    case _ => !s.plan.isStreaming && analyze(s.plan).exists { t =>
       s match {
         case d: DynamicPruningSubquery =>
           d.broadcastKeyIndices.forall(i => isStable(d.buildKeys(i), t.unstable))
@@ -864,19 +924,24 @@ private[optimizer] class RuntimeFilterSourceAnalysis(
       }
 
     case p: Project => analyze(p.child).map { t =>
-      t.copy(unstable =
-        AttributeSet(p.projectList.filterNot(isStable(_, t.unstable)).map(_.toAttribute)))
+      t.copy(
+        unstable =
+          AttributeSet(p.projectList.filterNot(isStable(_, t.unstable)).map(_.toAttribute)),
+        representatives = AttributeSet(p.projectList
+          .filter(passedOn(_).exists(t.representatives.contains)).map(_.toAttribute)))
     }
 
     case f: Filter => analyze(f.child).flatMap { t =>
-      if (isStable(f.condition, t.unstable)) Right(t) else Left(NotRepeatable)
+      if (isStable(f.condition, t.unstable, t.representatives)) Right(t) else Left(NotRepeatable)
     }
 
     case j: Join => analyze(j.left).flatMap { l =>
       analyze(j.right).flatMap { r =>
         val unstable = l.unstable ++ r.unstable
-        if (j.condition.forall(isStable(_, unstable))) {
-          Right(Taint(unstable, l.unstableMultiplicity || r.unstableMultiplicity))
+        val representatives = l.representatives ++ r.representatives
+        if (j.condition.forall(isStable(_, unstable, representatives))) {
+          Right(Taint(
+            unstable, l.unstableMultiplicity || r.unstableMultiplicity, representatives))
         } else {
           Left(NotRepeatable)
         }
@@ -900,7 +965,16 @@ private[optimizer] class RuntimeFilterSourceAnalysis(
           (e.exists(_.isInstanceOf[AggregateExpression]) &&
             (!stableGroups || t.unstableMultiplicity || !isOrderIrrelevant(e)))
       }
-      Taint(AttributeSet(unstable.map(_.toAttribute)), unstableMultiplicity = !stableGroups)
+      // A grouping column that is passed on as it is has the same collation key each time.
+      val passedOnRepresentatives = a.aggregateExpressions.filter { e =>
+        stableGroups && passedOn(e).exists { g =>
+          representatives.contains(g) && a.groupingExpressions.exists(_.semanticEquals(g))
+        }
+      }
+      Taint(
+        AttributeSet(unstable.map(_.toAttribute)),
+        unstableMultiplicity = !stableGroups,
+        representatives = AttributeSet(passedOnRepresentatives.map(_.toAttribute)))
     }
 
     case w: Window => analyze(w.child).map { t =>
@@ -961,6 +1035,15 @@ private[optimizer] class RuntimeFilterSourceAnalysis(
     // The rows and their values are unchanged.
     case _: Sort | _: Repartition | _: RepartitionByExpression | _: RebalancePartitions =>
       analyze(plan.children.head)
+
+    // The operator that the optimizer moves the Python UDFs of a plan into, once this analysis
+    // has run on it. A later pass finds it in a hinted side that an earlier pass decided.
+    case e: BaseEvalPython => analyze(e.child).map { t =>
+      val unstable = e.udfs.zip(e.resultAttrs).collect {
+        case (udf, attr) if !isStable(udf, t.unstable) => attr
+      }
+      t.copy(unstable = t.unstable ++ AttributeSet(unstable))
+    }
 
     // The filter would evaluate the observation a second time under the same name.
     case _: CollectMetrics =>
@@ -1042,8 +1125,14 @@ private[optimizer] object RuntimeFilterSourceAnalysis {
    * @param unstable output attributes whose values depend on evaluation order or on chance.
    * @param unstableMultiplicity whether rows may be repeated a different number of times per
    *                             evaluation, while each row stays present.
+   * @param representatives the unstable attributes that are, each time, one of the values of a
+   *                        group that are equal under a collation: they differ as strings, but
+   *                        have the same collation key, which is what a join compares.
    */
-  private case class Taint(unstable: AttributeSet, unstableMultiplicity: Boolean = false)
+  private case class Taint(
+      unstable: AttributeSet,
+      unstableMultiplicity: Boolean = false,
+      representatives: AttributeSet = AttributeSet.empty)
 
   private val NotRepeatable =
     "the hinted side may produce different rows or join keys when evaluated again"
@@ -1055,7 +1144,13 @@ private[optimizer] object RuntimeFilterSourceAnalysis {
     "external UDF, which a runtime filter cannot evaluate"
 
   def containsExtractedFunction(plan: LogicalPlan): Boolean = {
-    plan.containsAnyPattern(PYTHON_UDF, EXTERNAL_UDF) || plan.exists {
+    // The build plan of an `onlyInBroadcast` DPP filter is not evaluated on its own, see
+    // `isRepeatableSubquery`, so its functions do not count.
+    val evaluated = plan.transformAllExpressionsWithPruning(
+        _.containsPattern(DYNAMIC_PRUNING_SUBQUERY)) {
+      case d: DynamicPruningSubquery if d.onlyInBroadcast => Literal.TrueLiteral
+    }
+    evaluated.containsAnyPattern(PYTHON_UDF, EXTERNAL_UDF) || evaluated.exists {
       case g: Generate => g.generator.isInstanceOf[PythonUDTF]
       case _ => false
     }

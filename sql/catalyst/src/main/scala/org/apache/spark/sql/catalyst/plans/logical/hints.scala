@@ -85,9 +85,12 @@ object JoinHint {
  * @param runtimeFilterSource Whether this side was hinted as a runtime filter source, i.e. the
  *                            side a runtime filter should be built from to prune the other side
  *                            of the join.
- * @param runtimeFilterDecided Whether `InjectRuntimeFilter` has applied or reported the runtime
- *                             filter hint. Kept in the hint so that it survives a rule rebuilding
- *                             the join, and not shown, as it is not part of the hint as written.
+ * @param runtimeFilterDecided Whether `InjectRuntimeFilter` has decided the runtime filter
+ *                             hint: the hinted side builds the join's hinted filters, or for a
+ *                             reason that was reported builds none. Later passes add no runtime
+ *                             filter for the join. A hint that is ignored is removed instead.
+ *                             Kept in the hint so that it survives a rule rebuilding the join,
+ *                             and not shown, as it is not part of the hint as written.
  */
 case class HintInfo(
     strategy: Option[JoinStrategyHint] = None,

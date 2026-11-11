@@ -384,6 +384,15 @@ class InjectRuntimeFilterSuite extends SharedSparkSession
     }
   }
 
+  // Whether `query` has a DPP filter that honors a RUNTIME_FILTER hint.
+  def hasHintedDynamicPruning(query: String): Boolean = {
+    sql(query).queryExecution.optimizedPlan.exists(_.expressions.exists(_.exists {
+      case dpp: DynamicPruningSubquery =>
+        dpp.getTagValue(DynamicPruning.HONORS_RUNTIME_FILTER_HINT).isDefined
+      case _ => false
+    }))
+  }
+
   // Runs `f` with the thresholds of the DPP tests, `reuseBroadcastOnly` on, and `confs`, with AQE
   // on and off unless `confs` sets it.
   def withDppTestConf(confs: (String, String)*)(f: => Unit): Unit = {
@@ -2002,6 +2011,28 @@ class InjectRuntimeFilterSuite extends SharedSparkSession
     }
   }
 
+  test("Runtime bloom filter join: add bloom filter if a dpp filter that runs as its own " +
+    "subquery is pushed down into the creation side") {
+    withTable("bf_za", "bf_zb", "bf_zc") {
+      spark.range(2000).selectExpr("id AS v", "CAST(id % 100 AS INT) AS k")
+        .write.saveAsTable("bf_za")
+      spark.range(2000).selectExpr("CAST(id % 100 AS INT) AS k", "CAST(id % 10 AS INT) AS x",
+        "CAST(id % 20 AS INT) AS part").write.partitionBy("part").saveAsTable("bf_zb")
+      spark.range(20).selectExpr("CAST(id AS INT) AS p", "concat('n', id) AS name")
+        .write.saveAsTable("bf_zc")
+      // The join with `zc` pushes its DPP filter down into `zb`, the creation side of the bloom
+      // filter on `za.k`. Its build plan has a `LIKE`, which is not a simple expression.
+      val query = "SELECT za.v, zc.name FROM bf_za za JOIN bf_zb zb ON za.k = zb.k " +
+        "JOIN bf_zc zc ON zb.part = zc.p WHERE zb.x = 1 AND zc.name LIKE '_1'"
+      withDppTestConf(SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key -> "-1",
+          SQLConf.DYNAMIC_PARTITION_PRUNING_REUSE_BROADCAST_ONLY.key -> "false") {
+        assert(hasDynamicPruning(query))
+        assertRewroteWithBloomFilter(query)
+        assertReturnsRows(query)
+      }
+    }
+  }
+
   test("Runtime bloom filter join: do not add bloom filter if dpp filter exists " +
     "on the same column through a renaming projection") {
     withSQLConf(SQLConf.RUNTIME_BLOOM_FILTER_APPLICATION_SIDE_SCAN_SIZE_THRESHOLD.key -> "3000",
@@ -2444,6 +2475,7 @@ class InjectRuntimeFilterSuite extends SharedSparkSession
   }
 
   test("RUNTIME_FILTER hint honored by DPP stays honored after a DPP filter is pushed into it") {
+    import IntegratedUDFTestUtils._
     withSQLConf(SQLConf.RUNTIME_BLOOM_FILTER_APPLICATION_SIDE_SCAN_SIZE_THRESHOLD.key -> "3000",
       SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key -> "-1") {
       withTempView("rdd_side") {
@@ -2451,8 +2483,9 @@ class InjectRuntimeFilterSuite extends SharedSparkSession
         spark.createDataFrame(rdd, new StructType().add("k", IntegerType))
           .createOrReplaceTempView("rdd_side")
         // The hinted `d` honors the hint with a DPP filter on `f`. The upper join then prunes `d`
-        // with a DPP filter built from an RDD, which is pushed into `d` and is not repeatable.
-        // The hint was honored before that, and its DPP filter still runs.
+        // with a DPP filter built from an RDD, which is pushed into `d`. That filter could only
+        // read a broadcast, so it never evaluates the RDD again, and physical planning drops it
+        // here. So `d` is still the source of the hinted DPP filter, which is built again from it.
         val query = "SELECT /*+ RUNTIME_FILTER(d) */ f.c5, d.f5 FROM bf5part f " +
           "JOIN bf5filtered d ON f.f5 = d.f5 " +
           "JOIN (SELECT k FROM rdd_side WHERE k > 1) r ON d.f5 = r.k"
@@ -2465,9 +2498,20 @@ class InjectRuntimeFilterSuite extends SharedSparkSession
           case _ => false
         }
         assert(buildsFromRdd, plan.treeString)
+        assert(hasHintedDynamicPruning(query))
         assertDidNotRewriteWithBloomFilter(query)
         assertReturnsRows(query)
         assert(hintWarnings(query).isEmpty)
+        // The same when the build plan of that filter calls a Python UDF, which the hinted side
+        // does not evaluate for it either.
+        if (shouldTestPythonUDFs) {
+          registerTestUDF(TestPythonUDF(name = "bf_py_int", returnType = Some(IntegerType)), spark)
+          val udf = query.replace("SELECT k FROM rdd_side WHERE k > 1",
+            "SELECT bf_py_int(a2) AS k FROM bf2 WHERE a2 > 1")
+          assert(hasHintedDynamicPruning(udf))
+          assertReturnsRows(udf)
+          assert(hintWarnings(udf).isEmpty)
+        }
       }
     }
   }
@@ -2733,11 +2777,18 @@ class InjectRuntimeFilterSuite extends SharedSparkSession
       assertHintedRewrite("select * from bf4 where bf4.c4 in (select /*+ RUNTIME_FILTER(bf3) */ " +
         "t.k from (select c2 as k from bf2) t join bf3 on t.k = bf3.c3)")
       // And when a DPP filter from the outer query is pushed through the hoisted join, which
-      // rebuilds it: the decision is kept in the join's hint.
+      // rebuilds it: the join carries no hint by then.
       val pushedThroughFailing = "select * from bf4 where bf4.a4 = 10 and bf4.c4 in " +
         "(select /*+ RUNTIME_FILTER(t) */ p.f5 from bf5part p " +
         "join (select c3 from bf3 limit 5) t on p.c5 = t.c3)"
       assert(hintWarnings(pushedThroughFailing).count(_.contains("is not supported")) == 1)
+      // A hint that is not applied for another reason stays on the join, where the decision is
+      // kept for the pass over the outer query.
+      val pushedThroughBlocked = "select * from bf4 where bf4.a4 = 10 and bf4.c4 in " +
+        "(select /*+ RUNTIME_FILTER(bf3) */ p.f5 from bf5part p left join bf3 on p.c5 = bf3.c3)"
+      assert(hintWarnings(pushedThroughBlocked).count(_.contains("is not supported")) == 1)
+      assertHintNotApplied(pushedThroughBlocked,
+        "the left side of a left outer join cannot be pruned")
       val pushedThroughRenamed = "select * from bf4 where bf4.a4 = 10 and bf4.c4 in " +
         "(select /*+ RUNTIME_FILTER(bf3) */ t.f5 from (select f5, c5 as k from bf5part) t " +
         "join bf3 on t.k = bf3.c3)"
@@ -2972,19 +3023,15 @@ class InjectRuntimeFilterSuite extends SharedSparkSession
     // evaluate the UDTF, even a deterministic one.
     val udtf = TestPythonUDTF(name = "bf_udtf")
     spark.udtf.registerPython(udtf.name, udtf.udtf.copy(udfDeterministic = true))
-    try {
-      withSQLConf(SQLConf.RUNTIME_BLOOM_FILTER_APPLICATION_SIDE_SCAN_SIZE_THRESHOLD.key -> "3000",
-        SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key -> "-1") {
-        val query = "SELECT /*+ RUNTIME_FILTER(t) */ * FROM bf4 JOIN " +
-          "(SELECT u.x FROM (SELECT a2, b2 FROM bf2 WHERE a2 IS NOT NULL AND b2 IS NOT NULL) b, " +
-          s"LATERAL ${udtf.name}(b.a2, b.b2) u) t ON bf4.c4 = t.x"
-        assertDidNotRewriteWithBloomFilter(query)
-        assertReturnsRows(query)
-        assertHintNotApplied(query,
-          "the hinted side contains a Python UDF, Python UDTF or external UDF")
-      }
-    } finally {
-      spark.sessionState.catalog.dropTempFunction(udtf.name, ignoreIfNotExists = true)
+    withSQLConf(SQLConf.RUNTIME_BLOOM_FILTER_APPLICATION_SIDE_SCAN_SIZE_THRESHOLD.key -> "3000",
+      SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key -> "-1") {
+      val query = "SELECT /*+ RUNTIME_FILTER(t) */ * FROM bf4 JOIN " +
+        "(SELECT u.x FROM (SELECT a2, b2 FROM bf2 WHERE a2 IS NOT NULL AND b2 IS NOT NULL) b, " +
+        s"LATERAL ${udtf.name}(b.a2, b.b2) u) t ON bf4.c4 = t.x"
+      assertDidNotRewriteWithBloomFilter(query)
+      assertReturnsRows(query)
+      assertHintNotApplied(query,
+        "the hinted side contains a Python UDF, Python UDTF or external UDF")
     }
   }
 
@@ -3046,8 +3093,10 @@ class InjectRuntimeFilterSuite extends SharedSparkSession
     withSQLConf(SQLConf.RUNTIME_BLOOM_FILTER_APPLICATION_SIDE_SCAN_SIZE_THRESHOLD.key -> "3000") {
       // The inner join prunes `bf5part` with a DPP filter built from `d`, whose `first(c2)` is
       // order-dependent. Only `d`'s build key `b2` reaches that filter, so the hinted side is a
-      // repeatable source of `f5`.
-      assertHintedRewrite(
+      // repeatable source of `f5`. The Bloom filter's subquery computes `first(c2)` as well: it
+      // keeps the columns of the hinted side, to build the broadcast of `d` that the DPP filter
+      // reuses.
+      val query =
         """
           |SELECT /*+ RUNTIME_FILTER(f) */ *
           |FROM   (SELECT p.f5, d.n
@@ -3056,7 +3105,11 @@ class InjectRuntimeFilterSuite extends SharedSparkSession
           |               ON p.f5 = d.b2) f
           |       JOIN bf3
           |       ON f.f5 = bf3.f3
-        """.stripMargin)
+        """.stripMargin
+      assert(hasDynamicPruning(query))
+      assert(bloomFilterApplicationSideKeys(query) == Set("f3"))
+      assert(hintWarnings(query).isEmpty)
+      assertReturnsRows(query)
     }
   }
 
@@ -3131,6 +3184,15 @@ class InjectRuntimeFilterSuite extends SharedSparkSession
           "select /*+ RUNTIME_FILTER(bf4, bf2) */ * from bf4 join bf2 on bf4.c4 > bf2.c2",
           "the runtime filter source is ambiguous")
       }
+    }
+    // The same in an IN subquery: once it is joined with the outer query, the join gets the bloom
+    // filter on `f5` in place of its dropped DPP filter, as without a hint.
+    withDppTestConf(SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key -> "-1") {
+      val subquery = "select * from bf4 where bf4.c4 in (select %s p.f5 from bf5part p " +
+        "join bf2 on p.f5 = bf2.c2 where bf2.a2 = 62)"
+      assert(bloomFilterKeyNames(subquery.format("")).sorted == Seq("c4", "f5"))
+      assert(bloomFilterKeyNames(subquery.format("/*+ RUNTIME_FILTER(p, bf2) */")).sorted ==
+        Seq("c4", "f5"))
     }
   }
 
@@ -3327,6 +3389,12 @@ class InjectRuntimeFilterSuite extends SharedSparkSession
         // A plain column is joined on its collation key, which compares by its bytes.
         assertHintedRewrite("SELECT /*+ RUNTIME_FILTER(d) */ * FROM bf_collated_fact f " +
           "JOIN bf_collated_dim d ON f.k = d.k WHERE d.c = 2")
+        // A group outputs whichever of its values arrives first, all with the same collation key.
+        Seq("SELECT DISTINCT k FROM bf_collated_dim",
+          "SELECT k, count(*) AS n FROM bf_collated_dim GROUP BY k").foreach { side =>
+          assertHintedRewrite("SELECT /*+ RUNTIME_FILTER(d) */ * FROM bf_collated_fact f " +
+            s"JOIN ($side) d ON f.k = d.k")
+        }
       }
     }
   }
@@ -3358,21 +3426,23 @@ class InjectRuntimeFilterSuite extends SharedSparkSession
     assume(shouldTestPythonUDFs)
     val pythonUDF = TestPythonUDF("bf_python_udf")
     registerTestUDF(pythonUDF, spark)
-    try {
-      withSQLConf(SQLConf.RUNTIME_BLOOM_FILTER_APPLICATION_SIDE_SCAN_SIZE_THRESHOLD.key -> "3000",
-        SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key -> "-1") {
-        // The Bloom filter's subquery reads only what its key needs of the hinted side.
-        assertHintedRewrite("SELECT /*+ RUNTIME_FILTER(t) */ * FROM bf4 JOIN " +
-          "(SELECT c2, bf_python_udf(a2) AS x FROM bf2) t ON bf4.c4 = t.c2")
-        // A filter of the hinted side is part of it.
-        val filtered = "SELECT /*+ RUNTIME_FILTER(t) */ * FROM bf4 JOIN " +
-          "(SELECT c2 FROM bf2 WHERE bf_python_udf(a2) IS NOT NULL) t ON bf4.c4 = t.c2"
-        assertNoBloomFilters(filtered)
-        assertHintNotApplied(filtered,
-          "the hinted side contains a Python UDF, Python UDTF or external UDF")
-      }
-    } finally {
-      spark.sessionState.catalog.dropTempFunction(pythonUDF.name, ignoreIfNotExists = true)
+    withSQLConf(SQLConf.RUNTIME_BLOOM_FILTER_APPLICATION_SIDE_SCAN_SIZE_THRESHOLD.key -> "3000",
+      SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key -> "-1") {
+      // The Bloom filter's subquery reads only what its key needs of the hinted side.
+      assertHintedRewrite("SELECT /*+ RUNTIME_FILTER(t) */ * FROM bf4 JOIN " +
+        "(SELECT c2, bf_python_udf(a2) AS x FROM bf2) t ON bf4.c4 = t.c2")
+      // A filter of the hinted side is part of it.
+      val filtered = "SELECT /*+ RUNTIME_FILTER(t) */ * FROM bf4 JOIN " +
+        "(SELECT c2 FROM bf2 WHERE bf_python_udf(a2) IS NOT NULL) t ON bf4.c4 = t.c2"
+      assertNoBloomFilters(filtered)
+      assertHintNotApplied(filtered,
+        "the hinted side contains a Python UDF, Python UDTF or external UDF")
+      // By the time that an IN subquery is joined with the outer query, the UDF is in an
+      // operator of its own, which the Bloom filter's subquery does not read either.
+      val hoisted = "SELECT * FROM bf1 WHERE c1 IN (SELECT /*+ RUNTIME_FILTER(t) */ t.x " +
+        "FROM bf4 JOIN (SELECT c2, bf_python_udf(a2) AS x FROM bf2) t ON bf4.c4 = t.c2)"
+      assert(bloomFilterApplicationSideKeys(hoisted).contains("c4"))
+      assert(hintWarnings(hoisted).isEmpty)
     }
   }
 
@@ -3381,24 +3451,20 @@ class InjectRuntimeFilterSuite extends SharedSparkSession
     assume(shouldTestPythonUDFs)
     val pythonUDF = TestPythonUDF("bf_python_udf")
     registerTestUDF(pythonUDF, spark)
-    try {
-      withSQLConf(SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key -> "-1",
-          SQLConf.ANSI_ENABLED.key -> "true") {
-        // DPP declines the hint for the Python UDF of the hinted side and adds an `onlyInBroadcast`
-        // filter of its own, which physical planning drops without a broadcast to reuse.
-        def query(key: String): String = "SELECT /*+ RUNTIME_FILTER(t) */ * FROM bf5part p JOIN " +
-          s"(SELECT c2, bf_python_udf(a2) AS x FROM bf2 WHERE a2 = 62) t ON $key = t.c2"
-        assert(hasDynamicPruning(query("p.f5")))
-        assertRewroteWithBloomFilter(query("p.f5"))
-        // On the partition column, a Bloom filter would evaluate the narrowing cast on every
-        // partition, before the data filters (SPARK-60809).
-        val narrowed = query("CAST(p.f5 AS TINYINT)")
-        assert(hasDynamicPruning(narrowed))
-        assertNoBloomFilters(narrowed)
-        assertHintNotApplied(narrowed, "a Bloom filter pushed down on the join key could fail")
-      }
-    } finally {
-      spark.sessionState.catalog.dropTempFunction(pythonUDF.name, ignoreIfNotExists = true)
+    withSQLConf(SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key -> "-1",
+        SQLConf.ANSI_ENABLED.key -> "true") {
+      // DPP declines the hint for the Python UDF of the hinted side and adds an `onlyInBroadcast`
+      // filter of its own, which physical planning drops without a broadcast to reuse.
+      def query(key: String): String = "SELECT /*+ RUNTIME_FILTER(t) */ * FROM bf5part p JOIN " +
+        s"(SELECT c2, bf_python_udf(a2) AS x FROM bf2 WHERE a2 = 62) t ON $key = t.c2"
+      assert(hasDynamicPruning(query("p.f5")))
+      assertRewroteWithBloomFilter(query("p.f5"))
+      // On the partition column, a Bloom filter would evaluate the narrowing cast on every
+      // partition, before the data filters (SPARK-60809).
+      val narrowed = query("CAST(p.f5 AS TINYINT)")
+      assert(hasDynamicPruning(narrowed))
+      assertNoBloomFilters(narrowed)
+      assertHintNotApplied(narrowed, "a Bloom filter pushed down on the join key could fail")
     }
   }
 
@@ -3446,6 +3512,190 @@ class InjectRuntimeFilterSuite extends SharedSparkSession
     }
   }
 
+  test("RUNTIME_FILTER hint builds its filters from the hinted side as the join reads it") {
+    withTable("bf_wf", "bf_wd", "bf_wdn", "bf_wd2") {
+      spark.range(2000).selectExpr("id AS v", "CAST(1 + id % 100 AS INT) AS k",
+        "CAST(1 + id % 100 AS INT) AS part").write.partitionBy("part").saveAsTable("bf_wf")
+      // Only `p = 2` has a string that is not a number, and no row of `wd2` with `x = 1` has it.
+      val wd = spark.range(1, 2000)
+        .selectExpr("IF(id < 1999, CAST(id AS STRING), 'abc') AS s", "IF(id < 1999, 1, 2) AS p")
+      wd.write.partitionBy("p").saveAsTable("bf_wd")
+      wd.write.saveAsTable("bf_wdn")
+      sql("SELECT * FROM VALUES (1, 1), (2, 0) AS v(p, x)").write.saveAsTable("bf_wd2")
+      def dppKeys(query: String): Seq[String] =
+        sql(query).queryExecution.optimizedPlan.flatMap {
+          case Filter(condition, _) => condition.collect {
+            case d: DynamicPruningSubquery => d.pruningKey.references.head.name
+          }
+          case _ => Nil
+        }
+      // The hinted `query` gets the Bloom filters on `bloomKeys` and returns what it returns
+      // without `hint`, with `notApplied` as the reason if that hint is not applied.
+      def check(
+          query: String,
+          hint: String,
+          bloomKeys: Seq[String],
+          notApplied: Option[String] = None): Unit = {
+        assert(bloomFilterKeyNames(query).sorted == bloomKeys)
+        notApplied match {
+          case Some(reason) => assertHintNotApplied(query, reason)
+          case None => assert(!hintWarnings(query).exists(_.contains("is not supported")))
+        }
+        // A count would prune the columns that the hinted side outputs.
+        val expected = sql(query.replace(hint, "")).collect()
+        assert(expected.nonEmpty)
+        checkAnswer(sql(query), expected.toSeq)
+      }
+      val cannotFollow = "a DPP filter of a join outside the hinted side prunes it, which the " +
+        "subquery of a hinted filter cannot follow"
+      val d = "(SELECT CAST(s AS INT) AS k, p FROM bf_wdn) d"
+      val z = "(SELECT p FROM bf_wd2 WHERE x = 1) z"
+      withSQLConf(SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key -> "-1",
+          SQLConf.ANSI_ENABLED.key -> "true") {
+        // The join with `wd2` prunes `wd` with a DPP filter that reuses the broadcast of `wd2`.
+        // The subquery of a hinted filter has no such broadcast, so it would read `p = 2` and
+        // fail on the cast: of a DPP filter on `f.part`, and of a Bloom filter on `f.k`.
+        Seq("f.part", "f.k").foreach { key =>
+          val query = "SELECT /*+ RUNTIME_FILTER(d), BROADCAST(wd2), MERGE(d) */ f.v " +
+            s"FROM bf_wf f JOIN (SELECT CAST(s AS INT) AS k, p FROM bf_wd) d ON $key = d.k " +
+            "JOIN bf_wd2 wd2 ON d.p = wd2.p WHERE wd2.x = 1"
+          Seq("true", "false").foreach { aqe =>
+            withSQLConf(SQLConf.ADAPTIVE_EXECUTION_ENABLED.key -> aqe) {
+              assert(dppKeys(query) == Seq("p"))
+              check(query, "RUNTIME_FILTER(d), ", Nil, Some(cannotFollow))
+            }
+          }
+        }
+        // The hinted join above prunes `d` with a Bloom filter, which pushdown brings into `d`
+        // after the hinted filter of the join below is built.
+        check("SELECT /*+ RUNTIME_FILTER(d), RUNTIME_FILTER(z) */ f.v FROM bf_wf f " +
+          s"JOIN $d ON f.k = d.k JOIN $z ON d.p = z.p", "RUNTIME_FILTER(d), ", Seq("k", "p"))
+        // The same for a hinted filter whose key reads both sides of a join in the pruned side:
+        // pushdown leaves it in the condition of that join.
+        check("SELECT /*+ RUNTIME_FILTER(d), RUNTIME_FILTER(z) */ f.v FROM bf_wf f " +
+          s"JOIN bf_wf g ON f.v = g.v JOIN $d ON coalesce(f.k, g.k) = d.k JOIN $z ON d.p = z.p",
+          "RUNTIME_FILTER(d), ", Seq("k", "k", "p"))
+        // The DPP filter of the join within the hinted side `t` reuses the broadcast of `wd2`,
+        // with its column `x`, which the Bloom filter does not read. Its subquery keeps the
+        // column: without it, it would build another broadcast, lose the DPP filter and read
+        // `p = 2`.
+        Seq("true", "false").foreach { aqe =>
+          withSQLConf(SQLConf.ADAPTIVE_EXECUTION_ENABLED.key -> aqe) {
+            val within = "SELECT /*+ RUNTIME_FILTER(t) */ f.v, t.x FROM bf_wf f JOIN " +
+              "(SELECT /*+ BROADCAST(wd2) */ CAST(d.s AS INT) AS k, wd2.x FROM bf_wd d " +
+              "JOIN bf_wd2 wd2 ON d.p = wd2.p WHERE wd2.x = 1 AND CAST(d.s AS INT) > 0) t " +
+              "ON f.k = t.k"
+            assert(dppKeys(within) == Seq("p"))
+            check(within, "/*+ RUNTIME_FILTER(t) */ ", Seq("k"))
+          }
+        }
+        // Pushdown moves the Bloom filter of the join within the hinted side `t` below the
+        // aggregate, after the hinted filter on `f` is built: a Bloom filter on `f.k`, and a DPP
+        // filter on `f.part`.
+        val t = "(SELECT /*+ RUNTIME_FILTER(z) */ d.k FROM (SELECT k, p FROM " +
+          s"(SELECT CAST(s AS INT) AS k, p FROM bf_wdn) GROUP BY k, p) d JOIN $z ON d.p = z.p) t"
+        check(s"SELECT /*+ RUNTIME_FILTER(t) */ f.v FROM bf_wf f JOIN $t ON f.k = t.k",
+          "/*+ RUNTIME_FILTER(t) */ ", Seq("k", "p"))
+        val pruned = s"SELECT /*+ RUNTIME_FILTER(t) */ f.v FROM bf_wf f JOIN $t ON f.part = t.k"
+        assert(dppKeys(pruned) == Seq("part"))
+        check(pruned, "/*+ RUNTIME_FILTER(t) */ ", Seq("p"))
+        // The join within the hinted side `t` loses its own hinted filter, and the filter that is
+        // built from `t` does not keep a copy of it.
+        check("SELECT /*+ RUNTIME_FILTER(t) */ g.v FROM bf_wf g JOIN " +
+          "(SELECT /*+ RUNTIME_FILTER(d), BROADCAST(wd2), MERGE(d) */ f.k FROM bf_wf f " +
+          "JOIN (SELECT CAST(s AS INT) AS k, p FROM bf_wd) d ON f.k = d.k " +
+          "JOIN bf_wd2 wd2 ON d.p = wd2.p WHERE wd2.x = 1) t ON g.k = t.k",
+          "/*+ RUNTIME_FILTER(t) */ ", Seq("k"), Some(cannotFollow))
+        // The hint is decided in the IN subquery, before the outer query prunes `wd` with a DPP
+        // filter of its own subquery.
+        withSQLConf(SQLConf.DYNAMIC_PARTITION_PRUNING_REUSE_BROADCAST_ONLY.key -> "false") {
+          check("SELECT * FROM bf_wd2 o WHERE o.x = 1 AND o.p IN " +
+            "(SELECT /*+ RUNTIME_FILTER(d) */ d.p FROM bf_wf f " +
+            "JOIN (SELECT CAST(s AS INT) AS k, p FROM bf_wd) d ON f.k = d.k)",
+            "/*+ RUNTIME_FILTER(d) */ ", Nil, Some(cannotFollow))
+          // The same for the copy of the filter in a union branch with a literal key, whose hash
+          // is a literal by then.
+          check("SELECT * FROM bf_wd2 o WHERE o.x = 1 AND o.p IN " +
+            "(SELECT /*+ RUNTIME_FILTER(d) */ d.p FROM " +
+            "(SELECT k FROM bf_wf UNION ALL SELECT 7 AS k FROM bf_wf) f " +
+            "JOIN (SELECT CAST(s AS INT) AS k, p FROM bf_wd) d ON f.k = d.k)",
+            "/*+ RUNTIME_FILTER(d) */ ", Nil, Some(cannotFollow))
+          // And when the key of the hinted side is an alias that the optimizer removes once the
+          // subquery, whose output it was, is joined with the outer query.
+          check("SELECT * FROM bf_wd2 o WHERE o.x = 1 AND o.p IN " +
+            "(SELECT /*+ RUNTIME_FILTER(d) */ d.p FROM bf_wf f " +
+            "JOIN (SELECT p AS p FROM bf_wd WHERE CAST(s AS INT) > 0) d ON f.k = d.p)",
+            "/*+ RUNTIME_FILTER(d) */ ", Nil, Some(cannotFollow))
+        }
+        // Without that DPP filter, the hinted filter is built again on the key without the alias.
+        check("SELECT * FROM bf_wd2 o WHERE o.p IN " +
+          "(SELECT /*+ RUNTIME_FILTER(d) */ d.p FROM bf_wf f " +
+          "JOIN (SELECT p AS p FROM bf_wd2 WHERE x = 1) d ON f.k = d.p)",
+          "/*+ RUNTIME_FILTER(d) */ ", Seq("k"))
+      }
+      // A DPP filter of a join within the hinted side prunes the subquery as it does the join.
+      withDppTestConf() {
+        val within = "SELECT /*+ RUNTIME_FILTER(t) */ * FROM bf4 JOIN " +
+          "(SELECT /*+ BROADCAST(bf2) */ p.f5 FROM bf5part p JOIN bf2 ON p.f5 = bf2.c2 " +
+          "WHERE bf2.a2 = 36) t ON bf4.c4 = t.f5"
+        assert(dppKeys(within).nonEmpty)
+        check(within, "/*+ RUNTIME_FILTER(t) */ ", Seq("c4"))
+      }
+      // Each join keeps its own filters, though the hinted side of the one within `t` and `t`
+      // itself output the same column.
+      withSQLConf(SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key -> "-1") {
+        val nested = "SELECT /*+ RUNTIME_FILTER(t) */ bf4.a4 FROM bf4 JOIN " +
+          "(SELECT /*+ RUNTIME_FILTER(bf1), RUNTIME_FILTER(bf3) */ bf1.c1 FROM bf1 " +
+          "JOIN bf2 ON bf1.c1 = bf2.c2 JOIN bf3 ON bf1.c1 = bf3.c3) t ON bf4.c4 = t.c1"
+        assert(bloomFilterKeyNames(nested).sorted == Seq("c1", "c2", "c4"))
+        assert(hintWarnings(nested).isEmpty)
+        checkAnswer(sql(nested), sql(nested.replaceAll("/\\*\\+ [A-Z_(), a-z0-9]+ \\*/ ", "")))
+        // The join above filters `h2` on its row number, which another evaluation can assign
+        // differently, so `h2` as the join below reads it is no source of a filter.
+        val unstable = "SELECT /*+ RUNTIME_FILTER(h2), RUNTIME_FILTER(h1) */ * FROM bf1 a JOIN " +
+          "(SELECT c2 AS k, row_number() OVER (PARTITION BY b2 ORDER BY a2) AS rn FROM bf2) h2 " +
+          "ON a.c1 = h2.k JOIN bf3 h1 ON h2.rn = h1.c3"
+        assert(bloomFilterKeyNames(unstable) == Seq("rn"))
+        assertHintNotApplied(unstable,
+          "the hinted side may produce different rows or join keys when evaluated again")
+        // The join above loses that filter when a DPP filter prunes its own hinted side `h1`, so
+        // `h2` is the source of a filter for the join below after all.
+        val settled = "SELECT /*+ RUNTIME_FILTER(h2), RUNTIME_FILTER(h1), BROADCAST(z) */ * " +
+          "FROM bf1 a JOIN (SELECT c2 AS k, row_number() OVER (PARTITION BY b2 ORDER BY a2) " +
+          "AS rn FROM bf2) h2 ON a.c1 = h2.k JOIN bf5part h1 ON h2.rn = h1.c5 " +
+          "JOIN bf3 z ON h1.f5 = z.c3 WHERE z.a3 = 10"
+        assert(bloomFilterKeyNames(settled) == Seq("c1"))
+        val warnings = hintWarnings(settled)
+        assert(warnings.size == 1 && warnings.head.contains(cannotFollow))
+        // In an IN subquery, the join below is left to the heuristics once the subquery is joined
+        // with the outer query, like a join whose hinted side is declined to begin with.
+        withSQLConf(
+            SQLConf.RUNTIME_BLOOM_FILTER_APPLICATION_SIDE_SCAN_SIZE_THRESHOLD.key -> "3000") {
+          val hoisted = "SELECT * FROM bf4 WHERE bf4.c4 IN (SELECT /*+ RUNTIME_FILTER(h2), " +
+            "RUNTIME_FILTER(h1) */ a.c1 FROM (SELECT * FROM bf1 WHERE a1 = 5) a JOIN " +
+            "(SELECT c2 AS k, row_number() OVER (PARTITION BY b2 ORDER BY a2) AS rn FROM bf2) h2 " +
+            "ON a.c1 = h2.k JOIN bf3 h1 ON h2.rn = h1.c3)"
+          assert(bloomFilterKeyNames(hoisted).sorted == Seq("c4", "k", "rn"))
+          assert(hintWarnings(hoisted).count(_.contains("is not supported")) == 1)
+        }
+        // In an IN subquery, the join with `r` prunes the hinted `d` with a DPP filter that finds
+        // no broadcast to reuse, so the hinted DPP filter on `f` stays.
+        val hinted = "SELECT * FROM bf4 WHERE bf4.c4 IN (SELECT /*+ RUNTIME_FILTER(d)%s */ f.c5 " +
+          "FROM bf5part f JOIN bf5filtered d ON f.f5 = d.f5 " +
+          "JOIN (SELECT c2 AS k FROM bf2 WHERE a2 > 1) r ON d.f5 = r.k)"
+        assert(hasHintedDynamicPruning(hinted.format("")))
+        assert(hintWarnings(hinted.format("")).isEmpty)
+        // With the broadcast of `r`, the pass over the subquery reports the hint. It is not decided
+        // again once the subquery is joined with the outer query: DPP adds no filter that honors
+        // it then.
+        val reported = hinted.format(", BROADCAST(r)")
+        assert(!hasHintedDynamicPruning(reported))
+        assert(hintWarnings(reported).count(_.contains("is not supported")) == 1)
+        assertHintNotApplied(reported, cannotFollow)
+      }
+    }
+  }
+
   test("RUNTIME_FILTER hint takes a materialized CTE whose definition is repeatable") {
     withSQLConf(SQLConf.RUNTIME_BLOOM_FILTER_APPLICATION_SIDE_SCAN_SIZE_THRESHOLD.key -> "3000",
       SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key -> "-1") {
@@ -3477,8 +3727,35 @@ class InjectRuntimeFilterSuite extends SharedSparkSession
       assert(!hintWarnings(query).exists(_.contains("is not supported")))
       assertReturnsRows(query)
       checkAnswer(sql(query), sql(query.replace("/*+ RUNTIME_FILTER(d) */ ", "")))
-      // A scalar subquery is planned on its own, so no pass decides its hint and its join stays
-      // as without the hint.
+      // Until then, the subquery adds no filter for the join either, next to which the hinted one
+      // would be a second filter on the same key.
+      val nested = "WITH x AS MATERIALIZED (SELECT b1 AS k FROM bf1) " +
+        "SELECT * FROM bf4 WHERE bf4.c4 IN (SELECT /*+ RUNTIME_FILTER(d) */ bf3.c3 FROM bf3 " +
+        "JOIN (SELECT bf2.c2 FROM bf2 JOIN x ON bf2.b2 = x.k WHERE bf2.a2 = 62) d " +
+        "ON bf3.c3 = d.c2)"
+      assert(bloomFilterKeyNames(nested).count(_ == "c3") == 1)
+      assert(hintWarnings(nested).isEmpty)
+      checkAnswer(sql(nested), sql(nested.replace("/*+ RUNTIME_FILTER(d) */ ", "")))
+      // Nor does the subquery prune the hinted side with a DPP filter of this join, which the
+      // outer query would then find there.
+      withSQLConf(SQLConf.DYNAMIC_PARTITION_PRUNING_REUSE_BROADCAST_ONLY.key -> "false") {
+        val prunable = "WITH x AS MATERIALIZED (SELECT b1 AS k FROM bf1) " +
+          "SELECT * FROM bf4 WHERE bf4.c4 IN (SELECT /*+ RUNTIME_FILTER(d) */ bf2.c2 FROM bf2 " +
+          "JOIN (SELECT p.f5 FROM bf5part p JOIN x ON p.b5 = x.k) d ON bf2.c2 = d.f5 " +
+          "WHERE bf2.a2 = 62)"
+        assert(!hasDynamicPruning(prunable))
+        assert(bloomFilterKeyNames(prunable).contains("c2"))
+        assert(hintWarnings(prunable).isEmpty)
+      }
+      // The same when the hinted side reads the CTE in a subquery of one of its expressions.
+      val inExpression = "WITH x AS MATERIALIZED (SELECT max(a1) AS m FROM bf1) " +
+        "SELECT * FROM bf4 WHERE bf4.c4 IN (SELECT /*+ RUNTIME_FILTER(d) */ bf3.c3 FROM bf3 " +
+        "JOIN (SELECT c2 FROM bf2 WHERE a2 < (SELECT m FROM x)) d ON bf3.c3 = d.c2)"
+      assert(bloomFilterApplicationSideKeys(inExpression).contains("c3"))
+      assert(hintWarnings(inExpression).isEmpty)
+      checkAnswer(sql(inExpression), sql(inExpression.replace("/*+ RUNTIME_FILTER(d) */ ", "")))
+      // A scalar subquery is planned on its own, so no pass decides its hint and its join gets no
+      // Bloom filter.
       val scalar = "WITH d AS MATERIALIZED (SELECT c2 FROM bf2 WHERE a2 < 60) SELECT " +
         "(SELECT /*+ RUNTIME_FILTER(d) */ count(*) FROM bf3 JOIN d ON bf3.c3 = d.c2) AS n"
       assert(sql(scalar).queryExecution.optimizedPlan.collectWithSubqueries {

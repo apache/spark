@@ -179,9 +179,12 @@ filter from, to prune the other side. Spark decides on its own whether a runtime
 building, based on statistics; the hint overrides that decision, but not the requirements that make
 the filter correct, so Spark is not guaranteed to follow it and issues a warning when it cannot.
 Spark may also decline the hint because of configured limits on runtime filters; the warning names
-the reason. When the hinted side cannot be the source of a runtime filter, Spark plans the join as
-without the hint; when Spark declines the hint for another reason, it does not build a filter in the
-other direction instead.
+the reason. The one exception is a hint in a subquery that Spark plans on its own, such as a scalar
+or `EXISTS` subquery, when the hinted side reads a `MATERIALIZED` common table expression defined
+outside that subquery: Spark ignores the hint without a warning, and builds no runtime filter for
+that join. When the hinted side cannot be the source of a runtime filter, Spark plans the join as
+without the hint; when Spark declines the hint for another reason, it does not build a filter in
+the other direction instead.
 
 #### Runtime Filter Hints Types
 
@@ -230,6 +233,13 @@ other direction instead.
     broadcast to reuse, the hinted side's distinct join keys are collected to the driver and count
     toward `spark.driver.maxResultSize`. Hint a side whose size and distinct key count stay within
     these limits.
+
+    The filter is built from the hinted side apart from the join. When a dynamic partition pruning
+    filter of a join outside the hinted side prunes it, the hinted filter cannot follow that
+    pruning and would read rows that the join never reads, so Spark declines the hint. Hint a
+    relation that contains that other join instead. The hinted side must also stay repeatable with
+    the runtime filters that other joins push into it: when one of them filters on a value that can
+    differ between evaluations, such as a row number, Spark plans the join as without the hint.
 
 #### Examples
 

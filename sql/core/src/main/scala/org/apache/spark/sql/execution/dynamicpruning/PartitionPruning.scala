@@ -330,6 +330,9 @@ object PartitionPruning extends Rule[LogicalPlan] with PredicateHelper with Join
       // skip this rule if there's already a DPP subquery on the LHS of a join
       case j @ Join(Filter(_: DynamicPruningSubquery, _), _, _, _, _) => j
       case j @ Join(_, Filter(_: DynamicPruningSubquery, _), _, _, _) => j
+      // An earlier pass decided the join's runtime filter hint and built its filters, or reported
+      // why not. A new DPP filter here would honor a hint that was reported, or prune its side.
+      case j: Join if isRuntimeFilterHintDecided(j.hint) => j
       case j @ Join(left, right, joinType, Some(condition), hint) =>
         var newLeft = left
         var newRight = right
@@ -356,8 +359,11 @@ object PartitionPruning extends Rule[LogicalPlan] with PredicateHelper with Join
             if (hintedSource.contains(BuildRight)) check.rejection(l, r, checkFunctions)
             else check.rejection(r, l, checkFunctions)
           }
-        val declined = hintedSource.isDefined &&
-          leftKeys.lazyZip(rightKeys).forall(hintRejection(_, _, checkFunctions = false).isDefined)
+        val keyRejections =
+          leftKeys.lazyZip(rightKeys).map(hintRejection(_, _, checkFunctions = false))
+        val declined = hintedSource.isDefined && keyRejections.forall(_.isDefined)
+        // Until the pass over the outer query decides the hint, the join gets no DPP filter.
+        val leftToOuterQuery = leavesRuntimeFilterHintToOuterQuery(plan, keyRejections)
         val pruneLeftHinted = !declined && hintedSource.contains(BuildRight)
         val pruneRightHinted = !declined && hintedSource.contains(BuildLeft)
         // Whether the hinted side honors the hint for pruning on the key pair. Otherwise DPP
@@ -377,7 +383,7 @@ object PartitionPruning extends Rule[LogicalPlan] with PredicateHelper with Join
           fromLeftRight(x, y) || fromLeftRight(y, x)
         }
 
-        splitConjunctivePredicates(condition).foreach {
+        (if (leftToOuterQuery) Nil else splitConjunctivePredicates(condition)).foreach {
           case EqualTo(a: Expression, b: Expression)
               if fromDifferentSides(a, b) =>
             val (l, r) = if (a.references.subsetOf(left.outputSet) &&

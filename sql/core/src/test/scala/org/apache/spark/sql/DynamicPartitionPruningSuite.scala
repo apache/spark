@@ -2201,21 +2201,17 @@ abstract class DynamicPartitionPruningDataSourceSuiteBase
     // The same holds for a Python UDTF, even a deterministic one.
     val udtf = TestPythonUDTF(name = "dpp_udtf")
     spark.udtf.registerPython(udtf.name, udtf.udtf.copy(udfDeterministic = true))
-    try {
-      withSQLConf(SQLConf.DYNAMIC_PARTITION_PRUNING_ENABLED.key -> "true",
-          SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key -> "-1") {
-        val hinted = sql(
-          s"""SELECT /*+ RUNTIME_FILTER(s) */ f.date_id, f.store_id
-             |FROM fact_sk f
-             |JOIN (SELECT u.x AS k FROM dim_store, LATERAL ${udtf.name}(store_id, store_id) u) s
-             |ON f.store_id = s.k""".stripMargin)
-        checkPartitionPruningPredicate(hinted, withSubquery = false, withBroadcast = false)
-        checkAnswer(hinted,
-          sql("SELECT date_id, store_id FROM fact_sk JOIN (SELECT store_id FROM dim_store " +
-            "UNION ALL SELECT store_id FROM dim_store) USING (store_id)").collect().toSeq)
-      }
-    } finally {
-      spark.sessionState.catalog.dropTempFunction(udtf.name, ignoreIfNotExists = true)
+    withSQLConf(SQLConf.DYNAMIC_PARTITION_PRUNING_ENABLED.key -> "true",
+        SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key -> "-1") {
+      val hinted = sql(
+        s"""SELECT /*+ RUNTIME_FILTER(s) */ f.date_id, f.store_id
+           |FROM fact_sk f
+           |JOIN (SELECT u.x AS k FROM dim_store, LATERAL ${udtf.name}(store_id, store_id) u) s
+           |ON f.store_id = s.k""".stripMargin)
+      checkPartitionPruningPredicate(hinted, withSubquery = false, withBroadcast = false)
+      checkAnswer(hinted,
+        sql("SELECT date_id, store_id FROM fact_sk JOIN (SELECT store_id FROM dim_store " +
+          "UNION ALL SELECT store_id FROM dim_store) USING (store_id)").collect().toSeq)
     }
   }
 
