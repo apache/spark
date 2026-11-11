@@ -16,16 +16,12 @@
 #
 
 # Generate after Jekyll copies the static dashboard and its assets. Keep generated
-# workflow metadata out of source control and reuse the existing Pages deployment.
+# workflow metadata out of source control. Pages overlays the dedicated dashboard artifact.
 Jekyll::Hooks.register :site, :post_write do |site|
   root = File.expand_path('..', site.source)
   generator = File.join(root, 'dev', 'generate-ci-dashboard.py')
   output = File.join(site.dest, 'ci-dashboard-data.json')
   args = ['python3', generator, '--repo', root, '--output', output]
-  if ENV['CI_DASHBOARD_HISTORY'] == '1'
-    args += ['--history', '--history-cache',
-             File.join(root, 'docs', '_generated', 'ci-dashboard-history.json')]
-  end
   unless system(*args)
     raise 'Failed to generate CI dashboard metadata'
   end

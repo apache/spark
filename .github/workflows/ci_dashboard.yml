@@ -1,0 +1,77 @@
+#
+# Licensed to the Apache Software Foundation (ASF) under one
+# or more contributor license agreements.  See the NOTICE file
+# distributed with this work for additional information
+# regarding copyright ownership.  The ASF licenses this file
+# to you under the Apache License, Version 2.0 (the
+# "License"); you may not use this file except in compliance
+# with the License.  You may obtain a copy of the License at
+#
+#   http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing,
+# software distributed under the License is distributed on an
+# "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
+# KIND, either express or implied.  See the License for the
+# specific language governing permissions and limitations
+# under the License.
+#
+
+name: CI dashboard
+
+on:
+  # Build before the daily Pages deployment at 12:30 UTC.
+  schedule:
+    - cron: '30 11 * * *'
+  workflow_dispatch:
+
+concurrency:
+  group: ci-dashboard
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+  actions: read
+
+jobs:
+  dashboard:
+    name: Build CI dashboard
+    if: github.repository == 'apache/spark'
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - name: Checkout Spark repository
+        uses: actions/checkout@v7
+        with:
+          ref: master
+          persist-credentials: false
+      - name: Set up Python
+        uses: actions/setup-python@v7
+        with:
+          python-version: '3.12'
+      - name: Install dashboard dependency
+        run: python -m pip install --disable-pip-version-check pyyaml
+      - name: Restore CI timing history
+        continue-on-error: true
+        uses: actions/cache@v6
+        with:
+          path: docs/_generated/ci-dashboard-history.json
+          key: ci-dashboard-history-v2-${{ github.run_id }}-${{ github.run_attempt }}
+          restore-keys: ci-dashboard-history-v2-
+      - name: Build dashboard and collect job timings
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          python dev/generate-ci-dashboard.py \
+            --history --history-cache docs/_generated/ci-dashboard-history.json \
+            --output docs/_generated/ci-dashboard/ci-dashboard-data.json
+          install -Dm644 docs/ci-dashboard.html docs/_generated/ci-dashboard/ci-dashboard.html
+          install -Dm644 docs/css/ci-dashboard.css docs/_generated/ci-dashboard/css/ci-dashboard.css
+          install -Dm644 docs/js/ci-dashboard.js docs/_generated/ci-dashboard/js/ci-dashboard.js
+      - name: Upload CI dashboard
+        uses: actions/upload-artifact@v7
+        with:
+          name: ci-dashboard
+          path: docs/_generated/ci-dashboard/
+          if-no-files-found: error
+          retention-days: 14

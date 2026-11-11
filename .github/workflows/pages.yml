@@ -45,8 +45,6 @@ jobs:
     env:
       SPARK_TESTING: 1 # Reduce some noise in the logs
       RELEASE_VERSION: 'In-Progress'
-      CI_DASHBOARD_HISTORY: '1'
-      GH_TOKEN: ${{ github.token }}
       LC_ALL: C.UTF-8
       LANG: C.UTF-8
     if: github.repository == 'apache/spark'
@@ -59,13 +57,6 @@ jobs:
       - name: Add GITHUB_WORKSPACE to git trust safe.directory
         run: |
           git config --global --add safe.directory ${GITHUB_WORKSPACE}
-      - name: Restore CI timing history
-        continue-on-error: true
-        uses: actions/cache@v6
-        with:
-          path: docs/_generated/ci-dashboard-history.json
-          key: ci-dashboard-history-v2-${{ github.run_id }}-${{ github.run_attempt }}
-          restore-keys: ci-dashboard-history-v2-
       - name: Free up disk space
         run: ./dev/free_disk_space_container
       - name: Install Java 21
@@ -89,6 +80,34 @@ jobs:
           sed -i".tmp4" 's/__version__: str = .*$/__version__: str = "'"$RELEASE_VERSION"'"/' python/pyspark/version.py
           cd docs
           SKIP_RDOC=1 bundle exec jekyll build
+      - name: Find latest CI dashboard
+        id: dashboard
+        continue-on-error: true
+        uses: actions/github-script@v9
+        with:
+          retries: 3
+          script: |
+            const {data} = await github.rest.actions.listWorkflowRuns({
+              ...context.repo,
+              workflow_id: 'ci_dashboard.yml',
+              branch: 'master',
+              status: 'success',
+              per_page: 1
+            });
+            if (data.workflow_runs.length) {
+              core.setOutput('run_id', data.workflow_runs[0].id);
+            } else {
+              core.notice('No completed CI dashboard; publishing offline metadata.');
+            }
+      - name: Download CI dashboard
+        if: steps.dashboard.outputs.run_id != ''
+        continue-on-error: true
+        uses: actions/download-artifact@v8
+        with:
+          name: ci-dashboard
+          path: docs/_site
+          github-token: ${{ github.token }}
+          run-id: ${{ steps.dashboard.outputs.run_id }}
       - name: Setup Pages
         uses: actions/configure-pages@v6
       - name: Upload artifact

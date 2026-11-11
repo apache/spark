@@ -342,7 +342,8 @@ if (typeof document !== 'undefined') {
         'Usage is assigned to execution hours, including jobs crossing the window boundary.';
     } else {
       $('push-status').textContent = 'Upstream push measurements are unavailable. ' +
-        (snapshot.history?.pushError || 'The Pages deployment collects recent Actions timings.');
+        (snapshot.history?.pushError ||
+          'The CI dashboard workflow collects recent Actions timings.');
     }
   }
   function renderPolicy() {
@@ -396,7 +397,8 @@ if (typeof document !== 'undefined') {
         'Calendar weeks use Monday through Sunday UTC. ' +
         `Estimates cover ${data.profiles}/${data.targets} scheduled targets plus observed push ` +
         'activity; unprofiled targets and future manual runs are unmodeled.'
-      : 'Policy measurements are unavailable. The Pages deployment collects job timings.';
+      : 'Policy measurements are unavailable. ' +
+        'The CI dashboard workflow collects job timings.';
   }
   function renderCalendar(values, types, countMode) {
     const table = $('calendar');
@@ -479,7 +481,7 @@ if (typeof document !== 'undefined') {
       `${data.actualDays} observed days / ${data.futureDays} future days / ` +
       `${data.unknownDays} past days without measurements. Today is measured so far.`;
     $('load-status').textContent = countMode
-      ? 'The Pages deployment collects actual timestamps. No actual burden is inferred from crons.'
+      ? 'The CI dashboard workflow collects actual timestamps. Burden is not inferred from crons.'
       : `Actual measurements end at ${data.observedUntil || 'unavailable'}. ` +
         'Forecasts start after ' +
         `${data.today} UTC and combine scheduled job profiles with a push baseline from ` +
