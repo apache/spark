@@ -5851,6 +5851,36 @@ class KeyGroupedPartitioningSuite extends DistributionAndOrderingSuiteBase {
       }
     }
   }
+
+  test("SPARK-60460: nested SPJ shuffles when compatible transforms share partition values") {
+    val idCol = Array(Column.create("id", LongType))
+    createTable("pa12", idCol, Array(bucket(12, "id")))
+    createTable("pd", idCol, Array.empty)
+    createTable("pb8", idCol, Array(bucket(8, "id")))
+    // 12 is bucket 0 on pa12 and bucket 4 on pb8. The other ids make both scans report 0-7.
+    val ids = (0L to 7L) :+ 12L
+    Seq("pa12", "pd", "pb8").foreach { t =>
+      sql(s"INSERT INTO testcat.ns.$t VALUES ${ids.map(i => s"($i)").mkString(", ")}")
+    }
+
+    Seq(true, false).foreach { aqe =>
+      withSQLConf(
+        SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key -> "-1",
+        SQLConf.ADAPTIVE_EXECUTION_ENABLED.key -> aqe.toString,
+        SQLConf.V2_BUCKETING_SHUFFLE_ENABLED.key -> "true",
+        SQLConf.V2_BUCKETING_ALLOW_COMPATIBLE_TRANSFORMS.key -> "true") {
+        val df = sql(
+          """
+            |SELECT /*+ MERGE(pa12, pd, pb8) */ pa12.id, pd.id, pb8.id
+            |FROM testcat.ns.pa12 JOIN testcat.ns.pd ON pa12.id = pd.id
+            |JOIN testcat.ns.pb8 ON pa12.id = pb8.id
+            |""".stripMargin)
+        checkAnswer(df, ids.map(i => Row(i, i, i)))
+        assert(collectAllShuffles(df.queryExecution.executedPlan).size == 2,
+          s"expected two shuffles, got:\n${df.queryExecution.executedPlan}")
+      }
+    }
+  }
 }
 
 /**
