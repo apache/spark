@@ -259,14 +259,14 @@ class ArrowColumnarPythonUDFSuite extends SharedSparkSession {
 
       val numRows = 2000
       val numBatches = 20
-      // Returns the data sent to Python for the batches of the reader, with and without the three
+      // Returns the data sent to Python for the batches of the reader, with and without the
       // batches without rows that it can also return, first, in the middle and last.
       def dataSent(input: String, emptyBatches: Boolean): Long = {
         val result = readArrowSource(numRows = numRows, batchSize = numRows / numBatches,
             emptyBatches = emptyBatches)
           .selectExpr("id", "name", "value", "data", s"arrow_empty_udf($input) as udf_name")
         val arrowExec = singleArrowEvalPythonExec(result.queryExecution.executedPlan)
-        val numEmpty = if (emptyBatches) 3 else 0
+        val numEmpty = if (emptyBatches) ArrowBackedDataSourceV2.NUM_EMPTY_BATCHES else 0
 
         ArrowBackedDataSourceV2.resetBatchCounters()
         val rows = result.collect()
