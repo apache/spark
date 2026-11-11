@@ -885,6 +885,36 @@ class ParquetVectorizedSuite extends ParquetTest with SharedSparkSession {
     }
   }
 
+  test("SPARK-61460: Vectorized reader resets the levels of a NullType field for each batch") {
+    withTempPath { dir =>
+      val schema = new StructType().add("c",
+        ArrayType(new StructType().add("n", NullType).add("a", IntegerType)))
+      val rows = (0 until 3).map(i => Row(Seq(Row(null, i))))
+      spark.createDataFrame(spark.sparkContext.parallelize(rows, numSlices = 1), schema)
+        .write.parquet(dir.getCanonicalPath)
+
+      withSQLConf(SQLConf.PARQUET_VECTORIZED_READER_BATCH_SIZE.key -> "1") {
+        val file = TestUtils.listDirectory(dir).head
+        val reader = createVectorizedReader(file, schema, offheapEnabled = false)
+        try {
+          var numBatches = 0
+          while (reader.nextKeyValue()) {
+            numBatches += 1
+            // `n` is not the last field, so the struct does not share and reset its levels.
+            val n = ParquetTestAccess.columnVectors(reader).head
+              .asInstanceOf[ParquetColumnVector].getLeaves.get(0)
+            assert(n.getValueVector.dataType == NullType)
+            assert(n.getRepetitionLevelVector.getElementsAppended == 1)
+            assert(n.getDefinitionLevelVector.getElementsAppended == 1)
+          }
+          assert(numBatches == 3)
+        } finally {
+          reader.close()
+        }
+      }
+    }
+  }
+
   private def truncateTypeTest(
     testName: String,
     readType: DataType,
