@@ -19,10 +19,12 @@ package org.apache.spark.sql.catalyst.expressions
 
 import java.util.concurrent.ConcurrentHashMap
 
+import scala.jdk.CollectionConverters._
 import scala.util.{Failure, Success, Try}
 import scala.util.control.NonFatal
 
-import org.apache.spark.internal.Logging
+import org.apache.spark.{SparkThrowable, SparkThrowableHelper}
+import org.apache.spark.internal.{Logging, MessageWithContext}
 import org.apache.spark.internal.LogKeys.{ARGS, CLASS_NAME, ERROR, FUNCTION_NAME, FUNCTION_PARAM}
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.codegen.{CodegenContext, ExprCode}
@@ -244,7 +246,8 @@ case class TransformExpression(
         TransformExpression.methodLookupFailure(call) match {
           case None => Some(call)
           case failure =>
-            TransformExpression.logArgumentsMismatch(scalarFunc, arguments.map(_.dataType),
+            // The types the call was resolved over, i.e. after the casts of narrower arguments.
+            TransformExpression.logArgumentsMismatch(scalarFunc, typed.flatten.map(_.dataType),
               declaredTypes, failure)
             None
         }
@@ -268,9 +271,10 @@ case class TransformExpression(
 object TransformExpression extends Logging {
   /**
    * What was logged once, keyed by its kind: `notScalar:functionClass`,
-   * `mismatch:functionClass:argumentTypes:declaredTypes`, since one class can declare other input
-   * types per instance, e.g. one per column type, and `failure:functionClass:failureClass`, so
-   * that a function class that fails in another way is warned about again.
+   * `mismatch:functionClass:argumentTypes:declaredTypes` and its `unreachable:` counterpart for a
+   * method that cannot be invoked, since one class can declare other input types per instance,
+   * e.g. one per column type, and `failure:functionClass:failureClass`, so that a function class
+   * that fails in another way is warned about again.
    */
   private val loggedOnce: java.util.Set[String] = ConcurrentHashMap.newKeySet[String]()
 
@@ -286,59 +290,104 @@ object TransformExpression extends Logging {
     try value catch { case NonFatal(_) | _: LinkageError => fallback }
 
   /**
-   * Logs that `function`'s input types do not take `argumentTypes`, see `evaluableFunction`, with
-   * the failure to look up the method the call invokes, when that is what refused it. A
-   * user-defined type is named by its class, since its `catalogString` is its `sqlType`'s.
+   * `dataType` for a log line, a user-defined type by its class, since its `catalogString` is its
+   * `sqlType`'s. That `sqlType` is connector code, so `?` when it throws.
+   */
+  private def typeName(dataType: DataType): String = dataType match {
+    case udt: UserDefinedType[_] =>
+      s"${udt.getClass.getName}(${orElse(udt.sqlType.catalogString, "?")})"
+    case other => other.catalogString
+  }
+
+  private def typeList(types: Seq[DataType]): String = types.map(typeName).mkString("(", ", ", ")")
+
+  /** `function` for a log line: "partition transform NAME (CLASS)". */
+  private def transformLabel(function: BoundFunction): MessageWithContext = {
+    val functionClass = function.getClass.getName
+    log"partition transform ${MDC(FUNCTION_NAME, orElse(function.name(), functionClass))} " +
+      log"(${MDC(CLASS_NAME, functionClass)})"
+  }
+
+  /**
+   * What `e`, a failure to look up the method a call invokes, says about the lookup, for the
+   * info line: a `SparkThrowable`'s message template filled in, without the condition and SQL
+   * state that its message carries, and that read as a Spark bug for the `INTERNAL_ERROR` of
+   * `methodNotFoundError`. Anything else by `toString`, so with its class. The failure's class
+   * alone when that text throws, is null or is empty. The debug line has the whole failure.
+   */
+  private[expressions] def failureText(e: Throwable): String = {
+    val text = orElse(e match {
+      case t: SparkThrowable if t.getCondition != null =>
+        SparkThrowableHelper.errorReader.getErrorMessage(t.getCondition,
+          t.getMessageParameters.asScala.toMap)
+      case _ => e.toString
+    }, null)
+    Option(text).map(_.trim).filter(_.nonEmpty).getOrElse(e.getClass.getName)
+  }
+
+  /**
+   * The line `logArgumentsMismatch` logs, for the argument and declared type lists. With
+   * `lookupFailure`, the arguments suit the input types, cast where they are narrower, but the
+   * method the call resolves to cannot be invoked with them, and the line ends with what the
+   * lookup says. Without it, there is no `ERROR` in its context.
+   */
+  private[expressions] def argumentsMismatchMessage(
+      function: BoundFunction,
+      arguments: String,
+      declared: String,
+      lookupFailure: Option[Throwable]): MessageWithContext = {
+    val head = log"The " + transformLabel(function) + log" declares the input types " +
+      log"${MDC(FUNCTION_PARAM, declared)}, "
+    lookupFailure match {
+      case None =>
+        head + log"which do not take arguments of types ${MDC(ARGS, arguments)}, so a " +
+          log"storage-partitioned join does not evaluate it"
+      case Some(e) =>
+        head + log"but the method its call resolves to cannot be invoked with arguments of " +
+          log"types ${MDC(ARGS, arguments)}, since it or its class is not public or it does not " +
+          log"take their Java classes, so a storage-partitioned join does not evaluate it: " +
+          log"${MDC(ERROR, failureText(e))}"
+    }
+  }
+
+  /**
+   * Logs that `function`'s input types do not take `argumentTypes`, or, with `lookupFailure`, that
+   * the method its call resolves to cannot be invoked with them, see `evaluableFunction` and
+   * `argumentsMismatchMessage`. A lookup failure is logged with its stack trace at debug level.
    */
   private def logArgumentsMismatch(
       function: BoundFunction,
       argumentTypes: Seq[DataType],
       declaredTypes: Seq[DataType],
       lookupFailure: Option[Throwable]): Unit = {
-    def typeName(dataType: DataType): String = dataType match {
-      case udt: UserDefinedType[_] => s"${udt.getClass.getName}(${udt.sqlType.catalogString})"
-      case other => other.catalogString
-    }
-    def typeList(types: Seq[DataType]): String = types.map(typeName).mkString("(", ", ", ")")
-    val functionClass = function.getClass.getName
     val arguments = typeList(argumentTypes)
-    val reason = lookupFailure.map(e => s": ${orElse(e.toString, e.getClass.getName)}")
-      .getOrElse("")
-    logOnce(s"mismatch:$functionClass:$arguments:${typeList(declaredTypes)}") {
-      logInfo(log"The partition transform " +
-        log"${MDC(FUNCTION_NAME, orElse(function.name(), functionClass))} " +
-        log"(${MDC(CLASS_NAME, functionClass)}) declares the input types " +
-        log"${MDC(FUNCTION_PARAM, typeList(declaredTypes))}, which do not take arguments of " +
-        log"types ${MDC(ARGS, arguments)}, so a storage-partitioned join does not evaluate it" +
-        log"${MDC(ERROR, reason)}")
+    val declared = typeList(declaredTypes)
+    val kind = if (lookupFailure.isDefined) "unreachable" else "mismatch"
+    logOnce(s"$kind:${function.getClass.getName}:$arguments:$declared") {
+      logInfo(argumentsMismatchMessage(function, arguments, declared, lookupFailure))
+    }
+    lookupFailure.foreach { e =>
+      logDebug(log"Cannot invoke the method a call of the " + transformLabel(function) +
+        log" resolves to", e)
     }
   }
 
   /** Logs that `function` is not a `ScalarFunction`, so Spark cannot call it. */
   private def logNotScalar(function: BoundFunction): Unit = {
-    val functionClass = function.getClass.getName
-    logOnce(s"notScalar:$functionClass") {
-      logInfo(log"The partition transform " +
-        log"${MDC(FUNCTION_NAME, orElse(function.name(), functionClass))} " +
-        log"(${MDC(CLASS_NAME, functionClass)}) is not a ScalarFunction, so a " +
+    logOnce(s"notScalar:${function.getClass.getName}") {
+      logInfo(log"The " + transformLabel(function) + log" is not a ScalarFunction, so a " +
         log"storage-partitioned join does not evaluate it")
     }
   }
 
   /** Logs that a call of `function` failed to resolve, see `evaluableFunction`. */
   private def logCannotResolve(function: BoundFunction, e: Throwable): Unit = {
-    val functionClass = function.getClass.getName
-    val failureClass = e.getClass.getName
-    // Named before `logOnce`, since the debug line below runs on every call.
-    val functionName = orElse(function.name(), functionClass)
-    logOnce(s"failure:$functionClass:$failureClass") {
-      logWarning(log"Cannot resolve a call of the partition transform " +
-        log"${MDC(FUNCTION_NAME, functionName)} " +
-        log"(${MDC(CLASS_NAME, functionClass)}), so a storage-partitioned join " +
-        log"does not evaluate it: ${MDC(ERROR, orElse(e.toString, failureClass))}")
+    logOnce(s"failure:${function.getClass.getName}:${e.getClass.getName}") {
+      logWarning(log"Cannot resolve a call of the " + transformLabel(function) +
+        log", so a storage-partitioned join does not evaluate it: " +
+        log"${MDC(ERROR, orElse(e.toString, e.getClass.getName))}")
     }
-    logDebug(log"Cannot resolve a call of the partition transform " +
-      log"${MDC(FUNCTION_NAME, functionName)}", e)
+    logDebug(log"Cannot resolve a call of the " + transformLabel(function), e)
   }
 
   /**
@@ -403,8 +452,11 @@ object TransformExpression extends Logging {
    * types pair their groups wrongly, or fail, see `KeyedShuffleSpec.createPartitioning`. As
    * `storedAlike` for a nested value, apart from decimals: two decimals of one scale are stored
    * alike, whatever their precision, when both are stored as a `long`, up to
-   * `Decimal.MAX_LONG_DIGITS` digits, or both as bytes. A value read at a smaller precision than
-   * it has is then read as it is, as a `long`, or fails, as bytes.
+   * `Decimal.MAX_LONG_DIGITS` digits, or both as bytes. A row, the key itself or a struct field,
+   * reads a `long` at a smaller precision than its value has as it is. An array element, or a
+   * map's key or value, is read with a check that fails for a value of more digits than that
+   * precision, as one stored as bytes is anywhere. So a cogroup over such keys can fail, but never
+   * pairs its groups wrongly.
    */
   private[sql] def keysStoredAlike(from: DataType, to: DataType): Boolean = (from, to) match {
     case _ if from == to => true

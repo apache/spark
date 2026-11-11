@@ -19,10 +19,12 @@ package org.apache.spark.sql.catalyst.expressions
 
 import org.apache.logging.log4j.Level
 
-import org.apache.spark.{SparkException, SparkFunSuite}
+import org.apache.spark.{SparkArithmeticException, SparkException, SparkFunSuite, SparkThrowable}
+import org.apache.spark.internal.Logging
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.util.{ArrayBasedMapData, GenericArrayData}
 import org.apache.spark.sql.connector.catalog.functions.{BoundFunction, ScalarFunction}
+import org.apache.spark.sql.errors.QueryExecutionErrors
 import org.apache.spark.sql.types.{ArrayType, BinaryType, DataType, DateType, Decimal, DecimalType, DoubleType, IntegerType, LongType, MapType, ShortType, StringType, StructType, TimestampNTZType, TimestampType, UserDefinedType, VarcharType}
 import org.apache.spark.unsafe.types.UTF8String
 
@@ -322,11 +324,15 @@ class TransformExpressionSuite extends SparkFunSuite {
       .filter(_.getMessage.getFormattedMessage.contains("udt_bucket"))
     assert(logged.map(_.getLevel) == Seq(Level.INFO), logged.map(_.getMessage.getFormattedMessage))
     val message = logged.head.getMessage.getFormattedMessage
-    assert(message.contains("which do not take arguments"), message)
-    // The user-defined type by its class, not as the `int` of its `sqlType`, and why the method
-    // cannot be reached.
-    assert(message.contains(s"(int, ${argument.dataType.getClass.getName}(int))"), message)
-    assert(message.contains("Couldn't find method invoke"), message)
+    // The arguments suit the input types, so the line says the method cannot be reached with
+    // them, names the user-defined type by its class, not as the `int` of its `sqlType`, and ends
+    // with the lookup's own text, without the condition and SQL state that would read as a Spark
+    // bug.
+    assert(message.contains("but the method its call resolves to cannot be invoked with " +
+      s"arguments of types (int, ${argument.dataType.getClass.getName}(int)), since it or its " +
+      "class is not public or it does not take their Java classes"), message)
+    assert(message.contains("does not evaluate it: Couldn't find method invoke"), message)
+    assert(!message.contains("INTERNAL_ERROR") && !message.contains("SQLSTATE"), message)
     val transform = bucket(withProduceResult, argument)
     assert(transform.evaluableFunction.isDefined, "produceResult")
     assert(transform.eval(InternalRow(5)) == 1)
@@ -355,6 +361,9 @@ class TransformExpressionSuite extends SparkFunSuite {
       (DecimalType(10, 2), DecimalType(12, 2), true),
       (DecimalType(20, 2), DecimalType(38, 2), true),
       (ArrayType(DecimalType(10, 2)), ArrayType(DecimalType(18, 2)), true),
+      (MapType(IntegerType, DecimalType(10, 2)), MapType(IntegerType, DecimalType(15, 2)), true),
+      (new StructType().add("d", DecimalType(10, 2)),
+        new StructType().add("d", DecimalType(15, 2)), true),
       (IntegerType, LongType, false),
       (ShortType, IntegerType, false),
       (IntegerType, DoubleType, false),
@@ -537,6 +546,141 @@ class TransformExpressionSuite extends SparkFunSuite {
       .filter(_.contains("typed_bucket"))
     assert(logged.size == 2, logged)
     assert(logged.exists(_.contains("(int, string)")) && logged.exists(_.contains("(int, binary)")))
+  }
+
+  test("SPARK-60027: an argument mismatch line carries an error only for a lookup failure") {
+    // What a structured log gets: the `error` field holds what the lookup says, alone, and a
+    // mismatch the declared types explain has no `error` field at all. The line's context is
+    // filled only with structured logging on.
+    val structured = Logging.isStructuredLoggingEnabled
+    Logging.enableStructuredLogging()
+    try checkArgumentsMismatchLines()
+    finally if (!structured) Logging.disableStructuredLogging()
+  }
+
+  private def checkArgumentsMismatchLines(): Unit = {
+    val function = new ScalarFunction[Int] {
+      override def inputTypes(): Array[DataType] = Array(IntegerType, IntegerType)
+      override def resultType(): DataType = IntegerType
+      override def name(): String = "line_bucket"
+      override def canonicalName(): String = "test.bucket"
+      override def produceResult(input: InternalRow): Int = 0
+    }
+    val mismatch = TransformExpression.argumentsMismatchMessage(function, "(int, bigint)",
+      "(int, int)", None)
+    assert(mismatch.message.endsWith("which do not take arguments of types (int, bigint), so a " +
+      "storage-partitioned join does not evaluate it"), mismatch.message)
+    assert(!mismatch.context.containsKey("error"), mismatch.context)
+    assert(mismatch.context.get("args") == "(int, bigint)", mismatch.context)
+
+    val lookup = QueryExecutionErrors.methodNotFoundError(
+      classOf[String], "invoke", Seq(classOf[Int], classOf[Object]))
+    val unreachable = TransformExpression.argumentsMismatchMessage(function, "(int, int)",
+      "(int, int)", Some(lookup))
+    val text = "Couldn't find method invoke with arguments (int, class java.lang.Object) on " +
+      "class java.lang.String."
+    assert(unreachable.context.get("error") == text, unreachable.context)
+    // It names both reasons the lookup fails for, not only the argument types.
+    assert(unreachable.message.endsWith("but the method its call resolves to cannot be invoked " +
+      "with arguments of types (int, int), since it or its class is not public or it does not " +
+      s"take their Java classes, so a storage-partitioned join does not evaluate it: $text"),
+      unreachable.message)
+  }
+
+  test("SPARK-60027: a failure is logged by its own text") {
+    // A `SparkThrowable` by its filled-in template, without the condition and SQL state that its
+    // message carries, whichever parameters it has; anything else by `toString`. Its class alone
+    // when that text throws, is null or is empty.
+    val lookup = QueryExecutionErrors.methodNotFoundError(
+      classOf[String], "invoke", Seq(classOf[Int], classOf[Object]))
+    assert(TransformExpression.failureText(lookup) == "Couldn't find method invoke with " +
+      "arguments (int, class java.lang.Object) on class java.lang.String.")
+    val outOfRange = new SparkArithmeticException(
+      errorClass = "NUMERIC_VALUE_OUT_OF_RANGE.WITHOUT_SUGGESTION",
+      messageParameters = Map("roundedValue" -> "1.5", "originalValue" -> "1.45",
+        "precision" -> "1", "scale" -> "0"),
+      context = Array.empty, summary = "")
+    val outOfRangeText = TransformExpression.failureText(outOfRange)
+    assert(outOfRangeText.startsWith("The 1.5 rounded half up from 1.45 cannot be represented"),
+      outOfRangeText)
+    assert(!outOfRangeText.contains("NUMERIC_VALUE_OUT_OF_RANGE") &&
+      !outOfRangeText.contains("SQLSTATE"), outOfRangeText)
+    assert(TransformExpression.failureText(new NoSuchMethodException("m")) ==
+      "java.lang.NoSuchMethodException: m")
+    val unreadable = new IllegalStateException() {
+      override def toString: String = throw new IllegalArgumentException("unreadable")
+    }
+    assert(TransformExpression.failureText(unreadable) == unreadable.getClass.getName)
+    val noText = new RuntimeException() with SparkThrowable {
+      override def getCondition: String = null
+      override def toString: String = null
+    }
+    assert(TransformExpression.failureText(noText) == noText.getClass.getName)
+    val emptyTemplate = new SparkException(errorClass = "INTERNAL_ERROR",
+      messageParameters = Map("message" -> " "), cause = null)
+    assert(TransformExpression.failureText(emptyTemplate) == classOf[SparkException].getName)
+  }
+
+  test("SPARK-60027: a method that cannot be invoked is logged for the types it was looked up") {
+    // The call is resolved over the arguments cast to the declared types, so the line names those
+    // types, e.g. a `SMALLINT` cast to `INT`, which the lookup failure's classes match. The whole
+    // failure is logged at debug level.
+    class IntUDT extends UserDefinedType[Integer] {
+      override def sqlType: DataType = IntegerType
+      override def serialize(obj: Integer): Any = obj
+      override def deserialize(datum: Any): Integer = datum.asInstanceOf[Integer]
+      override def userClass: Class[Integer] = classOf[Integer]
+    }
+    val withInvoke = new ScalarFunction[Int] {
+      override def inputTypes(): Array[DataType] = Array(IntegerType, IntegerType, IntegerType)
+      override def resultType(): DataType = IntegerType
+      override def name(): String = "cast_bucket"
+      override def canonicalName(): String = "test.bucket"
+      def invoke(numBuckets: Int, a: Int, b: Int): Int = Math.floorMod(a + b, numBuckets)
+    }
+    val udt = new IntUDT
+    val appender = new LogAppender("a method that cannot be invoked over cast arguments")
+    appender.setThreshold(Level.DEBUG)
+    withLogAppender(appender, loggerNames = transformLogger, level = Some(Level.DEBUG)) {
+      assert(TransformExpression(withInvoke, Seq(BoundReference(0, ShortType, nullable = true),
+        BoundReference(1, udt, nullable = true)), Some(4)).evaluableFunction.isEmpty)
+    }
+    val info = appender.loggingEvents.filter(_.getLevel == Level.INFO)
+      .map(_.getMessage.getFormattedMessage)
+    assert(info.size == 1, info)
+    assert(info.head.contains(s"arguments of types (int, int, ${udt.getClass.getName}(int))"),
+      info.head)
+    assert(!info.head.contains("smallint"), info.head)
+    val debug = appender.loggingEvents.filter(_.getLevel == Level.DEBUG)
+    assert(debug.exists(e => e.getThrown != null &&
+      e.getThrown.getMessage.contains("Couldn't find method invoke")), debug)
+  }
+
+  test("SPARK-60027: a user-defined type whose sqlType throws does not change what is logged") {
+    // A mismatch is logged as one whatever the types' connector code does when the line names
+    // them, here an argument the function does not declare.
+    class ThrowingUDT extends UserDefinedType[Integer] {
+      override def sqlType: DataType = throw new IllegalStateException("udt bug")
+      override def serialize(obj: Integer): Any = obj
+      override def deserialize(datum: Any): Integer = datum.asInstanceOf[Integer]
+      override def userClass: Class[Integer] = classOf[Integer]
+    }
+    val oneInput = new ScalarFunction[Int] {
+      override def inputTypes(): Array[DataType] = Array(IntegerType)
+      override def resultType(): DataType = IntegerType
+      override def name(): String = "arity_bucket"
+      override def canonicalName(): String = "test.bucket"
+      override def produceResult(input: InternalRow): Int = 0
+    }
+    val appender = new LogAppender("a mismatch over a user-defined type whose sqlType throws")
+    withLogAppender(appender, loggerNames = transformLogger, level = Some(Level.INFO)) {
+      assert(TransformExpression(oneInput, Seq(AttributeReference("u", new ThrowingUDT)()),
+        Some(4)).evaluableFunction.isEmpty)
+    }
+    val logged = appender.loggingEvents.map(e => (e.getLevel, e.getMessage.getFormattedMessage))
+    assert(logged.map(_._1) == Seq(Level.INFO), logged)
+    assert(logged.head._2.contains("which do not take arguments of types (int, ") &&
+      logged.head._2.contains("ThrowingUDT$1(?))"), logged)
   }
 
   test("SPARK-60027: a function class that fails in another way is warned about again") {
