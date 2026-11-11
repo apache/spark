@@ -86,11 +86,11 @@ from pyspark.sql.dataframe import (
 from pyspark.sql.dataframe import (
     DataFrameStatFunctions as ParentDataFrameStatFunctions,
 )
+from pyspark.sql.dataframe import validate_approx_quantile_probabilities
 from pyspark.sql.pandas.functions import _validate_vectorized_udf  # type: ignore[attr-defined]
 from pyspark.sql.pandas.types import from_arrow_schema, to_arrow_schema
 from pyspark.sql.table_arg import TableArg
 from pyspark.sql.types import Row, StructType, _create_row
-from pyspark.sql.utils import validate_approx_quantile_probabilities
 from pyspark.storagelevel import StorageLevel
 from pyspark.util import PythonEvalType, is_remote_only
 

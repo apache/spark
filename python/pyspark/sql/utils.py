@@ -40,8 +40,6 @@ from pyspark.errors import (  # noqa: F401
     PySparkImportError,
     PySparkNotImplementedError,
     PySparkRuntimeError,
-    PySparkTypeError,
-    PySparkValueError,
     PythonException,
     QueryExecutionException,
     SparkUpgradeException,
@@ -481,45 +479,6 @@ def get_lit_sql_str(val: str) -> str:
     # See `sql` definition in `sql/catalyst/src/main/scala/org/apache/spark/
     # sql/catalyst/expressions/literals.scala`
     return "'" + val.replace("\\", "\\\\").replace("'", "\\'") + "'"
-
-
-def validate_approx_quantile_probabilities(probabilities: Any) -> List[Union[float, int]]:
-    """
-    Validate the ``probabilities`` argument of ``DataFrame.approxQuantile``, shared by the
-    classic and Connect implementations so both stay in sync. Returns it as a ``list``.
-    """
-    if not isinstance(probabilities, (list, tuple)):
-        raise PySparkTypeError(
-            errorClass="NOT_EXPECTED_TYPE",
-            messageParameters={
-                "arg_name": "probabilities",
-                "expected_type": "list or tuple",
-                "arg_type": type(probabilities).__name__,
-            },
-        )
-    probabilities = list(probabilities)
-    for p in probabilities:
-        if isinstance(p, bool) or not isinstance(p, (float, int)):
-            raise PySparkTypeError(
-                errorClass="NOT_EXPECTED_TYPE",
-                messageParameters={
-                    "arg_name": "probabilities",
-                    "expected_type": "list[float, int]",
-                    "arg_type": type(p).__name__,
-                },
-            )
-    for p in probabilities:
-        if not (0 <= p <= 1):
-            raise PySparkValueError(
-                errorClass="VALUE_OUT_OF_BOUNDS",
-                messageParameters={
-                    "arg_name": "probabilities",
-                    "lower_bound": "0",
-                    "upper_bound": "1",
-                    "actual": str(p),
-                },
-            )
-    return probabilities
 
 
 class NumpyHelper:
