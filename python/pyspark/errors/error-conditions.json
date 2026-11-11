@@ -16,11 +16,6 @@
       "Invocation of <target> failed."
     ],
     "sub_class": {
-      "AGENT_RUN_FAILED": {
-        "message": [
-          "The agent reported a failed invocation."
-        ]
-      },
       "CONNECTION_ERROR": {
         "message": [
           "Connection retries were exhausted."
@@ -39,11 +34,6 @@
       "HTTP_RETRIES_EXHAUSTED": {
         "message": [
           "Retries were exhausted after HTTP status <status>."
-        ]
-      },
-      "HUMAN_INPUT_REQUIRED": {
-        "message": [
-          "The agent requires human input."
         ]
       },
       "INVALID_RESPONSE": {

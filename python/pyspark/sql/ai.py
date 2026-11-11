@@ -17,11 +17,10 @@
 
 """Experimental PySpark functions for remote model inference."""
 
-from typing import TYPE_CHECKING, Dict, Iterator, Optional, Tuple, Union
+from typing import TYPE_CHECKING, Dict, Iterator, Optional
 
 from pyspark.errors import PySparkTypeError, PySparkValueError
 from pyspark.sql._ai_client import (
-    _AgentEndpoint,
     _ModelEndpoint,
     _query_batches,
     _validate_non_empty_string,
@@ -33,9 +32,9 @@ if TYPE_CHECKING:
 
     from pyspark.sql._typing import ColumnOrName
 
-__all__ = ["ai_query", "register_agent", "register_model"]
+__all__ = ["ai_query", "register_model"]
 
-_endpoints: Dict[str, Union[_AgentEndpoint, _ModelEndpoint]] = {}
+_endpoints: Dict[str, _ModelEndpoint] = {}
 
 
 def register_model(
@@ -106,81 +105,22 @@ def register_model(
     )
 
 
-def register_agent(
-    name: str,
-    app_name: str,
-    *,
-    profile: Optional[str] = None,
-    output_field: Optional[str] = None,
-    max_concurrency: int = 4,
-    timeout: float = 60.0,
-    max_retries: int = 2,
-    auth_type: str = "oauth-m2m",
-) -> None:
-    """Register an agent alias for subsequent calls to :func:`ai_query`.
-
-    Workers resolve credentials through the Databricks SDK. For CLI authentication,
-    the CLI and its authenticated profile must be available on every worker.
-    Registering the same name replaces its configuration for subsequently constructed columns.
-
-    .. versionadded:: 4.4.0
-
-    Parameters
-    ----------
-    name : str
-        Alias to use in :func:`ai_query`.
-    app_name : str
-        Name of the Databricks app that hosts the agent.
-    profile : str, optional
-        Databricks credential profile available on each worker.
-    output_field : str, optional
-        Top-level string field to read from a custom agent's output. By default,
-        the agent must return a string or AgentKit assistant messages.
-    max_concurrency : int, optional
-        Maximum concurrent invocations per Python task.
-    timeout : float, optional
-        Invocation time budget in seconds, excluding client setup.
-    max_retries : int, optional
-        Maximum retries for a transient HTTP or connection failure.
-    auth_type : str, optional
-        Either ``oauth-m2m`` (the default) or ``databricks-cli``.
-
-    Examples
-    --------
-    >>> from pyspark.sql.ai import register_agent
-    >>> register_agent("summarizer", "my-agent")
-    """
-    _validate_non_empty_string("name", name)
-    _endpoints[name] = _AgentEndpoint(
-        app_name, profile, output_field, max_concurrency, timeout, max_retries, auth_type
-    )
-
-
-def ai_query(
-    endpoint: str, request: "ColumnOrName", *, invocation_id: Optional["ColumnOrName"] = None
-) -> Column:
-    """Return a text column by invoking a registered model or agent for each non-null request.
+def ai_query(endpoint: str, request: "ColumnOrName") -> Column:
+    """Return a text column by invoking a registered model for each non-null request.
 
     The column captures the endpoint configuration when it is constructed. Spark may repeat
-    calls on task retries or subsequent actions. For agents, deduplication lasts as long as
-    Databricks retains the invocation record. This does not guarantee exactly-once tool execution.
-    The API supports synchronous text generation. Invalid identifiers and invocation errors
-    fail the task.
+    calls on task retries or subsequent actions. The API supports synchronous text generation.
+    Invalid requests and invocation errors fail the task.
 
     .. versionadded:: 4.4.0
 
     Parameters
     ----------
     endpoint : str
-        Alias registered with :func:`register_model` or :func:`register_agent`.
+        Alias registered with :func:`register_model`.
     request : :class:`~pyspark.sql.Column` or str
         String column or column name containing the prompt. Nulls produce null results
         without a network call.
-    invocation_id : :class:`~pyspark.sql.Column` or str, optional
-        String column or column name required for agent endpoints. Values must be stable,
-        non-empty, and unique per logical input within the job namespace. Include a job
-        or dataset version when you need to control reuse across actions. Model endpoints
-        do not accept this argument.
 
     Returns
     -------
@@ -198,7 +138,7 @@ def ai_query(
     ...     ai_query("summarizer", concat(lit("Summarize: "), col("description"))),
     ... )
     """
-    from pyspark.sql.functions import PandasUDFType, lit, pandas_udf
+    from pyspark.sql.functions import PandasUDFType, pandas_udf
     from pyspark.sql.types import StringType
 
     if not isinstance(endpoint, str):
@@ -216,26 +156,11 @@ def ai_query(
             messageParameters={"endpoint": endpoint},
         )
     config = _endpoints[endpoint]
-    if isinstance(config, _ModelEndpoint):
-        if invocation_id is not None:
-            raise PySparkValueError(
-                errorClass="AI_QUERY_UNSUPPORTED_OPTION",
-                messageParameters={"arg_name": "invocation_id", "target": "model endpoints"},
-            )
-        invocation_id = lit("")
-    elif invocation_id is None:
-        raise PySparkValueError(
-            errorClass="ARGUMENT_REQUIRED",
-            messageParameters={
-                "arg_name": "invocation_id",
-                "condition": "the endpoint is an agent",
-            },
-        )
 
-    def query(batches: Iterator[Tuple["pd.Series", "pd.Series"]]) -> Iterator["pd.Series"]:
+    def query(batches: Iterator["pd.Series"]) -> Iterator["pd.Series"]:
         yield from _query_batches(config, batches)
 
     query_udf = pandas_udf(
         query, returnType=StringType(), functionType=PandasUDFType.SCALAR_ITER
     ).asNondeterministic()
-    return query_udf(request, invocation_id)
+    return query_udf(request)

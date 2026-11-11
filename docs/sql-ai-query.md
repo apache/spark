@@ -20,7 +20,6 @@ license: |
 
 This prototype queries Databricks or Amazon Bedrock from a DataFrame through an iterator Pandas
 UDF. Register a model alias with `register_model` and use that alias in `ai_query`.
-A `DurableAgentServer` is an optional backend for agent workflows.
 The prototype does not add a native SQL function. Spark Connect and streaming are unvalidated.
 
 ## Prerequisites
@@ -67,87 +66,30 @@ Each provider receives a chat message per non-null request and returns text. Bot
 Python task. Bedrock applies the configured timeout to socket reads per attempt. Retries and
 repeated Spark actions can make additional billable calls.
 
-## Query a deployed agent when needed
-
-Use this backend when the workload needs an agent's tools, custom logic, or durable invocation
-records. Deploy an AgentKit `DurableAgentServer` and grant the calling identity access to the app.
-The agent chooses its model. Workers discover the app URL through the workspace SDK.
-
-```python
-from pyspark.sql.ai import ai_query, register_agent
-from pyspark.sql.functions import col, concat, lit
-
-register_agent(
-    "summarizer",
-    app_name="agent-bricks-summarizer",
-    max_concurrency=4,
-    timeout=60,
-    max_retries=2,
-)
-
-# document_id must be a stable, unique source identifier, stored with the input.
-result = documents.withColumn(
-    "summary",
-    ai_query(
-        endpoint="summarizer",
-        request=concat(lit("Summarize in one sentence: "), col("description")),
-        invocation_id=concat(lit("documents-v1:"), col("document_id").cast("string")),
-    ),
-)
-```
-
-The endpoint name is registered in the driver Python process. Each constructed column captures
-that configuration, so changing the registration does not change an already constructed column.
-`request` and `invocation_id` accept a column or a column name. Null requests produce null without
-calling Databricks. Other requests and their identifiers must be strings; identifiers cannot be
-null or empty. Errors fail the task, rather than silently returning null.
-
-The default response parser accepts a string returned by the agent, or the assistant text messages
-inside an AgentKit template output. For a custom agent that returns `{"answer": "..."}`, register
-with `output_field="answer"`. This selects a top-level field of the agent's output, not of the
-HTTP response envelope. Non-text outputs and requests that pause for human input fail explicitly.
-
 ## Execution and retries
 
-Each worker thread creates its own SDK client and HTTP session. Credentials are resolved locally;
-SDK authentication headers are obtained again for every HTTP attempt. An agent request contains
-an `input.messages` list and an independent session for its logical input. No conversation is
-shared across rows.
+Aliases are registered in the driver Python process. Each constructed column captures
+the registration available at construction time. Requests must be strings or nulls.
+Invalid requests and invocation errors fail the task.
 
-The app name, stable input identifier, and complete request determine a UUID. Both the invocation
-and session use that UUID. Transient connection errors and HTTP 429, 500, 502, 503, and 504 responses
-are retried with bounded exponential backoff and the same invocation ID. Numeric `Retry-After`
-headers are respected within the invocation time budget. Authentication, permission,
-conflict, and other HTTP errors fail immediately. Redirects are rejected. A running invocation is
-polled until it completes or the configured invocation time budget expires. Initial SDK setup and
-app discovery are outside that budget; HTTP timeouts bound socket waits rather than enforcing a
-hard wall-clock deadline for a response arriving continuously.
+Workers resolve credentials when they create provider clients. For Databricks, the SDK
+refreshes authentication headers for each attempt. Transient connection errors and
+HTTP 429, 500, 502, 503, and 504 responses are retried with bounded exponential backoff.
+Numeric `Retry-After` headers are respected within the invocation time budget. Other HTTP
+errors fail immediately and redirects are rejected. For Bedrock, the AWS SDK handles retries.
 
-Include a dataset/job version in the input identifier. Repeating an action with the same identifier
-and request reuses the invocation while Databricks retains its record. Changing the request creates
-a new invocation. Do not use random UUID expressions or partition/task IDs as stable source IDs.
-Two rows with the same identifier and request intentionally share one invocation. Distinct logical
-rows must have distinct source identifiers, even if their text is identical.
-
-Databricks idempotency does not guarantee exactly-once external tool effects. The server's retention
-window limits invocation deduplication, and agent crash recovery can replay tool calls. Use agents
-whose tools can tolerate retries. This API does not provide cancellation of remote runs when Spark
-cancels a task or the local request times out.
-
-Concurrency is bounded **per active Python task**, not per job or workspace. For example, 20 tasks
-with `max_concurrency=4` can issue up to 80 concurrent requests. A Pandas batch is processed as
-individual HTTP invocations; this is not a Databricks batch inference API. Materialize the selected
-input before inference when strict control of the input row set matters, and persist results for
-reuse across downstream jobs. All non-null request contents are sent to the configured agent.
+Concurrency is bounded per active Python task. For example, 20 tasks with
+`max_concurrency=4` can issue up to 80 concurrent requests. A Pandas batch is processed
+as individual model invocations. Persist results to reuse them across downstream jobs.
 
 ## Validation
 
-The unit suite checks the HTTP protocol against a local server, worker-side OAuth initialization,
-stable IDs, retry and polling behavior, response parsing, concurrency, row ordering, nulls, cleanup,
-and UDF configuration capture. It requires no Databricks credentials or Spark JVM:
+The suite checks registration, authentication, HTTP errors and retries, response parsing,
+concurrency, nulls, and cleanup. An integration test exercises the DataFrame API through
+a Spark Python worker and Arrow against a local server. The suite runs without cloud credentials.
 
 ```sh
-PYTHONPATH=python .venv/bin/python -m unittest pyspark.sql.tests.test_ai_query -v
+python/run-tests --testnames pyspark.sql.tests.test_ai_query
 ```
 
 Run the opt-in live check with these prototype modules installed in both the driver and worker
@@ -170,16 +112,10 @@ python dev/ai_query_e2e.py \
 ```
 
 The check launches Spark locally, asserts an `ArrowEvalPython` plan, and verifies the responses
-for two synthetic prompts and one null. It does not create a Databricks app or exercise the
-agent backend's live invocation or recovery behavior.
+for two synthetic prompts and one null.
 
 ## References
 
-* [Databricks agent server](https://docs.databricks.com/aws/en/agents/deploy/agent-server)
 * [Databricks Foundation Model APIs](https://docs.databricks.com/aws/en/machine-learning/foundation-model-apis/)
 * [Amazon Bedrock Converse](https://docs.aws.amazon.com/boto3/latest/reference/services/bedrock-runtime/client/converse.html)
-* [Query deployed agents](https://docs.databricks.com/aws/en/agents/query-llms)
 * [OAuth M2M authentication](https://docs.databricks.com/aws/en/dev-tools/auth/oauth-m2m)
-
-The Databricks Agent Bricks CLI and custom agent APIs are experimental. Keep SDK compatibility
-and the invocation contract under review before using this prototype in production.
