@@ -17,6 +17,8 @@
 
 package org.apache.spark.sql.streaming
 
+import org.apache.logging.log4j.Level
+
 import org.apache.spark.sql.{AnalysisException, Row}
 import org.apache.spark.sql.execution.streaming.runtime.MemoryStream
 import org.apache.spark.sql.execution.streaming.state.RocksDBStateStoreProvider
@@ -62,13 +64,16 @@ class StreamingJoinArithmeticWatermarkSuite extends StreamTest {
   }
 
   // The negative term's cutoff falls as the watermark rises, so it cannot finalize left rows,
-  // and the constant-only conjunct does not count as a bound either. Analysis rejects the plan
-  // before any state format is used.
+  // and the constant-only conjunct does not count as a bound either. The left watermark keeps
+  // the integral casts from deciding: a column with its own watermark is not held to the
+  // inexact-arithmetic rule, so only those two rules reject the conjuncts. Analysis rejects the
+  // plan before any state format is used.
   test("left outer join cannot finalize with a negative opposite watermark term") {
     val leftInput = MemoryStream[(Int, Long)]
     val rightInput = MemoryStream[(Int, Long)]
     val left = leftInput.toDF().toDF("leftKey", "time")
       .select($"leftKey", timestamp_seconds($"time").as("leftTime"))
+      .withWatermark("leftTime", "0 seconds")
     val right = rightInput.toDF().toDF("rightKey", "time")
       .select($"rightKey", timestamp_seconds($"time").as("rightTime"))
       .withWatermark("rightTime", "0 seconds")
@@ -83,5 +88,35 @@ class StreamingJoinArithmeticWatermarkSuite extends StreamTest {
         CheckNewAnswer())
     }
     assert(error.getMessage.contains("a watermark on the right input and a time constraint"))
+  }
+
+  // Earlier versions admitted a bound through a negative opposite watermark term, so disabling
+  // the finalization check runs this join. The left state is never evicted, so the matched left
+  // row emits no null-padded row later.
+  test("left outer join with a negative opposite watermark term runs with the check disabled") {
+    val leftInput = MemoryStream[(Int, Long)]
+    val rightInput = MemoryStream[(Int, Long)]
+    val left = leftInput.toDF().toDF("leftKey", "time")
+      .select($"leftKey", timestamp_seconds($"time").as("leftTime"))
+    val right = rightInput.toDF().toDF("rightKey", "time")
+      .select($"rightKey", timestamp_seconds($"time").as("rightTime"))
+      .withWatermark("rightTime", "0 seconds")
+    val condition = expr("leftKey = rightKey AND " +
+      "CAST(leftTime AS LONG) > 100 - CAST(rightTime AS LONG)")
+    val joined = left.join(right, condition, "left_outer")
+      .select($"leftKey", $"leftTime".cast("long"), $"rightTime".cast("long"))
+
+    val appender = new LogAppender("finalization check disabled")
+    withLogAppender(appender, level = Some(Level.WARN)) {
+      withSQLConf(SQLConf.STREAMING_JOIN_CHECK_FINALIZATION_ENABLED.key -> "false") {
+        testStream(joined)(
+          MultiAddData(leftInput, (1, 60L))(rightInput, (1, 50L)),
+          CheckNewAnswer(Row(1, 60L, 50L)),
+          AddData(rightInput, (2, 100L)),
+          CheckNewAnswer())
+      }
+    }
+    assert(appender.loggingEvents.exists(
+      _.getMessage.getFormattedMessage.contains("allow unmatched state to be finalized")))
   }
 }

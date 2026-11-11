@@ -490,7 +490,6 @@ object StreamingJoinHelper extends PredicateHelper with Logging {
     // only constants does not follow the watermark, and gives a cutoff only with
     // keepConstantOnly. The occurrence check above limits each input to one attribute, so there
     // can be at most one such term.
-    // TODO(SPARK-61350): a watermark term with a negative coefficient still passes this check.
     val watermarkTerms = terms.filter(_.references.exists(attributesWithEventWatermark.contains))
     if (!baseAdmissionRules && (watermarkTerms.isEmpty && !keepConstantOnly ||
         !watermarkTerms.headOption.forall(_.references.forall(_.metadata.contains(delayKey))))) {
@@ -498,7 +497,9 @@ object StreamingJoinHelper extends PredicateHelper with Logging {
     }
 
     // A negative opposite-time term lets later input match old state instead of bounding it.
-    if (watermarkTerms.head.isInstanceOf[UnaryMinus]) return None
+    if (!baseAdmissionRules && watermarkTerms.headOption.exists(_.isInstanceOf[UnaryMinus])) {
+      return None
+    }
 
     // Replace watermark attribute with watermark value, and generate the resolved expression
     // from the other terms. That is,
