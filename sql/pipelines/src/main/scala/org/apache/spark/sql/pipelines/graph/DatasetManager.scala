@@ -105,6 +105,16 @@ object DatasetManager extends Logging {
     val inferredSchemas = resolvedDataflowGraph.inferSchemas(sessionCaseSensitive)
     val auxiliaryTableSpecs = resolvedDataflowGraph.auxiliaryTableSpecs(inferredSchemas)
 
+    // A consumer-only refresh plans a downstream read against an AUTO CDC target's read-path schema
+    // without materializing the target, so materializeTable's per-target reserved-column casing
+    // guard never runs for it. Check those referenced-but-excluded targets up front.
+    checkReferencedUnmaterializedAutoCdcTargetCasing(
+      graph = resolvedDataflowGraph,
+      materializedIdentifiers = tablesToMaterialize.keySet,
+      inferredSchemas = inferredSchemas,
+      auxiliaryTableSpecs = auxiliaryTableSpecs,
+      context = context)
+
     // materialized [[DataflowGraph]] where each table has been materialized and each table
     // has metadata (e.g., normalized table storage path) populated
     val materializedGraph: DataflowGraph = try {
@@ -183,6 +193,69 @@ object DatasetManager extends Logging {
     }
     materializeViews(materializedGraph, context)
     materializedGraph
+  }
+
+  /**
+   * Reject a run in which a dataset being materialized reads an AUTO CDC target whose persisted
+   * reserved metadata column casing drifts from the spelling this run's read path plans against,
+   * when that target is itself excluded from the run (for example a consumer-only `--refresh`). The
+   * casing guard in [[materializeTable]] runs only while the target is materialized, so a
+   * consumer-only refresh skips it: the consumer is planned against the canonical (or
+   * this run's declared) spelling while the target keeps its persisted spelling, and a
+   * case-sensitive downstream `SELECT *` could not match them. Surface the same actionable error up
+   * front rather than let it fail opaquely at execution.
+   */
+  private def checkReferencedUnmaterializedAutoCdcTargetCasing(
+      graph: DataflowGraph,
+      materializedIdentifiers: Set[TableIdentifier],
+      inferredSchemas: Map[TableIdentifier, StructType],
+      auxiliaryTableSpecs: Map[TableIdentifier, AuxiliaryTableSpec],
+      context: PipelineUpdateContext): Unit = {
+    // Datasets whose plans this run (re)builds against the AUTO CDC read path: the tables being
+    // materialized, plus every persisted view (materializeViews republishes them on every run,
+    // independent of the refresh selection). Collect what they read.
+    val consumerIdentifiers: Set[TableIdentifier] =
+      materializedIdentifiers ++ graph.persistedViews.map(_.identifier)
+    val readByConsumers: Set[TableIdentifier] =
+      consumerIdentifiers.flatMap { id =>
+        graph.resolvedFlowsTo.getOrElse(id, Nil).flatMap(_.inputs)
+      }
+    // A target is covered by materializeTable's own guard iff it is itself a materialized table, so
+    // only check AUTO CDC targets that are read this run but excluded from materialization.
+    val referencedExcludedTargets = graph.tables.filter { t =>
+      !materializedIdentifiers.contains(t.identifier) &&
+        readByConsumers.contains(t.identifier) &&
+        auxiliaryTableSpecs.get(t.identifier).exists(_.isInstanceOf[AutoCdcAuxiliaryTableSpec])
+    }
+    referencedExcludedTargets.foreach { target =>
+      val (catalog, identifier) =
+        PipelinesCatalogUtils.resolveTableCatalog(context.spark, target.identifier)
+      loadTableIfExists(catalog, identifier).foreach { existingTable =>
+        val resolver = SchemaInferenceUtils.resolverFor(
+          effectiveCaseSensitivityFor(graph, target.identifier, context))
+        // The schema a same-graph consumer plans the target's read against (see
+        // VirtualTableInput.load): the reconciled declared schema for an AUTO CDC target, or
+        // the flow-inferred (canonical) schema when the declaration omits the reserved column.
+        val readPathSchema = target.specifiedSchema match {
+          case Some(ss) =>
+            AutoCdcReservedNames.appendEngineOwnedReservedFields(
+              ss, inferredSchemas(target.identifier), resolver)
+          case None => inferredSchemas(target.identifier)
+        }
+        AutoCdcReservedNames.reservedFieldCasingDrifts(
+          existingSchema = CatalogV2Util.v2ColumnsToStructType(existingTable.columns()),
+          desiredSchema = readPathSchema,
+          resolver = resolver
+        ).foreach { case (existingColumnName, resolvedColumnName) =>
+          throw new AnalysisException(
+            errorClass = "AUTOCDC_INVALID_STATE.RESERVED_METADATA_COLUMN_CASING_DRIFT",
+            messageParameters = Map(
+              "tableName" -> target.identifier.unquotedString,
+              "existingColumnName" -> existingColumnName,
+              "resolvedColumnName" -> resolvedColumnName))
+        }
+      }
+    }
   }
 
   /**

@@ -24,6 +24,7 @@ import org.apache.spark.sql.execution.streaming.runtime.MemoryStream
 import org.apache.spark.sql.functions
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.pipelines.autocdc.{AutoCdcReservedNames, Scd1BatchProcessor}
+import org.apache.spark.sql.pipelines.util.SchemaInferenceUtils
 import org.apache.spark.sql.pipelines.utils.{ExecutionTest, TestGraphRegistrationContext}
 import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.sql.types.{ArrayType, IntegerType, LongType, StringType, StructType}
@@ -852,5 +853,177 @@ class AutoCdcReservedColumnMaterializationSuite
           "columnNames" -> s"`$meta`, `$upperMeta`",
           "engineColumnName" -> meta))
     }
+  }
+
+  test("SPARK-58118: a consumer-only refresh is rejected when an excluded target's reserved " +
+    "column casing drifts from the canonical name") {
+    // Selective-refresh variant of "an already-materialized target with an upper-cased reserved
+    // column rejects a data-only declaration that omits it". There the target is refreshed, so the
+    // casing-drift guard in its materialization fires. Here the user refreshes ONLY a downstream
+    // case-sensitive `SELECT *` and leaves the target out of the run, so that guard never runs for
+    // the target. The target still exists with the reserved column upper-cased, while this run
+    // resolves the omitted column to the canonical lower-case name and plans `copy` against it, so
+    // the drift must be rejected up front rather than surface as an opaque failure when `copy`
+    // reanalyzes its read against the upper-cased target at execution.
+    val upperMeta = AutoCdcReservedNames.cdcMetadataColName.toUpperCase(Locale.ROOT)
+    val del = Scd1BatchProcessor.cdcDeleteSequenceFieldName
+    val ups = Scd1BatchProcessor.cdcUpsertSequenceFieldName
+    spark.sql(
+      s"CREATE TABLE $catalog.$namespace.target " +
+      s"(id INT NOT NULL, version BIGINT NOT NULL, " +
+      s"$upperMeta STRUCT<$del: BIGINT, $ups: BIGINT> NOT NULL)")
+
+    val declaredSchema = new StructType()
+      .add("id", IntegerType, nullable = false)
+      .add("version", LongType, nullable = false)
+    val stream = MemoryStream[(Int, Long)]
+    stream.addData((1, 5L))
+    val ctx = new TestGraphRegistrationContext(spark) {
+      registerTable("target", catalog = Some(catalog), database = Some(namespace),
+        specifiedSchema = Some(declaredSchema))
+      registerFlow(autoCdcFlow(name = "auto_cdc_flow", target = "target",
+        query = dfFlowFunc(stream.toDF().toDF("id", "version")),
+        keys = Seq("id"), sequencing = functions.col("version")))
+      registerMaterializedView("copy", catalog = Some(catalog), database = Some(namespace),
+        sqlConf = Map(SQLConf.CASE_SENSITIVE.key -> "true"),
+        query = readFlowFunc(s"$catalog.$namespace.target"))
+    }
+    val updateCtx = TestPipelineUpdateContext(
+      spark = spark,
+      unresolvedGraph = ctx.toDataflowGraph,
+      storageRoot = storageRoot,
+      refreshTables = SomeTables(Set(
+        fullyQualifiedIdentifier("copy", Some(catalog), Some(namespace))))
+    )
+    updateCtx.pipelineExecution.runPipeline()
+    updateCtx.pipelineExecution.awaitCompletion()
+    val errors = updateCtx.eventBuffer.getEvents.flatMap(_.error)
+    assert(
+      errors.nonEmpty,
+      "expected the consumer-only refresh to be rejected with a reserved-column casing drift " +
+        "error, but the run reported no error")
+    val failure = new RuntimeException("pipeline run failed")
+    errors.foreach(failure.addSuppressed)
+    checkErrorInPipelineFailure(
+      failure = failure,
+      condition = "AUTOCDC_INVALID_STATE.RESERVED_METADATA_COLUMN_CASING_DRIFT",
+      sqlState = Some("42000"),
+      parameters = Map(
+        "tableName" ->
+          fullyQualifiedIdentifier("target", Some(catalog), Some(namespace)).unquotedString,
+        "existingColumnName" -> upperMeta,
+        "resolvedColumnName" -> AutoCdcReservedNames.cdcMetadataColName))
+  }
+
+  test("SPARK-58118: a persisted-view consumer is rejected when an excluded target's reserved " +
+    "column casing drifts from the canonical name") {
+    // Same drift as the consumer-only refresh case, but the downstream reader is a PERSISTED VIEW.
+    // materializeViews republishes every persisted view on each run regardless of the refresh
+    // selection, and its plan is built against the target's read-path schema, so the drift must be
+    // rejected even though the view is not a materialized table (and so not in the refresh set).
+    val upperMeta = AutoCdcReservedNames.cdcMetadataColName.toUpperCase(Locale.ROOT)
+    val del = Scd1BatchProcessor.cdcDeleteSequenceFieldName
+    val ups = Scd1BatchProcessor.cdcUpsertSequenceFieldName
+    spark.sql(
+      s"CREATE TABLE $catalog.$namespace.target " +
+      s"(id INT NOT NULL, version BIGINT NOT NULL, " +
+      s"$upperMeta STRUCT<$del: BIGINT, $ups: BIGINT> NOT NULL)")
+
+    val declaredSchema = new StructType()
+      .add("id", IntegerType, nullable = false)
+      .add("version", LongType, nullable = false)
+    val stream = MemoryStream[(Int, Long)]
+    stream.addData((1, 5L))
+    val ctx = new TestGraphRegistrationContext(spark) {
+      registerTable("target", catalog = Some(catalog), database = Some(namespace),
+        specifiedSchema = Some(declaredSchema))
+      registerFlow(autoCdcFlow(name = "auto_cdc_flow", target = "target",
+        query = dfFlowFunc(stream.toDF().toDF("id", "version")),
+        keys = Seq("id"), sequencing = functions.col("version")))
+      registerPersistedView("copy", catalog = Some(catalog), database = Some(namespace),
+        sqlConf = Map(SQLConf.CASE_SENSITIVE.key -> "true"),
+        query = readFlowFunc(s"$catalog.$namespace.target"))
+    }
+    // Refresh nothing: the target table is excluded, while the persisted view still republishes.
+    val updateCtx = TestPipelineUpdateContext(
+      spark = spark,
+      unresolvedGraph = ctx.toDataflowGraph,
+      storageRoot = storageRoot,
+      refreshTables = NoTables)
+    updateCtx.pipelineExecution.runPipeline()
+    updateCtx.pipelineExecution.awaitCompletion()
+    val errors = updateCtx.eventBuffer.getEvents.flatMap(_.error)
+    assert(
+      errors.nonEmpty,
+      "expected the persisted-view consumer of a drifted excluded target to be rejected, but the " +
+        "run reported no error")
+    val failure = new RuntimeException("pipeline run failed")
+    errors.foreach(failure.addSuppressed)
+    checkErrorInPipelineFailure(
+      failure = failure,
+      condition = "AUTOCDC_INVALID_STATE.RESERVED_METADATA_COLUMN_CASING_DRIFT",
+      sqlState = Some("42000"),
+      parameters = Map(
+        "tableName" ->
+          fullyQualifiedIdentifier("target", Some(catalog), Some(namespace)).unquotedString,
+        "existingColumnName" -> upperMeta,
+        "resolvedColumnName" -> AutoCdcReservedNames.cdcMetadataColName))
+  }
+
+  test("SPARK-58118: reconciling an unchanged declared reserved column does not force a nested " +
+    "NOT NULL sequencing field nullable, so an existing target evolves without an unsupported " +
+    "nested-array schema change") {
+    // Nullability upgrade case. A sequencing type can be ARRAY<ARRAY<STRUCT<ordinal: BIGINT>>>
+    // (SEQUENCE BY array(array(named_struct('ordinal', coalesce(version, 0L)))) keeps `ordinal`
+    // non-null). A target already materialized from such a declaration carries the reserved
+    // metadata column with that nested NOT NULL field. Reconciling the unchanged declaration must
+    // not relax the declared nested nullability to match an `asNullable` engine shape: evolveTable
+    // diffs the persisted schema against the reconciled one, and a nullability change beneath two
+    // array levels is rejected by diffSchemas as an unsupported nested-complex-type evolution
+    // (PIPELINE_NESTED_COMPLEX_TYPE_SCHEMA_EVOLUTION_UNSUPPORTED). The engine owns and writes the
+    // column, so the reconciled nested nullability must follow the engine's actual inference (here,
+    // non-null) rather than a blanket asNullable.
+    val meta = AutoCdcReservedNames.cdcMetadataColName
+    val del = Scd1BatchProcessor.cdcDeleteSequenceFieldName
+    val ups = Scd1BatchProcessor.cdcUpsertSequenceFieldName
+    val resolver = SchemaInferenceUtils.resolverFor(caseSensitive = false)
+
+    // ARRAY<ARRAY<STRUCT<ordinal: BIGINT NOT NULL>>>, element and leaf non-null, as a `coalesce`d
+    // nested sequencing expression infers it.
+    val leaf = new StructType().add("ordinal", LongType, nullable = false)
+    val seqType = ArrayType(ArrayType(leaf, containsNull = false), containsNull = false)
+    val metaType = new StructType()
+      .add(del, seqType, nullable = false)
+      .add(ups, seqType, nullable = false)
+
+    val declaredSchema = new StructType()
+      .add("id", IntegerType, nullable = false)
+      .add("version", LongType, nullable = false)
+      .add(meta, metaType, nullable = false)
+    // The flow infers the same engine-owned shape, with the non-null nested sequencing field the
+    // `coalesce`d expression produces.
+    val flowInferredSchema = new StructType()
+      .add("id", IntegerType, nullable = false)
+      .add("version", LongType, nullable = false)
+      .add(meta, metaType, nullable = false)
+
+    val reconciled =
+      AutoCdcReservedNames.appendEngineOwnedReservedFields(
+        declaredSchema, flowInferredSchema, resolver)
+
+    def leafOrdinalNullable(schema: StructType): Boolean = {
+      val m = schema(meta).dataType.asInstanceOf[StructType]
+      val outer = m(ups).dataType.asInstanceOf[ArrayType]
+      val inner = outer.elementType.asInstanceOf[ArrayType]
+      inner.elementType.asInstanceOf[StructType]("ordinal").nullable
+    }
+    assert(
+      !leafOrdinalNullable(reconciled),
+      "reconciliation must preserve the declared NOT NULL nested sequencing field, but it was " +
+        "forced nullable")
+
+    // evolveTable diffs the persisted (pre-existing) schema against the reconciled one; with the
+    // nested nullability preserved this must not raise the unsupported nested-array evolution.
+    SchemaInferenceUtils.diffSchemas(currentSchema = declaredSchema, targetSchema = reconciled)
   }
 }

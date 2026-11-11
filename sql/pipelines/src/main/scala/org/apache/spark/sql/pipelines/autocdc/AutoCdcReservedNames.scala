@@ -75,18 +75,27 @@ private[pipelines] object AutoCdcReservedNames {
    * spelling in, and this schema -- which also feeds the analysis-time read path -- must agree with
    * it so a downstream `SELECT *` plans against the column the target actually has.
    *
-   * The engine-owned reserved fields are made nullable so a target created from a declared schema
-   * matches one created from an omitted schema (that path materializes the inferred schema
-   * `asNullable`), avoiding a spurious nullability diff when a declaration is added or removed.
-   * This deliberately overrides a `NOT NULL` a declaration might place on the engine-owned reserved
-   * column: parity between the declared and omitted paths is what the omit-the-column capability
-   * rests on, and the column is engine-written bookkeeping the user does not populate.
+   * The reserved column itself is made nullable so a target created from a declared schema matches
+   * one created from an omitted schema (that path materializes the inferred schema `asNullable`),
+   * avoiding a spurious nullability diff when the column declaration is added or removed. That
+   * deliberately overrides a top-level `NOT NULL` a declaration might place on the engine-owned
+   * reserved column; parity between the declared and omitted paths is what the omit-the-column
+   * capability rests on, and the column is engine-written bookkeeping the user does not populate.
+   * Its nested nullability is the union of the declaration's and the engine's: forcing
+   * a declared nested `NOT NULL` sequencing field nullable would churn an unchanged, already
+   * materialized target, and `evolveTable` cannot apply a nullability change beneath nested arrays
+   * (`diffSchemas` rejects it as an unsupported nested-complex-type evolution). Omitted (appended)
+   * fields stay fully nullable, matching the omitted-schema path.
    */
   private[pipelines] def appendEngineOwnedReservedFields(
       declaredSchema: StructType,
       flowInferredSchema: StructType,
       resolver: Resolver): StructType = {
-    val engineReserved = StructType(reservedFields(flowInferredSchema, resolver)).asNullable.fields
+    // Engine-owned reserved fields in the engine's actual inferred nullability (not blanket
+    // `asNullable`). A declared reserved field reconciles against these, so its nested nullability
+    // follows what the engine writes and an unchanged declaration does not churn the target.
+    // Omitted fields are made nullable where they are appended below.
+    val engineReserved = StructType(reservedFields(flowInferredSchema, resolver)).fields
 
     // A declaration carries at most one field matching each engine-owned reserved column. In both
     // contexts the declaration is validated first -- at materialization by
@@ -113,7 +122,11 @@ private[pipelines] object AutoCdcReservedNames {
         engineReserved.find(ef => resolver(df.name, ef.name)) match {
           case Some(ef) =>
             usedEngineNames += ef.name
-            reconcileReservedField(df, ef, resolver)
+            // Force the reserved column itself nullable to match the omitted-declaration path, so
+            // adding or removing the declaration is not a top-level nullability change. Nested
+            // fields follow the union below (not the omitted path's blanket nullable), so parity
+            // holds only at the reserved column itself.
+            reconcileReservedField(df, ef.copy(nullable = true), resolver)
           case None => df
         }
       } else {
@@ -121,8 +134,12 @@ private[pipelines] object AutoCdcReservedNames {
       }
     }
 
-    // Append engine-owned reserved fields the declaration omitted, in canonical form.
-    val appended = engineReserved.filterNot(ef => usedEngineNames.contains(ef.name))
+    // Append engine-owned reserved fields the declaration omitted, in canonical form and fully
+    // nullable to match the no-declaration path (DatasetManager materializes the inferred schema
+    // `asNullable`).
+    val appended =
+      StructType(engineReserved.filterNot(ef => usedEngineNames.contains(ef.name)))
+        .asNullable.fields
     StructType(rebuilt ++ appended)
   }
 
@@ -221,11 +238,12 @@ private[pipelines] object AutoCdcReservedNames {
 
   /**
    * Reconcile a declared reserved field against its engine-owned counterpart: keep the declared
-   * field's spelling and its metadata (e.g. a user `COMMENT`), take the engine field's type and
-   * nullability, and reconcile the types recursively (see `reconcileReservedType`) so declared
-   * nested spelling survives through structs and arrays. Building from the declared field is what
-   * keeps the comment: `SchemaInferenceUtils` merges the declaration in to carry such metadata, and
-   * dropping it here would lose it from the created target and the analysis-time read path.
+   * field's spelling and its metadata (e.g. a user `COMMENT`), take the engine field's type and the
+   * union of the declared and engine nullability, and reconcile the types recursively (see
+   * `reconcileReservedType`) so declared nested spelling survives through structs and arrays.
+   * Building from the declared field is what keeps the comment: `SchemaInferenceUtils` merges the
+   * declaration in to carry such metadata, and dropping it here would lose it from the created
+   * target and the analysis-time read path.
    */
   private def reconcileReservedField(
       declared: StructField,
@@ -233,13 +251,16 @@ private[pipelines] object AutoCdcReservedNames {
       resolver: Resolver): StructField =
     declared.copy(
       dataType = reconcileReservedType(declared.dataType, engine.dataType, resolver),
-      nullable = engine.nullable)
+      // Union so a declared `NOT NULL` the engine also produces is preserved (an unchanged target
+      // does not churn), while a field the engine may null is widened to nullable.
+      nullable = declared.nullable || engine.nullable)
 
   /**
    * Reconcile a declared data type against its engine-owned counterpart: keep the declared nested
-   * spelling, take the engine's types, nullability, and field ordering. Recurse through structs --
-   * the AUTO CDC metadata column is one -- and through array element types, since a sequencing
-   * column can be `ARRAY<STRUCT<...>>`; any other shape takes the engine's type as-is.
+   * spelling and the engine's field ordering and types, and union the declared and engine
+   * nullability (`containsNull` for arrays). Recurse through structs -- the AUTO CDC metadata
+   * column is one -- and through array element types, since a sequencing column can be
+   * `ARRAY<STRUCT<...>>`; any other shape takes the engine's type as-is.
    */
   private def reconcileReservedType(
       declared: DataType,
@@ -249,8 +270,12 @@ private[pipelines] object AutoCdcReservedNames {
       case (declaredStruct: StructType, engineStruct: StructType) =>
         reconcileReservedStruct(declaredStruct, engineStruct, resolver)
       case (declaredArray: ArrayType, engineArray: ArrayType) =>
-        engineArray.copy(elementType =
-          reconcileReservedType(declaredArray.elementType, engineArray.elementType, resolver))
+        engineArray.copy(
+          elementType =
+            reconcileReservedType(declaredArray.elementType, engineArray.elementType, resolver),
+          // Union `containsNull` for the same reason as field nullability: keep a declared
+          // non-nullable element the engine also produces so an unchanged target does not churn.
+          containsNull = declaredArray.containsNull || engineArray.containsNull)
       case _ => engine
     }
 
