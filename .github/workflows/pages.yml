@@ -49,10 +49,11 @@ jobs:
             let latest;
             for await (const {data} of github.paginate.iterator(
               github.rest.actions.listArtifactsForRepo,
-              {...context.repo, name: 'docs-preview-master', per_page: 100}
+              {...context.repo, per_page: 100}
             )) {
               for (const artifact of data) {
-                if (!artifact.expired && artifact.workflow_run?.head_branch === 'master' &&
+                if (artifact.name.startsWith('docs-preview-master-') && !artifact.expired &&
+                    artifact.workflow_run?.head_branch === 'master' &&
                     (!latest || artifact.created_at > latest.created_at ||
                      (artifact.created_at === latest.created_at && artifact.id > latest.id))) {
                   latest = artifact;

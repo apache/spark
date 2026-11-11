@@ -1012,12 +1012,11 @@ jobs:
         # Build docs first with SKIP_API to ensure they are buildable without requiring any
         # language docs to be built beforehand.
         cd docs; SKIP_ERRORDOC=1 SKIP_API=1 bundle exec jekyll build; cd ..
-        if [ -f "./dev/is-changed.py" ]; then
+        if [ "$GITHUB_REPOSITORY" != "apache/spark" ] &&
+            [ -f "./dev/is-changed.py" ]; then
           # Skip PySpark and SparkR docs while keeping Scala/Java/SQL docs
           pyspark_modules=`cd dev && python3.12 -c "import sparktestsupport.modules as m; print(','.join(m.name for m in m.all_modules if m.name.startswith('pyspark')))"`
-          # The published preview must include Python API docs even without Python changes.
-          if [ "$GITHUB_REPOSITORY" != "apache/spark" ] &&
-              [ `./dev/is-changed.py -m $pyspark_modules` = false ]; then
+          if [ `./dev/is-changed.py -m $pyspark_modules` = false ]; then
             export SKIP_PYTHONDOC=1
           fi
           if [ `./dev/is-changed.py -m sparkr` = false ]; then export SKIP_RDOC=1; fi
@@ -1027,18 +1026,20 @@ jobs:
     - name: Tar documentation
       id: documentation
       run: |
-        archive="site-$(date -u +%Y-%m-%d).tar.bz2"
+        timestamp=$(date -u +%Y-%m-%dT%H-%M-%SZ)
+        archive="site-$timestamp.tar.bz2"
         tar cjf "$archive" docs/_site
         echo "archive=$archive" >> "$GITHUB_OUTPUT"
+        echo "timestamp=$timestamp" >> "$GITHUB_OUTPUT"
     - name: Upload documentation
       uses: actions/upload-artifact@v7
       with:
         name: >-
           ${{ github.repository == 'apache/spark' &&
-              format('docs-preview-{0}', inputs.branch) || 'site' }}
+              format('docs-preview-{0}-{1}', inputs.branch,
+                steps.documentation.outputs.timestamp) || 'site' }}
         path: ${{ steps.documentation.outputs.archive }}
         retention-days: 1
-        overwrite: true
 
   # Any TPC-DS related updates on this job need to be applied to tpcds-1g-gen job of benchmark.yml as well
   tpcds-1g:
