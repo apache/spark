@@ -133,6 +133,10 @@ private[hive] case class HiveScriptTransformationExec(
           }
           i += 1
         }
+        // Read ahead, as the iterator without serde does: the task may not call `hasNext` again,
+        // as under a LIMIT, so the end of the output must also be recorded here. The unwrappers
+        // copy the values, so reading the next row into the reused writable keeps `mutableRow`.
+        hasNext
         mutableRow
       }
     }
