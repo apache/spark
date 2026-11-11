@@ -166,12 +166,14 @@ class NativeDataSource(
       queryId: String): ColumnarStreamWriter = {
     val executorLocation = NativeDataSourceRegistry.distribute(location)
     val library = NativeLibraries.get(location)
+    // The previous stream writer of the query is closed before create_writer, which may wait for
+    // it to release its destination.
+    NativeStreamWriters.closePrevious(queryId)
     val created = createWriter(library, schema, overwrite, queryId)
     val handle = new NativeHandle(created.handle, library.closeWriter)
-    val writer = new NativeDataSourceStreamWriter(
-      executorLocation, name, schema, timeZoneId, handle, bytesOrEmpty(Option(created.state)))
     NativeStreamWriters.register(queryId, handle)
-    writer
+    new NativeDataSourceStreamWriter(
+      executorLocation, name, schema, timeZoneId, handle, bytesOrEmpty(Option(created.state)))
   }
 
   /** Runs `f` with a new native data source, which is closed afterwards. */
@@ -550,27 +552,19 @@ class NativeDataSourceWriter(
   }
 
   override def commit(messages: Array[WriterCommitMessage]): Unit = {
-    call(name, "commit a write to") {
-      library.commit(handle.get, -1L, NativeWriterCommitMessage.toBytes(messages))
-    }
-    // Not closed if the commit fails: Spark then aborts the write, which closes it. Spark does
-    // not abort a committed write, see ColumnarBatchWrite.
-    handle.close()
+    commitWrite(library, name, handle, -1L, messages)
   }
 
   override def abort(messages: Array[WriterCommitMessage]): Unit = {
-    Utils.tryWithSafeFinally {
-      call(name, "abort a write to") {
-        library.abort(handle.get, -1L, NativeWriterCommitMessage.toBytes(messages))
-      }
-    }(handle.close())
+    abortWrite(library, name, handle, -1L, messages)
   }
 }
 
 /**
- * Writes to a native data source for a streaming write. Its handle is closed when the streaming
- * query creates its next stream writer, or, for the last stream writer of the query, once the
- * handle becomes unreachable, see [[NativeStreamWriters]].
+ * Writes to a native data source for a streaming write, one micro-batch. As for a batch write, its
+ * handle is closed once the micro-batch is committed or aborted. A stream writer that is neither
+ * committed nor aborted is closed before the streaming query creates its next stream writer, or
+ * once the handle becomes unreachable, see [[NativeStreamWriters]].
  */
 class NativeDataSourceStreamWriter(
     location: NativeLibraryLocation,
@@ -592,17 +586,12 @@ class NativeDataSourceStreamWriter(
       location, name, schema, timeZoneId, writerState, partitionId, taskId, epochId)
   }
 
-  // Spark does not abort a committed micro-batch, see ColumnarStreamingWrite.
   override def commit(epochId: Long, messages: Array[WriterCommitMessage]): Unit = {
-    call(name, "commit a write to") {
-      library.commit(handle.get, epochId, NativeWriterCommitMessage.toBytes(messages))
-    }
+    commitWrite(library, name, handle, epochId, messages)
   }
 
   override def abort(epochId: Long, messages: Array[WriterCommitMessage]): Unit = {
-    call(name, "abort a write to") {
-      library.abort(handle.get, epochId, NativeWriterCommitMessage.toBytes(messages))
-    }
+    abortWrite(library, name, handle, epochId, messages)
   }
 }
 
@@ -1514,22 +1503,30 @@ object NativeHandle extends Logging {
 }
 
 /**
- * The stream writers of the streaming queries, by query ID. The Data Source V2 streaming write
- * has no hook for when the query stops, but a micro-batch streaming query creates a new stream
- * writer for each micro-batch, after the previous micro-batch committed or aborted its write, and
- * a restarted query creates a new one. So the previous stream writer of a query is closed when
- * the query creates a new one, and the last one when it becomes unreachable.
+ * The stream writers of the streaming queries, by query ID, to close those that are neither
+ * committed nor aborted: a stream writer closes its handle once its micro-batch is committed or
+ * aborted. The Data Source V2 streaming write has no hook for when the query stops, but a
+ * micro-batch streaming query creates a new stream writer for each micro-batch, and a restarted
+ * query creates a new one. So a previous stream writer of a query that is still open is closed
+ * before the query creates a new one, and the last one when it becomes unreachable.
  */
 object NativeStreamWriters {
   // Weak, so that the last stream writer of a query can still become unreachable.
   private val writers = new ConcurrentHashMap[String, WeakReference[NativeHandle]]()
 
-  /** Registers the new stream writer of the query, and closes its previous one. */
-  def register(queryId: String, handle: NativeHandle): Unit = {
-    // Forgets the queries whose last stream writer was released.
+  /**
+   * Closes the previous stream writer of the query, before the query creates a new one. This has
+   * no effect if that one is already closed.
+   */
+  def closePrevious(queryId: String): Unit = {
+    // Forgets the queries whose last stream writer became unreachable.
     writers.values().removeIf(_.get() == null)
-    Option(writers.put(queryId, new WeakReference(handle))).flatMap(r => Option(r.get()))
-      .foreach(_.close())
+    Option(writers.remove(queryId)).flatMap(r => Option(r.get())).foreach(_.close())
+  }
+
+  /** Registers the new stream writer of the query. */
+  def register(queryId: String, handle: NativeHandle): Unit = {
+    writers.put(queryId, new WeakReference(handle))
   }
 }
 
@@ -1578,6 +1575,41 @@ object NativeCalls {
 
   def bytesOrEmpty(bytes: Option[Array[Byte]]): Array[Byte] = {
     bytes.flatMap(Option(_)).getOrElse(Array.emptyByteArray)
+  }
+
+  /**
+   * Commits the write of a writer, for the epoch of a micro-batch or -1 for a batch write, and
+   * closes the writer. It is not closed if the commit fails: Spark then aborts the write, which
+   * closes it. Spark does not abort a committed write, see ColumnarBatchWrite and
+   * ColumnarStreamingWrite.
+   */
+  def commitWrite(
+      library: NativeLibrary,
+      name: String,
+      handle: NativeHandle,
+      epochId: Long,
+      messages: Array[WriterCommitMessage]): Unit = {
+    call(name, "commit a write to") {
+      library.commit(handle.get, epochId, NativeWriterCommitMessage.toBytes(messages))
+    }
+    handle.close()
+  }
+
+  /**
+   * Aborts the write of a writer, for the epoch of a micro-batch or -1 for a batch write, and
+   * closes the writer, also if the abort fails.
+   */
+  def abortWrite(
+      library: NativeLibrary,
+      name: String,
+      handle: NativeHandle,
+      epochId: Long,
+      messages: Array[WriterCommitMessage]): Unit = {
+    Utils.tryWithSafeFinally {
+      call(name, "abort a write to") {
+        library.abort(handle.get, epochId, NativeWriterCommitMessage.toBytes(messages))
+      }
+    }(handle.close())
   }
 }
 

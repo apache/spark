@@ -35,7 +35,7 @@ import org.apache.spark.sql.connector.catalog.CatalogV2Implicits._
 import org.apache.spark.sql.connector.catalog.WriteDistributionMode
 import org.apache.spark.sql.connector.expressions.{FieldReference, LogicalExpressions, NamedReference, RewritableTransform, SortOrder => V2SortOrder, Transform}
 import org.apache.spark.sql.errors.QueryCompilationErrors
-import org.apache.spark.sql.execution.command.{CreateDataSourceTableCommand, DDLUtils}
+import org.apache.spark.sql.execution.command.{CreateDataSourceTableCommand, CreateTableLikeCommand, DDLUtils}
 import org.apache.spark.sql.execution.datasources.{BucketingUtils, CreateTable => CreateTableV1, PartitioningUtils}
 import org.apache.spark.sql.execution.datasources.v2.DataSourceV2Utils
 import org.apache.spark.sql.internal.{HiveSerDe, SQLConf}
@@ -84,6 +84,32 @@ private[sql] object CreateTableHelper extends SQLConfHelper with Logging with Al
     case _ => createTable
   }
 
+  /** Lowers a session-catalog CTAS when its provider uses V1 commands. */
+  private[analysis] def lowerCreateTableAsSelect(
+      c: CreateTableAsSelect,
+      ident: TableIdentifier,
+      tableSpec: TableSpec): LogicalPlan = {
+    val (storageFormat, provider) = getStorageFormatAndProvider(
+      c.tableSpec.provider,
+      tableSpec.options ++ c.writeOptions,
+      c.tableSpec.location,
+      c.tableSpec.serde,
+      ctas = true)
+
+    if (!isV2Provider(provider)) {
+      if (tableSpec.constraints.nonEmpty) {
+        throw QueryCompilationErrors.unsupportedTableOperationError(
+          ident, "CONSTRAINT")
+      }
+      failIfWriteDistributionOrOrdering(
+        ident, "CREATE TABLE AS SELECT", c.writeDistributionMode, c.writeOrdering)
+      constructV1TableCmd(Some(c.query), c.tableSpec, ident, new StructType, c.partitioning,
+        c.ignoreIfExists, storageFormat, provider)
+    } else {
+      c
+    }
+  }
+
   /** Rejects REPLACE TABLE for a session-catalog provider that only supports V1 commands. */
   private[analysis] def lowerReplaceTable(
       replaceTable: ReplaceTable): LogicalPlan = replaceTable match {
@@ -97,6 +123,30 @@ private[sql] object CreateTableHelper extends SQLConfHelper with Logging with Al
       }
 
     case _ => replaceTable
+  }
+
+  /** Rejects session-catalog RTAS when its provider only supports V1 commands. */
+  private[analysis] def lowerReplaceTableAsSelect(
+      c: ReplaceTableAsSelect,
+      ident: TableIdentifier,
+      defaultProvider: => String): LogicalPlan = {
+    val provider = c.tableSpec.provider.getOrElse(defaultProvider)
+    if (!isV2Provider(provider)) {
+      throw QueryCompilationErrors.unsupportedTableOperationError(
+        ident, "REPLACE TABLE AS SELECT")
+    } else {
+      c
+    }
+  }
+
+  /** Lowers CREATE TABLE LIKE after both V1 table identifiers have been resolved. */
+  private[analysis] def lowerCreateTableLike(
+      c: CreateTableLike,
+      targetIdent: TableIdentifier,
+      sourceIdent: TableIdentifier): CreateTableLikeCommand = {
+    val fileFormat = buildStorageFormatFromSerdeInfo(c.location, c.serdeInfo)
+    CreateTableLikeCommand(
+      targetIdent, sourceIdent, fileFormat, c.provider, c.properties, c.ifNotExists)
   }
 
   private[analysis] def constructV1TableCmd(

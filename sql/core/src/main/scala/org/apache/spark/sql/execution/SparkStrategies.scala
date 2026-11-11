@@ -401,7 +401,8 @@ abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
           joinType = j.joinType,
           condition = residual,
           left = planLater(j.left),
-          right = planLater(j.right)
+          right = planLater(j.right),
+          codegenEnabled = conf.getConf(SQLConf.ENABLE_SORT_MERGE_AS_OF_JOIN_CODEGEN)
         ) :: Nil
       case _ => Nil
     }
@@ -926,13 +927,22 @@ abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
    */
   object PythonEvals extends Strategy {
     override def apply(plan: LogicalPlan): Seq[SparkPlan] = plan match {
-      case ArrowEvalPython(udfs, output, child, PythonEvalType.SQL_SCALAR_ARROW_INPROCESS_UDF) =>
+      case e @ ArrowEvalPython(
+          udfs, requiredChildOutput, resultAttrs, child,
+          PythonEvalType.SQL_SCALAR_ARROW_INPROCESS_UDF) =>
         InProcessPythonUDFBuilder.checkConfiguration(conf)
-        InProcessArrowEvalPythonExec(udfs, output, planLater(child)) :: Nil
-      case ArrowEvalPython(udfs, output, child, evalType) =>
-        ArrowEvalPythonExec(udfs, output, planLater(child), evalType) :: Nil
-      case BatchEvalPython(udfs, output, child) =>
-        BatchEvalPythonExec(udfs, output, planLater(child)) :: Nil
+        // The in-process evaluator passes through the whole child, so drop what is not required.
+        val exec = InProcessArrowEvalPythonExec(udfs, resultAttrs, planLater(child))
+        if (requiredChildOutput == child.output) {
+          exec :: Nil
+        } else {
+          ProjectExec(e.output, exec) :: Nil
+        }
+      case ArrowEvalPython(udfs, requiredChildOutput, resultAttrs, child, evalType) =>
+        ArrowEvalPythonExec(
+          udfs, requiredChildOutput, resultAttrs, planLater(child), evalType) :: Nil
+      case BatchEvalPython(udfs, requiredChildOutput, resultAttrs, child) =>
+        BatchEvalPythonExec(udfs, requiredChildOutput, resultAttrs, planLater(child)) :: Nil
       case BatchEvalPythonUDTF(udtf, requiredChildOutput, resultAttrs, child) =>
         BatchEvalPythonUDTFExec(udtf, requiredChildOutput, resultAttrs, planLater(child)) :: Nil
       case ArrowEvalPythonUDTF(udtf, requiredChildOutput, resultAttrs, child, evalType) =>

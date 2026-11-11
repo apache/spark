@@ -119,10 +119,11 @@
  *   the same when the query restarts from its checkpoint, so the ID of the query and the epoch ID
  *   identify the output of a micro-batch, also when other queries write to the same destination. A
  *   micro-batch streaming query creates a new stream writer for each micro-batch, and Spark closes
- *   the previous stream writer of the query when the query creates a new one. Spark is not told
- *   when a streaming query stops, so it closes the last stream writer of the query once the writer
- *   is no longer referenced, or when the query is restarted. Streaming writes are micro-batch only:
- *   a query with continuous processing fails before create_writer.
+ *   it once it committed or aborted the micro-batch, as for a batch write. A stream writer that
+ *   Spark neither commits nor aborts is closed before the query calls create_writer for its next
+ *   one, or, since Spark is not told when a streaming query stops, once the writer is no longer
+ *   referenced. Streaming writes are micro-batch only: a query with continuous processing fails
+ *   before create_writer.
  *
  * Conventions
  * -----------
@@ -137,10 +138,11 @@
  *   NULL handle as an error. Spark releases each handle exactly once, with the close function of
  *   its kind: close, close_reader, close_stream_reader, close_writer or close_data_writer, and no
  *   other function releases a handle. A handle is not always released right after its last use: a
- *   batch reader whose partitions are never planned and the last stream writer of a query are
- *   released once they are no longer referenced (see Lifecycle above). A reader or writer handle
- *   must not depend on the data source handle it was created from, because Spark closes the data
- *   source handle right after creating it.
+ *   batch reader whose partitions are never planned may only be released once it is no longer
+ *   referenced, and a stream writer that is neither committed nor aborted before the query
+ *   creates its next one or once it is no longer referenced (see Lifecycle above). A reader or
+ *   writer handle must not depend on the data source handle it was created from, because Spark
+ *   closes the data source handle right after creating it.
  * - Order of the calls. After a function on a handle fails, Spark calls no other function on the
  *   handle than its close function, except that it aborts a writer whose commit failed and a data
  *   writer whose write or commit failed. It does not abort a writer or a data writer whose commit
@@ -201,8 +203,8 @@
  * - Threads. Spark calls the library from multiple threads, and calls on different handles may
  *   run concurrently. Calls on the same handle never run concurrently. A handle may be released
  *   from a thread other than the threads that used it, such as a JVM Cleaner thread when Spark
- *   releases a handle once it is no longer referenced, for example the last stream writer of a
- *   streaming query. A SparkDsSink must be called on the thread of the call that it was passed
+ *   releases a handle once it is no longer referenced, for example a batch reader whose partitions
+ *   are never planned. A SparkDsSink must be called on the thread of the call that it was passed
  *   to, during that call. The functions of SparkDsHost and SparkDsTaskContext, and the callbacks
  *   of the stream that read initializes, can be called from any thread. The callbacks of the
  *   stream never run concurrently.

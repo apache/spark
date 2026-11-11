@@ -17,6 +17,7 @@
 
 package org.apache.spark.sql.execution.joins
 
+import java.io.Closeable
 import java.math.{BigDecimal => JavaBigDecimal}
 
 import org.apache.spark.{SparkException, TaskContext}
@@ -24,8 +25,8 @@ import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.BindReferences.bindReference
-import org.apache.spark.sql.catalyst.expressions.codegen.{CodegenContext, GenerateOrdering,
-  GeneratePredicate}
+import org.apache.spark.sql.catalyst.expressions.codegen.{CodegenContext, CodeGenerator, ExprCode,
+  FalseLiteral, GeneratePredicate}
 import org.apache.spark.sql.catalyst.plans._
 import org.apache.spark.sql.catalyst.plans.logical.AsOfJoin
 import org.apache.spark.sql.catalyst.plans.physical._
@@ -49,6 +50,12 @@ import org.apache.spark.unsafe.types.TimestampNanosVal
  * [[SortMergeAsOfJoinScanner.supportsCursorScan]]) read the right side once
  * and buffer nothing.
  *
+ * Backward and forward joins support whole-stage codegen. The generated code runs the cursor
+ * scan or the buffered scan and checks the conditions. The right-side buffer stays a Scala
+ * object, since it can spill to disk. Nearest joins keep the interpreted scan. `codegenEnabled`
+ * is the codegen config as it was when the join was planned. A join built by hand, not by the
+ * planner, gets `false`.
+ *
  * Note: When there are no equi-keys, both sides are collected into a
  * single partition (AllTuples) and, without a cursor scan, the entire
  * right side is buffered.
@@ -64,6 +71,7 @@ case class SortMergeAsOfJoinExec(
     condition: Option[Expression],
     left: SparkPlan,
     right: SparkPlan,
+    codegenEnabled: Boolean = false,
     isSkewJoin: Boolean = false) extends ShuffledJoin {
 
   // The sides may have different key counts: each side is sorted on its own, and only the
@@ -78,14 +86,6 @@ case class SortMergeAsOfJoinExec(
     "numOutputRows" -> SQLMetrics.createMetric(sparkContext, "number of output rows"),
     "spillSize" -> SQLMetrics.createSizeMetric(sparkContext, "spill size"),
     "numAsOfCursorTasks" -> SQLMetrics.createMetric(sparkContext, "number of cursor scan tasks"))
-
-  override def supportCodegen: Boolean = false
-
-  // Codegen stubs (not called since supportCodegen = false)
-  override def inputRDDs(): Seq[RDD[InternalRow]] =
-    left.execute() :: right.execute() :: Nil
-  override protected def doProduce(ctx: CodegenContext): String =
-    throw SparkException.internalError(s"$nodeName does not support codegen")
 
   override def requiredChildDistribution: Seq[Distribution] = {
     if (leftKeys.isEmpty) {
@@ -112,9 +112,7 @@ case class SortMergeAsOfJoinExec(
     val sizeInBytesSpillThreshold = conf.sortMergeJoinExecBufferSpillSizeThreshold
     val spillThreshold = conf.sortMergeJoinExecBufferSpillThreshold
     val numAsOfCursorTasks = longMetric("numAsOfCursorTasks")
-    val useCursorScan = conf.sortMergeAsOfJoinCursorScanEnabled &&
-      SortMergeAsOfJoinScanner.supportsCursorScan(
-        direction, asOfCondition, condition, leftSortExprs, rightSortExprs)
+    val useCursorScan = cursorScanEnabled
 
     left.execute().zipPartitions(right.execute()) { (leftIter, rightIter) =>
       val scanner = new SortMergeAsOfJoinScanner(
@@ -131,6 +129,397 @@ case class SortMergeAsOfJoinExec(
       TaskContext.get().addTaskCompletionListener[Unit](_ => scanner.close())
       scanner.iterator
     }
+  }
+
+  /** Whether the join reads the right side once with a cursor, instead of buffering it. */
+  private def cursorScanEnabled: Boolean = conf.sortMergeAsOfJoinCursorScanEnabled &&
+    SortMergeAsOfJoinScanner.supportsCursorScan(
+      direction, asOfCondition, condition, leftSortExprs, rightSortExprs)
+
+  // Nearest joins keep the interpreted scan, as its distance compare is harder to generate. The
+  // codegen config is read once, when the join is planned.
+  override def supportCodegen: Boolean = direction != Nearest && codegenEnabled
+
+  // ShuffledJoin already hides `isSkewJoin`, the last field. This also hides `codegenEnabled`,
+  // the field before it, in the plan string.
+  override def stringArgs: Iterator[Any] = super.stringArgs.toSeq.dropRight(1).iterator
+
+  override def inputRDDs(): Seq[RDD[InternalRow]] =
+    left.execute() :: right.execute() :: Nil
+
+  // A left row makes at most one output row, so the output row needs no copy.
+  override def needCopyResult: Boolean = false
+
+  // The join loop reads the stage's input, so it stops at a LIMIT fused above it.
+  override protected def canCheckLimitNotReached: Boolean = true
+
+  /**
+   * Generates the join loop. For each left row, a generated function finds the best right row,
+   * or null: the cursor scan, or a scan of the buffered right group. The output columns go
+   * straight to the parent operator.
+   */
+  override protected def doProduce(ctx: CodegenContext): String = {
+    // Inline mutable state since not many join operations in a task
+    val leftInput = ctx.addMutableState("scala.collection.Iterator", "leftInput",
+      v => s"$v = inputs[0];", forceInline = true)
+    val rightInput = ctx.addMutableState("scala.collection.Iterator", "rightInput",
+      v => s"$v = inputs[1];", forceInline = true)
+    // The next right row, or null once the right side is done. Reading the right row after it
+    // can overwrite it, so anything that keeps it longer must copy it.
+    val rightPeek = ctx.addMutableState("UnsafeRow", "rightPeek", forceInline = true)
+    val nextRightName = ctx.freshName("nextRight")
+    val nextRight = ctx.addNewFunction(nextRightName,
+      s"""
+         |private UnsafeRow $nextRightName() {
+         |  return $rightInput.hasNext() ? (UnsafeRow) $rightInput.next() : null;
+         |}
+       """.stripMargin, inlineToOuterClass = true)
+
+    val (findMatch, initScan) = if (cursorScanEnabled) {
+      genCursorScan(ctx, rightPeek, nextRight)
+    } else {
+      genBufferedScan(ctx, rightInput, rightPeek, nextRight)
+    }
+
+    val leftRow = ctx.freshName("leftRow")
+    val matched = ctx.freshName("matched")
+    val leftVars = genOneSideJoinVars(ctx, leftRow, left, setDefaultValue = false)
+    val rightVars =
+      genOneSideJoinVars(ctx, matched, right, setDefaultValue = joinType == LeftOuter)
+    // An inner join drops a left row with no match. A left outer join keeps it with nulls.
+    val skipUnmatched = if (joinType == LeftOuter) "" else s"if ($matched == null) continue;"
+    val numOutput = metricTerm(ctx, "numOutputRows")
+    val initJoin = ctx.addMutableState(CodeGenerator.JAVA_BOOLEAN, "initJoin")
+    val thisPlan = ctx.addReferenceObj("plan", this)
+
+    s"""
+       |if (!$initJoin) {
+       |  $initJoin = true;
+       |  $rightPeek = $nextRight();
+       |  $initScan
+       |}
+       |while ($limitNotReachedCond $leftInput.hasNext()) {
+       |  InternalRow $leftRow = (InternalRow) $leftInput.next();
+       |  UnsafeRow $matched = $findMatch($leftRow);
+       |  $skipUnmatched
+       |  $numOutput.add(1);
+       |  ${consume(ctx, leftVars ++ rightVars)}
+       |  if (shouldStop()) return;
+       |}
+       |$thisPlan.cleanupResources();
+     """.stripMargin
+  }
+
+  /**
+   * Generates the cursor scan, which reads the right side once and never steps back. The left
+   * rows of a group come in ascending as-of key order, so backward keeps its best row for the
+   * next left row, and forward drops each failing row. Returns the function that finds the best
+   * right row for a left row, and the code that starts the scan.
+   */
+  private def genCursorScan(
+      ctx: CodegenContext,
+      rightPeek: String,
+      nextRight: String): (String, String) = {
+    // The best right row so far: null, or `bestBuffer`, which holds a copy of it.
+    val cursorBest = ctx.addMutableState("UnsafeRow", "cursorBest", forceInline = true)
+    val bestBuffer = ctx.addMutableState("UnsafeRow", "cursorBestBuffer", forceInline = true)
+    val groupHasRight =
+      ctx.addMutableState(CodeGenerator.JAVA_BOOLEAN, "cursorGroupHasRight", forceInline = true)
+    val copyToBestName = ctx.freshName("copyToCursorBestBuffer")
+    val copyToBest = ctx.addNewFunction(copyToBestName,
+      s"""
+         |private UnsafeRow $copyToBestName(UnsafeRow row) {
+         |  if ($bestBuffer == null) {
+         |    $bestBuffer = row.copy();
+         |  } else {
+         |    $bestBuffer.copyFrom(row);
+         |  }
+         |  return $bestBuffer;
+         |}
+       """.stripMargin, inlineToOuterClass = true)
+    val leftRow = ctx.freshName("leftRow")
+    val (readLeftKeys, compareRightKeys, onNewGroup) =
+      genEquiKeys(ctx, leftRow, rightPeek)
+    val leftAsOfKey = createJoinKey(ctx, leftRow, leftSortExprs.take(1), left.output).head
+    val rightAsOfKey = createJoinKey(ctx, rightPeek, rightSortExprs.take(1), right.output).head
+    val asOfHolds = genConditionFunction(ctx, asOfCondition, "asOfHolds")
+    // A new group skips the right rows of earlier groups without evaluating either as-of key,
+    // then records whether the group has a right row. Without equi-keys, the only group starts
+    // with the scan.
+    val (startGroup, startOnlyGroup) = if (leftKeys.isEmpty) {
+      ("", s"$groupHasRight = $rightPeek != null;")
+    } else {
+      val start =
+        s"""
+           |$cursorBest = null;
+           |while ($rightPeek != null) {
+           |  $compareRightKeys
+           |  if (comp <= 0) break;
+           |  $rightPeek = $nextRight();
+           |}
+           |$groupHasRight = $rightPeek != null && comp == 0;
+         """.stripMargin
+      (start, "")
+    }
+    // Forward checks the kept row again first. On a failing row, forward drops it, since no
+    // later left row can match it, and backward stops there and keeps it for the next left row.
+    val (checkKeptRow, onPass, onFail) = direction match {
+      case Forward =>
+        val check =
+          s"""
+             |if ($cursorBest != null) {
+             |  if ($asOfHolds($leftRow, $cursorBest)) return $cursorBest;
+             |  $cursorBest = null;
+             |}
+           """.stripMargin
+        (check, s"return $cursorBest;", s"$rightPeek = $nextRight();")
+      case _ =>
+        ("", "", s"return $cursorBest;")
+    }
+
+    val funcName = ctx.freshName("findWithCursor")
+    val func = ctx.addNewFunction(funcName,
+      s"""
+         |private UnsafeRow $funcName(InternalRow $leftRow) {
+         |  int comp = 0;
+         |  $readLeftKeys
+         |  ${onNewGroup(startGroup)}
+         |  // A group with no right rows never evaluates the left as-of key, which can fail at
+         |  // runtime, for example on an invalid cast under ANSI.
+         |  if (!$groupHasRight) return null;
+         |  ${leftAsOfKey.code}
+         |  // A NULL left as-of key matches nothing. It must not move the cursor.
+         |  if (${leftAsOfKey.isNull}) return null;
+         |  $checkKeptRow
+         |  while ($rightPeek != null) {
+         |    $compareRightKeys
+         |    // The group's right rows end at the first row of a later group.
+         |    if (comp != 0) return $cursorBest;
+         |    ${rightAsOfKey.code}
+         |    if (${rightAsOfKey.isNull}) {
+         |      $rightPeek = $nextRight();
+         |      continue;
+         |    }
+         |    if ($asOfHolds($leftRow, $rightPeek)) {
+         |      // The next right row can overwrite `rightPeek`, so keep a copy.
+         |      $cursorBest = $copyToBest($rightPeek);
+         |      $rightPeek = $nextRight();
+         |      $onPass
+         |    } else {
+         |      $onFail
+         |    }
+         |  }
+         |  return $cursorBest;
+         |}
+       """.stripMargin, inlineToOuterClass = true)
+    (func, s"""
+       |${metricTerm(ctx, "numAsOfCursorTasks")}.add(1);
+       |$startOnlyGroup
+     """.stripMargin)
+  }
+
+  /**
+   * Generates the buffered scan. Each right group stays in an [[ExternalAppendOnlyUnsafeRowArray]],
+   * which can spill, and is scanned for every left row. Returns the function that finds the best
+   * right row for a left row, and the code that starts the scan.
+   */
+  private def genBufferedScan(
+      ctx: CodegenContext,
+      rightInput: String,
+      rightPeek: String,
+      nextRight: String): (String, String) = {
+    val clsName = classOf[ExternalAppendOnlyUnsafeRowArray].getName
+    val inMemoryThreshold = conf.sortMergeJoinExecBufferInMemoryThreshold
+    val sizeInBytesSpillThreshold = conf.sortMergeJoinExecBufferSpillSizeThreshold
+    val spillThreshold = conf.sortMergeJoinExecBufferSpillThreshold
+    // Inline mutable state since not many join operations in a task
+    val group = ctx.addMutableState(clsName, "rightGroup",
+      v => s"$v = new $clsName($inMemoryThreshold, ${sizeInBytesSpillThreshold}L, " +
+        s"$spillThreshold, ${sizeInBytesSpillThreshold}L);",
+      forceInline = true)
+    val leftRow = ctx.freshName("leftRow")
+
+    val fillGroup = if (leftKeys.isEmpty) {
+      val allBuffered = ctx.addMutableState(CodeGenerator.JAVA_BOOLEAN, "allRightBuffered")
+      s"""
+         |if (!$allBuffered) {
+         |  // No equi-keys, so the whole right side is one group.
+         |  $allBuffered = true;
+         |  if ($rightPeek != null) {
+         |    $group.add($rightPeek);
+         |    $rightPeek = null;
+         |  }
+         |  while ($rightInput.hasNext()) {
+         |    $group.add((UnsafeRow) $rightInput.next());
+         |  }
+         |}
+       """.stripMargin
+    } else {
+      val (readLeftKeys, compareRightKeys, onNewGroup) =
+        genEquiKeys(ctx, leftRow, rightPeek)
+      val bufferGroup =
+        s"""
+           |$group.clear();
+           |while ($rightPeek != null) {
+           |  $compareRightKeys
+           |  if (comp > 0) {
+           |    $rightPeek = $nextRight();
+           |    continue;
+           |  }
+           |  if (comp < 0) break;
+           |  $group.add($rightPeek);
+           |  $rightPeek = $nextRight();
+           |}
+         """.stripMargin
+      s"""
+         |$readLeftKeys
+         |${onNewGroup(bufferGroup)}
+       """.stripMargin
+    }
+
+    val asOfHolds = genConditionFunction(ctx, asOfCondition, "asOfHolds")
+    val rightRow = ctx.freshName("rightRow")
+    val residualHolds = condition
+      .map(cond => s"${genConditionFunction(ctx, cond, "residualHolds")}($leftRow, $rightRow)")
+      .getOrElse("true")
+    val needsCopy = ctx.freshName("needsCopy")
+    val best = ctx.freshName("best")
+    // A spilled group reuses one row on every next(), so a kept match must be copied.
+    val retained = s"($needsCopy ? $rightRow.copy() : $rightRow)"
+    // Backward keeps the last passing row, and forward returns the first. Once the as-of
+    // condition has held, the first row that fails it ends the scan.
+    val (onMatch, onPastMatches, noMoreRows) = direction match {
+      case Forward => (s"return $retained;", "return null;", "return null;")
+      case _ => (s"$best = $retained;", s"return $best;", s"return $best;")
+    }
+    val iter = ctx.freshName("iter")
+    val asOfSeen = ctx.freshName("asOfSeen")
+
+    val funcName = ctx.freshName("findInGroup")
+    // The scan often stops early, so it closes the iterator to close the spill files it reads.
+    val func = ctx.addNewFunction(funcName,
+      s"""
+         |private UnsafeRow $funcName(InternalRow $leftRow) throws java.io.IOException {
+         |  int comp = 0;
+         |  $fillGroup
+         |  scala.collection.Iterator<UnsafeRow> $iter = $group.generateIterator();
+         |  try {
+         |    boolean $needsCopy = $group.isSpillBacked();
+         |    boolean $asOfSeen = false;
+         |    UnsafeRow $best = null;
+         |    while ($iter.hasNext()) {
+         |      UnsafeRow $rightRow = (UnsafeRow) $iter.next();
+         |      if ($asOfHolds($leftRow, $rightRow)) {
+         |        $asOfSeen = true;
+         |        if ($residualHolds) {
+         |          $onMatch
+         |        }
+         |      } else if ($asOfSeen) {
+         |        $onPastMatches
+         |      }
+         |    }
+         |    $noMoreRows
+         |  } finally {
+         |    if ($iter instanceof java.io.Closeable) {
+         |      ((java.io.Closeable) $iter).close();
+         |    }
+         |  }
+         |}
+       """.stripMargin, inlineToOuterClass = true)
+    val spillHook = s"${classOf[JoinHelper].getName}.recordSpillSizeOnTaskCompletion(" +
+      s"$group, ${metricTerm(ctx, "spillSize")});"
+    (func, spillHook)
+  }
+
+  /**
+   * Generates the equi-key code of a scan, as three parts:
+   *  - read the left keys, and return null for a NULL key, which matches nothing;
+   *  - set `comp` to the order of the left keys against the keys of `rightPeek`, where a NULL
+   *    right key sorts before any value;
+   *  - run the given code when the left keys start a new group.
+   * With no equi-keys all three are empty, so `comp` stays 0 and there is one group.
+   */
+  private def genEquiKeys(
+      ctx: CodegenContext,
+      leftRow: String,
+      rightPeek: String): (String, String, String => String) = {
+    if (leftKeys.isEmpty) return ("", "", _ => "")
+    val leftKeyVars = createJoinKey(ctx, leftRow, leftKeys, left.output)
+    val rightKeyVars = createJoinKey(ctx, rightPeek, rightKeys, right.output)
+    // The keys of the current left group, kept across calls.
+    val groupKeyVars = copyKeys(ctx, leftKeyVars)
+    val groupValid = ctx.addMutableState(CodeGenerator.JAVA_BOOLEAN, "groupValid")
+
+    val readLeftKeys =
+      s"""
+         |${leftKeyVars.map(_.code).mkString("\n")}
+         |${anyNull(leftKeyVars).map(isNull => s"if ($isNull) return null;").getOrElse("")}
+       """.stripMargin
+    // A NULL right key is compared, not skipped. It sorts before any value.
+    val compareRightKeys =
+      s"""
+         |${rightKeyVars.map(_.code).mkString("\n")}
+         |${genRightKeyComparison(ctx, leftKeyVars, rightKeyVars)}
+       """.stripMargin
+    val newGroup = ctx.freshName("newGroup")
+    val onNewGroup = (code: String) =>
+      s"""
+         |boolean $newGroup = !$groupValid;
+         |if ($groupValid) {
+         |  ${genComparison(ctx, leftKeyVars, groupKeyVars)}
+         |  $newGroup = comp != 0;
+         |}
+         |if ($newGroup) {
+         |  ${groupKeyVars.map(_.code).mkString("\n")}
+         |  $groupValid = true;
+         |  $code
+         |}
+       """.stripMargin
+    (readLeftKeys, compareRightKeys, onNewGroup)
+  }
+
+  /** The Java check that any of `keys` is NULL, or None when no key can be NULL. */
+  private def anyNull(keys: Seq[ExprCode]): Option[String] = {
+    val isNulls = keys.map(_.isNull).filter(_ != FalseLiteral)
+    if (isNulls.isEmpty) None else Some(isNulls.mkString(" || "))
+  }
+
+  /**
+   * Generates code that sets `comp` to the order of the left keys against the right keys, key
+   * by key. The left keys are never NULL here. A NULL right key sorts before any value, so it
+   * compares as smaller.
+   */
+  private def genRightKeyComparison(
+      ctx: CodegenContext,
+      leftVars: Seq[ExprCode],
+      rightVars: Seq[ExprCode]): String = {
+    leftVars.zip(rightVars).zipWithIndex.map { case ((l, r), i) =>
+      val compare = ctx.genComp(leftKeys(i).dataType, l.value, r.value)
+      val withNull = if (r.isNull == FalseLiteral) compare else s"(${r.isNull} ? 1 : ($compare))"
+      s"if (comp == 0) comp = $withNull;"
+    }.mkString("comp = 0;\n", "\n", "")
+  }
+
+  /** Generates a function that tells whether `cond` is TRUE for a left row and a right row. */
+  private def genConditionFunction(
+      ctx: CodegenContext,
+      cond: Expression,
+      name: String): String = {
+    val leftRow = ctx.freshName("leftRow")
+    val rightRow = ctx.freshName("rightRow")
+    val leftVars = genOneSideJoinVars(ctx, leftRow, left, setDefaultValue = false)
+    val (_, checkCondition, _) =
+      getJoinCondition(ctx, cond, leftVars, left, right, Some(rightRow))
+    val funcName = ctx.freshName(name)
+    ctx.addNewFunction(funcName,
+      s"""
+         |private boolean $funcName(InternalRow $leftRow, InternalRow $rightRow) {
+         |  $checkCondition {
+         |    return true;
+         |  }
+         |  return false;
+         |}
+       """.stripMargin)
   }
 
   override protected def withNewChildrenInternal(
@@ -194,13 +583,10 @@ private[joins] class SortMergeAsOfJoinScanner(
   private lazy val boundResidualCond =
     residualCondition.map(ShortCircuitPredicate.create(_, joinedOutput))
 
+  // A right key can be NULL even when the left key is NOT NULL, so every key is nullable here.
   private val equiKeyOrdering: Option[BaseOrdering] =
     if (leftKeys.nonEmpty) {
-      val keyAttributes = leftKeys.zipWithIndex.map { case (key, i) =>
-        AttributeReference(s"key_$i", key.dataType, key.nullable)()
-      }
-      Some(GenerateOrdering.generate(
-        keyAttributes.map(SortOrder(_, Ascending)), keyAttributes))
+      Some(RowOrdering.createNaturalAscendingOrdering(leftKeys.map(_.dataType)))
     } else {
       None
     }
@@ -413,6 +799,17 @@ private[joins] class SortMergeAsOfJoinScanner(
     if (needsCopy) rightRow.copy() else rightRow
   }
 
+  /**
+   * Closes a right-group iterator, which the scans below often leave before its end. Once the
+   * group has spilled, the iterator holds a reader open on every spill file until it ends or is
+   * closed, so an unclosed one per left row would keep them all open until the task ends. A kept
+   * match is already a copy then, so closing the iterator does not change it.
+   */
+  private def closeIterator(iter: Iterator[UnsafeRow]): Unit = iter match {
+    case closeable: Closeable => closeable.close()
+    case _ =>
+  }
+
   /** Whether `cond` is TRUE on the current joined row. FALSE and NULL both fail. */
   private def holds(cond: BasePredicate): Boolean = cond.eval(joinedRow)
 
@@ -435,22 +832,26 @@ private[joins] class SortMergeAsOfJoinScanner(
     var asOfSeen = false
 
     joinedRow.withLeft(leftRow)
-    while (iter.hasNext) {
-      val rightRow = iter.next()
-      joinedRow.withRight(rightRow)
+    try {
+      while (iter.hasNext) {
+        val rightRow = iter.next()
+        joinedRow.withRight(rightRow)
 
-      if (holds(boundAsOfCond)) {
-        asOfSeen = true
-        if (residualHolds) {
-          // Last match wins (closest right.t to left.t)
-          bestMatch = retainMatch(rightRow, needsCopy)
+        if (holds(boundAsOfCond)) {
+          asOfSeen = true
+          if (residualHolds) {
+            // Last match wins (closest right.t to left.t)
+            bestMatch = retainMatch(rightRow, needsCopy)
+          }
+        } else if (asOfSeen) {
+          // At or past left.t, so no later row passes the as-of condition.
+          return bestMatch
         }
-      } else if (asOfSeen) {
-        // At or past left.t, so no later row passes the as-of condition.
-        return bestMatch
       }
+      bestMatch
+    } finally {
+      closeIterator(iter)
     }
-    bestMatch
   }
 
   /**
@@ -464,21 +865,25 @@ private[joins] class SortMergeAsOfJoinScanner(
     var asOfSeen = false
 
     joinedRow.withLeft(leftRow)
-    while (iter.hasNext) {
-      val rightRow = iter.next()
-      joinedRow.withRight(rightRow)
+    try {
+      while (iter.hasNext) {
+        val rightRow = iter.next()
+        joinedRow.withRight(rightRow)
 
-      if (holds(boundAsOfCond)) {
-        asOfSeen = true
-        if (residualHolds) {
-          return retainMatch(rightRow, needsCopy)
+        if (holds(boundAsOfCond)) {
+          asOfSeen = true
+          if (residualHolds) {
+            return retainMatch(rightRow, needsCopy)
+          }
+        } else if (asOfSeen) {
+          // Past the tolerance bound, so no later row passes the as-of condition.
+          return null
         }
-      } else if (asOfSeen) {
-        // Past the tolerance bound, so no later row passes the as-of condition.
-        return null
       }
+      null
+    } finally {
+      closeIterator(iter)
     }
-    null
   }
 
   /**
@@ -578,33 +983,37 @@ private[joins] class SortMergeAsOfJoinScanner(
     val needsCopy = rightGroupBuffer.isSpillBacked
 
     joinedRow.withLeft(leftRow)
-    while (iter.hasNext) {
-      val rightRow = iter.next()
-      joinedRow.withRight(rightRow)
+    try {
+      while (iter.hasNext) {
+        val rightRow = iter.next()
+        joinedRow.withRight(rightRow)
 
-      if (holds(boundAsOfCond) && residualHolds) {
-        val rightKey = rightKeyExpr.eval(rightRow)
-        if (rightKey != null) {
-          if (keyOrdering.lt(rightKey, leftKey)) {
-            // Keep the first eligible row at each key so equal-distance ties stay stable.
-            if (bestBefore == null || keyOrdering.lt(bestBeforeKey, rightKey)) {
-              bestBefore = retainMatch(rightRow, needsCopy)
-              bestBeforeKey = InternalRow.copyValue(rightKey)
+        if (holds(boundAsOfCond) && residualHolds) {
+          val rightKey = rightKeyExpr.eval(rightRow)
+          if (rightKey != null) {
+            if (keyOrdering.lt(rightKey, leftKey)) {
+              // Keep the first eligible row at each key so equal-distance ties stay stable.
+              if (bestBefore == null || keyOrdering.lt(bestBeforeKey, rightKey)) {
+                bestBefore = retainMatch(rightRow, needsCopy)
+                bestBeforeKey = InternalRow.copyValue(rightKey)
+              }
+            } else if (keyOrdering.equiv(rightKey, leftKey)) {
+              // An exact match is the nearest row, even for an infinite key (Inf - Inf is NaN).
+              return retainMatch(rightRow, needsCopy)
+            } else if (bestBefore == null ||
+                isAfterCloser(bestBeforeKey, leftKey, rightKey, leftKeyExpr.dataType)) {
+              return retainMatch(rightRow, needsCopy)
+            } else {
+              return bestBefore
             }
-          } else if (keyOrdering.equiv(rightKey, leftKey)) {
-            // An exact match is the nearest row, even for an infinite key (Inf - Inf is NaN).
-            return retainMatch(rightRow, needsCopy)
-          } else if (bestBefore == null ||
-              isAfterCloser(bestBeforeKey, leftKey, rightKey, leftKeyExpr.dataType)) {
-            return retainMatch(rightRow, needsCopy)
-          } else {
-            return bestBefore
           }
         }
       }
-    }
 
-    bestBefore
+      bestBefore
+    } finally {
+      closeIterator(iter)
+    }
   }
 
   /** The exact value of a nearest key, or None for a NaN or infinite floating-point key. */

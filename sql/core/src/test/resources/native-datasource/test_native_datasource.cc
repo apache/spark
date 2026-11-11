@@ -1810,7 +1810,8 @@ int commitWrite(void* handle, const SparkDsFinishWriteInfo* info) {
 // Records the aborted write in _ABORTED for a batch write or a rejected writer, or
 // _ABORTED_<epoch> for a streaming one, as "<NULL messages>,<messages>,<rejected>": the number of
 // tasks that did not commit, the number of messages, and 1 for a writer whose create_writer
-// Spark rejected.
+// Spark rejected. With the option "fail" set to "abort", it fails before it records anything,
+// but its writer still records that it is closed.
 int abortWrite(void* handle, const SparkDsFinishWriteInfo* info) {
   auto* writer = fromHandle<Writer>(handle);
   if (writer->abort_called) orderViolation("abort called twice");
@@ -1820,6 +1821,7 @@ int abortWrite(void* handle, const SparkDsFinishWriteInfo* info) {
     checkSize("SparkDsFinishWriteInfo", info->size, sizeof(SparkDsFinishWriteInfo));
     int64_t epoch_id = info->epoch_id;
     writer->closed_marker = closedMarker(epoch_id);
+    maybeFail(writer->state, "abort");
     bool has_null = false;
     for (const auto& message :
          toByteStrings(info->messages, info->message_lengths, info->num_messages, &has_null)) {
