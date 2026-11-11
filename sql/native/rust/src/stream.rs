@@ -138,8 +138,8 @@ impl Drop for StreamState<'_> {
 /// # Safety
 /// The caller must keep everything borrowed by the reader alive until release,
 /// and the consumer must obey the Arrow C Stream ownership protocol.
-pub(super) unsafe fn export<'task>(
-    reader: PartitionReader<'task>,
+pub(super) unsafe fn export(
+    reader: PartitionReader<'_>,
     expected_schema: &SchemaRef,
 ) -> FFI_ArrowArrayStream {
     let state = Box::new(StreamState {

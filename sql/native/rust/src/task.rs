@@ -115,7 +115,7 @@ impl TaskContext<'static> {
     }
 }
 
-impl<'task> TaskContext<'task> {
+impl TaskContext<'_> {
     /// Wraps a host context, which has every field of version 1 of the ABI.
     ///
     /// # Safety

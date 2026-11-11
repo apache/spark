@@ -126,6 +126,7 @@ jobs:
             sparkr=`./dev/is-changed.py -m sparkr`
             tpcds=`./dev/is-changed.py -m sql`
             docker=`./dev/is-changed.py -m docker-integration-tests`
+            rust_sdk=`./dev/is-changed.py -m rust-sdk`
             # Skip PySpark, SparkR, TPC-DS when only static UI resources (JS/CSS/HTML) changed.
             # These tests are unaffected by UI static resource modifications.
             # Also we only run the very slow transpile changes when that logic changes
@@ -167,6 +168,7 @@ jobs:
             sparkr=false
             tpcds=false
             docker=false
+            rust_sdk=false
             buf=false
             ui=false
             docs=false
@@ -193,6 +195,7 @@ jobs:
               \"oidc-e2e\" : \"$oidc_e2e\",
               \"buf\" : \"$buf\",
               \"ui\" : \"$ui\",
+              \"rust-sdk\" : \"$rust_sdk\",
               \"transpile\": \"$transpile\",
             }"
           echo $precondition # For debugging
@@ -1425,3 +1428,33 @@ jobs:
           cd ui-test
           npm install --save-dev
           node --experimental-vm-modules node_modules/.bin/jest
+
+  rust-sdk:
+    needs: [precondition]
+    if: fromJson(needs.precondition.outputs.required).rust-sdk == 'true'
+    name: Run Rust SDK tests
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    env:
+      # The rust-version of the workspace. A fixed toolchain also keeps the new lints of a later
+      # clippy or rustdoc from failing a change that does not touch Rust, such as one to the header.
+      RUSTUP_TOOLCHAIN: '1.85'
+    steps:
+    - name: Bootstrap composite actions
+      uses: actions/checkout@v7
+    - name: Checkout and sync Spark repository
+      uses: ./.github/actions/checkout-and-sync
+      with:
+        ref: ${{ needs.precondition.outputs.head_sha }}
+    - name: Install Rust
+      run: |
+        rustup toolchain install "$RUSTUP_TOOLCHAIN" --profile minimal --no-self-update \
+          --component clippy,rustfmt
+    - name: Build, test, and lint the SDK and its examples
+      working-directory: sql/native/rust
+      run: |
+        cargo build --workspace --locked
+        cargo test --workspace --locked
+        cargo clippy --workspace --all-targets --locked -- -D warnings
+        cargo fmt --all -- --check
+        RUSTDOCFLAGS='-D warnings' cargo doc --workspace --no-deps --locked

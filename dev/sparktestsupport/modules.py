@@ -1793,6 +1793,18 @@ docs = Module(
     ],
 )
 
+# The Rust SDK of native data sources, a Cargo workspace that neither Maven nor SBT builds. The
+# rust-sdk job of build_and_test.yml tests it with its examples, against the C header it binds.
+rust_sdk = Module(
+    name="rust-sdk",
+    dependencies=[],
+    source_file_regexes=[
+        "sql/native/rust/",
+        "examples/src/main/rust/",
+        r"sql/core/src/main/resources/org/apache/spark/sql/datasource/spark_datasource\.h",
+    ],
+)
+
 build = Module(
     name="build",
     dependencies=[],

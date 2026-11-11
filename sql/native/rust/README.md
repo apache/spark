@@ -463,7 +463,11 @@ directory:
 cargo test --workspace --locked
 cargo clippy --workspace --all-targets --locked -- -D warnings
 cargo fmt --all -- --check
+RUSTDOCFLAGS='-D warnings' cargo doc --workspace --no-deps --locked
 ```
+
+Spark's CI runs these commands and `cargo build`, with Rust 1.85, for each pull request that
+changes this directory, the Rust examples, or [the header][header].
 
 The SDK's layout test compiles C assertions against [Spark's header][header], comparing the
 size, alignment, and every field offset of all native ABI structs with the values computed
