@@ -37,6 +37,7 @@ object QueueMode extends Enumeration {
 trait Queue[T] {
   def add(item: T): Boolean
   def remove(): T
+  def finishWrite(): Unit = {}
   def close(): Unit
 }
 
@@ -47,7 +48,8 @@ trait Queue[T] {
 abstract class HybridQueue[T, Q <: Queue[T]](
     memManager: TaskMemoryManager,
     tempDir: File,
-    serMgr: SerializerManager)
+    serMgr: SerializerManager,
+    maxMemoryBytes: Long = -1L)
   extends MemoryConsumer(memManager, memManager.getTungstenMemoryMode) {
 
   // Each buffer should have at least one element.
@@ -55,6 +57,13 @@ abstract class HybridQueue[T, Q <: Queue[T]](
 
   private var writing: Q = _
   protected var reading: Q = _
+
+  private var currentDiskQueueBytes: Long = 0L
+  private val maxDiskQueueBytes: Long = if (maxMemoryBytes > 0) {
+    math.min(memManager.pageSizeBytes(), math.max(maxMemoryBytes, 64L * 1024L))
+  } else {
+    memManager.pageSizeBytes()
+  }
 
   protected var numElementsQueuedOnDisk: Long = 0L
   protected var numElementsQueued: Long = 0L
@@ -98,6 +107,7 @@ abstract class HybridQueue[T, Q <: Queue[T]](
             diskQueue.add(item)
             item = queue.remove()
           }
+          diskQueue.finishWrite()
           released += getPageSize(queue)
           queue.close()
           diskQueue
@@ -113,18 +123,36 @@ abstract class HybridQueue[T, Q <: Queue[T]](
 
   private def createNewQueue(required: Long): Q = {
     // Tests may attempt to force spills.
-    val page = try {
-      allocatePage(required)
-    } catch {
-      case _: SparkOutOfMemoryError =>
+    val page = if (maxMemoryBytes < 0) {
+      try {
+        allocatePage(required)
+      } catch {
+        case _: SparkOutOfMemoryError =>
+          null
+      }
+    } else {
+      val remainingBudget = maxMemoryBytes - getUsed
+      val exactFitBudget = remainingBudget == required && required < memManager.pageSizeBytes()
+      if (remainingBudget < required || exactFitBudget) {
         null
+      } else {
+        val targetSize = math.min(math.max(memManager.pageSizeBytes(), required), remainingBudget)
+        try {
+          allocatePage(targetSize, required)
+        } catch {
+          case _: SparkOutOfMemoryError =>
+            null
+        }
+      }
     }
     val exactFitPartialPage = page != null &&
       required < memManager.pageSizeBytes() && page.size() == required
-    val buffer = if (page == null || exactFitPartialPage) {
+    val overBudget = page != null && maxMemoryBytes >= 0 && getUsed > maxMemoryBytes
+    val buffer = if (page == null || exactFitPartialPage || overBudget) {
       if (page != null) {
         freePage(page)
       }
+      currentDiskQueueBytes = 0L
       createDiskQueue()
     } else {
       createInMemoryQueue(page)
@@ -137,8 +165,18 @@ abstract class HybridQueue[T, Q <: Queue[T]](
   }
 
   def add(item: T): QueueMode.Value = {
+    val requiredSize = getRequiredSize(item)
+    if (writing != null && !isInMemoryQueue(writing) &&
+        currentDiskQueueBytes >= maxDiskQueueBytes) {
+      writing.finishWrite()
+      writing = null.asInstanceOf[Q]
+      currentDiskQueueBytes = 0L
+    }
     if (writing == null || !writing.add(item)) {
-      writing = createNewQueue(getRequiredSize(item))
+      if (writing != null) {
+        writing.finishWrite()
+      }
+      writing = createNewQueue(requiredSize)
       if (!writing.add(item)) {
         throw QueryExecutionErrors.failedToPushRowIntoRowQueueError(writing.toString)
       }
@@ -147,6 +185,7 @@ abstract class HybridQueue[T, Q <: Queue[T]](
     if (isInMemoryQueue(writing)) {
       QueueMode.IN_MEMORY
     } else {
+      currentDiskQueueBytes += requiredSize
       numElementsQueuedOnDisk += 1
       QueueMode.DISK
     }

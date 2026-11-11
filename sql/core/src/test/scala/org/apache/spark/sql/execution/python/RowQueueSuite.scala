@@ -293,4 +293,119 @@ class RowQueueSuite extends SparkFunSuite with EncryptionFunSuite {
     queue1.close()
     assert(taskM.cleanUpAllAllocatedMemory() === 0)
   }
+
+  test("hybrid queue enforces maxMemoryBytes cap without exhausting execution memory") {
+    val taskM = new TaskMemoryManager(new TestMemoryManager(smallPageConf), 0)
+    val serManager = createSerializerManager(smallPageConf)
+    val tempDir = Utils.createTempDir().getCanonicalFile
+    val maxBytes = 2 * smallPageSize
+    val queue = HybridRowQueue(
+      taskM, tempDir, 1, serManager, maxMemoryBytes = maxBytes)
+
+    val row = new UnsafeRow(1)
+    row.pointTo(new Array[Byte](16), 16)
+    val n = 500
+    (0 until n).foreach { i =>
+      row.setLong(0, i)
+      queue.add(row)
+      assert(queue.getUsed <= maxBytes)
+    }
+    assert(queue.getUsed === maxBytes)
+    assert(queue.getNumElementsQueuedOnDisk() > 0)
+    // Excess rows are split across multiple bounded disk segments rather than a single giant file.
+    val spillFilesBeforeDrain = tempDir.listFiles()
+    assert(spillFilesBeforeDrain != null && spillFilesBeforeDrain.length > 1)
+
+    (0 until n).foreach { i =>
+      val out = queue.remove()
+      assert(out != null)
+      assert(out.getLong(0) === i)
+    }
+    queue.close()
+    assert(tempDir.listFiles().isEmpty)
+    assert(taskM.cleanUpAllAllocatedMemory() === 0)
+  }
+
+  test("hybrid queue with maxMemoryBytes = 0 uses disk only") {
+    val taskM = new TaskMemoryManager(new TestMemoryManager(smallPageConf), 0)
+    val serManager = createSerializerManager(smallPageConf)
+    val tempDir = Utils.createTempDir().getCanonicalFile
+    val queue = HybridRowQueue(taskM, tempDir, 1, serManager, maxMemoryBytes = 0L)
+
+    val row = new UnsafeRow(1)
+    row.pointTo(new Array[Byte](16), 16)
+    val n = 200
+    (0 until n).foreach { i =>
+      row.setLong(0, i)
+      assert(queue.add(row) === QueueMode.DISK)
+      assert(queue.getUsed === 0L)
+    }
+    drainAndClose(queue, n)
+    assert(tempDir.listFiles().isEmpty)
+    assert(taskM.cleanUpAllAllocatedMemory() === 0)
+  }
+
+  test("hybrid queue recovers to in-memory pages after capped memory is drained") {
+    val taskM = new TaskMemoryManager(new TestMemoryManager(smallPageConf), 0)
+    val serManager = createSerializerManager(smallPageConf)
+    val tempDir = Utils.createTempDir().getCanonicalFile
+    val queue = HybridRowQueue(
+      taskM, tempDir, 1, serManager, maxMemoryBytes = smallPageSize)
+
+    val row = new UnsafeRow(1)
+    row.pointTo(new Array[Byte](16), 16)
+    val firstBatch = 120
+    val firstModes = (0 until firstBatch).map { i =>
+      row.setLong(0, i)
+      queue.add(row)
+    }
+    assert(firstModes.head === QueueMode.IN_MEMORY)
+    assert(firstModes.last === QueueMode.DISK)
+    assert(queue.getUsed === smallPageSize)
+
+    // Drain past the first in-memory page so its memory is freed back under maxMemoryBytes.
+    val drained = 60
+    (0 until drained).foreach { i =>
+      assert(queue.remove().getLong(0) === i)
+    }
+    assert(queue.getUsed === 0L)
+
+    // Subsequent writes finish the active disk segment and recover to an in-memory page.
+    val secondBatch = 80
+    val secondModes = (firstBatch until (firstBatch + secondBatch)).map { i =>
+      row.setLong(0, i)
+      queue.add(row)
+    }
+    assert(secondModes.contains(QueueMode.IN_MEMORY))
+    assert(queue.getUsed === smallPageSize)
+
+    (drained until (firstBatch + secondBatch)).foreach { i =>
+      assert(queue.remove().getLong(0) === i)
+    }
+    queue.close()
+    assert(tempDir.listFiles().isEmpty)
+    assert(taskM.cleanUpAllAllocatedMemory() === 0)
+  }
+
+  test("hybrid queue honors maxMemoryBytes smaller than pageSizeBytes") {
+    val taskM = new TaskMemoryManager(new TestMemoryManager(smallPageConf), 0)
+    val serManager = createSerializerManager(smallPageConf)
+    val tempDir = Utils.createTempDir().getCanonicalFile
+    val subPageCap = smallPageSize / 2
+    val queue = HybridRowQueue(taskM, tempDir, 1, serManager, maxMemoryBytes = subPageCap)
+
+    val row = new UnsafeRow(1)
+    row.pointTo(new Array[Byte](16), 16)
+    val n = 100
+    val modes = (0 until n).map { i =>
+      row.setLong(0, i)
+      val mode = queue.add(row)
+      assert(queue.getUsed <= subPageCap)
+      mode
+    }
+    assert(modes.head === QueueMode.IN_MEMORY)
+    assert(modes.last === QueueMode.DISK)
+    drainAndClose(queue, n)
+    assert(taskM.cleanUpAllAllocatedMemory() === 0)
+  }
 }
