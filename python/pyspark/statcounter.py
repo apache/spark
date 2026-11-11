@@ -19,17 +19,20 @@
 
 import copy
 import math
-from typing import Dict, Iterable, Optional
+from typing import Callable, Dict, Iterable, Optional
 
 
 class StatCounter:
     def __init__(self, values: Optional[Iterable[float]] = None):
+        maximum: Callable[[float, float], float]
+        minimum: Callable[[float, float], float]
+        sqrt: Callable[[float], float]
         try:
             from numpy import maximum, minimum, sqrt
         except ImportError:
-            maximum = max  # type: ignore[assignment]
-            minimum = min  # type: ignore[assignment]
-            sqrt = math.sqrt  # type: ignore[assignment]
+            maximum = max
+            minimum = min
+            sqrt = math.sqrt
 
         self.maximum = maximum
         self.minimum = minimum

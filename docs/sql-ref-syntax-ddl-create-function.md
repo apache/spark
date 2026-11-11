@@ -80,12 +80,21 @@ CREATE [ OR REPLACE ] [ TEMPORARY ] FUNCTION [ IF NOT EXISTS ]
 * **class_name**
 
     Specifies the name of the class that provides the implementation for function to be created.
-    The implementing class should extend one of the base classes as follows:
+    The implementing class should have a public no-arg constructor, and extend one of the base
+    classes as follows:
 
+    * Should implement `UnboundFunction` in `org.apache.spark.sql.connector.catalog.functions`
+      package.
     * Should extend `UDF` or `UDAF` in `org.apache.hadoop.hive.ql.exec` package.
     * Should extend `AbstractGenericUDAFResolver`, `GenericUDF`, or
       `GenericUDTF` in `org.apache.hadoop.hive.ql.udf.generic` package.
     * Should extend `UserDefinedAggregateFunction` in `org.apache.spark.sql.expressions` package.
+
+    **Note:** If an `UnboundFunction` binds to a `ScalarFunction` that implements the magic method
+    `invoke`, and its jar is added at runtime (`ADD JAR`, or `USING JAR`), codegen may fail to find
+    the class, e.g., in spark-shell. Whole-stage codegen falls back to slower interpreted
+    execution, other codegen fails the query. To avoid it, add the jar at startup via `--jars`, or
+    implement `produceResult` instead.
 
 * **resource_locations**
 

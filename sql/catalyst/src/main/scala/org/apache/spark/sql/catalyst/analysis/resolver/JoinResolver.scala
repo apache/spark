@@ -17,7 +17,7 @@
 
 package org.apache.spark.sql.catalyst.analysis.resolver
 
-import java.util.HashSet
+import java.util.{HashMap, HashSet}
 
 import org.apache.spark.sql.catalyst.analysis.NaturalAndUsingJoinResolution
 import org.apache.spark.sql.catalyst.expressions.{Attribute, Expression, ExprId, NamedExpression}
@@ -28,7 +28,8 @@ import org.apache.spark.sql.catalyst.util._
 /**
  * Resolves [[Join]] operator by resolving its left and right children and its join condition. If
  * the unresolved join is [[NaturalJoin]] or [[UsingJoin]], the resulting operator will be
- * [[Project]], otherwise it will be [[Join]].
+ * [[Project]], otherwise it will be [[Join]], or a [[Project]] over it that keeps the join's output
+ * (see `retainTopLevelJoinOutput`).
  */
 class JoinResolver(
     override val resolver: Resolver,
@@ -245,6 +246,8 @@ class JoinResolver(
    *  - Resolve join condition.
    *  - Overwrite [[NameScope.output]] with join's output and overwrite [[NameScope.hiddenOutput]]
    *    using the result of `computeHiddenOutputForRegularJoin` call.
+   *  - Wrap a top-level [[Join]] in a [[Project]] with its output if necessary (see
+   *    `retainTopLevelJoinOutput`).
    *  - Wrap the [[Join]] in [[WithCTE]] if necessary.
    */
   private def handleRegularJoin(
@@ -258,6 +261,12 @@ class JoinResolver(
       leftNameScope = leftNameScope,
       rightNameScope = rightNameScope
     )
+
+    val conditionReferencedAttributes = if (partiallyResolvedJoin.condition.isDefined) {
+      expressionResolver.getLastReferencedAttributes
+    } else {
+      new HashMap[ExprId, Attribute]
+    }
 
     val newOutput = Join.computeOutput(
       joinType = partiallyResolvedJoin.joinType,
@@ -275,12 +284,53 @@ class JoinResolver(
       hiddenOutput = Some(newHiddenOutput)
     )
 
-    val resolvedJoin = partiallyResolvedJoin.copy(condition = resolvedCondition)
+    val resolvedJoin = retainTopLevelJoinOutput(
+      unresolvedJoin = unresolvedJoin,
+      resolvedJoin = partiallyResolvedJoin.copy(condition = resolvedCondition),
+      conditionReferencedAttributes = conditionReferencedAttributes
+    )
 
     cteRegistry.currentScope.tryPutWithCTE(
       unresolvedOperator = unresolvedJoin,
       resolvedOperator = resolvedJoin
     )
+  }
+
+  /**
+   * Wraps a top-level [[Join]] in a [[Project]] with the join's output when its condition
+   * references a column found only in the hidden output, such as the hidden key of a USING join
+   * below, which is added to a child's output, and the column is in the join's own output. A
+   * LEFT SEMI or LEFT ANTI join outputs only its left side, so a hidden key of its right side does
+   * not change its output, and fixed-point does not wrap it either. A join that is not top-level
+   * is wrapped by the resolver of the operator above it instead (see
+   * [[RetainsOriginalJoinOutput]]). For example:
+   *
+   * {{{
+   * FROM nt1 JOIN nt2 USING (k) JOIN nt2 x ON nt2.k = x.k
+   *
+   * Project [k#1, v1#2, v2#3, k#5, v2#6]
+   * +- Join Inner, (k#4 = k#5)
+   *    :- Project [k#1, v1#2, v2#3, k#4]
+   *    :  +- Join Inner, (k#1 = k#4)
+   *    +- ...
+   * }}}
+   */
+  private def retainTopLevelJoinOutput(
+      unresolvedJoin: Join,
+      resolvedJoin: Join,
+      conditionReferencedAttributes: HashMap[ExprId, Attribute]): LogicalPlan = {
+    def referencesHiddenOutput: Boolean = {
+      val joinOutput = resolvedJoin.outputSet
+      scopes.current
+        .resolveMissingAttributesByHiddenOutput(conditionReferencedAttributes)
+        .exists(joinOutput.contains)
+    }
+    if (unresolvedJoin.containsTag(ResolverTag.TOP_LEVEL_OPERATOR) && referencesHiddenOutput) {
+      operatorResolutionContextStack.current.baseOperator = Some(resolvedJoin)
+      Project(scopes.current.output, resolvedJoin)
+    } else {
+      resolvedJoin
+    }
   }
 
   /**

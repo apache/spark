@@ -1953,6 +1953,53 @@ table other
 table other
 |> aggregate sum(a) as total_a;
 
+-- A pipe projection does not expose a removed struct through star or field resolution.
+from values (1, named_struct('a', 10, 'b', 20)) as tab(id, h)
+|> select id
+|> select h.*;
+
+from values (1, named_struct('a', 10, 'b', 20)) as tab(id, h)
+|> select id
+|> select h.a;
+
+-- The removed struct is also not exposed after DROP or AGGREGATE, or to WHERE and EXTEND, but
+-- stays visible when it is kept, renamed, or qualified through a relation alias.
+from values (1, named_struct('a', 10, 'b', 20)) as tab(id, h)
+|> drop h
+|> select h.*;
+
+from values (1, named_struct('a', 10, 'b', 20)) as tab(id, h)
+|> drop h
+|> select h.a;
+
+from values (1, named_struct('a', 10, 'b', 20)) as tab(id, h)
+|> aggregate count(*) as c group by id
+|> select h.a;
+
+from values (1, named_struct('a', 10, 'b', 20)) as tab(id, h)
+|> select id
+|> where h.a > 0;
+
+from values (1, named_struct('a', 10, 'b', 20)) as tab(id, h)
+|> select id
+|> extend h.a as z;
+
+from values (1, named_struct('a', 10, 'b', 20)) as tab(id, h)
+|> select id, h
+|> select h.*;
+
+from values (1, named_struct('a', 10, 'b', 20)) as tab(id, h)
+|> select h as g
+|> select g.*, g.a;
+
+from values (1, named_struct('a', 10, 'b', 20)) as tab(id, h)
+|> select h as g
+|> select h.a;
+
+from values (1, named_struct('a', 10, 'b', 20)) as tab(id, h)
+|> as x
+|> select x.h.a;
+
 -- Cleanup.
 -----------
 drop table t;

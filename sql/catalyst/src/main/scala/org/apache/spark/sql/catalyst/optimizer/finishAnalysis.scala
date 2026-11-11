@@ -37,6 +37,7 @@ import org.apache.spark.sql.catalyst.util.SparkDateTimeUtils.{instantToNanosOfDa
 import org.apache.spark.sql.catalyst.util.TypeUtils.toSQLExpr
 import org.apache.spark.sql.connector.catalog.CatalogManager
 import org.apache.spark.sql.types._
+import org.apache.spark.unsafe.types.UTF8String
 
 
 /**
@@ -316,14 +317,41 @@ object SpecialDatetimeValues extends Rule[LogicalPlan] {
     expression.transformWithPruning(_.containsPattern(CAST))(specialDatetimeRewrite)
   }
 
+  /** Whether this rule may replace a cast to `dt`. */
+  private[sql] def rewrites(dt: DataType): Boolean = conv.contains(dt)
+
+  /**
+   * Whether this rule replaces a cast of `s` to `dt` with a value that reads the current date, that
+   * is, the value of a special value other than 'epoch'.
+   */
+  private[sql] def readsCurrentDate(s: UTF8String, dt: DataType): Boolean =
+    conv.get(dt).exists(_(s.toString, java.time.ZoneOffset.UTC).isDefined) &&
+      !DateTimeUtils.isEpochSpecialValue(s.toString)
+
+  /**
+   * The constant string that `cast` casts, or None if it casts something else or evaluating the
+   * string fails. Unlike the rule, this does not throw.
+   */
+  private[sql] def constantString(cast: Cast): Option[UTF8String] = cast.child match {
+    case e if isConstantString(e) =>
+      try {
+        Option(e.eval().asInstanceOf[UTF8String])
+      } catch {
+        case NonFatal(_) => None
+      }
+    case _ => None
+  }
+
   private val specialDatetimeRewrite: PartialFunction[Expression, Expression] = {
-    case cast @ Cast(e, dt @ (DateType | TimestampType | TimestampNTZType), _, _)
-      if e.foldable && e.dataType.isInstanceOf[StringType] =>
+    case cast @ Cast(e, dt, _, _) if rewrites(dt) && isConstantString(e) =>
       Option(e.eval())
         .flatMap(s => conv(dt)(s.toString, cast.zoneId))
         .map(Literal(_, dt))
         .getOrElse(cast)
   }
+
+  private def isConstantString(e: Expression): Boolean =
+    e.foldable && e.dataType.isInstanceOf[StringType]
 }
 
 object ReplaceTranspose extends Rule[LogicalPlan] {

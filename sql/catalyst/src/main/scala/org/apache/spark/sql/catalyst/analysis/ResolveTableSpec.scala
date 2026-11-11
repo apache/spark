@@ -19,6 +19,7 @@ package org.apache.spark.sql.catalyst.analysis
 
 import org.apache.spark.SparkThrowable
 import org.apache.spark.sql.catalyst.expressions._
+import org.apache.spark.sql.catalyst.expressions.aggregate.AggregateExpression
 import org.apache.spark.sql.catalyst.optimizer.ComputeCurrentTime
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.rules.Rule
@@ -60,7 +61,27 @@ object ResolveTableSpec extends Rule[LogicalPlan] {
   private def resolveTableSpec(
       input: LogicalPlan,
       tableSpec: TableSpecBase,
-      withNewSpec: TableSpecBase => LogicalPlan): LogicalPlan = tableSpec match {
+      withNewSpec: TableSpecBase => LogicalPlan): LogicalPlan = {
+    val resolvedSpec = resolveTableSpec(tableSpec)
+    if (resolvedSpec eq tableSpec) input else withNewSpec(resolvedSpec)
+  }
+
+  /** Resolves a table specification after its expressions have been analyzed. */
+  def resolveTableSpec(tableSpec: TableSpecBase): TableSpecBase = tableSpec match {
+    // Check this before `childrenResolved`: `ResolveSubquery` skips these commands, so a subquery
+    // may never resolve. One that needs no resolution would be dropped by `toV2Constraint` or
+    // evaluated as an option value below.
+    case u: UnresolvedTableSpec if SubqueryExpression.hasSubquery(u) =>
+      u.constraints.foreach {
+        case check: CheckConstraint => check.failIfContainsSubquery()
+        case _ =>
+      }
+      u.optionExpression.options.foreach {
+        case (key, value) if SubqueryExpression.hasSubquery(value) =>
+          throw QueryCompilationErrors.optionMustBeConstant(key)
+        case _ =>
+      }
+      tableSpec
     case u: UnresolvedTableSpec if u.childrenResolved =>
       val newOptions: Seq[(String, String)] = u.optionExpression.options.map {
         case (key: String, null) =>
@@ -95,6 +116,22 @@ object ResolveTableSpec extends Rule[LogicalPlan] {
               messageParameters = Map("checkCondition" -> check.condition)
             )
           }
+          check.child.collectFirst {
+            case e @ (_: AggregateExpression | _: Grouping | _: GroupingID |
+                _: WindowExpression | _: WindowFunction) => e
+          }.foreach { call =>
+            call.failAnalysis(
+              errorClass = "AGGREGATE_OR_WINDOW_FUNCTION_IN_CHECK_CONSTRAINT",
+              messageParameters = Map("checkCondition" -> check.condition)
+            )
+          }
+          check.child.collectFirst { case g: Generator => g }.foreach { generator =>
+            generator.failAnalysis(
+              errorClass = "GENERATOR_IN_CHECK_CONSTRAINT",
+              messageParameters = Map("checkCondition" -> check.condition)
+            )
+          }
+          check.failIfCallsUserDefinedFunction()
         case _ =>
       }
 
@@ -108,8 +145,8 @@ object ResolveTableSpec extends Rule[LogicalPlan] {
         serde = u.serde,
         external = u.external,
         constraints = u.constraints.map(_.toV2Constraint))
-      withNewSpec(newTableSpec)
+      newTableSpec
     case _ =>
-      input
+      tableSpec
   }
 }

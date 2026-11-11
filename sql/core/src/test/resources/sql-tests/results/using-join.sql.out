@@ -479,3 +479,79 @@ one	one
 one	one
 one	one
 two	two
+
+
+-- !query
+FROM nt1 JOIN nt2 USING (k) JOIN nt2 x ON nt2.k = x.k
+-- !query schema
+struct<k:string,v1:int,v2:int,k:string,v2:int>
+-- !query output
+one	1	1	one	1
+one	1	1	one	5
+one	1	5	one	1
+one	1	5	one	5
+two	2	22	two	22
+
+
+-- !query
+FROM nt1 JOIN nt2 USING (k) JOIN nt2 x
+  ON nt2.k = x.k AND x.v2 = (SELECT max(y.v2) FROM nt2 y WHERE y.k = x.k)
+-- !query schema
+struct<>
+-- !query output
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
+{
+  "errorClass" : "UNSUPPORTED_SUBQUERY_EXPRESSION_CATEGORY.UNSUPPORTED_CORRELATED_SCALAR_SUBQUERY",
+  "sqlState" : "0A000",
+  "messageParameters" : {
+    "treeNode" : "Join Inner, ((k#x = k#x) AND (v2#x = scalar-subquery#x [k#x]))\n:  +- Aggregate [max(v2#x) AS max(v2)#x]\n:     +- Filter (k#x = outer(k#x))\n:        +- SubqueryAlias y\n:           +- SubqueryAlias nt2\n:              +- View (`nt2`, [k#x, v2#x])\n:                 +- Project [cast(k#x as string) AS k#x, cast(v2#x as int) AS v2#x]\n:                    +- Project [k#x, v2#x]\n:                       +- SubqueryAlias nt2\n:                          +- LocalRelation [k#x, v2#x]\n:- Project [k#x, v1#x, v2#x, k#x]\n:  +- Join Inner, (k#x = k#x)\n:     :- SubqueryAlias nt1\n:     :  +- View (`nt1`, [k#x, v1#x])\n:     :     +- Project [cast(k#x as string) AS k#x, cast(v1#x as int) AS v1#x]\n:     :        +- Project [k#x, v1#x]\n:     :           +- SubqueryAlias nt1\n:     :              +- LocalRelation [k#x, v1#x]\n:     +- SubqueryAlias nt2\n:        +- View (`nt2`, [k#x, v2#x])\n:           +- Project [cast(k#x as string) AS k#x, cast(v2#x as int) AS v2#x]\n:              +- Project [k#x, v2#x]\n:                 +- SubqueryAlias nt2\n:                    +- LocalRelation [k#x, v2#x]\n+- SubqueryAlias x\n   +- SubqueryAlias nt2\n      +- View (`nt2`, [k#x, v2#x])\n         +- Project [cast(k#x as string) AS k#x, cast(v2#x as int) AS v2#x]\n            +- Project [k#x, v2#x]\n               +- SubqueryAlias nt2\n                  +- LocalRelation [k#x, v2#x]\n"
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 29,
+    "stopIndex" : 112,
+    "fragment" : "JOIN nt2 x\n  ON nt2.k = x.k AND x.v2 = (SELECT max(y.v2) FROM nt2 y WHERE y.k = x.k)"
+  } ]
+}
+
+
+-- !query
+FROM nt2 x LEFT SEMI JOIN (nt1 JOIN nt2 USING (k)) ON x.k = nt2.k
+-- !query schema
+struct<k:string,v2:int>
+-- !query output
+one	1
+one	5
+two	22
+
+
+-- !query
+FROM nt2 x LEFT ANTI JOIN (nt1 JOIN nt2 USING (k)) ON x.k = nt2.k
+-- !query schema
+struct<k:string,v2:int>
+-- !query output
+four	4
+
+
+-- !query
+FROM nt1 JOIN nt2 USING (k) LEFT SEMI JOIN nt2 x ON nt2.k = x.k
+-- !query schema
+struct<k:string,v1:int,v2:int>
+-- !query output
+one	1	1
+one	1	5
+two	2	22
+
+
+-- !query
+FROM nt2 x LEFT JOIN (nt1 JOIN nt2 USING (k)) ON x.k = nt2.k
+-- !query schema
+struct<k:string,v2:int,k:string,v1:int,v2:int>
+-- !query output
+four	4	NULL	NULL	NULL
+one	1	one	1	1
+one	1	one	1	5
+one	5	one	1	1
+one	5	one	1	5
+two	22	two	2	22

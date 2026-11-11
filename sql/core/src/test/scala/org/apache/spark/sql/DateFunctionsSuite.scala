@@ -445,6 +445,37 @@ class DateFunctionsSuite extends SharedSparkSession {
       Seq(Row(Date.valueOf("2015-05-31")), Row(Date.valueOf("2015-06-01"))))
   }
 
+  gridTest("date arithmetic preserves NULL string day counts")(Seq(false, true)) { ansiEnabled =>
+    withSQLConf(SQLConf.ANSI_ENABLED.key -> ansiEnabled.toString) {
+      for (days <- Seq(
+          "CAST(NULL AS STRING)",
+          "IF(true, CAST(NULL AS STRING), '2')",
+          "CAST(CAST(NULL AS INT) AS STRING)")) {
+        checkAnswer(
+          sql(s"SELECT date_add(DATE '2020-01-01', $days), " +
+            s"date_sub(DATE '2020-01-01', $days)"),
+          Row(null, null))
+      }
+      checkAnswer(
+        sql("SELECT date_add(DATE '2020-01-01', '2'), date_sub(DATE '2020-01-01', '2')"),
+        Row(Date.valueOf("2020-01-03"), Date.valueOf("2019-12-30")))
+    }
+  }
+
+  test("date arithmetic rejects invalid string day counts in non-ANSI mode") {
+    withSQLConf(SQLConf.ANSI_ENABLED.key -> "false") {
+      for (function <- Seq("date_add", "date_sub"); days <- Seq("x", "1.5")) {
+        checkError(
+          exception = intercept[AnalysisException] {
+            sql(s"SELECT $function(DATE '2020-01-01', '$days')").collect()
+          },
+          condition = "SECOND_FUNCTION_ARGUMENT_NOT_INTEGER",
+          parameters = Map("functionName" -> function),
+          sqlState = "22023")
+      }
+    }
+  }
+
   test("time_add") {
     val t1 = Timestamp.valueOf("2015-07-31 23:59:59")
     val t2 = Timestamp.valueOf("2015-12-31 00:00:00")

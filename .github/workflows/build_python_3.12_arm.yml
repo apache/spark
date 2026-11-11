@@ -21,7 +21,7 @@ name: "Build / Python-only (Python 3.12, ARM)"
 
 on:
   schedule:
-    - cron: '0 22 */6 * *'
+    - cron: '17 3 * * 5'
   workflow_dispatch:
 
 jobs:

@@ -46,4 +46,44 @@ private[autocdc] object AutoCdcSchemaUtils {
         case _ => Seq(Seq(field.name))
       }
     }
+
+  /**
+   * Resolves an ignore-null selection against the top-level fields of `schema`, then flattens
+   * selected structs into leaf paths. Arrays and maps remain opaque leaves.
+   *
+   * @param schema Schema against which to resolve and canonicalize the selection.
+   * @param ignoreNullSelection Top-level columns selected for ignore-null handling.
+   * @param resolver Case-sensitivity resolver for column name matching.
+   * @return Raw, unquoted leaf-name parts in schema order, with spelling taken exactly from
+   *   `schema`.
+   */
+  def resolveIgnoreNullLeafPaths(
+      schema: StructType,
+      ignoreNullSelection: ColumnSelection,
+      resolver: Resolver): Seq[Seq[String]] = {
+    val ignoreNullColumns = ColumnSelection.applyToSchema(
+      schemaName = "ignoreNullSelection",
+      schema = schema,
+      columnSelection = Some(ignoreNullSelection),
+      resolver = resolver
+    )
+    flattenStructFieldPaths(ignoreNullColumns)
+  }
+
+  /**
+   * Returns the [[flattenStructFieldPaths]] of `schema` that are absent from `otherSchema`,
+   * preserving `schema` order. A path is present in `otherSchema` if one of its flattened paths
+   * has the same length and matches each name part under `resolver`.
+   */
+  def fieldPathsMissingFrom(
+      schema: StructType,
+      otherSchema: StructType,
+      resolver: Resolver): Seq[Seq[String]] = {
+    val otherPaths = flattenStructFieldPaths(otherSchema)
+    flattenStructFieldPaths(schema).filterNot { path =>
+      otherPaths.exists { otherPath =>
+        otherPath.length == path.length && path.zip(otherPath).forall(resolver.tupled)
+      }
+    }
+  }
 }

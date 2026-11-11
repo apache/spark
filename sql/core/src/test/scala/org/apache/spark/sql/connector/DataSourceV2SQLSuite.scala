@@ -2310,24 +2310,34 @@ class DataSourceV2SQLSuiteV1Filter
       val schema = new StructType()
         .add("catalog", StringType, nullable = false)
         .add("namespace", StringType, nullable = false)
-      val df = sql("SHOW CURRENT NAMESPACE")
-      val rows = df.collect()
+      Seq("NAMESPACE", "DATABASE", "SCHEMA").foreach { alias =>
+        val df = sql(s"SHOW CURRENT $alias")
+        val rows = df.collect()
 
-      assert(df.schema === schema)
-      assert(rows.length == 1)
-      assert(rows(0).getAs[String](0) === expectedCatalogName)
-      assert(rows(0).getAs[String](1) === expectedNamespace)
+        assert(df.schema === schema)
+        assert(rows.length == 1)
+        assert(rows(0).getAs[String](0) === expectedCatalogName)
+        assert(rows(0).getAs[String](1) === expectedNamespace)
+      }
     }
 
     // Initially, the v2 session catalog is set as a current catalog.
     testShowCurrentNamespace("spark_catalog", "default")
 
-    sql("USE testcat")
-    testShowCurrentNamespace("testcat", "")
+    withNamespace("testcat.ns1.ns2", "testcat.ns1.`inner.ns`") {
+      withCurrentCatalogAndNamespace {
+        sql("SET CATALOG 'testcat'")
+        testShowCurrentNamespace("testcat", "")
 
-    sql("CREATE NAMESPACE testcat.ns1.ns2")
-    sql("USE testcat.ns1.ns2")
-    testShowCurrentNamespace("testcat", "ns1.ns2")
+        sql("CREATE NAMESPACE testcat.ns1.ns2")
+        sql("USE testcat.ns1.ns2")
+        testShowCurrentNamespace("testcat", "ns1.ns2")
+
+        sql("CREATE NAMESPACE testcat.ns1.`inner.ns`")
+        sql("USE testcat.ns1.`inner.ns`")
+        testShowCurrentNamespace("testcat", "ns1.`inner.ns`")
+      }
+    }
   }
 
   test("tableCreation: partition column case insensitive resolution") {
@@ -3994,6 +4004,14 @@ class DataSourceV2SQLSuiteV1Filter
 
     assert(sql("SHOW CATALOGS LIKE 'testcat*'").collect() === Array(
       Row("testcat"), Row("testcat2")))
+
+    assert(sql("SHOW CATALOGS LIKE 'TESTCAT*'").collect() === Array(
+      Row("testcat"), Row("testcat2")))
+
+    assert(sql("SHOW CATALOGS 'TESTCAT*'").collect() === Array(
+      Row("testcat"), Row("testcat2")))
+
+    assert(sql("SHOW CATALOGS 'non_existing_catalog_pattern'").collect().isEmpty)
   }
 
   test("SPARK-49543: ShowCollations") {

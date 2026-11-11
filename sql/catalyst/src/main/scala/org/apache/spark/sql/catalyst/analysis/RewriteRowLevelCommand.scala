@@ -109,6 +109,17 @@ trait RewriteRowLevelCommand extends Rule[LogicalPlan] {
       relation)
   }
 
+  // metadata attrs referenced in the command (e.g. in the condition) must be read even if they are
+  // not required by the operation as the row-level operation table exposes no metadata columns
+  // such attrs are only read, the write projections include only required metadata attrs
+  protected def resolveReferencedMetadataAttrs(
+      relation: DataSourceV2Relation,
+      exprs: Seq[Expression]): Seq[AttributeReference] = {
+
+    val references = AttributeSet(exprs.flatMap(_.references)) -- relation.outputSet
+    relation.metadataOutput.filter(references.contains)
+  }
+
   protected def resolveRowIdAttrs(
       relation: DataSourceV2Relation,
       operation: SupportsDelta): Seq[AttributeReference] = {
@@ -307,8 +318,11 @@ trait RewriteRowLevelCommand extends Rule[LogicalPlan] {
     ProjectingInternalRow(schema, colOrdinals)
   }
 
+  // prefer the exact name as the plan may have columns whose names differ only by case
+  // fall back to the resolver as connectors may refer to columns using a different case
   private def findColOrdinal(plan: LogicalPlan, name: String): Int = {
-    plan.output.indexWhere(attr => conf.resolver(attr.name, name))
+    val ordinal = plan.output.indexWhere(_.name == name)
+    if (ordinal != -1) ordinal else plan.output.indexWhere(attr => conf.resolver(attr.name, name))
   }
 
   protected def buildOriginalRowIdValues(

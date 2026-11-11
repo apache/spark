@@ -1276,3 +1276,366 @@ DROP TABLE t1
 struct<>
 -- !query output
 
+
+
+-- !query
+SELECT c1, ROW_NUMBER() OVER (ORDER BY c1) AS rn FROM VALUES (1), (2) AS t(c1)
+GROUP BY ALL ORDER BY c1
+-- !query schema
+struct<>
+-- !query output
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
+{
+  "errorClass" : "UNSUPPORTED_EXPR_FOR_OPERATOR",
+  "sqlState" : "42K0E",
+  "messageParameters" : {
+    "invalidExprSqls" : "\"row_number() OVER (ORDER BY c1 ASC NULLS FIRST ROWS BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW)\"",
+    "operator" : "Aggregate"
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 80,
+    "stopIndex" : 91,
+    "fragment" : "GROUP BY ALL"
+  } ]
+}
+
+
+-- !query
+SELECT ROW_NUMBER() OVER (ORDER BY c1) FROM VALUES (1), (2) AS t(c1) GROUP BY 1
+-- !query schema
+struct<>
+-- !query output
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
+{
+  "errorClass" : "MISSING_AGGREGATION",
+  "sqlState" : "42803",
+  "messageParameters" : {
+    "expression" : "\"c1\"",
+    "expressionAnyValue" : "\"any_value(c1)\""
+  }
+}
+
+
+-- !query
+SELECT count(*) FROM VALUES (array(1, 2)), (array(3)) AS t(a) GROUP BY explode(a)
+-- !query schema
+struct<>
+-- !query output
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
+{
+  "errorClass" : "UNSUPPORTED_EXPR_FOR_OPERATOR",
+  "sqlState" : "42K0E",
+  "messageParameters" : {
+    "invalidExprSqls" : "\"explode(a)\"",
+    "operator" : "Aggregate"
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 63,
+    "stopIndex" : 81,
+    "fragment" : "GROUP BY explode(a)"
+  } ]
+}
+
+
+-- !query
+SELECT explode(a) FROM VALUES (array(1, 2)), (array(3)) AS t(a) GROUP BY ALL
+-- !query schema
+struct<col:int>
+-- !query output
+1
+2
+3
+
+
+-- !query
+SELECT explode(a) FROM VALUES (array(1, 2)), (array(3)) AS t(a) GROUP BY 1
+-- !query schema
+struct<col:int>
+-- !query output
+1
+2
+3
+
+
+-- !query
+SELECT explode(a) FROM VALUES (array(1, 1)) AS t(a) GROUP BY ALL
+-- !query schema
+struct<col:int>
+-- !query output
+1
+1
+
+
+-- !query
+SELECT count(*) FROM VALUES (1, array(1, 2)), (2, array(3)) AS t(c1, a)
+GROUP BY ROW_NUMBER() OVER (ORDER BY c1), explode(a)
+-- !query schema
+struct<>
+-- !query output
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
+{
+  "errorClass" : "UNSUPPORTED_EXPR_FOR_OPERATOR",
+  "sqlState" : "42K0E",
+  "messageParameters" : {
+    "invalidExprSqls" : "\"row_number() OVER (ORDER BY c1 ASC NULLS FIRST ROWS BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW)\", \"explode(a)\"",
+    "operator" : "Aggregate"
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 73,
+    "stopIndex" : 124,
+    "fragment" : "GROUP BY ROW_NUMBER() OVER (ORDER BY c1), explode(a)"
+  } ]
+}
+
+
+-- !query
+SELECT SUM(a) FROM (SELECT 1 AS a) t GROUP BY 1 + ROW_NUMBER() OVER (ORDER BY a)
+-- !query schema
+struct<>
+-- !query output
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
+{
+  "errorClass" : "UNSUPPORTED_EXPR_FOR_OPERATOR",
+  "sqlState" : "42K0E",
+  "messageParameters" : {
+    "invalidExprSqls" : "\"row_number() OVER (ORDER BY a ASC NULLS FIRST ROWS BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW)\"",
+    "operator" : "Aggregate"
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 38,
+    "stopIndex" : 80,
+    "fragment" : "GROUP BY 1 + ROW_NUMBER() OVER (ORDER BY a)"
+  } ]
+}
+
+
+-- !query
+SELECT count(*) FROM VALUES (1), (2) AS t(c1) GROUP BY RANK() OVER (ORDER BY c1)
+-- !query schema
+struct<>
+-- !query output
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
+{
+  "errorClass" : "UNSUPPORTED_EXPR_FOR_OPERATOR",
+  "sqlState" : "42K0E",
+  "messageParameters" : {
+    "invalidExprSqls" : "\"RANK() OVER (ORDER BY c1 ASC NULLS FIRST ROWS BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW)\"",
+    "operator" : "Aggregate"
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 47,
+    "stopIndex" : 80,
+    "fragment" : "GROUP BY RANK() OVER (ORDER BY c1)"
+  } ]
+}
+
+
+-- !query
+SELECT count(*) FROM VALUES (1), (2) AS t(c1) GROUP BY SUM(c1) OVER ()
+-- !query schema
+struct<>
+-- !query output
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
+{
+  "errorClass" : "GROUP_BY_AGGREGATE",
+  "sqlState" : "42903",
+  "messageParameters" : {
+    "sqlExpr" : "sum(t.c1) OVER (ROWS BETWEEN UNBOUNDED PRECEDING AND UNBOUNDED FOLLOWING)"
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 56,
+    "stopIndex" : 70,
+    "fragment" : "SUM(c1) OVER ()"
+  } ]
+}
+
+
+-- !query
+SELECT c1, SUM(c1) OVER () AS s FROM VALUES (1), (2) AS t(c1) GROUP BY ALL ORDER BY c1
+-- !query schema
+struct<c1:int,s:bigint>
+-- !query output
+1	3
+2	3
+
+
+-- !query
+SELECT c1, SUM(SUM(c1)) OVER () AS s FROM VALUES (1), (2) AS t(c1) GROUP BY ALL ORDER BY c1
+-- !query schema
+struct<c1:int,s:bigint>
+-- !query output
+1	3
+2	3
+
+
+-- !query
+SELECT c1, ROW_NUMBER() OVER (ORDER BY c1) FROM VALUES (1), (2) AS t(c1) GROUP BY 1, 2
+-- !query schema
+struct<>
+-- !query output
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
+{
+  "errorClass" : "UNSUPPORTED_EXPR_FOR_OPERATOR",
+  "sqlState" : "42K0E",
+  "messageParameters" : {
+    "invalidExprSqls" : "\"row_number() OVER (ORDER BY c1 ASC NULLS FIRST ROWS BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW)\"",
+    "operator" : "Aggregate"
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 74,
+    "stopIndex" : 86,
+    "fragment" : "GROUP BY 1, 2"
+  } ]
+}
+
+
+-- !query
+SELECT count(*) FROM VALUES (array(1, 2)), (array(3)) AS t(a) GROUP BY posexplode(a)
+-- !query schema
+struct<>
+-- !query output
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
+{
+  "errorClass" : "UNSUPPORTED_EXPR_FOR_OPERATOR",
+  "sqlState" : "42K0E",
+  "messageParameters" : {
+    "invalidExprSqls" : "\"posexplode(a)\"",
+    "operator" : "Aggregate"
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 63,
+    "stopIndex" : 84,
+    "fragment" : "GROUP BY posexplode(a)"
+  } ]
+}
+
+
+-- !query
+SELECT count(*) FROM VALUES (1) AS t(c1) GROUP BY stack(2, c1, c1 + 1)
+-- !query schema
+struct<>
+-- !query output
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
+{
+  "errorClass" : "UNSUPPORTED_EXPR_FOR_OPERATOR",
+  "sqlState" : "42K0E",
+  "messageParameters" : {
+    "invalidExprSqls" : "\"stack(2, c1, (c1 + 1))\"",
+    "operator" : "Aggregate"
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 42,
+    "stopIndex" : 70,
+    "fragment" : "GROUP BY stack(2, c1, c1 + 1)"
+  } ]
+}
+
+
+-- !query
+SELECT c1, explode(a) FROM VALUES (1, array(1, 2)), (2, array(3)) AS t(c1, a) GROUP BY ALL
+-- !query schema
+struct<c1:int,col:int>
+-- !query output
+1	1
+1	2
+2	3
+
+
+-- !query
+SELECT c1, explode(a) FROM VALUES (1, array(1, 2)), (2, array(3)) AS t(c1, a) GROUP BY 1, 2
+-- !query schema
+struct<c1:int,col:int>
+-- !query output
+1	1
+1	2
+2	3
+
+
+-- !query
+SELECT posexplode(a) FROM VALUES (array(1, 2)), (array(3)) AS t(a) GROUP BY ALL
+-- !query schema
+struct<pos:int,col:int>
+-- !query output
+0	1
+0	3
+1	2
+
+
+-- !query
+SELECT count(*) FROM VALUES (1, array(1, 2)), (2, array(3)) AS t(c1, a)
+GROUP BY explode(a), ROW_NUMBER() OVER (ORDER BY c1)
+-- !query schema
+struct<>
+-- !query output
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
+{
+  "errorClass" : "UNSUPPORTED_EXPR_FOR_OPERATOR",
+  "sqlState" : "42K0E",
+  "messageParameters" : {
+    "invalidExprSqls" : "\"explode(a)\", \"row_number() OVER (ORDER BY c1 ASC NULLS FIRST ROWS BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW)\"",
+    "operator" : "Aggregate"
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 73,
+    "stopIndex" : 124,
+    "fragment" : "GROUP BY explode(a), ROW_NUMBER() OVER (ORDER BY c1)"
+  } ]
+}
+
+
+-- !query
+SELECT count(*) FROM VALUES (array(1, 2)), (array(3)) AS t(a) GROUP BY GROUPING SETS ((explode(a)))
+-- !query schema
+struct<>
+-- !query output
+org.apache.spark.sql.AnalysisException
+{
+  "errorClass" : "UNSUPPORTED_GENERATOR.OUTSIDE_SELECT",
+  "sqlState" : "42K0E",
+  "messageParameters" : {
+    "plan" : "'Aggregate [groupingsets(Vector(0), explode(a#x))], [count(1) AS count(1)#xL]"
+  }
+}
+
+
+-- !query
+SELECT SUM(a) FROM (SELECT 1 AS a) t GROUP BY abs(1 + ROW_NUMBER() OVER (ORDER BY a))
+-- !query schema
+struct<>
+-- !query output
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
+{
+  "errorClass" : "UNSUPPORTED_EXPR_FOR_OPERATOR",
+  "sqlState" : "42K0E",
+  "messageParameters" : {
+    "invalidExprSqls" : "\"row_number() OVER (ORDER BY a ASC NULLS FIRST ROWS BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW)\"",
+    "operator" : "Aggregate"
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 38,
+    "stopIndex" : 85,
+    "fragment" : "GROUP BY abs(1 + ROW_NUMBER() OVER (ORDER BY a))"
+  } ]
+}
