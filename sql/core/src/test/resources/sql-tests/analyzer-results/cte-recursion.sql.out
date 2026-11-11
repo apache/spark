@@ -2989,6 +2989,250 @@ SetCommand (spark.sql.analyzer.maxIterations,Some(100))
 
 
 -- !query
+WITH x AS (SELECT 1L AS v)
+SELECT r.id FROM range(3) r WHERE EXISTS (
+    WITH RECURSIVE t(n) AS (SELECT 1L UNION ALL SELECT n + v FROM t, x WHERE n < 3)
+    SELECT 1 AS c FROM t WHERE false UNION ALL SELECT 1 AS c WHERE r.id > 0)
+-- !query analysis
+WithCTE
+:- CTERelationDef xxxx, false
+:  +- SubqueryAlias x
+:     +- Project [1 AS v#xL]
+:        +- OneRowRelation
++- Project [id#xL]
+   +- Filter exists#x [id#xL]
+      :  +- WithCTE
+      :     :- CTERelationDef xxxx, false
+      :     :  +- SubqueryAlias t
+      :     :     +- Project [1#xL AS n#xL]
+      :     :        +- UnionLoop xxxx
+      :     :           :- Project [1 AS 1#xL]
+      :     :           :  +- OneRowRelation
+      :     :           +- Project [(n#xL + v#xL) AS (n + v)#xL]
+      :     :              +- Filter (n#xL < cast(3 as bigint))
+      :     :                 +- Join Inner
+      :     :                    :- SubqueryAlias t
+      :     :                    :  +- Project [1#xL AS n#xL]
+      :     :                    :     +- UnionLoopRef xxxx, [1#xL], false
+      :     :                    +- SubqueryAlias x
+      :     :                       +- CTERelationRef xxxx, true, [v#xL], false, false, 1
+      :     +- Union false, false
+      :        :- Project [1 AS c#x]
+      :        :  +- Filter false
+      :        :     +- SubqueryAlias t
+      :        :        +- CTERelationRef xxxx, true, [n#xL], false, false
+      :        +- Project [1 AS c#x]
+      :           +- Filter (outer(id#xL) > cast(0 as bigint))
+      :              +- OneRowRelation
+      +- SubqueryAlias r
+         +- Range (0, 3, step=1)
+
+
+-- !query
+WITH x AS (SELECT 1L AS v)
+SELECT r.id FROM range(3) r WHERE NOT EXISTS (
+    WITH RECURSIVE t(n) AS (SELECT 1L UNION ALL SELECT n + v FROM t, x WHERE n < 3)
+    SELECT 1 AS c FROM t WHERE false UNION ALL SELECT 1 AS c WHERE r.id > 0)
+-- !query analysis
+WithCTE
+:- CTERelationDef xxxx, false
+:  +- SubqueryAlias x
+:     +- Project [1 AS v#xL]
+:        +- OneRowRelation
++- Project [id#xL]
+   +- Filter NOT exists#x [id#xL]
+      :  +- WithCTE
+      :     :- CTERelationDef xxxx, false
+      :     :  +- SubqueryAlias t
+      :     :     +- Project [1#xL AS n#xL]
+      :     :        +- UnionLoop xxxx
+      :     :           :- Project [1 AS 1#xL]
+      :     :           :  +- OneRowRelation
+      :     :           +- Project [(n#xL + v#xL) AS (n + v)#xL]
+      :     :              +- Filter (n#xL < cast(3 as bigint))
+      :     :                 +- Join Inner
+      :     :                    :- SubqueryAlias t
+      :     :                    :  +- Project [1#xL AS n#xL]
+      :     :                    :     +- UnionLoopRef xxxx, [1#xL], false
+      :     :                    +- SubqueryAlias x
+      :     :                       +- CTERelationRef xxxx, true, [v#xL], false, false, 1
+      :     +- Union false, false
+      :        :- Project [1 AS c#x]
+      :        :  +- Filter false
+      :        :     +- SubqueryAlias t
+      :        :        +- CTERelationRef xxxx, true, [n#xL], false, false
+      :        +- Project [1 AS c#x]
+      :           +- Filter (outer(id#xL) > cast(0 as bigint))
+      :              +- OneRowRelation
+      +- SubqueryAlias r
+         +- Range (0, 3, step=1)
+
+
+-- !query
+WITH x AS (SELECT 1L AS v)
+SELECT r.id FROM range(3) r WHERE 1 IN (
+    WITH RECURSIVE t(n) AS (SELECT 1L UNION ALL SELECT n + v FROM t, x WHERE n < 3)
+    SELECT 1 AS c FROM t WHERE false UNION ALL SELECT 1 AS c WHERE r.id > 0)
+-- !query analysis
+WithCTE
+:- CTERelationDef xxxx, false
+:  +- SubqueryAlias x
+:     +- Project [1 AS v#xL]
+:        +- OneRowRelation
++- Project [id#xL]
+   +- Filter 1 IN (list#x [id#xL])
+      :  +- WithCTE
+      :     :- CTERelationDef xxxx, false
+      :     :  +- SubqueryAlias t
+      :     :     +- Project [1#xL AS n#xL]
+      :     :        +- UnionLoop xxxx
+      :     :           :- Project [1 AS 1#xL]
+      :     :           :  +- OneRowRelation
+      :     :           +- Project [(n#xL + v#xL) AS (n + v)#xL]
+      :     :              +- Filter (n#xL < cast(3 as bigint))
+      :     :                 +- Join Inner
+      :     :                    :- SubqueryAlias t
+      :     :                    :  +- Project [1#xL AS n#xL]
+      :     :                    :     +- UnionLoopRef xxxx, [1#xL], false
+      :     :                    +- SubqueryAlias x
+      :     :                       +- CTERelationRef xxxx, true, [v#xL], false, false, 1
+      :     +- Union false, false
+      :        :- Project [1 AS c#x]
+      :        :  +- Filter false
+      :        :     +- SubqueryAlias t
+      :        :        +- CTERelationRef xxxx, true, [n#xL], false, false
+      :        +- Project [1 AS c#x]
+      :           +- Filter (outer(id#xL) > cast(0 as bigint))
+      :              +- OneRowRelation
+      +- SubqueryAlias r
+         +- Range (0, 3, step=1)
+
+
+-- !query
+WITH x AS (SELECT 1L AS v)
+SELECT r.id, l.c FROM range(3) r, LATERAL (
+    WITH RECURSIVE t(n) AS (SELECT 1L UNION ALL SELECT n + v FROM t, x WHERE n < 3)
+    SELECT 1 AS c FROM t WHERE false UNION ALL SELECT 1 AS c WHERE r.id > 0) l
+-- !query analysis
+WithCTE
+:- CTERelationDef xxxx, false
+:  +- SubqueryAlias x
+:     +- Project [1 AS v#xL]
+:        +- OneRowRelation
++- Project [id#xL, c#x]
+   +- LateralJoin lateral-subquery#x [id#xL], Inner
+      :  +- SubqueryAlias l
+      :     +- WithCTE
+      :        :- CTERelationDef xxxx, false
+      :        :  +- SubqueryAlias t
+      :        :     +- Project [1#xL AS n#xL]
+      :        :        +- UnionLoop xxxx
+      :        :           :- Project [1 AS 1#xL]
+      :        :           :  +- OneRowRelation
+      :        :           +- Project [(n#xL + v#xL) AS (n + v)#xL]
+      :        :              +- Filter (n#xL < cast(3 as bigint))
+      :        :                 +- Join Inner
+      :        :                    :- SubqueryAlias t
+      :        :                    :  +- Project [1#xL AS n#xL]
+      :        :                    :     +- UnionLoopRef xxxx, [1#xL], false
+      :        :                    +- SubqueryAlias x
+      :        :                       +- CTERelationRef xxxx, true, [v#xL], false, false, 1
+      :        +- Union false, false
+      :           :- Project [1 AS c#x]
+      :           :  +- Filter false
+      :           :     +- SubqueryAlias t
+      :           :        +- CTERelationRef xxxx, true, [n#xL], false, false
+      :           +- Project [1 AS c#x]
+      :              +- Filter (outer(id#xL) > cast(0 as bigint))
+      :                 +- OneRowRelation
+      +- SubqueryAlias r
+         +- Range (0, 3, step=1)
+
+
+-- !query
+SET spark.sql.cteRecursionAnchorRowsLimitToConvertToLocalRelation=0
+-- !query analysis
+SetCommand (spark.sql.cteRecursionAnchorRowsLimitToConvertToLocalRelation,Some(0))
+
+
+-- !query
+WITH RECURSIVE t(lvl, a, b) AS (
+    SELECT 0, ARRAY(1), ARRAY(1)
+    UNION ALL (
+        WITH y AS (SELECT lvl, a FROM t WHERE lvl < 2)
+        SELECT lvl + 1, ARRAY(CAST(NULL AS INT)), a FROM y
+    )
+)
+SELECT lvl, b, EXISTS(b, x -> x IS NULL) FROM t
+-- !query analysis
+WithCTE
+:- CTERelationDef xxxx, false
+:  +- SubqueryAlias t
+:     +- Project [0#x AS lvl#x, array(1)#x AS a#x, array(1)#x AS b#x]
+:        +- UnionLoop xxxx
+:           :- Project [0 AS 0#x, array(1) AS array(1)#x, array(1) AS array(1)#x]
+:           :  +- OneRowRelation
+:           +- WithCTE
+:              :- CTERelationDef xxxx, false
+:              :  +- SubqueryAlias y
+:              :     +- Project [lvl#x, a#x]
+:              :        +- Filter (lvl#x < 2)
+:              :           +- SubqueryAlias t
+:              :              +- Project [0#x AS lvl#x, array(1)#x AS a#x, array(1)#x AS b#x]
+:              :                 +- UnionLoopRef xxxx, [0#x, array(1)#x, array(1)#x], false
+:              +- Project [(lvl#x + 1) AS (lvl + 1)#x, array(cast(null as int)) AS array(CAST(NULL AS INT))#x, a#x]
+:                 +- SubqueryAlias y
+:                    +- CTERelationRef xxxx, true, [lvl#x, a#x], false, false
++- Project [lvl#x, b#x, exists(b#x, lambdafunction(isnull(lambda x#x), lambda x#x, false)) AS exists(b, lambdafunction((namedlambdavariable() IS NULL), namedlambdavariable()))#x]
+   +- SubqueryAlias t
+      +- CTERelationRef xxxx, true, [lvl#x, a#x, b#x], false, false
+
+
+-- !query
+WITH RECURSIVE t(lvl, a, b) AS (
+    SELECT 0, ARRAY(1), ARRAY(1)
+    UNION ALL (
+        WITH y AS (SELECT lvl, a FROM t WHERE lvl < 2), z AS (SELECT * FROM y)
+        SELECT lvl + 1, ARRAY(CAST(NULL AS INT)), a FROM z
+    )
+)
+SELECT lvl, b, EXISTS(b, x -> x IS NULL) FROM t
+-- !query analysis
+WithCTE
+:- CTERelationDef xxxx, false
+:  +- SubqueryAlias t
+:     +- Project [0#x AS lvl#x, array(1)#x AS a#x, array(1)#x AS b#x]
+:        +- UnionLoop xxxx
+:           :- Project [0 AS 0#x, array(1) AS array(1)#x, array(1) AS array(1)#x]
+:           :  +- OneRowRelation
+:           +- WithCTE
+:              :- CTERelationDef xxxx, false
+:              :  +- SubqueryAlias y
+:              :     +- Project [lvl#x, a#x]
+:              :        +- Filter (lvl#x < 2)
+:              :           +- SubqueryAlias t
+:              :              +- Project [0#x AS lvl#x, array(1)#x AS a#x, array(1)#x AS b#x]
+:              :                 +- UnionLoopRef xxxx, [0#x, array(1)#x, array(1)#x], false
+:              :- CTERelationDef xxxx, false
+:              :  +- SubqueryAlias z
+:              :     +- Project [lvl#x, a#x]
+:              :        +- SubqueryAlias y
+:              :           +- CTERelationRef xxxx, true, [lvl#x, a#x], false, false
+:              +- Project [(lvl#x + 1) AS (lvl + 1)#x, array(cast(null as int)) AS array(CAST(NULL AS INT))#x, a#x]
+:                 +- SubqueryAlias z
+:                    +- CTERelationRef xxxx, true, [lvl#x, a#x], false, false
++- Project [lvl#x, b#x, exists(b#x, lambdafunction(isnull(lambda x#x), lambda x#x, false)) AS exists(b, lambdafunction((namedlambdavariable() IS NULL), namedlambdavariable()))#x]
+   +- SubqueryAlias t
+      +- CTERelationRef xxxx, true, [lvl#x, a#x, b#x], false, false
+
+
+-- !query
+SET spark.sql.cteRecursionAnchorRowsLimitToConvertToLocalRelation=100
+-- !query analysis
+SetCommand (spark.sql.cteRecursionAnchorRowsLimitToConvertToLocalRelation,Some(100))
+
+
+-- !query
 WITH RECURSIVE t1(n) AS (
     SELECT 1
     UNION ALL

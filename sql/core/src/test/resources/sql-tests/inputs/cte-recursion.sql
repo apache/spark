@@ -944,7 +944,8 @@ SET spark.sql.cteRecursionAnchorRowsLimitToConvertToLocalRelation=100;
 SET spark.sql.legacy.negativeIndexInArrayInsert=false;
 
 -- The legacy setting also keeps the exact-type coercion, so a NULL written into a nested position
--- that the anchor types as non-nullable fails when a column needs a cast
+-- that the anchor types as non-nullable, or a struct field name that differs only in case, fails
+-- when a column needs a cast
 SET spark.sql.legacy.recursiveCTE.useAnchorNestedNullability=true;
 
 WITH RECURSIVE t1(n, m, arr) AS (
@@ -1061,6 +1062,51 @@ WITH RECURSIVE a(x) AS (
 SELECT * FROM a;
 
 SET spark.sql.analyzer.maxIterations=100;
+
+-- A correlated subquery whose recursive CTE reads a CTE of the enclosing query
+WITH x AS (SELECT 1L AS v)
+SELECT r.id FROM range(3) r WHERE EXISTS (
+    WITH RECURSIVE t(n) AS (SELECT 1L UNION ALL SELECT n + v FROM t, x WHERE n < 3)
+    SELECT 1 AS c FROM t WHERE false UNION ALL SELECT 1 AS c WHERE r.id > 0);
+
+WITH x AS (SELECT 1L AS v)
+SELECT r.id FROM range(3) r WHERE NOT EXISTS (
+    WITH RECURSIVE t(n) AS (SELECT 1L UNION ALL SELECT n + v FROM t, x WHERE n < 3)
+    SELECT 1 AS c FROM t WHERE false UNION ALL SELECT 1 AS c WHERE r.id > 0);
+
+WITH x AS (SELECT 1L AS v)
+SELECT r.id FROM range(3) r WHERE 1 IN (
+    WITH RECURSIVE t(n) AS (SELECT 1L UNION ALL SELECT n + v FROM t, x WHERE n < 3)
+    SELECT 1 AS c FROM t WHERE false UNION ALL SELECT 1 AS c WHERE r.id > 0);
+
+WITH x AS (SELECT 1L AS v)
+SELECT r.id, l.c FROM range(3) r, LATERAL (
+    WITH RECURSIVE t(n) AS (SELECT 1L UNION ALL SELECT n + v FROM t, x WHERE n < 3)
+    SELECT 1 AS c FROM t WHERE false UNION ALL SELECT 1 AS c WHERE r.id > 0) l;
+
+-- A column that copies a widened column through an inner CTE that reads the self-reference
+-- widens in a later round, also through a second inner CTE
+SET spark.sql.cteRecursionAnchorRowsLimitToConvertToLocalRelation=0;
+
+WITH RECURSIVE t(lvl, a, b) AS (
+    SELECT 0, ARRAY(1), ARRAY(1)
+    UNION ALL (
+        WITH y AS (SELECT lvl, a FROM t WHERE lvl < 2)
+        SELECT lvl + 1, ARRAY(CAST(NULL AS INT)), a FROM y
+    )
+)
+SELECT lvl, b, EXISTS(b, x -> x IS NULL) FROM t;
+
+WITH RECURSIVE t(lvl, a, b) AS (
+    SELECT 0, ARRAY(1), ARRAY(1)
+    UNION ALL (
+        WITH y AS (SELECT lvl, a FROM t WHERE lvl < 2), z AS (SELECT * FROM y)
+        SELECT lvl + 1, ARRAY(CAST(NULL AS INT)), a FROM z
+    )
+)
+SELECT lvl, b, EXISTS(b, x -> x IS NULL) FROM t;
+
+SET spark.sql.cteRecursionAnchorRowsLimitToConvertToLocalRelation=100;
 
 -- Two calls to same rCTE with and without limit
 WITH RECURSIVE t1(n) AS (

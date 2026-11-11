@@ -2755,6 +2755,103 @@ spark.sql.analyzer.maxIterations	100
 
 
 -- !query
+WITH x AS (SELECT 1L AS v)
+SELECT r.id FROM range(3) r WHERE EXISTS (
+    WITH RECURSIVE t(n) AS (SELECT 1L UNION ALL SELECT n + v FROM t, x WHERE n < 3)
+    SELECT 1 AS c FROM t WHERE false UNION ALL SELECT 1 AS c WHERE r.id > 0)
+-- !query schema
+struct<id:bigint>
+-- !query output
+1
+2
+
+
+-- !query
+WITH x AS (SELECT 1L AS v)
+SELECT r.id FROM range(3) r WHERE NOT EXISTS (
+    WITH RECURSIVE t(n) AS (SELECT 1L UNION ALL SELECT n + v FROM t, x WHERE n < 3)
+    SELECT 1 AS c FROM t WHERE false UNION ALL SELECT 1 AS c WHERE r.id > 0)
+-- !query schema
+struct<id:bigint>
+-- !query output
+0
+
+
+-- !query
+WITH x AS (SELECT 1L AS v)
+SELECT r.id FROM range(3) r WHERE 1 IN (
+    WITH RECURSIVE t(n) AS (SELECT 1L UNION ALL SELECT n + v FROM t, x WHERE n < 3)
+    SELECT 1 AS c FROM t WHERE false UNION ALL SELECT 1 AS c WHERE r.id > 0)
+-- !query schema
+struct<id:bigint>
+-- !query output
+1
+2
+
+
+-- !query
+WITH x AS (SELECT 1L AS v)
+SELECT r.id, l.c FROM range(3) r, LATERAL (
+    WITH RECURSIVE t(n) AS (SELECT 1L UNION ALL SELECT n + v FROM t, x WHERE n < 3)
+    SELECT 1 AS c FROM t WHERE false UNION ALL SELECT 1 AS c WHERE r.id > 0) l
+-- !query schema
+struct<id:bigint,c:int>
+-- !query output
+1	1
+2	1
+
+
+-- !query
+SET spark.sql.cteRecursionAnchorRowsLimitToConvertToLocalRelation=0
+-- !query schema
+struct<key:string,value:string>
+-- !query output
+spark.sql.cteRecursionAnchorRowsLimitToConvertToLocalRelation	0
+
+
+-- !query
+WITH RECURSIVE t(lvl, a, b) AS (
+    SELECT 0, ARRAY(1), ARRAY(1)
+    UNION ALL (
+        WITH y AS (SELECT lvl, a FROM t WHERE lvl < 2)
+        SELECT lvl + 1, ARRAY(CAST(NULL AS INT)), a FROM y
+    )
+)
+SELECT lvl, b, EXISTS(b, x -> x IS NULL) FROM t
+-- !query schema
+struct<lvl:int,b:array<int>,exists(b, lambdafunction((namedlambdavariable() IS NULL), namedlambdavariable())):boolean>
+-- !query output
+0	[1]	false
+1	[1]	false
+2	[null]	true
+
+
+-- !query
+WITH RECURSIVE t(lvl, a, b) AS (
+    SELECT 0, ARRAY(1), ARRAY(1)
+    UNION ALL (
+        WITH y AS (SELECT lvl, a FROM t WHERE lvl < 2), z AS (SELECT * FROM y)
+        SELECT lvl + 1, ARRAY(CAST(NULL AS INT)), a FROM z
+    )
+)
+SELECT lvl, b, EXISTS(b, x -> x IS NULL) FROM t
+-- !query schema
+struct<lvl:int,b:array<int>,exists(b, lambdafunction((namedlambdavariable() IS NULL), namedlambdavariable())):boolean>
+-- !query output
+0	[1]	false
+1	[1]	false
+2	[null]	true
+
+
+-- !query
+SET spark.sql.cteRecursionAnchorRowsLimitToConvertToLocalRelation=100
+-- !query schema
+struct<key:string,value:string>
+-- !query output
+spark.sql.cteRecursionAnchorRowsLimitToConvertToLocalRelation	100
+
+
+-- !query
 WITH RECURSIVE t1(n) AS (
     SELECT 1
     UNION ALL

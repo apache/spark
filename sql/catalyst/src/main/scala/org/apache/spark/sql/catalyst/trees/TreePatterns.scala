@@ -198,6 +198,7 @@ object TreePattern extends Enumeration  {
   val SUBQUERY_ALIAS: Value = Value
   val TRANSPOSE: Value = Value
   val UNION: Value = Value
+  val UNION_LOOP: Value = Value
   val UNPIVOT: Value = Value
   val UPDATE_EVENT_TIME_WATERMARK_COLUMN: Value = Value
   val UPDATE_TABLE: Value = Value

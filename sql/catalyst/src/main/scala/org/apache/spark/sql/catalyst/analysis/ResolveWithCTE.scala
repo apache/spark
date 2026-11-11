@@ -27,7 +27,7 @@ import org.apache.spark.sql.catalyst.plans.{Cross, Inner, LeftAnti, LeftOuter, L
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.rules.Rule
 import org.apache.spark.sql.catalyst.trees.TreeNodeTag
-import org.apache.spark.sql.catalyst.trees.TreePattern.{CTE, PLAN_EXPRESSION}
+import org.apache.spark.sql.catalyst.trees.TreePattern.{CTE, PLAN_EXPRESSION, UNION_LOOP}
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types.{ArrayType, DataType, IntegerType, MapType, StructType}
 
@@ -319,7 +319,15 @@ object ResolveWithCTE extends Rule[LogicalPlan] {
 
       case other =>
         other.transformExpressionsWithPruning(_.containsAllPatterns(PLAN_EXPRESSION, CTE)) {
-          case e: SubqueryExpression => e.withNewPlan(resolveWithCTE(e.plan, cteDefMap))
+          case e: SubqueryExpression =>
+            val newPlan = resolveWithCTE(e.plan, cteDefMap)
+            // A recursive CTE that a subquery's own analysis left unpublished can complete the plan
+            // here, where ResolveSubquery no longer records its outer references.
+            if (!e.plan.resolved && newPlan.resolved) {
+              e.withNewPlan(newPlan).withNewOuterAttrs(SubExprUtils.getOuterReferences(newPlan))
+            } else {
+              e.withNewPlan(newPlan)
+            }
         }
     }
   }
@@ -389,7 +397,7 @@ object ResolveWithCTE extends Rule[LogicalPlan] {
       cteDef: CTERelationDef,
       cteDefMap: collection.Map[Long, CTERelationDef],
       siblingDefs: Seq[CTERelationDef]): CTERelationDef = {
-    val loop = if (cteDef.hasSelfReferenceAsUnionLoopRef && !useAnchorNestedNullability) {
+    val loop = if (hasOwnLoop(cteDef)) {
       cteDef.child.collectFirst { case l: UnionLoop if l.id == cteDef.id => l }
     } else {
       None
@@ -442,10 +450,14 @@ object ResolveWithCTE extends Rule[LogicalPlan] {
   // prediction missed a definition of the enclosing query. Its references then wait for the
   // enclosing analysis to verify or rebuild it, so they bind to its final output.
   private def awaitsEnclosingCheck(cteDef: CTERelationDef): Boolean =
-    AnalysisContext.get.outerPlan.isDefined && cteDef.hasSelfReferenceAsUnionLoopRef &&
-      !useAnchorNestedNullability &&
+    AnalysisContext.get.outerPlan.isDefined && hasOwnLoop(cteDef) &&
       cteDef.child.collectFirst { case l: UnionLoop if l.id == cteDef.id => l }
         .exists(!isVerified(_))
+
+  // Whether the definition's self-reference was rewritten into a loop that the widening checks.
+  private def hasOwnLoop(cteDef: CTERelationDef): Boolean =
+    !useAnchorNestedNullability && cteDef.child.containsPattern(UNION_LOOP) &&
+      cteDef.hasSelfReferenceAsUnionLoopRef
 
   private def isNullableEverywhere(t: (DataType, Boolean)): Boolean =
     t._2 && t._1 == t._1.asNullable

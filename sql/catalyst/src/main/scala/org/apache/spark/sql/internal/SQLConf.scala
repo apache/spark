@@ -8078,7 +8078,10 @@ object SQLConf {
         "including their nested nullability, with every column nullable, which is the behavior " +
         "in Spark 4.3 and earlier. A NULL that the recursive term writes into an array element, " +
         "map value or struct field that the anchor types as non-nullable can then be read back " +
-        "as a non-NULL value. When false, the nullability of the recursive reference, top-level " +
+        "as a non-NULL value. The UnionLoop type coercion then also compares exact types, so a " +
+        "recursive term whose types differ from the anchor's only in nested nullability or in " +
+        "the case of struct field names fails with CANNOT_MERGE_INCOMPATIBLE_DATA_TYPE when a " +
+        "column needs a cast. When false, the nullability of the recursive reference, top-level " +
         "and nested, is widened to cover what the anchor and the recursive term can write.")
       .version("4.4.0")
       .withBindingPolicy(ConfigBindingPolicy.SESSION)
