@@ -23,7 +23,7 @@ import org.apache.spark.internal.Logging
 import org.apache.spark.internal.LogKeys.{ANALYSIS_ERROR, QUERY_PLAN}
 import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.ExtendedAnalysisException
-import org.apache.spark.sql.catalyst.expressions.{Attribute, AttributeReference, AttributeSet, CurrentDate, CurrentTimestampLike, Expression, GroupingSets, LocalTimestamp, LocalTimestampNanos, MonotonicallyIncreasingID, NamedExpression, SessionWindow, WindowExpression}
+import org.apache.spark.sql.catalyst.expressions.{Attribute, AttributeReference, AttributeSet, CurrentDate, CurrentTimestampLike, Expression, GroupingSets, LocalTimestamp, LocalTimestampNanos, MonotonicallyIncreasingID, NamedExpression, SessionWindow, TimeWindow, WindowExpression}
 import org.apache.spark.sql.catalyst.expressions.aggregate.AggregateExpression
 import org.apache.spark.sql.catalyst.planning.ExtractEquiJoinKeys
 import org.apache.spark.sql.catalyst.plans._
@@ -714,12 +714,29 @@ object UnsupportedOperationChecker extends Logging {
     def canEvictState(
         stateInput: LogicalPlan,
         otherInput: LogicalPlan,
-        otherKeys: Seq[Expression]): Boolean = {
+        otherKeys: Seq[Expression],
+        exactForUnwatermarkedColumns: Boolean = true): Boolean = {
       val eventTime = otherInput.output.find(_.metadata.contains(EventTimeWatermark.delayKey))
       StreamingJoinHelper.getStateKeyWatermarkOrdinal(otherKeys, otherInput.output).isDefined ||
         StreamingJoinHelper.getStateValueWatermark(stateInput.outputSet,
           AttributeSet(eventTime.toSeq), join.condition, Some(1000000),
-          exactForUnwatermarkedColumns = true).isDefined
+          exactForUnwatermarkedColumns).isDefined
+    }
+
+    // The rule of Spark versions before 4.4: a watermarked equality key, or a range bound that the
+    // solver finds for a finalized input. Disabling the finalization check never goes below it.
+    def admittedBeforeFinalizationCheck: Boolean = {
+      def hasRangeBound(stateInput: LogicalPlan, otherInput: LogicalPlan): Boolean =
+        StreamingJoinHelper.getStateValueWatermark(stateInput.outputSet, otherInput.outputSet,
+          join.condition, Some(1000000), baseAdmissionRules = true).isDefined
+      (leftKeys ++ rightKeys).exists {
+        case a: AttributeReference => a.metadata.contains(EventTimeWatermark.delayKey)
+        case _ => false
+      } || (join.joinType match {
+        case LeftOuter | LeftSemi => hasRangeBound(join.left, join.right)
+        case RightOuter => hasRangeBound(join.right, join.left)
+        case _ => hasRangeBound(join.left, join.right) || hasRangeBound(join.right, join.left)
+      })
     }
 
     val leftCanEvict = canEvictState(join.left, join.right, rightKeys)
@@ -748,23 +765,78 @@ object UnsupportedOperationChecker extends Logging {
       val downstreamNote = downstreamRequirement.map { case (eventTimeInput, boundingInput) =>
         s" A stateful operator after the join that uses the $eventTimeInput input's event time " +
           s"also needs a watermark on the $boundingInput input and a reverse time constraint; " +
-          "otherwise the join holds back its output watermark and that operator stops " +
-          "emitting results."
+          "otherwise the join holds back its output watermark for that input, so an " +
+          "append-mode aggregation over that event time fails at start, and other operators " +
+          "keep that input's rows in state and do not emit results that wait for the watermark."
       }.getOrElse("")
+      // In legacy mode an input can keep its event time and a window over it, both watermarked.
+      // Late rows are filtered by the first of them, so only that column bounds state.
+      val legacyWindowNote = if (SQLConf.get.getConf(SQLConf.STATEFUL_OPERATOR_ALLOW_MULTIPLE)) {
+        ""
+      } else {
+        def windowNote(input: LogicalPlan, inputKeys: Seq[Expression], side: String): String = {
+          val eventTime = input.output.find(_.metadata.contains(EventTimeWatermark.delayKey))
+          val windowKey = inputKeys.collectFirst {
+            case a: Attribute if a.metadata.contains(TimeWindow.marker) &&
+                a.metadata.contains(EventTimeWatermark.delayKey) &&
+                !eventTime.exists(_.semanticEquals(a)) => a
+          }
+          val note = for (first <- eventTime; window <- windowKey) yield {
+            s" With ${SQLConf.STATEFUL_OPERATOR_ALLOW_MULTIPLE.key}=false, the $side input " +
+              s"filters late rows by its first watermarked column, ${first.name}, so its window " +
+              s"key ${window.name} is not a time constraint. Put ${window.name} before " +
+              s"${first.name} in that input's columns, or drop ${first.name}, to bound state " +
+              "by the window."
+          }
+          note.getOrElse("")
+        }
+        val leftNote = if (rightCanEvict) "" else windowNote(join.left, leftKeys, "left")
+        val rightNote = if (leftCanEvict) "" else windowNote(join.right, rightKeys, "right")
+        join.joinType match {
+          case LeftOuter | LeftSemi => rightNote
+          case RightOuter => leftNote
+          case _ => leftNote + rightNote
+        }
+      }
+      // A side that only an inexact bound would finalize has the watermark and the time
+      // constraint; say why they are not enough.
+      def finalizedOnlyByInexactBound(side: String): Boolean = side match {
+        case "left" => !leftCanEvict &&
+          canEvictState(join.left, join.right, rightKeys, exactForUnwatermarkedColumns = false)
+        case _ => !rightCanEvict &&
+          canEvictState(join.right, join.left, leftKeys, exactForUnwatermarkedColumns = false)
+      }
+      val requiredSides = join.joinType match {
+        case FullOuter => Seq("left", "right")
+        case RightOuter => Seq("right")
+        case _ => Seq("left")
+      }
+      val inexactNote = requiredSides.filter(finalizedOnlyByInexactBound).map { side =>
+        s" The time constraint bounds the $side input only on a column without its own " +
+          "watermark, through an interval of a day or more or a truncating cast such as " +
+          "CAST(ts AS BIGINT), and such a bound does not finalize rows. Bound the input's " +
+          "watermarked event time instead, or use a bound shorter than a day."
+      }.mkString
       val checkConf = SQLConf.STREAMING_JOIN_CHECK_FINALIZATION_ENABLED.key
+      val canDisableCheck = admittedBeforeFinalizationCheck
+      val disableNote = if (canDisableCheck) {
+        s" To run the query anyway, set $checkConf to false; the query then keeps that " +
+          "state without bound, and an outer join never outputs those unmatched rows."
+      } else {
+        ""
+      }
       val message =
         s"Stream-stream ${join.joinType} join between two streaming DataFrame/Datasets " +
           s"is not supported: it requires $requirement " +
           "that allow unmatched state to be finalized. " +
           "The time constraint may be equality on event time or a time range condition. " +
           "A time range condition must bound a TIMESTAMP column of the finalized input by " +
-          "the other input's event time. " +
+          "the other input's event time, or compare time windows as a whole when the " +
+          "finalized input's windows are at least as long as the other input's. " +
           "When upgrading an existing query, correct its watermarks and time constraints, " +
           "then use a new checkpoint and replay the input, reconciling prior sink output." +
-          downstreamNote +
-          s" To run the query anyway, set $checkConf to false; the query then keeps that " +
-          "state without bound, and an outer join never outputs those unmatched rows."
-      if (SQLConf.get.streamingJoinCheckFinalizationEnabled) {
+          legacyWindowNote + inexactNote + downstreamNote + disableNote
+      if (SQLConf.get.streamingJoinCheckFinalizationEnabled || !canDisableCheck) {
         throwError(message)(join)
       } else {
         logWarning(log"${MDC(ANALYSIS_ERROR, message)};\n${MDC(QUERY_PLAN, join)}")

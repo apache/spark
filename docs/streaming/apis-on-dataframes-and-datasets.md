@@ -1300,11 +1300,13 @@ regarding watermark delays and whether data will be dropped or not.
 Unmatched output and state removal use the same cutoff, derived from the opposite input's
 watermark and the time constraint. In the example above, the `clickTime` watermark finalizes
 impressions; no watermark on `impressionTime` is needed for this. Without that watermark, the
-time constraint must have an exact length: whole days in a session time zone with daylight saving
-time, where a day can last 23 or 25 hours, or a truncating cast such as
-`CAST(impressionTime AS BIGINT)`, do not finalize impressions, and an outer join that relies on
-them fails analysis. Full outer joins require watermarks and time constraints in both directions
-to finalize both sides.
+time constraint must have an exact length. An interval of a day or more, such as
+`INTERVAL 1 DAY` or `INTERVAL 48 HOURS`, does not finalize impressions in any session time zone,
+because Spark adds its whole days in the session time zone, where a day can last 23 or 25 hours.
+Nor does a truncating cast such as `CAST(impressionTime AS BIGINT)`. An outer join that relies
+on such a bound fails analysis; add a watermark on `impressionTime`, or use a bound shorter than
+a day. Full outer joins require watermarks and time constraints in both directions to finalize
+both sides.
 
 ###### Caveats
 There are a few important characteristics to note regarding how the outer results are generated.
@@ -1449,17 +1451,33 @@ regarding watermark delays and whether data will be dropped or not.
 
 Additional details on supported joins:
 
+- For stream-stream outer and semi joins, an equality key counts as the time constraint in the
+  table above when it is the other input's event time, or that event time shifted by constant
+  intervals, such as `leftTime = rightTime + INTERVAL 10 MINUTES`. A key shifted backward by whole
+  days, months or years, such as `leftTime = rightTime - INTERVAL 1 DAY`, or truncated from the
+  other input's event time, such as `leftTime = CAST(CAST(rightTime AS BIGINT) AS TIMESTAMP)`,
+  does not count. When both inputs have watermarks, a time range condition between the two event
+  times, as in the time-interval join example above, can bound such a join instead.
+
 - Joins can be cascaded, that is, you can do `df1.join(df2, ...).join(df3, ...).join(df4, ....)`.
 
 - For stream-stream outer and semi joins, the time constraint that finalizes an input's rows must
   bound that input by the other input's event time, either through an equality key on that event
   time or its time window, or through a range condition on a timestamp column of the input. A
-  bound that uses only constants, such as `CAST(leftTime AS BIGINT) > 10`, or a sum that a later
-  row of the other input can always satisfy, such as
+  range condition may also compare the input's time window as a whole with the other input's,
+  such as `leftWindow > rightWindow`, when the input's windows last at least as long as the
+  other input's. A bound that uses only constants, such as `CAST(leftTime AS BIGINT) > 10`, or a
+  sum that a later row of the other input can always satisfy, such as
   `CAST(leftTime AS BIGINT) + CAST(rightTime AS BIGINT) > 100`, does not qualify, and neither
   does a range condition on a column of another type: a numeric column, such as
-  `n > CAST(rightTime AS BIGINT)`, a DATE or TIMESTAMP_NTZ column, or a time window, such as
-  `leftWindow > rightWindow`.
+  `n > CAST(rightTime AS BIGINT)`, a DATE or TIMESTAMP_NTZ column, or a time window shorter
+  than the other input's.
+
+- A stream-stream inner join cleans up an input's state only with such a time constraint. For
+  example, an inner join whose only time constraint is `leftWindow > rightWindow`, with 10-second
+  left windows and 20-second right windows, keeps every left row in its state and holds back its
+  output watermark for the left input, so a stateful operator after the join that uses the left
+  windows cannot emit results.
 
 - As of Spark 2.4, you can use joins only when the query is in Append output mode. Other output modes are not yet supported.
 

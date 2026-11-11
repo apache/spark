@@ -4257,11 +4257,15 @@ object SQLConf {
         "fails analysis unless the watermarks and time constraints let Spark finalize the " +
         "rows of each input whose unmatched rows it outputs or whose state it must bound for " +
         "a semi join: such an input needs a bound derived from the other input's watermark. " +
-        "When false, Spark logs a warning instead and runs the query. Unmatched rows are " +
+        "When false, Spark logs a warning instead and runs the query, as long as the join " +
+        "has a watermarked equality key or a range bound for a finalized input, which earlier " +
+        "versions required; other joins still fail analysis. Unmatched rows are " +
         "still finalized only with that bound, so such a query keeps the input's state " +
         "without bound, and an outer join never outputs the rows that the bound would " +
         "finalize. Before Spark 4.4, a weaker check that ignored the direction of each " +
-        "watermark admitted some of these joins.")
+        "watermark admitted some of these joins. The conf also controls the start-time check " +
+        "that rejects an append-mode aggregation after a stream-stream join whose event time " +
+        "comes from an input the join cannot bound.")
       .version("4.4.0")
       .withBindingPolicy(ConfigBindingPolicy.NOT_APPLICABLE)
       .booleanConf

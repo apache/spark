@@ -17,14 +17,15 @@
 
 package org.apache.spark.sql.catalyst.analysis
 
+import java.util.Locale
+
 import scala.util.control.NonFatal
 
 import org.apache.spark.internal.Logging
 import org.apache.spark.internal.LogKeys._
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.plans.logical.EventTimeWatermark._
-import org.apache.spark.sql.catalyst.util.DateTimeConstants.MICROS_PER_DAY
-import org.apache.spark.sql.catalyst.util.DateTimeUtils
+import org.apache.spark.sql.catalyst.util.DateTimeConstants.{MICROS_PER_DAY, MICROS_PER_HOUR, MICROS_PER_MILLIS, MICROS_PER_MINUTE, MICROS_PER_SECOND}
 import org.apache.spark.sql.types._
 import org.apache.spark.unsafe.types.CalendarInterval
 
@@ -39,9 +40,10 @@ object StreamingJoinHelper extends PredicateHelper with Logging {
    * For leftTime = rightTime, a watermark on rightTime bounds leftTime even when leftTime
    * has no watermark. It does not bound right-side state without a watermark on leftTime.
    * A key computed from the event time by adding constant intervals, such as
-   * leftTime = rightTime + INTERVAL 10 SECONDS, is bounded too if the solver can count the
-   * intervals exactly or they never move a time backward; see [[getStateKeyWatermark]]. The
-   * result does not depend on the session time zone, so neither does the V4 state layout.
+   * leftTime = rightTime + INTERVAL 10 SECONDS or leftTime = timestampadd(HOUR, 1, rightTime),
+   * is bounded too if the solver can count the intervals exactly or they never move a time
+   * backward; see [[getStateKeyWatermark]]. The result does not depend on the session time zone,
+   * so neither does the V4 state layout.
    */
   def getStateKeyWatermarkOrdinal(
       keys: Seq[Expression],
@@ -88,7 +90,8 @@ object StreamingJoinHelper extends PredicateHelper with Logging {
         case KeyShift(eventTime, true, _) =>
           val stateKey = AttributeReference("stateKey", TimestampType)()
           getStateValueWatermark(AttributeSet(Seq(stateKey)), AttributeSet(Seq(eventTime)),
-            Some(GreaterThanOrEqual(stateKey, keys(ordinal))), eventWatermark)
+            Some(GreaterThanOrEqual(stateKey, withIntervalLiterals(keys(ordinal)))),
+            eventWatermark)
         // The solver cannot count this shift, but it keeps the key of every future row at or
         // above that row's event time, which is above the watermark.
         case KeyShift(_, false, true) => eventWatermark
@@ -117,7 +120,8 @@ object StreamingJoinHelper extends PredicateHelper with Logging {
           metadata = new MetadataBuilder().putLong(delayKey, 0L).build())()
         getStateValueWatermark(AttributeSet(Seq(shift.eventTime)),
           AttributeSet(Seq(keyWithWatermark)),
-          Some(GreaterThanOrEqual(keys(ordinal), keyWithWatermark)), Some(keyWatermark))
+          Some(GreaterThanOrEqual(withIntervalLiterals(keys(ordinal)), keyWithWatermark)),
+          Some(keyWatermark))
       }
     }
   }
@@ -189,6 +193,16 @@ object StreamingJoinHelper extends PredicateHelper with Logging {
         combine(interval(i, negate = false), intervalShift(start, eventTime))
       case TimestampAddYMInterval(start, i, _) =>
         combine(interval(i, negate = false), intervalShift(start, eventTime))
+      // timestampadd adds sub-day units exactly, and days, weeks, months, quarters and years in
+      // the session time zone.
+      case TimestampAdd(unit, quantity, start, _) if quantity.foldable =>
+        val exactUnit = timestampAddUnitMicros(unit).isDefined
+        val known = exactUnit || calendarTimestampAddUnits.contains(unit.toUpperCase(Locale.ROOT))
+        val amount = try Option(quantity.eval()) catch { case NonFatal(_) => None }
+        val shift = amount.filter(_ => known).collect {
+          case n: Number => (exactUnit, n.longValue() >= 0)
+        }
+        combine(shift, intervalShift(start, eventTime))
       case DatetimeSub(_, _, replacement) => intervalShift(replacement, eventTime)
       case Add(left, right, _) =>
         combine(interval(right, negate = false), intervalShift(left, eventTime)).orElse(
@@ -200,11 +214,77 @@ object StreamingJoinHelper extends PredicateHelper with Logging {
   }
 
   /**
-   * Whether the expression is the event time plus or minus constant intervals that the solver
-   * counts exactly, so the intervals have no whole days or months.
+   * The key with each foldable interval, such as INTERVAL 1 HOUR * 2, replaced by a literal of
+   * its value, as [[intervalShift]] evaluates it, and each timestampadd of a sub-day unit replaced
+   * by the same interval added to its timestamp. The solver reads only interval literals, and the
+   * admission check runs on the analyzed plan, before constant folding, so without this it would
+   * find no bound where execution finds one.
    */
-  private[sql] def isExactIntervalShift(expr: Expression, eventTime: Attribute): Boolean =
-    intervalShift(expr, eventTime).exists(_._1)
+  private def withIntervalLiterals(key: Expression): Expression = key.transformDown {
+    case e if e.foldable && !e.isInstanceOf[Literal] && isIntervalType(e.dataType) =>
+      try Literal.create(e.eval(), e.dataType) catch { case NonFatal(_) => e }
+    // A sub-day unit adds an exact number of microseconds, which the solver reads as an interval.
+    case e @ TimestampAdd(unit, quantity, start, timeZoneId) if quantity.foldable &&
+        timestampAddUnitMicros(unit).isDefined =>
+      try {
+        val micros = Math.multiplyExact(
+          quantity.eval().asInstanceOf[Number].longValue(), timestampAddUnitMicros(unit).get)
+        TimestampAddInterval(start, Literal(micros, DayTimeIntervalType()), timeZoneId)
+      } catch {
+        case NonFatal(_) => e
+      }
+  }
+
+  /** Microseconds per unit for the timestampadd units that add an exact duration. */
+  private def timestampAddUnitMicros(unit: String): Option[Long] =
+    unit.toUpperCase(Locale.ROOT) match {
+      case "MICROSECOND" => Some(1L)
+      case "MILLISECOND" => Some(MICROS_PER_MILLIS)
+      case "SECOND" => Some(MICROS_PER_SECOND)
+      case "MINUTE" => Some(MICROS_PER_MINUTE)
+      case "HOUR" => Some(MICROS_PER_HOUR)
+      case _ => None
+    }
+
+  /** The timestampadd units that Spark adds as local days or months. */
+  private val calendarTimestampAddUnits =
+    Set("DAY", "DAYOFYEAR", "WEEK", "MONTH", "QUARTER", "YEAR")
+
+  private def isIntervalType(dataType: DataType): Boolean = dataType match {
+    case _: DayTimeIntervalType | _: YearMonthIntervalType | CalendarIntervalType => true
+    case _ => false
+  }
+
+  /**
+   * Whether the expression is the event time, optionally cast to TIMESTAMP or a numeric type,
+   * plus or minus constants: intervals without months, or numbers. The solver reads such a cast
+   * as the column itself and counts such an interval as a fixed duration, a day as 24 hours, in
+   * every version and every time zone, so a range condition built from it derives the same
+   * cutoff before and after the stream-stream join corrections. Months have no fixed length.
+   */
+  private[sql] def isConstantOffsetOf(expr: Expression, eventTime: Attribute): Boolean = {
+    def isConstant(e: Expression): Boolean = {
+      // A constant that fails to evaluate gives no bound; the query reports the error at run time.
+      def value: Option[Any] = try Option(e.eval()) catch { case NonFatal(_) => None }
+      e.foldable && (e.dataType match {
+        case _: DayTimeIntervalType | _: NumericType => value.isDefined
+        case CalendarIntervalType => value.exists(_.asInstanceOf[CalendarInterval].months == 0)
+        case _ => false
+      })
+    }
+    expr match {
+      case a: Attribute => a.semanticEquals(eventTime)
+      case Cast(child, TimestampType | _: NumericType, _, _) => isConstantOffsetOf(child, eventTime)
+      case TimestampAddInterval(start, interval, _) =>
+        isConstant(interval) && isConstantOffsetOf(start, eventTime)
+      case DatetimeSub(_, _, replacement) => isConstantOffsetOf(replacement, eventTime)
+      case Add(left, right, _) =>
+        isConstant(right) && isConstantOffsetOf(left, eventTime) ||
+          isConstant(left) && isConstantOffsetOf(right, eventTime)
+      case Subtract(left, right, _) => isConstant(right) && isConstantOffsetOf(left, eventTime)
+      case _ => false
+    }
+  }
 
   /**
    * Get state value watermark (see [[StreamingSymmetricHashJoinExec]] for context about it)
@@ -225,6 +305,10 @@ object StreamingJoinHelper extends PredicateHelper with Logging {
    *                                      cutoff from a condition that the solver counts
    *                                      inexactly. State eviction and the admission check set
    *                                      it, so they agree.
+   * @param baseAdmissionRules            whether to skip the checks that Spark 4.4 added to the
+   *                                      solver, so that the result matches earlier versions.
+   *                                      Only the admission rule that stays in force with
+   *                                      the finalization check disabled sets it.
    * @return state value watermark in milliseconds, is possible.
    */
   def getStateValueWatermark(
@@ -232,7 +316,8 @@ object StreamingJoinHelper extends PredicateHelper with Logging {
       attributesWithEventWatermark: AttributeSet,
       joinCondition: Option[Expression],
       eventWatermark: Option[Long],
-      exactForUnwatermarkedColumns: Boolean = false): Option[Long] = {
+      exactForUnwatermarkedColumns: Boolean = false,
+      baseAdmissionRules: Boolean = false): Option[Long] = {
 
     // If condition or event time watermark is not provided, then cannot calculate state watermark
     if (joinCondition.isEmpty || eventWatermark.isEmpty) return None
@@ -240,10 +325,14 @@ object StreamingJoinHelper extends PredicateHelper with Logging {
     // If there is not watermark attribute, then cannot define state watermark
     if (!attributesWithEventWatermark.exists(_.metadata.contains(delayKey))) return None
 
-    def getStateWatermarkSafely(l: Expression, r: Expression): Option[Long] = {
+    def getStateWatermarkSafely(
+        l: Expression,
+        r: Expression,
+        keepConstantOnly: Boolean): Option[Long] = {
       try {
         getStateWatermarkFromLessThenPredicate(l, r, attributesToFindStateWatermarkFor,
-          attributesWithEventWatermark, eventWatermark, exactForUnwatermarkedColumns)
+          attributesWithEventWatermark, eventWatermark, exactForUnwatermarkedColumns,
+          keepConstantOnly, baseAdmissionRules)
       } catch {
         case NonFatal(e) =>
           logWarning(log"Error trying to extract state constraint from condition " +
@@ -252,20 +341,21 @@ object StreamingJoinHelper extends PredicateHelper with Logging {
       }
     }
 
-    val allStateWatermarks = splitConjunctivePredicates(joinCondition.get).flatMap { predicate =>
+    def stateWatermarkOf(predicate: Expression, keepConstantOnly: Boolean): Option[Long] = {
+      def solve(l: Expression, r: Expression): Option[Long] =
+        getStateWatermarkSafely(l, r, keepConstantOnly)
 
       // The generated the state watermark cleanup expression is inclusive of the state watermark.
       // If state watermark is W, all state where timestamp <= W will be cleaned up.
       // Now when the canonicalized join condition solves to leftTime >= W, we don't want to clean
       // up leftTime <= W. Rather we should clean up leftTime <= W - 1. Hence the -1 below.
       val stateWatermark = predicate match {
-        case LessThan(l, r) => getStateWatermarkSafely(l, r)
-        case LessThanOrEqual(l, r) => getStateWatermarkSafely(l, r).map(_ - 1)
-        case GreaterThan(l, r) => getStateWatermarkSafely(r, l)
-        case GreaterThanOrEqual(l, r) => getStateWatermarkSafely(r, l).map(_ - 1)
+        case LessThan(l, r) => solve(l, r)
+        case LessThanOrEqual(l, r) => solve(l, r).map(_ - 1)
+        case GreaterThan(l, r) => solve(r, l)
+        case GreaterThanOrEqual(l, r) => solve(r, l).map(_ - 1)
         case Between(input, lower, upper, _) =>
-          getStateWatermarkSafely(lower, input).map(_ - 1)
-            .orElse(getStateWatermarkSafely(input, upper).map(_ - 1))
+          solve(lower, input).map(_ - 1).orElse(solve(input, upper).map(_ - 1))
         case _ => None
       }
       if (stateWatermark.nonEmpty) {
@@ -274,7 +364,23 @@ object StreamingJoinHelper extends PredicateHelper with Logging {
       }
       stateWatermark
     }
-    allStateWatermarks.reduceOption((x, y) => Math.min(x, y))
+
+    val conjuncts = splitConjunctivePredicates(joinCondition.get)
+    val boundingConjuncts = conjuncts.flatMap { predicate =>
+      stateWatermarkOf(predicate, keepConstantOnly = false).map(predicate -> _)
+    }
+    // A constant-only conjunct is left out when the other bounds follow the watermark exactly.
+    // The solver can over-estimate an inexact bound, such as a truncating cast or whole days,
+    // above a row that can still match. A constant's cutoff keeps that row, as in earlier
+    // versions, so keep the constants in the minimum then.
+    val constantBounds =
+      if (boundingConjuncts.exists { case (predicate, _) => hasInexactArithmetic(predicate) }) {
+        conjuncts.filterNot(c => boundingConjuncts.exists(_._1 eq c))
+          .flatMap(stateWatermarkOf(_, keepConstantOnly = true))
+      } else {
+        Nil
+      }
+    (boundingConjuncts.map(_._2) ++ constantBounds).reduceOption((x, y) => Math.min(x, y))
   }
 
   /**
@@ -293,7 +399,9 @@ object StreamingJoinHelper extends PredicateHelper with Logging {
       attributesToFindStateWatermarkFor: AttributeSet,
       attributesWithEventWatermark: AttributeSet,
       eventWatermark: Option[Long],
-      exactForUnwatermarkedColumns: Boolean): Option[Long] = {
+      exactForUnwatermarkedColumns: Boolean,
+      keepConstantOnly: Boolean,
+      baseAdmissionRules: Boolean): Option[Long] = {
 
     val attributesInCondition =
       leftExpr.collect { case a: AttributeReference => a } ++
@@ -364,20 +472,28 @@ object StreamingJoinHelper extends PredicateHelper with Logging {
       return None
     }
 
-    // State eviction compares this cutoff in timestamp units against the constrained column.
-    val hasTimestampStateAttribute = constraintTerm.exists {
-      case a: AttributeReference =>
-        attributesToFindStateWatermarkFor.contains(a) && a.dataType == TimestampType
-      case _ => false
+    // State eviction compares this cutoff in timestamp units against the constrained column, or
+    // against its end for a time window; see [[isWindowEvictionSafe]].
+    val stateColumn = constraintTerm.collectFirst {
+      case a: AttributeReference if attributesToFindStateWatermarkFor.contains(a) => a
     }
-    if (!hasTimestampStateAttribute) return None
+    val watermarkColumn = terms.flatMap(_.collect {
+      case a: AttributeReference
+          if attributesWithEventWatermark.contains(a) && a.metadata.contains(delayKey) => a
+    }).headOption
+    val canEvictStateColumn = stateColumn.exists { column =>
+      column.dataType == TimestampType || watermarkColumn.exists(isWindowEvictionSafe(column, _))
+    }
+    if (!baseAdmissionRules && !canEvictStateColumn) return None
 
     // A bound needs a term on the opposite input's watermarked event time; a conjunct that uses
-    // only constants does not follow the watermark. The occurrence check above limits each input
-    // to one attribute, so there can be at most one such term.
+    // only constants does not follow the watermark, and gives a cutoff only with
+    // keepConstantOnly. The occurrence check above limits each input to one attribute, so there
+    // can be at most one such term.
+    // TODO(SPARK-61350): a watermark term with a negative coefficient still passes this check.
     val watermarkTerms = terms.filter(_.references.exists(attributesWithEventWatermark.contains))
-    if (watermarkTerms.isEmpty ||
-        !watermarkTerms.head.references.forall(_.metadata.contains(delayKey))) {
+    if (!baseAdmissionRules && (watermarkTerms.isEmpty && !keepConstantOnly ||
+        !watermarkTerms.headOption.forall(_.references.forall(_.metadata.contains(delayKey))))) {
       return None
     }
 
@@ -410,10 +526,39 @@ object StreamingJoinHelper extends PredicateHelper with Logging {
     Some((Double2double(constraintValue) / 1000.0).toLong)
   }
 
+  /** Whether a column of a join input can take a range cutoff: TIMESTAMP, or a time window. */
+  def canTakeRangeCutoff(column: Attribute): Boolean =
+    column.dataType == TimestampType || windowDuration(column).isDefined
+
+  /** The length of the windows in a column built by window(), when the column records it. */
+  private def windowDuration(column: Attribute): Option[Long] = {
+    val metadata = column.metadata
+    if (metadata.contains(TimeWindow.marker) && metadata.contains(TimeWindow.durationKey)) {
+      Some(metadata.getLong(TimeWindow.durationKey))
+    } else {
+      None
+    }
+  }
+
   /**
-   * Whether the solver counts part of the expression inexactly: whole days added in a time zone
-   * that is not fixed-offset, where a day can be 23 or 25 hours, or a cast that drops part of a
-   * time, such as CAST(ts AS BIGINT).
+   * Whether evicting `stateWindow` by its end is safe when a range condition compares it, as a
+   * whole, with `watermarkWindow`, the other input's watermarked time window. Ordering windows
+   * compares their starts first. A window evicted at a cutoff no higher than the watermark
+   * starts at least its own duration before the watermark, while a later window of the other
+   * input ends above the watermark, so it starts less than its own duration before it. When the
+   * stored windows last at least as long as the other input's, every later window therefore
+   * starts after every evicted window and orders above it. Shorter stored windows get no cutoff.
+   */
+  private def isWindowEvictionSafe(stateWindow: Attribute, watermarkWindow: Attribute): Boolean =
+    (windowDuration(stateWindow), windowDuration(watermarkWindow)) match {
+      case (Some(stored), Some(other)) => stored >= other
+      case _ => false
+    }
+
+  /**
+   * Whether the solver counts part of the expression inexactly: an interval of a day or more,
+   * whose whole days Spark adds in the session time zone, where a day can be 23 or 25 hours, or a
+   * cast that drops part of a time, such as CAST(ts AS BIGINT).
    */
   private def hasInexactArithmetic(expr: Expression): Boolean = {
     def hasWholeDays(interval: Expression): Boolean = {
@@ -431,10 +576,11 @@ object StreamingJoinHelper extends PredicateHelper with Logging {
         case decimal: DecimalType => decimal.scale < 6
         case _ => false
       })
+    // Whole days count as inexact in every session time zone, as they do for equality keys.
+    // Whether a column gets a cutoff decides which column V4 stores and finds rows by, and the
+    // offset log does not keep the session time zone, so that must not depend on the zone.
     expr.exists {
-      case TimestampAddInterval(_, interval, timeZoneId) =>
-        !timeZoneId.exists(DateTimeUtils.getZoneId(_).getRules.isFixedOffset) &&
-          hasWholeDays(interval)
+      case TimestampAddInterval(_, interval, _) => hasWholeDays(interval)
       case Cast(child, dataType, _, _) => isTruncatingCast(child.dataType, dataType)
       case _ => false
     }

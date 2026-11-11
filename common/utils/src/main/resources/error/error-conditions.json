@@ -8172,6 +8172,13 @@
     ],
     "sqlState" : "0A000"
   },
+  "STREAMING_JOIN_UNBOUNDED_DOWNSTREAM_EVENT_TIME" : {
+    "message" : [
+      "The append-mode aggregation after a stream-stream join uses the event time <eventTime> of the join's <side> input, but the join cannot bound the state of that input, so it holds back its output watermark and the aggregation would never emit results.",
+      "Add <requirement>, aggregate the event time of an input whose state the join can bound, or use the update output mode. To run the query anyway, set <config> to false."
+    ],
+    "sqlState" : "0A000"
+  },
   "STREAMING_OUTPUT_MODE" : {
     "message" : [
       "Invalid streaming output mode: <outputMode>."
