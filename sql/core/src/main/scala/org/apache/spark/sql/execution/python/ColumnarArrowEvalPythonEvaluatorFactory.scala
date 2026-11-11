@@ -148,7 +148,7 @@ private[python] class ColumnarArrowEvalPythonEvaluatorFactory(
           StructField(s"_$i", dt)
         }.toArray)
 
-      val outputTypes = output.drop(childOutput.length).map(
+      val outputTypes = output.takeRight(udfs.length).map(
         _.dataType.transformRecursively {
           case udt: UserDefinedType[_] => udt.sqlType
         })
@@ -200,13 +200,22 @@ private[python] class ColumnarArrowEvalPythonEvaluatorFactory(
         outputTypes: Seq[DataType],
         columnIndices: Array[Int]): Iterator[ColumnarBatch] = {
 
+      val requiredChildOutput = output.dropRight(udfs.length)
+      val passThruIndices = requiredChildOutput.map { attr =>
+        val idx = childOutput.indexWhere(_.exprId == attr.exprId)
+        assert(idx >= 0, s"Required child output $attr not found in $childOutput")
+        idx
+      }.toArray
+      val nonPassThruIndices =
+        childOutput.indices.filterNot(passThruIndices.contains).toArray
+
       val passThruQueue =
-        new ArrayDeque[(Array[ColumnVector], Int)]()
+        new ArrayDeque[(Array[ColumnVector], Array[ColumnVector], Int)]()
 
       val bufferedIter = inputIter.map { batch =>
-        val passThruCols = childOutput.indices.map(
-          i => batch.column(i)).toArray
-        passThruQueue.add((passThruCols, batch.numRows()))
+        val passThruCols = passThruIndices.map(batch.column)
+        val nonPassThruCols = nonPassThruIndices.map(batch.column)
+        passThruQueue.add((passThruCols, nonPassThruCols, batch.numRows()))
         batch
       }
 
@@ -224,7 +233,8 @@ private[python] class ColumnarArrowEvalPythonEvaluatorFactory(
         val numRows = resultBatch.numRows()
         val resultCols = (0 until resultBatch.numCols()).map(
           i => resultBatch.column(i)).toArray
-        val (passThruCols, passThruRows) = passThruQueue.poll()
+        val (passThruCols, nonPassThruCols, passThruRows) = passThruQueue.poll()
+        nonPassThruCols.foreach(_.closeIfFreeable())
         assert(passThruRows == numRows,
           s"Batch size mismatch: pass-through has " +
             s"$passThruRows rows but UDF result has $numRows rows.")
@@ -248,24 +258,29 @@ private[python] class ColumnarArrowEvalPythonEvaluatorFactory(
         inputColumnIndices: Option[Array[Int]]
     ): Iterator[ColumnarBatch] = {
 
-      // In pipelined mode the queue's add() runs in the writer thread and remove() runs in
-      // the task thread; use lock-free mode to skip per-row synchronization.
-      val pipelined = SparkEnv.get.conf.get(PYTHON_UDF_PIPELINED_EXECUTION)
-      val queue = HybridRowQueue(
-        context.taskMemoryManager(),
-        new File(Utils.getLocalDir(SparkEnv.get.conf)),
-        childOutput.length,
-        lockFree = pipelined)
-      context.addTaskCompletionListener[Unit] { _ => queue.close() }
-
-      val unsafeProj = UnsafeProjection.create(
-        childOutput, childOutput)
+      val requiredChildOutput = output.dropRight(udfs.length)
+      val (queue, unsafeProj) = if (requiredChildOutput.nonEmpty) {
+        // In pipelined mode the queue's add() runs in the writer thread and remove() runs in
+        // the task thread; use lock-free mode to skip per-row synchronization.
+        val pipelined = SparkEnv.get.conf.get(PYTHON_UDF_PIPELINED_EXECUTION)
+        val q = HybridRowQueue(
+          context.taskMemoryManager(),
+          new File(Utils.getLocalDir(SparkEnv.get.conf)),
+          requiredChildOutput.length,
+          lockFree = pipelined)
+        context.addTaskCompletionListener[Unit] { _ => q.close() }
+        (q, UnsafeProjection.create(requiredChildOutput, childOutput))
+      } else {
+        (null, null)
+      }
 
       val resultIter = if (inputColumnIndices.isDefined) {
         // Path 2: simple column refs, non-Arrow vectors.
         val bufferedIter = new WrittenBatchReleasingIterator(inputIter, { batch =>
-          batch.rowIterator().asScala.foreach { row =>
-            queue.add(unsafeProj(row).copy())
+          if (queue != null) {
+            batch.rowIterator().asScala.foreach { row =>
+              queue.add(unsafeProj(row).copy())
+            }
           }
           true
         })
@@ -286,7 +301,9 @@ private[python] class ColumnarArrowEvalPythonEvaluatorFactory(
         // for the next batch, which releases it.
         val batchIter = new WrittenBatchReleasingIterator(inputIter, _ => true).map { batch =>
           batch.rowIterator().asScala.map { row =>
-            queue.add(unsafeProj(row).copy())
+            if (queue != null) {
+              queue.add(unsafeProj(row).copy())
+            }
             projection(row)
           }
         }
@@ -307,7 +324,11 @@ private[python] class ColumnarArrowEvalPythonEvaluatorFactory(
         validateOutputTypes(batch, outputTypes)
         batch.rowIterator.asScala
       }.map { outputRow =>
-        resultProj(joined(queue.remove(), outputRow))
+        if (queue != null) {
+          resultProj(joined(queue.remove(), outputRow))
+        } else {
+          resultProj(outputRow)
+        }
       }
 
       // Convert joined rows back to ColumnarBatch.

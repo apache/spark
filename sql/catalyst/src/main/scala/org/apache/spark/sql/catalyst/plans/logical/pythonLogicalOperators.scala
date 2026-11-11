@@ -287,11 +287,20 @@ trait BaseEvalPython extends UnaryNode {
 
   def udfs: Seq[PythonUDF]
 
+  def requiredChildOutput: Seq[Attribute]
+
   def resultAttrs: Seq[Attribute]
 
-  override def output: Seq[Attribute] = child.output ++ resultAttrs
+  override def output: Seq[Attribute] = requiredChildOutput ++ resultAttrs
 
   override def producedAttributes: AttributeSet = AttributeSet(resultAttrs)
+
+  def udfReferences: AttributeSet =
+    AttributeSet.fromAttributeSets(udfs.map(_.references)) -- producedAttributes
+
+  def withNewRequiredChildOutput(
+      newChild: LogicalPlan,
+      newRequiredChildOutput: Seq[Attribute]): BaseEvalPython
 
   final override val nodePatterns: Seq[TreePattern] = Seq(EVAL_PYTHON_UDF)
 }
@@ -316,10 +325,24 @@ trait BaseEvalPythonUDTF extends UnaryNode {
  */
 case class BatchEvalPython(
     udfs: Seq[PythonUDF],
+    requiredChildOutput: Seq[Attribute],
     resultAttrs: Seq[Attribute],
     child: LogicalPlan) extends BaseEvalPython {
+  override def withNewRequiredChildOutput(
+      newChild: LogicalPlan,
+      newRequiredChildOutput: Seq[Attribute]): BaseEvalPython =
+    copy(requiredChildOutput = newRequiredChildOutput, child = newChild)
+
   override protected def withNewChildInternal(newChild: LogicalPlan): BatchEvalPython =
     copy(child = newChild)
+}
+
+object BatchEvalPython {
+  def apply(
+      udfs: Seq[PythonUDF],
+      resultAttrs: Seq[Attribute],
+      child: LogicalPlan): BatchEvalPython =
+    BatchEvalPython(udfs, child.output, resultAttrs, child)
 }
 
 /**
@@ -327,11 +350,26 @@ case class BatchEvalPython(
  */
 case class ArrowEvalPython(
     udfs: Seq[PythonUDF],
+    requiredChildOutput: Seq[Attribute],
     resultAttrs: Seq[Attribute],
     child: LogicalPlan,
     evalType: Int) extends BaseEvalPython {
+  override def withNewRequiredChildOutput(
+      newChild: LogicalPlan,
+      newRequiredChildOutput: Seq[Attribute]): BaseEvalPython =
+    copy(requiredChildOutput = newRequiredChildOutput, child = newChild)
+
   override protected def withNewChildInternal(newChild: LogicalPlan): ArrowEvalPython =
     copy(child = newChild)
+}
+
+object ArrowEvalPython {
+  def apply(
+      udfs: Seq[PythonUDF],
+      resultAttrs: Seq[Attribute],
+      child: LogicalPlan,
+      evalType: Int): ArrowEvalPython =
+    ArrowEvalPython(udfs, child.output, resultAttrs, child, evalType)
 }
 
 /**

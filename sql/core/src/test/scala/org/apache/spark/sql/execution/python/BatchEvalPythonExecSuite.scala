@@ -20,12 +20,13 @@ package org.apache.spark.sql.execution.python
 import scala.collection.mutable.ArrayBuffer
 import scala.jdk.CollectionConverters._
 
-import org.apache.spark.{SparkRuntimeException, TaskContext}
+import org.apache.spark.{SparkEnv, SparkRuntimeException, TaskContext}
 import org.apache.spark.api.python.{ChainedPythonFunctions, PythonEvalType, SimplePythonFunction}
+import org.apache.spark.memory.{TaskMemoryManager, TestMemoryManager}
 import org.apache.spark.sql.catalyst.{FunctionIdentifier, InternalRow}
 import org.apache.spark.sql.catalyst.expressions.{
   And, AttributeReference, Concat, GenericInternalRow, GreaterThan, In, PythonUDF,
-  UnsafeProjection}
+  UnsafeProjection, UnsafeRow}
 import org.apache.spark.sql.connector.catalog.CatalogManager
 import org.apache.spark.sql.execution.{
   FilterExec, InputAdapter, LocalTableScanExec, WholeStageCodegenExec}
@@ -36,6 +37,7 @@ import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.{ExamplePointUDT, SharedSparkSession}
 import org.apache.spark.sql.types._
 import org.apache.spark.unsafe.types.UTF8String
+import org.apache.spark.util.Utils
 
 class BatchEvalPythonExecSuite extends SharedSparkSession
   with AdaptiveSparkPlanHelper {
@@ -172,6 +174,7 @@ class BatchEvalPythonExecSuite extends SharedSparkSession
         udfDeterministic = true)
       class TestBatchEvalPythonExec extends BatchEvalPythonExec(
           Seq(pythonUdf),
+          Seq(taskAttr),
           Seq(AttributeReference("result", StringType)()),
           LocalTableScanExec(Seq(taskAttr), Nil, None)) {
         def testEvaluatorFactory: BatchEvalPythonEvaluatorFactory =
@@ -425,7 +428,7 @@ class BatchEvalPythonExecSuite extends SharedSparkSession
       case f @ FilterExec(
           And(_: AttributeReference, _: AttributeReference),
           InputAdapter(_: BatchEvalPythonExec)) => f
-      case b @ BatchEvalPythonExec(_, _, WholeStageCodegenExec(FilterExec(_: In, _))) => b
+      case b @ BatchEvalPythonExec(_, _, _, WholeStageCodegenExec(FilterExec(_: In, _))) => b
     }
     assert(qualifiedPlanNodes.size == 2)
   }
@@ -435,7 +438,7 @@ class BatchEvalPythonExecSuite extends SharedSparkSession
       .where("dummyPythonUDF(a, dummyPythonUDF(a, b)) and a in (3, 4)")
     val qualifiedPlanNodes = df.queryExecution.executedPlan.collect {
       case f @ FilterExec(_: AttributeReference, InputAdapter(_: BatchEvalPythonExec)) => f
-      case b @ BatchEvalPythonExec(_, _, WholeStageCodegenExec(FilterExec(_: In, _))) => b
+      case b @ BatchEvalPythonExec(_, _, _, WholeStageCodegenExec(FilterExec(_: In, _))) => b
     }
     assert(qualifiedPlanNodes.size == 2)
   }
@@ -447,7 +450,7 @@ class BatchEvalPythonExecSuite extends SharedSparkSession
       case f @ FilterExec(
           And(_: AttributeReference, _: GreaterThan),
           InputAdapter(_: BatchEvalPythonExec)) => f
-      case b @ BatchEvalPythonExec(_, _, WholeStageCodegenExec(_: FilterExec)) => b
+      case b @ BatchEvalPythonExec(_, _, _, WholeStageCodegenExec(_: FilterExec)) => b
     }
     assert(qualifiedPlanNodes.size == 2)
   }
@@ -460,7 +463,7 @@ class BatchEvalPythonExecSuite extends SharedSparkSession
       case f @ FilterExec(
           And(_: AttributeReference, _: GreaterThan),
           InputAdapter(_: BatchEvalPythonExec)) => f
-      case b @ BatchEvalPythonExec(_, _, WholeStageCodegenExec(_: FilterExec)) => b
+      case b @ BatchEvalPythonExec(_, _, _, WholeStageCodegenExec(_: FilterExec)) => b
     }
     assert(qualifiedPlanNodes.size == 2)
   }
@@ -487,6 +490,117 @@ class BatchEvalPythonExecSuite extends SharedSparkSession
       val agg2 = sql("select dummyGroupedAggPandasUDF(id) from table")
 
       comparePlans(agg1.queryExecution.optimizedPlan, agg2.queryExecution.optimizedPlan)
+    }
+  }
+
+  test("EvalPythonEvaluatorFactory prunes unrequired child columns before HybridRowQueue") {
+    val idAttr = AttributeReference("id", IntegerType)()
+    val blob1Attr = AttributeReference("blob1", BinaryType)()
+    val blob2Attr = AttributeReference("blob2", BinaryType)()
+    val resAttr = AttributeReference("res", BooleanType)()
+    val childOutput = Seq(idAttr, blob1Attr, blob2Attr)
+    val pythonUdf = PythonUDF(
+      "dummy", new DummyUDF, BooleanType, Seq(blob1Attr, blob2Attr),
+      PythonEvalType.SQL_BATCHED_UDF, udfDeterministic = true)
+
+    val toUnsafe = UnsafeProjection.create(childOutput, childOutput)
+    val largeBlob = new Array[Byte](50 * 1024)
+    val inputRow = toUnsafe(InternalRow(42, largeBlob, largeBlob)).copy()
+    assert(inputRow.getSizeInBytes > 100 * 1024)
+
+    var createdQueueFields = -1
+    val queuedRowSizes = new ArrayBuffer[Int]()
+    val taskMemMgr = new TaskMemoryManager(new TestMemoryManager(spark.sparkContext.conf), 0)
+
+    val factory = new EvalPythonEvaluatorFactory(
+        childOutput, Seq(pythonUdf), Seq(idAttr, resAttr)) {
+      override protected def createRowQueue(
+          context: TaskContext,
+          numFields: Int,
+          lockFree: Boolean): HybridRowQueue = {
+        createdQueueFields = numFields
+        new HybridRowQueue(
+            taskMemMgr,
+            Utils.createTempDir().getCanonicalFile,
+            numFields,
+            SparkEnv.get.serializerManager,
+            lockFree) {
+          override def add(row: UnsafeRow): QueueMode.Value = {
+            queuedRowSizes += row.getSizeInBytes
+            super.add(row)
+          }
+        }
+      }
+
+      override protected def evaluate(
+          funcs: Seq[(ChainedPythonFunctions, Long)],
+          argMetas: Array[Array[ArgumentMetadata]],
+          iter: Iterator[InternalRow],
+          schema: StructType,
+          context: TaskContext): Iterator[InternalRow] = {
+        iter.map { projectedRow =>
+          assert(projectedRow.getBinary(0).length == largeBlob.length)
+          assert(projectedRow.getBinary(1).length == largeBlob.length)
+          InternalRow(true)
+        }
+      }
+    }
+
+    TaskContext.setTaskContext(TaskContext.empty())
+    try {
+      val outRows = factory.createEvaluator().eval(0, Iterator(inputRow)).toSeq
+      assert(createdQueueFields == 1)
+      assert(queuedRowSizes == Seq(16))
+      assert(outRows.length == 1)
+      assert(outRows.head.numFields == 2)
+      assert(outRows.head.getInt(0) == 42)
+      assert(outRows.head.getBoolean(1) === true)
+    } finally {
+      TaskContext.unset()
+    }
+  }
+
+  test("EvalPythonEvaluatorFactory skips HybridRowQueue when requiredChildOutput is empty") {
+    val blobAttr = AttributeReference("blob", BinaryType)()
+    val resAttr = AttributeReference("res", BooleanType)()
+    val childOutput = Seq(blobAttr)
+    val pythonUdf = PythonUDF(
+      "dummy", new DummyUDF, BooleanType, Seq(blobAttr),
+      PythonEvalType.SQL_BATCHED_UDF, udfDeterministic = true)
+
+    val toUnsafe = UnsafeProjection.create(childOutput, childOutput)
+    val inputRow = toUnsafe(InternalRow(new Array[Byte](1024))).copy()
+
+    var queueCreated = false
+    val factory = new EvalPythonEvaluatorFactory(
+        childOutput, Seq(pythonUdf), Seq(resAttr)) {
+      override protected def createRowQueue(
+          context: TaskContext,
+          numFields: Int,
+          lockFree: Boolean): HybridRowQueue = {
+        queueCreated = true
+        super.createRowQueue(context, numFields, lockFree)
+      }
+
+      override protected def evaluate(
+          funcs: Seq[(ChainedPythonFunctions, Long)],
+          argMetas: Array[Array[ArgumentMetadata]],
+          iter: Iterator[InternalRow],
+          schema: StructType,
+          context: TaskContext): Iterator[InternalRow] = {
+        iter.map(_ => InternalRow(true))
+      }
+    }
+
+    TaskContext.setTaskContext(TaskContext.empty())
+    try {
+      val outRows = factory.createEvaluator().eval(0, Iterator(inputRow)).toSeq
+      assert(!queueCreated)
+      assert(outRows.length == 1)
+      assert(outRows.head.numFields == 1)
+      assert(outRows.head.getBoolean(0) === true)
+    } finally {
+      TaskContext.unset()
     }
   }
 }

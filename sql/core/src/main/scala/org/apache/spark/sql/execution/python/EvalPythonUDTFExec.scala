@@ -58,15 +58,29 @@ trait EvalPythonUDTFExec extends UnaryExecNode {
     inputRDD.mapPartitions { iter =>
       val context = TaskContext.get()
 
-      // The queue used to buffer input rows so we can drain it to
+      // The queue used to buffer required input columns so we can drain it to
       // combine input with output from Python.
       // In pipelined mode the queue's add() runs in the writer thread and remove() runs in
       // the task thread; use lock-free mode to skip per-row synchronization.
-      val pipelined = SparkEnv.get.conf.get(PYTHON_UDF_PIPELINED_EXECUTION)
-      val queue = HybridRowQueue(context.taskMemoryManager(),
-        new File(Utils.getLocalDir(SparkEnv.get.conf)), child.output.length, lockFree = pipelined)
-      context.addTaskCompletionListener[Unit] { ctx =>
-        queue.close()
+      val (queue, pruneChildForResult) = if (requiredChildOutput.nonEmpty) {
+        val pipelined = SparkEnv.get.conf.get(PYTHON_UDF_PIPELINED_EXECUTION)
+        val q = HybridRowQueue(context.taskMemoryManager(),
+          new File(Utils.getLocalDir(SparkEnv.get.conf)),
+          requiredChildOutput.length, lockFree = pipelined)
+        context.addTaskCompletionListener[Unit] { _ =>
+          q.close()
+        }
+        val prune: InternalRow => UnsafeRow =
+          if (requiredChildOutput == child.output) {
+            _.asInstanceOf[UnsafeRow]
+          } else {
+            val proj = UnsafeProjection.create(requiredChildOutput, child.output)
+            proj.initialize(context.partitionId())
+            proj.apply _
+          }
+        (q, prune)
+      } else {
+        (null, null)
       }
 
       // flatten all the arguments
@@ -95,49 +109,54 @@ trait EvalPythonUDTFExec extends UnaryExecNode {
         StructField(s"_$i", dt)
       }.toArray)
 
-      // Add rows to the queue to join later with the result.
+      // Add required columns to the queue to join later with the result.
       // Also keep track of the number rows added to the queue.
       // This is needed to process extra output rows from the `terminate()` call of the UDTF.
       var count = 0L
       val projectedRowIter = iter.map { inputRow =>
-        queue.add(inputRow.asInstanceOf[UnsafeRow])
-        count += 1
+        if (queue != null) {
+          queue.add(pruneChildForResult(inputRow))
+          count += 1
+        }
         projection(inputRow)
       }
 
       val outputRowIterator = evaluate(argMetas, projectedRowIter, schema, context)
-
-      val pruneChildForResult: InternalRow => InternalRow =
-        if (child.outputSet == AttributeSet(requiredChildOutput)) {
-          identity
-        } else {
-          UnsafeProjection.create(requiredChildOutput, child.output)
-        }
 
       val joined = new JoinedRow
       val nullRow = new GenericInternalRow(udtf.elementSchema.length)
       val resultProj = UnsafeProjection.create(output, output)
 
       outputRowIterator.flatMap { outputRows =>
-        // If `count` is greater than zero, it means there are remaining input rows in the queue.
-        // In this case, the output rows of the UDTF are joined with the corresponding input row
-        // in the queue.
-        if (count > 0) {
-          val left = queue.remove()
-          count -= 1
-          joined.withLeft(pruneChildForResult(left))
-        }
-        // If `count` is zero, it means all input rows have been consumed. Any additional rows
-        // from the UDTF are from the `terminate()` call. We leave the left side as the last
-        // element of its child output to keep it consistent with the Generate implementation
-        // and Hive UDTFs.
-        outputRows.map { r =>
-          // When the UDTF's result is None, such as `def eval(): yield`,
-          // we join it with a null row to avoid NullPointerException.
-          if (r == null) {
-            resultProj(joined.withRight(nullRow))
-          } else {
-            resultProj(joined.withRight(r))
+        if (queue != null) {
+          // If `count` is greater than zero, it means there are remaining input rows in the queue.
+          // In this case, the output rows of the UDTF are joined with the corresponding input row
+          // in the queue.
+          if (count > 0) {
+            val left = queue.remove()
+            count -= 1
+            joined.withLeft(left)
+          }
+          // If `count` is zero, it means all input rows have been consumed. Any additional rows
+          // from the UDTF are from the `terminate()` call. We leave the left side as the last
+          // element of its child output to keep it consistent with the Generate implementation
+          // and Hive UDTFs.
+          outputRows.map { r =>
+            // When the UDTF's result is None, such as `def eval(): yield`,
+            // we join it with a null row to avoid NullPointerException.
+            if (r == null) {
+              resultProj(joined.withRight(nullRow))
+            } else {
+              resultProj(joined.withRight(r))
+            }
+          }
+        } else {
+          outputRows.map { r =>
+            if (r == null) {
+              resultProj(nullRow)
+            } else {
+              resultProj(r)
+            }
           }
         }
       }

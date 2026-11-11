@@ -27,6 +27,7 @@ import org.apache.spark.sql.internal.SQLConf
 /** Row-based CDI execution, sharing the standard Python UDF evaluator contracts. */
 case class InProcessArrowEvalPythonExec(
     udfs: Seq[PythonUDF],
+    requiredChildOutput: Seq[Attribute],
     resultAttrs: Seq[Attribute],
     child: SparkPlan) extends EvalPythonExec with PythonSQLMetrics {
 
@@ -65,6 +66,12 @@ case class InProcessArrowEvalPythonExec(
 }
 
 object InProcessArrowEvalPythonExec {
+  def apply(
+      udfs: Seq[PythonUDF],
+      resultAttrs: Seq[Attribute],
+      child: SparkPlan): InProcessArrowEvalPythonExec =
+    InProcessArrowEvalPythonExec(udfs, child.output, resultAttrs, child)
+
   private[python] val sizeMetricsDesc: Map[String, String] = Map(
     "pythonDataSent" -> "data exported to in-process Python",
     "pythonDataReceived" -> "data returned from in-process Python")

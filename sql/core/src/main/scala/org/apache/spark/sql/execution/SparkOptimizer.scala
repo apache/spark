@@ -114,6 +114,7 @@ class SparkOptimizer(
         ColumnPruning,
         LimitPushDown,
         PushPredicateThroughNonJoin,
+        ColumnPruning,
         PushProjectionThroughLimitAndOffset,
         RemoveNoopOperators),
       // Join-condition UDF extraction can convert a join to a cartesian product. Keep this in a

@@ -236,5 +236,53 @@ class ExtractPythonUDFsSuite extends SharedSparkSession {
       case _ =>
     }
   }
+
+  test("Prunes unrequired child output columns from BatchEvalPython and ArrowEvalPython") {
+    withTempPath { f =>
+      Seq((1, "x", 10, "extra")).toDF("a", "b", "c", "d")
+        .write.parquet(f.getCanonicalPath)
+      val df = spark.read.parquet(f.getCanonicalPath)
+
+      Seq(batchedPythonUDF, scalarPandasUDF).foreach { udfFunc =>
+        // 1. Filter on UDF(b) and select only a: b is needed by child for UDF input, but not in
+        // requiredChildOutput of EvalPython.
+        val filtered = df.filter(udfFunc(col("b"))).select("a")
+        val evalNodes1 = filtered.queryExecution.sparkPlan.collect {
+          case e: EvalPythonExec => e
+        }
+        assert(evalNodes1.length == 1)
+        assert(evalNodes1.head.requiredChildOutput.map(_.name) == Seq("a"))
+        assert(evalNodes1.head.child.output.map(_.name) == Seq("a", "b"))
+
+        // 2. Select only UDF(b): requiredChildOutput is empty.
+        val onlyUdf = df.select(udfFunc(col("b")))
+        val evalNodes2 = onlyUdf.queryExecution.sparkPlan.collect {
+          case e: EvalPythonExec => e
+        }
+        assert(evalNodes2.length == 1)
+        assert(evalNodes2.head.requiredChildOutput.isEmpty)
+        assert(evalNodes2.head.child.output.map(_.name) == Seq("b"))
+
+        // 3. Filter on UDF(b) AND deterministic predicate on c, selecting only a:
+        // c > 5 is pushed below EvalPython, and both b and c are pruned from requiredChildOutput.
+        val pushedFilter = df.filter(udfFunc(col("b")) && col("c") > 5).select("a")
+        val evalNodes3 = pushedFilter.queryExecution.sparkPlan.collect {
+          case e: EvalPythonExec => e
+        }
+        assert(evalNodes3.length == 1)
+        assert(evalNodes3.head.requiredChildOutput.map(_.name) == Seq("a"))
+        assert(evalNodes3.head.child.output.map(_.name) == Seq("a", "b"))
+      }
+
+      // 4. Chained UDFs of different eval types where intermediate UDF output and input are pruned.
+      val chained = df.select(col("a"), scalarPandasUDF(batchedPythonUDF(col("b"))).as("res"))
+      val batchExecs = collectBatchExec(chained.queryExecution.executedPlan)
+      val arrowExecs = collectArrowExec(chained.queryExecution.executedPlan)
+      assert(batchExecs.length == 1)
+      assert(arrowExecs.length == 1)
+      assert(batchExecs.head.requiredChildOutput.map(_.name) == Seq("a"))
+      assert(arrowExecs.head.requiredChildOutput.map(_.name) == Seq("a"))
+    }
+  }
 }
 
