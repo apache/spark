@@ -735,7 +735,7 @@ SELECT * FROM VALUES (CAST(TIMESTAMP_LTZ '2020-01-01 00:00:00.123456789 UTC' AS 
 SELECT variant_get(parse_json('{"t":"2020-01-01 00:00:00.123456789"}'), '$.t', 'TIMESTAMP_LTZ(9)');
 SELECT try_variant_get(parse_json('{"t":"2020-01-01 00:00:00.123456789"}'), '$.t', 'TIMESTAMP_LTZ(8)');
 SELECT CAST(parse_json('"2020-01-01 00:00:00.123456789"') AS timestamp_ltz(7));
--- Microsecond timestamps are still written, and widen when read back at nanosecond precision.
+-- Microsecond timestamps can be written, and widen when read back at nanosecond precision.
 SELECT CAST(CAST(TIMESTAMP_LTZ '2020-01-01 00:00:00.123456 UTC' AS VARIANT) AS STRING);
 SELECT variant_get(CAST(TIMESTAMP_LTZ '2020-01-01 00:00:00.123456 UTC' AS VARIANT), '$', 'TIMESTAMP_LTZ(9)');
 SET spark.sql.ansi.enabled=false;

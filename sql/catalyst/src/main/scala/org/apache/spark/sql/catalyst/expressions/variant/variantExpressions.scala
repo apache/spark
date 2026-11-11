@@ -131,7 +131,8 @@ case class IsVariantNull(child: Expression) extends UnaryExpression
   arguments = """
     Arguments:
       * expr - A nested value of array, map, or struct type. Maps must have string keys. Nested
-          values can be of any type that can be cast to a variant.
+          values can be structs or maps, or of any type that can be cast to a variant other than
+          NULL.
   """,
   examples = """
     Examples:
@@ -153,7 +154,7 @@ case class ToVariantObject(child: Expression)
   override def nullIntolerant: Boolean = true
   override val dataType: DataType = VariantType
 
-  // Only accept nested types at the root but any types can be nested inside.
+  // Only accept nested types at the root; nested values follow `VariantGet.canCastToVariant`.
   override def checkInputDataTypes(): TypeCheckResult = {
     val checkResult: Boolean = child.dataType match {
       case _: StructType | _: ArrayType | _: MapType =>
@@ -682,9 +683,10 @@ case class VariantCastArgs(
 
 case object VariantGet {
   /**
-   * Returns whether a value of `dataType` can be cast to a variant. Among datetime types, only
-   * DATE, TIMESTAMP and TIMESTAMP_NTZ can: Spark's variant has no primitive for the others.
-   * `allowStructsAndMaps = false` rejects structs and maps at any level.
+   * Returns whether a value of `dataType` can be cast to a variant. A datetime type can be cast
+   * only if the variant format has a primitive for it; the others (e.g. TIME) can only be read.
+   * `allowStructsAndMaps` is true for the variant object builders and false for CAST, which
+   * rejects structs and maps at any level.
    */
   def canCastToVariant(dataType: DataType, allowStructsAndMaps: Boolean): Boolean =
     checkDataType(dataType, toVariant = true, allowStructsAndMaps)

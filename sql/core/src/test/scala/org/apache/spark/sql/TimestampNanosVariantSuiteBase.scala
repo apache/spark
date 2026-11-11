@@ -88,7 +88,8 @@ abstract class TimestampNanosVariantSuiteBase extends QueryTest with SharedSpark
       withTempView("src") {
         sql("CREATE TABLE t (v VARIANT) USING parquet")
         nanosDF(9).createOrReplaceTempView("src")
-        // ANSI and STRICT already rejected this; LEGACY used to fail at runtime.
+        // ANSI and STRICT reject this in the table write check; LEGACY inserts a CAST, which
+        // fails analysis.
         Seq(
           "ANSI" -> "INCOMPATIBLE_DATA_FOR_TABLE.CANNOT_SAFELY_CAST",
           "STRICT" -> "INCOMPATIBLE_DATA_FOR_TABLE.CANNOT_SAFELY_CAST",

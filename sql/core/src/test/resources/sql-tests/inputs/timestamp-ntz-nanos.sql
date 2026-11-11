@@ -747,7 +747,7 @@ SELECT * FROM VALUES (CAST(TIMESTAMP_NTZ '2020-01-01 00:00:00.123456789' AS VARI
 SELECT variant_get(parse_json('{"t":"2020-01-01 00:00:00.123456789"}'), '$.t', 'TIMESTAMP_NTZ(9)');
 SELECT try_variant_get(parse_json('{"t":"2020-01-01 00:00:00.123456789"}'), '$.t', 'TIMESTAMP_NTZ(8)');
 SELECT CAST(parse_json('"2020-01-01 00:00:00.123456789"') AS timestamp_ntz(7));
--- Microsecond timestamps are still written, and widen when read back at nanosecond precision.
+-- Microsecond timestamps can be written, and widen when read back at nanosecond precision.
 SELECT CAST(CAST(TIMESTAMP_NTZ '2020-01-01 00:00:00.123456' AS VARIANT) AS STRING);
 SELECT variant_get(CAST(TIMESTAMP_NTZ '2020-01-01 00:00:00.123456' AS VARIANT), '$', 'TIMESTAMP_NTZ(9)');
 SET spark.sql.ansi.enabled=false;

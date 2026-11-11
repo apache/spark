@@ -1348,10 +1348,11 @@ class VariantExpressionSuite extends SparkFunSuite with ExpressionEvalHelper {
     }
   }
 
-  test("every type that can be cast to a variant can be built into one") {
+  test("every type that can be cast to a variant round-trips through one") {
     (DataTypeTestUtils.atomicTypes.toSeq :+ VariantType).foreach { t =>
       if (VariantGet.canCastToVariant(t, allowStructsAndMaps = false)) {
-        assert(VariantExpressionEvalUtils.castToVariant(Literal.default(t).value, t) != null, t)
+        val value = Literal.default(t)
+        checkEvaluation(Cast(Cast(value, VariantType), t), value.value)
       }
     }
   }
