@@ -18,6 +18,7 @@
 package org.apache.spark.sql.catalyst.optimizer
 
 import scala.collection.mutable.ArrayBuffer
+import scala.util.control.NonFatal
 
 import org.apache.spark.SparkException
 import org.apache.spark.sql.AnalysisException
@@ -715,7 +716,7 @@ object RewriteCorrelatedScalarSubquery extends Rule[LogicalPlan] with AliasHelpe
 
   /**
    * Checks if given expression is foldable. Evaluates it and returns it as literal, if yes.
-   * If not, returns the original expression without evaluation.
+   * If not, or if the evaluation fails, returns the original expression without evaluation.
    */
   private def tryEvalExpr(expr: Expression): Expression = {
     // Removes Alias over given expression, because Alias is not foldable.
@@ -724,7 +725,16 @@ object RewriteCorrelatedScalarSubquery extends Rule[LogicalPlan] with AliasHelpe
       // Needs to evaluate them on query runtime.
       expr
     } else {
-      Literal.create(expr.eval(), expr.dataType)
+      try {
+        Literal.create(expr.eval(), expr.dataType)
+      } catch {
+        // SPARK-61444: The result on zero tuples is only used for the outer rows without
+        // matching rows, in a conditional branch such as If(IsNull(alwaysTrue), ...). If its
+        // evaluation fails, e.g. with DIVIDE_BY_ZERO in ANSI mode, evaluate it in query runtime
+        // instead, so that the query fails only if such an outer row exists. ConstantFolding
+        // does the same in conditional branches (SPARK-39106).
+        case NonFatal(_) => expr
+      }
     }
   }
 
@@ -801,21 +811,17 @@ object RewriteCorrelatedScalarSubquery extends Rule[LogicalPlan] with AliasHelpe
         if (bindings.isEmpty) {
           bindings
         } else {
-          val bindCondition = bindingExpr(condition, bindings)
-
-          if (!bindCondition.foldable) {
-            // We can't evaluate the condition. Evaluate it in query runtime.
-            bindings.map { case (id, expr) =>
-              val newExpr = If(bindCondition, expr, Literal.create(null, expr.dataType))
-              (id, newExpr)
-            }
-          } else {
-            // The bound condition can be evaluated.
-            bindCondition.eval() match {
-              // For filter condition, null is the same as false.
-              case null | false => Map.empty
-              case true => bindings
-            }
+          bindingExpr(condition, bindings) match {
+            // The bound condition was evaluated. For filter condition, null is the same as false.
+            case Literal(null, _) | Literal(false, BooleanType) => Map.empty
+            case Literal(true, BooleanType) => bindings
+            case bindCondition =>
+              // We can't evaluate the condition, because it is not foldable or its evaluation
+              // failed. Evaluate it in query runtime.
+              bindings.map { case (id, expr) =>
+                val newExpr = If(bindCondition, expr, Literal.create(null, expr.dataType))
+                (id, newExpr)
+              }
           }
         }
 
