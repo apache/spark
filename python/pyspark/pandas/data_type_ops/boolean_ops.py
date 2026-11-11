@@ -15,6 +15,7 @@
 # limitations under the License.
 #
 
+import decimal
 import numbers
 from typing import Any, Union
 
@@ -46,7 +47,7 @@ from pyspark.pandas.typedef.typehints import (
 from pyspark.pandas.utils import is_ansi_mode_enabled
 from pyspark.sql import Column as PySparkColumn
 from pyspark.sql import functions as F
-from pyspark.sql.types import BooleanType, NumericType, StringType
+from pyspark.sql.types import BooleanType, DecimalType, NumericType, StringType
 
 
 def _transform_for_numeric_comparison(left: IndexOpsLike, right: Any) -> IndexOpsLike:
@@ -54,10 +55,17 @@ def _transform_for_numeric_comparison(left: IndexOpsLike, right: Any) -> IndexOp
     Cast the boolean `left` to the numeric type of `right` when `right` is a non-boolean
     number or numeric Series/Index, so that ordering comparisons such as `<` work like in
     pandas, where True and False compare as 1 and 0.
+
+    Decimals are left out because ordering comparisons are not supported for them (see
+    `DecimalOps`).
     """
-    if isinstance(right, numbers.Number) and not isinstance(right, bool):
+    if isinstance(right, numbers.Number) and not isinstance(right, (bool, decimal.Decimal)):
         return transform_boolean_operand_to_numeric(left, spark_type=as_spark_type(type(right)))
-    elif isinstance(right, IndexOpsMixin) and isinstance(right.spark.data_type, NumericType):
+    elif (
+        isinstance(right, IndexOpsMixin)
+        and isinstance(right.spark.data_type, NumericType)
+        and not isinstance(right.spark.data_type, DecimalType)
+    ):
         return transform_boolean_operand_to_numeric(left, spark_type=right.spark.data_type)
     else:
         return left

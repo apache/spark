@@ -23,6 +23,7 @@ import pandas as pd
 from pandas.api.types import CategoricalDtype
 
 from pyspark import pandas as ps
+from pyspark.errors import AnalysisException
 from pyspark.pandas import option_context
 from pyspark.pandas.tests.data_type_ops.testing_utils import OpsTestBase
 from pyspark.pandas.typedef.typehints import (
@@ -428,6 +429,9 @@ class BooleanOpsTestsMixin:
                 op(b_pser.astype("boolean"), pdf["float_nan"]),
                 op(b_psser.astype("boolean"), psdf["float_nan"]),
             )
+            # Ordering comparisons are not supported for decimals, in either direction.
+            self.assertRaises(AnalysisException, lambda: op(b_psser, psdf["decimal"]).to_pandas())
+            self.assertRaises(TypeError, lambda: op(psdf["decimal"], b_psser))
 
 
 @unittest.skipIf(
