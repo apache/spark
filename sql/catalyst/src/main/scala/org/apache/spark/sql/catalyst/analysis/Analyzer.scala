@@ -2351,15 +2351,13 @@ class Analyzer(
 
       plan.resolveExpressionsWithPruning(_.containsAnyPattern(UNRESOLVED_FUNCTION)) {
         case f @ UnresolvedFunction(nameParts, _, _, _, _, _, _, _) =>
-          // For builtin/temp functions, we can do a quick check without catalog lookup
-          val quickCheck = if (nameParts.size == 1 ||
-              FunctionResolution.sessionNamespaceKind(nameParts).isDefined) {
-            functionResolution.lookupBuiltinOrTempFunction(nameParts, Some(f))
-          } else {
-            None
-          }
+          // For builtin/temp functions, we can do a quick check without catalog lookup. It does
+          // not record a temp function as referred: ResolveFunctions does once it binds one.
+          val quickCheck = (nameParts.size == 1 ||
+              FunctionResolution.sessionNamespaceKind(nameParts).isDefined) &&
+            functionResolution.builtinOrTempFunctionExists(nameParts, Some(f))
 
-          if (quickCheck.isDefined) {
+          if (quickCheck) {
             // It's a builtin or temp function - no need for catalog lookup or caching
             f
           } else {

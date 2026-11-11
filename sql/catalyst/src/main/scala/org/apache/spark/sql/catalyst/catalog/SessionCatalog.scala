@@ -2724,6 +2724,19 @@ class SessionCatalog(
   }
 
   /**
+   * Whether [[lookupBuiltinOrTempFunction]] finds `name`, without recording a temp function as
+   * referred. For existence checks that do not decide the owner: a persistent function earlier in
+   * the path may own the call.
+   */
+  def builtinOrTempFunctionExists(name: String): Boolean =
+    FunctionRegistry.builtinOperators.contains(name.toLowerCase(Locale.ROOT)) ||
+      sessionFunctionKindsInResolutionOrder.exists { kind =>
+        val ident = functionIdentifierForKind(kind, name)
+        functionRegistry.functionExists(ident) &&
+          (kind != Temp || isTempFunctionVisibleInContext(ident))
+      }
+
+  /**
    * Look up the `ExpressionInfo` of the given function by name.
    * Resolution order follows the configured path (e.g. builtin then session).
    */
