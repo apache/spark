@@ -170,15 +170,18 @@ class SamplingResultParam(AccumulatorParam[Dict[str, Any]]):
 
     @staticmethod
     def addInPlace(value1: Dict[str, Any], value2: Dict[str, Any]) -> Dict[str, Any]:
-        # Combine recursively
-        for key, value in value2.items():
-            if key not in value1:
-                value1[key] = value
-            else:
-                if isinstance(value, int):
-                    value1[key] += value
+        # Merge with an explicit stack rather than recursion, because a call tree is as
+        # deep as the sampled call stack, which can exceed the recursion limit.
+        stack = [(value1, value2)]
+        while stack:
+            node1, node2 = stack.pop()
+            for key, value in node2.items():
+                if key not in node1:
+                    node1[key] = value
+                elif isinstance(value, int):
+                    node1[key] += value
                 elif isinstance(value, dict):
-                    value1[key] = SamplingResultParam.addInPlace(value1[key], value)
+                    stack.append((node1[key], value))
                 else:
                     raise ValueError(f"Unsupported value type: {type(value)}")
         return value1

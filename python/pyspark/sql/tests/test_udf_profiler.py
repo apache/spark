@@ -851,10 +851,11 @@ class UDFProfiler2TestsMixin:
                 if level is not None:
                     conf["spark.sql.pyspark.udf.profiler.samplingAggregation"] = level
                 with self.subTest(use_arrow=use_arrow, level=level), self.sql_conf(conf):
+                    # Clear first, so that a failed subtest does not affect the next ones.
+                    self.spark.profile.clear()
                     df.collect()
 
                     keys = list(self.sampling_profile_results)
-                    self.spark.profile.clear()
                     self.assertEqual(num_results, len(keys), keys)
                     for key in keys:
                         self.assertRegex(key, key_pattern)
@@ -987,15 +988,16 @@ class UDFProfiler2Tests(UDFProfiler2TestsMixin, ReusedSQLTestCase):
                     .trigger(availableNow=True)
                     .start()
                 )
-                q.awaitTermination()
+                try:
+                    self.assertTrue(q.awaitTermination(60))
+                finally:
+                    q.stop()
 
         self.assertEqual(3, len(q.recentProgress))
         # All micro-batches are merged under the streaming query id.
         self.assertEqual([f"sampling_query_{q.id}"], list(self.sampling_profile_results))
 
     def test_sampling_result_param_merge(self):
-        from pyspark.profiler import SamplingResultParam
-
         tree1 = {"MainThread": {"f": {"count": 2, "g": {"count": 1}}}}
         tree2 = {"MainThread": {"f": {"count": 3, "h": {"count": 3}}}}
         # Call trees with the same key are summed node by node.
@@ -1003,6 +1005,21 @@ class UDFProfiler2Tests(UDFProfiler2TestsMixin, ReusedSQLTestCase):
             {"MainThread": {"f": {"count": 5, "g": {"count": 1}, "h": {"count": 3}}}},
             SamplingResultParam.addInPlace(tree1, tree2),
         )
+
+    def test_sampling_result_param_merge_deep_tree(self):
+        def chain(depth):
+            root = node = {}
+            for i in range(depth):
+                node[f"f{i}"] = {"count": 1}
+                node = node[f"f{i}"]
+            return root
+
+        # A call tree deeper than the recursion limit can still be merged.
+        depth = sys.getrecursionlimit() + 100
+        node = SamplingResultParam.addInPlace(chain(depth), chain(depth))
+        for i in range(depth):
+            node = node[f"f{i}"]
+            self.assertEqual(2, node["count"])
 
 
 if __name__ == "__main__":
