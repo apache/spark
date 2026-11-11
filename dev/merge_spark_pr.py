@@ -113,7 +113,8 @@ SKIP_VERSION_CHECK = os.environ.get("SKIP_VERSION_CHECK", "")
 MERGE_SCRIPT_REPO_PATH = "dev/merge_spark_pr.py"
 
 # Run the push-triggered post-merge workflows at each branch's configured commit interval.
-# Other commits get GitHub's documented workflow-skip trailer after a visible warning.
+# Other commits get GitHub's documented workflow-skip trailer after a visible warning, unless
+# the PR has the do-not-skip-ci label.
 # See https://docs.github.com/en/actions/how-tos/manage-workflow-runs/skip-workflow-runs
 POST_MERGE_CI_INTERVALS = {"master": 10, "branch-4.x": 10}
 POST_MERGE_CI_SKIP_TRAILER = "skip-checks: true"
@@ -541,7 +542,7 @@ def red(text):
 
 
 def yellow(text):
-    return "\033[93m%s\033[0m" % text
+    return "\033[33m%s\033[0m" % text
 
 
 def bold(text):
@@ -889,7 +890,7 @@ def clean_up():
             git.run("git branch -D %s" % branch)
 
 
-def should_skip_post_merge_ci(target_ref, force_post_merge_ci=False):
+def should_skip_post_merge_ci(target_ref, force_post_merge_ci):
     """Return whether the next commit on ``target_ref`` should skip post-merge CI.
 
     The branch history count matches the check formerly performed in ``build_main.yml``.
@@ -986,7 +987,7 @@ def merge_pr(
     pr_repo_desc,
     pr_author,
     co_authors,
-    force_post_merge_ci=False,
+    force_post_merge_ci,
 ):
     pr_branch_name = "%s_MERGE_PR_%s" % (BRANCH_PREFIX, pr_num)
     target_branch_name = "%s_MERGE_PR_%s_%s" % (BRANCH_PREFIX, pr_num, target_ref.upper())
@@ -1068,7 +1069,7 @@ def merge_pr(
     return merge_hash
 
 
-def _do_cherry_pick(pr_num, merge_hash, pick_ref, force_post_merge_ci=False):
+def _do_cherry_pick(pr_num, merge_hash, pick_ref, force_post_merge_ci):
     """Cherry-pick `merge_hash` onto `pick_ref` and push.
 
     Returns the (pushed ref, pushed commit hash) pair. Raises `SkipCherryPick` if the
@@ -1213,7 +1214,8 @@ def cherry_pick(
     branch_names,
     target_ref,
     already_picked=(),
-    force_post_merge_ci=False,
+    *,
+    force_post_merge_ci,
 ):
     """Prompt for a target branch and cherry-pick `merge_hash` onto it.
 
@@ -3245,9 +3247,7 @@ def main():
 
     url = pr["url"]
     title = pr["title"]
-    force_post_merge_ci = POST_MERGE_CI_FORCE_LABEL in [
-        label["name"] for label in pr.get("labels", [])
-    ]
+    force_post_merge_ci = any(label["name"] == POST_MERGE_CI_FORCE_LABEL for label in pr["labels"])
 
     # Fail hard on draft, WIP, or DO-NOT-MERGE PRs to prevent accidental merges.
     if pr.get("draft", False) or "[WIP]" in title or "[DO-NOT-MERGE]" in title:
@@ -4004,7 +4004,7 @@ __test__ = {
     >>> from unittest.mock import Mock, patch
     >>> footer = "\\n\\nBody\\n\\nCloses #1 from x/h.\\n\\nAuthored-by: X <x@x>"
     >>> def run(pr_title, message=None, answer="n"):
-    ...     pr = {"url": "u", "title": pr_title, "draft": False, "body": "b",
+    ...     pr = {"url": "u", "title": pr_title, "draft": False, "body": "b", "labels": [],
     ...           "base": {"ref": "master"}, "user": {"login": "x"}, "head": {"ref": "h"},
     ...           "state": "open" if message is None else "closed", "mergeable": True}
     ...     def get_json(url):
