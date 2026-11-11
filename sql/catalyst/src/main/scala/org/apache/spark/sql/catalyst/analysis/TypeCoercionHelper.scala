@@ -70,6 +70,8 @@ import org.apache.spark.sql.internal.types.{
 import org.apache.spark.sql.types.{
   AbstractDataType,
   AnyDataType,
+  AnyTimestampNanoType,
+  AnyTimestampNanoTypeExpression,
   AnyTimestampTypeExpression,
   ArrayType,
   BinaryType,
@@ -202,6 +204,40 @@ abstract class TypeCoercionHelper {
     charVarcharToPlainString(e.dataType, StringTypeWithCollation(supportsTrimCollation = true))
       .map(dt => if (dt == e.dataType) e else Cast(e, dt))
       .getOrElse(implicitCast(e, StringType).getOrElse(e))
+  }
+
+  /**
+   * Whether an implicit cast of `from` to `to` narrows a nanosecond-precision timestamp, also
+   * inside an array, map or struct: a lower-precision timestamp drops sub-microsecond digits and
+   * TIME drops the date part.
+   */
+  protected def isNanosNarrowing(from: DataType, to: DataType): Boolean =
+    existsNanosPair(from, to) { (nanos, t) =>
+      t.isInstanceOf[TimeType] || TimestampFamily.fractionalPrecision(nanos).exists(fp =>
+        TimestampFamily.fractionalPrecision(t).exists(_ < fp))
+    }
+
+  /**
+   * Picks the implicit cast target for a [[TypeCollection]] from the castable member types, in
+   * member order. A nanosecond-precision timestamp, also nested, skips DATE, which drops the time
+   * of day.
+   */
+  protected def pickTypeCollectionCast(
+      inType: DataType,
+      castable: Seq[DataType]): Option[DataType] = {
+    castable.find(dt => !existsNanosPair(inType, dt)((_, t) => t == DateType))
+  }
+
+  /** Whether `p` holds for some nanos timestamp in `from` and its counterpart in `to`. */
+  private def existsNanosPair(from: DataType, to: DataType)(
+      p: (DataType, DataType) => Boolean): Boolean = (from, to) match {
+    case (_: AnyTimestampNanoType, _) => p(from, to)
+    case (ArrayType(f, _), ArrayType(t, _)) => existsNanosPair(f, t)(p)
+    case (MapType(fk, fv, _), MapType(tk, tv, _)) =>
+      existsNanosPair(fk, tk)(p) || existsNanosPair(fv, tv)(p)
+    case (StructType(ff), StructType(tf)) =>
+      ff.zip(tf).exists { case (f, t) => existsNanosPair(f.dataType, t.dataType)(p) }
+    case _ => false
   }
 
   /**
@@ -394,7 +430,9 @@ abstract class TypeCoercionHelper {
    * microsecond grid (a DayTimeIntervalType in the default mode, a CalendarIntervalType when
    * spark.sql.legacy.interval.enabled is set), so widening the precision never changes the numeric
    * result -- it only keeps the two operands the same concrete type. For a pure-micro cross-family
-   * pair this returns TimestampNTZType, identical to the pre-nanos behavior.
+   * pair this returns TimestampNTZType, identical to the pre-nanos behavior. A nanos operand only
+   * survives analysis in the as-of join distance; [[NanosTimestampSubtractionCheck]] rejects it
+   * anywhere else.
    */
   private def subtractTimestampsCommonType(dt1: DataType, dt2: DataType): DataType = {
     val p = math.max(
@@ -862,10 +900,10 @@ abstract class TypeCoercionHelper {
    */
   object DateTimeOperationsTypeCoercion {
     def apply(expression: Expression): Expression = expression match {
-      case d @ DateAdd(AnyTimestampTypeExpression(), _) =>
+      case d @ DateAdd(AnyTimestampTypeExpression() | AnyTimestampNanoTypeExpression(), _) =>
         d.copy(startDate = Cast(d.startDate, DateType))
       case d @ DateAdd(StringTypeExpression(), _) => d.copy(startDate = Cast(d.startDate, DateType))
-      case d @ DateSub(AnyTimestampTypeExpression(), _) =>
+      case d @ DateSub(AnyTimestampTypeExpression() | AnyTimestampNanoTypeExpression(), _) =>
         d.copy(startDate = Cast(d.startDate, DateType))
       case d @ DateSub(StringTypeExpression(), _) => d.copy(startDate = Cast(d.startDate, DateType))
 
@@ -896,9 +934,9 @@ abstract class TypeCoercionHelper {
    */
   object AnsiDateTimeOperationsTypeCoercion {
     def apply(expression: Expression): Expression = expression match {
-      case d @ DateAdd(AnyTimestampTypeExpression(), _) =>
+      case d @ DateAdd(AnyTimestampTypeExpression() | AnyTimestampNanoTypeExpression(), _) =>
         d.copy(startDate = Cast(d.startDate, DateType))
-      case d @ DateSub(AnyTimestampTypeExpression(), _) =>
+      case d @ DateSub(AnyTimestampTypeExpression() | AnyTimestampNanoTypeExpression(), _) =>
         d.copy(startDate = Cast(d.startDate, DateType))
 
       case s @ SubtractTimestamps(DateTypeExpression(), r, _, _)

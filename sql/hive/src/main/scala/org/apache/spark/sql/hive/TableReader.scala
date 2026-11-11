@@ -42,6 +42,7 @@ import org.apache.spark.rdd.{EmptyRDD, HadoopRDD, NewHadoopRDD, RDD, UnionRDD}
 import org.apache.spark.sql.SparkSession
 import org.apache.spark.sql.catalyst.{InternalRow, SQLConfHelper}
 import org.apache.spark.sql.catalyst.analysis.CastSupport
+import org.apache.spark.sql.catalyst.catalog.ExternalCatalogUtils
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.util.DateTimeUtils
 import org.apache.spark.sql.internal.SQLConf
@@ -195,7 +196,10 @@ class HadoopTableReader(
       def fillPartitionKeys(rawPartValues: Array[String], row: InternalRow): Unit = {
         partitionKeyAttrs.foreach { case (attr, ordinal) =>
           val partOrdinal = partitionKeys.indexOf(attr)
-          row(ordinal) = cast(Literal(rawPartValues(partOrdinal)), attr.dataType).eval(null)
+          val rawPartValue = rawPartValues(partOrdinal)
+          val partValue =
+            if (rawPartValue == ExternalCatalogUtils.DEFAULT_PARTITION_NAME) null else rawPartValue
+          row(ordinal) = cast(Literal(partValue), attr.dataType).eval(null)
         }
       }
 

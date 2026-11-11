@@ -68,6 +68,15 @@ class CastWithAnsiOffSuite extends CastSuiteBase {
     }
   }
 
+  test("SPARK-57838: legacy mode cast string beyond the epoch-microsecond range to nanos") {
+    // Same NULL as the micro types: the value does not fit the Long epoch-microseconds.
+    Seq("+294247-01-10 04:00:54.775808", "-290308-12-21 19:59:05.224191999").foreach { str =>
+      checkEvaluation(cast(Literal(str), TimestampNTZType), null)
+      checkEvaluation(cast(Literal(str), TimestampNTZNanosType(9)), null)
+      checkEvaluation(cast(Literal(s"${str}Z"), TimestampLTZNanosType(9), UTC_OPT), null)
+    }
+  }
+
   test("cast from int #2") {
     checkEvaluation(cast(cast(1000, TimestampType), LongType), 1000.toLong)
     checkEvaluation(cast(cast(-1200, TimestampType), LongType), -1200.toLong)

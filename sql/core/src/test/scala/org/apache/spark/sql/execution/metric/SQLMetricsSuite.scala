@@ -447,14 +447,32 @@ class SQLMetricsSuite extends SharedSparkSession with SQLMetricsTestUtils
   }
 
   test("SortMergeAsOfJoin metrics") {
-    // Only numOutputRows here; spillSize is covered in SortMergeAsOfJoinSuite.
-    def checkNumOutputRows(df: DataFrame, expected: Long): Unit = {
-      df.collect()
-      val op = df.queryExecution.executedPlan.collectFirst {
-        case s: SortMergeAsOfJoinExec => s
+    // Only numOutputRows here; spillSize is covered in SortMergeAsOfJoinSuite. Each check runs
+    // with the ASOF join codegen off and on, on a new DataFrame each time, since a DataFrame
+    // keeps the plan it got first.
+    def checkNumOutputRows(df: => DataFrame, expected: Long): Unit = {
+      // Whether the join runs in a codegen stage, and not only in a stage below it.
+      def inStage(plan: SparkPlan): Boolean = plan match {
+        case _: SortMergeAsOfJoinExec => true
+        case _: InputAdapter => false
+        case other => other.children.exists(inStage)
       }
-      assert(op.isDefined, "The query plan should have SortMergeAsOfJoin")
-      testMetricsInSparkPlanOperator(op.get, Map("numOutputRows" -> expected))
+      Seq(false, true).foreach { codegen =>
+        withClue(s"ASOF join codegen $codegen: ") {
+          withSQLConf(SQLConf.ENABLE_SORT_MERGE_AS_OF_JOIN_CODEGEN.key -> codegen.toString) {
+            val query = df
+            query.collect()
+            val plan = query.queryExecution.executedPlan
+            val op = plan.collectFirst { case s: SortMergeAsOfJoinExec => s }
+            assert(op.isDefined, "The query plan should have SortMergeAsOfJoin")
+            val generated = plan.collect {
+              case stage: WholeStageCodegenExec if inStage(stage.child) => stage
+            }.nonEmpty
+            assert(generated == codegen, s"Unexpected ASOF join codegen in:\n$plan")
+            testMetricsInSparkPlanOperator(op.get, Map("numOutputRows" -> expected))
+          }
+        }
+      }
     }
 
     withSQLConf(SQLConf.SORT_MERGE_AS_OF_JOIN_ENABLED.key -> "true") {

@@ -557,6 +557,12 @@
       "Invalid window bound type: <window_bound_type>."
     ]
   },
+  "IN_PROCESS_PYTHON_VERSION_MISMATCH": {
+    "message": [
+      "The in-process Python UDF interpreter has version <embedded_version>, but the driver has <driver_version>, and they must have the same minor version.",
+      "The interpreter is the CPython that JEP was built against, which PYSPARK_PYTHON does not select: install JEP built for Python <driver_version> on the executors, or run the driver with Python <embedded_version>."
+    ]
+  },
   "JAVA_GATEWAY_EXITED": {
     "message": [
       "Java gateway process exited before sending its port number."

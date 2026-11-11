@@ -862,6 +862,19 @@ class CastWithAnsiOnSuite extends CastSuiteBase with QueryErrorsBase {
     }
   }
 
+  test("SPARK-57838: ANSI mode cast string beyond the epoch-microsecond range to nanos") {
+    // Same error as the micro types: the value does not fit the Long epoch-microseconds.
+    Seq("+294247-01-10 04:00:54.775808", "-290308-12-21 19:59:05.224191999").foreach { str =>
+      checkExceptionInExpression[DateTimeException](
+        cast(Literal(str), TimestampNTZType), castErrMsg(str, TimestampNTZType))
+      checkExceptionInExpression[DateTimeException](
+        cast(Literal(str), TimestampNTZNanosType(9)), castErrMsg(str, TimestampNTZNanosType(9)))
+      checkExceptionInExpression[DateTimeException](
+        cast(Literal(s"${str}Z"), TimestampLTZNanosType(9), DateTimeTestUtils.UTC_OPT),
+        castErrMsg(s"${str}Z", TimestampLTZNanosType(9)))
+    }
+  }
+
   test("ANSI mode: cast string to date with parse error") {
     DateTimeTestUtils.outstandingZoneIds.foreach { zid =>
       def checkCastWithParseError(str: String): Unit = {

@@ -464,6 +464,38 @@ class SparkSubmitSuite
     conf.get("spark.kubernetes.driver.container.image") should be ("bar")
   }
 
+  test("handles Spark Connect server in k8s cluster mode") {
+    val connectServerClass = "org.apache.spark.sql.connect.service.SparkConnectServer"
+    val clArgs = Seq(
+      "--deploy-mode", "cluster",
+      "--master", "k8s://host:port",
+      "--class", connectServerClass,
+      "--conf", "spark.kubernetes.namespace=spark",
+      "--conf", "spark.kubernetes.driver.container.image=bar",
+      "spark-internal")
+    val appArgs = new SparkSubmitArguments(clArgs)
+    val (childArgs, _, _, mainClass) = submit.prepareSubmitEnvironment(appArgs)
+
+    val childArgsMap = childArgs.grouped(2).map(a => a(0) -> a(1)).toMap
+    // spark-internal is not a real resource, so no primary resource is passed to the driver.
+    childArgsMap.get("--primary-java-resource") should be (None)
+    childArgsMap.get("--main-class") should be (Some(connectServerClass))
+    mainClass should be (KUBERNETES_CLUSTER_SUBMIT_CLASS)
+
+    // Other cluster managers still reject the Spark Connect server in cluster mode.
+    val standaloneArgs = Seq(
+      "--deploy-mode", "cluster",
+      "--master", "spark://host:port",
+      "--class", connectServerClass,
+      "spark-internal")
+    val e = intercept[SparkException] {
+      submit.prepareSubmitEnvironment(new SparkSubmitArguments(standaloneArgs))
+    }
+    assert(e.getMessage.contains(
+      "Launching Spark Connect server in cluster deploy mode is supported only for " +
+        "YARN and Kubernetes"))
+  }
+
   test("SPARK-35084: include jars of the --packages" +
     " in k8s client mode & driver runs inside a POD") {
     val unusedJar = TestUtils.createJarWithClasses(Seq.empty)

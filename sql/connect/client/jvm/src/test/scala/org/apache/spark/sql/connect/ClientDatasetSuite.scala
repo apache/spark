@@ -178,6 +178,64 @@ class ClientDatasetSuite extends ConnectFunSuite {
     }
   }
 
+  test("BIN BY preserves bound columns and optional fields") {
+    val df = ss.newDataFrame(_ => ())
+    val end = df("end")
+    val binWidth = expr("INTERVAL 5 MINUTES")
+    val values = Array(df("value"), df("value2"))
+    val default = df
+      .binBy(
+        rangeStart = df("start"),
+        rangeEnd = end,
+        binWidth = binWidth,
+        distributeUniform = values)
+      .plan
+      .getRoot
+      .getBinBy
+    assert(default.getInput == df.plan.getRoot)
+    assert(
+      default.getRangeStart.getUnresolvedAttribute.getPlanId == df.plan.getRoot.getCommon.getPlanId)
+    assert(default.getRangeEnd == toExpr(end))
+    assert(default.getBinWidth == toExpr(binWidth))
+    assert(default.getDistributeUniformCount == 2)
+    assert(default.getDistributeUniform(0) == toExpr(values(0)))
+    assert(default.getDistributeUniform(1) == toExpr(values(1)))
+    assert(
+      !default.hasAlignTo && !default.hasBinStartName && !default.hasBinEndName &&
+        !default.hasBinDistributeRatioName)
+
+    val renamed = df
+      .binBy(
+        rangeStart = df("start"),
+        rangeEnd = end,
+        binWidth = binWidth,
+        distributeUniform = values,
+        alignTo = null,
+        binStartName = "bin.start",
+        binEndName = "bin`end",
+        binDistributeRatioName = "")
+      .plan
+      .getRoot
+      .getBinBy
+    assert(renamed.getBinStartName == "bin.start")
+    assert(renamed.getBinEndName == "bin`end")
+    assert(renamed.hasBinDistributeRatioName && renamed.getBinDistributeRatioName.isEmpty)
+    assert(!renamed.hasAlignTo)
+
+    val origin = lit(null).cast("timestamp")
+    val aligned = df
+      .binBy(
+        rangeStart = df("start"),
+        rangeEnd = end,
+        binWidth = binWidth,
+        distributeUniform = Array(df("value")),
+        alignTo = origin)
+      .plan
+      .getRoot
+      .getBinBy
+    assert(aligned.hasAlignTo && aligned.getAlignTo == toExpr(origin))
+  }
+
   test("serialize as null") {
     val session = newSparkSession()
     val ds = session.range(10)

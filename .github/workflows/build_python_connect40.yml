@@ -21,7 +21,7 @@ name: Build / Python-only, Connect-only (branch-4.0-client, Python 3.11)
 
 on:
   schedule:
-    - cron: '0 20 */2 * *'
+    - cron: '17 5 3-31/3 * *'
   workflow_dispatch:
 
 jobs:
@@ -39,7 +39,7 @@ jobs:
       - name: Setup build environment
         uses: ./.github/actions/setup-build-env
         with:
-          java-version: '17'
+          java-version: '21'
       - name: Install Python 3.11
         uses: actions/setup-python@v7
         with:

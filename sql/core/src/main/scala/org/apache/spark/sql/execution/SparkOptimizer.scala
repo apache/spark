@@ -28,7 +28,7 @@ import org.apache.spark.sql.execution.datasources.v2.{GroupBasedRowLevelOperatio
 import org.apache.spark.sql.execution.dynamicpruning.{CleanupDynamicPruningFilters, PartitionPruning, RowLevelOperationRuntimeGroupFiltering}
 import org.apache.spark.sql.execution.externalUDF.{ExtractExternalUDFFromWindow, PlanExternalUDFs}
 import org.apache.spark.sql.execution.planmerging.MergeSubplans
-import org.apache.spark.sql.execution.python.{ExtractGroupingPythonUDFFromAggregate, ExtractPythonUDFFromAggregate, ExtractPythonUDFs, ExtractPythonUDTFs}
+import org.apache.spark.sql.execution.python.{ExtractGroupingPythonUDFFromAggregate, ExtractPythonUDFFromAggregate, ExtractPythonUDFFromLambda, ExtractPythonUDFs, ExtractPythonUDTFs}
 
 class SparkOptimizer(
     catalogManager: CatalogManager,
@@ -62,74 +62,89 @@ class SparkOptimizer(
   override def preCBORules: Seq[Rule[LogicalPlan]] =
     Seq(OptimizeMetadataOnlyDeleteFromTable)
 
-  override def defaultBatches: Seq[Batch] = flattenBatches(Seq(
-    preOptimizationBatches,
-    super.defaultBatches,
-    Batch("Optimize Metadata Only Query", Once, OptimizeMetadataOnlyQuery(catalog)),
-    Batch("PartitionPruning", Once,
-      PartitionPruning,
-      // We can't run `OptimizeSubqueries` in this batch, as it will optimize the subqueries
-      // twice which may break some optimizer rules that can only be applied once. The rule below
-      // only invokes `OptimizeSubqueries` to optimize newly added subqueries.
-      new RowLevelOperationRuntimeGroupFiltering(OptimizeSubqueries)),
-    Batch("InjectRuntimeFilter", FixedPoint(1),
-      InjectRuntimeFilter),
-    Batch("MergeSubplans", Once,
-      MergeSubplans,
-      CombineApproximatePercentiles,
-      RewriteDistinctAggregates),
-    Batch("Pushdown Filters from PartitionPruning", fixedPoint,
-      PushDownPredicates),
-    Batch("Cleanup filters that cannot be pushed down", Once,
-      CleanupDynamicPruningFilters,
-      // cleanup the unnecessary TrueLiteral predicates
-      BooleanSimplification,
-      PruneFilters),
-    postHocOptimizationBatches,
-    Batch("Extract UDFs", Once,
-      ExtractPythonUDFFromJoinCondition,
-      // Expose window results as attributes before creating external UDF evaluation nodes.
-      ExtractExternalUDFFromWindow,
-      PlanExternalUDFs,
-      ExtractPythonUDFFromAggregate,
-      // This must be executed after `ExtractPythonUDFFromAggregate` and before `ExtractPythonUDFs`.
-      ExtractGroupingPythonUDFFromAggregate,
-      // `ExtractPythonUDFs` first lifts Python UDFs out of higher-order function lambdas
-      // (via `ExtractPythonUDFFromLambda`) and then extracts them as ordinary top-level UDFs.
-      ExtractPythonUDFs,
-      ExtractPythonUDTFs,
-      // The eval-python node may be between Project/Filter and the scan node, which breaks
-      // column pruning and filter push-down. Here we rerun the related optimizer rules.
-      ColumnPruning,
-      LimitPushDown,
-      PushPredicateThroughNonJoin,
-      PushProjectionThroughLimitAndOffset,
-      RemoveNoopOperators),
-    // Join-condition UDF extraction can convert a join to a cartesian product. Keep this in a
-    // subsequent batch so validation structurally follows both join-condition extractors.
-    Batch("Check Cartesian Products After UDF Extraction", Once,
-      CheckCartesianProducts),
-    Batch("Infer window group limit", Once,
-      InferWindowGroupLimit,
-      LimitPushDown,
-      LimitPushDownThroughWindow,
-      ConstantFolding,
-      EliminateLimits),
-    Batch("User Provided Optimizers", fixedPoint, experimentalMethods.extraOptimizations: _*),
-    Batch("Replace CTE with Repartition", Once, ReplaceCTERefWithRepartition),
-    // Must run last: it inspects the final plan shape to mark scans that can run in a single task,
-    // and no subsequent rule should reshape the plan or copy the marked scan nodes.
-    Batch("MarkSingleTaskExecution", Once, MarkSingleTaskExecution)))
+  override def defaultBatches: Seq[Batch] = {
+    // Run after Finish Analysis, so the SQL text of a constant parse_sql call already has
+    // SpecialDatetimeValues and ComputeCurrentTime applied.
+    val superBatches = super.defaultBatches
+    val finishAnalysis = superBatches.indexWhere(_.name == "Finish Analysis")
+    assert(finishAnalysis >= 0, "Finish Analysis batch is missing")
+    flattenBatches(Seq(
+      preOptimizationBatches,
+      superBatches.take(finishAnalysis + 1),
+      Batch("Evaluate parse_sql", Once, EvaluateParseSql),
+      superBatches.drop(finishAnalysis + 1),
+      Batch("Optimize Metadata Only Query", Once, OptimizeMetadataOnlyQuery(catalog)),
+      Batch("PartitionPruning", Once,
+        PartitionPruning,
+        // We can't run `OptimizeSubqueries` in this batch, as it will optimize the subqueries
+        // twice which may break some optimizer rules that can only be applied once. The rule below
+        // only invokes `OptimizeSubqueries` to optimize newly added subqueries.
+        new RowLevelOperationRuntimeGroupFiltering(OptimizeSubqueries)),
+      Batch("InjectRuntimeFilter", FixedPoint(1),
+        InjectRuntimeFilter),
+      Batch("MergeSubplans", Once,
+        MergeSubplans,
+        CombineApproximatePercentiles,
+        RewriteDistinctAggregates),
+      Batch("Pushdown Filters from PartitionPruning", fixedPoint,
+        PushDownPredicates),
+      Batch("Cleanup filters that cannot be pushed down", Once,
+        CleanupDynamicPruningFilters,
+        // cleanup the unnecessary TrueLiteral predicates
+        BooleanSimplification,
+        PruneFilters),
+      postHocOptimizationBatches,
+      Batch("Extract UDFs", Once,
+        // Lift Python UDFs out of higher-order function lambdas first. A UDF in a lambda reads the
+        // lambda's variables, so the rules below can place it by the columns it really reads (e.g.
+        // above an aggregate it is applied to) only once it is an ordinary UDF over a whole array.
+        ExtractPythonUDFFromLambda,
+        ExtractPythonUDFFromJoinCondition,
+        // Expose window results as attributes before creating external UDF evaluation nodes.
+        ExtractExternalUDFFromWindow,
+        PlanExternalUDFs,
+        ExtractPythonUDFFromAggregate,
+        // This must be executed after `ExtractPythonUDFFromAggregate` and before
+        // `ExtractPythonUDFs`.
+        ExtractGroupingPythonUDFFromAggregate,
+        ExtractPythonUDFs,
+        ExtractPythonUDTFs,
+        // The eval-python node may be between Project/Filter and the scan node, which breaks
+        // column pruning and filter push-down. Here we rerun the related optimizer rules.
+        ColumnPruning,
+        LimitPushDown,
+        PushPredicateThroughNonJoin,
+        PushProjectionThroughLimitAndOffset,
+        RemoveNoopOperators),
+      // Join-condition UDF extraction can convert a join to a cartesian product. Keep this in a
+      // subsequent batch so validation structurally follows both join-condition extractors.
+      Batch("Check Cartesian Products After UDF Extraction", Once,
+        CheckCartesianProducts),
+      Batch("Infer window group limit", Once,
+        InferWindowGroupLimit,
+        LimitPushDown,
+        LimitPushDownThroughWindow,
+        ConstantFolding,
+        EliminateLimits),
+      Batch("User Provided Optimizers", fixedPoint, experimentalMethods.extraOptimizations: _*),
+      Batch("Replace CTE with Repartition", Once, ReplaceCTERefWithRepartition),
+      // Must run last: it inspects the final plan shape to mark scans that can run in a single
+      // task, and no subsequent rule should reshape the plan or copy the marked scan nodes.
+      Batch("MarkSingleTaskExecution", Once, MarkSingleTaskExecution)))
+  }
 
   override def nonExcludableRules: Seq[String] = super.nonExcludableRules ++
     Seq(
+      // ANALYZE needs the driver session; do not leave it to ConstantFolding.
+      EvaluateParseSql.ruleName,
+      // A plan with a Python UDF in a higher-order function lambda passes analysis only because
+      // this rule lifts the UDF out of the lambda.
+      ExtractPythonUDFFromLambda.ruleName,
       ExtractPythonUDFFromJoinCondition.ruleName,
       ExtractPythonUDFFromAggregate.ruleName,
       ExtractGroupingPythonUDFFromAggregate.ruleName,
       ExtractExternalUDFFromWindow.ruleName,
       PlanExternalUDFs.ruleName,
-      // Non-excludable: a plan with a Python UDF in a higher-order function lambda only works
-      // because `ExtractPythonUDFs` lifts it out (via `ExtractPythonUDFFromLambda`).
       ExtractPythonUDFs.ruleName,
       GroupBasedRowLevelOperationScanPlanning.ruleName,
       V2ScanRelationPushDown.ruleName,

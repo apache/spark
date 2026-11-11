@@ -27,6 +27,7 @@ import org.apache.spark.sql.execution.vectorized.{OffHeapColumnVector, OnHeapCol
 import org.apache.spark.sql.types.StructType
 import org.apache.spark.sql.vectorized.ColumnarBatch
 import org.apache.spark.util.ArrayImplicits._
+import org.apache.spark.util.CompletionIterator
 
 class ColumnarToRowEvaluatorFactory(
     childOutput: Seq[Attribute],
@@ -44,10 +45,14 @@ class ColumnarToRowEvaluatorFactory(
         inputs: Iterator[ColumnarBatch]*): Iterator[InternalRow] = {
       assert(inputs.length == 1)
       val toUnsafe = UnsafeProjection.create(childOutput, childOutput)
+      // Releases each batch once all its rows have been returned, before the next batch is
+      // fetched, as the generated code of ColumnarToRowExec does in advanceBatch: flatMap checks
+      // the iterator of the current batch, which runs its completion, before the next batch.
       inputs.head.flatMap { input =>
         numInputBatches += 1
         numOutputRows += input.numRows()
-        input.rowIterator().asScala.map(toUnsafe)
+        CompletionIterator[InternalRow, Iterator[InternalRow]](
+          input.rowIterator().asScala.map(toUnsafe), input.closeIfFreeable())
       }
     }
   }
