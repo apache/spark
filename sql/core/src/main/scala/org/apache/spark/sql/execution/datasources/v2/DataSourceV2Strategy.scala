@@ -52,6 +52,7 @@ import org.apache.spark.sql.execution.streaming.runtime.StreamingV2ScanPushDown
 import org.apache.spark.sql.execution.streaming.runtime.StreamingV2ScanPushDown.ScanOfStream
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.internal.StaticSQLConf.WAREHOUSE_PATH
+import org.apache.spark.sql.internal.connector.SupportsRuntimeCatalystFiltering
 import org.apache.spark.sql.metricview.logical.CreateMetricView
 import org.apache.spark.sql.sources.{BaseRelation, TableScan}
 import org.apache.spark.storage.StorageLevel
@@ -171,12 +172,13 @@ class DataSourceV2Strategy(session: SparkSession) extends Strategy with Predicat
         case _ => false
       }
 
-      // Extract scalar subquery filters on runtime-filterable columns for runtime pushdown.
-      // These filters stay in postScanFilters for correctness (FilterExec above scan),
-      // but are also routed into runtimeFilters so BatchScanExec can use them for
-      // partition pruning via SupportsRuntimeV2Filtering.filter(). The exceptions are filters
-      // that only reference attributes the scan fully evaluates, which are dropped from
-      // postScanFilters below.
+      // Extract scalar subquery filters on runtime-filterable columns for runtime pushdown. These
+      // filters stay in postScanFilters for correctness (FilterExec above scan), but are also
+      // routed into runtimeFilters so BatchScanExec can use them for partition pruning via
+      // SupportsRuntimeV2Filtering.filter(), or pass them as Catalyst expressions to
+      // SupportsRuntimeCatalystFiltering.planInputPartitionsWithRuntimeFilters, as the built-in
+      // file scans do. The exceptions are filters that only reference attributes the scan fully
+      // evaluates, which are dropped from postScanFilters below.
       // Non-deterministic filters are not routed: they would be pushed to the source for
       // pruning while the FilterExec above the scan re-evaluates them, so the two evaluations
       // may disagree and rows the source pruned away could not be recovered. This is the
@@ -186,7 +188,8 @@ class DataSourceV2Strategy(session: SparkSession) extends Strategy with Predicat
       // read must not prune it: the negated condition that selects the rows to copy over would
       // drop the groups where every row matches. The group filter of
       // RowLevelOperationRuntimeGroupFiltering prunes it instead, since it keeps every group that
-      // has a matching row.
+      // has a matching row. A built-in file scan gets no group filter, so no runtime filter prunes
+      // its read.
       val groupBasedRead = relation.relation.table match {
         case t: RowLevelOperationTable => !t.operation.isInstanceOf[SupportsDelta]
         case _ => false
@@ -203,22 +206,29 @@ class DataSourceV2Strategy(session: SparkSession) extends Strategy with Predicat
       }
       // Screen with the same test pushdown applies, or a filter dropped here and rejected there
       // would be evaluated nowhere.
-      val fullyPushedRuntimeFilters = scalarSubqueryFilters.filter { f =>
-        f.references.subsetOf(relation.fullyPushedRuntimeFilterAttrs) &&
-          PushDownUtils.isPushablePartitionFilter(f, includeSubquery = true)
-      }
+      val fullyPushedRuntimeFilters = scalarSubqueryFilters.filter(
+        PushDownUtils.isFullyPushedRuntimeFilter(_, relation.fullyPushedRuntimeFilterAttrs))
       // dynamicFilters need no such check: a DynamicPruningSubquery over a non-deterministic
       // filtering plan is itself non-deterministic, so CleanupDynamicPruningFilters has already
       // rewritten it to TrueLiteral by the time we get here.
+      // A Catalyst runtime-filtering scan only applies a filter over attributes it declared, so a
+      // DPP filter over any other column is dropped here rather than planned for nothing. One
+      // PartitionPruning inserted over a union lands in every branch, including one that cannot
+      // use it; the join it was derived from still applies it.
+      val usableDynamicFilters = relation.scan match {
+        case _: SupportsRuntimeCatalystFiltering =>
+          dynamicFilters.filter(_.references.subsetOf(relation.runtimeFilterAttrs))
+        case _ => dynamicFilters
+      }
       // A group-based read keeps only the group filter, for the reason above. PartitionPruning
       // plans a DynamicPruningSubquery from the join of one read, so it is a filter of one read
       // too. With an IN subquery it lands on the read of the updated rows of an UPDATE. With a
       // NOT EXISTS subquery the negated condition becomes a semi join, so it lands on the read
       // of the rows to copy over.
       val runtimeFilters = if (groupBasedRead) {
-        dynamicFilters.filterNot(_.isInstanceOf[DynamicPruningSubquery])
+        usableDynamicFilters.filterNot(_.isInstanceOf[DynamicPruningSubquery])
       } else {
-        dynamicFilters ++ scalarSubqueryFilters
+        usableDynamicFilters ++ scalarSubqueryFilters
       }
 
       val batchExec = BatchScanExec(relation.output, new PlannedScan(relation.scan),

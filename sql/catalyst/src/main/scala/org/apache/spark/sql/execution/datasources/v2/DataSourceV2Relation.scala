@@ -188,6 +188,12 @@ case class DataSourceV2Relation(
  *                      offset, top-N, sample) or by any other rule stays not-mergeable by default,
  *                      so merging is safe by construction -- a new scan-relation build site need
  *                      not opt out.
+ * @param onlyRowWisePushdowns whether every operation pushed into the scan works on each row by
+ *                             itself, as filters, column pruning and variant extraction do.
+ *                             Default false: a pushed limit, offset, top-N, sample, aggregate or
+ *                             join decides which rows the scan returns, and a build site that does
+ *                             not set it keeps `PartitionPruning` from counting the scan's pushed
+ *                             filters.
  */
 case class DataSourceV2ScanRelation(
     relation: DataSourceV2Relation,
@@ -197,7 +203,8 @@ case class DataSourceV2ScanRelation(
     ordering: Option[Seq[SortOrder]] = None,
     pushedFilters: Seq[Expression] = Seq.empty,
     inferredFilters: Seq[Expression] = Seq.empty,
-    mergeableScan: Boolean = false) extends LeafNode with NamedRelation {
+    mergeableScan: Boolean = false,
+    onlyRowWisePushdowns: Boolean = false) extends LeafNode with NamedRelation {
 
   // TODO: Override validConstraints to return ExpressionSet(pushedFilters) so that pushed
   // filters participate in constraint propagation (InferFiltersFromConstraints, PruneFilters).

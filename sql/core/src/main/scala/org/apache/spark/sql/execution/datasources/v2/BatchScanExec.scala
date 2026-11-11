@@ -131,6 +131,16 @@ case class BatchScanExec(
     redact(result)
   }
 
+  // A DPP filter, and a fully pushed runtime filter, have no FilterExec above the scan, so the
+  // formatted explain shows them in full only here.
+  override def verboseStringWithOperatorId(): String = {
+    val verbose = super.verboseStringWithOperatorId()
+    val runtimeFiltersDescription = Option.when(runtimeFilters.nonEmpty) {
+      s"RuntimeFilters: ${runtimeFilters.mkString("[", ",", "]")}"
+    }
+    runtimeFiltersDescription.map(d => verbose + redact(d) + "\n").getOrElse(verbose)
+  }
+
   override def nodeName: String = {
     s"BatchScan ${table.name()}".trim
   }
@@ -142,8 +152,8 @@ case class BatchScanExec(
  * partitions the first node planned, with a reader factory from the `Batch` that planned them.
  * The partitions have to be the planned ones, because the `Scan` can be shared with another node
  * whose runtime filter prunes it first, e.g. the build side of a DPP subquery (SPARK-60752). A
- * pushed runtime filter replans them from a new `Batch`, but keeps the planned `Batch`'s reader
- * factory.
+ * runtime filter replans them, through `planInputPartitionsWithRuntimeFilters` or from a new
+ * `Batch` after a pushed `filter`, but keeps the planned `Batch`'s reader factory.
  *
  * A rule that rebuilds a node over the same `Scan` passes on its `plannedScan`, or uses `copy`. A
  * new `PlannedScan` is for a node that is planned again, or one over another `Scan`.
