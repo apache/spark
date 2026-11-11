@@ -19,6 +19,12 @@ These assignments spread runner demand without ranking jobs by importance, and i
 
 [schedule-event]: https://docs.github.com/en/actions/reference/workflows-and-actions/events-that-trigger-workflows#schedule
 
+### CI dashboard
+
+The [CI overview](https://apache.github.io/spark/ci-dashboard.html) summarizes the global CI structure, scheduled coverage across branches, and daily and hourly concentration of target starts. A monthly UTC heatmap shows all branches together, followed by branch totals and shared test workflows. Frequent build-status polling is summarized separately. Counts describe configured targets, including each branch in the SNAPSHOT publishing matrix, and actual runner consumption depends on runtime and skip behavior.
+
+Workflow metadata is generated from YAML during the existing documentation build. To preview local edits with PyYAML installed, run `python3 dev/generate-ci-dashboard.py --output docs/ci-dashboard-data.json`, serve `docs/` over HTTP, and open `ci-dashboard.html`. Generated JSON is not committed. Run the focused tests with `python3 -B dev/tests/test_ci_dashboard.py` and `node --test dev/test-ci-dashboard.js`; the documentation CI job runs both.
+
 ### Push heavy workflows out to forks
 
 Workflows triggered by `on: pull_request` [count against the base repo's (i.e. this repo's) activity limits][base]. For this reason it's [important] to use `on: push` for heavy workflows. `on: push` workflows count against the fork's limits and not ours, enabling more jobs to run concurrently.

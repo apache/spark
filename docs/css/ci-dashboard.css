@@ -1,0 +1,82 @@
+/*
+ * Licensed to the Apache Software Foundation (ASF) under one or more
+ * contributor license agreements.  See the NOTICE file distributed with
+ * this work for additional information regarding copyright ownership.
+ * The ASF licenses this file to You under the Apache License, Version 2.0
+ * (the "License"); you may not use this file except in compliance with
+ * the License.  You may obtain a copy of the License at
+ *
+ *    http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
+:root { color-scheme: light; font-family: system-ui, sans-serif; color: #243547; }
+* { box-sizing: border-box; }
+body { margin: 0; background: #f5f7fa; }
+header { background: #1d6890; color: white; }
+.header-content, main, footer { max-width: 1240px; margin: auto; padding: 24px 32px; }
+.header-content, nav { display: flex; align-items: center; gap: 24px; }
+.header-content { justify-content: space-between; }
+header a { color: white; text-decoration: none; }
+.project { font-size: 24px; font-weight: 750; }
+h1 { font-size: 38px; margin: 0 0 8px; letter-spacing: -1px; }
+h2 { font-size: 22px; margin: 0; }
+h3 { font-size: 16px; margin: 0 0 10px; }
+p { line-height: 1.6; }
+a { color: #12628c; }
+.eyebrow { color: #a34b0d; text-transform: uppercase; letter-spacing: 2px; font-size: 12px; }
+.intro { font-size: 18px; margin: 0; }
+.muted { color: #526477; font-size: 14px; }
+section, .metrics { margin-top: 24px; }
+section { padding: 24px; border: 1px solid #d8e0e8; border-radius: 10px; background: white; }
+.metrics { display: grid; grid-template-columns: repeat(4, 1fr); gap: 16px; }
+.metric { padding: 18px 24px; background: white; border-radius: 8px; border: 1px solid #d8e0e8; }
+.metric strong { display: block; font-size: 30px; color: #1d6890; }
+.metric span { font-size: 14px; color: #526477; }
+.flows { display: grid; grid-template-columns: repeat(3, 1fr); gap: 20px; margin-top: 20px; }
+.flow { padding: 18px; background: #f3f7fa; border-radius: 6px; }
+.flow p { font-size: 14px; margin: 0; }
+.triggers { display: flex; gap: 12px; flex-wrap: wrap; margin-top: 20px; }
+.triggers span { font-size: 13px; background: #eaf0f5; padding: 6px 12px; border-radius: 4px; }
+.section-heading { display: flex; flex-wrap: wrap; gap: 12px; align-items: center;
+  justify-content: space-between; }
+label { display: flex; align-items: center; gap: 10px; font-size: 14px; }
+input { font: inherit; border: 1px solid #a6b6c5; border-radius: 5px; padding: 8px; }
+:focus-visible { outline: 3px solid #cf680d; outline-offset: 2px; }
+.scroll { overflow-x: auto; }
+table { border-collapse: collapse; width: 100%; font-size: 14px; }
+th, td { text-align: left; padding: 12px 10px; border-bottom: 1px solid #e4eaf0; }
+th { color: #526477; font-weight: 600; }
+.calendar { font-size: 12px; min-width: 850px; table-layout: fixed; }
+.calendar caption { text-align: left; padding: 8px 0; color: #526477; }
+.calendar th, .calendar td { padding: 3px; text-align: center; border: 0; height: 25px; }
+.calendar th:first-child { width: 85px; text-align: left; }
+.calendar th:last-child { width: 48px; }
+.calendar td { background: #f3f6f9; border: 3px solid white; border-radius: 5px; }
+.calendar .low { background: #d6eaf4; }
+.calendar .medium { background: #a3cee3; }
+.calendar .high { background: #4b99bf; color: #102c40; font-weight: 650; }
+.calendar .total { background: transparent; color: #243547; font-weight: 650; }
+.calendar tfoot { border-top: 1px solid #d8e0e8; }
+.schedule-summary { font-size: 14px; padding: 12px 0; color: #1d6890; font-weight: 600; }
+.share { display: flex; align-items: center; gap: 12px; }
+.bar { height: 9px; background: #4b99bf; border-radius: 3px; }
+.notes { font-size: 14px; color: #526477; margin-top: 24px; }
+footer { color: #526477; font-size: 13px; }
+#error { background: #fff0e5; border: 1px solid #d98c4d; padding: 16px; }
+[hidden] { display: none !important; }
+@media (max-width: 700px) {
+  .header-content, main, footer { padding: 20px 16px; }
+  .header-content { align-items: start; }
+  nav { flex-direction: column; align-items: end; gap: 8px; font-size: 13px; }
+  section { padding: 16px; }
+  .metrics { grid-template-columns: repeat(2, 1fr); gap: 8px; }
+  .metric { padding: 12px; }
+  .metric strong { font-size: 24px; }
+  .flows { grid-template-columns: 1fr; gap: 12px; }
+}

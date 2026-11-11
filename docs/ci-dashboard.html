@@ -1,0 +1,106 @@
+<!DOCTYPE html>
+<!--
+ Licensed to the Apache Software Foundation (ASF) under one or more
+ contributor license agreements.  See the NOTICE file distributed with
+ this work for additional information regarding copyright ownership.
+ The ASF licenses this file to You under the Apache License, Version 2.0
+ (the "License"); you may not use this file except in compliance with
+ the License.  You may obtain a copy of the License at
+
+    http://www.apache.org/licenses/LICENSE-2.0
+
+ Unless required by applicable law or agreed to in writing, software
+ distributed under the License is distributed on an "AS IS" BASIS,
+ WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ See the License for the specific language governing permissions and
+ limitations under the License.
+-->
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Apache Spark CI overview</title>
+  <link rel="stylesheet" href="css/ci-dashboard.css">
+  <script defer src="js/ci-dashboard.js"></script>
+</head>
+<body>
+  <header>
+    <div class="header-content">
+      <a class="project" href="https://spark.apache.org/">Apache Spark</a>
+      <nav aria-label="Project links">
+        <a href="https://github.com/apache/spark/actions">Actions</a>
+        <a href="https://github.com/apache/spark/tree/master/.github/workflows">Workflow source</a>
+      </nav>
+    </div>
+  </header>
+  <main>
+    <p class="eyebrow">Contributor tools</p>
+    <h1>CI overview</h1>
+    <p class="intro">The global picture of Spark's CI coverage and scheduled activity.</p>
+    <p id="snapshot" class="muted">Loading workflow metadata...</p>
+    <p id="error" role="alert" hidden></p>
+    <noscript>This dashboard requires JavaScript to visualize workflow metadata.</noscript>
+    <div id="dashboard" hidden>
+      <div id="metrics" class="metrics"></div>
+      <section aria-labelledby="flow-title">
+        <h2 id="flow-title">How CI runs</h2>
+        <div class="flows">
+          <div class="flow">
+            <h3>Contributor builds</h3>
+            <p>Push to a contributor branch &rarr; fork's Build workflow &rarr; tests selected
+              from changed files &rarr; results reported on the pull request.</p>
+          </div>
+          <div class="flow">
+            <h3>Upstream builds</h3>
+            <p>Sampled upstream pushes &rarr; Build workflow &rarr; full test matrix.
+              Scheduled variants provide regular coverage of extra configurations.</p>
+          </div>
+          <div class="flow">
+            <h3>Branch coverage</h3>
+            <p>Schedules on master &rarr; master builds or maintenance-branch dispatches
+              &rarr; branch builds. Unchanged maintenance branches can skip a dispatch.</p>
+          </div>
+        </div>
+        <div id="triggers" class="triggers" aria-label="Workflow trigger summary"></div>
+      </section>
+      <section aria-labelledby="calendar-title">
+        <div class="section-heading">
+          <h2 id="calendar-title">Global schedule</h2>
+          <label>Month (UTC)<input id="month" type="month" required></label>
+        </div>
+        <p class="muted">All branches combined. Darker cells indicate more configured target
+          starts in that UTC hour. Row and column totals show daily and hourly concentration.</p>
+        <div id="schedule-summary" class="schedule-summary"></div>
+        <div class="scroll"><table id="calendar" class="calendar"></table></div>
+        <p class="muted">Counts include each branch in SNAPSHOT publishing's matrix.
+          Frequent build-status polling is summarized separately below.</p>
+      </section>
+      <section aria-labelledby="branches-title">
+        <h2 id="branches-title">Coverage by branch</h2>
+        <div class="scroll"><table>
+          <thead><tr><th scope="col">Branch</th><th scope="col">Scheduled targets</th>
+            <th scope="col">Starts this month</th><th scope="col">Share of starts</th></tr></thead>
+          <tbody id="branches"></tbody>
+        </table></div>
+      </section>
+      <section aria-labelledby="engines-title">
+        <h2 id="engines-title">Shared test workflows</h2>
+        <p class="muted">Build variants reuse these test definitions. Job counts describe
+          templates; conditions and matrices determine the jobs that execute.</p>
+        <div id="engines" class="flows"></div>
+      </section>
+      <section aria-labelledby="polling-title">
+        <h2 id="polling-title">Build-status polling</h2>
+        <p>Reports contributor fork build results on pull requests.</p>
+        <p id="polling" class="muted"></p>
+      </section>
+      <p class="notes">This page summarizes configured CI. Actual runner usage depends on build
+        duration, matrix parallelism, changed files, skip conditions, and GitHub scheduling delays.
+        Push and manual runs have no fixed schedule. Day-of-month phases restart monthly, so
+        gaps vary at month boundaries. Definitions come from the displayed revision;
+        maintenance-branch test definitions can differ.</p>
+    </div>
+  </main>
+  <footer>Apache Spark &middot; Refreshed with the existing documentation build.</footer>
+</body>
+</html>
