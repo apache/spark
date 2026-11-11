@@ -27,7 +27,7 @@ use arrow_array::{Array, ArrayRef, BooleanArray, StructArray};
 use arrow_schema::{DataType, Fields, TimeUnit};
 use serde::{Deserialize, Serialize};
 
-use crate::Result;
+use crate::{abi, Result};
 
 /// The domain of a column: the values that the column can have in the rows that match the
 /// filters of a query. A value is in the domain when it is:
@@ -85,17 +85,12 @@ impl Domain {
         }
     }
 
-    /// The domain that Spark passes for the column at `path`, by the indices of the column in
-    /// `fields`, the schema that `create_reader` got, and then of its field in each struct, or
-    /// `None` if the SDK has no [`Value`] for the type of the column, which a later version of
-    /// Spark may pass.
-    pub(crate) fn from_abi(
-        fields: &Fields,
-        path: &[usize],
-        null_allowed: bool,
-        nan_allowed: bool,
-        ranges: Option<&StructArray>,
-    ) -> Result<Option<Self>> {
+    /// The domain that Spark passes for the column at the path of `pushed`, by the indices of the
+    /// column in `fields`, the schema that `create_reader` got, and then of its field in each
+    /// struct, or `None` if the SDK has no [`Value`] for the type of the column, which a later
+    /// version of Spark may pass.
+    pub(crate) fn from_abi(fields: &Fields, pushed: &abi::PushedDomain) -> Result<Option<Self>> {
+        let path = &pushed.path;
         let invalid = || format!("the path {path:?} of a domain is not a column of the scan");
         let mut names = Vec::with_capacity(path.len());
         let mut fields = fields;
@@ -112,14 +107,14 @@ impl Domain {
         if names.is_empty() {
             return Err(invalid().into());
         }
-        let ranges = match ranges.map(value_ranges).transpose()? {
+        let ranges = match pushed.ranges.as_ref().map(value_ranges).transpose()? {
             Some(None) => return Ok(None),
             ranges => ranges.flatten(),
         };
         Ok(Some(Self {
             path: names,
-            null_allowed,
-            nan_allowed,
+            null_allowed: pushed.null_allowed,
+            nan_allowed: pushed.nan_allowed,
             ranges,
         }))
     }
@@ -393,9 +388,15 @@ mod tests {
             Field::new("point", DataType::Struct(point), true),
         ]);
         let fields = schema.fields();
+        let pushed = |path: &[usize], null_allowed, ranges| abi::PushedDomain {
+            path: path.to_vec(),
+            null_allowed,
+            nan_allowed: false,
+            ranges,
+        };
         let ints: ArrayRef = Arc::new(Int32Array::from(vec![3]));
         let x = ranges(ints.clone(), ints, (true, true));
-        let domain = Domain::from_abi(fields, &[1, 0], false, false, Some(&x))
+        let domain = Domain::from_abi(fields, &pushed(&[1, 0], false, Some(x)))
             .unwrap()
             .unwrap();
         assert_eq!(domain.path, ["point", "x"]);
@@ -403,7 +404,7 @@ mod tests {
             domain.ranges,
             Some(vec![ValueRange::single(Value::Integer(3))])
         );
-        let all = Domain::from_abi(fields, &[0], true, false, None)
+        let all = Domain::from_abi(fields, &pushed(&[0], true, None))
             .unwrap()
             .unwrap();
         assert_eq!(
@@ -414,11 +415,11 @@ mod tests {
         let times: ArrayRef = Arc::new(Time32SecondArray::from(vec![1]));
         let at = ranges(times.clone(), times, (true, true));
         assert_eq!(
-            Domain::from_abi(fields, &[1, 1], false, false, Some(&at)).unwrap(),
+            Domain::from_abi(fields, &pushed(&[1, 1], false, Some(at))).unwrap(),
             None
         );
         for path in [&[][..], &[2], &[0, 0], &[1, 2]] {
-            let error = Domain::from_abi(fields, path, false, false, None).unwrap_err();
+            let error = Domain::from_abi(fields, &pushed(path, false, None)).unwrap_err();
             assert!(
                 error.to_string().contains("is not a column of the scan"),
                 "{path:?}: {error}"

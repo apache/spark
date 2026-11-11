@@ -176,14 +176,7 @@ impl<S: DataSource> Bridge<S> {
         let mut positions = Vec::new();
         let mut domains = Vec::new();
         for (position, domain) in pushed.iter().enumerate() {
-            let domain = Domain::from_abi(
-                &scan.fields,
-                &domain.path,
-                domain.null_allowed,
-                domain.nan_allowed,
-                domain.ranges.as_ref(),
-            )?;
-            if let Some(domain) = domain {
+            if let Some(domain) = Domain::from_abi(&scan.fields, domain)? {
                 positions.push(position);
                 domains.push(domain);
             }
