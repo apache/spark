@@ -8772,15 +8772,10 @@ object SQLConf {
   val LEGACY_SCALAR_SUBQUERY_NESTED_AGGREGATE_COUNT_BUG_BEHAVIOR =
     buildConf("spark.sql.legacy.scalarSubqueryNestedAggregateCountBugBehavior")
       .internal()
-      .doc("When true, restores the behavior before SPARK-60501: for a correlated scalar " +
-        "subquery whose top node is an Aggregate, the count bug is handled during decorrelation " +
-        "only if some Aggregate without GROUP BY below it has an aggregate function with a " +
-        "default result on empty input, such as COUNT. Otherwise " +
-        "only the result of the top Aggregate is fixed, which can return wrong results: for " +
-        "example, COUNT(*) over a MAX without GROUP BY returns 0 instead of 1 for an outer row " +
-        "without matching rows. When false, the count bug is handled during decorrelation if " +
-        "some Aggregate without GROUP BY below it is correlated, i.e. it or a node below it " +
-        "references the outer query. Has no effect when " +
+      .doc("When true, restores the behavior before SPARK-60501, where a correlated scalar " +
+        "subquery whose top Aggregate is over a correlated Aggregate without GROUP BY can " +
+        "return a wrong result for an outer row without matching rows, e.g. COUNT(*) over a " +
+        "MAX returns 0 instead of 1. Has no effect when " +
         s"${DECORRELATE_INNER_QUERY_ENABLED.key} is false or " +
         s"${LEGACY_SCALAR_SUBQUERY_COUNT_BUG_HANDLING.key} is true.")
       .version("4.4.0")

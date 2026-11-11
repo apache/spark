@@ -243,6 +243,17 @@ struct<a1:int,a:bigint>
 
 
 -- !query
+select a1, ( select count(*) from (select max(b2) m from t2 where t1.a1 = t2.b1
+  intersect select max(b2) from t2 where t1.a1 = t2.b1) ) a
+from t1 order by a1
+-- !query schema
+struct<a1:int,a:bigint>
+-- !query output
+0	1
+1	1
+
+
+-- !query
 select a1, ( select count(*) from (select max(b2) m from t2 where t1.a1 = t2.b1 limit 1) ) a
 from t1 order by a1
 -- !query schema
@@ -281,6 +292,494 @@ struct<a1:int,a:bigint>
 -- !query output
 0	1
 1	0
+
+
+-- !query
+select a1, ( select collect_list(m) from (select max(b2) m from t2 where t1.a1 = t2.b1) ) a
+from t1 order by a1
+-- !query schema
+struct<a1:int,a:array<int>>
+-- !query output
+0	[3]
+1	[]
+
+
+-- !query
+select a1, ( select sum(m) + 1 from (select max(b2) m from t2 where t1.a1 = t2.b1) ) a
+from t1 order by a1
+-- !query schema
+struct<a1:int,a:bigint>
+-- !query output
+0	4
+1	NULL
+
+
+-- !query
+select a1, ( select stddev_samp(m) from (select max(b2) m from t2 where t1.a1 = t2.b1) ) a
+from t1 order by a1
+-- !query schema
+struct<a1:int,a:double>
+-- !query output
+0	NULL
+1	NULL
+
+
+-- !query
+select a1, ( select struct(sum(m), count(m), max(m), min(m), avg(m), collect_set(m))
+  from (select max(b2) m from t2 where t1.a1 = t2.b1) ) a
+from t1 order by a1
+-- !query schema
+struct<a1:int,a:struct<col1:bigint,col2:bigint,col3:int,col4:int,col5:double,col6:array<int>>>
+-- !query output
+0	{"col1":3,"col2":1,"col3":3,"col4":3,"col5":3.0,"col6":[3]}
+1	{"col1":null,"col2":0,"col3":null,"col4":null,"col5":null,"col6":[]}
+
+
+-- !query
+select a1, ( select collect_list(m) respect nulls from (select max(b2) m from t2
+  where t1.a1 = t2.b1) ) a
+from t1 order by a1
+-- !query schema
+struct<a1:int,a:array<int>>
+-- !query output
+0	[3]
+1	[null]
+
+
+-- !query
+select a1, ( select collect_set(m) respect nulls from (select max(b2) m from t2
+  where t1.a1 = t2.b1) ) a
+from t1 order by a1
+-- !query schema
+struct<a1:int,a:array<int>>
+-- !query output
+0	[3]
+1	[null]
+
+
+-- !query
+select a1, ( select first(m) respect nulls from (select max(b2) m from t2
+  where t1.a1 = t2.b1) ) a
+from t1 order by a1
+-- !query schema
+struct<a1:int,a:int>
+-- !query output
+0	3
+1	NULL
+
+
+-- !query
+select a1, ( select struct(count(*), collect_list(m)) from (select max(b2) m from t2
+  where t1.a1 = t2.b1) ) a
+from t1 order by a1
+-- !query schema
+struct<a1:int,a:struct<col1:bigint,col2:array<int>>>
+-- !query output
+0	{"col1":1,"col2":[3]}
+1	{"col1":1,"col2":[]}
+
+
+-- !query
+select a1, ( select struct(count(*) filter (where m is null), count(*) filter (where m > 2))
+  from (select max(b2) m from t2 where t1.a1 = t2.b1) ) a
+from t1 order by a1
+-- !query schema
+struct<a1:int,a:struct<col1:bigint,col2:bigint>>
+-- !query output
+0	{"col1":0,"col2":1}
+1	{"col1":1,"col2":0}
+
+
+-- !query
+select a1, ( select struct(sum(m) filter (where m > 2), sum(m) filter (where m > 3),
+  count(m) filter (where m is null), collect_list(m) filter (where m is null))
+  from (select max(b2) m from t2 where t1.a1 = t2.b1) ) a
+from t1 order by a1
+-- !query schema
+struct<a1:int,a:struct<col1:bigint,col2:bigint,col3:bigint,col4:array<int>>>
+-- !query output
+0	{"col1":3,"col2":null,"col3":0,"col4":[]}
+1	{"col1":null,"col2":null,"col3":0,"col4":[]}
+
+
+-- !query
+select a1, ( select sum(m) filter (where 10 / coalesce(m, 0) > 1) from (select max(b2) m from t2
+  where t1.a1 = t2.b1) ) a
+from t1 order by a1
+-- !query schema
+struct<a1:int,a:bigint>
+-- !query output
+0	3
+1	NULL
+
+
+-- !query
+select a1, ( select struct(first(m, true), last(m, true), first(m), last(m)) from
+  (select max(b2) m from t2 where t1.a1 = t2.b1) ) a
+from t1 order by a1
+-- !query schema
+struct<a1:int,a:struct<col1:int,col2:int,col3:int,col4:int>>
+-- !query output
+0	{"col1":3,"col2":3,"col3":3,"col4":3}
+1	{"col1":null,"col2":null,"col3":null,"col4":null}
+
+
+-- !query
+select a1, ( select struct(count(distinct m), sum(distinct m)) from (select max(b2) m from t2
+  where t1.a1 = t2.b1) ) a
+from t1 order by a1
+-- !query schema
+struct<a1:int,a:struct<col1:bigint,col2:bigint>>
+-- !query output
+0	{"col1":1,"col2":3}
+1	{"col1":0,"col2":null}
+
+
+-- !query
+select a1, ( select struct(sum(m), avg(m)) from (select max(cast(b2 as decimal(10, 2))) m
+  from t2 where t1.a1 = t2.b1) ) a
+from t1 order by a1
+-- !query schema
+struct<a1:int,a:struct<col1:decimal(20,2),col2:decimal(14,6)>>
+-- !query output
+0	{"col1":3.00,"col2":3.000000}
+1	{"col1":null,"col2":null}
+
+
+-- !query
+select a1, ( select struct(sum(m), avg(m), max(m)) from (select max(cast(b2 as bigint)
+  + 9223372036854775800) m from t2 where t1.a1 = t2.b1) ) a
+from t1 order by a1
+-- !query schema
+struct<a1:int,a:struct<col1:bigint,col2:double,col3:bigint>>
+-- !query output
+0	{"col1":9223372036854775803,"col2":9.223372036854776E18,"col3":9223372036854775803}
+1	{"col1":null,"col2":null,"col3":null}
+
+
+-- !query
+select a1, ( select struct(stddev_samp(m), var_pop(m), first(m), count(*) + max(m)) from
+  (select max(b2) m from t2 where t1.a1 = t2.b1) ) a
+from t1 order by a1
+-- !query schema
+struct<a1:int,a:struct<col1:double,col2:double,col3:int,col4:bigint>>
+-- !query output
+0	{"col1":null,"col2":0.0,"col3":3,"col4":4}
+1	{"col1":null,"col2":null,"col3":null,"col4":null}
+
+
+-- !query
+select a1, ( select sum(m) from (select max(b2) m, count(b2) c from t2 where t1.a1 = t2.b1) ) a
+from t1 order by a1
+-- !query schema
+struct<a1:int,a:bigint>
+-- !query output
+0	3
+1	NULL
+
+
+-- !query
+select a1, ( select count(s) from (select listagg(cast(b2 as string)) s from t2
+  where t1.a1 = t2.b1) ) a
+from t1 order by a1
+-- !query schema
+struct<a1:int,a:bigint>
+-- !query output
+0	1
+1	0
+
+
+-- !query
+select a1, ( select sum(m) + (select max(c2) from t3) from (select max(b2) m, count(b2) c from t2
+  where t1.a1 = t2.b1) ) a
+from t1 order by a1
+-- !query schema
+struct<a1:int,a:bigint>
+-- !query output
+0	6
+1	NULL
+
+
+-- !query
+select a1, ( select sum(m) + (select max(c2) from t3) from (select max(b2) m from t2
+  where t1.a1 = t2.b1) ) a
+from t1 order by a1
+-- !query schema
+struct<a1:int,a:bigint>
+-- !query output
+0	6
+1	NULL
+
+
+-- !query
+select a1, ( select sum((select max(c2) from t3 where t3.c2 = m)) from (select max(b2) m from t2
+  where t1.a1 = t2.b1) ) a
+from t1 order by a1
+-- !query schema
+struct<a1:int,a:bigint>
+-- !query output
+0	3
+1	NULL
+
+
+-- !query
+select a1, ( select sum(m) filter (where (select max(c2) from t3 where t3.c2 = m) is not null)
+  from (select max(b2) m from t2 where t1.a1 = t2.b1) ) a
+from t1 order by a1
+-- !query schema
+struct<a1:int,a:bigint>
+-- !query output
+0	3
+1	NULL
+
+
+-- !query
+select a1, ( select sum(m) filter (where (select max(c2) from t3) > 2)
+  from (select max(b2) m from t2 where t1.a1 = t2.b1) ) a
+from t1 order by a1
+-- !query schema
+struct<a1:int,a:bigint>
+-- !query output
+0	3
+1	NULL
+
+
+-- !query
+select a1, ( select sum(m) filter (where t is not null) from (select m,
+  (select max(c2) from t3 where t3.c2 = m) t from (select max(b2) m from t2
+  where t1.a1 = t2.b1)) ) a
+from t1 order by a1
+-- !query schema
+struct<a1:int,a:bigint>
+-- !query output
+0	3
+1	NULL
+
+
+-- !query
+select a1, ( select sum(m) filter (where (select max(c2) from t3 where t3.c2 = m) is not null)
+  from (select max(b2) m, count(b2) c from t2 where t1.a1 = t2.b1) ) a
+from t1 order by a1
+-- !query schema
+struct<a1:int,a:bigint>
+-- !query output
+0	3
+1	NULL
+
+
+-- !query
+select a1, ( select count(*) filter (where (select max(c2) from t3 where t3.c2 = c) is not null)
+  from (select count(*) c from t2) where c > t1.a2 ) a
+from t1 order by a1
+-- !query schema
+struct<a1:int,a:bigint>
+-- !query output
+0	1
+1	0
+
+
+-- !query
+select a1, ( select collect_list(m) from (select max(b2) m from t2 where t1.a1 = t2.b1)
+  group by m ) a
+from t1 order by a1
+-- !query schema
+struct<a1:int,a:array<int>>
+-- !query output
+0	[3]
+1	[]
+
+
+-- !query
+select a1, ( select percentile(m, 0.5) from (select max(b2) m from t2 where t1.a1 = t2.b1) ) a
+from t1 order by a1
+-- !query schema
+struct<a1:int,a:double>
+-- !query output
+0	3.0
+1	NULL
+
+
+-- !query
+select a1, ( select sum(m) from (select max(c) m from (select count(*) c from t2
+  where t1.a1 = t2.b1)) ) a
+from t1 order by a1
+-- !query schema
+struct<a1:int,a:bigint>
+-- !query output
+0	2
+1	0
+
+
+-- !query
+select a1, ( select count(*) from (select max(b2) m from t2 where t1.a1 = t2.b1 group by b2) ) a
+from t1 order by a1
+-- !query schema
+struct<a1:int,a:bigint>
+-- !query output
+0	2
+1	0
+
+
+-- !query
+select a1, ( select s + 1 from (select max(b2) s from t2 where t1.a1 = t2.b1) ) a
+from t1 order by a1
+-- !query schema
+struct<a1:int,a:int>
+-- !query output
+0	4
+1	NULL
+
+
+-- !query
+select a1, ( select coalesce(c, 10) from (select count(*) c from t2 where t1.a1 = t2.b1) ) a
+from t1 order by a1
+-- !query schema
+struct<a1:int,a:bigint>
+-- !query output
+0	2
+1	0
+
+
+-- !query
+select a1, ( select count(*) from (select 10 / coalesce(max(b2), 0) d from t2
+  where t1.a1 = t2.b1) ) a
+from t1 where a1 = 0 order by a1
+-- !query schema
+struct<>
+-- !query output
+org.apache.spark.SparkArithmeticException
+{
+  "errorClass" : "DIVIDE_BY_ZERO",
+  "sqlState" : "22012",
+  "messageParameters" : {
+    "config" : "\"spark.sql.ansi.enabled\""
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 43,
+    "stopIndex" : 67,
+    "fragment" : "10 / coalesce(max(b2), 0)"
+  } ]
+}
+
+
+-- !query
+select a1, ( select sum(d) from (select 10 / coalesce(max(b2), 0) d from t2
+  where t1.a1 = t2.b1) ) a
+from t1 where a1 = 0 order by a1
+-- !query schema
+struct<>
+-- !query output
+org.apache.spark.SparkArithmeticException
+{
+  "errorClass" : "DIVIDE_BY_ZERO",
+  "sqlState" : "22012",
+  "messageParameters" : {
+    "config" : "\"spark.sql.ansi.enabled\""
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 41,
+    "stopIndex" : 65,
+    "fragment" : "10 / coalesce(max(b2), 0)"
+  } ]
+}
+
+
+-- !query
+select a1, ( select sum(d) from (select 10 / coalesce(max(b2), 0) d from t2
+  where t1.a1 = t2.b1) ) a
+from t1 order by a1
+-- !query schema
+struct<>
+-- !query output
+org.apache.spark.SparkArithmeticException
+{
+  "errorClass" : "DIVIDE_BY_ZERO",
+  "sqlState" : "22012",
+  "messageParameters" : {
+    "config" : "\"spark.sql.ansi.enabled\""
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 41,
+    "stopIndex" : 65,
+    "fragment" : "10 / coalesce(max(b2), 0)"
+  } ]
+}
+
+
+-- !query
+select a1 from t1 where a1 = 0 and ( select sum(d) from (select 10 / coalesce(max(b2), 0) d
+  from t2 where t1.a1 = t2.b1) ) is not null order by a1
+-- !query schema
+struct<>
+-- !query output
+org.apache.spark.SparkArithmeticException
+{
+  "errorClass" : "DIVIDE_BY_ZERO",
+  "sqlState" : "22012",
+  "messageParameters" : {
+    "config" : "\"spark.sql.ansi.enabled\""
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 65,
+    "stopIndex" : 89,
+    "fragment" : "10 / coalesce(max(b2), 0)"
+  } ]
+}
+
+
+-- !query
+select a1, ( select sum(d) from (select cast(coalesce(max(cast(b2 as string)), 'x') as int) d
+  from t2 where t1.a1 = t2.b1) ) a
+from t1 where a1 = 0 order by a1
+-- !query schema
+struct<>
+-- !query output
+org.apache.spark.SparkNumberFormatException
+{
+  "errorClass" : "CAST_INVALID_INPUT",
+  "sqlState" : "22018",
+  "messageParameters" : {
+    "ansiConfig" : "\"spark.sql.ansi.enabled\"",
+    "expression" : "'x'",
+    "sourceType" : "\"STRING\"",
+    "targetType" : "\"INT\""
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 41,
+    "stopIndex" : 91,
+    "fragment" : "cast(coalesce(max(cast(b2 as string)), 'x') as int)"
+  } ]
+}
+
+
+-- !query
+select a1, ( select max(10 / c) from (select count(*) c from t2 where t1.a1 = t2.b1) ) a
+from t1 where a1 = 0 order by a1
+-- !query schema
+struct<a1:int,a:double>
+-- !query output
+0	5.0
+
+
+-- !query
+select a1, ( select c + (select max(c2) from t3 where t3.c1 = c or t3.c1 = c - 2) from
+  (select count(*) c from t2 where t1.a1 = t2.b1) ) a
+from t1 order by a1
+-- !query schema
+struct<a1:int,a:bigint>
+-- !query output
+0	5
+1	3
 
 
 -- !query

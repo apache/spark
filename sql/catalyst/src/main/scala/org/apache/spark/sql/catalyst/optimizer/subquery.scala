@@ -31,7 +31,7 @@ import org.apache.spark.sql.catalyst.planning.PhysicalAggregation
 import org.apache.spark.sql.catalyst.plans._
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.rules._
-import org.apache.spark.sql.catalyst.trees.TreePattern.{EXISTS_SUBQUERY, IN_SUBQUERY, LATERAL_JOIN, LIST_SUBQUERY, PLAN_EXPRESSION, SCALAR_SUBQUERY}
+import org.apache.spark.sql.catalyst.trees.TreePattern.{CTE, EXISTS_SUBQUERY, IN_SUBQUERY, LATERAL_JOIN, LIST_SUBQUERY, PLAN_EXPRESSION, SCALAR_SUBQUERY}
 import org.apache.spark.sql.errors.{QueryCompilationErrors, QueryExecutionErrors}
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.internal.SQLConf.{DECORRELATE_PREDICATE_SUBQUERIES_IN_JOIN_CONDITION, OPTIMIZE_UNCORRELATED_IN_SUBQUERIES_IN_JOIN_CONDITION,
@@ -567,6 +567,68 @@ object PullupCorrelatedPredicates extends Rule[LogicalPlan] with PredicateHelper
      nonEquivalentGroupbyCols(query, aggNode.get).isEmpty
    }
 
+  // Whether some aggregate function of `a` has a default result on empty input, such as COUNT.
+  private def hasDefaultResult(a: Aggregate): Boolean =
+    a.aggregateExpressions.exists(_.exists {
+      case ae: AggregateExpression => ae.aggregateFunction.defaultResult.isDefined
+      case _ => false
+    })
+
+  /**
+   * Returns true if the Aggregate without grouping expressions `agg` returns the same result
+   * over the one row that the Aggregate without grouping expressions below it returns on empty
+   * input as over no rows, so that constructLeftJoins handles its count bug correctly even
+   * though decorrelation loses that row, with fewer joins than DecorrelateInnerQuery. E.g.
+   * SUM(s) and COLLECT_LIST(s) over s = MAX(b.v) return NULL and [] over both. The check is
+   * conservative: it accepts only a short list of functions of `agg` directly over outputs of
+   * lower aggregate functions, with only Projects between, and leaves other shapes that have
+   * this property, such as STDDEV_SAMP(s), to DecorrelateInnerQuery. It never accepts a lower
+   * Aggregate with a function with a `defaultResult`, such as COUNT, which DecorrelateInnerQuery
+   * handled before SPARK-60501. Like the rest of the count bug handling, this relies on
+   * `defaultResult` matching the result on empty input.
+   */
+  private def sameResultOverEmptyLowerAggregate(agg: Aggregate): Boolean = {
+    // The attributes of `plan` that the count bug handling takes as NULL when the lower Aggregate
+    // gets empty input.
+    def nullOnEmptyInput(plan: LogicalPlan): Option[AttributeSet] = plan match {
+      case Project(projectList, child) =>
+        nullOnEmptyInput(child).map { attrs =>
+          AttributeSet(projectList.collect {
+            case a: Attribute if attrs.contains(a) => a
+            case a @ Alias(c: Attribute, _) if attrs.contains(c) => a.toAttribute
+          })
+        }
+      case lower: Aggregate if lower.groupingExpressions.isEmpty &&
+          !lower.child.exists(_.isInstanceOf[Aggregate]) && !hasDefaultResult(lower) =>
+        Some(AttributeSet(lower.aggregateExpressions.collect {
+          case a @ Alias(_: AggregateExpression, _) => a.toAttribute
+        }))
+      case _ => None
+    }
+    val aggregates = agg.aggregateExpressions.flatMap(_.collect {
+      case ae: AggregateExpression => ae
+    })
+    agg.groupingExpressions.isEmpty &&
+      nullOnEmptyInput(agg.child).exists { attrs =>
+        aggregates.forall { ae =>
+          val sameResultOverNulls = ae.aggregateFunction match {
+            case _: Max | _: Min | _: Sum | _: Average | _: Count | _: First | _: Last => true
+            // With RESPECT NULLS, they collect the NULLs.
+            case c: CollectList => c.ignoreNulls
+            case c: CollectSet => c.ignoreNulls
+            case _ => false
+          }
+          // constructLeftJoins does not decorrelate a correlated subquery in a FILTER of `agg`,
+          // and the query fails there; DecorrelateInnerQuery handles it.
+          val filterOk = ae.filter.forall(f => !SubqueryExpression.hasCorrelatedSubquery(f))
+          filterOk && sameResultOverNulls && ae.aggregateFunction.children.forall {
+            case a: Attribute => attrs.contains(a)
+            case _ => false
+          }
+        }
+      }
+  }
+
   private def rewriteSubQueries(plan: LogicalPlan): LogicalPlan = {
     /**
      * This function is used as a aid to enforce idempotency of pullUpCorrelatedPredicate rule.
@@ -584,7 +646,7 @@ object PullupCorrelatedPredicates extends Rule[LogicalPlan] with PredicateHelper
         sub: LogicalPlan,
         outer: LogicalPlan,
         handleCountBug: Boolean = false): (LogicalPlan, Seq[Expression]) = {
-      if (SQLConf.get.decorrelateInnerQueryEnabled) {
+      if (conf.decorrelateInnerQueryEnabled) {
         DecorrelateInnerQuery(sub, outer, handleCountBug)
       } else {
         pullOutCorrelatedPredicates(sub, outer)
@@ -600,46 +662,51 @@ object PullupCorrelatedPredicates extends Rule[LogicalPlan] with PredicateHelper
         // whatever its aggregate functions are, and an Aggregate above it sees that row. If the
         // Aggregate is correlated, decorrelation can lose that row (see below). An uncorrelated
         // one keeps its row: [[DecorrelateInnerQuery]] leaves a subtree without outer references
-        // (SubExprUtils.hasOuterReferences) unchanged, at most inner joining it with the domain,
-        // and the non-legacy branch below uses the same check. With
+        // unchanged or inner joins it with the domain, and mayHaveCountBugAgg uses the same check
+        // (SubExprUtils.hasOuterReferences).
+        // An Aggregate with an aggregate function with a default result, such as COUNT, also
+        // qualifies, correlated or not, as before SPARK-60501; with
         // LEGACY_SCALAR_SUBQUERY_NESTED_AGGREGATE_COUNT_BUG_BEHAVIOR, only such an Aggregate
-        // with an aggregate function that has a default result, such as COUNT, qualifies,
-        // whether it is correlated or not.
+        // does. So does it where the domain joins of DecorrelateInnerQuery, which compute the
+        // outer query again, are known not to work, so as not to make such queries worse than
+        // before. The check is conservative: e.g. the domain joins fail for a streaming query
+        // and for outer references that are not orderable, and can find other rows the second
+        // time for a non-deterministic input, or for a CTE that is not inlined, which may be a
+        // non-deterministic one (a CTERelationRef does not tell).
+        val domainJoinsWork = !plan.isStreaming &&
+          plan.children.forall(c => c.deterministic && !c.containsPattern(CTE)) &&
+          children.forall(e => RowOrdering.isOrderable(e.dataType))
         val legacyNestedAggregateCountBug =
-          conf.getConf(SQLConf.LEGACY_SCALAR_SUBQUERY_NESTED_AGGREGATE_COUNT_BUG_BEHAVIOR)
+          conf.getConf(SQLConf.LEGACY_SCALAR_SUBQUERY_NESTED_AGGREGATE_COUNT_BUG_BEHAVIOR) ||
+            !domainJoinsWork
         def mayHaveCountBugAgg(a: Aggregate): Boolean = {
-          a.groupingExpressions.isEmpty && (if (legacyNestedAggregateCountBug) {
-            a.aggregateExpressions.exists(_.exists {
-              case ae: AggregateExpression => ae.aggregateFunction.defaultResult.isDefined
-              case _ => false
-            })
-          } else {
-            SubExprUtils.hasOuterReferences(a)
-          })
+          a.groupingExpressions.isEmpty && (hasDefaultResult(a) ||
+            (!legacyNestedAggregateCountBug && SubExprUtils.hasOuterReferences(a)))
         }
 
         // The below logic controls handling count bug for scalar subqueries in
         // [[DecorrelateInnerQuery]], and if we don't handle it here, we handle it in
         // [[RewriteCorrelatedScalarSubquery#constructLeftJoins]]. Note that handling it in
-        // [[DecorrelateInnerQuery]] is always correct, and turning it off to handle it in
-        // constructLeftJoins is an optimization, so that additional, redundant left outer joins are
-        // not introduced.
-        val handleCountBugInDecorrelate = SQLConf.get.decorrelateInnerQueryEnabled &&
+        // [[DecorrelateInnerQuery]] is correct where its domain joins work (see domainJoinsWork
+        // above), and turning it off to handle it in constructLeftJoins is otherwise an
+        // optimization, so that additional, redundant left outer joins are not introduced.
+        val handleCountBugInDecorrelate = conf.decorrelateInnerQueryEnabled &&
           !conf.getConf(SQLConf.LEGACY_SCALAR_SUBQUERY_COUNT_BUG_HANDLING) && !(sub match {
           // If the top level node is an Agg, handle count bug in DecorrelateInnerQuery only if
           // there exists a lower level Agg for which mayHaveCountBugAgg holds. Decorrelation
           // groups a correlated lower level Agg by the outer (domain) columns, so it returns no
           // row for an outer row without matching rows, instead of the one row it returns on
           // empty input. constructLeftJoins only handles the count bug of the top level Agg and
-          // cannot bring back that row. It does not matter whether the top level Agg or the
-          // aggregate functions of the lower level Agg are count bug vulnerable, e.g.
-          // COUNT(COUNT + COUNT), SUM(COUNT), COUNT(MAX) and SUM(COALESCE(SUM, 0)) all need it.
-          // Some shapes do not, e.g. SUM(MAX), but handling it in DecorrelateInnerQuery is still
-          // correct.
+          // cannot bring back that row. Whether it is needed does not follow from whether the
+          // aggregate functions have a default result, e.g. COUNT(COUNT + COUNT), SUM(COUNT),
+          // COUNT(*) over MAX and SUM(COALESCE(SUM, 0)) all need it. Some shapes do not, because
+          // the top level Agg returns the same result over that row as over no rows, e.g. SUM(s)
+          // and COLLECT_LIST(s) over s = MAX; they are handled in constructLeftJoins, with fewer
+          // joins (see sameResultOverEmptyLowerAggregate).
           case agg: Aggregate => !agg.child.exists {
             case lowerAgg: Aggregate => mayHaveCountBugAgg(lowerAgg)
             case _ => false
-          }
+          } || sameResultOverEmptyLowerAggregate(agg)
           case _ => false
         })
         val (newPlan, newCond) = decorrelate(sub, plan, handleCountBugInDecorrelate)
