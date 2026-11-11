@@ -4863,7 +4863,7 @@ private[spark] class DAGScheduler(
     // Skip it if nothing is removable: the global flag is on, no host was lost under push-based
     // shuffle (its merge results must go), and every registered shuffle is reliably stored. The
     // cheap checks run first so the shuffle registry is walked only when it decides the outcome.
-    // TODO: that host pass still bumps the epoch when the host held nothing.
+    // TODO(SPARK-61465): that host pass still bumps the epoch when the host held nothing.
     val fileLost = (workerHost.isDefined || !env.blockManager.externalShuffleServiceEnabled) &&
       !(sc.shuffleDriverComponents.supportsReliableStorage() &&
         (workerHost.isEmpty || !pushBasedShuffleEnabled) &&
