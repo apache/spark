@@ -21,9 +21,17 @@ import org.apache.spark.SparkFunSuite
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.util.{ArrayBasedMapData, ArrayData, GenericArrayData}
 import org.apache.spark.sql.execution.vectorized.{OnHeapColumnVector, WritableColumnVector}
+import org.apache.spark.sql.test.ExamplePointUDT
 import org.apache.spark.sql.types._
 import org.apache.spark.unsafe.types.{TimestampNanosVal, UTF8String}
 import org.apache.spark.util.ArrayImplicits._
+
+private class StructBackedUDT extends UserDefinedType[InternalRow] {
+  override def sqlType: DataType = new StructType().add("x", IntegerType).add("y", IntegerType)
+  override def serialize(obj: InternalRow): Any = obj
+  override def deserialize(datum: Any): InternalRow = datum.asInstanceOf[InternalRow]
+  override def userClass: Class[InternalRow] = classOf[InternalRow]
+}
 
 class RowToColumnConverterSuite extends SparkFunSuite {
   def convertRows(rows: Seq[InternalRow], schema: StructType): Seq[WritableColumnVector] = {
@@ -226,6 +234,31 @@ class RowToColumnConverterSuite extends SparkFunSuite {
     assert(vectors.head.getLong(0) === 0L)
     assert(vectors.head.isNullAt(1))
     assert(vectors.head.getLong(2) === 86399999999999L)
+  }
+
+  test("SPARK-60325: null type column") {
+    Seq(
+      StructType(Seq(StructField("n", NullType))),
+      StructType(Seq(StructField("n", NullType, nullable = false)))).foreach { schema =>
+      val vectors = convertRows(Seq.fill(10)(InternalRow(null)), schema)
+      (0 until 10).foreach(i => assert(vectors.head.isNullAt(i)))
+    }
+  }
+
+  test("SPARK-60325: user-defined type columns hold their SQL type") {
+    // A null of a struct-backed type must be appended as a struct.
+    val arrayBacked = new ExamplePointUDT
+    val arrayRows = Seq(InternalRow(new GenericArrayData(Array(1.0, 2.0))), InternalRow(null))
+    val arrayVectors = convertRows(arrayRows, StructType(Seq(StructField("p", arrayBacked))))
+    assert(arrayVectors.head.getArray(0).toDoubleArray() === Array(1.0, 2.0))
+    assert(arrayVectors.head.isNullAt(1))
+
+    val structBacked = new StructBackedUDT
+    val structRows = Seq(InternalRow(InternalRow(1, 2)), InternalRow(null))
+    val structVectors = convertRows(structRows, StructType(Seq(StructField("s", structBacked))))
+    assert(structVectors.head.getStruct(0).getInt(0) === 1)
+    assert(structVectors.head.getStruct(0).getInt(1) === 2)
+    assert(structVectors.head.isNullAt(1))
   }
 
   test("multiple columns") {
