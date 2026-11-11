@@ -77,23 +77,6 @@ jobs:
           run-id: ${{ steps.preview.outputs.run-id }}
       - name: Extract documentation preview
         run: tar xjf site-*.tar.bz2
-      - name: Prepare documentation preview
-        run: |
-          python3 - <<'PYTHON'
-          from pathlib import Path
-          import re
-
-          for path in Path('docs/_site').rglob('*.html'):
-              original = path.read_text(encoding='utf-8')
-              preview = re.sub(
-                  r'(<title>.* - Spark )[^<]+( Documentation</title>)',
-                  r'\g<1>In-Progress\2', original)
-              preview = re.sub(
-                  r'(<span class="version">)[^<]+(</span>)',
-                  r'\g<1>In-Progress\2', preview)
-              if preview != original:
-                  path.write_text(preview, encoding='utf-8')
-          PYTHON
       - name: Setup Pages
         uses: actions/configure-pages@v6
       - name: Upload artifact

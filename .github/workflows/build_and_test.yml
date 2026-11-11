@@ -1021,8 +1021,18 @@ jobs:
           fi
           if [ `./dev/is-changed.py -m sparkr` = false ]; then export SKIP_RDOC=1; fi
         fi
-        cd docs
-        bundle exec jekyll build
+        if ${{ github.repository == 'apache/spark' && inputs.branch == 'master' }}; then
+          export RELEASE_VERSION=In-Progress
+          sed -i".tmp1" 's/SPARK_VERSION:.*$/SPARK_VERSION: '"$RELEASE_VERSION"'/g' docs/_config.yml
+          sed -i".tmp2" 's/SPARK_VERSION_SHORT:.*$/SPARK_VERSION_SHORT: '"$RELEASE_VERSION"'/g' docs/_config.yml
+          sed -i".tmp3" "s/'facetFilters':.*$/'facetFilters': [\"version:$RELEASE_VERSION\"]/g" docs/_config.yml
+          sed -i".tmp4" 's/__version__: str = .*$/__version__: str = "'"$RELEASE_VERSION"'"/' python/pyspark/version.py
+          cd docs
+          SKIP_RDOC=1 bundle exec jekyll build
+        else
+          cd docs
+          bundle exec jekyll build
+        fi
     - name: Tar documentation
       id: documentation
       run: |
