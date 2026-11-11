@@ -202,6 +202,21 @@ trait GeneratePredicateHelper extends PredicateHelper {
   }
 
   /**
+   * Returns whether an expression evaluates a column of `inputAttrs` that `inputExprCode`
+   * computes on demand by an expression that can raise, see `deferredMayRaise`. Each column is
+   * judged once.
+   */
+  private def raisingInputTest(
+      inputAttrs: Seq[Attribute],
+      inputExprCode: Seq[ExprCode]): AttributeSet => Boolean = {
+    val deferred = deferredInputs(inputAttrs, inputExprCode)
+    val raisingDeferred = mutable.HashMap.empty[Attribute, Boolean]
+    attrs => attrs.exists { a =>
+      deferred.contains(a) && raisingDeferred.getOrElseUpdate(a, deferredMayRaise(a))
+    }
+  }
+
+  /**
    * With `spark.sql.optimizer.evaluateNotNullChecksInOrder`, whether one of `attrs` is computed
    * on demand by an expression that can raise, see `deferredMayRaise`.
    */
@@ -209,9 +224,7 @@ trait GeneratePredicateHelper extends PredicateHelper {
       attrs: AttributeSet,
       inputAttrs: Seq[Attribute],
       inputExprCode: Seq[ExprCode]): Boolean = {
-    conf.evaluateNotNullChecksInOrder && deferredInputs(inputAttrs, inputExprCode).exists { a =>
-      attrs.contains(a) && deferredMayRaise(a)
-    }
+    conf.evaluateNotNullChecksInOrder && raisingInputTest(inputAttrs, inputExprCode)(attrs)
   }
 
   /**
@@ -230,11 +243,8 @@ trait GeneratePredicateHelper extends PredicateHelper {
       inputAttrs: Seq[Attribute],
       inputExprCode: Seq[ExprCode]): Option[NotNullCheckPlacement] = {
     if (conf.evaluateNotNullChecksInOrder) {
-      val deferred = deferredInputs(inputAttrs, inputExprCode)
-      val raisingDeferred = mutable.HashMap.empty[Attribute, Boolean]
-      def computesRaising(e: Expression): Boolean = e.references.exists { a =>
-        deferred.contains(a) && raisingDeferred.getOrElseUpdate(a, deferredMayRaise(a))
-      }
+      val computesRaisingAttrs = raisingInputTest(inputAttrs, inputExprCode)
+      def computesRaising(e: Expression): Boolean = computesRaisingAttrs(e.references)
       Some(NotNullCheckPlacement(
         notNullPreds.map(p => !mayRaise(p) && !computesRaising(p)),
         otherPreds.map(c => mayRaise(c) || computesRaising(c))))
@@ -331,7 +341,8 @@ trait GeneratePredicateHelper extends PredicateHelper {
    *    `notNullCheckPlacement` (SPARK-60329).
    *    Such a check only drops a row before an error the conjunct raises on it, as `And.eval`
    *    does. With the config, `InferFiltersFromConstraints` places an inferred check just before
-   *    the conjunct it is inferred from, so it does not load its column any earlier.
+   *    the first conjunct at which the conjuncts so far imply it, so it does not load its column
+   *    any earlier.
    *  - With the NULL-conjunct flag, a NULL conjunct no longer drops the row, so the conjuncts
    *    after it are evaluated in the order of the condition: a FALSE IsNotNull check drops the
    *    row before an error a later conjunct raises on it (SPARK-60315). Once a conjunct that can
@@ -355,10 +366,11 @@ trait GeneratePredicateHelper extends PredicateHelper {
       conjunct: Expression,
       afterNullable: Boolean,
       generated: Array[Boolean]): Seq[Expression] = {
-    val pending = notNullPreds.take(precedingNotNulls(k)).zipWithIndex.filterNot {
+    lazy val pending = notNullPreds.take(precedingNotNulls(k)).zipWithIndex.filterNot {
       case (_, idx) => generated(idx)
     }
-    val positioned = if (pending.isEmpty) {
+    // Without the config, only the NULL-conjunct flag moves the checks.
+    val positioned = if ((!afterNullable && placement.isEmpty) || pending.isEmpty) {
       Nil
     } else if (afterNullable && (mayRaise(conjunct) || pending.exists(p => mayRaise(p._1)))) {
       pending
@@ -623,18 +635,17 @@ case class FilterExec(condition: Expression, child: SparkPlan)
     // column that this stage computes on demand by an expression that can raise before any
     // check, so a filter over such a column falls back to `generatePredicateCode` too
     // (SPARK-60329).
+    val otherPredInputAttrs = AttributeSet(otherPreds.flatMap(_.references))
     val (prologueCode, predicateCode) =
       if (conf.subexpressionEliminationEnabled && conf.subexpressionEliminationFilterExecEnabled &&
           otherPreds.nonEmpty &&
           otherPredsEquivalentExpressions.getCommonSubexpressions
             .exists(!CollapseProject.isCheap(_)) &&
-          !computesRaisingInput(
-            AttributeSet(otherPreds.flatMap(_.references)), child.output, input)) {
+          !computesRaisingInput(otherPredInputAttrs, child.output, input)) {
         // Pre-evaluate input variables before CSE analysis: CSE clears
         // ctx.currentVars[i].code as a side effect; without this pre-evaluation, Janino
         // fails when otherPreds reference the same input columns that CSE already
         // consumed.
-        val otherPredInputAttrs = AttributeSet(otherPreds.flatMap(_.references))
         val inputVarsEvalCode = evaluateRequiredVariables(
           child.output, input, otherPredInputAttrs)
 
@@ -697,14 +708,12 @@ case class FilterExec(condition: Expression, child: SparkPlan)
             otherPreds.zip(boundOtherPreds).zipWithIndex.foreach {
               case ((orig, bound), idx) =>
                 val afterNullable = nullFlag.isDefined && nullableSeen
-                precedingNotNullChecks(
-                    notNullPreds, precedingNotNulls, placement, idx, orig,
-                    afterNullable, generatedIsNotNullChecks).foreach { p =>
-                  // The column of a check generated here needs no synthetic check below.
-                  p match {
-                    case IsNotNull(a: Attribute) => extraIsNotNullAttrs += a
-                    case _ =>
-                  }
+                val preceding = precedingNotNullChecks(
+                  notNullPreds, precedingNotNulls, placement, idx, orig,
+                  afterNullable, generatedIsNotNullChecks)
+                // The column of a check generated here needs no synthetic check below.
+                extraIsNotNullAttrs ++= preceding.collect { case IsNotNull(a: Attribute) => a }
+                preceding.foreach { p =>
                   parts.append(genNotNullWithoutCSE(p))
                   parts.append('\n')
                 }

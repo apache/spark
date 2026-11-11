@@ -2278,7 +2278,7 @@ object InferFiltersFromConstraints extends Rule[LogicalPlan]
       val newFilters = (filter.constraints --
         (child.constraints ++ splitConjunctivePredicates(condition))).toSeq.filter(canBeFilter)
       if (newFilters.nonEmpty) {
-        Filter(withInferredPredicates(newFilters, condition), child)
+        Filter(withInferredPredicates(newFilters, condition, child), child)
       } else {
         filter
       }
@@ -2311,24 +2311,31 @@ object InferFiltersFromConstraints extends Rule[LogicalPlan]
 
   /**
    * Adds the predicates inferred from the conjuncts of `condition` to it: at the front, or, with
-   * `spark.sql.optimizer.evaluateNotNullChecksInOrder`, each just before the first conjunct that
-   * references one of its columns, from which it is inferred, so that evaluating the condition
-   * in its order does not evaluate it before the conjuncts that precede that one, whose errors
-   * it would hide, e.g. `isnotnull(x)` from `x > 0` in `y + 1 > 0 AND x > 0`. A predicate that
-   * shares no column with the conjuncts, inferred through a constraint of the child, goes to the
-   * end, after all of them.
+   * `spark.sql.optimizer.evaluateNotNullChecksInOrder`, each just before the first conjunct at
+   * which the conjuncts so far, with the constraints of `child`, imply it, so that evaluating the
+   * condition in its order does not evaluate it before the conjuncts that precede that one, whose
+   * errors it would hide, e.g. `isnotnull(x)` from `x > 0` in `y + 1 > 0 AND x > 0`, or in
+   * `coalesce(x, 1) + y > 0 AND x > 0`. The constraints of the filter are computed for each
+   * prefix of the condition until every predicate is placed.
    */
   private def withInferredPredicates(
       inferred: Seq[Expression],
-      condition: Expression): Expression = {
+      condition: Expression,
+      child: LogicalPlan): Expression = {
     if (conf.evaluateNotNullChecksInOrder) {
       val conjuncts = splitConjunctivePredicates(condition)
-      val byPosition = inferred.groupBy { p =>
-        conjuncts.indexWhere(c => c.references.intersect(p.references).nonEmpty)
+      val placed = Array.fill(conjuncts.length)(Seq.empty[Expression])
+      var remaining = inferred
+      var k = 0
+      while (remaining.nonEmpty && k < conjuncts.length) {
+        val implied = Filter(conjuncts.take(k + 1).reduce(And), child).constraints
+        val (now, later) = remaining.partition(implied.contains)
+        placed(k) = now
+        remaining = later
+        k += 1
       }
-      (conjuncts.zipWithIndex.flatMap { case (c, k) =>
-        byPosition.getOrElse(k, Nil) :+ c
-      } ++ byPosition.getOrElse(-1, Nil)).reduce(And)
+      // The whole condition implies every inferred predicate, so `remaining` is empty here.
+      (conjuncts.zip(placed).flatMap { case (c, ps) => ps :+ c } ++ remaining).reduce(And)
     } else {
       And(inferred.reduce(And), condition)
     }

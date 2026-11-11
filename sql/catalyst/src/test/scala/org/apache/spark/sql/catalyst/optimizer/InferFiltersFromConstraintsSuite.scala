@@ -88,19 +88,33 @@ class InferFiltersFromConstraintsSuite extends PlanTest {
       Seq(b + 1 > 0, a > 0, c === a).map(_.canonicalized))
   }
 
-  test("SPARK-60329: evaluateNotNullChecksInOrder places an inferred predicate that shares no " +
-      "column with the conjuncts at the end") {
-    // The nondeterministic child filter is not combined, and `c > 0` is inferred from `a > 0`
-    // through its `a = c`.
-    val originalQuery = testRelation.where($"a" === $"c" && Rand(0) < 2)
-      .where($"b" + 1 > 0 && $"a" > 0).analyze
-    val Seq(a, b, c) = originalQuery.output
+  test("SPARK-60329: evaluateNotNullChecksInOrder places an inferred predicate just before the " +
+      "first conjunct at which the conjuncts so far imply it") {
     withSQLConf(SQLConf.EVALUATE_NOT_NULL_CHECKS_IN_ORDER.key -> "true") {
-      val Filter(condition, _) = Optimize.execute(originalQuery)
-      val conjuncts = splitConjunctivePredicates(condition).map(_.canonicalized)
-      val Seq(written1, written2, inferredC) =
-        Seq(b + 1 > 0, a > 0, c > 0).map(e => conjuncts.indexOf(e.canonicalized))
-      assert(written1 >= 0 && written1 < written2 && written2 < inferredC, conjuncts)
+      def positions(query: LogicalPlan, exprs: Expression*): Seq[Int] = {
+        val Filter(condition, _) = Optimize.execute(query.analyze)
+        val conjuncts = splitConjunctivePredicates(condition).map(_.canonicalized)
+        exprs.map(e => conjuncts.indexOf(e.canonicalized))
+      }
+      // `coalesce(a, 1) + b > 0` references `a`, but only `a > 0` implies `isnotnull(a)`.
+      val Seq(a, b, c) = testRelation.output
+      val Seq(written1, notNullA, written2) = positions(
+        testRelation.where(Coalesce(Seq($"a", 1)) + $"b" > 0 && $"a" > 0),
+        Coalesce(Seq(a, 1)) + b > 0, IsNotNull(a), a > 0)
+      assert(written1 >= 0 && written1 < notNullA && notNullA < written2)
+      // `c > 0` shares no column with the conjuncts. It is inferred from `a > 0` through the
+      // `a = c` of the nondeterministic child filter, which is not combined, so it goes just
+      // before `a > 0`, after `b + 1 > 0`.
+      val Seq(written3, inferredC, written4) = positions(
+        testRelation.where($"a" === $"c" && Rand(0) < 2).where($"b" + 1 > 0 && $"a" > 0),
+        b + 1 > 0, c > 0, a > 0)
+      assert(written3 >= 0 && written3 < inferredC && inferredC < written4)
+      // A transitive one: `a = c` goes just before `b = c`, after `b + 1 > 0`.
+      val Seq(written5, written6, inferredAC, written7) = positions(
+        testRelation.where($"a" === $"b" && $"b" + 1 > 0 && $"b" === $"c"),
+        a === b, b + 1 > 0, a === c, b === c)
+      assert(written5 >= 0 && written5 < written6 && written6 < inferredAC &&
+        inferredAC < written7)
     }
   }
 
