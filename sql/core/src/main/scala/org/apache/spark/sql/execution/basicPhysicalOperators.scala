@@ -903,7 +903,28 @@ case class UnionExec(children: Seq[SparkPlan]) extends SparkPlan with CodegenSup
       AttributeMap(otherAttrs.zip(firstAttrs))
     }
 
-    val partitionings = children.map(_.outputPartitioning)
+    val partitionings = children.map { child =>
+      // A member that references an attribute the child does not output, such as the key a
+      // `MapGroups` or a column-pruned cached scan passes through, is dropped: left unmapped, it
+      // could equal another child's real output attribute. A child with no member left reports
+      // unknown, which leaves the whole union unknown.
+      child.outputPartitioning match {
+        case p: Expression if !p.references.subsetOf(child.outputSet) =>
+          def members(member: Partitioning): Seq[Partitioning] = member match {
+            case PartitioningCollection(ps) => ps.flatMap(members)
+            case other => Seq(other)
+          }
+          members(p).filter {
+            case e: Expression => e.references.subsetOf(child.outputSet)
+            case _ => true
+          } match {
+            case Seq() => UnknownPartitioning(p.numPartitions)
+            case Seq(survivor) => survivor
+            case survivors => PartitioningCollection(survivors)
+          }
+        case p => p
+      }
+    }
     val firstPartitioning = partitionings.head
     val otherPartitionings = partitionings.tail
 
