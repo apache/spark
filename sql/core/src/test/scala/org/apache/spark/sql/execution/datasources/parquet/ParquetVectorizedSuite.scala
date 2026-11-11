@@ -899,13 +899,22 @@ class ParquetVectorizedSuite extends ParquetTest with SharedSparkSession {
         try {
           var numBatches = 0
           while (reader.nextKeyValue()) {
-            numBatches += 1
+            // The i-th batch has one row, whose `c` is `[{null, i}]`.
+            val batch = reader.resultBatch()
+            assert(batch.numRows == 1)
+            val c = batch.column(0).getArray(0)
+            assert(c.numElements == 1)
+            val element = c.getStruct(0, 2)
+            assert(element.isNullAt(0))
+            assert(element.getInt(1) == numBatches)
+
             // `n` is not the last field, so the struct does not share and reset its levels.
             val n = ParquetTestAccess.columnVectors(reader).head
               .asInstanceOf[ParquetColumnVector].getLeaves.get(0)
             assert(n.getValueVector.dataType == NullType)
             assert(n.getRepetitionLevelVector.getElementsAppended == 1)
             assert(n.getDefinitionLevelVector.getElementsAppended == 1)
+            numBatches += 1
           }
           assert(numBatches == 3)
         } finally {

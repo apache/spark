@@ -194,7 +194,8 @@ final class ParquetColumnVector {
       }
       return;
     }
-    // nothing to do if the column itself is missing
+    // nothing to do if the column itself is missing or is a NullType column. Unlike `reset()`,
+    // this can skip a NullType column because it is primitive, so there is nothing to assemble.
     if (vector.isAllNull()) return;
 
     DataType type = column.sparkType();
