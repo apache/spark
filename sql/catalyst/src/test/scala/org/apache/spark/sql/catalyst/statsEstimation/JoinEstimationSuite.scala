@@ -585,6 +585,25 @@ class JoinEstimationSuite extends StatsEstimationTestBase {
     assert(joinRows(paddedSide("l"), paddedSide("r")).contains(BigInt(10)))
   }
 
+  test("SPARK-60810: boolean join keys with histograms use the histogram estimate") {
+    // A DSv2 connector can report a histogram for a boolean column. The intersected bounds come
+    // back as Booleans and must be converted like the filter's histogram estimate does.
+    // 8 false and 4 true values on each side.
+    val histogram = Histogram(height = 4, Array(HistogramBin(lo = 0, hi = 0, ndv = 1),
+      HistogramBin(lo = 0, hi = 0, ndv = 1), HistogramBin(lo = 1, hi = 1, ndv = 1)))
+    val stat = ColumnStat(distinctCount = Some(2), min = Some(false), max = Some(true),
+      nullCount = Some(0), avgLen = Some(1), maxLen = Some(1), histogram = Some(histogram))
+    def side(name: String): LogicalPlan = {
+      val key = AttributeReference(name, BooleanType)()
+      StatsTestPlan(Seq(key), 12, AttributeMap(Seq(key -> stat)))
+    }
+    val (left, right) = (side("l"), side("r"))
+    val join = Join(left, right, Inner, Some(EqualTo(left.output.head, right.output.head)),
+      JoinHint.NONE)
+    // 8 x 8 + 4 x 4 from the histograms. The distinct count alone would give 12 x 12 / 2 = 72.
+    assert(join.stats.rowCount.contains(BigInt(80)))
+  }
+
   test("SPARK-60810: join keys without non-null values match no rows") {
     // ANALYZE stores a distinct count of 0 for a column of nulls, and an IS NULL filter sets
     // it. Padded CHAR keys get the column's statistics through the padding Project.

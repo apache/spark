@@ -96,6 +96,12 @@ object EstimationUtils {
       // then stores the type's default size as the lengths). The distinct count is left as is.
       // It is too high only when stored values differ just in trailing spaces, which the
       // padding makes equal.
+      // TODO(SPARK-60830): under spark.sql.charVarchar.standardSemantics.enabled the scan wraps
+      // CHAR and VARCHAR columns in charTypeReadSideCheck and varcharTypeReadSideCheck instead,
+      // so they still lose their statistics here and in FilterEstimation.calculateSingleCondition.
+      // They need an extractor of their own, because V2ExpressionBuilder relies on
+      // ReadSidePadding never matching the checks. Under first-class CHAR types the filter unwrap
+      // also has to see through the cast to STRING.
       case alias @ Alias(CharVarcharUtils.ReadSidePadding(attr: Attribute, n), _)
           if attributeStats.contains(attr) =>
         val stat = attributeStats(attr)
