@@ -382,7 +382,16 @@ case class AddConstraint(
  */
 case class AddCheckConstraint(
     child: LogicalPlan,
-    checkConstraint: CheckConstraint) extends UnaryCommand {
+    checkConstraint: CheckConstraint) extends UnaryCommand with KeepAnalyzedQuery {
+
+  // The constraint decides here, with its condition analyzed, whether to store a predicate.
+  // `NormalizePlan` also calls this, on parsed and optimized plans too, so the decision is made
+  // only once, on a resolved constraint.
+  override def storeAnalyzedQuery(): Command = if (checkConstraint.resolved) {
+    copy(checkConstraint = checkConstraint.withPredicateDecision())
+  } else {
+    this
+  }
 
   override protected def withNewChildInternal(newChild: LogicalPlan): LogicalPlan =
     copy(child = newChild)
