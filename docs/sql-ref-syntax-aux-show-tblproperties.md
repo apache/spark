@@ -2,21 +2,6 @@
 layout: global
 title: SHOW TBLPROPERTIES
 displayTitle: SHOW TBLPROPERTIES
-license: |
-  Licensed to the Apache Software Foundation (ASF) under one or more
-  contributor license agreements.  See the NOTICE file distributed with
-  this work for additional information regarding copyright ownership.
-  The ASF licenses this file to You under the Apache License, Version 2.0
-  (the "License"); you may not use this file except in compliance with
-  the License.  You may obtain a copy of the License at
- 
-     http://www.apache.org/licenses/LICENSE-2.0
- 
-  Unless required by applicable law or agreed to in writing, software
-  distributed under the License is distributed on an "AS IS" BASIS,
-  WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-  See the License for the specific language governing permissions and
-  limitations under the License.
 ---
 
 ### Description
@@ -24,19 +9,12 @@ license: |
 This statement returns the value of a table property given an optional value for
 a property key. If no key is specified then all the properties are returned. 
 
-For tables in [Data Source V2](sql-v2-data-sources.html) catalogs, the output may also include
-display-only properties supplied by the catalog. Spark itself does not remove these entries on
-`ALTER TABLE ... UNSET TBLPROPERTIES`; whether they remain depends on the catalog.
-`SHOW CREATE TABLE` does not include them. Stored properties take precedence over display-only
-entries with the same key. After unsetting a stored property other than `comment`, Spark displays
-the display-only value with that key if the catalog still supplies it. Display-only `comment`
-entries are ignored, even after unsetting the stored `comment`.
-
 ### Syntax
 
 ```sql
 SHOW TBLPROPERTIES table_identifier 
    [ ( unquoted_property_key | property_key_as_string_literal ) ]
+   [ AS JSON ]
 ```
 
 ### Parameters
@@ -59,13 +37,29 @@ SHOW TBLPROPERTIES table_identifier
 
     Specifies a property key value as a string literal.
 
-**Note**
-- Property value returned by this statement excludes some properties 
-  that are internal to spark and hive. The excluded properties are :
-  - All the properties that start with prefix `spark.sql`
-  - Property keys such as:  `EXTERNAL`, `comment`
-  - All the properties generated internally by hive to store statistics. Some of these
-    properties are: `numFiles`, `numPartitions`, `numRows`.
+* **AS JSON**
+
+    An optional parameter to return the table properties as a single-row JSON document
+    instead of the default tabular format. Supported for both V1 (session catalog / Hive
+    metastore) and V2 tables and views.
+
+    **Syntax:** `[ AS JSON ]`
+
+    **Output schema:** A single column named `json_metadata` of type `STRING NOT NULL`.
+
+    **Schema:**
+
+    Below is the full JSON schema.
+    ```json
+    {
+      "properties": [{"key": "k", "value": "v"}, ...]
+    }
+    ```
+
+    | Field | Type | Description |
+    |---|---|---|
+    | `properties` | array of objects | Each element maps a property `key` to its string `value` and If specific property key is requested and it is not set on the table, the array is empty. Sorted by key when all properties are listed.  |
+
 
 ### Examples
 
@@ -111,11 +105,32 @@ SHOW TBLPROPERTIES customer ('created.date');
 +----------+
 |01-01-2001|
 +----------+
+
+-- show all the user specified properties for table `customer` as JSON
+SHOW TBLPROPERTIES customer AS JSON;
++-----------------------------------------------------------------------------------------------------+
+|json_metadata                                                                                         |
++-----------------------------------------------------------------------------------------------------+
+|{"properties":[{"key":"created.by.user","value":"John"},{"key":"created.date","value":"01-01-2001"}]}|
++-----------------------------------------------------------------------------------------------------+
+
+-- show value for a specific property key as JSON
+SHOW TBLPROPERTIES customer ('created.date') AS JSON;
++------------------------------------------------------------+
+|json_metadata                                                |
++------------------------------------------------------------+
+|{"properties":[{"key":"created.date","value":"01-01-2001"}]}|
++------------------------------------------------------------+
+
+-- when the requested key is not set, AS JSON returns an empty array
+SHOW TBLPROPERTIES customer ('does.not.exist') AS JSON;
++-----------------+
+|json_metadata    |
++-----------------+
+|{"properties":[]}|
++-----------------+
 ```
 
 ### Related Statements
 
-* [CREATE TABLE](sql-ref-syntax-ddl-create-table.html)
-* [ALTER TABLE SET TBLPROPERTIES](sql-ref-syntax-ddl-alter-table.html)
-* [SHOW TABLES](sql-ref-syntax-aux-show-tables.html)
-* [SHOW TABLE EXTENDED](sql-ref-syntax-aux-show-table.html)
+* [SHOW CREATE TABLE](sql-ref-syntax-aux-show-create-table.md)
