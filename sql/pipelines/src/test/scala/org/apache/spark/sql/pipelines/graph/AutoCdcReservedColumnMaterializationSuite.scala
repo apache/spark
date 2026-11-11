@@ -404,8 +404,9 @@ class AutoCdcReservedColumnMaterializationSuite
       spark.table(table).schema(meta).dataType.asInstanceOf[StructType].fieldNames.toSeq
     val targetNested = nestedNames(s"$catalog.$namespace.target")
     val copyNested = nestedNames(s"$catalog.$namespace.copy")
-    assert(targetNested == Seq(upperDel, upperUps),
-      s"target should keep the declared upper-case nested names, got ${targetNested.mkString(",")}")
+    assert(targetNested == Seq(upperDel, upperUps, Scd1BatchProcessor.versionMapFieldName),
+      s"target should keep the declared upper-case nested names and append the engine's version " +
+        s"map, got ${targetNested.mkString(",")}")
     assert(copyNested == targetNested,
       s"downstream copy nested ${copyNested.mkString(",")} should match " +
         s"target ${targetNested.mkString(",")}")
@@ -579,8 +580,9 @@ class AutoCdcReservedColumnMaterializationSuite
     assert(
       metaStruct.fieldNames.toSeq == Seq(
         Scd1BatchProcessor.cdcDeleteSequenceFieldName,
-        Scd1BatchProcessor.cdcUpsertSequenceFieldName),
-      "materialization should append the omitted engine nested field in the engine's order, got " +
+        Scd1BatchProcessor.cdcUpsertSequenceFieldName,
+        Scd1BatchProcessor.versionMapFieldName),
+      "materialization should append the omitted engine nested fields in the engine's order, got " +
         metaStruct.fieldNames.mkString(", "))
   }
 
