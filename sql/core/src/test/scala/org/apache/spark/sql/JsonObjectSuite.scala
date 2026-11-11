@@ -723,10 +723,10 @@ world'))"""))
     assert(!df.columns.head.contains(" AS ") && !df.columns.head.contains("FORMAT JSON"),
       df.columns.head)
     checkAnswer(df, Row("""{"a":{"b":1}}"""))
-    checkAnswer(
-      spark.range(1).select(call_function(
-        "json_object", lit("a"), expr("CAST(json_object('b', 1) AS STRING)").as("x"))),
-      Row("""{"a":"{\"b\":1}"}"""))
+    val quoted = spark.range(1).select(call_function(
+      "json_object", lit("a"), expr("CAST(json_object('b', 1) AS STRING)").as("x")))
+    assert(quoted.columns.head.contains(" AS x"), quoted.columns.head)
+    checkAnswer(quoted, Row("""{"a":"{\"b\":1}"}"""))
   }
 
   test("SQL renders a raw nested value spliced back to raw even after collation wrapping") {

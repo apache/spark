@@ -407,10 +407,10 @@ class JsonArraySuite extends QueryTest with SharedSparkSession {
     // The column name drops the alias too; a user cast still quotes and keeps it.
     val df = spark.range(1).select(call_function("json_array", expr("json_array(1)").as("x")))
     assert(df.columns.toSeq == Seq("JSON_ARRAY(JSON_ARRAY(1))"))
-    checkAnswer(
-      spark.range(1).select(
-        call_function("json_array", expr("CAST(json_array(1) AS STRING)").as("x"))),
-      Row("""["[1]"]"""))
+    val quoted = spark.range(1).select(
+      call_function("json_array", expr("CAST(json_array(1) AS STRING)").as("x")))
+    assert(quoted.columns.toSeq == Seq("JSON_ARRAY(CAST(JSON_ARRAY(1) AS STRING) AS x)"))
+    checkAnswer(quoted, Row("""["[1]"]"""))
   }
 
   test("emitted SQL reparses and evaluates with raw-vs-quoted semantics preserved") {
