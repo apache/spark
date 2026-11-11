@@ -724,33 +724,39 @@ Project [try_multiply(try_multiply(a#x, 2), 2) AS try_multiply(try_multiply(a, 2
 
 
 -- !query
-SELECT try_add(try_add(a, -5), b) FROM try_arithmetic_chains WHERE a = 2147483647
-GROUP BY try_add(try_add(a, b), -5)
+SELECT a, b, try_add(try_add(try_add(a, b), 2), 3) FROM try_arithmetic_chains ORDER BY a
 -- !query analysis
-org.apache.spark.sql.catalyst.ExtendedAnalysisException
-{
-  "errorClass" : "MISSING_AGGREGATION",
-  "sqlState" : "42803",
-  "messageParameters" : {
-    "expression" : "\"a\"",
-    "expressionAnyValue" : "\"any_value(a)\""
-  }
-}
+Sort [a#x ASC NULLS FIRST], true
++- Project [a#x, b#x, try_add(try_add(try_add(a#x, b#x), 2), 3) AS try_add(try_add(try_add(a, b), 2), 3)#x]
+   +- SubqueryAlias spark_catalog.default.try_arithmetic_chains
+      +- Relation spark_catalog.default.try_arithmetic_chains[a#x,b#x] parquet
 
 
 -- !query
-SELECT try_multiply(try_multiply(a, -1), b) FROM try_arithmetic_chains WHERE a = 1073741824
-GROUP BY try_multiply(try_multiply(a, b), -1)
+SELECT a, b, try_multiply(try_multiply(try_multiply(a, b), 2), 3) FROM try_arithmetic_chains ORDER BY a
 -- !query analysis
-org.apache.spark.sql.catalyst.ExtendedAnalysisException
-{
-  "errorClass" : "MISSING_AGGREGATION",
-  "sqlState" : "42803",
-  "messageParameters" : {
-    "expression" : "\"a\"",
-    "expressionAnyValue" : "\"any_value(a)\""
-  }
-}
+Sort [a#x ASC NULLS FIRST], true
++- Project [a#x, b#x, try_multiply(try_multiply(try_multiply(a#x, b#x), 2), 3) AS try_multiply(try_multiply(try_multiply(a, b), 2), 3)#x]
+   +- SubqueryAlias spark_catalog.default.try_arithmetic_chains
+      +- Relation spark_catalog.default.try_arithmetic_chains[a#x,b#x] parquet
+
+
+-- !query
+SELECT try_add(try_add(a, -5), b), try_add(try_add(a, b), -5) FROM try_arithmetic_chains WHERE a = 2147483647
+-- !query analysis
+Project [try_add(try_add(a#x, -5), b#x) AS try_add(try_add(a, -5), b)#x, try_add(try_add(a#x, b#x), -5) AS try_add(try_add(a, b), -5)#x]
++- Filter (a#x = 2147483647)
+   +- SubqueryAlias spark_catalog.default.try_arithmetic_chains
+      +- Relation spark_catalog.default.try_arithmetic_chains[a#x,b#x] parquet
+
+
+-- !query
+SELECT try_multiply(try_multiply(a, -1), b), try_multiply(try_multiply(a, b), -1) FROM try_arithmetic_chains WHERE a = 1073741824
+-- !query analysis
+Project [try_multiply(try_multiply(a#x, -1), b#x) AS try_multiply(try_multiply(a, -1), b)#x, try_multiply(try_multiply(a#x, b#x), -1) AS try_multiply(try_multiply(a, b), -1)#x]
++- Filter (a#x = 1073741824)
+   +- SubqueryAlias spark_catalog.default.try_arithmetic_chains
+      +- Relation spark_catalog.default.try_arithmetic_chains[a#x,b#x] parquet
 
 
 -- !query

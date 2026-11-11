@@ -123,14 +123,14 @@ SELECT -5 + try_add(try_add(a, 2147483647), 1) FROM try_arithmetic_chains WHERE 
 SELECT try_add(try_add(a, 5), -3) FROM try_arithmetic_chains WHERE a = 2147483643;
 SELECT try_multiply(try_multiply(a, -1), b) FROM try_arithmetic_chains WHERE a = 1073741824;
 SELECT try_multiply(try_multiply(a, -1), b) * 3 FROM try_arithmetic_chains WHERE a = 1073741824;
--- Chains with one column operand and literals that move away from zero fold exactly.
+-- Literals that move away from zero fold exactly, also above a step with two column operands.
 SELECT try_add(try_add(a, 1), 2) FROM try_arithmetic_chains WHERE a = 2147483643;
 SELECT try_add(try_add(a, 2), 3) FROM try_arithmetic_chains WHERE a = 2147483643;
 SELECT try_multiply(try_multiply(a, 2), 3) FROM try_arithmetic_chains WHERE a = -10;
 SELECT try_multiply(try_multiply(a, 2), 2) FROM try_arithmetic_chains WHERE a = 1073741824;
--- A differently grouped TRY chain is not the grouping expression.
-SELECT try_add(try_add(a, -5), b) FROM try_arithmetic_chains WHERE a = 2147483647
-GROUP BY try_add(try_add(a, b), -5);
-SELECT try_multiply(try_multiply(a, -1), b) FROM try_arithmetic_chains WHERE a = 1073741824
-GROUP BY try_multiply(try_multiply(a, b), -1);
+SELECT a, b, try_add(try_add(try_add(a, b), 2), 3) FROM try_arithmetic_chains ORDER BY a;
+SELECT a, b, try_multiply(try_multiply(try_multiply(a, b), 2), 3) FROM try_arithmetic_chains ORDER BY a;
+-- Differently grouped TRY chains are different expressions.
+SELECT try_add(try_add(a, -5), b), try_add(try_add(a, b), -5) FROM try_arithmetic_chains WHERE a = 2147483647;
+SELECT try_multiply(try_multiply(a, -1), b), try_multiply(try_multiply(a, b), -1) FROM try_arithmetic_chains WHERE a = 1073741824;
 DROP TABLE try_arithmetic_chains;

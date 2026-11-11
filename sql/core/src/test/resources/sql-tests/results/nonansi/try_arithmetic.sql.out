@@ -810,37 +810,41 @@ NULL
 
 
 -- !query
-SELECT try_add(try_add(a, -5), b) FROM try_arithmetic_chains WHERE a = 2147483647
-GROUP BY try_add(try_add(a, b), -5)
+SELECT a, b, try_add(try_add(try_add(a, b), 2), 3) FROM try_arithmetic_chains ORDER BY a
 -- !query schema
-struct<>
+struct<a:int,b:int,try_add(try_add(try_add(a, b), 2), 3):int>
 -- !query output
-org.apache.spark.sql.catalyst.ExtendedAnalysisException
-{
-  "errorClass" : "MISSING_AGGREGATION",
-  "sqlState" : "42803",
-  "messageParameters" : {
-    "expression" : "\"a\"",
-    "expressionAnyValue" : "\"any_value(a)\""
-  }
-}
+-10	0	-5
+1073741824	2	1073741831
+2147483643	0	NULL
+2147483647	1	NULL
 
 
 -- !query
-SELECT try_multiply(try_multiply(a, -1), b) FROM try_arithmetic_chains WHERE a = 1073741824
-GROUP BY try_multiply(try_multiply(a, b), -1)
+SELECT a, b, try_multiply(try_multiply(try_multiply(a, b), 2), 3) FROM try_arithmetic_chains ORDER BY a
 -- !query schema
-struct<>
+struct<a:int,b:int,try_multiply(try_multiply(try_multiply(a, b), 2), 3):int>
 -- !query output
-org.apache.spark.sql.catalyst.ExtendedAnalysisException
-{
-  "errorClass" : "MISSING_AGGREGATION",
-  "sqlState" : "42803",
-  "messageParameters" : {
-    "expression" : "\"a\"",
-    "expressionAnyValue" : "\"any_value(a)\""
-  }
-}
+-10	0	0
+1073741824	2	NULL
+2147483643	0	0
+2147483647	1	NULL
+
+
+-- !query
+SELECT try_add(try_add(a, -5), b), try_add(try_add(a, b), -5) FROM try_arithmetic_chains WHERE a = 2147483647
+-- !query schema
+struct<try_add(try_add(a, -5), b):int,try_add(try_add(a, b), -5):int>
+-- !query output
+2147483643	NULL
+
+
+-- !query
+SELECT try_multiply(try_multiply(a, -1), b), try_multiply(try_multiply(a, b), -1) FROM try_arithmetic_chains WHERE a = 1073741824
+-- !query schema
+struct<try_multiply(try_multiply(a, -1), b):int,try_multiply(try_multiply(a, b), -1):int>
+-- !query output
+-2147483648	NULL
 
 
 -- !query
