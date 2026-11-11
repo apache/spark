@@ -18,6 +18,7 @@
 package org.apache.spark.sql
 
 import org.apache.spark.SparkRuntimeException
+import org.apache.spark.sql.catalyst.TableIdentifier
 import org.apache.spark.sql.catalyst.analysis.TableOutputResolver
 import org.apache.spark.sql.catalyst.expressions.AttributeReference
 import org.apache.spark.sql.catalyst.expressions.objects.StaticInvoke
@@ -25,7 +26,7 @@ import org.apache.spark.sql.catalyst.plans.logical.LocalRelation
 import org.apache.spark.sql.catalyst.util.{CharVarcharUtils, ResolveDefaultColumns}
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSparkSession
-import org.apache.spark.sql.types.{IntegerType, MetadataBuilder, StringType}
+import org.apache.spark.sql.types.{IntegerType, MetadataBuilder, StringType, StructType}
 
 class ResolveDefaultColumnsSuite extends SharedSparkSession {
   test("column without default value defined (null as default)") {
@@ -288,6 +289,38 @@ class ResolveDefaultColumnsSuite extends SharedSparkSession {
           checkAnswer(sql("SELECT region, count(*) FROM t GROUP BY region"), Row("EU ", 2L))
           assert(spark.table("t").schema("region").getExistenceDefaultValue().contains("'EU '"))
           assert(spark.table("t").schema("region").getCurrentDefaultValue().contains("'EU'"))
+        }
+      }
+    }
+  }
+
+  Seq("CREATE", "ALTER").foreach { ddl =>
+    test(s"CHAR/VARCHAR current defaults use insertion flags with cached metadata: $ddl") {
+      withSQLConf(
+        SQLConf.READ_SIDE_CHAR_PADDING.key -> "false",
+        SQLConf.LEGACY_CHAR_VARCHAR_AS_STRING.key -> "false") {
+        withTable("t") {
+          val columns = "region CHAR(3) DEFAULT 'EU', label VARCHAR(3) DEFAULT 'EU  '"
+          if (ddl == "CREATE") {
+            sql(s"CREATE TABLE t(id INT, $columns) USING parquet")
+          } else {
+            sql("CREATE TABLE t(id INT) USING parquet")
+            sql(s"ALTER TABLE t ADD COLUMNS ($columns)")
+          }
+          withSQLConf(SQLConf.LEGACY_CHAR_VARCHAR_AS_STRING.key -> "true") {
+            sql("INSERT INTO t (id) VALUES (1)")
+            sql("INSERT INTO t VALUES (2, 'EU', 'EU  ')")
+            val query = "SELECT id, region, length(region), label, length(label) FROM t"
+            checkAnswer(sql(query), Seq(1, 2).map(Row(_, "EU", 2, "EU  ", 4)))
+
+            // Serialized schemas retain the SQL but drop cached expressions.
+            val table = spark.sessionState.catalog.getTableMetadata(TableIdentifier("t"))
+            val schema = StructType.fromString(table.schema.json)
+            spark.sessionState.catalog.alterTableDataSchema(TableIdentifier("t"), schema)
+            spark.catalog.refreshTable("t")
+            sql("INSERT INTO t (id) VALUES (3)")
+            checkAnswer(sql(query), Seq(1, 2, 3).map(Row(_, "EU", 2, "EU  ", 4)))
+          }
         }
       }
     }

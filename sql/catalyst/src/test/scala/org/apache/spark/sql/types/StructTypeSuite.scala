@@ -22,7 +22,8 @@ import org.json4s.{JArray, JBool, JObject, JString, JValue}
 import org.json4s.jackson.JsonMethods.parse
 
 import org.apache.spark.{SparkException, SparkFunSuite, SparkIllegalArgumentException, SparkRuntimeException}
-import org.apache.spark.sql.AnalysisException
+import org.apache.spark.sql.{AnalysisException, Row}
+import org.apache.spark.sql.catalyst.CatalystTypeConverters
 import org.apache.spark.sql.catalyst.analysis.{caseInsensitiveResolution, caseSensitiveResolution}
 import org.apache.spark.sql.catalyst.expressions.Literal
 import org.apache.spark.sql.catalyst.parser.ParseException
@@ -1273,6 +1274,58 @@ class StructTypeSuite extends SparkFunSuite with SQLHelper {
             assert(ResolveDefaultColumns.analyze("c", dataType, "'toolong'", "CREATE TABLE")
               .eval().toString == "toolong")
           }
+        }
+      }
+    }
+  }
+
+  test("Nested CHAR/VARCHAR defaults retain assignment values through existence metadata") {
+    withSQLConf(
+        SQLConf.LEGACY_CHAR_VARCHAR_AS_STRING.key -> "false",
+        SQLConf.PRESERVE_CHAR_VARCHAR_TYPE_INFO.key -> "false",
+        SQLConf.CHAR_VARCHAR_STANDARD_SEMANTICS.key -> "false") {
+      val structType = new StructType()
+        .add("c", CharType(3))
+        .add("v", VarcharType(3))
+        .add("missing", CharType(3))
+      val structSQL =
+        "named_struct('c', 'EU', 'v', 'US  ', 'missing', CAST(NULL AS STRING))"
+      val stringStructType = new StructType()
+        .add("c", StringType).add("v", StringType).add("missing", StringType)
+      val expectedStruct = Row("EU ", "US ", null)
+      val cases: Seq[(DataType, DataType, String, Any)] = Seq(
+        (structType, stringStructType, structSQL, expectedStruct),
+        (ArrayType(structType), ArrayType(stringStructType),
+          s"array($structSQL, CAST(NULL AS STRUCT<c: STRING, v: STRING, missing: STRING>))",
+          Seq(expectedStruct, null)),
+        (MapType(CharType(3), VarcharType(3)), MapType(StringType, StringType),
+          "map('EU', 'US  ', 'NA', CAST(NULL AS STRING))",
+          Map("EU " -> "US ", "NA " -> null)))
+
+      cases.foreach { case (dataType, expectedType, defaultSQL, expectedValue) =>
+        // Include a null container as well as null struct fields, array elements and map values.
+        Seq(defaultSQL -> expectedValue, "NULL" -> null).foreach { case (sql, expected) =>
+          val expr = ResolveDefaultColumns.coerceDefaultValue(
+            Literal.fromSQL(sql), dataType, "CREATE TABLE", "c", sql)
+          assert(expr.dataType == expectedType)
+          assert(CatalystTypeConverters.convertToScala(expr.eval(), expectedType) == expected)
+
+          val field = ColumnDefinition("c", dataType, true, None,
+            Some(DefaultValueExpression(expr, sql))).toV1Column
+          val restored = StructType.fromString(StructType(Seq(field)).json).head
+          assert(restored.dataType == dataType)
+          assert(restored.getCurrentDefaultValue().contains(sql))
+          // Reading as STRING containers observes persisted values without applying CHAR checks.
+          val serialized = ResolveDefaultColumns.analyze(
+            "c", expectedType, restored.getExistenceDefaultValue().get, "CREATE TABLE")
+          assert(CatalystTypeConverters.convertToScala(
+            serialized.eval(), serialized.dataType) == expected)
+          val reanalyzed = ResolveDefaultColumns.analyze(
+            restored, "CREATE TABLE", ResolveDefaultColumns.EXISTS_DEFAULT_COLUMN_METADATA_KEY)
+          assert(reanalyzed.dataType == expectedType)
+          assert(CatalystTypeConverters.convertToScala(reanalyzed.eval(), expectedType) == expected)
+          assert(CatalystTypeConverters.convertToScala(
+            ResolveDefaultColumns.getExistenceDefaultValue(restored), expectedType) == expected)
         }
       }
     }

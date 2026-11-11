@@ -166,9 +166,14 @@ private[sql] object AlterTableHelper {
       colType: DataType,
       statementType: String): Unit = {
     val existsDefaultSQL = constantFoldDefaultValue(defaultValue, colName, colType, statementType)
-    builder.putExpression(
-      DefaultCols.CURRENT_DEFAULT_COLUMN_METADATA_KEY, defaultValue.originalSQL,
-      Some(defaultValue.child))
+    if (CharVarcharUtils.hasCharVarchar(colType)) {
+      // Keep session-dependent assignment padding/truncation out of the current default cache.
+      builder.putString(DefaultCols.CURRENT_DEFAULT_COLUMN_METADATA_KEY, defaultValue.originalSQL)
+    } else {
+      builder.putExpression(
+        DefaultCols.CURRENT_DEFAULT_COLUMN_METADATA_KEY, defaultValue.originalSQL,
+        Some(defaultValue.child))
+    }
     builder.putString(DefaultCols.EXISTS_DEFAULT_COLUMN_METADATA_KEY, existsDefaultSQL)
   }
 }

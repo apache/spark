@@ -439,6 +439,7 @@ object ResolveDefaultColumns extends QueryErrorsBase
           throw QueryCompilationErrors.defaultValuesDataTypeError(
             statementType, colName, defaultSQL, dataType, other.dataType))
     }
+    // TODO: Normalize persisted unpadded existence defaults in STRING-overlay schemas as well.
     if (CharVarcharUtils.hasCharVarchar(dataType) &&
         CharVarcharUtils.shouldApplyWriteSideLengthCheck(conf) && ret.foldable) {
       val checked = CharVarcharUtils.stringLengthCheck(ret, dataType).eval(EmptyRow)
@@ -547,6 +548,7 @@ object ResolveDefaultColumns extends QueryErrorsBase
    * These define existence default values for the struct fields for efficiency purposes.
    * The caller should avoid using such methods in a loop for efficiency.
    */
+  // TODO: Precompute defaults per reader; expanded CHAR literals increase per-row parsing costs.
   def existenceDefaultValues(schema: StructType): Array[Any] =
     getExistenceDefaultValues(schema)
   def existenceDefaultsBitmask(schema: StructType): Array[Boolean] =

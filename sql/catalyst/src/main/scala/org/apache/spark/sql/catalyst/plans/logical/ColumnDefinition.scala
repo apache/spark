@@ -96,8 +96,14 @@ case class ColumnDefinition(
       metadataBuilder.putString("comment", c)
     }
     defaultValue.foreach { default =>
-      metadataBuilder.putExpression(
-        CURRENT_DEFAULT_COLUMN_METADATA_KEY, default.originalSQL, Some(default.child))
+      if (CharVarcharUtils.hasCharVarchar(dataType)) {
+        // The assigned child can contain padding/truncation that depends on the DDL's SQLConf.
+        // Reanalyze the original current default under the insertion session's settings.
+        metadataBuilder.putString(CURRENT_DEFAULT_COLUMN_METADATA_KEY, default.originalSQL)
+      } else {
+        metadataBuilder.putExpression(
+          CURRENT_DEFAULT_COLUMN_METADATA_KEY, default.originalSQL, Some(default.child))
+      }
       val existsSQL = default.child match {
         case l: Literal => l.sql
         case _ => default.originalSQL
