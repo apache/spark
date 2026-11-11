@@ -3390,6 +3390,72 @@ class SubquerySuite extends SharedSparkSession
     }
   }
 
+  Seq("ROLLUP", "CUBE", "GROUPING SETS").foreach { groupingType =>
+    val groupByClause = groupingType match {
+      case "ROLLUP" => "GROUP BY ROLLUP(col1)"
+      case "CUBE" => "GROUP BY CUBE(col1)"
+      case "GROUPING SETS" => "GROUP BY GROUPING SETS ((col1), ())"
+    }
+
+    test(s"SPARK-61484: correlated EXISTS subquery in the SELECT list with $groupingType") {
+      val df = sql(
+        s"""SELECT
+           |  col1,
+           |  SUM(col2) AS s,
+           |  EXISTS (SELECT 1 FROM VALUES (1), (2) AS v(x) WHERE v.x = col1) AS has_match
+           |FROM VALUES (1, 10), (1, 20), (2, 30) AS t(col1, col2)
+           |$groupByClause
+           |ORDER BY col1 NULLS LAST""".stripMargin)
+      checkAnswer(df, Row(1, 30, true) :: Row(2, 30, true) :: Row(null, 60, false) :: Nil)
+    }
+
+    test(s"SPARK-61484: correlated NOT EXISTS subquery in HAVING with $groupingType") {
+      val df = sql(
+        s"""SELECT col1, count(*) AS c
+           |FROM VALUES (1, 10), (1, 20), (2, 30) AS t(col1, col2)
+           |$groupByClause
+           |HAVING NOT EXISTS (SELECT 1 FROM VALUES (1) AS v(x) WHERE v.x = col1)
+           |ORDER BY col1 NULLS LAST""".stripMargin)
+      checkAnswer(df, Row(2, 1L) :: Row(null, 3L) :: Nil)
+    }
+
+    test(s"SPARK-61484: $groupingType rewrites subquery outerAttrs to the post-Expand attribute") {
+      val plan = sql(
+        s"""SELECT
+           |  col1,
+           |  SUM(col2) AS s,
+           |  EXISTS (SELECT 1 FROM VALUES (1), (2) AS v(x) WHERE v.x = col1) AS has_match
+           |FROM VALUES (1, 10), (1, 20), (2, 30) AS t(col1, col2)
+           |$groupByClause""".stripMargin).queryExecution.analyzed
+
+      val aggregate = plan.collectFirst { case a: Aggregate => a }.get
+      val groupingAttribute = aggregate.groupingExpressions.head.asInstanceOf[NamedExpression]
+      val subquery = aggregate.aggregateExpressions.flatMap { expression =>
+        expression.collect { case s: SubqueryExpression => s }
+      }.head
+      val outerAttribute = subquery.getOuterAttrs.head.asInstanceOf[NamedExpression]
+      val innerOuterReference = subquery.plan.collectFirst {
+        case f: Filter => f
+      }.get.condition.collectFirst {
+        case outerReference: OuterReference => outerReference.e
+      }.get
+
+      // Golden files normalize exprIds away, so the post-Expand identity is pinned here.
+      assert(outerAttribute.exprId == groupingAttribute.exprId)
+      assert(innerOuterReference.exprId == groupingAttribute.exprId)
+    }
+  }
+
+  test("SPARK-61484: HAVING correlated subquery on an unselected ROLLUP grouping key") {
+    val df = sql(
+      """SELECT col2, count(*)
+        |FROM VALUES (1, 10), (1, 20), (2, 30) AS t(col1, col2)
+        |GROUP BY ROLLUP(col1, col2)
+        |HAVING NOT EXISTS (SELECT 1 FROM VALUES (1) AS v(x) WHERE v.x = col1)
+        |""".stripMargin)
+    checkAnswer(df, Seq(Row(30, 1L), Row(null, 1L), Row(null, 3L)))
+  }
+
   test("SPARK-60983: Propagate a constant into a comparison with a correlated scalar subquery") {
     withTempView("t1", "t2") {
       Seq((1, 2), (2, 3)).toDF("a", "b").createOrReplaceTempView("t1")

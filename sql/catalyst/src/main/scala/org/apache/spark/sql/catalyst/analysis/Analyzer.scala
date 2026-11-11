@@ -987,6 +987,13 @@ class Analyzer(
       }
     }
 
+    /**
+     * Resolves a HAVING condition over a grouping-analytics [[Aggregate]] and rebuilds the
+     * aggregate over an [[Expand]]. A correlated subquery in the condition has its grouping-key
+     * outer references re-pointed at the rebuilt aggregate's output; when a key appears several
+     * times in the aggregate list, its first alias wins over any bare occurrence, matching the
+     * alias [[UpdateOuterReferences]] later substitutes inside the subquery plan.
+     */
     private def tryResolveHavingCondition(
         h: UnresolvedHaving,
         aggregate: Aggregate,
@@ -1028,7 +1035,29 @@ class Analyzer(
       // attrMap to resolve the condition again.
       val attrMap = AttributeMap((aggForResolving.output ++ extraAggExprs.map(_.toAttribute))
         .zip(newChild.output))
+      lazy val groupingKeyToAggregateOutput = {
+        val (aliasedOutputs, bareOutputs) =
+          (aggregate.aggregateExpressions ++ extraAggExprs).partition(_.isInstanceOf[Alias])
+        val groupingInputToOutput = (aliasedOutputs ++ bareOutputs).flatMap { aggregateExpression =>
+          val groupingInput = aggregateExpression match {
+            case attribute: Attribute => Some(attribute)
+            case Alias(attribute: Attribute, _) => Some(attribute)
+            case _ => None
+          }
+          groupingInput
+            .filter(attribute => groupByExprs.exists(_.semanticEquals(attribute)))
+            .map(attribute =>
+              attribute -> attrMap.getOrElse(
+                aggregateExpression.toAttribute, aggregateExpression.toAttribute))
+        }
+        AttributeMap(groupingInputToOutput.groupBy(_._1.exprId).values.map(_.head).toSeq)
+      }
       val newCond = resolvedHavingCond.transform {
+        case s: SubqueryExpression =>
+          GroupingAnalyticsTransformer.rewriteCorrelatedSubqueryGroupingKeys(
+            subquery = s,
+            remap = groupingKeyToAggregateOutput.get,
+            skipAggregateExpressions = true)
         case a: AttributeReference => attrMap.getOrElse(a, a)
       }
 

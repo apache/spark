@@ -20,7 +20,7 @@ package org.apache.spark.sql.catalyst.analysis
 import org.apache.spark.sql.catalyst.SQLConfHelper
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.aggregate.AggregateExpression
-import org.apache.spark.sql.catalyst.plans.logical.{Aggregate, Expand, LogicalPlan}
+import org.apache.spark.sql.catalyst.plans.logical.{Aggregate, AnalysisHelper, Expand, LogicalPlan}
 import org.apache.spark.sql.catalyst.trees.TreeNodeTag
 import org.apache.spark.sql.catalyst.util.toPrettySQL
 import org.apache.spark.sql.errors.QueryCompilationErrors
@@ -379,19 +379,71 @@ object GroupingAnalyticsTransformer extends SQLConfHelper with AliasHelper {
 
   /**
    * Replace group by expressions with their corresponding expanded attributes from the
-   * [[Expand]] operator output. Leaves aggregate expressions unchanged.
+   * [[Expand]] operator output. Leaves aggregate expressions unchanged. A correlated subquery that
+   * is not itself a grouping key has its grouping-key outer references re-pointed at the expanded
+   * attributes, see [[rewriteCorrelatedSubqueryGroupingKeys]].
    */
   private def replaceExpressions(
       expression: Expression,
       groupByAliases: Seq[Alias],
       groupingAttributes: Seq[Expression]): Expression = expression match {
     case aggregateExpression: AggregateExpression => aggregateExpression
+    case subquery: SubqueryExpression
+        if groupingAttributeFor(subquery, groupByAliases, groupingAttributes).isEmpty =>
+      rewriteCorrelatedSubqueryGroupingKeys(
+        subquery = subquery,
+        remap = attribute => groupingAttributeFor(attribute, groupByAliases, groupingAttributes),
+        skipAggregateExpressions = false)
     case other =>
-      val index = groupByAliases.indexWhere(_.child.semanticEquals(other))
-      if (index == -1) {
-        other.mapChildren(replaceExpressions(_, groupByAliases, groupingAttributes))
-      } else {
-        groupingAttributes(index)
-      }
+      groupingAttributeFor(other, groupByAliases, groupingAttributes).getOrElse(
+        other.mapChildren(replaceExpressions(_, groupByAliases, groupingAttributes)))
+  }
+
+  /**
+   * The post-Expand grouping attribute for a grouping key, or None if `expression` is not a
+   * grouping key. A subquery that is itself a grouping key is replaced wholesale this way, so it
+   * shows null in super-aggregate rows.
+   */
+  private def groupingAttributeFor(
+      expression: Expression,
+      groupByAliases: Seq[Alias],
+      groupingAttributes: Seq[Expression]): Option[Attribute] = {
+    val index = groupByAliases.indexWhere(_.child.semanticEquals(expression))
+    if (index != -1) Some(groupingAttributes(index).asInstanceOf[Attribute]) else None
+  }
+
+  /**
+   * Rewrites a correlated subquery's grouping-key outer references, in its plan and in its
+   * `outerAttrs`, to `remap(attribute)`, recursing into nested subqueries. For
+   * `SELECT col1, EXISTS (SELECT 1 FROM v WHERE v.x = col1) FROM t GROUP BY ROLLUP(col1)` the
+   * subquery still holds `outer(col1#0)` after [[Expand]] mints `col1#3`; remapping it to
+   * `outer(col1#3)` lets super-aggregate rows see NULL. `outerAttrs` are handled separately
+   * because the plan traversal does not reach them and an entry may be a bare attribute.
+   * With `skipAggregateExpressions`, [[AggregateExpression]] subtrees keep their pre-Expand
+   * references; the HAVING path needs this so that [[UpdateOuterReferences]] can still match a
+   * lifted aggregate against the one the outer aggregate computes over its pre-Expand input.
+   */
+  def rewriteCorrelatedSubqueryGroupingKeys(
+      subquery: SubqueryExpression,
+      remap: Attribute => Option[Attribute],
+      skipAggregateExpressions: Boolean): SubqueryExpression = {
+    def rewriteInner(expression: Expression): Expression = expression match {
+      case _: AggregateExpression if skipAggregateExpressions => expression
+      case outerReference @ OuterReference(attribute: Attribute) =>
+        remap(attribute)
+          .map(target => outerReference.makeCopy(Array[AnyRef](target)))
+          .getOrElse(outerReference)
+      case nested: SubqueryExpression =>
+        rewriteCorrelatedSubqueryGroupingKeys(nested, remap, skipAggregateExpressions)
+      case other => other.mapChildren(rewriteInner)
+    }
+    def rewriteOuterAttr(expression: Expression): Expression = expression match {
+      case attribute: Attribute => remap(attribute).getOrElse(attribute)
+      case _ => rewriteInner(expression)
+    }
+    val newPlan = AnalysisHelper.allowInvokingTransformsInAnalyzer {
+      subquery.plan.transformDown { case operator => operator.mapExpressions(rewriteInner) }
+    }
+    subquery.withNewPlan(newPlan).withNewOuterAttrs(subquery.getOuterAttrs.map(rewriteOuterAttr))
   }
 }

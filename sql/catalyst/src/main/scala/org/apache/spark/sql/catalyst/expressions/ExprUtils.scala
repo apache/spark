@@ -207,6 +207,12 @@ object ExprUtils extends EvalHelper with QueryErrorsBase {
         s.failAnalysis(
           errorClass = "SCALAR_SUBQUERY_IS_IN_GROUP_BY_OR_AGGREGATE_FUNCTION",
           messageParameters = Map("sqlExpr" -> toSQLExpr(s)))
+      // A subquery's children are its outerAttrs followed by the joinConds that
+      // PullupCorrelatedPredicates adds; the joinConds reference the subquery plan's own
+      // attributes, which never participate in the GROUP BY, so only the outerAttrs are checked.
+      case s: SubqueryExpression
+        if s.children.nonEmpty && !a.groupingExpressions.exists(semanticEquality(_, s)) =>
+        s.getOuterAttrs.foreach(checkValidAggregateExpression)
       case e if a.groupingExpressions.exists(semanticEquality(_, e)) => // OK
       // There should be no Window in Aggregate - this case will fail later check anyway.
       // Perform this check for special case of lateral column alias, when the window
