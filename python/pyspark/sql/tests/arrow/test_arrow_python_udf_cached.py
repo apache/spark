@@ -134,8 +134,8 @@ class ArrowPythonUDFCachedInputTests(ReusedSQLTestCase):
             df.unpersist()
 
     def test_udf_on_cached_input_with_output_batch_slicing(self):
-        # The columnar path pairs each result batch with one input batch, so the 10-row result
-        # of the single cached batch must not be sliced under the configs below.
+        # The 10-row result of the single cached batch is sliced under the configs below, and
+        # must still line up with its rows, which are paired with the results by row.
         df = self.spark.range(0, 10, 1, 1).cache()
         try:
             for conf in [

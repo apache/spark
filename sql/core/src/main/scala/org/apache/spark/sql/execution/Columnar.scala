@@ -309,6 +309,9 @@ private object RowToColumnConverter {
       case st: StructType => new StructConverter(st.fields.map(
         (f) => getConverterForType(f.dataType, f.nullable)))
       case dt: DecimalType => new DecimalConverter(dt)
+      case NullType => NullConverter
+      // Rows and column vectors both hold a UDT in the form of its SQL type.
+      case udt: UserDefinedType[_] => getConverterForType(udt.sqlType, nullable)
       case mt: MapType => MapConverter(getConverterForType(mt.keyType, nullable = false),
         getConverterForType(mt.valueType, mt.valueContainsNull))
       case unknown => throw ExecutionErrors.unsupportedDataTypeError(unknown)
@@ -316,6 +319,8 @@ private object RowToColumnConverter {
 
     if (nullable) {
       dataType match {
+        // The converter of its SQL type handles the nulls.
+        case _: UserDefinedType[_] => core
         case CalendarIntervalType | VariantType => new StructNullableTypeConverter(core)
         case _: AnyTimestampNanoType =>
           new StructNullableTypeConverter(core)
@@ -325,6 +330,11 @@ private object RowToColumnConverter {
     } else {
       core
     }
+  }
+
+  // A column vector of NullType is all null and stores nothing.
+  private object NullConverter extends TypeConverter {
+    override def append(row: SpecializedGetters, column: Int, cv: WritableColumnVector): Unit = {}
   }
 
   private object BinaryConverter extends TypeConverter {

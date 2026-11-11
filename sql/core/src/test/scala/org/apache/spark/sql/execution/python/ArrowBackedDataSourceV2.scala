@@ -30,6 +30,7 @@ import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.connector.catalog.{SupportsRead, Table, TableCapability, TableProvider}
 import org.apache.spark.sql.connector.expressions.Transform
 import org.apache.spark.sql.connector.read._
+import org.apache.spark.sql.execution.vectorized.ReusedArrowColumnVector
 import org.apache.spark.sql.types._
 import org.apache.spark.sql.util.ArrowUtils
 import org.apache.spark.sql.util.CaseInsensitiveStringMap
@@ -144,9 +145,12 @@ private class ArrowBackedScanBuilder(options: CaseInsensitiveStringMap)
     options.getInt("batchSize", ArrowBackedDataSourceV2.BATCH_SIZE)
   private val arrowIdColumn =
     options.getBoolean("arrowIdColumn", true)
+  private val emptyBatches =
+    options.getBoolean("emptyBatches", false)
 
   override def createReaderFactory(): PartitionReaderFactory = {
-    new ArrowBackedReaderFactory(columnar, reuseVectors, batchSize, arrowIdColumn)
+    new ArrowBackedReaderFactory(
+      columnar, reuseVectors, batchSize, arrowIdColumn, emptyBatches)
   }
 }
 
@@ -163,12 +167,15 @@ private case class ArrowPartition(start: Int, end: Int)
  *   the columnar optimization.
  * @param arrowIdColumn if false, the `id` column of the batches is not an
  *   [[ArrowColumnVector]], so that a batch is not entirely Arrow-backed.
+ * @param emptyBatches if true, the reader with fresh vectors also returns batches without rows,
+ *   first, in the middle and last.
  */
 private class ArrowBackedReaderFactory(
     columnar: Boolean,
     reuseVectors: Boolean,
     batchSize: Int,
-    arrowIdColumn: Boolean)
+    arrowIdColumn: Boolean,
+    emptyBatches: Boolean)
   extends PartitionReaderFactory {
 
   override def supportColumnarReads(
@@ -198,7 +205,7 @@ private class ArrowBackedReaderFactory(
     if (reuseVectors) {
       new ReusingArrowPartitionReader(start, end, batchSize)
     } else {
-      new ArrowBackedPartitionReader(start, end, batchSize, arrowIdColumn)
+      new ArrowBackedPartitionReader(start, end, batchSize, arrowIdColumn, emptyBatches)
     }
   }
 }
@@ -206,7 +213,8 @@ private class ArrowBackedReaderFactory(
 /**
  * Reads the same rows as [[ArrowBackedPartitionReader]], with short values in `data`, but refills
  * the same vectors for every batch and closes them once the reader is closed, as columnar readers
- * may: a batch is only valid until the next one.
+ * may: a batch is only valid until the next one. Its columns are [[ReusedArrowColumnVector]]s,
+ * whose closeIfFreeable is a no-op.
  */
 private class ReusingArrowPartitionReader(start: Int, end: Int, batchSize: Int)
     extends PartitionReader[ColumnarBatch] {
@@ -218,7 +226,7 @@ private class ReusingArrowPartitionReader(start: Int, end: Int, batchSize: Int)
       errorOnDuplicatedFieldNames = true, largeVarTypes = false),
     allocator)
   private val batch = new ColumnarBatch(
-    root.getFieldVectors.asScala.map(new ArrowColumnVector(_): ColumnVector).toArray)
+    root.getFieldVectors.asScala.map(new ReusedArrowColumnVector(_): ColumnVector).toArray)
 
   override def next(): Boolean = {
     if (current >= end) return false
@@ -259,28 +267,34 @@ private class ReusingArrowPartitionReader(start: Int, end: Int, batchSize: Int)
  * - value (DOUBLE): id * 0.1
  * - data (STRING): 100 random characters
  *
- * Every batch has vectors of its own, which are not reused vectors: the consumer may
- * hold them past the next batch, even past the close of the reader, and releases them with
- * closeIfFreeable. The ones it does not release are closed when the task completes. Their
- * release is counted in [[ArrowBackedDataSourceV2]].
+ * Every batch has vectors of its own, which its consumer releases with closeIfFreeable. The ones
+ * it does not release are closed when the task completes. Their release is counted in
+ * [[ArrowBackedDataSourceV2]].
  *
  * If `arrowIdColumn` is false, the `id` column is a [[ColumnVector]] over its Arrow vector that is
- * not an [[ArrowColumnVector]].
+ * not an [[ArrowColumnVector]]. If `emptyBatches` is true, the reader also returns batches without
+ * rows, before the first batch, after half of the batches and after the last one.
  */
 private class ArrowBackedPartitionReader(
     start: Int,
     end: Int,
     batchSize: Int,
-    arrowIdColumn: Boolean = true)
+    arrowIdColumn: Boolean = true,
+    emptyBatches: Boolean = false)
   extends PartitionReader[ColumnarBatch] {
 
   private var current = start
+  // The positions before which the reader returns a batch without rows.
+  private val emptyBatchPositions = if (emptyBatches) {
+    scala.collection.mutable.Set(start, start + (end - start) / batchSize / 2 * batchSize, end)
+  } else {
+    scala.collection.mutable.Set.empty[Int]
+  }
   private var currentBatch: ColumnarBatch = _
 
   // Single allocator for the entire partition reader lifetime.
-  // Arrow vectors from earlier batches may still be referenced by
-  // downstream operators (e.g., pass-through column queue), so we
-  // must NOT close the allocator until the task completes.
+  // The vectors of the returned batches are closed when the task
+  // completes, so we must NOT close the allocator until then.
   private val allocator: BufferAllocator =
     ArrowUtils.rootAllocator.newChildAllocator(
       s"arrow-test-reader-$start", 0, Long.MaxValue)
@@ -290,9 +304,9 @@ private class ArrowBackedPartitionReader(
     new java.util.ArrayList[ColumnarBatch]()
   private var numReleased = 0
 
-  // The consumer may still hold the returned batches, even past the close of the reader, so they
-  // are closed when the task completes. A pipelined Python writer that reads them is stopped by a
-  // pre-completion listener, which runs before this one.
+  // A consumer that stops early does not release the batches, so they are closed when the task
+  // completes. A pipelined Python writer that reads them is stopped by a pre-completion listener,
+  // which runs before this one.
   TaskContext.get().addTaskCompletionListener[Unit] { _ =>
     allBatches.synchronized {
       allBatches.forEach(_.close())
@@ -343,9 +357,13 @@ private class ArrowBackedPartitionReader(
   }
 
   override def next(): Boolean = {
-    if (current >= end) return false
-
-    val count = math.min(batchSize, end - current)
+    val count = if (emptyBatchPositions.remove(current)) {
+      0
+    } else if (current >= end) {
+      return false
+    } else {
+      math.min(batchSize, end - current)
+    }
 
     // Create Arrow vectors
     val idVector = createIntVector(allocator, "id", count)
@@ -354,7 +372,7 @@ private class ArrowBackedPartitionReader(
     val dataVector = createLongStringVector(
       allocator, "data", count)
 
-    // Wrap in ArrowColumnVector
+    // Wrap in ArrowColumnVectors
     val columns: Array[ColumnVector] = Array(
       if (arrowIdColumn) {
         new ReleaseCountingArrowColumnVector(idVector)
@@ -378,7 +396,7 @@ private class ArrowBackedPartitionReader(
 
   override def get(): ColumnarBatch = currentBatch
 
-  // The consumer may still hold the returned batches, which are closed when the task completes.
+  // The returned batches are closed when the task completes.
   override def close(): Unit = {
     currentBatch = null
   }

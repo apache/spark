@@ -2623,7 +2623,7 @@ object SQLConf {
       .doc("When this config is set to true, join is tried to be pushed down" +
         "for DSv2 data sources in V2ScanRelationPushdown optimization rule.")
       .booleanConf
-      .createWithDefault(false)
+      .createWithDefault(Utils.isTesting)
 
   // This is used to set the default data source
   val DEFAULT_DATA_SOURCE_NAME = buildConf("spark.sql.sources.default")
@@ -4556,6 +4556,15 @@ object SQLConf {
       .booleanConf
       .createWithDefault(true)
 
+  val ENABLE_SORT_MERGE_AS_OF_JOIN_CODEGEN =
+    buildConf("spark.sql.codegen.join.sortMergeAsOfJoin.enabled")
+      .internal()
+      .doc("When true, enable code-gen for backward and forward sort-merge AS-OF join.")
+      .version("4.4.0")
+      .withBindingPolicy(ConfigBindingPolicy.NOT_APPLICABLE)
+      .booleanConf
+      .createWithDefault(true)
+
   val MAX_NESTED_VIEW_DEPTH =
     buildConf("spark.sql.view.maxNestedViewDepth")
       .internal()
@@ -5680,8 +5689,7 @@ object SQLConf {
         "the columnar-based operator implemented by third-party libraries. A batch that " +
         "Arrow cannot slice, e.g. one with a fixed-width column of 2 GiB or more, is sent " +
         "as a whole. " +
-        "applyInPandasWithState, Arrow Python UDTFs and Arrow Python UDFs that take " +
-        "columnar input directly ignore this config.")
+        "applyInPandasWithState and Arrow Python UDTFs ignore this config.")
       .version("4.1.0")
       .internal()
       .intConf
@@ -5699,8 +5707,7 @@ object SQLConf {
         "happen, but if in extreme case that even one record is still larger than this value, " +
         "Spark will create a batch with one record. A batch that Arrow cannot slice, e.g. one " +
         "with a fixed-width column of 2 GiB or more, is sent as a whole. " +
-        "applyInPandasWithState, Arrow Python UDTFs and Arrow Python UDFs that " +
-        "take columnar input directly ignore this config.")
+        "applyInPandasWithState and Arrow Python UDTFs ignore this config.")
       .version("4.1.0")
       .internal()
       .bytesConf(ByteUnit.BYTE)
@@ -5754,15 +5761,12 @@ object SQLConf {
 
   val ARROW_PYSPARK_UDF_COLUMNAR_INPUT_ENABLED =
     buildConf("spark.sql.execution.arrow.pythonUDF.columnarInput.enabled")
-      .doc("When true, Arrow-based Python UDFs (pandas UDFs) can accept " +
-        "columnar input directly from upstream operators that produce " +
-        "Arrow-backed ColumnarBatch (e.g., DataSource V2 connectors), " +
-        "bypassing the ColumnarToRow and ArrowWriter conversion. " +
-        "This optimization reduces data transfer overhead between " +
-        "the JVM and Python worker processes. It keeps the columns that the UDFs pass " +
-        "through until the results of their batch come back from Python, so it requires " +
-        "an upstream operator whose batches stay valid until then, which a columnar " +
-        "reader does not promise.")
+      .doc("When true, Arrow-based Python UDFs (pandas UDFs) accept columnar input " +
+        "from upstream operators that produce ColumnarBatch. If the inputs of the UDFs " +
+        "are plain column references, those of Arrow-backed batches are written to " +
+        "Python directly, bypassing the ColumnarToRow and ArrowWriter conversion. The " +
+        "columns that the UDFs pass through are still converted to rows and back, " +
+        "which can cost more than leaving this disabled.")
       .version("4.2.0")
       .withBindingPolicy(ConfigBindingPolicy.SESSION)
       .booleanConf
