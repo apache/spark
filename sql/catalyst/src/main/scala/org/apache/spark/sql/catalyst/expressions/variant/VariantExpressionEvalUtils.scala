@@ -49,9 +49,9 @@ object VariantExpressionEvalUtils {
         input.toString, allowDuplicateKeys, validateUnicodeInJsonParsing)
       new VariantVal(v.getValue, v.getMetadata)
     } catch {
-      case _: VariantSizeLimitException =>
+      case e: VariantSizeLimitException =>
         parseJsonFailure(QueryExecutionErrors
-          .variantSizeLimitError(VariantUtil.SIZE_LIMIT, "parse_json"))
+          .variantSizeLimitError(VariantUtil.SIZE_LIMIT, "parse_json", e))
       case NonFatal(e) =>
         parseJsonFailure(QueryExecutionErrors.malformedRecordsDetectedInRecordParsingError(
           input.toString, e))
@@ -145,8 +145,10 @@ object VariantExpressionEvalUtils {
 
   /**
    * Insert `value` into `input` at `javaSegments`. `path` is the source string used in error
-   * messages. The cast and insert share one try, so any size overflow maps to `VARIANT_SIZE_LIMIT`
-   * and a type mismatch maps to `VARIANT_PATH_TYPE_MISMATCH`. When `failOnError` is false (the
+   * messages. `value` is cast to a variant first, and that cast reports its own size overflow with
+   * `functionName`. The catch below only covers the insert: a size overflow there maps to
+   * `VARIANT_SIZE_LIMIT` and a type mismatch maps to `VARIANT_PATH_TYPE_MISMATCH`. When
+   * `failOnError` is false (the
    * `try_variant_insert` mode), a duplicate key or path type mismatch returns null instead of
    * throwing; a size overflow (and a malformed path, rejected earlier during parsing) is still
    * raised.
@@ -174,8 +176,8 @@ object VariantExpressionEvalUtils {
         throw QueryExecutionErrors.variantPathTypeMismatch(
           path, renderVariantPath(javaSegments.take(e.depth), legacyPathBackslashAsLiteral),
           functionName)
-      case _: VariantSizeLimitException =>
-        throw QueryExecutionErrors.variantSizeLimitError(VariantUtil.SIZE_LIMIT, functionName)
+      case e: VariantSizeLimitException =>
+        throw QueryExecutionErrors.variantSizeLimitError(VariantUtil.SIZE_LIMIT, functionName, e)
     }
   }
 
@@ -196,8 +198,10 @@ object VariantExpressionEvalUtils {
 
   /**
    * Set `input` at `javaSegments` to `value`. `path` is the source string used in error messages.
-   * The cast and set share one try, so any size overflow maps to `VARIANT_SIZE_LIMIT` and a type
-   * mismatch maps to `VARIANT_PATH_TYPE_MISMATCH`. When `createIfMissing` is false, a missing
+   * `value` is cast to a variant first, and that cast reports its own size overflow with
+   * `functionName`. The catch below only covers the set: a size overflow there maps to
+   * `VARIANT_SIZE_LIMIT` and a type mismatch maps to `VARIANT_PATH_TYPE_MISMATCH`. When
+   * `createIfMissing` is false, a missing
    * key/index leaves the variant unchanged. When `failOnError` is false (the `try_variant_set`
    * mode), a path type mismatch returns null instead of throwing; a size overflow (and a malformed
    * path, rejected earlier during parsing) is still raised.
@@ -224,8 +228,8 @@ object VariantExpressionEvalUtils {
         throw QueryExecutionErrors.variantPathTypeMismatch(
           path, renderVariantPath(javaSegments.take(e.depth), legacyPathBackslashAsLiteral),
           functionName)
-      case _: VariantSizeLimitException =>
-        throw QueryExecutionErrors.variantSizeLimitError(VariantUtil.SIZE_LIMIT, functionName)
+      case e: VariantSizeLimitException =>
+        throw QueryExecutionErrors.variantSizeLimitError(VariantUtil.SIZE_LIMIT, functionName, e)
     }
   }
 
@@ -247,9 +251,11 @@ object VariantExpressionEvalUtils {
 
   /**
    * Append `value` to the array in `input` at `javaSegments`. `path` is the source string used in
-   * error messages. `value` is cast to a variant first; a size overflow maps to
-   * `VARIANT_SIZE_LIMIT` and a target that is not an array (or an incompatible path segment) maps
-   * to `VARIANT_PATH_TYPE_MISMATCH`. When `failOnError` is false (the `try_variant_array_append`
+   * error messages. `value` is cast to a variant first, and that cast reports its own size
+   * overflow with `functionName`. The catch below only covers the append: a size overflow there
+   * maps to `VARIANT_SIZE_LIMIT` and a target that is not an array (or an incompatible path
+   * segment) maps to `VARIANT_PATH_TYPE_MISMATCH`. When `failOnError` is false (the
+   * `try_variant_array_append`
    * mode), a path type mismatch returns null instead of throwing; a size overflow (and a malformed
    * path, rejected earlier during parsing) is still raised.
    */
@@ -274,8 +280,8 @@ object VariantExpressionEvalUtils {
         throw QueryExecutionErrors.variantPathTypeMismatch(
           path, renderVariantPath(javaSegments.take(e.depth), legacyPathBackslashAsLiteral),
           functionName)
-      case _: VariantSizeLimitException =>
-        throw QueryExecutionErrors.variantSizeLimitError(VariantUtil.SIZE_LIMIT, functionName)
+      case e: VariantSizeLimitException =>
+        throw QueryExecutionErrors.variantSizeLimitError(VariantUtil.SIZE_LIMIT, functionName, e)
     }
   }
 
@@ -320,58 +326,65 @@ object VariantExpressionEvalUtils {
     new VariantVal(out.getValue, out.getMetadata)
   }
 
-  /** Cast a Spark value from `dataType` into the variant type. */
-  def castToVariant(input: Any, dataType: DataType): VariantVal =
-    castToVariant(input, dataType, "cast")
-
   /**
-   * Cast a Spark value from `dataType` into the variant type. A result over the size limit raises
-   * `VARIANT_SIZE_LIMIT` with `functionName`.
+   * Run `write` against a new builder and return the finished variant. A result over the size
+   * limit, in either the value or the metadata, raises `VARIANT_SIZE_LIMIT` with `functionName`.
    */
-  def castToVariant(input: Any, dataType: DataType, functionName: String): VariantVal = {
+  private def buildVariantVal(functionName: String)(write: VariantBuilder => Unit): VariantVal = {
     // Enforce strict check because it is illegal for input struct/map/variant to contain duplicate
     // keys.
     val builder = new VariantBuilder(false)
     try {
-      buildVariant(builder, input, dataType)
+      write(builder)
       val v = builder.result()
       new VariantVal(v.getValue, v.getMetadata)
     } catch {
-      case _: VariantSizeLimitException =>
-        throw QueryExecutionErrors.variantSizeLimitError(VariantUtil.SIZE_LIMIT, functionName)
+      case e: VariantSizeLimitException =>
+        throw QueryExecutionErrors.variantSizeLimitError(VariantUtil.SIZE_LIMIT, functionName, e)
     }
   }
+
+  /**
+   * Cast a Spark value from `dataType` into the variant type. `functionName` is reported in the
+   * `VARIANT_SIZE_LIMIT` error.
+   */
+  def castToVariant(input: Any, dataType: DataType, functionName: String): VariantVal =
+    buildVariantVal(functionName)(buildVariant(_, input, dataType))
 
   /**
    * Build a variant object directly from a keys array and a values array, without materializing an
    * intermediate map. Keys must be non-null strings and the two arrays must have equal length. A
    * null key raises `NULL_MAP_KEY`, a duplicate key raises `VARIANT_DUPLICATE_KEY` (matching
-   * to_variant_object), and null values are kept as variant null.
+   * to_variant_object), null values are kept as variant null, and a result over the size limit
+   * raises `VARIANT_SIZE_LIMIT` with `functionName`.
    */
-  def variantFromArrays(keys: ArrayData, values: ArrayData, valueType: DataType): VariantVal = {
+  def variantFromArrays(
+      keys: ArrayData,
+      values: ArrayData,
+      valueType: DataType,
+      functionName: String): VariantVal = {
     if (keys.numElements() != values.numElements()) {
       // Reuse the same error map_from_arrays raises for a keys/values length mismatch.
       throw QueryExecutionErrors.mapDataKeyArrayLengthDiffersFromValueArrayLengthError()
     }
-    val builder = new VariantBuilder(false)
-    val start = builder.getWritePos
-    val numElements = keys.numElements()
-    val fields = new java.util.ArrayList[VariantBuilder.FieldEntry](numElements)
-    var i = 0
-    while (i < numElements) {
-      if (keys.isNullAt(i)) {
-        throw QueryExecutionErrors.nullAsMapKeyNotAllowedError()
+    buildVariantVal(functionName) { builder =>
+      val start = builder.getWritePos
+      val numElements = keys.numElements()
+      val fields = new java.util.ArrayList[VariantBuilder.FieldEntry](numElements)
+      var i = 0
+      while (i < numElements) {
+        if (keys.isNullAt(i)) {
+          throw QueryExecutionErrors.nullAsMapKeyNotAllowedError()
+        }
+        val key = keys.getUTF8String(i).toString
+        val id = builder.addKey(key)
+        fields.add(new VariantBuilder.FieldEntry(key, id, builder.getWritePos - start))
+        val value = if (values.isNullAt(i)) null else values.get(i, valueType)
+        buildVariant(builder, value, valueType)
+        i += 1
       }
-      val key = keys.getUTF8String(i).toString
-      val id = builder.addKey(key)
-      fields.add(new VariantBuilder.FieldEntry(key, id, builder.getWritePos - start))
-      val value = if (values.isNullAt(i)) null else values.get(i, valueType)
-      buildVariant(builder, value, valueType)
-      i += 1
+      builder.finishWritingObject(start, fields)
     }
-    builder.finishWritingObject(start, fields)
-    val v = builder.result()
-    new VariantVal(v.getValue, v.getMetadata)
   }
 
   /**
@@ -379,10 +392,14 @@ object VariantExpressionEvalUtils {
    * intermediate map. Keys must be non-null strings. A null entry makes the whole result null,
    * and this is checked for every entry before any value is converted, so a null entry always
    * dominates a conversion failure in an earlier entry (matching `map_from_entries`). A null key
-   * raises `NULL_MAP_KEY`, a duplicate key raises `VARIANT_DUPLICATE_KEY`, and null values are
-   * kept as variant null.
+   * raises `NULL_MAP_KEY`, a duplicate key raises `VARIANT_DUPLICATE_KEY`, null values are kept
+   * as variant null, and a result over the size limit raises `VARIANT_SIZE_LIMIT` with
+   * `functionName`.
    */
-  def variantFromEntries(entries: ArrayData, valueType: DataType): VariantVal = {
+  def variantFromEntries(
+      entries: ArrayData,
+      valueType: DataType,
+      functionName: String): VariantVal = {
     val numElements = entries.numElements()
     var i = 0
     while (i < numElements) {
@@ -392,25 +409,24 @@ object VariantExpressionEvalUtils {
       i += 1
     }
 
-    val builder = new VariantBuilder(false)
-    val start = builder.getWritePos
-    val fields = new java.util.ArrayList[VariantBuilder.FieldEntry](numElements)
-    i = 0
-    while (i < numElements) {
-      val entry = entries.getStruct(i, 2)
-      if (entry.isNullAt(0)) {
-        throw QueryExecutionErrors.nullAsMapKeyNotAllowedError()
+    buildVariantVal(functionName) { builder =>
+      val start = builder.getWritePos
+      val fields = new java.util.ArrayList[VariantBuilder.FieldEntry](numElements)
+      i = 0
+      while (i < numElements) {
+        val entry = entries.getStruct(i, 2)
+        if (entry.isNullAt(0)) {
+          throw QueryExecutionErrors.nullAsMapKeyNotAllowedError()
+        }
+        val key = entry.getUTF8String(0).toString
+        val id = builder.addKey(key)
+        fields.add(new VariantBuilder.FieldEntry(key, id, builder.getWritePos - start))
+        val value = if (entry.isNullAt(1)) null else entry.get(1, valueType)
+        buildVariant(builder, value, valueType)
+        i += 1
       }
-      val key = entry.getUTF8String(0).toString
-      val id = builder.addKey(key)
-      fields.add(new VariantBuilder.FieldEntry(key, id, builder.getWritePos - start))
-      val value = if (entry.isNullAt(1)) null else entry.get(1, valueType)
-      buildVariant(builder, value, valueType)
-      i += 1
+      builder.finishWritingObject(start, fields)
     }
-    builder.finishWritingObject(start, fields)
-    val v = builder.result()
-    new VariantVal(v.getValue, v.getMetadata)
   }
 
   /** Returns `true` if a data type is or has a child variant type. */

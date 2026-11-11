@@ -1177,8 +1177,11 @@ class VariantExpressionSuite extends SparkFunSuite with ExpressionEvalHelper {
     checkFailure(Literal.create(Literal.create(Period.ofMonths(0))), toVariantObject = true)
     checkFailure(Map(1 -> 1), toVariantObject = true)
 
-    // A result over the size limit raises VARIANT_SIZE_LIMIT naming the function.
+    // A result over the size limit raises VARIANT_SIZE_LIMIT naming the function. The string
+    // overflows the value buffer while it is written; the map overflows the key dictionary, which
+    // is only checked when the builder produces its result.
     val tooBig = "x".repeat(16 * 1024 * 1024)
+    val bigKeys = Map("a".repeat(9 * 1024 * 1024) -> 1, "b".repeat(9 * 1024 * 1024) -> 2)
     checkErrorInExpression[SparkRuntimeException](
       Cast(Literal(tooBig), VariantType, evalMode = EvalMode.ANSI),
       "VARIANT_SIZE_LIMIT",
@@ -1187,6 +1190,12 @@ class VariantExpressionSuite extends SparkFunSuite with ExpressionEvalHelper {
       ToVariantObject(Literal.create(Array(tooBig))),
       "VARIANT_SIZE_LIMIT",
       Map("sizeLimit" -> "16.0 MiB", "functionName" -> "`to_variant_object`"))
+    checkErrorInExpression[SparkRuntimeException](
+      ToVariantObject(Literal.create(bigKeys)),
+      "VARIANT_SIZE_LIMIT",
+      Map("sizeLimit" -> "16.0 MiB", "functionName" -> "`to_variant_object`"))
+    // try_cast returns null instead.
+    checkEvaluation(Cast(Literal(tooBig), VariantType, evalMode = EvalMode.TRY), null)
   }
 
   test("SPARK-58672: validate char/varchar input types in to_variant_object") {
@@ -1275,6 +1284,17 @@ class VariantExpressionSuite extends SparkFunSuite with ExpressionEvalHelper {
     checkErrorInExpression[SparkRuntimeException](
       keysValues(Array("a", "b"), Array(1), IntegerType),
       "_LEGACY_ERROR_TEMP_2128", Map.empty[String, String])
+
+    // A result over the size limit raises VARIANT_SIZE_LIMIT naming the function.
+    val tooBig = "x".repeat(16 * 1024 * 1024)
+    checkErrorInExpression[SparkRuntimeException](
+      keysValues(Array("a"), Array(tooBig), StringType),
+      "VARIANT_SIZE_LIMIT",
+      Map("sizeLimit" -> "16.0 MiB", "functionName" -> "`variant_from_arrays`"))
+    checkErrorInExpression[SparkRuntimeException](
+      entriesOf(Array(Row("a", tooBig)), StringType),
+      "VARIANT_SIZE_LIMIT",
+      Map("sizeLimit" -> "16.0 MiB", "functionName" -> "`variant_from_entries`"))
   }
 
   test("schema_of_variant - unknown type") {

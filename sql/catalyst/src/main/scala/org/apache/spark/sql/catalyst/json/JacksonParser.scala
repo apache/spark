@@ -161,8 +161,9 @@ class JacksonParser(
         parser, variantAllowDuplicateKeys, variantValidateUnicodeInJsonParsing)
       new VariantVal(v.getValue, v.getMetadata)
     } catch {
-      case _: VariantSizeLimitException =>
-        throw QueryExecutionErrors.variantSizeLimitError(VariantUtil.SIZE_LIMIT, "JacksonParser")
+      case e: VariantSizeLimitException =>
+        throw QueryExecutionErrors.variantSizeLimitError(
+          VariantUtil.SIZE_LIMIT, "JacksonParser", e)
     }
   }
 

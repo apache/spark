@@ -3377,12 +3377,13 @@ private[sql] object QueryExecutionErrors extends QueryErrorsBase with ExecutionE
         "invalidValue" -> pos.toString))
   }
 
-  def variantSizeLimitError(sizeLimit: Int, functionName: String): Throwable = {
+  def variantSizeLimitError(sizeLimit: Int, functionName: String, cause: Throwable): Throwable = {
     new SparkRuntimeException(
       errorClass = "VARIANT_SIZE_LIMIT",
       messageParameters = Map(
         "sizeLimit" -> Utils.bytesToString(sizeLimit),
-        "functionName" -> toSQLId(functionName)))
+        "functionName" -> toSQLId(functionName)),
+      cause = cause)
   }
 
   def invalidVariantCast(value: String, dataType: DataType): Throwable = {
