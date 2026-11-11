@@ -543,6 +543,12 @@ class SQLFunctionSuite extends SharedSparkSession {
         sql(s"CREATE OR REPLACE FUNCTION perm_q_tbl() RETURNS TABLE (a INT) RETURN SELECT $call")
         checkAnswer(sql("SELECT * FROM perm_q_tbl()"), Row(1))
       }
+      // A system-qualified built-in table function, too.
+      Seq("builtin.range(3)", "system.builtin.range(3)").foreach { call =>
+        sql(s"CREATE OR REPLACE FUNCTION perm_q_tbl() RETURNS TABLE (id BIGINT) " +
+          s"RETURN SELECT * FROM $call")
+        checkAnswer(sql("SELECT * FROM perm_q_tbl()"), Seq(Row(0), Row(1), Row(2)))
+      }
     }
     // A catalog-qualified persistent call works too, and is checked for cyclic references.
     withUserDefinedFunction("perm_in" -> false, "perm_out" -> false) {
