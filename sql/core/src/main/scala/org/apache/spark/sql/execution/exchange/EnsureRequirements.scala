@@ -211,8 +211,22 @@ case class EnsureRequirements(
       // qualify. Only the branch that shuffles a child reads these, hence `lazy`.
       // A child with a member built from a reduced scan only looks compatible on the transform
       // the scan still reports, so it is shuffled onto the best spec instead.
+      // Compatible transforms can report the same raw partition values for different keys.
+      // `isCompatibleWith` accepts that, so a child whose member uses another function is
+      // shuffled onto the best spec instead.
+      def sameFunctions(a: ShuffleSpec, b: ShuffleSpec): Boolean = (a, b) match {
+        case (x: KeyGroupedShuffleSpec, y: KeyGroupedShuffleSpec) =>
+          x.isCompatibleWith(y) &&
+            x.partitioning.expressions.zip(y.partitioning.expressions).forall {
+              case (l: TransformExpression, r: TransformExpression) => l.isSameFunction(r)
+              case _ => true
+            }
+        case (ShuffleSpecCollection(xs), _) => xs.exists(sameFunctions(_, b))
+        case (_, ShuffleSpecCollection(ys)) => ys.exists(sameFunctions(a, _))
+        case _ => a.isCompatibleWith(b)
+      }
       lazy val matchedIndexes = bestSpecOpt.toSeq.flatMap { best =>
-        childrenIndexes.filter(i => best.isCompatibleWith(specs(i)) &&
+        childrenIndexes.filter(i => sameFunctions(best, specs(i)) &&
           !hasMemberBuiltFromReducedScan(children(i), specs(i)))
       }
       lazy val bestMemberOpt = bestSpecOpt.flatMap { best =>

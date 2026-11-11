@@ -4581,6 +4581,53 @@ class KeyGroupedPartitioningSuite extends DistributionAndOrderingSuiteBase {
     }
   }
 
+  test("SPARK-60460: nested SPJ shuffles when compatible transforms share partition values") {
+    val idCol = Array(Column.create("id", LongType))
+    createTable("pa12", idCol, Array(bucket(12, "id")))
+    createTable("pd", idCol, Array.empty)
+    createTable("pb8", idCol, Array(bucket(8, "id")))
+    // 12 is bucket 0 on pa12 and bucket 4 on pb8. The other ids make both scans report 0-7.
+    val ids = (0L to 7L) :+ 12L
+    Seq("pa12", "pd", "pb8").foreach { t =>
+      sql(s"INSERT INTO testcat.ns.$t VALUES ${ids.map(i => s"($i)").mkString(", ")}")
+    }
+
+    // The two partitioned scans report the same raw values and tie on partition count, so the
+    // first child becomes the best spec. A nested join on the left makes that spec a collection.
+    // A nested join on the right makes the plain scan the best spec. Both arms have to shuffle.
+    val queries = Seq(
+      """
+        |SELECT /*+ MERGE(pa12, pd, pb8) */ pa12.id, pd.id, pb8.id
+        |FROM testcat.ns.pa12 JOIN testcat.ns.pd ON pa12.id = pd.id
+        |JOIN testcat.ns.pb8 ON pa12.id = pb8.id
+        |""".stripMargin,
+      """
+        |SELECT /*+ MERGE(pb8, pd, pa12) */ pb8.id, pd.id, pa12.id
+        |FROM testcat.ns.pb8 JOIN testcat.ns.pd ON pb8.id = pd.id
+        |JOIN testcat.ns.pa12 ON pb8.id = pa12.id
+        |""".stripMargin,
+      """
+        |SELECT /*+ MERGE(pa12, pb8, pd) */ pa12.id, pb8.id, pd.id
+        |FROM testcat.ns.pa12 JOIN (testcat.ns.pb8 JOIN testcat.ns.pd ON pb8.id = pd.id)
+        |ON pa12.id = pb8.id
+        |""".stripMargin)
+
+    Seq(true, false).foreach { aqe =>
+      withSQLConf(
+        SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key -> "-1",
+        SQLConf.ADAPTIVE_EXECUTION_ENABLED.key -> aqe.toString,
+        SQLConf.V2_BUCKETING_SHUFFLE_ENABLED.key -> "true",
+        SQLConf.V2_BUCKETING_ALLOW_COMPATIBLE_TRANSFORMS.key -> "true") {
+        queries.foreach { query =>
+          val df = sql(query)
+          checkAnswer(df, ids.map(i => Row(i, i, i)))
+          assert(collectAllShuffles(df.queryExecution.executedPlan).size == 2,
+            s"expected two shuffles, got:\n${df.queryExecution.executedPlan}")
+        }
+      }
+    }
+  }
+
   test("SPARK-48012: one-side shuffle with partition transforms") {
     val items_partitions = Array(bucket(2, "id"), identity("arrive_time"))
     val items_partitions2 = Array(identity("arrive_time"), bucket(2, "id"))
