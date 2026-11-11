@@ -1883,7 +1883,7 @@ Apart from these, the following properties are also available, and may be useful
     If the Spark UI should be served through another front-end reverse proxy, this is the URL
     for accessing the Spark master UI through that reverse proxy.
     This is useful when running proxy for authentication e.g. an OAuth proxy. The URL may contain
-    a path prefix, like <code>http://mydomain.com/path/to/spark/</code>, allowing you to serve the
+    a path prefix, like <code>http://example.com/path/to/spark/</code>, allowing you to serve the
     UI for multiple Spark clusters and other web applications through the same virtual host and
     port.
     Normally, this should be an absolute URL including scheme (http/https), host and port.
@@ -1895,8 +1895,8 @@ Apart from these, the following properties are also available, and may be useful
     <ul>
       <li>stripping a path prefix before forwarding the request,</li>
       <li>rewriting redirects which point directly to the Spark master,</li>
-      <li>redirecting access from <code>http://mydomain.com/path/to/spark</code> to
-      <code>http://mydomain.com/path/to/spark/</code> (trailing slash after path prefix); otherwise
+      <li>redirecting access from <code>http://example.com/path/to/spark</code> to
+      <code>http://example.com/path/to/spark/</code> (trailing slash after path prefix); otherwise
       relative links on the master page do not work correctly.</li>
     </ul>
     This setting affects all the workers and application UIs running in the cluster and must be set
