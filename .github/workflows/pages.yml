@@ -46,28 +46,36 @@ jobs:
         uses: actions/github-script@v9
         with:
           script: |
+            let latest;
             for await (const {data} of github.paginate.iterator(
               github.rest.actions.listArtifactsForRepo,
-              {...context.repo, name: 'docs-preview', per_page: 100}
+              {...context.repo, name: 'docs-preview-master', per_page: 100}
             )) {
-              const artifact = data.find(artifact =>
-                !artifact.expired && artifact.workflow_run?.head_branch === 'master');
-              if (artifact) {
-                core.setOutput('run-id', artifact.workflow_run.id);
-                core.info(`Deploying documentation from ${artifact.workflow_run.head_sha}`);
-                return;
+              for (const artifact of data) {
+                if (!artifact.expired && artifact.workflow_run?.head_branch === 'master' &&
+                    (!latest || artifact.created_at > latest.created_at ||
+                     (artifact.created_at === latest.created_at && artifact.id > latest.id))) {
+                  latest = artifact;
+                }
               }
             }
-            core.setFailed('No unexpired master documentation preview artifact is available.');
+            if (!latest) {
+              core.setFailed('No unexpired master documentation preview artifact is available.');
+              return;
+            }
+            core.setOutput('artifact-id', latest.id);
+            core.setOutput('run-id', latest.workflow_run.id);
+            core.info(`Deploying documentation built at ${latest.created_at}` +
+              ` from ${latest.workflow_run.head_sha}`);
       - name: Download documentation preview
         uses: actions/download-artifact@v8
         with:
-          name: docs-preview
+          artifact-ids: ${{ steps.preview.outputs.artifact-id }}
           path: .
           github-token: ${{ secrets.GITHUB_TOKEN }}
           run-id: ${{ steps.preview.outputs.run-id }}
       - name: Extract documentation preview
-        run: tar xjf site.tar.bz2
+        run: tar xjf site-*.tar.bz2
       - name: Setup Pages
         uses: actions/configure-pages@v6
       - name: Upload artifact

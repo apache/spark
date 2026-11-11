@@ -978,9 +978,6 @@ jobs:
       PYSPARK_DRIVER_PYTHON: python3.12
       PYSPARK_PYTHON: python3.12
       GITHUB_PREV_SHA: ${{ github.event.before }}
-      PUBLISH_DOCS_PREVIEW: >-
-        ${{ github.repository == 'apache/spark' && github.event_name == 'push' &&
-            github.ref == 'refs/heads/master' }}
     container:
       image: ${{ needs.precondition.outputs.image_docs_url_link }}
     steps:
@@ -1009,7 +1006,7 @@ jobs:
         cd docs
         bundle install --retry=100
     - name: Prepare documentation preview
-      if: env.PUBLISH_DOCS_PREVIEW == 'true'
+      if: github.repository == 'apache/spark' && inputs.branch == 'master'
       run: |
         sed -i 's/^SPARK_VERSION:.*/SPARK_VERSION: In-Progress/' docs/_config.yml
         sed -i 's/^SPARK_VERSION_SHORT:.*/SPARK_VERSION_SHORT: In-Progress/' docs/_config.yml
@@ -1025,7 +1022,7 @@ jobs:
           # Skip PySpark and SparkR docs while keeping Scala/Java/SQL docs
           pyspark_modules=`cd dev && python3.12 -c "import sparktestsupport.modules as m; print(','.join(m.name for m in m.all_modules if m.name.startswith('pyspark')))"`
           # The published preview must include Python API docs even without Python changes.
-          if [ "$PUBLISH_DOCS_PREVIEW" != "true" ] &&
+          if [ "$GITHUB_REPOSITORY" != "apache/spark" ] &&
               [ `./dev/is-changed.py -m $pyspark_modules` = false ]; then
             export SKIP_PYTHONDOC=1
           fi
@@ -1034,15 +1031,25 @@ jobs:
         cd docs
         bundle exec jekyll build
     - name: Tar documentation
-      if: github.repository != 'apache/spark' || env.PUBLISH_DOCS_PREVIEW == 'true'
-      run: tar cjf site.tar.bz2 docs/_site
+      id: documentation
+      env:
+        DOCS_BRANCH: ${{ inputs.branch }}
+      run: |
+        archive="site-$(date -u +%Y%m%dT%H%M%SZ)-$GITHUB_RUN_ID-$GITHUB_RUN_ATTEMPT.tar.bz2"
+        tar cjf "$archive" docs/_site
+        echo "archive=$archive" >> "$GITHUB_OUTPUT"
+        if [ "$GITHUB_REPOSITORY" = "apache/spark" ]; then
+          branch=$(printf '%s' "$DOCS_BRANCH" | tr / -)
+          echo "name=docs-preview-$branch" >> "$GITHUB_OUTPUT"
+        else
+          echo "name=site" >> "$GITHUB_OUTPUT"
+        fi
     - name: Upload documentation
-      if: github.repository != 'apache/spark' || env.PUBLISH_DOCS_PREVIEW == 'true'
       uses: actions/upload-artifact@v7
       with:
-        name: ${{ env.PUBLISH_DOCS_PREVIEW == 'true' && 'docs-preview' || 'site' }}
-        path: site.tar.bz2
-        retention-days: ${{ env.PUBLISH_DOCS_PREVIEW == 'true' && 3 || 1 }}
+        name: ${{ steps.documentation.outputs.name }}
+        path: ${{ steps.documentation.outputs.archive }}
+        retention-days: 1
 
   # Any TPC-DS related updates on this job need to be applied to tpcds-1g-gen job of benchmark.yml as well
   tpcds-1g:
