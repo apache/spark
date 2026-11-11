@@ -23,6 +23,7 @@ import scala.math.BigDecimal.RoundingMode
 import org.apache.spark.sql.catalyst.expressions.{Alias, Attribute, AttributeMap, EmptyRow, Expression}
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.types.{DecimalType, _}
+import org.apache.spark.unsafe.types.TimestampNanosVal
 
 object EstimationUtils {
 
@@ -135,7 +136,19 @@ object EstimationUtils {
    */
   def toDouble(value: Any, dataType: DataType): Double = {
     dataType match {
-      case _: NumericType | DateType | TimestampType => value.toString.toDouble
+      case _: NumericType | DateType | TimestampType | TimestampNTZType =>
+        value.toString.toDouble
+      // TimestampNanosVal isn't a Long like the other datetime types, so it can't go through
+      // the toString/toDouble conversion above; use its epochMicros component, giving this
+      // estimation path the same microsecond resolution (and the same |epochMicros| <= 2^53
+      // exactness domain, ~1970 +/- 285 years) as the TimestampType/TimestampNTZType case
+      // above. A Double's 52-bit mantissa cannot also hold a distinguishable sub-microsecond
+      // fraction at realistic (i.e. any post-1970) timestamp magnitudes, so nanosWithinMicro is
+      // dropped here: distinct nanosecond values within the same microsecond are indistinguishable
+      // to CBO estimation and compare equal. This does not affect the persisted catalog
+      // statistic, which keeps full nanosecond precision (see CatalogColumnStat); true
+      // nanosecond-resolution CBO estimation is tracked separately in SPARK-57839.
+      case _: AnyTimestampNanoType => value.asInstanceOf[TimestampNanosVal].epochMicros.toDouble
       case BooleanType => if (value.asInstanceOf[Boolean]) 1 else 0
     }
   }
@@ -144,7 +157,11 @@ object EstimationUtils {
     dataType match {
       case BooleanType => double.toInt == 1
       case DateType => double.toInt
-      case TimestampType => double.toLong
+      case TimestampType | TimestampNTZType => double.toLong
+      case _: AnyTimestampNanoType =>
+        // Inverse of the toDouble encoding above. nanosWithinMicro isn't recoverable (toDouble
+        // never encoded it), so this always reconstructs a value truncated to the microsecond.
+        TimestampNanosVal.fromParts(double.toLong, 0.toShort)
       case ByteType => double.toByte
       case ShortType => double.toShort
       case IntegerType => double.toInt
