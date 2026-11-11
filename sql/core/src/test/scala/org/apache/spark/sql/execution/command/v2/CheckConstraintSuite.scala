@@ -276,6 +276,8 @@ class CheckConstraintSuite extends QueryTest with CommandSuiteBase with DDLComma
         "INTERVAL 2 DAYS"),
       ("TIMESTAMP", "CAST(TIME '23:59:59.999999' AS TIMESTAMP)", "current_timestamp()",
         "INTERVAL 1 DAY"),
+      ("TIMESTAMP_NTZ", "CAST(TIME '23:59:59.999999' AS TIMESTAMP_NTZ)", "localtimestamp()",
+        "INTERVAL 1 DAY"),
       ("TIMESTAMP_NTZ", "CAST('now' AS TIMESTAMP_NTZ)", "localtimestamp()", "INTERVAL 1 DAY"),
       ("DATE", "current_date()", "current_date()", "1"),
       ("DATE", "CAST('today' AS DATE)", "current_date()", "2")

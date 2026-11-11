@@ -22,7 +22,7 @@ import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.analysis.{AnalysisErrorAt, StoredExpressionFunctions, TypeCheckResult, UnresolvedException}
 import org.apache.spark.sql.catalyst.expressions.codegen.{Block, CodegenContext, ExprCode, FalseLiteral, TrueLiteral}
 import org.apache.spark.sql.catalyst.expressions.codegen.Block.BlockHelper
-import org.apache.spark.sql.catalyst.optimizer.{ComputeCurrentTime, ReplaceExpressions, SpecialDatetimeValues}
+import org.apache.spark.sql.catalyst.optimizer.{ReplaceExpressions, SpecialDatetimeValues}
 import org.apache.spark.sql.catalyst.parser.ParseException
 import org.apache.spark.sql.catalyst.trees.CurrentOrigin
 import org.apache.spark.sql.catalyst.trees.TreePattern.{CURRENT_LIKE, VARIABLE_REFERENCE}
@@ -31,7 +31,7 @@ import org.apache.spark.sql.connector.catalog.constraints.Constraint
 import org.apache.spark.sql.connector.expressions.FieldReference
 import org.apache.spark.sql.errors.QueryExecutionErrors
 import org.apache.spark.sql.internal.SQLConf
-import org.apache.spark.sql.types.{AbstractDataType, BooleanType, CharType, DataType, TimestampLTZNanosType, TimestampType}
+import org.apache.spark.sql.types.{AbstractDataType, BooleanType, CharType, DataType, TimestampFamily}
 
 trait TableConstraint extends Expression with Unevaluable {
   /** Convert to a data source v2 constraint */
@@ -181,11 +181,15 @@ case class CheckConstraint(
    * `spark.sql.legacy.freezeCurrentValuesInCheckConstraint`.
    */
   def withPredicateDecision(): CheckConstraint = if (omitPredicate.isDefined) this else {
+    // Computed only after the check for a user-defined function, since finding the reads of the
+    // current context evaluates constant strings.
+    lazy val replaced = ReplaceExpressions.replace(child)
+    lazy val readsCurrentContext = CheckConstraint.nodesReadingCurrentContext(replaced)
     copy(omitPredicate = Some(
       !SQLConf.get.getConf(SQLConf.FREEZE_CURRENT_VALUES_IN_CHECK_CONSTRAINT) &&
         StoredExpressionFunctions.findUserDefinedFunctionCall(child).isEmpty &&
-        !CheckConstraint.resolvesDifferentlyOnWrite(child) &&
-        CheckConstraint.readsCurrentContext(child) &&
+        !CheckConstraint.resolvesDifferentlyOnWrite(child, replaced, readsCurrentContext) &&
+        readsCurrentContext(replaced) &&
         CheckConstraint.readsAsOnWrite(condition)))
   }
 
@@ -246,20 +250,32 @@ case class CheckConstraint(
 
 object CheckConstraint {
   /**
-   * Whether `e`, with its `RuntimeReplaceable`s replaced, reads the current time, date, catalog,
-   * user and the like, which the optimizer replaces with their values. The CURRENT_LIKE pattern
-   * stands in for `ReplaceCurrentLike`, which needs a `CatalogManager`, and for the functions
-   * `ComputeCurrentTime` replaces. `ComputeCurrentTime` is still applied for the casts from TIME
-   * to a timestamp it rewrites, which carry no CURRENT_LIKE bit.
+   * Which nodes of `replaced`, an expression whose `RuntimeReplaceable`s are replaced, read the
+   * current time, date, catalog, user and the like, which the optimizer replaces with their
+   * values, found in one bottom-up pass. A node reads one if a node of its subtree is one of:
+   *  - a node with the CURRENT_LIKE pattern, which stands in for `ReplaceCurrentLike`, which needs
+   *    a `CatalogManager`, and for the functions `ComputeCurrentTime` replaces;
+   *  - a cast from TIME to a timestamp, which `ComputeCurrentTime` rewrites without that pattern;
+   *  - a cast that `castReadsCurrentDate`.
+   * The result answers by identity, so only for the nodes of `replaced` itself.
    */
-  private def readsCurrentContext(e: Expression): Boolean = {
-    val replaced = ReplaceExpressions.replace(e)
-    replaced.containsPattern(CURRENT_LIKE) ||
-      (ComputeCurrentTime.applyForExpression(replaced) ne replaced) ||
-      replaced.exists {
-        case c: Cast => castReadsCurrentDate(c)
+  private def nodesReadingCurrentContext(replaced: Expression): Expression => Boolean = {
+    val reading = java.util.Collections.newSetFromMap(
+      new java.util.IdentityHashMap[Expression, java.lang.Boolean]())
+    def visit(e: Expression): Boolean = {
+      // Every child is visited, so that each node that reads one is recorded.
+      val childReads = e.children.map(visit).contains(true)
+      val reads = childReads || e.containsPattern(CURRENT_LIKE) || (e match {
+        case c: Cast =>
+          Cast.isTimeToTimestampNTZ(c.child.dataType, c.dataType) ||
+            Cast.isTimeToTimestampLTZ(c.child.dataType, c.dataType) || castReadsCurrentDate(c)
         case _ => false
-      }
+      })
+      if (reads) reading.add(e)
+      reads
+    }
+    visit(replaced)
+    reading.contains
   }
 
   /**
@@ -270,10 +286,7 @@ object CheckConstraint {
    * from a VARIANT, or of a string that only the optimizer makes constant.
    */
   private def castReadsCurrentDate(cast: Cast): Boolean = {
-    val completesTime = cast.dataType match {
-      case TimestampType | _: TimestampLTZNanosType => true
-      case _ => false
-    }
+    val completesTime = TimestampFamily.isLtz(cast.dataType)
     (completesTime || SpecialDatetimeValues.rewrites(cast.dataType)) &&
       SpecialDatetimeValues.constantString(cast).exists { s =>
         SpecialDatetimeValues.readsCurrentDate(s, cast.dataType) ||
@@ -305,21 +318,21 @@ object CheckConstraint {
    * the time zone, such as `timestamp_seconds(0)`, and then keeps its predicate as before. A
    * user-defined function is rejected by `failIfCallsUserDefinedFunction`.
    */
-  private def resolvesDifferentlyOnWrite(e: Expression): Boolean = {
+  private def resolvesDifferentlyOnWrite(
+      e: Expression,
+      replaced: Expression,
+      readsCurrentContext: Expression => Boolean): Boolean = {
     e.containsPattern(VARIABLE_REFERENCE) ||
       e.references.exists { a =>
         val rawType = CharVarcharUtils.getRawType(a.metadata)
         rawType.exists(_.existsRecursively(_.isInstanceOf[CharType]))
       } ||
-      ReplaceExpressions.replace(e).exists {
+      replaced.exists {
         case c: Cast => c.foldable && c.needsTimeZone && !readsCurrentContext(c)
         case t: TimeZoneAwareExpression => t.foldable && !readsCurrentContext(t)
         // A typed literal, or a function such as `make_timestamp(DATE'2024-01-01', TIME'00:00')`
         // that the replacement turns into a call with the session time zone as an argument.
-        case x if x.foldable && x.dataType.existsRecursively {
-            case TimestampType | _: TimestampLTZNanosType => true
-            case _ => false
-          } =>
+        case x if x.foldable && x.dataType.existsRecursively(TimestampFamily.isLtz) =>
           !readsCurrentContext(x)
         case _ => false
       }
