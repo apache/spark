@@ -135,6 +135,56 @@ class FilterPushdownSuite extends PlanTest {
     comparePlans(optimized, originalQuery)
   }
 
+  test("SPARK-60980: a condition that can fail is not combined ahead of a non-deterministic " +
+    "or throwable one") {
+    // The divisions are built in ANSI mode, where they can fail, whatever the session's mode is.
+    def divide(l: Expression, r: Expression): Expression =
+      Divide(l, r, NumericEvalContext(EvalMode.ANSI))
+    Seq(Rand(0) > 0.1, IsNull(RaiseError(Literal("boom")))).foreach { blocker =>
+      val originalQuery =
+        testRelation
+          .where($"c" === 1)
+          .where(divide($"a", $"b") > 1 && blocker && divide($"b", $"a") > 1 && $"a" === 1)
+
+      val optimized = Optimize.execute(originalQuery.analyze)
+      val correctAnswer =
+        testRelation
+          .where($"c" === 1 && divide($"a", $"b") > 1 && $"a" === 1)
+          .where(blocker && divide($"b", $"a") > 1)
+          .analyze
+
+      comparePlans(optimized, correctAnswer)
+    }
+  }
+
+  test("SPARK-60882: a condition that can not fail is combined ahead of a non-deterministic " +
+    "or throwable one") {
+    // An addition or a division with ANSI mode off, a multiplication of doubles also with ANSI
+    // mode on, a substring and a string search with an explicit COLLATE can not fail, so they are
+    // combined with the filter below, as a comparison is.
+    val legacy = NumericEvalContext(EvalMode.LEGACY)
+    val ansi = NumericEvalContext(EvalMode.ANSI)
+    Seq(Rand(0) > 0.1, IsNull(RaiseError(Literal("boom")))).foreach { blocker =>
+      Seq[Expression](Add($"a", Literal(1), legacy) > 0, Divide($"b", $"a", legacy) > 1,
+          Multiply($"a".cast(DoubleType), Literal(1.1), ansi) > 100,
+          Substring($"a".cast(StringType), Literal(1), Literal(2)) === "1",
+          Contains(Collate($"a".cast(StringType), ResolvedCollation("UNICODE_CI")),
+            Substring($"b".cast(StringType), Literal(1), Literal(1)))
+      ).foreach { cannotFail =>
+        val originalQuery = testRelation
+          .where($"c" === 1)
+          .where(blocker && cannotFail)
+
+        val correctAnswer = testRelation
+          .where($"c" === 1 && cannotFail)
+          .where(blocker)
+          .analyze
+
+        comparePlans(Optimize.execute(originalQuery.analyze), correctAnswer)
+      }
+    }
+  }
+
   test("SPARK-16164: Filter pushdown should keep the ordering in the logical plan") {
     val originalQuery =
       testRelation
@@ -859,9 +909,9 @@ class FilterPushdownSuite extends PlanTest {
         val f = AttributeReference("f", IntegerType)()
         def evalPython(child: LogicalPlan): LogicalPlan =
           if (evalType == PythonEvalType.SQL_BATCHED_UDF) {
-            BatchEvalPython(Seq(pythonUDF), Seq(f), child)
+            BatchEvalPython(Seq(pythonUDF), child.output, Seq(f), child)
           } else {
-            ArrowEvalPython(Seq(pythonUDF), Seq(f), child, evalType)
+            ArrowEvalPython(Seq(pythonUDF), child.output, Seq(f), child, evalType)
           }
 
         // f > 5 cannot be pushed, so the throwable condition after it stays above too. b > 1

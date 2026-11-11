@@ -34,9 +34,11 @@ import org.apache.arrow.vector.types.pojo.{ArrowType, Field, FieldType, Schema}
 import org.apache.spark.{SparkArithmeticException, SparkException, TaskContextImpl}
 import org.apache.spark.sql.{AnalysisException, QueryTest, Row}
 import org.apache.spark.sql.catalyst.InternalRow
-import org.apache.spark.sql.catalyst.expressions.UnsafeProjection
+import org.apache.spark.sql.catalyst.expressions.{Contains, PredicateHelper, Rand, UnsafeProjection}
+import org.apache.spark.sql.catalyst.plans.logical.Filter
 import org.apache.spark.sql.connector.catalog.{Table, TableCapability, TableProvider}
-import org.apache.spark.sql.connector.expressions.Transform
+import org.apache.spark.sql.connector.expressions.{Expression => V2Expression, FieldReference, LiteralValue, Transform}
+import org.apache.spark.sql.connector.expressions.filter.Predicate
 import org.apache.spark.sql.connector.read.{InputPartition, PartitionReader, PartitionReaderFactory}
 import org.apache.spark.sql.connector.read.streaming.{ReadLimit, SupportsAdmissionControl}
 import org.apache.spark.sql.connector.write.{DataWriter, PhysicalWriteInfoImpl, WriterCommitMessage}
@@ -50,7 +52,7 @@ import org.apache.spark.sql.execution.vectorized.{OnHeapColumnVector, ReusedArro
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.sources.DataSourceRegister
 import org.apache.spark.sql.test.SharedSparkSession
-import org.apache.spark.sql.types.StructType
+import org.apache.spark.sql.types.{LongType, StructType}
 import org.apache.spark.sql.util.{ArrowUtils, CaseInsensitiveStringMap}
 import org.apache.spark.sql.vectorized.{ArrowColumnVector, ColumnarBatch, ColumnVector}
 import org.apache.spark.unsafe.types.UTF8String
@@ -61,7 +63,7 @@ import org.apache.spark.util.Utils
  * JVM. `NativeDataSourceSuite` tests the native data sources, which implement it.
  */
 class ColumnarDataSourceSuite extends QueryTest with SharedSparkSession
-  with AdaptiveSparkPlanHelper {
+  with AdaptiveSparkPlanHelper with PredicateHelper {
   import testImplicits._
 
   private val format = "test_columnar_range"
@@ -103,6 +105,64 @@ class ColumnarDataSourceSuite extends QueryTest with SharedSparkSession
     val limited = spark.read.format(format).option("end", "10").load().limit(2)
     assert(limited.collect().length == 2)
     assert(scan(limited).getMetaData()("PushedLimit") == "LIMIT 2")
+  }
+
+  test("keep the order of the filters that Spark evaluates after a scan") {
+    // A data source only skips data with the domains, so Spark evaluates all the filters after the
+    // scan, in the order of the query, as without the pushdown: here a nondeterministic and
+    // selective one first, before an expensive one that the scan gets.
+    Seq("true", "false").foreach { enabled =>
+      withSQLConf(SQLConf.NATIVE_DATA_SOURCE_FILTER_PUSHDOWN_ENABLED.key -> enabled) {
+        val df = spark.read.format(format).option("end", "10").load()
+          .where("rand(0) < 0.5 AND lower(name) LIKE '%e1%'")
+        val conjuncts = df.queryExecution.optimizedPlan.collectFirst {
+          case Filter(condition, _: DataSourceV2ScanRelation) =>
+            splitConjunctivePredicates(condition)
+        }.get
+        // The optimizer adds the filters that it infers, such as isnotnull(name), before them.
+        val random = conjuncts.indexWhere(_.exists(_.isInstanceOf[Rand]))
+        val contains = conjuncts.indexWhere(_.isInstanceOf[Contains])
+        assert(random >= 0 && contains > random, conjuncts)
+      }
+    }
+  }
+
+  test("push down the domains of filtered columns") {
+    val df = spark.read.format(format).option("end", "100").load()
+      .filter("id >= 40 AND id < 50 AND name <> 'x'")
+    checkAnswer(df, (40L until 50L).map(id => Row(id, s"name$id")))
+    // The data source only uses the domain of id, to read the ids in it.
+    val metadata = scan(df).getMetaData()
+    assert(metadata("PushedDomains") == "[id: [40L, 50L)]")
+    val pushed = metadata("PushedFilters")
+    assert(pushed.contains("id >= 40") && pushed.contains("id < 50"), pushed)
+    assert(!pushed.contains("name"), pushed)
+    assert(scan(df).toBatch.planInputPartitions().toSeq ==
+      Seq(TestRangePartition(40, 45), TestRangePartition(45, 50)))
+
+    // Spark evaluates all the filters after reading: the data source only keeps the hull of the
+    // ranges of id, so it reads the ids from 0 to 7, and Spark drops 3 with the pushed id <> 3.
+    val hull = spark.read.format(format).option("end", "10").load().filter("id <> 3 AND id < 8")
+    checkAnswer(hull, Seq(0L, 1L, 2L, 4L, 5L, 6L, 7L).map(id => Row(id, s"name$id")))
+    assert(scan(hull).getMetaData()("PushedDomains") == "[id: (-inf, 3L), (3L, 8L)]")
+    assert(scan(hull).toBatch.planInputPartitions().toSeq ==
+      Seq(TestRangePartition(0, 4), TestRangePartition(4, 8)))
+
+    // A filter that is not a domain is not pushed: the data source reads all the ids, and Spark
+    // evaluates both filters.
+    val other = spark.read.format(format).option("end", "10").load()
+      .filter("id <> 3 AND id % 2 = 0")
+    checkAnswer(other, Seq(0L, 2L, 4L, 6L, 8L).map(id => Row(id, s"name$id")))
+    assert(scan(other).getMetaData()("PushedDomains") == "[id: (-inf, 3L), (3L, +inf)]")
+    val otherPushed = scan(other).getMetaData()("PushedFilters")
+    assert(otherPushed.contains("NOT (id = 3)") && !otherPushed.contains("%"), otherPushed)
+
+    withSQLConf(SQLConf.NATIVE_DATA_SOURCE_FILTER_PUSHDOWN_ENABLED.key -> "false") {
+      val all = spark.read.format(format).option("end", "100").load().filter("id >= 95")
+      checkAnswer(all, (95L until 100L).map(id => Row(id, s"name$id")))
+      assert(scan(all).getMetaData()("PushedFilters") == "[]")
+      assert(!scan(all).getMetaData().contains("PushedDomains"))
+    }
   }
 
   test("tables in a catalog") {
@@ -785,6 +845,30 @@ class ColumnarDataSourceSuite extends QueryTest with SharedSparkSession
     assert(failing.prunes.get() == 1)
   }
 
+  test("push the predicates of a scan once, to a data source that takes domains") {
+    val predicate =
+      new Predicate(">", Array[V2Expression](FieldReference("id"), LiteralValue(1L, LongType)))
+    val dataSource = new TestRangeDataSource(options("end" -> "4"))
+    val builder = new ColumnarScanBuilder(format, dataSource.schema(), () => dataSource)
+    // Spark evaluates all the predicates after the scan.
+    assert(builder.pushPredicates(Array(predicate)).toSeq == Seq(predicate))
+    assert(builder.pushedPredicates().toSeq == Seq(predicate))
+    assert(dataSource.batchPlanners.get() == 1)
+    // The header promises that push_domains is called at most once for a reader.
+    val e = intercept[SparkException](builder.pushPredicates(Array(predicate)))
+    assert(e.getMessage.contains("pushed again"))
+    assert(builder.pushedPredicates().toSeq == Seq(predicate))
+
+    // A data source that takes no domain gets no planner for them.
+    val noDomains = new TestRangeDataSource(options("end" -> "4", "domains" -> "false"))
+    val noDomainsBuilder = new ColumnarScanBuilder(format, noDomains.schema(), () => noDomains)
+    assert(noDomainsBuilder.pushPredicates(Array(predicate)).toSeq == Seq(predicate))
+    assert(noDomainsBuilder.pushedPredicates().isEmpty)
+    assert(noDomains.batchPlanners.get() == 0)
+    assert(noDomainsBuilder.build().toBatch.planInputPartitions().length == 2)
+    assert(noDomains.batchPlanners.get() == 1)
+  }
+
   test("do not abort a write whose commit succeeded") {
     val dataSource = new TestRangeDataSource(options("table" -> "abort_after_commit"))
     val schema = dataSource.schema()
@@ -941,6 +1025,31 @@ class ColumnarDataSourceSuite extends QueryTest with SharedSparkSession
     assert(starts.tail.nonEmpty && starts.tail.forall(_ == """{"offset":5}"""), starts)
   }
 
+  test("streaming read of some of the columns") {
+    // The pruning of the scans of streaming queries is disabled by default.
+    withSQLConf(SQLConf.STREAMING_V2_COLUMN_PRUNING_ENABLED.key -> "true") {
+      withTempView("pruned_stream") {
+        val query = spark.readStream.format(format).option("end", "5").load().select("name")
+          .writeStream
+          .format("memory")
+          .queryName("pruned_stream")
+          .start()
+        try {
+          query.processAllAvailable()
+          // The stream reader gets only the columns that the query reads, which its batches
+          // have, and so does the scan node of the stream.
+          val scans = query.asInstanceOf[StreamingQueryWrapper].streamingQuery.lastExecution
+            .executedPlan.collect { case scan: MicroBatchScanExec => scan }
+          assert(scans.map(_.output.map(_.name)) == Seq(Seq("name")))
+          assert(scans.head.scan.readSchema() == StructType.fromDDL("name STRING"))
+        } finally {
+          query.stop()
+        }
+        checkAnswer(spark.table("pruned_stream"), (0L until 5L).map(id => Row(s"name$id")))
+      }
+    }
+  }
+
   test("create a stream writer for each micro-batch") {
     val table = "micro_batch_write"
     val input = MemoryStream[(Long, String)]
@@ -994,6 +1103,9 @@ class TestRangeDataSource(options: CaseInsensitiveStringMap) extends ColumnarDat
   val prunes = new AtomicInteger()
 
   override def schema(): StructType = StructType.fromDDL("id BIGINT, name STRING")
+
+  // The planners take the domain of id, unless the option "domains" is false.
+  override def supportsDomainPushdown(): Boolean = options.getBoolean("domains", true)
 
   // The names of the capabilities, such as "BATCH_READ, BATCH_WRITE", or all of them by default.
   override def capabilities(): util.Set[TableCapability] = {
@@ -1051,6 +1163,23 @@ class TestRangePlanner(
   extends ColumnarBatchPlanner {
   private var limit = Long.MaxValue
   private var readSchema = schema
+  // The ids [lo, hi) that contain the domain of id.
+  private var ids = (0L, Long.MaxValue)
+
+  override def pushDomains(domains: Seq[ColumnDomain]): Seq[Boolean] = domains.map { domain =>
+    domain.ranges match {
+      case Some(ranges) if domain.path == Seq(0) && ranges.nonEmpty =>
+        val lo = ranges.head.low.map { case low: Long =>
+          if (ranges.head.lowInclusive) low else low + 1
+        }.getOrElse(0L)
+        val hi = ranges.last.high.map { case high: Long =>
+          if (ranges.last.highInclusive) high + 1 else high
+        }.getOrElse(Long.MaxValue)
+        ids = (math.max(0L, lo), hi)
+        true
+      case _ => false
+    }
+  }
 
   override def pushLimit(limit: Int): Boolean = {
     this.limit = limit
@@ -1070,10 +1199,10 @@ class TestRangePlanner(
     if (fail) {
       throw new IllegalStateException("injected planning failure")
     }
-    val hi = math.min(end, limit)
-    val mid = hi / 2
+    val (lo, hi) = (ids._1, math.min(math.min(end, limit), ids._2))
+    val mid = lo + (hi - lo) / 2
     ColumnarPlannedBatch(
-      Array(TestRangePartition(0, mid), TestRangePartition(mid, hi)),
+      Array(TestRangePartition(lo, mid), TestRangePartition(mid, hi)),
       new TestRangeReaderFactory(readSchema, arrowBatchSize, ownedBatches))
   }
 }

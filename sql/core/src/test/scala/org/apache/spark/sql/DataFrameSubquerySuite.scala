@@ -68,6 +68,15 @@ class DataFrameSubquerySuite extends SharedSparkSession {
     )
   }
 
+  test("SPARK-61295: untyped aggregates and typed columns on a lazily analyzed DataFrame") {
+    // The output of the unanalyzed plan has an unresolved attribute `x`, but these need no
+    // input deserializer.
+    val df = spark.range(1).select(($"id".outer() + 1).as("x"))
+    checkAnswer(df.agg(sum("x")), Row(1))
+    checkDataset(df.select($"x".as[Long]), 1L)
+    checkDataset(df.as[Long].groupByKey(v => v).count(), (1L, 1L))
+  }
+
   test("simple uncorrelated scalar subquery") {
     checkAnswer(
       spark.range(1).select(

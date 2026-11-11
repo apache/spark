@@ -25,12 +25,12 @@ import org.apache.spark.{SparkConf, SparkException}
 import org.apache.spark.rdd.SortedMergeCoalescedRDD
 import org.apache.spark.sql.{AnalysisException, DataFrame, ExplainSuiteHelper, QueryTest, Row}
 import org.apache.spark.sql.catalyst.InternalRow
-import org.apache.spark.sql.catalyst.expressions.{Ascending, AttributeReference, Descending, ExprId, Literal, TransformExpression}
+import org.apache.spark.sql.catalyst.expressions.{Ascending, AttributeReference, BloomFilterMightContain, Descending, DynamicPruningExpression, ExprId, Literal, TransformExpression}
 import org.apache.spark.sql.catalyst.expressions.aggregate.Complete
 import org.apache.spark.sql.catalyst.plans.{Cross, ExistenceJoin, Inner, JoinType, LeftAnti, LeftSemi, LeftSingle, RightOuter}
 import org.apache.spark.sql.catalyst.plans.physical
 import org.apache.spark.sql.catalyst.plans.physical.{HASH_ROUTING, KeyedPartitioning, PartitioningCollection, REPLICATED_FOR_JOIN, ROUTING_LOST, SPLIT_FOR_JOIN}
-import org.apache.spark.sql.connector.catalog.{BufferedRows, Column, Identifier, InMemoryBaseTable, InMemoryCatalystRuntimeFilterCatalog, InMemoryTable, InMemoryTableCatalog}
+import org.apache.spark.sql.connector.catalog.{BufferedRows, Column, Identifier, InMemoryBaseTable, InMemoryCatalystRuntimeFilterCatalog, InMemoryTable, InMemoryTableCatalog, InMemoryWithV2FilterCatalog}
 import org.apache.spark.sql.connector.catalog.constraints.Constraint
 import org.apache.spark.sql.connector.catalog.functions._
 import org.apache.spark.sql.connector.distributions.{Distribution, Distributions}
@@ -42,15 +42,17 @@ import org.apache.spark.sql.execution.{
   ExtendedMode,
   FormattedMode,
   InputAdapter,
+  InSubqueryExec,
   LocalTableScanExec,
   ProjectExec,
   RDDScanExec,
   SimpleMode,
   SortExec,
   SparkPlan,
+  SubqueryExec,
   UnionExec,
   WholeStageCodegenExec}
-import org.apache.spark.sql.execution.adaptive.{AQEShuffleReadExec, ResultQueryStageExec, ShuffleQueryStageExec}
+import org.apache.spark.sql.execution.adaptive.{AdaptiveSparkPlanExec, AQEShuffleReadExec, ResultQueryStageExec, ShuffleQueryStageExec}
 import org.apache.spark.sql.execution.aggregate.{BaseAggregateExec, HashAggregateExec, SortAggregateExec}
 import org.apache.spark.sql.execution.datasources.v2.{BatchScanExec, DataSourceV2ScanRelation, GroupPartitionsExec, PlannedScan}
 import org.apache.spark.sql.execution.exchange.{EnsureRequirements, ReusedExchangeExec, ShuffleExchangeExec, ShuffleExchangeLike, ValidateRequirements}
@@ -226,6 +228,72 @@ trait KeyGroupedPartitioningRuntimeFilterTests extends KeyGroupedPartitioningSui
     }
   }
 
+  test("SPARK-60741: dynamic partition filtering keeps the build side's keyed partitioning") {
+    withSQLConf(
+        SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key -> "-1",
+        SQLConf.DYNAMIC_PARTITION_PRUNING_ENABLED.key -> "true",
+        SQLConf.DYNAMIC_PARTITION_PRUNING_REUSE_BROADCAST_ONLY.key -> "false",
+        SQLConf.DYNAMIC_PARTITION_PRUNING_FALLBACK_FILTER_RATIO.key -> "10") {
+      val items_partitions = Array(identity("id"))
+      createTable(items, itemsColumns, items_partitions)
+      sql(s"INSERT INTO testcat.ns.$items VALUES " +
+          s"(1, 'aa', 40.0, cast('2020-01-01' as timestamp)), " +
+          s"(1, 'aa', 41.0, cast('2020-01-15' as timestamp)), " +
+          s"(2, 'bb', 10.0, cast('2020-01-01' as timestamp)), " +
+          s"(2, 'bb', 10.5, cast('2020-01-01' as timestamp)), " +
+          s"(3, 'cc', 15.5, cast('2020-02-01' as timestamp))")
+
+      val purchases_partitions = Array(identity("item_id"))
+      createTable(purchases, purchasesColumns, purchases_partitions)
+      sql(s"INSERT INTO testcat.ns.$purchases VALUES " +
+          s"(1, 42.0, cast('2020-01-01' as timestamp)), " +
+          s"(1, 44.0, cast('2020-01-15' as timestamp)), " +
+          s"(1, 45.0, cast('2020-01-15' as timestamp)), " +
+          s"(2, 11.0, cast('2020-01-01' as timestamp)), " +
+          s"(3, 19.5, cast('2020-02-01' as timestamp))")
+
+      // The false arm exercises PlanDynamicPruningFilters and the true arm
+      // PlanAdaptiveDynamicPruningFilters.
+      Seq(false, true).foreach { aqeEnabled =>
+        withSQLConf(SQLConf.ADAPTIVE_EXECUTION_ENABLED.key -> aqeEnabled.toString) {
+          val df = sql(s"SELECT sum(p.price) FROM testcat.ns.$items i, " +
+              s"testcat.ns.$purchases p WHERE i.id = p.item_id AND i.price > 40.0")
+          checkAnswer(df, Seq(Row(131)))
+
+          // The subquery groups only on the build side's key column, which is a partition key of
+          // `items`, so its aggregate must keep the scan's keyed partitioning. These keys repeat
+          // across splits, so keeping the partitioning means a `GroupPartitionsExec` coalesces
+          // them, and no shuffle is needed.
+          val plan = df.queryExecution.executedPlan
+          val subqueries = collectScans(plan)
+            .flatMap(_.runtimeFilters)
+            .flatMap(_.collect { case d: DynamicPruningExpression => d })
+            .flatMap(_.collect { case i: InSubqueryExec => i.plan })
+          assert(subqueries.nonEmpty, s"expected a DPP subquery, got:\n$plan")
+          subqueries.foreach {
+            case subquery: SubqueryExec =>
+              val subPlan = subquery.child
+              assert(subPlan.isInstanceOf[AdaptiveSparkPlanExec] == aqeEnabled,
+                s"the DPP subquery should be adaptive only with AQE:\n$subPlan")
+              assert(collect(subPlan) { case s: ShuffleExchangeLike => s }.isEmpty,
+                s"the DPP subquery should not shuffle:\n$subPlan")
+              assert(collect(subPlan) { case g: GroupPartitionsExec => g }.nonEmpty,
+                s"the DPP subquery should group the keyed partitions:\n$subPlan")
+            case other =>
+              fail(s"expected a SubqueryExec, got $other")
+          }
+
+          // DPP keeps only the item_id = 1 splits of `purchases`.
+          assertFilteredPartitions(collectScans(plan), Seq(5, 5), Seq(0, 2))
+
+          // The outer query keeps its storage-partitioned join.
+          assert(collectShuffles(plan).isEmpty,
+            s"should not add shuffle for both sides of the join:\n$plan")
+        }
+      }
+    }
+  }
+
   test("SPARK-42038: partially clustered: with dynamic partition filtering") {
     val items_partitions = Array(identity("id"))
     createTable(items, itemsColumns, items_partitions)
@@ -380,9 +448,10 @@ trait KeyGroupedPartitioningRuntimeFilterTests extends KeyGroupedPartitioningSui
       // `translateRuntimeFilterV2` cannot translate a cast, so no filter reaches the scan and the
       // re-planning path never runs.
       //
-      // Only the V2 instance of this trait reaches that path with a pruned key. The Catalyst
-      // fixture's scan keeps the full table schema, so `store_id` stays in the output and nothing
-      // is projected away; that instance runs a no-pruning variant of the same query.
+      // Only `KeyGroupedPartitioningRuntimeFilterSuite` reaches that path with a pruned key. The
+      // scans of the V2 filter and Catalyst fixtures keep the full table schema, so `store_id`
+      // stays in the output and nothing is projected away; those suites run the same query with
+      // no column pruned.
       val df = sql(
         s"SELECT p.item_id, p.price from testcat.ns.$items i, testcat.ns.$purchases p " +
           "WHERE i.id = p.item_id AND i.price > 20.0 ORDER BY p.item_id, p.price")
@@ -553,11 +622,11 @@ trait KeyGroupedPartitioningRuntimeFilterTests extends KeyGroupedPartitioningSui
     "shares with the join") {
     // A DPP subquery that does not reuse a broadcast plans its build side again, over the same
     // `Scan` as the join's `purchases` scan. A scalar subquery filter on `item_id` is a runtime
-    // filter of both, and the subquery runs it first, which prunes the shared `Scan`. The join's
-    // scan is a copy made after planning, when the scalar subquery is replaced by a reused one. Had
-    // it planned its partitions again, it would report fewer of them than `items`, and the join
-    // would fail with "Can't zip RDDs". Of the two suites that run this, only the Catalyst one
-    // prunes on this predicate.
+    // filter of both, and the subquery runs it first, which prunes the shared `Scan` if it filters
+    // itself in place. The join's scan is a copy made after planning, when the scalar subquery is
+    // replaced by a reused one. Had it planned its partitions again, it would report fewer of them
+    // than `items`, and the join would fail with "Can't zip RDDs". Of the suites that run this,
+    // only the V2 filter one prunes the shared `Scan` on this predicate.
     withDppSubqueryTables(rowsPerKey = 1) {
       checkStoragePartitionedJoin(
         s"SELECT i.id, p.price FROM testcat.ns.$items i JOIN testcat.ns.$purchases p " +
@@ -570,9 +639,10 @@ trait KeyGroupedPartitioningRuntimeFilterTests extends KeyGroupedPartitioningSui
   test("SPARK-60752: a nested DPP filter on a DPP subquery's build side does not change the " +
     "layout of the scan it shares with the join") {
     // As above, with a DPP filter from a broadcast dimension as the build side's own runtime
-    // filter, which every fixture prunes on. Two rows per key give `purchases` two splits per key,
-    // so a GroupPartitionsExec groups that side and checks the layout of the copied scan. With
-    // `flag = 2` the build side's filter prunes every split.
+    // filter, on which every scan that filters itself in place prunes the shared `Scan`. Two rows
+    // per key give `purchases` two splits per key, so a GroupPartitionsExec groups that side and
+    // checks the layout of the copied scan. With `flag = 2` the build side's filter prunes every
+    // split.
     val dim = "dim"
     withDppSubqueryTables(rowsPerKey = 2) {
       createTable(dim, Array(Column.create("k", LongType), Column.create("flag", IntegerType)),
@@ -11545,6 +11615,24 @@ class KeyGroupedPartitioningRuntimeFilterSuite
 }
 
 /**
+ * Runs the runtime filtering tests against a catalog whose scans take runtime filters as connector
+ * predicates, via [[org.apache.spark.sql.connector.read.SupportsRuntimeV2Filtering]]. Over a
+ * single identity partition column they filter themselves in place on `=` and `IN`, so one node's
+ * runtime filter prunes a scan it shares with another node (SPARK-60752).
+ */
+@ExtendedSQLTest
+class KeyGroupedPartitioningV2FilterRuntimeFilterSuite
+  extends KeyGroupedPartitioningSuiteBase with KeyGroupedPartitioningRuntimeFilterTests {
+
+  override protected def catalogClassName: String =
+    classOf[InMemoryWithV2FilterCatalog].getName
+
+  after {
+    catalog.clearTables()
+  }
+}
+
+/**
  * Runs the runtime filtering tests against a catalog whose scans take runtime filters as Catalyst
  * expressions, via
  * [[org.apache.spark.sql.internal.connector.SupportsRuntimeCatalystFiltering]].
@@ -11558,6 +11646,41 @@ class KeyGroupedPartitioningCatalystRuntimeFilterSuite
 
   after {
     catalog.clearTables()
+    catalog.clearFunctions()
+  }
+
+  test("SPARK-60702: a storage-partitioned join gets the bloom filter that its dropped dpp " +
+    "filter used to keep out") {
+    // The scan offers the source column of `bucket(4, id)` for runtime filtering, so
+    // `PartitionPruning` adds a DPP filter on `f.id`. Nothing can broadcast its build plan, so
+    // physical planning plans it as `true`. The key gets a bloom filter instead, and the join
+    // still shuffles neither side.
+    catalog.createFunction(Identifier.of(Array.empty, UnboundBucketFunction.name()),
+      UnboundBucketFunction)
+    createTable("fact", Array(Column.create("id", LongType), Column.create("v", IntegerType)),
+      Array(bucket(4, "id")))
+    sql("INSERT INTO testcat.ns.fact VALUES " +
+      (0 until 16).map(i => s"($i, ${i * 10})").mkString(", "))
+    createTable("dim", Array(Column.create("id", LongType), Column.create("flag", IntegerType)),
+      Array(bucket(4, "id")))
+    sql("INSERT INTO testcat.ns.dim VALUES (1, 1), (2, 0), (3, 1), (5, 1), (6, 0), (9, 1)")
+    Seq(true, false).foreach { adaptive =>
+      withSQLConf(
+          SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key -> "-1",
+          SQLConf.RUNTIME_BLOOM_FILTER_APPLICATION_SIDE_SCAN_SIZE_THRESHOLD.key -> "0",
+          SQLConf.ADAPTIVE_EXECUTION_ENABLED.key -> adaptive.toString) {
+        val df = sql("SELECT f.id, f.v FROM testcat.ns.fact f JOIN testcat.ns.dim d " +
+          "ON f.id = d.id WHERE d.flag = 1")
+        checkAnswer(df, Seq(Row(1, 10), Row(3, 30), Row(5, 50), Row(9, 90)))
+        val plan = df.queryExecution.executedPlan
+        val runtimeFilters = collectScans(plan)
+          .filter(_.table.name().endsWith("fact"))
+          .flatMap(_.runtimeFilters)
+        assert(runtimeFilters.exists(_.exists(_.isInstanceOf[BloomFilterMightContain])), plan)
+        assert(runtimeFilters.contains(DynamicPruningExpression(Literal.TrueLiteral)), plan)
+        assert(collect(plan) { case s: ShuffleExchangeLike => s }.isEmpty, plan)
+      }
+    }
   }
 }
 

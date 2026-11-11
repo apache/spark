@@ -259,6 +259,8 @@ private[spark] abstract class MemoryManager(
    * SPARK-37593 If we are using G1GC, ZGC or ShenandoahGC, it's better to take the
    * LONG_ARRAY_OFFSET into consideration so that the requested memory size is power of 2
    * and can be divided by heap region size to reduce memory waste.
+   * `TaskMemoryManager.growingPageHeaderBytes` recognizes such a page size, so that the growing
+   * pages of hash join maps leave the same room.
    */
   private lazy val defaultPageSizeBytes = {
     val minPageSize = 1L * 1024 * 1024   // 1MB

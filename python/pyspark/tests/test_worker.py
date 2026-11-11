@@ -14,6 +14,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 #
+import importlib
 import io
 import json
 import os
@@ -24,6 +25,8 @@ import threading
 import time
 import unittest
 import warnings
+import zipfile
+import zipimport
 from typing import Any, Optional
 from unittest.mock import patch
 
@@ -33,8 +36,10 @@ try:
 except ImportError:
     has_resource_module = False
 
+import py4j
 from py4j.protocol import Py4JJavaError
 
+import pyspark
 from pyspark import SparkConf, SparkContext
 from pyspark.accumulators import _accumulatorRegistry
 from pyspark.core.files import SparkFiles
@@ -54,6 +59,7 @@ from pyspark.util import PythonEvalType
 from pyspark.worker_metrics import WorkerMetrics
 
 with patch.dict(os.environ, {"SPARK_PYTHON_RUNTIME": "PYTHON_WORKER"}):
+    from pyspark import worker_util
     from pyspark.worker import main as worker_main
     from pyspark.worker_util import read_in_thread
 
@@ -486,6 +492,52 @@ class WorkerInitResponseTests(unittest.TestCase):
         self.assertEqual(self._read_init_response(outfile), {})
         self.assertEqual(read_int(outfile), SpecialLengths.PYTHON_EXCEPTION_THROWN)
         self.assertIn("data error", outfile.read(read_int(outfile)).decode("utf-8"))
+
+
+class SetupSparkFilesImportCacheTests(unittest.TestCase):
+    def setUp(self):
+        temp_dir = tempfile.TemporaryDirectory()
+        self.addCleanup(temp_dir.cleanup)
+        self.temp_dir = temp_dir.name
+        # setup_spark_files changes these, so restore them for later tests.
+        self.addCleanup(sys.path.__setitem__, slice(None), list(sys.path))
+        self.addCleanup(setattr, SparkFiles, "_root_directory", SparkFiles._root_directory)
+        self.addCleanup(
+            setattr, SparkFiles, "_is_running_on_worker", SparkFiles._is_running_on_worker
+        )
+
+    def test_spark_archives_are_not_invalidated(self):
+        archives = {
+            module.__loader__.archive
+            for module in (pyspark, py4j)
+            if isinstance(module.__loader__, zipimport.zipimporter)
+        }
+        if not archives:
+            self.skipTest("neither pyspark nor py4j was loaded from a zip archive")
+
+        with patch.object(zipimport.zipimporter, "invalidate_caches", autospec=True) as invalidate:
+            worker_util.setup_spark_files(self.temp_dir, [])
+
+        invalidated = {call.args[0].archive for call in invalidate.call_args_list}
+        self.assertTrue(archives.isdisjoint(invalidated))
+
+    def test_user_archive_changes_are_picked_up(self):
+        user_zip = os.path.join(self.temp_dir, "user.zip")
+        with zipfile.ZipFile(user_zip, "w") as zf:
+            zf.writestr("_spark_user_a.py", "")
+        sys.path.insert(0, user_zip)
+        self.addCleanup(sys.path_importer_cache.pop, user_zip, None)
+        self.addCleanup(sys.modules.pop, "_spark_user_a", None)
+        self.addCleanup(sys.modules.pop, "_spark_user_b", None)
+        importlib.import_module("_spark_user_a")
+
+        with zipfile.ZipFile(user_zip, "a") as zf:
+            zf.writestr("_spark_user_b.py", "")
+        worker_util.setup_spark_files(self.temp_dir, [])
+
+        # This is the check: it raises ModuleNotFoundError if setup_spark_files did not refresh
+        # the user archive's cached directory listing.
+        importlib.import_module("_spark_user_b")
 
 
 class WorkerTests(ReusedPySparkTestCase):
