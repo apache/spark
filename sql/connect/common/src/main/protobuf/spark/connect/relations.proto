@@ -235,6 +235,8 @@ message Read {
 
     // Options for the named table. The map key is case insensitive.
     map<string, string> options = 2;
+
+    optional string source_name = 3;
   }
 
   message DataSource {
@@ -556,7 +558,7 @@ message ChunkedCachedLocalRelation {
 
 // Represents a remote relation that has been cached on server.
 message CachedRemoteRelation {
-  // (Required) ID of the remote related (assigned by the service).
+  // (Required) ID of the remote relation in the current session.
   string relation_id = 1;
 }
 

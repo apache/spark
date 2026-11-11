@@ -71,6 +71,7 @@ import org.apache.spark.sql.types.{
   AbstractDataType,
   AnyDataType,
   AnyTimestampNanoType,
+  AnyTimestampNanoTypeExpression,
   AnyTimestampTypeExpression,
   ArrayType,
   BinaryType,
@@ -429,7 +430,9 @@ abstract class TypeCoercionHelper {
    * microsecond grid (a DayTimeIntervalType in the default mode, a CalendarIntervalType when
    * spark.sql.legacy.interval.enabled is set), so widening the precision never changes the numeric
    * result -- it only keeps the two operands the same concrete type. For a pure-micro cross-family
-   * pair this returns TimestampNTZType, identical to the pre-nanos behavior.
+   * pair this returns TimestampNTZType, identical to the pre-nanos behavior. A nanos operand only
+   * survives analysis in the as-of join distance; [[NanosTimestampSubtractionCheck]] rejects it
+   * anywhere else.
    */
   private def subtractTimestampsCommonType(dt1: DataType, dt2: DataType): DataType = {
     val p = math.max(
@@ -897,10 +900,10 @@ abstract class TypeCoercionHelper {
    */
   object DateTimeOperationsTypeCoercion {
     def apply(expression: Expression): Expression = expression match {
-      case d @ DateAdd(AnyTimestampTypeExpression(), _) =>
+      case d @ DateAdd(AnyTimestampTypeExpression() | AnyTimestampNanoTypeExpression(), _) =>
         d.copy(startDate = Cast(d.startDate, DateType))
       case d @ DateAdd(StringTypeExpression(), _) => d.copy(startDate = Cast(d.startDate, DateType))
-      case d @ DateSub(AnyTimestampTypeExpression(), _) =>
+      case d @ DateSub(AnyTimestampTypeExpression() | AnyTimestampNanoTypeExpression(), _) =>
         d.copy(startDate = Cast(d.startDate, DateType))
       case d @ DateSub(StringTypeExpression(), _) => d.copy(startDate = Cast(d.startDate, DateType))
 
@@ -931,9 +934,9 @@ abstract class TypeCoercionHelper {
    */
   object AnsiDateTimeOperationsTypeCoercion {
     def apply(expression: Expression): Expression = expression match {
-      case d @ DateAdd(AnyTimestampTypeExpression(), _) =>
+      case d @ DateAdd(AnyTimestampTypeExpression() | AnyTimestampNanoTypeExpression(), _) =>
         d.copy(startDate = Cast(d.startDate, DateType))
-      case d @ DateSub(AnyTimestampTypeExpression(), _) =>
+      case d @ DateSub(AnyTimestampTypeExpression() | AnyTimestampNanoTypeExpression(), _) =>
         d.copy(startDate = Cast(d.startDate, DateType))
 
       case s @ SubtractTimestamps(DateTypeExpression(), r, _, _)

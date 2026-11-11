@@ -55,6 +55,20 @@ abstract class DeltaBasedUpdateTableSuiteBase extends UpdateTableSuiteBase {
     checkUpdateMetrics(numUpdatedRows = 1, numCopiedRows = 0)
   }
 
+  test("SPARK-60978: update with a row ID column whose name differs in case") {
+    // the table refers to its row ID column as `pk`
+    createAndInitTable("PK INT NOT NULL, id INT, dep STRING",
+      """{ "PK": 1, "id": 1, "dep": "hr" }
+        |{ "PK": 2, "id": 2, "dep": "software" }
+        |""".stripMargin)
+
+    sql(s"UPDATE $tableNameAsString SET id = -1 WHERE PK = 1")
+
+    checkAnswer(
+      sql(s"SELECT * FROM $tableNameAsString"),
+      Row(1, -1, "hr") :: Row(2, 2, "software") :: Nil)
+  }
+
   test("update with nondeterministic conditions") {
     createAndInitTable("pk INT NOT NULL, id INT, dep STRING",
       """{ "pk": 1, "id": 1, "dep": "hr" }

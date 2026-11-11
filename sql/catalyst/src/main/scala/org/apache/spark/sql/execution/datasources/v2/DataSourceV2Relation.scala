@@ -33,7 +33,7 @@ import org.apache.spark.sql.catalyst.util.{removeInternalMetadata, truncatedStri
 import org.apache.spark.sql.connector.catalog.{CatalogPlugin, FunctionCatalog, Identifier, SupportsMetadataColumns, Table, TableCapability, TableCatalog, V2TableUtil}
 import org.apache.spark.sql.connector.catalog.CatalogV2Implicits.CatalogHelper
 import org.apache.spark.sql.connector.expressions.{FieldReference, NamedReference}
-import org.apache.spark.sql.connector.read.{Scan, Statistics => V2Statistics, SupportsReportStatistics, SupportsRuntimeV2Filtering}
+import org.apache.spark.sql.connector.read.{Scan, Statistics => V2Statistics, SupportsReportStatistics, SupportsRuntimeV2Filtering, SupportsStorageFilters}
 import org.apache.spark.sql.connector.read.colstats.{ColumnStatistics, Histogram => V2Histogram, HistogramBin => V2HistogramBin}
 import org.apache.spark.sql.connector.read.streaming.{Offset, SparkDataStream}
 import org.apache.spark.sql.errors.QueryCompilationErrors
@@ -188,6 +188,13 @@ case class DataSourceV2Relation(
  *                      offset, top-N, sample) or by any other rule stays not-mergeable by default,
  *                      so merging is safe by construction -- a new scan-relation build site need
  *                      not opt out.
+ * @param onlyRowWisePushdowns whether every operation pushed into the scan works on each row by
+ *                             itself, as filters, column pruning and variant extraction do. A
+ *                             reader may then evaluate a predicate on the rows the scan returns
+ *                             ahead of those operations, see [[SupportsStorageFilters]]. Default
+ *                             false: a pushed limit, offset, top-N, sample, aggregate or join
+ *                             decides which rows the scan returns, and a build site that does not
+ *                             set it keeps storage filters away from its scan.
  */
 case class DataSourceV2ScanRelation(
     relation: DataSourceV2Relation,
@@ -197,7 +204,8 @@ case class DataSourceV2ScanRelation(
     ordering: Option[Seq[SortOrder]] = None,
     pushedFilters: Seq[Expression] = Seq.empty,
     inferredFilters: Seq[Expression] = Seq.empty,
-    mergeableScan: Boolean = false) extends LeafNode with NamedRelation {
+    mergeableScan: Boolean = false,
+    onlyRowWisePushdowns: Boolean = false) extends LeafNode with NamedRelation {
 
   // TODO: Override validConstraints to return ExpressionSet(pushedFilters) so that pushed
   // filters participate in constraint propagation (InferFiltersFromConstraints, PruneFilters).
@@ -264,6 +272,22 @@ case class DataSourceV2ScanRelation(
       method: String): AttributeSet = {
     V2ExpressionUtils.resolveDataSourceRuntimeFilterRefs(
       filterAttrs, output, method, scan.getClass.getName)
+  }
+
+  /**
+   * The output columns the scan declares for storage filtering via
+   * [[SupportsStorageFilters.storageFilterAttributes]], matched by name. Only top-level
+   * declarations count, and a declared column the scan does not read is left out, since no offered
+   * filter can reference it. Empty when the scan does not implement that interface. Unlike runtime
+   * filtering, there is no "fully pushed" set, since a storage filter always stays in the plan
+   * above the scan.
+   */
+  lazy val storageFilterAttrs: AttributeSet = scan match {
+    case s: SupportsStorageFilters =>
+      val declared = s.storageFilterAttributes().map(_.fieldNames).collect { case Array(n) => n }
+      val resolver = SQLConf.get.resolver
+      AttributeSet(output.filter(a => declared.exists(resolver(a.name, _))))
+    case _ => AttributeSet.empty
   }
 
   override val nodePatterns: Seq[TreePattern] = Seq(DATA_SOURCE_V2_SCAN_RELATION)
@@ -454,6 +478,18 @@ case class StreamingDataSourceV2Relation(
 /**
  * A specialization of [[DataSourceV2ScanRelation]] with the streaming bit set to true, as well
  * as start and end offsets for Microbatch processing.
+ *
+ * @param output the columns of the source that the query references, which the plan of each
+ *               micro-batch is optimized with
+ * @param scanOutput the columns of `output` that the scan reads, in the order of its read schema,
+ *                   unless these are all the columns of `output` in their order. The readers of
+ *                   the stream return these columns, so a planner must build the scan node from
+ *                   them rather than from `output`, and check that the plan reads no other column
+ *                   of `output`, as `DataSourceV2Strategy` does.
+ * @param pushedFilters the filters that the scan builder got, over `output`, which the scan may
+ *                      apply in any form. The plan of each micro-batch must apply them to all the
+ *                      rows of the relation too, so that the scan cannot drop a row that the plan
+ *                      keeps, which `StreamingV2ScanPushDown.checkPushedFilters` checks.
  */
 case class StreamingDataSourceV2ScanRelation(
     relation: StreamingDataSourceV2Relation,
@@ -461,7 +497,9 @@ case class StreamingDataSourceV2ScanRelation(
     output: Seq[AttributeReference],
     stream: SparkDataStream,
     startOffset: Option[Offset] = None,
-    endOffset: Option[Offset] = None)
+    endOffset: Option[Offset] = None,
+    scanOutput: Option[Seq[AttributeReference]] = None,
+    pushedFilters: Seq[Expression] = Nil)
   extends LeafNode with MultiInstanceRelation with NamedRelation  {
 
   val (catalog, identifier) = (relation.catalog, relation.identifier)
@@ -469,13 +507,43 @@ case class StreamingDataSourceV2ScanRelation(
   override def name: String = relation.table.name()
 
   override def simpleString(maxFields: Int): String = {
+    val scanned = scanOutput.map { columns =>
+      s", ScanOutput: ${truncatedString(columns, "[", ", ", "]", maxFields)}"
+    }
+    // The filters that the scan builder was given, which the plan of each micro-batch applies
+    // after the scan too. Unlike the PushedFilters of a batch scan, these are not the filters that
+    // the builder took.
+    val filters = if (pushedFilters.nonEmpty) {
+      s", FiltersOfScanBuilder: ${truncatedString(pushedFilters, "[", ", ", "]", maxFields)}"
+    } else {
+      ""
+    }
     statePrefix + "StreamingDataSourceV2ScanRelation" +
-      s"${truncatedString(output, "[", ", ", "]", maxFields)} $name"
+      s"${truncatedString(output, "[", ", ", "]", maxFields)} $name" + scanned.getOrElse("") +
+      filters
+  }
+
+  // The default canonicalization renumbers the attributes of `output` and `scanOutput`, but not
+  // those inside `pushedFilters`, which are over `output`: they are normalized against `output`,
+  // so that two copies of the same scan, such as the relation and its `newInstance()`, have the
+  // same result.
+  override def doCanonicalize(): StreamingDataSourceV2ScanRelation = {
+    super.doCanonicalize().asInstanceOf[StreamingDataSourceV2ScanRelation]
+      .copy(pushedFilters = pushedFilters.map(QueryPlan.normalizeExpressions(_, output)))
   }
 
   override def isStreaming: Boolean = true
 
-  override def newInstance(): LogicalPlan = copy(output = output.map(_.newInstance()))
+  override def newInstance(): LogicalPlan = {
+    val newOutput = output.map(_.newInstance())
+    val newAttributes = AttributeMap(output.zip(newOutput))
+    copy(
+      output = newOutput,
+      scanOutput = scanOutput.map(_.map(newAttributes)),
+      pushedFilters = pushedFilters.map(_.transform {
+        case a: AttributeReference => a.withExprId(newAttributes.getOrElse(a, a).exprId)
+      }))
+  }
 
   override def computeStats(): Statistics = scan match {
     case r: SupportsReportStatistics =>
@@ -491,7 +559,8 @@ case class StreamingDataSourceV2ScanRelation(
       case _ => None
     }
 
-    Seq(output, qualifiedTableName, scan, stream, startOffset, endOffset)
+    Seq(output, qualifiedTableName, scan, stream, startOffset, endOffset, scanOutput,
+      pushedFilters)
   }
 
   override protected def stringArgs: Iterator[Any] = stringArgsVal.iterator

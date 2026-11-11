@@ -98,17 +98,14 @@ class PandasGroupedMapWithStateUDFHandler(BatchEvalTypeHandler["pa.RecordBatch"]
         ]
     )
 
-    def __init__(self, udfs: list[UDF], runner_conf: RunnerConf, eval_conf: EvalConf) -> None:
+    def __init__(self, udf_descs: list[UDF], runner_conf: RunnerConf, eval_conf: EvalConf) -> None:
         require_minimum_pandas_version()
         require_minimum_pyarrow_version()
-        super().__init__(udfs, runner_conf, eval_conf)
-
-        assert len(udfs) == 1, "One GROUPED_MAP_PANDAS_UDF_WITH_STATE UDF expected here."
+        super().__init__(udf_descs, runner_conf, eval_conf)
 
         # See FlatMapGroupsInPandasWithStateExec for how arg_offsets are used to
         # distinguish between grouping attributes and data attributes.
-        self._func, self._return_type = udfs[0].func, udfs[0].return_type
-        parsed_offsets = extract_key_value_indexes(udfs[0].args_offsets)
+        parsed_offsets = extract_key_value_indexes(self._udf_desc.args_offsets)
         self._key_offsets = parsed_offsets[0][0]
         self._value_offsets = parsed_offsets[0][1]
 
@@ -228,13 +225,13 @@ class PandasGroupedMapWithStateUDFHandler(BatchEvalTypeHandler["pa.RecordBatch"]
             # The number of columns of the result must match the return type,
             # but an empty result with no columns at all is acceptable.
             if not (
-                len(result.columns) == len(self._return_type)
+                len(result.columns) == len(self._udf_desc.return_type)
                 or (len(result.columns) == 0 and result.empty)
             ):
                 raise PySparkRuntimeError(
                     errorClass="RESULT_COLUMN_SCHEMA_MISMATCH",
                     messageParameters={
-                        "expected": str(len(self._return_type)),
+                        "expected": str(len(self._udf_desc.return_type)),
                         "actual": str(len(result.columns)),
                     },
                 )
@@ -393,7 +390,11 @@ class PandasGroupedMapWithStateUDFHandler(BatchEvalTypeHandler["pa.RecordBatch"]
                     # Flush a batch once the record threshold is exceeded.
                     if pdf_data_cnt > self._arrow_max_records_per_batch:
                         yield construct_record_batch(
-                            pdfs, pdf_data_cnt, self._return_type, state_pdfs, state_data_cnt
+                            pdfs,
+                            pdf_data_cnt,
+                            self._udf_desc.return_type,
+                            state_pdfs,
+                            state_data_cnt,
                         )
                         pdfs = []
                         state_pdfs = []
@@ -408,7 +409,7 @@ class PandasGroupedMapWithStateUDFHandler(BatchEvalTypeHandler["pa.RecordBatch"]
         # Flush the trailing batch if it has any data or state left.
         if pdf_data_cnt > 0 or state_data_cnt > 0:
             yield construct_record_batch(
-                pdfs, pdf_data_cnt, self._return_type, state_pdfs, state_data_cnt
+                pdfs, pdf_data_cnt, self._udf_desc.return_type, state_pdfs, state_data_cnt
             )
 
 
@@ -420,24 +421,21 @@ class PandasTransformWithStateUDFHandler(BatchEvalTypeHandler["pa.RecordBatch"])
 
     eval_type = PythonEvalType.SQL_TRANSFORM_WITH_STATE_PANDAS_UDF
 
-    def __init__(self, udfs: list[UDF], runner_conf: RunnerConf, eval_conf: EvalConf) -> None:
+    def __init__(self, udf_descs: list[UDF], runner_conf: RunnerConf, eval_conf: EvalConf) -> None:
         require_minimum_pandas_version()
         require_minimum_pyarrow_version()
-        super().__init__(udfs, runner_conf, eval_conf)
-
-        assert len(udfs) == 1, "One TRANSFORM_WITH_STATE_PANDAS UDF expected here."
-        self._func, self._return_type = udfs[0].func, udfs[0].return_type
+        super().__init__(udf_descs, runner_conf, eval_conf)
 
         # See TransformWithStateInPandasExec for how arg_offsets are used to
         # distinguish between grouping attributes and data attributes
-        parsed_offsets = extract_key_value_indexes(udfs[0].args_offsets)
+        parsed_offsets = extract_key_value_indexes(self._udf_desc.args_offsets)
         assert len(parsed_offsets) == 1, (
             "Expected one pair of offsets for TRANSFORM_WITH_STATE_PANDAS UDF."
         )
 
         self._key_offsets = parsed_offsets[0][0]
         self._value_offsets = parsed_offsets[0][1]
-        self._output_schema = StructType([StructField("_0", self._return_type)])
+        self._output_schema = StructType([StructField("_0", self._udf_desc.return_type)])
 
         self._stateful_processor_api_client = StatefulProcessorApiClient(
             eval_conf.state_server_socket_port,  # type: ignore[arg-type]
@@ -515,7 +513,7 @@ class PandasTransformWithStateUDFHandler(BatchEvalTypeHandler["pa.RecordBatch"])
 
         def convert_results(result_iter: Iterable[pd.DataFrame]) -> Iterator[pa.RecordBatch]:
             for result in result_iter:
-                if isinstance(self._return_type, StructType) and not isinstance(
+                if isinstance(self._udf_desc.return_type, StructType) and not isinstance(
                     result, pd.DataFrame
                 ):
                     raise PySparkValueError(
@@ -573,13 +571,10 @@ class PandasTransformWithStateInitStateUDFHandler(BatchEvalTypeHandler["pa.Recor
 
     eval_type = PythonEvalType.SQL_TRANSFORM_WITH_STATE_PANDAS_INIT_STATE_UDF
 
-    def __init__(self, udfs: list[UDF], runner_conf: RunnerConf, eval_conf: EvalConf) -> None:
+    def __init__(self, udf_descs: list[UDF], runner_conf: RunnerConf, eval_conf: EvalConf) -> None:
         require_minimum_pandas_version()
         require_minimum_pyarrow_version()
-        super().__init__(udfs, runner_conf, eval_conf)
-
-        assert len(udfs) == 1, "One TRANSFORM_WITH_STATE_PANDAS_INIT_STATE UDF expected here."
-        self._func, self._return_type = udfs[0].func, udfs[0].return_type
+        super().__init__(udf_descs, runner_conf, eval_conf)
 
         # See TransformWithStateInPandasExec for how arg_offsets are used to
         # distinguish between grouping attributes and data attributes.
@@ -588,10 +583,10 @@ class PandasTransformWithStateInitStateUDFHandler(BatchEvalTypeHandler["pa.Recor
         #     [groupingKeyOffsets, dedupDataOffsets],
         #     [initStateGroupingOffsets, dedupInitDataOffsets]
         # ]
-        parsed_offsets = extract_key_value_indexes(udfs[0].args_offsets)
+        parsed_offsets = extract_key_value_indexes(self._udf_desc.args_offsets)
         self._key_offsets = parsed_offsets[0][0]
         self._init_key_offsets = parsed_offsets[1][0]
-        self._output_schema = StructType([StructField("_0", self._return_type)])
+        self._output_schema = StructType([StructField("_0", self._udf_desc.return_type)])
 
         self._stateful_processor_api_client = StatefulProcessorApiClient(
             eval_conf.state_server_socket_port,  # type: ignore[arg-type]
@@ -728,7 +723,7 @@ class PandasTransformWithStateInitStateUDFHandler(BatchEvalTypeHandler["pa.Recor
             # TODO(SPARK-49100): add verification that elements in result_iter are
             # indeed of type pd.DataFrame and conform to assigned cols
             for result in result_iter:
-                if isinstance(self._return_type, StructType) and not isinstance(
+                if isinstance(self._udf_desc.return_type, StructType) and not isinstance(
                     result, pd.DataFrame
                 ):
                     raise PySparkValueError(
@@ -793,16 +788,13 @@ class RowTransformWithStateUDFHandler(BatchEvalTypeHandler["pa.RecordBatch"]):
 
     eval_type = PythonEvalType.SQL_TRANSFORM_WITH_STATE_PYTHON_ROW_UDF
 
-    def __init__(self, udfs: list[UDF], runner_conf: RunnerConf, eval_conf: EvalConf) -> None:
+    def __init__(self, udf_descs: list[UDF], runner_conf: RunnerConf, eval_conf: EvalConf) -> None:
         require_minimum_pyarrow_version()
-        super().__init__(udfs, runner_conf, eval_conf)
-
-        assert len(udfs) == 1, "One TRANSFORM_WITH_STATE_PYTHON_ROW UDF expected here."
-        self._func, self._return_type = udfs[0].func, udfs[0].return_type
+        super().__init__(udf_descs, runner_conf, eval_conf)
 
         # See TransformWithStateInPySparkExec for how arg_offsets are used to
         # distinguish between grouping attributes and data attributes.
-        parsed_offsets = extract_key_value_indexes(udfs[0].args_offsets)
+        parsed_offsets = extract_key_value_indexes(self._udf_desc.args_offsets)
         self._key_offsets = parsed_offsets[0][0]
 
         self._stateful_processor_api_client = StatefulProcessorApiClient(
@@ -850,7 +842,7 @@ class RowTransformWithStateUDFHandler(BatchEvalTypeHandler["pa.RecordBatch"]):
             # Convert spark type to arrow type
             # TODO: we need to make this configurable, currently using default values.
             arrow_type = to_arrow_type(
-                self._return_type,
+                self._udf_desc.return_type,
                 timezone="UTC",
                 prefers_large_types=False,
             )
@@ -900,12 +892,9 @@ class RowTransformWithStateInitStateUDFHandler(BatchEvalTypeHandler["pa.RecordBa
 
     eval_type = PythonEvalType.SQL_TRANSFORM_WITH_STATE_PYTHON_ROW_INIT_STATE_UDF
 
-    def __init__(self, udfs: list[UDF], runner_conf: RunnerConf, eval_conf: EvalConf) -> None:
+    def __init__(self, udf_descs: list[UDF], runner_conf: RunnerConf, eval_conf: EvalConf) -> None:
         require_minimum_pyarrow_version()
-        super().__init__(udfs, runner_conf, eval_conf)
-
-        assert len(udfs) == 1, "One TRANSFORM_WITH_STATE_PYTHON_ROW_INIT_STATE UDF expected here."
-        self._func, self._return_type = udfs[0].func, udfs[0].return_type
+        super().__init__(udf_descs, runner_conf, eval_conf)
 
         # See TransformWithStateInPandasExec for how arg_offsets are used to
         # distinguish between grouping attributes and data attributes.
@@ -914,7 +903,7 @@ class RowTransformWithStateInitStateUDFHandler(BatchEvalTypeHandler["pa.RecordBa
         #     [groupingKeyOffsets, dedupDataOffsets],
         #     [initStateGroupingOffsets, dedupInitDataOffsets]
         # ]
-        parsed_offsets = extract_key_value_indexes(udfs[0].args_offsets)
+        parsed_offsets = extract_key_value_indexes(self._udf_desc.args_offsets)
         self._key_offsets = parsed_offsets[0][0]
         self._init_key_offsets = parsed_offsets[1][0]
 
@@ -1031,7 +1020,7 @@ class RowTransformWithStateInitStateUDFHandler(BatchEvalTypeHandler["pa.RecordBa
             # Convert spark type to arrow type
             # TODO: we need to make this configurable, currently using default values.
             arrow_type = to_arrow_type(
-                self._return_type,
+                self._udf_desc.return_type,
                 timezone="UTC",
                 prefers_large_types=False,
             )

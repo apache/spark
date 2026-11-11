@@ -28,7 +28,7 @@ import scala.language.postfixOps
 import scala.reflect.ClassTag
 import scala.util.Random
 
-import org.apache.spark.{SPARK_DOC_ROOT, SparkArithmeticException, SparkDateTimeException, SparkException, SparkFunSuite, SparkIllegalArgumentException, SparkRuntimeException, SparkUpgradeException}
+import org.apache.spark.{SPARK_DOC_ROOT, SparkArithmeticException, SparkDateTimeException, SparkException, SparkFunSuite, SparkIllegalArgumentException, SparkRuntimeException, SparkUnsupportedOperationException, SparkUpgradeException}
 import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.{CatalystTypeConverters, InternalRow}
 import org.apache.spark.sql.catalyst.analysis.TypeCheckResult.DataTypeMismatch
@@ -1283,6 +1283,84 @@ class DateExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
       ToUnixTimestamp(Literal.create(null, TimestampLTZNanosType(9)), fmt, UTC_OPT), null)
   }
 
+  test("SPARK-57836: GetTimestamp with a nanosecond-precision result type") {
+    import org.apache.spark.sql.catalyst.util.TimestampNanosTestUtils._
+    val fmt = "yyyy-MM-dd HH:mm:ss.SSSSSSSSS"
+    val ldt = timestampNTZ(2020, 1, 1, 13, 24, 35, 123456789)
+    def ntz(e: Expression, p: Int, failOnError: Boolean): GetTimestamp =
+      GetTimestamp(e, Literal(fmt), TimestampNTZNanosType(p), timeZoneId = PST_OPT,
+        failOnError = failOnError)
+    def ltz(e: Expression, p: Int, failOnError: Boolean): GetTimestamp =
+      GetTimestamp(e, Literal(fmt), TimestampLTZNanosType(p), timeZoneId = PST_OPT,
+        failOnError = failOnError)
+
+    Seq(true, false).foreach { failOnError =>
+      foreachNanosPrecision { p =>
+        val floored = ldt.withNano(nanoOfSecTruncator(p)(ldt.getNano))
+        // Digits beyond `p` are floored. NTZ ignores the zone; LTZ parses in it.
+        Seq(Literal(fmt), NonFoldableLiteral(fmt)).foreach { f =>
+          checkEvaluation(
+            ntz(Literal("2020-01-01 13:24:35.123456789"), p, failOnError).copy(right = f),
+            localDateTimeToNanosVal(floored))
+          checkEvaluation(
+            ltz(Literal("2020-01-01 13:24:35.123456789"), p, failOnError).copy(right = f),
+            localDateTimeToNanosVal(floored, PST))
+        }
+        // Fewer fractional digits than `p`, and a pre-epoch value.
+        checkEvaluation(
+          ntz(Literal("2020-01-01 13:24:35.1"), p, failOnError),
+          localDateTimeToNanosVal(timestampNTZ(2020, 1, 1, 13, 24, 35, 100000000)))
+        checkEvaluation(
+          ntz(Literal("1969-12-31 23:59:59.999999999"), p, failOnError),
+          localDateTimeToNanosVal(
+            timestampNTZ(1969, 12, 31, 23, 59, 59, nanoOfSecTruncator(p)(999999999))))
+
+        // Only a string is accepted; ParseToTimestamp casts other inputs.
+        Seq(
+          Literal.create(0, DateType),
+          Literal.create(0L, TimestampType),
+          Literal.create(0L, TimestampNTZType),
+          Literal.create(nanosVal(5L, 999), TimestampLTZNanosType(9))).foreach { e =>
+          assert(ntz(e, p, failOnError).checkInputDataTypes().isFailure)
+          assert(ltz(e, p, failOnError).checkInputDataTypes().isFailure)
+        }
+
+        // NULL input or format.
+        checkEvaluation(ntz(Literal.create(null, StringType), p, failOnError), null)
+        checkEvaluation(
+          ltz(Literal("2020-01-01 13:24:35"), p, failOnError)
+            .copy(right = Literal.create(null, StringType)),
+          null)
+
+        // Invalid input fails in ANSI mode like the microsecond path, and is NULL otherwise.
+        Seq("Unparseable", "2020-01-01 13:24:35.1234567891").foreach { s =>
+          Seq(ntz(Literal(s), p, failOnError), ltz(Literal(s), p, failOnError)).foreach { e =>
+            if (failOnError) {
+              checkExceptionInExpression[SparkDateTimeException](e, "could not be parsed")
+            } else {
+              checkEvaluation(e, null)
+            }
+          }
+        }
+      }
+    }
+
+    // The LEGACY parser can't parse nanoseconds: LTZ raises a clean error even when
+    // failOnError is false. NTZ always uses the non-legacy parser.
+    withSQLConf(SQLConf.LEGACY_TIME_PARSER_POLICY.key -> "LEGACY") {
+      Seq(true, false).foreach { failOnError =>
+        Seq(Literal(fmt), NonFoldableLiteral(fmt)).foreach { f =>
+          checkExceptionInExpression[SparkUnsupportedOperationException](
+            ltz(Literal("2020-01-01 13:24:35.123456789"), 9, failOnError).copy(right = f),
+            "LEGACY time parser policy")
+          checkEvaluation(
+            ntz(Literal("2020-01-01 13:24:35.123456789"), 9, failOnError).copy(right = f),
+            localDateTimeToNanosVal(ldt))
+        }
+      }
+    }
+  }
+
   test("datediff") {
     checkEvaluation(
       DateDiff(Literal(Date.valueOf("2015-07-24")), Literal(Date.valueOf("2015-07-21"))), 3)
@@ -1516,6 +1594,69 @@ class DateExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
               Literal(0), Literal(0), Literal(Decimal(BigDecimal(58.000001), 16, 6)))
             checkEvaluation(makeTimestampExpr, expectedAnswer("2019-08-12 00:00:58.000001"))
           }
+        }
+      }
+    }
+  }
+
+  test("SPARK-60743: make_timestamp rejects out-of-range seconds instead of wrapping them") {
+    // The seconds input is DecimalType(16, 6), so its unscaled micros can exceed an int.
+    // Each value below must fail like 61 seconds does instead of wrapping modulo 2^32. The
+    // error shows the seconds given, truncated towards zero, as make_time reports them, or in
+    // full for a value between -1 and 0, which the truncation would show as the valid 0.
+    def secondOfMinute(shown: String): String =
+      s"Invalid value for SecondOfMinute (valid values 0 - 59): $shown"
+    val monthOfYear = "Invalid value for MonthOfYear (valid values 1 - 12): 13"
+    val outOfRangeSeconds = Seq(
+      // (year, month, day, hour, min, sec, the range message of the error)
+      // The largest micros that fit an int, and the first that do not.
+      (2020, 1, 1, 0, 0, "2147.483647", secondOfMinute("2147")),
+      (2020, 1, 1, 0, 0, "2147.483648", secondOfMinute("2147")),
+      // 4324967296 - 2^32 = 30000000 micros, which would read as 30 seconds.
+      (2020, 1, 1, 0, 0, "4324.967296", secondOfMinute("4324")),
+      // 4354967296 - 2^32 = 60000000 micros, which would roll over to the next minute.
+      (2019, 6, 30, 23, 59, "4354.967296", secondOfMinute("4354")),
+      // 4354967297 - 2^32 = 60000001 micros, which raised INVALID_FRACTION_OF_SECOND.
+      (2019, 6, 30, 23, 59, "4354.967297", secondOfMinute("4354")),
+      // 3000000000 micros would wrap to a negative int.
+      (2020, 1, 1, 0, 0, "3000", secondOfMinute("3000")),
+      // A negative value whose micros would wrap to 30 seconds.
+      (2020, 1, 1, 0, 0, "-4264.967296", secondOfMinute("-4264")),
+      // Values between -1 and 0, shown in full.
+      (2020, 1, 1, 0, 0, "-0.5", secondOfMinute("-0.5")),
+      (2020, 1, 1, 0, 0, "-0.000001", secondOfMinute("-0.000001")),
+      // The largest and the smallest DecimalType(16, 6) values: even their whole seconds do
+      // not fit an int.
+      (2020, 1, 1, 0, 0, "9999999999.999999", secondOfMinute("9999999999")),
+      (2020, 1, 1, 0, 0, "-9999999999.999999", secondOfMinute("-9999999999")),
+      // A small out-of-range value, for comparison.
+      (2020, 1, 1, 0, 0, "61", secondOfMinute("61")),
+      // With an invalid month: a negative value, or one whose whole seconds exceed Int.MaxValue,
+      // is reported before the month, as make_time does, and any other out-of-range value after
+      // it, a value between 60 and 61 seconds excepted, whose fraction is reported first.
+      (2020, 13, 1, 0, 0, "-1", secondOfMinute("-1")),
+      (2020, 13, 1, 0, 0, "61", monthOfYear),
+      (2020, 13, 1, 0, 0, "2147483647", monthOfYear),
+      (2020, 13, 1, 0, 0, "2147483647.5", monthOfYear),
+      (2020, 13, 1, 0, 0, "2147483648", secondOfMinute("2147483648")))
+    for {
+      dataType <- Seq(TimestampType, TimestampNTZType)
+      // The seven-argument form, with a time zone, for make_timestamp and make_timestamp_ltz.
+      timezone <- if (dataType == TimestampType) Seq(None, Some(Literal("UTC"))) else Seq(None)
+      ansi <- Seq(true, false)
+      (year, month, day, hour, min, sec, rangeMessage) <- outOfRangeSeconds
+    } {
+      val expr = MakeTimestamp(Literal(year), Literal(month), Literal(day), Literal(hour),
+        Literal(min), Literal(Decimal(BigDecimal(sec), 16, 6)), timezone = timezone,
+        timeZoneId = Some("UTC"), failOnError = ansi, dataType = dataType)
+      withClue(s"$dataType, timezone = $timezone, ansi = $ansi, sec = $sec: ") {
+        if (ansi) {
+          checkErrorInExpression[SparkDateTimeException](
+            expr,
+            condition = "DATETIME_FIELD_OUT_OF_BOUNDS.WITHOUT_SUGGESTION",
+            parameters = Map("rangeMessage" -> rangeMessage))
+        } else {
+          checkEvaluation(expr, null)
         }
       }
     }
@@ -3929,8 +4070,9 @@ class DateExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
     assert(CurrentTimestampExpressionBuilder.build("current_timestamp", Seq(Add(Literal(4),
       Literal(5)))) === CurrentTimestampNanos(9))
 
-    // Out-of-range precision (other than 6) is rejected with INVALID_TIMESTAMP_PRECISION.
-    Seq(0, 3, 5, 10).foreach { p =>
+    // Out-of-range precision (other than 6) is rejected with INVALID_TIMESTAMP_PRECISION. A
+    // BIGINT precision does not wrap into range.
+    Seq[Any](0, 3, 5, 10, 4294967305L).foreach { p =>
       checkError(
         exception = intercept[SparkException] {
           CurrentTimestampExpressionBuilder.build("current_timestamp", Seq(Literal(p)))

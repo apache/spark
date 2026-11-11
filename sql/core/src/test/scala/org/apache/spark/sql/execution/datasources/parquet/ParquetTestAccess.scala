@@ -48,6 +48,7 @@ import org.apache.spark.util.SparkClassUtils
  *   - `LateMaterializationParquetRecordReader`'s scratch vectors and queued survivor sets, the
  *     column readers and row indexes a reader still holds, and a vector's byte-child capacity
  *     (private state a test checks the reader's memory by)
+ *   - `VectorizedParquetRecordReader.columnVectors` (field).
  */
 object ParquetTestAccess {
 
@@ -252,6 +253,10 @@ object ParquetTestAccess {
     val f = classOf[VectorizedParquetRecordReader].getDeclaredField("columnVectors")
     f.setAccessible(true)
     f
+  }
+
+  def columnVectors(reader: VectorizedParquetRecordReader): Array[AnyRef] = {
+    columnVectorsField.get(reader).asInstanceOf[Array[AnyRef]]
   }
 
   private lazy val columnVectorCls = SparkClassUtils.classForName[Any](

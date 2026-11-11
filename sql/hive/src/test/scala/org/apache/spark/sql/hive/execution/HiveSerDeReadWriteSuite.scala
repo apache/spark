@@ -340,4 +340,40 @@ class HiveSerDeReadWriteSuite extends QueryTest with TestHiveSingleton {
       }
     }
   }
+
+  test("SPARK-60565: Read and write collated strings in Hive serde tables") {
+    Seq("SEQUENCEFILE", "TEXTFILE", "RCFILE", "ORC", "PARQUET", "AVRO").foreach { fileFormat =>
+      withTable("hive_serde", "hive_serde_ctas") {
+        spark.sql(
+          s"""
+             |CREATE TABLE hive_serde (
+             |  c1 STRING COLLATE UNICODE_CI,
+             |  c2 ARRAY<STRING COLLATE UNICODE_CI>,
+             |  c3 STRUCT<f: STRING COLLATE UTF8_LCASE>,
+             |  c4 MAP<STRING, STRING COLLATE UNICODE_CI>,
+             |  c5 CHAR(3) COLLATE UTF8_LCASE,
+             |  c6 VARCHAR(3) COLLATE UNICODE_CI)
+             |STORED AS $fileFormat
+             |""".stripMargin)
+        hiveClient.runSqlHive("INSERT INTO TABLE hive_serde SELECT " +
+          "'a', ARRAY('b'), NAMED_STRUCT('f', 'c'), MAP('k', 'd'), 'e', 'f' FROM (SELECT 1) t")
+        spark.sql("INSERT INTO TABLE hive_serde " +
+          "SELECT 'A', ARRAY('B'), NAMED_STRUCT('f', 'C'), MAP('k', 'D'), 'E', 'F'")
+        val expected = Seq(
+          Row("a", Seq("b"), Row("c"), Map("k" -> "d"), "e  ", "f"),
+          Row("A", Seq("B"), Row("C"), Map("k" -> "D"), "E  ", "F"))
+        checkAnswer(spark.table("hive_serde"), expected)
+        // The collations are kept when Spark reads the table.
+        checkAnswer(
+          spark.sql("SELECT count(*) FROM hive_serde WHERE c1 = 'a' AND c2[0] = 'b' " +
+            "AND c3.f = 'c' AND c4['k'] = 'd' AND c5 = 'e' AND c6 = 'f'"),
+          Row(2))
+        assert(hiveClient.runSqlHive("SELECT c1 FROM hive_serde ORDER BY c1") === Seq("A", "a"))
+
+        spark.sql(s"CREATE TABLE hive_serde_ctas STORED AS $fileFormat AS SELECT * FROM hive_serde")
+        assert(spark.table("hive_serde_ctas").schema === spark.table("hive_serde").schema)
+        checkAnswer(spark.table("hive_serde_ctas"), expected)
+      }
+    }
+  }
 }

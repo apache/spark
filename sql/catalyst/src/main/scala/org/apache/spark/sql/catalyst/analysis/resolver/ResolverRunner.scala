@@ -18,7 +18,11 @@
 package org.apache.spark.sql.catalyst.analysis.resolver
 
 import org.apache.spark.sql.catalyst.{QueryPlanningTracker, SQLConfHelper}
-import org.apache.spark.sql.catalyst.analysis.{AnalysisContext, MaterializedCTECheck}
+import org.apache.spark.sql.catalyst.analysis.{
+  AnalysisContext,
+  MaterializedCTECheck,
+  NanosTimestampSubtractionCheck
+}
 import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
 import org.apache.spark.sql.catalyst.trees.TreeNodeTag
 import org.apache.spark.sql.internal.SQLConf
@@ -39,7 +43,8 @@ class ResolverRunner(
    */
   private val singlePassOnlyResolutionChecks: Seq[LogicalPlan => Unit] = Seq(
     NonDeterministicExpressionCheck,
-    MaterializedCTECheck
+    MaterializedCTECheck,
+    NanosTimestampSubtractionCheck
   )
 
   /**

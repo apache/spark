@@ -20,7 +20,6 @@ package org.apache.spark
 import java.io.PrintStream
 
 import org.apache.commons.io.output.TeeOutputStream
-import org.mockito.Mockito.{doReturn, mock}
 
 import org.apache.spark.benchmark.{Benchmark, BenchmarkBase}
 import org.apache.spark.internal.config
@@ -46,12 +45,15 @@ object HighlyCompressedMapStatusBenchmark extends BenchmarkBase {
 
   private val loc = BlockManagerId("a", "host", 1000)
 
-  private def envWithSkewedFactor(skewedFactor: Double): SparkEnv = {
-    val conf = new SparkConf()
-      .set(config.SHUFFLE_ACCURATE_BLOCK_SKEWED_FACTOR.key, skewedFactor.toString)
-    val env = mock(classOf[SparkEnv])
-    doReturn(conf, Seq.empty: _*).when(env).conf
-    env
+  // HighlyCompressedMapStatus reads the skewed factor from SparkEnv.get.conf on every call.
+  private def setSkewedFactor(skewedFactor: Double): Unit = {
+    SparkEnv.get.conf.set(config.SHUFFLE_ACCURATE_BLOCK_SKEWED_FACTOR.key, skewedFactor.toString)
+  }
+
+  private def withLocalSparkContext(f: => Unit): Unit = {
+    val sc = new SparkContext(
+      new SparkConf().setMaster("local[1]").setAppName("HighlyCompressedMapStatusBenchmark"))
+    try f finally sc.stop()
   }
 
   private def skewedBlockSizes(numPartitions: Int): Array[Long] = {
@@ -88,10 +90,10 @@ object HighlyCompressedMapStatusBenchmark extends BenchmarkBase {
    * adaptive query execution plans on, so the lookup cost is paid numPartitions * numMapTasks
    * times per shuffle.
    */
-  private def runLookupBenchmark(envWithSkewedSizes: SparkEnv): Unit = {
+  private def runLookupBenchmark(): Unit = {
     val numMapTasks = 100
     Seq(2048, 50000).foreach { numPartitions =>
-      SparkEnv.set(envWithSkewedSizes)
+      setSkewedFactor(5.0)
       val sizes = tiedSkewedBlockSizes(numPartitions)
       val statuses =
         Array.tabulate(numMapTasks)(id => HighlyCompressedMapStatus(loc, sizes, id.toLong))
@@ -182,33 +184,33 @@ object HighlyCompressedMapStatusBenchmark extends BenchmarkBase {
   }
 
   override def runBenchmarkSuite(mainArgs: Array[String]): Unit = {
-    val envWithoutSkewedSizes = envWithSkewedFactor(-1.0)
-    val envWithSkewedSizes = envWithSkewedFactor(5.0)
-    Seq("skewed" -> skewedBlockSizes _, "organ pipe" -> organPipeBlockSizes _).foreach {
-      case (distribution, blockSizes) =>
-        runBenchmark(s"Build HighlyCompressedMapStatus, $distribution block sizes") {
-          Seq(2048, 10000, 50000).foreach { numPartitions =>
-            val benchmark = new Benchmark(s"$numPartitions shuffle partitions", 1, output = output)
-            val sizes = blockSizes(numPartitions)
+    withLocalSparkContext {
+      Seq("skewed" -> skewedBlockSizes _, "organ pipe" -> organPipeBlockSizes _).foreach {
+        case (distribution, blockSizes) =>
+          runBenchmark(s"Build HighlyCompressedMapStatus, $distribution block sizes") {
+            Seq(2048, 10000, 50000).foreach { numPartitions =>
+              val benchmark =
+                new Benchmark(s"$numPartitions shuffle partitions", 1, output = output)
+              val sizes = blockSizes(numPartitions)
 
-            benchmark.addCase("skewed block sizes not recorded", 10) { _ =>
-              SparkEnv.set(envWithoutSkewedSizes)
-              HighlyCompressedMapStatus(loc, sizes, 0)
+              benchmark.addCase("skewed block sizes not recorded", 10) { _ =>
+                setSkewedFactor(-1.0)
+                HighlyCompressedMapStatus(loc, sizes, 0)
+              }
+
+              benchmark.addCase("skewed block sizes recorded accurately", 10) { _ =>
+                setSkewedFactor(5.0)
+                HighlyCompressedMapStatus(loc, sizes, 0)
+              }
+
+              benchmark.run()
             }
-
-            benchmark.addCase("skewed block sizes recorded accurately", 10) { _ =>
-              SparkEnv.set(envWithSkewedSizes)
-              HighlyCompressedMapStatus(loc, sizes, 0)
-            }
-
-            benchmark.run()
           }
-        }
+      }
+      runBenchmark("Read block sizes out of HighlyCompressedMapStatus") {
+        runLookupBenchmark()
+      }
     }
-    runBenchmark("Read block sizes out of HighlyCompressedMapStatus") {
-      runLookupBenchmark(envWithSkewedSizes)
-    }
-    SparkEnv.set(null)
     runBenchmark("Driver heap retained by MapOutputTracker") {
       runDriverHeapReport()
     }

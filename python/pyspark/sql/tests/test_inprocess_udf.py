@@ -303,15 +303,31 @@ class InProcessUDFTests(ReusedSQLTestCase):
             self.spark.range(1).select(inprocess_udf("boolean")(flags)("id")).first()[0]
         )
 
+    @staticmethod
+    def _java_command(jvm, java_home):
+        """
+        The start of a command line for a fresh probe JVM: this test's java and the module
+        options Spark's own launcher passes (JavaModuleOptions), so a probe gets the same module
+        options as Spark's JVMs on every Java version, e.g. with Unsafe allowed for Netty on
+        Java 25+. Only the module options are shared: the other options python/run-tests.py
+        gives the test JVM, such as java.io.tmpdir, are not.
+
+        The options start with -XX:+IgnoreUnrecognizedVMOptions, which also applies to the
+        options a probe appends, so a misspelled -XX option does not fail the launch.
+        """
+        options = jvm.org.apache.spark.launcher.JavaModuleOptions.defaultModuleOptions()
+        return [str(Path(java_home) / "bin" / "java")] + options.split(" ")
+
     def test_missing_cdi_dependency_fails_plugin_startup(self):
         import subprocess
 
         jvm = self.spark.sparkContext._jvm
         java_home = jvm.java.lang.System.getProperty("java.home")
+        # Spark bundles arrow-c-data too, so drop its JAR as well as the configured one.
         classpath = os.pathsep.join(
             p
             for p in jvm.java.lang.System.getProperty("java.class.path").split(os.pathsep)
-            if p != self.cdi_jar
+            if p != self.cdi_jar and not Path(p).name.startswith("arrow-c-data")
         )
         source = """
 import java.lang.reflect.Proxy;
@@ -340,7 +356,7 @@ class MissingCdiProbe {
             source_file = Path(directory) / "MissingCdiProbe.java"
             source_file.write_text(source)
             result = subprocess.run(
-                [str(Path(java_home) / "bin" / "java"), "-cp", classpath, str(source_file)],
+                self._java_command(jvm, java_home) + ["-cp", classpath, str(source_file)],
                 capture_output=True,
                 text=True,
                 timeout=90,
@@ -392,11 +408,8 @@ class MissingJepProbe {
             source_file = Path(directory) / "MissingJepProbe.java"
             source_file.write_text(source)
             result = subprocess.run(
-                [
-                    str(Path(java_home) / "bin" / "java"),
-                    "--add-opens=java.base/java.nio=ALL-UNNAMED",
-                    "--add-opens=java.base/sun.nio.ch=ALL-UNNAMED",
-                    "-Dio.netty.tryReflectionSetAccessible=true",
+                self._java_command(jvm, java_home)
+                + [
                     "-cp",
                     classpath,
                     str(source_file),
@@ -521,11 +534,8 @@ class BootstrapProbe {
             import sys
 
             result = subprocess.run(
-                [
-                    str(Path(java_home) / "bin" / "java"),
-                    "--add-opens=java.base/java.nio=ALL-UNNAMED",
-                    "--add-opens=java.base/sun.nio.ch=ALL-UNNAMED",
-                    "-Dio.netty.tryReflectionSetAccessible=true",
+                self._java_command(jvm, java_home)
+                + [
                     f"-Djava.library.path={self.jep_dir}",
                     "--class-path",
                     classpath,
@@ -601,8 +611,8 @@ class BootstrapFailureProbe {
                 [str(self.python_source), str(Path(py4j.__file__).parents[1])]
             )
             result = subprocess.run(
-                [
-                    str(Path(java_home) / "bin" / "java"),
+                self._java_command(jvm, java_home)
+                + [
                     f"-Djava.library.path={self.jep_dir}",
                     "--class-path",
                     classpath,

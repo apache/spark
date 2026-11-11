@@ -18,6 +18,7 @@
 package org.apache.spark.sql.execution.command.v2
 
 import org.apache.spark.sql.catalyst.InternalRow
+import org.apache.spark.sql.catalyst.analysis.NanosTimestampSubtractionCheck
 import org.apache.spark.sql.catalyst.expressions.{Alias, Expression, Literal, VariableReference}
 import org.apache.spark.sql.errors.QueryCompilationErrors
 
@@ -60,6 +61,8 @@ object ParameterBindingUtils {
       preExtractedNames: Seq[String] = Seq.empty): (Array[Any], Array[String]) = {
     val values = scala.collection.mutable.ListBuffer[Any]()
     val names = scala.collection.mutable.ListBuffer[String]()
+    // The args are evaluated here, before the analyzed plan is checked.
+    args.foreach(NanosTimestampSubtractionCheck.checkExpression)
 
     args.zipWithIndex.foreach { case (expr, idx) =>
       val (paramExpr, paramName) = if (preExtractedNames.nonEmpty) {

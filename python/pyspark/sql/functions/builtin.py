@@ -1871,7 +1871,7 @@ def median(col: "ColumnOrName") -> Column:
     ----------
     col : :class:`~pyspark.sql.Column` or column name
         target column to compute on.
-        A column that evaluates to a numeric, interval, or time.
+        A column that evaluates to a numeric, interval, time, or nanosecond-precision timestamp.
 
     Returns
     -------
@@ -14483,7 +14483,7 @@ def window(
     """
     from pyspark.sql.classic.column import _to_java_column
 
-    def check_string_field(field, fieldName):  # type: ignore[no-untyped-def]
+    def check_string_field(field: Any, fieldName: str) -> None:
         if not field or type(field) is not str:
             raise PySparkTypeError(
                 errorClass="NOT_EXPECTED_TYPE",

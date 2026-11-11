@@ -87,7 +87,6 @@ from pyspark.sql.connect.client.retries import (
     RetryPolicy,
 )
 from pyspark.sql.connect.conversion import (
-    proto_to_remote_cached_dataframe,
     proto_to_storage_level,
     storage_level_to_proto,
 )
@@ -1922,9 +1921,7 @@ class SparkConnectClient(object):
                 yield {"create_resource_profile_command_result": profile_id}
             if b.HasField("checkpoint_command_result"):
                 yield {
-                    "checkpoint_command_result": proto_to_remote_cached_dataframe(
-                        b.checkpoint_command_result.relation
-                    )
+                    "checkpoint_command_result": (b.checkpoint_command_result.relation.relation_id)
                 }
             if b.HasField("ml_command_result"):
                 yield {"ml_command_result": b.ml_command_result}
