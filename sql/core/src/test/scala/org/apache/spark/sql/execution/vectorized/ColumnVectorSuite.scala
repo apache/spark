@@ -112,6 +112,15 @@ class ColumnVectorSuite extends SparkFunSuite with SQLHelper {
     }
   }
 
+  testVectors("ColumnarArray.get returns null for null elements", 1, IntegerType) { testVector =>
+    testVector.putInt(0, 42)
+    testVector.putNull(0)
+
+    val array = new ColumnarArray(testVector, 0, 1)
+    assert(array.isNullAt(0))
+    assert(array.get(0, IntegerType) == null)
+  }
+
   testVectors("date", 10, DateType) { testVector =>
     (0 until 10).foreach { i =>
       testVector.appendInt(i)
