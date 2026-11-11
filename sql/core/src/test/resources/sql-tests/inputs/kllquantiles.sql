@@ -721,6 +721,39 @@ FROM t_float_1_5_through_7_11;
 SELECT kll_sketch_get_rank_double(kll_sketch_agg_double(col1), array(CAST(NULL AS DOUBLE)))
 FROM t_double_1_5_through_7_11;
 
+SET spark.sql.ansi.enabled=true;
+
+SELECT
+  kll_sketch_get_quantile_bigint(CAST(NULL AS BINARY), array(1D / 0D)) AS q_long,
+  kll_sketch_get_quantile_float(CAST(NULL AS BINARY), array(1D / 0D)) AS q_float,
+  kll_sketch_get_quantile_double(CAST(NULL AS BINARY), array(1D / 0D)) AS q_double,
+  kll_sketch_get_rank_bigint(CAST(NULL AS BINARY), array(CAST(1D / 0D AS BIGINT))) AS r_long,
+  kll_sketch_get_rank_float(CAST(NULL AS BINARY), array(CAST(1D / 0D AS FLOAT))) AS r_float,
+  kll_sketch_get_rank_double(CAST(NULL AS BINARY), array(1D / 0D)) AS r_double;
+
+SELECT
+  IF(false, kll_sketch_get_quantile_bigint(X'00', array(CAST('bad' AS DOUBLE))), NULL) AS q_long,
+  IF(false, kll_sketch_get_quantile_float(X'00', array(CAST('bad' AS DOUBLE))), NULL) AS q_float,
+  IF(false, kll_sketch_get_quantile_double(X'00', array(CAST('bad' AS DOUBLE))), NULL) AS q_double,
+  CASE WHEN false THEN
+    kll_sketch_get_rank_bigint(X'00', array(CAST('bad' AS BIGINT))) END AS r_long,
+  CASE WHEN false THEN
+    kll_sketch_get_rank_float(X'00', array(CAST('bad' AS FLOAT))) END AS r_float,
+  CASE WHEN false THEN
+    kll_sketch_get_rank_double(X'00', array(CAST('bad' AS DOUBLE))) END AS r_double;
+
+SELECT kll_sketch_get_quantile_bigint(kll_sketch_agg_bigint(col1), array(1D / 0D))
+FROM t_long_1_5_through_7_11;
+
+SELECT kll_sketch_get_rank_float(kll_sketch_agg_float(col1), array(CAST('bad' AS FLOAT)))
+FROM t_float_1_5_through_7_11;
+
+SET spark.sql.ansi.enabled=false;
+
+SELECT kll_sketch_get_quantile_double(X'00', array(CAST('bad' AS DOUBLE)));
+
+SET spark.sql.ansi.enabled=true;
+
 -- Clean up
 DROP TABLE IF EXISTS t_int_1_5_through_7_11;
 DROP TABLE IF EXISTS t_long_1_5_through_7_11;

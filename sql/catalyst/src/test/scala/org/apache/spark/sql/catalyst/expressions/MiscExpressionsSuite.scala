@@ -23,7 +23,8 @@ import scala.util.Random
 
 import org.apache.datasketches.kll.{KllDoublesSketch, KllFloatsSketch, KllLongsSketch}
 
-import org.apache.spark.{SparkFunSuite, SparkRuntimeException}
+import org.apache.spark.{SparkFunSuite, SparkRuntimeException, SparkThrowable}
+import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.analysis.TypeCheckResult.DataTypeMismatch
 import org.apache.spark.sql.catalyst.util.GenericArrayData
 import org.apache.spark.sql.catalyst.util.TypeUtils.ordinalNumber
@@ -253,6 +254,60 @@ class MiscExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
           assert(getter(nonFoldable).checkInputDataTypes().asInstanceOf[DataTypeMismatch]
             .errorSubClass == "NON_FOLDABLE_INPUT")
           assert(getter(Literal("invalid")).checkInputDataTypes().isFailure)
+        }
+
+        test(s"KLL $valueType $argumentName preserves deferred request errors") {
+          val requests = Seq(
+            CreateArray(Seq(Cast(Divide(Literal(1.0d), Literal(0.0d),
+              NumericEvalContext(EvalMode.ANSI)), argumentType))) -> "DIVIDE_BY_ZERO",
+            CreateArray(Seq(Cast(Literal("invalid"), argumentType,
+              evalMode = EvalMode.ANSI))) -> "CAST_INVALID_INPUT")
+          requests.foreach { case (request, condition) =>
+            val expression = getter(request)
+            assert(expression.checkInputDataTypes().isSuccess)
+            val nullSketch = expression.withNewChildren(
+              Seq(Literal.create(null, BinaryType), request))
+            assert(nullSketch.checkInputDataTypes().isSuccess)
+            checkEvaluation(nullSketch, null)
+            checkEvaluation(If(Literal(false), expression,
+              Literal.create(null, expression.dataType)), null)
+            checkEvaluation(CaseWhen(Seq(Literal(false) -> expression),
+              Some(Literal.create(null, expression.dataType))), null)
+            val error = intercept[Exception](expression.eval())
+            assert(error.asInstanceOf[SparkThrowable].getCondition == condition)
+          }
+          val permissiveCast = CreateArray(Seq(Cast(Literal("invalid"), argumentType,
+            evalMode = EvalMode.LEGACY)))
+          assert(getter(permissiveCast).checkInputDataTypes().isFailure)
+        }
+
+        test(s"KLL $valueType $argumentName skips inspection of non-nullable elements") {
+          val value = Cast(Literal(0), argumentType).eval()
+          Seq(false, true).foreach { containsNull =>
+            var evaluations = 0
+            val request = new Literal(new GenericArrayData(Array[Any](value)),
+                ArrayType(argumentType, containsNull)) {
+              override def eval(input: InternalRow): Any = {
+                evaluations += 1
+                super.eval(input)
+              }
+            }
+            val expression = getter(request)
+            assert(expression.checkInputDataTypes().isSuccess)
+            assert(expression.checkInputDataTypes().isSuccess)
+            assert(evaluations == (if (containsNull) 2 else 0))
+          }
+          var evaluations = 0
+          val request = new ArrayRepeat(Literal(value, argumentType), Literal(10000)) {
+            override def eval(input: InternalRow): Any = {
+              evaluations += 1
+              super.eval(input)
+            }
+          }
+          val expression = getter(request)
+          assert(expression.checkInputDataTypes().isSuccess)
+          assert(expression.checkInputDataTypes().isSuccess)
+          assert(evaluations == 0)
         }
     }
   }

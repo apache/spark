@@ -17,6 +17,8 @@
 
 package org.apache.spark.sql.catalyst.expressions
 
+import scala.util.Try
+
 import org.apache.datasketches.kll.{KllDoublesSketch, KllFloatsSketch, KllLongsSketch}
 import org.apache.datasketches.memory.Memory
 
@@ -551,16 +553,16 @@ abstract class KllSketchGetQuantileBase
           "inputExpr" -> toSQLExpr(right)))
     } else {
       val typeCheckResult = super.checkInputDataTypes()
-      if (typeCheckResult.isSuccess && right.dataType.isInstanceOf[ArrayType]) {
-        right.eval() match {
-          case array: ArrayData if (0 until array.numElements()).exists(array.isNullAt) =>
-            TypeCheckResult.DataTypeMismatch(
-              errorSubClass = "UNEXPECTED_NULL",
-              messageParameters = Map("exprName" -> "rank array elements"))
-          case _ => typeCheckResult
-        }
-      } else {
-        typeCheckResult
+      right.dataType match {
+        case ArrayType(_, true) if typeCheckResult.isSuccess =>
+          Try(right.eval()).toOption match {
+            case Some(array: ArrayData) if (0 until array.numElements()).exists(array.isNullAt) =>
+              TypeCheckResult.DataTypeMismatch(
+                errorSubClass = "UNEXPECTED_NULL",
+                messageParameters = Map("exprName" -> "rank array elements"))
+            case _ => typeCheckResult
+          }
+        case _ => typeCheckResult
       }
     }
   }
@@ -748,16 +750,16 @@ abstract class KllSketchGetRankBase
           "inputExpr" -> toSQLExpr(right)))
     } else {
       val typeCheckResult = super.checkInputDataTypes()
-      if (typeCheckResult.isSuccess && right.dataType.isInstanceOf[ArrayType]) {
-        right.eval() match {
-          case array: ArrayData if (0 until array.numElements()).exists(array.isNullAt) =>
-            TypeCheckResult.DataTypeMismatch(
-              errorSubClass = "UNEXPECTED_NULL",
-              messageParameters = Map("exprName" -> "quantile array elements"))
-          case _ => typeCheckResult
-        }
-      } else {
-        typeCheckResult
+      right.dataType match {
+        case ArrayType(_, true) if typeCheckResult.isSuccess =>
+          Try(right.eval()).toOption match {
+            case Some(array: ArrayData) if (0 until array.numElements()).exists(array.isNullAt) =>
+              TypeCheckResult.DataTypeMismatch(
+                errorSubClass = "UNEXPECTED_NULL",
+                messageParameters = Map("exprName" -> "quantile array elements"))
+            case _ => typeCheckResult
+          }
+        case _ => typeCheckResult
       }
     }
   }
