@@ -227,13 +227,13 @@ class MicroBatchExecution(
     val disabledSources =
       Utils.stringToSeq(sparkSession.sessionState.conf.disabledV2StreamingMicroBatchReaders)
 
-    // Read the source evolution enforcement from the last written offset log entry. If no entries
-    // are found, use the session config value.
-    val enforceNamedInCheckpoint = initialLatestOffsetSeq.flatMap { case (_, offsetSeq) =>
+    // Read the source evolution enforcement from the last written offset log entry; an entry
+    // without metadata tracks its sources by position. If no entries are found, use the session
+    // config value.
+    val enforceNamedInCheckpoint = initialLatestOffsetSeq.map { case (_, offsetSeq) =>
       offsetSeq.metadataOpt.flatMap { metadata =>
         OffsetSeqMetadata.readValueOpt(metadata, SQLConf.ENABLE_STREAMING_SOURCE_EVOLUTION)
-          .map(_.toBoolean)
-      }
+      }.exists(_.toBoolean)
     }
     val enforceNamed = enforceNamedInCheckpoint.getOrElse(
       sparkSessionForStream.sessionState.conf.enableStreamingSourceEvolution)
@@ -468,7 +468,7 @@ class MicroBatchExecution(
 
   /**
    * Rejects source names that do not fit the source tracking of this run. Runs before any source is
-   * created, so that a rejected run leaves nothing behind in the checkpoint.
+   * created, so that a rejected run writes nothing under the checkpoint's sources/ directory.
    */
   private def checkSourceNames(
       enforceNamed: Boolean,
@@ -490,9 +490,9 @@ class MicroBatchExecution(
     }
     (enforceNamedInCheckpoint, checkpointVersion) match {
       case (Some(false), Some(version)) if namedSources.nonEmpty =>
-        // A positional checkpoint cannot start tracking sources by name. Spark 4.2 ran the named
-        // sources of catalog tables by position, with their metadata in sources/<name>, and a
-        // checkpoint written that way keeps running as before.
+        // A positional checkpoint cannot start tracking sources by name. Spark 4.2 and 4.3 ran the
+        // named sources of catalog tables by position, with their metadata in sources/<name>, and
+        // a checkpoint written that way keeps running as before.
         val fileManager = CheckpointFileManager.create(
           new Path(resolvedCheckpointRoot), sparkSession.sessionState.newHadoopConf())
         val writtenUnderNames = namedSources.forall { name =>
