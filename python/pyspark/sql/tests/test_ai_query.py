@@ -20,6 +20,8 @@ import threading
 import time
 import unittest
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
+from pathlib import Path
+from tempfile import TemporaryDirectory
 from types import SimpleNamespace
 from unittest.mock import MagicMock, Mock, patch
 
@@ -34,7 +36,8 @@ from pyspark.sql._ai_client import (
     _request_id,
 )
 from pyspark.sql.ai import ai_query, register_agent, register_model
-from pyspark.testing.utils import PySparkErrorTestUtils
+from pyspark.testing import sqlutils
+from pyspark.testing.utils import PySparkErrorTestUtils, have_pyarrow
 
 try:
     import pandas as pd
@@ -173,15 +176,74 @@ class AIQueryTests(unittest.TestCase, PySparkErrorTestUtils):
                 factory.assert_called_with(profile="local", auth_type="databricks-cli")
             finally:
                 client.close()
-            for url in ("http://agent.example", "https://user:secret@agent.example", None):
+
+    def test_invalid_databricks_urls(self):
+        workspace = Mock()
+        targets = (
+            (
+                _ChatCompletionsClient,
+                _ModelEndpoint("model", provider="databricks"),
+                "Databricks model",
+            ),
+            (_AgentClient, _AgentEndpoint("agent"), "Databricks agent"),
+        )
+        sdk = SimpleNamespace(WorkspaceClient=Mock(return_value=workspace))
+        with patch.dict("sys.modules", {"databricks.sdk": sdk}):
+            for url in (
+                None,
+                "http://example.test",
+                "https://",
+                "https://user:password@example.test",
+                "https://@example.test",
+                "https://example.test?key=value",
+                "https://example.test?",
+                "https://example.test#fragment",
+                "https://example.test#",
+                "https://example.test:broken",
+                "https://[broken",
+            ):
+                workspace.config.host = url
                 workspace.apps.get.return_value.url = url
-                with self.subTest(url=url), self.assertRaises(PySparkRuntimeError) as raised:
-                    _AgentClient(_AgentEndpoint("agent"))
-                self.check_error(
-                    raised.exception,
-                    "AI_QUERY_INVOCATION_FAILED.INVALID_URL",
-                    {"target": "Databricks agent"},
-                )
+                for client_class, endpoint, target in targets:
+                    with self.subTest(url=url, target=target):
+                        with self.assertRaises(PySparkRuntimeError) as raised:
+                            client_class(endpoint)
+                        self.check_error(
+                            raised.exception,
+                            "AI_QUERY_INVOCATION_FAILED.INVALID_URL",
+                            {"target": target},
+                        )
+
+    def test_netrc_does_not_override_databricks_authentication(self):
+        workspace = Mock()
+        workspace.config.host = "https://example.test"
+        workspace.apps.get.return_value.url = workspace.config.host
+        workspace.config.authenticate.return_value = {"Authorization": "Bearer test"}
+        sdk = SimpleNamespace(WorkspaceClient=Mock(return_value=workspace))
+
+        with TemporaryDirectory() as directory:
+            netrc = Path(directory) / "netrc"
+            netrc.write_text("default login test-user password test-password\n", encoding="utf-8")
+            netrc.chmod(0o600)
+            with (
+                patch.dict("os.environ", {"NETRC": str(netrc)}),
+                patch.dict("sys.modules", {"databricks.sdk": sdk}),
+            ):
+                for client_class, endpoint in (
+                    (_ChatCompletionsClient, _ModelEndpoint("model", provider="databricks")),
+                    (_AgentClient, _AgentEndpoint("agent")),
+                ):
+                    with self.subTest(client=client_class.__name__):
+                        client = client_class(endpoint)
+                        try:
+                            request = requests.Request(
+                                "POST", client.url, headers=workspace.config.authenticate()
+                            )
+                            prepared = client.http.prepare_request(request)
+                            self.assertEqual(prepared.headers["Authorization"], "Bearer test")
+                            self.assertTrue(client.http.trust_env)
+                        finally:
+                            client.close()
 
     def test_transient_retry_keeps_body_and_refreshes_auth(self):
         client = self.client()
@@ -379,16 +441,31 @@ class AIQueryTests(unittest.TestCase, PySparkErrorTestUtils):
         for client in clients:
             client.close.assert_called_once()
 
-    def test_cleanup_on_batch_error(self):
-        client = Mock()
-        client.invoke.side_effect = RuntimeError("failed")
-        batches = [(pd.Series(["hello"]), pd.Series(["id"]))]
-        with (
-            patch("pyspark.sql._ai_client._AgentClient", return_value=client),
-            self.assertRaises(RuntimeError),
-        ):
-            list(_query_batches(_AgentEndpoint("agent"), batches))
-        client.close.assert_called_once()
+    def test_cleanup_continues_after_close_error(self):
+        batches = [(pd.Series(["hello", "world"]), pd.Series(["id1", "id2"]))]
+        for batch_error in (None, RuntimeError("invocation failed")):
+            with self.subTest(batch_error=batch_error):
+                ready = threading.Barrier(2)
+                clients = [Mock(), Mock()]
+                close_error = RuntimeError("close failed")
+
+                def invoke(request, row_id):
+                    ready.wait(timeout=5)
+                    if batch_error is not None:
+                        raise batch_error
+                    return request.upper()
+
+                for client in clients:
+                    client.invoke.side_effect = invoke
+                    client.close.side_effect = close_error
+                with (
+                    patch("pyspark.sql._ai_client._AgentClient", side_effect=clients),
+                    self.assertRaises(RuntimeError) as raised,
+                ):
+                    list(_query_batches(_AgentEndpoint("agent", max_concurrency=2), batches))
+                self.assertIs(raised.exception, batch_error or close_error)
+                for client in clients:
+                    client.close.assert_called_once()
 
     def test_nulls_and_invalid_ids_do_not_initialize_clients(self):
         with patch("pyspark.sql._ai_client._AgentClient") as client:
@@ -469,5 +546,77 @@ class AIQueryTests(unittest.TestCase, PySparkErrorTestUtils):
             thread.join()
 
 
+@unittest.skipUnless(
+    have_ai_query_dependencies and have_pyarrow,
+    "Spark AI query tests require pandas, requests and pyarrow",
+)
+class AIQuerySparkTests(sqlutils.ReusedSQLTestCase):
+    def test_model_query_with_arrow_and_local_endpoint(self):
+        received = []
+
+        class Handler(BaseHTTPRequestHandler):
+            def do_POST(self):
+                body = json.loads(self.rfile.read(int(self.headers["Content-Length"])))
+                prompt = body["messages"][0]["content"]
+                received.append((prompt, self.headers["Authorization"]))
+                result = {"choices": [{"message": {"content": prompt.upper()}}]}
+                response = json.dumps(result).encode()
+                self.send_response(200)
+                self.send_header("Content-Type", "application/json")
+                self.send_header("Content-Length", str(len(response)))
+                self.end_headers()
+                self.wfile.write(response)
+
+            def log_message(self, *args):
+                pass
+
+        with ThreadingHTTPServer(("127.0.0.1", 0), Handler) as server:
+            thread = threading.Thread(target=server.serve_forever, daemon=True)
+            thread.start()
+            url = f"http://127.0.0.1:{server.server_port}/invocations"
+
+            def local_batches(endpoint, batches):
+                # Install the local transport in the worker after the UDF is deserialized.
+                from pyspark.sql import _ai_client
+
+                client_type = _ai_client._ChatCompletionsClient
+
+                def make_client(config):
+                    client = object.__new__(client_type)
+                    client.endpoint = config
+                    client.url = url
+                    client.workspace = SimpleNamespace(
+                        config=SimpleNamespace(
+                            authenticate=lambda: {"Authorization": "Bearer test"}
+                        )
+                    )
+                    client.http = _ai_client._databricks_session()
+                    return client
+
+                with patch.object(_ai_client, "_ChatCompletionsClient", side_effect=make_client):
+                    yield from _ai_client._query_batches(endpoint, batches)
+
+            try:
+                register_model("local-model", "model", provider="databricks", timeout=5)
+                frame = self.spark.createDataFrame(
+                    [(1, "hello"), (2, None), (3, "world")], "id int, prompt string"
+                )
+                with patch("pyspark.sql.ai._query_batches", new=local_batches):
+                    result = frame.withColumn("answer", ai_query("local-model", "prompt"))
+                    self.assertIn(
+                        "ArrowEvalPython", result._jdf.queryExecution().executedPlan().toString()
+                    )
+                    self.assertEqual(
+                        sorted((row.id, row.answer) for row in result.collect()),
+                        [(1, "HELLO"), (2, None), (3, "WORLD")],
+                    )
+                self.assertCountEqual(
+                    received, [("hello", "Bearer test"), ("world", "Bearer test")]
+                )
+            finally:
+                server.shutdown()
+                thread.join()
+
+
 if __name__ == "__main__":
-    unittest.main()
+    unittest.main(verbosity=2)

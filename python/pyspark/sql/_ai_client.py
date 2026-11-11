@@ -32,6 +32,7 @@ from pyspark.errors import PySparkRuntimeError, PySparkTypeError, PySparkValueEr
 
 if TYPE_CHECKING:
     import pandas as pd
+    from requests import Session
 
 
 @dataclass(frozen=True)
@@ -188,21 +189,46 @@ def _retry_delay(headers: Mapping[str, str], failures: int, deadline: float) -> 
     )
 
 
+def _databricks_session() -> "Session":
+    import requests
+
+    session = requests.Session()
+    # Keep the SDK's Authorization header even when a matching netrc entry exists.
+    session.auth = lambda request: request
+    return session
+
+
+def _databricks_url(url: Optional[str], target: str) -> str:
+    try:
+        parsed = urlsplit(url or "")
+        port = parsed.port
+    except ValueError:
+        raise _invocation_error(target, "INVALID_URL") from None
+    if (
+        not url
+        or parsed.scheme != "https"
+        or not parsed.hostname
+        or parsed.username is not None
+        or parsed.password is not None
+        or "?" in url
+        or "#" in url
+        or port == 0
+    ):
+        raise _invocation_error(target, "INVALID_URL")
+    return url.rstrip("/")
+
+
 class _ChatCompletionsClient:
     def __init__(self, endpoint: _ModelEndpoint) -> None:
-        import requests
         from databricks.sdk import WorkspaceClient
 
         self.endpoint = endpoint
         self.workspace = WorkspaceClient(
             profile=endpoint.profile, auth_type=endpoint.auth_type or "oauth-m2m"
         )
-        host = self.workspace.config.host
-        if urlsplit(host).scheme != "https":
-            raise _invocation_error("Databricks model", "INVALID_URL")
-        self.url = host.rstrip("/") + "/serving-endpoints/" + quote(endpoint.model_id, safe="")
-        self.url += "/invocations"
-        self.http = requests.Session()
+        host = _databricks_url(self.workspace.config.host, "Databricks model")
+        self.url = host + "/serving-endpoints/" + quote(endpoint.model_id, safe="") + "/invocations"
+        self.http = _databricks_session()
 
     def close(self) -> None:
         self.http.close()
@@ -342,26 +368,14 @@ def _extract_text(output: Any, output_field: Optional[str]) -> str:
 
 class _AgentClient:
     def __init__(self, endpoint: _AgentEndpoint) -> None:
-        import requests
         from databricks.sdk import WorkspaceClient
 
         # Resolve credentials on the worker, never while building the Spark plan.
         self.endpoint = endpoint
         self.workspace = WorkspaceClient(profile=endpoint.profile, auth_type=endpoint.auth_type)
         app_url = self.workspace.apps.get(endpoint.app_name).url
-        parsed = urlsplit(app_url or "")
-        if (
-            not app_url
-            or parsed.scheme != "https"
-            or not parsed.hostname
-            or parsed.username
-            or parsed.password
-            or parsed.query
-            or parsed.fragment
-        ):
-            raise _invocation_error("Databricks agent", "INVALID_URL")
-        self.url = app_url.rstrip("/") + "/api/invocations"
-        self.http = requests.Session()
+        self.url = _databricks_url(app_url, "Databricks agent") + "/api/invocations"
+        self.http = _databricks_session()
 
     def close(self) -> None:
         self.http.close()
@@ -469,6 +483,7 @@ def _query_batches(
                 clients.append(local.client)
         return local.client.invoke(request, row_id)
 
+    batch_failed = False
     try:
         with ThreadPoolExecutor(max_workers=endpoint.max_concurrency) as pool:
             for requests, row_ids in batches:
@@ -481,6 +496,16 @@ def _query_batches(
                         break
                     values.extend(pool.map(invoke, chunk))
                 yield pd.Series(values, dtype="object")
+    except BaseException:
+        batch_failed = True
+        raise
     finally:
+        close_error = None
         for client in clients:
-            client.close()
+            try:
+                client.close()
+            except Exception as error:
+                if close_error is None:
+                    close_error = error
+        if not batch_failed and close_error is not None:
+            raise close_error
