@@ -1617,6 +1617,19 @@ object ColumnPruning extends Rule[LogicalPlan] {
 
     case NestedColumnAliasing(rewrittenPlan) => rewrittenPlan
 
+    // Prune unnecessary child output columns from BaseEvalPython.
+    case p @ Project(_, e: BaseEvalPython) =>
+      val requiredChildAttrs = p.references -- e.producedAttributes ++ e.udfReferences
+      val newChild = prunedChild(e.child, requiredChildAttrs)
+      val requiredChildOutput = newChild.output.filter(p.references.contains)
+      if (newChild.ne(e.child) || e.requiredChildOutput != requiredChildOutput) {
+        p.copy(child = e.withNewRequiredChildOutput(newChild, requiredChildOutput))
+      } else {
+        p
+      }
+    case e: BaseEvalPython if !e.child.outputSet.subsetOf(e.references) =>
+      e.withNewChildren(Seq(prunedChild(e.child, e.references)))
+
     // for all other logical plans that inherits the output from it's children
     // Project over project is handled by the first case, skip it here.
     case p @ Project(_, child) if !child.isInstanceOf[Project] =>

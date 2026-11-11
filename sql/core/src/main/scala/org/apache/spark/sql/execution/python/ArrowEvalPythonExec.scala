@@ -83,6 +83,7 @@ private[spark] class BatchIterator[T](iter: Iterator[T], batchSize: Int)
  */
 case class ArrowEvalPythonExec(
     udfs: Seq[PythonUDF],
+    requiredChildOutput: Seq[Attribute],
     resultAttrs: Seq[Attribute],
     child: SparkPlan,
     evalType: Int) extends EvalPythonExec with PythonSQLMetrics {
@@ -183,6 +184,15 @@ case class ArrowEvalPythonExec(
       PythonEvalType.SQL_SCALAR_PANDAS_ITER_UDF)
 }
 
+object ArrowEvalPythonExec {
+  def apply(
+      udfs: Seq[PythonUDF],
+      resultAttrs: Seq[Attribute],
+      child: SparkPlan,
+      evalType: Int): ArrowEvalPythonExec =
+    ArrowEvalPythonExec(udfs, child.output, resultAttrs, child, evalType)
+}
+
 class ArrowEvalPythonEvaluatorFactory(
     childOutput: Seq[Attribute],
     udfs: Seq[PythonUDF],
@@ -204,7 +214,7 @@ class ArrowEvalPythonEvaluatorFactory(
       schema: StructType,
       context: TaskContext): Iterator[InternalRow] = {
 
-    val outputTypes = output.drop(childOutput.length).map(_.dataType.transformRecursively {
+    val outputTypes = output.takeRight(udfs.length).map(_.dataType.transformRecursively {
       case udt: UserDefinedType[_] => udt.sqlType
     })
 

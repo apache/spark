@@ -927,13 +927,15 @@ abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
    */
   object PythonEvals extends Strategy {
     override def apply(plan: LogicalPlan): Seq[SparkPlan] = plan match {
-      case ArrowEvalPython(udfs, output, child, PythonEvalType.SQL_SCALAR_ARROW_INPROCESS_UDF) =>
+      case ArrowEvalPython(
+          udfs, requiredChildOutput, output, child,
+          PythonEvalType.SQL_SCALAR_ARROW_INPROCESS_UDF) =>
         InProcessPythonUDFBuilder.checkConfiguration(conf)
-        InProcessArrowEvalPythonExec(udfs, output, planLater(child)) :: Nil
-      case ArrowEvalPython(udfs, output, child, evalType) =>
-        ArrowEvalPythonExec(udfs, output, planLater(child), evalType) :: Nil
-      case BatchEvalPython(udfs, output, child) =>
-        BatchEvalPythonExec(udfs, output, planLater(child)) :: Nil
+        InProcessArrowEvalPythonExec(udfs, requiredChildOutput, output, planLater(child)) :: Nil
+      case ArrowEvalPython(udfs, requiredChildOutput, output, child, evalType) =>
+        ArrowEvalPythonExec(udfs, requiredChildOutput, output, planLater(child), evalType) :: Nil
+      case BatchEvalPython(udfs, requiredChildOutput, output, child) =>
+        BatchEvalPythonExec(udfs, requiredChildOutput, output, planLater(child)) :: Nil
       case BatchEvalPythonUDTF(udtf, requiredChildOutput, resultAttrs, child) =>
         BatchEvalPythonUDTFExec(udtf, requiredChildOutput, resultAttrs, planLater(child)) :: Nil
       case ArrowEvalPythonUDTF(udtf, requiredChildOutput, resultAttrs, child, evalType) =>

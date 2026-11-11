@@ -61,11 +61,12 @@ object EvalPythonExec {
  */
 trait EvalPythonExec extends UnaryExecNode {
   def udfs: Seq[PythonUDF]
+  def requiredChildOutput: Seq[Attribute]
   def resultAttrs: Seq[Attribute]
 
   protected def evaluatorFactory: EvalPythonEvaluatorFactory
 
-  override def output: Seq[Attribute] = child.output ++ resultAttrs
+  override def output: Seq[Attribute] = requiredChildOutput ++ resultAttrs
 
   override def producedAttributes: AttributeSet = AttributeSet(resultAttrs)
 

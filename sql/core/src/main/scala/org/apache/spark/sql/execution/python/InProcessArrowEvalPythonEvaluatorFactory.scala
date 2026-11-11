@@ -91,14 +91,17 @@ class InProcessArrowEvalPythonEvaluatorFactory(
       inputSchema: StructType,
       context: TaskContext): Option[Iterator[InternalRow]] = {
     import InProcessArrowEvalPythonEvaluatorFactory.{Buffered, ReadBack, readsBack}
+    val requiredChildOutput = output.dropRight(udfs.length)
     val inputColumns = inputs.length == childOutput.length && inputs.zip(childOutput).forall {
       case (a: Attribute, c) => a.exprId == c.exprId
       case _ => false
     }
-    // If all input columns are UDF arguments, they are written to Arrow regardless. Read them
-    // back from the exported input vectors instead of buffering every input row, if their
-    // values read back from Arrow exactly as written and as fast as an unsafe row copy.
-    val joinInput = if (inputColumns && inputSchema.forall(f => readsBack(f.dataType))) {
+    // If all input columns are UDF arguments and required in the output, they are written to
+    // Arrow regardless. Read them back from the exported input vectors instead of buffering
+    // every input row, if their values read back from Arrow exactly as written and as fast as
+    // an unsafe row copy.
+    val joinInput = if (requiredChildOutput == childOutput && inputColumns &&
+        inputSchema.forall(f => readsBack(f.dataType))) {
       ReadBack
     } else if (inputColumns) {
       Buffered(None)
@@ -140,9 +143,18 @@ class InProcessArrowEvalPythonEvaluatorFactory(
     // Rows are copied out of the queue and Arrow vectors before they are returned, so they
     // remain valid after task completion releases those, on whichever thread consumes them.
     val resultProj = UnsafeProjection.create(output, output)
+    val requiredChildOutput = output.dropRight(udfs.length)
+    val pruneChildForResult: InternalRow => UnsafeRow =
+      if (requiredChildOutput == childOutput) {
+        _.asInstanceOf[UnsafeRow]
+      } else {
+        val proj = UnsafeProjection.create(requiredChildOutput, childOutput)
+        proj.initialize(context.partitionId())
+        proj.apply _
+      }
     // Only the consumer holding the iterator's lock adds and removes rows.
     class InProcessRowQueue(localDir: File, serializerManager: SerializerManager)
-      extends HybridRowQueue(context.taskMemoryManager(), localDir, childOutput.length,
+      extends HybridRowQueue(context.taskMemoryManager(), localDir, requiredChildOutput.length,
         serializerManager, lockFree = true) {
       // Spill files go into a directory of the queue's own, created with the first disk queue,
       // so that task completion can delete them when it cannot close the queue.
@@ -155,7 +167,7 @@ class InProcessArrowEvalPythonEvaluatorFactory(
           spillDir = Files.createTempDirectory(localDir.toPath, "inprocess-udf-").toFile
         }
         DiskRowQueue(Files.createTempFile(spillDir.toPath, "buffer", "").toFile,
-          childOutput.length, serializerManager)
+          requiredChildOutput.length, serializerManager)
       }
 
       // Once task completion leaves the queue to the executor, it must not spill for other
@@ -188,8 +200,12 @@ class InProcessArrowEvalPythonEvaluatorFactory(
     }
     val (queue, projection) = joinInput match {
       case Buffered(projection) =>
-        val queue = new InProcessRowQueue(
-          new File(Utils.getLocalDir(SparkEnv.get.conf)), SparkEnv.get.serializerManager)
+        val queue = if (requiredChildOutput.nonEmpty) {
+          new InProcessRowQueue(
+            new File(Utils.getLocalDir(SparkEnv.get.conf)), SparkEnv.get.serializerManager)
+        } else {
+          null
+        }
         (queue, projection.orNull)
       case ReadBack => (null, null)
     }
@@ -308,7 +324,7 @@ class InProcessArrowEvalPythonEvaluatorFactory(
         }
         if (!open) endOfInput
         if (row == null) return false
-        if (queue != null) queue.add(row.asInstanceOf[UnsafeRow])
+        if (queue != null) queue.add(pruneChildForResult(row))
         writer.write(if (projection != null) projection(row) else row)
         true
       }
