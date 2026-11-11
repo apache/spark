@@ -3050,6 +3050,52 @@ Apart from these, the following properties are also available, and may be useful
   <td>0.8.0</td>
 </tr>
 <tr>
+  <td><code>spark.scheduler.oomRetry.enabled</code></td>
+  <td>false</td>
+  <td>
+    Prefer eligible idle executors when retrying a task after an out-of-memory failure.
+    After the second and each subsequent OOM failure of the same task, Spark tries to reserve
+    one executor for its next attempt. It lets existing tasks finish, then runs the retry alone.
+    While the reserved executor drains, Spark can move the pending retry to another eligible
+    idle executor.
+    Spark releases the executor when the isolated attempt ends, including when it fails with OOM.
+    At most one executor per application is reserved. Other repeated OOM retries wait up to
+    <code>spark.scheduler.oomRetry.isolationTimeout</code> before falling back to ordinary placement.
+    Normal tasks retain their ordinary placement policy. OOM retries may ignore preferred
+    locations, but still respect exclusions, resource profiles, and custom resource requirements.
+    Task CPU requests, executor memory limits, and <code>spark.task.maxFailures</code> are unchanged.
+    Dynamic allocation counts the reserved executor separately from the remaining work, within
+    the configured executor limits, so its unused slots do not suppress requests for other tasks.
+    Barrier and pipelined stages are excluded, and OOM-affected tasks are not speculated.
+    Recognized failures include JVM/Spark OOM exceptions (including wrapped exceptions),
+    application-caused Spark executor exits with code 52, Kubernetes executor-container
+    <code>OOMKilled</code> termination, and YARN executor containers killed for exceeding their
+    physical memory limit. Each task lost with an OOM-killed executor counts that loss toward
+    its own isolation threshold, since the executor exit alone cannot identify the task responsible.
+    For task retry, exit code 137 alone is not considered OOM. On Standalone, Spark may miss
+    an OOM exit code if it processes a generic executor loss first. On YARN, the JVM OOM hook
+    enabled by default through <code>spark.yarn.executor.oomKill.enabled</code> can terminate the
+    JVM with exit code 143 on Linux. Exit code 143 alone is not classified as OOM, so recovery
+    then depends on receiving a typed task failure. Spark also needs a typed signal to recognize
+    native OOM errors. The retry policy leaves fixed per-task native memory limits in place.
+    An idle executor may retain cached or native memory, so recovery is not guaranteed.
+  </td>
+  <td>4.4.0</td>
+</tr>
+<tr>
+  <td><code>spark.scheduler.oomRetry.isolationTimeout</code></td>
+  <td>60s</td>
+  <td>
+    Maximum wait for isolation, measured from the task's latest OOM failure, when
+    <code>spark.scheduler.oomRetry.enabled</code> is enabled. If an executor cannot be reserved
+    and drained within this time, the pending retry falls back to ordinary placement. The same
+    pending retry does not start another wait; a new OOM failure starts a new wait.
+    This timeout does not end isolation or kill a retry that has already started.
+    Must be positive.
+  </td>
+  <td>4.4.0</td>
+</tr>
+<tr>
   <td><code>spark.scheduler.revive.interval</code></td>
   <td>1s</td>
   <td>

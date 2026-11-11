@@ -46,8 +46,8 @@ import org.apache.spark.internal.config._
 import org.apache.spark.resource.{ExecutorResourceRequests, ResourceProfile, TaskResourceRequests}
 import org.apache.spark.resource.ResourceUtils.{AMOUNT, GPU}
 import org.apache.spark.resource.TestResourceIDs._
-import org.apache.spark.rpc.RpcEndpointRef
-import org.apache.spark.scheduler.SplitInfo
+import org.apache.spark.rpc.{RpcCallContext, RpcEndpointRef}
+import org.apache.spark.scheduler.{ExecutorExited, SplitInfo}
 import org.apache.spark.scheduler.cluster.CoarseGrainedClusterMessages.DecommissionExecutorsOnHost
 import org.apache.spark.util.ArrayImplicits._
 import org.apache.spark.util.ManualClock
@@ -700,6 +700,34 @@ class YarnAllocatorSuite extends SparkFunSuite
       .updateBlacklist(hosts.slice(9, 10).asJava, Collections.emptyList())
     verify(rmClientSpy)
       .updateBlacklist(hosts.slice(10, 11).asJava, Collections.emptyList())
+  }
+
+  test("classify YARN physical memory limit kills as OOM") {
+    val (handler, _) = createAllocator(1)
+
+    def lossReason(exitStatus: Int, release: Boolean = false): ExecutorExited = {
+      handler.updateResourceRequests()
+      val container = createContainer("host1")
+      handler.handleAllocatedContainers(Seq(container))
+      val executorId = handler.executorIdToContainer.keys.head
+      if (release) {
+        handler.killExecutor(executorId)
+      }
+      handler.processCompletedContainers(Seq(createContainerStatus(container.getId, exitStatus)))
+      val context = mock(classOf[RpcCallContext])
+      handler.enqueueGetLossReasonRequest(executorId, context)
+      val captor = ArgumentCaptor.forClass(classOf[ExecutorExited])
+      verify(context).reply(captor.capture())
+      captor.getValue
+    }
+
+    val pmem = lossReason(ContainerExitStatus.KILLED_EXCEEDED_PMEM)
+    assert(pmem.exitCausedByApp && pmem.isOutOfMemoryError)
+    assert(!lossReason(ContainerExitStatus.KILLED_EXCEEDED_VMEM).isOutOfMemoryError)
+    assert(!lossReason(ContainerExitStatus.PREEMPTED).isOutOfMemoryError)
+    assert(!lossReason(1).isOutOfMemoryError)
+    val released = lossReason(ContainerExitStatus.KILLED_EXCEEDED_PMEM, release = true)
+    assert(!released.exitCausedByApp && !released.isOutOfMemoryError)
   }
 
   test("SPARK-39601 YarnAllocator should not count executor failure after shutdown") {

@@ -35,6 +35,7 @@ import org.scalatestplus.mockito.MockitoSugar._
 
 import org.apache.spark._
 import org.apache.spark.TestUtils.createTempScriptWithExpectedOutput
+import org.apache.spark.errors.SparkCoreErrors
 import org.apache.spark.internal.config._
 import org.apache.spark.internal.config.Network.RPC_MESSAGE_MAX_SIZE
 import org.apache.spark.rdd.RDD
@@ -64,8 +65,123 @@ class CoarseGrainedSchedulerBackendSuite extends SparkFunSuite with LocalSparkCo
       larger.collect()
     }
     assert(thrown.getMessage.contains("using broadcast variables for large values"))
+    val scheduler = sc.taskScheduler.asInstanceOf[TaskSchedulerImpl]
+    eventually(timeout(5.seconds)) {
+      assert(scheduler.taskIdToTaskSetManager.isEmpty)
+      assert(scheduler.runningTasksByExecutors.values.forall(_ == 0))
+    }
     val smaller = sc.parallelize(1 to 4).collect()
     assert(smaller.length === 4)
+  }
+
+  test("RPC size rejection clears an isolated OOM retry without refunding resources") {
+    val conf = new SparkConf()
+      .set(RPC_MESSAGE_MAX_SIZE, 1)
+      .set(SCHEDULER_OOM_RETRY_ENABLED, true)
+      .set(EXECUTOR_CORES, 2)
+      .set(EXECUTOR_GPU_ID.amountConf, "1")
+      .set(TASK_GPU_ID.amountConf, "1")
+    val backend = createDecommissionBackend(conf)
+    val scheduler = backend.taskScheduler
+    val resources = Map(GPU -> new ResourceInformation(GPU, Array("0")))
+    val executor = registerDecommissionExecutor(backend, "1", 2, resources)
+    val taskSet = FakeTask.createTaskSet(1)
+    scheduler.submitTasks(taskSet)
+    val manager = scheduler.taskSetManagerForAttempt(0, 0).get
+    val frameSize = RpcUtils.maxMessageSizeBytes(sc.conf)
+
+    (0 until 2).foreach { attempt =>
+      backend.driverEndpoint.send(ReviveOffers)
+      val task = executor.nextTask()
+      assert(task.attemptNumber === attempt)
+      assert(backend.getExecutorAvailableCpus("1").contains(1))
+      assert(backend.getExecutorAvailableResources("1")(GPU).availableAddrs.isEmpty)
+      if (attempt == 1) {
+        // Properties are encoded into the launch message, so only the third attempt is too big.
+        taskSet.tasks(0).localProperties.setProperty("large", "x" * (2 * frameSize))
+      }
+      val failure = new ExceptionFailure(SparkCoreErrors.outOfMemoryError(1, 0, ""), Nil)
+      val serializedFailure = sc.env.closureSerializer.newInstance().serialize(failure)
+      backend.driverEndpoint.send(StatusUpdate(
+        task.executorId, task.taskId, TaskState.FAILED, new SerializableBuffer(serializedFailure),
+        task.cpus, task.resources))
+      flushDecommissionBackend(backend)
+      eventually(timeout(5.seconds)) {
+        scheduler.synchronized {
+          assert(manager.taskInfos(task.taskId).finished)
+        }
+      }
+    }
+
+    scheduler.synchronized {
+      assert(manager.oomRetryNeedsIsolation(0))
+    }
+    backend.driverEndpoint.send(ReviveOffers)
+    flushDecommissionBackend(backend)
+    eventually(timeout(5.seconds)) {
+      scheduler.synchronized {
+        assert(manager.isZombie)
+        assert(manager.taskAttempts(0).size === 3)
+        assert(manager.taskAttempts(0).head.killed)
+        assert(manager.runningTasks === 0)
+        assert(scheduler.taskSetManagerForAttempt(0, 0).isEmpty)
+        assert(scheduler.taskIdToTaskSetManager.isEmpty)
+        assert(scheduler.oomRetryReservationInfo.isEmpty)
+        assert(!scheduler.isExecutorBusy("1"))
+      }
+    }
+    assert(executor.launchedTasks.isEmpty)
+    assert(backend.getExecutorAvailableCpus("1").contains(2))
+    assert(backend.getExecutorAvailableResources("1")(GPU).availableAddrs === Array("0"))
+
+    scheduler.submitTasks(FakeTask.createTaskSet(1, stageId = 1, stageAttemptId = 0))
+    val ordinaryManager = scheduler.taskSetManagerForAttempt(1, 0).get
+    backend.driverEndpoint.send(ReviveOffers)
+    val ordinary = executor.nextTask()
+    completeDecommissionTestTask(backend, ordinary)
+    eventually(timeout(5.seconds)) {
+      scheduler.synchronized {
+        assert(ordinaryManager.taskInfos(ordinary.taskId).successful)
+      }
+    }
+    assert(!scheduler.isExecutorBusy("1"))
+    assert(backend.getExecutorAvailableCpus("1").contains(2))
+    assert(backend.getExecutorAvailableResources("1")(GPU).availableAddrs === Array("0"))
+  }
+
+  test("killing a draining executor releases its pending OOM retry before removal") {
+    val backend = createDecommissionBackend(new SparkConf().set(SCHEDULER_OOM_RETRY_ENABLED, true))
+    val scheduler = backend.taskScheduler
+    val executor = registerDecommissionExecutor(backend, "1", 2)
+    scheduler.submitTasks(FakeTask.createTaskSet(2))
+    val manager = scheduler.taskSetManagerForAttempt(0, 0).get
+    backend.driverEndpoint.send(ReviveOffers)
+    executor.nextTask() // Keep one task running while the other fails twice.
+    (0 until 2).foreach { attempt =>
+      val task = executor.nextTask()
+      assert(task.attemptNumber === attempt)
+      val failure = new ExceptionFailure(SparkCoreErrors.outOfMemoryError(1, 0, ""), Nil)
+      val reason = sc.env.closureSerializer.newInstance().serialize(failure)
+      backend.driverEndpoint.send(StatusUpdate(task.executorId, task.taskId, TaskState.FAILED,
+        new SerializableBuffer(reason), task.cpus, task.resources))
+      eventually(timeout(5.seconds)) {
+        scheduler.synchronized { assert(manager.taskInfos(task.taskId).finished) }
+      }
+      backend.driverEndpoint.send(ReviveOffers)
+    }
+    flushDecommissionBackend(backend)
+    assert(scheduler.oomRetryReservationInfo.exists(_.executorId == "1"))
+    assert(sc.killExecutor("1"))
+    assert(scheduler.isExecutorAlive("1") && !backend.isExecutorActive("1"))
+    assert(scheduler.oomRetryReservationInfo.isEmpty)
+
+    val replacement = registerDecommissionExecutor(backend, "2")
+    backend.driverEndpoint.send(ReviveOffers)
+    assert(replacement.nextTask().attemptNumber === 2)
+    assert(scheduler.oomRetryReservationInfo.exists(_.executorId == "2"))
+    // Once the isolated attempt launches, its reservation lasts until the task exits.
+    assert(sc.killExecutor("2"))
+    assert(scheduler.oomRetryReservationInfo.exists(_.executorId == "2"))
   }
 
   test("compute max number of concurrent tasks can be launched") {
@@ -1034,12 +1150,13 @@ class CoarseGrainedSchedulerBackendSuite extends SparkFunSuite with LocalSparkCo
   private def registerDecommissionExecutor(
       backend: DecommissionTestSchedulerBackend,
       executorId: String,
-      cores: Int = 1)
+      cores: Int = 1,
+      resources: Map[String, ResourceInformation] = Map.empty)
       : DecommissionTestExecutorRpcEndpointRef = {
     val executor = new DecommissionTestExecutorRpcEndpointRef(sc.conf, executorId)
     assert(backend.driverEndpoint.askSync[Boolean](
       RegisterExecutor(executorId, executor, "localhost", cores, Map.empty, Map.empty,
-        Map.empty, ResourceProfile.DEFAULT_RESOURCE_PROFILE_ID)))
+        resources, ResourceProfile.DEFAULT_RESOURCE_PROFILE_ID)))
     backend.driverEndpoint.send(LaunchedExecutor(executorId))
     flushDecommissionBackend(backend)
     executor
@@ -1154,6 +1271,10 @@ private[spark] class DecommissionTestSchedulerBackend(
       case message => super.receive(message)
     }
   }
+
+  // Acknowledge the kill request. Tests deliver executor removal separately.
+  override protected def doKillExecutors(executorIds: Seq[String]): Future[Boolean] =
+    Future.successful(true)
 
   override def reviveOffers(): Unit = {}
 

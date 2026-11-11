@@ -24,6 +24,13 @@ import org.apache.spark.scheduler.SchedulingMode.SchedulingMode
 import org.apache.spark.storage.BlockManagerId
 import org.apache.spark.util.AccumulatorV2
 
+private[spark] case class OomRetryReservationInfo(
+    resourceProfileId: Int,
+    executorId: String,
+    stageId: Int,
+    stageAttemptId: Int,
+    taskIndex: Int)
+
 /**
  * Low-level task scheduler interface, currently implemented exclusively by
  * [[org.apache.spark.scheduler.TaskSchedulerImpl]].
@@ -75,6 +82,13 @@ private[spark] trait TaskScheduler {
 
   // Get the default level of parallelism to use in the cluster, as a hint for sizing jobs.
   def defaultParallelism(): Int
+
+  /**
+   * Identity of the executor and retry partition reserved for OOM recovery.
+   * Allocation derives covered tasks from its own listener state, including during launch lag.
+   * Dynamic allocation reads this while holding its own lock, so it must not take scheduler locks.
+   */
+  def oomRetryReservationInfo: Option[OomRetryReservationInfo] = None
 
   /**
    * Update metrics for in-progress tasks and executor metrics, and let the master know that the

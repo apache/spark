@@ -12190,11 +12190,6 @@
       "countByValueApprox() does not support arrays"
     ]
   },
-  "_LEGACY_ERROR_TEMP_3028" : {
-    "message" : [
-      "<errorMsg>"
-    ]
-  },
   "_LEGACY_ERROR_TEMP_3052" : {
     "message" : [
       "Unexpected resolved action: <other>"

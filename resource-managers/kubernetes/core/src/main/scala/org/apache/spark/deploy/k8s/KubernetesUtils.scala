@@ -182,6 +182,17 @@ object KubernetesUtils extends Logging {
     formatPairsBundle(details)
   }
 
+  private[spark] def executorContainerTermination(
+      pod: Pod,
+      fallbackContainerName: String): Option[ContainerStateTerminated] = {
+    // Pods created by earlier drivers have no annotation. Use their configured name as before.
+    val name = Option(pod.getMetadata.getAnnotations)
+      .flatMap(annotations => Option(annotations.get(Constants.EXECUTOR_CONTAINER_NAME_ANNOTATION)))
+      .getOrElse(fallbackContainerName)
+    Option(pod.getStatus).flatMap(_.getContainerStatuses.asScala.find(_.getName == name))
+      .flatMap(status => Option(status.getState)).flatMap(state => Option(state.getTerminated))
+  }
+
   @Since("3.0.0")
   def containersDescription(p: Pod, indent: Int = 1): String = {
     p.getStatus.getContainerStatuses.asScala.map { status =>

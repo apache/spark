@@ -19,7 +19,6 @@ package org.apache.spark.scheduler.cluster.k8s
 import java.util.concurrent.TimeUnit
 
 import scala.collection.mutable
-import scala.jdk.CollectionConverters._
 
 import com.google.common.cache.CacheBuilder
 import io.fabric8.kubernetes.api.model.{Pod, PodBuilder}
@@ -269,7 +268,8 @@ private[spark] class ExecutorPodsLifecycleManager(
   }
 
   private def findExitReason(podState: FinalPodState, execId: Long): ExecutorExited = {
-    val exitCode = findExitCode(podState)
+    val executorTermination = executorContainerTermination(podState.pod, sparkContainerName)
+    val exitCode = executorTermination.map(_.getExitCode.toInt).getOrElse(UNKNOWN_EXIT_CODE)
     val (exitCausedByApp, exitMessage) = podState match {
       case PodDeleted(_) =>
         (false, s"The executor with id $execId was deleted by a user or the framework.")
@@ -277,7 +277,11 @@ private[spark] class ExecutorPodsLifecycleManager(
         val msg = exitReasonMessage(podState, execId, exitCode)
         (true, msg)
     }
-    ExecutorExited(exitCode, exitCausedByApp, exitMessage)
+    val exitReason = ExecutorExited(exitCode, exitCausedByApp, exitMessage)
+    // Exit code 137 alone can also mean a non-OOM SIGKILL. Only trust the executor container.
+    exitReason.isOutOfMemoryError = exitCausedByApp &&
+      (exitReason.isOutOfMemoryError || executorTermination.exists(_.getReason == "OOMKilled"))
+    exitReason
   }
 
   private def exitReasonMessage(podState: FinalPodState, execId: Long, exitCode: Int) = {
@@ -299,15 +303,6 @@ private[spark] class ExecutorPodsLifecycleManager(
        |
        |${containersDescription(pod)}
       """.stripMargin
-  }
-
-  private def findExitCode(podState: FinalPodState): Int = {
-    podState.pod.getStatus.getContainerStatuses.asScala.find { containerStatus =>
-      containerStatus.getName == sparkContainerName &&
-        containerStatus.getState.getTerminated != null
-    }.map { terminatedContainer =>
-      terminatedContainer.getState.getTerminated.getExitCode.toInt
-    }.getOrElse(UNKNOWN_EXIT_CODE)
   }
 
   private def isPodInactive(pod: Pod): Boolean = {

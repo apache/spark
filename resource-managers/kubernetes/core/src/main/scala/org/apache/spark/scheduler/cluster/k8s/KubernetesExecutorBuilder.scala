@@ -16,10 +16,12 @@
  */
 package org.apache.spark.scheduler.cluster.k8s
 
+import io.fabric8.kubernetes.api.model.PodBuilder
 import io.fabric8.kubernetes.client.KubernetesClient
 
 import org.apache.spark.SparkException
 import org.apache.spark.deploy.k8s._
+import org.apache.spark.deploy.k8s.Constants.EXECUTOR_CONTAINER_NAME_ANNOTATION
 import org.apache.spark.deploy.k8s.features._
 import org.apache.spark.resource.ResourceProfile
 import org.apache.spark.util.Utils
@@ -88,13 +90,21 @@ private[spark] class KubernetesExecutorBuilder {
 
     // If using a template this will always get the resources from that and combine
     // them with any Spark conf or ResourceProfile resources.
-    features.foldLeft(spec) { case (spec, feature) =>
+    val resolved = features.foldLeft(spec) { case (spec, feature) =>
       val configuredPod = feature.configurePod(spec.pod)
       val addedResources = feature.getAdditionalKubernetesResources()
       KubernetesExecutorSpec(
         configuredPod,
         spec.executorKubernetesResources ++ addedResources)
     }
+    // Templates and custom feature steps can both choose the executor container's name.
+    val executorPod = resolved.pod
+    val annotatedPod = new PodBuilder(executorPod.pod)
+      .editOrNewMetadata()
+        .addToAnnotations(EXECUTOR_CONTAINER_NAME_ANNOTATION, executorPod.container.getName)
+      .endMetadata()
+      .build()
+    resolved.copy(pod = executorPod.copy(pod = annotatedPod))
   }
 
 }

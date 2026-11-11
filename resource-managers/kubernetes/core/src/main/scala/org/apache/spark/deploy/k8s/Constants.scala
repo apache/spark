@@ -109,6 +109,7 @@ object Constants {
   val DEFAULT_PVC_ACCESS_MODE = "ReadWriteOncePod"
   val NON_JVM_MEMORY_OVERHEAD_FACTOR = 0.4d
   val CONNECT_GRPC_BINDING_PORT = "spark.connect.grpc.binding.port"
+  private[spark] val EXECUTOR_CONTAINER_NAME_ANNOTATION = "spark.apache.org/executor-container-name"
   val EXIT_EXCEPTION_ANNOTATION = "spark.exit-exception"
   val POD_DELETION_COST = "controller.kubernetes.io/pod-deletion-cost"
 

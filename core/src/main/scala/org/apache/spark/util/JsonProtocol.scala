@@ -711,14 +711,20 @@ private[spark] object JsonProtocol extends JsonUtils {
         g.writeStringField("Full Stack Trace", exceptionFailure.fullStackTrace)
         g.writeFieldName("Accumulator Updates")
         accumulablesToJson(exceptionFailure.accumUpdates, g)
+        if (exceptionFailure.isOutOfMemoryError) {
+          g.writeBooleanField("Out Of Memory Error", true)
+        }
       case taskCommitDenied: TaskCommitDenied =>
         g.writeNumberField("Job ID", taskCommitDenied.jobID)
         g.writeNumberField("Partition ID", taskCommitDenied.partitionID)
         g.writeNumberField("Attempt Number", taskCommitDenied.attemptNumber)
-      case ExecutorLostFailure(executorId, exitCausedByApp, reason) =>
+      case executorLostFailure @ ExecutorLostFailure(executorId, exitCausedByApp, reason) =>
         g.writeStringField("Executor ID", executorId)
         g.writeBooleanField("Exit Caused By App", exitCausedByApp)
         reason.foreach(g.writeStringField("Loss Reason", _))
+        if (executorLostFailure.isOutOfMemoryError) {
+          g.writeBooleanField("Out Of Memory Error", true)
+        }
       case taskKilled: TaskKilled =>
         g.writeStringField("Kill Reason", taskKilled.reason)
         g.writeFieldName("Accumulator Updates")
@@ -1457,7 +1463,11 @@ private[spark] object JsonProtocol extends JsonUtils {
           .getOrElse(taskMetricsFromJson(json.get("Metrics")).accumulators().map(acc => {
             acc.toInfoUpdate
           }).toArray.toImmutableArraySeq)
-        ExceptionFailure(className, description, stackTrace, fullStackTrace, None, accumUpdates)
+        val failure =
+          ExceptionFailure(className, description, stackTrace, fullStackTrace, None, accumUpdates)
+        failure.isOutOfMemoryError = jsonOption(json.get("Out Of Memory Error"))
+          .map(_.extractBoolean).getOrElse(failure.isOutOfMemoryError)
+        failure
       case `taskResultLost` => TaskResultLost
       case `taskKilled` =>
       // The "Kill Reason" field was added in Spark 2.2.0:
@@ -1480,10 +1490,13 @@ private[spark] object JsonProtocol extends JsonUtils {
         val exitCausedByApp = jsonOption(json.get("Exit Caused By App")).map(_.extractBoolean)
         val executorId = jsonOption(json.get("Executor ID")).map(_.asText)
         val reason = jsonOption(json.get("Loss Reason")).map(_.asText)
-        ExecutorLostFailure(
+        val failure = ExecutorLostFailure(
           executorId.getOrElse("Unknown"),
           exitCausedByApp.getOrElse(true),
           reason)
+        failure.isOutOfMemoryError = jsonOption(json.get("Out Of Memory Error"))
+          .exists(_.extractBoolean)
+        failure
       case `executorShutdownFailure` =>
         val executorId = json.get("Executor ID").extractString
         ExecutorShutdownFailure(executorId)

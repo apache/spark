@@ -279,14 +279,6 @@ private[spark] object SparkCoreErrors {
       messageParameters = Map("className" -> className, "methodName" -> methodName))
   }
 
-  def sparkError(errorMsg: String): Throwable = {
-    new SparkException(
-      errorClass = "_LEGACY_ERROR_TEMP_3028",
-      messageParameters = Map("errorMsg" -> errorMsg),
-      cause = null
-    )
-  }
-
   def clusterSchedulerError(message: String): Throwable = {
     new SparkException(
       errorClass = "CLUSTER_MANAGER_APPLICATION_FAILURE",

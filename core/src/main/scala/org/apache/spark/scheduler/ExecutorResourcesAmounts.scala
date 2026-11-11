@@ -74,6 +74,25 @@ private[spark] class ExecutorResourcesAmounts(
     }
   }
 
+  /** Count tasks that fit the current resource amounts, without consuming the live offer. */
+  def availableTaskSlots(taskSetProf: ResourceProfile, maxTasks: Int): Int = {
+    taskSetProf.getCustomTaskResources().foldLeft(maxTasks) { case (limit, (name, request)) =>
+      internalResources.get(name) match {
+        case Some(addresses) if request.amount >= 1.0 =>
+          val whole = addresses.valuesIterator.count(ResourceAmountUtils.isOneEntireResource)
+          math.min(limit, (whole / request.amount.toLong).toInt)
+        case Some(addresses) if request.amount > 0.0 =>
+          val share = ResourceAmountUtils.toInternalResource(request.amount)
+          val slots = addresses.valuesIterator.map { amount =>
+            // A positive request below the internal precision consumes zero on one address.
+            if (share == 0) limit.toLong else math.min(limit.toLong, amount / share)
+          }.sum
+          math.min(limit.toLong, slots).toInt
+        case _ => 0
+      }
+    }
+  }
+
   /**
    * Acquire the resource.
    * @param assignedResource the assigned resource information

@@ -38,11 +38,12 @@ import org.apache.spark.deploy.k8s.Fabric8Aliases._
 import org.apache.spark.internal.config.SCHEDULER_MAX_RETAINED_UNKNOWN_EXECUTORS
 import org.apache.spark.resource.{ResourceProfile, ResourceProfileManager}
 import org.apache.spark.rpc.{RpcAddress, RpcCallContext, RpcEndpoint, RpcEndpointRef, RpcEnv}
-import org.apache.spark.scheduler.{ExecutorDecommissionInfo, ExecutorKilled, ExecutorLossReason, LiveListenerBus, TaskSchedulerImpl}
+import org.apache.spark.scheduler.{ExecutorDecommissionInfo, ExecutorExited, ExecutorKilled, ExecutorLossReason, LiveListenerBus, TaskSchedulerImpl}
 import org.apache.spark.scheduler.cluster.CoarseGrainedClusterMessages.{DecommissionExecutor, RegisterExecutor, RemoveExecutor, StopDriver, StopExecutors}
 import org.apache.spark.scheduler.cluster.CoarseGrainedSchedulerBackend
 import org.apache.spark.scheduler.cluster.k8s.ExecutorLifecycleTestUtils.TEST_SPARK_APP_ID
 import org.apache.spark.storage.{BlockManager, BlockManagerMaster}
+import org.apache.spark.util.SparkExitCode
 
 class KubernetesClusterSchedulerBackendSuite extends SparkFunSuite with BeforeAndAfter {
 
@@ -246,6 +247,23 @@ class KubernetesClusterSchedulerBackendSuite extends SparkFunSuite with BeforeAn
 
     backend.doRemoveExecutor("2", ExecutorKilled)
     verify(driverEndpointRef).send(RemoveExecutor("2", ExecutorKilled))
+  }
+
+  for ((name, code, message, expected) <- Seq(
+      ("JVM OOM", SparkExitCode.OOM, "52(JVM OOM)", true),
+      ("plain SIGKILL", 137, "137(SIGKILL, possible container OOM)", true),
+      ("sidecar OOM message", 1, "Sidecar was OOMKilled", true),
+      ("ordinary error", 1, "Executor failed", false))) {
+    test(s"SPARK-55639: Kubernetes recovery uses the executor loss message for $name") {
+      val backend = spy[KubernetesClusterSchedulerBackend](schedulerBackendUnderTest)
+      when(backend.isExecutorActive(any())).thenReturn(false)
+      backend.start()
+      val reason = ExecutorExited(code, exitCausedByApp = true, message)
+
+      backend.doRemoveExecutor("1", reason)
+      verify(driverEndpointRef).send(RemoveExecutor("1", reason))
+      verify(podAllocator, times(if (expected) 1 else 0)).setRecoveryMode()
+    }
   }
 
   test("SPARK-55639: doRemoveExecutor triggers setRecoveryMode on OOM") {
