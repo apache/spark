@@ -3804,7 +3804,8 @@ class ExternalLookupJoinSuite extends QueryTest with SharedSparkSession {
   test("the cache TTL counts from an entry's write, not from its last hit") {
     // Each batch is one stream row of employee 2. The clock reads 0 when the first batch caches
     // the employee, 0.6ms when the second hits the entry, and 1.2ms when the third probes it:
-    // past the 1ms TTL since the write, but not since the hit.
+    // past the 1ms TTL since the write, but not since the hit. The third batch stops full, so it
+    // is not known as the last, and its write of the employee reads the clock once more.
     ExternalLookupTestTicker.reset(reading => if (reading == 1) 0L else 600000L)
     val lookup = spark.read
       .format(classOf[SimpleExternalLookupDataSource].getName)
@@ -3815,7 +3816,7 @@ class ExternalLookupJoinSuite extends QueryTest with SharedSparkSession {
     val rows = runWithTestTicker(
       left.join(lookup, left("id") === lookup("id"), "inner"), Seq(2, 2, 2))
     assert(rows.size === 3)
-    assert(ExternalLookupTestTicker.readings.get() === 3)
+    assert(ExternalLookupTestTicker.readings.get() === 4)
     assert(SimpleExternalLookupDataSource.requestedKeys.asScala.toSeq === Seq(2, 2))
   }
 
@@ -4000,17 +4001,20 @@ class ExternalLookupJoinSuite extends QueryTest with SharedSparkSession {
     // Each row of employee 1 and a two-letter department takes 92 bytes in the cache, a sixteenth
     // of 1472, and the employee has five. The residual reads the department, so the cache would
     // keep every row of the employee, and the second row takes the employee past its share. The
-    // first batch then reads no further, as when it caches nothing, and the second requests the
-    // employee again. Each badge swipe is a batch of its own.
+    // first batch, of the first two badge swipes, then reads no further, as when it caches
+    // nothing. The third swipe is the last batch, which the end of the input stops, so it caches
+    // nothing and requests the employee again.
     val lookup = spark.read
       .format(classOf[SimpleExternalLookupDataSource].getName)
-      .option("maxBatchSize", "1")
+      .option("maxBatchSize", "2")
       .load()
       .hint("external_lookup", "cache_max_bytes=1472")
-    val swipes = streamOf(Seq((1, "lobby"), (1, "garage")).toDF("employee", "door"))
+    val swipes =
+      streamOf(Seq((1, "lobby"), (1, "garage"), (1, "dock")).toDF("employee", "door"))
     val condition =
       swipes("employee") === lookup("id") && lookup("department") =!= swipes("door")
-    Seq("left_semi" -> Seq(Row(1, "lobby"), Row(1, "garage")), "left_anti" -> Nil).foreach {
+    val everySwipe = Seq(Row(1, "lobby"), Row(1, "garage"), Row(1, "dock"))
+    Seq("left_semi" -> everySwipe, "left_anti" -> Nil).foreach {
       case (joinType, expected) =>
         SimpleExternalLookupDataSource.resetCounters()
         SimpleExternalLookupDataSource.departmentsById.set(Map(1 -> (1 to 5).map(i => s"a$i")))
@@ -4028,6 +4032,69 @@ class ExternalLookupJoinSuite extends QueryTest with SharedSparkSession {
         assert(SimpleExternalLookupDataSource.closeEvents.asScala.toSeq ===
           Seq("cursor", "cursor", "reader"), joinType)
         assert(run.lookupJoin.metrics("numCacheHits").value === 0, joinType)
+    }
+  }
+
+  test("a partition whose input ends at the request cap returns its rows and closes its reader") {
+    // Each request takes two stream rows, so the last batch of each input stops full. It does not
+    // look for more input, so it is not known as the last, but the partition finds the end of its
+    // input once the batch is read, and closes its reader.
+    val lookup = spark.read
+      .format(classOf[SimpleExternalLookupDataSource].getName)
+      .option("maxBatchSize", "2")
+      .load()
+    // Employee 1 has two departments, employee 2 one, and employees 3 and 4 none.
+    def expected(ids: Seq[Int], joinType: String): Seq[Row] = ids.flatMap { id =>
+      val departments = SimpleExternalLookupDataSource.departmentsById.get().getOrElse(id, Nil)
+      joinType match {
+        case "inner" => departments.map(Row(id, id, _))
+        case "left_outer" if departments.isEmpty => Seq(Row(id, null, null))
+        case "left_outer" => departments.map(Row(id, id, _))
+        case "left_semi" => if (departments.isEmpty) Nil else Seq(Row(id))
+        case "left_anti" => if (departments.isEmpty) Seq(Row(id)) else Nil
+      }
+    }
+    for {
+      ids <- Seq(Seq(1, 3), Seq(1, 3, 2, 4))
+      joinType <- Seq("inner", "left_outer", "left_semi", "left_anti")
+    } {
+      SimpleExternalLookupDataSource.resetCounters()
+      val badges = streamOf(ids.toDF("id"))
+      val run = runStream(badges.join(lookup, badges("id") === lookup("id"), joinType))
+      QueryTest.sameRows(expected(ids, joinType), run.rows)
+        .foreach(error => fail(s"$joinType $ids: $error"))
+      val requests = ids.length / 2
+      assert(SimpleExternalLookupDataSource.requestSizes.asScala.toSeq === Seq.fill(requests)(2),
+        s"$joinType $ids")
+      assert(SimpleExternalLookupDataSource.readerCount.get() === 1, s"$joinType $ids")
+      assert(SimpleExternalLookupDataSource.closeEvents.asScala.toSeq ===
+        Seq.fill(requests)("cursor") :+ "reader", s"$joinType $ids")
+    }
+  }
+
+  test("a last batch caches nothing when the end of its input stops it") {
+    // The residual reads the department, so a cache keeps every row of a key, and a semi or anti
+    // batch that caches reads on until it has them all. A batch that the end of the input stops
+    // is the last, so it caches nothing and reads only its first match. A last batch that stops
+    // full does not look for more input, so it is not known as the last: it reads every row of
+    // the employee to cache them, though no later batch reads the cache.
+    val lookup = spark.read
+      .format(classOf[SimpleExternalLookupDataSource].getName)
+      .option("maxBatchSize", "2")
+      .load()
+    for {
+      (doors, rowsRead) <- Seq(Seq("lobby") -> 1, Seq("lobby", "garage") -> 5)
+      joinType <- Seq("left_semi", "left_anti")
+    } {
+      SimpleExternalLookupDataSource.resetCounters()
+      SimpleExternalLookupDataSource.departmentsById.set(Map(1 -> (1 to 5).map(i => s"a$i")))
+      val swipes = streamOf(doors.map(1 -> _).toDF("employee", "door"))
+      val condition =
+        swipes("employee") === lookup("id") && lookup("department") =!= swipes("door")
+      val expected = if (joinType == "left_semi") doors.map(Row(1, _)) else Nil
+      checkStream(swipes.join(lookup, condition, joinType), expected)
+      assert(SimpleExternalLookupDataSource.resultRowsRead.get() === rowsRead, s"$joinType $doors")
+      assert(SimpleExternalLookupDataSource.requestCount.get() === 1, s"$joinType $doors")
     }
   }
 
@@ -5664,9 +5731,10 @@ class ExternalLookupJoinRealTimeModeSuite extends StreamRealTimeModeE2ESuiteBase
       val query = startJoin(s"external_lookup_rtm_$joinType", joinType, input,
         lookupTable(maxBatchSize = 2))
       try {
-        // A request takes two stream rows, and its output comes once the next stream row arrives.
-        // Each full request has a key with lookup rows and one without, so that every join type
-        // emits rows for it, which also shows that the join has read the next row.
+        // A request takes two stream rows, and its output comes once the request is full, before
+        // the next stream row arrives. Each addition fills a request and starts the next. Each
+        // full request has a key with lookup rows and one without, so that every join type emits
+        // rows for it.
         input.addData(1, 3, 2)
         awaitOutputs(query, joinOutputs(joinType, 1, 3))
         input.addData(4, 1)
@@ -5787,7 +5855,8 @@ class ExternalLookupJoinRealTimeModeSuite extends StreamRealTimeModeE2ESuiteBase
   }
 
   // A known limitation: the join has no time bound on a request. It sends a request once the
-  // request is full or the batch ends, and emits its output once the next stream row arrives.
+  // request is full or the batch ends. The output of a full request comes at once, and the join
+  // closes the request's cursor before it waits for the next stream row.
   test("real-time mode holds a lookup request that is not full until the batch ends") {
     val clock = useManualClock()
     val input = LowLatencyMemoryStream.singlePartition[Int]
@@ -5795,12 +5864,13 @@ class ExternalLookupJoinRealTimeModeSuite extends StreamRealTimeModeE2ESuiteBase
       lookupTable(maxBatchSize = 2))
     try {
       input.addData(1, 2)
-      awaitQuery(query)(SimpleExternalLookupDataSource.requestCount.get() == 1)
-      // The request is full and sent, but its output waits for the next stream row.
-      awaitTaskWaitingForInput(query)
-      assert(outputs.isEmpty)
-      input.addData(3)
+      // The request is full, so the join sends it and emits its output with no further row.
       awaitOutputs(query, joinOutputs("left_outer", 1, 2))
+      assert(SimpleExternalLookupDataSource.requestCount.get() === 1)
+      // The task then waits for the next stream row, with the request's cursor closed.
+      awaitTaskWaitingForInput(query)
+      assert(SimpleExternalLookupDataSource.closeEvents.asScala.toSeq === Seq("cursor"))
+      input.addData(3)
       // The request of key 3 is not full, so the join neither sends it nor emits its row.
       awaitTaskWaitingForInput(query)
       assert(SimpleExternalLookupDataSource.requestCount.get() === 1)
