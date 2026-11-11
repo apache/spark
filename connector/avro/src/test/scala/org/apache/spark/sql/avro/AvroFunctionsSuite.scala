@@ -18,7 +18,11 @@
 package org.apache.spark.sql.avro
 
 import java.io.ByteArrayOutputStream
+import java.util.concurrent.{CountDownLatch, TimeUnit}
+import java.util.concurrent.atomic.AtomicBoolean
 
+import scala.concurrent.{ExecutionContext, Future}
+import scala.concurrent.duration._
 import scala.jdk.CollectionConverters._
 
 import org.apache.avro.{Schema, SchemaBuilder}
@@ -30,12 +34,35 @@ import org.apache.spark.{SparkException, SparkRuntimeException}
 import org.apache.spark.sql.{AnalysisException, Row}
 import org.apache.spark.sql.avro.{functions => Fns}
 import org.apache.spark.sql.avro.functions.{from_avro, to_avro}
+import org.apache.spark.sql.catalyst.InternalRow
+import org.apache.spark.sql.catalyst.expressions.{AttributeReference, CreateMap, Expression, ExprId, FromAvro, LeafExpression, Literal, RuntimeReplaceable, SchemaOfAvro => SchemaOfAvroExpression}
+import org.apache.spark.sql.catalyst.expressions.codegen.CodegenFallback
+import org.apache.spark.sql.catalyst.plans.QueryPlan
 import org.apache.spark.sql.execution.LocalTableScanExec
 import org.apache.spark.sql.functions.{col, lit, map, struct}
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.sql.types.{
-  BinaryType, CharType, IntegerType, MapType, StringType, StructField, StructType, VarcharType
+  BinaryType, CharType, DataType, IntegerType, MapType, StringType, StructField, StructType,
+  VarcharType
+}
+import org.apache.spark.unsafe.types.UTF8String
+import org.apache.spark.util.ThreadUtils
+
+/** A test string literal that runs onEval before returning, to pause or fail evaluation. */
+private case class StringLiteralWithEvalHook(
+    value: String,
+    onEval: () => Unit)
+  extends LeafExpression with CodegenFallback {
+
+  override def foldable: Boolean = true
+  override def nullable: Boolean = false
+  override def dataType: DataType = StringType
+
+  override def eval(input: InternalRow): Any = {
+    onEval()
+    UTF8String.fromString(value)
+  }
 }
 
 class AvroFunctionsSuite extends SharedSparkSession {
@@ -1021,5 +1048,101 @@ class AvroFunctionsSuite extends SharedSparkSession {
     }
     assert(!ex.isInstanceOf[NullPointerException],
       s"Should not throw NPE, but got: ${ex.getClass.getName}: ${ex.getMessage}")
+  }
+
+  private def avroExpressionWithOptions(
+      functionName: String,
+      options: Expression): (Expression, AttributeReference) = {
+    val data = AttributeReference("data", BinaryType)(exprId = ExprId(1))
+    val jsonFormatSchema = Literal("""{"type": "int"}""")
+    val expression = if (functionName == "FROM_AVRO") {
+      new FromAvro(data, jsonFormatSchema, options)
+    } else {
+      SchemaOfAvroExpression(jsonFormatSchema, options)
+    }
+    (expression, data)
+  }
+
+  private def canonicalizedOptions(
+      expression: Expression,
+      data: AttributeReference): Map[String, String] = {
+    QueryPlan.normalizeExpressions(expression, Seq(data)) match {
+      case from: AvroDataToCatalyst => from.options
+      case other => fail(s"Unexpected canonicalized expression: ${other.getClass.getName}")
+    }
+  }
+
+  private def replacementOptions(expression: Expression): Map[String, String] = {
+    expression.asInstanceOf[RuntimeReplaceable].replacement match {
+      case from: AvroDataToCatalyst => from.options
+      case schema: SchemaOfAvro => schema.options
+      case other => fail(s"Unexpected replacement: ${other.getClass.getName}")
+    }
+  }
+
+  // SCHEMA_OF_AVRO has no attribute input, so canonicalization does not copy it.
+  gridTest("SPARK-61419: FROM_AVRO options survive overlapping canonicalization")(
+    Seq("EXCEPTION", "LAST_WIN")) { policy =>
+    withSQLConf(SQLConf.MAP_KEY_DEDUP_POLICY.key -> policy) {
+      val firstEvaluationPaused = new CountDownLatch(1)
+      val resumeFirstEvaluation = new CountDownLatch(1)
+      val pauseOnNextEval = new AtomicBoolean(true)
+      val secondKey = StringLiteralWithEvalHook("key2", () => {
+        if (pauseOnNextEval.compareAndSet(true, false)) {
+          firstEvaluationPaused.countDown()
+          assert(resumeFirstEvaluation.await(1, TimeUnit.MINUTES),
+            "first evaluation was never resumed")
+        }
+      })
+      val options = CreateMap(Seq(
+        Literal("key1"), Literal("value1"), secondKey, Literal("value2")))
+      val expectedOptions = Map("key1" -> "value1", "key2" -> "value2")
+      val (expression, data) = avroExpressionWithOptions("FROM_AVRO", options)
+      val sqlConf = SQLConf.get
+      val executor = ThreadUtils.newDaemonSingleThreadExecutor("avro-options-race-test")
+      val executionContext = ExecutionContext.fromExecutorService(executor)
+      try {
+        val firstEvaluation = Future {
+          SQLConf.withExistingConf(sqlConf) {
+            canonicalizedOptions(expression, data)
+          }
+        }(executionContext)
+        assert(firstEvaluationPaused.await(1, TimeUnit.MINUTES),
+          "first canonicalization never paused")
+        // The first evaluation has inserted key1 and is paused while evaluating key2.
+        assert(canonicalizedOptions(expression, data) == expectedOptions)
+        resumeFirstEvaluation.countDown()
+        assert(ThreadUtils.awaitResult(firstEvaluation, 1.minute) == expectedOptions)
+      } finally {
+        resumeFirstEvaluation.countDown()
+        executor.shutdownNow()
+        assert(executor.awaitTermination(10, TimeUnit.SECONDS))
+      }
+    }
+  }
+
+  Seq("FROM_AVRO", "SCHEMA_OF_AVRO").foreach { functionName =>
+    test(s"SPARK-61419: $functionName options survive a failed evaluation") {
+      withSQLConf(SQLConf.MAP_KEY_DEDUP_POLICY.key -> "EXCEPTION") {
+        val failOnNextEval = new AtomicBoolean(true)
+        val expectedFailure = new RuntimeException("first options evaluation failed")
+        val secondKey = StringLiteralWithEvalHook("key2", () => {
+          if (failOnNextEval.compareAndSet(true, false)) {
+            throw expectedFailure
+          }
+        })
+        val options = CreateMap(Seq(
+          Literal("key1"), Literal("value1"), secondKey, Literal("value2")))
+        val expectedOptions = Map("key1" -> "value1", "key2" -> "value2")
+        val (expression, data) = avroExpressionWithOptions(functionName, options)
+        val failure = intercept[RuntimeException] {
+          QueryPlan.normalizeExpressions(expression, Seq(data))
+        }
+        assert(failure eq expectedFailure)
+
+        // Retrying must not reuse the partial map left by the failed evaluation.
+        assert(replacementOptions(expression) == expectedOptions)
+      }
+    }
   }
 }
