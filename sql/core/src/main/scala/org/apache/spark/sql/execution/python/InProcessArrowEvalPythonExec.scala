@@ -30,6 +30,10 @@ case class InProcessArrowEvalPythonExec(
     resultAttrs: Seq[Attribute],
     child: SparkPlan) extends EvalPythonExec with PythonSQLMetrics {
 
+  // The in-process evaluator joins the results with the whole input row, or reads the input
+  // back from Arrow, so it passes through the whole child; the planner drops what is unused.
+  override def requiredChildOutput: Seq[Attribute] = child.output
+
   // The keys of `PythonSQLMetrics` without `pythonBootTime`, since there are no workers to
   // start, and with descriptions of in-process execution. Times are summed in nanoseconds
   // across tasks, since a registration or a batch can take less than a millisecond.

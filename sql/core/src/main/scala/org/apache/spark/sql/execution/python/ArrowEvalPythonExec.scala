@@ -83,6 +83,7 @@ private[spark] class BatchIterator[T](iter: Iterator[T], batchSize: Int)
  */
 case class ArrowEvalPythonExec(
     udfs: Seq[PythonUDF],
+    requiredChildOutput: Seq[Attribute],
     resultAttrs: Seq[Attribute],
     child: SparkPlan,
     evalType: Int) extends EvalPythonExec with PythonSQLMetrics {
@@ -117,10 +118,12 @@ case class ArrowEvalPythonExec(
   // and columnar input is enabled, accept columnar input: the UDF inputs of a
   // batch whose columns are ArrowColumnVectors are serialized to IPC directly,
   // bypassing the ColumnarToRow -> ArrowWriter round-trip. Each input batch is
-  // released once it has been written to Python, and the pass-through columns
-  // are copied as rows and joined with the results, which are converted back to
-  // columnar batches. This node then outputs only columnar batches, so the
-  // planner inserts a ColumnarToRowExec above it for a row-based parent.
+  // released once it has been written to Python. Without pass-through columns,
+  // the result batches from Python are returned as they are; otherwise the
+  // pass-through columns are copied as rows and joined with the results, which
+  // are converted back to columnar batches. This node then outputs only
+  // columnar batches, so the planner inserts a ColumnarToRowExec above it for
+  // a row-based parent.
   // Otherwise it reads rows from its child, even from one that also supports
   // columnar, such as the scan of the Arrow cache. Either way, the choice is
   // fixed when the plan is built.
@@ -207,7 +210,7 @@ class ArrowEvalPythonEvaluatorFactory(
       schema: StructType,
       context: TaskContext): Iterator[InternalRow] = {
 
-    val outputTypes = output.drop(childOutput.length).map(_.dataType.transformRecursively {
+    val outputTypes = resultOutput.map(_.dataType.transformRecursively {
       case udt: UserDefinedType[_] => udt.sqlType
     })
 

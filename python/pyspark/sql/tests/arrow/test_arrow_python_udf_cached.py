@@ -17,9 +17,10 @@
 
 import datetime
 import unittest
+from typing import Iterator
 
 from pyspark.sql import Row
-from pyspark.sql.functions import col, udf
+from pyspark.sql.functions import arrow_udf, col, pandas_udf, udf
 from pyspark.testing.sqlutils import ReusedSQLTestCase
 from pyspark.testing.utils import (
     assertDataFrameEqual,
@@ -187,6 +188,87 @@ class ArrowPythonUDFCachedInputTests(ReusedSQLTestCase):
         finally:
             df.unpersist()
 
+
+    def test_udfs_without_pass_through_columns(self):
+        # Only the results are selected, so no column is passed through, and the result batches
+        # of Python are the output batches, including those of iterator UDFs, which may return
+        # batches of other sizes than their input.
+        import pandas as pd
+        import pyarrow as pa
+        import pyarrow.compute as pc
+
+        @pandas_udf("long")
+        def pandas_plus_one(it: Iterator[pd.Series]) -> Iterator[pd.Series]:
+            for s in it:
+                yield s + 1
+
+        @arrow_udf("long")
+        def arrow_plus_one(it: Iterator[pa.Array]) -> Iterator[pa.Array]:
+            for a in it:
+                # Splits each batch in two.
+                half = len(a) // 2
+                yield pc.add(a[:half], 1)
+                yield pc.add(a[half:], 1)
+
+        @pandas_udf("long")
+        def pandas_times_two(s: pd.Series) -> pd.Series:
+            return s * 2
+
+        num_rows = 10000
+        df = self.spark.range(0, num_rows, 1, 2).selectExpr("id", "id * 10 AS v").cache()
+        cases = [
+            ("pandas_iter", pandas_plus_one, lambda i: i + 1),
+            ("arrow_iter", arrow_plus_one, lambda i: i + 1),
+            ("pandas", pandas_times_two, lambda i: i * 2),
+            ("udf", udf(lambda x: x + 1, "long"), lambda i: i + 1),
+        ]
+        try:
+            with self.sql_conf({"spark.sql.execution.arrow.maxRecordsPerBatch": "1000"}):
+                for name, f, g in cases:
+                    with self.subTest(udf=name):
+                        expected = [Row(r=g(i)) for i in range(num_rows)]
+                        result = df.select(f(col("id")).alias("r"))
+                        self._assert_columnar_arrow_eval(result, expected_nodes=1)
+                        assertDataFrameEqual(result, expected)
+                        # With a filter on the result above.
+                        filtered = result.where(col("r") % 7 == 0)
+                        assertDataFrameEqual(filtered, [r for r in expected if r.r % 7 == 0])
+        finally:
+            df.unpersist()
+
+    def test_stacked_udfs_without_pass_through_columns(self):
+        # The outer UDF reads the result batches of the inner one, which are loaded into the
+        # same vectors for every batch, and neither passes through a column.
+        import pandas as pd
+
+        @pandas_udf("long")
+        def pandas_times_two(s: pd.Series) -> pd.Series:
+            return s * 2
+
+        plus_one = udf(lambda x: x + 1, "long")
+        df = self.spark.range(0, 10000, 1, 2).cache()
+        try:
+            with self.sql_conf({"spark.sql.execution.arrow.maxRecordsPerBatch": "1000"}):
+                result = df.select(pandas_times_two(plus_one(col("id"))).alias("r"))
+                self._assert_columnar_arrow_eval(result, expected_nodes=2)
+                assertDataFrameEqual(result, [Row(r=(i + 1) * 2) for i in range(10000)])
+        finally:
+            df.unpersist()
+
+    def test_cache_results_of_udf_without_pass_through_columns(self):
+        # The results of Python are the output batches, which are cached by copying them.
+        df = self.spark.range(0, 10000, 1, 2).cache()
+        try:
+            result = df.select(udf(lambda x: x + 1, "long")(col("id")).alias("r"))
+            self._assert_columnar_arrow_eval(result, expected_nodes=1)
+            cached = result.cache()
+            try:
+                self.assertEqual(cached.count(), 10000)
+                assertDataFrameEqual(cached, [Row(r=i + 1) for i in range(10000)])
+            finally:
+                cached.unpersist()
+        finally:
+            df.unpersist()
 
 if __name__ == "__main__":
     from pyspark.testing import main

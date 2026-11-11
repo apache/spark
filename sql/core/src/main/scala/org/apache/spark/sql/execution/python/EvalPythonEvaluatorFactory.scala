@@ -30,11 +30,23 @@ import org.apache.spark.sql.execution.python.EvalPythonExec.ArgumentMetadata
 import org.apache.spark.sql.types.{DataType, StructField, StructType}
 import org.apache.spark.util.Utils
 
+/**
+ * @param childOutput the output of the child, which the input rows have
+ * @param udfs the Python UDFs to evaluate
+ * @param output the output rows: the columns of the child that are passed through, followed by
+ *               one column for the result of each UDF
+ */
 abstract class EvalPythonEvaluatorFactory(
     childOutput: Seq[Attribute],
     udfs: Seq[PythonUDF],
     output: Seq[Attribute])
   extends PartitionEvaluatorFactory[InternalRow, InternalRow] {
+
+  /** The columns of the child that are passed through to the output. */
+  protected val passThroughOutput: Seq[Attribute] = output.dropRight(udfs.length)
+
+  /** The columns of the results of the UDFs. */
+  protected val resultOutput: Seq[Attribute] = output.takeRight(udfs.length)
 
   protected def evaluate(
       funcs: Seq[(ChainedPythonFunctions, Long)],
@@ -112,8 +124,17 @@ abstract class EvalPythonEvaluatorFactory(
       val joinedRows = evaluateJoined(pyFuncs, argMetas, iter, allInputs.toSeq, schema, context)
       if (joinedRows.isDefined) return joinedRows.get
 
-      // The queue used to buffer input rows so we can drain it to
-      // combine input with output from Python.
+      val projection = MutableProjection.create(allInputs.toSeq, childOutput)
+      projection.initialize(context.partitionId())
+
+      if (passThroughOutput.isEmpty) {
+        // No column of the child is passed through, so the results are the output rows.
+        val resultProj = UnsafeProjection.create(resultOutput, resultOutput)
+        return evaluate(pyFuncs, argMetas, iter.map(projection), schema, context).map(resultProj)
+      }
+
+      // The queue used to buffer the passed-through columns of the input rows so we can drain it
+      // to combine them with output from Python.
       // In pipelined mode, add() runs in the writer thread and remove() in the task thread.
       // Use lock-free mode to avoid synchronized overhead (memory visibility is guaranteed
       // by the blocking socket I/O between the two threads).
@@ -121,18 +142,25 @@ abstract class EvalPythonEvaluatorFactory(
       val queue = HybridRowQueue(
         context.taskMemoryManager(),
         new File(Utils.getLocalDir(SparkEnv.get.conf)),
-        childOutput.length,
+        passThroughOutput.length,
         lockFree = pipelined)
       context.addTaskCompletionListener[Unit] { ctx =>
         queue.close()
       }
 
-      val projection = MutableProjection.create(allInputs.toSeq, childOutput)
-      projection.initialize(context.partitionId())
+      // The queue copies each row it adds, so a projection may reuse its output row.
+      val passThrough: InternalRow => UnsafeRow =
+        if (passThroughOutput.map(_.exprId) == childOutput.map(_.exprId)) {
+          _.asInstanceOf[UnsafeRow]
+        } else {
+          val passThroughProj = UnsafeProjection.create(passThroughOutput, childOutput)
+          passThroughProj.initialize(context.partitionId())
+          passThroughProj(_)
+        }
 
       // Add rows to queue to join later with the result.
       val projectedRowIter = iter.map { inputRow =>
-        queue.add(inputRow.asInstanceOf[UnsafeRow])
+        queue.add(passThrough(inputRow))
         projection(inputRow)
       }
 

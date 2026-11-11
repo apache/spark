@@ -172,6 +172,7 @@ class BatchEvalPythonExecSuite extends SharedSparkSession
         udfDeterministic = true)
       class TestBatchEvalPythonExec extends BatchEvalPythonExec(
           Seq(pythonUdf),
+          Seq(taskAttr),
           Seq(AttributeReference("result", StringType)()),
           LocalTableScanExec(Seq(taskAttr), Nil, None)) {
         def testEvaluatorFactory: BatchEvalPythonEvaluatorFactory =
@@ -425,7 +426,7 @@ class BatchEvalPythonExecSuite extends SharedSparkSession
       case f @ FilterExec(
           And(_: AttributeReference, _: AttributeReference),
           InputAdapter(_: BatchEvalPythonExec)) => f
-      case b @ BatchEvalPythonExec(_, _, WholeStageCodegenExec(FilterExec(_: In, _))) => b
+      case b @ BatchEvalPythonExec(_, _, _, WholeStageCodegenExec(FilterExec(_: In, _))) => b
     }
     assert(qualifiedPlanNodes.size == 2)
   }
@@ -435,7 +436,7 @@ class BatchEvalPythonExecSuite extends SharedSparkSession
       .where("dummyPythonUDF(a, dummyPythonUDF(a, b)) and a in (3, 4)")
     val qualifiedPlanNodes = df.queryExecution.executedPlan.collect {
       case f @ FilterExec(_: AttributeReference, InputAdapter(_: BatchEvalPythonExec)) => f
-      case b @ BatchEvalPythonExec(_, _, WholeStageCodegenExec(FilterExec(_: In, _))) => b
+      case b @ BatchEvalPythonExec(_, _, _, WholeStageCodegenExec(FilterExec(_: In, _))) => b
     }
     assert(qualifiedPlanNodes.size == 2)
   }
@@ -447,7 +448,7 @@ class BatchEvalPythonExecSuite extends SharedSparkSession
       case f @ FilterExec(
           And(_: AttributeReference, _: GreaterThan),
           InputAdapter(_: BatchEvalPythonExec)) => f
-      case b @ BatchEvalPythonExec(_, _, WholeStageCodegenExec(_: FilterExec)) => b
+      case b @ BatchEvalPythonExec(_, _, _, WholeStageCodegenExec(_: FilterExec)) => b
     }
     assert(qualifiedPlanNodes.size == 2)
   }
@@ -460,7 +461,7 @@ class BatchEvalPythonExecSuite extends SharedSparkSession
       case f @ FilterExec(
           And(_: AttributeReference, _: GreaterThan),
           InputAdapter(_: BatchEvalPythonExec)) => f
-      case b @ BatchEvalPythonExec(_, _, WholeStageCodegenExec(_: FilterExec)) => b
+      case b @ BatchEvalPythonExec(_, _, _, WholeStageCodegenExec(_: FilterExec)) => b
     }
     assert(qualifiedPlanNodes.size == 2)
   }

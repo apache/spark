@@ -20,8 +20,6 @@ import java.nio.charset.StandardCharsets.UTF_8
 import java.util
 import java.util.concurrent.atomic.AtomicInteger
 
-import scala.jdk.CollectionConverters._
-
 import org.apache.arrow.memory.BufferAllocator
 import org.apache.arrow.vector._
 
@@ -113,9 +111,12 @@ private class ArrowBackedTable(options: CaseInsensitiveStringMap)
   }
 }
 
-/** Scan builder / Scan / Batch implementation. */
+/**
+ * Scan builder / Scan / Batch implementation. If the option `pruneColumns` is true, the scan reads
+ * only the columns that the query requires.
+ */
 private class ArrowBackedScanBuilder(options: CaseInsensitiveStringMap)
-    extends ScanBuilder with Scan with Batch {
+    extends ScanBuilder with SupportsPushDownRequiredColumns with Scan with Batch {
 
   private val numRows =
     options.getInt("numRows", ArrowBackedDataSourceV2.DEFAULT_NUM_ROWS)
@@ -126,7 +127,14 @@ private class ArrowBackedScanBuilder(options: CaseInsensitiveStringMap)
 
   override def toBatch: Batch = this
 
-  override def readSchema(): StructType = ArrowBackedDataSourceV2.SCHEMA
+  private val supportsColumnPruning = options.getBoolean("pruneColumns", false)
+  private var requiredSchema = ArrowBackedDataSourceV2.SCHEMA
+
+  override def pruneColumns(requiredSchema: StructType): Unit = {
+    if (supportsColumnPruning) this.requiredSchema = requiredSchema
+  }
+
+  override def readSchema(): StructType = requiredSchema
 
   override def planInputPartitions(): Array[InputPartition] = {
     val rowsPerPartition = numRows / numPartitions
@@ -150,7 +158,8 @@ private class ArrowBackedScanBuilder(options: CaseInsensitiveStringMap)
 
   override def createReaderFactory(): PartitionReaderFactory = {
     new ArrowBackedReaderFactory(
-      columnar, reuseVectors, batchSize, arrowIdColumn, emptyBatches)
+      columnar, reuseVectors, batchSize, arrowIdColumn, emptyBatches,
+      requiredSchema.fieldNames.map(ArrowBackedDataSourceV2.SCHEMA.fieldIndex))
   }
 }
 
@@ -169,13 +178,15 @@ private case class ArrowPartition(start: Int, end: Int)
  *   [[ArrowColumnVector]], so that a batch is not entirely Arrow-backed.
  * @param emptyBatches if true, the reader with fresh vectors also returns batches without rows,
  *   first, in the middle and last.
+ * @param columnIndices the indices of the columns of the schema to read
  */
 private class ArrowBackedReaderFactory(
     columnar: Boolean,
     reuseVectors: Boolean,
     batchSize: Int,
     arrowIdColumn: Boolean,
-    emptyBatches: Boolean)
+    emptyBatches: Boolean,
+    columnIndices: Array[Int])
   extends PartitionReaderFactory {
 
   override def supportColumnarReads(
@@ -184,7 +195,8 @@ private class ArrowBackedReaderFactory(
   override def createReader(
       partition: InputPartition): PartitionReader[InternalRow] = {
     val ArrowPartition(start, end) = partition
-    val inner = new ArrowBackedPartitionReader(start, end, batchSize, arrowIdColumn)
+    val inner = new ArrowBackedPartitionReader(
+      start, end, batchSize, columnIndices, arrowIdColumn)
     // Wrap columnar reader as row reader.
     new PartitionReader[InternalRow] {
       private var rowIter: java.util.Iterator[InternalRow] = _
@@ -203,9 +215,10 @@ private class ArrowBackedReaderFactory(
       partition: InputPartition): PartitionReader[ColumnarBatch] = {
     val ArrowPartition(start, end) = partition
     if (reuseVectors) {
-      new ReusingArrowPartitionReader(start, end, batchSize)
+      new ReusingArrowPartitionReader(start, end, batchSize, columnIndices)
     } else {
-      new ArrowBackedPartitionReader(start, end, batchSize, arrowIdColumn, emptyBatches)
+      new ArrowBackedPartitionReader(
+        start, end, batchSize, columnIndices, arrowIdColumn, emptyBatches)
     }
   }
 }
@@ -216,7 +229,8 @@ private class ArrowBackedReaderFactory(
  * may: a batch is only valid until the next one. Its columns are [[ReusedArrowColumnVector]]s,
  * whose closeIfFreeable is a no-op.
  */
-private class ReusingArrowPartitionReader(start: Int, end: Int, batchSize: Int)
+private class ReusingArrowPartitionReader(
+    start: Int, end: Int, batchSize: Int, columnIndices: Array[Int])
     extends PartitionReader[ColumnarBatch] {
   private var current = start
   private val allocator = ArrowUtils.rootAllocator.newChildAllocator(
@@ -225,8 +239,9 @@ private class ReusingArrowPartitionReader(start: Int, end: Int, batchSize: Int)
     ArrowUtils.toArrowSchema(ArrowBackedDataSourceV2.SCHEMA, null,
       errorOnDuplicatedFieldNames = true, largeVarTypes = false),
     allocator)
-  private val batch = new ColumnarBatch(
-    root.getFieldVectors.asScala.map(new ReusedArrowColumnVector(_): ColumnVector).toArray)
+  private val batch = new ColumnarBatch(columnIndices.map { i =>
+    new ReusedArrowColumnVector(root.getFieldVectors.get(i)): ColumnVector
+  })
 
   override def next(): Boolean = {
     if (current >= end) return false
@@ -273,12 +288,14 @@ private class ReusingArrowPartitionReader(start: Int, end: Int, batchSize: Int)
  *
  * If `arrowIdColumn` is false, the `id` column is a [[ColumnVector]] over its Arrow vector that is
  * not an [[ArrowColumnVector]]. If `emptyBatches` is true, the reader also returns batches without
- * rows, before the first batch, after half of the batches and after the last one.
+ * rows, before the first batch, after half of the batches and after the last one. The batches have
+ * the columns at `columnIndices`, the first of which counts the releases; the others are closed.
  */
 private class ArrowBackedPartitionReader(
     start: Int,
     end: Int,
     batchSize: Int,
+    columnIndices: Array[Int],
     arrowIdColumn: Boolean = true,
     emptyBatches: Boolean = false)
   extends PartitionReader[ColumnarBatch] {
@@ -373,15 +390,15 @@ private class ArrowBackedPartitionReader(
       allocator, "data", count)
 
     // Wrap in ArrowColumnVectors
-    val columns: Array[ColumnVector] = Array(
-      if (arrowIdColumn) {
-        new ReleaseCountingArrowColumnVector(idVector)
-      } else {
-        new ReleaseCountingColumnVector(new ArrowColumnVector(idVector))
-      },
-      new ArrowColumnVector(nameVector),
-      new ArrowColumnVector(valueVector),
-      new ArrowColumnVector(dataVector))
+    val vectors = Array[ValueVector](idVector, nameVector, valueVector, dataVector)
+    vectors.indices.filterNot(columnIndices.contains).foreach(vectors(_).close())
+    val columns: Array[ColumnVector] = columnIndices.zipWithIndex.map {
+      case (0, pos) if !arrowIdColumn =>
+        val vector = new ArrowColumnVector(idVector)
+        if (pos == 0) new ReleaseCountingColumnVector(vector) else vector
+      case (i, 0) => new ReleaseCountingArrowColumnVector(vectors(i))
+      case (i, _) => new ArrowColumnVector(vectors(i))
+    }
 
     currentBatch = new ColumnarBatch(columns, count)
     allBatches.synchronized {
