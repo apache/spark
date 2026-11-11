@@ -93,22 +93,22 @@ class ElementwiseEvalTypeHandlerTestCase(PySparkBaseTestCase):
             ["a", "b", "c"],
         )
 
-    def _handler(self, handler_cls, *udfs, nesting=None, input_type=None, runner_conf=None):
+    def _handler(self, handler_cls, *udf_descs, nesting=None, input_type=None, runner_conf=None):
         """Build ``handler_cls`` from ``(func, args_offsets, kwargs_offsets, return_type)``
         tuples, with ``nesting`` as the per-UDF ``elementwise_nesting``."""
         eval_conf = {"input_type": (input_type or self._INPUT_TYPE).json()}
         if nesting is not None:
             eval_conf["elementwise_nesting"] = ",".join(map(str, nesting))
         return handler_cls(
-            udfs=[
+            udf_descs=[
                 UDF(
-                    raw_func=func,
+                    funcs=[func],
                     args_offsets=args_offsets,
                     kwargs_offsets=kwargs_offsets,
                     return_type=return_type,
                     result_id=0,
                 )
-                for func, args_offsets, kwargs_offsets, return_type in udfs
+                for func, args_offsets, kwargs_offsets, return_type in udf_descs
             ],
             runner_conf=RunnerConf(runner_conf or {"spark.sql.session.timeZone": "UTC"}),
             eval_conf=EvalConf(eval_conf),
@@ -491,6 +491,15 @@ class ScalarIterElementwiseUDFHandlerTestsMixin:
                     0, iter([self._batch(), self._batch(a=[[]], b=[None], c=[[]])])
                 )
             )
+
+    def test_stop_iteration_in_udf_call_raises_runtime_error(self):
+        # A non-generator UDF that eagerly reads an empty input raises StopIteration from the
+        # call itself.
+        def eager(batches):
+            return iter([next(batches)])
+
+        with self.assertRaisesRegex(PySparkRuntimeError, "STOP_ITERATION_OCCURRED"):
+            list(self._iter_handler(eager).run(0, iter([])))
 
     def test_rejects_non_iterator_result(self):
         with self.assertRaisesRegex(PySparkTypeError, "UDF_RETURN_TYPE"):

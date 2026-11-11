@@ -76,10 +76,11 @@ case class HashAggregateExec(
       SQLMetrics.createAverageMetric(sparkContext, "avg hash probes per key"),
     "numTasksFallBacked" -> SQLMetrics.createMetric(sparkContext, "number of sort fallback tasks")
   ) ++ {
-    // Only the aggregates that can actually bypass report this, so the rest do not show a
-    // constant 0 in the SQL UI (see `UnionExec.metrics` for the same approach).
+    // Only the aggregates that can actually pass rows through report this, so the rest do not
+    // show a constant 0 in the SQL UI (see `UnionExec.metrics` for the same approach).
     if (adaptivePartialAggEnabled) {
-      Map("numBypassingRows" -> SQLMetrics.createMetric(sparkContext, "number of bypassing rows"))
+      Map("numPassthroughRows" ->
+        SQLMetrics.createMetric(sparkContext, "number of pass-through output rows"))
     } else {
       Map.empty[String, SQLMetric]
     }
@@ -106,7 +107,8 @@ case class HashAggregateExec(
     val aggTime = longMetric("aggTime")
     val numTasksFallBacked = longMetric("numTasksFallBacked")
     // Registered only when the feature applies, and only read from the pass-through path.
-    val numBypassingRows = if (adaptivePartialAggEnabled) longMetric("numBypassingRows") else null
+    val numPassthroughRows =
+      if (adaptivePartialAggEnabled) longMetric("numPassthroughRows") else null
 
     child.execute().mapPartitionsWithIndex { (partIndex, iter) =>
 
@@ -135,11 +137,11 @@ case class HashAggregateExec(
             spillSize,
             avgHashProbe,
             numTasksFallBacked,
-            numBypassingRows,
-            aggTime,
+            numPassthroughRows,
             adaptivePartialAggEnabled,
             adaptiveMinRows,
-            adaptiveMinCompaction)
+            adaptiveMinCompaction,
+            adaptiveMinCompactionToSpill)
         if (!hasInput && groupingExpressions.isEmpty) {
           numOutputRows += 1
           Iterator.single[UnsafeRow](aggregationIterator.outputForEmptyGroupingKeyWithoutInput())
@@ -207,10 +209,15 @@ case class HashAggregateExec(
       requiredChildDistributionExpressions.isEmpty
   }
 
-  // The number of rows between two compaction-ratio evaluations, and the ratio below which the
-  // partial aggregation is considered ineffective. Only read when the feature applies.
+  // The number of rows between two compaction-ratio evaluations, and the ratios below which the
+  // partial aggregation is considered ineffective: at the periodic check, and when the map is
+  // about to spill. Keeping the aggregation past that point means aggregating the rest of the
+  // input through spills, so the spill check never demands less compaction than the periodic one.
+  // Only read when the feature applies.
   private val adaptiveMinRows: Long = conf.adaptivePartialAggregationMinRows
   private val adaptiveMinCompaction: Double = conf.adaptivePartialAggregationMinCompaction
+  private val adaptiveMinCompactionToSpill: Double =
+    math.max(adaptiveMinCompaction, conf.adaptivePartialAggregationMinCompactionToSpill)
 
   // The name for Fast HashMap
   private var fastHashMapTerm: String = _
@@ -252,6 +259,13 @@ case class HashAggregateExec(
   // keeps both sides of the ratio on the same epoch. Once the fast map fills it stops accepting
   // keys, so the difference settles at zero and the ratio is the regular map's alone.
   private var adaptiveFastKeysAtSpillTerm: String = _
+  // The epoch's key count at its last periodic check, and at the check before that, where the
+  // window of recent rows that the spill check judges starts (see `adaptiveIneffective`). The
+  // checks run at multiples of `minRows`, and the next check row advances only past a check that
+  // keeps aggregating, so the window starts `2 * minRows` rows before the next check row, or at
+  // the epoch start before the second check.
+  private var adaptiveCheckKeysTerm: String = _
+  private var adaptiveWindowKeysTerm: String = _
   // The name of the generated output function, promoted to a field so `doConsumeWithKeys` can emit
   // pass-through rows directly from within the build loop.
   private var outputFunc: String = _
@@ -574,6 +588,8 @@ case class HashAggregateExec(
         ctx.addMutableState(CodeGenerator.JAVA_BOOLEAN, "adaptiveMapSetupDone")
       adaptiveFastKeysAtSpillTerm =
         ctx.addMutableState(CodeGenerator.JAVA_INT, "adaptiveFastKeysAtSpill")
+      adaptiveCheckKeysTerm = ctx.addMutableState(CodeGenerator.JAVA_LONG, "adaptiveCheckKeys")
+      adaptiveWindowKeysTerm = ctx.addMutableState(CodeGenerator.JAVA_LONG, "adaptiveWindowKeys")
       adaptivePendingRowsTerm = ctx.addMutableState(
         "java.util.LinkedList<UnsafeRow[]>", "adaptivePendingRows",
         v => s"$v = new java.util.LinkedList<UnsafeRow[]>();", forceInline = true)
@@ -777,6 +793,20 @@ case class HashAggregateExec(
        """.stripMargin
     }
 
+    // With adaptive partial aggregation, `aggTime` times the build up to the point where
+    // pass-through starts, plus the map iterator setup below (which in a task that has spilled also
+    // writes the map to disk and merges it with the spilled data), but never the pass-through rows:
+    // timing them would cost two `System.nanoTime()` calls per row, comparable to passing a row
+    // through. The timer starts before the build and stops right after the setup, which runs once,
+    // before the aggregate outputs anything: for the first passed-through row, or right after the
+    // build if no row is passed through. Fused with the Final, the build then goes on to pass the
+    // rest of the input through untimed.
+    val adaptiveBuildStartTerm = if (adaptivePartialAggEnabled) {
+      ctx.addMutableState(CodeGenerator.JAVA_LONG, "adaptiveBuildStart")
+    } else {
+      ""
+    }
+
     // With adaptive partial aggregation the maps are frozen once pass-through is active, so their
     // output (which also frees them) can happen as soon as pass-through fires, releasing the memory
     // before the remaining input is streamed. The output loops are wrapped in a function so the
@@ -784,21 +814,23 @@ case class HashAggregateExec(
     // The done flag is set inside, after the loops, so a mid-output drain (the loops return via
     // `shouldStop()`) leaves it unset and the caller resumes the map iterator on re-entry; once it
     // is set the maps have been fully output and freed and will not be touched again. The iterator
-    // setup (`finishHashMap`, which destructs the map) is guarded to run only once. The queue of
-    // passed-through rows held behind the maps is flushed here, right after the done flag is set:
-    // the maps must precede the held rows so the downstream Final merges a group's map buffer
-    // before its pass-through buffers (a group can straddle the freeze, since the maps only freeze
-    // once pass-through fires), and the copies were made when the row was queued, so emitting them
-    // here cannot corrupt the build's reusable rows.
+    // setup (`finishHashMap`, which destructs the map) is guarded to run only once, and stops the
+    // build timer (see `aggTime` above). The queue of passed-through rows held behind the maps is
+    // flushed here, right after the done flag is set: the maps must precede the held rows so the
+    // downstream Final merges a group's map buffer before its pass-through buffers (a group can
+    // straddle the freeze, since the maps only freeze once pass-through fires), and the copies were
+    // made when the row was queued, so emitting them here cannot corrupt the build's reusable rows.
     adaptiveOutputMapAndFlushFuncName = if (adaptivePartialAggEnabled) {
       val name = ctx.freshName("outputMapAndFlush")
       val pair = ctx.freshName("pendingRow")
+      val aggTime = metricTerm(ctx, "aggTime")
       ctx.addNewFunction(name,
         s"""
            |private void $name() throws java.io.IOException {
            |  if (!$adaptiveMapSetupDoneTerm) {
            |    $finishHashMap
            |    $adaptiveMapSetupDoneTerm = true;
+           |    $aggTime.add((System.nanoTime() - $adaptiveBuildStartTerm) / $NANOS_PER_MILLIS);
            |  }
            |  $outputFromFastHashMap
            |  $outputFromRegularHashMap
@@ -827,8 +859,16 @@ case class HashAggregateExec(
       outputFunc = generateResultFunction(ctx)
     }
 
-    val aggTime = metricTerm(ctx, "aggTime")
-    val beforeAgg = ctx.freshName("beforeAgg")
+    // The build timer. With adaptive partial aggregation the map setup stops it (see `aggTime`
+    // above), so its start is kept in a field.
+    val (startBuildTimer, stopBuildTimer) = if (adaptivePartialAggEnabled) {
+      (s"$adaptiveBuildStartTerm = System.nanoTime();", "")
+    } else {
+      val aggTime = metricTerm(ctx, "aggTime")
+      val beforeAgg = ctx.freshName("beforeAgg")
+      (s"long $beforeAgg = System.nanoTime();",
+        s"$aggTime.add((System.nanoTime() - $beforeAgg) / $NANOS_PER_MILLIS);")
+    }
     // Split by an exchange, `doAgg` may start appending pass-through rows to the output buffer
     // mid-build. In that case `shouldStop()` becomes true and we must return so the buffered rows
     // are drained; on re-entry the frozen maps are output first (`adaptiveOutputMapAndFlush`) and
@@ -858,14 +898,15 @@ case class HashAggregateExec(
     } else {
       ""
     }
+    // The resumed build only passes rows through, so it is not timed (see `aggTime` above). Split
+    // by an exchange, a child that checks `shouldStop()` between rows returns and re-enters here
+    // after every passed-through row, so a timer would cost two `System.nanoTime()` calls per row;
+    // a one-to-many child such as `GenerateExec` re-enters once per input row instead.
     val adaptiveResumeBuild = if (adaptivePartialAggEnabled) {
-      val beforeResumedAgg = ctx.freshName("beforeResumedAgg")
       s"""
          |if (!$adaptiveChildrenConsumedTerm) {
          |  $adaptiveOutputMapAndFlush
-         |  long $beforeResumedAgg = System.nanoTime();
          |  $doAggFuncName(partitionIndex);
-         |  $aggTime.add((System.nanoTime() - $beforeResumedAgg) / $NANOS_PER_MILLIS);
          |  if (shouldStop()) return;
          |}
        """.stripMargin
@@ -886,9 +927,9 @@ case class HashAggregateExec(
        |  $createFastHashMap
        |  $addHookToCloseFastHashMap
        |  $hashMapTerm = $thisPlan.createHashMap();
-       |  long $beforeAgg = System.nanoTime();
+       |  $startBuildTimer
        |  $doAggFuncName(partitionIndex);
-       |  $aggTime.add((System.nanoTime() - $beforeAgg) / $NANOS_PER_MILLIS);
+       |  $stopBuildTimer
        |  $adaptiveStopCheck
        |}
        |$adaptiveResumeBuild
@@ -954,25 +995,31 @@ case class HashAggregateExec(
       case _ => ("true", "", "")
     }
 
-    // The compaction ratio is measured at the operator level: all processed rows against the keys
-    // held by both maps, so two-level-map routing does not change the decision. The same predicate
-    // decides both check points -- periodically every `minRows` rows, and right before the map
-    // would spill (in which case the spill is skipped entirely). Pass-through cannot be undone
-    // within the task, so the spill check, like the periodic one, waits until the current epoch
-    // has processed `minRows` rows; a map that fills sooner spills as usual. `minRows = 0`
-    // disables the periodic check: the row count is only ever compared after being incremented
-    // past 0, so it never matches and only the spill check remains, without a row floor.
-    val adaptiveIneffective = if (adaptivePartialAggEnabled) {
-      val totalKeys = if (isFastHashMapEnabled) {
-        s"($fastHashMapTerm.getNumKeys() - $adaptiveFastKeysAtSpillTerm + " +
-          s"$hashMapTerm.getNumKeys())"
-      } else {
-        s"$hashMapTerm.getNumKeys()"
-      }
-      s"$processedRowsTerm < (double) $totalKeys * ${adaptiveMinCompaction}D"
+    // The compaction ratio is measured at the operator level: processed rows against the keys
+    // held by both maps, so two-level-map routing does not change the decision. It is evaluated at
+    // two check points:
+    //   - periodically, every `minRows` rows, over the whole epoch against `minCompaction`;
+    //   - right before the map would spill, over the recent rows against the higher
+    //     `minCompactionToSpill`, in which case the map does not spill and the rest of the input
+    //     is passed through. Keeping the aggregation then means aggregating the rest of the input
+    //     through spills, which pays off only if that input keeps repeating keys. The recent rows,
+    //     those since the periodic check before last, measure that: when keys repeat across the
+    //     input, more of them find their key already in the map as it fills, so their ratio
+    //     climbs above the epoch's; when each key's rows arrive together, the two ratios match.
+    // Pass-through cannot be undone within the task, so the spill check, like the periodic one,
+    // waits until the current epoch has processed `minRows` rows; a map that fills sooner spills
+    // as usual. `minRows = 0` disables the periodic check: the row count is only ever compared
+    // after being incremented past 0, so it never matches and only the spill check remains,
+    // without a row floor and over the whole epoch.
+    def adaptiveEpochKeys: String = if (isFastHashMapEnabled) {
+      s"((long) $fastHashMapTerm.getNumKeys() - $adaptiveFastKeysAtSpillTerm + " +
+        s"$hashMapTerm.getNumKeys())"
     } else {
-      ""
+      s"((long) $hashMapTerm.getNumKeys())"
     }
+    // Whether `rows` processed rows fail to collapse into `keys` keys by at least `threshold`.
+    def adaptiveIneffective(rows: String, keys: String, threshold: Double): String =
+      s"$rows < (double) $keys * ${threshold}D"
 
     val findOrInsertRegularHashMap: String = {
       // Assumes the grouping key projection (`unsafeRowKeyCode.code`) has already run for this row,
@@ -1029,7 +1076,14 @@ case class HashAggregateExec(
              |$processedRowsTerm = 0L;
              |$adaptiveNextCheckRowTerm = ${adaptiveMinRows}L;
              |$snapshotFastKeys
+             |$adaptiveCheckKeysTerm = 0L;
+             |$adaptiveWindowKeysTerm = 0L;
            """.stripMargin
+        val windowRows = s"Math.max(0L, $adaptiveNextCheckRowTerm - ${2 * adaptiveMinRows}L)"
+        val recentIneffective = adaptiveIneffective(
+          s"($processedRowsTerm - $windowRows)",
+          s"($adaptiveEpochKeys - $adaptiveWindowKeysTerm)",
+          adaptiveMinCompactionToSpill)
         // The spill check needs at least one processed row even when `minRows = 0`.
         val spillCheckMinRows = math.max(adaptiveMinRows, 1L)
         s"""
@@ -1038,7 +1092,7 @@ case class HashAggregateExec(
            |if (!$adaptivePassThroughTerm) {
            |  $probeRegularMap
            |  if ($unsafeRowBuffer == null) {
-           |    if ($processedRowsTerm >= ${spillCheckMinRows}L && $adaptiveIneffective) {
+           |    if ($processedRowsTerm >= ${spillCheckMinRows}L && $recentIneffective) {
            |      $adaptivePassThroughTerm = true;
            |    } else {
            |      $spillAndRestartEpoch
@@ -1112,6 +1166,8 @@ case class HashAggregateExec(
         } else {
           s"($unsafeRowBuffer != null)"
         }
+        val epochIneffective =
+          adaptiveIneffective(processedRowsTerm, adaptiveEpochKeys, adaptiveMinCompaction)
         // The grouping key was already projected in `findOrInsertRegularHashMap`
         // (`unsafeRowKeyCode.code`), so `unsafeRowKeyCode.value` holds this row's key. Only build
         // the single-row partial buffer here: reset the reusable buffer to the initial aggregation
@@ -1122,10 +1178,12 @@ case class HashAggregateExec(
            |  if (!$adaptivePassThroughTerm) {
            |    $processedRowsTerm += 1;
            |    if ($processedRowsTerm == $adaptiveNextCheckRowTerm) {
-           |      if ($adaptiveIneffective) {
+           |      if ($epochIneffective) {
            |        $adaptivePassThroughTerm = true;
            |      } else {
            |        $adaptiveNextCheckRowTerm += ${adaptiveMinRows}L;
+           |        $adaptiveWindowKeysTerm = $adaptiveCheckKeysTerm;
+           |        $adaptiveCheckKeysTerm = $adaptiveEpochKeys;
            |      }
            |    }
            |  }
@@ -1324,10 +1382,10 @@ case class HashAggregateExec(
     // buffered, `shouldStop()` never fires, and the single output call drains the whole map before
     // the held row follows.
     val handlePassThroughRow = if (adaptivePartialAggEnabled) {
-      val numBypassingRows = metricTerm(ctx, "numBypassingRows")
+      val numPassthroughRows = metricTerm(ctx, "numPassthroughRows")
       s"""
          |if ($adaptiveRowBypassedTerm) {
-         |  $numBypassingRows.add(1);
+         |  $numPassthroughRows.add(1);
          |  if ($adaptiveMapOutputDoneTerm) {
          |    $outputFunc(${unsafeRowKeyCode.value}, $unsafeRowBuffer);
          |  } else {

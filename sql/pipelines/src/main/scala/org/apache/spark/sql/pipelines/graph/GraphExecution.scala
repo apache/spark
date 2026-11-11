@@ -211,7 +211,7 @@ abstract class GraphExecution(
    */
   def stopThread(thread: Thread): Unit = {
     // Don't wait to join if current thread is the thread to stop
-    if (thread.getId != Thread.currentThread().getId) {
+    if (thread.threadId != Thread.currentThread().threadId) {
       thread.join(env.spark.sessionState.conf.timeoutMsForTerminationJoinAndLock)
       // thread is alive after we join.
       if (thread.isAlive) {
