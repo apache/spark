@@ -36,8 +36,8 @@ class ResolveGapFillSuite extends AnalysisTest {
       rangeEndExpr = None,
       fillColumns = Nil,
       maxGapExpr = None,
-      binStartName = None,
-      isGeneratedName = None,
+      binStart = None,
+      isGenerated = None,
       child = child)
 
   private val resolvedInput = LocalRelation($"ts".timestampNTZ)

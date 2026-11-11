@@ -26,8 +26,8 @@ import org.apache.spark.sql.internal.SQLConf
 /**
  * Rejects [[UnresolvedGapFill]] until the operator is implemented.
  *
- * When `spark.sql.gapFillRelationOperator.enabled` is off, it fails at once, so a disabled
- * operator is reported before any error in its input. When it is on, it waits for the child to
+ * When `spark.sql.gapFillRelationOperator.enabled` is off, it fails without waiting for the
+ * child, so a missing table also gets this error. When it is on, it waits for the child to
  * resolve, so an error in the child (such as a missing table) is still reported first.
  */
 object ResolveGapFill extends Rule[LogicalPlan] {

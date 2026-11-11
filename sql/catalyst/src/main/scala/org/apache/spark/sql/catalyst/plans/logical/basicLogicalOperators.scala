@@ -1974,8 +1974,15 @@ case class GapFillColumn(column: Expression, method: GapFillMethod)
 }
 
 /**
+ * An output column that GAP FILL adds when it is asked for with BIN_START or IS_GENERATED.
+ * `alias` is the name given with AS. When it is not set, the analyzer uses the default name,
+ * `bin_start` or `is_generated`.
+ */
+case class GapFillOutputColumn(alias: Option[String])
+
+/**
  * Unresolved counterpart of the GAP FILL relation operator, produced by the parser.
- * `binStartName` and `isGeneratedName` are set only when the BIN_START or IS_GENERATED column is
+ * `binStart` and `isGenerated` are set only when the BIN_START or IS_GENERATED column is
  * requested.
  */
 case class UnresolvedGapFill(
@@ -1987,8 +1994,8 @@ case class UnresolvedGapFill(
     rangeEndExpr: Option[Expression],
     fillColumns: Seq[GapFillColumn],
     maxGapExpr: Option[Expression],
-    binStartName: Option[String],
-    isGeneratedName: Option[String],
+    binStart: Option[GapFillOutputColumn],
+    isGenerated: Option[GapFillOutputColumn],
     child: LogicalPlan) extends UnresolvedUnaryNode {
   require(rangeStartExpr.isDefined == rangeEndExpr.isDefined,
     "The GAP FILL range has both FROM and TO, or neither.")

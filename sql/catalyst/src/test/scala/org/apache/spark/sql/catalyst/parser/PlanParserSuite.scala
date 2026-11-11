@@ -3574,7 +3574,7 @@ class PlanParserSuite extends AnalysisTest {
     assert(minimal.rangeStartExpr.isEmpty && minimal.rangeEndExpr.isEmpty)
     assert(minimal.fillColumns.isEmpty)
     assert(minimal.maxGapExpr.isEmpty)
-    assert(minimal.binStartName.isEmpty && minimal.isGeneratedName.isEmpty)
+    assert(minimal.binStart.isEmpty && minimal.isGenerated.isEmpty)
 
     // Qualified columns and several PARTITION BY columns.
     val partitioned = singleGapFill(parsePlan(
@@ -3618,8 +3618,8 @@ class PlanParserSuite extends AnalysisTest {
       fill("f", GapFillMethod.Constant(parseExpression("'unknown'"))),
       fill("g", GapFillMethod.Null)))
     assert(maximal.maxGapExpr.contains(parseExpression("INTERVAL '40' MINUTE")))
-    assert(maximal.binStartName.contains("bin_begin"))
-    assert(maximal.isGeneratedName.contains("gen"))
+    assert(maximal.binStart.contains(GapFillOutputColumn(Some("bin_begin"))))
+    assert(maximal.isGenerated.contains(GapFillOutputColumn(Some("gen"))))
   }
 
   test("GAP FILL: optional clauses can come in any order, with default column names") {
@@ -3644,8 +3644,9 @@ class PlanParserSuite extends AnalysisTest {
         |  ALIGN TO TIMESTAMP '2024-01-01 00:02:00'
         |)""".stripMargin))
     assert(inOrder == shuffled)
-    assert(inOrder.binStartName.contains("bin_start"))
-    assert(inOrder.isGeneratedName.contains("is_generated"))
+    // Without AS, no name is stored. The analyzer picks the default name.
+    assert(inOrder.binStart.contains(GapFillOutputColumn(None)))
+    assert(inOrder.isGenerated.contains(GapFillOutputColumn(None)))
   }
 
   test("GAP FILL: a repeated clause raises DUPLICATE_CLAUSES") {
@@ -3725,6 +3726,23 @@ class PlanParserSuite extends AnalysisTest {
           |) AS g (a, b)""".stripMargin),
       condition = "PARSE_SYNTAX_ERROR",
       parameters = Map("error" -> "'('", "hint" -> ""))
+  }
+
+  test("GAP FILL: a join keyword after the clause starts a join, not a table alias") {
+    val gapFill = "metrics GAP FILL (ORDER BY ts BIN WIDTH INTERVAL '5' MINUTE)"
+    Seq(
+      "LEFT JOIN t ON metrics.k = t.k" -> LeftOuter,
+      "RIGHT JOIN t ON metrics.k = t.k" -> RightOuter,
+      "FULL JOIN t ON metrics.k = t.k" -> FullOuter,
+      "INNER JOIN t ON metrics.k = t.k" -> Inner,
+      "LEFT SEMI JOIN t ON metrics.k = t.k" -> LeftSemi,
+      "LEFT ANTI JOIN t ON metrics.k = t.k" -> LeftAnti,
+      "CROSS JOIN t" -> Cross,
+      "NATURAL JOIN t" -> NaturalJoin(Inner)).foreach { case (join, joinType) =>
+      val joins = parsePlan(s"SELECT * FROM $gapFill $join").collect { case j: Join => j }
+      assert(joins.map(_.joinType) == Seq(joinType), join)
+      assert(joins.head.left.isInstanceOf[UnresolvedGapFill], join)
+    }
   }
 
   test("GAP FILL: works as a SQL pipe operator") {

@@ -1322,7 +1322,7 @@ gapFillClause
           | BIN_START (AS binStartAlias=errorCapturingIdentifier)?
           | IS_GENERATED (AS isGeneratedAlias=errorCapturingIdentifier)?
         )*
-      RIGHT_PAREN (AS? tblAlias=errorCapturingIdentifier)?
+      RIGHT_PAREN (AS? tblAlias=strictIdentifier)?
     ;
 
 gapFillFillClause

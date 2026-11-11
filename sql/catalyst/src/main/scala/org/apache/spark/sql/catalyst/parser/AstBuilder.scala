@@ -2547,11 +2547,11 @@ class AstBuilder extends DataTypeAstBuilder
         GapFillColumn(gapFillColumnRef(c.multipartIdentifier), toGapFillMethod(c.gapFillMethod))
       }.toSeq,
       maxGapExpr = Option(ctx.maxGap).map(expression),
-      binStartName = ctx.BIN_START.asScala.headOption.map { _ =>
-        Option(ctx.binStartAlias).map(getIdentifierText).getOrElse("bin_start")
+      binStart = ctx.BIN_START.asScala.headOption.map { _ =>
+        GapFillOutputColumn(Option(ctx.binStartAlias).map(getIdentifierText))
       },
-      isGeneratedName = ctx.IS_GENERATED.asScala.headOption.map { _ =>
-        Option(ctx.isGeneratedAlias).map(getIdentifierText).getOrElse("is_generated")
+      isGenerated = ctx.IS_GENERATED.asScala.headOption.map { _ =>
+        GapFillOutputColumn(Option(ctx.isGeneratedAlias).map(getIdentifierText))
       },
       child = query)
 
