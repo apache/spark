@@ -218,8 +218,7 @@ def recent_runs(api, since, until):
             if data["total_count"] > 1000:
                 raise ValueError("One day exceeds GitHub's 1,000-run search limit")
             for run in data["workflow_runs"]:
-                if run.get("path", "").split("@")[0].split("/")[-1] != "update_build_status.yml":
-                    result[run["id"]] = run
+                result[run["id"]] = run
             found += len(data["workflow_runs"])
             if found >= data["total_count"]:
                 break
@@ -228,8 +227,7 @@ def recent_runs(api, since, until):
     for page in range(1, 11):
         data = api.get("actions/runs", status="in_progress", per_page=100, page=page)
         for run in data["workflow_runs"]:
-            if run.get("path", "").split("@")[0].split("/")[-1] != "update_build_status.yml":
-                result[run["id"]] = run
+            result[run["id"]] = run
         if page * 100 >= data["total_count"]:
             break
     # Completed runs last updated before the measured window cannot contribute execution.
@@ -257,6 +255,7 @@ def observed_usage(api, workloads, since, until, timings):
             "pushHours": [0.0] * 24,
             "byBranch": {},
             "pushByBranch": {},
+            "policy": {"runnerHours": 0, "peakJobs": 0},
             "through": min(cursor + timedelta(days=1), until).isoformat(),
         }
         cursor += timedelta(days=1)
@@ -274,6 +273,8 @@ def observed_usage(api, workloads, since, until, timings):
         for run, run_jobs in executor.map(measure, runs):
             push = run.get("event") == "push"
             file = run.get("path", "").split("@")[0].split("/")[-1]
+            polling = file == "update_build_status.yml"
+            policy_events = defaultdict(list)
             touched = False
             run_hours, run_job_count = 0, 0
             for job in run_jobs:
@@ -289,6 +290,17 @@ def observed_usage(api, workloads, since, until, timings):
                     until, timestamp(job["completed_at"]) if job.get("completed_at") else until
                 )
                 if finish <= start:
+                    continue
+                # Policy budgets include every upstream workflow, including status polling.
+                day_start = start.replace(hour=0, minute=0, second=0, microsecond=0)
+                while day_start < finish:
+                    end = min(day_start + timedelta(days=1), finish)
+                    begin = max(day_start, start)
+                    day = day_start.date().isoformat()
+                    days[day]["policy"]["runnerHours"] += (end - begin).total_seconds() / 3600
+                    policy_events[day].extend([(begin, 1), (end, -1)])
+                    day_start += timedelta(days=1)
+                if polling:
                     continue
                 touched = True
                 job_count += 1
@@ -311,8 +323,17 @@ def observed_usage(api, workloads, since, until, timings):
                         row["pushHours"][hour] += value
                         row["pushByBranch"].setdefault(branch, [0.0] * 24)[hour] += value
                     slot = end
+            for day, events in policy_events.items():
+                active, peak = 0, 0
+                # Ends sort before starts so adjacent jobs do not count as concurrent.
+                for _, change in sorted(events):
+                    active += change
+                    peak = max(peak, active)
+                policy = days[day]["policy"]
+                if peak > policy["peakJobs"]:
+                    policy.update(peakJobs=peak, peakRunId=run["id"], peakWorkflow=file)
             created = run.get("created_at") or run.get("run_started_at")
-            if touched or (created and since <= timestamp(created) < until):
+            if not polling and (touched or (created and since <= timestamp(created) < until)):
                 run_count += 1
                 if push:
                     row = push_branches[run.get("head_branch") or "unknown"]

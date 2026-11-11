@@ -217,7 +217,66 @@ const CIDashboard = (() => {
       observedUntil: observedEnd ? new Date(observedEnd).toISOString() : null};
   }
 
-  return {key, calendar, parseCron, runnerLoad, actualForecast};
+  function policyMetrics(snapshot) {
+    const dayMs = 86400000;
+    const today = Date.parse((snapshot.history?.until || snapshot.generatedAt).slice(0, 10));
+    const iso = time => new Date(time).toISOString().slice(0, 10);
+    const records = snapshot.history?.observed?.days || {};
+    const observed = Object.entries(records).filter(([, row]) => row.policy);
+    const complete = observed.filter(([day, row]) => Date.parse(day) < today &&
+      Date.parse(row.through) >= Date.parse(day) + dayMs);
+    const completeDays = new Set(complete.map(([day]) => day));
+    const monday = time => time - ((new Date(time).getUTCDay() + 6) % 7) * dayMs;
+    function actual(start, length) {
+      let minutes = 0, days = 0, fullDays = 0;
+      for (let i = 0; i < length; i++) {
+        const day = iso(start + i * dayMs), row = records[day];
+        if (!row?.policy) continue;
+        minutes += row.policy.runnerHours * 60;
+        days++;
+        fullDays += completeDays.has(day) ? 1 : 0;
+      }
+      return {start: iso(start), end: iso(start + (length - 1) * dayMs),
+        minutes, days, fullDays, length};
+    }
+    const highest = values => values.reduce((best, value) =>
+      !best || value.minutes > best.minutes ? value : best, null);
+    const weeks = [...new Set(complete.map(([day]) => monday(Date.parse(day))))]
+      .map(start => actual(start, 7)).filter(row => row.fullDays === 7);
+    const week = highest(weeks) || actual(monday(today), 7);
+    const fiveDays = highest(complete.map(([day]) => actual(Date.parse(day), 5))
+      .filter(row => row.fullDays === 5));
+    const pushDays = Object.entries(records).filter(([day, row]) =>
+      Date.parse(day) < today && Date.parse(row.through) >= Date.parse(day) + dayMs);
+    const profiles = snapshot.workloads.filter(w => w.history?.sampleCount > 0).length;
+    const months = new Map();
+    function forecast(start, length) {
+      if (!profiles && !pushDays.length) return null;
+      let minutes = 0;
+      for (let i = 0; i < length; i++) {
+        const time = start + i * dayMs, date = new Date(time), month = iso(time).slice(0, 7);
+        if (!months.has(month)) months.set(month, runnerLoad(snapshot.workloads, month));
+        const scheduled = months.get(month).cells[date.getUTCDate() - 1];
+        const weekday = pushDays.filter(([day]) =>
+          new Date(day).getUTCDay() === date.getUTCDay());
+        const baseline = weekday.length ? weekday : pushDays;
+        const push = baseline.reduce((sum, [, row]) =>
+          sum + row.pushHours.reduce((a, b) => a + b, 0), 0) / (baseline.length || 1);
+        minutes += (scheduled.reduce((a, b) => a + b, 0) + push) * 60;
+      }
+      return {start: iso(start), end: iso(start + (length - 1) * dayMs), minutes};
+    }
+    const peak = observed.reduce((best, [day, row]) =>
+      !best || row.policy.peakJobs > best.jobs
+        ? {jobs: row.policy.peakJobs, run: row.policy.peakRunId,
+          workflow: row.policy.peakWorkflow, day} : best, null);
+    return {week, fiveDays, peak, weekForecast: forecast(monday(today) + 7 * dayMs, 7),
+      fiveForecast: forecast(today + dayMs, 5), profiles, targets: snapshot.workloads.length,
+      since: observed.map(([day]) => day).sort()[0],
+      until: observed.map(([, row]) => row.through).sort().at(-1)};
+  }
+
+  return {key, calendar, parseCron, runnerLoad, actualForecast, policyMetrics};
 })();
 
 if (typeof module !== 'undefined') module.exports = CIDashboard;
@@ -285,6 +344,59 @@ if (typeof document !== 'undefined') {
       $('push-status').textContent = 'Upstream push measurements are unavailable. ' +
         (snapshot.history?.pushError || 'The Pages deployment collects recent Actions timings.');
     }
+  }
+  function renderPolicy() {
+    const data = CIDashboard.policyMetrics(snapshot);
+    function budget(value, limit, label) {
+      const cell = element('td');
+      if (!value || value.days === 0) {
+        cell.textContent = 'Unavailable: not enough measured history';
+        return cell;
+      }
+      const percentage = value.minutes / limit * 100;
+      cell.append(element('strong', `${format(value.minutes)} min / ${format(percentage)}%`,
+        value.minutes > limit ? 'policy-high' : undefined));
+      cell.append(element('p', `${label}: ${value.start} to ${value.end}`, 'muted'));
+      if (value.fullDays !== undefined && value.fullDays < value.length) {
+        cell.append(element('p', `${value.fullDays}/${value.length} complete days; ` +
+          'partial usage, not a full-period result.', 'muted'));
+      }
+      return cell;
+    }
+    const weekly = element('tr');
+    weekly.append(element('th', 'Calendar week'),
+      budget(data.week, 250000, data.week.fullDays === 7
+        ? 'Highest complete measured week' : 'Current week so far'),
+      budget(data.weekForecast, 250000, 'Next full week estimate'),
+      element('td', '250,000 runner-minutes'));
+    const rolling = element('tr');
+    rolling.append(element('th', 'Any five consecutive days'),
+      budget(data.fiveDays, 216000, 'Highest complete measured window'),
+      budget(data.fiveForecast, 216000, 'Next five full days estimate'),
+      element('td', '216,000 runner-minutes'));
+    const concurrency = element('tr'), peak = element('td');
+    if (data.peak) {
+      const value = data.peak;
+      peak.append(element('strong', `${value.jobs} simultaneous jobs`,
+        value.jobs > 20 ? 'policy-high' : value.jobs > 15 ? 'policy-caution' : undefined));
+      if (value.run) {
+        const link = element('a', `${value.workflow} / ${value.day}`);
+        link.href = `https://github.com/apache/spark/actions/runs/${value.run}`;
+        peak.append(element('br'), link);
+      }
+    } else {
+      peak.textContent = 'Unavailable';
+    }
+    concurrency.append(element('th', 'Peak jobs in one workflow run'), peak,
+      element('td', 'Measured only'), element('td', '20 maximum; 15 recommended'));
+    for (const row of [weekly, rolling, concurrency]) row.firstChild.scope = 'row';
+    $('policy-metrics').replaceChildren(weekly, rolling, concurrency);
+    $('policy-status').textContent = data.since
+      ? `Policy measurements: ${data.since} to ${data.until}. ` +
+        'Calendar weeks use Monday through Sunday UTC. ' +
+        `Estimates cover ${data.profiles}/${data.targets} scheduled targets plus observed push ` +
+        'activity; unprofiled targets and future manual runs are unmodeled.'
+      : 'Policy measurements are unavailable. The Pages deployment collects job timings.';
   }
   function renderCalendar(values, types, countMode) {
     const table = $('calendar');
@@ -409,6 +521,7 @@ if (typeof document !== 'undefined') {
     $('snapshot').textContent = `Source: ${data.revision.slice(0, 12)}` +
       ` / Updated ${data.generatedAt}`;
     overview();
+    renderPolicy();
     $('dashboard').hidden = false;
     safeRender();
   }).catch(e => error(`${e.message} Generate metadata with dev/generate-ci-dashboard.py ` +

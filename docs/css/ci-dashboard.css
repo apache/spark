@@ -80,6 +80,11 @@ th { color: #526477; font-weight: 600; }
 .schedule-summary { font-size: 14px; padding: 12px 0; color: #1d6890; font-weight: 600; }
 .share { display: flex; align-items: center; gap: 12px; }
 .bar { height: 9px; background: #4b99bf; border-radius: 3px; }
+.policy { min-width: 760px; }
+.policy td, .policy th { vertical-align: top; }
+.policy p { margin: 6px 0 0; }
+.policy-high { color: #aa321d; }
+.policy-caution { color: #935707; }
 .notes { font-size: 14px; color: #526477; margin-top: 24px; }
 footer { color: #526477; font-size: 13px; }
 #error { background: #fff0e5; border: 1px solid #d98c4d; padding: 16px; }

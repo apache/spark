@@ -27,6 +27,9 @@ The existing Pages deployment starts with three measured days on a cold cache, e
 
 Normal documentation and PR builds make no history requests and show configured starts when timings are absent. To preview with PyYAML installed, run `python3 dev/generate-ci-dashboard.py --output docs/ci-dashboard-data.json`, serve `docs/` over HTTP, and open `ci-dashboard.html`. Add `--history --history-cache /tmp/ci-history.json` with `GH_TOKEN` or `GITHUB_TOKEN` set to collect and retain timings. Generated metadata is not committed. Run the focused dashboard checks locally with `python3 -B -m unittest discover -s dev/tests -p 'test_ci_dashboard*.py'` and `node --test dev/test-ci-dashboard.js`.
 
+
+The Apache Actions policy summary links to https://infra.apache.org/github-actions-policy.html and compares measured runner-minutes with the published 250,000-minute calendar-week and 216,000-minute consecutive-five-day limits. It reports the highest fully measured periods, falling back to explicitly partial current-week usage when no full week is available, plus next-week and next-five-day estimates. Calendar weeks use Monday through Sunday UTC. Peak simultaneous jobs in one workflow run are compared with the maximum of 20 and recommendation of 15. Policy totals include Build Status polling; the build calendar continues to exclude it. Other Spark repositories and contributor forks are outside these totals.
+
 ### Push heavy workflows out to forks
 
 Workflows triggered by `on: pull_request` [count against the base repo's (i.e. this repo's) activity limits][base]. For this reason it's [important] to use `on: push` for heavy workflows. `on: push` workflows count against the fork's limits and not ours, enabling more jobs to run concurrently.

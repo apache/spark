@@ -92,6 +92,22 @@
           displayed values; actual and forecast totals are reported separately above.
           Frequent build-status polling is summarized separately below.</p>
       </section>
+      <section aria-labelledby="policy-title">
+        <h2 id="policy-title">Apache Actions policy</h2>
+        <p class="muted">Usage against the
+          <a href="https://infra.apache.org/github-actions-policy.html">Apache GitHub Actions
+            policy</a>. Percentages compare runner-minutes with the published limits.</p>
+        <div class="scroll"><table class="policy">
+          <thead><tr><th scope="col">Metric</th><th scope="col">Measured usage</th>
+            <th scope="col">Future estimate</th><th scope="col">Policy limit</th></tr></thead>
+          <tbody id="policy-metrics"></tbody>
+        </table></div>
+        <p id="policy-status" class="muted"></p>
+        <p class="muted">These totals include all upstream workflows, including post-merge CI and
+          build-status polling. Concurrency counts overlapping job executions in one workflow run
+          across all matrices. Other Spark repositories and contributor forks are outside these
+          totals. Missing history is never counted as zero.</p>
+      </section>
       <section aria-labelledby="branches-title">
         <h2 id="branches-title">Coverage by branch</h2>
         <div class="scroll"><table>
