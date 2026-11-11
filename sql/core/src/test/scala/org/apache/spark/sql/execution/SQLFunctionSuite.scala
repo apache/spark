@@ -21,10 +21,10 @@ import java.text.SimpleDateFormat
 import java.util.Locale
 
 import org.apache.spark.sql.{AnalysisException, Row}
-import org.apache.spark.sql.catalyst.FunctionIdentifier
+import org.apache.spark.sql.catalyst.{FunctionIdentifier, TableIdentifier}
 import org.apache.spark.sql.catalyst.analysis.SQLFunctionExpression
 import org.apache.spark.sql.catalyst.catalog.SQLFunction
-import org.apache.spark.sql.catalyst.expressions.Literal
+import org.apache.spark.sql.catalyst.expressions.{Expression, Literal}
 import org.apache.spark.sql.connector.catalog.CatalogManager
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSparkSession
@@ -39,6 +39,18 @@ class SQLFunctionSuite extends SharedSparkSession {
     super.beforeAll()
     Seq((0, 1), (1, 2)).toDF("a", "b").createOrReplaceTempView("t")
   }
+
+  /** The metadata of a temporary SQL function, built with the given arguments. */
+  private def lookupTempSQLFunction(name: String, args: Seq[Expression]): SQLFunction =
+    spark.sessionState.functionRegistry
+      .lookupFunctionBuilder(FunctionIdentifier(
+        name,
+        Some(CatalogManager.SESSION_NAMESPACE),
+        Some(CatalogManager.SYSTEM_CATALOG_NAME))).get
+      .apply(args) match {
+        case f: SQLFunctionExpression => f.function
+        case other => fail(s"unexpected builder result: $other")
+      }
 
   test("SPARK-59970: a SQL function does not inherit the IDENTIFIER-clause variables of the " +
     "functions it calls") {
@@ -598,6 +610,125 @@ class SQLFunctionSuite extends SharedSparkSession {
     }
   }
 
+  test("SPARK-60806: a session-qualified call a persistent function owns is not a temp reference") {
+    withUserDefinedFunction("caller" -> false, "caller2" -> false, "temp_caller" -> true) {
+      withView("v") {
+        withDatabase("session") {
+          sql("CREATE DATABASE session")
+          sql("CREATE FUNCTION session.test_func() RETURNS STRING RETURN 'persistent'")
+          sql("CREATE TEMPORARY FUNCTION test_func() RETURNS STRING RETURN 'temp'")
+          try {
+            withSQLConf(SQLConf.PERSISTENT_CATALOG_FIRST.key -> "true") {
+              sql("CREATE FUNCTION caller() RETURNS STRING RETURN session.test_func()")
+              checkAnswer(sql("SELECT caller()"), Row("persistent"))
+              sql("CREATE VIEW v AS SELECT session.test_func() AS a")
+              checkAnswer(sql("SELECT * FROM v"), Row("persistent"))
+              sql("CREATE TEMPORARY FUNCTION temp_caller() RETURNS STRING " +
+                "RETURN session.test_func()")
+              assert(lookupTempSQLFunction("temp_caller", Nil)
+                .properties("referredTempFunctionsNames") === "[]")
+            }
+            // By default the temp function owns the session-qualified call.
+            checkError(
+              exception = intercept[AnalysisException] {
+                sql("CREATE FUNCTION caller2() RETURNS STRING RETURN session.test_func()")
+              },
+              condition = "INVALID_TEMP_OBJ_REFERENCE",
+              parameters = Map("obj" -> "FUNCTION", "objName" -> "`default`.`caller2`",
+                "tempObj" -> "FUNCTION", "tempObjName" -> "`test_func`"))
+          } finally {
+            sql("DROP TEMPORARY FUNCTION IF EXISTS test_func")
+            sql("DROP FUNCTION IF EXISTS session.test_func")
+          }
+        }
+      }
+    }
+  }
+
+  test("SPARK-60806: a temp function bound by an omitted named-argument default is not a " +
+    "reference") {
+    withUserDefinedFunction("g" -> false, "inner_fn" -> false, "inner_tvf" -> false,
+        "c1" -> false, "c2" -> false, "c3" -> false, "temp_c" -> true) {
+      withView("v", "tv") {
+        sql("CREATE FUNCTION g() RETURNS INT RETURN 1")
+        sql("CREATE FUNCTION inner_fn(x INT, y INT DEFAULT g(), z INT DEFAULT IDENTIFIER('g')()) " +
+          "RETURNS INT RETURN x + y + z")
+        sql("CREATE FUNCTION inner_tvf(x INT, y INT DEFAULT g()) RETURNS TABLE (a INT) " +
+          "RETURN SELECT x + y")
+        try {
+          sql("CREATE TEMPORARY FUNCTION g() RETURNS INT RETURN 2")
+          // The omitted defaults are the callee's dependencies, however the call is written.
+          sql("CREATE FUNCTION c1() RETURNS INT RETURN inner_fn(1)")
+          sql("CREATE FUNCTION c2() RETURNS INT RETURN inner_fn(x => 1)")
+          sql("CREATE FUNCTION c3() RETURNS TABLE (a INT) RETURN SELECT * FROM inner_tvf(x => 1)")
+          sql("CREATE TEMPORARY FUNCTION temp_c() RETURNS INT RETURN inner_fn(x => 1)")
+          assert(lookupTempSQLFunction("temp_c", Nil)
+            .properties("referredTempFunctionsNames") === "[]")
+          // A view owns the dependencies of the functions it expands.
+          checkError(
+            exception = intercept[AnalysisException] {
+              sql("CREATE VIEW v AS SELECT inner_fn(x => 1) AS a")
+            },
+            condition = "INVALID_TEMP_OBJ_REFERENCE",
+            parameters = Map("obj" -> "VIEW", "objName" -> "`spark_catalog`.`default`.`v`",
+              "tempObj" -> "FUNCTION", "tempObjName" -> "`g`"))
+          sql("CREATE TEMPORARY VIEW tv AS SELECT inner_fn(x => 1) AS a")
+          assert(spark.sessionState.catalog.getTempViewOrPermanentTableMetadata(
+            TableIdentifier("tv")).viewReferredTempFunctionNames === Seq("g"))
+          sql("DROP TEMPORARY FUNCTION g")
+          checkAnswer(sql("SELECT c1(), c2()"), Row(3, 3))
+          checkAnswer(sql("SELECT * FROM c3()"), Row(2))
+        } finally {
+          sql("DROP TEMPORARY FUNCTION IF EXISTS g")
+        }
+      }
+    }
+  }
+
+  test("SPARK-60806: the cycle check follows the owner a temp function shadows by name") {
+    withUserDefinedFunction("a" -> false, "pf" -> false, "a_tvf" -> false, "pf_tvf" -> false) {
+      def check(): Unit = {
+        sql("CREATE OR REPLACE FUNCTION a() RETURNS INT RETURN 1")
+        sql("CREATE OR REPLACE FUNCTION pf() RETURNS INT RETURN a()")
+        sql("CREATE OR REPLACE FUNCTION a_tvf() RETURNS TABLE (x INT) RETURN SELECT 1")
+        sql("CREATE OR REPLACE FUNCTION pf_tvf() RETURNS TABLE (x INT) " +
+          "RETURN SELECT * FROM a_tvf()")
+        sql("CREATE TEMPORARY FUNCTION pf() RETURNS INT RETURN 42")
+        sql("CREATE TEMPORARY FUNCTION pf_tvf() RETURNS TABLE (x INT) RETURN SELECT 42")
+        try {
+          Seq(
+            "a() RETURNS INT RETURN pf()" -> Seq("a", "pf", "a"),
+            "a_tvf() RETURNS TABLE (x INT) RETURN SELECT * FROM pf_tvf()" ->
+              Seq("a_tvf", "pf_tvf", "a_tvf")
+          ).foreach { case (signatureAndBody, path) =>
+            checkError(
+              exception = intercept[AnalysisException] {
+                sql(s"CREATE OR REPLACE FUNCTION $signatureAndBody")
+              },
+              condition = "CYCLIC_FUNCTION_REFERENCE",
+              parameters = Map("path" -> path.map("spark_catalog.default." + _).mkString(" -> ")))
+          }
+          checkAnswer(sql("SELECT a()"), Row(1))
+          checkAnswer(sql("SELECT * FROM a_tvf()"), Row(1))
+        } finally {
+          sql("DROP TEMPORARY FUNCTION IF EXISTS pf")
+          sql("DROP TEMPORARY FUNCTION IF EXISTS pf_tvf")
+        }
+      }
+      withSQLConf(SQLConf.SESSION_FUNCTION_RESOLUTION_ORDER.key -> "last") {
+        check()
+      }
+      withSQLConf(SQLConf.PATH_ENABLED.key -> "true") {
+        try {
+          sql("SET PATH = spark_catalog.default, system.session, system.builtin")
+          check()
+        } finally {
+          sql("SET PATH = DEFAULT_PATH")
+        }
+      }
+    }
+  }
+
   test("SPARK-60806: temp functions bound only during analysis are rejected") {
     withUserDefinedFunction("temp_fn" -> true, "temp_tvf" -> true, "temp_scala" -> true) {
       sql("CREATE TEMPORARY FUNCTION temp_fn() RETURNS INT RETURN 1")
@@ -663,25 +794,20 @@ class SQLFunctionSuite extends SharedSparkSession {
   }
 
   test("SPARK-60806: a temporary function stores the temp functions its body binds") {
-    withUserDefinedFunction("temp_fn" -> true, "temp_tvf" -> true, "meta_fn" -> true) {
+    withUserDefinedFunction("temp_fn" -> true, "temp_tvf" -> true, "temp_zfn" -> true,
+        "meta_fn" -> true) {
       sql("CREATE TEMPORARY FUNCTION abs(x INT) RETURNS INT RETURN 42")
       try {
         sql("CREATE TEMPORARY FUNCTION temp_fn() RETURNS INT RETURN 1")
         sql("CREATE TEMPORARY FUNCTION temp_tvf() RETURNS TABLE (a INT) RETURN SELECT 1")
-        // The built-in owns `abs`, so the temporary `abs` is not stored.
-        sql("CREATE TEMPORARY FUNCTION meta_fn() RETURNS INT " +
-          "RETURN abs(-1) + IDENTIFIER('temp_fn')() + (SELECT a FROM temp_tvf())")
-        val metaFn = spark.sessionState.functionRegistry
-          .lookupFunctionBuilder(FunctionIdentifier(
-            "meta_fn",
-            Some(CatalogManager.SESSION_NAMESPACE),
-            Some(CatalogManager.SYSTEM_CATALOG_NAME))).get
-          .apply(Nil) match {
-            case f: SQLFunctionExpression => f.function
-            case other => fail(s"unexpected builder result: $other")
-          }
-        assert(metaFn.properties("referredTempFunctionsNames") === """["temp_fn","temp_tvf"]""")
-        checkAnswer(sql("SELECT meta_fn()"), Row(3))
+        sql("CREATE TEMPORARY FUNCTION temp_zfn() RETURNS INT RETURN 1")
+        // The built-in owns `abs`, so the temporary `abs` is not stored. The names are stored
+        // sorted; the set holding them iterates `temp_zfn` first.
+        sql("CREATE TEMPORARY FUNCTION meta_fn() RETURNS INT RETURN abs(-1) + temp_zfn() + " +
+          "IDENTIFIER('temp_fn')() + (SELECT a FROM temp_tvf())")
+        assert(lookupTempSQLFunction("meta_fn", Nil).properties("referredTempFunctionsNames") ===
+          """["temp_fn","temp_tvf","temp_zfn"]""")
+        checkAnswer(sql("SELECT meta_fn()"), Row(4))
       } finally {
         sql("DROP TEMPORARY FUNCTION abs")
       }

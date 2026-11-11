@@ -4427,7 +4427,15 @@ struct<>
 
 
 -- !query
-CREATE FUNCTION foo3_5d(x INT) RETURNS INT RETURN foo3_5b(x) + foo3_5a(x)
+CREATE TEMPORARY FUNCTION foo3_5k(x INT) RETURNS INT RETURN x
+-- !query schema
+struct<>
+-- !query output
+
+
+
+-- !query
+CREATE FUNCTION foo3_5d(x INT) RETURNS INT RETURN foo3_5k(x) + foo3_5b(x) + foo3_5a(x)
 -- !query schema
 struct<>
 -- !query output
@@ -4442,6 +4450,14 @@ org.apache.spark.sql.AnalysisException
     "tempObjName" : "`foo3_5a`"
   }
 }
+
+
+-- !query
+DROP TEMPORARY FUNCTION foo3_5k
+-- !query schema
+struct<>
+-- !query output
+
 
 
 -- !query

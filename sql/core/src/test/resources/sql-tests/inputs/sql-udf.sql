@@ -857,7 +857,9 @@ DROP FUNCTION foo3_5f;
 DROP TEMPORARY VARIABLE foo3_5_tbl;
 DROP TEMPORARY VARIABLE foo3_5_col;
 -- Expect error naming foo3_5a: referenced temporary functions are reported in sorted order
-CREATE FUNCTION foo3_5d(x INT) RETURNS INT RETURN foo3_5b(x) + foo3_5a(x);
+CREATE TEMPORARY FUNCTION foo3_5k(x INT) RETURNS INT RETURN x;
+CREATE FUNCTION foo3_5d(x INT) RETURNS INT RETURN foo3_5k(x) + foo3_5b(x) + foo3_5a(x);
+DROP TEMPORARY FUNCTION foo3_5k;
 -- A same-named temporary function is not a reference when the built-in owns the call
 CREATE TEMPORARY FUNCTION abs(x INT) RETURNS INT RETURN 42;
 CREATE FUNCTION foo3_5h(x INT) RETURNS INT RETURN abs(x);

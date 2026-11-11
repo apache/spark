@@ -162,9 +162,9 @@ case class AnalysisContext(
     referredTempViewNames: Seq[Seq[String]] = Seq.empty,
     // 1. If we are resolving a view, this field will be restored from the view metadata,
     //    by calling `AnalysisContext.withAnalysisContext(viewDesc)`.
-    // 2. If we are not resolving a view, this field will be updated everytime the analyzer
-    //    lookup a temporary function. And export to the view metadata, or checked by persistent
-    //    SQL function creation.
+    // 2. If we are not resolving a view, this field is updated each time the analyzer binds a
+    //    temporary function, then exported to view or temporary SQL function metadata, or
+    //    rejected by persistent SQL function creation.
     referredTempFunctionNames: mutable.Set[String] = mutable.Set.empty,
     referredTempVariableNames: Seq[Seq[String]] = Seq.empty,
     // Like `referredTempFunctionNames`, this is populated only by fixed-point analysis (by
@@ -352,6 +352,33 @@ object AnalysisContext {
     set(context)
     try f finally { set(originContext) }
   }
+
+  /**
+   * Wraps `rule` so that a parameter default inserted by named-argument filling
+   * ([[SQLFunction.INSERTED_PARAMETER_DEFAULT]]) records temp references as the called function's
+   * body does: in fresh sets unless `shareTempReferencesWithNestedSQLFunctions` is set. Unlike a
+   * default that a positional call omits, which the body pads, it resolves in the caller's plan.
+   */
+  def withTempReferencesOfInsertedDefault(
+      rule: PartialFunction[Expression, Expression]): PartialFunction[Expression, Expression] =
+    new PartialFunction[Expression, Expression] {
+      override def isDefinedAt(e: Expression): Boolean = rule.isDefinedAt(e)
+      override def apply(e: Expression): Expression = applyOrElse(e, rule)
+      override def applyOrElse[E <: Expression, B >: Expression](e: E, default: E => B): B = {
+        lazy val originContext = value.get()
+        if (e.getTagValue(SQLFunction.INSERTED_PARAMETER_DEFAULT).isEmpty ||
+            originContext.shareTempReferencesWithNestedSQLFunctions) {
+          rule.applyOrElse(e, default)
+        } else {
+          val context = originContext.copy(
+            referredTempFunctionNames = mutable.Set.empty,
+            referredTempVariableNamesUnderIdentifier = mutable.LinkedHashSet.empty)
+          context.setSinglePassResolverBridgeState(originContext.getSinglePassResolverBridgeState)
+          set(context)
+          try rule.applyOrElse(e, default) finally { set(originContext) }
+        }
+      }
+    }
 }
 
 object Analyzer {
@@ -462,6 +489,10 @@ class Analyzer(
   }
 
   def getRelationResolution: RelationResolution = relationResolution
+
+  /** The resolution candidate that owns an unqualified function call, see `FunctionResolution`. */
+  private[sql] def unqualifiedFunctionOwner(name: String): Option[Seq[String]] =
+    functionResolution.unqualifiedFunctionOwner(name)
 
   /** Resolves only the dynamic identifier of an INSERT so transaction detection can inspect it. */
   private[sql] def resolveUnresolvedInsert(insert: UnresolvedInsert): LogicalPlan = {
@@ -616,7 +647,7 @@ class Analyzer(
    * SQL function creation analyzes the body, inspects it, and only then runs `checkAnalysis`, so
    * it cannot go through [[executeAndCheckReferredTempVariablesUnderIdentifier]]. It still needs
    * the recorded names, which [[execute]] discards with its analysis context: a persistent
-   * function must reject them and a temporary one stores the variables in its metadata.
+   * function must reject them and a temporary one stores them in its metadata.
    *
    * Only the names the body itself refers to are returned. A SQL function that the body calls is
    * expanded in a context of its own, so a temporary function it binds or a variable it reads
@@ -2534,9 +2565,10 @@ class Analyzer(
         }
 
       case q: LogicalPlan =>
+        // A default inserted by named-argument filling is the called function's dependency.
         q.transformExpressionsUpWithPruning(
           _.containsAnyPattern(UNRESOLVED_FUNCTION, GENERATOR, UNRESOLVED_JSON_CONSTRUCTOR),
-          ruleId) {
+          ruleId)(AnalysisContext.withTempReferencesOfInsertedDefault {
           case u @ UnresolvedFunction(_, arguments, _, _, _, _, _, _)
               if functionResolution.hasLambdaAndResolvedArguments(arguments) =>
             resolveHigherOrderFunction(u)
@@ -2608,7 +2640,7 @@ class Analyzer(
               u.name, u.func, analyzeResult.schema, Some(analyzeResult.pickledAnalyzeResult),
               newChildren, u.evalType, u.udfDeterministic, u.resultId, None, u.tableArguments)
           }
-        }
+        })
     }
 
     private def resolveHigherOrderFunction(u: UnresolvedFunction): Expression = withPosition(u) {

@@ -172,7 +172,7 @@ case class CreateSQLFunctionCommand(
         }
 
         // Check cyclic function reference before running the analyzer.
-        checkCyclicFunctionReference(catalog, name, plan)
+        checkCyclicFunctionReference(catalog, analyzer, name, plan)
 
         // Check the function body can be analyzed correctly.
         val (analyzed, referredTempFuncs, referredTempVarsUnderIdentifier) =
@@ -198,7 +198,7 @@ case class CreateSQLFunctionCommand(
           throw UserDefinedFunctionErrors.bodyIsNotAQueryForSqlTableUdf(name.funcName)
         }
         // Check cyclic function reference before running the analyzer.
-        checkCyclicFunctionReference(catalog, name, query.get)
+        checkCyclicFunctionReference(catalog, analyzer, name, query.get)
 
         // Construct a lateral join to analyze the function body.
         val plan = LateralJoin(inputPlan, LateralSubquery(query.get), Inner, None)
@@ -401,13 +401,27 @@ case class CreateSQLFunctionCommand(
    */
   private def checkCyclicFunctionReference(
       catalog: SessionCatalog,
+      analyzer: Analyzer,
       identifier: FunctionIdentifier,
       plan: LogicalPlan): Unit = {
+
+    // Look up an unqualified call that a persistent function owns by its qualified name, since
+    // the unqualified lookup tries built-in and temp functions first.
+    def lookupIdentifier(nameParts: Seq[String]): FunctionIdentifier = {
+      val owner =
+        if (nameParts.length == 1) analyzer.unqualifiedFunctionOwner(nameParts.head) else None
+      owner match {
+        case Some(Seq(catalogName, db, funcName))
+            if catalogName.equalsIgnoreCase(CatalogManager.SESSION_CATALOG_NAME) =>
+          FunctionIdentifier(funcName, Some(db), Some(CatalogManager.SESSION_CATALOG_NAME))
+        case _ => nameParts.asFunctionIdentifier
+      }
+    }
 
     def checkPlan(plan: LogicalPlan, path: Seq[FunctionIdentifier]): Unit = {
       plan.foreach {
         case u @ UnresolvedTableValuedFunction(nameParts, arguments, _) =>
-          val funcId = nameParts.asFunctionIdentifier
+          val funcId = lookupIdentifier(nameParts)
           val info = catalog.lookupFunctionInfo(funcId)
           if (isSQLFunction(info.getClassName)) {
             val f = withPosition(u) {
@@ -438,7 +452,7 @@ case class CreateSQLFunctionCommand(
     }
 
     def checkFunction(u: UnresolvedFunction, path: Seq[FunctionIdentifier]): Unit = {
-      val funcId = u.nameParts.asFunctionIdentifier
+      val funcId = lookupIdentifier(u.nameParts)
       val info = catalog.lookupFunctionInfo(funcId)
       if (isSQLFunction(info.getClassName)) {
         val f = withPosition(u) {
