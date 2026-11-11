@@ -4070,6 +4070,22 @@ class ExternalLookupJoinSuite extends QueryTest with SharedSparkSession {
       assert(SimpleExternalLookupDataSource.closeEvents.asScala.toSeq ===
         Seq.fill(requests)("cursor") :+ "reader", s"$joinType $ids")
     }
+    // One task computes both partitions in turn under the coalesce, so it outlives the first: the
+    // partition, not the end of the task, closes each reader, before the next partition's cursor.
+    // The stream rows go to the partitions in turn, so each partition's two rows fill one request.
+    val ids = Seq(1, 3, 2, 4)
+    for (joinType <- Seq("inner", "left_outer", "left_semi", "left_anti")) {
+      SimpleExternalLookupDataSource.resetCounters()
+      val badges = streamOf(ids.toDF("id"), numPartitions = 2)
+      val run =
+        runStream(badges.join(lookup, badges("id") === lookup("id"), joinType).coalesce(1))
+      QueryTest.sameRows(expected(ids, joinType), run.rows)
+        .foreach(error => fail(s"$joinType: $error"))
+      assert(SimpleExternalLookupDataSource.requestSizes.asScala.toSeq === Seq(2, 2), joinType)
+      assert(SimpleExternalLookupDataSource.readerCount.get() === 2, joinType)
+      assert(SimpleExternalLookupDataSource.closeEvents.asScala.toSeq ===
+        Seq("cursor", "reader", "cursor", "reader"), joinType)
+    }
   }
 
   test("a last batch caches nothing when the end of its input stops it") {
