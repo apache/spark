@@ -44,15 +44,18 @@ If in the future GitHub somehow allows workflows to run `on: pull_request` while
 
 Documentation builds on `apache/spark` upload the generated site as a
 `docs-preview-<branch>` artifact, retained for one day. The archive filename
-includes a UTC timestamp, workflow run ID, and run attempt. Artifacts from
-separate workflow runs coexist, even when their artifact names match.
+includes the UTC date. Rerunning a job replaces its existing artifact within the
+same workflow run. Artifacts from separate workflow runs coexist, even when their
+artifact names and archive filenames match.
 
 The Pages workflow deploys the unexpired `docs-preview-master` artifact with the
-newest creation date, using its artifact ID to download that exact build. It runs
-daily or on manual dispatch without rebuilding the documentation. It can use a
-completed documentation build even if another job in the same CI run fails. If no
-preview artifact is available, Pages fails and leaves the existing deployment in
-place.
+newest creation date, using its artifact ID to download that exact build. It adds
+the `In-Progress` label to the generated page titles and version badges after
+extracting the archive. Documentation builds retain the original source versions.
+Pages runs daily or on manual dispatch without rebuilding the documentation. It
+can use a completed documentation build even if another job in the same CI run
+fails. If no preview artifact is available, Pages fails and leaves the existing
+deployment in place.
 
 ## Composite actions
 
