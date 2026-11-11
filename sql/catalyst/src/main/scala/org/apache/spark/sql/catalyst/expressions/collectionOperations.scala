@@ -331,7 +331,7 @@ case class ArraysZip(children: Seq[Expression], names: Seq[Expression])
         case (e: NamedExpression, _) => NamePlaceholder
         case (g: GetStructField, _) => Literal(g.extractFieldName)
         case (g: GetArrayStructFields, _) => Literal(g.field.name)
-        case (GetMapValue(_, StringLiteral(key)), _) => Literal(key)
+        case (GetMapValue(_, Literal(key: UTF8String, _: StringType)), _) => Literal(key)
         case (_, idx) => Literal(idx.toString)
       })
   }
