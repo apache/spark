@@ -107,6 +107,7 @@ const CIDashboard = (() => {
     const measured = workloads.filter(w => w.history?.sampleCount > 0);
     const cells = Array.from({length: days}, () => Array(24).fill(0));
     const byBranch = new Map();
+    const byBranchCells = new Map();
     let lookback = 0;
     for (const w of measured) {
       for (const [offset, duration] of w.history.intervals) {
@@ -133,6 +134,11 @@ const CIDashboard = (() => {
                 Math.max(from, first + slot * hourMs);
               const value = overlap / hourMs / workload.history.sampleCount;
               cells[Math.floor(slot / 24)][slot % 24] += value;
+              if (!byBranchCells.has(workload.branch)) {
+                byBranchCells.set(workload.branch,
+                  Array.from({length: days}, () => Array(24).fill(0)));
+              }
+              byBranchCells.get(workload.branch)[Math.floor(slot / 24)][slot % 24] += value;
               byBranch.set(workload.branch, (byBranch.get(workload.branch) || 0) + value);
             }
           }
@@ -140,11 +146,78 @@ const CIDashboard = (() => {
       }));
       cursor.setUTCMonth(cursor.getUTCMonth() + 1);
     }
-    return {cells, byBranch, measured: measured.length,
+    return {cells, byBranch, byBranchCells, measured: measured.length,
       total: cells.flat().reduce((sum, value) => sum + value, 0)};
   }
 
-  return {key, calendar, parseCron, runnerLoad};
+  function actualForecast(snapshot, month) {
+    const workloads = snapshot.workloads.filter(w => w.file !== 'update_build_status.yml');
+    const estimate = runnerLoad(workloads, month);
+    const first = Date.parse(`${month}-01T00:00:00Z`);
+    const until = snapshot.history?.until || snapshot.generatedAt;
+    const today = until.slice(0, 10);
+    const records = snapshot.history?.observed?.days || {};
+    const complete = Object.entries(records).filter(([day, value]) =>
+      day < today && Date.parse(value.through) >= Date.parse(day) + 86400000);
+    const observedEnd = Math.max(0, ...Object.values(records).map(v => Date.parse(v.through)));
+    const byBranch = new Map();
+    const branch = name => {
+      if (!byBranch.has(name)) byBranch.set(name, {actual: 0, forecast: 0});
+      return byBranch.get(name);
+    };
+    let actualTotal = 0, forecastTotal = 0, actualDays = 0, futureDays = 0, unknownDays = 0;
+    const types = [];
+    const cells = estimate.cells.map((hours, index) => {
+      const date = new Date(first + index * 86400000);
+      const day = date.toISOString().slice(0, 10);
+      const observed = records[day];
+      const values = Array(24).fill(null);
+      const kinds = Array(24).fill('unknown');
+      if (day <= today && observed) {
+        actualDays++;
+        for (let hour = 0; hour < 24; hour++) {
+          if (date.getTime() + hour * 3600000 >= Date.parse(observed.through)) continue;
+          values[hour] = observed.hours[hour];
+          kinds[hour] = 'actual';
+          actualTotal += values[hour];
+        }
+        for (const [name, values] of Object.entries(observed.byBranch)) {
+          branch(name).actual += values.reduce((a, b) => a + b, 0);
+        }
+      } else if (day > today) {
+        futureDays++;
+        const weekday = date.getUTCDay();
+        const sameWeekday = complete.filter(([day]) => new Date(day).getUTCDay() === weekday);
+        const baseline = sameWeekday.length ? sameWeekday : complete;
+        if (estimate.measured || baseline.length) {
+          for (let hour = 0; hour < 24; hour++) {
+            const push = baseline.reduce((sum, [, v]) => sum + v.pushHours[hour], 0) /
+              (baseline.length || 1);
+            values[hour] = hours[hour] + push;
+            kinds[hour] = 'forecast';
+            forecastTotal += values[hour];
+          }
+          for (const [name, days] of estimate.byBranchCells) {
+            branch(name).forecast += days[index].reduce((a, b) => a + b, 0);
+          }
+          for (const [, record] of baseline) {
+            for (const [name, values] of Object.entries(record.pushByBranch)) {
+              branch(name).forecast += values.reduce((a, b) => a + b, 0) / baseline.length;
+            }
+          }
+        }
+      } else {
+        unknownDays++;
+      }
+      types.push(kinds);
+      return values;
+    });
+    return {cells, types, byBranch, actualTotal, forecastTotal, actualDays, futureDays,
+      unknownDays, baselineDays: complete.length, profiled: estimate.measured, today,
+      observedUntil: observedEnd ? new Date(observedEnd).toISOString() : null};
+  }
+
+  return {key, calendar, parseCron, runnerLoad, actualForecast};
 })();
 
 if (typeof module !== 'undefined') module.exports = CIDashboard;
@@ -157,7 +230,7 @@ if (typeof document !== 'undefined') {
     if (className) node.className = className;
     return node;
   };
-  const {calendar, runnerLoad} = CIDashboard;
+  const {calendar, actualForecast} = CIDashboard;
   let snapshot;
   const format = value => value.toLocaleString('en', {maximumFractionDigits: 1});
   const error = message => {
@@ -200,23 +273,23 @@ if (typeof document !== 'undefined') {
     const push = snapshot.history?.push;
     if (push) {
       $('push-metrics').replaceChildren(
-        metric(push.runnerHours, 'Observed runner-hours'),
-        metric(push.runCount, 'Completed upstream push runs'),
+        metric(push.runnerHours, 'Measured push runner-hours'),
+        metric(push.runCount, 'Upstream push runs'),
         metric(push.jobCount, 'Job executions, including reruns'),
         metric(push.runCount ? push.runnerHours / push.runCount : 0, 'Runner-hours per run')
       );
-      $('push-status').textContent = `${push.since.slice(0, 10)} to ` +
-        `${push.until.slice(0, 10)} UTC / Includes ${push.failedRuns} failed runs. ` +
-        'Completed push runs created in this window; all job attempts are included.';
+      $('push-status').textContent = `${push.since.slice(0, 10)} to ${push.until} / ` +
+        `Includes ${push.failedRuns} failed runs and active-job execution so far. ` +
+        'Usage is assigned to execution hours, including jobs crossing the window boundary.';
     } else {
       $('push-status').textContent = 'Upstream push measurements are unavailable. ' +
         (snapshot.history?.pushError || 'The Pages deployment collects recent Actions timings.');
     }
   }
-  function renderCalendar(values, total, weighted) {
+  function renderCalendar(values, types, countMode) {
     const table = $('calendar');
     table.replaceChildren();
-    const unit = weighted ? 'estimated runner-hours' : 'configured target starts';
+    const unit = countMode ? 'configured starts' : 'runner-hours';
     const caption = element('caption', `${$('month').value} / UTC / ${unit}`);
     const head = element('thead'), headings = element('tr');
     headings.append(element('th', 'Date / UTC'));
@@ -227,8 +300,8 @@ if (typeof document !== 'undefined') {
     for (const th of headings.children) th.scope = 'col';
     head.append(headings);
     const body = element('tbody');
-    const hourly = Array(24).fill(0);
-    const peak = Math.max(Number.EPSILON, ...values.flat());
+    const hourly = Array(24).fill(0), known = Array(24).fill(false);
+    const peak = Math.max(Number.EPSILON, ...values.flat().filter(v => v !== null));
     values.forEach((hours, day) => {
       const row = element('tr');
       const date = new Date(`${$('month').value}-${String(day + 1).padStart(2, '0')}T00:00:00Z`);
@@ -236,26 +309,37 @@ if (typeof document !== 'undefined') {
         date.toLocaleDateString('en', {weekday: 'short', timeZone: 'UTC'});
       const heading = element('th', label);
       heading.scope = 'row';
+      const kind = types[day].find(type => type !== 'unknown') || 'unknown';
+      if (!countMode) heading.append(element('small', kind === 'actual' ? 'Actual' :
+        kind === 'forecast' ? 'Forecast' : 'Unavailable'));
       row.append(heading);
-      hours.forEach((count, hour) => {
-        hourly[hour] += count;
-        const css = count === 0 ? '' : count / peak > 0.66 ? 'high'
-          : count / peak > 0.33 ? 'medium' : 'low';
-        const text = count > 0 && count < 0.1 ? '<0.1' : format(count);
-        const cell = element('td', count ? text : '', css);
-        cell.title = `${label} ${hour}:00 UTC: ${count.toFixed(2)} ${unit}`;
+      hours.forEach((value, hour) => {
+        const type = types[day][hour];
+        const shade = !value ? '' : value / peak > 0.66 ? 'high'
+          : value / peak > 0.33 ? 'medium' : 'low';
+        const text = value === null ? '' : value > 0 && value < 0.1 ? '<0.1' : format(value);
+        const cell = element('td', text, `${type} ${shade}`);
+        if (value !== null) {
+          hourly[hour] += value;
+          known[hour] = true;
+        }
+        cell.title = value === null ? `${label} ${hour}:00 UTC: unavailable` :
+          `${label} ${hour}:00 UTC: ${type} ${value.toFixed(2)} ${unit}`;
         row.append(cell);
       });
-      const daily = hours.reduce((sum, count) => sum + count, 0);
-      row.append(element('td', format(daily), 'total'));
+      const available = hours.filter(v => v !== null);
+      const daily = available.reduce((sum, count) => sum + count, 0);
+      row.append(element('td', available.length ? format(daily) : 'n/a', 'total'));
       body.append(row);
     });
     const foot = element('tfoot'), totals = element('tr');
-    const label = element('th', 'Total');
+    const label = element('th', 'Shown total');
     label.scope = 'row';
     totals.append(label);
-    for (const value of hourly) totals.append(element('td', format(value), 'total'));
-    totals.append(element('td', format(total), 'total'));
+    hourly.forEach((value, index) => totals.append(element('td',
+      known[index] ? format(value) : 'n/a', 'total')));
+    totals.append(element('td', known.some(Boolean) ? format(hourly.reduce((a, b) => a + b)) :
+      'n/a', 'total'));
     foot.append(totals);
     table.append(caption, head, body, foot);
   }
@@ -264,63 +348,53 @@ if (typeof document !== 'undefined') {
     error('');
     const workloads = snapshot.workloads.filter(w => !polling(w));
     const month = $('month').value;
-    const starts = calendar(workloads, month);
-    const estimate = runnerLoad(workloads, month);
-    const weighted = estimate.measured > 0;
-    const cells = weighted ? estimate.cells : starts.cells.map(hours => hours.map(c => c.length));
-    const total = weighted ? estimate.total : starts.total;
-    const peak = Math.max(0, ...cells.flat());
-    const branches = [...new Set(workloads.map(w => w.branch))].sort();
+    const data = actualForecast(snapshot, month);
+    const countMode = !snapshot.history;
+    const configured = calendar(workloads, month);
+    const values = countMode ? configured.cells.map(hours => hours.map(c => c.length)) : data.cells;
+    const types = countMode ? values.map(hours => hours.map(() => 'configured')) : data.types;
+    const available = data.cells.flat().filter(v => v !== null);
+    const hasForecast = data.types.flat().includes('forecast');
     $('metrics').replaceChildren(
-      metric(snapshot.workflows.length, 'Workflow files'),
-      metric(workloads.length, `Scheduled targets across ${branches.length} branches`),
-      metric(weighted ? total : 'Unavailable', estimate.measured < workloads.length
-        ? 'Profiled scheduled runner-hours / month' : 'Estimated scheduled runner-hours / month'),
-      metric(weighted ? peak : 'Unavailable', 'Peak hourly average scheduled runners')
+      metric(data.actualDays ? data.actualTotal : 'Unavailable', 'Actual runner-hours shown'),
+      metric(hasForecast ? data.forecastTotal : data.futureDays ? 'Unavailable' : 0,
+        'Forecast runner-hours for future days'),
+      metric(available.length ? Math.max(...available) : 'Unavailable',
+        'Peak shown hourly average runners'),
+      metric(`${data.profiled}/${workloads.length}`, 'Scheduled targets with duration profiles')
     );
-    const daily = cells.map(hours => hours.reduce((sum, value) => sum + value, 0));
-    const unit = weighted ? 'estimated runner-hours' : 'configured starts';
-    $('schedule-summary').textContent = `${format(starts.total)} configured starts this month / ` +
-      `${format(Math.min(...daily))}-${format(Math.max(...daily))} ${unit} per day`;
-    $('load-status').textContent = weighted
-      ? `${estimate.measured}/${workloads.length} targets have profiles from up to ` +
-        `${snapshot.history.sampleLimit} successful first-attempt runs each, between ` +
-        `${snapshot.history.since.slice(0, 10)} and ${snapshot.history.until.slice(0, 10)} UTC. ` +
-        (estimate.measured < workloads.length
-          ? 'Partial estimate: unprofiled targets are omitted. ' : '') +
-        'Assumes every configured target executes; branch skips reduce actual usage.'
-      : 'Duration profiles are unavailable; this heatmap shows configured starts. ' +
-        'No runner-load estimate is available.';
-    renderCalendar(cells, total, weighted);
-    $('share-heading').textContent = weighted ? 'Share of estimated hours' : 'Share of starts';
+    $('schedule-summary').textContent = countMode ? 'Timings unavailable: configured starts only.' :
+      `${data.actualDays} observed days / ${data.futureDays} future days / ` +
+      `${data.unknownDays} past days without measurements. Today is measured so far.`;
+    $('load-status').textContent = countMode
+      ? 'The Pages deployment collects actual timestamps. No actual burden is inferred from crons.'
+      : `Actual measurements end at ${data.observedUntil || 'unavailable'}. ` +
+        'Forecasts start after ' +
+        `${data.today} UTC and combine scheduled job profiles with a push baseline from ` +
+        `${data.baselineDays} complete observed days, averaged by weekday and UTC hour. ` +
+        `${data.profiled}/${workloads.length} scheduled targets are profiled; ` +
+        'unprofiled targets and future manual runs are unmodeled. ' +
+        (snapshot.history.actualError
+          ? 'Latest measurement refresh failed; retained data is shown.' : '');
+    $('load-legend').hidden = countMode;
+    renderCalendar(values, types, countMode);
     $('branches').replaceChildren();
-    for (const branch of branches) {
-      const targets = workloads.filter(w => w.branch === branch);
-      const count = calendar(targets, month).total;
+    const branches = new Set([...workloads.map(w => w.branch), ...data.byBranch.keys()]);
+    for (const name of [...branches].sort()) {
+      const targets = workloads.filter(w => w.branch === name);
       const measured = targets.filter(w => w.history?.sampleCount > 0).length;
-      const hours = estimate.byBranch.get(branch) || 0;
-      const value = weighted ? hours : count;
-      const percent = total ? value / total * 100 : 0;
+      const cost = data.byBranch.get(name) || {actual: 0, forecast: 0};
       const row = element('tr');
-      const share = element('td'), content = element('div', undefined, 'share');
-      const bar = element('span', undefined, 'bar');
-      bar.style.width = `${percent}%`;
-      const known = !weighted || measured > 0;
-      bar.hidden = !known;
-      content.append(element('span', known ? `${percent.toFixed(1)}%` : 'Unknown'), bar);
-      share.append(content);
-      const cost = element('td', measured ? format(hours) : 'Unavailable');
-      cost.title = `${measured}/${targets.length} targets profiled`;
-      row.append(element('td', branch), element('td', targets.length), element('td', count),
-        cost, share);
+      row.append(element('td', name), element('td', `${measured}/${targets.length}`),
+        element('td', data.actualDays ? format(cost.actual) : 'Unavailable'),
+        element('td', hasForecast ? format(cost.forecast) +
+          (measured < targets.length ? ' + unprofiled' : '') : 'Unavailable'));
       $('branches').append(row);
     }
     const polls = snapshot.workloads.filter(polling);
-    const cost = runnerLoad(polls, month);
     $('polling').textContent = polls.length ? polls.map(w => w.crons.join('; ')).join('; ') +
-      ` (UTC) / ${format(calendar(polls, month).total)} configured starts this month` +
-      (cost.measured ? ` / approximately ${format(cost.total)} runner-hours.` : '.') :
-      'No scheduled build-status polling in this revision.';
+      ` (UTC) / ${format(calendar(polls, month).total)} configured starts this month. ` +
+      'Excluded from the build burden timeline.' : 'No scheduled polling in this revision.';
   }
   function safeRender() {
     try { render(); } catch (e) { error(e.message); }

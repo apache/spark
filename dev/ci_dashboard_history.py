@@ -85,10 +85,14 @@ def jobs(api, run):
     raise ValueError("Workflow job pagination exceeded 10,000 jobs")
 
 
+def uses_runner(job):
+    return job.get("runner_id") != 0 and job.get("status") in (None, "in_progress", "completed")
+
+
 def intervals(run_jobs, origin):
     result = []
     for job in run_jobs:
-        if job.get("conclusion") == "skipped" or not job.get("started_at"):
+        if job.get("conclusion") == "skipped" or not job.get("started_at") or not uses_runner(job):
             continue
         if not job.get("completed_at"):
             raise ValueError("Completed run contains an unfinished job")
@@ -100,7 +104,7 @@ def intervals(run_jobs, origin):
     return result
 
 
-def profiles(api, workloads, since, until, sample_limit):
+def profiles(api, workloads, since, until, sample_limit, timings=None):
     first = workloads[0]
     matrix = first.get("matrixBranch", False)
     branch = "master" if matrix else first["branch"]
@@ -117,7 +121,7 @@ def profiles(api, workloads, since, until, sample_limit):
     runs = [run for run in data["workflow_runs"] if run.get("run_attempt", 1) == 1][:sample_limit]
     samples = defaultdict(list)
     for run in runs:
-        run_jobs = jobs(api, run)
+        run_jobs = timings.get(run) if timings else jobs(api, run)
         origin = timestamp(run["run_started_at"])
         for workload in workloads:
             selected = run_jobs
@@ -143,47 +147,192 @@ def profiles(api, workloads, since, until, sample_limit):
     return result
 
 
-def observed_push(api, since, until):
-    runs = []
+class JobTimings:
+    """Cache public job timestamps for completed runs, invalidating entries after reruns."""
+
+    def __init__(self, api, path=None):
+        self.api = api
+        self.path = path
+        self.state = {"version": 2, "jobs": {}, "days": {}}
+        if path and path.exists():
+            try:
+                value = json.loads(path.read_text())
+                if value.get("version") == 2:
+                    self.state = value
+            except (OSError, ValueError):
+                pass
+
+    def get(self, run):
+        key = str(run["id"])
+        cached = self.state["jobs"].get(key)
+        stamp = run.get("updated_at")
+        completed = run.get("status", "completed") == "completed"
+        if completed and stamp and cached and cached["updatedAt"] == stamp:
+            return cached["jobs"]
+        values = jobs(self.api, run)
+        if completed and stamp:
+            fields = (
+                "id",
+                "name",
+                "status",
+                "runner_id",
+                "conclusion",
+                "started_at",
+                "completed_at",
+            )
+            self.state["jobs"][key] = {
+                "updatedAt": stamp,
+                "jobs": [{field: value.get(field) for field in fields} for value in values],
+            }
+        return values
+
+    def save(self, now):
+        cutoff = (now - timedelta(days=28)).date().isoformat()
+        self.state["days"] = {d: v for d, v in self.state["days"].items() if d >= cutoff}
+        self.state["jobs"] = {
+            key: value
+            for key, value in self.state["jobs"].items()
+            if value["updatedAt"][:10] >= (now - timedelta(days=35)).date().isoformat()
+        }
+        if self.path:
+            self.path.parent.mkdir(parents=True, exist_ok=True)
+            temporary = self.path.with_suffix(".tmp")
+            temporary.write_text(json.dumps(self.state))
+            temporary.replace(self.path)
+
+
+def recent_runs(api, since, until):
+    """Query one creation date at a time to stay below GitHub's 1,000-run search limit."""
+    cursor = since
+    result = {}
+    while cursor < until:
+        end = min(cursor + timedelta(days=1), until)
+        found = 0
+        for page in range(1, 11):
+            data = api.get(
+                "actions/runs",
+                created=f"{cursor.isoformat()}..{end.isoformat()}",
+                per_page=100,
+                page=page,
+            )
+            if data["total_count"] > 1000:
+                raise ValueError("One day exceeds GitHub's 1,000-run search limit")
+            for run in data["workflow_runs"]:
+                if run.get("path", "").split("@")[0].split("/")[-1] != "update_build_status.yml":
+                    result[run["id"]] = run
+            found += len(data["workflow_runs"])
+            if found >= data["total_count"]:
+                break
+        cursor = end
+    # Running older runs may still be consuming runners in the measured window.
     for page in range(1, 11):
-        data = api.get(
-            "actions/runs",
-            event="push",
-            status="completed",
-            created=f"{since.isoformat()}..{until.isoformat()}",
-            per_page=100,
-            page=page,
-        )
-        if data["total_count"] > 1000:
-            raise ValueError("Push history exceeds GitHub's 1,000-run search limit")
-        runs.extend(data["workflow_runs"])
-        if len(runs) >= data["total_count"]:
+        data = api.get("actions/runs", status="in_progress", per_page=100, page=page)
+        for run in data["workflow_runs"]:
+            if run.get("path", "").split("@")[0].split("/")[-1] != "update_build_status.yml":
+                result[run["id"]] = run
+        if page * 100 >= data["total_count"]:
             break
-    totals = defaultdict(lambda: {"runs": 0, "runnerHours": 0, "jobs": 0})
+    # Completed runs last updated before the measured window cannot contribute execution.
+    values = [
+        run
+        for run in result.values()
+        if not (
+            run.get("status") == "completed"
+            and run.get("updated_at")
+            and timestamp(run["updated_at"]) < since + timedelta(days=1)
+        )
+    ]
+    return sorted(values, key=lambda run: run.get("created_at", ""), reverse=True)
+
+
+def observed_usage(api, workloads, since, until, timings):
+    # Include the preceding creation day for jobs that spill into the first measured day.
+    runs = recent_runs(api, since - timedelta(days=1), until)
+    days = {}
+    cursor = since
+    while cursor < until:
+        day = cursor.date().isoformat()
+        days[day] = {
+            "hours": [0.0] * 24,
+            "pushHours": [0.0] * 24,
+            "byBranch": {},
+            "pushByBranch": {},
+            "through": min(cursor + timedelta(days=1), until).isoformat(),
+        }
+        cursor += timedelta(days=1)
+    matrices = defaultdict(list)
+    for w in workloads:
+        if w.get("matrixBranch"):
+            matrices[w["file"]].append(w["branch"])
+    push_branches = defaultdict(lambda: {"runs": 0, "runnerHours": 0, "jobs": 0})
+    run_count, job_count, failed_pushes = 0, 0, 0
 
     def measure(run):
-        origin = timestamp(run.get("run_started_at") or run.get("created_at"))
-        profile = intervals(jobs(api, run), origin)
-        return run, sum(duration for _, duration in profile) / 3600, len(profile)
+        return run, timings.get(run)
 
     with ThreadPoolExecutor(max_workers=4) as executor:
-        for run, hours, count in executor.map(measure, runs):
-            row = totals[run["head_branch"]]
-            row["runs"] += 1
-            row["runnerHours"] += hours
-            row["jobs"] += count
-    return {
+        for run, run_jobs in executor.map(measure, runs):
+            push = run.get("event") == "push"
+            file = run.get("path", "").split("@")[0].split("/")[-1]
+            touched = False
+            run_hours, run_job_count = 0, 0
+            for job in run_jobs:
+                if (
+                    job.get("conclusion") == "skipped"
+                    or not job.get("started_at")
+                    or not uses_runner(job)
+                ):
+                    continue
+                start = max(since, timestamp(job["started_at"]))
+                # Active jobs contribute their measured execution so far.
+                finish = min(
+                    until, timestamp(job["completed_at"]) if job.get("completed_at") else until
+                )
+                if finish <= start:
+                    continue
+                touched = True
+                job_count += 1
+                run_job_count += 1
+                run_hours += (finish - start).total_seconds() / 3600
+                branch = run.get("head_branch") or "unknown"
+                for candidate in matrices[file]:
+                    if re.search(rf"(?<![\w./-]){re.escape(candidate)}(?![\w./-])", job["name"]):
+                        branch = candidate
+                        break
+                slot = start.replace(minute=0, second=0, microsecond=0)
+                while slot < finish:
+                    end = slot + timedelta(hours=1)
+                    value = (min(end, finish) - max(slot, start)).total_seconds() / 3600
+                    row = days[slot.date().isoformat()]
+                    hour = slot.hour
+                    row["hours"][hour] += value
+                    row["byBranch"].setdefault(branch, [0.0] * 24)[hour] += value
+                    if push:
+                        row["pushHours"][hour] += value
+                        row["pushByBranch"].setdefault(branch, [0.0] * 24)[hour] += value
+                    slot = end
+            created = run.get("created_at") or run.get("run_started_at")
+            if touched or (created and since <= timestamp(created) < until):
+                run_count += 1
+                if push:
+                    row = push_branches[run.get("head_branch") or "unknown"]
+                    row["runs"] += 1
+                    row["runnerHours"] += run_hours
+                    row["jobs"] += run_job_count
+                    failed_pushes += run.get("conclusion") in ("failure", "timed_out")
+    push = {
         "since": since.isoformat(),
         "until": until.isoformat(),
-        "runCount": len(runs),
-        "failedRuns": sum(run["conclusion"] == "failure" for run in runs),
-        "runnerHours": sum(row["runnerHours"] for row in totals.values()),
-        "jobCount": sum(row["jobs"] for row in totals.values()),
-        "branches": [{"branch": branch, **row} for branch, row in sorted(totals.items())],
+        "runCount": sum(row["runs"] for row in push_branches.values()),
+        "jobCount": sum(row["jobs"] for row in push_branches.values()),
+        "runnerHours": sum(row["runnerHours"] for row in push_branches.values()),
+        "failedRuns": failed_pushes,
+        "branches": [{"branch": branch, **row} for branch, row in sorted(push_branches.items())],
     }
+    return {"days": days, "push": push, "runCount": run_count, "jobCount": job_count}
 
 
-def collect_history(data, api=None, now=None, sample_limit=3):
+def collect_history(data, api=None, now=None, sample_limit=3, cache=None):
     if api is None:
         token = os.environ.get("GH_TOKEN") or os.environ.get("GITHUB_TOKEN")
         if not token:
@@ -191,15 +340,33 @@ def collect_history(data, api=None, now=None, sample_limit=3):
         api = GitHub(token)
     now = now or datetime.now(timezone.utc)
     since = now - timedelta(days=28)
+    timings = JobTimings(api, cache)
+    history = {
+        "since": since.isoformat(),
+        "until": now.isoformat(),
+        "sampleLimit": sample_limit,
+        "errors": [],
+    }
+    # Prioritize actual measurements; profiles can reuse the same cached job records.
+    # Bootstrap a shorter window under the Actions token quota; warm caches extend it.
+    actual_days = 7 if timings.state["jobs"] or timings.state["days"] else 3
+    actual_since = now.replace(hour=0, minute=0, second=0, microsecond=0) - timedelta(
+        days=actual_days
+    )
+    try:
+        actual = observed_usage(api, data["workloads"], actual_since, now, timings)
+        timings.state["days"].update(actual["days"])
+        timings.state["push"] = actual["push"]
+    except (RuntimeError, OSError, ValueError, KeyError) as error:
+        history["actualError"] = str(error)
     groups = defaultdict(list)
     for workload in data["workloads"]:
         branch = "master" if workload.get("matrixBranch") else workload["branch"]
         groups[(workload["file"], branch)].append(workload)
-    errors = []
 
     def sample(group):
         try:
-            return profiles(api, group, since, now, sample_limit), None
+            return profiles(api, group, since, now, sample_limit, timings), None
         except (RuntimeError, OSError, ValueError, KeyError) as error:
             return {}, {"file": group[0]["file"], "branch": group[0]["branch"], "error": str(error)}
 
@@ -208,17 +375,13 @@ def collect_history(data, api=None, now=None, sample_limit=3):
         for result, error in executor.map(sample, groups.values()):
             collected.update(result)
             if error:
-                errors.append(error)
+                history["errors"].append(error)
     for workload in data["workloads"]:
         workload["history"] = collected.get((workload["file"], workload["branch"]))
-    history = {
-        "since": since.isoformat(),
-        "until": now.isoformat(),
-        "sampleLimit": sample_limit,
-        "errors": errors,
-    }
-    try:
-        history["push"] = observed_push(api, now - timedelta(days=7), now)
-    except (RuntimeError, OSError, ValueError, KeyError) as error:
-        history["pushError"] = str(error)
+    timings.save(now)
+    history["observed"] = {"days": timings.state["days"]}
+    if "push" in timings.state:
+        history["push"] = timings.state["push"]
+    else:
+        history["pushError"] = history.get("actualError", "Actual timings are unavailable")
     data["history"] = history

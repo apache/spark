@@ -166,6 +166,7 @@ def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--repo", type=Path, default=Path(__file__).resolve().parents[1])
     parser.add_argument("--output", type=Path, required=True)
+    parser.add_argument("--history-cache", type=Path, help="Cache public completed-job timings")
     parser.add_argument("--history", action="store_true", help="Sample public Actions job timings")
     args = parser.parse_args()
     try:
@@ -176,7 +177,7 @@ def main():
     if args.history:
         from ci_dashboard_history import collect_history
 
-        collect_history(data)
+        collect_history(data, cache=args.history_cache)
     args.output.parent.mkdir(parents=True, exist_ok=True)
     args.output.write_text(json.dumps(data, indent=2) + "\n")
 

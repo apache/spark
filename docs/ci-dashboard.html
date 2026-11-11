@@ -73,24 +73,31 @@
       </section>
       <section aria-labelledby="calendar-title">
         <div class="section-heading">
-          <h2 id="calendar-title">Scheduled CI burden</h2>
+          <h2 id="calendar-title">Actual burden and future forecast</h2>
           <label>Month (UTC)<input id="month" type="month" required></label>
         </div>
-        <p class="muted">All branches combined. Darker cells indicate more estimated runner-hours
-          in that UTC hour. One runner-hour in a one-hour cell means one runner busy on average.
-          Jobs contribute to every hour they execute, including overlaps and month boundaries.</p>
+        <p class="muted">All upstream build workflows combined. Past cells use measured job
+          execution; future days use estimates. One runner-hour in an hourly cell means one runner
+          busy on average. Measurements include failed runs, reruns, and active execution so
+          far.</p>
+        <div id="load-legend" class="legend">
+          <span class="actual">Actual job execution</span>
+          <span class="forecast">Future estimate</span>
+          <span class="unknown">No measurement</span>
+        </div>
         <p id="load-status" class="muted"></p>
         <div id="schedule-summary" class="schedule-summary"></div>
         <div class="scroll"><table id="calendar" class="calendar"></table></div>
-        <p class="muted">Counts include each branch in SNAPSHOT publishing's matrix.
+        <p class="muted">Darker cells mean more runner-hours. Row and column totals sum the
+          displayed values; actual and forecast totals are reported separately above.
           Frequent build-status polling is summarized separately below.</p>
       </section>
       <section aria-labelledby="branches-title">
         <h2 id="branches-title">Coverage by branch</h2>
         <div class="scroll"><table>
-          <thead><tr><th scope="col">Branch</th><th scope="col">Scheduled targets</th>
-            <th scope="col">Starts this month</th><th scope="col">Estimated runner-hours</th>
-            <th scope="col" id="share-heading">Share of estimated hours</th></tr></thead>
+          <thead><tr><th scope="col">Branch</th><th scope="col">Profiled scheduled targets</th>
+            <th scope="col">Actual runner-hours shown</th>
+            <th scope="col">Forecast future runner-hours</th></tr></thead>
           <tbody id="branches"></tbody>
         </table></div>
       </section>
@@ -105,14 +112,16 @@
         <p>Reports contributor fork build results on pull requests.</p>
         <p id="polling" class="muted"></p>
       </section>
-      <p class="notes">Runner-hours sum individual job execution times, without billing or
-        operating-system multipliers. Scheduled estimates replay recent successful job timelines at
-        configured UTC starts; skips, failures, retries, and queue delays can change actual demand.
-        Push usage is measured separately because future merge activity has no fixed schedule.
-        Polling is summarized separately. Day-of-month phases restart monthly. Maintenance-branch
-        definitions can differ from this revision. The existing Pages build refreshes measurements;
-        ordinary documentation builds work offline and show start counts when profiles
-        are absent.</p>
+      <p class="notes">Actual usage comes from recent Actions job timestamps, clipped to their
+        execution hours. Running jobs count through the collection cutoff. Unavailable historical
+        days stay blank. The Pages build starts with three measured days, expands to seven on a warm
+        cache,
+        and retains up to 28 days
+        of measured history in its cache. Forecasts replay scheduled job profiles and add average
+        upstream push usage by weekday and UTC hour. Unprofiled targets, future manual runs, skips,
+        retries, and queue delays can change future demand. Runner-hours are unweighted execution
+        time, without billing multipliers. Fork usage and frequent Build Status polling are outside
+        this timeline. Normal documentation builds work offline and show configured starts.</p>
     </div>
   </main>
   <footer>Apache Spark &middot; Refreshed with the existing documentation build.</footer>

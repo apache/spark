@@ -59,6 +59,12 @@ jobs:
       - name: Add GITHUB_WORKSPACE to git trust safe.directory
         run: |
           git config --global --add safe.directory ${GITHUB_WORKSPACE}
+      - name: Restore CI timing history
+        uses: actions/cache@v6
+        with:
+          path: docs/_generated/ci-dashboard-history.json
+          key: ci-dashboard-history-v2-${{ github.run_id }}-${{ github.run_attempt }}
+          restore-keys: ci-dashboard-history-v2-
       - name: Free up disk space
         run: ./dev/free_disk_space_container
       - name: Install Java 21

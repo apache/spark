@@ -19,7 +19,7 @@
 
 const assert = require('node:assert/strict');
 const {test} = require('node:test');
-const {calendar, parseCron, runnerLoad} = require('../docs/js/ci-dashboard.js');
+const {calendar, parseCron, runnerLoad, actualForecast} = require('../docs/js/ci-dashboard.js');
 const workload = (cron, extra = {}) => ({file: 'build.yml', branch: 'master', name: 'Build',
   scheduler: 'build.yml', crons: [cron], ...extra});
 
@@ -96,4 +96,60 @@ test('coverage excludes missing profiles and branch totals equal total load', ()
   close(data.total, 3);
   close([...data.byBranch.values()].reduce((a, b) => a + b, 0), data.total);
   assert.equal(runnerLoad([workload('0 0 1 * *')], '2026-11').measured, 0);
+});
+
+const observedDay = (day, amount, through, pushAmount = 0) => {
+  const hours = Array(24).fill(0), pushHours = Array(24).fill(0);
+  hours[1] = amount;
+  hours[3] = pushAmount;
+  pushHours[3] = pushAmount;
+  return {hours, pushHours, through, byBranch: {master: hours},
+    pushByBranch: {master: pushHours}};
+};
+const observedSnapshot = days => ({generatedAt: '2026-11-11T12:00:00Z',
+  workloads: [profiled('0 0 * * *', [[0, 3600]])],
+  history: {until: '2026-11-11T12:00:00Z', observed: {days}}});
+
+test('past uses actual execution and future combines schedules with measured push activity', () => {
+  const snapshot = observedSnapshot({
+    '2026-11-10': observedDay('2026-11-10', 5, '2026-11-11T00:00:00Z', 2),
+    '2026-11-11': observedDay('2026-11-11', 4, '2026-11-11T12:00:00Z')
+  });
+  const data = actualForecast(snapshot, '2026-11');
+  close(data.actualTotal, 11);
+  close(data.forecastTotal, 19 * 3);
+  assert.equal(data.actualDays, 2);
+  assert.equal(data.futureDays, 19);
+  assert.equal(data.unknownDays, 9);
+  assert.equal(data.cells[8][0], null);
+  assert.equal(data.cells[10][12], null);
+  assert.equal(data.types[9][1], 'actual');
+  assert.equal(data.types[11][0], 'forecast');
+  close(data.cells[11][0], 1);
+  close(data.cells[11][3], 2);
+  close(data.byBranch.get('master').actual, data.actualTotal);
+  close(data.byBranch.get('master').forecast, data.forecastTotal);
+});
+
+test('push baseline averages complete days by weekday and excludes partial today', () => {
+  const snapshot = observedSnapshot({
+    '2026-11-03': observedDay('2026-11-03', 0, '2026-11-04T00:00:00Z', 4),
+    '2026-11-10': observedDay('2026-11-10', 0, '2026-11-11T00:00:00Z', 2),
+    '2026-11-11': observedDay('2026-11-11', 0, '2026-11-11T12:00:00Z', 99)
+  });
+  const data = actualForecast(snapshot, '2026-11');
+  assert.equal(data.baselineDays, 2);
+  close(data.cells[16][3], 3);
+});
+
+test('unmeasured historical months remain unavailable and future months are forecast only', () => {
+  const snapshot = observedSnapshot({});
+  const past = actualForecast(snapshot, '2026-10');
+  assert.ok(past.cells.flat().every(v => v === null));
+  close(past.actualTotal, 0);
+  close(past.forecastTotal, 0);
+  const future = actualForecast(snapshot, '2026-12');
+  assert.ok(future.types.flat().every(v => v === 'forecast'));
+  close(future.forecastTotal, 31);
+  close(future.actualTotal, 0);
 });

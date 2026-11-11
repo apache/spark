@@ -22,7 +22,10 @@ Jekyll::Hooks.register :site, :post_write do |site|
   generator = File.join(root, 'dev', 'generate-ci-dashboard.py')
   output = File.join(site.dest, 'ci-dashboard-data.json')
   args = ['python3', generator, '--repo', root, '--output', output]
-  args << '--history' if ENV['CI_DASHBOARD_HISTORY'] == '1'
+  if ENV['CI_DASHBOARD_HISTORY'] == '1'
+    args += ['--history', '--history-cache',
+             File.join(root, 'docs', '_generated', 'ci-dashboard-history.json')]
+  end
   unless system(*args)
     raise 'Failed to generate CI dashboard metadata'
   end
