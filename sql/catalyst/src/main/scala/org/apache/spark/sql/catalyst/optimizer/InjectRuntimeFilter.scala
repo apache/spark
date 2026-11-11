@@ -43,9 +43,10 @@ import org.apache.spark.sql.internal.SQLConf
  * the creation side, whatever its shape, and waives the checks that only estimate whether a filter
  * pays off, since the user asserts it does. It waives no correctness requirement (see
  * [[RuntimeFilterHintCheck]]) and does not lift the limits on the number of filters and on a
- * Bloom filter's size, nor the requirement that the join keys be simple expressions. A hinted side
- * is never itself filtered. On a join key that a DPP filter already prunes, no Bloom filter is
- * added; the other join keys still get one.
+ * Bloom filter's size, nor the requirement that the join keys be simple expressions. A join key
+ * that can fail where the filter evaluates it gets no hinted filter (`hintedKeyCannotFail`). A
+ * hinted side is never itself filtered. On a join key that a DPP filter already prunes, no Bloom
+ * filter is added; the other join keys still get one.
  * The rule runs after the DPP filters are pushed down and cleaned up, so it sees only the ones
  * that survive. When the hint is not applied, the reason is reported through the hint error
  * handler. A hinted side that cannot be a runtime filter source on any join key leaves the join
@@ -509,7 +510,8 @@ object InjectRuntimeFilter extends Rule[LogicalPlan] with PredicateHelper with J
   // Whether evaluating `e` cannot fail, also on rows that the join does not read. It asks
   // `ExprUtils.canEvaluateUnconditionally`, after it replaces, bottom-up, a wrapper that cannot
   // fail either over a child that it takes: the normalization that `NormalizeFloatingNumbers` puts
-  // around a floating point join key. The stand-in keeps the type of what it replaces. An
+  // around a floating point join key, and the collation key that `RewriteCollationJoin` puts
+  // around a collated string one. The stand-in keeps the type of what it replaces. An
   // `onlyInBroadcast` DPP filter counts too, since it finds no broadcast in the bloom filter's
   // subquery and is `true` there.
   private def cannotFail(e: Expression): Boolean = e match {
@@ -518,8 +520,32 @@ object InjectRuntimeFilter extends Rule[LogicalPlan] with PredicateHelper with J
       case n @ KnownFloatingPointNormalized(NormalizeNaNAndZero(child))
           if ExprUtils.canEvaluateUnconditionally(child) =>
         AttributeReference("normalized", n.dataType, n.nullable)()
+      case c @ CollationKey(child) if ExprUtils.canEvaluateUnconditionally(child) =>
+        AttributeReference("collationKey", c.dataType, c.nullable)()
     })
   }
+
+  /**
+   * Whether a hinted runtime filter on `key` cannot fail wherever pushdown takes it in `side`,
+   * with `key` rewritten through the aliases and for the branches of a union on its way. Down
+   * there, the filter evaluates its key also on rows that the join does not read: the rows that an
+   * operator above it drops, and on a partition column, where it becomes a partition filter, every
+   * partition before the data filters (SPARK-60809). The hint waives the estimates that keep a
+   * runtime filter off most keys, so a key that can fail could fail a query that succeeds without
+   * the hint. Unlike `canPushDown`, this takes a key that cannot be followed down to a leaf.
+   */
+  private[sql] def hintedKeyCannotFail(key: Expression, side: LogicalPlan): Boolean =
+    cannotFail(key) && (side match {
+      case p: Project => hintedKeyCannotFail(replaceAlias(key, getAliasMap(p)), p.child)
+      case a: Aggregate => hintedKeyCannotFail(replaceAlias(key, getAliasMap(a)), a.child)
+      case u: Union => u.children.forall { child =>
+        val branchOutput = AttributeMap(u.output.zip(child.output))
+        hintedKeyCannotFail(
+          key.transform { case a: Attribute => branchOutput.getOrElse(a, a) }, child)
+      }
+      case _ => side.children.filter(child => key.references.subsetOf(child.outputSet))
+        .forall(hintedKeyCannotFail(key, _))
+    })
 
   // Whether the bloom filter's subquery can evaluate `creationSide` again, apart from the join. The
   // plan it reads must give the same rows again (SPARK-60808). So it must read no CTE, whose
@@ -681,17 +707,26 @@ object InjectRuntimeFilter extends Rule[LogicalPlan] with PredicateHelper with J
         }
         def honorHint(filters: Seq[DynamicPruningSubquery]): Boolean =
           filters.exists(_.getTagValue(DynamicPruning.HONORS_RUNTIME_FILTER_HINT).isDefined)
-        // A key whose DPP filter honors the hint was accepted by [[PartitionPruning]], before a
-        // filter pushed into the hinted side could change its analysis. A Bloom filter's subquery
-        // is checked for the functions it calls once it is built.
-        val declinedReason = hintedSource.flatMap { side =>
-          val reasons = keyFilters.map { case (l, r, leftFilters, rightFilters) =>
+        // Why the hinted side cannot prune the other side on each key pair. A key whose DPP
+        // filter honors the hint was accepted by [[PartitionPruning]], before a filter pushed into
+        // the hinted side could change its analysis. A Bloom filter's subquery is checked for the
+        // functions it calls once it is built.
+        val keyRejections = hintedSource.map { side =>
+          keyFilters.map { case (l, r, leftFilters, rightFilters) =>
             if (honorHint(if (side == BuildRight) leftFilters else rightFilters)) None
             else hintRejection(l, r, checkFunctions = false)
           }
-          if (reasons.forall(_.isDefined)) reasons.head else None
         }
-        declinedReason.foreach(reportHintNotApplied(join, _))
+        val declinedReason =
+          keyRejections.flatMap(reasons => if (reasons.forall(_.isDefined)) reasons.head else None)
+        // A subquery cannot check a hinted side that reads a CTE of the outer query, whose
+        // definition it does not have. An uncorrelated IN subquery is joined with the rest of the
+        // query later, where the definition is visible, so the hint is neither reported nor marked
+        // as decided here, and that pass decides it. A subquery that is planned on its own, such
+        // as a scalar subquery, is not visited again, and its join stays as without the hint.
+        val leftToOuterQuery = inSubquery &&
+          keyRejections.exists(_.contains(Some(RuntimeFilterSourceAnalysis.OuterCte)))
+        if (!leftToOuterQuery) declinedReason.foreach(reportHintNotApplied(join, _))
         val hinted = hintedSource.isDefined && declinedReason.isEmpty
         val injectLeftHinted = hinted && hintedSource.contains(BuildRight)
         val injectRightHinted = hinted && hintedSource.contains(BuildLeft)
@@ -795,6 +830,9 @@ object InjectRuntimeFilter extends Rule[LogicalPlan] with PredicateHelper with J
             hintBlocked("a Bloom filter pushed down on the join key could fail or change a " +
               "broadcast that a DPP filter reuses")
             currentApplicationSide
+          } else if (!hintedKeyCannotFail(applicationSideKey, applicationSide)) {
+            hintBlocked("the join key could fail on rows the join does not read")
+            currentApplicationSide
           } else {
             hintCheck.flatMap(_.rejection(applicationSideKey, creationSideKey,
                 checkFunctions = false)) match {
@@ -834,7 +872,11 @@ object InjectRuntimeFilter extends Rule[LogicalPlan] with PredicateHelper with J
           if (keyDpps.exists(isKept)) {
             // Already pruned by partition pruning: no Bloom filter for the key.
             if (hinted && !honorsHint) {
-              hintRejection(l, r, checkFunctions = true).foreach(hintBlocked(_))
+              val (prunedKey, prunedSide) = if (injectLeftHinted) (l, left) else (r, right)
+              hintRejection(l, r, checkFunctions = true)
+                .orElse(Option.when(!hintedKeyCannotFail(prunedKey, prunedSide)) {
+                  "the join key could fail on rows the join does not read"
+                }).foreach(hintBlocked(_))
             }
           } else if (!bloomFilterEnabled) {
             hintBlocked(s"${SQLConf.RUNTIME_BLOOM_FILTER_ENABLED.key} is false")
@@ -865,7 +907,11 @@ object InjectRuntimeFilter extends Rule[LogicalPlan] with PredicateHelper with J
             notAppliedReason.getOrElse("no runtime filter could be built from the hinted side"))
         }
         val result = join.withNewChildren(Seq(newLeft, newRight)).asInstanceOf[Join]
-        if (hasRuntimeFilterHint(hint)) markRuntimeFilterHintDecided(result) else result
+        if (hasRuntimeFilterHint(hint) && !leftToOuterQuery) {
+          markRuntimeFilterHintDecided(result)
+        } else {
+          result
+        }
       case join @ Join(_, _, _, _, hint) if hasRuntimeFilterHint(hint) =>
         // A runtime filter is built from the join keys, so a join without equi-join keys has
         // nothing to build from.

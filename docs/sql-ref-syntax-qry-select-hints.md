@@ -211,7 +211,10 @@ other direction instead.
     overrides the pruning benefit estimate and
     `spark.sql.optimizer.dynamicPartitionPruning.reuseBroadcastOnly`; it still obeys
     `spark.sql.optimizer.dynamicPartitionPruning.enabled` and requires the pruned side to scan a
-    table that supports pruning on the join key.
+    table that supports pruning on the join key. Neither filter is added on a join key that can
+    fail on the pruned side, such as a cast of a string to a number in ANSI mode: a runtime filter
+    evaluates its key also on rows that the join does not read, so it could fail a query that
+    succeeds without it.
 
     Like a join strategy hint, `RUNTIME_FILTER` fixes the join order around the hinted relation:
     Spark does not reorder a join that carries it. Place the hinted relation where it joins the

@@ -838,16 +838,17 @@ private[optimizer] class RuntimeFilterSourceAnalysis(
       Left(s"the hinted side reads ${s.name}, which may return different rows when evaluated " +
         "again, e.g. with an aggregate, limit, offset, top-N or sample pushed into the source")
 
-    case r: CTERelationRef => cteDefs.get(r.cteId).filterNot(_ => r.recursive) match {
+    case r: CTERelationRef if r.recursive =>
+      Left("the hinted side reads a recursive CTE, which cannot be checked for repeatability")
+
+    case r: CTERelationRef => cteDefs.get(r.cteId) match {
       case Some(cteDef) => analyze(cteDef.child).map { t =>
         val unstable = r.output.zip(cteDef.child.output).collect {
           case (attr, defAttr) if t.unstable.contains(defAttr) => attr
         }
         Taint(AttributeSet(unstable), t.unstableMultiplicity)
       }
-      case None =>
-        Left("the hinted side reads a recursive CTE or one defined outside the plan being " +
-          "optimized, which cannot be checked for repeatability")
+      case None => Left(OuterCte)
     }
 
     case l: LeafNode =>
@@ -1046,6 +1047,9 @@ private[optimizer] object RuntimeFilterSourceAnalysis {
 
   private val NotRepeatable =
     "the hinted side may produce different rows or join keys when evaluated again"
+
+  val OuterCte: String = "the hinted side reads a CTE defined outside the plan being " +
+    "optimized, which cannot be checked for repeatability"
 
   val ExtractedFunction: String = "the hinted side contains a Python UDF, Python UDTF or " +
     "external UDF, which a runtime filter cannot evaluate"

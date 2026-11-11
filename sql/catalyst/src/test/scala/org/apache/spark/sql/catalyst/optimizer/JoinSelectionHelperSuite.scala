@@ -405,6 +405,6 @@ class JoinSelectionHelperSuite extends PlanTest with JoinSelectionHelper {
     assert(rejection(Filter(LessThan(Rand(Literal(1L)), Literal(2.0)), relation))
       .exists(_.contains("may produce different rows or join keys")))
     assert(rejection(relation, withDefinitions = false)
-      .exists(_.contains("reads a recursive CTE or one defined outside the plan")))
+      .exists(_.contains("reads a CTE defined outside the plan")))
   }
 }

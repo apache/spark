@@ -3404,7 +3404,8 @@ class JDBCV2Suite extends SharedSparkSession with ExplainSuiteHelper {
         spark.range(10).selectExpr("id AS v", "CAST(id % 3 AS INT) AS p")
           .write.partitionBy("p").saveAsTable("dpp_fact")
         withTempView("bf_fact") {
-          spark.range(10).selectExpr("CAST(id AS INT) AS k").createOrReplaceTempView("bf_fact")
+          // A `TRY_CAST`, as a join key that can fail gets no hinted filter.
+          spark.range(10).selectExpr("TRY_CAST(id AS INT) AS k").createOrReplaceTempView("bf_fact")
           def warnings(query: String): Seq[String] = {
             val logAppender = new LogAppender("runtime filter hint")
             withLogAppender(logAppender, level = Some(Level.WARN)) {

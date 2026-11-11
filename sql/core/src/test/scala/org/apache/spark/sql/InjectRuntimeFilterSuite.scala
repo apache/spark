@@ -1741,6 +1741,27 @@ class InjectRuntimeFilterSuite extends SharedSparkSession
     }
   }
 
+  test("Runtime bloom filter join: add bloom filter for a key with a dropped dpp filter of two " +
+    "collated string columns") {
+    // A join of two collated columns is on their collation keys, whose bytes the bloom filter can
+    // hash, while the IN subquery of the test above compares the strings themselves.
+    withSQLConf("spark.sql.catalog.testcat" -> classOf[InMemoryTableCatalog].getName) {
+      withTable("testcat.cf", "testcat.cd") {
+        sql("create table testcat.cf (k string collate utf8_lcase, v int) partitioned by (k)")
+        sql("insert into testcat.cf values ('abc', 1)")
+        sql("create table testcat.cd (k string collate utf8_lcase, flag int)")
+        sql("insert into testcat.cd values ('ABC', 1), ('zzz', 0)")
+        val query = "select v from testcat.cf f join testcat.cd d on f.k = d.k where d.flag = 1"
+        withDppTestConf(SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key -> "-1",
+            SQLConf.RUNTIME_BLOOM_FILTER_APPLICATION_SIDE_SCAN_SIZE_THRESHOLD.key -> "0") {
+          assert(hasDynamicPruning(query))
+          assert(bloomFilterKeys(query).size == 1)
+          checkAnswer(sql(query), Row(1))
+        }
+      }
+    }
+  }
+
   test("SPARK-60702: do not add bloom filter whose creation side reads a cte") {
     // The reference to `d` hides that its plan is not deterministic. With exchange reuse off, the
     // bloom filter's subquery would draw a second sample of `d`.
@@ -2398,9 +2419,10 @@ class InjectRuntimeFilterSuite extends SharedSparkSession
         ("SELECT f5 FROM (SELECT f5, row_number() OVER (PARTITION BY c5 ORDER BY f5) rn " +
           "FROM bf5part) WHERE rn = 1", 1),
         // The DPP filter is pushed into both union branches, where the limit blocks it and the
-        // `Range` cannot use it. The Bloom filter is pushed into both branches too.
+        // `Range` cannot use it. The Bloom filter is pushed into both branches too. The key of the
+        // second branch is a `TRY_CAST`, as a key that can fail gets no hinted filter.
         ("SELECT f5 FROM (SELECT f5 FROM bf5part ORDER BY f5 LIMIT 2) " +
-          "UNION ALL SELECT CAST(id AS INT) AS f5 FROM range(3)", 2)
+          "UNION ALL SELECT TRY_CAST(id AS INT) AS f5 FROM range(3)", 2)
       ).foreach { case (prunedSide, numBloomFilters) =>
         val query = "SELECT /*+ RUNTIME_FILTER(bf2) */ f.f5, bf2.c2 " +
           s"FROM ($prunedSide) f JOIN bf2 ON f.f5 = bf2.c2"
@@ -3380,6 +3402,50 @@ class InjectRuntimeFilterSuite extends SharedSparkSession
     }
   }
 
+  test("RUNTIME_FILTER hint adds no runtime filter on a join key that can fail") {
+    withTable("bf_fail_part", "bf_fail_dim") {
+      // Every row of the partition `f = 200` has `a >= 100`.
+      spark.range(30).selectExpr("id + CASE WHEN id < 20 THEN 0 ELSE 100 END AS a",
+        "CASE WHEN id < 10 THEN 1 WHEN id < 20 THEN 2 ELSE 200 END AS f")
+        .write.partitionBy("f").saveAsTable("bf_fail_part")
+      sql("SELECT CAST(c AS TINYINT) AS c FROM VALUES (0), (1), (2), (0), (1) AS v(c)")
+        .write.saveAsTable("bf_fail_dim")
+      // On the partition column, a runtime filter would evaluate the narrowing cast on every
+      // partition, before the data filter that leaves out the partition it overflows on
+      // (SPARK-60809). Pushdown takes it into each branch of a union too, with its key rewritten
+      // for the branch.
+      Seq(
+        ("bf_fail_part p JOIN bf_fail_dim t ON CAST(p.f AS TINYINT) = t.c WHERE p.a < 50", 30, 1),
+        ("(SELECT * FROM bf_fail_part WHERE a < 50 UNION ALL SELECT * FROM bf_fail_part " +
+          "WHERE a < 40) p JOIN bf_fail_dim t ON CAST(p.f AS TINYINT) = t.c", 60, 2)
+      ).foreach { case (join, numRows, numScans) =>
+        val unhinted = s"SELECT * FROM $join"
+        val query = s"SELECT /*+ RUNTIME_FILTER(t) */ * FROM $join"
+        Seq("true", "false").foreach { dpp =>
+          Seq("true", "false").foreach { aqe =>
+            withSQLConf(SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key -> "-1",
+                SQLConf.ANSI_ENABLED.key -> "true",
+                SQLConf.DYNAMIC_PARTITION_PRUNING_ENABLED.key -> dpp,
+                SQLConf.ADAPTIVE_EXECUTION_ENABLED.key -> aqe) {
+              assert(!hasDynamicPruning(query))
+              assertNoBloomFilters(query)
+              assertHintNotApplied(query,
+                "the join key could fail on rows the join does not read")
+              assert(sql(unhinted).count() == numRows)
+              checkAnswer(sql(query), sql(unhinted))
+              // A key that cannot fail gets its hinted filter: a DPP filter, or a Bloom filter
+              // with DPP off, on each scan.
+              val safe = query.replace("CAST(p.f AS TINYINT) = t.c", "p.f = t.c")
+              assert(hasDynamicPruning(safe) == dpp.toBoolean)
+              assert(bloomFilterKeys(safe).size == (if (dpp.toBoolean) 0 else numScans))
+              assert(hintWarnings(safe).isEmpty)
+            }
+          }
+        }
+      }
+    }
+  }
+
   test("RUNTIME_FILTER hint takes a materialized CTE whose definition is repeatable") {
     withSQLConf(SQLConf.RUNTIME_BLOOM_FILTER_APPLICATION_SIDE_SCAN_SIZE_THRESHOLD.key -> "3000",
       SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key -> "-1") {
@@ -3396,6 +3462,29 @@ class InjectRuntimeFilterSuite extends SharedSparkSession
       assert(hasDynamicPruning(pruned))
       assert(!hintWarnings(pruned).exists(_.contains("is not supported")))
       checkAnswer(sql(pruned), sql(pruned.replace("/*+ RUNTIME_FILTER(d) */ ", "")))
+    }
+  }
+
+  test("RUNTIME_FILTER hint in an IN subquery takes a materialized CTE of the outer query") {
+    withSQLConf(SQLConf.RUNTIME_BLOOM_FILTER_APPLICATION_SIDE_SCAN_SIZE_THRESHOLD.key -> "3000",
+      SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key -> "-1") {
+      // The subquery is optimized on its own first, without the definition of `d`, so the hint is
+      // decided once the subquery is joined with the rest of the query.
+      val query = "WITH d AS MATERIALIZED (SELECT c2 FROM bf2 WHERE a2 < 60) " +
+        "SELECT * FROM bf4 WHERE bf4.c4 IN " +
+        "(SELECT /*+ RUNTIME_FILTER(d) */ bf3.c3 FROM bf3 JOIN d ON bf3.c3 = d.c2)"
+      assert(bloomFilterApplicationSideKeys(query).contains("c3"))
+      assert(!hintWarnings(query).exists(_.contains("is not supported")))
+      assertReturnsRows(query)
+      checkAnswer(sql(query), sql(query.replace("/*+ RUNTIME_FILTER(d) */ ", "")))
+      // A scalar subquery is planned on its own, so no pass decides its hint and its join stays
+      // as without the hint.
+      val scalar = "WITH d AS MATERIALIZED (SELECT c2 FROM bf2 WHERE a2 < 60) SELECT " +
+        "(SELECT /*+ RUNTIME_FILTER(d) */ count(*) FROM bf3 JOIN d ON bf3.c3 = d.c2) AS n"
+      assert(sql(scalar).queryExecution.optimizedPlan.collectWithSubqueries {
+        case f: Filter if f.condition.exists(_.isInstanceOf[BloomFilterMightContain]) => f
+      }.isEmpty)
+      assert(hintWarnings(scalar).isEmpty)
     }
   }
 

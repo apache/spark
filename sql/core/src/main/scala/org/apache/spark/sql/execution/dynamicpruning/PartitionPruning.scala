@@ -19,7 +19,7 @@ package org.apache.spark.sql.execution.dynamicpruning
 
 import org.apache.spark.sql.catalyst.catalog.HiveTableRelation
 import org.apache.spark.sql.catalyst.expressions._
-import org.apache.spark.sql.catalyst.optimizer.{BuildLeft, BuildRight, JoinSelectionHelper, ReusableBroadcastValueProjection}
+import org.apache.spark.sql.catalyst.optimizer.{BuildLeft, BuildRight, InjectRuntimeFilter, JoinSelectionHelper, ReusableBroadcastValueProjection}
 import org.apache.spark.sql.catalyst.planning.ExtractEquiJoinKeys
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.rules.Rule
@@ -361,9 +361,13 @@ object PartitionPruning extends Rule[LogicalPlan] with PredicateHelper with Join
         val pruneLeftHinted = !declined && hintedSource.contains(BuildRight)
         val pruneRightHinted = !declined && hintedSource.contains(BuildLeft)
         // Whether the hinted side honors the hint for pruning on the key pair. Otherwise DPP
-        // decides from its own estimates, as without the hint.
+        // decides from its own estimates, as without the hint. The pruning key must not fail: the
+        // hint waives the estimates that keep a DPP filter off most keys (SPARK-60809).
         def honorsHint(l: Expression, r: Expression): Boolean =
-          hintRejection(l, r, checkFunctions = true).isEmpty
+          hintRejection(l, r, checkFunctions = true).isEmpty && {
+            if (hintedSource.contains(BuildRight)) InjectRuntimeFilter.hintedKeyCannotFail(l, left)
+            else InjectRuntimeFilter.hintedKeyCannotFail(r, right)
+          }
 
         // checks if two expressions are on opposite sides of the join
         def fromDifferentSides(x: Expression, y: Expression): Boolean = {
