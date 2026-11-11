@@ -395,6 +395,24 @@ abstract class DeleteFromTableSuiteBase extends RowLevelOperationSuiteBase {
     checkDeleteMetrics(numDeletedRows = 2, numCopiedRows = 0)
   }
 
+  test("SPARK-61462: delete with a CHAR condition in an OR with a partition condition") {
+    createTable("pk INT NOT NULL, c CHAR(3), dep STRING")
+    append("pk INT NOT NULL, c STRING, dep STRING",
+      """{ "pk": 1, "c": "a", "dep": "hr" }
+        |{ "pk": 2, "c": "b", "dep": "software" }
+        |{ "pk": 3, "c": "x", "dep": "hr" }
+        |{ "pk": 4, "c": "a", "dep": "finance" }
+        |{ "pk": 5, "c": "y", "dep": "finance" }
+        |""".stripMargin)
+
+    // the padded comparison has no V1 filter, so it must not be dropped from the OR
+    sql(s"DELETE FROM $tableNameAsString WHERE c = 'a' OR dep = 'software'")
+
+    checkAnswer(
+      sql(s"SELECT pk FROM $tableNameAsString"),
+      Row(3) :: Row(5) :: Nil)
+  }
+
   test("SPARK-61462: delete with a correlated subquery on a CHAR column") {
     withTempView("deleted") {
       createTable("pk INT NOT NULL, c CHAR(3), dep STRING")
