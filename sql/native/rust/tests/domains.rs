@@ -22,11 +22,11 @@ use std::ptr;
 use std::sync::{Arc, Mutex, PoisonError};
 
 use arrow_array::ffi::FFI_ArrowArray;
+use arrow_array::types::Int64Type;
 use arrow_array::{
-    Array, ArrayRef, BooleanArray, Float64Array, Int64Array, StringArray, StructArray,
-    Time64MicrosecondArray,
+    Array, ArrayRef, BooleanArray, Float64Array, Int64Array, ListArray, StringArray, StructArray,
 };
-use arrow_schema::{DataType, Field, Fields, Schema, TimeUnit};
+use arrow_schema::{DataType, Field, Fields, Schema};
 use serde::{Deserialize, Serialize};
 use spark_datasource::__private::abi::{
     ArrowSchema, SparkDsCreateInfo, SparkDsDomain, SparkDsHost, SparkDsLibrary, SparkDsReaderInfo,
@@ -127,7 +127,7 @@ fn error(library: &SparkDsLibrary) -> String {
 }
 
 /// The columns `id BIGINT, label STRING, point STRUCT<x: INT, y: STRING>, score DOUBLE`, and
-/// `at`, of a time type that the SDK has no `Value` for.
+/// `tags ARRAY<BIGINT>`, which a scan can read but whose values have no `Value` in the SDK.
 fn schema() -> Schema {
     let point = Fields::from(vec![
         Field::new("x", DataType::Int32, true),
@@ -138,7 +138,7 @@ fn schema() -> Schema {
         Field::new("label", DataType::Utf8, true),
         Field::new("point", DataType::Struct(point), true),
         Field::new("score", DataType::Float64, true),
-        Field::new("at", DataType::Time64(TimeUnit::Microsecond), true),
+        Field::new("tags", DataType::new_list(DataType::Int64, true), true),
     ])
 }
 
@@ -322,17 +322,16 @@ fn passes_the_domains_by_the_names_of_their_columns_with_their_values() {
 fn passes_nan_and_skips_the_domains_of_columns_without_values() {
     let _guard = TEST_LOCK.lock().unwrap_or_else(PoisonError::into_inner);
     let library = library();
-    // id = 3, at > 00:00:01, and score > 10.0, which NaN satisfies.
+    // id = 3, tags > array(1), and score > 10.0, which NaN satisfies.
     let ids = ranges(
         Arc::new(Int64Array::from(vec![3])),
         Arc::new(Int64Array::from(vec![3])),
         &[(true, true)],
     );
-    let times = ranges(
-        Arc::new(Time64MicrosecondArray::from(vec![Some(1_000_000)])),
-        Arc::new(Time64MicrosecondArray::from(vec![None::<i64>])),
-        &[(false, false)],
-    );
+    let list = |values: Option<Vec<Option<i64>>>| {
+        Arc::new(ListArray::from_iter_primitive::<Int64Type, _, _>([values])) as ArrayRef
+    };
+    let tags = ranges(list(Some(vec![Some(1)])), list(None), &[(false, false)]);
     let scores = ranges(
         Arc::new(Float64Array::from(vec![Some(10.0)])),
         Arc::new(Float64Array::from(vec![None::<f64>])),
@@ -342,7 +341,7 @@ fn passes_nan_and_skips_the_domains_of_columns_without_values() {
     score.nan_allowed = true;
     let mut exported = [
         Exported::new(&[0], false, Some(ids)),
-        Exported::new(&[4], false, Some(times)),
+        Exported::new(&[4], false, Some(tags)),
         score,
     ];
     let (used, failure) = push(library, "", &mut exported);
@@ -367,7 +366,7 @@ fn passes_nan_and_skips_the_domains_of_columns_without_values() {
     assert_eq!(*PUSHED.lock().unwrap(), expected);
 
     // The scan is not called without a domain of a column that has values, such as that of
-    // `at IS NOT NULL`.
+    // `tags IS NOT NULL`.
     let unchanged = vec![Domain::new(vec!["unchanged".into()], None)];
     *PUSHED.lock().unwrap() = unchanged.clone();
     let (used, failure) = push(library, "", &mut [Exported::new(&[4], false, None)]);
