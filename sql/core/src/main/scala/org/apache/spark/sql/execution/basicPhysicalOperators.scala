@@ -1108,15 +1108,6 @@ case class UnionExec(children: Seq[SparkPlan]) extends SparkPlan with CodegenSup
     }
   }
 
-  /** Whether any child has repeated exprIds, making its positional attribute mapping ambiguous. */
-  private[execution] def hasDuplicateChildOutputs: Boolean = {
-    children.exists { child =>
-      // `child.output` walks the child's subtree, so read it once.
-      val out = child.output
-      out.map(_.exprId).distinct.size != out.size
-    }
-  }
-
   /**
    * Returns the output partitionings of the children, with the attributes converted to this
    * union's output attributes at the same position. A member that does not map is dropped, and a
@@ -1203,10 +1194,11 @@ case class UnionExec(children: Seq[SparkPlan]) extends SparkPlan with CodegenSup
 
   // Whether the output of a child repeats an `ExprId`. Fixed for the given children, so it is
   // derived once rather than on every read of the partitioning.
-  @transient private lazy val childOutputRepeatsExprId: Boolean = children.exists { child =>
-    val exprIds = child.output.map(_.exprId)
-    exprIds.distinct.size < exprIds.size
-  }
+  @transient private[execution] lazy val childOutputRepeatsExprId: Boolean =
+    children.exists { child =>
+      val exprIds = child.output.map(_.exprId)
+      exprIds.distinct.size < exprIds.size
+    }
 
   /**
    * The SPARK-52921 candidate partitioning derived from the children, which `outputPartitioning`

@@ -315,13 +315,12 @@ case class PushDownShuffleExchangeThroughUnion(
       case shuffle @ ShuffleExchangeExec(_: HashPartitioning, child, ENSURE_REQUIREMENTS, _, _)
           if found.isEmpty =>
         findPushableShuffle(child, lookThrough, policy, Some(shuffle))
-      // A union reached before the shuffle is not a site; skip its eligibility checks.
-      case _: UnionExec if found.isEmpty => None
-      // AttributeMap keeps the last duplicate exprId, while runtime binding uses the first.
-      // Positional rebinding is ambiguous for these unions, so retain their exchange. A union
+      // A union is a site only when the shuffle below it was found and it is eligible for one.
+      // AttributeMap keeps the last duplicate exprId, while runtime binding uses the first;
+      // positional rebinding is ambiguous for those unions, so retain their exchange. A union
       // with too many children is not a site either.
-      case union: UnionExec
-          if union.hasDuplicateChildOutputs || union.children.length > policy.maxUnionChildren =>
+      case union: UnionExec if found.isEmpty || union.childOutputRepeatsExprId ||
+          union.children.length > policy.maxUnionChildren =>
         None
       // Below it: the operators this rule can cross, down to the union the shuffle is moved past.
       case union: UnionExec =>
@@ -554,7 +553,7 @@ case class PushDownShuffleExchangeThroughUnion(
       }
     case stage: ShuffleQueryStageExec =>
       keepableLayout(stage.shuffle, policy, fromBroadcastHashJoinExec)
-    case union: UnionExec if union.hasDuplicateChildOutputs => false
+    case union: UnionExec if union.childOutputRepeatsExprId => false
     case _: ShuffledJoin if !policy.keepJoinBranches => false
     case _: BroadcastNestedLoopJoinExec | _: CartesianProductExec
         if !policy.allowNonCoalescible => false
