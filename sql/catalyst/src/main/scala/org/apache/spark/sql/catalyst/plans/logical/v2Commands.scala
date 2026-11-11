@@ -383,10 +383,29 @@ trait RowLevelWrite extends V2WriteCommand with SupportsSubquery {
   }
 
   /**
-   * Replaces the query with a pruned one and moves the projections to the new ordinals, given a
-   * map from each read ordinal of the current query to its ordinal in the new one.
+   * Replaces the query with a pruned one and moves the projections to the new ordinals. Each
+   * column a projection reads is found in the new query by exprId, so the new query may order its
+   * columns differently, but it must keep every column the write reads and the operation column
+   * first.
    */
-  def withPrunedQuery(newQuery: LogicalPlan, ordinalMap: Int => Int): RowLevelWrite
+  final def withPrunedQuery(newQuery: LogicalPlan): RowLevelWrite = {
+    checkProjectionOrdinals()
+    val output = query.output.toIndexedSeq
+    val newOutput = newQuery.output
+    if (newOutput.headOption.map(_.exprId) != output.headOption.map(_.exprId)) {
+      throw SparkException.internalError(
+        s"The pruned query of $nodeName must start with the operation column.")
+    }
+    val newOrdinals = newOutput.map(_.exprId).zipWithIndex.toMap
+    val ordinalMap = readOrdinals.distinct.map { ordinal =>
+      ordinal -> newOrdinals.getOrElse(output(ordinal).exprId, throw SparkException.internalError(
+        s"The pruned query of $nodeName drops ${output(ordinal)}, which a projection reads."))
+    }.toMap
+    withRemappedQuery(newQuery, ordinalMap)
+  }
+
+  /** Replaces the query and remaps the projections with the given ordinal map. */
+  protected def withRemappedQuery(newQuery: LogicalPlan, ordinalMap: Int => Int): RowLevelWrite
 
   protected def operationResolved: Boolean = {
     val attr = query.output.head
@@ -473,10 +492,10 @@ case class ReplaceData(
 
   override def withNewQuery(newQuery: LogicalPlan): ReplaceData = copy(query = newQuery)
 
-  override def withPrunedQuery(newQuery: LogicalPlan, ordinalMap: Int => Int): ReplaceData = {
-    val pruned = copy(query = newQuery, projections = projections.remapOrdinals(ordinalMap))
-    pruned.checkProjectionOrdinals()
-    pruned
+  override protected def withRemappedQuery(
+      newQuery: LogicalPlan,
+      ordinalMap: Int => Int): ReplaceData = {
+    copy(query = newQuery, projections = projections.remapOrdinals(ordinalMap))
   }
 
   override def withNewTable(newTable: NamedRelation): ReplaceData = copy(table = newTable)
@@ -591,10 +610,10 @@ case class WriteDelta(
 
   override def withNewQuery(newQuery: LogicalPlan): V2WriteCommand = copy(query = newQuery)
 
-  override def withPrunedQuery(newQuery: LogicalPlan, ordinalMap: Int => Int): WriteDelta = {
-    val pruned = copy(query = newQuery, projections = projections.remapOrdinals(ordinalMap))
-    pruned.checkProjectionOrdinals()
-    pruned
+  override protected def withRemappedQuery(
+      newQuery: LogicalPlan,
+      ordinalMap: Int => Int): WriteDelta = {
+    copy(query = newQuery, projections = projections.remapOrdinals(ordinalMap))
   }
 
   override def withNewTable(newTable: NamedRelation): V2WriteCommand = copy(table = newTable)

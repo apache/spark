@@ -45,10 +45,10 @@ public interface RowLevelOperationInfo {
    * <p>
    * A column is reported unless its assigned value is the column itself, so identity assignments
    * such as {@code SET a = a} are excluded. With the default CHAR and VARCHAR handling, a
-   * self-assignment on a CHAR or VARCHAR column is still reported, because Spark pads or
-   * length-checks the assigned value. Nested struct field updates are reported at root-column
-   * granularity (e.g. {@code SET s.c1 = -1} returns {@code s}), even when the field is assigned to
-   * itself.
+   * self-assignment on a column whose type contains CHAR or VARCHAR at any depth is still reported,
+   * because Spark pads or length-checks the assigned value. Nested struct field updates are
+   * reported at root-column granularity (e.g. {@code SET s.c1 = -1} returns {@code s}), even when
+   * the field is assigned to itself.
    * <p>
    * Metadata columns are never reported. Column names match the case used in the table schema, and
    * a top-level column whose name contains a dot is one name part.

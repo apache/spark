@@ -24,6 +24,7 @@ import org.apache.spark.sql.{AnalysisException, Row}
 import org.apache.spark.sql.catalyst.optimizer.ColumnPruning
 import org.apache.spark.sql.catalyst.plans.logical.Union
 import org.apache.spark.sql.connector.catalog.{InMemoryBaseTable, InMemoryRowLevelOperationTable}
+import org.apache.spark.sql.connector.expressions.FieldReference
 import org.apache.spark.sql.connector.write.{RowLevelOperation, RowLevelOperationTable}
 import org.apache.spark.sql.connector.write.RowLevelOperation.Command.UPDATE
 import org.apache.spark.sql.execution.datasources.v2.{DataSourceV2Relation, V2Writes}
@@ -46,10 +47,10 @@ trait ColumnUpdateTableSharedTests extends UpdateTableSuiteBase {
   protected def scanMetadataColumns: String = ", _partition STRING, index INT"
 
   // the class name of the operation that `reqAttrsTableProps` builds
-  protected def reqAttrsOperationClass: String = if (deltaUpdate) {
-    classOf[InMemoryRowLevelOperationTable#DeltaBasedColumnUpdateOperationWithReqAttrs].getName
+  protected def columnUpdateOperationClass: String = if (deltaUpdate) {
+    classOf[InMemoryRowLevelOperationTable#DeltaBasedColumnUpdateOperation].getName
   } else {
-    classOf[InMemoryRowLevelOperationTable#PartitionBasedColumnUpdateOperationWithReqAttrs].getName
+    classOf[InMemoryRowLevelOperationTable#PartitionBasedColumnUpdateOperation].getName
   }
 
   // `base` with the given table properties added; a given key replaces the same key in `base`
@@ -170,7 +171,8 @@ trait ColumnUpdateTableSharedTests extends UpdateTableSuiteBase {
             sql(s"UPDATE $tableNameAsString SET bonus = 0 WHERE dep = 'hr'")
           },
           condition = "COLUMN_UPDATE_REQUIRED_DATA_ATTRIBUTES_MISSING_UPDATED_COLUMNS",
-          parameters = Map("connector" -> reqAttrsOperationClass, "missingColumns" -> "[`bonus`]"))
+          parameters =
+            Map("connector" -> columnUpdateOperationClass, "missingColumns" -> "[`bonus`]"))
       }
     }
   }
@@ -186,14 +188,15 @@ trait ColumnUpdateTableSharedTests extends UpdateTableSuiteBase {
     val relation = write.table.asInstanceOf[DataSourceV2Relation]
     val operationTable = relation.table.asInstanceOf[RowLevelOperationTable]
     val t = operationTable.table.asInstanceOf[InMemoryRowLevelOperationTable]
+    val pkAndDep = Seq(FieldReference("pk"), FieldReference("dep"))
     val replacements: Seq[(RowLevelOperation, String)] = if (deltaUpdate) {
       Seq(
         t.DeltaBasedOperation(UPDATE, CaseInsensitiveStringMap.empty()) -> "[pk, salary, dep]",
-        new t.DeltaBasedColumnUpdateOperation(UPDATE) -> "[pk, dep]")
+        new t.DeltaBasedColumnUpdateOperation(UPDATE, pkAndDep) -> "[pk, dep]")
     } else {
       Seq(
         t.PartitionBasedOperation(UPDATE, CaseInsensitiveStringMap.empty()) -> "[pk, salary, dep]",
-        new t.PartitionBasedColumnUpdateOperation(UPDATE) -> "[pk, dep]")
+        new t.PartitionBasedColumnUpdateOperation(UPDATE, pkAndDep) -> "[pk, dep]")
     }
     replacements.foreach { case (operation, expectedNames) =>
       assert(operation != operationTable.operation)
@@ -413,10 +416,12 @@ trait ColumnUpdateTableSharedTests extends UpdateTableSuiteBase {
   }
 
   test("column-update: row-level DELETE falls back to full-width rows") {
+    // a delta-based scan, which Spark prunes for a DELETE, also returns columns it did not ask for
     createAndInitTable("pk INT NOT NULL, salary INT, dep STRING",
       """{ "pk": 1, "salary": 100, "dep": "hr" }
         |{ "pk": 2, "salary": 200, "dep": "hr" }
-        |""".stripMargin)
+        |""".stripMargin,
+      tablePropsWith(extraTableProps, InMemoryBaseTable.SIMULATE_PARTIAL_COLUMN_PRUNING -> "true"))
     checkDeleteFallsBackToFullWidthRows(Row(2, 200, "hr"))
   }
 

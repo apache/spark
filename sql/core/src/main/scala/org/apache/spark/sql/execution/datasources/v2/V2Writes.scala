@@ -137,12 +137,14 @@ object V2Writes extends Rule[LogicalPlan] with PredicateHelper {
   }
 
   /**
-   * Whether a row-level write delivers narrow rows for updated, copied, and reinserted records.
+   * Whether a row-level write delivers narrow rows for updated, copied, and reinserted records:
+   * an UPDATE whose operation mixes in `SupportsColumnUpdates` and declares at least one column.
    * This must match the writes whose write relation RewriteUpdateTable narrows, even when the
    * declared columns cover the whole table.
    */
-  private[v2] def hasNarrowRows(write: RowLevelWrite): Boolean = {
-    write.operation.command == UPDATE && RewriteRowLevelCommand.narrowsWrite(write.operation)
+  private[v2] def hasNarrowRows(write: RowLevelWrite): Boolean = write.operation match {
+    case op: SupportsColumnUpdates => op.command == UPDATE && op.requiredDataAttributes.nonEmpty
+    case _ => false
   }
 
   /**

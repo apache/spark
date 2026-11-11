@@ -20,8 +20,8 @@ package org.apache.spark.sql.catalyst.analysis
 import scala.collection.mutable
 
 import org.apache.spark.SparkException
-import org.apache.spark.sql.catalyst.{ProjectingInternalRow, SQLConfHelper}
-import org.apache.spark.sql.catalyst.expressions.{Alias, Attribute, AttributeMap, AttributeReference, AttributeSet, Expression, ExprId, If, Literal, MetadataAttribute, NamedExpression, V2ExpressionUtils}
+import org.apache.spark.sql.catalyst.ProjectingInternalRow
+import org.apache.spark.sql.catalyst.expressions.{Alias, Attribute, AttributeReference, AttributeSet, Expression, ExprId, If, Literal, MetadataAttribute, NamedExpression, V2ExpressionUtils}
 import org.apache.spark.sql.catalyst.plans.logical.{Assignment, Expand, LogicalPlan, MergeRows, Project, Union}
 import org.apache.spark.sql.catalyst.rules.Rule
 import org.apache.spark.sql.catalyst.util.{GeneratedColumn, ReplaceDataProjections,
@@ -33,8 +33,9 @@ import org.apache.spark.sql.connector.write.{RowLevelOperation, RowLevelOperatio
 import org.apache.spark.sql.connector.write.RowLevelOperation.Command
 import org.apache.spark.sql.errors.QueryCompilationErrors
 import org.apache.spark.sql.execution.datasources.v2.DataSourceV2Relation
+import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types.{IntegerType, StructField, StructType}
-import org.apache.spark.sql.util.{CaseInsensitiveStringMap, SchemaUtils}
+import org.apache.spark.sql.util.CaseInsensitiveStringMap
 import org.apache.spark.util.ArrayImplicits._
 
 trait RewriteRowLevelCommand extends Rule[LogicalPlan] {
@@ -368,29 +369,21 @@ trait RewriteRowLevelCommand extends Rule[LogicalPlan] {
   }
 }
 
-object RewriteRowLevelCommand extends SQLConfHelper {
-
-  /**
-   * Whether the operation asks for narrow rows: it mixes in `SupportsColumnUpdates` and declares at
-   * least one column. Only UPDATE delivers them (see `V2Writes.hasNarrowRows`). An operation that
-   * declares none receives full-width rows.
-   */
-  private[sql] def narrowsWrite(operation: RowLevelOperation): Boolean = operation match {
-    case op: SupportsColumnUpdates => op.requiredDataAttributes.nonEmpty
-    case _ => false
-  }
+object RewriteRowLevelCommand {
 
   /**
    * Resolves the connector-declared required data attributes for column-update writes against
-   * the given relation, in declared order and with the relation's spelling. Nested fields,
-   * duplicate columns, columns that do not exist in the relation (including a reference with no
-   * name parts) and metadata columns are rejected with an `AnalysisException`.
+   * the given relation, in declared order and with the relation's spelling. A name matches the
+   * column with the same spelling, or else the one column that the session's resolver matches.
+   * Nested fields, duplicate columns, names that no column has and that the resolver matches to no
+   * column or to several (including a reference with no name parts) and metadata columns are
+   * rejected with an `AnalysisException`.
    */
   private[sql] def resolveRequiredDataAttrs(
       relation: LogicalPlan,
       operation: SupportsColumnUpdates): Seq[AttributeReference] = {
-    val refs = operation.requiredDataAttributes.toImmutableArraySeq
-    val names = refs.map(_.fieldNames.toImmutableArraySeq)
+    val names = operation.requiredDataAttributes.toImmutableArraySeq
+      .map(_.fieldNames.toImmutableArraySeq)
     val nameless = names.filter(_.isEmpty)
     if (nameless.nonEmpty) {
       throw QueryCompilationErrors.unknownRequiredDataAttributeError(
@@ -401,17 +394,16 @@ object RewriteRowLevelCommand extends SQLConfHelper {
       throw QueryCompilationErrors.nestedRequiredDataAttributeError(
         operation.getClass.getName, nested)
     }
-    val normalizedNames = names.map(n => SchemaUtils.foldName(n.head, conf.caseSensitiveAnalysis))
-    val counts = normalizedNames.groupBy(identity).view.mapValues(_.size).toMap
-    val duplicates = names.zip(normalizedNames)
-      .filter { case (_, name) => counts(name) > 1 }
-      .distinctBy(_._2)
-      .map(_._1)
-    if (duplicates.nonEmpty) {
-      throw QueryCompilationErrors.duplicateRequiredDataAttributeError(
-        operation.getClass.getName, duplicates)
+    // metadataOutput repeats the metadata columns that a rule already added to the output
+    val attrs = (relation.output ++ relation.metadataOutput).distinctBy(_.exprId)
+    val resolvedOpts = names.map { name =>
+      attrs.find(_.name == name.head).orElse {
+        attrs.filter(attr => SQLConf.get.resolver(attr.name, name.head)) match {
+          case Seq(attr) => Some(attr)
+          case _ => None
+        }
+      }
     }
-    val resolvedOpts = refs.map(V2ExpressionUtils.resolveRefOpt(_, relation))
     val unknown = names.zip(resolvedOpts).collect {
       case (name, None) => name
     }
@@ -419,7 +411,16 @@ object RewriteRowLevelCommand extends SQLConfHelper {
       throw QueryCompilationErrors.unknownRequiredDataAttributeError(
         operation.getClass.getName, unknown)
     }
-    val resolved = resolvedOpts.flatten.map(_.toAttribute)
+    val resolved = resolvedOpts.flatten
+    val counts = resolved.groupBy(_.exprId).view.mapValues(_.size).toMap
+    val duplicates = names.zip(resolved)
+      .filter { case (_, attr) => counts(attr.exprId) > 1 }
+      .distinctBy(_._2.exprId)
+      .map(_._1)
+    if (duplicates.nonEmpty) {
+      throw QueryCompilationErrors.duplicateRequiredDataAttributeError(
+        operation.getClass.getName, duplicates)
+    }
     val metadata = names.zip(resolved).collect {
       case (name, attr) if MetadataAttribute.isValid(attr.metadata) => name
     }
@@ -427,10 +428,6 @@ object RewriteRowLevelCommand extends SQLConfHelper {
       throw QueryCompilationErrors.metadataRequiredDataAttributeError(
         operation.getClass.getName, metadata)
     }
-    // `resolveRefOpt` matches with the session's resolver but keeps the declared spelling, so map
-    // each resolved attribute back to the relation's own (by exprId) to avoid a spelling mismatch
-    // between the connector's declaration and the table's actual column name.
-    val relationAttrs = AttributeMap(relation.output.map(a => a -> a))
-    resolved.map(a => relationAttrs(a).asInstanceOf[AttributeReference])
+    resolved.map(_.asInstanceOf[AttributeReference])
   }
 }

@@ -354,7 +354,7 @@ class GroupBasedColumnUpdateTableSuite extends UpdateTableSuiteBase
               "column-update-cow-unread-filter-attrs" -> "true",
               "use-catalyst-runtime-filtering" -> catalystFiltering.toString))
           val t = table
-          val scan = new t.PartitionBasedColumnUpdateOperation(UPDATE)
+          val scan = new t.PartitionBasedColumnUpdateOperation(UPDATE, Nil)
             .newScanBuilder(CaseInsensitiveStringMap.empty()).build()
           assert(scan.isInstanceOf[SupportsRuntimeCatalystFiltering] == catalystFiltering)
           import testImplicits._
@@ -400,7 +400,33 @@ class GroupBasedColumnUpdateTableSuite extends UpdateTableSuiteBase
           sql(s"UPDATE $tableNameAsString SET salary = -1 WHERE $cond")
         },
         condition = "COLUMN_UPDATE_UNDECLARED_WRITE_REQUIREMENT_COLUMNS",
-        parameters = Map("connector" -> reqAttrsOperationClass, "columns" -> "[`dep`]"))
+        parameters = Map("connector" -> columnUpdateOperationClass, "columns" -> "[`dep`]"))
+    }
+  }
+
+  test("column-update ReplaceData: the lookup column `pk` declared in another case") {
+    Seq(
+      ("salary = -1", Some(Seq("PK", "salary", "dep")), Row(1, -1, "hr")),
+      // assigning the lookup column falls back to full width
+      ("PK = 10", None, Row(10, 100, "hr"))
+    ).foreach { case (assignment, writeColumns, updatedRow) =>
+      withTable(tableNameAsString) {
+        createAndInitTable("PK INT NOT NULL, salary INT, dep STRING",
+          """{ "PK": 1, "salary": 100, "dep": "hr" }
+            |{ "PK": 2, "salary": 200, "dep": "software" }
+            |""".stripMargin,
+          reqAttrsTableProps("pk,salary,dep"))
+
+        sql(s"UPDATE $tableNameAsString SET $assignment WHERE PK = 1")
+
+        writeColumns match {
+          case Some(columns) => checkLastColumnUpdateSchema(columns: _*)
+          case None => checkLastWriteIsFullWidth()
+        }
+        checkAnswer(
+          sql(s"SELECT * FROM $tableNameAsString"),
+          updatedRow :: Row(2, 200, "software") :: Nil)
+      }
     }
   }
 

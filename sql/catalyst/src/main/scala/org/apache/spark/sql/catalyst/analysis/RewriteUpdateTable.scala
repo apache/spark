@@ -44,10 +44,14 @@ object RewriteUpdateTable extends RewriteRowLevelCommand {
       EliminateSubqueryAliases(aliasedTable) match {
         case r @ ExtractV2Table(tbl: SupportsRowLevelOperations) =>
           checkNoGeneratedColumns(r, UPDATE)
-          val updatedAttrs = collectUpdatedAttrs(r, assignments)
+          val (metadataUpdates, dataUpdates) = nonIdentityAssignments(r, assignments).partition {
+            case (attr, _) => MetadataAttribute.isValid(attr.metadata)
+          }
+          val updatedAttrs = dataUpdates.map(_._1)
           val table = buildOperationTable(tbl, UPDATE, r.options, updatedAttrs)
           val updateCond = cond.getOrElse(TrueLiteral)
-          val narrowAttrs = resolveNarrowWriteAttrs(r, table.operation, assignments, updatedAttrs)
+          val narrowAttrs = resolveNarrowWriteAttrs(
+            r, table.operation, metadataUpdates.map(_._2), updatedAttrs)
           val writeAttrs = narrowAttrs.getOrElse(r.output)
           table.operation match {
             case _: SupportsDelta =>
@@ -255,24 +259,10 @@ object RewriteUpdateTable extends RewriteRowLevelCommand {
   }
 
   /**
-   * Returns the data columns that these assignments set to a new value, skipping identity
-   * assignments and metadata columns. The assignments must be aligned with the relation output,
-   * one per column in order, so each assignment is paired with its column. A column is reported as
-   * the relation's attribute, so it keeps the table's spelling when the SET clause spells it
-   * differently.
-   */
-  private def collectUpdatedAttrs(
-      relation: DataSourceV2Relation,
-      assignments: Seq[Assignment]): Seq[AttributeReference] = {
-    nonIdentityAssignments(relation, assignments).collect {
-      case (attr, _) if !MetadataAttribute.isValid(attr.metadata) => attr
-    }
-  }
-
-  /**
    * Pairs each column of the relation with its assignment and keeps the pairs whose assignment
    * sets a new value. The assignments must be aligned with the relation output, one per column in
-   * order.
+   * order. A column is the relation's attribute, so it keeps the table's spelling when the SET
+   * clause spells it differently.
    */
   private def nonIdentityAssignments(
       relation: DataSourceV2Relation,
@@ -293,7 +283,7 @@ object RewriteUpdateTable extends RewriteRowLevelCommand {
   private def resolveNarrowWriteAttrs(
       relation: DataSourceV2Relation,
       operation: RowLevelOperation,
-      assignments: Seq[Assignment],
+      metadataUpdates: Seq[Assignment],
       updatedAttrs: Seq[AttributeReference]): Option[Seq[AttributeReference]] = operation match {
     case op: SupportsColumnUpdates =>
       val attrs = RewriteRowLevelCommand.resolveRequiredDataAttrs(relation, op)
@@ -301,7 +291,7 @@ object RewriteUpdateTable extends RewriteRowLevelCommand {
       if (attrs.isEmpty) {
         None
       } else {
-        validateNoMetadataAssignments(relation, assignments)
+        validateNoMetadataAssignments(metadataUpdates)
         Some(attrs)
       }
     case _ =>
@@ -314,16 +304,11 @@ object RewriteUpdateTable extends RewriteRowLevelCommand {
    * schema lets an UPDATE assign them; on other tables `ResolveRowLevelCommandAssignments` rejects
    * such an assignment, or drops it under the legacy config.
    */
-  private def validateNoMetadataAssignments(
-      relation: DataSourceV2Relation,
-      assignments: Seq[Assignment]): Unit = {
-    val metadataAssignments = nonIdentityAssignments(relation, assignments).collect {
-      case (attr, a) if MetadataAttribute.isValid(attr.metadata) => a
-    }
-    if (metadataAssignments.nonEmpty) {
+  private def validateNoMetadataAssignments(metadataUpdates: Seq[Assignment]): Unit = {
+    if (metadataUpdates.nonEmpty) {
       throw QueryCompilationErrors.invalidRowLevelOperationAssignments(
-        metadataAssignments,
-        RowLevelAssignmentResolution.metadataColumnAssignmentErrors(metadataAssignments))
+        metadataUpdates,
+        RowLevelAssignmentResolution.metadataColumnAssignmentErrors(metadataUpdates))
     }
   }
 

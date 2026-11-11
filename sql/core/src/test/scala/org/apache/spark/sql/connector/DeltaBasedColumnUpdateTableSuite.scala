@@ -25,8 +25,8 @@ import org.apache.spark.sql.catalyst.analysis.RewriteRowLevelCommand
 import org.apache.spark.sql.catalyst.optimizer.ColumnPruning
 import org.apache.spark.sql.catalyst.plans.logical.WriteDelta
 import org.apache.spark.sql.catalyst.util.RowDeltaUtils.ORIGINAL_ROW_ID_VALUE_PREFIX
-import org.apache.spark.sql.connector.catalog.{Delete, InMemoryBaseTable, InMemoryRowLevelOperationTable, Reinsert}
-import org.apache.spark.sql.connector.expressions.{FieldReference, NamedReference}
+import org.apache.spark.sql.connector.catalog.{Delete, InMemoryRowLevelOperationTable, Reinsert}
+import org.apache.spark.sql.connector.expressions.FieldReference
 import org.apache.spark.sql.connector.write.LogicalWriteInfo
 import org.apache.spark.sql.connector.write.RowLevelOperation.Command.UPDATE
 import org.apache.spark.sql.errors.QueryCompilationErrors
@@ -67,28 +67,14 @@ class DeltaBasedColumnUpdateTableSuite extends DeltaBasedUpdateTableSuiteBase
   private val splitWithRowIdOperationClass =
     classOf[InMemoryRowLevelOperationTable#DeltaBasedColumnUpdateSplitOperationWithRowId].getName
 
-  private val splitReqAttrsOperationClass =
-    classOf[InMemoryRowLevelOperationTable#DeltaBasedColumnUpdateSplitOperationWithReqAttrs].getName
-
   private def splitReqAttrsTableProps(reqAttrs: String): java.util.Map[String, String] = {
     tablePropsWith(reqAttrsTableProps(reqAttrs), "split-updates" -> "true")
-  }
-
-  private def createAndInitTableWithReqAttrs(
-      reqAttrs: String,
-      schemaString: String,
-      jsonData: String): Unit = {
-    createAndInitTable(schemaString, jsonData, reqAttrsTableProps(reqAttrs))
   }
 
   private val splitTableProps = tablePropsWith(extraTableProps, "split-updates" -> "true")
 
   private val splitPartitionRowIdTableProps =
     java.util.Map.of("column-update-split-row-id", "_partition")
-
-  private def createAndInitTableSplit(schemaString: String, jsonData: String): Unit = {
-    createAndInitTable(schemaString, jsonData, splitTableProps)
-  }
 
   test("column-update: column update schema contains a single assigned column") {
     Seq(extraTableProps, splitTableProps).foreach { props =>
@@ -142,29 +128,33 @@ class DeltaBasedColumnUpdateTableSuite extends DeltaBasedUpdateTableSuiteBase
   }
 
   test("column-update: CHAR and VARCHAR self-assignments are reported as updated") {
-    createTable("pk INT NOT NULL, id INT, c CHAR(3), v VARCHAR(10), dep STRING")
-    sql(s"INSERT INTO $tableNameAsString VALUES (1, 1, 'a', 'x', 'hr')")
+    createTable("pk INT NOT NULL, id INT, c CHAR(3), v VARCHAR(10), " +
+      "a ARRAY<CHAR(3)>, m MAP<STRING, CHAR(3)>, s STRUCT<f: CHAR(3)>, dep STRING")
+    sql(s"INSERT INTO $tableNameAsString VALUES " +
+      "(1, 1, 'a', 'x', array('b'), map('k', 'c'), named_struct('f', 'd'), 'hr')")
 
-    sql(s"UPDATE $tableNameAsString SET id = id, c = c, v = v WHERE pk = 1")
+    sql(s"UPDATE $tableNameAsString SET id = id, c = c, v = v, a = a, m = m, s = s WHERE pk = 1")
 
-    checkLastUpdatedColumns("c", "v")
+    checkLastUpdatedColumns("c", "v", "a", "m", "s")
     checkAnswer(
       sql(s"SELECT * FROM $tableNameAsString"),
-      Row(1, 1, "a  ", "x", "hr") :: Nil)
+      Row(1, 1, "a  ", "x", Seq("b  "), Map("k" -> "c  "), Row("d  "), "hr") :: Nil)
   }
 
   test("column-update: CHAR and VARCHAR self-assignments are not reported when the types are " +
     "preserved") {
     withSQLConf(SQLConf.PRESERVE_CHAR_VARCHAR_TYPE_INFO.key -> "true") {
-      createTable("pk INT NOT NULL, id INT, c CHAR(3), v VARCHAR(10), dep STRING")
-      sql(s"INSERT INTO $tableNameAsString VALUES (1, 1, 'a', 'x', 'hr')")
+      createTable("pk INT NOT NULL, id INT, c CHAR(3), v VARCHAR(10), " +
+        "a ARRAY<CHAR(3)>, m MAP<STRING, CHAR(3)>, s STRUCT<f: CHAR(3)>, dep STRING")
+      sql(s"INSERT INTO $tableNameAsString VALUES " +
+        "(1, 1, 'a', 'x', array('b'), map('k', 'c'), named_struct('f', 'd'), 'hr')")
 
-      sql(s"UPDATE $tableNameAsString SET id = -1, c = c, v = v WHERE pk = 1")
+      sql(s"UPDATE $tableNameAsString SET id = -1, c = c, v = v, a = a, m = m, s = s WHERE pk = 1")
 
       checkLastUpdatedColumns("id")
       checkAnswer(
         sql(s"SELECT * FROM $tableNameAsString"),
-        Row(1, -1, "a  ", "x", "hr") :: Nil)
+        Row(1, -1, "a  ", "x", Seq("b  "), Map("k" -> "c  "), Row("d  "), "hr") :: Nil)
     }
   }
 
@@ -210,10 +200,11 @@ class DeltaBasedColumnUpdateTableSuite extends DeltaBasedUpdateTableSuiteBase
   }
 
   test("column-update split: row-level DELETE falls back to full-width rows") {
-    createAndInitTableSplit("pk INT NOT NULL, salary INT, dep STRING",
+    createAndInitTable("pk INT NOT NULL, salary INT, dep STRING",
       """{ "pk": 1, "salary": 100, "dep": "hr" }
         |{ "pk": 2, "salary": 200, "dep": "hr" }
-        |""".stripMargin)
+        |""".stripMargin,
+      splitTableProps)
     checkDeleteFallsBackToFullWidthRows(Row(2, 200, "hr"))
   }
 
@@ -229,27 +220,28 @@ class DeltaBasedColumnUpdateTableSuite extends DeltaBasedUpdateTableSuiteBase
   }
 
   test("column-update split: MERGE falls back to full-width rows") {
-    createAndInitTableSplit("pk INT NOT NULL, salary INT, dep STRING",
+    createAndInitTable("pk INT NOT NULL, salary INT, dep STRING",
       """{ "pk": 1, "salary": 100, "dep": "hr" }
         |{ "pk": 2, "salary": 200, "dep": "software" }
-        |""".stripMargin)
+        |""".stripMargin,
+      splitTableProps)
     checkMergeFallsBackToFullWidthRows()
   }
 
   test("column-update: undeclared write requirement columns are rejected") {
     val excludeColumnPruning = SQLConf.OPTIMIZER_EXCLUDED_RULES.key -> ColumnPruning.ruleName
     Seq(
-      (reqAttrsTableProps("pk,salary"), "dep", reqAttrsOperationClass, "[`dep`]"),
-      (splitReqAttrsTableProps("pk,salary"), "dep", splitReqAttrsOperationClass, "[`dep`]"),
+      (reqAttrsTableProps("pk,salary"), "dep", columnUpdateOperationClass, "[`dep`]"),
+      (splitReqAttrsTableProps("pk,salary"), "dep", splitOperationClass, "[`dep`]"),
       (tablePropsWith(reqAttrsTableProps("pk,salary"), "column-update-order-by" -> "pk"), "dep",
-        reqAttrsOperationClass, "[`dep`]"),
+        columnUpdateOperationClass, "[`dep`]"),
       (tablePropsWith(reqAttrsTableProps("pk,salary"), "column-update-order-by" -> "dep"), "pk",
-        reqAttrsOperationClass, "[`dep`]"),
+        columnUpdateOperationClass, "[`dep`]"),
       (tablePropsWith(reqAttrsTableProps("pk,salary"),
-        "column-update-cluster-by-nested-transform" -> "true"), "dep", reqAttrsOperationClass,
+        "column-update-cluster-by-nested-transform" -> "true"), "dep", columnUpdateOperationClass,
         "[`dep`]"),
-      (reqAttrsTableProps("pk,salary"), "id,dep", reqAttrsOperationClass, "[`id`, `dep`]"),
-      (reqAttrsTableProps("pk,salary,s"), "s.missing", reqAttrsOperationClass,
+      (reqAttrsTableProps("pk,salary"), "id,dep", columnUpdateOperationClass, "[`id`, `dep`]"),
+      (reqAttrsTableProps("pk,salary,s"), "s.missing", columnUpdateOperationClass,
         "[`s`.`missing` (FIELD_NOT_FOUND)]")
     ).foreach { case (props, clusterBy, operationClass, columns) =>
       withTable(tableNameAsString) {
@@ -276,9 +268,9 @@ class DeltaBasedColumnUpdateTableSuite extends DeltaBasedUpdateTableSuiteBase
   test("column-update: an empty write requirement column name is reported as <empty>") {
     checkError(
       exception = QueryCompilationErrors.undeclaredWriteRequirementColumnsError(
-        reqAttrsOperationClass, Seq(Seq.empty[String] -> None)).asInstanceOf[AnalysisException],
+        columnUpdateOperationClass, Seq(Seq.empty[String] -> None)).asInstanceOf[AnalysisException],
       condition = "COLUMN_UPDATE_UNDECLARED_WRITE_REQUIREMENT_COLUMNS",
-      parameters = Map("connector" -> reqAttrsOperationClass, "columns" -> "[<empty>]"))
+      parameters = Map("connector" -> columnUpdateOperationClass, "columns" -> "[<empty>]"))
   }
 
   test("column-update: distribution by an undeclared row ID column is allowed") {
@@ -301,11 +293,12 @@ class DeltaBasedColumnUpdateTableSuite extends DeltaBasedUpdateTableSuiteBase
   }
 
   test("column-update: an undeclared, unreferenced partition column is not read") {
-    createAndInitTableWithReqAttrs("pk,id", "pk INT NOT NULL, id INT, dep STRING",
+    createAndInitTable("pk INT NOT NULL, id INT, dep STRING",
       """{ "pk": 1, "id": 1, "dep": "hr" }
         |{ "pk": 2, "id": 2, "dep": "software" }
         |{ "pk": 3, "id": 3, "dep": "hr" }
-        |""".stripMargin)
+        |""".stripMargin,
+      reqAttrsTableProps("pk,id"))
 
     executeAndCheckScan(
       s"UPDATE $tableNameAsString SET id = -1 WHERE pk = 1", "pk INT, _partition STRING")
@@ -316,10 +309,11 @@ class DeltaBasedColumnUpdateTableSuite extends DeltaBasedUpdateTableSuiteBase
 
   test("column-update: requiredDataAttributes resolves case-insensitively without adopting the " +
     "declared spelling") {
-    createAndInitTableWithReqAttrs("PK,SALARY,dep", "pk INT NOT NULL, salary INT, dep STRING",
+    createAndInitTable("pk INT NOT NULL, salary INT, dep STRING",
       """{ "pk": 1, "salary": 100, "dep": "hr" }
         |{ "pk": 2, "salary": 200, "dep": "software" }
-        |""".stripMargin)
+        |""".stripMargin,
+      reqAttrsTableProps("PK,SALARY,dep"))
 
     sql(s"UPDATE $tableNameAsString SET salary = salary + 1 WHERE pk = 1")
 
@@ -329,31 +323,52 @@ class DeltaBasedColumnUpdateTableSuite extends DeltaBasedUpdateTableSuiteBase
       Row(1, 101, "hr") :: Row(2, 200, "software") :: Nil)
   }
 
-  test("column-update: DELETE on a scan that returns unrequested columns is unaffected") {
-    createAndInitTable("pk INT NOT NULL, salary INT, bonus INT, dep STRING",
-      """{ "pk": 1, "salary": 100, "bonus": 10, "dep": "hr" }
-        |{ "pk": 2, "salary": 200, "bonus": 20, "dep": "software" }
-        |""".stripMargin,
-      tablePropsWith(extraTableProps, InMemoryBaseTable.SIMULATE_PARTIAL_COLUMN_PRUNING -> "true"))
-
-    sql(s"DELETE FROM $tableNameAsString WHERE pk < 2")
-
-    checkAnswer(
-      sql(s"SELECT * FROM $tableNameAsString"),
-      Row(2, 200, 20, "software") :: Nil)
-  }
-
   test("column-update: case-sensitive analysis accepts columns that differ only in case") {
     withSQLConf(SQLConf.CASE_SENSITIVE.key -> "true") {
-      createAndInitTableWithReqAttrs("pk,salary,SALARY,dep",
-        "pk INT NOT NULL, salary INT, SALARY INT, dep STRING",
+      createAndInitTable("pk INT NOT NULL, salary INT, SALARY INT, dep STRING",
         """{ "pk": 1, "salary": 100, "SALARY": 200, "dep": "hr" }
-          |""".stripMargin)
+          |""".stripMargin,
+        reqAttrsTableProps("pk,salary,SALARY,dep"))
 
       sql(s"UPDATE $tableNameAsString SET salary = -1 WHERE pk = 1")
 
       checkLastColumnUpdateSchema("pk", "salary", "SALARY", "dep")
       checkAnswer(sql(s"SELECT * FROM $tableNameAsString"), Row(1, -1, 200, "hr") :: Nil)
+    }
+  }
+
+  test("column-update: a declared name matches the same spelling, or else the one column that " +
+    "matches case-insensitively") {
+    Seq(
+      "pk,salary,SALARY,dep" -> Some(Seq("pk", "salary", "SALARY", "dep")),
+      "pk,SALARY,dep" -> Some(Seq("pk", "SALARY", "dep")),
+      "PK,SALARY,dep" -> Some(Seq("pk", "SALARY", "dep")),
+      "pk,Salary,dep" -> None
+    ).foreach { case (reqAttrs, writeColumns) =>
+      withTable(tableNameAsString) {
+        withSQLConf(SQLConf.CASE_SENSITIVE.key -> "true") {
+          createAndInitTable("pk INT NOT NULL, salary INT, SALARY INT, dep STRING",
+            """{ "pk": 1, "salary": 100, "SALARY": 200, "dep": "hr" }
+              |""".stripMargin,
+            reqAttrsTableProps(reqAttrs))
+        }
+
+        val update = s"UPDATE $tableNameAsString SET pk = 3 WHERE pk = 1"
+        writeColumns match {
+          case Some(columns) =>
+            sql(update)
+            checkLastColumnUpdateSchema(columns: _*)
+            withSQLConf(SQLConf.CASE_SENSITIVE.key -> "true") {
+              checkAnswer(sql(s"SELECT * FROM $tableNameAsString"), Row(3, 100, 200, "hr") :: Nil)
+            }
+          case None =>
+            checkError(
+              exception = intercept[AnalysisException](sql(update)),
+              condition = "COLUMN_UPDATE_UNKNOWN_REQUIRED_DATA_ATTRIBUTE",
+              parameters = Map(
+                "connector" -> columnUpdateOperationClass, "unknownAttributes" -> "[`Salary`]"))
+        }
+      }
     }
   }
 
@@ -373,17 +388,41 @@ class DeltaBasedColumnUpdateTableSuite extends DeltaBasedUpdateTableSuiteBase
         "missingColumns" -> "[`a.b`]")
     ).foreach { case (reqAttrs, condition, columns) =>
       withTable(tableNameAsString) {
-        createAndInitTableWithReqAttrs(reqAttrs,
+        createAndInitTable(
           "pk INT NOT NULL, salary INT, s STRUCT<c1: INT, c2: INT>, `a.b` INT, dep STRING",
           """{ "pk": 1, "salary": 100, "s": { "c1": 1, "c2": 2 }, "a.b": 1, "dep": "hr" }
-            |""".stripMargin)
+            |""".stripMargin,
+          reqAttrsTableProps(reqAttrs))
 
         checkError(
           exception = intercept[AnalysisException] {
             sql(s"UPDATE $tableNameAsString SET salary = -1, `a.b` = -1 WHERE pk = 1")
           },
           condition = condition,
-          parameters = Map("connector" -> reqAttrsOperationClass, columns))
+          parameters = Map("connector" -> columnUpdateOperationClass, columns))
+      }
+    }
+  }
+
+  test("column-update: a declared metadata column in any case is rejected as a metadata column " +
+    "when the relation already has the metadata columns") {
+    // on a table that accepts any schema, an UPDATE that lists the metadata columns adds them to
+    // the relation's output
+    Seq("_partition", "_PARTITION").foreach { name =>
+      withTable(tableNameAsString) {
+        createAndInitTable("pk INT NOT NULL, salary INT, dep STRING",
+          """{ "pk": 1, "salary": 100, "dep": "hr" }
+            |""".stripMargin,
+          tablePropsWith(reqAttrsTableProps(s"pk,salary,dep,$name"), "accept-any-schema" -> "true"))
+
+        checkError(
+          exception = intercept[AnalysisException] {
+            sql(s"UPDATE $tableNameAsString SET pk = pk, salary = -1, dep = dep, " +
+              "index = index, _partition = _partition")
+          },
+          condition = "COLUMN_UPDATE_METADATA_REQUIRED_DATA_ATTRIBUTE",
+          parameters = Map(
+            "connector" -> columnUpdateOperationClass, "metadataAttributes" -> s"[`$name`]"))
       }
     }
   }
@@ -393,11 +432,9 @@ class DeltaBasedColumnUpdateTableSuite extends DeltaBasedUpdateTableSuiteBase
       """{ "pk": 1, "salary": 100, "dep": "hr" }
         |""".stripMargin)
     val t = table
-    val operation = new t.DeltaBasedColumnUpdateOperation(UPDATE) {
-      override def requiredDataAttributes(): Array[NamedReference] =
-        Array(FieldReference(Seq.empty[String]), FieldReference("pk"),
-          FieldReference(Seq.empty[String]))
-    }
+    val nameless = FieldReference(Seq.empty[String])
+    val operation = new t.DeltaBasedColumnUpdateOperation(
+      UPDATE, Seq(nameless, FieldReference("pk"), nameless))
 
     checkError(
       exception = intercept[AnalysisException] {
@@ -410,10 +447,11 @@ class DeltaBasedColumnUpdateTableSuite extends DeltaBasedUpdateTableSuiteBase
   }
 
   test("column-update split: delete and reinsert carry the row ID and preserved metadata") {
-    createAndInitTableSplit("pk INT NOT NULL, id INT, dep STRING",
+    createAndInitTable("pk INT NOT NULL, id INT, dep STRING",
       """{ "pk": 1, "id": 1, "dep": "hr" }
         |{ "pk": 2, "id": 2, "dep": "hr" }
-        |""".stripMargin)
+        |""".stripMargin,
+      splitTableProps)
 
     sql(s"UPDATE $tableNameAsString SET id = -1 WHERE pk = 1")
 
@@ -425,13 +463,30 @@ class DeltaBasedColumnUpdateTableSuite extends DeltaBasedUpdateTableSuiteBase
       Row(1, -1, "hr") :: Row(2, 2, "hr") :: Nil)
   }
 
+  test("column-update split: a reinserted row is found by a row-ID column declared in another " +
+    "case") {
+    createAndInitTable("PK INT NOT NULL, id INT, salary INT, dep STRING",
+      """{ "PK": 1, "id": 1, "salary": 100, "dep": "hr" }
+        |{ "PK": 2, "id": 2, "salary": 200, "dep": "hr" }
+        |""".stripMargin,
+      splitTableProps)
+
+    sql(s"UPDATE $tableNameAsString SET salary = -1 WHERE PK = 1")
+
+    checkLastColumnUpdateSchema("PK", "dep", "salary")
+    checkAnswer(
+      sql(s"SELECT * FROM $tableNameAsString ORDER BY PK"),
+      Row(1, 1, -1, "hr") :: Row(2, 2, 200, "hr") :: Nil)
+  }
+
   test("column-update split: row-ID reassignment is rejected when requiredDataAttributes leaves " +
     "out a column") {
     // the declared [pk, dep, salary] leaves out `extra`
-    createAndInitTableSplit("pk INT NOT NULL, salary INT, dep STRING, extra STRING",
+    createAndInitTable("pk INT NOT NULL, salary INT, dep STRING, extra STRING",
       """{ "pk": 1, "salary": 100, "dep": "hr", "extra": "x" }
         |{ "pk": 2, "salary": 200, "dep": "software", "extra": "y" }
-        |""".stripMargin)
+        |""".stripMargin,
+      splitTableProps)
 
     checkError(
       exception = intercept[AnalysisException] {
@@ -442,18 +497,27 @@ class DeltaBasedColumnUpdateTableSuite extends DeltaBasedUpdateTableSuiteBase
   }
 
   test("column-update split: row-ID reassignment is allowed when requiredDataAttributes " +
-    "covers every table column") {
-    createAndInitTable("pk INT NOT NULL, salary INT, dep STRING",
-      """{ "pk": 1, "salary": 100, "dep": "hr" }
-        |{ "pk": 2, "salary": 200, "dep": "software" }
-        |""".stripMargin,
-      splitReqAttrsTableProps("pk,salary,dep"))
+    "covers every table column, also with a metadata column in the condition") {
+    Seq(
+      "dep = 'hr'",
+      "_partition = 'hr'",
+      // the coerced `salary > 0.5` makes the analyzer resolve the UPDATE in a later iteration
+      "dep = 'hr' AND _partition = 'hr' AND salary > 0.5"
+    ).foreach { cond =>
+      withTable(tableNameAsString) {
+        createAndInitTable("pk INT NOT NULL, salary INT, dep STRING",
+          """{ "pk": 1, "salary": 100, "dep": "hr" }
+            |{ "pk": 2, "salary": 200, "dep": "software" }
+            |""".stripMargin,
+          splitReqAttrsTableProps("pk,salary,dep"))
 
-    sql(s"UPDATE $tableNameAsString SET pk = pk + 10, salary = -1 WHERE dep = 'hr'")
+        sql(s"UPDATE $tableNameAsString SET pk = pk + 10, salary = -1 WHERE $cond")
 
-    checkAnswer(
-      sql(s"SELECT * FROM $tableNameAsString ORDER BY pk"),
-      Row(2, 200, "software") :: Row(11, -1, "hr") :: Nil)
+        checkAnswer(
+          sql(s"SELECT * FROM $tableNameAsString ORDER BY pk"),
+          Row(2, 200, "software") :: Row(11, -1, "hr") :: Nil)
+      }
+    }
   }
 
   test("column-update split: row-ID reassignment is rejected when metadata columns are listed") {
@@ -470,24 +534,7 @@ class DeltaBasedColumnUpdateTableSuite extends DeltaBasedUpdateTableSuiteBase
           "index = index, _partition = _partition")
       },
       condition = "COLUMN_UPDATE_SPLIT_ROW_ID_REASSIGNMENT",
-      parameters = Map("connector" -> splitReqAttrsOperationClass, "rowIds" -> "[`pk`]"))
-  }
-
-  test("column-update split: row-ID reassignment is allowed with a metadata column in a " +
-    "condition that resolves in a later iteration") {
-    createAndInitTable("pk INT NOT NULL, salary INT, dep STRING",
-      """{ "pk": 1, "salary": 100, "dep": "hr" }
-        |{ "pk": 2, "salary": 200, "dep": "software" }
-        |""".stripMargin,
-      splitReqAttrsTableProps("pk,salary,dep"))
-
-    // the coerced `salary > 0.5` makes the analyzer resolve the UPDATE in a later iteration
-    sql(s"UPDATE $tableNameAsString SET pk = pk + 10, salary = -1 " +
-      "WHERE dep = 'hr' AND _partition = 'hr' AND salary > 0.5")
-
-    checkAnswer(
-      sql(s"SELECT * FROM $tableNameAsString ORDER BY pk"),
-      Row(2, 200, "software") :: Row(11, -1, "hr") :: Nil)
+      parameters = Map("connector" -> splitOperationClass, "rowIds" -> "[`pk`]"))
   }
 
   test("column-update split: a row-ID column that does not reach the REINSERT row must be " +
@@ -596,21 +643,26 @@ class DeltaBasedColumnUpdateTableSuite extends DeltaBasedUpdateTableSuiteBase
     // `_partition` is a required metadata attribute with PRESERVE_ON_REINSERT, so the REINSERT
     // row carries it through the metadata projection.
     // Each partition holds one row, so `_partition` identifies it.
-    createAndInitTable("pk INT NOT NULL, salary INT, dep STRING",
-      """{ "pk": 1, "salary": 100, "dep": "hr" }
-        |{ "pk": 2, "salary": 200, "dep": "software" }
-        |""".stripMargin,
-      splitPartitionRowIdTableProps)
+    Seq(splitPartitionRowIdTableProps,
+        java.util.Map.of("column-update-split-row-id", "_PARTITION")).foreach { props =>
+      withTable(tableNameAsString) {
+        createAndInitTable("pk INT NOT NULL, salary INT, dep STRING",
+          """{ "pk": 1, "salary": 100, "dep": "hr" }
+            |{ "pk": 2, "salary": 200, "dep": "software" }
+            |""".stripMargin,
+          props)
 
-    sql(s"UPDATE $tableNameAsString SET salary = -1 WHERE dep = 'hr'")
+        sql(s"UPDATE $tableNameAsString SET salary = -1 WHERE dep = 'hr'")
 
-    checkLastColumnUpdateSchema("salary")
-    checkLastColumnUpdateWriteLog(
-      WriteLogEntry(operation = Delete, metadata = Some(Row("hr", null))),
-      reinsertWriteLogEntry(metadata = Row("hr", null), data = Row(-1)))
-    checkAnswer(
-      sql(s"SELECT * FROM $tableNameAsString ORDER BY pk"),
-      Row(1, -1, "hr") :: Row(2, 200, "software") :: Nil)
+        checkLastColumnUpdateSchema("salary")
+        checkLastColumnUpdateWriteLog(
+          WriteLogEntry(operation = Delete, metadata = Some(Row("hr", null))),
+          reinsertWriteLogEntry(metadata = Row("hr", null), data = Row(-1)))
+        checkAnswer(
+          sql(s"SELECT * FROM $tableNameAsString ORDER BY pk"),
+          Row(1, -1, "hr") :: Row(2, 200, "software") :: Nil)
+      }
+    }
   }
 
   test("column-update split: the write relation and the scan have only the declared and " +

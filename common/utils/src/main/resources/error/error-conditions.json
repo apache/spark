@@ -1317,7 +1317,7 @@
   },
   "COLUMN_UPDATE_SPLIT_ROW_ID_REASSIGNMENT" : {
     "message" : [
-      "Connector <connector> mixes in `SupportsColumnUpdates` and represents UPDATE as delete and insert, so UPDATE cannot assign row ID column(s) <rowIds>. The reinserted row carries only the columns in `requiredDataAttributes()`, and with a new row ID it cannot be matched to the row whose other columns the connector must preserve. Do not assign row ID columns, or include every data column in `requiredDataAttributes()` and do not list metadata columns in SET."
+      "Connector <connector> mixes in `SupportsColumnUpdates` and represents UPDATE as delete and insert, so UPDATE cannot assign row ID column(s) <rowIds>. The reinserted row carries only the columns in `requiredDataAttributes()`, and with a new row ID it cannot be matched to the row whose other columns the connector must preserve. Do not assign row ID columns, or include every data column in `requiredDataAttributes()` and do not reference metadata columns in the UPDATE."
     ],
     "sqlState" : "42000"
   },
@@ -1329,7 +1329,7 @@
   },
   "COLUMN_UPDATE_UNKNOWN_REQUIRED_DATA_ATTRIBUTE" : {
     "message" : [
-      "Connector <connector> mixes in `SupportsColumnUpdates` but declared column(s) <unknownAttributes> in `requiredDataAttributes()` that do not exist in the table."
+      "Connector <connector> mixes in `SupportsColumnUpdates` but declared column(s) <unknownAttributes> in `requiredDataAttributes()` that do not match exactly one column of the table."
     ],
     "sqlState" : "42703"
   },

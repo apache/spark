@@ -30,9 +30,9 @@ import org.apache.spark.sql.catalyst.util.RowDeltaUtils._
 import org.apache.spark.sql.types.{IntegerType, StructField, StructType}
 
 /**
- * Tests the [[ColumnPruning]] case that, for a [[RowLevelWrite]] whose write relation differs from
- * the table, prunes the query columns its projections don't read and moves the projections to the
- * ordinals of the pruned query.
+ * Tests the [[ColumnPruning]] case that, for a [[RowLevelWrite]] whose write relation's column
+ * names differ from the table's, prunes the query columns its projections don't read and moves the
+ * projections to the ordinals of the pruned query.
  */
 class RowLevelWriteColumnPruningSuite extends PlanTest {
 
@@ -227,7 +227,8 @@ class RowLevelWriteColumnPruningSuite extends PlanTest {
       val projections = ReplaceDataProjections(
         ProjectingInternalRow(StructType(Seq(field)), IndexedSeq(ordinal)), None)
       val write = ReplaceData(tableRelation, cond(read), query, tableRelation, projections)
-      val message = s"A projection of ReplaceData reads ordinal $ordinal of a query with 8 columns."
+      val message = s"A projection of ReplaceData reads ordinal $ordinal of a query with " +
+        s"${query.output.length} columns."
 
       // the plan can still be printed, to find the rule that left the ordinal behind
       assert(write.references == AttributeSet(query.output.head))
@@ -237,8 +238,39 @@ class RowLevelWriteColumnPruningSuite extends PlanTest {
         condition = "INTERNAL_ERROR",
         parameters = Map("message" -> message))
       checkError(
-        exception = intercept[SparkException](
-          replaceData(query, writeColumns).withPrunedQuery(query, _ => ordinal)),
+        exception = intercept[SparkException](write.withPrunedQuery(query)),
+        condition = "INTERNAL_ERROR",
+        parameters = Map("message" -> message))
+    }
+  }
+
+  test("withPrunedQuery finds each read column by exprId, in any column order") {
+    val query = updateQuery(read)
+    val write = replaceData(query, writeColumns)
+    val operation = query.output.head
+    val kept = write.references.toSeq.filterNot(_ == operation).sortBy(_.name).reverse
+
+    val pruned = write.withPrunedQuery(Project(operation +: kept, query)).asInstanceOf[ReplaceData]
+
+    val output = pruned.query.output
+    assert(pruned.projections.rowProjection.colOrdinals.map(output(_).name) == writeColumns)
+    assert(pruned.projections.metadataProjection.get.colOrdinals.map(output(_).name) ==
+      Seq("_partition"))
+  }
+
+  test("withPrunedQuery rejects a query that drops a read column or moves the operation column") {
+    val query = updateQuery(read)
+    val write = replaceData(query, writeColumns)
+    val operation = query.output.head
+    val salary = column(query, "salary")
+    Seq(
+      Project(query.output.filterNot(_ == salary), query) ->
+        s"The pruned query of ReplaceData drops $salary, which a projection reads.",
+      Project(query.output.tail :+ operation, query) ->
+        "The pruned query of ReplaceData must start with the operation column."
+    ).foreach { case (newQuery, message) =>
+      checkError(
+        exception = intercept[SparkException](write.withPrunedQuery(newQuery)),
         condition = "INTERNAL_ERROR",
         parameters = Map("message" -> message))
     }
@@ -249,7 +281,11 @@ class RowLevelWriteColumnPruningSuite extends PlanTest {
     // condition reads and its distribution can use
     val query = updateQuery(read)
     val projections = ReplaceDataProjections(projection(query, dataColumns: _*), None)
-    val write = ReplaceData(tableRelation, cond(read), query, tableRelation, projections)
-    comparePlans(Optimize.execute(write), write, checkAnalysis = false)
+    // a rule may rebuild the write relation with the same names and new exprIds
+    val rebuiltRelation = TestRelation(tableRelation.output.map(_.newInstance()))
+    Seq(tableRelation, rebuiltRelation).foreach { writeRelation =>
+      val write = ReplaceData(writeRelation, cond(read), query, tableRelation, projections)
+      comparePlans(Optimize.execute(write), write, checkAnalysis = false)
+    }
   }
 }

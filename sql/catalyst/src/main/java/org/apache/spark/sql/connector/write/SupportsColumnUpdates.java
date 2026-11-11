@@ -53,8 +53,9 @@ public interface SupportsColumnUpdates extends RowLevelOperation {
    * <p>
    * When Spark narrows the write, the returned columns become
    * {@link LogicalWriteInfo#columnUpdateSchema()}, in declared order. Spark matches each declared
-   * column with the session's resolver, and {@link LogicalWriteInfo#columnUpdateSchema()} uses the
-   * table's spelling of each column, which can differ in case from the declared reference.
+   * name to the column with the same spelling, or else to the one column that the session's
+   * resolver matches, and {@link LogicalWriteInfo#columnUpdateSchema()} uses the table's spelling
+   * of each column, which can differ in case from the declared reference.
    * Implementations must include every column they want to receive: every column reported by
    * {@link RowLevelOperationInfo#updatedColumns()}, plus any columns needed for row lookup or
    * routing. Columns that are not declared are absent from the rows the connector receives, so the
@@ -76,12 +77,13 @@ public interface SupportsColumnUpdates extends RowLevelOperation {
    * <p>
    * Each entry must name a top-level data column of the table. For updates on nested fields such as
    * {@code SET s.c1 = -1}, the connector must declare the root struct column {@code s}. For an
-   * UPDATE, Spark rejects with an analysis exception a column that does not exist, a column
-   * declared more than once, a nested field, a metadata column (declare those through
-   * {@link #requiredMetadataAttributes()} instead), and an array that misses a column reported by
-   * {@link RowLevelOperationInfo#updatedColumns()}. When Spark narrows the write, it also rejects
-   * an UPDATE that assigns a new value to a metadata column, which only a table that accepts any
-   * schema allows, because a connector can locate original rows through metadata columns.
+   * UPDATE, Spark rejects with an analysis exception a name that no column has and that the
+   * resolver matches to no column or to several, a column declared more than once, a nested field,
+   * a metadata column (declare those through {@link #requiredMetadataAttributes()} instead), and an
+   * array that misses a column reported by {@link RowLevelOperationInfo#updatedColumns()}. When
+   * Spark narrows the write, it also rejects an UPDATE that assigns a new value to a metadata
+   * column, which only a table that accepts any schema allows, because a connector can locate
+   * original rows through metadata columns.
    * <p>
    * If the returned array is non-empty and this operation also mixes in {@link SupportsDelta} and
    * represents updates as deletes and inserts
@@ -91,11 +93,13 @@ public interface SupportsColumnUpdates extends RowLevelOperation {
    * {@link #requiredMetadataAttributes()} with
    * {@link org.apache.spark.sql.connector.catalog.MetadataColumn#PRESERVE_ON_REINSERT} set. In this
    * mode, an UPDATE that assigns a new value to a row-ID column is also rejected, unless every data
-   * column is declared here and the UPDATE lists no metadata column. A self-assignment that
-   * {@link RowLevelOperationInfo#updatedColumns()} reports, such as one on a CHAR or VARCHAR row-ID
-   * column, counts as a new value. Only a table that accepts any schema lets an UPDATE list a
-   * metadata column. Spark rejects both a row-ID column that does not reach the reinserted row and
-   * such an assignment with an analysis exception.
+   * column is declared here and the aligned assignments include no metadata column, not even an
+   * identity assignment. A self-assignment that {@link RowLevelOperationInfo#updatedColumns()}
+   * reports, such as one on a CHAR or VARCHAR row-ID column, counts as a new value. Only on a table
+   * that accepts any schema can the aligned assignments include a metadata column: when SET lists
+   * one, or when the UPDATE references one, which can add every metadata column to the columns the
+   * connector's alignment rule must assign. Spark rejects both a row-ID column that does not reach
+   * the reinserted row and such an assignment with an analysis exception.
    * <p>
    * Data columns the write needs must be declared here too, even if the command does not
    * reference them, such as the source columns of partition transforms and any columns used by
@@ -103,9 +107,9 @@ public interface SupportsColumnUpdates extends RowLevelOperation {
    * {@link RequiresDistributionAndOrdering#requiredOrdering()}. Such columns appear in the rows
    * the connector receives; a connector that does not want to persist them should project them
    * away inside the connector before writing. A write whose distribution or ordering references
-   * any other column is rejected with an analysis exception, except for metadata columns returned
-   * by {@link #requiredMetadataAttributes()} and, for operations that mix in
-   * {@link SupportsDelta}, row-ID columns.
+   * any other column is rejected, except for metadata columns returned by
+   * {@link #requiredMetadataAttributes()} and, for operations that mix in {@link SupportsDelta},
+   * row-ID columns.
    * <p>
    * Apart from row-ID columns ({@link SupportsDelta#rowId()}), Spark does not read an undeclared
    * data column that neither the command nor a table constraint references, so such a column is not
