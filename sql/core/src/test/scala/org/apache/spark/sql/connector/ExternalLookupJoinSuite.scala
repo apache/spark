@@ -40,7 +40,7 @@ import org.apache.spark.sql.catalyst.expressions.{Add, Attribute, AttributeMap, 
   Cast, EqualTo, Expression, GenericInternalRow, LessThan, Literal, Rand, UnsafeProjection}
 import org.apache.spark.sql.catalyst.plans.{Inner, QueryPlan}
 import org.apache.spark.sql.catalyst.plans.logical.{Deduplicate, ExternalLookupJoin, Join, JoinHint,
-  LeafNode, LogicalPlan, PreparedExternalLookupJoin}
+  LeafNode, LogicalPlan, PreparedExternalLookupJoin, RepartitionByExpression}
 import org.apache.spark.sql.catalyst.trees.TreePattern.LOOKUP_ONLY_RELATION
 import org.apache.spark.sql.catalyst.util.{ArrayBasedMapData, GenericArrayData}
 import org.apache.spark.sql.classic.Dataset
@@ -1243,6 +1243,35 @@ class ExternalLookupJoinSuite extends QueryTest with SharedSparkSession {
     }
   }
 
+  test("a lookup join reads a table whose name does not parse as an identifier") {
+    // Table.name() is free-form, such as the path of the table's files, so classifying a join
+    // renders it only for an error. Cache substitution classifies the joins of a plan only while
+    // something is cached.
+    withSQLConf(
+        s"spark.sql.catalog.$EXTERNAL_LOOKUP_CATALOG_NAME" ->
+          classOf[ExternalLookupTestCatalog].getName) {
+      val swipes = streamOf(Seq((1, "lobby"), (3, "garage")).toDF("employee", "door"))
+      val lookupOnly = spark.table(s"$EXTERNAL_LOOKUP_CATALOG_NAME.ns.path_lookup")
+      val dual = spark.table(s"$EXTERNAL_LOOKUP_CATALOG_NAME.ns.path_dual")
+      def checkLookupJoins(): Unit = Seq(lookupOnly, dual.hint("external_lookup")).foreach {
+        directory =>
+          val run = runStream(swipes.join(directory, swipes("employee") === directory("id"))
+            .select(swipes("employee"), directory("department")))
+          assert(run.plan.exists(_.isInstanceOf[PreparedExternalLookupJoin]))
+          QueryTest.sameRows(Seq(Row(1, "engineering"), Row(1, "research")), run.rows)
+            .foreach(fail(_))
+      }
+      checkLookupJoins()
+      val unrelated = Seq(1).toDF("id").cache()
+      try {
+        assert(unrelated.count() === 1)
+        checkLookupJoins()
+      } finally {
+        unrelated.unpersist(blocking = true)
+      }
+    }
+  }
+
   test("a named external lookup hint accepts relation names given as strings") {
     withSQLConf(
         s"spark.sql.catalog.$EXTERNAL_LOOKUP_CATALOG_NAME" ->
@@ -1404,6 +1433,73 @@ class ExternalLookupJoinSuite extends QueryTest with SharedSparkSession {
     }
   }
 
+  test("a lookup side that is a DataFrame of a WITH query runs as an external lookup join") {
+    // The WithCTE of the DataFrame is on the lookup side's path, below the join.
+    withSQLConf(
+        s"spark.sql.catalog.$EXTERNAL_LOOKUP_CATALOG_NAME" ->
+          classOf[ExternalLookupTestCatalog].getName) {
+      val swipes = streamOf(Seq((1, "lobby"), (3, "garage")).toDF("employee", "door"))
+      def withQuery(table: String): DataFrame =
+        sql(s"WITH d AS (TABLE $EXTERNAL_LOOKUP_CATALOG_NAME.ns.$table) TABLE d")
+      Seq(withQuery("lookup"), withQuery("dual").hint("external_lookup")).foreach { directory =>
+        val run = runStream(swipes.join(directory, swipes("employee") === directory("id"))
+          .select(swipes("employee"), directory("department")))
+        assert(run.plan.exists(_.isInstanceOf[PreparedExternalLookupJoin]))
+        QueryTest.sameRows(Seq(Row(1, "engineering"), Row(1, "research")), run.rows)
+          .foreach(fail(_))
+      }
+    }
+  }
+
+  test("a lookup side read through a MATERIALIZED CTE fails when the DataFrame is built") {
+    withSQLConf(
+        s"spark.sql.catalog.$EXTERNAL_LOOKUP_CATALOG_NAME" ->
+          classOf[ExternalLookupTestCatalog].getName) {
+      withTempView("badge_swipes") {
+        streamOf(Seq((1, "lobby"), (3, "garage")).toDF("employee", "door"))
+          .createOrReplaceTempView("badge_swipes")
+        def query(table: String, option: String, hint: String = ""): DataFrame = sql(
+          s"""
+            |WITH lk AS $option (TABLE $EXTERNAL_LOOKUP_CATALOG_NAME.ns.$table)
+            |SELECT $hint s.employee, lk.department
+            |FROM badge_swipes s JOIN lk ON s.employee = lk.id
+            |""".stripMargin)
+        val expected = Seq(Row(1, "engineering"), Row(1, "research"))
+        Seq("lookup" -> "", "dual" -> "/*+ EXTERNAL_LOOKUP(lk) */").foreach { case (table, hint) =>
+          // A MATERIALIZED CTE is evaluated once, and a lookup join cannot read that result.
+          checkError(
+            exception = intercept[AnalysisException](query(table, "MATERIALIZED", hint)),
+            condition = "EXTERNAL_LOOKUP_JOIN_UNSUPPORTED.MATERIALIZED_CTE",
+            parameters = Map("cteName" -> "`lk`"))
+          Seq("NOT MATERIALIZED", "").foreach { option =>
+            val run = runStream(query(table, option, hint))
+            assert(run.plan.exists(_.isInstanceOf[PreparedExternalLookupJoin]), option)
+            QueryTest.sameRows(expected, run.rows).foreach(fail(_))
+          }
+        }
+        // A MATERIALIZED CTE that no lookup side reads is still evaluated once: it is not
+        // inlined, so the repartition that replaces its references is in the plan.
+        val shared = runStream(sql(
+          s"""
+            |WITH d AS MATERIALIZED (TABLE $EXTERNAL_LOOKUP_CATALOG_NAME.ns.dual)
+            |SELECT s.employee, lk.department, d.department
+            |FROM badge_swipes s JOIN $EXTERNAL_LOOKUP_CATALOG_NAME.ns.lookup lk
+            |  ON s.employee = lk.id
+            |JOIN d ON s.employee = d.id
+            |""".stripMargin))
+        assert(shared.plan.exists(_.isInstanceOf[PreparedExternalLookupJoin]))
+        assert(shared.plan.exists {
+          case repartition: RepartitionByExpression => repartition.partitionExpressions.isEmpty
+          case _ => false
+        })
+        QueryTest.sameRows(
+          Seq(Row(1, "engineering", "engineering"), Row(1, "engineering", "research"),
+            Row(1, "research", "engineering"), Row(1, "research", "research")),
+          shared.rows).foreach(fail(_))
+      }
+    }
+  }
+
   test("cached data does not replace the lookup side of an external lookup join") {
     withSQLConf(
         s"spark.sql.catalog.$EXTERNAL_LOOKUP_CATALOG_NAME" ->
@@ -1469,6 +1565,42 @@ class ExternalLookupJoinSuite extends QueryTest with SharedSparkSession {
           "operation" -> "batch scan"))
       assert(spark.sharedState.cacheManager.lookupCachedData(lookupOnly).isEmpty)
       checkRun(join(lookupOnly), lookupJoin = true, currentRows)
+    }
+  }
+
+  test("an EXTERNAL_LOOKUP hint that attaches to no join shares cached data with its plan") {
+    withSQLConf(
+        s"spark.sql.catalog.$EXTERNAL_LOOKUP_CATALOG_NAME" ->
+          classOf[ExternalLookupTestCatalog].getName) {
+      val dualTable = s"$EXTERNAL_LOOKUP_CATALOG_NAME.ns.dual"
+      val cacheManager = spark.sharedState.cacheManager
+      spark.catalog.clearCache()
+      val hinted = spark.table(dualTable).hint("external_lookup").cache()
+      try {
+        assert(hinted.count() === 3)
+        // Changes the directory after the cache has read it.
+        SimpleExternalLookupDataSource.departmentsById.set(
+          Map(1 -> Seq("legal"), 2 -> Seq("sales")))
+        // As for a strategy hint, the plan without the hint reads the cached data.
+        val plain = spark.table(dualTable)
+        checkAnswer(plain, Seq(Row(1, "engineering"), Row(1, "research"), Row(2, "sales")))
+        // A hinted lookup side still reads the connector's current data.
+        val swipes = streamOf(Seq((1, "lobby"), (3, "garage")).toDF("employee", "door"))
+        val directory = spark.table(dualTable).hint("external_lookup")
+        val run = runStream(swipes.join(directory, swipes("employee") === directory("id"))
+          .select(swipes("employee"), directory("department")))
+        assert(run.plan.exists(_.isInstanceOf[PreparedExternalLookupJoin]))
+        QueryTest.sameRows(Seq(Row(1, "legal")), run.rows).foreach(fail(_))
+        // Caching the plan without the hint adds no entry, and unpersisting it releases the one
+        // that the hinted DataFrame made.
+        plain.cache()
+        plain.unpersist(blocking = true)
+        assert(cacheManager.lookupCachedData(hinted).isEmpty)
+        assert(cacheManager.isEmpty)
+        checkAnswer(hinted, Seq(Row(1, "legal"), Row(2, "sales")))
+      } finally {
+        hinted.unpersist(blocking = true)
+      }
     }
   }
 
@@ -2940,10 +3072,10 @@ class ExternalLookupJoinSuite extends QueryTest with SharedSparkSession {
     }
   }
 
-  test("a query without a lookup-only table is not searched for lookup joins") {
-    // The relation of a lookup-only table carries a tree pattern, so the analysis check, the
-    // formation and the preparation leave any other plan alone, without asking its tables for
-    // their capabilities.
+  test("a join over a dual-capability table without the hint is not searched for lookup joins") {
+    // The relation of a lookup-only table and the EXTERNAL_LOOKUP hint each carry a tree pattern,
+    // so the analysis check, the formation and the preparation leave a plan with neither alone,
+    // without asking its tables for their capabilities.
     val dual = spark.read.format(classOf[DualCapabilityExternalLookupDataSource].getName).load()
     val swipes = streamOf(Seq((1, "lobby")).toDF("employee", "door"))
     val batch = dual.as("a").join(dual.as("b"), col("a.id") === col("b.id"))
@@ -3130,8 +3262,9 @@ class ExternalLookupJoinSuite extends QueryTest with SharedSparkSession {
 }
 
 /**
- * A catalog serving `ns.lookup` (lookup-only), `ns.dual` (dual-capability) and `ns.versioned`
- * (lookup-only, with a `_version` metadata column).
+ * A catalog serving `ns.lookup` (lookup-only), `ns.dual` (dual-capability), `ns.versioned`
+ * (lookup-only, with a `_version` metadata column), and `ns.path_lookup` and `ns.path_dual`, the
+ * first two under a name that is a file path.
  */
 class ExternalLookupTestCatalog extends TableCatalog {
   private var catalogName: String = _
@@ -3140,11 +3273,15 @@ class ExternalLookupTestCatalog extends TableCatalog {
     catalogName = name
   override def name(): String = catalogName
   override def listTables(namespace: Array[String]): Array[Identifier] =
-    Array("lookup", "dual", "versioned").map(Identifier.of(Array("ns"), _))
+    Array("lookup", "dual", "versioned", "path_lookup", "path_dual")
+      .map(Identifier.of(Array("ns"), _))
   override def loadTable(ident: Identifier): Table = (ident.namespace().toSeq, ident.name()) match {
     case (Seq("ns"), "lookup") => SimpleExternalLookupTable
     case (Seq("ns"), "dual") => DualCapabilityExternalLookupTable
     case (Seq("ns"), "versioned") => VersionedExternalLookupTable
+    case (Seq("ns"), "path_lookup") => PathNamedExternalLookupTable(SimpleExternalLookupTable)
+    case (Seq("ns"), "path_dual") =>
+      PathNamedExternalLookupTable(DualCapabilityExternalLookupTable)
     case _ => throw new NoSuchTableException(ident.namespace().mkString("."), ident.name())
   }
   override def alterTable(ident: Identifier, changes: TableChange*): Table =
@@ -3304,6 +3441,16 @@ object DualCapabilityExternalLookupTable extends Table with SupportsRead {
   }
   override def newScanBuilder(options: CaseInsensitiveStringMap): ScanBuilder =
     SimpleExternalLookupTable.newScanBuilder(options)
+}
+
+/** `table` under a name that is the path of its files, as `Table.name()` allows. */
+case class PathNamedExternalLookupTable(table: Table with SupportsRead)
+  extends Table with SupportsRead {
+  override def name(): String = "./users"
+  override def schema(): StructType = table.schema()
+  override def capabilities(): java.util.Set[TableCapability] = table.capabilities()
+  override def newScanBuilder(options: CaseInsensitiveStringMap): ScanBuilder =
+    table.newScanBuilder(options)
 }
 
 /** A lookup-only table that also exposes the version of each row as a metadata column. */

@@ -46,6 +46,11 @@ case class ExternalLookupHint(child: LogicalPlan) extends UnaryNode {
 
   final override val nodePatterns: Seq[TreePattern] = Seq(EXTERNAL_LOOKUP_HINT)
 
+  // As for a ResolvedHint, so that a hint that attaches to no join leaves the cached data that a
+  // plan finds as it is without the hint. Cache substitution protects the lookup side of a lookup
+  // join by identity, not by its canonical form.
+  override def doCanonicalize(): LogicalPlan = child.canonicalized
+
   override protected def withNewChildInternal(newChild: LogicalPlan): ExternalLookupHint =
     copy(child = newChild)
 }

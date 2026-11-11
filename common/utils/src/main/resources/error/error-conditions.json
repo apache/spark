@@ -2948,6 +2948,11 @@
           "The lookup-only table <relation> must be on the right side of the join."
         ]
       },
+      "MATERIALIZED_CTE" : {
+        "message" : [
+          "The lookup side reads the CTE <cteName>, which Spark evaluates once instead of inlining it, as for a `MATERIALIZED` CTE. An external lookup join must read the lookup table itself. Remove the `MATERIALIZED` option of the CTE."
+        ]
+      },
       "METADATA_COLUMN" : {
         "message" : [
           "An external lookup join over <relation> cannot read a metadata column of the table."

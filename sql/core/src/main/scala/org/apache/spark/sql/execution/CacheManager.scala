@@ -564,6 +564,8 @@ class CacheManager extends Logging with AdaptiveSparkPlanHelper {
     // An external lookup join reads its lookup side by lookups. If cached data replaced that side
     // or a CTE definition that it reads, the join would silently read the cached data instead, or
     // fail.
+    // TODO: protect only the lookup side's path, so that the other readers of a CTE definition
+    //   that a lookup side reads keep using cached data. Today the whole definition is skipped.
     val lookupSidePlans =
       if (entries.isEmpty) Nil else ExternalLookupJoinEligibility.lookupSidePlans(plan)
     val newPlan = plan.transformDownWithPruning(node => !lookupSidePlans.exists(_ eq node)) {

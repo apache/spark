@@ -24,9 +24,11 @@ import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.QueryPlanningTracker
 import org.apache.spark.sql.catalyst.dsl.expressions._
 import org.apache.spark.sql.catalyst.dsl.plans._
+import org.apache.spark.sql.catalyst.optimizer.InlineCTE
 import org.apache.spark.sql.catalyst.plans.{Cross, FullOuter, Inner, LeftOuter, RightOuter}
-import org.apache.spark.sql.catalyst.plans.logical.{ExternalLookupHint, ExternalLookupJoin, Join,
-  JoinHint, LocalRelation, LogicalPlan, Project}
+import org.apache.spark.sql.catalyst.plans.logical.{CTERelationDef, CTERelationRef,
+  ExternalLookupHint, ExternalLookupJoin, Join, JoinHint, LocalRelation, LogicalPlan, Project,
+  SubqueryAlias, WithCTE}
 import org.apache.spark.sql.catalyst.streaming.WriteToStream
 import org.apache.spark.sql.catalyst.trees.TreePattern.{DATA_SOURCE_V2_RELATION,
   LOOKUP_ONLY_RELATION}
@@ -56,6 +58,26 @@ class FormExternalLookupJoinSuite extends AnalysisTest {
   // The parameters of a JOIN_TYPE error, besides the relation.
   private def joinType(sql: String): Map[String, String] =
     Map("joinType" -> sql, "supportedJoinTypes" -> "INNER, LEFT OUTER")
+
+  // A definition of `plan` named `name`, and a reference to it under that name.
+  private def cteOf(
+      plan: LogicalPlan,
+      name: String,
+      materialized: Option[Boolean] = None,
+      forceSkipInline: Boolean = false): (CTERelationDef, LogicalPlan) = {
+    val cteDef = CTERelationDef(
+      SubqueryAlias(name, plan), materialized = materialized, forceSkipInline = forceSkipInline)
+    (cteDef, SubqueryAlias(name, CTERelationRef(cteDef.id, _resolved = true, cteDef.output,
+      isStreaming = false)))
+  }
+
+  // `plan` under the EXTERNAL_LOOKUP hint, without analyzing it.
+  private def lookupHint(plan: LogicalPlan): LogicalPlan =
+    ResolveExternalLookupHint(plan.hint("external_lookup"))
+
+  // A lookup-only table, and a table that also supports batch reads under the hint.
+  private def lookupSides: Seq[(LogicalPlan, LogicalPlan => LogicalPlan)] =
+    Seq((lookupOnly, plan => plan), (tableWith(BATCH_READ, EXTERNAL_LOOKUP), lookupHint))
 
   // Hints become ResolvedHint nodes, which only Finish Analysis moves into the join.
   private def analyze(plan: LogicalPlan): LogicalPlan =
@@ -214,6 +236,71 @@ class FormExternalLookupJoinSuite extends AnalysisTest {
               parameters + ("relation" -> "`LookupCapabilityTable`"))
         }
     }
+  }
+
+  test("a lookup side that holds its own WITH clause is formed with the definition inlined") {
+    // As in a DataFrame built from a WITH query, the WithCTE is on the lookup side's path. The
+    // reference's alias stays above the inlined definition.
+    lookupSides.foreach { case (table, hint) =>
+      val (cteDef, ref) = cteOf(table, "d")
+      val join = innerJoinOnId(hint(WithCTE(ref, Seq(cteDef))))
+      CheckExternalLookupJoin(join)
+      FormExternalLookupJoin(join) match {
+        case lookupJoin: ExternalLookupJoin =>
+          assert(lookupJoin.right == SubqueryAlias("d", SubqueryAlias("d", table)))
+        case other => fail(s"Expected an external lookup join: $other")
+      }
+    }
+  }
+
+  test("a lookup side that reads a CTE definition that InlineCTE keeps is rejected") {
+    lookupSides.foreach { case (table, hint) =>
+      def plan(materialized: Option[Boolean], forceSkipInline: Boolean = false): LogicalPlan = {
+        val (cteDef, ref) = cteOf(table, "lk", materialized, forceSkipInline)
+        WithCTE(innerJoinOnId(hint(ref)), Seq(cteDef))
+      }
+      // A MATERIALIZED definition, which CheckAnalysis inlines in the copy that it checks, and
+      // one that requests to skip inlining, which it keeps.
+      Seq(plan(Some(true)), plan(None, forceSkipInline = true)).foreach { kept =>
+        Seq[LogicalPlan => Any](CheckExternalLookupJoin.checkKeptCTEs,
+            FormExternalLookupJoin(_)).foreach { rule =>
+          checkError(
+            exception = intercept[AnalysisException] { rule(kept) },
+            condition = "EXTERNAL_LOOKUP_JOIN_UNSUPPORTED.MATERIALIZED_CTE",
+            parameters = Map("cteName" -> "`lk`"))
+        }
+        assert(ExternalLookupJoinEligibility.lookupSidePlans(kept).nonEmpty)
+      }
+      checkError(
+        exception = intercept[AnalysisException] {
+          CheckExternalLookupJoin(plan(None, forceSkipInline = true))
+        },
+        condition = "EXTERNAL_LOOKUP_JOIN_UNSUPPORTED.MATERIALIZED_CTE",
+        parameters = Map("cteName" -> "`lk`"))
+      // A definition that InlineCTE may inline is inlined into the lookup join.
+      Seq(plan(Some(false)), plan(None)).foreach { inlined =>
+        CheckExternalLookupJoin(inlined)
+        CheckExternalLookupJoin.checkKeptCTEs(inlined)
+        val formed = FormExternalLookupJoin(inlined)
+        assert(formed.collect { case join: ExternalLookupJoin => join.right } ==
+          Seq(SubqueryAlias("lk", SubqueryAlias("lk", table))))
+      }
+    }
+  }
+
+  test("a MATERIALIZED CTE that no lookup side reads keeps InlineCTE's decision") {
+    val static = LocalRelation($"k".int)
+    val (cteDef, ref) = cteOf(static, "m", materialized = Some(true))
+    val lookupJoin = innerJoinOnId(lookupOnly)
+    val plan = WithCTE(
+      Join(lookupJoin, ref, Inner, Some(stream.output(1) === ref.output(0)), JoinHint.NONE),
+      Seq(cteDef))
+    CheckExternalLookupJoin(plan)
+    CheckExternalLookupJoin.checkKeptCTEs(plan)
+    val optimized = InlineCTE()(FormExternalLookupJoin(plan))
+    assert(optimized.collect { case join: ExternalLookupJoin => join }.size === 1)
+    assert(optimized.collect { case kept: CTERelationDef => kept.id } === Seq(cteDef.id))
+    assert(optimized.exists(_.isInstanceOf[CTERelationRef]))
   }
 
   test("a strategy hint inside a nested join on the stream side belongs to that join") {

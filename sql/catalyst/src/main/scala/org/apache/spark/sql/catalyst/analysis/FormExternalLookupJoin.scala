@@ -69,11 +69,14 @@ object ExternalLookupJoinEligibility extends QueryErrorsBase {
   private val SUPPORTED_JOIN_TYPES = Seq(Inner, LeftOuter)
 
   /**
-   * An operator that the `EXTERNAL_LOOKUP` hint can annotate as a join, as a join strategy hint
-   * can: a [[Join]], an ASOF or NEAREST BY join, which Finish Analysis turns into joins, and a
-   * lateral join that the query writes, which operator optimization turns into a join. A lateral
-   * join that analysis adds for a table argument of a table function is not written by the query,
-   * so it is a unary operator for the hint, as for any other analysis check.
+   * An operator that the `EXTERNAL_LOOKUP` hint treats as a join: a [[Join]], an ASOF or NEAREST BY
+   * join, which Finish Analysis turns into a join, and a lateral join that the query writes, which
+   * operator optimization turns into a join. Each of the last three becomes a join only after the
+   * hints are attached, so a join strategy hint on one is dropped. None of them can run as an
+   * external lookup join, so the `EXTERNAL_LOOKUP` hint on one is misplaced and fails, rather than
+   * being dropped like a hint that attaches to no join. A lateral join that analysis adds for a
+   * table argument of a table function is not written by the query, so it is a unary operator for
+   * the hint, as for any other analysis check.
    */
   object HintableJoin {
     def unapply(plan: LogicalPlan): Boolean = plan match {
@@ -110,7 +113,9 @@ object ExternalLookupJoinEligibility extends QueryErrorsBase {
       case Right(found) => found
       case Left(rejection) => return rejection
     }
-    val relation = toSQLId(table.name())
+    // Rendered only for an error: Table.name() is free-form, such as the path of the table's
+    // files, and need not parse as an identifier.
+    lazy val relation = toSQLId(table.name())
     if (!table.capabilities().contains(TableCapability.EXTERNAL_LOOKUP)) {
       return Ineligible(QueryCompilationErrors.unsupportedExternalLookupJoinError(
         "TABLE", Map("table" -> relation)))
@@ -194,6 +199,35 @@ object ExternalLookupJoinEligibility extends QueryErrorsBase {
     plan.containsPattern(JOIN) &&
       plan.containsAnyPattern(EXTERNAL_LOOKUP_HINT, LOOKUP_ONLY_RELATION)
 
+  /**
+   * Classifies `join`, a join of a plan whose CTE definitions are `cteDefs`, and returns the
+   * classification with the join that [[inlineCTEs]] inlines. The analysis check, the formation,
+   * cache substitution and the start check all classify a join this way.
+   *
+   * The inlined join has every CTE reference on the paths of its inputs inlined, so that the
+   * classification sees the tables that the join reads. A join that must run as an external lookup
+   * join but whose lookup side reads a CTE definition that InlineCTE keeps, such as a MATERIALIZED
+   * one, is ineligible: inlining the definition into the lookup join would silently drop its
+   * materialization. So a lookup join is formed from the inlined join only when the join is
+   * eligible, and then no such definition is inlined.
+   */
+  def classify(join: Join, cteDefs: Map[Long, CTERelationDef]): (Join, Eligibility) = {
+    val inlined = inlineCTEs(join, cteDefs)
+    val eligibility = apply(inlined) match {
+      case eligibility @ (Eligible | MissingCondition) =>
+        keptCTE(join.right, cteDefs).map { cteDef =>
+          val cteName = cteDef.child match {
+            case alias: SubqueryAlias => alias.alias
+            case _ => cteDef.id.toString
+          }
+          Ineligible(QueryCompilationErrors.unsupportedExternalLookupJoinError(
+            "MATERIALIZED_CTE", Map("cteName" -> toSQLId(cteName))))
+        }.getOrElse(eligibility)
+      case other => other
+    }
+    (inlined, eligibility)
+  }
+
   /** The CTE definitions in `plan` by id, which [[inlineCTEs]] inlines. */
   def cteDefinitions(plan: LogicalPlan): Map[Long, CTERelationDef] =
     if (plan.containsPattern(CTE)) {
@@ -230,6 +264,22 @@ object ExternalLookupJoinEligibility extends QueryErrorsBase {
   }
 
   /**
+   * The first CTE definition that InlineCTE keeps, whatever its references, on the path that
+   * [[inlinePathCTEs]] inlines below `plan`.
+   */
+  private def keptCTE(
+      plan: LogicalPlan,
+      cteDefs: Map[Long, CTERelationDef]): Option[CTERelationDef] = plan match {
+    case _ if !plan.containsPattern(CTE) => None
+    case ref: CTERelationRef if cteDefs.contains(ref.cteId) =>
+      val cteDef = cteDefs(ref.cteId)
+      if (InlineCTE.keepsDefinition(cteDef)) Some(cteDef) else keptCTE(cteDef.child, cteDefs)
+    case WithCTE(child, _) => keptCTE(child, cteDefs)
+    case unary: UnaryNode => keptCTE(unary.child, cteDefs)
+    case _ => None
+  }
+
+  /**
    * The plans that external lookup joins in `plan` read by lookups: the lookup side of each join
    * that must run as an external lookup join, and the CTE definitions that the side reads,
    * directly or through other CTE definitions. Subqueries are not searched.
@@ -240,7 +290,7 @@ object ExternalLookupJoinEligibility extends QueryErrorsBase {
     } else {
       val cteDefs = cteDefinitions(plan)
       val lookupSides = plan.collect {
-        case join: Join if apply(inlineCTEs(join, cteDefs)) != NotLookupJoin => join.right
+        case join: Join if classify(join, cteDefs)._2 != NotLookupJoin => join.right
       }
       val readCTEs = mutable.LinkedHashMap.empty[Long, CTERelationDef]
       def addReadCTEs(plan: LogicalPlan): Unit = plan.foreach {
@@ -353,9 +403,11 @@ object CheckExternalLookupJoin extends (LogicalPlan => Unit) {
   override def apply(plan: LogicalPlan): Unit = {
     if (ExternalLookupJoinEligibility.mayHaveHintOrLookupJoin(plan)) {
       val complete = plan.isInstanceOf[WriteToStream]
+      // CheckAnalysis inlines every CTE but those that InlineCTE keeps even then.
+      val cteDefs = ExternalLookupJoinEligibility.cteDefinitions(plan)
       plan.foreachUp {
         case join: Join if join.resolved =>
-          ExternalLookupJoinEligibility(join) match {
+          ExternalLookupJoinEligibility.classify(join, cteDefs)._2 match {
             case ExternalLookupJoinEligibility.Ineligible(error) => throw error
             case ExternalLookupJoinEligibility.MissingCondition if complete =>
               throw QueryCompilationErrors.unsupportedExternalLookupJoinError(
@@ -380,6 +432,29 @@ object CheckExternalLookupJoin extends (LogicalPlan => Unit) {
     }
   }
 
+  /**
+   * Reports a join that must run as an external lookup join but whose lookup side reads a CTE
+   * definition that InlineCTE keeps, such as a MATERIALIZED one. CheckAnalysis runs the other
+   * checks on a copy of the plan in which it inlines MATERIALIZED CTEs too, so it runs this one on
+   * the plan itself, as it runs MaterializedCTECheck. Only a plan with a join, a CTE, and the hint
+   * or a lookup-only table, as its pattern bits tell, is walked.
+   */
+  def checkKeptCTEs(plan: LogicalPlan): Unit = {
+    if (plan.containsPattern(CTE) && ExternalLookupJoinEligibility.mayHaveLookupJoin(plan)) {
+      val cteDefs = ExternalLookupJoinEligibility.cteDefinitions(plan)
+      if (cteDefs.values.exists(InlineCTE.keepsDefinition(_))) {
+        plan.foreachUp {
+          case join: Join if join.resolved =>
+            ExternalLookupJoinEligibility.classify(join, cteDefs)._2 match {
+              case ExternalLookupJoinEligibility.Ineligible(error) => throw error
+              case _ =>
+            }
+          case _ =>
+        }
+      }
+    }
+  }
+
   private def readsJoin(plan: LogicalPlan): Boolean = plan match {
     case HintableJoin() => true
     case unary: UnaryNode => readsJoin(unary.child)
@@ -398,7 +473,8 @@ object CheckExternalLookupJoin extends (LogicalPlan => Unit) {
  * no predicate pushed into the join and no column pruned. These are the shapes that
  * [[CheckExternalLookupJoin]] validated. It also runs before CTEs are inlined, so it classifies a
  * join with the CTEs of its inputs inlined, as the analysis check does, and inlines the CTEs of
- * the lookup side into the lookup join.
+ * the lookup side into the lookup join. A lookup side that reads a CTE definition that InlineCTE
+ * keeps fails instead, so that every such definition keeps InlineCTE's decision.
  */
 object FormExternalLookupJoin extends Rule[LogicalPlan] {
   import ExternalLookupJoinEligibility._
@@ -410,8 +486,8 @@ object FormExternalLookupJoin extends Rule[LogicalPlan] {
     val cteDefs = cteDefinitions(plan)
     val formed = plan.transformUpWithPruning(_.containsPattern(JOIN)) {
       case join: Join =>
-        val inlined = inlineCTEs(join, cteDefs)
-        ExternalLookupJoinEligibility(inlined) match {
+        val (inlined, eligibility) = classify(join, cteDefs)
+        eligibility match {
           case Eligible =>
             val lookupPlan = lookupSide(inlined)
             ExternalLookupJoin(
