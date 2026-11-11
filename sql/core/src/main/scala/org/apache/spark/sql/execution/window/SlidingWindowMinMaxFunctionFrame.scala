@@ -50,7 +50,7 @@ private[window] final class SlidingWindowMinMaxFunctionFrame(
 
   // Spill-safety: when `input` (ExternalAppendOnlyUnsafeRowArray) spills, its
   // iterator reuses a single UnsafeRow whose pointer is rebound on each next().
-  // This is safe because nextRow (and lowerRow on RANGE frames) are used for
+  // This is safe because nextRow (and lowerRow on RANGE/GROUPS frames) are used for
   // comparison *before* calling getNextOrNull. Values are extracted from the row
   // via `evaluateAndCopy` before advancing. DO NOT cache a historical row without
   // an explicit .copy(); the shared reusable UnsafeRow would silently mutate.
@@ -58,7 +58,7 @@ private[window] final class SlidingWindowMinMaxFunctionFrame(
   private[this] var inputIterator: Iterator[UnsafeRow] = _
 
   // RowBoundOrdering.compare ignores its inputRow (it only uses the index), so
-  // the lower cursor is only needed for RANGE frames. Passing a null lowerRow to
+  // the lower cursor is only needed for RANGE and GROUPS frames. Passing a null lowerRow to
   // lbound.compare is safe on the ROWS path for exactly this reason.
   private[this] val needsLowerRow = !lbound.isInstanceOf[RowBoundOrdering]
 
@@ -134,6 +134,8 @@ private[window] final class SlidingWindowMinMaxFunctionFrame(
     inputIterator = input.generateIterator()
     nextRow = WindowFunctionFrame.getNextOrNull(inputIterator)
     upperBound = 0
+    lbound.prepare()
+    ubound.prepare()
   }
 
   override def write(index: Int, current: InternalRow): Unit = {
