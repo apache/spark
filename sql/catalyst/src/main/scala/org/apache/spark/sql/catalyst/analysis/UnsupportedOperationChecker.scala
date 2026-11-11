@@ -711,9 +711,7 @@ object UnsupportedOperationChecker extends Logging {
     val leftKeys = keys.map(_._2).getOrElse(Nil)
     val rightKeys = keys.map(_._3).getOrElse(Nil)
 
-    // TODO(SPARK-61348): this accepts a range bound on a column that is not TIMESTAMP,
-    //   which eviction never finalizes.
-    // TODO(SPARK-61349): this also accepts a bound that uses only constants, which does not
+    // TODO(SPARK-61349): this accepts a bound that uses only constants, which does not
     //   follow the other input's watermark and so cannot finalize unmatched state.
     def canEvictState(
         stateInput: LogicalPlan,
@@ -732,7 +730,7 @@ object UnsupportedOperationChecker extends Logging {
     def admittedBeforeFinalizationCheck: Boolean = {
       def hasRangeBound(stateInput: LogicalPlan, otherInput: LogicalPlan): Boolean =
         StreamingJoinHelper.getStateValueWatermark(stateInput.outputSet, otherInput.outputSet,
-          join.condition, Some(1000000)).isDefined
+          join.condition, Some(1000000), baseAdmissionRules = true).isDefined
       (leftKeys ++ rightKeys).exists {
         case a: AttributeReference => a.metadata.contains(EventTimeWatermark.delayKey)
         case _ => false
@@ -835,7 +833,8 @@ object UnsupportedOperationChecker extends Logging {
           "that allow unmatched state to be finalized. " +
           "The time constraint may be equality on event time or a time range condition. " +
           "A time range condition must bound a TIMESTAMP column of the finalized input by " +
-          "the other input's event time. " +
+          "the other input's event time, or compare time windows as a whole when the " +
+          "finalized input's windows are at least as long as the other input's. " +
           "When upgrading an existing query, correct its watermarks and time constraints, " +
           "then use a new checkpoint and replay the input, reconciling prior sink output." +
           legacyWindowNote + inexactNote + downstreamNote + disableNote

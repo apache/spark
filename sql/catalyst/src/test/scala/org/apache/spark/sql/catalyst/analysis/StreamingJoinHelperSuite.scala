@@ -20,12 +20,12 @@ package org.apache.spark.sql.catalyst.analysis
 import org.apache.logging.log4j.Level
 
 import org.apache.spark.sql.catalyst.dsl.expressions._
-import org.apache.spark.sql.catalyst.expressions.{Attribute, AttributeReference, AttributeSet, EqualTo, Expression, Literal, TimestampAddInterval}
+import org.apache.spark.sql.catalyst.expressions.{Attribute, AttributeReference, AttributeSet, EqualTo, Expression, Literal, TimestampAddInterval, TimeWindow}
 import org.apache.spark.sql.catalyst.optimizer.SimpleTestOptimizer
 import org.apache.spark.sql.catalyst.parser.CatalystSqlParser
 import org.apache.spark.sql.catalyst.plans.logical.{EventTimeWatermark, Filter, LeafNode, Statistics}
 import org.apache.spark.sql.internal.SQLConf
-import org.apache.spark.sql.types.{DayTimeIntervalType, IntegerType, LongType, MetadataBuilder, TimestampType}
+import org.apache.spark.sql.types.{DayTimeIntervalType, IntegerType, LongType, MetadataBuilder, StructType, TimestampType}
 import org.apache.spark.unsafe.types.CalendarInterval
 
 class StreamingJoinHelperSuite extends AnalysisTest {
@@ -39,6 +39,34 @@ class StreamingJoinHelperSuite extends AnalysisTest {
     assert(StreamingJoinHelper.getStateValueWatermark(
       AttributeSet(Seq(stateNumber)), AttributeSet(Seq(rightTime)),
       Some(condition), Some(10000L)) === None)
+  }
+
+  test("whole-window bounds need stored windows at least as long as the other input's") {
+    val windowType = new StructType().add("start", TimestampType).add("end", TimestampType)
+    def window(name: String, durationSeconds: Option[Long], watermark: Boolean): Attribute = {
+      val metadata = new MetadataBuilder().putBoolean(TimeWindow.marker, true)
+      durationSeconds.foreach(s => metadata.putLong(TimeWindow.durationKey, s * 1000000L))
+      if (watermark) metadata.putLong(EventTimeWatermark.delayKey, 0L)
+      AttributeReference(name, windowType, metadata = metadata.build())()
+    }
+    def cutoff(stored: Attribute, other: Attribute, condition: Expression): Option[Long] =
+      StreamingJoinHelper.getStateValueWatermark(
+        AttributeSet(Seq(stored)), AttributeSet(Seq(other)), Some(condition), Some(10000L))
+
+    val stored10 = window("lw", Some(10), watermark = false)
+    val other10 = window("rw", Some(10), watermark = true)
+    assert(cutoff(stored10, other10, stored10 > other10) === Some(10000L))
+    assert(cutoff(stored10, other10, stored10 >= other10) === Some(9999L))
+    val stored20 = window("lw", Some(20), watermark = false)
+    assert(cutoff(stored20, other10, stored20 > other10) === Some(10000L))
+    // A later 20-second window can start before an evicted 10-second window does.
+    val other20 = window("rw", Some(20), watermark = true)
+    assert(cutoff(stored10, other20, stored10 > other20) === None)
+    // Windows that do not record their duration give no cutoff.
+    val unknown = window("lw", None, watermark = false)
+    assert(cutoff(unknown, other10, unknown > other10) === None)
+    val struct = AttributeReference("ls", windowType)()
+    assert(cutoff(struct, other10, struct > other10) === None)
   }
 
   test("state watermark extraction preserves arithmetic term multiplicity") {

@@ -305,6 +305,10 @@ object StreamingJoinHelper extends PredicateHelper with Logging {
    *                                      cutoff from a condition that the solver counts
    *                                      inexactly. State eviction and the admission check set
    *                                      it, so they agree.
+   * @param baseAdmissionRules            whether to skip the checks that Spark 4.4 added to the
+   *                                      solver, so that the result matches earlier versions.
+   *                                      Only the admission rule that stays in force with
+   *                                      the finalization check disabled sets it.
    * @return state value watermark in milliseconds, is possible.
    */
   def getStateValueWatermark(
@@ -312,7 +316,8 @@ object StreamingJoinHelper extends PredicateHelper with Logging {
       attributesWithEventWatermark: AttributeSet,
       joinCondition: Option[Expression],
       eventWatermark: Option[Long],
-      exactForUnwatermarkedColumns: Boolean = false): Option[Long] = {
+      exactForUnwatermarkedColumns: Boolean = false,
+      baseAdmissionRules: Boolean = false): Option[Long] = {
 
     // If condition or event time watermark is not provided, then cannot calculate state watermark
     if (joinCondition.isEmpty || eventWatermark.isEmpty) return None
@@ -323,7 +328,8 @@ object StreamingJoinHelper extends PredicateHelper with Logging {
     def getStateWatermarkSafely(l: Expression, r: Expression): Option[Long] = {
       try {
         getStateWatermarkFromLessThenPredicate(l, r, attributesToFindStateWatermarkFor,
-          attributesWithEventWatermark, eventWatermark, exactForUnwatermarkedColumns)
+          attributesWithEventWatermark, eventWatermark, exactForUnwatermarkedColumns,
+          baseAdmissionRules)
       } catch {
         case NonFatal(e) =>
           logWarning(log"Error trying to extract state constraint from condition " +
@@ -373,7 +379,8 @@ object StreamingJoinHelper extends PredicateHelper with Logging {
       attributesToFindStateWatermarkFor: AttributeSet,
       attributesWithEventWatermark: AttributeSet,
       eventWatermark: Option[Long],
-      exactForUnwatermarkedColumns: Boolean): Option[Long] = {
+      exactForUnwatermarkedColumns: Boolean,
+      baseAdmissionRules: Boolean): Option[Long] = {
 
     val attributesInCondition =
       leftExpr.collect { case a: AttributeReference => a } ++
@@ -444,13 +451,19 @@ object StreamingJoinHelper extends PredicateHelper with Logging {
       return None
     }
 
-    // State eviction compares this cutoff in timestamp units against the constrained column.
-    val hasTimestampStateAttribute = constraintTerm.exists {
-      case a: AttributeReference =>
-        attributesToFindStateWatermarkFor.contains(a) && a.dataType == TimestampType
-      case _ => false
+    // State eviction compares this cutoff in timestamp units against the constrained column, or
+    // against its end for a time window; see [[isWindowEvictionSafe]].
+    val stateColumn = constraintTerm.collectFirst {
+      case a: AttributeReference if attributesToFindStateWatermarkFor.contains(a) => a
     }
-    if (!hasTimestampStateAttribute) return None
+    val watermarkColumn = terms.flatMap(_.collect {
+      case a: AttributeReference
+          if attributesWithEventWatermark.contains(a) && a.metadata.contains(delayKey) => a
+    }).headOption
+    val canEvictStateColumn = stateColumn.exists { column =>
+      column.dataType == TimestampType || watermarkColumn.exists(isWindowEvictionSafe(column, _))
+    }
+    if (!baseAdmissionRules && !canEvictStateColumn) return None
 
     // Replace watermark attribute with watermark value, and generate the resolved expression
     // from the other terms. That is,
@@ -477,6 +490,35 @@ object StreamingJoinHelper extends PredicateHelper with Logging {
     val constraintValue = exprWithWatermarkSubstituted.eval().asInstanceOf[java.lang.Double]
     Some((Double2double(constraintValue) / 1000.0).toLong)
   }
+
+  /** Whether a column of a join input can take a range cutoff: TIMESTAMP, or a time window. */
+  def canTakeRangeCutoff(column: Attribute): Boolean =
+    column.dataType == TimestampType || windowDuration(column).isDefined
+
+  /** The length of the windows in a column built by window(), when the column records it. */
+  private def windowDuration(column: Attribute): Option[Long] = {
+    val metadata = column.metadata
+    if (metadata.contains(TimeWindow.marker) && metadata.contains(TimeWindow.durationKey)) {
+      Some(metadata.getLong(TimeWindow.durationKey))
+    } else {
+      None
+    }
+  }
+
+  /**
+   * Whether evicting `stateWindow` by its end is safe when a range condition compares it, as a
+   * whole, with `watermarkWindow`, the other input's watermarked time window. Ordering windows
+   * compares their starts first. A window evicted at a cutoff no higher than the watermark
+   * starts at least its own duration before the watermark, while a later window of the other
+   * input ends above the watermark, so it starts less than its own duration before it. When the
+   * stored windows last at least as long as the other input's, every later window therefore
+   * starts after every evicted window and orders above it. Shorter stored windows get no cutoff.
+   */
+  private def isWindowEvictionSafe(stateWindow: Attribute, watermarkWindow: Attribute): Boolean =
+    (windowDuration(stateWindow), windowDuration(watermarkWindow)) match {
+      case (Some(stored), Some(other)) => stored >= other
+      case _ => false
+    }
 
   /**
    * Whether the solver counts part of the expression inexactly: an interval of a day or more,

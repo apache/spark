@@ -1464,9 +1464,17 @@ Additional details on supported joins:
 - For stream-stream outer and semi joins, the time constraint that finalizes an input's rows must
   bound that input by the other input's event time, either through an equality key on that event
   time or its time window, or through a range condition on a timestamp column of the input. A
-  range condition on a column of another type does not qualify: a numeric column, such as
-  `n > CAST(rightTime AS BIGINT)`, a DATE or TIMESTAMP_NTZ column, or a time window, such as
-  `leftWindow > rightWindow`.
+  range condition may also compare the input's time window as a whole with the other input's,
+  such as `leftWindow > rightWindow`, when the input's windows last at least as long as the
+  other input's. A range condition on a column of another type does not qualify: a numeric
+  column, such as `n > CAST(rightTime AS BIGINT)`, a DATE or TIMESTAMP_NTZ column, or a time
+  window shorter than the other input's.
+
+- A stream-stream inner join cleans up an input's state only with such a time constraint. For
+  example, an inner join whose only time constraint is `leftWindow > rightWindow`, with 10-second
+  left windows and 20-second right windows, keeps every left row in its state and holds back its
+  output watermark for the left input, so a stateful operator after the join that uses the left
+  windows cannot emit results.
 
 - As of Spark 2.4, you can use joins only when the query is in Append output mode. Other output modes are not yet supported.
 

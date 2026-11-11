@@ -278,8 +278,6 @@ object StreamingSymmetricHashJoinHelper extends Logging {
       } else { // case 2 in the StreamingSymmetricHashJoinExec docs
         // Future matches are limited by the opposite watermark. This input needs no watermark;
         // its event-time column may also have been pruned from the physical join.
-        // TODO(SPARK-61348): the analysis check admits a range bound on a column that is not
-        //   TIMESTAMP, which this branch never evicts.
         val otherSideEventTime = otherSideInputAttributes.find(_.metadata.contains(delayKey))
         getStateValueWatermarkForInput(oneSideInputAttributes, otherSideInputAttributes,
           condition, eventTimeWatermarkForEviction).flatMap { case (attribute, watermark) =>
@@ -314,18 +312,19 @@ object StreamingSymmetricHashJoinHelper extends Logging {
       otherInputAttributes: Seq[Attribute],
       condition: Option[Expression],
       eventWatermark: Option[Long]): Option[(Attribute, Long)] = {
-    // TODO(SPARK-61348): the analysis check admits a range bound on a column that is not
-    //   TIMESTAMP, which no candidate below takes.
     // TODO(SPARK-61349): a conjunct that uses only constants still caps the cutoff, so it can
     //   stop eviction.
     val eventTime = inputAttributes.find(_.metadata.contains(delayKey))
     // Only the first marked column is checked for late input in compatibility mode.
     val otherEventTime = otherInputAttributes.find(_.metadata.contains(delayKey))
     // First try the watermarked column. If it has no inferable bound, try the other timestamp
-    // columns in input schema order and use the first with a bound. This makes the indexed column
-    // deterministic for a fixed input schema and join condition.
+    // and time-window columns in input schema order and use the first with a bound. This makes
+    // the indexed column deterministic for a fixed input schema and join condition. The solver
+    // gives a cutoff for no other column, so the admission check, which tries every column,
+    // accepts the same bounds.
     val candidates = eventTime.toSeq ++ inputAttributes.filter { attribute =>
-      attribute.dataType == TimestampType && !eventTime.exists(_.semanticEquals(attribute))
+      StreamingJoinHelper.canTakeRangeCutoff(attribute) &&
+        !eventTime.exists(_.semanticEquals(attribute))
     }
     candidates.iterator.flatMap { attribute =>
       StreamingJoinHelper.getStateValueWatermark(AttributeSet(Seq(attribute)),

@@ -30,14 +30,15 @@ Please refer [Migration Guide: SQL, Datasets and DataFrame](../sql-migration-gui
   Right outer joins require the corresponding settings on the left; full outer joins require
   them on both sides. The time condition must be an equality key on the other input's event time
   or its time window, or a range condition that bounds a timestamp column of the finalized input
-  by the other input's event time. An equality key does not count when it shifts the other
-  input's event time backward by whole days, months or years, such as
-  `leftTime = rightTime - INTERVAL 1 DAY`, or truncates it, such as
+  by the other input's event time. A range condition may also compare time windows as a whole
+  when the finalized input's windows last at least as long as the other input's. An equality key
+  does not count when it shifts the other input's event time backward by whole days, months or
+  years, such as `leftTime = rightTime - INTERVAL 1 DAY`, or truncates it, such as
   `leftTime = CAST(CAST(rightTime AS BIGINT) AS TIMESTAMP)`. Neither does a range condition on a
-  numeric, DATE or TIMESTAMP_NTZ column or on a time window. When both inputs have watermarks, a
-  time range condition between the two event times can bound a join whose equality key does not
-  count. Some previously accepted queries now fail if these requirements are not met. Update
-  their watermarks and join conditions using the
+  numeric, DATE or TIMESTAMP_NTZ column or on a shorter time window. When both inputs have
+  watermarks, a time range condition between the two event times can bound a join whose equality
+  key does not count. Some previously accepted queries now fail if these requirements are not
+  met. Update their watermarks and join conditions using the
   [join support table](apis-on-dataframes-and-datasets.html#support-matrix-for-joins-in-streaming-queries).
   A stateful operator after such a join that uses the other input's event time also needs that
   input bounded: for example, a left outer join followed by an append-mode aggregation over the
@@ -66,6 +67,15 @@ Please refer [Migration Guide: SQL, Datasets and DataFrame](../sql-migration-gui
   and an outer join never outputs that input's unmatched rows. Because the corrected eviction
   changes results and cannot be turned off, these stream-stream join corrections are made in
   Spark 4.4.0 and are not backported to earlier releases.
+
+- Since Spark 4.4, a stream-stream inner join no longer removes an input's rows from its state
+  when the input's only time condition compares its time windows as a whole with longer time
+  windows of the other input, such as 10-second left windows and 20-second right windows in
+  `leftWindow > rightWindow`. Earlier versions removed them by window end, which could drop
+  matches. Such a join now keeps that input's rows for the life of the query and holds back its
+  output watermark for that input, so a stateful operator after the join that uses that input's
+  windows cannot emit results. Windows that last at least as long as the other input's are still
+  removed.
 
 - Spark 4.4 corrects cases where stream-stream equality joins could discard rows before their
   matches arrived or output unmatched rows too early. Such joins with a watermark on only one

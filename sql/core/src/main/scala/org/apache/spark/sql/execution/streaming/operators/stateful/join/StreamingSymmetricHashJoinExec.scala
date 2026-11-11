@@ -40,7 +40,7 @@ import org.apache.spark.sql.execution.streaming.operators.stateful.join.Symmetri
 import org.apache.spark.sql.execution.streaming.state._
 import org.apache.spark.sql.internal.{SessionState, SQLConf}
 import org.apache.spark.sql.streaming.OutputMode
-import org.apache.spark.sql.types.StructType
+import org.apache.spark.sql.types.{StructType, TimestampType}
 import org.apache.spark.util.{CompletionIterator, SerializableConfiguration}
 
 
@@ -846,15 +846,21 @@ case class StreamingSymmetricHashJoinExec(
           thisSideAttrs, !allowMultipleStatefulOperators).toSeq
         val otherEventTime = WatermarkSupport.findEventTimeColumn(
           otherSideAttrs, !allowMultipleStatefulOperators).toSeq
-        val lowerBoundMs = StreamingJoinHelper.getStateValueWatermark(
-          AttributeSet(otherEventTime), AttributeSet(thisEventTime), condition.full, Some(0L))
-        val upperBoundMs = StreamingJoinHelper.getStateValueWatermark(
-          AttributeSet(thisEventTime), AttributeSet(otherEventTime), condition.full, Some(0L))
+        // The scan reads the event time as a long, so a time-window event time, which the
+        // solver bounds by window order, cannot give it offsets.
+        if (!(thisEventTime ++ otherEventTime).forall(_.dataType == TimestampType)) {
+          None
+        } else {
+          val lowerBoundMs = StreamingJoinHelper.getStateValueWatermark(
+            AttributeSet(otherEventTime), AttributeSet(thisEventTime), condition.full, Some(0L))
+          val upperBoundMs = StreamingJoinHelper.getStateValueWatermark(
+            AttributeSet(thisEventTime), AttributeSet(otherEventTime), condition.full, Some(0L))
 
-        (lowerBoundMs, upperBoundMs) match {
-          case (Some(lower), Some(upper)) =>
-            Some((lower * 1000L, -upper * 1000L)) // ms -> us
-          case _ => None
+          (lowerBoundMs, upperBoundMs) match {
+            case (Some(lower), Some(upper)) =>
+              Some((lower * 1000L, -upper * 1000L)) // ms -> us
+            case _ => None
+          }
         }
       }
     }

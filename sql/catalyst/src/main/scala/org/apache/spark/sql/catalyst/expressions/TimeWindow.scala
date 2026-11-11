@@ -187,6 +187,9 @@ case class TimeWindow(
 
 object TimeWindow {
   val marker = "spark.timeWindow"
+  // Window length in microseconds, recorded next to the marker. A stream-stream join compares
+  // it to decide whether an ordering of two window columns can evict state.
+  val durationKey = "spark.timeWindow.durationUs"
 
   /**
    * Parses the interval string for a valid time duration. CalendarInterval expects interval
