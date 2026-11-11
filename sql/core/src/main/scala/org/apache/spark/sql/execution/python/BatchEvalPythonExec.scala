@@ -32,7 +32,8 @@ import org.apache.spark.sql.execution.SparkPlan
 import org.apache.spark.sql.execution.metric.SQLMetric
 import org.apache.spark.sql.execution.python.EvalPythonExec.ArgumentMetadata
 import org.apache.spark.sql.internal.SQLConf
-import org.apache.spark.sql.types.{BinaryType, DataType, StringType, StructField, StructType}
+import org.apache.spark.sql.types.{
+  BinaryType, DataType, GeographyType, GeometryType, StringType, StructField, StructType}
 
 /**
  * A physical plan that evaluates a [[PythonUDF]]
@@ -162,17 +163,20 @@ class BatchEvalPythonEvaluatorFactory(
 }
 
 object BatchEvalPythonExec {
+  private def isSupportedProjectedInputType(dataType: DataType): Boolean = dataType match {
+    case _: StringType | BinaryType => true
+    case _: GeometryType | _: GeographyType => true
+    case _ => false
+  }
+
   /**
    * Estimates top-level variable-width payloads in a projected UDF argument row. Nested inputs are
    * intentionally excluded to avoid a recursive walk of every value.
    */
   private[python] def projectedInputPayloadSizeEstimator(
       inputTypes: Seq[DataType]): Option[InternalRow => Long] = {
-    val projectedPayloads = inputTypes.zipWithIndex.flatMap { case (dataType, ordinal) =>
-      dataType match {
-        case _: StringType | BinaryType => Some((ordinal, dataType))
-        case _ => None
-      }
+    val projectedPayloads = inputTypes.zipWithIndex.collect {
+      case (dataType, ordinal) if isSupportedProjectedInputType(dataType) => (ordinal, dataType)
     }.toArray
     if (projectedPayloads.isEmpty) {
       None
@@ -186,6 +190,8 @@ object BatchEvalPythonExec {
             estimatedBytes += (dataType match {
               case _: StringType => row.getUTF8String(ordinal).numBytes.toLong
               case BinaryType => row.getBinary(ordinal).length.toLong
+              case _: GeometryType | _: GeographyType =>
+                row.getBinaryView(ordinal).numBytes().toLong
               case _ => 0L
             })
           }
