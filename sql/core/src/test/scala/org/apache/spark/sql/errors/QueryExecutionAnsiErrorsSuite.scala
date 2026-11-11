@@ -151,7 +151,8 @@ class QueryExecutionAnsiErrorsSuite extends SharedSparkSession
           condition = "INTERVAL_DIVIDED_BY_ZERO",
           sqlState = "22012",
           parameters = Map.empty[String, String],
-          context = ExpectedContext(fragment = "div", callSitePattern = getCurrentClassCallSitePattern))
+          context = ExpectedContext(
+            fragment = "div", callSitePattern = getCurrentClassCallSitePattern))
       }
     }
   }
