@@ -346,7 +346,7 @@ object SpecialDatetimeValues extends Rule[LogicalPlan] {
   }
 
   private val specialDatetimeRewrite: PartialFunction[Expression, Expression] = {
-    case cast @ Cast(e, dt, _, _) if rewrites(dt) && isConstantString(e) =>
+    case cast @ Cast(_, dt, _, _) if rewrites(dt) =>
       // A failing input is left to the cast, so that it fails the query only if evaluated.
       constantString(cast)
         .flatMap(s => conv(dt)(s.toString, cast.zoneId))
