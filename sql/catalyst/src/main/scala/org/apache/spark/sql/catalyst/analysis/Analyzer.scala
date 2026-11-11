@@ -607,7 +607,9 @@ class Analyzer(
 
   /**
    * Like [[execute]], but also returns the temporary variables recorded via IDENTIFIER clauses
-   * during this analysis (`AnalysisContext.referredTempVariableNamesUnderIdentifier`).
+   * during this analysis (`AnalysisContext.referredTempVariableNamesUnderIdentifier`), and the
+   * temporary functions that function resolution recorded
+   * (`AnalysisContext.referredTempFunctionNames`).
    *
    * SQL function creation analyzes the body, inspects it, and only then runs `checkAnalysis`, so
    * it cannot go through [[executeAndCheckReferredTempVariablesUnderIdentifier]]. It still needs
@@ -616,15 +618,18 @@ class Analyzer(
    *
    * Only the variables read by the body itself are returned. A SQL function that the body calls
    * is expanded in a context of its own, so a variable it reads through an IDENTIFIER clause stays
-   * that function's dependency rather than becoming one of the function under creation.
+   * that function's dependency rather than becoming one of the function under creation. Temporary
+   * function names, like for views, also include those recorded while expanding a called function.
    */
-  def executeWithReferredTempVariablesUnderIdentifier(
-      plan: LogicalPlan): (LogicalPlan, Seq[Seq[String]]) = {
+  def executeWithReferredTempObjects(
+      plan: LogicalPlan): (LogicalPlan, Seq[Seq[String]], Seq[String]) = {
     AnalysisContext.withNewAnalysisContext {
       AnalysisContext.withSharingIdentifierVariablesWithNestedSQLFunctions(share = false) {
         val analyzed = executeSameContext(plan)
-        // Read the accumulator before the context is restored on exit.
-        (analyzed, AnalysisContext.get.referredTempVariableNamesUnderIdentifier.toSeq)
+        // Read the accumulators before the context is restored on exit.
+        val context = AnalysisContext.get
+        (analyzed, context.referredTempVariableNamesUnderIdentifier.toSeq,
+          context.referredTempFunctionNames.toSeq)
       }
     }
   }

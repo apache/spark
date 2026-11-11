@@ -151,9 +151,9 @@ case class CreateSQLFunctionCommand(
       }
 
       // Build the function body and check if the function body can be analyzed successfully.
-      // The last element is the temporary variables the body reads only inside IDENTIFIER
-      // clauses. They are absent from the analyzed plan, so they are captured during analysis.
-      val (unresolvedPlan, analyzedPlan, inferredReturnType, identifierVars) = if (!isTableFunc) {
+      // The last element is captured during analysis: the temporary variables the body reads only
+      // inside IDENTIFIER clauses, and the temporary functions that resolution recorded.
+      val (unresolvedPlan, analyzedPlan, inferredReturnType, referredTemps) = if (!isTableFunc) {
         // Build SQL scalar function plan.
         val outputExpr = if (query.isDefined) ScalarSubquery(query.get) else expression.get
         val plan: LogicalPlan = returnType.map { t =>
@@ -174,8 +174,8 @@ case class CreateSQLFunctionCommand(
         checkCyclicFunctionReference(catalog, name, plan)
 
         // Check the function body can be analyzed correctly.
-        val (analyzed, referredTempVarsUnderIdentifier) =
-          analyzer.executeWithReferredTempVariablesUnderIdentifier(plan)
+        val (analyzed, referredTempVarsUnderIdentifier, referredTempFunctions) =
+          analyzer.executeWithReferredTempObjects(plan)
         val (resolved, resolvedReturnType) = analyzed match {
           case p @ Project(expr :: Nil, _) if expr.resolved =>
             (p, Left(resolveReturnType(expr.dataType, collation)))
@@ -190,7 +190,8 @@ case class CreateSQLFunctionCommand(
         // Check if the SQL function body can be analyzed.
         checkFunctionBodyAnalysis(analyzer, function, resolved)
 
-        (plan, resolved, resolvedReturnType, referredTempVarsUnderIdentifier)
+        (plan, resolved, resolvedReturnType,
+          (referredTempVarsUnderIdentifier, referredTempFunctions))
       } else {
         // Build SQL table function plan.
         if (query.isEmpty) {
@@ -201,8 +202,8 @@ case class CreateSQLFunctionCommand(
 
         // Construct a lateral join to analyze the function body.
         val plan = LateralJoin(inputPlan, LateralSubquery(query.get), Inner, None)
-        val (analyzed, referredTempVarsUnderIdentifier) =
-          analyzer.executeWithReferredTempVariablesUnderIdentifier(plan)
+        val (analyzed, referredTempVarsUnderIdentifier, referredTempFunctions) =
+          analyzer.executeWithReferredTempObjects(plan)
         val newPlan = analyzed match {
           case Project(_, j: LateralJoin) => j
           case j: LateralJoin => j
@@ -255,7 +256,8 @@ case class CreateSQLFunctionCommand(
           )
         }
 
-        (plan, analyzed, Right(returnParam), referredTempVarsUnderIdentifier)
+        (plan, analyzed, Right(returnParam),
+          (referredTempVarsUnderIdentifier, referredTempFunctions))
       }
 
       // A permanent function is not allowed to reference temporary objects.
@@ -263,10 +265,11 @@ case class CreateSQLFunctionCommand(
       // Like persisted views, honor `spark.sql.legacy.allowSessionVariableInPersistedView` for the
       // variables read only through IDENTIFIER clauses: with it set they are not rejected (and,
       // as for views, not persisted either).
+      val (identifierVars, referredTempFunctions) = referredTemps
       val identifierVarsToReject =
         if (conf.getConf(SQLConf.VARIABLES_UNDER_IDENTIFIER_IN_VIEW)) Nil else identifierVars
-      verifyTemporaryObjectsNotExists(
-        catalog, analyzer, isTemp, name, unresolvedPlan, analyzedPlan, identifierVarsToReject)
+      verifyTemporaryObjectsNotExists(catalog, analyzer, isTemp, name, unresolvedPlan,
+        analyzedPlan, identifierVarsToReject, referredTempFunctions)
 
       // Generate function properties.
       val properties =
@@ -363,12 +366,7 @@ case class CreateSQLFunctionCommand(
       child.flatMap {
         case w: UnresolvedWith if !w.resolved => w.innerChildren.flatMap(collectTempFunctions)
         case plan if !plan.resolved =>
-          val tempTableFunction = plan match {
-            case u: UnresolvedTableValuedFunction if isTemporaryFunctionName(catalog, u.name) =>
-              Seq(u.name.last)
-            case _ => Seq.empty
-          }
-          tempTableFunction ++ plan.expressions.flatMap(_.flatMap {
+          plan.expressions.flatMap(_.flatMap {
             case e: SubqueryExpression => collectTempFunctions(e.plan)
             case e: UnresolvedFunction if isTemporaryFunctionName(catalog, e.nameParts) =>
               Seq(e.nameParts.last)
@@ -390,14 +388,22 @@ case class CreateSQLFunctionCommand(
     (collectTempViews(child), tempFunctions)
   }
 
+  private def legacyTempFunctionCheck: Boolean =
+    conf.getConf(SQLConf.LEGACY_ALLOW_TEMP_TABLE_FUNCTION_IN_PERSISTED_SQL_FUNCTION)
+
   // Whether `nameParts` (unqualified, or `session.` / `system.session.`-qualified) names a temp
   // function.
   private def isTemporaryFunctionName(catalog: SessionCatalog, nameParts: Seq[String]): Boolean =
     nameParts match {
       case Seq(funcName) => catalog.isTemporaryFunction(FunctionIdentifier(funcName))
-      case _ => functionIdentifierForLookup(catalog, nameParts).exists {
-        case (ident, isSystem) => isSystem && catalog.isTemporaryFunction(ident)
-      }
+      // Legacy: only a full `system.session.` qualifier names a temp function.
+      case _ if legacyTempFunctionCheck =>
+        nameParts.length == 3 &&
+          catalog.identifierFromSystemNameParts(nameParts).exists(catalog.isTemporaryFunction)
+      // Check the in-memory registry first: the lookup may probe the metastore.
+      case _ =>
+        catalog.identifierFromSystemNameParts(nameParts).exists(catalog.isTemporaryFunction) &&
+          functionIdentifierForLookup(catalog, nameParts).exists(_._2)
     }
 
   // The identifier to look up `nameParts` by, and whether it is in a system namespace. A
@@ -408,18 +414,21 @@ case class CreateSQLFunctionCommand(
       nameParts: Seq[String]): Option[(FunctionIdentifier, Boolean)] = {
     lazy val persistentIdent = nameParts match {
       case Seq(_) | Seq(_, _) => Some(nameParts.asFunctionIdentifier)
-      // Catalog names are case-insensitive regardless of spark.sql.caseSensitive.
+      // The session catalog name is case-insensitive even with spark.sql.caseSensitive=true.
       case Seq(c, db, f) if c.equalsIgnoreCase(CatalogManager.SESSION_CATALOG_NAME) =>
         Some(FunctionIdentifier(f, Some(db), Some(CatalogManager.SESSION_CATALOG_NAME)))
       case _ => None
     }
+    // Check the registry first: a loaded persistent function needs no metastore call.
+    def persistentFunctionExists(ident: FunctionIdentifier): Boolean =
+      catalog.isRegisteredFunction(ident) || catalog.isPersistentFunction(ident)
     def systemFunctionExists(ident: FunctionIdentifier): Boolean =
       catalog.lookupFunctionInfoByIdentifier(ident, tableFunction = false).isDefined ||
         catalog.lookupFunctionInfoByIdentifier(ident, tableFunction = true).isDefined
     catalog.identifierFromSystemNameParts(nameParts) match {
       case Some(ident) if nameParts.length > 2 ||
           (conf.prioritizeSystemCatalog && systemFunctionExists(ident)) ||
-          !catalog.isPersistentFunction(persistentIdent.get) =>
+          !persistentFunctionExists(persistentIdent.get) =>
         Some((ident, true))
       case _ => persistentIdent.map((_, false))
     }
@@ -432,6 +441,7 @@ case class CreateSQLFunctionCommand(
    * @param referredTempVarsUnderIdentifier temporary variables the body reads only inside
    *                                        IDENTIFIER clauses, recorded during analysis because
    *                                        the analyzed plan no longer mentions them.
+   * @param referredTempFunctions temporary functions recorded while analyzing the body.
    */
   private def verifyTemporaryObjectsNotExists(
       catalog: SessionCatalog,
@@ -440,7 +450,8 @@ case class CreateSQLFunctionCommand(
       name: FunctionIdentifier,
       child: LogicalPlan,
       analyzed: LogicalPlan,
-      referredTempVarsUnderIdentifier: Seq[Seq[String]]): Unit = {
+      referredTempVarsUnderIdentifier: Seq[Seq[String]],
+      referredTempFunctions: Seq[String]): Unit = {
     import org.apache.spark.sql.connector.catalog.CatalogV2Implicits._
     if (!isTemporary) {
       val (tempViews, tempFunctions) =
@@ -449,7 +460,16 @@ case class CreateSQLFunctionCommand(
         throw UserDefinedFunctionErrors.invalidTempViewReference(
           routineName = name.asMultipart, tempViewName = nameParts)
       }
-      tempFunctions.foreach { funcName =>
+      // Temp table functions come from what resolution recorded, which covers IDENTIFIER calls.
+      // Recorded scalar names are not used: the existence check records names it does not bind.
+      val tempTableFunctions = if (legacyTempFunctionCheck) {
+        Nil
+      } else {
+        referredTempFunctions.filter { funcName =>
+          catalog.isTemporaryTableFunctionVisible(FunctionIdentifier(funcName))
+        }
+      }
+      (tempFunctions ++ tempTableFunctions).foreach { funcName =>
         throw UserDefinedFunctionErrors.invalidTempFuncReference(
           routineName = name.asMultipart, tempFuncName = funcName)
       }
@@ -485,8 +505,12 @@ case class CreateSQLFunctionCommand(
         case u @ UnresolvedTableValuedFunction(nameParts, arguments, _) =>
           sqlFunctionIdentifier(nameParts, tableFunction = true).foreach { case (ident, isSystem) =>
             val f = withPosition(u) {
-              (if (isSystem) catalog.resolveTableFunctionByIdentifier(ident, arguments).get
-              else catalog.lookupTableFunction(ident, arguments)).asInstanceOf[SQLTableFunction]
+              (if (isSystem) {
+                catalog.resolveTableFunctionByIdentifier(ident, arguments)
+                  .getOrElse(catalog.failFunctionLookup(ident))
+              } else {
+                catalog.lookupTableFunction(ident, arguments)
+              }).asInstanceOf[SQLTableFunction]
             }
             // Check cyclic reference using qualified function names.
             val newPath = path :+ f.function.name
@@ -515,8 +539,12 @@ case class CreateSQLFunctionCommand(
     def checkFunction(u: UnresolvedFunction, path: Seq[FunctionIdentifier]): Unit = {
       sqlFunctionIdentifier(u.nameParts, tableFunction = false).foreach { case (ident, isSystem) =>
         val f = withPosition(u) {
-          (if (isSystem) catalog.resolveScalarFunctionByIdentifier(ident, u.arguments).get
-          else catalog.lookupFunction(ident, u.arguments)).asInstanceOf[SQLFunctionExpression]
+          (if (isSystem) {
+            catalog.resolveScalarFunctionByIdentifier(ident, u.arguments)
+              .getOrElse(catalog.failFunctionLookup(ident))
+          } else {
+            catalog.lookupFunction(ident, u.arguments)
+          }).asInstanceOf[SQLFunctionExpression]
         }
         // Check cyclic reference using qualified function names.
         val newPath = path :+ f.function.name
