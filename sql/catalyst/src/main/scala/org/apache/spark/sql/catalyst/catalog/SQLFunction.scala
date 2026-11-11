@@ -29,6 +29,7 @@ import org.apache.spark.sql.catalyst.catalog.UserDefinedFunction._
 import org.apache.spark.sql.catalyst.expressions.{Cast, Expression, ExpressionInfo, ScalarSubquery}
 import org.apache.spark.sql.catalyst.parser.ParserInterface
 import org.apache.spark.sql.catalyst.plans.logical.{LogicalPlan, OneRowRelation, Project}
+import org.apache.spark.sql.catalyst.trees.TreeNodeTag
 import org.apache.spark.sql.errors.QueryCompilationErrors
 import org.apache.spark.sql.types.{DataType, ExplicitUTF8BinaryStringType, StructType}
 
@@ -200,6 +201,13 @@ object SQLFunction {
    * [[CatalogTable.VIEW_RESOLUTION_PATH]]).
    */
   val FUNCTION_RESOLUTION_PATH: String = "function.resolutionPath"
+
+  /**
+   * Marks the nodes of a parameter default that named-argument filling inserts into a call, so
+   * the analyzer can treat temporary objects the default binds as the called function's
+   * dependencies. See `AnalysisContext.withTempReferencesOfInsertedDefault`.
+   */
+  val INSERTED_PARAMETER_DEFAULT = TreeNodeTag[Unit]("insertedParameterDefault")
 
   private val SQL_FUNCTION_PREFIX = "sqlFunction."
 
