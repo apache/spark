@@ -1556,6 +1556,30 @@ class SparkSqlAstBuilder extends AstBuilder {
     ShowPartitionsJsonCommand(relation, partitionKeys.map(_.spec))
   }
 
+  /**
+   * Create a [[ShowTablePropertiesJsonCommand]] or [[ShowTableProperties]] command.
+   *
+   * When `AS JSON` is absent, parsing is delegated to the superclass
+   * ([[AstBuilder#visitShowTblProperties]]), which produces a [[ShowTableProperties]] logical
+   * plan.
+   *
+   * When `AS JSON` is present, this method produces a [[ShowTablePropertiesJsonCommand]]
+   * directly, bypassing the [[ShowTableProperties]] logical node. Both V1 (session catalog)
+   * and V2 tables/views are supported.
+   *
+   * The syntax of using this command in SQL is:
+   * {{{
+   *   SHOW TBLPROPERTIES multi_part_name[('propertyKey')] [AS JSON];
+   * }}}
+   */
+  override def visitShowTblProperties(
+      ctx: ShowTblPropertiesContext): LogicalPlan = withOrigin(ctx) {
+    if (ctx.JSON == null) return super.visitShowTblProperties(ctx)
+    val relation = createUnresolvedTableOrView(
+      ctx.table, "SHOW TBLPROPERTIES AS JSON", allowTempView = true)
+    ShowTablePropertiesJsonCommand(relation, Option(ctx.key).map(visitPropertyKeyOrStringLit))
+  }
+
   override def visitShowProcedures(ctx: ShowProceduresContext): LogicalPlan = withOrigin(ctx) {
     val ns = if (ctx.identifierReference != null) {
       withIdentClause(ctx.identifierReference, UnresolvedNamespace(_))
