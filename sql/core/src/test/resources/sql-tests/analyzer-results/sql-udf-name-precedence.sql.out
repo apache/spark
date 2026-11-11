@@ -191,7 +191,8 @@ Project [outer_param_pure(x#x) AS outer_param_pure(42)#x]
 CREATE OR REPLACE TEMPORARY FUNCTION derived_col_vs_paramless(u STRING)
 RETURNS STRING RETURN (SELECT current_user FROM (SELECT u AS current_user))
 -- !query analysis
-CreateSQLFunctionCommand derived_col_vs_paramless, u STRING, STRING, (SELECT current_user FROM (SELECT u AS current_user)), false, true, false, true
+CreateSQLFunctionCommand u STRING, STRING, (SELECT current_user FROM (SELECT u AS current_user)), false, true, false, true
++- ResolvedIdentifier org.apache.spark.sql.catalyst.analysis.FakeSystemCatalog$@xxxxxxxx, session.derived_col_vs_paramless
 
 
 -- !query
