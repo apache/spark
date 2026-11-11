@@ -24,7 +24,6 @@ import java.time.LocalDateTime;
 import java.time.ZoneId;
 
 import org.apache.spark.SparkDateTimeException;
-import org.apache.spark.sql.catalyst.util.DateTimeConstants;
 import org.apache.spark.sql.catalyst.util.DateTimeUtils;
 import org.apache.spark.sql.catalyst.util.IntervalUtils;
 import org.apache.spark.sql.catalyst.util.TimestampFormatter;
@@ -87,21 +86,26 @@ public final class DateTimeExpressionUtils {
    * (no zone applied); otherwise {@code zoneId} is used to resolve the instant.
    *
    * <p>This is the shared, exception-raising core used by both the eval and
-   * codegen paths. It throws {@link SparkDateTimeException} for an invalid
-   * fraction-of-second and {@link DateTimeException} for an invalid
-   * year/month/day/hour/min combination; callers decide how to translate those.
+   * codegen paths. It throws {@link DateTimeException} for seconds that are
+   * negative or whose whole seconds exceed {@code Integer.MAX_VALUE} (2147483648
+   * or more), before the other fields are checked; then
+   * {@link SparkDateTimeException} for an invalid fraction-of-second, a value
+   * between 60 and 61 seconds, still before the other fields; and otherwise
+   * {@link DateTimeException} for an invalid year/month/day/hour/min/second
+   * combination, 61 seconds included, in the order of the fields; callers decide
+   * how to translate those.
    */
   public static long makeTimestampMicros(
       int year, int month, int day, int hour, int min,
       Decimal secAndMicros, ZoneId zoneId, boolean timestampNTZ) {
-    assert secAndMicros.scale() == 6 :
-      "Seconds fraction must have 6 digits for microseconds but got " + secAndMicros.scale();
-    // 8 digits cannot overflow Int.
-    int totalMicros = (int) secAndMicros.toUnscaledLong();
-    int microsPerSecond = (int) DateTimeConstants.MICROS_PER_SECOND;
-    int nanosPerMicros = (int) DateTimeConstants.NANOS_PER_MICROS;
-    int seconds = Math.floorDiv(totalMicros, microsPerSecond);
-    int nanos = Math.floorMod(totalMicros, microsPerSecond) * nanosPerMicros;
+    // The seconds are DecimalType(16, 6), so their whole seconds can exceed an int. The split
+    // rejects such seconds, and negative ones, before narrowing, as make_time does; see
+    // DateTimeUtils.splitSecsAndMicros for the error message, the order of these checks and
+    // the packing of the seconds and the nanos. The 60-second branch below runs next, before
+    // LocalDateTime.of checks the other fields.
+    long secs = DateTimeUtils.splitSecsAndMicros(secAndMicros);
+    int seconds = (int) (secs >> 32);
+    int nanos = (int) secs;
     LocalDateTime ldt;
     if (seconds == 60) {
       if (nanos == 0) {
