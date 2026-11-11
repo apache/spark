@@ -4592,21 +4592,38 @@ class KeyGroupedPartitioningSuite extends DistributionAndOrderingSuiteBase {
       sql(s"INSERT INTO testcat.ns.$t VALUES ${ids.map(i => s"($i)").mkString(", ")}")
     }
 
+    // The two partitioned scans report the same raw values and tie on partition count, so the
+    // first child becomes the best spec. A nested join on the left makes that spec a collection.
+    // A nested join on the right makes the plain scan the best spec. Both arms have to shuffle.
+    val queries = Seq(
+      """
+        |SELECT /*+ MERGE(pa12, pd, pb8) */ pa12.id, pd.id, pb8.id
+        |FROM testcat.ns.pa12 JOIN testcat.ns.pd ON pa12.id = pd.id
+        |JOIN testcat.ns.pb8 ON pa12.id = pb8.id
+        |""".stripMargin,
+      """
+        |SELECT /*+ MERGE(pb8, pd, pa12) */ pb8.id, pd.id, pa12.id
+        |FROM testcat.ns.pb8 JOIN testcat.ns.pd ON pb8.id = pd.id
+        |JOIN testcat.ns.pa12 ON pb8.id = pa12.id
+        |""".stripMargin,
+      """
+        |SELECT /*+ MERGE(pa12, pb8, pd) */ pa12.id, pb8.id, pd.id
+        |FROM testcat.ns.pa12 JOIN (testcat.ns.pb8 JOIN testcat.ns.pd ON pb8.id = pd.id)
+        |ON pa12.id = pb8.id
+        |""".stripMargin)
+
     Seq(true, false).foreach { aqe =>
       withSQLConf(
         SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key -> "-1",
         SQLConf.ADAPTIVE_EXECUTION_ENABLED.key -> aqe.toString,
         SQLConf.V2_BUCKETING_SHUFFLE_ENABLED.key -> "true",
         SQLConf.V2_BUCKETING_ALLOW_COMPATIBLE_TRANSFORMS.key -> "true") {
-        val df = sql(
-          """
-            |SELECT /*+ MERGE(pa12, pd, pb8) */ pa12.id, pd.id, pb8.id
-            |FROM testcat.ns.pa12 JOIN testcat.ns.pd ON pa12.id = pd.id
-            |JOIN testcat.ns.pb8 ON pa12.id = pb8.id
-            |""".stripMargin)
-        checkAnswer(df, ids.map(i => Row(i, i, i)))
-        assert(collectAllShuffles(df.queryExecution.executedPlan).size == 2,
-          s"expected two shuffles, got:\n${df.queryExecution.executedPlan}")
+        queries.foreach { query =>
+          val df = sql(query)
+          checkAnswer(df, ids.map(i => Row(i, i, i)))
+          assert(collectAllShuffles(df.queryExecution.executedPlan).size == 2,
+            s"expected two shuffles, got:\n${df.queryExecution.executedPlan}")
+        }
       }
     }
   }
