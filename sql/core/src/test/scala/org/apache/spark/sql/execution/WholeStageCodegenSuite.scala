@@ -41,7 +41,7 @@ import org.apache.spark.sql.execution.adaptive.DisableAdaptiveExecutionSuite
 import org.apache.spark.sql.execution.aggregate.{HashAggregateExec, SortAggregateExec}
 import org.apache.spark.sql.execution.columnar.InMemoryTableScanExec
 import org.apache.spark.sql.execution.debug.{codegenString, codegenStringSeq}
-import org.apache.spark.sql.execution.joins.{BroadcastHashJoinExec, BroadcastNestedLoopJoinExec, CartesianProductExec, ShuffledHashJoinExec, SortMergeJoinExec}
+import org.apache.spark.sql.execution.joins.{BroadcastHashJoinExec, BroadcastNestedLoopJoinExec, CartesianProductExec, ShuffledHashJoinExec, SortMergeAsOfJoinExec, SortMergeJoinExec}
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSparkSession
@@ -637,6 +637,100 @@ class WholeStageCodegenSuite extends SharedSparkSession
            WholeStageCodegenExec(_ : SortMergeJoinExec) => true
     }.size === 2)
     checkAnswer(twoJoinsDF, Seq(Row(6), Row(7), Row(8), Row(9)))
+  }
+
+  test("Backward and forward sort-merge ASOF joins should be included in WholeStageCodegen") {
+    // One partition puts every key in one task, so the scan has to move between keys.
+    withSQLConf(
+        SQLConf.SORT_MERGE_AS_OF_JOIN_ENABLED.key -> "true",
+        SQLConf.SHUFFLE_PARTITIONS.key -> "1") {
+      val trades = Seq((5, 1), (11, 1), (12, 2), (3, 3)).toDF("ts", "k")
+      val quotes = Seq((0, 1, "a"), (7, 1, "b"), (10, 1, "c"), (8, 2, "d"), (9, 3, "e"))
+        .toDF("ts", "k", "v")
+      def asOfJoin(joinType: String, direction: String, tolerance: Option[Int]): DataFrame =
+        trades.joinAsOf(
+          quotes, trades("ts"), quotes("ts"), usingColumns = Seq("k"), joinType = joinType,
+          tolerance = tolerance.map(lit).orNull, allowExactMatches = true, direction = direction)
+      // Whether the ASOF join runs in a codegen stage, and not only in a stage below it.
+      def isGenerated(df: DataFrame): Boolean = {
+        def inStage(plan: SparkPlan): Boolean = plan match {
+          case _: SortMergeAsOfJoinExec => true
+          case _: InputAdapter => false
+          case other => other.children.exists(inStage)
+        }
+        df.queryExecution.executedPlan.collect {
+          case stage: WholeStageCodegenExec if inStage(stage.child) => stage
+        }.nonEmpty
+      }
+      // Whether the plan has the ASOF join at all, so a "not generated" check cannot pass on a
+      // plan without it.
+      def hasAsOfJoin(df: DataFrame): Boolean =
+        df.queryExecution.executedPlan.exists(_.isInstanceOf[SortMergeAsOfJoinExec])
+      // How many tasks of the ASOF join used the cursor scan, read after the join ran.
+      def cursorTasks(df: DataFrame): Long = df.queryExecution.executedPlan.collect {
+        case j: SortMergeAsOfJoinExec => j.metrics("numAsOfCursorTasks").value
+      }.sum
+
+      // Cursor scan: the last quote at or before each trade. The only quote of key 3 is after
+      // trade 3, so trade 3 gets none. A cursor that kept key 2's quote would give it "d".
+      val backward = asOfJoin("inner", "backward", None)
+      assert(isGenerated(backward))
+      checkAnswer(backward,
+        Seq(Row(5, 1, 0, 1, "a"), Row(11, 1, 10, 1, "c"), Row(12, 2, 8, 2, "d")))
+      assert(cursorTasks(backward) > 0, "Expected the cursor scan")
+
+      // Cursor scan, forward: a trade with no later quote keeps nulls in a left outer join.
+      val forward = asOfJoin("leftouter", "forward", None)
+      assert(isGenerated(forward))
+      checkAnswer(forward, Seq(Row(5, 1, 7, 1, "b"), Row(11, 1, null, null, null),
+        Row(12, 2, null, null, null), Row(3, 3, 9, 3, "e")))
+      assert(cursorTasks(forward) > 0, "Expected the cursor scan")
+
+      // Buffered scan: with a tolerance of 2, only trade 11 has a quote close enough.
+      val buffered = asOfJoin("inner", "backward", Some(2))
+      assert(isGenerated(buffered))
+      checkAnswer(buffered, Seq(Row(11, 1, 10, 1, "c")))
+      assert(cursorTasks(buffered) == 0, "Expected the buffered scan")
+
+      // Nearest joins keep the interpreted scan.
+      val nearest = asOfJoin("inner", "nearest", None)
+      assert(hasAsOfJoin(nearest) && !isGenerated(nearest))
+      checkAnswer(nearest, Seq(Row(5, 1, 7, 1, "b"), Row(11, 1, 10, 1, "c"),
+        Row(12, 2, 8, 2, "d"), Row(3, 3, 9, 3, "e")))
+
+      // With the codegen off, the interpreted scan gives the same rows.
+      withSQLConf(SQLConf.ENABLE_SORT_MERGE_AS_OF_JOIN_CODEGEN.key -> "false") {
+        val off = asOfJoin("inner", "backward", None)
+        assert(hasAsOfJoin(off) && !isGenerated(off))
+        checkAnswer(off, Seq(Row(5, 1, 0, 1, "a"), Row(11, 1, 10, 1, "c"), Row(12, 2, 8, 2, "d")))
+      }
+    }
+  }
+
+  test("A skewed sort-merge ASOF join should generate code that compiles") {
+    withSQLConf(SQLConf.SORT_MERGE_AS_OF_JOIN_ENABLED.key -> "true") {
+      val trades = Seq((5, 1), (11, 1)).toDF("ts", "k")
+      val quotes = Seq((0, 1, "a"), (10, 1, "c")).toDF("ts", "k", "v")
+      val df = trades.joinAsOf(
+        quotes, trades("ts"), quotes("ts"), usingColumns = Seq("k"), joinType = "inner",
+        tolerance = null, allowExactMatches = true, direction = "backward")
+      // No skew rule marks an ASOF join here, so mark it by hand. The skew changes its name.
+      val skewed = df.queryExecution.executedPlan.transform {
+        case j: SortMergeAsOfJoinExec => j.copy(isSkewJoin = true)
+      }
+      def inStage(plan: SparkPlan): Boolean = plan match {
+        case j: SortMergeAsOfJoinExec => j.isSkewJoin
+        case _: InputAdapter => false
+        case other => other.children.exists(inStage)
+      }
+      val stages = skewed.collect {
+        case stage: WholeStageCodegenExec if inStage(stage.child) => stage
+      }
+      assert(stages.length == 1, s"Expected the skewed join in one codegen stage:\n$skewed")
+      // Without its own variable prefix, the join names its variables after
+      // "SortMergeAsOfJoin(skew=true)" and the code does not compile.
+      CodeGenerator.compile(stages.head.doCodeGen()._2)
+    }
   }
 
   test("Inner/Cross BroadcastNestedLoopJoinExec should be included in WholeStageCodegen") {

@@ -36,7 +36,8 @@ import org.apache.spark.sql.catalyst.optimizer.CollapseProject
 import org.apache.spark.sql.catalyst.plans.logical.Sample
 import org.apache.spark.sql.catalyst.plans.physical._
 import org.apache.spark.sql.catalyst.trees.TreeNodeTag
-import org.apache.spark.sql.execution.joins.{ShuffledHashJoinExec, SortMergeJoinExec}
+import org.apache.spark.sql.execution.joins.{ShuffledHashJoinExec, SortMergeAsOfJoinExec,
+  SortMergeJoinExec}
 import org.apache.spark.sql.execution.metric.{SQLMetric, SQLMetrics}
 import org.apache.spark.sql.internal.{SQLConf, StaticSQLConf}
 import org.apache.spark.sql.types.{LongType, StructType}
@@ -1700,6 +1701,7 @@ object UnionExec {
   def isKnownMultiInputRDDCodegen(p: SparkPlan): Boolean = p match {
     case _: SortMergeJoinExec => true
     case _: ShuffledHashJoinExec => true
+    case j: SortMergeAsOfJoinExec => j.supportCodegen
     case _ => false
   }
 

@@ -4556,6 +4556,15 @@ object SQLConf {
       .booleanConf
       .createWithDefault(true)
 
+  val ENABLE_SORT_MERGE_AS_OF_JOIN_CODEGEN =
+    buildConf("spark.sql.codegen.join.sortMergeAsOfJoin.enabled")
+      .internal()
+      .doc("When true, enable code-gen for backward and forward sort-merge AS-OF join.")
+      .version("4.4.0")
+      .withBindingPolicy(ConfigBindingPolicy.NOT_APPLICABLE)
+      .booleanConf
+      .createWithDefault(true)
+
   val MAX_NESTED_VIEW_DEPTH =
     buildConf("spark.sql.view.maxNestedViewDepth")
       .internal()
