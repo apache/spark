@@ -223,14 +223,10 @@ case class TransformExpression(
    */
   @transient private lazy val evaluableFunctionAttempt: Try[Option[Expression]] =
     try Success(resolveEvaluableFunction()) catch {
-      case NonFatal(e) => cannotResolve(e)
-      case e: LinkageError => cannotResolve(e)
+      case e @ (NonFatal(_) | _: LinkageError) =>
+        TransformExpression.logCannotResolve(function, e)
+        Failure(e)
     }
-
-  private def cannotResolve(e: Throwable): Try[Option[Expression]] = {
-    TransformExpression.logCannotResolve(function, e)
-    Failure(e)
-  }
 
   private def resolveEvaluableFunction(): Option[Expression] = scalarFunction match {
     case None =>
@@ -243,17 +239,20 @@ case class TransformExpression(
       val typed = arguments.zip(declaredTypes).map { case (argument, declaredType) =>
         TransformExpression.atDeclaredType(argument, declaredType)
       }
-      val call = if (arguments.length == declaredTypes.length && typed.forall(_.isDefined)) {
-        Some(V2ExpressionUtils.resolveScalarFunction(scalarFunc, typed.flatten))
-          .filter(TransformExpression.methodTakesArguments)
+      if (arguments.length == declaredTypes.length && typed.forall(_.isDefined)) {
+        val call = V2ExpressionUtils.resolveScalarFunction(scalarFunc, typed.flatten)
+        TransformExpression.methodLookupFailure(call) match {
+          case None => Some(call)
+          case failure =>
+            TransformExpression.logArgumentsMismatch(scalarFunc, arguments.map(_.dataType),
+              declaredTypes, failure)
+            None
+        }
       } else {
+        TransformExpression.logArgumentsMismatch(scalarFunc, arguments.map(_.dataType),
+          declaredTypes, None)
         None
       }
-      if (call.isEmpty) {
-        TransformExpression.logArgumentsMismatch(scalarFunc, arguments.map(_.dataType),
-          declaredTypes)
-      }
-      call
   }
 
   override def eval(input: InternalRow): Any = evaluableFunctionAttempt match {
@@ -279,47 +278,39 @@ object TransformExpression extends Logging {
   private def logOnce(key: String)(log: => Unit): Unit = if (loggedOnce.add(key)) log
 
   /**
-   * `text`, or `fallback` when it throws. `name()` and a failure's message are connector code,
-   * which can throw as the call did, e.g. a `NoClassDefFoundError` for a missing dependency. A log
-   * line or an error message must not fail planning.
+   * `value`, or `fallback` when it throws. `name()`, `inputTypes()` and a failure's message are
+   * connector code, which can throw as the call did, e.g. a `NoClassDefFoundError` for a missing
+   * dependency. A log line or an error message must not fail planning.
    */
-  private[sql] def orElse(text: => String, fallback: String): String =
-    try text catch { case NonFatal(_) | _: LinkageError => fallback }
+  private[sql] def orElse[T](value: => T, fallback: => T): T =
+    try value catch { case NonFatal(_) | _: LinkageError => fallback }
 
   /**
-   * Whether the method `call` invokes takes its arguments. `Invoke` and `StaticInvoke` look it up
-   * again from the arguments' classes, a user-defined type's being `Object`, so a magic `invoke`
-   * the declared types found may not take them. Looked up here, so that such a call is refused as
-   * the argument mismatch it is, rather than failing in `eval`.
-   */
-  private def methodTakesArguments(call: Expression): Boolean =
-    try {
-      call match {
-        case i: objects.Invoke => i.method
-        case s: objects.StaticInvoke => s.method
-        case _ =>
-      }
-      true
-    } catch {
-      case NonFatal(_) => false
-    }
-
-  /**
-   * Logs that `function`'s input types do not take `argumentTypes`, see `evaluableFunction`.
+   * Logs that `function`'s input types do not take `argumentTypes`, see `evaluableFunction`, with
+   * the failure to look up the method the call invokes, when that is what refused it. A
+   * user-defined type is named by its class, since its `catalogString` is its `sqlType`'s.
    */
   private def logArgumentsMismatch(
       function: BoundFunction,
       argumentTypes: Seq[DataType],
-      declaredTypes: Seq[DataType]): Unit = {
-    def typeList(types: Seq[DataType]): String = types.map(_.catalogString).mkString("(", ", ", ")")
+      declaredTypes: Seq[DataType],
+      lookupFailure: Option[Throwable]): Unit = {
+    def typeName(dataType: DataType): String = dataType match {
+      case udt: UserDefinedType[_] => s"${udt.getClass.getName}(${udt.sqlType.catalogString})"
+      case other => other.catalogString
+    }
+    def typeList(types: Seq[DataType]): String = types.map(typeName).mkString("(", ", ", ")")
     val functionClass = function.getClass.getName
     val arguments = typeList(argumentTypes)
+    val reason = lookupFailure.map(e => s": ${orElse(e.toString, e.getClass.getName)}")
+      .getOrElse("")
     logOnce(s"mismatch:$functionClass:$arguments:${typeList(declaredTypes)}") {
       logInfo(log"The partition transform " +
         log"${MDC(FUNCTION_NAME, orElse(function.name(), functionClass))} " +
         log"(${MDC(CLASS_NAME, functionClass)}) declares the input types " +
         log"${MDC(FUNCTION_PARAM, typeList(declaredTypes))}, which do not take arguments of " +
-        log"types ${MDC(ARGS, arguments)}, so a storage-partitioned join does not evaluate it")
+        log"types ${MDC(ARGS, arguments)}, so a storage-partitioned join does not evaluate it" +
+        log"${MDC(ERROR, reason)}")
     }
   }
 
@@ -372,7 +363,9 @@ object TransformExpression extends Logging {
    * `DOUBLE`, is held as another JVM type, so it is cast. That gives the value a magic `invoke` got
    * from Java's widening before this check, which can lose digits for a `BIGINT` against a
    * `DOUBLE` as it did there, and needs no time zone. Anything else is refused,
-   * a `DATE` against a `TIMESTAMP` in particular, whose cast takes the session time zone.
+   * a `DATE` against a `TIMESTAMP` in particular, whose cast takes the session time zone. A call
+   * whose arguments all suit is still refused when the method it invokes cannot take them, see
+   * `methodLookupFailure`.
    */
   private def atDeclaredType(argument: Expression, declaredType: DataType): Option[Expression] =
     (argument.dataType, declaredType) match {
@@ -382,6 +375,25 @@ object TransformExpression extends Logging {
         Some(Cast(argument, declaredType))
       case _ =>
         None
+    }
+
+  /**
+   * Why the method `call` invokes does not take its arguments, or `None` when it does. `Invoke`
+   * and `StaticInvoke` look it up again from the arguments' classes, a user-defined type's being
+   * `Object`, and only among public methods, so a magic `invoke` the declared types found may not
+   * be reachable. Looked up here, so that such a call is refused as the argument mismatch it is,
+   * rather than failing in `eval`.
+   */
+  private def methodLookupFailure(call: Expression): Option[Throwable] =
+    try {
+      call match {
+        case i: objects.Invoke => i.method
+        case s: objects.StaticInvoke => s.method
+        case _ =>
+      }
+      None
+    } catch {
+      case NonFatal(e) => Some(e)
     }
 
   /**
@@ -395,10 +407,11 @@ object TransformExpression extends Logging {
    *    declaring a non-nullable field gets the values a nullable one holds;
    *  - two decimals of one scale, so that the unscaled digits a function reads are the same. At the
    *    top level the function gets the `Decimal` itself, whatever precision it declares, e.g. a
-   *    `DECIMAL(12,2)` key of a cogroup against a function declaring `DECIMAL(10,2)`, which a
-   *    cogroup does not coerce. Nested in an unsafe row, a decimal is read at the declared
-   *    precision: it is stored as a `long` up to `Decimal.MAX_LONG_DIGITS` digits and as bytes
-   *    above, so there `to` needs no less precision, and both on one side of that.
+   *    `DECIMAL(12,2)` key of a Pandas or Arrow cogroup against a function declaring
+   *    `DECIMAL(10,2)`, see `KeyedShuffleSpec.createPartitioning`. Nested in an unsafe row, a
+   *    decimal is read at the declared precision: it is stored as a `long` up to
+   *    `Decimal.MAX_LONG_DIGITS` digits and as bytes above, so there `to` needs no less precision,
+   *    and both on one side of that.
    */
   private def storedAlike(from: DataType, to: DataType, nested: Boolean): Boolean =
     (from, to) match {

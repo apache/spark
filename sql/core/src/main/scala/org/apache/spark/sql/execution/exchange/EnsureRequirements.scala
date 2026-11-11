@@ -352,22 +352,6 @@ case class EnsureRequirements(
   private def pickCoPartitionTarget(
       children: Seq[SparkPlan],
       specs: Seq[Option[ShuffleSpec]]): Option[CoPartitionTarget] = {
-    // Whether we should consider `spark.sql.shuffle.partitions` and ensure enough parallelism
-    // during shuffle. To achieve a good trade-off between parallelism and shuffle cost, we only
-    // consider the minimum parallelism iff ALL children need to be re-shuffled.
-    //
-    // A child needs to be re-shuffled iff either of the following is true:
-    //   1. It can't create partitioning by itself, i.e., no member of its spec can serve as the
-    //      layout (`canServe` below, as for the case of `RangePartitioning`), therefore it needs
-    //      to be re-shuffled according to another child's shuffle spec.
-    //   2. It already has `ShuffleExchangeLike`, so we can re-use existing shuffle without
-    //      introducing extra shuffle.
-    //
-    // On the other hand, in scenarios such as:
-    //   HashPartitioning(5) <-> HashPartitioning(6)
-    // while `spark.sql.shuffle.partitions` is 10, we'll only re-shuffle the left side and make it
-    // HashPartitioning(6).
-    //
     // A member of a child serves as the layout when it can create a partitioning, and either Spark
     // can evaluate that partitioning or no child has to be shuffled onto it: every other
     // co-partitioned child pairs with it as it stands, which evaluates nothing. One that cannot
@@ -397,6 +381,21 @@ case class EnsureRequirements(
     val pairings: Seq[Seq[Pairing]] = childMembers.zipWithIndex.map { case (members, index) =>
       members.map(new Pairing(_, index))
     }
+    // Whether we should consider `spark.sql.shuffle.partitions` and ensure enough parallelism
+    // during shuffle. To achieve a good trade-off between parallelism and shuffle cost, we only
+    // consider the minimum parallelism iff ALL children need to be re-shuffled.
+    //
+    // A child needs to be re-shuffled iff either of the following is true:
+    //   1. It can't create partitioning by itself, i.e., no member of its spec can serve as the
+    //      layout (`canServe` above, as for the case of `RangePartitioning`), therefore it needs
+    //      to be re-shuffled according to another child's shuffle spec.
+    //   2. It already has `ShuffleExchangeLike`, so we can re-use existing shuffle without
+    //      introducing extra shuffle.
+    //
+    // On the other hand, in scenarios such as:
+    //   HashPartitioning(5) <-> HashPartitioning(6)
+    // while `spark.sql.shuffle.partitions` is 10, we'll only re-shuffle the left side and make it
+    // HashPartitioning(6).
     val shouldConsiderMinParallelism = children.zip(pairings).forall { case (child, members) =>
       !members.exists(_.canServe) || child.isInstanceOf[ShuffleExchangeLike]
     }

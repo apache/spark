@@ -28,6 +28,9 @@ import org.apache.spark.unsafe.types.UTF8String
 
 class TransformExpressionSuite extends SparkFunSuite {
 
+  /** The logger the log tests attach their appender to, so that other loggers stay out. */
+  private val transformLogger = Seq(classOf[TransformExpression].getName)
+
   /**
    * A bound function with a stable canonical name and no `equals` of its own. A plain class, NOT a
    * case class: a case class would bring structural `equals`, which is the connector-provided
@@ -312,14 +315,18 @@ class TransformExpressionSuite extends SparkFunSuite {
     }
     val argument = BoundReference(0, new IntUDT, nullable = true)
     val appender = new LogAppender("a user-defined type a magic invoke cannot take")
-    withLogAppender(appender, level = Some(Level.INFO)) {
+    withLogAppender(appender, loggerNames = transformLogger, level = Some(Level.INFO)) {
       assert(bucket(withInvoke, argument).evaluableFunction.isEmpty, "a magic invoke")
     }
     val logged = appender.loggingEvents
-      .filter(_.getLoggerName.endsWith("TransformExpression"))
       .filter(_.getMessage.getFormattedMessage.contains("udt_bucket"))
     assert(logged.map(_.getLevel) == Seq(Level.INFO), logged.map(_.getMessage.getFormattedMessage))
-    assert(logged.head.getMessage.getFormattedMessage.contains("which do not take arguments"))
+    val message = logged.head.getMessage.getFormattedMessage
+    assert(message.contains("which do not take arguments"), message)
+    // The user-defined type by its class, not as the `int` of its `sqlType`, and why the method
+    // cannot be reached.
+    assert(message.contains(s"(int, ${argument.dataType.getClass.getName}(int))"), message)
+    assert(message.contains("Couldn't find method invoke"), message)
     val transform = bucket(withProduceResult, argument)
     assert(transform.evaluableFunction.isDefined, "produceResult")
     assert(transform.eval(InternalRow(5)) == 1)
@@ -358,13 +365,13 @@ class TransformExpressionSuite extends SparkFunSuite {
       override def produceResult(input: InternalRow): Int = 0
     }
     val appender = new LogAppender("cannot resolve a partition transform call")
-    withLogAppender(appender, level = Some(Level.WARN)) {
+    withLogAppender(appender, loggerNames = transformLogger, level = Some(Level.WARN)) {
       Seq(Literal(1), Literal(2), Literal(3)).foreach { value =>
         assert(bucket(failing, value).evaluableFunction.isEmpty)
       }
     }
     val warnings = appender.loggingEvents
-      .filter(e => e.getLevel == Level.WARN && e.getLoggerName.endsWith("TransformExpression"))
+      .filter(_.getLevel == Level.WARN)
       .map(_.getMessage.getFormattedMessage)
     assert(warnings.size == 1, warnings)
     assert(warnings.head.contains("connector bug"))
@@ -411,11 +418,11 @@ class TransformExpressionSuite extends SparkFunSuite {
       override def produceResult(input: InternalRow): Int = 0
     }
     val appender = new LogAppender("partition transform call failure with unlinked text")
-    withLogAppender(appender, level = Some(Level.WARN)) {
+    withLogAppender(appender, loggerNames = transformLogger, level = Some(Level.WARN)) {
       assert(bucket(unlinked, Literal(7)).evaluableFunction.isEmpty)
     }
     val warnings = appender.loggingEvents
-      .filter(e => e.getLevel == Level.WARN && e.getLoggerName.endsWith("TransformExpression"))
+      .filter(_.getLevel == Level.WARN)
       .map(_.getMessage.getFormattedMessage)
     assert(warnings.size == 1, warnings)
     assert(warnings.head.contains(unlinked.getClass.getName), warnings.head)
@@ -433,14 +440,14 @@ class TransformExpressionSuite extends SparkFunSuite {
       override def produceResult(input: InternalRow): Int = 0
     }
     val appender = new LogAppender("partition transform argument mismatches")
-    withLogAppender(appender, level = Some(Level.INFO)) {
+    withLogAppender(appender, loggerNames = transformLogger, level = Some(Level.INFO)) {
       Seq(Literal(7L), Literal(8L), Literal("7")).foreach { value =>
         assert(bucket(new IntBucket, value).evaluableFunction.isEmpty, value.dataType)
       }
       assert(bucket(new IntBucket, Literal(7)).evaluableFunction.isDefined, "matching types")
     }
     val logged = appender.loggingEvents
-      .filter(e => e.getLevel == Level.INFO && e.getLoggerName.endsWith("TransformExpression"))
+      .filter(_.getLevel == Level.INFO)
       .map(_.getMessage.getFormattedMessage)
     assert(logged.size == 2, logged)
     assert(logged.exists(m => m.contains("int_bucket") && m.contains("(int, int)") &&
@@ -457,13 +464,13 @@ class TransformExpressionSuite extends SparkFunSuite {
       override def canonicalName(): String = "test.bucket"
     }
     val appender = new LogAppender("partition transform that is not a ScalarFunction")
-    withLogAppender(appender, level = Some(Level.INFO)) {
+    withLogAppender(appender, loggerNames = transformLogger, level = Some(Level.INFO)) {
       Seq(Literal(1L), Literal(2L)).foreach { value =>
         assert(bucket(new NotScalar, value).evaluableFunction.isEmpty)
       }
     }
     val logged = appender.loggingEvents
-      .filter(e => e.getLevel == Level.INFO && e.getLoggerName.endsWith("TransformExpression"))
+      .filter(_.getLevel == Level.INFO)
       .map(_.getMessage.getFormattedMessage)
       .filter(_.contains("is not a ScalarFunction"))
     assert(logged.size == 1, logged)
@@ -480,13 +487,13 @@ class TransformExpressionSuite extends SparkFunSuite {
       override def produceResult(input: InternalRow): Int = 0
     }
     val appender = new LogAppender("partition transform mismatches per declared types")
-    withLogAppender(appender, level = Some(Level.INFO)) {
+    withLogAppender(appender, loggerNames = transformLogger, level = Some(Level.INFO)) {
       Seq(StringType, BinaryType, StringType).foreach { declared =>
         assert(bucket(new TypedBucket(declared), Literal(7L)).evaluableFunction.isEmpty)
       }
     }
     val logged = appender.loggingEvents
-      .filter(e => e.getLevel == Level.INFO && e.getLoggerName.endsWith("TransformExpression"))
+      .filter(_.getLevel == Level.INFO)
       .map(_.getMessage.getFormattedMessage)
       .filter(_.contains("typed_bucket"))
     assert(logged.size == 2, logged)
@@ -502,7 +509,7 @@ class TransformExpressionSuite extends SparkFunSuite {
       override def produceResult(input: InternalRow): Int = 0
     }
     val appender = new LogAppender("partition transform call failures by kind")
-    withLogAppender(appender, level = Some(Level.WARN)) {
+    withLogAppender(appender, loggerNames = transformLogger, level = Some(Level.WARN)) {
       Seq[() => Throwable](
         () => new IllegalStateException("first"),
         () => new IllegalArgumentException("second"),
@@ -512,7 +519,7 @@ class TransformExpressionSuite extends SparkFunSuite {
       }
     }
     val warnings = appender.loggingEvents
-      .filter(e => e.getLevel == Level.WARN && e.getLoggerName.endsWith("TransformExpression"))
+      .filter(_.getLevel == Level.WARN)
       .map(_.getMessage.getFormattedMessage)
     assert(warnings.size == 2, warnings)
     assert(warnings.exists(_.contains("first")) && warnings.exists(_.contains("second")))

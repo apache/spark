@@ -22,7 +22,6 @@ import java.util.concurrent.ConcurrentHashMap
 import scala.annotation.tailrec
 import scala.collection.immutable.BitSet
 import scala.collection.mutable
-import scala.util.control.NonFatal
 
 import org.apache.spark.{SparkException, SparkUnsupportedOperationException}
 import org.apache.spark.sql.catalyst.InternalRow
@@ -2404,11 +2403,11 @@ case class KeyedShuffleSpec(
         case (left: TransformExpression, right: TransformExpression) =>
           if (allowReduce && canReduceKeys) left.isCompatible(right)
           else left.isSameFunction(right)
-        // The reduce evaluates `t` rebuilt over the identity side's column, see `canEvaluate`.
-        case (_: AttributeReference, t: TransformExpression) =>
-          allowReduce && canReduceKeys && canEvaluate(t)
-        case (t: TransformExpression, _: AttributeReference) =>
-          allowReduce && canReduceKeys && canEvaluate(t)
+        // The reduce evaluates the transform rebuilt over the identity side's column, see
+        // `canEvaluate`.
+        case (_: AttributeReference, _: TransformExpression) |
+             (_: TransformExpression, _: AttributeReference) =>
+          allowReduce && canReduceKeys && canEvaluate(left) && canEvaluate(right)
         case _ => false
       }
     }
@@ -2440,19 +2439,18 @@ case class KeyedShuffleSpec(
    * equi-join pairs two keys only when their types are equal apart from nullability and field
    * names (`BinaryComparison.sameType`), which `evaluableFunction` does not tell apart either. So
    * for a join, asking this of the reported transform answers it for the rebuilt one, and the
-   * reported one keeps the answer. A Pandas or Arrow cogroup does not coerce its keys, so a key of
-   * another type, e.g. a `BIGINT` against a transform over an `INT` column that declares `INT`,
-   * can still fail as it did before this check. A one-side shuffle fails while planning, in
-   * `createPartitioning`. A decimal key of the column's scale passes, since its precision does not
-   * change what the function reads.
+   * reported one keeps the answer. A Pandas or Arrow cogroup's keys need not share a type, see
+   * `createPartitioning`. True for anything that is not a transform, which needs no call.
    *
    * A Scala class or object that extends `ScalarFunction` directly gets a mixin forwarder to the
    * default `produceResult`, which the lookup finds, so this is true even when the connector
    * implements neither `produceResult` nor `invoke`. Evaluating it then throws
    * `SCALAR_FUNCTION_NOT_COMPATIBLE`. Reflection cannot tell the forwarder from an override.
    */
-  private def canEvaluate(transform: TransformExpression): Boolean =
-    transform.evaluableFunction.isDefined
+  private def canEvaluate(expression: Expression): Boolean = expression match {
+    case t: TransformExpression => t.evaluableFunction.isDefined
+    case _ => true
+  }
 
   /**
    * `transform`, whose arguments are bare columns, with each replaced by `key`, which may be any
@@ -2619,10 +2617,7 @@ case class KeyedShuffleSpec(
       partitioning.expressionsDescribeKeys
 
   /** Whether Spark can evaluate each transform of this layout, see `canEvaluate`. */
-  override lazy val canEvaluatePartitioning: Boolean = partitioning.expressions.forall {
-    case t: TransformExpression => canEvaluate(t)
-    case _ => true
-  }
+  override lazy val canEvaluatePartitioning: Boolean = partitioning.expressions.forall(canEvaluate)
 
   override def createPartitioning(clustering: Seq[Expression]): Partitioning = {
     assert(clustering.size == distribution.clustering.size,
@@ -2641,16 +2636,19 @@ case class KeyedShuffleSpec(
     // A join's keys share their types, so that answers for what is built too. A Pandas or Arrow
     // cogroup's need not (SPARK-60782), e.g. a `BIGINT` key or a string of another collation, and
     // falling back to a hash shuffle would pair its groups wrongly. So such a child fails here,
-    // while planning, with an error that names the key's type.
+    // while planning, with an error that names the key's type. This covers transform positions
+    // only. An identity position is rebuilt over the other key whatever its type, and a layout
+    // Spark cannot evaluate takes the hash shuffle. Both behave as before this check, and are left
+    // to SPARK-60782.
     newExpressions.foreach {
-      case t: TransformExpression if t.evaluableFunction.isEmpty =>
+      case t: TransformExpression if !canEvaluate(t) =>
         // `name()` and `inputTypes()` are connector code, which must not replace this error.
         val functionClass = t.function.getClass.getName
-        val inputTypes =
-          try t.function.inputTypes().toSeq catch { case NonFatal(_) | _: LinkageError => Nil }
+        val name = TransformExpression.orElse(t.function.name(), functionClass)
         throw QueryExecutionErrors.storagePartitionJoinKeyTypeMismatchError(
-          TransformExpression.orElse(t.function.name(), functionClass), inputTypes,
-          t.children.head.dataType)
+          t.numBucketsOpt.fold(name)(n => s"$name($n)"),
+          TransformExpression.orElse(t.function.inputTypes().toSeq, Nil),
+          t.children.head)
       case _ =>
     }
     // The shuffled side is laid out on this side's partitions, so it shares their layout, with one

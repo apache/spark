@@ -1797,9 +1797,10 @@ class EnsureRequirementsSuite extends SharedSparkSession {
   }
 
   test("SPARK-60027: a cogroup shuffled onto a decimal bucket places a key of more precision") {
-    // A cogroup does not coerce its keys, so the side shuffled onto a bucket over a `DECIMAL(10,2)`
-    // column can be keyed on a `DECIMAL(12,2)`. The function gets the `Decimal` itself and reads
-    // its unscaled digits, as Iceberg's does, so each row lands where the keyed side put its value.
+    // A Pandas or Arrow cogroup does not coerce its keys, so the side shuffled onto a bucket over
+    // a `DECIMAL(10,2)` column can be keyed on a `DECIMAL(12,2)`. The function gets the `Decimal`
+    // itself and reads its unscaled digits, as Iceberg's does, so each row lands where the keyed
+    // side put its value.
     val decimalBucket = new ScalarFunction[Int] {
       override def inputTypes(): Array[DataType] = Array(IntegerType, DecimalType(10, 2))
       override def resultType(): DataType = IntegerType
@@ -1870,8 +1871,9 @@ class EnsureRequirementsSuite extends SharedSparkSession {
           exception = intercept[SparkException](EnsureRequirements.apply(cogroup)),
           condition = "STORAGE_PARTITION_JOIN_KEY_TYPE_MISMATCH",
           parameters = Map(
-            "transform" -> "bucket",
+            "transform" -> "bucket(4)",
             "inputTypes" -> ("(\"INT\", " + declared + ")"),
+            "key" -> "\"cR\"",
             "keyType" -> key))
       }
     }
