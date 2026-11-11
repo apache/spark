@@ -38,7 +38,7 @@ import org.apache.spark.sql.connector.expressions.filter.Predicate
 import org.apache.spark.sql.connector.read.{Scan, ScanBuilder, ScanContext, Statistics => V2Statistics, SupportsPushDownAggregates, SupportsPushDownFilters, SupportsPushDownJoin, SupportsPushDownRequiredColumns, SupportsPushDownV2Filters, SupportsPushDownVariantExtractions, SupportsReportStatistics, V1Scan, VariantExtraction}
 import org.apache.spark.sql.execution.datasources.{DataSourceStrategy, VariantInRelation, VariantMetadata}
 import org.apache.spark.sql.internal.SQLConf
-import org.apache.spark.sql.internal.connector.{SupportsPushDownCatalystFilters, VariantExtractionImpl}
+import org.apache.spark.sql.internal.connector.{SupportsFullyPushedCatalystFilters, SupportsPushDownCatalystFilters, VariantExtractionImpl}
 import org.apache.spark.sql.sources
 import org.apache.spark.sql.types.{BooleanType, DataType, DecimalType, IntegerType, StringType, StructField, StructType, VariantType}
 import org.apache.spark.sql.util.SchemaUtils._
@@ -147,6 +147,9 @@ object V2ScanRelationPushDown extends Rule[LogicalPlan] with PredicateHelper {
       // future use in constraint propagation, and are read by a Spark-side scan merge (see
       // TableCapability.SCAN_MERGING) to compare and re-enforce a scan's filters.
       val postScanFilterSet = ExpressionSet(postScanFiltersWithoutSubquery)
+      sHolder.postScanFilterExpressions = normalizedFiltersWithoutSubquery
+        .filter(postScanFilterSet.contains)
+        .filter(_.deterministic)
       sHolder.pushedFilterExpressions = normalizedFiltersWithoutSubquery
         .filterNot(postScanFilterSet.contains)
         .filter(_.deterministic)
@@ -1044,13 +1047,14 @@ object V2ScanRelationPushDown extends Rule[LogicalPlan] with PredicateHelper {
 
       // Remap inferred filters to the pruned output and drop filters whose references are no
       // longer available.
-      val remappedInferredFilters = sHolder.inferredFilterExpressions.flatMap { filter =>
+      def remapFilters(filters: Seq[Expression]): Seq[Expression] = filters.flatMap { filter =>
         try Some(projectionFunc(filter))
         catch {
           case e: SparkIllegalArgumentException if e.getCondition == "FIELD_NOT_FOUND" =>
             None
         }
       }.filter(_.references.subsetOf(AttributeSet(output)))
+      val remappedInferredFilters = remapFilters(sHolder.inferredFilterExpressions)
 
       // Record the fully-pushed filter expressions on the scan relation, keeping their references
       // to the relation's (pre-pruning) output. These include filters on columns that were pruned
@@ -1073,9 +1077,28 @@ object V2ScanRelationPushDown extends Rule[LogicalPlan] with PredicateHelper {
         } else {
           Nil
         }
+      val adjustmentFilters = if (shouldAddPostPushdownAdjustmentFilters(scanRelation)) {
+        inferredAdjustmentFilters ++ scanRelation.outputBoundPushedFilters
+      } else {
+        Nil
+      }
+      val removalCandidates = if (
+          sHolder.relation.table.isInstanceOf[SupportsFullyPushedCatalystFilters] &&
+            remappedInferredFilters.nonEmpty) {
+        remapFilters(sHolder.postScanFilterExpressions) ++ adjustmentFilters
+      } else {
+        Nil
+      }
+      // Only predicates Spark may omit need to distinguish otherwise identical scans. Residuals
+      // over undeclared fields remain executable and must not prevent subplan merging.
+      val withRemovalCandidates = scanRelation.copy(
+        filterRemovalCandidates = removalCandidates.flatMap(splitConjunctivePredicates).filter {
+          filter => scanRelation.isFilterOverFullyPushedAttributes(filter) &&
+            PushDownUtils.isPushablePartitionFilter(filter)
+        })
       val finalFilters = inferredAdjustmentFilters ++ normalizedFilters.map(projectionFunc)
       // bottom-most filters are put in the left of the list.
-      val withFilter = finalFilters.foldLeft[LogicalPlan](scanRelation)((plan, cond) => {
+      val withFilter = finalFilters.foldLeft[LogicalPlan](withRemovalCandidates)((plan, cond) => {
         Filter(cond, plan)
       })
       // For scans whose statistics do not reflect fully pushed filters
@@ -1437,6 +1460,8 @@ case class ScanBuilderHolder(
   var pushedVariants: Option[VariantInRelation] = None
 
   var pushedFilterExpressions: Seq[Expression] = Seq.empty
+
+  var postScanFilterExpressions: Seq[Expression] = Seq.empty
 
   var inferredFilterExpressions: Seq[Expression] = Seq.empty
 }

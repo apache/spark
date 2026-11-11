@@ -2388,6 +2388,12 @@
     ],
     "sqlState" : "0A000"
   },
+  "DATA_SOURCE_INVALID_FULLY_PUSHED_FILTER_ATTRIBUTE" : {
+    "message" : [
+      "The filter attribute <attribute> reported by `fullyPushedFilterAttributes()` in data source table <tableName> must name a top-level column or nested struct field in <tableSchema>."
+    ],
+    "sqlState" : "KD000"
+  },
   "DATA_SOURCE_INVALID_RUNTIME_FILTER_ATTRIBUTE" : {
     "message" : [
       "The runtime filter attribute <attribute> reported by `<method>` in data source scan <scanClass> is invalid for the scan relation output <relationOutput>."

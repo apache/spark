@@ -30,7 +30,14 @@ trait SupportsPushDownCatalystFilters extends ScanBuilder {
 
   /**
    * Pushes down catalyst Expression filters (which will be separated into partition filters and
-   * data filters), and returns data filters that need to be evaluated after scanning.
+   * data filters), and returns data filters for Spark to evaluate after scanning.
+   *
+   * For tables implementing [[SupportsFullyPushedCatalystFilters]], returned conjuncts over
+   * declared fields may be omitted when the scan reports inferred filters. Only deterministic
+   * conjuncts without subqueries or Python UDFs that remain unchanged from pushdown are eligible.
+   * The source must enforce these filters and reflect them in Scan equality for logical comparison.
+   * For physical reuse, enforcement must also be reflected in equality and hashCode of the Batch
+   * returned by Scan.toBatch, or the relation returned by toV1TableScan for V1-fallback scans.
    */
   def pushFilters(filters: Seq[Expression]): Seq[Expression]
 
@@ -51,6 +58,8 @@ trait SupportsPushDownCatalystFilters extends ScanBuilder {
    * enabled, Spark estimates the original and inferred groups against the same scan statistics
    * and takes the smaller estimate. Columns are not retained solely for statistics adjustment,
    * and filters that reference pruned columns are dropped.
+   * The omission rules for returned residuals and adjustment predicates are described in
+   * [[SupportsFullyPushedCatalystFilters.fullyPushedFilterAttributes]].
    *
    * Spark discards inferred filters if a join, aggregate, or variant extraction replaces the scan
    * output.
