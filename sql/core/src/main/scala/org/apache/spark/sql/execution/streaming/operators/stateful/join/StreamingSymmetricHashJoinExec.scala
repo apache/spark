@@ -235,6 +235,18 @@ case class StreamingSymmetricHashJoinExec(
 
   private val useVirtualColumnFamilies = stateFormatVersion >= 3
 
+  // Only the V4 state manager reads these ordinals. They depend only on plan fields, so
+  // doExecute computes them once on the driver instead of in every task.
+  private lazy val stateKeyOrdinalsForLookup: (Option[Int], Option[Int]) =
+    if (stateFormatVersion >= 4) {
+      (getStateKeyOrdinalForLookup(
+        left.output, leftKeys, right.output, rightKeys, stateWatermarkPredicates.left),
+        getStateKeyOrdinalForLookup(
+          right.output, rightKeys, left.output, leftKeys, stateWatermarkPredicates.right))
+    } else {
+      (None, None)
+    }
+
   // Determine the store names and metadata version based on format version
   private val (numStoresPerPartition, _stateStoreNames, _operatorStateMetadataVersion) =
     if (useVirtualColumnFamilies) {
@@ -369,6 +381,7 @@ case class StreamingSymmetricHashJoinExec(
   protected override def doExecute(): RDD[InternalRow] = {
     val stateStoreCoord = session.sessionState.streamingQueryManager.stateStoreCoordinator
     metrics // initialize metrics
+    stateKeyOrdinalsForLookup // computed here, so tasks do not compute it again
     left.execute().stateStoreAwareZipPartitions(
       right.execute(), stateInfo.get, stateStoreNames, stateStoreCoord)(processPartitions)
   }
@@ -413,16 +426,12 @@ case class StreamingSymmetricHashJoinExec(
         LeftSide, left.output, leftKeys, leftInputIter,
         condition.leftSideOnly, postJoinFilter, stateWatermarkPredicates.left, partitionId,
         checkpointIds.left.keyToNumValues, checkpointIds.left.keyWithIndexToValue,
-        skippedNullValueCount, joinStateManagerStoreGenerator,
-        getStateKeyOrdinalForLookup(
-          left.output, leftKeys, right.output, rightKeys, stateWatermarkPredicates.left)),
+        skippedNullValueCount, joinStateManagerStoreGenerator, stateKeyOrdinalsForLookup._1),
       new OneSideHashJoiner(
         RightSide, right.output, rightKeys, rightInputIter,
         condition.rightSideOnly, postJoinFilter, stateWatermarkPredicates.right, partitionId,
         checkpointIds.right.keyToNumValues, checkpointIds.right.keyWithIndexToValue,
-        skippedNullValueCount, joinStateManagerStoreGenerator,
-        getStateKeyOrdinalForLookup(
-          right.output, rightKeys, left.output, leftKeys, stateWatermarkPredicates.right)))
+        skippedNullValueCount, joinStateManagerStoreGenerator, stateKeyOrdinalsForLookup._2))
 
     //  Join one side input using the other side's buffered/state rows. Here is how it is done.
     //
@@ -733,22 +742,38 @@ case class StreamingSymmetricHashJoinExec(
     // so eviction never removes the row. The row cannot match either: that column is an equality
     // key, or a comparison in the join condition bounds it. Handle the row like one that fails
     // the pre-join filter.
-    private[this] val isEvictionColumnNull: UnsafeRow => Boolean = {
-      val isNull = stateWatermarkPredicate.map {
-        case JoinStateKeyWatermarkPredicate(expr, _, _) =>
+    // The check takes the generated key and the input row, so the key is computed only once.
+    private[this] val isEvictionColumnNull: (UnsafeRow, UnsafeRow) => Boolean =
+      stateWatermarkPredicate match {
+        case Some(JoinStateKeyWatermarkPredicate(expr, _, _)) =>
           // Only a NULL key fails equality. A struct key with a NULL field can still be equal.
           val ordinal = expr.collectFirst { case b: BoundReference => b.ordinal }.get
-          IsNull(joinKeys(ordinal))
-        case JoinStateValueWatermarkPredicate(expr, _, _) =>
-          IsNull(expr)
+          (key, _) => key.isNullAt(ordinal)
+        case Some(JoinStateValueWatermarkPredicate(expr, _, _)) =>
+          val isNull = Predicate.create(IsNull(expr), inputAttributes)
+          (_, row) => isNull.eval(row)
+        case None =>
+          (_, _) => false
       }
-      Predicate.create(isNull.getOrElse(Literal(false)), inputAttributes).eval _
-    }
 
     private[this] var updatedStateRowsCount = 0
     private[this] var numRemovedFromOtherSideDuringJoinCount = 0
     private[this] val allowMultipleStatefulOperators: Boolean =
       conf.getConf(SQLConf.STATEFUL_OPERATOR_ALLOW_MULTIPLE)
+
+    // For the right side of a left semi join: whether a cutoff at the late-events watermark that
+    // is exact today shows that no left row passing late filtering can match a key and row.
+    private[this] val noLeftRowCanMatch: (UnsafeRow, UnsafeRow) => Boolean =
+      if (joinType == LeftSemi && joinSide == RightSide) {
+        val (keyCutoff, valueCutoff) = getLeftSemiExactRightCutoffs(left.output, right.output,
+          leftKeys, rightKeys, condition.full, eventTimeWatermarkForLateEvents,
+          useFirstEventTimeColumn = !allowMultipleStatefulOperators)
+        val keyFunc = keyCutoff.map(Predicate.create(_, Seq.empty).eval _)
+        val valueFunc = valueCutoff.map(Predicate.create(_, inputAttributes).eval _)
+        (key, row) => keyFunc.exists(_(key)) || valueFunc.exists(_(row))
+      } else {
+        (_, _) => false
+      }
 
     // V4 range scan for time-interval joins (SPARK-55147). Extracts constant interval
     // offsets from the join condition using getStateValueWatermark(eventWatermark=0).
@@ -922,8 +947,8 @@ case class StreamingSymmetricHashJoinExec(
         // never satisfy the full join condition no matter what other side row it's matched with.
         // This allows us to avoid adding it to the state, and generate an outer join row
         // immediately (or do nothing in the case of inner join).
-        if (preJoinFilter(thisRow) && !isEvictionColumnNull(thisRow)) {
-          val key = keyGenerator(thisRow)
+        val key = if (preJoinFilter(thisRow)) keyGenerator(thisRow) else null
+        if (key != null && !isEvictionColumnNull(key, thisRow)) {
           // If the join type is Left Semi and this is the right side, we can remove the matched
           // row from the other (left) side's state, since the row won't be produced anymore for
           // the following input rows.
@@ -971,7 +996,14 @@ case class StreamingSymmetricHashJoinExec(
         //   is done at this point. That said, input can be skipped to be added to the state store
         //   if input is going to be evicted in this batch. Though, input should be added to the
         //   state store if it's right outer join or full outer join, as unmatched output is
-        //   handled during state eviction.
+        //   handled during state eviction. A left semi join processes the right side first, so
+        //   the left input of this batch has not probed it yet: an input this batch evicts is
+        //   added, and the eviction at the end of the batch removes it, unless a cutoff at the
+        //   late-events watermark that is exact today shows no left row passing late filtering
+        //   can match it (see getLeftSemiExactRightCutoffs). The cutoff derivation gives no exact
+        //   cutoff otherwise: it can apply a bound on another right column to the right event
+        //   time, and it counts a day as 24 hours and reads truncating casts as exact.
+        //   TODO(SPARK-61344, SPARK-61381): skip such inputs too once the cutoff is exact.
         val isLeftSemiWithMatch = joinType == LeftSemi && joinSide == LeftSide && iteratorNotEmpty
         val shouldAddToState = if (isLeftSemiWithMatch) {
           false
@@ -985,6 +1017,8 @@ case class StreamingSymmetricHashJoinExec(
             !stateKeyWatermarkPredicateFunc(key) && !stateValueWatermarkPredicateFunc(thisRow)
 
           isNotEvictingInThisBatch ||
+            // if a left row of this batch, which probes after this side, can still match it
+            (joinType == LeftSemi && !noLeftRowCanMatch(key, thisRow)) ||
             // if the input is producing "unmatched row" in this batch
             (
               (joinType == RightOuter && !iteratorNotEmpty) ||

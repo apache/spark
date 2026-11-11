@@ -17,7 +17,10 @@
 
 package org.apache.spark.sql.streaming
 
+import org.apache.logging.log4j.Level
+
 import org.apache.spark.sql.{DataFrame, Row}
+import org.apache.spark.sql.catalyst.analysis.StreamingJoinHelper
 import org.apache.spark.sql.execution.streaming.operators.stateful.join.StreamingSymmetricHashJoinExec
 import org.apache.spark.sql.execution.streaming.operators.stateful.join.StreamingSymmetricHashJoinHelper.{JoinStateKeyWatermarkPredicate, JoinStateValueWatermarkPredicate}
 import org.apache.spark.sql.execution.streaming.runtime.{MemoryStream, StreamExecution}
@@ -119,8 +122,14 @@ class StreamingJoinEqualityWatermarkSuite extends StreamTest {
   for {
     version <- Seq(2, 3, 4)
     offset <- Seq(10, -10)
+    // The analyzed plan keeps an interval expression unfolded; admission must still bound it.
+    (shiftedRightTime, spelling) <- Seq(
+      (s"rt + INTERVAL $offset SECONDS", ""),
+      (s"rt + INTERVAL 1 SECOND * $offset", " as an interval expression"),
+      (s"timestampadd(SECOND, $offset, rt)", " with timestampadd"))
   } {
-    test(s"equality on a shifted opposite event time evicts state, V$version offset=$offset") {
+    test(s"equality on a shifted opposite event time evicts state, V$version offset=$offset" +
+        spelling) {
       withSQLConf(
         SQLConf.STREAMING_JOIN_STATE_FORMAT_VERSION.key -> version.toString,
         SQLConf.STATE_STORE_PROVIDER_CLASS.key -> classOf[RocksDBStateStoreProvider].getName,
@@ -135,7 +144,7 @@ class StreamingJoinEqualityWatermarkSuite extends StreamTest {
           .withWatermark("rt", "10 seconds")
         // A left row matches the right row whose time is `offset` seconds earlier.
         val joined = left.join(right,
-          expr(s"lk = rk AND lt = rt + INTERVAL $offset SECONDS"), "left_outer")
+          expr(s"lk = rk AND lt = $shiftedRightTime"), "left_outer")
           .select($"lk", $"lt".cast("int"), $"rk", $"rt".cast("int"))
         testStream(joined)(
           MultiAddData(leftInput, (1, 100 + offset), (2, 90 + offset), (3, 145 + offset))(
@@ -356,6 +365,45 @@ class StreamingJoinEqualityWatermarkSuite extends StreamTest {
           AddData(leftInput, (1, rightTime + keyOffset)), CheckNewAnswer(), StopStream)
         run(secondZone, checkpoint)(AddData(rightInput, (1, rightTime)), CheckNewAnswer(Row(1, 1)))
       }
+    }
+  }
+
+  for (version <- Seq(2, 4)) {
+    test(s"lookup key ordinals are not derived in every task, V$version") {
+      // A shifted key makes the lookup ordinal run the cutoff solver, which logs each cutoff it
+      // derives. Planning derives the same cutoffs whatever the number of partitions.
+      def solverLogLines(numPartitions: Int): Int = {
+        val logAppender = new LogAppender("stream-stream join state constraints")
+        withLogAppender(logAppender,
+            loggerNames = Seq(StreamingJoinHelper.getClass.getName.stripSuffix("$")),
+            level = Some(Level.INFO)) {
+          withSQLConf(
+              SQLConf.STREAMING_JOIN_STATE_FORMAT_VERSION.key -> version.toString,
+              SQLConf.STATE_STORE_PROVIDER_CLASS.key ->
+                classOf[RocksDBStateStoreProvider].getName,
+              SQLConf.STREAMING_NO_DATA_MICRO_BATCHES_ENABLED.key -> "false",
+              SQLConf.SHUFFLE_PARTITIONS.key -> numPartitions.toString) {
+            val leftInput = MemoryStream[(Int, Int)]
+            val rightInput = MemoryStream[(Int, Int)]
+            val left = leftInput.toDF().toDF("lk", "t")
+              .select($"lk", timestamp_seconds($"t").as("lt"))
+              .withWatermark("lt", "0 seconds")
+            val right = rightInput.toDF().toDF("rk", "t")
+              .select($"rk", timestamp_seconds($"t").as("rt"))
+              .withWatermark("rt", "0 seconds")
+            val joined = left.join(right, expr("lk = rk AND lt = rt + INTERVAL 10 SECONDS"))
+              .select($"lk", $"lt".cast("long"), $"rt".cast("long"))
+            testStream(joined)(
+              MultiAddData(leftInput, (1, 20))(rightInput, (1, 10)),
+              CheckNewAnswer(Row(1, 20L, 10L)),
+              MultiAddData(leftInput, (2, 40))(rightInput, (2, 30)),
+              CheckNewAnswer(Row(2, 40L, 30L)))
+          }
+        }
+        logAppender.loggingEvents.count(_.getMessage.getFormattedMessage.contains(
+          "Final expression to evaluate constraint"))
+      }
+      assert(solverLogLines(numPartitions = 1) === solverLogLines(numPartitions = 5))
     }
   }
 }

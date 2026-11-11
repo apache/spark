@@ -110,8 +110,19 @@ class StreamingJoinHelperSuite extends AnalysisTest {
       // A constant shifts the bound, less 1 ms as for range conditions.
       ("eventTime + INTERVAL 2 SECONDS", Some(11999L), Some(7999L)),
       ("eventTime - INTERVAL 2 SECONDS", Some(7999L), Some(11999L)),
+      // A foldable interval expression gives the bound of its value.
+      ("eventTime + INTERVAL 1 SECOND * 2", Some(11999L), Some(7999L)),
+      ("eventTime - INTERVAL 1 SECOND * 2", Some(7999L), Some(11999L)),
+      ("eventTime + make_dt_interval(0, 2, 0, 0)", Some(7209999L), Some(-7190001L)),
+      ("eventTime + INTERVAL 2 HOURS", Some(7209999L), Some(-7190001L)),
+      // timestampadd adds a sub-day unit exactly.
+      ("timestampadd(SECOND, 2, eventTime)", Some(11999L), Some(7999L)),
+      ("timestampadd(SECOND, -2, eventTime)", Some(7999L), Some(11999L)),
+      ("timestampadd(HOUR, 2, eventTime)", Some(7209999L), Some(-7190001L)),
       // Keys that the watermark does not bound.
       ("other + INTERVAL 2 SECONDS", None, None),
+      ("other + INTERVAL 1 SECOND * 2", None, None),
+      ("timestampadd(SECOND, 2, other)", None, None),
       ("date_trunc('MINUTE', eventTime)", None, None),
       // Truncation can map a later event time below the watermark.
       ("CAST(CAST(eventTime AS BIGINT) AS TIMESTAMP)", None, None),
@@ -160,7 +171,14 @@ class StreamingJoinHelperSuite extends AnalysisTest {
       "eventTime + INTERVAL 1 YEAR" -> forward,
       "eventTime - INTERVAL 1 DAY" -> unbounded,
       "eventTime - INTERVAL 1 MONTH" -> unbounded,
-      "eventTime - INTERVAL 36 HOURS" -> unbounded).foreach { case (keyStr, expected) =>
+      "eventTime - INTERVAL 36 HOURS" -> unbounded,
+      // timestampadd adds days, weeks, months, quarters and years in the session time zone.
+      "timestampadd(DAY, 1, eventTime)" -> forward,
+      "timestampadd(WEEK, 1, eventTime)" -> forward,
+      "timestampadd(MONTH, 1, eventTime)" -> forward,
+      "timestampadd(YEAR, 1, eventTime)" -> forward,
+      "timestampadd(DAY, -1, eventTime)" -> unbounded,
+      "timestampadd(MONTH, -1, eventTime)" -> unbounded).foreach { case (keyStr, expected) =>
       Seq("UTC", "America/Los_Angeles").foreach { zone =>
         withSQLConf(SQLConf.SESSION_LOCAL_TIMEZONE.key -> zone) {
           withClue(s"$keyStr $zone") {
@@ -219,9 +237,12 @@ class StreamingJoinHelperSuite extends AnalysisTest {
     val castBound = Some(100000000L + 5000L - 1)
     // (condition, session time zone, column, cutoff with the flag, cutoff without it)
     Seq(
-      // Spark adds whole days in the session time zone, where a day can be 23 or 25 hours.
+      // Spark adds whole days in the session time zone, where a day can be 23 or 25 hours. They
+      // count as inexact in every zone, so whether a column gets a cutoff does not depend on it.
       ("rightTime <= leftTime + INTERVAL 1 DAY", "America/Los_Angeles", leftTime, None, dayBound),
-      ("rightTime <= leftTime + INTERVAL 1 DAY", "UTC", leftTime, dayBound, dayBound),
+      ("rightTime <= leftTime + INTERVAL 1 DAY", "UTC", leftTime, None, dayBound),
+      ("rightTime <= leftTime + INTERVAL 48 HOURS", "UTC", leftTime, None,
+        Some(100000000L - 2 * day - 1)),
       ("rightTime - INTERVAL 1 DAY <= leftTime", "America/Los_Angeles", leftTime, None, dayBound),
       ("rightTime <= leftTime + INTERVAL 2 HOURS", "America/Los_Angeles", leftTime,
         Some(100000000L - 7200000L - 1), Some(100000000L - 7200000L - 1)),
@@ -232,17 +253,38 @@ class StreamingJoinHelperSuite extends AnalysisTest {
         Some(100000000L - 1)),
       ("CAST(leftTime AS DOUBLE) >= CAST(rightTime AS DOUBLE) + 5", "UTC", leftTime, castBound,
         castBound),
+      // FLOAT, and DECIMAL with fewer than 6 fractional digits, drop part of a time too.
+      ("CAST(leftTime AS FLOAT) >= CAST(rightTime AS FLOAT) + 5", "UTC", leftTime, None,
+        castBound),
+      ("CAST(leftTime AS DECIMAL(20, 3)) >= CAST(rightTime AS DECIMAL(20, 3)) + 5", "UTC",
+        leftTime, None, castBound),
+      ("CAST(leftTime AS DECIMAL(20, 6)) >= CAST(rightTime AS DECIMAL(20, 6)) + 5", "UTC",
+        leftTime, castBound, castBound),
+      // A calendar interval adds its days in the session time zone too.
+      ("rightTime <= leftTime + make_interval(0, 0, 0, 1, 0, 0, 0)", "America/Los_Angeles",
+        leftTime, None, dayBound),
+      ("rightTime <= leftTime + make_interval(0, 0, 0, 1, 0, 0, 0)", "UTC", leftTime, None,
+        dayBound),
+      ("rightTime <= leftTime + make_interval(0, 0, 0, 0, 2, 0, 0)", "America/Los_Angeles",
+        leftTime, Some(100000000L - 7200000L - 1), Some(100000000L - 7200000L - 1)),
       // A column with its own watermark keeps its cutoff.
       ("rightTime <= leftEventTime + INTERVAL 1 DAY", "America/Los_Angeles", leftEventTime,
         dayBound, dayBound),
       ("CAST(leftEventTime AS BIGINT) >= CAST(rightTime AS BIGINT) + 5", "UTC", leftEventTime,
-        castBound, castBound)).foreach { case (conditionStr, zone, column, flagged, unflagged) =>
-      withSQLConf(SQLConf.SESSION_LOCAL_TIMEZONE.key -> zone) {
-        withClue(s"$conditionStr $zone") {
-          assert(cutoff(conditionStr, column, exact = true) === flagged)
-          assert(cutoff(conditionStr, column, exact = false) === unflagged)
+        castBound, castBound),
+      ("CAST(leftEventTime AS FLOAT) >= CAST(rightTime AS FLOAT) + 5", "UTC", leftEventTime,
+        castBound, castBound),
+      ("CAST(leftEventTime AS DECIMAL(20, 3)) >= CAST(rightTime AS DECIMAL(20, 3)) + 5", "UTC",
+        leftEventTime, castBound, castBound),
+      ("rightTime <= leftEventTime + make_interval(0, 0, 0, 1, 0, 0, 0)", "America/Los_Angeles",
+        leftEventTime, dayBound, dayBound)).foreach {
+      case (conditionStr, zone, column, flagged, unflagged) =>
+        withSQLConf(SQLConf.SESSION_LOCAL_TIMEZONE.key -> zone) {
+          withClue(s"$conditionStr $zone") {
+            assert(cutoff(conditionStr, column, exact = true) === flagged)
+            assert(cutoff(conditionStr, column, exact = false) === unflagged)
+          }
         }
-      }
     }
   }
 
