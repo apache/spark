@@ -20,13 +20,18 @@ package org.apache.spark.sql
 import java.sql.{Date, Timestamp}
 import java.util.Locale
 
+import org.apache.spark.SparkUnsupportedOperationException
+import org.apache.spark.rdd.RDD
+import org.apache.spark.sql.catalyst.InternalRow
+import org.apache.spark.sql.catalyst.expressions.{Attribute, AttributeReference, Expression}
 import org.apache.spark.sql.catalyst.optimizer.RemoveNoopUnion
 import org.apache.spark.sql.catalyst.plans.logical.Union
-import org.apache.spark.sql.catalyst.plans.physical.{HashPartitioning, UnknownPartitioning}
-import org.apache.spark.sql.execution.{SparkPlan, UnionExec}
+import org.apache.spark.sql.catalyst.plans.physical.{HashPartitioning, Partitioning, UnknownPartitioning}
+import org.apache.spark.sql.execution.{LeafExecNode, SparkPlan, UnionExec}
 import org.apache.spark.sql.execution.adaptive.AdaptiveSparkPlanHelper
 import org.apache.spark.sql.execution.columnar.InMemoryTableScanExec
 import org.apache.spark.sql.execution.exchange.{ReusedExchangeExec, ShuffleExchangeExec}
+import org.apache.spark.sql.expressions.Window
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.{ExamplePoint, ExamplePointUDT, SharedSparkSession, SQLTestData}
@@ -1589,6 +1594,86 @@ class DataFrameSetOperationsSuite extends QueryTest
     }
   }
 
+  test("SPARK-61211: union partitioning - an attribute the child does not output") {
+    import UnionPartitioningFixture._
+
+    withSQLConf(SQLConf.UNION_OUTPUT_PARTITIONING.key -> "true") {
+      val Seq(k, v) = Seq("k", "v").map(attr)
+      // The second child reports `hash(k)` over rows whose only column is `v`.
+      assert(union(Seq(k) -> hash(k), Seq(v) -> hash(k)).isInstanceOf[UnknownPartitioning])
+      // A partitioning that describes its child passes through.
+      assert(union(Seq(k) -> hash(k), Seq(k) -> hash(k)) == hash(k))
+    }
+  }
+
+  test("SPARK-61211: union of a grouped Dataset's keys and mapGroups") {
+    // `MapGroupsExec` and `SerializeFromObjectExec` pass the grouping key's partitioning through
+    // while outputting only the mapped value, so the second child reports `hash(key)` over rows
+    // whose value is `key + 1`.
+    Seq(true, false).foreach { aqe =>
+      withSQLConf(
+          SQLConf.ADAPTIVE_EXECUTION_ENABLED.key -> aqe.toString,
+          // Coalescing the few rows into one partition would hide the wrong partitioning.
+          SQLConf.COALESCE_PARTITIONS_ENABLED.key -> "false",
+          SQLConf.SHUFFLE_PARTITIONS.key -> "5",
+          SQLConf.UNION_OUTPUT_PARTITIONING.key -> "true") {
+        val kv = spark.range(100).as[Long].groupByKey(_ % 10)
+        val u = kv.keys.toDF().union(kv.mapGroups((k, _) => k + 1).toDF())
+        val df = u.withColumn("rn",
+          row_number().over(Window.partitionBy(u.columns(0)).orderBy(u.columns(0))))
+        // The values 0 to 10, each once.
+        assert(df.collect().count(_.getInt(1) == 1) == 11, s"aqe=$aqe")
+      }
+    }
+  }
+
+  test("SPARK-61211: union of column-pruned cached scans") {
+    // A column-pruned `InMemoryTableScanExec` reports the cached plan's partitioning, so the scan
+    // of `_2` reports `hash(_1)` over a column it does not output.
+    val kv = spark.range(1000).as[Long].groupByKey(x => (x % 10, x % 7))
+    val cached = kv.keys.toDF().repartition($"_1").cache()
+    try {
+      cached.count()
+      Seq(true, false).foreach { aqe =>
+        withSQLConf(
+            SQLConf.ADAPTIVE_EXECUTION_ENABLED.key -> aqe.toString,
+            SQLConf.UNION_OUTPUT_PARTITIONING.key -> "true") {
+          val df = cached.select("_1").union(cached.select("_2")).groupBy("_1").count()
+          checkAnswer(df,
+            (0L until 7L).map(Row(_, 17L)) ++ (7L until 10L).map(Row(_, 7L)))
+        }
+      }
+    } finally {
+      cached.unpersist()
+    }
+  }
+
+  test("SPARK-61211: union keeps the partitioning a column-pruned cached join still reports") {
+    withSQLConf(
+        SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key -> "-1",
+        SQLConf.UNION_OUTPUT_PARTITIONING.key -> "true") {
+      val joined = spark.range(1000).selectExpr("id k", "id v")
+        .join(spark.range(1000).selectExpr("id k2"), $"k" === $"k2").cache()
+      try {
+        joined.count()
+        Seq(true, false).foreach { aqe =>
+          withSQLConf(SQLConf.ADAPTIVE_EXECUTION_ENABLED.key -> aqe.toString) {
+            // Each scan reports the cached plan's keys, one of which (`k2`) it does not output.
+            // The member on `k` still describes it, so the aggregate needs no exchange.
+            val df = joined.select("k", "v")
+              .union(joined.where($"v" > 0).select("k", "v"))
+              .groupBy("k").count()
+            checkAnswer(df, Row(0L, 1L) +: (1L until 1000L).map(Row(_, 2L)))
+            val plan = df.queryExecution.executedPlan
+            assert(collect(plan) { case s: ShuffleExchangeExec => s }.isEmpty, plan)
+          }
+        }
+      } finally {
+        joined.unpersist()
+      }
+    }
+  }
+
   test("SPARK-52921: union partitioning - range partitioning") {
     val df1 = Seq((1, 2, 4), (1, 3, 5), (2, 2, 3), (2, 4, 5)).toDF("a", "b", "c")
     val df2 = Seq((4, 1, 5), (2, 4, 6), (1, 4, 2), (3, 5, 1)).toDF("d", "e", "f")
@@ -1695,3 +1780,17 @@ case class Struct2a(C2: Int, c1: Int)
 case class Struct3(c3: Int)
 case class Struct3a(C3: Int)
 case class Struct4(c3: Int, c5: Int)
+
+private object UnionPartitioningFixture {
+  def attr(name: String): AttributeReference = AttributeReference(name, LongType)()
+  def hash(e: Expression): HashPartitioning = HashPartitioning(Seq(e), 5)
+  def union(children: (Seq[Attribute], Partitioning)*): Partitioning =
+    UnionExec(children.map { case (o, p) => UnionChildStub(o, p) }).outputPartitioning
+}
+
+private case class UnionChildStub(
+    override val output: Seq[Attribute],
+    override val outputPartitioning: Partitioning) extends LeafExecNode {
+  override protected def doExecute(): RDD[InternalRow] =
+    throw SparkUnsupportedOperationException()
+}
