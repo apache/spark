@@ -1238,11 +1238,6 @@
       "Unsupported signature: <signature>."
     ]
   },
-  "VALUE_ALLOWED": {
-    "message": [
-      "Value for `<arg_name>` does not allow <disallowed_value>."
-    ]
-  },
   "VALUE_NOT_ACCESSIBLE": {
     "message": [
       "Value `<value>` cannot be accessed inside tasks."

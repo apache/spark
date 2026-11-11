@@ -228,10 +228,10 @@ class ArtifactManager:
                     # This has a limitation - hash(#) in the file name would not work.
                     if "#" in local_path:
                         raise PySparkValueError(
-                            errorClass="VALUE_ALLOWED",
+                            errorClass="VALUE_NOT_ALLOWED",
                             messageParameters={
                                 "arg_name": "artifact path",
-                                "disallowed_value": "#",
+                                "allowed_values": "strings without '#'",
                             },
                         )
                     name = f"{name}#{parsed.fragment}"

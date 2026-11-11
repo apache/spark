@@ -2289,10 +2289,10 @@ class SparkConnectClient(object):
             )
         if spark_job_tags_sep in tag:
             raise PySparkValueError(
-                errorClass="VALUE_ALLOWED",
+                errorClass="VALUE_NOT_ALLOWED",
                 messageParameters={
                     "arg_name": "Spark Connect tag",
-                    "disallowed_value": spark_job_tags_sep,
+                    "allowed_values": f"strings without '{spark_job_tags_sep}'",
                 },
             )
         if len(tag) == 0:
