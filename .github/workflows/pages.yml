@@ -20,8 +20,7 @@
 name: GitHub Pages deployment
 
 on:
-  # Deploy once a day instead of on every push to master, to save CI resources.
-  # This runs after the daily docs image refresh in build_infra_images_cache.yml (04:00 UTC).
+  # Deploy the latest master documentation artifact once a day.
   schedule:
     - cron: '30 12 * * *'
   workflow_dispatch:
@@ -32,53 +31,43 @@ concurrency:
 
 jobs:
   docs:
-    name: Build and deploy documentation
+    name: Deploy documentation
     runs-on: ubuntu-latest
     permissions:
+      actions: read
       id-token: write
       pages: write
     environment:
       name: github-pages # https://github.com/actions/deploy-pages/issues/271
-    container:
-      image: ghcr.io/apache/spark/apache-spark-github-action-image-docs-cache:master-static
-    env:
-      SPARK_TESTING: 1 # Reduce some noise in the logs
-      RELEASE_VERSION: 'In-Progress'
-      LC_ALL: C.UTF-8
-      LANG: C.UTF-8
     if: github.repository == 'apache/spark'
     steps:
-      - name: Checkout Spark repository
-        uses: actions/checkout@v7
+      - name: Find latest documentation preview
+        id: preview
+        uses: actions/github-script@v9
         with:
-          repository: apache/spark
-          ref: 'master'
-      - name: Add GITHUB_WORKSPACE to git trust safe.directory
-        run: |
-          git config --global --add safe.directory ${GITHUB_WORKSPACE}
-      - name: Free up disk space
-        run: ./dev/free_disk_space_container
-      - name: Install Java 21
-        uses: actions/setup-java@v6
+          script: |
+            for await (const {data} of github.paginate.iterator(
+              github.rest.actions.listArtifactsForRepo,
+              {...context.repo, name: 'docs-preview', per_page: 100}
+            )) {
+              const artifact = data.find(artifact =>
+                !artifact.expired && artifact.workflow_run?.head_branch === 'master');
+              if (artifact) {
+                core.setOutput('run-id', artifact.workflow_run.id);
+                core.info(`Deploying documentation from ${artifact.workflow_run.head_sha}`);
+                return;
+              }
+            }
+            core.setFailed('No unexpired master documentation preview artifact is available.');
+      - name: Download documentation preview
+        uses: actions/download-artifact@v8
         with:
-          distribution: zulu
-          java-version: 21
-      - name: Install dependencies for documentation generation
-        run: |
-          # Keep the version of Bundler here in sync with the following locations:
-          #   - dev/create-release/spark-rm/Dockerfile
-          #   - docs/README.md
-          gem install bundler -v 2.4.22
-          cd docs
-          bundle install --retry=100
-      - name: Run documentation build
-        run: |
-          sed -i".tmp1" 's/SPARK_VERSION:.*$/SPARK_VERSION: '"$RELEASE_VERSION"'/g' docs/_config.yml
-          sed -i".tmp2" 's/SPARK_VERSION_SHORT:.*$/SPARK_VERSION_SHORT: '"$RELEASE_VERSION"'/g' docs/_config.yml
-          sed -i".tmp3" "s/'facetFilters':.*$/'facetFilters': [\"version:$RELEASE_VERSION\"]/g" docs/_config.yml
-          sed -i".tmp4" 's/__version__: str = .*$/__version__: str = "'"$RELEASE_VERSION"'"/' python/pyspark/version.py
-          cd docs
-          SKIP_RDOC=1 bundle exec jekyll build
+          name: docs-preview
+          path: .
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          run-id: ${{ steps.preview.outputs.run-id }}
+      - name: Extract documentation preview
+        run: tar xjf site.tar.bz2
       - name: Setup Pages
         uses: actions/configure-pages@v6
       - name: Upload artifact

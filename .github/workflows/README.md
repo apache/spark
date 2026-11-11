@@ -40,6 +40,15 @@ Without these benefits, some GitHub Actions patterns become more difficult or im
 
 If in the future GitHub somehow allows workflows to run `on: pull_request` while counting those jobs against the forks' limits instead of ours, that would help eliminate various distortions of our build caused by the move away from `on: pull_request`. We would get the best functionality from GitHub Actions without hitting job run limits.
 
+## Documentation previews
+
+Sampled post-merge builds on `apache/spark` master upload the generated site as a
+`docs-preview` artifact, retained for three days. The Pages workflow deploys the
+latest unexpired master artifact daily or on manual dispatch, without rebuilding
+the documentation. It can use a completed documentation build even if another
+job in the same CI run fails. Until a preview artifact is available, the Pages
+workflow fails and leaves the existing deployment in place.
+
 ## Composite actions
 
 If you find yourself repeating the same set of instructions across multiple jobs, extract them into a reusable [composite action] under [`actions/`](../actions/).

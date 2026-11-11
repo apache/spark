@@ -978,6 +978,9 @@ jobs:
       PYSPARK_DRIVER_PYTHON: python3.12
       PYSPARK_PYTHON: python3.12
       GITHUB_PREV_SHA: ${{ github.event.before }}
+      PUBLISH_DOCS_PREVIEW: >-
+        ${{ github.repository == 'apache/spark' && github.event_name == 'push' &&
+            github.ref == 'refs/heads/master' }}
     container:
       image: ${{ needs.precondition.outputs.image_docs_url_link }}
     steps:
@@ -1005,6 +1008,12 @@ jobs:
         gem install bundler -v 2.4.22
         cd docs
         bundle install --retry=100
+    - name: Prepare documentation preview
+      if: env.PUBLISH_DOCS_PREVIEW == 'true'
+      run: |
+        sed -i 's/^SPARK_VERSION:.*/SPARK_VERSION: In-Progress/' docs/_config.yml
+        sed -i 's/^SPARK_VERSION_SHORT:.*/SPARK_VERSION_SHORT: In-Progress/' docs/_config.yml
+        sed -i 's/^__version__: str = .*$/__version__: str = "In-Progress"/' python/pyspark/version.py
     - name: Run documentation build
       run: |
         # We need this link to make sure `python3` points to `python3.12` which contains the prerequisite packages.
@@ -1015,21 +1024,25 @@ jobs:
         if [ -f "./dev/is-changed.py" ]; then
           # Skip PySpark and SparkR docs while keeping Scala/Java/SQL docs
           pyspark_modules=`cd dev && python3.12 -c "import sparktestsupport.modules as m; print(','.join(m.name for m in m.all_modules if m.name.startswith('pyspark')))"`
-          if [ `./dev/is-changed.py -m $pyspark_modules` = false ]; then export SKIP_PYTHONDOC=1; fi
+          # The published preview must include Python API docs even without Python changes.
+          if [ "$PUBLISH_DOCS_PREVIEW" != "true" ] &&
+              [ `./dev/is-changed.py -m $pyspark_modules` = false ]; then
+            export SKIP_PYTHONDOC=1
+          fi
           if [ `./dev/is-changed.py -m sparkr` = false ]; then export SKIP_RDOC=1; fi
         fi
         cd docs
         bundle exec jekyll build
     - name: Tar documentation
-      if: github.repository != 'apache/spark'
+      if: github.repository != 'apache/spark' || env.PUBLISH_DOCS_PREVIEW == 'true'
       run: tar cjf site.tar.bz2 docs/_site
     - name: Upload documentation
-      if: github.repository != 'apache/spark'
+      if: github.repository != 'apache/spark' || env.PUBLISH_DOCS_PREVIEW == 'true'
       uses: actions/upload-artifact@v7
       with:
-        name: site
+        name: ${{ env.PUBLISH_DOCS_PREVIEW == 'true' && 'docs-preview' || 'site' }}
         path: site.tar.bz2
-        retention-days: 1
+        retention-days: ${{ env.PUBLISH_DOCS_PREVIEW == 'true' && 3 || 1 }}
 
   # Any TPC-DS related updates on this job need to be applied to tpcds-1g-gen job of benchmark.yml as well
   tpcds-1g:
