@@ -193,12 +193,6 @@ impl Exported {
         }
     }
 
-    /// The domain, with NaN in it.
-    fn with_nan(mut self) -> Self {
-        self.nan_allowed = true;
-        self
-    }
-
     fn domain(&mut self) -> SparkDsDomain {
         let (ranges, ranges_schema) = match &mut self.ranges {
             Some((array, schema)) => (&mut **array as *mut _, &mut **schema as *mut _),
@@ -344,10 +338,12 @@ fn passes_nan_and_skips_the_domains_of_columns_without_values() {
         Arc::new(Float64Array::from(vec![None::<f64>])),
         &[(false, false)],
     );
+    let mut score = Exported::new(&[3], false, Some(scores));
+    score.nan_allowed = true;
     let mut exported = [
         Exported::new(&[0], false, Some(ids)),
         Exported::new(&[4], false, Some(times)),
-        Exported::new(&[3], false, Some(scores)).with_nan(),
+        score,
     ];
     let (used, failure) = push(library, "", &mut exported);
     assert_eq!(failure, None);
