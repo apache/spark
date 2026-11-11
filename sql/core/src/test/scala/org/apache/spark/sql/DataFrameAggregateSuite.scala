@@ -5778,12 +5778,76 @@ class DataFrameAggregateSuite extends SharedSparkSession
       ),
       Seq(Row(2, "a|b"))
     )
+    // Regular listagg alongside two distinct groups forces RewriteDistinctAggregates to execute
     checkAnswer(
       df.selectExpr(
         "count(DISTINCT keep)",
+        "count(DISTINCT s)",
         "listagg(s, '|') WITHIN GROUP (ORDER BY s)"
       ),
-      Seq(Row(2, "a|a|b|c"))
+      Seq(Row(2, 3, "a|a|b|c"))
+    )
+  }
+
+  test("SPARK-60124: listagg(DISTINCT ...) merged single-distinct path without FILTER") {
+    val df = Seq(
+      ("b", 1), ("a", 1), ("a", 1), (null.asInstanceOf[String], 1), ("c", 0)
+    ).toDF("s", "keep")
+
+    // count(DISTINCT s) with listagg(DISTINCT s) without FILTER
+    checkAnswer(
+      df.selectExpr(
+        "count(DISTINCT s)",
+        "listagg(DISTINCT s, '|') WITHIN GROUP (ORDER BY s)"
+      ),
+      Seq(Row(3, "a|b|c"))
+    )
+
+    // listagg(DISTINCT s) ASC alongside listagg(DISTINCT s) DESC without FILTER
+    checkAnswer(
+      df.selectExpr(
+        "listagg(DISTINCT s, '|') WITHIN GROUP (ORDER BY s ASC)",
+        "listagg(DISTINCT s, '|') WITHIN GROUP (ORDER BY s DESC)"
+      ),
+      Seq(Row("a|b|c", "c|b|a"))
+    )
+  }
+
+  test("SPARK-60124: listagg with ORDER BY expression differing from aggregated column") {
+    // 1. Regular listagg with ORDER BY separate column alongside two distinct groups
+    // Note: 'b' has ord=1 and 'a' has ord=2 so ord order ("b" then "a") is opposite
+    // alphabetical order ("a" then "b"). This verifies ord is used, not s.
+    val df1 = Seq(
+      ("b", 1, 1), ("a", 1, 2), ("a", 1, 2), (null.asInstanceOf[String], 1, 3), ("c", 0, 4)
+    ).toDF("s", "keep", "ord")
+
+    checkAnswer(
+      df1.selectExpr(
+        "count(DISTINCT keep)",
+        "count(DISTINCT s)",
+        "listagg(s, '|') WITHIN GROUP (ORDER BY ord ASC)"
+      ),
+      Seq(Row(2, 3, "b|a|a|c"))
+    )
+
+    checkAnswer(
+      df1.selectExpr(
+        "count(DISTINCT keep)",
+        "count(DISTINCT s)",
+        "listagg(s, '|') WITHIN GROUP (ORDER BY ord DESC)"
+      ),
+      Seq(Row(2, 3, "c|a|a|b"))
+    )
+
+    // 2. Distinct listagg with ORDER BY separate integer column ensuring numeric ordering
+    // Numerically 9 < 10 ("9,10"), whereas lexicographically "10" < "9" ("10,9").
+    val df2 = Seq((9, 1), (10, 1), (2, 0)).toDF("i", "keep")
+
+    checkAnswer(
+      df2.selectExpr(
+        "listagg(DISTINCT i, ',') WITHIN GROUP (ORDER BY i) FILTER (WHERE keep = 1)"
+      ),
+      Seq(Row("9,10"))
     )
   }
 }

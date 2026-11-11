@@ -625,7 +625,10 @@ abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
         val (functionsWithDistinct, functionsWithoutDistinct) =
           aggExpressions.partition(_.isDistinct)
         val distinctAggChildSets = functionsWithDistinct.map { ae =>
-          ExpressionSet(ae.aggregateFunction.children.filterNot(_.foldable))
+          ExpressionSet(ae.aggregateFunction.children.filterNot(_.foldable).map {
+            case s: SortOrder => s.child
+            case e => e
+          })
         }.distinct
         if (distinctAggChildSets.length > 1) {
           // This is a sanity check. We should not reach here when we have multiple distinct
