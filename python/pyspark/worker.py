@@ -264,8 +264,8 @@ def invoke_udf(message_receiver: SparkMessageReceiver, outfile: BinaryIO):
                 # Read input batches ahead in a background thread so that reading them overlaps
                 # with computing the UDF and writing its output.
                 queue_depth = int(os.environ.get("SPARK_PIPELINED_UDF_QUEUE_DEPTH", "2"))
-                with read_in_thread(iterator, queue_depth) as iterator:
-                    process(iterator)
+                with read_in_thread(iterator, queue_depth) as queued_iterator:
+                    process(queued_iterator)
             else:
                 process(iterator)
 

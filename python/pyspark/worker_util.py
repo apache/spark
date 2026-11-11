@@ -322,7 +322,7 @@ class _EndOfInput:
     __slots__ = ("error",)
 
     def __init__(self) -> None:
-        self.error: Optional[Exception] = None
+        self.error: Optional[BaseException] = None
 
 
 @contextmanager
@@ -361,7 +361,7 @@ def read_in_thread(
                 item_queue.put(item)
                 if stop_event.is_set():
                     return
-        except Exception as e:
+        except BaseException as e:
             end.error = e
         finally:
             if not stop_event.is_set():
