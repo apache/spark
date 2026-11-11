@@ -22,6 +22,7 @@ package ``__init__`` and the concrete-handler submodules can both import it.
 """
 
 import functools
+import os
 from abc import ABCMeta, abstractmethod
 from collections.abc import Iterator
 from typing import TYPE_CHECKING, Any, Callable, ClassVar, Generic, Optional
@@ -325,12 +326,21 @@ class EvalTypeHandler(Generic[InputBatch, OutputBatch], metaclass=_EvalTypeHandl
         ``func(split_index, data)``."""
 
 
+def pipelined_udf_enabled() -> bool:
+    """Whether the JVM runs this task in pipelined mode, where the worker reads its input ahead
+    in a background thread and flushes each output batch so that the JVM can read output while
+    it is still sending input."""
+    return os.environ.get("SPARK_PIPELINED_UDF") == "1"
+
+
 class BatchEvalTypeHandler(EvalTypeHandler["pa.RecordBatch", OutputBatch]):
     """Handler category whose input stream is ``Iterator[pa.RecordBatch]``."""
 
     @property
     def serializer(self) -> Serializer:
-        return ArrowStreamSerializer(write_start_stream=True)
+        return ArrowStreamSerializer(
+            write_start_stream=True, flush_per_batch=pipelined_udf_enabled()
+        )
 
 
 class GroupedEvalTypeHandler(EvalTypeHandler[GroupedBatch, OutputBatch]):
@@ -338,7 +348,9 @@ class GroupedEvalTypeHandler(EvalTypeHandler[GroupedBatch, OutputBatch]):
 
     @property
     def serializer(self) -> Serializer:
-        return ArrowStreamGroupSerializer(write_start_stream=True)
+        return ArrowStreamGroupSerializer(
+            write_start_stream=True, flush_per_batch=pipelined_udf_enabled()
+        )
 
 
 class CoGroupedEvalTypeHandler(EvalTypeHandler[CoGroupedBatch, OutputBatch]):
@@ -346,4 +358,6 @@ class CoGroupedEvalTypeHandler(EvalTypeHandler[CoGroupedBatch, OutputBatch]):
 
     @property
     def serializer(self) -> Serializer:
-        return ArrowStreamCoGroupSerializer(write_start_stream=True)
+        return ArrowStreamCoGroupSerializer(
+            write_start_stream=True, flush_per_batch=pipelined_udf_enabled()
+        )

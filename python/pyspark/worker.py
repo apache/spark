@@ -36,7 +36,11 @@ from pyspark.accumulators import (
     _deserialize_accumulator,
 )
 from pyspark.errors import PySparkRuntimeError
-from pyspark.eval_handlers._base import EvalTypeHandler, get_eval_type_handler
+from pyspark.eval_handlers._base import (
+    EvalTypeHandler,
+    get_eval_type_handler,
+    pipelined_udf_enabled,
+)
 from pyspark.eval_handlers._typing import UDF, UDTF
 from pyspark.eval_handlers._udtf import UDTFHandlerBase
 from pyspark.logger.worker_io import capture_outputs
@@ -243,12 +247,9 @@ def invoke_udf(message_receiver: SparkMessageReceiver, outfile: BinaryIO):
         # Fetch the input data stream
         input_data_stream = message_receiver.get_data_stream()
 
-        is_pipelined = os.environ.get("SPARK_PIPELINED_UDF") == "1"
+        is_pipelined = pipelined_udf_enabled()
         # Pipelined reads can overlap UDF work, so mark these task reports for filtering.
         metrics.set("pythonNumPipelinedTasks", int(is_pipelined))
-        if is_pipelined and hasattr(serializer, "flush_per_batch"):
-            # Flush each output batch so the JVM can read output while still sending input.
-            serializer.flush_per_batch = True
 
         def process(iterator):
             out_iter = func(split_index, iterator)
