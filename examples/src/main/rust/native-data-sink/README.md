@@ -73,6 +73,11 @@ That one manifest replacement is the commit point:
   outcome is unknown, so abort keeps the sealed directory that the new manifest may
   list. Dropping an unfinished coordinator also performs best-effort cleanup.
   Dropping a committed task writer leaves its file for the driver.
+- A task attempt that Spark killed, such as a losing speculative one, may still run
+  after the driver commits or aborts. A file that it creates while the driver renames
+  or removes the operation directory stays, unlisted, in `objects/<operation>` or
+  `.staging/<operation>`, and can make abort fail. Readers never see it, since they
+  read only the files that the manifest lists.
 
 To inspect output, read only the files listed in `manifest.json`. Recursively reading
 the destination directory would also pick up data from previous truncate operations.
@@ -127,9 +132,9 @@ Use `libspark_datasource_rust_sdk_sink.dylib` for macOS. The smoke script uses a
 temporary local directory and requires a local Spark master. It checks append,
 overwrite, a failed overwrite that preserves published data and cleans staging,
 write rejection with `readonly=true`, and a streaming write whose restart without new
-input commits nothing. Rust tests additionally exercise losing attempts, missing commit
-messages, a driver publication failure, lock cleanup, and epochs that a restarted query
-commits again.
+input commits nothing. Rust tests additionally exercise losing attempts, missing and
+invalid commit messages, invalid manifests, interrupted tasks, a driver publication
+failure, lock cleanup, and epochs that a restarted query commits again.
 
 An application can write with:
 
@@ -159,7 +164,9 @@ This example demonstrates atomic visibility during normal execution and abort, a
 publishes each epoch of a streaming query once, not crash recovery or exactly-once
 publication of a retried batch write. It syncs files but
 does not implement a crash-durable metadata journal. Process or machine failure can
-leave a stale `.write-lock`, staged files, or unreferenced objects. Recover the lock
+leave a stale `.write-lock`, staged files, or unreferenced objects, and a killed task
+attempt that races the seal or the abort can leave staged files or unreferenced
+objects too. Recover the lock
 only after confirming no operation still owns it. Retained files from old manifests
 also need garbage collection with an appropriate reader-retention policy; this demo
 does not implement that policy.

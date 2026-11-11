@@ -19,8 +19,9 @@ use std::ptr;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, Mutex, PoisonError};
 
+use arrow_array::builder::NullBufferBuilder;
 use arrow_array::ffi::FFI_ArrowArray;
-use arrow_array::{Array, Int64Array, RecordBatch, StructArray};
+use arrow_array::{Array, ArrayRef, Int64Array, RecordBatch, StructArray};
 use arrow_schema::{DataType, Field, Schema, SchemaRef};
 use serde::{Deserialize, Serialize, Serializer};
 use spark_datasource::__private::abi::{
@@ -716,6 +717,33 @@ fn task_failures_and_message_serialization_failures_remain_abortable() {
 }
 
 #[test]
+fn write_rejects_null_rows() {
+    let _guard = TEST_LOCK.lock().unwrap_or_else(PoisonError::into_inner);
+    EVENTS.lock().unwrap().clear();
+    let library = library();
+    let (source, _) = source(library, "", "");
+    let (driver, state) = driver(&source, 0);
+    let task = task(library, &state, 0);
+    let mut rows = NullBufferBuilder::new(2);
+    rows.append_non_null();
+    rows.append_null();
+    let values: ArrayRef = Arc::new(Int64Array::from(vec![1, 2]));
+    let input = StructArray::try_new(schema().fields().clone(), vec![values], rows.finish());
+    let mut array = FFI_ArrowArray::new(&input.unwrap().to_data());
+    assert_ne!(
+        unsafe { library.write.unwrap()(task.pointer, &mut array) },
+        0
+    );
+    assert!(error(library).contains("null rows"));
+    assert!(!events()
+        .iter()
+        .any(|event| matches!(event, Event::Batch(_))));
+    success(library, task_abort(&task));
+    drop(task);
+    success(library, driver_finish(&driver, true, &[None]));
+}
+
+#[test]
 fn driver_failures_preserve_messages_and_missing_task_positions_for_abort() {
     let _guard = TEST_LOCK.lock().unwrap_or_else(PoisonError::into_inner);
     let library = library();
@@ -805,7 +833,7 @@ fn the_epoch_of_a_data_writer_selects_its_write() {
 }
 
 #[test]
-fn undecodable_messages_fail_commit_but_abort_still_cleans_up() {
+fn missing_or_undecodable_messages_fail_commit_but_abort_still_cleans_up() {
     let _guard = TEST_LOCK.lock().unwrap_or_else(PoisonError::into_inner);
     EVENTS.lock().unwrap().clear();
     let library = library();
@@ -816,6 +844,9 @@ fn undecodable_messages_fail_commit_but_abort_still_cleans_up() {
     let message = task_message(&task);
     drop(task);
 
+    // Spark commits a write only with the message of every task.
+    assert_ne!(driver_finish(&driver, false, &[None]), 0);
+    assert!(error(library).contains("missing committed task message"));
     let garbage = b"not a commit message";
     assert_ne!(driver_finish(&driver, false, &[Some(garbage)]), 0);
     assert!(!events()

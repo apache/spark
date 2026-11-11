@@ -268,6 +268,10 @@ impl JsonWrite {
 
         // Seal the entire operation directory. New attempts can no longer open
         // a staged file, and existing losing files remain invisible to readers.
+        // A killed attempt that is still running, such as a losing speculative one,
+        // may have resolved the staging directory just before this rename and create
+        // its file after the sweep below. That file stays in the sealed directory,
+        // unlisted, so readers never see it.
         fs::rename(&self.staging, &self.objects)?;
         self.sealed = true;
         for entry in fs::read_dir(&self.objects)? {
@@ -332,7 +336,9 @@ impl JsonWrite {
 
     fn cleanup(&self) -> Result<()> {
         // Do not rely on commit messages: failed tasks and losing attempts may
-        // have staged files without returning a message to the driver.
+        // have staged files without returning a message to the driver. A killed
+        // attempt that is still running may also create a file while its directory
+        // is removed, which then fails this cleanup or leaves the directory behind.
         let mut first_error = None;
         for result in [
             fs::remove_dir_all(&self.staging),
@@ -608,6 +614,8 @@ fn unique_directory(parent: &Path) -> Result<PathBuf> {
 
 #[cfg(test)]
 mod tests {
+    use std::sync::atomic::AtomicBool;
+
     use super::*;
 
     struct TempDirectory(PathBuf);
@@ -787,6 +795,106 @@ mod tests {
         let message = stage(&factory, 1, vec![Some(1)]);
         assert!(write.commit(CommitInfo::new(vec![message])).is_err());
         assert!(!directory.0.join("manifest.json").exists());
+    }
+
+    #[test]
+    fn commit_rejects_invalid_messages_and_leaves_the_manifest_unchanged() {
+        let directory = TempDirectory::new();
+        let source = directory.source();
+        commit_ids(&source, WriteMode::Append, vec![Some(1)]);
+        let before = fs::read(directory.0.join("manifest.json")).unwrap();
+        let cases: [(fn(&JsonWrite, &mut [CommitMessage]), &str); 4] = [
+            (
+                |_, messages| messages[1].operation = "another".into(),
+                "Invalid or duplicate",
+            ),
+            (
+                |_, messages| messages[1].filename = messages[0].filename.clone(),
+                "Invalid or duplicate",
+            ),
+            (
+                |_, messages| messages[1].filename = format!("../{}", messages[1].filename),
+                "Invalid or duplicate",
+            ),
+            (
+                |write, messages| {
+                    fs::remove_file(write.staging.join(&messages[1].filename)).unwrap()
+                },
+                "staged file is missing",
+            ),
+        ];
+        for (invalidate, expected) in cases {
+            let (mut write, factory) = new_write(&source, WriteMode::Append).unwrap();
+            let mut messages = vec![
+                stage(&factory, 0, vec![Some(2)]),
+                stage(&factory, 1, vec![Some(3)]),
+            ];
+            invalidate(&write, &mut messages);
+            let error = write.commit(CommitInfo::new(messages)).unwrap_err();
+            assert!(error.to_string().contains(expected), "{error}");
+            assert!(write.staging.exists(), "{expected}");
+            assert_eq!(fs::read(directory.0.join("manifest.json")).unwrap(), before);
+        }
+    }
+
+    #[test]
+    fn a_write_rejects_a_manifest_of_another_version_or_with_an_invalid_data_path() {
+        let directory = TempDirectory::new();
+        let source = directory.source();
+        let with_file = |version: u32, path: &str| {
+            let files = serde_json::json!([{"path": path, "rows": 0}]);
+            serde_json::json!({"version": version, "files": files})
+        };
+        for (manifest, expected) in [
+            (with_file(2, "objects/a/b"), "manifest version"),
+            (with_file(1, "objects/a"), "manifest data path"),
+            (with_file(1, "data/a/b"), "manifest data path"),
+            (with_file(1, "objects/../b"), "manifest data path"),
+        ] {
+            fs::write(directory.0.join("manifest.json"), manifest.to_string()).unwrap();
+            let error = new_write(&source, WriteMode::Append).err().unwrap();
+            assert!(error.to_string().contains(expected), "{error}");
+            assert!(!directory.0.join(".write-lock").exists());
+        }
+        let manifest = with_file(1, "objects/a/b").to_string();
+        fs::write(directory.0.join("manifest.json"), manifest).unwrap();
+        assert!(new_write(&source, WriteMode::Append).is_ok());
+    }
+
+    #[test]
+    fn interrupted_tasks_fail_and_leave_no_staged_file() {
+        let directory = TempDirectory::new();
+        let (write, factory) = new_write(&directory.source(), WriteMode::Append).unwrap();
+        let staged = || fs::read_dir(&write.staging).unwrap().count();
+        let interrupted = AtomicBool::new(true);
+        let task = TaskContext::for_testing().interrupted_by(&interrupted);
+        let error = factory
+            .open(WriterContext::new(sink_schema(), task))
+            .err()
+            .unwrap();
+        assert!(error.to_string().contains("before opening"), "{error}");
+        assert_eq!(staged(), 0);
+
+        for (during_write, expected) in [(true, "while writing"), (false, "before committing")] {
+            let interrupted = AtomicBool::new(false);
+            let task = TaskContext::for_testing().interrupted_by(&interrupted);
+            let mut writer = factory
+                .open(WriterContext::new(sink_schema(), task))
+                .unwrap();
+            writer.write(batch(vec![Some(1)])).unwrap();
+            assert_eq!(staged(), 1);
+            interrupted.store(true, Ordering::SeqCst);
+            let error = if during_write {
+                writer.write(batch(vec![Some(2)])).unwrap_err()
+            } else {
+                writer.commit().unwrap_err()
+            };
+            assert!(error.to_string().contains(expected), "{error}");
+            // Spark aborts a task whose write or commit failed.
+            writer.abort().unwrap();
+            drop(writer);
+            assert_eq!(staged(), 0);
+        }
     }
 
     #[test]

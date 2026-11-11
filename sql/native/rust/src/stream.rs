@@ -231,7 +231,7 @@ unsafe extern "C" fn release(stream: *mut FFI_ArrowArrayStream) {
 // Compare the Spark logical types of version 1 of the ABI, ignoring Arrow
 // nullability/metadata and the interchangeable physical encodings of strings and
 // binary data. Spark also distinguishes only the presence of a time zone, not its
-// spelling. Nullability is checked against the data instead, in check_nulls.
+// spelling. Nullability is checked against the data instead, in check_values.
 pub(crate) fn validate_schema(schema: &SchemaRef) -> Result<()> {
     canonical_fields(schema.fields())?;
     Ok(())
@@ -409,13 +409,13 @@ mod tests {
     use std::sync::atomic::{AtomicUsize, Ordering};
 
     use arrow_array::builder::{
-        BooleanBuilder, Decimal128Builder, Int32Builder, ListBuilder, MapBuilder, StringBuilder,
-        StructBuilder,
+        BooleanBuilder, Decimal128Builder, Int32Builder, ListBuilder, MapBuilder,
+        OffsetBufferBuilder, StringBuilder, StructBuilder,
     };
     use arrow_array::ffi_stream::ArrowArrayStreamReader;
     use arrow_array::{
         ArrayRef, BooleanArray, Decimal128Array, Int32Array, Int64Array, LargeStringArray,
-        RecordBatch, RecordBatchReader,
+        MapArray, RecordBatch, RecordBatchReader, StringArray,
     };
     use arrow_schema::{ArrowError, DataType, Field, Schema};
 
@@ -890,6 +890,30 @@ mod tests {
         let error = batch_error(batch.clone(), &required);
         assert!(error.unwrap().contains("The column map.value has a null"));
         assert_eq!(batch_error(batch, &actual), None);
+    }
+
+    #[test]
+    fn map_keys_cannot_be_null_whatever_the_schema_to_read_declares() {
+        // MapBuilder rejects null keys, but a map whose key field is nullable can have them.
+        let fields = Fields::from(vec![
+            Field::new("key", DataType::Utf8, true),
+            Field::new("value", DataType::Int32, true),
+        ]);
+        let keys: ArrayRef = Arc::new(StringArray::from(vec![Some("a"), None]));
+        let values: ArrayRef = Arc::new(Int32Array::from(vec![1, 2]));
+        let entries = StructArray::try_new(fields.clone(), vec![keys, values], None).unwrap();
+        let entries_field = Arc::new(Field::new("entries", DataType::Struct(fields), false));
+        let mut offsets = OffsetBufferBuilder::<i32>::new(1);
+        offsets.push_length(2);
+        let map = MapArray::try_new(entries_field, offsets.finish(), entries, None, false).unwrap();
+        let schema = Arc::new(Schema::new(vec![Field::new(
+            "map",
+            map.data_type().clone(),
+            true,
+        )]));
+        let batch = RecordBatch::try_new(schema.clone(), vec![Arc::new(map)]).unwrap();
+        let error = batch_error(batch, &schema).unwrap();
+        assert!(error.contains("The column map.key has a null"), "{error}");
     }
 
     #[test]
