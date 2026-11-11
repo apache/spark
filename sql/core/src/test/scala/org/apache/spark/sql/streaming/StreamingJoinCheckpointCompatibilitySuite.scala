@@ -380,7 +380,10 @@ class StreamingJoinCheckpointCompatibilitySuite extends StreamTest {
   }
 
   test("resume old V4 aligned checkpoint when own equality key can be null") {
-    // A run restarted from an old checkpoint produces the same rows as an uninterrupted run.
+    // A run restarted from an emulated old checkpoint produces the same rows as an uninterrupted
+    // run. The emulated checkpoint holds no NULL-key row, because this version emits such a row
+    // on arrival; a real older checkpoint can hold one at timestamp 0, which the first batch after
+    // the restart evicts.
     Seq(false, true).foreach { restart =>
       withJoinConf(version = 4, logVersion = 2) {
         val (leftInput, rightInput, joined) = nullableAlignedJoinInputs()

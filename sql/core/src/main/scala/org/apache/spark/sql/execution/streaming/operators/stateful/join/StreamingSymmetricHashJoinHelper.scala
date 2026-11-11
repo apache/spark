@@ -245,8 +245,10 @@ object StreamingSymmetricHashJoinHelper extends Logging {
         val ordinal = joinKeyOrdinalForWatermark.get
         val keyExprWithWatermark = BoundReference(
           ordinal, oneSideJoinKeys(ordinal).dataType, oneSideJoinKeys(ordinal).nullable)
-        // The opposite watermark bounds this key, shifted by an exact constant in the opposite
-        // key. See StreamingJoinHelper.getStateKeyWatermark for the shifts it accepts.
+        // The opposite watermark bounds this key when the opposite key is that input's event
+        // time, possibly shifted by constant intervals: by the shift for an exact interval, and
+        // unshifted for whole days, months or years that never move a time backward. See
+        // StreamingJoinHelper.getStateKeyWatermark for which shifts qualify.
         def keyWatermark(watermark: Option[Long]): Option[Long] =
           StreamingJoinHelper.getStateKeyWatermark(
             otherSideJoinKeys, otherSideInputAttributes, ordinal, watermark)
@@ -275,6 +277,10 @@ object StreamingSymmetricHashJoinHelper extends Logging {
           }
         }
       } else if (isWatermarkDefinedOnInput) { // case 2 in the StreamingSymmetricHashJoinExec docs
+        // TODO(SPARK-61347): this needs the input's own watermark, although the analysis check
+        //   admits a range bound without one.
+        // TODO(SPARK-61348): the analysis check also admits a range bound on a column that is
+        //   not TIMESTAMP, which this branch never evicts.
         getStateValueWatermarkForInput(oneSideInputAttributes, otherSideInputAttributes,
           condition, eventTimeWatermarkForEviction).flatMap { case (attribute, watermark) =>
           // Late filtering only constrains the input's event-time column. A different indexed
@@ -310,6 +316,10 @@ object StreamingSymmetricHashJoinHelper extends Logging {
       otherInputAttributes: Seq[Attribute],
       condition: Option[Expression],
       eventWatermark: Option[Long]): Option[(Attribute, Long)] = {
+    // TODO(SPARK-61348): the analysis check admits a range bound on a column that is not
+    //   TIMESTAMP, which no candidate below takes.
+    // TODO(SPARK-61349): a conjunct that uses only constants still caps the cutoff, so it can
+    //   stop eviction.
     val eventTime = inputAttributes.find(_.metadata.contains(delayKey))
     // First try the watermarked column. If it has no inferable bound, try the other timestamp
     // columns in input schema order and use the first with a bound. This makes the indexed column
@@ -359,8 +369,12 @@ object StreamingSymmetricHashJoinHelper extends Logging {
    * at the same ordinal, or the join must be a time-interval join on the event times (see
    * [[isOwnEventTimeIntervalJoin]]). This excludes other range bounds. It also excludes a key
    * computed from the event time by a constant, which older versions evicted at the unshifted
-   * watermark. A NULL selected key does not matter: old V4 state indexed it at timestamp 0 under
-   * its own key, and evicting that row, which can never match, emits its correct outer row.
+   * watermark. A NULL selected key does not change the semantics: such a row can never match.
+   * Old V4 state indexed it at timestamp 0 under its own key, and the first batch after the
+   * restart scans V4 state from the start, so it evicts the row and a preserved side emits it
+   * unless an older version already joined it. V1 to V3 keep such a row, as older versions did,
+   * because its eviction predicate is unknown.
+   * TODO: evict the NULL-key rows that older versions stored in V1 to V3 state.
    */
   private[sql] def isWatermarkCheckpointCompatible(
       leftAttributes: Seq[Attribute],

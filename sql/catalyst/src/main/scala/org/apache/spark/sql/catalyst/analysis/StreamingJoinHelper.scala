@@ -17,13 +17,15 @@
 
 package org.apache.spark.sql.catalyst.analysis
 
+import java.util.Locale
+
 import scala.util.control.NonFatal
 
 import org.apache.spark.internal.Logging
 import org.apache.spark.internal.LogKeys._
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.plans.logical.EventTimeWatermark._
-import org.apache.spark.sql.catalyst.util.DateTimeConstants.MICROS_PER_DAY
+import org.apache.spark.sql.catalyst.util.DateTimeConstants.{MICROS_PER_DAY, MICROS_PER_HOUR, MICROS_PER_MILLIS, MICROS_PER_MINUTE, MICROS_PER_SECOND}
 import org.apache.spark.sql.types._
 import org.apache.spark.unsafe.types.CalendarInterval
 
@@ -38,9 +40,10 @@ object StreamingJoinHelper extends PredicateHelper with Logging {
    * For leftTime = rightTime, a watermark on rightTime bounds leftTime even when leftTime
    * has no watermark. It does not bound right-side state without a watermark on leftTime.
    * A key computed from the event time by adding constant intervals, such as
-   * leftTime = rightTime + INTERVAL 10 SECONDS, is bounded too if the solver can count the
-   * intervals exactly or they never move a time backward; see [[getStateKeyWatermark]]. The
-   * result does not depend on the session time zone, so neither does the V4 state layout.
+   * leftTime = rightTime + INTERVAL 10 SECONDS or leftTime = timestampadd(HOUR, 1, rightTime),
+   * is bounded too if the solver can count the intervals exactly or they never move a time
+   * backward; see [[getStateKeyWatermark]]. The result does not depend on the session time zone,
+   * so neither does the V4 state layout.
    */
   def getStateKeyWatermarkOrdinal(
       keys: Seq[Expression],
@@ -87,7 +90,8 @@ object StreamingJoinHelper extends PredicateHelper with Logging {
         case KeyShift(eventTime, true, _) =>
           val stateKey = AttributeReference("stateKey", TimestampType)()
           getStateValueWatermark(AttributeSet(Seq(stateKey)), AttributeSet(Seq(eventTime)),
-            Some(GreaterThanOrEqual(stateKey, keys(ordinal))), eventWatermark)
+            Some(GreaterThanOrEqual(stateKey, withIntervalLiterals(keys(ordinal)))),
+            eventWatermark)
         // The solver cannot count this shift, but it keeps the key of every future row at or
         // above that row's event time, which is above the watermark.
         case KeyShift(_, false, true) => eventWatermark
@@ -116,7 +120,8 @@ object StreamingJoinHelper extends PredicateHelper with Logging {
           metadata = new MetadataBuilder().putLong(delayKey, 0L).build())()
         getStateValueWatermark(AttributeSet(Seq(shift.eventTime)),
           AttributeSet(Seq(keyWithWatermark)),
-          Some(GreaterThanOrEqual(keys(ordinal), keyWithWatermark)), Some(keyWatermark))
+          Some(GreaterThanOrEqual(withIntervalLiterals(keys(ordinal)), keyWithWatermark)),
+          Some(keyWatermark))
       }
     }
   }
@@ -188,6 +193,16 @@ object StreamingJoinHelper extends PredicateHelper with Logging {
         combine(interval(i, negate = false), intervalShift(start, eventTime))
       case TimestampAddYMInterval(start, i, _) =>
         combine(interval(i, negate = false), intervalShift(start, eventTime))
+      // timestampadd adds sub-day units exactly, and days, weeks, months, quarters and years in
+      // the session time zone.
+      case TimestampAdd(unit, quantity, start, _) if quantity.foldable =>
+        val exactUnit = timestampAddUnitMicros(unit).isDefined
+        val known = exactUnit || calendarTimestampAddUnits.contains(unit.toUpperCase(Locale.ROOT))
+        val amount = try Option(quantity.eval()) catch { case NonFatal(_) => None }
+        val shift = amount.filter(_ => known).collect {
+          case n: Number => (exactUnit, n.longValue() >= 0)
+        }
+        combine(shift, intervalShift(start, eventTime))
       case DatetimeSub(_, _, replacement) => intervalShift(replacement, eventTime)
       case Add(left, right, _) =>
         combine(interval(right, negate = false), intervalShift(left, eventTime)).orElse(
@@ -196,6 +211,48 @@ object StreamingJoinHelper extends PredicateHelper with Logging {
         combine(interval(right, negate = true), intervalShift(left, eventTime))
       case _ => None
     }
+  }
+
+  /**
+   * The key with each foldable interval, such as INTERVAL 1 HOUR * 2, replaced by a literal of
+   * its value, as [[intervalShift]] evaluates it, and each timestampadd of a sub-day unit replaced
+   * by the same interval added to its timestamp. The solver reads only interval literals, and the
+   * admission check runs on the analyzed plan, before constant folding, so without this it would
+   * find no bound where execution finds one.
+   */
+  private def withIntervalLiterals(key: Expression): Expression = key.transformDown {
+    case e if e.foldable && !e.isInstanceOf[Literal] && isIntervalType(e.dataType) =>
+      try Literal.create(e.eval(), e.dataType) catch { case NonFatal(_) => e }
+    // A sub-day unit adds an exact number of microseconds, which the solver reads as an interval.
+    case e @ TimestampAdd(unit, quantity, start, timeZoneId) if quantity.foldable &&
+        timestampAddUnitMicros(unit).isDefined =>
+      try {
+        val micros = Math.multiplyExact(
+          quantity.eval().asInstanceOf[Number].longValue(), timestampAddUnitMicros(unit).get)
+        TimestampAddInterval(start, Literal(micros, DayTimeIntervalType()), timeZoneId)
+      } catch {
+        case NonFatal(_) => e
+      }
+  }
+
+  /** Microseconds per unit for the timestampadd units that add an exact duration. */
+  private def timestampAddUnitMicros(unit: String): Option[Long] =
+    unit.toUpperCase(Locale.ROOT) match {
+      case "MICROSECOND" => Some(1L)
+      case "MILLISECOND" => Some(MICROS_PER_MILLIS)
+      case "SECOND" => Some(MICROS_PER_SECOND)
+      case "MINUTE" => Some(MICROS_PER_MINUTE)
+      case "HOUR" => Some(MICROS_PER_HOUR)
+      case _ => None
+    }
+
+  /** The timestampadd units that Spark adds as local days or months. */
+  private val calendarTimestampAddUnits =
+    Set("DAY", "DAYOFYEAR", "WEEK", "MONTH", "QUARTER", "YEAR")
+
+  private def isIntervalType(dataType: DataType): Boolean = dataType match {
+    case _: DayTimeIntervalType | _: YearMonthIntervalType | CalendarIntervalType => true
+    case _ => false
   }
 
   /**

@@ -19,7 +19,9 @@ package org.apache.spark.sql.streaming
 
 import java.sql.Timestamp
 
-import org.apache.spark.sql.{DataFrame, Encoders, Row}
+import org.apache.logging.log4j.Level
+
+import org.apache.spark.sql.{AnalysisException, DataFrame, Encoders, Row}
 import org.apache.spark.sql.execution.streaming.operators.stateful.join.StreamingSymmetricHashJoinExec
 import org.apache.spark.sql.execution.streaming.operators.stateful.join.StreamingSymmetricHashJoinHelper.{JoinSide, LeftSide, RightSide}
 import org.apache.spark.sql.execution.streaming.runtime.{MemoryStream, StreamExecution}
@@ -153,8 +155,11 @@ class StreamingJoinOutputWatermarkSuite extends StreamTest {
         timeColumn) {
       val (impressionInput, clickInput, joined) = oneDirectionalJoin()
       val clickTime = if (timeColumn == "clickTime") $"clickTime" else $"clickTime".as(timeColumn)
-      runOneDirectionalJoin(impressionInput, clickInput,
-        windowCounts(joined.select(clickTime), timeColumn), Nil, Some(Set(RightSide)), 0L)
+      // The start-time check rejects this query by default; run it to observe the held watermark.
+      withSQLConf(SQLConf.STREAMING_JOIN_CHECK_FINALIZATION_ENABLED.key -> "false") {
+        runOneDirectionalJoin(impressionInput, clickInput,
+          windowCounts(joined.select(clickTime), timeColumn), Nil, Some(Set(RightSide)), 0L)
+      }
     }
   }
 
@@ -173,7 +178,11 @@ class StreamingJoinOutputWatermarkSuite extends StreamTest {
       ("clickTime", clickRows, RightSide, 0L)
     ).foreach { case (timeColumn, rows, side, outputWatermark) =>
       test(s"output watermark through $path over $timeColumn") {
-        withSQLConf(confs: _*) {
+        // Over impressionTime the start-time check must let the query run. Over clickTime it
+        // rejects an append-mode aggregation; disable it to observe the held watermark.
+        val checkEnabled = SQLConf.STREAMING_JOIN_CHECK_FINALIZATION_ENABLED.key ->
+          (side == LeftSide).toString
+        withSQLConf((confs :+ checkEnabled): _*) {
           val (impressionInput, clickInput, joined) = oneDirectionalJoin()
           runOneDirectionalJoin(impressionInput, clickInput, consumer(joined, timeColumn), rows,
             Some(Set(side)), outputWatermark)
@@ -289,6 +298,115 @@ class StreamingJoinOutputWatermarkSuite extends StreamTest {
     runOneDirectionalJoin(impressionInput, clickInput,
       joined.select($"impressionAdId", $"impressionTime".cast("long")),
       Seq(Row(1, 5L), Row(2, 15L), Row(3, 25L)), None, 0L)
+  }
+
+  // An append-mode aggregation over the event time of an input that the join cannot bound would
+  // never emit, so the query fails at start.
+  private def unboundedEventTimeError(eventTime: String, side: String, requirement: String) = {
+    ExpectFailure[AnalysisException](assertFailure = error => {
+      checkError(error.asInstanceOf[AnalysisException],
+        condition = "STREAMING_JOIN_UNBOUNDED_DOWNSTREAM_EVENT_TIME",
+        parameters = Map(
+          "eventTime" -> eventTime,
+          "side" -> side,
+          "requirement" -> requirement,
+          "config" -> SQLConf.STREAMING_JOIN_CHECK_FINALIZATION_ENABLED.key))
+    })
+  }
+
+  // A join on lk = rk AND lt = rt with a watermark on one input only: no watermark on the other
+  // input bounds the watermarked input's state, so the join holds back its output watermark for
+  // that input.
+  private def oneWatermarkEqualityJoin(joinType: String, watermarkOnLeft: Boolean):
+      (MemoryStream[(Int, Int)], MemoryStream[(Int, Int)], DataFrame) = {
+    val leftInput = MemoryStream[(Int, Int)]
+    val rightInput = MemoryStream[(Int, Int)]
+    val left =
+      leftInput.toDF().toDF("lk", "time").select($"lk", timestamp_seconds($"time").as("lt"))
+    val right =
+      rightInput.toDF().toDF("rk", "time").select($"rk", timestamp_seconds($"time").as("rt"))
+    val (watermarkedLeft, watermarkedRight) = if (watermarkOnLeft) {
+      (left.withWatermark("lt", "10 seconds"), right)
+    } else {
+      (left, right.withWatermark("rt", "10 seconds"))
+    }
+    (leftInput, rightInput,
+      watermarkedLeft.join(watermarkedRight, expr("lk = rk AND lt = rt"), joinType))
+  }
+
+  // The start-time check uses the same tracer, so it also rejects these aggregations over the
+  // unbounded clickTime.
+  Seq[(String, DataFrame => DataFrame)](
+    "a union" -> { joined =>
+      windowCounts(joined.select($"impressionAdId", $"clickTime".as("t")).union(laterInput()),
+        "t")
+    },
+    "a sliding window" -> { joined =>
+      windowCounts(joined.select($"clickTime"), "clickTime", slide = "5 seconds")
+    },
+    "a session window" -> { joined =>
+      joined.select($"impressionAdId", $"clickTime")
+        .groupBy($"impressionAdId", session_window($"clickTime", "5 seconds")).count()
+    }
+  ).foreach { case (path, aggregation) =>
+    test(s"reject an append-mode aggregation over the unbounded input through $path") {
+      val (impressionInput, clickInput, joined) = oneDirectionalJoin()
+      testStream(aggregation(joined), OutputMode.Append())(
+        MultiAddData(impressionInput, (1, 5L))(clickInput, (1, 8L)),
+        unboundedEventTimeError("clickTime", "right",
+          "a time constraint that limits how late a matching left row can arrive"))
+    }
+  }
+
+  test("reject an append-mode aggregation over an event time the join cannot bound") {
+    val (leftInput, rightInput, joined) = oneWatermarkEqualityJoin("inner", watermarkOnLeft = true)
+    testStream(windowCounts(joined, "lt"), OutputMode.Append())(
+      MultiAddData(leftInput, (1, 5))(rightInput, (1, 5)),
+      unboundedEventTimeError("lt", "left", "a watermark on the right input and a time " +
+        "constraint that limits how late a matching right row can arrive"))
+  }
+
+  test("reject an append-mode aggregation over the unbounded input of an admitted outer join") {
+    val (leftInput, rightInput, joined) =
+      oneWatermarkEqualityJoin("left_outer", watermarkOnLeft = false)
+    testStream(windowCounts(joined, "rt"), OutputMode.Append())(
+      MultiAddData(leftInput, (1, 5))(rightInput, (1, 5)),
+      unboundedEventTimeError("rt", "right", "a watermark on the left input and a time " +
+        "constraint that limits how late a matching left row can arrive"))
+  }
+
+  test("run an update-mode aggregation over an event time the join cannot bound") {
+    val (leftInput, rightInput, joined) = oneWatermarkEqualityJoin("inner", watermarkOnLeft = true)
+    testStream(windowCounts(joined, "lt"), OutputMode.Update())(
+      MultiAddData(leftInput, (1, 5))(rightInput, (1, 5)),
+      CheckNewAnswer(Row(0L, 1L)))
+  }
+
+  test("run an append-mode aggregation over an unbounded event time with one global watermark") {
+    val (leftInput, rightInput, joined) = oneWatermarkEqualityJoin("inner", watermarkOnLeft = true)
+    withSQLConf(SQLConf.STATEFUL_OPERATOR_ALLOW_MULTIPLE.key -> "false") {
+      testStream(windowCounts(joined, "lt"), OutputMode.Append())(
+        MultiAddData(leftInput, (1, 5))(rightInput, (1, 5)),
+        CheckNewAnswer(),
+        AddData(leftInput, (2, 100)),
+        CheckNewAnswer(Row(0L, 1L)))
+    }
+  }
+
+  test("run an append-mode aggregation over an unbounded event time with the check disabled") {
+    val (leftInput, rightInput, joined) = oneWatermarkEqualityJoin("inner", watermarkOnLeft = true)
+    val appender = new LogAppender("unbounded downstream event time")
+    withLogAppender(appender, level = Some(Level.WARN)) {
+      withSQLConf(SQLConf.STREAMING_JOIN_CHECK_FINALIZATION_ENABLED.key -> "false") {
+        testStream(windowCounts(joined, "lt"), OutputMode.Append())(
+          MultiAddData(leftInput, (1, 5))(rightInput, (1, 5)),
+          CheckNewAnswer(),
+          AddData(leftInput, (2, 100)),
+          CheckNewAnswer())
+      }
+    }
+    assert(appender.loggingEvents.exists(_.getMessage.getFormattedMessage
+      .contains("STREAMING_JOIN_UNBOUNDED_DOWNSTREAM_EVENT_TIME")))
   }
 }
 

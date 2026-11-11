@@ -2719,6 +2719,11 @@ abstract class StreamingLeftSemiJoinBase extends StreamingJoinSuite {
       // The left key leftTime + 10 seconds of (7, 100) stays above the 100-second cutoff.
       ("a key shifted by less than the watermark step",
         "leftTime + INTERVAL 10 SECONDS = rightTime", 120, 130, 150, 3L, 1L),
+      // The right key cutoff is the watermark plus 10 seconds less 1 ms, so the right row
+      // (1, 112) is at or below it although the watermark advances by only 5 seconds. The left
+      // keys of (7, 100) and (7, 105) stay above the 105-second left cutoff.
+      ("a key shifted by more than the watermark step",
+        "leftTime + INTERVAL 10 SECONDS = rightTime", 102, 112, 105, 2L, 2L),
       // A value cutoff of the watermark less 10 seconds and 1 ms: (1, 130) is below 139.999 s.
       ("a time interval",
         "leftTime BETWEEN rightTime - INTERVAL 10 SECONDS AND rightTime + INTERVAL 10 SECONDS",
@@ -2846,8 +2851,11 @@ abstract class StreamingLeftSemiJoinBase extends StreamingJoinSuite {
   }
 
   test("left semi join skips evicted right rows below an exact key cutoff") {
-    withSQLConf(SQLConf.STREAMING_NO_DATA_MICRO_BATCHES_ENABLED.key -> "false") {
-      // The right input has no watermark, so its rows are not late-filtered.
+    // The right input has no watermark, so its rows are not late-filtered. Without it, the left
+    // state is never finalized, so admission rejects the join unless the check is disabled, and
+    // the unmatched left rows stay in state.
+    withSQLConf(SQLConf.STREAMING_NO_DATA_MICRO_BATCHES_ENABLED.key -> "false",
+        SQLConf.STREAMING_JOIN_CHECK_FINALIZATION_ENABLED.key -> "false") {
       val (leftInput, rightInput, joined) =
         leftSemiJoin("leftTime = rightTime", rightWatermark = false)
       testStream(joined)(
@@ -2855,12 +2863,12 @@ abstract class StreamingLeftSemiJoinBase extends StreamingJoinSuite {
         CheckNewAnswer(),
         MultiAddData(leftInput, (7, 105))(rightInput, (8, 105)),
         CheckNewAnswer(),
-        assertNumStateRows(total = 2, updated = 4),
+        assertNumStateRows(total = 3, updated = 4),
         // Every left row passing late filtering has a key above 100 seconds, so (3, 90) is not
         // stored, while (1, 102) is stored for the left row (1, 102).
         MultiAddData(leftInput, (1, 102))(rightInput, (3, 90), (1, 102)),
         CheckNewAnswer((1, 102)),
-        assertNumStateRows(total = 0, updated = 1))
+        assertNumStateRows(total = 2, updated = 1))
     }
   }
 

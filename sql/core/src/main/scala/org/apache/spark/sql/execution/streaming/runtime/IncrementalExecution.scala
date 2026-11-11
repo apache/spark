@@ -768,6 +768,65 @@ class IncrementalExecution(
       }
     }
 
+    /**
+     * Reject an append-mode aggregation whose event time comes from a stream-stream join input
+     * that the join cannot bound: the join holds back its output watermark for that input, so
+     * the aggregation would never emit a result. Only an aggregation that the tracer of
+     * [[joinWatermarkConsumers]] reaches fails; with the finalization check disabled, it is only
+     * logged.
+     */
+    private def checkJoinOutputWatermarkConsumers(plan: SparkPlan): Unit = {
+      val joins = plan.collect {
+        case j: StreamingSymmetricHashJoinExec if j.stateInfo.isDefined =>
+          j.stateInfo.get.operatorId -> j
+      }.toMap
+      // A bounded input's state watermark advances with the input watermark; an input the join
+      // cannot bound contributes 0 at every input watermark.
+      def holdsOutputWatermark(join: StreamingSymmetricHashJoinExec, side: JoinSide): Boolean = {
+        Seq(1000000L, 2000000L).forall { inputWatermark =>
+          val (left, right) = StreamingSymmetricHashJoinHelper.getStateWatermark(
+            join.left.output, join.right.output, join.leftKeys, join.rightKeys,
+            join.condition.full, Some(inputWatermark), !allowMultipleStatefulOperators)
+          (if (side == LeftSide) left else right).contains(0L)
+        }
+      }
+      def isAppendAggregation(consumer: SparkPlan): Boolean = consumer match {
+        case s: StateStoreSaveExec => s.outputMode.contains(OutputMode.Append())
+        case s: SessionWindowStateStoreSaveExec => s.outputMode.contains(OutputMode.Append())
+        case s: StatefulStreamlineAggregateExec => s.outputMode.contains(OutputMode.Append())
+        case _ => false
+      }
+      joinWatermarkConsumers(plan).distinct.foreach {
+        case JoinWatermarkConsumer(consumer, joinOperatorId, side, eventTime)
+            if isAppendAggregation(consumer) &&
+              joins.get(joinOperatorId).exists(holdsOutputWatermark(_, side)) =>
+          val join = joins(joinOperatorId)
+          val (other, otherOutput) =
+            if (side == LeftSide) ("right", join.right.output) else ("left", join.left.output)
+          val constraint = s"a time constraint that limits how late a matching $other row can " +
+            "arrive"
+          val requirement =
+            if (otherOutput.exists(_.metadata.contains(EventTimeWatermark.delayKey))) {
+              constraint
+            } else {
+              s"a watermark on the $other input and $constraint"
+            }
+          val error = new AnalysisException(
+            errorClass = "STREAMING_JOIN_UNBOUNDED_DOWNSTREAM_EVENT_TIME",
+            messageParameters = Map(
+              "eventTime" -> eventTime.name,
+              "side" -> side.toString,
+              "requirement" -> requirement,
+              "config" -> SQLConf.STREAMING_JOIN_CHECK_FINALIZATION_ENABLED.key))
+          if (conf.getConf(SQLConf.STREAMING_JOIN_CHECK_FINALIZATION_ENABLED)) {
+            throw error
+          } else {
+            logWarning(log"${MDC(ERROR, error.getMessage)}")
+          }
+        case _ =>
+      }
+    }
+
     private lazy val composedRule: PartialFunction[SparkPlan, SparkPlan] = {
       // There should be no same pattern across rules in the list.
       val rulesToCompose = Seq(ShufflePartitionsRule, ConvertLocalLimitRule, StateOpIdRule)
@@ -901,6 +960,11 @@ class IncrementalExecution(
                 "rightWatermarkColumns" -> watermarkColumns(j.right)))
           case _ =>
         }
+      }
+      // Like the checkpoint check, this runs before state metadata is written or state opened.
+      // With a single global watermark, the join's output watermark does not reach the consumers.
+      if (isFirstBatch && allowMultipleStatefulOperators) {
+        checkJoinOutputWatermarkConsumers(planWithStateOpId)
       }
       // Need to check before write to metadata because we need to detect add operator
       // Only check when streaming is restarting and is first batch

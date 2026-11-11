@@ -235,6 +235,18 @@ case class StreamingSymmetricHashJoinExec(
 
   private val useVirtualColumnFamilies = stateFormatVersion >= 3
 
+  // Only the V4 state manager reads these ordinals. They depend only on plan fields, so
+  // doExecute computes them once on the driver instead of in every task.
+  private lazy val stateKeyOrdinalsForLookup: (Option[Int], Option[Int]) =
+    if (stateFormatVersion >= 4) {
+      (getStateKeyOrdinalForLookup(
+        left.output, leftKeys, right.output, rightKeys, stateWatermarkPredicates.left),
+        getStateKeyOrdinalForLookup(
+          right.output, rightKeys, left.output, leftKeys, stateWatermarkPredicates.right))
+    } else {
+      (None, None)
+    }
+
   // Determine the store names and metadata version based on format version
   private val (numStoresPerPartition, _stateStoreNames, _operatorStateMetadataVersion) =
     if (useVirtualColumnFamilies) {
@@ -369,6 +381,7 @@ case class StreamingSymmetricHashJoinExec(
   protected override def doExecute(): RDD[InternalRow] = {
     val stateStoreCoord = session.sessionState.streamingQueryManager.stateStoreCoordinator
     metrics // initialize metrics
+    stateKeyOrdinalsForLookup // computed here, so tasks do not compute it again
     left.execute().stateStoreAwareZipPartitions(
       right.execute(), stateInfo.get, stateStoreNames, stateStoreCoord)(processPartitions)
   }
@@ -413,16 +426,12 @@ case class StreamingSymmetricHashJoinExec(
         LeftSide, left.output, leftKeys, leftInputIter,
         condition.leftSideOnly, postJoinFilter, stateWatermarkPredicates.left, partitionId,
         checkpointIds.left.keyToNumValues, checkpointIds.left.keyWithIndexToValue,
-        skippedNullValueCount, joinStateManagerStoreGenerator,
-        getStateKeyOrdinalForLookup(
-          left.output, leftKeys, right.output, rightKeys, stateWatermarkPredicates.left)),
+        skippedNullValueCount, joinStateManagerStoreGenerator, stateKeyOrdinalsForLookup._1),
       new OneSideHashJoiner(
         RightSide, right.output, rightKeys, rightInputIter,
         condition.rightSideOnly, postJoinFilter, stateWatermarkPredicates.right, partitionId,
         checkpointIds.right.keyToNumValues, checkpointIds.right.keyWithIndexToValue,
-        skippedNullValueCount, joinStateManagerStoreGenerator,
-        getStateKeyOrdinalForLookup(
-          right.output, rightKeys, left.output, leftKeys, stateWatermarkPredicates.right)))
+        skippedNullValueCount, joinStateManagerStoreGenerator, stateKeyOrdinalsForLookup._2))
 
     //  Join one side input using the other side's buffered/state rows. Here is how it is done.
     //
