@@ -60,7 +60,7 @@ from pyspark.sql.dataframe import (
 from pyspark.sql.dataframe import (
     DataFrameStatFunctions as ParentDataFrameStatFunctions,
 )
-from pyspark.sql.dataframe import validate_approx_quantile_probabilities
+from pyspark.sql.dataframe import _validate_approx_quantile_probabilities
 from pyspark.sql.functions import builtin as F
 from pyspark.sql.merge import MergeIntoWriter
 from pyspark.sql.pandas.conversion import PandasConversionMixin
@@ -1725,7 +1725,7 @@ class DataFrame(ParentDataFrame, PandasMapOpsMixin, PandasConversionMixin):
                 )
         col = _to_list(self._sc, cast(List["ColumnOrName"], col))
 
-        probabilities = validate_approx_quantile_probabilities(probabilities)
+        probabilities = _validate_approx_quantile_probabilities(probabilities)
         probabilities = _to_list(self._sc, cast(List["ColumnOrName"], probabilities))
 
         if not isinstance(relativeError, (float, int)):

@@ -79,7 +79,7 @@ if TYPE_CHECKING:
 __all__ = ["DataFrame", "DataFrameNaFunctions", "DataFrameStatFunctions"]
 
 
-def validate_approx_quantile_probabilities(probabilities: Any) -> List[Union[float, int]]:
+def _validate_approx_quantile_probabilities(probabilities: Any) -> List[Union[float, int]]:
     """
     Validate the ``probabilities`` argument of ``DataFrame.approxQuantile``, shared by the
     classic and Connect implementations so both stay in sync. Returns it as a ``list``.

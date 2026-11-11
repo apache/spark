@@ -86,7 +86,7 @@ from pyspark.sql.dataframe import (
 from pyspark.sql.dataframe import (
     DataFrameStatFunctions as ParentDataFrameStatFunctions,
 )
-from pyspark.sql.dataframe import validate_approx_quantile_probabilities
+from pyspark.sql.dataframe import _validate_approx_quantile_probabilities
 from pyspark.sql.pandas.functions import _validate_vectorized_udf  # type: ignore[attr-defined]
 from pyspark.sql.pandas.types import from_arrow_schema, to_arrow_schema
 from pyspark.sql.table_arg import TableArg
@@ -1776,7 +1776,7 @@ class DataFrame(ParentDataFrame):
                     },
                 )
 
-        probabilities = validate_approx_quantile_probabilities(probabilities)
+        probabilities = _validate_approx_quantile_probabilities(probabilities)
 
         if not isinstance(relativeError, (float, int)):
             raise PySparkTypeError(
