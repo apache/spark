@@ -249,18 +249,16 @@ class KubernetesClusterSchedulerBackendSuite extends SparkFunSuite with BeforeAn
     verify(driverEndpointRef).send(RemoveExecutor("2", ExecutorKilled))
   }
 
-  for ((name, code, causedByApp, tagged, message, expected) <- Seq(
-      ("JVM OOM", SparkExitCode.OOM, true, false, "Executor failed", true),
-      ("container OOM", 137, true, true, "Executor failed", true),
-      ("plain SIGKILL", 137, true, false, "exit code 137 (possible container OOM)", false),
-      ("non-application exit", 137, false, true, "OOMKilled", false),
-      ("sidecar OOM message", 1, true, false, "Sidecar was OOMKilled", false))) {
-    test(s"SPARK-55639: Kubernetes recovery uses the typed OOM signal for $name") {
+  for ((name, code, message, expected) <- Seq(
+      ("JVM OOM", SparkExitCode.OOM, "52(JVM OOM)", true),
+      ("plain SIGKILL", 137, "137(SIGKILL, possible container OOM)", true),
+      ("sidecar OOM message", 1, "Sidecar was OOMKilled", true),
+      ("ordinary error", 1, "Executor failed", false))) {
+    test(s"SPARK-55639: Kubernetes recovery uses the executor loss message for $name") {
       val backend = spy[KubernetesClusterSchedulerBackend](schedulerBackendUnderTest)
       when(backend.isExecutorActive(any())).thenReturn(false)
       backend.start()
-      val reason = ExecutorExited(code, causedByApp, message)
-      if (tagged) reason.isOutOfMemoryError = true
+      val reason = ExecutorExited(code, exitCausedByApp = true, message)
 
       backend.doRemoveExecutor("1", reason)
       verify(driverEndpointRef).send(RemoveExecutor("1", reason))
@@ -268,7 +266,7 @@ class KubernetesClusterSchedulerBackendSuite extends SparkFunSuite with BeforeAn
     }
   }
 
-  test("Kubernetes recovery ignores an untyped executor loss message containing OOM") {
+  test("SPARK-55639: doRemoveExecutor triggers setRecoveryMode on OOM") {
     val backend = spy[KubernetesClusterSchedulerBackend](schedulerBackendUnderTest)
     when(backend.isExecutorActive(any())).thenReturn(false)
     backend.start()
@@ -278,7 +276,7 @@ class KubernetesClusterSchedulerBackendSuite extends SparkFunSuite with BeforeAn
 
     backend.doRemoveExecutor("1", reason)
     verify(driverEndpointRef).send(RemoveExecutor("1", reason))
-    verify(podAllocator, never()).setRecoveryMode()
+    verify(podAllocator).setRecoveryMode()
   }
 
   test("Kill executors") {

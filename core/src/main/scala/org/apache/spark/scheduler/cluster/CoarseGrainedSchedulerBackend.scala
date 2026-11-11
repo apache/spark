@@ -1165,7 +1165,11 @@ class CoarseGrainedSchedulerBackend(protected val scheduler: TaskSchedulerImpl, 
       val executorsToKill = knownExecutors
         .filter { id => !executorsPendingToRemove.contains(id) }
         .filter { id => force || !scheduler.isExecutorBusy(id) }
-      executorsToKill.foreach { id => executorsPendingToRemove(id) = !countFailures }
+      executorsToKill.foreach { id =>
+        executorsPendingToRemove(id) = !countFailures
+        // This executor stops receiving offers immediately, before its removal is reported.
+        scheduler.releasePendingOomRetryReservation(id)
+      }
 
       logInfo(log"Actual list of executor(s) to be killed is " +
         log"${MDC(LogKeys.EXECUTOR_IDS, executorsToKill.mkString(", "))}")

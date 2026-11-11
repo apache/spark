@@ -444,6 +444,34 @@ class TaskSchedulerImplSuite extends SparkFunSuite with LocalSparkContext
     assert(scheduler.oomRetryReservationInfo === Some(oomReservationInfo(manager, "idle")))
   }
 
+  test("a full offer moves a draining OOM reservation to an idle executor that fits") {
+    val clock = new ManualClock(1)
+    val scheduler = setupOomRetryScheduler(clock)
+    val draining = WorkerOffer("a", "host-a", 1)
+    val peer = WorkerOffer("b", "host-b", 2)
+    scheduler.submitTasks(FakeTask.createTaskSet(3))
+    assert(scheduler.resourceOffers(IndexedSeq(draining)).flatten.size === 1)
+    val peerTasks = scheduler.resourceOffers(IndexedSeq(peer)).flatten
+    assert(peerTasks.size === 2)
+    val manager = prepareOomRetries()
+    scheduler.executorLost("origin", ExecutorProcessLost())
+
+    assert(scheduler.resourceOffers(
+      IndexedSeq(draining, peer.copy(cores = 0))).flatten.isEmpty)
+    assert(scheduler.oomRetryReservationInfo === Some(oomReservationInfo(manager, "a")))
+    peerTasks.foreach(finishOomTestTask)
+    clock.advance(59000)
+    assert(scheduler.resourceOffers(IndexedSeq(peer), isAllFreeResources = false).flatten.isEmpty)
+    assert(scheduler.oomRetryReservationInfo === Some(oomReservationInfo(manager, "a")))
+
+    scheduler.submitTasks(FakeTask.createTaskSet(2, stageId = 2, stageAttemptId = 0))
+    val tooSmall = WorkerOffer("small", "host-small", 0)
+    val tasks = scheduler.resourceOffers(IndexedSeq(tooSmall, draining, peer)).flatten
+    assert(tasks.map(_.executorId) === Seq("a", "b"))
+    assert(scheduler.taskIdToTaskSetManager.get(tasks.last.taskId) eq manager)
+    assert(scheduler.oomRetryReservationInfo === Some(oomReservationInfo(manager, "b")))
+  }
+
   test("repeated OOM retries drain only one executor without killing existing tasks") {
     val scheduler = setupOomRetryScheduler(new ManualClock(1))
     val backend = spy(new FakeSchedulerBackend)

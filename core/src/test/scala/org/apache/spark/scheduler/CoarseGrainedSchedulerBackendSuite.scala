@@ -149,6 +149,41 @@ class CoarseGrainedSchedulerBackendSuite extends SparkFunSuite with LocalSparkCo
     assert(backend.getExecutorAvailableResources("1")(GPU).availableAddrs === Array("0"))
   }
 
+  test("killing a draining executor releases its pending OOM retry before removal") {
+    val backend = createDecommissionBackend(new SparkConf().set(SCHEDULER_OOM_RETRY_ENABLED, true))
+    val scheduler = backend.taskScheduler
+    val executor = registerDecommissionExecutor(backend, "1", 2)
+    scheduler.submitTasks(FakeTask.createTaskSet(2))
+    val manager = scheduler.taskSetManagerForAttempt(0, 0).get
+    backend.driverEndpoint.send(ReviveOffers)
+    executor.nextTask() // Keep one task running while the other fails twice.
+    (0 until 2).foreach { attempt =>
+      val task = executor.nextTask()
+      assert(task.attemptNumber === attempt)
+      val failure = new ExceptionFailure(SparkCoreErrors.outOfMemoryError(1, 0, ""), Nil)
+      val reason = sc.env.closureSerializer.newInstance().serialize(failure)
+      backend.driverEndpoint.send(StatusUpdate(task.executorId, task.taskId, TaskState.FAILED,
+        new SerializableBuffer(reason), task.cpus, task.resources))
+      eventually(timeout(5.seconds)) {
+        scheduler.synchronized { assert(manager.taskInfos(task.taskId).finished) }
+      }
+      backend.driverEndpoint.send(ReviveOffers)
+    }
+    flushDecommissionBackend(backend)
+    assert(scheduler.oomRetryReservationInfo.exists(_.executorId == "1"))
+    assert(sc.killExecutor("1"))
+    assert(scheduler.isExecutorAlive("1") && !backend.isExecutorActive("1"))
+    assert(scheduler.oomRetryReservationInfo.isEmpty)
+
+    val replacement = registerDecommissionExecutor(backend, "2")
+    backend.driverEndpoint.send(ReviveOffers)
+    assert(replacement.nextTask().attemptNumber === 2)
+    assert(scheduler.oomRetryReservationInfo.exists(_.executorId == "2"))
+    // Once the isolated attempt launches, its reservation lasts until the task exits.
+    assert(sc.killExecutor("2"))
+    assert(scheduler.oomRetryReservationInfo.exists(_.executorId == "2"))
+  }
+
   test("compute max number of concurrent tasks can be launched") {
     val conf = new SparkConf()
       .setMaster("local-cluster[4, 3, 1024]")
@@ -1236,6 +1271,10 @@ private[spark] class DecommissionTestSchedulerBackend(
       case message => super.receive(message)
     }
   }
+
+  // Acknowledge the kill request. Tests deliver executor removal separately.
+  override protected def doKillExecutors(executorIds: Seq[String]): Future[Boolean] =
+    Future.successful(true)
 
   override def reviveOffers(): Unit = {}
 

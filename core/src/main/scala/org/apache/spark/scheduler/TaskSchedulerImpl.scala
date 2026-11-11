@@ -482,6 +482,14 @@ private[spark] class TaskSchedulerImpl(
     }
   }
 
+  private[scheduler] def releasePendingOomRetryReservation(executorId: String): Unit =
+    synchronized {
+      if (oomRetryReservation.exists(r => r.executorId == executorId && r.taskId.isEmpty)) {
+        setOomRetryReservation(None)
+        backend.reviveOffers()
+      }
+    }
+
   private def refreshOomRetryReservation(): Boolean = {
     val hadReservation = oomRetryReservation.nonEmpty
     setOomRetryReservation(oomRetryReservation.filter { reservation =>
@@ -546,7 +554,7 @@ private[spark] class TaskSchedulerImpl(
 
     def launch(taskSet: TaskSetManager, index: Int, i: Int): Option[Long] = {
       val offer = offers(i)
-      if (!eligible(taskSet, index, i) || isExecutorBusy(offer.executorId)) {
+      if (isExecutorBusy(offer.executorId) || !eligible(taskSet, index, i)) {
         return None
       }
       resourcesMeetTaskRequirements(
@@ -605,11 +613,19 @@ private[spark] class TaskSchedulerImpl(
     oomRetryReservation.filter { reservation =>
       reservation.taskId.isEmpty && reservation.taskSet.oomRetryNeedsIsolation(reservation.index)
     }.foreach { reservation =>
-      offers.indices.find(i => offers(i).executorId == reservation.executorId).foreach { i =>
-        launch(reservation.taskSet, reservation.index, i).foreach { tid =>
-          setOomRetryReservation(Some(reservation.copy(taskId = Some(tid))))
-        }
+      // Move a draining reservation only if the retry can launch on an idle executor now.
+      // Partial rounds can still launch it on the executor that already holds the reservation.
+      val candidates = if (isAllFreeResources && isExecutorBusy(reservation.executorId)) {
+        offers.indices.iterator
+      } else {
+        offers.indices.iterator.filter(i => offers(i).executorId == reservation.executorId)
       }
+      candidates.takeWhile(_ => reservation.taskSet.oomRetryNeedsIsolation(reservation.index))
+        .flatMap { i =>
+          launch(reservation.taskSet, reservation.index, i).map { tid =>
+            reservation.copy(executorId = offers(i).executorId, taskId = Some(tid))
+          }
+        }.nextOption().foreach(updated => setOomRetryReservation(Some(updated)))
     }
 
     if (pendingRetries.nonEmpty) {

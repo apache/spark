@@ -3056,6 +3056,8 @@ Apart from these, the following properties are also available, and may be useful
     Prefer eligible idle executors when retrying a task after an out-of-memory failure.
     After the second and each subsequent OOM failure of the same task, Spark tries to reserve
     one executor for its next attempt. It lets existing tasks finish, then runs the retry alone.
+    While the reserved executor drains, Spark can move the pending retry to another eligible
+    idle executor.
     Spark releases the executor when the isolated attempt ends, including when it fails with OOM.
     At most one executor per application is reserved. Other repeated OOM retries wait up to
     <code>spark.scheduler.oomRetry.isolationTimeout</code> before falling back to ordinary placement.
@@ -3070,8 +3072,12 @@ Apart from these, the following properties are also available, and may be useful
     <code>OOMKilled</code> termination, and YARN executor containers killed for exceeding their
     physical memory limit. Each task lost with an OOM-killed executor counts that loss toward
     its own isolation threshold, since the executor exit alone cannot identify the task responsible.
-    Exit code 137 alone is not considered OOM. Native errors without a typed OOM signal
-    are not recognized; fixed per-task native memory limits are not increased.
+    For task retry, exit code 137 alone is not considered OOM. On Standalone, Spark may miss
+    an OOM exit code if it processes a generic executor loss first. On YARN, the JVM OOM hook
+    enabled by default through <code>spark.yarn.executor.oomKill.enabled</code> can terminate the
+    JVM with exit code 143 on Linux. Exit code 143 alone is not classified as OOM, so recovery
+    then depends on receiving a typed task failure. Spark also needs a typed signal to recognize
+    native OOM errors. The retry policy leaves fixed per-task native memory limits in place.
     An idle executor may retain cached or native memory, so recovery is not guaranteed.
   </td>
   <td>4.4.0</td>
