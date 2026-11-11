@@ -26,7 +26,7 @@ import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.plans.logical.Filter
 import org.apache.spark.sql.catalyst.util.AttributeNameParser
 import org.apache.spark.sql.catalyst.util.QuotingUtils.quoteNameParts
-import org.apache.spark.sql.connector.{StrLen, StrLenDefault, StrLenMagic}
+import org.apache.spark.sql.connector.{ConstantStringOfAnyArity, StrLen, StrLenDefault, StrLenMagic}
 import org.apache.spark.sql.connector.catalog.{Identifier, InMemoryCatalog, Table, TableCatalog, TableChange}
 import org.apache.spark.sql.connector.catalog.constraints.{Check, Constraint}
 import org.apache.spark.sql.connector.catalog.functions.{ScalarFunction, UnboundFunction}
@@ -423,6 +423,35 @@ class CheckConstraintSuite extends QueryTest with CommandSuiteBase with DDLComma
           }
         } finally {
           sql("DROP TEMPORARY FUNCTION upper")
+        }
+      }
+    }
+  }
+
+  test("SPARK-59243: Nested JSON constructors of a check constraint are not shadowed") {
+    Seq(
+      "json_array" -> """json_array(json_array(s)) <> '[["bad"]]'""",
+      "json_object" -> """json_object('a', json_object('b', s)) <> '{"a":{"b":"bad"}}'"""
+    ).foreach { case (name, cond) =>
+      withV2Function(name, ConstantStringOfAnyArity("OK")) {
+        withNamespaceAndTable("ns", "tbl", nonPartitionCatalog) { t =>
+          sql(s"CREATE TABLE $t (id INT, s STRING) $defaultUsing")
+          sql(s"ALTER TABLE $t ADD CONSTRAINT c1 CHECK ($cond)")
+          withSQLConf(SQLConf.PATH_ENABLED.key -> "true") {
+            sql(s"SET PATH = fun_$catalog.ns, system.builtin")
+            try {
+              // The path does shadow the nested calls outside of the constraint.
+              checkAnswer(sql(s"SELECT $cond FROM VALUES ('bad') AS t(s)"), Row(true))
+              sql(s"INSERT INTO $t VALUES (1, 'good')")
+              val e = intercept[SparkRuntimeException] {
+                sql(s"INSERT INTO $t VALUES (2, 'bad')")
+              }
+              assert(e.getCondition == "CHECK_CONSTRAINT_VIOLATION", s"for $cond")
+              checkAnswer(spark.table(t), Row(1, "good"))
+            } finally {
+              sql("SET PATH = DEFAULT_PATH")
+            }
+          }
         }
       }
     }

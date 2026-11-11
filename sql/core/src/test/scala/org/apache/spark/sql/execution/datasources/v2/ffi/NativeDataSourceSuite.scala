@@ -44,6 +44,8 @@ import org.apache.spark.sql.{AnalysisException, Dataset, IntegratedUDFTestUtils,
 import org.apache.spark.sql.catalyst.streaming.StreamingRelationV2
 import org.apache.spark.sql.classic.{DataFrame, SparkSession}
 import org.apache.spark.sql.connector.catalog.SupportsRead
+import org.apache.spark.sql.connector.expressions.{Expression => V2Expression, FieldReference, LiteralValue}
+import org.apache.spark.sql.connector.expressions.filter.Predicate
 import org.apache.spark.sql.connector.read.{InputPartition, SupportsArrowStreamRead, SupportsPushDownRequiredColumns}
 import org.apache.spark.sql.connector.read.streaming.{MicroBatchStream, Offset, ReadLimit, SupportsAdmissionControl}
 import org.apache.spark.sql.connector.write.PhysicalWriteInfoImpl
@@ -94,6 +96,9 @@ class NativeDataSourceSuite extends QueryTest with SharedSparkSession {
   // A library built against the header before default_read_limit, whose table ends before it.
   private lazy val noReadLimitLibrary = compile("test_native_datasource_nrl",
     "-DTABLE_SIZE=offsetof(SparkDsLibrary,default_read_limit)", "-DNAME_PREFIX=\"nrl_\"")
+  // Built as against a header without push_domains, the last function of the table.
+  private lazy val noDomainsLibrary = compile("test_native_datasource_nd",
+    "-DTABLE_SIZE=offsetof(SparkDsLibrary,push_domains)", "-DNAME_PREFIX=\"nd_\"")
   private lazy val failingInitLibrary =
     compile("test_native_datasource_if", "-DINIT_FAILURE=1", "-DNAME_PREFIX=\"if_\"")
   private lazy val noTableLibrary =
@@ -276,7 +281,11 @@ class NativeDataSourceSuite extends QueryTest with SharedSparkSession {
     NativeStreamWriters.register("query", first)
     NativeStreamWriters.register("other query", other)
     assert(released.isEmpty)
+    // Closed before the query creates its next stream writer.
+    NativeStreamWriters.closePrevious("query")
+    assert(released == Seq(1L))
     NativeStreamWriters.register("query", second)
+    NativeStreamWriters.closePrevious("new query")
     assert(released == Seq(1L))
     second.close()
     other.close()
@@ -379,9 +388,11 @@ class NativeDataSourceSuite extends QueryTest with SharedSparkSession {
       (0L until 6L).map(id => Row(id, if (id % 5 == 0) null else s"n$id")))
 
     // The Arrow schema does not have the collation, which applies to the data that Spark reads.
+    // A data source compares strings by their bytes, so the column has no domain.
     val collated = session.read.schema("id BIGINT, name STRING COLLATE UTF8_LCASE")
       .format("native_range").option("end", "6").load()
     checkRows(collated.filter("name = 'N1'"), Seq(Row(1L, "n1")))
+    assert(scan(collated.filter("name = 'N1'")).getMetaData()("PushedFilters") == "[]")
 
     val e = intercept[Exception] {
       session.read.schema("id INT").format("native_range").load().collect()
@@ -467,6 +478,121 @@ class NativeDataSourceSuite extends QueryTest with SharedSparkSession {
     assert(scan(pruned).readSchema() == StructType.fromDDL("id BIGINT"))
     assert(scan(pruned).getMetaData()("PushedLimit") == "LIMIT 3")
     assert(scan(pruned).toBatch.createReaderFactory().isInstanceOf[NativePartitionReaderFactory])
+  }
+
+  nativeTest("push down the domains of filtered columns") {
+    val file = new File(Utils.createTempDir(), "domains")
+    def readIn(session: SparkSession, options: (String, String)*): DataFrame = {
+      file.delete()
+      range(session, Seq("end" -> "45", "domains_path" -> file.getPath) ++ options: _*)
+    }
+    def read(options: (String, String)*): DataFrame = {
+      readIn(newSession(defaultPackage), options: _*)
+    }
+    // The domains that the library got: for each, the path of the column, whether null and NaN are
+    // in the domain, and the ranges.
+    def received(): Seq[String] = Files.readAllLines(file.toPath, UTF_8).asScala.toSeq
+
+    // The library reads the blocks of 10 rows whose ids may match, [10, 20) and [20, 30), with all
+    // their rows, and Spark filters the rows after reading.
+    val df = read().filter("id > 13 AND id < 27")
+    checkRows(df, (14L until 27L).map(expectedRow))
+    assert(received() == Seq("0 - - (13,27)"))
+    assert(scan(df).toBatch.planInputPartitions().length == 2)
+    val pushed = scan(df).getMetaData()("PushedFilters")
+    assert(pushed.contains("id > 13") && pushed.contains("id < 27"), pushed)
+    assert(scan(df).getMetaData()("PushedDomains") == "[id: (13L, 27L)]")
+
+    // The library gets the domains of the other columns too, and only uses the one of id, so the
+    // filters on the others are not shown as pushed.
+    val other = read().filter("id < 5 AND name = 'n3'")
+    checkRows(other, Seq(expectedRow(3L)))
+    assert(received() == Seq("0 - - (-inf,5)", "2 - - [n3,n3]"))
+    assert(scan(other).getMetaData()("PushedDomains") == "[id: (-inf, 5L)]")
+    assert(!scan(other).getMetaData()("PushedFilters").contains("name"))
+    val all = read("use_domains" -> "all").filter("id < 5 AND name = 'n3'")
+    checkRows(all, Seq(expectedRow(3L)))
+    assert(scan(all).getMetaData()("PushedFilters").contains("name = 'n3'"))
+    // A library that uses no domain reads all the data.
+    val none = read("use_domains" -> "none").filter("id > 40")
+    checkRows(none, (41L until 45L).map(expectedRow))
+    assert(scan(none).getMetaData()("PushedFilters") == "[]")
+    assert(!scan(none).getMetaData().contains("PushedDomains"))
+    assert(scan(none).toBatch.planInputPartitions().length == 2)
+
+    // NaN is greater than any other value, so it is in the domain of value > 10.
+    val doubles = read().filter("value > 10.0")
+    checkRows(doubles, (21L until 45L).map(expectedRow))
+    assert(received() == Seq("3 - nan (10,+inf)"))
+    // LIKE 'n1%' is STARTS_WITH(name, 'n1'): the strings from 'n1', up to 'n2' excluded.
+    val prefixed = read().filter("name LIKE 'n1%'")
+    checkRows(prefixed, Seq(1L, 11L, 12L, 13L, 14L, 16L, 17L, 18L, 19L).map(expectedRow))
+    assert(received() == Seq("2 - - [n1,n2)"))
+    // A field of a struct, and timestamps, in microseconds.
+    val nested = read("extra" -> "struct").filter("st.a >= 40 AND ts < timestamp_seconds(42)")
+    checkRows(nested.select("id"), Seq(Row(40L), Row(41L)))
+    assert(received() == Seq("6 - - (-inf,42000000)", "7.0 - - [40,+inf)"))
+    // A domain without values: the library reads nothing.
+    val empty = read().filter("id < 5 AND id > 10")
+    checkRows(empty, Nil)
+    assert(received() == Seq("0 - - "))
+    assert(scan(empty).toBatch.planInputPartitions().isEmpty)
+    // Domains with null, and with more than one range: the library reads the blocks that one of
+    // the ranges of id may match.
+    val nullSafe = read().filter("NOT (id <=> 5)")
+    checkRows(nullSafe, (0L until 45L).filter(_ != 5).map(expectedRow))
+    assert(received() == Seq("0 null - (-inf,5) (5,+inf)"))
+    val nullNames = read().filter("name IS NULL")
+    checkRows(nullNames, (0L until 45L by 5).map(expectedRow))
+    assert(received() == Seq("2 null - "))
+    val notIn = read().filter("id NOT IN (5, 20)")
+    checkRows(notIn, (0L until 45L).filter(id => id != 5 && id != 20).map(expectedRow))
+    assert(received() == Seq("0 - - (-inf,5) (5,20) (20,+inf)"))
+    val between = read().filter("id < 3 OR (id > 22 AND id < 25)")
+    checkRows(between, Seq(0L, 1L, 2L, 23L, 24L).map(expectedRow))
+    assert(received() == Seq("0 - - (-inf,3) (22,25)"))
+    assert(scan(between).toBatch.planInputPartitions().length == 2)
+    // Filters on other expressions are not pushed: Spark evaluates them.
+    val functions = read().filter("id % 7 = 0 AND upper(name) = 'N14'")
+    checkRows(functions, Seq(expectedRow(14L)))
+    val notPushed = scan(functions).getMetaData()("PushedFilters")
+    assert(!notPushed.contains("%") && !notPushed.contains("UPPER"), notPushed)
+
+    // A library compares strings by their bytes, so a column of a non-binary collation gets no
+    // domain, even for a library that uses all the domains.
+    file.delete()
+    val collated = newSession(defaultPackage).read
+      .schema("id BIGINT, name STRING COLLATE UTF8_LCASE").format("native_range")
+      .options(Map("end" -> "6", "domains_path" -> file.getPath, "use_domains" -> "all")).load()
+      .filter("name = 'N1' AND id < 5")
+    checkRows(collated, Seq(Row(1L, "n1")))
+    assert(received() == Seq("0 - - (-inf,5)"))
+    assert(!scan(collated).getMetaData()("PushedFilters").contains("name"))
+
+    val session = newSession(defaultPackage)
+    session.conf.set(SQLConf.NATIVE_DATA_SOURCE_FILTER_PUSHDOWN_ENABLED.key, "false")
+    val disabled = readIn(session).filter("id > 40")
+    checkRows(disabled, (41L until 45L).map(expectedRow))
+    assert(!file.exists())
+    assert(scan(disabled).getMetaData()("PushedFilters") == "[]")
+  }
+
+  nativeTest("push no domain to a library built against a header without push_domains") {
+    val file = new File(Utils.createTempDir(), "domains")
+    val session = newSession(createPackage(noDomainsLibrary, dataSources("nd_")))
+    val df = session.read.format("nd_native_range")
+      .options(Map("end" -> "20", "domains_path" -> file.getPath)).load().filter("id > 15")
+    checkRows(df, (16L until 20L).map(expectedRow))
+    // push_domains is set in the table of the library, but after its end.
+    assert(!file.exists())
+    assert(scan(df).getMetaData()("PushedFilters") == "[]")
+    // Nor does Spark create a reader to push them down while it optimizes the query: a reader
+    // that the library cannot create only fails the read.
+    val noReader = session.read.format("nd_native_range")
+      .options(Map("end" -> "20", "zero" -> "create_reader")).load().filter("id > 15")
+    noReader.queryExecution.optimizedPlan
+    val e = intercept[Exception](noReader.collect())
+    assert(Utils.exceptionString(e).contains("create_reader returned a NULL handle."))
   }
 
   nativeTest("read maps whose entry fields have other names") {
@@ -807,25 +933,56 @@ class NativeDataSourceSuite extends QueryTest with SharedSparkSession {
       new NativeDataSource(location, resolved, new CaseInsensitiveStringMap(options.toMap.asJava))
     }
     val schema = StructType.fromDDL("id BIGINT")
+    def newBatchWrite(dir: File, options: (String, String)*): ColumnarBatchWrite = {
+      val write = new ColumnarBatchWrite(
+        () => dataSource("native_sink", ("path" -> dir.getPath) +: options: _*)
+          .writer(schema, false),
+        schema)
+      write.createBatchWriterFactory(PhysicalWriteInfoImpl(1))
+      write
+    }
+    def newStreamWrite(dir: File, options: (String, String)*): ColumnarStreamingWrite = {
+      val write = new ColumnarStreamingWrite("native_sink",
+        () => dataSource("native_sink", ("path" -> dir.getPath) +: options: _*)
+          .streamWriter(schema, false, UUID.randomUUID().toString),
+        schema)
+      write.createStreamingWriterFactory(PhysicalWriteInfoImpl(1))
+      write
+    }
     // The test library records each call that the header rules out, which fails the test.
 
-    // A write or a micro-batch that committed is not aborted.
+    // A write or a micro-batch that committed is not aborted, and its writer is closed right away.
     val batchDir = Utils.createTempDir()
-    val batchWrite = new ColumnarBatchWrite(
-      () => dataSource("native_sink", "path" -> batchDir.getPath).writer(schema, false), schema)
-    batchWrite.createBatchWriterFactory(PhysicalWriteInfoImpl(1))
+    val batchWrite = newBatchWrite(batchDir)
     batchWrite.commit(Array.empty)
     batchWrite.abort(Array.empty)
     assert(new File(batchDir, "_SUCCESS").isFile && !new File(batchDir, "_ABORTED").exists())
+    assert(new File(batchDir, "_CLOSED").isFile)
     val streamDir = Utils.createTempDir()
-    val streamWrite = new ColumnarStreamingWrite("native_sink",
-      () => dataSource("native_sink", "path" -> streamDir.getPath)
-        .streamWriter(schema, false, UUID.randomUUID().toString),
-      schema)
-    streamWrite.createStreamingWriterFactory(PhysicalWriteInfoImpl(1))
+    val streamWrite = newStreamWrite(streamDir)
     streamWrite.commit(0, Array.empty)
     streamWrite.abort(0, Array.empty)
     assert(new File(streamDir, "_EPOCH_0").isFile && !new File(streamDir, "_ABORTED_0").exists())
+    assert(new File(streamDir, "_CLOSED_0").isFile)
+
+    // A writer whose abort fails is closed all the same.
+    def checkAbortError(abort: => Unit): Unit = checkError(
+      exception = findError(intercept[Exception](abort), "NATIVE_DATA_SOURCE_ERROR"),
+      condition = "NATIVE_DATA_SOURCE_ERROR",
+      parameters = Map(
+        "action" -> "abort a write to",
+        "name" -> "native_sink",
+        "msg" -> "injected failure in abort"))
+    val failingBatchDir = Utils.createTempDir()
+    val failingBatchWrite = newBatchWrite(failingBatchDir, "fail" -> "abort")
+    checkAbortError(failingBatchWrite.abort(Array.empty))
+    assert(!new File(failingBatchDir, "_ABORTED").exists())
+    assert(new File(failingBatchDir, "_CLOSED").isFile)
+    val failingStreamDir = Utils.createTempDir()
+    val failingStreamWrite = newStreamWrite(failingStreamDir, "fail" -> "abort")
+    checkAbortError(failingStreamWrite.abort(0, Array.empty))
+    assert(!new File(failingStreamDir, "_ABORTED_0").exists())
+    assert(new File(failingStreamDir, "_CLOSED_0").isFile)
 
     // After a write fails, a data writer only aborts and closes the data writer of the library.
     val failingDir = Utils.createTempDir()
@@ -873,29 +1030,34 @@ class NativeDataSourceSuite extends QueryTest with SharedSparkSession {
     builder.build().toBatch.planInputPartitions()
   }
 
-  nativeTest("abort a micro-batch whose write failed") {
-    val session = newSession(defaultPackage)
-    val dir = Utils.createTempDir()
-    val e = intercept[Exception] {
-      val query = session.readStream.format("native_counter").option("max_offset", "4").load()
-        .writeStream
-        .format("native_sink")
-        .option("path", dir.getPath)
-        .option("fail", "write")
-        .option("checkpointLocation", Utils.createTempDir().getPath)
-        .start()
-      try query.processAllAvailable() finally query.stop()
-    }
-    checkError(
-      exception = findError(e, "NATIVE_DATA_SOURCE_ERROR"),
-      condition = "NATIVE_DATA_SOURCE_ERROR",
-      parameters = Map(
-        "action" -> "write to",
-        "name" -> "native_sink",
-        "msg" -> "injected failure in write"))
-    // Spark aborted the first epoch, with a null message for its task, which did not commit.
-    assert(Files.readString(new File(dir, "_ABORTED_0").toPath) == "1,1,0")
-    assert(!new File(dir, "_EPOCH_0").exists())
+  Seq(("write", "write to", "1,1,0"), ("commit", "commit a write to", "0,1,0")).foreach {
+    case (fail, action, aborted) =>
+      nativeTest(s"abort a micro-batch whose $fail failed") {
+        val session = newSession(defaultPackage)
+        val dir = Utils.createTempDir()
+        val e = intercept[Exception] {
+          val query = session.readStream.format("native_counter").option("max_offset", "4").load()
+            .writeStream
+            .format("native_sink")
+            .option("path", dir.getPath)
+            .option("fail", fail)
+            .option("checkpointLocation", Utils.createTempDir().getPath)
+            .start()
+          try query.processAllAvailable() finally query.stop()
+        }
+        checkError(
+          exception = findError(e, "NATIVE_DATA_SOURCE_ERROR"),
+          condition = "NATIVE_DATA_SOURCE_ERROR",
+          parameters = Map(
+            "action" -> action,
+            "name" -> "native_sink",
+            "msg" -> s"injected failure in $fail"))
+        // Spark aborted the first epoch with its writer, which it closed afterwards: with a null
+        // message for a task that did not commit, or the message of one that did.
+        assert(Files.readString(new File(dir, "_ABORTED_0").toPath) == aborted)
+        assert(!new File(dir, "_EPOCH_0").exists())
+        assert(new File(dir, "_CLOSED_0").isFile)
+      }
   }
 
   nativeTest("continuous processing fails with a native data source") {
@@ -950,14 +1112,14 @@ class NativeDataSourceSuite extends QueryTest with SharedSparkSession {
         query.asInstanceOf[StreamingQueryWrapper].streamingQuery.lastExecution.executedPlan
       assert(plan.collectFirst { case write: V2TableWriteExec => write.query }
         .exists(_.isInstanceOf[MicroBatchScanExec]), plan)
+      // Each micro-batch creates a new stream writer, which is closed once it committed, so the
+      // writer of the last micro-batch is closed too while the query still runs.
+      assert((0 to 2).forall(epoch => new File(dir, s"_CLOSED_$epoch").isFile))
     } finally {
       query.stop()
     }
     // Each micro-batch makes 5 more rows available after its start: [0, 5), [5, 10) and [10, 12).
     assert((0 to 2).forall(epoch => new File(dir, s"_EPOCH_$epoch").isFile))
-    // Each micro-batch creates a new stream writer, which closes the one of the previous
-    // micro-batch. The last one is closed once it is no longer referenced.
-    assert((0 to 1).forall(epoch => new File(dir, s"_CLOSED_$epoch").isFile))
     val written = dir.listFiles().filter(_.getName.startsWith("part-"))
       .flatMap(file => Files.readAllLines(file.toPath).asScala)
     assert(written.sorted.toSeq == (0 until 12).map(_.toString).sorted)
@@ -1390,6 +1552,31 @@ class NativeDataSourceSuite extends QueryTest with SharedSparkSession {
     check("plan a scan of", "injected failure in plan") { session =>
       range(session, "fail" -> "plan").collect()
     }
+    // Spark releases the ranges of the domains that it pushes down, after a failure of push_domains
+    // as after a success.
+    val allocated = ArrowUtils.rootAllocator.getAllocatedMemory
+    check("plan a scan of", "injected failure in push_domains") { session =>
+      range(session, "end" -> "5", "fail" -> "push_domains").where("id IN (1, 3)").collect()
+    }
+    assert(ArrowUtils.rootAllocator.getAllocatedMemory == allocated)
+    checkRows(range(newSession(defaultPackage), "end" -> "5").where("id IN (1, 3)").select("id"),
+      Seq(Row(1L), Row(3L)))
+    assert(ArrowUtils.rootAllocator.getAllocatedMemory == allocated)
+    // A library may also move the ranges to take ownership of them, and keep them in its reader:
+    // they stay allocated until the library releases them, here when its reader is closed, once
+    // the partitions are planned, which read them again.
+    val movingSession = newSession(defaultPackage)
+    val (rangeName, rangeLocation) =
+      NativeDataSourceRegistry.lookup("native_range", movingSession.sessionState.conf).get
+    val moving = new NativeDataSource(rangeLocation, rangeName,
+      new CaseInsensitiveStringMap(Map("end" -> "5", "move_domains" -> "true").asJava))
+    val builder = new ColumnarScanBuilder(rangeName, moving.schema(), () => moving)
+    val in = new Predicate("IN", Array[V2Expression](FieldReference("id"),
+      LiteralValue(1L, LongType), LiteralValue(3L, LongType)))
+    movingSession.withActive(builder.pushPredicates(Array(in)))
+    assert(ArrowUtils.rootAllocator.getAllocatedMemory > allocated)
+    assert(builder.build().toBatch.planInputPartitions().nonEmpty)
+    assert(ArrowUtils.rootAllocator.getAllocatedMemory == allocated)
     check("read", "injected failure in open") { session =>
       range(session, "fail" -> "open").collect()
     }
@@ -1612,6 +1799,10 @@ class NativeDataSourceSuite extends QueryTest with SharedSparkSession {
     }
     assert(Utils.exceptionString(allColumns).contains("NATIVE_DATA_SOURCE_ERROR"))
     assert(Utils.exceptionString(allColumns).contains("but the expected schema is id BIGINT"))
+    // Nor does it push any filter down: Spark evaluates them after reading.
+    val filtered = df.filter("id > 6")
+    checkRows(filtered, (7L until 10L).map(expectedRow))
+    assert(scan(filtered).getMetaData()("PushedFilters") == "[]")
 
     def check(condition: String, parameters: Map[String, String])(f: => Unit): Unit = {
       val e = intercept[Exception](f)

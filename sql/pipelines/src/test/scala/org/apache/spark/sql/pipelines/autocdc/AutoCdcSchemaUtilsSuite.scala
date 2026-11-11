@@ -169,4 +169,28 @@ class AutoCdcSchemaUtilsSuite extends SparkFunSuite {
       Seq("wrapper.with.dot", "back`tick"),
       Seq("wrapper.with.dot", "space name")))
   }
+
+  test("fieldPathsMissingFrom returns flattened paths absent from the other schema") {
+    val schema = new StructType()
+      .add("kept", StringType)
+      .add("dropped", StringType)
+      .add("profile", new StructType()
+        .add("City", StringType)
+        .add("zip", StringType))
+    val otherSchema = new StructType()
+      .add("profile", new StructType()
+        .add("city", StringType))
+      .add("KEPT", StringType)
+      .add("extra", StringType)
+
+    assert(AutoCdcSchemaUtils.fieldPathsMissingFrom(
+      schema,
+      otherSchema,
+      caseInsensitiveResolution) === Seq(Seq("dropped"), Seq("profile", "zip")))
+    assert(AutoCdcSchemaUtils.fieldPathsMissingFrom(
+      schema,
+      otherSchema,
+      caseSensitiveResolution) ===
+      Seq(Seq("kept"), Seq("dropped"), Seq("profile", "City"), Seq("profile", "zip")))
+  }
 }

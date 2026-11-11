@@ -605,7 +605,9 @@ final class Decimal extends Ordered[Decimal] with Serializable {
 
   def unary_- : Decimal = {
     if (decimalVal.ne(null)) {
-      Decimal(-decimalVal, precision, scale)
+      // Negate the Java value: Scala 2.13's `BigDecimal.unary_-` rounds to its math context,
+      // 34 digits by default, which loses digits of a value of 35 to 38 digits (SPARK-45438).
+      Decimal(decimalVal.bigDecimal.negate(), precision, scale)
     } else {
       Decimal(-longVal, precision, scale)
     }
