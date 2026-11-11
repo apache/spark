@@ -22,73 +22,81 @@
 # Manually added configured labels are removed on the next scan if they do not
 # match the PR's changed files.
 #
-# To label all open PRs once, regardless of their last update:
-#   gh workflow run labeler.yml --repo apache/spark --ref master -f backfill=true
-
+# Each run labels PRs updated since the last successful run started, so failed
+# or skipped runs only widen the next run's window. The PRs are split into
+# groups that are labeled by parallel jobs, keeping each job well within
+# ubuntu-slim's 15-minute job limit.
+#
 name: Label pull requests
 
 on:
   schedule:
   - cron: "7-59/10 * * * *"
   workflow_dispatch:
-    inputs:
-      backfill:
-        description: Label all open PRs regardless of their last update
-        type: boolean
-        default: false
 
 concurrency:
   group: ${{ github.workflow }}
   cancel-in-progress: false
-  queue: max
 
 jobs:
-  label:
-    name: Label pull requests
+  list:
+    name: List pull requests
     if: github.repository == 'apache/spark' && github.ref == 'refs/heads/master'
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-slim
     permissions:
       actions: read
+      pull-requests: read
+    outputs:
+      groups: ${{ steps.prs.outputs.groups }}
+    steps:
+      - name: List PRs
+        id: prs
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          last_success=$(gh run list --workflow labeler.yml --branch master \
+            --status success --limit 1 --json startedAt \
+            --jq '.[0].startedAt // empty')
+          if [ -n "$last_success" ]; then
+            # Keep a short overlap to catch PR updates missed near the previous run's start.
+            since=$(date -u -d "$last_success - 10 minutes" +%Y-%m-%dT%H:%M:%SZ)
+          else
+            since=$(date -u -d "12 hours ago" +%Y-%m-%dT%H:%M:%SZ)
+          fi
+          echo "Listing PRs updated since $since"
+          numbers=$(gh api --method GET --paginate "repos/$GITHUB_REPOSITORY/issues" \
+            -f state=all -f since="$since" -f sort=updated -f direction=desc \
+            -f per_page=100 --jq '.[] | select(.pull_request != null) | .number')
+          # Dedupe, since PRs updated during pagination can appear on two pages.
+          numbers=$(sort -nu <<< "$numbers")
+          echo "PRs to label: $(tr '\n' ' ' <<< "$numbers")"
+          # Groups of 100 PRs take about 4 minutes each at ~2.4 seconds per PR.
+          groups=$(jq -Rnc '[inputs | select(. != "")]
+            | [range(0; length; 100) as $i | .[$i:$i+100] | join("\n")]' <<< "$numbers")
+          echo "groups=$groups" >> "$GITHUB_OUTPUT"
+
+  label:
+    # Keep names short; matrix values contain up to 100 PR numbers.
+    name: Label pull requests (group ${{ strategy.job-index }})
+    needs: list
+    if: needs.list.outputs.groups != '[]'
+    runs-on: ubuntu-slim
+    permissions:
       contents: read
       pull-requests: write
+    strategy:
+      # ASF policy caps a workflow at 20 concurrent jobs.
+      max-parallel: 10
+      matrix:
+        prs: ${{ fromJSON(needs.list.outputs.groups) }}
     steps:
       - name: Checkout labeler configuration
         uses: actions/checkout@v7
         with:
           persist-credentials: false
           sparse-checkout: .github
-      - name: List PRs
-        id: prs
-        env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          BACKFILL: ${{ inputs.backfill }}
-        run: |
-          if [[ "$BACKFILL" == "true" ]]; then
-            filters=(-f state=open)
-            echo "Listing all open PRs"
-          else
-            last_success=$(gh run list --workflow labeler.yml --branch master \
-              --event schedule --status success --limit 1 --json startedAt \
-              --jq '.[0].startedAt // empty')
-            if [ -n "$last_success" ]; then
-              # Keep a short overlap to catch PR updates missed near the previous run's start.
-              since=$(date -u -d "$last_success - 10 minutes" +%Y-%m-%dT%H:%M:%SZ)
-            else
-              since=$(date -u -d "12 hours ago" +%Y-%m-%dT%H:%M:%SZ)
-            fi
-            filters=(-f state=all -f since="$since")
-            echo "Listing PRs updated since $since"
-          fi
-          numbers=$(gh api --method GET --paginate "repos/$GITHUB_REPOSITORY/issues" \
-            "${filters[@]}" -f sort=updated -f direction=desc \
-            -f per_page=100 --jq '.[] | select(.pull_request != null) | .number')
-          echo "PRs to label: $(tr '\n' ' ' <<< "$numbers")"
-          if [ -n "$numbers" ]; then
-            printf 'numbers<<EOF\n%s\nEOF\n' "$numbers" >> "$GITHUB_OUTPUT"
-          fi
       - name: Label PRs
-        if: steps.prs.outputs.numbers != ''
         uses: actions/labeler@v7
         with:
-          pr-number: ${{ steps.prs.outputs.numbers }}
+          pr-number: ${{ matrix.prs }}
           sync-labels: true
