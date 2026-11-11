@@ -23,7 +23,7 @@ import org.apache.spark.{SparkException, SparkFunSuite}
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.util.{ArrayBasedMapData, GenericArrayData}
 import org.apache.spark.sql.connector.catalog.functions.{BoundFunction, ScalarFunction}
-import org.apache.spark.sql.types.{ArrayType, BinaryType, DataType, DateType, Decimal, DecimalType, DoubleType, IntegerType, LongType, MapType, StringType, StructType, UserDefinedType, VarcharType}
+import org.apache.spark.sql.types.{ArrayType, BinaryType, DataType, DateType, Decimal, DecimalType, DoubleType, IntegerType, LongType, MapType, ShortType, StringType, StructType, TimestampNTZType, TimestampType, UserDefinedType, VarcharType}
 import org.apache.spark.unsafe.types.UTF8String
 
 class TransformExpressionSuite extends SparkFunSuite {
@@ -330,6 +330,45 @@ class TransformExpressionSuite extends SparkFunSuite {
     val transform = bucket(withProduceResult, argument)
     assert(transform.evaluableFunction.isDefined, "produceResult")
     assert(transform.eval(InternalRow(5)) == 1)
+  }
+
+  test("SPARK-60027: cogroup keys are stored alike when their key rows compare alike") {
+    // A cogroup pairs the groups of its two sides by comparing their key rows, so a key shuffled
+    // onto a layout has to be stored as the layout's column is: apart from nullability and field
+    // names, and, for a decimal of one scale, its precision, while both are stored as a `long` or
+    // both as bytes. The answer does not depend on which side is which.
+    class IntUDT extends UserDefinedType[Integer] {
+      override def sqlType: DataType = IntegerType
+      override def serialize(obj: Integer): Any = obj
+      override def deserialize(datum: Any): Integer = datum.asInstanceOf[Integer]
+      override def userClass: Class[Integer] = classOf[Integer]
+    }
+    Seq[(DataType, DataType, Boolean)](
+      (IntegerType, IntegerType, true),
+      (DateType, IntegerType, true),
+      (TimestampNTZType, TimestampType, true),
+      (StringType, VarcharType(5), true),
+      (new IntUDT, IntegerType, true),
+      (new StructType().add("x", IntegerType, nullable = false),
+        new StructType().add("y", IntegerType, nullable = true), true),
+      (ArrayType(IntegerType, containsNull = false), ArrayType(IntegerType), true),
+      (DecimalType(10, 2), DecimalType(12, 2), true),
+      (DecimalType(20, 2), DecimalType(38, 2), true),
+      (ArrayType(DecimalType(10, 2)), ArrayType(DecimalType(18, 2)), true),
+      (IntegerType, LongType, false),
+      (ShortType, IntegerType, false),
+      (IntegerType, DoubleType, false),
+      (StringType, StringType("UTF8_LCASE"), false),
+      (DecimalType(10, 2), DecimalType(20, 2), false),
+      (DecimalType(10, 2), DecimalType(10, 3), false),
+      (new StructType().add("x", IntegerType), new StructType().add("x", LongType), false),
+      (ArrayType(IntegerType), ArrayType(LongType), false),
+      (new StructType().add("x", IntegerType),
+        new StructType().add("x", IntegerType).add("y", IntegerType), false)
+    ).foreach { case (one, other, alike) =>
+      assert(TransformExpression.keysStoredAlike(one, other) == alike, s"$one and $other")
+      assert(TransformExpression.keysStoredAlike(other, one) == alike, s"$other and $one")
+    }
   }
 
   test("SPARK-60027: a transform whose call fails to resolve is not evaluable, and says why") {

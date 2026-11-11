@@ -397,6 +397,33 @@ object TransformExpression extends Logging {
     }
 
   /**
+   * Whether a key of type `from` and one of type `to` holding one value are stored as the same
+   * bytes in an unsafe row, and order alike read as either type. A cogroup pairs the groups of its
+   * two sides by comparing their key rows, ordered by its left side's key types, so keys of other
+   * types pair their groups wrongly, or fail, see `KeyedShuffleSpec.createPartitioning`. As
+   * `storedAlike` for a nested value, apart from decimals: two decimals of one scale are stored
+   * alike, whatever their precision, when both are stored as a `long`, up to
+   * `Decimal.MAX_LONG_DIGITS` digits, or both as bytes. A value read at a smaller precision than
+   * it has is then read as it is, as a `long`, or fails, as bytes.
+   */
+  private[sql] def keysStoredAlike(from: DataType, to: DataType): Boolean = (from, to) match {
+    case _ if from == to => true
+    case (udt: UserDefinedType[_], _) => keysStoredAlike(udt.sqlType, to)
+    case (_, udt: UserDefinedType[_]) => keysStoredAlike(from, udt.sqlType)
+    case (f: StructType, t: StructType) =>
+      f.length == t.length && f.fields.zip(t.fields).forall { case (ff, tf) =>
+        keysStoredAlike(ff.dataType, tf.dataType)
+      }
+    case (f: ArrayType, t: ArrayType) => keysStoredAlike(f.elementType, t.elementType)
+    case (f: MapType, t: MapType) =>
+      keysStoredAlike(f.keyType, t.keyType) && keysStoredAlike(f.valueType, t.valueType)
+    case (f: DecimalType, t: DecimalType) =>
+      f.scale == t.scale &&
+        DecimalType.isByteArrayDecimalType(f) == DecimalType.isByteArrayDecimalType(t)
+    case _ => storedAlike(from, to, nested = true)
+  }
+
+  /**
    * Whether a value of type `from` is stored the way one of type `to` is, so that a function
    * declaring `to` reads it as it is:
    *  - two types with one physical type, e.g. a `VARCHAR` and a string of the same collation, a

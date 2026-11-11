@@ -1839,9 +1839,12 @@ class EnsureRequirementsSuite extends SharedSparkSession {
   test("SPARK-60027: a cogroup shuffled from a key Spark cannot place fails while planning") {
     // A Pandas or Arrow cogroup does not coerce its keys (SPARK-60782), so its other key can have
     // a type the layout's function does not take: a `BIGINT` against a function declaring `INT`,
-    // or a string of another collation, which master paired wrongly. Falling back to a hash
-    // shuffle would pair the groups wrongly too, so it fails, while planning, with an error that
-    // names the key's type.
+    // or a string of another collation, which master paired wrongly. Or one the function takes but
+    // that is stored otherwise than the layout's column, so the cogroup, which compares the key
+    // rows, would not pair its groups: an `INT` widened to a `BIGINT` column's declared type, which
+    // master failed on in a task, or a `DECIMAL(20,2)`, stored as bytes, against a `DECIMAL(10,2)`
+    // column, stored as a `long`. Falling back to a hash shuffle would pair the groups wrongly
+    // too, so it fails, while planning, with an error that names the key's type.
     def bucket(valueType: DataType): ScalarFunction[Int] = new ScalarFunction[Int] {
       override def inputTypes(): Array[DataType] = Array(IntegerType, valueType)
       override def resultType(): DataType = IntegerType
@@ -1856,7 +1859,9 @@ class EnsureRequirementsSuite extends SharedSparkSession {
       true)
     Seq(
       (IntegerType, LongType, "\"INT\"", "\"BIGINT\""),
-      (StringType, StringType("UTF8_LCASE"), "\"STRING\"", "\"STRING COLLATE UTF8_LCASE\"")
+      (StringType, StringType("UTF8_LCASE"), "\"STRING\"", "\"STRING COLLATE UTF8_LCASE\""),
+      (LongType, IntegerType, "\"BIGINT\"", "\"INT\""),
+      (DecimalType(10, 2), DecimalType(20, 2), "\"DECIMAL(10,2)\"", "\"DECIMAL(20,2)\"")
     ).foreach { case (columnType, keyType, declared, key) =>
       val cL = AttributeReference("cL", columnType)()
       val cR = AttributeReference("cR", keyType)()
@@ -1872,6 +1877,7 @@ class EnsureRequirementsSuite extends SharedSparkSession {
           condition = "STORAGE_PARTITION_JOIN_KEY_TYPE_MISMATCH",
           parameters = Map(
             "transform" -> "bucket(4)",
+            "columnType" -> declared,
             "inputTypes" -> ("(\"INT\", " + declared + ")"),
             "key" -> "\"cR\"",
             "keyType" -> key))

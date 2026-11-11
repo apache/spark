@@ -2633,20 +2633,28 @@ case class KeyedShuffleSpec(
     // this layout's own keys, so a caller that does not is a bug.
     assert(canEvaluatePartitioning,
       s"Cannot shuffle a child onto a layout Spark cannot evaluate: ${partitioning.expressions}")
-    // A join's keys share their types, so that answers for what is built too. A Pandas or Arrow
-    // cogroup's need not (SPARK-60782), e.g. a `BIGINT` key or a string of another collation, and
-    // falling back to a hash shuffle would pair its groups wrongly. So such a child fails here,
-    // while planning, with an error that names the key's type. This covers transform positions
-    // only. An identity position is rebuilt over the other key whatever its type, and a layout
-    // Spark cannot evaluate takes the hash shuffle. Both behave as before this check, and are left
-    // to SPARK-60782.
-    newExpressions.foreach {
-      case t: TransformExpression if !canEvaluate(t) =>
+    // A join's keys share their types, apart from nullability and field names, so that answers
+    // for what is built too. A Pandas or Arrow cogroup's need not (SPARK-60782). Its other key can
+    // be one the layout's function does not take, e.g. a `BIGINT` against a function declaring
+    // `INT`, or a string of another collation. Or one the function takes, but stored otherwise than
+    // the layout's column, e.g. an `INT` widened to a `BIGINT` column's declared type: every row is
+    // then placed, but the cogroup pairs its groups by comparing the two sides' key rows, so they
+    // do not pair, or the cogroup fails. Falling back to a hash shuffle would pair them wrongly
+    // too. So such a child fails here, while planning, with an error that names the key's type.
+    // This covers transform positions only. An identity position is rebuilt over the other key
+    // whatever its type, and a layout Spark cannot evaluate takes the hash shuffle. Both behave as
+    // before this check, and are left to SPARK-60782.
+    partitioning.expressions.zip(keyPositions).zip(newExpressions).foreach {
+      case ((te: TransformExpression, positionSet), t: TransformExpression)
+          if !canEvaluate(t) || !positionSet.forall { p =>
+            TransformExpression.keysStoredAlike(clustering(p).dataType, te.references.head.dataType)
+          } =>
         // `name()` and `inputTypes()` are connector code, which must not replace this error.
         val functionClass = t.function.getClass.getName
         val name = TransformExpression.orElse(t.function.name(), functionClass)
         throw QueryExecutionErrors.storagePartitionJoinKeyTypeMismatchError(
           t.numBucketsOpt.fold(name)(n => s"$name($n)"),
+          te.references.head.dataType,
           TransformExpression.orElse(t.function.inputTypes().toSeq, Nil),
           t.children.head)
       case _ =>

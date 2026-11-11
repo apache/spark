@@ -8102,7 +8102,7 @@
   },
   "STORAGE_PARTITION_JOIN_KEY_TYPE_MISMATCH" : {
     "message" : [
-      "Cannot shuffle a side onto the other side's storage partitioning: its partition transform <transform> declares the input types <inputTypes>, which do not take the key <key> of type <keyType>.",
+      "Cannot shuffle a side onto the other side's storage partitioning: its key <key> of type <keyType> does not match the partition transform <transform> over a column of type <columnType>, which declares the input types <inputTypes>.",
       "Cast the keys on both sides to one type."
     ],
     "sqlState" : "42K09"
