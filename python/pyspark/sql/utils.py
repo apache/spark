@@ -40,8 +40,6 @@ from pyspark.errors import (  # noqa: F401
     PySparkImportError,
     PySparkNotImplementedError,
     PySparkRuntimeError,
-    PySparkTypeError,
-    PySparkValueError,
     PythonException,
     QueryExecutionException,
     SparkUpgradeException,
@@ -481,31 +479,6 @@ def get_lit_sql_str(val: str) -> str:
     # See `sql` definition in `sql/catalyst/src/main/scala/org/apache/spark/
     # sql/catalyst/expressions/literals.scala`
     return "'" + val.replace("\\", "\\\\").replace("'", "\\'") + "'"
-
-
-def validate_approx_quantile_relative_error(relativeError: Any) -> float:
-    """
-    Validate the ``relativeError`` argument of ``DataFrame.approxQuantile``, shared by the
-    classic and Connect implementations so both stay in sync. Returns it as a ``float``.
-    """
-    if isinstance(relativeError, bool) or not isinstance(relativeError, (float, int)):
-        raise PySparkTypeError(
-            errorClass="NOT_EXPECTED_TYPE",
-            messageParameters={
-                "expected_type": "float or int",
-                "arg_name": "relativeError",
-                "arg_type": type(relativeError).__name__,
-            },
-        )
-    if not relativeError >= 0:
-        raise PySparkValueError(
-            errorClass="NEGATIVE_VALUE",
-            messageParameters={
-                "arg_name": "relativeError",
-                "arg_value": str(relativeError),
-            },
-        )
-    return float(relativeError)
 
 
 class NumpyHelper:

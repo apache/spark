@@ -35,6 +35,7 @@ from typing import (
 
 from pyspark import _NoValue
 from pyspark._globals import _NoValueType
+from pyspark.errors import PySparkTypeError, PySparkValueError
 from pyspark.resource import ResourceProfile
 from pyspark.sql.column import Column
 from pyspark.sql.merge import MergeIntoWriter
@@ -76,6 +77,31 @@ if TYPE_CHECKING:
 
 
 __all__ = ["DataFrame", "DataFrameNaFunctions", "DataFrameStatFunctions"]
+
+
+def validate_approx_quantile_relative_error(relativeError: Any) -> float:
+    """
+    Validate the ``relativeError`` argument of ``DataFrame.approxQuantile``, shared by the
+    classic and Connect implementations so both stay in sync. Returns it as a ``float``.
+    """
+    if isinstance(relativeError, bool) or not isinstance(relativeError, (float, int)):
+        raise PySparkTypeError(
+            errorClass="NOT_EXPECTED_TYPE",
+            messageParameters={
+                "expected_type": "float or int",
+                "arg_name": "relativeError",
+                "arg_type": type(relativeError).__name__,
+            },
+        )
+    if not relativeError >= 0:
+        raise PySparkValueError(
+            errorClass="NEGATIVE_VALUE",
+            messageParameters={
+                "arg_name": "relativeError",
+                "arg_value": str(relativeError),
+            },
+        )
+    return float(relativeError)
 
 
 class DataFrame:

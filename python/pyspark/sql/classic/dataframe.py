@@ -60,6 +60,7 @@ from pyspark.sql.dataframe import (
 from pyspark.sql.dataframe import (
     DataFrameStatFunctions as ParentDataFrameStatFunctions,
 )
+from pyspark.sql.dataframe import validate_approx_quantile_relative_error
 from pyspark.sql.functions import builtin as F
 from pyspark.sql.merge import MergeIntoWriter
 from pyspark.sql.pandas.conversion import PandasConversionMixin
@@ -77,7 +78,6 @@ from pyspark.sql.utils import (
     get_active_spark_context,
     to_java_array,
     to_scala_map,
-    validate_approx_quantile_relative_error,
 )
 from pyspark.storagelevel import StorageLevel
 from pyspark.traceback_utils import SCCallSiteSync
