@@ -24,6 +24,11 @@ You can find the latest Spark documentation, including a programming
 guide, on the [project web page](https://spark.apache.org/documentation.html).
 This README file only contains basic setup instructions.
 
+## CI Dashboard
+
+See the [Apache CI dashboard](https://ci-test.apache.org/#/project/spark) for an overview
+of Spark's CI usage.
+
 ## Build Pipeline Status
 
 | Branch     | Status                                                                                                                                                                                                          |
