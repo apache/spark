@@ -19,7 +19,7 @@
 
 const assert = require('node:assert/strict');
 const {test} = require('node:test');
-const {calendar, parseCron} = require('../docs/js/ci-dashboard.js');
+const {calendar, parseCron, runnerLoad} = require('../docs/js/ci-dashboard.js');
 const workload = (cron, extra = {}) => ({file: 'build.yml', branch: 'master', name: 'Build',
   scheduler: 'build.yml', crons: [cron], ...extra});
 
@@ -57,4 +57,43 @@ test('invalid crons and months fail explicitly', () => {
     assert.throws(() => parseCron(cron));
   }
   assert.throws(() => calendar([], '2026-13'));
+});
+
+const profiled = (cron, intervals, sampleCount = 1, branch = 'master') =>
+  workload(cron, {branch, history: {intervals, sampleCount}});
+const close = (a, b) => assert.ok(Math.abs(a - b) < 1e-8, `${a} != ${b}`);
+
+test('runner load sums parallel job durations rather than workflow elapsed time', () => {
+  const w = profiled('0 1 1 * *', [[0, 3600], [0, 3600]]);
+  const data = runnerLoad([w], '2026-11');
+  close(data.total, 2);
+  close(data.cells[0][1], 2);
+  close(data.byBranch.get('master'), 2);
+});
+
+test('job execution spills into later hours and successful samples are averaged', () => {
+  const w = profiled('30 1 1 * *', [[0, 3600], [0, 10800]], 2);
+  const data = runnerLoad([w], '2026-11');
+  close(data.total, 2);
+  close(data.cells[0][1], 0.5);
+  close(data.cells[0][2], 0.75);
+  close(data.cells[0][3], 0.5);
+  close(data.cells[0][4], 0.25);
+});
+
+test('load includes previous-month spillover and clips jobs at the month end', () => {
+  const w = profiled('30 23 31 * *', [[0, 3600]]);
+  close(runnerLoad([w], '2027-02').total, 0.5);
+  close(runnerLoad([w], '2027-03').total, 0.5);
+  close(runnerLoad([w], '2027-02').cells[0][0], 0.5);
+});
+
+test('coverage excludes missing profiles and branch totals equal total load', () => {
+  const a = profiled('0 0 1 * *', [[0, 3600]]);
+  const b = profiled('0 1 1 * *', [[0, 7200]], 1, 'branch-4.x');
+  const data = runnerLoad([a, b, workload('0 0 1 * *')], '2026-11');
+  assert.equal(data.measured, 2);
+  close(data.total, 3);
+  close([...data.byBranch.values()].reduce((a, b) => a + b, 0), data.total);
+  assert.equal(runnerLoad([workload('0 0 1 * *')], '2026-11').measured, 0);
 });

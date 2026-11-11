@@ -97,6 +97,7 @@ jobs:
         }
         data = dashboard.snapshot({"publish.yml": workflow}, "abc")
         self.assertEqual([w["branch"] for w in data["workloads"]], ["branch-4.x", "master"])
+        self.assertTrue(all(w["matrixBranch"] for w in data["workloads"]))
         workflow["jobs"]["publish"]["strategy"]["matrix"]["branch"] = "${{ unknown }}"
         with self.assertRaisesRegex(ValueError, "Cannot resolve"):
             dashboard.branch_targets(workflow)

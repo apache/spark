@@ -52,11 +52,11 @@ input { font: inherit; border: 1px solid #a6b6c5; border-radius: 5px; padding: 8
 table { border-collapse: collapse; width: 100%; font-size: 14px; }
 th, td { text-align: left; padding: 12px 10px; border-bottom: 1px solid #e4eaf0; }
 th { color: #526477; font-weight: 600; }
-.calendar { font-size: 12px; min-width: 850px; table-layout: fixed; }
+.calendar { font-size: 12px; min-width: 1000px; table-layout: fixed; }
 .calendar caption { text-align: left; padding: 8px 0; color: #526477; }
 .calendar th, .calendar td { padding: 3px; text-align: center; border: 0; height: 25px; }
 .calendar th:first-child { width: 85px; text-align: left; }
-.calendar th:last-child { width: 48px; }
+.calendar th:last-child { width: 65px; }
 .calendar td { background: #f3f6f9; border: 3px solid white; border-radius: 5px; }
 .calendar .low { background: #d6eaf4; }
 .calendar .medium { background: #a3cee3; }

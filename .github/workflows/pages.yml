@@ -35,6 +35,7 @@ jobs:
     name: Build and deploy documentation
     runs-on: ubuntu-latest
     permissions:
+      actions: read
       id-token: write
       pages: write
     environment:
@@ -44,6 +45,8 @@ jobs:
     env:
       SPARK_TESTING: 1 # Reduce some noise in the logs
       RELEASE_VERSION: 'In-Progress'
+      CI_DASHBOARD_HISTORY: '1'
+      GH_TOKEN: ${{ github.token }}
       LC_ALL: C.UTF-8
       LANG: C.UTF-8
     if: github.repository == 'apache/spark'

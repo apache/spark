@@ -21,7 +21,9 @@ Jekyll::Hooks.register :site, :post_write do |site|
   root = File.expand_path('..', site.source)
   generator = File.join(root, 'dev', 'generate-ci-dashboard.py')
   output = File.join(site.dest, 'ci-dashboard-data.json')
-  unless system('python3', generator, '--repo', root, '--output', output)
+  args = ['python3', generator, '--repo', root, '--output', output]
+  args << '--history' if ENV['CI_DASHBOARD_HISTORY'] == '1'
+  unless system(*args)
     raise 'Failed to generate CI dashboard metadata'
   end
 end

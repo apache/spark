@@ -36,7 +36,7 @@
   <main>
     <p class="eyebrow">Contributor tools</p>
     <h1>CI overview</h1>
-    <p class="intro">The global picture of Spark's CI coverage and scheduled activity.</p>
+    <p class="intro">The global picture of Spark's CI coverage and runner usage.</p>
     <p id="snapshot" class="muted">Loading workflow metadata...</p>
     <p id="error" role="alert" hidden></p>
     <noscript>This dashboard requires JavaScript to visualize workflow metadata.</noscript>
@@ -63,13 +63,23 @@
         </div>
         <div id="triggers" class="triggers" aria-label="Workflow trigger summary"></div>
       </section>
+      <section aria-labelledby="push-title">
+        <h2 id="push-title">Recent upstream push CI</h2>
+        <p class="muted">Measured usage of post-merge and other push builds on
+          <code>apache/spark</code>, including master and maintenance branches.</p>
+        <div id="push-metrics" class="metrics"></div>
+        <p id="push-status" class="muted"></p>
+        <p class="muted">Contributor-fork usage is outside the Apache repository total.</p>
+      </section>
       <section aria-labelledby="calendar-title">
         <div class="section-heading">
-          <h2 id="calendar-title">Global schedule</h2>
+          <h2 id="calendar-title">Scheduled CI burden</h2>
           <label>Month (UTC)<input id="month" type="month" required></label>
         </div>
-        <p class="muted">All branches combined. Darker cells indicate more configured target
-          starts in that UTC hour. Row and column totals show daily and hourly concentration.</p>
+        <p class="muted">All branches combined. Darker cells indicate more estimated runner-hours
+          in that UTC hour. One runner-hour in a one-hour cell means one runner busy on average.
+          Jobs contribute to every hour they execute, including overlaps and month boundaries.</p>
+        <p id="load-status" class="muted"></p>
         <div id="schedule-summary" class="schedule-summary"></div>
         <div class="scroll"><table id="calendar" class="calendar"></table></div>
         <p class="muted">Counts include each branch in SNAPSHOT publishing's matrix.
@@ -79,7 +89,8 @@
         <h2 id="branches-title">Coverage by branch</h2>
         <div class="scroll"><table>
           <thead><tr><th scope="col">Branch</th><th scope="col">Scheduled targets</th>
-            <th scope="col">Starts this month</th><th scope="col">Share of starts</th></tr></thead>
+            <th scope="col">Starts this month</th><th scope="col">Estimated runner-hours</th>
+            <th scope="col" id="share-heading">Share of estimated hours</th></tr></thead>
           <tbody id="branches"></tbody>
         </table></div>
       </section>
@@ -94,11 +105,14 @@
         <p>Reports contributor fork build results on pull requests.</p>
         <p id="polling" class="muted"></p>
       </section>
-      <p class="notes">This page summarizes configured CI. Actual runner usage depends on build
-        duration, matrix parallelism, changed files, skip conditions, and GitHub scheduling delays.
-        Push and manual runs have no fixed schedule. Day-of-month phases restart monthly, so
-        gaps vary at month boundaries. Definitions come from the displayed revision;
-        maintenance-branch test definitions can differ.</p>
+      <p class="notes">Runner-hours sum individual job execution times, without billing or
+        operating-system multipliers. Scheduled estimates replay recent successful job timelines at
+        configured UTC starts; skips, failures, retries, and queue delays can change actual demand.
+        Push usage is measured separately because future merge activity has no fixed schedule.
+        Polling is summarized separately. Day-of-month phases restart monthly. Maintenance-branch
+        definitions can differ from this revision. The existing Pages build refreshes measurements;
+        ordinary documentation builds work offline and show start counts when profiles
+        are absent.</p>
     </div>
   </main>
   <footer>Apache Spark &middot; Refreshed with the existing documentation build.</footer>

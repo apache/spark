@@ -130,6 +130,11 @@ def snapshot(workflows, revision):
         if not crons:
             continue
         targets = dispatches(workflow, crons)
+        matrix_branch = not targets and any(
+            isinstance(job.get("strategy", {}).get("matrix"), dict)
+            and "branch" in job["strategy"]["matrix"]
+            for job in jobs.values()
+        )
         if not targets:
             if filename.endswith("_scheduler.yml"):
                 raise ValueError("Unrecognized scheduler: " + filename)
@@ -143,6 +148,7 @@ def snapshot(workflows, revision):
                     "scheduler": filename,
                     "crons": selected,
                     "skipIfUnchanged": skip,
+                    "matrixBranch": matrix_branch,
                 }
             )
     ids = [(w["file"], w["branch"]) for w in workloads]
@@ -160,12 +166,17 @@ def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--repo", type=Path, default=Path(__file__).resolve().parents[1])
     parser.add_argument("--output", type=Path, required=True)
+    parser.add_argument("--history", action="store_true", help="Sample public Actions job timings")
     args = parser.parse_args()
     try:
         revision = git(args.repo, "rev-parse", "HEAD")
     except (FileNotFoundError, subprocess.CalledProcessError):
         revision = "master"
     data = snapshot(read_workflows(args.repo), revision)
+    if args.history:
+        from ci_dashboard_history import collect_history
+
+        collect_history(data)
     args.output.parent.mkdir(parents=True, exist_ok=True)
     args.output.write_text(json.dumps(data, indent=2) + "\n")
 

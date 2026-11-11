@@ -999,7 +999,7 @@ jobs:
         python3.12 -m pip list
     - name: Test CI dashboard
       run: |
-        python3.12 -B dev/tests/test_ci_dashboard.py
+        python3.12 -B -m unittest discover -s dev/tests -p 'test_ci_dashboard*.py'
         node --test dev/test-ci-dashboard.js
     - name: Install dependencies for documentation generation
       run: |
