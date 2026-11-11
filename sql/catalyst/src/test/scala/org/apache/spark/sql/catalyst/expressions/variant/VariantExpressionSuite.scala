@@ -1348,6 +1348,14 @@ class VariantExpressionSuite extends SparkFunSuite with ExpressionEvalHelper {
     }
   }
 
+  test("every type that can be cast to a variant can be built into one") {
+    (DataTypeTestUtils.atomicTypes.toSeq :+ VariantType).foreach { t =>
+      if (VariantGet.canCastToVariant(t, allowStructsAndMaps = false)) {
+        assert(VariantExpressionEvalUtils.castToVariant(Literal.default(t).value, t) != null, t)
+      }
+    }
+  }
+
   test("schema_of_variant - unknown type") {
     val emptyMetadata = Array[Byte](VERSION, 0, 0)
 

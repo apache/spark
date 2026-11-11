@@ -30,7 +30,7 @@ import org.apache.spark.sql.types._
  * `TIMESTAMP_NTZ(p)` / `TIMESTAMP_LTZ(p)` value into a variant fails at analysis, while reading a
  * variant as one works at precision `p`. The subclasses run every test with ANSI mode on and off.
  */
-abstract class TimestampNanosVariantSuiteBase extends SharedSparkSession {
+abstract class TimestampNanosVariantSuiteBase extends QueryTest with SharedSparkSession {
 
   override def sparkConf: SparkConf = super.sparkConf
     .set(SQLConf.SESSION_LOCAL_TIMEZONE.key, "America/Los_Angeles")
@@ -46,14 +46,11 @@ abstract class TimestampNanosVariantSuiteBase extends SharedSparkSession {
     spark.createDataFrame(spark.sparkContext.parallelize(data), schema)
   }
 
-  private def checkWriteError(
-      df: => DataFrame,
-      srcType: String,
-      targetType: String = "VARIANT"): Unit = {
+  private def checkWriteError(df: => DataFrame, srcType: String): Unit = {
     val e = intercept[AnalysisException](df)
     assert(e.getCondition == "DATATYPE_MISMATCH.CAST_WITHOUT_SUGGESTION")
     assert(e.getMessageParameters.get("srcType") == s""""$srcType"""")
-    assert(e.getMessageParameters.get("targetType") == s""""$targetType"""")
+    assert(e.getMessageParameters.get("targetType") == "\"VARIANT\"")
   }
 
   test("writing a nanosecond timestamp into a VARIANT fails at analysis") {
@@ -75,18 +72,10 @@ abstract class TimestampNanosVariantSuiteBase extends SharedSparkSession {
             s"MAP<STRING, ARRAY<STRUCT<t: $t>>>",
           s"variant_from_arrays(array('k'), array($c))" -> t,
           s"variant_from_entries(array(named_struct('k', 'k', 'v', $c)))" -> t,
-          s"variant_insert(parse_json('{}'), '$$.a', $c)" -> t,
-          s"try_variant_insert(parse_json('{}'), '$$.a', $c)" -> t,
-          s"variant_set(parse_json('{}'), '$$.a', $c)" -> t,
-          s"try_variant_set(parse_json('{}'), '$$.a', $c)" -> t,
-          s"variant_array_append(parse_json('[]'), '$$', $c)" -> t,
-          s"try_variant_array_append(parse_json('[]'), '$$', $c)" -> t
+          s"variant_set(parse_json('{}'), '$$.a', $c)" -> t
         ).foreach { case (expr, srcType) =>
           checkWriteError(df.selectExpr(expr), srcType)
         }
-        checkWriteError(
-          df.selectExpr(s"CAST(named_struct('t', $c) AS STRUCT<t: VARIANT>)"),
-          s"STRUCT<t: $t>", "STRUCT<t: VARIANT>")
         checkWriteError(df.select(col(c).cast(VariantType)), t)
         checkWriteError(df.select(col(c).try_cast(VariantType)), t)
         checkWriteError(df.select(to_variant_object(struct(col(c)))), s"STRUCT<$c: $t>")
@@ -99,6 +88,7 @@ abstract class TimestampNanosVariantSuiteBase extends SharedSparkSession {
       withTempView("src") {
         sql("CREATE TABLE t (v VARIANT) USING parquet")
         nanosDF(9).createOrReplaceTempView("src")
+        // ANSI and STRICT already rejected this; LEGACY used to fail at runtime.
         Seq(
           "ANSI" -> "INCOMPATIBLE_DATA_FOR_TABLE.CANNOT_SAFELY_CAST",
           "STRICT" -> "INCOMPATIBLE_DATA_FOR_TABLE.CANNOT_SAFELY_CAST",

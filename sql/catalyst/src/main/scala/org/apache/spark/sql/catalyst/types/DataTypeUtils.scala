@@ -18,6 +18,7 @@ package org.apache.spark.sql.catalyst.types
 
 import org.apache.spark.sql.catalyst.analysis.Resolver
 import org.apache.spark.sql.catalyst.expressions.{Attribute, AttributeReference, Cast, Literal}
+import org.apache.spark.sql.catalyst.expressions.variant.VariantGet
 import org.apache.spark.sql.catalyst.util.CollationFactory
 import org.apache.spark.sql.catalyst.util.TypeUtils.toSQLId
 import org.apache.spark.sql.connector.catalog.CatalogV2Util
@@ -238,10 +239,10 @@ object DataTypeUtils {
                (VariantType, _: StructType | _: ArrayType | _: MapType) =>
             throw QueryCompilationErrors.incompatibleDataToTableCannotSafelyCastError(
               tableName, context, w.catalogString, r.catalogString)
-          // - Building a variant from TIME or nanosecond timestamps isn't supported, whether the
-          //   value is top-level or nested in an array.
-          case (_, VariantType) if w.existsRecursively(
-              t => t.isInstanceOf[TimeType] || t.isInstanceOf[AnyTimestampNanoType]) =>
+          // Datetime types a variant can't store (e.g. TIME) also fail checkAnalysis; report them,
+          // top-level or nested, as a table write error.
+          case (_, VariantType) if w.existsRecursively(t => t.isInstanceOf[DatetimeType] &&
+              !VariantGet.canCastToVariant(t, allowStructsAndMaps = false)) =>
             throw QueryCompilationErrors.incompatibleDataToTableCannotSafelyCastError(
               tableName, context, w.catalogString, r.catalogString)
           case _ => true

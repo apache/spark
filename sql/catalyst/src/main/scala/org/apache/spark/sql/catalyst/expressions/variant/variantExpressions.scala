@@ -131,7 +131,7 @@ case class IsVariantNull(child: Expression) extends UnaryExpression
   arguments = """
     Arguments:
       * expr - A nested value of array, map, or struct type. Maps must have string keys. Nested
-          values of any type are allowed.
+          values can be of any type that can be cast to a variant.
   """,
   examples = """
     Examples:
@@ -157,7 +157,7 @@ case class ToVariantObject(child: Expression)
   override def checkInputDataTypes(): TypeCheckResult = {
     val checkResult: Boolean = child.dataType match {
       case _: StructType | _: ArrayType | _: MapType =>
-        VariantGet.checkDataType(child.dataType, toVariant = true, allowStructsAndMaps = true)
+        VariantGet.canCastToVariant(child.dataType, allowStructsAndMaps = true)
       case _ => false
     }
     if (!checkResult) {
@@ -228,8 +228,7 @@ case class VariantFromArrays(left: Expression, right: Expression)
       defaultCheck
     } else {
       left.dataType.asInstanceOf[ArrayType].elementType match {
-        case _: StringType
-            if VariantGet.checkDataType(valueType, toVariant = true, allowStructsAndMaps = true) =>
+        case _: StringType if VariantGet.canCastToVariant(valueType, allowStructsAndMaps = true) =>
           TypeCheckResult.TypeCheckSuccess
         case _: StringType =>
           DataTypeMismatch(
@@ -305,7 +304,7 @@ case class VariantFromEntries(child: Expression)
   override def checkInputDataTypes(): TypeCheckResult = child.dataType match {
     case ArrayType(
         StructType(Array(StructField(_, _: StringType, _, _), StructField(_, vt, _, _))), _) =>
-      if (VariantGet.checkDataType(vt, toVariant = true, allowStructsAndMaps = true)) {
+      if (VariantGet.canCastToVariant(vt, allowStructsAndMaps = true)) {
         TypeCheckResult.TypeCheckSuccess
       } else {
         DataTypeMismatch(
@@ -532,7 +531,7 @@ object VariantManipulationExpressionUtils extends QueryErrorsBase {
 
   def checkValueType(dataType: DataType): TypeCheckResult = {
     if (dataType == NullType ||
-        VariantGet.checkDataType(dataType, toVariant = true, allowStructsAndMaps = false)) {
+        VariantGet.canCastToVariant(dataType, allowStructsAndMaps = false)) {
       TypeCheckResult.TypeCheckSuccess
     } else {
       DataTypeMismatch(
@@ -580,7 +579,7 @@ case class VariantGet(
     val check = super.checkInputDataTypes()
     if (check.isFailure) {
       check
-    } else if (!VariantGet.checkDataType(targetType, toVariant = false)) {
+    } else if (!VariantGet.canCastFromVariant(targetType)) {
       DataTypeMismatch(
         errorSubClass = "CAST_WITHOUT_SUGGESTION",
         messageParameters =
@@ -683,15 +682,23 @@ case class VariantCastArgs(
 
 case object VariantGet {
   /**
-   * Returns whether a data type can be cast to variant (`toVariant = true`) or from variant
-   * (`toVariant = false`). For scalar types, we allow a subset of them. For nested types, we
-   * reject map types with a non-string key type. TIME and nanosecond timestamps can only be read
-   * from a variant: Spark's variant has no primitive for them.
+   * Returns whether a value of `dataType` can be cast to a variant. Among datetime types, only
+   * DATE, TIMESTAMP and TIMESTAMP_NTZ can: Spark's variant has no primitive for the others.
+   * `allowStructsAndMaps = false` rejects structs and maps at any level.
    */
-  def checkDataType(
+  def canCastToVariant(dataType: DataType, allowStructsAndMaps: Boolean): Boolean =
+    checkDataType(dataType, toVariant = true, allowStructsAndMaps)
+
+  /** Returns whether a variant can be cast to `dataType`. */
+  def canCastFromVariant(dataType: DataType): Boolean =
+    checkDataType(dataType, toVariant = false, allowStructsAndMaps = true)
+
+  // For scalar types, we allow a subset of them. For nested types, we reject map types with a
+  // non-string key type.
+  private def checkDataType(
       dataType: DataType,
       toVariant: Boolean,
-      allowStructsAndMaps: Boolean = true): Boolean =
+      allowStructsAndMaps: Boolean): Boolean =
     dataType match {
     case _: CharType | _: VarcharType => false
     case _: NumericType | BooleanType | _: StringType | BinaryType | DateType | TimestampType |
