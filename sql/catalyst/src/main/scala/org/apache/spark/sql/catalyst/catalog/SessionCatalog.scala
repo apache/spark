@@ -1213,6 +1213,8 @@ class SessionCatalog(
       case SchemaTypeEvolution => col
       case other => throw SparkException.internalError("Unexpected ViewSchemaMode")
     }
+    // TODO: views stored before SPARK-60876 can lack the CHAR/VARCHAR type of an outer column
+    // returned by a subquery; the stored metadata wins here until their schema is migrated.
     Alias(cast, toField.name)(explicitMetadata = Some(toField.metadata))
   }
   private def fromCatalogTable(metadata: CatalogTable, isTempView: Boolean): View = {
