@@ -4645,14 +4645,15 @@ class ExternalLookupJoinSuite extends QueryTest with SharedSparkSession {
   }
 
   test("external lookup does not cache the results of a range lookup") {
-    // One row per batch, so the third shift can avoid its request only through the cache.
+    // The lookup takes one parameter row per request, so each shift below is a batch of its own:
+    // an equality batch takes one stream row, and a range batch ends at another key. The third
+    // shift can then avoid its request only through the cache.
     val lookup = spark.read
       .format(classOf[SimpleExternalLookupDataSource].getName)
       .option("maxBatchSize", "1")
       .load()
       .hint("external_lookup", "cache_enabled=true")
-    // Two shifts that start at employee id 2, with another in between. Each shift is a batch of
-    // its own, as the lookup takes one parameter row per request.
+    // Two shifts that start at employee id 2, with another in between.
     val shifts = streamOf(Seq(("early", 2), ("late", 3), ("night", 2)).toDF("shift", "firstId"))
 
     Seq(
@@ -4668,6 +4669,15 @@ class ExternalLookupJoinSuite extends QueryTest with SharedSparkSession {
         assert(SimpleExternalLookupDataSource.requestCount.get() === requests, kind)
         assert(run.lookupJoin.metrics("numCacheHits").value === cacheHits, kind)
     }
+    // Equal range keys in a row share one batch, and so one request, whatever the source's limit,
+    // as the rows of the batch share its request's one parameter row. Nothing is cached.
+    SimpleExternalLookupDataSource.resetCounters()
+    val sameStart = streamOf(Seq(("early", 2), ("night", 2)).toDF("shift", "firstId"))
+    val run = runStream(sameStart.join(lookup, lookup("id") >= sameStart("firstId"), "inner"))
+    QueryTest.sameRows(Seq(Row("early", 2, 2, "sales"), Row("night", 2, 2, "sales")), run.rows)
+      .foreach(fail(_))
+    assert(SimpleExternalLookupDataSource.requestCount.get() === 1)
+    assert(run.lookupJoin.metrics("numCacheHits").value === 0)
   }
 
   test("a connector that reuses its byte buffer cannot change cached rows") {
