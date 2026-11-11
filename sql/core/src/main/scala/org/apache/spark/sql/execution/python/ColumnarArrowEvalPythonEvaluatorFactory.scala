@@ -24,6 +24,7 @@ import scala.jdk.CollectionConverters._
 import org.apache.spark.{PartitionEvaluator, PartitionEvaluatorFactory, SparkEnv, TaskContext}
 import org.apache.spark.api.python.ChainedPythonFunctions
 import org.apache.spark.internal.config.Python.PYTHON_UDF_PIPELINED_EXECUTION
+import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.errors.QueryExecutionErrors
 import org.apache.spark.sql.execution.RowToColumnConverter
@@ -54,12 +55,13 @@ import org.apache.spark.util.Utils
  * reuse `WritableColumnVector`s across batches, the Arrow cache releases
  * the vectors of a batch when the next one is read, and the Python output
  * of a stacked [[ArrowEvalPythonExec]] is loaded into the same vectors for
- * every batch. So both paths copy the pass-through columns into a
- * [[HybridRowQueue]], release a batch with closeIfFreeable once it has been
- * written to Python, join the results by row and convert the joined rows
- * back to [[ColumnarBatch]]. Input batches without rows are released and
- * skipped, so that the UDFs are not called with empty input, as on the row
- * path.
+ * every batch. So both paths release a batch with closeIfFreeable once it
+ * has been written to Python. If no column of the child is passed through,
+ * the result batches from Python are the output batches. Otherwise the
+ * pass-through columns are copied into a [[HybridRowQueue]], joined with the
+ * results by row, and the joined rows are converted back to
+ * [[ColumnarBatch]]. Input batches without rows are released and skipped, so
+ * that the UDFs are not called with empty input, as on the row path.
  *
  * TODO: Add a physical plan rule that inserts a ProjectExec before
  *   ArrowEvalPythonExec to pre-evaluate complex UDF input expressions
@@ -69,8 +71,8 @@ import org.apache.spark.util.Utils
 private[python] class ColumnarArrowEvalPythonEvaluatorFactory(
     childOutput: Seq[Attribute],
     udfs: Seq[PythonUDF],
-    output: Seq[Attribute],
-    outputSchema: StructType,
+    passThroughOutput: Seq[Attribute],
+    resultOutput: Seq[Attribute],
     batchSize: Int,
     maxBytesPerBatch: Long,
     evalType: Int,
@@ -81,6 +83,10 @@ private[python] class ColumnarArrowEvalPythonEvaluatorFactory(
     jobArtifactUUID: Option[String],
     sessionUUID: Option[String])
   extends PartitionEvaluatorFactory[ColumnarBatch, ColumnarBatch] {
+
+  // The output is the pass-through columns of the child followed by the results of the UDFs.
+  private val output = passThroughOutput ++ resultOutput
+  private val outputSchema = output.toStructType
 
   override def createEvaluator()
       : PartitionEvaluator[ColumnarBatch, ColumnarBatch] =
@@ -140,7 +146,7 @@ private[python] class ColumnarArrowEvalPythonEvaluatorFactory(
           StructField(s"_$i", dt)
         }.toArray)
 
-      val outputTypes = output.drop(childOutput.length).map(
+      val outputTypes = resultOutput.map(
         _.dataType.transformRecursively {
           case udt: UserDefinedType[_] => udt.sqlType
         })
@@ -150,8 +156,25 @@ private[python] class ColumnarArrowEvalPythonEvaluatorFactory(
         batch.numRows() > 0
       }
 
-      evalWithRowQueue(nonEmptyIter, context, pyFuncs, argMetas,
-        allInputs.toSeq, udfInputSchema, outputTypes, resolveColumnIndices(allInputs.toSeq))
+      val inputColumnIndices = resolveColumnIndices(allInputs.toSeq)
+      if (passThroughOutput.isEmpty) {
+        // The vectors of a result batch are valid until the next one is requested, which a
+        // consumer respecting the contract of ColumnVector does not rely on beyond that.
+        // The result batches are as large as the ones Python returns, unless
+        // maxRecordsPerOutputBatch or maxBytesPerOutputBatch slices them, and are not cut by
+        // maxRecordsPerBatch or maxBytesPerBatch as the rows converted back below are. So a
+        // parent that takes columnar input, e.g. a stacked evaluation or the Arrow cache, gets
+        // them at that size, as it gets the batches of any other columnar child. A stacked
+        // evaluation does not split its input batches yet either.
+        evalPython(nonEmptyIter, context, pyFuncs, argMetas, allInputs.toSeq, udfInputSchema,
+          inputColumnIndices, onInputRow = None).map { batch =>
+          validateOutputTypes(batch, outputTypes)
+          batch
+        }
+      } else {
+        evalWithRowQueue(nonEmptyIter, context, pyFuncs, argMetas,
+          allInputs.toSeq, udfInputSchema, outputTypes, inputColumnIndices)
+      }
     }
 
     private def resolveColumnIndices(
@@ -163,6 +186,58 @@ private[python] class ColumnarArrowEvalPythonEvaluatorFactory(
         case _ => return None
       }
       Some(indices.toArray)
+    }
+
+    /**
+     * Sends the UDF inputs of the batches to Python and returns the result batches, calling
+     * `onInputRow` with each input row before its batch is released.
+     */
+    private def evalPython(
+        inputIter: Iterator[ColumnarBatch],
+        context: TaskContext,
+        pyFuncs: Seq[(ChainedPythonFunctions, Long)],
+        argMetas: Array[Array[ArgumentMetadata]],
+        allInputs: Seq[Expression],
+        udfInputSchema: StructType,
+        inputColumnIndices: Option[Array[Int]],
+        onInputRow: Option[InternalRow => Unit]
+    ): Iterator[ColumnarBatch] = {
+      if (inputColumnIndices.isDefined) {
+        // Simple column refs: the writer sends Arrow-backed batches directly.
+        val bufferedIter = new WrittenBatchReleasingIterator(inputIter, { batch =>
+          onInputRow.foreach(f => batch.rowIterator().asScala.foreach(f))
+          true
+        })
+        val pyRunner =
+          new ColumnarArrowPythonWithNamedArgumentRunner(
+            pyFuncs, evalType, argMetas, udfInputSchema,
+            sessionLocalTimeZone, largeVarTypes, pythonRunnerConf,
+            pythonMetrics, jobArtifactUUID, sessionUUID,
+            inputColumnIndices.get, udfs.map(_.elementwiseNestingDepth))
+        pyRunner.compute(
+          bufferedIter, context.partitionId(), context)
+      } else {
+        // Complex expressions.
+        val projection = MutableProjection.create(
+          allInputs, childOutput)
+        projection.initialize(context.partitionId())
+        // The rows of a batch are written to Python before the writer asks
+        // for the next batch, which releases it.
+        val batchIter = new WrittenBatchReleasingIterator(inputIter, _ => true).map { batch =>
+          batch.rowIterator().asScala.map { row =>
+            onInputRow.foreach(_(row))
+            projection(row)
+          }
+        }
+        val pyRunner = new ArrowPythonWithNamedArgumentRunner(
+          pyFuncs, evalType, argMetas, udfInputSchema,
+          sessionLocalTimeZone, largeVarTypes, pythonRunnerConf,
+          pythonMetrics, jobArtifactUUID, sessionUUID,
+          udfs.map(_.elementwiseNestingDepth)
+        ) with BasicPythonArrowInput
+        pyRunner.compute(
+          batchIter, context.partitionId(), context)
+      }
     }
 
     /**
@@ -186,51 +261,16 @@ private[python] class ColumnarArrowEvalPythonEvaluatorFactory(
       val queue = HybridRowQueue(
         context.taskMemoryManager(),
         new File(Utils.getLocalDir(SparkEnv.get.conf)),
-        childOutput.length,
+        passThroughOutput.length,
         lockFree = pipelined)
       context.addTaskCompletionListener[Unit] { _ => queue.close() }
 
-      val unsafeProj = UnsafeProjection.create(
-        childOutput, childOutput)
+      // Copies the pass-through columns of an input row before its batch is released.
+      val unsafeProj = UnsafeProjection.create(passThroughOutput, childOutput)
 
-      val resultIter = if (inputColumnIndices.isDefined) {
-        // Simple column refs: the writer sends Arrow-backed batches directly.
-        val bufferedIter = new WrittenBatchReleasingIterator(inputIter, { batch =>
-          batch.rowIterator().asScala.foreach { row =>
-            queue.add(unsafeProj(row).copy())
-          }
-          true
-        })
-        val pyRunner =
-          new ColumnarArrowPythonWithNamedArgumentRunner(
-            pyFuncs, evalType, argMetas, udfInputSchema,
-            sessionLocalTimeZone, largeVarTypes, pythonRunnerConf,
-            pythonMetrics, jobArtifactUUID, sessionUUID,
-            inputColumnIndices.get, udfs.map(_.elementwiseNestingDepth))
-        pyRunner.compute(
-          bufferedIter, context.partitionId(), context)
-      } else {
-        // Complex expressions.
-        val projection = MutableProjection.create(
-          allInputs, childOutput)
-        projection.initialize(context.partitionId())
-        // The rows of a batch are written to Python before the writer asks
-        // for the next batch, which releases it.
-        val batchIter = new WrittenBatchReleasingIterator(inputIter, _ => true).map { batch =>
-          batch.rowIterator().asScala.map { row =>
-            queue.add(unsafeProj(row).copy())
-            projection(row)
-          }
-        }
-        val pyRunner = new ArrowPythonWithNamedArgumentRunner(
-          pyFuncs, evalType, argMetas, udfInputSchema,
-          sessionLocalTimeZone, largeVarTypes, pythonRunnerConf,
-          pythonMetrics, jobArtifactUUID, sessionUUID,
-          udfs.map(_.elementwiseNestingDepth)
-        ) with BasicPythonArrowInput
-        pyRunner.compute(
-          batchIter, context.partitionId(), context)
-      }
+      val resultIter = evalPython(inputIter, context, pyFuncs, argMetas, allInputs,
+        udfInputSchema, inputColumnIndices,
+        onInputRow = Some(row => queue.add(unsafeProj(row).copy())))
 
       val joined = new JoinedRow
       val resultProj = UnsafeProjection.create(output, output)
