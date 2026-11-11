@@ -8504,6 +8504,24 @@
     ],
     "sqlState" : "54023"
   },
+  "TASK_SERIALIZATION_TOO_LARGE" : {
+    "message" : [
+      "Cannot run stage <stageId> because a serialized task exceeds the 2 GB size limit."
+    ],
+    "subClass" : {
+      "TASK" : {
+        "message" : [
+          "Partition <partitionId> holds too much data created on the driver. Read the data from files or a table, or split it into more partitions."
+        ]
+      },
+      "TASK_BINARY" : {
+        "message" : [
+          "The functions or objects shared by its tasks are too large. Use broadcast variables for large objects instead of capturing them in functions."
+        ]
+      }
+    },
+    "sqlState" : "54000"
+  },
   "TASK_WRITE_FAILED" : {
     "message" : [
       "Task failed while writing rows to <path>."
