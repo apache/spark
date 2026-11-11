@@ -902,9 +902,11 @@ SET spark.sql.legacy.recursiveCTE.useAnchorNestedNullability=true;
 
 CREATE VIEW cte_recursion_copies AS
 WITH RECURSIVE t1 AS (
-    SELECT 1 AS n, ARRAY(1) AS path, ARRAY(1) AS prev, ARRAY(1) AS head, ARRAY(1) AS prev_head
+    SELECT 1 AS n, ARRAY(1) AS path, ARRAY(1) AS prev, ARRAY(1) AS head, ARRAY(1) AS prev_head,
+        ARRAY(1) AS ins, ARRAY(1) AS prev_ins, ARRAY(1) AS el, ARRAY(1) AS prev_el
     UNION ALL
-    SELECT n + 1, array_prepend(array_append(path, n + 1), 0), path, ARRAY(path[0]), head
+    SELECT n + 1, array_prepend(array_append(path, n + 1), 0), path, ARRAY(path[0]), head,
+        array_insert(array_insert(ins, 1, 0), -1, n), ins, ARRAY(element_at(path, 1)), el
     FROM t1 WHERE n < 3
 )
 SELECT * FROM t1;
@@ -926,7 +928,47 @@ WITH RECURSIVE t1(n, path, prev) AS (
 )
 SELECT n, path, prev, EXISTS(prev, x -> x IS NULL) FROM t1;
 
+-- Same with array_insert at -1, on a materialized step
+SET spark.sql.cteRecursionAnchorRowsLimitToConvertToLocalRelation=0;
+
+WITH RECURSIVE t1(n, path, prev) AS (
+    SELECT 1, ARRAY(1), ARRAY(1)
+    UNION ALL
+    SELECT n + 1, IF(n = 1, array_insert(filter(path, x -> false), -1, 7), path), path
+    FROM t1 WHERE n < 3
+)
+SELECT n, path, prev, EXISTS(prev, x -> x IS NULL) FROM t1;
+
+SET spark.sql.cteRecursionAnchorRowsLimitToConvertToLocalRelation=100;
+
 SET spark.sql.legacy.negativeIndexInArrayInsert=false;
+
+-- The legacy setting also keeps the exact-type coercion, so a NULL written into a nested position
+-- that the anchor types as non-nullable fails when a column needs a cast
+SET spark.sql.legacy.recursiveCTE.useAnchorNestedNullability=true;
+
+WITH RECURSIVE t1(n, m, arr) AS (
+    SELECT 1, CAST(1 AS BIGINT), ARRAY(1)
+    UNION ALL
+    SELECT n + 1, n + 1, ARRAY(CAST(NULL AS INT)) FROM t1 WHERE n < 3
+)
+SELECT * FROM t1;
+
+WITH RECURSIVE t1(n, arr) AS (
+    SELECT 1, ARRAY(CAST(1 AS BIGINT))
+    UNION ALL
+    SELECT n + 1, ARRAY(CAST(NULL AS INT)) FROM t1 WHERE n < 3
+)
+SELECT * FROM t1;
+
+WITH RECURSIVE t1(n, m, s) AS (
+    SELECT 1, CAST(1 AS BIGINT), NAMED_STRUCT('A', 1)
+    UNION ALL
+    SELECT n + 1, n + 1, NAMED_STRUCT('a', 1) FROM t1 WHERE n < 3
+)
+SELECT * FROM t1;
+
+SET spark.sql.legacy.recursiveCTE.useAnchorNestedNullability=false;
 
 -- With ANSI mode off, an index past the end reads a NULL, which the next level reads back
 SET spark.sql.ansi.enabled=false;

@@ -70,7 +70,7 @@ object ResolveWithCTE extends Rule[LogicalPlan] {
           // at all. In both cases we need to put it in the map in case it is resolved.
           // Second case is performing the substitution of recursive CTERelationRefs.
           case cteDef if !cteDef.hasSelfReferenceAsCTERef =>
-            if (cteDef.resolved) {
+            if (cteDef.resolved && !awaitsEnclosingCheck(cteDef)) {
               cteDefMap.put(cteDef.id, cteDef)
             }
             cteDef
@@ -438,6 +438,15 @@ object ResolveWithCTE extends Rule[LogicalPlan] {
     }
   }
 
+  // Whether a subquery's own analysis left the recursive definition's loop unverified, because its
+  // prediction missed a definition of the enclosing query. Its references then wait for the
+  // enclosing analysis to verify or rebuild it, so they bind to its final output.
+  private def awaitsEnclosingCheck(cteDef: CTERelationDef): Boolean =
+    AnalysisContext.get.outerPlan.isDefined && cteDef.hasSelfReferenceAsUnionLoopRef &&
+      !useAnchorNestedNullability &&
+      cteDef.child.collectFirst { case l: UnionLoop if l.id == cteDef.id => l }
+        .exists(!isVerified(_))
+
   private def isNullableEverywhere(t: (DataType, Boolean)): Boolean =
     t._2 && t._1 == t._1.asNullable
 
@@ -547,8 +556,9 @@ object ResolveWithCTE extends Rule[LogicalPlan] {
   }
 
   // Retypes, in a copy, values whose declared nested nullability ignores their inputs: appending
-  // or prepending an element, which never pads the array, and constant-index reads that fail
-  // rather than return NULL for a missing element.
+  // or prepending an element, which never pads the array unless the legacy negative index is set,
+  // and constant-index reads, which with ANSI mode on fail rather than return NULL for a missing
+  // element.
   private def withPreciseNullability(plan: LogicalPlan): LogicalPlan = {
     def concat(arrays: Expression*): Option[Expression] = {
       val types = arrays.map(_.dataType)

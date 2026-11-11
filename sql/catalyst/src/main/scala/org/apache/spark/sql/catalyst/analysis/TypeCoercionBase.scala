@@ -52,6 +52,7 @@ import org.apache.spark.sql.catalyst.util.ResolveDefaultColumns
 import org.apache.spark.sql.connector.catalog.CatalogV2Implicits.MultipartIdentifierHelper
 import org.apache.spark.sql.connector.catalog.procedures.BoundProcedure
 import org.apache.spark.sql.errors.DataTypeErrors.cannotMergeIncompatibleDataTypesError
+import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types.DataType
 
 abstract class TypeCoercionBase extends TypeCoercionHelper {
@@ -241,12 +242,18 @@ abstract class TypeCoercionBase extends TypeCoercionHelper {
           // On the other hand, we cannot cast the anchor type into a wider recursion type, as at
           // this point the UnionLoopRefs inside the recursion are already resolved with the
           // narrower anchor type. Nullability and the case of struct field names may differ, as
-          // UnionLoop's output merges them.
+          // UnionLoop's output merges them, unless the legacy setting keeps the exact types.
+          val sameType: (DataType, DataType) => Boolean =
+            if (conf.getConf(SQLConf.LEGACY_RECURSIVE_CTE_USE_ANCHOR_NESTED_NULLABILITY)) {
+              _ == _
+            } else {
+              DataTypeUtils.sameType
+            }
           val projectList = s.recursion.output.zip(s.anchor.output.map(_.dataType)).map {
             case (attr, dt) =>
               val widerType = findWiderTypeForTwo(attr.dataType, dt)
-              if (widerType.isDefined && DataTypeUtils.sameType(widerType.get, dt)) {
-                if (!DataTypeUtils.sameType(attr.dataType, dt)) {
+              if (widerType.isDefined && sameType(widerType.get, dt)) {
+                if (!sameType(attr.dataType, dt)) {
                   Alias(Cast(attr, widerType.get), attr.name)()
                 } else {
                   attr

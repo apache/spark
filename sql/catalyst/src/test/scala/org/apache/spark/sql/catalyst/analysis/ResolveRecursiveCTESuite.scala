@@ -21,7 +21,7 @@ package org.apache.spark.sql.catalyst.analysis
 import org.apache.spark.SparkException
 import org.apache.spark.sql.catalyst.dsl.expressions._
 import org.apache.spark.sql.catalyst.dsl.plans._
-import org.apache.spark.sql.catalyst.expressions.{Alias, ArrayAppend, ArrayPrepend, Attribute, CaseWhen, CreateArray, CreateMap, CreateNamedStruct, GetArrayItem, Literal}
+import org.apache.spark.sql.catalyst.expressions.{Alias, ArrayAppend, ArrayInsert, ArrayPrepend, Attribute, CaseWhen, CreateArray, CreateMap, CreateNamedStruct, ElementAt, GetArrayItem, Literal}
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types.{ArrayType, DataType, IntegerType, MapType, StringType, StructType}
@@ -239,6 +239,30 @@ class ResolveRecursiveCTESuite extends AnalysisTest {
     val refTypes = Seq(IntegerType -> false) ++ Seq.fill(4)(intArray -> false)
     val outputTypes = Seq(IntegerType -> false, nullableIntArray -> false, intArray -> false,
       nullableIntArray -> false, intArray -> false)
+    assert(selfReferenceAndOutputTypes(anchor, recursion) === (refTypes, outputTypes))
+  }
+
+  // Motivated by:
+  // WITH RECURSIVE t AS (SELECT 1 AS n, array(1) AS a, ..., array(1) AS f UNION ALL
+  // SELECT n + 1, array_insert(a, 1, n), a, array_insert(c, -1, n), c, array(element_at(e, 1)), e
+  // FROM t) SELECT * FROM t;
+  test("ResolveWithCTE keeps the types of copies of array_insert at either end and element_at") {
+    val anchor = Project(Seq("n", "a", "b", "c", "d", "e", "f").map { c =>
+      Alias(if (c == "n") Literal(1) else CreateArray(Seq(Literal(1))), c)()
+    }, OneRowRelation())
+    val recursion = (t: LogicalPlan) => t.select(
+      ($"n" + 1).as("n"),
+      ArrayInsert($"a", Literal(1), $"n", legacyNegativeIndex = false).as("a"),
+      $"a".as("b"),
+      ArrayInsert($"c", Literal(-1), $"n", legacyNegativeIndex = false).as("c"),
+      $"c".as("d"),
+      CreateArray(Seq(ElementAt($"e", Literal(1), None, failOnError = true))).as("e"),
+      $"e".as("f"))
+
+    val refTypes = Seq(IntegerType -> false) ++ Seq.fill(6)(intArray -> false)
+    val outputTypes = Seq(IntegerType -> false) ++
+      Seq(nullableIntArray, intArray, nullableIntArray, intArray, nullableIntArray, intArray)
+        .map(_ -> false)
     assert(selfReferenceAndOutputTypes(anchor, recursion) === (refTypes, outputTypes))
   }
 

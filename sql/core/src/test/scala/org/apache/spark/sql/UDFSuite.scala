@@ -583,9 +583,9 @@ class UDFSuite extends SharedSparkSession {
         s"""WITH RECURSIVE t(id, arr) AS (
            |  SELECT id, ARRAY(id) FROM range(1, 2)
            |  UNION ALL
-           |  SELECT x.dst, x.arr FROM t JOIN x ON $join)
+           |  SELECT x.dst, ARRAY(x.dst) FROM t JOIN x ON $join)
            |SELECT id FROM t""".stripMargin
-      val x = "WITH x AS (SELECT a AS src, f(b) AS dst, ARRAY(f(b)) AS arr FROM edges)"
+      val x = "WITH x AS (SELECT a AS src, f(b) AS dst FROM edges)"
       for (join <- Seq("t.id = x.src", "t.arr[0] = x.src")) {
         checkAnswer(sql(s"$x SELECT (SELECT count(*) FROM (${t(join)}))"), Row(2L))
         checkAnswer(sql(s"$x SELECT 2 IN (SELECT count(*) FROM (${t(join)}))"), Row(true))
@@ -594,6 +594,25 @@ class UDFSuite extends SharedSparkSession {
           Row(2L))
       }
     }
+  }
+
+  test("SPARK-60875: a recursive CTE in a subquery expression is read with its rebuilt types") {
+    spark.udf.register("f", (v: Long) => v + 1)
+    val x = "WITH x AS (SELECT f(CAST(NULL AS BIGINT)) AS v)"
+    val t = """WITH RECURSIVE t(lvl, v, prev) AS (
+              |  SELECT 0, 0L, 0L
+              |  UNION ALL
+              |  SELECT t.lvl + 1, x.v, t.v FROM t, x WHERE t.lvl < 2)""".stripMargin
+    val lateral = sql(
+      s"$x SELECT l.lvl, l.prev FROM range(1), LATERAL ($t SELECT lvl, prev FROM t) l")
+    assert(lateral.schema("prev").nullable)
+    checkAnswer(lateral, Seq(Row(0, 0L), Row(1, 0L), Row(2, null)))
+    checkAnswer(
+      sql(s"$x SELECT (SELECT count_if(prev IS NULL) FROM ($t SELECT prev FROM t))"),
+      Row(1L))
+    checkAnswer(
+      sql(s"$x SELECT 1 IN (SELECT count_if(prev IS NULL) FROM ($t SELECT prev FROM t))"),
+      Row(true))
   }
 
   test("SPARK-60875: UDF NULLs that a recursion reads from a CTE through a subquery") {
