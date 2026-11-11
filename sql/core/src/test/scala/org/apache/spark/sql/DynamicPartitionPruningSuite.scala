@@ -2652,6 +2652,42 @@ class DynamicPartitionPruningV1SuiteAEOn extends DynamicPartitionPruningV1Suite
     assert(adaptive.canonicalized === unprojected.canonicalized)
   }
 
+  test("SPARK-61447: nested dynamic pruning subqueries are compiled once each") {
+    val joinPlans = new AtomicInteger(0)
+    val countJoins = new org.apache.spark.sql.classic.Strategy {
+      override def apply(plan: org.apache.spark.sql.catalyst.plans.logical.LogicalPlan)
+          : Seq[SparkPlan] = {
+        plan match {
+          case _: org.apache.spark.sql.catalyst.plans.logical.Join => joinPlans.incrementAndGet()
+          case _ =>
+        }
+        Nil
+      }
+    }
+    withSQLConf(
+        SQLConf.DYNAMIC_PARTITION_PRUNING_ENABLED.key -> "true",
+        SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key -> "10485760") {
+      withTable((0 to 8).map(i => s"dpp_t$i"): _*) {
+        (0 to 8).foreach { i =>
+          spark.range(20).selectExpr("id", "id AS v", "id AS pk")
+            .write.partitionBy("pk").format(tableFormat).saveAsTable(s"dpp_t$i")
+        }
+        spark.experimental.extraStrategies = Seq(countJoins)
+        try {
+          val joins = (1 to 8)
+            .map(i => s"LEFT JOIN dpp_t$i ON dpp_t$i.pk = dpp_t0.pk").mkString(" ")
+          val df = sql(s"SELECT dpp_t0.id FROM dpp_t0 $joins WHERE dpp_t0.pk IN (1, 2, 3)")
+          joinPlans.set(0)
+          df.queryExecution.executedPlan
+          assert(joinPlans.get() <= 8 * 8,
+            s"nested DPP compilation did not reuse plans: ${joinPlans.get()} join planner calls")
+        } finally {
+          spark.experimental.extraStrategies = Nil
+        }
+      }
+    }
+  }
+
   test("SPARK-39447: Avoid AssertionError in AdaptiveSparkPlanExec.doExecuteBroadcast") {
     val df = sql(
       """
