@@ -6428,6 +6428,16 @@ object SQLConf {
       .booleanConf
       .createWithDefault(false)
 
+  val GAP_FILL_ENABLED =
+    buildConf("spark.sql.gapFillRelationOperator.enabled")
+      .doc("Enable the GAP FILL relation operator, which adds a row at each bin start of a " +
+        "regular time grid that has no input row at exactly that time.")
+      .internal()
+      .version("4.4.0")
+      .withBindingPolicy(ConfigBindingPolicy.SESSION)
+      .booleanConf
+      .createWithDefault(false)
+
   object StoreAssignmentPolicy extends Enumeration {
     val ANSI, LEGACY, STRICT = Value
   }

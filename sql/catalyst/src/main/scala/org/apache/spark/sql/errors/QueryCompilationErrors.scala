@@ -339,6 +339,12 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase with Compilat
       messageParameters = Map.empty)
   }
 
+  def gapFillNotSupportedError(): Throwable = {
+    new AnalysisException(
+      errorClass = "UNSUPPORTED_FEATURE.GAP_FILL",
+      messageParameters = Map.empty)
+  }
+
   def restrictedModeFeatureError(feature: String): Throwable = {
     new AnalysisException(
       errorClass = "UNSUPPORTED_FEATURE.SQL_RESTRICTED_MODE",

@@ -214,6 +214,7 @@ object TreePattern extends Enumeration  {
   val UNRESOLVED_BIN_BY: Value = Value
   val UNRESOLVED_DEDUPLICATE: Value = Value
   val UNRESOLVED_EVENT_TIME_WATERMARK: Value = Value
+  val UNRESOLVED_GAP_FILL: Value = Value
   val UNRESOLVED_HAVING: Value = Value
   val UNRESOLVED_HINT: Value = Value
   val UNRESOLVED_INSERT: Value = Value

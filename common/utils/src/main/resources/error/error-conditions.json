@@ -9396,6 +9396,11 @@
           "External UDF <funcName> uses columns from more than one input relation. Rewrite the query so the UDF is evaluated after the inputs are combined."
         ]
       },
+      "GAP_FILL" : {
+        "message" : [
+          "The GAP FILL relation operator is not yet supported."
+        ]
+      },
       "GEOSPATIAL_DISABLED" : {
         "message" : [
           "Geospatial feature is disabled."

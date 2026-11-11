@@ -18,7 +18,7 @@
 package org.apache.spark.sql.catalyst.plans.logical
 
 import org.apache.spark.sql.catalyst.{AliasIdentifier, InternalRow, SQLConfHelper}
-import org.apache.spark.sql.catalyst.analysis.{Analyzer, AnsiStringPromotionTypeCoercion, AnsiTypeCoercion, MultiInstanceRelation, Resolver, TypeCoercion, TypeCoercionBase, UnresolvedUnaryNode, WidenStatefulOpNullability}
+import org.apache.spark.sql.catalyst.analysis.{Analyzer, AnsiStringPromotionTypeCoercion, AnsiTypeCoercion, MultiInstanceRelation, Resolver, TypeCoercion, TypeCoercionBase, UnresolvedException, UnresolvedUnaryNode, WidenStatefulOpNullability}
 import org.apache.spark.sql.catalyst.catalog.{CatalogStorageFormat, CatalogTable}
 import org.apache.spark.sql.catalyst.catalog.CatalogTable.VIEW_STORING_ANALYZED_PLAN
 import org.apache.spark.sql.catalyst.expressions._
@@ -1931,6 +1931,72 @@ object BinBy {
       s"appends=${refs(appendedAttributes)}") ++
       timeZoneId.map(z => s"zone=$z")
   }
+}
+
+/**
+ * How a column in the GAP FILL `FILL` clause is filled in the rows that GAP FILL adds.
+ */
+sealed trait GapFillMethod
+
+object GapFillMethod {
+  case object Linear extends GapFillMethod
+  case object ForwardFill extends GapFillMethod
+  case object BackwardFill extends GapFillMethod
+  /** Fills with a fixed value. */
+  case class Constant(value: Expression) extends GapFillMethod
+  case object Null extends GapFillMethod
+}
+
+/**
+ * One entry of the GAP FILL `FILL` clause. It holds the column and how it is filled. For example,
+ * `FILL (status CONSTANT upper('unknown'))` gives
+ * `GapFillColumn('status, Constant('upper('unknown')))`.
+ *
+ * It is an [[Expression]] whose children are the column and the CONSTANT value, like
+ * [[Assignment]], so that plan walkers such as `QueryPlan.expressions` and
+ * `transformExpressions` reach both. A tuple or a plain case class would hide them from the
+ * analyzer.
+ */
+case class GapFillColumn(column: Expression, method: GapFillMethod)
+  extends Expression with Unevaluable {
+  override def children: Seq[Expression] = method match {
+    case GapFillMethod.Constant(value) => Seq(column, value)
+    case _ => Seq(column)
+  }
+  override def nullable: Boolean = false
+  override def dataType: DataType = throw new UnresolvedException("dataType")
+  override protected def withNewChildrenInternal(
+      newChildren: IndexedSeq[Expression]): GapFillColumn = method match {
+    case GapFillMethod.Constant(_) =>
+      copy(column = newChildren.head, method = GapFillMethod.Constant(newChildren(1)))
+    case _ => copy(column = newChildren.head)
+  }
+}
+
+/**
+ * Unresolved counterpart of the GAP FILL relation operator, produced by the parser.
+ * `binStartName` and `isGeneratedName` are set only when the BIN_START or IS_GENERATED column is
+ * requested.
+ */
+case class UnresolvedGapFill(
+    partitionColumns: Seq[Expression],
+    timeColumn: Expression,
+    binWidthExpr: Expression,
+    originExpr: Option[Expression],
+    rangeStartExpr: Option[Expression],
+    rangeEndExpr: Option[Expression],
+    fillColumns: Seq[GapFillColumn],
+    maxGapExpr: Option[Expression],
+    binStartName: Option[String],
+    isGeneratedName: Option[String],
+    child: LogicalPlan) extends UnresolvedUnaryNode {
+  require(rangeStartExpr.isDefined == rangeEndExpr.isDefined,
+    "The GAP FILL range has both FROM and TO, or neither.")
+
+  final override val nodePatterns: Seq[TreePattern] = Seq(UNRESOLVED_GAP_FILL)
+
+  override protected def withNewChildInternal(newChild: LogicalPlan): UnresolvedGapFill =
+    copy(child = newChild)
 }
 
 /**
