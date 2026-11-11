@@ -80,6 +80,21 @@ org.apache.spark.SparkDateTimeException
 
 
 -- !query
+SELECT make_timestamp_ntz(1, 1, 1, 1, 1, 4324.967296)
+-- !query schema
+struct<>
+-- !query output
+org.apache.spark.SparkDateTimeException
+{
+  "errorClass" : "DATETIME_FIELD_OUT_OF_BOUNDS.WITHOUT_SUGGESTION",
+  "sqlState" : "22023",
+  "messageParameters" : {
+    "rangeMessage" : "Invalid value for SecondOfMinute (valid values 0 - 59): 4324"
+  }
+}
+
+
+-- !query
 SELECT make_timestamp_ntz(make_date(2021, 07, 11), make_time(6, 30, 45.678))
 -- !query schema
 struct<make_timestamp_ntz(make_date(2021, 7, 11), make_time(6, 30, 45.678)):timestamp_ntz>

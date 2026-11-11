@@ -103,7 +103,7 @@ class StreamingJoinOneSidedWatermarkSuite extends StreamTest {
     version <- Seq(2, 3, 4)
     zone <- Seq("America/Los_Angeles", "UTC")
   } {
-    test(s"one-sided range bound of a whole day evicts only if the day is exact, V$version $zone") {
+    test(s"one-sided range bound of a whole day gives no cutoff, V$version $zone") {
       withSQLConf(
         SQLConf.STREAMING_JOIN_STATE_FORMAT_VERSION.key -> version.toString,
         SQLConf.STATE_STORE_PROVIDER_CLASS.key -> classOf[RocksDBStateStoreProvider].getName,
@@ -111,32 +111,26 @@ class StreamingJoinOneSidedWatermarkSuite extends StreamTest {
         SQLConf.SESSION_LOCAL_TIMEZONE.key -> zone) {
         val impressions = MemoryStream[(Int, Long)]
         val clicks = MemoryStream[(Int, Long)]
-        val daylightSaving = zone == "America/Los_Angeles"
-        val joinType = if (daylightSaving) "inner" else "left_outer"
-        testStream(impressionsJoinClicks(impressions, clicks, joinType))(
+        testStream(impressionsJoinClicks(impressions, clicks, "inner"))(
           MultiAddData(impressions, (1, impressionMs))(clicks, (9, watermarkMs)),
           CheckNewAnswer(),
-          // Eviction watermark 19:10Z. In UTC the impression matches clicks until 19:00Z only.
+          // Eviction watermark 19:10Z. The impression stays in state in every zone.
           AddData(clicks, (8, watermarkMs + 60000L)),
-          if (daylightSaving) {
-            CheckNewAnswer()
-          } else {
-            CheckNewAnswer(Row(1, impressionMs, null))
-          },
+          CheckNewAnswer(),
           AddData(clicks, (1, lateClickMs)),
-          if (daylightSaving) {
-            CheckNewAnswer(Row(1, impressionMs, lateClickMs))
-          } else {
+          // The impression matches clicks until 20:00Z in America/Los_Angeles and 19:00Z in UTC.
+          if (zone == "UTC") {
             CheckNewAnswer()
+          } else {
+            CheckNewAnswer(Row(1, impressionMs, lateClickMs))
           })
-        if (daylightSaving) {
-          // With no cutoff, an outer join could never emit its unmatched impressions.
-          val e = intercept[AnalysisException] {
-            impressionsJoinClicks(impressions, clicks, "left_outer").writeStream
-              .format("memory").queryName("unfinalizedOuterJoin").start()
-          }
-          assert(e.getMessage.contains("requires a watermark on the right input"))
+        // With no cutoff, an outer join could never emit its unmatched impressions.
+        val e = intercept[AnalysisException] {
+          impressionsJoinClicks(impressions, clicks, "left_outer").writeStream
+            .format("memory").queryName("unfinalizedOuterJoin").start()
         }
+        assert(e.getMessage.contains("requires a watermark on the right input"))
+        assert(e.getMessage.contains("through an interval of a day or more"))
       }
     }
   }

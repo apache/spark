@@ -21,7 +21,7 @@ import java.sql.Timestamp
 import java.time.LocalDateTime
 
 import org.apache.spark.sql.catalyst.encoders.ExpressionEncoder
-import org.apache.spark.sql.catalyst.expressions.AttributeReference
+import org.apache.spark.sql.catalyst.expressions.{AttributeReference, TimeWindow}
 import org.apache.spark.sql.catalyst.plans.logical.{Aggregate, Expand, Filter}
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.test.SharedSparkSession
@@ -630,6 +630,21 @@ class DataFrameTimeWindowingSuite extends SharedSparkSession {
         Row("2016-03-27 19:39:30", "2016-03-27 19:39:29.999999")
       )
     )
+  }
+
+  test("window column records its duration, and window_time drops it") {
+    val df = Seq("2016-03-27 19:38:18").toDF("time")
+      .select(window($"time", "10 seconds", "5 seconds").as("window"))
+    val windowMetadata = df.schema("window").metadata
+    assert(windowMetadata.getBoolean(TimeWindow.marker))
+    assert(windowMetadata.getLong(TimeWindow.durationKey) === 10000000L)
+
+    val withWindowTime = df.select(window_time($"window").as("wt"))
+    val windowTimeMetadata = withWindowTime.schema("wt").metadata
+    assert(!windowTimeMetadata.contains(TimeWindow.marker))
+    assert(!windowTimeMetadata.contains(TimeWindow.durationKey))
+    checkAnswer(withWindowTime.select($"wt".cast("string")),
+      Seq(Row("2016-03-27 19:38:19.999999"), Row("2016-03-27 19:38:24.999999")))
   }
 
   test("2 window_time functions on raw window column") {

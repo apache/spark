@@ -17,7 +17,7 @@
 
 package org.apache.spark.sql.streaming
 
-import org.apache.spark.sql.{AnalysisException, Row}
+import org.apache.spark.sql.{AnalysisException, DataFrame, Row}
 import org.apache.spark.sql.execution.streaming.runtime.MemoryStream
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.internal.SQLConf
@@ -89,6 +89,44 @@ class StreamingJoinWatermarkAdmissionSuite extends StreamTest {
           AddData(rightInput, (2, 6)),
           CheckNewAnswer(row(2, 6L)))
       }
+    }
+  }
+
+  // With allowMultiple=false, late rows are filtered by an input's first watermarked column, so
+  // a window key bounds state only when the window comes before its event time.
+  test("legacy-mode join on a window after its event time names the column order") {
+    withSQLConf(
+      SQLConf.STATEFUL_OPERATOR_ALLOW_MULTIPLE.key -> "false",
+      SQLConf.STREAMING_NO_DATA_MICRO_BATCHES_ENABLED.key -> "false") {
+      val leftInput = MemoryStream[(Int, Int)]
+      val rightInput = MemoryStream[(Int, Int)]
+      def windowed(input: MemoryStream[(Int, Int)], side: String): DataFrame =
+        input.toDF().toDF(s"${side}k", "time")
+          .select(col(s"${side}k"), timestamp_seconds($"time").as(s"${side}t"))
+          .withWatermark(s"${side}t", "0 seconds")
+          .withColumn(s"${side}w", window(col(s"${side}t"), "10 seconds"))
+      val left = windowed(leftInput, "l")
+      val right = windowed(rightInput, "r")
+      val condition = expr("lk = rk AND lw = rw")
+
+      val error = intercept[AnalysisException] {
+        testStream(left.join(right, condition, "left_outer"))(
+          AddData(leftInput, (1, 5)), CheckNewAnswer())
+      }
+      assert(error.getMessage.contains("the right input filters late rows by its first " +
+        "watermarked column, rt, so its window key rw is not a time constraint"))
+
+      val joined = left.select($"lk", $"lw", $"lt")
+        .join(right.select($"rk", $"rw", $"rt"), condition, "left_outer")
+        .select($"lk", $"lt".cast("int"), $"rk")
+      testStream(joined)(
+        MultiAddData(leftInput, (1, 5), (2, 6))(rightInput, (1, 7)),
+        CheckNewAnswer(Row(1, 5, 1)),
+        MultiAddData(leftInput, (3, 30))(rightInput, (9, 30)),
+        CheckNewAnswer(),
+        // At watermark 30 seconds, the window [0, 10) of the unmatched (2, 6) has ended.
+        AddData(rightInput, (9, 40)),
+        CheckNewAnswer(Row(2, 6, null)))
     }
   }
 }
