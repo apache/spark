@@ -2577,7 +2577,7 @@ object SQLConf {
       .doc("When this config is set to true, join is tried to be pushed down" +
         "for DSv2 data sources in V2ScanRelationPushdown optimization rule.")
       .booleanConf
-      .createWithDefault(false)
+      .createWithDefault(Utils.isTesting)
 
   // This is used to set the default data source
   val DEFAULT_DATA_SOURCE_NAME = buildConf("spark.sql.sources.default")
