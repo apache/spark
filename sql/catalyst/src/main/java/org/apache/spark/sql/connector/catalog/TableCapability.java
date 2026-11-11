@@ -160,5 +160,78 @@ public enum TableCapability {
    *
    * @since 4.3.0
    */
-  SCAN_MERGING
+  SCAN_MERGING,
+
+  /**
+   * Signals that the table has at least one parameterized lookup access path. The table must
+   * implement {@link SupportsRead}, its scan builder must implement
+   * {@link org.apache.spark.sql.connector.read.SupportsExternalLookup}, and the built scan must
+   * implement {@link org.apache.spark.sql.connector.read.Scan#toExternalLookup()}.
+   *
+   * @since 4.4.0
+   */
+  EXTERNAL_LOOKUP,
+
+  /**
+   * Signals that the scans of the streaming reads of the table may only read the columns that the
+   * streaming query reads, which Spark asks a scan builder that implements
+   * {@link org.apache.spark.sql.connector.read.SupportsPushDownRequiredColumns} for, as it does
+   * for the scans of batch reads.
+   * <p>
+   * Spark builds the scan of a streaming read once, when the query starts, from the plan of the
+   * query optimized then, and creates the micro-batch or continuous stream of the read from that
+   * scan. By returning this capability, a table declares that the partition readers of such a
+   * stream return the columns of {@link org.apache.spark.sql.connector.read.Scan#readSchema()},
+   * in its order, as those of the batches of the scan do. Spark asks the scan for its read schema
+   * before it creates the stream, whether the scan reads all the columns or not. Spark only prunes
+   * the columns of these scans when {@code spark.sql.streaming.v2ColumnPruning.enabled} is true,
+   * which it is not by default. Without this capability, the scans of streaming reads read all the
+   * columns of the table, in its order.
+   *
+   * @since 4.4.0
+   */
+  STREAMING_COLUMN_PRUNING,
+
+  /**
+   * Signals that the scans of the streaming reads of the table may get the filters that the
+   * streaming query applies to all the rows that it reads from the table, which Spark pushes to a
+   * scan builder that implements
+   * {@link org.apache.spark.sql.connector.read.SupportsPushDownFilters} or
+   * {@link org.apache.spark.sql.connector.read.SupportsPushDownV2Filters}, as it does for the scans
+   * of batch reads: the filters that Spark plans with the scan, over the relation of the read, up
+   * to the first nondeterministic one, so the filters after a nondeterministic filter or
+   * projection, or above another operator, such as a filter on the event-time column above its
+   * watermark, are not pushed. Nor are the filters on columns of floating types, of strings of a
+   * collation that is not binary, or of structs, arrays or user-defined types with such values:
+   * each micro-batch checks that its plan applies the pushed filters, also once its optimizer
+   * rewrote them with the values that the plan gives to their columns, which Spark only can for the
+   * other columns. The filters of a {@code SupportsPushDownFilters} builder compare columns with
+   * values, which cannot fail, so it gets such filters whatever their order among the filters over
+   * the relation. A builder whose filters may fail on some rows, as a cast does with ANSI, gets the
+   * filters that the query applies before any other filter, in their order, and then those that
+   * cannot fail, such as comparisons of columns with values, wherever they are. The streams of its
+   * scans must not evaluate a filter on a row that a filter before it drops, so that a filter does
+   * not see a row that the query drops with a filter written before it. Spark may still evaluate
+   * other conditions before these filters in a micro-batch, such as those that it infers from them,
+   * e.g. {@code a > 5} from {@code a = b AND b > 5}, or an equality with a literal that it moves
+   * first, so such a condition may drop a row in Spark on which a pushed filter that may fail, such
+   * as a division with ANSI, fails in the stream.
+   * <p>
+   * Spark builds the scan of a streaming read once, when the query starts, from the plan of the
+   * query optimized then, and creates the micro-batch or continuous stream of the read from that
+   * scan. By returning this capability, a table declares that its scan builders can take filters
+   * for such a scan, as for the scan of a batch read. The stream may then drop the rows that fail
+   * the filters that the builder took: the query applies all the filters that the builder got to
+   * the rows that it reads from the table, and Spark evaluates all the filters of the query after
+   * the scan. Its offsets, including those of {@code latestOffset}, must still be positions in all
+   * the rows of the table, as without filters: the filters are decided again each time the query
+   * starts, so a query that restarts from the offsets of its checkpoint may push other filters, or
+   * none. The progress of the query only counts the rows that the stream returns. Spark only
+   * pushes the filters to these scans when {@code spark.sql.streaming.v2FilterPushdown.enabled} is
+   * true, which it is not by default. Without this capability, the scans of streaming reads get no
+   * filter.
+   *
+   * @since 4.4.0
+   */
+  STREAMING_FILTER_PUSHDOWN
 }

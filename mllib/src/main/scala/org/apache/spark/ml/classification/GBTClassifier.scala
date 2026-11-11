@@ -37,6 +37,7 @@ import org.apache.spark.mllib.tree.model.{GradientBoostedTreesModel => OldGBTMod
 import org.apache.spark.sql._
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.types.StructType
+import org.apache.spark.storage.StorageLevel
 
 /**
  * Gradient-Boosted Trees (GBTs) (http://en.wikipedia.org/wiki/Gradient_boosting)
@@ -107,6 +108,10 @@ class GBTClassifier @Since("1.4.0") (
    */
   @Since("1.4.0")
   def setCheckpointInterval(value: Int): this.type = set(checkpointInterval, value)
+
+  /** @group expertSetParam */
+  @Since("4.4.0")
+  def setIntermediateStorageLevel(value: String): this.type = set(intermediateStorageLevel, value)
 
   /**
    * The impurity setting is ignored for GBT models.
@@ -189,17 +194,19 @@ class GBTClassifier @Since("1.4.0") (
     instr.logParams(this, labelCol, weightCol, featuresCol, predictionCol, leafCol,
       impurity, lossType, maxDepth, maxBins, maxIter, maxMemoryInMB, minInfoGain,
       minInstancesPerNode, minWeightFractionPerNode, seed, stepSize, subsamplingRate, cacheNodeIds,
-      checkpointInterval, featureSubsetStrategy, validationIndicatorCol, validationTol, thresholds)
+      checkpointInterval, featureSubsetStrategy, validationIndicatorCol, validationTol,
+      thresholds, intermediateStorageLevel)
     instr.logNumClasses(numClasses)
 
     val categoricalFeatures = MetadataUtils.getCategoricalFeatures(dataset.schema($(featuresCol)))
     val boostingStrategy = super.getOldBoostingStrategy(categoricalFeatures, OldAlgo.Classification)
+    val storageLevel = StorageLevel.fromString($(intermediateStorageLevel))
     val (baseLearners, learnerWeights) = if (withValidation) {
       GradientBoostedTrees.runWithValidation(trainDataset, validationDataset, boostingStrategy,
-        $(seed), $(featureSubsetStrategy), Some(instr))
+        $(seed), $(featureSubsetStrategy), Some(instr), storageLevel)
     } else {
       GradientBoostedTrees.run(trainDataset, boostingStrategy, $(seed), $(featureSubsetStrategy),
-        Some(instr))
+        Some(instr), storageLevel)
     }
     baseLearners.foreach(copyValues(_))
 

@@ -254,7 +254,7 @@ object SparkBuild extends PomBuild {
   // `(Compile / compile)` -- a violation in one module would otherwise abort
   // compile for that module and every transitive dependent, cascading style
   // failures into every job that recompiles those sources (Build modules,
-  // Documentation generation, Java 17/25 Maven build, sparkr, ...). Each
+  // Documentation generation, Java 21/25 Maven build, sparkr, ...). Each
   // cascaded job then surfaces only a generic "exit code 1" with no file/line.
   // After decoupling, the dedicated lint job is the single place style
   // violations surface, with file/line annotations from `dev/scalastyle`.
@@ -1603,9 +1603,8 @@ object PySparkAssembly {
   import java.util.zip.{ZipOutputStream, ZipEntry}
 
   lazy val settings = Seq(
-    // Use a resource generator to copy all .py files from python/pyspark into a managed directory
-    // to be included in the assembly. We can't just add "python/" to the assembly's resource dir
-    // list since that will copy unneeded / unwanted files.
+    // Use a resource generator to zip python/pyspark into python/lib/pyspark.zip. It returns no
+    // files, so nothing from python/ is added to the assembly jar.
     (Compile / resourceGenerators) += Def.macroValueI((Compile / resourceManaged) map { outDir: File =>
       val src = new File(BuildCommons.sparkHome, "python/pyspark")
       val zipFile = new File(BuildCommons.sparkHome , "python/lib/pyspark.zip")

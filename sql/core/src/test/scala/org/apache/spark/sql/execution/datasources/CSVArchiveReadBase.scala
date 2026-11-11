@@ -43,6 +43,8 @@ trait CSVArchiveReadBase extends ArchiveReadSuiteBase {
 
   override protected def readSchema: String = "id INT, name STRING"
 
+  override protected def supportsDecompressionCodec: Boolean = true
+
   // CSV infers its schema from row content (supportsSchemaInference defaults true); inference is
   // triggered by the `inferSchema` option. CSV is positional/header-keyed and cannot represent
   // nested types, so it opts out of the schema-merge and complex-type tests.

@@ -382,7 +382,22 @@ case class AddConstraint(
  */
 case class AddCheckConstraint(
     child: LogicalPlan,
-    checkConstraint: CheckConstraint) extends UnaryCommand {
+    checkConstraint: CheckConstraint,
+    analyzedQuery: Option[LogicalPlan] = None) extends UnaryCommand with KeepAnalyzedQuery {
+
+  // The optimizer replaces the filtered scan with an empty relation if no row can violate the
+  // check, so keep the analyzed child to find the table when planning. The constraint decides
+  // here, with its condition analyzed, whether to store a predicate. `NormalizePlan` also calls
+  // this, on parsed and optimized plans too, so the decision is made only once, on a resolved
+  // constraint.
+  override def storeAnalyzedQuery(): Command = {
+    val check = if (checkConstraint.resolved) {
+      checkConstraint.withPredicateDecision()
+    } else {
+      checkConstraint
+    }
+    copy(checkConstraint = check, analyzedQuery = Some(child))
+  }
 
   override protected def withNewChildInternal(newChild: LogicalPlan): LogicalPlan =
     copy(child = newChild)

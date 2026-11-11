@@ -17,17 +17,20 @@
 
 import inspect
 import os
+import pstats
 import sys
 import tempfile
+import threading
 import unittest
 import warnings
 from contextlib import contextmanager
 from io import StringIO
 from typing import Iterator
+from unittest import mock
 
 from pyspark import SparkConf
 from pyspark.errors import PySparkValueError
-from pyspark.profiler import UDFBasicProfiler
+from pyspark.profiler import SamplingResultParam, UDFBasicProfiler
 from pyspark.sql import SparkSession
 from pyspark.sql.functions import arrow_udf, col, pandas_udf, udf
 from pyspark.sql.window import Window
@@ -762,11 +765,128 @@ class UDFProfiler2TestsMixin:
         self.spark.profile.clear()
         self.assertEqual(0, len(self.profile_results), str(list(self.profile_results)))
 
+    @property
+    def sampling_profile_results(self):
+        return self.spark._profiler_collector._sampling_profile_results
+
+    def test_sampling_profiler_udf(self):
+        import time
+
+        @udf("long")
+        def busy_add1(x):
+            # Sleep so the sampling thread reliably catches this frame on the stack.
+            time.sleep(0.05)
+            return x + 1
+
+        # Without the conf enabled, no sampling results are collected.
+        self.spark.range(5, numPartitions=1).select(busy_add1("id")).collect()
+        self.assertEqual(0, len(self.sampling_profile_results))
+
+        with self.sql_conf(
+            {
+                "spark.sql.pyspark.udf.profiler": "sampling",
+                "spark.sql.pyspark.udf.profiler.samplingInterval": "10",
+            }
+        ):
+            self.spark.range(10, numPartitions=2).select(busy_add1("id")).collect()
+
+        results = self.sampling_profile_results
+        # Two partitions -> two tasks -> two call-trees keyed by task.
+        self.assertEqual(2, len(results), str(list(results)))
+
+        # Flatten the per-thread call trees and assert the UDF frame was sampled.
+        def collect_idents(node, idents):
+            for key, child in node.items():
+                if key == "count":
+                    continue
+                idents.append(key)
+                collect_idents(child, idents)
+
+        for result in results.values():
+            idents = []
+            for thread_tree in result["callstack"].values():
+                collect_idents(thread_tree, idents)
+            self.assertTrue(
+                any("busy_add1" in ident for ident in idents),
+                f"UDF frame not found in samples: {idents}",
+            )
+
+        # Clearing a single result removes only that result.
+        ids = list(results)
+        self.spark._profiler_collector.clear_sampling_profiles(ids[0])
+        self.assertEqual([ids[1]], list(self.sampling_profile_results))
+
+        # Clearing other profiler types keeps the sampling results.
+        self.spark.profile.clear(type="perf")
+        self.spark.profile.clear(type="memory")
+        self.assertEqual([ids[1]], list(self.sampling_profile_results))
+
+        # Clearing all profiles removes the sampling results and the emptied entries.
+        self.spark.profile.clear()
+        self.assertEqual(0, len(self.sampling_profile_results))
+        self.assertEqual(0, len(self.spark._profiler_collector._profile_results))
+
 
 class UDFProfiler2Tests(UDFProfiler2TestsMixin, ReusedSQLTestCase):
     def setUp(self) -> None:
         super().setUp()
         self.spark._profiler_collector._accumulator._value = {}
+
+    def test_clear_during_accumulator_merge(self):
+        # The accumulator server thread merges worker updates into the same dict that
+        # spark.profile.clear() pops from. Pause a merge midway and clear from another thread.
+        accumulator = self.spark._profiler_collector._accumulator
+        merging, cleared = threading.Event(), threading.Event()
+        add_in_place = SamplingResultParam.addInPlace
+
+        def paused_add_in_place(value1, value2):
+            merging.set()
+            # Without a shared lock, the clear runs while the merge is waiting here.
+            cleared.wait(timeout=0.1)
+            return add_in_place(value1, value2)
+
+        def clear():
+            # Skip the clear if the merge never pauses, so it can't affect later tests.
+            if merging.wait(timeout=10):
+                self.spark.profile.clear()
+                cleared.set()
+
+        accumulator += {"id": {"sampling": {"count": 1}}}
+        with mock.patch.object(SamplingResultParam, "addInPlace", paused_add_in_place):
+            thread = threading.Thread(target=clear, daemon=True)
+            thread.start()
+            accumulator += {"id": {"sampling": {"count": 1}}}
+            thread.join(timeout=10)
+        self.assertTrue(merging.is_set(), "The merge did not reach the pause")
+        self.assertFalse(thread.is_alive())
+        self.assertEqual({}, self.spark._profiler_collector._profile_results)
+
+    def test_show_perf_during_accumulator_merge(self):
+        # Merges mutate the stats in place. Merge a new function midway through show().
+        accumulator = self.spark._profiler_collector._accumulator
+
+        def stats(name):
+            st = pstats.Stats()
+            st.stream = None
+            st.stats = {("udf.py", 1, name): (1, 1, 0.1, 0.1, {})}
+            return st
+
+        accumulator += {"id": {"perf": stats("f")}}
+        func_std_string = pstats.func_std_string
+        merged = False
+
+        def func_std_string_with_merge(func):
+            nonlocal merged
+            if not merged:
+                merged = True
+                accumulator.add({"id": {"perf": stats("g")}})
+            return func_std_string(func)
+
+        with mock.patch("pstats.func_std_string", func_std_string_with_merge):
+            with self.trap_stdout() as io:
+                self.spark.profile.show(type="perf")
+        self.assertIn("Profile of id", io.getvalue())
+        self.assertEqual(2, len(self.profile_results["id"].stats))
 
 
 if __name__ == "__main__":

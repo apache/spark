@@ -878,6 +878,34 @@ object DateTimeUtils extends SparkDateTimeUtils {
   }
 
   /**
+   * Whether `input` is the special value 'epoch', the only one that `convertSpecialDate`,
+   * `convertSpecialTimestamp` and `convertSpecialTimestampNTZ` convert without reading the
+   * current date or time.
+   *
+   * @param input A string to check. It can contain trailing or leading whitespaces.
+   */
+  private[sql] def isEpochSpecialValue(input: String): Boolean =
+    extractSpecialValue(input.trim).contains("epoch")
+
+  /**
+   * Whether `input` is a valid timestamp string with only a time part, which a cast to a timestamp
+   * with local time zone completes with the current date.
+   */
+  private[sql] def isTimeOnlyTimestamp(input: UTF8String): Boolean = {
+    try {
+      val (segments, _, justTime) = parseTimestampString(input)
+      segments.nonEmpty && justTime && {
+        // Validates the time fields as `stringToTimestamp` does when it builds the time.
+        LocalTime.of(segments(3), segments(4), segments(5),
+          (MICROSECONDS.toNanos(segments(6)) + segments(9)).toInt)
+        true
+      }
+    } catch {
+      case NonFatal(_) => false
+    }
+  }
+
+  /**
    * Subtracts two dates expressed as days since 1970-01-01.
    *
    * @param endDay The end date, exclusive
@@ -1106,6 +1134,41 @@ object DateTimeUtils extends SparkDateTimeUtils {
   }
 
   /**
+   * Splits the seconds of a minute with a fraction of 6 digits (microseconds) into the whole
+   * seconds and the nanos of the second, as `LocalTime.of` and `LocalDateTime.of` take them,
+   * packed into a long, the seconds in the high 32 bits and the nanos in the low 32 bits, so
+   * that nothing is allocated per row: `(packed >> 32).toInt` and `packed.toInt`.
+   *
+   * The whole seconds are checked to be in the int range and not negative before they are
+   * narrowed. A value outside of the int range would overflow when converted from long to int,
+   * and could produce an int in the valid seconds range and return a wrong value, or a misleading
+   * error message. A negative value is rejected here for a better error message: `Math.floorDiv`
+   * gets the next lower integer for it, so the full seconds would not match the value given.
+   * The message is the one that `LocalTime.of` and `LocalDateTime.of` throw for invalid seconds,
+   * with the seconds given, truncated towards zero, or in full for a value between -1 and 0,
+   * which the truncation would show as the valid 0. Any other value, such as 61 seconds, is
+   * left to them, which check their fields in order, so an invalid date or hour is reported
+   * before such seconds, while a negative value, or one whose whole seconds exceed
+   * `Int.MaxValue` (2147483648 or more; 2147483647.5 passes), is reported first.
+   */
+  def splitSecsAndMicros(secsAndMicros: Decimal): Long = {
+    assert(secsAndMicros.scale == 6)
+    val unscaledSecFrac = secsAndMicros.toUnscaledLong
+    val fullSecs = Math.floorDiv(unscaledSecFrac, MICROS_PER_SECOND)
+    if (fullSecs > Int.MaxValue || fullSecs < 0) {
+      val shown = if (fullSecs == -1 && secsAndMicros.toLong == 0) {
+        secsAndMicros.toJavaBigDecimal.stripTrailingZeros.toPlainString
+      } else {
+        secsAndMicros.toLong.toString
+      }
+      throw new DateTimeException(
+        s"Invalid value for SecondOfMinute (valid values 0 - 59): $shown")
+    }
+    val nanos = Math.floorMod(unscaledSecFrac, MICROS_PER_SECOND) * NANOS_PER_MICROS
+    (fullSecs << 32) | nanos
+  }
+
+  /**
    * Converts separate time fields in a long that represents nanoseconds since the start of
    * the day
    * @param hours the hour, from 0 to 23
@@ -1115,25 +1178,8 @@ object DateTimeUtils extends SparkDateTimeUtils {
    */
   def makeTime(hours: Int, minutes: Int, secsAndMicros: Decimal): Long = {
     try {
-      val unscaledSecFrac = secsAndMicros.toUnscaledLong
-      val fullSecs = Math.floorDiv(unscaledSecFrac, MICROS_PER_SECOND)
-      // The greater than Int.MaxValue check is needed for the case where the full seconds is
-      // outside of the int range. This will overflow when full seconds is converted from
-      // long to int. The overflow could produce an int in the valid seconds range and return a
-      // wrong value. For overflow values outside of the valid seconds range, it would result in a
-      // misleading error message.
-      // The negative check is needed to throw a better error message. In the negative case,
-      // Math.floorDiv gets the next lower negative integer so the full second value in the
-      // original decimal will not match what is in the error message.
-      if (fullSecs > Int.MaxValue || fullSecs < 0) {
-        // Make this error message consistent with what is thrown by LocalTime.of when the
-        // seconds are invalid
-        throw new DateTimeException(
-          s"Invalid value for SecondOfMinute (valid values 0 - 59): ${secsAndMicros.toLong}")
-      }
-
-      val nanos = Math.floorMod(unscaledSecFrac, MICROS_PER_SECOND) * NANOS_PER_MICROS
-      val lt = LocalTime.of(hours, minutes, fullSecs.toInt, nanos.toInt)
+      val secs = splitSecsAndMicros(secsAndMicros)
+      val lt = LocalTime.of(hours, minutes, (secs >> 32).toInt, secs.toInt)
       localTimeToNanos(lt)
     } catch {
       case e @ (_: DateTimeException | _: ArithmeticException) =>

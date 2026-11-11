@@ -27,7 +27,7 @@ import org.apache.spark.internal.LogKeys.EXPR
 import org.apache.spark.sql.catalyst.analysis.{NamedRelation, ResolvedIdentifier, ResolvedNamespace, ResolvedPartitionSpec, ResolvedPersistentView, ResolvedTable, ResolvedTempView}
 import org.apache.spark.sql.catalyst.catalog.CatalogUtils
 import org.apache.spark.sql.catalyst.expressions
-import org.apache.spark.sql.catalyst.expressions.{And, Attribute, AttributeSet, BloomFilterMightContain, Cast, DynamicPruning, Expression, InSet, NamedExpression, Not, Or, PredicateHelper, SubqueryExpression}
+import org.apache.spark.sql.catalyst.expressions.{And, Attribute, AttributeReference, AttributeSet, BloomFilterMightContain, Cast, DynamicPruning, DynamicPruningSubquery, Expression, InSet, NamedExpression, Not, Or, PredicateHelper, SubqueryExpression}
 import org.apache.spark.sql.catalyst.expressions.Literal.TrueLiteral
 import org.apache.spark.sql.catalyst.optimizer.UnwrapCastInBinaryComparison
 import org.apache.spark.sql.catalyst.planning.PhysicalOperation
@@ -42,14 +42,17 @@ import org.apache.spark.sql.connector.expressions.{FieldReference, LiteralValue}
 import org.apache.spark.sql.connector.expressions.filter.{AlwaysFalse, And => V2And, Not => V2Not, Or => V2Or, Predicate}
 import org.apache.spark.sql.connector.read.LocalScan
 import org.apache.spark.sql.connector.read.streaming.{ContinuousStream, MicroBatchStream, SupportsRealTimeMode}
-import org.apache.spark.sql.connector.write.{V1Write, Write}
+import org.apache.spark.sql.connector.write.{RowLevelOperationTable, SupportsDelta, V1Write, Write}
 import org.apache.spark.sql.errors.{QueryCompilationErrors, QueryExecutionErrors}
 import org.apache.spark.sql.execution.{FilterExec, InSubqueryExec, LeafExecNode, LocalTableScanExec, ProjectExec, RowDataSourceScanExec, ScalarSubquery => ExecScalarSubquery, SparkPlan, SparkStrategy => Strategy}
 import org.apache.spark.sql.execution.command.{CommandUtils, MetricViewHelper}
 import org.apache.spark.sql.execution.datasources.{DataSourceStrategy, LogicalRelationWithTable, PushableColumnAndNestedColumn, StorageFilterPlanning}
 import org.apache.spark.sql.execution.streaming.continuous.{WriteToContinuousDataSource, WriteToContinuousDataSourceExec}
+import org.apache.spark.sql.execution.streaming.runtime.StreamingV2ScanPushDown
+import org.apache.spark.sql.execution.streaming.runtime.StreamingV2ScanPushDown.ScanOfStream
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.internal.StaticSQLConf.WAREHOUSE_PATH
+import org.apache.spark.sql.internal.connector.SupportsRuntimeCatalystFiltering
 import org.apache.spark.sql.metricview.logical.CreateMetricView
 import org.apache.spark.sql.sources.{BaseRelation, TableScan}
 import org.apache.spark.storage.StorageLevel
@@ -194,17 +197,29 @@ class DataSourceV2Strategy(session: SparkSession) extends Strategy with Predicat
         case _ => false
       }
 
-      // Extract scalar subquery filters on runtime-filterable columns for runtime pushdown.
-      // These filters stay in postScanFilters for correctness (FilterExec above scan),
-      // but are also routed into runtimeFilters so BatchScanExec can use them for
-      // partition pruning via SupportsRuntimeV2Filtering.filter(). The exceptions are filters
-      // that only reference attributes the scan fully evaluates, which are dropped from
-      // postScanFilters below.
+      // Extract scalar subquery filters on runtime-filterable columns for runtime pushdown. These
+      // filters stay in postScanFilters for correctness (FilterExec above scan), but are also
+      // routed into runtimeFilters so BatchScanExec can use them for partition pruning via
+      // SupportsRuntimeV2Filtering.filter(), or pass them as Catalyst expressions to
+      // SupportsRuntimeCatalystFiltering.planInputPartitionsWithRuntimeFilters, as the built-in
+      // file scans do. The exceptions are filters that only reference attributes the scan fully
+      // evaluates, which are dropped from postScanFilters below.
       // Non-deterministic filters are not routed: they would be pushed to the source for
       // pruning while the FilterExec above the scan re-evaluates them, so the two evaluations
       // may disagree and rows the source pruned away could not be recovered. This is the
       // runtime counterpart of the pushFilters guard in PushDownUtils (SPARK-58207).
-      val scalarSubqueryFilters = if (relation.runtimeFilterAttrs.nonEmpty) {
+      // Nothing is routed for a read of a group-based row-level operation either. The operation
+      // replaces the groups its scan returns, and its reads share that scan, so a filter of one
+      // read must not prune it: the negated condition that selects the rows to copy over would
+      // drop the groups where every row matches. The group filter of
+      // RowLevelOperationRuntimeGroupFiltering prunes it instead, since it keeps every group that
+      // has a matching row. A built-in file scan gets no group filter, so no runtime filter prunes
+      // its read.
+      val groupBasedRead = relation.relation.table match {
+        case t: RowLevelOperationTable => !t.operation.isInstanceOf[SupportsDelta]
+        case _ => false
+      }
+      val scalarSubqueryFilters = if (relation.runtimeFilterAttrs.nonEmpty && !groupBasedRead) {
         postScanFilters.filter { f =>
           f.deterministic &&
             f.containsPattern(SCALAR_SUBQUERY) &&
@@ -216,14 +231,36 @@ class DataSourceV2Strategy(session: SparkSession) extends Strategy with Predicat
       }
       // Screen with the same test pushdown applies, or a filter dropped here and rejected there
       // would be evaluated nowhere.
-      val fullyPushedRuntimeFilters = scalarSubqueryFilters.filter { f =>
-        f.references.subsetOf(relation.fullyPushedRuntimeFilterAttrs) &&
-          PushDownUtils.isPushablePartitionFilter(f, includeSubquery = true)
-      }
+      val fullyPushedRuntimeFilters = scalarSubqueryFilters.filter(
+        PushDownUtils.isFullyPushedRuntimeFilter(_, relation.fullyPushedRuntimeFilterAttrs))
       // dynamicFilters need no such check: a DynamicPruningSubquery over a non-deterministic
       // filtering plan is itself non-deterministic, so CleanupDynamicPruningFilters has already
       // rewritten it to TrueLiteral by the time we get here.
-      val runtimeFilters = dynamicFilters ++ scalarSubqueryFilters
+      // A Catalyst runtime-filtering scan only applies a filter over attributes it declared, so a
+      // DPP filter over any other column is dropped here rather than planned for nothing. One
+      // PartitionPruning inserted over a union lands in every branch, including one that cannot
+      // use it; the join it was derived from still applies it.
+      val usableDynamicFilters = relation.scan match {
+        case _: SupportsRuntimeCatalystFiltering =>
+          dynamicFilters.filter(_.references.subsetOf(relation.runtimeFilterAttrs))
+        case _ => dynamicFilters
+      }
+      // A group-based read keeps only the group filter, for the reason above. PartitionPruning
+      // plans a DynamicPruningSubquery from the join of one read, so it is a filter of one read
+      // too. With an IN subquery it lands on the read of the updated rows of an UPDATE. With a
+      // NOT EXISTS subquery the negated condition becomes a semi join, so it lands on the read
+      // of the rows to copy over.
+      val runtimeFilters = if (groupBasedRead) {
+        usableDynamicFilters.filterNot(_.isInstanceOf[DynamicPruningSubquery])
+      } else {
+        usableDynamicFilters ++ scalarSubqueryFilters
+      }
+
+      // Decide storage-partitioned join here, once, so a rebuild of the planned node (for instance
+      // the copy PlanAdaptiveDynamicPruningFilters makes at stage creation) does not read the
+      // config again and drop the keyed layout the join was planned with (SPARK-60260).
+      val keyGroupedPartitioning = relation.keyGroupedPartitioning
+        .filter(_ => session.sessionState.conf.v2BucketingEnabled)
 
       // Whether the scan gets the checked column does not depend on whether it is columnar. Asking
       // that can plan the scan's partitions, which the node built afterwards would plan again. A
@@ -233,25 +270,27 @@ class DataSourceV2Strategy(session: SparkSession) extends Strategy with Predicat
       val storageFilters = storageFiltersFor(relation, filtersAbove)
       val checked = StorageFilterPlanning.checkedColumn(
         session.sessionState.conf, storageFilters, relation.output)
-      val batchExec = BatchScanExec(relation.output ++ checked, relation.scan, runtimeFilters,
-        relation.ordering, relation.relation.table, relation.keyGroupedPartitioning,
+      val batchExec = BatchScanExec(relation.output ++ checked, new PlannedScan(relation.scan),
+        runtimeFilters, relation.ordering, relation.relation.table, keyGroupedPartitioning,
         storageFilters, checked.isDefined)
       // With the checked column the scan's output differs from `project`, so a Project drops it.
       DataSourceV2Strategy.withProjectAndFilter(project,
         StorageFilterPlanning.skipCheckedRows(filtersAbove, storageFilters, checked),
         batchExec, !batchExec.supportsColumnar) :: Nil
 
-    case PhysicalOperation(p, f, r: StreamingDataSourceV2ScanRelation)
+    // StreamingV2ScanPushDown takes what each streaming scan reads with the same match.
+    case ScanOfStream(p, f, r: StreamingDataSourceV2ScanRelation)
       if r.startOffset.isDefined && r.endOffset.isDefined =>
 
       val microBatchStream = r.stream.asInstanceOf[MicroBatchStream]
+      val output = DataSourceV2Strategy.streamingScanOutput(r, p, f)
       val scanExec = MicroBatchScanExec(
-        r.output, r.scan, microBatchStream, r.startOffset.get, r.endOffset.get)
+        output, r.scan, microBatchStream, r.startOffset.get, r.endOffset.get)
 
       // Add a Project here to make sure we produce unsafe rows.
       DataSourceV2Strategy.withProjectAndFilter(p, f, scanExec, !scanExec.supportsColumnar) :: Nil
 
-    case PhysicalOperation(p, f, r: StreamingDataSourceV2ScanRelation)
+    case ScanOfStream(p, f, r: StreamingDataSourceV2ScanRelation)
       if r.startOffset.isDefined && r.endOffset.isEmpty =>
 
         val scanExec = if (r.relation.realTimeModeDuration.isDefined) {
@@ -263,7 +302,7 @@ class DataSourceV2Strategy(session: SparkSession) extends Strategy with Predicat
           }
           val microBatchStream = r.stream.asInstanceOf[MicroBatchStream]
           new RealTimeStreamScanExec(
-            r.output,
+            DataSourceV2Strategy.streamingScanOutput(r, p, f),
             r.scan,
             microBatchStream,
             r.startOffset.get,
@@ -271,7 +310,8 @@ class DataSourceV2Strategy(session: SparkSession) extends Strategy with Predicat
           )
         } else {
           val continuousStream = r.stream.asInstanceOf[ContinuousStream]
-          val s = ContinuousScanExec(r.output, r.scan, continuousStream, r.startOffset.get)
+          val s = ContinuousScanExec(DataSourceV2Strategy.streamingScanOutput(r, p, f), r.scan,
+            continuousStream, r.startOffset.get)
           // initialize partitions
           s.inputPartitions
           s
@@ -864,15 +904,15 @@ class DataSourceV2Strategy(session: SparkSession) extends Strategy with Predicat
       }
       UncacheTableExec(r.table, cascade = !isTempView(r.table)) :: Nil
 
-    case a @ AddCheckConstraint(PhysicalOperation(_, _, d: DataSourceV2ScanRelation), check) =>
-      assert(d.relation.catalog.isDefined, "Catalog should be defined after analysis")
-      assert(d.relation.identifier.isDefined, "Identifier should be defined after analysis")
-      val catalog = d.relation.catalog.get.asTableCatalog
-      val ident = d.relation.identifier.get
+    case a @ AddCheckConstraintTarget(relation) =>
+      assert(relation.catalog.isDefined, "Catalog should be defined after analysis")
+      assert(relation.identifier.isDefined, "Identifier should be defined after analysis")
+      val catalog = relation.catalog.get.asTableCatalog
+      val ident = relation.identifier.get
       val condition = a.checkConstraint.condition
       val change = TableChange.addConstraint(
-        check.toV2Constraint,
-        d.relation.table.version)
+        a.checkConstraint.toV2Constraint,
+        relation.table.version)
       ResolveTableConstraints.validateCatalogForTableChange(Seq(change), catalog, ident)
       AddCheckConstraintExec(catalog, ident, change, condition, planLater(a.child)) :: Nil
 
@@ -933,6 +973,22 @@ private object AppendWrite {
   ): Option[(NamedRelation, Option[Write], Option[LogicalPlan])] = plan match {
     case a: AppendData => Some((a.table, a.write, a.analyzedQuery))
     case m: InsertOnlyMerge => Some((m.table, m.write, m.analyzedQuery))
+    case _ => None
+  }
+}
+
+/**
+ * Pattern that matches an [[AddCheckConstraint]] on a v2 table and exposes the table relation.
+ */
+private object AddCheckConstraintTarget {
+  def unapply(a: AddCheckConstraint): Option[DataSourceV2Relation] = a match {
+    case AddCheckConstraint(PhysicalOperation(_, _, d: DataSourceV2ScanRelation), _, _) =>
+      Some(d.relation)
+    // The optimizer replaces the filtered scan with an empty relation if no row can violate the
+    // check, so find the table in the analyzed query.
+    case AddCheckConstraint(_, _,
+        Some(Filter(_, SubqueryAlias(_, PhysicalOperation(_, _, r: DataSourceV2Relation))))) =>
+      Some(r)
     case _ => None
   }
 }
@@ -1100,6 +1156,30 @@ private[sql] object DataSourceV2Strategy extends Logging {
     } else {
       withFilter
     }
+  }
+
+  /**
+   * Returns the output of the scan node of a streaming relation: the columns that its scan reads,
+   * in the order of its read schema. The projections and the filters over the relation, which the
+   * scan node is planned with, must read no column of the relation that the scan does not read,
+   * if it was built to read fewer columns than the relation outputs (see
+   * `StreamingV2ScanPushDown`).
+   */
+  private def streamingScanOutput(
+      relation: StreamingDataSourceV2ScanRelation,
+      project: Seq[NamedExpression],
+      filters: Seq[Expression]): Seq[AttributeReference] = relation.scanOutput match {
+    case Some(scanOutput) =>
+      val missing = AttributeSet((project ++ filters).flatMap(_.references)) -- scanOutput
+      if (missing.nonEmpty) {
+        throw QueryExecutionErrors.streamingScanMissingColumnsError(
+          StreamingV2ScanPushDown.sourceName(
+            relation.relation.table, relation.catalog, relation.identifier),
+          relation.output.filter(missing.contains).map(_.name))
+      }
+      scanOutput
+    case None =>
+      relation.output
   }
 }
 

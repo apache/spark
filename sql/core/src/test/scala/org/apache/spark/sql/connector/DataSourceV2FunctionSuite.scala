@@ -134,6 +134,25 @@ case class StrLen(impl: BoundFunction) extends UnboundFunction {
     "strlen: returns the length of the input string  strlen(string) -> int"
 }
 
+// Binds any arguments and returns `result`, so that a test can shadow a built-in of any arity.
+case class ConstantStringOfAnyArity(result: String) extends UnboundFunction {
+  override def name(): String = "constant_string_of_any_arity"
+
+  override def bind(inputType: StructType): BoundFunction =
+    BoundConstantString(inputType.fields.map(_.dataType).toSeq, result)
+
+  override def description(): String = s"$name: returns '$result' for any arguments"
+}
+
+// A case class, so that both analyzers of a dual run bind equal functions.
+case class BoundConstantString(argTypes: Seq[DataType], result: String)
+  extends ScalarFunction[UTF8String] {
+  override def inputTypes(): Array[DataType] = argTypes.toArray
+  override def resultType(): DataType = StringType
+  override def name(): String = "constant_string"
+  override def produceResult(input: InternalRow): UTF8String = UTF8String.fromString(result)
+}
+
 class DataSourceV2FunctionSuite extends DatasourceV2SQLBase {
   private val emptyProps: java.util.Map[String, String] = Collections.emptyMap[String, String]
 

@@ -27,7 +27,7 @@ import org.apache.spark.{SparkException, SparkUnsupportedOperationException}
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.plans.QueryPlan
-import org.apache.spark.sql.catalyst.util.InternalRowComparableWrapper
+import org.apache.spark.sql.catalyst.util.{truncatedString, InternalRowComparableWrapper}
 import org.apache.spark.sql.connector.catalog.functions.Reducer
 import org.apache.spark.sql.errors.QueryExecutionErrors
 import org.apache.spark.sql.internal.SQLConf
@@ -749,17 +749,33 @@ case class KeyedPartitioning(
   override def dataType: DataType = IntegerType
 
   /**
-   * Prints the layout's contents where the value object would print, which keeps the plan string as
-   * it was before the layout held them. The list is curated rather than the layout's own fields,
-   * for two reasons. `partitionKeys` has to be printed as a `Seq` for `maxFields` to truncate it,
-   * and a partitioning can hold one key per split. And `dataTypes` has its naming erased, so
-   * printing it would put a struct field name into a plan that appears nowhere in the query. A
-   * field the layout grows is therefore a decision here, and the default is to print it: the plan
-   * string is the only place a reader sees why a marked partitioning still shuffles.
+   * Prints the layout as the partition keys followed by the flags and origins. The keys are
+   * summarized once they exceed the fields that `maxFields` leaves after the expressions and the
+   * trailing fields; when those fields alone exceed the budget, the argument list is truncated
+   * from the end as usual. `dataTypes` is left out because its naming is erased, so printing it
+   * would put a struct field name into a plan that appears nowhere in the query. The plan string
+   * is the only place a reader sees why a marked partitioning still shuffles. Keys print as
+   * values, so two keys that `equals` considers equal can print differently, e.g. `'a'` and `'A'`
+   * under `UTF8_LCASE`.
    */
-  override protected def stringArgs: Iterator[Any] =
-    Iterator(expressions, partitionKeys, isGrouped, isCollapsed) ++ unknownKeysOrigin ++
-      ungroupingOrigin
+  override def toString: String = simpleString(SQLConf.get.maxToStringFields)
+
+  override def simpleString(maxFields: Int): String = {
+    val trailing = Seq[Any](isGrouped, isCollapsed) ++ unknownKeysOrigin ++ ungroupingOrigin
+    // The keys take the fields that the expressions and the trailing flags leave.
+    val keyBudget = maxFields - expressions.size - trailing.size
+    val keys = if (keyBudget < 1) {
+      Iterator.empty
+    } else if (partitionKeys == null) {
+      Iterator.single("null")
+    } else if (partitionKeys.isEmpty) {
+      Iterator.empty
+    } else {
+      Iterator.single(truncatedString(partitionKeys, "[", ", ", "]", keyBudget))
+    }
+    val args = expressions.map(_.toString) ++ keys ++ trailing.map(_.toString)
+    s"$prettyName" + truncatedString(args, "(", ", ", ")", maxFields)
+  }
 
   override protected def withNewChildrenInternal(
       newChildren: IndexedSeq[Expression]): KeyedPartitioning =
