@@ -1449,6 +1449,14 @@ regarding watermark delays and whether data will be dropped or not.
 
 Additional details on supported joins:
 
+- For stream-stream outer and semi joins, an equality key counts as the time constraint in the
+  table above when it is the other input's event time, or that event time shifted by constant
+  intervals, such as `leftTime = rightTime + INTERVAL 10 MINUTES`. A key shifted backward by whole
+  days, months or years, such as `leftTime = rightTime - INTERVAL 1 DAY`, or truncated from the
+  other input's event time, such as `leftTime = CAST(CAST(rightTime AS BIGINT) AS TIMESTAMP)`,
+  does not count. When both inputs have watermarks, a time range condition between the two event
+  times, as in the time-interval join example above, can bound such a join instead.
+
 - Joins can be cascaded, that is, you can do `df1.join(df2, ...).join(df3, ...).join(df4, ....)`.
 
 - As of Spark 2.4, you can use joins only when the query is in Append output mode. Other output modes are not yet supported.

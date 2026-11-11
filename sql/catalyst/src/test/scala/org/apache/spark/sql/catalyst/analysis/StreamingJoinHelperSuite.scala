@@ -99,8 +99,19 @@ class StreamingJoinHelperSuite extends AnalysisTest {
       // A constant shifts the bound, less 1 ms as for range conditions.
       ("eventTime + INTERVAL 2 SECONDS", Some(11999L), Some(7999L)),
       ("eventTime - INTERVAL 2 SECONDS", Some(7999L), Some(11999L)),
+      // A foldable interval expression gives the bound of its value.
+      ("eventTime + INTERVAL 1 SECOND * 2", Some(11999L), Some(7999L)),
+      ("eventTime - INTERVAL 1 SECOND * 2", Some(7999L), Some(11999L)),
+      ("eventTime + make_dt_interval(0, 2, 0, 0)", Some(7209999L), Some(-7190001L)),
+      ("eventTime + INTERVAL 2 HOURS", Some(7209999L), Some(-7190001L)),
+      // timestampadd adds a sub-day unit exactly.
+      ("timestampadd(SECOND, 2, eventTime)", Some(11999L), Some(7999L)),
+      ("timestampadd(SECOND, -2, eventTime)", Some(7999L), Some(11999L)),
+      ("timestampadd(HOUR, 2, eventTime)", Some(7209999L), Some(-7190001L)),
       // Keys that the watermark does not bound.
       ("other + INTERVAL 2 SECONDS", None, None),
+      ("other + INTERVAL 1 SECOND * 2", None, None),
+      ("timestampadd(SECOND, 2, other)", None, None),
       ("date_trunc('MINUTE', eventTime)", None, None),
       // Truncation can map a later event time below the watermark.
       ("CAST(CAST(eventTime AS BIGINT) AS TIMESTAMP)", None, None),
@@ -149,7 +160,14 @@ class StreamingJoinHelperSuite extends AnalysisTest {
       "eventTime + INTERVAL 1 YEAR" -> forward,
       "eventTime - INTERVAL 1 DAY" -> unbounded,
       "eventTime - INTERVAL 1 MONTH" -> unbounded,
-      "eventTime - INTERVAL 36 HOURS" -> unbounded).foreach { case (keyStr, expected) =>
+      "eventTime - INTERVAL 36 HOURS" -> unbounded,
+      // timestampadd adds days, weeks, months, quarters and years in the session time zone.
+      "timestampadd(DAY, 1, eventTime)" -> forward,
+      "timestampadd(WEEK, 1, eventTime)" -> forward,
+      "timestampadd(MONTH, 1, eventTime)" -> forward,
+      "timestampadd(YEAR, 1, eventTime)" -> forward,
+      "timestampadd(DAY, -1, eventTime)" -> unbounded,
+      "timestampadd(MONTH, -1, eventTime)" -> unbounded).foreach { case (keyStr, expected) =>
       Seq("UTC", "America/Los_Angeles").foreach { zone =>
         withSQLConf(SQLConf.SESSION_LOCAL_TIMEZONE.key -> zone) {
           withClue(s"$keyStr $zone") {

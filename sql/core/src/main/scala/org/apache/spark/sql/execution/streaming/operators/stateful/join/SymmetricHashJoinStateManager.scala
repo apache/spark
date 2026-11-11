@@ -465,10 +465,12 @@ class SymmetricHashJoinStateManagerV4(
     // row removes every value with the same key and timestamp, which must not include a row
     // without a timestamp. Use the lowest timestamps for such rows: a real event time within
     // the first 1024 microseconds of the timestamp range (year -290308) would still share them.
-    val bucket = random.nextInt(bucketCountWithoutTimestamp)
-    val bucketTimestamp = if (hasTimestampForEviction) Long.MinValue + bucket else bucket.toLong
+    val storedTimestamp = timestamp.getOrElse {
+      val bucket = random.nextInt(bucketCountWithoutTimestamp)
+      if (hasTimestampForEviction) Long.MinValue + bucket else bucket.toLong
+    }
     // We always do blind merge for appending new value.
-    keyWithTsToValues.append(key, timestamp.getOrElse(bucketTimestamp), value, matched)
+    keyWithTsToValues.append(key, storedTimestamp, value, matched)
     if (hasTimestampForEviction && timestamp.isDefined) {
       tsWithKey.add(timestamp.get, key)
     }
