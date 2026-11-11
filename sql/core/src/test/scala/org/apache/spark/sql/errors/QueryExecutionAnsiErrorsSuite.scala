@@ -142,6 +142,16 @@ class QueryExecutionAnsiErrorsSuite extends SharedSparkSession
             parameters = Map.empty[String, String],
             context = expectedContext(query, query))
         }
+        // The Column API gives the division a `DataFrameQueryContext`.
+        checkError(
+          exception = intercept[SparkArithmeticException] {
+            spark.range(1).select(expr("CAST(id + 1 AS INTERVAL DAY)") / $"id".cast("int"))
+              .collect()
+          },
+          condition = "INTERVAL_DIVIDED_BY_ZERO",
+          sqlState = "22012",
+          parameters = Map.empty[String, String],
+          context = ExpectedContext(fragment = "div", callSitePattern = getCurrentClassCallSitePattern))
       }
     }
   }
