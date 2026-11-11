@@ -17,7 +17,7 @@
 
 """Experimental PySpark functions for remote model inference."""
 
-from typing import TYPE_CHECKING, Dict, Iterator, Optional
+from typing import TYPE_CHECKING, Dict, Iterator, Optional, cast
 
 from pyspark.errors import PySparkTypeError, PySparkValueError
 from pyspark.sql._ai_client import (
@@ -31,10 +31,17 @@ if TYPE_CHECKING:
     import pandas as pd
 
     from pyspark.sql._typing import ColumnOrName
+    from pyspark.sql.session import SparkSession
 
 __all__ = ["ai_query", "register_model"]
 
-_endpoints: Dict[str, _ModelEndpoint] = {}
+
+def _model_registry(session: Optional["SparkSession"]) -> Dict[str, _ModelEndpoint]:
+    if session is None:
+        from pyspark.sql.session import SparkSession
+
+        session = SparkSession.active()
+    return cast(Dict[str, _ModelEndpoint], session.__dict__.setdefault("_ai_model_registry", {}))
 
 
 def register_model(
@@ -50,11 +57,13 @@ def register_model(
     max_retries: int = 2,
     max_tokens: int = 2048,
     temperature: float = 0.0,
+    session: Optional["SparkSession"] = None,
 ) -> None:
     """Register a model alias for subsequent calls to :func:`ai_query`.
 
-    Workers resolve credentials through the provider SDK. Registering the same name
-    replaces its configuration for subsequently constructed columns.
+    Workers resolve credentials through the provider SDK. Aliases belong to the selected
+    Spark session. Registering the same name replaces its configuration for subsequently
+    constructed columns in that session.
 
     .. versionadded:: 4.4.0
 
@@ -84,6 +93,8 @@ def register_model(
         Maximum number of generated tokens.
     temperature : float, optional
         Sampling temperature. The maximum is 2 for Databricks and 1 for Bedrock.
+    session : :class:`~pyspark.sql.SparkSession`, optional
+        Session that owns the alias. Defaults to the active or default session.
 
     Examples
     --------
@@ -91,7 +102,7 @@ def register_model(
     >>> register_model("summarizer", "databricks-gpt-oss-20b", provider="databricks")
     """
     _validate_non_empty_string("name", name)
-    _endpoints[name] = _ModelEndpoint(
+    _model_registry(session)[name] = _ModelEndpoint(
         model_id=model_id,
         provider=provider,
         profile=profile,
@@ -105,7 +116,13 @@ def register_model(
     )
 
 
-def ai_query(endpoint: str, request: "ColumnOrName", *, on_error: str = "raise") -> Column:
+def ai_query(
+    endpoint: str,
+    request: "ColumnOrName",
+    *,
+    on_error: str = "raise",
+    session: Optional["SparkSession"] = None,
+) -> Column:
     """Return a text column by invoking a registered model for each non-null request.
 
     The column captures the endpoint configuration when it is constructed. Spark may repeat
@@ -125,6 +142,8 @@ def ai_query(endpoint: str, request: "ColumnOrName", *, on_error: str = "raise")
         How to handle a model invocation error. ``"raise"`` (the default) fails the task.
         ``"null"`` returns null for known inference and transient failures. Invalid input,
         client initialization, authentication, and permission errors fail the task.
+    session : :class:`~pyspark.sql.SparkSession`, optional
+        Session that owns the model alias. Defaults to the active or default session.
 
     Returns
     -------
@@ -154,7 +173,8 @@ def ai_query(endpoint: str, request: "ColumnOrName", *, on_error: str = "raise")
                 "arg_type": type(endpoint).__name__,
             },
         )
-    if endpoint not in _endpoints:
+    registry = _model_registry(session)
+    if endpoint not in registry:
         raise PySparkValueError(
             errorClass="AI_QUERY_ENDPOINT_NOT_REGISTERED",
             messageParameters={"endpoint": endpoint},
@@ -173,7 +193,7 @@ def ai_query(endpoint: str, request: "ColumnOrName", *, on_error: str = "raise")
             errorClass="VALUE_NOT_ALLOWED",
             messageParameters={"arg_name": "on_error", "allowed_values": "raise, null"},
         )
-    config = _endpoints[endpoint]
+    config = registry[endpoint]
 
     def query(batches: Iterator["pd.Series"]) -> Iterator["pd.Series"]:
         yield from _query_batches(config, batches, on_error=on_error)

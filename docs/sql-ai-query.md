@@ -66,8 +66,9 @@ Each provider receives a chat message per non-null request and returns text. Bot
 
 ## Execution and retries
 
-Aliases are registered in the driver Python process. Each column captures the registration
-available at construction time. Invocation errors fail the task by default. Set
+Aliases belong to a Spark session. Registration requires an active or default session.
+Use `session=spark` with both `register_model` and `ai_query` to select another session.
+Each column captures the registration available at construction time. Invocation errors fail the task by default. Set
 `on_error="null"` to return null for known inference and transient failures. Invalid input,
 client initialization, authentication, and permission errors still fail the task.
 

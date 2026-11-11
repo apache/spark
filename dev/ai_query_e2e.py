@@ -50,16 +50,6 @@ def main():
         (2, "Reply with exactly the word BANANA, without any other text.", "BANANA"),
         (3, None, None),
     ]
-    register_model(
-        "live",
-        args.model_id,
-        provider=args.provider,
-        profile=args.profile,
-        region=args.region,
-        auth_type=args.auth_type,
-        timeout=120,
-        max_tokens=256,
-    )
     spark = (
         SparkSession.builder.master("local[2]")
         .appName("ai-query-e2e")
@@ -69,6 +59,16 @@ def main():
     )
     spark.sparkContext.setLogLevel("WARN")
     try:
+        register_model(
+            "live",
+            args.model_id,
+            provider=args.provider,
+            profile=args.profile,
+            region=args.region,
+            auth_type=args.auth_type,
+            timeout=120,
+            max_tokens=256,
+        )
         frame = spark.createDataFrame(inputs, "row_id int, prompt string, expected string")
         result = frame.repartition(2).withColumn("answer", ai_query("live", "prompt"))
         plan = result._jdf.queryExecution().executedPlan().toString()

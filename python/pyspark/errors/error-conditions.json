@@ -51,6 +51,11 @@
           "Authentication or authorization failed with code <code>. Check the identity's access to <target>."
         ]
       },
+      "RETRY_AFTER_EXCEEDS_TIMEOUT": {
+        "message": [
+          "The server returned HTTP <status> with Retry-After <retry_after> seconds, exceeding the remaining invocation time budget."
+        ]
+      },
       "SDK_ERROR": {
         "message": [
           "The provider SDK reported error <code>."

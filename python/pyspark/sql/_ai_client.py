@@ -157,17 +157,24 @@ def _validate_endpoint_options(endpoint: _ModelEndpoint) -> None:
         raise PySparkValueError(errorClass="AI_QUERY_INVALID_TIMEOUT", messageParameters={})
 
 
-def _retry_delay(headers: Mapping[str, str], failures: int, deadline: float) -> float:
+def _retry_delay(
+    headers: Mapping[str, str], failures: int, deadline: float, status: Optional[int]
+) -> float:
     try:
         retry_after = float(headers.get("Retry-After", "0"))
         if not math.isfinite(retry_after):
             retry_after = 0.0
     except ValueError:
         retry_after = 0.0
-    return min(
-        max(2 ** min(failures, 3), retry_after),
-        max(0, deadline - time.monotonic()),
-    )
+    remaining = max(0, deadline - time.monotonic())
+    if retry_after > 0 and retry_after >= remaining:
+        raise _invocation_error(
+            "Databricks model",
+            "RETRY_AFTER_EXCEEDS_TIMEOUT",
+            status=str(status),
+            retry_after=str(retry_after),
+        )
+    return min(max(2 ** min(failures, 3), retry_after), remaining)
 
 
 def _databricks_session() -> "Session":
@@ -229,6 +236,7 @@ class _ChatCompletionsClient:
             if remaining <= 0:
                 raise _invocation_error("Databricks model", "TIMEOUT")
             retry_headers: Mapping[str, str] = {}
+            retry_status: Optional[int] = None
             try:
                 with self.http.post(
                     self.url,
@@ -244,6 +252,7 @@ class _ChatCompletionsClient:
                                 "Databricks model", "HTTP_RETRIES_EXHAUSTED", status=str(status)
                             )
                         retry_headers = response.headers
+                        retry_status = status
                     elif status in (401, 403):
                         raise _invocation_error(
                             "Databricks model", "PERMISSION_DENIED", code=str(status)
@@ -269,7 +278,7 @@ class _ChatCompletionsClient:
             except (requests.Timeout, requests.ConnectionError):
                 if attempt == self.endpoint.max_retries:
                     raise _invocation_error("Databricks model", "CONNECTION_ERROR") from None
-            time.sleep(_retry_delay(retry_headers, attempt, deadline))
+            time.sleep(_retry_delay(retry_headers, attempt, deadline, retry_status))
             attempt += 1
 
 
@@ -372,6 +381,7 @@ def _can_return_null(error: PySparkRuntimeError) -> bool:
         "AI_QUERY_INVOCATION_FAILED.EMPTY_RESPONSE",
         "AI_QUERY_INVOCATION_FAILED.HTTP_RETRIES_EXHAUSTED",
         "AI_QUERY_INVOCATION_FAILED.INVALID_RESPONSE",
+        "AI_QUERY_INVOCATION_FAILED.RETRY_AFTER_EXCEEDS_TIMEOUT",
         "AI_QUERY_INVOCATION_FAILED.TIMEOUT",
     )
 

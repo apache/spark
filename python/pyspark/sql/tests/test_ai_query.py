@@ -17,7 +17,6 @@
 
 import json
 import threading
-import time
 import unittest
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
@@ -55,6 +54,12 @@ class _ClientError(Exception):
 
 @unittest.skipUnless(have_ai_query_dependencies, "AI query tests require pandas and requests")
 class AIQueryTests(unittest.TestCase, PySparkErrorTestUtils):
+    def setUp(self):
+        super().setUp()
+        active = patch("pyspark.sql.session.SparkSession.active", return_value=SimpleNamespace())
+        active.start()
+        self.addCleanup(active.stop)
+
     def client(self, **options):
         client = object.__new__(_ChatCompletionsClient)
         client.endpoint = _ModelEndpoint("model", provider="databricks", **options)
@@ -218,6 +223,27 @@ class AIQueryTests(unittest.TestCase, PySparkErrorTestUtils):
             self.assertEqual(client.invoke("hello"), "answer")
         sleep.assert_called_once_with(3)
 
+    def test_retry_after_exceeding_budget_preserves_http_status(self):
+        for status in (429, 503):
+            with self.subTest(status=status):
+                client = self.client(timeout=5)
+                response = self.response(status)
+                response.headers = {"Retry-After": "30"}
+                client.http.post.return_value = response
+                with (
+                    patch("pyspark.sql._ai_client.time.monotonic", return_value=0),
+                    patch("pyspark.sql._ai_client.time.sleep") as sleep,
+                    self.assertRaises(PySparkRuntimeError) as raised,
+                ):
+                    client.invoke("private prompt")
+                self.check_error(
+                    raised.exception,
+                    "AI_QUERY_INVOCATION_FAILED.RETRY_AFTER_EXCEEDS_TIMEOUT",
+                    {"target": "Databricks model", "status": str(status), "retry_after": "30.0"},
+                )
+                sleep.assert_not_called()
+                client.http.post.assert_called_once()
+
     def test_http_errors_do_not_leak_or_retry(self):
         for status in (302, 400, 409):
             client = self.client()
@@ -375,6 +401,8 @@ class AIQueryTests(unittest.TestCase, PySparkErrorTestUtils):
         lock = threading.Lock()
         active = 0
         maximum = 0
+        started = threading.Barrier(2)
+        fast_finished = threading.Event()
 
         def make_client(endpoint):
             nonlocal active, maximum
@@ -385,9 +413,14 @@ class AIQueryTests(unittest.TestCase, PySparkErrorTestUtils):
                 with lock:
                     active += 1
                     maximum = max(maximum, active)
-                time.sleep(0.01 if request == "slow" else 0.001)
+                if request in ("slow", "fast"):
+                    started.wait(timeout=10)
+                if request == "slow":
+                    self.assertTrue(fast_finished.wait(timeout=10))
                 with lock:
                     active -= 1
+                if request == "fast":
+                    fast_finished.set()
                 return request.upper()
 
             client.invoke.side_effect = invoke
@@ -553,6 +586,28 @@ class AIQueryTests(unittest.TestCase, PySparkErrorTestUtils):
     "Spark AI query tests require pandas, requests and pyarrow",
 )
 class AIQuerySparkTests(sqlutils.ReusedSQLTestCase):
+    def test_registrations_are_session_scoped(self):
+        other = self.spark.newSession()
+        register_model("session-only", "first", provider="databricks", session=self.spark)
+        with self.assertRaises(PySparkValueError) as raised:
+            ai_query("session-only", "prompt", session=other)
+        self.check_error(
+            raised.exception,
+            "AI_QUERY_ENDPOINT_NOT_REGISTERED",
+            {"endpoint": "session-only"},
+        )
+        register_model("session-only", "second", provider="bedrock", session=other)
+        with patch("pyspark.sql.functions.pandas_udf") as factory:
+            ai_query("session-only", "prompt", session=self.spark)
+            first_query = factory.call_args.args[0]
+            ai_query("session-only", "prompt", session=other)
+            second_query = factory.call_args.args[0]
+        with patch("pyspark.sql.ai._query_batches", return_value=iter([])) as batches:
+            list(first_query(iter([])))
+            self.assertEqual(batches.call_args.args[0].model_id, "first")
+            list(second_query(iter([])))
+            self.assertEqual(batches.call_args.args[0].model_id, "second")
+
     def test_model_query_with_arrow_and_local_endpoint(self):
         received = []
 
