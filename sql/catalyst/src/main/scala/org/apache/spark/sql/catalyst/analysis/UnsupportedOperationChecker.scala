@@ -486,6 +486,12 @@ object UnsupportedOperationChecker extends Logging {
             }
           }
 
+        // Allow stream-static ASOF joins: the streaming left side matches against the current
+        // snapshot of the static right side. Reject static-stream and stream-stream ASOF joins:
+        // a streaming right side would require state to account for future, better matches.
+        case j: AsOfJoin if j.right.isStreaming =>
+          throwError("ASOF join with a streaming DataFrame/Dataset on the right is not supported")
+
         case j @ Join(left, right, joinType, condition, _) =>
           if (left.isStreaming && right.isStreaming) {
             joinType match {

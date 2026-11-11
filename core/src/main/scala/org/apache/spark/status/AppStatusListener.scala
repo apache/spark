@@ -766,7 +766,10 @@ private[spark] class AppStatusListener(
       }
 
       val esummary = stage.executorSummary(event.taskInfo.executorId)
-      esummary.taskTime += event.taskInfo.duration
+      // `Resubmitted` reuses the finished TaskInfo whose duration is already counted.
+      if (event.reason != Resubmitted) {
+        esummary.taskTime += event.taskInfo.duration
+      }
       esummary.succeededTasks += completedDelta
       esummary.failedTasks += failedDelta
       esummary.killedTasks += killedDelta
@@ -785,7 +788,7 @@ private[spark] class AppStatusListener(
       }
 
       if (event.taskInfo.speculative) {
-        stage.speculationStageSummary.numActiveTasks -= 1
+        stage.speculationStageSummary.numActiveTasks -= activeDelta
         stage.speculationStageSummary.numCompletedTasks += completedDelta
         stage.speculationStageSummary.numFailedTasks += failedDelta
         stage.speculationStageSummary.numKilledTasks += killedDelta
@@ -807,7 +810,6 @@ private[spark] class AppStatusListener(
       exec.activeTasks -= activeDelta
       exec.completedTasks += completedDelta
       exec.failedTasks += failedDelta
-      exec.totalDuration += event.taskInfo.duration
       exec.peakExecutorMetrics.compareAndUpdatePeakValues(event.taskExecutorMetrics)
 
       // Note: For resubmitted tasks, we continue to use the metrics that belong to the
@@ -815,6 +817,7 @@ private[spark] class AppStatusListener(
       // could have failed half-way through. The correct fix would be to keep track of the
       // metrics added by each attempt, but this is much more complicated.
       if (event.reason != Resubmitted) {
+        exec.totalDuration += event.taskInfo.duration
         if (event.taskMetrics != null) {
           val readMetrics = event.taskMetrics.shuffleReadMetrics
           exec.totalGcTime += event.taskMetrics.jvmGCTime
@@ -909,7 +912,11 @@ private[spark] class AppStatusListener(
     exec.hostPort = event.blockManagerId.hostPort
     event.maxOnHeapMem.foreach { _ =>
       exec.totalOnHeap = event.maxOnHeapMem.get
-      exec.totalOffHeap = event.maxOffHeapMem.get
+      if (event.blockManagerId.executorId == SparkContext.DRIVER_IDENTIFIER) {
+        exec.totalOffHeap = 0
+      } else {
+        exec.totalOffHeap = event.maxOffHeapMem.get
+      }
       // SPARK-30594: whenever(first time or re-register) a BlockManager added, all blocks
       // from this BlockManager will be reported to driver later. So, we should clean up
       // used memory to avoid overlapped count.

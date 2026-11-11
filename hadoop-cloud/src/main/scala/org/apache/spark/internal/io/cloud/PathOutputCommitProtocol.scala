@@ -48,6 +48,8 @@ import org.apache.spark.internal.io.HadoopMapReduceCommitProtocol
  * That feature is available on Hadoop releases with the Intermediate
  * Manifest Committer for GCS and ABFS; it is not supported by the
  * S3A committers.
+ * The committer is then bound to the staging directory, and the job commit
+ * replaces the written partitions of the destination with the staged ones.
  * @constructor Instantiate.
  * @param jobId                     job
  * @param dest                      destination
@@ -86,8 +88,12 @@ class PathOutputCommitProtocol(
    *         `PathOutputCommitter`.
    */
   override protected def setupCommitter(context: TaskAttemptContext): PathOutputCommitter = {
-    logTrace(s"Setting up committer for path $destination")
-    committer = PathOutputCommitterFactory.createCommitter(destPath, context)
+    // With dynamic partition overwrite, the committer must commit the task output to the staging
+    // directory, so that commitJob can delete the old partition directories and move the staged
+    // ones into place. Committers do not delete the old partition directories themselves.
+    val committerOutputPath = if (dynamicPartitionOverwrite) stagingDir else destPath
+    logTrace(s"Setting up committer for path $committerOutputPath")
+    committer = PathOutputCommitterFactory.createCommitter(committerOutputPath, context)
 
     // Special feature to force out the FileOutputCommitter, so as to guarantee
     // that the binding is working properly.
@@ -97,10 +103,10 @@ class PathOutputCommitProtocol(
       // the output format returned a file output format committer, which
       // is exactly what we do not want. So switch back to the factory.
       val factory = PathOutputCommitterFactory.getCommitterFactory(
-        destPath,
+        committerOutputPath,
         context.getConfiguration)
       logTrace(s"Using committer factory $factory")
-      committer = factory.createOutputCommitter(destPath, context)
+      committer = factory.createOutputCommitter(committerOutputPath, context)
     }
 
     logTrace(s"Using committer ${committer.getClass}")
@@ -114,17 +120,6 @@ class PathOutputCommitProtocol(
         // it is using the v2 algorithm, which is not safe for task commit
         // failures. Warn
         logTrace(s"Committer $committer may not be tolerant of task commit failures")
-      }
-
-      if (dynamicPartitionOverwrite) {
-        // FileOutputCommitter must be initialized with the staging directory so that task output
-        // lands under stagingDir/_temporary/... and commitJob can later delete the old partition
-        // directories and move staged files to final dest. Without this, the committer writes
-        // directly to the final path and the dynamic-overwrite cleanup in commitJob never sees any
-        // partitionPaths.
-        val ctor =
-          committer.getClass.getDeclaredConstructor(classOf[Path], classOf[TaskAttemptContext])
-        committer = ctor.newInstance(stagingDir, context)
       }
     } else {
       // if required other committers need to be checked for dynamic partition
@@ -172,7 +167,7 @@ class PathOutputCommitProtocol(
     }.getOrElse(workDir)
     val file = new Path(parent, getFilename(taskContext, spec))
     logTrace(s"Creating task file $file for dir $dir and spec $spec")
-    if (dynamicPartitionOverwrite && committer.isInstanceOf[FileOutputCommitter]) {
+    if (dynamicPartitionOverwrite) {
       assert(dir.isDefined,
         "The dataset to be written must be partitioned when dynamicPartitionOverwrite is true.")
       partitionPaths += dir.get

@@ -21,7 +21,9 @@ import java.util.{Map => JMap}
 import scala.jdk.CollectionConverters._
 import scala.util.Random
 
-import org.apache.spark.{SparkConf, SparkContext}
+import one.profiler.Span
+
+import org.apache.spark.{SparkConf, SparkContext, TaskContext, TaskFailedReason}
 import org.apache.spark.api.plugin.{DriverPlugin, ExecutorPlugin, PluginContext, SparkPlugin}
 import org.apache.spark.internal.Logging
 import org.apache.spark.internal.LogKeys.EXECUTOR_ID
@@ -70,12 +72,16 @@ class ProfilerExecutorPlugin extends ExecutorPlugin with Logging {
   private var profiler: SparkAsyncProfiler = _
   private var executorProfilerEnabled: Boolean = _
   private var executorProfilerFraction: Double = _
+  private var taskSpanEnabled: Boolean = _
   private val rand: Random = new Random(System.currentTimeMillis())
+  // TaskContext is cleared before the task success and failure callbacks run.
+  private val taskSpan = new ThreadLocal[(Long, String)]
 
   override def init(ctx: PluginContext, extraConf: JMap[String, String]): Unit = {
     pluginCtx = ctx
     sparkConf = ctx.conf()
     executorProfilerEnabled = sparkConf.get(PROFILER_EXECUTOR_ENABLED)
+    taskSpanEnabled = sparkConf.get(PROFILER_EXECUTOR_TASK_SPAN_ENABLED)
     if (executorProfilerEnabled) {
       executorProfilerFraction = sparkConf.get(PROFILER_EXECUTOR_FRACTION)
       if (rand.nextInt(100) * 0.01 < executorProfilerFraction) {
@@ -86,6 +92,40 @@ class ProfilerExecutorPlugin extends ExecutorPlugin with Logging {
       }
     }
     Map.empty[String, String].asJava
+  }
+
+  override def onTaskStart(): Unit = {
+    if (taskSpanEnabled && profiler != null) {
+      taskSpan.remove()
+      val startTime = Span.start()
+      if (startTime != 0) {
+        val context = TaskContext.get()
+        val tag = s"SparkTask:stageId=${context.stageId()}," +
+          s"stageAttemptNumber=${context.stageAttemptNumber()}," +
+          s"partitionId=${context.partitionId()}," +
+          s"taskAttemptId=${context.taskAttemptId()}," +
+          s"attemptNumber=${context.attemptNumber()}"
+        taskSpan.set((startTime, tag))
+      }
+    }
+  }
+
+  override def onTaskSucceeded(): Unit = {
+    endTaskSpan("succeeded")
+  }
+
+  override def onTaskFailed(failureReason: TaskFailedReason): Unit = {
+    endTaskSpan("failed")
+  }
+
+  private def endTaskSpan(status: String): Unit = {
+    if (taskSpanEnabled && profiler != null) {
+      val span = taskSpan.get()
+      taskSpan.remove()
+      if (span != null) {
+        Span.end(span._1, s"${span._2},status=$status")
+      }
+    }
   }
 
   override def shutdown(): Unit = {

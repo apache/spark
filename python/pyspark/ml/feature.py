@@ -4896,7 +4896,7 @@ class StringIndexerModel(
         Ordered list of labels, corresponding to indices to be assigned.
 
         .. deprecated:: 3.1.0
-            It will be removed in future versions. Use `labelsArray` method instead.
+            Use `labelsArray` method instead.
         """
         return self._call_java("labels")
 

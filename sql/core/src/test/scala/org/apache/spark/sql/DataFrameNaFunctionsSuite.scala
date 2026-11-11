@@ -22,7 +22,14 @@ import scala.jdk.CollectionConverters._
 import org.apache.spark.SparkUnsupportedOperationException
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSparkSession
-import org.apache.spark.sql.types.{CharType, StringType, StructField, StructType, VarcharType}
+import org.apache.spark.sql.types.{
+  CharType,
+  IntegerType,
+  StringType,
+  StructField,
+  StructType,
+  VarcharType
+}
 
 class DataFrameNaFunctionsSuite extends SharedSparkSession {
   import testImplicits._
@@ -219,10 +226,12 @@ class DataFrameNaFunctionsSuite extends SharedSparkSession {
     withSQLConf(SQLConf.CHAR_VARCHAR_STANDARD_SEMANTICS.key -> "true") {
       val schema = StructType(Seq(
         StructField("c", CharType(3)),
-        StructField("v", VarcharType(3))))
-      val input = spark.createDataFrame(sparkContext.parallelize(Seq(Row(null, null))), schema)
+        StructField("v", VarcharType(3)),
+        StructField("i", IntegerType)))
+      val input = spark.createDataFrame(
+        sparkContext.parallelize(Seq(Row(null, null, null))), schema)
 
-      checkAnswer(input.na.fill("x"), Row("x  ", "x"))
+      checkAnswer(input.na.fill("x"), Row("x  ", "x", null))
     }
   }
 

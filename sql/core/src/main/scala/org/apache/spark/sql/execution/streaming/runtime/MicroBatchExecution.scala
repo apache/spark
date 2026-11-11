@@ -29,7 +29,7 @@ import org.apache.hadoop.fs.Path
 import org.apache.spark.{SparkException, SparkIllegalArgumentException, SparkIllegalStateException}
 import org.apache.spark.internal.LogKeys
 import org.apache.spark.internal.LogKeys._
-import org.apache.spark.sql.catalyst.analysis.{ResolveDeduplicate, V2TableReference}
+import org.apache.spark.sql.catalyst.analysis.{ResolveDeduplicate, V2Reference}
 import org.apache.spark.sql.catalyst.encoders.ExpressionEncoder
 import org.apache.spark.sql.catalyst.expressions.{Alias, Attribute, CurrentBatchTimestamp, CurrentDate, CurrentTimestamp, CurrentTimestampNanos, FileSourceMetadataAttribute, LocalTimestamp, LocalTimestampNanos}
 import org.apache.spark.sql.catalyst.plans.logical.{Aggregate, Deduplicate, DeduplicateWithinWatermark, Distinct, FlatMapGroupsInPandasWithState, FlatMapGroupsWithState, GlobalLimit, Join, LeafNode, LocalRelation, LogicalPlan, Project, StreamSourceAwareLogicalPlan, TransformWithState, TransformWithStateInPySpark}
@@ -39,23 +39,23 @@ import org.apache.spark.sql.catalyst.util.truncatedString
 import org.apache.spark.sql.classic.{Dataset, SparkSession}
 import org.apache.spark.sql.classic.ClassicConversions.castToImpl
 import org.apache.spark.sql.connector.catalog.{SupportsRead, SupportsWrite, TableCapability, TransactionalCatalogPlugin}
-import org.apache.spark.sql.connector.read.SupportsPushDownRequiredColumns
 import org.apache.spark.sql.connector.read.streaming.{MicroBatchStream, Offset => OffsetV2, ReadLimit, SparkDataStream, SupportsAdmissionControl, SupportsRealTimeMode, SupportsTriggerAvailableNow}
 import org.apache.spark.sql.errors.QueryExecutionErrors
 import org.apache.spark.sql.execution.{SparkPlan, SQLExecution}
 import org.apache.spark.sql.execution.datasources.LogicalRelation
 import org.apache.spark.sql.execution.datasources.v2.{DataSourceV2Relation, RealTimeStreamScanExec, StreamingDataSourceV2Relation, StreamingDataSourceV2ScanRelation, StreamWriterCommitProgress, WriteToDataSourceV2Exec}
+import org.apache.spark.sql.execution.datasources.v2.state.metadata.StateMetadataPartitionReader
 import org.apache.spark.sql.execution.streaming.{AvailableNowTrigger, Offset, OneTimeTrigger, ProcessingTimeTrigger, RealTimeTrigger, Sink, Source, StreamingQueryPlanTraverseHelper}
-import org.apache.spark.sql.execution.streaming.checkpointing.{CheckpointFileManager, CheckpointVersionManager, CommitLog, CommitLogType, CommitMetadataV3, OffsetLogType, OffsetSeqBase, OffsetSeqLog, OffsetSeqMetadata, OffsetSeqMetadataV2, SinkMetadataInfo}
+import org.apache.spark.sql.execution.streaming.checkpointing.{CheckpointFileManager, CheckpointVersionManager, CommitLog, CommitLogType, CommitMetadataV3, OffsetLogType, OffsetSeqBase, OffsetSeqLog, OffsetSeqMetadata, OffsetSeqMetadataBase, OffsetSeqMetadataV2, SinkMetadataInfo}
 import org.apache.spark.sql.execution.streaming.operators.stateful.{StatefulOperatorStateInfo, StatefulOpStateStoreCheckpointInfo, StateStoreWriter}
 import org.apache.spark.sql.execution.streaming.runtime.StreamingCheckpointConstants.{DIR_NAME_COMMITS, DIR_NAME_OFFSETS, DIR_NAME_STATE}
 import org.apache.spark.sql.execution.streaming.sources.{ForeachBatchSink, WriteToMicroBatchDataSource, WriteToMicroBatchDataSourceV1}
-import org.apache.spark.sql.execution.streaming.state.{OfflineStateRepartitionUtils, StateSchemaBroadcast, StateStoreErrors}
+import org.apache.spark.sql.execution.streaming.state.{OfflineStateRepartitionUtils, RocksDBStateStoreProvider, StateSchemaBroadcast, StateStoreErrors}
 import org.apache.spark.sql.execution.streaming.utils.StreamingUtils
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.internal.connector.PartitionOffsetWithIndex
 import org.apache.spark.sql.streaming.Trigger
-import org.apache.spark.util.{Clock, ErrorNotifier, Utils}
+import org.apache.spark.util.{Clock, ErrorNotifier, SerializableConfiguration, Utils}
 
 class MicroBatchExecution(
     sparkSession: SparkSession,
@@ -195,6 +195,9 @@ class MicroBatchExecution(
   // into every subsequent batch's query plan.
   private val stateSchemaMetadatas = MutableMap[Long, StateSchemaBroadcast]()
 
+  // The rewrites of the filters that the scans of the sources got, which the micro-batches check.
+  private val pushedFilterRewrites = new StreamingV2ScanPushDown.PushedFilterRewrites
+
   /**
    * Cached result of the first `offsetLog.getLatest()` call. Reused by both
    * `logicalPlan` (to determine `enforceNamed`) and `initializeExecution` (to seed
@@ -240,6 +243,7 @@ class MicroBatchExecution(
     // the order pinned in the offset log (mirroring how `enforceNamed` is read above). For a new
     // query the offset log has no entry yet, so the session value is used and pinned at batch 0.
     val streamConf = sparkSessionForStream.sessionState.conf
+    applyJoinStateConfigGuardrails(streamConf)
     val orderDeterministically = initialLatestOffsetSeq.flatMap { case (_, offsetSeq) =>
       offsetSeq.metadataOpt.flatMap { metadata =>
         OffsetSeqMetadata.readValueOpt(metadata, SQLConf.DROP_DUPLICATES_DETERMINISTIC_KEY_ORDER)
@@ -259,6 +263,8 @@ class MicroBatchExecution(
     }
 
     import org.apache.spark.sql.execution.datasources.v2.DataSourceV2Implicits._
+    lazy val columnsAndFiltersOfSources = StreamingV2ScanPushDown.columnsAndFiltersOfSources(
+      sparkSessionForStream, planWithDedupKeys, initialLatestOffsetSeq.flatMap(_._2.metadataOpt))
     val _logicalPlan = planWithDedupKeys.transform {
       case streamingRelation @ StreamingRelation(
           dataSourceV1, sourceName, output, sourceIdentifyingName) =>
@@ -286,17 +292,14 @@ class MicroBatchExecution(
             logInfo(log"Reading table [${MDC(LogKeys.STREAMING_TABLE, table)}] " +
               log"from DataSourceV2 named '${MDC(LogKeys.STREAMING_DATA_SOURCE_NAME, srcName)}' " +
               log"${MDC(LogKeys.STREAMING_DATA_SOURCE_DESCRIPTION, dsStr)}")
-            // TODO: operator pushdown.
-            // Passes the full output schema (not a pruned subset) so that connectors
-            // implementing SupportsMetadataColumns can include metadata columns in readSchema().
-            val scanBuilder = table.newScanBuilder(options)
-            scanBuilder match {
-              case r: SupportsPushDownRequiredColumns =>
-                r.pruneColumns(output.toStructType)
-              case _ =>
-            }
-            val scan = scanBuilder.build()
-            val stream = scan.toMicroBatchStream(metadataPath)
+            // The scan gets the columns and the filters that the query reads from the source, see
+            // StreamingV2ScanPushDown. The output includes the metadata columns that the query
+            // reads, so that connectors implementing SupportsMetadataColumns include them in
+            // readSchema().
+            val streamingScan = StreamingV2ScanPushDown.buildScan(
+              table, options, output, streamConf, columnsAndFiltersOfSources.get(s),
+              StreamingV2ScanPushDown.sourceName(table, catalog, identifier))(
+              _.toMicroBatchStream(metadataPath))
             val relation = StreamingDataSourceV2Relation(
                 table,
                 output,
@@ -310,7 +313,7 @@ class MicroBatchExecution(
                 },
                 sourceIdentifyingName
               )
-            StreamingDataSourceV2ScanRelation(relation, scan, output, stream)
+            streamingScan.toRelation(relation, output)
           })
         } else if (v1.isEmpty) {
           throw QueryExecutionErrors.microBatchUnsupportedByDataSourceError(
@@ -430,7 +433,7 @@ class MicroBatchExecution(
             val catalogManager = sparkSessionForStream.sessionState.catalogManager
             val streamingCatalog = catalogManager.catalog(catalog.name)
             val v2Relation = DataSourceV2Relation.create(s, Some(streamingCatalog), Some(ident))
-            V2TableReference.createForWriteTarget(v2Relation)
+            V2Reference.createForWriteTarget(v2Relation)
           case Some((catalog, ident)) =>
             DataSourceV2Relation.create(s, Some(catalog), Some(ident))
           case None => DataSourceV2Relation.create(s, None, None)
@@ -462,6 +465,45 @@ class MicroBatchExecution(
 
       case _ =>
         throw new IllegalArgumentException(s"unknown sink type for $sink")
+    }
+  }
+
+  /**
+   * Align new stream-stream joins with the selected state store before checkpoint configuration
+   * is pinned. On restart the checkpoint's configuration must take precedence.
+   */
+  private def applyJoinStateConfigGuardrails(streamConf: SQLConf): Unit = {
+    def hasStreamStreamJoin: Boolean = analyzedPlan.exists {
+      case join: Join => join.left.isStreaming && join.right.isStreaming
+      case _ => false
+    }
+
+    def isRocksDBProvider(providerClassName: String): Boolean =
+      classOf[RocksDBStateStoreProvider].isAssignableFrom(Utils.classForName(providerClassName))
+
+    val configuredVersion = streamConf.getConf(SQLConf.STREAMING_JOIN_STATE_FORMAT_VERSION)
+    if (initialLatestOffsetSeq.isEmpty && configuredVersion >= 3 && hasStreamStreamJoin) {
+      val stateStoreProvider = streamConf.getConf(SQLConf.STATE_STORE_PROVIDER_CLASS)
+      if (!isRocksDBProvider(stateStoreProvider)) {
+        val fallbackVersion = 2
+        logInfo(log"Overriding " +
+          log"${MDC(CONFIG, SQLConf.STREAMING_JOIN_STATE_FORMAT_VERSION.key)} from " +
+          log"${MDC(OLD_VALUE, configuredVersion)} to ${MDC(NEW_VALUE, fallbackVersion)} " +
+          log"because ${MDC(CONFIG, SQLConf.STATE_STORE_PROVIDER_CLASS.key)} is set to " +
+          log"${MDC(CLASS_NAME, stateStoreProvider)}, which does not support the virtual column " +
+          log"families required by this join state format.")
+        streamConf.setConf(SQLConf.STREAMING_JOIN_STATE_FORMAT_VERSION, fallbackVersion)
+      } else if (configuredVersion == 4) {
+        val mergeOperatorVersion =
+          streamConf.getConf(SQLConf.STATE_STORE_ROCKSDB_MERGE_OPERATOR_VERSION)
+        if (mergeOperatorVersion != 2) {
+          logInfo(log"Overriding " +
+            log"${MDC(CONFIG, SQLConf.STATE_STORE_ROCKSDB_MERGE_OPERATOR_VERSION.key)} from " +
+            log"${MDC(OLD_VALUE, mergeOperatorVersion)} to ${MDC(NEW_VALUE, 2)} " +
+            log"because join state format version 4 requires RocksDB merge operator version 2.")
+          streamConf.setConf(SQLConf.STATE_STORE_ROCKSDB_MERGE_OPERATOR_VERSION, 2)
+        }
+      }
     }
   }
 
@@ -634,22 +676,6 @@ class MicroBatchExecution(
 
   private def disableAQESupportInStatelessIfUnappropriated(
       sparkSessionToRunBatches: SparkSession): Unit = {
-    def containsStatefulOperator(p: LogicalPlan): Boolean = {
-      p.exists {
-        case node: Aggregate if node.isStreaming => true
-        case node: Deduplicate if node.isStreaming => true
-        case node: DeduplicateWithinWatermark if node.isStreaming => true
-        case node: Distinct if node.isStreaming => true
-        case node: Join if node.left.isStreaming && node.right.isStreaming => true
-        case node: FlatMapGroupsWithState if node.isStreaming => true
-        case node: FlatMapGroupsInPandasWithState if node.isStreaming => true
-        case node: TransformWithState if node.isStreaming => true
-        case node: TransformWithStateInPySpark if node.isStreaming => true
-        case node: GlobalLimit if node.isStreaming => true
-        case _ => false
-      }
-    }
-
     if (trigger.isInstanceOf[RealTimeTrigger]) {
       logWarning(log"Disabling AQE since AQE is not supported for Real-time Mode.")
       sparkSessionToRunBatches.conf.set(SQLConf.ADAPTIVE_EXECUTION_ENABLED.key, "false")
@@ -657,6 +683,22 @@ class MicroBatchExecution(
       // SPARK-53941: We disable AQE for stateful workloads as of now.
       logWarning(log"Disabling AQE since AQE is not supported in stateful workloads.")
       sparkSessionToRunBatches.conf.set(SQLConf.ADAPTIVE_EXECUTION_ENABLED.key, "false")
+    }
+  }
+
+  private def containsStatefulOperator(p: LogicalPlan): Boolean = {
+    p.exists {
+      case node: Aggregate if node.isStreaming => true
+      case node: Deduplicate if node.isStreaming => true
+      case node: DeduplicateWithinWatermark if node.isStreaming => true
+      case node: Distinct if node.isStreaming => true
+      case node: Join if node.left.isStreaming && node.right.isStreaming => true
+      case node: FlatMapGroupsWithState if node.isStreaming => true
+      case node: FlatMapGroupsInPandasWithState if node.isStreaming => true
+      case node: TransformWithState if node.isStreaming => true
+      case node: TransformWithStateInPySpark if node.isStreaming => true
+      case node: GlobalLimit if node.isStreaming => true
+      case _ => false
     }
   }
 
@@ -822,20 +864,26 @@ class MicroBatchExecution(
         secondLatestOffsets.foreach { offset =>
           execCtx.startOffsets = offset.toStreamProgress(sources, sourceIdMap)
         }
-
+        val latestCommittedBatch = commitLog.getLatest()
+        val committedBatchId = latestCommittedBatch.map(_._1).getOrElse(-1L)
         // update offset metadata
         nextOffsets.metadataOpt.foreach { metadata =>
-          OffsetSeqMetadata.setSessionConf(metadata, sparkSessionToRunBatches.sessionState.conf)
+          val metadataWithRecoveredPartitions = recoverStatefulShufflePartitions(
+            metadata, sparkSessionToRunBatches, latestBatchId, committedBatchId)
+          OffsetSeqMetadata.setSessionConf(
+            metadataWithRecoveredPartitions, sparkSessionToRunBatches.sessionState.conf)
           execCtx.offsetSeqMetadata = OffsetSeqMetadata(
-            metadata.batchWatermarkMs, metadata.batchTimestampMs, sparkSessionToRunBatches.conf)
+            metadataWithRecoveredPartitions.batchWatermarkMs,
+            metadataWithRecoveredPartitions.batchTimestampMs,
+            sparkSessionToRunBatches.conf)
           watermarkTracker = WatermarkTracker(sparkSessionToRunBatches.conf, logicalPlan)
-          watermarkTracker.setWatermark(metadata.batchWatermarkMs)
+          watermarkTracker.setWatermark(metadataWithRecoveredPartitions.batchWatermarkMs)
         }
 
         /* identify the current batch id: if commit log indicates we successfully processed the
          * latest batch id in the offset log, then we can safely move to the next batch
          * i.e., committedBatchId + 1 */
-        commitLog.getLatest() match {
+        latestCommittedBatch match {
           case Some((latestCommittedBatchId, commitMetadata)) =>
             commitMetadata.stateUniqueIds.foreach {
               stateUniqueIds => currentStateStoreCkptId ++= stateUniqueIds
@@ -896,6 +944,50 @@ class MicroBatchExecution(
         logInfo(s"Starting new streaming query.")
         execCtx.batchId = 0
         watermarkTracker = WatermarkTracker(sparkSessionToRunBatches.conf, logicalPlan)
+    }
+  }
+
+  private def recoverStatefulShufflePartitions(
+      metadata: OffsetSeqMetadataBase,
+      sparkSessionToRunBatches: SparkSession,
+      latestBatchId: Long,
+      committedBatchId: Long): OffsetSeqMetadataBase = {
+    if (metadata.version != OffsetSeqLog.VERSION_2 ||
+        OffsetSeqMetadata.readValueOpt(
+          metadata, SQLConf.STATEFUL_SHUFFLE_PARTITIONS_INTERNAL).isDefined ||
+        !containsStatefulOperator(analyzedPlan)) {
+      metadata
+    } else {
+      metadata match {
+        case v2: OffsetSeqMetadataV2 =>
+          val stateCheckpointLocation = new Path(checkpointFile("state")).getParent
+          val stateMetadataBatchId = if (committedBatchId >= 0) committedBatchId else latestBatchId
+          val failedRecoveryMessage =
+            s"Failed to recover the state-store partition count from checkpoint " +
+              s"metadata at $stateCheckpointLocation. This can happen if the checkpoint " +
+              "was created using offset log format V2 and state metadata was subsequently " +
+              "corrupted due to a bug. See SPARK-59919 for more details. Delete the " +
+              "checkpoint and restart the query to recover."
+          val numPartitionsOpt = try {
+            val stateMetadataReader = new StateMetadataPartitionReader(
+              stateCheckpointLocation.toString,
+              new SerializableConfiguration(
+                sparkSessionToRunBatches.sessionState.newHadoopConf()),
+              stateMetadataBatchId)
+            stateMetadataReader.stateStoreNumPartitions
+          } catch {
+            case NonFatal(e) => throw new SparkException(failedRecoveryMessage, e)
+          }
+          val numPartitions = numPartitionsOpt.getOrElse {
+            throw new SparkException(failedRecoveryMessage)
+          }
+          logWarning(log"Recovered state-store partition count " +
+            log"${MDC(CONFIG, SQLConf.SHUFFLE_PARTITIONS.key)}=" +
+            log"${MDC(NUM_PARTITIONS, numPartitions)} from checkpoint state metadata")
+          OffsetSeqMetadata.withStatefulShufflePartitions(v2, numPartitions)
+        case _ =>
+          metadata
+      }
     }
   }
 
@@ -1285,7 +1377,8 @@ class MicroBatchExecution(
         currentStateStoreCkptId,
         stateSchemaMetadatas,
         isTerminatingTrigger = trigger.isInstanceOf[AvailableNowTrigger.type],
-        isRealTimeMode = trigger.isInstanceOf[RealTimeTrigger])
+        isRealTimeMode = trigger.isInstanceOf[RealTimeTrigger],
+        pushedFilterRewrites = pushedFilterRewrites)
       execCtx.executionPlan.executedPlan // Force the lazy generation of execution plan
     }
     // Set up StateStore commit tracking before execution begins

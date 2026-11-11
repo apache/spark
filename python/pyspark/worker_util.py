@@ -20,9 +20,12 @@ Util functions for workers.
 """
 
 import importlib
+import importlib.util
+import json
 import os
 import sys
 import warnings
+import zipimport
 from contextlib import contextmanager
 from inspect import currentframe, getframeinfo
 from typing import IO, Any, Generator, Optional, Union, overload
@@ -51,6 +54,7 @@ from pyspark.serializers import (
     read_long,
     write_int,
 )
+from pyspark.sql.types import DataType, StructType, _parse_datatype_json_string
 from pyspark.util import is_remote_only, local_connect_and_auth
 
 pickleSer = CPickleSerializer()
@@ -64,6 +68,55 @@ def add_path(path: str) -> bool:
         sys.path.insert(1, path)
         return True
     return False
+
+
+def _zip_archive_of(module_name: str) -> Optional[str]:
+    spec = importlib.util.find_spec(module_name)
+    loader = spec.loader if spec is not None else None
+    return loader.archive if isinstance(loader, zipimport.zipimporter) else None
+
+
+# The zip archives this worker's pyspark and py4j were loaded from, such as
+# $SPARK_HOME/python/lib/pyspark.zip or the copy that Spark ships to YARN containers. They are
+# not replaced while an application runs, so _invalidate_import_caches keeps their cached
+# directory listings. A user zip that supplies the worker's pyspark or py4j counts as one of
+# these archives and must not be replaced while the application runs either: the worker already
+# runs modules from it, so a replaced copy could not be used safely anyway. Other archives,
+# including user archives on PYTHONPATH, may be replaced and are not kept.
+_SPARK_ARCHIVES = frozenset(
+    archive for archive in map(_zip_archive_of, ("pyspark", "py4j")) if archive is not None
+)
+
+
+def _invalidate_import_caches() -> None:
+    """
+    Like importlib.invalidate_caches(), but keeps the zipimporters of Spark's own archives
+    (_SPARK_ARCHIVES).
+
+    Up to Python 3.12, invalidating a zipimporter re-reads the archive's whole directory, and an
+    archive has one zipimporter per package imported from it, so pyspark.zip is re-read once for
+    every package the worker imported from it. Python 3.13+ re-reads each archive once on its
+    next lookup. All other archives, such as user archives on PYTHONPATH and the ones in
+    python_includes, are still invalidated.
+    """
+    if not _SPARK_ARCHIVES:
+        importlib.invalidate_caches()
+        return
+    kept = {
+        path: finder
+        for path, finder in list(sys.path_importer_cache.items())
+        # importlib.invalidate_caches() drops relative paths because the working directory may
+        # have changed, so only keep absolute ones.
+        if isinstance(finder, zipimport.zipimporter)
+        and finder.archive in _SPARK_ARCHIVES
+        and os.path.isabs(path)
+    }
+    for path in kept:
+        del sys.path_importer_cache[path]
+    try:
+        importlib.invalidate_caches()
+    finally:
+        sys.path_importer_cache.update(kept)
 
 
 def read_command(serializer: FramedSerializer, file: Union[IO, bytes, memoryview]) -> Any:
@@ -170,7 +223,7 @@ def setup_spark_files(
         path_changed = add_path(os.path.join(spark_files_dir, filename)) or path_changed
 
     if path_changed:
-        importlib.invalidate_caches()
+        _invalidate_import_caches()
 
 
 @overload
@@ -296,3 +349,158 @@ class Conf:
         if isinstance(val, str) and lower_str:
             return val.lower()
         return val
+
+
+class RunnerConf(Conf):
+    @property
+    def assign_cols_by_name(self) -> bool:
+        return (
+            self.get("spark.sql.legacy.execution.pandas.groupedMap.assignColumnsByName", "true")
+            == "true"
+        )
+
+    @property
+    def use_large_var_types(self) -> bool:
+        return self.get("spark.sql.execution.arrow.useLargeVarTypes", "false") == "true"
+
+    @property
+    def use_legacy_pandas_udf_conversion(self) -> bool:
+        return (
+            self.get("spark.sql.legacy.execution.pythonUDF.pandas.conversion.enabled", "false")
+            == "true"
+        )
+
+    @property
+    def detailed_timing_enabled(self) -> bool:
+        return self.get("spark.sql.execution.pythonUDF.detailedTiming.enabled", "false") == "true"
+
+    @property
+    def use_legacy_pandas_udtf_conversion(self) -> bool:
+        return (
+            self.get("spark.sql.legacy.execution.pythonUDTF.pandas.conversion.enabled", "false")
+            == "true"
+        )
+
+    @property
+    def map_in_batch_legacy_accept_any_iterable(self) -> bool:
+        return (
+            self.get(
+                "spark.sql.execution.pythonUDF.mapInBatch.legacy.acceptAnyIterable.enabled",
+                "true",
+            )
+            == "true"
+        )
+
+    @property
+    def binary_as_bytes(self) -> bool:
+        return self.get("spark.sql.execution.pyspark.binaryAsBytes", "true") == "true"
+
+    @property
+    def safecheck(self) -> bool:
+        return self.get("spark.sql.execution.pandas.convertToArrowArraySafely", "false") == "true"
+
+    @property
+    def int_to_decimal_coercion_enabled(self) -> bool:
+        return (
+            self.get("spark.sql.execution.pythonUDF.pandas.intToDecimalCoercionEnabled", "false")
+            == "true"
+        )
+
+    @property
+    def prefer_int_ext_dtype(self) -> bool:
+        return (
+            self.get("spark.sql.execution.pythonUDF.pandas.preferIntExtensionDtype", "false")
+            == "true"
+        )
+
+    @property
+    def timezone(self) -> Optional[str]:
+        return self.get("spark.sql.session.timeZone", None, lower_str=False)
+
+    @property
+    def window_bound_types(self) -> list[str]:
+        # Per-UDF window frame bound type ("unbounded" or "bounded"), one entry per window UDF,
+        # sent comma-separated by the window operator.
+        return [t.strip().lower() for t in self.get("window_bound_types").split(",")]
+
+    @property
+    def arrow_max_records_per_batch(self) -> int:
+        return int(self.get("spark.sql.execution.arrow.maxRecordsPerBatch", 10000))
+
+    @property
+    def arrow_max_bytes_per_batch(self) -> int:
+        return int(self.get("spark.sql.execution.arrow.maxBytesPerBatch", 2**31 - 1))
+
+    @property
+    def python_udf_arrow_worker_output_batch_max_bytes(self) -> int:
+        # -1 (the default) means no limit; only positive values enable output batch resizing.
+        return int(self.get("spark.sql.execution.pythonUDF.arrow.workerOutputBatchMaxBytes", -1))
+
+    @property
+    def arrow_concurrency_level(self) -> int:
+        return int(self.get("spark.sql.execution.pythonUDF.arrow.concurrency.level", -1))
+
+    @property
+    def udf_profiler(self) -> Optional[str]:
+        return self.get("spark.sql.pyspark.udf.profiler", None)
+
+    @property
+    def udf_profiler_sampling_interval(self) -> int:
+        return int(self.get("spark.sql.pyspark.udf.profiler.samplingInterval", 100))
+
+    @property
+    def data_source_profiler(self) -> Optional[str]:
+        return self.get("spark.sql.pyspark.dataSource.profiler", None)
+
+
+class EvalConf(Conf):
+    @property
+    def state_value_schema(self) -> Optional[StructType]:
+        schema = self.get("state_value_schema", None)
+        if schema is None:
+            return None
+        return StructType.fromJson(json.loads(schema))
+
+    @property
+    def grouping_key_schema(self) -> Optional[StructType]:
+        schema = self.get("grouping_key_schema", None)
+        if schema is None:
+            return None
+        return StructType.fromJson(json.loads(schema))
+
+    @property
+    def state_server_socket_port(self) -> Optional[int | str]:
+        port = self.get("state_server_socket_port", None)
+        try:
+            return int(port)
+        except ValueError:
+            return port
+
+    @property
+    def state_server_auth_secret(self) -> Optional[str]:
+        return self.get("state_server_auth_secret", None, lower_str=False)
+
+    @property
+    def input_type(self) -> Optional[DataType]:
+        input_type = self.get("input_type", None, lower_str=False)
+        if input_type is None:
+            return None
+        return _parse_datatype_json_string(input_type)
+
+    @property
+    def elementwise_nesting(self) -> Optional[list]:
+        # Per-UDF nesting depth (parallel to the UDF list) for the element-wise lift: how many
+        # ``array`` levels the worker flattens off each argument and re-nests onto the result. A UDF
+        # in a single lambda is depth 1; one lifted out of nested lambdas is deeper. Absent/empty
+        # means depth 1 for every UDF. See ExtractPythonUDFFromLambda.
+        raw = self.get("elementwise_nesting", None)
+        if raw is None or raw == "":
+            return None
+        return [int(x) for x in raw.split(",")]
+
+    @property
+    def table_arg_offsets(self) -> Optional[list[int]]:
+        offsets = self.get("table_arg_offsets", None)
+        if offsets is None:
+            return None
+        return [int(x) for x in offsets.split(",") if x]

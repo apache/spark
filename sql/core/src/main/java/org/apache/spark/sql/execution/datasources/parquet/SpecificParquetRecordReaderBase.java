@@ -87,6 +87,17 @@ public abstract class SpecificParquetRecordReaderBase<T> extends RecordReader<Vo
 
   protected ParquetRowGroupReader reader;
 
+  /**
+   * The Parquet reader {@link #reader} wraps, or null when a {@link ParquetRowGroupReader} was
+   * handed in. The wrapper owns it and closes it.
+   */
+  protected ParquetFileReader fileReader;
+
+  /**
+   * The options {@link #fileReader} was built with, or null when a row-group reader was handed in.
+   */
+  protected ParquetReadOptions readOptions;
+
   protected Configuration configuration;
 
   @Override
@@ -104,17 +115,16 @@ public abstract class SpecificParquetRecordReaderBase<T> extends RecordReader<Vo
     this.configuration = taskAttemptContext.getConfiguration();
     FileSplit split = (FileSplit) inputSplit;
     this.file = split.getPath();
-    ParquetReadOptions options = HadoopReadOptions
+    readOptions = HadoopReadOptions
         .builder(configuration, file)
         .withRange(split.getStart(), split.getStart() + split.getLength())
         .build();
-    ParquetFileReader fileReader;
     if (inputFile.isDefined() && fileFooter.isDefined() && inputStream.isDefined()) {
       fileReader = new ParquetFileReader(
-          inputFile.get(), fileFooter.get(), options, inputStream.get());
+          inputFile.get(), fileFooter.get(), readOptions, inputStream.get());
     } else {
       fileReader = new ParquetFileReader(
-          HadoopInputFile.fromPath(file, configuration), options);
+          HadoopInputFile.fromPath(file, configuration), readOptions);
     }
     this.reader = new ParquetRowGroupReaderImpl(fileReader);
     this.fileSchema = fileReader.getFileMetaData().getSchema();
@@ -176,12 +186,12 @@ public abstract class SpecificParquetRecordReaderBase<T> extends RecordReader<Vo
     this.file = new Path(path);
     long length = this.file.getFileSystem(configuration).getFileStatus(this.file).getLen();
 
-    ParquetReadOptions options = HadoopReadOptions
+    readOptions = HadoopReadOptions
       .builder(configuration, file)
       .withRange(0, length)
       .build();
-    ParquetFileReader fileReader = ParquetFileReader.open(
-      HadoopInputFile.fromPath(file, configuration), options);
+    fileReader = ParquetFileReader.open(
+      HadoopInputFile.fromPath(file, configuration), readOptions);
     this.reader = new ParquetRowGroupReaderImpl(fileReader);
     this.fileSchema = fileReader.getFooter().getFileMetaData().getSchema();
 
@@ -239,6 +249,7 @@ public abstract class SpecificParquetRecordReaderBase<T> extends RecordReader<Vo
 
   @Override
   public void close() throws IOException {
+    fileReader = null;
     if (reader != null) {
       reader.close();
       reader = null;

@@ -4,7 +4,8 @@
 # https://github.com/python/cpython/blob/3.11/Lib/distutils/version.py
 
 import re
-from typing import Optional
+from types import NotImplementedType
+from typing import Optional, Union
 
 
 class LooseVersion:
@@ -31,37 +32,37 @@ class LooseVersion:
     def __repr__(self) -> str:
         return "LooseVersion ('%s')" % str(self)
 
-    def __eq__(self, other):  # type: ignore[no-untyped-def]
+    def __eq__(self, other: object) -> bool:
         c = self._cmp(other)
         if c is NotImplemented:
-            return c
+            return NotImplemented
         return c == 0
 
-    def __lt__(self, other):  # type: ignore[no-untyped-def]
+    def __lt__(self, other: Union["LooseVersion", str]) -> bool:
         c = self._cmp(other)
         if c is NotImplemented:
-            return c
+            return NotImplemented
         return c < 0
 
-    def __le__(self, other):  # type: ignore[no-untyped-def]
+    def __le__(self, other: Union["LooseVersion", str]) -> bool:
         c = self._cmp(other)
         if c is NotImplemented:
-            return c
+            return NotImplemented
         return c <= 0
 
-    def __gt__(self, other):  # type: ignore[no-untyped-def]
+    def __gt__(self, other: Union["LooseVersion", str]) -> bool:
         c = self._cmp(other)
         if c is NotImplemented:
-            return c
+            return NotImplemented
         return c > 0
 
-    def __ge__(self, other):  # type: ignore[no-untyped-def]
+    def __ge__(self, other: Union["LooseVersion", str]) -> bool:
         c = self._cmp(other)
         if c is NotImplemented:
-            return c
+            return NotImplemented
         return c >= 0
 
-    def _cmp(self, other):  # type: ignore[no-untyped-def]
+    def _cmp(self, other: object) -> Union[int, NotImplementedType]:
         if isinstance(other, str):
             other = LooseVersion(other)
         elif not isinstance(other, LooseVersion):
@@ -71,5 +72,4 @@ class LooseVersion:
             return 0
         if self.version < other.version:
             return -1
-        if self.version > other.version:
-            return 1
+        return 1

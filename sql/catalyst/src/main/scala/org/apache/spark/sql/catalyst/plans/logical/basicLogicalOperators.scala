@@ -18,7 +18,7 @@
 package org.apache.spark.sql.catalyst.plans.logical
 
 import org.apache.spark.sql.catalyst.{AliasIdentifier, InternalRow, SQLConfHelper}
-import org.apache.spark.sql.catalyst.analysis.{Analyzer, AnsiTypeCoercion, MultiInstanceRelation, Resolver, TypeCoercion, TypeCoercionBase, UnresolvedUnaryNode, WidenStatefulOpNullability}
+import org.apache.spark.sql.catalyst.analysis.{Analyzer, AnsiStringPromotionTypeCoercion, AnsiTypeCoercion, MultiInstanceRelation, Resolver, TypeCoercion, TypeCoercionBase, UnresolvedUnaryNode, WidenStatefulOpNullability}
 import org.apache.spark.sql.catalyst.catalog.{CatalogStorageFormat, CatalogTable}
 import org.apache.spark.sql.catalyst.catalog.CatalogTable.VIEW_STORING_ANALYZED_PLAN
 import org.apache.spark.sql.catalyst.expressions._
@@ -1758,12 +1758,16 @@ case class Unpivot(
 
   def canBeCoercioned: Boolean = values.exists(_.nonEmpty) &&
     values.exists(_.forall(_.forall(_.resolved))) &&
+    // values are coerced by position, so every value group must have one value per value column,
+    // otherwise CheckAnalysis reports UNPIVOT_VALUE_SIZE_MISMATCH
+    values.exists(_.forall(_.length == valueColumnNames.length)) &&
     // when no ids are given, values must be Attributes (column names) to allow detecting ids
     // coercion will add aliases, would disallow detecting ids, so defer coercion after id detection
     ids.exists(_.forall(_.resolved))
 
   def valuesTypeCoercioned: Boolean = canBeCoercioned &&
-    // all inner values at position idx must have the same data type
+    // all inner values at position idx must have the same data type, ignoring nullability;
+    // UnpivotTransformer merges the nullability of the values into the value column
     values.get.head.zipWithIndex.forall { case (v, idx) =>
       values.get.tail.forall(vals => DataTypeUtils.sameType(vals(idx).dataType, v.dataType))
     }
@@ -1789,16 +1793,17 @@ object BinByOutputAliases {
 }
 
 /**
- * Unresolved counterpart of [[BinBy]] produced by the parser. `ResolveBinBy` enforces type and
- * foldability constraints and rewrites this into a resolved [[BinBy]].
+ * Unresolved counterpart of [[BinBy]] produced by the parser and DataFrame API. Column positions
+ * accept expressions; `ResolveBinBy` requires them to resolve to top-level attributes. It also
+ * enforces type and foldability constraints and rewrites this into a resolved [[BinBy]].
  *
  * @param binWidthExpr       Bin-width expression (DAY-TIME INTERVAL).
- * @param rangeStartCol      Reference to the row's measurement-window start column.
- * @param rangeEndCol        Reference to the row's measurement-window end column.
+ * @param rangeStartCol      Expression for the row's measurement-window start column.
+ * @param rangeEndCol        Expression for the row's measurement-window end column.
  * @param originExpr         Optional alignment anchor expression (`ALIGN TO` clause). `None`
  *                           when the clause is omitted; `ResolveBinBy` defaults the resolved
  *                           plan's origin to `1970-01-01 00:00:00`.
- * @param distributeColumns  Columns whose values are proportionally redistributed across sub-rows.
+ * @param distributeColumns  Expressions for values to proportionally redistribute across sub-rows.
  * @param outputAliases      Optional renames for the three appended output columns.
  * @param child              Input relation.
  */
@@ -2440,6 +2445,14 @@ case class Deduplicate(
     keys: Seq[Attribute],
     child: LogicalPlan,
     dedupSpec: Option[DeduplicateSpec] = None) extends UnaryNode {
+  // Streaming deduplication filters late rows even when event time is not part of the key.
+  // A watermarked key already preserves event time; let unused alternatives be pruned.
+  override def references: AttributeSet = AttributeSet(keys) ++ AttributeSet(
+    if (child.isStreaming && !keys.exists(_.metadata.contains(EventTimeWatermark.delayKey))) {
+      child.output.filter(_.metadata.contains(EventTimeWatermark.delayKey))
+    } else {
+      Seq.empty
+    })
   override def maxRows: Option[Long] = child.maxRows
   override def output: Seq[Attribute] = {
     val base = child.output
@@ -2619,6 +2632,11 @@ object LateralJoin {
 
 /**
  * A logical plan for as-of join.
+ * @param direction Which matching right row to keep: the last for [[Backward]], the first for
+ *                  [[Forward]], or the closest key for [[Nearest]].
+ * @param requiresSortMergeAsOfJoin Execution strategy selected during analysis.
+ * @param orderExpression Fallback distance; sort-merge joins do not compute one.
+ * @param evalContext Arithmetic settings captured when the join is constructed.
  */
 case class AsOfJoin(
     left: LogicalPlan,
@@ -2626,15 +2644,18 @@ case class AsOfJoin(
     asOfCondition: Expression,
     condition: Option[Expression],
     joinType: JoinType,
-    orderExpression: Expression,
-    toleranceAssertion: Option[Expression],
+    tolerance: Option[Expression],
+    direction: AsOfJoinDirection,
     usingColumns: Option[Seq[String]] = None,
     matchLeftOperand: Option[Expression] = None,
     matchOperator: Option[MatchComparisonOperator] = None,
     matchRightOperand: Option[Expression] = None,
     leftSortExprs: Seq[Expression] = Nil,
     rightSortExprs: Seq[Expression] = Nil,
-    requiresSortMergeAsOfJoin: Boolean = false)
+    requiresSortMergeAsOfJoin: Boolean = false,
+    allowExactMatches: Boolean = true,
+    orderExpression: Option[Expression] = None,
+    evalContext: NumericEvalContext = NumericEvalContext.fromSQLConf(SQLConf.get))
     extends BinaryNode {
 
   require(Seq(Inner, LeftOuter).contains(joinType),
@@ -2645,6 +2666,11 @@ case class AsOfJoin(
   override def output: Seq[Attribute] =
     AsOfJoin.computeOutput(joinType, left.output, right.output)
 
+  /** The tolerance must be a nonnegative constant. */
+  def toleranceAssertion: Option[Expression] = tolerance.map { value =>
+    GreaterThanOrEqual(value, Literal.default(value.dataType))
+  }
+
   def duplicateResolved: Boolean = left.outputSet.intersect(right.outputSet).isEmpty
 
   override lazy val resolved: Boolean = {
@@ -2653,12 +2679,18 @@ case class AsOfJoin(
       matchLeftOperand.isEmpty &&
       matchOperator.isEmpty &&
       matchRightOperand.isEmpty &&
+      (if (requiresSortMergeAsOfJoin) {
+        leftSortExprs.nonEmpty && rightSortExprs.nonEmpty
+      } else {
+        orderExpression.nonEmpty
+      }) &&
       expressions.forall(_.resolved) &&
       duplicateResolved &&
       asOfCondition.dataType == BooleanType &&
       condition.forall(_.dataType == BooleanType) &&
       toleranceAssertion.forall { assertion =>
-        assertion.foldable && assertion.eval().asInstanceOf[Boolean]
+        assertion.checkInputDataTypes().isSuccess &&
+          assertion.foldable && assertion.eval().asInstanceOf[Boolean]
       }
   }
 
@@ -2695,15 +2727,24 @@ object AsOfJoin {
       tolerance: Option[Expression],
       allowExactMatches: Boolean,
       direction: AsOfJoinDirection): AsOfJoin = {
-    val asOfCond = makeAsOfCond(leftAsOf, rightAsOf, tolerance, allowExactMatches, direction)
-    val orderingExpr = makeOrderingExpr(leftAsOf, rightAsOf, direction)
-    AsOfJoin(left, right, asOfCond, condition, joinType,
-      orderingExpr, tolerance.map(t => GreaterThanOrEqual(t, Literal.default(t.dataType))))
+    AsOfJoin(
+      left = left,
+      right = right,
+      asOfCondition = Literal.TrueLiteral,
+      condition = condition,
+      joinType = joinType,
+      tolerance = tolerance,
+      direction = direction,
+      matchLeftOperand = Some(leftAsOf),
+      matchRightOperand = Some(rightAsOf),
+      allowExactMatches = allowExactMatches
+    )
   }
 
   /**
    * Build an [[AsOfJoin]] from a SQL `MATCH_CONDITION (left_expr op right_expr)` clause.
-   * Operand normalization is deferred until analysis when join inputs are resolved.
+   * Operand normalization is deferred until analysis when join inputs are resolved. Analysis
+   * then replaces the placeholder `asOfCondition` and `direction`.
    */
   def fromMatchCondition(
       left: LogicalPlan,
@@ -2720,8 +2761,8 @@ object AsOfJoin {
       asOfCondition = Literal.TrueLiteral,
       condition = condition,
       joinType = joinType,
-      orderExpression = Literal(0),
-      toleranceAssertion = None,
+      tolerance = None,
+      direction = operator.direction,
       usingColumns = usingColumns,
       matchLeftOperand = Some(leftExpr),
       matchOperator = Some(operator),
@@ -2729,15 +2770,80 @@ object AsOfJoin {
       requiresSortMergeAsOfJoin = true)
   }
 
+  /** Whether nearest matching can compare exact gaps between these key types. */
+  def supportsNearestKeys(leftType: DataType, rightType: DataType): Boolean = {
+    (leftType, rightType) match {
+      case (_: DecimalType, _: DecimalType) => true
+      case _ => leftType == rightType && (leftType match {
+        case _: IntegralType | FloatType | DoubleType => true
+        case DateType | _: YearMonthIntervalType | _: DayTimeIntervalType => true
+        case TimestampType | TimestampNTZType | _: AnyTimestampNanoType => true
+        case _ => false
+      })
+    }
+  }
+
   private[catalyst] def materializeMatchComparison(
       leftOperand: Expression,
       rightOperand: Expression,
       normalizedOp: MatchComparisonOperator)
-      : (Expression, Expression, Seq[Expression], Seq[Expression]) = {
-    val (asOfCondition, orderExpression) =
-      buildMatchExpressions(leftOperand, rightOperand, normalizedOp)
-    val (leftSortExprs, rightSortExprs) = matchSortExpressions(leftOperand, rightOperand)
-    (asOfCondition, orderExpression, leftSortExprs, rightSortExprs)
+      : (Expression, Seq[Expression], Seq[Expression]) = {
+    val (coercedLeft, coercedRight) = coerceMatchStringOperands(leftOperand, rightOperand)
+    val asOfCondition = normalizedOp match {
+      case GreaterThanOrEqualOp => GreaterThanOrEqual(coercedLeft, coercedRight)
+      case GreaterThanOp => GreaterThan(coercedLeft, coercedRight)
+      case LessThanOrEqualOp => LessThanOrEqual(coercedLeft, coercedRight)
+      case LessThanOp => LessThan(coercedLeft, coercedRight)
+    }
+    val (leftSortExprs, rightSortExprs) = matchSortExpressions(coercedLeft, coercedRight)
+    (asOfCondition, leftSortExprs, rightSortExprs)
+  }
+
+  /** Coerces string/non-string operands so sorting and comparison use the same value domain. */
+  private[catalyst] def coerceMatchStringOperands(
+      leftOperand: Expression,
+      rightOperand: Expression): (Expression, Expression) = {
+    val commonType = MatchConditionTypes.stringComparisonCommonType(
+      leftOperand.dataType, rightOperand.dataType)
+    commonType match {
+      case Some(commonType) =>
+        (castMatchOperand(leftOperand, commonType), castMatchOperand(rightOperand, commonType))
+      case None => (leftOperand, rightOperand)
+    }
+  }
+
+  /**
+   * Returns right sort types with mixed NTZ leaves converted to LTZ at their own precision.
+   * NTZ-to-LTZ conversion can change order across DST gaps; precision widening preserves it.
+   */
+  private def rightTimestampSortType(
+      leftType: DataType,
+      rightType: DataType): DataType = (leftType, rightType) match {
+    case (left: StructType, right: StructType) if left.length == right.length =>
+      StructType(left.fields.zip(right.fields).map { case (l, r) =>
+        r.copy(dataType = rightTimestampSortType(l.dataType, r.dataType))
+      })
+    case (left: ArrayType, right: ArrayType) =>
+      right.copy(elementType = rightTimestampSortType(left.elementType, right.elementType))
+    case (left, TimestampNTZType) if TimestampFamily.isLtz(left) =>
+      TimestampType
+    case (left, right: TimestampNTZNanosType) if TimestampFamily.isLtz(left) =>
+      TimestampLTZNanosType(right.precision)
+    case _ => rightType
+  }
+
+  private def castMatchOperand(operand: Expression, targetType: DataType): Expression = {
+    (operand, targetType) match {
+      case _ if operand.dataType == targetType => operand
+      case (tuple: CreateNamedStruct, struct: StructType) =>
+        val values = tuple.valExprs.zip(struct.fields).map { case (value, field) =>
+          castMatchOperand(value, field.dataType)
+        }
+        CreateNamedStruct(tuple.nameExprs.zip(values).flatMap { case (name, value) =>
+          Seq(name, value)
+        })
+      case _ => Cast(operand, targetType)
+    }
   }
 
   /**
@@ -2746,123 +2852,128 @@ object AsOfJoin {
    */
   private[catalyst] object MatchConditionTypes {
 
-    def isValidOperandType(dataType: DataType): Boolean =
-      RowOrdering.isOrderable(dataType) && !containsEmptyStructType(dataType)
+    def isValidOperandType(dataType: DataType): Boolean = RowOrdering.isOrderable(dataType)
 
+    /** Whether the `>=` this join builds can compare the two operands. */
     def areOperandsCompatible(leftType: DataType, rightType: DataType): Boolean = {
       if (!isValidOperandType(leftType) || !isValidOperandType(rightType)) {
         false
-      } else if (isStringTemporalMismatch(leftType, rightType)) {
-        false
+      } else if (isCompositeOperand(leftType, rightType)) {
+        areFieldTypesCompatible(leftType, rightType)
+      } else if (isExactlyOneStringPair(leftType, rightType)) {
+        stringComparisonCommonType(leftType, rightType).isDefined
       } else {
-        (leftType, rightType) match {
-          case (ArrayType(_, _), ArrayType(_, _)) =>
-            usesArrayOrderExpression(leftType, rightType)
-          case _ =>
-            TypeCoercion.findWiderTypeForTwo(leftType, rightType).isDefined ||
-              arePositionalStructsCompatible(leftType, rightType)
-        }
+        TypeCoercion.findWiderTypeForTwo(leftType, rightType).isDefined
       }
     }
 
-    def usesArrayOrderExpression(leftType: DataType, rightType: DataType): Boolean =
+    /** True when either operand is a STRUCT or ARRAY. */
+    private def isCompositeOperand(
+        leftType: DataType,
+        rightType: DataType): Boolean =
+      Seq(leftType, rightType).exists(t => t.isInstanceOf[StructType] || t.isInstanceOf[ArrayType])
+
+    /** True when exactly one operand is a string. */
+    private def isExactlyOneStringPair(leftType: DataType, rightType: DataType): Boolean =
+      leftType.isInstanceOf[StringType] != rightType.isInstanceOf[StringType]
+
+    /** Common type of a string vs non-string scalar pair, mirroring the comparison's coercion. */
+    private[catalyst] def stringComparisonCommonType(
+        leftType: DataType,
+        rightType: DataType): Option[DataType] = {
+      if (!isExactlyOneStringPair(leftType, rightType)) {
+        None
+      } else {
+        val commonType = if (SQLConf.get.ansiEnabled) {
+          AnsiStringPromotionTypeCoercion.findWiderTypeForString(leftType, rightType)
+        } else {
+          TypeCoercion.findCommonTypeForBinaryComparison(leftType, rightType, SQLConf.get)
+        }
+        commonType.filter(isValidOperandType)
+      }
+    }
+
+    /** STRUCT/ARRAY operands: fields and elements coerce only as the `>=` comparison can. */
+    private def areFieldTypesCompatible(leftType: DataType, rightType: DataType): Boolean =
+      (leftType, rightType) match {
+        case (ArrayType(_, _), ArrayType(_, _)) => areArrayElementsCompatible(leftType, rightType)
+        case (_: StructType, _: StructType) => comparisonCommonType(leftType, rightType).isDefined
+        case _ => false
+      }
+
+    /** Whether array elements have the common type required by their comparison. */
+    def areArrayElementsCompatible(leftType: DataType, rightType: DataType): Boolean =
       (leftType, rightType) match {
         case (ArrayType(leftElem, _), ArrayType(rightElem, _)) =>
-          areArrayElementsCompatible(leftElem, rightElem)
+          comparisonCommonType(leftElem, rightElem).isDefined
         case _ => false
       }
 
-    private def areArrayElementsCompatible(leftElem: DataType, rightElem: DataType): Boolean = {
-      if (DataTypeUtils.sameType(leftElem, rightElem)) {
-        RowOrdering.isOrderable(leftElem)
+    /**
+     * Type the `>=` uses for two orderable operands: already structurally equal (names and
+     * nullability ignored), or a tightest common type; no string/decimal promotion.
+     */
+    def comparisonCommonType(left: DataType, right: DataType): Option[DataType] = {
+      if (!isValidOperandType(left) || !isValidOperandType(right)) {
+        None
+      } else if (DataType.equalsStructurally(left, right, ignoreNullability = true)) {
+        Some(left)
       } else {
-        arePositionalStructsCompatible(leftElem, rightElem)
+        tightestCommonType(left, right)
       }
     }
 
-    /** Positional struct operands with the same field count (names may differ). */
-    def usesStructDecomposition(leftType: DataType, rightType: DataType): Boolean =
-      (leftType, rightType) match {
-        case (leftStruct: StructType, rightStruct: StructType) =>
-          leftStruct.length == rightStruct.length && leftStruct.nonEmpty
-        case _ => false
-      }
-
-    /** Whole struct columns with identical schemas sort as a single struct value. */
-    def usesIdenticalStructSort(leftType: DataType, rightType: DataType): Boolean =
-      (leftType, rightType) match {
-        case (leftStruct: StructType, rightStruct: StructType) =>
-          leftStruct.sameType(rightStruct) && leftStruct.nonEmpty
-        case _ => false
-      }
-
-    private def isStringTemporalMismatch(leftType: DataType, rightType: DataType): Boolean = {
-      def isString(dataType: DataType): Boolean = dataType.isInstanceOf[StringType]
-      def isTemporal(dataType: DataType): Boolean = dataType.isInstanceOf[DatetimeType]
-      (isTemporal(leftType) && isString(rightType)) || (isString(leftType) && isTemporal(rightType))
-    }
-
-    private def arePositionalStructsCompatible(
-        leftType: DataType,
-        rightType: DataType): Boolean = {
-      (leftType, rightType) match {
-        case (leftStruct: StructType, rightStruct: StructType)
-            if usesStructDecomposition(leftType, rightType) =>
-          leftStruct.zip(rightStruct).forall { case (leftField, rightField) =>
-            areOperandsCompatible(leftField.dataType, rightField.dataType)
-          }
-        case _ => false
-      }
-    }
-
-    private def containsEmptyStructType(dataType: DataType): Boolean = dataType match {
-      case struct: StructType =>
-        struct.isEmpty || struct.exists(field => containsEmptyStructType(field.dataType))
-      case ArrayType(elementType, _) => containsEmptyStructType(elementType)
-      case _ => false
+    /** Tightest common type (ANSI-aware), the only widening a comparison does. */
+    def tightestCommonType(left: DataType, right: DataType): Option[DataType] = {
+      val coercion = if (SQLConf.get.ansiEnabled) AnsiTypeCoercion else TypeCoercion
+      coercion.findTightestCommonType(left, right)
     }
   }
 
   /**
    * Sort-merge ASOF join sorts each side by these expressions (after equi-keys) so the
-   * right-side buffer is ordered consistently with MATCH_CONDITION lexicographic comparison.
+   * right-side buffer is ordered consistently with the MATCH_CONDITION comparison.
    *
-   * SQL tuple literals `(t.a, t.b)` are flattened to scalar leaves. Whole struct columns
-   * (`t.k >= r.k`) sort by the struct value directly so nested struct shapes stay intact.
+   * Each side picks its own keys, because the two sides are never compared key by key. A SQL
+   * tuple `(t.a, t.b)` sorts by its parts. A tuple is never NULL, so this keeps the comparison
+   * order. Anything else sorts as one value, so a NULL struct comes before a struct of NULL
+   * fields, the same as in the comparison.
    * Array operands sort element-wise; length mismatches follow Spark array ordering semantics.
    */
   def matchSortExpressions(
       leftOperand: Expression,
       rightOperand: Expression): (Seq[Expression], Seq[Expression]) = {
-    (leftOperand.dataType, rightOperand.dataType) match {
-      case (leftStruct: StructType, rightStruct: StructType)
-          if MatchConditionTypes.usesIdenticalStructSort(leftStruct, rightStruct) =>
-        if (isSqlTupleStructOperand(leftOperand) || isSqlTupleStructOperand(rightOperand)) {
-          val pairs = collectStructLeafPairs(leftOperand, rightOperand, leftStruct)
-          (pairs.map(_._1), pairs.map(_._2))
-        } else {
-          (Seq(leftOperand), Seq(rightOperand))
-        }
-      case _ =>
-        (Seq(leftOperand), Seq(rightOperand))
+    val timeZone = DateTimeUtils.getZoneId(SQLConf.get.sessionLocalTimeZone)
+    val rightTarget = if (timeZone.getRules.isFixedOffset) {
+      // A fixed offset preserves the order of NTZ values, including inside composite keys.
+      rightOperand.dataType
+    } else {
+      rightTimestampSortType(leftOperand.dataType, rightOperand.dataType)
     }
+    // The scan searches the right buffer independently for each left row.
+    (matchSortKeys(leftOperand), matchSortKeys(castMatchOperand(rightOperand, rightTarget)))
   }
 
-  /** True for SQL `(col1, col2, ...)` tuple operands, which become [[CreateNamedStruct]]. */
-  private def isSqlTupleStructOperand(operand: Expression): Boolean =
-    operand.isInstanceOf[CreateNamedStruct]
+  /** A SQL tuple becomes [[CreateNamedStruct]] and sorts by its parts. */
+  private def matchSortKeys(operand: Expression): Seq[Expression] = operand match {
+    case tuple: CreateNamedStruct if tuple.valExprs.nonEmpty => tuple.valExprs
+    case other => Seq(other)
+  }
 
   private[catalyst] def normalizeMatchOperands(
       leftSet: AttributeSet,
       rightSet: AttributeSet,
       expr1: Expression,
       operator: MatchComparisonOperator,
-      expr2: Expression): (Expression, Expression, MatchComparisonOperator) = {
-    val expr1Side = operandJoinSide(expr1, leftSet, rightSet, syntacticIsLeft = true)
-    val expr2Side = operandJoinSide(expr2, leftSet, rightSet, syntacticIsLeft = false)
+      expr2: Expression,
+      isDataFrame: Boolean = false): (Expression, Expression, MatchComparisonOperator) = {
+    val expr1Side = operandJoinSide(expr1, leftSet, rightSet)
+    val expr2Side = operandJoinSide(expr2, leftSet, rightSet)
     (expr1Side, expr2Side) match {
       case (Some(true), Some(false)) => (expr1, expr2, operator)
       case (Some(false), Some(true)) => (expr2, expr1, operator.flip)
+      case _ if isDataFrame =>
+        throw QueryCompilationErrors.asOfJoinKeyReferenceError(expr1, expr2)
       case _ =>
         throw QueryCompilationErrors.asOfJoinMatchConditionTableReferenceError(expr1, expr2)
     }
@@ -2871,13 +2982,11 @@ object AsOfJoin {
   private def operandJoinSide(
       expr: Expression,
       leftSet: AttributeSet,
-      rightSet: AttributeSet,
-      syntacticIsLeft: Boolean): Option[Boolean] = {
+      rightSet: AttributeSet): Option[Boolean] = {
     val refs = expr.references
     if (refs.isEmpty) {
-      // Literals, CURRENT_TIMESTAMP(), session variables, etc. have no column refs;
-      // use MATCH_CONDITION syntactic position (expr1/expr2) for join-side assignment.
-      Some(syntacticIsLeft)
+      // Constant operand (literal, current_timestamp(), session variable): no join input.
+      None
     } else if (refs.subsetOf(leftSet)) {
       Some(true)
     } else if (refs.subsetOf(rightSet)) {
@@ -2887,212 +2996,32 @@ object AsOfJoin {
     }
   }
 
-  private def buildMatchExpressions(
-      leftOperand: Expression,
-      rightOperand: Expression,
-      operator: MatchComparisonOperator): (Expression, Expression) = {
-    val (leftForCompare, rightForCompare) =
-      alignOperandsForComparison(leftOperand, rightOperand)
-    val orderExpression = buildOrderExpression(leftOperand, rightOperand, operator)
-    operator match {
-      case GreaterThanOrEqualOp =>
-        (GreaterThanOrEqual(leftForCompare, rightForCompare), orderExpression)
-      case GreaterThanOp =>
-        (GreaterThan(leftForCompare, rightForCompare), orderExpression)
-      case LessThanOrEqualOp =>
-        (LessThanOrEqual(leftForCompare, rightForCompare), orderExpression)
-      case LessThanOp =>
-        (LessThan(leftForCompare, rightForCompare), orderExpression)
+  /** Builds the subtraction-based distance for a DataFrame fallback join. */
+  private[catalyst] def makeOrderingExpr(
+      leftAsOf: Expression,
+      rightAsOf: Expression,
+      direction: AsOfJoinDirection,
+      evalContext: NumericEvalContext): Expression = {
+    def subtract(left: Expression, right: Expression): Expression = {
+      Subtract(left = left, right = right, evalContext = evalContext)
+    }
+
+    direction match {
+      case Backward => subtract(leftAsOf, rightAsOf)
+      case Forward => subtract(rightAsOf, leftAsOf)
+      case Nearest =>
+        If(GreaterThan(leftAsOf, rightAsOf),
+          subtract(leftAsOf, rightAsOf), subtract(rightAsOf, leftAsOf))
     }
   }
 
-  private def buildOrderExpression(
-      leftOperand: Expression,
-      rightOperand: Expression,
-      operator: MatchComparisonOperator): Expression = {
-    (leftOperand.dataType, rightOperand.dataType) match {
-      case (ArrayType(elementType, _), _)
-          if MatchConditionTypes.usesArrayOrderExpression(
-            leftOperand.dataType, rightOperand.dataType) =>
-        // MATCH_CONDITION array comparison uses Spark lexicographic ordering (including length).
-        // The ordering distance below is element-wise via ZipWith, padding the shorter side with
-        // null when lengths differ (e.g. [0, null]), not a lexicographic length tie-break.
-        buildArrayOrderExpression(leftOperand, rightOperand, elementType, operator)
-      case (leftType, rightType)
-          if MatchConditionTypes.usesStructDecomposition(leftType, rightType) =>
-        buildFlattenedStructOrderExpression(
-          leftOperand, rightOperand, leftType.asInstanceOf[StructType], operator)
-      case _ =>
-        buildLeafOrderExpression(leftOperand, rightOperand, operator)
-    }
-  }
-
-  /**
-   * Tuple/struct operands may use different field names on each side. Rewrite them to positional
-   * structs with matching schemas so comparison and ordering type-check.
-   */
-  private def alignOperandsForComparison(
-      leftOperand: Expression,
-      rightOperand: Expression): (Expression, Expression) = {
-    decomposeStructOperands(leftOperand, rightOperand) match {
-      case Some(pairs) =>
-        val aligned = pairs.map { case (left, right) =>
-          alignOperandsForComparison(left, right)
-        }
-        (CreateStruct(aligned.map(_._1)), CreateStruct(aligned.map(_._2)))
-      case None =>
-        (leftOperand, rightOperand)
-    }
-  }
-
-  private def buildLeafOrderExpression(
-      leftOperand: Expression,
-      rightOperand: Expression,
-      operator: MatchComparisonOperator): Expression = {
-    if (supportsSubtract(leftOperand.dataType)) {
-      operator match {
-        case GreaterThanOrEqualOp | GreaterThanOp =>
-          Subtract(leftOperand, rightOperand)
-        case LessThanOrEqualOp | LessThanOp =>
-          Subtract(rightOperand, leftOperand)
-      }
-    } else {
-      buildSignedComparisonDistance(leftOperand, rightOperand, operator)
-    }
-  }
-
-  private[catalyst] def supportsSubtract(dataType: DataType): Boolean = {
-    dataType match {
-      case _: NumericType | _: DayTimeIntervalType | _: YearMonthIntervalType |
-           _: CalendarIntervalType | _: TimestampType | _: TimestampNTZType | _: DateType =>
-        true
-      case _ =>
-        false
-    }
-  }
-
-  private def buildSignedComparisonDistance(
-      leftOperand: Expression,
-      rightOperand: Expression,
-      operator: MatchComparisonOperator): Expression = {
-    val (greaterValue, lesserValue) = operator match {
-      case GreaterThanOrEqualOp | GreaterThanOp => (Literal(1), Literal(-1))
-      case LessThanOrEqualOp | LessThanOp => (Literal(-1), Literal(1))
-    }
-    If(
-      EqualTo(leftOperand, rightOperand),
-      Literal(0),
-      If(GreaterThan(leftOperand, rightOperand), greaterValue, lesserValue))
-  }
-
-  private def buildArrayOrderExpression(
-      leftOperand: Expression,
-      rightOperand: Expression,
-      elementType: DataType,
-      operator: MatchComparisonOperator): Expression = {
-    elementType match {
-      case struct: StructType =>
-        val leftElement = NamedLambdaVariable("left_elem", struct, nullable = true)
-        val rightElement = NamedLambdaVariable("right_elem", struct, nullable = true)
-        val leafDiffs = collectStructLeafPairs(leftElement, rightElement, struct).map {
-          case (left, right) => buildLeafOrderExpression(left, right, operator)
-        }
-        val elementOrder = wrapCompositeOrderExpression(
-          leafDiffs,
-          ArrayType(struct, containsNull = true))
-        ZipWith(
-          leftOperand,
-          rightOperand,
-          LambdaFunction(elementOrder, Seq(leftElement, rightElement)))
-      case _ =>
-        val leftElement = NamedLambdaVariable("left_elem", elementType, nullable = true)
-        val rightElement = NamedLambdaVariable("right_elem", elementType, nullable = true)
-        val elementOrder = buildLeafOrderExpression(leftElement, rightElement, operator)
-        ZipWith(
-          leftOperand,
-          rightOperand,
-          LambdaFunction(elementOrder, Seq(leftElement, rightElement)))
-    }
-  }
-
-  private def buildFlattenedStructOrderExpression(
-      leftOperand: Expression,
-      rightOperand: Expression,
-      structType: StructType,
-      operator: MatchComparisonOperator): Expression = {
-    val leafDiffs = collectStructLeafPairs(leftOperand, rightOperand, structType).map {
-      case (left, right) => buildLeafOrderExpression(left, right, operator)
-    }
-    wrapCompositeOrderExpression(leafDiffs, structType)
-  }
-
-  private def collectStructLeafPairs(
-      leftOperand: Expression,
-      rightOperand: Expression,
-      structType: StructType): Seq[(Expression, Expression)] = {
-    structFieldExprs(leftOperand, structType)
-      .zip(structFieldExprs(rightOperand, structType))
-      .flatMap {
-        case (left, right) =>
-          if (MatchConditionTypes.usesStructDecomposition(left.dataType, right.dataType)) {
-            collectStructLeafPairs(
-              left, right, left.dataType.asInstanceOf[StructType])
-          } else {
-            Seq((left, right))
-          }
-      }
-  }
-
-  private def wrapCompositeOrderExpression(
-      diffs: Seq[Expression],
-      compositeType: DataType): Expression = {
-    diffs match {
-      case Seq(single) => single
-      case _ =>
-        compositeType match {
-          case _: ArrayType => CreateArray(diffs)
-          case _ => CreateStruct(diffs)
-        }
-    }
-  }
-
-  /** Positional struct fields when both operands are the same struct shape. */
-  private def decomposeStructOperands(
-      leftOperand: Expression,
-      rightOperand: Expression): Option[Seq[(Expression, Expression)]] = {
-    if (MatchConditionTypes.usesStructDecomposition(
-        leftOperand.dataType, rightOperand.dataType)) {
-      val leftStruct = leftOperand.dataType.asInstanceOf[StructType]
-      val rightStruct = rightOperand.dataType.asInstanceOf[StructType]
-      val leftFields = structFieldExprs(leftOperand, leftStruct)
-      val rightFields = structFieldExprs(rightOperand, rightStruct)
-      if (leftFields.length == rightFields.length) {
-        Some(leftFields.zip(rightFields))
-      } else {
-        None
-      }
-    } else {
-      None
-    }
-  }
-
-  private def structFieldExprs(
-      operand: Expression,
-      structType: StructType): Seq[Expression] = {
-    operand match {
-      case ns: CreateNamedStruct => ns.valExprs
-      case _ =>
-        structType.indices.map(index =>
-          GetStructField(operand, index, Some(structType(index).name)))
-    }
-  }
-
-  private def makeAsOfCond(
+  private[catalyst] def makeAsOfCond(
       leftAsOf: Expression,
       rightAsOf: Expression,
       tolerance: Option[Expression],
       allowExactMatches: Boolean,
-      direction: AsOfJoinDirection): Expression = {
+      direction: AsOfJoinDirection,
+      evalContext: NumericEvalContext): Expression = {
     val base = (allowExactMatches, direction) match {
       case (true, Backward) => GreaterThanOrEqual(leftAsOf, rightAsOf)
       case (false, Backward) => GreaterThan(leftAsOf, rightAsOf)
@@ -3103,37 +3032,26 @@ object AsOfJoin {
     }
     tolerance match {
       case Some(tolerance) =>
+        val lowerBound = Subtract(left = leftAsOf, right = tolerance, evalContext = evalContext)
+        val upperBound = Add(left = leftAsOf, right = tolerance, evalContext = evalContext)
         (allowExactMatches, direction) match {
           case (true, Backward) =>
-            And(base, GreaterThanOrEqual(rightAsOf, Subtract(leftAsOf, tolerance)))
+            And(base, GreaterThanOrEqual(rightAsOf, lowerBound))
           case (false, Backward) =>
-            And(base, GreaterThan(rightAsOf, Subtract(leftAsOf, tolerance)))
+            And(base, GreaterThan(rightAsOf, lowerBound))
           case (true, Forward) =>
-            And(base, LessThanOrEqual(rightAsOf, Add(leftAsOf, tolerance)))
+            And(base, LessThanOrEqual(rightAsOf, upperBound))
           case (false, Forward) =>
-            And(base, LessThan(rightAsOf, Add(leftAsOf, tolerance)))
+            And(base, LessThan(rightAsOf, upperBound))
           case (true, Nearest) =>
-            And(GreaterThanOrEqual(rightAsOf, Subtract(leftAsOf, tolerance)),
-              LessThanOrEqual(rightAsOf, Add(leftAsOf, tolerance)))
+            And(GreaterThanOrEqual(rightAsOf, lowerBound),
+              LessThanOrEqual(rightAsOf, upperBound))
           case (false, Nearest) =>
             And(base,
-              And(GreaterThan(rightAsOf, Subtract(leftAsOf, tolerance)),
-                LessThan(rightAsOf, Add(leftAsOf, tolerance))))
+              And(GreaterThan(rightAsOf, lowerBound),
+                LessThan(rightAsOf, upperBound)))
         }
       case None => base
-    }
-  }
-
-  private def makeOrderingExpr(
-      leftAsOf: Expression,
-      rightAsOf: Expression,
-      direction: AsOfJoinDirection): Expression = {
-    direction match {
-      case Backward => Subtract(leftAsOf, rightAsOf)
-      case Forward => Subtract(rightAsOf, leftAsOf)
-      case Nearest =>
-        If(GreaterThan(leftAsOf, rightAsOf),
-          Subtract(leftAsOf, rightAsOf), Subtract(rightAsOf, leftAsOf))
     }
   }
 }

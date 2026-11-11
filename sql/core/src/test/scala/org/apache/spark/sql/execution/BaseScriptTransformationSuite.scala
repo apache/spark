@@ -26,7 +26,8 @@ import org.json4s.jackson.JsonMethods._
 import org.scalatest.Assertions._
 import org.scalatest.exceptions.TestFailedException
 
-import org.apache.spark.{SparkException, TaskContext, TestUtils}
+import org.apache.spark.{SparkException, SparkRuntimeException, SparkThrowable, TaskContext,
+    TestUtils}
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.{QueryTest, Row}
 import org.apache.spark.sql.catalyst.InternalRow
@@ -70,6 +71,37 @@ abstract class BaseScriptTransformationSuite extends QueryTest {
       child: SparkPlan,
       ioschema: ScriptTransformationIOSchema): BaseScriptTransformationExec
 
+  protected def checkTransformWithoutSerdeUnsupportedType(
+      exception: Throwable,
+      sqlType: String): Unit = {
+    val err = Iterator.iterate[Throwable](exception)(_.getCause)
+      .takeWhile(_ != null)
+      .collectFirst {
+        case t: SparkThrowable
+            if t.getCondition == "UNSUPPORTED_FEATURE.TRANSFORM_WITHOUT_SERDE_TYPE" => t
+      }.getOrElse {
+        fail(s"expected TRANSFORM_WITHOUT_SERDE_TYPE, got $exception")
+      }
+    checkError(
+      exception = err,
+      condition = "UNSUPPORTED_FEATURE.TRANSFORM_WITHOUT_SERDE_TYPE",
+      parameters = Map("dataType" -> sqlType))
+  }
+
+  protected def checkExceedLimitLength(exception: Throwable, limit: String): Unit = {
+    val runtimeException = Iterator.iterate[Throwable](exception)(_.getCause)
+      .takeWhile(_ != null)
+      .collectFirst {
+        case s: SparkRuntimeException if s.getCondition == "EXCEED_LIMIT_LENGTH" => s
+      }.getOrElse {
+        fail(s"expected EXCEED_LIMIT_LENGTH, got $exception")
+      }
+    checkError(
+      exception = runtimeException,
+      condition = "EXCEED_LIMIT_LENGTH",
+      parameters = Map("limit" -> limit))
+  }
+
   test("cat without SerDe") {
     assume(TestUtils.testCommandAvailable("/bin/bash"))
 
@@ -84,6 +116,198 @@ abstract class BaseScriptTransformationSuite extends QueryTest {
       ),
       rowsDf.collect().toImmutableArraySeq)
     assert(uncaughtExceptionHandler.exception.isEmpty)
+  }
+
+  test("SPARK-60090: TRANSFORM CHAR/VARCHAR assignment via Project") {
+    assume(TestUtils.testCommandAvailable("/bin/bash"))
+    withSQLConf(SQLConf.CHAR_VARCHAR_STANDARD_SEMANTICS.key -> "true") {
+      val query = sql(
+        """
+          |SELECT TRANSFORM(c, v)
+          |USING 'cat' AS (c CHAR(4) COLLATE UTF8_LCASE, v VARCHAR(5) COLLATE UNICODE_CI)
+          |FROM VALUES ('ab', 'xyz') t(c, v)
+          |""".stripMargin)
+      assert(query.schema.map(_.dataType) === Seq(
+        CharType(4, "UTF8_LCASE"),
+        VarcharType(5, "UNICODE_CI")))
+      checkAnswer(query, Row("ab  ", "xyz"))
+    }
+    assert(uncaughtExceptionHandler.exception.isEmpty)
+  }
+
+  test("SPARK-60090: TRANSFORM mixed CHAR and non-CHAR columns") {
+    assume(TestUtils.testCommandAvailable("/bin/bash"))
+    withSQLConf(SQLConf.CHAR_VARCHAR_STANDARD_SEMANTICS.key -> "true") {
+      val query = sql(
+        """
+          |SELECT TRANSFORM(id, name, note)
+          |USING 'cat' AS (id INT, name CHAR(4), note STRING)
+          |FROM VALUES (1, 'ab', 'hello') t(id, name, note)
+          |""".stripMargin)
+      assert(query.schema.map(_.dataType) === Seq(IntegerType, CharType(4), StringType))
+      checkAnswer(query, Row(1, "ab  ", "hello"))
+    }
+    assert(uncaughtExceptionHandler.exception.isEmpty)
+  }
+
+  test("SPARK-60090: TRANSFORM CHAR comparison with a STRING literal") {
+    assume(TestUtils.testCommandAvailable("/bin/bash"))
+    val subquery =
+      """
+        |SELECT * FROM (
+        |  SELECT TRANSFORM(c) USING 'cat' AS (c CHAR(4))
+        |  FROM VALUES ('ab') t(c)
+        |)
+        |""".stripMargin
+    // Either first-class-types flag yields a CharType attribute, so `=` promotes
+    // CHAR to STRING instead of padding the literal (table preserve-only padding
+    // applies only to StringType attributes that carry CHAR metadata).
+    Seq(
+      Map(SQLConf.CHAR_VARCHAR_STANDARD_SEMANTICS.key -> "true"),
+      Map(
+        SQLConf.PRESERVE_CHAR_VARCHAR_TYPE_INFO.key -> "true",
+        SQLConf.CHAR_VARCHAR_STANDARD_SEMANTICS.key -> "false")).foreach { confs =>
+      withSQLConf(confs.toSeq: _*) {
+        checkAnswer(sql(subquery + " WHERE c = 'ab'"), Seq.empty)
+        checkAnswer(sql(subquery), Row("ab  "))
+      }
+    }
+    assert(uncaughtExceptionHandler.exception.isEmpty)
+  }
+
+  test("SPARK-60090: TRANSFORM CHAR/VARCHAR null token") {
+    assume(TestUtils.testCommandAvailable("/bin/bash"))
+    withSQLConf(SQLConf.CHAR_VARCHAR_STANDARD_SEMANTICS.key -> "true") {
+      checkAnswer(
+        sql(
+          """
+            |SELECT TRANSFORM(c)
+            |USING 'cat' AS (c CHAR(4))
+            |FROM VALUES (CAST(NULL AS STRING)), ('ab') t(c)
+            |""".stripMargin),
+        Seq(Row(null), Row("ab  ")))
+      checkAnswer(
+        sql(
+          """
+            |SELECT TRANSFORM(v)
+            |USING 'cat' AS (v VARCHAR(5))
+            |FROM VALUES (CAST(NULL AS STRING)), ('xy') t(v)
+            |""".stripMargin),
+        Seq(Row(null), Row("xy")))
+    }
+    assert(uncaughtExceptionHandler.exception.isEmpty)
+  }
+
+  test("SPARK-60090: TRANSFORM CHAR overflow raises EXCEED_LIMIT_LENGTH") {
+    assume(TestUtils.testCommandAvailable("/bin/bash"))
+    withSQLConf(SQLConf.CHAR_VARCHAR_STANDARD_SEMANTICS.key -> "true") {
+      val exception = intercept[Exception] {
+        sql(
+          """
+            |SELECT TRANSFORM(c)
+            |USING 'cat' AS (c CHAR(4))
+            |FROM VALUES ('abcdef') t(c)
+            |""".stripMargin).collect()
+      }
+      checkExceedLimitLength(exception, "4")
+    }
+  }
+
+  test("SPARK-60090: TRANSFORM VARCHAR overflow raises EXCEED_LIMIT_LENGTH") {
+    assume(TestUtils.testCommandAvailable("/bin/bash"))
+    withSQLConf(SQLConf.CHAR_VARCHAR_STANDARD_SEMANTICS.key -> "true") {
+      val exception = intercept[Exception] {
+        sql(
+          """
+            |SELECT TRANSFORM(v)
+            |USING 'cat' AS (v VARCHAR(5))
+            |FROM VALUES ('abcdefgh') t(v)
+            |""".stripMargin).collect()
+      }
+      checkExceedLimitLength(exception, "5")
+    }
+  }
+
+  test("SPARK-60090: TRANSFORM CHAR/VARCHAR flag off stays STRING") {
+    assume(TestUtils.testCommandAvailable("/bin/bash"))
+    withSQLConf(SQLConf.CHAR_VARCHAR_STANDARD_SEMANTICS.key -> "false") {
+      val query = sql(
+        """
+          |SELECT TRANSFORM(c)
+          |USING 'cat' AS (c CHAR(4))
+          |FROM VALUES ('ab'), ('abcdef') t(c)
+          |""".stripMargin)
+      assert(query.schema.map(_.dataType) === Seq(StringType))
+      checkAnswer(query, Seq(Row("ab"), Row("abcdef")))
+    }
+    assert(uncaughtExceptionHandler.exception.isEmpty)
+  }
+
+  test("SPARK-60090: preserve-only TRANSFORM CHAR/VARCHAR still assigns") {
+    assume(TestUtils.testCommandAvailable("/bin/bash"))
+    withSQLConf(
+        SQLConf.PRESERVE_CHAR_VARCHAR_TYPE_INFO.key -> "true",
+        SQLConf.CHAR_VARCHAR_STANDARD_SEMANTICS.key -> "false") {
+      val query = sql(
+        """
+          |SELECT TRANSFORM(c)
+          |USING 'cat' AS (c CHAR(4))
+          |FROM VALUES ('ab') t(c)
+          |""".stripMargin)
+      // First-class types keep CHAR in the result; assignment still pads / length-checks.
+      assert(query.schema.map(_.dataType) === Seq(CharType(4)))
+      checkAnswer(query, Seq(Row("ab  ")))
+      checkExceedLimitLength(
+        intercept[Exception] {
+          sql(
+            """
+              |SELECT TRANSFORM(c)
+              |USING 'cat' AS (c CHAR(4))
+              |FROM VALUES ('abcdef') t(c)
+              |""".stripMargin).collect()
+        },
+        "4")
+    }
+    assert(uncaughtExceptionHandler.exception.isEmpty)
+  }
+
+  test("SPARK-60090: unreferenced CHAR overflow is pruned like scans") {
+    assume(TestUtils.testCommandAvailable("/bin/bash"))
+    withSQLConf(SQLConf.CHAR_VARCHAR_STANDARD_SEMANTICS.key -> "true") {
+      // Assignment lives in a Project, so count(*) can skip the overflowing column.
+      checkAnswer(
+        sql(
+          """
+            |SELECT count(*) FROM (
+            |  SELECT TRANSFORM(c) USING 'cat' AS (c CHAR(4))
+            |  FROM VALUES ('abcdef') t(c)
+            |)
+            |""".stripMargin),
+        Row(1))
+    }
+  }
+
+  test("SPARK-60090: hand-built CHAR/VARCHAR script output stays unsupported without SerDe") {
+    assume(TestUtils.testCommandAvailable("/bin/bash"))
+    // SQL AS (c CHAR(...)) is rewritten to STRING before the exec. A hand-built plan
+    // that still puts CharType/VarcharType on script output must fail.
+    val input = Seq("ab").toDF("c")
+    Seq(
+      AttributeReference("c", CharType(4))() -> "\"CHAR(4)\"",
+      AttributeReference("v", VarcharType(5))() -> "\"VARCHAR(5)\"",
+      AttributeReference("a", ArrayType(CharType(4)))() -> "\"ARRAY<CHAR(4)>\"").foreach {
+        case (attr, sqlType) =>
+          val exception = intercept[Exception] {
+            QueryTest.executePlan(
+              createScriptTransformationExec(
+                script = "cat",
+                output = Seq(attr),
+                child = input.queryExecution.sparkPlan,
+                ioschema = defaultIOSchema),
+              spark.sqlContext)
+          }
+          checkTransformWithoutSerdeUnsupportedType(exception, sqlType)
+      }
   }
 
   test("script transformation should not swallow errors from upstream operators (no serde)") {

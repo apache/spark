@@ -233,6 +233,12 @@ object PartitionPruning extends Rule[LogicalPlan] with PredicateHelper with Join
 
   private def hasSelectivePredicate(plan: LogicalPlan): Boolean = plan.exists {
     case f: Filter => isLikelySelective(f.condition)
+    // A V2 scan may take a filter in fully and leave no `Filter` above it, as a built-in file
+    // scan does with a partition filter, where V1 keeps one. A scan with a row-selecting
+    // pushdown, such as a limit, is left out, since a DPP subquery may read it again and get
+    // other rows.
+    case r: DataSourceV2ScanRelation if r.onlyRowWisePushdowns =>
+      r.pushedFilters.exists(isLikelySelective)
     case _ => false
   }
 
