@@ -1659,6 +1659,10 @@ class FunctionsTestsMixin:
 
         self.assertEqual(df.stat.approxQuantile("a", [0.5], 0), [4.0])
 
+        quantiles = df.stat.approxQuantile("a", [0.5], 1)
+        self.assertEqual(len(quantiles), 1)
+        self.assertEqual(quantiles, df.stat.approxQuantile("a", [0.5], 1.0))
+
     def test_sorting_functions_with_column(self):
         self.check_sorting_functions_with_column(Column)
 
