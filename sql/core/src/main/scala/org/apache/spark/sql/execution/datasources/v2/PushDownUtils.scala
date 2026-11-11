@@ -27,6 +27,7 @@ import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.expressions.{AttributeReference, AttributeSet, DynamicPruning, DynamicPruningExpression, Expression, ExpressionSet, GetStructField, Literal, NamedExpression, PythonUDF, SchemaPruning, SubqueryExpression, V2ExpressionUtils}
 import org.apache.spark.sql.catalyst.plans.logical.SampleMethod
 import org.apache.spark.sql.catalyst.plans.physical.KeyedPartitioning
+import org.apache.spark.sql.catalyst.trees.TreePattern.NATIVE_UDF
 import org.apache.spark.sql.catalyst.types.DataTypeUtils
 import org.apache.spark.sql.catalyst.types.DataTypeUtils.toAttributes
 import org.apache.spark.sql.catalyst.util.{CharVarcharUtils, InternalRowComparableWrapper}
@@ -639,9 +640,9 @@ object PushDownUtils extends Logging {
 
   /**
    * Whether the data source can be trusted to evaluate `f` in place of Spark: a non-deterministic
-   * expression would not give the same answer twice, and a Python UDF or a subquery cannot be
-   * evaluated by the source at all. Spark will attempt to push only these expressions to the
-   * data source.
+   * expression would not give the same answer twice, and a Python UDF, a native function or a
+   * subquery cannot be evaluated by the source at all. Spark will attempt to push only these
+   * expressions to the data source.
    *
    * Spark will also call this before dropping a fully pushed runtime filter from the
    * post-scan filters, so that it never removes the only evaluator of a filter that Spark
@@ -655,6 +656,7 @@ object PushDownUtils extends Logging {
       includeSubquery: Boolean = false): Boolean =
     f.deterministic &&
       !f.exists(_.isInstanceOf[PythonUDF]) &&
+      !f.containsPattern(NATIVE_UDF) &&
       (includeSubquery || !SubqueryExpression.hasSubquery(f))
 
   /**

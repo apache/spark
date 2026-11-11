@@ -172,6 +172,9 @@ class SessionResourceLoader(session: SparkSession) extends FunctionResourceLoade
       case JarResource => addJar(resource.uri)
       case FileResource => session.sparkContext.addFile(resource.uri)
       case ArchiveResource => session.sparkContext.addArchive(resource.uri)
+      // A native function reads its package when it is registered, and executors get the
+      // package as an artifact of the session that runs the query.
+      case PackageResource =>
     }
   }
 

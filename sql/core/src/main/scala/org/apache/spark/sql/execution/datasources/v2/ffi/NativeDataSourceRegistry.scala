@@ -271,7 +271,7 @@ object NativeDataSourceRegistry extends Logging {
     }
   }
 
-  private def configuredPackageFiles(conf: SQLConf): Seq[File] = {
+  private[ffi] def configuredPackageFiles(conf: SQLConf): Seq[File] = {
     conf.getConf(SQLConf.NATIVE_DATA_SOURCE_PATHS).flatMap { path =>
       val uri = Utils.resolveURI(path)
       val file = new File(uri.getPath)

@@ -2050,6 +2050,52 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase with Compilat
       messageParameters = Map("name" -> name, "packages" -> packages.mkString(", ")))
   }
 
+  def nativeUdfDisabledError(function: FunctionIdentifier, config: String): Throwable = {
+    new AnalysisException(
+      errorClass = "NATIVE_UDF_DISABLED",
+      messageParameters = Map(
+        "functionName" -> toSQLId(function.nameParts), "config" -> toSQLConf(config)))
+  }
+
+  def nativeUdfPackageNotFoundError(function: FunctionIdentifier, pkg: String): Throwable = {
+    new AnalysisException(
+      errorClass = "NATIVE_UDF_PACKAGE_NOT_FOUND",
+      messageParameters = Map("package" -> pkg, "functionName" -> toSQLId(function.nameParts)))
+  }
+
+  def nativeUdfNotFoundError(pkg: String, name: String, functions: Seq[String]): Throwable = {
+    new AnalysisException(
+      errorClass = "NATIVE_UDF_NOT_FOUND",
+      messageParameters = Map(
+        "package" -> pkg, "name" -> name, "functions" -> functions.mkString(", ")))
+  }
+
+  def nativeUdfUnsupportedKindError(
+      pkg: String, name: String, kind: String, kinds: Seq[String]): Throwable = {
+    new AnalysisException(
+      errorClass = "NATIVE_UDF_UNSUPPORTED_KIND",
+      messageParameters = Map(
+        "package" -> pkg, "name" -> name, "kind" -> kind, "kinds" -> kinds.mkString(", ")))
+  }
+
+  def persistentNativeUdfUnsupportedError(function: FunctionIdentifier): Throwable = {
+    new AnalysisException(
+      errorClass = "UNSUPPORTED_FEATURE.PERSISTENT_NATIVE_UDF",
+      messageParameters = Map("functionName" -> toSQLId(function.nameParts)))
+  }
+
+  def nativeUdfInLambdaUnsupportedError(function: String): Throwable = {
+    new AnalysisException(
+      errorClass = "UNSUPPORTED_FEATURE.NATIVE_UDF_IN_LAMBDA",
+      messageParameters = Map("functionName" -> toSQLId(function)))
+  }
+
+  def nativeUdfInJoinConditionUnsupportedError(joinType: JoinType): Throwable = {
+    new AnalysisException(
+      errorClass = "UNSUPPORTED_FEATURE.NATIVE_UDF_IN_ON_CLAUSE",
+      messageParameters = Map("joinType" -> toSQLStmt(joinType.sql)))
+  }
+
   def findMultipleDataSourceError(provider: String, sourceNames: Seq[String]): Throwable = {
     new AnalysisException(
       errorClass = "MULTIPLE_DATA_SOURCES",

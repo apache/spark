@@ -933,18 +933,23 @@ class SparkSqlAstBuilder extends AstBuilder {
    * {{{
    *   CREATE [OR REPLACE] [TEMPORARY] FUNCTION [IF NOT EXISTS] [db_name.]function_name
    *   AS class_name [USING JAR|FILE|ARCHIVE 'file_uri' [, JAR|FILE|ARCHIVE 'file_uri']];
+   *   CREATE [OR REPLACE] TEMPORARY FUNCTION function_name
+   *   AS 'native_function_name' USING PACKAGE 'package';
    * }}}
    */
   override def visitCreateFunction(ctx: CreateFunctionContext): LogicalPlan = withOrigin(ctx) {
     val resources = ctx.resource.asScala.map { resource =>
       val resourceType = resource.simpleIdentifier.getText.toLowerCase(Locale.ROOT)
       resourceType match {
-        case "jar" | "file" | "archive" =>
+        case "jar" | "file" | "archive" | "package" =>
           FunctionResource(FunctionResourceType.fromString(resourceType),
             string(visitStringLit(resource.stringLit())))
         case other =>
           operationNotAllowed(s"CREATE FUNCTION with resource type '$resourceType'", ctx)
       }
+    }
+    if (resources.exists(_.resourceType == PackageResource) && resources.length > 1) {
+      operationNotAllowed("CREATE FUNCTION with a package and other resources", ctx)
     }
 
     if (ctx.EXISTS != null && ctx.REPLACE != null) {

@@ -871,6 +871,40 @@ private[sql] object QueryExecutionErrors extends QueryErrorsBase with ExecutionE
     e
   }
 
+  /**
+   * @param function the function as the query calls it
+   * @param name the name of the function in the manifest of its package
+   * @param pkg the file name of the package
+   */
+  def nativeUdfError(
+      function: String,
+      name: String,
+      pkg: String,
+      msg: String,
+      cause: Throwable): SparkRuntimeException = {
+    new SparkRuntimeException(
+      errorClass = "NATIVE_UDF_ERROR",
+      messageParameters = Map(
+        "function" -> toSQLId(function), "name" -> name, "package" -> pkg, "msg" -> msg),
+      cause = cause)
+  }
+
+  def nativeUdfUnsupportedJavaVersionError(
+      required: Int, current: Int): SparkUnsupportedOperationException = {
+    new SparkUnsupportedOperationException(
+      errorClass = "NATIVE_UDF_UNSUPPORTED_JAVA_VERSION",
+      messageParameters = Map("required" -> required.toString, "current" -> current.toString))
+  }
+
+  def nativeUdfUnsupportedPlatformError(
+      platform: String, cause: Throwable): SparkUnsupportedOperationException = {
+    val e = new SparkUnsupportedOperationException(
+      errorClass = "NATIVE_UDF_UNSUPPORTED_PLATFORM",
+      messageParameters = Map("platform" -> platform, "reason" -> cause.toString))
+    e.initCause(cause)
+    e
+  }
+
   def removedClassInSpark2Error(className: String, e: Throwable): SparkClassNotFoundException = {
     new SparkClassNotFoundException(
       errorClass = "_LEGACY_ERROR_TEMP_2052",

@@ -181,7 +181,7 @@ class NativeDataSourceSuite extends QueryTest with SharedSparkSession {
   test("parse manifests") {
     assert(NativeDataSourcePackage.parseManifest(
       """{"abiVersion": 1, "dataSources": ["a", "b"], "libraries": {"linux-x86_64": "x.so"}}""") ==
-      Right(NativeDataSourceManifest(1, Seq("a", "b"), Map("linux-x86_64" -> "x.so"))))
+      Right(NativeDataSourceManifest(Some(1), Seq("a", "b"), Map("linux-x86_64" -> "x.so"))))
     Seq(
       "not json" -> "The manifest is not valid JSON",
       "[1]" -> "The manifest must be a JSON object.",
@@ -2722,7 +2722,7 @@ class NativeDataSourceSuite extends QueryTest with SharedSparkSession {
 
   test("distribute a package without an active session") {
     val pkg = NativeDataSourcePackage(
-      "/path/to/x.sparkpkg", "checksum", NativeDataSourceManifest(1, Seq("x"), Map.empty))
+      "/path/to/x.sparkpkg", "checksum", NativeDataSourceManifest(Some(1), Seq("x"), Map.empty))
     val logAppender = new LogAppender("distribute without an active session")
     SparkSession.clearActiveSession()
     try {

@@ -34,12 +34,16 @@ object FileResource extends FunctionResourceType("file")
 // use --archive with spark submit.
 object ArchiveResource extends FunctionResourceType("archive")
 
+// A native package (.sparkpkg file) of native functions.
+object PackageResource extends FunctionResourceType("package")
+
 object FunctionResourceType {
   def fromString(resourceType: String): FunctionResourceType = {
     resourceType.toLowerCase(Locale.ROOT) match {
       case "jar" => JarResource
       case "file" => FileResource
       case "archive" => ArchiveResource
+      case "package" => PackageResource
       case other =>
         throw QueryCompilationErrors.resourceTypeNotSupportedError(resourceType)
     }

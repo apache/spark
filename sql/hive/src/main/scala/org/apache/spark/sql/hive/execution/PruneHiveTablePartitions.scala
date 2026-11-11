@@ -27,6 +27,7 @@ import org.apache.spark.sql.catalyst.planning.PhysicalOperation
 import org.apache.spark.sql.catalyst.plans.logical.{Filter, LogicalPlan, Project}
 import org.apache.spark.sql.catalyst.plans.logical.statsEstimation.FilterEstimation
 import org.apache.spark.sql.catalyst.rules.Rule
+import org.apache.spark.sql.catalyst.trees.TreePattern.NATIVE_UDF
 import org.apache.spark.sql.execution.datasources.DataSourceStrategy
 import org.apache.spark.sql.internal.SQLConf
 
@@ -56,8 +57,9 @@ private[sql] class PruneHiveTablePartitions(session: SparkSession)
       filters.filter { f =>
         f.deterministic &&
           !SubqueryExpression.hasSubquery(f) &&
-          // Python UDFs might exist because this rule is applied before ``ExtractPythonUDFs``.
-          !f.exists(_.isInstanceOf[PythonUDF])
+          // Python and native UDFs might exist because this rule is applied before they are
+          // extracted, and partition pruning evaluates the filters on the driver.
+          !f.exists(_.isInstanceOf[PythonUDF]) && !f.containsPattern(NATIVE_UDF)
       }, relation.output)
     val partitionColumnSet = AttributeSet(relation.partitionCols)
     ExpressionSet(

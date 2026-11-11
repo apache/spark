@@ -55,15 +55,23 @@ import org.apache.spark.util.Utils
  * @param abiVersion the oldest version of the native data source interface that the libraries
  *                   implement. Spark uses a package whose version it supports, or that is older
  *                   than the newest version that it supports, and `spark_ds_init` chooses the
- *                   version of the table. Spark ignores the fields that it does not know.
- * @param dataSources the names of the data sources that the libraries implement
+ *                   version of the table. Spark ignores the fields that it does not know. It can
+ *                   be absent in a manifest with functions and no data sources.
+ * @param dataSources the names of the data sources that the libraries implement, which can be
+ *                    absent or empty in a manifest with functions
  * @param libraries the path of the library in the package for each platform, as returned by
  *                  [[NativePlatform.current]]
+ * @param udfAbiVersion the oldest version of the native function interface that the libraries
+ *                      implement, as `abiVersion` for data sources, if the manifest lists
+ *                      functions
+ * @param functions the native functions that the libraries implement: see [[NativeFunctionEntry]]
  */
 case class NativeDataSourceManifest(
-    abiVersion: Int,
+    abiVersion: Option[Int],
     dataSources: Seq[String],
-    libraries: Map[String, String])
+    libraries: Map[String, String],
+    udfAbiVersion: Option[Int] = None,
+    functions: Seq[NativeFunctionEntry] = Nil)
 
 /**
  * Where the library of a native data source is: in a [[NativeDataSourcePackage]], or installed in
@@ -146,22 +154,43 @@ object NativeDataSourcePackage extends Logging {
    * its data sources fails, and on a platform where the C data interface of Arrow Java does not
    * load, such as Linux with musl, only a package with a library for that platform is added, and
    * the queries fail too. The file is not the artifact itself, so the result is not cached, and
-   * errors call it `path`.
+   * errors call it `path`. The functions of a package are checked in the same way, and fail it if
+   * Spark does not support their version of the native function interface.
    */
   def checkAdded(file: File, path: String): Unit = {
     val manifest = readManifest(file, path).fold(invalid => throw invalid.error, identity)
     if (!isSupported(manifest)) {
       throw unsupportedAbiVersionError(path, manifest)
     }
+    if (!isUdfSupported(manifest)) {
+      throw unsupportedUdfAbiVersionError(path, manifest)
+    }
     if (!manifest.libraries.contains(NativePlatform.current)) {
       throw unsupportedPlatformError(path, manifest)
     }
   }
 
-  /** Whether Spark supports the version of the interface of a package. */
+  /** Whether Spark supports the version of the interface of a package, if it has one. */
   private[ffi] def isSupported(manifest: NativeDataSourceManifest): Boolean = {
     // The version of a package is the oldest that its library implements.
-    manifest.abiVersion <= NativeLibrary.ABI_VERSION
+    manifest.abiVersion.forall(_ <= NativeLibrary.ABI_VERSION)
+  }
+
+  /** Whether Spark supports the version of the native function interface of a package. */
+  private[ffi] def isUdfSupported(manifest: NativeDataSourceManifest): Boolean = {
+    manifest.udfAbiVersion.forall(_ <= NativeUdfLibrary.ABI_VERSION)
+  }
+
+  /** The error for a package whose functions need a version that Spark does not support. */
+  private[ffi] def unsupportedUdfAbiVersionError(
+      path: String,
+      manifest: NativeDataSourceManifest): Throwable = {
+    QueryExecutionErrors.invalidNativeDataSourcePackageError(
+      path,
+      "UNSUPPORTED_UDF_ABI_VERSION",
+      Map(
+        "version" -> manifest.udfAbiVersion.get.toString,
+        "supported" -> NativeUdfLibrary.ABI_VERSION.toString))
   }
 
   /** The error for a package whose version of the interface Spark does not support. */
@@ -172,7 +201,7 @@ object NativeDataSourcePackage extends Logging {
       path,
       "UNSUPPORTED_ABI_VERSION",
       Map(
-        "version" -> manifest.abiVersion.toString,
+        "version" -> manifest.abiVersion.get.toString,
         "supported" -> NativeLibrary.ABI_VERSION.toString))
   }
 
@@ -207,8 +236,9 @@ object NativeDataSourcePackage extends Logging {
           logWarning(log"Invalid native data source package ${MDC(PATH, canonical)}.",
             invalid.error)
         case Right(pkg) if !isSupported(pkg.manifest) =>
+          val abiVersion = pkg.manifest.abiVersion.get
           logWarning(log"The native data source package ${MDC(PATH, canonical)} implements " +
-            log"version ${MDC(VERSION_NUM, pkg.manifest.abiVersion)} of the native data source " +
+            log"version ${MDC(VERSION_NUM, abiVersion)} of the native data source " +
             log"interface, which this version of Spark does not support, so it is not used.")
         case _ =>
       }
@@ -318,15 +348,30 @@ object NativeDataSourcePackage extends Logging {
     if (root == null || !root.isObject) {
       return Left("The manifest must be a JSON object.")
     }
-    val abiVersion = root.get("abiVersion")
-    if (abiVersion == null || !abiVersion.isInt || abiVersion.asInt() < 1) {
+    // A manifest that lists functions and no data sources may have no version. Its fields are read
+    // here, so that the version is checked before the functions.
+    val abiVersion = Option(root.get("abiVersion"))
+    val onlyFunctions = Option(root.get("dataSources")).forall(d => d.isArray && d.isEmpty) &&
+      Option(root.get("functions")).exists(f => f.isArray && !f.isEmpty)
+    val validVersion = abiVersion.exists(v => v.isInt && v.asInt() >= 1)
+    if (!validVersion && (abiVersion.isDefined || !onlyFunctions)) {
       return Left("The manifest must have a positive integer field 'abiVersion'.")
     }
-    val dataSources = root.get("dataSources")
-    if (dataSources == null || !dataSources.isArray || dataSources.isEmpty ||
-        !dataSources.elements().asScala.forall { n =>
-          n.isTextual && n.asText().nonEmpty && !n.asText().contains('\u0000')
-        }) {
+    val (udfAbiVersion, functions) = NativeFunctionSpec.parse(root) match {
+      case Left(reason) => return Left(reason)
+      case Right(parsed) => parsed
+    }
+    // A manifest with functions may have no data sources: its field is absent or empty.
+    val dataSources = Option(root.get("dataSources"))
+    val validDataSources = dataSources match {
+      case None => functions.nonEmpty
+      case Some(names) =>
+        names.isArray && (!names.isEmpty || functions.nonEmpty) &&
+          names.elements().asScala.forall { n =>
+            n.isTextual && n.asText().nonEmpty && !n.asText().contains('\u0000')
+          }
+    }
+    if (!validDataSources) {
       return Left("The manifest must have a field 'dataSources' with a non-empty array of " +
         "data source names.")
     }
@@ -337,9 +382,11 @@ object NativeDataSourcePackage extends Logging {
         "platforms to the paths of the libraries in the package.")
     }
     Right(NativeDataSourceManifest(
-      abiVersion.asInt(),
-      dataSources.elements().asScala.map(_.asText()).toSeq,
-      libraries.properties().asScala.map(e => e.getKey -> e.getValue.asText()).toMap))
+      abiVersion.map(_.asInt()),
+      dataSources.toSeq.flatMap(_.elements().asScala.map(_.asText())),
+      libraries.properties().asScala.map(e => e.getKey -> e.getValue.asText()).toMap,
+      udfAbiVersion,
+      functions))
   }
 
   private[ffi] def sha256(file: File): String = {
@@ -439,6 +486,13 @@ object NativeLibraries extends Logging {
   // it is not loaded again.
   private val packagedLibraries = new ConcurrentHashMap[String, Try[NativeLibrary]]()
   private val installedLibraries = new ConcurrentHashMap[String, (String, Try[NativeLibrary])]()
+  // The native function libraries of the packages, by the checksum of the package, as
+  // `packagedLibraries`. A package whose library implements both interfaces is in both.
+  private val functionLibraries = new ConcurrentHashMap[String, Try[NativeUdfLibrary]]()
+  // The lock of each library file extracted from a package, by its path, under which the file is
+  // extracted and each interface of the library is initialized, so that a library that implements
+  // both interfaces never initializes them at the same time.
+  private val libraryLocks = new ConcurrentHashMap[String, Object]()
 
   private lazy val extractionDir: File = Utils.createTempDir(namePrefix = "native-datasources")
 
@@ -458,15 +512,59 @@ object NativeLibraries extends Logging {
    * the data, loads on this platform. Arrow Java ships it for Linux with glibc and macOS on x86_64
    * and aarch64, and for Windows on x86_64; elsewhere, its own error does not say what it is for.
    */
-  private[ffi] def checkCDataInterface(load: => Unit = JniLoader.get().ensureLoaded()): Unit = {
+  private[ffi] def checkCDataInterface(
+      load: => Unit = JniLoader.get().ensureLoaded(),
+      unsupported: (String, Throwable) => Throwable =
+        QueryExecutionErrors.nativeDataSourceUnsupportedPlatformError): Unit = {
     try {
       load
     } catch {
       // Arrow Java does not have the library for the architecture, or the library does not link,
       // as with musl.
       case e @ (_: IllegalStateException | _: LinkageError) =>
-        throw QueryExecutionErrors.nativeDataSourceUnsupportedPlatformError(
-          NativePlatform.current, e)
+        throw unsupported(NativePlatform.current, e)
+    }
+  }
+
+  /**
+   * Returns the native function library of the package, and loads it if needed. The library of
+   * the package for this platform is loaded once, also if it implements native data sources too,
+   * and `spark_udf_init` is called once.
+   */
+  private[ffi] def getFunctionLibrary(pkg: NativeDataSourcePackage): NativeUdfLibrary = {
+    if (!NativeLibrary.isSupported) {
+      throw QueryExecutionErrors.nativeUdfUnsupportedJavaVersionError(
+        NativeLibrary.MINIMUM_JAVA_VERSION, Runtime.version().feature())
+    }
+    checkCDataInterface(unsupported = QueryExecutionErrors.nativeUdfUnsupportedPlatformError)
+    getOrLoad(functionLibraries, pkg.sha256)(loadFunctionLibrary(pkg)).get
+  }
+
+  private def loadFunctionLibrary(pkg: NativeDataSourcePackage): Try[NativeUdfLibrary] = {
+    withExtractedLibrary(pkg) { (libraryPath, libraryFile) =>
+      def invalidLibrary(reason: String, cause: Throwable): Throwable = {
+        QueryExecutionErrors.invalidNativeDataSourcePackageError(
+          pkg.path, "INVALID_LIBRARY", Map("library" -> libraryPath, "reason" -> reason), cause)
+      }
+      logInfo(log"Loading the native function library ${MDC(PATH, libraryFile)}.")
+      try {
+        val library = NativeUdfLibrary.load(libraryFile.getPath, SPARK_VERSION)
+        Try {
+          if (library.abiVersion() != NativeUdfLibrary.ABI_VERSION) {
+            throw QueryExecutionErrors.invalidNativeDataSourcePackageError(
+              pkg.path,
+              "UNSUPPORTED_UDF_ABI_VERSION",
+              Map(
+                "version" -> library.abiVersion().toString,
+                "supported" -> NativeUdfLibrary.ABI_VERSION.toString))
+          }
+          library
+        }
+      } catch {
+        // A library that was loaded stays loaded, and Spark must not initialize it again.
+        case e: NativeLibrary.LoadException if e.loaded => Failure(invalidLibrary(e.getMessage, e))
+        case e: NativeLibrary.LoadException => throw invalidLibrary(e.getMessage, e)
+      }
     }
   }
 
@@ -495,21 +593,33 @@ object NativeLibraries extends Logging {
   }
 
   private def loadPackaged(pkg: NativeDataSourcePackage): Try[NativeLibrary] = {
+    withExtractedLibrary(pkg) { (libraryPath, libraryFile) =>
+      load(
+        libraryFile,
+        (reason, cause) => QueryExecutionErrors.invalidNativeDataSourcePackageError(
+          pkg.path, "INVALID_LIBRARY", Map("library" -> libraryPath, "reason" -> reason), cause),
+        parameters => QueryExecutionErrors.invalidNativeDataSourcePackageError(
+          pkg.path, "UNSUPPORTED_ABI_VERSION", parameters))
+    }
+  }
+
+  /**
+   * Calls `f` with the path of the library of the package for this platform and the file to
+   * which it is extracted, under the lock of the file, once the library is extracted.
+   */
+  private def withExtractedLibrary[T](pkg: NativeDataSourcePackage)(f: (String, File) => T): T = {
     val platform = NativePlatform.current
     val libraryPath = pkg.manifest.libraries.getOrElse(platform, {
       throw NativeDataSourcePackage.unsupportedPlatformError(pkg.path, pkg.manifest)
     })
     val packageFile = locate(pkg)
     val libraryFile = new File(new File(extractionDir, pkg.sha256), new File(libraryPath).getName)
-    if (!libraryFile.isFile) {
-      extract(packageFile, libraryPath, libraryFile)
+    libraryLocks.computeIfAbsent(libraryFile.getPath, _ => new Object).synchronized {
+      if (!libraryFile.isFile) {
+        extract(packageFile, libraryPath, libraryFile)
+      }
+      f(libraryPath, libraryFile)
     }
-    load(
-      libraryFile,
-      (reason, cause) => QueryExecutionErrors.invalidNativeDataSourcePackageError(
-        pkg.path, "INVALID_LIBRARY", Map("library" -> libraryPath, "reason" -> reason), cause),
-      parameters => QueryExecutionErrors.invalidNativeDataSourcePackageError(
-        pkg.path, "UNSUPPORTED_ABI_VERSION", parameters))
   }
 
   private def loadInstalled(file: File): Try[NativeLibrary] = {

@@ -25,6 +25,7 @@ import org.apache.spark.sql.catalyst.rules.Rule
 import org.apache.spark.sql.connector.catalog.CatalogManager
 import org.apache.spark.sql.execution.datasources.{MarkSingleTaskExecution, PruneFileSourcePartitions, PullOutVariantExtractions, PushVariantIntoScan, SchemaPruning, V1Writes}
 import org.apache.spark.sql.execution.datasources.v2.{GroupBasedRowLevelOperationScanPlanning, OptimizeMetadataOnlyDeleteFromTable, V2ScanPartitioningAndOrdering, V2ScanRelationPushDown, V2Writes}
+import org.apache.spark.sql.execution.datasources.v2.ffi.ExtractNativeUDFs
 import org.apache.spark.sql.execution.dynamicpruning.{CleanupDynamicPruningFilters, PartitionPruning, RowLevelOperationRuntimeGroupFiltering}
 import org.apache.spark.sql.execution.externalUDF.{ExtractExternalUDFFromWindow, PlanExternalUDFs}
 import org.apache.spark.sql.execution.planmerging.MergeSubplans
@@ -95,6 +96,7 @@ class SparkOptimizer(
         PruneFilters),
       postHocOptimizationBatches,
       Batch("Extract UDFs", Once,
+        ExtractNativeUDFs,
         // Lift Python UDFs out of higher-order function lambdas first. A UDF in a lambda reads the
         // lambda's variables, so the rules below can place it by the columns it really reads (e.g.
         // above an aggregate it is applied to) only once it is an ordinary UDF over a whole array.
@@ -137,6 +139,7 @@ class SparkOptimizer(
     Seq(
       // ANALYZE needs the driver session; do not leave it to ConstantFolding.
       EvaluateParseSql.ruleName,
+      ExtractNativeUDFs.ruleName,
       // A plan with a Python UDF in a higher-order function lambda passes analysis only because
       // this rule lifts the UDF out of the lambda.
       ExtractPythonUDFFromLambda.ruleName,
