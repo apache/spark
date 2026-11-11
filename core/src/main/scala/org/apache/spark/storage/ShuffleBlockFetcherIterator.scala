@@ -81,6 +81,10 @@ import org.apache.spark.util.{Clock, CompletionIterator, SystemClock, TaskComple
  * @param shuffleMetrics used to report shuffle metrics.
  * @param doBatchFetch fetch continuous shuffle blocks from same executor in batch if the server
  *                     side supports.
+ * @param orderRequestsByMapIndex send the remote requests in map index order instead of a random
+ *                                order, so that the blocks arrive close to map index order. For
+ *                                callers that read the blocks in map index order, see
+ *                                [[currentMapIndex]].
  */
 private[spark]
 final class ShuffleBlockFetcherIterator(
@@ -101,6 +105,7 @@ final class ShuffleBlockFetcherIterator(
     checksumAlgorithm: String,
     shuffleMetrics: ShuffleReadMetricsReporter,
     doBatchFetch: Boolean,
+    orderRequestsByMapIndex: Boolean = false,
   clock: Clock = new SystemClock())
   extends Iterator[(BlockId, InputStream)] with DownloadFileManager with Logging {
 
@@ -138,6 +143,9 @@ final class ShuffleBlockFetcherIterator(
    * in case of a runtime exception when processing the current buffer.
    */
   @volatile private[this] var currentResult: SuccessFetchResult = null
+
+  /** The map index of the block last returned by [[next]]. See [[currentMapIndex]]. */
+  private[this] var lastMapIndex = -1
 
   /**
    * Queue of fetch requests to issue; we'll pull requests off this gradually to make sure that
@@ -720,8 +728,13 @@ final class ShuffleBlockFetcherIterator(
     // remote blocks.
     val remoteRequests = partitionBlocksByFetchMode(
       blocksByAddress, localBlocks, hostLocalBlocksByExecutor, pushMergedLocalBlocks)
-    // Add the remote requests into our queue in a random order
-    fetchRequests ++= Utils.randomize(remoteRequests)
+    // Add the remote requests into our queue in a random order, or in map index order if the
+    // caller reads the blocks in that order.
+    fetchRequests ++= (if (orderRequestsByMapIndex) {
+      remoteRequests.sortBy(_.blocks.map(_.mapIndex).min)
+    } else {
+      Utils.randomize(remoteRequests)
+    })
     assert ((0 == reqsInFlight) == (0 == bytesInFlight),
       "expected reqsInFlight = 0 but found reqsInFlight = " + reqsInFlight +
       ", expected bytesInFlight = 0 but found bytesInFlight = " + bytesInFlight)
@@ -796,6 +809,13 @@ final class ShuffleBlockFetcherIterator(
   }
 
   override def hasNext: Boolean = numBlocksProcessed < numBlocksToFetch
+
+  /**
+   * Returns the map index of the block last returned by [[next]], or -1 if [[next]] has not been
+   * called. A push-merged block holds the blocks of several map outputs, so its map index is
+   * [[org.apache.spark.MapOutputTracker.SHUFFLE_PUSH_MAP_ID]].
+   */
+  def currentMapIndex: Int = lastMapIndex
 
   /**
    * Fetches the next (BlockId, InputStream). If a task fails, the ManagedBuffers
@@ -1086,6 +1106,7 @@ final class ShuffleBlockFetcherIterator(
     }
 
     currentResult = result.asInstanceOf[SuccessFetchResult]
+    lastMapIndex = currentResult.mapIndex
     (currentResult.blockId,
       new BufferReleasingInputStream(
         input,

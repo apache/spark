@@ -25,12 +25,14 @@ import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.{execution, AnalysisException}
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.analysis.{EliminateSubqueryAliases, NamedRelation}
+import org.apache.spark.sql.catalyst.catalog.HiveTableRelation
 import org.apache.spark.sql.catalyst.encoders.ExpressionEncoder
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.optimizer.{BuildRight, BuildSide, JoinSelectionHelper, NormalizeFloatingNumbers}
 import org.apache.spark.sql.catalyst.planning._
 import org.apache.spark.sql.catalyst.plans._
 import org.apache.spark.sql.catalyst.plans.logical._
+import org.apache.spark.sql.catalyst.plans.physical.RangePartitioning
 import org.apache.spark.sql.catalyst.streaming.{InternalOutputModes, StreamingRelationV2}
 import org.apache.spark.sql.catalyst.types.DataTypeUtils
 import org.apache.spark.sql.connector.catalog.CatalogV2Implicits._
@@ -40,7 +42,7 @@ import org.apache.spark.sql.execution.aggregate.AggUtils
 import org.apache.spark.sql.execution.columnar.{InMemoryRelation, InMemoryTableScanExec}
 import org.apache.spark.sql.execution.command._
 import org.apache.spark.sql.execution.datasources.{LogicalRelation, WriteFiles, WriteFilesExec}
-import org.apache.spark.sql.execution.datasources.v2.{DataSourceV2Relation, StreamingDataSourceV2ScanRelation}
+import org.apache.spark.sql.execution.datasources.v2.{DataSourceV2Relation, DataSourceV2ScanRelation, StreamingDataSourceV2ScanRelation}
 import org.apache.spark.sql.execution.exchange.{REBALANCE_PARTITIONS_BY_COL, REBALANCE_PARTITIONS_BY_NONE, REPARTITION_BY_COL, REPARTITION_BY_NUM, ShuffleExchangeExec}
 import org.apache.spark.sql.execution.python._
 import org.apache.spark.sql.execution.python.streaming.{FlatMapGroupsInPandasWithStateExec, TransformWithStateInPySparkExec}
@@ -110,25 +112,56 @@ abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
         // We should match the combination of limit and offset first, to get the optimal physical
         // plan, instead of planning limit and offset separately.
         case LimitAndOffset(limit, offset, child) =>
-          CollectLimitExec(limit = limit, child = planLater(child), offset = offset)
+          CollectLimitExec(limit = limit, child = planLater(child), offset = offset,
+            childMayBeOrdered = mayBeOrdered(child))
         case OffsetAndLimit(offset, limit, child) =>
           // 'Offset a' then 'Limit b' is the same as 'Limit a + b' then 'Offset a'.
-          CollectLimitExec(limit = offset + limit, child = planLater(child), offset = offset)
+          CollectLimitExec(limit = offset + limit, child = planLater(child), offset = offset,
+            childMayBeOrdered = mayBeOrdered(child))
         case Limit(IntegerLiteral(limit), child) =>
-          CollectLimitExec(limit = limit, child = planLater(child))
+          CollectLimitExec(limit = limit, child = planLater(child),
+            childMayBeOrdered = mayBeOrdered(child))
         case logical.Offset(IntegerLiteral(0), child) =>
           // OFFSET 0 is a no-op. It is normally removed by the EliminateOffsets optimizer rule,
           // but that rule is excludable, so handle it defensively here to avoid constructing a
           // CollectLimitExec with no limit and a zero offset (which fails its assertion).
           planLater(child)
         case logical.Offset(IntegerLiteral(offset), child) =>
-          CollectLimitExec(child = planLater(child), offset = offset)
+          CollectLimitExec(child = planLater(child), offset = offset,
+            childMayBeOrdered = mayBeOrdered(child))
         case Tail(IntegerLiteral(limit), child) =>
           CollectTailExec(limit, planLater(child))
         case other => planLater(other)
       })  :: Nil
 
       case other => planTakeOrdered(other).toSeq
+    }
+
+    /**
+     * Returns false if the partitions of `plan` are known to carry no order across them, so that a
+     * LIMIT or OFFSET over it may return any of its rows. `CollectLimitExec` keeps such an order by
+     * gathering the partitions in partition index order. A node can create it by sorting, by range
+     * partitioning, or by producing its rows in a natural order, such as `Range`, local or cached
+     * data, or a source that reports an ordering. The nodes listed below cannot: they keep the
+     * order of their children, or produce a single partition or partitions clustered by hash, like
+     * `Window` and `Aggregate`, even when they sort within partitions. Any other node may, so this
+     * returns true for it, which is always correct but may keep an order that does not matter.
+     */
+    private def mayBeOrdered(plan: LogicalPlan): Boolean = plan match {
+      // With AQE, the plan is planned again with the completed query stages in it.
+      case stage: LogicalQueryStage => mayBeOrdered(stage.logicalPlan)
+      // Range partitioning orders the partitions. This must come before the cases below.
+      case r: RepartitionByExpression if r.partitioning.isInstanceOf[RangePartitioning] => true
+      case s: DataSourceV2ScanRelation => s.ordering.exists(_.nonEmpty)
+      // Scans that read their partitions in no particular order.
+      case _: LogicalRelation | _: DataSourceV2Relation | _: HiveTableRelation |
+           _: OneRowRelation => false
+      case _: Project | _: Filter | _: Aggregate | _: Join | _: Union | _: Generate | _: Expand |
+           _: logical.Window | _: Sample | _: SubqueryAlias | _: LocalLimit | _: GlobalLimit |
+           _: logical.Offset | _: Repartition | _: RepartitionByExpression | _: BatchEvalPython |
+           _: ArrowEvalPython =>
+        plan.children.exists(mayBeOrdered)
+      case _ => true
     }
 
     private def planTakeOrdered(plan: LogicalPlan): Option[SparkPlan] = plan match {

@@ -20,6 +20,7 @@ package org.apache.spark.shuffle
 import scala.collection
 
 import org.apache.spark._
+import org.apache.spark.errors.SparkCoreErrors
 import org.apache.spark.internal.{config, Logging}
 import org.apache.spark.io.CompressionCodec
 import org.apache.spark.serializer.SerializerManager
@@ -68,14 +69,15 @@ private[spark] class BlockStoreShuffleReader[K, C](
     doBatchFetch
   }
 
-  /** Read the combined key-values for this reduce task */
-  override def read(): Iterator[Product2[K, C]] = {
-    val wrappedStreams = new ShuffleBlockFetcherIterator(
+  private def createFetcherIterator(
+      blocks: Iterator[(BlockManagerId, collection.Seq[(BlockId, Long, Int)])],
+      orderRequestsByMapIndex: Boolean): ShuffleBlockFetcherIterator = {
+    new ShuffleBlockFetcherIterator(
       context,
       blockManager.blockStoreClient,
       blockManager,
       mapOutputTracker,
-      blocksByAddress,
+      blocks,
       serializerManager.wrapStream,
       // Note: we use getSizeAsMb when no suffix is provided for backwards compatibility
       SparkEnv.get.conf.get(config.REDUCER_MAX_SIZE_IN_FLIGHT) * 1024 * 1024,
@@ -88,7 +90,62 @@ private[spark] class BlockStoreShuffleReader[K, C](
       SparkEnv.get.conf.get(config.SHUFFLE_CHECKSUM_ENABLED),
       SparkEnv.get.conf.get(config.SHUFFLE_CHECKSUM_ALGORITHM),
       readMetrics,
-      fetchContinuousBlocksInBatch).toCompletionIterator
+      fetchContinuousBlocksInBatch,
+      orderRequestsByMapIndex)
+  }
+
+  /**
+   * Reads the map outputs one at a time, each labelled with its map index, so that the caller can
+   * put them back in map index order. Requires no aggregation, no key ordering, and one block per
+   * map output.
+   *
+   * @return the map indexes to expect, in increasing order, and each of those map outputs with its
+   *         records, in arrival order. Read a map output's records before asking for the next one.
+   */
+  def readMapOutputs(): (Array[Int], Iterator[(Int, Iterator[Product2[K, C]])]) = {
+    require(dep.aggregator.isEmpty && dep.keyOrdering.isEmpty,
+      "Map outputs can only be read separately without aggregation and key ordering")
+    val blocks = blocksByAddress.toArray
+    val mapIndexes = blocks.flatMap(_._2.map(_._3)).sorted
+    // Otherwise a map output would be returned once per block.
+    require(mapIndexes.distinct.length == mapIndexes.length,
+      "Map outputs can only be read separately with a single block per map output")
+    val fetcher = createFetcherIterator(blocks.iterator, orderRequestsByMapIndex = true)
+    val streams = fetcher.toCompletionIterator
+    val serializerInstance = dep.serializer.newInstance()
+    val mapOutputs = new Iterator[(Int, Iterator[Product2[K, C]])] {
+      override def hasNext: Boolean = streams.hasNext
+
+      override def next(): (Int, Iterator[Product2[K, C]]) = {
+        if (!hasNext) {
+          throw SparkCoreErrors.endOfStreamError()
+        }
+        val (blockId, wrappedStream) = streams.next()
+        val mapIndex = fetcher.currentMapIndex
+        // A push-merged block holds the blocks of several map outputs.
+        if (mapIndex < 0) {
+          throw SparkException.internalError(
+            s"Unknown map index for shuffle block $blockId", category = "SHUFFLE")
+        }
+        val records = serializerInstance.deserializeStream(wrappedStream).asKeyValueIterator.map {
+          record =>
+            readMetrics.incRecordsRead(1)
+            record.asInstanceOf[Product2[K, C]]
+        }
+        (mapIndex, new InterruptibleIterator[Product2[K, C]](context, records))
+      }
+    }
+    // Update the context task metrics once all map outputs have been read.
+    val metricIter = CompletionIterator[
+      (Int, Iterator[Product2[K, C]]), Iterator[(Int, Iterator[Product2[K, C]])]](
+      mapOutputs, context.taskMetrics().mergeShuffleReadMetrics())
+    (mapIndexes, new InterruptibleIterator(context, metricIter))
+  }
+
+  /** Read the combined key-values for this reduce task */
+  override def read(): Iterator[Product2[K, C]] = {
+    val wrappedStreams =
+      createFetcherIterator(blocksByAddress, orderRequestsByMapIndex = false).toCompletionIterator
 
     val serializerInstance = dep.serializer.newInstance()
 

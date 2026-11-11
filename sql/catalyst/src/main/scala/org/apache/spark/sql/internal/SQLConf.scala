@@ -8842,6 +8842,28 @@ object SQLConf {
     .booleanConf
     .createWithDefault(true)
 
+  val COLLECT_LIMIT_ORDERED_GATHER_ENABLED =
+    buildConf("spark.sql.execution.collectLimit.orderedGather.enabled")
+      .internal()
+      .doc("When true, the executor-side CollectLimitExec gather returns the child partitions in " +
+        "partition index order before applying LIMIT and OFFSET, unless the planner knows that " +
+        "the child's rows come in no particular order. The map outputs are read in batches. " +
+        "Within a batch, a map output that arrives on its turn is returned as it is read, and " +
+        "the others are spooled to local disk until their turn.")
+      .version("4.4.0")
+      .booleanConf
+      .createWithDefault(Utils.isTesting)
+
+  val COLLECT_LIMIT_ORDERED_GATHER_MAX_BATCH_PARTITIONS =
+    buildConf("spark.sql.execution.collectLimit.orderedGather.maxBatchPartitions")
+      .internal()
+      .doc("The maximum number of map outputs that the ordered CollectLimitExec gather reads in " +
+        "one batch.")
+      .version("4.4.0")
+      .intConf
+      .checkValue(_ > 0, "value should be positive")
+      .createWithDefault(100)
+
   val LAZY_SET_OPERATOR_OUTPUT = buildConf("spark.sql.lazySetOperatorOutput.enabled")
     .internal()
     .doc(
