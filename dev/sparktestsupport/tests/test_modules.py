@@ -107,5 +107,18 @@ class ModuleDefinitionsTests(unittest.TestCase):
                 self.assertIn(modules.rust_sdk, changed_modules)
                 self.assertNotIn(modules.root, changed_modules)
 
+    def test_cargo_only_changes_select_only_rust_sdk_module(self):
+        for filename in (
+            "sql/native/rust/src/lib.rs",
+            "examples/src/main/rust/native-data-source/src/lib.rs",
+        ):
+            with self.subTest(filename=filename):
+                changed_modules = determine_modules_for_files([filename])
+                self.assertEqual({modules.rust_sdk}, changed_modules)
+
+    def test_non_rust_example_changes_select_examples_module(self):
+        changed_modules = determine_modules_for_files(["examples/src/main/scala/Example.scala"])
+        self.assertIn(modules.examples, changed_modules)
+
     def test_sql_changes_do_not_select_rust_sdk_tests(self):
         self.assertNotIn(modules.rust_sdk, determine_modules_to_test([modules.sql]))

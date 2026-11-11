@@ -579,7 +579,8 @@ examples = Module(
     name="examples",
     dependencies=[graphx, mllib, streaming, hive],
     source_file_regexes=[
-        "examples/",
+        # The Rust examples are tested by the rust-sdk module instead.
+        "examples/(?!src/main/rust/)",
     ],
     sbt_test_goals=[
         "examples/test",
