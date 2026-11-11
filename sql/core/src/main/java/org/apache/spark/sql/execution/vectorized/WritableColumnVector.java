@@ -80,7 +80,13 @@ public abstract class WritableColumnVector extends ColumnVector {
    * Resets this column for writing. The currently stored values are no longer accessible.
    */
   public void reset() {
-    if (isConstant || isAllNull()) return;
+    if (isConstant) return;
+    if (isAllNull()) {
+      // An all-null vector stores nothing, but appending nulls to it (e.g. through a null
+      // parent struct) still advances elementsAppended, so it must be cleared here.
+      elementsAppended = 0;
+      return;
+    }
 
     if (childColumns != null) {
       for (WritableColumnVector c: childColumns) {

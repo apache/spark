@@ -61,8 +61,10 @@ class RelationalGroupedDataset protected[sql](
   import df.sparkSession.toRichColumn
 
   override protected def toDF(aggCols: Seq[Column]): DataFrame = {
+    // Compute the output at most once. For a `Project`, it creates new attributes on every call.
+    lazy val inputAttributes = df.logicalPlan.output
     val aggExprs = aggCols.map(_.expr).map { e =>
-      withInputType(e, df.exprEnc, df.logicalPlan.output)
+      withInputType(e, df.exprEnc, inputAttributes)
     }
 
     @scala.annotation.nowarn("cat=deprecation")

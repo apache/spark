@@ -1126,13 +1126,15 @@ class DecisionTreeRegressor(
         weightCol: Optional[str] = None,
         leafCol: str = "",
         minWeightFractionPerNode: float = 0.0,
+        intermediateStorageLevel: str = "MEMORY_AND_DISK",
     ):
         """
         __init__(self, \\*, featuresCol="features", labelCol="label", predictionCol="prediction", \
                  maxDepth=5, maxBins=32, minInstancesPerNode=1, minInfoGain=0.0, \
                  maxMemoryInMB=256, cacheNodeIds=False, checkpointInterval=10, \
                  impurity="variance", seed=None, varianceCol=None, weightCol=None, \
-                 leafCol="", minWeightFractionPerNode=0.0)
+                 leafCol="", minWeightFractionPerNode=0.0, \
+                 intermediateStorageLevel="MEMORY_AND_DISK")
         """
         super().__init__()
         self._java_obj = self._new_java_obj(
@@ -1162,13 +1164,15 @@ class DecisionTreeRegressor(
         weightCol: Optional[str] = None,
         leafCol: str = "",
         minWeightFractionPerNode: float = 0.0,
+        intermediateStorageLevel: str = "MEMORY_AND_DISK",
     ) -> "DecisionTreeRegressor":
         """
         setParams(self, \\*, featuresCol="features", labelCol="label", predictionCol="prediction", \
                   maxDepth=5, maxBins=32, minInstancesPerNode=1, minInfoGain=0.0, \
                   maxMemoryInMB=256, cacheNodeIds=False, checkpointInterval=10, \
                   impurity="variance", seed=None, varianceCol=None, weightCol=None, \
-                  leafCol="", minWeightFractionPerNode=0.0)
+                  leafCol="", minWeightFractionPerNode=0.0, \
+                  intermediateStorageLevel="MEMORY_AND_DISK")
         Sets params for the DecisionTreeRegressor.
         """
         kwargs = self._input_kwargs
@@ -1239,6 +1243,13 @@ class DecisionTreeRegressor(
         Sets the value of :py:attr:`checkpointInterval`.
         """
         return self._set(checkpointInterval=value)
+
+    @since("4.4.0")
+    def setIntermediateStorageLevel(self, value: str) -> "DecisionTreeRegressor":
+        """
+        Sets the value of :py:attr:`intermediateStorageLevel`.
+        """
+        return self._set(intermediateStorageLevel=value)
 
     def setSeed(self, value: int) -> "DecisionTreeRegressor":
         """
@@ -1429,6 +1440,7 @@ class RandomForestRegressor(
         minWeightFractionPerNode: float = 0.0,
         weightCol: Optional[str] = None,
         bootstrap: Optional[bool] = True,
+        intermediateStorageLevel: str = "MEMORY_AND_DISK",
     ):
         """
         __init__(self, \\*, featuresCol="features", labelCol="label", predictionCol="prediction", \
@@ -1436,7 +1448,8 @@ class RandomForestRegressor(
                  maxMemoryInMB=256, cacheNodeIds=False, checkpointInterval=10, \
                  impurity="variance", subsamplingRate=1.0, seed=None, numTrees=20, \
                  featureSubsetStrategy="auto", leafCol=", minWeightFractionPerNode=0.0", \
-                 weightCol=None, bootstrap=True)
+                 weightCol=None, bootstrap=True, \
+                 intermediateStorageLevel="MEMORY_AND_DISK")
         """
         super().__init__()
         self._java_obj = self._new_java_obj(
@@ -1469,6 +1482,7 @@ class RandomForestRegressor(
         minWeightFractionPerNode: float = 0.0,
         weightCol: Optional[str] = None,
         bootstrap: Optional[bool] = True,
+        intermediateStorageLevel: str = "MEMORY_AND_DISK",
     ) -> "RandomForestRegressor":
         """
         setParams(self, \\*, featuresCol="features", labelCol="label", predictionCol="prediction", \
@@ -1476,7 +1490,8 @@ class RandomForestRegressor(
                   maxMemoryInMB=256, cacheNodeIds=False, checkpointInterval=10, \
                   impurity="variance", subsamplingRate=1.0, seed=None, numTrees=20, \
                   featureSubsetStrategy="auto", leafCol="", minWeightFractionPerNode=0.0, \
-                  weightCol=None, bootstrap=True)
+                  weightCol=None, bootstrap=True, \
+                  intermediateStorageLevel="MEMORY_AND_DISK")
         Sets params for linear regression.
         """
         kwargs = self._input_kwargs
@@ -1561,6 +1576,13 @@ class RandomForestRegressor(
         Sets the value of :py:attr:`checkpointInterval`.
         """
         return self._set(checkpointInterval=value)
+
+    @since("4.4.0")
+    def setIntermediateStorageLevel(self, value: str) -> "RandomForestRegressor":
+        """
+        Sets the value of :py:attr:`intermediateStorageLevel`.
+        """
+        return self._set(intermediateStorageLevel=value)
 
     def setSeed(self, value: int) -> "RandomForestRegressor":
         """
@@ -1782,6 +1804,7 @@ class GBTRegressor(
         leafCol: str = "",
         minWeightFractionPerNode: float = 0.0,
         weightCol: Optional[str] = None,
+        intermediateStorageLevel: str = "MEMORY_AND_DISK",
     ):
         """
         __init__(self, \\*, featuresCol="features", labelCol="label", predictionCol="prediction", \
@@ -1790,7 +1813,8 @@ class GBTRegressor(
                  checkpointInterval=10, lossType="squared", maxIter=20, stepSize=0.1, seed=None, \
                  impurity="variance", featureSubsetStrategy="all", validationTol=0.01, \
                  validationIndicatorCol=None, leafCol="", minWeightFractionPerNode=0.0,
-                 weightCol=None)
+                 weightCol=None, \
+                 intermediateStorageLevel="MEMORY_AND_DISK")
         """
         super().__init__()
         self._java_obj = self._new_java_obj("org.apache.spark.ml.regression.GBTRegressor", self.uid)
@@ -1824,6 +1848,7 @@ class GBTRegressor(
         leafCol: str = "",
         minWeightFractionPerNode: float = 0.0,
         weightCol: Optional[str] = None,
+        intermediateStorageLevel: str = "MEMORY_AND_DISK",
     ) -> "GBTRegressor":
         """
         setParams(self, \\*, featuresCol="features", labelCol="label", predictionCol="prediction", \
@@ -1832,7 +1857,8 @@ class GBTRegressor(
                   checkpointInterval=10, lossType="squared", maxIter=20, stepSize=0.1, seed=None, \
                   impurity="variance", featureSubsetStrategy="all", validationTol=0.01, \
                   validationIndicatorCol=None, leafCol="", minWeightFractionPerNode=0.0, \
-                  weightCol=None)
+                  weightCol=None, \
+                  intermediateStorageLevel="MEMORY_AND_DISK")
         Sets params for Gradient Boosted Tree Regression.
         """
         kwargs = self._input_kwargs
@@ -1931,6 +1957,13 @@ class GBTRegressor(
         Sets the value of :py:attr:`checkpointInterval`.
         """
         return self._set(checkpointInterval=value)
+
+    @since("4.4.0")
+    def setIntermediateStorageLevel(self, value: str) -> "GBTRegressor":
+        """
+        Sets the value of :py:attr:`intermediateStorageLevel`.
+        """
+        return self._set(intermediateStorageLevel=value)
 
     @since("1.4.0")
     def setSeed(self, value: int) -> "GBTRegressor":

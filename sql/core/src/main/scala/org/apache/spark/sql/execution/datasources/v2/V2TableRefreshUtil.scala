@@ -20,7 +20,6 @@ package org.apache.spark.sql.execution.datasources.v2
 import scala.collection.mutable
 
 import org.apache.spark.internal.Logging
-import org.apache.spark.sql.catalyst.SQLConfHelper
 import org.apache.spark.sql.catalyst.analysis.ChangelogCacheKey
 import org.apache.spark.sql.catalyst.plans.logical.{Command, LogicalPlan}
 import org.apache.spark.sql.classic.SparkSession
@@ -32,7 +31,7 @@ import org.apache.spark.sql.util.SchemaValidationMode
 import org.apache.spark.sql.util.SchemaValidationMode.ALLOW_NEW_FIELDS
 import org.apache.spark.sql.util.SchemaValidationMode.PROHIBIT_CHANGES
 
-private[sql] object V2TableRefreshUtil extends SQLConfHelper with Logging {
+private[sql] object V2TableRefreshUtil extends Logging {
   private type CurrentTableKey = (TableCatalog, Identifier, CaseInsensitiveStringMap)
 
   /**
@@ -133,7 +132,7 @@ private[sql] object V2TableRefreshUtil extends SQLConfHelper with Logging {
       table: Table,
       stateOptions: CaseInsensitiveStringMap): Option[DataSourceV2Relation] = {
     CatalogV2Util.lookupCachedRelationWithStateOptions(
-      spark.sharedState.relationCache, catalog, ident, table, stateOptions, conf)
+      spark.sharedState.relationCache, catalog, ident, table, stateOptions)
   }
 
   // it is not safe to allow any schema changes in commands (e.g. CTAS, RTAS, MERGE)

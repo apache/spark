@@ -28,7 +28,7 @@ import scala.collection.mutable
 import scala.collection.mutable.{ArrayBuffer, ListBuffer}
 import scala.jdk.CollectionConverters._
 
-import org.apache.spark.sql.catalyst.{InternalRow, ProjectingInternalRow}
+import org.apache.spark.sql.catalyst.{InternalRow, ProjectingInternalRow, StructFilters}
 import org.apache.spark.sql.catalyst.expressions.{AttributeReference, BoundReference, Cast, EvalMode, Expression => CatalystExpression, GenericInternalRow, GetStructField, JoinedRow, Literal, MetadataStructFieldWithLogicalName, Predicate => CatalystPredicate}
 import org.apache.spark.sql.catalyst.util.{ArrayBasedMapData, ArrayData, CaseInsensitiveMap, CharVarcharUtils, DateTimeUtils, GenericArrayData, MapData, ResolveDefaultColumns}
 import org.apache.spark.sql.connector.catalog.constraints.Constraint
@@ -225,6 +225,12 @@ abstract class InMemoryBaseTable(
 
   private val streamingColumnPruning = properties
     .getOrDefault(InMemoryBaseTable.STREAMING_COLUMN_PRUNING, "false").toBoolean
+
+  private val streamingFilterPushdown = properties
+    .getOrDefault(InMemoryBaseTable.STREAMING_FILTER_PUSHDOWN, "false").toBoolean
+
+  private val simulateStreamingFilters = properties
+    .getOrDefault(InMemoryBaseTable.SIMULATE_STREAMING_FILTERS, "false").toBoolean
 
   private val acceptAnySchema = properties.getOrDefault("accept-any-schema", "false").toBoolean
   private val autoSchemaEvolution = properties.getOrDefault("auto-schema-evolution", "true")
@@ -555,6 +561,11 @@ abstract class InMemoryBaseTable(
     (baseCapabiilities ++
       (if (acceptAnySchema) Seq(TableCapability.ACCEPT_ANY_SCHEMA) else Seq.empty) ++
       (if (streamingColumnPruning) Seq(TableCapability.STREAMING_COLUMN_PRUNING) else Seq.empty) ++
+      (if (streamingFilterPushdown) {
+        Seq(TableCapability.STREAMING_FILTER_PUSHDOWN)
+      } else {
+        Seq.empty
+      }) ++
       (if (autoSchemaEvolution) Seq(TableCapability.AUTOMATIC_SCHEMA_EVOLUTION) else Seq.empty) ++
       (if (generateColumnValuesOnWrite) {
         Seq(TableCapability.GENERATE_COLUMN_VALUES_ON_WRITE)
@@ -687,7 +698,13 @@ abstract class InMemoryBaseTable(
   // The number of the micro-batch streams that the scans of the table created.
   val createdMicroBatchStreams = new AtomicLong()
 
-  class InMemoryMicroBatchStream(readSchema: StructType, tableSchema: StructType)
+  /**
+   * @param filters the filters that the rows of the stream pass, see SIMULATE_STREAMING_FILTERS
+   */
+  class InMemoryMicroBatchStream(
+      readSchema: StructType,
+      tableSchema: StructType,
+      filters: Array[Filter] = Array.empty)
       extends MicroBatchStream {
     override def initialOffset(): Offset = new InMemoryTableOffset(0)
     override def latestOffset(): Offset =
@@ -695,7 +712,10 @@ abstract class InMemoryBaseTable(
     override def planInputPartitions(start: Offset, end: Offset): Array[InputPartition] = {
       val s = start.asInstanceOf[InMemoryTableOffset].rowCount.toInt
       val e = end.asInstanceOf[InMemoryTableOffset].rowCount.toInt
-      Array(InMemoryMicroBatchPartition(InMemoryBaseTable.this.rows.slice(s, e)))
+      // The rows keep their positions in the micro-batch, which the metadata column index has
+      // with or without the filters.
+      Array(InMemoryMicroBatchPartition(InMemoryBaseTable.this.rows.slice(s, e).zipWithIndex
+        .filter { case (row, _) => filters.forall(InMemoryBaseTable.passes(_, row, tableSchema)) }))
     }
     override def createReaderFactory(): PartitionReaderFactory = {
       val metadataColNames = new mutable.ArrayBuffer[String]()
@@ -798,6 +818,13 @@ abstract class InMemoryBaseTable(
 
     override def planInputPartitions(): Array[InputPartition] = data.toArray
 
+    /**
+     * The partitions this scan reported to Spark for reading. `data` for a scan that narrows
+     * itself in place when Spark pushes runtime filters, overridden by one that instead plans
+     * fresh partitions per call. `PartitionBasedReplaceData` replaces exactly these.
+     */
+    def readPartitions: Seq[InputPartition] = data
+
     override def createReaderFactory(): PartitionReaderFactory = {
       val metadataColumns = new mutable.ArrayBuffer[String]()
       val nonMetadataColumns = readSchema.filter {
@@ -815,16 +842,21 @@ abstract class InMemoryBaseTable(
 
     override def toMicroBatchStream(checkpointLocation: String): MicroBatchStream = {
       createdMicroBatchStreams.incrementAndGet()
-      new InMemoryMicroBatchStream(readSchema, tableSchema)
+      val filters = this match {
+        case scan: InMemoryBatchScan if simulateStreamingFilters => scan.pushedFilters
+        case _ => Array.empty[Filter]
+      }
+      new InMemoryMicroBatchStream(readSchema, tableSchema, filters)
     }
   }
 
   /**
-   * Reference implementation of [[SupportsRuntimeCatalystFiltering.filter]] for the in-memory
+   * Reference implementation of
+   * [[SupportsRuntimeCatalystFiltering.planInputPartitionsWithRuntimeFilters]] for the in-memory
    * fixtures: records what was pushed, and binds expressions referencing only identity partition
-   * columns against the partition key to drop partitions that do not match. Interpreting the
-   * bound expression lets the fixture honor arbitrary pushed expressions. Mixing classes supply
-   * their own `filterAttributes()`.
+   * columns against the partition key to return the partitions that match. Interpreting the bound
+   * expression lets the fixture honor arbitrary pushed expressions. Mixing classes supply their own
+   * `filterAttributes()`.
    */
   trait CatalystRuntimeFilteringScan extends SupportsRuntimeCatalystFiltering {
     self: BatchScanBaseClass =>
@@ -834,14 +866,29 @@ abstract class InMemoryBaseTable(
 
     private val catalystPredicates = ArrayBuffer.empty[CatalystExpression]
     private var filterCalls = 0
+    private val plannedPartitions = ArrayBuffer.empty[Seq[InputPartition]]
 
-    override def filter(expressions: Array[CatalystExpression]): Unit = {
+    override def planInputPartitionsWithRuntimeFilters(
+        expressions: Array[CatalystExpression]): Array[InputPartition] = {
       catalystPredicates ++= expressions
       filterCalls += 1
-      val partAttrs = partitionAttributes
-      if (partAttrs.isEmpty) return
+      // The result comes from `expressions` and the unfiltered `data` alone. Spark calls this once
+      // per scan node, and several nodes can share one scan, so carrying one call's pruning into
+      // the next would drop partitions the second node still needs. `catalystPredicates` and
+      // `filterCalls` only record what happened, for test assertions; `plannedPartitions` is read
+      // back through `readPartitions`, which is what the group-based write replaces.
+      val filtered = prunePartitions(self.data, expressions)
+      plannedPartitions += filtered
+      filtered.toArray
+    }
 
-      expressions.foreach { expr =>
+    private def prunePartitions(
+        partitions: Seq[InputPartition],
+        expressions: Array[CatalystExpression]): Seq[InputPartition] = {
+      val partAttrs = partitionAttributes
+      if (partAttrs.isEmpty) return partitions
+
+      expressions.foldLeft(partitions) { (remaining, expr) =>
         // Top down, so `s.part` is rewritten before its `s` child is considered.
         val remapped = expr.transformDown {
           case e => partitionAttrFor(e, partAttrs).getOrElse(e)
@@ -849,7 +896,7 @@ abstract class InMemoryBaseTable(
         // Evaluate expressions only when every reference maps to an identity partition-key slot.
         if (remapped.references.isEmpty) {
           val pred = CatalystPredicate.createInterpreted(remapped)
-          self.data = self.data.filter { p =>
+          remaining.filter { p =>
             try {
               pred.eval(p.asInstanceOf[BufferedRows].partitionKey())
             } catch {
@@ -863,14 +910,24 @@ abstract class InMemoryBaseTable(
               case _: Exception => true
             }
           }
+        } else {
+          remaining
         }
       }
     }
 
-    /** Predicates recorded by [[filter]], for test assertions only. */
+    /** Predicates recorded by [[planInputPartitionsWithRuntimeFilters]], for assertions only. */
     def pushedCatalystPredicates: Seq[CatalystExpression] = catalystPredicates.toSeq
 
     def filterCallCount: Int = filterCalls
+
+    /**
+     * Every partition [[planInputPartitionsWithRuntimeFilters]] handed to Spark, unioned over its
+     * calls because two scan nodes can share one scan and the group-based write has to replace
+     * everything they read; `data` when Spark never called it.
+     */
+    override def readPartitions: Seq[InputPartition] =
+      if (plannedPartitions.isEmpty) self.data else plannedPartitions.flatten.distinct.toSeq
 
     /**
      * Identity partition columns paired with their bound partition-key slots.
@@ -1184,6 +1241,33 @@ object InMemoryBaseTable {
   // columns of their read schemas. It does not by default.
   val STREAMING_COLUMN_PRUNING = "streaming-column-pruning"
 
+  // Test table property: whether the table declares STREAMING_FILTER_PUSHDOWN, so that the scan
+  // builders of its streaming reads get the filters of the queries, as for batch reads. It does not
+  // by default, so that the streaming reads of the other suites keep the path without it.
+  val STREAMING_FILTER_PUSHDOWN = "streaming-filter-pushdown"
+
+  // Test table property that simulates a connector whose micro-batch streams drop the rows that
+  // fail the filters that their scan builder took, which `STREAMING_FILTER_PUSHDOWN` permits:
+  // the streams of the table only return the rows that pass the pushed filters, see `passes`.
+  val SIMULATE_STREAMING_FILTERS = "simulate-streaming-filters"
+
+  /**
+   * Returns whether `row`, a row of a table with `schema`, may pass `filter`. It only returns
+   * false for a row that does not pass the filter, so that a stream that drops the other rows
+   * drops no row that Spark keeps.
+   */
+  def passes(filter: Filter, row: InternalRow, schema: StructType): Boolean = {
+    // Evaluates the filter as Spark does, with the Catalyst predicate that the CSV and JSON
+    // filters use. A filter over a column that the row does not have, such as a nested or a quoted
+    // one, or one added after the row was written, keeps the row, as does one that the predicate
+    // cannot express or evaluate.
+    val toRef = (name: String) => schema.getFieldIndex(name).filter(_ < row.numFields)
+      .map(i => BoundReference(i, schema(i).dataType, nullable = true))
+    StructFilters.filterToExpression(filter, toRef).forall { predicate =>
+      scala.util.Try(CatalystPredicate.createInterpreted(predicate).eval(row)).getOrElse(true)
+    }
+  }
+
   /**
    * Assigns fresh IDs to any top-level column or nested struct field that does not already
    * have one. Recurses into struct fields within ArrayType and MapType so that every field
@@ -1259,9 +1343,10 @@ object InMemoryBaseTable {
 }
 
 /**
- * A partition for [[InMemoryBaseTable]] micro-batch streaming reads, holding a slice of rows.
+ * A partition for [[InMemoryBaseTable]] micro-batch streaming reads: the rows of a micro-batch that
+ * pass the filters of its stream, each with its position in the micro-batch.
  */
-case class InMemoryMicroBatchPartition(rows: Seq[InternalRow]) extends InputPartition
+case class InMemoryMicroBatchPartition(rows: Seq[(InternalRow, Int)]) extends InputPartition
 
 /**
  * Represent a set of rows buffered in memory for a given partition key.
@@ -1307,7 +1392,7 @@ private class InMemoryMicroBatchReaderFactory(
         dataOrdinals.map(ordinals => ProjectingInternalRow(dataSchema, ordinals.toSeq))
       override def next(): Boolean = { idx += 1; idx < rows.size }
       override def get(): InternalRow = {
-        val tableRow = rows(idx)
+        val (tableRow, index) = rows(idx)
         val rawRow = projection.map { projection =>
           projection.project(tableRow)
           projection
@@ -1315,7 +1400,7 @@ private class InMemoryMicroBatchReaderFactory(
         if (metaNames.isEmpty) rawRow
         else {
           val metaRow = new GenericInternalRow(metaNames.map {
-            case "index" => idx.asInstanceOf[Any]
+            case "index" => index.asInstanceOf[Any]
             case "_partition" => UTF8String.fromString("").asInstanceOf[Any]
             case _ => null
           })
