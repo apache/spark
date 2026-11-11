@@ -29,7 +29,7 @@ import org.apache.spark.sql.connector.catalog.Changelog.{
   CHANGE_TYPE_DELETE, CHANGE_TYPE_INSERT, CHANGE_TYPE_UPDATE_POSTIMAGE, CHANGE_TYPE_UPDATE_PREIMAGE}
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSparkSession
-import org.apache.spark.sql.types.{LongType, StringType}
+import org.apache.spark.sql.types.{LongType, StringType, StructType}
 import org.apache.spark.unsafe.types.UTF8String
 
 /**
@@ -1201,6 +1201,102 @@ class ChangelogEndToEndSuite extends SharedSparkSession {
             Row(3L, "Carol", CHANGE_TYPE_INSERT)))
       } finally {
         q.stop()
+      }
+    }
+  }
+
+  for {
+    streaming <- Seq(false, true)
+    computeUpdates <- Seq(false, true)
+  } {
+    val mode = if (streaming) "streaming" else "batch"
+    test(s"$mode netChanges uses hidden metadata identity, computeUpdates=$computeUpdates") {
+      val id = recreateWithRowVersion()
+      val metadataColumn = new MetadataColumn {
+        override def name(): String = "_metadata"
+        override def dataType(): StructType = new StructType()
+          .add("row_id", LongType, nullable = false)
+        override def isNullable(): Boolean = false
+      }
+      catalog.setChangelogProperties(id, ChangelogProperties(
+        containsCarryoverRows = true,
+        containsIntermediateChanges = true,
+        representsUpdateAsDeleteAndInsert = true,
+        rowIdPaths = Seq(Seq("_metadata", "row_id"), Seq("id")),
+        rowVersionName = Some("row_commit_version"),
+        metadataColumns = Seq(metadataColumn)))
+
+      def change(
+          hiddenId: Long,
+          visibleId: Long,
+          data: String,
+          rowVersion: Long,
+          changeType: String,
+          commitVersion: Long): InternalRow = {
+        InternalRow(
+          visibleId,
+          UTF8String.fromString(data),
+          rowVersion,
+          UTF8String.fromString(changeType),
+          commitVersion,
+          commitVersion * 1000000L,
+          InternalRow(hiddenId))
+      }
+
+      // Both identities have id=1. Only their hidden row IDs distinguish them.
+      catalog.addChangeRows(id, Seq(
+        change(10L, 1L, "Alice", 1L, CHANGE_TYPE_DELETE, 1L),
+        change(10L, 1L, "Alicia", 2L, CHANGE_TYPE_INSERT, 1L),
+        change(20L, 1L, "Bob", 1L, CHANGE_TYPE_INSERT, 1L),
+        change(20L, 1L, "Bob", 1L, CHANGE_TYPE_DELETE, 2L),
+        change(20L, 1L, "Bob", 1L, CHANGE_TYPE_INSERT, 2L),
+        // Reuse hidden ID 20 with a different visible ID and advance the watermark.
+        change(20L, 2L, "Carol", 3L, CHANGE_TYPE_INSERT, 3L)))
+
+      val preLabel = if (computeUpdates) CHANGE_TYPE_UPDATE_PREIMAGE else CHANGE_TYPE_DELETE
+      val postLabel = if (computeUpdates) CHANGE_TYPE_UPDATE_POSTIMAGE else CHANGE_TYPE_INSERT
+      val expected = Seq(
+        Row(1L, "Alice", 1L, preLabel, 1L, new Timestamp(1000L)),
+        Row(1L, "Alicia", 2L, postLabel, 1L, new Timestamp(1000L)),
+        Row(1L, "Bob", 1L, CHANGE_TYPE_INSERT, 1L, new Timestamp(1000L)),
+        Row(2L, "Carol", 3L, CHANGE_TYPE_INSERT, 3L, new Timestamp(3000L)))
+      val changes = if (streaming) {
+        spark.readStream
+          .option("startingVersion", "1")
+          .option("deduplicationMode", "netChanges")
+          .option("computeUpdates", computeUpdates.toString)
+          .changes(fullTableName)
+      } else {
+        spark.read
+          .option("startingVersion", "1")
+          .option("endingVersion", "3")
+          .option("deduplicationMode", "netChanges")
+          .option("computeUpdates", computeUpdates.toString)
+          .changes(fullTableName)
+      }
+      val expectedColumns = Seq(
+        "id", "data", "row_commit_version", "_change_type", "_commit_version", "_commit_timestamp")
+      assert(changes.schema.fieldNames.toSeq == expectedColumns)
+
+      if (streaming) {
+        withSQLConf(rocksDbProviderConf) {
+          val queryName = s"cdc_hidden_identity_$computeUpdates"
+          val query = changes.writeStream
+            .format("memory")
+            .queryName(queryName)
+            .outputMode("append")
+            .start()
+          try {
+            query.processAllAvailable()
+            val result = spark.table(queryName)
+            assert(result.schema.fieldNames.toSeq == expectedColumns)
+            checkAnswer(result, expected)
+          } finally {
+            query.stop()
+          }
+        }
+      } else {
+        checkAnswer(changes, expected)
       }
     }
   }

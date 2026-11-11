@@ -20,6 +20,7 @@ package org.apache.spark.sql.connector.catalog
 import scala.collection.mutable
 
 import org.apache.spark.sql.catalyst.InternalRow
+import org.apache.spark.sql.catalyst.expressions.GenericInternalRow
 import org.apache.spark.sql.connector.catalog.ChangelogRange.{TimestampRange, UnboundedRange, VersionRange}
 import org.apache.spark.sql.connector.expressions.{FieldReference, NamedReference}
 import org.apache.spark.sql.connector.read._
@@ -34,7 +35,7 @@ import org.apache.spark.sql.util.CaseInsensitiveStringMap
  */
 class InMemoryChangelogCatalog extends InMemoryCatalog {
 
-  // tableName -> list of change rows (each row: Array[Any] matching changelog schema)
+  // Rows contain the changelog data columns followed by any declared metadata columns.
   private val changeData: mutable.Map[String, mutable.ArrayBuffer[InternalRow]] =
     mutable.Map.empty
 
@@ -118,7 +119,8 @@ class InMemoryChangelogCatalog extends InMemoryCatalog {
 
   /**
    * Add change rows for a table. Each row should match the changelog schema:
-   * (data columns..., _change_type STRING, _commit_version LONG, _commit_timestamp LONG).
+   * (data columns..., _change_type STRING, _commit_version LONG, _commit_timestamp LONG),
+   * followed by any metadata columns declared in ChangelogProperties.
    */
   def addChangeRows(ident: Identifier, rows: Seq[InternalRow]): Unit = {
     val buf = changeData.getOrElseUpdate(
@@ -221,7 +223,11 @@ class InMemoryChangelog(
   override def newScanBuilder(
       options: CaseInsensitiveStringMap): ScanBuilder = {
     onScan(options)
-    new InMemoryChangelogScanBuilder(readSchema, rows)
+    val metadataFields = properties.metadataColumns.map { column =>
+      StructField(column.name(), column.dataType(), column.isNullable())
+    }
+    val scanSchema = StructType(readSchema.fields.toSeq ++ metadataFields)
+    new InMemoryChangelogScanBuilder(scanSchema, rows)
   }
 
   def readSchema: StructType = {
@@ -231,9 +237,21 @@ class InMemoryChangelog(
 
 private class InMemoryChangelogScanBuilder(
     schema: StructType,
-    rows: Seq[InternalRow]) extends ScanBuilder {
-  override def build(): Scan =
-    new InMemoryChangelogScan(schema, rows)
+    rows: Seq[InternalRow]) extends ScanBuilder with SupportsPushDownRequiredColumns {
+  private var projectedSchema = schema
+
+  override def pruneColumns(requiredSchema: StructType): Unit = {
+    val requiredNames = requiredSchema.fieldNames.toSet
+    projectedSchema = StructType(schema.fields.filter(field => requiredNames.contains(field.name)))
+  }
+
+  override def build(): Scan = {
+    val ordinals = projectedSchema.fields.map(field => schema.fieldIndex(field.name))
+    val projectedRows = rows.map { row =>
+      new GenericInternalRow(ordinals.map(ordinal => row.get(ordinal, schema(ordinal).dataType)))
+    }
+    new InMemoryChangelogScan(projectedSchema, projectedRows)
+  }
 }
 
 private class InMemoryChangelogScan(
