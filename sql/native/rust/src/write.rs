@@ -60,10 +60,8 @@ pub trait DriverWrite: Send {
     fn abort(&mut self, epoch_id: i64, messages: &[Option<&[u8]>]) -> Result<()>;
 }
 
-/// The driver keeps this coordinator until a successful commit or an abort, after which Spark
-/// only closes the writer, and until close otherwise, including after a failed commit, which
-/// Spark aborts next. Dropping it before close releases its resources even when Spark closes
-/// the writer late, such as a stream writer after the next micro-batch created its own.
+/// The driver keeps this coordinator until close, including after a failed commit, which
+/// Spark aborts next. Spark closes the writer right after it commits or aborts the write.
 pub struct DriverWriter<C: StreamingWrite> {
     coordinator: Option<C>,
 }
@@ -84,18 +82,8 @@ impl<C: StreamingWrite> DriverWriter<C> {
         self.coordinator.as_ref().expect("coordinator is present")
     }
 
-    fn coordinator_mut(&mut self) -> Result<&mut C> {
-        Ok(self
-            .coordinator
-            .as_mut()
-            .ok_or("the write was already committed or aborted")?)
-    }
-
-    /// Drops the coordinator, logging a panic of its Drop instead of failing the call.
-    fn release(&mut self) {
-        if let Some(coordinator) = self.coordinator.take() {
-            drop_provider(coordinator);
-        }
+    fn coordinator_mut(&mut self) -> &mut C {
+        self.coordinator.as_mut().expect("coordinator is present")
     }
 }
 
@@ -105,10 +93,8 @@ impl<C: StreamingWrite> DriverWrite for DriverWriter<C> {
             .iter()
             .map(|message| decode(message.ok_or("missing committed task message")?))
             .collect::<Result<Vec<_>>>()?;
-        self.coordinator_mut()?
-            .commit(StreamingCommitInfo::new(epoch_id, messages))?;
-        self.release();
-        Ok(())
+        self.coordinator_mut()
+            .commit(StreamingCommitInfo::new(epoch_id, messages))
     }
 
     fn abort(&mut self, epoch_id: i64, messages: &[Option<&[u8]>]) -> Result<()> {
@@ -129,17 +115,17 @@ impl<C: StreamingWrite> DriverWrite for DriverWriter<C> {
                 }
             })
             .collect();
-        let result = self
-            .coordinator_mut()?
-            .abort(StreamingAbortInfo::new(epoch_id, messages));
-        self.release();
-        result
+        self.coordinator_mut()
+            .abort(StreamingAbortInfo::new(epoch_id, messages))
     }
 }
 
 impl<C: StreamingWrite> Drop for DriverWriter<C> {
     fn drop(&mut self) {
-        self.release();
+        // A panic of the coordinator's Drop is logged instead of unwinding into close.
+        if let Some(coordinator) = self.coordinator.take() {
+            drop_provider(coordinator);
+        }
     }
 }
 

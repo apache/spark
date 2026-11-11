@@ -842,17 +842,15 @@ fn streaming_writes_pass_the_query_and_the_epoch_to_the_write_and_its_tasks() {
         library,
         finish(library, writer, false, 7, &[Some(&message)], false),
     );
-    // Spark closes the writer of a micro-batch only after the next micro-batch created its
-    // own, but the SDK drops a write as soon as it is committed or aborted.
-    let previous = writer;
+    // Spark closes the writer of a micro-batch, which drops its write, once it committed or
+    // aborted the micro-batch, before it creates the writer of the next one.
+    unsafe { library.close_writer.unwrap()(writer) };
     let (writer, _) = create_writer(library, &[], 0, c"query-1".as_ptr()).unwrap();
-    unsafe { library.close_writer.unwrap()(previous) };
     success(library, finish(library, writer, true, 8, &[None], false));
+    unsafe { library.close_writer.unwrap()(writer) };
 
     // A rejected writer is dropped without its abort at close, as when its creation fails.
-    let previous = writer;
     let (writer, _) = create_writer(library, &[], 0, c"query-1".as_ptr()).unwrap();
-    unsafe { library.close_writer.unwrap()(previous) };
     success(library, finish(library, writer, true, -1, &[], true));
     unsafe { library.close_writer.unwrap()(writer) };
 

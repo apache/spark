@@ -633,9 +633,9 @@ pub enum WriteMode {
 ///   without calling it when a task message cannot be decoded.
 /// - `abort` runs at most once, never after a successful `commit`. It follows a failed
 ///   `commit`, or a failed task, also when computing the data to write failed.
-/// - Drop runs exactly once: right after a successful `commit` or after `abort`, on the
-///   thread of that call, or, for a write that Spark neither commits nor aborts, when Spark
-///   closes the writer, which may be late and on another thread.
+/// - Drop runs exactly once, otherwise when Spark closes the writer: right after a
+///   successful `commit` or after `abort`, or, for a write that Spark neither commits nor
+///   aborts, possibly late and on another thread.
 /// - A panic in any method is reported as that method's failure.
 ///
 /// These guarantees do not determine the outcome of a remote transaction. A destination
@@ -824,9 +824,9 @@ impl StreamingWriteInfo {
 ///
 /// Spark creates a write for each micro-batch, with the lifecycle of a [`BatchWrite`], and
 /// passes the epoch ID of the micro-batch to `commit` and `abort`, in [`StreamingCommitInfo`]
-/// and [`StreamingAbortInfo`], and to the task writers in [`WriterContext::epoch_id`]. A write
-/// that is committed or aborted is therefore dropped before Spark creates the write of the next
-/// micro-batch.
+/// and [`StreamingAbortInfo`], and to the task writers in [`WriterContext::epoch_id`]. Spark
+/// closes a write that it committed or aborted before it creates the write of the next
+/// micro-batch, so the write is dropped by then.
 ///
 /// # Exactly-once output
 ///

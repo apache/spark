@@ -292,11 +292,11 @@ A task commit whose message cannot be serialized counts as failed, so `abort` ca
 follow a `commit` that returned a message. Spark calls each method at most once, never
 writes after a failure or a commit, and never aborts a successful commit, as the header
 documents; the `# Lifecycle` sections of `BatchWrite` and `DataWriter` list the exact
-call-order guarantees. Drop only releases resources. The SDK drops a driver coordinator right
-after a successful `commit` or after `abort`, so the write of a micro-batch is dropped before
-Spark creates that of the next one. A write that Spark neither commits nor aborts, and a
-`ScanBuilder` that Spark never plans, are dropped when Spark closes their handles, which may
-be late and on another thread.
+call-order guarantees. Drop only releases resources. The SDK drops a driver coordinator when
+Spark closes its writer, which Spark does right after a successful `commit` or after `abort`,
+so the write of a micro-batch is dropped before Spark creates that of the next one. A write
+that Spark neither commits nor aborts, and a `ScanBuilder` that Spark never plans, are dropped
+when Spark closes their handles, which may be late and on another thread.
 
 The callback order does not determine the outcome of a remote transaction. A destination
 can publish a write successfully but lose its acknowledgement, so `commit` returns an error
