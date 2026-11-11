@@ -703,6 +703,24 @@ FROM (
     GROUP BY col1
 );
 
+SELECT kll_sketch_get_quantile_bigint(kll_sketch_agg_bigint(col1), array(0.5D, NULL))
+FROM t_long_1_5_through_7_11;
+
+SELECT kll_sketch_get_quantile_float(kll_sketch_agg_float(col1), array(NULL, 0.5D))
+FROM t_float_1_5_through_7_11;
+
+SELECT kll_sketch_get_quantile_double(kll_sketch_agg_double(col1), array(0.0D, NULL, 1.0D))
+FROM t_double_1_5_through_7_11;
+
+SELECT kll_sketch_get_rank_bigint(kll_sketch_agg_bigint(col1), array(1L, NULL))
+FROM t_long_1_5_through_7_11;
+
+SELECT kll_sketch_get_rank_float(kll_sketch_agg_float(col1), array(NULL, CAST(1 AS FLOAT)))
+FROM t_float_1_5_through_7_11;
+
+SELECT kll_sketch_get_rank_double(kll_sketch_agg_double(col1), array(CAST(NULL AS DOUBLE)))
+FROM t_double_1_5_through_7_11;
+
 -- Clean up
 DROP TABLE IF EXISTS t_int_1_5_through_7_11;
 DROP TABLE IF EXISTS t_long_1_5_through_7_11;

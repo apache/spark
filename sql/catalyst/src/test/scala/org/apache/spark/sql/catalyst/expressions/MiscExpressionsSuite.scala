@@ -21,8 +21,11 @@ import java.io.PrintStream
 
 import scala.util.Random
 
+import org.apache.datasketches.kll.{KllDoublesSketch, KllFloatsSketch, KllLongsSketch}
+
 import org.apache.spark.{SparkFunSuite, SparkRuntimeException}
 import org.apache.spark.sql.catalyst.analysis.TypeCheckResult.DataTypeMismatch
+import org.apache.spark.sql.catalyst.util.GenericArrayData
 import org.apache.spark.sql.catalyst.util.TypeUtils.ordinalNumber
 import org.apache.spark.sql.types._
 
@@ -174,5 +177,83 @@ class MiscExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
         "parameter" -> "`algorithm`",
         "functionName" -> "`hmac`",
         "algorithm" -> "'SHA-3'"))
+  }
+
+  Seq(LongType, FloatType, DoubleType).foreach { valueType =>
+    val sketch = valueType match {
+      case LongType =>
+        val buffer = KllLongsSketch.newHeapInstance()
+        Seq(10L, 20L, 30L).foreach(buffer.update)
+        buffer.toByteArray
+      case FloatType =>
+        val buffer = KllFloatsSketch.newHeapInstance()
+        Seq(10.0f, 20.0f, 30.0f).foreach(buffer.update)
+        buffer.toByteArray
+      case DoubleType =>
+        val buffer = KllDoublesSketch.newHeapInstance()
+        Seq(10.0d, 20.0d, 30.0d).foreach(buffer.update)
+        buffer.toByteArray
+    }
+
+    val quantile: Expression => Expression = valueType match {
+      case LongType => KllSketchGetQuantileBigint(Literal(sketch), _)
+      case FloatType => KllSketchGetQuantileFloat(Literal(sketch), _)
+      case DoubleType => KllSketchGetQuantileDouble(Literal(sketch), _)
+    }
+    val rank: Expression => Expression = valueType match {
+      case LongType => KllSketchGetRankBigint(Literal(sketch), _)
+      case FloatType => KllSketchGetRankFloat(Literal(sketch), _)
+      case DoubleType => KllSketchGetRankDouble(Literal(sketch), _)
+    }
+
+    Seq(("rank", DoubleType, quantile), ("quantile", valueType, rank)).foreach {
+      case (argumentName, argumentType, getter) =>
+        test(s"KLL $valueType $argumentName rejects NULL array elements") {
+          val value = Cast(Literal(0), argumentType).eval()
+          Seq(
+            Array[Any](null, value, value),
+            Array[Any](value, null, value),
+            Array[Any](value, value, null),
+            Array[Any](null, null)).foreach { values =>
+            val array = Literal(new GenericArrayData(values),
+              ArrayType(argumentType, containsNull = true))
+            assert(getter(array).checkInputDataTypes() == DataTypeMismatch(
+              errorSubClass = "UNEXPECTED_NULL",
+              messageParameters = Map("exprName" -> s"$argumentName array elements")))
+          }
+          val array = CreateArray(Seq(Cast(Literal(0), argumentType),
+            Cast(Literal.create(null, NullType), argumentType)))
+          assert(getter(array).checkInputDataTypes().isFailure)
+        }
+
+        test(s"KLL $valueType $argumentName preserves valid arrays and scalar NULL") {
+          val value = Cast(Literal(0), argumentType).eval()
+          val nullableArray = Literal(new GenericArrayData(Array[Any](value)),
+            ArrayType(argumentType, containsNull = true))
+          val expression = getter(nullableArray)
+          assert(expression.checkInputDataTypes().isSuccess)
+          val expected = if (argumentName == "rank") {
+            Cast(Literal(10), valueType).eval()
+          } else {
+            0.0d
+          }
+          checkEvaluation(expression, Seq(expected))
+          val emptyArray = Literal(new GenericArrayData(Array.empty[Any]),
+            ArrayType(argumentType, containsNull = true))
+          assert(getter(emptyArray).checkInputDataTypes().isSuccess)
+          checkEvaluation(getter(emptyArray), Seq.empty)
+          val nullArray = Literal.create(null, ArrayType(argumentType, containsNull = true))
+          assert(getter(nullArray).checkInputDataTypes().isSuccess)
+          checkEvaluation(getter(nullArray), null)
+          val scalarNull = Literal.create(null, argumentType)
+          assert(getter(scalarNull).checkInputDataTypes().isSuccess)
+          checkEvaluation(getter(scalarNull), null)
+          checkEvaluation(getter(Literal(value, argumentType)), expected)
+          val nonFoldable = AttributeReference("input", ArrayType(argumentType))()
+          assert(getter(nonFoldable).checkInputDataTypes().asInstanceOf[DataTypeMismatch]
+            .errorSubClass == "NON_FOLDABLE_INPUT")
+          assert(getter(Literal("invalid")).checkInputDataTypes().isFailure)
+        }
+    }
   }
 }

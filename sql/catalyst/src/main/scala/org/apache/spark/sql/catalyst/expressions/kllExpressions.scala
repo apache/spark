@@ -550,7 +550,18 @@ abstract class KllSketchGetQuantileBase
           "inputType" -> toSQLType(right.dataType),
           "inputExpr" -> toSQLExpr(right)))
     } else {
-      super.checkInputDataTypes()
+      val typeCheckResult = super.checkInputDataTypes()
+      if (typeCheckResult.isSuccess && right.dataType.isInstanceOf[ArrayType]) {
+        right.eval() match {
+          case array: ArrayData if (0 until array.numElements()).exists(array.isNullAt) =>
+            TypeCheckResult.DataTypeMismatch(
+              errorSubClass = "UNEXPECTED_NULL",
+              messageParameters = Map("exprName" -> "rank array elements"))
+          case _ => typeCheckResult
+        }
+      } else {
+        typeCheckResult
+      }
     }
   }
 
@@ -736,7 +747,18 @@ abstract class KllSketchGetRankBase
           "inputType" -> toSQLType(right.dataType),
           "inputExpr" -> toSQLExpr(right)))
     } else {
-      super.checkInputDataTypes()
+      val typeCheckResult = super.checkInputDataTypes()
+      if (typeCheckResult.isSuccess && right.dataType.isInstanceOf[ArrayType]) {
+        right.eval() match {
+          case array: ArrayData if (0 until array.numElements()).exists(array.isNullAt) =>
+            TypeCheckResult.DataTypeMismatch(
+              errorSubClass = "UNEXPECTED_NULL",
+              messageParameters = Map("exprName" -> "quantile array elements"))
+          case _ => typeCheckResult
+        }
+      } else {
+        typeCheckResult
+      }
     }
   }
 
