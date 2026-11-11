@@ -17,6 +17,9 @@
 
 package org.apache.spark.sql.execution.command.v2
 
+import org.json4s._
+import org.json4s.jackson.JsonMethods._
+
 import org.apache.spark.sql.Row
 import org.apache.spark.sql.execution.command
 
@@ -60,6 +63,34 @@ class ShowTblPropertiesSuite extends command.ShowTblPropertiesSuiteBase with Com
       sql(s"ALTER TABLE $tbl UNSET TBLPROPERTIES ('catalog-label')")
       checkAnswer(sql(s"SHOW TBLPROPERTIES $tbl ('catalog-label')"),
         Row("catalog-label", "catalog-value"))
+    }
+  }
+
+  test("SHOW TBLPROPERTIES AS JSON on a v2 table") {
+    withNamespaceAndTable("ns1", "tbl") { tbl =>
+      spark.sql(s"CREATE TABLE $tbl (id bigint, data string) $defaultUsing " +
+        "TBLPROPERTIES ('user'='andrew', 'status'='new')")
+
+      val jsonStr = sql(s"SHOW TBLPROPERTIES $tbl AS JSON").collect()(0).getString(0)
+      val properties = (parse(jsonStr) \ "properties").asInstanceOf[JArray].arr
+      val user = properties.find(e => (e \ "key").extract[String] == "user")
+      assert(user.isDefined)
+      assert((user.get \ "value").extract[String] == "andrew")
+    }
+  }
+
+  test("SHOW TBLPROPERTIES AS JSON includes display properties and excludes reserved keys") {
+    withNamespaceAndTable("ns", "table") { tbl =>
+      createTableWithDisplayProperties("ns", "table")
+
+      val json = parse(sql(s"SHOW TBLPROPERTIES $tbl AS JSON").collect()(0).getString(0))
+      val props = (json \ "properties").asInstanceOf[JArray].arr.map { e =>
+        (e \ "key").asInstanceOf[JString].s -> (e \ "value").asInstanceOf[JString].s
+      }
+      assert(props === Seq(
+        "catalog-label" -> "catalog-value",
+        "password" -> "*********(redacted)",
+        "persisted" -> "stored"))
     }
   }
 }
