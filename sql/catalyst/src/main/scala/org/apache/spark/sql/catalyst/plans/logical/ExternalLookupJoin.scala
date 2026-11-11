@@ -134,10 +134,10 @@ case class PreparedExternalLookupJoin(
   override protected def stringArgs: Iterator[Any] =
     Iterator(joinType, lookupParameters, residualCondition, child)
 
-  // The join keeps the size estimate it had before preparation, as an ordinary join's: the product
-  // of the stream side's size and the lookup side's, Spark's default size for a table it cannot
-  // scan. The stream side's size alone would ignore the lookup columns and the rows that a stream
-  // row can match.
+  // The product of the stream side's size and spark.sql.defaultSizeInBytes, as the lookup side is
+  // read by lookups rather than scanned. It can differ from the estimate before preparation, when
+  // the scan of the lookup side reports statistics. The stream side's size alone would ignore the
+  // lookup columns and the rows that a stream row can match.
   override def stats: Statistics = statsCache.getOrElse {
     statsCache = Some(Statistics(sizeInBytes =
       Seq(child.stats.sizeInBytes, BigInt(conf.defaultSizeInBytes)).filter(_ > 0L).product))

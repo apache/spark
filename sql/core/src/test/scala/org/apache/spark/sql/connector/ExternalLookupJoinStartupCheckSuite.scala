@@ -202,6 +202,27 @@ class ExternalLookupJoinStartupCheckSuite extends QueryTest with SharedSparkSess
     }
   }
 
+  test("NO_LOOKUP_CANDIDATE stops a hinted join over a dual-capability table when it starts") {
+    withTempView("startup_bigint_stream", "startup_dual") {
+      MemoryStream[Long].toDF().toDF("id").createOrReplaceTempView("startup_bigint_stream")
+      spark.read.format(classOf[DualCapabilityExternalLookupDataSource].getName).load()
+        .createOrReplaceTempView("startup_dual")
+      // A BIGINT stream key casts the INT lookup column, so Spark has no candidate to offer. The
+      // table also serves batch scans, so only the hint makes it a lookup side, directly or
+      // through a WITH clause.
+      Seq(
+        "SELECT /*+ EXTERNAL_LOOKUP(d) */ d.department FROM startup_bigint_stream s " +
+          "JOIN startup_dual d ON s.id = d.id",
+        "WITH lk AS (TABLE startup_dual) SELECT /*+ EXTERNAL_LOOKUP(lk) */ lk.department " +
+          "FROM startup_bigint_stream s JOIN lk ON s.id = lk.id").foreach { query =>
+        checkError(
+          exception = queryFailure[AnalysisException](spark.sql(query)),
+          condition = "EXTERNAL_LOOKUP_JOIN_UNSUPPORTED.NO_LOOKUP_CANDIDATE",
+          parameters = Map("table" -> "`DualCapabilityExternalLookupTable`"))
+      }
+    }
+  }
+
   test("NO_LOOKUP_CANDIDATE stops the query when it starts, before any data arrives") {
     val stream = MemoryStream[Long].toDF().toDF("id")
     val lookup = lookupOnly

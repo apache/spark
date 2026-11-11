@@ -23,15 +23,15 @@ import scala.collection.mutable
 import org.apache.spark.sql.catalyst.expressions.SubqueryExpression
 import org.apache.spark.sql.catalyst.optimizer.{EliminateResolvedHint, InlineCTE}
 import org.apache.spark.sql.catalyst.plans.{Inner, LeftOuter}
-import org.apache.spark.sql.catalyst.plans.logical.{CTERelationDef, CTERelationRef,
-  ExternalLookupHint, ExternalLookupJoin, Join, JoinStrategyHint, LogicalPlan, ResolvedHint,
-  SetOperation, SubqueryAlias, UnaryNode, Union, View, WithCTE}
+import org.apache.spark.sql.catalyst.plans.logical.{AsOfJoin, CTERelationDef, CTERelationRef,
+  ExternalLookupHint, ExternalLookupJoin, Join, JoinStrategyHint, LateralJoin, LogicalPlan,
+  NearestByJoin, ResolvedHint, SetOperation, SubqueryAlias, UnaryNode, Union, View, WithCTE}
 import org.apache.spark.sql.catalyst.rules.Rule
 import org.apache.spark.sql.catalyst.streaming.WriteToStream
-import org.apache.spark.sql.catalyst.trees.TreePattern.{CTE, EXTERNAL_LOOKUP_HINT, JOIN,
-  LOOKUP_ONLY_RELATION}
+import org.apache.spark.sql.catalyst.trees.TreePattern.{AS_OF_JOIN, CTE, EXTERNAL_LOOKUP_HINT, JOIN,
+  LATERAL_JOIN, LOOKUP_ONLY_RELATION, NEAREST_BY_JOIN, TreePattern}
 import org.apache.spark.sql.catalyst.util.MetadataColumnHelper
-import org.apache.spark.sql.connector.catalog.TableCapability
+import org.apache.spark.sql.connector.catalog.{Table, TableCapability}
 import org.apache.spark.sql.errors.{QueryCompilationErrors, QueryErrorsBase}
 import org.apache.spark.sql.execution.datasources.v2.ExternalLookupRelations
 
@@ -68,6 +68,24 @@ object ExternalLookupJoinEligibility extends QueryErrorsBase {
 
   private val SUPPORTED_JOIN_TYPES = Seq(Inner, LeftOuter)
 
+  /**
+   * An operator that the `EXTERNAL_LOOKUP` hint can annotate as a join, as a join strategy hint
+   * can: a [[Join]], an ASOF or NEAREST BY join, which Finish Analysis turns into joins, and a
+   * lateral join that the query writes, which operator optimization turns into a join. A lateral
+   * join that analysis adds for a table argument of a table function is not written by the query,
+   * so it is a unary operator for the hint, as for any other analysis check.
+   */
+  object HintableJoin {
+    def unapply(plan: LogicalPlan): Boolean = plan match {
+      case _: Join | _: AsOfJoin | _: NearestByJoin => true
+      case lateral: LateralJoin => !lateral.containsTag(LateralJoin.BY_TABLE_ARGUMENT)
+      case _ => false
+    }
+
+    /** The tree patterns of these operators. */
+    val patterns: Seq[TreePattern] = Seq(JOIN, AS_OF_JOIN, NEAREST_BY_JOIN, LATERAL_JOIN)
+  }
+
   def apply(join: Join): Eligibility = {
     // Every other outcome needs the hint or a lookup-only relation on an input of the join.
     if (!join.containsAnyPattern(EXTERNAL_LOOKUP_HINT, LOOKUP_ONLY_RELATION)) return NotLookupJoin
@@ -88,13 +106,9 @@ object ExternalLookupJoinEligibility extends QueryErrorsBase {
       return Ineligible(QueryCompilationErrors.unsupportedExternalLookupJoinError(
         "STREAMING_LOOKUP_SIDE"))
     }
-    // The DSv2 table that the lookup side reads through hints, aliases and views only. There is
-    // none when another operator stands in between or the side reads no DSv2 table.
-    val tableRelation = lookupRelation(join.right)
-    val table = ExternalLookupRelations.table(tableRelation) match {
-      case Some(table) => table
-      case None =>
-        return Ineligible(QueryCompilationErrors.unsupportedExternalLookupJoinError("LOOKUP_PLAN"))
+    val (tableRelation, table) = lookupTable(join.right) match {
+      case Right(found) => found
+      case Left(rejection) => return rejection
     }
     val relation = toSQLId(table.name())
     if (!table.capabilities().contains(TableCapability.EXTERNAL_LOOKUP)) {
@@ -127,6 +141,47 @@ object ExternalLookupJoinEligibility extends QueryErrorsBase {
       case None => Eligible
     }
   }
+
+  /**
+   * The error of an `EXTERNAL_LOOKUP` hint on an input of an ASOF, NEAREST BY or lateral join, none
+   * of which runs as an external lookup join, or None. A hint on the left input is on the lookup
+   * side of no join, as for a [[Join]]. A hint on the right input of an ASOF or NEAREST BY join
+   * asks for a join type that a lookup join does not support, or for a lookup side that reads no
+   * DSv2 table. The subquery of a lateral join is checked as a subquery plan.
+   */
+  def otherJoinHintError(join: LogicalPlan): Option[Throwable] = {
+    val (left, right, joinType) = join match {
+      case asOf: AsOfJoin => (asOf.left, Some(asOf.right), "ASOF")
+      case nearestBy: NearestByJoin => (nearestBy.left, Some(nearestBy.right), "NEAREST BY")
+      case lateral: LateralJoin => (lateral.left, None, "LATERAL")
+      case _ => return None
+    }
+    if (!join.containsPattern(EXTERNAL_LOOKUP_HINT)) None else {
+      if (lookupHints(left).nonEmpty) {
+        Some(QueryCompilationErrors.invalidExternalLookupHintError("NOT_ON_LOOKUP_SIDE"))
+      } else {
+        right.filter(lookupHints(_).nonEmpty).map { lookupSide =>
+          lookupTable(lookupSide) match {
+            case Left(rejection) => rejection.error
+            case Right((_, table)) =>
+              ineligible("JOIN_TYPE", toSQLId(table.name()), Map(
+                "joinType" -> toSQLStmt(joinType),
+                "supportedJoinTypes" ->
+                  SUPPORTED_JOIN_TYPES.map(t => toSQLStmt(t.sql)).mkString(", "))).error
+          }
+        }
+      }
+    }
+  }
+
+  /**
+   * Whether the analysis check of `plan` has anything to check: a join that can be one over a
+   * lookup-only table, or the hint with an operator that it can annotate as a join. The pattern
+   * bits tell this without a walk, as for [[mayHaveLookupJoin]].
+   */
+  def mayHaveHintOrLookupJoin(plan: LogicalPlan): Boolean =
+    mayHaveLookupJoin(plan) || plan.containsPattern(EXTERNAL_LOOKUP_HINT) &&
+      plan.containsAnyPattern(HintableJoin.patterns: _*)
 
   /**
    * Whether `plan` can have a join that must run as an external lookup join: one over a lookup-only
@@ -224,6 +279,23 @@ object ExternalLookupJoinEligibility extends QueryErrorsBase {
     case other => other
   }
 
+  /**
+   * The DSv2 table that a lookup side reads through hints, aliases and views only, with its
+   * relation, or the rejection of a side that reads none: another operator stands in between, or
+   * the side reads no DSv2 table.
+   */
+  private def lookupTable(lookupSide: LogicalPlan): Either[Ineligible, (LogicalPlan, Table)] = {
+    val tableRelation = lookupRelation(lookupSide)
+    ExternalLookupRelations.table(tableRelation) match {
+      case Some(table) => Right(tableRelation -> table)
+      // TODO: look through projections and filters on the lookup side, such as those that a
+      // SQL-defined view, read-side CHAR padding, a second reference to a WITH clause or the
+      // refresh of a versioned table puts above the table.
+      case None =>
+        Left(Ineligible(QueryCompilationErrors.unsupportedExternalLookupJoinError("LOOKUP_PLAN")))
+    }
+  }
+
   /** The first operator below a join input that is not a hint, an alias or a view. */
   @tailrec
   private def lookupRelation(plan: LogicalPlan): LogicalPlan = plan match {
@@ -270,10 +342,16 @@ object ExternalLookupJoinEligibility extends QueryErrorsBase {
  * A missing join condition is reported only for the query of a streaming write, which is analyzed
  * in full when the query starts, so that `start()` throws it. Other plans can still get their
  * condition: the classic Dataset API analyzes a USING join first as a join without a condition.
+ *
+ * The hint on an input of an ASOF, NEAREST BY or lateral join, which the analyzer and the
+ * optimizer turn into joins only later, fails here too, as no such join runs as an external lookup
+ * join.
  */
 object CheckExternalLookupJoin extends (LogicalPlan => Unit) {
+  import ExternalLookupJoinEligibility.HintableJoin
+
   override def apply(plan: LogicalPlan): Unit = {
-    if (ExternalLookupJoinEligibility.mayHaveLookupJoin(plan)) {
+    if (ExternalLookupJoinEligibility.mayHaveHintOrLookupJoin(plan)) {
       val complete = plan.isInstanceOf[WriteToStream]
       plan.foreachUp {
         case join: Join if join.resolved =>
@@ -284,6 +362,8 @@ object CheckExternalLookupJoin extends (LogicalPlan => Unit) {
                 "MISSING_JOIN_CONDITION")
             case _ =>
           }
+        case join @ HintableJoin() if join.resolved =>
+          ExternalLookupJoinEligibility.otherJoinHintError(join).foreach(error => throw error)
         case _ =>
       }
       // An `EXTERNAL_LOOKUP` hint over a join, or over a set operation such as UNION with a join
@@ -301,7 +381,7 @@ object CheckExternalLookupJoin extends (LogicalPlan => Unit) {
   }
 
   private def readsJoin(plan: LogicalPlan): Boolean = plan match {
-    case _: Join => true
+    case HintableJoin() => true
     case unary: UnaryNode => readsJoin(unary.child)
     case union: Union => union.children.exists(readsJoin)
     case setOperation: SetOperation => setOperation.children.exists(readsJoin)

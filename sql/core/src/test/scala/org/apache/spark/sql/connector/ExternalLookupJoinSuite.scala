@@ -850,7 +850,25 @@ class ExternalLookupJoinSuite extends QueryTest with SharedSparkSession {
         },
         condition = "INVALID_EXTERNAL_LOOKUP_HINT.RELATION_NOT_FOUND",
         parameters = Map("relations" -> "`missing`"))
+      // A missing name fails next to one that matches, and every missing name is reported, but
+      // not the one that matches.
+      Seq(
+        "EXTERNAL_LOOKUP(r, missing)" -> "`missing`",
+        "EXTERNAL_LOOKUP(missing, r, other)" -> "`missing`, `other`").foreach {
+        case (hint, missing) =>
+          checkError(
+            exception = intercept[AnalysisException](query(hint).queryExecution.analyzed),
+            condition = "INVALID_EXTERNAL_LOOKUP_HINT.RELATION_NOT_FOUND",
+            parameters = Map("relations" -> missing))
+      }
     }
+    checkError(
+      exception = intercept[AnalysisException] {
+        left.join(lookup.as("r"), left("id") === col("r.id"))
+          .hint("external_lookup", "r", "missing").queryExecution.analyzed
+      },
+      condition = "INVALID_EXTERNAL_LOOKUP_HINT.RELATION_NOT_FOUND",
+      parameters = Map("relations" -> "`missing`"))
 
     val stream = MemoryStream[Int].toDF().toDF("id")
     checkError(
@@ -1849,6 +1867,122 @@ class ExternalLookupJoinSuite extends QueryTest with SharedSparkSession {
       },
       condition = "INVALID_EXTERNAL_LOOKUP_HINT.NOT_ON_LOOKUP_SIDE",
       parameters = Map.empty)
+  }
+
+  test("the hint on or above an ASOF, NEAREST BY or lateral join fails while it is analyzed") {
+    val directory =
+      spark.read.format(classOf[DualCapabilityExternalLookupDataSource].getName).load()
+    val scans = streamOf(Seq(1, 3).toDF("id"))
+    val batchScans = Seq(1, 3).toDF("id")
+    def analysisError(query: => DataFrame): AnalysisException =
+      intercept[AnalysisException](query.queryExecution.analyzed)
+    def joinTypeError(joinType: String): Map[String, String] = Map(
+      "joinType" -> joinType,
+      "relation" -> "`DualCapabilityExternalLookupTable`",
+      "supportedJoinTypes" -> SUPPORTED_JOIN_TYPES)
+    withTempView("hinted_scans", "hinted_batch_scans", "hinted_directory", "hinted_values") {
+      withSQLConf(SQLConf.SQL_ASOF_JOIN_ENABLED.key -> "true") {
+        scans.createOrReplaceTempView("hinted_scans")
+        batchScans.createOrReplaceTempView("hinted_batch_scans")
+        directory.createOrReplaceTempView("hinted_directory")
+        Seq((1, "lobby")).toDF("id", "department").createOrReplaceTempView("hinted_values")
+        def asOf(left: String)(right: String): String =
+          s"$left s ASOF JOIN $right d MATCH_CONDITION(s.id >= d.id) ON s.id = d.id"
+        def nearestBy(left: String)(right: String): String =
+          s"$left s JOIN $right d APPROX NEAREST 1 BY DISTANCE abs(s.id - d.id)"
+        // Streaming and batch ASOF joins, and a NEAREST BY join, which only a batch query allows.
+        val joins = Seq[(String, String => String)](
+          "ASOF" -> asOf("hinted_scans"), "ASOF" -> asOf("hinted_batch_scans"),
+          "NEAREST BY" -> nearestBy("hinted_batch_scans"))
+        joins.foreach { case (joinType, from) =>
+          // On the right input, the join type is not supported, or the input is no lookup side when
+          // it reads no DSv2 table.
+          checkError(
+            exception = analysisError(
+              sql(s"SELECT /*+ EXTERNAL_LOOKUP(d) */ s.id FROM ${from("hinted_directory")}")),
+            condition = "EXTERNAL_LOOKUP_JOIN_UNSUPPORTED.JOIN_TYPE",
+            parameters = joinTypeError(joinType))
+          checkError(
+            exception = analysisError(
+              sql(s"SELECT /*+ EXTERNAL_LOOKUP(d) */ s.id FROM ${from("hinted_values")}")),
+            condition = "EXTERNAL_LOOKUP_JOIN_UNSUPPORTED.LOOKUP_PLAN",
+            parameters = Map.empty)
+        }
+        // On the left input, and above the join, the hint is on the lookup side of no join.
+        val lateral = "hinted_batch_scans s JOIN LATERAL " +
+          "(SELECT department FROM hinted_directory p WHERE p.id = s.id) d"
+        (joins.map(_._2("hinted_directory")) :+ lateral).foreach { from =>
+          Seq("EXTERNAL_LOOKUP(s)", "EXTERNAL_LOOKUP").foreach { hint =>
+            checkError(
+              exception = analysisError(sql(s"SELECT /*+ $hint */ s.id FROM $from")),
+              condition = "INVALID_EXTERNAL_LOOKUP_HINT.NOT_ON_LOOKUP_SIDE",
+              parameters = Map.empty)
+          }
+        }
+      }
+    }
+
+    // A streaming joinAsOf with the hint on its right input fails with the join type, in
+    // parameterless and named form. A batch joinAsOf first analyzes the join of its two inputs,
+    // whose left side is static.
+    def joinAsOf(left: DataFrame, right: DataFrame): DataFrame =
+      left.asInstanceOf[Dataset[Row]].joinAsOf(
+        right, left("id"), right("id"), left("id") === right("id"), "inner",
+        tolerance = null, allowExactMatches = true, direction = "backward")
+    Seq(directory.hint("external_lookup"), directory.as("d").hint("external_lookup", "d"))
+      .foreach { hinted =>
+        checkError(
+          exception = analysisError(joinAsOf(scans, hinted)),
+          condition = "EXTERNAL_LOOKUP_JOIN_UNSUPPORTED.JOIN_TYPE",
+          parameters = joinTypeError("ASOF"))
+        checkError(
+          exception = analysisError(joinAsOf(batchScans, hinted)),
+          condition = "EXTERNAL_LOOKUP_JOIN_UNSUPPORTED.STATIC_LEFT_SIDE",
+          parameters = Map("relation" -> "`DualCapabilityExternalLookupTable`"))
+      }
+    // On the left input of joinAsOf and lateralJoin, and above them.
+    val departments =
+      directory.where(directory("id") === col("id").outer()).select("department")
+    Seq[() => DataFrame](
+      () => joinAsOf(scans.hint("external_lookup"), directory),
+      () => joinAsOf(scans, directory).hint("external_lookup"),
+      () => batchScans.hint("external_lookup").lateralJoin(departments),
+      () => batchScans.lateralJoin(departments).hint("external_lookup")).foreach { query =>
+      checkError(
+        exception = analysisError(query()),
+        condition = "INVALID_EXTERNAL_LOOKUP_HINT.NOT_ON_LOOKUP_SIDE",
+        parameters = Map.empty)
+    }
+  }
+
+  test("ASOF, NEAREST BY and lateral joins without the hint read a dual-capability table") {
+    // As without the hint, they read the table, which also serves batch scans, with a scan, and
+    // return the rows that they return over a copy of its rows. A hint with no join below it, over
+    // the table or inside a lateral subquery, is ignored.
+    val directory =
+      spark.read.format(classOf[DualCapabilityExternalLookupDataSource].getName).load()
+    withTempView("plain_scans", "dual_directory", "copied_directory") {
+      withSQLConf(SQLConf.SQL_ASOF_JOIN_ENABLED.key -> "true") {
+        Seq(1, 2, 3).toDF("id").createOrReplaceTempView("plain_scans")
+        directory.createOrReplaceTempView("dual_directory")
+        spark.createDataFrame(directory.collect().toSeq.asJava, directory.schema)
+          .createOrReplaceTempView("copied_directory")
+        Seq(
+          "SELECT s.id, d.department FROM plain_scans s " +
+            "ASOF JOIN %s d MATCH_CONDITION(s.id >= d.id) ON s.id = d.id",
+          "SELECT s.id, d.department FROM plain_scans s " +
+            "JOIN %s d APPROX NEAREST 1 BY DISTANCE abs(s.id - d.id)",
+          "SELECT s.id, d.department FROM plain_scans s " +
+            "JOIN LATERAL (SELECT department FROM %s p WHERE p.id = s.id) d",
+          "SELECT s.id, d.department FROM plain_scans s " +
+            "JOIN LATERAL (SELECT /*+ EXTERNAL_LOOKUP */ department FROM %s p WHERE p.id = s.id) d",
+          "SELECT /*+ EXTERNAL_LOOKUP */ id, department FROM %s").foreach { query =>
+          val expected = sql(query.format("copied_directory")).collect().toSeq
+          assert(expected.nonEmpty, query)
+          checkAnswer(sql(query.format("dual_directory")), expected)
+        }
+      }
+    }
   }
 
   test("external lookup join handles null, missing, duplicate, and partial batches") {
