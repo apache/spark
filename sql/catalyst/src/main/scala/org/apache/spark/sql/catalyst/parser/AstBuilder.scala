@@ -3401,19 +3401,18 @@ class AstBuilder extends DataTypeAstBuilder
 
   override def visitStreamRelation(ctx: StreamRelationContext): LogicalPlan =
     withOrigin(ctx) {
-      val source = ctx.streamSource
       val sourceName = extractSourceName(ctx.identifiedByClause)
-      Option(source.multipartIdentifier).map { multipartIdentifier =>
+      Option(ctx.multipartIdentifier).map { multipartIdentifier =>
         val ident = visitMultipartIdentifier(multipartIdentifier)
         var relation: LogicalPlan = createUnresolvedRelation(
           ctx = ctx,
           ident = ident,
-          optionsClause = Option(source.optionsClause),
+          optionsClause = Option(ctx.optionsClause),
           writePrivileges = Set.empty,
           isStreaming = true)
 
-        Option(source.streamChangesClause).foreach { changesCtx =>
-          val options = resolveOptions(Option(source.optionsClause))
+        Option(ctx.streamChangesClause).foreach { changesCtx =>
+          val options = resolveOptions(Option(ctx.optionsClause))
           val changelogContext = buildStreamChangelogContext(changesCtx, options)
           relation = RelationChanges(relation, changelogContext)
         }
@@ -3422,7 +3421,7 @@ class AstBuilder extends DataTypeAstBuilder
         relation.optionalMap(ctx.watermarkClause)(withWatermark)
       }.getOrElse {
         val tvfPlan = buildTvfFromTableFunctionCall(
-          source.tableFunctionCall, ctx.tableAlias, ctx.watermarkClause)
+          ctx.tableFunctionCall, ctx.tableAlias, ctx.watermarkClause)
         tvfPlan.transformUp {
           case tvf: UnresolvedTableValuedFunction =>
             NamedStreamingRelation.withUserProvidedName(tvf.copy(isStreaming = true), sourceName)

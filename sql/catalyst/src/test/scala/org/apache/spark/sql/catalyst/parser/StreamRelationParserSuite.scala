@@ -611,6 +611,16 @@ class StreamRelationParserSuite extends AnalysisTest {
     }
   }
 
+  test("SPARK-60557: STREAM(t) AS changes keeps changes as an alias") {
+    parsePlan("SELECT * FROM STREAM(t) AS changes") match {
+      case Project(_, SubqueryAlias(alias, NamedStreamingRelation(relation, Unassigned))) =>
+        assert(alias.name == "changes")
+        assert(relation == UnresolvedRelation(Seq("t"), isStreaming = true))
+      case other =>
+        fail(s"Expected a streaming relation aliased as changes, but got: $other")
+    }
+  }
+
   test("STREAM t CHANGES FROM VERSION") {
     val plan = parsePlan("SELECT * FROM STREAM t CHANGES FROM VERSION 1")
     val relationChanges = plan.collect { case rc: RelationChanges => rc }

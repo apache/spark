@@ -648,12 +648,6 @@ createPipelineDatasetHeader
       identifierReference
     ;
 
-streamSource
-    : (multipartIdentifier | LEFT_PAREN multipartIdentifier RIGHT_PAREN)
-      streamChangesClause? optionsClause?
-    | (tableFunctionCall | LEFT_PAREN tableFunctionCall RIGHT_PAREN)
-    ;
-
 setResetStatement
     : SET ROLE .*?                                                     #failSetRole
     | SET TIME ZONE interval                                           #setTimeZone
@@ -1406,8 +1400,11 @@ identifierComment
     ;
 
 relationPrimary
-    : STREAM streamSource identifiedByClause?
-      watermarkClause? tableAlias                           #streamRelation
+    : STREAM (multipartIdentifier | LEFT_PAREN multipartIdentifier RIGHT_PAREN)
+      streamChangesClause? optionsClause?
+      identifiedByClause? watermarkClause? tableAlias       #streamRelation
+    | STREAM (tableFunctionCall | LEFT_PAREN tableFunctionCall RIGHT_PAREN)
+      identifiedByClause? watermarkClause? tableAlias       #streamRelation
     | identifierReference changesClause
       optionsClause? tableAlias                             #changelogTableName
     | temporalTableIdentifierReference temporalClause?
