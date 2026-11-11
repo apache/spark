@@ -50,7 +50,7 @@ SHOW TBLPROPERTIES table_identifier
 * **property_key_as_string_literal**
 
     Specifies a property key value as a string literal.
-
+  
 * **AS JSON**
 
     An optional parameter to return the table properties as a single-row JSON document
@@ -74,6 +74,14 @@ SHOW TBLPROPERTIES table_identifier
     |---|---|---|
     | `properties` | array of objects | Each element maps a property `key` to its string `value` and If specific property key is requested and it is not set on the table, the array is empty. Sorted by key when all properties are listed.  |
 
+**Note**
+- Property value returned by this statement excludes some properties 
+  that are internal to spark and hive. The excluded properties are :
+  - All the properties that start with prefix `spark.sql`
+  - Property keys such as:  `EXTERNAL`, `comment`
+  - All the properties generated internally by hive to store statistics. Some of these
+    properties are: `numFiles`, `numPartitions`, `numRows`.
+    
 
 ### Examples
 
