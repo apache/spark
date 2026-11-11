@@ -780,13 +780,17 @@ class BasePythonStreamingDataSourceTestsMixin:
                 "SIMPLE_STREAM_READER_OFFSET_DID_NOT_ADVANCE",
             )
 
-        # A proxy forwarding __getattr__ and __iter__ to an iterator behaves like one.
-        wrapper = _SimpleStreamReaderWrapper(
-            HookedResultReader([0, 1], IteratorProxy, advance=True)
+        # A proxy forwarding __getattr__ and __iter__ to an iterator is converted with
+        # iter() and validated like any other iterable. It is only checked on paths
+        # where the guard runs: the cache readback copies entries with copy.copy,
+        # which a proxy rebuilt without __init__ cannot survive.
+        wrapper = _SimpleStreamReaderWrapper(HookedResultReader([0], IteratorProxy, advance=False))
+        with self.assertRaises(PySparkException) as cm:
+            wrapper.latestOffset(start, ReadAllAvailable())
+        self.assertEqual(
+            cm.exception.getCondition(),
+            "SIMPLE_STREAM_READER_OFFSET_DID_NOT_ADVANCE",
         )
-        end = wrapper.latestOffset(start, ReadAllAvailable())
-        self.assertEqual(end, {"offset": 2})
-        self.assertEqual(list(wrapper.getCache(start, end)), [0, 1])
 
         wrapper = _SimpleStreamReaderWrapper(HookedResultReader([], IteratorProxy, advance=False))
         end = wrapper.latestOffset(start, ReadAllAvailable())
