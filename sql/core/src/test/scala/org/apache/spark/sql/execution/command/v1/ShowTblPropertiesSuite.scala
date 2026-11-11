@@ -45,6 +45,14 @@ trait ShowTblPropertiesSuiteBase extends command.ShowTblPropertiesSuiteBase
     }
   }
 
+  test("SHOW TBLPROPERTIES FOR TEMPORARY VIEW") {
+    val v = "testview"
+    withView(v) {
+      spark.sql(s"CREATE TEMPORARY VIEW $v AS SELECT 1 AS c1;")
+      checkAnswer(sql(s"SHOW TBLPROPERTIES $v"), Seq.empty)
+    }
+  }
+
   test("SHOW TBLPROPERTIES FOR VIEW AS JSON") {
     val v = "testview"
     withView(v) {
@@ -52,6 +60,16 @@ trait ShowTblPropertiesSuiteBase extends command.ShowTblPropertiesSuiteBase
       checkAnswer(
         sql(s"SHOW TBLPROPERTIES $v ('p1') AS JSON"),
         Seq(Row("""{"properties":[{"key":"p1","value":"v1"}]}""")))
+    }
+  }
+        
+  test("SHOW TBLPROPERTIES FOR TEMPORARY VIEW AS JSON") {
+    val v = "testview"
+    withView(v) {
+      spark.sql(s"CREATE TEMPORARY VIEW $v AS SELECT 1 AS c1;")
+      checkAnswer(
+        sql(s"SHOW TBLPROPERTIES $v AS JSON"),
+        Seq(Row("""{"properties":[]}""")))
     }
   }
 }
