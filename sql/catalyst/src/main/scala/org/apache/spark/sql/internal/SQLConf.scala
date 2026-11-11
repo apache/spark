@@ -5601,8 +5601,10 @@ object SQLConf {
         "same streaming query (samples outside a SQL query are merged under \"unknown\"), " +
         "\"stage\" merges samples from the same stage, and " +
         "\"task\" keeps one result per task, merging its attempts. A finer level uses more " +
-        "driver memory. This takes effect only when spark.sql.pyspark.udf.profiler is set " +
-        "to \"sampling\".")
+        "memory where the results are merged: on the driver in classic PySpark, and on the " +
+        "client in Spark Connect, where the server keeps every task's result until it sends " +
+        "them to the client, whatever the level. This takes effect only when " +
+        "spark.sql.pyspark.udf.profiler is set to \"sampling\".")
       .version("4.4.0")
       .withBindingPolicy(ConfigBindingPolicy.NOT_APPLICABLE)
       .stringConf
