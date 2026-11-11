@@ -711,21 +711,20 @@ object UnsupportedOperationChecker extends Logging {
     val leftKeys = keys.map(_._2).getOrElse(Nil)
     val rightKeys = keys.map(_._3).getOrElse(Nil)
 
-    // TODO(SPARK-61347): this accepts a range bound on an input without its own watermark,
-    //   which eviction does not finalize yet.
-    // TODO(SPARK-61348): this also accepts a range bound on a column that is not TIMESTAMP,
+    // TODO(SPARK-61348): this accepts a range bound on a column that is not TIMESTAMP,
     //   which eviction never finalizes.
     // TODO(SPARK-61349): this also accepts a bound that uses only constants, which does not
     //   follow the other input's watermark and so cannot finalize unmatched state.
     def canEvictState(
         stateInput: LogicalPlan,
         otherInput: LogicalPlan,
-        otherKeys: Seq[Expression]): Boolean = {
+        otherKeys: Seq[Expression],
+        exactForUnwatermarkedColumns: Boolean = true): Boolean = {
       val eventTime = otherInput.output.find(_.metadata.contains(EventTimeWatermark.delayKey))
       StreamingJoinHelper.getStateKeyWatermarkOrdinal(otherKeys, otherInput.output).isDefined ||
         StreamingJoinHelper.getStateValueWatermark(stateInput.outputSet,
           AttributeSet(eventTime.toSeq), join.condition, Some(1000000),
-          exactForUnwatermarkedColumns = true).isDefined
+          exactForUnwatermarkedColumns).isDefined
     }
 
     // The rule of Spark versions before 4.4: a watermarked equality key, or a range bound that the
@@ -803,6 +802,25 @@ object UnsupportedOperationChecker extends Logging {
           case _ => leftNote + rightNote
         }
       }
+      // A side that only an inexact bound would finalize has the watermark and the time
+      // constraint; say why they are not enough.
+      def finalizedOnlyByInexactBound(side: String): Boolean = side match {
+        case "left" => !leftCanEvict &&
+          canEvictState(join.left, join.right, rightKeys, exactForUnwatermarkedColumns = false)
+        case _ => !rightCanEvict &&
+          canEvictState(join.right, join.left, leftKeys, exactForUnwatermarkedColumns = false)
+      }
+      val requiredSides = join.joinType match {
+        case FullOuter => Seq("left", "right")
+        case RightOuter => Seq("right")
+        case _ => Seq("left")
+      }
+      val inexactNote = requiredSides.filter(finalizedOnlyByInexactBound).map { side =>
+        s" The time constraint bounds the $side input only on a column without its own " +
+          "watermark, through an interval of a day or more or a truncating cast such as " +
+          "CAST(ts AS BIGINT), and such a bound does not finalize rows. Bound the input's " +
+          "watermarked event time instead, or use a bound shorter than a day."
+      }.mkString
       val checkConf = SQLConf.STREAMING_JOIN_CHECK_FINALIZATION_ENABLED.key
       val canDisableCheck = admittedBeforeFinalizationCheck
       val disableNote = if (canDisableCheck) {
@@ -818,7 +836,7 @@ object UnsupportedOperationChecker extends Logging {
           "The time constraint may be equality on event time or a time range condition. " +
           "When upgrading an existing query, correct its watermarks and time constraints, " +
           "then use a new checkpoint and replay the input, reconciling prior sink output." +
-          legacyWindowNote + downstreamNote + disableNote
+          legacyWindowNote + inexactNote + downstreamNote + disableNote
       if (SQLConf.get.streamingJoinCheckFinalizationEnabled || !canDisableCheck) {
         throwError(message)(join)
       } else {

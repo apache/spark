@@ -1300,11 +1300,13 @@ regarding watermark delays and whether data will be dropped or not.
 Unmatched output and state removal use the same cutoff, derived from the opposite input's
 watermark and the time constraint. In the example above, the `clickTime` watermark finalizes
 impressions; no watermark on `impressionTime` is needed for this. Without that watermark, the
-time constraint must have an exact length: whole days in a session time zone with daylight saving
-time, where a day can last 23 or 25 hours, or a truncating cast such as
-`CAST(impressionTime AS BIGINT)`, do not finalize impressions, and an outer join that relies on
-them fails analysis. Full outer joins require watermarks and time constraints in both directions
-to finalize both sides.
+time constraint must have an exact length. An interval of a day or more, such as
+`INTERVAL 1 DAY` or `INTERVAL 48 HOURS`, does not finalize impressions in any session time zone,
+because Spark adds its whole days in the session time zone, where a day can last 23 or 25 hours.
+Nor does a truncating cast such as `CAST(impressionTime AS BIGINT)`. An outer join that relies
+on such a bound fails analysis; add a watermark on `impressionTime`, or use a bound shorter than
+a day. Full outer joins require watermarks and time constraints in both directions to finalize
+both sides.
 
 ###### Caveats
 There are a few important characteristics to note regarding how the outer results are generated.

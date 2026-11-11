@@ -796,10 +796,14 @@ class UnsupportedOperationsSuite extends SparkFunSuite with SQLHelper {
 
     // A range bound that counts a local day as 24 hours, or reads a truncated time as exact, can
     // put the cutoff above a row that can still match. Only an input with its own watermark keeps
-    // such a bound, so an outer join of an input without one cannot finalize its rows.
+    // such a bound, so an outer join of an input without one cannot finalize its rows. An
+    // interval of a day or more counts as inexact in every session time zone.
+    val inexactNote = "only on a column without its own watermark, through an interval of a day " +
+      "or more or a truncating cast"
     for {
       watermarked <- Seq(false, true)
       zone <- Seq("UTC", "America/Los_Angeles")
+      (length, interval) <- Seq("one-day" -> Duration.ofDays(1), "48-hour" -> Duration.ofHours(48))
     } {
       val leftTime = if (watermarked) {
         unwatermarkedTime.withMetadata(watermarkMetadata)
@@ -807,22 +811,44 @@ class UnsupportedOperationsSuite extends SparkFunSuite with SQLHelper {
         unwatermarkedTime
       }
       val left = new TestStreamingRelation(leftTime)
-      val dayLater = TimestampAddInterval(leftTime, Literal(Duration.ofDays(1)), Some(zone))
+      val later = TimestampAddInterval(leftTime, Literal(interval), Some(zone))
       val inputs = if (watermarked) "both inputs watermarked" else "only the right watermarked"
       val plan = left.join(right, joinType = LeftOuter,
-        condition = Some(rightTime >= leftTime && rightTime <= dayLater))
-      val name = s"LeftOuter with a one-day range in $zone, $inputs"
-      if (watermarked || zone == "UTC") {
+        condition = Some(rightTime >= leftTime && rightTime <= later))
+      val name = s"LeftOuter with a $length range in $zone, $inputs"
+      if (watermarked) {
         assertSupportedInStreamingPlan(name, plan, OutputMode.Append())
       } else {
         assertNotSupportedInStreamingPlan(name, plan, OutputMode.Append(),
-          Seq("requires a watermark on the right input"))
+          Seq("requires a watermark on the right input", s"bounds the left input $inexactNote"))
       }
     }
+    // Here the right time bounds the left time from below through 24 hours.
+    assertNotSupportedInStreamingPlan("LeftOuter with a 24-hour range below the right time",
+      new TestStreamingRelation(unwatermarkedTime).join(right, joinType = LeftOuter,
+        condition = Some(unwatermarkedTime >= TimestampAddInterval(rightTime,
+          Literal(Duration.ofHours(-24)), Some("UTC")) && unwatermarkedTime <= rightTime)),
+      OutputMode.Append(),
+      Seq("requires a watermark on the right input", s"bounds the left input $inexactNote"))
     assertNotSupportedInStreamingPlan("LeftOuter with a range over a truncating cast",
       new TestStreamingRelation(unwatermarkedTime).join(right, joinType = LeftOuter,
         condition = Some(unwatermarkedTime.cast(LongType) >= rightTime.cast(LongType) + 5L)),
-      OutputMode.Append(), Seq("requires a watermark on the right input"))
+      OutputMode.Append(),
+      Seq("requires a watermark on the right input", s"bounds the left input $inexactNote"))
+
+    test("streaming plan - a join that lacks the right watermark gets no inexact-bound note") {
+      val unwatermarkedRight = new TestStreamingRelation(AttributeReference("rt", TimestampType)())
+      val e = intercept[AnalysisException] {
+        UnsupportedOperationChecker.checkForStreaming(wrapInStreaming(
+          new TestStreamingRelation(unwatermarkedTime).join(unwatermarkedRight,
+            joinType = LeftOuter, condition = Some(
+              unwatermarkedRight.output.head <= TimestampAddInterval(unwatermarkedTime,
+                Literal(Duration.ofDays(1)), Some("UTC"))))),
+          OutputMode.Append())
+      }
+      assert(e.getMessage.contains("requires a watermark on the right input"))
+      assert(!e.getMessage.contains("interval of a day or more"))
+    }
   }
 
   // multi-aggregations only supported in Append mode

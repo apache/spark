@@ -44,6 +44,16 @@ Please refer [Migration Guide: SQL, Datasets and DataFrame](../sql-migration-gui
   watermark, and the query fails at start (see below) because the aggregation would never emit
   results.
 
+- Since Spark 4.4, a time condition can finalize an input that has no watermark of its own, such
+  as impressions without a watermark joined on
+  `clickTime BETWEEN impressionTime AND impressionTime + INTERVAL 1 HOUR`. Such a bound must
+  have an exact length. An interval of a day or more, such as `INTERVAL 1 DAY` or
+  `INTERVAL 48 HOURS`, or a truncating cast such as `CAST(impressionTime AS BIGINT)`, does not
+  finalize that input in any session time zone, because Spark adds whole days in the session
+  time zone, where a day can last 23 or 25 hours. An outer or left semi join that relies on such
+  a bound fails analysis. Add a watermark on that input's event time and bound it instead, or use
+  a bound shorter than a day.
+
 - Since Spark 4.4, you can set `spark.sql.streaming.join.checkFinalization.enabled` to `false`
   to run a stream-stream outer or left semi join that fails the requirement above, or a query
   that fails the start-time check for an aggregation after a join, below. Spark then logs a

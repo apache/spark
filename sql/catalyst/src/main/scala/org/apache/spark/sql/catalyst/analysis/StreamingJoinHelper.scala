@@ -26,7 +26,6 @@ import org.apache.spark.internal.LogKeys._
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.plans.logical.EventTimeWatermark._
 import org.apache.spark.sql.catalyst.util.DateTimeConstants.{MICROS_PER_DAY, MICROS_PER_HOUR, MICROS_PER_MILLIS, MICROS_PER_MINUTE, MICROS_PER_SECOND}
-import org.apache.spark.sql.catalyst.util.DateTimeUtils
 import org.apache.spark.sql.types._
 import org.apache.spark.unsafe.types.CalendarInterval
 
@@ -472,9 +471,9 @@ object StreamingJoinHelper extends PredicateHelper with Logging {
   }
 
   /**
-   * Whether the solver counts part of the expression inexactly: whole days added in a time zone
-   * that is not fixed-offset, where a day can be 23 or 25 hours, or a cast that drops part of a
-   * time, such as CAST(ts AS BIGINT).
+   * Whether the solver counts part of the expression inexactly: an interval of a day or more,
+   * whose whole days Spark adds in the session time zone, where a day can be 23 or 25 hours, or a
+   * cast that drops part of a time, such as CAST(ts AS BIGINT).
    */
   private def hasInexactArithmetic(expr: Expression): Boolean = {
     def hasWholeDays(interval: Expression): Boolean = {
@@ -492,10 +491,11 @@ object StreamingJoinHelper extends PredicateHelper with Logging {
         case decimal: DecimalType => decimal.scale < 6
         case _ => false
       })
+    // Whole days count as inexact in every session time zone, as they do for equality keys.
+    // Whether a column gets a cutoff decides which column V4 stores and finds rows by, and the
+    // offset log does not keep the session time zone, so that must not depend on the zone.
     expr.exists {
-      case TimestampAddInterval(_, interval, timeZoneId) =>
-        !timeZoneId.exists(DateTimeUtils.getZoneId(_).getRules.isFixedOffset) &&
-          hasWholeDays(interval)
+      case TimestampAddInterval(_, interval, _) => hasWholeDays(interval)
       case Cast(child, dataType, _, _) => isTruncatingCast(child.dataType, dataType)
       case _ => false
     }
