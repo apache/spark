@@ -46,9 +46,10 @@ import org.apache.spark.sql.internal.SQLConf
  * `StreamingV2ScanPushDown.forStartup`), so that their scans are neither built nor planned at the
  * start, as for a query without a lookup join.
  *
- * Only the planning errors of the lookup join and of its connector contract stop the query. Any
- * other error, such as one that an ordinary join raises too, is left to the micro-batch, which
- * plans the query as before.
+ * Only the planning errors of the lookup join and of its connector contract stop the query, those
+ * of the classes in `lookupErrorClasses`. Any other error, such as one that an ordinary join raises
+ * too, or an exception that the connector throws while Spark plans the lookup, is left to the
+ * micro-batch, which plans the query as before.
  */
 private[sql] object ExternalLookupJoinStartupCheck extends Logging {
   private val lookupErrorClasses = Set(

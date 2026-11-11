@@ -18,7 +18,7 @@
 package org.apache.spark.sql.connector
 
 import java.util.concurrent.{ConcurrentLinkedQueue, CountDownLatch, TimeUnit}
-import java.util.concurrent.atomic.{AtomicInteger, AtomicReference}
+import java.util.concurrent.atomic.{AtomicBoolean, AtomicInteger, AtomicReference}
 
 import scala.jdk.CollectionConverters._
 import scala.reflect.{classTag, ClassTag}
@@ -397,7 +397,10 @@ class ExternalLookupJoinStartupCheckSuite extends QueryTest with SharedSparkSess
     val query = start(stream.join(lookup, stream("id") === lookup("id")).select("department"))
     try {
       // start() has returned, and the query thread is in the call, which waits to be released.
+      // Had start() planned the lookup itself, the call would have returned, once its wait ran
+      // out, before start() did.
       assert(BlockingLookupTable.entered.get().await(timeoutMs, TimeUnit.MILLISECONDS))
+      assert(BlockingLookupTable.returned.get() === false)
       assert(query.isActive && query.exception.isEmpty)
       BlockingLookupTable.release.get().countDown()
       input.addData(1, 3)
@@ -608,10 +611,13 @@ object BlockingLookupTable extends Table with SupportsRead {
   // Counted down when a scan builder is requested; the request waits for `release`.
   val entered = new AtomicReference(new CountDownLatch(1))
   val release = new AtomicReference(new CountDownLatch(1))
+  // Whether a request has returned, once released or once its wait ran out.
+  val returned = new AtomicBoolean(false)
 
   def reset(): Unit = {
     entered.set(new CountDownLatch(1))
     release.set(new CountDownLatch(1))
+    returned.set(false)
   }
 
   override def name(): String = "BlockingLookupTable"
@@ -621,6 +627,7 @@ object BlockingLookupTable extends Table with SupportsRead {
   override def newScanBuilder(options: CaseInsensitiveStringMap): ScanBuilder = {
     entered.get().countDown()
     release.get().await(60, TimeUnit.SECONDS)
+    returned.set(true)
     SimpleExternalLookupTable.newScanBuilder(options)
   }
 }

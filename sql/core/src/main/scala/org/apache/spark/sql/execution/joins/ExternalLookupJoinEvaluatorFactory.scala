@@ -118,9 +118,9 @@ class ExternalLookupJoinEvaluatorFactory(
     /** Reads more only when nothing is buffered; safe to call repeatedly. */
     private def tryAdvance(): Unit = {
       while (!batch.hasNext && !inputExhausted) {
-        val rows = readBatch()
-        if (rows.nonEmpty) {
-          batch = new BatchJoinIterator(rows, parameters, resultRows, joinOutput, reader)
+        val next = readBatch()
+        if (next.rows.nonEmpty) {
+          batch = new BatchJoinIterator(next, parameters, resultRows, joinOutput, reader)
         }
         inputExhausted = !input.hasNext
       }
@@ -135,22 +135,45 @@ class ExternalLookupJoinEvaluatorFactory(
     // counts only as an input row. A left outer join emits it, so a batch keeps it.
     private val keepsRowsThatCannotMatch = joinType != Inner
 
-    private def canMatch(row: InternalRow): Boolean =
-      joinOutput.canMatch(row) && !parameters.matchesNothing(parameters.requestRow(row))
+    /**
+     * The request row of a stream row that can match, in a reused row, or null. The stream
+     * condition is checked before the parameters are evaluated, so that it can guard their
+     * expressions.
+     */
+    private def requestRowOf(row: InternalRow): UnsafeRow =
+      if (!joinOutput.canMatch(row)) null else {
+        val requestRow = parameters.requestRow(row)
+        if (parameters.matchesNothing(requestRow)) null else requestRow
+      }
 
     // An array, because a batch's rows are read by position for every key, match and output row.
     // The batch holds its rows until its request is read, so it stops once their copies reach
     // maxBatchBytes, keeping the row that reaches it, as well as at maxParameterRowsPerRequest
-    // rows. It always keeps one row, when one remains.
-    private def readBatch(): Array[InternalRow] = {
+    // rows. It always keeps one row, when one remains. It decides once for each row whether the
+    // row can match, and groups the rows that can by their request row, which it copies once.
+    private def readBatch(): StreamBatch = {
       val rows = mutable.ArrayBuffer.empty[InternalRow]
+      val keyEntries = mutable.LinkedHashMap.empty[UnsafeRow, KeyEntry]
+      val rowsThatCannotMatch = mutable.ArrayBuffer.empty[Int]
       var bytes = 0L
       while (rows.length < maxParameterRowsPerRequest && bytes < maxBatchBytes && input.hasNext) {
         val next = input.next()
-        if (keepsRowsThatCannotMatch || canMatch(next)) {
+        val requestRow = requestRowOf(next)
+        if (keepsRowsThatCannotMatch || requestRow != null) {
           val row = next match {
             case unsafe: UnsafeRow => unsafe.copy()
             case other => toUnsafe(other).copy()
+          }
+          val index = rows.length
+          if (requestRow == null) {
+            rowsThatCannotMatch += index
+          } else {
+            keyEntries.get(requestRow) match {
+              case Some(entry) => entry.rowIndexes += index
+              case None =>
+                val retained = requestRow.copy()
+                keyEntries.put(retained, KeyEntry(retained, mutable.ArrayBuffer(index)))
+            }
           }
           bytes += row.getSizeInBytes
           rows += row
@@ -158,12 +181,23 @@ class ExternalLookupJoinEvaluatorFactory(
           metrics.inputRows += 1
         }
       }
-      rows.toArray
+      StreamBatch(rows.toArray, keyEntries.values.toArray, rowsThatCannotMatch.toArray)
     }
   }
 
   /** The stream rows that share a key, and the one request row sent for them. */
   private case class KeyEntry(requestRow: UnsafeRow, rowIndexes: mutable.ArrayBuffer[Int])
+
+  /**
+   * The stream rows of a batch, with one entry for each distinct request row that can match, in
+   * the order of first occurrence, and the positions of the rows that a left outer join keeps
+   * although they cannot match, because they fail the stream condition or have a null parameter
+   * that is not null-safe.
+   */
+  private case class StreamBatch(
+      rows: Array[InternalRow],
+      keyEntries: Array[KeyEntry],
+      rowsThatCannotMatch: Array[Int])
 
   /**
    * Joins one batch of stream rows. Rows whose parameters are equal under Spark equality share
@@ -175,11 +209,12 @@ class ExternalLookupJoinEvaluatorFactory(
    * retains, as with other join iterators.
    */
   private class BatchJoinIterator(
-      rows: Array[InternalRow],
+      batch: StreamBatch,
       parameters: LookupParameters,
       resultRows: LookupResultRows,
       joinOutput: JoinOutput,
       reader: LookupReader) extends Iterator[InternalRow] {
+    private val rows = batch.rows
     metrics.inputRows += rows.length
     metrics.inputBatches += 1
 
@@ -188,27 +223,9 @@ class ExternalLookupJoinEvaluatorFactory(
     // Output rows not yet returned: a stream row index and the lookup row it is joined with.
     private val pending = mutable.Queue.empty[(Int, InternalRow)]
 
-    // One entry for each distinct request row that can match, in the order of first occurrence.
-    // A row that can never match, because it fails the stream condition or has a null parameter,
-    // is finished right away, and its parameters are not requested. The stream condition is
-    // checked before the parameters are evaluated, so that it can guard their expressions.
-    private val keyEntries = {
-      val entries = mutable.LinkedHashMap.empty[UnsafeRow, KeyEntry]
-      rows.indices.foreach { index =>
-        lazy val requestRow = parameters.requestRow(rows(index))
-        if (!joinOutput.canMatch(rows(index)) || parameters.matchesNothing(requestRow)) {
-          finish(index)
-        } else {
-          entries.get(requestRow) match {
-            case Some(entry) => entry.rowIndexes += index
-            case None =>
-              val retained = requestRow.copy()
-              entries.put(retained, KeyEntry(retained, mutable.ArrayBuffer(index)))
-          }
-        }
-      }
-      entries.values.toArray
-    }
+    // A row that can never match is finished right away, and its parameters are not requested.
+    batch.rowsThatCannotMatch.foreach(finish)
+    private val keyEntries = batch.keyEntries
 
     // No connector request, and no reader, when no key can match.
     private var cursor: ExternalLookupResultCursor =

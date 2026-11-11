@@ -2547,9 +2547,14 @@ object SQLConf {
       .internal()
       .withBindingPolicy(ConfigBindingPolicy.NOT_APPLICABLE)
       .doc("When true, a streaming query plans its external lookup joins once when its " +
-        "execution starts, including the planning calls to their connectors, so that a join " +
-        "that cannot be planned stops the query before its first micro-batch, also without " +
-        "data. When false, such a join fails the first micro-batch that runs.")
+        "execution starts, including the planning calls to their connectors. A planning error " +
+        "of a lookup join or of its connector contract, of the error class " +
+        "EXTERNAL_LOOKUP_JOIN_UNSUPPORTED, DATA_SOURCE_INVALID_EXTERNAL_LOOKUP or " +
+        "DATA_SOURCE_EXTERNAL_LOOKUP_NOT_SUPPORTED, then stops the query before its first " +
+        "micro-batch, also without data. Any other planning error is left to the first " +
+        "micro-batch, such as one that an ordinary join raises too, or an exception that the " +
+        "connector throws while Spark plans the lookup. When false, those lookup join errors " +
+        "fail the first micro-batch that runs.")
       .version("4.4.0")
       .booleanConf
       .createWithDefault(true)

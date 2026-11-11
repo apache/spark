@@ -69,7 +69,7 @@ import org.apache.spark.sql.execution.streaming.runtime.{IncrementalExecution, M
 import org.apache.spark.sql.execution.streaming.sources.LowLatencyMemoryStream
 import org.apache.spark.sql.execution.vectorized.OnHeapColumnVector
 import org.apache.spark.sql.functions.{coalesce, col, concat, expr, length, lit, max, raise_error,
-  to_json, when}
+  to_json, udf, when}
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.sources.{BaseRelation, CreatableRelationProvider, InsertableRelation,
   RelationProvider, SchemaRelationProvider}
@@ -896,6 +896,64 @@ class ExternalLookupJoinSuite extends QueryTest with SharedSparkSession {
     assert(metrics("lookupTime").value > 0)
   }
 
+  test("a lookup join computes its key once per stream row that passes the stream condition") {
+    // A UDF over the badge computes the key, and counts its calls. The stream condition
+    // `verified` reads only the stream, so the join checks it before it computes the key, and
+    // never computes the key of a row that fails it.
+    val badgeId = udf { (badge: String) =>
+      CountingKeyUDF.calls.incrementAndGet()
+      badge.toInt
+    }
+    val employees = spark.read.format(classOf[SimpleExternalLookupDataSource].getName).load()
+    val scans = streamOf(
+      Seq(("1", true), ("2", false), ("1", true), ("3", true)).toDF("badge", "verified"))
+    val condition = scans("verified") && employees("id") === badgeId(scans("badge"))
+    val matched = Seq(Row("1", true, 1, "engineering"), Row("1", true, 1, "research"))
+    Seq(
+      "inner" -> (matched ++ matched),
+      "left_outer" -> (matched ++ matched :+ Row("2", false, null, null) :+
+        Row("3", true, null, null))).foreach { case (joinType, expected) =>
+      CountingKeyUDF.calls.set(0)
+      checkStream(scans.join(employees, condition, joinType), expected)
+      assert(CountingKeyUDF.calls.get() === 3, joinType)
+    }
+  }
+
+  test("external lookup batches rows with null keys, failing rows and repeated keys") {
+    // Up to three stream rows per request. An inner join leaves out the row with a null key and
+    // the unverified row, so its batches are [1, 1, 3] and [2]. A left outer join keeps them, so
+    // its batches are [1, null, 1] and [2, 3, 2], and requests no parameter for them.
+    val lookup = spark.read
+      .format(classOf[SimpleExternalLookupDataSource].getName)
+      .option("maxBatchSize", "3")
+      .load()
+    val scans = streamOf(Seq[(java.lang.Integer, Boolean)](
+      (1, true), (null, true), (1, true), (2, false), (3, true), (2, true)).toDF("id", "verified"))
+    val condition = scans("verified") && scans("id") === lookup("id")
+    val matched = Seq(Row(1, true, 1, "engineering"), Row(1, true, 1, "research"))
+    val inner = matched ++ matched :+ Row(2, true, 2, "sales")
+    val unmatched = Seq(Row(null, true, null, null), Row(2, false, null, null),
+      Row(3, true, null, null))
+    // The rows, request sizes and the metrics: input rows, batches, requests, parameter rows and
+    // output rows.
+    Seq(
+      ("inner", inner, Seq(2, 1), Seq(6, 2, 2, 3, 5)),
+      ("left_outer", inner ++ unmatched, Seq(1, 2), Seq(6, 2, 2, 3, 8))).foreach {
+      case (joinType, expected, requestSizes, metricValues) =>
+        SimpleExternalLookupDataSource.resetCounters()
+        val run = runStream(scans.join(lookup, condition, joinType))
+        QueryTest.sameRows(expected, run.rows).foreach(error => fail(s"$joinType: $error"))
+        assert(SimpleExternalLookupDataSource.requestSizes.asScala.toSeq === requestSizes,
+          joinType)
+        assert(SimpleExternalLookupDataSource.requestedKeys.asScala.toSeq === Seq(1, 3, 2),
+          joinType)
+        assert(SimpleExternalLookupDataSource.nullKeyRequests.get() === 0, joinType)
+        assert(Seq("numInputRows", "numInputBatches", "numLookupRequests",
+          "numLookupParameterRows", "numOutputRows").map(run.lookupJoin.metrics(_).value) ===
+          metricValues, joinType)
+    }
+  }
+
   test("external lookup join supports complete composite equi-keys") {
     val lookup = spark.read
       .format(classOf[CompositeExternalLookupDataSource].getName)
@@ -964,6 +1022,38 @@ class ExternalLookupJoinSuite extends QueryTest with SharedSparkSession {
         CaseInsensitiveExternalLookupTable.returnedRows.set(0)
         checkStream(orders.join(products, orders("sku") === products("sku"), joinType), expected)
         assert(CaseInsensitiveExternalLookupTable.returnedRows.get() === 6)
+    }
+  }
+
+  test("external lookup checks every selected lookup predicate on the returned rows") {
+    // The source selects `tenant = ?` and `id = ?`, but ignores one of them, each in turn, when it
+    // matches, so it also returns stored rows that fail that predicate. Spark checks both on every
+    // returned row, and joins only the stored rows whose tenant and id both match the stream row.
+    val lookup = spark.read.format(classOf[CompositeExternalLookupDataSource].getName).load()
+    val left = streamOf(Seq((1, 1), (1, 2), (2, 1)).toDF("tenant", "id"))
+    val condition = left("tenant") === lookup("tenant") && left("id") === lookup("id")
+    val matched = Seq(Row(1, 1, 1, 1, "one-one"), Row(2, 1, 2, 1, "two-one"))
+    // The stored rows that the source returns for each stream row, as (tenant, id) pairs.
+    val returnedIgnoring = Map(
+      "tenant" -> Set((1, 1) -> (1, 1), (1, 1) -> (2, 1), (2, 1) -> (1, 1), (2, 1) -> (2, 1)),
+      "id" -> Set((1, 1) -> (1, 1), (1, 1) -> (1, 3), (1, 2) -> (1, 1), (1, 2) -> (1, 3),
+        (2, 1) -> (2, 1)))
+    try {
+      for {
+        (ignored, returned) <- returnedIgnoring
+        (joinType, expected) <-
+          Seq("inner" -> matched, "left_outer" -> (matched :+ Row(1, 2, null, null, null)))
+      } {
+        CompositeExternalLookupDataSource.ignoredField.set(Some(ignored))
+        CompositeExternalLookupDataSource.returnedRows.clear()
+        checkStream(left.join(lookup, condition, joinType), expected)
+        assert(CompositeExternalLookupDataSource.selectedLookupPredicates.get() ===
+          Seq("=" -> "tenant", "=" -> "id"), s"$ignored, $joinType")
+        assert(CompositeExternalLookupDataSource.returnedRows.asScala.toSet === returned,
+          s"$ignored, $joinType")
+      }
+    } finally {
+      CompositeExternalLookupDataSource.ignoredField.set(None)
     }
   }
 
@@ -2440,6 +2530,16 @@ object CompositeExternalLookupDataSource {
     (2, 1) -> "two-one")
   val selectedLookupPredicates =
     new AtomicReference(Seq.empty[(String, String)])
+  // A selected field that the source does not compare when it matches, if any.
+  val ignoredField = new AtomicReference(Option.empty[String])
+  // The (tenant, id) parameters of each request row, with the (tenant, id) of each stored row
+  // that the source returned for it, while it ignores a field.
+  val returnedRows = new ConcurrentLinkedQueue[((Int, Int), (Int, Int))]()
+}
+
+/** Counts the calls of a test UDF that computes a lookup key, in every task of the JVM. */
+object CountingKeyUDF {
+  val calls = new AtomicInteger()
 }
 
 object CompositeExternalLookupTable extends Table with SupportsRead {
@@ -2495,8 +2595,10 @@ case class CompositeExternalLookupReaderFactory(
   override def createReader(): ExternalLookupReader = new ExternalLookupReader {
     override def lookupBatch(keys: Array[InternalRow]): ExternalLookupResultCursor = {
       val results = keys.iterator.zipWithIndex.flatMap { case (key, ordinal) =>
+        val ignored = CompositeExternalLookupDataSource.ignoredField.get()
         CompositeExternalLookupDataSource.values.iterator.filter { case ((tenant, id), _) =>
           selectedLookupPredicates.zipWithIndex.forall {
+            case ((_, field), _) if ignored.contains(field) => true
             case ((predicate, field), index) =>
               val lookupValue = if (field == "tenant") tenant else id
               val parameter = key.getInt(index)
@@ -2509,6 +2611,10 @@ case class CompositeExternalLookupReaderFactory(
               }
           }
         }.map { case ((tenant, id), lookupValue) =>
+          if (ignored.nonEmpty) {
+            CompositeExternalLookupDataSource.returnedRows.add(
+              (key.getInt(0), key.getInt(1)) -> (tenant, id))
+          }
           ordinal -> InternalRow.fromSeq(requiredSchema.fieldNames.toSeq.map {
             case "tenant" => Int.box(tenant)
             case "id" => Int.box(id)
