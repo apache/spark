@@ -40,7 +40,8 @@ trait SupportsFullyPushedCatalystFilters extends Table {
    * References may name top-level data or metadata columns, or nested struct fields. Declaring a
    * struct covers all of its nested fields. Spark ignores fields pruned from the scan. The source
    * must evaluate every eligible predicate over these fields with Spark's semantics, including
-   * error behavior.
+   * error behavior. Declarations apply to the original table columns, not new output columns
+   * created by pushed joins, aggregates or variant extraction, even if their names match.
    */
   def fullyPushedFilterAttributes(): Array[NamedReference] = Array.empty
 }

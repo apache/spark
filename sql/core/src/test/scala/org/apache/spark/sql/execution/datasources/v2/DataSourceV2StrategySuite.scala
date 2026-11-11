@@ -31,7 +31,7 @@ import org.apache.spark.sql.catalyst.expressions.objects.StaticInvoke
 import org.apache.spark.sql.catalyst.expressions.variant.VariantGet
 import org.apache.spark.sql.catalyst.optimizer.{BooleanSimplification, CombineFilters, ConstantFolding}
 import org.apache.spark.sql.catalyst.planning.PhysicalOperation
-import org.apache.spark.sql.catalyst.plans.Inner
+import org.apache.spark.sql.catalyst.plans.{Inner, LeftOuter, RightOuter}
 import org.apache.spark.sql.catalyst.plans.logical.{Aggregate, Filter, Join, JoinHint, Limit, LogicalPlan, Offset, OneRowRelation, Project, Sort}
 import org.apache.spark.sql.catalyst.util.{CharVarcharCodegenUtils, CharVarcharUtils, V2ExpressionBuilder}
 import org.apache.spark.sql.connector.catalog.{SupportsRead, Table, TableCapability}
@@ -1564,6 +1564,26 @@ class DataSourceV2StrategySuite extends SharedSparkSession {
   }
 
   test("filters guaranteed pushed down by data source: " +
+    "retain conjuncts mixing declared and undeclared fields") {
+    val schema = new StructType().add("id", LongType).add("value", LongType)
+    val inferred = GreaterThanOrEqual(AttributeReference("value", LongType)(), Literal(0L))
+    val table = new InMemoryCatalystFilterTable(schema, inferred,
+      estimateInferred = false, fullyPushedColumns = Seq("value"))
+    val relation = DataSourceV2Relation.create(table, None, None, CaseInsensitiveStringMap.empty)
+    val Seq(id, value) = relation.output
+    val declaredOnly = GreaterThan(value, Literal(0L))
+    val mixed = Or(GreaterThan(value, Literal(10L)), EqualTo(id, Literal(1L)))
+    val pushed = V2ScanRelationPushDown(Filter(And(declaredOnly, mixed), relation))
+    val scan = pushed.collectFirst { case s: DataSourceV2ScanRelation => s }.get
+    val candidates = ExpressionSet(scan.filterRemovalCandidates)
+    assert(candidates.contains(declaredOnly))
+    assert(!candidates.contains(mixed))
+    val physical = new DataSourceV2Strategy(spark).apply(pushed).head
+    val remaining = physical.collect { case FilterExec(condition, _) => condition }
+    assert(remaining.size == 1 && remaining.head.semanticEquals(mixed))
+  }
+
+  test("filters guaranteed pushed down by data source: " +
     "preserve merges across undeclared residuals") {
     withSQLConf(
         SQLConf.MERGE_SUBPLANS_FILTER_PROPAGATION_ENABLED.key -> "true",
@@ -1695,6 +1715,100 @@ class DataSourceV2StrategySuite extends SharedSparkSession {
         "tableName" -> "`in-memory-catalyst-filter-table`",
         "tableSchema" -> ("\"" + schema.sql + "\"")),
       sqlState = "KD000")
+  }
+
+  test("filters guaranteed pushed down by data source: " +
+    "remap nested residuals during pushdown and pruning") {
+    withSQLConf(SQLConf.NESTED_SCHEMA_PRUNING_ENABLED.key -> "true") {
+      val nestedType = new StructType()
+        .add("unused", LongType).add("part", LongType).add("other", LongType)
+      val schema = new StructType().add("s", nestedType)
+      val inferred = GreaterThanOrEqual(AttributeReference("s.part", LongType)(), Literal(0L))
+      val table = new InMemoryCatalystFilterTable(schema, inferred,
+        estimateInferred = false, fullyPushedColumns = Seq("s.part"))
+      val relation = DataSourceV2Relation.create(table, None, None, CaseInsensitiveStringMap.empty)
+      val root = relation.output.head
+      val part = GetStructField(root, 1)
+      val declaredOnly = GreaterThan(part, Literal(0L))
+      val sibling = EqualTo(GetStructField(root, 2), Literal(2L))
+      val pushed = V2ScanRelationPushDown(Project(Seq(Alias(part, "part")()),
+        Filter(And(declaredOnly, sibling), relation)))
+      val scan = pushed.collectFirst { case s: DataSourceV2ScanRelation => s }.get
+      assert(scan.output.head.dataType ==
+        new StructType().add("part", LongType).add("other", LongType))
+      val remappedPart = GetStructField(scan.output.head, 0)
+      val expectedCandidates = Seq(
+        GreaterThan(remappedPart, Literal(0L)), GreaterThanOrEqual(remappedPart, Literal(0L)))
+      assert(ExpressionSet(scan.filterRemovalCandidates) == ExpressionSet(expectedCandidates))
+      val physical = new DataSourceV2Strategy(spark).apply(pushed).head
+      val remaining = physical.collect { case FilterExec(condition, _) => condition }
+      val remappedSibling = EqualTo(GetStructField(scan.output.head, 1), Literal(2L))
+      assert(remaining.size == 1 && remaining.head.semanticEquals(remappedSibling))
+    }
+  }
+
+  gridTest("filters guaranteed pushed down by data source: " +
+    "preserve pushed joins with colliding declaration names")(
+      Seq(Inner, LeftOuter, RightOuter)) { joinType =>
+    withSQLConf(SQLConf.DATA_SOURCE_V2_JOIN_PUSHDOWN.key -> "true") {
+      val schema = new StructType().add("id", LongType)
+        .add("s", new StructType().add("part", LongType)).add("value", LongType)
+      val inferred = GreaterThanOrEqual(AttributeReference("id", LongType)(), Literal(0L))
+      val table = new PushdownTable(schema, inferred) with SupportsFullyPushedCatalystFilters {
+        override def fullyPushedFilterAttributes(): Array[NamedReference] =
+          Array(FieldReference("s.part"), FieldReference("s"), FieldReference("value"))
+      }
+      val left = DataSourceV2Relation.create(table, None, None, CaseInsensitiveStringMap.empty)
+      val rightSchema = new StructType().add("k", LongType).add("s", LongType)
+        .add("value", LongType)
+      val right = DataSourceV2Relation.create(new PushdownTable(rightSchema, inferred),
+        None, None, CaseInsensitiveStringMap.empty)
+      val id = left.output.head
+      val leftInput = Project(Seq(id), Filter(EqualTo(id, Literal(1L)), left))
+      val plan = Join(leftInput, right, joinType,
+        Some(EqualTo(id, right.output.head)), JoinHint.NONE)
+      val pushed = V2ScanRelationPushDown(plan)
+      assert(table.builder.joinPushed)
+      assert(!pushed.exists(_.isInstanceOf[Join]))
+      val scan = pushed.collectFirst { case s: DataSourceV2ScanRelation => s }.get
+      assert(scan.output.exists(a => a.name == "s" && a.dataType == LongType))
+      assert(scan.output.exists(_.name == "value"))
+      assert(scan.fullyPushedFilterAttrs.isEmpty)
+      assert(scan.inferredFilters.isEmpty && scan.filterRemovalCandidates.isEmpty)
+      assert(new DataSourceV2Strategy(spark).apply(pushed).nonEmpty)
+    }
+  }
+
+  test("filters guaranteed pushed down by data source: " +
+    "preserve pushed aggregates with colliding declaration names") {
+    val tableSchema = new StructType().add("id", LongType)
+      .add("s", new StructType().add("part", LongType))
+    val inferred = GreaterThanOrEqual(AttributeReference("id", LongType)(), Literal(0L))
+    val table = new PushdownTable(tableSchema, inferred) with SupportsFullyPushedCatalystFilters {
+      override def fullyPushedFilterAttributes(): Array[NamedReference] =
+        Array(FieldReference("s.part"), FieldReference("s"))
+
+      override def newScanBuilder(options: CaseInsensitiveStringMap): ScanBuilder = {
+        builder = new PushdownScanBuilder(tableSchema, inferred) {
+          override def build(): Scan = new Scan with SupportsInferredFilterEstimation {
+            override def readSchema(): StructType = new StructType().add("s", LongType)
+            override def toBatch: Batch = emptyBatch
+          }
+        }
+        builder
+      }
+    }
+    val relation = DataSourceV2Relation.create(table, None, None, CaseInsensitiveStringMap.empty)
+    val id = relation.output.head
+    val plan = Aggregate(Nil, Seq(Alias(Count(id).toAggregateExpression(), "count")()),
+      Filter(EqualTo(id, Literal(1L)), relation))
+    val pushed = V2ScanRelationPushDown(plan)
+    assert(table.builder.pushedAggregation.nonEmpty)
+    val scan = pushed.collectFirst { case s: DataSourceV2ScanRelation => s }.get
+    assert(scan.output.head.name == "s" && scan.output.head.dataType == LongType)
+    assert(scan.fullyPushedFilterAttrs.isEmpty)
+    assert(scan.inferredFilters.isEmpty && scan.filterRemovalCandidates.isEmpty)
+    assert(new DataSourceV2Strategy(spark).apply(pushed).nonEmpty)
   }
 
   test("filters guaranteed pushed down by data source: " +

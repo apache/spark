@@ -25,7 +25,7 @@ import org.apache.spark.sql.catalyst.analysis.{MultiInstanceRelation, NamedRelat
 import org.apache.spark.sql.catalyst.catalog.{CatalogColumnStat, CatalogStatistics}
 import org.apache.spark.sql.catalyst.expressions.{Alias, And, Attribute, AttributeMap, AttributeReference, AttributeSeq, AttributeSet, Expression, ExpressionSet, Literal, NamedExpression, ProjectionOverSchema, SortOrder, V2ExpressionUtils}
 import org.apache.spark.sql.catalyst.plans.QueryPlan
-import org.apache.spark.sql.catalyst.plans.logical.{ColumnStat, ExposesMetadataColumns, Histogram, HistogramBin, LeafNode, LogicalPlan, Statistics}
+import org.apache.spark.sql.catalyst.plans.logical.{ColumnStat, ExposesMetadataColumns, Histogram, HistogramBin, LeafNode, LocalRelation, LogicalPlan, Statistics}
 import org.apache.spark.sql.catalyst.plans.logical.statsEstimation.{EstimationUtils, FilterEstimation}
 import org.apache.spark.sql.catalyst.streaming.{StreamingSourceIdentifyingName, Unassigned}
 import org.apache.spark.sql.catalyst.trees.TreePattern.{DATA_SOURCE_V2_RELATION, DATA_SOURCE_V2_SCAN_RELATION, TreePattern}
@@ -197,9 +197,12 @@ case class DataSourceV2Relation(
  *                             false: a pushed limit, offset, top-N, sample, aggregate or join
  *                             decides which rows the scan returns, and a build site that does not
  *                             set it keeps storage filters away from its scan.
- * @param filterRemovalCandidates post-scan conjuncts recorded during filter pushdown, resolved
- *                                against the pruned output and covered by the table's fully pushed
- *                                attribute declaration, that physical planning may omit.
+ * @param filterRemovalCandidates conjuncts that physical planning may omit: residuals the builder
+ *                                returned unchanged and adjustment predicates Spark re-adds
+ *                                (surviving inferred filters and fully pushed filters bound to
+ *                                the output), remapped to the pruned output and covered by the
+ *                                table's fully pushed attribute declaration. They are deterministic
+ *                                and contain no subqueries or Python UDFs.
  */
 case class DataSourceV2ScanRelation(
     relation: DataSourceV2Relation,
@@ -238,13 +241,16 @@ case class DataSourceV2ScanRelation(
             ref.fieldNames, table.name(), tableSchema)
         }
       }
-      val schema = fromAttributes(output)
+      // Join, aggregate and variant pushdown create new output attributes. A matching name does
+      // not make such an attribute a column of the declaring table.
+      val declaringOutput = LocalRelation(output.filter(relation.outputSet.contains))
+      val schema = fromAttributes(declaringOutput.output)
       val available = refs.filter { ref =>
         schema.findNestedField(ref.fieldNames.toImmutableArraySeq, resolver = conf.resolver)
           .isDefined
       }
       ExpressionSet(available.map { ref =>
-        V2ExpressionUtils.resolveRef[NamedExpression](ref, this) match {
+        V2ExpressionUtils.resolveRef[NamedExpression](ref, declaringOutput) match {
           case Alias(child, _) => child
           case expression => expression
         }
@@ -252,7 +258,10 @@ case class DataSourceV2ScanRelation(
     case _ => ExpressionSet()
   }
 
-  /** Whether every field accessed by a filter is covered by the table's static declaration. */
+  /**
+   * Whether a filter accesses at least one field and every field it accesses is covered by the
+   * table's static declaration.
+   */
   def isFilterOverFullyPushedAttributes(filter: Expression): Boolean = {
     def covered(expression: Expression): Boolean = expression match {
       case e if fullyPushedFilterAttrs.contains(e) => true
