@@ -298,7 +298,7 @@ To use a custom metrics.properties for the application master and executors, upd
   <td><code>spark.yarn.historyServer.address</code></td>
   <td>(none)</td>
   <td>
-    The address of the Spark history server, e.g. <code>host.com:18080</code>. The address should not contain a scheme (<code>http://</code>). Defaults to not being set since the history server is an optional service. This address is given to the YARN ResourceManager when the Spark application finishes to link the application from the ResourceManager UI to the Spark history server UI.
+    The address of the Spark history server, e.g. <code>example.com:18080</code>. The address should not contain a scheme (<code>http://</code>). Defaults to not being set since the history server is an optional service. This address is given to the YARN ResourceManager when the Spark application finishes to link the application from the ResourceManager UI to the Spark history server UI.
     For this property, YARN properties can be used as variables, and these are substituted by Spark at runtime. For example, if the Spark history server runs on the same node as the YARN ResourceManager, it can be set to <code>${hadoopconf-yarn.resourcemanager.hostname}:18080</code>.
   </td>
   <td>1.0.0</td>
@@ -834,8 +834,8 @@ staging directory of the Spark application.
   <td>(none)</td>
   <td>
     A comma-separated list of Hadoop filesystems for whose hosts will be excluded from delegation
-    token renewal at resource scheduler. For example, <code>spark.yarn.kerberos.renewal.excludeHadoopFileSystems=hdfs://nn1.com:8032,
-    hdfs://nn2.com:8032</code>. This is known to work under YARN for now, so YARN Resource Manager won't renew tokens for the application.
+    token renewal at resource scheduler. For example, <code>spark.yarn.kerberos.renewal.excludeHadoopFileSystems=hdfs://nn1.example.com:8032,
+    hdfs://nn2.example.com:8032</code>. This is known to work under YARN for now, so YARN Resource Manager won't renew tokens for the application.
     Note that as resource scheduler does not renew token, so any application running longer than the original token expiration that tries
     to use that token will likely fail.
   </td>

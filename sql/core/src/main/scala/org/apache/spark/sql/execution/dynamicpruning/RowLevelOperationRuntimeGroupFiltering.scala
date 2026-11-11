@@ -28,7 +28,7 @@ import org.apache.spark.sql.catalyst.trees.TreePattern.{REPLACE_DATA, WRITE_DELT
 import org.apache.spark.sql.connector.expressions.NamedReference
 import org.apache.spark.sql.connector.read.Scan
 import org.apache.spark.sql.connector.write.RowLevelOperation.Command.{DELETE, MERGE, UPDATE}
-import org.apache.spark.sql.execution.datasources.v2.{DataSourceV2Implicits, DataSourceV2Relation, DataSourceV2ScanRelation}
+import org.apache.spark.sql.execution.datasources.v2.{DataSourceV2Implicits, DataSourceV2Relation, DataSourceV2ScanRelation, RuntimePartitionPruningFileScan}
 import org.apache.spark.util.ArrayImplicits._
 
 /**
@@ -38,7 +38,8 @@ import org.apache.spark.util.ArrayImplicits._
  * converted to data source filters. Since not all expressions can be pushed down that way, Spark
  * allows data sources to filter groups at runtime. If the primary scan in a row-level operation
  * supports runtime filtering, this rule will inject a subquery to find all rows that match the
- * condition so that data sources know exactly which groups have changes.
+ * condition so that data sources know exactly which groups have changes. A built-in file scan is
+ * the exception, see `canInjectGroupFilters`.
  *
  * Note that this rule is also beneficial for operations that deal with deltas of rows. Even if
  * the data source is capable of handling specific changes, it is useful to first discard entire
@@ -70,7 +71,12 @@ class RowLevelOperationRuntimeGroupFiltering(optimizeSubqueries: Rule[LogicalPla
       scanRelation: DataSourceV2ScanRelation): Boolean = {
     conf.runtimeRowLevelOperationGroupFilterEnabled &&
       cond != TrueLiteral &&
-      scanRelation.runtimeFilterAttrs.nonEmpty
+      scanRelation.runtimeFilterAttrs.nonEmpty &&
+      // A built-in file scan gets no group filter. It does not record the groups each call
+      // returned, which a group-based write relies on. The group filter's IN is never true on a
+      // directory with a null partition value, so the scan's pruning would drop it, and a
+      // delta-based write would miss the matching rows there.
+      !scanRelation.scan.isInstanceOf[RuntimePartitionPruningFileScan]
   }
 
   private def injectGroupFilters(

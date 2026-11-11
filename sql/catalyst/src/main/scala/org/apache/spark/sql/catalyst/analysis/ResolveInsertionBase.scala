@@ -17,12 +17,8 @@
 
 package org.apache.spark.sql.catalyst.analysis
 
-import org.apache.spark.sql.catalyst.expressions.{Alias, Cast}
-import org.apache.spark.sql.catalyst.plans.logical.{InsertIntoStatement, LogicalPlan, Project}
+import org.apache.spark.sql.catalyst.plans.logical.{InsertIntoStatement, LogicalPlan}
 import org.apache.spark.sql.catalyst.rules.Rule
-import org.apache.spark.sql.errors.QueryCompilationErrors
-import org.apache.spark.sql.types.{ArrayType, DataType, MapType, StructType}
-import org.apache.spark.sql.util.SchemaUtils
 
 abstract class ResolveInsertionBase extends Rule[LogicalPlan] {
   def resolver: Resolver = conf.resolver
@@ -31,60 +27,6 @@ abstract class ResolveInsertionBase extends Rule[LogicalPlan] {
   protected def createProjectForByNameQuery(
       tblName: String,
       i: InsertIntoStatement): LogicalPlan = {
-    SchemaUtils.checkColumnNameDuplication(i.userSpecifiedCols, resolver)
-
-    if (i.userSpecifiedCols.size != i.query.output.size) {
-      if (i.userSpecifiedCols.size > i.query.output.size) {
-        throw QueryCompilationErrors.cannotWriteNotEnoughColumnsToTableError(
-          tblName, i.userSpecifiedCols, i.query.output)
-      } else {
-        throw QueryCompilationErrors.cannotWriteTooManyColumnsToTableError(
-          tblName, i.userSpecifiedCols, i.query.output)
-      }
-    }
-    val projectByName = i.userSpecifiedCols.zip(i.query.output)
-      .map { case (userSpecifiedCol, queryOutputCol) =>
-        val resolvedCol = i.table.resolve(Seq(userSpecifiedCol), resolver)
-          .getOrElse(
-            throw QueryCompilationErrors.unresolvedAttributeError(
-              "UNRESOLVED_COLUMN", userSpecifiedCol, i.table.output.map(_.name), i.origin))
-        (queryOutputCol.dataType, resolvedCol.dataType) match {
-          case (input: StructType, expected: StructType) =>
-            // Rename inner fields of the input column to pass the by-name INSERT analysis.
-            Alias(Cast(queryOutputCol, renameFieldsInStruct(input, expected)), resolvedCol.name)()
-          case (input: ArrayType, expected: ArrayType) =>
-            Alias(Cast(queryOutputCol, renameFieldsInType(input, expected)), resolvedCol.name)()
-          case (input: MapType, expected: MapType) =>
-            Alias(Cast(queryOutputCol, renameFieldsInType(input, expected)), resolvedCol.name)()
-          case _ =>
-            Alias(queryOutputCol, resolvedCol.name)()
-        }
-      }
-    Project(projectByName, i.query)
+    InsertionResolution.createProjectForByNameQuery(tblName, i, resolver)
   }
-
-  private def renameFieldsInStruct(input: StructType, expected: StructType): StructType = {
-    if (input.length == expected.length) {
-      val newFields = input.zip(expected).map { case (f1, f2) =>
-        f1.copy(name = f2.name, dataType = renameFieldsInType(f1.dataType, f2.dataType))
-      }
-      StructType(newFields)
-    } else {
-      input
-    }
-  }
-
-  // Recursively rename fields so that positional INSERT analysis applies at every nesting level,
-  // including structs inside arrays and maps.  See SPARK-58816.
-  private def renameFieldsInType(input: DataType, expected: DataType): DataType =
-    (input, expected) match {
-      case (s1: StructType, s2: StructType) =>
-        renameFieldsInStruct(s1, s2)
-      case (ArrayType(e1, n1), ArrayType(e2, _)) =>
-        ArrayType(renameFieldsInType(e1, e2), n1)
-      case (MapType(k1, v1, n1), MapType(k2, v2, _)) =>
-        MapType(renameFieldsInType(k1, k2), renameFieldsInType(v1, v2), n1)
-      case _ =>
-        input
-    }
 }

@@ -323,7 +323,7 @@ object RewriteUpdateTable extends RewriteRowLevelCommand {
     if (metadataAssignments.nonEmpty) {
       throw QueryCompilationErrors.invalidRowLevelOperationAssignments(
         metadataAssignments,
-        ResolveRowLevelCommandAssignments.metadataColumnAssignmentErrors(metadataAssignments))
+        RowLevelAssignmentResolution.metadataColumnAssignmentErrors(metadataAssignments))
     }
   }
 
