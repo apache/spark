@@ -20,9 +20,8 @@ license: |
 ---
 
 ### Description
-
-This statement returns the value of a table property given an optional value for
-a property key. If no key is specified then all the properties are returned. 
+The `SHOW TBLPROPERTIES table_identifier AS JSON` statement returns the value of a table properties 
+given an optional value for a property key. If no key is specified then all the properties are returned. 
 
 ### Syntax
 
