@@ -36,12 +36,13 @@ import org.apache.spark.sql.QueryTest
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.analysis.{CheckExternalLookupJoin,
   ExternalLookupJoinEligibility, FormExternalLookupJoin, NoSuchTableException}
-import org.apache.spark.sql.catalyst.expressions.{Add, Attribute, AttributeMap, AttributeReference,
-  Cast, EqualTo, Expression, GenericInternalRow, LessThan, Literal, Rand, UnsafeProjection}
+import org.apache.spark.sql.catalyst.expressions.{Add, Alias, Attribute, AttributeMap,
+  AttributeReference, Cast, EqualTo, Expression, GenericInternalRow, LessThan, Literal,
+  NamedExpression, Rand, UnsafeProjection, Upper}
 import org.apache.spark.sql.catalyst.plans.{Inner, QueryPlan}
-import org.apache.spark.sql.catalyst.plans.logical.{Deduplicate, ExternalLookupJoin,
-  ExternalLookupProject, Join, JoinHint, LeafNode, LogicalPlan, PreparedExternalLookupJoin,
-  RepartitionByExpression}
+import org.apache.spark.sql.catalyst.plans.logical.{Deduplicate, ExternalLookupFilter,
+  ExternalLookupJoin, ExternalLookupProject, ExternalLookupTransform, Join, JoinHint, LeafNode,
+  LogicalPlan, PreparedExternalLookupJoin, RepartitionByExpression}
 import org.apache.spark.sql.catalyst.trees.TreePattern.LOOKUP_ONLY_RELATION
 import org.apache.spark.sql.catalyst.util.{ArrayBasedMapData, GenericArrayData}
 import org.apache.spark.sql.classic.Dataset
@@ -76,7 +77,9 @@ import org.apache.spark.sql.functions.{broadcast, coalesce, col, concat, current
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.sources.{BaseRelation, CreatableRelationProvider, InsertableRelation,
   RelationProvider, SchemaRelationProvider}
-import org.apache.spark.sql.streaming.{StreamingQueryException, StreamRealTimeModeE2ESuiteBase}
+import org.apache.spark.sql.streaming.{StreamingQueryException, StreamRealTimeModeE2ESuiteBase,
+  StreamTest, Trigger}
+import org.apache.spark.sql.streaming.util.StreamManualClock
 import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.sql.types.{ArrayType, DataType, Decimal, DecimalType, DoubleType,
   IntegerType, MapType, StringType, StructType, UserDefinedType}
@@ -2791,7 +2794,7 @@ class ExternalLookupJoinSuite extends QueryTest with SharedSparkSession {
     assert(SimpleExternalLookupDataSource.requestedKeys.asScala.toSeq === Seq(1, 2, 1))
   }
 
-  test("a range request takes no more equal stream rows than the request size allows") {
+  test("a range request takes up to 1000 equal stream rows, whatever the source's limit") {
     // Every shift covers employee ids from 1, so each request holds the one parameter row 1.
     def requests(shifts: Int, maxBatchSize: String, conf: (String, String)*): Seq[Int] = {
       val lookup = spark.read.format(classOf[SimpleExternalLookupDataSource].getName)
@@ -2807,9 +2810,13 @@ class ExternalLookupJoinSuite extends QueryTest with SharedSparkSession {
       }
       SimpleExternalLookupDataSource.requestSizes.asScala.toSeq
     }
-    // Spark's cap of 1000 rows, the source's lower limit, and maxBatchBytes each end a batch.
+    // Spark's cap of 1000 rows and maxBatchBytes each end a batch. The source's limit does not,
+    // as the rows of a batch share the one parameter row of its request, also when the source
+    // takes one parameter row per request.
     assert(requests(1500, "5000") === Seq(1, 1))
-    assert(requests(5, "2") === Seq(1, 1, 1))
+    assert(requests(1500, "1") === Seq(1, 1))
+    assert(requests(5, "1") === Seq(1))
+    assert(requests(5, "2") === Seq(1))
     assert(requests(7, "100") === Seq(1))
     assert(requests(7, "100", SQLConf.JOIN_EXTERNAL_LOOKUP_MAX_BATCH_BYTES.key -> "2500") ===
       Seq(1, 1, 1))
@@ -2842,6 +2849,93 @@ class ExternalLookupJoinSuite extends QueryTest with SharedSparkSession {
           // Each of the two requests returned all four stored rows.
           assert(SimpleExternalLookupDataSource.resultRowsRead.get() === 8, condition)
         }
+    }
+  }
+
+  test("a range against a cast that cannot fail runs as an external lookup join") {
+    // ExprUtils.canEvaluateUnconditionally takes a TIMESTAMP cast to DATE and a try_cast as unable
+    // to fail, so a range on either is offered, here as the only lookup predicate. Each join
+    // returns the rows of the ordinary join that it replaces, over the same rows, and a stream row
+    // whose try_cast is NULL matches nothing, so its parameter is not requested.
+    def check(joined: DataFrame, replaced: DataFrame): Unit = {
+      val run = runStream(joined)
+      assert(run.plan.exists(_.isInstanceOf[PreparedExternalLookupJoin]))
+      val expected = runStream(replaced).rows
+      assert(expected.nonEmpty)
+      QueryTest.sameRows(expected, run.rows).foreach(fail(_))
+    }
+    withSQLConf(SQLConf.ANSI_ENABLED.key -> "true", SQLConf.SESSION_LOCAL_TIMEZONE.key -> "UTC") {
+      def day(date: String): Int = java.time.LocalDate.parse(date).toEpochDay.toInt
+      TypedKeyExternalLookupTable.storedRows.set(
+        Seq(day("2026-01-01") -> "new year", day("2026-01-03") -> "holiday"))
+      val calendar = spark.read.format(classOf[TypedKeyExternalLookupDataSource].getName)
+        .option("keyType", "DATE").option("ranges", "true").load()
+      val calendarRows = sql("SELECT DATE'2026-01-01' AS key, 'new year' AS payload " +
+        "UNION ALL SELECT DATE'2026-01-03', 'holiday'")
+      val visits = streamOf(sql("SELECT TIMESTAMP'2026-01-02 10:00:00' AS at"))
+      check(
+        visits.join(calendar, calendar("key") >= visits("at").cast("date")),
+        visits.join(calendarRows, calendarRows("key") >= visits("at").cast("date")))
+
+      val employees = spark.read.format(classOf[SimpleExternalLookupDataSource].getName).load()
+      val employeeRows =
+        Seq((1, "engineering"), (1, "research"), (2, "sales")).toDF("id", "department")
+      val badges = streamOf(Seq("2", "abc").toDF("code"))
+      SimpleExternalLookupDataSource.resetCounters()
+      check(
+        badges.join(employees, employees("id") >= expr("try_cast(code AS INT)")),
+        badges.join(employeeRows, employeeRows("id") >= expr("try_cast(code AS INT)")))
+      assert(SimpleExternalLookupDataSource.lookupCandidates.get() ===
+        Seq((">=", "id", IntegerType)))
+      assert(SimpleExternalLookupDataSource.requestedKeys.asScala.toSeq === Seq(2))
+      assert(SimpleExternalLookupDataSource.nullKeyRequests.get() === 0)
+    }
+  }
+
+  test("lookup join nodes with different lookup-side stages canonicalize apart") {
+    // A projection stage that computes a label from the product, and a filter stage on it, over a
+    // table of two STRING columns.
+    val products =
+      spark.read.format(classOf[CaseInsensitiveExternalLookupDataSource].getName).load()
+    val staged = products.select($"sku", $"product", upper($"product").as("label"))
+      .where($"label" =!= "NONE")
+    val orders = streamOf(Seq((1, "AB-1")).toDF("order", "sku"))
+    val exec = runStream(orders.join(staged, orders("sku") === staged("sku"))).lookupJoin
+    assert(exec.lookupTransforms.length === 2)
+    val Seq(sku, product) = exec.lookupInput
+    val label = exec.lookupTransforms.collectFirst {
+      case project: ExternalLookupProject => project.output.last
+    }.get
+    // The same join after another analysis, which gives every lookup-side attribute another id.
+    val newIds = AttributeMap(ExternalLookupTransform.attributes(exec.lookupInput,
+      exec.lookupTransforms).map(attr => attr -> attr.newInstance()))
+    def renew[T <: Expression](expression: T): T = expression.transformUp {
+      case alias: Alias if newIds.contains(alias.toAttribute) =>
+        Alias(alias.child, alias.name)(newIds(alias.toAttribute).exprId)
+      case attr: Attribute if newIds.contains(attr) => newIds(attr)
+    }.asInstanceOf[T]
+    val reanalyzed = exec.transformExpressions {
+      case attr: Attribute if newIds.contains(attr) => newIds(attr)
+    }.asInstanceOf[ExternalLookupJoinExec].copy(lookupTransforms = exec.lookupTransforms.map {
+      case ExternalLookupProject(projectList, input) =>
+        ExternalLookupProject(projectList.map(renew), input.map(renew))
+      case ExternalLookupFilter(condition, input) =>
+        ExternalLookupFilter(renew(condition), input.map(renew))
+    })
+    assert(reanalyzed.lookupInput != exec.lookupInput)
+    assert(reanalyzed.sameResult(exec))
+    // A stage expression over the other column of the same type.
+    val bySku = exec.copy(lookupTransforms = exec.lookupTransforms.map {
+      case project: ExternalLookupProject => project.copy(projectList =
+        project.projectList.map(_.transform { case Upper(_) => Upper(sku) }
+          .asInstanceOf[NamedExpression]))
+      case other => other
+    })
+    assert(bySku.sameResult(exec) === false)
+    // Joins that keep different columns of one type, of the read schema or of a stage.
+    Seq(Seq(sku), Seq(product), Seq(label)).combinations(2).foreach { case Seq(one, other) =>
+      assert(exec.copy(lookupOutput = one).sameResult(exec.copy(lookupOutput = other)) === false,
+        s"$one, $other")
     }
   }
 
@@ -2879,53 +2973,6 @@ class ExternalLookupJoinSuite extends QueryTest with SharedSparkSession {
       events.join(rates, condition, "left_outer").select(events("id"), rates("id")),
       Seq(Row(2, null)))
     assert(ValidityExternalLookupTable.offered.get() === Seq("id = ?"))
-  }
-
-  test("a lookup-side filter reads the current time of the micro-batch") {
-    // MicroBatchExecution gives current_timestamp() and current_date() the time of the batch, as
-    // on a static side. The only stored rate is valid from 1970-01-01, so it is valid now.
-    val rates = spark.read.format(classOf[ValidityExternalLookupDataSource].getName).load()
-    val events = streamOf(Seq(1).toDF("id"))
-    Seq(
-      $"validFrom" <= current_timestamp(),
-      $"validFrom".cast("date") <= current_date()).foreach { validNow =>
-      Seq(validNow -> Row(1, 1), !validNow -> Row(1, null)).foreach { case (filter, expected) =>
-        val current = rates.where(filter)
-        // The query starts, which checks it, and runs a micro-batch.
-        checkStream(
-          events.join(current, events("id") === current("id"), "left_outer")
-            .select(events("id"), current("id")),
-          Seq(expected))
-      }
-    }
-  }
-
-  test("a lookup-side filter reads the current time when the stream's scan is pruned") {
-    // The pruning of the stream's scan optimizes the query at its start with placeholders for the
-    // current time, but not on the lookup sides, which it keeps whole, so the start forms the
-    // lookup join, as each micro-batch does.
-    withSQLConf(
-        "spark.sql.catalog.stream_cat" -> classOf[InMemoryTableCatalog].getName,
-        SQLConf.STREAMING_V2_COLUMN_PRUNING_ENABLED.key -> "true") {
-      withTable("stream_cat.ns.events") {
-        sql("CREATE TABLE stream_cat.ns.events (id INT, note STRING) " +
-          s"TBLPROPERTIES ('${InMemoryBaseTable.STREAMING_COLUMN_PRUNING}' = 'true')")
-        sql("INSERT INTO stream_cat.ns.events VALUES (1, 'lobby')")
-        val rates = spark.read.format(classOf[ValidityExternalLookupDataSource].getName).load()
-        Seq(
-          $"validFrom" <= current_timestamp(),
-          $"validFrom".cast("date") <= current_date()).foreach { validNow =>
-          Seq(validNow -> Row(1, 1), !validNow -> Row(1, null)).foreach { case (filter, expected) =>
-            val events = spark.readStream.table("stream_cat.ns.events")
-            val current = rates.where(filter)
-            checkStream(
-              events.join(current, events("id") === current("id"), "left_outer")
-                .select(events("id"), current("id")),
-              Seq(expected))
-          }
-        }
-      }
-    }
   }
 
   test("external lookup leaves unselected criteria as Spark residuals") {
@@ -4138,6 +4185,109 @@ class ExternalLookupTestCatalog extends TableCatalog {
     throw new UnsupportedOperationException()
 }
 
+/**
+ * Lookup joins in micro-batches that run at the times of a manual clock: on 1970-01-02 and
+ * 1970-01-03, after the query starts on 1970-01-01. The only stored rate is valid from 1970-01-03,
+ * so it is valid in the second micro-batch, by time and by date, and in neither at the start.
+ */
+class ExternalLookupJoinBatchTimeSuite extends StreamTest {
+  import testImplicits._
+
+  private val day = TimeUnit.DAYS.toMillis(1)
+
+  override def beforeEach(): Unit = {
+    super.beforeEach()
+    ValidityExternalLookupTable.validFrom.set(TimeUnit.DAYS.toMicros(2))
+  }
+
+  override def afterEach(): Unit = {
+    try ValidityExternalLookupTable.validFrom.set(0L) finally super.afterEach()
+  }
+
+  // A filter that keeps a rate valid at the current time, and one that keeps it at the current
+  // date, with the rows of the first and the second micro-batch, also for its negation.
+  private def validNowCases: Seq[(Column, Row, Row)] = Seq(
+    $"validFrom" <= current_timestamp(),
+    $"validFrom".cast("date") <= current_date()).flatMap { validNow =>
+    Seq((validNow, Row(1, null), Row(1, 1)), (!validNow, Row(1, 1), Row(1, null)))
+  }
+
+  /**
+   * Runs `joined` in two micro-batches, a day apart, each after `addRow`, the first of them the
+   * micro-batch `firstBatchId`.
+   */
+  private def checkBatches(
+      joined: DataFrame,
+      addRow: StreamAction,
+      first: Row,
+      second: Row,
+      firstBatchId: Long = 0): Unit = {
+    val clock = new StreamManualClock
+    testStream(joined)(
+      StartStream(Trigger.ProcessingTime(day), triggerClock = clock),
+      addRow,
+      AdvanceManualClock(day),
+      WaitUntilBatchProcessed(firstBatchId),
+      CheckNewAnswer(first),
+      addRow,
+      AdvanceManualClock(day),
+      WaitUntilBatchProcessed(firstBatchId + 1),
+      CheckNewAnswer(second))
+  }
+
+  test("a lookup-side filter reads the current time of each micro-batch") {
+    // MicroBatchExecution gives current_timestamp() and current_date() the time of the batch, as
+    // on a static side.
+    withSQLConf(SQLConf.SESSION_LOCAL_TIMEZONE.key -> "UTC") {
+      val rates = spark.read.format(classOf[ValidityExternalLookupDataSource].getName).load()
+      validNowCases.foreach { case (filter, first, second) =>
+        val input = MemoryStream[Int]
+        val events = input.toDF().toDF("id")
+        val current = rates.where(filter)
+        checkBatches(
+          events.join(current, events("id") === current("id"), "left_outer")
+            .select(events("id"), current("id")),
+          AddData(input, 1), first, second)
+      }
+    }
+  }
+
+  test("a lookup-side filter reads the current time of each micro-batch when the scan is pruned") {
+    // The pruning of the stream's scan optimizes the query at its start with placeholders for the
+    // current time, but not on the lookup sides, which it keeps whole, so the start forms the
+    // lookup join, as each micro-batch does.
+    withSQLConf(
+        SQLConf.SESSION_LOCAL_TIMEZONE.key -> "UTC",
+        "spark.sql.catalog.stream_cat" -> classOf[InMemoryTableCatalog].getName,
+        SQLConf.STREAMING_V2_COLUMN_PRUNING_ENABLED.key -> "true") {
+      val rates = spark.read.format(classOf[ValidityExternalLookupDataSource].getName).load()
+      // Inserts an event while no trigger runs, as AddData adds data, so that the event goes into
+      // the micro-batch of the next AdvanceManualClock.
+      val insertEvent = Execute("insert an event") { query =>
+        val clock = query.triggerClock.asInstanceOf[StreamManualClock]
+        eventually(timeout(streamingTimeout)) {
+          assert(clock.isStreamWaitingAt(clock.getTimeMillis()))
+        }
+        sql("INSERT INTO stream_cat.ns.events VALUES (1, 'lobby')")
+      }
+      validNowCases.foreach { case (filter, first, second) =>
+        withTable("stream_cat.ns.events") {
+          sql("CREATE TABLE stream_cat.ns.events (id INT, note STRING) " +
+            s"TBLPROPERTIES ('${InMemoryBaseTable.STREAMING_COLUMN_PRUNING}' = 'true')")
+          val events = spark.readStream.table("stream_cat.ns.events")
+          val current = rates.where(filter)
+          // The stream starts with a micro-batch over the empty table, as the table's offsets
+          // begin at 0, so the events come in the micro-batches after it.
+          checkBatches(
+            events.join(current, events("id") === current("id"), "left_outer")
+              .select(events("id"), current("id")),
+            insertEvent, first, second, firstBatchId = 1)
+        }
+      }
+    }
+  }
+}
+
 class ExternalLookupJoinRealTimeModeSuite extends StreamRealTimeModeE2ESuiteBase {
   import testImplicits._
 
@@ -4741,6 +4891,8 @@ class ValidityExternalLookupDataSource extends TableProvider {
 object ValidityExternalLookupTable extends Table with SupportsRead {
   // The descriptions of the predicates that Spark offered.
   val offered = new AtomicReference(Seq.empty[String])
+  // The time from which the rate is valid, in microseconds, 1970-01-01 unless a test sets it.
+  val validFrom = new AtomicReference(0L)
 
   override def name(): String = "ValidityExternalLookupTable"
   override def schema(): StructType = StructType.fromDDL("id INT, validFrom TIMESTAMP_NTZ")
@@ -4761,12 +4913,13 @@ object ValidityExternalLookupTable extends Table with SupportsRead {
     }
 }
 
-/** Returns the rate of id 1, valid from 1970-01-01, for each parameter row that asks for id 1. */
+/** Returns the rate of id 1 for each parameter row that asks for id 1. */
 object ValidityExternalLookupReaderFactory extends ExternalLookupReaderFactory {
   override def createReader(): ExternalLookupReader = new ExternalLookupReader {
     override def lookupBatch(keys: Array[InternalRow]): ExternalLookupResultCursor =
       new TestExternalLookupResultCursor(keys.iterator.zipWithIndex.collect {
-        case (key, ordinal) if key.getInt(0) == 1 => ordinal -> InternalRow(1, 0L)
+        case (key, ordinal) if key.getInt(0) == 1 =>
+          ordinal -> InternalRow(1, ValidityExternalLookupTable.validFrom.get())
       })
 
     override def close(): Unit = {}
@@ -5476,14 +5629,20 @@ class TypedKeyExternalLookupDataSource extends TableProvider {
       schema: StructType,
       partitioning: Array[Transform],
       properties: java.util.Map[String, String]): Table =
-    TypedKeyExternalLookupTable(new CaseInsensitiveStringMap(properties).get("keyType"))
+    TypedKeyExternalLookupTable(new CaseInsensitiveStringMap(properties).get("keyType"),
+      new CaseInsensitiveStringMap(properties).getBoolean("ranges", false))
 }
 
 /**
  * A lookup-only table keyed on a column of the given type, whose rows the test sets. For each
  * parameter row, its source returns the stored rows with that key, and one row with another key.
  */
-case class TypedKeyExternalLookupTable(keyType: String) extends Table with SupportsRead {
+/**
+ * A lookup-only table keyed by a column of `keyType`. Its source selects an equality, or with
+ * `ranges` a range, which it serves with every stored row, as Spark checks the range on each.
+ */
+case class TypedKeyExternalLookupTable(keyType: String, ranges: Boolean = false)
+  extends Table with SupportsRead {
   override def name(): String = "TypedKeyExternalLookupTable"
   override def schema(): StructType = TypedKeyExternalLookupTable.schema(keyType)
   override def capabilities(): java.util.Set[TableCapability] =
@@ -5492,11 +5651,11 @@ case class TypedKeyExternalLookupTable(keyType: String) extends Table with Suppo
   override def newScanBuilder(options: CaseInsensitiveStringMap): ScanBuilder =
     new SupportsExternalLookup {
       override def selectLookupPredicates(candidates: Array[Predicate]): Array[Predicate] =
-        candidates.filter(_.name() == "=").take(1)
+        candidates.filter(candidate => (candidate.name() == "=") != ranges).take(1)
       override def build(): Scan = new Scan {
         override def readSchema(): StructType = schema()
         override def toExternalLookup(): ExternalLookup = TestExternalLookup(
-          100, TypedKeyExternalLookupReaderFactory(DataType.fromDDL(keyType)))
+          100, TypedKeyExternalLookupReaderFactory(DataType.fromDDL(keyType), ranges))
       }
     }
 }
@@ -5511,7 +5670,7 @@ object TypedKeyExternalLookupTable {
   val requestSizes = new ConcurrentLinkedQueue[Int]()
 }
 
-case class TypedKeyExternalLookupReaderFactory(keyType: DataType)
+case class TypedKeyExternalLookupReaderFactory(keyType: DataType, ranges: Boolean = false)
   extends ExternalLookupReaderFactory {
   override def createReader(): ExternalLookupReader = new ExternalLookupReader {
     private def sameKey(first: Any, second: Any): Boolean =
@@ -5522,9 +5681,12 @@ case class TypedKeyExternalLookupReaderFactory(keyType: DataType)
       val stored = TypedKeyExternalLookupTable.storedRows.get()
       val results = keys.iterator.zipWithIndex.flatMap { case (key, ordinal) =>
         val parameter = key.get(0, keyType)
-        val matches = stored.filter { case (storedKey, _) => sameKey(storedKey, parameter) }
-        val other = (stored.map(_._1) ++ TypedKeyExternalLookupTable.otherKeys.get())
-          .find(!sameKey(_, parameter)).map(_ -> "other")
+        val matches =
+          stored.filter { case (storedKey, _) => ranges || sameKey(storedKey, parameter) }
+        val other = if (ranges) None else {
+          (stored.map(_._1) ++ TypedKeyExternalLookupTable.otherKeys.get())
+            .find(!sameKey(_, parameter)).map(_ -> "other")
+        }
         (matches ++ other).map { case (rowKey, payload) =>
           ordinal -> InternalRow(rowKey, UTF8String.fromString(payload))
         }

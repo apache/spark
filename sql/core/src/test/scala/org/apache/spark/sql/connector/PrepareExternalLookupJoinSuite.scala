@@ -22,15 +22,15 @@ import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.analysis.FormExternalLookupJoin
 import org.apache.spark.sql.catalyst.dsl.expressions._
-import org.apache.spark.sql.catalyst.expressions.{Attribute, AttributeMap, AttributeReference,
-  AttributeSet, BindReferences, Cast, Coalesce, Expression, ExternalUserDefinedFunction, Literal,
-  Predicate => CatalystPredicate}
+import org.apache.spark.sql.catalyst.expressions.{Alias, Attribute, AttributeMap,
+  AttributeReference, AttributeSet, BindReferences, Cast, Coalesce, EqualTo, EvalMode, Expression,
+  ExternalUserDefinedFunction, Literal, NamedExpression, Not, Predicate => CatalystPredicate, Upper}
 import org.apache.spark.sql.catalyst.optimizer.ColumnPruning
 import org.apache.spark.sql.catalyst.plans.{Inner, JoinType, LeftAnti, LeftOuter, LeftSemi,
   PlanTest}
-import org.apache.spark.sql.catalyst.plans.logical.{ExecuteExternalUDF, ExternalLookupJoin,
-  Filter, Join, JoinHint, LocalRelation, LogicalPlan, LookupKeyComparison,
-  PreparedExternalLookupJoin, Project}
+import org.apache.spark.sql.catalyst.plans.logical.{ExecuteExternalUDF, ExternalLookupFilter,
+  ExternalLookupJoin, ExternalLookupProject, ExternalLookupTransform, Filter, Join, JoinHint,
+  LocalRelation, LogicalPlan, LookupKeyComparison, PreparedExternalLookupJoin, Project}
 import org.apache.spark.sql.connector.catalog.{SupportsRead, Table, TableCapability}
 import org.apache.spark.sql.connector.catalog.TableCapability.EXTERNAL_LOOKUP
 import org.apache.spark.sql.connector.expressions.FieldReference
@@ -41,8 +41,8 @@ import org.apache.spark.sql.execution.datasources.v2.{DataSourceV2Relation,
   ExternalLookupRelation, PrepareExternalLookupJoin}
 import org.apache.spark.sql.execution.externalUDF.PlanExternalUDFs
 import org.apache.spark.sql.internal.{SQLConf, StaticSQLConf}
-import org.apache.spark.sql.types.{ArrayType, BooleanType, DecimalType, IntegerType, LongType,
-  MapType, StringType, StructType, TimestampNTZType, TimestampType}
+import org.apache.spark.sql.types.{ArrayType, BooleanType, DateType, DecimalType, IntegerType,
+  LongType, MapType, StringType, StructType, TimestampNTZType, TimestampType}
 import org.apache.spark.sql.util.CaseInsensitiveStringMap
 import org.apache.spark.udf.worker.UDFWorkerSpecification
 import org.apache.spark.unsafe.types.UTF8String
@@ -331,56 +331,76 @@ class PrepareExternalLookupJoinSuite extends PlanTest {
   }
 
   test("a range is a lookup candidate only when its parameter cannot fail") {
+    // Spark evaluates the parameters on each stream row that passes the stream condition, but a
+    // join evaluates a range only after its keys match. So a range is offered only when
+    // ExprUtils.canEvaluateUnconditionally takes its parameter as unable to fail, cast or not, in
+    // the cast's own eval mode. An equality with a parameter that can fail is still offered, as a
+    // hash join evaluates its keys on every row too.
     var offered = Seq.empty[String]
     val lookup = lookupRelation(PlanningExternalLookupTable(
-      "id INT, value INT, total BIGINT, localTime TIMESTAMP_NTZ, time TIMESTAMP, " +
+      "id INT, value INT, total BIGINT, day DATE, localTime TIMESTAMP_NTZ, time TIMESTAMP, " +
         "price DECIMAL(12, 2), rate DECIMAL(38, 10)",
       select = { candidates =>
         offered = candidates.map(_.toString).toSeq
         candidates.take(1)
       }))
-    val Seq(lookupId, lookupValue, lookupTotal, lookupLocalTime, lookupTime, lookupPrice,
+    val Seq(lookupId, lookupValue, lookupTotal, lookupDay, lookupLocalTime, lookupTime, lookupPrice,
       lookupRate) = lookup.output
     val Seq(streamId, streamLabel) = stream.output
-    val (streamDay, streamLocalTime, streamAmount, streamBid, streamUnits) =
-      ($"streamDay".date, $"streamLocalTime".timestampNTZ, $"streamAmount".decimal(19, 0),
-        $"streamBid".decimal(10, 2), $"streamUnits".decimal(38, 0))
-    // Spark evaluates the parameters on each stream row that passes the stream condition, but a
-    // join evaluates a range only after its keys match. A widening numeric cast cannot fail, so a
-    // range with one is offered: of the INT `streamId` to BIGINT or to DECIMAL(12, 2), and of a
-    // DECIMAL(10, 2) to DECIMAL(12, 2). Other casts stay in the residual, as each can fail on some
-    // values: a string that is not a number, a far-future DATE or a TIMESTAMP_NTZ near the limits
-    // as a timestamp, DECIMAL(19, 0) as BIGINT under ANSI, and DECIMAL(38, 0) as DECIMAL(38, 10),
-    // which has room for only 28 integer digits. An equality with a cast that can fail is still
-    // offered, as a hash join evaluates its keys on every row too.
-    val labelNumber = streamLabel.cast(IntegerType)
-    val conjuncts = Seq(
-      lookupId === labelNumber,
-      lookupValue >= streamId,
-      lookupValue < labelNumber,
-      lookupTotal >= streamId.cast(LongType),
-      lookupPrice >= streamId.cast(DecimalType(12, 2)),
-      lookupPrice <= streamBid.cast(DecimalType(12, 2)),
-      lookupLocalTime >= Cast(streamDay, TimestampNTZType),
-      lookupTime >= Cast(streamDay, TimestampType, Some("UTC")),
-      lookupTime >= Cast(streamLocalTime, TimestampType, Some("UTC")),
-      lookupTotal >= streamAmount.cast(LongType),
-      lookupRate >= streamUnits.cast(DecimalType(38, 10)))
-    val left = LocalRelation(
-      Seq(streamId, streamLabel, streamDay, streamLocalTime, streamAmount, streamBid, streamUnits),
-      isStreaming = true)
-    val prepared = prepare(lookupJoin(lookup, conjuncts.reduce(_ && _), left = left))
-    assert(offered === Seq("id = ?", "value >= ?", "total >= ?", "price >= ?", "price <= ?"))
-    assert(prepared.lookupParameters === Seq(labelNumber))
-    // The other conjuncts stay in the residual, those that go first under a NULL guard. Which ones
-    // go first depends on what ExprUtils.canEvaluateUnconditionally takes as unable to fail, which
-    // another test covers.
-    val residual = prepared.residualCondition.toSeq.flatMap(splitConjunctivePredicates).map {
-      case Coalesce(Seq(conjunct, Literal(false, BooleanType))) => conjunct
-      case conjunct => conjunct
+    val (streamDay, streamLocalTime, streamTime) =
+      ($"streamDay".date, $"streamLocalTime".timestampNTZ, $"streamTime".timestamp)
+    val (streamSmall, streamAmount, streamBid, streamUnits) = ($"streamSmall".decimal(18, 0),
+      $"streamAmount".decimal(19, 0), $"streamBid".decimal(10, 2), $"streamUnits".decimal(38, 0))
+    val left = LocalRelation(Seq(streamId, streamLabel, streamDay, streamLocalTime, streamTime,
+      streamSmall, streamAmount, streamBid, streamUnits), isStreaming = true)
+    // Prepares the join of an equality on `id`, which is selected, and of the ranges, and checks
+    // which ranges are offered, and that the rest of the condition stays in the residual.
+    def check(offeredRanges: Seq[(Expression, String)], keptRanges: Seq[Expression]): Unit = {
+      val labelNumber = streamLabel.cast(IntegerType)
+      val conjuncts = (lookupId === labelNumber) +: (offeredRanges.map(_._1) ++ keptRanges)
+      val prepared = prepare(lookupJoin(lookup, conjuncts.reduce(_ && _), left = left))
+      assert(offered === "id = ?" +: offeredRanges.map(_._2))
+      assert(prepared.lookupParameters === Seq(labelNumber))
+      // Which conjuncts go first under a NULL guard depends on what
+      // ExprUtils.canEvaluateUnconditionally takes as unable to fail, which another test covers.
+      val residual = prepared.residualCondition.toSeq.flatMap(splitConjunctivePredicates).map {
+        case Coalesce(Seq(conjunct, Literal(false, BooleanType))) => conjunct
+        case conjunct => conjunct
+      }
+      assert(residual.length === conjuncts.length - 1)
+      assert(residual.toSet === conjuncts.drop(1).toSet)
     }
-    assert(residual.length === conjuncts.length - 1)
-    assert(residual.toSet === conjuncts.drop(1).toSet)
+    withSQLConf(SQLConf.ANSI_ENABLED.key -> "true") {
+      check(
+        offeredRanges = Seq(
+          (lookupValue >= streamId, "value >= ?"),
+          // The widening numeric casts that analysis adds, and DECIMAL(18, 0), which BIGINT holds.
+          (lookupTotal >= streamId.cast(LongType), "total >= ?"),
+          (lookupPrice >= streamId.cast(DecimalType(12, 2)), "price >= ?"),
+          (lookupPrice <= streamBid.cast(DecimalType(12, 2)), "price <= ?"),
+          (lookupTotal >= streamSmall.cast(LongType), "total >= ?"),
+          // The date of a timestamp, and a cast that returns NULL where it would fail.
+          (lookupDay >= Cast(streamTime, DateType, Some("UTC")), "day >= ?"),
+          (lookupDay <= Cast(streamLocalTime, DateType), "day <= ?"),
+          (lookupValue >= Cast(streamLabel, IntegerType, evalMode = EvalMode.TRY), "value >= ?")),
+        // Each fails on some values: a string that is not a number, a far-future DATE or a
+        // TIMESTAMP_NTZ near the limits as a timestamp, DECIMAL(19, 0) beyond BIGINT, and
+        // DECIMAL(38, 0) as DECIMAL(38, 10), which has room for only 28 integer digits.
+        keptRanges = Seq(
+          lookupValue < streamLabel.cast(IntegerType),
+          lookupLocalTime >= Cast(streamDay, TimestampNTZType),
+          lookupTime >= Cast(streamDay, TimestampType, Some("UTC")),
+          lookupTime >= Cast(streamLocalTime, TimestampType, Some("UTC")),
+          lookupTotal >= streamAmount.cast(LongType),
+          lookupRate >= streamUnits.cast(DecimalType(38, 10))))
+    }
+    // With ANSI off, a string that is not a number becomes NULL, but a far-future DATE still
+    // overflows as a timestamp.
+    withSQLConf(SQLConf.ANSI_ENABLED.key -> "false") {
+      check(
+        offeredRanges = Seq((lookupValue < streamLabel.cast(IntegerType), "value < ?")),
+        keptRanges = Seq(lookupTime >= Cast(streamDay, TimestampType, Some("UTC"))))
+    }
   }
 
   test("the read schema binds to the analyzed lookup attributes by exact name") {
@@ -595,6 +615,55 @@ class PrepareExternalLookupJoinSuite extends PlanTest {
     val keepsCode = prepared.copy(lookupOutput = Seq(lookupCode))
     assert(keepsId.sameResult(keepsCode) === false)
     assert(keepsId.sameResult(prepared.copy(lookupOutput = Seq(lookupId))))
+  }
+
+  test("prepared lookup joins with different lookup-side stages canonicalize apart") {
+    // A projection stage that computes a team from a STRING column, and a filter stage on it, over
+    // a table of two STRING columns.
+    val lookup =
+      lookupRelation(PlanningExternalLookupTable("id INT, department STRING, name STRING"))
+    val Seq(id, department, name) = lookup.output
+    val team = Alias(Upper(department), "team")()
+    val staged = Filter(Not(EqualTo(team.toAttribute, Literal("SALES"))),
+      Project(lookup.output :+ team, lookup))
+    val prepared = prepare(lookupJoin(staged, stream.output.head === id))
+    assert(prepared.lookupTransforms.length === 2)
+    // The same join after another analysis, which gives every lookup-side attribute another id.
+    val newIds = AttributeMap(ExternalLookupTransform.attributes(prepared.lookupInput,
+      prepared.lookupTransforms).map(attr => attr -> attr.newInstance()))
+    def renew[T <: Expression](expression: T): T = expression.transformUp {
+      case alias: Alias if newIds.contains(alias.toAttribute) =>
+        Alias(alias.child, alias.name)(newIds(alias.toAttribute).exprId)
+      case attr: Attribute if newIds.contains(attr) => newIds(attr)
+    }.asInstanceOf[T]
+    val reanalyzed = prepared.transformExpressions {
+      case attr: Attribute if newIds.contains(attr) => newIds(attr)
+    }.asInstanceOf[PreparedExternalLookupJoin].copy(lookupTransforms =
+      prepared.lookupTransforms.map {
+        case ExternalLookupProject(projectList, input) =>
+          ExternalLookupProject(projectList.map(renew), input.map(renew))
+        case ExternalLookupFilter(condition, input) =>
+          ExternalLookupFilter(renew(condition), input.map(renew))
+      })
+    assert(reanalyzed.lookupInput != prepared.lookupInput)
+    assert(reanalyzed.sameResult(prepared))
+    // A stage expression over the other column of the same type.
+    val byName = prepared.copy(lookupTransforms = prepared.lookupTransforms.map {
+      case project: ExternalLookupProject => project.copy(projectList =
+        project.projectList.map(_.transform { case Upper(_) => Upper(name) }
+          .asInstanceOf[NamedExpression]))
+      case other => other
+    })
+    assert(byName.sameResult(prepared) === false)
+    // Joins that keep different columns of one type, of the read schema or of a stage.
+    val stagedTeam = prepared.lookupTransforms.collectFirst {
+      case project: ExternalLookupProject => project.output.last
+    }.get
+    Seq(Seq(department), Seq(name), Seq(stagedTeam)).combinations(2).foreach {
+      case Seq(one, other) =>
+        assert(prepared.copy(lookupOutput = one)
+          .sameResult(prepared.copy(lookupOutput = other)) === false, s"$one, $other")
+    }
   }
 
   test("an external UDF over lookup columns in the join condition") {

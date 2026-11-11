@@ -45,7 +45,9 @@ import org.apache.spark.util.Utils
  * tasks, so it holds only what they need; the plan node and its scan stay on the driver.
  *
  * An evaluator joins its partition one batch of up to `maxParameterRowsPerRequest` stream rows at
- * a time, and with `oneKeyPerBatch`, of stream rows that share one key. For each batch it sends
+ * a time, or, with `oneKeyPerBatch`, of up to
+ * [[ExternalLookupJoinExec.MAX_PARAMETER_ROWS_PER_REQUEST]] stream rows that share one key, whose
+ * request holds one parameter row, whatever the source's limit. For each batch it sends
  * one request with the distinct parameters that can match, and streams the connector's result
  * rows into output rows. Parameters are deduplicated per request, that is within one batch: a key
  * repeated in a later batch is requested again.
@@ -154,6 +156,12 @@ class ExternalLookupJoinEvaluatorFactory(
     // match. It is a reused row that the next request row overwrites, unless the row was held.
     private var keptRequestRow: UnsafeRow = null
 
+    // A batch of one key holds one parameter row in its request, whatever the source's limit, so
+    // only Spark's own cap and maxBatchBytes end it before another key does.
+    private val maxBatchRows =
+      if (oneKeyPerBatch) ExternalLookupJoinExec.MAX_PARAMETER_ROWS_PER_REQUEST
+      else maxParameterRowsPerRequest
+
     private def hasInput: Boolean = heldRow != null || input.hasNext
 
     /** The next row that a batch keeps, copied, or null after a row that it leaves out. */
@@ -190,18 +198,17 @@ class ExternalLookupJoinEvaluatorFactory(
 
     // An array, because a batch's rows are read by position for every key, match and output row.
     // The batch holds its rows until its request is read, so it stops once their copies reach
-    // maxBatchBytes, keeping the row that reaches it, and at maxParameterRowsPerRequest rows, also
-    // with one key per batch, where it stops at another key too. It always keeps one row, when one
-    // remains. It decides once for each row whether the row can match, and groups the rows that
-    // can by their request row, a copy of which each group keeps.
+    // maxBatchBytes, keeping the row that reaches it, and at maxBatchRows rows. A batch of one key
+    // also stops at another key. It always keeps one row, when one remains. It decides once for
+    // each row whether the row can match, and groups the rows that can by their request row, a
+    // copy of which each group keeps.
     private def readBatch(): StreamBatch = {
       val rows = mutable.ArrayBuffer.empty[InternalRow]
       val keyEntries = mutable.LinkedHashMap.empty[UnsafeRow, KeyEntry]
       val rowsThatCannotMatch = mutable.ArrayBuffer.empty[Int]
       var bytes = 0L
       var keyChanged = false
-      while (!keyChanged && rows.length < maxParameterRowsPerRequest &&
-          bytes < maxBatchBytes && hasInput) {
+      while (!keyChanged && rows.length < maxBatchRows && bytes < maxBatchBytes && hasInput) {
         val row = nextKeptRow()
         if (row != null) {
           val requestRow = keptRequestRow
