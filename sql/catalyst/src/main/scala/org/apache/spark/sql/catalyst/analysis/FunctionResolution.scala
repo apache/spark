@@ -390,6 +390,19 @@ class FunctionResolution(
     }
   }
 
+  /**
+   * Whether [[lookupBuiltinOrTempFunction]] finds the function. An unqualified name records no
+   * temp reference, see `SessionCatalog.builtinOrTempFunctionExists`.
+   */
+  def builtinOrTempFunctionExists(
+      nameParts: Seq[String],
+      unresolvedFunc: Option[UnresolvedFunction]): Boolean =
+    if (nameParts.length == 1 && !unresolvedFunc.exists(_.isInternal)) {
+      v1SessionCatalog.builtinOrTempFunctionExists(nameParts.head)
+    } else {
+      lookupBuiltinOrTempFunction(nameParts, unresolvedFunc).isDefined
+    }
+
   def lookupBuiltinOrTempTableFunction(nameParts: Seq[String]): Option[ExpressionInfo] = {
     val n = nameParts.length
     v1SessionCatalog.identifierFromSystemNameParts(nameParts) match {

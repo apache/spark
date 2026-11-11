@@ -566,6 +566,38 @@ class SQLFunctionSuite extends SharedSparkSession {
     }
   }
 
+  test("SPARK-60806: a temp function is not a reference when a persistent one owns the call") {
+    withUserDefinedFunction("caller" -> false, "caller2" -> false) {
+      withView("v", "v2") {
+        sql("CREATE FUNCTION pf() RETURNS INT RETURN 7")
+        sql("CREATE TEMPORARY FUNCTION pf() RETURNS INT RETURN 42")
+        try {
+          def check(caller: String, view: String): Unit = {
+            checkAnswer(sql("SELECT pf()"), Row(7))
+            sql(s"CREATE FUNCTION $caller() RETURNS INT RETURN pf()")
+            checkAnswer(sql(s"SELECT $caller()"), Row(7))
+            sql(s"CREATE VIEW $view AS SELECT pf() AS a")
+            checkAnswer(sql(s"SELECT * FROM $view"), Row(7))
+          }
+          withSQLConf(SQLConf.SESSION_FUNCTION_RESOLUTION_ORDER.key -> "last") {
+            check("caller", "v")
+          }
+          withSQLConf(SQLConf.PATH_ENABLED.key -> "true") {
+            try {
+              sql("SET PATH = spark_catalog.default, system.session, system.builtin")
+              check("caller2", "v2")
+            } finally {
+              sql("SET PATH = DEFAULT_PATH")
+            }
+          }
+        } finally {
+          sql("DROP TEMPORARY FUNCTION IF EXISTS pf")
+          sql("DROP FUNCTION IF EXISTS pf")
+        }
+      }
+    }
+  }
+
   test("SPARK-60806: temp functions bound only during analysis are rejected") {
     withUserDefinedFunction("temp_fn" -> true, "temp_tvf" -> true, "temp_scala" -> true) {
       sql("CREATE TEMPORARY FUNCTION temp_fn() RETURNS INT RETURN 1")
