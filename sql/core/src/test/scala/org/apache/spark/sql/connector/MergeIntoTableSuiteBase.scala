@@ -2237,6 +2237,92 @@ abstract class MergeIntoTableSuiteBase extends RowLevelOperationSuiteBase
     }
   }
 
+  test("SPARK-61479: merge with CHAR columns stored without padding") {
+    createTable("pk INT NOT NULL, c CHAR(3), id INT, v STRING, dep STRING")
+    sql(s"CREATE TABLE $sourceNameAsString (pk INT NOT NULL, c CHAR(3))")
+    sql(s"INSERT INTO $sourceNameAsString VALUES (1, 'a'), (2, 'q'), (3, 'x')")
+    // read-side padding also covers values that are not padded in the storage, so the rows to
+    // update must be found by comparing the padded values of the target
+    withSQLConf(SQLConf.LEGACY_CHAR_VARCHAR_AS_STRING.key -> "true") {
+      append("pk INT NOT NULL, c STRING, id INT, v STRING, dep STRING",
+        """{ "pk": 1, "c": "a", "id": 1, "dep": "hr" }
+          |{ "pk": 2, "c": "b", "id": 2, "dep": "software" }
+          |{ "pk": 3, "c": "x", "id": 3, "dep": "hr" }
+          |{ "pk": 4, "c": "y", "id": 4, "dep": "finance" }
+          |""".stripMargin)
+    }
+
+    sql(
+      s"""MERGE INTO $tableNameAsString t
+         |USING $sourceNameAsString s
+         |ON t.pk = s.pk AND t.c IN ('a', 'b', 'c')
+         |WHEN MATCHED THEN
+         | UPDATE SET id = -1
+         |""".stripMargin)
+
+    checkAnswer(
+      sql(s"SELECT pk, id FROM $tableNameAsString"),
+      Row(1, -1) :: Row(2, -1) :: Row(3, 3) :: Row(4, 4) :: Nil)
+
+    sql(
+      s"""MERGE INTO $tableNameAsString t
+         |USING $sourceNameAsString s
+         |ON t.c = s.c
+         |WHEN MATCHED THEN
+         | UPDATE SET id = -2
+         |""".stripMargin)
+
+    checkAnswer(
+      sql(s"SELECT pk, id FROM $tableNameAsString"),
+      Row(1, -2) :: Row(2, -1) :: Row(3, -2) :: Row(4, 4) :: Nil)
+
+    sql(
+      s"""MERGE INTO $tableNameAsString t
+         |USING $sourceNameAsString s
+         |ON t.pk = s.pk
+         |WHEN MATCHED AND t.c = 'x' THEN
+         | UPDATE SET v = t.c
+         |WHEN NOT MATCHED BY SOURCE AND t.c = 'y' THEN
+         | UPDATE SET v = t.c
+         |""".stripMargin)
+
+    checkAnswer(
+      sql(s"SELECT pk, v FROM $tableNameAsString"),
+      Row(1, null) :: Row(2, null) :: Row(3, "x  ") :: Row(4, "y  ") :: Nil)
+
+    // only the conditions and the assigned values read the padded values
+    withSQLConf(SQLConf.LEGACY_CHAR_VARCHAR_AS_STRING.key -> "true") {
+      checkAnswer(
+        sql(s"SELECT c FROM $tableNameAsString"),
+        Row("a") :: Row("b") :: Row("x") :: Row("y") :: Nil)
+    }
+  }
+
+  test("SPARK-61479: insert-only merge with CHAR columns stored without padding") {
+    withTempView("source") {
+      createTable("pk INT NOT NULL, c CHAR(3), dep STRING")
+      withSQLConf(SQLConf.LEGACY_CHAR_VARCHAR_AS_STRING.key -> "true") {
+        append("pk INT NOT NULL, c STRING, dep STRING",
+          """{ "pk": 1, "c": "a", "dep": "hr" }
+            |""".stripMargin)
+      }
+
+      Seq((1, "a  "), (2, "b  ")).toDF("pk", "c").createOrReplaceTempView("source")
+
+      sql(
+        s"""MERGE INTO $tableNameAsString t
+           |USING source s
+           |ON t.c = s.c
+           |WHEN NOT MATCHED THEN
+           | INSERT (pk, c, dep) VALUES (s.pk, s.c, 'new')
+           |""".stripMargin)
+
+      checkAnswer(
+        sql(s"SELECT * FROM $tableNameAsString"),
+        Row(1, "a  ", "hr") :: Row(2, "b  ", "new") :: Nil)
+    }
+  }
+
   test("SPARK-60667: insert-only merge with type coercion handles metadata columns correctly") {
     withTempView("source") {
       createAndInitTable("pk INT NOT NULL, salary INT, dep STRING",
