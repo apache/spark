@@ -82,7 +82,7 @@ module.exports = async ({github, context, core, env = process.env, log = console
                           checkName: "${BUILD_CHECK_NAME}", checkType: LATEST
                         }) {
                       pageInfo { hasNextPage }
-                      nodes { databaseId status conclusion text }
+                      nodes { databaseId externalId status conclusion }
                     }
                   }
                 }
@@ -182,9 +182,9 @@ module.exports = async ({github, context, core, env = process.env, log = console
       branch: node.headRef.name,
       buildChecks: [...checks.values()].map(cr => ({
         id: cr.databaseId,
+        externalId: cr.externalId,
         status: lower(cr.status),
-        conclusion: lower(cr.conclusion),
-        text: cr.text
+        conclusion: lower(cr.conclusion)
       })),
       forkRuns: new Map(runs.map(run => [String(run.id), run])),
       forkRunsTruncated: target.checkSuites.pageInfo.hasNextPage,
@@ -193,23 +193,19 @@ module.exports = async ({github, context, core, env = process.env, log = console
     }
   }
 
-  // The fork run ID a Build check points at, stored as JSON in its output text, or
-  // undefined if the text is not that JSON (e.g. a check from an older version or a
-  // manual run).
-  const runIdOf = (cr) => {
-    try {
-      return JSON.parse(cr.text).run_id
-    } catch {
-      return undefined
-    }
-  }
+  // The fork run ID a Build check points at, stored in its external ID, or undefined if
+  // the check is not linked to a run (e.g. action_required guidance, or a check from an
+  // older version of this script).
+  const runIdOf = (cr) => cr.externalId || undefined
+  const isGuidance = (cr) => cr.conclusion == 'action_required' && !runIdOf(cr)
 
-  // The fields that link a Build check to a fork run. Every update sends them again:
-  // an update without the output text clears it, losing the run ID.
+  // The fields that link a Build check to a fork run. Every update sends them again,
+  // so the link does not depend on GitHub keeping fields an update omits.
   const runLink = (pr, run) => {
     const actions_url = 'https://github.com/' + pr.forkOwner + '/' + pr.forkRepo
       + '/actions/runs/' + run.id
     return {
+      external_id: String(run.id),
       details_url: actions_url,
       output: {
         title: 'Test results',
@@ -217,8 +213,7 @@ module.exports = async ({github, context, core, env = process.env, log = console
           + 'If the tests fail for reasons unrelated to this pull request, '
           + 'please rerun the workflow in your forked repository.\n'
           + 'If the failures are related to this pull request, '
-          + 'please investigate them and push follow-up changes.',
-        text: JSON.stringify({owner: pr.forkOwner, repo: pr.forkRepo, run_id: run.id})
+          + 'please investigate them and push follow-up changes.'
       }
     }
   }
@@ -248,7 +243,7 @@ module.exports = async ({github, context, core, env = process.env, log = console
 
   // The log lists only the Build checks a pass creates or updates, and errors, each
   // with its PR and head commit. Everything else is counted for a summary at the end.
-  const count = {prs: 0, skipped: 0, updated: 0, created: 0, unchanged: 0}
+  const count = {prs: 0, skipped: 0, updated: 0, notApplied: 0, created: 0, unchanged: 0}
   const prUrl = `https://github.com/${context.repo.owner}/${context.repo.repo}/pull/`
 
   // Create a Build check linked to a fork run, or action_required guidance if there is
@@ -319,13 +314,14 @@ module.exports = async ({github, context, core, env = process.env, log = console
 
       // Sync every Build check that points at a fork run, not just the first: a commit
       // can carry more than one (e.g. left by the notify workflow this one replaced).
-      // An action_required guidance check is not linked to a run.
+      // An action_required guidance check is not linked to a run, but a fork run can
+      // also conclude with action_required.
       let syncableBuildCheck = false
       let unlistedRun = false
       let trackedRunShown = false
       let trackedRunReran = false
       for (const cr of pr.buildChecks) {
-        if (cr.conclusion == 'action_required') {
+        if (isGuidance(cr)) {
           continue
         }
         const runId = runIdOf(cr)
@@ -340,8 +336,9 @@ module.exports = async ({github, context, core, env = process.env, log = console
             syncableBuildCheck = true
             unlistedRun = true
           }
-          // Otherwise the check's output is unusable or its fork run was deleted, so
-          // it can never be synced; a check for the tracked run replaces it below.
+          // Otherwise the check is not linked to a run or its fork run was deleted, so
+          // it can never be synced. Below, it is replaced by a check for the tracked
+          // run, or by action_required guidance if there is no tracked run.
           continue
         }
         syncableBuildCheck = true
@@ -356,9 +353,9 @@ module.exports = async ({github, context, core, env = process.env, log = console
           count.unchanged++
           continue
         }
-        trackedRunShown ||= tracked
         // Leave a check alone if it already shows the run's state, as nearly all do.
         if (sameState(cr, state)) {
+          trackedRunShown ||= tracked
           count.unchanged++
           continue
         }
@@ -371,28 +368,32 @@ module.exports = async ({github, context, core, env = process.env, log = console
             ...runLink(pr, run)
           })
           if (sameState(updated, state)) {
+            trackedRunShown ||= tracked
             log.log(ref + ': ' + change)
             count.updated++
           } else {
+            count.notApplied++
             core.warning(ref + ': GitHub did not apply ' + change
               + '; the check is still ' + label(updated))
           }
         } catch (error) {
+          // A failed request has an unknown outcome; retry it on the next pass.
+          trackedRunShown ||= tracked
           log.error(ref + ': ' + change + ' failed: ' + error.message)
           failedPRs.add(pr.number)
         }
       }
 
-      // Link a new check to the tracked run if no check shows it: the PR has none yet,
-      // its check completed before a rerun, or its checks link to other runs (e.g. an
-      // older build of the same commit). Checks for other runs are only synced above.
+      // Link a new check to the tracked run if no check shows its current state: the PR
+      // has none yet, its check completed before a rerun, an update was not applied, or
+      // its checks link to other runs (e.g. an older build of the same commit).
       if (trackedRun && !trackedRunShown && !unlistedRun) {
         await createCheck(pr, ref, trackedRun, trackedRunReran ? 'rerun' : 'none')
       } else if (!trackedRun && !syncableBuildCheck) {
         // No run exists, it was skipped, or the PR is from fork master: create
         // action_required guidance, unless the PR already has it or is still within
         // the run-registration grace period.
-        if (pr.buildChecks.some(cr => cr.conclusion == 'action_required')
+        if (pr.buildChecks.some(isGuidance)
             || Date.parse(pr.updatedAt) > runGraceSince) {
           count.skipped++
           continue
@@ -403,8 +404,8 @@ module.exports = async ({github, context, core, env = process.env, log = console
   }
 
   log.log(count.prs + ' PRs checked, ' + count.skipped + ' skipped. '
-    + 'Build checks: ' + count.updated + ' updated, ' + count.created + ' created, '
-    + count.unchanged + ' unchanged.')
+    + 'Build checks: ' + count.updated + ' updated, ' + count.notApplied + ' not applied, '
+    + count.created + ' created, ' + count.unchanged + ' unchanged.')
 
   if (failedPRs.size > 0) {
     core.setFailed('Failed to sync ' + failedPRs.size + ' PR(s), will retry next pass: #'

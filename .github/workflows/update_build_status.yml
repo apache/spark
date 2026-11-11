@@ -22,15 +22,14 @@
 # workflow only reports their results. Running on a schedule avoids
 # `pull_request_target` and needs no maintainer approval for fork PRs.
 #
-# Each pass synchronizes existing `Build` checks with their fork runs. A PR whose
-# branch's latest fork build has no `Build` check showing it, because the PR has none
-# yet, its check completed before a rerun, or its checks link to other runs, gets a
-# new check linked to that build. PRs with no usable build (none exists, it was
-# skipped, or the PR is from fork master) get `action_required` guidance after the
-# registration grace period. Fork master is reserved for syncing upstream;
-# PR builds should use other branches. Existing run-linked checks remain supported,
-# including older master-branch builds. GitHub may delay or drop scheduled runs, so
-# neither the initial check nor result updates are immediate.
+# Each pass:
+# - Syncs existing checks with their fork runs.
+# - Creates a check for the PR branch's latest build when needed, including reruns.
+# - Provides `action_required` guidance after a grace period if neither a usable
+#   build nor a syncable check exists.
+#
+# Fork master is reserved for syncing upstream; PR builds use other branches.
+# GitHub may delay or drop scheduled runs, so status changes are not immediate.
 
 name: Build Status
 
