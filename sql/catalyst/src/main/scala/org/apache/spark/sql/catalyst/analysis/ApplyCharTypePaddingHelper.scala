@@ -104,17 +104,21 @@ object ApplyCharTypePaddingHelper {
           .getRawType(attr.metadata)
           .flatMap {
             case c: CharType =>
-              val (nulls, literalChars) =
-                list.map(_.eval().asInstanceOf[UTF8String]).partition(_ == null)
-              val literalCharLengths = literalChars.map(_.numChars())
-              val targetLen = (c.length +: literalCharLengths).max
+              // Compute the length of every list element in place, so that each length stays
+              // aligned with the element it came from. NULL elements have no length: they can
+              // never match, so they are left untouched instead of being padded.
+              val literalCharLengths = list.map { lit =>
+                Option(lit.eval().asInstanceOf[UTF8String]).map(_.numChars())
+              }
+              val targetLen = (c.length +: literalCharLengths.flatten).max
               Some(
                 i.copy(
                   value = addPadding(e, c.length, targetLen, alwaysPad = padCharCol),
                   list = list.zip(literalCharLengths).map {
-                      case (lit, charLength) =>
-                        addPadding(lit, charLength, targetLen, alwaysPad = false)
-                    } ++ nulls.map(Literal.create(_, StringType))
+                    case (lit, Some(charLength)) =>
+                      addPadding(lit, charLength, targetLen, alwaysPad = false)
+                    case (lit, None) => lit
+                  }
                 )
               )
             case _ => None

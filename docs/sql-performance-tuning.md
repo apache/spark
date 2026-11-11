@@ -198,18 +198,48 @@ for the final aggregation to merge. Once pass-through is active the map is froze
 always comes before the passed-through rows: rows that collide with the frozen map are held in a
 queue behind it and flushed only after it drains, so a duplicate of a key already in the map still
 merges after that key's accumulated rows, keeping an order-sensitive aggregate such as
-`first`/`last` consistent with a run that never bypasses. The ratio is evaluated periodically, and
-again right before the aggregation map would spill, in which case the spill is skipped entirely.
+`first`/`last` consistent with a run that never bypasses. The SQL UI counts the passed-through rows
+in `number of pass-through output rows`. They are not timed: `time in aggregation build` covers the
+aggregation up to the point where pass-through starts, and preparing the aggregated map for output,
+which in a task that has spilled also writes the map to disk and merges it with the spilled data.
 
-Both evaluations use the cumulative rows and keys of the current map epoch and, once triggered,
-pass-through is not reversed for the rest of the task, so a skewed prefix biases the outcome in
-either direction. A favorable prefix can mask a later distinct-heavy tail, keeping the aggregation
-on until a spill restarts the accounting; conversely, a distinct-heavy prefix can trip the
-pass-through early and keep it tripped even where the rest of the input would aggregate well. To
+The ratio is evaluated periodically, every `minRows` rows, over the rows and keys of the current map
+epoch, against `minCompaction`. It is evaluated again right before the aggregation map would spill,
+against the larger of `minCompaction` and `minCompactionToSpill`. Keeping the aggregation at that
+point means aggregating the rest of the input through spills, which pays off only if that input
+keeps repeating keys, so this evaluation measures the recent rows, at least `minRows` and fewer than
+twice that many: those processed since the periodic evaluation before last, against the keys they
+added. When keys repeat across the input, more of the recent rows find their key already in the map
+as it fills, so their ratio climbs above the epoch's; when each key's rows arrive together, the two
+ratios match. The recent rows still only show how often keys repeat within the map: with keys spread
+evenly over the task, their ratio reflects how much of the task's distinct keys the map holds rather
+than how often each key repeats, so at the default threshold the aggregation is kept only when the
+map holds about half of the task's keys or more. Before the current map's second periodic
+evaluation, or with `minRows` set to `0`, the evaluation measures the whole map epoch instead, whose
+ratio is lower because an epoch's early rows add most of its keys, so it passes through more
+readily. If the ratio is below the threshold, the map is not spilled and the rest of the input is
+passed through. In a task that has already spilled, the frozen map is still written out and merged
+with the spilled data at the end, but no later epoch spills. Because pass-through cannot be
+reversed, the evaluation before a spill also waits until the current map has processed `minRows`
+rows, so a map that fills sooner spills as usual instead of committing the task on a small sample.
+
+Once triggered, pass-through is not reversed for the rest of the task, so a skewed prefix biases the
+outcome in either direction. A favorable prefix can mask a later distinct-heavy tail, keeping the
+aggregation on until a spill restarts the accounting; conversely, a distinct-heavy prefix can trip
+the pass-through early and keep it tripped even where the rest of the input would aggregate well. To
 catch the former without waiting for a spill, raise `minCompaction` so the cumulative ratio trips
 the threshold on a weaker late turn (a higher threshold also bypasses more readily on other inputs).
-To avoid committing the task to pass-through on the latter, raise `minRows` so the periodic
-evaluations start later.
+To avoid committing the task to pass-through on the latter, raise `minRows` so the evaluations start
+later, or, when the task commits at the evaluation before a spill, lower `minCompactionToSpill`.
+Raising `minRows` helps there only past the number of rows the map takes to fill, and also widens
+the sample of recent rows that the evaluation before a spill measures. Lowering
+`minCompactionToSpill` also keeps aggregating keys that repeat across a task whose map holds well
+under half of them; whether that pays off depends on how the cost of spilling the rest of the input
+compares with shuffling it. Pass-through also streams the later rows of keys the frozen map holds,
+so with a few hot keys each of them reaches the final aggregation row by row, on the one reducer
+that key hashes to. When one or two keys, such as a NULL or default value, hold a large share of the
+rows over many distinct ones, that reducer can receive a large share of all rows; setting
+`minCompactionToSpill` to `minCompaction` or below keeps such inputs aggregating through spills.
 
 <table class="spark-config">
   <thead><tr><th>Property Name</th><th>Default</th><th>Meaning</th><th>Since Version</th></tr></thead>
@@ -227,12 +257,16 @@ evaluations start later.
     <td><code>spark.sql.execution.aggregate.adaptivePartialAggregation.minRows</code></td>
     <td>100000</td>
     <td>
-      The number of rows between periodic compaction-ratio evaluations. Setting this to
-      <code>0</code> disables the periodic evaluation. The ratio may still be evaluated when the
-      aggregation map is about to spill. A larger value also delays the periodic evaluations, so
-      when one of them trips pass-through the frozen map tends to hold more rows; the frozen map
-      stays resident until its output is drained, so a larger value raises that transient memory
-      peak.
+      The number of rows between periodic compaction-ratio evaluations. The ratio is also evaluated
+      when the aggregation map is about to spill, but only once the current map has processed at
+      least this many rows, and over the rows since the periodic evaluation before last, so this
+      also sets how many recent rows that evaluation measures: at least this many and fewer than
+      twice that, or the whole map epoch when the map fills before its second periodic evaluation.
+      Setting this to <code>0</code> disables the periodic evaluation, leaving only the evaluation
+      when the map is about to spill, which then measures the whole map epoch. A larger value also
+      delays the evaluations, so when one of them trips pass-through the frozen map tends to hold
+      more rows; the frozen map stays resident until its output is drained, so a larger value raises
+      that transient memory peak.
     </td>
     <td>4.4.0</td>
   </tr>
@@ -240,10 +274,27 @@ evaluations start later.
     <td><code>spark.sql.execution.aggregate.adaptivePartialAggregation.minCompaction</code></td>
     <td>1.05</td>
     <td>
-      The minimum compaction ratio required to keep the partial aggregation. A ratio of 10 means the
-      partial aggregation collapses ten rows into one key; when an evaluation finds the ratio below
-      this value the partial aggregation is bypassed for the rest of the input. A larger value
-      bypasses more aggressively.
+      The minimum compaction ratio required to keep the partial aggregation at the periodic
+      evaluation. A ratio of 10 means the partial aggregation collapses ten rows into one key; when
+      the periodic evaluation finds the ratio below this value the partial aggregation is bypassed
+      for the rest of the input. A larger value bypasses more aggressively. The evaluation before a
+      spill demands at least this value too.
+    </td>
+    <td>4.4.0</td>
+  </tr>
+  <tr>
+    <td><code>spark.sql.execution.aggregate.adaptivePartialAggregation.minCompactionToSpill</code></td>
+    <td>2.0</td>
+    <td>
+      The minimum compaction ratio required to keep the partial aggregation when its map is about to
+      spill, measured over the rows processed since the periodic evaluation before last, or over the
+      whole map epoch before its second periodic evaluation. Keeping the aggregation then means
+      aggregating the rest of the input through spills, which pays off only if that input keeps
+      repeating keys. With keys spread evenly over the task, the default keeps aggregating only when
+      the map holds about half of the task's keys or more. When the ratio is below the larger of
+      this value and <code>minCompaction</code>, the map is not spilled and the rest of the input is
+      passed through. The evaluation runs only once the current map has processed
+      <code>minRows</code> rows.
     </td>
     <td>4.4.0</td>
   </tr>
@@ -340,7 +391,9 @@ SELECT
 
 They are merged into one aggregate that computes `min` and `max` together, so `store_sales` is read once. In `EXPLAIN` output a merged subplan shows up as a subquery whose single output column is named `mergedValue`, and the sites that share it as `ReusedSubquery`.
 
-Two subplans are merged when their plans match node by node: `Project` lists are unioned, `Aggregate`s must have the same grouping and use the same aggregation implementation (so a `min` is not merged with a `collect_list`), `Filter`s must have the same condition, `Join`s must have the same type, condition and hints, and the leaves must read the same input. Subplans that differ only in their `WHERE` conditions can be merged as well, by turning each side's condition into a boolean column and giving each side's aggregate expressions a `FILTER (WHERE ...)` clause. That is controlled by the configurations below. Queries that still contain a `WITH` clause when this rule runs (one that was not inlined) are skipped.
+Two subplans are merged when their plans match node by node: `Project` lists are unioned, `Aggregate`s must have the same grouping and use the same aggregation implementation (so a `min` is not merged with a `collect_list`), `Filter`s must have the same condition, `Join`s must have the same type, condition and hints, and the leaves must read the same input. A V1 file relation whose rows depend on which columns the read asked for is merged only when both subplans read the same columns of it: `csv`, `json` and `xml`, whose parsers decide what counts as a malformed record from the required schema, and any file relation read with `spark.sql.files.ignoreCorruptFiles` enabled, as a read option or through the configuration, where a failure in a column only one side reads is swallowed together with the rest of that file's rows. `spark.sql.files.ignoreMissingFiles` counts too, not for that reason but because one predicate answers for both. Subplans that differ only in their `WHERE` conditions can be merged as well, by turning each side's condition into a boolean column and giving each side's aggregate expressions a `FILTER (WHERE ...)` clause. That is controlled by the configurations below. Queries that still contain a `WITH` clause when this rule runs (one that was not inlined) are skipped.
+
+On the DataSource V2 read path the requirement that the leaves read the same input is relaxed for a source that declares the `SCAN_MERGING` table capability: two leaves that differ only in their projected columns merge into a single scan reading the union of those columns. Among the built-in file formats Parquet, ORC, text and Avro declare it; a format reaches its V2 read path only when it is removed from `spark.sql.sources.useV1SourceList`. A file table withholds the capability when `spark.sql.files.ignoreCorruptFiles` is true, because a read failure in a column that only the other subplan projects would then be swallowed along with the rest of that file's rows, and when `spark.sql.files.ignoreMissingFiles` is true, to match the strictness predicate the file reader uses.
 
 When only one of the two subplans has a filter, merging is always beneficial, because the unfiltered side reads all the data anyway. This case is on by default, unless the filter has to cross a `Join` to reach the aggregate, which needs the through-join configuration below. When both sides have a filter (the symmetric case), the merged scan filter becomes `OR(f1, f2)`, which is less selective than either original filter and can therefore read more data - for example when the filters prune partitions or Parquet row groups. That is why the symmetric case is disabled by default.
 
@@ -384,7 +437,7 @@ In TPC-DS benchmark runs, enabling symmetric filter propagation made `q9` and `q
     <td><code>spark.sql.optimizer.mergeSubplans.filterPropagation.dsv2SymmetricFilterPropagation.enabled</code></td>
     <td>false</td>
     <td>
-      When true, two DataSource V2 scans that pushed the same strictly enforced filters but carry different best-effort (post-scan) filters can be merged even when <code>spark.sql.optimizer.mergeSubplans.filterPropagation.symmetricFilterPropagation.enabled</code> is false. In this case widening cannot change the set of rows the scan is required to return, as the strict filters are re-pushed unchanged and the enclosing <code>Filter</code> re-checks the rest above the scan. This applies only to V2 sources that opt in to scan merging with the <code>SCAN_MERGING</code> table capability; no built-in source does.
+      When true, two DataSource V2 scans that pushed the same strictly enforced filters but carry different best-effort (post-scan) filters can be merged even when <code>spark.sql.optimizer.mergeSubplans.filterPropagation.symmetricFilterPropagation.enabled</code> is false. In this case widening cannot change the set of rows the scan is required to return, as the strict filters are re-pushed unchanged and the enclosing <code>Filter</code> re-checks the rest above the scan. This applies only to V2 sources that opt in to scan merging with the <code>SCAN_MERGING</code> table capability. For a file source the strictly enforced filters are the partition filters, so this configuration is what lets two scans over the same partitions but with different data filters merge.
     </td>
     <td>4.3.0</td>
   </tr>
@@ -397,6 +450,27 @@ spark.sql.optimizer.excludedRules=org.apache.spark.sql.execution.planmerging.Mer
 ```
 
 Use exactly that name: the rule was called `MergeScalarSubqueries` before Spark 4.2 and sat in a different package before Spark 4.3, and unknown names in `spark.sql.optimizer.excludedRules` are silently ignored, so an older name carried over from a previous version does not turn the rule off. See the [SQL migration guide](sql-migration-guide.html) for the old names.
+
+## Whole-Stage Code Generation
+
+Whole-stage code generation combines operators into generated Java methods. On HotSpot JVMs with
+`-XX:+DontCompileHugeMethods` enabled (the default), methods larger than 8000 bytes are not JIT
+compiled. Spark logs `Generated method too long to be JIT compiled` when it encounters such a
+method.
+
+As an advanced tuning option, consider setting `spark.sql.codegen.hugeMethodLimit` to `8000`.
+This internal setting has no compatibility guarantee and may change in future releases. It limits
+the bytecode size of a compiled method generated by whole-stage code generation. If a method exceeds
+this limit, Spark runs that codegen stage without whole-stage code generation; stages above and
+below it can still use generated code. This setting does not change the JVM's JIT compilation limit.
+
+The default, `65535`, is the JVM's maximum valid method size, so this check only takes effect when
+the limit is lowered. A method beyond the JVM limit cannot be compiled into a class; compilation
+failure is handled separately by `spark.sql.codegen.fallback`.
+
+Compare performance on your workload before retaining a lower limit. Disabling whole-stage code
+generation can reduce performance, even when a generated method is too large for HotSpot to JIT
+compile.
 
 ## Adaptive Query Execution
 Adaptive Query Execution (AQE) is an optimization technique in Spark SQL that makes use of the runtime statistics to choose the most efficient query execution plan, which is enabled by default since Apache Spark 3.2.0. Spark SQL can turn on and off AQE by `spark.sql.adaptive.enabled` as an umbrella configuration.
@@ -650,9 +724,17 @@ The following SQL properties enable Storage Partition Join in different join que
       <td><code>spark.sql.requireAllClusterKeysForCoPartition</code></td>
       <td>true</td>
       <td>
-        When true, storage-partitioned join requires every join or MERGE key to be covered by some partition key (rather than matching the partition keys positionally) to eliminate shuffle. When the partition keys cover only part of the join or MERGE keys, set to <b>false</b> to eliminate shuffle, at the risk of data skew and reduced parallelism from the coarser storage partitioning.
+        When true, storage-partitioned join requires every join or MERGE key to be covered by some partition key (rather than matching the partition keys positionally) to eliminate shuffle. The same applies when <code>spark.sql.sources.v2.bucketing.shuffle.enabled</code> shuffles only one side onto the partition keys of the other. When the partition keys cover only part of the join or MERGE keys, set to <b>false</b> to eliminate shuffle, at the risk of data skew and reduced parallelism from the coarser storage partitioning. Storage-partitioned layouts read <code>spark.sql.sources.v2.bucketing.requireAllClusterKeysForCoPartition.enabled</code>, which defaults to this config. To keep the requirement for hash partitionings, set that one to <b>false</b> instead.
       </td>
       <td>3.3.0</td>
+    </tr>
+    <tr>
+      <td><code>spark.sql.sources.v2.bucketing.requireAllClusterKeysForCoPartition.enabled</code></td>
+      <td>(value of <code>spark.sql.requireAllClusterKeysForCoPartition</code>)</td>
+      <td>
+        When true, a storage-partitioned join, or the one-side shuffle of <code>spark.sql.sources.v2.bucketing.shuffle.enabled</code>, runs on the partition keys only if they cover every join, cogroup or MERGE key. Set to <b>false</b> to also allow partition keys that cover only some of those keys, at the risk of data skew and reduced parallelism from the coarser storage partitioning. Hash partitionings still follow <code>spark.sql.requireAllClusterKeysForCoPartition</code>.
+      </td>
+      <td>4.4.0</td>
     </tr>
     <tr>
       <td><code>spark.sql.sources.v2.bucketing.partiallyClusteredDistribution.enabled</code></td>
@@ -666,7 +748,7 @@ The following SQL properties enable Storage Partition Join in different join que
       <td><code>spark.sql.sources.v2.bucketing.allowKeysSubsetOfPartitionKeys.enabled</code></td>
       <td>false</td>
       <td>
-        When enabled, try to avoid shuffle if join or MERGE condition does not include all partition columns. This config requires both <code>spark.sql.sources.v2.bucketing.enabled</code> and <code>spark.sql.sources.v2.bucketing.pushPartValues.enabled</code> to be true.
+        When enabled, try to avoid shuffle if join or MERGE condition does not include all partition columns. This config requires <code>spark.sql.sources.v2.bucketing.enabled</code> to be true.
       </td>
       <td>4.0.0</td>
     </tr>
@@ -674,7 +756,7 @@ The following SQL properties enable Storage Partition Join in different join que
       <td><code>spark.sql.sources.v2.bucketing.allowCompatibleTransforms.enabled</code></td>
       <td>false</td>
       <td>
-        When enabled, try to avoid shuffle if partition transforms are compatible but not identical. This config requires both <code>spark.sql.sources.v2.bucketing.enabled</code> and <code>spark.sql.sources.v2.bucketing.pushPartValues.enabled</code> to be true.
+        When enabled, try to avoid shuffle if partition transforms are compatible but not identical. This config requires both <code>spark.sql.sources.v2.bucketing.enabled</code> and <code>spark.sql.sources.v2.bucketing.pushPartValues.enabled</code> to be true, and <code>spark.sql.sources.v2.bucketing.partiallyClusteredDistribution.enabled</code> to be false.
       </td>
       <td>4.0.0</td>
     </tr>
@@ -685,6 +767,46 @@ The following SQL properties enable Storage Partition Join in different join que
         When enabled, try to avoid shuffle on one side of the join, by recognizing the partitioning reported by a V2 data source on the other side.
       </td>
       <td>4.0.0</td>
+    </tr>
+    <tr>
+      <td><code>spark.sql.sources.v2.bucketing.partition.filter.enabled</code></td>
+      <td>true</td>
+      <td>
+        When enabled, key groups that cannot produce output for the join type may be skipped, instead of being filled with empty partitions on the side that does not hold them. For example, an inner join may scan only the key groups present on both sides. This config requires <code>spark.sql.sources.v2.bucketing.enabled</code> to be true, together with either <code>spark.sql.sources.v2.bucketing.pushPartValues.enabled</code> or <code>spark.sql.sources.v2.bucketing.allowKeysSubsetOfPartitionKeys.enabled</code>.
+      </td>
+      <td>4.0.0</td>
+    </tr>
+    <tr>
+      <td><code>spark.sql.sources.v2.bucketing.sorting.enabled</code></td>
+      <td>false</td>
+      <td>
+        When enabled, Spark satisfies a sort on the partition key expressions from the partitioning reported by a V2 data source, so no shuffle is added for that sort. The parallelism of the sorted output is then whatever the data source's partition layout provides, and there is no shuffle stage left for adaptive partition coalescing or skew splitting to balance. This config requires <code>spark.sql.sources.v2.bucketing.enabled</code> to be true.
+      </td>
+      <td>4.0.0</td>
+    </tr>
+    <tr>
+      <td><code>spark.sql.sources.v2.bucketing.partitionKeyOrdering.enabled</code></td>
+      <td>true</td>
+      <td>
+        When enabled, Spark derives the output ordering of a V2 scan from its partition key expressions, if the source reports a keyed partitioning and no ordering that Spark keeps for the scan output. For example, the source reports none, an empty one, or one that starts with a sort order on a column pruned from the scan output or on a partition transform and has no later sort order on a partition key other than a transform. All rows of such a partition share one key value, so the partition is trivially sorted by those expressions, and a sort Spark would otherwise add becomes unnecessary. Partition transforms such as <code>days(ts)</code> or <code>bucket(8, id)</code> are left out of the ordering. This config requires <code>spark.sql.sources.v2.bucketing.enabled</code> to be true.
+      </td>
+      <td>4.2.0</td>
+    </tr>
+    <tr>
+      <td><code>spark.sql.sources.v2.bucketing.preserveKeyOrderingOnCoalesce.enabled</code></td>
+      <td>true</td>
+      <td>
+        When enabled, <code>GroupPartitionsExec</code> reports sort orders over partition key expressions after coalescing several input partitions into one. The merged partitions share the same partition key value, so these orders still hold, while orders over other columns are lost by the concatenation. Sort orders over partition transforms such as <code>days(ts)</code> or <code>bucket(8, id)</code> are left out. No order is reported when the join reduced the partition keys onto a common key space (see <code>spark.sql.sources.v2.bucketing.allowCompatibleTransforms.enabled</code>), because the merged partitions then share only the reduced key. This config requires <code>spark.sql.sources.v2.bucketing.enabled</code> to be true.
+      </td>
+      <td>4.2.0</td>
+    </tr>
+    <tr>
+      <td><code>spark.sql.sources.v2.bucketing.preserveOrderingOnCoalesce.enabled</code></td>
+      <td>false</td>
+      <td>
+        When enabled, <code>GroupPartitionsExec</code> may preserve the child's full ordering through a sorted merge instead of concatenation, rather than only the orderings over partition key expressions that <code>spark.sql.sources.v2.bucketing.preserveKeyOrderingOnCoalesce.enabled</code> preserves. The sorted merge is selected only where a downstream ordering is otherwise unsatisfied and the merge is feasible, that is, the node coalesces partitions sharing a key, the child reports a non-empty ordering, and every operator below it is one Spark can drive from several partitions at once; otherwise the node concatenates. Where it applies, it removes a downstream sort when data is both partitioned and sorted, but a sorted merge costs more than concatenation, especially when merging many partitions, and it gives up columnar execution for the merged plan. This config requires <code>spark.sql.sources.v2.bucketing.enabled</code> to be true.
+      </td>
+      <td>4.2.0</td>
     </tr>
   </table>
 
@@ -722,7 +844,6 @@ ON t.dep = s.dep AND t.id = s.id
 SET 'spark.sql.sources.v2.bucketing.enabled' 'true'
 SET 'spark.sql.iceberg.planning.preserve-data-grouping' 'true'
 SET 'spark.sql.sources.v2.bucketing.pushPartValues.enabled' 'true'
-SET 'spark.sql.sources.v2.bucketing.partiallyClusteredDistribution.enabled' 'true'
 
 -- Plan with Storage Partition Join
 == Physical Plan ==
@@ -737,3 +858,8 @@ SET 'spark.sql.sources.v2.bucketing.partiallyClusteredDistribution.enabled' 'tru
          +- * ColumnarToRow (6)
             +- BatchScan (5)
 ```
+
+For skewed joins, consider enabling
+`spark.sql.sources.v2.bucketing.partiallyClusteredDistribution.enabled` and measuring its
+effect on your workload. This option replicates partitions from one side of the join and may
+increase the amount of data read; the example above leaves it at its default of `false`.

@@ -17,11 +17,13 @@
 import cProfile
 import os
 import pstats
+import sys
+import threading
 import warnings
 from abc import ABC, abstractmethod
 from io import StringIO
 from threading import RLock
-from types import CodeType, TracebackType
+from types import CodeType, FrameType, TracebackType
 from typing import (
     TYPE_CHECKING,
     Any,
@@ -42,16 +44,18 @@ from pyspark.accumulators import (
     SpecialAccumulatorIds,
     _accumulatorRegistry,
 )
-from pyspark.errors import PySparkValueError
+from pyspark.errors import PySparkRuntimeError, PySparkValueError
 from pyspark.profiler import (
     CodeMapDict,
     MemoryProfiler,
     MemUsageParam,
     PStatsParam,
+    SamplingResultParam,
 )
 
 if TYPE_CHECKING:
     from pyspark.sql._typing import ProfileResults, ProfileResultsV2
+    from pyspark.taskcontext import TaskContext
 
 
 class _ProfileResultsParam(AccumulatorParam[Optional["ProfileResults"]]):
@@ -99,30 +103,116 @@ class _ProfileResultsParamV2(AccumulatorParam["ProfileResultsV2"]):
     AccumulatorParam for profilers.
     """
 
+    # Guards a results dict that the driver's accumulator server thread merges into while other
+    # threads read or clear it. The DAGScheduler blocks until that thread acknowledges, so keep
+    # holds short, and never call into the JVM or wait on a Spark job while holding it.
+    # A class attribute, so it is not pickled with the param.
+    lock = RLock()
+
     @staticmethod
     def zero(value: "ProfileResultsV2") -> "ProfileResultsV2":
         return {}
 
-    @staticmethod
-    def addInPlace(value1: "ProfileResultsV2", value2: "ProfileResultsV2") -> "ProfileResultsV2":
-        for key, result in value2.items():
-            if key not in value1:
-                value1[key] = result
-            else:
-                perf = PStatsParam.addInPlace(
-                    value1[key].get("perf", None), result.get("perf", None)
-                )
-                if perf is not None:
-                    value1[key]["perf"] = perf
-                memory = MemUsageParam.addInPlace(
-                    value1[key].get("memory", None), result.get("memory", None)
-                )
-                if memory is not None:
-                    value1[key]["memory"] = memory
-        return value1
+    @classmethod
+    def addInPlace(
+        cls, value1: "ProfileResultsV2", value2: "ProfileResultsV2"
+    ) -> "ProfileResultsV2":
+        with cls.lock:
+            for key, result in value2.items():
+                if key not in value1:
+                    value1[key] = result
+                else:
+                    perf = PStatsParam.addInPlace(
+                        value1[key].get("perf", None), result.get("perf", None)
+                    )
+                    if perf is not None:
+                        value1[key]["perf"] = perf
+                    memory = MemUsageParam.addInPlace(
+                        value1[key].get("memory", None), result.get("memory", None)
+                    )
+                    if memory is not None:
+                        value1[key]["memory"] = memory
+                    sampling = SamplingResultParam.addInPlace(
+                        value1[key].get("sampling", {}), result.get("sampling", {})
+                    )
+                    if sampling:
+                        value1[key]["sampling"] = sampling
+            return value1
 
 
 ProfileResultsParamV2 = _ProfileResultsParamV2()
+
+
+class WorkerSamplingProfiler:
+    """
+    SamplingProfiler is a profiler for sampling profiling.
+    """
+
+    def __init__(
+        self,
+        task_context: "TaskContext",
+        sampling_interval: float = 100,
+    ) -> None:
+        self._callstack_data: dict[int, dict] = {}
+        self._task_context = task_context
+        self._sampling_interval = sampling_interval
+        self._sampling_thread: Optional[threading.Thread] = None
+        self._stop_event = threading.Event()
+
+    def __enter__(self) -> "WorkerSamplingProfiler":
+        self._start_sampling_thread()
+        return self
+
+    def __exit__(
+        self,
+        exc_type: Optional[type[BaseException]],
+        exc_val: Optional[BaseException],
+        exc_tb: Optional[TracebackType],
+    ) -> None:
+        assert self._sampling_thread is not None
+        self._stop_event.set()
+        self._sampling_thread.join()
+        self._sampling_thread = None
+
+    def save(self, accumulator: Accumulator["ProfileResultsV2"]) -> None:
+        accumulator.add({self._get_task_key(): {"sampling": {"callstack": self._callstack_data}}})
+
+    def _start_sampling_thread(self) -> None:
+        if self._sampling_thread is not None:
+            raise PySparkRuntimeError("Sampling thread already started")
+        self._sampling_thread = threading.Thread(target=self._sample_loop)
+        self._sampling_thread.start()
+
+    def _sample_loop(self) -> None:
+        self_tid = threading.get_ident()
+        while not self._stop_event.wait(self._sampling_interval / 1000):
+            for tid, frame in sys._current_frames().items():
+                if tid != self_tid:
+                    self._add_sample(tid, frame)
+
+    def _add_sample(self, tid: int, frame: Optional[FrameType]) -> None:
+        if tid not in self._callstack_data:
+            self._callstack_data[tid] = {}
+        frames: list[FrameType] = []
+        while frame is not None:
+            frames.append(frame)
+            frame = frame.f_back
+
+        d = self._callstack_data[tid]
+        for f in reversed(frames):
+            ident = self._get_ident_from_frame(f)
+            if ident not in d:
+                d[ident] = {"count": 0}
+            d[ident]["count"] += 1
+            d = d[ident]
+
+    def _get_ident_from_frame(self, frame: FrameType) -> str:
+        code = frame.f_code
+        return f"{code.co_qualname} ({code.co_filename}:{code.co_firstlineno})"
+
+    def _get_task_key(self) -> str:
+        tc = self._task_context
+        return f"{tc.stageId()}_{tc.partitionId()}.{tc.attemptNumber()}_{tc.taskAttemptId()}"
 
 
 class WorkerPerfProfiler:
@@ -274,9 +364,11 @@ class ProfilerCollector(ABC):
 
     @property
     def _perf_profile_results(self) -> Dict[Union[int, str], pstats.Stats]:
+        # Return copies, since merges mutate the stats in place while callers sort, print and
+        # dump them outside the lock.
         with self._lock:
             return {
-                result_id: result["perf"]
+                result_id: pstats.Stats().add(result["perf"])
                 for result_id, result in self._profile_results.items()
                 if result.get("perf", None) is not None
             }
@@ -325,6 +417,15 @@ class ProfilerCollector(ABC):
                 result_id: result["memory"]
                 for result_id, result in self._profile_results.items()
                 if result.get("memory", None) is not None
+            }
+
+    @property
+    def _sampling_profile_results(self) -> Dict[Union[int, str], dict]:
+        with self._lock:
+            return {
+                result_id: result["sampling"]
+                for result_id, result in self._profile_results.items()
+                if result.get("sampling", None) is not None
             }
 
     @property
@@ -451,6 +552,30 @@ class ProfilerCollector(ABC):
                     if not self._profile_results[id]:
                         self._profile_results.pop(id)
 
+    def clear_sampling_profiles(self, id: Optional[Union[int, str]] = None) -> None:
+        """
+        Clear the sampling profile results.
+
+        .. versionadded:: 4.4.0
+
+        Parameters
+        ----------
+        id : int or str, optional
+            The result ID whose sampling profile results should be cleared.
+            If not specified, all the results will be cleared.
+        """
+        with self._lock:
+            if id is not None:
+                if id in self._profile_results:
+                    self._profile_results[id].pop("sampling", None)
+                    if not self._profile_results[id]:
+                        self._profile_results.pop(id)
+            else:
+                for id in list(self._profile_results.keys()):
+                    self._profile_results[id].pop("sampling", None)
+                    if not self._profile_results[id]:
+                        self._profile_results.pop(id)
+
 
 class AccumulatorProfilerCollector(ProfilerCollector):
     def __init__(self) -> None:
@@ -462,6 +587,8 @@ class AccumulatorProfilerCollector(ProfilerCollector):
             self._accumulator = Accumulator(
                 SpecialAccumulatorIds.SQL_UDF_PROFIER_V2, {}, ProfileResultsParamV2
             )
+        # Share the lock with the accumulator merge, which mutates the same dict.
+        self._lock = ProfileResultsParamV2.lock
 
     @property
     def _profile_results(self) -> "ProfileResultsV2":
@@ -650,8 +777,9 @@ class Profile:
             self.profiler_collector.clear_memory_profiles(id)
         elif type == "perf" or type is None:
             self.profiler_collector.clear_perf_profiles(id)
-            if type is None:  # Clear both perf and memory profiles
+            if type is None:  # Clear perf, memory and sampling profiles
                 self.profiler_collector.clear_memory_profiles(id)
+                self.profiler_collector.clear_sampling_profiles(id)
         else:
             raise PySparkValueError(
                 errorClass="VALUE_NOT_ALLOWED",

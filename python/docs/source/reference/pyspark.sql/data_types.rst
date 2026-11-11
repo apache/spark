@@ -50,6 +50,8 @@ Data Types
     VariantType
     TimestampType
     TimestampNTZType
+    TimestampNTZNanosType
+    TimestampLTZNanosType
     DayTimeIntervalType
     YearMonthIntervalType
     CalendarIntervalType

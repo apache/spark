@@ -677,7 +677,10 @@ object Multiply {
 // Common base trait for Divide and Remainder, since these two classes are almost identical
 trait DivModLike extends BinaryArithmetic {
 
-  protected def decimalToDataTypeCodeGen(decimalResult: String): String = decimalResult
+  /** Java code assigning the checked decimal result to `value`. */
+  protected def decimalToDataTypeCodeGen(
+      decimalResult: String, value: String, errorContextCode: String): String =
+    s"$value = $decimalResult;"
 
   // Whether we should check overflow or not in ANSI mode.
   protected def checkDivideOverflow: Boolean = false
@@ -766,14 +769,14 @@ trait DivModLike extends BinaryArithmetic {
              |Decimal $decimalValue = $castUtils.changePrecisionExact(
              |  ${decimalOperation(eval1.value, eval2.value, scale)}, $precision, $scale,
              |  $errorContextCode);
-             |${ev.value} = ${decimalToDataTypeCodeGen(s"$decimalValue")};
+             |${decimalToDataTypeCodeGen(decimalValue, ev.value, errorContextCode)}
              |""".stripMargin
         } else {
           s"""
              |Decimal $decimalValue = $castUtils.changePrecisionOrNull(
              |  ${decimalOperation(eval1.value, eval2.value, scale)}, $precision, $scale);
              |if ($decimalValue != null) {
-             |  ${ev.value} = ${decimalToDataTypeCodeGen(s"$decimalValue")};
+             |  ${decimalToDataTypeCodeGen(decimalValue, ev.value, errorContextCode)}
              |} else {
              |  ${ev.isNull} = true;
              |}
@@ -974,7 +977,26 @@ case class IntegralDivide(
 
   override def symbol: String = "/"
   override def decimalMethod: String = "quot"
-  override def decimalToDataTypeCodeGen(decimalResult: String): String = s"$decimalResult.toLong()"
+
+  // A decimal quotient that fits the decimal result type can still overflow a long when the
+  // type has more digits than a long can always hold.
+  private lazy val checkDecimalToLongOverflow: Boolean = failOnError && (super.dataType match {
+    case DecimalType.Fixed(precision, _) => precision > Decimal.MAX_LONG_DIGITS
+    case _ => false
+  })
+
+  override def decimalToDataTypeCodeGen(
+      decimalResult: String, value: String, errorContextCode: String): String = {
+    val checkLongOverflow = if (checkDecimalToLongOverflow) {
+      s"""
+         |if ($decimalResult.toJavaBigInteger().bitLength() > 63) {
+         |  throw QueryExecutionErrors.overflowInIntegralDivideError($errorContextCode);
+         |}""".stripMargin
+    } else {
+      ""
+    }
+    s"$checkLongOverflow\n$value = $decimalResult.toLong();"
+  }
 
   override def resultDecimalType(p1: Int, s1: Int, p2: Int, s2: Int): DecimalType = {
     // This follows division rule
@@ -1007,6 +1029,10 @@ case class IntegralDivide(
       if (res == null) {
         null
       } else {
+        if (checkDecimalToLongOverflow &&
+            res.asInstanceOf[Decimal].toJavaBigInteger.bitLength > 63) {
+          throw QueryExecutionErrors.overflowInIntegralDivideError(getContextOrNull())
+        }
         integral.toLong(res)
       }
     }
@@ -1239,10 +1265,10 @@ case class Pmod(
            |${ev.isNull} = ${ev.value} == null;
            |""".stripMargin
 
-      // The positive-modulo arithmetic is the same fixed algorithm for every primitive numeric
-      // type, so delegate to the shared MathUtils.pmod helper (also used by the eval path) instead
-      // of emitting the remainder/adjust block inline. byte/short are widened to int by `%`, and
-      // the matching MathUtils.pmod overload narrows the result back.
+      // The positive-modulo arithmetic has the same semantics for every primitive numeric type,
+      // so delegate to the shared MathUtils.pmod helper (also used by the eval path) instead of
+      // emitting the remainder/adjust block inline. The byte/short overloads compute in int and
+      // narrow the result back.
       case _ =>
         s"${ev.value} = $mathUtils.pmod(${eval1.value}, ${eval2.value});"
     }

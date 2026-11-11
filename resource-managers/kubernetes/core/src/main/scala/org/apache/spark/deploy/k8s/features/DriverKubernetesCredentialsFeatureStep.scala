@@ -28,7 +28,7 @@ import io.fabric8.kubernetes.api.model.{ContainerBuilder, HasMetadata, PodBuilde
 import org.apache.spark.deploy.k8s.{KubernetesConf, SparkPod}
 import org.apache.spark.deploy.k8s.Config._
 import org.apache.spark.deploy.k8s.Constants._
-import org.apache.spark.deploy.k8s.KubernetesUtils.buildPodWithServiceAccount
+import org.apache.spark.deploy.k8s.KubernetesUtils.{buildPodWithServiceAccount, podServiceAccount}
 import org.apache.spark.internal.Logging
 import org.apache.spark.internal.LogKeys.{CONFIG, CONFIGS, PREFIX, SERVICE_ACCOUNT_NAME, VALUE}
 
@@ -81,15 +81,10 @@ private[spark] class DriverKubernetesCredentialsFeatureStep(kubernetesConf: Kube
     } else {
       // The credentials secret takes precedence over the driver service account: this branch never
       // applies the account, so warn that the pod keeps whatever its spec names, or the namespace
-      // default. Stay quiet when the spec already names the same account. Both spec fields are
-      // read, `serviceAccountName` winning, matching Kubernetes' SetDefaults_PodSpec: a pod
-      // template is deserialized with no API-server defaulting, so it can leave either one null.
-      val podSpec = Option(pod.pod.getSpec)
-      val podServiceAccount = podSpec.flatMap(s => Option(s.getServiceAccountName))
-        .filter(_.nonEmpty)
-        .orElse(podSpec.flatMap(s => Option(s.getServiceAccount)).filter(_.nonEmpty))
-      driverServiceAccount.filterNot(podServiceAccount.contains).foreach { account =>
-        val keptAccount = podServiceAccount
+      // default. Stay quiet when the spec already names the same account.
+      val specServiceAccount = podServiceAccount(pod)
+      driverServiceAccount.filterNot(specServiceAccount.contains).foreach { account =>
+        val keptAccount = specServiceAccount
           .map(name => log"the pod keeps ${MDC(SERVICE_ACCOUNT_NAME, name)}, named by its spec")
           .getOrElse(log"the pod falls back to the namespace's default account")
         logWarning(log"Not applying " +

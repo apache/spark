@@ -78,6 +78,47 @@ if TYPE_CHECKING:
 __all__ = ["DataFrame", "DataFrameNaFunctions", "DataFrameStatFunctions"]
 
 
+def _validate_approx_quantile_probabilities(probabilities: Any) -> List[Union[float, int]]:
+    """
+    Validate the ``probabilities`` argument of ``DataFrame.approxQuantile``, shared by the
+    classic and Connect implementations so both stay in sync. Returns it as a ``list``.
+    """
+    from pyspark.errors import PySparkTypeError, PySparkValueError
+
+    if not isinstance(probabilities, (list, tuple)):
+        raise PySparkTypeError(
+            errorClass="NOT_EXPECTED_TYPE",
+            messageParameters={
+                "arg_name": "probabilities",
+                "expected_type": "list or tuple",
+                "arg_type": type(probabilities).__name__,
+            },
+        )
+    probabilities = list(probabilities)
+    for p in probabilities:
+        if isinstance(p, bool) or not isinstance(p, (float, int)):
+            raise PySparkTypeError(
+                errorClass="NOT_EXPECTED_TYPE",
+                messageParameters={
+                    "arg_name": "probabilities",
+                    "expected_type": "list[float, int]",
+                    "arg_type": type(p).__name__,
+                },
+            )
+    for p in probabilities:
+        if not (0 <= p <= 1):
+            raise PySparkValueError(
+                errorClass="VALUE_OUT_OF_BOUNDS",
+                messageParameters={
+                    "arg_name": "probabilities",
+                    "lower_bound": "0",
+                    "upper_bound": "1",
+                    "actual": str(p),
+                },
+            )
+    return probabilities
+
+
 class DataFrame:
     """A distributed collection of data grouped into named columns.
 
@@ -4340,6 +4381,85 @@ class DataFrame:
         See Also
         --------
         DataFrame.rollup : Compute hierarchical summaries at multiple levels.
+        """
+        ...
+
+    @dispatch_df_method
+    def binBy(
+        self,
+        rangeStart: "ColumnOrName",
+        rangeEnd: "ColumnOrName",
+        binWidth: Column,
+        distributeUniform: Union[List["ColumnOrName"], Tuple["ColumnOrName", ...]],
+        *,
+        alignTo: Optional[Column] = None,
+        binStartName: Optional[str] = None,
+        binEndName: Optional[str] = None,
+        binDistributeRatioName: Optional[str] = None,
+    ) -> "DataFrame":
+        """Split timestamp ranges across fixed bins and proportionally scale selected columns.
+
+        .. versionadded:: 4.4.0
+
+        Supports Spark Connect.
+
+        Parameters
+        ----------
+        rangeStart : :class:`Column` or str
+            Top-level timestamp column for the inclusive range start.
+        rangeEnd : :class:`Column` or str
+            Top-level timestamp column for the exclusive range end.
+            Both range columns must have the same timestamp type.
+        binWidth : :class:`Column`
+            Positive, constant day-time interval expression,
+            for example ``sf.expr("INTERVAL 5 MINUTES")``.
+        distributeUniform : list or tuple
+            Nonempty collection of top-level FLOAT or DOUBLE columns to scale.
+            Each entry is a :class:`Column` or a column name.
+        alignTo : :class:`Column`, optional
+            Constant alignment origin with the same timestamp type as the range columns.
+            The default is 1970-01-01 00:00:00, in the session time zone for TIMESTAMP.
+        binStartName : str, optional
+            Name for the appended bin-start column. The default is ``bin_start``.
+        binEndName : str, optional
+            Name for the appended bin-end column. The default is ``bin_end``.
+        binDistributeRatioName : str, optional
+            Name for the appended overlap-ratio column.
+            The default is ``bin_distribute_ratio``.
+
+        Returns
+        -------
+        :class:`DataFrame`
+            Input columns with the selected values scaled, followed by the three bin columns.
+
+        Notes
+        -----
+        This API is experimental.
+
+        This operation requires ``spark.sql.binByRelationOperator.enabled`` to be true.
+        The range and distribution arguments must directly reference top-level columns.
+        Use :meth:`select` to project computed, cast, or nested values into columns first.
+
+        Each selected value must represent the change over its input range.
+        The ratio uses the real elapsed time that overlaps each bin.
+        TIMESTAMP bins use the session time zone for widths of at least one day.
+        TIMESTAMP_NTZ bins and sub-day widths use UTC arithmetic.
+
+        A zero-length range produces one row with a ratio of 1.0.
+        An inverted range raises an error.
+        A NULL range bound produces one row with NULL bin columns and NULL scaled values.
+
+        Examples
+        --------
+        >>> from pyspark.sql import functions as sf
+        >>> spark.conf.set("spark.sql.binByRelationOperator.enabled", "true")
+        >>> df = spark.sql("SELECT TIMESTAMP_NTZ '2024-01-01 00:00:00' AS start, "
+        ...                "TIMESTAMP_NTZ '2024-01-01 00:10:00' AS end, 100.0D AS value")
+        >>> df.binBy("start", "end", sf.expr("INTERVAL 5 MINUTES"), ["value"]).select(
+        ...     "value", "bin_distribute_ratio"
+        ... ).collect()
+        [Row(value=50.0, bin_distribute_ratio=0.5), Row(value=50.0, bin_distribute_ratio=0.5)]
+        >>> spark.conf.unset("spark.sql.binByRelationOperator.enabled")
         """
         ...
 

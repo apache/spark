@@ -36,6 +36,7 @@ import org.apache.spark.mllib.tree.model.{RandomForestModel => OldRandomForestMo
 import org.apache.spark.sql._
 import org.apache.spark.sql.functions.{col, udf}
 import org.apache.spark.sql.types.StructType
+import org.apache.spark.storage.StorageLevel
 
 /**
  * <a href="http://en.wikipedia.org/wiki/Random_forest">Random Forest</a>
@@ -93,6 +94,10 @@ class RandomForestRegressor @Since("1.4.0") (@Since("1.4.0") override val uid: S
    */
   @Since("1.4.0")
   def setCheckpointInterval(value: Int): this.type = set(checkpointInterval, value)
+
+  /** @group expertSetParam */
+  @Since("4.4.0")
+  def setIntermediateStorageLevel(value: String): this.type = set(intermediateStorageLevel, value)
 
   /** @group setParam */
   @Since("1.4.0")
@@ -154,10 +159,11 @@ class RandomForestRegressor @Since("1.4.0") (@Since("1.4.0") override val uid: S
     instr.logParams(this, labelCol, featuresCol, weightCol, predictionCol, leafCol, impurity,
       numTrees, featureSubsetStrategy, maxDepth, maxBins, maxMemoryInMB, minInfoGain,
       minInstancesPerNode, minWeightFractionPerNode, seed, subsamplingRate, cacheNodeIds,
-      checkpointInterval, bootstrap)
+      checkpointInterval, bootstrap, intermediateStorageLevel)
 
     val trees = RandomForest
-      .run(instances, strategy, getNumTrees, getFeatureSubsetStrategy, getSeed, Some(instr))
+      .run(instances, strategy, getNumTrees, getFeatureSubsetStrategy, getSeed, Some(instr),
+        intermediateStorageLevel = StorageLevel.fromString($(intermediateStorageLevel)))
       .map(_.asInstanceOf[DecisionTreeRegressionModel])
     trees.foreach(copyValues(_))
 
@@ -238,17 +244,22 @@ class RandomForestRegressionModel private[ml] (
     if ($(predictionCol).nonEmpty || $(leafCol).nonEmpty) {
       var predColNames = Seq.empty[String]
       var predCols = Seq.empty[Column]
-      val bcModel = dataset.sparkSession.sparkContext.broadcast(this)
+      val bcRootNodes = dataset.sparkSession.sparkContext.broadcast(_trees.map(_.rootNode))
 
       if ($(predictionCol).nonEmpty) {
-        val predUDF = udf { features: Vector => bcModel.value.predict(features) }
+        val predUDF = udf { features: Vector =>
+          val rootNodes = bcRootNodes.value
+          TreeEnsembleModel.predictRaw(features, rootNodes) / rootNodes.length
+        }
         predColNames :+= $(predictionCol)
         predCols :+= predUDF(col($(featuresCol)))
           .as($(predictionCol), outputSchema($(predictionCol)).metadata)
       }
 
       if ($(leafCol).nonEmpty) {
-        val leafUDF = udf { features: Vector => bcModel.value.predictLeaf(features) }
+        val leafUDF = udf { features: Vector =>
+          TreeEnsembleModel.predictLeaf(features, bcRootNodes.value)
+        }
         predColNames :+= $(leafCol)
         predCols :+= leafUDF(col($(featuresCol)))
           .as($(leafCol), outputSchema($(leafCol)).metadata)
@@ -262,12 +273,8 @@ class RandomForestRegressionModel private[ml] (
     }
   }
 
-  override def predict(features: Vector): Double = {
-    // TODO: When we add a generic Bagging class, handle transform there.  SPARK-7128
-    // Predict average of tree predictions.
-    // Ignore the weights since all are 1.0 for now.
-    _trees.map(_.rootNode.predictImpl(features).prediction).sum / getNumTrees
-  }
+  override def predict(features: Vector): Double =
+    TreeEnsembleModel.predictRaw(features, _trees) / getNumTrees
 
   @Since("1.4.0")
   override def copy(extra: ParamMap): RandomForestRegressionModel = {

@@ -112,6 +112,9 @@ case class UnionLoopRef(
  * @param underSubquery If true, it means we don't need to add a shuffle for this CTE relation as
  *                      subquery reuse will be applied to reuse CTE relation output.
  * @param maxDepth The maximal depth of a recursion in a recursive CTE.
+ * @param materialized The user-specified materialization option: `Some(true)` for `MATERIALIZED`,
+ *                     `Some(false)` for `NOT MATERIALIZED`, `None` if unspecified. It overrides
+ *                     the default decision of [[InlineCTE]] on whether to inline this CTE.
  * @param forceSkipInline If true, this CTE relation will never be inlined by [[InlineCTE]],
  *                        regardless of determinism or reference count. This lets a producer
  *                        force the CTE to be materialized instead of duplicated, e.g. when the
@@ -123,18 +126,18 @@ case class CTERelationDef(
     originalPlanWithPredicates: Option[(LogicalPlan, Seq[Expression])] = None,
     underSubquery: Boolean = false,
     maxDepth: Option[Int] = None,
+    materialized: Option[Boolean] = None,
     forceSkipInline: Boolean = false) extends UnaryNode {
 
   final override val nodePatterns: Seq[TreePattern] = Seq(CTE)
 
   // Keep the default string representation stable when `forceSkipInline` is not set, so that
-  // existing plan comparisons and golden files are unaffected by the new field.
+  // existing plan comparisons and golden files are unaffected by the field. The materialization
+  // option is printed as its keyword, and omitted when unspecified.
   override def stringArgs: Iterator[Any] = {
-    if (forceSkipInline) {
-      super.stringArgs
-    } else {
-      super.stringArgs.toArray.dropRight(1).iterator
-    }
+    val option = materialized.map(m => if (m) "MATERIALIZED" else "NOT MATERIALIZED")
+    Iterator(child, id, originalPlanWithPredicates, underSubquery, maxDepth, option) ++
+      (if (forceSkipInline) Iterator(forceSkipInline) else Iterator.empty)
   }
 
   override def maxRows: Option[Long] = if (conf.getConf(SQLConf.CTE_RELATION_DEF_MAX_ROWS)) {
@@ -289,28 +292,43 @@ trait CTEInChildren extends LogicalPlan {
 }
 
 /**
+ * A named common table expression (CTE) as defined in a WITH clause, before analysis.
+ *
+ * @param name The name of the CTE.
+ * @param plan The CTE definition query plan, aliased by `name`.
+ * @param maxDepth The optional `MAX RECURSION LEVEL` of a recursive CTE.
+ * @param materialized The materialization option: `Some(true)` for `MATERIALIZED`,
+ *                     `Some(false)` for `NOT MATERIALIZED`, `None` if unspecified.
+ */
+case class UnresolvedCTERelation(
+    name: String,
+    plan: SubqueryAlias,
+    maxDepth: Option[Int] = None,
+    materialized: Option[Boolean] = None)
+
+/**
  * A container for holding named common table expressions (CTEs) and a query plan.
  * This operator will be removed during analysis and the relations will be substituted into child.
  *
  * @param child The final query of this CTE.
- * @param cteRelations A sequence of pair (alias, the CTE definition) that this CTE defined
- *                     Each CTE can see the base tables and the previously defined CTEs only.
+ * @param cteRelations The CTE definitions that this CTE defined. Each CTE can see the base tables
+ *                     and the previously defined CTEs only.
  * @param allowRecursion A boolean flag if recursion is allowed.
  */
 case class UnresolvedWith(
     child: LogicalPlan,
-    cteRelations: Seq[(String, SubqueryAlias, Option[Int])],
+    cteRelations: Seq[UnresolvedCTERelation],
     allowRecursion: Boolean = false) extends UnaryNode {
   final override val nodePatterns: Seq[TreePattern] = Seq(UNRESOLVED_WITH)
 
   override def output: Seq[Attribute] = child.output
 
   override def simpleString(maxFields: Int): String = {
-    val cteAliases = truncatedString(cteRelations.map(_._1), "[", ", ", "]", maxFields)
+    val cteAliases = truncatedString(cteRelations.map(_.name), "[", ", ", "]", maxFields)
     s"CTE $cteAliases"
   }
 
-  override def innerChildren: Seq[LogicalPlan] = cteRelations.map(_._2)
+  override def innerChildren: Seq[LogicalPlan] = cteRelations.map(_.plan)
 
   override protected def withNewChildInternal(newChild: LogicalPlan): UnresolvedWith =
     copy(child = newChild)

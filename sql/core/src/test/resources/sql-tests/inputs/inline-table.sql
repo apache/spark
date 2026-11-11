@@ -35,7 +35,7 @@ select * from values ("one", array(0, 1)), ("two", array(2, 3)) as data(a, b);
 -- decimal and double coercion
 select * from values ("one", 2.0), ("two", 3.0D) as data(a, b);
 
--- error reporting: nondeterministic function rand
+-- nondeterministic function rand
 select * from values ("one", rand(5)), ("two", 3.0D) as data(a, b);
 
 -- error reporting: different number of columns
@@ -75,3 +75,24 @@ select * from values (1 as id, 'a' as name), (2 as id, 'b' as name) as t(a, b);
 
 -- aliased expressions without table alias
 select * from values (1 as a, 2 as b);
+
+-- nondeterministic functions have a different seed in every row
+select count(distinct u) from values (uuid()), (uuid()), (uuid()) as data(u);
+
+-- current_timestamp() is evaluated once per query, also next to non-foldable expressions
+select count(distinct ct), count(distinct r) from values (current_timestamp(), rand()), (current_timestamp(), rand()) as data(ct, r);
+
+-- foldable expressions next to non-foldable expressions
+select a, b is not null from values (1 + 1, rand()), (cast('3' as int), rand()) as data(a, b);
+
+-- uncorrelated scalar subqueries
+select * from values ((select 1) + (select 2), 'a'), ((select max(c) from values (4), (5) as t(c)), 'b') as data(a, b);
+
+-- error reporting: correlated reference
+select * from values (1) as t(a), lateral (values (t.a, rand())) as v(b, r);
+
+-- error reporting: EXISTS subquery
+select * from values (exists (select 1), rand()) as data(a, b);
+
+-- error reporting: window function
+select * from values (row_number() over (order by 1), rand()) as data(a, b);

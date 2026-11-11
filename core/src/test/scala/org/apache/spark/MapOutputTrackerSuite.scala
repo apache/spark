@@ -1124,7 +1124,7 @@ class MapOutputTrackerSuite extends SparkFunSuite with LocalSparkContext {
       tracker.registerMapOutput(0, 0, MapStatus(BlockManagerId("exec-1", "hostA", 1000),
         Array(2L), 0))
       tracker.removeOutputsOnHost("hostA")
-      assert(tracker.shuffleStatuses(0).mapIdToMapIndex.filter(_._2 == 0).size == 0)
+      assert(tracker.shuffleStatuses(0).mapIdToMapIndex.filter(_._2 == 0).isEmpty)
     } finally {
       tracker.stop()
       rpcEnv.shutdown()
@@ -1141,7 +1141,7 @@ class MapOutputTrackerSuite extends SparkFunSuite with LocalSparkContext {
       tracker.registerMapOutput(0, 0, MapStatus(BlockManagerId("exec-1", "hostA", 1000),
         Array(2L), 0))
       tracker.unregisterMapOutput(0, 0, BlockManagerId("exec-1", "hostA", 1000))
-      assert(tracker.shuffleStatuses(0).mapIdToMapIndex.filter(_._2 == 0).size == 0)
+      assert(tracker.shuffleStatuses(0).mapIdToMapIndex.filter(_._2 == 0).isEmpty)
     } finally {
       tracker.stop()
       rpcEnv.shutdown()

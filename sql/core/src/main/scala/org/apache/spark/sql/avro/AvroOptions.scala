@@ -18,7 +18,7 @@
 package org.apache.spark.sql.avro
 
 import java.net.URI
-import java.util.HashMap
+import java.util.{HashMap, Locale}
 
 import org.apache.avro.Schema
 import org.apache.hadoop.conf.Configuration
@@ -29,7 +29,7 @@ import org.apache.spark.sql.SparkSession
 import org.apache.spark.sql.catalyst.{DataSourceOptions, FileSourceOptions}
 import org.apache.spark.sql.catalyst.util.{CaseInsensitiveMap, FailFastMode, ParseMode}
 import org.apache.spark.sql.errors.QueryCompilationErrors
-import org.apache.spark.sql.internal.SQLConf
+import org.apache.spark.sql.internal.{SQLConf, StaticSQLConf}
 
 /**
  * Options for Avro Reader and Writer stored in case insensitive manner.
@@ -76,7 +76,30 @@ private[sql] class AvroOptions(
     parameters.get(AVRO_SCHEMA).map(AvroUtils.parseAvroSchema).orElse({
       val avroUrlSchema = parameters.get(AVRO_SCHEMA_URL).map(url => {
         log.debug("loading avro schema from url: " + url)
-        val fs = FileSystem.get(new URI(url), conf)
+        val uri = new URI(url)
+        // Optional operator-configured allowlist of URI schemes for avroSchemaUrl. Empty by
+        // default, which permits any scheme and leaves the file-system resolution below unchanged.
+        // When set, the scheme is resolved and checked before the file system for the URL is
+        // instantiated, so a disallowed scheme is rejected with a clear error rather than a
+        // lower-level failure while opening it. A scheme-less URL takes the default file system's
+        // scheme, so it can be permitted by allowing that scheme.
+        val allowedSchemes = SQLConf.get.getConf(StaticSQLConf.AVRO_SCHEMA_URL_ALLOWED_SCHEMES)
+          .map(_.toLowerCase(Locale.ROOT))
+        if (allowedSchemes.nonEmpty) {
+          // FileSystem.getDefaultUri always carries a scheme (it throws otherwise), so a
+          // scheme-less URL resolves to the default file system's scheme.
+          val scheme = Option(uri.getScheme)
+            .getOrElse(FileSystem.getDefaultUri(conf).getScheme)
+            .toLowerCase(Locale.ROOT)
+          if (!allowedSchemes.contains(scheme)) {
+            throw QueryCompilationErrors.avroOptionsException(
+              AVRO_SCHEMA_URL,
+              s"The scheme '$scheme' of avroSchemaUrl '$url' is not in the allowlist " +
+                s"${allowedSchemes.mkString("[", ", ", "]")} configured by " +
+                s"${StaticSQLConf.AVRO_SCHEMA_URL_ALLOWED_SCHEMES.key}.")
+          }
+        }
+        val fs = FileSystem.get(uri, conf)
         val in = fs.open(new Path(url))
         try {
           new Schema.Parser().setValidateDefaults(false).parse(in)

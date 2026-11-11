@@ -62,7 +62,7 @@ class IdentifierClauseParserSuite extends AnalysisTest {
         "col",
         Seq("v1", "v2"),
         table("unpivot_test"))
-        .where(coalesce($"v1", $"v2").isNotNull)
+        .where($"v1".isNotNull || $"v2".isNotNull)
         .select(star())
     )
   }

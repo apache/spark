@@ -26,10 +26,8 @@ import scala.jdk.CollectionConverters._
 import scala.util.{Failure, Random, Success, Try}
 
 import org.apache.spark.{SparkException, SparkUnsupportedOperationException}
-import org.apache.spark.internal.config.ConfigBindingPolicy
 import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst._
-import org.apache.spark.sql.catalyst.analysis.TableOutputResolver.DefaultValueFillMode._
 import org.apache.spark.sql.catalyst.analysis.resolver.{
   AnalyzerBridgeState,
   HybridAnalyzer,
@@ -49,21 +47,20 @@ import org.apache.spark.sql.catalyst.trees.AlwaysProcess
 import org.apache.spark.sql.catalyst.trees.CurrentOrigin.withOrigin
 import org.apache.spark.sql.catalyst.trees.TreePattern._
 import org.apache.spark.sql.catalyst.types.DataTypeUtils
-import org.apache.spark.sql.catalyst.util.{toPrettySQL, trimTempResolvedColumn, CharVarcharUtils, GeneratedColumn}
+import org.apache.spark.sql.catalyst.util.{toPrettySQL, trimTempResolvedColumn}
 import org.apache.spark.sql.catalyst.util.ResolveDefaultColumns._
 // `View` is aliased to `V2View` to avoid clashing with the logical-plan `View` imported via
 // `org.apache.spark.sql.catalyst.plans.logical._`.
 import org.apache.spark.sql.connector.catalog.{View => V2View, _}
 import org.apache.spark.sql.connector.catalog.CatalogV2Implicits._
-import org.apache.spark.sql.connector.catalog.TableChange.{After, ColumnPosition}
 import org.apache.spark.sql.connector.catalog.functions.UnboundFunction
 import org.apache.spark.sql.connector.catalog.procedures.{BoundProcedure, ProcedureParameter, UnboundProcedure}
-import org.apache.spark.sql.connector.expressions.{FieldReference, IdentityTransform}
 import org.apache.spark.sql.errors.QueryCompilationErrors
-import org.apache.spark.sql.execution.datasources.v2.DataSourceV2Relation
+import org.apache.spark.sql.execution.datasources.v2.{ChangelogTable, DataSourceV2Relation, ExtractV2Table}
 import org.apache.spark.sql.internal.SQLConf
-import org.apache.spark.sql.internal.SQLConf.{PartitionOverwriteMode, StoreAssignmentPolicy}
+import org.apache.spark.sql.internal.SQLConf.StoreAssignmentPolicy
 import org.apache.spark.sql.internal.connector.V1Function
+import org.apache.spark.sql.metricview.logical.MetricViewPlaceholder
 import org.apache.spark.sql.types._
 import org.apache.spark.sql.util.CaseInsensitiveStringMap
 import org.apache.spark.util.ArrayImplicits._
@@ -138,6 +135,8 @@ object FakeV2SessionCatalog extends TableCatalog with FunctionCatalog with Suppo
  * @param tableCache A mapping from (catalog, identifier, time travel spec, table-state options) to
  *                   concrete tables. This pins one table state while allowing references to keep
  *                   different read-specific options.
+ * @param changelogCache A mapping from (catalog, identifier, changelog context, state options) to
+ *                       changelog metadata. References retain their own scan options.
  * @param referredTempViewNames All the temp view names referred by the current view we are
  *                              resolving. It's used to make sure the relation resolution is
  *                              consistent between view creation and view resolution. For example,
@@ -159,6 +158,7 @@ case class AnalysisContext(
     maxNestedViewDepth: Int = -1,
     relationCache: mutable.Map[RelationCacheKey, LogicalPlan] = mutable.Map.empty,
     tableCache: mutable.Map[TableCacheKey, Table] = mutable.Map.empty,
+    changelogCache: mutable.Map[ChangelogCacheKey, ChangelogTable] = mutable.Map.empty,
     referredTempViewNames: Seq[Seq[String]] = Seq.empty,
     // 1. If we are resolving a view, this field will be restored from the view metadata,
     //    by calling `AnalysisContext.withAnalysisContext(viewDesc)`.
@@ -166,6 +166,30 @@ case class AnalysisContext(
     //    lookup a temporary function. And export to the view metadata.
     referredTempFunctionNames: mutable.Set[String] = mutable.Set.empty,
     referredTempVariableNames: Seq[Seq[String]] = Seq.empty,
+    // Like `referredTempFunctionNames`, this is populated only by fixed-point analysis (by
+    // `ResolveIdentifierClause`, the sole writer). A temporary view, temporary ALTER VIEW, or
+    // CACHE TABLE AS SELECT stores the names in its metadata so they resolve when the stored view
+    // text is analyzed again. A persisted CREATE/ALTER VIEW instead rejects them -- usually in
+    // `ResolveIdentifierClause` while resolving the body, and otherwise (e.g. an IDENTIFIER nested
+    // in a scalar subquery) by persisted-view validation: `verifyTemporaryObjectsNotExists`, which
+    // the v1 runnable commands call while executing and the v2 commands reach during analysis via
+    // `CheckViewReferences`. When `spark.sql.legacy.allowSessionVariableInPersistedView` is set,
+    // the persisted paths simply discard the set. SQL function creation consumes it the same way
+    // (SPARK-59970): a persistent function rejects the names, or discards them under the legacy
+    // flag, and a temporary function stores them as informational metadata in its
+    // `referredTempVariableNames` property. The single-pass resolver has no IDENTIFIER-clause
+    // resolution of its own, so there is no second writer to keep in sync. LinkedHashSet keeps
+    // insertion order so the recorded names (and any error naming them) are deterministic when more
+    // than one variable is read via an IDENTIFIER clause.
+    referredTempVariableNamesUnderIdentifier: mutable.Set[Seq[String]] =
+      mutable.LinkedHashSet.empty,
+    // Whether a SQL function expanded during this analysis shares the accumulator above with the
+    // enclosing object. A view or CACHE TABLE AS SELECT body owns the dependencies of every
+    // function it expands (functions persist no IDENTIFIER-variable metadata of their own that is
+    // consulted on resolution), so they share. A SQL function body being created does not: a
+    // variable that an already existing function reads is that function's dependency, and
+    // attributing it to the new function would reject or record it there. See SPARK-59970.
+    shareIdentifierVariablesWithNestedSQLFunctions: Boolean = true,
     outerPlan: Option[LogicalPlan] = None,
     collation: Option[String] = None,
 
@@ -254,9 +278,14 @@ object AnalysisContext {
       maxNestedViewDepth = maxNestedViewDepth,
       relationCache = originContext.relationCache,
       tableCache = originContext.tableCache,
+      changelogCache = originContext.changelogCache,
       referredTempViewNames = viewDesc.viewReferredTempViewNames,
       referredTempFunctionNames = mutable.Set(viewDesc.viewReferredTempFunctionNames: _*),
       referredTempVariableNames = viewDesc.viewReferredTempVariableNames,
+      // Reset rather than share: a temporary nested view records its own IDENTIFIER-clause
+      // variables in its own metadata, and a persisted one does not carry them at all, so in
+      // neither case may they be attributed to the object whose creation is driving this analysis.
+      referredTempVariableNamesUnderIdentifier = mutable.LinkedHashSet.empty,
       collation = viewDesc.collation)
     context.setSinglePassResolverBridgeState(originContext.getSinglePassResolverBridgeState)
     set(context)
@@ -270,6 +299,20 @@ object AnalysisContext {
       resolutionPathEntries = function.functionStoredResolutionPath
         .map(CatalogManager.deserializePathEntriesOrFail(
           _, "SQL function", function.name.unquotedString)),
+      // Unlike `withAnalysisContext(viewDesc)`, do NOT reset this accumulator by default. A SQL
+      // function has no IDENTIFIER-variable metadata of its own that is consulted on resolution, so
+      // a variable its body reads through an IDENTIFIER clause is part of the enclosing object's
+      // definition (e.g. the temporary view or CACHE TABLE AS SELECT that selects the function),
+      // and must be recorded there. Sharing the caller's set records it; a nested view, by
+      // contrast, stores its own and so is reset. The exception is a SQL function body under
+      // creation, which must not inherit the dependencies of the functions it calls; see
+      // `shareIdentifierVariablesWithNestedSQLFunctions`.
+      referredTempVariableNamesUnderIdentifier =
+        if (originContext.shareIdentifierVariablesWithNestedSQLFunctions) {
+          originContext.referredTempVariableNamesUnderIdentifier
+        } else {
+          mutable.LinkedHashSet.empty
+        },
       collation = function.collation)
     set(context)
     try f finally { set(originContext) }
@@ -288,33 +331,51 @@ object AnalysisContext {
     set(context)
     try f finally { set(originContext) }
   }
+
+  /**
+   * Runs `f` with `shareIdentifierVariablesWithNestedSQLFunctions` set to `share`; see that field.
+   */
+  def withSharingIdentifierVariablesWithNestedSQLFunctions[A](share: Boolean)(f: => A): A = {
+    val originContext = value.get()
+    val context = originContext.copy(shareIdentifierVariablesWithNestedSQLFunctions = share)
+    context.setSinglePassResolverBridgeState(originContext.getSinglePassResolverBridgeState)
+    set(context)
+    try f finally { set(originContext) }
+  }
 }
 
 object Analyzer {
   // Configs with bindingPolicy SESSION or NOT_APPLICABLE are retained when resolving views and
   // SQL UDFs, so that their values propagate from the active session rather than falling back to
-  // Spark defaults. Note: configs defined in lazily-loaded modules (e.g., sql/hive) will only
-  // be included if their holding Scala object has been initialized before this set is computed.
+  // Spark defaults. Entries from lazily-loaded modules are recognized once registered.
   def retainResolutionConfigsForAnalysis(
       newConf: SQLConf,
       existingConf: SQLConf,
       createSparkVersion: String = ""): Unit = {
-    val retainedConfigKeys = SQLConf.getConfigEntries().asScala
-      .filter(entry =>
-        entry.bindingPolicy.contains(ConfigBindingPolicy.SESSION) ||
-        entry.bindingPolicy.contains(ConfigBindingPolicy.NOT_APPLICABLE))
-      .map(_.key)
-      .toSet
-
-    val retainedConfigs = existingConf.getAllConfs.filter { case (key, _) =>
-      retainedConfigKeys.contains(key) || key.startsWith("spark.sql.catalog.")
-    }
-
-    retainedConfigs.foreach { case (k, v) =>
-      newConf.settings.put(k, v)
+    // The retained configs are memoized on `existingConf` unless
+    // `ANALYZER_MEMOIZE_RETAINED_RESOLUTION_CONFIGS` is off, which recomputes them on every build.
+    if (existingConf.getConf(SQLConf.ANALYZER_MEMOIZE_RETAINED_RESOLUTION_CONFIGS)) {
+      newConf.settings.putAll(existingConf.retainedResolutionConfigs)
+    } else {
+      existingConf.getAllConfs.foreach { case (key, value) =>
+        if (bodyFollowsCaller(key)) {
+          newConf.settings.put(key, value)
+        }
+      }
     }
 
     trySetAnsiValue(newConf, createSparkVersion)
+  }
+
+  /**
+   * True if `retainResolutionConfigsForAnalysis` overlays the caller's explicitly set value for
+   * `key` onto a view or SQL function body conf, replacing any value saved with the body. These
+   * are the catalog configs and the SQL configs bound SESSION or NOT_APPLICABLE. Keys the caller
+   * has not set keep their saved values, and confs built without that method do not consult this
+   * predicate.
+   */
+  def bodyFollowsCaller(key: String): Boolean = {
+    key.startsWith("spark.sql.catalog.") || SQLConf.isSessionBindingPolicy(key)
   }
 
   /**
@@ -392,14 +453,9 @@ class Analyzer(
 
   def getRelationResolution: RelationResolution = relationResolution
 
-  private def toUnresolvedRelation(target: UnresolvedInsertTarget): UnresolvedRelation = {
-    val relation = withOrigin(target.origin) {
-      UnresolvedRelation(target.multipartIdentifier, target.options)
-        .requireWritePrivileges(target.writePrivileges)
-    }
-    relation.copyTagsFrom(target)
-    relation
-  }
+  /** Whether a temporary function owns the unqualified built-in `name` under the SQL path. */
+  private[sql] def unqualifiedFunctionResolvesToTemp(name: String): Boolean =
+    functionResolution.unqualifiedFunctionResolvesToTemp(name)
 
   /** Resolves only the dynamic identifier of an INSERT so transaction detection can inspect it. */
   private[sql] def resolveUnresolvedInsert(insert: UnresolvedInsert): LogicalPlan = {
@@ -411,7 +467,7 @@ class Analyzer(
       withOrigin(insert.origin) {
         identifierResolvedTarget match {
           case target: UnresolvedInsertTarget =>
-            insert.toInsertIntoStatement(toUnresolvedRelation(target))
+            insert.toInsertIntoStatement(target.toUnresolvedRelation)
           case target if !target.fastEquals(insert.table) =>
             val updated = insert.copy(table = target)
             updated.copyTagsFrom(insert)
@@ -498,6 +554,77 @@ class Analyzer(
 
   private def executeSameContext(plan: LogicalPlan): LogicalPlan =
     runWithSessionConf(super.execute(plan))
+
+  /**
+   * Like [[executeAndCheck]], but also returns the temporary variables recorded via IDENTIFIER
+   * clauses during this analysis (`AnalysisContext.referredTempVariableNamesUnderIdentifier`).
+   *
+   * Those variables are absent from the analyzed plan (the placeholder is replaced by the plan
+   * built from the evaluated name), and the accumulator that holds them is discarded when the
+   * analysis scope exits. A caller that separately validates a freshly analyzed body against
+   * persisted-view rules (metric-view creation) therefore cannot recover them afterwards, so this
+   * entry point reads them inside the owning scope and freezes them into the returned result.
+   *
+   * When single-pass resolution is forced on, this defers to [[executeAndCheck]] so the configured
+   * routing is preserved: the only caller analyzes a metric-view placeholder, which is explicitly
+   * unsupported by the single-pass resolver, and forced mode must surface that incompatibility
+   * rather than silently succeeding through fixed-point analysis (no IDENTIFIER variables are
+   * captured on that path -- the call fails before persisted-view validation is reached).
+   * Otherwise it runs the fixed-point analyzer directly, in a context it owns so the accumulator
+   * stays readable.
+   */
+  def executeAndCheckReferredTempVariablesUnderIdentifier(
+      plan: LogicalPlan,
+      tracker: QueryPlanningTracker): (LogicalPlan, Seq[Seq[String]]) = {
+    if (plan.analyzed) {
+      (plan, Seq.empty)
+    } else if (conf.getConf(SQLConf.ANALYZER_SINGLE_PASS_RESOLVER_ENABLED)) {
+      (executeAndCheck(plan, tracker), Seq.empty)
+    } else {
+      def analyze(): (LogicalPlan, Seq[Seq[String]]) = AnalysisHelper.markInAnalyzer {
+        val analyzed = QueryPlanningTracker.withTracker(tracker) {
+          executeSameContext(plan)
+        }
+        // Read the accumulator before the surrounding context is reset / restored below.
+        val referredTempVariablesUnderIdentifier =
+          AnalysisContext.get.referredTempVariableNamesUnderIdentifier.toSeq
+        checkAnalysis(analyzed)
+        (analyzed, referredTempVariablesUnderIdentifier)
+      }
+      if (AnalysisContext.get.isDefault) {
+        AnalysisContext.reset()
+        try analyze() finally AnalysisContext.reset()
+      } else {
+        AnalysisContext.withNewAnalysisContext {
+          analyze()
+        }
+      }
+    }
+  }
+
+  /**
+   * Like [[execute]], but also returns the temporary variables recorded via IDENTIFIER clauses
+   * during this analysis (`AnalysisContext.referredTempVariableNamesUnderIdentifier`).
+   *
+   * SQL function creation analyzes the body, inspects it, and only then runs `checkAnalysis`, so
+   * it cannot go through [[executeAndCheckReferredTempVariablesUnderIdentifier]]. It still needs
+   * the recorded variables, which [[execute]] discards with its analysis context: a persistent
+   * function must reject them and a temporary one stores them in its metadata.
+   *
+   * Only the variables read by the body itself are returned. A SQL function that the body calls
+   * is expanded in a context of its own, so a variable it reads through an IDENTIFIER clause stays
+   * that function's dependency rather than becoming one of the function under creation.
+   */
+  def executeWithReferredTempVariablesUnderIdentifier(
+      plan: LogicalPlan): (LogicalPlan, Seq[Seq[String]]) = {
+    AnalysisContext.withNewAnalysisContext {
+      AnalysisContext.withSharingIdentifierVariablesWithNestedSQLFunctions(share = false) {
+        val analyzed = executeSameContext(plan)
+        // Read the accumulator before the context is restored on exit.
+        (analyzed, AnalysisContext.get.referredTempVariableNamesUnderIdentifier.toSeq)
+      }
+    }
+  }
 
   def resolver: Resolver = conf.resolver
 
@@ -641,7 +768,7 @@ class Analyzer(
       ResolveWindowFrame ::
       ResolveNaturalAndUsingJoin ::
       ResolveOutputRelation ::
-      new ResolveTableConstraints(catalogManager) ::
+      new ResolveTableConstraints(catalogManager, plan => execute(plan)) ::
       new ResolveSetVariable(catalogManager) ::
       new ResolveFetchCursor(catalogManager) ::
       new ResolveCursors() ::
@@ -671,6 +798,7 @@ class Analyzer(
       BindParameters ::
       typeCoercionRules() ++
       Seq(
+        ResolveStockJsonConstructors,
         ResolveWithCTE,
         ExtractDistributedSequenceID,
         ResolveAsOfJoin,
@@ -1066,9 +1194,12 @@ class Analyzer(
           if (metaCols.isEmpty) {
             node
           } else {
-            val newNode = node.mapChildren(
-              addMetadataCol(_, metaCols.map(_.exprId).toSet, onlyUniqueAndNecessaryMetadataColumns)
-            )
+            val requiredAttrIds = metaCols.map(_.exprId).toSet
+            val newNode = node.mapChildren {
+              case child if isRowLevelCommandTarget(node, child) => child
+              case child =>
+                addMetadataCol(child, requiredAttrIds, onlyUniqueAndNecessaryMetadataColumns)
+            }
             // We should not change the output schema of the plan. We should project away the extra
             // metadata columns if necessary.
             if (newNode.sameOutput(node)) {
@@ -1101,6 +1232,29 @@ class Analyzer(
             plan.children.exists(c => c.metadataOutput.exists(_.exprId == a.exprId))
         case _ => false
       })
+    }
+
+    // DELETE, UPDATE and MERGE on a table that supports row-level operations are rewritten into
+    // plans that read the metadata columns they need (see RewriteRowLevelCommand). The rewrite
+    // takes the output of the target table as the data columns to write, so metadata columns must
+    // not be added to it, even if the command is resolved only in a later iteration. This does not
+    // apply to UPDATE and MERGE on a table that accepts any schema, whose assignments Spark leaves
+    // to the rules injected for that table (see ResolveRowLevelCommandAssignments). Spark still
+    // rewrites such a command once its assignments are aligned, for example a MERGE with only
+    // DELETE actions, which has nothing to align.
+    private def isRowLevelCommandTarget(node: LogicalPlan, child: LogicalPlan): Boolean = {
+      node match {
+        case d: DeleteFromTable =>
+          (d.table eq child) && (EliminateSubqueryAliases(child) match {
+            case ExtractV2Table(_: SupportsRowLevelOperations) => true
+            case _ => false
+          })
+        case u: UpdateTable =>
+          (u.table eq child) && u.rewritable && !u.skipSchemaResolution
+        case m: MergeIntoTable =>
+          (m.targetTable eq child) && m.rewritable && !m.skipSchemaResolution
+        case _ => false
+      }
     }
 
     private def addMetadataCol(
@@ -1151,7 +1305,7 @@ class Analyzer(
       case view: View if !view.child.resolved =>
         ViewResolution
           .resolve(view, options, resolveChild = executeSameContext, checkAnalysis = checkAnalysis)
-      // V2TableReference is a placeholder for DSv2 tables that needs to be resolved to
+      // V2Reference is a placeholder for DSv2 tables or changelogs that must be resolved to
       // DataSourceV2Relation on each view access. Only dataframe temp view may contain it
       // as it stores resolved plans directly.
       case view: View if view.isTempViewStoringAnalyzedPlan =>
@@ -1161,7 +1315,7 @@ class Analyzer(
       case _ => plan
     }
 
-    // Unwrap temp views storing analyzed plans and resolve V2TableReference nodes in the child.
+    // Unwrap temp views storing analyzed plans and resolve V2Reference nodes in the child.
     private def unwrapRelationPlan(plan: LogicalPlan): LogicalPlan = {
       EliminateSubqueryAliases(plan) match {
         case v: View if v.isTempViewStoringAnalyzedPlan => resolveTableReferencesInTempView(v.child)
@@ -1169,12 +1323,12 @@ class Analyzer(
       }
     }
 
-    // Resolve V2TableReference nodes inside temp view plans. These are created by
-    // V2TableReference.createForTempView. We only need to resolve it when returning
+    // Resolve V2Reference nodes inside temp view plans. These are created by
+    // V2Reference.createForTempView. We only need to resolve it when returning
     // the plan of temp views (in resolveViews and unwrapRelationPlan).
     private def resolveTableReferencesInTempView(plan: LogicalPlan): LogicalPlan = {
       plan.resolveOperatorsUp {
-        case r: V2TableReference if r.context.isInstanceOf[V2TableReference.TemporaryViewContext] =>
+        case r: V2Reference if r.context.isInstanceOf[V2Reference.TemporaryViewContext] =>
           relationResolution.resolveReference(r)
       }
     }
@@ -1191,7 +1345,7 @@ class Analyzer(
         // Inserting into a file-based temporary view is allowed.
         // (e.g., spark.read.parquet("path").createOrReplaceTempView("t").
         // Thus, we need to look at the raw plan if `relation` is a temporary view.
-        // unwrapRelationPlan also resolves V2TableReference nodes in temp view plans.
+        // unwrapRelationPlan also resolves V2Reference nodes in temp view plans.
         unwrapRelationPlan(relation) match {
           case v: View if i.replaceCriteriaOpt.exists(_.isReplaceWhere) =>
             throw QueryCompilationErrors.writeIntoViewNotAllowedError(v.desc.identifier, i)
@@ -1202,11 +1356,11 @@ class Analyzer(
 
       case write: V2StreamingWriteCommand =>
         write.table match {
-          case ref: V2TableReference =>
+          case ref: V2Reference =>
             relationResolution.resolveReference(ref) match {
               case r: NamedRelation => write.withNewTable(r)
               case other => throw SparkException.internalError(
-                s"Expected V2TableReference write target to resolve to a NamedRelation, " +
+                s"Expected V2Reference write target to resolve to a NamedRelation, " +
                   s"but got ${other.getClass.getName}")
             }
           case _ => write
@@ -1232,7 +1386,7 @@ class Analyzer(
       case u: UnresolvedRelation =>
         resolveRelation(u).map(resolveViews(_, u.options)).getOrElse(u)
 
-      case r: V2TableReference =>
+      case r: V2Reference =>
         relationResolution.resolveReference(r)
 
       case r @ RelationTimeTravel(u: UnresolvedRelation, timestamp, version)
@@ -1254,6 +1408,15 @@ class Analyzer(
               identifier, cmd, suggestAlternative, u)
           case table => table
         }.getOrElse(u)
+
+      // The child of `AddCheckConstraint` reads its target to validate the existing data, so the
+      // target is an `UnresolvedRelation` that can resolve to a view, unlike `UnresolvedTable`.
+      case a @ AddCheckConstraint(Filter(_, SubqueryAlias(_, v: View)), _, _) =>
+        throw QueryCompilationErrors.expectTableNotViewError(
+          v.desc.fullIdent, "ALTER TABLE ... ADD CONSTRAINT", suggestAlternative = false, a)
+      case a @ AddCheckConstraint(Filter(_, m: MetricViewPlaceholder), _, _) =>
+        throw QueryCompilationErrors.expectTableNotViewError(
+          m.metadata.fullIdent, "ALTER TABLE ... ADD CONSTRAINT", suggestAlternative = false, a)
 
       case u @ UnresolvedView(identifier, cmd, allowTemp, suggestAlternative) =>
         lookupTableOrView(identifier, viewOnly = true).map {
@@ -1384,7 +1547,7 @@ class Analyzer(
     override def apply(plan: LogicalPlan): LogicalPlan = plan.resolveOperatorsUpWithPruning(
       _.containsPattern(UNRESOLVED_INSERT), ruleId) {
       case insert @ UnresolvedInsert(target: UnresolvedInsertTarget, _, _, _, _, _, _, _, _) =>
-        insert.toInsertIntoStatement(toUnresolvedRelation(target))
+        insert.toInsertIntoStatement(target.toUnresolvedRelation)
     }
   }
 
@@ -1403,190 +1566,7 @@ class Analyzer(
           if i.table.isInstanceOf[DataSourceV2Relation] &&
             i.query.resolved &&
             (i.replaceCriteriaOpt.isEmpty || i.replaceCriteriaOpt.exists(_.isReplaceWhere)) =>
-        val r = i.table.asInstanceOf[DataSourceV2Relation]
-        // ifPartitionNotExists is append with validation, but validation is not supported
-        if (i.ifPartitionNotExists) {
-          throw QueryCompilationErrors.unsupportedIfNotExistsError(r.table.name)
-        }
-
-        // Create a project if this is an INSERT INTO BY NAME query.
-        val projectByName = if (i.userSpecifiedCols.nonEmpty) {
-          Some(createProjectForByNameQuery(r.table.name, i))
-        } else {
-          None
-        }
-        val isByName = projectByName.nonEmpty || i.byName
-
-        val partCols = partitionColumnNames(r.table)
-        validatePartitionSpec(partCols, i.partitionSpec)
-
-        val staticPartitions = i.partitionSpec.filter(_._2.isDefined).transform((_, v) => v.get)
-        val query = addStaticPartitionColumns(r, projectByName.getOrElse(i.query), staticPartitions,
-          isByName)
-
-        if (!i.overwrite) {
-          if (isByName) {
-            AppendData.byName(
-              r,
-              query,
-              withSchemaEvolution = i.withSchemaEvolution)
-          } else {
-            AppendData.byPosition(
-              r,
-              query,
-              withSchemaEvolution = i.withSchemaEvolution)
-          }
-        // Dynamic partition overwrite applies only to plain INSERT OVERWRITE. REPLACE WHERE always
-        // deletes by its condition, so it falls through to the OverwriteByExpression branch below
-        // even when the session is in DYNAMIC partition-overwrite mode.
-        } else if (i.replaceCriteriaOpt.isEmpty &&
-            conf.partitionOverwriteMode == PartitionOverwriteMode.DYNAMIC) {
-          if (isByName) {
-            OverwritePartitionsDynamic.byName(
-              r,
-              query,
-              withSchemaEvolution = i.withSchemaEvolution)
-          } else {
-            OverwritePartitionsDynamic.byPosition(
-              r,
-              query,
-              withSchemaEvolution = i.withSchemaEvolution)
-          }
-        } else {
-          val deleteExpr = i.replaceCriteriaOpt match {
-            case Some(InsertReplaceWhere(condition)) =>
-              if (staticPartitions.nonEmpty) {
-                throw SparkException.internalError(
-                  s"REPLACE WHERE must not carry static partitions, but got: $staticPartitions")
-              }
-              condition
-            case Some(other) => throw SparkException.internalError(
-              s"Replace criteria ${other.getClass.getSimpleName} must not reach " +
-                "ResolveInsertInto; REPLACE ON/USING are rejected earlier.")
-            case None => staticDeleteExpression(r, staticPartitions)
-          }
-          if (isByName) {
-            OverwriteByExpression.byName(
-              table = r,
-              df = query,
-              deleteExpr = deleteExpr,
-              withSchemaEvolution = i.withSchemaEvolution)
-          } else {
-            OverwriteByExpression.byPosition(
-              table = r,
-              query = query,
-              deleteExpr = deleteExpr,
-              withSchemaEvolution = i.withSchemaEvolution)
-          }
-        }
-    }
-
-    private def partitionColumnNames(table: Table): Seq[String] = {
-      // get partition column names. in v2, partition columns are columns that are stored using an
-      // identity partition transform because the partition values and the column values are
-      // identical. otherwise, partition values are produced by transforming one or more source
-      // columns and cannot be set directly in a query's PARTITION clause.
-      table.partitioning.flatMap {
-        case IdentityTransform(FieldReference(Seq(name))) => Some(name)
-        case _ => None
-      }.toImmutableArraySeq
-    }
-
-    private def validatePartitionSpec(
-        partitionColumnNames: Seq[String],
-        partitionSpec: Map[String, Option[String]]): Unit = {
-      // check that each partition name is a partition column. otherwise, it is not valid
-      partitionSpec.keySet.foreach { partitionName =>
-        partitionColumnNames.find(name => conf.resolver(name, partitionName)) match {
-          case Some(_) =>
-          case None =>
-            throw QueryCompilationErrors.nonPartitionColError(partitionName)
-        }
-      }
-    }
-
-    private def addStaticPartitionColumns(
-        relation: DataSourceV2Relation,
-        query: LogicalPlan,
-        staticPartitions: Map[String, String],
-        isByName: Boolean): LogicalPlan = {
-
-      if (staticPartitions.isEmpty) {
-        query
-
-      } else {
-        // add any static value as a literal column
-        val withStaticPartitionValues = {
-          // for each static name, find the column name it will replace and check for unknowns.
-          val outputNameToStaticName = staticPartitions.keySet.map { staticName =>
-            if (isByName) {
-              // If this is INSERT INTO BY NAME, the query output's names will be the user specified
-              // column names. We need to make sure the static partition column name doesn't appear
-              // there to catch the following ambiguous query:
-              // INSERT OVERWRITE t PARTITION (c='1') (c) VALUES ('2')
-              if (query.output.exists(col => conf.resolver(col.name, staticName))) {
-                throw QueryCompilationErrors.staticPartitionInUserSpecifiedColumnsError(staticName)
-              }
-            }
-            relation.output.find(col => conf.resolver(col.name, staticName)) match {
-              case Some(attr) =>
-                attr.name -> staticName
-              case _ =>
-                throw QueryCompilationErrors.missingStaticPartitionColumn(staticName)
-            }
-          }.toMap
-
-          val queryColumns = query.output.iterator
-
-          // for each output column, add the static value as a literal, or use the next input
-          // column. this does not fail if input columns are exhausted and adds remaining columns
-          // at the end. both cases will be caught by ResolveOutputRelation and will fail the
-          // query with a helpful error message.
-          relation.output.flatMap { col =>
-            outputNameToStaticName.get(col.name).flatMap(staticPartitions.get) match {
-              case Some(staticValue) =>
-                // SPARK-30844: try our best to follow StoreAssignmentPolicy for static partition
-                // values but not completely follow because we can't do static type checking due to
-                // the reason that the parser has erased the type info of static partition values
-                // and converted them to string.
-                val cast = Cast(Literal(staticValue), col.dataType, ansiEnabled = true)
-                cast.setTagValue(Cast.BY_TABLE_INSERTION, ())
-                Some(Alias(cast, col.name)())
-              case _ if queryColumns.hasNext =>
-                Some(queryColumns.next())
-              case _ =>
-                None
-            }
-          } ++ queryColumns
-        }
-
-        Project(withStaticPartitionValues, query)
-      }
-    }
-
-    private def staticDeleteExpression(
-        relation: DataSourceV2Relation,
-        staticPartitions: Map[String, String]): Expression = {
-      if (staticPartitions.isEmpty) {
-        Literal(true)
-      } else {
-        staticPartitions.map { case (name, value) =>
-          relation.output.find(col => conf.resolver(col.name, name)) match {
-            case Some(attr) =>
-              // the delete expression must reference the table's column names, but these attributes
-              // are not available when CheckAnalysis runs because the relation is not a child of
-              // the logical operation. instead, expressions are resolved after
-              // ResolveOutputRelation runs, using the query's column names that will match the
-              // table names at that point. because resolution happens after a future rule, create
-              // an UnresolvedAttribute.
-              EqualNullSafe(
-                UnresolvedAttribute.quoted(attr.name),
-                Cast(Literal(value), attr.dataType))
-            case None =>
-              throw QueryCompilationErrors.missingStaticPartitionColumn(name)
-          }
-        }.reduce(And)
-      }
+        InsertionResolution.resolveInsertInto(i, createProjectForByNameQuery, conf)
     }
   }
 
@@ -1824,17 +1804,24 @@ class Analyzer(
             m
 
           case _ =>
+            // Defer outer-reference and variable resolution until schema evolution has produced
+            // the final target schema so newly added target columns retain precedence.
+            val canResolveLastResort = !m.schemaEvolutionEnabled ||
+              (m.schemaEvolutionReady && m.pendingSchemaChanges.isEmpty)
+
             def findAttrInTarget(name: String): Option[Attribute] = {
               targetTable.output.find(targetAttr => conf.resolver(name, targetAttr.name))
             }
             val newMatchedActions = m.matchedActions.map {
               case DeleteAction(deleteCondition) =>
                 val resolvedDeleteCondition = deleteCondition.map(
-                  resolveExpressionByPlanChildren(_, m))
+                  resolveExpressionByPlanChildren(
+                    _, m, includeLastResort = canResolveLastResort))
                 DeleteAction(resolvedDeleteCondition)
               case UpdateAction(updateCondition, assignments, fromStar) =>
                 val resolvedUpdateCondition = updateCondition.map(
-                  resolveExpressionByPlanChildren(_, m))
+                  resolveExpressionByPlanChildren(
+                    _, m, includeLastResort = canResolveLastResort))
                 UpdateAction(
                   resolvedUpdateCondition,
                   // The update value can access columns from both target and source tables.
@@ -1857,7 +1844,9 @@ class Analyzer(
                   }
                 }
                 UpdateAction(
-                  updateCondition.map(resolveExpressionByPlanChildren(_, m)),
+                  updateCondition.map(
+                    resolveExpressionByPlanChildren(
+                      _, m, includeLastResort = canResolveLastResort)),
                   // For UPDATE *, the value must be from source table.
                   resolveAssignments(assignments, m, MergeResolvePolicy.SOURCE, throws),
                   fromStar = true)
@@ -1868,7 +1857,8 @@ class Analyzer(
                 // The insert action is used when not matched, so its condition and value can only
                 // access columns from the source table.
                 val resolvedInsertCondition = insertCondition.map(
-                  resolveExpressionByPlanOutput(_, m.sourceTable))
+                  resolveExpressionByPlanOutput(
+                    _, m.sourceTable, includeLastResort = canResolveLastResort))
                 InsertAction(
                   resolvedInsertCondition,
                   resolveAssignments(assignments, m, MergeResolvePolicy.SOURCE, throws))
@@ -1876,7 +1866,8 @@ class Analyzer(
                 // The insert action is used when not matched, so its condition and value can only
                 // access columns from the source table.
                 val resolvedInsertCondition = insertCondition.map(
-                  resolveExpressionByPlanOutput(_, m.sourceTable))
+                  resolveExpressionByPlanOutput(
+                    _, m.sourceTable, includeLastResort = canResolveLastResort))
                 // Expand star to top level source columns.  If source has less columns than target,
                 // assignments will be added by ResolveRowLevelCommandAssignments later.
                 val assignments = if (m.schemaEvolutionEnabled) {
@@ -1900,11 +1891,13 @@ class Analyzer(
             val newNotMatchedBySourceActions = m.notMatchedBySourceActions.map {
               case DeleteAction(deleteCondition) =>
                 val resolvedDeleteCondition = deleteCondition.map(
-                  resolveExpressionByPlanOutput(_, targetTable))
+                  resolveExpressionByPlanOutput(
+                    _, targetTable, includeLastResort = canResolveLastResort))
                 DeleteAction(resolvedDeleteCondition)
               case UpdateAction(updateCondition, assignments, fromStar) =>
                 val resolvedUpdateCondition = updateCondition.map(
-                  resolveExpressionByPlanOutput(_, targetTable))
+                  resolveExpressionByPlanOutput(
+                    _, targetTable, includeLastResort = canResolveLastResort))
                 UpdateAction(
                   resolvedUpdateCondition,
                   // The update value can access columns from the target table only.
@@ -1913,7 +1906,9 @@ class Analyzer(
               case o => o
             }
 
-            val resolvedMergeCondition = resolveExpressionByPlanChildren(m.mergeCondition, m)
+            val resolvedMergeCondition =
+              resolveExpressionByPlanChildren(
+                m.mergeCondition, m, includeLastResort = canResolveLastResort)
             m.copy(mergeCondition = resolvedMergeCondition,
               matchedActions = newMatchedActions,
               notMatchedActions = newNotMatchedActions,
@@ -2105,54 +2100,89 @@ class Analyzer(
      * This is used for special syntax transformations (e.g., COUNT(*) -> COUNT(1)) that
      * should only apply to builtin functions, not to user-defined functions.
      *
-     * When the effective SQL PATH puts `system.session` before `system.builtin`, temp
-     * functions shadow builtins, so an unqualified name that matches a temp function
-     * should NOT be treated as builtin.
+     * Mirrors function resolution precedence, including SQL PATH shadowing for unqualified names
+     * and `spark.sql.legacy.persistentCatalogFirst` for two-part `builtin.name` references.
      */
-    private def matchesFunctionName(nameParts: Seq[String], expectedName: String): Boolean = {
-      if (!FunctionResolution.isUnqualifiedOrBuiltinFunctionName(nameParts, expectedName)) {
-        return false
-      }
-      if (nameParts.size == 1 && functionResolution.isSessionBeforeBuiltinInPath) {
-        val v1Catalog = catalogManager.v1SessionCatalog
-        !v1Catalog.isTemporaryFunction(FunctionIdentifier(nameParts.head))
-      } else {
-        true
-      }
-    }
+    private def matchesFunctionName(nameParts: Seq[String], expectedName: String): Boolean =
+      functionResolution.functionNameResolvesToBuiltin(nameParts, expectedName)
 
     /**
      * Expands the matching attribute.*'s in `child`'s output.
      */
     def expandStarExpression(expr: Expression, child: LogicalPlan): Expression = {
+      def expandDirectStars(arguments: Seq[Expression]): Seq[Expression] = {
+        arguments.flatMap {
+          case s: Star => expand(s, child)
+          case o => o :: Nil
+        }
+      }
+
       expr.transformUp {
-        case f0: UnresolvedFunction if !f0.isDistinct &&
-          matchesFunctionName(f0.nameParts, "count") &&
-          isCountStarExpansionAllowed(f0.arguments) =>
-          // Transform COUNT(*) into COUNT(1).
-          // We do not normalize the name to "count"; we keep the original name parts
-          // (e.g. builtin.count, system.builtin.count) so that resolution still sees
-          // the same qualification.
-          f0.copy(arguments = Seq(Literal(1)))
-        case f1: UnresolvedFunction if containsStar(f1.arguments) =>
-          // SPECIAL CASE: We want to block count(tblName.*) because in spark, count(tblName.*) will
-          // be expanded while count(*) will be converted to count(1). They will produce different
-          // results and confuse users if there are any null values. For count(t1.*, t2.*), it is
-          // still allowed, since it's well-defined in spark.
-          if (!conf.allowStarWithSingleTableIdentifierInCount &&
-              matchesFunctionName(f1.nameParts, "count") &&
-              f1.arguments.length == 1) {
-            f1.arguments.foreach {
-              case u: UnresolvedStar if u.isQualifiedByTable(child.output, resolver) =>
-                throw QueryCompilationErrors
-                  .singleTableStarInCountNotAllowedError(u.target.get.mkString("."))
-              case _ => // do nothing
+        case f: UnresolvedFunction if containsStar(f.arguments) =>
+          // Only a direct star (bare `*` or qualified `t.*`) reaches here: a star nested in another
+          // expression (json_array(array(*))) is expanded bottom-up first. For a routed SQL/JSON
+          // call, resolve the owner once and bind a shadow so `ResolveFunctions` cannot later fall
+          // through to the stock built-in after the star is expanded away.
+          functionResolution.selectRoutedSqlJsonDirectStarOwner(f.nameParts) match {
+            case RoutedSqlJsonStarOwner.RejectStockBuiltin =>
+              throw QueryCompilationErrors.invalidStarUsageError(
+                s"expression `${f.prettyName}`", extractStar(f.arguments))
+            case RoutedSqlJsonStarOwner.BindShadowOwner(candidate) =>
+              f.copy(
+                arguments = f.arguments.flatMap {
+                  case s: Star => expand(s, child)
+                  case o => o :: Nil
+                },
+                boundOwner = Some(candidate))
+            case RoutedSqlJsonStarOwner.NoBinding =>
+              // The count owner probe can hit an external functionExists lookup on a
+              // persistent-first PATH, so compute it once (lazily) and reuse it for the count(*)
+              // rewrite and the count(tbl.*) guard, as `FunctionResolverUtils` does.
+              lazy val resolvesToCountBuiltin = matchesFunctionName(f.nameParts, "count")
+              if (!f.isDistinct && isCountStarExpansionAllowed(f.arguments) &&
+                  resolvesToCountBuiltin) {
+                // Transform COUNT(*) into COUNT(1).
+                // We do not normalize the name to "count"; we keep the original name parts
+                // (e.g. builtin.count, system.builtin.count) so that resolution still sees
+                // the same qualification.
+                f.copy(arguments = Seq(Literal(1)))
+              } else {
+                // SPECIAL CASE: block count(tblName.*). In spark count(tblName.*) is expanded while
+                // count(*) is converted to count(1); they produce different results and confuse
+                // users when there are null values. count(t1.*, t2.*) stays allowed (well-defined).
+                if (!conf.allowStarWithSingleTableIdentifierInCount &&
+                    resolvesToCountBuiltin &&
+                    f.arguments.length == 1) {
+                  f.arguments.foreach {
+                    case u: UnresolvedStar if u.isQualifiedByTable(child.output, resolver) =>
+                      throw QueryCompilationErrors
+                        .singleTableStarInCountNotAllowedError(u.target.get.mkString("."))
+                    case _ => // do nothing
+                  }
+                }
+                f.copy(arguments = f.arguments.flatMap {
+                  case s: Star => expand(s, child)
+                  case o => o :: Nil
+                })
+              }
+          }
+        case j: UnresolvedJsonConstructor if containsStar(j.arguments) =>
+          // Decide the owner as for `UnresolvedFunction`: the built-in rejects a direct star, while
+          // a routine owning the call receives the expanded arguments.
+          def rejectStar(): Nothing = throw QueryCompilationErrors.invalidStarUsageError(
+            s"expression `${j.prettyName}`", extractStar(j.arguments))
+          def routed: UnresolvedFunction =
+            UnresolvedFunction(j.prettyName, expandDirectStars(j.arguments), isDistinct = false)
+          if (!j.routeThroughResolution) {
+            rejectStar()
+          } else {
+            functionResolution.selectRoutedSqlJsonDirectStarOwner(Seq(j.prettyName)) match {
+              case RoutedSqlJsonStarOwner.RejectStockBuiltin => rejectStar()
+              case RoutedSqlJsonStarOwner.BindShadowOwner(candidate) =>
+                routed.copy(boundOwner = Some(candidate))
+              case RoutedSqlJsonStarOwner.NoBinding => routed
             }
           }
-          f1.copy(arguments = f1.arguments.flatMap {
-            case s: Star => expand(s, child)
-            case o => o :: Nil
-          })
         case c: CreateNamedStruct if containsStar(c.valExprs) =>
           val newChildren = c.children.grouped(2).flatMap {
             case Seq(k, s : Star) => CreateStruct(expand(s, child)).children
@@ -2310,7 +2340,7 @@ class Analyzer(
       val externalFunctionNameSet = new mutable.HashSet[Seq[String]]()
 
       plan.resolveExpressionsWithPruning(_.containsAnyPattern(UNRESOLVED_FUNCTION)) {
-        case f @ UnresolvedFunction(nameParts, _, _, _, _, _, _) =>
+        case f @ UnresolvedFunction(nameParts, _, _, _, _, _, _, _) =>
           // For builtin/temp functions, we can do a quick check without catalog lookup
           val quickCheck = if (nameParts.size == 1 ||
               FunctionResolution.sessionNamespaceKind(nameParts).isDefined) {
@@ -2379,11 +2409,13 @@ class Analyzer(
    * Replaces [[UnresolvedFunction]]s with concrete [[Expression]]s.
    * Replaces [[UnresolvedGenerator]]s with concrete [[Expression]]s.
    * Replaces [[UnresolvedTableValuedFunction]]s with concrete [[LogicalPlan]]s.
+   * Replaces [[UnresolvedJsonConstructor]]s with the owning call or the stock built-in.
    */
   object ResolveFunctions extends Rule[LogicalPlan] {
     def apply(plan: LogicalPlan): LogicalPlan = plan.resolveOperatorsUpWithPruning(
       _.containsAnyPattern(UNRESOLVED_FUNC, UNRESOLVED_FUNCTION, GENERATOR,
-        UNRESOLVED_TABLE_VALUED_FUNCTION, UNRESOLVED_TVF_ALIASES), ruleId) {
+        UNRESOLVED_TABLE_VALUED_FUNCTION, UNRESOLVED_TVF_ALIASES, UNRESOLVED_JSON_CONSTRUCTOR),
+      ruleId) {
       // Resolve scalar/table functions and get the function metadata for DESCRIBE FUNCTION.
       case u @ UnresolvedFunctionName(nameParts, _, _) =>
         functionResolution.lookupBuiltinOrTempFunction(nameParts, None)
@@ -2495,18 +2527,45 @@ class Analyzer(
 
       case q: LogicalPlan =>
         q.transformExpressionsUpWithPruning(
-          _.containsAnyPattern(UNRESOLVED_FUNCTION, GENERATOR),
+          _.containsAnyPattern(UNRESOLVED_FUNCTION, GENERATOR, UNRESOLVED_JSON_CONSTRUCTOR),
           ruleId) {
-          case u @ UnresolvedFunction(nameParts, arguments, _, _, _, _, _)
-              if functionResolution.hasLambdaAndResolvedArguments(arguments) => withPosition(u) {
-            functionResolution.resolveFunction(u) match {
-              case func: HigherOrderFunction => func
-              case other => other.failAnalysis(
-                errorClass = "INVALID_LAMBDA_FUNCTION_CALL.NON_HIGHER_ORDER_FUNCTION",
-                messageParameters = Map(
-                  "class" -> other.getClass.getCanonicalName))
+          case u @ UnresolvedFunction(_, arguments, _, _, _, _, _, _)
+              if functionResolution.hasLambdaAndResolvedArguments(arguments) =>
+            resolveHigherOrderFunction(u)
+
+          // Handle JSON constructors in this same bottom-up pass, so nesting them inside other
+          // calls does not cost extra analyzer iterations.
+          case j: UnresolvedJsonConstructor
+              if functionResolution.routesJsonConstructorToFunction(j) =>
+            // A routine owns the name: resolve like the equivalent flat call.
+            val u = j.toUnresolvedFunction
+            if (functionResolution.hasLambdaAndResolvedArguments(u.arguments)) {
+              resolveHigherOrderFunction(u)
+            } else if (!u.childrenResolved) {
+              u
+            } else {
+              functionResolution.resolveFunction(u)
             }
-          }
+
+          case j: UnresolvedJsonConstructor =>
+            val directStars = j.arguments.collect { case s: Star => s }
+            if (directStars.nonEmpty) {
+              throw QueryCompilationErrors.invalidStarUsageError(
+                s"expression `${j.prettyName}`", directStars)
+            }
+            // The built-in owns it. Switch to the built-in form so the owner is checked only once.
+            val stock = j match {
+              case r: RoutedJsonConstructor => r.toStock
+              case s: StockJsonConstructor => s
+            }
+            stock match {
+              // Set the time zone now, so the parent sees a resolved child in this pass.
+              case s: StockJsonConstructor if s.childrenResolved =>
+                ResolveStockJsonConstructors.materialize(s)
+              // A child may still become a JSON producer (e.g. inside a lambda), so wait. A
+              // built-in JSON_QUERY resolves on its own.
+              case other => other
+            }
 
           case u if !u.childrenResolved => u // Skip until children are resolved.
 
@@ -2543,6 +2602,34 @@ class Analyzer(
           }
         }
     }
+
+    private def resolveHigherOrderFunction(u: UnresolvedFunction): Expression = withPosition(u) {
+      functionResolution.resolveFunction(u) match {
+        case func: HigherOrderFunction => func
+        case other => other.failAnalysis(
+          errorClass = "INVALID_LAMBDA_FUNCTION_CALL.NON_HIGHER_ORDER_FUNCTION",
+          messageParameters = Map(
+            "class" -> other.getClass.getCanonicalName))
+      }
+    }
+  }
+
+  /**
+   * Materializes a [[StockJsonConstructor]] whose children resolved after [[ResolveFunctions]] in
+   * this iteration (e.g. in [[ResolveTimeZone]], [[ResolveSubquery]] or type coercion), so it
+   * resolves in the same iteration as its children. Routed wrappers wait for [[ResolveFunctions]].
+   */
+  object ResolveStockJsonConstructors extends Rule[LogicalPlan] {
+    def apply(plan: LogicalPlan): LogicalPlan = plan.resolveOperatorsUpWithPruning(
+      _.containsPattern(UNRESOLVED_JSON_CONSTRUCTOR)) {
+      case q: LogicalPlan =>
+        q.transformExpressionsUpWithPruning(_.containsPattern(UNRESOLVED_JSON_CONSTRUCTOR)) {
+          case s: StockJsonConstructor if s.childrenResolved => materialize(s)
+        }
+    }
+
+    def materialize(s: StockJsonConstructor): Expression =
+      s.toBuiltin.withTimeZone(conf.sessionLocalTimeZone)
   }
 
   /**
@@ -2653,13 +2740,13 @@ class Analyzer(
         case a: FunctionTableSubqueryArgumentExpression if !a.plan.resolved =>
           resolveSubQuery(a, outer)(
             (plan, outerAttrs) => a.copy(plan = plan, outerAttrs = outerAttrs))
-        // The subquery's plan is already resolved. Replace any V2TableReferences without
+        // The subquery's plan is already resolved. Replace any V2References without
         // re-running any analyzer rules.
         case se: SubqueryExpression
             if se.plan.resolved &&
-               se.plan.collectFirstWithSubqueries { case _: V2TableReference => () }.isDefined =>
+               se.plan.collectFirstWithSubqueries { case _: V2Reference => () }.isDefined =>
           val newPlan = se.plan.transformWithSubqueries {
-            case r: V2TableReference => relationResolution.resolveReference(r)
+            case r: V2Reference => relationResolution.resolveReference(r)
           }
           se.withNewPlan(newPlan)
       }
@@ -2688,6 +2775,10 @@ class Analyzer(
         resolveSubQueries(j, j)
       case tvf: UnresolvedTableValuedFunction =>
         resolveSubQueries(tvf, tvf)
+      // An inline table has no output, so its subqueries cannot reference its columns.
+      case t: UnresolvedInlineTable
+          if conf.getConf(SQLConf.INLINE_TABLE_NON_FOLDABLE_EXPRESSIONS_ENABLED) =>
+        resolveSubQueries(t, t)
       case s: SupportsSubquery if s.childrenResolved =>
         resolveSubQueries(s, s)
     }
@@ -2737,7 +2828,7 @@ class Analyzer(
   object ResolveSQLFunctions extends Rule[LogicalPlan] {
 
     private def hasSQLFunctionExpression(exprs: Seq[Expression]): Boolean = {
-      exprs.exists(_.find(_.isInstanceOf[SQLFunctionExpression]).nonEmpty)
+      exprs.exists(_.exists(_.isInstanceOf[SQLFunctionExpression]))
     }
 
     /**
@@ -3544,7 +3635,9 @@ class Analyzer(
      *          seq of non-window expressions)
      */
     private def extract(
-        expressions: Seq[NamedExpression]): (Seq[NamedExpression], Seq[NamedExpression]) = {
+        expressions: Seq[NamedExpression],
+        groupExpressions: Seq[Expression] = Nil)
+      : (Seq[NamedExpression], Seq[NamedExpression]) = {
       // First, we partition the input expressions to two part. For the first part,
       // every expression in it contain at least one WindowExpression.
       // Expressions in the second part do not have any WindowExpression.
@@ -3625,6 +3718,16 @@ class Analyzer(
           case agg: AggregateExpression if !seenWindowAggregates.contains(agg) =>
             extractedExprMap.getOrElseUpdate(agg.canonicalized,
               Alias(agg, s"_w${extractedExprMap.size}")()).toAttribute
+
+          // Extracts a non-window sub-expression that matches a grouping expression as a whole
+          // (e.g. UPPER(country) when the query groups by UPPER(country)). Without this, the
+          // transform would descend into it and extract its underlying attributes (e.g. country),
+          // which are not part of the GROUP BY clause and would make the child Aggregate invalid
+          // (SPARK-59175). Bare grouping attributes are left to the `Attribute` case below.
+          case e: Expression
+              if !e.isInstanceOf[Attribute] && !e.foldable && !hasWindowFunction(e) &&
+                groupExpressions.exists(_.semanticEquals(e)) =>
+            getOrExtract(e, e)
 
           // Extracts other attributes
           case attr: Attribute => extractExpr(attr)
@@ -3732,7 +3835,7 @@ class Analyzer(
             throw QueryCompilationErrors.lateralColumnAliasInAggWithWindowAndHavingUnsupportedError(
               lcaRef.nameParts)
         })
-        val (windowExpressions, aggregateExpressions) = extract(aggregateExprs)
+        val (windowExpressions, aggregateExpressions) = extract(aggregateExprs, groupingExprs)
         // Create an Aggregate operator to evaluate aggregation functions.
         val withAggregate = Aggregate(groupingExprs, aggregateExpressions, child)
         // Add a Filter operator for conditions in the Having clause.
@@ -3751,7 +3854,7 @@ class Analyzer(
         if hasWindowFunction(aggregateExprs) &&
           a.expressions.forall(_.resolved) &&
           !aggregateExprs.exists(_.containsPattern(LATERAL_COLUMN_ALIAS_REFERENCE)) =>
-        val (windowExpressions, aggregateExpressions) = extract(aggregateExprs)
+        val (windowExpressions, aggregateExpressions) = extract(aggregateExprs, groupingExprs)
         // Create an Aggregate operator to evaluate aggregation functions.
         val withAggregate = Aggregate(groupingExprs, aggregateExpressions, child)
         // Add Window operators.
@@ -3946,38 +4049,7 @@ class Analyzer(
           if v2Write.table.resolved && v2Write.query.resolved && !v2Write.outputResolved &&
             v2Write.pendingSchemaChanges.isEmpty =>
         validateStoreAssignmentPolicy()
-        TableOutputResolver.suitableForByNameCheck(v2Write.isByName,
-          expected = v2Write.table.output, queryOutput = v2Write.query.output)
-        // With schema evolution + coercion flag, missing top-level columns AND missing nested
-        // struct fields are filled with defaults/null (RECURSE mode). Otherwise, only missing
-        // top-level columns are filled via FILL mode; missing nested struct fields still cause
-        // schema enforcement errors.
-        val defaultValueFillMode =
-          if (conf.coerceInsertNestedTypes && v2Write.schemaEvolutionEnabled) RECURSE
-          else FILL
-        // Generation expressions live on the table's columns, so attach them to the expected
-        // output for TableOutputResolver, which auto-fills the generated columns the query is
-        // missing.
-        val expected = v2Write.table match {
-          case r: DataSourceV2Relation => GeneratedColumn.attachGenerationExpressions(r)
-          case _ => v2Write.table.output
-        }
-        val (projection, autoFilledGenCols) =
-          TableOutputResolver.resolveOutputColumnsWithGeneratedInfo(
-            v2Write.table.name, expected, v2Write.query, v2Write.isByName, conf,
-            defaultValueFillMode)
-        if (projection != v2Write.query) {
-          val cleanedTable = v2Write.table match {
-            case r: DataSourceV2Relation =>
-              val cleaned = r.output.map(CharVarcharUtils.cleanAttrMetadata)
-              r.copy(output =
-                GeneratedColumn.markAutoFilledGeneratedColumns(cleaned, autoFilledGenCols))
-            case other => other
-          }
-          v2Write.withNewQuery(projection).withNewTable(cleanedTable)
-        } else {
-          v2Write
-        }
+        WriteOutputResolution.resolveOutputRelation(v2Write, execute, conf)
     }
   }
 
@@ -3995,8 +4067,6 @@ class Analyzer(
       joinNames: Seq[String],
       condition: Option[Expression],
       hint: JoinHint): LogicalPlan = {
-    import org.apache.spark.sql.catalyst.util._
-
     val (projectList, hiddenList, newCondition) =
       NaturalAndUsingJoinResolution.computeJoinOutputsAndNewCondition(
         left,
@@ -4009,14 +4079,12 @@ class Analyzer(
         (attributeName, keyName) => resolver(attributeName, keyName)
       )
 
-    // use Project to hide duplicated common keys
-    // propagate hidden columns from nested USING/NATURAL JOINs
-    val project = Project(projectList, Join(left, right, joinType, newCondition, hint))
-    project.setTagValue(
-      Project.hiddenOutputTag,
-      hiddenList.map(_.markAsQualifiedAccessOnly()) ++
-        project.child.metadataOutput.filter(_.qualifiedAccessOnly))
-    project
+    val join = Join(left, right, joinType, newCondition, hint)
+    NaturalAndUsingJoinResolution.buildUsingJoinProject(
+      projectList,
+      hiddenList,
+      join,
+      join.metadataOutput)
   }
 
   /**
@@ -4163,127 +4231,21 @@ class Analyzer(
       case cmd: CreateIndex if cmd.table.resolved &&
           cmd.columns.exists(_._1.isInstanceOf[UnresolvedFieldName]) =>
         val table = cmd.table.asInstanceOf[ResolvedTable]
-        cmd.copy(columns = cmd.columns.map {
-          case (u: UnresolvedFieldName, prop) => resolveFieldNames(table, u.name, u) -> prop
-          case other => other
-        })
+        FieldNameAndPositionResolution.resolveCreateIndex(cmd, table, conf)
 
       case a: DropColumns if a.table.resolved && hasUnresolvedFieldName(a) && a.ifExists =>
-        // for DropColumn with IF EXISTS clause, we should resolve and ignore missing column errors
         val table = a.table.asInstanceOf[ResolvedTable]
-        val columnsToDrop = a.columnsToDrop
-        a.copy(columnsToDrop = columnsToDrop.flatMap(c => resolveFieldNamesOpt(table, c.name, c)))
+        FieldNameAndPositionResolution.resolveDropColumnsIfExists(a, table, conf)
 
       case a: AlterTableCommand if a.table.resolved && hasUnresolvedFieldName(a) =>
         val table = a.table.asInstanceOf[ResolvedTable]
-        a.transformExpressions {
-          case u: UnresolvedFieldName => resolveFieldNames(table, u.name, u)
-        }
+        FieldNameAndPositionResolution.resolveAlterTableFieldNames(a, table, conf)
 
-      case a @ AddColumns(r: ResolvedTable, cols) if !a.resolved =>
-        // 'colsToAdd' keeps track of new columns being added. It stores a mapping from a
-        // normalized parent name of fields to field names that belong to the parent.
-        // For example, if we add columns "a.b.c", "a.b.d", and "a.c", 'colsToAdd' will become
-        // Map(Seq("a", "b") -> Seq("c", "d"), Seq("a") -> Seq("c")).
-        val colsToAdd = mutable.Map.empty[Seq[String], Seq[String]]
-        def resolvePosition(
-            col: QualifiedColType,
-            parentSchema: StructType,
-            resolvedParentName: Seq[String]): Option[FieldPosition] = {
-          val fieldsAdded = colsToAdd.getOrElse(resolvedParentName, Nil)
-          val resolvedPosition = col.position.map {
-            case u: UnresolvedFieldPosition => u.position match {
-              case after: After =>
-                val allFields = parentSchema.fieldNames ++ fieldsAdded
-                allFields.find(n => conf.resolver(n, after.column())) match {
-                  case Some(colName) =>
-                    ResolvedFieldPosition(ColumnPosition.after(colName))
-                  case None =>
-                    throw QueryCompilationErrors.referenceColNotFoundForAlterTableChangesError(
-                      col.colName, allFields)
-                }
-              case _ => ResolvedFieldPosition(u.position)
-            }
-            case resolved => resolved
-          }
-          colsToAdd(resolvedParentName) = fieldsAdded :+ col.colName
-          resolvedPosition
-        }
-        val schema = r.table.columns.asSchema
-        val resolvedCols = cols.map { col =>
-          col.path match {
-            case Some(parent: UnresolvedFieldName) =>
-              // Adding a nested field, need to resolve the parent column and position.
-              val resolvedParent = resolveFieldNames(r, parent.name, parent)
-              val parentSchema = resolvedParent.field.dataType match {
-                case s: StructType => s
-                case _ => throw QueryCompilationErrors.invalidFieldName(
-                  col.name, parent.name, parent.origin)
-              }
-              val resolvedPosition = resolvePosition(col, parentSchema, resolvedParent.name)
-              col.copy(path = Some(resolvedParent), position = resolvedPosition)
-            case _ =>
-              // Adding to the root. Just need to resolve position.
-              val resolvedPosition = resolvePosition(col, schema, Nil)
-              col.copy(position = resolvedPosition)
-          }
-        }
-        val resolved = a.copy(columnsToAdd = resolvedCols)
-        resolved.copyTagsFrom(a)
-        resolved
+      case a @ AddColumns(r: ResolvedTable, _) if !a.resolved =>
+        FieldNameAndPositionResolution.resolveAddColumns(a, r, conf)
 
-      case a @ AlterColumns(table: ResolvedTable, specs, _) =>
-        val resolvedSpecs = specs.map {
-          case s @ AlterColumnSpec(
-              ResolvedFieldName(path, field), dataType, _, _, position, _, _, _) =>
-            val newDataType = dataType.flatMap { dt =>
-              // Hive style syntax provides the column type, even if it may not have changed.
-              val existing = CharVarcharUtils.getRawType(field.metadata).getOrElse(field.dataType)
-              if (existing == dt) None else Some(dt)
-            }
-            val newPosition = position map {
-              case u @ UnresolvedFieldPosition(after: After) =>
-                // TODO: since the field name is already resolved, it's more efficient if
-                //       `ResolvedFieldName` carries the parent struct and we resolve column
-                //       position based on the parent struct, instead of re-resolving the entire
-                //       column path.
-                val resolved = resolveFieldNames(table, path :+ after.column(), u)
-                ResolvedFieldPosition(ColumnPosition.after(resolved.field.name))
-              case u: UnresolvedFieldPosition => ResolvedFieldPosition(u.position)
-              case other => other
-            }
-            s.copy(newDataType = newDataType, newPosition = newPosition)
-          case spec => spec
-        }
-        val resolved = a.copy(specs = resolvedSpecs)
-        resolved.copyTagsFrom(a)
-        resolved
-    }
-
-    /**
-     * Returns the resolved field name if the field can be resolved, returns None if the column is
-     * not found. An error will be thrown in CheckAnalysis for columns that can't be resolved.
-     */
-    private def resolveFieldNames(
-        table: ResolvedTable,
-        fieldName: Seq[String],
-        context: Expression): ResolvedFieldName = {
-      resolveFieldNamesOpt(table, fieldName, context)
-        .getOrElse {
-          throw QueryCompilationErrors.unresolvedColumnError(fieldName, table.schema.fieldNames,
-            context.origin)
-        }
-    }
-
-    private def resolveFieldNamesOpt(
-        table: ResolvedTable,
-        fieldName: Seq[String],
-        context: Expression): Option[ResolvedFieldName] = {
-      table.schema.findNestedField(
-        fieldName, includeCollections = true, conf.resolver, context.origin
-      ).map {
-        case (path, field) => ResolvedFieldName(path, field)
-      }
+      case a @ AlterColumns(table: ResolvedTable, _, _) =>
+        FieldNameAndPositionResolution.resolveAlterColumns(a, table, conf)
     }
 
     private def hasUnresolvedFieldName(a: AlterTableCommand): Boolean = {
@@ -4445,10 +4407,10 @@ class Analyzer(
               throw QueryCompilationErrors.aggregateInQualifyNotAllowedError(a)
           }
           // Ensure at least one window function in SELECT or QUALIFY condition.
-          if (windowExpressionToAliasMap.size() == 0 && !hasWindowInPlan(child)) {
+          if (windowExpressionToAliasMap.isEmpty && !hasWindowInPlan(child)) {
             throw QueryCompilationErrors.qualifyRequiresWindowFunctionError()
           }
-          if (windowExpressionToAliasMap.size() > 0) {
+          if (!windowExpressionToAliasMap.isEmpty) {
             val projectList =
               windowExpressionToAliasMap.values().asScala.toSeq
             Filter(newCond, Project(newChild.output ++ projectList, newChild))

@@ -251,7 +251,7 @@ class ExplainSuite extends ExplainSuiteHelper with DisableAdaptiveExecutionSuite
     checkKeywordsExistsInExplain(df,
       "Project [id#xL AS ifnull(id, 1)#xL, if ((id#xL = 1)) null " +
         "else id#xL AS nullif(id, 1)#xL, id#xL AS nvl(id, 1)#xL, 1 AS nvl2(id, 1, 2)#x]")
-    checkKeywordsNotExistsInExplain(df, ExtendedMode, "typednullliteral")
+    checkKeywordsNotExistsInExplain(df, ExtendedMode, "nullifresult")
   }
 
   test("SPARK-26659: explain of DataWritingCommandExec should not contain duplicate cmd.nodeName") {
@@ -505,6 +505,28 @@ class ExplainSuite extends ExplainSuiteHelper with DisableAdaptiveExecutionSuite
             .load(basePath).where($"id" > 1 && $"value" > 2)
           val normalizedOutput = getNormalizedExplain(df, FormattedMode)
           assert(expectedPlanFragment.r.findAllMatchIn(normalizedOutput).length == 1)
+        }
+      }
+    }
+  }
+
+  test("Explain formatted output shows the runtime filters of a datasource V2 scan") {
+    // A scalar subquery filter over a partition column prunes a built-in V2 file scan at runtime,
+    // so the scan's own details list it.
+    withTempDir { dir =>
+      val factPath = dir.getCanonicalPath + "/fact"
+      val dimPath = dir.getCanonicalPath + "/dim"
+      spark.range(100).selectExpr("id", "CAST(id % 10 AS INT) AS part")
+        .write.partitionBy("part").parquet(factPath)
+      spark.range(10).selectExpr("CAST(id AS INT) AS dim_id").write.parquet(dimPath)
+      withSQLConf(SQLConf.USE_V1_SOURCE_LIST.key -> "") {
+        withTempView("fact", "dim") {
+          spark.read.parquet(factPath).createOrReplaceTempView("fact")
+          spark.read.parquet(dimPath).createOrReplaceTempView("dim")
+          val q = sql("SELECT id FROM fact WHERE part = (SELECT max(dim_id) FROM dim)")
+          val output = getNormalizedExplain(q, FormattedMode)
+          assert("""(?m)^RuntimeFilters: \[\(part#x = Subquery scalar-subquery#x, \[id=#x\]\)\]$"""
+            .r.findFirstIn(output).isDefined, output)
         }
       }
     }

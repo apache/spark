@@ -428,6 +428,22 @@ import org.apache.spark.sql.internal.connector.ExpressionWithToString;
  *    <li>Since version: 4.0.0</li>
  *   </ul>
  *  </li>
+ *  <li>Name: <code>CHAR_READ_SIDE_PADDING</code>
+ *   <ul>
+ *    <li>SQL semantic: <code>CHAR_READ_SIDE_PADDING(str, len, pad)</code>.
+ *        <code>len</code> is an integer literal; <code>pad</code> is always a
+ *        single space. Right-pads <code>str</code> with spaces to
+ *        <code>len</code> characters; values of <code>len</code> or more
+ *        characters are returned unchanged. Spark only emits this in
+ *        <code>=</code>, <code>&lt;=&gt;</code>, <code>&lt;&gt;</code>, and
+ *        <code>IN</code> against a string of length <code>len</code>.
+ *        A source may compile it as the raw value only if it compares that
+ *        value with a <code>len</code>-character string using blank-padded
+ *        (PAD SPACE) semantics, and its stored values never exceed
+ *        <code>len</code> characters.</li>
+ *    <li>Since version: 4.4.0</li>
+ *   </ul>
+ *  </li>
  * </ol>
  * Note: SQL semantic conforms ANSI standard, so some expressions are not supported when ANSI off,
  * including: add, subtract, multiply, divide, remainder, pmod.

@@ -184,7 +184,7 @@ private[spark] class ExecutorResourcesAmounts(
             }
           }
 
-          if (taskAmount == 0 && allocatedAddressesMap.size > 0) {
+          if (taskAmount == 0 && allocatedAddressesMap.nonEmpty) {
             allocatedAddresses.put(rName, allocatedAddressesMap.toMap)
           } else {
             return None

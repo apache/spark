@@ -24,7 +24,7 @@ import org.apache.spark.util.Utils
 
 /**
  * A base class for generate benchmark results to a file.
- * For JDK 21+, JDK major version number is added to the file names to distinguish the results.
+ * For JDK 25+, JDK major version number is added to the file names to distinguish the results.
  */
 abstract class BenchmarkBase {
   var output: Option[OutputStream] = None
@@ -52,7 +52,7 @@ abstract class BenchmarkBase {
     val regenerateBenchmarkFiles: Boolean = System.getenv("SPARK_GENERATE_BENCHMARK_FILES") == "1"
     if (regenerateBenchmarkFiles) {
       val version = Utils.javaVersion.split("\\D+")(0).toInt
-      val jdkString = if (version > 17) s"-jdk$version" else ""
+      val jdkString = if (version > 21) s"-jdk$version" else ""
       val resultFileName =
         s"${this.getClass.getSimpleName.replace("$", "")}$jdkString$suffix-results.txt"
       val prefix = Benchmarks.currentProjectRoot.map(_ + "/").getOrElse("")

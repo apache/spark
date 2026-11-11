@@ -43,8 +43,9 @@ class UnpivotResolver(operatorResolver: Resolver, expressionResolver: Expression
    *  1. Resolve the child operator.
    *  2. Resolve the ids and values expressions based on their presence (see respective scala docs
    *     for more info).
-   *  3. Perform type coercion on the values expressions.
-   *  4. Validate the lengths of the values expressions.
+   *  3. Validate the lengths of the values expressions.
+   *  4. Perform type coercion on the values expressions, unless their types are already the same
+   *     up to nullability.
    *  5. Use the [[UnpivotTransformer]] to create the resolved operator (see its scala doc for more
    *     info).
    *  6. Map the output attributes to new ones with unique expression ids. This is needed since the
@@ -91,11 +92,15 @@ class UnpivotResolver(operatorResolver: Resolver, expressionResolver: Expression
     val partiallyResolvedUnpivot =
       unpivot.copy(ids = Some(resolvedIds), values = Some(resolvedValues))
 
-    val typeCoercedUnpivot = UnpivotTypeCoercion(partiallyResolvedUnpivot)
+    validateValuesLength(partiallyResolvedUnpivot.values.get, partiallyResolvedUnpivot)
+
+    val typeCoercedUnpivot = if (partiallyResolvedUnpivot.valuesTypeCoercioned) {
+      partiallyResolvedUnpivot
+    } else {
+      UnpivotTypeCoercion(partiallyResolvedUnpivot)
+    }
 
     validateValuesTypeCoercioned(typeCoercedUnpivot)
-
-    validateValuesLength(typeCoercedUnpivot.values.get, typeCoercedUnpivot)
 
     val resolvedOperator: Expand = UnpivotTransformer(
       ids = typeCoercedUnpivot.ids.get,

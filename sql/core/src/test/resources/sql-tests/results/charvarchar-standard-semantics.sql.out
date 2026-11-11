@@ -95,6 +95,22 @@ NULL
 
 
 -- !query
+SELECT concat('<', CAST(CAST('a' AS CHAR(2)) AS VARCHAR(2)), '>')
+-- !query schema
+struct<concat(<, CAST(CAST(a AS CHAR(2)) AS VARCHAR(2)), >):string>
+-- !query output
+<a >
+
+
+-- !query
+SELECT concat('<', CAST(CAST('a' AS VARCHAR(2)) AS CHAR(4)), '>')
+-- !query schema
+struct<concat(<, CAST(CAST(a AS VARCHAR(2)) AS CHAR(4)), >):string>
+-- !query output
+<a   >
+
+
+-- !query
 SELECT coalesce(CAST('abcdef' AS VARCHAR(2)), CAST('x' AS VARCHAR(4)))
 -- !query schema
 struct<coalesce(CAST(abcdef AS VARCHAR(2)), CAST(x AS VARCHAR(4))):varchar(4)>

@@ -1051,11 +1051,6 @@ class GeneralizedLinearRegressionModel private[ml] (
   }
 
   override def transform(dataset: Dataset[_]): DataFrame = {
-    transformSchema(dataset.schema)
-    transformImpl(dataset)
-  }
-
-  override protected def transformImpl(dataset: Dataset[_]): DataFrame = {
     val outputSchema = transformSchema(dataset.schema, logging = true)
 
     val offset = if (!hasOffsetCol) lit(0.0) else col($(offsetCol)).cast(DoubleType)

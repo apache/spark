@@ -905,6 +905,10 @@ case class ApproxTopKCombine(
    */
   override def update(buffer: CombineInternal[Any], input: InternalRow): CombineInternal[Any] = {
     val inputState = state.eval(input).asInstanceOf[InternalRow]
+    if (inputState == null) {
+      // A NULL sketch carries no items, so it contributes nothing to the combined sketch.
+      return buffer
+    }
     val inputSketchBytes = inputState.getBinary(0)
     val inputMaxItemsTracked = inputState.getInt(1)
     val inputItemDataTypeDDL = inputState.getUTF8String(3).toString
@@ -961,7 +965,10 @@ case class ApproxTopKCombine(
   }
 
   override def serialize(buffer: CombineInternal[Any]): Array[Byte] = {
-    resolveEmptyBufferItemDataType(buffer)
+    // Keep a partial buffer that saw no sketch (empty input or only NULL sketches) untyped, so it
+    // stays neutral in the final merge. Resolving it to uncheckedItemDataType here would give it
+    // the coercion-widened type, which need not match the real sketches' item type (SPARK-58164).
+    // eval resolves the type of a buffer that is still untyped at the end.
     buffer.serialize()
   }
 

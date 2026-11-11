@@ -51,11 +51,13 @@ class VariantExpressionSuite extends SparkFunSuite with ExpressionEvalHelper {
     def check(
         value: Array[Byte],
         metadata: Array[Byte],
-        condition: String = "MALFORMED_VARIANT"): Unit = {
+        condition: String = "MALFORMED_VARIANT",
+        parameters: Map[String, String] = Map.empty): Unit = {
       checkErrorInExpression[SparkRuntimeException](
         ResolveTimeZone.resolveTimeZones(
           StructsToJson(Map.empty, Literal(new VariantVal(value, metadata)))),
-        condition
+        condition,
+        parameters
       )
     }
 
@@ -100,7 +102,9 @@ class VariantExpressionSuite extends SparkFunSuite with ExpressionEvalHelper {
     val a = createArray[Byte](SIZE_LIMIT, 'a'.toByte)
     val hugeMetadata = bigVersion ++ Array[Byte](2, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 1, 0, 0, 1) ++
       a ++ Array[Byte]('b')
-    check(Array(primitiveHeader(TRUE)), hugeMetadata, "VARIANT_CONSTRUCTOR_SIZE_LIMIT")
+    val sizeLimitParams = Map("sizeLimit" -> "16 MiB")
+    check(Array(primitiveHeader(TRUE)), hugeMetadata, "VARIANT_CONSTRUCTOR_SIZE_LIMIT",
+      sizeLimitParams)
 
     // The keys are 'aaa....' and 'b'. Values are "yyy..." and 'true'.
     val y = createArray[Byte](SIZE_LIMIT, 'y'.toByte)
@@ -116,8 +120,8 @@ class VariantExpressionSuite extends SparkFunSuite with ExpressionEvalHelper {
 
     val smallMetadata = bigVersion ++ Array[Byte](2, 0, 0, 0, 0, 0, 0, 0, 1, 0, 0, 0, 2, 0, 0, 0) ++
       Array[Byte]('a', 'b')
-    check(hugeObject, smallMetadata, "VARIANT_CONSTRUCTOR_SIZE_LIMIT")
-    check(hugeObject, hugeMetadata, "VARIANT_CONSTRUCTOR_SIZE_LIMIT")
+    check(hugeObject, smallMetadata, "VARIANT_CONSTRUCTOR_SIZE_LIMIT", sizeLimitParams)
+    check(hugeObject, hugeMetadata, "VARIANT_CONSTRUCTOR_SIZE_LIMIT", sizeLimitParams)
   }
 
   // Test valid forms of Variant that our writer would never produce.
@@ -737,6 +741,51 @@ class VariantExpressionSuite extends SparkFunSuite with ExpressionEvalHelper {
     // scalastyle:on nonascii
     testVariantGet("[1, 2, 3]", "$[2147483647]", IntegerType, null)
 
+    testVariantGet("""{"a'b": 1}""", """$['a\'b']""", IntegerType, 1)
+    testVariantGet("""{"a']b": 1}""", """$['a\']b']""", IntegerType, 1)
+    testVariantGet("""{"a\nb":1,"a\\nb":2}""", """$.a\nb""", IntegerType, 2)
+    testVariantGet("""{"a\"b": 2}""", """$['a"b']""", IntegerType, 2)
+    testVariantGet("""{"a\\b": 4}""", """$['a\\b']""", IntegerType, 4)
+    testVariantGet("""{"a\tb": 5}""", """$['a\tb']""", IntegerType, 5)
+    testVariantGet("""{"a\nb": 6}""", """$['a\nb']""", IntegerType, 6)
+    testVariantGet("""{"a\bb": 11}""", """$['a\bb']""", IntegerType, 11)
+    testVariantGet("""{"a\fb": 12}""", """$['a\fb']""", IntegerType, 12)
+    testVariantGet("""{"a\rb": 13}""", """$['a\rb']""", IntegerType, 13)
+    testVariantGet("""{"a/b": 14}""", """$['a\/b']""", IntegerType, 14)
+    // Split the Unicode escape so Scala does not decode it.
+    testVariantGet("{\"a\\" + "u000bb\": 7}", "$['a\\" + "u000bb']", IntegerType, 7)
+    testVariantGet("""{"a\"b": 8}""", """$["a\"b"]""", IntegerType, 8)
+    testVariantGet("""{"a'b": 9}""", """$["a'b"]""", IntegerType, 9)
+    testVariantGet("""{"a\\xb": 15}""", """$['a\xb']""", IntegerType, 15)
+    testVariantGet("""{"a\\u12G4b": 17}""", "$['a\\" + "u12G4b']", IntegerType, 17)
+    testVariantGet("""{"a\\\"b": 18}""", """$['a\"b']""", IntegerType, 18)
+    testVariantGet("""{"a\\'b": 19}""", """$["a\'b"]""", IntegerType, 19)
+    testVariantGet(
+      "{\"a\\" + "uD83D\\" + "uDE00b\": 20}",
+      "$['a\\" + "uD83D\\" + "uDE00b']",
+      IntegerType,
+      20)
+    testVariantGet(
+      "{\"\\\\" + "uD800\\" + "uD83D\\" + "uDE00\":21}",
+      "$['\\" + "uD800\\" + "uD83D\\" + "uDE00']",
+      IntegerType,
+      21)
+    testVariantGet(
+      "{\"a\\" + "uD83D\\" + "uDE00b\": 22}",
+      "$['a\\" + "ud83d\\" + "ude00b']",
+      IntegerType,
+      22)
+    testVariantGet(
+      "{\"a\\" + "uDBFF\\" + "uDFFFb\": 23}",
+      "$['a\\" + "uDBFF\\" + "uDFFFb']",
+      IntegerType,
+      23)
+    Seq("uD800", "uDC00").foreach { escape =>
+      val path = "$['\\" + escape + "']"
+      testVariantGet("""{"?":1}""", path, IntegerType, null)
+      testVariantGet("{\"?\":1,\"\\\\" + escape + "\":2}", path, IntegerType, 2)
+    }
+
     Seq("variant_get" -> true, "try_variant_get" -> false).foreach {
       case (name, failOnError) =>
         checkErrorInExpression[SparkRuntimeException](
@@ -756,7 +805,78 @@ class VariantExpressionSuite extends SparkFunSuite with ExpressionEvalHelper {
     checkInvalidPath("""$['"]""")
 
     checkInvalidPath("$[\"\"\"]")
-    checkInvalidPath("$[\"\\\"\"]")
+    checkInvalidPath("""$['a\']""")
+    checkInvalidPath("""$["a\"]""")
+  }
+
+  test("legacy Variant paths treat backslashes literally") {
+    val input = """{"a\nb":1,"a\\nb":2}"""
+    val path = "$['a\\nb']"
+
+    withSQLConf(SQLConf.LEGACY_VARIANT_PATH_BACKSLASH_AS_LITERAL.key -> "false") {
+      testVariantGet(input, path, IntegerType, 1)
+    }
+
+    withSQLConf(SQLConf.LEGACY_VARIANT_PATH_BACKSLASH_AS_LITERAL.key -> "true") {
+      testVariantGet(input, path, IntegerType, 2)
+
+      val escapedQuote = """$['a\'b']"""
+      checkErrorInExpression[SparkRuntimeException](
+        variantGet("""{"a'b":1}""", escapedQuote, IntegerType),
+        "INVALID_VARIANT_GET_PATH",
+        Map("path" -> escapedQuote, "functionName" -> "`variant_get`"))
+    }
+  }
+
+  gridTest("Variant path functions use the captured parser mode")(Seq(false, true)) { legacy =>
+    val conf = SQLConf.LEGACY_VARIANT_PATH_BACKSLASH_AS_LITERAL.key
+    val input = Literal(parseJson("""{"a\nb":[1],"a\\nb":[2]}"""))
+    val path = "$['a\\nb']"
+    withSQLConf(conf -> legacy.toString) {
+      Seq(Literal(path), BoundReference(0, StringType, nullable = false)).foreach { pathExpr =>
+        val get = VariantGet(input, pathExpr, ArrayType(IntegerType), failOnError = true)
+        val cases = Seq(
+          VariantDelete(Seq(input, pathExpr)) ->
+            (if (legacy) """{"a\nb":[1]}""" else """{"a\\nb":[2]}"""),
+          VariantPick(Seq(input, pathExpr)) ->
+            (if (legacy) """{"a\\nb":[2]}""" else """{"a\nb":[1]}"""),
+          VariantInsert(input, Concat(Seq(pathExpr, Literal("[0]"))), Literal(3)) ->
+            (if (legacy) """{"a\nb":[1],"a\\nb":[3,2]}""" else """{"a\nb":[3,1],"a\\nb":[2]}"""),
+          VariantSet(input, pathExpr, Literal(3), Literal(true)) ->
+            (if (legacy) """{"a\nb":[1],"a\\nb":3}""" else """{"a\nb":3,"a\\nb":[2]}"""),
+          VariantArrayAppend(input, pathExpr, Literal(3)) ->
+            (if (legacy) """{"a\nb":[1],"a\\nb":[2,3]}""" else """{"a\nb":[1,3],"a\\nb":[2]}"""))
+        withSQLConf(conf -> (!legacy).toString) {
+          val row = InternalRow(UTF8String.fromString(path))
+          checkEvaluation(get, Array(if (legacy) 2 else 1), row)
+          cases.foreach { case (expr, expected) =>
+            checkEvaluation(
+              ResolveTimeZone.resolveTimeZones(Cast(expr, StringType)), expected, row)
+          }
+        }
+      }
+    }
+  }
+
+  gridTest("Variant diagnostics use the captured parser mode")(Seq(false, true)) { legacy =>
+    val conf = SQLConf.LEGACY_VARIANT_PATH_BACKSLASH_AS_LITERAL.key
+    val path = """$['a.\nb'].c"""
+    val input = Literal(parseJson("""{"a.\nb":5,"a.\\nb":6}"""))
+    val expressions = withSQLConf(conf -> legacy.toString) {
+      Seq(
+        VariantInsert(input, Literal(path), Literal(2)),
+        VariantSet(input, Literal(path), Literal(2), Literal(true)),
+        VariantArrayAppend(input, Literal(path), Literal(2)))
+    }
+    withSQLConf(conf -> (!legacy).toString) {
+      expressions.foreach { expression =>
+        checkErrorInExpression[SparkRuntimeException](
+          expression,
+          "VARIANT_PATH_TYPE_MISMATCH",
+          Map("path" -> path, "failedAt" -> """$['a.\nb']""",
+            "functionName" -> s"`${expression.prettyName}`"))
+      }
+    }
   }
 
   test("SPARK-58672: validate char/varchar target types in variant_get") {
@@ -1352,6 +1472,115 @@ class VariantExpressionSuite extends SparkFunSuite with ExpressionEvalHelper {
       /* offset list */ 0, 2,
       /* field data: INT8 with only 1 byte */ primitiveHeader(INT8), 0), metadata)
 
+    // Malformed containers: the final offset is missing. A container with n children requires
+    // n + 1 offsets, so even an empty container requires one.
+    invalid(Array(arrayHeader(false, 1),
+      /* size */ 0))
+    invalid(Array(objectHeader(false, 1, 1),
+      /* size */ 0))
+    invalid(Array(arrayHeader(false, 4),
+      /* size */ 0,
+      /* truncated offset list */ 0, 0))
+    valid(Array(arrayHeader(false, 4),
+      /* size */ 0,
+      /* offset list */ 0, 0, 0, 0))
+    invalid(Array(arrayHeader(true, 1),
+      /* size */ 0, 0, 0, 0))
+    valid(Array(arrayHeader(true, 1),
+      /* size */ 0, 0, 0, 0,
+      /* offset list */ 0))
+    invalid(Array(arrayHeader(false, 1),
+      /* size */ 1,
+      /* offset list */ 0, 2,
+      /* element data: empty array without its offset list */ arrayHeader(false, 1), 0))
+
+    // Malformed containers: the final offset points past the end of the value.
+    invalid(Array(arrayHeader(false, 1),
+      /* size */ 0,
+      /* offset list */ 5))
+    invalid(Array(objectHeader(false, 1, 1),
+      /* size */ 0,
+      /* offset list */ 5))
+
+    // Malformed containers: dataStart + final offset overflows an int.
+    invalid(Array(arrayHeader(false, 4),
+      /* size */ 0,
+      /* offset list */ -1, -1, -1, 0x7F))
+    invalid(Array(objectHeader(false, 1, 4),
+      /* size */ 0,
+      /* offset list */ -1, -1, -1, 0x7F))
+    invalid(Array(arrayHeader(false, 1),
+      /* size */ 1,
+      /* offset list */ 0, 6,
+      /* element data */ arrayHeader(false, 4), 0, -1, -1, -1, 0x7F))
+
+    // Valid container: the final offset may cover unused bytes within the value.
+    valid(Array(arrayHeader(false, 1),
+      /* size */ 0,
+      /* offset list */ 2,
+      /* unused data */ 0, 0))
+
+    // Malformed containers: a child does not end within the data of its container.
+    invalid(Array(arrayHeader(false, 1),
+      /* size */ 1,
+      /* offset list */ 0, 1,
+      /* element data: 3-byte INT2 */ primitiveHeader(INT2), 1, 0))
+    invalid(Array(objectHeader(false, 1, 1),
+      /* size */ 1,
+      /* id list */ 0,
+      /* offset list */ 0, 1,
+      /* field data: 2-byte INT1 */ primitiveHeader(INT1), 1), metadata)
+    invalid(Array(arrayHeader(false, 1),
+      /* size */ 1,
+      /* offset list: the element starts at the final offset */ 1, 1,
+      /* element data */ primitiveHeader(TRUE), primitiveHeader(TRUE)))
+    invalid(Array(arrayHeader(false, 1),
+      /* size */ 1,
+      /* offset list */ 0, 1,
+      /* element data: 5-byte nested array */
+      arrayHeader(false, 1), 1, 0, 1, primitiveHeader(TRUE)))
+    invalid(Array(arrayHeader(false, 1),
+      /* size */ 1,
+      /* offset list */ 0, 2,
+      /* element data: 7-byte LONG_STR */ primitiveHeader(LONG_STR), 2, 0, 0, 0, 'a', 'b'))
+
+    // Valid container: unused bytes between children.
+    valid(Array(arrayHeader(false, 1),
+      /* size */ 2,
+      /* offset list */ 0, 2, 3,
+      /* element data */ primitiveHeader(TRUE),
+      /* unused */ 0,
+      primitiveHeader(FALSE)))
+
+    // Valid object: field data is not required to be in the order of the offset list.
+    valid(Array(objectHeader(false, 1, 1),
+      /* size */ 2,
+      /* id list */ 0, 1,
+      /* offset list */ 2, 0, 4,
+      /* field data */ primitiveHeader(INT1), 2, primitiveHeader(INT1), 1), metadata)
+
+    // Valid value: trailing bytes after the top-level value are ignored.
+    valid(Array(arrayHeader(false, 1),
+      /* size */ 0,
+      /* offset list */ 0,
+      /* trailing bytes */ 99))
+
+    // Variants built by `parse_json` are valid.
+    Seq(
+      "{}",
+      "[]",
+      """{"a": {}, "b": []}""",
+      """[[], {}, [1, [2, {"c": "d"}]]]""",
+      """{"a": 1, "b": {"c": [true, null, 1.5]}}""",
+      s"""["${"x" * 100}", {"k": "${"y" * 100}"}]"""
+    ).foreach { json =>
+      val v = parseJson(json)
+      valid(v.getValue, v.getMetadata)
+    }
+    val dedup = VariantExpressionEvalUtils.parseJson(
+      UTF8String.fromString("""{"a": 1, "a": {"b": [1, 2]}, "c": 3}"""), allowDuplicateKeys = true)
+    valid(dedup.getValue, dedup.getMetadata)
+
     // Unknown primitive type (type info 17 is not defined).
     invalid(Array(primitiveHeader(17)))
 
@@ -1459,7 +1688,7 @@ class VariantExpressionSuite extends SparkFunSuite with ExpressionEvalHelper {
     checkDelete("""{"a": null, "b": 2}""", Seq("$.a"), """{"b":2}""")
     checkDelete("[null, 1, null]", Seq("$[0]"), "[1,null]")
 
-    // Mixed literal + dynamic path exercises both `ParsedDeletePath` and `DynamicDeletePath`
+    // Mixed literal + dynamic path exercises both `FoldableVariantPath` and `DynamicVariantPath`
     // arms of `eval` in a single call.
     val mixedLitDyn = VariantDelete(Seq(
       Literal(parseJson("""{"a": 1, "b": 2, "c": 3}""")),
@@ -1486,6 +1715,18 @@ class VariantExpressionSuite extends SparkFunSuite with ExpressionEvalHelper {
         VariantDelete(Seq(Literal(parseJson("""{"a": 1}""")), Literal(".a")))),
       "INVALID_VARIANT_PATH",
       Map("path" -> ".a", "functionName" -> "`variant_delete`"))
+
+    checkErrorInExpression[SparkRuntimeException](
+      ResolveTimeZone.resolveTimeZones(
+        VariantDelete(Seq(Literal(parseJson("""{"a": 1}""")), Literal("""$['a\']""")))),
+      "INVALID_VARIANT_PATH",
+      Map("path" -> """$['a\']""", "functionName" -> "`variant_delete`"))
+
+    checkErrorInExpression[SparkRuntimeException](
+      ResolveTimeZone.resolveTimeZones(
+        VariantDelete(Seq(Literal(parseJson("""{"a": 1}""")), Literal("""$["a\"]""")))),
+      "INVALID_VARIANT_PATH",
+      Map("path" -> """$["a\"]""", "functionName" -> "`variant_delete`"))
 
     for (path <- Seq("$[2147483648]", "$[4294967296]")) {
       checkErrorInExpression[SparkRuntimeException](
@@ -1580,6 +1821,11 @@ class VariantExpressionSuite extends SparkFunSuite with ExpressionEvalHelper {
     // Special / edge-case keys.
     checkInsert("""{"a": 1}""", "$['']", Literal(2), """{"":2,"a":1}""")
     checkInsert("""{"a": 1}""", "$['?']", Literal(2), """{"?":2,"a":1}""")
+    Seq("uD800", "uDC00").foreach { escape =>
+      checkInsert(
+        """{"?":1}""", "$['\\" + escape + "']", Literal(2),
+        "{\"?\":1,\"\\\\" + escape + "\":2}")
+    }
     checkInsert(
       """{"a": 1}""", "$['key with spaces']", Literal(2), """{"a":1,"key with spaces":2}""")
     checkInsert("""{"a": 1}""", "$.fb:testid", Literal(2), """{"a":1,"fb:testid":2}""")
@@ -1640,6 +1886,32 @@ class VariantExpressionSuite extends SparkFunSuite with ExpressionEvalHelper {
     checkInsertRecoverableError("""{"a.b": 5}""", """$['a.b'].c""", Literal(2),
       "VARIANT_PATH_TYPE_MISMATCH",
       Map("path" -> "$['a.b'].c", "failedAt" -> "$['a.b']", "functionName" -> "`variant_insert`"))
+    checkInsertRecoverableError("""{"a.'b": 5}""", """$["a.'b"].c""", Literal(2),
+      "VARIANT_PATH_TYPE_MISMATCH",
+      Map("path" -> "$[\"a.'b\"].c", "failedAt" -> "$[\"a.'b\"]",
+        "functionName" -> "`variant_insert`"))
+    checkInsertRecoverableError("""{"a.'\"b": 5}""", """$['a.\'"b'].c""", Literal(2),
+      "VARIANT_PATH_TYPE_MISMATCH",
+      Map(
+        "path" -> """$['a.\'"b'].c""",
+        "failedAt" -> """$["a.'\"b"]""",
+        "functionName" -> "`variant_insert`"))
+    checkInsertRecoverableError("""{"a.\\nb": 5}""", """$['a.\\nb'].c""", Literal(2),
+      "VARIANT_PATH_TYPE_MISMATCH",
+      Map(
+        "path" -> """$['a.\\nb'].c""",
+        "failedAt" -> """$['a.\\nb']""",
+        "functionName" -> "`variant_insert`"))
+    Seq('\b' -> "\\b", '\f' -> "\\f", '\n' -> "\\n", '\r' -> "\\r", '\t' -> "\\t",
+      1.toChar -> ("\\" + "u0001")).foreach { case (control, escape) =>
+      val prefix = s"$$['a.${escape}b']"
+      checkInsertRecoverableError(s"""{"a.${escape}b":5}""", prefix + ".c", Literal(2),
+        "VARIANT_PATH_TYPE_MISMATCH",
+        Map("path" -> (prefix + ".c"), "failedAt" -> prefix,
+          "functionName" -> "`variant_insert`"))
+      assert(VariantPathParser.parse(prefix, legacyPathBackslashAsLiteral = false).get
+        .sameElements(Array(ObjectExtraction(s"a.${control}b"))))
+    }
 
     // Structs and maps are rejected at analysis.
     Seq(
@@ -1660,6 +1932,12 @@ class VariantExpressionSuite extends SparkFunSuite with ExpressionEvalHelper {
     checkInsertUnrecoverableError("{}", "abc", Literal(1),
       "INVALID_VARIANT_PATH",
       name => Map("path" -> "abc", "functionName" -> s"`$name`"))
+    checkInsertUnrecoverableError("{}", """$['a\']""", Literal(1),
+      "INVALID_VARIANT_PATH",
+      name => Map("path" -> """$['a\']""", "functionName" -> s"`$name`"))
+    checkInsertUnrecoverableError("{}", """$["a\"]""", Literal(1),
+      "INVALID_VARIANT_PATH",
+      name => Map("path" -> """$["a\"]""", "functionName" -> s"`$name`"))
 
     Seq("variant_insert" -> true, "try_variant_insert" -> false).foreach {
       case (name, failOnError) =>
@@ -1742,6 +2020,11 @@ class VariantExpressionSuite extends SparkFunSuite with ExpressionEvalHelper {
     checkSet("""{"a": 1}""", "$.a", Literal(2), """{"a":2}""")
     checkSet("""{"a": 1}""", "$.b", Literal(3), """{"a":1,"b":3}""")
     checkSet("""{"a": {"b": 1}}""", "$.a.b", Literal(9), """{"a":{"b":9}}""")
+    Seq("uD800", "uDC00").foreach { escape =>
+      checkSet(
+        """{"?":1}""", "$['\\" + escape + "']", Literal(2),
+        "{\"?\":1,\"\\\\" + escape + "\":2}")
+    }
 
     // Missing intermediate keys are created when create_if_missing is true.
     checkSet("{}", "$.a.b", Literal(1), """{"a":{"b":1}}""")
@@ -1882,6 +2165,12 @@ class VariantExpressionSuite extends SparkFunSuite with ExpressionEvalHelper {
     checkSetUnrecoverableError("{}", "$", Literal(1),
       "INVALID_VARIANT_PATH",
       name => Map("path" -> "$", "functionName" -> s"`$name`"))
+    checkSetUnrecoverableError("{}", """$['a\']""", Literal(1),
+      "INVALID_VARIANT_PATH",
+      name => Map("path" -> """$['a\']""", "functionName" -> s"`$name`"))
+    checkSetUnrecoverableError("{}", """$["a\"]""", Literal(1),
+      "INVALID_VARIANT_PATH",
+      name => Map("path" -> """$["a\"]""", "functionName" -> s"`$name`"))
     val tooBig = "x".repeat(16 * 1024 * 1024)
     checkSetUnrecoverableError("{}", "$.a[2000000000]", Literal(1),
       "VARIANT_SIZE_LIMIT",
@@ -2038,6 +2327,12 @@ class VariantExpressionSuite extends SparkFunSuite with ExpressionEvalHelper {
     checkAppendUnrecoverableError("[]", "abc", Literal(1),
       "INVALID_VARIANT_PATH",
       name => Map("path" -> "abc", "functionName" -> s"`$name`"))
+    checkAppendUnrecoverableError("[]", """$['a\']""", Literal(1),
+      "INVALID_VARIANT_PATH",
+      name => Map("path" -> """$['a\']""", "functionName" -> s"`$name`"))
+    checkAppendUnrecoverableError("[]", """$["a\"]""", Literal(1),
+      "INVALID_VARIANT_PATH",
+      name => Map("path" -> """$["a\"]""", "functionName" -> s"`$name`"))
 
     Seq("variant_array_append" -> true, "try_variant_array_append" -> false).foreach {
       case (name, failOnError) =>
@@ -2126,5 +2421,207 @@ class VariantExpressionSuite extends SparkFunSuite with ExpressionEvalHelper {
           Literal(parseJson("""{"a": null}""")), Literal.create(null, BooleanType)),
         StringType),
       null)
+  }
+
+  test("variant_pick") {
+    def checkPick(input: String, paths: Seq[String], expected: String): Unit = {
+      val pathLits: Seq[Expression] = paths.map(p => Literal.create(p, StringType))
+      val expr = VariantPick(Literal(parseJson(input)) +: pathLits)
+      checkEvaluation(
+        ResolveTimeZone.resolveTimeZones(Cast(expr, StringType)),
+        expected)
+    }
+
+    // Keep a subset of object fields, and union paths under the same parent (parent preserved).
+    checkPick("""{"a": 1, "b": 2, "c": 3}""", Seq("$.a", "$.c"), """{"a":1,"c":3}""")
+    checkPick("""{"a": {"b": 1, "c": 2}, "d": 3}""", Seq("$.a.b"), """{"a":{"b":1}}""")
+    checkPick(
+      """{"a": {"b": 1, "c": 2, "d": 3}}""", Seq("$.a.b", "$.a.c"), """{"a":{"b":1,"c":2}}""")
+
+    // A broader path subsumes a narrower one.
+    checkPick("""{"a": {"b": 1, "c": 2}}""", Seq("$.a", "$.a.b"), """{"a":{"b":1,"c":2}}""")
+    checkPick("""{"a": {"b": 1, "c": 2}}""", Seq("$.a.b", "$.a"), """{"a":{"b":1,"c":2}}""")
+
+    // Arrays are compacted in original order; out-of-range indices are skipped.
+    checkPick("[10, 20, 30, 40]", Seq("$[2]", "$[0]"), "[10,30]")
+    checkPick("[10, 20, 30]", Seq("$[5]"), "[]")
+    checkPick("""{"a": [10, 20, 30]}""", Seq("$.a[1]"), """{"a":[20]}""")
+
+    // Array elements that are containers recurse and compact; an element that picks nothing drops.
+    checkPick("""[{"x": 1, "y": 2}, {"z": 3}]""", Seq("$[0].x"), """[{"x":1}]""")
+    checkPick("""[{"x": 1}]""", Seq("$[0].y"), "[]")
+    checkPick("[[10, 20, 30]]", Seq("$[0][1]"), "[[20]]")
+
+    // Missing keys are skipped; a parent whose picks all miss is dropped.
+    checkPick("""{"a": 1, "b": 2}""", Seq("$.a", "$.missing"), """{"a":1}""")
+    checkPick("""{"a": {"b": 1}}""", Seq("$.a.x"), "{}")
+
+    // Root path is identity; a scalar or variant-null input is returned unchanged. The variant
+    // null is compared directly, since casting it to a string yields SQL NULL, not the text "null".
+    checkPick("""{"a": 1}""", Seq("$"), """{"a":1}""")
+    checkPick("42", Seq("$.a"), "42")
+    checkEvaluation(
+      VariantPick(Seq(Literal(parseJson("null")), Literal("$.a"))),
+      parseJson("null"))
+
+    // Type mismatch matches nothing, but the top-level shape is preserved (object -> {}, array
+    // -> []); descending into a scalar, or into a container of the wrong kind, drops the parent.
+    checkPick("[1, 2, 3]", Seq("$.a"), "[]")
+    checkPick("""{"a": 1}""", Seq("$[0]"), "{}")
+    checkPick("""{"a": 1}""", Seq("$.a.b"), "{}")
+    checkPick("""{"a": [1, 2]}""", Seq("$.a.b"), "{}")
+    checkPick("""{"a": {"b": 1}}""", Seq("$.a[0]"), "{}")
+
+    // Both-maps node uses only the matching branch.
+    checkPick("""{"a": 1, "b": 2}""", Seq("$.a", "$[0]"), """{"a":1}""")
+    checkPick("[10, 20, 30]", Seq("$.a", "$[0]"), "[10]")
+    checkPick("""{"a": {"b": 1}}""", Seq("$.a.b", "$.a[0]", "$.a"), """{"a":{"b":1}}""")
+
+    // Duplicate paths are deduplicated, and bracket notation resolves like dot notation.
+    checkPick("""{"a": 1, "b": 2}""", Seq("$.a", "$.a"), """{"a":1}""")
+    checkPick("""{"a": 1, "b": 2}""", Seq("$['a']"), """{"a":1}""")
+
+    // Non-ASCII field names are matched and preserved, in both dot and bracket notation.
+    // scalastyle:off nonascii
+    checkPick("""{"café": 1, "naïve": 2}""", Seq("$.café"), """{"café":1}""")
+    checkPick(
+      """{"日本語": {"x": 1, "y": 2}}""", Seq("$['日本語'].x"), """{"日本語":{"x":1}}""")
+    checkPick("""{"ключ": [10, 20, 30]}""", Seq("$.ключ[1]"), """{"ключ":[20]}""")
+    // scalastyle:on nonascii
+
+    // Larger object trees built from several paths.
+    // Many sibling keys unioned under one parent.
+    checkPick(
+      """{"a": {"b": 1, "c": 2, "d": 3, "e": 4, "f": 5, "g": 6, "h": 7}}""",
+      Seq("$.a.b", "$.a.c", "$.a.e", "$.a.g", "$.a.h"),
+      """{"a":{"b":1,"c":2,"e":4,"g":6,"h":7}}""")
+    // Several top-level parents, each keeping a different subset of children.
+    checkPick(
+      """{"a": {"x": 1, "y": 2}, "b": {"p": 3, "q": 4}, "c": 5, "d": {"m": 6, "n": 7}}""",
+      Seq("$.a.x", "$.b.p", "$.b.q", "$.c", "$.d.m"),
+      """{"a":{"x":1},"b":{"p":3,"q":4},"c":5,"d":{"m":6}}""")
+    // A broader path subsumes a narrower sibling while other branches are kept partially.
+    checkPick(
+      """{"a": {"b": {"c": 1, "d": 2}, "e": 3}, "f": {"g": 4, "h": 5}}""",
+      Seq("$.a.b.c", "$.a.b", "$.a.e", "$.f.g"),
+      """{"a":{"b":{"c":1,"d":2},"e":3},"f":{"g":4}}""")
+    // Deep branch: multiple paths share a long prefix; an unpicked sibling is dropped.
+    checkPick(
+      """{"a": {"b": {"c": {"d": 1, "e": 2}, "f": 3, "g": 4}}}""",
+      Seq("$.a.b.c.d", "$.a.b.c.e", "$.a.b.f"),
+      """{"a":{"b":{"c":{"d":1,"e":2},"f":3}}}""")
+    // A path terminating at a genuinely empty container keeps it as-is (not dropped).
+    checkPick("""{"a": {}, "b": 1}""", Seq("$.a"), """{"a":{}}""")
+    // A picked field that matches nothing is rewound.
+    checkPick(
+      """{"a": 1, "b": {"m": 1}, "c": 2}""",
+      Seq("$.a", "$.b.x", "$.c"),
+      """{"a":1,"c":2}""")
+
+    // Larger array trees.
+    // Indices given out of order are compacted into original array order, not path order.
+    checkPick(
+      "[0, 10, 20, 30, 40, 50, 60, 70]",
+      Seq("$[5]", "$[0]", "$[7]", "$[3]"),
+      "[0,30,50,70]")
+    // A picked element that matches nothing is dropped; survivors compact around the hole.
+    checkPick(
+      """[{"x": 1}, {"y": 2}, {"z": 3}]""",
+      Seq("$[0].x", "$[1].w", "$[2].z"),
+      """[{"x":1},{"z":3}]""")
+    // Nested arrays: picks descend into multiple sub-arrays, compacting at each level.
+    checkPick(
+      "[[10, 20], [30, 40], [50, 60]]",
+      Seq("$[0][1]", "$[2][0]"),
+      "[[20],[50]]")
+    // A path ending at an array index keeps the whole element; unpicked siblings drop.
+    checkPick(
+      """[{"x": 1, "y": 2}, {"z": 3}]""",
+      Seq("$[0]"),
+      """[{"x":1,"y":2}]""")
+
+    // Mixed object/array variant with paths at different depths.
+    checkPick(
+      """{"a": [{"p": 1, "q": 2, "r": 3}, {"p": 4, "q": 5, "r": 6}], "b": {"s": 7, "t": 8}}""",
+      Seq("$.a[0].p", "$.a[0].q", "$.a[1].r", "$.b.s"),
+      """{"a":[{"p":1,"q":2},{"r":6}],"b":{"s":7}}""")
+
+    // A large variant with many paths at once.
+    checkPick(
+      """{"a": {"b": 1, "c": 2, "d": 3},
+         "e": [{"f": 10, "g": 20}, {"f": 30, "g": 40}, {"f": 50}],
+         "h": {"i": {"j": 5, "k": 6}}, "l": 7}""",
+      Seq("$.a.b", "$.a.c", "$.e[0].f", "$.e[2]", "$.h.i.j", "$.h.i", "$.l", "$.x"),
+      """{"a":{"b":1,"c":2},"e":[{"f":10},{"f":50}],"h":{"i":{"j":5,"k":6}},"l":7}""")
+
+    // Deep, branchy trie exercising many branches at once.
+    checkPick(
+      """{"a": {"b": [{"c": 1, "d": [10, 11, 12], "e": {"f": 1, "g": 2}}, {"c": 2},
+         {"e": {"f": 5}}], "h": {"i": {"j": 9}, "l": 8}}}""",
+      Seq("$.a.b[0].c", "$.a.b[0].d[1]", "$.a.b[0].e.f", "$.a.b[2].e", "$.a.b[1].z", "$.a.b.x",
+        "$.a.h.i", "$.a.h.i.j"),
+      """{"a":{"b":[{"c":1,"d":[11],"e":{"f":1}},{"e":{"f":5}}],"h":{"i":{"j":9}}}}""")
+
+    // A NULL path is skipped; the remaining paths still apply.
+    checkPick("""{"a": 1, "b": 2}""", Seq(null, "$.a"), """{"a":1}""")
+
+    // Dynamic (non-foldable) path mixed with a literal.
+    val mixedLitDyn = VariantPick(Seq(
+      Literal(parseJson("""{"a": 1, "b": 2, "c": 3}""")),
+      Literal("$.a"),
+      BoundReference(0, StringType, nullable = true)))
+    checkEvaluation(
+      ResolveTimeZone.resolveTimeZones(Cast(mixedLitDyn, StringType)),
+      """{"a":1,"c":3}""",
+      InternalRow(UTF8String.fromString("$.c")))
+
+    // A dynamic path that evaluates to NULL is skipped at runtime (unlike a constant NULL, which is
+    // dropped when the tree is built); the remaining literal path still applies.
+    checkEvaluation(
+      ResolveTimeZone.resolveTimeZones(Cast(mixedLitDyn, StringType)),
+      """{"a":1}""",
+      InternalRow(null))
+
+    // NULL variant input yields NULL.
+    checkEvaluation(
+      VariantPick(Seq(Literal.create(null, VariantType), Literal("$.a"))),
+      null)
+
+    // Malformed paths are rejected.
+    checkErrorInExpression[SparkRuntimeException](
+      VariantPick(Seq(Literal(parseJson("""{"a": 1}""")), Literal("garbage"))),
+      "INVALID_VARIANT_PATH",
+      Map("path" -> "garbage", "functionName" -> "`variant_pick`"))
+    checkErrorInExpression[SparkRuntimeException](
+      VariantPick(Seq(Literal(parseJson("""{"a": 1}""")), Literal("""$['a\']"""))),
+      "INVALID_VARIANT_PATH",
+      Map("path" -> """$['a\']""", "functionName" -> "`variant_pick`"))
+    checkErrorInExpression[SparkRuntimeException](
+      VariantPick(Seq(Literal(parseJson("""{"a": 1}""")), Literal("""$["a\"]"""))),
+      "INVALID_VARIANT_PATH",
+      Map("path" -> """$["a\"]""", "functionName" -> "`variant_pick`"))
+
+    // A malformed constant path is rejected in both interpreted and codegen modes even when the
+    // input variant is NULL: the path is parsed before the NULL short-circuit.
+    checkErrorInExpression[SparkRuntimeException](
+      VariantPick(Seq(BoundReference(0, VariantType, nullable = true), Literal("garbage"))),
+      InternalRow(null),
+      "INVALID_VARIANT_PATH",
+      Map("path" -> "garbage", "functionName" -> "`variant_pick`"))
+
+    // A malformed dynamic path is rejected at runtime (via `parsePickPath`), in both modes.
+    checkErrorInExpression[SparkRuntimeException](
+      VariantPick(Seq(
+        Literal(parseJson("""{"a": 1}""")),
+        BoundReference(0, StringType, nullable = true))),
+      InternalRow(UTF8String.fromString("garbage")),
+      "INVALID_VARIANT_PATH",
+      Map("path" -> "garbage", "functionName" -> "`variant_pick`"))
+
+    // At least one path is required.
+    val noPaths = VariantPick(Seq(Literal(parseJson("""{"a": 1}"""))))
+    intercept[org.apache.spark.sql.AnalysisException] {
+      noPaths.checkInputDataTypes()
+    }
   }
 }

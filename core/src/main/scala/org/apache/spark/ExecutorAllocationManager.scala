@@ -559,7 +559,7 @@ private[spark] class ExecutorAllocationManager(
       updates: Map[Int, ExecutorAllocationManager.TargetNumUpdates],
       now: Long): Int = {
     // Only call cluster manager if target has changed.
-    if (updates.size > 0) {
+    if (updates.nonEmpty) {
       val requestAcknowledged = try {
         logDebug("requesting updates: " + updates)
         testing ||

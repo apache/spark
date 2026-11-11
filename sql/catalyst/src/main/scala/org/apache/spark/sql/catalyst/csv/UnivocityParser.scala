@@ -278,8 +278,10 @@ class UnivocityParser(
         timeFormatter.parse(datum)
       }
 
-    case _: StringType => (d: String) =>
-      nullSafeDatum(d, name, nullable, options)(UTF8String.fromString)
+    case dt: StringType => (d: String) =>
+      nullSafeDatum(d, name, nullable, options) { s =>
+        CharVarcharUtils.applyTextParseSemantics(UTF8String.fromString(s), dt)
+      }
 
     case _: BinaryType => (d: String) =>
       nullSafeDatum(d, name, nullable, options)(_.getBytes)
@@ -478,6 +480,11 @@ class UnivocityParser(
     def convertInput(builder: VariantBuilder, s: String): Unit = {
       if (s == null || s == options.nullValue) {
         builder.appendNull()
+        return
+      }
+
+      if (!options.inferSchemaFlag && options.variantRespectInferSchema) {
+        builder.appendString(s)
         return
       }
 

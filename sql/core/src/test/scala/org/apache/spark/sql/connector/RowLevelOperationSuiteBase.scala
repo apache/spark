@@ -117,8 +117,17 @@ abstract class RowLevelOperationSuiteBase
     createTable(columns)
   }
 
+  protected def createTable(schemaString: String, transforms: Array[Transform]): Unit = {
+    val columns = CatalogV2Util.structTypeToV2Columns(StructType.fromDDL(schemaString))
+    createTable(columns, transforms)
+  }
+
   protected def createTable(columns: Array[Column]): Unit = {
     val transforms = Array[Transform](identity(reference(Seq("dep"))))
+    createTable(columns, transforms)
+  }
+
+  protected def createTable(columns: Array[Column], transforms: Array[Transform]): Unit = {
     val tableInfo = new TableInfo.Builder()
       .withColumns(columns)
       .withPartitions(transforms)
@@ -160,8 +169,8 @@ abstract class RowLevelOperationSuiteBase
   protected def executeTransaction(func: => Unit): (Txn, Map[String, TxnTable]) = {
     val tables = withQueryExecutionsCaptured(spark)(func).flatMap { qe =>
       collectWithSubqueries(qe.executedPlan) {
-        case BatchScanExec(_, _, _, _, table: TxnTable, _) => table
-        case BatchScanExec(_, _, _, _, RowLevelOperationTable(table: TxnTable, _), _) => table
+        case BatchScanExec(_, _, _, _, table: TxnTable, _, _, _) => table
+        case BatchScanExec(_, _, _, _, RowLevelOperationTable(table: TxnTable, _), _, _, _) => table
       }
     }
     (catalog.lastTransaction, indexByName(tables))

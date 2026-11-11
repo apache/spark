@@ -25,6 +25,9 @@ SELECT make_timestamp(1, 1, 1, 1, 1, null);
 SELECT make_timestamp(1, 1, 1, 1, 1, 59.999999);
 SELECT make_timestamp(1, 1, 1, 1, 1, 99.999999);
 SELECT make_timestamp(1, 1, 1, 1, 1, 999.999999);
+-- SPARK-60743: seconds whose microseconds do not fit an int must not wrap to a valid value.
+SELECT make_timestamp(1, 1, 1, 1, 1, 4324.967296);
+SELECT try_make_timestamp(1, 1, 1, 1, 1, 4324.967296);
 
 -- SPARK-51415: timestamp date constructor.
 SELECT make_timestamp(make_date(2021, 07, 11));
@@ -206,6 +209,11 @@ select timestampdiff(SECOND, date'2022-02-15', timestamp'2022-02-14 23:59:59');
 
 select timestampdiff('MINUTE', timestamp'2022-02-14 01:02:03', timestamp'2022-02-14 02:00:03');
 select timestampdiff('YEAR', date'2022-02-15', date'2023-02-15');
+
+-- NANOSECOND is a valid datetimeUnit keyword (timestampadd accepts it for nanosecond-precision
+-- timestamps) but timestampdiff does not support it, so it is rejected at runtime, matching other
+-- add-only units such as DAYOFYEAR.
+select timestampdiff(NANOSECOND, timestamp'2022-02-14 01:02:03', timestamp'2022-02-14 01:02:04');
 
 select timediff(QUARTER, timestamp'2023-08-10 01:02:03', timestamp'2022-01-14 01:02:03');
 select timediff(HOUR, timestamp'2022-02-14 01:02:03', timestamp'2022-02-14 12:00:03');

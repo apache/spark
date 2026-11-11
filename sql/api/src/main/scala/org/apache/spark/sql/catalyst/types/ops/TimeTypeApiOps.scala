@@ -64,7 +64,7 @@ class TimeTypeApiOps(val t: TimeType) extends TypeApiOps {
 
   // ==================== Row Encoding ====================
 
-  override def getEncoder: AgnosticEncoder[_] = LocalTimeEncoder
+  override def getEncoder: AgnosticEncoder[_] = LocalTimeEncoder(t.precision)
 
   // ==================== Optional Operations ====================
 

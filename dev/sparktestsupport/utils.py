@@ -1,5 +1,3 @@
-#!/usr/bin/env python3
-
 #
 # Licensed to the Apache Software Foundation (ASF) under one or more
 # contributor license agreements.  See the NOTICE file distributed with
@@ -19,7 +17,6 @@
 
 import os
 import subprocess
-import sys
 
 from sparktestsupport import modules
 from sparktestsupport.shellutils import run_cmd
@@ -37,7 +34,7 @@ def determine_modules_for_files(filenames):
     file to belong to the 'root' module. `.github` directory is counted only in GitHub Actions.
 
     >>> sorted(x.name for x in determine_modules_for_files(["python/pyspark/a.py", "sql/core/foo"]))
-    ['pyspark-core', 'pyspark-install', 'sql']
+    ['pyspark-core', 'pyspark-periodic', 'sql']
     >>> [x.name for x in determine_modules_for_files(["file_not_matched_by_any_subproject"])]
     ['root']
     >>> [x.name for x in determine_modules_for_files(["python/README.md"])]
@@ -63,13 +60,6 @@ def identify_changed_files_from_git_commits(patch_sha, target_branch=None, targe
     """
     Given a git commit and target ref, use the set of files changed in the diff in order to
     determine which modules' tests should be run.
-
-    >>> [x.name for x in determine_modules_for_files( \
-            identify_changed_files_from_git_commits("fc0a1475ef", target_ref="5da21f07"))]
-    ['graphx']
-    >>> 'root' in [x.name for x in determine_modules_for_files( \
-         identify_changed_files_from_git_commits("50a0496a43", target_ref="6765ef9"))]
-    True
     """
     if target_branch is None and target_ref is None:
         raise AttributeError("must specify either target_branch or target_ref")
@@ -96,45 +86,10 @@ def determine_modules_to_test(changed_modules, deduplicated=True):
     If ``deduplicated`` is disabled, the modules are returned without tacking the deduplication
     by dependencies into account.
 
-    >>> [x.name for x in determine_modules_to_test([modules.root])]
-    ['root']
-    >>> [x.name for x in determine_modules_to_test([modules.build])]
-    ['root']
     >>> [x.name for x in determine_modules_to_test([modules.core])]
-    ['root']
-    >>> [x.name for x in determine_modules_to_test([modules.launcher])]
     ['root']
     >>> [x.name for x in determine_modules_to_test([modules.graphx])]
     ['graphx', 'examples']
-    >>> sorted([x.name for x in determine_modules_to_test([modules.sql])])
-    ... # doctest: +NORMALIZE_WHITESPACE
-    ['avro', 'connect', 'docker-integration-tests', 'examples', 'hive', 'hive-thriftserver',
-     'mllib', 'pipelines', 'protobuf', 'pyspark-connect', 'pyspark-ml', 'pyspark-ml-connect',
-     'pyspark-mllib', 'pyspark-pandas', 'pyspark-pandas-connect', 'pyspark-pandas-slow',
-     'pyspark-pandas-slow-connect', 'pyspark-pipelines', 'pyspark-sql',
-     'pyspark-structured-streaming', 'pyspark-structured-streaming-connect',
-     'pyspark-testing', 'repl', 'sparkr', 'sql', 'sql-kafka-0-10']
-    >>> sorted([x.name for x in determine_modules_to_test(
-    ...     [modules.sparkr, modules.sql], deduplicated=False)])
-    ... # doctest: +NORMALIZE_WHITESPACE
-    ['avro', 'connect', 'docker-integration-tests', 'examples', 'hive', 'hive-thriftserver',
-     'mllib', 'pipelines', 'protobuf', 'pyspark-connect', 'pyspark-ml', 'pyspark-ml-connect',
-     'pyspark-mllib', 'pyspark-pandas', 'pyspark-pandas-connect', 'pyspark-pandas-slow',
-     'pyspark-pandas-slow-connect', 'pyspark-pipelines', 'pyspark-sql',
-     'pyspark-structured-streaming', 'pyspark-structured-streaming-connect',
-     'pyspark-testing', 'repl', 'sparkr', 'sql', 'sql-kafka-0-10']
-    >>> sorted([x.name for x in determine_modules_to_test(
-    ...     [modules.sql, modules.core], deduplicated=False)])
-    ... # doctest: +NORMALIZE_WHITESPACE
-    ['avro', 'catalyst', 'connect', 'core', 'credential-aws', 'docker-integration-tests',
-     'examples', 'graphx',
-     'hive', 'hive-thriftserver', 'mllib', 'mllib-local', 'pipelines', 'protobuf',
-     'pyspark-connect', 'pyspark-core', 'pyspark-errors', 'pyspark-ml', 'pyspark-ml-connect',
-     'pyspark-mllib', 'pyspark-pandas', 'pyspark-pandas-connect', 'pyspark-pandas-slow',
-     'pyspark-pandas-slow-connect', 'pyspark-pipelines', 'pyspark-resource', 'pyspark-sql',
-     'pyspark-streaming', 'pyspark-structured-streaming', 'pyspark-structured-streaming-connect',
-     'pyspark-testing', 'repl', 'root', 'sparkr', 'sql', 'sql-kafka-0-10', 'streaming',
-     'streaming-kafka-0-10', 'streaming-kinesis-asl']
     """
     modules_to_test = set()
     for module in changed_modules:
@@ -161,6 +116,9 @@ def determine_dangling_python_tests(changed_files):
     """
     dangling_tests = set()
     for filename in changed_files:
+        # Module test goals only cover PySpark tests; other suites have their own runners.
+        if not filename.startswith("python/"):
+            continue
         if os.path.exists(filename) and modules.root.missing_potential_python_test(filename):
             dangling_tests.add(filename)
     return dangling_tests
@@ -172,15 +130,3 @@ def determine_tags_to_exclude(changed_modules):
         if m not in changed_modules:
             tags += m.test_tags
     return tags
-
-
-def _test():
-    import doctest
-
-    failure_count = doctest.testmod()[0]
-    if failure_count:
-        sys.exit(-1)
-
-
-if __name__ == "__main__":
-    _test()

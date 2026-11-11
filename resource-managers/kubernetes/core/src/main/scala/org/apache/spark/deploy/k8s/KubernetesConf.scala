@@ -16,25 +16,32 @@
  */
 package org.apache.spark.deploy.k8s
 
-import java.util.{Locale, UUID}
+import java.util.{Locale, Map => JMap, UUID}
+
+import scala.jdk.CollectionConverters._
 
 import io.fabric8.kubernetes.api.model.{LocalObjectReference, LocalObjectReferenceBuilder, Pod}
 
-import org.apache.spark.{SPARK_VERSION, SparkConf, SparkException}
+import org.apache.spark.{SecurityManager, SPARK_VERSION, SparkConf, SparkException}
 import org.apache.spark.annotation.{DeveloperApi, Since, Unstable}
 import org.apache.spark.deploy.k8s.Config._
 import org.apache.spark.deploy.k8s.Constants._
 import org.apache.spark.deploy.k8s.features.DriverServiceFeatureStep._
 import org.apache.spark.deploy.k8s.submit._
 import org.apache.spark.internal.{Logging, LogKeys}
-import org.apache.spark.internal.config.ConfigEntry
+import org.apache.spark.internal.config.{AUTH_SECRET, ConfigEntry}
 import org.apache.spark.resource.ResourceProfile.DEFAULT_RESOURCE_PROFILE_ID
 import org.apache.spark.util.{Clock, SystemClock, Utils}
 
 /**
+ * :: DeveloperApi ::
+ *
  * Structure containing metadata for Kubernetes logic to build Spark pods.
  */
-private[spark] abstract class KubernetesConf(val sparkConf: SparkConf) {
+@Unstable
+@DeveloperApi
+@Since("4.4.0")
+abstract class KubernetesConf(val sparkConf: SparkConf) {
 
   val resourceNamePrefix: String
   def labels: Map[String, String]
@@ -197,13 +204,46 @@ class KubernetesDriverConf(
   }
 }
 
-private[spark] class KubernetesExecutorConf(
+/**
+ * :: DeveloperApi ::
+ *
+ * Used for K8s operations internally and Spark K8s operator.
+ */
+@Unstable
+@DeveloperApi
+@Since("4.4.0")
+class KubernetesExecutorConf(
     sparkConf: SparkConf,
     val appId: String,
     val executorId: String,
     val driverPod: Option[Pod],
-    val resourceProfileId: Int = DEFAULT_RESOURCE_PROFILE_ID)
+    val resourceProfileId: Int = DEFAULT_RESOURCE_PROFILE_ID,
+    customAuthSecret: Option[String] = None,
+    private[spark] val sslRpcPasswordEnvs: Map[String, String] = Map.empty)
   extends KubernetesConf(sparkConf) with Logging {
+
+  /**
+   * Java-friendly constructor that accepts nullable values instead of Option and a
+   * java.util.Map instead of a Scala Map.
+   */
+  @Since("4.4.0")
+  def this(
+      sparkConf: SparkConf,
+      appId: String,
+      executorId: String,
+      driverPod: Pod,
+      resourceProfileId: Int,
+      customAuthSecret: String,
+      sslRpcPasswordEnvs: JMap[String, String]) =
+    this(sparkConf, appId, executorId, Option(driverPod), resourceProfileId,
+      Option(customAuthSecret),
+      Option(sslRpcPasswordEnvs).map(_.asScala.toMap).getOrElse(Map.empty))
+
+  def authSecret: Option[String] = {
+    customAuthSecret
+      .orElse(get(AUTH_SECRET))
+      .orElse(Option(sparkConf.getenv(SecurityManager.ENV_AUTH_SECRET)))
+  }
 
   def executorNodeSelector: Map[String, String] =
     KubernetesUtils.parsePrefixedKeyValuePairs(sparkConf, KUBERNETES_EXECUTOR_NODE_SELECTOR_PREFIX)
@@ -320,8 +360,12 @@ private[spark] object KubernetesConf {
       executorId: String,
       appId: String,
       driverPod: Option[Pod],
-      resourceProfileId: Int = DEFAULT_RESOURCE_PROFILE_ID): KubernetesExecutorConf = {
-    new KubernetesExecutorConf(sparkConf.clone(), appId, executorId, driverPod, resourceProfileId)
+      resourceProfileId: Int = DEFAULT_RESOURCE_PROFILE_ID,
+      authSecret: Option[String],
+      sslRpcPasswordEnvs: Map[String, String]): KubernetesExecutorConf = {
+    new KubernetesExecutorConf(
+      sparkConf.clone(), appId, executorId, driverPod, resourceProfileId, authSecret,
+      sslRpcPasswordEnvs)
   }
 
   def getKubernetesAppId(): String =
