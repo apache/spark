@@ -1091,6 +1091,35 @@ class DateTimeUtilsSuite extends SparkFunSuite with Matchers with SQLHelper {
     }
   }
 
+  test("special nanosecond timestamp values") {
+    val tolerance = TimeUnit.SECONDS.toMicros(30)
+
+    testSpecialDatetimeValues { zoneId =>
+      Seq(7, 8, 9).foreach { p =>
+        // Midnight-based values equal the micro result with no sub-micro digits.
+        Seq("Epoch", " Yesterday", "Today ", " tomorrow CET ").foreach { s =>
+          assert(convertSpecialTimestampLTZNanos(s, zoneId, p) ===
+            convertSpecialTimestamp(s, zoneId).map(TimestampNanosVal.fromParts(_, 0)))
+          assert(convertSpecialTimestampNTZNanos(s, zoneId, p) ===
+            convertSpecialTimestampNTZ(s, zoneId).map(TimestampNanosVal.fromParts(_, 0)))
+        }
+        val step = math.pow(10, 9 - p).toInt
+        Seq(
+          convertSpecialTimestampLTZNanos("NOW", zoneId, p) -> instantToMicros(Instant.now()),
+          convertSpecialTimestampNTZNanos("NOW", zoneId, p) ->
+            DateTimeUtils.localDateTimeToMicros(LocalDateTime.now(zoneId))).foreach {
+          case (v, now) =>
+            v.get.epochMicros should be(now +- tolerance)
+            assert(v.get.nanosWithinMicro % step === 0)
+        }
+        Seq("now UTC", "2020-01-01", "epochs").foreach { s =>
+          assert(convertSpecialTimestampLTZNanos(s, zoneId, p) === None)
+          assert(convertSpecialTimestampNTZNanos(s, zoneId, p) === None)
+        }
+      }
+    }
+  }
+
   test("SPARK-28141: special date values") {
     testSpecialDatetimeValues { zoneId =>
       assert(convertSpecialDate("epoch", zoneId).get === 0)

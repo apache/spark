@@ -827,16 +827,30 @@ object DateTimeUtils extends SparkDateTimeUtils {
    *         successfully otherwise None.
    */
   def convertSpecialTimestamp(input: String, zoneId: ZoneId): Option[Long] = {
+    specialTimestampInstant(input, zoneId).map(instantToMicros)
+  }
+
+  /**
+   * Nanosecond variant of [[convertSpecialTimestamp]] for `TIMESTAMP_LTZ(precision)`, with
+   * `precision` in [7, 9]. `now` is floored to `precision`.
+   */
+  def convertSpecialTimestampLTZNanos(
+      input: String,
+      zoneId: ZoneId,
+      precision: Int): Option[TimestampNanosVal] = {
+    specialTimestampInstant(input, zoneId).map(instantToTimestampNanos(_, precision))
+  }
+
+  private def specialTimestampInstant(input: String, zoneId: ZoneId): Option[Instant] = {
     extractSpecialValue(input.trim).flatMap {
-      case "epoch" => Some(0)
-      case "now" => Some(instantToMicros(Instant.now()))
-      case "today" => Some(instantToMicros(today(zoneId).toInstant))
-      case "tomorrow" => Some(instantToMicros(today(zoneId).plusDays(1).toInstant))
-      case "yesterday" => Some(instantToMicros(today(zoneId).minusDays(1).toInstant))
+      case "epoch" => Some(Instant.EPOCH)
+      case "now" => Some(Instant.now())
+      case "today" => Some(today(zoneId).toInstant)
+      case "tomorrow" => Some(today(zoneId).plusDays(1).toInstant)
+      case "yesterday" => Some(today(zoneId).minusDays(1).toInstant)
       case _ => None
     }
   }
-
 
   /**
    * Converts notational shorthands that are converted to ordinary timestamps without time zone.
@@ -847,7 +861,22 @@ object DateTimeUtils extends SparkDateTimeUtils {
    *         successfully otherwise None.
    */
   def convertSpecialTimestampNTZ(input: String, zoneId: ZoneId): Option[Long] = {
-    val localDateTime = extractSpecialValue(input.trim).flatMap {
+    specialLocalDateTime(input, zoneId).map(localDateTimeToMicros)
+  }
+
+  /**
+   * Nanosecond variant of [[convertSpecialTimestampNTZ]] for `TIMESTAMP_NTZ(precision)`, with
+   * `precision` in [7, 9]. `now` is floored to `precision`.
+   */
+  def convertSpecialTimestampNTZNanos(
+      input: String,
+      zoneId: ZoneId,
+      precision: Int): Option[TimestampNanosVal] = {
+    specialLocalDateTime(input, zoneId).map(localDateTimeToTimestampNanos(_, precision))
+  }
+
+  private def specialLocalDateTime(input: String, zoneId: ZoneId): Option[LocalDateTime] = {
+    extractSpecialValue(input.trim).flatMap {
       case "epoch" => Some(LocalDateTime.of(1970, 1, 1, 0, 0))
       case "now" => Some(LocalDateTime.now(zoneId))
       case "today" => Some(LocalDateTime.now(zoneId).`with`(LocalTime.MIDNIGHT))
@@ -857,7 +886,6 @@ object DateTimeUtils extends SparkDateTimeUtils {
         Some(LocalDateTime.now(zoneId).`with`(LocalTime.MIDNIGHT).minusDays(1))
       case _ => None
     }
-    localDateTime.map(localDateTimeToMicros)
   }
 
   /**

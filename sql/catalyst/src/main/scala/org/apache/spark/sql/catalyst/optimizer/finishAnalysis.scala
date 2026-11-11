@@ -32,7 +32,7 @@ import org.apache.spark.sql.catalyst.rules._
 import org.apache.spark.sql.catalyst.trees.TreePattern._
 import org.apache.spark.sql.catalyst.trees.TreePatternBits
 import org.apache.spark.sql.catalyst.util.DateTimeUtils
-import org.apache.spark.sql.catalyst.util.DateTimeUtils.{convertSpecialDate, convertSpecialTimestamp, convertSpecialTimestampNTZ, instantToMicros, localDateTimeToMicros}
+import org.apache.spark.sql.catalyst.util.DateTimeUtils.{convertSpecialDate, convertSpecialTimestamp, convertSpecialTimestampLTZNanos, convertSpecialTimestampNTZ, convertSpecialTimestampNTZNanos, instantToMicros, localDateTimeToMicros}
 import org.apache.spark.sql.catalyst.util.SparkDateTimeUtils.{instantToNanosOfDay, instantToTimestampNanos, localDateTimeToTimestampNanos, truncateTimeToPrecision}
 import org.apache.spark.sql.catalyst.util.TypeUtils.toSQLExpr
 import org.apache.spark.sql.connector.catalog.CatalogManager
@@ -298,10 +298,13 @@ case class ReplaceCurrentLike(catalogManager: CatalogManager) extends Rule[Logic
  * if the input strings are foldable.
  */
 object SpecialDatetimeValues extends Rule[LogicalPlan] {
-  private val conv = Map[DataType, (String, java.time.ZoneId) => Option[Any]](
-    DateType -> convertSpecialDate,
-    TimestampType -> convertSpecialTimestamp,
-    TimestampNTZType -> convertSpecialTimestampNTZ)
+  private val conv: PartialFunction[DataType, (String, ZoneId) => Option[Any]] = {
+    case DateType => convertSpecialDate
+    case TimestampType => convertSpecialTimestamp
+    case TimestampNTZType => convertSpecialTimestampNTZ
+    case TimestampLTZNanosType(p) => convertSpecialTimestampLTZNanos(_, _, p)
+    case TimestampNTZNanosType(p) => convertSpecialTimestampNTZNanos(_, _, p)
+  }
   def apply(plan: LogicalPlan): LogicalPlan = {
     plan.transformAllExpressionsWithPruning(_.containsPattern(CAST))(specialDatetimeRewrite)
   }
@@ -317,9 +320,11 @@ object SpecialDatetimeValues extends Rule[LogicalPlan] {
   }
 
   private val specialDatetimeRewrite: PartialFunction[Expression, Expression] = {
-    case cast @ Cast(e, dt @ (DateType | TimestampType | TimestampNTZType), _, _)
-      if e.foldable && e.dataType.isInstanceOf[StringType] =>
-      Option(e.eval())
+    case cast @ Cast(e, dt, _, _)
+      if conv.isDefinedAt(dt) && e.foldable && e.dataType.isInstanceOf[StringType] =>
+      // Leave a failing input to the cast, so that it fails the query only if evaluated.
+      val input = try Option(e.eval()) catch { case NonFatal(_) => None }
+      input
         .flatMap(s => conv(dt)(s.toString, cast.zoneId))
         .map(Literal(_, dt))
         .getOrElse(cast)
