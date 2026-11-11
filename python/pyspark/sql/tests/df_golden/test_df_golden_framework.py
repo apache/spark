@@ -30,6 +30,7 @@ import unittest
 
 from pyspark.sql.tests.df_golden.df_golden import (
     _compare_case,
+    _golden_diff,
     _regenerate_case,
     _validate_test_file,
     format_double,
@@ -507,6 +508,23 @@ class DFGoldenFrameworkTests(unittest.TestCase):
         for bad in ("a\tb", "a\nb"):
             with self.assertRaisesRegex(AssertionError, "tab or newline"):
                 _format_value(bad, StringType())
+
+    # -- golden diff -----------------------------------------------------
+
+    def test_golden_diff(self):
+        for old, new, expected in [
+            ("same\n", "same\n", ""),
+            ("old\n", "new\n", "@@ -1 +1 @@\n-old\n+new\n"),
+            ("old", "new\n", "@@ -1 +1 @@\n-old\n\\ No newline at end of file\n+new\n"),
+        ]:
+            with self.subTest(old=old, new=new):
+                path = self._write(old)
+                if expected:
+                    rel = "python/pyspark/sql/tests/df_golden/" + os.path.basename(path)
+                    expected = "--- a/{}\n+++ b/{}\n{}".format(rel, rel, expected)
+                self.assertEqual(_golden_diff(path, new), expected)
+                with open(path) as f:
+                    self.assertEqual(f.read(), old)
 
     # -- regeneration ----------------------------------------------------
 

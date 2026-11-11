@@ -36,8 +36,11 @@ wrapper script::
 
     python/pyspark/sql/tests/df_golden/regenerate.sh [--verify]
 
-With ``--verify`` the wrapper re-runs the tests afterwards against the
-regenerated files.
+Every run prints a unified diff between ``=== BEGIN GOLDEN DIFF ===`` and
+``=== END GOLDEN DIFF ===`` markers when the generated file differs. A diff alone does not
+fail a test; only the expected sections are compared. The environment variable still
+controls whether the file is rewritten. With ``--verify`` the wrapper re-runs the tests
+against the regenerated files.
 
 Adding a new test file
 ----------------------
@@ -47,9 +50,13 @@ Drop a new ``<name>.test`` file in this directory and its case scripts under
 regenerate the golden files with the steps above.
 """
 
+import io
 import os
+import tempfile
+from contextlib import redirect_stderr
+from pathlib import Path
 
-from pyspark.sql.tests.df_golden.df_golden import run_golden_test
+from pyspark.sql.tests.df_golden.df_golden import run_golden_test, write_test_file
 from pyspark.testing.connectutils import ReusedConnectTestCase
 
 _THIS_DIR = os.path.dirname(os.path.abspath(__file__))
@@ -134,6 +141,69 @@ class DFGoldenTest(DFGoldenTestBase):
 
 
 _register_tests(DFGoldenTest)
+
+
+class DFGoldenRunnerTests(DFGoldenTestBase):
+    def _golden_file(self, root, schemas):
+        self.test_file_dir = root
+        root = Path(root)
+        cases = []
+        for index, schema in enumerate(schemas):
+            script = root / f"case_{index}.py"
+            # Record each execution to detect accidental reruns during comparison or regeneration.
+            script.write_text(
+                f"with open({str(root / 'executions')!r}, 'a') as f:\n"
+                f"    f.write('{index}\\n')\n"
+                "df = spark.range(1)\n"
+            )
+            case = {"name": f"case {index}", "script": script.name}
+            if schema is not None:
+                case["expected_output_schema"] = schema
+            cases.append(case)
+        path = root / "case.test"
+        write_test_file(path, {}, cases)
+        return path
+
+    def test_passing_case_prints_diff_without_writing(self):
+        with tempfile.TemporaryDirectory() as root:
+            path = self._golden_file(root, ["struct<id:bigint>"])
+            old_content = path.read_text()
+            output = io.StringIO()
+            with self.temp_env({"SPARK_GENERATE_GOLDEN_FILES": None}), redirect_stderr(output):
+                self._run_golden_test(path.name)
+            self.assertIn("=== BEGIN GOLDEN DIFF ===\n", output.getvalue())
+            self.assertIn("+--! expected_result\n", output.getvalue())
+            self.assertEqual(path.read_text(), old_content)
+            self.assertEqual((path.parent / "executions").read_text().splitlines(), ["0"])
+
+    def test_failure_prints_complete_diff_without_rerunning_cases(self):
+        with tempfile.TemporaryDirectory() as root:
+            path = self._golden_file(root, ["wrong first schema", "wrong second schema"])
+            old_content = path.read_text()
+            output = io.StringIO()
+            with self.temp_env({"SPARK_GENERATE_GOLDEN_FILES": None}), redirect_stderr(output):
+                with self.assertRaisesRegex(AssertionError, "mismatch in `expected_output_schema`"):
+                    self._run_golden_test(path.name)
+            self.assertIn("-wrong first schema\n", output.getvalue())
+            self.assertIn("-wrong second schema\n", output.getvalue())
+            self.assertIn("=== END GOLDEN DIFF ===\n", output.getvalue())
+            self.assertEqual(path.read_text(), old_content)
+            self.assertEqual((path.parent / "executions").read_text().splitlines(), ["0", "1"])
+
+    def test_regeneration_prints_diff_and_writes_passing_golden(self):
+        with tempfile.TemporaryDirectory() as root:
+            path = self._golden_file(root, [None])
+            output = io.StringIO()
+            with self.temp_env({"SPARK_GENERATE_GOLDEN_FILES": "1"}), redirect_stderr(output):
+                self._run_golden_test(path.name)
+            self.assertIn("=== BEGIN GOLDEN DIFF ===\n", output.getvalue())
+            self.assertIn("--! expected_result\n", path.read_text())
+            self.assertEqual((path.parent / "executions").read_text().splitlines(), ["0"])
+            output = io.StringIO()
+            with self.temp_env({"SPARK_GENERATE_GOLDEN_FILES": None}), redirect_stderr(output):
+                self._run_golden_test(path.name)
+            self.assertNotIn("=== BEGIN GOLDEN DIFF ===", output.getvalue())
+            self.assertEqual((path.parent / "executions").read_text().splitlines(), ["0", "0"])
 
 
 if __name__ == "__main__":
