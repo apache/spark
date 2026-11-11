@@ -26,7 +26,7 @@ import org.apache.spark.{SparkEnv, SparkException}
 import org.apache.spark.internal.config.Python.PYTHON_UDF_PIPELINED_EXECUTION
 import org.apache.spark.sql.{AnalysisException, DataFrame, IntegratedUDFTestUtils, Row}
 import org.apache.spark.sql.catalyst.InternalRow
-import org.apache.spark.sql.functions.{aggregate, array, avg, col, count, lit, transform}
+import org.apache.spark.sql.functions.{aggregate, array, assert_true, avg, col, count, lit, transform}
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.sql.types.{LongType, StringType, StructType}
@@ -124,6 +124,29 @@ class PythonUDFSuite extends SharedSparkSession {
     val df = spark.range(1)
     val pandasTestUDF = TestGroupedAggPandasUDF(name = udfName)
     assert(df.agg(pandasTestUDF(df("id"))).schema.fieldNames.exists(_.startsWith(udfName)))
+  }
+
+  test("SPARK-60150: filter on a float key above a grouped-agg pandas UDF aggregate") {
+    assume(shouldTestPandasUDFs)
+    val pandasTestUDF = TestGroupedAggPandasUDF(name = "pandas_udf")
+    // The aggregate outputs the raw key -0.0, and the filter pushed below it must read it raw.
+    val grouped = Seq(-0.0d, -0.0d).toDF("x").groupBy("x").agg(pandasTestUDF(col("x")))
+    assert(grouped.where(col("x").cast("string") === "-0.0").collect().length == 1)
+    assert(grouped.where(col("x").cast("string") === "0.0").collect().isEmpty)
+
+    // Column pruning removes an aggregate function after the filter push-down, which keeps the
+    // filter above the aggregate. With count(*) pruned, the aggregate outputs the raw key -0.0,
+    // which the filter keeps.
+    val df = Seq((-0.0d, 1.0d), (-0.0d, 2.0d)).toDF("x", "v")
+    val mixed = df.groupBy("x").agg(pandasTestUDF(col("v")).as("p"), count("*").as("c"))
+      .where(col("x").cast("string") === "-0.0").select("x", "p")
+    assert(mixed.collect().length == 1)
+    // With the pandas UDF pruned, the aggregate is group-only and outputs the normalized key 0.0,
+    // which the filter then reads, pushed below it in normalized form.
+    def keys(key: String): Array[String] = df.groupBy("x").agg(pandasTestUDF(col("v")).as("p"))
+      .where(col("x").cast("string") === key).select(col("x").cast("string")).as[String].collect()
+    assert(keys("0.0").toSeq == Seq("0.0"))
+    assert(keys("-0.0").isEmpty)
   }
 
   test("SPARK-27052: Python UDF in a higher order function lambda") {
@@ -382,6 +405,29 @@ class PythonUDFSuite extends SharedSparkSession {
         }
       } finally {
         SparkEnv.get.conf.remove(PYTHON_UDF_PIPELINED_EXECUTION)
+      }
+    }
+  }
+
+  test("SPARK-60633: a throwable filter condition is not pushed below a Python UDF " +
+    "evaluation ahead of its order") {
+    assume(shouldTestPythonUDFs)
+    val udfs = Seq(pythonTestUDF) ++ (if (shouldTestPandasUDFs) {
+      Seq(TestScalarPandasUDF(name = "pandasUDF", Some(LongType)))
+    } else {
+      Nil
+    })
+    udfs.foreach { testUDF =>
+      // `assert_true(id > 5)` only holds for the rows `f > 5` keeps. Once the UDF is extracted
+      // into its own operator, `f > 5` cannot be pushed below it. The query is built inside the
+      // config loop, so it is planned under that config.
+      def df(): DataFrame = spark.range(0, 10, 1, 1)
+        .select($"id", testUDF($"id") as "f")
+        .where($"f" > 5 && assert_true($"id" > 5).isNull)
+      Seq(true, false).foreach { avoid =>
+        withSQLConf(SQLConf.AVOID_DOUBLE_FILTER_EVAL.key -> avoid.toString) {
+          checkAnswer(df(), (6L until 10L).map(i => Row(i, i)))
+        }
       }
     }
   }

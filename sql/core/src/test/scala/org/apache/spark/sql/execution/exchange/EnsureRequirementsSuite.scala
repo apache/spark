@@ -17,6 +17,8 @@
 
 package org.apache.spark.sql.execution.exchange
 
+import org.apache.logging.log4j.Level
+
 import org.apache.spark.api.python.PythonEvalType
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.catalyst.InternalRow
@@ -32,6 +34,7 @@ import org.apache.spark.sql.catalyst.util.InternalRowComparableWrapper
 import org.apache.spark.sql.connector.catalog.functions._
 import org.apache.spark.sql.execution.{BinaryExecNode, DummySparkPlan, LeafExecNode, SafeForKWayMerge, SortExec, UnaryExecNode}
 import org.apache.spark.sql.execution.SparkPlan
+import org.apache.spark.sql.execution.adaptive.ShuffleQueryStageExec
 import org.apache.spark.sql.execution.datasources.v2.{BatchScanExec, GroupPartitionsExec}
 import org.apache.spark.sql.execution.joins.{ShuffledHashJoinExec, SortMergeAsOfJoinExec, SortMergeJoinExec}
 import org.apache.spark.sql.execution.python.FlatMapCoGroupsInPandasExec
@@ -1142,6 +1145,126 @@ class EnsureRequirementsSuite extends SharedSparkSession {
           assert(right.partitionings.head.isInstanceOf[PartitioningCollection])
         case other => fail(other.toString)
       }
+    }
+  }
+
+  test("SPARK-60618: skip identity alignment only when all leaves are shuffle stages") {
+    val keys = Seq(InternalRow(1), InternalRow(2))
+    val extraKeys = keys :+ InternalRow(3)
+
+    def stage(partitionKeys: Seq[InternalRow]): ShuffleQueryStageExec = {
+      val leaf = DummySparkPlan(outputPartitioning = UnknownPartitioning(partitionKeys.size))
+      val exchange = ShuffleExchangeExec(KeyedPartitioning(Seq(exprA), partitionKeys), leaf)
+      ShuffleQueryStageExec(0, exchange, exchange)
+    }
+
+    def planned(left: SparkPlan, rightKeys: Seq[InternalRow]): SortMergeJoinExec = {
+      val right = DummySparkPlan(outputPartitioning = KeyedPartitioning(Seq(exprB), rightKeys))
+      val join = SortMergeJoinExec(Seq(exprA), Seq(exprB), Inner, None, left, right)
+      EnsureRequirements.apply(join).asInstanceOf[SortMergeJoinExec]
+    }
+
+    withSQLConf(
+        SQLConf.V2_BUCKETING_ENABLED.key -> "true",
+        SQLConf.V2_BUCKETING_PUSH_PART_VALUES_ENABLED.key -> "true",
+        SQLConf.V2_BUCKETING_PARTITION_FILTER_ENABLED.key -> "true",
+        SQLConf.V2_BUCKETING_PARTIALLY_CLUSTERED_DISTRIBUTION_ENABLED.key -> "false") {
+      val identityStage = stage(keys)
+      val identity = planned(identityStage, extraKeys)
+      assert(groupPartitionsNodes(identity.left).isEmpty)
+      assert(identity.left.exists(_ eq identityStage))
+      assert(groupPartitionsNodes(identity.right).size == 1)
+      assert(ValidateRequirements.validate(identity))
+
+      val wrapped = DummyPassthroughUnaryExec(identityStage)
+      val wrappedPlan = planned(wrapped, extraKeys)
+      assert(groupPartitionsNodes(wrappedPlan.left).isEmpty,
+        "an identity alignment over a wrapped shuffle stage is skipped")
+      assert(wrappedPlan.left.exists(_ eq identityStage))
+      assert(ValidateRequirements.validate(wrappedPlan))
+
+      val stagePair = DummyOrderFromLeftBinaryExec(identityStage, stage(keys))
+      val stagesPlan = planned(stagePair, extraKeys)
+      assert(groupPartitionsNodes(stagesPlan.left).isEmpty,
+        "an identity alignment over multiple shuffle-stage leaves is skipped")
+      assert(ValidateRequirements.validate(stagesPlan))
+
+      val mixed = DummyOrderFromLeftBinaryExec(identityStage,
+        DummySparkPlan(outputPartitioning = KeyedPartitioning(Seq(exprA), keys)))
+      val mixedPlan = planned(mixed, extraKeys)
+      assert(groupPartitionsNodes(mixedPlan.left).size == 1,
+        "a child with a non-stage leaf retains its identity alignment")
+      assert(groupPartitionsNodes(mixedPlan.left).head.grouping.isIdentity)
+      assert(ValidateRequirements.validate(mixedPlan))
+
+      val identityExchange = identityStage.plan
+      val exchangePlan = planned(identityExchange, extraKeys)
+      assert(groupPartitionsNodes(exchangePlan.left).size == 1,
+        "an exchange outside a query stage retains its alignment node")
+      assert(groupPartitionsNodes(exchangePlan.left).head.grouping.isIdentity)
+      assert(ValidateRequirements.validate(exchangePlan))
+
+      val pruningStage = stage(extraKeys)
+      val nonIdentity = planned(pruningStage, keys)
+      val grouping = groupPartitionsNodes(nonIdentity.left)
+      assert(grouping.size == 1 && !grouping.head.grouping.isIdentity,
+        "a shuffle stage still needs non-identity alignment")
+      assert(ValidateRequirements.validate(nonIdentity))
+    }
+
+    withSQLConf(
+        SQLConf.V2_BUCKETING_ENABLED.key -> "true",
+        SQLConf.V2_BUCKETING_PUSH_PART_VALUES_ENABLED.key -> "true",
+        SQLConf.V2_BUCKETING_PARTIALLY_CLUSTERED_DISTRIBUTION_ENABLED.key -> "true") {
+      def stageJoin(joinType: JoinType): SortMergeJoinExec = {
+        val rightExchange = ShuffleExchangeExec(KeyedPartitioning(Seq(exprB), extraKeys),
+          DummySparkPlan(outputPartitioning = UnknownPartitioning(extraKeys.size)))
+        SortMergeJoinExec(Seq(exprA), Seq(exprB), joinType, None,
+          stage(keys), ShuffleQueryStageExec(1, rightExchange, rightExchange))
+      }
+      Seq(Inner, LeftOuter).foreach { joinType =>
+        val planned = EnsureRequirements.apply(stageJoin(joinType))
+          .asInstanceOf[SortMergeJoinExec]
+        val left = groupPartitionsNodes(planned.left)
+        val right = groupPartitionsNodes(planned.right)
+        assert(left.size == 1 && right.size == 1,
+          s"$joinType: a chosen replicate side keeps both alignment nodes")
+        assert(left.head.grouping.isIdentity,
+          s"$joinType: the left alignment is the identity")
+        assert(ValidateRequirements.validate(planned))
+      }
+    }
+  }
+
+  test("SPARK-60618: log a push only when an alignment node is retained") {
+    val keys = Seq(InternalRow(1), InternalRow(2))
+    def stage(expr: Attribute, id: Int, values: Seq[InternalRow]): ShuffleQueryStageExec = {
+      val leaf = DummySparkPlan(outputPartitioning = UnknownPartitioning(values.size))
+      val exchange = ShuffleExchangeExec(KeyedPartitioning(Seq(expr), values), leaf)
+      ShuffleQueryStageExec(id, exchange, exchange)
+    }
+    def join(rightKeys: Seq[InternalRow]): SortMergeJoinExec =
+      SortMergeJoinExec(Seq(exprA), Seq(exprB), FullOuter, None,
+        stage(exprA, 0, keys), stage(exprB, 1, rightKeys))
+
+    withSQLConf(
+        SQLConf.V2_BUCKETING_ENABLED.key -> "true",
+        SQLConf.V2_BUCKETING_PUSH_PART_VALUES_ENABLED.key -> "true",
+        SQLConf.V2_BUCKETING_PARTIALLY_CLUSTERED_DISTRIBUTION_ENABLED.key -> "true") {
+      def check(rightKeys: Seq[InternalRow], expectPush: Boolean): Unit = {
+        val appender = new LogAppender("storage partition alignment")
+        withLogAppender(appender, loggerNames = Seq(classOf[EnsureRequirements].getName),
+            level = Some(Level.INFO)) {
+          val planned = EnsureRequirements.apply(join(rightKeys))
+          assert(ValidateRequirements.validate(planned))
+          assert(groupPartitionsNodes(planned).nonEmpty == expectPush)
+        }
+        val pushLogged = appender.loggingEvents.exists(_.getMessage.getFormattedMessage
+          .contains("Pushing common partition values for storage-partitioned join"))
+        assert(pushLogged == expectPush)
+      }
+      check(keys, expectPush = false)
+      check(keys :+ InternalRow(3), expectPush = true)
     }
   }
 

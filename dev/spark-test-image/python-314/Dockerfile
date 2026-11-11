@@ -42,7 +42,7 @@ RUN apt-get update && apt-get install -y \
     liblapack-dev \
     libopenblas-dev \
     libssl-dev \
-    openjdk-17-jdk-headless \
+    openjdk-21-jdk-headless \
     pkg-config \
     tzdata \
     software-properties-common \

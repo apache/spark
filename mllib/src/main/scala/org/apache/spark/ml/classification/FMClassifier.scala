@@ -25,6 +25,7 @@ import org.apache.spark.annotation.Since
 import org.apache.spark.internal.Logging
 import org.apache.spark.ml.linalg._
 import org.apache.spark.ml.param._
+import org.apache.spark.ml.param.shared.HasIntermediateStorageLevel
 import org.apache.spark.ml.regression.{FactorizationMachines, FactorizationMachinesParams}
 import org.apache.spark.ml.regression.FactorizationMachines._
 import org.apache.spark.ml.util._
@@ -38,7 +39,7 @@ import org.apache.spark.storage.StorageLevel
  * Params for FMClassifier.
  */
 private[classification] trait FMClassifierParams extends ProbabilisticClassifierParams
-  with FactorizationMachinesParams {
+  with FactorizationMachinesParams with HasIntermediateStorageLevel {
 }
 
 // scalastyle:off line.size.limit
@@ -179,6 +180,10 @@ class FMClassifier @Since("3.0.0") (
   @Since("3.0.0")
   def setSeed(value: Long): this.type = set(seed, value)
 
+  /** @group expertSetParam */
+  @Since("4.4.0")
+  def setIntermediateStorageLevel(value: String): this.type = set(intermediateStorageLevel, value)
+
   override protected def train(
       dataset: Dataset[_]): FMClassificationModel = instrumented { instr =>
     val numClasses = 2
@@ -191,7 +196,8 @@ class FMClassifier @Since("3.0.0") (
     instr.logPipelineStage(this)
     instr.logDataset(dataset)
     instr.logParams(this, factorSize, fitIntercept, fitLinear, regParam,
-      miniBatchFraction, initStd, maxIter, stepSize, tol, solver, thresholds)
+      miniBatchFraction, initStd, maxIter, stepSize, tol, solver, thresholds,
+      intermediateStorageLevel)
     instr.logNumClasses(numClasses)
 
     val numFeatures = getNumFeatures(dataset, $(featuresCol))
@@ -205,7 +211,9 @@ class FMClassifier @Since("3.0.0") (
     ).rdd.map { case Row(l: Double, v: Vector) => (l, OldVectors.fromML(v))
     }.setName("training instances")
 
-    if (handlePersistence) data.persist(StorageLevel.MEMORY_AND_DISK)
+    if (handlePersistence) {
+      data.persist(StorageLevel.fromString($(intermediateStorageLevel)))
+    }
 
     val (coefficients, objectiveHistory) = trainImpl(data, numFeatures, LogisticLoss)
 

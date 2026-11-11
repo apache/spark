@@ -180,7 +180,7 @@ class SparkSqlParser extends AbstractSqlParser {
       currentOrigin.copy(
         sqlText = Some(paramSubstituted),
         startIndex = Some(0),
-        stopIndex = Some(paramSubstituted.length - 1),
+        stopIndex = Some(paramSubstituted.codePointCount(0, paramSubstituted.length) - 1),
         positionMapper = Some(positionMapper)
       )
     } else {

@@ -1743,6 +1743,66 @@ class DataFrameSetOperationsSuite extends SharedSparkSession with AdaptiveSparkP
     }
   }
 
+  test("SPARK-61356: union outputPartitioning when a child output repeats an ExprId") {
+    // `SELECT p, p, w` leaves two output positions with one ExprId. The analyzer normally replaces
+    // a repeated output column with a fresh ExprId (`DeduplicateUnionChildOutput`); these confs
+    // keep it so the physical union sees it.
+    withSQLConf(
+        SQLConf.UNION_IS_RESOLVED_WHEN_DUPLICATES_PER_CHILD_RESOLVED.key -> "false",
+        SQLConf.ENFORCE_TYPE_COERCION_BEFORE_UNION_DEDUPLICATION.key -> "false",
+        SQLConf.ANALYZER_DUAL_RUN_LEGACY_AND_SINGLE_PASS_RESOLVER.key -> "false",
+        SQLConf.ADAPTIVE_EXECUTION_ENABLED.key -> "false",
+        SQLConf.SHUFFLE_PARTITIONS.key -> "5",
+        "spark.sql.catalog.testcat" -> classOf[InMemoryCatalog].getName) {
+      def repeated: DataFrame = spark.range(10).selectExpr("id p", "id w").select($"p", $"p", $"w")
+
+      // A later child repeats the ExprId. `r` is a union, so for `p2`'s rows its second position
+      // holds `r` while its first holds `q`, and its shuffle hashes the first one. Reading that
+      // partitioning as one on `c`, the second position, would let the aggregate skip its exchange
+      // and split a group over partitions.
+      val p1 = repeated
+      val p2 = spark.range(10, 110).selectExpr("id q", "id % 10 r", "id w2")
+      val r = p1.union(p2).repartition(p1.col("p"))
+      val x = spark.range(10).selectExpr("id x", "id c", "id u").repartition($"c")
+      // All three columns are referenced, so `ColumnPruning` adds no `Project` below the union.
+      val laterChild = x.union(r).groupBy($"c").agg(sum($"x"), sum($"u"))
+
+      // The first child repeats the ExprId, so this union's own output does. Its second child is
+      // hashed by `r`, the second position, while `p` is read from the first one.
+      val c0 = repeated
+      val c1 = spark.range(100).selectExpr("id % 10 q", "id r", "id w2").repartition($"r")
+      val firstChild = c0.repartition(c0.col("p")).union(c1).groupBy(c0.col("p")).agg(sum($"w"))
+
+      // Keyed legs are merged rather than passed through. The first leg repeats its key column,
+      // and the later leg is keyed by `r`, the second position.
+      sql("CREATE TABLE testcat.ns.k1 (id bigint, data string) PARTITIONED BY (id)")
+      sql("INSERT INTO testcat.ns.k1 VALUES (1, 'a1'), (2, 'a2')")
+      sql("CREATE TABLE testcat.ns.k2 (q bigint, r bigint, w string) PARTITIONED BY (r)")
+      sql("INSERT INTO testcat.ns.k2 VALUES (1, 5, 'b'), (1, 6, 'c'), (2, 5, 'd')")
+      val k1 = spark.table("testcat.ns.k1")
+      val keyed = k1.select($"id", $"id", $"data").union(spark.table("testcat.ns.k2"))
+        .groupBy(k1.col("id")).agg(count($"data"))
+
+      Seq(
+        laterChild -> (0 until 10).map(k => Row(k, 12 * k + 550, 12 * k + 550)),
+        firstChild -> (0 until 10).map(k => Row(k, 11 * k + 450)),
+        keyed -> Seq(Row(1, 3), Row(2, 2))
+      ).foreach { case (df, expected) =>
+        val unionExec = df.queryExecution.executedPlan.collect { case u: UnionExec => u }.head
+        val partitionings = unionExec.children.map(_.outputPartitioning)
+        // The analyzer can drop this shape, so assert it survived rather than letting the test
+        // go vacuous: children partitioned the same way, one of them repeating an ExprId.
+        assert((partitionings.forall(_.isInstanceOf[HashPartitioning]) ||
+          partitionings.forall(_.isInstanceOf[KeyedPartitioning])) &&
+          unionExec.children.exists(c => c.output.map(_.exprId).distinct.size < c.output.size),
+          s"expected hash- or key-partitioned children, one repeating an ExprId:\n$unionExec")
+        assert(unionExec.outputPartitioning.isInstanceOf[UnknownPartitioning],
+          s"expected no pass-through but got ${unionExec.outputPartitioning}")
+        checkAnswer(df, expected)
+      }
+    }
+  }
+
   test("SPARK-52921: union partitioning - range partitioning") {
     val df1 = Seq((1, 2, 4), (1, 3, 5), (2, 2, 3), (2, 4, 5)).toDF("a", "b", "c")
     val df2 = Seq((4, 1, 5), (2, 4, 6), (1, 4, 2), (3, 5, 1)).toDF("d", "e", "f")

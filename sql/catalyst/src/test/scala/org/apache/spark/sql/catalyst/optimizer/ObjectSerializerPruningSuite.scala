@@ -74,6 +74,17 @@ class ObjectSerializerPruningSuite extends PlanTest {
     }
   }
 
+  test("SPARK-60979: Prune a serializer by the exact field names") {
+    withSQLConf(SQLConf.CASE_SENSITIVE.key -> "false") {
+      val rowEncoder = ExpressionEncoder(
+        new StructType().add("s", StructType.fromDDL("a string, A string, b int")))
+      val prunedType = StructType.fromDDL("A string")
+      val pruned = ObjectSerializerPruning.pruneSerializer(
+        rowEncoder.namedExpressions.head, prunedType)
+      assert(pruned.dataType === prunedType)
+    }
+  }
+
   test("SPARK-26619: Prune the unused serializers from SerializeFromObject") {
     val testRelation = LocalRelation($"_1".int, $"_2".int)
     val serializerObject = CatalystSerde.serialize[(Int, Int)](

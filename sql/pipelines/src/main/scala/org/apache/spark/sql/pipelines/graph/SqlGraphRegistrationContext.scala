@@ -910,17 +910,21 @@ object SqlGraphRegistrationContext {
       // The actual start position of the SQL query in this sqlText string. Within sqlText it's
       // possible that whitespace or comments precede the start of the query, and is accounted for
       // in the parsed logical plan's origin.
-      val sqlStatementStartIdxInString = logicalPlanFromSqlQuery.origin.startIndex.getOrElse(
-        throw new SparkRuntimeException(
-          errorClass = "INTERNAL_ERROR",
-          messageParameters = Map(
-            "message" ->
-              s"""Unable to retrieve start index of logical plan parsed by the following
-                 |SQL text:
-                 |
-                 |$rawSqlStatementText""".stripMargin)
+      val sqlStatementStartIdxInString = {
+        val startCp = logicalPlanFromSqlQuery.origin.startIndex.getOrElse(
+          throw new SparkRuntimeException(
+            errorClass = "INTERNAL_ERROR",
+            messageParameters = Map(
+              "message" ->
+                s"""Unable to retrieve start index of logical plan parsed by the following
+                   |SQL text:
+                   |
+                   |$rawSqlStatementText""".stripMargin)
+          )
         )
-      )
+        rawSqlStatementText.offsetByCodePoints(
+          0, math.min(startCp, rawSqlStatementText.codePointCount(0, rawSqlStatementText.length)))
+      }
 
       // The actual start position of the SQL query in the entire file.
       val sqlStatementStartIndexInFile = currentCharIndexInFile + sqlStatementStartIdxInString

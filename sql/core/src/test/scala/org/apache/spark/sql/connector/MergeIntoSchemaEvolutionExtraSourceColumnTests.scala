@@ -18,6 +18,7 @@
 package org.apache.spark.sql.connector
 
 import org.apache.spark.sql.Row
+import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
 
 /**
@@ -475,6 +476,65 @@ trait MergeIntoSchemaEvolutionExtraSourceColumnTests extends MergeIntoSchemaEvol
       ))
     )
   }
+
+  // The target exposes metadata columns `index` and `_partition`
+  testEvolution("SPARK-60721: source has extra column named like a target metadata column" +
+    " with set all columns")(
+    targetData = Seq(
+      (1, 100, "hr"),
+      (2, 200, "software")
+    ).toDF("pk", "salary", "dep"),
+    sourceData = Seq(
+      (1, 150, "hr", 10),
+      (3, 350, "hr", 30)
+    ).toDF("pk", "salary", "dep", "index"),
+    clauses = Seq(updateAll(), insertAll()),
+    expectErrorContains = "Cannot assign to metadata column 'index'",
+    expectedWithoutEvolution = Seq(
+      (1, 150, "hr"),
+      (2, 200, "software"),
+      (3, 350, "hr")).toDF("pk", "salary", "dep")
+  )
+
+  testEvolution("SPARK-60721: source has extra column named like a target metadata column" +
+    " with insert all")(
+    targetData = Seq(
+      (1, 100, "hr"),
+      (2, 200, "software")
+    ).toDF("pk", "salary", "dep"),
+    sourceData = Seq(
+      (1, 150, "hr", "p1"),
+      (3, 350, "hr", "p3")
+    ).toDF("pk", "salary", "dep", "_partition"),
+    clauses = Seq(insertAll()),
+    expectErrorContains = "Cannot assign to metadata column '_partition'",
+    expectedWithoutEvolution = Seq(
+      (1, 100, "hr"),
+      (2, 200, "software"),
+      (3, 350, "hr")).toDF("pk", "salary", "dep")
+  )
+
+  testEvolution("SPARK-60721: source has extra column named like a target metadata column" +
+    " with set all columns in legacy mode")(
+    targetData = Seq(
+      (1, 100, "hr"),
+      (2, 200, "software")
+    ).toDF("pk", "salary", "dep"),
+    sourceData = Seq(
+      (1, 150, "hr", 10),
+      (3, 350, "hr", 30)
+    ).toDF("pk", "salary", "dep", "index"),
+    clauses = Seq(updateAll(), insertAll()),
+    expected = Seq(
+      (1, 150, "hr"),
+      (2, 200, "software"),
+      (3, 350, "hr")).toDF("pk", "salary", "dep"),
+    expectedWithoutEvolution = Seq(
+      (1, 150, "hr"),
+      (2, 200, "software"),
+      (3, 350, "hr")).toDF("pk", "salary", "dep"),
+    confs = Seq(SQLConf.LEGACY_IGNORE_METADATA_COLUMN_ASSIGNMENTS.key -> "true")
+  )
 
   // When assigning s.bonus to existing t.salary, bonus column should NOT be added to schema
   testEvolution("source has extra column -" +
