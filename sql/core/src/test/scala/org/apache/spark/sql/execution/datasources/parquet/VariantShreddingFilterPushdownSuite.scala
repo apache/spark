@@ -433,6 +433,44 @@ class VariantShreddingFilterPushdownSuite extends QueryTest with ParquetTest
     }
   }
 
+  test("SPARK-60322: a comparison with a zero keeps both zeros of a shredded field") {
+    // Spark treats 0.0 and -0.0 as equal, but Parquet orders -0.0 before 0.0, and its dictionaries
+    // tell them apart. Each file holds zeros of one sign only, so a predicate pushed down to the
+    // shredded leaf with the other zero must not skip it.
+    Seq("float", "double").foreach { t =>
+      withTempDir { dir =>
+        val path = dir.getAbsolutePath
+        Seq(0 -> "0.0D", 100 -> "-0.0D", 200 -> "1.0D").foreach { case (start, value) =>
+          withSQLConf(writeConf(s"a $t", annotate = true): _*) {
+            spark.range(start, start + 100, 1, 1)
+              .selectExpr("id", s"to_variant_object(named_struct('a', CAST($value AS $t))) AS v")
+              .write.mode("append").parquet(path)
+          }
+        }
+        def read: DataFrame =
+          spark.read.parquet(path).selectExpr("id", s"variant_get(v, '$$.a', '$t') AS x")
+        val expected = spark.range(0, 300)
+          .selectExpr("id", s"CAST(CASE WHEN id < 100 THEN 0.0D WHEN id < 200 THEN -0.0D " +
+            s"ELSE 1.0D END AS $t) AS x")
+        Seq("0.0D", "-0.0D").foreach { zero =>
+          val z = s"CAST($zero AS $t)"
+          val many = (1 to 12).map(i => s"CAST($i.5D AS $t)").mkString(", ")
+          val predicates = Seq(s"x = $z", s"x <=> $z", s"x IN ($z, CAST(5.0D AS $t))",
+            s"x IN ($z, $many)", s"x < $z", s"x <= $z", s"x > $z", s"x >= $z")
+          forEachReader { (dsv1, vectorized) =>
+            predicates.foreach { p =>
+              checkAnswer(read.where(p), expected.where(p))
+            }
+            if (dsv1 && vectorized) {
+              // The predicate is pushed down: it skips the file of 1.0 only.
+              assert(countRowGroupsRead(read.where(s"x = $z")) == 2)
+            }
+          }
+        }
+      }
+    }
+  }
+
   // Walk an exception's cause chain for a Spark error condition (message substring).
   private def findCause(e: Throwable, condition: String): Boolean = {
     var cur: Throwable = e
