@@ -615,6 +615,24 @@ class UDFSuite extends SharedSparkSession {
       Row(true))
   }
 
+  test("SPARK-60875: UDF null handling runs in a subquery whose recursive CTE reads an outer CTE") {
+    spark.udf.register("f", (x: Long) => x + 1)
+    val x = "WITH x AS (SELECT 1L AS v)"
+    val t = "WITH RECURSIVE t(n) AS (SELECT 1L UNION ALL SELECT n + v FROM t, x WHERE n < 3)"
+    checkAnswer(
+      sql(s"""$x SELECT r.id FROM range(3) r
+             |WHERE EXISTS ($t SELECT 1 AS c FROM t WHERE f(CAST(NULL AS BIGINT)) IS NULL)
+             |""".stripMargin),
+      Seq(Row(0L), Row(1L), Row(2L)))
+    checkAnswer(
+      sql(s"$x SELECT ($t SELECT max(f(CAST(NULL AS BIGINT))) AS m FROM t)"),
+      Row(null))
+    checkAnswer(
+      sql(s"""$x SELECT count(*), count(l.c) FROM range(3) r,
+             |LATERAL ($t SELECT f(CAST(NULL AS BIGINT)) AS c FROM t) l""".stripMargin),
+      Row(9L, 0L))
+  }
+
   test("SPARK-60875: UDF NULLs that a recursion reads from a CTE through a subquery") {
     spark.udf.register("f", (x: Long) => x + 1)
     def nullsPerLevel(read: String): DataFrame = sql(

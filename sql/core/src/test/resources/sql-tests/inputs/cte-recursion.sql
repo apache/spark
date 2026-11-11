@@ -896,26 +896,24 @@ WITH RECURSIVE t1(n, m, s) AS (
 )
 SELECT * FROM t1;
 
--- A view created with the previous types still reads when the recursion copies appended arrays
--- and ANSI index reads, which never hold a NULL
-SET spark.sql.legacy.recursiveCTE.useAnchorNestedNullability=true;
-
-CREATE VIEW cte_recursion_copies AS
+-- A view keeps the negative-index setting that array_append was analyzed with, so a session that
+-- sets it does not pad a NULL that the view's types do not allow
+CREATE VIEW cte_recursion_append AS
 WITH RECURSIVE t1 AS (
-    SELECT 1 AS n, ARRAY(1) AS path, ARRAY(1) AS prev, ARRAY(1) AS head, ARRAY(1) AS prev_head,
-        ARRAY(1) AS ins, ARRAY(1) AS prev_ins, ARRAY(1) AS el, ARRAY(1) AS prev_el
+    SELECT 1 AS n, ARRAY(1) AS path, ARRAY(1) AS prev
     UNION ALL
-    SELECT n + 1, array_prepend(array_append(path, n + 1), 0), path, ARRAY(path[0]), head,
-        array_insert(array_insert(ins, 1, 0), -1, n), ins, ARRAY(element_at(path, 1)), el
+    SELECT n + 1, IF(n = 1, array_append(filter(path, x -> false), 7), path), path
     FROM t1 WHERE n < 3
 )
 SELECT * FROM t1;
 
-SET spark.sql.legacy.recursiveCTE.useAnchorNestedNullability=false;
+SET spark.sql.legacy.negativeIndexInArrayInsert=true;
 
-SELECT * FROM cte_recursion_copies;
+SELECT n, to_json(prev), EXISTS(prev, x -> x IS NULL) FROM cte_recursion_append;
 
-DROP VIEW cte_recursion_copies;
+SET spark.sql.legacy.negativeIndexInArrayInsert=false;
+
+DROP VIEW cte_recursion_append;
 
 -- With the legacy negative index, array_append can pad a NULL, which the next level reads back
 SET spark.sql.legacy.negativeIndexInArrayInsert=true;

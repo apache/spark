@@ -2414,21 +2414,11 @@ struct<n:int,m:bigint,s:struct<A:int>>
 
 
 -- !query
-SET spark.sql.legacy.recursiveCTE.useAnchorNestedNullability=true
--- !query schema
-struct<key:string,value:string>
--- !query output
-spark.sql.legacy.recursiveCTE.useAnchorNestedNullability	true
-
-
--- !query
-CREATE VIEW cte_recursion_copies AS
+CREATE VIEW cte_recursion_append AS
 WITH RECURSIVE t1 AS (
-    SELECT 1 AS n, ARRAY(1) AS path, ARRAY(1) AS prev, ARRAY(1) AS head, ARRAY(1) AS prev_head,
-        ARRAY(1) AS ins, ARRAY(1) AS prev_ins, ARRAY(1) AS el, ARRAY(1) AS prev_el
+    SELECT 1 AS n, ARRAY(1) AS path, ARRAY(1) AS prev
     UNION ALL
-    SELECT n + 1, array_prepend(array_append(path, n + 1), 0), path, ARRAY(path[0]), head,
-        array_insert(array_insert(ins, 1, 0), -1, n), ins, ARRAY(element_at(path, 1)), el
+    SELECT n + 1, IF(n = 1, array_append(filter(path, x -> false), 7), path), path
     FROM t1 WHERE n < 3
 )
 SELECT * FROM t1
@@ -2439,25 +2429,33 @@ struct<>
 
 
 -- !query
-SET spark.sql.legacy.recursiveCTE.useAnchorNestedNullability=false
+SET spark.sql.legacy.negativeIndexInArrayInsert=true
 -- !query schema
 struct<key:string,value:string>
 -- !query output
-spark.sql.legacy.recursiveCTE.useAnchorNestedNullability	false
+spark.sql.legacy.negativeIndexInArrayInsert	true
 
 
 -- !query
-SELECT * FROM cte_recursion_copies
+SELECT n, to_json(prev), EXISTS(prev, x -> x IS NULL) FROM cte_recursion_append
 -- !query schema
-struct<n:int,path:array<int>,prev:array<int>,head:array<int>,prev_head:array<int>,ins:array<int>,prev_ins:array<int>,el:array<int>,prev_el:array<int>>
+struct<n:int,to_json(prev):string,exists(prev, lambdafunction((namedlambdavariable() IS NULL), namedlambdavariable())):boolean>
 -- !query output
-1	[1]	[1]	[1]	[1]	[1]	[1]	[1]	[1]
-2	[0,1,2]	[1]	[1]	[1]	[0,1,1]	[1]	[1]	[1]
-3	[0,0,1,2,3]	[0,1,2]	[0]	[1]	[0,0,1,1,2]	[0,1,1]	[0]	[1]
+1	[1]	false
+2	[1]	false
+3	[7]	false
 
 
 -- !query
-DROP VIEW cte_recursion_copies
+SET spark.sql.legacy.negativeIndexInArrayInsert=false
+-- !query schema
+struct<key:string,value:string>
+-- !query output
+spark.sql.legacy.negativeIndexInArrayInsert	false
+
+
+-- !query
+DROP VIEW cte_recursion_append
 -- !query schema
 struct<>
 -- !query output

@@ -45,6 +45,10 @@ object ResolveWithCTE extends Rule[LogicalPlan] {
   // The anchor and recursion a UnionLoop's self-reference types were last found stable for.
   private val VERIFIED_CHILDREN = TreeNodeTag[(LogicalPlan, LogicalPlan)]("unionLoopVerified")
 
+  // Marks a UnionLoop whose definition a subquery's own analysis held back until an enclosing
+  // analysis verifies it.
+  private val HELD_BACK = TreeNodeTag[Unit]("unionLoopHeldBack")
+
   override def apply(plan: LogicalPlan): LogicalPlan = {
     if (plan.containsAllPatterns(CTE)) {
       // A helper map definitionID->Definition. Used for non-recursive CTE definitions only, either
@@ -59,9 +63,11 @@ object ResolveWithCTE extends Rule[LogicalPlan] {
     }
   }
 
+  // `inSubquery` is set for a subquery expression's plan, which its own analysis also resolves.
   private def resolveWithCTE(
       plan: LogicalPlan,
-      cteDefMap: mutable.HashMap[Long, CTERelationDef]): LogicalPlan = {
+      cteDefMap: mutable.HashMap[Long, CTERelationDef],
+      inSubquery: Boolean = false): LogicalPlan = {
     plan.resolveOperatorsDownWithPruning(_.containsAllPatterns(CTE)) {
       case withCTE @ WithCTE(_, cteDefs) =>
         val newCTEDefs = cteDefs.map(widenSelfReference(_, cteDefMap, cteDefs)).map {
@@ -70,7 +76,7 @@ object ResolveWithCTE extends Rule[LogicalPlan] {
           // at all. In both cases we need to put it in the map in case it is resolved.
           // Second case is performing the substitution of recursive CTERelationRefs.
           case cteDef if !cteDef.hasSelfReferenceAsCTERef =>
-            if (cteDef.resolved && !awaitsEnclosingCheck(cteDef)) {
+            if (cteDef.resolved && publishable(cteDef, inSubquery)) {
               cteDefMap.put(cteDef.id, cteDef)
             }
             cteDef
@@ -320,7 +326,7 @@ object ResolveWithCTE extends Rule[LogicalPlan] {
       case other =>
         other.transformExpressionsWithPruning(_.containsAllPatterns(PLAN_EXPRESSION, CTE)) {
           case e: SubqueryExpression =>
-            val newPlan = resolveWithCTE(e.plan, cteDefMap)
+            val newPlan = resolveWithCTE(e.plan, cteDefMap, inSubquery = true)
             // A recursive CTE that a subquery's own analysis left unpublished can complete the plan
             // here, where ResolveSubquery no longer records its outer references.
             if (!e.plan.resolved && newPlan.resolved) {
@@ -446,13 +452,25 @@ object ResolveWithCTE extends Rule[LogicalPlan] {
     }
   }
 
-  // Whether a subquery's own analysis left the recursive definition's loop unverified, because its
-  // prediction missed a definition of the enclosing query. Its references then wait for the
-  // enclosing analysis to verify or rebuild it, so they bind to its final output.
-  private def awaitsEnclosingCheck(cteDef: CTERelationDef): Boolean =
-    AnalysisContext.get.outerPlan.isDefined && hasOwnLoop(cteDef) &&
+  // Whether a resolved definition can be published for its references to bind to. A subquery's own
+  // analysis holds back a recursive definition whose loop it could not verify, because its
+  // prediction missed a definition of the enclosing query. The enclosing analysis then verifies or
+  // rebuilds the loop but leaves publication to the subquery's analysis, which completes the plan
+  // on its next run, so that its references bind to the final output and its later batches run.
+  private def publishable(cteDef: CTERelationDef, inSubquery: Boolean): Boolean = {
+    val loop = if (hasOwnLoop(cteDef)) {
       cteDef.child.collectFirst { case l: UnionLoop if l.id == cteDef.id => l }
-        .exists(!isVerified(_))
+    } else {
+      None
+    }
+    loop match {
+      case Some(l) if inSubquery => l.getTagValue(HELD_BACK).isEmpty
+      case Some(l) if AnalysisContext.get.outerPlan.isDefined && !isVerified(l) =>
+        l.setTagValue(HELD_BACK, ())
+        false
+      case _ => true
+    }
+  }
 
   // Whether the definition's self-reference was rewritten into a loop that the widening checks.
   private def hasOwnLoop(cteDef: CTERelationDef): Boolean =
@@ -584,14 +602,12 @@ object ResolveWithCTE extends Rule[LogicalPlan] {
       case _: CreateArray | GetArrayStructFields(_: CreateArray, _, _, _, _) => true
       case _ => false
     }
-    def legacyNegativeIndex(insert: Expression): Boolean =
-      insert.asInstanceOf[ArrayInsert].legacyNegativeIndex
     // A non-foldable stand-in for a constant index, so the read's nullability comes from the array.
     def index(ordinal: Expression): Expression =
       AttributeReference("index", ordinal.dataType, nullable = false)()
     plan.transformUpWithSubqueries { case p =>
       p.transformExpressionsUp {
-        case a @ ArrayAppend(array, item) if !legacyNegativeIndex(a.replacement) =>
+        case a @ ArrayAppend(array, item, false) =>
           concat(array, CreateArray(Seq(item))).getOrElse(a)
         case a @ ArrayPrepend(array, item) =>
           concat(CreateArray(Seq(item)), array).getOrElse(a)

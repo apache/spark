@@ -2464,29 +2464,19 @@ WithCTE
 
 
 -- !query
-SET spark.sql.legacy.recursiveCTE.useAnchorNestedNullability=true
--- !query analysis
-SetCommand (spark.sql.legacy.recursiveCTE.useAnchorNestedNullability,Some(true))
-
-
--- !query
-CREATE VIEW cte_recursion_copies AS
+CREATE VIEW cte_recursion_append AS
 WITH RECURSIVE t1 AS (
-    SELECT 1 AS n, ARRAY(1) AS path, ARRAY(1) AS prev, ARRAY(1) AS head, ARRAY(1) AS prev_head,
-        ARRAY(1) AS ins, ARRAY(1) AS prev_ins, ARRAY(1) AS el, ARRAY(1) AS prev_el
+    SELECT 1 AS n, ARRAY(1) AS path, ARRAY(1) AS prev
     UNION ALL
-    SELECT n + 1, array_prepend(array_append(path, n + 1), 0), path, ARRAY(path[0]), head,
-        array_insert(array_insert(ins, 1, 0), -1, n), ins, ARRAY(element_at(path, 1)), el
+    SELECT n + 1, IF(n = 1, array_append(filter(path, x -> false), 7), path), path
     FROM t1 WHERE n < 3
 )
 SELECT * FROM t1
 -- !query analysis
-CreateViewCommand `spark_catalog`.`default`.`cte_recursion_copies`, WITH RECURSIVE t1 AS (
-    SELECT 1 AS n, ARRAY(1) AS path, ARRAY(1) AS prev, ARRAY(1) AS head, ARRAY(1) AS prev_head,
-        ARRAY(1) AS ins, ARRAY(1) AS prev_ins, ARRAY(1) AS el, ARRAY(1) AS prev_el
+CreateViewCommand `spark_catalog`.`default`.`cte_recursion_append`, WITH RECURSIVE t1 AS (
+    SELECT 1 AS n, ARRAY(1) AS path, ARRAY(1) AS prev
     UNION ALL
-    SELECT n + 1, array_prepend(array_append(path, n + 1), 0), path, ARRAY(path[0]), head,
-        array_insert(array_insert(ins, 1, 0), -1, n), ins, ARRAY(element_at(path, 1)), el
+    SELECT n + 1, IF(n = 1, array_append(filter(path, x -> false), 7), path), path
     FROM t1 WHERE n < 3
 )
 SELECT * FROM t1, false, false, PersistedView, COMPENSATION, true
@@ -2494,49 +2484,55 @@ SELECT * FROM t1, false, false, PersistedView, COMPENSATION, true
       :- CTERelationDef xxxx, false
       :  +- SubqueryAlias t1
       :     +- UnionLoop xxxx
-      :        :- Project [1 AS n#x, array(1) AS path#x, array(1) AS prev#x, array(1) AS head#x, array(1) AS prev_head#x, array(1) AS ins#x, array(1) AS prev_ins#x, array(1) AS el#x, array(1) AS prev_el#x]
+      :        :- Project [1 AS n#x, array(1) AS path#x, array(1) AS prev#x]
       :        :  +- OneRowRelation
-      :        +- Project [(n#x + 1) AS (n + 1)#x, array_prepend(array_append(path#x, (n#x + 1)), 0) AS array_prepend(array_append(path, (n + 1)), 0)#x, path#x, array(path#x[0]) AS array(path[0])#x, head#x, array_insert(array_insert(ins#x, 1, 0, false), -1, n#x, false) AS array_insert(array_insert(ins, 1, 0), -1, n)#x, ins#x, array(element_at(path#x, 1, None, true)) AS array(element_at(path, 1))#x, el#x]
+      :        +- Project [(n#x + 1) AS (n + 1)#x, if ((n#x = 1)) array_append(filter(path#x, lambdafunction(false, lambda x#x, false)), 7) else path#x AS (IF((n = 1), array_append(filter(path, lambdafunction(false, namedlambdavariable())), 7), path))#x, path#x]
       :           +- Filter (n#x < 3)
       :              +- SubqueryAlias t1
-      :                 +- UnionLoopRef xxxx, [n#x, path#x, prev#x, head#x, prev_head#x, ins#x, prev_ins#x, el#x, prev_el#x], false
-      +- Project [n#x, path#x, prev#x, head#x, prev_head#x, ins#x, prev_ins#x, el#x, prev_el#x]
+      :                 +- UnionLoopRef xxxx, [n#x, path#x, prev#x], false
+      +- Project [n#x, path#x, prev#x]
          +- SubqueryAlias t1
-            +- CTERelationRef xxxx, true, [n#x, path#x, prev#x, head#x, prev_head#x, ins#x, prev_ins#x, el#x, prev_el#x], false, false
+            +- CTERelationRef xxxx, true, [n#x, path#x, prev#x], false, false
 
 
 -- !query
-SET spark.sql.legacy.recursiveCTE.useAnchorNestedNullability=false
+SET spark.sql.legacy.negativeIndexInArrayInsert=true
 -- !query analysis
-SetCommand (spark.sql.legacy.recursiveCTE.useAnchorNestedNullability,Some(false))
+SetCommand (spark.sql.legacy.negativeIndexInArrayInsert,Some(true))
 
 
 -- !query
-SELECT * FROM cte_recursion_copies
+SELECT n, to_json(prev), EXISTS(prev, x -> x IS NULL) FROM cte_recursion_append
 -- !query analysis
-Project [n#x, path#x, prev#x, head#x, prev_head#x, ins#x, prev_ins#x, el#x, prev_el#x]
-+- SubqueryAlias spark_catalog.default.cte_recursion_copies
-   +- View (`spark_catalog`.`default`.`cte_recursion_copies`, [n#x, path#x, prev#x, head#x, prev_head#x, ins#x, prev_ins#x, el#x, prev_el#x])
-      +- Project [cast(n#x as int) AS n#x, cast(path#x as array<int>) AS path#x, cast(prev#x as array<int>) AS prev#x, cast(head#x as array<int>) AS head#x, cast(prev_head#x as array<int>) AS prev_head#x, cast(ins#x as array<int>) AS ins#x, cast(prev_ins#x as array<int>) AS prev_ins#x, cast(el#x as array<int>) AS el#x, cast(prev_el#x as array<int>) AS prev_el#x]
+Project [n#x, to_json(prev#x, Some(America/Los_Angeles)) AS to_json(prev)#x, exists(prev#x, lambdafunction(isnull(lambda x#x), lambda x#x, false)) AS exists(prev, lambdafunction((namedlambdavariable() IS NULL), namedlambdavariable()))#x]
++- SubqueryAlias spark_catalog.default.cte_recursion_append
+   +- View (`spark_catalog`.`default`.`cte_recursion_append`, [n#x, path#x, prev#x])
+      +- Project [cast(n#x as int) AS n#x, cast(path#x as array<int>) AS path#x, cast(prev#x as array<int>) AS prev#x]
          +- WithCTE
             :- CTERelationDef xxxx, false
             :  +- SubqueryAlias t1
             :     +- UnionLoop xxxx
-            :        :- Project [1 AS n#x, array(1) AS path#x, array(1) AS prev#x, array(1) AS head#x, array(1) AS prev_head#x, array(1) AS ins#x, array(1) AS prev_ins#x, array(1) AS el#x, array(1) AS prev_el#x]
+            :        :- Project [1 AS n#x, array(1) AS path#x, array(1) AS prev#x]
             :        :  +- OneRowRelation
-            :        +- Project [(n#x + 1) AS (n + 1)#x, array_prepend(array_append(path#x, (n#x + 1)), 0) AS array_prepend(array_append(path, (n + 1)), 0)#x, path#x, array(path#x[0]) AS array(path[0])#x, head#x, array_insert(array_insert(ins#x, 1, 0, false), -1, n#x, false) AS array_insert(array_insert(ins, 1, 0), -1, n)#x, ins#x, array(element_at(path#x, 1, None, true)) AS array(element_at(path, 1))#x, el#x]
+            :        +- Project [(n#x + 1) AS (n + 1)#x, if ((n#x = 1)) array_append(filter(path#x, lambdafunction(false, lambda x#x, false)), 7) else path#x AS (IF((n = 1), array_append(filter(path, lambdafunction(false, namedlambdavariable())), 7), path))#x, path#x]
             :           +- Filter (n#x < 3)
             :              +- SubqueryAlias t1
-            :                 +- UnionLoopRef xxxx, [n#x, path#x, prev#x, head#x, prev_head#x, ins#x, prev_ins#x, el#x, prev_el#x], false
-            +- Project [n#x, path#x, prev#x, head#x, prev_head#x, ins#x, prev_ins#x, el#x, prev_el#x]
+            :                 +- UnionLoopRef xxxx, [n#x, path#x, prev#x], false
+            +- Project [n#x, path#x, prev#x]
                +- SubqueryAlias t1
-                  +- CTERelationRef xxxx, true, [n#x, path#x, prev#x, head#x, prev_head#x, ins#x, prev_ins#x, el#x, prev_el#x], false, false
+                  +- CTERelationRef xxxx, true, [n#x, path#x, prev#x], false, false
 
 
 -- !query
-DROP VIEW cte_recursion_copies
+SET spark.sql.legacy.negativeIndexInArrayInsert=false
 -- !query analysis
-DropTableCommand `spark_catalog`.`default`.`cte_recursion_copies`, false, true, false
+SetCommand (spark.sql.legacy.negativeIndexInArrayInsert,Some(false))
+
+
+-- !query
+DROP VIEW cte_recursion_append
+-- !query analysis
+DropTableCommand `spark_catalog`.`default`.`cte_recursion_append`, false, true, false
 
 
 -- !query

@@ -1875,15 +1875,28 @@ case class ArrayPrepend(left: Expression, right: Expression) extends ArrayPendBa
   """,
   since = "3.4.0",
   group = "array_funcs")
-case class ArrayAppend(left: Expression, right: Expression) extends ArrayPendBase {
+case class ArrayAppend(left: Expression, right: Expression, legacyNegativeIndex: Boolean)
+  extends ArrayPendBase {
 
-  override lazy val replacement: Expression = new ArrayInsert(left, Literal(-1), right)
+  // Fixes the negative-index setting when the expression is built, as ArrayInsert does, so that
+  // the append that runs pads exactly as analysis assumed.
+  def this(left: Expression, right: Expression) =
+    this(left, right, SQLConf.get.legacyNegativeIndexInArrayInsert)
+
+  override lazy val replacement: Expression =
+    ArrayInsert(left, Literal(-1), right, legacyNegativeIndex)
 
   override def prettyName: String = "array_append"
+
+  override def stringArgs: Iterator[Any] = Iterator(left, right)
 
   override protected def withNewChildrenInternal(
       newLeft: Expression, newRight: Expression): ArrayAppend =
     copy(left = newLeft, right = newRight)
+}
+
+object ArrayAppend {
+  def apply(left: Expression, right: Expression): ArrayAppend = new ArrayAppend(left, right)
 }
 
 /**
