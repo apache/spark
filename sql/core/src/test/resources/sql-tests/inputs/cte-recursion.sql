@@ -896,6 +896,130 @@ WITH RECURSIVE t1(n, m, s) AS (
 )
 SELECT * FROM t1;
 
+-- A view created with the previous types still reads when the recursion copies appended arrays
+-- and ANSI index reads, which never hold a NULL
+SET spark.sql.legacy.recursiveCTE.useAnchorNestedNullability=true;
+
+CREATE VIEW cte_recursion_copies AS
+WITH RECURSIVE t1 AS (
+    SELECT 1 AS n, ARRAY(1) AS path, ARRAY(1) AS prev, ARRAY(1) AS head, ARRAY(1) AS prev_head
+    UNION ALL
+    SELECT n + 1, array_prepend(array_append(path, n + 1), 0), path, ARRAY(path[0]), head
+    FROM t1 WHERE n < 3
+)
+SELECT * FROM t1;
+
+SET spark.sql.legacy.recursiveCTE.useAnchorNestedNullability=false;
+
+SELECT * FROM cte_recursion_copies;
+
+DROP VIEW cte_recursion_copies;
+
+-- With the legacy negative index, array_append can pad a NULL, which the next level reads back
+SET spark.sql.legacy.negativeIndexInArrayInsert=true;
+
+WITH RECURSIVE t1(n, path, prev) AS (
+    SELECT 1, ARRAY(1), ARRAY(1)
+    UNION ALL
+    SELECT n + 1, IF(n = 1, array_append(filter(path, x -> false), 7), path), path
+    FROM t1 WHERE n < 3
+)
+SELECT n, path, prev, EXISTS(prev, x -> x IS NULL) FROM t1;
+
+SET spark.sql.legacy.negativeIndexInArrayInsert=false;
+
+-- With ANSI mode off, an index past the end reads a NULL, which the next level reads back
+SET spark.sql.ansi.enabled=false;
+
+WITH RECURSIVE t1(n, a, b) AS (
+    SELECT 1, ARRAY(1), ARRAY(1)
+    UNION ALL
+    SELECT n + 1, ARRAY(a[5]), a FROM t1 WHERE n < 3
+)
+SELECT n, a, b, b[0] IS NULL FROM t1;
+
+SET spark.sql.ansi.enabled=true;
+
+-- An inner recursive CTE that references the enclosing one widens its self-reference
+WITH RECURSIVE o(lvl) AS (
+    SELECT id FROM range(1)
+    UNION ALL
+    SELECT m FROM (
+        WITH RECURSIVE i(m) AS (
+            SELECT 1L
+            UNION ALL
+            SELECT IF(o.lvl > 0, NULL, o.lvl + 2) FROM i JOIN o ON i.m = 1 WHERE o.lvl < 2
+        )
+        SELECT m FROM i
+    ) WHERE m > 1
+)
+SELECT * FROM o;
+
+-- Same, with a NULL element that the inner recursion reads back
+WITH RECURSIVE o(lvl) AS (
+    SELECT id FROM range(1)
+    UNION ALL
+    SELECT m FROM (
+        WITH RECURSIVE i(m, arr) AS (
+            SELECT 1L, ARRAY(1L)
+            UNION ALL
+            SELECT IF(i.arr[0] IS NULL, 100, i.m + 1),
+                IF(o.lvl = 0 AND i.m = 1, ARRAY(CAST(NULL AS BIGINT)), i.arr)
+            FROM i JOIN o ON i.m < 3 AND o.lvl < 1
+        )
+        SELECT m FROM i
+    ) WHERE m > 2
+)
+SELECT * FROM o;
+
+-- Three nested recursive CTEs that each widen their self-reference rebuild each inner loop at
+-- most once, whichever anchor resolves first
+SET spark.sql.analyzer.maxIterations=50;
+
+WITH RECURSIVE a(x) AS (
+    SELECT id FROM range(1)
+    UNION ALL
+    SELECT IF(a.x = 0, NULL, 9) FROM a JOIN (
+        WITH RECURSIVE b(y) AS (
+            SELECT 1L
+            UNION ALL
+            SELECT IF(b.y = 1, NULL, 9) FROM b JOIN (
+                WITH RECURSIVE c(z) AS (
+                    SELECT 1L
+                    UNION ALL
+                    SELECT IF(c.z = 1, NULL, 9) FROM c WHERE c.z = 1
+                )
+                SELECT z FROM c WHERE z = 1
+            ) WHERE b.y = 1
+        )
+        SELECT y FROM b WHERE y = 1
+    ) WHERE a.x = 0
+)
+SELECT * FROM a;
+
+WITH RECURSIVE a(x) AS (
+    SELECT 0L
+    UNION ALL
+    SELECT IF(a.x = 0, NULL, 9) FROM a JOIN (
+        WITH RECURSIVE b(y) AS (
+            SELECT id + 1 FROM range(1)
+            UNION ALL
+            SELECT IF(b.y = 1, NULL, 9) FROM b JOIN (
+                WITH RECURSIVE c(z) AS (
+                    SELECT id + 1 FROM range(1)
+                    UNION ALL
+                    SELECT IF(c.z = 1, NULL, 9) FROM c WHERE c.z = 1
+                )
+                SELECT z FROM c WHERE z = 1
+            ) WHERE b.y = 1
+        )
+        SELECT y FROM b WHERE y = 1
+    ) WHERE a.x = 0
+)
+SELECT * FROM a;
+
+SET spark.sql.analyzer.maxIterations=100;
+
 -- Two calls to same rCTE with and without limit
 WITH RECURSIVE t1(n) AS (
     SELECT 1

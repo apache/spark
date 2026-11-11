@@ -2414,6 +2414,234 @@ struct<n:int,m:bigint,s:struct<A:int>>
 
 
 -- !query
+SET spark.sql.legacy.recursiveCTE.useAnchorNestedNullability=true
+-- !query schema
+struct<key:string,value:string>
+-- !query output
+spark.sql.legacy.recursiveCTE.useAnchorNestedNullability	true
+
+
+-- !query
+CREATE VIEW cte_recursion_copies AS
+WITH RECURSIVE t1 AS (
+    SELECT 1 AS n, ARRAY(1) AS path, ARRAY(1) AS prev, ARRAY(1) AS head, ARRAY(1) AS prev_head
+    UNION ALL
+    SELECT n + 1, array_prepend(array_append(path, n + 1), 0), path, ARRAY(path[0]), head
+    FROM t1 WHERE n < 3
+)
+SELECT * FROM t1
+-- !query schema
+struct<>
+-- !query output
+
+
+
+-- !query
+SET spark.sql.legacy.recursiveCTE.useAnchorNestedNullability=false
+-- !query schema
+struct<key:string,value:string>
+-- !query output
+spark.sql.legacy.recursiveCTE.useAnchorNestedNullability	false
+
+
+-- !query
+SELECT * FROM cte_recursion_copies
+-- !query schema
+struct<n:int,path:array<int>,prev:array<int>,head:array<int>,prev_head:array<int>>
+-- !query output
+1	[1]	[1]	[1]	[1]
+2	[0,1,2]	[1]	[1]	[1]
+3	[0,0,1,2,3]	[0,1,2]	[0]	[1]
+
+
+-- !query
+DROP VIEW cte_recursion_copies
+-- !query schema
+struct<>
+-- !query output
+
+
+
+-- !query
+SET spark.sql.legacy.negativeIndexInArrayInsert=true
+-- !query schema
+struct<key:string,value:string>
+-- !query output
+spark.sql.legacy.negativeIndexInArrayInsert	true
+
+
+-- !query
+WITH RECURSIVE t1(n, path, prev) AS (
+    SELECT 1, ARRAY(1), ARRAY(1)
+    UNION ALL
+    SELECT n + 1, IF(n = 1, array_append(filter(path, x -> false), 7), path), path
+    FROM t1 WHERE n < 3
+)
+SELECT n, path, prev, EXISTS(prev, x -> x IS NULL) FROM t1
+-- !query schema
+struct<n:int,path:array<int>,prev:array<int>,exists(prev, lambdafunction((namedlambdavariable() IS NULL), namedlambdavariable())):boolean>
+-- !query output
+1	[1]	[1]	false
+2	[7,null]	[1]	false
+3	[7,null]	[7,null]	true
+
+
+-- !query
+SET spark.sql.legacy.negativeIndexInArrayInsert=false
+-- !query schema
+struct<key:string,value:string>
+-- !query output
+spark.sql.legacy.negativeIndexInArrayInsert	false
+
+
+-- !query
+SET spark.sql.ansi.enabled=false
+-- !query schema
+struct<key:string,value:string>
+-- !query output
+spark.sql.ansi.enabled	false
+
+
+-- !query
+WITH RECURSIVE t1(n, a, b) AS (
+    SELECT 1, ARRAY(1), ARRAY(1)
+    UNION ALL
+    SELECT n + 1, ARRAY(a[5]), a FROM t1 WHERE n < 3
+)
+SELECT n, a, b, b[0] IS NULL FROM t1
+-- !query schema
+struct<n:int,a:array<int>,b:array<int>,(b[0] IS NULL):boolean>
+-- !query output
+1	[1]	[1]	false
+2	[null]	[1]	false
+3	[null]	[null]	true
+
+
+-- !query
+SET spark.sql.ansi.enabled=true
+-- !query schema
+struct<key:string,value:string>
+-- !query output
+spark.sql.ansi.enabled	true
+
+
+-- !query
+WITH RECURSIVE o(lvl) AS (
+    SELECT id FROM range(1)
+    UNION ALL
+    SELECT m FROM (
+        WITH RECURSIVE i(m) AS (
+            SELECT 1L
+            UNION ALL
+            SELECT IF(o.lvl > 0, NULL, o.lvl + 2) FROM i JOIN o ON i.m = 1 WHERE o.lvl < 2
+        )
+        SELECT m FROM i
+    ) WHERE m > 1
+)
+SELECT * FROM o
+-- !query schema
+struct<lvl:bigint>
+-- !query output
+0
+2
+
+
+-- !query
+WITH RECURSIVE o(lvl) AS (
+    SELECT id FROM range(1)
+    UNION ALL
+    SELECT m FROM (
+        WITH RECURSIVE i(m, arr) AS (
+            SELECT 1L, ARRAY(1L)
+            UNION ALL
+            SELECT IF(i.arr[0] IS NULL, 100, i.m + 1),
+                IF(o.lvl = 0 AND i.m = 1, ARRAY(CAST(NULL AS BIGINT)), i.arr)
+            FROM i JOIN o ON i.m < 3 AND o.lvl < 1
+        )
+        SELECT m FROM i
+    ) WHERE m > 2
+)
+SELECT * FROM o
+-- !query schema
+struct<lvl:bigint>
+-- !query output
+0
+100
+
+
+-- !query
+SET spark.sql.analyzer.maxIterations=50
+-- !query schema
+struct<key:string,value:string>
+-- !query output
+spark.sql.analyzer.maxIterations	50
+
+
+-- !query
+WITH RECURSIVE a(x) AS (
+    SELECT id FROM range(1)
+    UNION ALL
+    SELECT IF(a.x = 0, NULL, 9) FROM a JOIN (
+        WITH RECURSIVE b(y) AS (
+            SELECT 1L
+            UNION ALL
+            SELECT IF(b.y = 1, NULL, 9) FROM b JOIN (
+                WITH RECURSIVE c(z) AS (
+                    SELECT 1L
+                    UNION ALL
+                    SELECT IF(c.z = 1, NULL, 9) FROM c WHERE c.z = 1
+                )
+                SELECT z FROM c WHERE z = 1
+            ) WHERE b.y = 1
+        )
+        SELECT y FROM b WHERE y = 1
+    ) WHERE a.x = 0
+)
+SELECT * FROM a
+-- !query schema
+struct<x:bigint>
+-- !query output
+0
+NULL
+
+
+-- !query
+WITH RECURSIVE a(x) AS (
+    SELECT 0L
+    UNION ALL
+    SELECT IF(a.x = 0, NULL, 9) FROM a JOIN (
+        WITH RECURSIVE b(y) AS (
+            SELECT id + 1 FROM range(1)
+            UNION ALL
+            SELECT IF(b.y = 1, NULL, 9) FROM b JOIN (
+                WITH RECURSIVE c(z) AS (
+                    SELECT id + 1 FROM range(1)
+                    UNION ALL
+                    SELECT IF(c.z = 1, NULL, 9) FROM c WHERE c.z = 1
+                )
+                SELECT z FROM c WHERE z = 1
+            ) WHERE b.y = 1
+        )
+        SELECT y FROM b WHERE y = 1
+    ) WHERE a.x = 0
+)
+SELECT * FROM a
+-- !query schema
+struct<x:bigint>
+-- !query output
+0
+NULL
+
+
+-- !query
+SET spark.sql.analyzer.maxIterations=100
+-- !query schema
+struct<key:string,value:string>
+-- !query output
+spark.sql.analyzer.maxIterations	100
+
+
+-- !query
 WITH RECURSIVE t1(n) AS (
     SELECT 1
     UNION ALL

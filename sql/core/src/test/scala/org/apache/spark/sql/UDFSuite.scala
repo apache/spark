@@ -574,6 +574,46 @@ class UDFSuite extends SharedSparkSession {
       Seq(Row(0, 0L), Row(1, 0L), Row(2, 100L)))
   }
 
+  test("SPARK-60875: UDF NULLs read by a recursive CTE in a subquery expression") {
+    spark.udf.register("f", (v: Long) => v + 1)
+    withTempView("edges") {
+      sql("CREATE TEMPORARY VIEW edges(a, b) AS VALUES (1L, CAST(NULL AS BIGINT)), (0L, 5L)")
+      // Level 1 writes the NULL. Read back as 0, it joins the (0, 5) edge and adds a row.
+      def t(join: String): String =
+        s"""WITH RECURSIVE t(id, arr) AS (
+           |  SELECT id, ARRAY(id) FROM range(1, 2)
+           |  UNION ALL
+           |  SELECT x.dst, x.arr FROM t JOIN x ON $join)
+           |SELECT id FROM t""".stripMargin
+      val x = "WITH x AS (SELECT a AS src, f(b) AS dst, ARRAY(f(b)) AS arr FROM edges)"
+      for (join <- Seq("t.id = x.src", "t.arr[0] = x.src")) {
+        checkAnswer(sql(s"$x SELECT (SELECT count(*) FROM (${t(join)}))"), Row(2L))
+        checkAnswer(sql(s"$x SELECT 2 IN (SELECT count(*) FROM (${t(join)}))"), Row(true))
+        checkAnswer(
+          sql(s"$x SELECT c FROM range(1), LATERAL (SELECT count(*) AS c FROM (${t(join)}))"),
+          Row(2L))
+      }
+    }
+  }
+
+  test("SPARK-60875: UDF NULLs that a recursion reads from a CTE through a subquery") {
+    spark.udf.register("f", (x: Long) => x + 1)
+    def nullsPerLevel(read: String): DataFrame = sql(
+      s"""WITH RECURSIVE x AS (SELECT f(CAST(NULL AS BIGINT)) AS v, ARRAY(f(NULL)) AS a),
+         |t(lvl, v, a) AS (
+         |  SELECT 0, id, ARRAY(id) FROM range(200)
+         |  UNION ALL
+         |  SELECT t.lvl + 1, IF(t.lvl = 0, l.v, t.v), IF(t.lvl = 0, l.a, t.a)
+         |  FROM t, $read WHERE t.lvl < 2)
+         |SELECT lvl, count_if(v IS NULL AND a[0] IS NULL) FROM t GROUP BY lvl ORDER BY lvl
+         |""".stripMargin)
+    val expected = Seq(Row(0, 0L), Row(1, 200L), Row(2, 200L))
+    checkAnswer(nullsPerLevel("LATERAL (SELECT v, a FROM x) l"), expected)
+    checkAnswer(
+      nullsPerLevel("LATERAL (SELECT (SELECT v FROM x) AS v, (SELECT a FROM x) AS a) l"),
+      expected)
+  }
+
   test("SPARK-60875: recursive CTEs that cast values built by a primitive Scala UDF analyze") {
     spark.udf.register("g", (x: Int) => x + 1)
     // Analysis only: as for a plain UNION ALL, the optimizer later folds the UDF into the cast,

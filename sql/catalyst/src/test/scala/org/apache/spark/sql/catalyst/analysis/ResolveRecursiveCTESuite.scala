@@ -21,8 +21,9 @@ package org.apache.spark.sql.catalyst.analysis
 import org.apache.spark.SparkException
 import org.apache.spark.sql.catalyst.dsl.expressions._
 import org.apache.spark.sql.catalyst.dsl.plans._
-import org.apache.spark.sql.catalyst.expressions.{Alias, Attribute, CaseWhen, CreateArray, CreateMap, CreateNamedStruct, Literal}
+import org.apache.spark.sql.catalyst.expressions.{Alias, ArrayAppend, ArrayPrepend, Attribute, CaseWhen, CreateArray, CreateMap, CreateNamedStruct, GetArrayItem, Literal}
 import org.apache.spark.sql.catalyst.plans.logical._
+import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types.{ArrayType, DataType, IntegerType, MapType, StringType, StructType}
 
 class ResolveRecursiveCTESuite extends AnalysisTest {
@@ -218,6 +219,58 @@ class ResolveRecursiveCTESuite extends AnalysisTest {
 
     val types = columns.map(_ => nullableIntArray -> false)
     assert(selfReferenceAndOutputTypes(anchor, recursion) === (types, types))
+  }
+
+  // Motivated by:
+  // WITH RECURSIVE t AS (SELECT 1 AS n, array(1) AS path, array(1) AS prev, array(1) AS head,
+  // array(1) AS prev_head UNION ALL SELECT n + 1, array_prepend(array_append(path, n + 1), 0),
+  // path, array(path[0]), head FROM t) SELECT * FROM t;
+  test("ResolveWithCTE keeps the types of copies of appended arrays and ANSI index reads") {
+    val anchor = Project(Seq("n", "path", "prev", "head", "prev_head").map { c =>
+      Alias(if (c == "n") Literal(1) else CreateArray(Seq(Literal(1))), c)()
+    }, OneRowRelation())
+    val recursion = (t: LogicalPlan) => t.select(
+      ($"n" + 1).as("n"),
+      ArrayPrepend(ArrayAppend($"path", $"n" + 1), Literal(0)).as("path"),
+      $"path".as("prev"),
+      CreateArray(Seq(GetArrayItem($"path", Literal(0), failOnError = true))).as("head"),
+      $"head".as("prev_head"))
+
+    val refTypes = Seq(IntegerType -> false) ++ Seq.fill(4)(intArray -> false)
+    val outputTypes = Seq(IntegerType -> false, nullableIntArray -> false, intArray -> false,
+      nullableIntArray -> false, intArray -> false)
+    assert(selfReferenceAndOutputTypes(anchor, recursion) === (refTypes, outputTypes))
+  }
+
+  test("ResolveWithCTE widens copies of appends and index reads that can pad a NULL") {
+    val anchor = Project(Seq("n", "path", "prev", "head", "prev_head").map { c =>
+      Alias(if (c == "n") Literal(1) else CreateArray(Seq(Literal(1))), c)()
+    }, OneRowRelation())
+    val recursion = (t: LogicalPlan) => t.select(
+      ($"n" + 1).as("n"),
+      ArrayAppend($"path", $"n" + 1).as("path"),
+      $"path".as("prev"),
+      CreateArray(Seq(GetArrayItem($"path", Literal(5), failOnError = false))).as("head"),
+      $"head".as("prev_head"))
+
+    withSQLConf(SQLConf.LEGACY_NEGATIVE_INDEX_IN_ARRAY_INSERT.key -> "true") {
+      val types = Seq(IntegerType -> false) ++ Seq.fill(4)(nullableIntArray -> false)
+      assert(selfReferenceAndOutputTypes(anchor, recursion) === (types, types))
+    }
+  }
+
+  test("ResolveWithCTE keeps the anchor's nested types with the legacy flag") {
+    val anchor = Project(Seq(
+      Alias(Literal(1), "n")(),
+      Alias(CreateArray(Seq(Literal(1))), "a")()), OneRowRelation())
+    val recursion = (t: LogicalPlan) =>
+      t.select(($"n" + 1).as("n"), CreateArray(Seq(Literal(null, IntegerType))).as("a"))
+
+    withSQLConf(SQLConf.LEGACY_RECURSIVE_CTE_USE_ANCHOR_NESTED_NULLABILITY.key -> "true") {
+      assert(selfReferenceAndOutputTypes(anchor, recursion) ===
+        (Seq(IntegerType -> true, intArray -> true),
+          Seq(IntegerType -> true, nullableIntArray -> false)))
+    }
   }
 
   test("ResolveWithCTE fails if a self-reference needs wider types but the loop has no origin") {

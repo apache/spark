@@ -2464,6 +2464,420 @@ WithCTE
 
 
 -- !query
+SET spark.sql.legacy.recursiveCTE.useAnchorNestedNullability=true
+-- !query analysis
+SetCommand (spark.sql.legacy.recursiveCTE.useAnchorNestedNullability,Some(true))
+
+
+-- !query
+CREATE VIEW cte_recursion_copies AS
+WITH RECURSIVE t1 AS (
+    SELECT 1 AS n, ARRAY(1) AS path, ARRAY(1) AS prev, ARRAY(1) AS head, ARRAY(1) AS prev_head
+    UNION ALL
+    SELECT n + 1, array_prepend(array_append(path, n + 1), 0), path, ARRAY(path[0]), head
+    FROM t1 WHERE n < 3
+)
+SELECT * FROM t1
+-- !query analysis
+CreateViewCommand `spark_catalog`.`default`.`cte_recursion_copies`, WITH RECURSIVE t1 AS (
+    SELECT 1 AS n, ARRAY(1) AS path, ARRAY(1) AS prev, ARRAY(1) AS head, ARRAY(1) AS prev_head
+    UNION ALL
+    SELECT n + 1, array_prepend(array_append(path, n + 1), 0), path, ARRAY(path[0]), head
+    FROM t1 WHERE n < 3
+)
+SELECT * FROM t1, false, false, PersistedView, COMPENSATION, true
+   +- WithCTE
+      :- CTERelationDef xxxx, false
+      :  +- SubqueryAlias t1
+      :     +- UnionLoop xxxx
+      :        :- Project [1 AS n#x, array(1) AS path#x, array(1) AS prev#x, array(1) AS head#x, array(1) AS prev_head#x]
+      :        :  +- OneRowRelation
+      :        +- Project [(n#x + 1) AS (n + 1)#x, array_prepend(array_append(path#x, (n#x + 1)), 0) AS array_prepend(array_append(path, (n + 1)), 0)#x, path#x, array(path#x[0]) AS array(path[0])#x, head#x]
+      :           +- Filter (n#x < 3)
+      :              +- SubqueryAlias t1
+      :                 +- UnionLoopRef xxxx, [n#x, path#x, prev#x, head#x, prev_head#x], false
+      +- Project [n#x, path#x, prev#x, head#x, prev_head#x]
+         +- SubqueryAlias t1
+            +- CTERelationRef xxxx, true, [n#x, path#x, prev#x, head#x, prev_head#x], false, false
+
+
+-- !query
+SET spark.sql.legacy.recursiveCTE.useAnchorNestedNullability=false
+-- !query analysis
+SetCommand (spark.sql.legacy.recursiveCTE.useAnchorNestedNullability,Some(false))
+
+
+-- !query
+SELECT * FROM cte_recursion_copies
+-- !query analysis
+Project [n#x, path#x, prev#x, head#x, prev_head#x]
++- SubqueryAlias spark_catalog.default.cte_recursion_copies
+   +- View (`spark_catalog`.`default`.`cte_recursion_copies`, [n#x, path#x, prev#x, head#x, prev_head#x])
+      +- Project [cast(n#x as int) AS n#x, cast(path#x as array<int>) AS path#x, cast(prev#x as array<int>) AS prev#x, cast(head#x as array<int>) AS head#x, cast(prev_head#x as array<int>) AS prev_head#x]
+         +- WithCTE
+            :- CTERelationDef xxxx, false
+            :  +- SubqueryAlias t1
+            :     +- UnionLoop xxxx
+            :        :- Project [1 AS n#x, array(1) AS path#x, array(1) AS prev#x, array(1) AS head#x, array(1) AS prev_head#x]
+            :        :  +- OneRowRelation
+            :        +- Project [(n#x + 1) AS (n + 1)#x, array_prepend(array_append(path#x, (n#x + 1)), 0) AS array_prepend(array_append(path, (n + 1)), 0)#x, path#x, array(path#x[0]) AS array(path[0])#x, head#x]
+            :           +- Filter (n#x < 3)
+            :              +- SubqueryAlias t1
+            :                 +- UnionLoopRef xxxx, [n#x, path#x, prev#x, head#x, prev_head#x], false
+            +- Project [n#x, path#x, prev#x, head#x, prev_head#x]
+               +- SubqueryAlias t1
+                  +- CTERelationRef xxxx, true, [n#x, path#x, prev#x, head#x, prev_head#x], false, false
+
+
+-- !query
+DROP VIEW cte_recursion_copies
+-- !query analysis
+DropTableCommand `spark_catalog`.`default`.`cte_recursion_copies`, false, true, false
+
+
+-- !query
+SET spark.sql.legacy.negativeIndexInArrayInsert=true
+-- !query analysis
+SetCommand (spark.sql.legacy.negativeIndexInArrayInsert,Some(true))
+
+
+-- !query
+WITH RECURSIVE t1(n, path, prev) AS (
+    SELECT 1, ARRAY(1), ARRAY(1)
+    UNION ALL
+    SELECT n + 1, IF(n = 1, array_append(filter(path, x -> false), 7), path), path
+    FROM t1 WHERE n < 3
+)
+SELECT n, path, prev, EXISTS(prev, x -> x IS NULL) FROM t1
+-- !query analysis
+WithCTE
+:- CTERelationDef xxxx, false
+:  +- SubqueryAlias t1
+:     +- Project [1#x AS n#x, array(1)#x AS path#x, array(1)#x AS prev#x]
+:        +- UnionLoop xxxx
+:           :- Project [1 AS 1#x, array(1) AS array(1)#x, array(1) AS array(1)#x]
+:           :  +- OneRowRelation
+:           +- Project [(n#x + 1) AS (n + 1)#x, if ((n#x = 1)) array_append(filter(path#x, lambdafunction(false, lambda x#x, false)), 7) else path#x AS (IF((n = 1), array_append(filter(path, lambdafunction(false, namedlambdavariable())), 7), path))#x, path#x]
+:              +- Filter (n#x < 3)
+:                 +- SubqueryAlias t1
+:                    +- Project [1#x AS n#x, array(1)#x AS path#x, array(1)#x AS prev#x]
+:                       +- UnionLoopRef xxxx, [1#x, array(1)#x, array(1)#x], false
++- Project [n#x, path#x, prev#x, exists(prev#x, lambdafunction(isnull(lambda x#x), lambda x#x, false)) AS exists(prev, lambdafunction((namedlambdavariable() IS NULL), namedlambdavariable()))#x]
+   +- SubqueryAlias t1
+      +- CTERelationRef xxxx, true, [n#x, path#x, prev#x], false, false
+
+
+-- !query
+SET spark.sql.legacy.negativeIndexInArrayInsert=false
+-- !query analysis
+SetCommand (spark.sql.legacy.negativeIndexInArrayInsert,Some(false))
+
+
+-- !query
+SET spark.sql.ansi.enabled=false
+-- !query analysis
+SetCommand (spark.sql.ansi.enabled,Some(false))
+
+
+-- !query
+WITH RECURSIVE t1(n, a, b) AS (
+    SELECT 1, ARRAY(1), ARRAY(1)
+    UNION ALL
+    SELECT n + 1, ARRAY(a[5]), a FROM t1 WHERE n < 3
+)
+SELECT n, a, b, b[0] IS NULL FROM t1
+-- !query analysis
+WithCTE
+:- CTERelationDef xxxx, false
+:  +- SubqueryAlias t1
+:     +- Project [1#x AS n#x, array(1)#x AS a#x, array(1)#x AS b#x]
+:        +- UnionLoop xxxx
+:           :- Project [1 AS 1#x, array(1) AS array(1)#x, array(1) AS array(1)#x]
+:           :  +- OneRowRelation
+:           +- Project [(n#x + 1) AS (n + 1)#x, array(a#x[5]) AS array(a[5])#x, a#x]
+:              +- Filter (n#x < 3)
+:                 +- SubqueryAlias t1
+:                    +- Project [1#x AS n#x, array(1)#x AS a#x, array(1)#x AS b#x]
+:                       +- UnionLoopRef xxxx, [1#x, array(1)#x, array(1)#x], false
++- Project [n#x, a#x, b#x, isnull(b#x[0]) AS (b[0] IS NULL)#x]
+   +- SubqueryAlias t1
+      +- CTERelationRef xxxx, true, [n#x, a#x, b#x], false, false
+
+
+-- !query
+SET spark.sql.ansi.enabled=true
+-- !query analysis
+SetCommand (spark.sql.ansi.enabled,Some(true))
+
+
+-- !query
+WITH RECURSIVE o(lvl) AS (
+    SELECT id FROM range(1)
+    UNION ALL
+    SELECT m FROM (
+        WITH RECURSIVE i(m) AS (
+            SELECT 1L
+            UNION ALL
+            SELECT IF(o.lvl > 0, NULL, o.lvl + 2) FROM i JOIN o ON i.m = 1 WHERE o.lvl < 2
+        )
+        SELECT m FROM i
+    ) WHERE m > 1
+)
+SELECT * FROM o
+-- !query analysis
+WithCTE
+:- CTERelationDef xxxx, false
+:  +- SubqueryAlias o
+:     +- Project [id#xL AS lvl#xL]
+:        +- UnionLoop xxxx
+:           :- Project [id#xL]
+:           :  +- Range (0, 1, step=1)
+:           +- Project [m#xL]
+:              +- Filter (m#xL > cast(1 as bigint))
+:                 +- SubqueryAlias __auto_generated_subquery_name
+:                    +- WithCTE
+:                       :- CTERelationDef xxxx, false
+:                       :  +- SubqueryAlias i
+:                       :     +- Project [1#xL AS m#xL]
+:                       :        +- UnionLoop xxxx
+:                       :           :- Project [1 AS 1#xL]
+:                       :           :  +- OneRowRelation
+:                       :           +- Project [if ((lvl#xL > cast(0 as bigint))) cast(null as bigint) else (lvl#xL + cast(2 as bigint)) AS (IF((lvl > 0), NULL, (lvl + 2)))#xL]
+:                       :              +- Filter (lvl#xL < cast(2 as bigint))
+:                       :                 +- Join Inner, (m#xL = cast(1 as bigint))
+:                       :                    :- SubqueryAlias i
+:                       :                    :  +- Project [1#xL AS m#xL]
+:                       :                    :     +- UnionLoopRef xxxx, [1#xL], false
+:                       :                    +- SubqueryAlias o
+:                       :                       +- Project [id#xL AS lvl#xL]
+:                       :                          +- UnionLoopRef xxxx, [id#xL], false
+:                       +- Project [m#xL]
+:                          +- SubqueryAlias i
+:                             +- CTERelationRef xxxx, true, [m#xL], false, false
++- Project [lvl#xL]
+   +- SubqueryAlias o
+      +- CTERelationRef xxxx, true, [lvl#xL], false, false
+
+
+-- !query
+WITH RECURSIVE o(lvl) AS (
+    SELECT id FROM range(1)
+    UNION ALL
+    SELECT m FROM (
+        WITH RECURSIVE i(m, arr) AS (
+            SELECT 1L, ARRAY(1L)
+            UNION ALL
+            SELECT IF(i.arr[0] IS NULL, 100, i.m + 1),
+                IF(o.lvl = 0 AND i.m = 1, ARRAY(CAST(NULL AS BIGINT)), i.arr)
+            FROM i JOIN o ON i.m < 3 AND o.lvl < 1
+        )
+        SELECT m FROM i
+    ) WHERE m > 2
+)
+SELECT * FROM o
+-- !query analysis
+WithCTE
+:- CTERelationDef xxxx, false
+:  +- SubqueryAlias o
+:     +- Project [id#xL AS lvl#xL]
+:        +- UnionLoop xxxx
+:           :- Project [id#xL]
+:           :  +- Range (0, 1, step=1)
+:           +- Project [m#xL]
+:              +- Filter (m#xL > cast(2 as bigint))
+:                 +- SubqueryAlias __auto_generated_subquery_name
+:                    +- WithCTE
+:                       :- CTERelationDef xxxx, false
+:                       :  +- SubqueryAlias i
+:                       :     +- Project [1#xL AS m#xL, array(1)#x AS arr#x]
+:                       :        +- UnionLoop xxxx
+:                       :           :- Project [1 AS 1#xL, array(1) AS array(1)#x]
+:                       :           :  +- OneRowRelation
+:                       :           +- Project [if (isnull(arr#x[0])) cast(100 as bigint) else (m#xL + cast(1 as bigint)) AS (IF((arr[0] IS NULL), 100, (m + 1)))#xL, if (((lvl#xL = cast(0 as bigint)) AND (m#xL = cast(1 as bigint)))) array(cast(null as bigint)) else arr#x AS (IF(((lvl = 0) AND (m = 1)), array(CAST(NULL AS BIGINT)), arr))#x]
+:                       :              +- Join Inner, ((m#xL < cast(3 as bigint)) AND (lvl#xL < cast(1 as bigint)))
+:                       :                 :- SubqueryAlias i
+:                       :                 :  +- Project [1#xL AS m#xL, array(1)#x AS arr#x]
+:                       :                 :     +- UnionLoopRef xxxx, [1#xL, array(1)#x], false
+:                       :                 +- SubqueryAlias o
+:                       :                    +- Project [id#xL AS lvl#xL]
+:                       :                       +- UnionLoopRef xxxx, [id#xL], false
+:                       +- Project [m#xL]
+:                          +- SubqueryAlias i
+:                             +- CTERelationRef xxxx, true, [m#xL, arr#x], false, false
++- Project [lvl#xL]
+   +- SubqueryAlias o
+      +- CTERelationRef xxxx, true, [lvl#xL], false, false
+
+
+-- !query
+SET spark.sql.analyzer.maxIterations=50
+-- !query analysis
+SetCommand (spark.sql.analyzer.maxIterations,Some(50))
+
+
+-- !query
+WITH RECURSIVE a(x) AS (
+    SELECT id FROM range(1)
+    UNION ALL
+    SELECT IF(a.x = 0, NULL, 9) FROM a JOIN (
+        WITH RECURSIVE b(y) AS (
+            SELECT 1L
+            UNION ALL
+            SELECT IF(b.y = 1, NULL, 9) FROM b JOIN (
+                WITH RECURSIVE c(z) AS (
+                    SELECT 1L
+                    UNION ALL
+                    SELECT IF(c.z = 1, NULL, 9) FROM c WHERE c.z = 1
+                )
+                SELECT z FROM c WHERE z = 1
+            ) WHERE b.y = 1
+        )
+        SELECT y FROM b WHERE y = 1
+    ) WHERE a.x = 0
+)
+SELECT * FROM a
+-- !query analysis
+WithCTE
+:- CTERelationDef xxxx, false
+:  +- SubqueryAlias a
+:     +- Project [id#xL AS x#xL]
+:        +- UnionLoop xxxx
+:           :- Project [id#xL]
+:           :  +- Range (0, 1, step=1)
+:           +- Project [cast((IF((x = 0), NULL, 9))#x as bigint) AS (IF((x = 0), NULL, 9))#xL]
+:              +- Project [if ((x#xL = cast(0 as bigint))) cast(null as int) else 9 AS (IF((x = 0), NULL, 9))#x]
+:                 +- Filter (x#xL = cast(0 as bigint))
+:                    +- Join Inner
+:                       :- SubqueryAlias a
+:                       :  +- Project [id#xL AS x#xL]
+:                       :     +- UnionLoopRef xxxx, [id#xL], false
+:                       +- SubqueryAlias __auto_generated_subquery_name
+:                          +- WithCTE
+:                             :- CTERelationDef xxxx, false
+:                             :  +- SubqueryAlias b
+:                             :     +- Project [1#xL AS y#xL]
+:                             :        +- UnionLoop xxxx
+:                             :           :- Project [1 AS 1#xL]
+:                             :           :  +- OneRowRelation
+:                             :           +- Project [cast((IF((y = 1), NULL, 9))#x as bigint) AS (IF((y = 1), NULL, 9))#xL]
+:                             :              +- Project [if ((y#xL = cast(1 as bigint))) cast(null as int) else 9 AS (IF((y = 1), NULL, 9))#x]
+:                             :                 +- Filter (y#xL = cast(1 as bigint))
+:                             :                    +- Join Inner
+:                             :                       :- SubqueryAlias b
+:                             :                       :  +- Project [1#xL AS y#xL]
+:                             :                       :     +- UnionLoopRef xxxx, [1#xL], false
+:                             :                       +- SubqueryAlias __auto_generated_subquery_name
+:                             :                          +- WithCTE
+:                             :                             :- CTERelationDef xxxx, false
+:                             :                             :  +- SubqueryAlias c
+:                             :                             :     +- Project [1#xL AS z#xL]
+:                             :                             :        +- UnionLoop xxxx
+:                             :                             :           :- Project [1 AS 1#xL]
+:                             :                             :           :  +- OneRowRelation
+:                             :                             :           +- Project [cast((IF((z = 1), NULL, 9))#x as bigint) AS (IF((z = 1), NULL, 9))#xL]
+:                             :                             :              +- Project [if ((z#xL = cast(1 as bigint))) cast(null as int) else 9 AS (IF((z = 1), NULL, 9))#x]
+:                             :                             :                 +- Filter (z#xL = cast(1 as bigint))
+:                             :                             :                    +- SubqueryAlias c
+:                             :                             :                       +- Project [1#xL AS z#xL]
+:                             :                             :                          +- UnionLoopRef xxxx, [1#xL], false
+:                             :                             +- Project [z#xL]
+:                             :                                +- Filter (z#xL = cast(1 as bigint))
+:                             :                                   +- SubqueryAlias c
+:                             :                                      +- CTERelationRef xxxx, true, [z#xL], false, false
+:                             +- Project [y#xL]
+:                                +- Filter (y#xL = cast(1 as bigint))
+:                                   +- SubqueryAlias b
+:                                      +- CTERelationRef xxxx, true, [y#xL], false, false
++- Project [x#xL]
+   +- SubqueryAlias a
+      +- CTERelationRef xxxx, true, [x#xL], false, false
+
+
+-- !query
+WITH RECURSIVE a(x) AS (
+    SELECT 0L
+    UNION ALL
+    SELECT IF(a.x = 0, NULL, 9) FROM a JOIN (
+        WITH RECURSIVE b(y) AS (
+            SELECT id + 1 FROM range(1)
+            UNION ALL
+            SELECT IF(b.y = 1, NULL, 9) FROM b JOIN (
+                WITH RECURSIVE c(z) AS (
+                    SELECT id + 1 FROM range(1)
+                    UNION ALL
+                    SELECT IF(c.z = 1, NULL, 9) FROM c WHERE c.z = 1
+                )
+                SELECT z FROM c WHERE z = 1
+            ) WHERE b.y = 1
+        )
+        SELECT y FROM b WHERE y = 1
+    ) WHERE a.x = 0
+)
+SELECT * FROM a
+-- !query analysis
+WithCTE
+:- CTERelationDef xxxx, false
+:  +- SubqueryAlias a
+:     +- Project [0#xL AS x#xL]
+:        +- UnionLoop xxxx
+:           :- Project [0 AS 0#xL]
+:           :  +- OneRowRelation
+:           +- Project [cast((IF((x = 0), NULL, 9))#x as bigint) AS (IF((x = 0), NULL, 9))#xL]
+:              +- Project [if ((x#xL = cast(0 as bigint))) cast(null as int) else 9 AS (IF((x = 0), NULL, 9))#x]
+:                 +- Filter (x#xL = cast(0 as bigint))
+:                    +- Join Inner
+:                       :- SubqueryAlias a
+:                       :  +- Project [0#xL AS x#xL]
+:                       :     +- UnionLoopRef xxxx, [0#xL], false
+:                       +- SubqueryAlias __auto_generated_subquery_name
+:                          +- WithCTE
+:                             :- CTERelationDef xxxx, false
+:                             :  +- SubqueryAlias b
+:                             :     +- Project [(id + 1)#xL AS y#xL]
+:                             :        +- UnionLoop xxxx
+:                             :           :- Project [(id#xL + cast(1 as bigint)) AS (id + 1)#xL]
+:                             :           :  +- Range (0, 1, step=1)
+:                             :           +- Project [cast((IF((y = 1), NULL, 9))#x as bigint) AS (IF((y = 1), NULL, 9))#xL]
+:                             :              +- Project [if ((y#xL = cast(1 as bigint))) cast(null as int) else 9 AS (IF((y = 1), NULL, 9))#x]
+:                             :                 +- Filter (y#xL = cast(1 as bigint))
+:                             :                    +- Join Inner
+:                             :                       :- SubqueryAlias b
+:                             :                       :  +- Project [(id + 1)#xL AS y#xL]
+:                             :                       :     +- UnionLoopRef xxxx, [(id + 1)#xL], false
+:                             :                       +- SubqueryAlias __auto_generated_subquery_name
+:                             :                          +- WithCTE
+:                             :                             :- CTERelationDef xxxx, false
+:                             :                             :  +- SubqueryAlias c
+:                             :                             :     +- Project [(id + 1)#xL AS z#xL]
+:                             :                             :        +- UnionLoop xxxx
+:                             :                             :           :- Project [(id#xL + cast(1 as bigint)) AS (id + 1)#xL]
+:                             :                             :           :  +- Range (0, 1, step=1)
+:                             :                             :           +- Project [cast((IF((z = 1), NULL, 9))#x as bigint) AS (IF((z = 1), NULL, 9))#xL]
+:                             :                             :              +- Project [if ((z#xL = cast(1 as bigint))) cast(null as int) else 9 AS (IF((z = 1), NULL, 9))#x]
+:                             :                             :                 +- Filter (z#xL = cast(1 as bigint))
+:                             :                             :                    +- SubqueryAlias c
+:                             :                             :                       +- Project [(id + 1)#xL AS z#xL]
+:                             :                             :                          +- UnionLoopRef xxxx, [(id + 1)#xL], false
+:                             :                             +- Project [z#xL]
+:                             :                                +- Filter (z#xL = cast(1 as bigint))
+:                             :                                   +- SubqueryAlias c
+:                             :                                      +- CTERelationRef xxxx, true, [z#xL], false, false
+:                             +- Project [y#xL]
+:                                +- Filter (y#xL = cast(1 as bigint))
+:                                   +- SubqueryAlias b
+:                                      +- CTERelationRef xxxx, true, [y#xL], false, false
++- Project [x#xL]
+   +- SubqueryAlias a
+      +- CTERelationRef xxxx, true, [x#xL], false, false
+
+
+-- !query
+SET spark.sql.analyzer.maxIterations=100
+-- !query analysis
+SetCommand (spark.sql.analyzer.maxIterations,Some(100))
+
+
+-- !query
 WITH RECURSIVE t1(n) AS (
     SELECT 1
     UNION ALL
