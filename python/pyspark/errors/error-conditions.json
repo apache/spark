@@ -46,6 +46,16 @@
           "The endpoint must be a valid HTTPS URL without embedded credentials, a query, or a fragment."
         ]
       },
+      "PERMISSION_DENIED": {
+        "message": [
+          "Authentication or authorization failed with code <code>. Check the identity's access to <target>."
+        ]
+      },
+      "SDK_ERROR": {
+        "message": [
+          "The provider SDK reported error <code>."
+        ]
+      },
       "TIMEOUT": {
         "message": [
           "The invocation exceeded its time budget."

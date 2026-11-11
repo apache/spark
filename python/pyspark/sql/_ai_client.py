@@ -17,7 +17,9 @@
 
 """Worker-side transport for the experimental AI query API."""
 
+import logging
 import math
+import re
 import threading
 import time
 from concurrent.futures import ThreadPoolExecutor
@@ -242,6 +244,10 @@ class _ChatCompletionsClient:
                                 "Databricks model", "HTTP_RETRIES_EXHAUSTED", status=str(status)
                             )
                         retry_headers = response.headers
+                    elif status in (401, 403):
+                        raise _invocation_error(
+                            "Databricks model", "PERMISSION_DENIED", code=str(status)
+                        )
                     elif not 200 <= status < 300:
                         raise _invocation_error(
                             "Databricks model", "HTTP_ERROR", status=str(status)
@@ -267,34 +273,86 @@ class _ChatCompletionsClient:
             attempt += 1
 
 
+_BEDROCK_PERMISSION_CODES = frozenset(
+    {
+        "AccessDeniedException",
+        "UnauthorizedException",
+        "UnrecognizedClientException",
+        "ExpiredTokenException",
+    }
+)
+
+
+# Only known inference and transient failures are eligible for a null result.
+_BEDROCK_NULLABLE_CODES = frozenset(
+    {
+        "ConnectTimeoutError",
+        "ConnectionClosedError",
+        "EndpointConnectionError",
+        "InternalServerException",
+        "ModelErrorException",
+        "ModelNotReadyException",
+        "ModelTimeoutException",
+        "ReadTimeoutError",
+        "ServiceUnavailableException",
+        "ThrottlingException",
+        "ValidationException",
+    }
+)
+
+
+def _bedrock_error(error: Exception) -> PySparkRuntimeError:
+    from botocore.exceptions import ClientError
+
+    code = type(error).__name__
+    status = None
+    if isinstance(error, ClientError):
+        status = error.response.get("ResponseMetadata", {}).get("HTTPStatusCode")
+        service_code = error.response.get("Error", {}).get("Code")
+        if isinstance(service_code, str) and re.fullmatch(r"[A-Za-z0-9_]{1,80}", service_code):
+            code = service_code
+    if status in (401, 403) or code in _BEDROCK_PERMISSION_CODES:
+        return _invocation_error("Bedrock model", "PERMISSION_DENIED", code=code)
+    return _invocation_error("Bedrock model", "SDK_ERROR", code=code)
+
+
 class _ConverseClient:
     def __init__(self, endpoint: _ModelEndpoint) -> None:
         import boto3
         from botocore.config import Config
+        from botocore.exceptions import BotoCoreError, ClientError
 
         self.endpoint = endpoint
-        session = boto3.Session(profile_name=endpoint.profile, region_name=endpoint.region)
-        self.client = session.client(
-            "bedrock-runtime",
-            config=Config(
-                connect_timeout=min(5, endpoint.timeout),
-                read_timeout=endpoint.timeout,
-                retries={"mode": "adaptive", "total_max_attempts": endpoint.max_retries + 1},
-            ),
-        )
+        try:
+            session = boto3.Session(profile_name=endpoint.profile, region_name=endpoint.region)
+            self.client = session.client(
+                "bedrock-runtime",
+                config=Config(
+                    connect_timeout=min(5, endpoint.timeout),
+                    read_timeout=endpoint.timeout,
+                    retries={"mode": "adaptive", "total_max_attempts": endpoint.max_retries + 1},
+                ),
+            )
+        except (BotoCoreError, ClientError) as error:
+            raise _bedrock_error(error) from None
 
     def close(self) -> None:
         self.client.close()
 
     def invoke(self, request: str) -> str:
-        response = self.client.converse(
-            modelId=self.endpoint.model_id,
-            messages=[{"role": "user", "content": [{"text": request}]}],
-            inferenceConfig={
-                "maxTokens": self.endpoint.max_tokens,
-                "temperature": self.endpoint.temperature,
-            },
-        )
+        from botocore.exceptions import BotoCoreError, ClientError
+
+        try:
+            response = self.client.converse(
+                modelId=self.endpoint.model_id,
+                messages=[{"role": "user", "content": [{"text": request}]}],
+                inferenceConfig={
+                    "maxTokens": self.endpoint.max_tokens,
+                    "temperature": self.endpoint.temperature,
+                },
+            )
+        except (BotoCoreError, ClientError) as error:
+            raise _bedrock_error(error) from None
         content = response.get("output", {}).get("message", {}).get("content", [])
         text = "".join(block["text"] for block in content if "text" in block)
         if not text.strip():
@@ -302,9 +360,27 @@ class _ConverseClient:
         return text
 
 
+def _can_return_null(error: PySparkRuntimeError) -> bool:
+    condition = error.getCondition()
+    parameters = error.getMessageParameters() or {}
+    if condition == "AI_QUERY_INVOCATION_FAILED.SDK_ERROR":
+        return parameters.get("code", "") in _BEDROCK_NULLABLE_CODES
+    if condition == "AI_QUERY_INVOCATION_FAILED.HTTP_ERROR":
+        return parameters.get("status", "") in ("400", "408", "413", "422")
+    return condition in (
+        "AI_QUERY_INVOCATION_FAILED.CONNECTION_ERROR",
+        "AI_QUERY_INVOCATION_FAILED.EMPTY_RESPONSE",
+        "AI_QUERY_INVOCATION_FAILED.HTTP_RETRIES_EXHAUSTED",
+        "AI_QUERY_INVOCATION_FAILED.INVALID_RESPONSE",
+        "AI_QUERY_INVOCATION_FAILED.TIMEOUT",
+    )
+
+
 def _query_batches(
     endpoint: _ModelEndpoint,
     batches: Iterator["pd.Series"],
+    *,
+    on_error: str = "raise",
 ) -> Iterator["pd.Series"]:
     import pandas as pd
 
@@ -329,9 +405,13 @@ def _query_batches(
             local.client = factory(endpoint)
             with lock:
                 clients.append(local.client)
-        return local.client.invoke(request)
+        try:
+            return local.client.invoke(request)
+        except PySparkRuntimeError as error:
+            if on_error == "null" and _can_return_null(error):
+                return None
+            raise
 
-    batch_failed = False
     try:
         with ThreadPoolExecutor(max_workers=endpoint.max_concurrency) as pool:
             for requests in batches:
@@ -344,16 +424,11 @@ def _query_batches(
                         break
                     values.extend(pool.map(invoke, chunk))
                 yield pd.Series(values, dtype="object")
-    except BaseException:
-        batch_failed = True
-        raise
     finally:
-        close_error = None
         for client in clients:
             try:
                 client.close()
-            except Exception as error:
-                if close_error is None:
-                    close_error = error
-        if not batch_failed and close_error is not None:
-            raise close_error
+            except Exception:
+                logging.getLogger(__name__).warning(
+                    "Failed to close an AI query client for provider %s", endpoint.provider
+                )

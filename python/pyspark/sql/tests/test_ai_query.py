@@ -28,6 +28,7 @@ from unittest.mock import MagicMock, Mock, patch
 from pyspark.errors import PySparkRuntimeError, PySparkTypeError, PySparkValueError
 from pyspark.sql._ai_client import (
     _ChatCompletionsClient,
+    _ConverseClient,
     _ModelEndpoint,
     _query_batches,
 )
@@ -42,6 +43,14 @@ except ImportError:
     have_ai_query_dependencies = False
 else:
     have_ai_query_dependencies = True
+
+
+class _BotoCoreError(Exception):
+    pass
+
+
+class _ClientError(Exception):
+    pass
 
 
 @unittest.skipUnless(have_ai_query_dependencies, "AI query tests require pandas and requests")
@@ -210,7 +219,7 @@ class AIQueryTests(unittest.TestCase, PySparkErrorTestUtils):
         sleep.assert_called_once_with(3)
 
     def test_http_errors_do_not_leak_or_retry(self):
-        for status in (302, 400, 401, 403, 409):
+        for status in (302, 400, 409):
             client = self.client()
             client.http.post.return_value = self.response(status)
             with (
@@ -222,6 +231,23 @@ class AIQueryTests(unittest.TestCase, PySparkErrorTestUtils):
                 raised.exception,
                 "AI_QUERY_INVOCATION_FAILED.HTTP_ERROR",
                 {"target": "Databricks model", "status": str(status)},
+            )
+            self.assertEqual(raised.exception.getSqlState(), "58000")
+            self.assertNotIn("private prompt", str(raised.exception))
+
+    def test_permission_denied_http_statuses_do_not_leak_or_retry(self):
+        for status in (401, 403):
+            client = self.client()
+            client.http.post.return_value = self.response(status)
+            with (
+                self.subTest(status=status),
+                self.assertRaises(PySparkRuntimeError) as raised,
+            ):
+                client.invoke("private prompt")
+            self.check_error(
+                raised.exception,
+                "AI_QUERY_INVOCATION_FAILED.PERMISSION_DENIED",
+                {"target": "Databricks model", "code": str(status)},
             )
             self.assertEqual(raised.exception.getSqlState(), "58000")
             self.assertNotIn("private prompt", str(raised.exception))
@@ -239,6 +265,15 @@ class AIQueryTests(unittest.TestCase, PySparkErrorTestUtils):
         )
         client.http.post.assert_called_once()
 
+    def bedrock_modules(self, session_factory):
+        return {
+            "boto3": SimpleNamespace(Session=session_factory),
+            "botocore.config": SimpleNamespace(Config=Mock()),
+            "botocore.exceptions": SimpleNamespace(
+                BotoCoreError=_BotoCoreError, ClientError=_ClientError
+            ),
+        }
+
     def test_bedrock_registered_model_batches(self):
         session = Mock()
         client = session.client.return_value
@@ -246,13 +281,8 @@ class AIQueryTests(unittest.TestCase, PySparkErrorTestUtils):
             "output": {"message": {"content": [{"text": "hello"}, {"text": " world"}]}}
         }
         create_session = Mock(return_value=session)
-        config = Mock()
-        sdk_modules = {
-            "boto3": SimpleNamespace(Session=create_session),
-            "botocore.config": SimpleNamespace(Config=config),
-        }
         with (
-            patch.dict("sys.modules", sdk_modules),
+            patch.dict("sys.modules", self.bedrock_modules(create_session)),
             patch("pyspark.sql.functions.pandas_udf") as udf,
         ):
             register_model("test-bedrock", "model", provider="bedrock", region="us-east-1")
@@ -268,6 +298,46 @@ class AIQueryTests(unittest.TestCase, PySparkErrorTestUtils):
             inferenceConfig={"maxTokens": 2048, "temperature": 0.0},
         )
         client.close.assert_called_once()
+
+    def test_bedrock_sdk_errors_are_structured(self):
+        endpoint = _ModelEndpoint("model", provider="bedrock")
+        session = Mock()
+        sdk_client = session.return_value.client.return_value
+        arn = "arn:aws:bedrock:us-east-1:000000000000:inference-profile/synthetic"
+        failure = _ClientError(arn)
+        failure.response = {"Error": {"Code": "AccessDeniedException", "Message": arn}}
+        sdk_client.converse.side_effect = failure
+
+        with patch.dict("sys.modules", self.bedrock_modules(session)):
+            with self.assertRaises(PySparkRuntimeError) as raised:
+                _ConverseClient(endpoint).invoke("prompt")
+            self.check_error(
+                raised.exception,
+                "AI_QUERY_INVOCATION_FAILED.PERMISSION_DENIED",
+                {"target": "Bedrock model", "code": "AccessDeniedException"},
+            )
+            self.assertNotIn(arn, str(raised.exception))
+            self.assertTrue(raised.exception.__suppress_context__)
+
+            failure.response = {"Error": {"Code": "ThrottlingException", "Message": arn}}
+            with self.assertRaises(PySparkRuntimeError) as raised:
+                _ConverseClient(endpoint).invoke("prompt")
+            self.check_error(
+                raised.exception,
+                "AI_QUERY_INVOCATION_FAILED.SDK_ERROR",
+                {"target": "Bedrock model", "code": "ThrottlingException"},
+            )
+            self.assertNotIn(arn, str(raised.exception))
+
+            session.side_effect = _BotoCoreError(arn)
+            with self.assertRaises(PySparkRuntimeError) as raised:
+                _ConverseClient(endpoint)
+            self.check_error(
+                raised.exception,
+                "AI_QUERY_INVOCATION_FAILED.SDK_ERROR",
+                {"target": "Bedrock model", "code": "_BotoCoreError"},
+            )
+            self.assertNotIn(arn, str(raised.exception))
 
     def test_retries_are_bounded(self):
         client = self.client(max_retries=1)
@@ -356,17 +426,20 @@ class AIQueryTests(unittest.TestCase, PySparkErrorTestUtils):
                 for client in clients:
                     client.invoke.side_effect = invoke
                     client.close.side_effect = close_error
+                endpoint = _ModelEndpoint("model", provider="databricks", max_concurrency=2)
                 with (
                     patch("pyspark.sql._ai_client._ChatCompletionsClient", side_effect=clients),
-                    self.assertRaises(RuntimeError) as raised,
+                    self.assertLogs("pyspark.sql._ai_client", level="WARNING") as logs,
                 ):
-                    list(
-                        _query_batches(
-                            _ModelEndpoint("model", provider="databricks", max_concurrency=2),
-                            iter(batches),
-                        )
-                    )
-                self.assertIs(raised.exception, batch_error or close_error)
+                    if batch_error is None:
+                        result = list(_query_batches(endpoint, iter(batches)))
+                        self.assertEqual(result[0].tolist(), ["HELLO", "WORLD"])
+                    else:
+                        with self.assertRaises(RuntimeError) as raised:
+                            list(_query_batches(endpoint, iter(batches)))
+                        self.assertIs(raised.exception, batch_error)
+                self.assertEqual(len(logs.output), 2)
+                self.assertNotIn("close failed", " ".join(logs.output))
                 for client in clients:
                     client.close.assert_called_once()
 
@@ -383,6 +456,76 @@ class AIQueryTests(unittest.TestCase, PySparkErrorTestUtils):
                 {"arg_name": "request", "expected_type": "str", "arg_type": "int"},
             )
             client.assert_not_called()
+
+    def test_null_on_invocation_error_preserves_validation_and_setup_errors(self):
+        endpoint = _ModelEndpoint("model", provider="databricks")
+        with patch("pyspark.sql._ai_client._ChatCompletionsClient") as factory:
+            factory.side_effect = PySparkRuntimeError(
+                errorClass="AI_QUERY_INVOCATION_FAILED.INVALID_URL",
+                messageParameters={"target": "Databricks model"},
+            )
+            with self.assertRaises(PySparkRuntimeError) as raised:
+                list(_query_batches(endpoint, iter([pd.Series(["hello"])]), on_error="null"))
+            self.assertEqual(
+                raised.exception.getCondition(), "AI_QUERY_INVOCATION_FAILED.INVALID_URL"
+            )
+            with self.assertRaises(PySparkTypeError):
+                list(_query_batches(endpoint, iter([pd.Series([12])]), on_error="null"))
+
+    def test_null_on_invocation_error_does_not_hide_permission_denied(self):
+        endpoint = _ModelEndpoint("model", provider="databricks")
+        client = Mock()
+        client.invoke.side_effect = PySparkRuntimeError(
+            errorClass="AI_QUERY_INVOCATION_FAILED.PERMISSION_DENIED",
+            messageParameters={"target": "Databricks model", "code": "403"},
+        )
+        with patch("pyspark.sql._ai_client._ChatCompletionsClient", return_value=client):
+            with self.assertRaises(PySparkRuntimeError) as raised:
+                list(_query_batches(endpoint, iter([pd.Series(["hello"])]), on_error="null"))
+            self.assertEqual(
+                raised.exception.getCondition(), "AI_QUERY_INVOCATION_FAILED.PERMISSION_DENIED"
+            )
+
+    def test_bedrock_null_mode_distinguishes_transient_and_auth_errors(self):
+        endpoint = _ModelEndpoint("model", provider="bedrock")
+        session = Mock()
+        sdk_client = session.return_value.client.return_value
+        failure = _ClientError("synthetic")
+        sdk_client.converse.side_effect = failure
+        with patch.dict("sys.modules", self.bedrock_modules(session)):
+            for code, status, condition in (
+                ("AccessDeniedException", 403, "PERMISSION_DENIED"),
+                ("ExpiredToken", 400, "SDK_ERROR"),
+                ("InvalidClientTokenId", 400, "SDK_ERROR"),
+                ("UnknownForbidden", 403, "PERMISSION_DENIED"),
+            ):
+                with self.subTest(code=code):
+                    failure.response = {
+                        "Error": {"Code": code},
+                        "ResponseMetadata": {"HTTPStatusCode": status},
+                    }
+                    with self.assertRaises(PySparkRuntimeError) as raised:
+                        list(
+                            _query_batches(endpoint, iter([pd.Series(["prompt"])]), on_error="null")
+                        )
+                    self.check_error(
+                        raised.exception,
+                        f"AI_QUERY_INVOCATION_FAILED.{condition}",
+                        {"target": "Bedrock model", "code": code},
+                    )
+            failure.response = {"Error": {"Code": "ThrottlingException"}}
+            result = list(_query_batches(endpoint, iter([pd.Series(["prompt"])]), on_error="null"))
+            self.assertEqual(result[0].tolist(), [None])
+
+    def test_on_error_type_is_validated(self):
+        register_model("on-error-type-test", "model", provider="databricks")
+        with self.assertRaises(PySparkTypeError) as raised:
+            ai_query("on-error-type-test", "prompt", on_error=["null"])
+        self.check_error(
+            raised.exception,
+            "NOT_EXPECTED_TYPE",
+            {"arg_name": "on_error", "expected_type": "str", "arg_type": "list"},
+        )
 
     def test_registration_is_lazy_and_columns_snapshot_configuration(self):
         with patch("pyspark.sql.functions.pandas_udf") as factory:
@@ -417,10 +560,10 @@ class AIQuerySparkTests(sqlutils.ReusedSQLTestCase):
             def do_POST(self):
                 body = json.loads(self.rfile.read(int(self.headers["Content-Length"])))
                 prompt = body["messages"][0]["content"]
-                received.append((prompt, self.headers["Authorization"]))
+                received.append((self.path, prompt, self.headers["Authorization"]))
                 result = {"choices": [{"message": {"content": prompt.upper()}}]}
                 response = json.dumps(result).encode()
-                self.send_response(200)
+                self.send_response(400 if prompt == "reject" else 200)
                 self.send_header("Content-Type", "application/json")
                 self.send_header("Content-Length", str(len(response)))
                 self.end_headers()
@@ -432,45 +575,63 @@ class AIQuerySparkTests(sqlutils.ReusedSQLTestCase):
         with ThreadingHTTPServer(("127.0.0.1", 0), Handler) as server:
             thread = threading.Thread(target=server.serve_forever, daemon=True)
             thread.start()
-            url = f"http://127.0.0.1:{server.server_port}/invocations"
+            origin = f"http://127.0.0.1:{server.server_port}"
 
-            def local_batches(endpoint, batches):
-                # Install the local transport in the worker after the UDF is deserialized.
+            def local_batches(endpoint, batches, *, on_error):
+                from urllib.parse import urlsplit
+
+                import requests
+
                 from pyspark.sql import _ai_client
 
-                client_type = _ai_client._ChatCompletionsClient
+                session_type = requests.Session
+                config = SimpleNamespace(
+                    host="https://example.test",
+                    authenticate=lambda: {"Authorization": "Bearer test"},
+                )
+                sdk = SimpleNamespace(
+                    WorkspaceClient=lambda **kwargs: SimpleNamespace(config=config)
+                )
 
-                def make_client(config):
-                    client = object.__new__(client_type)
-                    client.endpoint = config
-                    client.url = url
-                    client.workspace = SimpleNamespace(
-                        config=SimpleNamespace(
-                            authenticate=lambda: {"Authorization": "Bearer test"}
-                        )
-                    )
-                    client.http = _ai_client._databricks_session()
-                    return client
+                class LocalAdapter(requests.adapters.HTTPAdapter):
+                    def send(self, request, **kwargs):
+                        request.url = origin + urlsplit(request.url).path
+                        kwargs["proxies"] = {}
+                        return super().send(request, **kwargs)
 
-                with patch.object(_ai_client, "_ChatCompletionsClient", side_effect=make_client):
-                    yield from _ai_client._query_batches(endpoint, batches)
+                def make_session():
+                    session = session_type()
+                    session.mount(config.host, LocalAdapter())
+                    return session
+
+                with (
+                    patch.dict("sys.modules", {"databricks.sdk": sdk}),
+                    patch("requests.Session", side_effect=make_session),
+                ):
+                    yield from _ai_client._query_batches(endpoint, batches, on_error=on_error)
 
             try:
                 register_model("local-model", "model", provider="databricks", timeout=5)
                 frame = self.spark.createDataFrame(
-                    [(1, "hello"), (2, None), (3, "world")], "id int, prompt string"
+                    [(1, "hello"), (2, None), (3, "world"), (4, "reject")], "id int, prompt string"
                 )
                 with patch("pyspark.sql.ai._query_batches", new=local_batches):
-                    result = frame.withColumn("answer", ai_query("local-model", "prompt"))
+                    result = frame.withColumn(
+                        "answer", ai_query("local-model", "prompt", on_error="null")
+                    )
                     self.assertIn(
                         "ArrowEvalPython", result._jdf.queryExecution().executedPlan().toString()
                     )
                     self.assertEqual(
                         sorted((row.id, row.answer) for row in result.collect()),
-                        [(1, "HELLO"), (2, None), (3, "WORLD")],
+                        [(1, "HELLO"), (2, None), (3, "WORLD"), (4, None)],
                     )
                 self.assertCountEqual(
-                    received, [("hello", "Bearer test"), ("world", "Bearer test")]
+                    received,
+                    [
+                        ("/serving-endpoints/model/invocations", prompt, "Bearer test")
+                        for prompt in ("hello", "world", "reject")
+                    ],
                 )
             finally:
                 server.shutdown()

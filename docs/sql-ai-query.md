@@ -62,25 +62,23 @@ result = documents.select(
 ```
 
 Each provider receives a chat message per non-null request and returns text. Both accept
-`max_tokens` and `temperature`. Null requests produce null. Concurrency is bounded per active
-Python task. Bedrock applies the configured timeout to socket reads per attempt. Retries and
-repeated Spark actions can make additional billable calls.
+`max_tokens` and `temperature`. Null requests produce null.
 
 ## Execution and retries
 
-Aliases are registered in the driver Python process. Each constructed column captures
-the registration available at construction time. Requests must be strings or nulls.
-Invalid requests and invocation errors fail the task.
-
-Workers resolve credentials when they create provider clients. For Databricks, the SDK
-refreshes authentication headers for each attempt. Transient connection errors and
-HTTP 429, 500, 502, 503, and 504 responses are retried with bounded exponential backoff.
-Numeric `Retry-After` headers are respected within the invocation time budget. Other HTTP
-errors fail immediately and redirects are rejected. For Bedrock, the AWS SDK handles retries.
+Aliases are registered in the driver Python process. Each column captures the registration
+available at construction time. Invocation errors fail the task by default. Set
+`on_error="null"` to return null for known inference and transient failures. Invalid input,
+client initialization, authentication, and permission errors still fail the task.
 
 Concurrency is bounded per active Python task. For example, 20 tasks with
-`max_concurrency=4` can issue up to 80 concurrent requests. A Pandas batch is processed
-as individual model invocations. Persist results to reuse them across downstream jobs.
+`max_concurrency=4` can issue up to 80 concurrent requests. The worker invokes the model
+for each non-null row in an Arrow batch before yielding the batch. A preview such as
+`show(1)` can therefore invoke the model for more rows than it displays. Apply a limit
+to the input before adding the inference column when previewing a workload.
+
+Spark can repeat billable calls when retrying a failed task. Persist results to reuse them
+across downstream jobs.
 
 ## Validation
 

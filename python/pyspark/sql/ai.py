@@ -105,12 +105,12 @@ def register_model(
     )
 
 
-def ai_query(endpoint: str, request: "ColumnOrName") -> Column:
+def ai_query(endpoint: str, request: "ColumnOrName", *, on_error: str = "raise") -> Column:
     """Return a text column by invoking a registered model for each non-null request.
 
     The column captures the endpoint configuration when it is constructed. Spark may repeat
-    calls on task retries or subsequent actions. The API supports synchronous text generation.
-    Invalid requests and invocation errors fail the task.
+    calls on task retries or subsequent actions. Apply filters and limits to the input before
+    adding this column to control how many rows can reach the model.
 
     .. versionadded:: 4.4.0
 
@@ -120,7 +120,11 @@ def ai_query(endpoint: str, request: "ColumnOrName") -> Column:
         Alias registered with :func:`register_model`.
     request : :class:`~pyspark.sql.Column` or str
         String column or column name containing the prompt. Nulls produce null results
-        without a network call.
+        without a network call. Use :meth:`~pyspark.sql.Column.cast` for other input types.
+    on_error : str, optional
+        How to handle a model invocation error. ``"raise"`` (the default) fails the task.
+        ``"null"`` returns null for known inference and transient failures. Invalid input,
+        client initialization, authentication, and permission errors fail the task.
 
     Returns
     -------
@@ -155,10 +159,24 @@ def ai_query(endpoint: str, request: "ColumnOrName") -> Column:
             errorClass="AI_QUERY_ENDPOINT_NOT_REGISTERED",
             messageParameters={"endpoint": endpoint},
         )
+    if not isinstance(on_error, str):
+        raise PySparkTypeError(
+            errorClass="NOT_EXPECTED_TYPE",
+            messageParameters={
+                "arg_name": "on_error",
+                "expected_type": "str",
+                "arg_type": type(on_error).__name__,
+            },
+        )
+    if on_error not in ("raise", "null"):
+        raise PySparkValueError(
+            errorClass="VALUE_NOT_ALLOWED",
+            messageParameters={"arg_name": "on_error", "allowed_values": "raise, null"},
+        )
     config = _endpoints[endpoint]
 
     def query(batches: Iterator["pd.Series"]) -> Iterator["pd.Series"]:
-        yield from _query_batches(config, batches)
+        yield from _query_batches(config, batches, on_error=on_error)
 
     query_udf = pandas_udf(
         query, returnType=StringType(), functionType=PandasUDFType.SCALAR_ITER
