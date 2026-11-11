@@ -2759,10 +2759,10 @@ class NativeDataSourceSuite extends QueryTest with SharedSparkSession {
     // The contexts of the tasks of earlier tests are closed first, so that the counts below are
     // exactly those of this test.
     eventually(timeout(1.minute))(assert(NativeLibrary.openTaskContexts() == 0))
-    // Closes a reader on this thread once the other thread read a batch, and returns the allocator
-    // of the reader, which is no longer referenced then. With `nextAgain`, the other thread then
-    // calls next, which tells that it no longer reads the batch.
-    def closeWhileRead(nextAgain: Boolean): BufferAllocator = {
+    // Closes a reader on this thread once the other thread read a batch. With `nextAgain`, the
+    // other thread then calls next, which tells that it no longer reads the batch. Otherwise
+    // nativeTest checks that a Cleaner frees the buffers once the reader is unreachable.
+    def closeWhileRead(nextAgain: Boolean): Unit = {
       val marker = new File(Utils.createTempDir(), "released")
       // get_next does not wait: the file .continue exists.
       new File(marker.getPath + ".continue").createNewFile()
@@ -2796,15 +2796,9 @@ class NativeDataSourceSuite extends QueryTest with SharedSparkSession {
       } finally {
         reader.close()
       }
-      allocator
     }
     try {
-      val allocator = closeWhileRead(nextAgain = false)
-      // A Cleaner frees them once the reader and the column vectors of its batch are unreachable.
-      eventually(timeout(1.minute), interval(100.milliseconds)) {
-        System.gc()
-        assert(!readerAllocators().contains(allocator))
-      }
+      closeWhileRead(nextAgain = false)
       closeWhileRead(nextAgain = true)
     } finally {
       pool.shutdown()
@@ -2825,9 +2819,8 @@ class NativeDataSourceSuite extends QueryTest with SharedSparkSession {
       }
       (reader.get(), allocator)
     }
-    // Reads the batch after garbage collections, and returns the allocator once the batch is no
-    // longer referenced.
-    def readAfterGC(): BufferAllocator = {
+    // Reads the batch after garbage collections.
+    def readAfterGC(): Unit = {
       val (batch, allocator) = closedBatch()
       // An object that a Cleaner action marks once a garbage collection found it unreachable,
       // after which the reader would be freed too if only the reader referred to it.
@@ -2841,14 +2834,9 @@ class NativeDataSourceSuite extends QueryTest with SharedSparkSession {
       // free the buffers that a consumer still reads.
       assert(readerAllocators().contains(allocator) && allocator.getAllocatedMemory > 0)
       assert((0 until batch.numRows()).map(batch.column(0).getLong) === (0L until 10L))
-      allocator
     }
-    val allocator = readAfterGC()
-    // The Cleaner frees them once the batch is dropped too.
-    eventually(timeout(1.minute), interval(100.milliseconds)) {
-      System.gc()
-      assert(!readerAllocators().contains(allocator))
-    }
+    // nativeTest checks that the Cleaner frees them once the batch is dropped too.
+    readAfterGC()
   }
 
   nativeTest("free the buffers of a reader closed at the end of its stream without a GC") {
