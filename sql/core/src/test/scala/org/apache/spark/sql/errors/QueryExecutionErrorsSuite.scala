@@ -86,7 +86,8 @@ class QueryExecutionErrorsSuite
   extends ParquetTest
   with OrcTest
   with SharedSparkSession
-  with DataTypeErrorsBase {
+  with DataTypeErrorsBase
+  with IntervalErrorContextTestUtils {
 
   import testImplicits._
 
@@ -849,15 +850,9 @@ class QueryExecutionErrorsSuite
     // The expressions read a column, so that they are not constant-folded on the driver.
     // `SimplifyCasts` replaces a cast to the type of the expression with the expression, which
     // keeps its own context although the non-ANSI cast has none.
-    def expectedContext(query: String, fragment: String): ExpectedContext = {
-      val start = "SELECT ".length + query.indexOf(fragment)
-      ExpectedContext(fragment = fragment, start = start, stop = start + fragment.length - 1)
-    }
     def withSameTypeCast(expr: String, dataType: String): Seq[(String, String)] =
       Seq(expr -> expr, s"CAST($expr AS $dataType)" -> expr)
 
-    val ymDivide = "CAST(CAST(id - 2147483648 AS INT) AS INTERVAL MONTH) / -1"
-    val dtDivide = "CAST(id + 1 AS INTERVAL DAY) / CAST(id AS INT)"
     val makeYM = "make_ym_interval(CAST(id AS INT) + 178956971, 0)"
     val makeDT = "make_dt_interval(CAST(id AS INT) + 106751992)"
     val cases = Seq(

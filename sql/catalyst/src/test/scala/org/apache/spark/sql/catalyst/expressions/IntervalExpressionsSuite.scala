@@ -522,16 +522,17 @@ class IntervalExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
     // does not serialize `origin`, so the copy must carry the context itself. Each expression is
     // built inside `withOrigin` and evaluated outside it: evaluated inside, the copy would read
     // the origin back from `CurrentOrigin` and the test could not fail.
-    def withQuery(query: String)(expr: => Expression): (Expression, String) = {
+    def withQuery(query: String)(expr: => Expression): (() => Expression, String) = {
       val o = Origin(
         line = Some(1),
         startPosition = Some(7),
         startIndex = Some(7),
         stopIndex = Some(7 + query.length - 1),
         sqlText = Some(s"select $query"))
-      (withOrigin(o)(expr), s"== SQL (line 1, position 8) ==\nselect $query")
+      (() => withOrigin(o)(expr), s"== SQL (line 1, position 8) ==\nselect $query")
     }
     // A cast to the type of the expression, with a context of its own (ANSI) or none (LEGACY).
+    val castContext = "== SQL (line 1, position 1) ==\ncast"
     def sameTypeCast(expr: Expression, evalMode: EvalMode.Value): Expression = {
       val o = Origin(
         line = Some(1),
@@ -557,23 +558,28 @@ class IntervalExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
       withQuery("make_dt_interval(2147483647)")(
         MakeDTInterval(Literal(Int.MaxValue), Literal(0), Literal(0),
           Literal(Decimal(0, Decimal.MAX_LONG_DIGITS, 6))))
-    ).foreach { case (expr, context) =>
+    ).foreach { case (newExpr, context) =>
+      // Each form gets an instance of its own, since `copyTagsFrom` changes the instance that a
+      // rule returns, so that a failure tells which form lost the context.
       // A rule that replaces a node calls `copyTagsFrom` on the replacement, as `SimplifyCasts`
-      // does when it replaces a cast to the same type with its child.
-      val replacingCasts = Seq(EvalMode.ANSI, EvalMode.LEGACY).map { evalMode =>
-        sameTypeCast(expr, evalMode).transformDown {
-          case Cast(child, dataType, _, _) if child.dataType == dataType => child
-        }
+      // does when it replaces a cast to the same type with its child: the expression takes the
+      // context of an ANSI cast, and keeps its own under a LEGACY cast, which has none.
+      val replacingCasts = Seq(EvalMode.ANSI -> castContext, EvalMode.LEGACY -> context).map {
+        case (evalMode, expected) =>
+          sameTypeCast(newExpr(), evalMode).transformDown {
+            case Cast(child, dataType, _, _) if child.dataType == dataType => child
+          } -> expected
       }
       // A transform of a deserialized copy, as `BindReferences` runs on an executor, rebuilds the
       // node with an empty `origin`, and the rebuilt node takes the context of the copy.
-      val deserialized = ser.deserialize[Expression](ser.serialize(expr))
+      val deserialized = ser.deserialize[Expression](ser.serialize(newExpr()))
       val rebuilt = deserialized.makeCopy(deserialized.productIterator.map(_.asInstanceOf[AnyRef])
         .toArray)
-      (expr +: rebuilt +: replacingCasts).foreach { e =>
-        withClue(s"$e: ") {
-          checkExceptionInExpression[SparkArithmeticException](e, context)
-        }
+      ((newExpr() -> context) +: (rebuilt -> context) +: replacingCasts).foreach {
+        case (e, expected) =>
+          withClue(s"$e: ") {
+            checkExceptionInExpression[SparkArithmeticException](e, expected)
+          }
       }
     }
   }

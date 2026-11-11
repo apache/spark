@@ -27,7 +27,7 @@ import org.apache.spark.sql.catalyst.expressions.Cast.{toSQLExpr, toSQLType}
 import org.apache.spark.sql.catalyst.expressions.aggregate.AggregateFunction
 import org.apache.spark.sql.catalyst.expressions.codegen._
 import org.apache.spark.sql.catalyst.expressions.codegen.Block._
-import org.apache.spark.sql.catalyst.trees.{BinaryLike, CurrentOrigin, LeafLike, QuaternaryLike, SQLQueryContext, TernaryLike, TreeNode, UnaryLike}
+import org.apache.spark.sql.catalyst.trees.{BinaryLike, CurrentOrigin, LeafLike, QuaternaryLike, TernaryLike, TreeNode, UnaryLike}
 import org.apache.spark.sql.catalyst.trees.TreePattern
 import org.apache.spark.sql.catalyst.trees.TreePattern._
 import org.apache.spark.sql.catalyst.trees.TreePatternBits.toPatternBits
@@ -699,22 +699,16 @@ trait SupportQueryContext extends Expression with Serializable {
   //       empty "Origin" during rule transforms since "Origin"s are not serialized to executors
   //       for better performance. Thus, we need to copy the original query context during
   //       transforms. The query context string is considered as a "tag" on the expression here.
-  //       Like the tags of `TreeNode.copyTagsFrom`, it is copied only when this expression has
-  //       no context of its own: `None`, or one regenerated from an empty "Origin". A rule that
-  //       replaces a node with an existing expression, such as a child, then keeps the context
-  //       of the expression that raises the error instead of taking the context of the node.
+  //       It is copied only when the replaced node has one: a node without a context, such as
+  //       a non-ANSI `Divide` that the analyzer turns into an interval division, would otherwise
+  //       leave the expression that replaces it, which raises in every mode, with none.
   override def copyTagsFrom(other: Expression): Unit = {
     other match {
-      case s: SupportQueryContext if !hasOwnQueryContext =>
+      case s: SupportQueryContext if s.queryContext.isDefined =>
         queryContext = s.queryContext
       case _ =>
     }
     super.copyTagsFrom(other)
-  }
-
-  private def hasOwnQueryContext: Boolean = queryContext.exists {
-    case c: SQLQueryContext => c.isValid
-    case _ => true
   }
 }
 

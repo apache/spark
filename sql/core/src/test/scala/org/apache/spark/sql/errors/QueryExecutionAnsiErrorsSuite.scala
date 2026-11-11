@@ -28,7 +28,8 @@ import org.apache.spark.sql.test.{SharedSparkSession, TestSparkSession}
 import org.apache.spark.sql.types.ByteType
 
 // Test suite for all the execution errors that requires enable ANSI SQL mode.
-class QueryExecutionAnsiErrorsSuite extends SharedSparkSession {
+class QueryExecutionAnsiErrorsSuite extends SharedSparkSession
+  with IntervalErrorContextTestUtils {
   import testImplicits._
 
   override def sparkConf: SparkConf = super.sparkConf.set(SQLConf.ANSI_ENABLED.key, "true")
@@ -117,15 +118,8 @@ class QueryExecutionAnsiErrorsSuite extends SharedSparkSession {
 
   test("SPARK-61352: an interval division error keeps its query context") {
     // Without whole-stage codegen the projection is built on the executor from a deserialized
-    // copy of the expression. The divisions read a column, so that they are not constant-folded
-    // on the driver. `SimplifyCasts` replaces a cast to the type of the division with the
-    // division, which keeps its own context instead of taking the context of the cast.
-    def expectedContext(query: String, fragment: String): ExpectedContext = {
-      val start = "SELECT ".length + query.indexOf(fragment)
-      ExpectedContext(fragment = fragment, start = start, stop = start + fragment.length - 1)
-    }
-    val ymDivide = "CAST(CAST(id - 2147483648 AS INT) AS INTERVAL MONTH) / -1"
-    val dtDivide = "CAST(id + 1 AS INTERVAL DAY) / CAST(id AS INT)"
+    // copy of the expression. `SimplifyCasts` replaces a cast to the type of the division with
+    // the division, which takes the context of the cast, as the other ANSI expressions do.
     Seq("true", "false").foreach { wholeStage =>
       withSQLConf(SQLConf.WHOLESTAGE_CODEGEN_ENABLED.key -> wholeStage) {
         Seq(ymDivide, s"CAST($ymDivide AS INTERVAL YEAR TO MONTH)").foreach { query =>
@@ -136,7 +130,7 @@ class QueryExecutionAnsiErrorsSuite extends SharedSparkSession {
             condition = "INTERVAL_ARITHMETIC_OVERFLOW.WITH_SUGGESTION",
             sqlState = "22015",
             parameters = Map("functionName" -> "`try_divide`"),
-            context = expectedContext(query, ymDivide))
+            context = expectedContext(query, query))
         }
         Seq(dtDivide, s"CAST($dtDivide AS INTERVAL DAY TO SECOND)").foreach { query =>
           checkError(
@@ -146,7 +140,7 @@ class QueryExecutionAnsiErrorsSuite extends SharedSparkSession {
             condition = "INTERVAL_DIVIDED_BY_ZERO",
             sqlState = "22012",
             parameters = Map.empty[String, String],
-            context = expectedContext(query, dtDivide))
+            context = expectedContext(query, query))
         }
       }
     }

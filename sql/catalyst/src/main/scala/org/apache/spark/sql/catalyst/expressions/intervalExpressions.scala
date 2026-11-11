@@ -734,10 +734,11 @@ case class MultiplyDTInterval(
  * the `IntervalMathUtils.divide` overload for the interval type and the kind of the divisor, which
  * holds the checks and the error, so that the two paths cannot drift apart.
  *
- * The division raises on overflow and on a zero divisor in every mode, so it always keeps the
- * query context. It keeps it as a `SupportQueryContext` field rather than reading `origin` when
- * it evaluates: `origin` is not serialized, so a copy of the expression deserialized on an
- * executor, where an interpreted or a non-whole-stage projection is built, has an empty one.
+ * The division raises on overflow and on a zero divisor in every mode, so it has a query context
+ * in every mode, unlike `Divide`, whose context is set only under ANSI. It keeps it as a
+ * `SupportQueryContext` field rather than reading `origin` when it evaluates: `origin` is not
+ * serialized, so a copy of the expression deserialized on an executor, where an interpreted or a
+ * non-whole-stage projection is built, has an empty one.
  */
 trait IntervalDivide extends BinaryExpression with SupportQueryContext {
   override def initQueryContext(): Option[QueryContext] = Some(origin.context)
