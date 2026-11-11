@@ -79,6 +79,8 @@ object ArrowBackedDataSourceV2 {
   val DEFAULT_NUM_ROWS: Int = 10000
   val DEFAULT_NUM_PARTITIONS: Int = 2
   val BATCH_SIZE: Int = 1024
+  // The number of batches without rows that a partition reader returns with `emptyBatches`.
+  val NUM_EMPTY_BATCHES: Int = 3
 
   // The batches that ArrowBackedPartitionReaders returned, and the ones among them that their
   // consumer released with closeIfFreeable.
@@ -176,8 +178,9 @@ private case class ArrowPartition(start: Int, end: Int)
  *   the columnar optimization.
  * @param arrowIdColumn if false, the `id` column of the batches is not an
  *   [[ArrowColumnVector]], so that a batch is not entirely Arrow-backed.
- * @param emptyBatches if true, the reader with fresh vectors also returns batches without rows,
- *   first, in the middle and last.
+ * @param emptyBatches if true, the reader with fresh vectors also returns
+ *   [[ArrowBackedDataSourceV2.NUM_EMPTY_BATCHES]] batches without rows, first, in the middle and
+ *   last.
  * @param columnIndices the indices of the columns of the schema to read
  */
 private class ArrowBackedReaderFactory(
@@ -287,9 +290,11 @@ private class ReusingArrowPartitionReader(
  * [[ArrowBackedDataSourceV2]].
  *
  * If `arrowIdColumn` is false, the `id` column is a [[ColumnVector]] over its Arrow vector that is
- * not an [[ArrowColumnVector]]. If `emptyBatches` is true, the reader also returns batches without
- * rows, before the first batch, after half of the batches and after the last one. The batches have
- * the columns at `columnIndices`, the first of which counts the releases; the others are closed.
+ * not an [[ArrowColumnVector]]. If `emptyBatches` is true, the reader also returns
+ * [[ArrowBackedDataSourceV2.NUM_EMPTY_BATCHES]] batches without rows: before the first batch,
+ * after half of the batches and after the last one. Some of them are adjacent if there are fewer
+ * than two batches. The batches have the columns at `columnIndices`, the first of which counts the
+ * releases; the others are closed.
  */
 private class ArrowBackedPartitionReader(
     start: Int,
@@ -301,11 +306,12 @@ private class ArrowBackedPartitionReader(
   extends PartitionReader[ColumnarBatch] {
 
   private var current = start
-  // The positions before which the reader returns a batch without rows.
+  // The positions before which the reader returns a batch without rows, in order. A position can
+  // occur more than once, so that the number of the batches does not depend on the parameters.
   private val emptyBatchPositions = if (emptyBatches) {
-    scala.collection.mutable.Set(start, start + (end - start) / batchSize / 2 * batchSize, end)
+    scala.collection.mutable.Queue(start, start + (end - start) / batchSize / 2 * batchSize, end)
   } else {
-    scala.collection.mutable.Set.empty[Int]
+    scala.collection.mutable.Queue.empty[Int]
   }
   private var currentBatch: ColumnarBatch = _
 
@@ -374,7 +380,8 @@ private class ArrowBackedPartitionReader(
   }
 
   override def next(): Boolean = {
-    val count = if (emptyBatchPositions.remove(current)) {
+    val count = if (emptyBatchPositions.headOption.contains(current)) {
+      emptyBatchPositions.dequeue()
       0
     } else if (current >= end) {
       return false
