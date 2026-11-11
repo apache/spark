@@ -84,6 +84,8 @@
       url: sql-native-data-sources.html#how-it-works
     - text: Finding Native Data Sources
       url: sql-native-data-sources.html#finding-native-data-sources
+    - text: Native Scalar Functions
+      url: sql-native-data-sources.html#native-scalar-functions
     - text: Example in Rust
       url: sql-native-data-sources.html#example-in-rust
     - text: Example in C++

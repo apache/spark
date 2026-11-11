@@ -61,8 +61,8 @@ case class NativeFunctionSpec(
 
 /**
  * A function of a kind that this version of Spark does not know, which a later version of the
- * interface may add: only its name and its kind are read, so that the rest of the package stays
- * usable, and registering it fails.
+ * interface may add, or of a version of the interface that Spark does not support: only its name
+ * and its kind are read, so that the rest of the package stays usable, and registering it fails.
  */
 case class UnsupportedNativeFunction(name: String, kind: String) extends NativeFunctionEntry
 
@@ -80,7 +80,10 @@ object NativeFunctionSpec {
   /**
    * Reads the version of the native function interface, `udfAbiVersion`, and the functions of a
    * manifest, or returns why they are invalid. A manifest without functions has no version: Spark
-   * ignores `udfAbiVersion` then, as it ignores the fields that it does not know.
+   * ignores `udfAbiVersion` then, as it ignores the fields that it does not know. Of a version
+   * that Spark does not support, only the names and the kinds of the functions are read, since
+   * the version may change the other fields: Spark reports the version when a session adds the
+   * package or registers one of its functions.
    */
   private[ffi] def parse(
       root: JsonNode): Either[String, (Option[Int], Seq[NativeFunctionEntry])] = {
@@ -99,7 +102,8 @@ object NativeFunctionSpec {
       return Left("A manifest with functions must have a positive integer field " +
         "'udfAbiVersion'.")
     }
-    val parsed = functions.elements().asScala.map(parseFunction).toSeq
+    val unsupportedVersion = version.asInt() > NativeUdfLibrary.ABI_VERSION
+    val parsed = functions.elements().asScala.map(parseFunction(_, unsupportedVersion)).toSeq
     parsed.collectFirst { case Left(reason) => reason } match {
       case Some(reason) => Left(reason)
       case None =>
@@ -113,7 +117,9 @@ object NativeFunctionSpec {
     }
   }
 
-  private def parseFunction(function: JsonNode): Either[String, NativeFunctionEntry] = {
+  private def parseFunction(
+      function: JsonNode,
+      unsupportedVersion: Boolean): Either[String, NativeFunctionEntry] = {
     if (!function.isObject) {
       return Left("Each function of the manifest must be a JSON object.")
     }
@@ -129,7 +135,7 @@ object NativeFunctionSpec {
     if (kind == null || !kind.isTextual) {
       return invalid("must have a field 'kind'.")
     }
-    if (!Kinds.contains(kind.asText())) {
+    if (unsupportedVersion || !Kinds.contains(kind.asText())) {
       return Right(UnsupportedNativeFunction(functionName, kind.asText()))
     }
     val arguments = function.get("arguments")

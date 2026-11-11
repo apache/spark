@@ -51,6 +51,12 @@
 //                        fewer than the rows; "long", one value more; "null_count", a null_count of
 //                        1 without a validity buffer; "children", a child array; "buffers", a NULL
 //                        pointer to its buffers; "unset", out left unset.
+//   bad_nested_result(bigint, string)
+//                        Returns, for each row, an array<bigint> of its first argument, in a
+//                        result whose child array breaks a rule of the header, chosen as in
+//                        bad_result: "child_offset", an offset of 1; "short_child", one value fewer
+//                        than its parent refers to; "null_child", a NULL child; "child_dictionary",
+//                        a dictionary.
 //   keep_input(bigint)   Moves the input and keeps it until close, and returns its argument in an
 //                        array that shares the buffers of the input when they have an offset of 0.
 //                        close records an order violation if the kept buffers changed.
@@ -245,6 +251,7 @@ struct ArrayData {
   std::vector<const void*> buffers;
   std::vector<std::unique_ptr<ArrowArray>> children;
   std::vector<ArrowArray*> child_pointers;
+  std::unique_ptr<ArrowArray> dictionary;
   // The state of the eval that returned the array, or 0 for a child array.
   int64_t state_id = 0;
 };
@@ -256,6 +263,9 @@ void releaseArray(ArrowArray* array) {
   }
   for (auto& child : data->children) {
     if (child->release != nullptr) child->release(child.get());
+  }
+  if (data->dictionary != nullptr && data->dictionary->release != nullptr) {
+    data->dictionary->release(data->dictionary.get());
   }
   delete data;
   array->release = nullptr;
@@ -498,6 +508,7 @@ const Function kFunctions[] = {
     {"null_state", nullptr, nullptr},
     {"wait_for_interrupt", "u", "l"},
     {"bad_result", "l,u", "l"},
+    {"bad_nested_result", "l,u", "+l(l)"},
     {"keep_input", "l", "l"},
 };
 
@@ -728,6 +739,41 @@ void badResult(const ArrowArray* input, ArrowArray* out) {
   }
 }
 
+void badNestedResult(const ArrowArray* input, ArrowArray* out) {
+  Column x = column(input, 0);
+  std::string how = column(input, 1).string(0);
+  std::vector<int64_t> values;
+  std::vector<int32_t> offsets{0};
+  for (int64_t i = 0; i < input->length; i++) {
+    values.push_back(x.valid(i) ? x.int64(i) : 0);
+    offsets.push_back(static_cast<int32_t>(i + 1));
+  }
+  ArrowArray child{};
+  if (how == "child_offset") {
+    values.insert(values.begin(), 0);
+    exportArray(&child, input->length, 0, {{}, bytesOf(values)});
+    child.offset = 1;
+  } else if (how == "short_child") {
+    values.pop_back();
+    exportArray(&child, static_cast<int64_t>(values.size()), 0, {{}, bytesOf(values)});
+  } else if (how == "null_child" || how == "child_dictionary") {
+    exportArray(&child, input->length, 0, {{}, bytesOf(values)});
+  } else {
+    throw std::runtime_error("bad_nested_result: unknown kind " + how);
+  }
+  exportArray(out, input->length, 0, {{}, bytesOf(offsets)}, {child});
+  auto* data = static_cast<ArrayData*>(out->private_data);
+  if (how == "null_child") {
+    data->child_pointers[0] = nullptr;
+  } else if (how == "child_dictionary") {
+    ArrowArray* exported = data->children[0].get();
+    auto* child_data = static_cast<ArrayData*>(exported->private_data);
+    child_data->dictionary = std::make_unique<ArrowArray>();
+    exportArray(child_data->dictionary.get(), 1, 0, {{}, bytesOf(std::vector<int64_t>{0})});
+    exported->dictionary = child_data->dictionary.get();
+  }
+}
+
 void keepInput(State* state, ArrowArray* input, ArrowArray* out) {
   state->kept.push_back(*input);
   input->release = nullptr;
@@ -798,6 +844,8 @@ int evalBatch(void* handle, const SparkUdfEvalInfo* info, ArrowArray* input, Arr
         waitForInterrupt(state, input);
       } else if (name == "bad_result") {
         badResult(input, out);
+      } else if (name == "bad_nested_result") {
+        badNestedResult(input, out);
       } else if (name == "keep_input") {
         keepInput(state, input, out);
       }

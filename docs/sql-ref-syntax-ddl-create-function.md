@@ -29,7 +29,9 @@ to all executors when they are executed for the first time. In addition to the
 SQL interface, spark allows users to create custom user defined scalar and
 aggregate functions using Scala, Python and Java APIs. Please refer to 
 [Scalar UDFs](sql-ref-functions-udf-scalar.html) and
-[UDAFs](sql-ref-functions-udf-aggregate.html) for more information.
+[UDAFs](sql-ref-functions-udf-aggregate.html) for more information. A temporary function
+can also be a scalar function implemented in native code, such as Rust or C++, in a native
+package: see [Native Scalar Functions](sql-native-data-sources.html#native-scalar-functions).
 
 ### Syntax
 
@@ -96,12 +98,23 @@ CREATE [ OR REPLACE ] [ TEMPORARY ] FUNCTION [ IF NOT EXISTS ]
     execution, other codegen fails the query. To avoid it, add the jar at startup via `--jars`, or
     implement `produceResult` instead.
 
+    With `PACKAGE`, `class_name` is instead the name of the function in the manifest of the native
+    package, which is case-insensitive.
+
 * **resource_locations**
 
     Specifies the list of resources that contain the implementation of the function
     along with its dependencies.
 
-    **Syntax:** `USING { { (JAR | FILE | ARCHIVE) resource_uri } , ... }`
+    **Syntax:** `USING { { (JAR | FILE | ARCHIVE) resource_uri } , ... | PACKAGE package }`
+
+    `PACKAGE` names one native package, a `.sparkpkg` file, whose library implements the function:
+    the file name of a package that the session added with `spark.addArtifact`, or else of a
+    package in `spark.sql.dataSource.native.paths`, or else the path or the URI of a package. A
+    package at a URI that is not a local file is fetched each time a function is created from it.
+    `PACKAGE` cannot be combined with other resources, and only a `TEMPORARY` function can use it:
+    creating a permanent one fails with `UNSUPPORTED_FEATURE.PERSISTENT_NATIVE_UDF`. See
+    [Native Scalar Functions](sql-native-data-sources.html#native-scalar-functions).
 
 ### Examples
 
@@ -176,6 +189,22 @@ SELECT simple_udf(c1) AS function_return_value FROM test;
 +---------------------+
 |                   21|
 |                   22|
++---------------------+
+
+-- 1. Build a native package `udfs.sparkpkg` whose manifest lists a function `add_one`, which
+--    increments a BIGINT by 1: see Native Scalar Functions.
+-- 2. Add it to the session, for example with `spark.addArtifact("/tmp/udfs.sparkpkg")`.
+
+-- Create a temporary function called `add_one` from the native package.
+CREATE TEMPORARY FUNCTION add_one AS 'add_one' USING PACKAGE 'udfs.sparkpkg';
+
+-- Invoke the function. Every selected value should be incremented by 1.
+SELECT add_one(c1) AS function_return_value FROM test;
++---------------------+
+|function_return_value|
++---------------------+
+|                    2|
+|                    3|
 +---------------------+
 ```
 

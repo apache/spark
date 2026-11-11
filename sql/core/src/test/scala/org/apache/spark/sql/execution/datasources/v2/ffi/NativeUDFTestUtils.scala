@@ -22,6 +22,9 @@ import java.nio.file.Files
 import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.atomic.AtomicInteger
 
+import org.apache.spark.sql.catalyst.FunctionIdentifier
+import org.apache.spark.sql.catalyst.catalog.{CatalogFunction, FunctionResource, PackageResource}
+import org.apache.spark.sql.classic.SparkSession
 import org.apache.spark.util.Utils
 
 /**
@@ -123,6 +126,7 @@ object NativeUDFTestUtils {
     function("null_state", Seq("bigint"), "bigint"),
     function("wait_for_interrupt", Seq("string"), "bigint"),
     function("bad_result", Seq("bigint", "string"), "bigint"),
+    function("bad_nested_result", Seq("bigint", "string"), "array<bigint>"),
     function("keep_input", Seq("bigint"), "bigint"))
 
   /** A manifest, as JSON, without data sources unless `dataSources` is given. */
@@ -140,6 +144,27 @@ object NativeUDFTestUtils {
     val version = abiVersion.map(v => s""""abiVersion": $v, """).getOrElse("")
     s"""{$version$sources"udfAbiVersion": $udfAbiVersion, """ +
       s""""functions": [${functions.mkString(", ")}], "libraries": {$paths}}"""
+  }
+
+  /**
+   * Registers add_one in the session, as CREATE TEMPORARY FUNCTION does, from a package whose
+   * library Spark never loads, for the tests of plans: they need neither a C++ compiler nor Java
+   * 22, since only the executors load a library, to evaluate a call.
+   */
+  def registerForPlans(session: SparkSession): Unit = {
+    val file = NativeDataSourceTestUtils.createZip(
+      Utils.createTempDir(),
+      "plans.sparkpkg",
+      NativeDataSourcePackage.MANIFEST_NAME -> manifestJson(Seq(function("add_one",
+        Seq("bigint"), "bigint")), Map(NativePlatform.current -> "lib.so")).getBytes(UTF_8),
+      "lib.so" -> Array.emptyByteArray)
+    val pkg = NativeDataSourcePackage.read(file)
+    val addOne = pkg.manifest.functions.head.asInstanceOf[NativeFunctionSpec]
+    session.sessionState.catalog.registerFunction(
+      CatalogFunction(FunctionIdentifier(addOne.name), addOne.name,
+        Seq(FunctionResource(PackageResource, file.getPath))),
+      overrideIfExists = true,
+      functionBuilder = Some(arguments => NativeUDF(addOne.name, addOne, pkg, arguments)))
   }
 
   /** Creates a package with the library built for this platform. */

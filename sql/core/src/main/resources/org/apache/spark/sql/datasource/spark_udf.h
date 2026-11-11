@@ -21,15 +21,17 @@
  *
  * A native function library is a shared library that exports a single C function,
  * spark_udf_init, which returns the table of the functions that implement its user-defined
- * functions, a SparkUdfLibrary. Spark calls them with the Foreign Function and Memory API of
- * Java, so native functions require Java 22 or later. Each library has its own table, so any
- * number of libraries can be loaded side by side. Spark evaluates a native function on Arrow
- * batches, in the process of the executor, without a worker process. Version 1 has scalar
- * functions: a call gets a batch of rows and returns one value for each row.
+ * functions, a SparkUdfLibrary. Each library has its own table, so any number of libraries can be
+ * loaded side by side. Spark evaluates a native function on Arrow batches, in the process that
+ * loads the library, the host. The interface does not depend on the host: the JVM host of Spark
+ * calls the library with the Foreign Function and Memory API of Java, so it requires Java 22 or
+ * later, and evaluates the calls in the process of the executor, without a worker process.
+ * Version 1 has scalar functions: a call gets a batch of rows and returns one value for each row.
  *
  * This header is self-contained: it only depends on the C standard library, and defines the
- * structs of the Arrow C data interface unless they are already defined, as by Arrow C++. A library
- * can copy it into its source tree, or use the copy in the include directory of a Spark
+ * structs of the Arrow C data interface unless they are already defined, as by Arrow C++. It
+ * needs C11 or C++11, for its anonymous unions, alignment specifiers and static assertions. A
+ * library can copy it into its source tree, or use the copy in the include directory of a Spark
  * distribution. A library built against it works with all the releases of Spark that support its
  * SPARK_UDF_ABI_VERSION. A library can also implement native data sources: it then includes
  * spark_datasource.h too, and exports both spark_ds_init and spark_udf_init. The two headers
@@ -43,11 +45,11 @@
  * library implements, as udfAbiVersion. A session registers a function of a package, for example
  * with CREATE TEMPORARY FUNCTION f AS 'my_function' USING PACKAGE 'my_package.sparkpkg', and then
  * calls it by name, as f. Spark analyzes and plans the calls with the types of the manifest: the
- * driver does not load the library, only the executors do.
+ * driver does not load the library, only the processes that evaluate the calls do.
  *
  * Lifecycle
  * ---------
- * Spark loads a library once in each JVM that evaluates one of its functions, and calls
+ * Spark loads a library once in each process that evaluates one of its functions, and calls
  * spark_udf_init before any other function of its table. A library that also exports
  * spark_ds_init gets each of the two calls once, the first time Spark uses that interface, in
  * either order, but never at the same time.
@@ -63,7 +65,10 @@
  * attempt of a task, after a failure or with speculative execution.
  *
  * Spark may evaluate a function for rows that the query drops afterwards, such as the rows that a
- * later filter rejects, and evaluates rows again when a task runs again. A function that the
+ * later filter rejects, and evaluates rows again when a task runs again. It evaluates a call in a
+ * branch of CASE WHEN or IF, in an argument of COALESCE or in an operand of AND or OR for every
+ * row that reaches the call, also where the query does not use its value: a function that fails
+ * on some arguments must not rely on a condition in the query to avoid them. A function that the
  * manifest declares deterministic must return the same result for the same arguments, and Spark
  * may then evaluate the identical calls of a query only once. Spark never evaluates a native
  * function on the driver, for example to fold a call whose arguments are constants.
@@ -74,7 +79,7 @@
  *   They then set the message that last_error returns, and Spark reports it as a NATIVE_UDF_ERROR,
  *   which names the function and its package, and fails the task. close cannot fail. A C++
  *   exception or a Rust panic must not cross the interface: catch it and return an error instead.
- *   A crash, such as a segmentation fault, ends the executor.
+ *   A crash, such as a segmentation fault, ends the process that loaded the library.
  * - States. create returns an opaque, non-NULL state in its last argument, typically a pointer:
  *   Spark reports a NULL state as an error. Spark releases each state exactly once, with close, and
  *   no other function releases a state. It closes every state that create returned, also after an
@@ -105,8 +110,9 @@
  *     them after the call.
  *   - eval initializes out with an array of exactly as many values as the input has rows, of the
  *     type of the result in the schema that create got: the same format, with the same number of
- *     children at every level. Arrow Java ignores the offsets of the arrays it imports, so the
- *     array must have an offset of 0, at every level: copy a sliced array before returning it.
+ *     children at every level. The JVM host imports it with Arrow Java, which ignores the offsets
+ *     of the arrays that it imports, so the array must have an offset of 0, at every level: copy a
+ *     sliced array before returning it.
  *     Spark rejects an array with another offset, an array with fewer values than its parent
  *     refers to, and an array without a validity buffer whose null_count is not 0. As the C data
  *     interface requires, the buffers of an array must hold all of its values: the interface does
@@ -139,14 +145,16 @@
  *   query, only stops once eval returns. Spark checks whether the task was killed between the
  *   batches, so an eval that runs for long, or blocks, should check task->is_interrupted
  *   regularly, for example every few thousand rows, and fail once it is true. An eval that never
- *   returns keeps the task running, unless the task reaper (spark.task.reaper.enabled and
- *   spark.task.reaper.killTimeout) kills the executor.
+ *   returns keeps the task running, unless the host ends its process: the JVM host does so with
+ *   the task reaper (spark.task.reaper.enabled and spark.task.reaper.killTimeout), which kills the
+ *   executor.
  * - Batches. A batch has at most spark.sql.execution.arrow.maxRecordsPerBatch rows, and also ends
  *   once its arguments hold spark.sql.execution.arrow.maxBytesPerBatch bytes, or at the end of the
  *   rows of the task.
  * - Memory accounting. Spark does not manage the memory of a library: what the library allocates,
- *   and the arrays that eval returns, which Spark reads without copying them, come out of the
- *   memory overhead of the executor. Bound this memory, for example by the size of the batches.
+ *   and the arrays that eval returns, are not accounted by the host. On the JVM host, which reads
+ *   the arrays without copying them, they come out of the memory overhead of the executor. Bound
+ *   this memory, for example by the size of the batches.
  * - Optional functions. last_error is optional: without it, Spark only reports the value that a
  *   function returned. create, eval and close are required: Spark rejects a table without them,
  *   such as one whose size ends before close.
@@ -154,11 +162,18 @@
  * Compatibility
  * -------------
  * As in spark_datasource.h, the function table and the structs that Spark passes to the library
- * start with their size, so that they can grow. They have no padding at their end, and each field
- * appended to them is 8 bytes wide, on the 64-bit platforms that Spark supports: an int64_t, a
- * pointer or a function pointer, with flags and booleans as int64_t. So each appended field grows
- * the size by 8 bytes, and the size tells whether a field is there: a narrower field could take
- * the padding after the field before it, without growing the size. Within a
+ * start with their size, so that they can grow. They have the same layout on every target, that
+ * of 64-bit targets: each pointer and function pointer is in an 8-byte slot, a union with an
+ * int64_t aligned to 8, and this header checks the size of each struct and the offset of each
+ * field. On a target with 4-byte pointers, a pointer fills the first 4 bytes of its slot, and the
+ * other 4 bytes are zero: the host zeroes the structs that it passes, and a library zeroes the
+ * structs that it returns before it sets their fields, as a static or zero-initialized table
+ * already is. So on a little-endian target, a host can read a slot as an int64_t. The structs
+ * have no padding at their end, and each field appended to them is 8 bytes wide: an int64_t, or a
+ * pointer or a function pointer in a slot, with flags and booleans as int64_t. So each appended
+ * field grows the size by 8 bytes, and the size tells whether a field is there: a narrower field
+ * could take the padding after the field before it, without growing the size. The structs of the
+ * Arrow C data interface keep the layout that each target gives them. Within a
  * SPARK_UDF_ABI_VERSION:
  * - fields are only appended to the structs, including SparkUdfLibrary, and the existing fields
  *   never change, nor do the semantics of the existing functions;
@@ -178,6 +193,7 @@
 #define SPARK_UDF_H
 
 #include <stdbool.h>
+#include <stddef.h>
 #include <stdint.h>
 
 #ifdef __cplusplus
@@ -192,6 +208,13 @@ extern "C" {
 #define SPARK_UDF_EXPORT __declspec(dllexport)
 #else
 #define SPARK_UDF_EXPORT __attribute__((visibility("default")))
+#endif
+
+/* An int64_t inside a struct is aligned to 4 bytes on i386, so the 8-byte slots are aligned. */
+#ifdef __cplusplus
+#define SPARK_UDF_ALIGNED(n) alignas(n)
+#else
+#define SPARK_UDF_ALIGNED(n) _Alignas(n)
 #endif
 
 /* The Arrow C data interface: https://arrow.apache.org/docs/format/CDataInterface.html */
@@ -240,7 +263,7 @@ struct ArrowArray {
 #define SPARK_UDF_LOG_DEBUG 4
 #define SPARK_UDF_LOG_TRACE 5
 
-/* Spark, as spark_udf_init gets it. It stays valid until the JVM exits. */
+/* The host, as spark_udf_init gets it. It stays valid until the process exits. */
 typedef struct SparkUdfHost {
   /*
    * The size of this struct in the header that Spark was built with. A later version of Spark may
@@ -250,21 +273,30 @@ typedef struct SparkUdfHost {
   /* The newest version of this interface that Spark supports. */
   int32_t abi_version;
   /* The version of Spark, such as "5.0.0". */
-  const char* spark_version;
+  union {
+    const char* spark_version;
+    SPARK_UDF_ALIGNED(8) int64_t spark_version_slot;
+  };
   /*
    * Logs a message, a NUL-terminated UTF-8 string, at one of the SPARK_UDF_LOG_* levels, in the
-   * log of the executor, with the path of the library. Another level is treated as
-   * SPARK_UDF_LOG_INFO.
+   * log of the host, such as the log of the executor, with the path of the library. Another level
+   * is treated as SPARK_UDF_LOG_INFO.
    */
-  void (*log)(int32_t level, const char* message);
+  union {
+    void (*log)(int32_t level, const char* message);
+    SPARK_UDF_ALIGNED(8) int64_t log_slot;
+  };
   /*
    * Returns whether the logger that log writes to is enabled for one of the SPARK_UDF_LOG_*
    * levels, another level being treated as SPARK_UDF_LOG_INFO, so that the library only formats
    * the messages that Spark may write. It follows the level of the logger, which can change while
-   * Spark runs, but each call is a call into the JVM: a library may keep the answer for a while,
+   * Spark runs, but each call is a call into the host: a library may keep the answer for a while,
    * and ask again from time to time.
    */
-  bool (*is_log_enabled)(int32_t level);
+  union {
+    bool (*is_log_enabled)(int32_t level);
+    SPARK_UDF_ALIGNED(8) int64_t is_log_enabled_slot;
+  };
 } SparkUdfHost;
 
 /*
@@ -287,7 +319,10 @@ typedef struct SparkUdfTaskContext {
    * interrupt native code, so an eval that runs for long, or blocks, should check it regularly,
    * and fail once it is true.
    */
-  bool (*is_interrupted)(const struct SparkUdfTaskContext* task);
+  union {
+    bool (*is_interrupted)(const struct SparkUdfTaskContext* task);
+    SPARK_UDF_ALIGNED(8) int64_t is_interrupted_slot;
+  };
 } SparkUdfTaskContext;
 
 /* The kinds of functions. */
@@ -300,7 +335,10 @@ typedef struct SparkUdfCreateInfo {
   /* The kind of the function, as the manifest declares it: SPARK_UDF_SCALAR in version 1. */
   int32_t kind;
   /* The name of the function, as listed in the manifest. A library can implement several. */
-  const char* name;
+  union {
+    const char* name;
+    SPARK_UDF_ALIGNED(8) int64_t name_slot;
+  };
   /*
    * The arguments of the call: a struct type with one field for each argument, in order, of the
    * type that the manifest gives. A field is nullable if the argument can be null. A function
@@ -308,16 +346,28 @@ typedef struct SparkUdfCreateInfo {
    * fail if it does not implement the function for them: the manifest and the library can
    * disagree, for example if the manifest was edited, and Spark cannot tell.
    */
-  struct ArrowSchema* arguments;
+  union {
+    struct ArrowSchema* arguments;
+    SPARK_UDF_ALIGNED(8) int64_t arguments_slot;
+  };
   /* The result: a nullable field of the type that the manifest gives, as eval returns it. */
-  struct ArrowSchema* result;
+  union {
+    struct ArrowSchema* result;
+    SPARK_UDF_ALIGNED(8) int64_t result_slot;
+  };
   /*
    * The time zone of the session, such as "America/Los_Angeles", which the formats of the
    * timestamps of the schemas also have.
    */
-  const char* session_time_zone;
+  union {
+    const char* session_time_zone;
+    SPARK_UDF_ALIGNED(8) int64_t session_time_zone_slot;
+  };
   /* The task, valid until close returns for the state. */
-  const SparkUdfTaskContext* task;
+  union {
+    const SparkUdfTaskContext* task;
+    SPARK_UDF_ALIGNED(8) int64_t task_slot;
+  };
 } SparkUdfCreateInfo;
 
 /* A batch to evaluate, as eval gets it. */
@@ -345,7 +395,10 @@ typedef struct SparkUdfLibrary {
    * that stays valid until the next call on that thread. Optional: without it, Spark only reports
    * the value that the function returned.
    */
-  const char* (*last_error)(void);
+  union {
+    const char* (*last_error)(void);
+    SPARK_UDF_ALIGNED(8) int64_t last_error_slot;
+  };
 
   /*
    * Creates the state of a call of a function, in a task, the first time the task evaluates the
@@ -356,7 +409,10 @@ typedef struct SparkUdfLibrary {
    *       data" above.
    * state: set to the state
    */
-  int (*create)(const SparkUdfCreateInfo* info, void** state);
+  union {
+    int (*create)(const SparkUdfCreateInfo* info, void** state);
+    SPARK_UDF_ALIGNED(8) int64_t create_slot;
+  };
 
   /*
    * Evaluates a scalar function for a batch of rows.
@@ -365,21 +421,70 @@ typedef struct SparkUdfLibrary {
    * input: a struct array whose children are the arguments: see "Arrow data" above
    * out: set to the array of the results, one for each row of the input
    */
-  int (*eval)(void* state, const SparkUdfEvalInfo* info, struct ArrowArray* input,
-              struct ArrowArray* out);
+  union {
+    int (*eval)(void* state, const SparkUdfEvalInfo* info, struct ArrowArray* input,
+                struct ArrowArray* out);
+    SPARK_UDF_ALIGNED(8) int64_t eval_slot;
+  };
 
   /* Releases a state. */
-  void (*close)(void* state);
+  union {
+    void (*close)(void* state);
+    SPARK_UDF_ALIGNED(8) int64_t close_slot;
+  };
 } SparkUdfLibrary;
 
+/* The layout of these structs is the same on every target: see Compatibility. */
+#ifdef __cplusplus
+#define SPARK_UDF_STATIC_ASSERT(condition) static_assert(condition, #condition)
+#else
+#define SPARK_UDF_STATIC_ASSERT(condition) _Static_assert(condition, #condition)
+#endif
+SPARK_UDF_STATIC_ASSERT(sizeof(SparkUdfHost) == 40);
+SPARK_UDF_STATIC_ASSERT(offsetof(SparkUdfHost, size) == 0);
+SPARK_UDF_STATIC_ASSERT(offsetof(SparkUdfHost, abi_version) == 8);
+SPARK_UDF_STATIC_ASSERT(offsetof(SparkUdfHost, spark_version) == 16);
+SPARK_UDF_STATIC_ASSERT(offsetof(SparkUdfHost, log) == 24);
+SPARK_UDF_STATIC_ASSERT(offsetof(SparkUdfHost, is_log_enabled) == 32);
+SPARK_UDF_STATIC_ASSERT(sizeof(SparkUdfTaskContext) == 40);
+SPARK_UDF_STATIC_ASSERT(offsetof(SparkUdfTaskContext, size) == 0);
+SPARK_UDF_STATIC_ASSERT(offsetof(SparkUdfTaskContext, stage_id) == 8);
+SPARK_UDF_STATIC_ASSERT(offsetof(SparkUdfTaskContext, stage_attempt_number) == 12);
+SPARK_UDF_STATIC_ASSERT(offsetof(SparkUdfTaskContext, partition_id) == 16);
+SPARK_UDF_STATIC_ASSERT(offsetof(SparkUdfTaskContext, attempt_number) == 20);
+SPARK_UDF_STATIC_ASSERT(offsetof(SparkUdfTaskContext, task_attempt_id) == 24);
+SPARK_UDF_STATIC_ASSERT(offsetof(SparkUdfTaskContext, is_interrupted) == 32);
+SPARK_UDF_STATIC_ASSERT(sizeof(SparkUdfCreateInfo) == 56);
+SPARK_UDF_STATIC_ASSERT(offsetof(SparkUdfCreateInfo, size) == 0);
+SPARK_UDF_STATIC_ASSERT(offsetof(SparkUdfCreateInfo, kind) == 8);
+SPARK_UDF_STATIC_ASSERT(offsetof(SparkUdfCreateInfo, name) == 16);
+SPARK_UDF_STATIC_ASSERT(offsetof(SparkUdfCreateInfo, arguments) == 24);
+SPARK_UDF_STATIC_ASSERT(offsetof(SparkUdfCreateInfo, result) == 32);
+SPARK_UDF_STATIC_ASSERT(offsetof(SparkUdfCreateInfo, session_time_zone) == 40);
+SPARK_UDF_STATIC_ASSERT(offsetof(SparkUdfCreateInfo, task) == 48);
+SPARK_UDF_STATIC_ASSERT(sizeof(SparkUdfEvalInfo) == 8);
+SPARK_UDF_STATIC_ASSERT(offsetof(SparkUdfEvalInfo, size) == 0);
+SPARK_UDF_STATIC_ASSERT(sizeof(SparkUdfLibrary) == 48);
+SPARK_UDF_STATIC_ASSERT(offsetof(SparkUdfLibrary, size) == 0);
+SPARK_UDF_STATIC_ASSERT(offsetof(SparkUdfLibrary, abi_version) == 8);
+SPARK_UDF_STATIC_ASSERT(offsetof(SparkUdfLibrary, last_error) == 16);
+SPARK_UDF_STATIC_ASSERT(offsetof(SparkUdfLibrary, create) == 24);
+SPARK_UDF_STATIC_ASSERT(offsetof(SparkUdfLibrary, eval) == 32);
+SPARK_UDF_STATIC_ASSERT(offsetof(SparkUdfLibrary, close) == 40);
+#undef SPARK_UDF_STATIC_ASSERT
+#undef SPARK_UDF_ALIGNED
+
 /*
- * The function that a library exports. Spark calls it once in each JVM, the first time it uses a
- * function of the library, before any other function of the table.
+ * The function that a library exports. Spark calls it once in each process, the first time it
+ * uses a function of the library, before any other function of the table.
  *
- * host: Spark, valid until the JVM exits
+ * host: the host, valid until the process exits
  * library: set to the function table of the library, for the version of this interface that it
  *          implements, or the newest one up to host->abi_version if it implements several. Spark
  *          reads the table after the call, so it is typically the address of a static struct.
+ *          Fill in the table by field name, for example with designated initializers or by
+ *          assignment: an initializer in the order of the fields needs braces around each slot to
+ *          compile without warnings.
  *
  * Returns 0 on success, or any other value if the library cannot run, after it logs why with
  * host->log.

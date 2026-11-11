@@ -22,6 +22,7 @@ import scala.collection.mutable.ArrayBuffer
 
 import org.apache.spark.sql.{QueryTest, Row}
 import org.apache.spark.sql.classic.{DataFrame, SparkSession}
+import org.apache.spark.sql.execution.streaming.runtime.{MemoryStream, StreamingQueryWrapper}
 import org.apache.spark.tags.ExtendedSQLTest
 
 /**
@@ -104,5 +105,25 @@ class NativeUDFClusterSuite extends QueryTest {
     assert(pkg.setLastModified(lastModified))
     checkRows(session.range(0, 8, 1, 4).selectExpr("shout(CAST(id AS STRING))"),
       (0 until 8).map(i => Row(s"$i!")))
+  }
+
+  nativeTest("distribute the package at a path through the session of a streaming query") {
+    val session = newSession()
+    import session.implicits._
+    val pkg = createPackage(library)
+    session.sql(s"CREATE TEMPORARY FUNCTION add_one AS 'add_one' USING PACKAGE '${pkg.getPath}'")
+    val input = MemoryStream[Long](session, 4)
+    val query = input.toDF().selectExpr("add_one(value)").writeStream
+      .format("memory").queryName("native_stream").start()
+    try {
+      input.addData(0L until 20L)
+      query.processAllAvailable()
+    } finally {
+      query.stop()
+    }
+    checkRows(session.table("native_stream"), (1L to 20L).map(Row(_)))
+    val stream = query.asInstanceOf[StreamingQueryWrapper].streamingQuery.sparkSessionForStream
+    assert(stream.artifactManager.hasFileArtifact(
+      s"${pkg.getName}.${NativeDataSourcePackage.read(pkg).sha256}"))
   }
 }

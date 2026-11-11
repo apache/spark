@@ -37,9 +37,13 @@ import org.apache.spark.{SPARK_DOC_ROOT, SparkRuntimeException, SparkThrowable, 
 import org.apache.spark.api.python.PythonEvalType
 import org.apache.spark.sql.{AnalysisException, IntegratedUDFTestUtils, QueryTest, Row}
 import org.apache.spark.sql.catalyst.InternalRow
+import org.apache.spark.sql.catalyst.expressions.BloomFilterMightContain
 import org.apache.spark.sql.catalyst.parser.ParseException
 import org.apache.spark.sql.classic.{DataFrame, SparkSession}
+import org.apache.spark.sql.connector.FakeV2ProviderWithCustomSchema
+import org.apache.spark.sql.connector.catalog.{InMemoryEnhancedPartitionFilterTable, InMemoryTableEnhancedPartitionFilterCatalog}
 import org.apache.spark.sql.execution.LocalLimitExec
+import org.apache.spark.sql.execution.datasources.v2.DataSourceV2ScanRelation
 import org.apache.spark.sql.execution.python.{ArrowEvalPythonExec, BatchEvalPythonExec}
 import org.apache.spark.sql.functions.{call_function, col}
 import org.apache.spark.sql.internal.{SQLConf, StaticSQLConf}
@@ -299,6 +303,26 @@ class NativeUDFSuite extends QueryTest with SharedSparkSession {
       "its argument 1, which is not a valid type: "), reason)
   }
 
+  gridTest("check the functions of a later version when a session adds their package")(Seq(
+    Case("a type of that version", Seq(function("f", Seq("time"), "int")) ->
+      ("UNSUPPORTED_UDF_ABI_VERSION", Map("version" -> "2", "supported" -> "1"))),
+    Case("no kind", Seq("""{"name": "f", "arguments": "time"}""") -> ("INVALID_MANIFEST",
+      Map("reason" -> "The function f of the manifest must have a field 'kind'."))),
+    Case("duplicate names",
+      Seq(function("f", Seq("time"), "int"), """{"name": "F", "kind": "table"}""") ->
+      ("INVALID_MANIFEST",
+        Map("reason" -> "The manifest lists the function f more than once."))))) {
+    case Case(_, (functions, (subClass, parameters))) =>
+      val pkg = createZip(Utils.createTempDir(), "later.sparkpkg",
+        NativeDataSourcePackage.MANIFEST_NAME -> manifestJson(functions,
+          Map(NativePlatform.current -> "lib.so"), udfAbiVersion = 2).getBytes(UTF_8),
+        "lib.so" -> "unused".getBytes(UTF_8))
+      checkError(
+        exception = intercept[SparkRuntimeException](spark.newSession().addArtifact(pkg.getPath)),
+        condition = s"INVALID_NATIVE_DATA_SOURCE_PACKAGE.$subClass",
+        parameters = Map("path" -> pkg.getPath) ++ parameters)
+  }
+
   nativeTest("check a package with functions when a session adds it") {
     // A package with functions only, which Spark accepts.
     newSession(defaultPackage)
@@ -335,6 +359,20 @@ class NativeUDFSuite extends QueryTest with SharedSparkSession {
       parameters = Map("path" -> invalid.getPath, "reason" -> ("The function f of the manifest " +
         "has INTERVAL DAY as the type of its result, which contains the type INTERVAL DAY: " +
         "native functions do not support it.")))
+  }
+
+  nativeTest("serve the data sources of a configured package of a later version of functions") {
+    val both = compileWithDataSources("test_native_udf_with_data_sources")
+    val pkg = createPackage(both, functions = Seq(function("f", Seq("time"), "int")),
+      udfAbiVersion = 2, dataSources = Some(NativeDataSourceTestUtils.dataSources("")))
+    val session = newSession()
+    session.conf.set(SQLConf.NATIVE_DATA_SOURCE_PATHS.key, pkg.getParent)
+    checkRows(session.read.format("native_range").option("end", "3").load().select("id"),
+      Seq(Row(0L), Row(1L), Row(2L)))
+    checkError(
+      exception = intercept[SparkRuntimeException](register(session, pkg.getName, "f")),
+      condition = "INVALID_NATIVE_DATA_SOURCE_PACKAGE.UNSUPPORTED_UDF_ABI_VERSION",
+      parameters = Map("path" -> pkg.getCanonicalPath, "version" -> "2", "supported" -> "1"))
   }
 
   nativeGridTest("register a function of a package given by")(
@@ -727,17 +765,26 @@ class NativeUDFSuite extends QueryTest with SharedSparkSession {
     "children" -> "The result has 1 child arrays, but its type has 0.",
     "buffers" -> "The result has 2 buffers, but a NULL pointer to them.",
     "unset" -> "eval succeeded without setting its result.").map { case (kind, message) =>
-    Case(kind, message)
-  }) { case Case(kind, message) =>
+    Case(kind, ("bad_result", message))
+  } ++ Seq(
+    "child_offset" -> ("A child array of the result has an offset of 1, but Spark only reads " +
+      "arrays with an offset of 0. Copy sliced arrays before returning them."),
+    "short_child" ->
+      "The result has a child array with a length of 2, but it refers to 3 values of it.",
+    "null_child" -> "The result has a NULL child array.",
+    "child_dictionary" ->
+      "A child array of the result is dictionary-encoded, which Spark does not read.").map {
+    case (kind, message) => Case(kind, ("bad_nested_result", message))
+  }) { case Case(kind, (function, message)) =>
     val session = newSession(defaultPackage)
-    register(session, defaultPackage.getName, "bad_result")
+    register(session, defaultPackage.getName, function)
     val e = intercept[Exception] {
-      session.range(0, 3, 1, 1).selectExpr(s"bad_result(id, '$kind')").collect()
+      session.range(0, 3, 1, 1).selectExpr(s"$function(id, '$kind')").collect()
     }
     checkError(
       exception = findError(e, "NATIVE_UDF_ERROR"),
       condition = "NATIVE_UDF_ERROR",
-      parameters = Map("function" -> "`bad_result`", "name" -> "bad_result",
+      parameters = Map("function" -> s"`$function`", "name" -> function,
         "package" -> defaultPackage.getName, "msg" -> message))
   }
 
@@ -952,6 +999,40 @@ class NativeUDFSuite extends QueryTest with SharedSparkSession {
     }
   }
 
+  test("push no native call to a data source as a partition predicate") {
+    val session = spark.newSession()
+    registerForPlans(session)
+    session.conf.set("spark.sql.catalog.testpartfilter",
+      classOf[InMemoryTableEnhancedPartitionFilterCatalog].getName)
+    session.sql("CREATE TABLE testpartfilter.t (p BIGINT, data STRING) USING " +
+      s"${classOf[FakeV2ProviderWithCustomSchema].getName} PARTITIONED BY (p)")
+    session.sql("INSERT INTO testpartfilter.t VALUES (1, 'a'), (2, 'b')")
+    val plan = session.sql("SELECT data FROM testpartfilter.t WHERE add_one(p) = 2")
+      .queryExecution.optimizedPlan
+    val pushed = plan.collect { case relation: DataSourceV2ScanRelation => relation.scan }.map {
+      case scan: InMemoryEnhancedPartitionFilterTable#InMemoryEnhancedPartitionFilterBatchScan =>
+        scan.getPushedPartitionPredicates
+    }
+    assert(pushed == Seq(Nil), plan)
+  }
+
+  gridTest("inject no runtime filter that evaluates a native call, for a join key")(Seq(
+    Case("computed by a call on the creation side",
+      "f.id = d.k" -> "SELECT coalesce(add_one(id), 0) AS k FROM range(10) WHERE id = 5"),
+    Case("with a call on the application side",
+      "add_one(f.id) = d.k" -> "SELECT id AS k FROM range(10) WHERE id = 5"))) {
+    case Case(_, (condition, creationSide)) =>
+      val session = spark.newSession()
+      registerForPlans(session)
+      session.conf.set(SQLConf.RUNTIME_BLOOM_FILTER_APPLICATION_SIDE_SCAN_SIZE_THRESHOLD.key, "0")
+      session.conf.set(SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key, "-1")
+      val plan = session.sql(
+        s"SELECT f.id FROM range(1000) f JOIN ($creationSide) d ON $condition")
+        .queryExecution.optimizedPlan
+      assert(!plan.exists(_.expressions.exists(_.exists(_.isInstanceOf[BloomFilterMightContain]))),
+        plan)
+  }
+
   nativeTest("evaluate calls in joins, aggregates and lambda functions") {
     val session = newSession(defaultPackage)
     register(session, defaultPackage.getName, "add_one", "edit_distance")
@@ -976,6 +1057,37 @@ class NativeUDFSuite extends QueryTest with SharedSparkSession {
       },
       condition = "UNSUPPORTED_FEATURE.NATIVE_UDF_IN_LAMBDA",
       parameters = Map("functionName" -> "`add_one`"))
+  }
+
+  nativeGridTest("evaluate a call on one side of an outer join or in a correlated subquery")({
+    def join(joinType: String, side: String): String = "SELECT a.id, b.id FROM range(4) a " +
+      s"$joinType JOIN range(4) b ON a.id = b.id AND add_one($side.id) > 2"
+    val leftRows = Seq(Row(0L, null), Row(1L, null), Row(2L, 2L), Row(3L, 3L))
+    val rightRows = Seq(Row(null, 0L), Row(null, 1L), Row(2L, 2L), Row(3L, 3L))
+    val scalar = "SELECT id, " +
+      "(SELECT add_one(count(b.id)) FROM range(3) b WHERE b.id = a.id) FROM range(4) a"
+    val scalarRows = Seq(Row(0L, 2L), Row(1L, 2L), Row(2L, 2L), Row(3L, 1L))
+    val noConf = Seq.empty[(String, String)]
+    Seq(
+      Case("LEFT OUTER JOIN, on the preserved side", (join("LEFT", "a"), noConf, leftRows)),
+      Case("LEFT OUTER JOIN, on the null-supplying side", (join("LEFT", "b"), noConf, leftRows)),
+      Case("RIGHT OUTER JOIN, on the preserved side", (join("RIGHT", "b"), noConf, rightRows)),
+      Case("RIGHT OUTER JOIN, on the null-supplying side", (join("RIGHT", "a"), noConf, rightRows)),
+      Case("correlated EXISTS", ("SELECT id FROM range(4) a WHERE EXISTS " +
+        "(SELECT 1 FROM range(4) b WHERE b.id = a.id AND add_one(b.id) > 2)", noConf,
+        Seq(Row(2L), Row(3L)))),
+      Case("correlated IN", ("SELECT id FROM range(4) a WHERE id IN " +
+        "(SELECT add_one(b.id) FROM range(4) b WHERE b.id < a.id)", noConf,
+        Seq(Row(1L), Row(2L), Row(3L)))),
+      Case("correlated scalar subquery", (scalar, noConf, scalarRows)),
+      Case("correlated scalar subquery, with its aggregate optimized before the rewrite",
+        (scalar, Seq(SQLConf.DECORRELATE_SUBQUERY_PREVENT_CONSTANT_FOLDING_FOR_COUNT_BUG.key ->
+          "false"), scalarRows)))
+  }) { case Case(_, (query, confs, expected)) =>
+    val session = newSession(defaultPackage)
+    confs.foreach { case (key, value) => session.conf.set(key, value) }
+    register(session, defaultPackage.getName, "add_one")
+    checkRows(session.sql(query), expected)
   }
 
   nativeGridTest("evaluate the calls of a deterministic function once")(Seq(true, false)) {
