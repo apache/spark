@@ -786,6 +786,36 @@ class SparkConnectClientTestCase(unittest.TestCase):
             client.close()
         unregister.assert_called_once_with(client._on_exit)
 
+    def test_on_exit_cleans_ml_cache_after_failed_ml_command(self):
+        """Test _on_exit cleans the ML cache after an ML command whose response never arrived.
+
+        The server can cache a model even though this client observed no server-side session ID.
+        """
+
+        def lost_response(*args, **kwargs):
+            raise RuntimeError("response lost")
+
+        command = proto.Command()
+        command.ml_command.fit.SetInParent()
+        for method in ["execute_command", "execute_command_as_iterator"]:
+            with self.subTest(method=method):
+                client = SparkConnectClient("sc://foo/", use_reattachable_execute=False)
+                self.addCleanup(client.close)
+                calls = []
+                client._cleanup_ml_cache = lambda: calls.append("cleanup_ml_cache")
+                client._release_session_on_exit = False
+                # Skip the Config RPC that fetches the plan compression settings.
+                client._plan_compression_threshold, client._plan_compression_algorithm = -1, "NONE"
+                client._execute_and_fetch = lost_response
+                client._execute_and_fetch_as_iterator = lost_response
+                with self.assertRaises(RuntimeError):
+                    # list() runs the generator that execute_command_as_iterator returns.
+                    list(getattr(client, method)(command))
+                self.assertIsNone(client._server_session_id)
+
+                client._on_exit()
+                self.assertEqual(calls, ["cleanup_ml_cache"])
+
     def test_on_exit_catches_release_session_exception(self):
         """Test _on_exit continues to call close even if release_session raises."""
         client = SparkConnectClient("sc://foo/", use_reattachable_execute=False)

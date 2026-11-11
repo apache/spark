@@ -969,6 +969,9 @@ class SparkConnectClient(object):
 
         self._release_futures: weakref.WeakSet[concurrent.futures.Future] = weakref.WeakSet()
         self._session_released = False
+        # Set when an ML command was sent, since it can cache a model on the server even if
+        # its response never reaches this client.
+        self._ml_command_sent = False
 
         self._release_session_on_exit = os.getenv(
             "SPARK_CONNECT_RELEASE_SESSION_ON_EXIT", "false"
@@ -1434,6 +1437,8 @@ class SparkConnectClient(object):
             # inside an if statement to not incur a performance cost converting proto to string
             # when not at debug log level.
             logger.debug(f"Execute command for command {self._proto_to_string(command, True)}")
+        if command.HasField("ml_command"):
+            self._ml_command_sent = True
         req = self._execute_plan_request_with_metadata()
         self._set_command_in_plan(req.plan, command)
         data, _, metrics, observed_metrics, properties = self._execute_and_fetch(
@@ -1458,6 +1463,8 @@ class SparkConnectClient(object):
             logger.debug(
                 f"Execute command as iterator for command {self._proto_to_string(command, True)}"
             )
+        if command.HasField("ml_command"):
+            self._ml_command_sent = True
         req = self._execute_plan_request_with_metadata()
         self._set_command_in_plan(req.plan, command)
         for response in self._execute_and_fetch_as_iterator(req, observations or {}):
@@ -2614,8 +2621,8 @@ class SparkConnectClient(object):
         if self._closed or self._session_released:
             return
 
-        # No server-side session ID (None or "") means no ML cache to clean.
-        if self._server_session_id:
+        # The session may hold ML cache entries (see _ml_command_sent).
+        if self._server_session_id or self._ml_command_sent:
             self._cleanup_ml_cache()
         if self._release_session_on_exit:
             try:
