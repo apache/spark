@@ -45,11 +45,13 @@ trait ShowTblPropertiesSuiteBase extends command.ShowTblPropertiesSuiteBase
     }
   }
 
-  test("SHOW TBLPROPERTIES FOR TEMPORARY VIEW") {
+  test("SHOW TBLPROPERTIES FOR VIEW AS JSON") {
     val v = "testview"
     withView(v) {
-      spark.sql(s"CREATE TEMPORARY VIEW $v AS SELECT 1 AS c1;")
-      checkAnswer(sql(s"SHOW TBLPROPERTIES $v"), Seq.empty)
+      spark.sql(s"CREATE VIEW $v TBLPROPERTIES('p1'='v1', 'p2'='v2') AS SELECT 1 AS c1")
+      checkAnswer(
+        sql(s"SHOW TBLPROPERTIES $v ('p1') AS JSON"),
+        Seq(Row("""{"properties":[{"key":"p1","value":"v1"}]}""")))
     }
   }
 }
