@@ -31,7 +31,7 @@ import org.apache.spark.sql.types._
  * `TIMESTAMP_NTZ(p)` / `TIMESTAMP_LTZ(p)`, compared with the micro types. The two subclasses
  * run ANSI on and off.
  */
-abstract class TimestampNanosSpecialValuesSuiteBase extends SharedSparkSession {
+abstract class TimestampNanosSpecialValuesSuiteBase extends QueryTest with SharedSparkSession {
 
   override def sparkConf: SparkConf = super.sparkConf
     .set(SQLConf.SESSION_LOCAL_TIMEZONE.key, "America/Los_Angeles")

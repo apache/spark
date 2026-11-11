@@ -4649,6 +4649,18 @@ object SQLConf {
       .booleanConf
       .createWithDefault(false)
 
+  val FREEZE_CURRENT_VALUES_IN_CHECK_CONSTRAINT =
+    buildConf("spark.sql.legacy.freezeCurrentValuesInCheckConstraint")
+      .internal()
+      .doc("When true, ALTER TABLE ... ADD CONSTRAINT ... CHECK on a Data Source V2 table stores " +
+        "the predicate of a condition that reads the current time, date, catalog, user and the " +
+        "like, if Spark can build one, with their values at the time of the ALTER TABLE, as " +
+        "before, so that a write that can read the predicate back compares with those values.")
+      .version("4.4.0")
+      .withBindingPolicy(ConfigBindingPolicy.SESSION)
+      .booleanConf
+      .createWithDefault(false)
+
   val STORE_ANALYZED_PLAN_FOR_VIEW =
     buildConf("spark.sql.legacy.storeAnalyzedPlanForView")
       .internal()
