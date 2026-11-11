@@ -79,7 +79,7 @@ if TYPE_CHECKING:
 __all__ = ["DataFrame", "DataFrameNaFunctions", "DataFrameStatFunctions"]
 
 
-def validate_approx_quantile_relative_error(relativeError: Any) -> float:
+def _validate_approx_quantile_relative_error(relativeError: Any) -> float:
     """
     Validate the ``relativeError`` argument of ``DataFrame.approxQuantile``, shared by the
     classic and Connect implementations so both stay in sync. Returns it as a ``float``.

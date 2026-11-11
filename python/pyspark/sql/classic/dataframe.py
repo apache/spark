@@ -60,7 +60,7 @@ from pyspark.sql.dataframe import (
 from pyspark.sql.dataframe import (
     DataFrameStatFunctions as ParentDataFrameStatFunctions,
 )
-from pyspark.sql.dataframe import validate_approx_quantile_relative_error
+from pyspark.sql.dataframe import _validate_approx_quantile_relative_error
 from pyspark.sql.functions import builtin as F
 from pyspark.sql.merge import MergeIntoWriter
 from pyspark.sql.pandas.conversion import PandasConversionMixin
@@ -1748,7 +1748,7 @@ class DataFrame(ParentDataFrame, PandasMapOpsMixin, PandasConversionMixin):
                 )
         probabilities = _to_list(self._sc, cast(List["ColumnOrName"], probabilities))
 
-        relativeError = validate_approx_quantile_relative_error(relativeError)
+        relativeError = _validate_approx_quantile_relative_error(relativeError)
 
         jaq = self._jdf.stat().approxQuantile(col, probabilities, relativeError)
         jaq_list = [list(j) for j in jaq]
