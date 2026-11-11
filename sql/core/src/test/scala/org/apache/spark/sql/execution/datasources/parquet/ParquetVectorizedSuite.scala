@@ -17,22 +17,30 @@
 
 package org.apache.spark.sql.execution.datasources.parquet
 
+import java.io.File
 import java.util.{Optional, PrimitiveIterator}
 
 import scala.collection.mutable.ArrayBuffer
 import scala.language.implicitConversions
+import scala.util.control.NonFatal
 
+import org.apache.hadoop.fs.Path
+import org.apache.hadoop.mapred.FileSplit
+import org.apache.hadoop.mapreduce.TaskAttemptID
+import org.apache.hadoop.mapreduce.task.TaskAttemptContextImpl
 import org.apache.parquet.bytes.BytesInput
 import org.apache.parquet.column.{ColumnDescriptor, Encoding, ParquetProperties}
 import org.apache.parquet.column.impl.ColumnWriteStoreV1
 import org.apache.parquet.column.page._
 import org.apache.parquet.column.page.mem.MemPageStore
 import org.apache.parquet.column.statistics.Statistics
+import org.apache.parquet.hadoop.ParquetInputFormat
 import org.apache.parquet.io.ParquetDecodingException
 import org.apache.parquet.io.api.Binary
 import org.apache.parquet.schema.{MessageType, MessageTypeParser}
 import org.apache.parquet.schema.PrimitiveType.PrimitiveTypeName
 
+import org.apache.spark.TestUtils
 import org.apache.spark.memory.MemoryMode
 import org.apache.spark.sql.Row
 import org.apache.spark.sql.catalyst.InternalRow
@@ -40,6 +48,7 @@ import org.apache.spark.sql.catalyst.expressions.{RowOrdering, SpecificInternalR
 import org.apache.spark.sql.catalyst.util.DateTimeUtils
 import org.apache.spark.sql.execution.datasources.parquet.SpecificParquetRecordReaderBase.ParquetRowGroupReader
 import org.apache.spark.sql.execution.vectorized.ColumnVectorUtils
+import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.sql.types._
 import org.apache.spark.util.ArrayImplicits._
@@ -699,6 +708,45 @@ class ParquetVectorizedSuite extends ParquetTest with SharedSparkSession {
       .add("_2", IntegerType)
   )
 
+  test("SPARK-61460: Vectorized reader resets the levels of a NullType field for each batch") {
+    withTempPath { dir =>
+      val schema = new StructType().add("c",
+        ArrayType(new StructType().add("n", NullType).add("a", IntegerType)))
+      val rows = (0 until 3).map(i => Row(Seq(Row(null, i))))
+      spark.createDataFrame(spark.sparkContext.parallelize(rows, numSlices = 1), schema)
+        .write.parquet(dir.getCanonicalPath)
+
+      withSQLConf(SQLConf.PARQUET_VECTORIZED_READER_BATCH_SIZE.key -> "1") {
+        val file = TestUtils.listDirectory(dir).head
+        val reader = createVectorizedReader(file, schema, offheapEnabled = false)
+        try {
+          var numBatches = 0
+          while (reader.nextKeyValue()) {
+            // The i-th batch has one row, whose `c` is `[{null, i}]`.
+            val batch = reader.resultBatch()
+            assert(batch.numRows == 1)
+            val c = batch.column(0).getArray(0)
+            assert(c.numElements == 1)
+            val element = c.getStruct(0, 2)
+            assert(element.isNullAt(0))
+            assert(element.getInt(1) == numBatches)
+
+            // `n` is not the last field, so the struct does not share and reset its levels.
+            val n = ParquetTestAccess.columnVectors(reader).head
+              .asInstanceOf[ParquetColumnVector].getLeaves.get(0)
+            assert(n.getValueVector.dataType == NullType)
+            assert(n.getRepetitionLevelVector.getElementsAppended == 1)
+            assert(n.getDefinitionLevelVector.getElementsAppended == 1)
+            numBatches += 1
+          }
+          assert(numBatches == 3)
+        } finally {
+          reader.close()
+        }
+      }
+    }
+  }
+
   private def truncateTypeTest(
     testName: String,
     readType: DataType,
@@ -905,6 +953,43 @@ class ParquetVectorizedSuite extends ParquetTest with SharedSparkSession {
       }
       fieldStrings.mkString(", ")
     }
+  }
+
+  private def createVectorizedReader(
+      file: String,
+      readSchema: StructType,
+      offheapEnabled: Boolean): VectorizedParquetRecordReader = {
+    val conf = spark.sessionState.conf
+    val hadoopConf = spark.sessionState.newHadoopConf()
+    hadoopConf.set(ParquetInputFormat.READ_SUPPORT_CLASS, classOf[ParquetReadSupport].getName)
+    hadoopConf.set(ParquetReadSupport.SPARK_ROW_REQUESTED_SCHEMA, readSchema.json)
+    Seq(
+      SQLConf.CASE_SENSITIVE,
+      SQLConf.PARQUET_BINARY_AS_STRING,
+      SQLConf.PARQUET_INT96_AS_TIMESTAMP,
+      SQLConf.PARQUET_INFER_TIMESTAMP_NTZ_ENABLED,
+      SQLConf.LEGACY_PARQUET_NANOS_AS_LONG
+    ).foreach { entry =>
+      hadoopConf.set(entry.key, conf.getConfString(entry.key))
+    }
+
+    val split = new FileSplit(new Path(file), 0, new File(file).length(), Array.empty[String])
+    val context = new TaskAttemptContextImpl(hadoopConf, new TaskAttemptID())
+    val reader = new VectorizedParquetRecordReader(
+      offheapEnabled,
+      conf.parquetVectorizedReaderBatchSize
+    )
+
+    try {
+      reader.enableReturningBatches()
+      reader.initialize(split, context)
+    } catch {
+      case NonFatal(e) =>
+        reader.close()
+        throw e
+    }
+
+    reader
   }
 
   case class TestParquetRowGroupReader(groups: Seq[PageReadStore]) extends ParquetRowGroupReader {
