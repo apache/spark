@@ -155,4 +155,7 @@ SHOW TBLPROPERTIES customer ('does.not.exist') AS JSON;
 
 ### Related Statements
 
-* [SHOW CREATE TABLE](sql-ref-syntax-aux-show-create-table.md)
+* [CREATE TABLE](sql-ref-syntax-ddl-create-table.html)
+* [ALTER TABLE SET TBLPROPERTIES](sql-ref-syntax-ddl-alter-table.html)
+* [SHOW TABLES](sql-ref-syntax-aux-show-tables.html)
+* [SHOW TABLE EXTENDED](sql-ref-syntax-aux-show-table.html)
