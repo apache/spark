@@ -184,10 +184,11 @@ private[sql] object OrcFilters extends OrcFiltersBase {
       .getOrElse(throw QueryExecutionErrors.unsupportedOperationForDataTypeError(dt))
   }
 
-  // ORC's `DateUtils.SWITCHOVER_MILLIS`, 1582-10-15 00:00:00 in milliseconds. ORC converts the
-  // TIMESTAMP statistics whose wall clock is before it from the hybrid Julian/Gregorian calendar
-  // to the proleptic Gregorian calendar.
-  private val GregorianSwitchMillis: Long = LocalDate.of(1582, 10, 15).toEpochDay * MILLIS_PER_DAY
+  // 1582-10-17 00:00:00 in milliseconds, two days after ORC's `DateUtils.SWITCHOVER_MILLIS`. A
+  // TIMESTAMP value whose wall clock is before it is not pushed down, see
+  // `hasValueBeforeCalendarSwitch`.
+  private val MinPushedTimestampWallClockMillis: Long =
+    LocalDate.of(1582, 10, 17).toEpochDay * MILLIS_PER_DAY
 
   /**
    * Cast literal values for filters.
@@ -299,8 +300,18 @@ private[sql] object OrcFilters extends OrcFiltersBase {
     // proleptic Gregorian calendar (see `DateUtils.convertTimeToProleptic`), which moves them by
     // up to 10 days. So a predicate with a value whose wall clock is before 1582-10-15 is not
     // pushed down. A later value compares the same with a converted statistic as with the stored
-    // one, as both are earlier than it. ORC compares wall clocks in the JVM default time zone,
-    // and its wall clock is computed here as in `SerializationUtils.convertToUtc`.
+    // one, as both are earlier than it.
+    // The dates from 1582-10-05 to 1582-10-14 don't exist in the hybrid calendar, so the
+    // conversion to it moves them to 1582-10-15 at the same time of day, and the pushed down
+    // value would be later than the value that Spark compares. With the Java 8 API off, a filter
+    // already holds the moved `java.sql.Timestamp`, so such a value can't be told apart from a
+    // value on 1582-10-15. Also, the conversion uses rebasing tables built with older time zone
+    // rules (see `RebaseDateTime.gregJulianRebaseMap`). With the current rules of the JVM, the
+    // wall clock of a moved value can be up to an hour later, e.g. 1582-10-16 00:59 for
+    // 1582-10-05 23:59 in America/Asuncion. So a predicate with a value whose wall clock is
+    // before 1582-10-17 is not pushed down either.
+    // ORC compares wall clocks in the JVM default time zone, and the wall clock is computed here
+    // as in `SerializationUtils.convertToUtc`.
     def hasValueBeforeCalendarSwitch(attribute: String, values: Seq[Any]): Boolean =
       dataTypeMap.get(attribute).exists(_.fieldType == TimestampType) && {
         val timeZone = TimeZone.getDefault
@@ -308,7 +319,7 @@ private[sql] object OrcFilters extends OrcFiltersBase {
           castLiteralValue(v, TimestampType) match {
             case ts: Timestamp =>
               val millis = ts.getTime
-              millis + timeZone.getOffset(millis) < GregorianSwitchMillis
+              millis + timeZone.getOffset(millis) < MinPushedTimestampWallClockMillis
             case _ => false
           }
         }

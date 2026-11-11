@@ -435,10 +435,17 @@ class OrcFilterSuite extends OrcTest with SharedSparkSession {
       // Its wall clock is before 1582-10-15, but in a time zone behind UTC its UTC time is not.
       "1582-10-04 20:00:00",
       "1582-10-15 00:00:00",
+      "1582-10-15 18:00:00",
       "1582-10-16 00:00:00",
       "2020-05-25 10:11:12")
+    // The dates from 1582-10-05 to 1582-10-14 don't exist in the hybrid calendar, and their values
+    // are moved to 1582-10-15 at the same time of day when they are converted to it. As data, they
+    // read back as the moved values, so they are only used in the conditions. In
+    // America/Asuncion, the wall clock of the moved 1582-10-05 23:30:00 can be 1582-10-16 00:30:00,
+    // see `OrcFilters.buildLeafSearchArgument`.
+    val conditionValues = values ++ Seq("1582-10-05 23:30:00", "1582-10-10 18:00:00")
     val later = "TIMESTAMP'2020-05-25 10:11:12'"
-    val conditions = values.flatMap { v =>
+    val conditions = conditionValues.flatMap { v =>
       val ts = s"TIMESTAMP'$v'"
       Seq("=", "<=>", "<", "<=", ">", ">=", "!=").map(op => s"t $op $ts") ++ Seq(
         s"NOT (t <=> $ts)",
@@ -446,7 +453,7 @@ class OrcFilterSuite extends OrcTest with SharedSparkSession {
         s"t IN ($ts, NULL)",
         s"t = $ts OR t > $later")
     }
-    timeZonesForCalendarSwitch.foreach { zone =>
+    (timeZonesForCalendarSwitch :+ "America/Asuncion").foreach { zone =>
       withDefaultTimeZone(ZoneId.of(zone)) {
         withSQLConf(SQLConf.SESSION_LOCAL_TIMEZONE.key -> zone) {
           val inMemory = sql(values.map(v => s"SELECT TIMESTAMP'$v' AS t").mkString(" UNION ALL "))
@@ -468,7 +475,7 @@ class OrcFilterSuite extends OrcTest with SharedSparkSession {
                   // Predicates with a later value are still pushed down and skip the other files.
                   assert(stripSparkFilter(df.where(s"t = $later")).count() === 1)
                   assert(
-                    stripSparkFilter(df.where("t > TIMESTAMP'1582-10-16 00:00:00'")).count() === 1)
+                    stripSparkFilter(df.where("t > TIMESTAMP'1582-10-17 00:00:00'")).count() === 1)
                 }
               }
             }
@@ -492,7 +499,13 @@ class OrcFilterSuite extends OrcTest with SharedSparkSession {
           "1500-01-01T00:00:00" -> false,
           "1582-10-04T20:00:00" -> false,
           "1582-10-04T23:59:59.999999" -> false,
-          "1582-10-15T01:00:00" -> true,
+          // The hybrid calendar has no 1582-10-05 to 1582-10-14, and this value is moved to
+          // 1582-10-15 18:00:00 in it.
+          "1582-10-10T18:00:00" -> false,
+          "1582-10-15T01:00:00" -> false,
+          "1582-10-15T23:59:59.999999" -> false,
+          "1582-10-16T23:59:59.999999" -> false,
+          "1582-10-17T00:00:00" -> true,
           "1900-01-01T00:00:00" -> true
         ).foreach { case (wallClock, pushed) =>
           val instant = LocalDateTime.parse(wallClock).atZone(ZoneId.of(zone)).toInstant
