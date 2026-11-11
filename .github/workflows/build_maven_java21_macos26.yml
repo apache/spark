@@ -35,6 +35,8 @@ jobs:
       java: 21
       os: macos-26
       arch: arm64
+      # macOS Maven test shards can take over four hours.
+      build_timeout_minutes: 300
       envs: >-
         {
           "SPARK_TEST_SQL_SHUFFLE_EXCHANGE_MAX_THREAD_THRESHOLD": "256",

@@ -81,6 +81,7 @@ jobs:
     # `ubuntu-slim` is lighter than `ubuntu-latest`.
     # Please see https://docs.github.com/en/actions/how-tos/write-workflows/choose-where-workflows-run/choose-the-runner-for-a-job#standard-github-hosted-runners-for-public-repositories
     runs-on: ubuntu-slim
+    timeout-minutes: 10
     env:
       GITHUB_PREV_SHA: ${{ github.event.before }}
     outputs:
@@ -441,6 +442,7 @@ jobs:
       fromJson(needs.precondition.outputs.required).docs == 'true' ||
       fromJson(needs.precondition.outputs.required).sparkr == 'true'
     runs-on: ubuntu-latest
+    timeout-minutes: 60
     permissions:
       packages: write
     steps:
@@ -819,6 +821,7 @@ jobs:
     if: (!cancelled()) && fromJson(needs.precondition.outputs.required).buf == 'true'
     name: Protobuf breaking change detection and Python CodeGen check
     runs-on: ubuntu-latest
+    timeout-minutes: 10
     steps:
     - name: Bootstrap composite actions
       uses: actions/checkout@v7

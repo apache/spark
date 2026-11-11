@@ -62,6 +62,7 @@ jobs:
   precompile:
     name: "Precompile Spark"
     runs-on: ${{ inputs.os }}
+    timeout-minutes: 60
     # If this job fails or is cancelled, the matrix entries fall back to
     # running the SBT build locally as before.
     continue-on-error: true
@@ -110,6 +111,7 @@ jobs:
     needs: precompile
     if: (!cancelled())
     runs-on: ${{ inputs.os }}
+    timeout-minutes: 120
     strategy:
       fail-fast: false
       max-parallel: 20

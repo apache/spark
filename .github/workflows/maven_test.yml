@@ -46,6 +46,11 @@ on:
         required: false
         type: string
         default: x64
+      build_timeout_minutes:
+        description: Timeout for each build matrix job. Raise it for slower runners.
+        required: false
+        type: number
+        default: 150
       envs:
         description: Additional environment variables to set when running the tests. Should be in JSON format.
         required: false
@@ -58,6 +63,7 @@ jobs:
   precompile-maven:
     name: "Precompile Spark with Maven"
     runs-on: ${{ inputs.os }}
+    timeout-minutes: 60
     # If this job fails or is cancelled, the matrix entries fall back to
     # running `mvn clean install` locally as before.
     continue-on-error: true
@@ -120,6 +126,7 @@ jobs:
     needs: precompile-maven
     if: (!cancelled())
     runs-on: ${{ inputs.os }}
+    timeout-minutes: ${{ inputs.build_timeout_minutes }}
     strategy:
       fail-fast: false
       max-parallel: 20
