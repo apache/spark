@@ -311,10 +311,19 @@ module.exports = async ({github, context, core, env = process.env, log = console
         continue
       }
 
+      // New Build checks link only to the PR branch's latest build_main.yml run. Fork
+      // master is reserved for syncing upstream, so new PR builds must use other
+      // branches, even if an older workflow ran on master; a skipped run has no result.
+      const trackedRun = pr.branch == 'master' || pr.buildRun?.conclusion == 'skipped'
+        ? undefined : pr.buildRun
+
       // Sync every Build check that points at a fork run, not just the first: a commit
       // can carry more than one (e.g. left by the notify workflow this one replaced).
       // An action_required guidance check is not linked to a run.
       let syncableBuildCheck = false
+      let unlistedRun = false
+      let trackedRunShown = false
+      let trackedRunReran = false
       for (const cr of pr.buildChecks) {
         if (cr.conclusion == 'action_required') {
           continue
@@ -324,30 +333,33 @@ module.exports = async ({github, context, core, env = process.env, log = console
         if (!run) {
           if (runId && pr.forkRunsTruncated) {
             // The run may be among the fork's check suites the page left out. Keep
-            // the backfill from replacing the check, and fail the PR to get noticed.
+            // the check below from replacing it, and fail the PR to get noticed.
             log.error(ref + ': fork run ' + runId + ' not in the first fork check '
               + 'suites; raise the limits in prPageQuery')
             failedPRs.add(pr.number)
             syncableBuildCheck = true
+            unlistedRun = true
           }
           // Otherwise the check's output is unusable or its fork run was deleted, so
-          // it can never be synced; the backfill below replaces it.
+          // it can never be synced; a check for the tracked run replaces it below.
           continue
         }
         syncableBuildCheck = true
 
-        // Leave a check alone if it already shows the run's state, as nearly all do.
         const state = checkState(run)
-        if (sameState(cr, state)) {
+        const tracked = run.id == trackedRun?.id
+        // The run was rerun after its check completed. GitHub accepts an update that
+        // reopens a completed check but leaves it unchanged, so leave it alone. The
+        // tracked run gets a new check below unless another check already shows it.
+        if (cr.status == 'completed' && state.status != 'completed') {
+          trackedRunReran ||= tracked
           count.unchanged++
           continue
         }
-        // The fork run was rerun after its check completed. GitHub accepts an update
-        // that reopens a completed check but leaves it unchanged, so create a new
-        // check instead. It hides this one, since the PR query reads only the latest
-        // Build check in a suite.
-        if (cr.status == 'completed' && state.status != 'completed') {
-          await createCheck(pr, ref, run, 'rerun')
+        trackedRunShown ||= tracked
+        // Leave a check alone if it already shows the run's state, as nearly all do.
+        if (sameState(cr, state)) {
+          count.unchanged++
           continue
         }
         const change = label(cr) + ' -> ' + label(state)
@@ -371,23 +383,21 @@ module.exports = async ({github, context, core, env = process.env, log = console
         }
       }
 
-      // No syncable Build check: link one to the PR branch's build_main.yml run, or
-      // create action_required guidance if no run exists, it was skipped, or the PR
-      // is from fork master. Fork master is reserved for syncing upstream; new PR
-      // builds must use other branches, even if an older workflow ran on master.
-      // Existing run-linked checks are still synchronized above.
-      if (!syncableBuildCheck) {
-        const run = pr.branch == 'master' || pr.buildRun?.conclusion == 'skipped'
-          ? undefined : pr.buildRun
-        if (!run) {
-          // Already provided guidance, or still within the run-registration grace period.
-          if (pr.buildChecks.some(cr => cr.conclusion == 'action_required')
-              || Date.parse(pr.updatedAt) > runGraceSince) {
-            count.skipped++
-            continue
-          }
+      // Link a new check to the tracked run if no check shows it: the PR has none yet,
+      // its check completed before a rerun, or its checks link to other runs (e.g. an
+      // older build of the same commit). Checks for other runs are only synced above.
+      if (trackedRun && !trackedRunShown && !unlistedRun) {
+        await createCheck(pr, ref, trackedRun, trackedRunReran ? 'rerun' : 'none')
+      } else if (!trackedRun && !syncableBuildCheck) {
+        // No run exists, it was skipped, or the PR is from fork master: create
+        // action_required guidance, unless the PR already has it or is still within
+        // the run-registration grace period.
+        if (pr.buildChecks.some(cr => cr.conclusion == 'action_required')
+            || Date.parse(pr.updatedAt) > runGraceSince) {
+          count.skipped++
+          continue
         }
-        await createCheck(pr, ref, run, 'none')
+        await createCheck(pr, ref, undefined, 'none')
       }
     }
   }
