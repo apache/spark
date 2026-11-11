@@ -43,22 +43,22 @@ If in the future GitHub somehow allows workflows to run `on: pull_request` while
 ## Documentation previews
 
 Documentation builds on `apache/spark` upload the generated site as a
-`docs-preview-<branch>-<timestamp>` artifact, retained for one day. Both the
-artifact name and archive filename include a UTC timestamp. Uploads do not replace
-existing artifacts. Change-based skipping of Python and R API docs applies only
-to fork builds.
+`docs-preview-<branch>-<sha>-<attempt>` artifact, retained for one day. The archive
+is named `site-<sha>-<attempt>.tar.bz2`. Names include the checked-out commit hash
+and workflow run attempt so reruns can upload without replacing existing artifacts.
+Change-based skipping of Python and R API docs applies only to fork builds.
 
 Upstream master builds apply the `In-Progress` version and search settings before
-the complete Jekyll build and skip R API documentation, matching the preview build.
-Other branches retain their source versions. The initial build without API docs
-still checks that the documentation builds independently of generated API docs.
+the complete Jekyll build and skip R API documentation. Other branches retain
+their source versions. The initial build without API docs still checks that the
+documentation builds independently of generated API docs.
 
-The Pages workflow deploys the unexpired `docs-preview-master-<timestamp>`
-artifact with the newest creation date, using its artifact ID to download that
-exact build. Pages runs daily or on manual dispatch without rebuilding or
-modifying the documentation. It can use a completed documentation build even if
-another job in the same CI run fails. If no preview artifact is available, Pages
-fails and leaves the existing deployment in place.
+The Pages workflow selects the unexpired master preview artifact with the newest
+creation date, using its artifact ID to download that exact build. Commit hashes
+do not determine artifact order. Pages runs daily or on manual dispatch without
+rebuilding or modifying the documentation. It can use a completed documentation
+build even if another job in the same CI run fails. If no preview artifact is
+available, Pages fails and leaves the existing deployment in place.
 
 ## Composite actions
 

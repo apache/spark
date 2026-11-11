@@ -66,8 +66,7 @@ jobs:
             }
             core.setOutput('artifact-id', latest.id);
             core.setOutput('run-id', latest.workflow_run.id);
-            core.info(`Deploying documentation built at ${latest.created_at}` +
-              ` from ${latest.workflow_run.head_sha}`);
+            core.info(`Deploying ${latest.name} built at ${latest.created_at}`);
       - name: Download documentation preview
         uses: actions/download-artifact@v8
         with:

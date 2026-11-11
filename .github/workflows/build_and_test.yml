@@ -1036,18 +1036,16 @@ jobs:
     - name: Tar documentation
       id: documentation
       run: |
-        timestamp=$(date -u +%Y-%m-%dT%H-%M-%SZ)
-        archive="site-$timestamp.tar.bz2"
+        archive="site-$(git rev-parse HEAD)-$GITHUB_RUN_ATTEMPT.tar.bz2"
         tar cjf "$archive" docs/_site
         echo "archive=$archive" >> "$GITHUB_OUTPUT"
-        echo "timestamp=$timestamp" >> "$GITHUB_OUTPUT"
     - name: Upload documentation
       uses: actions/upload-artifact@v7
       with:
         name: >-
           ${{ github.repository == 'apache/spark' &&
-              format('docs-preview-{0}-{1}', inputs.branch,
-                steps.documentation.outputs.timestamp) || 'site' }}
+              format('docs-preview-{0}-{1}-{2}', inputs.branch,
+                needs.precondition.outputs.head_sha, github.run_attempt) || 'site' }}
         path: ${{ steps.documentation.outputs.archive }}
         retention-days: 1
 
