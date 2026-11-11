@@ -1080,7 +1080,8 @@ class AvroFunctionsSuite extends SharedSparkSession {
     }
   }
 
-  // SCHEMA_OF_AVRO has no attribute input, so canonicalization does not copy it.
+  // Only FROM_AVRO: SCHEMA_OF_AVRO has no column input, so canonicalization reuses the same
+  // instance, whose lazy replacement runs once, instead of copying it.
   gridTest("SPARK-61419: FROM_AVRO options survive overlapping canonicalization")(
     Seq("EXCEPTION", "LAST_WIN")) { policy =>
     withSQLConf(SQLConf.MAP_KEY_DEDUP_POLICY.key -> policy) {
