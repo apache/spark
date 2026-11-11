@@ -721,3 +721,24 @@ SELECT median(c), percentile(c, 0.25), percentile_cont(0.75) WITHIN GROUP (ORDER
 SELECT typeof(median(c))
   FROM VALUES (CAST('2020-01-01 12:00:00.0000001 UTC' AS timestamp_ltz(7))) AS t(c);
 SET spark.sql.ansi.enabled=true;
+
+-- Spark's VARIANT has no nanosecond primitive: writing one into a variant fails at analysis,
+-- while reading a variant as TIMESTAMP_LTZ(p) works.
+SELECT CAST(TIMESTAMP_LTZ '2020-01-01 00:00:00.123456789 UTC' AS VARIANT);
+SELECT try_cast(CAST('2020-01-01 00:00:00.1234567 UTC' AS timestamp_ltz(7)) AS VARIANT);
+SELECT CAST(array(CAST('2020-01-01 00:00:00.12345678 UTC' AS timestamp_ltz(8))) AS VARIANT);
+SELECT to_variant_object(named_struct('t', TIMESTAMP_LTZ '2020-01-01 00:00:00.123456789 UTC'));
+SELECT variant_from_arrays(array('a'), array(TIMESTAMP_LTZ '2020-01-01 00:00:00.123456789 UTC'));
+SELECT variant_from_entries(array(named_struct('k', 'a', 'v', TIMESTAMP_LTZ '2020-01-01 00:00:00.123456789 UTC')));
+SELECT variant_set(parse_json('{"a":1}'), '$.b', TIMESTAMP_LTZ '2020-01-01 00:00:00.123456789 UTC');
+SELECT * FROM VALUES (CAST(TIMESTAMP_LTZ '2020-01-01 00:00:00.123456789 UTC' AS VARIANT)) AS t(v);
+SELECT variant_get(parse_json('{"t":"2020-01-01 00:00:00.123456789"}'), '$.t', 'TIMESTAMP_LTZ(9)');
+SELECT try_variant_get(parse_json('{"t":"2020-01-01 00:00:00.123456789"}'), '$.t', 'TIMESTAMP_LTZ(8)');
+SELECT CAST(parse_json('"2020-01-01 00:00:00.123456789"') AS timestamp_ltz(7));
+-- Microsecond timestamps are still written, and widen when read back at nanosecond precision.
+SELECT CAST(CAST(TIMESTAMP_LTZ '2020-01-01 00:00:00.123456 UTC' AS VARIANT) AS STRING);
+SELECT variant_get(CAST(TIMESTAMP_LTZ '2020-01-01 00:00:00.123456 UTC' AS VARIANT), '$', 'TIMESTAMP_LTZ(9)');
+SET spark.sql.ansi.enabled=false;
+SELECT CAST(TIMESTAMP_LTZ '2020-01-01 00:00:00.123456789 UTC' AS VARIANT);
+SELECT variant_get(parse_json('{"t":"2020-01-01 00:00:00.123456789"}'), '$.t', 'TIMESTAMP_LTZ(9)');
+SET spark.sql.ansi.enabled=true;
