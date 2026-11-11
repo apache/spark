@@ -140,7 +140,7 @@ case class QualifiedColType(
   def name: Seq[String] = path.map(_.name).getOrElse(Nil) :+ colName
 
   def getV2Default(statement: String): ColumnDefaultValue =
-    default.map(_.toV2(statement, colName)).orNull
+    default.map(_.toV2(statement, colName, dataType)).orNull
 
   /**
    * Returns true if the default value's type has been coerced to match this column's dataType.

@@ -298,20 +298,29 @@ class ResolveDefaultColumnsSuite extends SharedSparkSession {
     test(s"CHAR/VARCHAR current defaults use insertion flags with cached metadata: $ddl") {
       withSQLConf(
         SQLConf.READ_SIDE_CHAR_PADDING.key -> "false",
-        SQLConf.LEGACY_CHAR_VARCHAR_AS_STRING.key -> "false") {
+        SQLConf.LEGACY_CHAR_VARCHAR_AS_STRING.key -> "false",
+        SQLConf.PRESERVE_CHAR_VARCHAR_TYPE_INFO.key -> "false",
+        SQLConf.CHAR_VARCHAR_STANDARD_SEMANTICS.key -> "false") {
         withTable("t") {
           val columns = "region CHAR(3) DEFAULT 'EU', label VARCHAR(3) DEFAULT 'EU  '"
           if (ddl == "CREATE") {
             sql(s"CREATE TABLE t(id INT, $columns) USING parquet")
           } else {
             sql("CREATE TABLE t(id INT) USING parquet")
+            sql("INSERT INTO t VALUES (0)")
             sql(s"ALTER TABLE t ADD COLUMNS ($columns)")
+          }
+          val historicalRows = if (ddl == "ALTER") {
+            Seq(Row(0, "EU ", 3, "EU ", 3))
+          } else {
+            Seq.empty[Row]
           }
           withSQLConf(SQLConf.LEGACY_CHAR_VARCHAR_AS_STRING.key -> "true") {
             sql("INSERT INTO t (id) VALUES (1)")
             sql("INSERT INTO t VALUES (2, 'EU', 'EU  ')")
             val query = "SELECT id, region, length(region), label, length(label) FROM t"
-            checkAnswer(sql(query), Seq(1, 2).map(Row(_, "EU", 2, "EU  ", 4)))
+            checkAnswer(sql(query), historicalRows ++
+              Seq(1, 2).map(Row(_, "EU", 2, "EU  ", 4)))
 
             // Serialized schemas retain the SQL but drop cached expressions.
             val table = spark.sessionState.catalog.getTableMetadata(TableIdentifier("t"))
@@ -319,7 +328,8 @@ class ResolveDefaultColumnsSuite extends SharedSparkSession {
             spark.sessionState.catalog.alterTableDataSchema(TableIdentifier("t"), schema)
             spark.catalog.refreshTable("t")
             sql("INSERT INTO t (id) VALUES (3)")
-            checkAnswer(sql(query), Seq(1, 2, 3).map(Row(_, "EU", 2, "EU  ", 4)))
+            checkAnswer(sql(query), historicalRows ++
+              Seq(1, 2, 3).map(Row(_, "EU", 2, "EU  ", 4)))
           }
         }
       }

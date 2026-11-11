@@ -28,9 +28,10 @@ import org.apache.spark.sql.catalyst.analysis.{caseInsensitiveResolution, caseSe
 import org.apache.spark.sql.catalyst.expressions.Literal
 import org.apache.spark.sql.catalyst.parser.ParseException
 import org.apache.spark.sql.catalyst.plans.SQLHelper
-import org.apache.spark.sql.catalyst.plans.logical.{ColumnDefinition, DefaultValueExpression}
+import org.apache.spark.sql.catalyst.plans.logical.{ColumnDefinition, DefaultValueExpression, QualifiedColType}
 import org.apache.spark.sql.catalyst.types.DataTypeUtils
-import org.apache.spark.sql.catalyst.util.{ResolveDefaultColumns, ResolveDefaultColumnsUtils}
+import org.apache.spark.sql.catalyst.util.{CharVarcharUtils, ResolveDefaultColumns, ResolveDefaultColumnsUtils}
+import org.apache.spark.sql.connector.catalog.{CatalogV2Util, Column}
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types.{DayTimeIntervalType => DT}
 import org.apache.spark.sql.types.{YearMonthIntervalType => YM}
@@ -1326,6 +1327,51 @@ class StructTypeSuite extends SparkFunSuite with SQLHelper {
           assert(CatalystTypeConverters.convertToScala(reanalyzed.eval(), expectedType) == expected)
           assert(CatalystTypeConverters.convertToScala(
             ResolveDefaultColumns.getExistenceDefaultValue(restored), expectedType) == expected)
+        }
+      }
+    }
+  }
+
+  test("V2 CHAR/VARCHAR defaults separate current SQL from assigned existence values") {
+    withSQLConf(
+        SQLConf.LEGACY_CHAR_VARCHAR_AS_STRING.key -> "false",
+        SQLConf.PRESERVE_CHAR_VARCHAR_TYPE_INFO.key -> "false",
+        SQLConf.CHAR_VARCHAR_STANDARD_SEMANTICS.key -> "false") {
+      val cases: Seq[(DataType, DataType, String, Any)] = Seq(
+        (CharType(3), StringType, "'EU'", "EU "),
+        (VarcharType(3), StringType, "'EU  '", "EU "),
+        (CharType(3), StringType, "NULL", null),
+        (VarcharType(3), StringType, "NULL", null),
+        (ArrayType(CharType(3)), ArrayType(StringType),
+          "array('EU', CAST(NULL AS STRING))", Seq("EU ", null)),
+        (IntegerType, IntegerType, "42", 42))
+      cases.foreach { case (dataType, expectedType, sql, expected) =>
+        val expr = ResolveDefaultColumns.analyze("c", dataType, sql, "CREATE TABLE")
+        val default = DefaultValueExpression(expr, sql).markAsAnalyzed()
+        val defaults = Seq(
+          ColumnDefinition("c", dataType, defaultValue = Some(default))
+            .toV2Column("CREATE TABLE").defaultValue(),
+          QualifiedColType(None, "c", dataType, true, None, None, Some(default))
+            .getV2Default("ALTER TABLE"))
+        defaults.foreach { converted =>
+          assert(converted.getSql == sql)
+          assert(converted.getValue.dataType() == expectedType)
+          assert(CatalystTypeConverters.convertToScala(
+            converted.getValue.value(), expectedType) == expected)
+          val column = Column.create(
+            "c", dataType, true, null, converted, null)
+          val field = CatalogV2Util.v2ColumnsToStructType(Array(column)).head
+          withSQLConf(SQLConf.LEGACY_CHAR_VARCHAR_AS_STRING.key -> "true") {
+            val current = ResolveDefaultColumns.analyze(
+              field, "INSERT", ResolveDefaultColumns.CURRENT_DEFAULT_COLUMN_METADATA_KEY)
+            assert(CatalystTypeConverters.convertToScala(current.eval(), expectedType) ==
+              CatalystTypeConverters.convertToScala(Literal.fromSQL(sql).eval(), expectedType))
+          }
+          if (CharVarcharUtils.hasCharVarchar(dataType)) {
+            assert(converted.getExpression == null)
+          } else {
+            assert(converted.getExpression != null)
+          }
         }
       }
     }

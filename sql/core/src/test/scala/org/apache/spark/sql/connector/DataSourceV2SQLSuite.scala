@@ -912,6 +912,55 @@ class DataSourceV2SQLSuiteV1Filter
     }
   }
 
+  Seq("CREATE", "REPLACE", "ADD").foreach { ddl =>
+    test(s"CHAR/VARCHAR V2 current defaults use insertion settings: $ddl") {
+      withSQLConf(
+        "spark.sql.catalog.default_expr" -> classOf[DefaultExpressionRetainingCatalog].getName,
+        SQLConf.DEFAULT_COLUMN_ALLOWED_PROVIDERS.key -> "foo",
+        SQLConf.LEGACY_CHAR_VARCHAR_AS_STRING.key -> "false",
+        SQLConf.PRESERVE_CHAR_VARCHAR_TYPE_INFO.key -> "false",
+        SQLConf.CHAR_VARCHAR_STANDARD_SEMANTICS.key -> "false",
+        SQLConf.READ_SIDE_CHAR_PADDING.key -> "false") {
+        val tableName = "default_expr.char_varchar_defaults"
+        withTable(tableName) {
+          val columns = "region CHAR(3) DEFAULT 'EU', label VARCHAR(3) DEFAULT 'EU  '"
+          if (ddl == "ADD") {
+            sql(s"CREATE TABLE $tableName(id INT) USING foo")
+            sql(s"ALTER TABLE $tableName ADD COLUMNS ($columns)")
+          } else {
+            if (ddl == "REPLACE") {
+              sql(s"CREATE TABLE $tableName(id INT) USING foo")
+            }
+            sql(s"$ddl TABLE $tableName(id INT, $columns) USING foo")
+          }
+
+          // This catalog retains the supplied default, including any current expression.
+          val table = catalog("default_expr").asTableCatalog.loadTable(
+            Identifier.of(Array.empty, "char_varchar_defaults"))
+          val defaults = table.columns.map(c => c.name -> c.defaultValue()).toMap
+          val regionDefault = defaults("region")
+          val labelDefault = defaults("label")
+          assert(regionDefault.getSql == "'EU'")
+          assert(labelDefault.getSql == "'EU  '")
+          Seq(regionDefault, labelDefault).foreach { default =>
+            assert(default.getValue.dataType == StringType)
+            assert(default.getValue.value == UTF8String.fromString("EU "))
+          }
+
+          withSQLConf(SQLConf.LEGACY_CHAR_VARCHAR_AS_STRING.key -> "true") {
+            sql(s"INSERT INTO $tableName(id) VALUES (1)")
+            sql(s"INSERT INTO $tableName VALUES (2, DEFAULT, DEFAULT)")
+            sql(s"INSERT INTO $tableName VALUES (3, 'EU', 'EU  ')")
+            checkAnswer(sql(s"SELECT id, region, length(region), label, length(label) " +
+              s"FROM $tableName"), Seq(1, 2, 3).map(Row(_, "EU", 2, "EU  ", 4)))
+          }
+          assert(regionDefault.getExpression == null)
+          assert(labelDefault.getExpression == null)
+        }
+      }
+    }
+  }
+
   test("ReplaceTableAsSelect: CREATE OR REPLACE new table has same behavior as CTAS.") {
     Seq("testcat", "testcat_atomic").foreach { catalogName =>
       spark.sql(
@@ -5671,6 +5720,33 @@ class DataSourceV2SQLSuiteV2Filter extends DataSourceV2SQLSuite {
       val numPartitions = batchScan.filteredPartitions.count(_.isDefined)
       assert(numPartitions == 1,
         s"Expected 1 partition after scalar subquery pruning, got $numPartitions")
+    }
+  }
+}
+
+class DefaultExpressionRetainingCatalog extends InMemoryCatalog {
+  override def alterTable(ident: Identifier, changes: TableChange*): Table = {
+    val addedDefaults = changes.collect {
+      case add: TableChange.AddColumn
+          if add.fieldNames().length == 1 && add.defaultValue() != null =>
+        add.fieldNames().head -> add.defaultValue()
+    }.toMap
+    val table = super.alterTable(ident, changes: _*).asInstanceOf[InMemoryTable]
+    if (addedDefaults.isEmpty) {
+      table
+    } else {
+      // Preserve the supplied ADD defaults instead of dropping expressions in schema conversion.
+      val columns = table.columns().map { column =>
+        addedDefaults.get(column.name()).map { default =>
+          ColumnV2.builderFrom(column).defaultValue(default).build()
+        }.getOrElse(column)
+      }
+      val retained = new InMemoryTable(
+        table.name, columns, table.partitioning, table.properties, id = table.id)
+        .withData(table.data)
+      retained.copyTableStateFrom(table)
+      tables.put(ident, retained)
+      retained
     }
   }
 }

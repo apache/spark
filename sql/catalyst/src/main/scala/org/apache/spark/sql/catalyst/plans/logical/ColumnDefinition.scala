@@ -83,7 +83,7 @@ case class ColumnDefinition(
       dataType,
       nullable,
       comment.orNull,
-      defaultValue.map(_.toV2(statement, name)).orNull,
+      defaultValue.map(_.toV2(statement, name, dataType)).orNull,
       generationExpression.map(_.toV2).orNull,
       identityColumnSpec.orNull,
       if (metadata == Metadata.empty) null else metadata.json,
@@ -285,9 +285,17 @@ case class DefaultValueExpression(
     copy(child = newChild)
 
   // Convert the default expression to ColumnDefaultValue, which is required by DS v2 APIs.
-  def toV2(statement: String, colName: String): ColumnDefaultValue = child match {
+  def toV2(
+      statement: String,
+      colName: String,
+      columnType: DataType): ColumnDefaultValue = child match {
     case Literal(value, dataType) =>
-      val currentDefault = analyzedChild.flatMap(new V2ExpressionBuilder(_).build())
+      // Only the existence value may freeze the definition session's CHAR/VARCHAR assignment.
+      val currentDefault = if (CharVarcharUtils.hasCharVarchar(columnType)) {
+        None
+      } else {
+        analyzedChild.flatMap(new V2ExpressionBuilder(_).build())
+      }
       val existsDefault = LiteralValue(value, dataType)
       new ColumnDefaultValue(originalSQL, currentDefault.orNull, existsDefault)
     case _ =>
