@@ -28,7 +28,7 @@ import warnings
 import zipimport
 from contextlib import contextmanager
 from inspect import currentframe, getframeinfo
-from typing import IO, Any, Generator, Iterable, Iterator, Optional, Union, overload
+from typing import IO, Any, Generator, Iterator, Optional, Union, overload
 
 from pyspark.messages import ZeroCopyByteStream
 
@@ -327,7 +327,7 @@ class _EndOfInput:
 
 @contextmanager
 def read_in_thread(
-    iterator: Iterable[Any], queue_depth: int
+    iterator: Iterator[Any], queue_depth: int
 ) -> Generator[Iterator[Any], None, None]:
     """
     Read ``iterator`` in a background thread and yield an iterator over the same items. The
