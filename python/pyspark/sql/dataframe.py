@@ -35,7 +35,6 @@ from typing import (
 
 from pyspark import _NoValue
 from pyspark._globals import _NoValueType
-from pyspark.errors import PySparkTypeError, PySparkValueError
 from pyspark.resource import ResourceProfile
 from pyspark.sql.column import Column
 from pyspark.sql.merge import MergeIntoWriter
@@ -84,6 +83,8 @@ def _validate_approx_quantile_probabilities(probabilities: Any) -> List[Union[fl
     Validate the ``probabilities`` argument of ``DataFrame.approxQuantile``, shared by the
     classic and Connect implementations so both stay in sync. Returns it as a ``list``.
     """
+    from pyspark.errors import PySparkTypeError, PySparkValueError
+
     if not isinstance(probabilities, (list, tuple)):
         raise PySparkTypeError(
             errorClass="NOT_EXPECTED_TYPE",

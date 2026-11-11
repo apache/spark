@@ -74,11 +74,7 @@ from pyspark.sql.types import (
     _first_timestamp_nanos_map_key_type,
     _parse_datatype_json_string,
 )
-from pyspark.sql.utils import (
-    get_active_spark_context,
-    to_java_array,
-    to_scala_map,
-)
+from pyspark.sql.utils import get_active_spark_context, to_java_array, to_scala_map
 from pyspark.storagelevel import StorageLevel
 from pyspark.traceback_utils import SCCallSiteSync
 from pyspark.util import (
