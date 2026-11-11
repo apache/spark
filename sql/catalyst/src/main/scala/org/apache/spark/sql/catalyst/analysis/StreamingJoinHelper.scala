@@ -325,11 +325,14 @@ object StreamingJoinHelper extends PredicateHelper with Logging {
     // If there is not watermark attribute, then cannot define state watermark
     if (!attributesWithEventWatermark.exists(_.metadata.contains(delayKey))) return None
 
-    def getStateWatermarkSafely(l: Expression, r: Expression): Option[Long] = {
+    def getStateWatermarkSafely(
+        l: Expression,
+        r: Expression,
+        keepConstantOnly: Boolean): Option[Long] = {
       try {
         getStateWatermarkFromLessThenPredicate(l, r, attributesToFindStateWatermarkFor,
           attributesWithEventWatermark, eventWatermark, exactForUnwatermarkedColumns,
-          baseAdmissionRules)
+          keepConstantOnly, baseAdmissionRules)
       } catch {
         case NonFatal(e) =>
           logWarning(log"Error trying to extract state constraint from condition " +
@@ -338,20 +341,21 @@ object StreamingJoinHelper extends PredicateHelper with Logging {
       }
     }
 
-    val allStateWatermarks = splitConjunctivePredicates(joinCondition.get).flatMap { predicate =>
+    def stateWatermarkOf(predicate: Expression, keepConstantOnly: Boolean): Option[Long] = {
+      def solve(l: Expression, r: Expression): Option[Long] =
+        getStateWatermarkSafely(l, r, keepConstantOnly)
 
       // The generated the state watermark cleanup expression is inclusive of the state watermark.
       // If state watermark is W, all state where timestamp <= W will be cleaned up.
       // Now when the canonicalized join condition solves to leftTime >= W, we don't want to clean
       // up leftTime <= W. Rather we should clean up leftTime <= W - 1. Hence the -1 below.
       val stateWatermark = predicate match {
-        case LessThan(l, r) => getStateWatermarkSafely(l, r)
-        case LessThanOrEqual(l, r) => getStateWatermarkSafely(l, r).map(_ - 1)
-        case GreaterThan(l, r) => getStateWatermarkSafely(r, l)
-        case GreaterThanOrEqual(l, r) => getStateWatermarkSafely(r, l).map(_ - 1)
+        case LessThan(l, r) => solve(l, r)
+        case LessThanOrEqual(l, r) => solve(l, r).map(_ - 1)
+        case GreaterThan(l, r) => solve(r, l)
+        case GreaterThanOrEqual(l, r) => solve(r, l).map(_ - 1)
         case Between(input, lower, upper, _) =>
-          getStateWatermarkSafely(lower, input).map(_ - 1)
-            .orElse(getStateWatermarkSafely(input, upper).map(_ - 1))
+          solve(lower, input).map(_ - 1).orElse(solve(input, upper).map(_ - 1))
         case _ => None
       }
       if (stateWatermark.nonEmpty) {
@@ -360,7 +364,23 @@ object StreamingJoinHelper extends PredicateHelper with Logging {
       }
       stateWatermark
     }
-    allStateWatermarks.reduceOption((x, y) => Math.min(x, y))
+
+    val conjuncts = splitConjunctivePredicates(joinCondition.get)
+    val boundingConjuncts = conjuncts.flatMap { predicate =>
+      stateWatermarkOf(predicate, keepConstantOnly = false).map(predicate -> _)
+    }
+    // A constant-only conjunct is left out when the other bounds follow the watermark exactly.
+    // The solver can over-estimate an inexact bound, such as a truncating cast or whole days,
+    // above a row that can still match. A constant's cutoff keeps that row, as in earlier
+    // versions, so keep the constants in the minimum then.
+    val constantBounds =
+      if (boundingConjuncts.exists { case (predicate, _) => hasInexactArithmetic(predicate) }) {
+        conjuncts.filterNot(c => boundingConjuncts.exists(_._1 eq c))
+          .flatMap(stateWatermarkOf(_, keepConstantOnly = true))
+      } else {
+        Nil
+      }
+    (boundingConjuncts.map(_._2) ++ constantBounds).reduceOption((x, y) => Math.min(x, y))
   }
 
   /**
@@ -380,6 +400,7 @@ object StreamingJoinHelper extends PredicateHelper with Logging {
       attributesWithEventWatermark: AttributeSet,
       eventWatermark: Option[Long],
       exactForUnwatermarkedColumns: Boolean,
+      keepConstantOnly: Boolean,
       baseAdmissionRules: Boolean): Option[Long] = {
 
     val attributesInCondition =
@@ -466,11 +487,13 @@ object StreamingJoinHelper extends PredicateHelper with Logging {
     if (!baseAdmissionRules && !canEvictStateColumn) return None
 
     // A bound needs a term on the opposite input's watermarked event time; a conjunct that uses
-    // only constants does not follow the watermark. The occurrence check above limits each input
-    // to one attribute, so there can be at most one such term.
+    // only constants does not follow the watermark, and gives a cutoff only with
+    // keepConstantOnly. The occurrence check above limits each input to one attribute, so there
+    // can be at most one such term.
+    // TODO(SPARK-61350): a watermark term with a negative coefficient still passes this check.
     val watermarkTerms = terms.filter(_.references.exists(attributesWithEventWatermark.contains))
-    if (watermarkTerms.isEmpty ||
-        !watermarkTerms.head.references.forall(_.metadata.contains(delayKey))) {
+    if (!baseAdmissionRules && (watermarkTerms.isEmpty && !keepConstantOnly ||
+        !watermarkTerms.headOption.forall(_.references.forall(_.metadata.contains(delayKey))))) {
       return None
     }
 

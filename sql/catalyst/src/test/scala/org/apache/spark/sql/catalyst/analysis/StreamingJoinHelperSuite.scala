@@ -316,6 +316,50 @@ class StreamingJoinHelperSuite extends AnalysisTest {
     }
   }
 
+  test("a constant-only conjunct caps an inexact bound on a column with its own watermark") {
+    val watermark = new MetadataBuilder().putLong(EventTimeWatermark.delayKey, 1000).build()
+    val leftTime = AttributeReference("leftTime", TimestampType, metadata = watermark)()
+    val rightTime = AttributeReference("rightTime", TimestampType, metadata = watermark)()
+
+    case class DummyLeafNode() extends LeafNode {
+      override def output: Seq[Attribute] = Seq(leftTime, rightTime)
+      override def computeStats(): Statistics = Statistics(sizeInBytes = BigInt(0))
+    }
+
+    def cutoff(conditionStr: String): Option[Long] = {
+      val plan = Filter(CatalystSqlParser.parseExpression(conditionStr), DummyLeafNode())
+      val condition = SimpleTestOptimizer.execute(SimpleAnalyzer.execute(plan))
+        .asInstanceOf[Filter].condition
+      StreamingJoinHelper.getStateValueWatermark(AttributeSet(Seq(leftTime)),
+        AttributeSet(Seq(rightTime)), Some(condition), Some(100000000L),
+        exactForUnwatermarkedColumns = true)
+    }
+
+    val constant = " AND CAST(leftTime AS BIGINT) > 10"
+    // (condition, session time zone, cutoff)
+    Seq(
+      // The solver can over-estimate these bounds, so the constant keeps capping the cutoff.
+      // Whole days count as inexact in every session time zone.
+      ("CAST(leftTime AS BIGINT) >= CAST(rightTime AS BIGINT) + 5" + constant, "UTC",
+        Some(10000L)),
+      ("rightTime <= leftTime + INTERVAL 1 DAY" + constant, "America/Los_Angeles",
+        Some(10000L)),
+      ("rightTime <= leftTime + INTERVAL 1 DAY" + constant, "UTC", Some(10000L)),
+      // An exact bound advances with the watermark, so the constant is left out.
+      ("rightTime <= leftTime + INTERVAL 2 HOURS" + constant, "UTC",
+        Some(100000000L - 7200000L - 1)),
+      ("leftTime > rightTime - INTERVAL 5 SECONDS" + constant, "America/Los_Angeles",
+        Some(100000000L - 5000L)),
+      // A constant alone gives no bound.
+      ("CAST(leftTime AS BIGINT) > 10", "UTC", None)).foreach { case (conditionStr, zone, bound) =>
+      withSQLConf(SQLConf.SESSION_LOCAL_TIMEZONE.key -> zone) {
+        withClue(s"$conditionStr $zone") {
+          assert(cutoff(conditionStr) === bound)
+        }
+      }
+    }
+  }
+
   test("extract watermark from time condition") {
     val attributesToFindConstraintFor = Seq(
       AttributeReference("leftTime", TimestampType)(),

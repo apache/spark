@@ -711,8 +711,6 @@ object UnsupportedOperationChecker extends Logging {
     val leftKeys = keys.map(_._2).getOrElse(Nil)
     val rightKeys = keys.map(_._3).getOrElse(Nil)
 
-    // TODO(SPARK-61349): this accepts a bound that uses only constants, which does not
-    //   follow the other input's watermark and so cannot finalize unmatched state.
     def canEvictState(
         stateInput: LogicalPlan,
         otherInput: LogicalPlan,

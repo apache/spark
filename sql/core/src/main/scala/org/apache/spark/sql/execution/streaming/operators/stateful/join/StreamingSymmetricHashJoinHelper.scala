@@ -312,8 +312,6 @@ object StreamingSymmetricHashJoinHelper extends Logging {
       otherInputAttributes: Seq[Attribute],
       condition: Option[Expression],
       eventWatermark: Option[Long]): Option[(Attribute, Long)] = {
-    // TODO(SPARK-61349): a conjunct that uses only constants still caps the cutoff, so it can
-    //   stop eviction.
     val eventTime = inputAttributes.find(_.metadata.contains(delayKey))
     // Only the first marked column is checked for late input in compatibility mode.
     val otherEventTime = otherInputAttributes.find(_.metadata.contains(delayKey))
