@@ -88,6 +88,41 @@ class RangeJoinSQLSuite extends QueryTest with SharedSparkSession with AdaptiveS
   }
 
   /**
+   * Runs `outerQuery`/`semiQuery`/`antiQuery` (same build side, same join condition,
+   * differing only in join type) against their nested-loop answers, then asserts each
+   * plans as a single range join on `BuildRight` with the matching join type. Shared by
+   * the boxed-key-family coverage tests below, which otherwise only differ in which
+   * views and condition they probe.
+   */
+  private def checkOuterSemiAntiAgainstNestedLoop(
+      outerQuery: String,
+      semiQuery: String,
+      antiQuery: String): Unit = {
+    val expectedOuter = sql(outerQuery).collect()
+    val expectedSemi = sql(semiQuery).collect()
+    val expectedAnti = sql(antiQuery).collect()
+    assert(expectedOuter.exists(_.anyNull), expectedOuter.toSeq)
+    assert(expectedAnti.nonEmpty, expectedAnti.toSeq)
+    Seq(true, false).foreach { codegen =>
+      withRangeJoin(
+        SQLConf.WHOLESTAGE_CODEGEN_ENABLED.key -> codegen.toString,
+        SQLConf.CODEGEN_FALLBACK.key -> "false") {
+        Seq(
+          (outerQuery, expectedOuter, LeftOuter),
+          (semiQuery, expectedSemi, LeftSemi),
+          (antiQuery, expectedAnti, LeftAnti)).foreach { case (query, expected, joinType) =>
+          val df = sql(query)
+          val planned = findRangeJoin(df.queryExecution.executedPlan)
+          assert(planned.size == 1, (query, codegen))
+          assert(planned.head.joinType == joinType, (query, codegen))
+          assert(planned.head.buildSide == BuildRight, (query, codegen))
+          checkAnswer(df, expected)
+        }
+      }
+    }
+  }
+
+  /**
    * One query per key family and join type that a range join can plan, shared by
    * "whole-stage codegen covers each range-join probe" and "interpreted execution
    * covers each range-join probe" so the two coverage lists cannot drift apart.
@@ -625,6 +660,48 @@ class RangeJoinSQLSuite extends QueryTest with SharedSparkSession with AdaptiveS
           }
         }
       }
+  }
+
+  test("boxed IntervalIndex family (STRING) matches the nested loop result under left " +
+      "outer, semi, and anti joins") {
+    // probeCoverageQueries only ever joins str_ranges_a/b (the boxed IntervalIndex family,
+    // since StringType has no order-preserving long encoding) with a plain INNER JOIN; every
+    // LeftOuter/LeftSemi/LeftAnti case in that list runs on the long-specialized family
+    // instead (BIGINT via signin_ip/ip_lookup). Left outer's null-padding and left semi/anti's
+    // short-circuit over a boxed-row candidate iterator are a different code path per key
+    // type than the long family, so this pins the untested (boxed index) x (non-inner join
+    // type) cell directly.
+    setupStringIntervalViews()
+    val cond = "a.lo < b.hi AND b.lo < a.hi"
+    val outerQuery =
+      s"SELECT a.lo, a.hi, b.lo, b.hi FROM str_ranges_a a LEFT JOIN str_ranges_b b ON $cond"
+    val semiQuery =
+      s"SELECT a.lo, a.hi FROM str_ranges_a a LEFT SEMI JOIN str_ranges_b b ON $cond"
+    val antiQuery =
+      s"SELECT a.lo, a.hi FROM str_ranges_a a LEFT ANTI JOIN str_ranges_b b ON $cond"
+    checkOuterSemiAntiAgainstNestedLoop(outerQuery, semiQuery, antiQuery)
+  }
+
+  test("boxed PointIndex family (wide DECIMAL) matches the nested loop result under left " +
+      "outer, semi, and anti joins") {
+    // probeCoverageQueries only ever joins wide_dec_partial_points/bounds (the boxed
+    // PointIndex family, since DECIMAL(20, 2) exceeds Decimal.MAX_LONG_DIGITS and has no long
+    // encoding) with a plain INNER JOIN, where the inferred not-null filter also strips the
+    // NULL point row before it reaches the join. Left outer, semi, and anti preserve every
+    // row instead, so this is the only place the boxed PointIndex's null-padding and
+    // short-circuit behavior is exercised end to end, rather than just the long-specialized
+    // family covered elsewhere.
+    setupPartialRangeViews()
+    val outerQuery =
+      "SELECT p.d, b.lo FROM wide_dec_partial_points p LEFT JOIN wide_dec_partial_bounds b " +
+        "ON p.d < b.lo"
+    val semiQuery =
+      "SELECT p.d FROM wide_dec_partial_points p LEFT SEMI JOIN wide_dec_partial_bounds b " +
+        "ON p.d < b.lo"
+    val antiQuery =
+      "SELECT p.d FROM wide_dec_partial_points p LEFT ANTI JOIN wide_dec_partial_bounds b " +
+        "ON p.d < b.lo"
+    checkOuterSemiAntiAgainstNestedLoop(outerQuery, semiQuery, antiQuery)
   }
 
   test("strict inequalities over duplicated build keys match the nested loop join") {

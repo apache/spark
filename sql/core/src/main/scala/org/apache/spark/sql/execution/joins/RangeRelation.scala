@@ -440,9 +440,9 @@ private[joins] object IntervalIndex {
   }
 
   def apply(
-      keyType: DataType,
-      buildKeys: Seq[Expression],
       rows: Iterator[InternalRow],
+      buildKeys: Seq[Expression],
+      keyType: DataType,
       sizeHint: Option[Long]): IntervalIndex = {
     val buffer = new ArrayBuffer[(Any, Any, InternalRow)](RangeIndex.initialCapacity(sizeHint))
     val ordering = PhysicalDataType.ordering(keyType)
@@ -693,9 +693,9 @@ private[joins] class PointIndex private (
 private[joins] object PointIndex {
 
   def apply(
-      keyType: DataType,
-      buildKeys: Seq[Expression],
       rows: Iterator[InternalRow],
+      buildKeys: Seq[Expression],
+      keyType: DataType,
       sizeHint: Option[Long]): PointIndex = {
     val buffer = new ArrayBuffer[(Any, InternalRow)](RangeIndex.initialCapacity(sizeHint))
     val keyExpr = buildKeys.head
@@ -939,9 +939,9 @@ private[joins] object LongIntervalIndex {
   private final class Staged(val lo: Long, val hi: Long, val row: InternalRow)
 
   def apply(
-      keyType: DataType,
-      buildKeys: Seq[Expression],
       rows: Iterator[InternalRow],
+      buildKeys: Seq[Expression],
+      keyType: DataType,
       sizeHint: Option[Long]): LongIntervalIndex = {
     val toLongs: Seq[Any => Long] = buildKeys.map(k => RangeIndex.requiredLongKey(k.dataType).value)
     val valid = new ArrayBuffer[LongIntervalIndex.Staged](RangeIndex.initialCapacity(sizeHint))
@@ -1181,9 +1181,9 @@ private[joins] object LongPointIndex {
   private final class Staged(val key: Long, val row: InternalRow)
 
   def apply(
-      keyType: DataType,
-      buildKeys: Seq[Expression],
       rows: Iterator[InternalRow],
+      buildKeys: Seq[Expression],
+      keyType: DataType,
       sizeHint: Option[Long]): LongPointIndex = {
     require(buildKeys.length == 1, "A long point index expects one build key.")
     val toLong = RangeIndex.requiredLongKey(buildKeys.head.dataType).value
@@ -1286,17 +1286,17 @@ private[execution] case class RangeRelationBroadcastMode private (
         require(buildKeys.nonEmpty && buildKeys.length <= 2,
           "An interval index expects (low, high), or one point used as both ends.")
         if (longKeys) {
-          LongIntervalIndex(buildKeys.head.dataType, buildKeys, rows, sizeHint)
+          LongIntervalIndex(rows, buildKeys, buildKeys.head.dataType, sizeHint)
         } else {
-          IntervalIndex(buildKeys.head.dataType, buildKeys, rows, sizeHint)
+          IntervalIndex(rows, buildKeys, buildKeys.head.dataType, sizeHint)
         }
 
       case PointIndexKind =>
         require(buildKeys.length == 1, "A point index expects one build key.")
         if (longKeys) {
-          LongPointIndex(buildKeys.head.dataType, buildKeys, rows, sizeHint)
+          LongPointIndex(rows, buildKeys, buildKeys.head.dataType, sizeHint)
         } else {
-          PointIndex(buildKeys.head.dataType, buildKeys, rows, sizeHint)
+          PointIndex(rows, buildKeys, buildKeys.head.dataType, sizeHint)
         }
     }
   }

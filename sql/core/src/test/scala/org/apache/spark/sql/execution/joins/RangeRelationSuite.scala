@@ -53,17 +53,15 @@ class RangeRelationSuite extends SparkFunSuite {
     val keys = Seq(
       BoundReference(1, keyType, nullable = true),
       BoundReference(2, keyType, nullable = true))
-    IntervalIndex(keyType, keys,
-      spans.iterator.map(t => InternalRow(t._3.getInt(0), t._1, t._2)),
-      Some(spans.size.toLong))
+    IntervalIndex(spans.iterator.map(t => InternalRow(t._3.getInt(0), t._1, t._2)),
+      keys, keyType, Some(spans.size.toLong))
   }
 
   /** The point-index build with the same row layout: id at 0, key at 1. */
   private def buildPoints(keyType: DataType, keyed: Seq[(Any, InternalRow)]): PointIndex = {
     val key = Seq(BoundReference(1, keyType, nullable = true))
-    PointIndex(keyType, key,
-      keyed.iterator.map(t => InternalRow(t._2.getInt(0), t._1)),
-      Some(keyed.size.toLong))
+    PointIndex(keyed.iterator.map(t => InternalRow(t._2.getInt(0), t._1)),
+      key, keyType, Some(keyed.size.toLong))
   }
 
   private def ids(rows: Iterator[InternalRow]): List[Int] = rows.map(_.getInt(0)).toList
@@ -152,7 +150,7 @@ class RangeRelationSuite extends SparkFunSuite {
       BoundReference(0, IntegerType, nullable = true),
       BoundReference(1, IntegerType, nullable = true))
     val (shared, rows) = reusingRowIterator(fields = 3, n)
-    val index = IntervalIndex(IntegerType, buildKeys, rows, Some(n))
+    val index = IntervalIndex(rows, buildKeys, IntegerType, Some(n))
 
     // Simulate the caller reusing the buffer after the build-side iterator is exhausted.
     shared.update(0, -1)
@@ -171,7 +169,7 @@ class RangeRelationSuite extends SparkFunSuite {
       BoundReference(0, StringType, nullable = true),
       BoundReference(0, StringType, nullable = true))
     val (sharedBytes, rows) = reusingByteBufferStringIterator(n)
-    val index = IntervalIndex(StringType, buildKeys, rows, Some(n))
+    val index = IntervalIndex(rows, buildKeys, StringType, Some(n))
 
     java.util.Arrays.fill(sharedBytes, 'X'.toByte)
 
@@ -189,7 +187,7 @@ class RangeRelationSuite extends SparkFunSuite {
     val n = 50
     val oneKey = Seq(BoundReference(0, StringType, nullable = true))
     val (sharedBytes, rows) = reusingByteBufferStringIterator(n)
-    val index = IntervalIndex(StringType, oneKey, rows, Some(n))
+    val index = IntervalIndex(rows, oneKey, StringType, Some(n))
 
     java.util.Arrays.fill(sharedBytes, 'X'.toByte)
 
@@ -206,7 +204,7 @@ class RangeRelationSuite extends SparkFunSuite {
       BoundReference(0, StringType, nullable = true),
       BoundReference(0, StringType, nullable = true))
     val (_, moreRows) = reusingByteBufferStringIterator(n)
-    val twoCopy = IntervalIndex(StringType, twoKeys, moreRows, Some(n))
+    val twoCopy = IntervalIndex(moreRows, twoKeys, StringType, Some(n))
     assert(index.estimatedSize < twoCopy.estimatedSize)
   }
 
@@ -602,7 +600,7 @@ class RangeRelationSuite extends SparkFunSuite {
     val n = 50
     val buildKeys = Seq(BoundReference(0, IntegerType, nullable = true))
     val (shared, rows) = reusingRowIterator(fields = 2, n)
-    val index = PointIndex(IntegerType, buildKeys, rows, Some(n))
+    val index = PointIndex(rows, buildKeys, IntegerType, Some(n))
 
     shared.update(0, -1)
     shared.update(1, -1)
@@ -617,7 +615,7 @@ class RangeRelationSuite extends SparkFunSuite {
     val n = 50
     val buildKeys = Seq(BoundReference(0, StringType, nullable = true))
     val (sharedBytes, rows) = reusingByteBufferStringIterator(n)
-    val index = PointIndex(StringType, buildKeys, rows, Some(n))
+    val index = PointIndex(rows, buildKeys, StringType, Some(n))
 
     java.util.Arrays.fill(sharedBytes, 'X'.toByte)
 
