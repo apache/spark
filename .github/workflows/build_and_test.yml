@@ -1026,22 +1026,16 @@ jobs:
         bundle exec jekyll build
     - name: Tar documentation
       id: documentation
-      env:
-        DOCS_BRANCH: ${{ inputs.branch }}
       run: |
         archive="site-$(date -u +%Y-%m-%d).tar.bz2"
         tar cjf "$archive" docs/_site
         echo "archive=$archive" >> "$GITHUB_OUTPUT"
-        if [ "$GITHUB_REPOSITORY" = "apache/spark" ]; then
-          branch=$(printf '%s' "$DOCS_BRANCH" | tr / -)
-          echo "name=docs-preview-$branch" >> "$GITHUB_OUTPUT"
-        else
-          echo "name=site" >> "$GITHUB_OUTPUT"
-        fi
     - name: Upload documentation
       uses: actions/upload-artifact@v7
       with:
-        name: ${{ steps.documentation.outputs.name }}
+        name: >-
+          ${{ github.repository == 'apache/spark' &&
+              format('docs-preview-{0}', inputs.branch) || 'site' }}
         path: ${{ steps.documentation.outputs.archive }}
         retention-days: 1
         overwrite: true
