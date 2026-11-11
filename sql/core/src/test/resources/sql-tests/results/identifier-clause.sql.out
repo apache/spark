@@ -4092,3 +4092,267 @@ DROP TEMPORARY VARIABLE identifier_subq_col
 struct<>
 -- !query output
 
+
+
+-- !query
+CREATE TEMPORARY FUNCTION identifier_sql_function(arg1 STRING) RETURNS STRING
+RETURN arg1 || 'blah'
+-- !query schema
+struct<>
+-- !query output
+
+
+
+-- !query
+DECLARE identifier_sql_function_name STRING DEFAULT 'identifier_sql_function'
+-- !query schema
+struct<>
+-- !query output
+
+
+
+-- !query
+SELECT IDENTIFIER(identifier_sql_function_name)(col1) FROM VALUES ('b'), ('a') GROUP BY col1
+-- !query schema
+struct<identifier_sql_function(col1):string>
+-- !query output
+ablah
+bblah
+
+
+-- !query
+SELECT count(*) FROM VALUES ('b'), ('a') GROUP BY IDENTIFIER(identifier_sql_function_name)(col1)
+-- !query schema
+struct<count(1):bigint>
+-- !query output
+1
+1
+
+
+-- !query
+SELECT * FROM VALUES ('a') t1(a) JOIN VALUES ('ablah') t2(b)
+ON IDENTIFIER(identifier_sql_function_name)(a) = b
+-- !query schema
+struct<a:string,b:string>
+-- !query output
+a	ablah
+
+
+-- !query
+SELECT * FROM VALUES ('a'), ('b') t(c) WHERE IDENTIFIER(identifier_sql_function_name)(c) = 'ablah'
+-- !query schema
+struct<c:string>
+-- !query output
+a
+
+
+-- !query
+SELECT col1 FROM VALUES ('b'), ('a') GROUP BY col1
+HAVING IDENTIFIER(identifier_sql_function_name)(col1) = 'ablah'
+-- !query schema
+struct<col1:string>
+-- !query output
+a
+
+
+-- !query
+SELECT col1 FROM VALUES ('b'), ('a') ORDER BY IDENTIFIER(identifier_sql_function_name)(col1)
+-- !query schema
+struct<>
+-- !query output
+org.apache.spark.sql.AnalysisException
+{
+  "errorClass" : "UNSUPPORTED_SQL_UDF_USAGE",
+  "sqlState" : "0A000",
+  "messageParameters" : {
+    "functionName" : "`identifier_sql_function`",
+    "nodeName" : "Sort"
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 47,
+    "stopIndex" : 92,
+    "fragment" : "IDENTIFIER(identifier_sql_function_name)(col1)"
+  } ]
+}
+
+
+-- !query
+SELECT col1 FROM VALUES ('b'), ('a') ORDER BY identifier_sql_function(col1)
+-- !query schema
+struct<>
+-- !query output
+org.apache.spark.sql.AnalysisException
+{
+  "errorClass" : "UNSUPPORTED_SQL_UDF_USAGE",
+  "sqlState" : "0A000",
+  "messageParameters" : {
+    "functionName" : "`identifier_sql_function`",
+    "nodeName" : "Sort"
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 47,
+    "stopIndex" : 75,
+    "fragment" : "identifier_sql_function(col1)"
+  } ]
+}
+
+
+-- !query
+SELECT col1, row_number() OVER (
+  PARTITION BY IDENTIFIER(identifier_sql_function_name)(col1) ORDER BY col1) AS rn
+FROM VALUES ('b'), ('a')
+-- !query schema
+struct<col1:string,rn:int>
+-- !query output
+a	1
+b	1
+
+
+-- !query
+SELECT max(IDENTIFIER(identifier_sql_function_name)(col1)) FROM VALUES ('b'), ('a')
+-- !query schema
+struct<max(identifier_sql_function(col1)):string>
+-- !query output
+bblah
+
+
+-- !query
+SELECT IDENTIFIER(identifier_sql_function_name)(col1), count(*) FROM VALUES ('b'), ('a')
+GROUP BY ALL
+-- !query schema
+struct<identifier_sql_function(col1):string,count(1):bigint>
+-- !query output
+ablah	1
+bblah	1
+
+
+-- !query
+SELECT IDENTIFIER(identifier_sql_function_name || '')(col1) FROM VALUES ('b'), ('a') GROUP BY col1
+-- !query schema
+struct<identifier_sql_function(col1):string>
+-- !query output
+ablah
+bblah
+
+
+-- !query
+DECLARE identifier_builtin_function_name STRING DEFAULT 'rand'
+-- !query schema
+struct<>
+-- !query output
+
+
+
+-- !query
+SELECT * FROM VALUES ('a') t1(a) JOIN VALUES ('ablah') t2(b)
+ON IDENTIFIER(identifier_builtin_function_name)(0) > 0.5
+-- !query schema
+struct<>
+-- !query output
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
+{
+  "errorClass" : "INVALID_NON_DETERMINISTIC_EXPRESSIONS",
+  "sqlState" : "42K0E",
+  "messageParameters" : {
+    "sqlExprs" : "\"(rand(0) > 0.5)\""
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 34,
+    "stopIndex" : 117,
+    "fragment" : "JOIN VALUES ('ablah') t2(b)\nON IDENTIFIER(identifier_builtin_function_name)(0) > 0.5"
+  } ]
+}
+
+
+-- !query
+SET VAR identifier_builtin_function_name = 'max'
+-- !query schema
+struct<>
+-- !query output
+
+
+
+-- !query
+SELECT * FROM VALUES ('a') t1(a) JOIN VALUES ('ablah') t2(b)
+ON IDENTIFIER(identifier_builtin_function_name)(a) = b
+-- !query schema
+struct<>
+-- !query output
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
+{
+  "errorClass" : "UNSUPPORTED_EXPR_FOR_OPERATOR",
+  "sqlState" : "42K0E",
+  "messageParameters" : {
+    "invalidExprSqls" : "\"max(a)\"",
+    "operator" : "Join"
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 34,
+    "stopIndex" : 115,
+    "fragment" : "JOIN VALUES ('ablah') t2(b)\nON IDENTIFIER(identifier_builtin_function_name)(a) = b"
+  } ]
+}
+
+
+-- !query
+SET VAR identifier_builtin_function_name = 'explode'
+-- !query schema
+struct<>
+-- !query output
+
+
+
+-- !query
+SELECT count(*) FROM VALUES (array(1, 2)) AS t(a)
+GROUP BY IDENTIFIER(identifier_builtin_function_name)(a)
+-- !query schema
+struct<>
+-- !query output
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
+{
+  "errorClass" : "UNSUPPORTED_EXPR_FOR_OPERATOR",
+  "sqlState" : "42K0E",
+  "messageParameters" : {
+    "invalidExprSqls" : "\"explode(a)\"",
+    "operator" : "Aggregate"
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 51,
+    "stopIndex" : 106,
+    "fragment" : "GROUP BY IDENTIFIER(identifier_builtin_function_name)(a)"
+  } ]
+}
+
+
+-- !query
+DROP TEMPORARY VARIABLE identifier_builtin_function_name
+-- !query schema
+struct<>
+-- !query output
+
+
+
+-- !query
+DROP TEMPORARY VARIABLE identifier_sql_function_name
+-- !query schema
+struct<>
+-- !query output
+
+
+
+-- !query
+DROP TEMPORARY FUNCTION identifier_sql_function
+-- !query schema
+struct<>
+-- !query output
+

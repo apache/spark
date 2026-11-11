@@ -16,19 +16,25 @@
  */
 package org.apache.spark.sql.catalyst.analysis
 
-import scala.collection.mutable
-
-import org.apache.spark.sql.catalyst.expressions.{And, CheckInvariant, EqualNullSafe, Expression, V2ExpressionUtils}
+import org.apache.spark.sql.catalyst.expressions.CheckInvariant
 import org.apache.spark.sql.catalyst.plans.logical.{Filter, LogicalPlan, V2WriteCommand, WriteDelta}
 import org.apache.spark.sql.catalyst.rules.Rule
 import org.apache.spark.sql.catalyst.trees.TreePattern.COMMAND
-import org.apache.spark.sql.catalyst.util.GeneratedColumn
-import org.apache.spark.sql.connector.catalog.{CatalogManager, GenerationExpression}
-import org.apache.spark.sql.connector.catalog.constraints.Check
+import org.apache.spark.sql.connector.catalog.CatalogManager
 import org.apache.spark.sql.connector.write.RowLevelOperation
 import org.apache.spark.sql.execution.datasources.v2.DataSourceV2Relation
 
-class ResolveTableConstraints(val catalogManager: CatalogManager) extends Rule[LogicalPlan] {
+/**
+ * @param analyze Analyzes a plan under the active SQLConf. The check of a generated column goes
+ *                through it, so that the settings its stored text is read under cover its analysis
+ *                without applying to the query of the write.
+ */
+class ResolveTableConstraints(
+    val catalogManager: CatalogManager,
+    analyze: LogicalPlan => LogicalPlan) extends Rule[LogicalPlan] {
+
+  private val tableConstraintResolution = new TableConstraintResolution(
+    this.catalogManager, analyze, conf.sessionLocalTimeZone)
 
   override def apply(plan: LogicalPlan): LogicalPlan = plan.resolveOperatorsWithPruning(
     _.containsPattern(COMMAND), ruleId) {
@@ -41,24 +47,7 @@ class ResolveTableConstraints(val catalogManager: CatalogManager) extends Rule[L
         !containsCheckInvariant(v2Write.query) && v2Write.outputResolved =>
       v2Write.table match {
         case r: DataSourceV2Relation =>
-          val tableCheckInvariants =
-            if (r.table.constraints != null && r.table.constraints.nonEmpty) {
-              // Check constraint is the only enforced constraint for DSV2 tables.
-              r.table.constraints.collect {
-                case c: Check =>
-                  val unresolvedExpr = buildCatalystExpression(c)
-                  val columnExtractors = mutable.Map[String, Expression]()
-                  buildColumnExtractors(unresolvedExpr, columnExtractors)
-                  CheckInvariant(unresolvedExpr, columnExtractors.toSeq, c.name, c.predicateSql)
-              }.toSeq
-            } else {
-              Seq.empty
-            }
-          val genColInvariants = buildGeneratedColumnConstraints(r, v2Write)
-          val allInvariants = tableCheckInvariants ++ genColInvariants
-          // Combine the check invariants into a single expression using conjunctive AND.
-          allInvariants.reduceOption(And).fold(v2Write)(
-            condition => v2Write.withNewQuery(Filter(condition, v2Write.query)))
+          tableConstraintResolution.resolveTableConstraints(v2Write, r)
         case _ =>
           v2Write
       }
@@ -70,74 +59,6 @@ class ResolveTableConstraints(val catalogManager: CatalogManager) extends Rule[L
         condition.exists(_.isInstanceOf[CheckInvariant])
 
       case _ => false
-    }
-  }
-
-  private def buildCatalystExpression(c: Check): Expression = {
-    Option(c.predicate())
-      .flatMap(V2ExpressionUtils.toCatalyst)
-      .getOrElse(catalogManager.v1SessionCatalog.parser.parseExpression(c.predicateSql()))
-  }
-
-  /**
-   * For each generated column whose value was provided by the write, add a CheckInvariant that
-   * validates the column value matches the generation expression. Generated columns Spark
-   * auto-filled are excluded: ResolveOutputRelation marks them in the table output and their
-   * values are correct by construction.
-   */
-  private def buildGeneratedColumnConstraints(
-      r: DataSourceV2Relation,
-      v2Write: V2WriteCommand): Seq[Expression] = {
-    if (!GeneratedColumn.supportsGeneratedColumnsOnWrite(r.table, r.table.columns())) {
-      return Seq.empty
-    }
-
-    val resolver = catalogManager.v1SessionCatalog.conf.resolver
-    val autoFilledGenCols = r.output
-      .filter(GeneratedColumn.isAutoFilledGeneratedColumn)
-      .map(_.name)
-      .toSet
-
-    // Use V2 columns from the table to access both V2 expressions and SQL strings.
-    r.table.columns().flatMap { col =>
-      Option(col.columnGenerationExpression())
-        .filter(_ => !autoFilledGenCols.exists(n => resolver(n, col.name)))
-        .map { genExpr =>
-          val catalystExpr = buildGenerationCatalystExpression(genExpr)
-          val colRef = UnresolvedAttribute.quoted(col.name)
-          val columnExtractors = Seq(col.name -> colRef)
-          val genExprSql = Option(genExpr.getSql()).getOrElse(catalystExpr.sql)
-          CheckInvariant(
-            EqualNullSafe(colRef, catalystExpr),
-            columnExtractors,
-            "Generated Column",
-            s"${col.name} <=> $genExprSql")
-        }
-    }.toSeq
-  }
-
-  /**
-   * Convert a V2 GenerationExpression to a Catalyst expression.
-   * Try the V2 expression first, fall back to parsing the SQL string.
-   */
-  private def buildGenerationCatalystExpression(genExpr: GenerationExpression): Expression = {
-    Option(genExpr.getExpression)
-      .flatMap(V2ExpressionUtils.toCatalyst)
-      .getOrElse(catalogManager.v1SessionCatalog.parser.parseExpression(genExpr.getSql))
-  }
-
-  private def buildColumnExtractors(
-      expr: Expression,
-      columnExtractors: mutable.Map[String, Expression]): Unit = {
-    expr match {
-      case u: UnresolvedExtractValue =>
-        // When extracting a value from a Map or Array type, we display only the specific extracted
-        // value rather than the entire Map or Array structure for clarity and readability.
-        columnExtractors(u.sql) = u
-      case u: UnresolvedAttribute =>
-        columnExtractors(u.name) = u
-      case other =>
-        other.children.foreach(buildColumnExtractors(_, columnExtractors))
     }
   }
 }

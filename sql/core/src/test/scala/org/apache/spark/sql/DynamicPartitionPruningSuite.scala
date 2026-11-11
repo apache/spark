@@ -38,7 +38,8 @@ import org.apache.spark.sql.execution._
 import org.apache.spark.sql.execution.adaptive._
 import org.apache.spark.sql.execution.datasources.v2.BatchScanExec
 import org.apache.spark.sql.execution.dynamicpruning.PlanDynamicPruningFilters
-import org.apache.spark.sql.execution.exchange.{BroadcastExchangeLike, ReusedExchangeExec}
+import org.apache.spark.sql.execution.exchange.{BroadcastExchangeLike, ReusedExchangeExec,
+  ShuffleExchangeLike}
 import org.apache.spark.sql.execution.joins.BroadcastHashJoinExec
 import org.apache.spark.sql.execution.metric.SQLLastAttemptMetrics
 import org.apache.spark.sql.execution.streaming.runtime.{MemoryStream, StreamingQueryWrapper}
@@ -2050,6 +2051,36 @@ abstract class DynamicPartitionPruningDataSourceSuiteBase
 abstract class DynamicPartitionPruningV1Suite extends DynamicPartitionPruningDataSourceSuiteBase {
 
   import testImplicits._
+
+  test("SPARK-60741: the DPP subquery keeps a bucketed build side's partitioning") {
+    withSQLConf(SQLConf.DYNAMIC_PARTITION_PRUNING_ENABLED.key -> "true",
+        SQLConf.DYNAMIC_PARTITION_PRUNING_REUSE_BROADCAST_ONLY.key -> "false",
+        SQLConf.DYNAMIC_PARTITION_PRUNING_FALLBACK_FILTER_RATIO.key -> "10",
+        SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key -> "-1") {
+      withTable("bucketed_dim", "partitioned_fact") {
+        spark.range(100).selectExpr("id", "id % 10 AS k")
+          .write.bucketBy(4, "k").format(tableFormat).saveAsTable("bucketed_dim")
+        spark.range(100).selectExpr("id AS v", "id % 10 AS p")
+          .write.partitionBy("p").format(tableFormat).saveAsTable("partitioned_fact")
+        val df = sql("SELECT sum(f.v) FROM partitioned_fact f JOIN bucketed_dim d " +
+          "ON f.p = d.k WHERE d.id < 5")
+        checkAnswer(df, Row(2350))
+
+        // The subquery groups on the bucket column, so the bucketed scan is kept, and no shuffle
+        // is needed.
+        val subqueries = collectDynamicPruningExpressions(df.queryExecution.executedPlan)
+          .collect { case i: InSubqueryExec => i.plan }
+        assert(subqueries.nonEmpty)
+        subqueries.foreach {
+          case s: SubqueryExec =>
+            assert(collect(s.child) { case e: ShuffleExchangeLike => e }.isEmpty, s.child)
+            assert(collect(s.child) { case f: FileSourceScanExec => f.bucketedScan } === Seq(true),
+              s.child)
+          case other => fail(s"expected a SubqueryExec, got $other")
+        }
+      }
+    }
+  }
 
   test("DPP with a checkpointed filtering side and an expression partition key") {
     withSQLConf(SQLConf.DYNAMIC_PARTITION_PRUNING_ENABLED.key -> "true",

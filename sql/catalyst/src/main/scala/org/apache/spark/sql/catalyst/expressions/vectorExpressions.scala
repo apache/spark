@@ -17,6 +17,8 @@
 
 package org.apache.spark.sql.catalyst.expressions
 
+import java.lang.{Float => JFloat}
+
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.analysis.TypeCheckResult
 import org.apache.spark.sql.catalyst.analysis.TypeCheckResult.DataTypeMismatch
@@ -672,14 +674,85 @@ object VectorAvg {
         inputArray: ArrayData,
         dim: Int,
         newCount: Long): Unit = {
-      // Update running average: new_avg = old_avg + (new_value - old_avg) / new_count
+      // Finite deltas use: new_avg = old_avg + (new_value - old_avg) * invCount.
+      // updateElement handles subtraction overflow and non-finite operands.
       val invCount = 1.0f / newCount
+      updateElementsInBlocks(accBytes, inputArray, dim, invCount)
+    }
+
+    private def updateElementsInBlocks(
+        accBytes: Array[Byte],
+        inputArray: ArrayData,
+        dim: Int,
+        invCount: Float): Unit = {
       var i = 0
+      while (i <= dim - 4) {
+        val off = Platform.BYTE_ARRAY_OFFSET + i.toLong * 4
+        val oldAvg0 = Platform.getFloat(accBytes, off)
+        val value0 = inputArray.getFloat(i)
+        val delta0 = value0 - oldAvg0
+        val oldAvg1 = Platform.getFloat(accBytes, off + 4)
+        val value1 = inputArray.getFloat(i + 1)
+        val delta1 = value1 - oldAvg1
+        val oldAvg2 = Platform.getFloat(accBytes, off + 8)
+        val value2 = inputArray.getFloat(i + 2)
+        val delta2 = value2 - oldAvg2
+        val oldAvg3 = Platform.getFloat(accBytes, off + 12)
+        val value3 = inputArray.getFloat(i + 3)
+        val delta3 = value3 - oldAvg3
+        // A finite sum guarantees finite deltas; sum overflow only triggers a scalar fallback.
+        val deltaSum = (delta0 + delta1) + (delta2 + delta3)
+        if (JFloat.isFinite(deltaSum)) {
+          Platform.putFloat(accBytes, off, oldAvg0 + delta0 * invCount)
+          Platform.putFloat(accBytes, off + 4, oldAvg1 + delta1 * invCount)
+          Platform.putFloat(accBytes, off + 8, oldAvg2 + delta2 * invCount)
+          Platform.putFloat(accBytes, off + 12, oldAvg3 + delta3 * invCount)
+        } else {
+          Platform.putFloat(accBytes, off, updateElement(oldAvg0, value0, invCount))
+          Platform.putFloat(accBytes, off + 4, updateElement(oldAvg1, value1, invCount))
+          Platform.putFloat(accBytes, off + 8, updateElement(oldAvg2, value2, invCount))
+          Platform.putFloat(accBytes, off + 12, updateElement(oldAvg3, value3, invCount))
+        }
+        i += 4
+      }
+      if (i < dim) {
+        updateElementsScalar(accBytes, inputArray, i, dim, invCount)
+      }
+    }
+
+    private def updateElementsScalar(
+        accBytes: Array[Byte],
+        inputArray: ArrayData,
+        start: Int,
+        dim: Int,
+        invCount: Float): Unit = {
+      var i = start
       while (i < dim) {
         val off = Platform.BYTE_ARRAY_OFFSET + i.toLong * 4
         val oldAvg = Platform.getFloat(accBytes, off)
-        Platform.putFloat(accBytes, off, oldAvg + (inputArray.getFloat(i) - oldAvg) * invCount)
+        val value = inputArray.getFloat(i)
+        Platform.putFloat(accBytes, off, updateElement(oldAvg, value, invCount))
         i += 1
+      }
+    }
+
+    private def updateElement(oldAvg: Float, value: Float, invCount: Float): Float = {
+      val delta = value - oldAvg
+      if (JFloat.isFinite(delta)) {
+        oldAvg + delta * invCount
+      } else if (JFloat.isFinite(oldAvg) && JFloat.isFinite(value)) {
+        // Scale before subtracting when opposite finite values overflow the delta.
+        // For oldAvg = Float.MaxValue, value = -Float.MaxValue and invCount = 0.5f,
+        // the delta is -Infinity, but scaling first gives the correct average of 0.0f.
+        oldAvg + (value * invCount - oldAvg * invCount)
+      } else {
+        // At least one operand is non-finite. Addition gives the IEEE result
+        // regardless of which operand is the running average:
+        // Inf + Inf -> Inf; -Inf + (-Inf) -> -Inf.
+        // Inf + (-Inf) -> NaN.
+        // NaN + any value -> NaN.
+        // Inf + finite -> Inf; -Inf + finite -> -Inf.
+        oldAvg + value
       }
     }
 

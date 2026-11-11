@@ -45,7 +45,7 @@ import org.apache.spark.sql.catalyst.util.DateTimeTestUtils.{withDefaultTimeZone
 import org.apache.spark.sql.connector.catalog.TableCapability
 import org.apache.spark.sql.execution.{FileSourceScanExec, FormattedMode, SparkPlan}
 import org.apache.spark.sql.execution.datasources.{CommonFileDataSourceSuite, DataSource, FilePartition}
-import org.apache.spark.sql.execution.datasources.v2.{BatchScanExec, DataSourceV2ScanRelation, FileDataSourceV2, FileTable}
+import org.apache.spark.sql.execution.datasources.v2.{BatchScanExec, DataSourceV2ScanRelation, FileDataSourceV2, FileTable, PlannedScan}
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.internal.LegacyBehaviorPolicy
 import org.apache.spark.sql.internal.LegacyBehaviorPolicy._
@@ -3638,9 +3638,7 @@ abstract class AvroSuite
       SQLConf.TIMESTAMP_NANOS_TYPES_ENABLED.key -> "true",
       SQLConf.SESSION_LOCAL_TIMEZONE.key -> "UTC") {
       // Long.MaxValue epoch-nanoseconds = 2262-04-11T23:47:16.854775807Z, the largest instant the
-      // INT64 epoch-nanos encoding can represent. The lower bound Long.MinValue is intentionally
-      // not exercised: re-encoding its floored epoch-microseconds overflows Long (see
-      // DateTimeUtilsSuite), so it is not writable.
+      // INT64 epoch-nanos encoding can represent.
       val maxInstant = java.time.Instant.ofEpochSecond(9223372036L, 854775807L)
       val maxLocal = LocalDateTime.ofEpochSecond(9223372036L, 854775807, java.time.ZoneOffset.UTC)
       Seq(
@@ -3663,13 +3661,11 @@ abstract class AvroSuite
     withSQLConf(
       SQLConf.TIMESTAMP_NANOS_TYPES_ENABLED.key -> "true",
       SQLConf.SESSION_LOCAL_TIMEZONE.key -> "UTC") {
-      // The smallest *writable* instant: Long.MinValue epoch-nanoseconds floor to an epochMicros
-      // whose re-encode overflows Long, so the practical minimum is the next whole microsecond up
-      // (~1677-09-21), the symmetric counterpart of the maximum-instant test above.
-      val minEpochNanos = (Long.MinValue / 1000L) * 1000L
+      // The smallest instant: Long.MinValue epoch-nanoseconds = 1677-09-21T00:12:43.145224192Z,
+      // the symmetric counterpart of the maximum-instant test above.
       // Pre-epoch full-precision value: 1969-12-31T23:59:59.999999999Z (= -1 epoch-nanosecond),
       // exercising the floor semantics end to end (mirrors the Parquet/ORC suites).
-      Seq(-1L, minEpochNanos).foreach { epochNanos =>
+      Seq(-1L, Long.MinValue).foreach { epochNanos =>
         val seconds = Math.floorDiv(epochNanos, 1000000000L)
         val nanoOfSecond = Math.floorMod(epochNanos, 1000000000L).toInt
         val instant = java.time.Instant.ofEpochSecond(seconds, nanoOfSecond.toLong)
@@ -3686,6 +3682,36 @@ abstract class AvroSuite
             val readBack = spark.read.schema(new StructType().add("ts", nanosType))
               .format("avro").load(dir.getCanonicalPath)
             checkAnswer(readBack, df)
+          }
+        }
+      }
+    }
+  }
+
+  test("SPARK-57838: writing one nanosecond past the int64 epoch-nanos range fails loudly") {
+    withSQLConf(
+      SQLConf.TIMESTAMP_NANOS_TYPES_ENABLED.key -> "true",
+      SQLConf.SESSION_LOCAL_TIMEZONE.key -> "UTC") {
+      Seq(
+        "2262-04-11T23:47:16.854775808", "1677-09-21T00:12:43.145224191").foreach { ts =>
+        val local = LocalDateTime.parse(ts)
+        Seq(
+          (TimestampLTZNanosType(9), local.toInstant(java.time.ZoneOffset.UTC): Any, s"${ts}Z"),
+          (TimestampNTZNanosType(9), local: Any, ts)).foreach { case (nanosType, value, shown) =>
+          withTempPath { dir =>
+            val df = spark.createDataFrame(
+              spark.sparkContext.parallelize(Seq(Row(value)), numSlices = 1),
+              new StructType().add("ts", nanosType))
+            val e = intercept[SparkException] {
+              df.write.format("avro").save(dir.getCanonicalPath)
+            }
+            checkError(
+              exception = getRootCause(e).asInstanceOf[SparkArithmeticException],
+              condition = "DATETIME_OVERFLOW",
+              parameters = Map("operation" ->
+                (s"write the timestamp value $shown as Avro epoch-nanoseconds " +
+                  "(supported range: 1677-09-21T00:12:43.145224192Z to " +
+                  "2262-04-11T23:47:16.854775807Z)")))
           }
         }
       }
@@ -4159,6 +4185,40 @@ class AvroV2Suite extends AvroSuite with ExplainSuiteHelper {
     }
   }
 
+  test("SPARK-30628: Avro source v2: runtime filters prune partitions") {
+    withSQLConf(
+        SQLConf.ADAPTIVE_EXECUTION_ENABLED.key -> "false",
+        SQLConf.DYNAMIC_PARTITION_PRUNING_REUSE_BROADCAST_ONLY.key -> "false",
+        SQLConf.DYNAMIC_PARTITION_PRUNING_FALLBACK_FILTER_RATIO.key -> "2") {
+      withTempPath { dir =>
+        val factPath = new File(dir, "fact").getCanonicalPath
+        val dimPath = new File(dir, "dim").getCanonicalPath
+        spark.range(100).selectExpr("id", "CAST(id % 10 AS INT) AS part")
+          .write.format("avro").partitionBy("part").save(factPath)
+        spark.range(10).selectExpr("CAST(id AS INT) AS dim_id", "id AS dim_val")
+          .write.format("avro").save(dimPath)
+        withTempView("fact", "dim") {
+          spark.read.format("avro").load(factPath).createOrReplaceTempView("fact")
+          spark.read.format("avro").load(dimPath).createOrReplaceTempView("dim")
+          Seq(
+            "SELECT f.id FROM fact f JOIN dim d ON f.part = d.dim_id WHERE d.dim_val = 7",
+            "SELECT id FROM fact WHERE part = (SELECT max(dim_id) FROM dim WHERE dim_val = 7)"
+          ).foreach { query =>
+            val df = sql(query)
+            checkAnswer(df, (0 until 10).map(i => Row(i * 10L + 7)))
+            val factScan = df.queryExecution.executedPlan.collectFirst {
+              case b: BatchScanExec if b.scan.isInstanceOf[AvroScan] && b.runtimeFilters.nonEmpty =>
+                b
+            }.getOrElse(fail(s"no Avro scan with runtime filters:\n${df.queryExecution}"))
+            val readParts = factScan.filteredPartitions.flatten
+              .flatMap(_.asInstanceOf[FilePartition].files.map(_.partitionValues.getInt(0)))
+            assert(readParts.distinct === Seq(7), query)
+          }
+        }
+      }
+    }
+  }
+
   test("Avro source v2: support partition pruning") {
     withTempPath { dir =>
       Seq(("a", 1, 2), ("b", 1, 2), ("c", 2, 1))
@@ -4184,7 +4244,7 @@ class AvroV2Suite extends AvroSuite with ExplainSuiteHelper {
       })
 
       val fileScan = df.queryExecution.executedPlan collectFirst {
-        case BatchScanExec(_, f: AvroScan, _, _, _, _) => f
+        case BatchScanExec(_, PlannedScan(f: AvroScan), _, _, _, _, _, _) => f
       }
       assert(fileScan.nonEmpty)
       assert(fileScan.get.partitionFilters.nonEmpty)
@@ -4218,7 +4278,7 @@ class AvroV2Suite extends AvroSuite with ExplainSuiteHelper {
       assert(filterCondition.isDefined)
 
       val fileScan = df.queryExecution.executedPlan collectFirst {
-        case BatchScanExec(_, f: AvroScan, _, _, _, _) => f
+        case BatchScanExec(_, PlannedScan(f: AvroScan), _, _, _, _, _, _) => f
       }
       assert(fileScan.nonEmpty)
       assert(fileScan.get.partitionFilters.isEmpty)
@@ -4299,7 +4359,7 @@ class AvroV2Suite extends AvroSuite with ExplainSuiteHelper {
             .where("value = 'a'")
 
           val fileScan = df.queryExecution.executedPlan collectFirst {
-            case BatchScanExec(_, f: AvroScan, _, _, _, _) => f
+            case BatchScanExec(_, PlannedScan(f: AvroScan), _, _, _, _, _, _) => f
           }
           assert(fileScan.nonEmpty)
           if (filtersPushdown) {

@@ -160,7 +160,7 @@ case class ChangelogProperties(
     rowIdPaths: Seq[Seq[String]] = Seq.empty,
     rowVersionName: Option[String] = None,
     commitTimestampNullable: Boolean = true,
-    metadataColumns: Array[MetadataColumn] = Array.empty)
+    metadataColumns: Seq[MetadataColumn] = Seq.empty)
 
 /**
  * A test [[Changelog]] that returns pre-populated change rows.
@@ -196,7 +196,7 @@ class InMemoryChangelog(
 
   override def hashCode(): Int = readIdentity.hashCode()
 
-  override def metadataColumns(): Array[MetadataColumn] = properties.metadataColumns
+  override def metadataColumns(): Array[MetadataColumn] = properties.metadataColumns.toArray
 
   override def containsCarryoverRows(): Boolean = properties.containsCarryoverRows
 

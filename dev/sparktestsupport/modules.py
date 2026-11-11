@@ -18,7 +18,6 @@
 import itertools
 import os
 import re
-import sys
 from functools import total_ordering
 from pathlib import Path, PurePath
 
@@ -59,6 +58,8 @@ ignored_file_patterns = (
     "/dev/requirements.txt",
     "/dev/spark_merge_footer.py",
     "/dev/spark-test-image/lint/Dockerfile",
+    # Always run by the precondition job in build_and_test.yml.
+    "/dev/sparktestsupport/tests/",
     "/dev/structured_logging_style.py",
     "/ui-test/package-lock.json",
     "/ui-test/package.json",
@@ -83,10 +84,6 @@ def is_ignored_file(filename: str) -> bool:
     A trailing slash ignores a directory subtree:
     >>> is_ignored_file("dev/create-release/spark-rm/Dockerfile")
     True
-
-    Non-matches fall through:
-    >>> is_ignored_file("xasfZyaml")
-    False
     """
     path = PurePath("/") / filename
     for pattern in ignored_file_patterns:
@@ -148,13 +145,6 @@ class Module(object):
             is not explicitly changed.
         :param should_run_r_tests: If true, changes in this module will trigger all R tests.
         :param should_run_build_tests: If true, changes in this module will trigger build tests.
-
-        Duplicate names are rejected and not registered:
-
-        >>> Module("core", [], [])
-        Traceback (most recent call last):
-            ...
-        ValueError: module name 'core' is already in use
         """
         if any(module.name == name for module in all_modules):
             raise ValueError(f"module name {name!r} is already in use")
@@ -371,7 +361,7 @@ catalyst = Module(
 
 sql = Module(
     name="sql",
-    dependencies=[catalyst],
+    dependencies=[catalyst, udf_worker],
     source_file_regexes=[
         "sql/core/",
         "python/pyspark/sql/worker/",  # analyze_udtf is invoked and tested in JVM
@@ -596,10 +586,22 @@ examples = Module(
     ],
 )
 
+# Shared Python test environment.
+pyspark_base = Module(
+    name="pyspark-base",
+    dependencies=[],
+    source_file_regexes=[
+        "dev/spark-test-image/python-.*/",
+        "pyproject.toml",
+    ],
+)
+
 pyspark_core = Module(
     name="pyspark-core",
-    dependencies=[core],
-    source_file_regexes=["python/(?!pyspark/(ml|mllib|sql|streaming|pandas|resource|testing))"],
+    dependencies=[core, pyspark_base],
+    source_file_regexes=[
+        "python/(?!pyspark/(ml|mllib|sql|streaming|pandas|resource|testing|inprocess))"
+    ],
     python_test_goals=[
         # doctests
         "pyspark.conf",
@@ -642,7 +644,7 @@ pyspark_core = Module(
 pyspark_sql = Module(
     name="pyspark-sql",
     dependencies=[pyspark_core, hive, avro, protobuf],
-    source_file_regexes=["python/pyspark/sql"],
+    source_file_regexes=["python/pyspark/sql", "python/pyspark/inprocess"],
     python_test_goals=[
         # doctests
         "pyspark.sql.types",
@@ -703,6 +705,8 @@ pyspark_sql = Module(
         "pyspark.sql.tests.test_group",
         "pyspark.sql.tests.test_sql",
         "pyspark.sql.tests.test_job_cancellation",
+        "pyspark.sql.tests.test_inprocess_udf",
+        "pyspark.sql.tests.test_inprocess_runtime",
         "pyspark.sql.tests.arrow.test_arrow",
         "pyspark.sql.tests.arrow.test_arrow_map",
         "pyspark.sql.tests.arrow.test_arrow_cogrouped_map",
@@ -944,7 +948,7 @@ pyspark_ml = Module(
 
 pyspark_periodic = Module(
     name="pyspark-periodic",
-    dependencies=[],
+    dependencies=[pyspark_base],
     source_file_regexes=[
         # This module contains tests that are not sensitive to pyspark code changes.
         # We run these on scheduled CIs and pre-merge CIs, not post-merge CIs.
@@ -1742,7 +1746,7 @@ pyspark_errors = Module(
 
 pyspark_logger = Module(
     name="pyspark-logger",
-    dependencies=[],
+    dependencies=[pyspark_base],
     source_file_regexes=["python/pyspark/logger"],
     python_test_goals=[
         # doctests
@@ -1870,13 +1874,22 @@ root = Module(
 )
 
 
-def _test():
-    import doctest
+def transitive_dependencies(module: Module) -> set[Module]:
+    """
+    Return all modules that `module` depends on, directly or transitively.
+    The module itself is not included.
 
-    failure_count = doctest.testmod()[0]
-    if failure_count:
-        sys.exit(-1)
+    `utils-java` is an indirect dependency of `unsafe`:
 
-
-if __name__ == "__main__":
-    _test()
+    >>> sorted(dependency.name for dependency in transitive_dependencies(unsafe))
+    ['config', 'tags', 'utils', 'utils-java']
+    """
+    seen = set()
+    pending = list(module.dependencies)
+    while pending:
+        dependency = pending.pop()
+        if dependency in seen or dependency is module:
+            continue
+        seen.add(dependency)
+        pending.extend(dependency.dependencies)
+    return seen

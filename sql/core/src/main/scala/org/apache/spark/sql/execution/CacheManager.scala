@@ -22,9 +22,10 @@ import scala.util.control.NonFatal
 
 import org.apache.hadoop.fs.{FileSystem, Path}
 
+import org.apache.spark.SparkException
 import org.apache.spark.internal.{Logging, MessageWithContext}
 import org.apache.spark.internal.LogKeys._
-import org.apache.spark.sql.catalyst.analysis.Resolver
+import org.apache.spark.sql.catalyst.analysis.{RelationCacheIneligible, Resolver}
 import org.apache.spark.sql.catalyst.catalog.HiveTableRelation
 import org.apache.spark.sql.catalyst.expressions.{Attribute, SubqueryExpression}
 import org.apache.spark.sql.catalyst.optimizer.EliminateResolvedHint
@@ -33,7 +34,7 @@ import org.apache.spark.sql.catalyst.trees.TreePattern.PLAN_EXPRESSION
 import org.apache.spark.sql.catalyst.util.sideBySide
 import org.apache.spark.sql.classic.{Dataset, SparkSession}
 import org.apache.spark.sql.connector.catalog.{CatalogPlugin, CatalogV2Util}
-import org.apache.spark.sql.connector.catalog.CatalogV2Implicits.{IdentifierHelper, MultipartIdentifierHelper}
+import org.apache.spark.sql.connector.catalog.CatalogV2Implicits.IdentifierHelper
 import org.apache.spark.sql.connector.catalog.Identifier
 import org.apache.spark.sql.connector.catalog.transactions.Transaction
 import org.apache.spark.sql.execution.adaptive.AdaptiveSparkPlanHelper
@@ -45,6 +46,7 @@ import org.apache.spark.sql.execution.datasources.{
   LogicalRelation,
   LogicalRelationWithTable}
 import org.apache.spark.sql.execution.datasources.v2.{BatchScanExec, ChangelogTable, DataSourceV2Relation, ExtractV2CatalogAndIdentifier, ExtractV2Table, FileTable, V2TableRefreshUtil}
+import org.apache.spark.sql.execution.python.InProcessPythonUDFBuilder
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.sources.BaseRelation
 import org.apache.spark.sql.util.CaseInsensitiveStringMap
@@ -292,14 +294,6 @@ class CacheManager extends Logging with AdaptiveSparkPlanHelper {
 
   private def isSameName(
       name: Seq[String],
-      catalog: CatalogPlugin,
-      ident: Identifier,
-      resolver: Resolver): Boolean = {
-    isSameName(name, ident.toQualifiedNameParts(catalog), resolver)
-  }
-
-  private def isSameName(
-      name: Seq[String],
       nameInCache: Seq[String],
       resolver: Resolver): Boolean = {
     nameInCache.length == name.length && nameInCache.zip(name).forall(resolver.tupled)
@@ -410,14 +404,26 @@ class CacheManager extends Logging with AdaptiveSparkPlanHelper {
   private def tryRebuildCacheEntry(spark: SparkSession, cd: CachedData): Option[CachedData] = {
     val sessionWithConfigsOff = getOrCloneSessionWithConfigsOff(spark)
     sessionWithConfigsOff.withActive {
-      tryRefreshPlan(sessionWithConfigsOff, cd.plan).map { refreshedPlan =>
-        val qe = QueryExecution.create(
-          sessionWithConfigsOff,
-          refreshedPlan,
-          refreshPhaseEnabled = false)
-        val newKey = qe.normalized
-        val newCache = InMemoryRelation(cd.cachedRepresentation.cacheBuilder, qe)
-        cd.copy(plan = newKey, cachedRepresentation = newCache)
+      tryRefreshPlan(sessionWithConfigsOff, cd.plan).flatMap { refreshedPlan =>
+        try {
+          val qe = QueryExecution.create(
+            sessionWithConfigsOff,
+            refreshedPlan,
+            refreshPhaseEnabled = false)
+          val newKey = qe.normalized
+          val newCache = InMemoryRelation(cd.cachedRepresentation.cacheBuilder, qe)
+          Some(cd.copy(plan = newKey, cachedRepresentation = newCache))
+        } catch {
+          // Re-caching follows the command that invalidated the entry, e.g. a committed write,
+          // and plans the entry in that command's session. In-process Python UDFs check that
+          // session's configuration while planning; if it rejects them, drop the entry rather
+          // than fail a command whose work is done. Other failures still propagate.
+          case e: SparkException
+              if InProcessPythonUDFBuilder.isUnsupportedSessionConfiguration(e) =>
+            logWarning(log"Removed cache entry ${MDC(DATAFRAME_CACHE_ENTRY, cd)} because it " +
+              log"cannot be re-planned in the session that invalidated it", e)
+            None
+        }
       }
     }
   }
@@ -460,39 +466,31 @@ class CacheManager extends Logging with AdaptiveSparkPlanHelper {
       catalog: CatalogPlugin,
       ident: Identifier,
       tableId: Option[String],
-      stateOptions: CaseInsensitiveStringMap,
-      resolver: Resolver): Option[LogicalPlan] = {
-    val name = ident.toQualifiedNameParts(catalog)
-    val cachedRelations = findCachedRelations(name, resolver)
-    // Changelog loads have their own context and state options, so they cannot supply an
-    // ordinary table's metadata even when the catalog and identifier match.
-    val cachedRelation = cachedRelations.collectFirst {
-      case r: DataSourceV2Relation
-          if !r.table.isInstanceOf[ChangelogTable] &&
-            r.catalog.contains(catalog) && r.identifier.contains(ident) &&
-            tableId.forall(_ == r.table.id) &&
-            CatalogV2Util.extractTableStateOptions(catalog, r.options) == stateOptions =>
-        r
-    }
-    cachedRelation.foreach { _ =>
-      CacheManager.logCacheOperation(
-        log"Relation cache hit for table ${MDC(TABLE_NAME, name.quoted)}")
+      stateOptions: CaseInsensitiveStringMap): Option[LogicalPlan] = {
+    val cachedRelation = findCachedRelation(catalog, ident, tableId, stateOptions)
+    cachedRelation.foreach { r =>
+      CacheManager.logCacheOperation(log"Relation cache hit for table ${MDC(TABLE_NAME, r.name)}")
     }
     cachedRelation
   }
 
-  private def findCachedRelations(
-      name: Seq[String],
-      resolver: Resolver): Seq[LogicalPlan] = {
-    cachedData.flatMap { cd =>
-      val plan = stripRootSubqueryAliases(cd.plan)
-      plan match {
-        case r @ ExtractV2CatalogAndIdentifier(catalog, ident)
-            if isSameName(name, catalog, ident, resolver) && r.timeTravelSpec.isEmpty =>
-          Some(r)
-        case _ =>
-          None
-      }
+  // finds a relation cached directly (e.g. CACHE TABLE t) for the given table and state,
+  // ignoring time travel relations and tables marked ineligible for the relation cache
+  private def findCachedRelation(
+      catalog: CatalogPlugin,
+      ident: Identifier,
+      tableId: Option[String],
+      stateOptions: CaseInsensitiveStringMap): Option[DataSourceV2Relation] = {
+    val cachedPlans = cachedData.map(cd => stripRootSubqueryAliases(cd.plan))
+    cachedPlans.collectFirst {
+      case r: DataSourceV2Relation
+          if !r.table.isInstanceOf[RelationCacheIneligible] &&
+            r.catalog.contains(catalog) &&
+            r.identifier.contains(ident) &&
+            r.timeTravelSpec.isEmpty &&
+            tableId.forall(_ == r.table.id) &&
+            CatalogV2Util.extractTableStateOptions(catalog, r.options) == stateOptions =>
+        r
     }
   }
 

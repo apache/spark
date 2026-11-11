@@ -300,10 +300,6 @@ case class StatefulStreamlineAggregateExec(
             incrementalEvictionIter.foreach { evictionIter =>
               allRemovalsTimeMs += timeTakenMs {
                 var numRemovalsCurrRecord = 0
-                // NOTE: EvictionIterator removes (and counts) a row inside hasNext, not next(), so
-                //  a bare hasNext already deletes and bumps the metrics. To stop at exactly
-                //  incrementalCleanupFactor removals per input we must re-check the count before
-                //  each hasNext rather than draining the iterator.
                 while (numRemovalsCurrRecord < incrementalCleanupFactor
                   && evictionIter.hasNext) {
                   // The removal happens inside of the iterator; in Update mode,

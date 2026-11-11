@@ -44,7 +44,9 @@ def find_py_files(path, exclude_paths):
         if any(exclude_path in root for exclude_path in exclude_paths):
             continue
         for file in files:
-            if file.endswith(".py"):
+            if file.endswith(".py") and not any(
+                excluded in os.path.join(root, file) for excluded in exclude_paths
+            ):
                 py_files.append(os.path.join(root, file))
     return py_files
 
@@ -172,8 +174,10 @@ if __name__ == "__main__":
     pyspark_error_list += internal_error_list
 
     # Target paths and exclude paths
-    TARGET_PATHS = ["python/pyspark/sql"]
+    TARGET_PATHS = ["python/pyspark/sql", "python/pyspark/inprocess"]
     EXCLUDE_PATHS = [
+        # Executor errors are wrapped as JNI-safe exception text by this transport module.
+        "python/pyspark/inprocess/runtime.py",
         "python/pyspark/sql/tests",
         "python/pyspark/sql/connect/resource",
         "python/pyspark/sql/connect/proto",

@@ -29,7 +29,8 @@ import org.apache.spark.sql.catalyst.SQLConfHelper
 import org.apache.spark.sql.catalyst.analysis.{IndexAlreadyExistsException, NoSuchIndexException}
 import org.apache.spark.sql.connector.catalog.Identifier
 import org.apache.spark.sql.connector.catalog.index.TableIndex
-import org.apache.spark.sql.connector.expressions.{Expression, Extract, FieldReference, NamedReference, NullOrdering, SortDirection}
+import org.apache.spark.sql.connector.expressions.{Expression, Extract, FieldReference, NamedReference, NullOrdering, SortDirection, SortOrder}
+import org.apache.spark.sql.connector.expressions.aggregate.{AggregateFunc, Aggregation}
 import org.apache.spark.sql.errors.{QueryCompilationErrors, QueryExecutionErrors}
 import org.apache.spark.sql.execution.datasources.jdbc.{JDBCOptions, JdbcUtils}
 import org.apache.spark.sql.types._
@@ -448,4 +449,35 @@ private case class MySQLDialect() extends JdbcDialect with SQLConfHelper with No
   override def supportsHint: Boolean = true
 
   override def supportsJoin: Boolean = true
+
+  // ONLY_FULL_GROUP_BY (on by default) rejects an ORDER BY term that uses a column outside an
+  // aggregate, unless that column is itself grouped or the term equals a GROUP BY expression.
+  override def supportsTopN(
+      orders: Array[SortOrder],
+      aggregation: Option[Aggregation]): Boolean = {
+    conf.legacyMySqlTopNOverGroupByExprEnabled || aggregation.forall { agg =>
+      val groupBys = agg.groupByExpressions.toSeq
+      // Compare compiled SQL: some V2 expressions, such as Extract, have no value equality.
+      val groupBySqls = groupBys.flatMap(compileExpression).toSet
+      orders.forall { order =>
+        equalsGroupByTerm(order, groupBySqls) ||
+          columnsOutsideAggregates(order.expression).forall(groupBys.contains)
+      }
+    }
+  }
+
+  // Other null orders compile to `CASE WHEN key IS NULL ...`, which differs from the GROUP BY term.
+  private def equalsGroupByTerm(order: SortOrder, groupBySqls: Set[String]): Boolean =
+    compileExpression(order.expression).exists(groupBySqls.contains) &&
+      ((order.direction, order.nullOrdering) match {
+        case (SortDirection.ASCENDING, NullOrdering.NULLS_FIRST) |
+             (SortDirection.DESCENDING, NullOrdering.NULLS_LAST) => true
+        case _ => false
+      })
+
+  private def columnsOutsideAggregates(e: Expression): Seq[Expression] = e match {
+    case _: AggregateFunc => Nil
+    case r: NamedReference => Seq(r)
+    case _ => e.children.toSeq.flatMap(columnsOutsideAggregates)
+  }
 }

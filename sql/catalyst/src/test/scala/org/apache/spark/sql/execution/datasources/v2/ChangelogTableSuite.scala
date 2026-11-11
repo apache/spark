@@ -154,6 +154,13 @@ class ChangelogTableSuite extends SparkFunSuite {
       table(properties.copy(rowIdNames = Seq("other_id"))))
   }
 
+  test("independent changelog loads with default metadata compare equally") {
+    val first = new InMemoryChangelog("changes", dataColumns, Seq.empty)
+    val second = new InMemoryChangelog("changes", dataColumns, Seq.empty)
+    assert(first == second)
+    assert(first.hashCode() == second.hashCode())
+  }
+
   test("changelog relations compare by connector equality, context, identifier, and options") {
     val catalog = new InMemoryChangelogCatalog
     catalog.initialize("catalog", CaseInsensitiveStringMap.empty())

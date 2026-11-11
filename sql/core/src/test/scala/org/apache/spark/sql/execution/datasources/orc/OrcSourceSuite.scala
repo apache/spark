@@ -20,7 +20,7 @@ package org.apache.spark.sql.execution.datasources.orc
 import java.io.{File, FileNotFoundException}
 import java.nio.charset.StandardCharsets.UTF_8
 import java.sql.{Date, Timestamp}
-import java.time.{Duration, Period}
+import java.time.{Duration, Instant, Period}
 import java.util.Locale
 
 import org.apache.hadoop.conf.Configuration
@@ -34,7 +34,7 @@ import org.apache.orc.OrcProto.Stream.Kind
 import org.apache.orc.TypeDescription
 import org.apache.orc.impl.RecordReaderImpl
 
-import org.apache.spark.{SPARK_VERSION_SHORT, SparkConf, SparkException, SparkRuntimeException}
+import org.apache.spark.{SPARK_VERSION_SHORT, SparkConf, SparkException, SparkRuntimeException, SparkUnsupportedOperationException}
 import org.apache.spark.sql.{QueryTestBase, Row, SPARK_VERSION_METADATA_KEY}
 import org.apache.spark.sql.execution.datasources.{CommonFileDataSourceSuite, SchemaMergeUtils}
 import org.apache.spark.sql.execution.datasources.orc.OrcCompressionCodec._
@@ -943,6 +943,53 @@ abstract class OrcSourceSuite extends OrcSuite with SharedSparkSession {
         val readBack = spark.read.orc(dir.getCanonicalPath)
         assert(readBack.schema("ts").dataType === TimestampType)
         assert(readBack.count() === 1)
+      }
+    }
+  }
+
+  test("SPARK-60400: ORC TIMESTAMP is inferred as TIMESTAMP_LTZ regardless of " +
+      "spark.sql.timestampType") {
+    val expected = Seq(
+      Row(Timestamp.from(Instant.ofEpochSecond(0, 123456000))),
+      Row(Timestamp.from(Instant.ofEpochSecond(1))))
+    withTempPath { foreignDir =>
+      // A foreign ORC file has no catalyst type attribute.
+      foreignDir.mkdirs()
+      val outputFile = new Path(new File(foreignDir, "part-00000.orc").getCanonicalPath)
+      val schema = TypeDescription.fromString("struct<ts:timestamp>")
+      val writerOptions = OrcFile
+        .writerOptions(spark.sessionState.newHadoopConf())
+        .setSchema(schema)
+      Utils.tryWithResource(OrcFile.createWriter(outputFile, writerOptions)) { writer =>
+        val batch = schema.createRowBatch()
+        val tsCol = batch.cols(0).asInstanceOf[TimestampColumnVector]
+        batch.size = 2
+        tsCol.time(0) = 123L
+        tsCol.nanos(0) = 123456789
+        tsCol.time(1) = 1000L
+        tsCol.nanos(1) = 0
+        writer.addRowBatch(batch)
+      }
+      withTempPath { sparkDir =>
+        // Spark writes TIMESTAMP_LTZ with the catalyst type attribute `timestamp`.
+        spark.createDataFrame(sparkContext.parallelize(expected),
+          new StructType().add("ts", TimestampType)).write.orc(sparkDir.getCanonicalPath)
+        withSQLConf(SQLConf.TIMESTAMP_TYPE.key -> "TIMESTAMP_NTZ") {
+          withAllNativeOrcReaders {
+            Seq(foreignDir, sparkDir).foreach { dir =>
+              val df = spark.read.orc(dir.getCanonicalPath)
+              assert(df.schema("ts").dataType === TimestampType)
+              checkAnswer(df, expected)
+              val e = intercept[SparkException] {
+                spark.read.schema("ts TIMESTAMP_NTZ").orc(dir.getCanonicalPath).collect()
+              }
+              checkError(
+                exception = e.getCause.asInstanceOf[SparkUnsupportedOperationException],
+                condition = "UNSUPPORTED_FEATURE.ORC_TYPE_CAST",
+                parameters = Map("orcType" -> "\"TIMESTAMP\"", "toType" -> "\"TIMESTAMP_NTZ\""))
+            }
+          }
+        }
       }
     }
   }

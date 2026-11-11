@@ -31,7 +31,7 @@ import org.apache.spark.sql.errors.DataTypeErrors
  *   Number of digits of fractional seconds for this SQL type. The valid values are 7, 8, and 9
  *   where 9 means nanosecond precision.
  *
- * @since 4.2.0
+ * @since 4.3.0
  */
 @Unstable
 case class TimestampNTZNanosType(precision: Int) extends AnyTimestampNanoType {

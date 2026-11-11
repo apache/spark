@@ -18,7 +18,7 @@
 package org.apache.spark.sql.catalyst.analysis
 
 import java.lang.management.ManagementFactory
-import java.util.{TimeZone, UUID}
+import java.util.{Set => JSet, TimeZone, UUID}
 
 import scala.jdk.CollectionConverters._
 import scala.reflect.ClassTag
@@ -31,7 +31,7 @@ import org.apache.spark.SparkException
 import org.apache.spark.api.python.PythonEvalType
 import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.{AliasIdentifier, QueryPlanningTracker, TableIdentifier}
-import org.apache.spark.sql.catalyst.catalog.{InMemoryCatalog, SessionCatalog}
+import org.apache.spark.sql.catalyst.catalog.{InMemoryCatalog, SessionCatalog, VariableDefinition}
 import org.apache.spark.sql.catalyst.dsl.expressions._
 import org.apache.spark.sql.catalyst.dsl.plans._
 import org.apache.spark.sql.catalyst.encoders.ExpressionEncoder
@@ -43,7 +43,8 @@ import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.plans.physical.{HashPartitioning, Partitioning, RangePartitioning, RoundRobinPartitioning}
 import org.apache.spark.sql.catalyst.types.DataTypeUtils
 import org.apache.spark.sql.catalyst.util._
-import org.apache.spark.sql.connector.catalog.InMemoryTable
+import org.apache.spark.sql.connector.catalog.{Column, Identifier, InMemoryTable, Table, TableCapability}
+import org.apache.spark.sql.connector.expressions.{Expressions, Transform}
 import org.apache.spark.sql.errors.QueryCompilationErrors
 import org.apache.spark.sql.execution.datasources.v2.DataSourceV2Relation
 import org.apache.spark.sql.internal.SQLConf
@@ -52,6 +53,195 @@ import org.apache.spark.sql.util.CaseInsensitiveStringMap
 
 class AnalysisSuite extends AnalysisTest with Matchers {
   import org.apache.spark.sql.catalyst.analysis.TestRelations._
+
+  gridTest("insertion column projection preserves caller-owned aliases")(
+      Seq(IntegerType, StructType(Seq(StructField("input", IntegerType, nullable = false))),
+        ArrayType(StructType(Seq(StructField("input", IntegerType))), containsNull = false),
+        MapType(StringType, StructType(Seq(StructField("input", IntegerType))),
+          valueContainsNull = false))) { inputType =>
+    val renamedType = inputType match {
+      case struct: StructType => StructType(struct.fields.map(_.copy(name = "target")))
+      case ArrayType(struct: StructType, containsNull) =>
+        ArrayType(StructType(struct.fields.map(_.copy(name = "target"))), containsNull)
+      case MapType(keyType, struct: StructType, valueContainsNull) =>
+        MapType(keyType, StructType(struct.fields.map(_.copy(name = "target"))), valueContainsNull)
+      case other => other
+    }
+    val input = AttributeReference("input", inputType)()
+    val target = AttributeReference("target", renamedType)()
+    val expressionId = NamedExpression.newExprId
+    var aliasesCreated = 0
+    val projected = InsertionResolution.resolveByNameColumn(input, target, (child, name) => {
+      aliasesCreated += 1
+      Alias(child, name)(exprId = expressionId)
+    })
+    assert(aliasesCreated == 1)
+    assert(projected.exprId == expressionId)
+    assert(projected.name == target.name)
+    val expectedChild = inputType match {
+      case _: StructType | _: ArrayType | _: MapType => Cast(input, renamedType)
+      case _ => input
+    }
+    assert(projected.child == expectedChild)
+  }
+
+  test("insertion base preserves overridden resolver dispatch") {
+    withSQLConf(SQLConf.CASE_SENSITIVE.key -> "true") {
+      var reads = 0
+      val rule = new ResolveInsertionBase {
+        override def resolver: Resolver = {
+          reads += 1
+          caseInsensitiveResolution
+        }
+        override def apply(plan: LogicalPlan): LogicalPlan =
+          createProjectForByNameQuery("t", plan.asInstanceOf[InsertIntoStatement])
+      }
+      val target = TestRelation(Seq(AttributeReference("TARGET", IntegerType)()))
+      val query = LocalRelation(AttributeReference("input", IntegerType)())
+      val insert = InsertIntoStatement(
+        target, Map.empty, Seq("target"), query,
+        overwrite = false, ifPartitionNotExists = false)
+      val projected = rule(insert).asInstanceOf[Project]
+      assert(projected.projectList.map(_.name) == Seq("target"))
+      assert(reads == 2)
+    }
+  }
+
+  gridTest("V2 insertion preserves the rule's overwrite mode and partition resolver")(
+      Seq("STATIC", "DYNAMIC")) { mode =>
+    val owner = new SQLConf
+    val otherMode = if (mode == "STATIC") "DYNAMIC" else "STATIC"
+    owner.setConfString(SQLConf.PARTITION_OVERWRITE_MODE.key, otherMode)
+    owner.setConfString(SQLConf.CASE_SENSITIVE.key, "true")
+    val analyzer = new Analyzer(SimpleAnalyzer.catalogManager) {
+      override def conf: SQLConf = owner
+    }
+    val table = new Table {
+      override def name(): String = "partitioned"
+      override def columns(): Array[Column] =
+        Array(Column.create("id", IntegerType), Column.create("p", IntegerType))
+      override def partitioning(): Array[Transform] = Array(Expressions.identity("p"))
+      override def capabilities(): JSet[TableCapability] = JSet.of[TableCapability]()
+    }
+    val target = DataSourceV2Relation.create(table, None, None)
+    val query = LocalRelation(AttributeReference("id", IntegerType)())
+    val insert = InsertIntoStatement(
+      target, Map("P" -> Some("1")), Nil, query,
+      overwrite = true, ifPartitionNotExists = false)
+    val resolved = withSQLConf(
+        SQLConf.PARTITION_OVERWRITE_MODE.key -> mode,
+        SQLConf.CASE_SENSITIVE.key -> "false") {
+      analyzer.ResolveInsertInto(insert).asInstanceOf[V2WriteCommand]
+    }
+    assert(resolved.query.output.map(_.name) == Seq("id", "p"))
+    if (mode == "DYNAMIC") {
+      assert(resolved.isInstanceOf[OverwritePartitionsDynamic])
+    } else {
+      val overwrite = resolved.asInstanceOf[OverwriteByExpression]
+      assert(overwrite.deleteExpr == EqualNullSafe(
+        UnresolvedAttribute.quoted("p"), Cast(Literal("1"), IntegerType)))
+    }
+
+    val supplied = new SQLConf
+    supplied.setConfString(SQLConf.PARTITION_OVERWRITE_MODE.key, mode)
+    supplied.setConfString(SQLConf.CASE_SENSITIVE.key, "false")
+    withSQLConf(
+        SQLConf.PARTITION_OVERWRITE_MODE.key -> otherMode,
+        SQLConf.CASE_SENSITIVE.key -> "true") {
+      val explicit = InsertionResolution.resolveInsertInto(
+        insert, (_, _) => fail("Unexpected by-name projection"), supplied)
+      comparePlans(explicit, resolved)
+    }
+  }
+
+  gridTest("command validation preserves the analyzer's error formatters")(
+      Seq("alter", "partition")) { commandType =>
+    val table = new Table {
+      override def name(): String = "formatting"
+      override def columns(): Array[Column] = Array(Column.create("i", IntegerType))
+      override def capabilities(): JSet[TableCapability] = JSet.of[TableCapability]()
+    }
+    val target = ResolvedTable.create(
+      FakeV2SessionCatalog, Identifier.of(Array("default"), "t"), table)
+    val analyzer = new Analyzer(SimpleAnalyzer.catalogManager) {
+      override def toSQLId(name: String): String = "CUSTOM_STRING:" + name
+      override def toSQLId(names: Seq[String]): String = "CUSTOM_PATH:" + names.mkString(".")
+      override def toSQLType(dataType: AbstractDataType): String = "CUSTOM_TYPE"
+    }
+    commandType match {
+      case "alter" =>
+        val command = AddColumns(target, Seq(QualifiedColType(
+          None, "i", IntegerType, nullable = true, None, None, None)))
+        checkError(
+          exception = intercept[AnalysisException](analyzer.checkAnalysis(command)),
+          condition = "FIELD_ALREADY_EXISTS",
+          parameters = Map("op" -> "add", "fieldNames" -> "CUSTOM_PATH:i",
+            "struct" -> "CUSTOM_TYPE"))
+      case "partition" =>
+        checkError(
+          exception = intercept[AnalysisException] {
+            analyzer.checkAnalysis(ShowPartitions(target, None))
+          },
+          condition = "INVALID_PARTITION_OPERATION.PARTITION_MANAGEMENT_IS_UNSUPPORTED",
+          parameters = Map("name" -> ("CUSTOM_STRING:" + target.name)))
+    }
+  }
+
+  test("resolve a table specification without changing option evaluation or other fields") {
+    val specification = UnresolvedTableSpec(
+      properties = Map("property" -> "value"),
+      provider = Some("parquet"),
+      optionExpression = OptionList(Seq(
+        "answer" -> Literal(1),
+        "answer" -> Add(Literal(40), Literal(2)),
+        "nullable" -> Literal(null))),
+      location = Some("/table"),
+      comment = Some("table comment"),
+      collation = Some("UTF8_BINARY"),
+      serde = None,
+      external = true,
+      constraints = Nil)
+
+    val expected = TableSpec(
+      properties = specification.properties,
+      provider = specification.provider,
+      options = Map("answer" -> "42", "nullable" -> null),
+      location = specification.location,
+      comment = specification.comment,
+      collation = specification.collation,
+      serde = specification.serde,
+      external = specification.external,
+      constraints = Nil)
+    assert(ResolveTableSpec.resolveTableSpec(specification) == expected)
+    assert(ResolveTableSpec.resolveTableSpec(expected) eq expected)
+    val unresolved = specification.copy(
+      optionExpression = OptionList(Seq("answer" -> UnresolvedAttribute("missing"))))
+    assert(ResolveTableSpec.resolveTableSpec(unresolved) eq unresolved)
+  }
+
+  gridTest("table specification rejects root subquery options before evaluation")(
+      Seq(false, true)) { resolved =>
+    val subqueryPlan = if (resolved) OneRowRelation() else UnresolvedRelation(Seq("missing"))
+    val specification = UnresolvedTableSpec(
+      properties = Map.empty,
+      provider = Some("parquet"),
+      optionExpression = OptionList(Seq("answer" -> ScalarSubquery(subqueryPlan))),
+      location = None,
+      comment = None,
+      collation = None,
+      serde = None,
+      external = false,
+      constraints = Nil)
+
+    val error = intercept[AnalysisException] {
+      ResolveTableSpec.resolveTableSpec(specification)
+    }
+    checkError(
+      exception = error,
+      condition = "INVALID_SQL_SYNTAX.OPTION_IS_INVALID",
+      parameters = Map("key" -> "answer", "supported" -> "constant expressions"))
+    assert(error.getCause == null)
+  }
 
   test("fail for unresolved plan") {
     intercept[AnalysisException] {
@@ -600,7 +790,7 @@ class AnalysisSuite extends AnalysisTest with Matchers {
     if (!bean.isThreadAllocatedMemoryEnabled) {
       bean.setThreadAllocatedMemoryEnabled(true)
     }
-    val threadId = Thread.currentThread().getId
+    val threadId = Thread.currentThread().threadId
     val sharedOutput = (0 until 26).map(i => AttributeReference(s"c$i", IntegerType)())
 
     def allocatedBytes(branchCount: Int): Long = {
@@ -640,7 +830,7 @@ class AnalysisSuite extends AnalysisTest with Matchers {
     if (!bean.isThreadAllocatedMemoryEnabled) {
       bean.setThreadAllocatedMemoryEnabled(true)
     }
-    val threadId = Thread.currentThread().getId
+    val threadId = Thread.currentThread().threadId
 
     def allocatedBytes(width: Int, useDirectPath: Boolean): Long = {
       val plan = wideProject(width)
@@ -968,6 +1158,23 @@ class AnalysisSuite extends AnalysisTest with Matchers {
     assertAnalysisErrorCondition(parsePlan("INSERT INTO test VALUES (1)"),
       "TABLE_OR_VIEW_NOT_FOUND", Map("relationName" -> "`test`"),
       Array(ExpectedContext("test", 12, 15)))
+  }
+
+  test("UnresolvedInsert that is not lowered during analysis is an internal error") {
+    // The parser never builds a resolved target here. It cannot be lowered to
+    // InsertIntoStatement, so the temporary INSERT plan would remain after analysis.
+    val insert = UnresolvedInsert(
+      table = testRelation,
+      partitionSpec = Map.empty,
+      userSpecifiedCols = Nil,
+      query = testRelation2,
+      overwrite = false,
+      ifPartitionNotExists = false)
+    checkError(
+      exception = intercept[SparkException](insert.analyze),
+      condition = "INTERNAL_ERROR",
+      parameters = Map(
+        "message" -> "UnresolvedInsert target was not lowered during analysis: LocalRelation"))
   }
 
   test("check CollectMetrics resolved") {
@@ -1903,6 +2110,37 @@ class AnalysisSuite extends AnalysisTest with Matchers {
         .where($"x" === 1)
       plan.join(plan).analyze
     }
+  }
+
+  test("collect temporary variables from expression roots, subqueries and plan children") {
+    def variable(name: String): VariableReference = {
+      val identifier = Identifier.of(Array("session"), name)
+      VariableReference(
+        originalNameParts = Seq("session", name),
+        catalog = FakeSystemCatalog,
+        identifier = identifier,
+        varDef = VariableDefinition(identifier, "1", Literal(1)))
+    }
+
+    val first = variable("first")
+    val second = variable("second")
+    val third = variable("third")
+    val subqueryPlan = Project(Seq(Alias(Add(second, first), "value")()), OneRowRelation())
+    val subquery = ScalarSubquery(subqueryPlan)
+    val expression = Add(first, subquery)
+    val childPlan = Project(Seq(Alias(third, "child_value")()), OneRowRelation())
+    val plan = Project(Seq(Alias(expression, "value")()), childPlan)
+    val expected = Seq(first.originalNameParts, second.originalNameParts)
+
+    assert(IdentifierResolution.collectTemporaryVariablesInExpressionTree(first) ==
+      Seq(first.originalNameParts))
+    assert(IdentifierResolution.collectTemporaryVariablesInExpressionTree(subquery) ==
+      Seq(second.originalNameParts, first.originalNameParts))
+    assert(IdentifierResolution.collectTemporaryVariablesInExpressionTree(expression) == expected)
+    assert(IdentifierResolution.collectTemporaryVariablesInLogicalPlan(plan) ==
+      Seq(first.originalNameParts, second.originalNameParts, third.originalNameParts))
+    assert(IdentifierResolution.collectTemporaryVariablesInExpressionTree(Literal(1)).isEmpty)
+    assert(IdentifierResolution.collectTemporaryVariablesInLogicalPlan(OneRowRelation()).isEmpty)
   }
 
   test("IDENTIFIER with alias and RuntimeReplaceable") {

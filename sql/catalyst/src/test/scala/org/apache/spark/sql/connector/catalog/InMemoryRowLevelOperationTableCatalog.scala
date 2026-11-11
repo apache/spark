@@ -100,7 +100,7 @@ class InMemoryRowLevelOperationTableCatalog
       tableId = table.id,
       schemaAlignmentConfig = table.schemaAlignmentConfig)
     newTable.alterTableWithData(table.data, schema)
-    newTable.setVersionAndValidatedVersionFrom(table)
+    newTable.copyTableStateFrom(table)
 
     tables.put(ident, newTable)
 
@@ -143,7 +143,7 @@ class PartialSchemaEvolutionCatalog extends InMemoryRowLevelOperationTableCatalo
       constraints = table.constraints,
       schemaAlignmentConfig = table.schemaAlignmentConfig)
     newTable.alterTableWithData(table.data, table.schema)
-    newTable.setVersionAndValidatedVersionFrom(table)
+    newTable.copyTableStateFrom(table)
     tables.put(ident, newTable)
     newTable
   }
