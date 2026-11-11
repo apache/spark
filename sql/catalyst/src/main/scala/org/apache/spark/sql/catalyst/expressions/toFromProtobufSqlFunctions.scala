@@ -81,7 +81,8 @@ case class FromProtobuf(
     messageName: Expression,
     descFilePath: Expression,
     options: Expression,
-    // Copies must retain the map-key policy used during analysis.
+    // PERSISTED: spark.sql.mapKeyDedupPolicy at analysis time. A constructor parameter, so that
+    // copies such as canonicalization's keep it and evaluate the arguments the same way.
     mapKeyDedupPolicy: SQLConf.MapKeyDedupPolicy.Value)
   extends QuaternaryExpression with RuntimeReplaceable {
 
@@ -179,7 +180,8 @@ case class FromProtobuf(
   }
 
   private def createReplacement(): Expression = {
-    // Canonicalization copies share arguments, so each evaluation needs its own stateful nodes.
+    // Concurrent canonicalization can evaluate the same CreateMap and corrupt its map builder.
+    // Copy stateful arguments to avoid duplicate-key errors and mismatched key/value array lengths.
     val freshMessageName = messageName.freshCopyIfContainsStatefulExpression()
     val messageNameValue: String = freshMessageName.eval() match {
       case null =>
@@ -216,6 +218,7 @@ case class FromProtobuf(
     expr.asInstanceOf[Expression]
   }
 
+  // The map key policy is not a user argument; keep it out of EXPLAIN output.
   override protected def stringArgs: Iterator[Any] = super.stringArgs.take(4)
 
   override def prettyName: String =
@@ -267,7 +270,8 @@ case class ToProtobuf(
     messageName: Expression,
     descFilePath: Expression,
     options: Expression,
-    // Copies must retain the map-key policy used during analysis.
+    // PERSISTED: spark.sql.mapKeyDedupPolicy at analysis time. A constructor parameter, so that
+    // copies such as canonicalization's keep it and evaluate the arguments the same way.
     mapKeyDedupPolicy: SQLConf.MapKeyDedupPolicy.Value)
   extends QuaternaryExpression with RuntimeReplaceable {
 
@@ -379,7 +383,8 @@ case class ToProtobuf(
   }
 
   private def createReplacement(): Expression = {
-    // Canonicalization copies share arguments, so each evaluation needs its own stateful nodes.
+    // Concurrent canonicalization can evaluate the same CreateMap and corrupt its map builder.
+    // Copy stateful arguments to avoid duplicate-key errors and mismatched key/value array lengths.
     val freshMessageName = messageName.freshCopyIfContainsStatefulExpression()
     val messageNameValue: String = freshMessageName.eval() match {
       case null =>
@@ -414,6 +419,7 @@ case class ToProtobuf(
     expr.asInstanceOf[Expression]
   }
 
+  // The map key policy is not a user argument; keep it out of EXPLAIN output.
   override protected def stringArgs: Iterator[Any] = super.stringArgs.take(4)
 
   override def prettyName: String =
