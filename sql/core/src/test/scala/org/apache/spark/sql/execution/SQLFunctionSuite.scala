@@ -593,6 +593,22 @@ class SQLFunctionSuite extends SharedSparkSession {
     }
   }
 
+  test("SPARK-60806: the legacy IDENTIFIER variable flag does not admit temp functions") {
+    withUserDefinedFunction("temp_fn" -> true) {
+      sql("CREATE TEMPORARY FUNCTION temp_fn() RETURNS INT RETURN 1")
+      // The flag relaxes only session variables read through IDENTIFIER clauses.
+      withSQLConf(SQLConf.VARIABLES_UNDER_IDENTIFIER_IN_VIEW.key -> "true") {
+        checkError(
+          exception = intercept[AnalysisException] {
+            sql("CREATE FUNCTION perm_fn() RETURNS INT RETURN IDENTIFIER('temp_fn')()")
+          },
+          condition = "INVALID_TEMP_OBJ_REFERENCE",
+          parameters = Map("obj" -> "FUNCTION", "objName" -> "`default`.`perm_fn`",
+            "tempObj" -> "FUNCTION", "tempObjName" -> "`temp_fn`"))
+      }
+    }
+  }
+
   test("SPARK-60806: a temp function bound in a called function's body is not a reference") {
     withUserDefinedFunction("callee" -> false, "inner_fn" -> false, "callee_tbl" -> false,
         "caller" -> false, "caller_tbl" -> false) {
