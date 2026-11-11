@@ -37,7 +37,7 @@ import org.apache.spark.sql.execution.{FilterExec, ScalarSubquery => ExecScalarS
 import org.apache.spark.sql.execution.ExplainUtils.stripAQEPlan
 import org.apache.spark.sql.execution.datasources.v2.{BatchScanExec, DataSourceV2ScanRelation, DataSourceV2Strategy, PushDownUtils}
 import org.apache.spark.sql.internal.SQLConf
-import org.apache.spark.sql.internal.connector.{SupportsCatalystFilterGuarantees, SupportsRuntimeCatalystFiltering}
+import org.apache.spark.sql.internal.connector.{SupportsFullyPushedCatalystFilters, SupportsRuntimeCatalystFiltering}
 import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.sql.types.{IntegerType, StringType, StructType}
 
@@ -174,7 +174,7 @@ class DataSourceV2CatalystRuntimeFilterSuite extends SharedSparkSession {
         case r: DataSourceV2ScanRelation => r
       }.getOrElse(fail("Expected a DataSourceV2ScanRelation"))
       val source = relation.relation.table
-      val table = new Table with SupportsCatalystFilterGuarantees {
+      val table = new Table with SupportsFullyPushedCatalystFilters {
         override def name(): String = source.name()
         override def columns(): Array[Column] = source.columns()
         override def capabilities() = source.capabilities()

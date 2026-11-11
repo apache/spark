@@ -160,13 +160,8 @@ class DataSourceV2Strategy(session: SparkSession) extends Strategy with Predicat
     val attributes = relation.fullyPushedFilterAttrs
     if (relation.inferredFilters.isEmpty || attributes.isEmpty) return filters
     val candidates = ExpressionSet(relation.filterRemovalCandidates)
-    def fullyPushed(expression: Expression): Boolean = expression match {
-      case e if attributes.contains(e) => true
-      case _: Attribute => false
-      case e => e.children.forall(fullyPushed)
-    }
     filters.filterNot { filter =>
-      candidates.contains(filter) && filter.references.nonEmpty && fullyPushed(filter) &&
+      candidates.contains(filter) && relation.isFilterOverFullyPushedAttributes(filter) &&
         PushDownUtils.isPushablePartitionFilter(filter)
     }
   }

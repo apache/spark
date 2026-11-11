@@ -38,7 +38,7 @@ import org.apache.spark.sql.connector.expressions.filter.Predicate
 import org.apache.spark.sql.connector.read.{Scan, ScanBuilder, ScanContext, Statistics => V2Statistics, SupportsPushDownAggregates, SupportsPushDownFilters, SupportsPushDownJoin, SupportsPushDownRequiredColumns, SupportsPushDownV2Filters, SupportsPushDownVariantExtractions, SupportsReportStatistics, V1Scan, VariantExtraction}
 import org.apache.spark.sql.execution.datasources.{DataSourceStrategy, VariantInRelation, VariantMetadata}
 import org.apache.spark.sql.internal.SQLConf
-import org.apache.spark.sql.internal.connector.{SupportsCatalystFilterGuarantees, SupportsPushDownCatalystFilters, VariantExtractionImpl}
+import org.apache.spark.sql.internal.connector.{SupportsFullyPushedCatalystFilters, SupportsPushDownCatalystFilters, VariantExtractionImpl}
 import org.apache.spark.sql.sources
 import org.apache.spark.sql.types.{BooleanType, DataType, DecimalType, IntegerType, StringType, StructField, StructType, VariantType}
 import org.apache.spark.sql.util.SchemaUtils._
@@ -1083,14 +1083,19 @@ object V2ScanRelationPushDown extends Rule[LogicalPlan] with PredicateHelper {
         Nil
       }
       val removalCandidates = if (
-          sHolder.relation.table.isInstanceOf[SupportsCatalystFilterGuarantees] &&
+          sHolder.relation.table.isInstanceOf[SupportsFullyPushedCatalystFilters] &&
             remappedInferredFilters.nonEmpty) {
         remapFilters(sHolder.postScanFilterExpressions) ++ adjustmentFilters
       } else {
         Nil
       }
+      // Only predicates Spark may omit need to distinguish otherwise identical scans. Residuals
+      // over undeclared fields remain executable and must not prevent subplan merging.
       val withRemovalCandidates = scanRelation.copy(
-        filterRemovalCandidates = removalCandidates.flatMap(splitConjunctivePredicates))
+        filterRemovalCandidates = removalCandidates.flatMap(splitConjunctivePredicates).filter {
+          filter => scanRelation.isFilterOverFullyPushedAttributes(filter) &&
+            PushDownUtils.isPushablePartitionFilter(filter)
+        })
       val finalFilters = inferredAdjustmentFilters ++ normalizedFilters.map(projectionFunc)
       // bottom-most filters are put in the left of the list.
       val withFilter = finalFilters.foldLeft[LogicalPlan](withRemovalCandidates)((plan, cond) => {

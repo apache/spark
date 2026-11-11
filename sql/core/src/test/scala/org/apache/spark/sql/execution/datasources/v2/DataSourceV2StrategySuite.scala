@@ -43,7 +43,7 @@ import org.apache.spark.sql.connector.read.{Batch, InputPartition, LocalScan, Pa
 import org.apache.spark.sql.execution.{FilterExec, InSubqueryExec, LocalTableScanExec, ProjectExec, SubqueryExec}
 import org.apache.spark.sql.execution.planmerging.MergeSubplans
 import org.apache.spark.sql.internal.SQLConf
-import org.apache.spark.sql.internal.connector.{SupportsCatalystFilterGuarantees, SupportsPushDownCatalystFilters}
+import org.apache.spark.sql.internal.connector.{SupportsFullyPushedCatalystFilters, SupportsPushDownCatalystFilters}
 import org.apache.spark.sql.sources.{BaseRelation, TableScan}
 import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.sql.types.{ArrayType, BooleanType, DoubleType, FloatType, IntegerType, LongType, MapType, MetadataBuilder, StringType, StructField, StructType, TimestampNTZNanosType, TimestampType, TimeType, VariantType}
@@ -1503,7 +1503,8 @@ class DataSourceV2StrategySuite extends SharedSparkSession {
     }
   }
 
-  gridTest("guaranteed inferred filters stay logical for batch, V1 and local scans")(
+  gridTest("filters guaranteed pushed down by data source: " +
+    "keep inferred filters logical for batch, V1 and local scans")(
       Seq("batch", "v1", "local")) { scanType =>
     val schema = StructType(Seq(
       StructField("id", LongType, nullable = false),
@@ -1542,7 +1543,61 @@ class DataSourceV2StrategySuite extends SharedSparkSession {
     assert(remaining.size == 1 && remaining.head.semanticEquals(residual))
   }
 
-  gridTest("guaranteed nested filter attributes distinguish siblings and dotted names")(
+  test("filters guaranteed pushed down by data source: " +
+    "retain residuals derived by the scan builder") {
+    val schema = new StructType().add("value", LongType)
+    val inferred = GreaterThanOrEqual(AttributeReference("value", LongType)(), Literal(0L))
+    val table = new InMemoryCatalystFilterTable(schema, inferred,
+      estimateInferred = false, fullyPushedColumns = Seq("value"),
+      residualFilters = filters => filters :+ LessThan(filters.head.references.head, Literal(10L)))
+    val relation = DataSourceV2Relation.create(table, None, None, CaseInsensitiveStringMap.empty)
+    val value = relation.output.head
+    val unchanged = GreaterThan(value, Literal(0L))
+    val derived = LessThan(value, Literal(10L))
+    val pushed = V2ScanRelationPushDown(Filter(unchanged, relation))
+    val scan = pushed.collectFirst { case s: DataSourceV2ScanRelation => s }.get
+    assert(ExpressionSet(scan.filterRemovalCandidates).contains(unchanged))
+    assert(!ExpressionSet(scan.filterRemovalCandidates).contains(derived))
+    val physical = new DataSourceV2Strategy(spark).apply(pushed).head
+    val remaining = physical.collect { case FilterExec(condition, _) => condition }
+    assert(remaining.size == 1 && remaining.head.semanticEquals(derived))
+  }
+
+  test("filters guaranteed pushed down by data source: " +
+    "preserve merges across undeclared residuals") {
+    withSQLConf(
+        SQLConf.MERGE_SUBPLANS_FILTER_PROPAGATION_ENABLED.key -> "true",
+        SQLConf.MERGE_SUBPLANS_SYMMETRIC_FILTER_PROPAGATION_ENABLED.key -> "false") {
+      val schema = new StructType().add("id", LongType).add("value", LongType)
+      val inferred = GreaterThanOrEqual(AttributeReference("value", LongType)(), Literal(0L))
+      val sharedScan = new Scan with SupportsInferredFilterEstimation {
+        override def readSchema(): StructType = schema
+        override def toBatch: Batch = emptyBatch
+      }
+      val table = new InMemoryCatalystFilterTable(schema, inferred,
+        scanFactory = Some(_ => sharedScan), fullyPushedColumns = Seq("value"),
+        residualFilters = filters => filters.filter(_.references.exists(_.name == "id")))
+      val subqueries = Seq(false, true).map { extraResidual =>
+        val relation = DataSourceV2Relation.create(table, None, None,
+          CaseInsensitiveStringMap.empty)
+        val Seq(id, value) = relation.output
+        val common = GreaterThan(value, Literal(0L))
+        val condition = if (extraResidual) And(common, EqualTo(id, Literal(1L))) else common
+        val pushed = CombineFilters(V2ScanRelationPushDown(Filter(condition, relation)))
+        val scan = pushed.collectFirst { case s: DataSourceV2ScanRelation => s }.get
+        assert(scan.filterRemovalCandidates.isEmpty)
+        val aggregate = Aggregate(Nil,
+          Seq(Alias(Count(Add(id, value)).toAggregateExpression(), "count")()), pushed)
+        Alias(ScalarSubquery(aggregate), s"count_$extraResidual")()
+      }
+      val merged = MergeSubplans(Project(subqueries, OneRowRelation()))
+      val scans = merged.collectWithSubqueries { case s: DataSourceV2ScanRelation => s }
+      assert(scans.size == 1, s"expected undeclared residuals to allow scan merging:\n$merged")
+    }
+  }
+
+  gridTest("filters guaranteed pushed down by data source: " +
+    "distinguish nested siblings and dotted top-level names")(
       Seq("s.part", "`s.part`", "s")) { declared =>
     val nestedType = new StructType().add("other", LongType).add("part", LongType)
     val schema = new StructType().add("s", nestedType).add("s.part", LongType)
@@ -1571,7 +1626,8 @@ class DataSourceV2StrategySuite extends SharedSparkSession {
     assert(remaining.head.semanticEquals(expected.reduceLeft(And)))
   }
 
-  gridTest("guaranteed nested filter attributes resolve against the pruned scan schema")(
+  gridTest("filters guaranteed pushed down by data source: " +
+    "resolve nested attributes against the pruned scan schema")(
       Seq("S.NESTED.PART", "S.NESTED")) { declared =>
     withSQLConf(SQLConf.CASE_SENSITIVE.key -> "false") {
       val nestedType = new StructType()
@@ -1606,7 +1662,8 @@ class DataSourceV2StrategySuite extends SharedSparkSession {
     }
   }
 
-  gridTest("guaranteed filter attributes reject invalid declarations consistently")(
+  gridTest("filters guaranteed pushed down by data source: " +
+    "reject invalid attribute declarations consistently")(
       for {
         declared <- Seq("missing", "s.missing", "arr.part", "map.part")
         infer <- Seq(false, true)
@@ -1640,7 +1697,8 @@ class DataSourceV2StrategySuite extends SharedSparkSession {
       sqlState = "KD000")
   }
 
-  test("guaranteed filter attributes preserve Boolean projection aliases") {
+  test("filters guaranteed pushed down by data source: " +
+    "preserve Boolean projection aliases") {
     val schema = StructType(Seq(StructField("value", LongType, nullable = true)))
     val inferred = GreaterThanOrEqual(AttributeReference("value", LongType)(), Literal(0L))
     val table = new InMemoryCatalystFilterTable(schema, inferred,
@@ -1669,7 +1727,8 @@ class DataSourceV2StrategySuite extends SharedSparkSession {
     assert(project.projectList == aliases)
   }
 
-  test("guaranteed filter attributes retain nondeterministic, subquery and constant filters") {
+  test("filters guaranteed pushed down by data source: " +
+    "retain nondeterministic, subquery and constant filters") {
     val schema = StructType(Seq(StructField("value", LongType, nullable = true)))
     val inferred = GreaterThanOrEqual(AttributeReference("value", LongType)(), Literal(0L))
     val table = new InMemoryCatalystFilterTable(schema, inferred,
@@ -1690,7 +1749,8 @@ class DataSourceV2StrategySuite extends SharedSparkSession {
     }
   }
 
-  gridTest("guaranteed filter attributes retain factored Boolean predicates")(
+  gridTest("filters guaranteed pushed down by data source: " +
+    "retain factored Boolean predicates")(
       Seq(false, true)) { includeResidualColumns =>
     val schema = StructType(Seq("a", "b", "c").map(StructField(_, BooleanType, false)))
     val a = AttributeReference("a", BooleanType, nullable = false)()
@@ -1709,7 +1769,8 @@ class DataSourceV2StrategySuite extends SharedSparkSession {
     assert(remaining.exists(_.semanticEquals(condition)))
   }
 
-  test("guaranteed filter attributes retain static filters when the scan reports no inference") {
+  test("filters guaranteed pushed down by data source: " +
+    "retain static filters when the scan reports no inference") {
     val schema = StructType(Seq(StructField("value", LongType, nullable = true)))
     val inferred = GreaterThanOrEqual(AttributeReference("value", LongType)(), Literal(0L))
     val table = new InMemoryCatalystFilterTable(schema, inferred,
@@ -1729,7 +1790,8 @@ class DataSourceV2StrategySuite extends SharedSparkSession {
     assert(remaining.head.semanticEquals(expected))
   }
 
-  gridTest("guaranteed filter attributes preserve aliases after merging three scans")(
+  gridTest("filters guaranteed pushed down by data source: " +
+    "preserve aliases after merging three scans")(
       Seq("general", "dsv2")) { mode =>
     withSQLConf(
         SQLConf.MERGE_SUBPLANS_FILTER_PROPAGATION_ENABLED.key -> "true",
@@ -1985,8 +2047,9 @@ class DataSourceV2StrategySuite extends SharedSparkSession {
       inferredFilter: Expression,
       scanFactory: Option[StructType => Scan] = None,
       estimateInferred: Boolean = true,
-      fullyPushedColumns: Seq[String] = Nil)
-    extends Table with SupportsRead with SupportsCatalystFilterGuarantees {
+      fullyPushedColumns: Seq[String] = Nil,
+      residualFilters: Seq[Expression] => Seq[Expression] = filters => filters)
+    extends Table with SupportsRead with SupportsFullyPushedCatalystFilters {
 
     override def name(): String = "in-memory-catalyst-filter-table"
 
@@ -2000,14 +2063,15 @@ class DataSourceV2StrategySuite extends SharedSparkSession {
 
     override def newScanBuilder(options: CaseInsensitiveStringMap): ScanBuilder =
       new InMemoryCatalystFilterScanBuilder(
-        tableSchema, inferredFilter, scanFactory, estimateInferred)
+        tableSchema, inferredFilter, scanFactory, estimateInferred, residualFilters)
   }
 
   private class InMemoryCatalystFilterScanBuilder(
       tableSchema: StructType,
       inferredFilter: Expression,
       scanFactory: Option[StructType => Scan],
-      estimateInferred: Boolean)
+      estimateInferred: Boolean,
+      residualFilters: Seq[Expression] => Seq[Expression])
     extends ScanBuilder
     with SupportsPushDownCatalystFilters
     with SupportsPushDownRequiredColumns {
@@ -2028,7 +2092,7 @@ class DataSourceV2StrategySuite extends SharedSparkSession {
       this.requiredSchema = requiredSchema
     }
 
-    override def pushFilters(filters: Seq[Expression]): Seq[Expression] = filters
+    override def pushFilters(filters: Seq[Expression]): Seq[Expression] = residualFilters(filters)
 
     override def pushedFilters: Array[Predicate] = Array.empty
 

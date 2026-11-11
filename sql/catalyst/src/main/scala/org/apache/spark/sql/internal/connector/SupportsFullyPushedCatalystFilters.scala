@@ -21,7 +21,7 @@ import org.apache.spark.sql.connector.catalog.Table
 import org.apache.spark.sql.connector.expressions.NamedReference
 
 /** A table that declares when its scans fully evaluate Catalyst predicates. */
-trait SupportsCatalystFilterGuarantees extends Table {
+trait SupportsFullyPushedCatalystFilters extends Table {
 
   /**
    * Returns attributes for which this table's scans fully evaluate Catalyst filters.
@@ -30,14 +30,17 @@ trait SupportsCatalystFilterGuarantees extends Table {
    * that are unchanged from returned residuals or adjustment predicates recorded during pushdown.
    * Eligible conjuncts must be deterministic and contain no subqueries or Python UDFs. The source
    * must fully enforce the query filters it receives over these attributes, including residuals
-   * returned to Spark, and reflect their enforcement in scan equality for scan reuse.
+   * returned to Spark, and reflect their enforcement in Scan equality for logical scan comparison.
+   * For physical reuse, enforcement must also be reflected in equality and hashCode of the Batch
+   * returned by Scan.toBatch, or the relation returned by toV1TableScan for V1-fallback scans.
    *
    * The declaration must stay fixed for a Table instance and hold for every scan its builders
    * produce, including scans built with different read options.
    *
-   * References may name top-level columns or nested struct fields. Declaring a struct covers all
-   * of its nested fields. Spark ignores fields pruned from the scan. The source must evaluate every
-   * eligible predicate over these fields with Spark's semantics, including error behavior.
+   * References may name top-level data or metadata columns, or nested struct fields. Declaring a
+   * struct covers all of its nested fields. Spark ignores fields pruned from the scan. The source
+   * must evaluate every eligible predicate over these fields with Spark's semantics, including
+   * error behavior.
    */
   def fullyPushedFilterAttributes(): Array[NamedReference] = Array.empty
 }

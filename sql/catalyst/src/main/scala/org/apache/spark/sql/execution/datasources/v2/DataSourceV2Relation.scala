@@ -39,7 +39,7 @@ import org.apache.spark.sql.connector.read.colstats.{ColumnStatistics, Histogram
 import org.apache.spark.sql.connector.read.streaming.{Offset, SparkDataStream}
 import org.apache.spark.sql.errors.QueryCompilationErrors
 import org.apache.spark.sql.internal.SQLConf
-import org.apache.spark.sql.internal.connector.{SupportsCatalystFilterGuarantees, SupportsRuntimeCatalystFiltering, V2StatisticsUtils}
+import org.apache.spark.sql.internal.connector.{SupportsFullyPushedCatalystFilters, SupportsRuntimeCatalystFiltering, V2StatisticsUtils}
 import org.apache.spark.sql.types.{DataType, StructType}
 import org.apache.spark.sql.util.CaseInsensitiveStringMap
 import org.apache.spark.util.ArrayImplicits._
@@ -198,8 +198,8 @@ case class DataSourceV2Relation(
  *                             decides which rows the scan returns, and a build site that does not
  *                             set it keeps storage filters away from its scan.
  * @param filterRemovalCandidates post-scan conjuncts recorded during filter pushdown, resolved
- *                                against the pruned output, that a table's fully pushed attribute
- *                                declaration may allow physical planning to omit.
+ *                                against the pruned output and covered by the table's fully pushed
+ *                                attribute declaration, that physical planning may omit.
  */
 case class DataSourceV2ScanRelation(
     relation: DataSourceV2Relation,
@@ -223,9 +223,9 @@ case class DataSourceV2ScanRelation(
 
   /** Resolved table fields whose static Catalyst filters the source fully evaluates. */
   lazy val fullyPushedFilterAttrs: ExpressionSet = relation.table match {
-    case table: SupportsCatalystFilterGuarantees =>
+    case table: SupportsFullyPushedCatalystFilters =>
       val refs = table.fullyPushedFilterAttributes().toImmutableArraySeq
-      val tableSchema = fromAttributes(relation.output)
+      val tableSchema = fromAttributes(relation.withMetadataColumns().output)
       refs.foreach { ref =>
         val names = ref.fieldNames.toImmutableArraySeq
         val valid = try {
@@ -250,6 +250,16 @@ case class DataSourceV2ScanRelation(
         }
       })
     case _ => ExpressionSet()
+  }
+
+  /** Whether every field accessed by a filter is covered by the table's static declaration. */
+  def isFilterOverFullyPushedAttributes(filter: Expression): Boolean = {
+    def covered(expression: Expression): Boolean = expression match {
+      case e if fullyPushedFilterAttrs.contains(e) => true
+      case _: Attribute => false
+      case e => e.children.forall(covered)
+    }
+    filter.references.nonEmpty && covered(filter)
   }
 
   /**

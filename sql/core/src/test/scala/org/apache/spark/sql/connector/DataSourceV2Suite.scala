@@ -42,7 +42,7 @@ import org.apache.spark.sql.catalyst.plans.logical.{
 import org.apache.spark.sql.catalyst.plans.logical.statsEstimation.EstimationUtils
 import org.apache.spark.sql.catalyst.rules.Rule
 import org.apache.spark.sql.catalyst.types.DataTypeUtils
-import org.apache.spark.sql.connector.catalog.{PartitionInternalRow, SupportsRead, SupportsWrite, Table, TableCapability, TableProvider}
+import org.apache.spark.sql.connector.catalog.{MetadataColumn, PartitionInternalRow, SupportsMetadataColumns, SupportsRead, SupportsWrite, Table, TableCapability, TableProvider}
 import org.apache.spark.sql.connector.catalog.TableCapability._
 import org.apache.spark.sql.connector.expressions.{Expression, FieldReference, Literal, NamedReference, NullOrdering, SortDirection, SortOrder, Transform}
 import org.apache.spark.sql.connector.expressions.filter.Predicate
@@ -59,15 +59,15 @@ import org.apache.spark.sql.execution.datasources.v2.{
   BatchScanExec, DataSourceV2Relation, DataSourceV2ScanRelation, PushedDownOperators,
   V1ScanWrapper, V2ScanPartitioningAndOrdering}
 import org.apache.spark.sql.execution.datasources.v2.DataSourceV2Implicits._
-import org.apache.spark.sql.execution.exchange.{Exchange, ShuffleExchangeExec}
+import org.apache.spark.sql.execution.exchange.{Exchange, ReusedExchangeExec, ShuffleExchangeExec}
 import org.apache.spark.sql.execution.vectorized.OnHeapColumnVector
 import org.apache.spark.sql.expressions.Window
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.internal.SQLConf
-import org.apache.spark.sql.internal.connector.{SimpleTableProvider, SupportsCatalystFilterGuarantees, SupportsPushDownCatalystFilters}
+import org.apache.spark.sql.internal.connector.{SimpleTableProvider, SupportsFullyPushedCatalystFilters, SupportsPushDownCatalystFilters}
 import org.apache.spark.sql.sources.{BaseRelation, Filter, GreaterThan, TableScan}
 import org.apache.spark.sql.test.SharedSparkSession
-import org.apache.spark.sql.types.{IntegerType, StructField, StructType}
+import org.apache.spark.sql.types.{DataType, IntegerType, StructField, StructType}
 import org.apache.spark.sql.util.CaseInsensitiveStringMap
 import org.apache.spark.sql.vectorized.ColumnarBatch
 import org.apache.spark.util.ArrayImplicits._
@@ -1858,7 +1858,8 @@ class DataSourceV2Suite extends SharedSparkSession with AdaptiveSparkPlanHelper 
     }
   }
 
-  gridTest("guaranteed filters retain logical statistics without physical evaluation")(
+  gridTest("filters guaranteed pushed down by data source: " +
+    "retain logical statistics without physical evaluation")(
       Seq(false, true)) { keepResiduals =>
     withSQLConf(SQLConf.CBO_ENABLED.key -> "true") {
       val query = spark.read
@@ -1886,7 +1887,8 @@ class DataSourceV2Suite extends SharedSparkSession with AdaptiveSparkPlanHelper 
     }
   }
 
-  gridTest("guaranteed filters retain predicates introduced by correlated subqueries")(
+  gridTest("filters guaranteed pushed down by data source: " +
+    "retain predicates introduced by correlated subqueries")(
       Seq("EXISTS (SELECT 1 FROM u WHERE u.c = t.i AND t.j < -8)",
         "i IN (SELECT c FROM u WHERE t.j < -8)")) { subquery =>
     withTempView("t", "u") {
@@ -1901,7 +1903,72 @@ class DataSourceV2Suite extends SharedSparkSession with AdaptiveSparkPlanHelper 
     }
   }
 
-  test("guaranteed filters retain predicates above expensive projections") {
+  gridTest("filters guaranteed pushed down by data source: " +
+    "validate declarations even when metadata columns are unused")(
+      for {
+        infer <- Seq(false, true)
+        readMetadata <- Seq(false, true)
+        declared <- Seq("_j", "missing")
+      } yield (infer, readMetadata, declared)) { case (infer, readMetadata, declared) =>
+    val data = spark.read.format(classOf[GuaranteedMetadataFilterDataSourceV2].getName)
+      .option("guaranteedColumn", declared)
+      .option(CatalystFilterScanBuilder.INFERRED_DERIVATION,
+        if (infer) CatalystFilterScanBuilder.REPEAT_PUSHED_FILTERS else "")
+      .option(CatalystFilterScanBuilder.KEEP_RESIDUAL_FILTERS, "true")
+      .option(CatalystFilterScanBuilder.USE_INFERRED_FILTER_ESTIMATION, "false")
+      .load().filter($"i" > 7)
+    val query = if (readMetadata) data.filter($"_j" < -8).select("i", "_j") else data
+    if (declared == "missing") {
+      checkError(
+        exception = intercept[AnalysisException](query.queryExecution.executedPlan),
+        condition = "DATA_SOURCE_INVALID_FULLY_PUSHED_FILTER_ATTRIBUTE",
+        parameters = Map(
+          "attribute" -> "`missing`",
+          "tableName" -> "`guaranteed-metadata-filter-table`",
+          "tableSchema" -> "\"STRUCT<i: INT, _j: INT>\""))
+    } else {
+      checkAnswer(query, if (readMetadata) Seq(Row(9, -9)) else Seq(Row(8), Row(9)))
+      assert(getScanRelation(query).inferredFilters.nonEmpty == infer)
+      val filters = query.queryExecution.executedPlan.collect {
+        case filter: FilterExec => filter.condition
+      }
+      assert(filters.exists(containsFilter(_, "_j < -8")) == (readMetadata && !infer))
+    }
+  }
+
+  gridTest("filters guaranteed pushed down by data source: " +
+    "distinguish differently filtered exchanges")(
+      Seq(false, true)) { keepResiduals =>
+    withTempView("t") {
+      spark.read.format(classOf[GuaranteedCatalystFilterDataSourceV2].getName)
+        .option(CatalystFilterScanBuilder.INFERRED_DERIVATION,
+          CatalystFilterScanBuilder.NEGATE_I_TO_J)
+        .option(CatalystFilterScanBuilder.USE_INFERRED_FILTER_ESTIMATION, "false")
+        .option(CatalystFilterScanBuilder.KEEP_RESIDUAL_FILTERS, keepResiduals.toString)
+        .load().createOrReplaceTempView("t")
+      val queryText = """
+        |SELECT i, j, count(*) FROM t WHERE i > 7 GROUP BY i, j
+        |UNION ALL
+        |SELECT i, j, count(*) FROM t GROUP BY i, j
+        |""".stripMargin
+      val expected = (0 until 10).map(i => Row(i, -i, 1L)) ++
+        Seq(Row(8, -8, 1L), Row(9, -9, 1L))
+      Seq(false, true).foreach { reuse =>
+        withSQLConf(SQLConf.ADAPTIVE_EXECUTION_ENABLED.key -> "false",
+            SQLConf.EXCHANGE_REUSE_ENABLED.key -> reuse.toString) {
+          val query = sql(queryText)
+          checkAnswer(query, expected)
+          val plan = query.queryExecution.executedPlan
+          assert(plan.collect { case _: ShuffleExchangeExec => 1 }.size == 2)
+          assert(!plan.exists(_.isInstanceOf[ReusedExchangeExec]))
+          assert(!plan.exists(_.isInstanceOf[FilterExec]))
+        }
+      }
+    }
+  }
+
+  test("filters guaranteed pushed down by data source: " +
+    "retain predicates above expensive projections") {
     val twice = udf((value: Int) => value * 2)
     val query = spark.read.format(classOf[GuaranteedCatalystFilterDataSourceV2].getName)
       .option(CatalystFilterScanBuilder.INFERRED_DERIVATION,
@@ -1912,7 +1979,8 @@ class DataSourceV2Suite extends SharedSparkSession with AdaptiveSparkPlanHelper 
     assert(query.queryExecution.executedPlan.exists(_.isInstanceOf[FilterExec]))
   }
 
-  test("guaranteed filters retain predicates added by an optimizer rule after pushdown") {
+  test("filters guaranteed pushed down by data source: " +
+    "retain predicates added by an optimizer rule after pushdown") {
     val original = spark.experimental.extraOptimizations
     val addFilter = new Rule[LogicalPlan] {
       private var applied = false
@@ -2261,7 +2329,7 @@ class ValuesReaderFactory(requiredSchema: StructType) extends PartitionReaderFac
         val i = values(index)
         InternalRow.fromSeq(requiredSchema.map(_.name).map {
           case "i" => i
-          case "j" => -i
+          case "j" | "_j" => -i
         })
       }
 
@@ -2283,7 +2351,7 @@ class SimpleReaderFactory(requiredSchema: StructType) extends PartitionReaderFac
 
       override def get(): InternalRow = InternalRow.fromSeq(requiredSchema.map(_.name).map {
         case "i" => current
-        case "j" => -current
+        case "j" | "_j" => -current
       })
 
       override def close(): Unit = {}
@@ -2418,13 +2486,39 @@ class CatalystFilterDataSourceV2 extends TestingV2Source {
 class GuaranteedCatalystFilterDataSourceV2 extends TestingV2Source {
 
   override def getTable(options: CaseInsensitiveStringMap): Table = {
-    new SimpleBatchTable with SupportsCatalystFilterGuarantees {
+    new SimpleBatchTable with SupportsFullyPushedCatalystFilters {
       override def fullyPushedFilterAttributes(): Array[NamedReference] =
         Array(FieldReference.column("i"), FieldReference.column("j"))
 
       override def newScanBuilder(options: CaseInsensitiveStringMap): ScanBuilder = {
         new CatalystFilterScanBuilder(options)
       }
+    }
+  }
+}
+
+class GuaranteedMetadataFilterDataSourceV2 extends TestingV2Source {
+
+  override def inferSchema(options: CaseInsensitiveStringMap): StructType =
+    new StructType().add("i", IntegerType)
+
+  override def getTable(options: CaseInsensitiveStringMap): Table = {
+    new SimpleBatchTable with SupportsMetadataColumns with SupportsFullyPushedCatalystFilters {
+      override def name(): String = "guaranteed-metadata-filter-table"
+
+      override def schema(): StructType = inferSchema(options)
+
+      override def metadataColumns(): Array[MetadataColumn] = Array(new MetadataColumn {
+        override def name(): String = "_j"
+        override def dataType(): DataType = IntegerType
+      })
+
+      override def fullyPushedFilterAttributes(): Array[NamedReference] =
+        Array(FieldReference.column(options.get("guaranteedColumn")))
+
+      override def newScanBuilder(options: CaseInsensitiveStringMap): ScanBuilder =
+        new CatalystFilterScanBuilder(options, new StructType().add("i", IntegerType)
+          .add("_j", IntegerType))
     }
   }
 }
@@ -2535,7 +2629,9 @@ class CatalystFilterLimitScanBuilder(options: CaseInsensitiveStringMap)
   }
 }
 
-class CatalystFilterScanBuilder(options: CaseInsensitiveStringMap) extends SimpleScanBuilder
+class CatalystFilterScanBuilder(
+    options: CaseInsensitiveStringMap,
+    sourceSchema: StructType = TestingV2Source.schema) extends SimpleScanBuilder
   with SupportsPushDownCatalystFilters
   with SupportsPushDownRequiredColumns
   with SupportsReportStatistics {
@@ -2551,8 +2647,8 @@ class CatalystFilterScanBuilder(options: CaseInsensitiveStringMap) extends Simpl
     options.getBoolean(CatalystFilterScanBuilder.REPORT_COLUMN_STATS, false)
   private val keepResidualFilters =
     options.getBoolean(CatalystFilterScanBuilder.KEEP_RESIDUAL_FILTERS, false)
-  private val sourceOutput = DataTypeUtils.toAttributes(TestingV2Source.schema)
-  private var requiredSchema = TestingV2Source.schema
+  private val sourceOutput = DataTypeUtils.toAttributes(sourceSchema)
+  private var requiredSchema = sourceSchema
 
   override def readSchema(): StructType = requiredSchema
 
@@ -2607,6 +2703,21 @@ class CatalystFilterScanBuilder(options: CaseInsensitiveStringMap) extends Simpl
           throw new IllegalArgumentException(s"Unknown column: ${attr.name}"))
     }
   }
+
+  private def canonicalFilters: Seq[CatalystExpression] = {
+    (pushedCatalystFilters ++ inferredFilters).map { filter =>
+      BindReferences.bindReference(bindToSourceOutput(filter), sourceOutput).canonicalized
+    }
+  }
+
+  override def equals(obj: Any): Boolean = obj match {
+    case other: CatalystFilterScanBuilder =>
+      getClass == other.getClass && readSchema() == other.readSchema() &&
+        canonicalFilters == other.canonicalFilters
+    case _ => false
+  }
+
+  override def hashCode(): Int = (getClass, readSchema(), canonicalFilters).hashCode()
 
   override def planInputPartitions(): Array[InputPartition] = {
     // This source enforces inferred filters and asks Spark to use them for stats adjustment.
