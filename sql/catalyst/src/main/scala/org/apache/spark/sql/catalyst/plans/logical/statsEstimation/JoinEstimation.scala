@@ -41,7 +41,7 @@ case class JoinEstimation(join: Join) extends Logging {
     join.joinType match {
       case Inner | Cross | LeftOuter | RightOuter | FullOuter =>
         estimateInnerOuterJoin()
-      case LeftSemi | LeftAnti =>
+      case LeftSemi | LeftAnti | ExistenceJoin(_) =>
         estimateLeftSemiAntiJoin()
       case _ =>
         logDebug(s"[CBO] Unsupported join type: ${join.joinType}")

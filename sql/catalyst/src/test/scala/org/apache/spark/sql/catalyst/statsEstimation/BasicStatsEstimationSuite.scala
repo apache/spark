@@ -381,7 +381,8 @@ test("range with invalid long value") {
   test("SPARK-61534: an existence join is estimated from its left side") {
     // It outputs each of the 10 rows of `plan` once, with a boolean column added.
     val otherKey = attr("other")
-    val other = plan.copy(outputList = Seq(otherKey))
+    val other = StatsTestPlan(outputList = Seq(otherKey), rowCount = 1000,
+      attributeStats = AttributeMap(Seq(otherKey -> colStat)), size = Some(1000 * (8 + 4)))
     val exists = AttributeReference("exists", BooleanType, nullable = false)()
     val join = Join(plan, other, ExistenceJoin(exists), Some(attribute === otherKey),
       JoinHint.NONE)
