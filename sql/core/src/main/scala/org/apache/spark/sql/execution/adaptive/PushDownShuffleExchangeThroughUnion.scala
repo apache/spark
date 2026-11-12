@@ -70,8 +70,10 @@ import org.apache.spark.sql.internal.SQLConf
  * count must be between the smaller and the larger of the replaced exchange's count and the
  * effective initial shuffle partition count (`coalescePartitions.initialPartitionNum` when set);
  * the larger side is scaled by `maxTargetPartitionNumFactor`. A branch that is already a query
- * stage pins the target to the layout it reports. At least one child keeps its layout; others
- * are retargeted or shuffled without changing child order.
+ * stage pins the target to the layout it reports, unless its stage wraps an unmarked user
+ * repartition: the rewrite could only stack on such a branch, and a re-plan must be able to
+ * repeat that. At least one child keeps its layout; others are retargeted or shuffled without
+ * changing child order.
  * `spark.sql.adaptive.pushDownShuffleThroughUnion.maxMovedBranches` limits moved children, and
  * `maxUnionChildren` limits all branches whose tails run within each consumer task.
  * The rebuilt child must satisfy its consumer's distribution and pair with fixed siblings.
@@ -143,33 +145,44 @@ case class PushDownShuffleExchangeThroughUnion(
     // Whether every adopted target is the layout of the exchange this rewrite removes. The retry
     // cannot help while this holds.
     var usedRemovedLayout = true
-    def rewrite(preferRemovedLayout: Boolean): SparkPlan = plan.transformUp {
-      case join: ShuffledJoin if !allowJoinInputs => join
-      case operator: SparkPlan =>
-        val matched = operator.children.map { child =>
-          findPushableShuffle(child, lookThrough, policy)
-        }
-        if (matched.forall(_.isEmpty)) {
-          operator
-        } else {
-          // Read requirements only after finding a site; some operators log when asked.
-          val required = operator.requiredChildDistribution
-          if (!required.forall(_.isInstanceOf[ClusteredDistribution])) {
+    // Whether an earlier site in this pass has rewritten the plan. Until then its layouts are the
+    // ones preparation produced and can be read without checking.
+    var hasPushed = false
+    def rewrite(preferRemovedLayout: Boolean): SparkPlan = {
+      hasPushed = false
+      plan.transformUp {
+        case join: ShuffledJoin if !allowJoinInputs => join
+        case operator: SparkPlan =>
+          val matched = operator.children.map { child =>
+            findPushableShuffle(child, lookThrough, policy)
+          }
+          if (matched.forall(_.isEmpty)) {
             operator
           } else {
-            val requirements = required.map(_.asInstanceOf[ClusteredDistribution])
-            val (candidate, operatorUsedRemovedLayout) = pushDownThroughUnion(
-              operator,
-              matched.zip(requirements),
-              sharedExchangesFunc = sharedExchanges,
-              policy = policy.copy(
-                allowNonCoalescible =
-                  policy.allowNonCoalescible || !allExchangeInputs(operator),
-                preferRemovedLayout = preferRemovedLayout))
-            usedRemovedLayout = usedRemovedLayout && operatorUsedRemovedLayout
-            candidate
+            // Read requirements only after finding a site; some operators log when asked.
+            val required = operator.requiredChildDistribution
+            if (!required.forall(_.isInstanceOf[ClusteredDistribution])) {
+              operator
+            } else if (hasPushed && operator.children.exists(child =>
+                !ValidateRequirements.validate(child))) {
+              // An earlier site in this pass can leave a child invalid; its layout cannot be read.
+              operator
+            } else {
+              val requirements = required.map(_.asInstanceOf[ClusteredDistribution])
+              val (candidate, operatorUsedRemovedLayout) = pushDownThroughUnion(
+                operator,
+                matched.zip(requirements),
+                sharedExchangesFunc = sharedExchanges,
+                policy = policy.copy(
+                  allowNonCoalescible =
+                    policy.allowNonCoalescible || !allExchangeInputs(operator),
+                  preferRemovedLayout = preferRemovedLayout))
+              usedRemovedLayout = usedRemovedLayout && operatorUsedRemovedLayout
+              hasPushed = hasPushed || (candidate ne operator)
+              candidate
+            }
           }
-        }
+      }
     }
 
     def accepted(candidate: SparkPlan): Boolean = {
@@ -279,16 +292,27 @@ case class PushDownShuffleExchangeThroughUnion(
       pushable.shuffle.outputPartitioning.asInstanceOf[HashPartitioning]
 
     /**
-     * Indices of branches that are already shuffle query stages. Such a branch carries the shuffle
-     * work that laid it out, so laying it out again adds a shuffle on top of materialized data.
-     * A target is viable only when every one of these branches already reports it, which pins the
-     * layout chosen in the round that created the stage. Non-staged branches do not constrain the
-     * target: one that reports it is kept, and one that does not is laid out as usual.
+     * Indices of branches that are already shuffle query stages and pin the target: their
+     * exchange carries a rewrite mark, or `EnsureRequirements` added it. Such a branch carries
+     * the shuffle work that laid it out, so laying it out again adds a shuffle on top of
+     * materialized data, and a target is viable only when every one of these branches already
+     * reports it. An unmarked user repartition is left out: the rewrite could not retarget it and
+     * stacked an exchange instead, which a re-plan has to be able to repeat. Non-staged branches
+     * do not constrain the target: one that reports it is kept, and one that does not is laid out
+     * as usual.
      */
-    private lazy val stagedIndices: Set[Int] =
-      pushable.union.children.indices.filter { index =>
-        pushable.union.children(index).isInstanceOf[ShuffleQueryStageExec]
+    private lazy val stagedIndices: Set[Int] = {
+      val children = pushable.union.children
+      children.indices.filter { index =>
+        children(index) match {
+          case stage: ShuffleQueryStageExec =>
+            val shuffle = stage.shuffle
+            PushDownShuffleExchangeThroughUnion.isMarked(shuffle) ||
+              shuffle.shuffleOrigin == ENSURE_REQUIREMENTS
+          case _ => false
+        }
       }.toSet
+    }
   }
 
   /**
@@ -367,10 +391,13 @@ case class PushDownShuffleExchangeThroughUnion(
     }
 
     val newChildren = new ArrayBuffer[SparkPlan](children.length)
-    // Whether every adopted target is the layout of the exchange this rewrite removes. The retry
-    // cannot help while this holds.
+    // Whether every target adopted by the attempt whose result is used is the layout of the
+    // exchange this rewrite removes. The retry cannot help while this holds.
     var usedRemovedLayout = true
     def rebuildChildren(joint: Boolean): Boolean = {
+      // The joint attempt may have adopted another layout before failing on a sibling; only the
+      // attempt whose children are used counts.
+      usedRemovedLayout = true
       newChildren.clear()
       children.indices.forall { index =>
         val (pushableChild, required) = movableSites(index)
@@ -713,6 +740,12 @@ object PushDownShuffleExchangeThroughUnion {
     plan.setTagValue(PUSHED_DOWN_SHUFFLE, kind)
 
   /**
+   * Whether this node carries either kind of rewrite mark.
+   */
+  private[adaptive] def isMarked(plan: SparkPlan): Boolean =
+    plan.getTagValue(PUSHED_DOWN_SHUFFLE).isDefined
+
+  /**
    * Whether this node is a shuffle inserted below a union in place of its removed exchange. Custom
    * cost evaluators can distinguish these exchanges from ordinary shuffles; an exchange only
    * retargeted by the rule carries [[RetargetedShuffle]] and still counts.
@@ -731,8 +764,7 @@ object PushDownShuffleExchangeThroughUnion {
    */
   def hasPushedShuffle(union: UnionExec): Boolean = {
     def counted(plan: SparkPlan): Boolean = plan match {
-      case shuffle: ShuffleExchangeLike =>
-        shuffle.getTagValue(PUSHED_DOWN_SHUFFLE).isDefined
+      case shuffle: ShuffleExchangeLike => isMarked(shuffle)
       case stage: ShuffleQueryStageExec => counted(stage.shuffle)
       case _ => false
     }

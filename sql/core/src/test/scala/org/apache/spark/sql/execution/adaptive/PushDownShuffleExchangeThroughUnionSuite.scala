@@ -87,6 +87,12 @@ class PushDownShuffleExchangeThroughUnionSuite extends QueryTest with SharedSpar
   private def numShufflesOnUnion(plan: SparkPlan): Int =
     plan.collect { case s: ShuffleExchangeExec if isUnionPlan(s.child) => s }.size
 
+  private def numShuffleExchanges(plan: SparkPlan): Int =
+    collect(plan) { case _: ShuffleExchangeLike => () }.size
+
+  private def numUnionExchanges(plan: SparkPlan): Int =
+    collect(plan) { case s: ShuffleExchangeExec if isUnionPlan(s.child) => () }.size
+
   // The union may be wrapped in a `WholeStageCodegenExec` by `CollapseCodegenStages`, or in an
   // `InputAdapter` when it feeds a codegen'd parent, so look through both when checking whether
   // a shuffle's child is (effectively) a union.
@@ -163,6 +169,13 @@ class PushDownShuffleExchangeThroughUnionSuite extends QueryTest with SharedSpar
 
   /** A materialized union branch reporting `hash(_, n)`. */
   private def stagedUnionBranch(n: Int): ShuffleQueryStageExec = {
+    val a = attr("id")
+    val exchange = ShuffleExchangeExec(hash(a, n), leaf(a), ENSURE_REQUIREMENTS)
+    ShuffleQueryStageExec(0, exchange, exchange.canonicalized)
+  }
+
+  /** A staged branch wrapping an unmarked user repartition. */
+  private def userStagedUnionBranch(n: Int): ShuffleQueryStageExec = {
     val a = attr("id")
     val exchange = ShuffleExchangeExec(hash(a, n), leaf(a), REPARTITION_BY_COL)
     ShuffleQueryStageExec(0, exchange, exchange.canonicalized)
@@ -2158,6 +2171,44 @@ class PushDownShuffleExchangeThroughUnionSuite extends QueryTest with SharedSpar
         assert(original.shuffleOrigin === REPARTITION_BY_COL)
         val expected = HashPartitioning(Seq(original.output(1), original.output.head), 5)
         assert(original.outputPartitioning.asInstanceOf[HashPartitioning].semanticEquals(expected))
+        val finalPlan = df.queryExecution.executedPlan
+          .asInstanceOf[AdaptiveSparkPlanExec].executedPlan
+        assert(numUnionExchanges(finalPlan) === 0,
+          s"the push-down must survive re-planning:\n$finalPlan")
+        assert(numShuffleExchanges(finalPlan) === 3,
+          s"expected three shuffles in the executed plan:\n$finalPlan")
+        assert(collect(finalPlan) {
+          case s: ShuffleExchangeExec
+              if PushDownShuffleExchangeThroughUnion.isPushedDownShuffle(s) => s
+        }.nonEmpty, s"the rewritten branch must stay pushed down:\n$finalPlan")
+      }
+    }
+  }
+
+  test("SPARK-60379: fixed-count branches keep the push-down across re-plans") {
+    withSQLConf(
+        SQLConf.ADAPTIVE_EXECUTION_ENABLED.key -> "true",
+        SQLConf.COALESCE_PARTITIONS_ENABLED.key -> "false",
+        SQLConf.SHUFFLE_PARTITIONS.key -> "5") {
+      withTempView("t1", "t2") {
+        spark.range(100).selectExpr("id % 7 k", "id v").createOrReplaceTempView("t1")
+        spark.range(100, 120).selectExpr("id % 7 k", "id v").createOrReplaceTempView("t2")
+        val sql = """SELECT k, v, row_number() OVER (PARTITION BY k ORDER BY v) rn FROM (
+          | SELECT /*+ REPARTITION(5, k) */ k, v FROM t1
+          | UNION ALL
+          | SELECT /*+ REPARTITION(7, k) */ k, v FROM t2)""".stripMargin
+        val df = spark.sql(sql)
+        checkAnswer(df, expectedResult(sql))
+        val finalPlan = df.queryExecution.executedPlan
+          .asInstanceOf[AdaptiveSparkPlanExec].executedPlan
+        assert(numUnionExchanges(finalPlan) === 0,
+          s"the push-down must survive re-planning:\n$finalPlan")
+        assert(numShuffleExchanges(finalPlan) === 3,
+          s"expected three shuffles in the executed plan:\n$finalPlan")
+        assert(collect(finalPlan) {
+          case s: ShuffleExchangeExec
+              if PushDownShuffleExchangeThroughUnion.isPushedDownShuffle(s) => s
+        }.nonEmpty, s"the rewritten branch must stay pushed down:\n$finalPlan")
       }
     }
   }
@@ -2254,6 +2305,25 @@ class PushDownShuffleExchangeThroughUnionSuite extends QueryTest with SharedSpar
         assert(moved.outputPartitioning.asInstanceOf[HashPartitioning].numPartitions === 8,
           s"the leaves move to the pinned layout:\n$rebuilt")
       }
+    }
+  }
+
+  test("SPARK-60379: an unmarked user stage does not pin the target") {
+    withPushDown {
+      val union = UnionExec(Seq(unionBranch(8), userStagedUnionBranch(2)))
+      val parent = TestPartitioningPlan(
+        children = Seq(ensureShuffle(hash(union.output.head, 2), union)),
+        required = Seq(clustered(union.output.head)), output = union.output)
+
+      val rebuilt = pushDown(parent).children.head.asInstanceOf[UnionExec]
+
+      // The rewrite could only stack an exchange above this user stage, so the stage is laid out
+      // again instead of pinning the union to its smaller layout.
+      assert(rebuilt.children(0).fastEquals(union.children(0)),
+        s"the other branch must keep the larger target:\n$rebuilt")
+      val moved = rebuilt.children(1).asInstanceOf[ShuffleExchangeExec]
+      assert(moved.outputPartitioning.asInstanceOf[HashPartitioning].numPartitions === 8,
+        s"the user stage must be laid out again:\n$rebuilt")
     }
   }
 
@@ -2413,6 +2483,113 @@ class PushDownShuffleExchangeThroughUnionSuite extends QueryTest with SharedSpar
         }.get
         assert(unionExchange.outputPartitioning.numPartitions === 200,
           s"the union should keep the config's partition count:\n$initial")
+      }
+    }
+  }
+
+  test("SPARK-60379: an inner rewrite leaves no unreadable layout for an outer site") {
+    withSQLConf(
+        SQLConf.ADAPTIVE_EXECUTION_ENABLED.key -> "true",
+        SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key -> "-1",
+        SQLConf.ADAPTIVE_AUTO_BROADCASTJOIN_THRESHOLD.key -> "-1",
+        SQLConf.COALESCE_PARTITIONS_ENABLED.key -> "false",
+        SQLConf.SHUFFLE_PARTITIONS.key -> "5",
+        SQLConf.PUSH_DOWN_SHUFFLE_THROUGH_UNION_ENABLED.key -> "true",
+        SQLConf.PUSH_DOWN_SHUFFLE_THROUGH_UNION_LOOK_THROUGH_OPERATORS_ENABLED.key -> "false",
+        SQLConf.PUSH_DOWN_SHUFFLE_THROUGH_UNION_KEEP_NON_COALESCIBLE_BRANCHES_ENABLED.key ->
+          "false",
+        SQLConf.PUSH_DOWN_SHUFFLE_THROUGH_UNION_ALLOW_JOIN_INPUTS_ENABLED.key -> "false",
+        SQLConf.PUSH_DOWN_SHUFFLE_THROUGH_UNION_KEEP_JOIN_BRANCHES_ENABLED.key -> "false",
+        SQLConf
+          .PUSH_DOWN_SHUFFLE_THROUGH_UNION_ALLOW_PARTITION_KEYS_SUBSET_OF_CLUSTER_KEYS_ENABLED
+          .key -> "false",
+        SQLConf.REQUIRE_ALL_CLUSTER_KEYS_FOR_CO_PARTITION.key -> "true",
+        SQLConf.PUSH_DOWN_SHUFFLE_THROUGH_UNION_MAX_TARGET_PARTITION_NUM_FACTOR.key -> "2.0") {
+      withTempView("n1", "n2", "n3", "n4", "n5") {
+        Seq("n1" -> 1000, "n2" -> 2000, "n3" -> 6000, "n4" -> 80, "n5" -> 700).foreach {
+          case (name, rows) =>
+            spark.range(rows).selectExpr("id % 97 AS k", "id AS v")
+              .createOrReplaceTempView(name)
+        }
+        // The inner window site adopts the 10-partition branch layout, leaving the join's two
+        // sides on different counts. The outer site must not read that join's partitioning.
+        val sql = """SELECT k, c, sum(c) OVER (PARTITION BY k) AS s FROM (
+          | SELECT x.k, x.c + x.rn AS c FROM (
+          |  SELECT k, c, row_number() OVER (PARTITION BY k ORDER BY c) AS rn FROM (
+          |   SELECT k, sum(v) AS c FROM n1 GROUP BY k
+          |   UNION ALL SELECT k, v FROM n2
+          |   UNION ALL SELECT k, v FROM (SELECT /*+ REPARTITION(10, k) */ k, v FROM n3))) x
+          | JOIN n4 ON x.k = n4.k
+          | UNION ALL SELECT k, v FROM n5)""".stripMargin
+        val df = spark.sql(sql)
+        checkAnswer(df, expectedResult(sql))
+        val finalPlan = df.queryExecution.executedPlan
+          .asInstanceOf[AdaptiveSparkPlanExec].executedPlan
+        // The first proposal (10 partitions) broke the join above and rolled back. The retry
+        // stacked a 5-partition exchange on the fixed-count branch, and the outer site stays
+        // unpushed because its join branch cannot keep a layout without keepJoinBranches.
+        assert(numShuffleExchanges(finalPlan) === 6,
+          s"unexpected shuffle count:\n$finalPlan")
+        assert(numUnionExchanges(finalPlan) === 1,
+          s"only the outer union exchange may come back:\n$finalPlan")
+        assert(collect(finalPlan) {
+          case s: ShuffleExchangeExec
+              if PushDownShuffleExchangeThroughUnion.isPushedDownShuffle(s) => s
+        }.size === 2, s"expected two pushed exchanges:\n$finalPlan")
+      }
+    }
+  }
+
+  test("SPARK-60379: an invalid fixed sibling is not read during pairing") {
+    withSQLConf(
+        SQLConf.ADAPTIVE_EXECUTION_ENABLED.key -> "true",
+        SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key -> "-1",
+        SQLConf.ADAPTIVE_AUTO_BROADCASTJOIN_THRESHOLD.key -> "-1",
+        SQLConf.COALESCE_PARTITIONS_ENABLED.key -> "false",
+        SQLConf.SHUFFLE_PARTITIONS.key -> "5",
+        SQLConf.PUSH_DOWN_SHUFFLE_THROUGH_UNION_ENABLED.key -> "true",
+        SQLConf.PUSH_DOWN_SHUFFLE_THROUGH_UNION_LOOK_THROUGH_OPERATORS_ENABLED.key -> "false",
+        SQLConf.PUSH_DOWN_SHUFFLE_THROUGH_UNION_KEEP_NON_COALESCIBLE_BRANCHES_ENABLED.key ->
+          "false",
+        SQLConf.PUSH_DOWN_SHUFFLE_THROUGH_UNION_ALLOW_JOIN_INPUTS_ENABLED.key -> "true",
+        SQLConf.PUSH_DOWN_SHUFFLE_THROUGH_UNION_KEEP_JOIN_BRANCHES_ENABLED.key -> "false",
+        SQLConf
+          .PUSH_DOWN_SHUFFLE_THROUGH_UNION_ALLOW_PARTITION_KEYS_SUBSET_OF_CLUSTER_KEYS_ENABLED
+          .key -> "false",
+        SQLConf.REQUIRE_ALL_CLUSTER_KEYS_FOR_CO_PARTITION.key -> "true",
+        SQLConf.PUSH_DOWN_SHUFFLE_THROUGH_UNION_MAX_TARGET_PARTITION_NUM_FACTOR.key -> "2.0") {
+      withTempView("n1", "n2", "n4", "n5", "n6") {
+        Seq("n1" -> 1000, "n2" -> 2000, "n4" -> 80, "n5" -> 6000, "n6" -> 700).foreach {
+          case (name, rows) =>
+            spark.range(rows).selectExpr("id % 97 AS k", "id AS v")
+              .createOrReplaceTempView(name)
+        }
+        // The inner window site moves its union to 10 partitions, leaving the join inside the
+        // outer site's second child with mismatched sides. Pairing must not read that join.
+        val sql = """SELECT /*+ MERGE(a, b) */ a.k, a.v, b.k AS bk, b.rn FROM (
+          | SELECT k, v FROM n1
+          | UNION ALL SELECT /*+ REPARTITION(5, k) */ k, v FROM n2) a
+          | JOIN (
+          |  SELECT /*+ MERGE(w, n4) */ w.k, w.v, w.rn FROM (
+          |   SELECT k, v, row_number() OVER (PARTITION BY k ORDER BY v) AS rn FROM (
+          |    SELECT k, v FROM n5
+          |    UNION ALL SELECT /*+ REPARTITION(10, k) */ k, v FROM n6)) w
+          |  JOIN n4 ON w.k = n4.k) b
+          | ON a.k = b.k""".stripMargin
+        val df = spark.sql(sql)
+        checkAnswer(df, expectedResult(sql))
+        val finalPlan = df.queryExecution.executedPlan
+          .asInstanceOf[AdaptiveSparkPlanExec].executedPlan
+        // The invalid fixed sibling made the first pass skip the outer site. The retry pushed
+        // the outer union down; the inner union keeps its exchange.
+        assert(numShuffleExchanges(finalPlan) === 5,
+          s"unexpected shuffle count:\n$finalPlan")
+        assert(numUnionExchanges(finalPlan) === 1,
+          s"only the inner union exchange remains:\n$finalPlan")
+        assert(collect(finalPlan) {
+          case s: ShuffleExchangeExec
+              if PushDownShuffleExchangeThroughUnion.isPushedDownShuffle(s) => s
+        }.size === 1, s"expected one pushed exchange:\n$finalPlan")
       }
     }
   }
