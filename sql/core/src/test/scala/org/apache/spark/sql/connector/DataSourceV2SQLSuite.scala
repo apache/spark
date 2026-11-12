@@ -5573,9 +5573,8 @@ class DataSourceV2SQLSuiteV2Filter extends DataSourceV2SQLSuite {
     val dim = s"${catalogAndNamespace}dim"
     withTable(tbl, dim) {
       sql(s"CREATE TABLE $tbl (id INT, part INT) USING $v2Format PARTITIONED BY (part)")
-      for (i <- 0 until 10) {
-        sql(s"INSERT INTO $tbl VALUES ($i, $i)")
-      }
+      val values = (0 until 10).map(i => s"($i, $i)").mkString(", ")
+      sql(s"INSERT INTO $tbl VALUES $values")
 
       sql(s"CREATE TABLE $dim (val INT) USING $v2Format")
       sql(s"INSERT INTO $dim VALUES (3)")
@@ -5608,9 +5607,8 @@ class DataSourceV2SQLSuiteV2Filter extends DataSourceV2SQLSuite {
     val dim = s"${catalogAndNamespace}dim"
     withTable(tbl, dim) {
       sql(s"CREATE TABLE $tbl (id INT, part INT) USING $v2Format PARTITIONED BY (part)")
-      for (i <- 0 until 10) {
-        sql(s"INSERT INTO $tbl VALUES ($i, $i)")
-      }
+      val values = (0 until 10).map(i => s"($i, $i)").mkString(", ")
+      sql(s"INSERT INTO $tbl VALUES $values")
 
       sql(s"CREATE TABLE $dim (val INT) USING $v2Format")
       sql(s"INSERT INTO $dim VALUES (3)")
@@ -5648,9 +5646,8 @@ class DataSourceV2SQLSuiteV2Filter extends DataSourceV2SQLSuite {
     val dim = s"${catalogAndNamespace}dim"
     withTable(tbl, dim) {
       sql(s"CREATE TABLE $tbl (id INT, part INT) USING $v2Format PARTITIONED BY (part)")
-      for (i <- 0 until 10) {
-        sql(s"INSERT INTO $tbl VALUES ($i, $i)")
-      }
+      val values = (0 until 10).map(i => s"($i, $i)").mkString(", ")
+      sql(s"INSERT INTO $tbl VALUES $values")
 
       sql(s"CREATE TABLE $dim (val INT) USING $v2Format")
       sql(s"INSERT INTO $dim VALUES (1), (3)")
