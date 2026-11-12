@@ -38,9 +38,12 @@ object StoredExpressionText {
    * also one that a function reads while it is built, such as
    * `spark.sql.legacy.negativeIndexInArrayInsert`. With
    * `spark.sql.legacy.useCurrentConfigsForGeneratedColumn`, these are the settings of the session.
+   * Set `useCurrentConfigs` to false for modeled expressions, which always use the fixed settings.
    */
-  def conf(session: SQLConf): SQLConf = {
-    if (session.useCurrentSQLConfigsForGeneratedColumn) {
+  def conf(session: SQLConf): SQLConf = conf(session, useCurrentConfigs = true)
+
+  private[sql] def conf(session: SQLConf, useCurrentConfigs: Boolean): SQLConf = {
+    if (useCurrentConfigs && session.useCurrentSQLConfigsForGeneratedColumn) {
       session.clone()
     } else {
       val c = new SQLConf

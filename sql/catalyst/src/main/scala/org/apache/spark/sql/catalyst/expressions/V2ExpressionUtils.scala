@@ -344,15 +344,16 @@ object V2ExpressionUtils extends SQLConfHelper with Logging {
       case "STARTS_WITH" => convertBinaryExpr(expr, StartsWith)
       case "ENDS_WITH" => convertBinaryExpr(expr, EndsWith)
       case "CONTAINS" => convertBinaryExpr(expr, Contains)
-      case "IN" => convertExpr(expr, children => In(children.head, children.tail))
-      case "BOOLEAN_EXPRESSION" => toCatalyst(expr.children().head)
+      case "IN" if expr.children.nonEmpty =>
+        convertExpr(expr, children => In(children.head, children.tail))
+      case "BOOLEAN_EXPRESSION" => convertUnaryExpr(expr, identity)
       case _ => None
     }
   }
 
   private def convertConditionalFunc(expr: GeneralScalarExpression): Option[Expression] = {
     expr.name match {
-      case "CASE_WHEN" =>
+      case "CASE_WHEN" if expr.children.length >= 2 =>
         convertExpr(expr, children =>
           if (children.length % 2 == 0) {
             val branches = children.grouped(2).map { case Seq(c, v) => (c, v) }.toSeq
@@ -381,9 +382,9 @@ object V2ExpressionUtils extends SQLConfHelper with Logging {
       case "/" => convertBinaryExpr(expr, Divide(_, _, evalMode = EvalMode.ANSI))
       case "%" => convertBinaryExpr(expr, Remainder(_, _, evalMode = EvalMode.ANSI))
       case "ABS" => convertUnaryExpr(expr, Abs(_, failOnError = true))
-      case "COALESCE" => convertExpr(expr, Coalesce)
-      case "GREATEST" => convertExpr(expr, Greatest)
-      case "LEAST" => convertExpr(expr, Least)
+      case "COALESCE" if expr.children.nonEmpty => convertExpr(expr, Coalesce)
+      case "GREATEST" if expr.children.length >= 2 => convertExpr(expr, Greatest)
+      case "LEAST" if expr.children.length >= 2 => convertExpr(expr, Least)
       case "RAND" =>
         if (expr.children.isEmpty) {
           Some(new Rand())
@@ -407,9 +408,13 @@ object V2ExpressionUtils extends SQLConfHelper with Logging {
       case "RADIANS" => convertUnaryExpr(expr, ToRadians)
       case "SIGN" => convertUnaryExpr(expr, Signum)
       case "WIDTH_BUCKET" =>
-        convertExpr(
-          expr,
-          children => WidthBucket(children(0), children(1), children(2), children(3)))
+        if (expr.children.length == 4) {
+          convertExpr(
+            expr,
+            children => WidthBucket(children(0), children(1), children(2), children(3)))
+        } else {
+          None
+        }
       case _ => None
     }
   }

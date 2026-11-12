@@ -95,10 +95,11 @@ private[sql] class TableConstraintResolution(
       GeneratedColumn.columnGenerationExpression(col)
         .filter(_ => !autoFilledGenCols.exists(n => resolver(n, col.name)))
         .map { genExpr =>
-          val catalystExpr = GeneratedColumn.toCatalyst(r, col.name, genExpr)
+          val reader = new GeneratedColumn.ExpressionReader(r, col.name, genExpr)
+          val catalystExpr = reader.toCatalyst()
           val colRef = UnresolvedAttribute.quoted(col.name)
           val columnExtractors = Seq(col.name -> colRef)
-          val genExprSql = Option(genExpr.getSql()).getOrElse(catalystExpr.sql)
+          val genExprSql = reader.sql
           // Compare with the value an auto-fill stores, which store assignment casts to the column
           // type. Otherwise, the comparison can cast the provided value to the expression type.
           val colType = CharVarcharUtils.replaceCharVarcharWithString(col.dataType())
@@ -110,10 +111,9 @@ private[sql] class TableConstraintResolution(
             s"${col.name} <=> $genExprSql")
           // Analyze the check under the settings an auto-filled value is analyzed under, so that a
           // row Spark auto-filled passes it when a later write carries it.
-          StoredExpressionText.analyze(
+          reader.analyze(
             check(catalystExpr),
-            check(GeneratedColumn.toCatalyst(
-              r, col.name, genExpr, StoredExpressionText.parseWithSessionAnsi)),
+            check(reader.toCatalyst(StoredExpressionText.parseWithSessionAnsi)),
             v2Write.query.output,
             analyze)
         }

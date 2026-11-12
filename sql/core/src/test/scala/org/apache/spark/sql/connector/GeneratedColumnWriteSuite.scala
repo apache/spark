@@ -34,7 +34,7 @@ import org.apache.spark.sql.execution.streaming.runtime.MemoryStream
 import org.apache.spark.sql.functions.lit
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.internal.connector.ColumnImpl
-import org.apache.spark.sql.types.{DataType, IntegerType, LongType, MetadataBuilder, StringType, StructType}
+import org.apache.spark.sql.types.{BooleanType, DataType, DateType, IntegerType, LongType, MetadataBuilder, StringType, StructType}
 import org.apache.spark.unsafe.types.UTF8String
 
 // A V2 function that a test binds to the name of a built-in function to shadow it.
@@ -444,9 +444,15 @@ class GeneratedColumnWriteSuite extends QueryTest with DatasourceV2SQLBase {
       val rejected = if (function == "+") 2 else 101
       sql(s"INSERT INTO testcat.$tblName(a) VALUES (1)")
       sql(s"INSERT INTO testcat.$tblName VALUES (1, $expected)")
-      assertWriteFails("CHECK_CONSTRAINT_VIOLATION") {
-        sql(s"INSERT INTO testcat.$tblName VALUES (1, $rejected)")
-      }
+      checkError(
+        exception = intercept[SparkRuntimeException] {
+          sql(s"INSERT INTO testcat.$tblName VALUES (1, $rejected)")
+        },
+        condition = "CHECK_CONSTRAINT_VIOLATION",
+        parameters = Map(
+          "constraintName" -> "Generated Column",
+          "expression" -> (if (function == "+") "b <=> (a + 100)" else "b <=> a + 1"),
+          "values" -> s" - b : $rejected"))
       checkAnswer(spark.table(s"testcat.$tblName"), Seq(Row(1, expected), Row(1, expected)))
     }
   }
@@ -467,9 +473,15 @@ class GeneratedColumnWriteSuite extends QueryTest with DatasourceV2SQLBase {
         Collections.emptyMap[String, String])
       sql(s"INSERT INTO testcat.$tblName(a) VALUES (1)")
       sql(s"INSERT INTO testcat.$tblName VALUES (1, 2)")
-      assertWriteFails("CHECK_CONSTRAINT_VIOLATION") {
-        sql(s"INSERT INTO testcat.$tblName VALUES (1, 3)")
-      }
+      checkError(
+        exception = intercept[SparkRuntimeException] {
+          sql(s"INSERT INTO testcat.$tblName VALUES (1, 3)")
+        },
+        condition = "CHECK_CONSTRAINT_VIOLATION",
+        parameters = Map(
+          "constraintName" -> "Generated Column",
+          "expression" -> "b <=> (a + 1)",
+          "values" -> " - b : 3"))
       checkAnswer(spark.table(s"testcat.$tblName"), Seq(Row(1, 2), Row(1, 2)))
     }
   }
@@ -489,6 +501,65 @@ class GeneratedColumnWriteSuite extends QueryTest with DatasourceV2SQLBase {
         assertWriteFails("UNRESOLVED_COLUMN.WITH_SUGGESTION") {
           sql(s"INSERT INTO testcat.$tblName$suffix")
         }
+      }
+    }
+  }
+
+  gridTest("malformed modeled generation expression falls back to SQL")(
+      Seq("WIDTH_BUCKET", "IN", "BOOLEAN_EXPRESSION")) { function =>
+    val tblName = "my_tab"
+    val children = if (function == "WIDTH_BUCKET") {
+      Array[V2Expression](FieldReference(Seq("a")), LiteralValue(0, IntegerType))
+    } else {
+      Array.empty[V2Expression]
+    }
+    val text = if (function == "WIDTH_BUCKET") "width_bucket(a, 0, 10, 5)" else "a + 1"
+    val genExpr = new GeneralScalarExpression(function, children)
+    withTable(s"testcat.$tblName") {
+      catalog("testcat").asInstanceOf[InMemoryCatalog].createTable(
+        Identifier.of(Array(), tblName),
+        Array(
+          Column.create("a", IntegerType),
+          Column.builderFor("b", LongType)
+            .generationExpression(new GenerationExpression(text, genExpr)).build()),
+        Array.empty[Transform],
+        Collections.emptyMap[String, String])
+      sql(s"INSERT INTO testcat.$tblName(a) VALUES (1)")
+      val expected = if (function == "WIDTH_BUCKET") 1L else 2L
+      sql(s"INSERT INTO testcat.$tblName VALUES (1, $expected)")
+      assertWriteFails("CHECK_CONSTRAINT_VIOLATION") {
+        sql(s"INSERT INTO testcat.$tblName VALUES (1, 100)")
+      }
+      checkAnswer(spark.table(s"testcat.$tblName"), Seq.fill(2)(Row(1, expected)))
+    }
+  }
+
+  gridTest("modeled generation expression does not use session type coercion")(
+      for {
+        ansi <- Seq("false", "true")
+        legacy <- Seq("false", "true")
+      } yield (ansi, legacy)) { case (ansi, legacy) =>
+    val tblName = "my_tab"
+    val genExpr = new GeneralScalarExpression("=", Array[V2Expression](
+      FieldReference(Seq("flag")), LiteralValue(1, IntegerType)))
+    withSQLConf(
+        SQLConf.ANSI_ENABLED.key -> ansi,
+        SQLConf.USE_CURRENT_SQL_CONFIGS_FOR_GENERATED_COLUMN.key -> legacy) {
+      withTable(s"testcat.$tblName") {
+        catalog("testcat").asInstanceOf[InMemoryCatalog].createTable(
+          Identifier.of(Array(), tblName),
+          Array(
+            Column.create("flag", BooleanType),
+            Column.builderFor("b", BooleanType)
+              .generationExpression(new GenerationExpression("true", genExpr)).build()),
+          Array.empty[Transform],
+          Collections.emptyMap[String, String])
+        Seq("(flag) VALUES (true)", " VALUES (true, true)").foreach { suffix =>
+          assertWriteFails("DATATYPE_MISMATCH.BINARY_OP_DIFF_TYPES") {
+            sql(s"INSERT INTO testcat.$tblName$suffix")
+          }
+        }
+        checkAnswer(spark.table(s"testcat.$tblName"), Nil)
       }
     }
   }
@@ -1994,10 +2065,13 @@ class GeneratedColumnWriteSuite extends QueryTest with DatasourceV2SQLBase {
     "of the writer") {
     val tblName = "my_tab"
     withTable(s"testcat.$tblName") {
-      sql(s"""CREATE TABLE testcat.$tblName(
-             |  `current_date` DATE,
-             |  b DATE GENERATED ALWAYS AS (current_date)
-             |) USING foo""".stripMargin)
+      catalog("testcat").asInstanceOf[InMemoryCatalog].createTable(
+        Identifier.of(Array(), tblName),
+        Array(
+          Column.create("current_date", DateType),
+          Column.builderFor("b", DateType).generationExpression("current_date").build()),
+        Array.empty[Transform],
+        Collections.emptyMap[String, String])
       withSQLConf(
           SQLConf.ANSI_ENABLED.key -> "true",
           SQLConf.ENFORCE_RESERVED_KEYWORDS.key -> "true") {
@@ -2298,12 +2372,19 @@ class GeneratedColumnWriteSuite extends QueryTest with DatasourceV2SQLBase {
       withSQLConf(
           SQLConf.ANSI_ENABLED.key -> "true",
           SQLConf.DOUBLE_QUOTED_IDENTIFIERS.key -> "true") {
-        sql(s"""CREATE TABLE testcat.$tblName(
-               |  a INT,
-               |  b INT GENERATED ALWAYS AS (IDENTIFIER('"a"') + 1)
-               |) USING foo""".stripMargin)
+        catalog("testcat").asInstanceOf[InMemoryCatalog].createTable(
+          Identifier.of(Array(), tblName),
+          Array(
+            Column.create("a", IntegerType),
+            Column.builderFor("b", IntegerType)
+              .generationExpression("IDENTIFIER('\"a\"') + 1").build()),
+          Array.empty[Transform],
+          Collections.emptyMap[String, String])
         assert(!hasCheckInvariant(s"INSERT INTO testcat.$tblName(a) VALUES (1)"))
         assert(hasCheckInvariant(s"INSERT INTO testcat.$tblName VALUES (5, 6)"))
+        sql(s"INSERT INTO testcat.$tblName(a) VALUES (1)")
+        sql(s"INSERT INTO testcat.$tblName VALUES (5, 6)")
+        checkAnswer(spark.table(s"testcat.$tblName"), Seq(Row(1, 2), Row(5, 6)))
       }
     }
   }

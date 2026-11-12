@@ -29,6 +29,8 @@ import org.apache.spark.sql.connector.expressions.Expression;
  * To compute a missing generated value or check a provided value, Spark first attempts to convert
  * the connector expression to its internal representation. If the expression is absent or cannot
  * be converted, Spark falls back to parsing the SQL string, if provided.
+ * A converted connector expression is analyzed with ANSI mode enabled. Analysis or evaluation
+ * errors fail the write without falling back to SQL text or the writing session's type coercion.
  *
  * @since 4.3.0
  */

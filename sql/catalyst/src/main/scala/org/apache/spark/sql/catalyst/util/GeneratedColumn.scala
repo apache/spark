@@ -17,13 +17,15 @@
 
 package org.apache.spark.sql.catalyst.util
 
-import org.apache.spark.sql.catalyst.expressions.{Attribute, AttributeReference, Expression, V2ExpressionUtils}
-import org.apache.spark.sql.catalyst.plans.logical.ColumnDefinition
+import org.apache.spark.sql.catalyst.analysis.SimpleAnalyzer
+import org.apache.spark.sql.catalyst.expressions.{Alias, Attribute, AttributeReference, Expression, NamedExpression, V2ExpressionUtils}
+import org.apache.spark.sql.catalyst.plans.logical.{ColumnDefinition, LocalRelation, LogicalPlan, Project}
 import org.apache.spark.sql.catalyst.util.TypeUtils.toSQLId
 import org.apache.spark.sql.connector.catalog.{Column, GenerationExpression, Identifier, Table,
   TableCapability, TableCatalog, TableCatalogCapability}
 import org.apache.spark.sql.errors.QueryCompilationErrors
 import org.apache.spark.sql.execution.datasources.v2.DataSourceV2Relation
+import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types.{Metadata, MetadataBuilder, StructField, StructType}
 
 /**
@@ -133,28 +135,60 @@ object GeneratedColumn {
   }
 
   /**
-   * Converts a generation expression for both auto-fill and validation. Try the modeled expression
-   * first, falling back to SQL text when it is absent or cannot be converted, as defaults and CHECK
-   * constraints do.
+   * Reads a generation expression for both auto-fill and validation. Convert the modeled expression
+   * once, falling back to SQL text when it is absent or cannot be converted, as defaults and CHECK
+   * constraints do. Conversion is deferred so presence checks do not read either form.
    */
-  def toCatalyst(
+  private[sql] class ExpressionReader(
       relation: DataSourceV2Relation,
       colName: String,
-      genExpr: GenerationExpression,
-      readSql: String => Expression = StoredExpressionText.parse): Expression = {
-    Option(genExpr.getExpression)
+      genExpr: GenerationExpression) {
+    private lazy val modeledExpression = Option(genExpr.getExpression)
       .flatMap(V2ExpressionUtils.toCatalyst)
-      .orElse(Option(genExpr.getSql).map(readSql))
-      .getOrElse {
-        val operation = s"a value for the generated column ${toSQLId(colName)}, because " +
-          s"Spark cannot convert its expression ${genExpr.getExpression}"
-        // A relation of a TableProvider has no catalog and no identifier.
-        throw ((relation.catalog, relation.identifier) match {
-          case (Some(catalog), Some(ident)) =>
-            QueryCompilationErrors.unsupportedTableOperationError(catalog, ident, operation)
-          case _ => QueryCompilationErrors.unsupportedTableOperationError(relation.table, operation)
-        })
+
+    def toCatalyst(readSql: String => Expression = StoredExpressionText.parse): Expression = {
+      modeledExpression.orElse(Option(genExpr.getSql).map(readSql))
+        .getOrElse {
+          val operation = s"a value for the generated column ${toSQLId(colName)}, because " +
+            s"Spark cannot convert its expression ${genExpr.getExpression}"
+          // A relation of a TableProvider has no catalog and no identifier.
+          throw ((relation.catalog, relation.identifier) match {
+            case (Some(catalog), Some(ident)) =>
+              QueryCompilationErrors.unsupportedTableOperationError(catalog, ident, operation)
+            case _ =>
+              QueryCompilationErrors.unsupportedTableOperationError(relation.table, operation)
+          })
+        }
+    }
+
+    def sql: String = modeledExpression.map(_.sql).getOrElse(genExpr.getSql)
+
+    /** Only SQL text may fall back to analysis under the writing session's settings. */
+    def analyze[E <: Expression](
+        expr: E,
+        inSession: => E,
+        input: Seq[Attribute],
+        analyzer: LogicalPlan => LogicalPlan): E = {
+      if (modeledExpression.isEmpty) {
+        StoredExpressionText.analyze(expr, inSession, input, analyzer)
+      } else {
+        val conf = StoredExpressionText.conf(SQLConf.get, useCurrentConfigs = false)
+        SQLConf.withExistingConf(conf) {
+          val named = expr match {
+            case n: NamedExpression => n
+            case e => Alias(e, "value")()
+          }
+          val plan = analyzer(Project(Seq(named), LocalRelation(input)))
+          // Report unresolved references and type errors before the writer can re-analyze them.
+          SimpleAnalyzer.checkAnalysis(plan)
+          val analyzed = plan.asInstanceOf[Project].projectList.head
+          (analyzed match {
+            case Alias(child, _) if !expr.isInstanceOf[NamedExpression] => child
+            case a => a
+          }).asInstanceOf[E]
+        }
       }
+    }
   }
 
   /**
