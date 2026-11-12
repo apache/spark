@@ -961,6 +961,101 @@ class DataSourceV2SQLSuiteV1Filter
     }
   }
 
+  Seq("CREATE", "REPLACE", "ADD").foreach { ddl =>
+    test(s"CHAR/VARCHAR V2 late-folded defaults retain assigned existence values: $ddl") {
+      withSQLConf(
+        "spark.sql.catalog.default_expr" -> classOf[DefaultExpressionRetainingCatalog].getName,
+        SQLConf.DEFAULT_COLUMN_ALLOWED_PROVIDERS.key -> "foo",
+        SQLConf.LEGACY_CHAR_VARCHAR_AS_STRING.key -> "false",
+        SQLConf.PRESERVE_CHAR_VARCHAR_TYPE_INFO.key -> "false",
+        SQLConf.CHAR_VARCHAR_STANDARD_SEMANTICS.key -> "false",
+        SQLConf.READ_SIDE_CHAR_PADDING.key -> "false") {
+        val currentUser = sql("SELECT current_user(), length(current_user())").head()
+        val width = currentUser.getInt(1) + 1
+        val expected = currentUser.getString(0) + " "
+        val tableName = "default_expr.late_folded_defaults"
+        withTable(tableName) {
+          val columns = s"region CHAR($width) DEFAULT current_user(), " +
+            s"label VARCHAR($width) DEFAULT concat(current_user(), '  ')"
+          if (ddl == "ADD") {
+            sql(s"CREATE TABLE $tableName(id INT) USING foo")
+            sql(s"ALTER TABLE $tableName ADD COLUMNS ($columns)")
+          } else {
+            if (ddl == "REPLACE") {
+              sql(s"CREATE TABLE $tableName(id INT) USING foo")
+            }
+            sql(s"$ddl TABLE $tableName(id INT, $columns) USING foo")
+          }
+
+          val table = catalog("default_expr").asTableCatalog.loadTable(
+            Identifier.of(Array.empty, "late_folded_defaults"))
+          val defaults = table.columns.map(c => c.name -> c.defaultValue()).toMap
+          Seq("region" -> "current_user()", "label" -> "concat(current_user(), '  ')")
+            .foreach { case (name, originalSQL) =>
+              val default = defaults(name)
+              assert(default.getSql == originalSQL)
+              assert(default.getExpression == null)
+              assert(default.getValue.dataType == StringType)
+              assert(default.getValue.value == UTF8String.fromString(expected))
+            }
+
+          sql(s"INSERT INTO $tableName(id) VALUES (1)")
+          sql(s"INSERT INTO $tableName VALUES (2, DEFAULT, DEFAULT)")
+          sql(s"INSERT INTO $tableName VALUES (3, current_user(), concat(current_user(), '  '))")
+          checkAnswer(sql(s"SELECT id, region, length(region), label, length(label) " +
+            s"FROM $tableName"), Seq(1, 2, 3).map(Row(_, expected, width, expected, width)))
+        }
+      }
+    }
+
+    test(s"CHAR/VARCHAR V2 late-folded defaults retain INSERT-time overflow: $ddl") {
+      withSQLConf(
+        "spark.sql.catalog.default_expr" -> classOf[DefaultExpressionRetainingCatalog].getName,
+        SQLConf.DEFAULT_COLUMN_ALLOWED_PROVIDERS.key -> "foo",
+        SQLConf.LEGACY_CHAR_VARCHAR_AS_STRING.key -> "false",
+        SQLConf.PRESERVE_CHAR_VARCHAR_TYPE_INFO.key -> "false",
+        SQLConf.CHAR_VARCHAR_STANDARD_SEMANTICS.key -> "false",
+        SQLConf.READ_SIDE_CHAR_PADDING.key -> "false") {
+        val currentUser = sql("SELECT current_user(), length(current_user())").head()
+        val width = currentUser.getInt(1) + 1
+        val oversized = currentUser.getString(0) + "XX"
+        val originalSQL = "concat(current_user(), 'XX')"
+        val tableName = "default_expr.late_folded_overflow"
+        Seq("CHAR", "VARCHAR").foreach { dataType =>
+          withClue(s"$dataType($width): ") {
+            withTable(tableName) {
+              val column = s"region $dataType($width) DEFAULT $originalSQL"
+              if (ddl == "ADD") {
+                sql(s"CREATE TABLE $tableName(id INT) USING foo")
+                sql(s"ALTER TABLE $tableName ADD COLUMNS ($column)")
+              } else {
+                if (ddl == "REPLACE") {
+                  sql(s"CREATE TABLE $tableName(id INT) USING foo")
+                }
+                sql(s"$ddl TABLE $tableName(id INT, $column) USING foo")
+              }
+
+              val table = catalog("default_expr").asTableCatalog.loadTable(
+                Identifier.of(Array.empty, "late_folded_overflow"))
+              val default = table.columns.find(_.name == "region").get.defaultValue()
+              assert(default.getSql == originalSQL)
+              assert(default.getValue.dataType == StringType)
+              assert(default.getValue.value == UTF8String.fromString(oversized))
+
+              Seq(s"INSERT INTO $tableName(id) VALUES (1)",
+                s"INSERT INTO $tableName VALUES (2, DEFAULT)").foreach { insert =>
+                checkError(
+                  exception = intercept[SparkRuntimeException](sql(insert)),
+                  condition = "EXCEED_LIMIT_LENGTH",
+                  parameters = Map("limit" -> width.toString))
+              }
+            }
+          }
+        }
+      }
+    }
+  }
+
   test("ReplaceTableAsSelect: CREATE OR REPLACE new table has same behavior as CTAS.") {
     Seq("testcat", "testcat_atomic").foreach { catalogName =>
       spark.sql(
@@ -5731,7 +5826,16 @@ class DefaultExpressionRetainingCatalog extends InMemoryCatalog {
           if add.fieldNames().length == 1 && add.defaultValue() != null =>
         add.fieldNames().head -> add.defaultValue()
     }.toMap
-    val table = super.alterTable(ident, changes: _*).asInstanceOf[InMemoryTable]
+    // Keep supplied defaults out of the schema round trip, which reparses frozen literals and
+    // cannot retain the original nonfoldable expression's INSERT-time validation policy.
+    val schemaChanges = changes.map {
+      case add: TableChange.AddColumn
+          if add.fieldNames().length == 1 && addedDefaults.contains(add.fieldNames().head) =>
+        TableChange.addColumn(
+          add.fieldNames(), add.dataType(), add.isNullable(), add.comment(), add.position(), null)
+      case change => change
+    }
+    val table = super.alterTable(ident, schemaChanges: _*).asInstanceOf[InMemoryTable]
     if (addedDefaults.isEmpty) {
       table
     } else {

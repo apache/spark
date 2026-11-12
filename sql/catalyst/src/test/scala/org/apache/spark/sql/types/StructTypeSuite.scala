@@ -1372,6 +1372,63 @@ class StructTypeSuite extends SparkFunSuite with SQLHelper {
     }
   }
 
+  test("Existence default normalization inspects original foldability only on overflow") {
+    withSQLConf(
+        SQLConf.LEGACY_CHAR_VARCHAR_AS_STRING.key -> "false",
+        SQLConf.PRESERVE_CHAR_VARCHAR_TYPE_INFO.key -> "false",
+        SQLConf.CHAR_VARCHAR_STANDARD_SEMANTICS.key -> "false") {
+      def checkWithoutOriginalQuery(
+          frozen: Literal,
+          dataType: DataType,
+          expected: Literal): Unit = {
+        var originalQueries = 0
+        def queryOriginalFoldability: Boolean = {
+          originalQueries += 1
+          false
+        }
+        val assigned = ResolveDefaultColumns.normalizeExistenceDefaultValue(
+          frozen, dataType, queryOriginalFoldability)
+        assert(originalQueries == 0)
+        assert(assigned == expected)
+      }
+
+      checkWithoutOriginalQuery(Literal("EU"), StringType, Literal("EU"))
+      checkWithoutOriginalQuery(Literal(42), IntegerType, Literal(42))
+      checkWithoutOriginalQuery(Literal("EU"), CharType(3), Literal("EU "))
+      checkWithoutOriginalQuery(Literal("EU  "), VarcharType(3), Literal("EU "))
+      withSQLConf(SQLConf.LEGACY_CHAR_VARCHAR_AS_STRING.key -> "true") {
+        checkWithoutOriginalQuery(Literal("EU"), CharType(3), Literal("EU"))
+        checkWithoutOriginalQuery(Literal("EU  "), VarcharType(3), Literal("EU  "))
+      }
+
+      for {
+        dataType <- Seq(CharType(3), VarcharType(3))
+        originallyFoldable <- Seq(false, true)
+      } {
+        var originalQueries = 0
+        def queryOriginalFoldability: Boolean = {
+          originalQueries += 1
+          originallyFoldable
+        }
+        val frozen = Literal("toolong")
+        if (originallyFoldable) {
+          checkError(
+            exception = intercept[SparkRuntimeException] {
+              ResolveDefaultColumns.normalizeExistenceDefaultValue(
+                frozen, dataType, queryOriginalFoldability)
+            },
+            condition = "EXCEED_LIMIT_LENGTH",
+            parameters = Map("limit" -> "3"))
+        } else {
+          val retained = ResolveDefaultColumns.normalizeExistenceDefaultValue(
+            frozen, dataType, queryOriginalFoldability)
+          assert(retained eq frozen)
+        }
+        assert(originalQueries == 1)
+      }
+    }
+  }
+
   test("Late-folded CHAR/VARCHAR existence defaults are assigned at producer handoffs") {
     val user = "test_user"
     val width = 16

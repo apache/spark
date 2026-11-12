@@ -453,7 +453,7 @@ object ResolveDefaultColumns extends QueryErrorsBase
   def normalizeExistenceDefaultValue(
       expression: Expression,
       dataType: DataType,
-      originallyFoldable: Boolean): Expression = {
+      originallyFoldable: => Boolean): Expression = {
     if (CharVarcharUtils.hasCharVarchar(dataType) &&
         CharVarcharUtils.shouldApplyWriteSideLengthCheck(conf) && expression.foldable) {
       try {
@@ -461,7 +461,7 @@ object ResolveDefaultColumns extends QueryErrorsBase
         Literal(checked, CharVarcharUtils.replaceCharVarcharWithString(dataType))
       } catch {
         case e: SparkRuntimeException
-            if !originallyFoldable && e.getCondition == "EXCEED_LIMIT_LENGTH" =>
+            if e.getCondition == "EXCEED_LIMIT_LENGTH" && !originallyFoldable =>
           // SPARK-57187 defers oversized nonfoldable defaults' length errors until INSERT.
           // Preserve that timing while assigning valid values frozen by FinishAnalysis.
           expression
