@@ -82,7 +82,7 @@ object ApplyCharTypePadding extends Rule[LogicalPlan] {
             throw QueryCompilationErrors.unsupportedExternalLookupJoinError(
               "CHAR_VARCHAR_COLUMN",
               Map(
-                "relation" -> QueryCompilationErrors.toSQLId(r.table.name()),
+                "relation" -> QueryCompilationErrors.toSQLFreeFormId(r.table.name()),
                 "column" -> QueryCompilationErrors.toSQLId(attr.name)))
           }
           r -> Nil

@@ -88,7 +88,7 @@ object PrepareExternalLookupJoin extends Rule[LogicalPlan] with PredicateHelper
           if table.capabilities().contains(TableCapability.EXTERNAL_LOOKUP) => table
       case _ =>
         throw QueryCompilationErrors.unsupportedExternalLookupJoinError(
-          "TABLE", Map("table" -> toSQLId(tableName)))
+          "TABLE", Map("table" -> toSQLFreeFormId(tableName)))
     }
     val conjuncts = join.condition.toSeq.flatMap(splitConjunctivePredicates)
     // A Python or external UDF over lookup columns cannot run in the residual. The rules that move
@@ -112,7 +112,7 @@ object PrepareExternalLookupJoin extends Rule[LogicalPlan] with PredicateHelper
     }
     if (offeredCandidates.isEmpty) {
       throw QueryCompilationErrors.unsupportedExternalLookupJoinError(
-        "NO_LOOKUP_CANDIDATE", Map("table" -> toSQLId(tableName)))
+        "NO_LOOKUP_CANDIDATE", Map("table" -> toSQLFreeFormId(tableName)))
     }
 
     val scanBuilder = supportsRead.newScanBuilder(relation.options)
@@ -120,7 +120,7 @@ object PrepareExternalLookupJoin extends Rule[LogicalPlan] with PredicateHelper
       case builder: SupportsExternalLookup => builder
       case _ =>
         throw QueryCompilationErrors.unsupportedExternalLookupJoinError(
-          "SCAN_BUILDER", Map("table" -> toSQLId(tableName)))
+          "SCAN_BUILDER", Map("table" -> toSQLFreeFormId(tableName)))
     }
     // A column is offered under the table's name for it. Under case-insensitive analysis, the
     // condition may spell it in another case, as `ID` for `id`, with the same exprId; filter
@@ -297,7 +297,7 @@ object PrepareExternalLookupJoin extends Rule[LogicalPlan] with PredicateHelper
     }
     if (selected.isEmpty) {
       throw QueryCompilationErrors.unsupportedExternalLookupJoinError(
-        "NO_LOOKUP_PREDICATE", Map("table" -> toSQLId(tableName)))
+        "NO_LOOKUP_PREDICATE", Map("table" -> toSQLFreeFormId(tableName)))
     }
     val candidateByPredicate = new IdentityHashMap[V2Predicate, OfferedLookupPredicate]()
     offered.zip(candidates).foreach { case (predicate, candidate) =>

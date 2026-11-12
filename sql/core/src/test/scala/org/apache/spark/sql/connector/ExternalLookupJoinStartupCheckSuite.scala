@@ -223,6 +223,21 @@ class ExternalLookupJoinStartupCheckSuite extends QueryTest with SharedSparkSess
     }
   }
 
+  test("NO_LOOKUP_CANDIDATE names a table whose name does not parse as an identifier") {
+    withSQLConf(
+        "spark.sql.catalog.startup_lookup_cat" -> classOf[ExternalLookupTestCatalog].getName) {
+      val stream = MemoryStream[Long].toDF().toDF("id")
+      val lookup = spark.table("startup_lookup_cat.ns.path_dual").hint("external_lookup")
+      // A BIGINT stream key casts the INT lookup column, so Spark has no candidate to offer. The
+      // error renders the table's name, `./users`, as one quoted part.
+      checkError(
+        exception = queryFailure[AnalysisException](
+          stream.join(lookup, stream("id") === lookup("id"))),
+        condition = "EXTERNAL_LOOKUP_JOIN_UNSUPPORTED.NO_LOOKUP_CANDIDATE",
+        parameters = Map("table" -> "`./users`"))
+    }
+  }
+
   test("NO_LOOKUP_CANDIDATE stops the query when it starts, before any data arrives") {
     val stream = MemoryStream[Long].toDF().toDF("id")
     val lookup = lookupOnly

@@ -1272,6 +1272,56 @@ class ExternalLookupJoinSuite extends QueryTest with SharedSparkSession {
     }
   }
 
+  test("an ineligible join names a table whose name does not parse as an identifier") {
+    // The error renders the whole name as one quoted part, and a name that parses as a multipart
+    // identifier as its quoted parts.
+    withSQLConf(
+        s"spark.sql.catalog.$EXTERNAL_LOOKUP_CATALOG_NAME" ->
+          classOf[ExternalLookupTestCatalog].getName,
+        SQLConf.SQL_ASOF_JOIN_ENABLED.key -> "true") {
+      val swipes = streamOf(Seq((1, "lobby"), (3, "garage")).toDF("employee", "door"))
+      val lookupOnly = spark.table(s"$EXTERNAL_LOOKUP_CATALOG_NAME.ns.path_lookup")
+      val hinted =
+        spark.table(s"$EXTERNAL_LOOKUP_CATALOG_NAME.ns.path_dual").hint("external_lookup")
+      val multipart = spark.table(s"$EXTERNAL_LOOKUP_CATALOG_NAME.ns.multipart_lookup")
+      def analysisError(query: => DataFrame): AnalysisException =
+        intercept[AnalysisException](query.queryExecution.analyzed)
+      def joinTypeError(joinType: String, relation: String): Map[String, String] = Map(
+        "joinType" -> joinType,
+        "relation" -> relation,
+        "supportedJoinTypes" -> SUPPORTED_JOIN_TYPES)
+
+      val badges = Seq(1, 3).toDF("employee")
+      checkError(
+        exception = analysisError(badges.join(hinted, badges("employee") === hinted("id"))),
+        condition = "EXTERNAL_LOOKUP_JOIN_UNSUPPORTED.STATIC_LEFT_SIDE",
+        parameters = Map("relation" -> "`./users`"))
+      checkError(
+        exception = analysisError(
+          swipes.join(hinted, swipes("employee") === hinted("id"), "right_outer")),
+        condition = "EXTERNAL_LOOKUP_JOIN_UNSUPPORTED.JOIN_TYPE",
+        parameters = joinTypeError("RIGHT OUTER", "`./users`"))
+      Seq(lookupOnly -> "`./users`", multipart -> "`ns`.`users`").foreach {
+        case (directory, relation) =>
+          checkError(
+            exception = analysisError(
+              swipes.join(directory, swipes("employee") === directory("id"), "full_outer")),
+            condition = "EXTERNAL_LOOKUP_JOIN_UNSUPPORTED.JOIN_TYPE",
+            parameters = joinTypeError("FULL OUTER", relation))
+      }
+      withTempView("renamed_swipes") {
+        swipes.createOrReplaceTempView("renamed_swipes")
+        checkError(
+          exception = analysisError(sql(
+            s"""SELECT /*+ EXTERNAL_LOOKUP(d) */ s.employee FROM renamed_swipes s
+               |ASOF JOIN $EXTERNAL_LOOKUP_CATALOG_NAME.ns.path_lookup d
+               |MATCH_CONDITION(s.employee >= d.id) ON s.employee = d.id""".stripMargin)),
+          condition = "EXTERNAL_LOOKUP_JOIN_UNSUPPORTED.JOIN_TYPE",
+          parameters = joinTypeError("ASOF", "`./users`"))
+      }
+    }
+  }
+
   test("a named external lookup hint accepts relation names given as strings") {
     withSQLConf(
         s"spark.sql.catalog.$EXTERNAL_LOOKUP_CATALOG_NAME" ->
@@ -3263,8 +3313,9 @@ class ExternalLookupJoinSuite extends QueryTest with SharedSparkSession {
 
 /**
  * A catalog serving `ns.lookup` (lookup-only), `ns.dual` (dual-capability), `ns.versioned`
- * (lookup-only, with a `_version` metadata column), and `ns.path_lookup` and `ns.path_dual`, the
- * first two under a name that is a file path.
+ * (lookup-only, with a `_version` metadata column), `ns.path_lookup` and `ns.path_dual`, the
+ * first two under a name that is a file path, and `ns.multipart_lookup`, the first under a name
+ * that parses as a multipart identifier.
  */
 class ExternalLookupTestCatalog extends TableCatalog {
   private var catalogName: String = _
@@ -3273,15 +3324,18 @@ class ExternalLookupTestCatalog extends TableCatalog {
     catalogName = name
   override def name(): String = catalogName
   override def listTables(namespace: Array[String]): Array[Identifier] =
-    Array("lookup", "dual", "versioned", "path_lookup", "path_dual")
+    Array("lookup", "dual", "versioned", "path_lookup", "path_dual", "multipart_lookup")
       .map(Identifier.of(Array("ns"), _))
   override def loadTable(ident: Identifier): Table = (ident.namespace().toSeq, ident.name()) match {
     case (Seq("ns"), "lookup") => SimpleExternalLookupTable
     case (Seq("ns"), "dual") => DualCapabilityExternalLookupTable
     case (Seq("ns"), "versioned") => VersionedExternalLookupTable
-    case (Seq("ns"), "path_lookup") => PathNamedExternalLookupTable(SimpleExternalLookupTable)
+    case (Seq("ns"), "path_lookup") =>
+      RenamedExternalLookupTable(SimpleExternalLookupTable, "./users")
     case (Seq("ns"), "path_dual") =>
-      PathNamedExternalLookupTable(DualCapabilityExternalLookupTable)
+      RenamedExternalLookupTable(DualCapabilityExternalLookupTable, "./users")
+    case (Seq("ns"), "multipart_lookup") =>
+      RenamedExternalLookupTable(SimpleExternalLookupTable, "ns.users")
     case _ => throw new NoSuchTableException(ident.namespace().mkString("."), ident.name())
   }
   override def alterTable(ident: Identifier, changes: TableChange*): Table =
@@ -3443,10 +3497,10 @@ object DualCapabilityExternalLookupTable extends Table with SupportsRead {
     SimpleExternalLookupTable.newScanBuilder(options)
 }
 
-/** `table` under a name that is the path of its files, as `Table.name()` allows. */
-case class PathNamedExternalLookupTable(table: Table with SupportsRead)
+/** `table` under another name, such as the path of its files, as `Table.name()` allows. */
+case class RenamedExternalLookupTable(table: Table with SupportsRead, tableName: String)
   extends Table with SupportsRead {
-  override def name(): String = "./users"
+  override def name(): String = tableName
   override def schema(): StructType = table.schema()
   override def capabilities(): java.util.Set[TableCapability] = table.capabilities()
   override def newScanBuilder(options: CaseInsensitiveStringMap): ScanBuilder =

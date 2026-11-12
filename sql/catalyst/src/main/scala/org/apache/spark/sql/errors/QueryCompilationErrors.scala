@@ -4858,7 +4858,7 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase with Compilat
       messageParameters: Map[String, String] = Map.empty): Throwable = {
     new AnalysisException(
       errorClass = s"DATA_SOURCE_INVALID_EXTERNAL_LOOKUP.$errorSubClass",
-      messageParameters = Map("table" -> toSQLId(table)) ++ messageParameters)
+      messageParameters = Map("table" -> toSQLFreeFormId(table)) ++ messageParameters)
   }
 
   def foundMultipleXMLDataSourceError(provider: String,

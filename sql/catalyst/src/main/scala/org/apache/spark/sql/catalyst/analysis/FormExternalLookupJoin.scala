@@ -70,9 +70,13 @@ object ExternalLookupJoinEligibility extends QueryErrorsBase {
 
   /**
    * An operator that the `EXTERNAL_LOOKUP` hint treats as a join: a [[Join]], an ASOF or NEAREST BY
-   * join, which Finish Analysis turns into a join, and a lateral join that the query writes, which
-   * operator optimization turns into a join. Each of the last three becomes a join only after the
-   * hints are attached, so a join strategy hint on one is dropped. None of them can run as an
+   * join, and a lateral join that the query writes. None of the last three is a [[Join]] when
+   * EliminateResolvedHint attaches the hints, so a join strategy hint on one is dropped. The
+   * planner runs a SQL ASOF join, and a DataFrame `joinAsOf` when
+   * `spark.sql.join.sortMergeAsOfJoin.enabled` is set, with its own sort-merge operator. Finish
+   * Analysis rewrites any other `joinAsOf` into a projection over a correlated scalar subquery,
+   * which operator optimization later rewrites into a join, and a NEAREST BY join into a plan with
+   * a join. Operator optimization rewrites a lateral join into a join. None of them can run as an
    * external lookup join, so the `EXTERNAL_LOOKUP` hint on one is misplaced and fails, rather than
    * being dropped like a hint that attaches to no join. A lateral join that analysis adds for a
    * table argument of a table function is not written by the query, so it is a unary operator for
@@ -98,7 +102,7 @@ object ExternalLookupJoinEligibility extends QueryErrorsBase {
     // The lookup-only table must be on the right side; the sides are never swapped.
     val leftLookupOnlyTable = ExternalLookupRelations.lookupOnlyTable(input(join.left))
     if (leftLookupOnlyTable.isDefined) {
-      return ineligible("LOOKUP_TABLE_ON_LEFT", toSQLId(leftLookupOnlyTable.get.name()))
+      return ineligible("LOOKUP_TABLE_ON_LEFT", toSQLFreeFormId(leftLookupOnlyTable.get.name()))
     }
     val markers = lookupHints(join.right)
     val lookupOnly = ExternalLookupRelations.lookupOnlyTable(input(join.right)).isDefined
@@ -115,7 +119,7 @@ object ExternalLookupJoinEligibility extends QueryErrorsBase {
     }
     // Rendered only for an error: Table.name() is free-form, such as the path of the table's
     // files, and need not parse as an identifier.
-    lazy val relation = toSQLId(table.name())
+    lazy val relation = toSQLFreeFormId(table.name())
     if (!table.capabilities().contains(TableCapability.EXTERNAL_LOOKUP)) {
       return Ineligible(QueryCompilationErrors.unsupportedExternalLookupJoinError(
         "TABLE", Map("table" -> relation)))
@@ -169,7 +173,7 @@ object ExternalLookupJoinEligibility extends QueryErrorsBase {
           lookupTable(lookupSide) match {
             case Left(rejection) => rejection.error
             case Right((_, table)) =>
-              ineligible("JOIN_TYPE", toSQLId(table.name()), Map(
+              ineligible("JOIN_TYPE", toSQLFreeFormId(table.name()), Map(
                 "joinType" -> toSQLStmt(joinType),
                 "supportedJoinTypes" ->
                   SUPPORTED_JOIN_TYPES.map(t => toSQLStmt(t.sql)).mkString(", "))).error
@@ -393,9 +397,10 @@ object ExternalLookupJoinEligibility extends QueryErrorsBase {
  * in full when the query starts, so that `start()` throws it. Other plans can still get their
  * condition: the classic Dataset API analyzes a USING join first as a join without a condition.
  *
- * The hint on an input of an ASOF, NEAREST BY or lateral join, which the analyzer and the
- * optimizer turn into joins only later, fails here too, as no such join runs as an external lookup
- * join.
+ * The hint on an input of an ASOF, NEAREST BY or lateral join fails here too. None of these
+ * operators is a [[Join]] when the hints are attached, and none runs as an external lookup join:
+ * the planner runs a SQL ASOF join with its own sort-merge operator, and
+ * [[ExternalLookupJoinEligibility.HintableJoin]] describes how Spark runs the others.
  */
 object CheckExternalLookupJoin extends (LogicalPlan => Unit) {
   import ExternalLookupJoinEligibility.HintableJoin

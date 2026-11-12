@@ -150,6 +150,25 @@ class FormExternalLookupJoinSuite extends AnalysisTest {
     CheckExternalLookupJoin(analyze(dual.union(dual).hint("external_lookup")))
   }
 
+  test("a hint that no join consumes is removed from a plan with a join") {
+    val dual = tableWith(BATCH_READ, EXTERNAL_LOOKUP)
+    // Next to a join that is formed into a lookup join.
+    val lookupJoin = stream.join(lookupOnly, Inner, Some(idsEqual)).select(stream.output(1))
+    val besideLookupJoin = lookupJoin.union(lookupHint(dual).select(dual.output(1)))
+    // Below a union on the input of a join, where the hint is on the lookup side of no join, so
+    // the join stays an ordinary join.
+    val belowUnion = innerJoinOnId(lookupHint(dual).union(dual))
+    Seq(besideLookupJoin, belowUnion).foreach { plan =>
+      assert(plan.exists(_.isInstanceOf[ExternalLookupHint]))
+      CheckExternalLookupJoin(plan)
+      val formed = FormExternalLookupJoin(plan)
+      assert(formed.exists(_.isInstanceOf[ExternalLookupHint]) === false)
+      assert(formed.output == plan.output)
+    }
+    assert(FormExternalLookupJoin(besideLookupJoin).exists(_.isInstanceOf[ExternalLookupJoin]))
+    assert(FormExternalLookupJoin(belowUnion) == innerJoinOnId(dual.union(dual)))
+  }
+
   test("validation rejects the hint on a join that reads no DSv2 table") {
     val other = LocalRelation($"k".int, $"k2".int)
     Seq(
