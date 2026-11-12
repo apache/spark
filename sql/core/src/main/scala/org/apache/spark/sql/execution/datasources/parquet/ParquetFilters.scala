@@ -793,13 +793,15 @@ class ParquetFilters(
   private val makeInPredicate:
     PartialFunction[ParquetSchemaType, (Array[String], Array[Any]) => FilterPredicate] = {
 
+    // An OR of equalities instead of `FilterApi.in`: the bloom filter level of parquet-java
+    // cannot hash a Boolean and fails on an `in` predicate (`BloomFilterImpl.visit(In)`), while
+    // it treats an `eq` predicate that it cannot hash as might match. A BOOLEAN column has at
+    // most two distinct values, so this is the same filter.
     case ParquetBooleanType =>
       (n: Array[String], values: Array[Any]) =>
-        val set = new HashSet[JBoolean]()
-        for (value <- values) {
-          set.add(value.asInstanceOf[JBoolean])
-        }
-        FilterApi.in(booleanColumn(n), set)
+        values.distinct.map { value =>
+          FilterApi.eq(booleanColumn(n), value.asInstanceOf[JBoolean]): FilterPredicate
+        }.reduceLeft(FilterApi.or)
 
     case ParquetByteType | ParquetShortType | ParquetIntegerType =>
       (n: Array[String], values: Array[Any]) =>
@@ -1249,11 +1251,17 @@ class ParquetFilters(
             makeEq.lift(fieldType).map(_(fieldNames, v))
           }.reduceLeftOption(FilterApi.or)
         } else if (canPartialPushDownConjuncts) {
-          if (values.contains(null)) {
-            // Push both disjuncts or neither: either one alone is stricter than the IN.
+          val nonNullValues = values.filter(_ != null)
+          if (nonNullValues.isEmpty) {
+            // The IN matches no row, so pushing its IS NULL disjunct alone is safe, as below the
+            // threshold. `FilterApi.in` does not accept an empty set.
+            makeEq.lift(fieldType).map(_(fieldNames, null))
+          } else if (values.contains(null)) {
+            // The IN never keeps a NULL row, so its IS NULL disjunct alone would be stricter than
+            // the IN. Push it only together with the `in` disjunct, and push nothing otherwise.
             for {
               eqNull <- makeEq.lift(fieldType).map(_(fieldNames, null))
-              in <- makeInPredicate.lift(fieldType).map(_(fieldNames, values.filter(_ != null)))
+              in <- makeInPredicate.lift(fieldType).map(_(fieldNames, nonNullValues))
             } yield FilterApi.or(eqNull, in)
           } else {
             makeInPredicate.lift(fieldType).map(_(fieldNames, values))
