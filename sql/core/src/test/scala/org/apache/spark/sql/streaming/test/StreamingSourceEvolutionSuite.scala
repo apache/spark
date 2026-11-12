@@ -767,6 +767,21 @@ class StreamingSourceEvolutionSuite extends StreamTest {
     verifyNoSourceCreated()
   }
 
+  test("new named query rejects separately analyzed named and unnamed sources") {
+    val named = withSQLConf(SQLConf.ENABLE_STREAMING_SOURCE_EVOLUTION.key -> "true") {
+      testSource(Some("a"))
+    }
+    withSQLConf(SQLConf.ENABLE_STREAMING_SOURCE_EVOLUTION.key -> "false") {
+      val checkpointLocation = new Path(newMetadataDir)
+      LastOptions.clear()
+      checkError(
+        exception = startExpectingFailure(named.union(testSource(None)), checkpointLocation),
+        condition = "STREAMING_QUERY_EVOLUTION_ERROR.UNNAMED_STREAMING_SOURCES_WITH_ENFORCEMENT",
+        parameters = Map("sourceInfo" -> "Leaf position 1 - dummySource"))
+      verifyNoSourceCreated()
+    }
+  }
+
   test("named checkpoint - restart with an unnamed source is rejected before creating sources") {
     val checkpointLocation = new Path(newMetadataDir)
     withSQLConf(SQLConf.ENABLE_STREAMING_SOURCE_EVOLUTION.key -> "true") {
