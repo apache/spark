@@ -592,8 +592,10 @@ class StreamingSourceEvolutionSuite extends StreamTest {
   }
 
   gridTest("positional checkpoint written under source names keeps running with those names")(
-      for (version <- Seq(1, 2); sourceName <- Seq("src", "src-old")) yield (version, sourceName)) {
-    testCase =>
+      for {
+        version <- Seq(1, 2)
+        sourceName <- Seq("src", "src-old")
+      } yield (version, sourceName)) { testCase =>
     val (version, sourceName) = testCase
     withTable("legacy_named_source") {
       sql("CREATE TABLE legacy_named_source (id INT) USING parquet")

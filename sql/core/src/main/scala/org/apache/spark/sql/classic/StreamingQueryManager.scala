@@ -323,18 +323,20 @@ class StreamingQueryManager private[sql] (
       case _ => (sparkSession, dataStreamWritePlan)
     }
 
+    if (trigger.isInstanceOf[ContinuousTrigger] &&
+        StreamingSourceIdentifyingName.collectSources(analyzedPlan)
+          .exists(_._2.nameOpt.isDefined)) {
+      throw new SparkIllegalArgumentException(
+        errorClass = "STREAMING_QUERY_EVOLUTION_ERROR." +
+          "SOURCE_EVOLUTION_CONTINUOUS_PROCESSING_NOT_SUPPORTED")
+    }
+
     val analyzedStreamWritePlan =
       streamWriteAnalysisSession.sessionState.executePlan(streamWriteAnalysisPlan).analyzed
         .asInstanceOf[WriteToStream]
 
     (sink, trigger) match {
       case (_: SupportsWrite, trigger: ContinuousTrigger) =>
-        if (StreamingSourceIdentifyingName.collectSources(analyzedStreamWritePlan)
-            .exists(_._2.nameOpt.isDefined)) {
-          throw new SparkIllegalArgumentException(
-            errorClass = "STREAMING_QUERY_EVOLUTION_ERROR." +
-              "SOURCE_EVOLUTION_CONTINUOUS_PROCESSING_NOT_SUPPORTED")
-        }
         // Sink evolution persists per-sink metadata via the V3 commit log, which is written only
         // by MicroBatchExecution.markMicroBatchEnd. ContinuousExecution.commit writes just V1
         // commit metadata and never goes through that path, so the sink metadata would be silently
