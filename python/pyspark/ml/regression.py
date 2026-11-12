@@ -448,6 +448,10 @@ class LinearRegression(
     def setIntermediateStorageLevel(self, value: str) -> "LinearRegression":
         """
         Sets the value of :py:attr:`intermediateStorageLevel`.
+
+        Only affects the iterative training path. Has no effect on normal-equation
+        training, including when :py:attr:`solver` is "auto" and selects that path,
+        or when training returns early for a constant label.
         """
         return self._set(intermediateStorageLevel=value)
 
@@ -3144,9 +3148,9 @@ class _FactorizationMachinesParams(
 class FMRegressor(
     _JavaRegressor["FMRegressionModel"],
     _FactorizationMachinesParams,
+    HasIntermediateStorageLevel,
     JavaMLWritable,
     JavaMLReadable["FMRegressor"],
-    HasIntermediateStorageLevel,
 ):
     """
     Factorization Machines learning algorithm for regression.
@@ -3364,9 +3368,9 @@ class FMRegressor(
 class FMRegressionModel(
     _JavaRegressionModel,
     _FactorizationMachinesParams,
+    HasIntermediateStorageLevel,
     JavaMLWritable,
     JavaMLReadable["FMRegressionModel"],
-    HasIntermediateStorageLevel,
 ):
     """
     Model fitted by :class:`FMRegressor`.

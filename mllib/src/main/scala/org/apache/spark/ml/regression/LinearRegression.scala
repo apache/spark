@@ -327,7 +327,13 @@ class LinearRegression @Since("1.3.0") (@Since("1.3.0") override val uid: String
   @Since("3.1.0")
   def setMaxBlockSizeInMB(value: Double): this.type = set(maxBlockSizeInMB, value)
 
-  /** @group expertSetParam */
+  /**
+   * Sets the storage level for intermediate training data on the iterative training path.
+   * Has no effect on normal-equation training, including when [[solver]] is "auto" and selects
+   * that path, or when training returns early for a constant label.
+   *
+   * @group expertSetParam
+   */
   @Since("4.4.0")
   def setIntermediateStorageLevel(value: String): this.type = set(intermediateStorageLevel, value)
 
