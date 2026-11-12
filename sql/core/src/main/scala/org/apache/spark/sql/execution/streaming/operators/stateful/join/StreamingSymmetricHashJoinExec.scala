@@ -749,10 +749,12 @@ case class StreamingSymmetricHashJoinExec(
         // The solver reads a cast that drops part of a time as the time itself. For
         // CAST(rightTime AS BIGINT) >= CAST(leftTime AS BIGINT) + 60, the scan for a left row
         // at 100.6 seconds would start near 160.6 seconds and miss a right row at 160.2
-        // seconds, although the casts make them match (160 >= 100 + 60). Read all rows for
-        // the key instead.
-        if (StreamingJoinHelper.hasTruncatingCast(
-            condition.full, AttributeSet(thisEventTime ++ otherEventTime))) {
+        // seconds, although the casts make them match (160 >= 100 + 60). It also counts a day
+        // as 24 hours, so for rightTime <= leftTime + INTERVAL 1 DAY the scan would miss a
+        // right row 24.5 hours later on a 25-hour day. Read all rows for the key instead.
+        val eventTimes = AttributeSet(thisEventTime ++ otherEventTime)
+        if (StreamingJoinHelper.hasTruncatingCast(condition.full, eventTimes) ||
+            StreamingJoinHelper.hasCalendarInterval(condition.full, eventTimes)) {
           None
         } else {
           val lowerBoundMs = StreamingJoinHelper.getStateValueWatermark(

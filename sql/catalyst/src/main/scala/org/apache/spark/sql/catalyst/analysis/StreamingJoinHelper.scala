@@ -17,6 +17,8 @@
 
 package org.apache.spark.sql.catalyst.analysis
 
+import java.util.Locale
+
 import scala.util.control.NonFatal
 
 import org.apache.spark.internal.Logging
@@ -67,6 +69,38 @@ object StreamingJoinHelper extends PredicateHelper with Logging {
     condition.toSeq.flatMap(splitConjunctivePredicates).exists { conjunct =>
       conjunct.references.exists(columns.contains) && conjunct.exists {
         case Cast(child, dataType, _, _) => isTruncatingCast(child.dataType, dataType)
+        case _ => false
+      }
+    }
+  }
+
+  /**
+   * Whether a conjunct of the condition that references one of `columns` adds whole days or
+   * months to a time, or an interval whose value is not known. Spark adds days and months in the
+   * session time zone, where a day can be 23 or 25 hours long, but the solver counts a day as 24
+   * hours, so a bound it solves from that conjunct can be an hour or more too narrow.
+   */
+  def hasCalendarInterval(condition: Option[Expression], columns: AttributeSet): Boolean = {
+    def hasDaysOrMonths(interval: Expression): Boolean = {
+      // An interval that cannot be evaluated here counts as one with days.
+      val value = if (interval.foldable) {
+        try Option(interval.eval()) catch { case NonFatal(_) => None }
+      } else {
+        None
+      }
+      value.forall {
+        case micros: Long => micros <= -MICROS_PER_DAY || micros >= MICROS_PER_DAY
+        case i: CalendarInterval => i.months != 0 || i.days != 0
+        case _ => true
+      }
+    }
+    condition.toSeq.flatMap(splitConjunctivePredicates).exists { conjunct =>
+      conjunct.references.exists(columns.contains) && conjunct.exists {
+        case TimestampAddInterval(_, interval, _) => hasDaysOrMonths(interval)
+        case _: TimestampAddYMInterval => true
+        case TimestampAdd(unit, _, _, _) =>
+          !Set("MICROSECOND", "MILLISECOND", "SECOND", "MINUTE", "HOUR")
+            .contains(unit.toUpperCase(Locale.ROOT))
         case _ => false
       }
     }

@@ -20,6 +20,7 @@ package org.apache.spark.sql.streaming
 import java.io.File
 import java.lang.{Integer => JInteger}
 import java.sql.Timestamp
+import java.time.{LocalDateTime, ZoneId}
 import java.util.{Locale, UUID}
 
 import scala.util.Random
@@ -674,6 +675,39 @@ abstract class StreamingInnerJoinBase extends StreamingJoinSuite {
         CheckNewAnswer(),
         second,
         CheckNewAnswer((1, 100600L, 160200L)))
+    }
+  }
+
+  test("stream stream inner join on a range of whole days across a daylight saving change") {
+    val zone = ZoneId.of("America/Los_Angeles")
+    // Daylight saving time ends on 2026-11-01, so the day after the left row has 25 hours,
+    // and a right row 24.5 hours later is within one day of it.
+    val leftTimeMs = LocalDateTime.of(2026, 10, 31, 12, 0).atZone(zone).toInstant.toEpochMilli
+    val rightTimeMs = leftTimeMs + 24L * 3600 * 1000 + 1800 * 1000
+    withSQLConf(SQLConf.SESSION_LOCAL_TIMEZONE.key -> zone.getId) {
+      for (leftFirst <- Seq(true, false)) {
+        val leftInput = MemoryStream[(Int, Long)]
+        val rightInput = MemoryStream[(Int, Long)]
+        val left = leftInput.toDF().toDF("leftKey", "time")
+          .select($"leftKey", timestamp_millis($"time").as("leftTime"))
+          .withWatermark("leftTime", "2 days")
+        val right = rightInput.toDF().toDF("rightKey", "time")
+          .select($"rightKey", timestamp_millis($"time").as("rightTime"))
+          .withWatermark("rightTime", "2 days")
+        val joined = left.join(right, expr("leftKey = rightKey AND " +
+            "rightTime BETWEEN leftTime AND leftTime + INTERVAL 1 DAY"))
+          .select(unix_millis($"leftTime"), unix_millis($"rightTime"))
+        val leftData = AddData(leftInput, (1, leftTimeMs))
+        val rightData = AddData(rightInput, (1, rightTimeMs))
+        val (first, second) = if (leftFirst) (leftData, rightData) else (rightData, leftData)
+        withClue(s"left first = $leftFirst") {
+          testStream(joined)(
+            first,
+            CheckNewAnswer(),
+            second,
+            CheckNewAnswer((leftTimeMs, rightTimeMs)))
+        }
+      }
     }
   }
 
