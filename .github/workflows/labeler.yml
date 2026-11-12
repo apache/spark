@@ -22,11 +22,10 @@
 # Manually added configured labels are removed on the next scan if they do not
 # match the PR's changed files.
 #
-# Each run labels PRs updated since the last successful run started, so failed
-# or skipped runs only widen the next run's window. The PRs are split into
-# groups that are labeled by parallel jobs, keeping each job well within
-# ubuntu-slim's 15-minute job limit.
-#
+# Each run labels PRs updated since 10 minutes before the last successful run
+# was created, so failed or skipped runs only widen the next run's window. The
+# PRs are split into groups that are labeled by parallel jobs, keeping each job
+# well within ubuntu-slim's 15-minute job limit.
 name: Label pull requests
 
 on:
@@ -54,11 +53,11 @@ jobs:
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
-          last_success=$(gh run list --workflow labeler.yml --branch master \
-            --status success --limit 1 --json startedAt \
-            --jq '.[0].startedAt // empty')
+          last_success=$(gh run list --repo "$GITHUB_REPOSITORY" \
+            --workflow labeler.yml --branch master --status success --limit 1 \
+            --json createdAt --jq '.[0].createdAt // empty')
           if [ -n "$last_success" ]; then
-            # Keep a short overlap to catch PR updates missed near the previous run's start.
+            # Keep a short overlap to cover updates around the run's creation time.
             since=$(date -u -d "$last_success - 10 minutes" +%Y-%m-%dT%H:%M:%SZ)
           else
             since=$(date -u -d "12 hours ago" +%Y-%m-%dT%H:%M:%SZ)
@@ -67,7 +66,7 @@ jobs:
           numbers=$(gh api --method GET --paginate "repos/$GITHUB_REPOSITORY/issues" \
             -f state=all -f since="$since" -f sort=updated -f direction=desc \
             -f per_page=100 --jq '.[] | select(.pull_request != null) | .number')
-          # Dedupe, since PRs updated during pagination can appear on two pages.
+          # Dedupe, since updates during pagination can shift PRs across page boundaries.
           numbers=$(sort -nu <<< "$numbers")
           echo "PRs to label: $(tr '\n' ' ' <<< "$numbers")"
           # Groups of 100 PRs take about 4 minutes each at ~2.4 seconds per PR.
