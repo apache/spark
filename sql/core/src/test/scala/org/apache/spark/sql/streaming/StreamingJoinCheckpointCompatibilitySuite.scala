@@ -1125,38 +1125,44 @@ class StreamingJoinCheckpointCompatibilitySuite extends StreamTest {
   }
 
   // Earlier versions stored a row whose eviction column is NULL and never evicted it from V1 to
-  // V3 state. Here the first run has no watermark on the left input, so nothing bounds the left
+  // V3 state. Here the first run has no time condition and no watermark, so nothing bounds the
   // state and this version stores the NULL-time left row the same way. After the restart with
-  // the watermark, V1 to V3 eviction must remove that row and emit it padded with nulls.
+  // the time condition and the watermarks, V1 to V3 eviction must remove that row and emit it
+  // padded with nulls. A watermark on the right input alone would not do: since SPARK-61347 it
+  // already bounds the left state, so the first run would emit the row on arrival.
   Seq(2, 3).foreach { version =>
     test(s"evict a restored left row with a NULL event time, V$version") {
       withJoinConf(version, logVersion = 1) {
         val leftInput = MemoryStream[(Int, Int)]
         val rightInput = MemoryStream[(Int, Int)]
-        def joined(leftWatermark: Boolean): DataFrame = {
+        def joined(firstRun: Boolean): DataFrame = {
           // A negative time is a null event time.
-          val leftData = leftInput.toDF().toDF("leftKey", "time")
+          val left = leftInput.toDF().toDF("leftKey", "time")
             .select($"leftKey", when($"time" < 0, lit(null).cast(TimestampType))
               .otherwise(timestamp_seconds($"time")).as("leftTime"))
-          val left =
-            if (leftWatermark) leftData.withWatermark("leftTime", "5 seconds") else leftData
           val right = rightInput.toDF().toDF("rightKey", "time")
             .select($"rightKey", timestamp_seconds($"time").as("rightTime"))
-            .withWatermark("rightTime", "5 seconds")
-          left.join(right, expr(intervalCondition), "left_outer")
-            .select($"leftKey", $"rightKey", $"leftTime".cast("long"), $"rightTime".cast("long"))
+          val result = if (firstRun) {
+            left.join(right, expr("leftKey = rightKey"))
+          } else {
+            left.withWatermark("leftTime", "5 seconds")
+              .join(right.withWatermark("rightTime", "5 seconds"), expr(intervalCondition),
+                "left_outer")
+          }
+          result.select($"leftKey", $"rightKey", $"leftTime".cast("long"),
+            $"rightTime".cast("long"))
         }
         withTempDir { checkpointDir =>
           val checkpoint = checkpointDir.getCanonicalPath
-          testStream(joined(leftWatermark = false))(
+          testStream(joined(firstRun = true))(
             StartStream(checkpointLocation = checkpoint),
-            MultiAddData(leftInput, (1, -1), (2, 10))(rightInput, (2, 12)),
-            CheckNewAnswer(Row(2, 2, 10L, 12L)),
+            AddData(leftInput, (1, -1), (2, 10)),
+            CheckNewAnswer(),
             StopStream)
-          testStream(joined(leftWatermark = true))(
+          testStream(joined(firstRun = false))(
             StartStream(checkpointLocation = checkpoint),
-            AddData(rightInput, (3, 30)),
-            CheckNewAnswer(Row(1, null, null, null)),
+            AddData(rightInput, (2, 12), (3, 30)),
+            CheckNewAnswer(Row(2, 2, 10L, 12L), Row(1, null, null, null)),
             StopStream)
         }
       }
