@@ -331,6 +331,12 @@ class EvalTypeHandler(Generic[InputBatch, OutputBatch], metaclass=_EvalTypeHandl
     def _create_phase_timers(
         self,
     ) -> Optional[tuple["_WorkerTimer", "_WorkerTimer", "_WorkerTimer"]]:
+        """Create input-preparation, UDF-execution and output-preparation timers.
+
+        Serializers measure reads and writes. Exclude nested input iteration from UDF
+        time; count consumed transport batches, not groups or output batches. Framework
+        work outside the measured intervals remains unattributed.
+        """
         if not self._detailed_timing_enabled:
             return None
         metrics = WorkerMetrics()

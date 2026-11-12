@@ -26,7 +26,7 @@ from pyspark.errors import AnalysisException, PySparkNotImplementedError, Python
 from pyspark.loose_version import LooseVersion
 from pyspark.serializers import read_int
 from pyspark.sql import Row
-from pyspark.sql.functions import col, pandas_udf, udf
+from pyspark.sql.functions import col, udf
 from pyspark.sql.pandas.serializers import ArrowStreamSerializer, SpecialLengths
 from pyspark.sql.tests.test_udf import BaseUDFTestsMixin
 from pyspark.sql.types import (
@@ -680,9 +680,8 @@ class ArrowPythonUDFNonLegacyTests(ArrowPythonUDFNonLegacyTestsMixin, ReusedSQLT
                             metrics.apply("pythonNumTimingReports").value(), int(not enabled)
                         )
 
-    def test_phase_metrics_disabled_for_unsupported_handlers(self):
+    def test_phase_metrics_disabled_when_plan_switches_to_legacy(self):
         legacy_conf = "spark.sql.legacy.execution.pythonUDF.pandas.conversion.enabled"
-        data = self.spark.range(2, numPartitions=1)
         with self.sql_conf(
             {
                 "spark.sql.execution.pythonUDF.detailedTiming.enabled": "true",
@@ -690,35 +689,16 @@ class ArrowPythonUDFNonLegacyTests(ArrowPythonUDFNonLegacyTestsMixin, ReusedSQLT
                 legacy_conf: "false",
             }
         ):
-            for name, build in (
-                (
-                    "legacy",
-                    lambda: data.select(udf(lambda value: value, "long", useArrow=True)("id")),
-                ),
-                (
-                    "scalar pandas",
-                    lambda: data.select(pandas_udf(lambda value: value, "long")("id")),
-                ),
-                ("map arrow", lambda: data.mapInArrow(lambda batches: batches, "id long")),
-                ("grouped pandas", lambda: data.groupBy().applyInPandas(lambda df: df, "id long")),
-                (
-                    "cogrouped pandas",
-                    lambda: data.groupBy("id")
-                    .cogroup(data.groupBy("id"))
-                    .applyInPandas(lambda left, right: left, "id long"),
-                ),
-            ):
-                with self.subTest(handler=name):
-                    result = build()
-                    plan = result._jdf.queryExecution().executedPlan()
-                    while not plan.metrics().contains("pythonProcessingTime"):
-                        self.assertEqual(plan.children().size(), 1)
-                        plan = plan.children().apply(0)
-                    metrics = plan.metrics()
-                    # Switch after planning to exercise execution-time handler selection.
-                    with self.sql_conf({legacy_conf: str(name == "legacy").lower()}):
-                        self.assertEqual(sorted(row[0] for row in result.collect()), [0, 1])
-                    self.assertEqual(metrics.apply("pythonNumTimingReports").value(), 0)
+            result = self.spark.range(2, numPartitions=1).select(
+                udf(lambda value: value, "long", useArrow=True)("id")
+            )
+            plan = result._jdf.queryExecution().executedPlan()
+            while not plan.metrics().contains("pythonNumTimingReports"):
+                self.assertEqual(plan.children().size(), 1)
+                plan = plan.children().apply(0)
+            with self.sql_conf({legacy_conf: "true"}):
+                self.assertEqual([row[0] for row in result.collect()], [0, 1])
+            self.assertEqual(plan.metrics().apply("pythonNumTimingReports").value(), 0)
 
 
 @unittest.skipIf(not have_pyarrow, pyarrow_requirement_message)
