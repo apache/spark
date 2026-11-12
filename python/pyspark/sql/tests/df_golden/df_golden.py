@@ -19,8 +19,9 @@
 Framework for DataFrame API golden file tests, analogous to SQLQueryTestSuite for SQL.
 
 A test is described by a ``.test`` file which doubles as the golden file: the
-expected outputs are stored inline and rewritten in place when golden files are
-regenerated (``SPARK_GENERATE_GOLDEN_FILES=1``).
+expected outputs are stored inline. Each run prints a unified diff when the regenerated
+file differs, independently of whether its assertions pass. Regeneration
+(``SPARK_GENERATE_GOLDEN_FILES=1``) also writes the new file in place.
 
 ``.test`` file format::
 
@@ -86,10 +87,12 @@ checked, so optional sections (e.g. ``expected_optimized_output``) may be
 omitted.  Regeneration writes all sections the case produces.
 """
 
+import difflib
 import hashlib
 import math
 import os
 import re
+import sys
 from decimal import Decimal
 
 _CASE_END = "!-- end"
@@ -207,8 +210,8 @@ def parse_test_file(filepath, require_terminated=False):
     return header, cases
 
 
-def write_test_file(filepath, header, cases):
-    """Serialize *header* and *cases* back into ``.test`` file format."""
+def serialize_test_file(header, cases):
+    """Serialize *header* and *cases* into ``.test`` file format."""
     blocks = []
     if header:
         header_lines = [_SECTION_PREFIX + "name", _FILE_METADATA_NAME]
@@ -228,8 +231,41 @@ def write_test_file(filepath, header, cases):
         case_lines.append(_CASE_END)
         blocks.append("\n".join(case_lines))
 
+    return "\n\n\n".join(blocks) + "\n"
+
+
+def write_test_file(filepath, header, cases):
+    """Write *header* and *cases* back into ``.test`` file format."""
     with open(filepath, "w") as f:
-        f.write("\n\n\n".join(blocks) + "\n")
+        f.write(serialize_test_file(header, cases))
+
+
+_GOLDEN_DIFF_BEGIN = "=== BEGIN GOLDEN DIFF ==="
+_GOLDEN_DIFF_END = "=== END GOLDEN DIFF ==="
+_GOLDEN_REL_DIR = "python/pyspark/sql/tests/df_golden"
+
+
+def _golden_diff(test_file, new_content):
+    """Return a repo-relative unified diff for use with ``git apply``."""
+    with open(test_file) as f:
+        old_content = f.read()
+    rel = "{}/{}".format(_GOLDEN_REL_DIR, os.path.basename(test_file))
+    lines = difflib.unified_diff(
+        old_content.splitlines(keepends=True),
+        new_content.splitlines(keepends=True),
+        fromfile="a/" + rel,
+        tofile="b/" + rel,
+    )
+    return "".join(
+        line if line.endswith("\n") else line + "\n\\ No newline at end of file\n" for line in lines
+    )
+
+
+def _print_golden_diff(diff):
+    """Print patch markers for regeneration tools to extract from test logs."""
+    print(
+        "{}\n{}{}".format(_GOLDEN_DIFF_BEGIN, diff, _GOLDEN_DIFF_END), file=sys.stderr, flush=True
+    )
 
 
 def parse_tags(case):
@@ -675,7 +711,7 @@ def _validate_test_file(test_file, header, cases, regenerate):
 
 def run_golden_test(test_case, spark, test_file):
     """
-    Run all cases of a ``.test`` file.
+    Run all cases and print their golden diff before comparing or regenerating.
 
     Parameters
     ----------
@@ -693,23 +729,28 @@ def run_golden_test(test_case, spark, test_file):
     regenerate = os.environ.get("SPARK_GENERATE_GOLDEN_FILES") is not None
     base_dir = os.path.dirname(test_file)
 
-    header, cases = parse_test_file(test_file, require_terminated=not regenerate)
-    _validate_test_file(test_file, header, cases, regenerate)
+    # Parse leniently to generate a diff for incomplete goldens; verify strictly below.
+    header, cases = parse_test_file(test_file)
+    _validate_test_file(test_file, header, cases, regenerate=True)
 
     # Golden files are generated with ANSI mode on, matching the SQL golden
     # tests.  The session is discarded after the file, so nothing to restore.
     spark.conf.set("spark.sql.ansi.enabled", "true")
 
-    regenerated_cases = []
-    for case in cases:
-        actual = compute_case_outputs(spark, case, base_dir)
-        if regenerate:
-            regenerated_cases.append(_regenerate_case(case, actual))
-        else:
-            _compare_case(test_case, case, actual)
+    # Capture every case once so a mismatch does not leave the diff incomplete.
+    actuals = [compute_case_outputs(spark, case, base_dir) for case in cases]
+    regenerated_cases = [_regenerate_case(case, actual) for case, actual in zip(cases, actuals)]
+    diff = _golden_diff(test_file, serialize_test_file(header, regenerated_cases))
+    if diff:
+        _print_golden_diff(diff)
 
     if regenerate:
         write_test_file(test_file, header, regenerated_cases)
+    else:
+        header, cases = parse_test_file(test_file, require_terminated=True)
+        _validate_test_file(test_file, header, cases, regenerate=False)
+        for case, actual in zip(cases, actuals):
+            _compare_case(test_case, case, actual)
 
 
 def _regenerate_case(old_case, actual):
