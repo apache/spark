@@ -27,7 +27,7 @@ import scala.jdk.CollectionConverters._
 import scala.util.{Failure, Success, Try}
 import scala.util.control.NonFatal
 
-import org.apache.spark.{SparkContext, SparkRuntimeException, SparkThrowable, SparkUnsupportedOperationException, TaskContext}
+import org.apache.spark.{SparkContext, SparkThrowable, SparkUnsupportedOperationException, TaskContext}
 import org.apache.spark.executor.InputMetrics
 import org.apache.spark.internal.Logging
 import org.apache.spark.internal.LogKeys.{DEFAULT_ISOLATION_LEVEL, ISOLATION_LEVEL}
@@ -704,10 +704,10 @@ object JdbcUtils extends Logging with SQLConfHelper {
         messageParameters = parameters,
         description = s"Write rows to the table $table.",
         isRuntime = true)
-      // The legacy classifier ignores the supplied condition and uses a placeholder URL.
-      // Normalize only its generic fallback so specific dialect mappings still take precedence.
+      // The default legacy classifier does not know about write errors. Preserve the
+      // original SQLException for dialects that have not opted into condition-based errors.
       if (classified.getCondition == "FAILED_JDBC.UNCLASSIFIED") {
-        throw new SparkRuntimeException("FAILED_JDBC.WRITE", parameters, e)
+        throw e
       }
       throw classified
     }
@@ -857,9 +857,7 @@ object JdbcUtils extends Logging with SQLConfHelper {
       committed = true
     } finally {
       if (!committed) {
-        // The stage must fail.  We got here through an exception path, so
-        // let the exception through unless rollback() or close() want to
-        // tell the user about another problem.
+        // Preserve the failure that brought us here, even if cleanup fails.
         if (supportsTransactions) {
           // The connection may already be closed by the task interrupt listener; rollback
           // is best-effort in that case.
@@ -874,7 +872,11 @@ object JdbcUtils extends Logging with SQLConfHelper {
         } else {
           outMetrics.setRecordsWritten(totalRowCount)
         }
-        conn.close()
+        try {
+          conn.close()
+        } catch {
+          case NonFatal(e) => logWarning("Exception closing JDBC connection on task failure", e)
+        }
       } else {
         outMetrics.setRecordsWritten(totalRowCount)
 

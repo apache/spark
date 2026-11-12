@@ -197,7 +197,7 @@ class JdbcWriteExceptionSuite extends SparkFunSuite {
     }
   }
 
-  test("savePartition normalizes an unclassified legacy JDBC write failure") {
+  test("savePartition preserves an unclassified legacy JDBC write failure") {
     withWriteFixture { fixture =>
       import fixture._
       val batchFailure = new SQLException("batch rejected", "23000", 2627)
@@ -207,15 +207,11 @@ class JdbcWriteExceptionSuite extends SparkFunSuite {
         override def createConnectionFactory(options: JDBCOptions): Int => Connection = _ => conn
       }
 
-      val error = intercept[SparkRuntimeException] {
+      val error = intercept[SQLException] {
         savePartition(dialect = legacyDialect)
       }
-      checkError(
-        exception = error,
-        condition = "FAILED_JDBC.WRITE",
-        sqlState = Some("HV000"),
-        parameters = Map("url" -> options.getRedactUrl(), "tableName" -> "t"))
-      assert(error.getCause eq batchFailure)
+      assert(error eq batchFailure)
+      assert(error.getSQLState == "23000")
     }
   }
 
@@ -369,6 +365,28 @@ class JdbcWriteExceptionSuite extends SparkFunSuite {
       verify(conn).rollback()
       verify(conn, never()).commit()
       verify(stmt).close()
+    }
+  }
+
+  test("connection cleanup preserves the write failure") {
+    withWriteFixture { fixture =>
+      import fixture._
+      enableTransactions()
+      val writeFailure = new SQLException("write rejected", "23000")
+      when(stmt.executeBatch()).thenThrow(writeFailure)
+      doThrow(new SQLException("connection close failed", "08006")).when(conn).close()
+
+      val error = intercept[SparkRuntimeException] {
+        savePartition(isolationLevel = Connection.TRANSACTION_READ_COMMITTED)
+      }
+      checkError(
+        exception = error,
+        condition = "FAILED_JDBC.WRITE",
+        sqlState = Some("HV000"),
+        parameters = Map("url" -> options.getRedactUrl(), "tableName" -> "t"))
+      assert(error.getCause eq writeFailure)
+      verify(conn).rollback()
+      verify(conn).close()
     }
   }
 

@@ -856,8 +856,8 @@ abstract class JdbcDialect extends Serializable with Logging {
    * The default implementation delegates to the deprecated classifier and returns an
    * `AnalysisException`, even for runtime failures. Dialects using condition-based classification
    * can return a runtime exception when `isRuntime` is true. The executor write path replaces
-   * the generic `FAILED_JDBC.UNCLASSIFIED` fallback with `FAILED_JDBC.WRITE`, preserving specific
-   * dialect mappings. The default wrappers preserve the original exception as the cause;
+   * the generic `FAILED_JDBC.UNCLASSIFIED` fallback with the original `SQLException`, preserving
+   * specific dialect mappings. The default wrappers preserve the original exception as the cause;
    * dialect-specific mappings may handle it differently.
    * @param e The dialect specific exception.
    * @param condition The error condition assigned in the case of an unclassified `e`
