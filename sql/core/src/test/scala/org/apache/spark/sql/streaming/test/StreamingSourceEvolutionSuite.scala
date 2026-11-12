@@ -592,7 +592,8 @@ class StreamingSourceEvolutionSuite extends StreamTest {
   }
 
   gridTest("positional checkpoint written under source names keeps running with those names")(
-      Seq(1, 2)) { version =>
+      for (version <- Seq(1, 2); sourceName <- Seq("src", "src-old")) yield (version, sourceName)) {
+    case (version, sourceName) =>
     withTable("legacy_named_source") {
       sql("CREATE TABLE legacy_named_source (id INT) USING parquet")
       sql("INSERT INTO legacy_named_source VALUES (1)")
@@ -616,7 +617,8 @@ class StreamingSourceEvolutionSuite extends StreamTest {
       }
       // Spark 4.2 ran a catalog table named by IDENTIFIED BY by position, with the source
       // metadata in sources/<name>.
-      assert(new File(checkpointDir, "sources/0").renameTo(new File(checkpointDir, "sources/src")))
+      assert(new File(checkpointDir, "sources/0")
+        .renameTo(new File(checkpointDir, s"sources/$sourceName")))
       sql("INSERT INTO legacy_named_source VALUES (2)")
 
       val e = intercept[StreamingQueryException] {
@@ -628,7 +630,7 @@ class StreamingSourceEvolutionSuite extends StreamTest {
         parameters = Map.empty)
       assert(!new File(checkpointDir, "sources/other").exists())
 
-      runSqlQuery("SELECT * FROM STREAM legacy_named_source IDENTIFIED BY src")
+      runSqlQuery(s"SELECT * FROM STREAM legacy_named_source IDENTIFIED BY `$sourceName`")
       checkAnswer(spark.read.parquet(outputDir.getCanonicalPath), Seq(Row(1), Row(2)))
       val offsetLog = new OffsetSeqLog(spark, s"${checkpointDir.getCanonicalPath}/offsets")
       val (latestBatchId, latestOffsets) = offsetLog.getLatest().get
