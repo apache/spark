@@ -1098,10 +1098,12 @@ case class UnionExec(children: Seq[SparkPlan]) extends SparkPlan with CodegenSup
       val firstAttr = attrs.head
       val nullable = attrs.exists(_.nullable)
       val newDt = attrs.map(_.dataType).reduce(StructType.unionLikeMerge)
+      val metadata = TimeWindow.unionOutputMetadata(attrs)
       if (firstAttr.dataType == newDt) {
-        firstAttr.withNullability(nullable)
+        val attr = firstAttr.withNullability(nullable)
+        if (metadata eq firstAttr.metadata) attr else attr.withMetadata(metadata)
       } else {
-        AttributeReference(firstAttr.name, newDt, nullable, firstAttr.metadata)(
+        AttributeReference(firstAttr.name, newDt, nullable, metadata)(
           firstAttr.exprId, firstAttr.qualifier)
       }
     }

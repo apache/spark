@@ -328,6 +328,9 @@ class StreamingJoinCheckpointCompatibilitySuite extends StreamTest {
     // A comparison of one input's column with a constant gives a bound in older versions, and so
     // does a BETWEEN half that bounds a column other than the event time.
     assert(!compatible(And(interval, GreaterThan(leftPrice, Literal(10))), both))
+    // Older versions bound a numeric column by the other input's event time, which this version
+    // no longer admits, so the check must still see that bound.
+    assert(!compatible(And(interval, GreaterThan(leftPrice, Cast(rightTime, LongType))), both))
     assert(!compatible(And(interval, GreaterThan(leftTime, Literal(1000000L, TimestampType))),
       both))
     assert(!compatible(Between(rightTime, leftTime, leftOther), both))

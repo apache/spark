@@ -192,6 +192,22 @@ object TimeWindow {
   val durationKey = "spark.timeWindow.durationUs"
 
   /**
+   * The metadata of a union's output column, given the children's columns at its position: the
+   * first child's, which a union keeps, but without the window length unless every child records
+   * the same one. Otherwise a join would read the first child's length for every child's rows.
+   */
+  def unionOutputMetadata(columns: Seq[Attribute]): Metadata = {
+    val first = columns.head.metadata
+    def sameDuration(metadata: Metadata): Boolean =
+      metadata.contains(durationKey) && metadata.getLong(durationKey) == first.getLong(durationKey)
+    if (first.contains(durationKey) && !columns.tail.forall(c => sameDuration(c.metadata))) {
+      new MetadataBuilder().withMetadata(first).remove(durationKey).build()
+    } else {
+      first
+    }
+  }
+
+  /**
    * Parses the interval string for a valid time duration. CalendarInterval expects interval
    * strings to start with the string `interval`. For usability, we prepend `interval` to the string
    * if the user omitted it.

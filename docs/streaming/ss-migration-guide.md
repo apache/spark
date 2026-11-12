@@ -77,9 +77,11 @@ Please refer [Migration Guide: SQL, Datasets and DataFrame](../sql-migration-gui
   windows of the other input, such as 10-second left windows and 20-second right windows in
   `leftWindow > rightWindow`. Earlier versions removed them by window end, which could drop
   matches. Such a join now keeps that input's rows for the life of the query and holds back its
-  output watermark for that input, so a stateful operator after the join that uses that input's
-  windows cannot emit results. Windows that last at least as long as the other input's are still
-  removed.
+  output watermark for that input. An append-mode aggregation over that input's windows then
+  fails at start. Other stateful operators after the join that use them keep their rows in state
+  and do not emit results that wait for the watermark, such as event-time timeouts, while
+  update-mode aggregations and deduplication still emit rows. Windows that last at least as long
+  as the other input's are still removed.
 
 - Spark 4.4 corrects cases where stream-stream equality joins could discard rows before their
   matches arrived or output unmatched rows too early. Such joins with a watermark on only one

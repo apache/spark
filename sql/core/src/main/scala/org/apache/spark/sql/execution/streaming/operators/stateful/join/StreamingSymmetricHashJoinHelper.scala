@@ -484,14 +484,15 @@ object StreamingSymmetricHashJoinHelper extends Logging {
     // or one with a month interval, which the solver cannot read. Older versions solved every
     // column of an input against the other input; this version solves one candidate column at a
     // time. A comparison within one input stays excluded: older versions read some of them, such
-    // as one with a numeric constant, as a bound.
+    // as one with a numeric constant, as a bound. The older solve skips the admission rules that
+    // this version added, such as the TIMESTAMP column rule, so it passes baseAdmissionRules.
     def givesNoBound(comparison: Expression): Boolean = {
       val inputs = Seq(leftAttributes -> rightAttributes, rightAttributes -> leftAttributes)
       inputs.forall { case (input, _) =>
         comparison.references.exists(a => input.exists(_.semanticEquals(a)))
       } && inputs.forall { case (input, other) =>
         StreamingJoinHelper.getStateValueWatermark(AttributeSet(input), AttributeSet(other),
-          Some(comparison), Some(1000000L)).isEmpty &&
+          Some(comparison), Some(1000000L), baseAdmissionRules = true).isEmpty &&
           getStateValueWatermarkForInput(input, other, Some(comparison), Some(1000000L)).isEmpty
       }
     }

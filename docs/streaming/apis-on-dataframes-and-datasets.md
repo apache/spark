@@ -1480,8 +1480,10 @@ Additional details on supported joins:
 - A stream-stream inner join cleans up an input's state only with such a time constraint. For
   example, an inner join whose only time constraint is `leftWindow > rightWindow`, with 10-second
   left windows and 20-second right windows, keeps every left row in its state and holds back its
-  output watermark for the left input, so a stateful operator after the join that uses the left
-  windows cannot emit results.
+  output watermark for the left input. An append-mode aggregation over the left windows then
+  fails at start. Other stateful operators after the join that use them keep their rows in state
+  and do not emit results that wait for the watermark, such as event-time timeouts, while
+  update-mode aggregations and deduplication still emit rows.
 
 - As of Spark 2.4, you can use joins only when the query is in Append output mode. Other output modes are not yet supported.
 

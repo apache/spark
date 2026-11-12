@@ -314,10 +314,14 @@ object StreamingJoinHelper extends PredicateHelper with Logging {
    *                                      cutoff from a condition that the solver counts
    *                                      inexactly. State eviction and the admission check set
    *                                      it, so they agree.
-   * @param baseAdmissionRules            whether to skip the checks that Spark 4.4 added to the
-   *                                      solver, so that the result matches earlier versions.
-   *                                      Only the admission rule that stays in force with
-   *                                      the finalization check disabled sets it.
+   * @param baseAdmissionRules            whether to skip the check that the bounded column is a
+   *                                      TIMESTAMP column or a time window, which Spark 4.4
+   *                                      added to the solver. It does not skip the inexact
+   *                                      arithmetic check for columns without their own
+   *                                      watermark, which exactForUnwatermarkedColumns alone
+   *                                      controls; leave that false too for the result of
+   *                                      earlier versions. Only the admission rule that stays
+   *                                      in force with the finalization check disabled sets it.
    * @return state value watermark in milliseconds, is possible.
    */
   def getStateValueWatermark(
