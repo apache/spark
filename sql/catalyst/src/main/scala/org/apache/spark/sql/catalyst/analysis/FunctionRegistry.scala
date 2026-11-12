@@ -1256,6 +1256,7 @@ object FunctionRegistry {
     registerInternalExpression[VectorScaleShift]("ml_vector_scale_shift")
     registerInternalExpression[VectorDotProduct]("ml_vector_dot_product")
     registerInternalExpression[VectorPosExplode]("ml_vector_posexplode")
+    registerInternalExpression[VectorToArray]("vector_to_array")
   }
 
   registerInternalExpressions()
