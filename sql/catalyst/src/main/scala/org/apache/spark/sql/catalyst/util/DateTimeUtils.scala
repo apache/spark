@@ -28,7 +28,7 @@ import scala.util.control.NonFatal
 import org.apache.spark.{QueryContext, SparkException, SparkIllegalArgumentException}
 import org.apache.spark.sql.catalyst.util.DateTimeConstants._
 import org.apache.spark.sql.errors.QueryExecutionErrors
-import org.apache.spark.sql.types.{DataType, Decimal, DoubleExactNumeric, TimestampNTZType, TimestampType}
+import org.apache.spark.sql.types.{DataType, Decimal, DoubleExactNumeric, TimestampNTZType, TimestampType, TimeType}
 import org.apache.spark.unsafe.types.{CalendarInterval, TimestampNanosVal, UTF8String}
 
 /**
@@ -1242,23 +1242,29 @@ object DateTimeUtils extends SparkDateTimeUtils {
   /**
    * Creates a TIME value from seconds since midnight (decimal type).
    * @param seconds Seconds (0 to 86399.999999)
-   * @return Nanoseconds since midnight
+   * @return Nanoseconds since midnight, truncated to microsecond precision
    */
   def timeFromSeconds(seconds: Decimal): Long = withTimeConversionErrorHandling {
-    val operand = new java.math.BigDecimal(NANOS_PER_SECOND)
-    seconds.toJavaBigDecimal.multiply(operand).longValueExact()
+    secondsToMicrosPrecisionNanos(seconds.toJavaBigDecimal)
   }
 
   /**
    * Creates a TIME value from seconds since midnight (floating point type).
    * @param seconds Seconds (0 to 86399.999999)
-   * @return Nanoseconds since midnight
+   * @return Nanoseconds since midnight, truncated to microsecond precision
    */
   def timeFromSeconds(seconds: Double): Long = withTimeConversionErrorHandling {
     if (seconds.isNaN || seconds.isInfinite) {
       throw new DateTimeException("Cannot convert NaN or Infinite value to TIME")
     }
-    (seconds * NANOS_PER_SECOND).toLong
+    // Use the shortest decimal form like CAST(double AS DECIMAL) to avoid floating-point error.
+    secondsToMicrosPrecisionNanos(java.math.BigDecimal.valueOf(seconds))
+  }
+
+  // Floor, not truncate toward zero, so negative inputs stay out of range.
+  private def secondsToMicrosPrecisionNanos(seconds: java.math.BigDecimal): Long = {
+    val micros = seconds.setScale(TimeType.MICROS_PRECISION, java.math.RoundingMode.FLOOR)
+    Math.multiplyExact(micros.unscaledValue().longValueExact(), NANOS_PER_MICROS)
   }
 
   /**
