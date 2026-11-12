@@ -19,10 +19,6 @@
 Upgrading PySpark
 ==================
 
-Upgrading from PySpark 4.3 to 5.0
----------------------------------
-* In Spark 5.0, inside the function passed to ``DataFrameGroupBy.apply`` and ``DataFrameGroupBy.filter`` in pandas API on Spark, the group's ``name`` attribute is the group key, matching pandas, even when the DataFrame has a column called ``name``. Previously, ``name`` raised an ``AttributeError``, or returned that column. To read such a column, use ``g["name"]`` instead of ``g.name``.
-
 Upgrading from PySpark 4.2 to 4.3
 ---------------------------------
 * In Spark 4.3, Python 3.10 support was dropped in PySpark.
