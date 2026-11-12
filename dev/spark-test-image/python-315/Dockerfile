@@ -42,7 +42,7 @@ RUN apt-get update && apt-get install -y \
     liblapack-dev \
     libopenblas-dev \
     libssl-dev \
-    openjdk-17-jdk-headless \
+    openjdk-21-jdk-headless \
     pkg-config \
     tzdata \
     software-properties-common \
@@ -67,7 +67,6 @@ COPY --from=root pyproject.toml ./pyproject.toml
 
 RUN python3.15 -m pip install -U pip
 
-# pandas<3 does not have Python 3.15 wheels yet. Start with dependencies that can be installed.
 RUN python3.15 -m pip install --group ml_torch --index-url https://download.pytorch.org/whl/cpu && \
-    python3.15 -m pip install py4j psutil six unittest-xml-reporting && \
+    python3.15 -m pip install --group ci_python_315 && \
     python3.15 -m pip cache purge

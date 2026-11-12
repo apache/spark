@@ -29,11 +29,10 @@ import org.apache.spark.sql.catalyst.optimizer.InlineCTE
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.trees.TreePattern.{LATERAL_COLUMN_ALIAS_REFERENCE, PLAN_EXPRESSION, UNRESOLVED_WINDOW_EXPRESSION}
 import org.apache.spark.sql.catalyst.util.{CharVarcharUtils, StringUtils, TypeUtils}
-import org.apache.spark.sql.connector.catalog.{CatalogManager, LookupCatalog, SupportsPartitionManagement}
+import org.apache.spark.sql.connector.catalog.{CatalogManager, CatalogV2Util, LookupCatalog}
 import org.apache.spark.sql.errors.{QueryCompilationErrors, QueryErrorsBase}
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
-import org.apache.spark.sql.util.SchemaUtils
 import org.apache.spark.util.ArrayImplicits._
 
 /**
@@ -45,7 +44,6 @@ trait CheckAnalysis extends LookupCatalog with QueryErrorsBase with PlanToString
 
   protected def conf: org.apache.spark.sql.internal.SQLConf
 
-  import org.apache.spark.sql.connector.catalog.CatalogV2Implicits._
 
   /**
    * Override to provide additional checks for correct analysis.
@@ -526,21 +524,7 @@ trait CheckAnalysis extends LookupCatalog with QueryErrorsBase with PlanToString
         throw QueryCompilationErrors.inlineTableContainsScalarSubquery(u)
 
       case command: V2PartitionCommand =>
-        command.table match {
-          case r @ ResolvedTable(_, _, table, _) => table match {
-            case t: SupportsPartitionManagement =>
-              if (t.partitionSchema.isEmpty) {
-                r.failAnalysis(
-                  errorClass = "INVALID_PARTITION_OPERATION.PARTITION_SCHEMA_IS_EMPTY",
-                  messageParameters = Map("name" -> toSQLId(r.name)))
-              }
-            case _ =>
-              r.failAnalysis(
-                errorClass = "INVALID_PARTITION_OPERATION.PARTITION_MANAGEMENT_IS_UNSUPPORTED",
-                messageParameters = Map("name" -> toSQLId(r.name)))
-          }
-          case _ =>
-        }
+        PartitionSpecResolution.validate(command, this)
 
       case o: OverwriteByExpression if o.deleteExpr.exists(_.isInstanceOf[SubqueryExpression]) =>
         o.deleteExpr.failAnalysis (
@@ -1018,7 +1002,8 @@ trait CheckAnalysis extends LookupCatalog with QueryErrorsBase with PlanToString
           case CreateTableLike(_: ResolvedIdentifier, source, _, _, _, _, _) =>
             source match {
               case ResolvedTable(_, _, table, _) =>
-                TypeUtils.checkNoUnknownFileTypeInTableSchema(table.columns.asSchema)
+                TypeUtils.checkNoUnknownFileTypeInTableSchema(
+                  CatalogV2Util.v2ColumnsToStructType(table.columns))
               case view: ResolvedPersistentView =>
                 TypeUtils.checkNoUnknownFileTypeInTableSchema(view.info.schema)
               case ResolvedTempView(_, metadata) =>
@@ -1039,7 +1024,7 @@ trait CheckAnalysis extends LookupCatalog with QueryErrorsBase with PlanToString
             a.checkConstraint.failIfCallsUserDefinedFunction()
 
           case alter: AlterTableCommand =>
-            checkAlterTableCommand(alter)
+            AlterTableValidation.validate(alter, this)
 
           case c: CreateVariable
               if c.resolved && c.defaultExpr.child.containsPattern(PLAN_EXPRESSION) =>
@@ -1332,122 +1317,6 @@ trait CheckAnalysis extends LookupCatalog with QueryErrorsBase with PlanToString
       })
     }
     check(plan)
-  }
-
-  /**
-   * Validates the options used for alter table commands after table and columns are resolved.
-   */
-  private def checkAlterTableCommand(alter: AlterTableCommand): Unit = {
-    def checkColumnNotExists(op: String, fieldNames: Seq[String], struct: StructType): Unit = {
-      if (struct.findNestedField(
-          fieldNames, includeCollections = true, alter.conf.resolver).isDefined) {
-        alter.failAnalysis(
-          errorClass = "FIELD_ALREADY_EXISTS",
-          messageParameters = Map(
-            "op" -> op,
-            "fieldNames" -> toSQLId(fieldNames),
-            "struct" -> toSQLType(struct)))
-      }
-    }
-
-    def checkColumnNameDuplication(colsToAdd: Seq[QualifiedColType]): Unit = {
-      SchemaUtils.checkColumnNameDuplication(
-        colsToAdd.map(_.name.quoted),
-        alter.conf.resolver)
-    }
-
-    def checkNoCollationsInMapKeys(colsToAdd: Seq[QualifiedColType]): Unit = {
-      if (!alter.conf.allowCollationsInMapKeys) {
-        colsToAdd.foreach(col => SchemaUtils.checkNoCollationsInMapKeys(col.dataType))
-      }
-    }
-
-    alter match {
-      case AddColumns(table: ResolvedTable, colsToAdd) =>
-        colsToAdd.foreach { colToAdd =>
-          checkColumnNotExists("add", colToAdd.name, table.schema)
-        }
-        checkColumnNameDuplication(colsToAdd)
-        checkNoCollationsInMapKeys(colsToAdd)
-
-      case ReplaceColumns(_: ResolvedTable, colsToAdd) =>
-        checkColumnNameDuplication(colsToAdd)
-        checkNoCollationsInMapKeys(colsToAdd)
-
-      case RenameColumn(table: ResolvedTable, col: ResolvedFieldName, newName) =>
-        checkColumnNotExists("rename", col.path :+ newName, table.schema)
-
-      case AlterColumns(table: ResolvedTable, specs, _) =>
-        AlterColumns.findRepeatedColumn(specs).foreach { name =>
-          alter.failAnalysis(
-            errorClass = "NOT_SUPPORTED_CHANGE_SAME_COLUMN",
-            messageParameters = Map(
-              "table" -> toSQLId(table.name),
-              "fieldName" -> toSQLId(name)))
-        }
-        specs.foreach {
-          case AlterColumnSpec(col: ResolvedFieldName, dataType, nullable, _, _, _, _, _) =>
-            val fieldName = col.name.quoted
-            if (dataType.isDefined) {
-              val field = CharVarcharUtils.getRawType(col.field.metadata)
-                .map(dt => col.field.copy(dataType = dt))
-                .getOrElse(col.field)
-              val newDataType = dataType.get
-              newDataType match {
-                case _: StructType => alter.failAnalysis(
-                  "CANNOT_UPDATE_FIELD.STRUCT_TYPE",
-                  Map("table" -> toSQLId(table.name), "fieldName" -> toSQLId(fieldName)))
-                case _: MapType => alter.failAnalysis(
-                  "CANNOT_UPDATE_FIELD.MAP_TYPE",
-                  Map("table" -> toSQLId(table.name), "fieldName" -> toSQLId(fieldName)))
-                case _: ArrayType => alter.failAnalysis(
-                  "CANNOT_UPDATE_FIELD.ARRAY_TYPE",
-                  Map("table" -> toSQLId(table.name), "fieldName" -> toSQLId(fieldName)))
-                case u: UserDefinedType[_] => alter.failAnalysis(
-                  "CANNOT_UPDATE_FIELD.USER_DEFINED_TYPE",
-                  Map(
-                    "table" -> toSQLId(table.name),
-                    "fieldName" -> toSQLId(fieldName),
-                    "udtSql" -> toSQLType(u)))
-                case _: CalendarIntervalType | _: AnsiIntervalType => alter.failAnalysis(
-                  "CANNOT_UPDATE_FIELD.INTERVAL_TYPE",
-                  Map("table" -> toSQLId(table.name), "fieldName" -> toSQLId(fieldName)))
-                case _ => // update is okay
-              }
-
-              // We don't need to handle nested types here which shall fail before.
-              def canAlterColumnType(from: DataType, to: DataType): Boolean = (from, to) match {
-                case (c1: CharType, c2: CharType) => c1.length == c2.length
-                case (c: CharType, v: VarcharType) => c.length <= v.length
-                case (v1: VarcharType, v2: VarcharType) => v1.length <= v2.length
-                case _ => Cast.canUpCast(from, to)
-              }
-              if (!canAlterColumnType(field.dataType, newDataType)) {
-                alter.failAnalysis(
-                  errorClass = "NOT_SUPPORTED_CHANGE_COLUMN",
-                  messageParameters = Map(
-                    "table" -> toSQLId(table.name),
-                    "originName" -> toSQLId(fieldName),
-                    "originType" -> toSQLType(field.dataType),
-                    "newName" -> toSQLId(fieldName),
-                    "newType" -> toSQLType(newDataType)))
-              }
-            }
-            if (nullable.isDefined) {
-              if (!nullable.get && col.field.nullable) {
-                alter.failAnalysis(
-                  errorClass = "_LEGACY_ERROR_TEMP_2330",
-                  messageParameters = Map("fieldName" -> fieldName))
-              }
-            }
-          case _ =>
-        }
-
-      // FILE is not comparable, so it cannot be a clustering column.
-      case AlterTableClusterBy(table: ResolvedTable, Some(clusterBySpec)) =>
-        TypeUtils.checkNoFileTypeClusteringColumn(table.schema, clusterBySpec, alter.conf.resolver)
-      case _ =>
-    }
   }
 
   private def unresolvedInlineTableContainsScalarSubquery(

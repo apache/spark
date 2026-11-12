@@ -318,8 +318,11 @@ trait RewriteRowLevelCommand extends Rule[LogicalPlan] {
     ProjectingInternalRow(schema, colOrdinals)
   }
 
+  // prefer the exact name as the plan may have columns whose names differ only by case
+  // fall back to the resolver as connectors may refer to columns using a different case
   private def findColOrdinal(plan: LogicalPlan, name: String): Int = {
-    plan.output.indexWhere(attr => conf.resolver(attr.name, name))
+    val ordinal = plan.output.indexWhere(_.name == name)
+    if (ordinal != -1) ordinal else plan.output.indexWhere(attr => conf.resolver(attr.name, name))
   }
 
   protected def buildOriginalRowIdValues(

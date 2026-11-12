@@ -17,9 +17,8 @@
 
 package org.apache.spark.sql.execution.adaptive
 
-import org.apache.spark.sql.catalyst.expressions.{Alias, BindReferences, BroadcastValueProjection, DynamicPruningExpression, Expression, Literal}
+import org.apache.spark.sql.catalyst.expressions.{BindReferences, BroadcastValueProjection, DynamicPruningExpression, DynamicPruningSubquery, Expression, Literal}
 import org.apache.spark.sql.catalyst.optimizer.{BuildLeft, BuildRight}
-import org.apache.spark.sql.catalyst.plans.logical.Aggregate
 import org.apache.spark.sql.catalyst.rules.Rule
 import org.apache.spark.sql.catalyst.trees.TreePattern._
 import org.apache.spark.sql.execution._
@@ -118,9 +117,8 @@ case class PlanAdaptiveDynamicPruningFilters(
           case None if onlyInBroadcast =>
             DynamicPruningExpression(Literal.TrueLiteral)
           case None =>
-            val aliases = indices.map(idx =>
-              Alias(buildKeys(idx), buildKeys(idx).toString)())
-            val aggregate = Aggregate(aliases, aliases, buildPlan)
+            val aggregate =
+              DynamicPruningSubquery.planDistinctBuildKeys(buildPlan, buildKeys, indices)
             val sparkPlan = QueryExecution.prepareExecutedPlan(aggregate, adaptivePlan.context)
             assert(sparkPlan.isInstanceOf[AdaptiveSparkPlanExec])
             val newAdaptivePlan = sparkPlan.asInstanceOf[AdaptiveSparkPlanExec]

@@ -27,8 +27,9 @@ import java.nio.ByteBuffer
 import java.nio.channels.Channels
 import java.nio.charset.StandardCharsets
 import java.nio.file.Files
+import java.nio.file.attribute.PosixFilePermissions
 import java.security.SecureRandom
-import java.util.{HexFormat, Locale, Properties, Random, UUID}
+import java.util.{Collections, HexFormat, Locale, Properties, Random, UUID}
 import java.util.concurrent._
 import java.util.concurrent.TimeUnit.NANOSECONDS
 import java.util.zip.{GZIPInputStream, ZipInputStream}
@@ -223,19 +224,53 @@ private[spark] object Utils
     writeByteBufferImpl(bb, out.write)
   }
 
+  // fromString returns a mutable set; wrap it so no future caller can mutate the shared set.
+  private val chmod700Perms =
+    Collections.unmodifiableSet(PosixFilePermissions.fromString("rwx------"))
+
   /**
    * JDK equivalent of `chmod 700 file`.
+   *
+   * On POSIX filesystems this is a single `chmod` call, which is atomic: concurrent calls on
+   * the same path cannot interleave into a broken permission set, unlike the `File.set*`
+   * fallback below, each call of which is a non-atomic stat-then-chmod. The POSIX call writes
+   * exactly the nine rwx bits, so it also clears setuid, setgid, and sticky bits, which the
+   * previous `File.set*` implementation kept.
    *
    * @param file the file whose permissions will be modified
    * @return true if the permissions were successfully changed, false otherwise.
    */
   def chmod700(file: File): Boolean = {
-    file.setReadable(false, false) &&
-    file.setReadable(true, true) &&
-    file.setWritable(false, false) &&
-    file.setWritable(true, true) &&
-    file.setExecutable(false, false) &&
-    file.setExecutable(true, true)
+    if (file.getPath.isEmpty) {
+      // The NIO empty path resolves to the process working directory; the File.set* sequence
+      // returned false for it, so keep that behavior rather than chmod-ing the cwd.
+      return false
+    }
+    try {
+      Files.setPosixFilePermissions(file.toPath, chmod700Perms)
+      true
+    } catch {
+      case _: UnsupportedOperationException =>
+        // Non-POSIX filesystems use this best-effort, non-atomic fallback. On Windows, these
+        // calls change nothing for a directory and return false. Attempt every operation even
+        // after a failure, and never grant group/other access.
+        val succeeded =
+          file.setReadable(false, false) &
+          file.setWritable(false, false) &
+          file.setExecutable(false, false) &
+          file.setReadable(true, true) &
+          file.setWritable(true, true) &
+          file.setExecutable(true, true)
+        if (!succeeded) {
+          // Structural on Windows: File.setReadable(false, false) always fails there (the
+          // filesystem has no read permission to revoke), so do not warn on every call.
+          logDebug(log"Failed to set permissions to 700 on ${MDC(PATH, file.getAbsolutePath)}")
+        }
+        succeeded
+      case NonFatal(e) =>
+        logWarning(log"Failed to set permissions to 700 on ${MDC(PATH, file.getAbsolutePath)}", e)
+        false
+    }
   }
 
   /**
@@ -1984,6 +2019,25 @@ private[spark] object Utils
       case _ =>
         true
     }
+  }
+
+  /**
+   * Detects the distinct messages used by supported JDKs when an array cannot grow any further.
+   * There are two known patterns:
+   *
+   *  - `Required array length 2147483639 + 626 is too large`
+   *  - `Requested array size exceeds VM limit`
+   *
+   * Unlike a heap-space OOM, this failure can be handled because retrying the same operation can
+   * never succeed.
+   */
+  def isJavaArraySizeLimitExceeded(error: Throwable): Boolean = error match {
+    case oom: OutOfMemoryError =>
+      Option(oom.getMessage).exists { message =>
+        (message.startsWith("Required array length") && message.endsWith("is too large")) ||
+          message.contains("Requested array size exceeds VM limit")
+      }
+    case _ => false
   }
 
   /** Resolve a comma-separated list of paths. */

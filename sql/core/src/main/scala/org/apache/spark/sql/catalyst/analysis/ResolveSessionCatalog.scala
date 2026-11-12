@@ -24,17 +24,14 @@ import org.apache.spark.sql.catalyst.catalog.{ClusterBySpec, HiveTableRelation}
 import org.apache.spark.sql.catalyst.expressions.{Alias, Attribute}
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.rules.Rule
-import org.apache.spark.sql.catalyst.util.{quoteIfNeeded, toPrettySQL, CharVarcharUtils, ResolveDefaultColumns => DefaultCols, TypeUtils}
-import org.apache.spark.sql.catalyst.util.ResolveDefaultColumns._
-import org.apache.spark.sql.connector.catalog.{CatalogManager, CatalogV2Util, LookupCatalog, SupportsNamespaces, V1Table, ViewCatalog}
-import org.apache.spark.sql.errors.{QueryCompilationErrors, QueryExecutionErrors}
+import org.apache.spark.sql.catalyst.util.{quoteIfNeeded, toPrettySQL, TypeUtils}
+import org.apache.spark.sql.connector.catalog.{CatalogManager, LookupCatalog, V1Table, ViewCatalog}
+import org.apache.spark.sql.errors.QueryCompilationErrors
 import org.apache.spark.sql.execution.command._
 import org.apache.spark.sql.execution.datasources.LogicalRelation
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.internal.connector.V1Function
 import org.apache.spark.sql.metricview.logical.CreateMetricView
-import org.apache.spark.sql.types.{DataType, MetadataBuilder, StringType, StructField, StructType}
-import org.apache.spark.util.SparkStringUtils
 
 /**
  * Converts resolved v2 commands to v1 if the catalog is the session catalog. Since the v2 commands
@@ -44,7 +41,6 @@ import org.apache.spark.util.SparkStringUtils
  */
 class ResolveSessionCatalog(val catalogManager: CatalogManager)
   extends Rule[LogicalPlan] with LookupCatalog {
-  import CreateTableHelper._
   import org.apache.spark.sql.connector.catalog.CatalogV2Implicits._
   import org.apache.spark.sql.connector.catalog.CatalogV2Util._
   import org.apache.spark.sql.execution.datasources.v2.DataSourceV2Implicits._
@@ -52,28 +48,7 @@ class ResolveSessionCatalog(val catalogManager: CatalogManager)
   override def apply(plan: LogicalPlan): LogicalPlan = plan.resolveOperatorsUp {
     case a @ AddColumns(ResolvedV1TableIdentifier(ident), cols)
         if a.resolved && cols.forall(_.isDefaultValueTypeCoerced) =>
-      cols.foreach { c =>
-        if (c.name.length > 1) {
-          throw QueryCompilationErrors.unsupportedTableOperationError(
-            ident, "ADD COLUMN with qualified column")
-        }
-        if (!c.nullable) {
-          throw QueryCompilationErrors.addColumnWithV1TableCannotSpecifyNotNullError()
-        }
-      }
-      // For V1 ALTER TABLE ADD COLUMNS command, the default value expression is hidden in the
-      // StructField metadata, and won't be constant folded by the optimizer. Here we
-      // manually constant fold it, as exist default needs to be a constant.
-      val newCols = cols.map { col =>
-        val builder = new MetadataBuilder
-        col.comment.foreach(builder.putString("comment", _))
-        col.default.foreach { defaultValue =>
-          addDefaultValueMetadata(builder, defaultValue, col.colName, col.dataType,
-            "ALTER TABLE ADD COLUMNS")
-        }
-        StructField(col.name.head, col.dataType, nullable = true, builder.build())
-      }
-      AlterTableAddColumnsCommand(ident, newCols)
+      AlterTableHelper.lowerAddColumns(ident, cols)
 
     case ReplaceColumns(ResolvedV1TableIdentifier(ident), _) =>
       throw QueryCompilationErrors.unsupportedTableOperationError(ident, "REPLACE COLUMNS")
@@ -87,76 +62,12 @@ class ResolveSessionCatalog(val catalogManager: CatalogManager)
     // next case and keep their existing `UNSUPPORTED_FEATURE.TABLE_OPERATION` error on V1.
     case a @ AlterColumns(rt @ ResolvedTable(catalog, _, table: V1Table, _), specs, _)
         if a.fromCommentOn && supportsV1Command(catalog) && a.resolved &&
-          isMultiOrNestedCommentOnly(specs) =>
-      // This rule rewrites AlterColumns into a command during resolution, before CheckAnalysis
-      // gets to validate it, so re-run the "same column changed twice" check here (the same one
-      // CheckAnalysis applies to the AlterColumns node on the V2 path). Use `a.failAnalysis` so the
-      // error carries the same query context as the V2 path.
-      AlterColumns.findRepeatedColumn(specs).foreach { name =>
-        a.failAnalysis(
-          errorClass = "NOT_SUPPORTED_CHANGE_SAME_COLUMN",
-          messageParameters = Map(
-            "table" -> toSQLId(rt.name),
-            "fieldName" -> toSQLId(name)))
-      }
-      AlterTableChangeColumnCommentsCommand(table.catalogTable.identifier, a.changes)
+          AlterTableHelper.isMultiOrNestedCommentOnly(specs) =>
+      AlterTableHelper.lowerColumnComments(a, rt.name, table.catalogTable.identifier)
 
     case a @ AlterColumns(ResolvedTable(catalog, ident, table: V1Table, _), specs, _)
         if supportsV1Command(catalog) && a.resolved && specs.forall(_.isDefaultValueTypeCoerced) =>
-      if (specs.size > 1) {
-        throw QueryCompilationErrors.unsupportedTableOperationError(
-          catalog, ident, "ALTER COLUMN in bulk")
-      }
-      val s = specs.head
-      if (s.column.name.length > 1) {
-        throw QueryCompilationErrors.unsupportedTableOperationError(
-          catalog, ident, "ALTER COLUMN with qualified column")
-      }
-      if (s.newNullability.isDefined) {
-        throw QueryCompilationErrors.unsupportedTableOperationError(
-          catalog, ident, "ALTER COLUMN ... SET NOT NULL")
-      }
-      if (s.newPosition.isDefined) {
-        throw QueryCompilationErrors.unsupportedTableOperationError(
-          catalog, ident, "ALTER COLUMN ... FIRST | AFTER")
-      }
-      val builder = new MetadataBuilder
-      // Add comment to metadata
-      s.newComment.foreach(c => builder.putString("comment", c))
-      val colName = s.column.name.head
-      val dataType = s.newDataType.getOrElse {
-        table.schema.findNestedField(Seq(colName), resolver = conf.resolver)
-          .map {
-            case (_, StructField(_, st: StringType, _, metadata)) =>
-              CharVarcharUtils.getRawType(metadata).getOrElse(st)
-            case (_, field) => field.dataType
-          }
-          .getOrElse {
-            throw QueryCompilationErrors.unresolvedColumnError(
-              toSQLId(s.column.name), table.schema.fieldNames)
-          }
-      }
-      // For V1 ALTER TABLE ALTER COLUMN command, we only set the CURRENT_DEFAULT metadata.
-      // The EXISTS_DEFAULT should be preserved from the original column, as it represents
-      // the default value that was in effect when the column was added (used for backfilling).
-      s.newDefaultExpression.foreach { defaultValue =>
-        // Validate the default value expression
-        constantFoldDefaultValue(defaultValue, colName, dataType, "ALTER TABLE ALTER COLUMN")
-        builder.putExpression(
-          DefaultCols.CURRENT_DEFAULT_COLUMN_METADATA_KEY, defaultValue.originalSQL,
-          Some(defaultValue.child))
-      }
-      if (s.dropDefault) {
-        // for legacy reasons, "" means clearing default value
-        builder.putString(CURRENT_DEFAULT_COLUMN_METADATA_KEY, "")
-      }
-      val newColumn = StructField(
-        colName,
-        dataType,
-        nullable = true,
-        builder.build())
-      AlterTableChangeColumnCommand(
-        table.catalogTable.identifier, colName, newColumn, dropComment = s.dropComment)
+      AlterTableHelper.lowerAlterColumns(a, catalog, ident, table, conf.resolver)
 
     case AlterTableClusterBy(ResolvedTable(catalog, _, table: V1Table, _), clusterBySpecOpt)
         if supportsV1Command(catalog) =>
@@ -211,10 +122,7 @@ class ResolveSessionCatalog(val catalogManager: CatalogManager)
       AlterDatabasePropertiesCommand(db, properties)
 
     case SetNamespaceLocation(ResolvedV1Database(db), location) if conf.useV1Command =>
-      if (SparkStringUtils.isBlank(location)) {
-        throw QueryExecutionErrors.invalidEmptyLocationError(location)
-      }
-      AlterDatabaseSetLocationCommand(db, location)
+      NamespaceCommandHelper.lowerSetLocation(db, location)
 
     case RenameTable(ResolvedV1TableOrViewIdentifier(oldIdent), newName, isView) =>
       AlterTableRenameCommand(oldIdent, newName.asTableIdentifier, isView)
@@ -272,26 +180,8 @@ class ResolveSessionCatalog(val catalogManager: CatalogManager)
       CreateTableHelper.lowerCreateTable(c)
 
     case c @ CreateTableAsSelect(
-        ResolvedV1CommandIdentifier(ident), _, _, tableSpec: TableSpec, writeOptions, _, _, _, _) =>
-      val (storageFormat, provider) = getStorageFormatAndProvider(
-        c.tableSpec.provider,
-        tableSpec.options ++ writeOptions,
-        c.tableSpec.location,
-        c.tableSpec.serde,
-        ctas = true)
-
-      if (!isV2Provider(provider)) {
-        if (tableSpec.constraints.nonEmpty) {
-          throw QueryCompilationErrors.unsupportedTableOperationError(
-            ident, "CONSTRAINT")
-        }
-        failIfWriteDistributionOrOrdering(
-          ident, "CREATE TABLE AS SELECT", c.writeDistributionMode, c.writeOrdering)
-        constructV1TableCmd(Some(c.query), c.tableSpec, ident, new StructType, c.partitioning,
-          c.ignoreIfExists, storageFormat, provider)
-      } else {
-        c
-      }
+        ResolvedV1CommandIdentifier(ident), _, _, tableSpec: TableSpec, _, _, _, _, _) =>
+      CreateTableHelper.lowerCreateTableAsSelect(c, ident, tableSpec)
 
     case RefreshTable(ResolvedV1TableOrViewIdentifier(ident)) =>
       RefreshTableCommand(ident)
@@ -302,24 +192,16 @@ class ResolveSessionCatalog(val catalogManager: CatalogManager)
       CreateTableHelper.lowerReplaceTable(c)
 
     case c @ ReplaceTableAsSelect(ResolvedV1CommandIdentifier(ident), _, _, _, _, _, _, _, _) =>
-      val provider = c.tableSpec.provider.getOrElse(conf.defaultDataSourceName)
-      if (!isV2Provider(provider)) {
-        throw QueryCompilationErrors.unsupportedTableOperationError(
-          ident, "REPLACE TABLE AS SELECT")
-      } else {
-        c
-      }
+      CreateTableHelper.lowerReplaceTableAsSelect(c, ident, conf.defaultDataSourceName)
 
     // For CREATE TABLE LIKE, use the v1 command if both the target and source are in the session
     // catalog (or a V1-compatible catalog extension). If source is in a different catalog, fall
     // through to the V2 execution path (CreateTableLikeExec via DataSourceV2Strategy).
-    case CreateTableLike(
+    case c @ CreateTableLike(
         ResolvedV1CommandIdentifier(targetIdent),
         ResolvedV1TableOrViewIdentifier(sourceIdent),
-        location, provider, serdeInfo, properties, ifNotExists) =>
-      val fileFormat = buildStorageFormatFromSerdeInfo(location, serdeInfo)
-      CreateTableLikeCommand(
-        targetIdent, sourceIdent, fileFormat, provider, properties, ifNotExists)
+        _, _, _, _, _) =>
+      CreateTableHelper.lowerCreateTableLike(c, targetIdent, sourceIdent)
 
     case dropTable @ DropTable(_: ResolvedIdentifier, _, _) =>
       DropTableHelper.rewrite(dropTable)
@@ -328,13 +210,7 @@ class ResolveSessionCatalog(val catalogManager: CatalogManager)
       ViewCommandHelper.rewrite(dropView)
 
     case c @ CreateNamespace(DatabaseNameInSessionCatalog(name), _, _) if conf.useV1Command =>
-      val comment = c.properties.get(SupportsNamespaces.PROP_COMMENT)
-      val location = c.properties.get(SupportsNamespaces.PROP_LOCATION)
-      val newProperties = c.properties -- CatalogV2Util.NAMESPACE_RESERVED_PROPERTIES
-      if (location.exists(SparkStringUtils.isBlank)) {
-        throw QueryExecutionErrors.invalidEmptyLocationError(location.get)
-      }
-      CreateDatabaseCommand(name, c.ifNotExists, location, comment, newProperties)
+      NamespaceCommandHelper.lowerCreateNamespace(c, name)
 
     case d @ DropNamespace(ResolvedV1Database(db), _, _) if conf.useV1Command =>
       DropDatabaseCommand(db, d.ifExists, d.cascade)
@@ -656,36 +532,5 @@ class ResolveSessionCatalog(val catalogManager: CatalogManager)
 
   private object CreateFunctionInSessionCatalog
     extends ResolvedIdentifierInSessionCatalog("CREATE", "FUNCTION")
-
-  /**
-   * Validates and constant-folds a column default value expression for V1 tables.
-   * Populates both CURRENT_DEFAULT and EXISTS_DEFAULT in the metadata builder.
-   */
-  private def addDefaultValueMetadata(
-      builder: MetadataBuilder,
-      defaultValue: DefaultValueExpression,
-      colName: String,
-      colType: DataType,
-      statementType: String): Unit = {
-    val existsDefaultSQL = constantFoldDefaultValue(defaultValue, colName, colType, statementType)
-    builder.putExpression(
-      DefaultCols.CURRENT_DEFAULT_COLUMN_METADATA_KEY, defaultValue.originalSQL,
-      Some(defaultValue.child))
-    builder.putString(DefaultCols.EXISTS_DEFAULT_COLUMN_METADATA_KEY, existsDefaultSQL)
-  }
-
-  // True when the ALTER COLUMN specs only change comments (set or drop, no type / nullability /
-  // position / default changes) and, taken together, touch multiple columns or a nested field.
-  // Such changes come from `COMMENT ON TABLE ... COLUMN (...)` and cannot be expressed by the
-  // single-column, top-level-only V1 `AlterTableChangeColumnCommand`, so they are handled by the
-  // dedicated `AlterTableChangeColumnCommentsCommand` instead.
-  private def isMultiOrNestedCommentOnly(specs: Seq[AlterColumnSpec]): Boolean = {
-    val commentOnly = specs.forall { s =>
-      (s.newComment.isDefined || s.dropComment) &&
-        s.newDataType.isEmpty && s.newNullability.isEmpty && s.newPosition.isEmpty &&
-        s.newDefaultExpression.isEmpty && !s.dropDefault
-    }
-    commentOnly && (specs.size > 1 || specs.exists(_.column.name.length > 1))
-  }
 
 }

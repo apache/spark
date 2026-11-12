@@ -24,6 +24,7 @@ import java.util.function.BooleanSupplier
 import javax.annotation.concurrent.GuardedBy
 
 import scala.collection.mutable
+import scala.collection.mutable.ArrayBuffer
 import scala.jdk.CollectionConverters._
 import scala.reflect.{classTag, ClassTag}
 import scala.util.control.NonFatal
@@ -40,6 +41,7 @@ import org.apache.arrow.vector.types.pojo.{ArrowType, Field, Schema}
 import org.apache.spark.{SparkContext, SparkException, SparkThrowable, SparkUnsupportedOperationException, TaskContext}
 import org.apache.spark.broadcast.Broadcast
 import org.apache.spark.internal.Logging
+import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.classic.SparkSession
 import org.apache.spark.sql.connector.catalog.TableCapability
 import org.apache.spark.sql.connector.catalog.TableCapability.{BATCH_READ, BATCH_WRITE, MICRO_BATCH_READ, STREAMING_WRITE, TRUNCATE}
@@ -47,7 +49,8 @@ import org.apache.spark.sql.connector.read.{InputPartition, PartitionReader, Par
 import org.apache.spark.sql.connector.read.streaming.{ReadAllAvailable, ReadLimit, ReadMaxRows}
 import org.apache.spark.sql.connector.write.{DataWriter, WriterCommitMessage}
 import org.apache.spark.sql.errors.{QueryCompilationErrors, QueryExecutionErrors}
-import org.apache.spark.sql.execution.datasources.v2.columnar.{ColumnarBatchPlanner, ColumnarDataSource, ColumnarOnlyPartitionReaderFactory, ColumnarPlannedBatch, ColumnarStreamReader, ColumnarStreamWriter, ColumnarWriter}
+import org.apache.spark.sql.execution.arrow.ArrowWriter
+import org.apache.spark.sql.execution.datasources.v2.columnar.{ColumnarBatchPlanner, ColumnarDataSource, ColumnarOnlyPartitionReaderFactory, ColumnarPlannedBatch, ColumnarStreamReader, ColumnarStreamWriter, ColumnarWriter, ColumnDomain}
 import org.apache.spark.sql.execution.vectorized.ReusedArrowColumnVector
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
@@ -102,6 +105,11 @@ class NativeDataSource(
     }
     capabilities
   }
+
+  // A library built against a header without push_domains has a table that ends before it: Spark
+  // then neither derives the domains of a scan nor creates its reader to push them down.
+  override def supportsDomainPushdown(): Boolean =
+    NativeLibraries.get(location).hasFunction(NativeLibrary.Function.PUSH_DOMAINS)
 
   // The readers and the writers export the schemas with the time zone of the session on the
   // driver, also on the executors, where they pass the same schemas to the library again. A data
@@ -159,12 +167,14 @@ class NativeDataSource(
       queryId: String): ColumnarStreamWriter = {
     val executorLocation = NativeDataSourceRegistry.distribute(location)
     val library = NativeLibraries.get(location)
+    // The previous stream writer of the query is closed before create_writer, which may wait for
+    // it to release its destination.
+    NativeStreamWriters.closePrevious(queryId)
     val created = createWriter(library, schema, overwrite, queryId)
     val handle = new NativeHandle(created.handle, library.closeWriter)
-    val writer = new NativeDataSourceStreamWriter(
-      executorLocation, name, schema, timeZoneId, handle, bytesOrEmpty(Option(created.state)))
     NativeStreamWriters.register(queryId, handle)
-    writer
+    new NativeDataSourceStreamWriter(
+      executorLocation, name, schema, timeZoneId, handle, bytesOrEmpty(Option(created.state)))
   }
 
   /** Runs `f` with a new native data source, which is closed afterwards. */
@@ -277,6 +287,15 @@ class NativeBatchPlanner(
   import NativeCalls._
 
   private var readSchema: StructType = schema
+
+  // Only called when the library has push_domains, see NativeDataSource.supportsDomainPushdown.
+  override def pushDomains(domains: Seq[ColumnDomain]): Seq[Boolean] = {
+    call(name, "plan a scan of") {
+      NativeArrow.exportDomains(domains, timeZoneId) { exported =>
+        library.pushDomains(handle.get, exported.toArray).toSeq
+      }
+    }
+  }
 
   override def pushLimit(limit: Int): Boolean = {
     call(name, "plan a scan of")(optional(library.pushLimit(handle.get, limit))).getOrElse(false)
@@ -534,27 +553,19 @@ class NativeDataSourceWriter(
   }
 
   override def commit(messages: Array[WriterCommitMessage]): Unit = {
-    call(name, "commit a write to") {
-      library.commit(handle.get, -1L, NativeWriterCommitMessage.toBytes(messages))
-    }
-    // Not closed if the commit fails: Spark then aborts the write, which closes it. Spark does
-    // not abort a committed write, see ColumnarBatchWrite.
-    handle.close()
+    commitWrite(library, name, handle, -1L, messages)
   }
 
   override def abort(messages: Array[WriterCommitMessage]): Unit = {
-    Utils.tryWithSafeFinally {
-      call(name, "abort a write to") {
-        library.abort(handle.get, -1L, NativeWriterCommitMessage.toBytes(messages))
-      }
-    }(handle.close())
+    abortWrite(library, name, handle, -1L, messages)
   }
 }
 
 /**
- * Writes to a native data source for a streaming write. Its handle is closed when the streaming
- * query creates its next stream writer, or, for the last stream writer of the query, once the
- * handle becomes unreachable, see [[NativeStreamWriters]].
+ * Writes to a native data source for a streaming write, one micro-batch. As for a batch write, its
+ * handle is closed once the micro-batch is committed or aborted. A stream writer that is neither
+ * committed nor aborted is closed before the streaming query creates its next stream writer, or
+ * once the handle becomes unreachable, see [[NativeStreamWriters]].
  */
 class NativeDataSourceStreamWriter(
     location: NativeLibraryLocation,
@@ -576,17 +587,12 @@ class NativeDataSourceStreamWriter(
       location, name, schema, timeZoneId, writerState, partitionId, taskId, epochId)
   }
 
-  // Spark does not abort a committed micro-batch, see ColumnarStreamingWrite.
   override def commit(epochId: Long, messages: Array[WriterCommitMessage]): Unit = {
-    call(name, "commit a write to") {
-      library.commit(handle.get, epochId, NativeWriterCommitMessage.toBytes(messages))
-    }
+    commitWrite(library, name, handle, epochId, messages)
   }
 
   override def abort(epochId: Long, messages: Array[WriterCommitMessage]): Unit = {
-    call(name, "abort a write to") {
-      library.abort(handle.get, epochId, NativeWriterCommitMessage.toBytes(messages))
-    }
+    abortWrite(library, name, handle, epochId, messages)
   }
 }
 
@@ -1395,22 +1401,30 @@ object NativeHandle extends Logging {
 }
 
 /**
- * The stream writers of the streaming queries, by query ID. The Data Source V2 streaming write
- * has no hook for when the query stops, but a micro-batch streaming query creates a new stream
- * writer for each micro-batch, after the previous micro-batch committed or aborted its write, and
- * a restarted query creates a new one. So the previous stream writer of a query is closed when
- * the query creates a new one, and the last one when it becomes unreachable.
+ * The stream writers of the streaming queries, by query ID, to close those that are neither
+ * committed nor aborted: a stream writer closes its handle once its micro-batch is committed or
+ * aborted. The Data Source V2 streaming write has no hook for when the query stops, but a
+ * micro-batch streaming query creates a new stream writer for each micro-batch, and a restarted
+ * query creates a new one. So a previous stream writer of a query that is still open is closed
+ * before the query creates a new one, and the last one when it becomes unreachable.
  */
 object NativeStreamWriters {
   // Weak, so that the last stream writer of a query can still become unreachable.
   private val writers = new ConcurrentHashMap[String, WeakReference[NativeHandle]]()
 
-  /** Registers the new stream writer of the query, and closes its previous one. */
-  def register(queryId: String, handle: NativeHandle): Unit = {
-    // Forgets the queries whose last stream writer was released.
+  /**
+   * Closes the previous stream writer of the query, before the query creates a new one. This has
+   * no effect if that one is already closed.
+   */
+  def closePrevious(queryId: String): Unit = {
+    // Forgets the queries whose last stream writer became unreachable.
     writers.values().removeIf(_.get() == null)
-    Option(writers.put(queryId, new WeakReference(handle))).flatMap(r => Option(r.get()))
-      .foreach(_.close())
+    Option(writers.remove(queryId)).flatMap(r => Option(r.get())).foreach(_.close())
+  }
+
+  /** Registers the new stream writer of the query. */
+  def register(queryId: String, handle: NativeHandle): Unit = {
+    writers.put(queryId, new WeakReference(handle))
   }
 }
 
@@ -1459,6 +1473,41 @@ object NativeCalls {
 
   def bytesOrEmpty(bytes: Option[Array[Byte]]): Array[Byte] = {
     bytes.flatMap(Option(_)).getOrElse(Array.emptyByteArray)
+  }
+
+  /**
+   * Commits the write of a writer, for the epoch of a micro-batch or -1 for a batch write, and
+   * closes the writer. It is not closed if the commit fails: Spark then aborts the write, which
+   * closes it. Spark does not abort a committed write, see ColumnarBatchWrite and
+   * ColumnarStreamingWrite.
+   */
+  def commitWrite(
+      library: NativeLibrary,
+      name: String,
+      handle: NativeHandle,
+      epochId: Long,
+      messages: Array[WriterCommitMessage]): Unit = {
+    call(name, "commit a write to") {
+      library.commit(handle.get, epochId, NativeWriterCommitMessage.toBytes(messages))
+    }
+    handle.close()
+  }
+
+  /**
+   * Aborts the write of a writer, for the epoch of a micro-batch or -1 for a batch write, and
+   * closes the writer, also if the abort fails.
+   */
+  def abortWrite(
+      library: NativeLibrary,
+      name: String,
+      handle: NativeHandle,
+      epochId: Long,
+      messages: Array[WriterCommitMessage]): Unit = {
+    Utils.tryWithSafeFinally {
+      call(name, "abort a write to") {
+        library.abort(handle.get, epochId, NativeWriterCommitMessage.toBytes(messages))
+      }
+    }(handle.close())
   }
 }
 
@@ -1513,6 +1562,55 @@ object NativeArrow {
       // Releases the schema unless the library moved it to take ownership.
       struct.release()
       struct.close()
+    }
+  }
+
+  /**
+   * Exports the domains, with their ranges as struct arrays whose fields are low and high, of the
+   * Arrow type of the column in the schema that the reader got from create_reader, and
+   * low_inclusive and high_inclusive, and calls `f` with them.
+   *
+   * @param timeZoneId the time zone of the timestamps of the schema that the reader got
+   */
+  def exportDomains[T](domains: Seq[ColumnDomain], timeZoneId: String)(
+      f: Seq[NativeLibrary.Domain] => T): T = {
+    // Frees what was allocated, in the reverse order, also when a later allocation fails.
+    val cleanups = ArrayBuffer.empty[() => Unit]
+    try {
+      val structs = domains.map { domain =>
+        val (ranges, rangesSchema) = domain.ranges match {
+          case None => (0L, 0L)
+          case Some(values) =>
+            val schema = StructType(Seq(
+              StructField("low", domain.dataType),
+              StructField("high", domain.dataType),
+              StructField("low_inclusive", BooleanType, nullable = false),
+              StructField("high_inclusive", BooleanType, nullable = false)))
+            val root = VectorSchemaRoot.create(
+              ArrowUtils.toArrowSchema(
+                schema, timeZoneId, errorOnDuplicatedFieldNames = true, largeVarTypes = false),
+              ArrowUtils.rootAllocator)
+            cleanups += (() => root.close())
+            // Releasing the ranges does nothing if the library moved them to take ownership.
+            val array = ArrowArray.allocateNew(ArrowUtils.rootAllocator)
+            cleanups += { () => array.release(); array.close() }
+            val arrowSchema = ArrowSchema.allocateNew(ArrowUtils.rootAllocator)
+            cleanups += { () => arrowSchema.release(); arrowSchema.close() }
+            val writer = ArrowWriter.create(root)
+            values.foreach { range =>
+              writer.write(InternalRow(range.low.orNull, range.high.orNull, range.lowInclusive,
+                range.highInclusive))
+            }
+            writer.finish()
+            Data.exportVectorSchemaRoot(ArrowUtils.rootAllocator, root, null, array, arrowSchema)
+            (array.memoryAddress(), arrowSchema.memoryAddress())
+        }
+        new NativeLibrary.Domain(
+          domain.path.toArray, domain.nullAllowed, domain.nanAllowed, ranges, rangesSchema)
+      }
+      f(structs)
+    } finally {
+      cleanups.reverseIterator.foreach(cleanup => cleanup())
     }
   }
 

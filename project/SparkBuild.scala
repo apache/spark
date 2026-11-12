@@ -254,7 +254,7 @@ object SparkBuild extends PomBuild {
   // `(Compile / compile)` -- a violation in one module would otherwise abort
   // compile for that module and every transitive dependent, cascading style
   // failures into every job that recompiles those sources (Build modules,
-  // Documentation generation, Java 17/25 Maven build, sparkr, ...). Each
+  // Documentation generation, Java 21/25 Maven build, sparkr, ...). Each
   // cascaded job then surfaces only a generic "exit code 1" with no file/line.
   // After decoupling, the dedicated lint job is the single place style
   // violations surface, with file/line annotations from `dev/scalastyle`.
