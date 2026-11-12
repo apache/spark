@@ -957,7 +957,7 @@ class FilterPushdownSuite extends PlanTest {
       .analyze
 
     // t is not computed with f, so the UDF the two share runs in the layer of f and again in the
-    // layer of t.
+    // layer of t. Running it only once is the subject of SPARK-61515.
     val udfProjects = Optimize.execute(originalQuery).collect {
       case p: Project if p.projectList.exists(_.exists(_.isInstanceOf[PythonUDF])) => p
     }

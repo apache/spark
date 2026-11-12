@@ -3070,7 +3070,9 @@ object PushPredicateThroughNonJoin extends Rule[LogicalPlan] with PredicateHelpe
    *    shared part then runs twice, a cost whole-stage codegen does not remove. When whole-stage
    *    codegen covers the operator, it already defers the alias past the filter (see above), so
    *    the exception only costs the second run; but the optimizer cannot know in advance that
-   *    codegen will cover it, even with whole-stage codegen enabled.
+   *    codegen will cover it, even with whole-stage codegen enabled. Computing the shared part
+   *    only once for such a throwable alias, when the alias sharing it evaluates it
+   *    unconditionally, is the subject of SPARK-61515.
    *
    * The conditions from the first one that needs every expensive alias not computed yet
    * (counting the aliases that are not throwable and share expensive work with the ones it
@@ -3115,6 +3117,12 @@ object PushPredicateThroughNonJoin extends Rule[LogicalPlan] with PredicateHelpe
     // A throwable alias is not pulled into the unit of an alias it shares work with, so it is
     // not computed ahead of the first condition that reads it, even when that evaluates the
     // shared part twice. It still pulls in the aliases that are not throwable.
+    // TODO(SPARK-61515): Compute the shared part only once, e.g. by having the layer that computes
+    // the alias sharing it also output the shared part as a column (unless that alias is the
+    // shared part itself), for the throwable alias, computed in a later layer or on top, to read.
+    // That is only valid when that alias evaluates the shared part unconditionally, not only in
+    // some branches or inside a lambda; otherwise keep the second run, as the part would run, and
+    // could fail, on rows it does not run on now.
     val aliasesSharing = expensivePartsOf.toSeq
       .filterNot { case (attr, _) => aliasMap(attr).child.throwable }
       .flatMap { case (attr, parts) => parts.map(part => part -> attr) }

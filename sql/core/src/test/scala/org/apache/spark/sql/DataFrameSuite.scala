@@ -3058,32 +3058,41 @@ class DataFrameSuite extends SharedSparkSession
     }
   }
 
-
-  test("SPARK-60731: a throwable alias sharing work with an earlier condition's alias is not " +
-    "computed ahead of its first reader") {
-    // t shares gt5 with f, but is not computed with f, so without codegen it does not raise on
-    // the rows f drops. With the split off, the single interpreted projection computes it on
-    // every row and raises.
-    val gt5 = udf((i: Long) => i > 5)
-    def query(): DataFrame = spark.range(0, 10, 1, 1)
+  test("SPARK-60731: a throwable alias sharing work with an earlier condition's alias is " +
+    "computed above that condition's filter") {
+    // t shares gt5 with f, but is not computed with f: with the split on, it is computed above
+    // the filter on f, in the layer of its reader or, when no condition reads it, in the
+    // projection on top, so without codegen it does not raise on the rows f drops. With the split
+    // off, the single interpreted projection computes it on every row and raises.
+    val gt5Calls = sparkContext.longAccumulator("gt5Calls")
+    val gt5 = udf((i: Long) => {
+      gt5Calls.add(1)
+      i > 5
+    })
+    def query(readsT: Boolean): DataFrame = spark.range(0, 10, 1, 1)
       .select($"id", gt5($"id") as "f",
         when(gt5($"id"), lit(true)).otherwise(raise_error(lit("boom")).isNull) as "t")
-      .where($"f" && $"t")
-    for (split <- Seq(true, false)) {
+      .where(if (readsT) $"f" && $"t" else $"f")
+    for (readsT <- Seq(true, false); codegen <- Seq(true, false); split <- Seq(true, false)) {
       withSQLConf(
-        SQLConf.WHOLESTAGE_CODEGEN_ENABLED.key -> "false",
+        SQLConf.WHOLESTAGE_CODEGEN_ENABLED.key -> codegen.toString,
         SQLConf.SPLIT_PROJECTION_FOR_EXPENSIVE_FILTERS.key -> split.toString) {
-        if (split) {
-          assert(query().collect().toSeq === (6L until 10L).map(i => Row(i, true, true)))
+        gt5Calls.reset()
+        if (codegen || split) {
+          assert(query(readsT).collect().toSeq === (6L until 10L).map(i => Row(i, true, true)))
+          // With the split, gt5 runs for f on every row and again for t on the rows f keeps,
+          // also with codegen. Computing it only once is the subject of SPARK-61515.
+          if (split) assert(gt5Calls.value === 14)
         } else {
           checkError(
-            exception = intercept[SparkRuntimeException](query().collect()),
+            exception = intercept[SparkRuntimeException](query(readsT).collect()),
             condition = "USER_RAISED_EXCEPTION",
             parameters = Map("errorMessage" -> "boom"))
         }
       }
     }
   }
+
   test("SPARK-60633: a throwable filter condition is not pushed through an operator ahead of " +
     "its order") {
     def df: DataFrame = spark.range(0, 10, 1, 1).toDF()
