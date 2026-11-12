@@ -89,10 +89,11 @@ jobs:
           export JAVA_VERSION=${{ inputs.java }}
           ./build/mvn $MAVEN_CLI_OPTS -DskipTests -Pyarn -Pkubernetes -Pvolcano -Phive -Phive-thriftserver -Phadoop-cloud -Pjvm-profiler -Pspark-ganglia-lgpl -Pkinesis-asl -Pcredential-aws -Djava.version=${JAVA_VERSION/-ea} clean install
       - name: Package compile output
+        shell: bash
         run: |
-          # Exclude assembly/ from the artifact: 11 of 12 matrix entries wipe it
-          # right after extraction (SPARK-51628 regression-test-for-SPARK-51600),
-          # and the connect entry rebuilds it via `mvn install -pl assembly`.
+          # Exclude assembly/ to preserve SPARK-51628 regression coverage of the
+          # SPARK-51600 fallback when the assembly jars directory is missing.
+          # Only the Connect shard rebuilds assembly before running tests.
           find . \( -path './build' -o -path './.git' -o -path './assembly' \) -prune \
             -o -type d -name target -print0 \
             | tar --null -cf - -T - | zstd -c -T0 > compile-target.tar.zst
@@ -101,14 +102,27 @@ jobs:
           fi
           ls -lh compile-target.tar.zst compile-m2-spark.tar.zst
       - name: Upload compile artifact
+        id: upload-compile
+        continue-on-error: true
         uses: actions/upload-artifact@v7
         with:
           name: spark-maven-compile-${{ inputs.branch }}-java${{ inputs.java }}-${{ github.run_id }}
           path: |
             compile-target.tar.zst
             compile-m2-spark.tar.zst
-          retention-days: 1
+          retention-days: 7
           if-no-files-found: error
+      - name: Retry compile artifact upload
+        if: steps.upload-compile.outcome == 'failure'
+        uses: actions/upload-artifact@v7
+        with:
+          name: spark-maven-compile-${{ inputs.branch }}-java${{ inputs.java }}-${{ github.run_id }}
+          path: |
+            compile-target.tar.zst
+            compile-m2-spark.tar.zst
+          retention-days: 7
+          if-no-files-found: error
+          overwrite: true
 
   # Build: build Spark and run the tests for specified modules using maven
   build:
@@ -191,8 +205,7 @@ jobs:
       - name: Checkout and sync Spark repository
         uses: ./.github/actions/checkout-and-sync
         with:
-          # Fall back to the branch when the precompile job failed before resolving the SHA.
-          ref: ${{ needs.precompile-maven.outputs.head_sha || inputs.branch }}
+          ref: ${{ needs.precompile-maven.outputs.head_sha }}
       - name: Setup build environment
         uses: ./.github/actions/setup-build-env
         with:
@@ -214,12 +227,11 @@ jobs:
           python3.12 -m pip install 'numpy>=1.23.2' pyarrow 'pandas==2.3.3' pyyaml scipy unittest-xml-reporting 'grpcio==1.84.1' 'grpcio-status==1.84.1' 'protobuf==6.33.5' 'zstandard==0.25.0'
           python3.12 -m pip list
       - name: Download precompiled artifact
-        id: download-precompiled
         uses: actions/download-artifact@v8
         with:
           name: spark-maven-compile-${{ inputs.branch }}-java${{ matrix.java }}-${{ github.run_id }}
       - name: Extract precompiled artifact
-        id: extract-precompiled
+        shell: bash
         run: |
           zstd -dc compile-target.tar.zst | tar -xf -
           rm compile-target.tar.zst
@@ -248,17 +260,11 @@ jobs:
           # Replace with the real module name, for example, connector#kafka-0-10 -> connector/kafka-0-10
           export TEST_MODULES=`echo "$MODULES_TO_TEST" | sed -e "s%#%/%g"`
           echo "Reusing precompiled artifact, skipping local Maven clean install."
-          # SPARK-51628 regression coverage is naturally preserved on the reuse
-          # path: the precompile artifact excludes assembly/, so non-connect
-          # tests already run with the assembly module's jars dir missing.
-          # Connect tests strongly depend on a built assembly module; rebuild
-          # it here.
+          # The artifact excludes assembly/ for SPARK-51628 regression coverage.
+          # Connect tests require a built assembly module; rebuild it here.
           if [ "$MODULES_TO_TEST" = "connect" ]; then
             echo "Building assembly module for connect tests."
-            ./build/mvn $MAVEN_CLI_OPTS -DskipTests -Pyarn -Pkubernetes -Pvolcano -Phive \
-              -Phive-thriftserver -Phadoop-cloud -Pjvm-profiler -Pspark-ganglia-lgpl \
-              -Pkinesis-asl -Pcredential-aws -Djava.version=${JAVA_VERSION/-ea} -pl assembly \
-              install
+            ./build/mvn $MAVEN_CLI_OPTS -DskipTests -Pyarn -Pkubernetes -Pvolcano -Phive -Phive-thriftserver -Phadoop-cloud -Pjvm-profiler -Pspark-ganglia-lgpl -Pkinesis-asl -Pcredential-aws -Djava.version=${JAVA_VERSION/-ea} -pl assembly install
           fi
 
           if [[ "$INCLUDED_TAGS" != "" ]]; then
