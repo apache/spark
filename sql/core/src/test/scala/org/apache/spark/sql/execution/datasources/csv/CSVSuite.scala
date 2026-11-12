@@ -1667,6 +1667,30 @@ abstract class CSVSuite
     }
   }
 
+  test("SPARK-59629: the legacy flag restores exact matching of the corrupt record column") {
+    val malformed = "0,2013-111_11 12:13:14"
+    val schema = new StructType()
+      .add("a", IntegerType)
+      .add("b", DateType)
+      .add("_UNPARSED", StringType)
+    val date = java.sql.Date.valueOf("1983-08-04")
+    withTempPath { dir =>
+      val path = dir.getCanonicalPath
+      Seq(malformed, "1,1983-08-04").toDF("value").write.text(path)
+      val reader = spark.read.option("columnNameOfCorruptRecord", "_unparsed").schema(schema)
+      val reads = Seq(
+        () => reader.csv(path),
+        () => reader.csv(spark.read.text(path).as[String]))
+      reads.foreach { read =>
+        checkAnswer(read(), Row(0, null, malformed) :: Row(1, date, null) :: Nil)
+        // With the flag `_UNPARSED` is an ordinary data column, as it was before.
+        withSQLConf(SQLConf.LEGACY_COLUMN_NAME_OF_CORRUPT_RECORD_EXACT_MATCH.key -> "true") {
+          checkAnswer(read(), Row(0, null, null) :: Row(1, date, null) :: Nil)
+        }
+      }
+    }
+  }
+
   test("Enabling/disabling ignoreCorruptFiles/ignoreMissingFiles") {
     withCorruptFile(inputFile => {
       withSQLConf(SQLConf.IGNORE_CORRUPT_FILES.key -> "false") {

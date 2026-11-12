@@ -163,6 +163,8 @@ case class XmlToStructsEvaluator(
           new XmlOptions(options, timeZoneId.get, nameOfCorruptRecord, rootVariantType = true))
       case _ =>
         val s = nullableSchema.asInstanceOf[StructType]
+        // TODO: XML matches `columnNameOfCorruptRecord` exactly. Resolve it with
+        // `ExprUtils.resolveColumnNameOfCorruptRecord`, as `from_csv` and `from_json` do.
         ExprUtils.verifyColumnNameOfCorruptRecord(s, parsedOptions.columnNameOfCorruptRecord)
         (s, parsedOptions)
     }

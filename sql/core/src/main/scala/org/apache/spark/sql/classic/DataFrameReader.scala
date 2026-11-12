@@ -186,8 +186,12 @@ class DataFrameReader private[sql](sparkSession: SparkSession)
     // Resolve the corrupt record column once, here on the driver, also checking its type. The
     // options used from here on carry the resolved name, so every later comparison, including
     // the ones on executors, is exact.
-    val readOptions = jsonOptions(ExprUtils.withResolvedColumnNameOfCorruptRecord(
-      extraOptions.toMap, schema, parsedOptions.columnNameOfCorruptRecord))
+    val rawOptions = extraOptions.toMap
+    val resolvedOptions = ExprUtils.withResolvedColumnNameOfCorruptRecord(
+      rawOptions, schema, parsedOptions.columnNameOfCorruptRecord,
+      sparkSession.sessionState.conf.columnNameOfCorruptRecordExactMatch)
+    val readOptions =
+      if (resolvedOptions eq rawOptions) parsedOptions else jsonOptions(resolvedOptions)
     val actualSchema =
       StructType(schema.filterNot(_.name == readOptions.columnNameOfCorruptRecord))
 
@@ -245,8 +249,12 @@ class DataFrameReader private[sql](sparkSession: SparkSession)
     // Resolve the corrupt record column once, here on the driver, also checking its type. The
     // options used from here on carry the resolved name, so every later comparison, including
     // the ones on executors, is exact.
-    val readOptions = csvOptions(ExprUtils.withResolvedColumnNameOfCorruptRecord(
-      extraOptions.toMap, schema, parsedOptions.columnNameOfCorruptRecord))
+    val rawOptions = extraOptions.toMap
+    val resolvedOptions = ExprUtils.withResolvedColumnNameOfCorruptRecord(
+      rawOptions, schema, parsedOptions.columnNameOfCorruptRecord,
+      sparkSession.sessionState.conf.columnNameOfCorruptRecordExactMatch)
+    val readOptions =
+      if (resolvedOptions eq rawOptions) parsedOptions else csvOptions(resolvedOptions)
     val actualSchema =
       StructType(schema.filterNot(_.name == readOptions.columnNameOfCorruptRecord))
 

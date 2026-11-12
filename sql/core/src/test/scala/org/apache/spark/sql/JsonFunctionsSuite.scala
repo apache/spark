@@ -1907,7 +1907,68 @@ class JsonFunctionsSuite extends SharedSparkSession {
 
         // Under case-sensitive resolution the variant is an ordinary field, absent from the input.
         withSQLConf(SQLConf.CASE_SENSITIVE.key -> "true") {
-          checkAnswer(df.selectExpr("p._CORRUPT_RECORD"), Row(null) :: Row(null) :: Nil)
+          checkAnswer(
+            parsed("_CORRUPT_RECORD string, a int").selectExpr("p._CORRUPT_RECORD"),
+            Row(null) :: Row(null) :: Nil)
+        }
+      }
+    }
+  }
+
+  test("SPARK-59629: from_json decides the corrupt record column when it is analyzed") {
+    def parsed(): DataFrame =
+      sparkContext.parallelize(Seq("""{"_CORRUPT_RECORD": "x", "a": 1}"""))
+        .toDF("value")
+        .selectExpr("from_json(value, '_CORRUPT_RECORD string, a int') as p")
+    // `_CORRUPT_RECORD` as data holds the record's value. As the corrupt record column it is
+    // not read from this well-formed record.
+    val asData = Row(Row("x", 1)) :: Nil
+    val asCorruptRecord = Row(Row(null, 1)) :: Nil
+
+    Seq(
+      SQLConf.CASE_SENSITIVE.key,
+      SQLConf.LEGACY_COLUMN_NAME_OF_CORRUPT_RECORD_EXACT_MATCH.key).foreach { exactMatchConf =>
+      withSQLConf(exactMatchConf -> "true") {
+        val df = parsed()
+        checkAnswer(df, asData)
+        // A `Dataset.rdd` action runs its tasks without the session's SQL configuration.
+        assert(df.rdd.collect().toSeq === asData)
+        // The extraction is pruned as the ordinary field it is.
+        checkAnswer(df.selectExpr("p._CORRUPT_RECORD"), Row("x") :: Nil)
+        assert(df.selectExpr("p._CORRUPT_RECORD").rdd.collect().toSeq === Row("x") :: Nil)
+      }
+
+      // The setting in force when the plan is analyzed decides, not the one at execution.
+      val exact = withSQLConf(exactMatchConf -> "true")(parsed())
+      assert(exact.collect().toSeq === asData)
+      val caseInsensitive = parsed()
+      withSQLConf(exactMatchConf -> "true") {
+        assert(caseInsensitive.collect().toSeq === asCorruptRecord)
+      }
+    }
+    assert(parsed().rdd.collect().toSeq === asCorruptRecord)
+  }
+
+  test("SPARK-59629: json pruning keeps a case variant beside an exact corrupt record column") {
+    withTempView("t") {
+      // A non-local input, so that the pruning rule sees the extraction below.
+      sparkContext.parallelize(Seq("""{"_CORRUPT_RECORD": "v", "a": 1}"""))
+        .toDF("value")
+        .createOrReplaceTempView("t")
+      Seq("true", "false").foreach { enabled =>
+        withSQLConf(SQLConf.JSON_EXPRESSION_OPTIMIZATION.key -> enabled) {
+          // With `_corrupt_record` in the schema, `_CORRUPT_RECORD` is an ordinary data field.
+          // Pruning the schema to it alone would make it the corrupt record column.
+          checkAnswer(
+            sql(
+              """
+                |SELECT c FROM (
+                |  SELECT p.* FROM (
+                |    SELECT from_json(
+                |      value, '_corrupt_record STRING, _CORRUPT_RECORD STRING, a INT') AS p
+                |    FROM t)) AS x(r, c, a)
+              """.stripMargin),
+            Row("v") :: Nil)
         }
       }
     }

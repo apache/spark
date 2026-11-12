@@ -3877,22 +3877,23 @@ class XmlSuite
 
   test("SPARK-59629: a case variant of the corrupt record column stays a data column") {
     // XML still matches `columnNameOfCorruptRecord` exactly, so `_CORRUPT_RECORD` is ordinary
-    // data here and the fields after it keep their values.
+    // data here: it keeps the value the record carries for it, and the fields after it keep
+    // theirs.
     val schema = "a STRING, _CORRUPT_RECORD STRING, b STRING"
-    val record = "<row><a>1</a><b>2</b></row>"
+    val record = "<row><a>1</a><_CORRUPT_RECORD>c</_CORRUPT_RECORD><b>2</b></row>"
     withTempDir { dir =>
       val file = new File(dir, "data.xml")
       Files.write(file.toPath, record.getBytes(StandardCharsets.UTF_8))
       checkAnswer(
         spark.read.schema(schema).option("rowTag", "row").xml(file.getCanonicalPath),
-        Row("1", null, "2") :: Nil)
+        Row("1", "c", "2") :: Nil)
     }
     checkAnswer(
       spark.read.schema(schema).option("rowTag", "row").xml(Seq(record).toDS()),
-      Row("1", null, "2") :: Nil)
+      Row("1", "c", "2") :: Nil)
     checkAnswer(
       Seq(record).toDF("value").select(from_xml($"value", StructType.fromDDL(schema))),
-      Row(Row("1", null, "2")) :: Nil)
+      Row(Row("1", "c", "2")) :: Nil)
   }
 
 }

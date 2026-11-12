@@ -128,7 +128,7 @@ Project [to_timestamp(2020-11-31-366, Some(yyyy-MM-dd-DDD), TimestampType, Some(
 -- !query
 select from_csv('2018-366', 'date Date', map('dateFormat', 'yyyy-DDD'))
 -- !query analysis
-Project [from_csv(StructField(date,DateType,true), (dateFormat,yyyy-DDD), 2018-366, Some(America/Los_Angeles), None) AS from_csv(2018-366)#x]
+Project [from_csv(StructField(date,DateType,true), (dateFormat,yyyy-DDD), 2018-366, Some(America/Los_Angeles), None, false) AS from_csv(2018-366)#x]
 +- OneRowRelation
 
 

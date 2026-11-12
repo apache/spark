@@ -72,7 +72,12 @@ case class CsvToStructs(
     options: Map[String, String],
     child: Expression,
     timeZoneId: Option[String] = None,
-    requiredSchema: Option[StructType] = None)
+    requiredSchema: Option[StructType] = None,
+    // Whether the corrupt record column is found by exact name only. It is captured here at
+    // analysis time, as the default argument, because the parser that needs it is built on an
+    // executor, where the session's settings are not reliably visible, and because the
+    // optimizer's pruning has to decide with the same value as that parser.
+    corruptRecordExactMatch: Boolean = SQLConf.get.columnNameOfCorruptRecordExactMatch)
   extends UnaryExpression
   with TimeZoneAwareExpression
   with ExpectsInputTypes {
@@ -117,7 +122,8 @@ case class CsvToStructs(
 
   @transient
   private lazy val evaluator: CsvToStructsEvaluator = CsvToStructsEvaluator(
-    options, nullableSchema, nameOfCorruptRecord, timeZoneId, requiredSchema)
+    options, nullableSchema, nameOfCorruptRecord, timeZoneId, requiredSchema,
+    corruptRecordExactMatch)
   override def stateful: Boolean = true
 
   override def nullSafeEval(input: Any): Any = {

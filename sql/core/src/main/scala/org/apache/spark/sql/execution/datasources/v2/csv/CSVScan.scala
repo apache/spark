@@ -72,8 +72,12 @@ case class CSVScan(
     // Resolve the corrupt record column once, here on the driver, also checking its type. The
     // options handed to the reader factory carry the resolved name, so every later comparison,
     // including the ones on executors, is exact.
-    val readOptions = csvOptions(ExprUtils.withResolvedColumnNameOfCorruptRecord(
-      options.asScala.toMap, dataSchema, parsedOptions.columnNameOfCorruptRecord))
+    val rawOptions = options.asScala.toMap
+    val resolvedOptions = ExprUtils.withResolvedColumnNameOfCorruptRecord(
+      rawOptions, dataSchema, parsedOptions.columnNameOfCorruptRecord,
+      conf.columnNameOfCorruptRecordExactMatch)
+    val readOptions =
+      if (resolvedOptions eq rawOptions) parsedOptions else csvOptions(resolvedOptions)
 
     if (readDataSchema.length == 1 &&
       readDataSchema.head.name == readOptions.columnNameOfCorruptRecord) {

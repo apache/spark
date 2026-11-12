@@ -691,6 +691,39 @@ class CsvFunctionsSuite extends SharedSparkSession {
     }
   }
 
+  test("SPARK-59629: from_csv decides the corrupt record column when it is analyzed") {
+    def parsed(): DataFrame = sparkContext.parallelize(Seq("1,x"))
+      .toDF("csv")
+      .selectExpr("from_csv(csv, 'a int, _CORRUPT_RECORD string') as parsed")
+    // `_CORRUPT_RECORD` as data holds the second token. As the corrupt record column it leaves
+    // the parser one column for two tokens, which makes the line malformed.
+    val asData = Row(Row(1, "x")) :: Nil
+    val asCorruptRecord = Row(Row(1, "1,x")) :: Nil
+
+    Seq(
+      SQLConf.CASE_SENSITIVE.key,
+      SQLConf.LEGACY_COLUMN_NAME_OF_CORRUPT_RECORD_EXACT_MATCH.key).foreach { exactMatchConf =>
+      withSQLConf(exactMatchConf -> "true") {
+        val df = parsed()
+        checkAnswer(df, asData)
+        // A `Dataset.rdd` action runs its tasks without the session's SQL configuration.
+        assert(df.rdd.collect().toSeq === asData)
+        // The extraction is pruned as the ordinary field it is.
+        checkAnswer(df.selectExpr("parsed._CORRUPT_RECORD"), Row("x") :: Nil)
+        assert(df.selectExpr("parsed._CORRUPT_RECORD").rdd.collect().toSeq === Row("x") :: Nil)
+      }
+
+      // The setting in force when the plan is analyzed decides, not the one at execution.
+      val exact = withSQLConf(exactMatchConf -> "true")(parsed())
+      assert(exact.collect().toSeq === asData)
+      val caseInsensitive = parsed()
+      withSQLConf(exactMatchConf -> "true") {
+        assert(caseInsensitive.collect().toSeq === asCorruptRecord)
+      }
+    }
+    assert(parsed().rdd.collect().toSeq === asCorruptRecord)
+  }
+
   test("SPARK-35998: Make from_csv/to_csv to handle year-month intervals properly") {
     val ymDF = Seq(Period.of(1, 2, 0)).toDF()
     Seq(

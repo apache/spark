@@ -94,9 +94,15 @@ case class JsonFileFormat() extends TextBasedFileFormat with DataSourceRegister 
     // Resolve the corrupt record column once, here on the driver, also checking its type. The
     // options carry the resolved name, so every later comparison, including the ones in the
     // parsers, is exact.
-    val parsedOptions = getJsonOptions(sparkSession,
-      ExprUtils.withResolvedColumnNameOfCorruptRecord(
-        options, dataSchema, getJsonOptions(sparkSession, options).columnNameOfCorruptRecord))
+    val initialOptions = getJsonOptions(sparkSession, options)
+    val resolvedOptions = ExprUtils.withResolvedColumnNameOfCorruptRecord(
+      options, dataSchema, initialOptions.columnNameOfCorruptRecord,
+      getSqlConf(sparkSession).columnNameOfCorruptRecordExactMatch)
+    val parsedOptions = if (resolvedOptions eq options) {
+      initialOptions
+    } else {
+      getJsonOptions(sparkSession, resolvedOptions)
+    }
     val actualSchema =
       StructType(requiredSchema.filterNot(_.name == parsedOptions.columnNameOfCorruptRecord))
 

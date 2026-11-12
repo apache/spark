@@ -120,7 +120,8 @@ case class JsonToStructsEvaluator(
     nameOfCorruptRecord: String,
     timeZoneId: Option[String],
     variantAllowDuplicateKeys: Boolean,
-    charVarcharStandardSemantics: Boolean) {
+    charVarcharStandardSemantics: Boolean,
+    corruptRecordExactMatch: Boolean) {
 
   // This converts parsed rows to the desired output by the given schema.
   @transient
@@ -141,11 +142,13 @@ case class JsonToStructsEvaluator(
       new JSONOptions(parameters, timeZoneId.get, nameOfCorruptRecord)
     // Resolve the corrupt record column once, also checking its type, and parse with options
     // that carry the resolved name, so that every comparison below is exact.
+    val initialOptions = jsonOptions(options)
     val parsedOptions = nullableSchema match {
       case s: StructType =>
-        jsonOptions(ExprUtils.withResolvedColumnNameOfCorruptRecord(
-          options, s, jsonOptions(options).columnNameOfCorruptRecord))
-      case _ => jsonOptions(options)
+        val resolvedOptions = ExprUtils.withResolvedColumnNameOfCorruptRecord(
+          options, s, initialOptions.columnNameOfCorruptRecord, corruptRecordExactMatch)
+        if (resolvedOptions eq options) initialOptions else jsonOptions(resolvedOptions)
+      case _ => initialOptions
     }
     val mode = parsedOptions.parseMode
     if (mode != PermissiveMode && mode != FailFastMode) {

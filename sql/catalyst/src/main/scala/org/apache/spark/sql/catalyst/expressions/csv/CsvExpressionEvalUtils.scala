@@ -35,7 +35,8 @@ case class CsvToStructsEvaluator(
     nullableSchema: StructType,
     nameOfCorruptRecord: String,
     timeZoneId: Option[String],
-    requiredSchema: Option[StructType]) {
+    requiredSchema: Option[StructType],
+    corruptRecordExactMatch: Boolean) {
 
   // This converts parsed rows to the desired output by the given schema.
   @transient
@@ -64,8 +65,12 @@ case class CsvToStructsEvaluator(
       defaultColumnNameOfCorruptRecord = nameOfCorruptRecord)
     // Resolve the corrupt record column once, also checking its type, and parse with options
     // that carry the resolved name, so that every comparison below is exact.
-    val parsedOptions = csvOptions(ExprUtils.withResolvedColumnNameOfCorruptRecord(
-      exprOptions, nullableSchema, csvOptions(exprOptions).columnNameOfCorruptRecord))
+    val initialOptions = csvOptions(exprOptions)
+    val resolvedOptions = ExprUtils.withResolvedColumnNameOfCorruptRecord(
+      exprOptions, nullableSchema, initialOptions.columnNameOfCorruptRecord,
+      corruptRecordExactMatch)
+    val parsedOptions =
+      if (resolvedOptions eq exprOptions) initialOptions else csvOptions(resolvedOptions)
     val mode = parsedOptions.parseMode
     if (mode != PermissiveMode && mode != FailFastMode) {
       throw QueryCompilationErrors.parseModeUnsupportedError("from_csv", mode)

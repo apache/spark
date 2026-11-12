@@ -8116,6 +8116,20 @@ object SQLConf {
       .booleanConf
       .createWithDefault(false)
 
+  val LEGACY_COLUMN_NAME_OF_CORRUPT_RECORD_EXACT_MATCH =
+    buildConf("spark.sql.legacy.columnNameOfCorruptRecord.exactMatch")
+      .internal()
+      .doc("When true, the CSV and JSON data sources and the from_csv and from_json functions " +
+        "treat a schema field as the corrupt record column only when it is named exactly like " +
+        "columnNameOfCorruptRecord, which is the behavior in Spark 4.3 and earlier. When false, " +
+        "the field is found with the case sensitivity set by spark.sql.caseSensitive, so a " +
+        "field that differs from the name only in case is the corrupt record column under " +
+        "case-insensitive resolution.")
+      .version("4.4.0")
+      .withBindingPolicy(ConfigBindingPolicy.SESSION)
+      .booleanConf
+      .createWithDefault(false)
+
   val LEGACY_UNPIVOT_USE_FIRST_VALUE_NESTED_NULLABILITY =
     buildConf("spark.sql.legacy.unpivot.useFirstValueNestedNullability")
       .internal()
@@ -10031,6 +10045,13 @@ class SQLConf extends Serializable with Logging with SqlApiConf {
   def offHeapColumnVectorEnabled: Boolean = getConf(COLUMN_VECTOR_OFFHEAP_ENABLED)
 
   def columnNameOfCorruptRecord: String = getConf(COLUMN_NAME_OF_CORRUPT_RECORD)
+
+  /**
+   * Whether the CSV and JSON readers and functions find the corrupt record column of a schema
+   * by exact name only, rather than with case-insensitive matching.
+   */
+  def columnNameOfCorruptRecordExactMatch: Boolean =
+    caseSensitiveAnalysis || getConf(LEGACY_COLUMN_NAME_OF_CORRUPT_RECORD_EXACT_MATCH)
 
   def broadcastTimeout: Long = {
     val timeoutValue = getConf(BROADCAST_TIMEOUT)

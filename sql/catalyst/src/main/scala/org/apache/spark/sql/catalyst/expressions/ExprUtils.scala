@@ -100,31 +100,35 @@ object ExprUtils extends EvalHelper with QueryErrorsBase {
   /**
    * The fields of `schema` that `columnNameOfCorruptRecord` can refer to. A field named exactly
    * like the option always wins, so a schema that already works keeps its meaning. Otherwise,
-   * under case-insensitive resolution, these are the fields the session resolver matches.
+   * unless `exactMatch` is set, these are the fields that match the name ignoring case.
    */
   private def corruptRecordCandidates(
       schema: StructType,
-      columnNameOfCorruptRecord: String): Seq[StructField] = {
+      columnNameOfCorruptRecord: String,
+      exactMatch: Boolean): Seq[StructField] = {
     if (columnNameOfCorruptRecord == null) {
       // `from_csv` holds the name in a transient field, so it reads back as null after the
       // expression is serialized. A null never names a field.
       Nil
     } else {
       val exact = schema.fields.filter(_.name == columnNameOfCorruptRecord)
-      if (exact.nonEmpty || SQLConf.get.caseSensitiveAnalysis) {
+      if (exact.nonEmpty || exactMatch) {
         exact.toSeq
       } else {
-        val resolver = SQLConf.get.resolver
-        schema.fields.filter(f => resolver(f.name, columnNameOfCorruptRecord)).toSeq
+        schema.fields.filter(_.name.equalsIgnoreCase(columnNameOfCorruptRecord)).toSeq
       }
     }
   }
 
   /**
    * Decides which field of `schema` is the corrupt record column of a CSV or JSON reader and
-   * returns that field's exact name, honouring `spark.sql.caseSensitive`. When no field matches,
-   * the name is returned unchanged. Several fields that match only ignoring case are ambiguous
-   * and are rejected.
+   * returns that field's exact name. When no field matches, the name is returned unchanged.
+   * Several fields that match only ignoring case are ambiguous and are rejected.
+   *
+   * `exactMatch` is `SQLConf.columnNameOfCorruptRecordExactMatch`, read by the caller rather
+   * than here: the readers read it from the session when they are set up on the driver, while
+   * `from_csv` and `from_json` capture it when they are analyzed, because their parsers are
+   * built on executors, where the session's value is not reliably visible.
    *
    * A reader has to make this decision once and compare field names exactly against the result
    * everywhere else, including on executors: the record parser drops the column from its schema
@@ -138,8 +142,9 @@ object ExprUtils extends EvalHelper with QueryErrorsBase {
    */
   def resolveColumnNameOfCorruptRecord(
       schema: StructType,
-      columnNameOfCorruptRecord: String): String = {
-    val candidates = corruptRecordCandidates(schema, columnNameOfCorruptRecord)
+      columnNameOfCorruptRecord: String,
+      exactMatch: Boolean): String = {
+    val candidates = corruptRecordCandidates(schema, columnNameOfCorruptRecord, exactMatch)
     val names = candidates.map(_.name).distinct
     if (names.length > 1) {
       throw QueryCompilationErrors.ambiguousColumnOrFieldError(
@@ -157,13 +162,15 @@ object ExprUtils extends EvalHelper with QueryErrorsBase {
   /**
    * Returns the reader `options` with `columnNameOfCorruptRecord` set to the name
    * [[resolveColumnNameOfCorruptRecord]] picks for `schema`, so that the options a reader hands
-   * to its parsers carry the resolved name.
+   * to its parsers carry the resolved name. When the name is already the resolved one, this
+   * returns `options` itself, which lets a caller keep the options object it has already built.
    */
   def withResolvedColumnNameOfCorruptRecord(
       options: Map[String, String],
       schema: StructType,
-      columnNameOfCorruptRecord: String): Map[String, String] = {
-    val resolved = resolveColumnNameOfCorruptRecord(schema, columnNameOfCorruptRecord)
+      columnNameOfCorruptRecord: String,
+      exactMatch: Boolean): Map[String, String] = {
+    val resolved = resolveColumnNameOfCorruptRecord(schema, columnNameOfCorruptRecord, exactMatch)
     if (resolved == columnNameOfCorruptRecord) {
       options
     } else {
@@ -174,19 +181,31 @@ object ExprUtils extends EvalHelper with QueryErrorsBase {
   /**
    * Whether the field at `ordinal` is one [[resolveColumnNameOfCorruptRecord]] can pick as the
    * corrupt record column of `schema`. Unlike the resolution this never throws, so the optimizer
-   * can use it to keep such a field from being pruned.
+   * can use it to keep such a field from being pruned. It answers without collecting the
+   * candidates, since the optimizer asks for every extraction on every pass.
    */
   def isCorruptRecordField(
       schema: StructType,
       ordinal: Int,
-      columnNameOfCorruptRecord: String): Boolean = {
+      columnNameOfCorruptRecord: String,
+      exactMatch: Boolean): Boolean = {
     val name = schema(ordinal).name
-    corruptRecordCandidates(schema, columnNameOfCorruptRecord).exists(_.name == name)
+    if (columnNameOfCorruptRecord == null) {
+      false
+    } else if (name == columnNameOfCorruptRecord) {
+      true
+    } else if (exactMatch || !name.equalsIgnoreCase(columnNameOfCorruptRecord)) {
+      false
+    } else {
+      // A case variant counts only while no field is named exactly like the option.
+      !schema.fields.exists(_.name == columnNameOfCorruptRecord)
+    }
   }
 
   /**
-   * A convenient function for schema validation in datasources supporting
-   * `columnNameOfCorruptRecord` as an option.
+   * Checks that the field of `schema` named exactly `columnNameOfCorruptRecord`, if there is
+   * one, is a nullable string. This matches the name exactly and serves the XML paths, which do
+   * not resolve the corrupt record column with [[resolveColumnNameOfCorruptRecord]] yet.
    */
   def verifyColumnNameOfCorruptRecord(
       schema: StructType,

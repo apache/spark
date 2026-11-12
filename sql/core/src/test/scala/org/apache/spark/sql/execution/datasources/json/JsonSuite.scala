@@ -2760,6 +2760,40 @@ abstract class JsonSuite
     }
   }
 
+  test("SPARK-59629: the legacy flag restores exact matching of the corrupt record column") {
+    val malformed = """{"a": 2, """
+    val schema = new StructType().add("_UNPARSED", StringType).add("a", IntegerType)
+    withTempPath { dir =>
+      val path = dir.getCanonicalPath
+      Seq("""{"a": 1, "_UNPARSED": "x"}""", malformed).toDF("value").write.text(path)
+      val reader = spark.read.option("columnNameOfCorruptRecord", "_unparsed").schema(schema)
+      val reads = Seq(
+        () => reader.json(path),
+        () => reader.json(spark.read.text(path).as[String]))
+      reads.foreach { read =>
+        // By default `_UNPARSED` is the corrupt record column, so it is not read from the input.
+        checkAnswer(read(), Row(null, 1) :: Row(malformed, null) :: Nil)
+        // With the flag it is the data column it was before, and holds the record's value.
+        withSQLConf(SQLConf.LEGACY_COLUMN_NAME_OF_CORRUPT_RECORD_EXACT_MATCH.key -> "true") {
+          checkAnswer(read(), Row("x", 1) :: Row(null, null) :: Nil)
+        }
+      }
+    }
+  }
+
+  test("SPARK-59629: an inferred key that matches the corrupt record name ignoring case") {
+    // Inference adds an exactly named corrupt record field only when it meets a malformed
+    // record, so over clean records `Error` is the only field matching the name.
+    val ds = Seq("""{"id": 1, "Error": "timeout"}""").toDS()
+    def read(): DataFrame =
+      spark.read.option("columnNameOfCorruptRecord", "error").json(ds).select("id", "Error")
+
+    checkAnswer(read(), Row(1L, null) :: Nil)
+    withSQLConf(SQLConf.LEGACY_COLUMN_NAME_OF_CORRUPT_RECORD_EXACT_MATCH.key -> "true") {
+      checkAnswer(read(), Row(1L, "timeout") :: Nil)
+    }
+  }
+
   test("SPARK-59629: several case variants of the corrupt record column are ambiguous") {
     checkError(
       exception = intercept[AnalysisException] {

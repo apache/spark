@@ -107,9 +107,15 @@ case class CSVFileFormat() extends TextBasedFileFormat with DataSourceRegister {
     // Resolve the corrupt record column once, here on the driver, also checking its type. The
     // options carry the resolved name, so every later comparison, including the ones in the
     // per-file closure and the parsers, is exact.
-    val parsedOptions = getCsvOptions(sparkSession,
-      ExprUtils.withResolvedColumnNameOfCorruptRecord(
-        options, dataSchema, getCsvOptions(sparkSession, options).columnNameOfCorruptRecord))
+    val initialOptions = getCsvOptions(sparkSession, options)
+    val resolvedOptions = ExprUtils.withResolvedColumnNameOfCorruptRecord(
+      options, dataSchema, initialOptions.columnNameOfCorruptRecord,
+      getSqlConf(sparkSession).columnNameOfCorruptRecordExactMatch)
+    val parsedOptions = if (resolvedOptions eq options) {
+      initialOptions
+    } else {
+      getCsvOptions(sparkSession, resolvedOptions)
+    }
     val isColumnPruningEnabled = parsedOptions.isColumnPruningEnabled(requiredSchema)
     // The effective `ignoredPathSegmentRegex` for skipping hidden archive entries. Reused from the
     // options' lazily-compiled Pattern (Serializable) instead of re-compiling per file or entry.

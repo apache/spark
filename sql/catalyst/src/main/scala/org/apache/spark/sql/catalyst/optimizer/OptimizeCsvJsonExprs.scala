@@ -46,12 +46,33 @@ object OptimizeCsvJsonExprs extends Rule[LogicalPlan] {
   private def nameOfCorruptRecord = conf.columnNameOfCorruptRecord
 
   /**
-   * Whether the field this extracts is the corrupt record column of its `JsonToStructs`. This
-   * follows the rule the evaluators resolve the column with, so a field that matches the name
-   * only ignoring case counts under case-insensitive resolution.
+   * Whether the field at `ordinal` of `schema` is the corrupt record column for `j`. This follows
+   * the rule the evaluator resolves the column with, using the setting `j` captured when it was
+   * analyzed, so the pruning below and the evaluator always agree on the field.
    */
+  private def isCorruptRecord(j: JsonToStructs, schema: StructType, ordinal: Int): Boolean =
+    ExprUtils.isCorruptRecordField(schema, ordinal, nameOfCorruptRecord, j.corruptRecordExactMatch)
+
+  /** Whether the field this extracts is the corrupt record column of its `JsonToStructs`. */
   private def selectsCorruptRecord(g: GetStructField): Boolean =
-    ExprUtils.isCorruptRecordField(g.childSchema, g.ordinal, nameOfCorruptRecord)
+    isCorruptRecord(g.child.asInstanceOf[JsonToStructs], g.childSchema, g.ordinal)
+
+  /**
+   * Whether every field `fields` extracts plays the same corrupt record role in `prunedSchema`,
+   * which holds exactly those fields in that order, as in the schema it is extracted from. The
+   * evaluator resolves the corrupt record column against the schema it is handed, and a field
+   * that matches the name only ignoring case is the corrupt record column only while no field is
+   * named exactly like it. Pruning the exactly named field away would therefore turn such a data
+   * field into the corrupt record column.
+   */
+  private def keepsCorruptRecordRoles(
+      fields: Seq[GetStructField],
+      prunedSchema: StructType): Boolean = {
+    fields.zipWithIndex.forall { case (g, i) =>
+      val j = g.child.asInstanceOf[JsonToStructs]
+      isCorruptRecord(j, prunedSchema, i) == isCorruptRecord(j, g.childSchema, g.ordinal)
+    }
+  }
 
   private type SimpleJsonPath = Seq[GetJsonObject.SimpleJsonPathSegment]
   private type SharedJsonCandidate = (GetJsonObject, SimpleJsonPath, String)
@@ -434,7 +455,10 @@ object OptimizeCsvJsonExprs extends Rule[LogicalPlan] {
 
       // If we create struct from various fields of the same `JsonToStructs` and we don't
       // alias field names and there is no duplicated field in the struct.
-      if (sameFieldName && !duplicateFields && !prunesCorruptRecord) {
+      // `sameFieldName` makes the fields of `c.dataType` the extracted fields, in order.
+      val keepsRoles = sameFieldName && keepsCorruptRecordRoles(fields, c.dataType)
+
+      if (sameFieldName && !duplicateFields && !prunesCorruptRecord && keepsRoles) {
         val fromJson = jsonToStructs.head.asInstanceOf[JsonToStructs].copy(schema = c.dataType)
         val nullFields = c.children.grouped(2).flatMap {
           case Seq(name, value) => Seq(name, Literal(null, value.dataType))
@@ -463,7 +487,8 @@ object OptimizeCsvJsonExprs extends Rule[LogicalPlan] {
       child
 
     case g @ GetStructField(j @ JsonToStructs(schema: StructType, _, _, _), ordinal, _)
-        if schema.length > 1 && j.options.isEmpty && !selectsCorruptRecord(g) =>
+        if schema.length > 1 && j.options.isEmpty && !selectsCorruptRecord(g) &&
+          keepsCorruptRecordRoles(Seq(g), StructType(Array(schema(ordinal)))) =>
         // Options here should be empty because the optimization should not be enabled
         // for some options. For example, when the parse mode is failfast it should not
         // optimize, and should force to parse the whole input JSON with failing fast for
@@ -471,7 +496,8 @@ object OptimizeCsvJsonExprs extends Rule[LogicalPlan] {
         // To be more conservative, it does not optimize when any option is set for now.
         // Pruning to the corrupt record column alone is excluded as well: it leaves the
         // parser nothing to convert, so the parser never records the row when a dropped
-        // field contains a malformed value, and the column comes back null.
+        // field contains a malformed value, and the column comes back null. Nor is a field
+        // pruned to when it would become the corrupt record column only once it is alone.
       val prunedSchema = StructType(Array(schema(ordinal)))
       g.copy(child = j.copy(schema = prunedSchema), ordinal = 0)
 
@@ -494,9 +520,10 @@ object OptimizeCsvJsonExprs extends Rule[LogicalPlan] {
   }
 
   private val csvOptimization: PartialFunction[Expression, Expression] = {
-    case g @ GetStructField(c @ CsvToStructs(schema: StructType, _, _, _, None), ordinal, _)
+    case g @ GetStructField(c @ CsvToStructs(schema: StructType, _, _, _, None, _), ordinal, _)
         if schema.length > 1 && c.options.isEmpty &&
-          !ExprUtils.isCorruptRecordField(schema, ordinal, nameOfCorruptRecord) =>
+          !ExprUtils.isCorruptRecordField(
+            schema, ordinal, nameOfCorruptRecord, c.corruptRecordExactMatch) =>
         // When the parse mode is permissive, and corrupt column is not selected, we can prune here
         // from `GetStructField`. To be more conservative, it does not optimize when any option
         // is set.
