@@ -18,11 +18,13 @@
 package org.apache.spark.sql.catalyst.analysis
 
 import org.apache.spark.sql.catalyst.dsl.expressions._
-import org.apache.spark.sql.catalyst.expressions.{Attribute, AttributeReference, AttributeSet, Expression}
+import org.apache.spark.sql.catalyst.expressions.{Attribute, AttributeReference, AttributeSet, Expression, Literal, TimestampAdd, TimestampAddInterval, TimestampAddYMInterval}
 import org.apache.spark.sql.catalyst.optimizer.SimpleTestOptimizer
 import org.apache.spark.sql.catalyst.parser.CatalystSqlParser
 import org.apache.spark.sql.catalyst.plans.logical.{EventTimeWatermark, Filter, LeafNode, Statistics}
-import org.apache.spark.sql.types.{DecimalType, DoubleType, FloatType, IntegerType, LongType, MetadataBuilder, TimestampType}
+import org.apache.spark.sql.catalyst.util.DateTimeConstants.MICROS_PER_DAY
+import org.apache.spark.sql.types.{CalendarIntervalType, DayTimeIntervalType, DecimalType, DoubleType, FloatType, IntegerType, LongType, MetadataBuilder, TimestampType, YearMonthIntervalType}
+import org.apache.spark.unsafe.types.CalendarInterval
 
 class StreamingJoinHelperSuite extends AnalysisTest {
 
@@ -67,6 +69,36 @@ class StreamingJoinHelperSuite extends AnalysisTest {
     assert(!truncates(leftTime.cast(TimestampType) > rightTime))
     assert(!truncates(leftTime > rightTime && other.cast(IntegerType) > 0))
     assert(!StreamingJoinHelper.hasTruncatingCast(None, times))
+  }
+
+  test("find whole days or months added to times in conjuncts on the given columns") {
+    val leftTime = AttributeReference("leftTime", TimestampType)()
+    val rightTime = AttributeReference("rightTime", TimestampType)()
+    val delay = AttributeReference("delay", DayTimeIntervalType())()
+    val times = AttributeSet(Seq(leftTime, rightTime))
+    def dayTime(micros: Long): Expression = Literal(micros, DayTimeIntervalType())
+    def plus(interval: Expression): Expression = TimestampAddInterval(leftTime, interval)
+    def calendar(months: Int, days: Int, micros: Long): Expression =
+      Literal(new CalendarInterval(months, days, micros), CalendarIntervalType)
+    def hasCalendar(condition: Expression): Boolean =
+      StreamingJoinHelper.hasCalendarInterval(Some(condition), times)
+
+    assert(hasCalendar(rightTime <= plus(dayTime(MICROS_PER_DAY))))
+    assert(hasCalendar(rightTime >= plus(dayTime(-MICROS_PER_DAY))))
+    assert(hasCalendar(rightTime <= plus(calendar(0, 1, 0))))
+    assert(hasCalendar(rightTime <= plus(calendar(1, 0, 0))))
+    assert(hasCalendar(rightTime <= plus(delay)))
+    assert(hasCalendar(
+      rightTime <= TimestampAddYMInterval(leftTime, Literal(1, YearMonthIntervalType()))))
+    assert(hasCalendar(rightTime <= TimestampAdd("DAY", Literal(1), leftTime)))
+    // Intervals shorter than a day are exact.
+    assert(!hasCalendar(rightTime <= plus(dayTime(MICROS_PER_DAY - 1))))
+    assert(!hasCalendar(rightTime <= plus(calendar(0, 0, MICROS_PER_DAY))))
+    assert(!hasCalendar(rightTime <= TimestampAdd("HOUR", Literal(25), leftTime)))
+    assert(!hasCalendar(rightTime >= leftTime))
+    assert(!StreamingJoinHelper.hasCalendarInterval(
+      Some(TimestampAddInterval(Literal(0L, TimestampType), dayTime(MICROS_PER_DAY)) >
+        Literal(0L, TimestampType)), times))
   }
 
   test("extract watermark from time condition") {
