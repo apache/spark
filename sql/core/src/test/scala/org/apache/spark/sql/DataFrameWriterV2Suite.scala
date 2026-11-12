@@ -27,7 +27,7 @@ import org.apache.spark.sql.catalyst.TableIdentifier
 import org.apache.spark.sql.catalyst.analysis.{CannotReplaceMissingTableException, TableAlreadyExistsException}
 import org.apache.spark.sql.catalyst.plans.logical.{AppendData, LogicalPlan, OverwriteByExpression, OverwritePartitionsDynamic}
 import org.apache.spark.sql.connector.InMemoryV1Provider
-import org.apache.spark.sql.connector.catalog.{Column => ColumnV2, Identifier, InMemoryTable, InMemoryTableCatalog, TableCatalog}
+import org.apache.spark.sql.connector.catalog.{Column => ColumnV2, Identifier, InMemoryTable, InMemoryTableCatalog, InMemoryTableWithV2FilterCatalog, TableCatalog}
 import org.apache.spark.sql.connector.catalog.CatalogManager.SESSION_CATALOG_NAME
 import org.apache.spark.sql.connector.expressions.{BucketTransform, ClusterByTransform, DaysTransform, FieldReference, HoursTransform, IdentityTransform, LiteralValue, MonthsTransform, YearsTransform}
 import org.apache.spark.sql.execution.QueryExecution
@@ -225,6 +225,21 @@ class DataFrameWriterV2Suite extends QueryTest with SharedSparkSession with Befo
     checkAnswer(
       spark.table("testcat.table_name"),
       Seq(Row(1L, "a"), Row(2L, "b"), Row(4L, "d"), Row(5L, "e"), Row(6L, "f")))
+  }
+
+  test("SPARK-61504: Overwrite: overwrite by expression on a CHAR column") {
+    // InMemoryTable of branch-4.1 compares a String filter value with a UTF8String partition value
+    spark.conf.set("spark.sql.catalog.testcat", classOf[InMemoryTableWithV2FilterCatalog].getName)
+    spark.sql(
+      "CREATE TABLE testcat.table_name (id bigint, dep char(8)) USING foo PARTITIONED BY (dep)")
+    spark.sql("INSERT INTO testcat.table_name VALUES (1L, 'hr'), (2L, 'software')")
+
+    // the query is not resolved when the command is created, unlike the query of a SQL INSERT
+    Seq((3L, "hr")).toDF("id", "dep").writeTo("testcat.table_name").overwrite($"dep" === "hr")
+
+    checkAnswer(
+      spark.table("testcat.table_name"),
+      Seq(Row(2L, "software"), Row(3L, "hr      ")))
   }
 
   test("Overwrite: write to a temp view of v2 relation") {
