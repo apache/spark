@@ -22,7 +22,7 @@ import java.nio.charset.StandardCharsets.UTF_8
 import java.nio.file.Files
 import java.sql.{Date, Timestamp}
 import java.time.LocalDateTime
-import java.util.{Locale, UUID}
+import java.util.{Locale, Properties, UUID}
 import java.util.concurrent.{Callable, Executors, TimeUnit}
 import java.util.concurrent.atomic.AtomicReference
 
@@ -33,12 +33,15 @@ import org.apache.arrow.c.{ArrowArray, ArrowSchema, Data}
 import org.apache.arrow.vector.{BigIntVector, VectorSchemaRoot}
 import org.scalatest.time.SpanSugar._
 
-import org.apache.spark.{SPARK_DOC_ROOT, SparkRuntimeException, SparkThrowable, SparkUnsupportedOperationException, TaskContext, TestUtils}
+import org.apache.spark.{SPARK_DOC_ROOT, SparkConf, SparkRuntimeException, SparkThrowable, SparkUnsupportedOperationException, TaskContext, TaskContextImpl, TestUtils}
 import org.apache.spark.api.python.PythonEvalType
+import org.apache.spark.internal.config.BUFFER_PAGESIZE
+import org.apache.spark.memory.{TaskMemoryManager, TestMemoryConsumer, TestMemoryManager}
 import org.apache.spark.sql.{AnalysisException, IntegratedUDFTestUtils, QueryTest, Row}
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.BloomFilterMightContain
 import org.apache.spark.sql.catalyst.parser.ParseException
+import org.apache.spark.sql.catalyst.plans.logical.{Aggregate, EvalNativeUDFs}
 import org.apache.spark.sql.classic.{DataFrame, SparkSession}
 import org.apache.spark.sql.connector.FakeV2ProviderWithCustomSchema
 import org.apache.spark.sql.connector.catalog.{InMemoryEnhancedPartitionFilterTable, InMemoryTableEnhancedPartitionFilterCatalog}
@@ -169,6 +172,22 @@ class NativeUDFSuite extends QueryTest with SharedSparkSession {
       parameters = parameters)
   }
 
+  test("fail clearly where the C data interface of Arrow Java does not load, for native " +
+      "functions") {
+    assume(NativeLibrary.isSupported, "Native functions require Java 22 or later.")
+    val pkg = NativeDataSourcePackage(
+      "unused.sparkpkg", "", NativeDataSourceManifest(Some(1), Nil, Map.empty))
+    val cause = new UnsatisfiedLinkError("libarrow_cdata_jni.so: symbol not found")
+    val e = intercept[SparkUnsupportedOperationException] {
+      NativeLibraries.getFunctionLibrary(pkg, loadCDataInterface = throw cause)
+    }
+    checkError(
+      exception = e,
+      condition = "NATIVE_UDF_UNSUPPORTED_PLATFORM",
+      parameters = Map("platform" -> NativePlatform.current, "reason" -> cause.toString))
+    assert(e.getCause eq cause)
+  }
+
   test("read the functions of a manifest") {
     val json = manifestJson(
       Seq(
@@ -200,7 +219,10 @@ class NativeUDFSuite extends QueryTest with SharedSparkSession {
     Case("data sources and no functions", s""""dataSources": ["a"], "functions": []"""),
     // The version of the functions of a manifest without functions is not used.
     Case("data sources and a version of no functions",
-      s""""dataSources": ["a"], "udfAbiVersion": 0"""))) { case Case(_, fields) =>
+      s""""dataSources": ["a"], "udfAbiVersion": 0"""),
+    Case("struct fields whose names differ only in case",
+      s""""udfAbiVersion": 1, "functions": [${function("f", Nil, "struct<a: int, A: int>")}]"""))) {
+    case Case(_, fields) =>
     assert(NativeDataSourcePackage.parseManifest(
       s"""{"abiVersion": 1, $fields, $libraries}""").isRight)
   }
@@ -269,7 +291,17 @@ class NativeUDFSuite extends QueryTest with SharedSparkSession {
       |"functions": [${function("f", Nil, "struct<`a\\u0000`: int>")}]""".stripMargin ->
       ("The function f of the manifest has STRUCT<`a\\u0000`: INT> as the type of its result, " +
         "with a field whose name contains the character U+0000, which Spark cannot pass to a " +
-        "library.")))) { case Case(_, (fields, reason)) =>
+        "library.")),
+    Case("duplicate field names", s""""udfAbiVersion": 1,
+      |"functions": [${function("f", Nil, "struct<a: int, a: string>")}]""".stripMargin ->
+      ("The function f of the manifest has STRUCT<a: INT, a: STRING> as the type of its result, " +
+        "with more than one field named a in a struct, which Spark cannot pass to a library.")),
+    Case("duplicate field names in a nested struct", s""""udfAbiVersion": 1, "functions": [
+      |${function("f", Seq("array<map<string,struct<s: struct<b: int, b: int>>>>"), "int")}]"""
+      .stripMargin ->
+      ("The function f of the manifest has ARRAY<MAP<STRING, STRUCT<s: STRUCT<b: INT, b: INT>>>> " +
+        "as the type of its argument 1, with more than one field named b in a struct, which " +
+        "Spark cannot pass to a library.")))) { case Case(_, (fields, reason)) =>
     assert(NativeDataSourcePackage.parseManifest(
       s"""{"abiVersion": 1, $fields, $libraries}""") == Left(reason))
   }
@@ -294,33 +326,31 @@ class NativeUDFSuite extends QueryTest with SharedSparkSession {
         .map(_.abiVersion) == expected)
   }
 
-  test("reject an invalid type in a manifest") {
+  gridTest("reject an invalid type in a manifest")(Seq("no_such_type", "decimal(40,2)")) { ddl =>
     val reason = NativeDataSourcePackage.parseManifest(
       s"""{"abiVersion": 1, "udfAbiVersion": 1,
-         |"functions": [${function("f", Seq("no_such_type"), "int")}], $libraries}"""
+         |"functions": [${function("f", Seq(ddl), "int")}], $libraries}"""
         .stripMargin).swap.toOption.get
-    assert(reason.startsWith("The function f of the manifest has no_such_type as the type of " +
-      "its argument 1, which is not a valid type: "), reason)
+    assert(reason.startsWith(s"The function f of the manifest has $ddl as the type of its " +
+      "argument 1, which is not a valid type: "), reason)
   }
 
-  gridTest("check the functions of a later version when a session adds their package")(Seq(
-    Case("a type of that version", Seq(function("f", Seq("time"), "int")) ->
-      ("UNSUPPORTED_UDF_ABI_VERSION", Map("version" -> "2", "supported" -> "1"))),
-    Case("no kind", Seq("""{"name": "f", "arguments": "time"}""") -> ("INVALID_MANIFEST",
-      Map("reason" -> "The function f of the manifest must have a field 'kind'."))),
+  gridTest("report the version of the functions of a later version when a session adds their " +
+      "package, whatever they declare")(Seq(
+    Case("a type of that version", Seq(function("f", Seq("time"), "int"))),
+    Case("no kind", Seq("""{"name": "f", "arguments": "time"}""")),
     Case("duplicate names",
-      Seq(function("f", Seq("time"), "int"), """{"name": "F", "kind": "table"}""") ->
-      ("INVALID_MANIFEST",
-        Map("reason" -> "The manifest lists the function f more than once."))))) {
-    case Case(_, (functions, (subClass, parameters))) =>
-      val pkg = createZip(Utils.createTempDir(), "later.sparkpkg",
-        NativeDataSourcePackage.MANIFEST_NAME -> manifestJson(functions,
-          Map(NativePlatform.current -> "lib.so"), udfAbiVersion = 2).getBytes(UTF_8),
-        "lib.so" -> "unused".getBytes(UTF_8))
-      checkError(
-        exception = intercept[SparkRuntimeException](spark.newSession().addArtifact(pkg.getPath)),
-        condition = s"INVALID_NATIVE_DATA_SOURCE_PACKAGE.$subClass",
-        parameters = Map("path" -> pkg.getPath) ++ parameters)
+      Seq(function("f", Seq("time"), "int"), """{"name": "F", "kind": "table"}""")),
+    Case("U+0000 in a name", Seq(function("a\\u0000b", Nil, "int"))),
+    Case("a function that is not an object", Seq("\"f\"")))) { case Case(_, functions) =>
+    val pkg = createZip(Utils.createTempDir(), "later.sparkpkg",
+      NativeDataSourcePackage.MANIFEST_NAME -> manifestJson(functions,
+        Map(NativePlatform.current -> "lib.so"), udfAbiVersion = 2).getBytes(UTF_8),
+      "lib.so" -> "unused".getBytes(UTF_8))
+    checkError(
+      exception = intercept[SparkRuntimeException](spark.newSession().addArtifact(pkg.getPath)),
+      condition = "INVALID_NATIVE_DATA_SOURCE_PACKAGE.UNSUPPORTED_UDF_ABI_VERSION",
+      parameters = Map("path" -> pkg.getPath, "version" -> "2", "supported" -> "1"))
   }
 
   nativeTest("check a package with functions when a session adds it") {
@@ -363,7 +393,7 @@ class NativeUDFSuite extends QueryTest with SharedSparkSession {
 
   nativeTest("serve the data sources of a configured package of a later version of functions") {
     val both = compileWithDataSources("test_native_udf_with_data_sources")
-    val pkg = createPackage(both, functions = Seq(function("f", Seq("time"), "int")),
+    val pkg = createPackage(both, functions = Seq("""{"name": "f", "arguments": ["time"]}"""),
       udfAbiVersion = 2, dataSources = Some(NativeDataSourceTestUtils.dataSources("")))
     val session = newSession()
     session.conf.set(SQLConf.NATIVE_DATA_SOURCE_PATHS.key, pkg.getParent)
@@ -373,6 +403,17 @@ class NativeUDFSuite extends QueryTest with SharedSparkSession {
       exception = intercept[SparkRuntimeException](register(session, pkg.getName, "f")),
       condition = "INVALID_NATIVE_DATA_SOURCE_PACKAGE.UNSUPPORTED_UDF_ABI_VERSION",
       parameters = Map("path" -> pkg.getCanonicalPath, "version" -> "2", "supported" -> "1"))
+  }
+
+  nativeTest("serve the data sources of a configured package next to one with an invalid type") {
+    val dir = Utils.createTempDir()
+    createPackage(compileWithDataSources("test_native_udf_with_data_sources"), dir = dir,
+      dataSources = Some(NativeDataSourceTestUtils.dataSources("")))
+    createPackage(library, functions = Seq(function("f", Seq("decimal(40,2)"), "int")), dir = dir)
+    val session = newSession()
+    session.conf.set(SQLConf.NATIVE_DATA_SOURCE_PATHS.key, dir.getPath)
+    checkRows(session.read.format("native_range").option("end", "3").load().select("id"),
+      Seq(Row(0L), Row(1L), Row(2L)))
   }
 
   nativeGridTest("register a function of a package given by")(
@@ -723,6 +764,16 @@ class NativeUDFSuite extends QueryTest with SharedSparkSession {
     assert(batches >= 9, batches)
   }
 
+  nativeTest("release the rows that a batch keeps when its task stops early") {
+    val session = newSession(defaultPackage)
+    register(session, defaultPackage.getName, "add_one")
+    val payload = "x" * 10000
+    val df = session.createDataFrame((0L until 100L).map(Row(_, payload)).asJava,
+      StructType(Seq(StructField("id", LongType), StructField("payload", StringType))))
+      .where("add_one(id) > 3").selectExpr("add_one(id)", "payload").limit(2)
+    checkRows(df, Seq(Row(4L, payload), Row(5L, payload)))
+  }
+
   nativeGridTest("report a failure of the library as NATIVE_UDF_ERROR")(Seq(
     Case("failed eval", ("fail_on", "fail_on(id, 3)", false,
       "fail_on: got 3 in row 3 of the batch")),
@@ -788,19 +839,27 @@ class NativeUDFSuite extends QueryTest with SharedSparkSession {
         "package" -> defaultPackage.getName, "msg" -> message))
   }
 
-  nativeTest("reject a null that the type of a result does not allow") {
-    val pkg = createPackage(library, functions = Seq(function("identity",
-      Seq("struct<a: int, b: string>"), "struct<a: int NOT NULL, b: string>")))
-    val session = newSession(pkg)
-    register(session, pkg.getName, "identity")
+  nativeGridTest("reject a null that the type of a result does not allow as")(Seq(
     // The library returns its input, whose field a is null in the second row.
-    val e = intercept[Exception] {
-      session.sql("SELECT identity(named_struct('a', id, 'b', 'x')) FROM " +
-        "(SELECT IF(id = 1, NULL, CAST(id AS INT)) AS id FROM range(3))").collect()
-    }
-    assert(findError(e, "NATIVE_UDF_ERROR").getMessageParameters.get("msg") ==
-      "eval returned a null value in the field a, which the type of the result does not allow: " +
-        "STRUCT<a: INT NOT NULL, b: STRING>.")
+    Case("a field declared NOT NULL", ("identity", Seq("struct<a: int, b: string>"),
+      "struct<a: int NOT NULL, b: string>",
+      "SELECT identity(named_struct('a', id, 'b', 'x')) FROM " +
+        "(SELECT IF(id = 1, NULL, CAST(id AS INT)) AS id FROM range(3))",
+      "value in the field a, which the type of the result does not allow: " +
+        "STRUCT<a: INT NOT NULL, b: STRING>.")),
+    Case("a key of a map", ("bad_map_result", Seq("bigint", "string"), "map<bigint,bigint>",
+      "SELECT bad_map_result(id, 'null_key') FROM range(3)",
+      "key of a map, which the type of the result does not allow: MAP<BIGINT, BIGINT>.")))) {
+    case Case(_, (name, arguments, returns, query, returned)) =>
+      val pkg = createPackage(library, functions = Seq(function(name, arguments, returns)))
+      val session = newSession(pkg)
+      register(session, pkg.getName, name)
+      val e = intercept[Exception](session.sql(query).collect())
+      checkError(
+        exception = findError(e, "NATIVE_UDF_ERROR"),
+        condition = "NATIVE_UDF_ERROR",
+        parameters = Map("function" -> s"`$name`", "name" -> name, "package" -> pkg.getName,
+          "msg" -> s"eval returned a null $returned"))
   }
 
   nativeTest("let a library keep its input until the state is closed") {
@@ -891,19 +950,34 @@ class NativeUDFSuite extends QueryTest with SharedSparkSession {
     eventually(timeout(1.minute))(assert(NativeLibrary.openTaskContexts() <= contexts))
   }
 
-  nativeTest("close a state once its eval returns when the task ends during it") {
+  /** The context of a task, whose memory manager has pages of `pageSize` bytes. */
+  private def taskContext(pageSize: Long): (TaskContextImpl, TestMemoryManager) = {
+    val memory = new TestMemoryManager(new SparkConf(false).set(BUFFER_PAGESIZE, pageSize))
+    (new TaskContextImpl(0, 0, 0, 0, 0, 1, new TaskMemoryManager(memory, 0), new Properties, null),
+      memory)
+  }
+
+  nativeGridTest("close a state once its eval returns when the task ends during it, with")(
+      Seq("the arguments read back", "the rows kept")) { rowsOf =>
     val session = newSession(defaultPackage)
     session.conf.set(SQLConf.ADAPTIVE_EXECUTION_ENABLED.key, "false")
     register(session, defaultPackage.getName, "wait_for_interrupt")
     val marker = new File(Utils.createTempDir(), "interrupted")
-    val exec = evaluations(session.sql(
-      s"SELECT wait_for_interrupt(path) FROM VALUES ('${marker.getPath}') AS t(path)")).head
+    val path = UTF8String.fromString(marker.getPath)
+    val (query, input) = if (rowsOf == "the rows kept") {
+      (s"SELECT wait_for_interrupt(path), n FROM VALUES ('${marker.getPath}', 1) AS t(path, n)",
+        InternalRow(path, 1))
+    } else {
+      (s"SELECT wait_for_interrupt(path) FROM VALUES ('${marker.getPath}') AS t(path)",
+        InternalRow(path))
+    }
+    val exec = evaluations(session.sql(query)).head
     val evaluator = new NativeUDFEvaluator(exec.child.output, exec.udfs, exec.udfs.map(_.pkg),
       batchSize = 10, maxBytes = Long.MaxValue, timeZoneId = "UTC", metrics = exec.metrics)
-    val context = TaskContext.empty()
+    val (context, _) = taskContext(pageSize = 1024)
+    val memory = context.taskMemoryManager
     val contexts = NativeLibrary.openTaskContexts()
-    val rows = evaluator.evaluate(
-      context, 0, Iterator(InternalRow(UTF8String.fromString(marker.getPath))))
+    val rows = evaluator.evaluate(context, 0, Iterator(input))
     val failure = new AtomicReference[Throwable]()
     // The consumer runs on another thread than the end of the task, as a pipelined writer does.
     val consumer = new Thread(() => {
@@ -915,7 +989,9 @@ class NativeUDFSuite extends QueryTest with SharedSparkSession {
     eventually(timeout(1.minute)) {
       assert(new File(marker.getPath + ".waiting").isFile)
     }
+    assert((memory.getMemoryConsumptionForThisTask > 0) == (rowsOf == "the rows kept"))
     context.markTaskCompleted(None)
+    assert(memory.getMemoryConsumptionForThisTask == 0)
     assert(NativeLibrary.openTaskContexts() == contexts + 1)
     context.markInterrupted("test")
     consumer.join(TimeUnit.MINUTES.toMillis(1))
@@ -925,6 +1001,32 @@ class NativeUDFSuite extends QueryTest with SharedSparkSession {
     assert(NativeLibrary.openTaskContexts() == contexts)
     assert(!rows.hasNext)
     intercept[NoSuchElementException](rows.next())
+  }
+
+  nativeTest("spill the rows that a batch keeps when the task needs their memory") {
+    val session = newSession(defaultPackage)
+    session.conf.set(SQLConf.ADAPTIVE_EXECUTION_ENABLED.key, "false")
+    register(session, defaultPackage.getName, "add_one")
+    val exec = evaluations(session.sql(
+      "SELECT add_one(id), payload FROM VALUES (1L, 'x') AS t(id, payload)")).head
+    val evaluator = new NativeUDFEvaluator(exec.child.output, exec.udfs, exec.udfs.map(_.pkg),
+      batchSize = 1000, maxBytes = Long.MaxValue, timeZoneId = "UTC", metrics = exec.metrics)
+    val pageSize = 1024L
+    val (context, memoryManager) = taskContext(pageSize)
+    val memory = context.taskMemoryManager
+    val payload = UTF8String.fromString("x" * 200)
+    val rows = evaluator.evaluate(context, 0, (0L until 20L).iterator.map(InternalRow(_, payload)))
+    assert(rows.hasNext)
+    assert(memory.getMemoryConsumptionForThisTask > pageSize)
+    memoryManager.limit(0)
+    val other = new TestMemoryConsumer(memory)
+    other.use(pageSize)
+    assert(other.getUsed == pageSize)
+    assert(rows.map(_.copy()).map(row => (row.getLong(0), row.getUTF8String(1), row.getLong(2)))
+      .toSeq == (0L until 20L).map(id => (id, payload, id + 1)))
+    other.free(pageSize)
+    context.markTaskCompleted(None)
+    assert(memory.getMemoryConsumptionForThisTask == 0)
   }
 
   nativeGridTest("evaluate the arguments and the results of Python UDFs, with Arrow")(
@@ -1051,6 +1153,11 @@ class NativeUDFSuite extends QueryTest with SharedSparkSession {
       session.sql("SELECT add_one(id % 2) AS k, add_one(count(*)) AS c FROM range(10) " +
         "GROUP BY add_one(id % 2)"),
       Seq(Row(1L, 6L), Row(2L, 6L)))
+    val constant = session.sql("SELECT add_one(1), count(*) FROM range(3)")
+    checkRows(constant, Seq(Row(2L, 3L)))
+    assert(constant.queryExecution.optimizedPlan.collect {
+      case evaluation: EvalNativeUDFs => evaluation.child.exists(_.isInstanceOf[Aggregate])
+    } == Seq(true))
     checkError(
       exception = intercept[AnalysisException] {
         session.sql("SELECT transform(array(1L, 2L), x -> add_one(x))").collect()

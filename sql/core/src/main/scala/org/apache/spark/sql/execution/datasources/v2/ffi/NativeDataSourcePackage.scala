@@ -531,12 +531,14 @@ object NativeLibraries extends Logging {
    * the package for this platform is loaded once, also if it implements native data sources too,
    * and `spark_udf_init` is called once.
    */
-  private[ffi] def getFunctionLibrary(pkg: NativeDataSourcePackage): NativeUdfLibrary = {
+  private[ffi] def getFunctionLibrary(
+      pkg: NativeDataSourcePackage,
+      loadCDataInterface: => Unit = JniLoader.get().ensureLoaded()): NativeUdfLibrary = {
     if (!NativeLibrary.isSupported) {
       throw QueryExecutionErrors.nativeUdfUnsupportedJavaVersionError(
         NativeLibrary.MINIMUM_JAVA_VERSION, Runtime.version().feature())
     }
-    checkCDataInterface(unsupported = QueryExecutionErrors.nativeUdfUnsupportedPlatformError)
+    checkCDataInterface(loadCDataInterface, QueryExecutionErrors.nativeUdfUnsupportedPlatformError)
     getOrLoad(functionLibraries, pkg.sha256)(loadFunctionLibrary(pkg)).get
   }
 

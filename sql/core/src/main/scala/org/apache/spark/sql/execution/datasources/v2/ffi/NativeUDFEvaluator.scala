@@ -16,6 +16,8 @@
  */
 package org.apache.spark.sql.execution.datasources.v2.ffi
 
+import java.io.File
+
 import scala.collection.mutable.ArrayBuffer
 import scala.jdk.CollectionConverters._
 import scala.util.control.NonFatal
@@ -25,12 +27,13 @@ import org.apache.arrow.vector.{FieldVector, ValueVector, VectorSchemaRoot}
 import org.apache.arrow.vector.complex.{ListVector, MapVector, StructVector}
 import org.apache.arrow.vector.types.pojo.{ArrowType, Field}
 
-import org.apache.spark.{SparkThrowable, TaskContext}
+import org.apache.spark.{SparkEnv, SparkThrowable, TaskContext}
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.errors.QueryExecutionErrors
 import org.apache.spark.sql.execution.arrow.ArrowWriter
 import org.apache.spark.sql.execution.metric.SQLMetric
+import org.apache.spark.sql.execution.python.HybridRowQueue
 import org.apache.spark.sql.types._
 import org.apache.spark.sql.util.ArrowUtils
 import org.apache.spark.sql.vectorized.{ArrowColumnVector, ColumnarBatch, ColumnVector}
@@ -40,8 +43,9 @@ import org.apache.spark.util.Utils
 /**
  * Evaluates calls of native functions in the tasks of an [[EvalNativeUDFsExec]]. A task writes the
  * arguments to Arrow batches of `maxRecordsPerBatch` rows, or fewer once the arguments and the rows
- * that the batch keeps hold `maxBytesPerBatch` bytes, and calls eval for each call and batch. When
- * every column of the child is an argument, the rows are read back from the arguments instead.
+ * that the batch keeps hold `maxBytesPerBatch` bytes, and calls eval for each call and batch. A
+ * batch keeps its rows in a [[HybridRowQueue]], in the memory of the task, or reads them back from
+ * the arguments when every column of the child is an argument.
  *
  * @param packages the packages of the calls, as the executors find them
  */
@@ -98,7 +102,9 @@ private[ffi] class NativeUDFEvaluator(
    * The rows of a task, with the results of the calls. The consumer of the rows and the end-of-task
    * listener may run on different threads: the consumer marks itself busy while it uses the
    * resources, and releases them itself if the task ended meanwhile, so that no call on a state
-   * overlaps its close and the listener never waits for a consumer that waits for its input.
+   * overlaps its close and the listener never waits for a consumer that waits for its input. Only
+   * the rows that a batch keeps are released by the listener also while the consumer is busy: see
+   * [[KeptRows]].
    */
   private class NativeUDFBatches(
       context: TaskContext,
@@ -131,9 +137,7 @@ private[ffi] class NativeUDFEvaluator(
     // Whether the library moved an input of the batch, whose buffers it may keep until the
     // state is closed: the next batch is then written to new vectors.
     private var inputMoved = false
-    // Without read-back, the rows of the batch, and their size.
-    private val inputRows = ArrayBuffer.empty[UnsafeRow]
-    private var inputRowBytes = 0L
+    private val keptRows = if (readBack.isEmpty) new KeptRows else null
     private lazy val toUnsafe = UnsafeProjection.create(childOutput, childOutput)
     private val results = new Array[FieldVector](udfs.length)
     private var batch: ColumnarBatch = _
@@ -153,7 +157,11 @@ private[ffi] class NativeUDFEvaluator(
         ended = true
         idle
       }
-      if (release) releaseAll()
+      Utils.tryWithSafeFinally {
+        if (keptRows != null) keptRows.release()
+      } {
+        if (release) releaseAll()
+      }
     }
 
     private def consume[T](onEnded: => T)(f: => T): T = {
@@ -193,10 +201,10 @@ private[ffi] class NativeUDFEvaluator(
         throw new NoSuchElementException("End of the rows of the native functions.")
       }
       consume[InternalRow](throw new NoSuchElementException("The task ended.")) {
-        val row = if (readBack.isDefined) {
-          resultProjection(batch.getRow(position))
-        } else {
-          resultProjection(joined(inputRows(position), batch.getRow(position)))
+        val result = batch.getRow(position)
+        val row = if (keptRows == null) resultProjection(result) else keptRows.joinNext(result)
+        if (row == null) {
+          throw new NoSuchElementException("The task ended.")
         }
         position += 1
         metrics("numOutputRows") += 1
@@ -216,25 +224,27 @@ private[ffi] class NativeUDFEvaluator(
       } else {
         writer.reset()
       }
-      inputRows.clear()
-      inputRowBytes = 0
+      batchRows = 0
+      position = 0
+      var keptBytes = 0L
       var count = 0
       while ((batchSize <= 0 || count < batchSize) &&
-          (count == 0 || writer.sizeInBytes() + inputRowBytes < maxBytes) && rows.hasNext) {
+          (count == 0 || writer.sizeInBytes() + keptBytes < maxBytes) && rows.hasNext) {
         val row = rows.next()
-        if (readBack.isEmpty) {
-          val kept = row match {
-            case unsafe: UnsafeRow => unsafe.copy()
-            case other => toUnsafe(other).copy()
+        if (keptRows != null) {
+          val unsafe = row match {
+            case unsafe: UnsafeRow => unsafe
+            case other => toUnsafe(other)
           }
-          inputRows += kept
-          inputRowBytes += kept.getSizeInBytes
+          // The task ended, and its listener released the kept rows: the batch ends empty.
+          if (!keptRows.add(unsafe)) {
+            return
+          }
+          keptBytes += unsafe.getSizeInBytes
         }
         writer.write(projection(row))
         count += 1
       }
-      batchRows = 0
-      position = 0
       if (count > 0) {
         writer.finish()
         calls.foreach(_.eval(count))
@@ -268,17 +278,57 @@ private[ffi] class NativeUDFEvaluator(
       }
       if (release) {
         Utils.tryWithSafeFinally {
-          Utils.tryWithSafeFinally(releaseResults()) {
-            calls.foreach(call => Utils.tryLogNonFatalError(call.close()))
-          }
-        } {
           Utils.tryWithSafeFinally {
-            if (writer != null) {
-              writer.root.close()
+            Utils.tryWithSafeFinally(releaseResults()) {
+              calls.foreach(call => Utils.tryLogNonFatalError(call.close()))
             }
           } {
-            Utils.tryLogNonFatalError(allocator.close())
+            Utils.tryWithSafeFinally {
+              if (writer != null) {
+                writer.root.close()
+              }
+            } {
+              Utils.tryLogNonFatalError(allocator.close())
+            }
           }
+        } {
+          if (keptRows != null) keptRows.release()
+        }
+      }
+    }
+
+    /**
+     * Without read-back, the rows of the batch, in the memory of the task, or on disk once the task
+     * needs the memory for another consumer, or has no more. The listener releases them also while
+     * the consumer is busy, since the executor frees the memory of the task after the listeners:
+     * the consumer uses them only under their lock, which it never holds while it reads its input
+     * or calls the library, and not once they are released.
+     */
+    private class KeptRows {
+      // Only the consumer adds and removes rows, under the lock.
+      private val queue = HybridRowQueue(context.taskMemoryManager(),
+        new File(Utils.getLocalDir(SparkEnv.get.conf)), childOutput.length,
+        SparkEnv.get.serializerManager, lockFree = true)
+      // Guarded by this.
+      private var closed = false
+
+      /** Keeps a row of the batch, and returns false instead once the rows are released. */
+      def add(row: UnsafeRow): Boolean = synchronized {
+        if (!closed) {
+          queue.add(row)
+        }
+        !closed
+      }
+
+      /** The next row with its results, or null once the rows are released. */
+      def joinNext(results: InternalRow): InternalRow = synchronized {
+        if (closed) null else resultProjection(joined(queue.remove(), results))
+      }
+
+      def release(): Unit = synchronized {
+        if (!closed) {
+          closed = true
+          queue.close()
         }
       }
     }

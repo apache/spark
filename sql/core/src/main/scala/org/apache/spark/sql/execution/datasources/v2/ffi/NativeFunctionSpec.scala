@@ -19,10 +19,11 @@ package org.apache.spark.sql.execution.datasources.v2.ffi
 import java.util.Locale
 
 import scala.jdk.CollectionConverters._
+import scala.util.control.NonFatal
 
 import com.fasterxml.jackson.databind.JsonNode
 
-import org.apache.spark.sql.catalyst.parser.{CatalystSqlParser, ParseException}
+import org.apache.spark.sql.catalyst.parser.CatalystSqlParser
 import org.apache.spark.sql.types._
 
 /** A function that the manifest of a native package lists in `functions`. */
@@ -63,6 +64,7 @@ case class NativeFunctionSpec(
  * A function of a kind that this version of Spark does not know, which a later version of the
  * interface may add, or of a version of the interface that Spark does not support: only its name
  * and its kind are read, so that the rest of the package stays usable, and registering it fails.
+ * Of a version that Spark does not support, a name or a kind that is not a string is read as empty.
  */
 case class UnsupportedNativeFunction(name: String, kind: String) extends NativeFunctionEntry
 
@@ -80,10 +82,10 @@ object NativeFunctionSpec {
   /**
    * Reads the version of the native function interface, `udfAbiVersion`, and the functions of a
    * manifest, or returns why they are invalid. A manifest without functions has no version: Spark
-   * ignores `udfAbiVersion` then, as it ignores the fields that it does not know. Of a version
-   * that Spark does not support, only the names and the kinds of the functions are read, since
-   * the version may change the other fields: Spark reports the version when a session adds the
-   * package or registers one of its functions.
+   * ignores `udfAbiVersion` then, as it ignores the fields that it does not know. The functions of
+   * a version that Spark does not support are not checked, since the version may change any of
+   * their fields: each is read as an [[UnsupportedNativeFunction]], and Spark reports the version
+   * when a session adds the package or registers one of its functions.
    */
   private[ffi] def parse(
       root: JsonNode): Either[String, (Option[Int], Seq[NativeFunctionEntry])] = {
@@ -102,8 +104,13 @@ object NativeFunctionSpec {
       return Left("A manifest with functions must have a positive integer field " +
         "'udfAbiVersion'.")
     }
-    val unsupportedVersion = version.asInt() > NativeUdfLibrary.ABI_VERSION
-    val parsed = functions.elements().asScala.map(parseFunction(_, unsupportedVersion)).toSeq
+    if (version.asInt() > NativeUdfLibrary.ABI_VERSION) {
+      return Right((Some(version.asInt()), functions.elements().asScala.map { function =>
+        def text(field: String) = Option(function.get(field)).filter(_.isTextual).map(_.asText())
+        UnsupportedNativeFunction(text("name").getOrElse(""), text("kind").getOrElse(""))
+      }.toSeq))
+    }
+    val parsed = functions.elements().asScala.map(parseFunction).toSeq
     parsed.collectFirst { case Left(reason) => reason } match {
       case Some(reason) => Left(reason)
       case None =>
@@ -117,9 +124,7 @@ object NativeFunctionSpec {
     }
   }
 
-  private def parseFunction(
-      function: JsonNode,
-      unsupportedVersion: Boolean): Either[String, NativeFunctionEntry] = {
+  private def parseFunction(function: JsonNode): Either[String, NativeFunctionEntry] = {
     if (!function.isObject) {
       return Left("Each function of the manifest must be a JSON object.")
     }
@@ -135,7 +140,7 @@ object NativeFunctionSpec {
     if (kind == null || !kind.isTextual) {
       return invalid("must have a field 'kind'.")
     }
-    if (unsupportedVersion || !Kinds.contains(kind.asText())) {
+    if (!Kinds.contains(kind.asText())) {
       return Right(UnsupportedNativeFunction(functionName, kind.asText()))
     }
     val arguments = function.get("arguments")
@@ -168,7 +173,8 @@ object NativeFunctionSpec {
     val dataType = try {
       CatalystSqlParser.parseDataType(ddl)
     } catch {
-      case e: ParseException => return Left(s"has $ddl as $what, which is not a valid type: " +
+      // Not only a ParseException: a decimal of more than 38 digits fails to be constructed.
+      case NonFatal(e) => return Left(s"has $ddl as $what, which is not a valid type: " +
         e.getMessage)
     }
     unsupportedType(dataType) match {
@@ -178,7 +184,13 @@ object NativeFunctionSpec {
       case None if hasNulInFieldName(dataType) =>
         Left(s"has ${NativeArrow.printable(dataType.sql)} as $what, with a field whose name " +
           "contains the character U+0000, which Spark cannot pass to a library.")
-      case None => Right(dataType)
+      case None => duplicateFieldName(dataType) match {
+        case Some(name) =>
+          Left(s"has ${NativeArrow.printable(dataType.sql)} as $what, with more than one field " +
+            s"named ${NativeArrow.printable(name)} in a struct, which Spark cannot pass to a " +
+            "library.")
+        case None => Right(dataType)
+      }
     }
   }
 
@@ -203,5 +215,20 @@ object NativeFunctionSpec {
   private def hasNulInFieldName(dataType: DataType): Boolean = dataType.existsRecursively {
     case StructType(fields) => fields.exists(_.name.contains('\u0000'))
     case _ => false
+  }
+
+  /**
+   * The first name that two fields of a struct in `dataType` share, at any level. The names are
+   * compared exactly, as the Arrow schemas of the arguments are checked when they are exported.
+   */
+  private def duplicateFieldName(dataType: DataType): Option[String] = dataType match {
+    case ArrayType(elementType, _) => duplicateFieldName(elementType)
+    case MapType(keyType, valueType, _) =>
+      duplicateFieldName(keyType).orElse(duplicateFieldName(valueType))
+    case StructType(fields) =>
+      val names = fields.map(_.name).toSeq
+      names.diff(names.distinct).headOption
+        .orElse(fields.iterator.flatMap(f => duplicateFieldName(f.dataType)).nextOption())
+    case _ => None
   }
 }

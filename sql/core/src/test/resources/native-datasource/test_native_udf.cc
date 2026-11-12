@@ -57,6 +57,10 @@
 //                        bad_result: "child_offset", an offset of 1; "short_child", one value fewer
 //                        than its parent refers to; "null_child", a NULL child; "child_dictionary",
 //                        a dictionary.
+//   bad_map_result(bigint, string)
+//                        Returns, for each row, a map from its first argument to itself, whose key
+//                        breaks the type of the result, chosen as in bad_result: "null_key", a null
+//                        key in the map of the first row.
 //   keep_input(bigint)   Moves the input and keeps it until close, and returns its argument in an
 //                        array that shares the buffers of the input when they have an offset of 0.
 //                        close records an order violation if the kept buffers changed.
@@ -509,6 +513,7 @@ const Function kFunctions[] = {
     {"wait_for_interrupt", "u", "l"},
     {"bad_result", "l,u", "l"},
     {"bad_nested_result", "l,u", "+l(l)"},
+    {"bad_map_result", "l,u", "+m(+s(l,l))"},
     {"keep_input", "l", "l"},
 };
 
@@ -774,6 +779,27 @@ void badNestedResult(const ArrowArray* input, ArrowArray* out) {
   }
 }
 
+void badMapResult(const ArrowArray* input, ArrowArray* out) {
+  Column x = column(input, 0);
+  std::string how = column(input, 1).string(0);
+  if (how != "null_key") throw std::runtime_error("bad_map_result: unknown kind " + how);
+  std::vector<int64_t> values;
+  std::vector<int32_t> offsets{0};
+  std::vector<uint8_t> valid_keys(static_cast<size_t>((input->length + 7) / 8), 0);
+  for (int64_t i = 0; i < input->length; i++) {
+    values.push_back(x.valid(i) ? x.int64(i) : 0);
+    offsets.push_back(static_cast<int32_t>(i + 1));
+    if (i > 0) setBit(valid_keys, i);
+  }
+  ArrowArray keys{};
+  exportArray(&keys, input->length, 1, {std::move(valid_keys), bytesOf(values)});
+  ArrowArray items{};
+  exportArray(&items, input->length, 0, {{}, bytesOf(values)});
+  ArrowArray entries{};
+  exportArray(&entries, input->length, 0, {{}}, {keys, items});
+  exportArray(out, input->length, 0, {{}, bytesOf(offsets)}, {entries});
+}
+
 void keepInput(State* state, ArrowArray* input, ArrowArray* out) {
   state->kept.push_back(*input);
   input->release = nullptr;
@@ -846,6 +872,8 @@ int evalBatch(void* handle, const SparkUdfEvalInfo* info, ArrowArray* input, Arr
         badResult(input, out);
       } else if (name == "bad_nested_result") {
         badNestedResult(input, out);
+      } else if (name == "bad_map_result") {
+        badMapResult(input, out);
       } else if (name == "keep_input") {
         keepInput(state, input, out);
       }

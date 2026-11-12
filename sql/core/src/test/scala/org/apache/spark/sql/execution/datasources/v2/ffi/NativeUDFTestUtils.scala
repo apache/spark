@@ -127,6 +127,7 @@ object NativeUDFTestUtils {
     function("wait_for_interrupt", Seq("string"), "bigint"),
     function("bad_result", Seq("bigint", "string"), "bigint"),
     function("bad_nested_result", Seq("bigint", "string"), "array<bigint>"),
+    function("bad_map_result", Seq("bigint", "string"), "map<bigint,bigint>"),
     function("keep_input", Seq("bigint"), "bigint"))
 
   /** A manifest, as JSON, without data sources unless `dataSources` is given. */

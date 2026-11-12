@@ -616,9 +616,11 @@ function that fails on some arguments must not rely on a condition in the query 
 neither must its arguments: with ANSI mode, as by default, `CASE WHEN d <> 0 THEN f(n / d) END`
 fails with `DIVIDE_BY_ZERO` on a row whose `d` is 0, where a built-in function in place of `f` would
 not be evaluated. Put the condition in the arguments instead, as in `f(IF(d <> 0, n / d, NULL))` or
-`f(try_divide(n, d))`, which pass a null for such a row. The conditions that a `WHERE` clause
-combines with `AND` and that call no native function are applied before the calls, so the calls
-only get the rows that they keep: `WHERE d <> 0 AND f(n / d) > 0` never divides by zero.
+`f(try_divide(n, d))`, which pass a null for such a row. When the user-defined functions that a
+`WHERE` clause calls, and their arguments, are deterministic, the deterministic conditions that it
+combines with `AND` and that call none of them are applied before the calls, so the calls only get
+the rows that they keep: for a deterministic `f`, as the functions of a manifest are by default,
+`WHERE d <> 0 AND f(n / d) > 0` never divides by zero.
 
 Spark never evaluates a native function on the driver, also to fold a call whose arguments are
 constants. It may evaluate a function for rows that the query drops afterwards, such as the rows
