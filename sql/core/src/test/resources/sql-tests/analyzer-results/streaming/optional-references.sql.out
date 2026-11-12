@@ -50,6 +50,31 @@ WHERE id? >= 2 AND archived? IS NULL
 
 
 -- !query
+CREATE FLOW streaming_sql_golden_optional_references_cdc_flow AS
+AUTO CDC INTO streaming_sql_golden_optional_references_sink
+FROM STREAM(streaming_sql_golden_optional_references_source)
+KEYS (id)
+APPLY AS DELETE WHEN deleted? = true
+SEQUENCE BY id
+-- !query analysis
+org.apache.spark.sql.catalyst.parser.ParseException
+{
+  "errorClass" : "OPTIONAL_COLUMN_REFERENCE_NOT_SUPPORTED.IN_DML",
+  "sqlState" : "0A000",
+  "messageParameters" : {
+    "context" : "AUTO CDC"
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 218,
+    "stopIndex" : 225,
+    "fragment" : "deleted?"
+  } ]
+}
+
+
+-- !query
 REFRESH FLOW streaming_sql_golden_optional_references_flow
 -- !query analysis
 

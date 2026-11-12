@@ -142,6 +142,23 @@ class SQLFunctionSuite extends SharedSparkSession {
     }
   }
 
+  test("SPARK-61494: the body of a SQL function does not reference the query around the " +
+    "subquery that calls the function") {
+    withUserDefinedFunction("outer_name_fn" -> true) {
+      sql("DECLARE OR REPLACE VARIABLE outer_name INT DEFAULT 100")
+      try {
+        sql("CREATE TEMPORARY FUNCTION outer_name_fn() RETURNS INT RETURN outer_name")
+        // `outer_name` in the body is the variable, not the column of the calling query.
+        checkAnswer(sql("SELECT outer_name_fn() FROM VALUES (5) AS t(outer_name)"), Row(100))
+        checkAnswer(
+          sql("SELECT (SELECT outer_name_fn()) FROM VALUES (5) AS t(outer_name)"),
+          Row(100))
+      } finally {
+        sql("DROP TEMPORARY VARIABLE IF EXISTS outer_name")
+      }
+    }
+  }
+
   test("SQL table function") {
     withUserDefinedFunction("foo" -> false) {
       sql(

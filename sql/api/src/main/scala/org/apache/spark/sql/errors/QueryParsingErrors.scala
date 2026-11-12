@@ -1103,8 +1103,9 @@ private[sql] object QueryParsingErrors extends DataTypeErrorsBase {
 
   /**
    * The syntax error for the `?` optional-reference marker `marker` of the reference `ctx` where
-   * the marker is not allowed, e.g. while optional references are disabled. Like the syntax error
-   * that the parser raises for any other unexpected token, it points at the token.
+   * the grammar accepts the marker but it has no meaning, e.g. after a regular expression that
+   * selects columns. Like the syntax error that the parser raises for any other unexpected token,
+   * it points at the token.
    */
   def unexpectedOptionalReferenceMarkerError(ctx: ParserRuleContext, marker: Token): Throwable = {
     new ParseException(

@@ -409,7 +409,7 @@ object SqlStatementSplitter {
 
     // Two-stage parse: SLL first (fast), then LL on failure. Matches the
     // normal parser's `AbstractParser.executeWithTwoStageStrategy`.
-    try {
+    def parseRegion(): ParseOutcome = try {
       parser.getInterpreter.setPredictionMode(PredictionMode.SLL)
       parser.compoundOrSingleStatement()
       ParsedOk
@@ -431,6 +431,14 @@ object SqlStatementSplitter {
           case _: StackOverflowError => FailedNonEof
         }
       case _: StackOverflowError => FailedNonEof
+    }
+
+    parseRegion() match {
+      case ParsedOk => ParsedOk
+      // Like the normal parser, parse a region that is not a statement again with optional
+      // references (`x?`) if they are enabled.
+      case _ if AbstractParser.restartWithOptionalReferences(parser, regionTokens) => parseRegion()
+      case failed => failed
     }
   }
 
@@ -458,6 +466,7 @@ object SqlStatementSplitter {
     parser.legacy_identifier_clause_only = conf.legacyIdentifierClauseOnly
     parser.single_character_pipe_operator_enabled = conf.singleCharacterPipeOperatorEnabled
     parser.file_type_enabled = conf.isFileTypeEnabled
+    parser.optional_references_enabled = conf.optionalReferencesEnabled
 
     parser.removeErrorListeners()
     parser.setErrorHandler(new BailErrorStrategy)

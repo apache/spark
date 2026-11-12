@@ -313,6 +313,9 @@ object AnalysisContext {
         } else {
           mutable.LinkedHashSet.empty
         },
+      // The body of a SQL function is not a part of the query that calls it. If the call is in a
+      // subquery, the body must not resolve its names as outer references of that query.
+      outerPlan = None,
       collation = function.collation)
     set(context)
     try f finally { set(originContext) }
@@ -4700,13 +4703,19 @@ object UpdateOuterReferences extends Rule[LogicalPlan] {
  */
 object RemoveTempResolvedColumn extends Rule[LogicalPlan] {
   override def apply(plan: LogicalPlan): LogicalPlan = {
-    plan.resolveExpressionsWithPruning(_.containsPattern(TEMP_RESOLVED_COLUMN)) {
-      case t: TempResolvedColumn =>
-        if (t.hasTried) {
-          UnresolvedAttribute(t.nameParts)
-        } else {
-          t.child
-        }
+    if (ResolveOptionalReferences.isUnfinishedSubqueryPlan(plan)) {
+      // HAVING and ORDER BY can still resolve these columns when the subquery plan is resolved
+      // again, after its unresolvable optional references are replaced.
+      plan
+    } else {
+      plan.resolveExpressionsWithPruning(_.containsPattern(TEMP_RESOLVED_COLUMN)) {
+        case t: TempResolvedColumn =>
+          if (t.hasTried) {
+            UnresolvedAttribute(t.nameParts)
+          } else {
+            t.child
+          }
+      }
     }
   }
 }

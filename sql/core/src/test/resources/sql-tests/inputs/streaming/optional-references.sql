@@ -21,6 +21,14 @@ SELECT id?, upper(value?) AS value, deleted_at?
 FROM STREAM(streaming_sql_golden_optional_references_source)
 WHERE id? >= 2 AND archived? IS NULL;
 
+-- An AUTO CDC flow modifies its target like a MERGE statement, so it rejects `?`.
+CREATE FLOW streaming_sql_golden_optional_references_cdc_flow AS
+AUTO CDC INTO streaming_sql_golden_optional_references_sink
+FROM STREAM(streaming_sql_golden_optional_references_source)
+KEYS (id)
+APPLY AS DELETE WHEN deleted? = true
+SEQUENCE BY id;
+
 REFRESH FLOW streaming_sql_golden_optional_references_flow;
 
 SELECT * FROM streaming_sql_golden_optional_references_sink ORDER BY id;

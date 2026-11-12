@@ -17,7 +17,6 @@
 
 package org.apache.spark.sql.catalyst.parser
 
-import org.apache.spark.SparkFunSuite
 import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.analysis.{
   ExpressionWithUnresolvedIdentifier,
@@ -32,12 +31,15 @@ import org.apache.spark.sql.catalyst.expressions.{
   Alias,
   Cast,
   Expression,
+  InSubquery,
   LambdaFunction,
   Literal,
   SemiStructuredExtract,
+  SubqueryExpression,
   UnresolvedNamedLambdaVariable
 }
-import org.apache.spark.sql.catalyst.plans.SQLHelper
+import org.apache.spark.sql.catalyst.plans.PlanTest
+import org.apache.spark.sql.catalyst.plans.logical.{LogicalPlan, SetVariable}
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types.IntegerType
 
@@ -45,7 +47,7 @@ import org.apache.spark.sql.types.IntegerType
  * Tests the parsing of optional references: a `?` after an identifier of a column, field, or
  * variable reference, or after a named parameter marker.
  */
-class OptionalReferencesParserSuite extends SparkFunSuite with SQLHelper {
+class OptionalReferencesParserSuite extends PlanTest {
 
   private def withOptionalReferences(enabled: Boolean)(f: => Unit): Unit = {
     withSQLConf(SQLConf.OPTIONAL_REFERENCES_ENABLED.key -> enabled.toString)(f)
@@ -53,6 +55,25 @@ class OptionalReferencesParserSuite extends SparkFunSuite with SQLHelper {
 
   private def parseExpression(sqlText: String): Expression =
     CatalystSqlParser.parseExpression(sqlText)
+
+  private def parsePlan(sqlText: String, optionalReferences: Boolean): LogicalPlan = {
+    var plan: LogicalPlan = null
+    withOptionalReferences(optionalReferences) {
+      plan = CatalystSqlParser.parsePlan(sqlText)
+    }
+    plan
+  }
+
+  /** Returns the positional parameters of `plan` and of the plans of its subqueries. */
+  private def positionalParameters(plan: LogicalPlan): Seq[PosParameter] = {
+    plan
+      .flatMap(_.expressions.flatMap(_.flatMap {
+        case parameter: PosParameter => Seq(parameter)
+        case subquery: SubqueryExpression => positionalParameters(subquery.plan)
+        case _ => Nil
+      }))
+      .distinct
+  }
 
   /** Returns the expression that an `ExpressionWithUnresolvedIdentifier` builds for `nameParts`. */
   private def buildIdentifierExpression(
@@ -264,7 +285,6 @@ class OptionalReferencesParserSuite extends SparkFunSuite with SQLHelper {
         "s.x?" -> 3,
         "s?.x" -> 1,
         "array(1)[0].x?" -> 13,
-        ":p?" -> 2,
         "IDENTIFIER('x')?" -> 15,
         "IDENTIFIER(name)?" -> 16
       ).foreach {
@@ -321,12 +341,133 @@ class OptionalReferencesParserSuite extends SparkFunSuite with SQLHelper {
         "SELECT a? FROM t WHERE b? = ?" -> 1
       ).foreach {
         case (sqlText, expectedPositionalParameters) =>
-          val positionalParameters = CatalystSqlParser
-            .parsePlan(sqlText)
-            .flatMap(_.expressions.flatMap(_.collect { case parameter: PosParameter => parameter }))
-            .distinct
-          assert(positionalParameters.length == expectedPositionalParameters, sqlText)
+          val plan = parsePlan(sqlText, optionalReferences = true)
+          assert(positionalParameters(plan).length == expectedPositionalParameters, sqlText)
       }
+    }
+  }
+
+  test("a statement that is valid without optional references keeps its meaning") {
+    // Each `?` follows a keyword that is also a valid name of a column, so it could mark an
+    // optional reference to that column.
+    Seq(
+      "SELECT a FROM t WHERE a IN (SELECT ?)",
+      "SELECT a FROM t WHERE a NOT IN (SELECT ? + 1)",
+      "SELECT a FROM t WHERE (a, b) IN (SELECT ?, ?)",
+      "SELECT a FROM t WHERE a IN (VALUES ?, ?)",
+      "SELECT a FROM t WHERE a = (SELECT ?, ?)",
+      "SELECT first(DISTINCT ?), last(ALL ?), any_value(DISTINCT ?) FROM t",
+      "SELECT trim(FROM ?) FROM t",
+      "SELECT json_array(ALL ?, ?) FROM t",
+      "SELECT NOT LIKE ? FROM t",
+      "SELECT CASE WHEN WHEN ? THEN ? END FROM t",
+      "SELECT count(DISTINCT ?) FROM t"
+    ).foreach { sqlText =>
+      val plan = parsePlan(sqlText, optionalReferences = true)
+      comparePlans(plan, parsePlan(sqlText, optionalReferences = false), checkAnalysis = false)
+      assert(positionalParameters(plan).length == sqlText.count(_ == '?'), sqlText)
+    }
+
+    // Parameter markers in string literals are only supported when they are substituted.
+    Seq(
+      "SELECT INTERVAL ? DAY",
+      "SELECT 'a' ? 'b'",
+      "SELECT trim(FROM ?) FROM t WHERE a IN (SELECT ?)"
+    ).foreach { sqlText =>
+      val parameters = List.fill(sqlText.count(_ == '?'))("'1'")
+      Seq(true, false).foreach { enabled =>
+        withOptionalReferences(enabled) {
+          val substituted =
+            new SubstituteParamsParser().substitute(sqlText, positionalParams = parameters)._1
+          assert(substituted == sqlText.replace("?", "'1'"), sqlText)
+        }
+      }
+    }
+  }
+
+  test("a ? after SELECT or VALUES in an IN subquery is a positional parameter marker") {
+    withOptionalReferences(enabled = true) {
+      // The optional reference `b?` makes these statements invalid without optional references.
+      Seq(
+        "SELECT b? FROM t WHERE a IN (SELECT ?)" -> 1,
+        "SELECT b? FROM t WHERE a NOT IN (SELECT ? + 1)" -> 1,
+        "SELECT b? FROM t WHERE (a, b) IN (SELECT ?, ?)" -> 2,
+        "SELECT b? FROM t WHERE a IN (VALUES ?, ?)" -> 2
+      ).foreach {
+        case (sqlText, expectedPositionalParameters) =>
+          val subqueries = CatalystSqlParser
+            .parsePlan(sqlText)
+            .flatMap(_.expressions.flatMap(_.collect { case in: InSubquery => in.query.plan }))
+          assert(subqueries.length == 1, sqlText)
+          assert(
+            positionalParameters(subqueries.head).length == expectedPositionalParameters,
+            sqlText
+          )
+      }
+      // A quoted name is a reference.
+      val plan = CatalystSqlParser.parsePlan("SELECT a FROM t WHERE a IN (`select`?)")
+      assert(plan.flatMap(_.expressions.flatMap(_.collect { case in: InSubquery => in })).isEmpty)
+    }
+  }
+
+  test("optional references in a statement that a rule for free text accepts without them") {
+    withOptionalReferences(enabled = true) {
+      // Without optional references, `SET .*?` is the only rule that parses these statements.
+      Seq(
+        "SET VAR v = a?",
+        "SET VARIABLE v = (SELECT max(a?) FROM t)",
+        "SET VAR (v, w) = (SELECT a?, b FROM t)"
+      ).foreach { sqlText =>
+        assert(CatalystSqlParser.parsePlan(sqlText).isInstanceOf[SetVariable], sqlText)
+      }
+
+      // The parameter markers of such a statement are substituted.
+      val substitutor = new SubstituteParamsParser()
+      assert(substitutor.substitute("SET VAR v = :p?", Map("p" -> "1"))._1 == "SET VAR v = 1")
+      assert(substitutor.substitute("SET VAR v = :p?", Map("q" -> "1"))._1 == "SET VAR v = NULL")
+      assert(
+        substitutor.substitute("SET VAR v = coalesce(a?, ?)", positionalParams = List("1"))._1 ==
+        "SET VAR v = coalesce(a?, 1)"
+      )
+      // As before, a `?` in free text is not a parameter marker.
+      assert(
+        substitutor.substitute("SET spark.a.b=c?d", positionalParams = List("1"))._1 ==
+        "SET spark.a.b=c?d"
+      )
+    }
+  }
+
+  test("optional references in a query that is parsed without its end") {
+    withSQLConf(
+      SQLConf.OPTIONAL_REFERENCES_ENABLED.key -> "true",
+      SQLConf.LEGACY_PARSE_QUERY_WITHOUT_EOF.key -> "true") {
+      // The rule for a query stops before a `?` that is not a parameter marker.
+      val sqlText = "SELECT a, b? FROM t WHERE c? IS NULL"
+      val plan = CatalystSqlParser.parseQuery(sqlText)
+      comparePlans(plan, CatalystSqlParser.parsePlan(sqlText), checkAnalysis = false)
+      val optionalNames = plan.flatMap(_.expressions.flatMap(_.collect {
+        case attribute: UnresolvedAttribute
+            if OptionalReferences.optionalNamePartIndices(attribute).nonEmpty =>
+          attribute.name
+      }))
+      assert(optionalNames.toSet == Set("b", "c"))
+    }
+  }
+
+  test("statements with optional references are split like other statements") {
+    withOptionalReferences(enabled = true) {
+      val result =
+        SqlStatementSplitter.split("BEGIN SELECT a? FROM t; SELECT 1; END; SELECT b?; SELECT ?")
+      assert(
+        result.completeStatements.map(_.statement) ==
+        Seq("BEGIN SELECT a? FROM t; SELECT 1; END", "SELECT b?")
+      )
+      assert(result.partialStatement == "SELECT ?")
+      // Without optional references, this is the start of an interval literal.
+      assert(
+        SqlStatementSplitter.split("SELECT interval?;").completeStatements.map(_.statement) ==
+        Seq("SELECT interval?")
+      )
     }
   }
 
@@ -390,6 +531,29 @@ class OptionalReferencesParserSuite extends SparkFunSuite with SQLHelper {
     }
   }
 
+  test("optional named parameter markers are not supported in partition specifications") {
+    withOptionalReferences(enabled = true) {
+      Seq(
+        "TRUNCATE TABLE t PARTITION (p = :v?)",
+        "ALTER TABLE t DROP PARTITION (p = :v?)",
+        "INSERT INTO t PARTITION (p = :v?) SELECT a FROM s"
+      ).foreach { sqlText =>
+        Seq[() => Any](
+          () => CatalystSqlParser.parsePlan(sqlText),
+          () => new SubstituteParamsParser().substitute(sqlText, Map("v" -> "1"))
+        ).foreach { parse =>
+          checkError(
+            exception = intercept[ParseException](parse()),
+            condition = "OPTIONAL_COLUMN_REFERENCE_NOT_SUPPORTED.IN_DML",
+            sqlState = Some("0A000"),
+            parameters = Map("context" -> "PARTITION"),
+            context = expectedContext(sqlText, ":v?")
+          )
+        }
+      }
+    }
+  }
+
   test("optional references are not supported in expressions that define table objects") {
     withOptionalReferences(enabled = true) {
       Seq(
@@ -398,7 +562,8 @@ class OptionalReferencesParserSuite extends SparkFunSuite with SQLHelper {
         ("ALTER TABLE t ALTER COLUMN b SET DEFAULT a?", "DEFAULT"),
         ("ALTER TABLE t ADD CONSTRAINT c CHECK (a? > 0)", "CHECK"),
         ("CREATE TABLE t (a INT, CONSTRAINT c CHECK (a? > 0))", "CHECK"),
-        ("CREATE TABLE t (a INT CHECK (a? > 0))", "CHECK")
+        ("CREATE TABLE t (a INT CHECK (a? > 0))", "CHECK"),
+        ("CREATE TABLE t (b INT) USING parquet OPTIONS (compression = a?)", "OPTIONS")
       ).foreach {
         case (sqlText, clause) =>
           checkError(
@@ -454,16 +619,28 @@ class OptionalReferencesParserSuite extends SparkFunSuite with SQLHelper {
         context = ExpectedContext(fragment = ":y", start = 12, stop = 13)
       )
     }
+    // The name of a parameter can be a double-quoted identifier.
+    withSQLConf(
+      SQLConf.OPTIONAL_REFERENCES_ENABLED.key -> "true",
+      SQLConf.ANSI_ENABLED.key -> "true",
+      SQLConf.DOUBLE_QUOTED_IDENTIFIERS.key -> "true") {
+      val substituted = new SubstituteParamsParser().substitute("SELECT :\"x\"?", Map("x" -> "1"))
+      assert(substituted._1 == "SELECT 1")
+    }
   }
 
   test(
-    "optional named parameter markers are a syntax error while optional references are " +
-    "disabled"
+    "a ? after a named parameter marker is a positional parameter marker while optional " +
+    "references are disabled"
   ) {
     withOptionalReferences(enabled = false) {
-      checkUnexpectedMarker("SELECT :x?", position = 9) { sqlText =>
-        new SubstituteParamsParser().substitute(sqlText, Map("x" -> "1"))
+      // As before, the two markers are the parts of a string literal, which then is not valid.
+      val parseException = intercept[ParseException](parseExpression(":p?"))
+      assert(parseException.getCondition == "UNEXPECTED_USE_OF_PARAMETER_MARKER")
+      val substitutionException = intercept[AnalysisException] {
+        new SubstituteParamsParser().substitute("SELECT :x?", Map("x" -> "1"))
       }
+      assert(substitutionException.getCondition == "INVALID_QUERY_MIXED_QUERY_PARAMETERS")
     }
   }
 }

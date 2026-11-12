@@ -803,6 +803,27 @@ org.apache.spark.sql.AnalysisException
 
 
 -- !query
+SELECT addr.state? FROM people a JOIN people b ON a.id = b.id
+-- !query analysis
+org.apache.spark.sql.AnalysisException
+{
+  "errorClass" : "AMBIGUOUS_REFERENCE",
+  "sqlState" : "42704",
+  "messageParameters" : {
+    "name" : "`addr`.`state`",
+    "referenceNames" : "[`a`.`addr`, `b`.`addr`]"
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 8,
+    "stopIndex" : 18,
+    "fragment" : "addr.state?"
+  } ]
+}
+
+
+-- !query
 SELECT id.missing? FROM people
 -- !query analysis
 org.apache.spark.sql.AnalysisException
@@ -889,6 +910,19 @@ Project [a#x, a#x AS b#x]
 
 
 -- !query
+SELECT missing? AS a, a + 1 AS b FROM people
+-- !query analysis
+Project [a#x, (cast(a#x as int) + 1) AS b#x]
++- Project [id#x, addr#x, null AS a#x]
+   +- SubqueryAlias people
+      +- View (`people`, [id#x, addr#x])
+         +- Project [cast(id#x as int) AS id#x, cast(addr#x as struct<city:string,zip:string>) AS addr#x]
+            +- Project [id#x, addr#x]
+               +- SubqueryAlias t
+                  +- LocalRelation [id#x, addr#x]
+
+
+-- !query
 SELECT id AS a, a? + 1 AS b FROM people WHERE missing? IS NULL
 -- !query analysis
 Project [a#x, (a#x + 1) AS b#x]
@@ -903,16 +937,37 @@ Project [a#x, (a#x + 1) AS b#x]
 
 
 -- !query
-SELECT missing?, missing + 1 AS m, addr.city, upper(city) AS c FROM people
+SELECT missing?, missing? IS NULL AS m, addr.city, upper(city) AS c FROM people
 -- !query analysis
-Project [missing#x, (cast(missing#x as int) + 1) AS m#x, city#x, upper(city#x) AS c#x]
-+- Project [id#x, addr#x, null AS missing#x, addr#x.city AS city#x]
+Project [null AS missing#x, isnull(null) AS m#x, city#x, upper(city#x) AS c#x]
++- Project [id#x, addr#x, addr#x.city AS city#x]
    +- SubqueryAlias people
       +- View (`people`, [id#x, addr#x])
          +- Project [cast(id#x as int) AS id#x, cast(addr#x as struct<city:string,zip:string>) AS addr#x]
             +- Project [id#x, addr#x]
                +- SubqueryAlias t
                   +- LocalRelation [id#x, addr#x]
+
+
+-- !query
+SELECT missing?, missing + 1 AS m FROM people
+-- !query analysis
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
+{
+  "errorClass" : "UNRESOLVED_COLUMN.WITH_SUGGESTION",
+  "sqlState" : "42703",
+  "messageParameters" : {
+    "objectName" : "`missing`",
+    "proposal" : "`id`, `addr`"
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 18,
+    "stopIndex" : 24,
+    "fragment" : "missing"
+  } ]
+}
 
 
 -- !query
@@ -934,6 +989,144 @@ org.apache.spark.sql.catalyst.ExtendedAnalysisException
     "fragment" : "missing"
   } ]
 }
+
+
+-- !query
+SELECT addr.state?, upper(state) AS s FROM people
+-- !query analysis
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
+{
+  "errorClass" : "UNRESOLVED_COLUMN.WITH_SUGGESTION",
+  "sqlState" : "42703",
+  "messageParameters" : {
+    "objectName" : "`state`",
+    "proposal" : "`id`, `addr`"
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 27,
+    "stopIndex" : 31,
+    "fragment" : "state"
+  } ]
+}
+
+
+-- !query
+SELECT missing?, count(*) AS c FROM people GROUP BY missing
+-- !query analysis
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
+{
+  "errorClass" : "UNRESOLVED_COLUMN.WITH_SUGGESTION",
+  "sqlState" : "42703",
+  "messageParameters" : {
+    "objectName" : "`missing`",
+    "proposal" : "`id`, `addr`"
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 53,
+    "stopIndex" : 59,
+    "fragment" : "missing"
+  } ]
+}
+
+
+-- !query
+SELECT addr.state?, count(*) AS c FROM people GROUP BY state
+-- !query analysis
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
+{
+  "errorClass" : "UNRESOLVED_COLUMN.WITH_SUGGESTION",
+  "sqlState" : "42703",
+  "messageParameters" : {
+    "objectName" : "`state`",
+    "proposal" : "`id`, `addr`"
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 56,
+    "stopIndex" : 60,
+    "fragment" : "state"
+  } ]
+}
+
+
+-- !query
+SELECT addr.city, count(*) AS c FROM people GROUP BY city ORDER BY city
+-- !query analysis
+Sort [city#x ASC NULLS FIRST], true
++- Aggregate [addr#x.city], [addr#x.city AS city#x, count(1) AS c#xL]
+   +- SubqueryAlias people
+      +- View (`people`, [id#x, addr#x])
+         +- Project [cast(id#x as int) AS id#x, cast(addr#x as struct<city:string,zip:string>) AS addr#x]
+            +- Project [id#x, addr#x]
+               +- SubqueryAlias t
+                  +- LocalRelation [id#x, addr#x]
+
+
+-- !query
+SELECT missing?, count(*) AS c FROM people GROUP BY missing?
+-- !query analysis
+Aggregate [null], [null AS missing#x, count(1) AS c#xL]
++- SubqueryAlias people
+   +- View (`people`, [id#x, addr#x])
+      +- Project [cast(id#x as int) AS id#x, cast(addr#x as struct<city:string,zip:string>) AS addr#x]
+         +- Project [id#x, addr#x]
+            +- SubqueryAlias t
+               +- LocalRelation [id#x, addr#x]
+
+
+-- !query
+SELECT missing? AS m, count(*) AS c FROM people GROUP BY m
+-- !query analysis
+Aggregate [null], [null AS m#x, count(1) AS c#xL]
++- SubqueryAlias people
+   +- View (`people`, [id#x, addr#x])
+      +- Project [cast(id#x as int) AS id#x, cast(addr#x as struct<city:string,zip:string>) AS addr#x]
+         +- Project [id#x, addr#x]
+            +- SubqueryAlias t
+               +- LocalRelation [id#x, addr#x]
+
+
+-- !query
+SELECT missing?, id FROM people ORDER BY missing, id
+-- !query analysis
+Sort [missing#x ASC NULLS FIRST, id#x ASC NULLS FIRST], true
++- Project [null AS missing#x, id#x]
+   +- SubqueryAlias people
+      +- View (`people`, [id#x, addr#x])
+         +- Project [cast(id#x as int) AS id#x, cast(addr#x as struct<city:string,zip:string>) AS addr#x]
+            +- Project [id#x, addr#x]
+               +- SubqueryAlias t
+                  +- LocalRelation [id#x, addr#x]
+
+
+-- !query
+SELECT missing?, count(*) AS c FROM people GROUP BY ALL HAVING missing IS NULL
+-- !query analysis
+Filter isnull(missing#x)
++- Aggregate [null], [null AS missing#x, count(1) AS c#xL]
+   +- SubqueryAlias people
+      +- View (`people`, [id#x, addr#x])
+         +- Project [cast(id#x as int) AS id#x, cast(addr#x as struct<city:string,zip:string>) AS addr#x]
+            +- Project [id#x, addr#x]
+               +- SubqueryAlias t
+                  +- LocalRelation [id#x, addr#x]
+
+
+-- !query
+SELECT named_struct('state', 'CA') AS addr, addr.state? FROM people
+-- !query analysis
+Project [named_struct(state, CA) AS addr#x, null AS state#x]
++- SubqueryAlias people
+   +- View (`people`, [id#x, addr#x])
+      +- Project [cast(id#x as int) AS id#x, cast(addr#x as struct<city:string,zip:string>) AS addr#x]
+         +- Project [id#x, addr#x]
+            +- SubqueryAlias t
+               +- LocalRelation [id#x, addr#x]
 
 
 -- !query
@@ -1012,6 +1205,86 @@ org.apache.spark.sql.AnalysisException
     "fragment" : "known_struct.b"
   } ]
 }
+
+
+-- !query
+SET VAR known = unknown?
+-- !query analysis
+SetVariable [variablereference(system.session.known=7)]
++- Project [cast(unknown#x as int) AS known#x]
+   +- Project [null AS unknown#x]
+      +- OneRowRelation
+
+
+-- !query
+SELECT known
+-- !query analysis
+Project [variablereference(system.session.known=CAST(NULL AS INT)) AS known#x]
++- OneRowRelation
+
+
+-- !query
+SET VAR known = (SELECT max(id) + coalesce(max(bonus?), 10) FROM people)
+-- !query analysis
+SetVariable [variablereference(system.session.known=CAST(NULL AS INT))]
++- Project [scalar-subquery#x [] AS known#x]
+   :  +- Aggregate [(max(id#x) + coalesce(cast(max(null) as int), 10)) AS (max(id) + coalesce(max(NULL), 10))#x]
+   :     +- SubqueryAlias people
+   :        +- View (`people`, [id#x, addr#x])
+   :           +- Project [cast(id#x as int) AS id#x, cast(addr#x as struct<city:string,zip:string>) AS addr#x]
+   :              +- Project [id#x, addr#x]
+   :                 +- SubqueryAlias t
+   :                    +- LocalRelation [id#x, addr#x]
+   +- OneRowRelation
+
+
+-- !query
+SELECT known
+-- !query analysis
+Project [variablereference(system.session.known=12) AS known#x]
++- OneRowRelation
+
+
+-- !query
+EXECUTE IMMEDIATE 'SET VAR known = :p?' USING 5 AS p
+-- !query analysis
+ExecuteImmediateCommand
+   +- SetVariable [variablereference(system.session.known=12)]
+      +- Project [5 AS known#x]
+         +- OneRowRelation
+
+
+-- !query
+SELECT known
+-- !query analysis
+Project [variablereference(system.session.known=5) AS known#x]
++- OneRowRelation
+
+
+-- !query
+EXECUTE IMMEDIATE 'SET VAR known = coalesce(unknown?, :p?, ?)' USING 7
+-- !query analysis
+org.apache.spark.sql.AnalysisException
+{
+  "errorClass" : "INVALID_QUERY_MIXED_QUERY_PARAMETERS",
+  "sqlState" : "42613"
+}
+
+
+-- !query
+EXECUTE IMMEDIATE 'SET VAR known = coalesce(unknown?, ?)' USING 7
+-- !query analysis
+ExecuteImmediateCommand
+   +- SetVariable [variablereference(system.session.known=5)]
+      +- Project [coalesce(cast(null as int), 7) AS known#x]
+         +- OneRowRelation
+
+
+-- !query
+SELECT known
+-- !query analysis
+Project [variablereference(system.session.known=7) AS known#x]
++- OneRowRelation
 
 
 -- !query
@@ -1277,6 +1550,50 @@ Project [scalar-subquery#x [] AS c#x]
 
 
 -- !query
+SELECT id, (SELECT max(i.id) AS id FROM people i WHERE i.id = o.id GROUP BY i.addr
+  HAVING id > 0 AND missing? IS NULL) AS m
+FROM people o ORDER BY id
+-- !query analysis
+Sort [id#x ASC NULLS FIRST], true
++- Project [id#x, scalar-subquery#x [id#x] AS m#x]
+   :  +- Filter ((id#x > 0) AND isnull(null))
+   :     +- Aggregate [addr#x], [max(id#x) AS id#x]
+   :        +- Filter (id#x = outer(id#x))
+   :           +- SubqueryAlias i
+   :              +- SubqueryAlias people
+   :                 +- View (`people`, [id#x, addr#x])
+   :                    +- Project [cast(id#x as int) AS id#x, cast(addr#x as struct<city:string,zip:string>) AS addr#x]
+   :                       +- Project [id#x, addr#x]
+   :                          +- SubqueryAlias t
+   :                             +- LocalRelation [id#x, addr#x]
+   +- SubqueryAlias o
+      +- SubqueryAlias people
+         +- View (`people`, [id#x, addr#x])
+            +- Project [cast(id#x as int) AS id#x, cast(addr#x as struct<city:string,zip:string>) AS addr#x]
+               +- Project [id#x, addr#x]
+                  +- SubqueryAlias t
+                     +- LocalRelation [id#x, addr#x]
+
+
+-- !query
+SELECT id, (SELECT addr.zip? FROM (SELECT named_struct('city', 'x') AS addr)) AS zip FROM people
+ORDER BY id
+-- !query analysis
+Sort [id#x ASC NULLS FIRST], true
++- Project [id#x, scalar-subquery#x [] AS zip#x]
+   :  +- Project [null AS zip#x]
+   :     +- SubqueryAlias __auto_generated_subquery_name
+   :        +- Project [named_struct(city, x) AS addr#x]
+   :           +- OneRowRelation
+   +- SubqueryAlias people
+      +- View (`people`, [id#x, addr#x])
+         +- Project [cast(id#x as int) AS id#x, cast(addr#x as struct<city:string,zip:string>) AS addr#x]
+            +- Project [id#x, addr#x]
+               +- SubqueryAlias t
+                  +- LocalRelation [id#x, addr#x]
+
+
+-- !query
 SELECT explode(array(1, 2)) AS e, (SELECT max(id) FROM people WHERE id = e?) AS m
 -- !query analysis
 Project [e#x, scalar-subquery#x [e#x] AS m#x]
@@ -1522,6 +1839,79 @@ Project [optional_qualified_fn(a#x) AS optional_qualified_fn(1)#x]
 
 
 -- !query
+SELECT (SELECT optional_fn(1)) AS r
+-- !query analysis
+Project [scalar-subquery#x [] AS r#x]
+:  +- Project [optional_fn(a#x) AS optional_fn(1)#x]
+:     +- Project [cast(1 as int) AS a#x]
+:        +- OneRowRelation
++- OneRowRelation
+
+
+-- !query
+SELECT (SELECT optional_fn(1)) AS r FROM VALUES (5) AS t(b)
+-- !query analysis
+Project [scalar-subquery#x [] AS r#x]
+:  +- Project [optional_fn(a#x) AS optional_fn(1)#x]
+:     +- Project [cast(1 as int) AS a#x]
+:        +- OneRowRelation
++- SubqueryAlias t
+   +- LocalRelation [b#x]
+
+
+-- !query
+CREATE TEMPORARY FUNCTION optional_table_fn(a INT) RETURNS TABLE (x INT, y INT)
+  RETURN SELECT a, coalesce(b?, 10)
+-- !query analysis
+CreateSQLFunctionCommand optional_table_fn, a INT, x INT, y INT, SELECT a, coalesce(b?, 10), true, true, false, false
+
+
+-- !query
+SELECT p.id, f.x, f.y FROM people p, LATERAL optional_table_fn(p.id) f ORDER BY p.id
+-- !query analysis
+Sort [id#x ASC NULLS FIRST], true
++- Project [id#x, x#x, y#x]
+   +- LateralJoin lateral-subquery#x [id#x], Inner
+      :  +- SubqueryAlias f
+      :     +- SQLFunctionNode optional_table_fn
+      :        +- SubqueryAlias optional_table_fn
+      :           +- Project [cast(a#x as int) AS x#x, cast(coalesce(NULL, 10)#x as int) AS y#x]
+      :              +- Project [cast(outer(id#x) as int) AS a#x, coalesce(cast(null as int), 10) AS coalesce(NULL, 10)#x]
+      :                 +- OneRowRelation
+      +- SubqueryAlias p
+         +- SubqueryAlias people
+            +- View (`people`, [id#x, addr#x])
+               +- Project [cast(id#x as int) AS id#x, cast(addr#x as struct<city:string,zip:string>) AS addr#x]
+                  +- Project [id#x, addr#x]
+                     +- SubqueryAlias t
+                        +- LocalRelation [id#x, addr#x]
+
+
+-- !query
+DECLARE OR REPLACE VARIABLE fn_variable INT DEFAULT 100
+-- !query analysis
+CreateVariable default(cast(100 as int), sql='100'), true
++- ResolvedIdentifier org.apache.spark.sql.catalyst.analysis.FakeSystemCatalog$@xxxxxxxx, session.fn_variable
+
+
+-- !query
+CREATE TEMPORARY FUNCTION variable_fn() RETURNS INT RETURN fn_variable
+-- !query analysis
+CreateSQLFunctionCommand variable_fn, INT, fn_variable, false, true, false, false
+
+
+-- !query
+SELECT (SELECT variable_fn()) AS r FROM VALUES (5) AS t(fn_variable)
+-- !query analysis
+Project [scalar-subquery#x [] AS r#x]
+:  +- Project [variable_fn() AS variable_fn()#x]
+:     +- Project
+:        +- OneRowRelation
++- SubqueryAlias t
+   +- LocalRelation [fn_variable#x]
+
+
+-- !query
 DROP TEMPORARY FUNCTION optional_fn
 -- !query analysis
 DropFunctionCommand optional_fn, false, true
@@ -1531,6 +1921,25 @@ DropFunctionCommand optional_fn, false, true
 DROP TEMPORARY FUNCTION optional_qualified_fn
 -- !query analysis
 DropFunctionCommand optional_qualified_fn, false, true
+
+
+-- !query
+DROP TEMPORARY FUNCTION optional_table_fn
+-- !query analysis
+DropFunctionCommand optional_table_fn, false, true
+
+
+-- !query
+DROP TEMPORARY FUNCTION variable_fn
+-- !query analysis
+DropFunctionCommand variable_fn, false, true
+
+
+-- !query
+DROP TEMPORARY VARIABLE fn_variable
+-- !query analysis
+DropVariable false
++- ResolvedIdentifier org.apache.spark.sql.catalyst.analysis.FakeSystemCatalog$@xxxxxxxx, session.fn_variable
 
 
 -- !query
@@ -1752,6 +2161,37 @@ Distinct
 
 
 -- !query
+EXECUTE IMMEDIATE 'SELECT id FROM people WHERE id IN (SELECT ?) ORDER BY id' USING 2
+-- !query analysis
+Sort [id#x ASC NULLS FIRST], true
++- Project [id#x]
+   +- Filter id#x IN (list#x [])
+      :  +- Project [2 AS 2#x]
+      :     +- OneRowRelation
+      +- SubqueryAlias people
+         +- View (`people`, [id#x, addr#x])
+            +- Project [cast(id#x as int) AS id#x, cast(addr#x as struct<city:string,zip:string>) AS addr#x]
+               +- Project [id#x, addr#x]
+                  +- SubqueryAlias t
+                     +- LocalRelation [id#x, addr#x]
+
+
+-- !query
+EXECUTE IMMEDIATE 'SELECT id FROM people WHERE id IN (VALUES ?, ?) ORDER BY id' USING 1, 2
+-- !query analysis
+Sort [id#x ASC NULLS FIRST], true
++- Project [id#x]
+   +- Filter id#x IN (list#x [])
+      :  +- LocalRelation [col1#x]
+      +- SubqueryAlias people
+         +- View (`people`, [id#x, addr#x])
+            +- Project [cast(id#x as int) AS id#x, cast(addr#x as struct<city:string,zip:string>) AS addr#x]
+               +- Project [id#x, addr#x]
+                  +- SubqueryAlias t
+                     +- LocalRelation [id#x, addr#x]
+
+
+-- !query
 EXECUTE IMMEDIATE 'SELECT ? ? FROM people' USING 'a', 'b'
 -- !query analysis
 Project [ab AS ab#x]
@@ -1819,6 +2259,49 @@ Sort [id#x ASC NULLS FIRST], true
                +- Project [id#x, addr#x]
                   +- SubqueryAlias t
                      +- LocalRelation [id#x, addr#x]
+
+
+-- !query
+EXECUTE IMMEDIATE 'SELECT first(DISTINCT ?) AS f FROM people' USING 5
+-- !query analysis
+Aggregate [first(distinct 5, false) AS f#x]
++- SubqueryAlias people
+   +- View (`people`, [id#x, addr#x])
+      +- Project [cast(id#x as int) AS id#x, cast(addr#x as struct<city:string,zip:string>) AS addr#x]
+         +- Project [id#x, addr#x]
+            +- SubqueryAlias t
+               +- LocalRelation [id#x, addr#x]
+
+
+-- !query
+EXECUTE IMMEDIATE
+  'SELECT missing?, id FROM people WHERE id IN (SELECT ?) AND id BETWEEN ? AND ? LIMIT ?'
+  USING 2, 1, 2, 1
+-- !query analysis
+GlobalLimit 1
++- LocalLimit 1
+   +- Project [null AS missing#x, id#x]
+      +- Filter (id#x IN (list#x []) AND between(id#x, 1, 2))
+         :  +- Project [2 AS 2#x]
+         :     +- OneRowRelation
+         +- SubqueryAlias people
+            +- View (`people`, [id#x, addr#x])
+               +- Project [cast(id#x as int) AS id#x, cast(addr#x as struct<city:string,zip:string>) AS addr#x]
+                  +- Project [id#x, addr#x]
+                     +- SubqueryAlias t
+                        +- LocalRelation [id#x, addr#x]
+
+
+-- !query
+EXECUTE IMMEDIATE 'SELECT missing?, first(DISTINCT ?) AS f FROM people' USING 5
+-- !query analysis
+Aggregate [null AS missing#x, first(null, false) AS f#x]
++- SubqueryAlias people
+   +- View (`people`, [id#x, addr#x])
+      +- Project [cast(id#x as int) AS id#x, cast(addr#x as struct<city:string,zip:string>) AS addr#x]
+         +- Project [id#x, addr#x]
+            +- SubqueryAlias t
+               +- LocalRelation [id#x, addr#x]
 
 
 -- !query
@@ -2431,6 +2914,46 @@ org.apache.spark.sql.catalyst.parser.ParseException
 
 
 -- !query
+EXECUTE IMMEDIATE 'TRUNCATE TABLE target PARTITION (id = :p?)'
+-- !query analysis
+org.apache.spark.sql.catalyst.parser.ParseException
+{
+  "errorClass" : "OPTIONAL_COLUMN_REFERENCE_NOT_SUPPORTED.IN_DML",
+  "sqlState" : "0A000",
+  "messageParameters" : {
+    "context" : "PARTITION"
+  },
+  "queryContext" : [ {
+    "objectType" : "EXECUTE IMMEDIATE",
+    "objectName" : "",
+    "startIndex" : 39,
+    "stopIndex" : 41,
+    "fragment" : ":p?"
+  } ]
+}
+
+
+-- !query
+EXECUTE IMMEDIATE 'INSERT INTO target PARTITION (id = :p?) SELECT NULL' USING 1 AS p
+-- !query analysis
+org.apache.spark.sql.catalyst.parser.ParseException
+{
+  "errorClass" : "OPTIONAL_COLUMN_REFERENCE_NOT_SUPPORTED.IN_DML",
+  "sqlState" : "0A000",
+  "messageParameters" : {
+    "context" : "PARTITION"
+  },
+  "queryContext" : [ {
+    "objectType" : "EXECUTE IMMEDIATE",
+    "objectName" : "",
+    "startIndex" : 36,
+    "stopIndex" : 38,
+    "fragment" : ":p?"
+  } ]
+}
+
+
+-- !query
 UPDATE target SET missing? = 1
 -- !query analysis
 org.apache.spark.sql.catalyst.parser.ParseException
@@ -2521,6 +3044,26 @@ org.apache.spark.sql.catalyst.parser.ParseException
     "startIndex" : 46,
     "stopIndex" : 47,
     "fragment" : "a?"
+  } ]
+}
+
+
+-- !query
+CREATE TABLE ddl (a INT) USING parquet OPTIONS (compression = codec?)
+-- !query analysis
+org.apache.spark.sql.catalyst.parser.ParseException
+{
+  "errorClass" : "OPTIONAL_COLUMN_REFERENCE_NOT_SUPPORTED.IN_DDL",
+  "sqlState" : "0A000",
+  "messageParameters" : {
+    "context" : "OPTIONS"
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 63,
+    "stopIndex" : 68,
+    "fragment" : "codec?"
   } ]
 }
 
@@ -2699,29 +3242,37 @@ org.apache.spark.sql.catalyst.parser.ParseException
 -- !query
 SELECT :x?
 -- !query analysis
-org.apache.spark.sql.catalyst.parser.ParseException
+org.apache.spark.sql.AnalysisException
 {
-  "errorClass" : "PARSE_SYNTAX_ERROR",
-  "sqlState" : "42601",
-  "messageParameters" : {
-    "error" : "'?'",
-    "hint" : ""
-  }
+  "errorClass" : "INVALID_QUERY_MIXED_QUERY_PARAMETERS",
+  "sqlState" : "42613"
 }
 
 
 -- !query
 EXECUTE IMMEDIATE 'SELECT :x?' USING 1 AS x
 -- !query analysis
-org.apache.spark.sql.catalyst.parser.ParseException
+org.apache.spark.sql.AnalysisException
 {
-  "errorClass" : "PARSE_SYNTAX_ERROR",
-  "sqlState" : "42601",
-  "messageParameters" : {
-    "error" : "'?'",
-    "hint" : ""
-  }
+  "errorClass" : "INVALID_QUERY_MIXED_QUERY_PARAMETERS",
+  "sqlState" : "42613"
 }
+
+
+-- !query
+EXECUTE IMMEDIATE 'SELECT id FROM people WHERE id IN (SELECT ?) ORDER BY id' USING 2
+-- !query analysis
+Sort [id#x ASC NULLS FIRST], true
++- Project [id#x]
+   +- Filter id#x IN (list#x [])
+      :  +- Project [2 AS 2#x]
+      :     +- OneRowRelation
+      +- SubqueryAlias people
+         +- View (`people`, [id#x, addr#x])
+            +- Project [cast(id#x as int) AS id#x, cast(addr#x as struct<city:string,zip:string>) AS addr#x]
+               +- Project [id#x, addr#x]
+                  +- SubqueryAlias t
+                     +- LocalRelation [id#x, addr#x]
 
 
 -- !query
@@ -2734,7 +3285,14 @@ org.apache.spark.sql.catalyst.parser.ParseException
   "messageParameters" : {
     "error" : "'?'",
     "hint" : ""
-  }
+  },
+  "queryContext" : [ {
+    "objectType" : "VIEW",
+    "objectName" : "people_v",
+    "startIndex" : 15,
+    "stopIndex" : 22,
+    "fragment" : "people_v"
+  } ]
 }
 
 

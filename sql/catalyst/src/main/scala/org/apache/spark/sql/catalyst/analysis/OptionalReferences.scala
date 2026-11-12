@@ -22,6 +22,7 @@ import scala.util.{Left => EitherLeft, Right => EitherRight}
 
 import org.apache.spark.SparkThrowable
 import org.apache.spark.sql.catalyst.expressions.{
+  Alias,
   Attribute,
   Expression,
   ExtractValue,
@@ -62,6 +63,12 @@ object OptionalReferences {
 
   /** Marks an optional [[UnresolvedExtractValue]] as a last resort, see [[markLastResort]]. */
   val LAST_RESORT: TreeNodeTag[Unit] = TreeNodeTag[Unit]("optionalReferenceLastResort")
+
+  /**
+   * Marks the NULL that an unresolvable optional reference resolves to, see [[nullReference]], and
+   * the alias that names it, see [[implicitAlias]].
+   */
+  val NULL_REFERENCE: TreeNodeTag[Unit] = TreeNodeTag[Unit]("optionalReferenceNull")
 
   /** Qualifiers of session variables, which are valid prefixes of a variable reference. */
   private val SESSION_VARIABLE_QUALIFIERS = Seq(
@@ -115,17 +122,49 @@ object OptionalReferences {
     extractValue.getTagValue(LAST_RESORT).isDefined
 
   /** The static NULL of type VOID that an unresolvable optional reference resolves to. */
-  def nullReference(): Literal = Literal(null, NullType)
+  def nullReference(): Literal = {
+    val nullReference = Literal(null, NullType)
+    nullReference.setTagValue(NULL_REFERENCE, ())
+    nullReference
+  }
 
   /**
-   * Returns true if the optional reference `reference` resolved to [[nullReference]] instead of
-   * an expression that references a column, field, or variable.
+   * Returns true if `expression` is a [[nullReference]], i.e. the result of an optional reference
+   * that did not resolve to a column, field, or variable.
    */
-  def isNullReference(reference: Expression, resolvedReference: Expression): Boolean = {
-    hasOptionalMarker(reference) && (resolvedReference match {
-      case Literal(null, NullType) => true
-      case _ => false
-    })
+  def isNullReference(expression: Expression): Boolean =
+    expression.getTagValue(NULL_REFERENCE).isDefined
+
+  /**
+   * Returns the alias that gives `child`, the result of a top-level reference, the name `name` of
+   * the reference, see [[markImplicitAlias]].
+   */
+  def implicitAlias(child: Expression, name: String): Alias =
+    markImplicitAlias(Alias(child, name)())
+
+  /**
+   * Marks `alias`, which gives the result of a top-level reference the name of the reference, if
+   * that result is a [[nullReference]]. Such an alias is only there for the name of the output
+   * column, which ORDER BY and HAVING can reference. Unlike other aliases of a SELECT list,
+   * including `missing? AS m`, it is neither a lateral column alias nor an alias that GROUP BY
+   * can reference, so that a reference without `?` is not found, see [[isNullReferenceAlias]].
+   *
+   * {{{
+   *   SELECT missing?, missing? IS NULL, missing + 1 FROM t;
+   *   -- NULL, true, and UNRESOLVED_COLUMN for the `missing` without `?`
+   * }}}
+   */
+  def markImplicitAlias(alias: Alias): Alias = {
+    if (isNullReference(alias.child)) {
+      alias.setTagValue(NULL_REFERENCE, ())
+    }
+    alias
+  }
+
+  /** Returns true if `expression` is the [[implicitAlias]] of a [[nullReference]]. */
+  def isNullReferenceAlias(expression: Expression): Boolean = expression match {
+    case alias: Alias => alias.getTagValue(NULL_REFERENCE).isDefined
+    case _ => false
   }
 
   /**
@@ -239,7 +278,8 @@ object OptionalReferences {
     if (nestedFields.isEmpty) {
       EitherLeft(expression)
     } else if (voidBaseIsNull && expression.dataType == NullType) {
-      EitherLeft(nullReference())
+      // The name is found, so this NULL is not a `nullReference`.
+      EitherLeft(Literal(null, NullType))
     } else {
       ExtractValue.extractValue(expression, Literal(nestedFields.head), resolver) match {
         case EitherLeft(extracted) =>

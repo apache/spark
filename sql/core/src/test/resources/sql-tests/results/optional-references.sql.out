@@ -577,6 +577,29 @@ org.apache.spark.sql.AnalysisException
 
 
 -- !query
+SELECT addr.state? FROM people a JOIN people b ON a.id = b.id
+-- !query schema
+struct<>
+-- !query output
+org.apache.spark.sql.AnalysisException
+{
+  "errorClass" : "AMBIGUOUS_REFERENCE",
+  "sqlState" : "42704",
+  "messageParameters" : {
+    "name" : "`addr`.`state`",
+    "referenceNames" : "[`a`.`addr`, `b`.`addr`]"
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 8,
+    "stopIndex" : 18,
+    "fragment" : "addr.state?"
+  } ]
+}
+
+
+-- !query
 SELECT id.missing? FROM people
 -- !query schema
 struct<>
@@ -652,6 +675,15 @@ NULL	NULL
 
 
 -- !query
+SELECT missing? AS a, a + 1 AS b FROM people
+-- !query schema
+struct<a:void,b:int>
+-- !query output
+NULL	NULL
+NULL	NULL
+
+
+-- !query
 SELECT id AS a, a? + 1 AS b FROM people WHERE missing? IS NULL
 -- !query schema
 struct<a:int,b:int>
@@ -661,12 +693,35 @@ struct<a:int,b:int>
 
 
 -- !query
-SELECT missing?, missing + 1 AS m, addr.city, upper(city) AS c FROM people
+SELECT missing?, missing? IS NULL AS m, addr.city, upper(city) AS c FROM people
 -- !query schema
-struct<missing:void,m:int,city:string,c:string>
+struct<missing:void,m:boolean,city:string,c:string>
 -- !query output
-NULL	NULL	NYC	NYC
-NULL	NULL	SF	SF
+NULL	true	NYC	NYC
+NULL	true	SF	SF
+
+
+-- !query
+SELECT missing?, missing + 1 AS m FROM people
+-- !query schema
+struct<>
+-- !query output
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
+{
+  "errorClass" : "UNRESOLVED_COLUMN.WITH_SUGGESTION",
+  "sqlState" : "42703",
+  "messageParameters" : {
+    "objectName" : "`missing`",
+    "proposal" : "`id`, `addr`"
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 18,
+    "stopIndex" : 24,
+    "fragment" : "missing"
+  } ]
+}
 
 
 -- !query
@@ -690,6 +745,126 @@ org.apache.spark.sql.catalyst.ExtendedAnalysisException
     "fragment" : "missing"
   } ]
 }
+
+
+-- !query
+SELECT addr.state?, upper(state) AS s FROM people
+-- !query schema
+struct<>
+-- !query output
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
+{
+  "errorClass" : "UNRESOLVED_COLUMN.WITH_SUGGESTION",
+  "sqlState" : "42703",
+  "messageParameters" : {
+    "objectName" : "`state`",
+    "proposal" : "`id`, `addr`"
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 27,
+    "stopIndex" : 31,
+    "fragment" : "state"
+  } ]
+}
+
+
+-- !query
+SELECT missing?, count(*) AS c FROM people GROUP BY missing
+-- !query schema
+struct<>
+-- !query output
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
+{
+  "errorClass" : "UNRESOLVED_COLUMN.WITH_SUGGESTION",
+  "sqlState" : "42703",
+  "messageParameters" : {
+    "objectName" : "`missing`",
+    "proposal" : "`id`, `addr`"
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 53,
+    "stopIndex" : 59,
+    "fragment" : "missing"
+  } ]
+}
+
+
+-- !query
+SELECT addr.state?, count(*) AS c FROM people GROUP BY state
+-- !query schema
+struct<>
+-- !query output
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
+{
+  "errorClass" : "UNRESOLVED_COLUMN.WITH_SUGGESTION",
+  "sqlState" : "42703",
+  "messageParameters" : {
+    "objectName" : "`state`",
+    "proposal" : "`id`, `addr`"
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 56,
+    "stopIndex" : 60,
+    "fragment" : "state"
+  } ]
+}
+
+
+-- !query
+SELECT addr.city, count(*) AS c FROM people GROUP BY city ORDER BY city
+-- !query schema
+struct<city:string,c:bigint>
+-- !query output
+NYC	1
+SF	1
+
+
+-- !query
+SELECT missing?, count(*) AS c FROM people GROUP BY missing?
+-- !query schema
+struct<missing:void,c:bigint>
+-- !query output
+NULL	2
+
+
+-- !query
+SELECT missing? AS m, count(*) AS c FROM people GROUP BY m
+-- !query schema
+struct<m:void,c:bigint>
+-- !query output
+NULL	2
+
+
+-- !query
+SELECT missing?, id FROM people ORDER BY missing, id
+-- !query schema
+struct<missing:void,id:int>
+-- !query output
+NULL	1
+NULL	2
+
+
+-- !query
+SELECT missing?, count(*) AS c FROM people GROUP BY ALL HAVING missing IS NULL
+-- !query schema
+struct<missing:void,c:bigint>
+-- !query output
+NULL	2
+
+
+-- !query
+SELECT named_struct('state', 'CA') AS addr, addr.state? FROM people
+-- !query schema
+struct<addr:struct<state:string>,state:void>
+-- !query output
+{"state":"CA"}	NULL
+{"state":"CA"}	NULL
 
 
 -- !query
@@ -769,6 +944,82 @@ org.apache.spark.sql.AnalysisException
     "fragment" : "known_struct.b"
   } ]
 }
+
+
+-- !query
+SET VAR known = unknown?
+-- !query schema
+struct<>
+-- !query output
+
+
+
+-- !query
+SELECT known
+-- !query schema
+struct<known:int>
+-- !query output
+NULL
+
+
+-- !query
+SET VAR known = (SELECT max(id) + coalesce(max(bonus?), 10) FROM people)
+-- !query schema
+struct<>
+-- !query output
+
+
+
+-- !query
+SELECT known
+-- !query schema
+struct<known:int>
+-- !query output
+12
+
+
+-- !query
+EXECUTE IMMEDIATE 'SET VAR known = :p?' USING 5 AS p
+-- !query schema
+struct<>
+-- !query output
+
+
+
+-- !query
+SELECT known
+-- !query schema
+struct<known:int>
+-- !query output
+5
+
+
+-- !query
+EXECUTE IMMEDIATE 'SET VAR known = coalesce(unknown?, :p?, ?)' USING 7
+-- !query schema
+struct<>
+-- !query output
+org.apache.spark.sql.AnalysisException
+{
+  "errorClass" : "INVALID_QUERY_MIXED_QUERY_PARAMETERS",
+  "sqlState" : "42613"
+}
+
+
+-- !query
+EXECUTE IMMEDIATE 'SET VAR known = coalesce(unknown?, ?)' USING 7
+-- !query schema
+struct<>
+-- !query output
+
+
+
+-- !query
+SELECT known
+-- !query schema
+struct<known:int>
+-- !query output
+7
 
 
 -- !query
@@ -906,6 +1157,27 @@ SELECT (SELECT (SELECT missing? AS a) AS b) AS c
 struct<c:void>
 -- !query output
 NULL
+
+
+-- !query
+SELECT id, (SELECT max(i.id) AS id FROM people i WHERE i.id = o.id GROUP BY i.addr
+  HAVING id > 0 AND missing? IS NULL) AS m
+FROM people o ORDER BY id
+-- !query schema
+struct<id:int,m:int>
+-- !query output
+1	1
+2	2
+
+
+-- !query
+SELECT id, (SELECT addr.zip? FROM (SELECT named_struct('city', 'x') AS addr)) AS zip FROM people
+ORDER BY id
+-- !query schema
+struct<id:int,zip:void>
+-- !query output
+1	NULL
+2	NULL
 
 
 -- !query
@@ -1126,6 +1398,64 @@ struct<optional_qualified_fn(1):int>
 
 
 -- !query
+SELECT (SELECT optional_fn(1)) AS r
+-- !query schema
+struct<r:int>
+-- !query output
+11
+
+
+-- !query
+SELECT (SELECT optional_fn(1)) AS r FROM VALUES (5) AS t(b)
+-- !query schema
+struct<r:int>
+-- !query output
+11
+
+
+-- !query
+CREATE TEMPORARY FUNCTION optional_table_fn(a INT) RETURNS TABLE (x INT, y INT)
+  RETURN SELECT a, coalesce(b?, 10)
+-- !query schema
+struct<>
+-- !query output
+
+
+
+-- !query
+SELECT p.id, f.x, f.y FROM people p, LATERAL optional_table_fn(p.id) f ORDER BY p.id
+-- !query schema
+struct<id:int,x:int,y:int>
+-- !query output
+1	1	10
+2	2	10
+
+
+-- !query
+DECLARE OR REPLACE VARIABLE fn_variable INT DEFAULT 100
+-- !query schema
+struct<>
+-- !query output
+
+
+
+-- !query
+CREATE TEMPORARY FUNCTION variable_fn() RETURNS INT RETURN fn_variable
+-- !query schema
+struct<>
+-- !query output
+
+
+
+-- !query
+SELECT (SELECT variable_fn()) AS r FROM VALUES (5) AS t(fn_variable)
+-- !query schema
+struct<r:int>
+-- !query output
+100
+
+
+-- !query
 DROP TEMPORARY FUNCTION optional_fn
 -- !query schema
 struct<>
@@ -1135,6 +1465,30 @@ struct<>
 
 -- !query
 DROP TEMPORARY FUNCTION optional_qualified_fn
+-- !query schema
+struct<>
+-- !query output
+
+
+
+-- !query
+DROP TEMPORARY FUNCTION optional_table_fn
+-- !query schema
+struct<>
+-- !query output
+
+
+
+-- !query
+DROP TEMPORARY FUNCTION variable_fn
+-- !query schema
+struct<>
+-- !query output
+
+
+
+-- !query
+DROP TEMPORARY VARIABLE fn_variable
 -- !query schema
 struct<>
 -- !query output
@@ -1332,6 +1686,23 @@ struct<5:int>
 
 
 -- !query
+EXECUTE IMMEDIATE 'SELECT id FROM people WHERE id IN (SELECT ?) ORDER BY id' USING 2
+-- !query schema
+struct<id:int>
+-- !query output
+2
+
+
+-- !query
+EXECUTE IMMEDIATE 'SELECT id FROM people WHERE id IN (VALUES ?, ?) ORDER BY id' USING 1, 2
+-- !query schema
+struct<id:int>
+-- !query output
+1
+2
+
+
+-- !query
 EXECUTE IMMEDIATE 'SELECT ? ? FROM people' USING 'a', 'b'
 -- !query schema
 struct<ab:string>
@@ -1380,6 +1751,32 @@ EXECUTE IMMEDIATE
 struct<id:int>
 -- !query output
 1
+
+
+-- !query
+EXECUTE IMMEDIATE 'SELECT first(DISTINCT ?) AS f FROM people' USING 5
+-- !query schema
+struct<f:int>
+-- !query output
+5
+
+
+-- !query
+EXECUTE IMMEDIATE
+  'SELECT missing?, id FROM people WHERE id IN (SELECT ?) AND id BETWEEN ? AND ? LIMIT ?'
+  USING 2, 1, 2, 1
+-- !query schema
+struct<missing:void,id:int>
+-- !query output
+NULL	2
+
+
+-- !query
+EXECUTE IMMEDIATE 'SELECT missing?, first(DISTINCT ?) AS f FROM people' USING 5
+-- !query schema
+struct<missing:void,f:void>
+-- !query output
+NULL	NULL
 
 
 -- !query
@@ -1989,6 +2386,50 @@ org.apache.spark.sql.catalyst.parser.ParseException
 
 
 -- !query
+EXECUTE IMMEDIATE 'TRUNCATE TABLE target PARTITION (id = :p?)'
+-- !query schema
+struct<>
+-- !query output
+org.apache.spark.sql.catalyst.parser.ParseException
+{
+  "errorClass" : "OPTIONAL_COLUMN_REFERENCE_NOT_SUPPORTED.IN_DML",
+  "sqlState" : "0A000",
+  "messageParameters" : {
+    "context" : "PARTITION"
+  },
+  "queryContext" : [ {
+    "objectType" : "EXECUTE IMMEDIATE",
+    "objectName" : "",
+    "startIndex" : 39,
+    "stopIndex" : 41,
+    "fragment" : ":p?"
+  } ]
+}
+
+
+-- !query
+EXECUTE IMMEDIATE 'INSERT INTO target PARTITION (id = :p?) SELECT NULL' USING 1 AS p
+-- !query schema
+struct<>
+-- !query output
+org.apache.spark.sql.catalyst.parser.ParseException
+{
+  "errorClass" : "OPTIONAL_COLUMN_REFERENCE_NOT_SUPPORTED.IN_DML",
+  "sqlState" : "0A000",
+  "messageParameters" : {
+    "context" : "PARTITION"
+  },
+  "queryContext" : [ {
+    "objectType" : "EXECUTE IMMEDIATE",
+    "objectName" : "",
+    "startIndex" : 36,
+    "stopIndex" : 38,
+    "fragment" : ":p?"
+  } ]
+}
+
+
+-- !query
 UPDATE target SET missing? = 1
 -- !query schema
 struct<>
@@ -2090,6 +2531,28 @@ org.apache.spark.sql.catalyst.parser.ParseException
     "startIndex" : 46,
     "stopIndex" : 47,
     "fragment" : "a?"
+  } ]
+}
+
+
+-- !query
+CREATE TABLE ddl (a INT) USING parquet OPTIONS (compression = codec?)
+-- !query schema
+struct<>
+-- !query output
+org.apache.spark.sql.catalyst.parser.ParseException
+{
+  "errorClass" : "OPTIONAL_COLUMN_REFERENCE_NOT_SUPPORTED.IN_DDL",
+  "sqlState" : "0A000",
+  "messageParameters" : {
+    "context" : "OPTIONS"
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 63,
+    "stopIndex" : 68,
+    "fragment" : "codec?"
   } ]
 }
 
@@ -2295,14 +2758,10 @@ SELECT :x?
 -- !query schema
 struct<>
 -- !query output
-org.apache.spark.sql.catalyst.parser.ParseException
+org.apache.spark.sql.AnalysisException
 {
-  "errorClass" : "PARSE_SYNTAX_ERROR",
-  "sqlState" : "42601",
-  "messageParameters" : {
-    "error" : "'?'",
-    "hint" : ""
-  }
+  "errorClass" : "INVALID_QUERY_MIXED_QUERY_PARAMETERS",
+  "sqlState" : "42613"
 }
 
 
@@ -2311,15 +2770,19 @@ EXECUTE IMMEDIATE 'SELECT :x?' USING 1 AS x
 -- !query schema
 struct<>
 -- !query output
-org.apache.spark.sql.catalyst.parser.ParseException
+org.apache.spark.sql.AnalysisException
 {
-  "errorClass" : "PARSE_SYNTAX_ERROR",
-  "sqlState" : "42601",
-  "messageParameters" : {
-    "error" : "'?'",
-    "hint" : ""
-  }
+  "errorClass" : "INVALID_QUERY_MIXED_QUERY_PARAMETERS",
+  "sqlState" : "42613"
 }
+
+
+-- !query
+EXECUTE IMMEDIATE 'SELECT id FROM people WHERE id IN (SELECT ?) ORDER BY id' USING 2
+-- !query schema
+struct<id:int>
+-- !query output
+2
 
 
 -- !query
@@ -2334,7 +2797,14 @@ org.apache.spark.sql.catalyst.parser.ParseException
   "messageParameters" : {
     "error" : "'?'",
     "hint" : ""
-  }
+  },
+  "queryContext" : [ {
+    "objectType" : "VIEW",
+    "objectName" : "people_v",
+    "startIndex" : 15,
+    "stopIndex" : 22,
+    "fragment" : "people_v"
+  } ]
 }
 
 

@@ -313,7 +313,7 @@ class DataFrameSuite extends SharedSparkSession
     checkError(
       exception = intercept[AnalysisException](df.selectExpr("id?")),
       condition = "PARSE_SYNTAX_ERROR",
-      parameters = Map("error" -> "'?'", "hint" -> ""))
+      parameters = Map("error" -> "'?'", "hint" -> ": extra input '?'"))
   }
 
   test("filterExpr") {

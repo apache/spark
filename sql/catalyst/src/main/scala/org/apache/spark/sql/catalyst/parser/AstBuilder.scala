@@ -4770,7 +4770,7 @@ class AstBuilder extends DataTypeAstBuilder
       case e =>
         val extractValue = UnresolvedExtractValue(e, Literal(attr))
         if (optionalMarker != null) {
-          OptionalReferenceValidation.validate(ctx, optionalMarker)
+          OptionalReferenceValidation.validate(ctx)
           OptionalReferences.markOptional(extractValue)
         }
         extractValue
@@ -4815,7 +4815,7 @@ class AstBuilder extends DataTypeAstBuilder
         UnresolvedRegex(columnNameRegex, None, conf.caseSensitiveAnalysis)
       case _ if namePart.identifier == null =>
         // IDENTIFIER(expression)?
-        OptionalReferenceValidation.validate(ctx, namePart.optionalMarker)
+        OptionalReferenceValidation.validate(ctx)
         val identifierExpr = withOrigin(namePart.expression) { expression(namePart.expression) }
         val identifierClause = new ExpressionWithUnresolvedIdentifier(
           identifierExpr,
@@ -4856,7 +4856,7 @@ class AstBuilder extends DataTypeAstBuilder
       optionalMarker: Token,
       ctx: ParserRuleContext): T = {
     if (optionalMarker != null) {
-      OptionalReferenceValidation.validate(ctx, optionalMarker)
+      OptionalReferenceValidation.validate(ctx)
       OptionalReferences.markNamePartsOptional(expression, Set(index))
     }
     expression
@@ -8206,7 +8206,7 @@ class AstBuilder extends DataTypeAstBuilder
     // Named parameters use simpleIdentifier, so .getText() is correct.
     val namedParameter = NamedParameter(ctx.namedParameterMarker().simpleIdentifier().getText)
     if (ctx.optionalMarker != null) {
-      OptionalReferenceValidation.validate(ctx, ctx.optionalMarker)
+      OptionalReferenceValidation.validate(ctx)
       OptionalReferences.markOptional(namedParameter)
     }
     namedParameter
@@ -8218,7 +8218,7 @@ class AstBuilder extends DataTypeAstBuilder
    * */
   override def visitPosParameterLiteral(
       ctx: PosParameterLiteralContext): Expression = withOrigin(ctx) {
-    PosParameter(ctx.QUESTION().getSymbol.getStartIndex)
+    PosParameter(ctx.getStart.getStartIndex)
   }
 
   /**

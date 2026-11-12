@@ -433,7 +433,7 @@ package object expressions  {
               ExtractValue.applyOrNull(e, Literal(name), resolver)
             }
           }
-          Seq(Alias(fieldExprs, nestedFields.last)())
+          Seq(OptionalReferences.implicitAlias(fieldExprs, nestedFields.last))
 
         case Seq(a) =>
           // One match, no nested fields, use it.

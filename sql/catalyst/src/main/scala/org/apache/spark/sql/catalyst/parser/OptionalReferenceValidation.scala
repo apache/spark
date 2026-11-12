@@ -17,21 +17,20 @@
 
 package org.apache.spark.sql.catalyst.parser
 
-import org.antlr.v4.runtime.{ParserRuleContext, Token}
+import org.antlr.v4.runtime.ParserRuleContext
 import org.antlr.v4.runtime.tree.ParseTree
 
 import org.apache.spark.sql.catalyst.parser.SqlBaseParser._
 import org.apache.spark.sql.catalyst.util.SparkParserUtils
 import org.apache.spark.sql.errors.QueryParsingErrors
-import org.apache.spark.sql.internal.SQLConf
 
 /** Checks where the `?` optional-reference operator can appear in a SQL statement. */
 object OptionalReferenceValidation {
 
   /**
-   * Throws an error for the optional reference `ctx`, i.e. the parse tree of a reference that is
-   * followed by the `?` token `marker`, if optional references are disabled, or if `ctx` is part
-   * of an UPDATE, DELETE, or MERGE statement, of the condition of INSERT ... REPLACE, or of an
+   * Throws an error for the optional reference `ctx`, i.e. the parse tree of a reference with a
+   * `?` after one of its name parts, if `ctx` is part of an UPDATE, DELETE, MERGE, or AUTO CDC
+   * statement, of the condition of INSERT ... REPLACE, of a partition specification, or of an
    * expression that defines a table object.
    *
    * {{{
@@ -41,10 +40,7 @@ object OptionalReferenceValidation {
    *   INSERT INTO t SELECT a? FROM s;                       -- allowed: the query only reads data
    * }}}
    */
-  def validate(ctx: ParserRuleContext, marker: Token): Unit = {
-    if (!SQLConf.get.getConf(SQLConf.OPTIONAL_REFERENCES_ENABLED)) {
-      throw QueryParsingErrors.unexpectedOptionalReferenceMarkerError(ctx, marker)
-    }
+  def validate(ctx: ParserRuleContext): Unit = {
     Iterator
       .iterate(ctx.getParent)(_.getParent)
       .takeWhile(_ != null)
@@ -61,7 +57,7 @@ object OptionalReferenceValidation {
   def validateNamedParameterMarkers(tree: ParseTree, sqlText: String): Unit = tree match {
     case namedParameter: NamedParameterLiteralContext if namedParameter.optionalMarker != null =>
       SparkParserUtils.withOrigin(namedParameter, Some(sqlText)) {
-        validate(namedParameter, namedParameter.optionalMarker)
+        validate(namedParameter)
       }
     case _ =>
       (0 until tree.getChildCount).foreach { index =>
@@ -87,12 +83,20 @@ object OptionalReferenceValidation {
     case dmlStatement: DmlStatementContext =>
       // The common table expressions of a statement are siblings of its DELETE, UPDATE, or MERGE.
       unsupportedContextError(dmlStatement.dmlStatementNoWith, ctx)
+    case _: AutoCdcParametersContext =>
+      Some(QueryParsingErrors.optionalReferenceInDmlNotSupportedError("AUTO CDC", ctx))
+    case _: PartitionSpecContext =>
+      // An unbound `:name?` would make e.g. TRUNCATE TABLE or INSERT target the NULL partition.
+      // For simplicity, statements that only read a partition reject it as well.
+      Some(QueryParsingErrors.optionalReferenceInDmlNotSupportedError("PARTITION", ctx))
     case _: GeneratedColumnContext =>
       Some(QueryParsingErrors.optionalReferenceInDdlNotSupportedError("GENERATED ALWAYS AS", ctx))
     case _: DefaultExpressionContext =>
       Some(QueryParsingErrors.optionalReferenceInDdlNotSupportedError("DEFAULT", ctx))
     case _: CheckConstraintContext =>
       Some(QueryParsingErrors.optionalReferenceInDdlNotSupportedError("CHECK", ctx))
+    case _: ExpressionPropertyListContext =>
+      Some(QueryParsingErrors.optionalReferenceInDdlNotSupportedError("OPTIONS", ctx))
     case _ =>
       None
   }

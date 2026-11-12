@@ -9493,6 +9493,8 @@ class SQLConf extends Serializable with Logging with SqlApiConf {
 
   override def isFileTypeEnabled: Boolean = getConf(FILE_TYPE_ENABLED)
 
+  override def optionalReferencesEnabled: Boolean = getConf(OPTIONAL_REFERENCES_ENABLED)
+
   def dataSourceV2JoinPushdown: Boolean = getConf(DATA_SOURCE_V2_JOIN_PUSHDOWN)
 
   def dynamicPartitionPruningEnabled: Boolean = getConf(DYNAMIC_PARTITION_PRUNING_ENABLED)

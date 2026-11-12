@@ -23,6 +23,7 @@ import scala.collection.mutable
 import scala.jdk.CollectionConverters._
 
 import org.apache.spark.SparkException
+import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.SQLConfHelper
 import org.apache.spark.sql.catalyst.analysis.{
   ExpandStarParameters,
@@ -629,7 +630,8 @@ class NameScope(
         canReferenceAggregatedAccessOnlyAttributes =
           parameters.canReferenceAggregatedAccessOnlyAttributes,
         extractValueExtractionKey = parameters.extractValueExtractionKey
-      ).orElse(tryResolveMultipartNameAsLiteralFunction(multipartName))
+      ).orElse(tryResolveMissingOptionalFieldByOutput(multipartName, parameters))
+        .orElse(tryResolveMultipartNameAsLiteralFunction(multipartName))
         .orElse(
           tryResolveMultipartNameAsLateralColumnReference(
             multipartName,
@@ -786,6 +788,57 @@ class NameScope(
       )
     } else {
       None
+    }
+  }
+
+  /**
+   * Resolves the optional name `multipartName` that [[tryResolveMultipartNameByOutput]] could not
+   * resolve, if it matches columns of the output and none of them has the nested fields of the
+   * name. This mirrors the fixed-point analyzer, for which the error of the same name without `?`
+   * is final in that case, except in ORDER BY: the result is NULL if the field that the only
+   * matching column does not have is optional, and all the matching columns, for the ambiguity
+   * error, if there are several.
+   *
+   * {{{
+   *   -- `t.addr` has no field `zip`, so `addr.zip?` is NULL instead of the field of the alias.
+   *   SELECT named_struct('zip', '1') AS addr, addr.zip? FROM t;
+   * }}}
+   */
+  private def tryResolveMissingOptionalFieldByOutput(
+      multipartName: Seq[String],
+      parameters: NameResolutionParameters): Option[ResolvedMultipartName] = {
+    if (parameters.optionalNamePartIndices.isEmpty || parameters.resolvingSortOrder) {
+      None
+    } else {
+      val (candidates, nestedFields) =
+        attributesForResolution.getCandidatesForResolution(multipartName, nameComparator)
+      val outputCandidates = Seq(
+        getMainOutputCandidates(candidates),
+        getMetadataOutputCandidates(candidates)
+      ).find(_.nonEmpty).getOrElse(Seq.empty)
+      val resolvedCandidates = if (nestedFields.isEmpty || outputCandidates.isEmpty) {
+        Seq.empty
+      } else {
+        try {
+          attributesForResolution.resolveCandidates(
+            multipartName,
+            nameComparator,
+            outputCandidates,
+            nestedFields,
+            parameters.optionalNamePartIndices
+          )
+        } catch {
+          // The name does not resolve to a field of these columns, e.g. because a field that a
+          // column does not have is not optional. Like for a name without `?`, the other ways to
+          // resolve the name are tried next.
+          case _: AnalysisException => Seq.empty
+        }
+      }
+      if (resolvedCandidates.nonEmpty) {
+        Some(ResolvedMultipartName(candidates = resolvedCandidates, referencedAttribute = None))
+      } else {
+        None
+      }
     }
   }
 

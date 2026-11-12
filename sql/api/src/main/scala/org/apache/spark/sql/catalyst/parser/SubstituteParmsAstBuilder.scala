@@ -102,7 +102,7 @@ class SubstituteParmsAstBuilder extends SqlBaseParserBaseVisitor[AnyRef] {
    */
   override def visitPosParameterLiteral(ctx: PosParameterLiteralContext): AnyRef =
     withOrigin(ctx) {
-      val startIndex = ctx.QUESTION().getSymbol.getStartIndex
+      val startIndex = ctx.getStart.getStartIndex
       positionalParams += startIndex
 
       // Question mark is single character, so stopIndex = startIndex + 1

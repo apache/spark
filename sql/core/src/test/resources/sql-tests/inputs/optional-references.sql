@@ -99,6 +99,7 @@ SELECT struct(id?, missing?) AS s FROM orgs;
 
 -- Errors other than not-found are still raised.
 SELECT x? FROM (SELECT 1 AS x) a JOIN (SELECT 2 AS x) b;
+SELECT addr.state? FROM people a JOIN people b ON a.id = b.id;
 SELECT id.missing? FROM people;
 SELECT missing? FROM people GROUP BY id;
 
@@ -109,11 +110,25 @@ SELECT addr.zip? FROM people GROUP BY id;
 SELECT id AS a, a? + 1 AS b, c? FROM people;
 SELECT named_struct('x', 1) AS s, s.x?, s.y? FROM people;
 SELECT missing? AS a, a? AS b FROM people;
+SELECT missing? AS a, a + 1 AS b FROM people;
 SELECT id AS a, a? + 1 AS b FROM people WHERE missing? IS NULL;
--- A missing optional reference is NULL under its own name, which the following items of the
--- SELECT list can reference like the name of `addr.city`.
-SELECT missing?, missing + 1 AS m, addr.city, upper(city) AS c FROM people;
+-- A missing optional reference is NULL under its own name, but unlike the name of `addr.city`,
+-- that name is not a lateral column alias and not a GROUP BY alias, so a reference to it
+-- without `?` is not found. ORDER BY and HAVING can reference it as a column of the SELECT list.
+SELECT missing?, missing? IS NULL AS m, addr.city, upper(city) AS c FROM people;
+SELECT missing?, missing + 1 AS m FROM people;
 SELECT missing + 1 AS m, missing? FROM people;
+SELECT addr.state?, upper(state) AS s FROM people;
+SELECT missing?, count(*) AS c FROM people GROUP BY missing;
+SELECT addr.state?, count(*) AS c FROM people GROUP BY state;
+SELECT addr.city, count(*) AS c FROM people GROUP BY city ORDER BY city;
+SELECT missing?, count(*) AS c FROM people GROUP BY missing?;
+SELECT missing? AS m, count(*) AS c FROM people GROUP BY m;
+SELECT missing?, id FROM people ORDER BY missing, id;
+SELECT missing?, count(*) AS c FROM people GROUP BY ALL HAVING missing IS NULL;
+-- A field that the column does not have is not looked up in a lateral column alias of the same
+-- name, like without `?`.
+SELECT named_struct('state', 'CA') AS addr, addr.state? FROM people;
 
 -- Session variables resolve as usual.
 DECLARE OR REPLACE VARIABLE known INT DEFAULT 7;
@@ -124,6 +139,16 @@ SELECT known_struct.a?, known_struct.b?;
 SELECT session.known?, session.unknown?, system.session.unknown?;
 SELECT session?, system.session?;
 SELECT known_struct.b;
+-- A SET VAR statement outside of a SQL script.
+SET VAR known = unknown?;
+SELECT known;
+SET VAR known = (SELECT max(id) + coalesce(max(bonus?), 10) FROM people);
+SELECT known;
+EXECUTE IMMEDIATE 'SET VAR known = :p?' USING 5 AS p;
+SELECT known;
+EXECUTE IMMEDIATE 'SET VAR known = coalesce(unknown?, :p?, ?)' USING 7;
+EXECUTE IMMEDIATE 'SET VAR known = coalesce(unknown?, ?)' USING 7;
+SELECT known;
 DROP TEMPORARY VARIABLE known;
 DROP TEMPORARY VARIABLE known_struct;
 
@@ -159,6 +184,12 @@ ORDER BY p.id;
 SELECT id, (SELECT named_struct('id', p.id, 'missing', p.missing?) AS s) AS s FROM people p
 ORDER BY id;
 SELECT (SELECT (SELECT missing? AS a) AS b) AS c;
+SELECT id, (SELECT max(i.id) AS id FROM people i WHERE i.id = o.id GROUP BY i.addr
+  HAVING id > 0 AND missing? IS NULL) AS m
+FROM people o ORDER BY id;
+-- A field that the column of the subquery does not have is not looked up in the outer query.
+SELECT id, (SELECT addr.zip? FROM (SELECT named_struct('city', 'x') AS addr)) AS zip FROM people
+ORDER BY id;
 -- A subquery can reference the alias of a generator of the query around it.
 SELECT explode(array(1, 2)) AS e, (SELECT max(id) FROM people WHERE id = e?) AS m;
 
@@ -192,8 +223,21 @@ SELECT optional_fn(1);
 CREATE TEMPORARY FUNCTION optional_qualified_fn(a INT) RETURNS INT
   RETURN optional_qualified_fn.a? + coalesce(optional_qualified_fn.b?, 10);
 SELECT optional_qualified_fn(1);
+-- The body of a SQL function does not see the columns of the query that calls it, with or
+-- without `?`.
+SELECT (SELECT optional_fn(1)) AS r;
+SELECT (SELECT optional_fn(1)) AS r FROM VALUES (5) AS t(b);
+CREATE TEMPORARY FUNCTION optional_table_fn(a INT) RETURNS TABLE (x INT, y INT)
+  RETURN SELECT a, coalesce(b?, 10);
+SELECT p.id, f.x, f.y FROM people p, LATERAL optional_table_fn(p.id) f ORDER BY p.id;
+DECLARE OR REPLACE VARIABLE fn_variable INT DEFAULT 100;
+CREATE TEMPORARY FUNCTION variable_fn() RETURNS INT RETURN fn_variable;
+SELECT (SELECT variable_fn()) AS r FROM VALUES (5) AS t(fn_variable);
 DROP TEMPORARY FUNCTION optional_fn;
 DROP TEMPORARY FUNCTION optional_qualified_fn;
+DROP TEMPORARY FUNCTION optional_table_fn;
+DROP TEMPORARY FUNCTION variable_fn;
+DROP TEMPORARY VARIABLE fn_variable;
 
 -- SQL pipe syntax.
 FROM people |> SELECT id, missing?;
@@ -222,6 +266,8 @@ SELECT :x;
 EXECUTE IMMEDIATE 'SELECT TRIM(BOTH ? FROM ?)' USING 'x', 'xabcx';
 EXECUTE IMMEDIATE 'SELECT INTERVAL ? DAY' USING '1';
 EXECUTE IMMEDIATE 'SELECT DISTINCT ? FROM people' USING 5;
+EXECUTE IMMEDIATE 'SELECT id FROM people WHERE id IN (SELECT ?) ORDER BY id' USING 2;
+EXECUTE IMMEDIATE 'SELECT id FROM people WHERE id IN (VALUES ?, ?) ORDER BY id' USING 1, 2;
 EXECUTE IMMEDIATE 'SELECT ? ? FROM people' USING 'a', 'b';
 EXECUTE IMMEDIATE 'SELECT id FROM people WHERE id = ? ORDER BY id' USING 2;
 EXECUTE IMMEDIATE 'SELECT ?::INT' USING '5';
@@ -230,6 +276,17 @@ EXECUTE IMMEDIATE 'SELECT NOT ?, CASE ? WHEN 1 THEN ? ELSE ? END' USING true, 1,
 EXECUTE IMMEDIATE
   'SELECT id FROM people WHERE id BETWEEN ? AND ? AND addr.city LIKE ? ORDER BY id'
   USING 1, 2, '%F';
+-- A statement that is valid without optional references keeps its meaning: the `?` is a
+-- parameter marker, although `distinct?` is also a reference to a column named `distinct`.
+EXECUTE IMMEDIATE 'SELECT first(DISTINCT ?) AS f FROM people' USING 5;
+-- Parameter markers in a statement with optional references.
+EXECUTE IMMEDIATE
+  'SELECT missing?, id FROM people WHERE id IN (SELECT ?) AND id BETWEEN ? AND ? LIMIT ?'
+  USING 2, 1, 2, 1;
+-- In a statement that is not valid without optional references, a `?` after a keyword marks a
+-- reference to a column with the name of the keyword where the syntax allows a reference, so
+-- `distinct?` is NULL here.
+EXECUTE IMMEDIATE 'SELECT missing?, first(DISTINCT ?) AS f FROM people' USING 5;
 
 -- Views are the primary use case: a view stays valid while its source table evolves.
 CREATE OR REPLACE TEMPORARY VIEW people_v AS SELECT id, addr, deleted_at? FROM people;
@@ -297,6 +354,9 @@ WITH s AS (SELECT id? AS id FROM people) MERGE INTO target t USING s ON t.id = s
   WHEN MATCHED THEN DELETE;
 WITH s AS (SELECT id? AS id FROM people) DELETE FROM target WHERE id IN (SELECT id FROM s);
 INSERT INTO target REPLACE WHERE missing? IS NULL SELECT * FROM target;
+-- A partition specification rejects `:name?`, which would stand for the NULL partition.
+EXECUTE IMMEDIATE 'TRUNCATE TABLE target PARTITION (id = :p?)';
+EXECUTE IMMEDIATE 'INSERT INTO target PARTITION (id = :p?) SELECT NULL' USING 1 AS p;
 -- Write targets are column names rather than expressions, so `?` is a syntax error.
 UPDATE target SET missing? = 1;
 INSERT INTO target (id, missing?) VALUES (1, NULL);
@@ -306,6 +366,7 @@ DROP TABLE target;
 CREATE TABLE ddl (a INT, b INT GENERATED ALWAYS AS (a? + 1)) USING parquet;
 CREATE TABLE ddl (a INT, b INT DEFAULT missing?) USING parquet;
 CREATE TABLE ddl (a INT, CONSTRAINT c CHECK (a? > 0)) USING parquet;
+CREATE TABLE ddl (a INT) USING parquet OPTIONS (compression = codec?);
 CREATE TABLE ddl (a INT) USING parquet;
 ALTER TABLE ddl ALTER COLUMN a SET DEFAULT missing?;
 ALTER TABLE ddl ADD CONSTRAINT c CHECK (a? > 0);
@@ -318,14 +379,16 @@ SELECT abs(1)? FROM people;
 SELECT id FROM people?;
 SELECT id?? FROM people;
 
--- `?` raises a syntax error while optional references are disabled, including in a view that was
--- created while they were enabled.
+-- While optional references are disabled, `?` after an identifier is a syntax error, including
+-- in a view that was created while they were enabled, and `?` after a named parameter marker is a
+-- positional parameter marker.
 SET spark.sql.optionalReferences.enabled=false;
 SELECT id? FROM people;
 SELECT addr.city? FROM people;
 SELECT IDENTIFIER('id')? FROM people;
 SELECT :x?;
 EXECUTE IMMEDIATE 'SELECT :x?' USING 1 AS x;
+EXECUTE IMMEDIATE 'SELECT id FROM people WHERE id IN (SELECT ?) ORDER BY id' USING 2;
 SELECT * FROM people_v ORDER BY id;
 
 -- A session that does not set the config can still query a view that was created while optional

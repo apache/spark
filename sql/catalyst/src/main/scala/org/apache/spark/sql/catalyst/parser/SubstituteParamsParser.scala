@@ -16,7 +16,7 @@
  */
 package org.apache.spark.sql.catalyst.parser
 
-import org.antlr.v4.runtime.{CharStreams, CommonTokenStream}
+import org.antlr.v4.runtime.{CharStreams, CommonTokenStream, ParserRuleContext}
 
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.AnalysisException
@@ -73,12 +73,25 @@ class SubstituteParamsParser extends Logging {
     // Use shared parser configuration to ensure consistency with main parser.
     AbstractParser.configureParser(parser, sqlText, tokenStream, SQLConf.get)
 
-    val astBuilder = new SubstituteParmsAstBuilder()
-
     // Use shared two-stage parsing strategy for consistent error handling.
-    val ctx = AbstractParser.executeWithTwoStageStrategy(parser, tokenStream,
-      _.compoundOrSingleStatement())
-    val parameterLocations = astBuilder.extractParameterLocations(ctx)
+    def parseParameterLocations(): (ParserRuleContext, ParameterLocationInfo) = {
+      val ctx = AbstractParser.executeWithTwoStageStrategy(parser, tokenStream,
+        _.compoundOrSingleStatement())
+      (ctx, new SubstituteParmsAstBuilder().extractParameterLocations(ctx))
+    }
+    val (ctx, parameterLocations) = parseParameterLocations() match {
+      // A rule that accepts any tokens, such as `SET .*?`, parses a statement such as
+      // `SET VAR v = :p?`, which is not valid without optional references. Only the parser that
+      // builds the plan can tell, so parse a statement with a `?` that is not a parameter marker
+      // again with optional references.
+      case (_, locations)
+          if AbstractParser.questions(tokenStream).length >
+            locations.positionalParameterLocations.length &&
+            AbstractParser.restartWithOptionalReferences(parser, tokenStream) =>
+        parseParameterLocations()
+      case parsed =>
+        parsed
+    }
     // Optional named parameter markers are substituted before the AstBuilder sees them.
     if (parameterLocations.namedParameterLocations.values.exists(_.exists(_.optional))) {
       OptionalReferenceValidation.validateNamedParameterMarkers(ctx, sqlText)

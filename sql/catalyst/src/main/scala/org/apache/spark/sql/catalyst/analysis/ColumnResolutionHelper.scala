@@ -212,7 +212,10 @@ trait ColumnResolutionHelper extends Logging with DataTypeErrorsBase {
             None
           }
           if (missingOptionalFieldAliasName.isDefined) {
-            Alias(OptionalReferences.nullReference(), missingOptionalFieldAliasName.get)()
+            OptionalReferences.implicitAlias(
+              OptionalReferences.nullReference(),
+              missingOptionalFieldAliasName.get
+            )
           } else if (newChild.resolved) {
             // applyOrNull propagates NULL when the base is NullType instead of throwing
             // INVALID_EXTRACT_BASE_FIELD_TYPE, consistent with multipart field access (col.a).
@@ -315,7 +318,7 @@ trait ColumnResolutionHelper extends Logging with DataTypeErrorsBase {
         resolvingView = AnalysisContext.get.catalogAndNamespace.nonEmpty,
         referredTempVariableNames = AnalysisContext.get.referredTempVariableNames,
         optionalNamePartIndices = optionalNamePartIndices
-      ).map(e => Alias(e, nameParts.last)())
+      ).map(e => OptionalReferences.implicitAlias(e, nameParts.last))
     }
 
     def innerResolve(e: Expression, isTopLevel: Boolean): Expression = withOrigin(e.origin) {
@@ -426,7 +429,8 @@ trait ColumnResolutionHelper extends Logging with DataTypeErrorsBase {
     }
 
     selectList.map {
-      case a: Alias =>
+      // The alias of an optional reference that is not found is not a lateral column alias.
+      case a: Alias if !OptionalReferences.isNullReferenceAlias(a) =>
         val result = resolve(a)
         val lowerCasedName = a.name.toLowerCase(Locale.ROOT)
         aliasMap.get(lowerCasedName) match {

@@ -18,7 +18,6 @@
 package org.apache.spark.sql.catalyst.analysis
 
 import org.apache.spark.sql.catalyst.expressions.{
-  Alias,
   Attribute,
   Expression,
   LambdaFunction,
@@ -67,6 +66,7 @@ import org.apache.spark.sql.catalyst.trees.TreePattern.{PARAMETERIZED_QUERY, PLA
  */
 class ResolveOptionalReferences(resolveAgain: LogicalPlan => LogicalPlan)
     extends Rule[LogicalPlan] {
+  import ResolveOptionalReferences._
 
   override def apply(plan: LogicalPlan): LogicalPlan = plan match {
     case subquery: ResolveOptionalReferencesInSubquery =>
@@ -78,19 +78,6 @@ class ResolveOptionalReferences(resolveAgain: LogicalPlan => LogicalPlan)
       replaceAndResolveAgain(plan)
     case _ =>
       plan
-  }
-
-  private def isPlanOfSubquery: Boolean = AnalysisContext.get.outerPlan.isDefined
-
-  /**
-   * Returns true if `plan` or the plan of one of its subquery expressions has an optional
-   * reference that is not resolved.
-   */
-  private def hasUnresolvedOptionalReferences(plan: LogicalPlan): Boolean = plan.exists {
-    _.expressions.exists(_.exists {
-      case subquery: SubqueryExpression => hasUnresolvedOptionalReferences(subquery.plan)
-      case expression => !expression.resolved && OptionalReferences.hasOptionalMarker(expression)
-    })
   }
 
   private def replaceAndResolveAgain(plan: LogicalPlan): LogicalPlan = {
@@ -171,7 +158,11 @@ class ResolveOptionalReferences(resolveAgain: LogicalPlan => LogicalPlan)
           resolver = conf.resolver
         ) =>
       val nullReference = OptionalReferences.nullReference()
-      if (isTopLevel) Alias(nullReference, unresolvedAttribute.nameParts.last)() else nullReference
+      if (isTopLevel) {
+        OptionalReferences.implicitAlias(nullReference, unresolvedAttribute.nameParts.last)
+      } else {
+        nullReference
+      }
     case namedParameter: NamedParameter if OptionalReferences.isOptional(namedParameter) =>
       OptionalReferences.nullReference()
     case lambdaFunction: LambdaFunction if !lambdaFunction.bound =>
@@ -269,6 +260,31 @@ class ResolveOptionalReferences(resolveAgain: LogicalPlan => LogicalPlan)
     case _ =>
       Seq.empty
   }
+}
+
+object ResolveOptionalReferences {
+
+  /**
+   * Returns true if `plan` or the plan of one of its subquery expressions has an optional
+   * reference that is not resolved.
+   */
+  private def hasUnresolvedOptionalReferences(plan: LogicalPlan): Boolean = plan.exists {
+    _.expressions.exists(_.exists {
+      case subquery: SubqueryExpression => hasUnresolvedOptionalReferences(subquery.plan)
+      case expression => !expression.resolved && OptionalReferences.hasOptionalMarker(expression)
+    })
+  }
+
+  private def isPlanOfSubquery: Boolean = AnalysisContext.get.outerPlan.isDefined
+
+  /**
+   * Returns true if `plan` is the plan of a subquery expression that the analyzer is resolving on
+   * its own and that still has unresolved optional references. [[ResolveOptionalReferences]] only
+   * replaces these when it handles the operator of the subquery expression, so the rules that
+   * finish the analysis of a plan must leave its pending state alone until then.
+   */
+  def isUnfinishedSubqueryPlan(plan: LogicalPlan): Boolean =
+    isPlanOfSubquery && !plan.resolved && hasUnresolvedOptionalReferences(plan)
 }
 
 /**
