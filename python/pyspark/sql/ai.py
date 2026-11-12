@@ -219,6 +219,7 @@ def register_sql_function(
     session: Optional["SparkSession"] = None,
     *,
     on_error: str = "raise",
+    aliases: Optional[list[str]] = None,
 ) -> None:
     """Register a session-local SQL function for remote model inference.
 
@@ -239,6 +240,9 @@ def register_sql_function(
         Error policy for calls to the registered SQL function. ``"raise"`` fails the task.
         ``"null"`` returns null for known inference and transient failures. Invalid input,
         client initialization, authentication, and permission errors fail the task.
+    aliases : list of str, optional
+        Model aliases available to the SQL function. Defaults to all aliases in the session.
+        Unknown aliases fail at registration. Use this to restrict row-dependent routing.
 
     Examples
     --------
@@ -262,6 +266,24 @@ def register_sql_function(
 
         target_session = _SparkSession.active()
     registry = dict(_model_registry(target_session))
+    if aliases is not None:
+        if not isinstance(aliases, list):
+            raise PySparkTypeError(
+                errorClass="NOT_EXPECTED_TYPE",
+                messageParameters={
+                    "arg_name": "aliases",
+                    "expected_type": "list",
+                    "arg_type": type(aliases).__name__,
+                },
+            )
+        for alias in aliases:
+            _validate_non_empty_string("aliases", alias)
+            if alias not in registry:
+                raise PySparkValueError(
+                    errorClass="AI_QUERY_ENDPOINT_NOT_REGISTERED",
+                    messageParameters={"endpoint": alias[:100]},
+                )
+        registry = {alias: registry[alias] for alias in aliases}
 
     def query(batches: Iterator[Tuple["pd.Series", "pd.Series"]]) -> Iterator["pd.Series"]:
         import pandas as pd

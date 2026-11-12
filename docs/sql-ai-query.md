@@ -57,7 +57,9 @@ Null requests produce null.
 
 The endpoint argument can be a literal or a column, allowing rows to use different models.
 With a column endpoint, row values select the provider, credential profile, and region from
-all aliases captured at registration. Use a literal endpoint for a fixed destination.
+the aliases captured at registration. Restrict that set with
+`register_sql_function(aliases=["summarizer"])`; unknown names fail at registration.
+An empty list exposes no models. Use a literal endpoint for a fixed destination.
 
 This takes a snapshot of the aliases registered so far. A `register_model` call after
 `register_sql_function` does not change it; call `register_sql_function` again to pick up
@@ -78,8 +80,10 @@ the registered function. Invalid input, client initialization, authentication, a
 errors still fail the task.
 
 Concurrency is bounded per active Python task. For example, 20 tasks with
-`max_concurrency=4` can issue up to 80 concurrent requests. The worker invokes the model
-for each non-null row in an Arrow batch before yielding the batch. A preview such as
+`max_concurrency=4` can issue up to 80 concurrent requests. Each task runs
+with at most `max_concurrency` requests in flight, starting another as each completes
+and preserving input order. Retries use randomized backoff and respect `Retry-After`.
+The worker invokes the model for each non-null row before yielding the Arrow batch. A preview such as
 `show(1)` can therefore invoke the model for more rows than it displays. Apply a limit
 to the input before adding the inference column when previewing a workload.
 
@@ -93,6 +97,10 @@ which produces null with `on_error="null"`. Authentication and in-progress respo
 can delay timeout reporting beyond the budget. The HTTP timeout limits connection and read
 inactivity, so a response that keeps delivering bytes can continue downloading past expiry.
 Bedrock uses the SDK's connection and read timeouts.
+
+Databricks responses are limited to 16 MiB of decoded response data. Larger responses
+fail with `AI_QUERY_INVOCATION_FAILED.INVALID_RESPONSE`, or produce null with
+`on_error="null"`.
 
 ## Validation
 

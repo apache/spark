@@ -17,25 +17,35 @@
 
 """Worker-side transport for the experimental AI query API."""
 
+import json
 import logging
 import math
+import random
 import re
 import threading
 import time
-from concurrent.futures import ThreadPoolExecutor
+from concurrent.futures import FIRST_COMPLETED, ThreadPoolExecutor, wait
 from contextlib import contextmanager
 from dataclasses import dataclass
 from datetime import timezone
 from email.utils import parsedate_to_datetime
 from itertools import islice
-from typing import TYPE_CHECKING, Any, Callable, Iterator, Mapping, Optional, Union
+from typing import TYPE_CHECKING, Any, Callable, Iterator, Mapping, Optional, TypeVar, Union
 from urllib.parse import quote, urlsplit
 
-from pyspark.errors import PySparkRuntimeError, PySparkTypeError, PySparkValueError
+from pyspark.errors import (
+    PySparkException,
+    PySparkRuntimeError,
+    PySparkTypeError,
+    PySparkValueError,
+)
 
 if TYPE_CHECKING:
     import pandas as pd
     from requests import Session
+
+_T = TypeVar("_T")
+_MAX_DATABRICKS_RESPONSE_BYTES = 16 * 1024 * 1024
 
 
 @dataclass(frozen=True)
@@ -184,7 +194,21 @@ def _retry_delay(
             status=str(status),
             retry_after=str(retry_after),
         )
-    return min(max(2 ** min(failures, 3), retry_after), remaining)
+    backoff = 2 ** min(failures, 3) * random.uniform(0.5, 1.0)
+    return min(max(backoff, retry_after), remaining)
+
+
+def _databricks_authentication(action: Callable[[], _T]) -> _T:
+    import requests
+
+    try:
+        return action()
+    except (requests.RequestException, PySparkException):
+        raise
+    except Exception:
+        raise _invocation_error(
+            "Databricks model", "PERMISSION_DENIED", code="SDK_AUTHENTICATION_ERROR"
+        ) from None
 
 
 def _databricks_session() -> "Session":
@@ -221,8 +245,10 @@ class _ChatCompletionsClient:
         from databricks.sdk import WorkspaceClient
 
         self.endpoint = endpoint
-        self.workspace = WorkspaceClient(
-            profile=endpoint.profile, auth_type=endpoint.auth_type or "oauth-m2m"
+        self.workspace = _databricks_authentication(
+            lambda: WorkspaceClient(
+                profile=endpoint.profile, auth_type=endpoint.auth_type or "oauth-m2m"
+            )
         )
         host = _databricks_url(self.workspace.config.host)
         self.url = host + "/serving-endpoints/" + quote(endpoint.model_id, safe="") + "/invocations"
@@ -259,7 +285,7 @@ class _ChatCompletionsClient:
             retry_headers: Mapping[str, str] = {}
             retry_status: Optional[int] = None
             try:
-                headers = self.workspace.config.authenticate()
+                headers = _databricks_authentication(self.workspace.config.authenticate)
                 remaining = self._remaining_timeout(deadline, last_retry_status)
                 with self.http.post(
                     self.url,
@@ -267,6 +293,7 @@ class _ChatCompletionsClient:
                     json=body,
                     timeout=remaining,
                     allow_redirects=False,
+                    stream=True,
                 ) as response:
                     status = response.status_code
                     if status == 429 or status in (500, 502, 503, 504):
@@ -287,7 +314,14 @@ class _ChatCompletionsClient:
                         )
                     else:
                         try:
-                            text = response.json()["choices"][0]["message"]["content"]
+                            response_body = bytearray()
+                            for chunk in response.iter_content(chunk_size=64 * 1024):
+                                if len(response_body) + len(chunk) > _MAX_DATABRICKS_RESPONSE_BYTES:
+                                    raise _invocation_error(
+                                        "Databricks model", "INVALID_RESPONSE"
+                                    ) from None
+                                response_body.extend(chunk)
+                            text = json.loads(response_body)["choices"][0]["message"]["content"]
                         except (KeyError, IndexError, TypeError, ValueError):
                             raise _invocation_error(
                                 "Databricks model", "INVALID_RESPONSE"
@@ -484,14 +518,22 @@ def _query_session(
 
             def query(requests: "pd.Series") -> "pd.Series":
                 _validate_requests(requests)
-                # Chunk submission as well as execution to bound outstanding work.
-                rows = iter(requests)
-                values: list[Optional[str]] = []
-                while True:
-                    chunk = list(islice(rows, endpoint.max_concurrency))
-                    if not chunk:
-                        break
-                    values.extend(pool.map(invoke, chunk))
+                rows = iter(enumerate(requests))
+                values: list[Optional[str]] = [None] * len(requests)
+                pending = {
+                    pool.submit(invoke, request): index
+                    for index, request in islice(rows, endpoint.max_concurrency)
+                }
+                try:
+                    while pending:
+                        done, _ = wait(pending, return_when=FIRST_COMPLETED)
+                        for future in done:
+                            values[pending.pop(future)] = future.result()
+                        for index, request in islice(rows, len(done)):
+                            pending[pool.submit(invoke, request)] = index
+                finally:
+                    for future in pending:
+                        future.cancel()
                 return pd.Series(values, dtype="object")
 
             yield query

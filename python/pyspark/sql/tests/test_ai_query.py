@@ -161,6 +161,7 @@ class AIQueryTests(unittest.TestCase, PySparkErrorTestUtils):
         response.status_code = http_status
         response.headers = {}
         response.json.return_value = body
+        response.iter_content.return_value = [json.dumps(body).encode()]
         return response
 
     def sql_query(self):
@@ -360,8 +361,163 @@ class AIQueryTests(unittest.TestCase, PySparkErrorTestUtils):
                 self.subTest(retry_after=value),
                 patch("pyspark.sql._ai_client.time.time", return_value=now),
                 patch("pyspark.sql._ai_client.time.monotonic", return_value=0),
+                patch("pyspark.sql._ai_client.random.uniform", return_value=1.0),
             ):
                 self.assertEqual(_retry_delay({"Retry-After": value}, 0, 5, 429), 1)
+
+    def test_retry_jitter_respects_server_delay_and_budget(self):
+        with (
+            patch("pyspark.sql._ai_client.time.monotonic", return_value=0),
+            patch("pyspark.sql._ai_client.random.uniform", return_value=0.5),
+        ):
+            self.assertEqual(_retry_delay({}, 0, 10, None), 0.5)
+            self.assertEqual(_retry_delay({"Retry-After": "3"}, 1, 10, 429), 3)
+            self.assertEqual(_retry_delay({}, 3, 0.25, None), 0.25)
+
+    def test_response_size_limit_closes_the_response_and_sanitizes_errors(self):
+        client = self.client()
+        response = self.response(choices=[{"message": {"content": "answer"}}])
+        response.iter_content.return_value = [b"synthetic-sensitive-response"]
+        client.http.post.return_value = response
+        with (
+            patch("pyspark.sql._ai_client._MAX_DATABRICKS_RESPONSE_BYTES", 8),
+            self.assertRaises(PySparkRuntimeError) as raised,
+        ):
+            client.invoke("hello")
+        self.check_error(
+            raised.exception,
+            "AI_QUERY_INVOCATION_FAILED.INVALID_RESPONSE",
+            {"target": "Databricks model"},
+        )
+        self.assertNotIn(
+            "synthetic-sensitive-response", "".join(traceback.format_exception(raised.exception))
+        )
+        response.__exit__.assert_called_once()
+        client.http.post.assert_called_once()
+        self.assertTrue(client.http.post.call_args.kwargs["stream"])
+
+    def test_response_at_the_size_limit_is_accepted(self):
+        client = self.client()
+        response = self.response(choices=[{"message": {"content": "answer"}}])
+        chunks = list(response.iter_content.return_value)
+        payload = b"".join(chunks)
+        response.iter_content.return_value = [payload[:10], payload[10:]]
+        client.http.post.return_value = response
+        with patch("pyspark.sql._ai_client._MAX_DATABRICKS_RESPONSE_BYTES", len(payload)):
+            self.assertEqual(client.invoke("hello"), "answer")
+
+    def test_sdk_constructor_errors_are_sanitized(self):
+        sdk = SimpleNamespace(WorkspaceClient=Mock(side_effect=ValueError("synthetic-auth-body")))
+        with (
+            patch.dict("sys.modules", {"databricks.sdk": sdk}),
+            self.assertRaises(PySparkRuntimeError) as raised,
+        ):
+            _ChatCompletionsClient(_ModelEndpoint("model", provider="databricks"))
+        self.check_error(
+            raised.exception,
+            "AI_QUERY_INVOCATION_FAILED.PERMISSION_DENIED",
+            {"target": "Databricks model", "code": "SDK_AUTHENTICATION_ERROR"},
+        )
+        self.assertNotIn(
+            "synthetic-auth-body", "".join(traceback.format_exception(raised.exception))
+        )
+
+    def test_authentication_errors_fail_even_with_null_policy(self):
+        client = self.client()
+        client.workspace.config.authenticate.side_effect = ValueError("synthetic-auth-body")
+        with (
+            patch("pyspark.sql._ai_client._ChatCompletionsClient", return_value=client),
+            self.assertRaises(PySparkRuntimeError) as raised,
+        ):
+            list(_query_batches(client.endpoint, iter([pd.Series(["hello"])]), on_error="null"))
+        self.check_error(
+            raised.exception,
+            "AI_QUERY_INVOCATION_FAILED.PERMISSION_DENIED",
+            {"target": "Databricks model", "code": "SDK_AUTHENTICATION_ERROR"},
+        )
+        self.assertNotIn(
+            "synthetic-auth-body", "".join(traceback.format_exception(raised.exception))
+        )
+        client.http.post.assert_not_called()
+        client.http.close.assert_called_once()
+
+    def test_real_oauth_non_json_error_is_sanitized(self):
+        try:
+            from databricks.sdk.oauth import ClientCredentials
+        except ImportError:
+            self.skipTest("OAuth regression requires databricks-sdk")
+
+        marker = b"synthetic-private-token-response"
+
+        class Handler(BaseHTTPRequestHandler):
+            def do_POST(self):
+                self.rfile.read(int(self.headers["Content-Length"]))
+                self.send_response(401)
+                self.send_header("Content-Type", "text/plain")
+                self.send_header("Content-Length", str(len(marker)))
+                self.end_headers()
+                self.wfile.write(marker)
+
+            def log_message(self, *args):
+                pass
+
+        with ThreadingHTTPServer(("127.0.0.1", 0), Handler) as server:
+            thread = threading.Thread(target=server.serve_forever, daemon=True)
+            thread.start()
+            try:
+                tokens = ClientCredentials(
+                    client_id="synthetic-client",
+                    client_secret="synthetic-secret",
+                    token_url=f"http://127.0.0.1:{server.server_port}/token",
+                    use_header=True,
+                )
+                client = self.client()
+                client.workspace.config.authenticate.side_effect = tokens.token
+                with self.assertRaises(PySparkRuntimeError) as raised:
+                    client.invoke("hello")
+                self.check_error(
+                    raised.exception,
+                    "AI_QUERY_INVOCATION_FAILED.PERMISSION_DENIED",
+                    {"target": "Databricks model", "code": "SDK_AUTHENTICATION_ERROR"},
+                )
+                self.assertNotIn(
+                    marker.decode(), "".join(traceback.format_exception(raised.exception))
+                )
+                client.http.post.assert_not_called()
+            finally:
+                server.shutdown()
+                thread.join()
+
+    def test_transient_authentication_transport_errors_are_retried(self):
+        client = self.client(max_retries=1)
+        client.workspace.config.authenticate.side_effect = requests.ConnectionError(
+            "private diagnostic"
+        )
+        with (
+            patch("pyspark.sql._ai_client.time.sleep"),
+            self.assertRaises(PySparkRuntimeError) as raised,
+        ):
+            client.invoke("hello")
+        self.check_error(
+            raised.exception,
+            "AI_QUERY_INVOCATION_FAILED.CONNECTION_ERROR",
+            {"target": "Databricks model"},
+        )
+        self.assertEqual(client.workspace.config.authenticate.call_count, 2)
+        client.http.post.assert_not_called()
+
+    def test_response_size_limit_respects_null_policy(self):
+        client = self.client()
+        client.http.post.return_value = self.response(choices=[{"message": {"content": "answer"}}])
+        with (
+            patch("pyspark.sql._ai_client._MAX_DATABRICKS_RESPONSE_BYTES", 8),
+            patch("pyspark.sql._ai_client._ChatCompletionsClient", return_value=client),
+        ):
+            result = list(
+                _query_batches(client.endpoint, iter([pd.Series(["hello"])]), on_error="null")
+            )
+        self.assertEqual(result[0].tolist(), [None])
+        client.http.close.assert_called_once()
 
     def test_http_body_failures_are_sanitized_and_follow_null_policy(self):
         received = []
@@ -749,6 +905,28 @@ class AIQueryTests(unittest.TestCase, PySparkErrorTestUtils):
             {"target": "Databricks model", "status": "429"},
         )
 
+    def test_sliding_window_starts_later_rows_while_an_earlier_row_is_running(self):
+        later_started = threading.Event()
+        client = Mock()
+
+        def invoke(request):
+            if request == "slow":
+                self.assertTrue(later_started.wait(timeout=10))
+            elif request == "later":
+                later_started.set()
+            return request.upper()
+
+        client.invoke.side_effect = invoke
+        with patch("pyspark.sql._ai_client._ChatCompletionsClient", return_value=client):
+            result = list(
+                _query_batches(
+                    _ModelEndpoint("model", provider="databricks", max_concurrency=2),
+                    iter([pd.Series(["slow", "fast", "later"])]),
+                )
+            )
+        self.assertEqual(result[0].tolist(), ["SLOW", "FAST", "LATER"])
+        self.assertEqual(client.invoke.call_count, 3)
+
     def test_batch_order_nulls_concurrency_and_cleanup(self):
         clients = []
         lock = threading.Lock()
@@ -1016,6 +1194,42 @@ class AIQueryTests(unittest.TestCase, PySparkErrorTestUtils):
                 {"function_name": "ai_query", "num_args": str(count)},
             )
 
+    def test_sql_alias_allowlist_excludes_other_credentials_from_the_snapshot(self):
+        import pyspark.cloudpickle as cloudpickle
+
+        session = SimpleNamespace(udf=Mock())
+        register_model("safe", "model", provider="databricks", session=session)
+        register_model(
+            "prod",
+            "private-model",
+            provider="bedrock",
+            profile="private-prod-profile",
+            region="us-east-2",
+            session=session,
+        )
+        register_sql_function(session=session, aliases=["safe"])
+        query = session.udf.register.call_args.args[1].func
+        self.assertNotIn(b"private-prod-profile", cloudpickle.dumps(query))
+        with (
+            patch("pyspark.sql.ai._query_session") as factory,
+            self.assertRaises(PySparkValueError) as raised,
+        ):
+            list(query(iter([(pd.Series(["safe", "prod"]), pd.Series(["a", "b"]))])))
+        self.check_error(raised.exception, "AI_QUERY_ENDPOINT_NOT_REGISTERED", {"endpoint": "prod"})
+        factory.assert_not_called()
+
+    def test_sql_alias_allowlist_is_validated_at_registration(self):
+        session = SimpleNamespace(udf=Mock())
+        register_model("known", "model", provider="databricks", session=session)
+        for aliases, error_type in (
+            ("known", PySparkTypeError),
+            ([None], PySparkTypeError),
+            (["missing"], PySparkValueError),
+        ):
+            with self.subTest(aliases=aliases), self.assertRaises(error_type):
+                register_sql_function(session=session, aliases=aliases)
+        session.udf.register.assert_not_called()
+
     def test_sql_reuses_clients_across_batches_and_closes_them(self):
         session = SimpleNamespace(udf=Mock())
         for alias in ("first", "second"):
@@ -1093,6 +1307,24 @@ class AIQueryTests(unittest.TestCase, PySparkErrorTestUtils):
     "Spark AI query tests require pandas, requests and pyarrow",
 )
 class AIQuerySparkTests(sqlutils.ReusedSQLTestCase):
+    def test_sql_alias_allowlist_limits_routing(self):
+        with _model_http_server() as (origin, received):
+            local_session, _ = _local_query_functions(origin)
+            with patch("pyspark.sql.ai._query_session", new=local_session):
+                for alias in ("allowed", "excluded"):
+                    register_model(alias, alias, provider="databricks", session=self.spark)
+                register_sql_function("restricted_query", session=self.spark, aliases=["allowed"])
+                self.assertEqual(
+                    self.spark.sql("SELECT restricted_query('allowed', 'hello')").first()[0],
+                    "allowed:HELLO",
+                )
+                for aliases, alias in ((["allowed"], "excluded"), ([], "allowed")):
+                    register_sql_function("restricted_query", session=self.spark, aliases=aliases)
+                    with self.assertRaises(PythonException) as raised:
+                        self.spark.sql(f"SELECT restricted_query('{alias}', 'hello')").collect()
+                    self.assertIn("AI_QUERY_ENDPOINT_NOT_REGISTERED", str(raised.exception))
+            self.assertEqual(received, [("allowed", "hello")])
+
     def test_non_string_columns_fail_without_http_calls(self):
         from pyspark.sql.functions import col, struct
 

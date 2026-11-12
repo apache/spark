@@ -263,6 +263,22 @@ Additional libraries that enhance functionality but are not included in the inst
 - **flameprof**: Provide the default renderer for UDF performance profiling.
 
 
+AI query
+^^^^^^^^
+
+Installable with ``pip install "pyspark[ai]"``. This includes the Spark SQL dependencies
+needed to execute Pandas UDFs, plus the provider SDKs below.
+
+================ ================= ==============================
+Package          Supported version Note
+================ ================= ==============================
+`requests`       >=2.32.5           Required for Databricks
+`urllib3`        >=2.0.7            Enforces HTTP response framing
+`databricks-sdk` >=0.57.0           Required for Databricks OAuth
+`boto3`          >=1.34.131         Required for Bedrock Converse
+================ ================= ==============================
+
+
 Pandas API on Spark
 ^^^^^^^^^^^^^^^^^^^
 
