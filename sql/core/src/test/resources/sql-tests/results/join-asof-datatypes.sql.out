@@ -250,14 +250,67 @@ struct<d:date,matched_ts:timestamp>
 
 
 -- !query
-SELECT t.ts, r.ts_ntz AS matched_ts_ntz
-FROM VALUES (TIMESTAMP '2026-06-29 10:00:00') AS t(ts) ASOF JOIN
-     VALUES (TIMESTAMP_NTZ '2026-06-29 09:00:00') AS r(ts_ntz)
-  MATCH_CONDITION (t.ts >= r.ts_ntz)
+SET spark.sql.session.timeZone=America/Los_Angeles
 -- !query schema
-struct<ts:timestamp,matched_ts_ntz:timestamp_ntz>
+struct<key:string,value:string>
 -- !query output
-2026-06-29 10:00:00	2026-06-29 09:00:00
+spark.sql.session.timeZone	America/Los_Angeles
+
+
+-- !query
+SELECT l.id, r.id
+FROM VALUES
+  (TIMESTAMP_LTZ '2024-03-10 10:05:00Z', 1),
+  (TIMESTAMP_LTZ '2024-03-10 10:55:00Z', 2) AS l(ts, id)
+LEFT ASOF JOIN VALUES
+  (TIMESTAMP_NTZ '2024-03-10 02:50:00', 1),
+  (TIMESTAMP_NTZ '2024-03-10 03:00:00', 2),
+  (TIMESTAMP_NTZ '2024-03-10 03:15:00', 3) AS r(ts, id)
+MATCH_CONDITION (l.ts <= r.ts)
+-- !query schema
+struct<id:int,id:int>
+-- !query output
+1	3
+2	NULL
+
+
+-- !query
+SELECT l.id, r.id
+FROM VALUES
+  (TIMESTAMP_LTZ '2024-03-10 10:05:00Z', 1),
+  (TIMESTAMP_LTZ '2024-03-10 10:55:00Z', 2) AS l(ts, id)
+LEFT ASOF JOIN VALUES
+  (TIMESTAMP_NTZ '2024-03-10 02:50:00', 1),
+  (TIMESTAMP_NTZ '2024-03-10 03:00:00', 2),
+  (TIMESTAMP_NTZ '2024-03-10 03:15:00', 3) AS r(ts, id)
+MATCH_CONDITION (l.ts >= r.ts)
+-- !query schema
+struct<id:int,id:int>
+-- !query output
+1	2
+2	1
+
+
+-- !query
+SELECT r.id
+FROM VALUES (TIMESTAMP_LTZ '2024-03-10 10:15:00Z', 2L) AS l(ts, n)
+LEFT ASOF JOIN VALUES
+  (TIMESTAMP_NTZ '2024-03-10 02:50:00', 1, 1),
+  (TIMESTAMP_NTZ '2024-03-10 03:15:00', 1, 2),
+  (TIMESTAMP_NTZ '2024-03-10 03:15:00', 3, 3) AS r(ts, n, id)
+MATCH_CONDITION ((l.ts, l.n) <= (r.ts, r.n))
+-- !query schema
+struct<id:int>
+-- !query output
+3
+
+
+-- !query
+RESET spark.sql.session.timeZone
+-- !query schema
+struct<>
+-- !query output
+
 
 
 -- !query

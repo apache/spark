@@ -17,13 +17,36 @@
 
 package org.apache.spark.sql.catalyst.analysis
 
+import org.apache.spark.sql.catalyst.dsl.expressions._
 import org.apache.spark.sql.catalyst.expressions.{Attribute, AttributeReference, AttributeSet}
 import org.apache.spark.sql.catalyst.optimizer.SimpleTestOptimizer
 import org.apache.spark.sql.catalyst.parser.CatalystSqlParser
 import org.apache.spark.sql.catalyst.plans.logical.{EventTimeWatermark, Filter, LeafNode, Statistics}
-import org.apache.spark.sql.types.{IntegerType, MetadataBuilder, TimestampType}
+import org.apache.spark.sql.types.{IntegerType, LongType, MetadataBuilder, TimestampType}
 
 class StreamingJoinHelperSuite extends AnalysisTest {
+
+  test("state watermark extraction preserves arithmetic term multiplicity") {
+    val leftTime = AttributeReference("leftTime", TimestampType)()
+    val metadata = new MetadataBuilder().putLong(EventTimeWatermark.delayKey, 1000).build()
+    val rightTime = AttributeReference("rightTime", TimestampType, metadata = metadata)()
+    val left = leftTime.cast(LongType)
+    val right = rightTime.cast(LongType)
+
+    val cases = Seq(
+      (left > right + 2 + 2, Some(14000L)),
+      (left > right - 2 - 2, Some(6000L)),
+      (left + left > right, None),
+      (left > right + right, None),
+      (left > right - right, None))
+    cases.foreach { case (condition, expected) =>
+      withClue(condition.sql) {
+        assert(StreamingJoinHelper.getStateValueWatermark(
+          AttributeSet(Seq(leftTime)), AttributeSet(Seq(rightTime)),
+          Some(condition), Some(10000L)) === expected)
+      }
+    }
+  }
 
   test("extract watermark from time condition") {
     val attributesToFindConstraintFor = Seq(

@@ -18,7 +18,9 @@
 package org.apache.spark.sql.pipelines.autocdc
 
 import org.apache.spark.SparkFunSuite
+import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.analysis.{caseInsensitiveResolution, caseSensitiveResolution}
+import org.apache.spark.sql.catalyst.util.QuotingUtils
 import org.apache.spark.sql.types._
 
 class AutoCdcSchemaUtilsSuite extends SparkFunSuite {
@@ -96,5 +98,99 @@ class AutoCdcSchemaUtilsSuite extends SparkFunSuite {
 
   test("flattenStructFieldPaths returns an empty sequence for an empty schema") {
     assert(AutoCdcSchemaUtils.flattenStructFieldPaths(new StructType()) === Seq.empty)
+  }
+
+  test("resolveIgnoreNullLeafPaths returns canonical leaves in schema order") {
+    val schema = new StructType()
+      .add("id", IntegerType)
+      .add("Profile", new StructType()
+        .add("Display Name", StringType)
+        .add("Contact", new StructType().add("e.mail", StringType)))
+      .add("Events", ArrayType(new StructType().add("kind", StringType)))
+      .add("Lookup", MapType(StringType, new StructType().add("value", StringType)))
+
+    val includeSelection = ColumnSelection.IncludeColumns(Seq(
+      UnqualifiedColumnName("lookup"),
+      UnqualifiedColumnName("profile"),
+      UnqualifiedColumnName("events")))
+    assert(AutoCdcSchemaUtils.resolveIgnoreNullLeafPaths(
+      schema, includeSelection, caseInsensitiveResolution) === Seq(
+      Seq("Profile", "Display Name"),
+      Seq("Profile", "Contact", "e.mail"),
+      Seq("Events"),
+      Seq("Lookup")))
+
+    val excludeSelection =
+      ColumnSelection.ExcludeColumns(Seq(UnqualifiedColumnName("profile")))
+    assert(AutoCdcSchemaUtils.resolveIgnoreNullLeafPaths(
+      schema, excludeSelection, caseInsensitiveResolution) === Seq(
+      Seq("id"),
+      Seq("Events"),
+      Seq("Lookup")))
+  }
+
+  test("resolveIgnoreNullLeafPaths respects case sensitivity") {
+    val schema = new StructType()
+      .add("Profile", new StructType().add("Name", StringType))
+
+    val exactSelection =
+      ColumnSelection.IncludeColumns(Seq(UnqualifiedColumnName("Profile")))
+    assert(AutoCdcSchemaUtils.resolveIgnoreNullLeafPaths(
+      schema, exactSelection, caseSensitiveResolution) === Seq(Seq("Profile", "Name")))
+
+    val mismatchedSelection =
+      ColumnSelection.IncludeColumns(Seq(UnqualifiedColumnName("profile")))
+    checkError(
+      exception = intercept[AnalysisException] {
+        AutoCdcSchemaUtils.resolveIgnoreNullLeafPaths(
+          schema, mismatchedSelection, caseSensitiveResolution)
+      },
+      condition = "AUTOCDC_COLUMNS_NOT_FOUND_IN_SCHEMA",
+      sqlState = "42703",
+      parameters = Map(
+        "caseSensitivity" -> "case-sensitive",
+        "schemaName" -> "ignoreNullSelection",
+        "missingColumns" -> "profile",
+        "availableColumns" -> "Profile"
+      )
+    )
+  }
+
+  test("resolveIgnoreNullLeafPaths preserves raw special-character names") {
+    val schema = new StructType()
+      .add("wrapper.with.dot", new StructType()
+        .add("back`tick", StringType)
+        .add("space name", StringType))
+    val selection = ColumnSelection.IncludeColumns(Seq(
+      UnqualifiedColumnName(QuotingUtils.quoteIdentifier("wrapper.with.dot"))))
+
+    assert(AutoCdcSchemaUtils.resolveIgnoreNullLeafPaths(
+      schema, selection, caseInsensitiveResolution) === Seq(
+      Seq("wrapper.with.dot", "back`tick"),
+      Seq("wrapper.with.dot", "space name")))
+  }
+
+  test("fieldPathsMissingFrom returns flattened paths absent from the other schema") {
+    val schema = new StructType()
+      .add("kept", StringType)
+      .add("dropped", StringType)
+      .add("profile", new StructType()
+        .add("City", StringType)
+        .add("zip", StringType))
+    val otherSchema = new StructType()
+      .add("profile", new StructType()
+        .add("city", StringType))
+      .add("KEPT", StringType)
+      .add("extra", StringType)
+
+    assert(AutoCdcSchemaUtils.fieldPathsMissingFrom(
+      schema,
+      otherSchema,
+      caseInsensitiveResolution) === Seq(Seq("dropped"), Seq("profile", "zip")))
+    assert(AutoCdcSchemaUtils.fieldPathsMissingFrom(
+      schema,
+      otherSchema,
+      caseSensitiveResolution) ===
+      Seq(Seq("kept"), Seq("dropped"), Seq("profile", "City"), Seq("profile", "zip")))
   }
 }

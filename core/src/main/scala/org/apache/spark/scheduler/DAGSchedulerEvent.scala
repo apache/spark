@@ -96,6 +96,10 @@ private[scheduler] case class CompletionEvent(
     taskInfo: TaskInfo)
   extends DAGSchedulerEvent
 
+/** A lightweight reference to a released completion still owned by the pipelined scheduler. */
+private[scheduler] case class PipelinedTaskCompletionReplay(stageId: Int, replayId: Long)
+  extends DAGSchedulerEvent
+
 private[scheduler] case class ExecutorAdded(execId: String, host: String) extends DAGSchedulerEvent
 
 private[scheduler] case class ExecutorLost(execId: String, reason: ExecutorLossReason)

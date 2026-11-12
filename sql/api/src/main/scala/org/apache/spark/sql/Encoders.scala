@@ -153,7 +153,7 @@ object Encoders {
    *
    * @since 4.1.0
    */
-  def LOCALTIME: Encoder[java.time.LocalTime] = LocalTimeEncoder
+  def LOCALTIME: Encoder[java.time.LocalTime] = DEFAULT_LOCAL_TIME_ENCODER
 
   /**
    * An encoder for arrays of bytes.

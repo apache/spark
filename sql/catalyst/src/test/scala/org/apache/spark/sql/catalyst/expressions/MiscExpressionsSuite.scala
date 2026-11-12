@@ -94,6 +94,31 @@ class MiscExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
       evaluateWithUnsafeProjection(new Uuid(seed3)))
   }
 
+  Seq(0L, 42L, Long.MinValue).foreach { seed =>
+    test(s"uuid fresh copies own independent generators for seed $seed") {
+      val original = Uuid(Some(seed))
+      val first = original.freshCopyIfContainsStatefulExpression().asInstanceOf[Uuid]
+      val second = original.freshCopyIfContainsStatefulExpression().asInstanceOf[Uuid]
+      assert(first ne original)
+      assert(second ne original)
+      assert(first ne second)
+      assert(first.randomSeed == original.randomSeed)
+      original.initialize(0)
+      first.initialize(0)
+      second.initialize(0)
+      for (_ <- 0 until 20) {
+        val expected = original.eval()
+        assert(first.eval() == expected)
+        assert(second.eval() == expected)
+      }
+      first.initialize(1)
+      assert(second.eval() == original.eval())
+      val otherPartition = Uuid(Some(seed))
+      otherPartition.initialize(1)
+      assert(first.eval() == otherPartition.eval())
+    }
+  }
+
   test("PrintToStderr") {
     val inputExpr = Literal(1)
     val systemErr = System.err

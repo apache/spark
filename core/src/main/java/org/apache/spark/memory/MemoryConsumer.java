@@ -28,6 +28,14 @@ import org.apache.spark.unsafe.memory.MemoryBlock;
  * A memory consumer of {@link TaskMemoryManager} that supports spilling.
  *
  * Note: this only supports allocation / spilling of Tungsten memory.
+ *
+ * Memory consumers have identity equality: {@link #equals} and {@link #hashCode} are defined here
+ * by reference, so a subclass, including a Scala case class when compiled against this version,
+ * does not get value equality unless it explicitly overrides them. {@link TaskMemoryManager} also
+ * tracks consumers by identity, even if a subclass overrides {@code equals}: distinct instances are
+ * never merged into one entry, so each of them can be offered for spilling and reported in the
+ * memory usage breakdown. How much memory a spill actually releases is decided by each consumer's
+ * {@link #spill(long, MemoryConsumer)}.
  */
 public abstract class MemoryConsumer {
 
@@ -80,7 +88,10 @@ public abstract class MemoryConsumer {
    * Note: today, this only frees Tungsten-managed pages.
    *
    * @param size the amount of memory should be released
-   * @param trigger the MemoryConsumer that trigger this spilling
+   * @param trigger the MemoryConsumer that trigger this spilling. Compare it with this consumer
+   *                by reference ({@code eq}/{@code ne} in Scala), not by {@code equals}: a
+   *                distinct consumer that is equal to this one does not make this a
+   *                self-triggered spill.
    * @return the amount of released memory in bytes
    */
   public abstract long spill(long size, MemoryConsumer trigger) throws IOException;
@@ -117,8 +128,17 @@ public abstract class MemoryConsumer {
    * @throws SparkOutOfMemoryError
    */
   protected MemoryBlock allocatePage(long required) {
-    MemoryBlock page =
-      taskMemoryManager.allocatePageWithMinimum(Math.max(pageSize, required), required, this);
+    return allocatePage(Math.max(pageSize, required), required);
+  }
+
+  /**
+   * Allocate a memory block of `size` bytes. A smaller block may be returned, but it has at least
+   * `required` bytes, which must not exceed `size`.
+   *
+   * @throws SparkOutOfMemoryError
+   */
+  protected MemoryBlock allocatePage(long size, long required) {
+    MemoryBlock page = taskMemoryManager.allocatePageWithMinimum(size, required, this);
     if (page == null || page.size() < required) {
       throwOom(page, required);
     }
@@ -154,6 +174,22 @@ public abstract class MemoryConsumer {
   public void freeMemory(long size) {
     taskMemoryManager.releaseExecutionMemory(size, this);
     used.getAndAdd(-size);
+  }
+
+  /**
+   * Memory consumers are compared by identity. This is not final so that existing subclasses which
+   * override it keep compiling, but its presence stops Scala case classes compiled against this
+   * version from generating value equality. A case class compiled against an earlier version keeps
+   * its generated equality until it is rebuilt.
+   */
+  @Override
+  public boolean equals(Object other) {
+    return this == other;
+  }
+
+  @Override
+  public int hashCode() {
+    return System.identityHashCode(this);
   }
 
   private void throwOom(final MemoryBlock page, final long required) {

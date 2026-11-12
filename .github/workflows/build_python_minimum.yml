@@ -21,7 +21,7 @@ name: "Build / Python-only (Minimum dependencies of PySpark)"
 
 on:
   schedule:
-    - cron: '0 9 */2 * *'
+    - cron: '17 9 * * 4'
   workflow_dispatch:
 
 jobs:
@@ -32,7 +32,7 @@ jobs:
     uses: ./.github/workflows/build_and_test.yml
     if: github.repository == 'apache/spark'
     with:
-      java: 17
+      java: 21
       branch: master
       hadoop: hadoop3
       envs: >-

@@ -99,7 +99,7 @@ private[sql] object ArrowConverters extends Logging {
     // Create compression codec based on config
     private val codec = ArrowCompressionUtils.createCompressionCodec(
       SQLConf.get.arrowCompressionCodec, SQLConf.get.arrowZstdCompressionLevel)
-    protected val unloader = new VectorUnloader(root, true, codec, true)
+    protected val unloader = ArrowCompressionUtils.createVectorUnloader(root, codec)
     protected val arrowWriter = ArrowWriter.create(root)
     protected def maxBytesPerBatch: Long = -1L
 
@@ -221,12 +221,14 @@ private[sql] object ArrowConverters extends Logging {
         }
         arrowWriter.finish()
         val batch = unloader.getRecordBatch()
-        MessageSerializer.serialize(writeChannel, batch)
+        try {
+          MessageSerializer.serialize(writeChannel, batch)
 
-        // Always write the Ipc options at the end.
-        ArrowStreamWriter.writeEndOfStream(writeChannel, IpcOption.DEFAULT)
-
-        batch.close()
+          // Always write the Ipc options at the end.
+          ArrowStreamWriter.writeEndOfStream(writeChannel, IpcOption.DEFAULT)
+        } finally {
+          batch.close()
+        }
       } {
         arrowWriter.reset()
       }

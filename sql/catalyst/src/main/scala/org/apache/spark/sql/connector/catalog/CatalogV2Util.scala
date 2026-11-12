@@ -656,14 +656,10 @@ private[sql] object CatalogV2Util {
       catalog: CatalogPlugin,
       ident: Identifier,
       table: Table,
-      stateOptions: CaseInsensitiveStringMap,
-      conf: SQLConf): Option[DataSourceV2Relation] = {
-    cache.lookup(
-      catalog,
-      ident,
-      Some(table.id),
-      stateOptions,
-      conf.resolver).collect { case r: DataSourceV2Relation => r }
+      stateOptions: CaseInsensitiveStringMap): Option[DataSourceV2Relation] = {
+    cache.lookup(catalog, ident, Some(table.id), stateOptions).collect {
+      case r: DataSourceV2Relation => r
+    }
   }
 
   def isSessionCatalog(catalog: CatalogPlugin): Boolean = {
@@ -690,6 +686,16 @@ private[sql] object CatalogV2Util {
     Option(existing.schemaMode).foreach(builder.withSchemaMode)
     Option(existing.viewDependencies).foreach(builder.withViewDependencies)
     builder
+  }
+
+  /** Returns redacted, non-reserved table properties with additional display-only metadata. */
+  def tablePropertiesForDisplay(
+      properties: util.Map[String, String],
+      displayProperties: util.Map[String, String],
+      conf: SQLConf): Map[String, String] = {
+    val merged = (displayProperties.asScala.toMap ++ properties.asScala)
+      .filterNot { case (key, _) => TABLE_RESERVED_PROPERTIES.contains(key) }
+    conf.redactOptions(merged)
   }
 
   def convertTableProperties(t: TableSpec): Map[String, String] = {

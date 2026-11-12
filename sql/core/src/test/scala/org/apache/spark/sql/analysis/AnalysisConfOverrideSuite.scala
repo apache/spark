@@ -20,7 +20,7 @@ package org.apache.spark.sql.analysis
 import org.apache.spark.SparkConf
 import org.apache.spark.SparkNoSuchElementException
 import org.apache.spark.internal.config.ConfigBindingPolicy
-import org.apache.spark.sql.SparkSessionExtensions
+import org.apache.spark.sql.{Row, SparkSessionExtensions}
 import org.apache.spark.sql.catalyst.analysis.Analyzer
 import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
 import org.apache.spark.sql.catalyst.rules.Rule
@@ -104,6 +104,43 @@ class AnalysisConfOverrideSuite extends SharedSparkSession {
       assert(newConf.getConfString(unknownKey) == "captured after unregistration")
     } finally {
       SQLConf.unregister(dynamicEntry)
+    }
+  }
+
+  gridTest("view and SQL function bodies follow a SESSION-bound config changed between queries")(
+      Seq(true, false)) { memoize =>
+    val key = SQLConf.LOWER_EMPTY_GROUPING_SET_TO_GLOBAL_AGGREGATE.key
+    // Over empty input, this grand total returns one row when the config is on and none when off.
+    val grandTotal =
+      "SELECT count(*) AS c FROM VALUES (1) AS t(k) WHERE k > 1 GROUP BY GROUPING SETS (())"
+    def checkBodies(enabled: Boolean): Unit = {
+      val viewRows = if (enabled) Seq(Row(0L)) else Seq.empty
+      checkAnswer(spark.table("grand_total_temp_view"), viewRows)
+      checkAnswer(spark.table("grand_total_view"), viewRows)
+      // A scalar subquery that returns no rows evaluates to NULL.
+      checkAnswer(spark.sql("SELECT grand_total_func()"), Row(if (enabled) 0L else null))
+    }
+
+    withSQLConf(
+        key -> "true",
+        SQLConf.ANALYZER_MEMOIZE_RETAINED_RESOLUTION_CONFIGS.key -> memoize.toString) {
+      withTempView("grand_total_temp_view") {
+        withView("grand_total_view") {
+          withUserDefinedFunction("grand_total_func" -> true) {
+            spark.sql(s"CREATE TEMPORARY VIEW grand_total_temp_view AS $grandTotal")
+            spark.sql(s"CREATE VIEW grand_total_view AS $grandTotal")
+            spark.sql(
+              s"CREATE TEMPORARY FUNCTION grand_total_func() RETURNS BIGINT RETURN ($grandTotal)")
+            checkBodies(enabled = true)
+
+            spark.sql(s"SET $key=false")
+            checkBodies(enabled = false)
+
+            spark.sql(s"SET $key=true")
+            checkBodies(enabled = true)
+          }
+        }
+      }
     }
   }
 

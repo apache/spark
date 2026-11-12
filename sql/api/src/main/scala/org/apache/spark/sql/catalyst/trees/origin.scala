@@ -71,6 +71,16 @@ case class Origin(
       case _ => true
     }.toArray
   }
+
+  /**
+   * The SQL text covered by this origin. Indexes are Unicode code points, matching parser
+   * origins.
+   */
+  def sqlTextSlice: Option[String] = (sqlText, startIndex, stopIndex) match {
+    case (Some(text), Some(from), Some(to)) =>
+      Some(SQLQueryContext.sliceByCodePoints(text, from, to))
+    case _ => None
+  }
 }
 
 /**
@@ -152,8 +162,20 @@ object CurrentOrigin {
     "(org\\.apache\\.spark\\.sql\\." +
       "(?:(classic|connect)\\.)?" +
       "(?:functions|Column|ColumnName|SQLImplicits|Dataset|DataFrameStatFunctions|DatasetHolder" +
-      "|SparkSession|ColumnNodeToProtoConverter)" +
+      "|SparkSession|ColumnNodeToProtoConverter" +
+      // `KeyValueGroupedDataset` and its Connect impl build columns the user never names directly:
+      // `KeyValueGroupedDatasetImpl.apply` builds the Connect `groupByKey` grouping UDF, and
+      // methods on the abstract `KeyValueGroupedDataset` build aggregate columns (e.g. `count()`
+      // builds `count(1)`). Both must count as Spark frames or the captured call site stops at the
+      // helper instead of the user code that invoked the typed API.
+      "|KeyValueGroupedDataset|KeyValueGroupedDatasetImpl)" +
       "(?:|\\..*|\\$.*))" +
+      // Every UDF column is created via `UserDefinedFunction.apply(Column*)`, so this covers both
+      // ordinary UDF usage (`df.select(myUdf(col("x")))`) and the typed Connect APIs that encode
+      // themselves as a scalar UDF (`filter`/`reduce` call `udf.apply(col("*"))` directly, and
+      // `groupByKey` builds its grouping UDF the same way); otherwise the call site would stop at
+      // this helper.
+      "|(org\\.apache\\.spark\\.sql\\.expressions\\.UserDefinedFunction(?:|\\..*|\\$.*))" +
       "|(scala\\.collection\\..*)")
 
   private def sparkCode(ste: StackTraceElement): Boolean = {

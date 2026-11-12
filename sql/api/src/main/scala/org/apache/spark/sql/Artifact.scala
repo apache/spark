@@ -38,6 +38,10 @@ private[sql] object Artifact {
   val CLASS_PREFIX: Path = Paths.get("classes")
   val JAR_PREFIX: Path = Paths.get("jars")
   val CACHE_PREFIX: Path = Paths.get("cache")
+  val FILE_PREFIX: Path = Paths.get("files")
+
+  /** The file extension of native data source packages, which are added as file artifacts. */
+  val NATIVE_DATA_SOURCE_PACKAGE_EXTENSION = ".sparkpkg"
 
   def newArtifactFromExtension(
       fileName: String,
@@ -48,13 +52,15 @@ private[sql] object Artifact {
         newJarArtifact(targetFilePath, storage)
       case cf if cf.endsWith(".class") =>
         newClassArtifact(targetFilePath, storage)
+      case pkg if pkg.endsWith(NATIVE_DATA_SOURCE_PACKAGE_EXTENSION) =>
+        newFileArtifact(targetFilePath, storage)
       case other =>
         throw new UnsupportedOperationException(s"Unsupported file format: $other")
     }
   }
 
   def parseArtifacts(uri: URI): Seq[Artifact] = {
-    // Currently only local files with extensions .jar and .class are supported.
+    // Currently only local files with extensions .jar, .class and .sparkpkg are supported.
     uri.getScheme match {
       case "file" =>
         val path = Paths.get(uri)
@@ -80,11 +86,17 @@ private[sql] object Artifact {
     newArtifact(CLASS_PREFIX, ".class", targetFilePath, storage)
   }
 
+  def newFileArtifact(targetFilePath: Path, storage: LocalData): Artifact = {
+    newArtifact(FILE_PREFIX, "", targetFilePath, storage)
+  }
+
   def newCacheArtifact(id: String, storage: LocalData): Artifact = {
     newArtifact(CACHE_PREFIX, "", Paths.get(id), storage)
   }
 
-  def newIvyArtifacts(uri: URI): Seq[Artifact] = {
+  def newIvyArtifacts(uri: URI): Seq[Artifact] = newIvyArtifacts(uri, None)
+
+  def newIvyArtifacts(uri: URI, ivySettingsPath: Option[String]): Seq[Artifact] = {
     implicit val printStream: PrintStream = System.err
 
     val authority = uri.getAuthority
@@ -108,7 +120,10 @@ private[sql] object Artifact {
         Nil
       }
 
-    val ivySettings = MavenUtils.buildIvySettings(Some(repos), None)
+    val ivySettings = ivySettingsPath match {
+      case Some(path) => MavenUtils.loadIvySettings(path, Some(repos), None)
+      case None => MavenUtils.buildIvySettings(Some(repos), None)
+    }
 
     val jars = MavenUtils.resolveMavenCoordinates(
       authority,

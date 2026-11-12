@@ -707,7 +707,7 @@ org.apache.spark.sql.catalyst.ExtendedAnalysisException
 -- !query
 SELECT listagg(DISTINCT v:a::string, ',') WITHIN GROUP (ORDER BY v:a::string) FROM (SELECT parse_json('{"a": "x"}') v UNION ALL SELECT parse_json('{"a": "y"}') UNION ALL SELECT parse_json('{"a": "x"}'))
 -- !query analysis
-Aggregate [listagg(distinct cast(variant_get(v#x, $.a, VariantType, true, Some(America/Los_Angeles)) as string), ,, cast(variant_get(v#x, $.a, VariantType, true, Some(America/Los_Angeles)) as string) ASC NULLS FIRST, 0, 0) AS listagg(DISTINCT CAST(variant_get(v, $.a) AS a AS STRING), ,) WITHIN GROUP (ORDER BY CAST(variant_get(v, $.a) AS a AS STRING) ASC NULLS FIRST)#x]
+Aggregate [listagg(distinct cast(variant_get(v#x, $.a, VariantType, true, Some(America/Los_Angeles), false) as string), ,, cast(variant_get(v#x, $.a, VariantType, true, Some(America/Los_Angeles), false) as string) ASC NULLS FIRST, 0, 0) AS listagg(DISTINCT CAST(variant_get(v, $.a) AS a AS STRING), ,) WITHIN GROUP (ORDER BY CAST(variant_get(v, $.a) AS a AS STRING) ASC NULLS FIRST)#x]
 +- SubqueryAlias __auto_generated_subquery_name
    +- Union false, false
       :- Union false, false
@@ -722,7 +722,7 @@ Aggregate [listagg(distinct cast(variant_get(v#x, $.a, VariantType, true, Some(A
 -- !query
 SELECT listagg(v:a::string, ',') WITHIN GROUP (ORDER BY v:a::string) FROM (SELECT parse_json('{"a": "x"}') v UNION ALL SELECT parse_json('{"a": "y"}') UNION ALL SELECT parse_json('{"a": "x"}'))
 -- !query analysis
-Aggregate [listagg(cast(variant_get(v#x, $.a, VariantType, true, Some(America/Los_Angeles)) as string), ,, cast(variant_get(v#x, $.a, VariantType, true, Some(America/Los_Angeles)) as string) ASC NULLS FIRST, 0, 0) AS listagg(CAST(variant_get(v, $.a) AS a AS STRING), ,) WITHIN GROUP (ORDER BY CAST(variant_get(v, $.a) AS a AS STRING) ASC NULLS FIRST)#x]
+Aggregate [listagg(cast(variant_get(v#x, $.a, VariantType, true, Some(America/Los_Angeles), false) as string), ,, cast(variant_get(v#x, $.a, VariantType, true, Some(America/Los_Angeles), false) as string) ASC NULLS FIRST, 0, 0) AS listagg(CAST(variant_get(v, $.a) AS a AS STRING), ,) WITHIN GROUP (ORDER BY CAST(variant_get(v, $.a) AS a AS STRING) ASC NULLS FIRST)#x]
 +- SubqueryAlias __auto_generated_subquery_name
    +- Union false, false
       :- Union false, false
@@ -737,7 +737,7 @@ Aggregate [listagg(cast(variant_get(v#x, $.a, VariantType, true, Some(America/Lo
 -- !query
 SELECT listagg(DISTINCT v:a::string, ',') WITHIN GROUP (ORDER BY v:a::string DESC) FROM (SELECT parse_json('{"a": "x"}') v UNION ALL SELECT parse_json('{"a": "y"}') UNION ALL SELECT parse_json('{"a": "x"}'))
 -- !query analysis
-Aggregate [listagg(distinct cast(variant_get(v#x, $.a, VariantType, true, Some(America/Los_Angeles)) as string), ,, cast(variant_get(v#x, $.a, VariantType, true, Some(America/Los_Angeles)) as string) DESC NULLS LAST, 0, 0) AS listagg(DISTINCT CAST(variant_get(v, $.a) AS a AS STRING), ,) WITHIN GROUP (ORDER BY CAST(variant_get(v, $.a) AS a AS STRING) DESC NULLS LAST)#x]
+Aggregate [listagg(distinct cast(variant_get(v#x, $.a, VariantType, true, Some(America/Los_Angeles), false) as string), ,, cast(variant_get(v#x, $.a, VariantType, true, Some(America/Los_Angeles), false) as string) DESC NULLS LAST, 0, 0) AS listagg(DISTINCT CAST(variant_get(v, $.a) AS a AS STRING), ,) WITHIN GROUP (ORDER BY CAST(variant_get(v, $.a) AS a AS STRING) DESC NULLS LAST)#x]
 +- SubqueryAlias __auto_generated_subquery_name
    +- Union false, false
       :- Union false, false
@@ -752,7 +752,7 @@ Aggregate [listagg(distinct cast(variant_get(v#x, $.a, VariantType, true, Some(A
 -- !query
 SELECT listagg(DISTINCT v:a.b::string, ',') WITHIN GROUP (ORDER BY v:a.b::string) FROM (SELECT parse_json('{"a": {"b": "x"}}') v UNION ALL SELECT parse_json('{"a": {"b": "y"}}') UNION ALL SELECT parse_json('{"a": {"b": "x"}}'))
 -- !query analysis
-Aggregate [listagg(distinct cast(variant_get(v#x, $.a.b, VariantType, true, Some(America/Los_Angeles)) as string), ,, cast(variant_get(v#x, $.a.b, VariantType, true, Some(America/Los_Angeles)) as string) ASC NULLS FIRST, 0, 0) AS listagg(DISTINCT CAST(variant_get(v, $.a.b) AS b AS STRING), ,) WITHIN GROUP (ORDER BY CAST(variant_get(v, $.a.b) AS b AS STRING) ASC NULLS FIRST)#x]
+Aggregate [listagg(distinct cast(variant_get(v#x, $.a.b, VariantType, true, Some(America/Los_Angeles), false) as string), ,, cast(variant_get(v#x, $.a.b, VariantType, true, Some(America/Los_Angeles), false) as string) ASC NULLS FIRST, 0, 0) AS listagg(DISTINCT CAST(variant_get(v, $.a.b) AS b AS STRING), ,) WITHIN GROUP (ORDER BY CAST(variant_get(v, $.a.b) AS b AS STRING) ASC NULLS FIRST)#x]
 +- SubqueryAlias __auto_generated_subquery_name
    +- Union false, false
       :- Union false, false
@@ -767,7 +767,7 @@ Aggregate [listagg(distinct cast(variant_get(v#x, $.a.b, VariantType, true, Some
 -- !query
 SELECT grp, listagg(DISTINCT v:a::string, ',') WITHIN GROUP (ORDER BY v:a::string) FROM (SELECT 1 grp, parse_json('{"a": "x"}') v UNION ALL SELECT 1, parse_json('{"a": "y"}') UNION ALL SELECT 2, parse_json('{"a": "x"}') UNION ALL SELECT 2, parse_json('{"a": "x"}') UNION ALL SELECT 1, parse_json('{"a": "x"}')) GROUP BY grp
 -- !query analysis
-Aggregate [grp#x], [grp#x, listagg(distinct cast(variant_get(v#x, $.a, VariantType, true, Some(America/Los_Angeles)) as string), ,, cast(variant_get(v#x, $.a, VariantType, true, Some(America/Los_Angeles)) as string) ASC NULLS FIRST, 0, 0) AS listagg(DISTINCT CAST(variant_get(v, $.a) AS a AS STRING), ,) WITHIN GROUP (ORDER BY CAST(variant_get(v, $.a) AS a AS STRING) ASC NULLS FIRST)#x]
+Aggregate [grp#x], [grp#x, listagg(distinct cast(variant_get(v#x, $.a, VariantType, true, Some(America/Los_Angeles), false) as string), ,, cast(variant_get(v#x, $.a, VariantType, true, Some(America/Los_Angeles), false) as string) ASC NULLS FIRST, 0, 0) AS listagg(DISTINCT CAST(variant_get(v, $.a) AS a AS STRING), ,) WITHIN GROUP (ORDER BY CAST(variant_get(v, $.a) AS a AS STRING) ASC NULLS FIRST)#x]
 +- SubqueryAlias __auto_generated_subquery_name
    +- Union false, false
       :- Union false, false

@@ -1314,6 +1314,8 @@ package object config {
       SparkContext.VALID_LOG_LEVELS.mkString(","))
     .createOptional
 
+  private[spark] val SPARK_LOG_LEVEL_PREFIX = "spark.log.level."
+
   private[spark] val FILES_MAX_PARTITION_BYTES = ConfigBuilder("spark.files.maxPartitionBytes")
     .doc("The maximum number of bytes to pack into a single partition when reading files.")
     .version("2.1.0")
@@ -1468,12 +1470,20 @@ package object config {
     ConfigBuilder("spark.shuffle.accurateBlockSkewedFactor")
       .doc("A shuffle block is considered as skewed and will be accurately recorded in " +
         "HighlyCompressedMapStatus if its size is larger than this factor multiplying " +
-        "the median shuffle block size or SHUFFLE_ACCURATE_BLOCK_THRESHOLD. It is " +
-        "recommended to set this parameter to be the same as SKEW_JOIN_SKEWED_PARTITION_FACTOR." +
-        "Set to -1.0 to disable this feature by default.")
+        "the median shuffle block size or SHUFFLE_ACCURATE_BLOCK_THRESHOLD. Otherwise every " +
+        "block below SHUFFLE_ACCURATE_BLOCK_THRESHOLD is reported as the average block size, " +
+        "which hides skew from adaptive query execution once a shuffle has more than " +
+        "SHUFFLE_MIN_NUM_PARTS_TO_HIGHLY_COMPRESS partitions. At most " +
+        "SHUFFLE_MAX_ACCURATE_SKEWED_BLOCK_NUMBER block sizes are recorded accurately per map " +
+        "task, plus the blocks tied at the cutoff of that selection, whose reduce ids are held " +
+        "in a bitmap. The tied blocks are not capped, so in the worst case, where they are " +
+        "scattered across the reduce id space, that bitmap costs a bit per reduce partition per " +
+        "map task on the driver, about 8 KiB per map task at 50000 reduce partitions. " +
+        "The default matches SKEW_JOIN_SKEWED_PARTITION_FACTOR. Set to -1.0 to disable " +
+        "this feature.")
       .version("3.3.0")
       .doubleConf
-      .createWithDefault(-1.0)
+      .createWithDefault(5.0)
 
   private[spark] val SHUFFLE_MAX_ACCURATE_SKEWED_BLOCK_NUMBER =
     ConfigBuilder("spark.shuffle.maxAccurateSkewedBlockNumber")
@@ -1981,7 +1991,7 @@ package object config {
     ConfigBuilder("spark.shuffle.streaming.writerConnectionTimeout")
       .doc("Maximum time a streaming shuffle writer waits for each reader to connect. " +
         "Set to -1 to wait indefinitely.")
-      .version("4.4.0")
+      .version("4.3.0")
       .withBindingPolicy(ConfigBindingPolicy.NOT_APPLICABLE)
       .timeConf(TimeUnit.MILLISECONDS)
       .checkValue(
@@ -2418,6 +2428,9 @@ package object config {
         "cost because of excessive JNI call overhead")
       .version("2.3.0")
       .bytesConf(ByteUnit.BYTE)
+      .checkValue(v => v > 0 && v <= ByteArrayMethods.MAX_ROUNDED_ARRAY_LENGTH,
+        s"The buffer size must be positive and less than or equal to" +
+          s" ${ByteArrayMethods.MAX_ROUNDED_ARRAY_LENGTH}.")
       .createWithDefaultString("32k")
 
   private[spark] val IO_COMPRESSION_ZSTD_BUFFERPOOL_ENABLED =
@@ -3062,7 +3075,9 @@ package object config {
       .doc("Path to specify the Ivy user directory, used for the local Ivy cache and " +
         "package files from spark.jars.packages. " +
         "This will override the Ivy property ivy.default.ivy.user.dir " +
-        "which defaults to ~/.ivy2.5.2")
+        "which defaults to ~/.ivy2.5.2. " +
+        "SparkSession.addArtifact reads the local repository search path from the session " +
+        "configuration and keeps its runtime cache and downloaded jars session-local.")
       .version("1.3.0")
       .stringConf
       .createWithDefault("~/.ivy2.5.2")
@@ -3072,9 +3087,12 @@ package object config {
       .doc("Path to an Ivy settings file to customize resolution of jars specified " +
         "using spark.jars.packages or ivy:// URIs passed to SparkSession.addArtifact instead " +
         "of the built-in defaults, such as maven central. " +
+        "SparkSession.addArtifact reads this setting from its session, including values " +
+        "inherited from SparkConf. Updates through spark.conf.set are blocked by default. " +
         "For spark.jars.packages, additional repositories from spark.jars.repositories will " +
         "also be included. " +
-        "Client-resolved Spark Connect Ivy URIs do not use this setting. " +
+        "Client-resolved Spark Connect Ivy URIs use this setting only when the settings file is " +
+        "readable on the client. " +
         "The spark-submit --repositories option applies to submission-time resolution. " +
         "Useful for allowing Spark to resolve artifacts from behind a firewall " +
         "e.g. via an in-house artifact server like Artifactory. " +
@@ -3087,7 +3105,7 @@ package object config {
     ConfigBuilder("spark.jars.ivyConnectTimeout")
       .doc("Connection timeout for Ivy repository requests made by " +
         "SparkSession.addArtifact. Client-resolved Spark Connect Ivy URIs do not use this " +
-        "setting. This must be set before the SparkContext starts.")
+        "setting. The session configuration value is captured on first use of the artifact APIs.")
       .version("4.4.0")
       .withBindingPolicy(ConfigBindingPolicy.NOT_APPLICABLE)
       .timeConf(TimeUnit.MILLISECONDS)
@@ -3100,7 +3118,7 @@ package object config {
     ConfigBuilder("spark.jars.ivyReadTimeout")
       .doc("Read timeout for Ivy repository requests made by SparkSession.addArtifact. " +
         "Client-resolved Spark Connect Ivy URIs do not use this setting. " +
-        "This must be set before the SparkContext starts.")
+        "The session configuration value is captured on first use of the artifact APIs.")
       .version("4.4.0")
       .withBindingPolicy(ConfigBindingPolicy.NOT_APPLICABLE)
       .timeConf(TimeUnit.MILLISECONDS)

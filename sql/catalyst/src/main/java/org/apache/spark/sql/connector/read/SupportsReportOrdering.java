@@ -39,6 +39,16 @@ public interface SupportsReportOrdering extends Scan {
    * Spark resolves the column references in these sort orders against the table columns,
    * including columns pruned from the scan output. If any of them cannot be resolved, Spark
    * ignores the whole reported ordering and logs a warning.
+   * <p>
+   * Spark currently does not rely on a sort order over a transform such as {@code days(ts)} to
+   * avoid a sort, whether or not it is a partition key. Nor does it rely on the sort orders after
+   * it. The exception is a sort order on a partition key that is not a transform, when Spark uses
+   * the reported {@code KeyGroupedPartitioning}.
+   * <p>
+   * If Spark relies on none of the reported sort orders, for example when this returns an empty
+   * array, it may treat each partition as sorted by the partition keys that are not transforms.
+   * This needs a reported {@code KeyGroupedPartitioning}, whose partitions each hold a single key
+   * value. {@code spark.sql.sources.v2.bucketing.partitionKeyOrdering.enabled} controls it.
    */
   SortOrder[] outputOrdering();
 }

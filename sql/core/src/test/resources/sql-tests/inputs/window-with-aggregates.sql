@@ -184,3 +184,118 @@ SELECT
   RANK() OVER (PARTITION BY col1 / 5, col2 % 2 ORDER BY AVG(col1)) as rank_in_bucket
 FROM VALUES (5, 1), (7, 3), (10, 2), (12, 4), (15, 1) AS t(col1, col2)
 GROUP BY col1 / 5, col2 % 2, col1, col2;
+
+CREATE OR REPLACE TEMPORARY VIEW wwa_data AS SELECT * FROM VALUES
+(1, 10), (1, 20), (2, 30), (3, 40) AS wwa_data(col1, col2);
+
+-- ORDER BY grouping key that is aliased with a different name in SELECT,
+-- combined with a window function (Aggregate + Window + Sort).
+SELECT col1 AS a, count(*) * 1.0 / sum(count(*)) OVER () AS ratio
+FROM wwa_data
+GROUP BY col1
+ORDER BY col1;
+
+-- Same as above but without a window function (Aggregate + Sort).
+SELECT col1 AS a, count(*) AS cnt
+FROM wwa_data
+GROUP BY col1
+ORDER BY col1;
+
+-- HAVING on grouping key that is aliased with a different name in SELECT,
+-- combined with a window function (Aggregate + Window + Filter).
+SELECT col1 AS a, count(*) * 1.0 / sum(count(*)) OVER () AS ratio
+FROM wwa_data
+GROUP BY col1
+HAVING col1 > 0;
+
+-- QUALIFY on grouping key that is aliased with a different name in SELECT,
+-- combined with a window function (Aggregate + Window + Filter).
+SELECT col1 AS a, count(*) * 1.0 / sum(count(*)) OVER () AS ratio
+FROM wwa_data
+GROUP BY col1
+QUALIFY col1 > 0;
+
+-- QUALIFY with a window function in the condition on an aliased grouping key.
+SELECT col1 AS a, count(*) * 1.0 / sum(count(*)) OVER () AS ratio
+FROM wwa_data
+GROUP BY col1
+QUALIFY row_number() OVER (ORDER BY col1) = 1;
+
+-- QUALIFY + ORDER BY on grouping key that is aliased with a different name in SELECT,
+-- combined with a window function (Aggregate + Window + Filter + Sort).
+-- The Sort child is Filter(_, Window), not Window directly.
+SELECT col1 AS a, count(*) * 1.0 / sum(count(*)) OVER () AS ratio
+FROM wwa_data
+GROUP BY col1
+QUALIFY col1 > 0
+ORDER BY col1;
+
+-- QUALIFY with a window function in the condition + ORDER BY on aliased grouping key.
+-- The Sort child is Project(_, Filter(_, Window(_, Window(_)))).
+SELECT col1 AS a, count(*) * 1.0 / sum(count(*)) OVER () AS ratio
+FROM wwa_data
+GROUP BY col1
+QUALIFY row_number() OVER (ORDER BY col1) = 1
+ORDER BY col1;
+
+-- GROUPING SETS + window + ORDER BY: GROUPING_ID() aliased by user.
+-- The aliased GROUPING_ID() becomes the Aggregate output "gid", the window aggregate reads only
+-- the per-group count, and "gid" passes through the Window to the ORDER BY.
+SELECT col1, COUNT(*) AS cnt,
+  (COUNT(*) * 100.0 / SUM(COUNT(*)) OVER ()) AS pct,
+  GROUPING_ID() AS gid
+FROM wwa_data
+GROUP BY GROUPING SETS ((col1), ())
+ORDER BY gid ASC, col1 ASC;
+
+-- Same pattern with GROUPING() instead of GROUPING_ID().
+SELECT col1, COUNT(*) AS cnt,
+  SUM(COUNT(*)) OVER () AS total,
+  GROUPING(col1) AS grp
+FROM wwa_data
+GROUP BY GROUPING SETS ((col1), ())
+ORDER BY grp ASC, col1 ASC;
+
+-- ORDER BY the alias in descending order, with a window function.
+SELECT col1 AS a, count(*) * 1.0 / sum(count(*)) OVER () AS ratio
+FROM wwa_data
+GROUP BY col1
+ORDER BY a DESC;
+
+-- Grouping keys aliased with each other's names, combined with a window function.
+SELECT col1 AS col2, col2 AS col1, count(*) * 1.0 / sum(count(*)) OVER () AS ratio
+FROM wwa_data
+GROUP BY col1, col2
+ORDER BY col1 DESC, col2;
+
+-- HAVING on an aggregate over an aliased grouping key, with a window function.
+SELECT col1 AS a, count(*) * 1.0 / sum(count(*)) OVER () AS ratio
+FROM wwa_data
+GROUP BY col1
+HAVING count(*) > 1;
+
+-- ROLLUP and CUBE with aliased GROUPING_ID() and GROUPING(), referenced by ORDER BY, HAVING,
+-- QUALIFY and a window specification.
+SELECT col1, COUNT(*) AS cnt, SUM(COUNT(*)) OVER () AS total, GROUPING_ID() AS gid
+FROM wwa_data
+GROUP BY ROLLUP(col1)
+ORDER BY gid, col1;
+
+SELECT col1, col2, COUNT(*) AS cnt,
+  SUM(COUNT(*)) OVER (PARTITION BY GROUPING_ID(col1, col2)) AS s,
+  GROUPING_ID(col1, col2) AS gid
+FROM wwa_data
+GROUP BY CUBE(col1, col2)
+ORDER BY gid, col1, col2;
+
+SELECT col1, COUNT(*) AS cnt, SUM(COUNT(*)) OVER () AS total, GROUPING_ID() AS gid
+FROM wwa_data
+GROUP BY GROUPING SETS ((col1), ())
+HAVING GROUPING_ID() = 1;
+
+SELECT col1, COUNT(*) AS cnt, SUM(COUNT(*)) OVER () AS total, GROUPING(col1) AS grp
+FROM wwa_data
+GROUP BY GROUPING SETS ((col1), ())
+QUALIFY grp = 1;
+
+DROP VIEW wwa_data;
