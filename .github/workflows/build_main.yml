@@ -36,7 +36,7 @@ jobs:
     if: github.repository == 'apache/spark' || github.ref != 'refs/heads/master'
     uses: ./.github/workflows/build_and_test.yml
     with:
-      # Master docs are built daily in pages.yml, so skip the duplicate post-merge build.
+      # "docs": "true",  # Master docs are built daily in pages.yml.
       # Fork pushes keep the reusable workflow's change-based selection.
       jobs: >-
         ${{ github.repository == 'apache/spark' && '{
