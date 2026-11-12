@@ -1091,7 +1091,7 @@ class DateTimeUtilsSuite extends SparkFunSuite with Matchers with SQLHelper {
     }
   }
 
-  test("special nanosecond timestamp values") {
+  test("SPARK-61538: special nanosecond timestamp values") {
     val tolerance = TimeUnit.SECONDS.toMicros(30)
 
     testSpecialDatetimeValues { zoneId =>

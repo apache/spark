@@ -145,7 +145,7 @@ class SpecialDatetimeValuesSuite extends PlanTest {
     }
   }
 
-  test("special nanosecond timestamp values") {
+  test("SPARK-61538: special nanosecond timestamp values") {
     testSpecialDatetimeValues { zoneId =>
       for {
         p <- Seq(7, 8, 9)
@@ -177,7 +177,7 @@ class SpecialDatetimeValuesSuite extends PlanTest {
     }
   }
 
-  test("non-special or non-foldable strings cast to nanosecond timestamps are kept") {
+  test("SPARK-61538: non-special or non-foldable strings cast to nanosecond timestamps are kept") {
     val str = AttributeReference("s", StringType)()
     Seq(TimestampLTZNanosType(9), TimestampNTZNanosType(7)).foreach { dt =>
       Seq(Literal("epochs"), Literal("now UTC"), Literal("2020-01-01"),
@@ -188,7 +188,7 @@ class SpecialDatetimeValuesSuite extends PlanTest {
     }
   }
 
-  test("a foldable string that fails to evaluate is left to a nanosecond cast") {
+  test("SPARK-61538: a foldable string that fails to evaluate is left to a nanosecond cast") {
     val failing = ElementAt(CreateArray(Seq(Literal("epoch"))), Literal(2), failOnError = true)
     Seq(TimestampLTZNanosType(9), TimestampNTZNanosType(7)).foreach { dt =>
       val cast = Cast(failing, dt, Some("UTC"))

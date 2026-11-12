@@ -47,7 +47,7 @@ abstract class TimestampNanosSpecialValuesSuiteBase extends QueryTest with Share
     for (fam <- families; p <- 7 to 9) f(fam, p, s"${fam.micro}($p)")
   }
 
-  test("foldable casts of special strings equal the micro value") {
+  test("SPARK-61538: foldable casts of special strings equal the micro value") {
     forAll { (fam, p, t) =>
       Seq("epoch", " Epoch ", "today", "TOMORROW", "yesterday").foreach { s =>
         val df = sql(s"SELECT CAST('$s' AS $t), try_cast('$s' AS $t), " +
@@ -62,7 +62,7 @@ abstract class TimestampNanosSpecialValuesSuiteBase extends QueryTest with Share
     }
   }
 
-  test("'now' is the current timestamp floored to the precision") {
+  test("SPARK-61538: 'now' is the current timestamp floored to the precision") {
     forAll { (fam, p, t) =>
       val current = if (fam.micro == "TIMESTAMP_NTZ") "localtimestamp()" else "current_timestamp()"
       val df = sql(s"SELECT CAST('now' AS $t) AS c, " +
@@ -78,7 +78,7 @@ abstract class TimestampNanosSpecialValuesSuiteBase extends QueryTest with Share
     }
   }
 
-  test("non-special and non-foldable strings are not converted") {
+  test("SPARK-61538: non-special and non-foldable strings are not converted") {
     import testImplicits._
     val df = Seq("epoch").toDF("s")
     forAll { (fam, p, t) =>
@@ -106,7 +106,7 @@ abstract class TimestampNanosSpecialValuesSuiteBase extends QueryTest with Share
     }
   }
 
-  test("a failing foldable string fails the query only when it is evaluated") {
+  test("SPARK-61538: a failing foldable string fails the query only when it is evaluated") {
     forAll { (fam, p, t) =>
       val failing = s"CAST(element_at(array('a'), 2) AS $t)"
       checkAnswer(
@@ -125,7 +125,7 @@ abstract class TimestampNanosSpecialValuesSuiteBase extends QueryTest with Share
     }
   }
 
-  test("implicit casts of special strings match the micro column") {
+  test("SPARK-61538: implicit casts of special strings match the micro column") {
     forAll { (fam, p, t) =>
       withTable("t") {
         sql(s"CREATE TABLE t (c6 ${fam.micro}, c9 $t) USING parquet")
@@ -145,7 +145,7 @@ abstract class TimestampNanosSpecialValuesSuiteBase extends QueryTest with Share
     }
   }
 
-  test("column defaults of special-string casts") {
+  test("SPARK-61538: column defaults of special-string casts") {
     forAll { (fam, p, t) =>
       withTable("t") {
         sql(s"CREATE TABLE t (id INT, c $t DEFAULT CAST('epoch' AS $t), " +
@@ -157,7 +157,7 @@ abstract class TimestampNanosSpecialValuesSuiteBase extends QueryTest with Share
     }
   }
 
-  test("static partition values of special strings") {
+  test("SPARK-61538: static partition values of special strings") {
     forAll { (fam, p, t) =>
       val tbl = "testcat.ns.t"
       withTable(tbl) {
