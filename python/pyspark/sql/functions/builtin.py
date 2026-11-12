@@ -31290,8 +31290,8 @@ def kll_sketch_get_quantile_bigint(sketch: "ColumnOrName", rank: "ColumnOrName")
 
     Notes
     -----
+    A NULL sketch, scalar NULL rank, or NULL rank array returns NULL.
     NULL elements in a rank array are treated as 0.0, requesting the minimum quantile.
-    If either argument is NULL, the result is NULL.
 
     Examples
     --------
@@ -31335,8 +31335,8 @@ def kll_sketch_get_quantile_float(sketch: "ColumnOrName", rank: "ColumnOrName") 
 
     Notes
     -----
+    A NULL sketch, scalar NULL rank, or NULL rank array returns NULL.
     NULL elements in a rank array are treated as 0.0, requesting the minimum quantile.
-    If either argument is NULL, the result is NULL.
 
     Examples
     --------
@@ -31380,8 +31380,8 @@ def kll_sketch_get_quantile_double(sketch: "ColumnOrName", rank: "ColumnOrName")
 
     Notes
     -----
+    A NULL sketch, scalar NULL rank, or NULL rank array returns NULL.
     NULL elements in a rank array are treated as 0.0, requesting the minimum quantile.
-    If either argument is NULL, the result is NULL.
 
     Examples
     --------
@@ -31425,8 +31425,8 @@ def kll_sketch_get_rank_bigint(sketch: "ColumnOrName", quantile: "ColumnOrName")
 
     Notes
     -----
+    A NULL sketch, scalar NULL quantile, or NULL quantile array returns NULL.
     NULL elements in a quantile array are treated as zero, returning the rank of zero.
-    If either argument is NULL, the result is NULL.
 
     Examples
     --------
@@ -31470,8 +31470,8 @@ def kll_sketch_get_rank_float(sketch: "ColumnOrName", quantile: "ColumnOrName") 
 
     Notes
     -----
+    A NULL sketch, scalar NULL quantile, or NULL quantile array returns NULL.
     NULL elements in a quantile array are treated as zero, returning the rank of zero.
-    If either argument is NULL, the result is NULL.
 
     Examples
     --------
@@ -31515,8 +31515,8 @@ def kll_sketch_get_rank_double(sketch: "ColumnOrName", quantile: "ColumnOrName")
 
     Notes
     -----
+    A NULL sketch, scalar NULL quantile, or NULL quantile array returns NULL.
     NULL elements in a quantile array are treated as zero, returning the rank of zero.
-    If either argument is NULL, the result is NULL.
 
     Examples
     --------

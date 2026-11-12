@@ -11579,8 +11579,8 @@ object functions {
    * Extracts a quantile value from a KLL bigint sketch given an input rank value. The rank can be
    * a single value or an array.
    *
+   * A NULL sketch, scalar NULL rank, or NULL rank array returns NULL.
    * NULL elements in a rank array are treated as 0.0, requesting the minimum quantile.
-   * If either argument is NULL, returns NULL.
    *
    * @param sketch
    *   The KLL bigint sketch binary representation. A column that evaluates to a binary.
@@ -11599,8 +11599,8 @@ object functions {
    * Extracts a quantile value from a KLL float sketch given an input rank value. The rank can be
    * a single value or an array.
    *
+   * A NULL sketch, scalar NULL rank, or NULL rank array returns NULL.
    * NULL elements in a rank array are treated as 0.0, requesting the minimum quantile.
-   * If either argument is NULL, returns NULL.
    *
    * @param sketch
    *   The KLL float sketch binary representation. A column that evaluates to a binary.
@@ -11619,8 +11619,8 @@ object functions {
    * Extracts a quantile value from a KLL double sketch given an input rank value. The rank can be
    * a single value or an array.
    *
+   * A NULL sketch, scalar NULL rank, or NULL rank array returns NULL.
    * NULL elements in a rank array are treated as 0.0, requesting the minimum quantile.
-   * If either argument is NULL, returns NULL.
    *
    * @param sketch
    *   The KLL double sketch binary representation. A column that evaluates to a binary.
@@ -11640,8 +11640,8 @@ object functions {
    * Extracts a rank value from a KLL bigint sketch given an input quantile value. The quantile
    * can be a single value or an array.
    *
+   * A NULL sketch, scalar NULL quantile, or NULL quantile array returns NULL.
    * NULL elements in a quantile array are treated as zero, returning the rank of zero.
-   * If either argument is NULL, returns NULL.
    *
    * @param sketch
    *   The KLL bigint sketch binary representation. A column that evaluates to a binary.
@@ -11660,8 +11660,8 @@ object functions {
    * Extracts a rank value from a KLL float sketch given an input quantile value. The quantile can
    * be a single value or an array.
    *
+   * A NULL sketch, scalar NULL quantile, or NULL quantile array returns NULL.
    * NULL elements in a quantile array are treated as zero, returning the rank of zero.
-   * If either argument is NULL, returns NULL.
    *
    * @param sketch
    *   The KLL float sketch binary representation. A column that evaluates to a binary.
@@ -11680,8 +11680,8 @@ object functions {
    * Extracts a rank value from a KLL double sketch given an input quantile value. The quantile
    * can be a single value or an array.
    *
+   * A NULL sketch, scalar NULL quantile, or NULL quantile array returns NULL.
    * NULL elements in a quantile array are treated as zero, returning the rank of zero.
-   * If either argument is NULL, returns NULL.
    *
    * @param sketch
    *   The KLL double sketch binary representation. A column that evaluates to a binary.
