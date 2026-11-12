@@ -294,6 +294,49 @@ class ResolveDefaultColumnsSuite extends SharedSparkSession {
     }
   }
 
+  for {
+    ddl <- Seq("CREATE", "ADD", "SET")
+    preserve <- Seq(false, true)
+  } {
+    test(s"V1 character current defaults preserve resolved session functions: " +
+        s"$ddl, preserve=$preserve") {
+      withSQLConf(
+        SQLConf.USE_V1_SOURCE_LIST.key -> "parquet",
+        SQLConf.READ_SIDE_CHAR_PADDING.key -> "false",
+        SQLConf.LEGACY_CHAR_VARCHAR_AS_STRING.key -> "false",
+        SQLConf.PRESERVE_CHAR_VARCHAR_TYPE_INFO.key -> preserve.toString,
+        SQLConf.CHAR_VARCHAR_STANDARD_SEMANTICS.key -> "false") {
+        withUserDefinedFunction("default_type_probe" -> true) {
+          spark.udf.register("default_type_probe", () => "EU")
+          withTable("t") {
+            val default = "typeof(default_type_probe())"
+            val columns = s"c CHAR(6) DEFAULT $default, padded CHAR(8) DEFAULT $default"
+            ddl match {
+              case "CREATE" => sql(s"CREATE TABLE t(id INT, $columns) USING parquet")
+              case "ADD" =>
+                sql("CREATE TABLE t(id INT) USING parquet")
+                sql(s"ALTER TABLE t ADD COLUMNS ($columns)")
+              case "SET" =>
+                sql("CREATE TABLE t(id INT, c CHAR(6), padded CHAR(8)) USING parquet")
+                sql(s"ALTER TABLE t ALTER COLUMN c SET DEFAULT $default")
+                sql(s"ALTER TABLE t ALTER COLUMN padded SET DEFAULT $default")
+            }
+            // Both unchanged and padded defaults must retain the resolved function binding.
+            sql("INSERT INTO t (id) VALUES (1)")
+            checkAnswer(sql("SELECT id, c, length(c), padded, length(padded) FROM t"),
+              Row(1, "string", 6, "string  ", 8))
+            // Restore the definition before each write, since writes can invalidate table caches.
+            sql(s"ALTER TABLE t ALTER COLUMN c SET DEFAULT $default")
+            sql(s"ALTER TABLE t ALTER COLUMN padded SET DEFAULT $default")
+            sql("INSERT INTO t VALUES (2, DEFAULT, DEFAULT)")
+            checkAnswer(sql("SELECT id, c, length(c), padded, length(padded) FROM t"),
+              Seq(1, 2).map(Row(_, "string", 6, "string  ", 8)))
+          }
+        }
+      }
+    }
+  }
+
   Seq("CREATE", "ALTER").foreach { ddl =>
     test(s"CHAR/VARCHAR current defaults use insertion flags with cached metadata: $ddl") {
       withSQLConf(
@@ -468,13 +511,14 @@ class ResolveDefaultColumnsSuite extends SharedSparkSession {
         assert(updatedField.getCurrentDefaultValue().contains(charDefault))
         assert(updatedField.getExistenceDefaultValue() == existenceDefault)
 
-        // Merging SQL-only metadata must clear the previous US expression as well.
+        // Replacing the default must replace the previous US expression as well.
         sql("INSERT INTO t (id) VALUES (1)")
         sql(s"INSERT INTO t VALUES (2, DEFAULT), (3, $charDefault)")
         val query = "SELECT id, region, length(region) FROM t"
         val expectedRows = Seq(Row(0, "US", 2)) ++ Seq(1, 2, 3).map(Row(_, "EU", 2))
         checkAnswer(sql(query), expectedRows)
-        assert(updatedField.metadata.getExpression[Expression](currentKey)._2.isEmpty)
+        assert(updatedField.metadata.getExpression[Expression](currentKey)._2
+          .exists(_.eval().toString == "EU"))
 
         sql("ALTER TABLE t ALTER COLUMN region DROP DEFAULT")
         val droppedField = catalog.getTableRawMetadata(identifier).schema("region")

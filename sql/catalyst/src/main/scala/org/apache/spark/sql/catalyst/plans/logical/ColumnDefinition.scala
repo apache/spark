@@ -97,15 +97,9 @@ case class ColumnDefinition(
       metadataBuilder.putString("comment", c)
     }
     defaultValue.foreach { default =>
-      if (CharVarcharUtils.hasCharVarchar(dataType) &&
-          CharVarcharUtils.shouldApplyWriteSideLengthCheck(SQLConf.get)) {
-        // The assigned child can contain padding/truncation that depends on the DDL's SQLConf.
-        // Reanalyze the original current default under the insertion session's settings.
-        metadataBuilder.putString(CURRENT_DEFAULT_COLUMN_METADATA_KEY, default.originalSQL)
-      } else {
-        metadataBuilder.putExpression(
-          CURRENT_DEFAULT_COLUMN_METADATA_KEY, default.originalSQL, Some(default.child))
-      }
+      metadataBuilder.putExpression(
+        CURRENT_DEFAULT_COLUMN_METADATA_KEY, default.originalSQL,
+        Some(default.uncoercedChild.getOrElse(default.child)))
       val existsSQL = default.child match {
         case l: Literal if default.analyzedChild.isDefined =>
           normalizeExistenceDefaultValue(
@@ -269,11 +263,13 @@ object ColumnDefinition {
 
 /**
  * A fake expression to hold the column/variable default value expression and its original SQL text.
+ * `uncoercedChild` preserves resolved bindings before character assignment for current defaults.
  */
 case class DefaultValueExpression(
     child: Expression,
     originalSQL: String,
-    analyzedChild: Option[Expression] = None)
+    analyzedChild: Option[Expression] = None,
+    uncoercedChild: Option[Expression] = None)
   extends UnaryExpression
   with Unevaluable
   with AnalysisAwareExpression[DefaultValueExpression] {

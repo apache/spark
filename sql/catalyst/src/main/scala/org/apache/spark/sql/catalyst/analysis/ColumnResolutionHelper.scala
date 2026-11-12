@@ -215,7 +215,7 @@ trait ColumnResolutionHelper extends Logging with DataTypeErrorsBase {
         // Default value expression can not reference real columns,
         // so we only need to resolve special literal columns like CURRENT_DATE.
         // See {@link LiteralFunctionResolution} for details.
-        case d @ DefaultValueExpression(c: Expression, _, _) =>
+        case d @ DefaultValueExpression(c: Expression, _, _, _) =>
           d.copy(child = resolveLiteralColumns(c))
 
         case _ => e.mapChildren(innerResolve(_, isTopLevel = false))

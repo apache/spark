@@ -1332,7 +1332,7 @@ class StructTypeSuite extends SparkFunSuite with SQLHelper {
     }
   }
 
-  test("V1 CHAR/VARCHAR current-default cache follows assignment modes") {
+  test("V1 CHAR/VARCHAR current-default cache retains the unassigned expression") {
     for {
       legacy <- Seq(false, true)
       preserve <- Seq(false, true)
@@ -1342,7 +1342,6 @@ class StructTypeSuite extends SparkFunSuite with SQLHelper {
         SQLConf.LEGACY_CHAR_VARCHAR_AS_STRING.key -> legacy.toString,
         SQLConf.PRESERVE_CHAR_VARCHAR_TYPE_INFO.key -> preserve.toString,
         SQLConf.CHAR_VARCHAR_STANDARD_SEMANTICS.key -> standard.toString) {
-        val cacheCurrent = legacy && !preserve && !standard
         for {
           dataType <- Seq(CharType(3), VarcharType(3))
           sql <- Seq("'EU'", "'EU  '", "NULL")
@@ -1350,9 +1349,11 @@ class StructTypeSuite extends SparkFunSuite with SQLHelper {
           withClue(s"legacy=$legacy, preserve=$preserve, standard=$standard, " +
               s"dataType=$dataType, sql=$sql: ") {
             val expr = ResolveDefaultColumns.analyze("c", dataType, sql, "CREATE TABLE")
+            val uncoerced = Literal.fromSQL(sql)
             val column = ColumnDefinition("c", dataType,
-              defaultValue = Some(DefaultValueExpression(expr, sql)))
-            val expectedCache = if (cacheCurrent) Some(expr) else None
+              defaultValue = Some(DefaultValueExpression(
+                expr, sql, uncoercedChild = Some(uncoerced))))
+            val expectedCache = Some(uncoerced)
             val expectedExistenceSQL = expr match {
               case literal: Literal => literal.sql
               case _ => sql

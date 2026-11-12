@@ -47,7 +47,7 @@ import org.apache.spark.sql.catalyst.plans.logical.{
 }
 import org.apache.spark.sql.catalyst.rules.Rule
 import org.apache.spark.sql.catalyst.trees.CurrentOrigin.withOrigin
-import org.apache.spark.sql.catalyst.util.ResolveDefaultColumns
+import org.apache.spark.sql.catalyst.util.{CharVarcharUtils, ResolveDefaultColumns}
 import org.apache.spark.sql.connector.catalog.CatalogV2Implicits.MultipartIdentifierHelper
 import org.apache.spark.sql.connector.catalog.procedures.BoundProcedure
 import org.apache.spark.sql.errors.DataTypeErrors.cannotMergeIncompatibleDataTypesError
@@ -104,7 +104,8 @@ abstract class TypeCoercionBase extends TypeCoercionHelper {
               c.dataType,
               "CREATE TABLE",
               c.name,
-              d.originalSQL))))
+              d.originalSQL), uncoercedChild = d.uncoercedChild.orElse(
+                Option.when(CharVarcharUtils.hasCharVarchar(c.dataType))(d.child)))))
         }
         createTable.copy(columns = newCols)
 
@@ -117,7 +118,8 @@ abstract class TypeCoercionBase extends TypeCoercionHelper {
               c.dataType,
               "REPLACE TABLE",
               c.name,
-              d.originalSQL))))
+              d.originalSQL), uncoercedChild = d.uncoercedChild.orElse(
+                Option.when(CharVarcharUtils.hasCharVarchar(c.dataType))(d.child)))))
         }
         replaceTable.copy(columns = newCols)
 
@@ -130,7 +132,8 @@ abstract class TypeCoercionBase extends TypeCoercionHelper {
               c.dataType,
               "ALTER TABLE ADD COLUMNS",
               c.colName,
-              d.originalSQL))))
+              d.originalSQL), uncoercedChild = d.uncoercedChild.orElse(
+                Option.when(CharVarcharUtils.hasCharVarchar(c.dataType))(d.child)))))
         }
         addColumns.copy(columnsToAdd = newCols)
 
@@ -144,7 +147,8 @@ abstract class TypeCoercionBase extends TypeCoercionHelper {
               dataType,
               "ALTER TABLE ALTER COLUMN",
               c.column.name.quoted,
-              d.originalSQL))))
+              d.originalSQL), uncoercedChild = d.uncoercedChild.orElse(
+                Option.when(CharVarcharUtils.hasCharVarchar(dataType))(d.child)))))
         }
         alterColumns.copy(specs = newSpecs)
     }

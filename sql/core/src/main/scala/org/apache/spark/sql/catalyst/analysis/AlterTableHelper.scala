@@ -104,13 +104,9 @@ private[sql] object AlterTableHelper {
     s.newDefaultExpression.foreach { defaultValue =>
       // Validate the default value expression
       constantFoldDefaultValue(defaultValue, colName, dataType, "ALTER TABLE ALTER COLUMN")
-      if (CharVarcharUtils.hasCharVarchar(dataType) &&
-          CharVarcharUtils.shouldApplyWriteSideLengthCheck(conf)) {
-        builder.putString(CURRENT_DEFAULT_COLUMN_METADATA_KEY, defaultValue.originalSQL)
-      } else {
-        builder.putExpression(
-          CURRENT_DEFAULT_COLUMN_METADATA_KEY, defaultValue.originalSQL, Some(defaultValue.child))
-      }
+      builder.putExpression(
+        CURRENT_DEFAULT_COLUMN_METADATA_KEY, defaultValue.originalSQL,
+        Some(defaultValue.uncoercedChild.getOrElse(defaultValue.child)))
     }
     if (s.dropDefault) {
       // for legacy reasons, "" means clearing default value
@@ -171,15 +167,9 @@ private[sql] object AlterTableHelper {
       statementType: String): Unit = {
     val existsDefaultSQL = constantFoldDefaultValue(
       defaultValue, colName, colType, statementType, forExistenceDefault = true)
-    if (CharVarcharUtils.hasCharVarchar(colType) &&
-        CharVarcharUtils.shouldApplyWriteSideLengthCheck(conf)) {
-      // Keep session-dependent assignment padding/truncation out of the current default cache.
-      builder.putString(DefaultCols.CURRENT_DEFAULT_COLUMN_METADATA_KEY, defaultValue.originalSQL)
-    } else {
-      builder.putExpression(
-        DefaultCols.CURRENT_DEFAULT_COLUMN_METADATA_KEY, defaultValue.originalSQL,
-        Some(defaultValue.child))
-    }
+    builder.putExpression(
+      DefaultCols.CURRENT_DEFAULT_COLUMN_METADATA_KEY, defaultValue.originalSQL,
+      Some(defaultValue.uncoercedChild.getOrElse(defaultValue.child)))
     builder.putString(DefaultCols.EXISTS_DEFAULT_COLUMN_METADATA_KEY, existsDefaultSQL)
   }
 }
