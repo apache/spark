@@ -3644,7 +3644,7 @@ class PlanParserSuite extends AnalysisTest {
         |  ALIGN TO TIMESTAMP '2024-01-01 00:02:00'
         |)""".stripMargin))
     assert(inOrder == shuffled)
-    // Without AS, no name is stored. The analyzer picks the default name.
+    // Without AS, no name is stored, which requests the default name.
     assert(inOrder.binStart.contains(GapFillOutputColumn(None)))
     assert(inOrder.isGenerated.contains(GapFillOutputColumn(None)))
   }

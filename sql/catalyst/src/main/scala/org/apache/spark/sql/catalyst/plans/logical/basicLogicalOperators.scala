@@ -1975,8 +1975,8 @@ case class GapFillColumn(column: Expression, method: GapFillMethod)
 
 /**
  * An output column that GAP FILL adds when it is asked for with BIN_START or IS_GENERATED.
- * `alias` is the name given with AS. When it is not set, the analyzer uses the default name,
- * `bin_start` or `is_generated`.
+ * `alias` is the name given with AS. `None` requests the default name, `bin_start` or
+ * `is_generated`.
  */
 case class GapFillOutputColumn(alias: Option[String])
 
