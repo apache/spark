@@ -82,7 +82,7 @@ module.exports = async ({github, context, core, env = process.env, log = console
                           checkName: "${BUILD_CHECK_NAME}", checkType: LATEST
                         }) {
                       pageInfo { hasNextPage }
-                      nodes { databaseId externalId status conclusion }
+                      nodes { databaseId externalId text status conclusion }
                     }
                   }
                 }
@@ -183,6 +183,7 @@ module.exports = async ({github, context, core, env = process.env, log = console
       buildChecks: [...checks.values()].map(cr => ({
         id: cr.databaseId,
         externalId: cr.externalId,
+        text: cr.text,
         status: lower(cr.status),
         conclusion: lower(cr.conclusion)
       })),
@@ -193,10 +194,22 @@ module.exports = async ({github, context, core, env = process.env, log = console
     }
   }
 
-  // The fork run ID a Build check points at, stored in its external ID, or undefined if
-  // the check is not linked to a run (e.g. action_required guidance, or a check from an
-  // older version of this script).
-  const runIdOf = (cr) => cr.externalId || undefined
+  // New checks and updates use external IDs; output text is a temporary fallback.
+  // Remove it once legacy-only checks no longer need support. Unchanged checks are
+  // not proactively migrated.
+  const runIdOf = (cr) => {
+    if (cr.externalId) {
+      return cr.externalId
+    }
+    try {
+      const runId = JSON.parse(cr.text).run_id
+      const validNumber = Number.isSafeInteger(runId) && runId > 0
+      const validString = typeof runId == 'string' && /^[1-9]\d*$/.test(runId)
+      return validNumber || validString ? runId : undefined
+    } catch {
+      return undefined
+    }
+  }
   const isGuidance = (cr) => cr.conclusion == 'action_required' && !runIdOf(cr)
 
   // The fields that link a Build check to a fork run. Every update sends them again,
