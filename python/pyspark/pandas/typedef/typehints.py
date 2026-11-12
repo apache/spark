@@ -271,6 +271,28 @@ def as_spark_type(
         return None
 
 
+def _prefers_large_var_types() -> bool:
+    from pyspark.sql import SparkSession
+
+    session = SparkSession.getActiveSession()
+    if session is not None:
+        return (
+            session.conf.get("spark.sql.execution.arrow.useLargeVarTypes", "false").lower()
+            == "true"
+        )
+    try:
+        from pyspark.pandas.utils import default_session
+
+        return (
+            default_session()
+            .conf.get("spark.sql.execution.arrow.useLargeVarTypes", "false")
+            .lower()
+            == "true"
+        )
+    except Exception:
+        return False
+
+
 def spark_type_to_pandas_dtype(
     spark_type: types.DataType,
     *,
@@ -280,7 +302,38 @@ def spark_type_to_pandas_dtype(
     """Return the given Spark DataType to pandas dtype."""
 
     if use_arrow_dtypes and extension_arrow_dtypes_available:
-        return ArrowDtype(to_arrow_type(spark_type))
+        prefers_large_var_types = _prefers_large_var_types()
+
+        def _to_arrow_dtype_internal(dt: types.DataType) -> "pa.DataType":
+            if isinstance(dt, (types.TimestampType, types.TimestampNTZType)):
+                return pa.timestamp("us")
+            elif isinstance(dt, types.ArrayType):
+                return pa.list_(
+                    pa.field(
+                        "element",
+                        _to_arrow_dtype_internal(dt.elementType),
+                        nullable=dt.containsNull,
+                    )
+                )
+            elif isinstance(dt, types.MapType):
+                return pa.map_(
+                    _to_arrow_dtype_internal(dt.keyType),
+                    _to_arrow_dtype_internal(dt.valueType),
+                )
+            elif isinstance(dt, types.StructType):
+                fields = [
+                    pa.field(f.name, _to_arrow_dtype_internal(f.dataType), nullable=f.nullable)
+                    for f in dt.fields
+                ]
+                return pa.struct(fields)
+            else:
+                return to_arrow_type(
+                    dt,
+                    timezone="UTC",
+                    prefers_large_types=prefers_large_var_types,
+                )
+
+        return ArrowDtype(_to_arrow_dtype_internal(spark_type))
 
     if use_extension_dtypes and extension_dtypes_available:
         # IntegralType
@@ -335,14 +388,7 @@ def spark_type_to_pandas_dtype(
         else:
             return np.dtype("datetime64[us]")
     else:
-        from pyspark.pandas.utils import default_session
-
-        prefers_large_var_types = (
-            default_session()
-            .conf.get("spark.sql.execution.arrow.useLargeVarTypes", "false")
-            .lower()
-            == "true"
-        )
+        prefers_large_var_types = _prefers_large_var_types()
         return np.dtype(
             to_arrow_type(
                 spark_type, timezone="UTC", prefers_large_types=prefers_large_var_types
@@ -353,13 +399,24 @@ def spark_type_to_pandas_dtype(
 def is_str_dtype(tpe: Dtype) -> bool:
     if LooseVersion(pd.__version__) < "3.0.0":
         return False
-    if extension_arrow_dtypes_available and isinstance(tpe, ArrowDtype):
-        pyarrow_type = tpe.pyarrow_dtype
-        if pa.types.is_string(pyarrow_type) or pa.types.is_large_string(pyarrow_type):
-            return True
     if extension_object_dtypes_available:
         return isinstance(tpe, StringDtype) and tpe.na_value is np.nan
     return False
+
+
+def is_arrow_dtype(tpe: Dtype) -> bool:
+    """Return whether the given dtype is an ArrowDtype."""
+    return extension_arrow_dtypes_available and isinstance(tpe, ArrowDtype)
+
+
+def is_string_pyarrow_dtype(tpe: Dtype) -> bool:
+    """Return whether the given dtype is string[pyarrow] (StringDtype with pd.NA)."""
+    return (
+        extension_object_dtypes_available
+        and isinstance(tpe, StringDtype)
+        and getattr(tpe, "storage", None) == "pyarrow"
+        and not is_str_dtype(tpe)
+    )
 
 
 def is_pyarrow_backed_dtype(tpe: Dtype) -> bool:

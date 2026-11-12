@@ -34,7 +34,9 @@ from pyspark.pandas.typedef import (
     extension_float_dtypes_available,
     extension_object_dtypes_available,
     infer_return_type,
+    is_arrow_dtype,
     is_pyarrow_backed_dtype,
+    is_string_pyarrow_dtype,
     pandas_on_spark_type,
     spark_type_to_pandas_dtype,
 )
@@ -492,6 +494,7 @@ class TypeHintTestsMixin:
             ArrowDtype(pa.float32()): FloatType(),
             ArrowDtype(pa.float64()): DoubleType(),
             ArrowDtype(pa.string()): StringType(),
+            ArrowDtype(pa.timestamp("us")): TimestampType(),
         }
 
         for arrow_dtype, spark_type in type_mapper.items():
@@ -500,6 +503,18 @@ class TypeHintTestsMixin:
                 spark_type_to_pandas_dtype(spark_type, use_arrow_dtypes=True),
                 arrow_dtype,
             )
+
+        # Test nested timestamps in spark_type_to_pandas_dtype
+        self.assertEqual(
+            spark_type_to_pandas_dtype(ArrayType(TimestampType()), use_arrow_dtypes=True),
+            ArrowDtype(pa.list_(pa.field("element", pa.timestamp("us")))),
+        )
+        self.assertEqual(
+            spark_type_to_pandas_dtype(
+                StructType([StructField("ts", TimestampType())]), use_arrow_dtypes=True
+            ),
+            ArrowDtype(pa.struct([pa.field("ts", pa.timestamp("us"))])),
+        )
 
     @unittest.skipIf(
         not extension_arrow_dtypes_available, "PyArrow-backed dtypes are not available"
@@ -514,6 +529,14 @@ class TypeHintTestsMixin:
         self.assertTrue(is_pyarrow_backed_dtype(StringDtype(storage="pyarrow")))
         self.assertFalse(is_pyarrow_backed_dtype(StringDtype(storage="python")))
         self.assertFalse(is_pyarrow_backed_dtype(np.dtype("int64")))
+
+        self.assertTrue(is_arrow_dtype(ArrowDtype(pa.string())))
+        self.assertFalse(is_arrow_dtype(StringDtype(storage="pyarrow")))
+        self.assertFalse(is_arrow_dtype(np.dtype("int64")))
+
+        self.assertTrue(is_string_pyarrow_dtype(StringDtype(storage="pyarrow")))
+        self.assertFalse(is_string_pyarrow_dtype(StringDtype(storage="python")))
+        self.assertFalse(is_string_pyarrow_dtype(ArrowDtype(pa.string())))
 
 
 class TypeHintTests(TypeHintTestsMixin, PandasOnSparkTestCase):

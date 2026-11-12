@@ -51,7 +51,7 @@ from pyspark.pandas._typing import (
     Label,
     Name,
 )
-from pyspark.pandas.typedef.typehints import as_spark_type, is_pyarrow_backed_dtype
+from pyspark.pandas.typedef.typehints import as_spark_type, is_arrow_dtype
 from pyspark.sql import Column, SparkSession
 from pyspark.sql import DataFrame as PySparkDataFrame
 from pyspark.sql import functions as F
@@ -239,7 +239,7 @@ def combine_frames(
                     any(field.is_extension_dtype for field in [this_field, that_field])
                 )
                 index_use_arrow_dtypes.append(
-                    any(is_pyarrow_backed_dtype(field.dtype) for field in [this_field, that_field])
+                    any(is_arrow_dtype(field.dtype) for field in [this_field, that_field])
                 )
                 merged_index_scols.append(
                     F.when(this_scol.isNotNull(), this_scol).otherwise(that_scol).alias(column_name)
@@ -280,29 +280,48 @@ def combine_frames(
 
         schema = joined_df.select(*index_spark_columns, *new_data_columns).schema
 
-        index_fields = [
-            InternalField.from_struct_field(
-                struct_field,
-                use_extension_dtypes=use_extension_dtypes,
-                use_arrow_dtypes=use_arrow_dtypes,
-            )
-            for struct_field, use_extension_dtypes, use_arrow_dtypes in zip(
-                schema.fields[: len(index_spark_columns)],
-                index_use_extension_dtypes,
-                index_use_arrow_dtypes,
-            )
-        ]
-        data_fields = [
-            InternalField.from_struct_field(
-                struct_field,
-                use_extension_dtypes=field.is_extension_dtype,
-                use_arrow_dtypes=is_pyarrow_backed_dtype(field.dtype),
-            )
-            for struct_field, field in zip(
-                schema.fields[len(index_spark_columns) :],
-                this_internal.data_fields + that_internal.data_fields,
-            )
-        ]
+        index_fields = []
+        for (
+            struct_field,
+            use_extension_dtypes,
+            use_arrow_dtypes,
+            ((_, _, this_field), (_, _, that_field)),
+        ) in zip(
+            schema.fields[: len(index_spark_columns)],
+            index_use_extension_dtypes,
+            index_use_arrow_dtypes,
+            this_and_that_index_map,
+        ):
+            if is_arrow_dtype(this_field.dtype) and struct_field.dataType == this_field.spark_type:
+                index_fields.append(this_field.copy(struct_field=struct_field))
+            elif (
+                is_arrow_dtype(that_field.dtype) and struct_field.dataType == that_field.spark_type
+            ):
+                index_fields.append(that_field.copy(struct_field=struct_field))
+            else:
+                index_fields.append(
+                    InternalField.from_struct_field(
+                        struct_field,
+                        use_extension_dtypes=use_extension_dtypes,
+                        use_arrow_dtypes=use_arrow_dtypes,
+                    )
+                )
+
+        data_fields = []
+        for struct_field, field in zip(
+            schema.fields[len(index_spark_columns) :],
+            this_internal.data_fields + that_internal.data_fields,
+        ):
+            if is_arrow_dtype(field.dtype) and struct_field.dataType == field.spark_type:
+                data_fields.append(field.copy(struct_field=struct_field))
+            else:
+                data_fields.append(
+                    InternalField.from_struct_field(
+                        struct_field,
+                        use_extension_dtypes=field.is_extension_dtype,
+                        use_arrow_dtypes=is_arrow_dtype(field.dtype),
+                    )
+                )
 
         level = max(this_internal.column_labels_level, that_internal.column_labels_level)
 
