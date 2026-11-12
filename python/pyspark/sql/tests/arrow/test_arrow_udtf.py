@@ -1353,14 +1353,19 @@ class ArrowUDTFTestsMixin:
         ).selectExpr("k", "v", "array(k) AS arr", "struct(k) AS st")
         with self.temp_view("t_nan"):
             df.createOrReplaceTempView("t_nan")
-            for key in ["k", "arr", "st"]:
-                with self.subTest(key=key):
-                    assertDataFrameEqual(
-                        self.spark.sql(
-                            f"SELECT * FROM count_rows_arrow(TABLE(t_nan) PARTITION BY {key})"
-                        ),
-                        [Row(n=2), Row(n=2)],
-                    )
+            # A batch size of 1 makes each partition span Arrow batches, so the cross-batch
+            # partition key comparison is covered too.
+            for batch_size in ["10000", "1"]:
+                with self.sql_conf({"spark.sql.execution.arrow.maxRecordsPerBatch": batch_size}):
+                    for key in ["k", "arr", "st"]:
+                        with self.subTest(batch_size=batch_size, key=key):
+                            assertDataFrameEqual(
+                                self.spark.sql(
+                                    "SELECT * FROM count_rows_arrow("
+                                    f"TABLE(t_nan) PARTITION BY {key})"
+                                ),
+                                [Row(n=2), Row(n=2)],
+                            )
 
     def test_arrow_udtf_with_empty_table(self):
         @arrow_udtf(returnType="result string")

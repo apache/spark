@@ -30,7 +30,6 @@ from __future__ import annotations
 import dataclasses
 import inspect
 import itertools
-import math
 from abc import ABCMeta, abstractmethod
 from collections.abc import Iterable, Iterator
 from typing import TYPE_CHECKING, Any, Callable, ClassVar, Optional, Tuple
@@ -74,12 +73,14 @@ if TYPE_CHECKING:
 
 def _partition_values_equal(left: Any, right: Any) -> bool:
     """
-    Compare two partition key values the way Spark groups them, treating NaN as equal to NaN
-    (also when nested inside rows, structs, arrays or maps). Python's ``!=`` is not enough,
-    since ``float("nan") != float("nan")`` is True.
+    Compare two partition key values with ``==``, except that NaN is equal to NaN (also when
+    nested inside rows, structs, arrays or maps). Python's ``!=`` is not enough, since
+    ``float("nan") != float("nan")`` is True.
     """
-    if isinstance(left, float) and isinstance(right, float):
-        return left == right or (math.isnan(left) and math.isnan(right))
+    # TODO: collated string keys (for example 'a' and 'A' under UTF8_LCASE) still compare with
+    # plain ``==``, because the worker does not know each key's collation.
+    if left == right:
+        return True
     if isinstance(left, (list, tuple)) and isinstance(right, (list, tuple)):
         return len(left) == len(right) and all(
             _partition_values_equal(lv, rv) for lv, rv in zip(left, right)
@@ -88,7 +89,9 @@ def _partition_values_equal(left: Any, right: Any) -> bool:
         return len(left) == len(right) and all(
             k in right and _partition_values_equal(v, right[k]) for k, v in left.items()
         )
-    return left == right
+    # NaN is the only value not equal to itself. This also covers NumPy floating scalars such as
+    # numpy.float32, which are not ``float`` subclasses.
+    return left != left and right != right
 
 
 class PartitionedUDTF(metaclass=ABCMeta):

@@ -2750,10 +2750,12 @@ class BaseUDTFTestsMixin:
         # NaN keys must form one partition, also when nested in an array or a struct.
         df = self.spark.createDataFrame(
             [(nan, 1), (nan, 2), (1.0, 3), (1.0, 4)], "k double, v int"
-        ).selectExpr("k", "v", "array(k) AS arr", "struct(k) AS st")
+        ).selectExpr(
+            "k", "v", "array(k) AS arr", "struct(k) AS st", "array(CAST(k AS FLOAT)) AS arr_f"
+        )
         with self.temp_view("t"):
             df.createOrReplaceTempView("t")
-            for key in ["k", "arr", "st"]:
+            for key in ["k", "arr", "st", "arr_f"]:
                 with self.subTest(key=key):
                     assertDataFrameEqual(
                         self.spark.sql(f"SELECT * FROM count_rows(TABLE(t) PARTITION BY {key})"),
