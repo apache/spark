@@ -3470,6 +3470,17 @@ object SQLConf {
     .booleanConf
     .createWithDefault(false)
 
+  val LEGACY_IGNORE_CORRUPT_FILES_SKIPS_UPGRADE_ERRORS =
+    buildConf("spark.sql.legacy.files.ignoreCorruptFilesSkipsUpgradeErrors")
+      .internal()
+      .doc("When true, restores the old behavior where 'spark.sql.files.ignoreCorruptFiles' also " +
+        "skips the rest of a file whose read raises a SparkUpgradeException. When false, the " +
+        "upgrade error is raised, since it is not file corruption.")
+      .version("5.0.0")
+      .withBindingPolicy(ConfigBindingPolicy.NOT_APPLICABLE)
+      .booleanConf
+      .createWithDefault(false)
+
   val IGNORE_MISSING_FILES = buildConf("spark.sql.files.ignoreMissingFiles")
     .doc("Whether to ignore missing files. If true, the Spark jobs will continue to run when " +
       "encountering missing files and the contents that have been read will still be returned. " +
