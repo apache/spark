@@ -858,8 +858,15 @@ case class StreamingSymmetricHashJoinExec(
         val otherEventTime = WatermarkSupport.findEventTimeColumn(
           otherSideAttrs, !allowMultipleStatefulOperators).toSeq
         // The scan reads the event time as a long, so a time-window event time, which the
-        // solver bounds by window order, cannot give it offsets.
-        if (!(thisEventTime ++ otherEventTime).forall(_.dataType == TimestampType)) {
+        // solver bounds by window order, cannot give it offsets. The solver also reads a cast
+        // that drops part of a time as the time itself. For
+        // CAST(rightTime AS BIGINT) >= CAST(leftTime AS BIGINT) + 60, the scan for a left row
+        // at 100.6 seconds would start near 160.6 seconds and miss a right row at 160.2
+        // seconds, although the casts make them match (160 >= 100 + 60). Read all rows for
+        // the key instead.
+        if (!(thisEventTime ++ otherEventTime).forall(_.dataType == TimestampType) ||
+            StreamingJoinHelper.hasTruncatingCast(
+              condition.full, AttributeSet(thisEventTime ++ otherEventTime))) {
           None
         } else {
           val lowerBoundMs = StreamingJoinHelper.getStateValueWatermark(

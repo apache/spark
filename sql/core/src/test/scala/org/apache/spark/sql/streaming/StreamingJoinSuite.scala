@@ -725,6 +725,35 @@ abstract class StreamingInnerJoinBase extends StreamingJoinSuite {
     assert(e.toString.contains("Stream-stream join without equality predicate is not supported"))
   }
 
+  for (leftFirst <- Seq(true, false)) {
+    test(s"stream stream inner join through truncating casts of event times, " +
+        s"left first = $leftFirst") {
+      val leftInput = MemoryStream[(Int, Long)]
+      val rightInput = MemoryStream[(Int, Long)]
+      val left = leftInput.toDF().toDF("leftKey", "time")
+        .select($"leftKey", timestamp_millis($"time").as("leftTime"))
+        .withWatermark("leftTime", "60 seconds")
+      val right = rightInput.toDF().toDF("rightKey", "time")
+        .select($"rightKey", timestamp_millis($"time").as("rightTime"))
+        .withWatermark("rightTime", "60 seconds")
+      // The casts drop the fraction of a second, so a left row at 100.6 seconds matches a
+      // right row at 160.2 seconds: 160 >= 100 + 60.
+      val condition = "leftKey = rightKey AND " +
+        "CAST(rightTime AS BIGINT) >= CAST(leftTime AS BIGINT) + 60 AND " +
+        "CAST(rightTime AS BIGINT) <= CAST(leftTime AS BIGINT) + 120"
+      val joined = left.join(right, expr(condition))
+        .select($"leftKey", unix_millis($"leftTime"), unix_millis($"rightTime"))
+      val leftData = AddData(leftInput, (1, 100600L))
+      val rightData = AddData(rightInput, (1, 160200L))
+      val (first, second) = if (leftFirst) (leftData, rightData) else (rightData, leftData)
+      testStream(joined)(
+        first,
+        CheckNewAnswer(),
+        second,
+        CheckNewAnswer((1, 100600L, 160200L)))
+    }
+  }
+
   testWithAppendAndUpdate("stream stream self join") { outputMode =>
     val input = MemoryStream[Int]
     val df = input.toDF()
