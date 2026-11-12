@@ -48,17 +48,18 @@ is named `site-<sha>-<attempt>.tar.bz2`. Names include the checked-out commit ha
 and workflow run attempt so reruns can upload without replacing existing artifacts.
 Change-based skipping of Python and R API docs applies only to fork builds.
 
-Upstream master builds apply the `In-Progress` version and search settings before
-the complete Jekyll build and skip R API documentation. Other branches retain
-their source versions. The initial build without API docs still checks that the
+CI builds keep their source versions unchanged. Upstream master builds skip R API
+documentation. The initial build without API docs still checks that the
 documentation builds independently of generated API docs.
 
 The Pages workflow selects the unexpired master preview artifact with the newest
 creation date, using its artifact ID to download that exact build. Commit hashes
-do not determine artifact order. Pages runs daily or on manual dispatch without
-rebuilding or modifying the documentation. It can use a completed documentation
-build even if another job in the same CI run fails. If no preview artifact is
-available, Pages fails and leaves the existing deployment in place.
+do not determine artifact order. After extraction, Pages applies the `In-Progress`
+Spark and PySpark version labels, search filter, and PySpark version-switcher
+settings to the generated site. Pages runs daily or on manual dispatch without
+rebuilding the documentation. It can use a completed documentation build even if
+another job in the same CI run fails. If no preview artifact is available, Pages
+fails and leaves the existing deployment in place.
 
 ## Composite actions
 

@@ -76,6 +76,40 @@ jobs:
           run-id: ${{ steps.preview.outputs.run-id }}
       - name: Extract documentation preview
         run: tar xjf site-*.tar.bz2
+      - name: Prepare documentation preview
+        env:
+          RELEASE_VERSION: In-Progress
+        run: |
+          python3 - <<'PYTHON'
+          from pathlib import Path
+          import os
+          import re
+
+          version = os.environ['RELEASE_VERSION']
+          replacement = rf'\g<1>{version}\2'
+
+          def prepare(path, patterns):
+              original = path.read_text(encoding='utf-8')
+              preview = original
+              for pattern in patterns:
+                  preview = re.sub(pattern, replacement, preview)
+              if preview != original:
+                  path.write_text(preview, encoding='utf-8')
+
+          patterns = (
+              r'(<title>.* - Spark )[^<]+( Documentation</title>)',
+              r'(<span class="version">)[^<]+(</span>)',
+              r"""('facetFilters':\s*\[\s*["']version:)[^"']+(["'])""",
+              r'(<title>[^<]*PySpark )[^<]+( documentation</title>)',
+              r"""(DOCUMENTATION_OPTIONS\.theme_switcher_version_match\s*=\s*['"])[^'"]+(['"])""",
+          )
+          site = Path('docs/_site')
+          for path in site.rglob('*.html'):
+              prepare(path, patterns)
+          options = site / 'api/python/_static/documentation_options.js'
+          if options.is_file():
+              prepare(options, (r"""(\bVERSION:\s*['"])[^'"]*(['"])""",))
+          PYTHON
       - name: Setup Pages
         uses: actions/configure-pages@v6
       - name: Upload artifact
