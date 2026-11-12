@@ -1052,6 +1052,115 @@ abstract class UpdateTableSuiteBase extends RowLevelOperationSuiteBase {
       Row(1, -1, "hr", "a") :: Row(2, 2, "software", "b") :: Row(3, 3, "hr", "c") :: Nil)
   }
 
+  test("SPARK-61479: update with conditions on CHAR columns stored without padding") {
+    withTempView("updated") {
+      createTable("pk INT NOT NULL, c CHAR(3), id INT, dep STRING")
+      // read-side padding also covers values that are not padded in the storage, so the rows to
+      // update must be found by comparing the padded values
+      withSQLConf(SQLConf.LEGACY_CHAR_VARCHAR_AS_STRING.key -> "true") {
+        append("pk INT NOT NULL, c STRING, id INT, dep STRING",
+          """{ "pk": 1, "c": "a", "id": 1, "dep": "hr" }
+            |{ "pk": 2, "c": "b", "id": 2, "dep": "software" }
+            |{ "pk": 3, "c": "x", "id": 3, "dep": "hr" }
+            |{ "pk": 4, "c": "y", "id": 4, "dep": "finance" }
+            |""".stripMargin)
+      }
+
+      sql(s"UPDATE $tableNameAsString SET id = -1 WHERE c IN ('a', 'b', 'c')")
+
+      checkAnswer(
+        sql(s"SELECT * FROM $tableNameAsString"),
+        Row(1, "a  ", -1, "hr") :: Row(2, "b  ", -1, "software") ::
+          Row(3, "x  ", 3, "hr") :: Row(4, "y  ", 4, "finance") :: Nil)
+
+      Seq("x  ").toDF("v").createOrReplaceTempView("updated")
+
+      sql(s"UPDATE $tableNameAsString SET id = -2 WHERE c IN (SELECT v FROM updated)")
+
+      checkAnswer(
+        sql(s"SELECT * FROM $tableNameAsString"),
+        Row(1, "a  ", -1, "hr") :: Row(2, "b  ", -1, "software") ::
+          Row(3, "x  ", -2, "hr") :: Row(4, "y  ", 4, "finance") :: Nil)
+
+      Seq("y  ").toDF("v").createOrReplaceTempView("updated")
+
+      sql(
+        s"""UPDATE $tableNameAsString t
+           |SET id = -3
+           |WHERE EXISTS (SELECT 1 FROM updated WHERE updated.v = t.c)
+           |""".stripMargin)
+
+      checkAnswer(
+        sql(s"SELECT * FROM $tableNameAsString"),
+        Row(1, "a  ", -1, "hr") :: Row(2, "b  ", -1, "software") ::
+          Row(3, "x  ", -2, "hr") :: Row(4, "y  ", -3, "finance") :: Nil)
+
+      // only the conditions read the padded values, the rows keep what is stored
+      withSQLConf(SQLConf.LEGACY_CHAR_VARCHAR_AS_STRING.key -> "true") {
+        checkAnswer(
+          sql(s"SELECT c FROM $tableNameAsString"),
+          Row("a") :: Row("b") :: Row("x") :: Row("y") :: Nil)
+      }
+    }
+  }
+
+  test("SPARK-61479: update with a condition on a CHAR partition column stored without padding") {
+    createTable("pk INT NOT NULL, id INT, dep CHAR(8)")
+    withSQLConf(SQLConf.LEGACY_CHAR_VARCHAR_AS_STRING.key -> "true") {
+      append("pk INT NOT NULL, id INT, dep STRING",
+        """{ "pk": 1, "id": 1, "dep": "hr" }
+          |{ "pk": 2, "id": 2, "dep": "software" }
+          |""".stripMargin)
+    }
+
+    sql(s"UPDATE $tableNameAsString SET id = -1 WHERE dep = 'hr'")
+
+    checkAnswer(
+      sql(s"SELECT * FROM $tableNameAsString"),
+      Row(1, -1, "hr      ") :: Row(2, 2, "software") :: Nil)
+  }
+
+  test("SPARK-61479: update with values from CHAR columns stored without padding") {
+    createTable("pk INT NOT NULL, c CHAR(3), id INT, v STRING, dep STRING")
+    withSQLConf(SQLConf.LEGACY_CHAR_VARCHAR_AS_STRING.key -> "true") {
+      append("pk INT NOT NULL, c STRING, id INT, v STRING, dep STRING",
+        """{ "pk": 1, "c": "a", "id": 1, "dep": "hr" }
+          |{ "pk": 2, "c": "b", "id": 2, "dep": "software" }
+          |""".stripMargin)
+    }
+
+    sql(s"UPDATE $tableNameAsString SET v = c, id = IF(c = 'a', 10, 20)")
+
+    checkAnswer(
+      sql(s"SELECT pk, id, v FROM $tableNameAsString"),
+      Row(1, 10, "a  ") :: Row(2, 20, "b  ") :: Nil)
+  }
+
+  test("SPARK-61479: update reads CHAR columns as the read-side configs define") {
+    createTable("pk INT NOT NULL, c CHAR(3), id INT, dep STRING")
+    withSQLConf(SQLConf.LEGACY_CHAR_VARCHAR_AS_STRING.key -> "true") {
+      append("pk INT NOT NULL, c STRING, id INT, dep STRING",
+        """{ "pk": 1, "c": "a", "id": 1, "dep": "hr" }
+          |""".stripMargin)
+    }
+
+    Seq(
+      Seq(SQLConf.READ_SIDE_CHAR_PADDING.key -> "false") -> 1,
+      Seq(SQLConf.LEGACY_CHAR_VARCHAR_AS_STRING.key -> "true") -> 1,
+      Seq(
+        SQLConf.CHAR_VARCHAR_STANDARD_SEMANTICS.key -> "true",
+        SQLConf.READ_SIDE_CHAR_PADDING.key -> "false") -> 3,
+      Seq(
+        SQLConf.CHAR_VARCHAR_STANDARD_SEMANTICS.key -> "true",
+        SQLConf.LEGACY_CHAR_VARCHAR_AS_STRING.key -> "true") -> 3
+    ).foreach { case (confs, expectedLength) =>
+      withSQLConf(confs: _*) {
+        sql(s"UPDATE $tableNameAsString SET id = length(c)")
+      }
+      checkAnswer(sql(s"SELECT id FROM $tableNameAsString"), Row(expectedLength))
+    }
+  }
+
   test("update with NOT NULL checks") {
     createAndInitTable("pk INT NOT NULL, s STRUCT<n_i: INT NOT NULL, n_l: LONG>, dep STRING",
       """{ "pk": 1, "s": { "n_i": 1, "n_l": 11 }, "dep": "hr" }
