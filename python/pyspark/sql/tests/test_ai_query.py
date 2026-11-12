@@ -163,6 +163,12 @@ class AIQueryTests(unittest.TestCase, PySparkErrorTestUtils):
         response.json.return_value = body
         return response
 
+    def sql_query(self):
+        session = SimpleNamespace(udf=Mock())
+        register_model("model", "endpoint", provider="databricks", session=session)
+        register_sql_function(session=session)
+        return session.udf.register.call_args.args[1].func
+
     def test_invalid_configuration(self):
         for options, condition in (
             ({"model_id": ""}, "VALUE_NOT_NON_EMPTY_STR"),
@@ -585,6 +591,57 @@ class AIQueryTests(unittest.TestCase, PySparkErrorTestUtils):
         self.assertNotIn("private diagnostic", str(raised.exception))
         self.assertEqual(client.http.post.call_count, 2)
 
+    def test_read_timeout_is_distinguished_from_connection_failures(self):
+        from urllib3.exceptions import ReadTimeoutError
+
+        for error, condition in (
+            (requests.ReadTimeout("private diagnostic"), "TIMEOUT"),
+            (
+                requests.ConnectionError(ReadTimeoutError(None, None, "private diagnostic")),
+                "TIMEOUT",
+            ),
+            (requests.ConnectTimeout("private diagnostic"), "CONNECTION_ERROR"),
+        ):
+            client = self.client(max_retries=0)
+            client.http.post.side_effect = error
+            with (
+                self.subTest(error=type(error).__name__),
+                self.assertRaises(PySparkRuntimeError) as raised,
+            ):
+                client.invoke("hello")
+            self.check_error(
+                raised.exception,
+                f"AI_QUERY_INVOCATION_FAILED.{condition}",
+                {"target": "Databricks model"},
+            )
+            self.assertNotIn(
+                "private diagnostic", "".join(traceback.format_exception(raised.exception))
+            )
+            client.http.post.assert_called_once()
+
+    def test_throttling_status_survives_deadline_expiry_with_fallback_backoff(self):
+        now = 1700000000
+        past = format_datetime(datetime.fromtimestamp(now - 30, timezone.utc), usegmt=True)
+        for header in ("-5", "nan", "invalid", past, "0.5"):
+            client = self.client(timeout=1)
+            response = self.response(429)
+            response.headers = {"Retry-After": header}
+            client.http.post.return_value = response
+            with (
+                self.subTest(retry_after=header),
+                patch("pyspark.sql._ai_client.time.time", return_value=now),
+                patch("pyspark.sql._ai_client.time.monotonic", side_effect=[0, 0, 0, 0.25, 1]),
+                patch("pyspark.sql._ai_client.time.sleep"),
+                self.assertRaises(PySparkRuntimeError) as raised,
+            ):
+                client.invoke("hello")
+            self.check_error(
+                raised.exception,
+                "AI_QUERY_INVOCATION_FAILED.HTTP_RETRIES_EXHAUSTED",
+                {"target": "Databricks model", "status": "429"},
+            )
+            client.http.post.assert_called_once()
+
     def test_authentication_time_reduces_http_timeout(self):
         client = self.client(timeout=5)
         client.http.post.return_value = self.response(choices=[{"message": {"content": "answer"}}])
@@ -688,8 +745,8 @@ class AIQueryTests(unittest.TestCase, PySparkErrorTestUtils):
             client.invoke("hello")
         self.check_error(
             raised.exception,
-            "AI_QUERY_INVOCATION_FAILED.TIMEOUT",
-            {"target": "Databricks model"},
+            "AI_QUERY_INVOCATION_FAILED.HTTP_RETRIES_EXHAUSTED",
+            {"target": "Databricks model", "status": "429"},
         )
 
     def test_batch_order_nulls_concurrency_and_cleanup(self):
@@ -910,6 +967,55 @@ class AIQueryTests(unittest.TestCase, PySparkErrorTestUtils):
 
         cloudpickle.loads(cloudpickle.dumps(query))
 
+    def test_invalid_request_batches_fail_before_creating_clients(self):
+        endpoint = _ModelEndpoint("model", provider="databricks", max_concurrency=1)
+        for batch in (pd.DataFrame({"field": ["value"]}), pd.Series(["valid", 42])):
+            with (
+                self.subTest(batch_type=type(batch).__name__),
+                patch("pyspark.sql._ai_client._ChatCompletionsClient") as factory,
+                self.assertRaises(PySparkTypeError) as raised,
+            ):
+                list(_query_batches(endpoint, iter([batch])))
+            self.assertEqual(raised.exception.getCondition(), "NOT_EXPECTED_TYPE")
+            factory.assert_not_called()
+
+    def test_sql_validates_all_aliases_before_invoking_models(self):
+        query = self.sql_query()
+        alias = "missing" * 500
+        batches = [(pd.Series(["model", alias]), pd.Series(["first", "second"]))]
+        with (
+            patch("pyspark.sql.ai._query_session") as factory,
+            self.assertRaises(PySparkValueError) as raised,
+        ):
+            list(query(iter(batches)))
+        self.check_error(
+            raised.exception,
+            "AI_QUERY_ENDPOINT_NOT_REGISTERED",
+            {"endpoint": alias[:100] + "..."},
+        )
+        factory.assert_not_called()
+
+    def test_sql_null_alias_does_not_invoke_a_model(self):
+        query = self.sql_query()
+        client = Mock()
+        client.invoke.return_value = "answer"
+        with patch("pyspark.sql._ai_client._ChatCompletionsClient", return_value=client):
+            result = list(query(iter([(pd.Series([None, "model"]), pd.Series(["skip", "hello"]))])))
+        self.assertEqual(result[0].tolist(), [None, "answer"])
+        client.invoke.assert_called_once_with("hello")
+        client.close.assert_called_once()
+
+    def test_sql_wrong_arity_has_a_structured_error(self):
+        query = self.sql_query()
+        for batch, count in ((pd.Series(["one"]), 1), ((pd.Series(["one"]),), 1), ((), 0)):
+            with self.subTest(count=count), self.assertRaises(PySparkValueError) as raised:
+                list(query(iter([batch])))
+            self.check_error(
+                raised.exception,
+                "AI_QUERY_WRONG_NUM_ARGUMENTS",
+                {"function_name": "ai_query", "num_args": str(count)},
+            )
+
     def test_sql_reuses_clients_across_batches_and_closes_them(self):
         session = SimpleNamespace(udf=Mock())
         for alias in ("first", "second"):
@@ -987,6 +1093,53 @@ class AIQueryTests(unittest.TestCase, PySparkErrorTestUtils):
     "Spark AI query tests require pandas, requests and pyarrow",
 )
 class AIQuerySparkTests(sqlutils.ReusedSQLTestCase):
+    def test_non_string_columns_fail_without_http_calls(self):
+        from pyspark.sql.functions import col, struct
+
+        with _model_http_server() as (origin, received):
+            local_session, local_batches = _local_query_functions(origin)
+            with (
+                patch("pyspark.sql.ai._query_session", new=local_session),
+                patch("pyspark.sql.ai._query_batches", new=local_batches),
+            ):
+                register_model("typed", "model", provider="databricks", session=self.spark)
+                register_sql_function("typed_query", session=self.spark)
+                base = self.spark.createDataFrame([(1, "hello")], "id int, text string")
+                for request in (col("id"), struct("text")):
+                    frame = base.select(request.alias("request"))
+                    frame.createOrReplaceTempView("typed_documents")
+                    results = (
+                        frame.select(ai_query("typed", "request")),
+                        self.spark.sql("SELECT typed_query('typed', request) FROM typed_documents"),
+                    )
+                    for result in results:
+                        with (
+                            self.subTest(schema=frame.schema),
+                            self.assertRaises(PythonException) as raised,
+                        ):
+                            result.collect()
+                        self.assertIn("NOT_EXPECTED_TYPE", str(raised.exception))
+            self.assertEqual(received, [])
+
+    def test_sql_wrong_arity_fails_with_a_structured_error(self):
+        register_sql_function("arity_query", session=self.spark)
+        for arguments in ("'model'", "'model', 'hello', 'extra'"):
+            result = self.spark.sql(f"SELECT arity_query({arguments})")
+            with self.subTest(arguments=arguments), self.assertRaises(PythonException) as raised:
+                result.collect()
+            self.assertIn("AI_QUERY_WRONG_NUM_ARGUMENTS", str(raised.exception))
+
+    def test_sql_null_alias_returns_null_without_http_calls(self):
+        with _model_http_server() as (origin, received):
+            local_session, _ = _local_query_functions(origin)
+            with patch("pyspark.sql.ai._query_session", new=local_session):
+                register_sql_function("null_alias_query", session=self.spark)
+                result = self.spark.sql(
+                    "SELECT null_alias_query(CAST(NULL AS STRING), 'hello') AS answer"
+                )
+                self.assertIsNone(result.collect()[0].answer)
+            self.assertEqual(received, [])
+
     def test_sql_registration_snapshots_and_refreshes_each_session_independently(self):
         other = self.spark.newSession()
         statement = "SELECT session_query('shared', 'hello') AS answer"

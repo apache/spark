@@ -232,14 +232,19 @@ class _ChatCompletionsClient:
         self.http.close()
 
     @staticmethod
-    def _remaining_timeout(deadline: float) -> float:
+    def _remaining_timeout(deadline: float, retry_status: Optional[int] = None) -> float:
         remaining = deadline - time.monotonic()
         if remaining <= 0:
+            if retry_status is not None:
+                raise _invocation_error(
+                    "Databricks model", "HTTP_RETRIES_EXHAUSTED", status=str(retry_status)
+                )
             raise _invocation_error("Databricks model", "TIMEOUT")
         return remaining
 
     def invoke(self, request: str) -> str:
         import requests
+        from urllib3.exceptions import ReadTimeoutError
 
         body: dict[str, Any] = {
             "messages": [{"role": "user", "content": request}],
@@ -248,13 +253,14 @@ class _ChatCompletionsClient:
         }
         deadline = time.monotonic() + self.endpoint.timeout
         attempt = 0
+        last_retry_status: Optional[int] = None
         while True:
-            self._remaining_timeout(deadline)
+            self._remaining_timeout(deadline, last_retry_status)
             retry_headers: Mapping[str, str] = {}
             retry_status: Optional[int] = None
             try:
                 headers = self.workspace.config.authenticate()
-                remaining = self._remaining_timeout(deadline)
+                remaining = self._remaining_timeout(deadline, last_retry_status)
                 with self.http.post(
                     self.url,
                     headers=headers,
@@ -270,6 +276,7 @@ class _ChatCompletionsClient:
                             )
                         retry_headers = response.headers
                         retry_status = status
+                        last_retry_status = status
                     elif status in (401, 403):
                         raise _invocation_error(
                             "Databricks model", "PERMISSION_DENIED", code=str(status)
@@ -300,9 +307,14 @@ class _ChatCompletionsClient:
                 requests.Timeout,
                 requests.ConnectionError,
                 requests.exceptions.ChunkedEncodingError,
-            ):
+            ) as error:
                 if attempt == self.endpoint.max_retries:
-                    raise _invocation_error("Databricks model", "CONNECTION_ERROR") from None
+                    cause = error.args[0] if error.args else None
+                    read_timeout = isinstance(error, requests.ReadTimeout) or isinstance(
+                        cause, ReadTimeoutError
+                    )
+                    condition = "TIMEOUT" if read_timeout else "CONNECTION_ERROR"
+                    raise _invocation_error("Databricks model", condition) from None
             time.sleep(_retry_delay(retry_headers, attempt, deadline, retry_status))
             attempt += 1
 
@@ -411,6 +423,31 @@ def _can_return_null(error: PySparkRuntimeError) -> bool:
     )
 
 
+def _validate_requests(requests: "pd.Series", arg_name: str = "request") -> None:
+    import pandas as pd
+
+    if not isinstance(requests, pd.Series):
+        raise PySparkTypeError(
+            errorClass="NOT_EXPECTED_TYPE",
+            messageParameters={
+                "arg_name": arg_name,
+                "expected_type": "pandas.Series",
+                "arg_type": type(requests).__name__,
+            },
+        )
+    for value in requests:
+        if isinstance(value, str) or (pd.api.types.is_scalar(value) and pd.isna(value)):
+            continue
+        raise PySparkTypeError(
+            errorClass="NOT_EXPECTED_TYPE",
+            messageParameters={
+                "arg_name": arg_name,
+                "expected_type": "str",
+                "arg_type": type(value).__name__,
+            },
+        )
+
+
 @contextmanager
 def _query_session(
     endpoint: _ModelEndpoint,
@@ -422,20 +459,15 @@ def _query_session(
     local = threading.local()
     clients: list[Union[_ConverseClient, _ChatCompletionsClient]] = []
     lock = threading.Lock()
-    factory = _ConverseClient if endpoint.provider == "bedrock" else _ChatCompletionsClient
+    factory: Callable[[_ModelEndpoint], Union[_ConverseClient, _ChatCompletionsClient]]
+    if endpoint.provider == "bedrock":
+        factory = _ConverseClient
+    else:
+        factory = _ChatCompletionsClient
 
     def invoke(request: Any) -> Optional[str]:
         if pd.api.types.is_scalar(request) and pd.isna(request):
             return None
-        if not isinstance(request, str):
-            raise PySparkTypeError(
-                errorClass="NOT_EXPECTED_TYPE",
-                messageParameters={
-                    "arg_name": "request",
-                    "expected_type": "str",
-                    "arg_type": type(request).__name__,
-                },
-            )
         if not hasattr(local, "client"):
             local.client = factory(endpoint)
             with lock:
@@ -451,6 +483,7 @@ def _query_session(
         with ThreadPoolExecutor(max_workers=endpoint.max_concurrency) as pool:
 
             def query(requests: "pd.Series") -> "pd.Series":
+                _validate_requests(requests)
                 # Chunk submission as well as execution to bound outstanding work.
                 rows = iter(requests)
                 values: list[Optional[str]] = []

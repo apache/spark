@@ -26,6 +26,7 @@ from pyspark.sql._ai_client import (
     _query_batches,
     _query_session,
     _validate_non_empty_string,
+    _validate_requests,
 )
 from pyspark.sql.column import Column
 
@@ -267,14 +268,28 @@ def register_sql_function(
 
         with ExitStack() as stack:
             queries: Dict[str, Callable[[pd.Series], pd.Series]] = {}
-            for aliases, requests in batches:
-                answers = pd.Series(None, index=requests.index, dtype="object")
-                for alias in aliases.unique():
-                    if not isinstance(alias, str) or alias not in registry:
+            for batch in batches:
+                if not isinstance(batch, tuple) or len(batch) != 2:
+                    raise PySparkValueError(
+                        errorClass="AI_QUERY_WRONG_NUM_ARGUMENTS",
+                        messageParameters={
+                            "function_name": name,
+                            "num_args": str(len(batch) if isinstance(batch, tuple) else 1),
+                        },
+                    )
+                aliases, requests = batch
+                _validate_requests(requests)
+                _validate_requests(aliases, arg_name="endpoint")
+                names = aliases.dropna().unique()
+                for alias in names:
+                    if alias not in registry:
+                        display_alias = alias if len(alias) <= 100 else alias[:100] + "..."
                         raise PySparkValueError(
                             errorClass="AI_QUERY_ENDPOINT_NOT_REGISTERED",
-                            messageParameters={"endpoint": str(alias)},
+                            messageParameters={"endpoint": display_alias},
                         )
+                answers = pd.Series([None] * len(requests), index=requests.index, dtype="object")
+                for alias in names:
                     if alias not in queries:
                         queries[alias] = stack.enter_context(
                             _query_session(registry[alias], on_error=on_error)

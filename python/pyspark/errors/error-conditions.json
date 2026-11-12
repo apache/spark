@@ -75,6 +75,12 @@
     ],
     "sqlState": "22023"
   },
+  "AI_QUERY_WRONG_NUM_ARGUMENTS": {
+    "message": [
+      "SQL function `<function_name>` requires 2 arguments (endpoint, request), but received <num_args>."
+    ],
+    "sqlState": "42605"
+  },
   "APPLICATION_NAME_NOT_SET": {
     "message": [
       "An application name must be set in your configuration."
