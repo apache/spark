@@ -121,6 +121,9 @@ class MiscExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
 
   test("PrintToStderr") {
     val inputExpr = Literal(1)
+    assert(!PrintToStderr(inputExpr).foldable)
+    assert(!PrintToStderr(inputExpr).deterministic)
+
     val systemErr = System.err
 
     val (outputEval, outputCodegen) = try {
@@ -140,6 +143,83 @@ class MiscExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
 
     assert(outputCodegen.contains(s"Result of $inputExpr is 1"))
     assert(outputEval.contains(s"Result of $inputExpr is 1"))
+  }
+
+  // Constant folding must retain the marker used by dynamic partition pruning.
+  test("DynamicPruningExpression is not foldable") {
+    assert(!DynamicPruningExpression(Literal.TrueLiteral).foldable)
+  }
+
+  // Determinism must propagate to the executable replacement before constant folding.
+  test("AesEncrypt determinism reflects whether it generates an IV") {
+    val randomIvExpression = new AesEncrypt(Literal("Spark"), Literal("0000111122223333"))
+    assert(!randomIvExpression.deterministic)
+    assert(!randomIvExpression.replacement.deterministic)
+    assert(!randomIvExpression.replacement.foldable)
+
+    val explicitIvExpression = new AesEncrypt(
+      Literal("Spark"),
+      Literal("0000111122223333"),
+      Literal("GCM"),
+      Literal("DEFAULT"),
+      Unhex(Literal("000000000000000000000000")))
+    assert(explicitIvExpression.deterministic)
+    assert(explicitIvExpression.replacement.deterministic)
+    assert(explicitIvExpression.replacement.foldable)
+
+    val ecbExpression = new AesEncrypt(
+      Literal("Spark"),
+      Literal("0000111122223333"),
+      Literal("ECB"),
+      Literal("PKCS"))
+    assert(ecbExpression.deterministic)
+    assert(ecbExpression.replacement.deterministic)
+    assert(ecbExpression.replacement.foldable)
+
+    val nondeterministicKeyExpression = new AesEncrypt(
+      Literal("Spark"),
+      Uuid(Some(0)),
+      Literal("ECB"),
+      Literal("PKCS"))
+    assert(!nondeterministicKeyExpression.deterministic)
+    assert(!nondeterministicKeyExpression.replacement.deterministic)
+    assert(!nondeterministicKeyExpression.replacement.foldable)
+  }
+
+  // A fixed IV cannot make a call deterministic when another argument varies.
+  test("AesEncrypt remains nondeterministic for a nondeterministic argument in any position") {
+    val arguments = Seq(
+      Literal(Array[Byte](1)),
+      Literal("0000111122223333".getBytes("UTF-8")),
+      Literal("GCM"),
+      Literal("DEFAULT"),
+      Literal(Array.fill[Byte](12)(0)),
+      Literal(Array.emptyByteArray))
+    arguments.indices.foreach { index =>
+      val nondeterministic = Cast(Uuid(Some(0)), arguments(index).dataType)
+      val expression = AesEncrypt(
+        arguments(0), arguments(1), arguments(2), arguments(3), arguments(4), arguments(5))
+        .withNewChildren(arguments.updated(index, nondeterministic)).asInstanceOf[AesEncrypt]
+      assert(!expression.deterministic)
+      assert(!expression.replacement.deterministic)
+      assert(!expression.replacement.foldable)
+    }
+  }
+
+  // Unknown or unusable IV values must not enable constant folding.
+  test("AesEncrypt treats empty, null, per-row and unevaluable IVs conservatively") {
+    Seq(
+      Literal(Array.emptyByteArray),
+      Literal.create(null, BinaryType),
+      BoundReference(0, BinaryType, nullable = true),
+      Unhex(Literal("invalid"), failOnError = true)
+    ).foreach { iv =>
+      val expression = new AesEncrypt(
+        Literal("Spark"), Literal("0000111122223333"), Literal("GCM"), Literal("DEFAULT"), iv)
+      assert(!expression.deterministic)
+      assert(!expression.replacement.deterministic)
+      assert(!expression.replacement.foldable)
+    }
   }
 
   test("Hmac") {

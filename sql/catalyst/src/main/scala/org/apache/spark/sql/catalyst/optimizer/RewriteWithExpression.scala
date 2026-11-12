@@ -100,7 +100,7 @@ object RewriteWithExpression extends Rule[LogicalPlan] {
       // (see `canSubstitute`), and the copies compound with nesting, as with
       // `spark.sql.alwaysInlineCommonExpr`. Each copy is evaluated wherever the expression is: a
       // CHECK predicate stored by ALTER TABLE at every later write, and a `Call` argument when it
-      // is folded, so an impure foldable such as `aes_encrypt` over literals is folded per copy.
+      // is folded, so an impure foldable invocation can be evaluated separately for each copy.
       // Analysis lets no command but `CreateVariable` hold a nondeterministic expression; a `Call`
       // can hold one, as `InvokeProcedures` optimizes it before analysis checks it, and then
       // rejects it as not foldable. A nondeterministic definition read more than once keeps its
@@ -195,8 +195,8 @@ object RewriteWithExpression extends Rule[LogicalPlan] {
   /**
    * Whether a copy of `e` at every reference always evaluates to the same value. `foldable` is not
    * enough: `current_timestamp()` re-reads the clock, a TIME -> TIMESTAMP cast derives the current
-   * date, `aes_encrypt` is a foldable `StaticInvoke` with a random IV, and a Hive UDF is foldable
-   * on a user-declared determinism flag.
+   * date, and a Hive UDF can be foldable on a user-declared determinism flag even when it has
+   * observable side effects.
    */
   private def isSafeToDuplicate(
       e: Expression,
@@ -265,14 +265,14 @@ object RewriteWithExpression extends Rule[LogicalPlan] {
    * `SparkOptimizer` extracts it in a later batch. So determinism is asked separately.
    *
    * It is asked of the expression, which is weaker than `isSafeToDuplicate` above: `isCheap` admits
-   * anything foldable and `InvokeLike.foldable` implies `deterministic`, so an impure foldable such
-   * as an `aes_encrypt` with no IV still gets substituted and folded per copy. That predates this
+   * anything foldable and `InvokeLike.foldable` implies `deterministic`, so an impure foldable
+   * invocation can still get substituted and folded per copy. That predates this
    * rule keeping a `With` -- the condition it replaced was no stricter -- and belongs either on
    * those expressions or in one purity predicate shared with `isSafeToDuplicate`.
    *
    * Without `requireCheap`, as for a command's expressions (`inlineCommandWiths`), the cost is not
-   * asked, so the gap widens to an impure definition that reads a column, such as an
-   * `aes_encrypt` over one.
+   * asked, so the gap widens to an impure definition that reads a column, such as a Hive UDF
+   * with observable side effects.
    */
   private def canSubstitute(
       child: Expression,

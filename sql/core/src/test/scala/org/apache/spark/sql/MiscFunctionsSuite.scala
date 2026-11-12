@@ -18,7 +18,8 @@
 package org.apache.spark.sql
 
 import org.apache.spark.{SPARK_REVISION, SPARK_VERSION_SHORT}
-import org.apache.spark.sql.catalyst.expressions.Hex
+import org.apache.spark.sql.catalyst.expressions.{AesEncrypt, Hex}
+import org.apache.spark.sql.catalyst.optimizer.ReplaceExpressions
 import org.apache.spark.sql.catalyst.parser.ParseException
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.internal.SQLConf
@@ -134,6 +135,156 @@ class MiscFunctionsSuite extends SharedSparkSession {
       df3.select(aes_decrypt(unbase64(base64(
         aes_encrypt(col("input"), col("key")))), col("key")).cast(StringType)),
       Seq(Row("Spark")))
+  }
+
+  // Constant wrapper IVs must remain valid wherever deterministic AES was accepted.
+  test("SPARK-59768: fixed AES wrapper arguments work in joins and column defaults") {
+    for {
+      (mode, length) <- Seq("GCM" -> 12, "CBC" -> 16)
+      iv <- Seq(
+        s"to_binary('${"00" * length}', 'hex')",
+        s"encode('${"0" * length}', 'utf-8')")
+    } {
+      val encrypt = s"aes_encrypt('Spark', '0000111122223333', '$mode', 'DEFAULT', $iv)"
+      checkAnswer(sql(s"""SELECT l.v FROM VALUES ('Spark') l(v)
+                         |JOIN VALUES ('Spark') r(v)
+                         |ON aes_encrypt(l.v, '0000111122223333', '$mode', 'DEFAULT', $iv) =
+                         |   aes_encrypt(r.v, '0000111122223333', '$mode', 'DEFAULT', $iv)
+                         |""".stripMargin), Row("Spark"))
+      withTable("aes_defaults") {
+        sql(s"CREATE TABLE aes_defaults(id INT, enc BINARY DEFAULT $encrypt) USING parquet")
+        sql("INSERT INTO aes_defaults(id) VALUES (1)")
+        sql("INSERT INTO aes_defaults VALUES (2, DEFAULT)")
+        checkAnswer(sql(s"SELECT enc = $encrypt FROM aes_defaults"), Seq(Row(true), Row(true)))
+      }
+    }
+  }
+
+  // A session variable supplies one fixed IV throughout analysis and execution.
+  test("SPARK-59768: session variables supply fixed AES IVs") {
+    Seq("GCM" -> 12, "CBC" -> 16).foreach { case (mode, length) =>
+      sql(s"DECLARE VARIABLE aes_iv BINARY DEFAULT unhex('${"00" * length}')")
+      try {
+        val encrypt = s"aes_encrypt('Spark', '0000111122223333', '$mode', 'DEFAULT', aes_iv)"
+        val analyzed = sql(s"SELECT $encrypt").queryExecution.analyzed
+        val aes = analyzed.expressions.flatMap(_.collect { case a: AesEncrypt => a }).head
+        assert(aes.deterministic)
+        val replacement = ReplaceExpressions.replace(aes)
+        assert(replacement.deterministic && replacement.foldable)
+        checkAnswer(sql(s"""SELECT l.v FROM VALUES ('Spark') l(v)
+                           |JOIN VALUES ('Spark') r(v)
+                           |ON aes_encrypt(l.v, '0000111122223333', '$mode', 'DEFAULT', aes_iv) =
+                           |   aes_encrypt(r.v, '0000111122223333', '$mode', 'DEFAULT', aes_iv)
+                           |""".stripMargin), Row("Spark"))
+      } finally {
+        sql("DROP TEMPORARY VARIABLE aes_iv")
+      }
+    }
+  }
+
+  // Invalid arguments in skipped branches must never reach AES evaluation.
+  test("SPARK-59768: AES guards still skip invalid keys and IVs after extraction") {
+    val expressions = Seq(
+      "CASE WHEN octet_length(k) = 16 THEN aes_encrypt(v, k) END",
+      "if(octet_length(k) = 16, aes_encrypt(v, k), NULL)",
+      "coalesce(if(octet_length(k) <> 16, X'01', NULL), aes_encrypt(v, k))",
+      "octet_length(k) = 16 AND aes_encrypt(v, k) IS NOT NULL",
+      "octet_length(k) <> 16 OR aes_encrypt(v, k) IS NOT NULL",
+      "CASE WHEN octet_length(iv) = 12 " +
+        "THEN aes_encrypt(v, '0000111122223333', 'GCM', 'DEFAULT', iv) END")
+    val input = "VALUES ('Spark', '0000111122223333', '000000000000'), " +
+      "('SQL', 'short', 'short') AS t(v, k, iv)"
+    expressions.foreach { expression =>
+      val ordered = sql(s"SELECT v FROM $input ORDER BY $expression").collect().toSeq
+      assert(ordered.sortBy(_.getString(0)) == Seq(Row("SQL"), Row("Spark")))
+      checkAnswer(sql(s"SELECT v FROM $input DISTRIBUTE BY $expression"),
+        Seq(Row("Spark"), Row("SQL")))
+      checkAnswer(sql(s"SELECT sum(n) FROM (" +
+        s"SELECT count(*) AS n FROM $input GROUP BY $expression)"), Row(2L))
+    }
+  }
+
+  // Extracting TryEval with AES preserves both interpreted and generated exception handling.
+  test("SPARK-59768: try functions catch AES errors after extraction") {
+    Seq("true", "false").foreach { codegen =>
+      withSQLConf(SQLConf.WHOLESTAGE_CODEGEN_ENABLED.key -> codegen) {
+        Seq(
+          "try_aes_decrypt(aes_encrypt(v, k), k)",
+          "try_to_binary(hex(aes_encrypt(v, k)), 'hex')"
+        ).foreach { expression =>
+          val input = "VALUES ('Spark', '0000111122223333'), ('SQL', 'short') AS t(v, k)"
+          val ordered = sql(s"SELECT v FROM $input ORDER BY $expression").collect().toSeq
+          assert(ordered.sortBy(_.getString(0)) == Seq(Row("SQL"), Row("Spark")))
+          checkAnswer(sql(s"SELECT v FROM $input DISTRIBUTE BY $expression"),
+            Seq(Row("SQL"), Row("Spark")))
+          checkAnswer(sql(s"SELECT sum(n) FROM (" +
+            s"SELECT count(*) AS n FROM $input GROUP BY $expression)"), Row(2L))
+        }
+      }
+    }
+  }
+
+  // Predicate subqueries must move with wrappers and guards accepted by GROUP BY.
+  test("SPARK-59768: AES grouping retains predicate subqueries and conditional guards") {
+    val input = "VALUES ('Spark', '0000111122223333'), ('SQL', 'short') AS t(v, k)"
+    val predicates = Seq(
+      "k IN (SELECT a FROM VALUES ('0000111122223333') AS s(a))",
+      "EXISTS (SELECT 1 WHERE t.k = '0000111122223333')")
+    for {
+      singlePass <- Seq("true", "false")
+      predicate <- predicates
+    } {
+      withSQLConf(SQLConf.ANALYZER_SINGLE_PASS_RESOLVER_ENABLED.key -> singlePass) {
+        Seq(
+          s"CASE WHEN $predicate THEN aes_encrypt(v, k) END",
+          s"if($predicate, aes_encrypt(v, k), NULL)",
+          s"coalesce(if(NOT ($predicate), X'01', NULL), aes_encrypt(v, k))",
+          s"$predicate AND aes_encrypt(v, k) IS NOT NULL",
+          s"NOT ($predicate) OR aes_encrypt(v, k) IS NOT NULL",
+          s"aes_encrypt(CAST($predicate AS STRING), '0000111122223333')"
+        ).foreach { expression =>
+          // The single-pass resolver does not support the harness's RDD deserialization plan.
+          QueryTest.checkAnswer(
+            sql(s"SELECT sum(n) FROM (" +
+              s"SELECT count(*) AS n FROM $input GROUP BY $expression)"),
+            Seq(Row(2L)),
+            checkToRDD = false)
+        }
+      }
+    }
+    withUserDefinedFunction("nd_predicate" -> true) {
+      spark.udf.register("nd_predicate", udf((value: Boolean) => value).asNondeterministic())
+      predicates.foreach { predicate =>
+        checkAnswer(sql(s"SELECT sum(n) FROM (" +
+          s"SELECT count(*) AS n FROM $input GROUP BY nd_predicate($predicate))"), Row(2L))
+      }
+    }
+    withSQLConf(
+      SQLConf.ALLOW_SUBQUERY_EXPRESSIONS_IN_LAMBDAS_AND_HIGHER_ORDER_FUNCTIONS.key -> "true") {
+      val expression = "transform(array(CAST(k IN (SELECT a FROM VALUES " +
+        "('0000111122223333') AS s(a)) AS STRING)), " +
+        "x -> aes_encrypt(x, '0000111122223333'))"
+      checkAnswer(sql(s"SELECT sum(n) FROM (" +
+        s"SELECT count(*) AS n FROM $input GROUP BY $expression)"), Row(2L))
+    }
+  }
+
+  // Operator extraction must keep each AES call inside the lambda that binds its input.
+  test("SPARK-59768: lambda-bound AES evaluates inside the higher-order function") {
+    val expression = "transform(array(v), x -> aes_encrypt(x, '0000111122223333'))"
+    val input = "VALUES ('Spark'), ('SQL') AS t(v)"
+    val ordered = sql(s"SELECT v FROM $input ORDER BY $expression").collect().toSeq
+    assert(ordered.sortBy(_.getString(0)) == Seq(Row("SQL"), Row("Spark")))
+    checkAnswer(sql(s"SELECT v FROM $input DISTRIBUTE BY $expression"),
+      Seq(Row("Spark"), Row("SQL")))
+    checkAnswer(sql(s"SELECT sum(n) FROM (" +
+      s"SELECT count(*) AS n FROM $input GROUP BY $expression)"), Row(2L))
+  }
+
+  // Constant folding must not reuse one randomly generated ciphertext for every row.
+  test("SPARK-59768: constant AES inputs generate a fresh IV for every row") {
+    val encrypted = spark.range(32).selectExpr("aes_encrypt('Spark', '0000111122223333')")
+    assert(encrypted.distinct().count() == 32)
   }
 
   test("aes_decrypt") {
