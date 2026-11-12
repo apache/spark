@@ -299,6 +299,10 @@ object StreamingSymmetricHashJoinHelper extends Logging {
       otherInputAttributes: Seq[Attribute],
       condition: Option[Expression],
       eventWatermark: Option[Long]): Option[(Attribute, Long)] = {
+    // TODO(SPARK-61348): the analysis check admits a range bound on a column that is not
+    //   TIMESTAMP, which no candidate below takes. A left, right or full outer join whose
+    //   preserved side is bounded only through such a column cast to TIMESTAMP then keeps its
+    //   unmatched rows in state and never emits them. SPARK-61348 rejects that shape at analysis.
     val eventTime = inputAttributes.find(_.metadata.contains(delayKey))
     // First try the watermarked column. If it has no inferable bound, try the other timestamp
     // columns in input schema order and use the first with a bound. This makes the indexed column
@@ -373,16 +377,18 @@ object StreamingSymmetricHashJoinHelper extends Logging {
   }
 
   /**
-   * Whether every ordering conjunct compares the two inputs' TIMESTAMP event times, each only
-   * cast or offset by constants (see [[StreamingJoinHelper.isConstantOffsetOf]]), and each event
-   * time either gets a range bound or gets none and is not in `consumedSides`. Older versions
-   * and this one solve such conjuncts the same way for columns with their own watermark, and
-   * older versions solved every column of an input but then found bounds only in the same
-   * conjuncts, so they derived the same value predicates, scan starts and V4 index columns, and
-   * neither evicts an input that gets no bound. Old V4 stored a null event time at timestamp 0
-   * under the row's own key; both versions scan that entry the same way. No equality key may
-   * use an event time: older versions evicted such keys at the unshifted watermark. Time windows
-   * are excluded: older versions derived an ordering bound for them that this version removes.
+   * Whether every ordering conjunct compares the two inputs' TIMESTAMP event times, each only cast
+   * or offset by constants (see [[StreamingJoinHelper.isConstantOffsetOf]]), or gives no bound to
+   * either input in either version, and each event time either gets a range bound or gets none and
+   * is not in `consumedSides`. Each half of a BETWEEN counts as one conjunct, as the solver reads
+   * it. Older versions and this one solve such conjuncts the same way for columns with their own
+   * watermark, and older versions solved every column of an input but then found bounds only in the
+   * same conjuncts, so they derived the same value predicates, scan starts and V4 index columns,
+   * and neither evicts an input that gets no bound. Old V4 stored a null event time at timestamp 0
+   * under the row's own key; both versions scan that entry the same way. No equality key may use an
+   * event time: older versions evicted such keys at the unshifted watermark. Time windows are
+   * excluded: this version still derives the older ordering bound for them, but SPARK-61348 later
+   * removes it for windows shorter than the other input's.
    */
   private def isOwnEventTimeIntervalJoin(
       leftAttributes: Seq[Attribute],
@@ -404,14 +410,31 @@ object StreamingSymmetricHashJoinHelper extends Logging {
         case (Some(x), Some(y)) => !x.semanticEquals(y)
         case _ => false
       }
+    // Whether the comparison references both inputs and neither version derives a bound for
+    // either input from it, as for one between columns of both inputs that have no watermark,
+    // or one with a month interval, which the solver cannot read. Older versions solved every
+    // column of an input against the other input; this version solves one candidate column at a
+    // time. A comparison within one input stays excluded: older versions read some of them, such
+    // as one with a numeric constant, as a bound.
+    def givesNoBound(comparison: Expression): Boolean = {
+      val inputs = Seq(leftAttributes -> rightAttributes, rightAttributes -> leftAttributes)
+      inputs.forall { case (input, _) =>
+        comparison.references.exists(a => input.exists(_.semanticEquals(a)))
+      } && inputs.forall { case (input, other) =>
+        StreamingJoinHelper.getStateValueWatermark(AttributeSet(input), AttributeSet(other),
+          Some(comparison), Some(1000000L)).isEmpty &&
+          getStateValueWatermarkForInput(input, other, Some(comparison), Some(1000000L)).isEmpty
+      }
+    }
     // The solver reads bounds only from these conjunct shapes; other conjuncts give no bound in
     // either version.
     val conditionIsInterval = condition.toSeq.flatMap(conjuncts).forall {
       case c @ (_: LessThan | _: LessThanOrEqual | _: GreaterThan | _: GreaterThanOrEqual) =>
         val comparison = c.asInstanceOf[BinaryComparison]
-        comparesInputs(comparison.left, comparison.right)
+        comparesInputs(comparison.left, comparison.right) || givesNoBound(comparison)
       case Between(input, lower, upper, _) =>
-        comparesInputs(input, lower) && comparesInputs(input, upper)
+        (comparesInputs(input, lower) || givesNoBound(GreaterThanOrEqual(input, lower))) &&
+          (comparesInputs(input, upper) || givesNoBound(LessThanOrEqual(input, upper)))
       case _ => true
     }
     val keysUseEventTime = (leftKeys ++ rightKeys).exists(
@@ -453,9 +476,9 @@ object StreamingSymmetricHashJoinHelper extends Logging {
    * part, and with no cast other than one from timestamp to timestamp. A day part counts only in
    * a time zone with a fixed offset, such as UTC, where Spark adds a day as 24 hours, as the
    * solver counts it. Any other conjunct can give a cutoff that is too high, so it gives none
-   * here: for example a bound on another right column, an interval with whole days in a time
-   * zone with daylight saving time, or a truncating cast.
-   * TODO(SPARK-61344, SPARK-61381): derive exact cutoffs for those conditions too.
+   * here: for example an interval with whole days in a time zone with daylight saving time, or a
+   * truncating cast.
+   * TODO(SPARK-61381): derive exact cutoffs for those conditions too.
    */
   def getLeftSemiExactRightCutoffs(
       leftAttributes: Seq[Attribute],

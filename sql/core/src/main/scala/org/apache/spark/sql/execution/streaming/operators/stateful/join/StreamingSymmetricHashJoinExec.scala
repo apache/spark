@@ -26,7 +26,7 @@ import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.analysis.StreamingJoinHelper
 import org.apache.spark.sql.catalyst.analysis.WidenStatefulOpNullability
-import org.apache.spark.sql.catalyst.expressions.{Attribute, AttributeSet, BoundReference, Expression, GenericInternalRow, IsNull, JoinedRow, Literal, Predicate, UnsafeProjection, UnsafeRow}
+import org.apache.spark.sql.catalyst.expressions.{Attribute, AttributeSet, BoundReference, Expression, GenericInternalRow, IsNull, JoinedRow, LessThanOrEqual, Literal, Predicate, UnsafeProjection, UnsafeRow}
 import org.apache.spark.sql.catalyst.plans._
 import org.apache.spark.sql.catalyst.plans.logical.EventTimeWatermark
 import org.apache.spark.sql.catalyst.plans.physical._
@@ -738,12 +738,23 @@ case class StreamingSymmetricHashJoinExec(
           // Only a NULL key fails equality. A struct key with a NULL field can still be equal.
           val ordinal = expr.collectFirst { case b: BoundReference => b.ordinal }.get
           (key, _) => key.isNullAt(ordinal)
-        case Some(JoinStateValueWatermarkPredicate(expr, _, _)) =>
-          val isNull = Predicate.create(IsNull(expr), inputAttributes)
+        case Some(JoinStateValueWatermarkPredicate(LessThanOrEqual(column, _), _, _)) =>
+          // Test the compared column, not the predicate: the predicate holds the cutoff, which
+          // changes every batch and would generate and compile new code each time.
+          val isNull = Predicate.create(IsNull(column), inputAttributes)
           (_, row) => isNull.eval(row)
-        case None =>
+        case _ =>
           (_, _) => false
       }
+
+    // V1 to V3 eviction tests every stored row each batch, so it also removes a row whose
+    // eviction column is NULL. This version never stores such a row, but an older version did,
+    // and the row can never match. isEvictionColumnNull reads only the key for a key predicate
+    // and only the row for a value predicate.
+    private[this] val stateKeyEvictionFunc: UnsafeRow => Boolean =
+      key => stateKeyWatermarkPredicateFunc(key) || isEvictionColumnNull(key, null)
+    private[this] val stateValueEvictionFunc: UnsafeRow => Boolean =
+      row => stateValueWatermarkPredicateFunc(row) || isEvictionColumnNull(null, row)
 
     private[this] var updatedStateRowsCount = 0
     private[this] var numRemovedFromOtherSideDuringJoinCount = 0
@@ -984,10 +995,9 @@ case class StreamingSymmetricHashJoinExec(
         //   added, and the eviction at the end of the batch removes it, unless a cutoff at the
         //   late-events watermark that is exact today shows no left row passing late filtering
         //   can match it (see getLeftSemiExactRightCutoffs). The cutoff derivation gives no exact
-        //   cutoff otherwise: it can apply a bound on another right column to the right event
-        //   time, it counts a day as 24 hours, which is wrong in a time zone with daylight saving
-        //   time, and it reads truncating casts as exact.
-        //   TODO(SPARK-61344, SPARK-61381): skip such inputs too once the cutoff is exact.
+        //   cutoff otherwise: it counts a day as 24 hours, which is wrong in a time zone with
+        //   daylight saving time, and it reads truncating casts as exact.
+        //   TODO(SPARK-61381): skip such inputs too once the cutoff is exact.
         val isLeftSemiWithMatch = joinType == LeftSemi && joinSide == LeftSide && iteratorNotEmpty
         val shouldAddToState = if (isLeftSemiWithMatch) {
           false
@@ -1035,7 +1045,7 @@ case class StreamingSymmetricHashJoinExec(
         case Some(JoinStateKeyWatermarkPredicate(_, stateWatermark, prevStateWatermark)) =>
           joinStateManager match {
             case s: SupportsEvictByCondition =>
-              s.evictByKeyCondition(stateKeyWatermarkPredicateFunc)
+              s.evictByKeyCondition(stateKeyEvictionFunc)
 
             case s: SupportsEvictByTimestamp =>
               s.evictByTimestamp(
@@ -1045,7 +1055,7 @@ case class StreamingSymmetricHashJoinExec(
         case Some(JoinStateValueWatermarkPredicate(_, stateWatermark, prevStateWatermark)) =>
           joinStateManager match {
             case s: SupportsEvictByCondition =>
-              s.evictByValueCondition(stateValueWatermarkPredicateFunc)
+              s.evictByValueCondition(stateValueEvictionFunc)
 
             case s: SupportsEvictByTimestamp =>
               s.evictByTimestamp(
@@ -1072,7 +1082,7 @@ case class StreamingSymmetricHashJoinExec(
         case Some(JoinStateKeyWatermarkPredicate(_, stateWatermark, prevStateWatermark)) =>
           joinStateManager match {
             case s: SupportsEvictByCondition =>
-              s.evictAndReturnByKeyCondition(stateKeyWatermarkPredicateFunc)
+              s.evictAndReturnByKeyCondition(stateKeyEvictionFunc)
 
             case s: SupportsEvictByTimestamp =>
               s.evictAndReturnByTimestamp(
@@ -1082,7 +1092,7 @@ case class StreamingSymmetricHashJoinExec(
         case Some(JoinStateValueWatermarkPredicate(_, stateWatermark, prevStateWatermark)) =>
           joinStateManager match {
             case s: SupportsEvictByCondition =>
-              s.evictAndReturnByValueCondition(stateValueWatermarkPredicateFunc)
+              s.evictAndReturnByValueCondition(stateValueEvictionFunc)
 
             case s: SupportsEvictByTimestamp =>
               s.evictAndReturnByTimestamp(

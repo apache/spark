@@ -2088,6 +2088,30 @@ abstract class StreamingOuterJoinBase extends StreamingJoinSuite {
     }
   }
 
+  test("left-outer: a row whose watermarked equality key is null is emitted on arrival") {
+    val leftInput = MemoryStream[(Int, Int)]
+    val rightInput = MemoryStream[(Int, Int)]
+    val left = leftInput.toDF().toDF("leftKey", "time")
+      .select($"leftKey", when($"time" >= 0, timestamp_seconds($"time")) as "leftTime")
+      .withWatermark("leftTime", "0 seconds")
+    val right = rightInput.toDF().toDF("rightKey", "time")
+      .select($"rightKey", timestamp_seconds($"time") as "rightTime")
+      .withWatermark("rightTime", "0 seconds")
+    val joined = left.join(right, expr("leftKey = rightKey AND leftTime = rightTime"),
+      "left_outer")
+      .select($"leftKey", $"leftTime".cast("int"), $"rightKey", $"rightTime".cast("int"))
+
+    withSQLConf(SQLConf.STREAMING_NO_DATA_MICRO_BATCHES_ENABLED.key -> "false") {
+      testStream(joined)(
+        // The state is evicted on the equality key leftTime, so a NULL key would never be
+        // evicted, and the row can never match.
+        MultiAddData(leftInput, (1, -1), (2, 10))(rightInput, (2, 10)),
+        CheckNewAnswer(Row(2, 10, 2, 10), Row(1, null, null, null)),
+        assertNumStateRows(total = 2, updated = 2)
+      )
+    }
+  }
+
   test("SPARK-38684: outer join works correctly even if processing input rows and " +
     "evicting state rows for same grouping key happens in the same micro-batch") {
 

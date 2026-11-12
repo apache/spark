@@ -142,7 +142,9 @@ class StreamingJoinOutputWatermarkSuite extends StreamTest {
 
   test("output watermark follows the bounded input when only its event time is used") {
     val (impressionInput, clickInput, joined) = oneDirectionalJoin()
-    // Impressions are evicted below the click watermark (90 seconds) less 10 seconds and 1 ms.
+    // The eviction watermark is 90 seconds: the impression input (100 seconds less its 10-second
+    // delay) holds back the min-policy watermark, while the click input's own watermark is 140
+    // seconds by then. The output watermark is that less 10 seconds and 1 ms, 79.999 seconds.
     runOneDirectionalJoin(impressionInput, clickInput,
       windowCounts(joined.select($"impressionTime"), "impressionTime"),
       Seq(Row(0L, 1L), Row(10L, 1L), Row(20L, 1L)), Some(Set(LeftSide)), 79999L)
@@ -159,9 +161,9 @@ class StreamingJoinOutputWatermarkSuite extends StreamTest {
   }
 
   // Each recognized path must carry the operator's event-time column to the join input it comes
-  // from. Over impressionTime the join narrows to the bounded input and emits what the base
-  // branch emits; over clickTime it holds back at 0. Mapping either column to the other input
-  // fails the side, watermark or late-row assertion.
+  // from. Over impressionTime the join narrows to the bounded input, so its output watermark is
+  // that input's state watermark, 79.999 seconds by default; over clickTime it holds back at 0.
+  // Mapping either column to the other input fails the side, watermark or late-row assertion.
   private def testTracedConsumer(
       path: String,
       impressionRows: Seq[Row],
