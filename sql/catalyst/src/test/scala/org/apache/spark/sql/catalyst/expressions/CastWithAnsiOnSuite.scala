@@ -94,6 +94,21 @@ class CastWithAnsiOnSuite extends CastSuiteBase with QueryErrorsBase {
     }
   }
 
+  test("SPARK-61572: cast wide DECIMAL to integral truncates the exact value") {
+    val wide = Decimal(BigDecimal("0.999999999999999999"), 38, 18)
+    val qty = Decimal(BigDecimal("999999.999999999999"), 30, 12)
+    // Default: the exact value is truncated toward zero.
+    checkEvaluation(cast(wide, IntegerType), 0)
+    checkEvaluation(cast(wide, ShortType), 0.toShort)
+    checkEvaluation(cast(wide, ByteType), 0.toByte)
+    checkEvaluation(cast(qty, IntegerType), 999999)
+    // Legacy: the value goes through a Double first, so 0.999999999999999999 rounds to 1.
+    withSQLConf(SQLConf.LEGACY_CAST_DECIMAL_TO_INTEGRAL_TYPE_VIA_DOUBLE.key -> "true") {
+      checkEvaluation(cast(wide, IntegerType), 1)
+      checkEvaluation(cast(qty, IntegerType), 1000000)
+    }
+  }
+
   test("ANSI mode: Throw exception on casting out-of-range value to byte type") {
     testIntMaxAndMin(ByteType)
     Seq(Byte.MaxValue + 1, Byte.MinValue - 1).foreach { value =>
