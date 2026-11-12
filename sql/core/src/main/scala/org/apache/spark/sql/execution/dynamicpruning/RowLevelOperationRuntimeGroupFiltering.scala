@@ -22,7 +22,7 @@ import org.apache.spark.sql.catalyst.expressions.{Attribute, AttributeMap, Attri
 import org.apache.spark.sql.catalyst.expressions.Literal.TrueLiteral
 import org.apache.spark.sql.catalyst.optimizer.RewritePredicateSubquery
 import org.apache.spark.sql.catalyst.planning.GroupBasedRowLevelOperation
-import org.apache.spark.sql.catalyst.plans.logical.{Aggregate, Filter, LogicalPlan}
+import org.apache.spark.sql.catalyst.plans.logical.{Aggregate, Filter, LogicalPlan, Project}
 import org.apache.spark.sql.catalyst.rules.Rule
 import org.apache.spark.sql.connector.read.SupportsRuntimeV2Filtering
 import org.apache.spark.sql.connector.write.RowLevelOperation.Command
@@ -63,7 +63,8 @@ class RowLevelOperationRuntimeGroupFiltering(optimizeSubqueries: Rule[LogicalPla
           val relation = r.relation.copy(table = originalTable)
           val tableAttrs = replaceData.table.output
           val command = replaceData.operation.command
-          val matchingRowsPlan = buildMatchingRowsPlan(relation, cond, tableAttrs, command)
+          val matchingRowsPlan =
+            buildMatchingRowsPlan(replaceData.query, relation, cond, tableAttrs, command)
 
           val filterAttrs = scan.filterAttributes.toImmutableArraySeq
           val buildKeys = V2ExpressionUtils.resolveRefs[Attribute](filterAttrs, matchingRowsPlan)
@@ -78,6 +79,7 @@ class RowLevelOperationRuntimeGroupFiltering(optimizeSubqueries: Rule[LogicalPla
   }
 
   private def buildMatchingRowsPlan(
+      query: LogicalPlan,
       relation: DataSourceV2Relation,
       cond: Expression,
       tableAttrs: Seq[Attribute],
@@ -85,7 +87,11 @@ class RowLevelOperationRuntimeGroupFiltering(optimizeSubqueries: Rule[LogicalPla
 
     val matchingRowsPlan = command match {
       case DELETE =>
-        Filter(cond, relation)
+        // the condition may refer to aliases computed on top of the read relation, such as the
+        // CHAR columns padded by ApplyCharTypePadding, which must be replaced by their definitions
+        // mapping them to the relation columns by name would compare the stored values instead
+        val aliasMap = getAliasMap(query.collect { case p: Project => p.projectList }.flatten)
+        Filter(replaceAlias(cond, aliasMap), relation)
 
       case UPDATE =>
         // UPDATEs with subqueries are rewritten using UNION with two identical scan relations
