@@ -204,6 +204,21 @@ class V1TimeTravelCacheSuite extends QueryTest with SharedSparkSession {
     }
   }
 
+  test("write-driven recacheByPath refreshes two live V1 FileIndexes read in one plan tree") {
+    withTempDir { dir =>
+      val rootPath = new Path(dir.toURI)
+      val liveIndex1 = new TestFileIndex(isTimeTravel = false, rootPaths = Seq(rootPath))
+      val liveIndex2 = new TestFileIndex(isTimeTravel = false, rootPaths = Seq(rootPath))
+      assertWriteDrivenRecacheByPathClearsCache(
+        rootPath,
+        Seq("live1" -> liveIndex1, "live2" -> liveIndex2),
+        "SELECT * FROM live1 UNION ALL SELECT * FROM live2")
+
+      assert(liveIndex1.refreshCount === 1)
+      assert(liveIndex2.refreshCount === 1)
+    }
+  }
+
   test("write-driven recacheByPath refreshes a FileIndex shared by two cache entries once") {
     withTempDir { dir =>
       val rootPath = new Path(dir.toURI)
