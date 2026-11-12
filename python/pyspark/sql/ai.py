@@ -17,7 +17,7 @@
 
 """Experimental PySpark functions for remote model inference."""
 
-from typing import TYPE_CHECKING, Dict, Iterator, Optional, cast
+from typing import TYPE_CHECKING, Dict, Iterator, Optional, Tuple, cast
 
 from pyspark.errors import PySparkTypeError, PySparkValueError
 from pyspark.sql._ai_client import (
@@ -33,7 +33,7 @@ if TYPE_CHECKING:
     from pyspark.sql._typing import ColumnOrName
     from pyspark.sql.session import SparkSession
 
-__all__ = ["ai_query", "register_model"]
+__all__ = ["ai_query", "register_model", "register_sql_function"]
 
 
 def _model_registry(session: Optional["SparkSession"]) -> Dict[str, _ModelEndpoint]:
@@ -205,3 +205,75 @@ def ai_query(
         query, returnType=StringType(), functionType=PandasUDFType.SCALAR_ITER
     ).asNondeterministic()
     return query_udf(request)
+
+
+def register_sql_function(name: str = "ai_query", session: Optional["SparkSession"] = None) -> None:
+    """Register ``name`` as a SQL function backed by the same execution path as :func:`ai_query`.
+
+    Lets SQL text call the registered models directly, e.g.
+    ``SELECT ai_query('summarizer', description) FROM documents``. The endpoint can also be
+    a column, so a query can route different rows to different registered models in one call.
+    Reuses the same registry, batching, retries, and provider clients as :func:`ai_query` --
+    SQL and the Column API execute through identical code.
+
+    This takes a snapshot of the currently registered aliases. Registrations made after
+    this call do not affect it; call it again to pick up later registrations.
+
+    Unlike :func:`ai_query`, which validates and resolves the alias when the
+    :class:`~pyspark.sql.Column` is built, before any task runs, a SQL argument is a column
+    value rather than a Python-side parameter: the alias is resolved inside the UDF instead,
+    once per distinct value in each Arrow batch. An unregistered alias therefore only fails
+    once a task actually executes it, not when the query is analyzed.
+
+    .. versionadded:: 4.4.0
+
+    Parameters
+    ----------
+    name : str, optional
+        SQL function name to register. Defaults to ``"ai_query"``.
+    session : :class:`~pyspark.sql.SparkSession`, optional
+        Session that owns both the registration and the snapshot of model aliases it
+        resolves. Defaults to the active or default session.
+
+    Examples
+    --------
+    >>> from pyspark.sql.ai import register_model, register_sql_function
+    >>> register_model("summarizer", "databricks-gpt-oss-20b", provider="databricks")
+    >>> register_sql_function()
+    >>> df = spark.createDataFrame([("A document",)], ["description"])
+    >>> df.createOrReplaceTempView("documents")  # doctest: +SKIP
+    >>> spark.sql(
+    ...     "SELECT ai_query('summarizer', description) FROM documents"
+    ... )  # doctest: +SKIP
+    """
+    from pyspark.sql.functions import PandasUDFType, pandas_udf
+    from pyspark.sql.types import StringType
+
+    _validate_non_empty_string("name", name)
+    target_session = session
+    if target_session is None:
+        from pyspark.sql.session import SparkSession as _SparkSession
+
+        target_session = _SparkSession.active()
+    registry = dict(_model_registry(target_session))
+
+    def query(batches: Iterator[Tuple["pd.Series", "pd.Series"]]) -> Iterator["pd.Series"]:
+        import pandas as pd
+
+        for aliases, requests in batches:
+            answers = pd.Series(None, index=requests.index, dtype="object")
+            for alias in aliases.unique():
+                if not isinstance(alias, str) or alias not in registry:
+                    raise PySparkValueError(
+                        errorClass="AI_QUERY_ENDPOINT_NOT_REGISTERED",
+                        messageParameters={"endpoint": str(alias)},
+                    )
+                mask = aliases.eq(alias).fillna(False)
+                for response in _query_batches(registry[alias], iter([requests.loc[mask]])):
+                    answers.loc[mask] = response.to_numpy()
+            yield answers
+
+    query_udf = pandas_udf(
+        query, returnType=StringType(), functionType=PandasUDFType.SCALAR_ITER
+    ).asNondeterministic()
+    target_session.udf.register(name, query_udf)

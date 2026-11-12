@@ -36,7 +36,7 @@ from pyspark.sql._ai_client import (
     _query_batches,
     _retry_delay,
 )
-from pyspark.sql.ai import ai_query, register_model
+from pyspark.sql.ai import ai_query, register_model, register_sql_function
 from pyspark.testing import sqlutils
 from pyspark.testing.utils import PySparkErrorTestUtils, have_pyarrow
 
@@ -795,6 +795,37 @@ class AIQueryTests(unittest.TestCase, PySparkErrorTestUtils):
         )
         self.assertEqual(raised.exception.getSqlState(), "22023")
 
+    def test_sql_function_resolves_per_row_alias_and_snapshots_registry(self):
+        session = SimpleNamespace(udf=Mock(), __dict__={})
+        with patch("pyspark.sql.session.SparkSession.active", return_value=session):
+            register_model("alias1", "model1", provider="databricks")
+            register_model("alias2", "model2", provider="bedrock", region="us-east-1")
+            register_sql_function()
+            query_udf = session.udf.register.call_args.args[1]
+            query = query_udf.func
+            # A registration made after register_sql_function must not affect this snapshot.
+            register_model("alias3", "model3", provider="databricks")
+
+        def fake_query_batches(config, requests_iter):
+            for series in requests_iter:
+                yield pd.Series([f"{config.model_id}:{r}" for r in series], index=series.index)
+
+        with patch("pyspark.sql.ai._query_batches", side_effect=fake_query_batches):
+            batches = [(pd.Series(["alias1", "alias2", "alias1"]), pd.Series(["x", "y", "z"]))]
+            self.assertEqual(
+                list(query(iter(batches)))[0].tolist(),
+                ["model1:x", "model2:y", "model1:z"],
+            )
+            with self.assertRaises(PySparkValueError) as raised:
+                list(query(iter([(pd.Series(["alias3"]), pd.Series(["x"]))])))
+            self.check_error(
+                raised.exception, "AI_QUERY_ENDPOINT_NOT_REGISTERED", {"endpoint": "alias3"}
+            )
+
+        import pyspark.cloudpickle as cloudpickle
+
+        cloudpickle.loads(cloudpickle.dumps(query))
+
 
 @unittest.skipUnless(
     have_ai_query_dependencies and have_pyarrow,
@@ -906,6 +937,114 @@ class AIQuerySparkTests(sqlutils.ReusedSQLTestCase):
             finally:
                 server.shutdown()
                 thread.join()
+
+    def test_sql_and_column_api_share_the_same_execution_path(self):
+        received = []
+
+        class Handler(BaseHTTPRequestHandler):
+            def do_POST(self):
+                body = json.loads(self.rfile.read(int(self.headers["Content-Length"])))
+                prompt = body["messages"][0]["content"]
+                received.append((self.path, prompt, self.headers["Authorization"]))
+                result = {"choices": [{"message": {"content": prompt.upper()}}]}
+                response = json.dumps(result).encode()
+                self.send_response(200)
+                self.send_header("Content-Type", "application/json")
+                self.send_header("Content-Length", str(len(response)))
+                self.end_headers()
+                self.wfile.write(response)
+
+            def log_message(self, *args):
+                pass
+
+        with ThreadingHTTPServer(("127.0.0.1", 0), Handler) as server:
+            thread = threading.Thread(target=server.serve_forever, daemon=True)
+            thread.start()
+            origin = f"http://127.0.0.1:{server.server_port}"
+
+            def local_batches(endpoint, batches, *, on_error="raise"):
+                from urllib.parse import urlsplit
+
+                import requests
+
+                from pyspark.sql import _ai_client
+
+                session_type = requests.Session
+                config = SimpleNamespace(
+                    host="https://example.test",
+                    authenticate=lambda: {"Authorization": "Bearer test"},
+                )
+                sdk = SimpleNamespace(
+                    WorkspaceClient=lambda **kwargs: SimpleNamespace(config=config)
+                )
+
+                class LocalAdapter(requests.adapters.HTTPAdapter):
+                    def send(self, request, **kwargs):
+                        request.url = origin + urlsplit(request.url).path
+                        kwargs["proxies"] = {}
+                        return super().send(request, **kwargs)
+
+                def make_session():
+                    session = session_type()
+                    session.mount(config.host, LocalAdapter())
+                    return session
+
+                with (
+                    patch.dict("sys.modules", {"databricks.sdk": sdk}),
+                    patch("requests.Session", side_effect=make_session),
+                ):
+                    yield from _ai_client._query_batches(endpoint, batches, on_error=on_error)
+
+            try:
+                register_model("sql-and-column-model", "model", provider="databricks", timeout=5)
+                frame = self.spark.createDataFrame([("hello",), ("world",)], ["prompt"])
+                frame.createOrReplaceTempView("sql_and_column_api_documents")
+
+                with patch("pyspark.sql.ai._query_batches", new=local_batches):
+                    register_sql_function()
+                    sql_result = self.spark.sql(
+                        "SELECT ai_query('sql-and-column-model', prompt) AS answer "
+                        "FROM sql_and_column_api_documents"
+                    )
+                    self.assertIn(
+                        "ArrowEvalPython",
+                        sql_result._jdf.queryExecution().executedPlan().toString(),
+                    )
+                    column_result = frame.select(
+                        ai_query("sql-and-column-model", "prompt").alias("answer")
+                    )
+                    self.assertIn(
+                        "ArrowEvalPython",
+                        column_result._jdf.queryExecution().executedPlan().toString(),
+                    )
+                    self.assertEqual(
+                        sorted(row.answer for row in sql_result.collect()),
+                        sorted(row.answer for row in column_result.collect()),
+                    )
+                self.assertCountEqual(
+                    received,
+                    [
+                        ("/serving-endpoints/model/invocations", prompt, "Bearer test")
+                        for prompt in ("hello", "world", "hello", "world")
+                    ],
+                )
+            finally:
+                server.shutdown()
+                thread.join()
+
+    def test_sql_function_fails_at_execution_for_unregistered_alias(self):
+        # Documents the known gap vs. ai_query(): a bad alias is only caught once a task
+        # runs, not at query analysis time, because the alias is a column value in SQL.
+        register_model("registered-for-gap-test", "model", provider="databricks")
+        register_sql_function(name="unused_alias_check")
+        frame = self.spark.createDataFrame([("hello",)], ["prompt"])
+        frame.createOrReplaceTempView("unregistered_alias_documents")
+        with self.assertRaises(Exception) as raised:
+            self.spark.sql(
+                "SELECT unused_alias_check('not-registered', prompt) "
+                "FROM unregistered_alias_documents"
+            ).collect()
+        self.assertIn("AI_QUERY_ENDPOINT_NOT_REGISTERED", str(raised.exception))
 
 
 if __name__ == "__main__":

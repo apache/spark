@@ -20,7 +20,9 @@ license: |
 
 This prototype queries Databricks or Amazon Bedrock from a DataFrame through an iterator Pandas
 UDF. Register a model alias with `register_model` and use that alias in `ai_query`.
-The prototype does not add a native SQL function. Spark Connect and streaming are unvalidated.
+`register_sql_function` makes the same execution path callable from SQL text. This is not a
+native SQL function yet -- see [SQL text](#sql-text) for what that means in practice. Spark
+Connect and streaming are unvalidated.
 
 ## Prerequisites
 
@@ -64,6 +66,36 @@ result = documents.select(
 
 Each provider receives a chat message per non-null request and returns text. Both accept
 `max_tokens` and `temperature`. Null requests produce null.
+
+## SQL text
+
+```python
+from pyspark.sql.ai import register_sql_function
+
+register_sql_function()
+documents.createOrReplaceTempView("documents")
+spark.sql(
+    "SELECT ai_query('databricks-summary', description) AS summary FROM documents"
+).show()
+```
+
+`register_sql_function` registers a SQL function (`ai_query` by default) backed by the exact
+same registry, batching, retries, and provider clients as the Column API above -- SQL and
+`ai_query()` execute through identical code, not two implementations. The endpoint can also be
+a column rather than a literal, so one query can route different rows to different registered
+models.
+
+This takes a snapshot of the aliases registered so far. A `register_model` call after
+`register_sql_function` does not change it; call `register_sql_function` again to pick up
+later registrations.
+
+This is not a native SQL function like `from_json`, which resolves and validates its schema
+argument during query analysis, before anything runs. Here, because a SQL argument is a
+column value rather than a Python-side parameter, the alias is resolved inside the UDF
+instead, once per distinct value in each Arrow batch. An unregistered alias therefore fails
+once a task actually executes it, not when the query is analyzed. Making this validate at
+analysis time, the way `from_json` does, needs a Catalyst-level piece this prototype does not
+have yet; that is an open design question, not something decided here.
 
 ## Execution and retries
 
