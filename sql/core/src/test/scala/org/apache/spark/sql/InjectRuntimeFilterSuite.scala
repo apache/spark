@@ -2052,15 +2052,16 @@ class InjectRuntimeFilterSuite extends SharedSparkSession
   test("SPARK-61173: a DSv2 scan that took a selective filter in fully can be the creation " +
     "side, as in V1") {
     // `FileScanBuilder` takes a partition filter in fully and leaves no `Filter` for it above the
-    // V2 scan, while V1 keeps the `Filter`. The rule counts the pushed filters as it counts the
-    // condition of that `Filter`. V1 is the reference.
+    // V2 scan, while V1 keeps the `Filter`. With no selective `Filter` above the V2 scan, the rule
+    // counts the pushed filters as it counts the condition of that `Filter`. V1 is the reference.
     withTempDir { dir =>
       val factPath = new File(dir, "fact").getCanonicalPath
       val dimPath = new File(dir, "dim").getCanonicalPath
       spark.range(100).selectExpr("id", "CAST(id % 10 AS INT) AS part")
         .write.partitionBy("part").parquet(factPath)
-      spark.range(10).selectExpr("CAST(id AS INT) AS k", "CAST(id % 2 AS INT) AS dp",
-        "IF(id < 5, 'a1', 'b1') AS ds").write.partitionBy("dp", "ds").parquet(dimPath)
+      spark.range(10).selectExpr("CAST(id AS INT) AS k", "CAST(id AS INT) AS v",
+        "CAST(id % 2 AS INT) AS dp", "IF(id < 5, 'a1', 'b1') AS ds")
+        .write.partitionBy("dp", "ds").parquet(dimPath)
       def createViews(): Unit = {
         // A temp view keeps the relation it was created with, so create both under the conf.
         spark.read.parquet(factPath).createOrReplaceTempView("rf_fact")
@@ -2069,12 +2070,14 @@ class InjectRuntimeFilterSuite extends SharedSparkSession
       def query(condition: String): String =
         s"SELECT f.id FROM rf_fact f JOIN rf_dim d ON f.part = d.k WHERE $condition"
       // (condition, the fact partitions it keeps, the columns the bloom filters check without DPP
-      // and with a DPP filter that the shuffle join drops). A bloom filter's subquery takes only a
-      // simple filter, which `LIKE` is not. For a key with a dropped DPP filter, the filter must
-      // also pass `cannotFail`, which does not take `RLIKE`.
+      // and with a DPP filter that the shuffle join drops). A `LIKE` is not simple: V1 keeps it in
+      // the `Filter`, and V2 pushes it with no selective `Filter` above the scan, so neither builds
+      // a bloom filter. For a key with a dropped DPP filter, the pushed filters must pass
+      // `cannotFail`, which does not take `RLIKE`, also under a selective `Filter` on `v`.
       val cases = Seq(
         ("d.dp = 1", (p: Int) => p % 2 == 1, Seq("part"), Seq("part")),
         ("d.ds RLIKE '^a'", (p: Int) => p < 5, Seq("part"), Nil),
+        ("d.ds RLIKE '^a' AND d.v > 2", (p: Int) => p == 3 || p == 4, Seq("part"), Nil),
         ("d.ds LIKE 'a_'", (p: Int) => p < 5, Nil, Nil))
       withTempView("rf_fact", "rf_dim") {
         withDppTestConf(SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key -> "-1",
