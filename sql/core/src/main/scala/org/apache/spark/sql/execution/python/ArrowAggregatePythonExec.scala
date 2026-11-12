@@ -56,7 +56,7 @@ case class ArrowAggregatePythonExec(
     aggExpressions: Seq[AggregateExpression],
     resultExpressions: Seq[NamedExpression],
     child: SparkPlan,
-    evalType: Int) extends UnaryExecNode with PythonSQLMetrics {
+    evalType: Int) extends UnaryExecNode with PythonPhaseMetrics {
   if (!supportedPythonEvalTypes.contains(evalType)) {
     throw SparkException.internalError(s"Unexpected eval type $evalType")
   }

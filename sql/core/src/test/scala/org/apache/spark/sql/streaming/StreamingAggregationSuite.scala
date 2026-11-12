@@ -34,6 +34,7 @@ import org.apache.spark.sql.catalyst.util.DateTimeConstants._
 import org.apache.spark.sql.classic.{DataFrame, Dataset, SparkSession}
 import org.apache.spark.sql.execution.{SparkPlan, UnaryExecNode}
 import org.apache.spark.sql.execution.exchange.Exchange
+import org.apache.spark.sql.execution.python.PythonSQLMetrics
 import org.apache.spark.sql.execution.streaming._
 import org.apache.spark.sql.execution.streaming.operators.stateful.{StateStoreRestoreExec, StateStoreSaveExec, StreamingAggregationStateManager}
 import org.apache.spark.sql.execution.streaming.runtime.{LongOffset, MemoryStream, StreamExecution}
@@ -867,7 +868,10 @@ class StreamingAggregationSuite extends StateStoreMetricsTest with Assertions {
           case store: StateStoreSaveExec => store
         }
         assert(stores.nonEmpty)
-        assert(stores.forall(_.metrics("pythonNumTimingReports").value == 0))
+        val phaseMetrics = PythonSQLMetrics.pythonPhaseTimingMetricsDesc.keySet ++
+          PythonSQLMetrics.pythonPhaseCountMetricsDesc.keySet
+        assert(stores.forall(_.metrics.contains("pythonDataSent")))
+        assert(stores.forall(_.metrics.keySet.intersect(phaseMetrics).isEmpty))
       },
       assertNumStateRows(
         total = Seq(3), updated = Seq(3), droppedByWatermark = Seq(0), removed = Some(Seq(0))),

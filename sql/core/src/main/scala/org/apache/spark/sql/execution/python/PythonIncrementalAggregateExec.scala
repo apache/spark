@@ -47,7 +47,7 @@ import org.apache.spark.util.Utils
  * kept as an abstract class so the per-stage inputs, eval type, output attributes and final
  * projection stay explicit hooks.
  */
-abstract class PythonIncrementalAggregateExecBase extends UnaryExecNode with PythonSQLMetrics {
+abstract class PythonIncrementalAggregateExecBase extends UnaryExecNode with PythonPhaseMetrics {
 
   def groupingExpressions: Seq[NamedExpression]
   def aggExpressions: Seq[AggregateExpression]
@@ -200,7 +200,7 @@ case class PythonIncrementalAggregatePartialExec(
     groupingExpressions: Seq[NamedExpression],
     aggExpressions: Seq[AggregateExpression],
     bufferAttributes: Seq[Attribute],
-    child: SparkPlan) extends UnaryExecNode with PythonSQLMetrics {
+    child: SparkPlan) extends UnaryExecNode with PythonPhaseMetrics {
 
   private val udfExpressions: Seq[PythonAggregate] =
     aggExpressions.map(_.aggregateFunction.asInstanceOf[PythonAggregate])

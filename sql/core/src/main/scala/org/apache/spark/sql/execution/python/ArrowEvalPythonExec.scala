@@ -86,7 +86,7 @@ case class ArrowEvalPythonExec(
     resultAttrs: Seq[Attribute],
     child: SparkPlan,
     evalType: Int)(
-    val columnarInputEnabled: Boolean) extends EvalPythonExec with PythonSQLMetrics {
+    val columnarInputEnabled: Boolean) extends EvalPythonExec with PythonPhaseMetrics {
   if (!supportedPythonEvalTypes.contains(evalType)) {
     throw SparkException.internalError(s"Unexpected eval type $evalType")
   }
