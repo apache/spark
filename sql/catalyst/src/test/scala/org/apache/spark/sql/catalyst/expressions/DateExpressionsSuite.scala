@@ -842,6 +842,69 @@ class DateExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
     }
   }
 
+  test("SPARK-60929: last_day near the DATE range bounds") {
+    val min = Int.MinValue // -5877641-06-23
+    val max = Int.MaxValue // +5881580-07-11
+    checkEvaluation(LastDay(Literal(min, DateType)), min + 7)
+    checkEvaluation(LastDay(Literal(max - 11, DateType)), max - 11)
+    Seq(max - 10 -> "+5881580-07-01", max -> "+5881580-07-11").foreach { case (days, date) =>
+      checkErrorInExpression[SparkArithmeticException](
+        LastDay(Literal(days, DateType)),
+        condition = "DATETIME_OVERFLOW",
+        parameters = Map("operation" -> s"find the last day of the month of DATE '$date'"))
+    }
+  }
+
+  test("SPARK-60929: next_day near the DATE range bounds") {
+    val min = Int.MinValue // -5877641-06-23, a Tuesday
+    val max = Int.MaxValue // +5881580-07-11, a Friday
+    // `failOnError` only governs an invalid day of week. Codegen has a path for a foldable one.
+    Seq(true, false).foreach { failOnError =>
+      Seq[String => Expression](s => Literal(s), s => NonFoldableLiteral(s)).foreach { dayOfWeek =>
+        def nextDay(days: Int, dow: String): NextDay =
+          NextDay(Literal(days, DateType), dayOfWeek(dow), failOnError)
+        checkEvaluation(nextDay(min, "MO"), min + 6)
+        checkEvaluation(nextDay(min, "FR"), min + 3)
+        checkEvaluation(nextDay(min, "TU"), min + 7)
+        checkEvaluation(nextDay(max - 7, "FR"), max)
+        checkEvaluation(nextDay(max - 6, "FR"), max)
+        checkErrorInExpression[SparkArithmeticException](
+          nextDay(max - 6, "SA"),
+          condition = "DATETIME_OVERFLOW",
+          parameters = Map("operation" -> "find the next SATURDAY after DATE '+5881580-07-05'"))
+        checkErrorInExpression[SparkArithmeticException](
+          nextDay(max, "Mon"),
+          condition = "DATETIME_OVERFLOW",
+          parameters = Map("operation" -> "find the next MONDAY after DATE '+5881580-07-11'"))
+      }
+    }
+  }
+
+  test("SPARK-60929: trunc near the minimum DATE") {
+    val min = Int.MinValue // -5877641-06-23
+    val lastDayOfMinYear = DateTimeUtils.localDateToDays(LocalDate.of(-5877641, 12, 31))
+    // Codegen has a path for a foldable format.
+    Seq[String => Expression](s => Literal(s), s => NonFoldableLiteral(s)).foreach { format =>
+      def trunc(days: Int, fmt: String): TruncDate = TruncDate(Literal(days, DateType), format(fmt))
+      checkEvaluation(trunc(min + 6, "WEEK"), min + 6)
+      checkEvaluation(trunc(min + 8, "WEEK"), min + 6)
+      checkEvaluation(trunc(min + 8, "MM"), min + 8)
+      checkEvaluation(trunc(min + 8, "QUARTER"), min + 8)
+      checkEvaluation(trunc(lastDayOfMinYear + 1, "YEAR"), lastDayOfMinYear + 1)
+      Seq(
+        (min + 5, "WEEK", "DATE '-5877641-06-28' to WEEK"),
+        (min + 7, "MM", "DATE '-5877641-06-30' to MONTH"),
+        (min, "QUARTER", "DATE '-5877641-06-23' to QUARTER"),
+        (lastDayOfMinYear, "YEAR", "DATE '-5877641-12-31' to YEAR")).foreach {
+        case (days, fmt, operation) =>
+          checkErrorInExpression[SparkArithmeticException](
+            trunc(days, fmt),
+            condition = "DATETIME_OVERFLOW",
+            parameters = Map("operation" -> s"truncate $operation"))
+      }
+    }
+  }
+
   private def testTruncDate(input: Date, fmt: String, expected: Date): Unit = {
     checkEvaluation(TruncDate(Literal.create(input, DateType), Literal.create(fmt, StringType)),
       expected)
