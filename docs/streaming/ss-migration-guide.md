@@ -97,14 +97,19 @@ Please refer [Migration Guide: SQL, Datasets and DataFrame](../sql-migration-gui
   existing checkpoint with `STREAMING_JOIN_CHECKPOINT_INCOMPATIBLE`. Spark reuses the checkpoint
   of a join without watermarks, of a join with an equality condition between the two inputs'
   event times, such as `leftTime = rightTime`, and of a join whose time condition compares the
-  two inputs' event times, optionally cast, with constant intervals or numbers, such as
-  `rightTime BETWEEN leftTime AND leftTime + INTERVAL 1 HOUR`. When such a condition bounds only
-  one input, or the join has only equality conditions on columns other than event times, such as
-  `leftKey = rightKey`, Spark reuses the checkpoint only when no stateful operator after the join
-  uses the event time of an input without a bound. It rejects other joins with watermarks, for
-  example when the time condition uses another column or adds a month interval. Spark cannot
-  verify that their saved rows can be reused safely after the correction, even if the query did
-  not previously produce incorrect results.
+  two inputs' event times with each other, each optionally cast and offset by constant intervals or
+  numbers, such as `rightTime BETWEEN leftTime AND leftTime + INTERVAL 1 HOUR`. When such a
+  condition bounds only one input, or the join has only equality conditions on columns other than
+  event times, such as `leftKey = rightKey`, Spark reuses the checkpoint only when no stateful
+  operator after the join uses the event time of an input without a bound. A stateful operator that
+  does not use the watermark, such as an update-mode aggregation on columns other than event times,
+  does not count, while `transformWithState` always counts because its code can read the watermark.
+  The time condition may also include comparisons from which Spark derives no bound, such as one
+  between columns of both inputs that have no watermark, like `leftPrice >= rightPrice`, or one that
+  adds a month interval, which has no fixed length. An input that only such a comparison constrains
+  has no bound. Spark rejects other joins with watermarks, for example when the time condition
+  bounds another column. Spark cannot verify that their saved rows can be reused safely after the
+  correction, even if the query did not previously produce incorrect results.
 
   Before upgrading, check that the input history needed to rebuild the join is still available.
   If the checkpoint is rejected, start with a new checkpoint and replay that input. Account for
