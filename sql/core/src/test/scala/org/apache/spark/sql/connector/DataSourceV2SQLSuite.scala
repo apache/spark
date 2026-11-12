@@ -257,6 +257,14 @@ abstract class DataSourceV2SQLSuite
     withTable(t) {
       sql(s"CREATE TABLE $t (id bigint, dep char(8)) USING foo PARTITIONED BY (dep)")
       sql(s"INSERT INTO $t VALUES (1L, 'hr')")
+      // the source does not support the padding, even if the values are stored with padding
+      checkError(
+        exception = intercept[SparkException] {
+          sql(s"INSERT INTO $t REPLACE WHERE dep = 'hr' VALUES (2L, 'hr')")
+        },
+        condition = "_LEGACY_ERROR_TEMP_2245",
+        parameters = Map("table" -> ".*"),
+        matchPVals = true)
       // the source compares the stored values with the padded literal, as before
       withSQLConf(SQLConf.LEGACY_NO_CHAR_PADDING_IN_OVERWRITE_CONDITION.key -> "true") {
         sql(s"INSERT INTO $t REPLACE WHERE dep = 'hr' VALUES (2L, 'hr')")
@@ -265,20 +273,16 @@ abstract class DataSourceV2SQLSuite
     }
   }
 
-  test("SPARK-61512: REPLACE WHERE with a CHAR condition in an OR with a partition condition") {
+  test("SPARK-61512: static partition overwrite on a CHAR column under standard semantics") {
     val t = s"${catalogAndNamespace}tbl"
-    withTable(t) {
-      sql(s"CREATE TABLE $t (id bigint, dep char(8)) USING foo PARTITIONED BY (id, dep)")
-      sql(s"INSERT INTO $t VALUES (1L, 'hr'), (2L, 'it')")
-      // the padded comparison has no V1 filter, so it must not be dropped from the OR
-      checkError(
-        exception = intercept[SparkException] {
-          sql(s"INSERT INTO $t REPLACE WHERE dep = 'hr' OR id = 2 VALUES (3L, 'hr')")
-        },
-        condition = "_LEGACY_ERROR_TEMP_2245",
-        parameters = Map("table" -> ".*"),
-        matchPVals = true)
-      checkAnswer(spark.table(t), Seq(Row(1L, "hr      "), Row(2L, "it      ")))
+    withSQLConf(SQLConf.CHAR_VARCHAR_STANDARD_SEMANTICS.key -> "true") {
+      withTable(t) {
+        sql(s"CREATE TABLE $t (id bigint, dep char(8)) USING foo PARTITIONED BY (dep)")
+        sql(s"INSERT INTO $t VALUES (1L, 'hr')")
+        // the read-side check of the column has no source filter, so it is not applied
+        sql(s"INSERT OVERWRITE $t PARTITION (dep = 'hr') VALUES (2L)")
+        checkAnswer(spark.table(t), Row(2L, "hr      "))
+      }
     }
   }
 
@@ -4693,6 +4697,23 @@ class DataSourceV2SQLSuiteV1Filter
       checkAnswer(
         spark.table(s"$t"),
         Seq(Row(1L, "a"), Row(2L, "b"), Row(4L, "d"), Row(5L, "e"), Row(6L, "f")))
+    }
+  }
+
+  test("SPARK-61512: REPLACE WHERE with a CHAR condition in an OR with a partition condition") {
+    val t = "testcat.tbl"
+    withTable(t) {
+      sql(s"CREATE TABLE $t (id bigint, dep char(8)) USING foo PARTITIONED BY (id, dep)")
+      sql(s"INSERT INTO $t VALUES (1L, 'hr'), (2L, 'it')")
+      // the padded comparison has no V1 filter, so it must not be dropped from the OR
+      checkError(
+        exception = intercept[SparkException] {
+          sql(s"INSERT INTO $t REPLACE WHERE dep = 'hr' OR id = 2 VALUES (3L, 'hr')")
+        },
+        condition = "_LEGACY_ERROR_TEMP_2245",
+        parameters = Map("table" -> ".*"),
+        matchPVals = true)
+      checkAnswer(spark.table(t), Seq(Row(1L, "hr      "), Row(2L, "it      ")))
     }
   }
 

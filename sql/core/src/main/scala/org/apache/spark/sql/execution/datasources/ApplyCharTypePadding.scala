@@ -112,8 +112,10 @@ object ApplyCharTypePadding extends Rule[LogicalPlan] {
   private def padDeleteConditions(plan: LogicalPlan): LogicalPlan = {
     plan.resolveOperatorsWithPruning(_.containsPattern(COMMAND)) {
       case d: DeleteFromTable => d.copy(condition = padRawTypedColumns(d.condition))
-      case o: OverwriteByExpression
-          if !conf.getConf(SQLConf.LEGACY_NO_CHAR_PADDING_IN_OVERWRITE_CONDITION) =>
+      // Under standard semantics, the read-side check of the columns cannot be translated to a
+      // filter, so the overwrite keeps comparing the stored values.
+      case o: OverwriteByExpression if !conf.charVarcharStandardSemantics &&
+          !conf.getConf(SQLConf.LEGACY_NO_CHAR_PADDING_IN_OVERWRITE_CONDITION) =>
         o.copy(deleteExpr = padRawTypedColumns(o.deleteExpr))
     }
   }
