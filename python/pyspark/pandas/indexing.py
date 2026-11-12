@@ -40,7 +40,7 @@ from pyspark.pandas.internal import (
     InternalField,
     InternalFrame,
 )
-from pyspark.pandas.typedef.typehints import is_pyarrow_backed_dtype
+from pyspark.pandas.typedef.typehints import is_arrow_dtype
 from pyspark.pandas.utils import (
     is_name_like_tuple,
     is_name_like_value,
@@ -801,11 +801,15 @@ class LocIndexerLike(IndexerLike, metaclass=ABCMeta):
                 for scol in data_spark_columns:
                     if spark_column_equals(new_scol, scol):
                         new_scol = F.when(cond, value).otherwise(scol).alias(spark_column_name)
-                        new_field = InternalField.from_struct_field(
-                            self._internal.spark_frame.select(new_scol).schema[0],
-                            use_extension_dtypes=new_field.is_extension_dtype,
-                            use_arrow_dtypes=is_pyarrow_backed_dtype(new_field.dtype),
-                        )
+                        sf = self._internal.spark_frame.select(new_scol).schema[0]
+                        if is_arrow_dtype(new_field.dtype) and sf.dataType == new_field.spark_type:
+                            new_field = new_field.copy(struct_field=sf)
+                        else:
+                            new_field = InternalField.from_struct_field(
+                                sf,
+                                use_extension_dtypes=new_field.is_extension_dtype,
+                                use_arrow_dtypes=is_arrow_dtype(new_field.dtype),
+                            )
                         break
                 new_data_spark_columns.append(new_scol)
                 new_fields.append(new_field)
