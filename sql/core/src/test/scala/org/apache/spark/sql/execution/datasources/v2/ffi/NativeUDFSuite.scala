@@ -207,6 +207,24 @@ class NativeUDFSuite extends QueryTest with SharedSparkSession {
         UnsupportedNativeFunction("sum_all", "aggregate")))))
   }
 
+  test("read the types of a manifest the same way in every session") {
+    val file = createZip(Utils.createTempDir(), "timestamps.sparkpkg",
+      NativeDataSourcePackage.MANIFEST_NAME -> manifestJson(
+        Seq(function("ts", Seq("timestamp", "timestamp_ntz"), "timestamp")),
+        Map(NativePlatform.current -> "lib.so")).getBytes(UTF_8),
+      "lib.so" -> Array.emptyByteArray)
+    def types(session: SparkSession): (Seq[DataType], DataType) = session.withActive {
+      val ts = NativeDataSourcePackage.read(file).manifest.functions.head
+        .asInstanceOf[NativeFunctionSpec]
+      (ts.arguments, ts.returnType)
+    }
+    val ntz = spark.newSession()
+    ntz.conf.set(SQLConf.TIMESTAMP_TYPE.key, "TIMESTAMP_NTZ")
+    val expected = (Seq(TimestampType, TimestampNTZType), TimestampType)
+    assert(types(ntz) == expected)
+    assert(types(spark.newSession()) == expected)
+  }
+
   private val libraries = """"libraries": {"linux-x86_64": "lib.so"}"""
   private val addOne = function("add_one", Seq("bigint"), "bigint")
 
@@ -1224,6 +1242,13 @@ class NativeUDFSuite extends QueryTest with SharedSparkSession {
       },
       condition = "UNSUPPORTED_FEATURE.NATIVE_UDF_IN_ON_CLAUSE",
       parameters = Map("joinType" -> "LEFT OUTER"))
+    checkError(
+      exception = intercept[AnalysisException] {
+        session.sql("SELECT * FROM range(3) a WHERE EXISTS (SELECT 1 FROM range(4) b " +
+          "WHERE edit_distance(CAST(a.id AS STRING), CAST(b.id AS STRING)) = 0)").collect()
+      },
+      condition = "UNSUPPORTED_FEATURE.NATIVE_UDF_IN_ON_CLAUSE",
+      parameters = Map("joinType" -> "LEFT SEMI"))
     checkRows(
       session.sql("SELECT add_one(id % 2) AS k, add_one(count(*)) AS c FROM range(10) " +
         "GROUP BY add_one(id % 2)"),

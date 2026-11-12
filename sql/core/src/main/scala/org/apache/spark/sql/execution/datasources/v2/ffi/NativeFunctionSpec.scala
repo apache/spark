@@ -24,6 +24,7 @@ import scala.util.control.NonFatal
 import com.fasterxml.jackson.databind.JsonNode
 
 import org.apache.spark.sql.catalyst.parser.CatalystSqlParser
+import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
 
 /** A function that the manifest of a native package lists in `functions`. */
@@ -171,7 +172,8 @@ object NativeFunctionSpec {
   /** Parses `what`, a type of the manifest, and checks that it is a type of version 1. */
   private def parseType(ddl: String, what: String): Either[String, DataType] = {
     val dataType = try {
-      CatalystSqlParser.parseDataType(ddl)
+      // The default settings, not the session's: the parsed package is cached for every session.
+      SQLConf.withExistingConf(new SQLConf)(CatalystSqlParser.parseDataType(ddl))
     } catch {
       // Not only a ParseException: a decimal of more than 38 digits fails to be constructed.
       case NonFatal(e) => return Left(s"has $ddl as $what, which is not a valid type: " +
