@@ -737,6 +737,36 @@ abstract class StreamingInnerJoinBase extends StreamingJoinSuite {
     }
   }
 
+  for (leftFirst <- Seq(true, false)) {
+    test(s"stream stream inner join through DOUBLE casts far from 1970, left first = $leftFirst") {
+      val leftInput = MemoryStream[(Int, Long)]
+      val rightInput = MemoryStream[(Int, Long)]
+      val left = leftInput.toDF().toDF("leftKey", "time")
+        .select($"leftKey", timestamp_micros($"time").as("leftTime"))
+        .withWatermark("leftTime", "1 hour")
+      val right = rightInput.toDF().toDF("rightKey", "time")
+        .select($"rightKey", timestamp_micros($"time").as("rightTime"))
+        .withWatermark("rightTime", "1 hour")
+      // In 2831 the casts round by microseconds: for a right row 6002 us before the left row,
+      // CAST(rightTime AS DOUBLE) - CAST(leftTime AS DOUBLE) is -0.0059967 seconds, so the
+      // comparison holds, although the exact difference is below -0.005999 seconds.
+      val joined = left.join(right, expr("leftKey = rightKey AND " +
+          "CAST(rightTime AS DOUBLE) > CAST(leftTime AS DOUBLE) - 0.005999 AND " +
+          "rightTime <= leftTime + INTERVAL 10 SECONDS"))
+        .select($"leftKey", unix_micros($"leftTime"), unix_micros($"rightTime"))
+      // 2831-09-23 20:48:48.580325 UTC
+      val leftTime = 27193524528580325L
+      val leftData = AddData(leftInput, (1, leftTime))
+      val rightData = AddData(rightInput, (1, leftTime - 6002L))
+      val (first, second) = if (leftFirst) (leftData, rightData) else (rightData, leftData)
+      testStream(joined)(
+        first,
+        CheckNewAnswer(),
+        second,
+        CheckNewAnswer((1, leftTime, leftTime - 6002L)))
+    }
+  }
+
   testWithAppendAndUpdate("stream stream self join") { outputMode =>
     val input = MemoryStream[Int]
     val df = input.toDF()

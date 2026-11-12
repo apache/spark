@@ -61,11 +61,13 @@ object StreamingJoinHelper extends PredicateHelper with Logging {
    *
    * The window comes only from comparisons whose solved bound is an exact offset from the row's
    * event time, so each of them admits every row it can match, and so does the loosest of them:
+   * - The comparison must compare timestamps: no event time in it may be cast to a type other
+   *   than TIMESTAMP; see [[castsEventTime]]. Casting an event time to a number, as in
+   *   CAST(ts AS BIGINT), is the epoch-seconds idiom from before Spark 3.0. Eviction still
+   *   supports it, but the range scan does not optimize it.
    * - The bound must move with the watermark the solver is given. It stays fixed for a
-   *   comparison of one event time with a constant, such as CAST(leftTime AS DOUBLE) >=
-   *   1700000000, which gives an absolute time, and moves the other way for a sum of the two
-   *   event times.
-   * - The comparison must have no cast that drops part of a time; see [[hasTruncatingCast]].
+   *   comparison of one event time with a constant, such as
+   *   leftTime >= CAST(1700000000 AS TIMESTAMP), which gives an absolute time.
    * - It must add no months, and no whole days in a zone whose offset changes; see
    *   [[hasCalendarInterval]].
    * The solver returns whole milliseconds, truncated toward zero, so a bound that is not a whole
@@ -75,9 +77,11 @@ object StreamingJoinHelper extends PredicateHelper with Logging {
       condition: Option[Expression],
       thisEventTime: Attribute,
       otherEventTime: Attribute): Option[(Long, Long)] = {
+    val eventTimes = AttributeSet(Seq(thisEventTime, otherEventTime))
     val exactComparisons = condition.toSeq.flatMap(splitConjunctivePredicates)
-      .filterNot(c => hasTruncatingCast(c) || hasCalendarInterval(c))
-    // The lowest value of `bounded` that the comparisons allow, relative to `probing`.
+      .filterNot(c => castsEventTime(c, eventTimes) || hasCalendarInterval(c))
+    // The solver's bound on `bounded` for the loosest kept comparison, in milliseconds relative
+    // to `probing`: truncated toward zero, and 1 ms lower for a non-strict comparison.
     def loosestOffsetMs(bounded: Attribute, probing: Attribute): Option[Long] =
       exactComparisons.flatMap { comparison =>
         def solve(watermark: Long): Option[Long] = getStateValueWatermark(
@@ -100,22 +104,14 @@ object StreamingJoinHelper extends PredicateHelper with Logging {
   private val rangeScanOffsetCheckMs = 1000000000000L
 
   /**
-   * Whether the expression has a cast that drops part of a time, such as CAST(ts AS BIGINT),
-   * which drops the fraction of a second. The solver reads such a cast as its input, so a bound
-   * it solves from that expression can be too narrow, by up to a second for integral and DECIMAL
-   * casts and by a minute or more for FLOAT.
+   * Whether the expression casts one of the event times in `eventTimes` to a type other than
+   * TIMESTAMP, such as BIGINT, DOUBLE, DECIMAL or a TIMESTAMP with nanoseconds. The solver reads
+   * such a cast as its input, but it can drop or round part of a time.
    */
-  def hasTruncatingCast(expr: Expression): Boolean = {
-    def isTruncatingCast(from: DataType, to: DataType): Boolean =
-      !from.isInstanceOf[IntegralType] && (to match {
-        case _: IntegralType | FloatType => true
-        case decimal: DecimalType => decimal.scale < 6
-        case _ => false
-      })
-    expr.exists {
-      case Cast(child, dataType, _, _) => isTruncatingCast(child.dataType, dataType)
-      case _ => false
-    }
+  def castsEventTime(expr: Expression, eventTimes: AttributeSet): Boolean = expr.exists {
+    case Cast(child, dataType, _, _) =>
+      dataType != TimestampType && child.references.exists(eventTimes.contains)
+    case _ => false
   }
 
   /**
