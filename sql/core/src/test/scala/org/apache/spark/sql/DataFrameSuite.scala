@@ -35,7 +35,7 @@ import org.apache.spark.sql.catalyst.encoders.ExpressionEncoder
 import org.apache.spark.sql.catalyst.expressions.{Attribute, AttributeReference, Cast, EqualTo, ExpressionSet, GreaterThan, Literal, PythonUDF, ScalarSubquery}
 import org.apache.spark.sql.catalyst.optimizer.ConvertToLocalRelation
 import org.apache.spark.sql.catalyst.parser.ParseException
-import org.apache.spark.sql.catalyst.plans.logical.{Filter, LeafNode, LocalRelation, LogicalPlan, OneRowRelation}
+import org.apache.spark.sql.catalyst.plans.logical.{Filter, LeafNode, LocalRelation, LogicalPlan, OneRowRelation, Project}
 import org.apache.spark.sql.catalyst.util.RandomUUIDGenerator
 import org.apache.spark.sql.connector.FakeV2Provider
 import org.apache.spark.sql.execution.{FilterExec, LogicalRDD, QueryExecution, SortExec, WholeStageCodegenExec}
@@ -3070,6 +3070,95 @@ class DataFrameSuite extends SharedSparkSession
             sql("SELECT * FROM l LEFT JOIN r ON l.x = r.y AND " +
               "l.x IN (SELECT a FROM s WHERE s.b = 10 / l.x)"),
             Row(6L, null))
+        }
+      }
+    }
+  }
+
+  test("SPARK-61437: ConstantPropagation judges a filter condition by what the aliases of the " +
+    "projection below stand for") {
+    withTempPath { dir =>
+      // `i` fails on the row ("x", 0), which `id > 0` and `id > 5` filter out. One file, so that
+      // the scan does not skip that row by the statistics of a file of its own.
+      Seq(("1", 7L), ("x", 0L)).toDF("s", "id").coalesce(1).write.parquet(dir.getCanonicalPath)
+      withSQLConf(SQLConf.ANSI_ENABLED.key -> "true") {
+        def projected: DataFrame = spark.read.parquet(dir.getCanonicalPath)
+          .select($"s", $"id", $"s".cast("int").as("i"))
+        // Whether the filter is above the projection that computes `i`.
+        def filtersAboveI(df: DataFrame): Boolean = df.queryExecution.optimizedPlan.exists {
+          case Filter(_, child) => child.exists {
+            case p: Project => p.projectList.exists(_.name == "i")
+            case _ => false
+          }
+          case _ => false
+        }
+        val conditions = Seq(
+          $"id" > 5 && $"i" * $"id" > 0 && $"i" === 1,
+          $"id" > 5 && $"i" > 0 && lit(10) / ($"id" - 3) > 0 && $"i" === 1,
+          // `id = 7` folds `id > 0`, and goes first, as `i > 0` and `i = 1` can fail.
+          $"id" > 0 && $"i" > 0 && $"id" === 7,
+          $"id" > 0 && $"i" === 1 && $"id" === 7)
+        withSQLConf(SQLConf.WHOLESTAGE_CODEGEN_ENABLED.key -> "true") {
+          conditions.foreach { condition =>
+            // With `r` read, the filter stays above the projection, and so it does above a
+            // sample. The projection computes `i` only for the rows that reach a condition
+            // reading it.
+            Seq(
+              projected.select($"*", rand(1).as("r")).where(condition)
+                .select($"s", $"id", $"r" >= 0),
+              projected.sample(0.999, 1).where(condition).select($"s", $"id", lit(true))
+            ).foreach { df =>
+              assert(filtersAboveI(df))
+              checkAnswer(df, Row("1", 7L, true))
+            }
+          }
+          // As on master, `i = 1` simplifies the other conditions, so `i` is not computed
+          // for the row ("x", 0).
+          Seq(
+            $"i" + 1 > 3 && $"i" === 1,
+            $"i" === 1 && $"i" + 1 > 3,
+            ($"id" < 0 || $"i" + 1 > 3) && $"i" === 1,
+            nullif($"i", lit(1)) > 0 && $"i" === 1,
+            // Also with a division in between, so `i` is propagated, and no row computes it.
+            $"i" + 1 > 3 && lit(10) / ($"id" - 3) > 0 && $"i" === 1,
+            $"i" === 1 && lit(10) / ($"id" - 3) > 0 && $"i" === 2,
+            nullif($"i", lit(1)) > 0 && lit(10) / ($"id" - 3) > 0 && $"i" === 1
+          ).foreach { condition =>
+            checkAnswer(
+              projected.select($"*", rand(1).as("r")).where(condition)
+                .select($"s", $"id", $"r" >= 0),
+              Seq.empty)
+          }
+          // Nor the division by zero for the row ("0", 8).
+          withTempPath { zero =>
+            Seq(("1", 7L), ("0", 8L)).toDF("s", "id").coalesce(1).write.parquet(zero.toString)
+            val df = spark.read.parquet(zero.toString)
+              .select($"s", $"id", $"s".cast("int").as("i"), rand(1).as("r"))
+              .where(lit(10) / $"i" > 1 && $"i" === 1).select($"s", $"id", $"r" >= 0)
+            assert(filtersAboveI(df))
+            checkAnswer(df, Row("1", 7L, true))
+          }
+          // `id < 3` decides whether `i > 0` runs. Without the subexpression elimination path of
+          // `FilterExec`, which computes `i` up front for the `i > 0` that
+          // `InferFiltersFromConstraints` infers from it.
+          withSQLConf(SQLConf.SUBEXPRESSION_ELIMINATION_FILTER_EXEC_ENABLED.key -> "false") {
+            val df = projected.select($"*", rand(1).as("r"))
+              .where(($"id" < 3 || $"i" > 0) && $"id" === 7).select($"s", $"id", $"r" >= 0)
+            assert(filtersAboveI(df))
+            checkAnswer(df, Row("1", 7L, true))
+          }
+        }
+        // Without `r`, the projection goes away and the filter reads `cast(s as int)` itself.
+        Seq("true", "false").foreach { codegen =>
+          withSQLConf(SQLConf.WHOLESTAGE_CODEGEN_ENABLED.key -> codegen) {
+            (conditions :+ ($"id" > 5 && $"i" * $"id" > 0 && $"i" * $"id" < 100 && $"i" === 1))
+              .foreach { condition =>
+                val df = projected.select($"*", rand(1).as("r")).where(condition)
+                  .select($"s", $"id")
+                assert(!df.queryExecution.optimizedPlan.exists(_.isInstanceOf[Project]))
+                checkAnswer(df, Row("1", 7L))
+              }
+          }
         }
       }
     }
