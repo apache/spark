@@ -154,6 +154,7 @@ case class DynamicPruningExpression(child: Expression)
   with DynamicPruning {
   override def eval(input: InternalRow): Any = child.eval(input)
 
+  /** Retain the pruning marker even when its child is a constant. */
   override def foldable: Boolean = false
 
   final override val nodePatterns: Seq[TreePattern] = Seq(DYNAMIC_PRUNING_EXPRESSION)

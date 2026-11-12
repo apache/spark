@@ -42,8 +42,13 @@ class RewriteWithExpressionSuite extends PlanTest {
   /** A foldable expression whose evaluation must not be duplicated. */
   private case class ImpureFoldable(child: Expression)
       extends UnaryExpression with NonSQLExpression with CodegenFallback {
+    /** Preserve the wrapped expression's result type. */
     override def dataType: DataType = child.dataType
+
+    /** Delegate evaluation while retaining the fixture's NonSQLExpression classification. */
     override def eval(input: InternalRow): Any = child.eval(input)
+
+    /** Preserve the fixture when the expression tree is rewritten. */
     override protected def withNewChildInternal(newChild: Expression): ImpureFoldable =
       copy(child = newChild)
   }
@@ -137,6 +142,7 @@ class RewriteWithExpressionSuite extends PlanTest {
     assert(rewritten == (Literal(1) + Literal(1)) * (Literal(1) + Literal(1)))
   }
 
+  // Inlining must reject a foldable definition whose evaluation cannot be duplicated.
   test("applyForExpression rejects an impure foldable definition referenced more than once") {
     val expr = With(ImpureFoldable(Literal(1))) { case Seq(ref) =>
       ref + ref

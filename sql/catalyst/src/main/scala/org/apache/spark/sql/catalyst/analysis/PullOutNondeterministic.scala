@@ -39,7 +39,8 @@ object PullOutNondeterministic extends Rule[LogicalPlan] {
 
     case a: Aggregate if a.groupingExpressions.exists(!_.deterministic) =>
       val nondeterToAttr =
-        NondeterministicExpressionCollection.getNondeterministicToAttributes(a.groupingExpressions)
+        NondeterministicExpressionCollection.getNondeterministicToAttributes(
+          a.groupingExpressions, allowPredicateSubqueries = true)
       val newChild = Project(a.child.output ++ nondeterToAttr.values.asScala.toSeq, a.child)
       val deterministicAggregate = a.transformExpressions { case e =>
         Option(nondeterToAttr.get(e.canonicalized)).map(_.toAttribute).getOrElse(e)
@@ -68,10 +69,15 @@ object PullOutNondeterministic extends Rule[LogicalPlan] {
     case p: UnaryNode if p.output == p.child.output && p.expressions.exists(!_.deterministic) =>
       val nondeterToAttr =
         NondeterministicExpressionCollection.getNondeterministicToAttributes(p.expressions)
-      val newPlan = p.transformExpressions { case e =>
-        Option(nondeterToAttr.get(e.canonicalized)).map(_.toAttribute).getOrElse(e)
+      if (nondeterToAttr.isEmpty) {
+        // Leave predicate subqueries in place for validation without adding empty projections.
+        p
+      } else {
+        val newPlan = p.transformExpressions { case e =>
+          Option(nondeterToAttr.get(e.canonicalized)).map(_.toAttribute).getOrElse(e)
+        }
+        val newChild = Project(p.child.output ++ nondeterToAttr.values.asScala.toSeq, p.child)
+        Project(p.output, newPlan.withNewChildren(newChild :: Nil))
       }
-      val newChild = Project(p.child.output ++ nondeterToAttr.values.asScala.toSeq, p.child)
-      Project(p.output, newPlan.withNewChildren(newChild :: Nil))
   }
 }

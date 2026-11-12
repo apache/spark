@@ -317,6 +317,25 @@ class GeneratedColumnWriteSuite extends QueryTest with DatasourceV2SQLBase {
     Nil
   }
 
+  // Fixed wrapper IVs must remain deterministic when generated columns are validated and written.
+  test("SPARK-59768: generated columns accept fixed AES wrapper IVs") {
+    for {
+      (mode, length) <- Seq("GCM" -> 12, "CBC" -> 16)
+      iv <- Seq(
+        s"to_binary('${"00" * length}', 'hex')",
+        s"encode('${"0" * length}', 'utf-8')")
+    } {
+      val encrypt = s"aes_encrypt(v, '0000111122223333', '$mode', 'DEFAULT', $iv)"
+      withTable("testcat.aes_generated") {
+        sql(s"""CREATE TABLE testcat.aes_generated(
+               |  v STRING, enc BINARY GENERATED ALWAYS AS ($encrypt)) USING foo
+               |""".stripMargin)
+        sql("INSERT INTO testcat.aes_generated(v) VALUES ('Spark')")
+        checkAnswer(sql(s"SELECT enc = $encrypt FROM testcat.aes_generated"), Row(true))
+      }
+    }
+  }
+
   test("INSERT by name auto-fills missing generated column") {
     val tblName = "my_tab"
     withTable(s"testcat.$tblName") {

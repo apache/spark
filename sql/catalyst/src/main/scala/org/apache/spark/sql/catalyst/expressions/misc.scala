@@ -24,6 +24,7 @@ import org.apache.spark.sql.catalyst.analysis.{ExpressionBuilder, FunctionRegist
 import org.apache.spark.sql.catalyst.expressions.codegen._
 import org.apache.spark.sql.catalyst.expressions.codegen.Block._
 import org.apache.spark.sql.catalyst.expressions.objects.StaticInvoke
+import org.apache.spark.sql.catalyst.optimizer.ReplaceExpressions
 import org.apache.spark.sql.catalyst.trees.TreePattern.{CURRENT_LIKE, TreePattern}
 import org.apache.spark.sql.catalyst.util.{toPrettySQL, MapData, RandomUUIDGenerator}
 import org.apache.spark.sql.errors.QueryCompilationErrors
@@ -42,6 +43,7 @@ case class PrintToStderr(child: Expression) extends UnaryExpression {
 
   override lazy val deterministic: Boolean = false
 
+  /** Preserve the stderr side effect for every evaluated row. */
   override def foldable: Boolean = false
 
   protected override def nullSafeEval(input: Any): Any = {
@@ -424,16 +426,22 @@ case class CurrentUser()
 }
 
 private object AesEncryptDeterminism {
+  /** Whether deterministic arguments use a fixed IV or a mode that does not generate one. */
   def apply(arguments: Seq[Expression]): Boolean = {
     arguments.forall(_.deterministic) &&
       (hasNonEmptyFixedValue(arguments(4)) || isEcbFixedValue(arguments(2)))
   }
 
+  /** Read the same constant value that constant folding sees after replacing SQL wrappers. */
   private def fixedValue(expression: Expression): Option[Any] = {
-    if (expression.resolved && expression.foldable && expression.deterministic &&
-        expression.contextIndependentFoldable) {
+    if (expression.resolved && expression.deterministic) {
       try {
-        Option(expression.eval(EmptyRow))
+        val replaced = ReplaceExpressions.replace(expression)
+        if (replaced.resolved && replaced.foldable && replaced.deterministic) {
+          Option(replaced.eval(EmptyRow))
+        } else {
+          None
+        }
       } catch {
         case NonFatal(_) => None
       }
@@ -442,6 +450,7 @@ private object AesEncryptDeterminism {
     }
   }
 
+  /** Empty and unknown IVs may request a randomly generated IV. */
   private def hasNonEmptyFixedValue(expression: Expression): Boolean =
     fixedValue(expression) match {
       case Some(value: Array[Byte]) => value.nonEmpty
@@ -449,6 +458,7 @@ private object AesEncryptDeterminism {
       case _ => false
     }
 
+  /** ECB never generates an IV. */
   private def isEcbFixedValue(expression: Expression): Boolean = fixedValue(expression) match {
     case Some(value: UTF8String) => value.toString.equalsIgnoreCase("ECB")
     case _ => false
