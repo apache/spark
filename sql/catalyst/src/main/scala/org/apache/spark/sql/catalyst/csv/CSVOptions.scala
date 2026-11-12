@@ -292,6 +292,10 @@ class CSVOptions(
    * Note this only takes effect when `nullValue` is left at its default (empty string): a
    * non-empty `nullValue` is always written verbatim, so this option has no observable effect,
    * matching how the SQL config it overrides already composes with `nullValue`.
+   *
+   * One exception to the bare-token behavior: a record whose only value is a null is written as a
+   * quoted empty string even when this is `false` (with quoting enabled), because a bare token
+   * would be an empty line that the writer drops.
    */
   val treatNullAsEmptyString: Option[Boolean] =
     parameters.get(TREAT_NULL_AS_EMPTY_STRING) match {

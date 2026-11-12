@@ -50,6 +50,7 @@ import org.apache.spark.sql.internal.SQLConf.BinaryOutputStyle
 import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.sql.types._
 import org.apache.spark.tags.ExtendedSQLTest
+import org.apache.spark.util.Utils
 
 abstract class CSVSuite
   extends SharedSparkSession
@@ -863,6 +864,100 @@ abstract class CSVSuite
             checkAnswer(spark.read.text(path.getCanonicalPath), Row("Tesla,,\"\""))
           } else {
             checkAnswer(spark.read.text(path.getCanonicalPath), Row("Tesla,\"\",\"\""))
+          }
+        }
+      }
+    }
+  }
+
+  private def checkSingleNullValueRecords(skipped: Boolean): Unit = {
+    withSQLConf(SQLConf.LEGACY_NULL_VALUE_WRITTEN_AS_QUOTED_EMPTY_STRING_CSV.key -> "false") {
+      val df = Seq(("A", "west"), (null, "west"), ("B", "east"), (null, "east"),
+        (null, "east")).toDF("code", "region")
+      val ab = Seq("A", "B")
+      def kept(token: String) = ab ++ Seq.fill(if (skipped) 0 else 3)(token)
+      // (write options, read options, lines written). The row is rewritten whenever the configured
+      // writer would render the lone null as an empty line, including when it is written through an
+      // empty `emptyValue` or a whitespace `nullValue` that the default trimming reduces to empty.
+      // A non-empty nullValue or quoteAll never wrote an empty line; with quoting off a null cannot
+      // be told from an empty line, so the row is still dropped.
+      Seq[(Map[String, String], Map[String, String], Seq[String])](
+        (Map.empty, Map.empty, kept("\"\"")),
+        (Map("emptyValue" -> "-"), Map.empty, kept("\"\"")),
+        (Map("emptyValue" -> ""), Map.empty, kept("\"\"")),
+        (Map("treatNullAsEmptyString" -> "false"), Map.empty, kept("\"\"")),
+        (Map("treatNullAsEmptyString" -> "true", "emptyValue" -> ""), Map.empty, kept("\"\"")),
+        (Map("nullValue" -> null), Map.empty, kept("\"\"")),
+        (Map("nullValue" -> " "), Map.empty, kept("\"\"")),
+        (Map("quote" -> "'"), Map("quote" -> "'"), kept("''")),
+        (Map("nullValue" -> "N"), Map("nullValue" -> "N"), ab ++ Seq.fill(3)("N")),
+        (Map("quoteAll" -> "true"), Map.empty, Seq("\"A\"", "\"B\"") ++ Seq.fill(3)("\"\"")),
+        (Map("quote" -> ""), Map.empty, ab)).foreach { case (opts, readOpts, lines) =>
+        withTempPath { path =>
+          df.select("code").write.options(opts).csv(path.getCanonicalPath)
+          checkAnswer(spark.read.text(path.getCanonicalPath), lines.map(Row(_)))
+          checkAnswer(spark.read.options(readOpts).schema("code STRING").csv(path.getCanonicalPath),
+            (ab ++ Seq.fill(lines.size - 2)(null: String)).map(Row(_)))
+        }
+      }
+      withTempPath { path =>
+        df.write.partitionBy("region").csv(path.getCanonicalPath)
+        checkAnswer(
+          spark.read.schema("code STRING, region STRING").csv(path.getCanonicalPath)
+            .groupBy("region").agg("*" -> "count", "code" -> "count"),
+          if (skipped) Seq(Row("east", 1L, 1L), Row("west", 1L, 1L))
+          else Seq(Row("east", 3L, 1L), Row("west", 2L, 1L)))
+      }
+      // A multi-column record with a leading null is not a lone-null record (numFields != 1), so it
+      // is written in full and keeps its other fields, whatever the legacy skip conf is.
+      withTempPath { path =>
+        df.write.csv(path.getCanonicalPath)
+        checkAnswer(
+          spark.read.schema("code STRING, region STRING").csv(path.getCanonicalPath),
+          Seq(Row("A", "west"), Row(null, "west"), Row("B", "east"),
+            Row(null, "east"), Row(null, "east")))
+      }
+      checkAnswer(
+        sql("SELECT to_csv(named_struct('code', CAST(NULL AS STRING), 'region', 'west'))"),
+        Row(",west"))
+      val folded = sql("SELECT to_csv(named_struct('code', CAST(NULL AS STRING)))")
+      checkAnswer(folded, Row(if (skipped) null else "\"\""))
+      val toCsv = spark.range(2).selectExpr(
+        "to_csv(named_struct('code', CASE WHEN id = 0 THEN 'A' END))",
+        "to_csv(named_struct('code', CASE WHEN id = 0 THEN '' END), map('emptyValue', ''))")
+      if (skipped) {
+        val e = intercept[SparkException](toCsv.collect())
+        assert(Utils.getRootCause(e).isInstanceOf[NullPointerException])
+      } else {
+        checkAnswer(toCsv, Seq(Row("A", ""), Row("\"\"", "\"\"")))
+      }
+    }
+  }
+
+  test("CSV write keeps a single-column record whose value is null") {
+    checkSingleNullValueRecords(skipped = false)
+  }
+
+  test("CSV write keeps a single-column record whose value is null " +
+    "(legacy skip conf enabled reproduces the bug)") {
+    withSQLConf(SQLConf.LEGACY_CSV_SKIP_SINGLE_NULL_VALUE_RECORD_ON_WRITE.key -> "true") {
+      checkSingleNullValueRecords(skipped = true)
+    }
+  }
+
+  test("CSV write keeps a single-column record whose value is null " +
+    "(reads a mix of legacy-dropped and fixed files)") {
+    val legacySkip = SQLConf.LEGACY_CSV_SKIP_SINGLE_NULL_VALUE_RECORD_ON_WRITE.key
+    withSQLConf(SQLConf.LEGACY_NULL_VALUE_WRITTEN_AS_QUOTED_EMPTY_STRING_CSV.key -> "false") {
+      withTempPath { path =>
+        val df = Seq("A", null).toDF("code")
+        withSQLConf(legacySkip -> "true")(df.write.csv(path.getCanonicalPath))
+        withSQLConf(legacySkip -> "false")(df.write.mode("append").csv(path.getCanonicalPath))
+        // The legacy files lack the null row; the fixed files keep it, under either reader setting.
+        Seq("false", "true").foreach { value =>
+          withSQLConf(legacySkip -> value) {
+            checkAnswer(spark.read.schema("code STRING").csv(path.getCanonicalPath),
+              Seq(Row("A"), Row("A"), Row(null)))
           }
         }
       }

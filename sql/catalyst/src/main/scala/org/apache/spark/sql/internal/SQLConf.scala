@@ -8380,10 +8380,26 @@ object SQLConf {
   val LEGACY_NULL_VALUE_WRITTEN_AS_QUOTED_EMPTY_STRING_CSV =
     buildConf("spark.sql.legacy.nullValueWrittenAsQuotedEmptyStringCsv")
       .internal()
-      .doc("When set to false, nulls are written as unquoted empty strings in CSV data source. " +
+      .doc("When set to false, nulls are written as unquoted empty strings in CSV data source, " +
+        "except that a record whose only value is a null is written as a quoted empty string " +
+        "(with quoting enabled), since a bare token would be an empty line the writer drops. " +
         "If set to true, it restores the legacy behavior that nulls were written as quoted " +
         "empty strings, `\"\"`.")
       .version("3.3.0")
+      .booleanConf
+      .createWithDefault(false)
+
+  val LEGACY_CSV_SKIP_SINGLE_NULL_VALUE_RECORD_ON_WRITE =
+    buildConf("spark.sql.legacy.csv.skipSingleNullValueRecordOnWrite")
+      .internal()
+      .doc("When true, restores the legacy behavior that a CSV record whose only value is a null " +
+        "written as an empty token is an empty line, which the CSV writer drops. When false, " +
+        "the record is written as a quoted empty string whatever `emptyValue` is, so it reads " +
+        "back as null, except with quoting disabled (`quote` set to an empty string), where no " +
+        "token can represent the null and the record is still dropped; `to_csv` returns an empty " +
+        "string for any other record the writer drops as an empty line.")
+      .version("5.0.0")
+      .withBindingPolicy(ConfigBindingPolicy.NOT_APPLICABLE)
       .booleanConf
       .createWithDefault(false)
 

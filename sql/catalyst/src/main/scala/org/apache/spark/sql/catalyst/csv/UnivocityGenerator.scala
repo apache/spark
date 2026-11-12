@@ -70,7 +70,8 @@ class UnivocityGenerator(
   // `spark.sql.legacy.nullValueWrittenAsQuotedEmptyStringCsv` config. This lets a single write
   // choose whether a null is written as an empty string (a quoted empty string `""` with the
   // default `emptyValue`) or as a bare, unquoted empty token, without changing the session
-  // default.
+  // default. Either way a record whose only value is a null is written as a quoted empty string
+  // (with quoting enabled), since a bare token would be an empty line the writer drops.
   private val nullAsQuotedEmptyString = options.treatNullAsEmptyString.getOrElse(
     SQLConf.get.getConf(SQLConf.LEGACY_NULL_VALUE_WRITTEN_AS_QUOTED_EMPTY_STRING_CSV))
 
@@ -209,6 +210,27 @@ class UnivocityGenerator(
     }
   }
 
+  private lazy val skipSingleNullValueRecord =
+    SQLConf.get.getConf(SQLConf.LEGACY_CSV_SKIP_SINGLE_NULL_VALUE_RECORD_ON_WRITE)
+  // A record holding only a null that the writer renders as nothing is an empty line, which the
+  // writer skips; write it as a quoted empty string instead so it reads back as null. With quoting
+  // disabled (`quote` set to an empty string) there is no token to represent the null, so such a
+  // record is still dropped.
+  private val loneNullRecord = s"${options.quote}${options.quote}"
+  // Whether the configured writer renders a one-field null as an empty line. Probed from the writer
+  // itself rather than inferred from the option strings, so it also covers a null written through
+  // an empty or null `emptyValue`/`nullValue`, or whitespace that the default trimming removes.
+  private lazy val loneNullRendersAsEmptyLine: Boolean = {
+    val probe = new CsvWriter(options.asWriterSettings)
+    val nullField = if (nullAsQuotedEmptyString) options.nullValue else null
+    probe.writeRowToString(Array[String](nullField): _*) == null
+  }
+
+  private def isLoneNullRecord(row: InternalRow): Boolean = {
+    row.numFields == 1 && row.isNullAt(0) && !skipSingleNullValueRecord &&
+      options.quote != '\u0000' && loneNullRendersAsEmptyLine
+  }
+
   private def convertRow(row: InternalRow): Seq[String] = {
     var i = 0
     val values = new Array[String](row.numFields)
@@ -231,11 +253,21 @@ class UnivocityGenerator(
    * Writes a single InternalRow to CSV using Univocity.
    */
   def write(row: InternalRow): Unit = {
-    gen.writeRow(convertRow(row): _*)
+    if (isLoneNullRecord(row)) {
+      gen.writeRow(loneNullRecord)
+    } else {
+      gen.writeRow(convertRow(row): _*)
+    }
   }
 
   def writeToString(row: InternalRow): String = {
-    gen.writeRowToString(convertRow(row): _*)
+    if (isLoneNullRecord(row)) {
+      loneNullRecord
+    } else {
+      // The writer returns null for a record it skips as an empty line; to_csv returns "".
+      val line = gen.writeRowToString(convertRow(row): _*)
+      if (line == null && !skipSingleNullValueRecord) "" else line
+    }
   }
 
   def close(): Unit = gen.close()
