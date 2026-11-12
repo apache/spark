@@ -248,25 +248,15 @@ class PandasMapUDFHandler(BatchEvalTypeHandler["pa.RecordBatch"]):
     def run(self, split_index: int, data: "Iterator[pa.RecordBatch]") -> "Iterator[pa.RecordBatch]":
         metrics = WorkerMetrics()
         phase_timers = self._create_phase_timers()
-        if phase_timers is not None:
-            # If the UDF never pulls from its lazy input iterator, the serializer's load_stream()
-            # may never start, leaving the read timer unregistered. Register a zero for that case.
-            metrics.measure("pythonDataReadTime")
-
-            # Sequential input intervals include reads. Record their nesting because
-            # the serializer may publish its read total after the handler finishes.
-            metrics.record_sub_duration(
-                parent_metric="pythonInputPreparationTime", sub_metric="pythonDataReadTime"
-            )
-
         clock = time.perf_counter_ns
-        input_duration_ns = 0
+        input_preparation_duration_ns = 0
+        input_iteration_duration_ns = 0
         udf_duration_ns = 0
         output_duration_ns = 0
         num_timed_batches = 0
 
         def dataframe_iter() -> "Iterator[Any]":
-            nonlocal input_duration_ns, num_timed_batches
+            nonlocal input_preparation_duration_ns, input_iteration_duration_ns, num_timed_batches
             # Input batches have a single struct column (see MapInBatchEvaluatorFactory);
             # convert lazily so peakmem stays bounded by one batch.
             while True:
@@ -278,6 +268,7 @@ class PandasMapUDFHandler(BatchEvalTypeHandler["pa.RecordBatch"]):
                         return
                     if phase_timers is not None:
                         num_timed_batches += 1
+                        preparation_start_ns = clock()
                     df = ArrowToPandasConversion.to_pandas(
                         batch,
                         timezone=self._runner_conf.timezone,
@@ -286,7 +277,10 @@ class PandasMapUDFHandler(BatchEvalTypeHandler["pa.RecordBatch"]):
                     )[0]
                 finally:
                     if phase_timers is not None:
-                        input_duration_ns += clock() - input_start_ns
+                        input_end_ns = clock()
+                        input_iteration_duration_ns += input_end_ns - input_start_ns
+                if phase_timers is not None:
+                    input_preparation_duration_ns += input_end_ns - preparation_start_ns
                 yield df
                 del df
 
@@ -348,9 +342,9 @@ class PandasMapUDFHandler(BatchEvalTypeHandler["pa.RecordBatch"]):
             if phase_timers is not None:
                 metrics.set("pythonNumTimedBatches", num_timed_batches)
                 input_timer, udf_timer, output_timer = phase_timers
-                input_timer.add_duration_ns(input_duration_ns)
-                # Input requests run inside UDF execution; subtract their full duration.
-                udf_timer.add_duration_ns(udf_duration_ns - input_duration_ns)
+                input_timer.add_duration_ns(input_preparation_duration_ns)
+                # Input iteration includes reads and conversion nested inside UDF execution.
+                udf_timer.add_duration_ns(udf_duration_ns - input_iteration_duration_ns)
                 output_timer.add_duration_ns(output_duration_ns)
 
 

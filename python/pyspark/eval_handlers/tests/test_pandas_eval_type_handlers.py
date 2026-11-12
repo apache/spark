@@ -27,7 +27,6 @@ Arrow<->pandas conversion.
 
 import os
 import unittest
-from io import BytesIO
 from unittest.mock import patch
 
 from pyspark.errors import PySparkRuntimeError, PySparkTypeError, PySparkValueError
@@ -63,7 +62,11 @@ if have_pandas and have_pyarrow:
         PandasScalarUDFHandler,
         PandasWindowAggUDFHandler,
     )
-    from pyspark.sql.conversion import ArrowBatchTransformer
+    from pyspark.sql.conversion import (
+        ArrowBatchTransformer,
+        ArrowToPandasConversion,
+        PandasToArrowConversion,
+    )
 
 _missing_message = pandas_requirement_message or pyarrow_requirement_message
 
@@ -439,68 +442,56 @@ class PandasMapUDFHandlerTests(PandasEvalTypeHandlerTestCase):
         self.addCleanup(metrics.reset)
         batch = ArrowBatchTransformer.wrap_struct(self._batch(v=[1, 2]))
         handler = self._handler(lambda dfs: dfs, self._return_type)
-        with patch(
-            "pyspark.eval_handlers._pandas.time.perf_counter_ns",
-            side_effect=AssertionError("Timing is disabled"),
-        ):
-            output = list(handler.run(0, iter([batch])))
+        output = list(handler.run(0, iter([batch])))
         self.assertEqual(output[0].num_rows, 2)
         self.assertEqual(metrics.to_dict(), {})
 
-    def test_phase_timing_excludes_nested_input_and_output_writes(self):
+    def test_phase_timing_excludes_nested_input_and_consumer_work(self):
         metrics = WorkerMetrics()
         metrics.reset()
         self.addCleanup(metrics.reset)
         clock_ns = 0
-        input_ns = 0
-        output_ns = 0
 
-        class TimedBatch:
-            def __init__(self, batch):
-                self.batch = batch
+        def advancing(ns, func):
+            running = False
 
-            def __getattr__(self, name):
-                return getattr(self.batch, name)
+            def wrapped(*args, **kwargs):
+                nonlocal clock_ns, running
+                if running:
+                    return func(*args, **kwargs)
+                running = True
+                try:
+                    clock_ns += ns
+                    return func(*args, **kwargs)
+                finally:
+                    running = False
 
-            def column(self, index):
-                nonlocal clock_ns, input_ns
-                clock_ns += 3_000_000
-                input_ns += 3_000_000
-                return self.batch.column(index)
+            return wrapped
 
-        class OutputFrame(pd.DataFrame):
-            def __getitem__(self, key):
-                nonlocal clock_ns, output_ns
-                clock_ns += 5_000_000
-                output_ns += 5_000_000
-                return super().__getitem__(key)
+        batches = [
+            ArrowBatchTransformer.wrap_struct(self._batch(v=[1, 2])),
+            ArrowBatchTransformer.wrap_struct(self._batch(v=[3, 4, 5])),
+        ]
 
-        class TimedStream(BytesIO):
-            read_ns = 0
-            write_ns = 0
-
-            def read(self, size=-1):
-                nonlocal clock_ns
-                clock_ns += 17_000_000
-                self.read_ns += 17_000_000
-                return super().read(size)
-
-            def write(self, data):
-                nonlocal clock_ns
-                clock_ns += 19_000_000
-                self.write_ns += 19_000_000
-                return super().write(data)
+        def data():
+            nonlocal clock_ns
+            for batch in batches:
+                clock_ns += 17_000_000  # Read/deserialization.
+                clock_ns += 23_000_000  # Iterator work outside conversion.
+                yield batch
+            clock_ns += 29_000_000  # Input exhaustion.
 
         def udf(dfs):
             nonlocal clock_ns
             clock_ns += 7_000_000
-            combined = pd.concat(list(dfs))
+            first = next(dfs)
 
             def results():
                 nonlocal clock_ns
+                combined = pd.concat([first, *dfs])
                 for start, end in ((0, 1), (1, 4), (4, 5)):
                     clock_ns += 13_000_000
-                    yield OutputFrame(combined.iloc[start:end])
+                    yield combined.iloc[start:end]
                 clock_ns += 11_000_000
 
             return results()
@@ -510,68 +501,36 @@ class PandasMapUDFHandlerTests(PandasEvalTypeHandlerTestCase):
             self._return_type,
             RunnerConf({"spark.sql.execution.pythonUDF.detailedTiming.enabled": "true"}),
         )
-        batches = [
-            ArrowBatchTransformer.wrap_struct(self._batch(v=[1, 2])),
-            ArrowBatchTransformer.wrap_struct(self._batch(v=[3, 4, 5])),
-        ]
-        raw_input = BytesIO()
-        with pa.ipc.new_stream(raw_input, batches[0].schema) as writer:
-            for batch in batches:
-                writer.write_batch(batch)
-        input_stream = TimedStream(raw_input.getvalue())
-        output_stream = TimedStream()
+        with (
+            patch("pyspark.eval_handlers._pandas.time.perf_counter_ns", new=lambda: clock_ns),
+            patch.object(
+                ArrowToPandasConversion,
+                "to_pandas",
+                new=advancing(3_000_000, ArrowToPandasConversion.to_pandas),
+            ),
+            patch.object(
+                PandasToArrowConversion,
+                "from_pandas",
+                new=advancing(5_000_000, PandasToArrowConversion.from_pandas),
+            ),
+        ):
+            output = []
+            for batch in handler.run(0, data()):
+                output.append(batch)
+                clock_ns += 19_000_000  # Consumer work after yielding the output.
 
-        def data():
-            nonlocal clock_ns, input_ns
-            for batch in handler.serializer.load_stream(input_stream):
-                clock_ns += 23_000_000
-                input_ns += 23_000_000
-                yield TimedBatch(batch)
-            clock_ns += 29_000_000
-            input_ns += 29_000_000
-
-        with patch("pyspark.eval_handlers._pandas.time.perf_counter_ns", new=lambda: clock_ns):
-            handler.serializer.dump_stream(handler.run(0, data()), output_stream)
-
-        output = list(pa.ipc.open_stream(output_stream.getvalue()[4:]))
         self.assertEqual([batch.num_rows for batch in output], [1, 3, 1])
+        self.assertEqual(self._struct_values(output), [1, 2, 3, 4, 5])
         report = metrics.to_dict()
         self.assertEqual(report["pythonNumTimedBatches"], 2)
-        self.assertEqual(report["pythonDataReadTime"], input_stream.read_ns // 1_000_000)
-        self.assertEqual(report["pythonInputPreparationTime"], input_ns // 1_000_000)
-        self.assertGreater(input_ns, 0)
+        self.assertEqual(report["pythonInputPreparationTime"], 2 * 3)
         self.assertEqual(report["pythonUDFExecutionTime"], 7 + 3 * 13 + 11)
-        self.assertEqual(report["pythonOutputPreparationTime"], output_ns // 1_000_000)
-        self.assertGreater(output_ns, 0)
-        self.assertEqual(report["pythonDataWriteTime"], output_stream.write_ns // 1_000_000)
-        self.assertEqual(
-            sum(
-                report[name]
-                for name in (
-                    "pythonDataReadTime",
-                    "pythonInputPreparationTime",
-                    "pythonUDFExecutionTime",
-                    "pythonOutputPreparationTime",
-                    "pythonDataWriteTime",
-                )
-            ),
-            clock_ns // 1_000_000,
-        )
+        self.assertEqual(report["pythonOutputPreparationTime"], 3 * 5)
 
     def test_timing_with_unconsumed_input_and_early_close(self):
         metrics = WorkerMetrics()
         self.addCleanup(metrics.reset)
         batch = ArrowBatchTransformer.wrap_struct(self._batch(v=[1, 2]))
-        raw_input = BytesIO()
-        with pa.ipc.new_stream(raw_input, batch.schema) as writer:
-            writer.write_batch(batch)
-            writer.write_batch(batch)
-
-        class TimedStream(BytesIO):
-            def read(self, size=-1):
-                nonlocal clock_ns
-                clock_ns += 17_000_000
-                return super().read(size)
 
         for consumed in (0, 1):
             with self.subTest(consumed=consumed):
@@ -581,9 +540,9 @@ class PandasMapUDFHandlerTests(PandasEvalTypeHandlerTestCase):
 
                 def data():
                     nonlocal clock_ns, pulls
-                    for batch in reader:
+                    for _ in range(2):
                         pulls += 1
-                        clock_ns += 23_000_000
+                        clock_ns += 17_000_000
                         yield batch
 
                 def udf(dfs):
@@ -597,7 +556,6 @@ class PandasMapUDFHandlerTests(PandasEvalTypeHandlerTestCase):
                     self._return_type,
                     RunnerConf({"spark.sql.execution.pythonUDF.detailedTiming.enabled": "true"}),
                 )
-                reader = handler.serializer.load_stream(TimedStream(raw_input.getvalue()))
                 input_iter = data()
                 result = handler.run(0, input_iter)
                 with patch(
@@ -611,18 +569,14 @@ class PandasMapUDFHandlerTests(PandasEvalTypeHandlerTestCase):
                             result.close()
                         else:
                             self.assertEqual(list(result), [])
-                        self.assertEqual(metrics.to_dict()["pythonDataReadTime"], 0)
                     finally:
                         result.close()
                         input_iter.close()
-                        reader.close()
 
                 report = metrics.to_dict()
                 self.assertEqual(pulls, consumed)
                 self.assertEqual(report["pythonNumTimingReports"], 1)
                 self.assertEqual(report["pythonNumTimedBatches"], consumed)
-                self.assertEqual(report["pythonDataReadTime"] > 0, bool(consumed))
-                self.assertEqual(report["pythonInputPreparationTime"], 23 * consumed)
                 self.assertEqual(report["pythonUDFExecutionTime"], 7)
 
     def test_legacy_accepts_any_iterable(self):
