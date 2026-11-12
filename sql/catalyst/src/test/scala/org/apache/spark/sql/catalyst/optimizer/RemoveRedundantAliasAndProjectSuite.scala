@@ -321,4 +321,54 @@ class RemoveRedundantAliasAndProjectSuite extends PlanTest {
       comparePlans(union, optimized)
     }
   }
+
+  test("SPARK-61379: Don't remove aliases under Union when Window has duplicate aliases") {
+    val exprId = NamedExpression.newExprId
+    val attribute = AttributeReference("attr", IntegerType)(exprId = exprId)
+    val aAttr = AttributeReference("a", IntegerType)()
+    val bAttr = AttributeReference("b", IntegerType)()
+    val cAttr = AttributeReference("c", IntegerType)()
+    val firstChild = LocalRelation(aAttr, bAttr, cAttr)
+    val secondChild = Window(
+      Seq(
+        Alias(attribute, "attr")(),
+        Alias(attribute, "attr")()
+      ),
+      Nil,
+      Nil,
+      LocalRelation(attribute)
+    )
+    val union = Union(Seq(firstChild, secondChild))
+
+    withSQLConf(SQLConf.UNION_IS_RESOLVED_WHEN_DUPLICATES_PER_CHILD_RESOLVED.key -> "true") {
+      val optimized = Optimize.execute(union)
+      comparePlans(union, optimized)
+    }
+  }
+
+  test("SPARK-61379: Safely remove redundant alias under Union when non-conflicting") {
+    val exprId = NamedExpression.newExprId
+    val attribute = AttributeReference("attr", IntegerType)(exprId = exprId)
+    val otherAlias = Alias(attribute, "other")()
+    val aAttr = AttributeReference("a", IntegerType)()
+    val bAttr = AttributeReference("b", IntegerType)()
+    val firstChild = LocalRelation(aAttr, bAttr)
+    val secondChild = Project(
+      Seq(
+        Alias(attribute, "attr")(),
+        otherAlias
+      ),
+      LocalRelation(attribute)
+    )
+    val secondChildCleaned = Project(
+      Seq(attribute, otherAlias),
+      LocalRelation(attribute)
+    )
+    val union = Union(Seq(firstChild, secondChild))
+
+    withSQLConf(SQLConf.UNION_IS_RESOLVED_WHEN_DUPLICATES_PER_CHILD_RESOLVED.key -> "true") {
+      val optimized = Optimize.execute(union)
+      comparePlans(optimized, Union(Seq(firstChild, secondChildCleaned)))
+    }
+  }
 }
