@@ -4173,8 +4173,14 @@ object SQLConf {
         "eviction happens at batch end. When k, up to k eligible records are removed per input; " +
         "any still-eligible records left over are removed at batch end. Only applies to modes " +
         "that evict (e.g. Append/Update); has no effect in Complete mode, which never evicts. " +
-        "Read by the streamline aggregation and streaming deduplication (dropDuplicates) " +
-        "operators; dropDuplicatesWithinWatermark always evicts at batch end.")
+        "Read by the streamline aggregation and streaming deduplication operators. Real-Time " +
+        "Mode defaults this setting to 2 when it is not explicitly set. For " +
+        "dropDuplicatesWithinWatermark, incremental cleanup only applies in Real-Time Mode; " +
+        "micro-batch queries always evict at batch end, even with a positive factor. When " +
+        "enabled for this operator, all cleanup uses the late-events watermark, including " +
+        "the batch-end drain and no-data batches. This can retain more state than a value of 0. " +
+        "Cleanup progress may change which records outside the guaranteed watermark-delay " +
+        "interval are emitted.")
       .version("4.3.0")
       .withBindingPolicy(ConfigBindingPolicy.NOT_APPLICABLE)
       .longConf
