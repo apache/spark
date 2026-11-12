@@ -1833,6 +1833,35 @@ object SQLConf {
       .booleanConf
       .createWithDefault(false)
 
+  val EVALUATE_NOT_NULL_CHECKS_IN_ORDER =
+    buildConf("spark.sql.optimizer.evaluateNotNullChecksInOrder")
+      .internal()
+      .doc("When true, an IS NOT NULL check in a filter condition, including the FILTER clause " +
+        "of an aggregate function, is evaluated in the order of the condition, as the " +
+        "interpreted evaluation does, so that it drops a row before an error that a later " +
+        "conjunct raises on the row. With whole-stage codegen, a check that cannot raise an " +
+        "error is evaluated at its position before a conjunct that can raise one, is " +
+        "nondeterministic, calls a user-defined function, or evaluates a column that the same " +
+        "stage computes on demand by an expression that can raise, instead of just before the " +
+        "first conjunct that references its column; a check whose column the same stage has " +
+        "not computed yet, by an expression that can raise, keeps the latter placement, except " +
+        "after a conjunct that can be NULL, as when false. A predicate that the optimizer " +
+        "infers from the condition is placed just before the first conjunct at which the " +
+        "conjuncts so far imply it, instead of at the front of the condition, so with " +
+        "whole-stage codegen off it is evaluated after the nondeterministic or user-defined " +
+        "function conjuncts that precede that one. A predicate pushed down to a DSv2 data " +
+        "source is still evaluated before the others, by the source or after the scan, while " +
+        "after the scan of a DSv1 source, a pushed predicate that the source does not handle " +
+        "is evaluated after the ones that cannot be pushed down. When false, with whole-stage " +
+        "codegen, a check is evaluated just before the first conjunct that references its " +
+        "column, or after all conjuncts, except after a conjunct that can be NULL (see " +
+        s"${LEGACY_FILTER_SHORT_CIRCUIT_ON_NULL_CONJUNCT.key}), so a conjunct before that " +
+        "position can raise an error on a row that the check rejects.")
+      .version("4.4.0")
+      .withBindingPolicy(ConfigBindingPolicy.NOT_APPLICABLE)
+      .booleanConf
+      .createWithDefault(false)
+
   val CASE_SENSITIVE = buildConf(SqlApiConfHelper.CASE_SENSITIVE_KEY)
     .internal()
     .doc("Whether the query analyzer should be case sensitive or not. " +
@@ -10032,6 +10061,8 @@ class SQLConf extends Serializable with Logging with SqlApiConf {
 
   def legacyFilterShortCircuitOnNullConjunct: Boolean =
     getConf(LEGACY_FILTER_SHORT_CIRCUIT_ON_NULL_CONJUNCT)
+
+  def evaluateNotNullChecksInOrder: Boolean = getConf(EVALUATE_NOT_NULL_CHECKS_IN_ORDER)
 
   def autoBroadcastJoinThreshold: Long = getConf(AUTO_BROADCASTJOIN_THRESHOLD)
 

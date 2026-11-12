@@ -2995,8 +2995,8 @@ class WholeStageCodegenSuite extends SharedSparkSession
   // row's file by its statistics.
   private def withNullConjunctTable(y: Int)(f: => Unit): Unit = {
     withTable("t") {
-      sql("CREATE TABLE t USING parquet AS " +
-        s"SELECT * FROM VALUES (NULL, 1, $y, NULL, 'x'), (0, 1, 0, 1, '1') AS v(a, b, y, x, s)")
+      sql("CREATE TABLE t USING parquet AS SELECT *, named_struct('x', x) AS st " +
+        s"FROM VALUES (NULL, 1, $y, NULL, 'x'), (0, 1, 0, 1, '1') AS v(a, b, y, x, s)")
       f
     }
   }
@@ -3297,6 +3297,205 @@ class WholeStageCodegenSuite extends SharedSparkSession
           checkAnswer(sql(query), Row(1))
         } else {
           checkArithmeticOverflow(query)
+        }
+      }
+    }
+  }
+
+  private val notNullChecksInOrder = SQLConf.EVALUATE_NOT_NULL_CHECKS_IN_ORDER.key -> "true"
+
+  test("SPARK-60329: a filter checks a column IS NOT NULL before a conjunct that can raise") {
+    withNullConjunctTable(Int.MaxValue) {
+      // `x` is NULL on the first row and `y + 1` overflows on it. With codegen off, the FALSE
+      // `x IS NOT NULL` drops the row before the conjunct after it is evaluated. With codegen
+      // on, the check is generated just before the first conjunct that references `x`, or after
+      // all of them, so the overflow is raised, unless `notNullChecksInOrder` generates a check
+      // that cannot raise at its position before a conjunct that can.
+      //
+      // The common `b * 2` takes the CSE path of FilterExec.
+      val cseQuery = "SELECT a FROM t WHERE x IS NOT NULL AND y + 1 > 0 AND " +
+        "b * 2 > 0 AND b * 2 > -1"
+      def multiplyExactCount(filterExecCSE: Boolean): Int = {
+        withSQLConf(
+            notNullChecksInOrder,
+            SQLConf.ANSI_ENABLED.key -> "true",
+            SQLConf.SUBEXPRESSION_ELIMINATION_FILTER_EXEC_ENABLED.key -> filterExecCSE.toString) {
+          val code = codegenString(sql(cseQuery).queryExecution.executedPlan)
+          "multiplyExact".r.findAllIn(code).length
+        }
+      }
+      assert(multiplyExactCount(filterExecCSE = true) < multiplyExactCount(filterExecCSE = false))
+
+      Seq("true", "false").foreach { filterExecCSE =>
+        // With codegen on and off, and `spark.sql.legacy.filterShortCircuitOnNullConjunct` on and
+        // off.
+        withNullConjunctConfs(
+            notNullChecksInOrder,
+            SQLConf.ANSI_ENABLED.key -> "true",
+            SQLConf.SUBEXPRESSION_ELIMINATION_FILTER_EXEC_ENABLED.key -> filterExecCSE) { _ =>
+          // A check written in the query, with and without a later conjunct that references `x`.
+          checkAnswer(sql("SELECT a FROM t WHERE x IS NOT NULL AND y + 1 > 0 AND x > 0"), Row(0))
+          checkAnswer(sql("SELECT a FROM t WHERE x IS NOT NULL AND y + 1 > 0"), Row(0))
+          // The same with a common subexpression.
+          checkAnswer(sql(cseQuery), Row(0))
+          // A check on an expression that cannot raise, a struct field.
+          checkAnswer(sql("SELECT a FROM t WHERE st.x IS NOT NULL AND y + 1 > 0"), Row(0))
+          // A check written after the overflowing conjunct stays after it, so the query raises.
+          checkArithmeticOverflow("SELECT a FROM t WHERE y + 1 > 0 AND x IS NOT NULL")
+          // `isnotnull(x)`, inferred from `x > 0`, is placed just before it, after the
+          // overflowing conjunct, so the query raises with codegen on and off alike.
+          checkArithmeticOverflow("SELECT a FROM t WHERE y + 1 > 0 AND x > 0")
+        }
+      }
+      Seq(true, false).foreach { codegen =>
+        withSQLConf(
+            SQLConf.ANSI_ENABLED.key -> "true",
+            SQLConf.PARQUET_FILTER_PUSHDOWN_ENABLED.key -> "false",
+            SQLConf.WHOLESTAGE_CODEGEN_ENABLED.key -> codegen.toString) {
+          withClue(s"wholeStage=$codegen: ") {
+            // Without `notNullChecksInOrder`, codegen keeps the lazy placement, and the inferred
+            // `isnotnull(x)` is at the front of the condition.
+            val written = "SELECT a FROM t WHERE x IS NOT NULL AND y + 1 > 0"
+            val inferred = "SELECT a FROM t WHERE y + 1 > 0 AND x > 0"
+            if (codegen) {
+              checkArithmeticOverflow(written)
+              checkArithmeticOverflow(inferred)
+            } else {
+              checkAnswer(sql(written), Row(0))
+              checkAnswer(sql(inferred), Row(0))
+            }
+            // A check on an expression that can raise, `cast(s AS INT) IS NOT NULL`, keeps the
+            // lazy placement with codegen on, so the overflowing conjunct raises on the first
+            // row before the check does, while codegen off evaluates the check first.
+            withSQLConf(notNullChecksInOrder) {
+              val raisingCheck = "SELECT a FROM t WHERE cast(s AS INT) IS NOT NULL AND y + 1 > 0"
+              if (codegen) {
+                checkArithmeticOverflow(raisingCheck)
+              } else {
+                checkCastInvalidInput(raisingCheck)
+              }
+            }
+          }
+        }
+      }
+      // The aggregate FILTER clause goes through the same code generation.
+      withNullConjunctConfs(notNullChecksInOrder, SQLConf.ANSI_ENABLED.key -> "true") { _ =>
+        checkAnswer(
+          sql("SELECT count(1) FILTER (WHERE x IS NOT NULL AND y + 1 > 0) FROM t"), Row(1))
+      }
+    }
+  }
+
+  test("SPARK-60329: a check on a column that the stage computes on demand is placed by the " +
+      "expression that computes it") {
+    withSQLConf(
+        notNullChecksInOrder,
+        SQLConf.ANSI_ENABLED.key -> "true",
+        SQLConf.PARQUET_FILTER_PUSHDOWN_ENABLED.key -> "false") {
+      // An aggregate in the same stage computes a result expression over its aggregates on
+      // demand. `r` is `sum(a) / sum(b)`, which raises DIVIDE_BY_ZERO on the first group, so the
+      // check on it keeps the lazy placement after `my - 1 < 0`, which drops the group. `mx` is
+      // `max(x) * 2.0D`, which cannot raise, so the check on it is generated before
+      // `my + 1 > 0`, which overflows on the first group.
+      val groups = "SELECT k, sum(a) / sum(b) AS r, max(x) * 2.0D AS mx, max(y) AS my FROM " +
+        "VALUES (1, 1, 0, NULL, 2147483647), (2, 1, 1, 1, 0) AS v(k, a, b, x, y) GROUP BY k"
+      Seq(
+        s"SELECT k FROM ($groups) WHERE r IS NOT NULL AND my - 1 < 0",
+        s"SELECT k FROM ($groups) WHERE mx IS NOT NULL AND my + 1 > 0").foreach { query =>
+        val df = sql(query)
+        assert(df.queryExecution.executedPlan.exists {
+          case w: WholeStageCodegenExec =>
+            w.exists(_.isInstanceOf[FilterExec]) && w.exists(_.isInstanceOf[HashAggregateExec])
+          case _ => false
+        })
+        checkAnswer(df, Row(2))
+      }
+      // After the NULL conjunct `NOT (m > 0 AND mw > 0)` on the first group, the check on `r`
+      // and `mz > 0` cannot raise by their own expressions, so the group is dropped at the NULL
+      // conjunct, with the config as without it, without evaluating `r`.
+      Seq("true", "false").foreach { inOrder =>
+        withSQLConf(SQLConf.EVALUATE_NOT_NULL_CHECKS_IN_ORDER.key -> inOrder) {
+          checkAnswer(
+            sql("SELECT k FROM (SELECT k, sum(a) / sum(b) AS r, max(n) AS m, max(w) AS mw, " +
+              "max(z) AS mz FROM VALUES (1, 1, 0, NULL, 1, 1), (2, 1, 1, 1, 1, 1) " +
+              "AS v(k, a, b, n, w, z) GROUP BY k) " +
+              "WHERE NOT (m > 0 AND mw > 0) AND r IS NOT NULL AND mz > 0"),
+            Seq.empty)
+        }
+      }
+      withNullConjunctTable(-5) {
+        // `c` is computed on demand by `cast(s AS INT)`, which raises on the first row, through a
+        // sample, which forwards the variables of the projection: the check on `c` keeps the lazy
+        // placement after `y + 1 > 0`, which drops the row.
+        val sampled = spark.table("t").selectExpr("a", "cast(s AS INT) AS c", "y")
+          .sample(1.0).where("c IS NOT NULL AND y + 1 > 0").select("a")
+        assert(sampled.queryExecution.executedPlan.exists(_.isInstanceOf[SampleExec]))
+        checkAnswer(sampled, Row(0))
+        // A conjunct on `c` evaluates the cast too, so the check on `x` before it, which drops
+        // the first row, is generated at its position.
+        checkAnswer(
+          spark.table("t").selectExpr("a", "cast(s AS INT) AS c", "x")
+            .sample(1.0).where("x IS NOT NULL AND c > 0").select("a"),
+          Row(0))
+        // The shared `c * 2` would take the CSE branch, which evaluates `c` before the checks, so
+        // the filter falls back to the other branch, and the check on `x` drops the first row
+        // with and without the CSE branch enabled.
+        Seq("true", "false").foreach { cse =>
+          withSQLConf(SQLConf.SUBEXPRESSION_ELIMINATION_FILTER_EXEC_ENABLED.key -> cse) {
+            checkAnswer(
+              spark.table("t").selectExpr("a", "cast(s AS INT) AS c", "x").sample(1.0)
+                .where("x IS NOT NULL AND c * 2 > 0 AND c * 2 > -1").select("a"),
+              Row(0))
+          }
+        }
+      }
+      withNullConjunctTable(Int.MaxValue) {
+        // A sample forwards the column `x` of the scan, which cannot raise, so the check on it
+        // is generated before the overflowing `y + 1 > 0`, which it drops the row before.
+        val sampled = spark.table("t").select("a", "x", "y")
+          .sample(1.0).where("x IS NOT NULL AND y + 1 > 0").select("a")
+        assert(sampled.queryExecution.executedPlan.exists(_.isInstanceOf[SampleExec]))
+        checkAnswer(sampled, Row(0))
+        // So do the limits over a single partition, in the same stage as the filter.
+        val limited = spark.table("t").select("a", "x", "y").repartition(1).limit(10)
+          .where("x IS NOT NULL AND y + 1 > 0").select("a")
+        assert(limited.queryExecution.executedPlan.exists {
+          case w: WholeStageCodegenExec =>
+            w.exists(_.isInstanceOf[FilterExec]) && w.exists(_.isInstanceOf[GlobalLimitExec])
+          case _ => false
+        })
+        checkAnswer(limited, Row(0))
+        // The aggregate evaluates its inputs before its FILTER clause, here `c`, which
+        // `x * 2` computes, so the check on it is generated before the overflowing `y + 1 > 0`.
+        // `rand()` keeps the projection from collapsing into the aggregate.
+        checkAnswer(
+          sql("SELECT count(1) FILTER (WHERE c IS NOT NULL AND y + 1 > 0), max(r) < 1 " +
+            "FROM (SELECT x * 2 AS c, y, rand() AS r FROM t)"),
+          Row(1, true))
+      }
+    }
+  }
+
+  test("SPARK-60329: a check before a nondeterministic conjunct or a UDF") {
+    withTable("r") {
+      sql("CREATE TABLE r USING parquet AS " +
+        "SELECT IF(id % 2 = 0, NULL, id) AS x, id AS y FROM range(0, 100, 1, 1)")
+      withSQLConf(notNullChecksInOrder, SQLConf.PARQUET_FILTER_PUSHDOWN_ENABLED.key -> "false") {
+        // A seeded `rand` is evaluated only on the rows that the check passes, with codegen on as
+        // with it off, so both return the same rows.
+        val sampled = "SELECT y FROM r WHERE x IS NOT NULL AND rand(42) < 0.5"
+        val expected = withSQLConf(SQLConf.WHOLESTAGE_CODEGEN_ENABLED.key -> "false") {
+          sql(sampled).collect().toSeq
+        }
+        checkAnswer(sql(sampled), expected)
+        // A UDF after the check is not called on the rows that the check rejects.
+        val calls = spark.sparkContext.longAccumulator
+        withUserDefinedFunction("count_calls" -> true) {
+          spark.udf.register("count_calls", (v: Long) => { calls.add(1); v >= 0 })
+          // Collected once, as `checkAnswer` runs the query more than once.
+          assert(sql("SELECT count(*) FROM r WHERE x IS NOT NULL AND count_calls(y)").collect()
+            === Array(Row(50)))
+          assert(calls.value === 50)
         }
       }
     }

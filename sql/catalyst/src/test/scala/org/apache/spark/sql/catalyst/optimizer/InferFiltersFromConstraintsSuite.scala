@@ -63,6 +63,61 @@ class InferFiltersFromConstraintsSuite extends PlanTest {
     comparePlans(optimized, correctAnswer)
   }
 
+  test("SPARK-60329: evaluateNotNullChecksInOrder places an inferred predicate just before the " +
+      "first conjunct that references its columns") {
+    val originalQuery = testRelation.where($"b" + 1 > 0 && $"a" > 0 && $"c" === $"a").analyze
+    def conjuncts(conf: Boolean): Seq[Expression] = {
+      withSQLConf(SQLConf.EVALUATE_NOT_NULL_CHECKS_IN_ORDER.key -> conf.toString) {
+        val Filter(condition, _) = Optimize.execute(originalQuery)
+        splitConjunctivePredicates(condition)
+      }
+    }
+    val Seq(a, b, c) = originalQuery.output
+    def positions(conf: Boolean, exprs: Expression*): Seq[Int] = {
+      val canonicalized = conjuncts(conf).map(_.canonicalized)
+      exprs.map(e => canonicalized.indexOf(e.canonicalized))
+    }
+    // Each inferred check is just before the first conjunct on its column, after the conjuncts
+    // before that one: `isnotnull(c)` before `c = a`, after `a > 0`.
+    val Seq(notNullB, written1, notNullA, written2, notNullC, written3) = positions(conf = true,
+      IsNotNull(b), b + 1 > 0, IsNotNull(a), a > 0, IsNotNull(c), c === a)
+    assert(notNullB == 0 && written1 == 1 && written1 < notNullA && notNullA < written2 &&
+      written2 < notNullC && notNullC < written3, conjuncts(conf = true))
+    // Otherwise the inferred predicates are at the front of the condition.
+    assert(conjuncts(conf = false).takeRight(3).map(_.canonicalized) ===
+      Seq(b + 1 > 0, a > 0, c === a).map(_.canonicalized))
+  }
+
+  test("SPARK-60329: evaluateNotNullChecksInOrder places an inferred predicate just before the " +
+      "first conjunct at which the conjuncts so far imply it") {
+    withSQLConf(SQLConf.EVALUATE_NOT_NULL_CHECKS_IN_ORDER.key -> "true") {
+      def positions(query: LogicalPlan, exprs: Expression*): Seq[Int] = {
+        val Filter(condition, _) = Optimize.execute(query.analyze)
+        val conjuncts = splitConjunctivePredicates(condition).map(_.canonicalized)
+        exprs.map(e => conjuncts.indexOf(e.canonicalized))
+      }
+      // `coalesce(a, 1) + b > 0` references `a`, but only `a > 0` implies `isnotnull(a)`.
+      val Seq(a, b, c) = testRelation.output
+      val Seq(written1, notNullA, written2) = positions(
+        testRelation.where(Coalesce(Seq($"a", 1)) + $"b" > 0 && $"a" > 0),
+        Coalesce(Seq(a, 1)) + b > 0, IsNotNull(a), a > 0)
+      assert(written1 >= 0 && written1 < notNullA && notNullA < written2)
+      // `c > 0` shares no column with the conjuncts. It is inferred from `a > 0` through the
+      // `a = c` of the nondeterministic child filter, which is not combined, so it goes just
+      // before `a > 0`, after `b + 1 > 0`.
+      val Seq(written3, inferredC, written4) = positions(
+        testRelation.where($"a" === $"c" && Rand(0) < 2).where($"b" + 1 > 0 && $"a" > 0),
+        b + 1 > 0, c > 0, a > 0)
+      assert(written3 >= 0 && written3 < inferredC && inferredC < written4)
+      // A transitive one: `a = c` goes just before `b = c`, after `b + 1 > 0`.
+      val Seq(written5, written6, inferredAC, written7) = positions(
+        testRelation.where($"a" === $"b" && $"b" + 1 > 0 && $"b" === $"c"),
+        a === b, b + 1 > 0, a === c, b === c)
+      assert(written5 >= 0 && written5 < written6 && written6 < inferredAC &&
+        inferredAC < written7)
+    }
+  }
+
   test("single inner join: filter out values on either side on equi-join keys") {
     val x = testRelation.subquery("x")
     val y = testRelation.subquery("y")
