@@ -149,8 +149,10 @@ bytes already copied to Spark, including for retried tasks.
 The reader owns its executor resources and cannot borrow its temporary factory.
 It may borrow `TaskContext` until the returned Arrow stream is released. Every host
 provides the task IDs of version 1 of the ABI, so the SDK rejects a task context shorter
-than in version 1, as it rejects the info structures and the read limit that Spark passes to
-the calls when they are shorter. `is_interrupted()` checks
+than in Spark 4.4.0, as it rejects the info structures and the read limit that Spark passes to
+the calls when they are shorter. It reads a field that a later release appends to one of them
+only when Spark passes it, so a connector built with a later version of the SDK still runs on
+4.4.0. `is_interrupted()` checks
 Spark's live cancellation callback, not a snapshot of its initial value; for a reader, it
 is also true once the task ended. Check it during long operations; blocking I/O still
 requires timeouts. `TaskContext::for_testing()`, with its `with_*` methods and

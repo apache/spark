@@ -17,7 +17,7 @@
 
 use std::cell::RefCell;
 use std::ffi::{c_char, c_int, c_void, CStr, CString};
-use std::mem::{offset_of, size_of};
+use std::mem::{offset_of, size_of, MaybeUninit};
 use std::sync::Arc;
 
 pub use arrow_array::ffi::FFI_ArrowArray as ArrowArray;
@@ -405,6 +405,58 @@ layout! {
     }
 }
 
+/// A structure that Spark passes to the library, to read or to fill.
+///
+/// # Safety
+/// All zero bytes must be a valid value of every field after the first `MIN_SIZE` bytes, as they
+/// are for numbers, pointers, and optional functions.
+pub unsafe trait Input: Copy {
+    /// The size of the structure in Spark 4.4.0, the first release of version 1 of the ABI, which
+    /// is the least that Spark passes. A field that a later release appends does not change it:
+    /// [`input`] reads such a field and [`fill`] sets it only when Spark passes it.
+    const MIN_SIZE: usize;
+}
+
+// The structures that Spark passes, with their sizes in Spark 4.4.0 on 64-bit targets. So far,
+// each binding has the fields of 4.4.0, so its minimum is its size. Once a binding has a field
+// that a later release appended, its minimum must be the offset of that field instead, as the
+// assertion checks.
+macro_rules! inputs {
+    ($($name:ident: $size:literal),* $(,)?) => {
+        $(
+            // SAFETY: the fields of the bindings are numbers, booleans, pointers, and optional
+            // functions.
+            unsafe impl Input for $name {
+                const MIN_SIZE: usize = size_of::<$name>();
+            }
+        )*
+
+        #[cfg(target_pointer_width = "64")]
+        const _: () = {
+            $(assert!(<$name as Input>::MIN_SIZE == $size);)*
+        };
+    };
+}
+
+inputs! {
+    SparkDsCreateInfo: 40,
+    SparkDsReaderInfo: 8,
+    SparkDsPartitionsInfo: 8,
+    SparkDsDomain: 48,
+    SparkDsStreamReaderInfo: 16,
+    SparkDsInitialOffsetInfo: 8,
+    SparkDsReadLimit: 24,
+    SparkDsLatestOffsetInfo: 32,
+    SparkDsStreamPartitionsInfo: 24,
+    SparkDsCommitOffsetInfo: 16,
+    SparkDsTaskContext: 40,
+    SparkDsReadInfo: 56,
+    SparkDsWriteInfo: 24,
+    SparkDsDataWriterInfo: 40,
+    SparkDsFinishWriteInfo: 48,
+    SparkDsFinishDataWriterInfo: 8,
+}
+
 thread_local! {
     static LAST_ERROR: RefCell<Option<CString>> = const { RefCell::new(None) };
 }
@@ -457,14 +509,15 @@ pub unsafe fn struct_size<T>(pointer: *const T) -> Result<i64> {
     Ok(size)
 }
 
-/// Copies a structure that Spark passes, which has every field of version 1 of the ABI: fields
-/// are only appended to the structures, so a shorter one is an error, not partly read.
+/// Copies a structure that Spark passes, which has at least the fields of Spark 4.4.0: fields are
+/// only appended to the structures, so a shorter one is an error. The fields of the binding that
+/// Spark does not pass, because a later release appended them, are zero.
 ///
 /// # Safety
 /// A non-null pointer must address a live structure whose first field is its size.
-pub unsafe fn input<T: Copy>(pointer: *const T) -> Result<T> {
+pub unsafe fn input<T: Input>(pointer: *const T) -> Result<T> {
     let size = unsafe { struct_size(pointer)? };
-    if size < size_of::<T>() as i64 {
+    if size < T::MIN_SIZE as i64 {
         let name = std::any::type_name::<T>()
             .rsplit("::")
             .next()
@@ -473,7 +526,38 @@ pub unsafe fn input<T: Copy>(pointer: *const T) -> Result<T> {
             format!("{name} has {size} bytes, fewer than in version 1 of the native ABI").into(),
         );
     }
-    Ok(unsafe { pointer.read_unaligned() })
+    let mut value = MaybeUninit::<T>::zeroed();
+    unsafe {
+        std::ptr::copy_nonoverlapping(
+            pointer.cast::<u8>(),
+            value.as_mut_ptr().cast::<u8>(),
+            fitting::<T>(size),
+        );
+        // The bytes that Spark does not pass are zero, which Input makes valid.
+        Ok(value.assume_init())
+    }
+}
+
+/// Sets the fields of a structure that Spark passes for the library to fill, such as the
+/// SparkDsReadLimit of default_read_limit, that fit in its size.
+///
+/// # Safety
+/// `pointer` must address a live structure whose first field is its size.
+pub unsafe fn fill<T: Input>(pointer: *mut T, value: &T) -> Result<()> {
+    let size = unsafe { struct_size(pointer.cast_const())? };
+    unsafe {
+        std::ptr::copy_nonoverlapping(
+            (value as *const T).cast::<u8>(),
+            pointer.cast::<u8>(),
+            fitting::<T>(size),
+        )
+    };
+    Ok(())
+}
+
+/// The bytes of a binding that fit in a structure of `size` bytes.
+fn fitting<T>(size: i64) -> usize {
+    usize::try_from(size).map_or(size_of::<T>(), |size| size.min(size_of::<T>()))
 }
 
 pub fn require_output<T>(pointer: *mut T) -> Result<()> {
@@ -642,8 +726,7 @@ pub unsafe fn set_read_limit(output: *mut SparkDsReadLimit, limit: ReadLimit) ->
                 .map_err(|_| format!("a read limit of {rows} rows exceeds the native ABI"))?;
         }
     }
-    unsafe { output.write_unaligned(value) };
-    Ok(())
+    unsafe { fill(output, &value) }
 }
 
 /// # Safety
@@ -779,6 +862,46 @@ mod tests {
             "SparkDsCreateInfo has 8 bytes, fewer than in version 1 of the native ABI"
         );
         assert!(unsafe { input::<SparkDsReadInfo>(std::ptr::null()) }.is_err());
+    }
+
+    /// A structure to which a release after 4.4.0 appended `added`.
+    #[repr(C)]
+    #[derive(Clone, Copy, Debug, PartialEq)]
+    struct Grown {
+        size: i64,
+        value: i64,
+        added: i64,
+    }
+
+    // SAFETY: the fields are numbers.
+    unsafe impl Input for Grown {
+        const MIN_SIZE: usize = offset_of!(Grown, added);
+    }
+
+    #[test]
+    fn appended_fields_are_read_and_set_only_when_spark_passes_them() {
+        let read = |structure: &[i64]| unsafe { input(structure.as_ptr().cast::<Grown>()) };
+        let grown = |size, added| Grown {
+            size,
+            value: 5,
+            added,
+        };
+        // As from Spark 4.4.0, from the release that appended the field, and from a later one.
+        assert_eq!(read(&[16, 5]).unwrap(), grown(16, 0));
+        assert_eq!(read(&[24, 5, 7]).unwrap(), grown(24, 7));
+        assert_eq!(read(&[32, 5, 7, 9]).unwrap(), grown(32, 7));
+        assert_eq!(
+            read(&[8]).unwrap_err().to_string(),
+            "Grown has 8 bytes, fewer than in version 1 of the native ABI"
+        );
+
+        // The last value stands for the memory after a structure from Spark 4.4.0.
+        let mut structure = [16_i64, 0, -1];
+        unsafe { fill(structure.as_mut_ptr().cast::<Grown>(), &grown(16, 7)) }.unwrap();
+        assert_eq!(structure, [16, 5, -1]);
+        let mut structure = [24_i64, 0, 0];
+        unsafe { fill(structure.as_mut_ptr().cast::<Grown>(), &grown(24, 7)) }.unwrap();
+        assert_eq!(structure, [24, 5, 7]);
     }
 
     #[test]
