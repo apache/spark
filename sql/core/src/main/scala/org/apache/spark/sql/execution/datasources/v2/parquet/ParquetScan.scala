@@ -175,6 +175,7 @@ case class ParquetScan(
     ParquetPartitionReaderFactory(
       conf,
       broadcastedConf,
+      dataSchema,
       effectiveSchema,
       readPartitionSchema,
       pushedFilters,

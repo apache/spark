@@ -21,14 +21,15 @@ import scala.jdk.CollectionConverters._
 
 import org.apache.spark.sql.SparkSession
 import org.apache.spark.sql.catalyst.util.RebaseDateTime.RebaseSpec
-import org.apache.spark.sql.connector.expressions.aggregate.{Aggregation, Count}
+import org.apache.spark.sql.connector.expressions.Expression
+import org.apache.spark.sql.connector.expressions.aggregate.{Aggregation, Count, Max, Min}
 import org.apache.spark.sql.connector.read.{SupportsPushDownAggregates, SupportsPushDownVariantExtractions, VariantExtraction}
 import org.apache.spark.sql.execution.datasources.{AggregatePushDownUtils, PartitioningAwareFileIndex}
 import org.apache.spark.sql.execution.datasources.parquet.{ParquetFilters, ParquetUtils, SparkToParquetSchemaConverter}
 import org.apache.spark.sql.execution.datasources.v2.{FileScanBuilder, V2ColumnUtils}
-import org.apache.spark.sql.internal.LegacyBehaviorPolicy
+import org.apache.spark.sql.internal.{LegacyBehaviorPolicy, SQLConf}
 import org.apache.spark.sql.sources.Filter
-import org.apache.spark.sql.types.{ArrayType, DataType, MapType, StructType, UserDefinedType, VariantType}
+import org.apache.spark.sql.types.{ArrayType, DataType, MapType, StructField, StructType, UserDefinedType, VariantType}
 import org.apache.spark.sql.util.CaseInsensitiveStringMap
 import org.apache.spark.util.ArrayImplicits._
 
@@ -101,23 +102,36 @@ case class ParquetScanBuilder(
     }
     // With field ID reading, the reader matches columns by field ID rather than by name (see
     // `ParquetReadSupport.clipParquetGroupFields`), but the footer statistics are looked up by
-    // name, so the two could pick different columns.
-    if (sqlConf.parquetFieldIdReadEnabled && ParquetUtils.hasFieldIds(dataSchema)) {
+    // name, so the two could pick different columns. Read the flag from the Hadoop configuration
+    // that the reader uses, which also has the options of this read.
+    val fieldIdReadEnabled = hadoopConf.getBoolean(SQLConf.PARQUET_FIELD_ID_READ_ENABLED.key,
+      SQLConf.PARQUET_FIELD_ID_READ_ENABLED.defaultValue.get)
+    if (fieldIdReadEnabled && ParquetUtils.hasFieldIds(dataSchema)) {
       return false
+    }
+    // `colName` is the name of the resolved column, as it appears in the table schema, so match
+    // it exactly.
+    def findField(column: Expression): Option[StructField] =
+      V2ColumnUtils.extractV2Column(column).flatMap(name => schema.fields.find(_.name == name))
+    val countedFields = aggregation.aggregateExpressions.toSeq.flatMap {
+      case count: Count => findField(count.column)
+      case _ => None
+    }
+    val aggregatedFields = countedFields ++ aggregation.aggregateExpressions.toSeq.flatMap {
+      case max: Max => findField(max.column)
+      case min: Min => findField(min.column)
+      case _ => None
     }
     // The footer only has statistics for leaf columns, and the null count of a leaf of a nested
     // column is not the number of nulls of the column itself: a non-null struct can have a null
     // field, and an empty array or map has no leaf value. So COUNT of a nested column cannot be
     // answered from the footer.
-    val countsNestedColumn = aggregation.aggregateExpressions.exists {
-      case count: Count => V2ColumnUtils.extractV2Column(count.column).exists { colName =>
-        // `colName` is the name of the resolved column, so match it exactly: `getFieldIndex` is
-        // case-insensitive and could pick another column that differs only in case.
-        schema.fields.find(_.name == colName).exists(f => isNestedType(f.dataType))
-      }
-      case _ => false
+    if (countedFields.exists(f => isNestedType(f.dataType))) {
+      return false
     }
-    if (countsNestedColumn) {
+    // For a column that a file does not have, the reader returns the existence default of the
+    // column, if it has one (see `ParquetColumnVector`), which the footer does not know about.
+    if (aggregatedFields.exists(_.hasExistenceDefaultValue)) {
       return false
     }
 

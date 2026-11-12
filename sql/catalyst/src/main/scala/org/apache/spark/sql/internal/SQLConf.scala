@@ -2121,8 +2121,9 @@ object SQLConf {
       "and COUNT as aggregate expression. For MIN/MAX, support boolean, integer, float and date " +
       "type. For COUNT, support all data types except struct, array, map and variant. " +
       "Aggregates are not pushed down when spark.sql.parquet.fieldId.read.enabled is true and " +
-      "the read schema has field IDs. If statistics is missing from any Parquet file footer, " +
-      "exception would be thrown.")
+      "the read schema has field IDs, or when an aggregated column has a default value for " +
+      "files without it, e.g. after ALTER TABLE ... ADD COLUMN ... DEFAULT. If statistics is " +
+      "missing from any Parquet file footer, exception would be thrown.")
     .version("3.3.0")
     .booleanConf
     .createWithDefault(false)
