@@ -49,7 +49,8 @@
 //                        Returns a result that breaks a rule of the header, chosen by the second
 //                        argument of the first row: "offset", an offset of 1; "short", one value
 //                        fewer than the rows; "long", one value more; "null_count", a null_count of
-//                        1 without a validity buffer; "children", a child array; "buffers", a NULL
+//                        1 without a validity buffer; "negative_null_count", a null_count of -2
+//                        with a validity buffer; "children", a child array; "buffers", a NULL
 //                        pointer to its buffers; "unset", out left unset.
 //   bad_nested_result(bigint, string)
 //                        Returns, for each row, an array<bigint> of its first argument, in a
@@ -740,6 +741,9 @@ void badResult(const ArrowArray* input, ArrowArray* out) {
   } else if (how == "null_count") {
     exportArray(out, input->length, 0, {{}, bytesOf(values)});
     out->null_count = 1;
+  } else if (how == "negative_null_count") {
+    std::vector<uint8_t> validity((static_cast<size_t>(input->length) + 7) / 8, 0xFF);
+    exportArray(out, input->length, -2, {validity, bytesOf(values)});
   } else if (how == "children") {
     ArrowArray child{};
     exportArray(&child, input->length, 0, {{}, bytesOf(values)});

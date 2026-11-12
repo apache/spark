@@ -31,6 +31,7 @@ import scala.jdk.CollectionConverters._
 
 import org.apache.arrow.c.{ArrowArray, ArrowSchema, Data}
 import org.apache.arrow.vector.{BigIntVector, VectorSchemaRoot}
+import org.apache.logging.log4j.Level
 import org.scalatest.time.SpanSugar._
 
 import org.apache.spark.{SPARK_DOC_ROOT, SparkConf, SparkRuntimeException, SparkThrowable, SparkUnsupportedOperationException, TaskContext, TaskContextImpl, TestUtils}
@@ -813,6 +814,7 @@ class NativeUDFSuite extends QueryTest with SharedSparkSession {
     "long" -> "eval returned 4 values for a batch of 3 rows.",
     "null_count" -> ("The result has a null_count of 1 but no validity buffer, which the C data " +
       "interface only allows with a null_count of 0."),
+    "negative_null_count" -> "The result has an invalid null_count of -2.",
     "children" -> "The result has 1 child arrays, but its type has 0.",
     "buffers" -> "The result has 2 buffers, but a NULL pointer to them.",
     "unset" -> "eval succeeded without setting its result.").map { case (kind, message) =>
@@ -876,6 +878,8 @@ class NativeUDFSuite extends QueryTest with SharedSparkSession {
 
   nativeGridTest("reject a library that Spark cannot use")(Seq(
     ("-DABI_VERSION=2", "UNSUPPORTED_UDF_ABI_VERSION", None),
+    ("-DTABLE_SIZE=8", "INVALID_LIBRARY",
+      Some("spark_udf_init returned a function table with a size of 8 bytes.")),
     ("-DTABLE_SIZE=24", "INVALID_LIBRARY",
       Some("The function table that spark_udf_init returned, of 24 bytes, does not have the " +
         "function create.")),
@@ -908,6 +912,19 @@ class NativeUDFSuite extends QueryTest with SharedSparkSession {
           condition = s"INVALID_NATIVE_DATA_SOURCE_PACKAGE.$subClass",
           parameters = Map("path" -> pkg.getCanonicalPath) ++ parameters)
       }
+  }
+
+  nativeTest("log the messages of a library in the log of Spark, with the path of the library") {
+    val name = "test_native_udf_logs"
+    val pkg = NativeDataSourcePackage.read(createPackage(compile(name, "-DINIT_FAILURE=1")))
+    val logAppender = new LogAppender("native function logs")
+    withLogAppender(logAppender, loggerNames = Seq(classOf[NativeUdfLibrary].getName)) {
+      intercept[Exception](NativeLibraries.getFunctionLibrary(pkg))
+    }
+    val events = logAppender.loggingEvents.filter(
+      _.getMessage.getFormattedMessage.contains("injected failure in spark_udf_init"))
+    assert(events.map(_.getLevel) == Seq(Level.ERROR))
+    assert(events.head.getMessage.getFormattedMessage.contains(System.mapLibraryName(name)))
   }
 
   nativeTest("tell an eval that its task was killed") {
