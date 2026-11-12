@@ -1926,74 +1926,7 @@ class GeneratedColumnWriteSuite extends QueryTest with DatasourceV2SQLBase {
     }
   }
 
-  // MERGE/UPDATE with generated columns are blocked for now; DELETE is allowed.
-
-  test("UPDATE with generated columns is blocked") {
-    withRowLevelCatalog {
-      val tblName = "my_tab"
-      withTable(s"$rowLevelCat.$tblName") {
-        sql(s"""CREATE TABLE $rowLevelCat.$tblName(
-               |  id INT,
-               |  data STRING,
-               |  doubled INT GENERATED ALWAYS AS (id * 2)
-               |) USING foo""".stripMargin)
-        val ex = intercept[AnalysisException] {
-          sql(s"UPDATE $rowLevelCat.$tblName SET data = 'x' WHERE id = 1")
-        }
-        assert(ex.getCondition == "UNSUPPORTED_FEATURE.TABLE_OPERATION")
-        assert(ex.getMessage.contains("UPDATE with generated columns"))
-      }
-    }
-  }
-
-  test("MERGE with generated columns is blocked") {
-    withRowLevelCatalog {
-      val tblName = "my_tab"
-      withTable(s"$rowLevelCat.$tblName") {
-        sql(s"""CREATE TABLE $rowLevelCat.$tblName(
-               |  id INT,
-               |  data STRING,
-               |  doubled INT GENERATED ALWAYS AS (id * 2)
-               |) USING foo""".stripMargin)
-        val ex = intercept[AnalysisException] {
-          sql(
-            s"""MERGE INTO $rowLevelCat.$tblName AS t
-               |USING source AS s
-               |ON t.id = s.id
-               |WHEN MATCHED THEN UPDATE SET t.data = s.data
-               |WHEN NOT MATCHED THEN INSERT (id, data) VALUES (s.id, s.data)
-               |""".stripMargin)
-        }
-        assert(ex.getCondition == "UNSUPPORTED_FEATURE.TABLE_OPERATION")
-        assert(ex.getMessage.contains("MERGE with generated columns"))
-      }
-    }
-  }
-
-  test("MERGE with only NOT MATCHED actions and generated columns is blocked") {
-    withRowLevelCatalog {
-      val tblName = "my_tab"
-      withTable(s"$rowLevelCat.$tblName") {
-        sql(s"""CREATE TABLE $rowLevelCat.$tblName(
-               |  id INT,
-               |  data STRING,
-               |  doubled INT GENERATED ALWAYS AS (id * 2)
-               |) USING foo""".stripMargin)
-        val ex = intercept[AnalysisException] {
-          sql(
-            s"""MERGE INTO $rowLevelCat.$tblName AS t
-               |USING source AS s
-               |ON t.id = s.id
-               |WHEN NOT MATCHED THEN INSERT (id, data) VALUES (s.id, s.data)
-               |""".stripMargin)
-        }
-        assert(ex.getCondition == "UNSUPPORTED_FEATURE.TABLE_OPERATION")
-        assert(ex.getMessage.contains("MERGE with generated columns"))
-      }
-    }
-  }
-
-  test("SPARK-61550: UPDATE and MERGE with a legacy SQL-only generated column are blocked") {
+  test("SPARK-61550: UPDATE and MERGE generate values from the legacy SQL getter") {
     val legacyCat = "legacycat"
     // This catalog keeps the given columns, so the legacy getter reaches the analyzer.
     withSQLConf(s"spark.sql.catalog.$legacyCat" ->
@@ -2008,24 +1941,18 @@ class GeneratedColumnWriteSuite extends QueryTest with DatasourceV2SQLBase {
             legacyGeneratedColumn("doubled", IntegerType, "id * 2")),
           Array.empty[Transform],
           Collections.emptyMap[String, String])
-        Seq(
-          "UPDATE" -> s"UPDATE $legacyCat.$tblName SET data = 'x' WHERE id = 1",
-          "MERGE" ->
-            s"""MERGE INTO $legacyCat.$tblName AS t
-               |USING source AS s
-               |ON t.id = s.id
-               |WHEN MATCHED THEN UPDATE SET t.data = s.data
-               |""".stripMargin
-        ).foreach { case (command, sqlText) =>
-          val ex = intercept[AnalysisException] {
-            sql(sqlText)
-          }
-          assert(ex.getCondition == "UNSUPPORTED_FEATURE.TABLE_OPERATION")
-          assert(ex.getMessage.contains(s"$command with generated columns"))
-        }
-        // INSERT auto-fills the column from the legacy getter.
         sql(s"INSERT INTO $legacyCat.$tblName(id, data) VALUES (1, 'a')")
         checkAnswer(spark.table(s"$legacyCat.$tblName"), Row(1, "a", 2))
+        sql(s"UPDATE $legacyCat.$tblName SET id = 2 WHERE id = 1")
+        checkAnswer(spark.table(s"$legacyCat.$tblName"), Row(2, "a", 4))
+        sql(s"""MERGE INTO $legacyCat.$tblName t
+               |USING (SELECT * FROM VALUES (2, 3), (4, 4) AS v(id, newId)) s
+               |ON t.id = s.id
+               |WHEN MATCHED THEN UPDATE SET id = s.newId
+               |WHEN NOT MATCHED THEN INSERT (id, data) VALUES (s.newId, 'b')
+               |""".stripMargin)
+        checkAnswer(spark.table(s"$legacyCat.$tblName"),
+          Seq(Row(3, "a", 6), Row(4, "b", 8)))
       }
     }
   }
@@ -2041,7 +1968,6 @@ class GeneratedColumnWriteSuite extends QueryTest with DatasourceV2SQLBase {
                |  doubled INT GENERATED ALWAYS AS (id * 2)
                |) USING foo PARTITIONED BY (id)""".stripMargin)
         sql(s"INSERT INTO $rowLevelCat.$tblName(id, data) VALUES (1, 'a'), (2, 'b')")
-        // DELETE is not blocked (only MERGE/UPDATE are), and auto-fill still applies on INSERT.
         sql(s"DELETE FROM $rowLevelCat.$tblName WHERE id = 1")
         checkAnswer(spark.table(s"$rowLevelCat.$tblName"), Row(2, "b", 4))
       }

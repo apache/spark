@@ -24,8 +24,7 @@ import org.apache.spark.sql.catalyst.ProjectingInternalRow
 import org.apache.spark.sql.catalyst.expressions.{Alias, Attribute, AttributeReference, AttributeSet, Expression, ExprId, If, Literal, MetadataAttribute, NamedExpression, V2ExpressionUtils}
 import org.apache.spark.sql.catalyst.plans.logical.{Assignment, Expand, LogicalPlan, MergeRows, Project, Union}
 import org.apache.spark.sql.catalyst.rules.Rule
-import org.apache.spark.sql.catalyst.util.{GeneratedColumn, ReplaceDataProjections,
-  WriteDeltaProjections}
+import org.apache.spark.sql.catalyst.util.{ReplaceDataProjections, WriteDeltaProjections}
 import org.apache.spark.sql.catalyst.util.RowDeltaUtils._
 import org.apache.spark.sql.connector.catalog.SupportsRowLevelOperations
 import org.apache.spark.sql.connector.expressions.FieldReference
@@ -48,27 +47,6 @@ trait RewriteRowLevelCommand extends Rule[LogicalPlan] {
     Set(DELETE_OPERATION, UPDATE_OPERATION)
 
   protected def groupFilterEnabled: Boolean = conf.runtimeRowLevelOperationGroupFilterEnabled
-
-  /**
-   * Throws if the catalog supports auto-filling generated columns on write and the table
-   * has generated columns. MERGE and UPDATE with generated columns are not yet supported.
-   *
-   * This is intentionally coarse-grained: the whole statement is rejected whenever the target
-   * has any generated column, even if the operation does not assign to a generated column. This
-   * is because Spark cannot yet recompute generated column values for the rewritten rows, so it
-   * fails fast rather than risk writing stale values. It can be relaxed once recomputation is
-   * implemented for these operations.
-   */
-  protected def checkNoGeneratedColumns(
-      relation: DataSourceV2Relation,
-      command: Command): Unit = {
-    if (GeneratedColumn.supportsGeneratedColumnsOnWrite(
-        relation.table, relation.table.columns())) {
-      throw QueryCompilationErrors.unsupportedTableOperationError(
-        relation.catalog.get, relation.identifier.get,
-        s"${command.toString} with generated columns")
-    }
-  }
 
   // AddMetadataColumns may add the metadata columns to the target table of an UPDATE or a MERGE on
   // a table that accepts any schema, so its aligned assignments may include one for each metadata

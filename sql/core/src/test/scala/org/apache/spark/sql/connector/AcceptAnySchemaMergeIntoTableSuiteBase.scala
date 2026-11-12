@@ -285,10 +285,12 @@ object ResolveMergeIntoTableAcceptingAnySchema extends Rule[LogicalPlan] {
     case m: MergeIntoTable if m.skipSchemaResolution && m.resolved && !m.aligned =>
       def align(actions: Seq[MergeAction]): Seq[MergeAction] = {
         RowLevelAssignmentResolution.alignActions(
-          m.targetTable.output,
+          m.targetTable,
           actions,
           coerceNestedTypes = false,
-          SchemaAlignmentConfig.DEFAULT.ansiStoreAssignmentCastCheck())
+          SchemaAlignmentConfig.DEFAULT.ansiStoreAssignmentCastCheck(),
+          generatedColumns = Set.empty,
+          analyze = identity)
       }
       m.copy(
         matchedActions = align(m.matchedActions),

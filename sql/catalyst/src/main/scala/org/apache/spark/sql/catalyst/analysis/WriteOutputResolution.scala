@@ -54,12 +54,7 @@ private[sql] object WriteOutputResolution {
     // Read directly from the V2 columns so modeled expressions do not pass through SQL text
     // or schema metadata. Reuse the readers when SQL text needs the session fallback pass.
     val generationExpressions: Map[String, GeneratedColumn.ExpressionReader] = v2Write.table match {
-      case r: DataSourceV2Relation if GeneratedColumn.supportsGeneratedColumnsOnWrite(r.table) =>
-        r.table.columns().flatMap { col =>
-          GeneratedColumn.columnGenerationExpression(col).map { expr =>
-            col.name -> new GeneratedColumn.ExpressionReader(r, col.name, expr)
-          }
-        }.toMap
+      case r: DataSourceV2Relation => GeneratedColumn.expressionReaders(r)
       case _ => Map.empty
     }
     def resolveOutput(readSql: String => Expression) = {

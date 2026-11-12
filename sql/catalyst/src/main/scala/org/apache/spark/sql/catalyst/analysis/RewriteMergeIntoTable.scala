@@ -54,7 +54,6 @@ object RewriteMergeIntoTable extends RewriteRowLevelCommand with PredicateHelper
 
       EliminateSubqueryAliases(aliasedTable) match {
         case r: DataSourceV2Relation =>
-          checkNoGeneratedColumns(r, MERGE)
           validateMergeIntoConditions(m)
 
           // NOT MATCHED conditions may only refer to columns in source so they can be pushed down
@@ -89,7 +88,6 @@ object RewriteMergeIntoTable extends RewriteRowLevelCommand with PredicateHelper
 
       EliminateSubqueryAliases(aliasedTable) match {
         case r: DataSourceV2Relation =>
-          checkNoGeneratedColumns(r, MERGE)
           validateMergeIntoConditions(m)
 
           // there are only NOT MATCHED actions, use a left anti join to remove any matching rows
@@ -129,7 +127,6 @@ object RewriteMergeIntoTable extends RewriteRowLevelCommand with PredicateHelper
         notMatchedBySourceActions, _) if m.resolved && m.rewritable && m.aligned =>
       EliminateSubqueryAliases(aliasedTable) match {
         case r @ ExtractV2Table(tbl: SupportsRowLevelOperations) =>
-          checkNoGeneratedColumns(r, MERGE)
           validateMergeIntoConditions(m)
           val dataMatchedActions = removeMetadataAssignments(matchedActions)
           val dataNotMatchedActions = removeMetadataAssignments(notMatchedActions)

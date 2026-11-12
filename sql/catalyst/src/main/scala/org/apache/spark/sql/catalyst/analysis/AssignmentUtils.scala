@@ -22,7 +22,7 @@ import scala.collection.mutable
 import org.apache.spark.SparkException
 import org.apache.spark.sql.catalyst.SQLConfHelper
 import org.apache.spark.sql.catalyst.analysis.TableOutputResolver.DefaultValueFillMode.{NONE, RECURSE}
-import org.apache.spark.sql.catalyst.expressions.{And, Attribute, CreateNamedStruct, Expression, GetStructField, If, IsNull, Literal}
+import org.apache.spark.sql.catalyst.expressions.{And, Attribute, CreateNamedStruct, Expression, GetStructField, If, IsNull, LeafExpression, Literal, Unevaluable}
 import org.apache.spark.sql.catalyst.plans.logical.Assignment
 import org.apache.spark.sql.catalyst.types.DataTypeUtils
 import org.apache.spark.sql.catalyst.util.CharVarcharUtils
@@ -61,6 +61,7 @@ object AssignmentUtils extends SQLConfHelper with CastSupport {
    * @param ansiStoreAssignmentCastCheck when the ANSI store-assignment cast check runs:
    *                                     ANALYSIS (default) rejects an unsafe cast at analysis
    *                                     time; RUNTIME rejects invalid values at execution time.
+   * @param generatedColumns top-level column names whose omitted values must be generated
    * @return aligned update assignments that match table attributes
    */
   def alignUpdateAssignments(
@@ -68,20 +69,26 @@ object AssignmentUtils extends SQLConfHelper with CastSupport {
       assignments: Seq[Assignment],
       fromStar: Boolean,
       coerceNestedTypes: Boolean,
-      ansiStoreAssignmentCastCheck: AnsiStoreAssignmentCastCheck): Seq[Assignment] = {
+      ansiStoreAssignmentCastCheck: AnsiStoreAssignmentCastCheck,
+      generatedColumns: Set[String] = Set.empty): Seq[Assignment] = {
 
     val errors = new mutable.ArrayBuffer[String]()
 
     val output = attrs.map { attr =>
-      applyAssignments(
-        col = restoreActualType(attr),
-        colExpr = attr,
-        assignments,
-        addError = err => errors += err,
-        colPath = Seq(attr.name),
-        coerceNestedTypes,
-        fromStar,
-        ansiStoreAssignmentCastCheck)
+      if (generatedColumns.contains(attr.name) &&
+          !assignments.exists(_.key.references.contains(attr))) {
+        GeneratedColumnValue(attr.dataType, attr.nullable)
+      } else {
+        applyAssignments(
+          col = restoreActualType(attr),
+          colExpr = attr,
+          assignments,
+          addError = err => errors += err,
+          colPath = Seq(attr.name),
+          coerceNestedTypes,
+          fromStar,
+          ansiStoreAssignmentCastCheck)
+      }
     }
 
     if (errors.nonEmpty) {
@@ -107,13 +114,15 @@ object AssignmentUtils extends SQLConfHelper with CastSupport {
    * @param ansiStoreAssignmentCastCheck when the ANSI store-assignment cast check runs:
    *                                     ANALYSIS (default) rejects an unsafe cast at analysis
    *                                     time; RUNTIME rejects invalid values at execution time.
+   * @param generatedColumns omitted columns whose values must be generated from the inserted row
    * @return aligned insert assignments that match table attributes
    */
   def alignInsertAssignments(
       attrs: Seq[Attribute],
       assignments: Seq[Assignment],
       coerceNestedTypes: Boolean = false,
-      ansiStoreAssignmentCastCheck: AnsiStoreAssignmentCastCheck): Seq[Assignment] = {
+      ansiStoreAssignmentCastCheck: AnsiStoreAssignmentCastCheck,
+      generatedColumns: Set[String] = Set.empty): Seq[Assignment] = {
 
     val errors = new mutable.ArrayBuffer[String]()
 
@@ -130,7 +139,9 @@ object AssignmentUtils extends SQLConfHelper with CastSupport {
       val matchingAssignments = topLevelAssignments.collect {
         case assignment if assignment.key.semanticEquals(attr) => assignment
       }
-      val resolvedValue = if (matchingAssignments.isEmpty) {
+      val resolvedValue = if (matchingAssignments.isEmpty && generatedColumns.contains(attr.name)) {
+        GeneratedColumnValue(attr.dataType, attr.nullable)
+      } else if (matchingAssignments.isEmpty) {
         val defaultExpr = getDefaultValueExprOrNullLit(
           attr, conf.useNullsForMissingDefaultColumnValues)
         if (defaultExpr.isEmpty) {
@@ -408,3 +419,10 @@ object AssignmentUtils extends SQLConfHelper with CastSupport {
     }
   }
 }
+
+/**
+ * Marks an omitted generated-column assignment until all assignments have been aligned.
+ * Assignment resolution replaces it with the generation expression over the assigned values.
+ */
+private[sql] case class GeneratedColumnValue(dataType: DataType, nullable: Boolean)
+  extends LeafExpression with Unevaluable

@@ -18,8 +18,8 @@
 package org.apache.spark.sql.catalyst.util
 
 import org.apache.spark.sql.AnalysisException
-import org.apache.spark.sql.catalyst.expressions.{Attribute, AttributeReference, Expression, V2ExpressionUtils}
-import org.apache.spark.sql.catalyst.plans.logical.{ColumnDefinition, LogicalPlan}
+import org.apache.spark.sql.catalyst.expressions.{Alias, Attribute, AttributeReference, Expression, V2ExpressionUtils}
+import org.apache.spark.sql.catalyst.plans.logical.{ColumnDefinition, LocalRelation, LogicalPlan, Project}
 import org.apache.spark.sql.catalyst.util.TypeUtils.toSQLId
 import org.apache.spark.sql.connector.catalog.{Column, GenerationExpression, Identifier, Table,
   TableCapability, TableCatalog, TableCatalogCapability}
@@ -144,6 +144,24 @@ object GeneratedColumn {
       columns.exists(columnGenerationExpression(_).isDefined)
   }
 
+  /** Generation expressions Spark is responsible for evaluating during writes. */
+  def generationExpressions(table: Table): Map[String, GenerationExpression] = {
+    if (supportsGeneratedColumnsOnWrite(table)) {
+      table.columns().flatMap { col =>
+        columnGenerationExpression(col).map(col.name() -> _)
+      }.toMap
+    } else {
+      Map.empty
+    }
+  }
+
+  /** Shares expression selection and analysis across INSERT, row-level writes and validation. */
+  def expressionReaders(relation: DataSourceV2Relation): Map[String, ExpressionReader] = {
+    generationExpressions(relation.table).map { case (name, expr) =>
+      name -> new ExpressionReader(relation, name, expr)
+    }
+  }
+
   /**
    * Reads a generation expression for both auto-fill and validation. Convert the modeled expression
    * once, falling back to SQL text when it is absent or cannot be converted, as defaults and CHECK
@@ -204,6 +222,24 @@ object GeneratedColumn {
               cause = Some(error))
         }
       }
+    }
+
+    /**
+     * Reads and analyzes a value, applying the caller's wrappers to both expression forms.
+     * Resolve the lazy SQL session fallback before returning, so callers can substitute the
+     * resolved input attributes without waiting for another analyzer pass.
+     */
+    def resolve(
+        input: Seq[Attribute],
+        analyzer: LogicalPlan => LogicalPlan)(
+        prepare: Expression => Expression): Expression = {
+      def inSession: Expression = {
+        val value = prepare(toCatalyst(StoredExpressionText.parseWithSessionAnsi))
+        val Project(Seq(Alias(resolved, _)), _) =
+          analyzer(Project(Seq(Alias(value, colName)()), LocalRelation(input)))
+        resolved
+      }
+      analyze(prepare(toCatalyst()), inSession, input, analyzer)
     }
   }
 

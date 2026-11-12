@@ -117,6 +117,8 @@ public enum TableCapability {
    *   <li>Auto-compute missing generated column values using the generation expression for
    *       by-name writes. Ordinary by-position writes still require the input to provide a
    *       value for every table column.</li>
+   *   <li>Recompute omitted generated column values for UPDATE and MERGE actions from the
+   *       new row, after applying the other assignments.</li>
    *   <li>Validate explicitly-provided generated column values against the generation
    *       expression.</li>
    * </ul>
