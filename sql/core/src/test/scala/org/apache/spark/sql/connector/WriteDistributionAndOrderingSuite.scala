@@ -22,6 +22,7 @@ import java.sql.Date
 import java.util.Collections
 
 import org.apache.spark.sql.{catalyst, AnalysisException, DataFrame, Row}
+import org.apache.spark.sql.QueryTest.withQueryExecutionsCaptured
 import org.apache.spark.sql.catalyst.expressions.{ApplyFunctionExpression, Cast, Literal, TransformExpression}
 import org.apache.spark.sql.catalyst.expressions.objects.Invoke
 import org.apache.spark.sql.catalyst.plans.physical
@@ -31,7 +32,7 @@ import org.apache.spark.sql.connector.catalog.functions._
 import org.apache.spark.sql.connector.distributions.{Distribution, Distributions}
 import org.apache.spark.sql.connector.expressions._
 import org.apache.spark.sql.connector.expressions.Expressions._
-import org.apache.spark.sql.execution.{QueryExecution, SortExec, SparkPlan}
+import org.apache.spark.sql.execution.{SortExec, SparkPlan}
 import org.apache.spark.sql.execution.adaptive.AQEShuffleReadExec
 import org.apache.spark.sql.execution.datasources.v2.BatchScanExec
 import org.apache.spark.sql.execution.datasources.v2.V2TableWriteExec
@@ -42,7 +43,6 @@ import org.apache.spark.sql.functions.lit
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.streaming.{StreamingQueryException, Trigger}
 import org.apache.spark.sql.types.{DateType, IntegerType, LongType, ObjectType, StringType, TimestampType}
-import org.apache.spark.sql.util.QueryExecutionListener
 import org.apache.spark.tags.SlowSQLTest
 
 @SlowSQLTest
@@ -1481,22 +1481,11 @@ class WriteDistributionAndOrderingSuite extends DistributionAndOrderingSuiteBase
 
   // executes a write operation and keeps the executed physical plan
   private def execute(writeFunc: => Unit): SparkPlan = {
-    var executedPlan: SparkPlan = null
-
-    val listener = new QueryExecutionListener {
-      override def onSuccess(funcName: String, qe: QueryExecution, durationNs: Long): Unit = {
-        executedPlan = qe.executedPlan
-      }
-      override def onFailure(funcName: String, qe: QueryExecution, exception: Exception): Unit = {
-      }
+    val Seq(qe) = withQueryExecutionsCaptured(spark) {
+      writeFunc
     }
-    spark.listenerManager.register(listener)
 
-    writeFunc
-
-    sparkContext.listenerBus.waitUntilEmpty()
-
-    executedPlan match {
+    qe.executedPlan match {
       case w: V2TableWriteExec =>
         stripAQEPlan(w.query)
       case _ =>
