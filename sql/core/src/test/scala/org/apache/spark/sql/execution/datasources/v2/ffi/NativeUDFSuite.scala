@@ -42,12 +42,12 @@ import org.apache.spark.sql.{AnalysisException, IntegratedUDFTestUtils, QueryTes
 import org.apache.spark.sql.catalyst.{FunctionIdentifier, InternalRow}
 import org.apache.spark.sql.catalyst.expressions.{Alias, ArrayTransform, BloomFilterMightContain, LambdaFunction, Literal, NamedLambdaVariable}
 import org.apache.spark.sql.catalyst.parser.ParseException
-import org.apache.spark.sql.catalyst.plans.logical.{Aggregate, EvalNativeUDFs, Join, OneRowRelation, Project}
+import org.apache.spark.sql.catalyst.plans.logical.{Aggregate, EvalNativeUDFs, Filter, Join, LocalLimit, OneRowRelation, Project}
 import org.apache.spark.sql.classic.{DataFrame, SparkSession}
 import org.apache.spark.sql.connector.FakeV2ProviderWithCustomSchema
 import org.apache.spark.sql.connector.catalog.{InMemoryEnhancedPartitionFilterTable, InMemoryTableEnhancedPartitionFilterCatalog}
-import org.apache.spark.sql.execution.LocalLimitExec
-import org.apache.spark.sql.execution.datasources.v2.DataSourceV2ScanRelation
+import org.apache.spark.sql.execution.datasources.{CatalogFileIndex, HadoopFsRelation, LogicalRelation}
+import org.apache.spark.sql.execution.datasources.v2.{DataSourceV2ScanRelation, FileScan}
 import org.apache.spark.sql.execution.python.{ArrowEvalPythonExec, BatchEvalPythonExec}
 import org.apache.spark.sql.functions.{call_function, col}
 import org.apache.spark.sql.internal.{SQLConf, StaticSQLConf}
@@ -1106,15 +1106,6 @@ class NativeUDFSuite extends QueryTest with SharedSparkSession {
       Seq(Row(0L), Row(1L), Row(2L), Row(4L)))
   }
 
-  nativeTest("push a limit below the evaluation of native calls") {
-    val session = newSession(defaultPackage)
-    session.conf.set(SQLConf.ADAPTIVE_EXECUTION_ENABLED.key, "false")
-    register(session, defaultPackage.getName, "add_one")
-    val df = session.sql("SELECT add_one(id) FROM range(1000000) LIMIT 5")
-    assert(df.collect().length == 5)
-    assert(evaluations(df).map(_.child.exists(_.isInstanceOf[LocalLimitExec])) == Seq(true))
-  }
-
   nativeGridTest("filter the partitions of a file source with a native call, from")(
       Seq("a catalog table", "a path with the V2 file source")) { source =>
     val session = newSession(defaultPackage)
@@ -1151,6 +1142,74 @@ class NativeUDFSuite extends QueryTest with SharedSparkSession {
         scan.getPushedPartitionPredicates
     }
     assert(pushed == Seq(Nil), plan)
+  }
+
+  gridTest("use no native call to prune the partitions of a file source on the driver, from")(
+      Seq("a catalog table", "a path with the V2 file source")) { source =>
+    val session = spark.newSession()
+    registerForPlans(session)
+    val rows = session.range(6).selectExpr("id", "id % 3 AS p").write.partitionBy("p")
+    withTable("native_plans_partitioned") {
+      val df = if (source == "a catalog table") {
+        rows.saveAsTable("native_plans_partitioned")
+        session.table("native_plans_partitioned")
+      } else {
+        session.conf.set(SQLConf.USE_V1_SOURCE_LIST.key, "")
+        val dir = new File(Utils.createTempDir(), "native_partitioned")
+        rows.parquet(dir.getPath)
+        session.read.parquet(dir.getPath)
+      }
+      val plan = df.where("add_one(p) = 2").queryExecution.optimizedPlan
+      val unpruned = if (source == "a catalog table") {
+        plan.collect { case LogicalRelation(relation: HadoopFsRelation, _, _, _, _) =>
+          relation.location.isInstanceOf[CatalogFileIndex]
+        }
+      } else {
+        plan.collect { case relation: DataSourceV2ScanRelation =>
+          val filters = relation.scan.asInstanceOf[FileScan].partitionFilters
+          !filters.exists(_.exists(_.isInstanceOf[NativeUDF]))
+        }
+      }
+      assert(unpruned == Seq(true), plan)
+    }
+  }
+
+  test("push the conjuncts without native calls below the evaluation of native calls") {
+    val session = spark.newSession()
+    registerForPlans(session)
+    val plan = session.sql("SELECT id FROM range(5) WHERE id <> 3 AND add_one(id) >= 0")
+      .queryExecution.optimizedPlan
+    assert(plan.collect { case e: EvalNativeUDFs => e.child.exists(_.isInstanceOf[Filter]) } ==
+      Seq(true), plan)
+  }
+
+  test("push a limit below the evaluation of native calls") {
+    val session = spark.newSession()
+    registerForPlans(session)
+    val plan = session.sql("SELECT add_one(id) FROM range(1000000) LIMIT 5")
+      .queryExecution.optimizedPlan
+    assert(plan.collect { case e: EvalNativeUDFs => e.child.exists(_.isInstanceOf[LocalLimit]) } ==
+      Seq(true), plan)
+  }
+
+  private val equiJoins = Seq(
+    Case("a WHERE clause over two relations",
+      "SELECT a.id, b.id FROM range(3) a, range(5) b WHERE add_one(a.id) = b.id" ->
+        Seq(Row(0L, 1L), Row(1L, 2L), Row(2L, 3L))),
+    Case("the ON clause of a join of three relations",
+      "SELECT a.id, b.id, c.id FROM range(3) a JOIN range(5) b ON add_one(a.id) = b.id " +
+        "JOIN range(5) c ON b.id = c.id" ->
+        Seq(Row(0L, 1L, 1L), Row(1L, 2L, 2L), Row(2L, 3L, 3L))))
+
+  gridTest("plan an equi-join on a call over one side of an inner join, for")(equiJoins) {
+    case Case(_, (query, _)) =>
+      val session = spark.newSession()
+      registerForPlans(session)
+      val plan = session.sql(query).queryExecution.optimizedPlan
+      val joins = plan.collect { case join: Join => join }
+      assert(joins.nonEmpty && joins.forall(_.condition.isDefined), plan)
+      assert(plan.collect { case e: EvalNativeUDFs => e.child.exists(_.isInstanceOf[Join]) } ==
+        Seq(false), plan)
   }
 
   gridTest("inject no runtime filter that evaluates a native call, for a join key")(Seq(
@@ -1294,24 +1353,11 @@ class NativeUDFSuite extends QueryTest with SharedSparkSession {
     checkRows(session.sql(query), expected)
   }
 
-  nativeGridTest("plan an equi-join on a call over one side of an inner join, for")(Seq(
-    Case("a WHERE clause over two relations",
-      "SELECT a.id, b.id FROM range(3) a, range(5) b WHERE add_one(a.id) = b.id" ->
-        Seq(Row(0L, 1L), Row(1L, 2L), Row(2L, 3L))),
-    Case("the ON clause of a join of three relations",
-      "SELECT a.id, b.id, c.id FROM range(3) a JOIN range(5) b ON add_one(a.id) = b.id " +
-        "JOIN range(5) c ON b.id = c.id" ->
-        Seq(Row(0L, 1L, 1L), Row(1L, 2L, 2L), Row(2L, 3L, 3L))))) {
-    case Case(_, (query, rows)) =>
-      val session = newSession(defaultPackage)
-      register(session, defaultPackage.getName, "add_one")
-      val df = session.sql(query)
-      val plan = df.queryExecution.optimizedPlan
-      val joins = plan.collect { case join: Join => join }
-      assert(joins.nonEmpty && joins.forall(_.condition.isDefined), plan)
-      assert(plan.collect { case e: EvalNativeUDFs => e.child.exists(_.isInstanceOf[Join]) } ==
-        Seq(false), plan)
-      checkRows(df, rows)
+  nativeGridTest("evaluate an equi-join on a call over one side of an inner join, for")(
+      equiJoins) { case Case(_, (query, rows)) =>
+    val session = newSession(defaultPackage)
+    register(session, defaultPackage.getName, "add_one")
+    checkRows(session.sql(query), rows)
   }
 
   nativeTest("evaluate an IN subquery on a call and both sides of an inner join") {
