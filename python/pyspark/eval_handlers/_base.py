@@ -22,7 +22,6 @@ so the package ``__init__`` and the concrete-handler submodules can both import 
 """
 
 import functools
-import os
 from abc import ABCMeta, abstractmethod
 from collections.abc import Iterator
 from typing import TYPE_CHECKING, Any, Callable, ClassVar, Generic, Optional
@@ -178,7 +177,7 @@ class EvalTypeHandler(Generic[InputBatch, OutputBatch], metaclass=_EvalTypeHandl
         self._detailed_timing_enabled = (
             self._supports_detailed_timing
             and runner_conf.detailed_timing_enabled
-            and os.environ.get("SPARK_PIPELINED_UDF") != "1"
+            and not runner_conf.is_pipelined
         )
         # Each UDF's functions chained into one before any wrapping, at the indexes of _udf_descs: a
         # single function is the pickled object itself (an incremental Aggregator) with its
@@ -357,7 +356,7 @@ class BatchEvalTypeHandler(EvalTypeHandler["pa.RecordBatch", OutputBatch]):
     def serializer(self) -> Serializer:
         return ArrowStreamSerializer(
             write_start_stream=True,
-            flush_per_batch=os.environ.get("SPARK_PIPELINED_UDF") == "1",
+            flush_per_batch=self._runner_conf.is_pipelined,
             detailed_timing_enabled=self._detailed_timing_enabled,
         )
 
@@ -369,7 +368,7 @@ class GroupedEvalTypeHandler(EvalTypeHandler[GroupedBatch, OutputBatch]):
     def serializer(self) -> Serializer:
         return ArrowStreamGroupSerializer(
             write_start_stream=True,
-            flush_per_batch=os.environ.get("SPARK_PIPELINED_UDF") == "1",
+            flush_per_batch=self._runner_conf.is_pipelined,
             detailed_timing_enabled=self._detailed_timing_enabled,
         )
 
@@ -381,6 +380,6 @@ class CoGroupedEvalTypeHandler(EvalTypeHandler[CoGroupedBatch, OutputBatch]):
     def serializer(self) -> Serializer:
         return ArrowStreamCoGroupSerializer(
             write_start_stream=True,
-            flush_per_batch=os.environ.get("SPARK_PIPELINED_UDF") == "1",
+            flush_per_batch=self._runner_conf.is_pipelined,
             detailed_timing_enabled=self._detailed_timing_enabled,
         )
