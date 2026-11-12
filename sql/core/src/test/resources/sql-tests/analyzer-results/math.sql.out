@@ -809,3 +809,157 @@ SELECT POSITIVE(null)
 -- !query analysis
 Project [positive(cast(null as double)) AS (+ NULL)#x]
 +- OneRowRelation
+
+
+-- !query
+SELECT gcd(24, 36)
+-- !query analysis
+Project [gcd(cast(24 as bigint), cast(36 as bigint), true) AS gcd(24, 36)#xL]
++- OneRowRelation
+
+
+-- !query
+SELECT gcd(17, 5)
+-- !query analysis
+Project [gcd(cast(17 as bigint), cast(5 as bigint), true) AS gcd(17, 5)#xL]
++- OneRowRelation
+
+
+-- !query
+SELECT gcd(-24, 36)
+-- !query analysis
+Project [gcd(cast(-24 as bigint), cast(36 as bigint), true) AS gcd(-24, 36)#xL]
++- OneRowRelation
+
+
+-- !query
+SELECT gcd(24, -36)
+-- !query analysis
+Project [gcd(cast(24 as bigint), cast(-36 as bigint), true) AS gcd(24, -36)#xL]
++- OneRowRelation
+
+
+-- !query
+SELECT gcd(-24, -36)
+-- !query analysis
+Project [gcd(cast(-24 as bigint), cast(-36 as bigint), true) AS gcd(-24, -36)#xL]
++- OneRowRelation
+
+
+-- !query
+SELECT gcd(0, 0)
+-- !query analysis
+Project [gcd(cast(0 as bigint), cast(0 as bigint), true) AS gcd(0, 0)#xL]
++- OneRowRelation
+
+
+-- !query
+SELECT gcd(0, -7)
+-- !query analysis
+Project [gcd(cast(0 as bigint), cast(-7 as bigint), true) AS gcd(0, -7)#xL]
++- OneRowRelation
+
+
+-- !query
+SELECT gcd(7, 0)
+-- !query analysis
+Project [gcd(cast(7 as bigint), cast(0 as bigint), true) AS gcd(7, 0)#xL]
++- OneRowRelation
+
+
+-- !query
+SELECT gcd(null, 5)
+-- !query analysis
+Project [gcd(cast(null as bigint), cast(5 as bigint), true) AS gcd(NULL, 5)#xL]
++- OneRowRelation
+
+
+-- !query
+SELECT gcd(5, null)
+-- !query analysis
+Project [gcd(cast(5 as bigint), cast(null as bigint), true) AS gcd(5, NULL)#xL]
++- OneRowRelation
+
+
+-- !query
+SELECT lcm(4, 6)
+-- !query analysis
+Project [lcm(cast(4 as bigint), cast(6 as bigint), true) AS lcm(4, 6)#xL]
++- OneRowRelation
+
+
+-- !query
+SELECT lcm(17, 5)
+-- !query analysis
+Project [lcm(cast(17 as bigint), cast(5 as bigint), true) AS lcm(17, 5)#xL]
++- OneRowRelation
+
+
+-- !query
+SELECT lcm(-4, 6)
+-- !query analysis
+Project [lcm(cast(-4 as bigint), cast(6 as bigint), true) AS lcm(-4, 6)#xL]
++- OneRowRelation
+
+
+-- !query
+SELECT lcm(4, -6)
+-- !query analysis
+Project [lcm(cast(4 as bigint), cast(-6 as bigint), true) AS lcm(4, -6)#xL]
++- OneRowRelation
+
+
+-- !query
+SELECT lcm(-4, -6)
+-- !query analysis
+Project [lcm(cast(-4 as bigint), cast(-6 as bigint), true) AS lcm(-4, -6)#xL]
++- OneRowRelation
+
+
+-- !query
+SELECT lcm(0, 0)
+-- !query analysis
+Project [lcm(cast(0 as bigint), cast(0 as bigint), true) AS lcm(0, 0)#xL]
++- OneRowRelation
+
+
+-- !query
+SELECT lcm(0, 5)
+-- !query analysis
+Project [lcm(cast(0 as bigint), cast(5 as bigint), true) AS lcm(0, 5)#xL]
++- OneRowRelation
+
+
+-- !query
+SELECT lcm(5, 0)
+-- !query analysis
+Project [lcm(cast(5 as bigint), cast(0 as bigint), true) AS lcm(5, 0)#xL]
++- OneRowRelation
+
+
+-- !query
+SELECT lcm(null, 5)
+-- !query analysis
+Project [lcm(cast(null as bigint), cast(5 as bigint), true) AS lcm(NULL, 5)#xL]
++- OneRowRelation
+
+
+-- !query
+SELECT lcm(5, null)
+-- !query analysis
+Project [lcm(cast(5 as bigint), cast(null as bigint), true) AS lcm(5, NULL)#xL]
++- OneRowRelation
+
+
+-- !query
+SELECT lcm(4611686018427387904L, 2L)
+-- !query analysis
+Project [lcm(4611686018427387904, 2, true) AS lcm(4611686018427387904, 2)#xL]
++- OneRowRelation
+
+
+-- !query
+SELECT lcm(9223372036854775807L, 9223372036854775805L)
+-- !query analysis
+Project [lcm(9223372036854775807, 9223372036854775805, true) AS lcm(9223372036854775807, 9223372036854775805)#xL]
++- OneRowRelation

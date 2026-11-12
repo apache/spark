@@ -1578,6 +1578,10 @@ class PlanGenerationTestSuite extends ConnectFunSuite with Logging {
     fn.floor(fn.col("b"), lit(2))
   }
 
+  functionTest("gcd") {
+    fn.gcd(fn.col("a"), lit(12))
+  }
+
   functionTest("greatest") {
     fn.greatest(fn.col("a"), fn.col("d").getItem("a"))
   }
@@ -1592,6 +1596,10 @@ class PlanGenerationTestSuite extends ConnectFunSuite with Logging {
 
   functionTest("hypot") {
     fn.hypot(fn.col("a"), fn.col("b"))
+  }
+
+  functionTest("lcm") {
+    fn.lcm(fn.col("a"), lit(6))
   }
 
   functionTest("least") {
