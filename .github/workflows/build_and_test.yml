@@ -103,6 +103,9 @@ jobs:
       uses: ./.github/actions/checkout-and-sync
       with:
         ref: ${{ inputs.branch }}
+    # Test sparktestsupport before relying on it below, even if only its tests changed.
+    - name: Test sparktestsupport
+      run: python3 -m unittest discover -s dev/sparktestsupport/tests -t dev
     - name: Check all modules
       id: set-outputs
       run: |

@@ -114,6 +114,32 @@ class OffsetSeqLogSuite extends SharedSparkSession {
     }
   }
 
+  test("setConfWithoutLogging sets the values that setSessionConf sets") {
+    // The metadata of a checkpoint without the confs that have defaults for old checkpoints, of a
+    // checkpoint of Spark 4.2, and of a new query, with a rebound conf.
+    val metadatas = withSQLConf(
+        SQLConf.SHUFFLE_PARTITIONS.key -> "10",
+        SQLConf.STATEFUL_SHUFFLE_PARTITIONS_INTERNAL.key -> "3") {
+      Seq(
+        readFromResource("offset-log-version-2.1.0")._2.metadataOpt.get,
+        readFromResource("checkpoint-version-4.2.0-deduplication-metadata-boundary/offsets")
+          ._2.metadataOpt.get,
+        OffsetSeqMetadata(0, 0, spark.conf))
+    }
+    metadatas.foreach { metadata =>
+      val logged = spark.sessionState.conf.clone()
+      val unlogged = spark.sessionState.conf.clone()
+      // Values that the metadata replaces, and one that only a conf missing from it keeps.
+      Seq(logged, unlogged).foreach { conf =>
+        conf.setConf(SQLConf.SHUFFLE_PARTITIONS, 7)
+        conf.setConf(SQLConf.AVOID_DOUBLE_FILTER_EVAL, true)
+      }
+      OffsetSeqMetadata.setSessionConf(metadata, logged)
+      OffsetSeqMetadata.setConfWithoutLogging(metadata, unlogged)
+      assert(unlogged.getAllConfs === logged.getAllConfs, metadata)
+    }
+  }
+
   /** test string offset type */
   case class StringOffset(override val json: String) extends Offset
 

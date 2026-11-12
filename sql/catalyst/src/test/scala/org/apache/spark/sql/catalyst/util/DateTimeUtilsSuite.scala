@@ -1103,6 +1103,22 @@ class DateTimeUtilsSuite extends SparkFunSuite with Matchers with SQLHelper {
     }
   }
 
+  test("SPARK-60032: 'epoch' and time-only strings") {
+    Seq("epoch", " Epoch ", "EPOCH UTC").foreach { s =>
+      assert(isEpochSpecialValue(s), s)
+    }
+    Seq("now", "today", "2020-01-01", "12:00:00", "", "abc").foreach { s =>
+      assert(!isEpochSpecialValue(s), s)
+    }
+    Seq("12:00:00", " 23:59:59.999999 ", "T12:00", "12:00:00 UTC").foreach { s =>
+      assert(isTimeOnlyTimestamp(UTF8String.fromString(s)), s)
+    }
+    Seq("2020-01-01 12:00:00", "2020-01-01", "now", "", "abc", "24:00:00", "23:59:60",
+      "12:60").foreach { s =>
+      assert(!isTimeOnlyTimestamp(UTF8String.fromString(s)), s)
+    }
+  }
+
   test("parsing day of week") {
     assert(getDayOfWeekFromString(UTF8String.fromString("THU")) == 0)
     assert(getDayOfWeekFromString(UTF8String.fromString("MONDAY")) == 4)
@@ -1787,6 +1803,14 @@ class DateTimeUtilsSuite extends SparkFunSuite with Matchers with SQLHelper {
         parameters = Map("rangeMessage" ->
           s"Invalid value for SecondOfMinute (valid values 0 - 59): ${invalidSecond.toLong}"))
     }
+    // A value between -1 and 0 is shown in full, not truncated to the valid 0.
+    checkError(
+      exception = intercept[SparkDateTimeException] {
+        makeTime(hour, min, Decimal(-0.5, 16, 6))
+      },
+      condition = "DATETIME_FIELD_OUT_OF_BOUNDS.WITHOUT_SUGGESTION",
+      parameters = Map("rangeMessage" ->
+        "Invalid value for SecondOfMinute (valid values 0 - 59): -0.5"))
   }
 
   test("SPARK-51415: makeTimestamp with days, nanos, and zoneId") {

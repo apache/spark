@@ -255,6 +255,10 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase with Compilat
         "invalidValue" -> toSQLExpr(invalidValue)))
   }
 
+  def invalidParseSqlMode(mode: Expression): Throwable = {
+    invalidParameter("PARSE_SQL_MODE", "parse_sql", "mode", mode)
+  }
+
   def unorderablePivotColError(pivotCol: Expression): Throwable = {
     new AnalysisException(
       errorClass = "INCOMPARABLE_PIVOT_COLUMN",
@@ -4830,6 +4834,23 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase with Compilat
         "scanClass" -> scanClass,
         "relationOutput" -> toSQLType(relationOutput)),
       cause = cause)
+  }
+
+  def unsupportedExternalLookupJoinError(
+      errorSubClass: String,
+      messageParameters: Map[String, String] = Map.empty): Throwable = {
+    new AnalysisException(
+      errorClass = s"EXTERNAL_LOOKUP_JOIN_UNSUPPORTED.$errorSubClass",
+      messageParameters = messageParameters)
+  }
+
+  def invalidDataSourceExternalLookupError(
+      table: String,
+      errorSubClass: String,
+      messageParameters: Map[String, String] = Map.empty): Throwable = {
+    new AnalysisException(
+      errorClass = s"DATA_SOURCE_INVALID_EXTERNAL_LOOKUP.$errorSubClass",
+      messageParameters = Map("table" -> toSQLId(table)) ++ messageParameters)
   }
 
   def foundMultipleXMLDataSourceError(provider: String,

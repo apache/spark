@@ -30,11 +30,13 @@ import org.apache.spark.SparkException
 import org.apache.spark.sql.SparkSession
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.connector.catalog.{SupportsRead, SupportsWrite, Table, TableCapability}
+import org.apache.spark.sql.connector.expressions.filter.Predicate
 import org.apache.spark.sql.connector.read._
 import org.apache.spark.sql.connector.read.streaming.{MicroBatchStream, Offset, ReadLimit, SupportsTriggerAvailableNow}
 import org.apache.spark.sql.connector.write.{LogicalWriteInfo, WriteBuilder}
 import org.apache.spark.sql.execution.streaming.checkpointing.HDFSMetadataLog
-import org.apache.spark.sql.internal.connector.SupportsMetadata
+import org.apache.spark.sql.internal.SQLConf
+import org.apache.spark.sql.internal.connector.{EvaluatesAllPushedPredicates, SupportsMetadata}
 import org.apache.spark.sql.types.StructType
 import org.apache.spark.sql.util.CaseInsensitiveStringMap
 import org.apache.spark.util.Utils
@@ -61,8 +63,16 @@ class ColumnarTable(
 
   override def schema(): StructType = tableSchema
 
-  private lazy val tableCapabilities =
-    createDataSource(withTableOptions(CaseInsensitiveStringMap.empty())).capabilities()
+  // The streams of the scans of the table return the columns of their read schemas: their stream
+  // readers get these columns, and return exactly them, see ColumnarScan. The native data sources,
+  // which implement ColumnarDataSource, check the schema of the data of each partition against it
+  // (see NativePartitionReader), and fail the read otherwise.
+  private lazy val tableCapabilities = {
+    val capabilities = new util.HashSet[TableCapability](
+      createDataSource(withTableOptions(CaseInsensitiveStringMap.empty())).capabilities())
+    capabilities.add(TableCapability.STREAMING_COLUMN_PRUNING)
+    util.Collections.unmodifiableSet(capabilities)
+  }
 
   override def capabilities(): util.Set[TableCapability] = tableCapabilities
 
@@ -90,6 +100,9 @@ class ColumnarScanBuilder(
     schema: StructType,
     createDataSource: () => ColumnarDataSource)
   extends ScanBuilder
+  with SupportsPushDownV2Filters
+  // Spark evaluates all the predicates after the scan, see `pushPredicates`.
+  with EvaluatesAllPushedPredicates
   with SupportsPushDownLimit
   with SupportsPushDownRequiredColumns {
 
@@ -99,6 +112,11 @@ class ColumnarScanBuilder(
   // batch, and its data source may not support batch scans at all.
   private var planner: ColumnarBatchPlanner = _
 
+  // Whether the predicates were pushed, which the scan does at most once, as the header promises
+  // for push_domains.
+  private var predicatesPushed = false
+  private var pushed: Array[Predicate] = Array.empty
+  private var usedDomains: Seq[ColumnDomain] = Nil
   private var pushedLimit: Option[Int] = None
   // The limit passed to the reader, and whether the reader applies it.
   private var limitResult: Option[(Int, Boolean)] = None
@@ -113,6 +131,34 @@ class ColumnarScanBuilder(
     }
     planner
   }
+
+  override def pushPredicates(predicates: Array[Predicate]): Array[Predicate] = {
+    // Spark pushes all the predicates at once, since the builder does not support iterative
+    // pushdown.
+    if (predicatesPushed) {
+      throw SparkException.internalError("The predicates of a scan were pushed again.")
+    }
+    predicatesPushed = true
+    // A data source that takes no domain gets no planner for them: Spark would create its reader
+    // while it optimizes the query, and derive domains only to drop them.
+    if (SQLConf.get.nativeDataSourceFilterPushdownEnabled && dataSource.supportsDomainPushdown()) {
+      val derived = ColumnDomains.derive(predicates.toSeq, schema)
+      if (derived.domains.nonEmpty) {
+        val used = batchPlanner.pushDomains(derived.domains)
+        if (used.length != derived.domains.length) {
+          throw SparkException.internalError(
+            s"Expected ${derived.domains.length} answers for the domains, but got ${used.length}.")
+        }
+        usedDomains = derived.domains.zip(used).collect { case (domain, true) => domain }
+        pushed = derived.pushedPredicates(used)
+      }
+    }
+    // Spark evaluates all the predicates again after reading: a data source only skips data with
+    // the domains, and may return rows for which the predicates are not true.
+    predicates
+  }
+
+  override def pushedPredicates(): Array[Predicate] = pushed
 
   override def pushLimit(limit: Int): Boolean = limitResult match {
     // Spark can push a limit more than once, for example the limit of LIMIT ... OFFSET, but the
@@ -154,7 +200,8 @@ class ColumnarScanBuilder(
 
   // The scan takes over the planner, so it is built once.
   private lazy val scan = new ColumnarScan(
-    shortName, schema, requiredSchema, dataSource, Option(planner), pushedLimit)
+    shortName, schema, requiredSchema, dataSource, Option(planner), pushed, usedDomains,
+    pushedLimit)
 
   override def build(): Scan = scan
 }
@@ -169,6 +216,8 @@ class ColumnarScanBuilder(
  *                       full schema
  * @param pushedDownPlanner the planner that the operations were pushed down to, if any. Otherwise,
  *                          the scan creates one when its batch is planned.
+ * @param pushedPredicates the predicates whose domains the data source uses
+ * @param pushedDomains the domains that the data source uses
  */
 class ColumnarScan(
     shortName: String,
@@ -176,6 +225,8 @@ class ColumnarScan(
     requiredSchema: Option[StructType],
     dataSource: ColumnarDataSource,
     pushedDownPlanner: Option[ColumnarBatchPlanner],
+    pushedPredicates: Array[Predicate],
+    pushedDomains: Seq[ColumnDomain],
     pushedLimit: Option[Int])
   extends Scan with SupportsMetadata {
 
@@ -203,8 +254,11 @@ class ColumnarScan(
   }
 
   override def getMetaData(): Map[String, String] = {
-    Map("ReadSchema" -> readSchema().simpleString) ++
-      pushedLimit.map(limit => "PushedLimit" -> s"LIMIT $limit")
+    Map(
+      "PushedFilters" -> pushedPredicates.mkString("[", ", ", "]"),
+      "ReadSchema" -> readSchema().simpleString
+    ) ++ pushedLimit.map(limit => "PushedLimit" -> s"LIMIT $limit") ++
+      Option.when(pushedDomains.nonEmpty)("PushedDomains" -> pushedDomains.mkString("[", "; ", "]"))
   }
 }
 
