@@ -27,7 +27,7 @@ import org.apache.spark.sql.catalyst.plans.QueryPlan
 import org.apache.spark.sql.catalyst.plans.logical.{ColumnStat, ExposesMetadataColumns, Histogram, HistogramBin, LeafNode, LogicalPlan, Statistics}
 import org.apache.spark.sql.catalyst.plans.logical.statsEstimation.{EstimationUtils, FilterEstimation}
 import org.apache.spark.sql.catalyst.streaming.{StreamingSourceIdentifyingName, Unassigned}
-import org.apache.spark.sql.catalyst.trees.TreePattern.{DATA_SOURCE_V2_RELATION, DATA_SOURCE_V2_SCAN_RELATION, TreePattern}
+import org.apache.spark.sql.catalyst.trees.TreePattern.{DATA_SOURCE_V2_RELATION, DATA_SOURCE_V2_SCAN_RELATION, LOOKUP_ONLY_RELATION, TreePattern}
 import org.apache.spark.sql.catalyst.types.DataTypeUtils.{fromAttributes, toAttributes}
 import org.apache.spark.sql.catalyst.util.{removeInternalMetadata, truncatedString, CharVarcharUtils}
 import org.apache.spark.sql.connector.catalog.{CatalogPlugin, FunctionCatalog, Identifier, SupportsMetadataColumns, Table, TableCapability, TableCatalog, V2TableUtil}
@@ -42,6 +42,7 @@ import org.apache.spark.sql.internal.connector.{SupportsRuntimeCatalystFiltering
 import org.apache.spark.sql.types.{DataType, StructType}
 import org.apache.spark.sql.util.CaseInsensitiveStringMap
 import org.apache.spark.util.Utils
+import org.apache.spark.util.collection.BitSet
 
 /**
  * A logical plan representing a data source v2 table.
@@ -151,6 +152,69 @@ case class DataSourceV2Relation(
   def isVersioned: Boolean = table.version != null
 
   override val nodePatterns: Seq[TreePattern] = Seq(DATA_SOURCE_V2_RELATION)
+
+  override protected def getDefaultTreePatternBits: BitSet =
+    ExternalLookupRelations.withLookupOnlyPattern(super.getDefaultTreePatternBits, table)
+}
+
+/**
+ * A logical placeholder for a table that supports external lookup but not batch scan.
+ *
+ * The placeholder lets a Dataset carry the table until an external lookup join reads it as its
+ * lookup side. It must never be planned as an ordinary scan.
+ */
+case class ExternalLookupRelation(relation: DataSourceV2Relation)
+  extends DataSourceV2RelationBase(
+    relation.table,
+    relation.output,
+    relation.catalog,
+    relation.identifier,
+    relation.options,
+    relation.timeTravelSpec) {
+
+  def table: Table = relation.table
+
+  override def output: Seq[AttributeReference] = relation.output
+
+  override def newInstance(): ExternalLookupRelation =
+    copy(relation = relation.newInstance())
+
+  override def computeStats(): Statistics = Statistics(sizeInBytes = conf.defaultSizeInBytes)
+
+  override val nodePatterns: Seq[TreePattern] = Seq(DATA_SOURCE_V2_RELATION)
+
+  override protected def getDefaultTreePatternBits: BitSet =
+    ExternalLookupRelations.withLookupOnlyPattern(super.getDefaultTreePatternBits, table)
+}
+
+/** Finds the table that an external lookup join would read. */
+object ExternalLookupRelations {
+  /** The table of a DSv2 relation, including the placeholder of a lookup-only table. */
+  def table(plan: LogicalPlan): Option[Table] = plan match {
+    case relation: DataSourceV2Relation => Some(relation.table)
+    case relation: ExternalLookupRelation => Some(relation.table)
+    case _ => None
+  }
+
+  /** Whether only an external lookup join can read the table, because it has no batch scan. */
+  def isLookupOnly(table: Table): Boolean = {
+    val capabilities = table.capabilities()
+    capabilities.contains(TableCapability.EXTERNAL_LOOKUP) &&
+      !capabilities.contains(TableCapability.BATCH_READ)
+  }
+
+  /** The table of a relation that only an external lookup join can read. */
+  def lookupOnlyTable(plan: LogicalPlan): Option[Table] = table(plan).filter(isLookupOnly)
+
+  /**
+   * The pattern bits `bits` of a relation of `table`, with [[LOOKUP_ONLY_RELATION]] set when the
+   * table is lookup-only, so that a rule can tell from the bits of a plan, without a walk, whether
+   * the plan reads such a table. A relation computes its bits once, so it asks its table once.
+   */
+  private[v2] def withLookupOnlyPattern(bits: BitSet, table: Table): BitSet = {
+    if (isLookupOnly(table)) bits.set(LOOKUP_ONLY_RELATION.id)
+    bits
+  }
 }
 
 /**
