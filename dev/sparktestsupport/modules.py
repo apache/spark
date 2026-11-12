@@ -18,6 +18,9 @@
 import itertools
 import os
 import re
+from collections.abc import Sequence
+from dataclasses import dataclass
+from enum import Enum
 from functools import total_ordering
 from pathlib import Path, PurePath
 
@@ -180,6 +183,47 @@ def is_ignored_file(filename: str) -> bool:
     return False
 
 
+class TestStage(Enum):
+    """
+    When a shell script test goal runs in dev/run-tests.py.
+    """
+
+    # Before the Spark build.
+    PRE_BUILD = "pre_build"
+
+
+@dataclass(frozen=True)
+class ShellScriptTestGoal:
+    """
+    Describe a shell script test goal.
+
+    >>> goal = ShellScriptTestGoal("dev/example")
+    >>> goal.stage.value
+    'pre_build'
+
+    The stage must be a `TestStage`, not its string value. The path may be supplied
+    as a `str` or `Path` and is normalized to a `Path`. It must be non-blank,
+    repository-relative, and must not contain `..` path components.
+    """
+
+    path: Path
+    stage: TestStage
+
+    def __init__(self, path: str | Path, stage: TestStage = TestStage.PRE_BUILD) -> None:
+        if not isinstance(stage, TestStage):
+            raise TypeError(f"Unsupported test stage: {stage!r}")
+        original_path = path
+        # `Path` rejects non-path types and normalizes spellings like "./dev//x".
+        path = Path(path)
+        if not str(path).strip() or path == Path() or path.is_absolute() or ".." in path.parts:
+            raise ValueError(
+                f"Shell script path must be relative to repo root: {str(original_path)!r}"
+            )
+        # We have to call `object.__setattr__` because the class is frozen.
+        object.__setattr__(self, "path", path)
+        object.__setattr__(self, "stage", stage)
+
+
 @total_ordering
 class Module(object):
     """
@@ -198,10 +242,10 @@ class Module(object):
         environ=None,
         sbt_test_goals=(),
         python_test_goals=(),
+        shell_script_test_goals: Sequence[ShellScriptTestGoal] = (),
         excluded_python_implementations=(),
         test_tags=(),
         should_run_r_tests=False,
-        should_run_build_tests=False,
     ):
         """
         Define a new module.
@@ -219,16 +263,24 @@ class Module(object):
             module are changed.
         :param sbt_test_goals: A set of SBT test goals for testing this module.
         :param python_test_goals: A set of Python test goals for testing this module.
+        :param shell_script_test_goals: A sequence (e.g. a list or tuple) of shell script test
+            goals for testing this module.
         :param excluded_python_implementations: A set of Python implementations that are not
             supported by this module's Python components. The values in this set should match
             strings returned by Python's `platform.python_implementation()`.
         :param test_tags A set of tags that will be excluded when running unit tests if the module
             is not explicitly changed.
         :param should_run_r_tests: If true, changes in this module will trigger all R tests.
-        :param should_run_build_tests: If true, changes in this module will trigger build tests.
         """
         if any(module.name == name for module in all_modules):
             raise ValueError(f"module name {name!r} is already in use")
+        if isinstance(shell_script_test_goals, (str, bytes)) or not isinstance(
+            shell_script_test_goals, Sequence
+        ):
+            raise TypeError(f"{name}: shell_script_test_goals must be a sequence")
+        for goal in shell_script_test_goals:
+            if not isinstance(goal, ShellScriptTestGoal):
+                raise TypeError(f"{name}: expected ShellScriptTestGoal, got {goal!r}")
 
         self.name = name
         self.dependencies = dependencies
@@ -237,10 +289,10 @@ class Module(object):
         self.build_profile_flags = build_profile_flags
         self.environ = environ or {}
         self.python_test_goals = python_test_goals
+        self.shell_script_test_goals = shell_script_test_goals
         self.excluded_python_implementations = excluded_python_implementations
         self.test_tags = test_tags
         self.should_run_r_tests = should_run_r_tests
-        self.should_run_build_tests = should_run_build_tests
 
         self.dependent_modules = set()
         for dep in dependencies:
@@ -1883,7 +1935,7 @@ build = Module(
         ".*pom.xml",
         "dev/test-dependencies.sh",
     ],
-    should_run_build_tests=True,
+    shell_script_test_goals=[ShellScriptTestGoal("dev/test-dependencies.sh")],
 )
 
 yarn = Module(
@@ -1952,8 +2004,10 @@ root = Module(
         "test",
     ],
     python_test_goals=list(itertools.chain.from_iterable(m.python_test_goals for m in all_modules)),
+    shell_script_test_goals=list(
+        itertools.chain.from_iterable(m.shell_script_test_goals for m in all_modules)
+    ),
     should_run_r_tests=True,
-    should_run_build_tests=True,
 )
 
 
