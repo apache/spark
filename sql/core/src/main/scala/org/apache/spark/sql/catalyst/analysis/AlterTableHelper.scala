@@ -104,9 +104,13 @@ private[sql] object AlterTableHelper {
     s.newDefaultExpression.foreach { defaultValue =>
       // Validate the default value expression
       constantFoldDefaultValue(defaultValue, colName, dataType, "ALTER TABLE ALTER COLUMN")
-      builder.putExpression(
-        DefaultCols.CURRENT_DEFAULT_COLUMN_METADATA_KEY, defaultValue.originalSQL,
-        Some(defaultValue.child))
+      if (CharVarcharUtils.hasCharVarchar(dataType) &&
+          CharVarcharUtils.shouldApplyWriteSideLengthCheck(conf)) {
+        builder.putString(CURRENT_DEFAULT_COLUMN_METADATA_KEY, defaultValue.originalSQL)
+      } else {
+        builder.putExpression(
+          CURRENT_DEFAULT_COLUMN_METADATA_KEY, defaultValue.originalSQL, Some(defaultValue.child))
+      }
     }
     if (s.dropDefault) {
       // for legacy reasons, "" means clearing default value

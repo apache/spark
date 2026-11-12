@@ -17,11 +17,11 @@
 
 package org.apache.spark.sql.catalyst.plans.logical
 
-import org.apache.spark.sql.catalyst.analysis.{FieldName, FieldPosition, UnresolvedException}
+import org.apache.spark.sql.catalyst.analysis.{FieldName, FieldPosition, ResolvedFieldName, UnresolvedException}
 import org.apache.spark.sql.catalyst.catalog.CatalogTypes.TablePartitionSpec
 import org.apache.spark.sql.catalyst.catalog.ClusterBySpec
 import org.apache.spark.sql.catalyst.expressions.{CheckConstraint, Expression, TableConstraint, Unevaluable}
-import org.apache.spark.sql.catalyst.util.TypeUtils
+import org.apache.spark.sql.catalyst.util.{CharVarcharUtils, TypeUtils}
 import org.apache.spark.sql.connector.catalog.{DefaultValue, TableCatalog, TableChange}
 import org.apache.spark.sql.connector.catalog.CatalogV2Implicits.MultipartIdentifierHelper
 import org.apache.spark.sql.errors.QueryCompilationErrors
@@ -296,8 +296,12 @@ case class AlterColumns(
         TableChange.updateColumnPosition(colName, newPosition.position)
       }
       val defaultValueChange = spec.newDefaultExpression.map { newDefault =>
+        val field = column.asInstanceOf[ResolvedFieldName].field
+        val columnType = spec.newDataType.getOrElse {
+          CharVarcharUtils.getRawType(field.metadata).getOrElse(field.dataType)
+        }
         TableChange.updateColumnDefaultValue(colName,
-          newDefault.toV2CurrentDefault("ALTER TABLE", column.name.quoted))
+          newDefault.toV2CurrentDefault("ALTER TABLE", column.name.quoted, columnType))
       }
       val dropDefaultValue = if (spec.dropDefault) {
         Some(TableChange.updateColumnDefaultValue(colName, null: DefaultValue))

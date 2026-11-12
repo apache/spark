@@ -24,14 +24,14 @@ import org.json4s.jackson.JsonMethods.parse
 import org.apache.spark.{SparkException, SparkFunSuite, SparkIllegalArgumentException, SparkRuntimeException}
 import org.apache.spark.sql.{AnalysisException, Row}
 import org.apache.spark.sql.catalyst.CatalystTypeConverters
-import org.apache.spark.sql.catalyst.analysis.{caseInsensitiveResolution, caseSensitiveResolution}
+import org.apache.spark.sql.catalyst.analysis.{caseInsensitiveResolution, caseSensitiveResolution, ResolvedFieldName}
 import org.apache.spark.sql.catalyst.expressions.{CurrentUser, Expression, Literal}
 import org.apache.spark.sql.catalyst.parser.ParseException
 import org.apache.spark.sql.catalyst.plans.SQLHelper
-import org.apache.spark.sql.catalyst.plans.logical.{ColumnDefinition, DefaultValueExpression, QualifiedColType}
+import org.apache.spark.sql.catalyst.plans.logical.{AlterColumns, AlterColumnSpec, ColumnDefinition, DefaultValueExpression, LocalRelation, QualifiedColType}
 import org.apache.spark.sql.catalyst.types.DataTypeUtils
 import org.apache.spark.sql.catalyst.util.{CharVarcharUtils, ResolveDefaultColumns, ResolveDefaultColumnsUtils}
-import org.apache.spark.sql.connector.catalog.{CatalogV2Util, Column}
+import org.apache.spark.sql.connector.catalog.{CatalogV2Util, Column, TableChange}
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types.{DayTimeIntervalType => DT}
 import org.apache.spark.sql.types.{YearMonthIntervalType => YM}
@@ -1517,6 +1517,83 @@ class StructTypeSuite extends SparkFunSuite with SQLHelper {
                 exception = intercept[SparkRuntimeException](convert()),
                 condition = "EXCEED_LIMIT_LENGTH",
                 parameters = Map("limit" -> width.toString))
+            }
+          }
+        }
+      }
+    }
+  }
+
+  test("V2 SET DEFAULT cache uses the resolved target type and raw metadata") {
+    val rawChar = new MetadataBuilder()
+      .putString(CharVarcharUtils.CHAR_VARCHAR_TYPE_STRING_METADATA_KEY, "char(3)").build()
+    for {
+      legacy <- Seq(false, true)
+      preserve <- Seq(false, true)
+      standard <- Seq(false, true)
+    } {
+      withSQLConf(
+        SQLConf.LEGACY_CHAR_VARCHAR_AS_STRING.key -> legacy.toString,
+        SQLConf.PRESERVE_CHAR_VARCHAR_TYPE_INFO.key -> preserve.toString,
+        SQLConf.CHAR_VARCHAR_STANDARD_SEMANTICS.key -> standard.toString) {
+        val assignsCharacter = !legacy || preserve || standard
+        val fields = Seq(
+          StructField("c", CharType(3)),
+          StructField("c", StringType, metadata = rawChar),
+          StructField("c", StringType))
+        for {
+          field <- fields
+          newType <- Seq(None, Some(StringType), Some(CharType(4)))
+        } {
+          val target = newType.getOrElse(
+            CharVarcharUtils.getRawType(field.metadata).getOrElse(field.dataType))
+          val literal = Literal("EU")
+          val default = DefaultValueExpression(literal, "'EU'").markAsAnalyzed()
+          val spec = AlterColumnSpec(ResolvedFieldName(Seq("nested"), field), newType,
+            None, None, None, Some(default))
+          val change = AlterColumns(LocalRelation(), Seq(spec)).changes.collectFirst {
+            case update: TableChange.UpdateColumnDefaultValue => update
+          }.get
+          val current = change.newCurrentDefault()
+          val expectedCache = !CharVarcharUtils.hasCharVarchar(target) || !assignsCharacter
+          withClue(s"legacy=$legacy, preserve=$preserve, standard=$standard, " +
+              s"field=$field, newType=$newType: ") {
+            assert(current.getSql == "'EU'")
+            assert((current.getExpression != null) == expectedCache)
+            assert(change.fieldNames().toSeq == Seq("nested", "c"))
+          }
+        }
+      }
+    }
+  }
+
+  test("V2 current-default caches follow CHAR/VARCHAR assignment modes") {
+    for {
+      legacy <- Seq(false, true)
+      preserve <- Seq(false, true)
+      standard <- Seq(false, true)
+    } {
+      withSQLConf(
+        SQLConf.LEGACY_CHAR_VARCHAR_AS_STRING.key -> legacy.toString,
+        SQLConf.PRESERVE_CHAR_VARCHAR_TYPE_INFO.key -> preserve.toString,
+        SQLConf.CHAR_VARCHAR_STANDARD_SEMANTICS.key -> standard.toString) {
+        val assignsCharacter = !legacy || preserve || standard
+        for (dataType <- Seq(CharType(3), VarcharType(3), StringType, IntegerType)) {
+          val sql = if (dataType == IntegerType) "42" else "'EU'"
+          val child = ResolveDefaultColumns.analyze("c", dataType, sql, "CREATE TABLE")
+          val default = DefaultValueExpression(child, sql).markAsAnalyzed()
+          val expectedCache = !CharVarcharUtils.hasCharVarchar(dataType) || !assignsCharacter
+          val defaults = Seq(
+            ColumnDefinition("c", dataType, defaultValue = Some(default))
+              .toV2Column("CREATE TABLE").defaultValue(),
+            QualifiedColType(None, "c", dataType, true, None, None, Some(default))
+              .getV2Default("ALTER TABLE"))
+          withClue(s"legacy=$legacy, preserve=$preserve, standard=$standard, $dataType: ") {
+            defaults.foreach { converted =>
+              assert(converted.getSql == sql)
+              assert((converted.getExpression != null) == expectedCache)
+              assert(converted.getValue.dataType == child.dataType)
+              assert(converted.getValue.value == child.eval())
             }
           }
         }

@@ -296,23 +296,27 @@ case class DefaultValueExpression(
       columnType: DataType): ColumnDefaultValue = child match {
     case literal: Literal =>
       // Only the existence value may freeze the definition session's CHAR/VARCHAR assignment.
-      val currentDefault = if (CharVarcharUtils.hasCharVarchar(columnType)) {
-        None
-      } else {
-        analyzedChild.flatMap(new V2ExpressionBuilder(_).build())
-      }
+      val currentDefault = toV2CurrentDefault(statement, colName, columnType)
       val assigned = normalizeExistenceDefaultValue(
         literal, columnType, analyzedChild.getOrElse(child).foldable).asInstanceOf[Literal]
       val existsDefault = LiteralValue(assigned.value, assigned.dataType)
-      new ColumnDefaultValue(originalSQL, currentDefault.orNull, existsDefault)
+      new ColumnDefaultValue(originalSQL, currentDefault.getExpression, existsDefault)
     case _ =>
       throw QueryCompilationErrors.defaultValueNotConstantError(statement, colName, originalSQL)
   }
 
   // Convert the default expression to DefaultValue, which is required by DS v2 APIs.
-  def toV2CurrentDefault(statement: String, colName: String): DefaultValue = child match {
+  def toV2CurrentDefault(
+      statement: String,
+      colName: String,
+      columnType: DataType): DefaultValue = child match {
     case Literal(_, _) =>
-      val currentDefault = analyzedChild.flatMap(new V2ExpressionBuilder(_).build())
+      val currentDefault = if (CharVarcharUtils.hasCharVarchar(columnType) &&
+          CharVarcharUtils.shouldApplyWriteSideLengthCheck(SQLConf.get)) {
+        None
+      } else {
+        analyzedChild.flatMap(new V2ExpressionBuilder(_).build())
+      }
       new DefaultValue(originalSQL, currentDefault.orNull)
     case _ =>
       throw QueryCompilationErrors.defaultValueNotConstantError(statement, colName, originalSQL)
