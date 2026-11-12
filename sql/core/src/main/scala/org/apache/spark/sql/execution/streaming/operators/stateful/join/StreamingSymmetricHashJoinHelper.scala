@@ -26,6 +26,7 @@ import org.apache.spark.sql.catalyst.analysis.StreamingJoinHelper
 import org.apache.spark.sql.catalyst.expressions.{And, Attribute, AttributeSet, Between, BinaryComparison, BoundReference, Cast, Expression, GreaterThanOrEqual, LessThanOrEqual, Literal, NamedExpression, PredicateHelper, TimestampAddInterval}
 import org.apache.spark.sql.catalyst.plans.logical.EventTimeWatermark._
 import org.apache.spark.sql.catalyst.util.DateTimeConstants.MICROS_PER_DAY
+import org.apache.spark.sql.catalyst.util.DateTimeUtils
 import org.apache.spark.sql.execution.SparkPlan
 import org.apache.spark.sql.execution.streaming.operators.stateful.{StatefulOperatorStateInfo, WatermarkSupport}
 import org.apache.spark.sql.execution.streaming.operators.stateful.WatermarkSupport.watermarkExpression
@@ -308,10 +309,12 @@ object StreamingSymmetricHashJoinHelper extends Logging {
    * The key cutoff applies when the left input's late-filtered column is the left join key at an
    * ordinal: the right key at that ordinal must then be above the late-events watermark. The
    * value cutoff is on the right event time, solved only from conjuncts that compare it with the
-   * left input's late-filtered column, each shifted only by literal intervals without a day or
-   * month part, and with no cast. Any other conjunct can give a cutoff that is too high, so it
-   * gives none here: for example a bound on another right column, an interval with whole days,
-   * or a truncating cast.
+   * left input's late-filtered column, each shifted only by literal intervals without a month
+   * part, and with no cast other than one from timestamp to timestamp. A day part counts only in
+   * a time zone with a fixed offset, such as UTC, where Spark adds a day as 24 hours, as the
+   * solver counts it. Any other conjunct can give a cutoff that is too high, so it gives none
+   * here: for example a bound on another right column, an interval with whole days in a time
+   * zone with daylight saving time, or a truncating cast.
    * TODO(SPARK-61344, SPARK-61381): derive exact cutoffs for those conditions too.
    */
   def getLeftSemiExactRightCutoffs(
@@ -339,15 +342,19 @@ object StreamingSymmetricHashJoinHelper extends Logging {
     }
 
     // Whether the expression is the column shifted only by literal intervals that the solver
-    // counts exactly: no whole days, which Spark adds in the session time zone, and no months.
+    // counts exactly: no months, and whole days only where the zone that the shift adds them in
+    // has a fixed offset. Elsewhere a day can be 23 or 25 hours, but the solver counts 24.
+    def addsDaysExactly(shift: TimestampAddInterval): Boolean =
+      shift.timeZoneId.exists(zone => DateTimeUtils.getZoneId(zone).getRules.isFixedOffset)
     def isExactShiftOf(e: Expression, column: Attribute): Boolean = e match {
       case a: Attribute => a.semanticEquals(column)
       case Cast(child, TimestampType, _, _) if child.dataType == TimestampType =>
         isExactShiftOf(child, column)
-      case TimestampAddInterval(start, Literal(micros: Long, _: DayTimeIntervalType), _) =>
-        -MICROS_PER_DAY < micros && micros < MICROS_PER_DAY && isExactShiftOf(start, column)
-      case TimestampAddInterval(start, Literal(i: CalendarInterval, CalendarIntervalType), _) =>
-        i.months == 0 && i.days == 0 && isExactShiftOf(start, column)
+      case s @ TimestampAddInterval(start, Literal(micros: Long, _: DayTimeIntervalType), _) =>
+        (-MICROS_PER_DAY < micros && micros < MICROS_PER_DAY || addsDaysExactly(s)) &&
+          isExactShiftOf(start, column)
+      case s @ TimestampAddInterval(start, Literal(i: CalendarInterval, CalendarIntervalType), _) =>
+        i.months == 0 && (i.days == 0 || addsDaysExactly(s)) && isExactShiftOf(start, column)
       case _ => false
     }
     def conjuncts(e: Expression): Seq[Expression] = e match {
