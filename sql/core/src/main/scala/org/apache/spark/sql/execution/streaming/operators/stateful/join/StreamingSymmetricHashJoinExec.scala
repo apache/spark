@@ -752,7 +752,7 @@ case class StreamingSymmetricHashJoinExec(
 
     // For the right side of a left semi join: whether a cutoff at the late-events watermark that
     // is exact today shows that no left row passing late filtering can match a key and row.
-    private[this] val noLeftRowCanMatch: (UnsafeRow, UnsafeRow) => Boolean =
+    private[this] lazy val noLeftRowCanMatch: (UnsafeRow, UnsafeRow) => Boolean =
       if (joinType == LeftSemi && joinSide == RightSide) {
         val (keyCutoff, valueCutoff) = getLeftSemiExactRightCutoffs(left.output, right.output,
           leftKeys, rightKeys, condition.full, eventTimeWatermarkForLateEvents,
@@ -985,7 +985,8 @@ case class StreamingSymmetricHashJoinExec(
         //   late-events watermark that is exact today shows no left row passing late filtering
         //   can match it (see getLeftSemiExactRightCutoffs). The cutoff derivation gives no exact
         //   cutoff otherwise: it can apply a bound on another right column to the right event
-        //   time, and it counts a day as 24 hours and reads truncating casts as exact.
+        //   time, it counts a day as 24 hours, which is wrong in a time zone with daylight saving
+        //   time, and it reads truncating casts as exact.
         //   TODO(SPARK-61344, SPARK-61381): skip such inputs too once the cutoff is exact.
         val isLeftSemiWithMatch = joinType == LeftSemi && joinSide == LeftSide && iteratorNotEmpty
         val shouldAddToState = if (isLeftSemiWithMatch) {
