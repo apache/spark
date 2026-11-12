@@ -25,8 +25,7 @@ import org.apache.spark.sql.catalyst.plans.physical._
 import org.apache.spark.sql.catalyst.util.{ArrayBasedMapData, GenericArrayData}
 import org.apache.spark.sql.connector.catalog.functions.{FlipLowBitFunction, NonScalarBucketFunction, Reducer, ReducibleFunction, ScalarFunction}
 import org.apache.spark.sql.internal.SQLConf
-import org.apache.spark.sql.types.{ArrayType, CharType, DataType, DateType, Decimal, DecimalType, DoubleType, IntegerType, LongType, MapType, ShortType, StringType, StructType, TimestampNTZType, TimestampType, VarcharType}
-import org.apache.spark.unsafe.types.UTF8String
+import org.apache.spark.sql.types.{ArrayType, CharType, DataType, DateType, DecimalType, DoubleType, IntegerType, LongType, MapType, ShortType, StringType, StructType, TimestampNTZType, TimestampType, VarcharType}
 
 class ShuffleSpecSuite extends SparkFunSuite with SQLHelper {
 
@@ -810,14 +809,8 @@ class ShuffleSpecSuite extends SparkFunSuite with SQLHelper {
       val column = AttributeReference("k", columnType)()
       val bucket = spec(
         TransformExpression(bucketFunction(declared: _*), Seq(column), Some(4)), InternalRow(1))
-      val identityKey = columnType match {
-        case LongType | TimestampType => InternalRow(1L)
-        case DoubleType => InternalRow(1.0)
-        case _: StringType => InternalRow(UTF8String.fromString("a"))
-        case _: DecimalType => InternalRow(Decimal(1))
-        case _ => InternalRow(1)
-      }
-      val identity = spec(column, identityKey)
+      // The key is a placeholder: compatibility compares partition keys only when they are unknown.
+      val identity = spec(column, InternalRow(1))
       withSQLConf(
           SQLConf.V2_BUCKETING_PUSH_PART_VALUES_ENABLED.key -> "true",
           SQLConf.V2_BUCKETING_PARTIALLY_CLUSTERED_DISTRIBUTION_ENABLED.key -> "false",

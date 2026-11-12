@@ -1907,9 +1907,9 @@ trait LeafShuffleSpec extends ShuffleSpec {
    * of a child shuffled onto this layout. [[canCreatePartitioning]] does not ask it, since a child
    * that pairs with this layout as it stands evaluates nothing. A caller that shuffles a child onto
    * this layout has to ask it too. Only a [[KeyedShuffleSpec]] can answer false, and its
-   * [[createPartitioning]] asserts it, so a caller that does not ask fails while planning. What it
-   * builds over a Pandas or Arrow cogroup child's key of another type can still be one Spark
-   * cannot evaluate, and fails while planning too, with `STORAGE_PARTITION_JOIN_KEY_TYPE_MISMATCH`.
+   * [[createPartitioning]] asserts it, so a caller that does not ask fails while planning. A
+   * cogroup child's key the layout cannot place fails while planning too, see
+   * [[createPartitioning]].
    */
   def canEvaluatePartitioning: Boolean = true
 
@@ -2455,8 +2455,9 @@ case class KeyedShuffleSpec(
    * equi-join pairs two keys only when their types are equal apart from nullability and field
    * names (`BinaryComparison.sameType`), which `evaluableFunction` does not tell apart either. So
    * for a join, asking this of the reported transform answers it for the rebuilt one, and the
-   * reported one keeps the answer. A Pandas or Arrow cogroup's keys need not share a type, see
-   * `createPartitioning`. True for anything that is not a transform, which needs no call.
+   * reported one keeps the answer. The keys of a cogroup that does not coerce them, e.g. a Pandas
+   * or Arrow cogroup, need not share a type, see `createPartitioning`. True for anything that is
+   * not a transform, which needs no call.
    *
    * A Scala class or object that extends `ScalarFunction` directly gets a mixin forwarder to the
    * default `produceResult`, which the lookup finds, so this is true even when the connector
@@ -2650,9 +2651,10 @@ case class KeyedShuffleSpec(
     assert(canEvaluatePartitioning,
       s"Cannot shuffle a child onto a layout Spark cannot evaluate: ${partitioning.expressions}")
     // A join's keys share their types, apart from nullability and field names, so that answers
-    // for what is built too. A Pandas or Arrow cogroup's need not (SPARK-60782). Its other key can
-    // be one the layout's function does not take, e.g. a `BIGINT` against a function declaring
-    // `INT`, or a string of another collation. Or one the function takes, but stored otherwise than
+    // for what is built too. A cogroup that does not coerce its keys, e.g. a Pandas or Arrow
+    // cogroup, need not have them (SPARK-60782). Its other key can be one the layout's function
+    // does not take, e.g. a `BIGINT` against a function declaring `INT`, or a string of another
+    // collation. Or one the function takes, but stored otherwise than
     // the layout's column, e.g. an `INT` widened to a `BIGINT` column's declared type: every row is
     // then placed, but the cogroup pairs its groups by comparing the two sides' key rows, so they
     // do not pair, or the cogroup fails. Falling back to a hash shuffle would pair them wrongly
@@ -2660,19 +2662,25 @@ case class KeyedShuffleSpec(
     // This covers transform positions only. An identity position is rebuilt over the other key
     // whatever its type, and a layout Spark cannot evaluate takes the hash shuffle. Both behave as
     // before this check, and are left to SPARK-60782.
+    // The storage check comes first, since it needs no call: a key it refuses is named, and the
+    // call of the transform rebuilt over the other key is not resolved, so nothing logs that it is
+    // not evaluated.
     partitioning.expressions.zip(keyPositions).zip(newExpressions).foreach {
-      case ((te: TransformExpression, positionSet), t: TransformExpression)
-          if !canEvaluate(t) || !positionSet.forall { p =>
-            TransformExpression.keysStoredAlike(clustering(p).dataType, te.references.head.dataType)
-          } =>
-        // `name()` and `inputTypes()` are connector code, which must not replace this error.
-        val functionClass = t.function.getClass.getName
-        val name = TransformExpression.orElse(t.function.name(), functionClass)
-        throw QueryExecutionErrors.storagePartitionJoinKeyTypeMismatchError(
-          t.numBucketsOpt.fold(name)(n => s"$name($n)"),
-          te.references.head.dataType,
-          TransformExpression.orElse(t.function.inputTypes().toSeq, Nil),
-          t.children.head)
+      case ((te: TransformExpression, positionSet), t: TransformExpression) =>
+        val columnType = te.references.head.dataType
+        positionSet.iterator.map(clustering)
+          .find(key => !TransformExpression.keysStoredAlike(key.dataType, columnType))
+          .orElse(Option.when(!canEvaluate(t))(t.children.head))
+          .foreach { key =>
+            // `name()` and `inputTypes()` are connector code, which must not replace this error.
+            val functionClass = t.function.getClass.getName
+            val name = TransformExpression.orElse(t.function.name(), functionClass)
+            throw QueryExecutionErrors.storagePartitionJoinKeyTypeMismatchError(
+              t.numBucketsOpt.fold(name)(n => s"$name($n)"),
+              columnType,
+              TransformExpression.orElse(t.function.inputTypes().toSeq, Nil),
+              key)
+          }
       case _ =>
     }
     // The shuffled side is laid out on this side's partitions, so it shares their layout, with one

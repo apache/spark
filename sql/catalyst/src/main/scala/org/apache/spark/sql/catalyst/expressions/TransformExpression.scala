@@ -278,8 +278,12 @@ object TransformExpression extends Logging {
    */
   private val loggedOnce: java.util.Set[String] = ConcurrentHashMap.newKeySet[String]()
 
-  /** Runs `log` the first time `key` is seen. */
-  private def logOnce(key: String)(log: => Unit): Unit = if (loggedOnce.add(key)) log
+  /**
+   * Runs `line` the first time `key` is seen while its level is `enabled`. A line its level drops
+   * does not take the key, so it is logged once the level is on.
+   */
+  private def logOnce(key: String, enabled: Boolean)(line: => Unit): Unit =
+    if (enabled && loggedOnce.add(key)) line
 
   /**
    * `value`, or `fallback` when it throws. `name()`, `inputTypes()` and a failure's message are
@@ -291,11 +295,10 @@ object TransformExpression extends Logging {
 
   /**
    * `dataType` for a log line, a user-defined type by its class, since its `catalogString` is its
-   * `sqlType`'s. That `sqlType` is connector code, so `?` when it throws.
+   * `sqlType`'s.
    */
   private def typeName(dataType: DataType): String = dataType match {
-    case udt: UserDefinedType[_] =>
-      s"${udt.getClass.getName}(${orElse(udt.sqlType.catalogString, "?")})"
+    case udt: UserDefinedType[_] => s"${udt.getClass.getName}(${udt.sqlType.catalogString})"
     case other => other.catalogString
   }
 
@@ -363,7 +366,7 @@ object TransformExpression extends Logging {
     val arguments = typeList(argumentTypes)
     val declared = typeList(declaredTypes)
     val kind = if (lookupFailure.isDefined) "unreachable" else "mismatch"
-    logOnce(s"$kind:${function.getClass.getName}:$arguments:$declared") {
+    logOnce(s"$kind:${function.getClass.getName}:$arguments:$declared", log.isInfoEnabled) {
       logInfo(argumentsMismatchMessage(function, arguments, declared, lookupFailure))
     }
     lookupFailure.foreach { e =>
@@ -374,15 +377,15 @@ object TransformExpression extends Logging {
 
   /** Logs that `function` is not a `ScalarFunction`, so Spark cannot call it. */
   private def logNotScalar(function: BoundFunction): Unit = {
-    logOnce(s"notScalar:${function.getClass.getName}") {
-      logInfo(log"The " + transformLabel(function) + log" is not a ScalarFunction, so a " +
-        log"storage-partitioned join does not evaluate it")
+    logOnce(s"notScalar:${function.getClass.getName}", log.isInfoEnabled) {
+      logInfo(log"The " + transformLabel(function) + log" is not a ScalarFunction, so Spark " +
+        log"does not evaluate it")
     }
   }
 
   /** Logs that a call of `function` failed to resolve, see `evaluableFunction`. */
   private def logCannotResolve(function: BoundFunction, e: Throwable): Unit = {
-    logOnce(s"failure:${function.getClass.getName}:${e.getClass.getName}") {
+    logOnce(s"failure:${function.getClass.getName}:${e.getClass.getName}", log.isWarnEnabled) {
       logWarning(log"Cannot resolve a call of the " + transformLabel(function) +
         log", so a storage-partitioned join does not evaluate it: " +
         log"${MDC(ERROR, orElse(e.toString, e.getClass.getName))}")
@@ -458,22 +461,8 @@ object TransformExpression extends Logging {
    * precision, as one stored as bytes is anywhere. So a cogroup over such keys can fail, but never
    * pairs its groups wrongly.
    */
-  private[sql] def keysStoredAlike(from: DataType, to: DataType): Boolean = (from, to) match {
-    case _ if from == to => true
-    case (udt: UserDefinedType[_], _) => keysStoredAlike(udt.sqlType, to)
-    case (_, udt: UserDefinedType[_]) => keysStoredAlike(from, udt.sqlType)
-    case (f: StructType, t: StructType) =>
-      f.length == t.length && f.fields.zip(t.fields).forall { case (ff, tf) =>
-        keysStoredAlike(ff.dataType, tf.dataType)
-      }
-    case (f: ArrayType, t: ArrayType) => keysStoredAlike(f.elementType, t.elementType)
-    case (f: MapType, t: MapType) =>
-      keysStoredAlike(f.keyType, t.keyType) && keysStoredAlike(f.valueType, t.valueType)
-    case (f: DecimalType, t: DecimalType) =>
-      f.scale == t.scale &&
-        DecimalType.isByteArrayDecimalType(f) == DecimalType.isByteArrayDecimalType(t)
-    case _ => storedAlike(from, to, nested = true)
-  }
+  private[sql] def keysStoredAlike(from: DataType, to: DataType): Boolean =
+    storedAlike(from, to, nested = true, anyPrecision = true)
 
   /**
    * Whether a value of type `from` is stored the way one of type `to` is, so that a function
@@ -486,27 +475,33 @@ object TransformExpression extends Logging {
    *    declaring a non-nullable field gets the values a nullable one holds;
    *  - two decimals of one scale, so that the unscaled digits a function reads are the same. At the
    *    top level the function gets the `Decimal` itself, whatever precision it declares, e.g. a
-   *    `DECIMAL(12,2)` key of a Pandas or Arrow cogroup against a function declaring
+   *    `DECIMAL(12,2)` key of a cogroup that does not coerce its keys against a function declaring
    *    `DECIMAL(10,2)`, see `KeyedShuffleSpec.createPartitioning`. Nested in an unsafe row, a
    *    decimal is read at the declared precision: it is stored as a `long` up to
    *    `Decimal.MAX_LONG_DIGITS` digits and as bytes above, so there `to` needs no less precision,
-   *    and both on one side of that.
+   *    and both on one side of that. With `anyPrecision`, as `keysStoredAlike` asks, any precision
+   *    on one side of that.
    */
-  private def storedAlike(from: DataType, to: DataType, nested: Boolean): Boolean =
+  private def storedAlike(
+      from: DataType,
+      to: DataType,
+      nested: Boolean,
+      anyPrecision: Boolean = false): Boolean =
     (from, to) match {
       case _ if from == to => true
-      case (udt: UserDefinedType[_], _) => storedAlike(udt.sqlType, to, nested)
-      case (_, udt: UserDefinedType[_]) => storedAlike(from, udt.sqlType, nested)
+      case (udt: UserDefinedType[_], _) => storedAlike(udt.sqlType, to, nested, anyPrecision)
+      case (_, udt: UserDefinedType[_]) => storedAlike(from, udt.sqlType, nested, anyPrecision)
       case (f: StructType, t: StructType) =>
         f.length == t.length && f.fields.zip(t.fields).forall { case (ff, tf) =>
-          storedAlike(ff.dataType, tf.dataType, nested = true)
+          storedAlike(ff.dataType, tf.dataType, nested = true, anyPrecision)
         }
-      case (f: ArrayType, t: ArrayType) => storedAlike(f.elementType, t.elementType, nested = true)
+      case (f: ArrayType, t: ArrayType) =>
+        storedAlike(f.elementType, t.elementType, nested = true, anyPrecision)
       case (f: MapType, t: MapType) =>
-        storedAlike(f.keyType, t.keyType, nested = true) &&
-          storedAlike(f.valueType, t.valueType, nested = true)
+        storedAlike(f.keyType, t.keyType, nested = true, anyPrecision) &&
+          storedAlike(f.valueType, t.valueType, nested = true, anyPrecision)
       case (f: DecimalType, t: DecimalType) =>
-        f.scale == t.scale && (!nested || (f.precision <= t.precision &&
+        f.scale == t.scale && (!nested || ((anyPrecision || f.precision <= t.precision) &&
           DecimalType.isByteArrayDecimalType(f) == DecimalType.isByteArrayDecimalType(t)))
       case _ =>
         val physical = PhysicalDataType(from)

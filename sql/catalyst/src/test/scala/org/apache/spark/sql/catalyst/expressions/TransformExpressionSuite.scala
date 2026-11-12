@@ -522,6 +522,10 @@ class TransformExpressionSuite extends SparkFunSuite {
       .map(_.getMessage.getFormattedMessage)
       .filter(_.contains("is not a ScalarFunction"))
     assert(logged.size == 1, logged)
+    // Any evaluation asks for the call, e.g. the V2 write path's, not only a storage-partitioned
+    // join's.
+    assert(logged.head.endsWith("is not a ScalarFunction, so Spark does not evaluate it"),
+      logged.head)
   }
 
   test("SPARK-60027: a mismatch is logged once per argument and declared types") {
@@ -554,37 +558,36 @@ class TransformExpressionSuite extends SparkFunSuite {
     // filled only with structured logging on.
     val structured = Logging.isStructuredLoggingEnabled
     Logging.enableStructuredLogging()
-    try checkArgumentsMismatchLines()
-    finally if (!structured) Logging.disableStructuredLogging()
-  }
+    try {
+      val function = new ScalarFunction[Int] {
+        override def inputTypes(): Array[DataType] = Array(IntegerType, IntegerType)
+        override def resultType(): DataType = IntegerType
+        override def name(): String = "line_bucket"
+        override def canonicalName(): String = "test.bucket"
+        override def produceResult(input: InternalRow): Int = 0
+      }
+      val mismatch = TransformExpression.argumentsMismatchMessage(function, "(int, bigint)",
+        "(int, int)", None)
+      assert(mismatch.message.endsWith("which do not take arguments of types (int, bigint), so a " +
+        "storage-partitioned join does not evaluate it"), mismatch.message)
+      assert(!mismatch.context.containsKey("error"), mismatch.context)
+      assert(mismatch.context.get("args") == "(int, bigint)", mismatch.context)
 
-  private def checkArgumentsMismatchLines(): Unit = {
-    val function = new ScalarFunction[Int] {
-      override def inputTypes(): Array[DataType] = Array(IntegerType, IntegerType)
-      override def resultType(): DataType = IntegerType
-      override def name(): String = "line_bucket"
-      override def canonicalName(): String = "test.bucket"
-      override def produceResult(input: InternalRow): Int = 0
+      val lookup = QueryExecutionErrors.methodNotFoundError(
+        classOf[String], "invoke", Seq(classOf[Int], classOf[Object]))
+      val unreachable = TransformExpression.argumentsMismatchMessage(function, "(int, int)",
+        "(int, int)", Some(lookup))
+      val text = "Couldn't find method invoke with arguments (int, class java.lang.Object) on " +
+        "class java.lang.String."
+      assert(unreachable.context.get("error") == text, unreachable.context)
+      // It names both reasons the lookup fails for, not only the argument types.
+      assert(unreachable.message.endsWith("but the method its call resolves to cannot be invoked " +
+        "with arguments of types (int, int), since it or its class is not public or it does not " +
+        s"take their Java classes, so a storage-partitioned join does not evaluate it: $text"),
+        unreachable.message)
+    } finally {
+      if (!structured) Logging.disableStructuredLogging()
     }
-    val mismatch = TransformExpression.argumentsMismatchMessage(function, "(int, bigint)",
-      "(int, int)", None)
-    assert(mismatch.message.endsWith("which do not take arguments of types (int, bigint), so a " +
-      "storage-partitioned join does not evaluate it"), mismatch.message)
-    assert(!mismatch.context.containsKey("error"), mismatch.context)
-    assert(mismatch.context.get("args") == "(int, bigint)", mismatch.context)
-
-    val lookup = QueryExecutionErrors.methodNotFoundError(
-      classOf[String], "invoke", Seq(classOf[Int], classOf[Object]))
-    val unreachable = TransformExpression.argumentsMismatchMessage(function, "(int, int)",
-      "(int, int)", Some(lookup))
-    val text = "Couldn't find method invoke with arguments (int, class java.lang.Object) on " +
-      "class java.lang.String."
-    assert(unreachable.context.get("error") == text, unreachable.context)
-    // It names both reasons the lookup fails for, not only the argument types.
-    assert(unreachable.message.endsWith("but the method its call resolves to cannot be invoked " +
-      "with arguments of types (int, int), since it or its class is not public or it does not " +
-      s"take their Java classes, so a storage-partitioned join does not evaluate it: $text"),
-      unreachable.message)
   }
 
   test("SPARK-60027: a failure is logged by its own text") {
@@ -656,31 +659,27 @@ class TransformExpressionSuite extends SparkFunSuite {
       e.getThrown.getMessage.contains("Couldn't find method invoke")), debug)
   }
 
-  test("SPARK-60027: a user-defined type whose sqlType throws does not change what is logged") {
-    // A mismatch is logged as one whatever the types' connector code does when the line names
-    // them, here an argument the function does not declare.
-    class ThrowingUDT extends UserDefinedType[Integer] {
-      override def sqlType: DataType = throw new IllegalStateException("udt bug")
-      override def serialize(obj: Integer): Any = obj
-      override def deserialize(datum: Any): Integer = datum.asInstanceOf[Integer]
-      override def userClass: Class[Integer] = classOf[Integer]
-    }
-    val oneInput = new ScalarFunction[Int] {
-      override def inputTypes(): Array[DataType] = Array(IntegerType)
+  test("SPARK-60027: a line its level drops is logged once the level is on") {
+    // The once-only key is taken only while the line's level is on, so a refusal first seen with
+    // INFO off is still logged once INFO is turned on.
+    val function = new ScalarFunction[Int] {
+      override def inputTypes(): Array[DataType] = Array(IntegerType, IntegerType)
       override def resultType(): DataType = IntegerType
-      override def name(): String = "arity_bucket"
+      override def name(): String = "level_bucket"
       override def canonicalName(): String = "test.bucket"
       override def produceResult(input: InternalRow): Int = 0
     }
-    val appender = new LogAppender("a mismatch over a user-defined type whose sqlType throws")
-    withLogAppender(appender, loggerNames = transformLogger, level = Some(Level.INFO)) {
-      assert(TransformExpression(oneInput, Seq(AttributeReference("u", new ThrowingUDT)()),
-        Some(4)).evaluableFunction.isEmpty)
+    def refusals(level: Level): Seq[String] = {
+      val appender = new LogAppender(s"a mismatch at $level")
+      withLogAppender(appender, loggerNames = transformLogger, level = Some(level)) {
+        assert(bucket(function, Literal(7L)).evaluableFunction.isEmpty)
+      }
+      appender.loggingEvents.map(_.getMessage.getFormattedMessage)
+        .filter(_.contains("level_bucket")).toSeq
     }
-    val logged = appender.loggingEvents.map(e => (e.getLevel, e.getMessage.getFormattedMessage))
-    assert(logged.map(_._1) == Seq(Level.INFO), logged)
-    assert(logged.head._2.contains("which do not take arguments of types (int, ") &&
-      logged.head._2.contains("ThrowingUDT$1(?))"), logged)
+    assert(refusals(Level.WARN).isEmpty)
+    assert(refusals(Level.INFO).size == 1)
+    assert(refusals(Level.INFO).isEmpty, "logged once")
   }
 
   test("SPARK-60027: a function class that fails in another way is warned about again") {

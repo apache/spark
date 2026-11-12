@@ -1797,10 +1797,10 @@ class EnsureRequirementsSuite extends SharedSparkSession {
   }
 
   test("SPARK-60027: a cogroup shuffled onto a decimal bucket places a key of more precision") {
-    // A Pandas or Arrow cogroup does not coerce its keys, so the side shuffled onto a bucket over
-    // a `DECIMAL(10,2)` column can be keyed on a `DECIMAL(12,2)`. The function gets the `Decimal`
-    // itself and reads its unscaled digits, as Iceberg's does, so each row lands where the keyed
-    // side put its value.
+    // A cogroup that does not coerce its keys, e.g. a Pandas or Arrow cogroup, can shuffle a side
+    // keyed on a `DECIMAL(12,2)` onto a bucket over a `DECIMAL(10,2)` column. The function gets
+    // the `Decimal` itself and reads its unscaled digits, as Iceberg's does, so each row lands
+    // where the keyed side put its value.
     val decimalBucket = new ScalarFunction[Int] {
       override def inputTypes(): Array[DataType] = Array(IntegerType, DecimalType(10, 2))
       override def resultType(): DataType = IntegerType
@@ -1837,14 +1837,16 @@ class EnsureRequirementsSuite extends SharedSparkSession {
   }
 
   test("SPARK-60027: a cogroup shuffled from a key Spark cannot place fails while planning") {
-    // A Pandas or Arrow cogroup does not coerce its keys (SPARK-60782), so its other key can have
-    // a type the layout's function does not take: a `BIGINT` against a function declaring `INT`,
+    // A cogroup that does not coerce its keys, e.g. a Pandas or Arrow cogroup (SPARK-60782), can
+    // have another key of a type the layout's function does not take: a `BIGINT` against a
+    // function declaring `INT`,
     // or a string of another collation, which master paired wrongly. Or one the function takes but
     // that is stored otherwise than the layout's column, so the cogroup, which compares the key
     // rows, would not pair its groups: an `INT` widened to a `BIGINT` column's declared type, which
     // master failed on in a task, or a `DECIMAL(20,2)`, stored as bytes, against a `DECIMAL(10,2)`
     // column, stored as a `long`. Falling back to a hash shuffle would pair the groups wrongly
-    // too, so it fails, while planning, with an error that names the key's type.
+    // too, so it fails, while planning, with an error that names the key's type. The storage check
+    // needs no call, so nothing is logged about the transform not being evaluated first.
     def bucket(valueType: DataType): ScalarFunction[Int] = new ScalarFunction[Int] {
       override def inputTypes(): Array[DataType] = Array(IntegerType, valueType)
       override def resultType(): DataType = IntegerType
@@ -1871,17 +1873,59 @@ class EnsureRequirementsSuite extends SharedSparkSession {
       val right = DummySparkPlan(outputPartitioning = UnknownPartitioning(0))
       val cogroup = FlatMapCoGroupsInPandasExec(Seq(cL), Seq(cR), pythonUdf,
         AttributeReference("value", IntegerType)() :: Nil, left, right)
-      withSQLConf(SQLConf.V2_BUCKETING_SHUFFLE_ENABLED.key -> "true") {
-        checkError(
-          exception = intercept[SparkException](EnsureRequirements.apply(cogroup)),
-          condition = "STORAGE_PARTITION_JOIN_KEY_TYPE_MISMATCH",
-          parameters = Map(
-            "transform" -> "bucket(4)",
-            "columnType" -> declared,
-            "inputTypes" -> ("(\"INT\", " + declared + ")"),
-            "key" -> "\"cR\"",
-            "keyType" -> key))
+      val appender = new LogAppender("a cogroup key the layout cannot place")
+      withLogAppender(appender, loggerNames = Seq(classOf[TransformExpression].getName),
+          level = Some(Level.INFO)) {
+        withSQLConf(SQLConf.V2_BUCKETING_SHUFFLE_ENABLED.key -> "true") {
+          checkError(
+            exception = intercept[SparkException](EnsureRequirements.apply(cogroup)),
+            condition = "STORAGE_PARTITION_JOIN_KEY_TYPE_MISMATCH",
+            parameters = Map(
+              "transform" -> "bucket(4)",
+              "columnType" -> declared,
+              "inputTypes" -> ("(\"INT\", " + declared + ")"),
+              "key" -> "\"cR\"",
+              "keyType" -> key))
+        }
       }
+      assert(appender.loggingEvents.isEmpty,
+        appender.loggingEvents.map(_.getMessage.getFormattedMessage))
+    }
+  }
+
+  test("SPARK-60027: the key type error names the cogroup key that does not match") {
+    // A column at two cluster positions: the layout's transform is rebuilt over the key at the
+    // first, `x`, which matches, and the error names the one that does not, `y`.
+    val intBucket = new ScalarFunction[Int] {
+      override def inputTypes(): Array[DataType] = Array(IntegerType, IntegerType)
+      override def resultType(): DataType = IntegerType
+      override def name(): String = "bucket"
+      override def canonicalName(): String = "bucket"
+      override def produceResult(input: InternalRow): Int = 0
+    }
+    val c = AttributeReference("c", IntegerType)()
+    val x = AttributeReference("x", IntegerType)()
+    val y = AttributeReference("y", LongType)()
+    val left = DummySparkPlan(outputPartitioning = KeyedPartitioning(
+      Seq(TransformExpression(intBucket, Seq(c), Some(4))), (0 until 4).map(InternalRow(_))))
+    val right = DummySparkPlan(outputPartitioning = UnknownPartitioning(0))
+    val pythonUdf = PythonUDF("pyUDF", null,
+      StructType(Seq(StructField("value", IntegerType))),
+      Seq.empty,
+      PythonEvalType.SQL_COGROUPED_MAP_PANDAS_UDF,
+      true)
+    val cogroup = FlatMapCoGroupsInPandasExec(Seq(c, c), Seq(x, y), pythonUdf,
+      AttributeReference("value", IntegerType)() :: Nil, left, right)
+    withSQLConf(SQLConf.V2_BUCKETING_SHUFFLE_ENABLED.key -> "true") {
+      checkError(
+        exception = intercept[SparkException](EnsureRequirements.apply(cogroup)),
+        condition = "STORAGE_PARTITION_JOIN_KEY_TYPE_MISMATCH",
+        parameters = Map(
+          "transform" -> "bucket(4)",
+          "columnType" -> "\"INT\"",
+          "inputTypes" -> "(\"INT\", \"INT\")",
+          "key" -> "\"y\"",
+          "keyType" -> "\"BIGINT\""))
     }
   }
 
