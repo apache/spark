@@ -2393,6 +2393,11 @@
       "Data source table <table> violates the external lookup contract:"
     ],
     "subClass" : {
+      "DECIMAL_OUT_OF_RANGE" : {
+        "message" : [
+          "The lookup result cursor returned a value in the field <field> that does not fit its type <type>."
+        ]
+      },
       "DUPLICATE_SCAN_FIELD" : {
         "message" : [
           "The lookup scan returned the field <field> more than once."
@@ -2403,6 +2408,16 @@
           "`selectLookupPredicates()` returned the predicate <predicate> more than once."
         ]
       },
+      "INVALID_INPUT_ORDINAL" : {
+        "message" : [
+          "The lookup result cursor returned the input ordinal <ordinal>, but the request had <numParameterRows> parameter rows."
+        ]
+      },
+      "LOOKUP_ONLY_TABLE_WITH_V1_READ" : {
+        "message" : [
+          "The table reports EXTERNAL_LOOKUP without BATCH_READ, but its provider <provider> also has a V1 read path. A table that supports both batch reads and lookups must report BATCH_READ and EXTERNAL_LOOKUP. Otherwise, remove the V1 read path from the provider."
+        ]
+      },
       "MISSING_SCAN_FIELD" : {
         "message" : [
           "The lookup scan did not return the table column <field>, which the join requires."
@@ -2411,6 +2426,11 @@
       "NON_POSITIVE_MAX_PARAMETER_ROWS" : {
         "message" : [
           "`maxParameterRowsPerRequest()` returned <value>, but it must be positive."
+        ]
+      },
+      "NULL_IN_NOT_NULL_FIELD" : {
+        "message" : [
+          "The lookup result cursor returned NULL in the field <field>, which the table or the read schema declares NOT NULL."
         ]
       },
       "NULL_RESULT" : {
@@ -2903,6 +2923,11 @@
       "The join cannot be executed as an external lookup join:"
     ],
     "subClass" : {
+      "CHAR_VARCHAR_COLUMN" : {
+        "message" : [
+          "The column <column> of the lookup-only table <relation> needs read-side CHAR padding or a VARCHAR length check, which an external lookup join does not support."
+        ]
+      },
       "CONFLICTING_JOIN_STRATEGY" : {
         "message" : [
           "The join strategy hint <strategy> cannot be honored by an external lookup join over <relation>. Remove the <strategy> hint."
@@ -2946,6 +2971,11 @@
       "STATIC_LEFT_SIDE" : {
         "message" : [
           "An external lookup join must be a stream-static join, but the left side of the join over <relation> is not a streaming query."
+        ]
+      },
+      "SUBQUERY_IN_JOIN_CONDITION" : {
+        "message" : [
+          "The join condition of an external lookup join over <relation> cannot contain a subquery."
         ]
       },
       "TABLE" : {

@@ -17,13 +17,14 @@
 
 package org.apache.spark.sql.catalyst.analysis
 
+import org.apache.spark.sql.catalyst.expressions.SubqueryExpression
 import org.apache.spark.sql.catalyst.optimizer.EliminateResolvedHint
 import org.apache.spark.sql.catalyst.plans.{Inner, LeftOuter}
 import org.apache.spark.sql.catalyst.plans.logical.{ExternalLookupJoin, Join, JoinStrategyHint,
   LogicalPlan, ResolvedHint}
 import org.apache.spark.sql.catalyst.rules.Rule
 import org.apache.spark.sql.catalyst.streaming.WriteToStream
-import org.apache.spark.sql.catalyst.trees.TreePattern.JOIN
+import org.apache.spark.sql.catalyst.trees.TreePattern.{JOIN, LOOKUP_ONLY_RELATION}
 import org.apache.spark.sql.connector.catalog.Table
 import org.apache.spark.sql.errors.{QueryCompilationErrors, QueryErrorsBase}
 import org.apache.spark.sql.execution.datasources.v2.ExternalLookupRelations
@@ -93,6 +94,10 @@ object ExternalLookupJoinEligibility extends QueryErrorsBase {
           "joinType" -> toSQLStmt(join.joinType.sql),
           "supportedJoinTypes" -> SUPPORTED_JOIN_TYPES.map(t => toSQLStmt(t.sql)).mkString(", ")))
       case None if join.condition.isEmpty => MissingCondition
+      // The optimizer rewrites a subquery in a join condition only for a Join, which a lookup join
+      // no longer is by then.
+      case None if join.condition.exists(SubqueryExpression.hasSubquery) =>
+        ineligible("SUBQUERY_IN_JOIN_CONDITION", table)
       case None => Eligible
     }
   }
@@ -126,7 +131,9 @@ object ExternalLookupJoinEligibility extends QueryErrorsBase {
  */
 object CheckExternalLookupJoin extends (LogicalPlan => Unit) {
   override def apply(plan: LogicalPlan): Unit = {
-    if (plan.containsPattern(JOIN)) {
+    // Only a join over a lookup-only table can be an external lookup join, and the relation of
+    // such a table carries LOOKUP_ONLY_RELATION, so other plans need no walk.
+    if (plan.containsAllPatterns(JOIN, LOOKUP_ONLY_RELATION)) {
       val complete = plan.isInstanceOf[WriteToStream]
       plan.foreachUp {
         case join: Join if join.resolved =>
@@ -154,8 +161,10 @@ object CheckExternalLookupJoin extends (LogicalPlan => Unit) {
 object FormExternalLookupJoin extends Rule[LogicalPlan] {
   import ExternalLookupJoinEligibility._
 
+  // Only a join over a lookup-only table converts, and the relation of such a table carries
+  // LOOKUP_ONLY_RELATION, so a subtree without it has no join to convert.
   override def apply(plan: LogicalPlan): LogicalPlan =
-    plan.transformUpWithPruning(_.containsPattern(JOIN)) {
+    plan.transformUpWithPruning(_.containsAllPatterns(JOIN, LOOKUP_ONLY_RELATION)) {
       case join: Join =>
         ExternalLookupJoinEligibility(join) match {
           case Eligible =>
