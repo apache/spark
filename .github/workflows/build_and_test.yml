@@ -1012,8 +1012,9 @@ jobs:
         # Build docs first with SKIP_API to ensure they are buildable without requiring any
         # language docs to be built beforehand.
         cd docs; SKIP_ERRORDOC=1 SKIP_API=1 bundle exec jekyll build; cd ..
-        if [ "$GITHUB_REPOSITORY" != "apache/spark" ] &&
-            [ -f "./dev/is-changed.py" ]; then
+        if [ "$GITHUB_REPOSITORY" = "apache/spark" ]; then
+          export SKIP_RDOC=1
+        elif [ -f "./dev/is-changed.py" ]; then
           # Skip PySpark and SparkR docs while keeping Scala/Java/SQL docs
           pyspark_modules=`cd dev && python3.12 -c "import sparktestsupport.modules as m; print(','.join(m.name for m in m.all_modules if m.name.startswith('pyspark')))"`
           if [ `./dev/is-changed.py -m $pyspark_modules` = false ]; then
@@ -1022,7 +1023,6 @@ jobs:
           if [ `./dev/is-changed.py -m sparkr` = false ]; then export SKIP_RDOC=1; fi
         fi
         cd docs
-        export SKIP_RDOC=1
         bundle exec jekyll build
     - name: Tar documentation
       id: documentation
