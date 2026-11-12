@@ -2173,6 +2173,67 @@ abstract class MergeIntoTableSuiteBase extends RowLevelOperationSuiteBase
     }
   }
 
+  test("SPARK-61462: delete-only merge comparing CHAR columns stored with and without padding") {
+    createTable("pk INT NOT NULL, c CHAR(3), dep STRING")
+    sql(s"CREATE TABLE $sourceNameAsString (c CHAR(3), dep STRING)")
+
+    withSQLConf(SQLConf.LEGACY_CHAR_VARCHAR_AS_STRING.key -> "true") {
+      append("pk INT NOT NULL, c STRING, dep STRING",
+        """{ "pk": 1, "c": "a", "dep": "hr" }
+          |{ "pk": 3, "c": "x", "dep": "hr" }
+          |""".stripMargin)
+      sql(s"INSERT INTO $sourceNameAsString VALUES ('b', 'software')")
+    }
+    append("pk INT NOT NULL, c STRING, dep STRING",
+      """{ "pk": 2, "c": "b", "dep": "software" }
+        |{ "pk": 4, "c": "y", "dep": "finance" }
+        |""".stripMargin)
+    sql(s"INSERT INTO $sourceNameAsString VALUES ('a', 'hr')")
+
+    sql(
+      s"""MERGE INTO $tableNameAsString t
+         |USING $sourceNameAsString s
+         |ON t.c = s.c AND t.dep = s.dep
+         |WHEN MATCHED THEN
+         | DELETE
+         |""".stripMargin)
+
+    checkAnswer(
+      sql(s"SELECT * FROM $tableNameAsString"),
+      Row(3, "x  ", "hr") :: Row(4, "y  ", "finance") :: Nil)
+  }
+
+  Seq("true", "false").foreach { groupFilterEnabled =>
+    test("SPARK-61462: delete-only merge with a condition on a CHAR column stored without " +
+      s"padding (group filter enabled: $groupFilterEnabled)") {
+      withSQLConf(
+          SQLConf.RUNTIME_ROW_LEVEL_OPERATION_GROUP_FILTER_ENABLED.key -> groupFilterEnabled) {
+        withTempView("source") {
+          createTable("pk INT NOT NULL, id INT, dep CHAR(8)")
+          withSQLConf(SQLConf.LEGACY_CHAR_VARCHAR_AS_STRING.key -> "true") {
+            append("pk INT NOT NULL, id INT, dep STRING",
+              """{ "pk": 1, "id": 1, "dep": "hr" }
+                |{ "pk": 2, "id": 2, "dep": "it" }
+                |{ "pk": 3, "id": 3, "dep": "software" }
+                |""".stripMargin)
+          }
+
+          Seq(1, 2, 3).toDF("pk").createOrReplaceTempView("source")
+
+          sql(
+            s"""MERGE INTO $tableNameAsString t
+               |USING source s
+               |ON t.pk = s.pk AND t.dep IN ('hr', 'it')
+               |WHEN MATCHED THEN
+               | DELETE
+               |""".stripMargin)
+
+          checkAnswer(sql(s"SELECT * FROM $tableNameAsString"), Row(3, 3, "software") :: Nil)
+        }
+      }
+    }
+  }
+
   test("SPARK-60708: merge into char/varchar table with metadata columns") {
     withTempView("source") {
       createTable("pk INT NOT NULL, id INT, dep STRING, name VARCHAR(10)")
