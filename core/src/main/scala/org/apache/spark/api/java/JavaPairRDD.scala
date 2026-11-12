@@ -54,6 +54,9 @@ class JavaPairRDD[K, V](val rdd: RDD[(K, V)])
 
   import JavaPairRDD._
 
+  private def mergedKeyTag(others: JavaPairRDD[K, _]*): ClassTag[K] =
+    JavaSparkContext.mergeClassTags(kClassTag, others.map(_.kClassTag): _*)
+
   // Common RDD functions
 
   /**
@@ -206,8 +209,8 @@ class JavaPairRDD[K, V](val rdd: RDD[(K, V)])
    * times (use `.distinct()` to eliminate them).
    */
   def union(other: JavaPairRDD[K, V]): JavaPairRDD[K, V] = {
-    val kTag = JavaSparkContext.mergeKeyClassTags(kClassTag, other.kClassTag)
-    val vTag = JavaSparkContext.mergeKeyClassTags(vClassTag, other.vClassTag)
+    val kTag = mergedKeyTag(other)
+    val vTag = JavaSparkContext.mergeClassTags(vClassTag, other.vClassTag)
     new JavaPairRDD[K, V](rdd.union(other.rdd))(kTag, vTag)
   }
 
@@ -514,9 +517,8 @@ class JavaPairRDD[K, V](val rdd: RDD[(K, V)])
   def rightOuterJoin[W](other: JavaPairRDD[K, W], partitioner: Partitioner)
   : JavaPairRDD[K, (Optional[V], W)] = {
     val joinResult = rdd.rightOuterJoin(other, partitioner)
-    val kTag = JavaSparkContext.mergeKeyClassTags(kClassTag, other.kClassTag)
     fromRDD(joinResult.mapValues{case (v, w) => (JavaUtils.optionToOptional(v), w)})(
-      kTag, fakeClassTag)
+      mergedKeyTag(other), fakeClassTag)
   }
 
   /**
@@ -530,10 +532,9 @@ class JavaPairRDD[K, V](val rdd: RDD[(K, V)])
   def fullOuterJoin[W](other: JavaPairRDD[K, W], partitioner: Partitioner)
   : JavaPairRDD[K, (Optional[V], Optional[W])] = {
     val joinResult = rdd.fullOuterJoin(other, partitioner)
-    val kTag = JavaSparkContext.mergeKeyClassTags(kClassTag, other.kClassTag)
     fromRDD(joinResult.mapValues{ case (v, w) =>
       (JavaUtils.optionToOptional(v), JavaUtils.optionToOptional(w))
-    })(kTag, fakeClassTag)
+    })(mergedKeyTag(other), fakeClassTag)
   }
 
   /**
@@ -615,9 +616,8 @@ class JavaPairRDD[K, V](val rdd: RDD[(K, V)])
    */
   def rightOuterJoin[W](other: JavaPairRDD[K, W]): JavaPairRDD[K, (Optional[V], W)] = {
     val joinResult = rdd.rightOuterJoin(other)
-    val kTag = JavaSparkContext.mergeKeyClassTags(kClassTag, other.kClassTag)
     fromRDD(joinResult.mapValues{case (v, w) => (JavaUtils.optionToOptional(v), w)})(
-      kTag, fakeClassTag)
+      mergedKeyTag(other), fakeClassTag)
   }
 
   /**
@@ -629,9 +629,8 @@ class JavaPairRDD[K, V](val rdd: RDD[(K, V)])
   def rightOuterJoin[W](other: JavaPairRDD[K, W], numPartitions: Int)
   : JavaPairRDD[K, (Optional[V], W)] = {
     val joinResult = rdd.rightOuterJoin(other, numPartitions)
-    val kTag = JavaSparkContext.mergeKeyClassTags(kClassTag, other.kClassTag)
     fromRDD(joinResult.mapValues{case (v, w) => (JavaUtils.optionToOptional(v), w)})(
-      kTag, fakeClassTag)
+      mergedKeyTag(other), fakeClassTag)
   }
 
   /**
@@ -645,10 +644,9 @@ class JavaPairRDD[K, V](val rdd: RDD[(K, V)])
    */
   def fullOuterJoin[W](other: JavaPairRDD[K, W]): JavaPairRDD[K, (Optional[V], Optional[W])] = {
     val joinResult = rdd.fullOuterJoin(other)
-    val kTag = JavaSparkContext.mergeKeyClassTags(kClassTag, other.kClassTag)
     fromRDD(joinResult.mapValues{ case (v, w) =>
       (JavaUtils.optionToOptional(v), JavaUtils.optionToOptional(w))
-    })(kTag, fakeClassTag)
+    })(mergedKeyTag(other), fakeClassTag)
   }
 
   /**
@@ -662,10 +660,9 @@ class JavaPairRDD[K, V](val rdd: RDD[(K, V)])
   def fullOuterJoin[W](other: JavaPairRDD[K, W], numPartitions: Int)
   : JavaPairRDD[K, (Optional[V], Optional[W])] = {
     val joinResult = rdd.fullOuterJoin(other, numPartitions)
-    val kTag = JavaSparkContext.mergeKeyClassTags(kClassTag, other.kClassTag)
     fromRDD(joinResult.mapValues{ case (v, w) =>
       (JavaUtils.optionToOptional(v), JavaUtils.optionToOptional(w))
-    })(kTag, fakeClassTag)
+    })(mergedKeyTag(other), fakeClassTag)
   }
 
   /**
@@ -702,8 +699,8 @@ class JavaPairRDD[K, V](val rdd: RDD[(K, V)])
    */
   def cogroup[W](other: JavaPairRDD[K, W], partitioner: Partitioner)
   : JavaPairRDD[K, (JIterable[V], JIterable[W])] = {
-    val kTag = JavaSparkContext.mergeKeyClassTags(kClassTag, other.kClassTag)
-    fromRDD(cogroupResultToJava(rdd.cogroup(other, partitioner)))(kTag, fakeClassTag)
+    fromRDD(cogroupResultToJava(rdd.cogroup(other, partitioner)))(
+      mergedKeyTag(other), fakeClassTag)
   }
 
   /**
@@ -712,8 +709,8 @@ class JavaPairRDD[K, V](val rdd: RDD[(K, V)])
    */
   def cogroup[W1, W2](other1: JavaPairRDD[K, W1], other2: JavaPairRDD[K, W2],
       partitioner: Partitioner): JavaPairRDD[K, (JIterable[V], JIterable[W1], JIterable[W2])] = {
-    val kTag = JavaSparkContext.mergeKeyClassTags(kClassTag, other1.kClassTag, other2.kClassTag)
-    fromRDD(cogroupResult2ToJava(rdd.cogroup(other1, other2, partitioner)))(kTag, fakeClassTag)
+    fromRDD(cogroupResult2ToJava(rdd.cogroup(other1, other2, partitioner)))(
+      mergedKeyTag(other1, other2), fakeClassTag)
   }
 
   /**
@@ -726,10 +723,8 @@ class JavaPairRDD[K, V](val rdd: RDD[(K, V)])
       other3: JavaPairRDD[K, W3],
       partitioner: Partitioner)
   : JavaPairRDD[K, (JIterable[V], JIterable[W1], JIterable[W2], JIterable[W3])] = {
-    val kTag = JavaSparkContext.mergeKeyClassTags(
-      kClassTag, other1.kClassTag, other2.kClassTag, other3.kClassTag)
     fromRDD(cogroupResult3ToJava(rdd.cogroup(other1, other2, other3, partitioner)))(
-      kTag, fakeClassTag)
+      mergedKeyTag(other1, other2, other3), fakeClassTag)
   }
 
   /**
@@ -737,8 +732,7 @@ class JavaPairRDD[K, V](val rdd: RDD[(K, V)])
    * list of values for that key in `this` as well as `other`.
    */
   def cogroup[W](other: JavaPairRDD[K, W]): JavaPairRDD[K, (JIterable[V], JIterable[W])] = {
-    val kTag = JavaSparkContext.mergeKeyClassTags(kClassTag, other.kClassTag)
-    fromRDD(cogroupResultToJava(rdd.cogroup(other)))(kTag, fakeClassTag)
+    fromRDD(cogroupResultToJava(rdd.cogroup(other)))(mergedKeyTag(other), fakeClassTag)
   }
 
   /**
@@ -747,8 +741,8 @@ class JavaPairRDD[K, V](val rdd: RDD[(K, V)])
    */
   def cogroup[W1, W2](other1: JavaPairRDD[K, W1], other2: JavaPairRDD[K, W2])
   : JavaPairRDD[K, (JIterable[V], JIterable[W1], JIterable[W2])] = {
-    val kTag = JavaSparkContext.mergeKeyClassTags(kClassTag, other1.kClassTag, other2.kClassTag)
-    fromRDD(cogroupResult2ToJava(rdd.cogroup(other1, other2)))(kTag, fakeClassTag)
+    fromRDD(cogroupResult2ToJava(rdd.cogroup(other1, other2)))(
+      mergedKeyTag(other1, other2), fakeClassTag)
   }
 
   /**
@@ -760,9 +754,8 @@ class JavaPairRDD[K, V](val rdd: RDD[(K, V)])
       other2: JavaPairRDD[K, W2],
       other3: JavaPairRDD[K, W3])
   : JavaPairRDD[K, (JIterable[V], JIterable[W1], JIterable[W2], JIterable[W3])] = {
-    val kTag = JavaSparkContext.mergeKeyClassTags(
-      kClassTag, other1.kClassTag, other2.kClassTag, other3.kClassTag)
-    fromRDD(cogroupResult3ToJava(rdd.cogroup(other1, other2, other3)))(kTag, fakeClassTag)
+    fromRDD(cogroupResult3ToJava(rdd.cogroup(other1, other2, other3)))(
+      mergedKeyTag(other1, other2, other3), fakeClassTag)
   }
 
   /**
@@ -771,8 +764,8 @@ class JavaPairRDD[K, V](val rdd: RDD[(K, V)])
    */
   def cogroup[W](other: JavaPairRDD[K, W], numPartitions: Int)
   : JavaPairRDD[K, (JIterable[V], JIterable[W])] = {
-    val kTag = JavaSparkContext.mergeKeyClassTags(kClassTag, other.kClassTag)
-    fromRDD(cogroupResultToJava(rdd.cogroup(other, numPartitions)))(kTag, fakeClassTag)
+    fromRDD(cogroupResultToJava(rdd.cogroup(other, numPartitions)))(
+      mergedKeyTag(other), fakeClassTag)
   }
 
   /**
@@ -781,8 +774,8 @@ class JavaPairRDD[K, V](val rdd: RDD[(K, V)])
    */
   def cogroup[W1, W2](other1: JavaPairRDD[K, W1], other2: JavaPairRDD[K, W2], numPartitions: Int)
   : JavaPairRDD[K, (JIterable[V], JIterable[W1], JIterable[W2])] = {
-    val kTag = JavaSparkContext.mergeKeyClassTags(kClassTag, other1.kClassTag, other2.kClassTag)
-    fromRDD(cogroupResult2ToJava(rdd.cogroup(other1, other2, numPartitions)))(kTag, fakeClassTag)
+    fromRDD(cogroupResult2ToJava(rdd.cogroup(other1, other2, numPartitions)))(
+      mergedKeyTag(other1, other2), fakeClassTag)
   }
 
   /**
@@ -795,23 +788,20 @@ class JavaPairRDD[K, V](val rdd: RDD[(K, V)])
       other3: JavaPairRDD[K, W3],
       numPartitions: Int)
   : JavaPairRDD[K, (JIterable[V], JIterable[W1], JIterable[W2], JIterable[W3])] = {
-    val kTag = JavaSparkContext.mergeKeyClassTags(
-      kClassTag, other1.kClassTag, other2.kClassTag, other3.kClassTag)
     fromRDD(cogroupResult3ToJava(rdd.cogroup(other1, other2, other3, numPartitions)))(
-      kTag, fakeClassTag)
+      mergedKeyTag(other1, other2, other3), fakeClassTag)
   }
 
   /** Alias for cogroup. */
   def groupWith[W](other: JavaPairRDD[K, W]): JavaPairRDD[K, (JIterable[V], JIterable[W])] = {
-    val kTag = JavaSparkContext.mergeKeyClassTags(kClassTag, other.kClassTag)
-    fromRDD(cogroupResultToJava(rdd.groupWith(other)))(kTag, fakeClassTag)
+    fromRDD(cogroupResultToJava(rdd.groupWith(other)))(mergedKeyTag(other), fakeClassTag)
   }
 
   /** Alias for cogroup. */
   def groupWith[W1, W2](other1: JavaPairRDD[K, W1], other2: JavaPairRDD[K, W2])
   : JavaPairRDD[K, (JIterable[V], JIterable[W1], JIterable[W2])] = {
-    val kTag = JavaSparkContext.mergeKeyClassTags(kClassTag, other1.kClassTag, other2.kClassTag)
-    fromRDD(cogroupResult2ToJava(rdd.groupWith(other1, other2)))(kTag, fakeClassTag)
+    fromRDD(cogroupResult2ToJava(rdd.groupWith(other1, other2)))(
+      mergedKeyTag(other1, other2), fakeClassTag)
   }
 
   /** Alias for cogroup. */
@@ -819,9 +809,8 @@ class JavaPairRDD[K, V](val rdd: RDD[(K, V)])
       other2: JavaPairRDD[K, W2],
       other3: JavaPairRDD[K, W3])
   : JavaPairRDD[K, (JIterable[V], JIterable[W1], JIterable[W2], JIterable[W3])] = {
-    val kTag = JavaSparkContext.mergeKeyClassTags(
-      kClassTag, other1.kClassTag, other2.kClassTag, other3.kClassTag)
-    fromRDD(cogroupResult3ToJava(rdd.groupWith(other1, other2, other3)))(kTag, fakeClassTag)
+    fromRDD(cogroupResult3ToJava(rdd.groupWith(other1, other2, other3)))(
+      mergedKeyTag(other1, other2, other3), fakeClassTag)
   }
 
   /**
@@ -1133,7 +1122,7 @@ object JavaPairRDD {
    *                 ("UNSUPPORTED_ARRAY_KEY.HASH_PARTITIONER"), and map-side combine
    *                 operations will fail fast with
    *                 ("UNSUPPORTED_ARRAY_KEY.MAP_SIDE_COMBINE"). It also determines the
-   *                 runtime type of arrays returned by actions on [[keys()]]. Must be a
+   *                 runtime type of arrays returned by actions on `keys()`. Must be a
    *                 reference class (e.g. `Integer.class`, not `int.class`).
    *                 The value class remains erased.
    * @since 4.4.0

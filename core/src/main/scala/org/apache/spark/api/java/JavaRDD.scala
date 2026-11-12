@@ -175,7 +175,7 @@ class JavaRDD[T](val rdd: RDD[T])(implicit val classTag: ClassTag[T])
    * times (use `.distinct()` to eliminate them).
    */
   def union(other: JavaRDD[T]): JavaRDD[T] = {
-    val tag: ClassTag[T] = JavaSparkContext.mergeKeyClassTags(classTag, other.classTag)
+    val tag: ClassTag[T] = JavaSparkContext.mergeClassTags(classTag, other.classTag)
     new JavaRDD[T](rdd.context.union(rdd, other.rdd)(tag))(tag)
   }
 
