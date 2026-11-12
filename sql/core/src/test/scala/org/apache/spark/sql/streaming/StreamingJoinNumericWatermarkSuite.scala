@@ -55,7 +55,8 @@ class StreamingJoinNumericWatermarkSuite extends StreamTest {
   }
 
   // Earlier versions admitted this join, so disabling the finalization check runs it. The left
-  // state is never evicted, so the matched left row emits no null-padded row later.
+  // state is never evicted, so the unmatched left row (2, 50) is never output with nulls, which
+  // evicting it by the cutoff solved for the numeric field would do.
   test("left outer join on a numeric state field runs with the finalization check disabled") {
     val leftInput = MemoryStream[(Int, Long, Long)]
     val rightInput = MemoryStream[(Int, Long)]
@@ -66,7 +67,7 @@ class StreamingJoinNumericWatermarkSuite extends StreamTest {
       .select($"rightKey", timestamp_seconds($"time").as("rt"))
       .withWatermark("rt", "1 second")
     val joined = left.join(right,
-      expr("leftKey = rightKey AND n > CAST(rt AS BIGINT)"), "left_outer")
+      expr("leftKey = rightKey AND n > CAST(rt AS DOUBLE)"), "left_outer")
       .select($"leftKey", $"n", $"rt".cast("long"))
 
     val appender = new LogAppender("finalization check disabled")
@@ -77,12 +78,19 @@ class StreamingJoinNumericWatermarkSuite extends StreamTest {
             AddData(leftInput, (1, 20L, 20L)), AddData(rightInput, (1, 10L)))),
           CheckNewAnswer(Row(1, 20L, 10L)),
           AddData(rightInput, (2, 100L)),
+          CheckNewAnswer(),
+          // The left row (2, 50) does not match (2, 100). Its time is below the eviction
+          // watermark of 99 seconds in the next batch, yet the left state keeps the row.
+          AddData(leftInput, (2, 50L, 50L), (3, 200L, 200L)),
+          CheckNewAnswer(),
+          AddData(rightInput, (4, 120L)),
           CheckNewAnswer())
       }
     }
     assert(appender.loggingEvents.exists { event =>
       val message = event.getMessage.getFormattedMessage
-      message.contains("allow unmatched state to be finalized") && message.contains(timestampRule)
+      message.contains("allow unmatched state to be finalized") &&
+        message.contains("keeps that state without bound")
     })
   }
 
@@ -150,6 +158,37 @@ class StreamingJoinNumericWatermarkSuite extends StreamTest {
           StreamProgressLockedActions(Seq(
             AddData(leftInput, (1, 5L), (5, 15L)), AddData(rightInput, (2, 5L), (5, 5L)))),
           CheckNewAnswer(Row(5, matchedStart, 0L)),
+          StreamProgressLockedActions(Seq(
+            AddData(leftInput, (3, 45L)), AddData(rightInput, (2, 45L)))),
+          CheckNewAnswer(),
+          // The eviction watermark is 45 seconds, past the end of key 1's left window.
+          AddData(rightInput, (2, 46L)),
+          CheckNewAnswer(Row(1, 0L, null)))
+      }
+    }
+  }
+
+  // The left input is watermarked on its event time lt, which the join condition does not use,
+  // and holds a window over the unwatermarked column ot. Eviction must try the window after lt
+  // finds no bound, or the left state is never finalized.
+  for (version <- Seq(2, 4)) {
+    test(s"left outer join finalizes a window over an unwatermarked column, V$version") {
+      withJoinConf(version) {
+        val leftInput = MemoryStream[(Int, Long)]
+        val rightInput = MemoryStream[(Int, Long)]
+        val left = leftInput.toDF().toDF("leftKey", "time")
+          .select($"leftKey", timestamp_seconds($"time").as("lt"),
+            timestamp_seconds($"time").as("ot"))
+          .withWatermark("lt", "0 seconds")
+          .select($"leftKey", $"lt", window($"ot", "10 seconds").as("lw"))
+        val right = windowed(rightInput, "rightKey", "rw", "10 seconds", "10 seconds")
+        val joined = left.join(right, $"leftKey" === $"rightKey" && $"lw" > $"rw", "left_outer")
+          .select($"leftKey", $"lw.start".cast("long"), $"rw.start".cast("long"))
+
+        testStream(joined)(
+          StreamProgressLockedActions(Seq(
+            AddData(leftInput, (1, 5L), (5, 15L)), AddData(rightInput, (2, 5L), (5, 5L)))),
+          CheckNewAnswer(Row(5, 10L, 0L)),
           StreamProgressLockedActions(Seq(
             AddData(leftInput, (3, 45L)), AddData(rightInput, (2, 45L)))),
           CheckNewAnswer(),
@@ -275,6 +314,68 @@ class StreamingJoinNumericWatermarkSuite extends StreamTest {
           CheckNewAnswer(),
           // Time 18 is in right window [-1, 19), which is not late and orders below [0, 10).
           AddData(rightInput, (1, 18L)),
+          CheckNewAnswer(Row(1, 0L, -1L)))
+      }
+    }
+  }
+
+  // A union's column keeps its first child's metadata, so with children of different window
+  // lengths it records none, and a whole-window bound evicts neither union's windows nor the
+  // windows compared with them: a 20-second window can start before a 10-second window that ends
+  // at or below the watermark.
+  test("outer joins cannot finalize windows compared with a union of window lengths") {
+    Seq("right", "left").foreach { unionSide =>
+      withClue(s"$unionSide union") {
+        val leftInput = MemoryStream[(Int, Long)]
+        val otherLeftInput = MemoryStream[(Int, Long)]
+        val rightInput = MemoryStream[(Int, Long)]
+        val otherRightInput = MemoryStream[(Int, Long)]
+        val (left, right) = if (unionSide == "right") {
+          (windowed(leftInput, "leftKey", "lw", "10 seconds", "10 seconds"),
+            windowed(rightInput, "rightKey", "rw", "10 seconds", "10 seconds")
+              .union(windowed(otherRightInput, "rightKey", "rw", "20 seconds", "1 second")))
+        } else {
+          (windowed(leftInput, "leftKey", "lw", "20 seconds", "20 seconds")
+              .union(windowed(otherLeftInput, "leftKey", "lw", "10 seconds", "10 seconds")),
+            windowed(rightInput, "rightKey", "rw", "20 seconds", "1 second"))
+        }
+        val joined = left.join(right, $"leftKey" === $"rightKey" && $"lw" > $"rw", "left_outer")
+
+        val error = intercept[AnalysisException] {
+          testStream(joined)(
+            AddData(leftInput, (1, 5L)),
+            CheckNewAnswer())
+        }
+        assert(error.getMessage.contains(timestampRule))
+      }
+    }
+  }
+
+  for (version <- Seq(2, 3, 4)) {
+    test(s"inner join keeps windows compared with a union of window lengths, V$version") {
+      withJoinConf(version) {
+        val leftInput = MemoryStream[(Int, Long)]
+        val tumblingInput = MemoryStream[(Int, Long)]
+        val slidingInput = MemoryStream[(Int, Long)]
+        val left = windowed(leftInput, "leftKey", "lw", "10 seconds", "10 seconds")
+        val right = windowed(tumblingInput, "rightKey", "rw", "10 seconds", "10 seconds")
+          .union(windowed(slidingInput, "rightKey", "rw", "20 seconds", "1 second"))
+        val joined = left.join(right, $"leftKey" === $"rightKey" && $"lw" > $"rw")
+          .select($"leftKey", $"lw.start".cast("long"), $"rw.start".cast("long"))
+
+        testStream(joined)(
+          StreamProgressLockedActions(Seq(AddData(leftInput, (1, 5L)),
+            AddData(tumblingInput, (9, 5L)), AddData(slidingInput, (9, 5L)))),
+          CheckNewAnswer(),
+          StreamProgressLockedActions(Seq(AddData(leftInput, (8, 15L)),
+            AddData(tumblingInput, (9, 15L)), AddData(slidingInput, (9, 15L)))),
+          CheckNewAnswer(),
+          // The watermark reaches 15 seconds, past the end of left window [0, 10).
+          AddData(tumblingInput, (9, 16L)),
+          CheckNewAnswer(),
+          // Time 18 is in sliding right window [-1, 19), which is not late and orders below
+          // [0, 10).
+          AddData(slidingInput, (1, 18L)),
           CheckNewAnswer(Row(1, 0L, -1L)))
       }
     }

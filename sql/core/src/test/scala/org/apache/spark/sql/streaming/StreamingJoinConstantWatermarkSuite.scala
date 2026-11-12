@@ -101,8 +101,8 @@ class StreamingJoinConstantWatermarkSuite extends StreamTest {
   }
 
   // Earlier versions admitted a bound that uses only constants, so disabling the finalization
-  // check runs this join. The left state is never evicted, so the matched left row emits no
-  // null-padded row later.
+  // check runs this join. The left state is never evicted, so the unmatched left row (2, 100 s)
+  // is never output with nulls, although the watermark later passes it.
   test("left outer join bounded only by a constant runs with the finalization check disabled") {
     val leftInput = MemoryStream[(Int, Long)]
     val rightInput = MemoryStream[(Int, Long)]
@@ -123,6 +123,11 @@ class StreamingJoinConstantWatermarkSuite extends StreamTest {
           MultiAddData(leftInput, (1, 20L))(rightInput, (1, 20L)),
           CheckNewAnswer(Row(1, 20L, 20L)),
           MultiAddData(leftInput, (2, 100L))(rightInput, (3, 100L)),
+          CheckNewAnswer(),
+          // The watermark becomes 199 seconds, and the next batch evicts by it.
+          MultiAddData(leftInput, (4, 200L))(rightInput, (5, 200L)),
+          CheckNewAnswer(),
+          AddData(rightInput, (6, 201L)),
           CheckNewAnswer())
       }
     }

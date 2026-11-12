@@ -616,14 +616,24 @@ class IncrementalExecution(
         // watermark propagation yields Some(0) for late events even though no state has been
         // evicted yet, which would incorrectly skip entries at timestamp 0.
         //
-        // On the first batch after restoring a checkpoint with older join watermark semantics,
-        // the late-events watermark comes from re-simulating the previous batch with this
-        // version's output watermarks. It can be above the watermark that the older version
-        // evicted with, for example when this version leaves an unbounded input out of an
-        // upstream join's output watermark. Scan from the start once in that batch.
+        // On the first batch of a run, the late-events watermark comes from re-simulating the
+        // previous batch with this run's plan and semantics. An upstream stream-stream join's
+        // output watermark can then be above the one the previous batch evicted with, so this
+        // join scans from the start in that batch in two cases:
+        // - The checkpoint is pinned to older join watermark semantics. Older versions included
+        //   every bounded input in a join's output watermark; this version leaves out one that
+        //   the next stateful operator does not read. The pinned marker never advances, so this
+        //   recurs on the first batch of every run of such a checkpoint. Limiting it to the first
+        //   run after the upgrade would mean guessing which version ran the previous batch, and
+        //   a wrong guess skips rows that were never evicted.
+        // - Another stream-stream join is below this one. Its output watermark depends on the
+        //   plan above it (see withJoinOutputWatermarkSides), which can change between runs,
+        //   for example when a stream-static join between the two joins is removed.
+        val hasJoinBelow =
+          j.children.exists(_.exists(_.isInstanceOf[StreamingSymmetricHashJoinExec]))
         val prevBatchLateEventsWm =
           if (prevOffsetSeqMetadata.isDefined && allowMultipleStatefulOperators &&
-              !isFirstBatchWithOlderJoinWatermarkSemantics) {
+              !isFirstBatchWithOlderJoinWatermarkSemantics && !(isFirstBatch && hasJoinBelow)) {
             iwLateEvents
           } else {
             None
@@ -926,10 +936,21 @@ class IncrementalExecution(
             _.metadata.contains(EventTimeWatermark.delayKey))
           if (columns.isEmpty) "none" else columns.map(_.name).mkString(", ")
         }
-        // A join's output watermark reaches every stateful operator above it. The nearest one
-        // reads the inputs that the tracer names, or both inputs when it cannot be traced.
+        // A join's output watermark reaches every stateful operator above it. One that uses its
+        // input watermark reads the inputs that the tracer names, or both inputs when it cannot
+        // be traced. An operator uses it when an input carries an event-time column, when it
+        // fires event-time timeouts, or when it passes the watermark to user code, as
+        // transformWithState does in every time mode. The join's output watermark changes
+        // nothing for any other operator, such as an update-mode count on a key.
+        def usesInputWatermark(operator: StatefulOperator): Boolean = operator match {
+          case _: TransformWithStateExec | _: TransformWithStateInPySparkExec => true
+          case f: FlatMapGroupsWithStateExec if f.timeoutConf == EventTimeTimeout => true
+          case f: FlatMapGroupsInPandasWithStateExec if f.timeoutConf == EventTimeTimeout => true
+          case _ => operator.children.exists(
+            _.output.exists(_.metadata.contains(EventTimeWatermark.delayKey)))
+        }
         val joinsBelowStatefulOperators = planWithStateOpId.collect {
-          case s: StatefulOperator => s.children.flatMap(_.collect {
+          case s: StatefulOperator if usesInputWatermark(s) => s.children.flatMap(_.collect {
             case j: StreamingSymmetricHashJoinExec => j.stateInfo.map(_.operatorId)
           }.flatten)
         }.flatten.toSet

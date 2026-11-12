@@ -127,6 +127,15 @@ object StreamingJoinHelper extends PredicateHelper with Logging {
   }
 
   /**
+   * Whether the key is this input's event time shifted by constant intervals that never move a
+   * time backward. [[getStateKeyWatermark]] bounds the opposite state by such a key at the
+   * watermark plus the shift for an exact interval, and at the watermark itself otherwise, so it
+   * is never below the watermark.
+   */
+  def isForwardShiftOfEventTime(key: Expression, inputAttributes: Seq[Attribute]): Boolean =
+    shiftOfKey(key, inputAttributes).exists(_.forward)
+
+  /**
    * A timestamp key computed from the input's event time by constant intervals. `exact` means
    * the solver counts the shift exactly; `forward` means the shift never moves a time backward.
    */
@@ -305,10 +314,14 @@ object StreamingJoinHelper extends PredicateHelper with Logging {
    *                                      cutoff from a condition that the solver counts
    *                                      inexactly. State eviction and the admission check set
    *                                      it, so they agree.
-   * @param baseAdmissionRules            whether to skip the checks that Spark 4.4 added to the
-   *                                      solver, so that the result matches earlier versions.
-   *                                      Only the admission rule that stays in force with
-   *                                      the finalization check disabled sets it.
+   * @param baseAdmissionRules            whether to skip the check that the bounded column is a
+   *                                      TIMESTAMP column or a time window, which Spark 4.4
+   *                                      added to the solver. It does not skip the inexact
+   *                                      arithmetic check for columns without their own
+   *                                      watermark, which exactForUnwatermarkedColumns alone
+   *                                      controls; leave that false too for the result of
+   *                                      earlier versions. Only the admission rule that stays
+   *                                      in force with the finalization check disabled sets it.
    * @return state value watermark in milliseconds, is possible.
    */
   def getStateValueWatermark(

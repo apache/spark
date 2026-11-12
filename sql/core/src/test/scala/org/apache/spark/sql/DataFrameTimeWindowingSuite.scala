@@ -23,6 +23,7 @@ import java.time.LocalDateTime
 import org.apache.spark.sql.catalyst.encoders.ExpressionEncoder
 import org.apache.spark.sql.catalyst.expressions.{AttributeReference, TimeWindow}
 import org.apache.spark.sql.catalyst.plans.logical.{Aggregate, Expand, Filter}
+import org.apache.spark.sql.execution.UnionExec
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.sql.types._
@@ -645,6 +646,32 @@ class DataFrameTimeWindowingSuite extends SharedSparkSession {
     assert(!windowTimeMetadata.contains(TimeWindow.durationKey))
     checkAnswer(withWindowTime.select($"wt".cast("string")),
       Seq(Row("2016-03-27 19:38:19.999999"), Row("2016-03-27 19:38:24.999999")))
+  }
+
+  test("union keeps the window duration only when every child records the same one") {
+    val time = spark.range(1).select(timestamp_seconds($"id").as("time"))
+    val tenSeconds = time.select(window($"time", "10 seconds").as("window"))
+    val twentySeconds = time.select(window($"time", "20 seconds", "1 second").as("window"))
+    val plainStruct = time.select(struct($"time".as("start"), $"time".as("end")).as("window"))
+    def outputMetadata(df: DataFrame): Seq[Metadata] = {
+      val physical = df.queryExecution.sparkPlan.collectFirst {
+        case u: UnionExec => u.output.head.metadata
+      }
+      Seq(df.queryExecution.analyzed.output.head.metadata) ++ physical
+    }
+
+    Seq(tenSeconds.union(twentySeconds), twentySeconds.union(tenSeconds),
+        tenSeconds.union(plainStruct)).foreach { df =>
+      val metadata = outputMetadata(df)
+      assert(metadata.size == 2)
+      metadata.foreach { m =>
+        assert(m.getBoolean(TimeWindow.marker))
+        assert(!m.contains(TimeWindow.durationKey))
+      }
+    }
+    val metadata = outputMetadata(tenSeconds.union(tenSeconds))
+    assert(metadata.size == 2)
+    metadata.foreach(m => assert(m.getLong(TimeWindow.durationKey) === 10000000L))
   }
 
   test("2 window_time functions on raw window column") {
