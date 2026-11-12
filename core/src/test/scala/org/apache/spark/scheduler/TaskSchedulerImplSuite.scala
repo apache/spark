@@ -1006,6 +1006,75 @@ class TaskSchedulerImplSuite extends SparkFunSuite with LocalSparkContext
     assert(!tsm.isZombie)
   }
 
+  for (useDefaultProfile <- Seq(true, false)) {
+    test(s"SPARK-45537: recover excluded tasks only within their resource profile " +
+        s"(default profile: $useDefaultProfile)") {
+      taskScheduler = setupSchedulerWithMockTaskSetExcludelist(
+        config.DYN_ALLOCATION_ENABLED.key -> "true",
+        config.UNSCHEDULABLE_TASKSET_TIMEOUT.key -> "60")
+      val executorResources = new ExecutorResourceRequests().cores(1).memory("2g")
+      val taskResources = new TaskResourceRequests().cpus(1)
+      val profile = new ResourceProfile(executorResources.requests, taskResources.requests)
+      sc.resourceProfileManager.addResourceProfile(profile)
+      val defaultProfileId = ResourceProfile.DEFAULT_RESOURCE_PROFILE_ID
+      val taskProfileId = if (useDefaultProfile) defaultProfileId else profile.id
+      val otherProfileId = if (useDefaultProfile) profile.id else defaultProfileId
+      val excludedOffer = WorkerOffer("excluded", "host0", 1,
+        resourceProfileId = taskProfileId)
+      val otherOffer = WorkerOffer("other", "host0", 1,
+        resourceProfileId = otherProfileId)
+      taskScheduler.resourceOffers(IndexedSeq(excludedOffer, otherOffer))
+
+      taskScheduler.submitTasks(FakeTask.createTaskSet(1, taskProfileId))
+      val tsm = stageToMockTaskSetManager(0)
+      val task = taskScheduler.resourceOffers(IndexedSeq(excludedOffer)).flatten.head
+      failTask(task.taskId, TaskState.FAILED, UnknownReason, tsm)
+      when(tsm.taskSetExcludelistHelperOpt.get.isExecutorExcludedForTaskSet("excluded"))
+        .thenReturn(true)
+
+      // The compatible executor is known even when only another profile makes an offer.
+      assert(taskScheduler.resourceOffers(IndexedSeq(otherOffer)).flatten.isEmpty)
+      assert(taskScheduler.unschedulableTaskSetToExpiryTime.contains(tsm))
+      verify(healthTracker).killExcludedIdleExecutor("excluded")
+      verify(healthTracker, never()).killExcludedIdleExecutor("other")
+
+      val replacement = WorkerOffer("replacement", "host0", 1,
+        resourceProfileId = taskProfileId)
+      val retriedTasks = taskScheduler.resourceOffers(IndexedSeq(replacement)).flatten
+      assert(retriedTasks.size === 1)
+      assert(retriedTasks.head.executorId === "replacement")
+      assert(taskScheduler.unschedulableTaskSetToExpiryTime.isEmpty)
+      assert(!tsm.isZombie)
+    }
+  }
+
+  test("SPARK-45537: recover a task resource profile using default executors") {
+    taskScheduler = setupSchedulerWithMockTaskSetExcludelist(
+      config.DYN_ALLOCATION_ENABLED.key -> "false",
+      config.UNSCHEDULABLE_TASKSET_TIMEOUT.key -> "60")
+    val profile = new TaskResourceProfile(new TaskResourceRequests().cpus(1).requests)
+    sc.resourceProfileManager.addResourceProfile(profile)
+    taskScheduler.submitTasks(FakeTask.createTaskSet(1, profile.id))
+    val tsm = stageToMockTaskSetManager(0)
+    val task = taskScheduler.resourceOffers(
+      IndexedSeq(WorkerOffer("excluded", "host0", 1))).flatten.head
+    failTask(task.taskId, TaskState.FAILED, UnknownReason, tsm)
+    when(tsm.taskSetExcludelistHelperOpt.get.isExecutorExcludedForTaskSet("excluded"))
+      .thenReturn(true)
+
+    assert(taskScheduler.resourceOffers(
+      IndexedSeq(WorkerOffer("excluded", "host0", 1))).flatten.isEmpty)
+    assert(taskScheduler.unschedulableTaskSetToExpiryTime.contains(tsm))
+    verify(healthTracker).killExcludedIdleExecutor("excluded")
+
+    val retriedTasks = taskScheduler.resourceOffers(
+      IndexedSeq(WorkerOffer("replacement", "host0", 1))).flatten
+    assert(retriedTasks.size === 1)
+    assert(retriedTasks.head.executorId === "replacement")
+    assert(taskScheduler.unschedulableTaskSetToExpiryTime.isEmpty)
+    assert(!tsm.isZombie)
+  }
+
   // This is to test a scenario where we have two taskSets completely excluded and on acquiring
   // a new executor we don't want the abort timer for the second taskSet to expire and abort the job
   test("SPARK-22148 abort timer should clear unschedulableTaskSetToExpiryTime for all TaskSets") {
