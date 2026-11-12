@@ -363,6 +363,15 @@ class CacheManager extends Logging with AdaptiveSparkPlanHelper {
   }
 
   /**
+   * Like [[recacheByPlan]], but only re-caches the entries that refer to the given plan outside
+   * subquery expressions.
+   */
+  private[sql] def recacheByPlanOutsideSubqueries(spark: SparkSession, plan: LogicalPlan): Unit = {
+    val normalized = QueryExecution.normalize(spark, plan)
+    recacheByCondition(spark, _.plan.exists(_.sameResult(normalized)))
+  }
+
+  /**
    * Re-caches all cache entries that reference the given table name.
    */
   def recacheTableOrView(

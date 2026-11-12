@@ -21,9 +21,11 @@ import java.io.{File, FilenameFilter}
 import java.nio.file.{Files, Paths}
 import java.time.{Duration, LocalDateTime, LocalTime, Period}
 import java.util
+import java.util.concurrent.TimeoutException
 import java.util.concurrent.atomic.{AtomicBoolean, AtomicInteger}
 
 import scala.collection.mutable.HashSet
+import scala.concurrent.{ExecutionContext, Future}
 import scala.concurrent.duration._
 
 import org.apache.spark.{CleanerListener, SparkRuntimeException}
@@ -60,7 +62,7 @@ import org.apache.spark.storage.{RDDBlockId, StorageLevel}
 import org.apache.spark.storage.StorageLevel.{MEMORY_AND_DISK, MEMORY_AND_DISK_2, MEMORY_ONLY}
 import org.apache.spark.tags.SlowSQLTest
 import org.apache.spark.unsafe.types.CalendarInterval
-import org.apache.spark.util.{AccumulatorContext, Utils}
+import org.apache.spark.util.{AccumulatorContext, ThreadUtils, Utils}
 
 private case class BigData(s: String)
 
@@ -1476,6 +1478,24 @@ class CachedTableSuite extends SharedSparkSession
     }
   }
 
+  test("REFRESH TABLE keeps a cached query whose subquery reads only another table") {
+    withTable("t", "other") {
+      sql("CREATE TABLE t (id BIGINT) USING parquet")
+      sql("INSERT INTO t VALUES (1)")
+      sql("CREATE TABLE other (id BIGINT) USING parquet")
+      sql("INSERT INTO other VALUES (2)")
+      val query = "SELECT id FROM range(5) WHERE id IN (SELECT id FROM other)"
+      sql(query).cache()
+      checkAnswer(sql(query), Row(2L))
+
+      sql("REFRESH TABLE t")
+
+      val cachedData = cacheManager.lookupCachedData(sql(query))
+      assert(cachedData.isDefined)
+      assert(cachedData.get.cachedRepresentation.cacheBuilder.isCachedColumnBuffersLoaded)
+    }
+  }
+
   test("SPARK-33647: cache table support for permanent view") {
     withView("v1") {
       spark.catalog.clearCache()
@@ -1963,6 +1983,41 @@ class CachedTableSuite extends SharedSparkSession
     }
   }
 
+  test("SPARK-49982: AQE negative caching with a cache read only inside a scalar subquery") {
+    val triggered = new AtomicBoolean(false)
+    val func: Long => Boolean = (i: Long) => {
+      if (!triggered.get()) {
+        throw new Exception("SPARK-49982")
+      }
+      i % 2 == 0
+    }
+    withUserDefinedFunction("func" -> true) {
+      spark.udf.register("func", func)
+      withSQLConf(SQLConf.ADAPTIVE_EXECUTION_ENABLED.key -> "true") {
+        withTempView("failing") {
+          val df1 = spark.range(1024).select($"id".as("key1"))
+          val df2 = spark.range(2048).select($"id".as("key2"))
+          val failing = df1.filter(expr("func(key1)")).hint("MERGE").join(df2, $"key1" === $"key2")
+          failing.cache()
+          failing.createOrReplaceTempView("failing")
+          val query = "SELECT id FROM range(10) WHERE id < (SELECT count(*) FROM failing)"
+          sql(query).cache()
+          try {
+            // The failed build of `failing` runs on the subquery's thread while the dependent's
+            // build waits for that subquery, so a hang here shows up as a timeout.
+            val firstRun = Future(sql(query).collect())(ExecutionContext.global)
+            val error = intercept[Throwable](ThreadUtils.awaitResult(firstRun, 2.minutes))
+            assert(!error.isInstanceOf[TimeoutException], "materializing the cache hung")
+            triggered.set(true)
+            checkAnswer(sql(query), (0L until 10L).map(Row(_)))
+          } finally {
+            failing.unpersist(blocking = true)
+          }
+        }
+      }
+    }
+  }
+
   test("SPARK-52684: Atomicity of cache table on error") {
     withTempView("SPARK_52684") {
       intercept[SparkRuntimeException] {
@@ -2027,6 +2082,24 @@ class CachedTableSuite extends SharedSparkSession
       cacheManager.uncacheTableOrView(spark, Seq("testcat", "tbl"), cascade = true)
 
       queries.foreach(query => assertNotCached(sql(query)))
+    }
+  }
+
+  test("cascading uncacheTableOrView keeps a cached query whose subquery reads another table") {
+    val t = "testcat.tbl"
+    val other = "testcat.other"
+    withTable(t, other) {
+      sql(s"CREATE TABLE $t (id bigint, data string) USING foo")
+      sql(s"INSERT INTO $t VALUES (1, 'a')")
+      sql(s"CREATE TABLE $other (id bigint, data string) USING foo")
+      sql(s"INSERT INTO $other VALUES (2, 'b')")
+      val query = s"SELECT id FROM range(5) WHERE id IN (SELECT id FROM $other)"
+      sql(query).cache()
+      checkAnswer(sql(query), Row(2L))
+
+      cacheManager.uncacheTableOrView(spark, Seq("testcat", "tbl"), cascade = true)
+
+      assertCached(sql(query))
     }
   }
 

@@ -252,6 +252,31 @@ class V1TimeTravelCacheSuite extends QueryTest with SharedSparkSession {
     }
   }
 
+  test("write-driven recacheTableOrView keeps a cache whose subquery reads only a pinned version") {
+    withPinnedOnlyCacheWithSubquery { (cached, _, _) =>
+      spark.sharedState.cacheManager.recacheTableOrView(
+        spark,
+        cachedTableNameParts,
+        includeTimeTravel = false)
+
+      assertCacheLoading(cached, expected = true)
+    }
+  }
+
+  test("write-driven recacheByPath keeps a cache whose subquery reads only a pinned version") {
+    withPinnedOnlyCacheWithSubquery { (cached, rootPath, pinnedIndex) =>
+      val fs = rootPath.getFileSystem(spark.sessionState.newHadoopConf())
+      spark.sharedState.cacheManager.recacheByPath(
+        spark,
+        rootPath,
+        fs,
+        includeTimeTravel = false)
+
+      assertCacheLoading(cached, expected = true)
+      assert(pinnedIndex.refreshCount === 0)
+    }
+  }
+
   test("V1 file write preserves a time travel cache and refreshes a live cache") {
     withTempPath { path =>
       withSQLConf(SQLConf.USE_V1_SOURCE_LIST.key -> "parquet") {
@@ -509,6 +534,30 @@ class V1TimeTravelCacheSuite extends QueryTest with SharedSparkSession {
         cached.foreach(assertCacheLoading(_, expected = false))
       } finally {
         cached.foreach(_.unpersist(blocking = true))
+      }
+    }
+  }
+
+  /**
+   * Caches a query that reads the table only at a pinned version, in its main plan and inside an
+   * IN subquery, then passes the materialized cache, the root path, and the file index to `f`.
+   */
+  private def withPinnedOnlyCacheWithSubquery(
+      f: (ClassicDataset[_], Path, TestFileIndex) => Unit): Unit = {
+    withTempDir { dir =>
+      val rootPath = new Path(dir.toURI)
+      val pinnedIndex = new TestFileIndex(isTimeTravel = true, rootPaths = Seq(rootPath))
+      withTempView("pinned") {
+        ClassicDataset.ofRows(spark, LogicalRelation(newFileRelation(pinnedIndex), tableMetadata))
+          .createOrReplaceTempView("pinned")
+        val cached = spark.sql("SELECT * FROM pinned WHERE id IN (SELECT id FROM pinned)").persist()
+        try {
+          cached.count()
+          assertCacheLoading(cached, expected = true)
+          f(cached, rootPath, pinnedIndex)
+        } finally {
+          cached.unpersist(blocking = true)
+        }
       }
     }
   }
