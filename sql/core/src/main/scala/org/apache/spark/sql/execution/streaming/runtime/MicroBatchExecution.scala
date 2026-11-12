@@ -244,7 +244,16 @@ class MicroBatchExecution(
 
     checkSourceNames()
     // Every offset log entry records the decision from the query's session.
-    sparkSessionForStream.conf.set(SQLConf.ENABLE_STREAMING_SOURCE_EVOLUTION.key, enforceNamed)
+    val sourceEvolutionKey = SQLConf.ENABLE_STREAMING_SOURCE_EVOLUTION.key
+    val previousValue = sparkSessionForStream.sessionState.conf
+      .getConfString(sourceEvolutionKey, null)
+    if (enforceNamedInCheckpoint.isDefined && previousValue != null &&
+        previousValue != enforceNamed.toString) {
+      logWarning(log"Updating the value of conf '${MDC(CONFIG, sourceEvolutionKey)}' in " +
+        log"current session from '${MDC(OLD_VALUE, previousValue)}' " +
+        log"to '${MDC(NEW_VALUE, enforceNamed.toString)}'.")
+    }
+    sparkSessionForStream.conf.set(sourceEvolutionKey, enforceNamed)
 
     // SPARK-57489: dropDuplicates / dropDuplicatesWithinWatermark resolve their keys with the
     // deterministic order by default, but streaming deduplication binds state-store keys by

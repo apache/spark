@@ -801,7 +801,8 @@ class OffsetSeqLogSuite extends SharedSparkSession {
     }
   }
 
-  test("restart keeps the checkpoint's positional source tracking in the query's session only") {
+  gridTest("restart keeps positional source tracking and reports a config override")(
+      Seq(false, true)) { sessionEnforcement =>
     withTempDir { checkpointDir =>
       withTempDir { outputDir =>
         val inputData = MemoryStream[Int]
@@ -819,23 +820,36 @@ class OffsetSeqLogSuite extends SharedSparkSession {
         }
 
         // A memory stream has no NamedStreamingRelation, so the config alone passes analysis.
-        withSQLConf(SQLConf.ENABLE_STREAMING_SOURCE_EVOLUTION.key -> "true") {
-          val query2 = inputData.toDF()
-            .writeStream
-            .format("parquet")
-            .option("path", outputDir.getAbsolutePath)
-            .option("checkpointLocation", checkpointDir.getAbsolutePath)
-            .start()
-          try {
-            inputData.addData(3, 4)
-            query2.processAllAvailable()
-            val querySession =
-              query2.asInstanceOf[StreamingQueryWrapper].streamingQuery.sparkSessionForStream
-            assert(!querySession.sessionState.conf.enableStreamingSourceEvolution)
-            assert(spark.sessionState.conf.enableStreamingSourceEvolution)
-          } finally {
-            query2.stop()
+        val logAppender = new LogAppender("source tracking override")
+        withLogAppender(logAppender) {
+          withSQLConf(SQLConf.ENABLE_STREAMING_SOURCE_EVOLUTION.key ->
+              sessionEnforcement.toString) {
+            val query2 = inputData.toDF()
+              .writeStream
+              .format("parquet")
+              .option("path", outputDir.getAbsolutePath)
+              .option("checkpointLocation", checkpointDir.getAbsolutePath)
+              .start()
+            try {
+              inputData.addData(3, 4)
+              query2.processAllAvailable()
+              val querySession =
+                query2.asInstanceOf[StreamingQueryWrapper].streamingQuery.sparkSessionForStream
+              assert(!querySession.sessionState.conf.enableStreamingSourceEvolution)
+              assert(spark.sessionState.conf.enableStreamingSourceEvolution == sessionEnforcement)
+            } finally {
+              query2.stop()
+            }
           }
+        }
+        val overrides = logAppender.loggingEvents.map(_.getMessage.getFormattedMessage)
+          .filter(message => message.contains("Updating the value of conf") &&
+            message.contains(SQLConf.ENABLE_STREAMING_SOURCE_EVOLUTION.key))
+        if (sessionEnforcement) {
+          assert(overrides.size == 1)
+          assert(overrides.head.contains("from 'true' to 'false'"))
+        } else {
+          assert(overrides.isEmpty)
         }
 
         val offsetLog = new OffsetSeqLog(spark, s"${checkpointDir.getAbsolutePath}/offsets")
