@@ -379,15 +379,18 @@ test("range with invalid long value") {
   }
 
   test("SPARK-61534: an existence join is estimated from its left side") {
-    // It outputs each of the 10 rows of `plan` once, with a boolean column added.
+    // It outputs each of the 10 rows of `left` once, with a boolean column added. The size of
+    // `left` is twice its row count times its row width, so a size computed from the row count
+    // and the column stats, as `JoinEstimation` computes it for a left semi join, would be half.
+    val left = plan.copy(size = Some(2 * 10 * (8 + 4)))
     val otherKey = attr("other")
     val other = StatsTestPlan(outputList = Seq(otherKey), rowCount = 1000,
       attributeStats = AttributeMap(Seq(otherKey -> colStat)), size = Some(1000 * (8 + 4)))
     val exists = AttributeReference("exists", BooleanType, nullable = false)()
-    val join = Join(plan, other, ExistenceJoin(exists), Some(attribute === otherKey),
+    val join = Join(left, other, ExistenceJoin(exists), Some(attribute === otherKey),
       JoinHint.NONE)
     checkStats(join, Statistics(
-      sizeInBytes = 10 * (8 + 4 + 1),
+      sizeInBytes = 2 * 10 * (8 + 4 + 1),
       rowCount = Some(10),
       attributeStats = AttributeMap(Seq(attribute -> colStat))))
   }

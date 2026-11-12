@@ -466,20 +466,6 @@ class JoinEstimationSuite extends StatsEstimationTestBase {
     }
   }
 
-  test("SPARK-61534: existence join") {
-    // table2 (key-1-2 int, key-2-4 int): (1, 2), (2, 3), (2, 4)
-    // table3 (key-1-2 int, key-2-3 int): (1, 2), (2, 3)
-    val exists = AttributeReference("exists", BooleanType, nullable = false)()
-    val join = Join(table2, table3, ExistenceJoin(exists),
-      Some(EqualTo(nameToAttr("key-2-4"), nameToAttr("key-2-3"))), JoinHint.NONE)
-    // It outputs each row of the left side once, with a boolean column added.
-    val expectedStats = Statistics(
-      sizeInBytes = 3 * (8 + 4 * 2 + 1),
-      rowCount = Some(3),
-      attributeStats = AttributeMap(Seq(nameToColInfo("key-1-2"), nameToColInfo("key-2-4"))))
-    assert(join.stats == expectedStats)
-  }
-
   test("test join keys of different types") {
     /** Columns in a table with only one row */
     def genColumnData: mutable.LinkedHashMap[Attribute, ColumnStat] = {
