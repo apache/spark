@@ -396,8 +396,11 @@ try:
                 "zstandard>=%s" % _minimum_zstandard_version,
                 "pyyaml>=%s" % _minimum_pyyaml_version,
             ],
-            # Used by the experimental pyspark.sql.ai prototype (DataFrame.ai_query).
+            # Dependencies for pyspark.sql.ai and its Pandas UDF execution.
             "ai": [
+                "pandas>=%s" % _minimum_pandas_version,
+                "pyarrow>=%s" % _minimum_pyarrow_version,
+                "numpy>=%s" % _minimum_numpy_version,
                 "requests",
                 "boto3",
                 "databricks-sdk",

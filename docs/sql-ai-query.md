@@ -24,8 +24,10 @@ for SQL with `register_sql_function`. Spark Connect and streaming are unvalidate
 
 ## Prerequisites
 
-Install Pandas UDF dependencies (`pandas` and `pyarrow`) on the Python workers. The provider SDK
-resolves credentials on each worker using the environment, workload identity, or a named profile.
+Install the wheel built from this branch with its `ai` extra on the driver and workers:
+`pip install "path/to/pyspark-<version>-py3-none-any.whl[ai]"`. The extra includes Pandas UDF
+dependencies and the provider SDKs. Workers resolve credentials through the environment,
+workload identity, or a named profile.
 
 * Databricks requires `databricks-sdk` and `requests`, a chat serving endpoint, and OAuth access.
   The default authentication is `oauth-m2m`. Local workers can use an authenticated CLI profile
@@ -36,56 +38,34 @@ resolves credentials on each worker using the environment, workload identity, or
 
 ## Query a foundation model directly
 
-```python
-from pyspark.sql.ai import ai_query, register_model
-from pyspark.sql.functions import col, concat, lit
+The runnable example accepts the provider, model, and credential profile as command-line
+arguments and creates a DataFrame of synthetic prompts.
 
-register_model(
-    "databricks-summary",
-    "databricks-gpt-oss-20b",
-    provider="databricks",
-    profile="my-workspace",
-    auth_type="databricks-cli",
-)
-register_model(
-    "bedrock-summary",
-    "amazon.nova-micro-v1:0",
-    provider="bedrock",
-    region="us-east-1",
-)
+{% include_example imports python/sql/ai_query.py %}
 
-documents = spark.createDataFrame([("A document to summarize.",)], ["description"])
-prompt = concat(lit("Summarize in one sentence: "), col("description"))
-result = documents.select(
-    ai_query("databricks-summary", prompt).alias("databricks_summary"),
-    ai_query("bedrock-summary", prompt).alias("bedrock_summary"),
-)
-```
+{% include_example registration python/sql/ai_query.py %}
+
+{% include_example column python/sql/ai_query.py %}
 
 Each provider receives a chat message per non-null request and returns text. Both accept
-`max_tokens` and `temperature`. Null requests produce null.
+`max_tokens` and `temperature`. Providers may return partial text when `max_tokens` is reached.
+Null requests produce null.
 
 ## SQL text
 
-```python
-from pyspark.sql.ai import register_sql_function
-
-register_sql_function()
-documents.createOrReplaceTempView("documents")
-spark.sql(
-    "SELECT ai_query('databricks-summary', "
-    "CONCAT('Summarize in one sentence: ', description)) AS summary FROM documents"
-).show()
-```
+{% include_example sql python/sql/ai_query.py %}
 
 The endpoint argument can be a literal or a column, allowing rows to use different models.
+With a column endpoint, row values select the provider, credential profile, and region from
+all aliases captured at registration. Use a literal endpoint for a fixed destination.
 
 This takes a snapshot of the aliases registered so far. A `register_model` call after
 `register_sql_function` does not change it; call `register_sql_function` again to pick up
 later registrations.
 
-SQL registration requires Python setup in the same session. Unknown aliases fail during task
-execution. Analysis-time validation remains an open design question.
+SQL registration requires Python setup in the same session. Null endpoints produce null.
+Unknown aliases and non-string requests fail before inference within their Arrow batch.
+Earlier batches may already have invoked models. Analysis-time validation remains open design work.
 
 ## Execution and retries
 
@@ -124,19 +104,27 @@ a Spark Python worker and Arrow against a local server. The suite runs without c
 python/run-tests --testnames pyspark.sql.tests.test_ai_query
 ```
 
-Run the opt-in live check with these prototype modules installed in both the driver and worker
+Run the local example against a simulated Bedrock Converse endpoint. It uses synthetic
+credentials and the real SDK, Spark workers, and Arrow. It also checks mixed aliases,
+registration snapshots, nulls, and unknown aliases.
+
+```sh
+python examples/src/main/python/sql/ai_query.py --provider local --report /tmp/ai-query-local.json
+```
+
+Run the live checks with these prototype modules installed in both the driver and worker
 Python packages. For a pip-installed Spark distribution, the worker package is `python/lib/pyspark.zip`
 under the installed `pyspark` package. Use an isolated Spark installation for this check.
 
 ```sh
-python dev/ai_query_e2e.py \
+python examples/src/main/python/sql/ai_query.py \
   --provider databricks \
   --profile my-workspace \
   --auth-type databricks-cli \
   --model-id databricks-gpt-oss-20b \
   --report /tmp/ai-query-e2e.json
 
-python dev/ai_query_e2e.py \
+python examples/src/main/python/sql/ai_query.py \
   --provider bedrock \
   --region us-east-1 \
   --model-id amazon.nova-micro-v1:0 \

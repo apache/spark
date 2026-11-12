@@ -88,6 +88,8 @@
       url: sql-native-data-sources.html#example-in-rust
     - text: Example in C++
       url: sql-native-data-sources.html#example-in-c
+- text: AI Inference (Experimental)
+  url: sql-ai-query.html
 - text: Performance Tuning
   url: sql-performance-tuning.html
   subitems:

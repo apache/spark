@@ -99,7 +99,7 @@ sql = [
 ]
 
 ai = [
-    # Used by the experimental pyspark.sql.ai prototype (DataFrame.ai_query).
+    {include-group = "sql"},
     "requests",
     "boto3",
     "databricks-sdk",
