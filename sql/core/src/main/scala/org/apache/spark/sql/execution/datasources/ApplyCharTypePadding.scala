@@ -22,7 +22,7 @@ import java.util.concurrent.atomic.AtomicBoolean
 import org.apache.spark.internal.LogKeys
 import org.apache.spark.sql.catalyst.analysis.ApplyCharTypePaddingHelper
 import org.apache.spark.sql.catalyst.catalog.HiveTableRelation
-import org.apache.spark.sql.catalyst.expressions.{Alias, AttributeMap, AttributeReference, Expression, NamedExpression, OuterReference, SubqueryExpression}
+import org.apache.spark.sql.catalyst.expressions.{Alias, AttributeMap, AttributeReference, Expression, NamedExpression, OuterReference, SubExprUtils, SubqueryExpression}
 import org.apache.spark.sql.catalyst.plans.logical.{DeleteFromTable, LogicalPlan, Project, ReplaceData, WriteDelta}
 import org.apache.spark.sql.catalyst.rules.Rule
 import org.apache.spark.sql.catalyst.trees.TreePattern.{DELETE_FROM_TABLE, REPLACE_DATA, WRITE_DELTA}
@@ -130,6 +130,9 @@ object ApplyCharTypePadding extends Rule[LogicalPlan] {
   }
 
   // Maps the stored and the padded attribute of each padded target column to the padded value.
+  // A condition can refer to either one. The read-side padding rewrites the attributes a node
+  // references, and `ReplaceData.references` is `query.outputSet`, so a group-based DELETE refers
+  // to the padded alias. A delta-based DELETE does not output the column and keeps the stored one.
   // The aliases of the padding keep the raw type, unlike the new values that an UPDATE also
   // projects directly on top of the read relation.
   private def targetColumnPaddings(query: LogicalPlan): AttributeMap[Expression] = {
@@ -153,17 +156,26 @@ object ApplyCharTypePadding extends Rule[LogicalPlan] {
     // The padded value refers to the attribute without the raw type, which is not padded again.
     def isPadded(attr: AttributeReference): Boolean = paddings.contains(attr) && hasRawType(attr)
 
-    cond.transform {
+    def pad(expr: Expression): Expression = expr match {
       case attr: AttributeReference if isPadded(attr) =>
         paddings(attr)
 
       // The analyzer pads the subqueries it resolves, but the group filter subquery of a MERGE is
-      // built from a resolved source, which only gets its read-side padding here.
+      // built from a resolved source, which only gets its read-side padding here. `apply` leaves
+      // a subquery that is already padded unchanged: its relations no longer have the raw type,
+      // and its padded comparisons are not padded again. The outer attributes are collected from
+      // the new plan, as the analyzer does, because they may refer to the padded alias.
       case subquery: SubqueryExpression =>
-        subquery.withNewPlan(apply(subquery.plan).transformAllExpressionsWithSubqueries {
+        val newPlan = apply(subquery.plan).transformAllExpressionsWithSubqueries {
           case OuterReference(attr: AttributeReference) if isPadded(attr) =>
             paddings(attr).transform { case a: AttributeReference => OuterReference(a) }
-        })
+        }
+        subquery.withNewPlan(newPlan).withNewOuterAttrs(SubExprUtils.getOuterReferences(newPlan))
+
+      case other =>
+        other.mapChildren(pad)
     }
+
+    pad(cond)
   }
 }

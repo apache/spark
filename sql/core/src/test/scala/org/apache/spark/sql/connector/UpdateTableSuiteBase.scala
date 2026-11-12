@@ -1000,6 +1000,7 @@ abstract class UpdateTableSuiteBase extends RowLevelOperationSuiteBase {
         |{ "pk": 3, "c": "b", "id": 3, "dep": "hr" }
         |""".stripMargin)
 
+    // the new values that an UPDATE projects on top of the read relation are not paddings
     sql(s"UPDATE $tableNameAsString SET id = -1 WHERE c IN ('a', 'b', 'c')")
 
     checkAnswer(
