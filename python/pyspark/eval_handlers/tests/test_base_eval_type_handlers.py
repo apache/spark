@@ -82,9 +82,6 @@ class EvalTypeHandlerTests(PySparkBaseTestCase):
             self.assertNotIn(base, registered)
 
     def test_default_serializer_per_category(self):
-        metrics = WorkerMetrics()
-        self.addCleanup(metrics.reset)
-
         class _Batch(BatchEvalTypeHandler["pa.RecordBatch"]):
             _multi_udf = True
 
@@ -108,44 +105,48 @@ class EvalTypeHandlerTests(PySparkBaseTestCase):
             (_Grouped, ArrowStreamGroupSerializer),
             (_CoGrouped, ArrowStreamCoGroupSerializer),
         ):
-            for supported, enabled, pipelined in (
-                (False, True, False),
-                (True, False, False),
-                (True, True, False),
-                (True, True, True),
-            ):
-                with (
-                    self.subTest(
-                        handler=handler_class.__name__,
-                        supported=supported,
-                        enabled=enabled,
-                        pipelined=pipelined,
-                    ),
-                    patch.dict(os.environ, {"SPARK_PIPELINED_UDF": str(int(pipelined))}),
-                ):
-                    metrics.reset()
-                    handler_class._supports_detailed_timing = supported
-                    conf = RunnerConf(
-                        {
-                            "spark.sql.execution.pythonUDF.detailedTiming.enabled": str(
-                                enabled
-                            ).lower()
-                        }
-                    )
-                    handler = handler_class([], conf, None)
-                    serializer = handler.serializer
-                    expected_timing = supported and enabled and not pipelined
-                    self.assertIsInstance(serializer, serializer_class)
-                    self.assertEqual(serializer._detailed_timing_enabled, expected_timing)
-                    self.assertEqual(handler._create_phase_timers() is not None, expected_timing)
-                    self.assertEqual(conf.detailed_timing_enabled, enabled)
-                    if not expected_timing:
-                        self.assertEqual(metrics.to_dict(), {})
+            with self.subTest(handler=handler_class.__name__):
+                handler = handler_class([], RunnerConf({}), None)
+                self.assertIsInstance(handler.serializer, serializer_class)
             # Pipelined mode flushes each output batch.
             for value, flush in (("0", False), ("1", True)):
                 with patch.dict(os.environ, {"SPARK_PIPELINED_UDF": value}):
-                    serializer = handler_class([], RunnerConf({}), None).serializer
-                    self.assertEqual(serializer._flush_per_batch, flush)
+                    self.assertEqual(handler.serializer._flush_per_batch, flush)
+
+    def test_detailed_timing_gate(self):
+        metrics = WorkerMetrics()
+        self.addCleanup(metrics.reset)
+
+        class _Unsupported(BatchEvalTypeHandler["pa.RecordBatch"]):
+            _multi_udf = True
+
+            def run(self, split_index, data):
+                return data
+
+        class _Supported(_Unsupported):
+            _supports_detailed_timing = True
+
+        for handler_class, enabled, pipelined, expected in (
+            (_Unsupported, True, False, False),
+            (_Supported, False, False, False),
+            (_Supported, True, True, False),
+            (_Supported, True, False, True),
+        ):
+            with (
+                self.subTest(handler=handler_class.__name__, enabled=enabled, pipelined=pipelined),
+                patch.dict(os.environ, {"SPARK_PIPELINED_UDF": str(int(pipelined))}),
+            ):
+                metrics.reset()
+                conf = RunnerConf(
+                    {"spark.sql.execution.pythonUDF.detailedTiming.enabled": str(enabled).lower()}
+                )
+                handler = handler_class([], conf, None)
+                self.assertEqual(conf.is_pipelined, pipelined)
+                self.assertEqual(conf.detailed_timing_enabled, enabled)
+                self.assertEqual(handler.serializer._detailed_timing_enabled, expected)
+                self.assertEqual(handler._create_phase_timers() is not None, expected)
+                if not expected:
+                    self.assertEqual(metrics.to_dict(), {})
 
     def test_run_produces_output(self):
         class _Doubler(BatchEvalTypeHandler["pa.RecordBatch"]):
