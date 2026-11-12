@@ -21,7 +21,7 @@ import java.sql.{Date, Timestamp}
 
 import scala.collection.mutable
 
-import org.apache.spark.sql.catalyst.expressions.{And, Attribute, AttributeMap, AttributeReference, EqualTo}
+import org.apache.spark.sql.catalyst.expressions.{And, Attribute, AttributeMap, AttributeReference, EqualTo, GreaterThan, Literal}
 import org.apache.spark.sql.catalyst.plans._
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.plans.logical.statsEstimation.EstimationUtils._
@@ -572,8 +572,8 @@ class JoinEstimationSuite extends StatsEstimationTestBase {
       attributeStats = AttributeMap(Seq(noMinMax -> noMinMaxStat)))
     val join = Join(table1, noMinMaxTable, Inner,
       Some(EqualTo(nameToAttr("key-1-5"), noMinMax)), JoinHint.NONE)
-    // Estimated by ndv: 5 * 3 / max(5, 3) = 3. The range of the joined keys is unknown.
-    val joinedColStat = ColumnStat(distinctCount = Some(3), min = None, max = None,
+    // Estimated by ndv: 5 * 3 / max(5, 3) = 3. The joined keys keep the range of key-1-5.
+    val joinedColStat = ColumnStat(distinctCount = Some(3), min = Some(1), max = Some(5),
       nullCount = Some(0), avgLen = Some(4), maxLen = Some(4))
     val expectedStats = Statistics(
       sizeInBytes = 3 * (8 + 4 * 3),
@@ -597,6 +597,39 @@ class JoinEstimationSuite extends StatsEstimationTestBase {
     val join = Join(withMinMax, noMinMax, Inner, Some(EqualTo(col1, col2)), JoinHint.NONE)
     // 20 * 20 / max(9, 9), rounded up.
     assert(join.stats.rowCount == Some(45))
+  }
+
+  test("SPARK-61002: a join key without min/max drops its histogram for the range of the other") {
+    // The joined keys take the range [1, 5] of `known`. The histogram of `unknown` covers only
+    // [2, 4], so it is dropped, while the histogram of `known` is kept.
+    val knownHistogram = Histogram(height = 5, Array(
+      HistogramBin(lo = 1, hi = 3, ndv = 3), HistogramBin(lo = 3, hi = 5, ndv = 3)))
+    val unknownHistogram = Histogram(height = 5, Array(
+      HistogramBin(lo = 2, hi = 3, ndv = 2), HistogramBin(lo = 3, hi = 4, ndv = 2)))
+    val (known, unknown) = (attr("known"), attr("unknown"))
+    def table(key: AttributeReference, stat: ColumnStat): StatsTestPlan =
+      StatsTestPlan(Seq(key), rowCount = 10, attributeStats = AttributeMap(Seq(key -> stat)))
+    val knownTable = table(known, ColumnStat(distinctCount = Some(5), min = Some(1),
+      max = Some(5), nullCount = Some(0), avgLen = Some(4), maxLen = Some(4),
+      histogram = Some(knownHistogram)))
+    val unknownTable = table(unknown, ColumnStat(distinctCount = Some(3), min = None,
+      max = None, nullCount = Some(0), avgLen = Some(4), maxLen = Some(4),
+      histogram = Some(unknownHistogram)))
+    // 10 * 10 / max(5, 3), rounded up.
+    val joinedColStat = ColumnStat(distinctCount = Some(3), min = Some(1), max = Some(5),
+      nullCount = Some(0), avgLen = Some(4), maxLen = Some(4))
+    Seq(
+      Join(knownTable, unknownTable, Inner, Some(EqualTo(known, unknown)), JoinHint.NONE),
+      Join(unknownTable, knownTable, Inner, Some(EqualTo(unknown, known)), JoinHint.NONE)
+    ).foreach { join =>
+      assert(join.stats.rowCount == Some(20))
+      assert(join.stats.attributeStats(known) ==
+        joinedColStat.copy(histogram = Some(knownHistogram)))
+      assert(join.stats.attributeStats(unknown) == joinedColStat)
+      // A filter estimated with the histogram of `unknown` would read it outside of its bins.
+      assert(Filter(EqualTo(unknown, Literal(3)), join).stats.rowCount.isDefined)
+      assert(Filter(GreaterThan(unknown, Literal(3)), join).stats.rowCount.isDefined)
+    }
   }
 
   test("SPARK-61002: a boolean join key from a union is not taken as holding only nulls") {

@@ -200,9 +200,14 @@ case class JoinEstimation(join: Join) extends Logging {
       val rInterval = keyInterval(rightKey, rightKeyStat)
       if (ValueInterval.isIntersected(lInterval, rInterval)) {
         val (newMin, newMax) = ValueInterval.intersect(lInterval, rInterval, leftKey.dataType)
+        // If only one key has a known range, the joined keys take it. The histogram of the other
+        // key may not cover that range, so it is neither used nor propagated.
+        def keepsHistogram(interval: ValueInterval): Boolean =
+          newMin.isEmpty || interval.isInstanceOf[NumericValueInterval]
         val (card, joinStat) = (leftKeyStat.histogram, rightKeyStat.histogram) match {
-          // Histograms are bounded by the intersected min/max, so they need both keys' min/max.
-          case (Some(l: Histogram), Some(r: Histogram)) if newMin.isDefined && newMax.isDefined =>
+          // Histograms are trimmed to the intersected range, so both keys need a known range.
+          case (Some(l: Histogram), Some(r: Histogram)) if newMin.isDefined && newMax.isDefined &&
+              keepsHistogram(lInterval) && keepsHistogram(rInterval) =>
             computeByHistogram(leftKey, rightKey, l, r, newMin, newMax)
           case _ =>
             computeByNdv(leftKey, rightKey, newMin, newMax)
@@ -211,8 +216,10 @@ case class JoinEstimation(join: Join) extends Logging {
           // Histograms are propagated as unchanged. During future estimation, they should be
           // truncated by the updated max/min. In this way, only pointers of the histograms are
           // propagated and thus reduce memory consumption.
-          (leftKey -> joinStat.copy(histogram = leftKeyStat.histogram)) +=
-            (rightKey -> joinStat.copy(histogram = rightKeyStat.histogram))
+          (leftKey -> joinStat.copy(
+            histogram = leftKeyStat.histogram.filter(_ => keepsHistogram(lInterval)))) +=
+            (rightKey -> joinStat.copy(
+              histogram = rightKeyStat.histogram.filter(_ => keepsHistogram(rInterval))))
         // Return cardinality estimated from the most selective join keys.
         if (card < joinCard) joinCard = card
       } else {
@@ -227,7 +234,7 @@ case class JoinEstimation(join: Join) extends Logging {
   /**
    * Returns the value range of a join key. A key with distinct values but no min/max (a data
    * source may not report them, and a union drops them for some types) has an unknown range, not
-   * only nulls. Like a string key, it is assumed to overlap the other key.
+   * only nulls, so it overlaps the other key unless that key holds only nulls.
    */
   private def keyInterval(key: AttributeReference, keyStat: ColumnStat): ValueInterval = {
     if (keyStat.distinctCount.get > 0 && !keyStat.hasMinMaxStats) {
