@@ -25,6 +25,7 @@ import org.apache.spark.unsafe.types.BinaryView;
 import org.apache.spark.unsafe.types.UTF8String;
 
 import java.nio.ByteOrder;
+import java.util.Arrays;
 
 // This class defines static methods that used to implement ST expressions using `StaticInvoke`.
 public final class STUtils {
@@ -139,6 +140,12 @@ public final class STUtils {
 
   public static byte[] stGeogAsBinary(BinaryView geo, UTF8String endianness) {
     return geogFromPhysVal(geo).toWkb(parseEndianness(endianness));
+  }
+
+  // Returns the WKB of a GEOMETRY or GEOGRAPHY value as it was created, without re-encoding it.
+  public static byte[] wkbAsCreated(BinaryView geo) {
+    byte[] bytes = geo.getBytes();
+    return Arrays.copyOfRange(bytes, Geo.WKB_OFFSET, bytes.length);
   }
 
   public static byte[] stGeomAsBinary(BinaryView geo) {

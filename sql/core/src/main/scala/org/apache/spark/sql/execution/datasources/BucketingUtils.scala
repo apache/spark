@@ -18,7 +18,7 @@
 package org.apache.spark.sql.execution.datasources
 
 import org.apache.spark.sql.catalyst.InternalRow
-import org.apache.spark.sql.catalyst.expressions.{Attribute, Expression, SpecificInternalRow, UnaryExpression, UnsafeProjection}
+import org.apache.spark.sql.catalyst.expressions.{Attribute, Expression, SpecializedGetters, SpecificInternalRow, UnaryExpression, UnsafeProjection}
 import org.apache.spark.sql.catalyst.expressions.codegen.CodegenFallback
 import org.apache.spark.sql.catalyst.expressions.st.STExpressionUtils.isGeoSpatialType
 import org.apache.spark.sql.catalyst.plans.physical.HashPartitioning
@@ -86,34 +86,50 @@ case class RejectGeoSpatialBucketValue(child: Expression)
 
   override def dataType: DataType = child.dataType
 
+  // Built once from the type, so that the check reads only the parts of a value whose type can
+  // hold a GEOMETRY or GEOGRAPHY value.
+  @transient private lazy val containsGeoSpatialValue: Any => Boolean = valueChecker(dataType)
+
   override protected def nullSafeEval(input: Any): Any = {
-    if (containsGeoSpatialValue(input, dataType)) {
+    if (containsGeoSpatialValue(input)) {
       throw QueryExecutionErrors.invalidBucketColumnDataTypeError(dataType)
     }
     input
   }
 
-  private def containsGeoSpatialValue(value: Any, dataType: DataType): Boolean =
-    value != null && (dataType match {
-      case _: GeometryType | _: GeographyType => true
-      case st: StructType =>
-        val row = value.asInstanceOf[InternalRow]
-        st.fields.indices.exists { i =>
-          containsGeoSpatialValue(row.get(i, st(i).dataType), st(i).dataType)
-        }
-      case ArrayType(elementType, _) =>
-        arrayContainsGeoSpatialValue(value.asInstanceOf[ArrayData], elementType)
-      case MapType(keyType, valueType, _) =>
+  // Returns whether a non-NULL value of the type holds a non-NULL GEOMETRY or GEOGRAPHY value.
+  private def valueChecker(dataType: DataType): Any => Boolean = dataType match {
+    case _ if !BucketingUtils.containsGeoSpatialType(dataType) => _ => false
+    case _: GeometryType | _: GeographyType => _ => true
+    case udt: UserDefinedType[_] => valueChecker(udt.sqlType)
+    case st: StructType =>
+      val fieldCheckers = st.fields.indices.map(i => (i, entryChecker(st(i).dataType)))
+      value => fieldCheckers.exists { case (i, check) => check(value.asInstanceOf[InternalRow], i) }
+    case ArrayType(elementType, _) =>
+      val check = entryChecker(elementType)
+      value => {
+        val array = value.asInstanceOf[ArrayData]
+        (0 until array.numElements()).exists(check(array, _))
+      }
+    case MapType(keyType, valueType, _) =>
+      val keysCheck = valueChecker(ArrayType(keyType))
+      val valuesCheck = valueChecker(ArrayType(valueType))
+      value => {
         val map = value.asInstanceOf[MapData]
-        arrayContainsGeoSpatialValue(map.keyArray(), keyType) ||
-          arrayContainsGeoSpatialValue(map.valueArray(), valueType)
-      case udt: UserDefinedType[_] => containsGeoSpatialValue(value, udt.sqlType)
-      case _ => false
-    })
+        keysCheck(map.keyArray()) || valuesCheck(map.valueArray())
+      }
+  }
 
-  private def arrayContainsGeoSpatialValue(array: ArrayData, elementType: DataType): Boolean =
-    (0 until array.numElements()).exists { i =>
-      containsGeoSpatialValue(array.get(i, elementType), elementType)
+  // Returns whether the entry at an ordinal of a struct or an array holds a non-NULL GEOMETRY or
+  // GEOGRAPHY value. A GEOMETRY or GEOGRAPHY entry is only tested for NULL.
+  private def entryChecker(dataType: DataType): (SpecializedGetters, Int) => Boolean =
+    dataType match {
+      case _ if !BucketingUtils.containsGeoSpatialType(dataType) => (_, _) => false
+      case _: GeometryType | _: GeographyType => (data, i) => !data.isNullAt(i)
+      case udt: UserDefinedType[_] => entryChecker(udt.sqlType)
+      case _ =>
+        val check = valueChecker(dataType)
+        (data, i) => !data.isNullAt(i) && check(data.get(i, dataType))
     }
 
   override protected def withNewChildInternal(newChild: Expression): RejectGeoSpatialBucketValue =

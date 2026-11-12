@@ -997,7 +997,9 @@ private class InternalRowToArrowCachedBatchIterator(
   private val arrowSchema = ArrowUtils.toArrowSchema(
     sparkSchema, timeZoneId, false, false, losslessInternalTypes = true)
   private val root = VectorSchemaRoot.create(arrowSchema, allocator)
-  private val arrowWriter = ArrowWriter.create(root)
+  // A cached plan keeps reporting its hash partitioning, so GEOMETRY and GEOGRAPHY values must
+  // read back with the bytes that their hash was computed from.
+  private val arrowWriter = ArrowWriter.create(root, keepGeoSpatialBytes = true)
   private val unloader = ArrowCompressionUtils.createVectorUnloader(root, compressionCodec)
 
   // Create statistics collectors for each column
@@ -1203,7 +1205,7 @@ private class ColumnarBatchToArrowCachedBatchIterator(
       schema: Seq[Attribute]): ArrowCachedBatch = {
     // Convert columnar batch to rows, then to Arrow
     val root = VectorSchemaRoot.create(arrowSchema, allocator)
-    val arrowWriter = ArrowWriter.create(root)
+    val arrowWriter = ArrowWriter.create(root, keepGeoSpatialBytes = true)
     val unloader = ArrowCompressionUtils.createVectorUnloader(root, compressionCodec)
 
     Utils.tryWithSafeFinally {

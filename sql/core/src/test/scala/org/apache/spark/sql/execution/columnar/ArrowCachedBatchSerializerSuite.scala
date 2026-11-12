@@ -29,7 +29,7 @@ import org.apache.arrow.vector.complex.{MapVector, StructVector}
 import org.apache.arrow.vector.types.pojo.{ArrowType, Field, FieldType}
 
 import org.apache.spark.{SparkConf, SparkException, SparkUnsupportedOperationException, TaskContext}
-import org.apache.spark.sql.{QueryTest, Row}
+import org.apache.spark.sql.{DataFrame, QueryTest, Row}
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.{AttributeReference, GenericInternalRow}
 import org.apache.spark.sql.columnar.CachedBatch
@@ -2605,6 +2605,39 @@ class ArrowCachedBatchSerializerSuite extends QueryTest with SharedSparkSession 
           s"expected [0, 10, 20, 30, 40] but got [${values.sorted.mkString(", ")}]")
       } finally {
         cached.unpersist()
+      }
+    }
+  }
+
+  test("SPARK-61081: geometry and geography keep their WKB bytes through the cache") {
+    // POINT(1 2) as little-endian and as big-endian WKB. The cached plan keeps reporting its hash
+    // partitioning on `g`, which holds only if each value reads back with the bytes it was hashed
+    // from.
+    val littleEndian = "X'0101000000000000000000F03F0000000000000040'"
+    val bigEndian = "X'00000000013FF00000000000004000000000000000'"
+    val hashes = Seq("hash(g)", "hash(s)", "hash(a)", "hash(map_values(m))")
+    Seq("ST_GeomFromWKB(%s, 4326)", "ST_GeogFromWKB(%s)").foreach { fromWkb =>
+      Seq(false, true).foreach { vectorized =>
+        withSQLConf(SQLConf.CACHE_VECTORIZED_READER_ENABLED.key -> vectorized.toString) {
+          val input = spark.sql(
+            "SELECT g, named_struct('g', g) AS s, array(g) AS a, map(1, g) AS m FROM (" +
+              s"SELECT ${fromWkb.format(littleEndian)} AS g UNION ALL " +
+              s"SELECT ${fromWkb.format(bigEndian)} AS g)")
+            .repartition(8, $"g")
+          def groups(df: DataFrame): DataFrame =
+            df.groupBy($"g").count().selectExpr("hash(g)", "count")
+          val expectedHashes = input.selectExpr(hashes: _*).collect().toSeq
+          val expectedGroups = groups(input).collect().toSeq
+          val cached = input.cache()
+          try {
+            checkAnswer(cached.selectExpr(hashes: _*), expectedHashes)
+            checkAnswer(groups(cached), expectedGroups)
+            checkAnswer(cached.selectExpr("count(DISTINCT g)"), Row(2))
+          } finally {
+            cached.unpersist()
+            InMemoryRelation.clearSerializer()
+          }
+        }
       }
     }
   }

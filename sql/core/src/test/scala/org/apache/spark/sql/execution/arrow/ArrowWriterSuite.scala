@@ -42,6 +42,31 @@ import org.apache.spark.util.MaybeNull
 
 class ArrowWriterSuite extends SparkFunSuite {
 
+  test("SPARK-61081: GEOMETRY and GEOGRAPHY keep their WKB only with keepGeoSpatialBytes") {
+    def fromHex(hex: String): Array[Byte] =
+      hex.grouped(2).map(Integer.parseInt(_, 16).toByte).toArray
+    // POINT(1 2) as big-endian and as little-endian WKB.
+    val bigEndian = fromHex("00000000013FF00000000000004000000000000000")
+    val littleEndian = fromHex("0101000000000000000000F03F0000000000000040")
+    Seq[(DataType, Array[Byte] => BinaryView)](
+      (GeometryType(4326), InternalGeometry.fromWkb(_, 4326).getValue),
+      (GeographyType(4326), InternalGeography.fromWkb(_, 4326).getValue)).foreach {
+      case (dt, fromWkb) =>
+        // Other consumers get little-endian WKB; the cache keeps the bytes as created.
+        Seq(false -> littleEndian, true -> bigEndian).foreach { case (keepBytes, expectedWkb) =>
+          val schema = new StructType().add("value", dt)
+          val root = VectorSchemaRoot.create(
+            ArrowUtils.toArrowSchema(schema, null, true, false), ArrowUtils.rootAllocator)
+          val writer = ArrowWriter.create(root, keepGeoSpatialBytes = keepBytes)
+          writer.write(InternalRow(fromWkb(bigEndian)))
+          writer.finish()
+          val reader = new ArrowColumnVector(root.getFieldVectors().get(0))
+          assert(reader.getBinaryView(0).getBytes === fromWkb(expectedWkb).getBytes)
+          root.close()
+        }
+    }
+  }
+
   test("simple") {
     def check(
         dt: DataType,

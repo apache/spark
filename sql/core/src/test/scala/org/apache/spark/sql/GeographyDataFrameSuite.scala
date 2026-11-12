@@ -250,8 +250,8 @@ class GeographyDataFrameSuite extends SharedSparkSession {
         parameters = Map("type" -> dataType))
     }
 
-    withTable("t", "t_ctas", "t_df", "t_struct", "t_array", "t_map", "t_map_key", "t_udt",
-        "t_udt_struct", "t_other") {
+    withTable("t", "t_ctas", "t_df", "t_struct", "t_deep", "t_array", "t_map", "t_map_key",
+        "t_udt", "t_udt_struct", "t_other") {
       sql("CREATE TABLE t (g GEOGRAPHY(4326)) USING parquet CLUSTERED BY (g) INTO 8 BUCKETS")
       Seq("true", "false").foreach { plannedWrite =>
         withSQLConf(SQLConf.PLANNED_WRITE_ENABLED.key -> plannedWrite) {
@@ -281,6 +281,17 @@ class GeographyDataFrameSuite extends SharedSparkSession {
         "\"STRUCT<id: INT NOT NULL, g: GEOGRAPHY(4326) NOT NULL>\"")
       sql(s"INSERT INTO t_struct SELECT named_struct('id', 1, 'g', $nullValue)")
       checkAnswer(spark.table("t_struct"), Row(Row(1, null)))
+      sql("CREATE TABLE t_deep " +
+        "(s STRUCT<id: INT, a: ARRAY<STRUCT<x: INT, g: GEOGRAPHY(4326)>>>) " +
+        "USING parquet CLUSTERED BY (s) INTO 8 BUCKETS")
+      def deepValue(g: String): String =
+        s"named_struct('id', 1, 'a', array(named_struct('x', 2, 'g', $g)))"
+      checkBucketedWriteFails(
+        sql(s"INSERT INTO t_deep SELECT ${deepValue("g")} FROM ($values)"),
+        "\"STRUCT<id: INT NOT NULL, " +
+          "a: ARRAY<STRUCT<x: INT NOT NULL, g: GEOGRAPHY(4326) NOT NULL>> NOT NULL>\"")
+      sql(s"INSERT INTO t_deep SELECT ${deepValue(nullValue)}")
+      checkAnswer(spark.table("t_deep"), Row(Row(1, Seq(Row(2, null)))))
       sql("CREATE TABLE t_array (a ARRAY<GEOGRAPHY(4326)>) USING parquet " +
         "CLUSTERED BY (a) INTO 8 BUCKETS")
       checkBucketedWriteFails(
