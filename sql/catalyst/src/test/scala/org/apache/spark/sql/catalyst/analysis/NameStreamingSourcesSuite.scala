@@ -347,22 +347,19 @@ class NameStreamingSourcesSuite extends AnalysisTest {
     }
   }
 
-  test("config disabled - UserProvided name requires every source to be named") {
+  test("config disabled - mixed wrapper names defer enforcement to query startup") {
     withSQLConf(
       SQLConf.ENABLE_STREAMING_SOURCE_EVOLUTION.key -> "false"
     ) {
-      val namedSource = NamedStreamingRelation(createStreamingRelation(), UserProvided("named"))
-      val unnamedSource = NamedStreamingRelation(createStreamingRelation(), Unassigned)
+      val namedSource = NamedStreamingRelation(createStreamingRelationV2(), UserProvided("named"))
+      val unnamedSource = NamedStreamingRelation(createStreamingRelationV2(), Unassigned)
       val streamingPlan = Union(Seq(namedSource, unnamedSource))
 
-      checkError(
-        exception = intercept[AnalysisException] {
-          NameStreamingSources.apply(streamingPlan)
-        },
-        condition =
-          "STREAMING_QUERY_EVOLUTION_ERROR.UNNAMED_STREAMING_SOURCES_WITH_ENFORCEMENT",
-        parameters = Map("sourceInfo" -> "Leaf position 1 - LocalRelation")
-      )
+      val result = NameStreamingSources(streamingPlan)
+      assert(StreamingSourceIdentifyingName.collectSources(result).map(_._2) ===
+        Seq(UserProvided("named"), Unassigned))
+      assert(!result.containsPattern(
+        org.apache.spark.sql.catalyst.trees.TreePattern.NAMED_STREAMING_RELATION))
     }
   }
 

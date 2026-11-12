@@ -8223,7 +8223,7 @@
       },
       "CANNOT_ENABLE_ON_EXISTING_CHECKPOINT" : {
         "message" : [
-          "Cannot enable streaming source evolution on a checkpoint that was created without it. The query names its streaming sources, but the checkpoint tracks them by position. To use source evolution, start the query with a fresh checkpoint."
+          "Cannot enable streaming source evolution on a checkpoint that was created without it. The query names its streaming sources, but the checkpoint tracks them by position. To resume this positional checkpoint, keep the source names and their order unchanged from the original query. To use source evolution, start the query with a fresh checkpoint."
         ]
       },
       "CONTINUOUS_PROCESSING_NOT_SUPPORTED" : {

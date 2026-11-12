@@ -41,9 +41,9 @@ import org.apache.spark.sql.errors.QueryCompilationErrors
  * - Flow-assigned names (from DLT context) are preserved
  * - Unassigned sources remain unassigned and will be auto-numbered later in MicroBatchExecution
  *
- * Validates names still carried by wrappers when a wrapper has a user-provided name or the
- * session enables source evolution. Query startup validates already-analyzed sources using the
- * checkpoint's tracking mode; this rule cannot determine whether a query is a legacy restart.
+ * Validates source naming when the session enables source evolution. Query startup enforces
+ * per-query naming opt-in using the checkpoint's tracking mode; this rule cannot determine
+ * whether a query is a legacy restart.
  */
 object NameStreamingSources extends Rule[LogicalPlan] {
 
@@ -69,7 +69,7 @@ object NameStreamingSources extends Rule[LogicalPlan] {
       .zipWithIndex.collect {
         case ((source, Unassigned), index) =>
           s"Leaf position $index - ${getSourceDescriptor(source)}"
-    }
+      }
     if (unnamedSourcesInfo.nonEmpty) {
       throw QueryCompilationErrors.unnamedStreamingSourcesWithEnforcementError(
         unnamedSourcesInfo.mkString("\n"))
@@ -128,7 +128,9 @@ object NameStreamingSources extends Rule[LogicalPlan] {
       plan
     } else if (conf.enableStreamingSourceEvolution || hasUserProvidedName(plan)) {
       // Feature enabled - propagate names to streaming sources.
-      checkSourceNamingEnforcement(plan)
+      if (conf.enableStreamingSourceEvolution) {
+        checkSourceNamingEnforcement(plan)
+      }
       propagateSourceNames(plan)
     } else {
       // Feature disabled - unwrap NamedStreamingRelation nodes without propagating names.
