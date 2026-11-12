@@ -247,7 +247,7 @@ module.exports = async ({github, context, core, env = process.env, log = console
   const prUrl = `https://github.com/${context.repo.owner}/${context.repo.repo}/pull/`
 
   // Create a Build check linked to a fork run, or action_required guidance if there is
-  // no run. `from` describes, for the log, what the new check takes over from.
+  // no run. `from` is the state replaced, or 'rerun' for a rerun of the tracked run.
   const createCheck = async (pr, ref, run, from) => {
     const state = run ? checkState(run)
       : {status: 'completed', conclusion: 'action_required'}
@@ -311,6 +311,7 @@ module.exports = async ({github, context, core, env = process.env, log = console
       // branches, even if an older workflow ran on master; a skipped run has no result.
       const trackedRun = pr.branch == 'master' || pr.buildRun?.conclusion == 'skipped'
         ? undefined : pr.buildRun
+      const previousBuildState = pr.buildChecks.map(label).join(', ') || 'none'
 
       // Sync every Build check that points at a fork run, not just the first: a commit
       // can carry more than one (e.g. left by the notify workflow this one replaced).
@@ -388,7 +389,8 @@ module.exports = async ({github, context, core, env = process.env, log = console
       // has none yet, its check completed before a rerun, an update was not applied, or
       // its checks link to other runs (e.g. an older build of the same commit).
       if (trackedRun && !trackedRunShown && !unlistedRun) {
-        await createCheck(pr, ref, trackedRun, trackedRunReran ? 'rerun' : 'none')
+        await createCheck(pr, ref, trackedRun,
+          trackedRunReran ? 'rerun' : previousBuildState)
       } else if (!trackedRun && !syncableBuildCheck) {
         // No run exists, it was skipped, or the PR is from fork master: create
         // action_required guidance, unless the PR already has it or is still within
@@ -398,7 +400,7 @@ module.exports = async ({github, context, core, env = process.env, log = console
           count.skipped++
           continue
         }
-        await createCheck(pr, ref, undefined, 'none')
+        await createCheck(pr, ref, undefined, previousBuildState)
       }
     }
   }
