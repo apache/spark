@@ -17,6 +17,8 @@
 
 package org.apache.spark.sql.execution
 
+import java.util.{Collections, IdentityHashMap}
+
 import scala.annotation.tailrec
 import scala.util.control.NonFatal
 
@@ -632,22 +634,29 @@ class CacheManager extends Logging with AdaptiveSparkPlanHelper {
       fs: FileSystem,
       includeTimeTravel: Boolean): Unit = {
     val qualifiedPath = fs.makeQualified(resourcePath)
+    // Cache entries can share a file index, so each index is refreshed once per call. That is
+    // enough, because the condition runs for every entry before any matched entry is rebuilt.
+    // Indexes are compared by reference: InMemoryFileIndex equality compares root paths only.
+    val refreshedIndexes =
+      Collections.newSetFromMap(new IdentityHashMap[FileIndex, java.lang.Boolean])
     recacheByCondition(
       spark,
-      entry => lookupAndRefresh(entry.plan, fs, qualifiedPath, includeTimeTravel))
+      entry => lookupAndRefresh(entry.plan, fs, qualifiedPath, includeTimeTravel, refreshedIndexes))
   }
 
   /**
    * Searches `plan`, including its subqueries, for the
    * [[org.apache.spark.sql.execution.datasources.FileIndex]] of file-backed relations under
-   * `qualifiedPath`, refreshes each distinct matching index once, and returns whether any was
-   * found. Every match is refreshed because the rebuilt cache entry reuses these indexes.
+   * `qualifiedPath`, refreshes each matching index that is not in `refreshedIndexes` yet, and
+   * returns whether any was found. Every match is refreshed because the rebuilt cache entry reuses
+   * these indexes.
    */
   private def lookupAndRefresh(
       plan: LogicalPlan,
       fs: FileSystem,
       qualifiedPath: Path,
-      includeTimeTravel: Boolean): Boolean = {
+      includeTimeTravel: Boolean,
+      refreshedIndexes: java.util.Set[FileIndex]): Boolean = {
     def fileIndexToRefresh(node: LogicalPlan): Option[FileIndex] = {
       val fileIndex: Option[FileIndex] = node match {
         case lr: LogicalRelation => lr.relation match {
@@ -664,12 +673,10 @@ class CacheManager extends Logging with AdaptiveSparkPlanHelper {
       fileIndex.filter(needToRefresh(_, fs, qualifiedPath, includeTimeTravel))
     }
 
-    // Deduplicate by reference: InMemoryFileIndex equality compares root paths only.
     val fileIndexes = (plan +: subqueryPlans(plan)).flatMap(_.flatMap(fileIndexToRefresh))
-      .foldLeft(Vector.empty[FileIndex]) { (distinct, fileIndex) =>
-        if (distinct.exists(_ eq fileIndex)) distinct else distinct :+ fileIndex
-      }
-    fileIndexes.foreach(_.refresh())
+    fileIndexes.foreach { fileIndex =>
+      if (refreshedIndexes.add(fileIndex)) fileIndex.refresh()
+    }
     fileIndexes.nonEmpty
   }
 

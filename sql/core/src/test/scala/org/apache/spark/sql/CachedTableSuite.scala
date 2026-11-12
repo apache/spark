@@ -1449,9 +1449,13 @@ class CachedTableSuite extends SharedSparkSession
       withTempDir { dir =>
         sql(s"CREATE TABLE t (id BIGINT) USING parquet LOCATION '${dir.toURI}'")
         sql("INSERT INTO t VALUES (1)")
-        val query = "SELECT id FROM range(5) WHERE id IN (SELECT id FROM t)"
-        sql(query).cache()
-        checkAnswer(sql(query), Row(1L))
+        val queries = Seq(
+          "SELECT id FROM range(5) WHERE id IN (SELECT id FROM t)",
+          // The table is read in a subquery of a subquery.
+          "SELECT id FROM range(5) WHERE id IN " +
+            "(SELECT id FROM range(4) WHERE id IN (SELECT id FROM t))")
+        queries.foreach(sql(_).cache())
+        queries.foreach(query => checkAnswer(sql(query), Row(1L)))
 
         // Add a data file outside Spark, so that only REFRESH TABLE can pick it up.
         withTempPath { newData =>
@@ -1462,10 +1466,12 @@ class CachedTableSuite extends SharedSparkSession
         }
         sql("REFRESH TABLE t")
 
-        val cachedData = cacheManager.lookupCachedData(sql(query))
-        assert(cachedData.isDefined)
-        assert(!cachedData.get.cachedRepresentation.cacheBuilder.isCachedColumnBuffersLoaded)
-        checkAnswer(sql(query), Seq(Row(1L), Row(3L)))
+        queries.foreach { query =>
+          val cachedData = cacheManager.lookupCachedData(sql(query))
+          assert(cachedData.isDefined)
+          assert(!cachedData.get.cachedRepresentation.cacheBuilder.isCachedColumnBuffersLoaded)
+          checkAnswer(sql(query), Seq(Row(1L), Row(3L)))
+        }
       }
     }
   }
@@ -2007,14 +2013,20 @@ class CachedTableSuite extends SharedSparkSession
     withTable(t) {
       sql(s"CREATE TABLE $t (id bigint, data string) USING foo")
       sql(s"INSERT INTO $t VALUES (1, 'a'), (2, 'b')")
-      val query = s"SELECT id FROM range(5) WHERE id IN (SELECT id FROM $t)"
-      sql(query).cache()
-      assertCached(sql(query))
-      checkAnswer(sql(query), Seq(Row(1L), Row(2L)))
+      val queries = Seq(
+        s"SELECT id FROM range(5) WHERE id IN (SELECT id FROM $t)",
+        // The table is read in a subquery of a subquery.
+        s"SELECT id FROM range(5) WHERE id IN (SELECT id FROM range(4) WHERE id IN " +
+          s"(SELECT id FROM $t))")
+      queries.foreach { query =>
+        sql(query).cache()
+        assertCached(sql(query))
+        checkAnswer(sql(query), Seq(Row(1L), Row(2L)))
+      }
 
       cacheManager.uncacheTableOrView(spark, Seq("testcat", "tbl"), cascade = true)
 
-      assertNotCached(sql(query))
+      queries.foreach(query => assertNotCached(sql(query)))
     }
   }
 

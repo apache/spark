@@ -204,6 +204,54 @@ class V1TimeTravelCacheSuite extends QueryTest with SharedSparkSession {
     }
   }
 
+  test("write-driven recacheByPath refreshes a FileIndex shared by two cache entries once") {
+    withTempDir { dir =>
+      val rootPath = new Path(dir.toURI)
+      val indexX = new TestFileIndex(isTimeTravel = false, rootPaths = Seq(rootPath))
+      val indexY = new TestFileIndex(isTimeTravel = false, rootPaths = Seq(rootPath))
+      assertWriteDrivenRecacheByPathClearsCache(
+        rootPath,
+        Seq("x" -> indexX, "y" -> indexY),
+        "SELECT * FROM x WHERE id IN (SELECT id FROM y)",
+        "SELECT * FROM y")
+
+      assert(indexX.refreshCount === 1)
+      assert(indexY.refreshCount === 1)
+    }
+  }
+
+  test("write-driven recacheByPath refreshes a FileIndex read by subqueries of two entries once") {
+    withTempDir { dir =>
+      val rootPath = new Path(dir.toURI)
+      val pinnedIndex = new TestFileIndex(isTimeTravel = true, rootPaths = Seq(rootPath))
+      val liveIndex = new TestFileIndex(isTimeTravel = false, rootPaths = Seq(rootPath))
+      assertWriteDrivenRecacheByPathClearsCache(
+        rootPath,
+        Seq("pinned" -> pinnedIndex, "live" -> liveIndex),
+        "SELECT * FROM pinned WHERE id IN (SELECT id FROM live)",
+        "SELECT * FROM pinned WHERE id NOT IN (SELECT id FROM live)")
+
+      assert(pinnedIndex.refreshCount === 0)
+      assert(liveIndex.refreshCount === 1)
+    }
+  }
+
+  test("write-driven recacheByPath refreshes a FileIndex read in a nested subquery") {
+    withTempDir { dir =>
+      val rootPath = new Path(dir.toURI)
+      val pinnedIndex = new TestFileIndex(isTimeTravel = true, rootPaths = Seq(rootPath))
+      val liveIndex = new TestFileIndex(isTimeTravel = false, rootPaths = Seq(rootPath))
+      assertWriteDrivenRecacheByPathClearsCache(
+        rootPath,
+        Seq("pinned" -> pinnedIndex, "live" -> liveIndex),
+        "SELECT * FROM pinned WHERE id IN " +
+          "(SELECT id FROM pinned WHERE id IN (SELECT id FROM live))")
+
+      assert(pinnedIndex.refreshCount === 0)
+      assert(liveIndex.refreshCount === 1)
+    }
+  }
+
   test("V1 file write preserves a time travel cache and refreshes a live cache") {
     withTempPath { path =>
       withSQLConf(SQLConf.USE_V1_SOURCE_LIST.key -> "parquet") {
@@ -432,22 +480,24 @@ class V1TimeTravelCacheSuite extends QueryTest with SharedSparkSession {
   }
 
   /**
-   * Creates a temp view over each file index, caches and materializes `query`, and checks that a
-   * write-driven `recacheByPath` on `rootPath` clears the cache.
+   * Creates a temp view over each file index, caches and materializes each of `queries`, and
+   * checks that one write-driven `recacheByPath` on `rootPath` clears all of their caches.
    */
   private def assertWriteDrivenRecacheByPathClearsCache(
       rootPath: Path,
       views: Seq[(String, TestFileIndex)],
-      query: String): Unit = {
+      queries: String*): Unit = {
     withTempView(views.map(_._1): _*) {
       views.foreach { case (name, fileIndex) =>
         ClassicDataset.ofRows(spark, LogicalRelation(newFileRelation(fileIndex), tableMetadata))
           .createOrReplaceTempView(name)
       }
-      val cached = spark.sql(query).persist()
+      val cached = queries.map(spark.sql(_).persist())
       try {
-        cached.count()
-        assertCacheLoading(cached, expected = true)
+        cached.foreach { dataset =>
+          dataset.count()
+          assertCacheLoading(dataset, expected = true)
+        }
 
         val fs = rootPath.getFileSystem(spark.sessionState.newHadoopConf())
         spark.sharedState.cacheManager.recacheByPath(
@@ -456,9 +506,9 @@ class V1TimeTravelCacheSuite extends QueryTest with SharedSparkSession {
           fs,
           includeTimeTravel = false)
 
-        assertCacheLoading(cached, expected = false)
+        cached.foreach(assertCacheLoading(_, expected = false))
       } finally {
-        cached.unpersist(blocking = true)
+        cached.foreach(_.unpersist(blocking = true))
       }
     }
   }
