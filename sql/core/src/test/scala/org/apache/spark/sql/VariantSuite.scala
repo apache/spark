@@ -110,6 +110,51 @@ class VariantSuite extends SharedSparkSession with ExpressionEvalHelper {
     checkAnswer(df.select(try_variant_get(v, "$.a", "binary")), rows(null, null))
   }
 
+  test("variant colon paths with escapes") {
+    val df = Seq("""{"a'b":1,"a\"b":2,"a\\b":3,"items":[{"a'b":4}]}""")
+      .toDF("json").select(parse_json($"json").as("v"))
+    withSQLConf(SQLConf.LEGACY_VARIANT_PATH_BACKSLASH_AS_LITERAL.key -> "false") {
+      checkAnswer(
+        df.selectExpr("""v:['a\'b']::int""", """v:["a\"b"]::int""",
+          """v:items[0]['a\'b']::int"""),
+        Row(1, 2, 4))
+      // Colon paths decode escapes independently of SQL string literal settings.
+      Seq(false, true).foreach { escapedStringLiterals =>
+        withSQLConf(SQLConf.ESCAPED_STRING_LITERALS.key -> escapedStringLiterals.toString) {
+          checkAnswer(df.selectExpr("""v:['a\\b']::int"""), Row(3))
+        }
+      }
+    }
+  }
+
+  test("variant colon paths retain the parse-time legacy mode") {
+    for (legacy <- Seq(false, true); singlePass <- Seq(false, true)) {
+      val plan = withSQLConf(
+          SQLConf.LEGACY_VARIANT_PATH_BACKSLASH_AS_LITERAL.key -> legacy.toString) {
+        spark.sessionState.sqlParser.parsePlan(
+          """SELECT v:['a\nb'], v:["a\nb"]
+            |FROM (SELECT parse_json(r'{"a\nb":1,"a\\nb":2}') AS v)
+            |""".stripMargin)
+      }
+      // Reuse the parsed plan with both the original setting and the opposite setting.
+      Seq(false, true).foreach { analysisLegacy =>
+        withSQLConf(
+          SQLConf.LEGACY_VARIANT_PATH_BACKSLASH_AS_LITERAL.key -> analysisLegacy.toString,
+          SQLConf.ANALYZER_SINGLE_PASS_RESOLVER_ENABLED.key -> singlePass.toString,
+          SQLConf.ANALYZER_SINGLE_PASS_RESOLVER_ENABLED_TENTATIVELY.key -> "false",
+          SQLConf.ANALYZER_DUAL_RUN_LEGACY_AND_SINGLE_PASS_RESOLVER.key -> "false") {
+          val result = classic.Dataset.ofRows(spark, plan)
+          val name = if (legacy) """a\nb""" else "a\nb"
+          assert(result.columns.toSeq == Seq(name, name))
+          val expected = VariantExpressionEvalUtils.parseJson(
+            UTF8String.fromString(if (legacy) "2" else "1"))
+          // The single-pass analyzer does not support the RDD deserializer.
+          QueryTest.checkAnswer(result, Seq(Row(expected, expected)), checkToRDD = false)
+        }
+      }
+    }
+  }
+
   test("non-literal variant_get") {
     def rows(results: Any*): Seq[Row] = results.map(Row(_))
 
