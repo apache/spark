@@ -18,11 +18,11 @@
 package org.apache.spark.sql.catalyst.analysis
 
 import org.apache.spark.sql.catalyst.dsl.expressions._
-import org.apache.spark.sql.catalyst.expressions.{Attribute, AttributeReference, AttributeSet}
+import org.apache.spark.sql.catalyst.expressions.{Attribute, AttributeReference, AttributeSet, Expression}
 import org.apache.spark.sql.catalyst.optimizer.SimpleTestOptimizer
 import org.apache.spark.sql.catalyst.parser.CatalystSqlParser
 import org.apache.spark.sql.catalyst.plans.logical.{EventTimeWatermark, Filter, LeafNode, Statistics}
-import org.apache.spark.sql.types.{IntegerType, LongType, MetadataBuilder, TimestampType}
+import org.apache.spark.sql.types.{DecimalType, DoubleType, FloatType, IntegerType, LongType, MetadataBuilder, TimestampType}
 
 class StreamingJoinHelperSuite extends AnalysisTest {
 
@@ -46,6 +46,27 @@ class StreamingJoinHelperSuite extends AnalysisTest {
           Some(condition), Some(10000L)) === expected)
       }
     }
+  }
+
+  test("find truncating casts in conjuncts on the given columns") {
+    val leftTime = AttributeReference("leftTime", TimestampType)()
+    val rightTime = AttributeReference("rightTime", TimestampType)()
+    val other = AttributeReference("other", LongType)()
+    val times = AttributeSet(Seq(leftTime, rightTime))
+    def truncates(condition: Expression): Boolean =
+      StreamingJoinHelper.hasTruncatingCast(Some(condition), times)
+
+    assert(truncates(leftTime.cast(LongType) > rightTime.cast(LongType)))
+    assert(truncates(leftTime.cast(IntegerType) > 0))
+    assert(truncates(leftTime.cast(FloatType) > rightTime.cast(DoubleType)))
+    assert(truncates(leftTime.cast(DecimalType(20, 3)) > 0))
+    assert(truncates((other > 0) && (leftTime.cast(LongType) > rightTime.cast(LongType))))
+    // Casts that keep every microsecond, or of an integral value.
+    assert(!truncates(leftTime.cast(DoubleType) > rightTime.cast(DoubleType)))
+    assert(!truncates(leftTime.cast(DecimalType(20, 6)) > 0))
+    assert(!truncates(leftTime.cast(TimestampType) > rightTime))
+    assert(!truncates(leftTime > rightTime && other.cast(IntegerType) > 0))
+    assert(!StreamingJoinHelper.hasTruncatingCast(None, times))
   }
 
   test("extract watermark from time condition") {
