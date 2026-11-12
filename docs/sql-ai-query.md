@@ -82,6 +82,14 @@ to the input before adding the inference column when previewing a workload.
 Spark can repeat billable calls when retrying a failed task. Persist results to reuse them
 across downstream jobs.
 
+For Databricks, `timeout` is a per-row budget across authentication, HTTP attempts, and
+retry delays. Each HTTP attempt uses the budget remaining after authentication. Successful
+responses received after expiry are rejected with `AI_QUERY_INVOCATION_FAILED.TIMEOUT`,
+which produces null with `on_error="null"`. Authentication and in-progress response downloads
+can delay timeout reporting beyond the budget. The HTTP timeout limits connection and read
+inactivity, so a response that keeps delivering bytes can continue downloading past expiry.
+Bedrock uses the SDK's connection and read timeouts.
+
 ## Validation
 
 The suite checks registration, authentication, HTTP errors and retries, response parsing,

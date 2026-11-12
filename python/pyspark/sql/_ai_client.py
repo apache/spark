@@ -230,6 +230,13 @@ class _ChatCompletionsClient:
     def close(self) -> None:
         self.http.close()
 
+    @staticmethod
+    def _remaining_timeout(deadline: float) -> float:
+        remaining = deadline - time.monotonic()
+        if remaining <= 0:
+            raise _invocation_error("Databricks model", "TIMEOUT")
+        return remaining
+
     def invoke(self, request: str) -> str:
         import requests
 
@@ -241,15 +248,15 @@ class _ChatCompletionsClient:
         deadline = time.monotonic() + self.endpoint.timeout
         attempt = 0
         while True:
-            remaining = deadline - time.monotonic()
-            if remaining <= 0:
-                raise _invocation_error("Databricks model", "TIMEOUT")
+            self._remaining_timeout(deadline)
             retry_headers: Mapping[str, str] = {}
             retry_status: Optional[int] = None
             try:
+                headers = self.workspace.config.authenticate()
+                remaining = self._remaining_timeout(deadline)
                 with self.http.post(
                     self.url,
-                    headers=self.workspace.config.authenticate(),
+                    headers=headers,
                     json=body,
                     timeout=remaining,
                     allow_redirects=False,
@@ -279,6 +286,8 @@ class _ChatCompletionsClient:
                             ) from None
                         if not isinstance(text, str) or not text.strip():
                             raise _invocation_error("Databricks model", "EMPTY_RESPONSE")
+                        # A response received after the budget expires cannot become a success.
+                        self._remaining_timeout(deadline)
                         return text
             except requests.exceptions.InvalidProxyURL:
                 raise

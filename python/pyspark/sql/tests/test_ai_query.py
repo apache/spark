@@ -17,6 +17,7 @@
 
 import json
 import threading
+import time
 import traceback
 import unittest
 from datetime import datetime, timezone
@@ -355,7 +356,7 @@ class AIQueryTests(unittest.TestCase, PySparkErrorTestUtils):
             "private diagnostic"
         )
         with (
-            patch("pyspark.sql._ai_client.time.monotonic", side_effect=[0, 0, 2, 2]),
+            patch("pyspark.sql._ai_client.time.monotonic", side_effect=[0, 0, 0, 2, 2]),
             patch("pyspark.sql._ai_client.time.sleep") as sleep,
             self.assertRaises(PySparkRuntimeError) as raised,
         ):
@@ -503,11 +504,103 @@ class AIQueryTests(unittest.TestCase, PySparkErrorTestUtils):
         self.assertNotIn("private diagnostic", str(raised.exception))
         self.assertEqual(client.http.post.call_count, 2)
 
+    def test_authentication_time_reduces_http_timeout(self):
+        client = self.client(timeout=5)
+        client.http.post.return_value = self.response(choices=[{"message": {"content": "answer"}}])
+        with patch("pyspark.sql._ai_client.time.monotonic", side_effect=[0, 0, 2, 3]):
+            self.assertEqual(client.invoke("hello"), "answer")
+        self.assertEqual(client.http.post.call_args.kwargs["timeout"], 3)
+
+    def test_slow_authentication_exhausts_budget_before_post(self):
+        client = self.client(timeout=0.1, max_retries=0)
+
+        def authenticate():
+            time.sleep(0.2)
+            return {"Authorization": "Bearer test"}
+
+        client.workspace.config.authenticate.side_effect = authenticate
+        client.http.post.return_value = self.response(choices=[{"message": {"content": "answer"}}])
+        with self.assertRaises(PySparkRuntimeError) as raised:
+            client.invoke("hello")
+        self.check_error(
+            raised.exception, "AI_QUERY_INVOCATION_FAILED.TIMEOUT", {"target": "Databricks model"}
+        )
+        client.workspace.config.authenticate.assert_called_once()
+        client.http.post.assert_not_called()
+
+    def test_success_at_or_after_deadline_is_rejected(self):
+        for arrival in (1, 2):
+            with self.subTest(arrival=arrival):
+                client = self.client(timeout=1)
+                response = self.response(choices=[{"message": {"content": "private answer"}}])
+                client.http.post.return_value = response
+                with (
+                    patch("pyspark.sql._ai_client.time.monotonic", side_effect=[0, 0, 0, arrival]),
+                    self.assertRaises(PySparkRuntimeError) as raised,
+                ):
+                    client.invoke("private prompt")
+                self.check_error(
+                    raised.exception,
+                    "AI_QUERY_INVOCATION_FAILED.TIMEOUT",
+                    {"target": "Databricks model"},
+                )
+                client.http.post.assert_called_once()
+                response.__exit__.assert_called_once()
+
+    def test_slow_http_download_returns_null_and_closes_client(self):
+        received = []
+        body = json.dumps({"choices": [{"message": {"content": "answer"}}]}).encode()
+
+        class Handler(BaseHTTPRequestHandler):
+            def do_POST(self):
+                self.rfile.read(int(self.headers["Content-Length"]))
+                received.append(self.path)
+                self.send_response(200)
+                self.send_header("Content-Type", "application/json")
+                self.send_header("Content-Length", str(len(body)))
+                self.end_headers()
+                for offset in range(0, len(body), 2):
+                    self.wfile.write(body[offset : offset + 2])
+                    self.wfile.flush()
+                    if offset + 2 < len(body):
+                        time.sleep(0.05)
+
+            def log_message(self, *args):
+                pass
+
+        with ThreadingHTTPServer(("127.0.0.1", 0), Handler) as server:
+            thread = threading.Thread(target=server.serve_forever, daemon=True)
+            thread.start()
+            client = self.client(timeout=0.5, max_retries=0)
+            client.url = f"http://127.0.0.1:{server.server_port}/invocations"
+            client.http = requests.Session()
+            client.http.trust_env = False
+            try:
+                with (
+                    patch("pyspark.sql._ai_client._ChatCompletionsClient", return_value=client),
+                    patch.object(client, "close", wraps=client.close) as close,
+                ):
+                    started = time.monotonic()
+                    result = list(
+                        _query_batches(
+                            client.endpoint, iter([pd.Series(["hello"])]), on_error="null"
+                        )
+                    )
+                    elapsed = time.monotonic() - started
+                    self.assertEqual(result[0].tolist(), [None])
+                    self.assertGreaterEqual(elapsed, client.endpoint.timeout)
+                    close.assert_called_once()
+                self.assertEqual(received, ["/invocations"])
+            finally:
+                client.close()
+                server.shutdown()
+                thread.join()
+
     def test_retry_deadline(self):
         client = self.client(timeout=1)
         client.http.post.return_value = self.response(429)
         with (
-            patch("pyspark.sql._ai_client.time.monotonic", side_effect=[0, 0, 2, 2]),
+            patch("pyspark.sql._ai_client.time.monotonic", side_effect=[0, 0, 0, 2, 2]),
             patch("pyspark.sql._ai_client.time.sleep"),
             self.assertRaises(PySparkRuntimeError) as raised,
         ):
