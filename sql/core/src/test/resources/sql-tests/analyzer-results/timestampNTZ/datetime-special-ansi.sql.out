@@ -24,3 +24,63 @@ select make_timestamp(-1969, 12, 31, 16, 0, 0.0), make_timestamp(-15, 3, 18, 16,
 -- !query analysis
 Project [make_timestamp(-1969, 12, 31, 16, 0, cast(0.0 as decimal(16,6)), None, Some(America/Los_Angeles), true, TimestampNTZType) AS make_timestamp(-1969, 12, 31, 16, 0, 0.0)#x, make_timestamp(-15, 3, 18, 16, 0, cast(0.0 as decimal(16,6)), None, Some(America/Los_Angeles), true, TimestampNTZType) AS make_timestamp(-15, 3, 18, 16, 0, 0.0)#x, make_timestamp(99999, 3, 18, 12, 3, cast(17.0 as decimal(16,6)), None, Some(America/Los_Angeles), true, TimestampNTZType) AS make_timestamp(99999, 3, 18, 12, 3, 17.0)#x]
 +- OneRowRelation
+
+
+-- !query
+select next_day(date'-5877641-06-23', 'MO'), next_day(date'-5877641-06-23', 'FR')
+-- !query analysis
+[Analyzer test output redacted due to nondeterminism]
+
+
+-- !query
+select next_day(date'+5881580-07-04', 'FR')
+-- !query analysis
+[Analyzer test output redacted due to nondeterminism]
+
+
+-- !query
+select next_day(date'+5881580-07-11', 'MO')
+-- !query analysis
+[Analyzer test output redacted due to nondeterminism]
+
+
+-- !query
+select last_day(date'-5877641-06-23'), last_day(date'+5881580-06-30')
+-- !query analysis
+[Analyzer test output redacted due to nondeterminism]
+
+
+-- !query
+select last_day(date'+5881580-07-11')
+-- !query analysis
+[Analyzer test output redacted due to nondeterminism]
+
+
+-- !query
+select trunc(date'-5877641-06-29', 'WEEK'), trunc(date'-5877641-07-01', 'WEEK'), trunc(date'-5877641-07-01', 'MM'), trunc(date'-5877641-07-01', 'QUARTER'), trunc(date'-5877640-06-23', 'YEAR')
+-- !query analysis
+[Analyzer test output redacted due to nondeterminism]
+
+
+-- !query
+select trunc(date'-5877641-06-28', 'WEEK')
+-- !query analysis
+[Analyzer test output redacted due to nondeterminism]
+
+
+-- !query
+select trunc(date'-5877641-06-30', 'MONTH')
+-- !query analysis
+[Analyzer test output redacted due to nondeterminism]
+
+
+-- !query
+select trunc(date'-5877641-06-23', 'QUARTER')
+-- !query analysis
+[Analyzer test output redacted due to nondeterminism]
+
+
+-- !query
+select trunc(date'-5877641-12-31', 'YEAR')
+-- !query analysis
+[Analyzer test output redacted due to nondeterminism]

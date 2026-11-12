@@ -392,6 +392,19 @@ object CharVarcharUtils extends Logging with SparkCharVarcharUtils {
   }
 
   /**
+   * Matches the read-side CHAR padding that [[addPaddingForScan]] wraps a column in (when
+   * standard semantics are off) and extracts the padded expression and the CHAR length.
+   */
+  private[sql] object ReadSidePadding {
+    def unapply(e: Expression): Option[(Expression, Int)] = e match {
+      case s @ StaticInvoke(_, _, READ_SIDE_PADDING, Seq(child, Literal(n: Int, _)), _, _, _, _,
+          None) if s.staticObject == classOf[CharVarcharCodegenUtils] =>
+        Some((child, n))
+      case _ => None
+    }
+  }
+
+  /**
    * Return expressions to apply char type padding for the string comparison between the given
    * attributes. When comparing two char type columns/fields, we need to pad the shorter one to
    * the longer length.
