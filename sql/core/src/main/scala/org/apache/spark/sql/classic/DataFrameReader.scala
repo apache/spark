@@ -162,10 +162,11 @@ class DataFrameReader private[sql](sparkSession: SparkSession)
 
   /** @inheritdoc */
   def json(jsonDataset: sql.Dataset[String]): DataFrame = {
-    val parsedOptions = new JSONOptions(
-      extraOptions.toMap,
+    def jsonOptions(parameters: Map[String, String]): JSONOptions = new JSONOptions(
+      parameters,
       sparkSession.sessionState.conf.sessionLocalTimeZone,
       sparkSession.sessionState.conf.columnNameOfCorruptRecord)
+    val parsedOptions = jsonOptions(extraOptions.toMap)
 
     // Each element of the input dataset is already one JSON document, so the embedded array
     // splitting can never apply.
@@ -182,18 +183,26 @@ class DataFrameReader private[sql](sparkSession: SparkSession)
       TextInputJsonDataSource.inferFromDataset(jsonDataset, parsedOptions)
     }
 
-    ExprUtils.verifyColumnNameOfCorruptRecord(schema, parsedOptions.columnNameOfCorruptRecord)
+    // Resolve the corrupt record column once, here on the driver, also checking its type. The
+    // options used from here on carry the resolved name, so every later comparison, including
+    // the ones on executors, is exact.
+    val rawOptions = extraOptions.toMap
+    val resolvedOptions = ExprUtils.withResolvedColumnNameOfCorruptRecord(
+      rawOptions, schema, parsedOptions.columnNameOfCorruptRecord,
+      sparkSession.sessionState.conf.columnNameOfCorruptRecordExactMatch)
+    val readOptions =
+      if (resolvedOptions eq rawOptions) parsedOptions else jsonOptions(resolvedOptions)
     val actualSchema =
-      StructType(schema.filterNot(_.name == parsedOptions.columnNameOfCorruptRecord))
+      StructType(schema.filterNot(_.name == readOptions.columnNameOfCorruptRecord))
 
     val createParser = CreateJacksonParser.string _
     val parsed = jsonDataset.rdd.mapPartitions { iter =>
-      val rawParser = new JacksonParser(actualSchema, parsedOptions, allowArrayAsStructs = true)
+      val rawParser = new JacksonParser(actualSchema, readOptions, allowArrayAsStructs = true)
       val parser = new FailureSafeParser[String](
         input => rawParser.parse(input, createParser, UTF8String.fromString),
-        parsedOptions.parseMode,
+        readOptions.parseMode,
         schema,
-        parsedOptions.columnNameOfCorruptRecord)
+        readOptions.columnNameOfCorruptRecord)
       iter.flatMap(parser.parse)
     }
     sparkSession.internalCreateDataFrame(parsed, schema, isStreaming = jsonDataset.isStreaming)
@@ -204,10 +213,11 @@ class DataFrameReader private[sql](sparkSession: SparkSession)
 
   /** @inheritdoc */
   def csv(csvDataset: sql.Dataset[String]): DataFrame = {
-    val parsedOptions: CSVOptions = new CSVOptions(
-      extraOptions.toMap,
+    def csvOptions(parameters: Map[String, String]): CSVOptions = new CSVOptions(
+      parameters,
       sparkSession.sessionState.conf.csvColumnPruning,
       sparkSession.sessionState.conf.sessionLocalTimeZone)
+    val parsedOptions: CSVOptions = csvOptions(extraOptions.toMap)
     val filteredLines: Dataset[String] =
       CSVUtils.filterCommentAndEmpty(csvDataset, parsedOptions)
 
@@ -236,26 +246,34 @@ class DataFrameReader private[sql](sparkSession: SparkSession)
         parsedOptions)
     }
 
-    ExprUtils.verifyColumnNameOfCorruptRecord(schema, parsedOptions.columnNameOfCorruptRecord)
+    // Resolve the corrupt record column once, here on the driver, also checking its type. The
+    // options used from here on carry the resolved name, so every later comparison, including
+    // the ones on executors, is exact.
+    val rawOptions = extraOptions.toMap
+    val resolvedOptions = ExprUtils.withResolvedColumnNameOfCorruptRecord(
+      rawOptions, schema, parsedOptions.columnNameOfCorruptRecord,
+      sparkSession.sessionState.conf.columnNameOfCorruptRecordExactMatch)
+    val readOptions =
+      if (resolvedOptions eq rawOptions) parsedOptions else csvOptions(resolvedOptions)
     val actualSchema =
-      StructType(schema.filterNot(_.name == parsedOptions.columnNameOfCorruptRecord))
+      StructType(schema.filterNot(_.name == readOptions.columnNameOfCorruptRecord))
 
     val linesWithoutHeader: RDD[String] = maybeFirstLine.map { firstLine =>
       val headerChecker = new CSVHeaderChecker(
         actualSchema,
-        parsedOptions,
+        readOptions,
         source = s"CSV source: $csvDataset")
       headerChecker.checkHeaderColumnNames(firstLine)
-      filteredLines.rdd.mapPartitions(CSVUtils.filterHeaderLine(_, firstLine, parsedOptions))
+      filteredLines.rdd.mapPartitions(CSVUtils.filterHeaderLine(_, firstLine, readOptions))
     }.getOrElse(filteredLines.rdd)
 
     val parsed = linesWithoutHeader.mapPartitions { iter =>
-      val rawParser = new UnivocityParser(actualSchema, parsedOptions)
+      val rawParser = new UnivocityParser(actualSchema, readOptions)
       val parser = new FailureSafeParser[String](
         input => rawParser.parse(input),
-        parsedOptions.parseMode,
+        readOptions.parseMode,
         schema,
-        parsedOptions.columnNameOfCorruptRecord)
+        readOptions.columnNameOfCorruptRecord)
       iter.flatMap(parser.parse)
     }
     sparkSession.internalCreateDataFrame(parsed, schema, isStreaming = csvDataset.isStreaming)
@@ -290,6 +308,8 @@ class DataFrameReader private[sql](sparkSession: SparkSession)
     }
 
     ExprUtils.verifyColumnNameOfCorruptRecord(schema, parsedOptions.columnNameOfCorruptRecord)
+    // TODO: XML matches `columnNameOfCorruptRecord` exactly. Resolve it with
+    // `ExprUtils.resolveColumnNameOfCorruptRecord`, as the CSV and JSON readers do.
     val actualSchema =
       StructType(schema.filterNot(_.name == parsedOptions.columnNameOfCorruptRecord))
 

@@ -180,7 +180,7 @@ Data source options of JSON can be set via:
   <tr>
     <td><code>columnNameOfCorruptRecord</code></td>
     <td>(value of <code>spark.sql.columnNameOfCorruptRecord</code> configuration)</td>
-    <td>Allows renaming the new field having malformed string created by <code>PERMISSIVE</code> mode. This overrides spark.sql.columnNameOfCorruptRecord.</td>
+    <td>Allows renaming the new field having malformed string created by <code>PERMISSIVE</code> mode. This overrides spark.sql.columnNameOfCorruptRecord. The field is matched against the schema with the case sensitivity set by <code>spark.sql.caseSensitive</code>, and a field named exactly like this option takes precedence.</td>
     <td>read</td>
   </tr>
   <tr>

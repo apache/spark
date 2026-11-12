@@ -104,14 +104,22 @@ case class CSVFileFormat() extends TextBasedFileFormat with DataSourceRegister {
       hadoopConf: Configuration): (PartitionedFile) => Iterator[InternalRow] = {
     val broadcastedHadoopConf =
       SerializableConfiguration.broadcast(sparkSession.sparkContext, hadoopConf)
-    val parsedOptions = getCsvOptions(sparkSession, options)
+    // Resolve the corrupt record column once, here on the driver, also checking its type. The
+    // options carry the resolved name, so every later comparison, including the ones in the
+    // per-file closure and the parsers, is exact.
+    val initialOptions = getCsvOptions(sparkSession, options)
+    val resolvedOptions = ExprUtils.withResolvedColumnNameOfCorruptRecord(
+      options, dataSchema, initialOptions.columnNameOfCorruptRecord,
+      getSqlConf(sparkSession).columnNameOfCorruptRecordExactMatch)
+    val parsedOptions = if (resolvedOptions eq options) {
+      initialOptions
+    } else {
+      getCsvOptions(sparkSession, resolvedOptions)
+    }
     val isColumnPruningEnabled = parsedOptions.isColumnPruningEnabled(requiredSchema)
     // The effective `ignoredPathSegmentRegex` for skipping hidden archive entries. Reused from the
     // options' lazily-compiled Pattern (Serializable) instead of re-compiling per file or entry.
     val ignoredPathSegmentRegex = parsedOptions.ignoredPathSegmentRegexPattern
-
-    // Check a field requirement for corrupt records here to throw an exception in a driver side
-    ExprUtils.verifyColumnNameOfCorruptRecord(dataSchema, parsedOptions.columnNameOfCorruptRecord)
 
     if (requiredSchema.length == 1 &&
       requiredSchema.head.name == parsedOptions.columnNameOfCorruptRecord) {

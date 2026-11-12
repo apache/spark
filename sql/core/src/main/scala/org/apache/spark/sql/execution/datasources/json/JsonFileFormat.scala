@@ -91,11 +91,20 @@ case class JsonFileFormat() extends TextBasedFileFormat with DataSourceRegister 
       hadoopConf: Configuration): PartitionedFile => Iterator[InternalRow] = {
     val broadcastedHadoopConf =
       SerializableConfiguration.broadcast(sparkSession.sparkContext, hadoopConf)
-    val parsedOptions = getJsonOptions(sparkSession, options)
+    // Resolve the corrupt record column once, here on the driver, also checking its type. The
+    // options carry the resolved name, so every later comparison, including the ones in the
+    // parsers, is exact.
+    val initialOptions = getJsonOptions(sparkSession, options)
+    val resolvedOptions = ExprUtils.withResolvedColumnNameOfCorruptRecord(
+      options, dataSchema, initialOptions.columnNameOfCorruptRecord,
+      getSqlConf(sparkSession).columnNameOfCorruptRecordExactMatch)
+    val parsedOptions = if (resolvedOptions eq options) {
+      initialOptions
+    } else {
+      getJsonOptions(sparkSession, resolvedOptions)
+    }
     val actualSchema =
       StructType(requiredSchema.filterNot(_.name == parsedOptions.columnNameOfCorruptRecord))
-    // Check a field requirement for corrupt records here to throw an exception in a driver side
-    ExprUtils.verifyColumnNameOfCorruptRecord(dataSchema, parsedOptions.columnNameOfCorruptRecord)
 
     if (requiredSchema.length == 1 &&
       requiredSchema.head.name == parsedOptions.columnNameOfCorruptRecord) {

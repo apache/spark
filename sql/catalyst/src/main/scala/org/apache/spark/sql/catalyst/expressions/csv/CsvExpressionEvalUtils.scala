@@ -35,7 +35,8 @@ case class CsvToStructsEvaluator(
     nullableSchema: StructType,
     nameOfCorruptRecord: String,
     timeZoneId: Option[String],
-    requiredSchema: Option[StructType]) {
+    requiredSchema: Option[StructType],
+    corruptRecordExactMatch: Boolean) {
 
   // This converts parsed rows to the desired output by the given schema.
   @transient
@@ -57,32 +58,41 @@ case class CsvToStructsEvaluator(
     // scalastyle:off nonascii
     val exprOptions = options ++ Map("lineSep" -> '\uFFFF'.toString)
     // scalastyle:on nonascii
-    val parsedOptions = new CSVOptions(
-      exprOptions,
+    def csvOptions(parameters: Map[String, String]): CSVOptions = new CSVOptions(
+      parameters,
       columnPruning = true,
       defaultTimeZoneId = timeZoneId.get,
       defaultColumnNameOfCorruptRecord = nameOfCorruptRecord)
+    // Resolve the corrupt record column once, also checking its type, and parse with options
+    // that carry the resolved name, so that every comparison below is exact.
+    val initialOptions = csvOptions(exprOptions)
+    val resolvedOptions = ExprUtils.withResolvedColumnNameOfCorruptRecord(
+      exprOptions, nullableSchema, initialOptions.columnNameOfCorruptRecord,
+      corruptRecordExactMatch)
+    val parsedOptions =
+      if (resolvedOptions eq exprOptions) initialOptions else csvOptions(resolvedOptions)
     val mode = parsedOptions.parseMode
     if (mode != PermissiveMode && mode != FailFastMode) {
       throw QueryCompilationErrors.parseModeUnsupportedError("from_csv", mode)
     }
     DataSourceOptions.validateSingleVariantColumn(parsedOptions.parameters, Some(nullableSchema))
-    ExprUtils.verifyColumnNameOfCorruptRecord(
-      nullableSchema,
-      parsedOptions.columnNameOfCorruptRecord)
 
     val actualSchema =
       StructType(nullableSchema.filterNot(_.name == parsedOptions.columnNameOfCorruptRecord))
+    // The schema of the rows this returns: the pruned one when the optimizer asked for a
+    // single field, the full one otherwise.
+    val outputSchema = requiredSchema.map(_.asNullable).getOrElse(nullableSchema)
     val actualRequiredSchema =
-      StructType(requiredSchema.map(_.asNullable).getOrElse(nullableSchema)
-        .filterNot(_.name == parsedOptions.columnNameOfCorruptRecord))
+      StructType(outputSchema.filterNot(_.name == parsedOptions.columnNameOfCorruptRecord))
     val rawParser = new UnivocityParser(actualSchema,
       actualRequiredSchema,
       parsedOptions)
     new FailureSafeParser[String](
       input => rawParser.parse(input),
       mode,
-      nullableSchema,
+      // Not `nullableSchema`: the parser emits rows of the required schema, and
+      // `FailureSafeParser` copies them by position.
+      outputSchema,
       parsedOptions.columnNameOfCorruptRecord)
   }
 

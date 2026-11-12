@@ -661,6 +661,69 @@ class CsvFunctionsSuite extends SharedSparkSession {
     }
   }
 
+  test("SPARK-59629: from_csv resolves a case variant of the corrupt record column") {
+    Seq("true", "false").foreach { enabled =>
+      withSQLConf(SQLConf.CSV_EXPRESSION_OPTIMIZATION.key -> enabled) {
+        // A non-local input, so that the pruning rule sees the extractions below.
+        def parsed(schema: String): DataFrame = sparkContext.parallelize(Seq("1,x", "y,z"))
+          .toDF("csv")
+          .selectExpr(s"from_csv(csv, '$schema') as parsed")
+        Seq("_corrupt_record", "_CORRUPT_RECORD").foreach { corrupt =>
+          val df = parsed(s"a int, b string, $corrupt string")
+          checkAnswer(df, Row(Row(1, "x", null)) :: Row(Row(null, "z", "y,z")) :: Nil)
+          // Extracting the corrupt record column alone still returns the raw line.
+          checkAnswer(df.selectExpr(s"parsed.$corrupt"), Row(null) :: Row("y,z") :: Nil)
+          // Extracting an ordinary field returns what the whole struct holds for it, wherever
+          // the corrupt record field is declared.
+          checkAnswer(df.selectExpr("parsed.b"), Row("x") :: Row("z") :: Nil)
+          checkAnswer(
+            parsed(s"$corrupt string, a int, b string").selectExpr("parsed.b"),
+            Row("x") :: Row("z") :: Nil)
+        }
+
+        // Under case-sensitive resolution the variant is an ordinary field.
+        withSQLConf(SQLConf.CASE_SENSITIVE.key -> "true") {
+          checkAnswer(
+            parsed("a string, _CORRUPT_RECORD string").selectExpr("parsed._CORRUPT_RECORD"),
+            Row("x") :: Row("z") :: Nil)
+        }
+      }
+    }
+  }
+
+  test("SPARK-59629: from_csv decides the corrupt record column when it is analyzed") {
+    def parsed(): DataFrame = sparkContext.parallelize(Seq("1,x"))
+      .toDF("csv")
+      .selectExpr("from_csv(csv, 'a int, _CORRUPT_RECORD string') as parsed")
+    // `_CORRUPT_RECORD` as data holds the second token. As the corrupt record column it leaves
+    // the parser one column for two tokens, which makes the line malformed.
+    val asData = Row(Row(1, "x")) :: Nil
+    val asCorruptRecord = Row(Row(1, "1,x")) :: Nil
+
+    Seq(
+      SQLConf.CASE_SENSITIVE.key,
+      SQLConf.LEGACY_COLUMN_NAME_OF_CORRUPT_RECORD_EXACT_MATCH.key).foreach { exactMatchConf =>
+      withSQLConf(exactMatchConf -> "true") {
+        val df = parsed()
+        checkAnswer(df, asData)
+        // A `Dataset.rdd` action runs its tasks without the session's SQL configuration.
+        assert(df.rdd.collect().toSeq === asData)
+        // The extraction is pruned as the ordinary field it is.
+        checkAnswer(df.selectExpr("parsed._CORRUPT_RECORD"), Row("x") :: Nil)
+        assert(df.selectExpr("parsed._CORRUPT_RECORD").rdd.collect().toSeq === Row("x") :: Nil)
+      }
+
+      // The setting in force when the plan is analyzed decides, not the one at execution.
+      val exact = withSQLConf(exactMatchConf -> "true")(parsed())
+      assert(exact.collect().toSeq === asData)
+      val caseInsensitive = parsed()
+      withSQLConf(exactMatchConf -> "true") {
+        assert(caseInsensitive.collect().toSeq === asCorruptRecord)
+      }
+    }
+    assert(parsed().rdd.collect().toSeq === asCorruptRecord)
+  }
+
   test("SPARK-35998: Make from_csv/to_csv to handle year-month intervals properly") {
     val ymDF = Seq(Period.of(1, 2, 0)).toDF()
     Seq(

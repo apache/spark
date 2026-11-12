@@ -1598,6 +1598,99 @@ abstract class CSVSuite
     }
   }
 
+  test("SPARK-59629: columnNameOfCorruptRecord honors spark.sql.caseSensitive") {
+    val schema = new StructType().add("a", IntegerType).add("b", DateType)
+    val columnNameOfCorruptRecord = "_unparsed"
+    // The schema declares the corrupt record field in a different case to the option value.
+    val schemaWithCorrField =
+      schema.add(columnNameOfCorruptRecord.toUpperCase(Locale.ROOT), StringType)
+
+    withTempPath { dir =>
+      val path = dir.getCanonicalPath
+      Seq("0,2013-111_11 12:13:14", "1,1983-08-04").toDF("value").write.text(path)
+
+      def read(): DataFrame = spark
+        .read
+        .option("mode", "PERMISSIVE")
+        .option("columnNameOfCorruptRecord", columnNameOfCorruptRecord)
+        .schema(schemaWithCorrField)
+        .csv(path)
+
+      // Case-insensitive resolution is the default, so the malformed record is captured even
+      // though the schema spells the field `_UNPARSED`.
+      withSQLConf(SQLConf.CASE_SENSITIVE.key -> "false") {
+        checkAnswer(read(),
+          Row(0, null, "0,2013-111_11 12:13:14") ::
+          Row(1, java.sql.Date.valueOf("1983-08-04"), null) ::
+          Nil)
+        // A query for the corrupt record column alone is rejected, as for an exact name.
+        checkError(
+          exception = intercept[AnalysisException] {
+            read().select("_UNPARSED").collect()
+          },
+          condition = "UNSUPPORTED_FEATURE.QUERY_ONLY_CORRUPT_RECORD_COLUMN",
+          parameters = Map.empty)
+      }
+
+      // Under case-sensitive resolution the names genuinely differ, so `_UNPARSED` stays an
+      // ordinary data column and no record is captured in it.
+      withSQLConf(SQLConf.CASE_SENSITIVE.key -> "true") {
+        checkAnswer(read(),
+          Row(0, null, null) ::
+          Row(1, java.sql.Date.valueOf("1983-08-04"), null) ::
+          Nil)
+      }
+    }
+  }
+
+  test("SPARK-59629: csv(Dataset[String]) resolves the corrupt record column once") {
+    val malformed = "0,2013-111_11 12:13:14"
+    val ds = Seq(malformed, "1,1983-08-04").toDS()
+    // The corrupt record field comes first, so that a reader which failed to leave it out of
+    // the parser schema would shift the data columns.
+    val schema = new StructType()
+      .add("_UNPARSED", StringType)
+      .add("a", IntegerType)
+      .add("b", DateType)
+    def read(): DataFrame =
+      spark.read.option("columnNameOfCorruptRecord", "_unparsed").schema(schema).csv(ds)
+
+    val captured =
+      Row(malformed, 0, null) :: Row(null, 1, java.sql.Date.valueOf("1983-08-04")) :: Nil
+    checkAnswer(read(), captured)
+
+    // The field is decided when the DataFrame is created, so running it under another setting
+    // cannot make the parser and the corrupt record handling disagree.
+    val df = read()
+    withSQLConf(SQLConf.CASE_SENSITIVE.key -> "true") {
+      checkAnswer(df, captured)
+    }
+  }
+
+  test("SPARK-59629: the legacy flag restores exact matching of the corrupt record column") {
+    val malformed = "0,2013-111_11 12:13:14"
+    val schema = new StructType()
+      .add("a", IntegerType)
+      .add("b", DateType)
+      .add("_UNPARSED", StringType)
+    val date = java.sql.Date.valueOf("1983-08-04")
+    withTempPath { dir =>
+      val path = dir.getCanonicalPath
+      Seq(malformed, "1,1983-08-04").toDF("value").write.text(path)
+      val reader = spark.read.option("columnNameOfCorruptRecord", "_unparsed").schema(schema)
+      val reads = Seq(
+        () => reader.csv(path),
+        () => reader.csv(spark.read.text(path).as[String]))
+      reads.foreach { read =>
+        checkAnswer(read(), Row(0, null, malformed) :: Row(1, date, null) :: Nil)
+        // With the flag `_UNPARSED` is an ordinary data column, as it was before.
+        withSQLConf(SQLConf.LEGACY_COLUMN_NAME_OF_CORRUPT_RECORD_EXACT_MATCH.key -> "true") {
+          checkAnswer(read(), Row(0, null, null) :: Row(1, date, null) :: Nil)
+        }
+      }
+    }
+  }
+
   test("Enabling/disabling ignoreCorruptFiles/ignoreMissingFiles") {
     withCorruptFile(inputFile => {
       withSQLConf(SQLConf.IGNORE_CORRUPT_FILES.key -> "false") {

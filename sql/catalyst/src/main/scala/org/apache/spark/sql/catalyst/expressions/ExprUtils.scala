@@ -20,18 +20,20 @@ package org.apache.spark.sql.catalyst.expressions
 import java.text.{DecimalFormat, DecimalFormatSymbols, ParsePosition}
 import java.util.Locale
 
+import org.apache.spark.sql.catalyst.DataSourceOptions
 import org.apache.spark.sql.catalyst.analysis._
 import org.apache.spark.sql.catalyst.analysis.TypeCheckResult
 import org.apache.spark.sql.catalyst.analysis.TypeCheckResult.{DataTypeMismatch, TypeCheckSuccess}
 import org.apache.spark.sql.catalyst.expressions.aggregate.AggregateExpression
 import org.apache.spark.sql.catalyst.optimizer.ReplaceExpressions
 import org.apache.spark.sql.catalyst.plans.logical.Aggregate
+import org.apache.spark.sql.catalyst.trees.CurrentOrigin
 import org.apache.spark.sql.catalyst.trees.TreePattern.PLAN_EXPRESSION
-import org.apache.spark.sql.catalyst.util.{ArrayBasedMapData, CharVarcharUtils}
+import org.apache.spark.sql.catalyst.util.{ArrayBasedMapData, CaseInsensitiveMap, CharVarcharUtils}
 import org.apache.spark.sql.errors.{QueryCompilationErrors, QueryErrorsBase, QueryExecutionErrors}
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.internal.types.{AbstractMapType, StringTypeWithCollation}
-import org.apache.spark.sql.types.{BooleanType, DataType, DateType, DecimalType, DoubleType, FileType, FloatType, FractionalType, MapType, NumericType, StringHelper, StringType, StructType, TimestampNTZType, TimestampType, UserDefinedType, VariantType}
+import org.apache.spark.sql.types.{BooleanType, DataType, DateType, DecimalType, DoubleType, FileType, FloatType, FractionalType, MapType, NumericType, StringHelper, StringType, StructField, StructType, TimestampNTZType, TimestampType, UserDefinedType, VariantType}
 import org.apache.spark.unsafe.types.UTF8String
 
 object ExprUtils extends EvalHelper with QueryErrorsBase {
@@ -96,8 +98,114 @@ object ExprUtils extends EvalHelper with QueryErrorsBase {
   }
 
   /**
-   * A convenient function for schema validation in datasources supporting
-   * `columnNameOfCorruptRecord` as an option.
+   * The fields of `schema` that `columnNameOfCorruptRecord` can refer to. A field named exactly
+   * like the option always wins, so a schema that already works keeps its meaning. Otherwise,
+   * unless `exactMatch` is set, these are the fields that match the name ignoring case.
+   */
+  private def corruptRecordCandidates(
+      schema: StructType,
+      columnNameOfCorruptRecord: String,
+      exactMatch: Boolean): Seq[StructField] = {
+    if (columnNameOfCorruptRecord == null) {
+      // `from_csv` holds the name in a transient field, so it reads back as null after the
+      // expression is serialized. A null never names a field.
+      Nil
+    } else {
+      val exact = schema.fields.filter(_.name == columnNameOfCorruptRecord)
+      if (exact.nonEmpty || exactMatch) {
+        exact.toSeq
+      } else {
+        schema.fields.filter(_.name.equalsIgnoreCase(columnNameOfCorruptRecord)).toSeq
+      }
+    }
+  }
+
+  /**
+   * Decides which field of `schema` is the corrupt record column of a CSV or JSON reader and
+   * returns that field's exact name. When no field matches, the name is returned unchanged.
+   * Several fields that match only ignoring case are ambiguous and are rejected.
+   *
+   * `exactMatch` is `SQLConf.columnNameOfCorruptRecordExactMatch`, read by the caller rather
+   * than here: the readers read it from the session when they are set up on the driver, while
+   * `from_csv` and `from_json` capture it when they are analyzed, because their parsers are
+   * built on executors, where the session's value is not reliably visible.
+   *
+   * A reader has to make this decision once and compare field names exactly against the result
+   * everywhere else, including on executors: the record parser drops the column from its schema
+   * and [[org.apache.spark.sql.catalyst.util.FailureSafeParser]] copies the parsed row back by
+   * position, so the two must agree on the field or values land in the wrong columns.
+   *
+   * This also checks that the resolved field is a nullable string, as
+   * [[verifyColumnNameOfCorruptRecord]] does, reporting the name as the user spelled it.
+   *
+   * XML does not resolve the name this way yet and still matches it exactly.
+   */
+  def resolveColumnNameOfCorruptRecord(
+      schema: StructType,
+      columnNameOfCorruptRecord: String,
+      exactMatch: Boolean): String = {
+    val candidates = corruptRecordCandidates(schema, columnNameOfCorruptRecord, exactMatch)
+    val names = candidates.map(_.name).distinct
+    if (names.length > 1) {
+      throw QueryCompilationErrors.ambiguousColumnOrFieldError(
+        Seq(columnNameOfCorruptRecord), names.length, CurrentOrigin.get)
+    }
+    candidates.foreach { f =>
+      if (!f.dataType.isInstanceOf[StringType] || !f.nullable) {
+        throw QueryCompilationErrors.invalidFieldTypeForCorruptRecordError(
+          columnNameOfCorruptRecord, f.dataType)
+      }
+    }
+    names.headOption.getOrElse(columnNameOfCorruptRecord)
+  }
+
+  /**
+   * Returns the reader `options` with `columnNameOfCorruptRecord` set to the name
+   * [[resolveColumnNameOfCorruptRecord]] picks for `schema`, so that the options a reader hands
+   * to its parsers carry the resolved name. When the name is already the resolved one, this
+   * returns `options` itself, which lets a caller keep the options object it has already built.
+   */
+  def withResolvedColumnNameOfCorruptRecord(
+      options: Map[String, String],
+      schema: StructType,
+      columnNameOfCorruptRecord: String,
+      exactMatch: Boolean): Map[String, String] = {
+    val resolved = resolveColumnNameOfCorruptRecord(schema, columnNameOfCorruptRecord, exactMatch)
+    if (resolved == columnNameOfCorruptRecord) {
+      options
+    } else {
+      CaseInsensitiveMap(options) + (DataSourceOptions.COLUMN_NAME_OF_CORRUPT_RECORD -> resolved)
+    }
+  }
+
+  /**
+   * Whether the field at `ordinal` is one [[resolveColumnNameOfCorruptRecord]] can pick as the
+   * corrupt record column of `schema`. Unlike the resolution this never throws, so the optimizer
+   * can use it to keep such a field from being pruned. It answers without collecting the
+   * candidates, since the optimizer asks for every extraction on every pass.
+   */
+  def isCorruptRecordField(
+      schema: StructType,
+      ordinal: Int,
+      columnNameOfCorruptRecord: String,
+      exactMatch: Boolean): Boolean = {
+    val name = schema(ordinal).name
+    if (columnNameOfCorruptRecord == null) {
+      false
+    } else if (name == columnNameOfCorruptRecord) {
+      true
+    } else if (exactMatch || !name.equalsIgnoreCase(columnNameOfCorruptRecord)) {
+      false
+    } else {
+      // A case variant counts only while no field is named exactly like the option.
+      !schema.fields.exists(_.name == columnNameOfCorruptRecord)
+    }
+  }
+
+  /**
+   * Checks that the field of `schema` named exactly `columnNameOfCorruptRecord`, if there is
+   * one, is a nullable string. This matches the name exactly and serves the XML paths, which do
+   * not resolve the corrupt record column with [[resolveColumnNameOfCorruptRecord]] yet.
    */
   def verifyColumnNameOfCorruptRecord(
       schema: StructType,

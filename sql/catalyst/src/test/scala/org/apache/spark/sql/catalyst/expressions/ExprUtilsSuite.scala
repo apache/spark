@@ -18,6 +18,7 @@
 package org.apache.spark.sql.catalyst.expressions
 
 import org.apache.spark.{SparkFunSuite, SparkRuntimeException}
+import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.codegen.GenerateUnsafeProjection
 import org.apache.spark.sql.catalyst.plans.SQLHelper
@@ -585,5 +586,95 @@ class ExprUtilsSuite extends SparkFunSuite with SQLHelper {
 
   test("canEvaluateUnconditionally: non-deterministic expressions are excluded") {
     assert(!ExprUtils.canEvaluateUnconditionally(LessThan(Rand(Literal(0L)), Literal(0.5))))
+  }
+
+  test("SPARK-59629: resolve the corrupt record column of a schema") {
+    def schema(names: String*): StructType = StructType(names.map(StructField(_, StringType)))
+    def resolve(s: StructType, exactMatch: Boolean, name: String = "_corrupt_record"): String =
+      ExprUtils.resolveColumnNameOfCorruptRecord(s, name, exactMatch)
+
+    // Without a matching field the name stays as it is.
+    assert(resolve(schema("a", "b"), exactMatch = false) === "_corrupt_record")
+    assert(resolve(schema("a", "_corrupt_record"), exactMatch = false) === "_corrupt_record")
+    // A single field that matches ignoring case is the corrupt record column.
+    assert(resolve(schema("a", "_CORRUPT_RECORD"), exactMatch = false) === "_CORRUPT_RECORD")
+    // An exactly named field wins over one that matches only ignoring case.
+    assert(
+      resolve(schema("_Corrupt_Record", "_corrupt_record"), exactMatch = false) ===
+        "_corrupt_record")
+    // Several fields that match only ignoring case are ambiguous.
+    checkError(
+      exception = intercept[AnalysisException] {
+        resolve(schema("_Corrupt_Record", "_CORRUPT_RECORD"), exactMatch = false)
+      },
+      condition = "AMBIGUOUS_COLUMN_OR_FIELD",
+      parameters = Map("name" -> "`_corrupt_record`", "n" -> "2"))
+    // `from_csv` can pass a null name, which names no field.
+    assert(resolve(schema("a", "_CORRUPT_RECORD"), exactMatch = false, name = null) === null)
+
+    // With exact matching only an exactly named field counts.
+    assert(resolve(schema("a", "_CORRUPT_RECORD"), exactMatch = true) === "_corrupt_record")
+    assert(
+      resolve(schema("_Corrupt_Record", "_CORRUPT_RECORD"), exactMatch = true) ===
+        "_corrupt_record")
+    assert(resolve(schema("a", "_corrupt_record"), exactMatch = true) === "_corrupt_record")
+  }
+
+  test("SPARK-59629: the resolved corrupt record column must be a nullable string") {
+    Seq(
+      StructField("_CORRUPT_RECORD", IntegerType),
+      StructField("_CORRUPT_RECORD", StringType, nullable = false)).foreach { field =>
+      val schema = StructType(Seq(StructField("a", StringType), field))
+      // The error names the column as the option spells it.
+      checkError(
+        exception = intercept[AnalysisException] {
+          ExprUtils.resolveColumnNameOfCorruptRecord(schema, "_corrupt_record", exactMatch = false)
+        },
+        condition = "INVALID_CORRUPT_RECORD_TYPE",
+        parameters = Map(
+          "columnName" -> "`_corrupt_record`",
+          "actualType" -> s"\"${field.dataType.sql}\""))
+      // With exact matching the field is ordinary data, so nothing is checked.
+      assert(
+        ExprUtils.resolveColumnNameOfCorruptRecord(schema, "_corrupt_record", exactMatch = true) ===
+          "_corrupt_record")
+    }
+  }
+
+  test("SPARK-59629: fields the optimizer must treat as the corrupt record column") {
+    def schema(names: String*): StructType = StructType(names.map(StructField(_, StringType)))
+    val name = "_corrupt_record"
+    // What the resolution can pick, worked out independently of the fast path.
+    def expected(s: StructType, ordinal: Int, exactMatch: Boolean): Boolean = {
+      val exact = s.fieldNames.filter(_ == name)
+      val candidates = if (exact.nonEmpty || exactMatch) {
+        exact
+      } else {
+        s.fieldNames.filter(_.equalsIgnoreCase(name))
+      }
+      candidates.contains(s(ordinal).name)
+    }
+
+    val schemas = Seq(
+      schema("a", "b"),
+      schema("a", "_corrupt_record"),
+      schema("a", "_CORRUPT_RECORD"),
+      schema("_CORRUPT_RECORD", "_corrupt_record", "a"),
+      schema("_CORRUPT_RECORD", "a", "_Corrupt_Record"))
+    for (s <- schemas; ordinal <- s.indices; exactMatch <- Seq(false, true)) {
+      assert(
+        ExprUtils.isCorruptRecordField(s, ordinal, name, exactMatch) ===
+          expected(s, ordinal, exactMatch),
+        s"for field $ordinal of ${s.simpleString} with exactMatch = $exactMatch")
+      assert(!ExprUtils.isCorruptRecordField(s, ordinal, null, exactMatch))
+    }
+
+    // A lone case variant is the corrupt record column unless matching is exact.
+    assert(ExprUtils.isCorruptRecordField(schema("a", "_CORRUPT_RECORD"), 1, name, false))
+    assert(!ExprUtils.isCorruptRecordField(schema("a", "_CORRUPT_RECORD"), 1, name, true))
+    // With an exactly named field, a case variant of it is ordinary data.
+    val both = schema("_CORRUPT_RECORD", "_corrupt_record")
+    assert(!ExprUtils.isCorruptRecordField(both, 0, name, false))
+    assert(ExprUtils.isCorruptRecordField(both, 1, name, false))
   }
 }

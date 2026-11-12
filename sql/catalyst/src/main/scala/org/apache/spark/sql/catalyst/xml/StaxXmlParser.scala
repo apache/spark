@@ -198,6 +198,8 @@ class StaxXmlParser(
     // such a column, this would cause an error. In this mode, if such a column
     // is not manually specified, then fall back to DROPMALFORMED, which will return
     // null column values where parsing fails.
+    // TODO: XML matches `columnNameOfCorruptRecord` exactly. Resolve it with
+    // `ExprUtils.resolveColumnNameOfCorruptRecord`, as the CSV and JSON readers do.
     val parseMode =
       if (options.parseMode == PermissiveMode &&
         !schema.fields.exists(_.name == options.columnNameOfCorruptRecord)) {

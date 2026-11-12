@@ -2152,7 +2152,12 @@ case class JsonToStructs(
     // a view's CHAR/VARCHAR map-key semantics tied to its creation-time flag rather than the
     // caller's session setting. (`variantAllowDuplicateKeys` is only captured, not threaded: the
     // parser still reads that one live from `SQLConf.get`.)
-    charVarcharStandardSemantics: Boolean = SQLConf.get.charVarcharStandardSemantics)
+    charVarcharStandardSemantics: Boolean = SQLConf.get.charVarcharStandardSemantics,
+    // Whether the corrupt record column is found by exact name only. It is captured here at
+    // analysis time because the parser that needs it is built on an executor, where the
+    // session's settings are not reliably visible, and because the optimizer's pruning has to
+    // decide with the same value as that parser.
+    corruptRecordExactMatch: Boolean = SQLConf.get.columnNameOfCorruptRecordExactMatch)
   extends UnaryExpression
   with TimeZoneAwareExpression
   with CodegenFallback
@@ -2215,7 +2220,7 @@ case class JsonToStructs(
   @transient
   private lazy val evaluator = new JsonToStructsEvaluator(
     options, nullableSchema, nameOfCorruptRecord, timeZoneId, variantAllowDuplicateKeys,
-    charVarcharStandardSemantics)
+    charVarcharStandardSemantics, corruptRecordExactMatch)
   override def stateful: Boolean = true
 
   override def nullSafeEval(json: Any): Any = {
