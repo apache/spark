@@ -28,22 +28,27 @@ Please refer [Migration Guide: SQL, Datasets and DataFrame](../sql-migration-gui
 - Since Spark 4.4, left outer and left semi stream-stream joins require a watermark on the
   right input and a time condition that limits how late a matching right row can arrive.
   Right outer joins require the corresponding settings on the left; full outer joins require
-  them on both sides. The time condition must be an equality key on the other input's event time
-  or its time window, or a range condition that bounds a timestamp column of the finalized input
-  by the other input's event time. A range condition may also compare time windows as a whole
-  when the finalized input's windows last at least as long as the other input's. An equality key
-  does not count when it shifts the other input's event time backward by whole days, months or
-  years, such as `leftTime = rightTime - INTERVAL 1 DAY`, or truncates it, such as
-  `leftTime = CAST(CAST(rightTime AS BIGINT) AS TIMESTAMP)`. Neither does a bound that uses only
-  constants, or a range condition on a numeric, DATE or TIMESTAMP_NTZ column or on a shorter
-  time window. When both inputs have watermarks, a time range condition between the two event
-  times can bound a join whose equality key does not count. Some previously accepted queries now
-  fail if these requirements are not met. Update their watermarks and join conditions using the
+  them on both sides. The time condition must be an equality key on the other input's event time or
+  its time window, or a range condition that bounds a timestamp column of the finalized input by the
+  other input's event time. A range condition may also compare time windows as a whole when the
+  finalized input's windows last at least as long as the other input's. An equality key counts when
+  it is the other input's event time, or that event time shifted by constant intervals, except a
+  shift backward by months, years, or a day-time interval of 24 hours or more. A key such as
+  `leftTime = rightTime - INTERVAL 1 DAY` or `leftTime = rightTime - INTERVAL 36 HOURS`, or one
+  truncated from the other input's event time, such as `leftTime = CAST(CAST(rightTime AS BIGINT) AS
+  TIMESTAMP)`, does not count, while `timestampadd` in hours, minutes or seconds does, whatever the
+  amount. A bound that uses only constants, or a range condition on a numeric, DATE or TIMESTAMP_NTZ
+  column or on a shorter time window, does not count either. When both inputs have watermarks, a
+  time range condition between the two event times can bound a join whose equality key does not
+  count. Some previously accepted queries now fail if these requirements are not met. Update their
+  watermarks and join conditions using the
   [join support table](apis-on-dataframes-and-datasets.html#support-matrix-for-joins-in-streaming-queries).
   A stateful operator after such a join that uses the other input's event time also needs that
   input bounded: for example, a left outer join followed by an append-mode aggregation over the
   right event time also needs a watermark on the left input and a time condition that limits
-  how late a matching left row can arrive. Without them, the join holds back its output
+  how late a matching left row can arrive: an equality with an exact shift (an interval under
+  one day, or `timestampadd` in hours, minutes or seconds), or a range condition in place of a
+  shifted equality. Without them, the join holds back its output
   watermark, and the query fails at start (see below) because the aggregation would never emit
   results.
 
@@ -73,9 +78,11 @@ Please refer [Migration Guide: SQL, Datasets and DataFrame](../sql-migration-gui
   windows of the other input, such as 10-second left windows and 20-second right windows in
   `leftWindow > rightWindow`. Earlier versions removed them by window end, which could drop
   matches. Such a join now keeps that input's rows for the life of the query and holds back its
-  output watermark for that input, so a stateful operator after the join that uses that input's
-  windows cannot emit results. Windows that last at least as long as the other input's are still
-  removed.
+  output watermark for that input. An append-mode aggregation over that input's windows then
+  fails at start. Other stateful operators after the join that use them keep their rows in state
+  and do not emit results that wait for the watermark, such as event-time timeouts, while
+  update-mode aggregations and deduplication still emit rows. Windows that last at least as long
+  as the other input's are still removed.
 
 - Spark 4.4 corrects cases where stream-stream equality joins could discard rows before their
   matches arrived or output unmatched rows too early. Such joins with a watermark on only one
@@ -119,14 +126,23 @@ Please refer [Migration Guide: SQL, Datasets and DataFrame](../sql-migration-gui
   existing checkpoint with `STREAMING_JOIN_CHECKPOINT_INCOMPATIBLE`. Spark reuses the checkpoint
   of a join without watermarks, of a join with an equality condition between the two inputs'
   event times, such as `leftTime = rightTime`, and of a join whose time condition compares the
-  two inputs' event times, optionally cast, with constant intervals or numbers, such as
-  `rightTime BETWEEN leftTime AND leftTime + INTERVAL 1 HOUR`. When such a condition bounds only
-  one input, or the join has only equality conditions on columns other than event times, such as
-  `leftKey = rightKey`, Spark reuses the checkpoint only when no stateful operator after the join
-  uses the event time of an input without a bound. It rejects other joins with watermarks, for
-  example when the time condition uses another column or adds a month interval. Spark cannot
-  verify that their saved rows can be reused safely after the correction, even if the query did
-  not previously produce incorrect results.
+  two inputs' event times with each other, each optionally cast and offset by constant intervals or
+  numbers, such as `rightTime BETWEEN leftTime AND leftTime + INTERVAL 1 HOUR`. When such a
+  condition bounds only one input, or the join has only equality conditions on columns other than
+  event times, such as `leftKey = rightKey`, Spark reuses the checkpoint only when no stateful
+  operator after the join uses the event time of an input without a bound. A stateful operator that
+  does not use the watermark, such as an update-mode aggregation on columns other than event times,
+  does not count, while `transformWithState` always counts because its code can read the watermark.
+  The time condition may also include comparisons from which Spark derives no bound, such as one
+  between columns of both inputs that have no watermark, like `leftPrice >= rightPrice`, or one that
+  adds a month interval, which has no fixed length. An input that only such a comparison constrains
+  has no bound. Spark also reuses the checkpoint of an equality condition between one input's event
+  time and the other input's event time shifted forward by constant intervals, such as `leftTime =
+  rightTime + INTERVAL 10 SECONDS`, when no stateful operator after the join uses the shifted
+  input's event time, here `rightTime`. Spark rejects other joins with watermarks, for example when
+  the time condition bounds another column or an equality key shifts an event time backward. Spark
+  cannot verify that their saved rows can be reused safely after the correction, even if the query
+  did not previously produce incorrect results.
 
   Before upgrading, check that the input history needed to rebuild the join is still available.
   If the checkpoint is rejected, start with a new checkpoint and replay that input. Account for

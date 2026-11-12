@@ -1,0 +1,2 @@
+v2
+{"operatorInfo":{"operatorId":0,"operatorName":"symmetricHashJoin"},"stateStoreInfo":[{"storeName":"default","numColsPrefixKey":0,"numPartitions":5,"stateSchemaFilePaths":["file:/home/jungtaek.lim/.sp2k/scratch/5d72f621-80ec-485b-b62a-0022af2517f5/fixture-out/nulltime/state/0/_stateSchema/default/0_43e3dc25-dc53-47ba-8a46-5c2f442ca7ed"]}],"operatorPropertiesJson":"{\"useVirtualColumnFamilies\":true}"}

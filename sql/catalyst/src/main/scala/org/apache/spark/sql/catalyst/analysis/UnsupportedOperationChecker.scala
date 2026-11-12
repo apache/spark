@@ -839,7 +839,12 @@ object UnsupportedOperationChecker extends Logging {
       if (SQLConf.get.streamingJoinCheckFinalizationEnabled || !canDisableCheck) {
         throwError(message)(join)
       } else {
-        logWarning(log"${MDC(ANALYSIS_ERROR, message)};\n${MDC(QUERY_PLAN, join)}")
+        val warning =
+          s"Stream-stream ${join.joinType} join runs with $checkConf set to false, although " +
+            s"it requires $requirement that allow unmatched state to be finalized. The query " +
+            "keeps that state without bound, and an outer join never outputs those unmatched " +
+            "rows." + legacyWindowNote + downstreamNote
+        logWarning(log"${MDC(ANALYSIS_ERROR, warning)};\n${MDC(QUERY_PLAN, join)}")
       }
     }
   }

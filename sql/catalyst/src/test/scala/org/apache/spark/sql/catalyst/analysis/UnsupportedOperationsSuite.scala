@@ -868,6 +868,58 @@ class UnsupportedOperationsSuite extends SparkFunSuite with SQLHelper {
     }
   }
 
+  // The range-bound arm of the check that earlier versions applied keeps a join runnable with the
+  // conf false only when the range bounds the state of every input the join must finalize.
+  {
+    val leftTime = AttributeReference("leftTime", TimestampType)().withMetadata(watermarkMetadata)
+    val rightTime = AttributeReference("rightTime", TimestampType)()
+      .withMetadata(watermarkMetadata)
+    val left = new TestStreamingRelation(leftTime)
+    val right = new TestStreamingRelation(rightTime)
+    val checkConf = SQLConf.STREAMING_JOIN_CHECK_FINALIZATION_ENABLED.key
+    // leftTime > rightTime - 5 seconds bounds only the left input's state.
+    val leftBoundOnly = Some(
+      leftTime > TimestampAddInterval(rightTime, Literal(Duration.ofSeconds(-5))))
+
+    assertNotSupportedInStreamingPlan("FullOuter with a range bound in one direction",
+      left.join(right, joinType = FullOuter, condition = leftBoundOnly), OutputMode.Append(),
+      Seq("requires watermarks on both inputs", checkConf))
+
+    test("FullOuter with a range bound in one direction logs a warning " +
+        s"when $checkConf=false") {
+      val appender = new LogAppender("finalization check")
+      withLogAppender(appender, level = Some(Level.WARN)) {
+        withSQLConf(checkConf -> "false") {
+          UnsupportedOperationChecker.checkForStreaming(
+            wrapInStreaming(left.join(right, joinType = FullOuter, condition = leftBoundOnly)),
+            OutputMode.Append())
+        }
+      }
+      assert(appender.loggingEvents.exists { event =>
+        val message = event.getMessage.getFormattedMessage
+        message.contains("runs with") && message.contains(checkConf) &&
+          message.contains("requires watermarks on both inputs") &&
+          !message.contains("is not supported")
+      })
+    }
+
+    // A right outer join needs the left watermark to bound the right input's state, which this
+    // range does not do, so the conf cannot turn the failure into a warning.
+    Seq("true", "false").foreach { enabled =>
+      test(s"RightOuter with a range bound on the left input only fails when $checkConf=$enabled") {
+        withSQLConf(checkConf -> enabled) {
+          val e = intercept[AnalysisException] {
+            UnsupportedOperationChecker.checkForStreaming(wrapInStreaming(
+              left.join(right, joinType = RightOuter, condition = leftBoundOnly)),
+              OutputMode.Append())
+          }
+          assert(e.getMessage.contains("requires a watermark on the left input"))
+          assert(!e.getMessage.contains(checkConf))
+        }
+      }
+    }
+  }
+
   // multi-aggregations only supported in Append mode
   assertPassOnGlobalWatermarkLimit(
     "aggregate - multiple streaming aggregations - append",
