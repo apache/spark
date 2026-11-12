@@ -1515,6 +1515,27 @@ class DAGSchedulerSuite extends SparkFunSuite with TempLocalSparkContext with Ti
     assert(scheduler.reliableShuffleFileLostEpochSize === 0)
   }
 
+  test("SPARK-59138: reliable-loss fence entries are retired when their executor is re-added") {
+    val (_, reliableDep) =
+      submitReliableShuffleJob(numMaps = 2, numReduces = 2, hostNames = Seq("hostA", "hostB"))
+
+    runEvent(makeCompletionEvent(taskSets(1).tasks(0),
+      FetchFailed(makeBlockManagerId("hostA"), reliableDep.shuffleId, 0L, 0, 0, "ignored"), null))
+    runEvent(makeCompletionEvent(taskSets(1).tasks(1),
+      FetchFailed(makeBlockManagerId("hostB"), reliableDep.shuffleId, 1L, 1, 1, "ignored"), null))
+    assert(scheduler.reliableShuffleFileLostEpochSize === 2)
+
+    runEvent(ExecutorAdded("hostC-exec", "hostC"))
+    assert(scheduler.reliableShuffleFileLostEpochSize === 2)
+    runEvent(ExecutorAdded("hostA-exec", "hostA"))
+    assert(scheduler.reliableShuffleFileLostEpochSize === 1)
+    // Re-adding hostA retires nothing more, so the surviving entry is hostB's.
+    runEvent(ExecutorAdded("hostA-exec", "hostA"))
+    assert(scheduler.reliableShuffleFileLostEpochSize === 1)
+    runEvent(ExecutorAdded("hostB-exec", "hostB"))
+    assert(scheduler.reliableShuffleFileLostEpochSize === 0)
+  }
+
   for (reliable <- Seq(true, false)) {
     test(s"SPARK-59138: a FetchFailed that aborts the job leaves no fence entry " +
       s"(reliable=$reliable)") {
