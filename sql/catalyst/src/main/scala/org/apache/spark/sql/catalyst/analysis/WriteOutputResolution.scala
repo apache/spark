@@ -58,7 +58,9 @@ private[sql] object WriteOutputResolution {
       val readGenerationExpr: Attribute => Option[() => Expression] = v2Write.table match {
         case r: DataSourceV2Relation if GeneratedColumn.supportsGeneratedColumnsOnWrite(r.table) =>
           val expressions = r.table.columns().flatMap { col =>
+            // Read the API that can carry SQL text, a modeled expression, or both.
             Option(col.columnGenerationExpression())
+              // Fall back to the legacy SQL getter and wrap its text in GenerationExpression.
               .orElse(Option(col.generationExpression()).map(new GenerationExpression(_)))
               .map(col.name -> _)
           }.toMap
