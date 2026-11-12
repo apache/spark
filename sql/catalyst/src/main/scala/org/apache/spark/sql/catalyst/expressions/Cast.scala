@@ -244,6 +244,12 @@ object Cast extends QueryErrorsBase {
   val USER_SPECIFIED_CAST = new TreeNodeTag[Unit]("user_specified_cast")
 
   /**
+   * Marks a user CAST that `ApplyDefaultCollation` rebuilt without [[USER_SPECIFIED_CAST]], so it
+   * is still told apart from a cast the analyzer added.
+   */
+  val RECOLORED_USER_CAST = new TreeNodeTag[Unit]("recolored_user_cast")
+
+  /**
    * Returns true iff we can cast `from` type to `to` type.
    */
   def canCast(from: DataType, to: DataType): Boolean = (from, to) match {
@@ -816,10 +822,6 @@ case class Cast(
   } else {
     (child.dataType, dataType) match {
       case (_: StringType, BinaryType) => child.nullable
-      // TODO: Implement a more accurate method for checking whether a decimal value can be cast
-      //       as integral types without overflow. Currently, the cast can overflow even if
-      //       "Cast.canUpCast" method returns true.
-      case (_: DecimalType, _: IntegralType) => true
       case _ => child.nullable || !Cast.canUpCast(child.dataType, dataType)
     }
   }

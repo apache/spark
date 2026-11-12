@@ -35,6 +35,7 @@ import org.apache.spark.mllib.tree.model.{GradientBoostedTreesModel => OldGBTMod
 import org.apache.spark.sql._
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.types.StructType
+import org.apache.spark.storage.StorageLevel
 
 /**
  * <a href="http://en.wikipedia.org/wiki/Gradient_boosting">Gradient-Boosted Trees (GBTs)</a>
@@ -104,6 +105,10 @@ class GBTRegressor @Since("1.4.0") (@Since("1.4.0") override val uid: String)
    */
   @Since("1.4.0")
   def setCheckpointInterval(value: Int): this.type = set(checkpointInterval, value)
+
+  /** @group expertSetParam */
+  @Since("4.4.0")
+  def setIntermediateStorageLevel(value: String): this.type = set(intermediateStorageLevel, value)
 
   /**
    * The impurity setting is ignored for GBT models.
@@ -178,16 +183,17 @@ class GBTRegressor @Since("1.4.0") (@Since("1.4.0") override val uid: String)
     instr.logParams(this, labelCol, featuresCol, predictionCol, leafCol, weightCol, impurity,
       lossType, maxDepth, maxBins, maxIter, maxMemoryInMB, minInfoGain, minInstancesPerNode,
       minWeightFractionPerNode, seed, stepSize, subsamplingRate, cacheNodeIds, checkpointInterval,
-      featureSubsetStrategy, validationIndicatorCol, validationTol)
+      featureSubsetStrategy, validationIndicatorCol, validationTol, intermediateStorageLevel)
 
     val categoricalFeatures = MetadataUtils.getCategoricalFeatures(dataset.schema($(featuresCol)))
     val boostingStrategy = super.getOldBoostingStrategy(categoricalFeatures, OldAlgo.Regression)
+    val storageLevel = StorageLevel.fromString($(intermediateStorageLevel))
     val (baseLearners, learnerWeights) = if (withValidation) {
       GradientBoostedTrees.runWithValidation(trainDataset, validationDataset, boostingStrategy,
-        $(seed), $(featureSubsetStrategy), Some(instr))
+        $(seed), $(featureSubsetStrategy), Some(instr), storageLevel)
     } else {
       GradientBoostedTrees.run(trainDataset, boostingStrategy,
-        $(seed), $(featureSubsetStrategy), Some(instr))
+        $(seed), $(featureSubsetStrategy), Some(instr), storageLevel)
     }
     baseLearners.foreach(copyValues(_))
 

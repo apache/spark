@@ -94,7 +94,9 @@ private[sql] object Artifact {
     newArtifact(CACHE_PREFIX, "", Paths.get(id), storage)
   }
 
-  def newIvyArtifacts(uri: URI): Seq[Artifact] = {
+  def newIvyArtifacts(uri: URI): Seq[Artifact] = newIvyArtifacts(uri, None)
+
+  def newIvyArtifacts(uri: URI, ivySettingsPath: Option[String]): Seq[Artifact] = {
     implicit val printStream: PrintStream = System.err
 
     val authority = uri.getAuthority
@@ -118,7 +120,10 @@ private[sql] object Artifact {
         Nil
       }
 
-    val ivySettings = MavenUtils.buildIvySettings(Some(repos), None)
+    val ivySettings = ivySettingsPath match {
+      case Some(path) => MavenUtils.loadIvySettings(path, Some(repos), None)
+      case None => MavenUtils.buildIvySettings(Some(repos), None)
+    }
 
     val jars = MavenUtils.resolveMavenCoordinates(
       authority,

@@ -27,8 +27,9 @@ import org.apache.spark.{SparkException, SparkUnsupportedOperationException}
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.plans.QueryPlan
-import org.apache.spark.sql.catalyst.util.InternalRowComparableWrapper
+import org.apache.spark.sql.catalyst.util.{truncatedString, InternalRowComparableWrapper}
 import org.apache.spark.sql.connector.catalog.functions.Reducer
+import org.apache.spark.sql.errors.QueryExecutionErrors
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types.{DataType, IntegerType}
 import org.apache.spark.util.TransientBestEffortLazyVal
@@ -748,17 +749,33 @@ case class KeyedPartitioning(
   override def dataType: DataType = IntegerType
 
   /**
-   * Prints the layout's contents where the value object would print, which keeps the plan string as
-   * it was before the layout held them. The list is curated rather than the layout's own fields,
-   * for two reasons. `partitionKeys` has to be printed as a `Seq` for `maxFields` to truncate it,
-   * and a partitioning can hold one key per split. And `dataTypes` has its naming erased, so
-   * printing it would put a struct field name into a plan that appears nowhere in the query. A
-   * field the layout grows is therefore a decision here, and the default is to print it: the plan
-   * string is the only place a reader sees why a marked partitioning still shuffles.
+   * Prints the layout as the partition keys followed by the flags and origins. The keys are
+   * summarized once they exceed the fields that `maxFields` leaves after the expressions and the
+   * trailing fields; when those fields alone exceed the budget, the argument list is truncated
+   * from the end as usual. `dataTypes` is left out because its naming is erased, so printing it
+   * would put a struct field name into a plan that appears nowhere in the query. The plan string
+   * is the only place a reader sees why a marked partitioning still shuffles. Keys print as
+   * values, so two keys that `equals` considers equal can print differently, e.g. `'a'` and `'A'`
+   * under `UTF8_LCASE`.
    */
-  override protected def stringArgs: Iterator[Any] =
-    Iterator(expressions, partitionKeys, isGrouped, isCollapsed) ++ unknownKeysOrigin ++
-      ungroupingOrigin
+  override def toString: String = simpleString(SQLConf.get.maxToStringFields)
+
+  override def simpleString(maxFields: Int): String = {
+    val trailing = Seq[Any](isGrouped, isCollapsed) ++ unknownKeysOrigin ++ ungroupingOrigin
+    // The keys take the fields that the expressions and the trailing flags leave.
+    val keyBudget = maxFields - expressions.size - trailing.size
+    val keys = if (keyBudget < 1) {
+      Iterator.empty
+    } else if (partitionKeys == null) {
+      Iterator.single("null")
+    } else if (partitionKeys.isEmpty) {
+      Iterator.empty
+    } else {
+      Iterator.single(truncatedString(partitionKeys, "[", ", ", "]", keyBudget))
+    }
+    val args = expressions.map(_.toString) ++ keys ++ trailing.map(_.toString)
+    s"$prettyName" + truncatedString(args, "(", ", ", ")", maxFields)
+  }
 
   override protected def withNewChildrenInternal(
       newChildren: IndexedSeq[Expression]): KeyedPartitioning =
@@ -1851,10 +1868,12 @@ sealed trait ShuffleSpec {
   def isCompatibleWith(other: ShuffleSpec): Boolean
 
   /**
-   * Whether this shuffle spec can be used to create partitionings for the other children. A
-   * [[ShuffleSpecCollection]] can when any of its members can. Building the partitioning is
+   * Whether this shuffle spec can serve as the layout the children are lined up on: read as it
+   * stands by a child that pairs with it, or used to create partitionings for the other children.
+   * A [[ShuffleSpecCollection]] can when any of its members can. Building the partitioning is
    * [[LeafShuffleSpec.createPartitioning]], and that is always one member's job, so the planner
-   * builds it from a member that can.
+   * builds it from a member that can. Shuffling a child onto the layout also needs Spark to
+   * evaluate the partitioning, which is [[LeafShuffleSpec.canEvaluatePartitioning]], not this.
    */
   def canCreatePartitioning: Boolean
 
@@ -1882,6 +1901,17 @@ trait LeafShuffleSpec extends ShuffleSpec {
    */
   def createPartitioning(clustering: Seq[Expression]): Partitioning =
     throw SparkUnsupportedOperationException()
+
+  /**
+   * Whether Spark can evaluate the partitioning [[createPartitioning]] builds, to place the rows
+   * of a child shuffled onto this layout. [[canCreatePartitioning]] does not ask it, since a child
+   * that pairs with this layout as it stands evaluates nothing. A caller that shuffles a child onto
+   * this layout has to ask it too. Only a [[KeyedShuffleSpec]] can answer false, and its
+   * [[createPartitioning]] asserts it, so a caller that does not ask fails while planning. A
+   * cogroup child's key the layout cannot place fails while planning too, see
+   * [[createPartitioning]].
+   */
+  def canEvaluatePartitioning: Boolean = true
 
   override final def flatten: Seq[LeafShuffleSpec] = Seq(this)
 }
@@ -2389,8 +2419,11 @@ case class KeyedShuffleSpec(
         case (left: TransformExpression, right: TransformExpression) =>
           if (allowReduce && canReduceKeys) left.isCompatible(right)
           else left.isSameFunction(right)
+        // The reduce evaluates the transform rebuilt over the identity side's column, see
+        // `canEvaluate`.
         case (_: AttributeReference, _: TransformExpression) |
-             (_: TransformExpression, _: AttributeReference) => allowReduce && canReduceKeys
+             (_: TransformExpression, _: AttributeReference) =>
+          allowReduce && canReduceKeys && canEvaluate(left) && canEvaluate(right)
         case _ => false
       }
     }
@@ -2414,6 +2447,27 @@ case class KeyedShuffleSpec(
    */
   private def argumentsAreColumns(transform: TransformExpression): Boolean =
     transform.children.forall(_.isInstanceOf[Attribute])
+
+  /**
+   * Whether Spark can evaluate `transform`, see `TransformExpression.evaluableFunction`. An
+   * identity reduce evaluates it on the identity side's partition keys, and a one-side shuffle on
+   * each row of the side it shuffles, both after rebuilding it over the other side's key. An
+   * equi-join pairs two keys only when their types are equal apart from nullability and field
+   * names (`BinaryComparison.sameType`), which `evaluableFunction` does not tell apart either. So
+   * for a join, asking this of the reported transform answers it for the rebuilt one, and the
+   * reported one keeps the answer. The keys of a cogroup that does not coerce them, e.g. a Pandas
+   * or Arrow cogroup, need not share a type, see `createPartitioning`. True for anything that is
+   * not a transform, which needs no call.
+   *
+   * A Scala class or object that extends `ScalarFunction` directly gets a mixin forwarder to the
+   * default `produceResult`, which the lookup finds, so this is true even when the connector
+   * implements neither `produceResult` nor `invoke`. Evaluating it then throws
+   * `SCALAR_FUNCTION_NOT_COMPATIBLE`. Reflection cannot tell the forwarder from an override.
+   */
+  private def canEvaluate(expression: Expression): Boolean = expression match {
+    case t: TransformExpression => t.evaluableFunction.isDefined
+    case _ => true
+  }
 
   /**
    * `transform`, whose arguments are bare columns, with each replaced by `key`, which may be any
@@ -2523,8 +2577,9 @@ case class KeyedShuffleSpec(
 
       // Identity transform on this side, arbitrary transform on the other side: create a reducer
       // that applies the other's transform to the raw identity values. `areKeysCompatible` admitted
-      // this pair, so `t`'s argument is one bare column. `isExpressionCompatible` refuses any other
-      // argument here, and `keyPositions` maps an expression with more references to no position.
+      // this pair, so `t`'s argument is one bare column, and Spark can evaluate `t`, as far as
+      // `canEvaluate` can tell. `isExpressionCompatible` refuses any other argument or function
+      // here, and `keyPositions` maps an expression with more references to no position.
       // `IdentityReducer` binds `a` to ordinal 0.
       case (a: AttributeReference, t: TransformExpression) =>
         (Some(KeyReducer(IdentityReducer(rebuiltOver(t, a)), t)), None)
@@ -2570,7 +2625,7 @@ case class KeyedShuffleSpec(
         // `createPartitioning` replaces a transform's argument with the other child's cluster key,
         // which drops whatever surrounds the key, e.g. the `+ 1` of `bucket(4, b + 1)` or the `.a`
         // of `bucket(4, s.a)`. Such a spec's own child would then be laid out differently from the
-        // children shuffled onto it.
+        // children shuffled onto it. Whether Spark can evaluate it is `canEvaluatePartitioning`.
         case t: TransformExpression => argumentsAreColumns(t)
         case _ => false
       } &&
@@ -2578,15 +2633,55 @@ case class KeyedShuffleSpec(
       // decide where each row goes, and reduced keys are not what those expressions compute.
       partitioning.expressionsDescribeKeys
 
+  /** Whether Spark can evaluate each transform of this layout, see `canEvaluate`. */
+  override lazy val canEvaluatePartitioning: Boolean = partitioning.expressions.forall(canEvaluate)
+
   override def createPartitioning(clustering: Seq[Expression]): Partitioning = {
     assert(clustering.size == distribution.clustering.size,
       "Required distributions of join legs should be the same size.")
-
     val newExpressions = partitioning.expressions.zip(keyPositions).map {
       case (te: TransformExpression, positionSet) =>
         // `canCreatePartitioning` admits only a template over bare columns, see there.
         rebuiltOver(te, clustering(positionSet.head))
       case (_, positionSet) => clustering(positionSet.head)
+    }
+    // The child shuffled onto this layout is placed by evaluating what is built here, which would
+    // fail on an executor. A caller has to ask `canEvaluatePartitioning` first, which answers for
+    // this layout's own keys, so a caller that does not is a bug.
+    assert(canEvaluatePartitioning,
+      s"Cannot shuffle a child onto a layout Spark cannot evaluate: ${partitioning.expressions}")
+    // A join's keys share their types, apart from nullability and field names, so that answers
+    // for what is built too. A cogroup that does not coerce its keys, e.g. a Pandas or Arrow
+    // cogroup, need not have them (SPARK-60782). Its other key can be one the layout's function
+    // does not take, e.g. a `BIGINT` against a function declaring `INT`, or a string of another
+    // collation. Or one the function takes, but stored otherwise than
+    // the layout's column, e.g. an `INT` widened to a `BIGINT` column's declared type: every row is
+    // then placed, but the cogroup pairs its groups by comparing the two sides' key rows, so they
+    // do not pair, or the cogroup fails. Falling back to a hash shuffle would pair them wrongly
+    // too. So such a child fails here, while planning, with an error that names the key's type.
+    // This covers transform positions only. An identity position is rebuilt over the other key
+    // whatever its type, and a layout Spark cannot evaluate takes the hash shuffle. Both behave as
+    // before this check, and are left to SPARK-60782.
+    // The storage check comes first, since it needs no call: a key it refuses is named, and the
+    // call of the transform rebuilt over the other key is not resolved, so nothing logs that it is
+    // not evaluated.
+    partitioning.expressions.zip(keyPositions).zip(newExpressions).foreach {
+      case ((te: TransformExpression, positionSet), t: TransformExpression) =>
+        val columnType = te.references.head.dataType
+        positionSet.iterator.map(clustering)
+          .find(key => !TransformExpression.keysStoredAlike(key.dataType, columnType))
+          .orElse(Option.when(!canEvaluate(t))(t.children.head))
+          .foreach { key =>
+            // `name()` and `inputTypes()` are connector code, which must not replace this error.
+            val functionClass = t.function.getClass.getName
+            val name = TransformExpression.orElse(t.function.name(), functionClass)
+            throw QueryExecutionErrors.storagePartitionJoinKeyTypeMismatchError(
+              t.numBucketsOpt.fold(name)(n => s"$name($n)"),
+              columnType,
+              TransformExpression.orElse(t.function.inputTypes().toSeq, Nil),
+              key)
+          }
+      case _ =>
     }
     // The shuffled side is laid out on this side's partitions, so it shares their layout, with one
     // change. The child re-shuffled onto it may hold keys outside the declared set, so every
@@ -2653,6 +2748,8 @@ case class ShufflePartitionIdPassThroughSpec(
  * A choice between several layouts, produced by [[PartitioningCollection.createShuffleSpec]].
  *
  * `specs` can hold a nested collection, since a [[PartitioningCollection]] can hold a nested one.
+ * A collection has no `canEvaluatePartitioning` of its own: a child is shuffled onto one member,
+ * so the planner asks it of that member, see [[ShuffleSpec.flatten]].
  */
 case class ShuffleSpecCollection(specs: Seq[ShuffleSpec]) extends ShuffleSpec {
   require(specs.nonEmpty, "expected specs to be non-empty")

@@ -339,7 +339,7 @@ ________________________________________________________________________________
 def _parse_memory(s: str) -> int:
     """
     Parse a memory string in the format supported by Java (e.g. 1g, 200m) and
-    return the value in MiB
+    return the value in MiB. Raise ValueError for empty or invalid memory strings.
 
     Examples
     --------
@@ -349,7 +349,7 @@ def _parse_memory(s: str) -> int:
     2048
     """
     units = {"g": 1024, "m": 1, "t": 1 << 20, "k": 1.0 / 1024}
-    if s[-1].lower() not in units:
+    if not s or s[-1].lower() not in units:
         raise ValueError("invalid format: " + s)
     return int(float(s[:-1]) * units[s[-1].lower()])
 
@@ -566,7 +566,7 @@ def handle_worker_exception(
     try:
         exc_info = format_worker_exception(e, hide_traceback)
         write_int(SpecialLengths.PYTHON_EXCEPTION_THROWN, outfile)
-        write_with_length(exc_info.encode("utf-8"), outfile)
+        write_with_length(exc_info.encode("utf-8", "backslashreplace"), outfile)
     except IOError:
         # JVM close the socket
         pass

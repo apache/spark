@@ -25,30 +25,35 @@ import org.apache.spark.annotation.Unstable
 /**
  * The data type representing a reference to a file, with metadata describing the file.
  *
- * In SQL the type is named `FILE`, and the `EXTERNAL` keyword is planned to be required when
- * declaring a table column, as in `CREATE TABLE t (f FILE EXTERNAL)`; until then a bare `FILE` is
- * accepted wherever a type is. Its JSON representation is `"file external"` for
- * `FileType.external` and `"file unknown"` for `FileType()`, except that an external file in a
- * struct field is the plain `"file"`. A bare `"file"` is read as external inside a struct field
- * and as unknown elsewhere.
+ * In SQL the type is named `FILE`. A table column must be declared with the `EXTERNAL` keyword,
+ * as in `CREATE TABLE t (f FILE EXTERNAL)`, while the signature of a function declares a bare
+ * `FILE`. Its JSON representation is `"file external"` for `FileType.external` and
+ * `"file unknown"` for `FileType()`, except that an external file in a struct field is the plain
+ * `"file"`. A bare `"file"` is read as external inside a struct field and as unknown elsewhere.
  *
  * FileType is planned to be physically stored as a struct with the following fields (see
  * `FileType.FIELDS`), but it deliberately does not extend [[StructType]]:
- *   - uri (STRING): the opaque URI to the file
+ *   - uri (STRING): the URI of the referenced file, which may be absolute or relative
  *   - offset (BIGINT): the start of the referenced byte range
- *   - size (BIGINT): the size of the file in bytes
- *   - content_type (STRING): the MIME/content type of the file
- *   - checksum (STRING): an algorithm-tagged integrity token for the file, e.g. "ETAG:{etag}"
+ *   - size (BIGINT): the length of the referenced byte range
+ *   - content_type (STRING): the MIME/content type of the referenced bytes
+ *   - checksum (STRING): an algorithm-tagged integrity token for the referenced bytes, e.g.
+ *     "MD5:{digest}", or "ETAG:{etag}" for the whole file
  *   - inline (BINARY): the referenced bytes stored inline in the value
  *
  * FileType may be EXTERNAL (simple references, lifecycle independent of the table) or UNKNOWN
  * (mode not yet determined, such as the result of a cast or of a UDF). Mode is part of type
  * identity - files with different modes are distinct under `equals`.
  *
- * FileType is planned to be not comparable -- it cannot be used in join expressions, grouping
- * expressions, or as a partition/clustering column. Users can extract the uri field for such
- * operations. This type currently only guarantees the schema-level pieces (DDL and JSON); the
- * physical representation and most of the restrictions are added by later parts.
+ * FileType is not comparable: it defines neither equality nor an ordering, as it is not clear
+ * what equality of two files should mean. These uses of a FILE fail at analysis: a join,
+ * grouping, sort or window key, `DISTINCT`, `INTERSECT`, `EXCEPT` and `UNION` without `ALL`, the
+ * keys of `dropDuplicates`, a repartition or `REBALANCE` key, hash functions such as `hash` and
+ * `xxhash64`, the key of a map built in a query or of a map in the return type of a function, and
+ * a partition, bucket, clustering or write-ordering column of a table. Aggregates that
+ * deduplicate or hash their input, such as `count(DISTINCT f)`, `collect_set`,
+ * `approx_count_distinct` and `mode`, are not rejected yet. Accessing the fields of a FILE, such
+ * as `uri`, is planned together with its physical representation.
  *
  * @param mode
  *   the mode for this FileType column

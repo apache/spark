@@ -83,6 +83,7 @@ private[spark] class BatchIterator[T](iter: Iterator[T], batchSize: Int)
  */
 case class ArrowEvalPythonExec(
     udfs: Seq[PythonUDF],
+    requiredChildOutput: Seq[Attribute],
     resultAttrs: Seq[Attribute],
     child: SparkPlan,
     evalType: Int) extends EvalPythonExec with PythonSQLMetrics {
@@ -113,15 +114,19 @@ case class ArrowEvalPythonExec(
     }
   }
 
-  // When the child supports columnar output (e.g., Arrow-backed DSv2 connectors),
-  // accept columnar input to avoid the ColumnarToRow -> ArrowWriter round-trip.
-  // The Arrow FieldVectors are extracted directly from ArrowColumnVector and
-  // serialized to IPC, bypassing the row-based ArrowWriter conversion.
-  // This node then outputs only columnar batches, so the planner inserts a
-  // ColumnarToRowExec above it for a row-based parent, which releases each
-  // batch once its rows are consumed. Otherwise it reads rows from its child,
-  // even from one that also supports columnar, such as the scan of the Arrow
-  // cache. Either way, the choice is fixed when the plan is built.
+  // When the child supports columnar output (e.g., Arrow-backed DSv2 connectors)
+  // and columnar input is enabled, accept columnar input: the UDF inputs of a
+  // batch whose columns are ArrowColumnVectors are serialized to IPC directly,
+  // bypassing the ColumnarToRow -> ArrowWriter round-trip. Each input batch is
+  // released once it has been written to Python. Without pass-through columns,
+  // the result batches from Python are returned as they are; otherwise the
+  // pass-through columns are copied as rows and joined with the results, which
+  // are converted back to columnar batches. This node then outputs only
+  // columnar batches, so the planner inserts a ColumnarToRowExec above it for
+  // a row-based parent.
+  // Otherwise it reads rows from its child, even from one that also supports
+  // columnar, such as the scan of the Arrow cache. Either way, the choice is
+  // fixed when the plan is built.
   override def supportsColumnar: Boolean =
     child.supportsColumnar && conf.arrowPySparkUDFColumnarInputEnabled
 
@@ -140,9 +145,10 @@ case class ArrowEvalPythonExec(
     new ColumnarArrowEvalPythonEvaluatorFactory(
       child.output,
       udfs,
-      output,
-      output.toStructType,
+      requiredChildOutput,
+      resultAttrs,
       conf.arrowMaxRecordsPerBatch,
+      conf.arrowMaxBytesPerBatch,
       evalType,
       conf.sessionLocalTimeZone,
       conf.arrowUseLargeVarTypes,
@@ -155,7 +161,8 @@ case class ArrowEvalPythonExec(
     new ArrowEvalPythonEvaluatorFactory(
       child.output,
       udfs,
-      output,
+      requiredChildOutput,
+      resultAttrs,
       conf.arrowMaxRecordsPerBatch,
       evalType,
       conf.sessionLocalTimeZone,
@@ -165,6 +172,10 @@ case class ArrowEvalPythonExec(
       jobArtifactUUID,
       sessionUUID)
   }
+
+  override def withRequiredChildOutput(
+      requiredChildOutput: Seq[Attribute]): ArrowEvalPythonExec =
+    copy(requiredChildOutput = requiredChildOutput)
 
   override protected def withNewChildInternal(newChild: SparkPlan): SparkPlan =
     copy(child = newChild)
@@ -186,7 +197,8 @@ case class ArrowEvalPythonExec(
 class ArrowEvalPythonEvaluatorFactory(
     childOutput: Seq[Attribute],
     udfs: Seq[PythonUDF],
-    output: Seq[Attribute],
+    passThroughOutput: Seq[Attribute],
+    resultOutput: Seq[Attribute],
     batchSize: Int,
     evalType: Int,
     sessionLocalTimeZone: String,
@@ -195,7 +207,7 @@ class ArrowEvalPythonEvaluatorFactory(
     pythonMetrics: Map[String, SQLMetric],
     jobArtifactUUID: Option[String],
     sessionUUID: Option[String])
-  extends EvalPythonEvaluatorFactory(childOutput, udfs, output) {
+  extends EvalPythonEvaluatorFactory(childOutput, udfs, passThroughOutput, resultOutput) {
 
   override def evaluate(
       funcs: Seq[(ChainedPythonFunctions, Long)],
@@ -204,7 +216,7 @@ class ArrowEvalPythonEvaluatorFactory(
       schema: StructType,
       context: TaskContext): Iterator[InternalRow] = {
 
-    val outputTypes = output.drop(childOutput.length).map(_.dataType.transformRecursively {
+    val outputTypes = resultOutput.map(_.dataType.transformRecursively {
       case udt: UserDefinedType[_] => udt.sqlType
     })
 

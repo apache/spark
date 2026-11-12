@@ -194,7 +194,8 @@ final class ParquetColumnVector {
       }
       return;
     }
-    // nothing to do if the column itself is missing
+    // nothing to do if the column itself is missing or is a NullType column. Unlike `reset()`,
+    // this can skip a NullType column because it is primitive, so there is nothing to assemble.
     if (vector.isAllNull()) return;
 
     DataType type = column.sparkType();
@@ -216,8 +217,9 @@ final class ParquetColumnVector {
    * (used to store values, definition levels, and repetition levels) for this and all its children.
    */
   void reset() {
-    // nothing to do if the column itself is missing
-    if (vector.isAllNull()) return;
+    // nothing to do if the column itself is missing. A NullType column is not missing: its
+    // column reader still writes repetition and definition levels for each batch.
+    if (vector.isMissing()) return;
 
     vector.reset();
     if (repetitionLevels != null) {

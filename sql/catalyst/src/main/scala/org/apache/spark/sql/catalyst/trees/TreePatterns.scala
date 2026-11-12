@@ -84,6 +84,7 @@ object TreePattern extends Enumeration  {
   val OR: Value = Value
   val OUTER_REFERENCE: Value = Value
   val PARAMETER: Value = Value
+  val PARSE_SQL: Value = Value
   val PIPE_EXPRESSION: Value = Value
   val PLAN_EXPRESSION: Value = Value
   val PYTHON_UDF: Value = Value
@@ -127,6 +128,7 @@ object TreePattern extends Enumeration  {
   val UNRESOLVED_DF_STAR: Value = Value
   val UNRESOLVED_FUNCTION: Value = Value
   val UNRESOLVED_IDENTIFIER: Value = Value
+  val UNRESOLVED_JSON_CONSTRUCTOR: Value = Value
   val UNRESOLVED_ORDINAL: Value = Value
   val UNRESOLVED_PLAN_ID: Value = Value
   val UNRESOLVED_REGEX: Value = Value
@@ -161,6 +163,7 @@ object TreePattern extends Enumeration  {
   val EVENT_TIME_WATERMARK: Value = Value
   val EXCEPT: Value = Value
   val EXECUTE_IMMEDIATE: Value = Value
+  val EXTERNAL_LOOKUP_JOIN: Value = Value
   val INTERSECT: Value = Value
   val FILTER: Value = Value
   val GENERATE: Value = Value
@@ -172,6 +175,7 @@ object TreePattern extends Enumeration  {
   val LIMIT: Value = Value
   val LOCAL_RELATION: Value = Value
   val LOGICAL_QUERY_STAGE: Value = Value
+  val LOOKUP_ONLY_RELATION: Value = Value
   val MERGE_INTO_TABLE: Value = Value
   val METRIC_VIEW_PLACEHOLDER: Value = Value
   val NATURAL_LIKE_JOIN: Value = Value

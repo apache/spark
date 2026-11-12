@@ -534,6 +534,49 @@ class GeneratedColumnWriteSuite extends QueryTest with DatasourceV2SQLBase {
     }
   }
 
+  test("SPARK-59243: SQL path does not shadow nested JSON constructors of a generation " +
+      "expression") {
+    val tblName = "my_tab"
+    Seq("json_array", "json_object", "json_query").foreach { name =>
+      addFunction(name, ConstantStringOfAnyArity("OK"))
+    }
+    // Every level of a nested clause-free call stays the built-in, so nested producers still
+    // splice, and a user cast around one still quotes it.
+    Seq(
+      "json_array(json_array(s))" -> "x" -> """[["x"]]""",
+      "json_array(json_array(s) NULL ON NULL)" -> "x" -> """[["x"]]""",
+      "json_object('a', json_object('b', s))" -> "x" -> """{"a":{"b":"x"}}""",
+      "json_object('a' VALUE json_object('b' VALUE s))" -> "x" -> """{"a":{"b":"x"}}""",
+      "json_object('a' : json_object('b' : s))" -> "x" -> """{"a":{"b":"x"}}""",
+      "json_array(json_query(s, '$.b'))" -> """{"b":[1]}""" -> "[[1]]",
+      "json_array(CAST(json_array(s) AS STRING))" -> "x" -> """["[\"x\"]"]"""
+    ).foreach { case ((expr, s), expected) =>
+      withTable(s"testcat.$tblName") {
+        sql(s"""CREATE TABLE testcat.$tblName(
+               |  s STRING,
+               |  g STRING GENERATED ALWAYS AS ($expr)
+               |) USING foo""".stripMargin)
+        withSQLConf(SQLConf.PATH_ENABLED.key -> "true") {
+          sql("SET PATH = testcat.ns, system.builtin")
+          try {
+            // The path does shadow the calls outside of the generation expression.
+            val shadowed = sql(s"SELECT $expr FROM VALUES ('$s') AS t(s)").head().getString(0)
+            assert(shadowed != expected, s"for $expr")
+            sql(s"INSERT INTO testcat.$tblName(s) VALUES ('$s')")
+            sql(s"INSERT INTO testcat.$tblName VALUES ('$s', r'$expected')")
+            val e = intercept[SparkRuntimeException] {
+              sql(s"INSERT INTO testcat.$tblName VALUES ('$s', 'OK')")
+            }
+            assert(e.getCondition == "CHECK_CONSTRAINT_VIOLATION", s"for $expr")
+            checkAnswer(spark.table(s"testcat.$tblName"), Seq.fill(2)(Row(s, expected)))
+          } finally {
+            sql("SET PATH = DEFAULT_PATH")
+          }
+        }
+      }
+    }
+  }
+
   test("INSERT by position does not auto-fill trailing generated column") {
     val tblName = "my_tab"
     withTable(s"testcat.$tblName") {
