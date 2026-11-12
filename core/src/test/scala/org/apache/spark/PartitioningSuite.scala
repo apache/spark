@@ -150,6 +150,26 @@ class PartitioningSuite extends SparkFunSuite with SharedSparkContext with Priva
     }
   }
 
+  test("SPARK-61561: RangePartitioner bounds of skewed data do not depend on the RDD id") {
+    // Partition 0 is re-sampled as imbalanced; partitions 1-7 fit their reservoir whole.
+    val data = sc.makeRDD(0 until 8, 8).flatMap { i =>
+      if (i == 0) Iterator.range(0, 70000) else Iterator.range(70000 + 100 * i, 70020 + 100 * i)
+    }.cache()
+    def partitioner(): RangePartitioner[Int, Int] = new RangePartitioner(4, data.map(x => (x, x)))
+    val fixed = partitioner()
+    // Same data, a fresh RDD each time: the fixed seeds give identical bounds.
+    assert(fixed.numPartitions === 4 && fixed === partitioner())
+    val key = LEGACY_RANGE_PARTITIONER_RDD_ID_SEED.key
+    val prior = sc.conf.getOption(key)
+    sc.conf.set(LEGACY_RANGE_PARTITIONER_RDD_ID_SEED, true)
+    try {
+      // The legacy RDD-id seed moves the bounds of the same data between executions.
+      assert(partitioner() !== partitioner())
+    } finally {
+      prior.fold(sc.conf.remove(key))(sc.conf.set(key, _))
+    }
+  }
+
   test("RangePartitioner should return a single partition for empty RDDs") {
     val empty1 = sc.emptyRDD[(Int, Double)]
     val partitioner1 = new RangePartitioner(0, empty1)

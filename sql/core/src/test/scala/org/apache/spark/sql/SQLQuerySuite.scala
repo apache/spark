@@ -30,6 +30,7 @@ import java.util.concurrent.atomic.AtomicBoolean
 import scala.collection.mutable
 
 import org.apache.spark.{AccumulatorSuite, SPARK_DOC_ROOT, SparkArithmeticException, SparkDateTimeException, SparkException, SparkNumberFormatException, SparkRuntimeException}
+import org.apache.spark.internal.config.LEGACY_RANGE_PARTITIONER_RDD_ID_SEED
 import org.apache.spark.scheduler.{SparkListener, SparkListenerJobStart}
 import org.apache.spark.sql.catalyst.ExtendedAnalysisException
 import org.apache.spark.sql.catalyst.expressions.{CodegenObjectFactoryMode, GenericRow, Hex}
@@ -5399,6 +5400,49 @@ class SQLQuerySuite extends SharedSparkSession with AdaptiveSparkPlanHelper
       checkAnswer(
         sql("SELECT * FROM (SELECT id FROM range(3) OFFSET 0) ORDER BY id"),
         Seq(Row(0), Row(1), Row(2)))
+    }
+  }
+
+  // Runs a REPEATABLE sample over ORDER BY twice, and once as a CTE read twice in one query.
+  private def repeatableSampleOverOrderBy(): (Set[Long], Set[Long], Long) = {
+    var result: (Set[Long], Set[Long], Long) = null
+    withTable("t") {
+      spark.range(0, 20000, 1, 4).selectExpr("id AS k", "concat('v', id) AS v")
+        .write.format("parquet").saveAsTable("t")
+      withSQLConf(
+          SQLConf.SHUFFLE_PARTITIONS.key -> "4",
+          SQLConf.COALESCE_PARTITIONS_ENABLED.key -> "false",
+          SQLConf.RANGE_EXCHANGE_SAMPLE_SIZE_PER_PARTITION.key -> "100") {
+        val sampled = "(SELECT * FROM (SELECT * FROM t ORDER BY k) " +
+          "TABLESAMPLE (10 PERCENT) REPEATABLE (42))"
+        def run(): Set[Long] = sql(s"SELECT k FROM $sampled").collect().map(_.getLong(0)).toSet
+        val leftover = sql(s"WITH s AS $sampled SELECT count(*) FROM " +
+          "(SELECT k FROM s EXCEPT SELECT k FROM s WHERE v IS NOT NULL)").head().getLong(0)
+        result = (run(), run(), leftover)
+      }
+    }
+    result
+  }
+
+  test("SPARK-61561: TABLESAMPLE REPEATABLE over ORDER BY returns the same rows " +
+      "on every execution") {
+    val (first, second, leftover) = repeatableSampleOverOrderBy()
+    assert(first.size > 1000 && first.size < 3000)
+    assert(first === second && leftover === 0L)
+  }
+
+  test("SPARK-61561: TABLESAMPLE REPEATABLE over ORDER BY returns the same rows on every " +
+      "execution (gate off reproduces the bug)") {
+    val conf = spark.sparkContext.conf
+    val key = LEGACY_RANGE_PARTITIONER_RDD_ID_SEED.key
+    val prior = conf.getOption(key)
+    conf.set(key, "true")
+    try {
+      val (first, second, leftover) = repeatableSampleOverOrderBy()
+      assert(first !== second)
+      assert(leftover > 0L)
+    } finally {
+      prior.fold(conf.remove(key))(conf.set(key, _))
     }
   }
 }

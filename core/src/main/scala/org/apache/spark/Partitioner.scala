@@ -203,7 +203,11 @@ class RangePartitioner[K : Ordering : ClassTag, V](
       val sampleSize = math.min(samplePointsPerPartitionHint.toDouble * partitions, 1e6)
       // Assume the input partitions are roughly balanced and over-sample a little bit.
       val sampleSizePerPartition = math.ceil(3.0 * sampleSize / rdd.partitions.length).toInt
-      val (numItems, sketched) = RangePartitioner.sketch(rdd.map(_._1), sampleSizePerPartition)
+      // Seeds derived from the RDD id move the bounds of the same data on every execution, which
+      // breaks seeded samples over a global sort.
+      val legacyRddIdSeed = rdd.sparkContext.conf.get(config.LEGACY_RANGE_PARTITIONER_RDD_ID_SEED)
+      val (numItems, sketched) =
+        RangePartitioner.sketch(rdd.map(_._1), sampleSizePerPartition, legacyRddIdSeed)
       if (numItems == 0L) {
         Array.empty
       } else {
@@ -226,7 +230,8 @@ class RangePartitioner[K : Ordering : ClassTag, V](
         if (imbalancedPartitions.nonEmpty) {
           // Re-sample imbalanced partitions with the desired sampling probability.
           val imbalanced = new PartitionPruningRDD(rdd.map(_._1), imbalancedPartitions.contains)
-          val seed = byteswap32(-rdd.id - 1)
+          val seedShift = if (legacyRddIdSeed) rdd.id else 0
+          val seed = byteswap32(-seedShift - 1)
           val reSampled = imbalanced.sample(withReplacement = false, fraction, seed).collect()
           val weight = (1.0 / fraction).toFloat
           candidates ++= reSampled.map(x => (x, weight))
@@ -329,12 +334,14 @@ private[spark] object RangePartitioner {
    *
    * @param rdd the input RDD to sketch
    * @param sampleSizePerPartition max sample size per partition
+   * @param legacyRddIdSeed whether to mix the RDD id into the per-partition seeds
    * @return (total number of items, an array of (partitionId, number of items, sample))
    */
   def sketch[K : ClassTag](
       rdd: RDD[K],
-      sampleSizePerPartition: Int): (Long, Array[(Int, Long, Array[K])]) = {
-    val shift = rdd.id
+      sampleSizePerPartition: Int,
+      legacyRddIdSeed: Boolean = false): (Long, Array[(Int, Long, Array[K])]) = {
+    val shift = if (legacyRddIdSeed) rdd.id else 0
     // val classTagK = classTag[K] // to avoid serializing the entire partitioner object
     val sketched = rdd.mapPartitionsWithIndex { (idx, iter) =>
       val seed = byteswap32(idx ^ (shift << 16))
