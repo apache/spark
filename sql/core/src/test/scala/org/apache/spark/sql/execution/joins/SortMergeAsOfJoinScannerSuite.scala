@@ -22,7 +22,8 @@ import java.util.concurrent.atomic.AtomicInteger
 
 import com.sun.management.UnixOperatingSystemMXBean
 
-import org.apache.spark.{LocalSparkContext, SparkConf, SparkContext, SparkFunSuite}
+import org.apache.spark.{LocalSparkContext, SparkConf, SparkContext, SparkException,
+  SparkFunSuite}
 import org.apache.spark.internal.config.UNSAFE_SORTER_SPILL_READ_AHEAD_ENABLED
 import org.apache.spark.sql.YearUDT
 import org.apache.spark.sql.catalyst.InternalRow
@@ -40,6 +41,29 @@ class SortMergeAsOfJoinScannerSuite extends SparkFunSuite with LocalSparkContext
 
   private val factoryModes =
     Seq(CodegenObjectFactoryMode.CODEGEN_ONLY, CodegenObjectFactoryMode.NO_CODEGEN)
+
+  test("only backward and forward joins have a scan strategy") {
+    assert(AsOfScanStrategy.of(Backward).contains(AsOfScanStrategy.LastMatch))
+    assert(AsOfScanStrategy.of(Forward).contains(AsOfScanStrategy.FirstMatch))
+    assert(AsOfScanStrategy.of(Nearest).isEmpty)
+    assert(AsOfScanStrategy(Backward) == AsOfScanStrategy.LastMatch)
+    assert(AsOfScanStrategy(Forward) == AsOfScanStrategy.FirstMatch)
+    checkError(
+      exception = intercept[SparkException](AsOfScanStrategy(Nearest)),
+      condition = "INTERNAL_ERROR",
+      parameters = Map("message" -> "The Nearest AS-OF join has no ordered scan"))
+  }
+
+  test("nearest join has no cursor scan") {
+    val leftKey = AttributeReference("leftKey", IntegerType)()
+    val rightKey = AttributeReference("rightKey", IntegerType)()
+    // A scanner built by hand must fail, not run the cursor of another direction.
+    val error = intercept[SparkException] {
+      runScan(Seq(5), Seq(1, 9), leftKey, rightKey, Literal.TrueLiteral, Nearest,
+        useCursorScan = true)
+    }
+    assert(error.getMessage.contains("The Nearest AS-OF join has no ordered scan"))
+  }
 
   test("nearest scan stops at the first eligible row after the left key") {
     sc = new SparkContext("local", "SortMergeAsOfJoinScannerSuite", new SparkConf(false))

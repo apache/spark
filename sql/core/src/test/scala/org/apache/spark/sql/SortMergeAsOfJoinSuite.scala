@@ -25,6 +25,7 @@ import scala.jdk.CollectionConverters._
 
 import com.sun.management.UnixOperatingSystemMXBean
 
+import org.apache.spark.SparkException
 import org.apache.spark.sql.catalyst.expressions.{BinaryComparison, Expression, GreaterThan, GreaterThanOrEqual, LessThan, LessThanOrEqual}
 import org.apache.spark.sql.catalyst.plans.{AsOfJoinDirection, Backward, Forward, Nearest}
 import org.apache.spark.sql.catalyst.plans.logical.{AsOfJoin, LogicalPlan}
@@ -2494,5 +2495,98 @@ class SortMergeAsOfJoinSuite extends QueryTest
         assert(openedFiles < 8, s"the scan left $openedFiles more files open")
       }
     }
+  }
+
+  // (grp, ts, v, tag) rows for the differential test below. Both sides have ties on `ts` with
+  // different tags, NULL as-of keys, a NULL equi-key and a group that the other side lacks. The
+  // left keys fall before, on, between and after the right keys of their group.
+  private def directionTestSides(): (classic.DataFrame, classic.DataFrame) = {
+    val schema = StructType(
+      StructField("grp", StringType) ::
+        StructField("ts", IntegerType) ::
+        StructField("v", IntegerType) ::
+        StructField("tag", StringType) :: Nil)
+    val leftRows = List(
+      Row("A", 1, 5, "l1"), Row("A", 5, 5, "l2"), Row("A", 5, 1, "l3"), Row("A", null, 5, "l4"),
+      Row("A", 9, 5, "l5"), Row("A", 20, 5, "l6"), Row("B", 4, 5, "l7"), Row("C", 4, 5, "l8"),
+      Row(null, 5, 5, "l9"))
+    val rightRows = List(
+      Row("A", 2, 1, "r1"), Row("A", 5, 9, "r2"), Row("A", 5, 3, "r3"), Row("A", null, 1, "r4"),
+      Row("A", 7, 3, "r5"), Row("A", 7, 7, "r6"), Row("A", 12, 1, "r7"), Row("B", 1, 1, "r8"),
+      Row("B", 4, 6, "r9"), Row("D", 4, 1, "r10"), Row(null, 5, 1, "r11"))
+    // One partition per side fixes the order within a tie.
+    (spark.createDataFrame(leftRows.asJava, schema).coalesce(1),
+      spark.createDataFrame(rightRows.asJava, schema).coalesce(1))
+  }
+
+  for {
+    direction <- Seq("backward", "forward", "nearest")
+    joinType <- Seq("inner", "left")
+  } {
+    test(s"$direction $joinType join returns the same rows with the ASOF join codegen off and on") {
+      val leftRowCount = directionTestSides()._1.count()
+      var matchedRows = 0L
+      for {
+        equiKey <- Seq(false, true)
+        residual <- Seq(false, true)
+        tolerance <- Seq(None, Some(2))
+        allowExactMatches <- Seq(false, true)
+        cursorScan <- Seq(false, true)
+      } {
+        withClue(s"equi-key $equiKey, residual $residual, tolerance $tolerance, " +
+            s"exact matches $allowExactMatches, cursor scan $cursorScan: ") {
+          withSQLConf(
+              SQLConf.SHUFFLE_PARTITIONS.key -> "1",
+              SQLConf.SORT_MERGE_AS_OF_JOIN_CURSOR_SCAN_ENABLED.key -> cursorScan.toString) {
+            def joined: DataFrame = {
+              val (left, right) = directionTestSides()
+              val conditions =
+                (if (equiKey) Seq(left.col("grp") === right.col("grp")) else Nil) ++
+                  (if (residual) Seq(left.col("v") >= right.col("v")) else Nil)
+              left.joinAsOf(
+                right, left.col("ts"), right.col("ts"),
+                joinExprs = conditions.reduceOption(_ && _).orNull,
+                joinType = joinType, tolerance = tolerance.map(functions.lit).orNull,
+                allowExactMatches = allowExactMatches, direction = direction)
+            }
+            // The interpreted scan gives the expected rows of the generated one.
+            var interpreted: Seq[Row] = null
+            withAsOfJoinCodegenOffAndOn { codegen =>
+              val query = joined
+              if (codegen) {
+                checkAnswer(query, interpreted)
+              } else {
+                interpreted = query.collect().toSeq
+              }
+              assertAsOfJoinCodegen(query, codegen)
+            }
+            if (joinType == "left") assert(interpreted.length == leftRowCount)
+            matchedRows += interpreted.count(!_.isNullAt(7))
+          }
+        }
+      }
+      assert(matchedRows > 0, "no case matched any row")
+    }
+  }
+
+  test("a nearest join built with the codegen on has no generated scan") {
+    val (left, right) = directionTestSides()
+    val joined = left.joinAsOf(
+      right, left.col("ts"), right.col("ts"), usingColumns = Seq.empty,
+      joinType = "inner", tolerance = null, allowExactMatches = true, direction = "nearest")
+    val planned = joined.queryExecution.sparkPlan.collectFirst {
+      case j: SortMergeAsOfJoinExec => j
+    }.get
+    // The planner already passes the config on. Set it here so the test does not depend on it.
+    val join = planned.copy(codegenEnabled = true)
+    assert(join.direction == Nearest)
+    assert(!join.supportCodegen)
+    // A stage built by hand around the join must fail, not run the scan of another direction.
+    checkError(
+      exception = intercept[SparkException] {
+        WholeStageCodegenExec(join)(codegenStageId = 0).doCodeGen()
+      },
+      condition = "INTERNAL_ERROR",
+      parameters = Map("message" -> "The Nearest AS-OF join has no ordered scan"))
   }
 }
