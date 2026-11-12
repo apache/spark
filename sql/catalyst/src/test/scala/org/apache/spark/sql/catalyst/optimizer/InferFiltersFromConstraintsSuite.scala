@@ -590,4 +590,64 @@ class InferFiltersFromConstraintsSuite extends PlanTest {
     comparePlans(optimized, correctAnswer)
   }
 
+  private val asOfLeft = LocalRelation($"lt".int, $"lk".int)
+  private val asOfRight = LocalRelation($"rt".int, $"rk".int)
+  private val leftKey = asOfLeft.output(1)
+  private val rightKey = asOfRight.output(1)
+
+  // A backward as-of join on lt >= rt, by default ON lk = rk.
+  private def asOfJoin(
+      left: LogicalPlan,
+      right: LogicalPlan,
+      joinType: JoinType,
+      condition: Expression = leftKey === rightKey): LogicalPlan = {
+    AsOfJoin(left, right, asOfLeft.output(0), asOfRight.output(0), Some(condition), joinType,
+      tolerance = None, allowExactMatches = true, direction = AsOfJoinDirection("backward"))
+  }
+
+  test("as-of joins: a left filter on the ON key also filters the right side") {
+    Seq(Inner, LeftOuter).foreach { joinType =>
+      val originalQuery = asOfJoin(asOfLeft.where(leftKey % 100 === 7), asOfRight, joinType)
+        .analyze
+      val correctAnswer = asOfJoin(
+        asOfLeft.where(IsNotNull(leftKey) && leftKey % 100 === 7),
+        asOfRight.where(IsNotNull(rightKey) && rightKey % 100 === 7),
+        joinType).analyze
+      comparePlans(Optimize.execute(originalQuery), correctAnswer)
+    }
+  }
+
+  test("as-of joins: a right filter on the ON key filters the left side only for an inner join") {
+    val right = asOfRight.where(rightKey === 5)
+    val expectedRight = asOfRight.where(IsNotNull(rightKey) && rightKey === 5)
+    val innerQuery = asOfJoin(asOfLeft, right, Inner).analyze
+    val innerAnswer = asOfJoin(
+      asOfLeft.where(IsNotNull(leftKey) && leftKey === 5), expectedRight, Inner).analyze
+    comparePlans(Optimize.execute(innerQuery), innerAnswer)
+
+    // A left outer join keeps every left row, so its left side gets no filter.
+    val leftOuterQuery = asOfJoin(asOfLeft, right, LeftOuter).analyze
+    val leftOuterAnswer = asOfJoin(asOfLeft, expectedRight, LeftOuter).analyze
+    comparePlans(Optimize.execute(leftOuterQuery), leftOuterAnswer)
+  }
+
+  test("as-of joins: drop the rows with a null ON key") {
+    val innerQuery = asOfJoin(asOfLeft, asOfRight, Inner).analyze
+    val innerAnswer = asOfJoin(
+      asOfLeft.where(IsNotNull(leftKey)), asOfRight.where(IsNotNull(rightKey)), Inner).analyze
+    comparePlans(Optimize.execute(innerQuery), innerAnswer)
+
+    val leftOuterQuery = asOfJoin(asOfLeft, asOfRight, LeftOuter).analyze
+    val leftOuterAnswer = asOfJoin(asOfLeft, asOfRight.where(IsNotNull(rightKey)), LeftOuter)
+      .analyze
+    comparePlans(Optimize.execute(leftOuterQuery), leftOuterAnswer)
+  }
+
+  test("as-of joins: a null-safe ON key keeps the rows with a NULL key") {
+    // NULL <=> NULL is true, so a NULL key can match and must not be filtered out.
+    Seq(Inner, LeftOuter).foreach { joinType =>
+      val originalQuery = asOfJoin(asOfLeft, asOfRight, joinType, leftKey <=> rightKey).analyze
+      comparePlans(Optimize.execute(originalQuery), originalQuery)
+    }
+  }
 }

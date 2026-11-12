@@ -22,7 +22,9 @@ import java.sql.{Date, Timestamp}
 import scala.util.Random
 
 import org.apache.spark.SparkThrowable
-import org.apache.spark.sql.catalyst.expressions.{Cast, CodegenObjectFactoryMode}
+import org.apache.spark.sql.catalyst.expressions.{Attribute, Cast, CodegenObjectFactoryMode,
+  EqualTo, Expression, Literal}
+import org.apache.spark.sql.catalyst.optimizer.InferFiltersFromConstraints
 import org.apache.spark.sql.catalyst.plans.{AsOfJoinDirection, Backward, Forward, Nearest}
 import org.apache.spark.sql.catalyst.plans.logical.AsOfJoin
 import org.apache.spark.sql.execution.{FileSourceScanExec, InputAdapter, SparkPlan,
@@ -160,15 +162,35 @@ class AsOfJoinSortMergeSQLSuite extends QueryTest
     }
   }
 
-  /** Names of the columns that the scan of `table` filters on. */
-  private def scanFilterColumns(df: DataFrame, table: String): Set[String] = {
+  /** The data filters that the scan of `table` runs. */
+  private def scanDataFilters(df: DataFrame, table: String): Seq[Expression] = {
     val plan = df.queryExecution.executedPlan
     val scans = collect(plan) {
       case scan: FileSourceScanExec if scan.tableIdentifier.exists(_.table == table) => scan
     }
     assert(scans.length == 1, s"Expected one scan of $table in plan:\n$plan")
-    scans.head.dataFilters.flatMap(_.references.map(_.name)).toSet
+    scans.head.dataFilters
   }
+
+  /** Names of the columns that the scan of `table` filters on. */
+  private def scanFilterColumns(df: DataFrame, table: String): Set[String] =
+    scanDataFilters(df, table).flatMap(_.references.map(_.name)).toSet
+
+  /** Whether the scan of `table` keeps only the rows where string `column` equals `value`. */
+  private def scanFiltersOnEquality(
+      df: DataFrame, table: String, column: String, value: String): Boolean =
+    scanDataFilters(df, table).exists {
+      case EqualTo(a: Attribute, Literal(v, _: StringType)) =>
+        a.name == column && v.toString == value
+      case _ => false
+    }
+
+  /**
+   * Runs `f` without InferFiltersFromConstraints. It would drop the right rows with a NULL ON
+   * key before the join, so a test of how the join itself treats NULL keys would not see them.
+   */
+  private def withNullOnKeysKept(f: => Unit): Unit =
+    withSQLConf(SQLConf.OPTIMIZER_EXCLUDED_RULES.key -> InferFiltersFromConstraints.ruleName)(f)
 
   /** Runs `f` with temp view `r` over `rows`, kept in input order so ties keep that order. */
   private def withOrderedRightView(rows: String, columns: String)(f: => Unit): Unit = {
@@ -1299,6 +1321,81 @@ class AsOfJoinSortMergeSQLSuite extends QueryTest
         Row(Timestamp.valueOf("2026-06-29 10:00:12"), null)))
   }
 
+  test("WHERE on the left ON key also filters the right scan") {
+    withTradeQuoteTables {
+      Seq("LEFT ASOF JOIN", "ASOF JOIN").foreach { join =>
+        val query = sql(
+          s"""
+             |SELECT t.trade_time, q.bid_price
+             |FROM trades_t t $join quotes_t q
+             |  MATCH_CONDITION (t.trade_time >= q.quote_time)
+             |  ON t.symbol = q.symbol
+             |WHERE t.symbol = 'MSFT'
+             |""".stripMargin)
+        withClue(s"$join: ") {
+          checkSortMergeAsOf(query, Row(Timestamp.valueOf("2026-06-29 10:00:12"), 420.50) :: Nil)
+          assert(scanFiltersOnEquality(query, "quotes_t", "symbol", "MSFT"))
+        }
+      }
+    }
+  }
+
+  test("a right input filter on the ON key filters the left scan only for an inner join") {
+    withTradeQuoteTables {
+      // A left outer join keeps every trade, so only the inner join may skip the other symbols.
+      val leftOuterQuery = sql(
+        """
+          |SELECT t.trade_time, q.bid_price
+          |FROM trades_t t LEFT ASOF JOIN (SELECT * FROM quotes_t WHERE symbol = 'MSFT') q
+          |  MATCH_CONDITION (t.trade_time >= q.quote_time)
+          |  ON t.symbol = q.symbol
+          |""".stripMargin)
+      checkSortMergeAsOf(
+        leftOuterQuery,
+        Seq(
+          Row(Timestamp.valueOf("2026-06-29 09:59:59"), null),
+          Row(Timestamp.valueOf("2026-06-29 10:00:05"), null),
+          Row(Timestamp.valueOf("2026-06-29 10:00:11"), null),
+          Row(Timestamp.valueOf("2026-06-29 10:00:12"), 420.50)))
+      assert(!scanFiltersOnEquality(leftOuterQuery, "trades_t", "symbol", "MSFT"))
+
+      val innerQuery = sql(
+        """
+          |SELECT t.trade_time, q.bid_price
+          |FROM trades_t t ASOF JOIN (SELECT * FROM quotes_t WHERE symbol = 'MSFT') q
+          |  MATCH_CONDITION (t.trade_time >= q.quote_time)
+          |  ON t.symbol = q.symbol
+          |""".stripMargin)
+      checkSortMergeAsOf(innerQuery, Row(Timestamp.valueOf("2026-06-29 10:00:12"), 420.50) :: Nil)
+      assert(scanFiltersOnEquality(innerQuery, "trades_t", "symbol", "MSFT"))
+    }
+  }
+
+  test("a right filter inferred from the ON condition is not added if it can fail") {
+    withTable("guarded_t") {
+      sql(
+        """
+          |CREATE TABLE guarded_t USING parquet AS
+          |SELECT * FROM VALUES (1, 6, 'num', 0, 100), (2, 10, 'text', 0, 100)
+          |  AS t(id, k, kind, lo, hi)
+          |""".stripMargin)
+      withGuardedConditionConfs {
+        // WHERE t.lo = 0 and ON CAST(r.v AS INT) >= t.lo give CAST(r.v AS INT) >= 0. As a right
+        // filter it would cast 'abc', which only the 'text' row could match, and fail.
+        checkSortMergeAsOf(
+          sql(
+            """
+              |SELECT t.id, r.v
+              |FROM guarded_t t LEFT ASOF JOIN VALUES (5, '42'), (8, 'abc') AS r(k, v)
+              |  MATCH_CONDITION (t.k >= r.k)
+              |  ON t.kind <> 'text' AND CAST(r.v AS INT) >= t.lo AND CAST(r.v AS INT) <= t.hi
+              |WHERE t.lo = 0
+              |""".stripMargin),
+          Seq(Row(1, "42"), Row(2, null)))
+      }
+    }
+  }
+
   test("ON condition does not divide when an AND guard before it is FALSE") {
     withGuardedConditionConfs {
       // The closer right row has the same y, so `t.y <> r.y` must stop the division by zero.
@@ -1572,54 +1669,60 @@ class AsOfJoinSortMergeSQLSuite extends QueryTest
   test("cursor scan: backward match moves forward across trades and keys") {
     // B has no quotes, C has quotes but no trades, and NULL keys never match. A best row kept
     // from key A would give B a match.
-    checkCursorScan(
-      sql(
-        """
-          |SELECT t.sym, t.ts, q.tag
-          |FROM VALUES ('A', 2), ('A', 6), ('A', 7), ('B', 4), ('D', 5), (NULL, 3) AS t(sym, ts)
-          |LEFT ASOF JOIN VALUES ('A', 1, 'a1'), ('A', 3, 'a3'), ('A', 5, 'a5'), ('A', 8, 'a8'),
-          |  ('C', 1, 'c1'), ('D', 2, 'd2'), ('D', 6, 'd6'), (NULL, 1, 'n1') AS q(sym, ts, tag)
-          |  MATCH_CONDITION (t.ts >= q.ts)
-          |  ON t.sym = q.sym
-          |""".stripMargin),
-      Row("A", 2, "a1") :: Row("A", 6, "a5") :: Row("A", 7, "a5") :: Row("B", 4, null) ::
-        Row("D", 5, "d2") :: Row(null, 3, null) :: Nil)
+    withNullOnKeysKept {
+      checkCursorScan(
+        sql(
+          """
+            |SELECT t.sym, t.ts, q.tag
+            |FROM VALUES ('A', 2), ('A', 6), ('A', 7), ('B', 4), ('D', 5), (NULL, 3) AS t(sym, ts)
+            |LEFT ASOF JOIN VALUES ('A', 1, 'a1'), ('A', 3, 'a3'), ('A', 5, 'a5'), ('A', 8, 'a8'),
+            |  ('C', 1, 'c1'), ('D', 2, 'd2'), ('D', 6, 'd6'), (NULL, 1, 'n1') AS q(sym, ts, tag)
+            |  MATCH_CONDITION (t.ts >= q.ts)
+            |  ON t.sym = q.sym
+            |""".stripMargin),
+        Row("A", 2, "a1") :: Row("A", 6, "a5") :: Row("A", 7, "a5") :: Row("B", 4, null) ::
+          Row("D", 5, "d2") :: Row(null, 3, null) :: Nil)
+    }
   }
 
   test("cursor scan: two ON keys, with NULL parts, start a new group on either key") {
     // (1, 1) and (1, 2) differ only in the second key. A cursor that compared only the first
     // key would give trade 5 the quote q1n, and trade 1 the later quote q12.
-    checkCursorScan(
-      sql(
-        """
-          |SELECT t.id, q.tag
-          |FROM VALUES (1, 1, 1, 10), (2, 1, 2, 10), (3, 1, NULL, 10), (4, 2, 1, 10), (5, 1, 1, 3)
-          |  AS t(id, a, b, ts)
-          |LEFT ASOF JOIN VALUES (1, 1, 5, 'q11'), (1, 2, 6, 'q12'), (1, NULL, 1, 'q1n'),
-          |  (2, 2, 1, 'q22') AS q(a, b, ts, tag)
-          |  MATCH_CONDITION (t.ts >= q.ts)
-          |  ON t.a = q.a AND t.b = q.b
-          |""".stripMargin),
-      Row(1, "q11") :: Row(2, "q12") :: Row(3, null) :: Row(4, null) :: Row(5, null) :: Nil)
+    withNullOnKeysKept {
+      checkCursorScan(
+        sql(
+          """
+            |SELECT t.id, q.tag
+            |FROM VALUES (1, 1, 1, 10), (2, 1, 2, 10), (3, 1, NULL, 10), (4, 2, 1, 10),
+            |  (5, 1, 1, 3) AS t(id, a, b, ts)
+            |LEFT ASOF JOIN VALUES (1, 1, 5, 'q11'), (1, 2, 6, 'q12'), (1, NULL, 1, 'q1n'),
+            |  (2, 2, 1, 'q22') AS q(a, b, ts, tag)
+            |  MATCH_CONDITION (t.ts >= q.ts)
+            |  ON t.a = q.a AND t.b = q.b
+            |""".stripMargin),
+        Row(1, "q11") :: Row(2, "q12") :: Row(3, null) :: Row(4, null) :: Row(5, null) :: Nil)
+    }
   }
 
   test("cursor scan: a NULL right ON key ends the group like any later key") {
     // Row 'null key' has k1 = 2, so it ends the group of k1 = 1, and the scan stops there. It
     // must not read on to row 'bad', whose ON key r.a / r.b divides by zero under ANSI.
-    withSQLConf(SQLConf.ANSI_ENABLED.key -> "true") {
-      withOrderedRightView(
-          "(1, 10, 2, 1, 'match'), (2, NULL, 1, 1, 'null key'), (3, 1, 0, 1, 'bad')",
-          "k1, a, b, ts, tag") {
-        checkCursorScan(
-          sql(
-            """
-              |SELECT t.k1, r.tag
-              |FROM VALUES (1, 5.0D, 10) AS t(k1, k2, ts)
-              |ASOF JOIN r
-              |  MATCH_CONDITION (t.ts >= r.ts)
-              |  ON t.k1 = r.k1 AND t.k2 = r.a / r.b
-              |""".stripMargin),
-          Row(1, "match") :: Nil)
+    withNullOnKeysKept {
+      withSQLConf(SQLConf.ANSI_ENABLED.key -> "true") {
+        withOrderedRightView(
+            "(1, 10, 2, 1, 'match'), (2, NULL, 1, 1, 'null key'), (3, 1, 0, 1, 'bad')",
+            "k1, a, b, ts, tag") {
+          checkCursorScan(
+            sql(
+              """
+                |SELECT t.k1, r.tag
+                |FROM VALUES (1, 5.0D, 10) AS t(k1, k2, ts)
+                |ASOF JOIN r
+                |  MATCH_CONDITION (t.ts >= r.ts)
+                |  ON t.k1 = r.k1 AND t.k2 = r.a / r.b
+                |""".stripMargin),
+            Row(1, "match") :: Nil)
+        }
       }
     }
   }
@@ -1692,7 +1795,9 @@ class AsOfJoinSortMergeSQLSuite extends QueryTest
   gridTest("cursor scan: a NOT NULL left ON key never matches a NULL right ON key")(
     notNullLeftKeyQueries.keys.toSeq.sorted) { keyShape =>
     val (query, expected) = notNullLeftKeyQueries(keyShape)
-    checkCursorScan(sql(query), expected)
+    withNullOnKeysKept {
+      checkCursorScan(sql(query), expected)
+    }
   }
 
   test("a LIMIT in the join's codegen stage stops the join early") {
@@ -2017,9 +2122,11 @@ class AsOfJoinSortMergeSQLSuite extends QueryTest
           // buffered scan would open one spill file per right row of the group for every left row.
           for (cursorScan <- Seq(false, true)) {
             withClue(s"seed $seed, $joinType, t.ts $op q.ts, cursor scan $cursorScan: ") {
+              // Without InferFiltersFromConstraints, the NULL ON key row reaches the join.
               withSQLConf(
                   SQLConf.SHUFFLE_PARTITIONS.key -> "1",
-                  SQLConf.SORT_MERGE_AS_OF_JOIN_CURSOR_SCAN_ENABLED.key -> cursorScan.toString) {
+                  SQLConf.SORT_MERGE_AS_OF_JOIN_CURSOR_SCAN_ENABLED.key -> cursorScan.toString,
+                  SQLConf.OPTIMIZER_EXCLUDED_RULES.key -> InferFiltersFromConstraints.ruleName) {
                 checkWithAsOfJoinCodegenOffAndOn(sql(
                   s"""
                      |SELECT t.id, q.ts, q.tag

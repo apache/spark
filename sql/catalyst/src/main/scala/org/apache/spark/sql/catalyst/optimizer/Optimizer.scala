@@ -2264,7 +2264,7 @@ object InferFiltersFromGenerate extends Rule[LogicalPlan] {
  * Generate a list of additional filters from an operator's existing constraint but remove those
  * that are either already part of the operator's condition or are part of the operator's child
  * constraints. These filters are currently inserted to the existing conditions in the Filter
- * operators and on either side of Join operators.
+ * operators and on either side of Join and AsOfJoin operators.
  *
  * Note: While this optimization is applicable to a lot of types of join, it primarily benefits
  * Inner and LeftSemi joins.
@@ -2281,7 +2281,7 @@ object InferFiltersFromConstraints extends Rule[LogicalPlan]
   }
 
   private def inferFilters(plan: LogicalPlan): LogicalPlan = plan.transformWithPruning(
-    _.containsAnyPattern(FILTER, JOIN)) {
+    _.containsAnyPattern(FILTER, JOIN, AS_OF_JOIN)) {
     case filter @ Filter(condition, child) =>
       val newFilters = (filter.constraints --
         (child.constraints ++ splitConjunctivePredicates(condition))).toSeq.filter(canBeFilter)
@@ -2315,6 +2315,19 @@ object InferFiltersFromConstraints extends Rule[LogicalPlan]
 
         case _ => join
       }
+
+    // A right row that fails the ON condition is never the match of any left row, so a filter
+    // that follows from the left constraints and the ON condition can drop it before the join.
+    // An inner join also drops the left rows without a match, so its left side gets one too.
+    case j: AsOfJoin =>
+      val allConstraints = getAllConstraints(j.left, j.right, j.condition)
+      val newLeft = j.joinType match {
+        case Inner => inferNewFilter(j.left, allConstraints)
+        case LeftOuter => j.left
+        case other =>
+          throw SparkException.internalError(s"Unexpected as-of join type: $other")
+      }
+      j.copy(left = newLeft, right = inferNewFilter(j.right, allConstraints))
   }
 
   private def getAllConstraints(
