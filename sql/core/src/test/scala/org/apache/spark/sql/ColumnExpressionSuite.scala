@@ -26,7 +26,7 @@ import org.apache.hadoop.io.{LongWritable, Text}
 import org.apache.hadoop.mapreduce.lib.input.{TextInputFormat => NewTextInputFormat}
 import org.scalatest.matchers.should.Matchers._
 
-import org.apache.spark.{SparkException, SparkRuntimeException}
+import org.apache.spark.{SparkArithmeticException, SparkException, SparkRuntimeException}
 import org.apache.spark.sql.UpdateFieldsBenchmark._
 import org.apache.spark.sql.catalyst.expressions.{GetStructField, InSet, Literal, NamedExpression,
   UpdateFields, With, WithField}
@@ -3762,14 +3762,15 @@ class ColumnExpressionSuite extends SharedSparkSession {
         }
       }
 
-      val e = intercept[SparkException] {
-        Seq((LocalDate.ofEpochDay(0), LocalDate.of(500000, 1, 1)))
-          .toDF("start", "end")
-          .select($"end" - $"start")
-          .collect()
-      }.getCause
-      assert(e.isInstanceOf[ArithmeticException])
-      assert(e.getMessage == null || e.getMessage.contains("overflow"))
+      checkError(
+        exception = intercept[SparkArithmeticException] {
+          Seq((LocalDate.ofEpochDay(0), LocalDate.of(500000, 1, 1)))
+            .toDF("start", "end")
+            .select($"end" - $"start")
+            .collect()
+        },
+        condition = "DATETIME_OVERFLOW",
+        parameters = Map("operation" -> "subtract DATE '1970-01-01' from DATE '+500000-01-01'"))
     }
   }
 

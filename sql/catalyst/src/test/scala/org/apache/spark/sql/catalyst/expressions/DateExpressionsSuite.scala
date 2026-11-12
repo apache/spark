@@ -1373,6 +1373,22 @@ class DateExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
     checkEvaluation(
       DateDiff(Literal.create(null, DateType), Literal.create(null, DateType)),
       null)
+    checkConsistencyBetweenInterpretedAndCodegenAllowingException(DateDiff, DateType, DateType)
+  }
+
+  test("SPARK-60910: datediff fails on overflow instead of wrapping around") {
+    def date(days: Int): Literal = Literal(days, DateType)
+    checkEvaluation(DateDiff(date(Int.MaxValue), date(0)), Int.MaxValue)
+    checkEvaluation(DateDiff(date(-1), date(Int.MaxValue)), Int.MinValue)
+    checkErrorInExpression[SparkArithmeticException](
+      DateDiff(date(Int.MaxValue), date(-1)),
+      condition = "DATETIME_OVERFLOW",
+      parameters = Map("operation" -> "subtract DATE '1969-12-31' from DATE '+5881580-07-11'"))
+    checkErrorInExpression[SparkArithmeticException](
+      DateDiff(date(Int.MinValue), date(Int.MaxValue)),
+      condition = "DATETIME_OVERFLOW",
+      parameters = Map(
+        "operation" -> "subtract DATE '+5881580-07-11' from DATE '-5877641-06-23'"))
   }
 
   test("to_utc_timestamp") {
@@ -1887,6 +1903,27 @@ class DateExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
         (end: Expression, start: Expression) => SubtractDates(end, start, ansiIntervals),
         DateType, DateType)
     }
+  }
+
+  test("SPARK-60910: subtracting dates fails with DATETIME_OVERFLOW on overflow") {
+    def date(days: Int): Literal = Literal(days, DateType)
+    // The largest number of days that a day-time interval can hold.
+    val maxDays = Long.MaxValue / MICROS_PER_DAY
+    assert(maxDays == 106751991L)
+    checkEvaluation(
+      SubtractDates(date(maxDays.toInt), date(0), legacyInterval = false),
+      Duration.ofDays(maxDays))
+    checkEvaluation(
+      SubtractDates(date(0), date(maxDays.toInt), legacyInterval = false),
+      Duration.ofDays(-maxDays))
+    checkErrorInExpression[SparkArithmeticException](
+      SubtractDates(date(maxDays.toInt + 1), date(0), legacyInterval = false),
+      condition = "DATETIME_OVERFLOW",
+      parameters = Map("operation" -> "subtract DATE '1970-01-01' from DATE '+294247-01-11'"))
+    checkErrorInExpression[SparkArithmeticException](
+      SubtractDates(date(Int.MaxValue), date(-1), legacyInterval = false),
+      condition = "DATETIME_OVERFLOW",
+      parameters = Map("operation" -> "subtract DATE '1969-12-31' from DATE '+5881580-07-11'"))
   }
 
   test("to_timestamp_ntz") {

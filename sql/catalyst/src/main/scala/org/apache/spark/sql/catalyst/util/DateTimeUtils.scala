@@ -921,6 +921,39 @@ object DateTimeUtils extends SparkDateTimeUtils {
   }
 
   /**
+   * Returns the number of days from `startDay` to `endDay`, both expressed as days since
+   * 1970-01-01.
+   *
+   * @throws SparkArithmeticException with the error condition `DATETIME_OVERFLOW` if the number
+   *         of days does not fit in an `Int`.
+   */
+  def daysBetween(endDay: Int, startDay: Int): Int = {
+    try {
+      Math.subtractExact(endDay, startDay)
+    } catch {
+      case _: ArithmeticException =>
+        throw QueryExecutionErrors.subtractDatesOverflowError(endDay, startDay)
+    }
+  }
+
+  /**
+   * Subtracts two dates expressed as days since 1970-01-01, and returns the difference in
+   * microseconds, as a day-time interval stores it.
+   *
+   * @throws SparkArithmeticException with the error condition `DATETIME_OVERFLOW` if the
+   *         difference does not fit in a `Long` number of microseconds.
+   */
+  def subtractDatesToMicros(endDay: Int, startDay: Int): Long = {
+    try {
+      // The difference of two Ints always fits in a Long.
+      Math.multiplyExact(endDay.toLong - startDay, MICROS_PER_DAY)
+    } catch {
+      case _: ArithmeticException =>
+        throw QueryExecutionErrors.subtractDatesOverflowError(endDay, startDay)
+    }
+  }
+
+  /**
    * Subtracts two time values expressed as nanoseconds since 00:00:00, and returns
    * the difference in microseconds.
    *
