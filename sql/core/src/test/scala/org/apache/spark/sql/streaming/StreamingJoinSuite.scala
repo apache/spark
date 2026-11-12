@@ -809,6 +809,32 @@ abstract class StreamingInnerJoinBase extends StreamingJoinSuite {
     }
   }
 
+  for (leftFirst <- Seq(true, false)) {
+    test(s"stream stream inner join on a sub-millisecond interval bound, left first = $leftFirst") {
+      val leftInput = MemoryStream[(Int, Long)]
+      val rightInput = MemoryStream[(Int, Long)]
+      val left = leftInput.toDF().toDF("leftKey", "time")
+        .select($"leftKey", timestamp_micros($"time").as("leftTime"))
+        .withWatermark("leftTime", "10 seconds")
+      val right = rightInput.toDF().toDF("rightKey", "time")
+        .select($"rightKey", timestamp_micros($"time").as("rightTime"))
+        .withWatermark("rightTime", "10 seconds")
+      // A right row 0.3 ms before the left row matches: rightTime > leftTime - 0.5 ms.
+      val joined = left.join(right, expr("leftKey = rightKey AND " +
+          "rightTime > leftTime - INTERVAL 500 MICROSECONDS AND " +
+          "rightTime < leftTime + INTERVAL 1 SECOND"))
+        .select($"leftKey", unix_micros($"leftTime"), unix_micros($"rightTime"))
+      val leftData = AddData(leftInput, (1, 100000000L))
+      val rightData = AddData(rightInput, (1, 99999700L))
+      val (first, second) = if (leftFirst) (leftData, rightData) else (rightData, leftData)
+      testStream(joined)(
+        first,
+        CheckNewAnswer(),
+        second,
+        CheckNewAnswer((1, 100000000L, 99999700L)))
+    }
+  }
+
   testWithAppendAndUpdate("stream stream self join") { outputMode =>
     val input = MemoryStream[Int]
     val df = input.toDF()
