@@ -106,6 +106,11 @@ private[execution] class MapOutputBatch(
  * once the map outputs before it have been returned. Only the rows that can still be returned
  * before the limit are spooled, so a map output may be spooled in part, or not at all.
  *
+ * With a limit, a batch only starts once all rows of the previous batches have been returned, so
+ * that its size can follow the number of rows still needed. Without a limit, the next batch starts
+ * as soon as all map outputs of the current batch have arrived, so that fetching it overlaps with
+ * returning the spools of the current batch.
+ *
  * @param metrics the SQL metrics to update.
  * @param serializer serializes the rows of the spooled map outputs.
  * @param readMapOutputs reads the map outputs in the map index range `[start, end)`.
@@ -146,6 +151,8 @@ private[execution] class OrderedGatherIterator(
   private var nextMapIndex = 0
   // The rows of the map output being returned, read from the shuffle or from a spool.
   private var rows: Iterator[InternalRow] = Iterator.empty
+  // Without a limit, the next batch once it has been started early, with its map index range.
+  private var prefetchedBatch: Option[(Int, Int, MapOutputBatch)] = None
 
   context.addTaskCompletionListener[Unit](_ => close())
 
@@ -186,6 +193,7 @@ private[execution] class OrderedGatherIterator(
       finishBatch()
       startNextBatch()
     } else if (spools.contains(nextMapIndex)) {
+      prefetchNextBatch()
       returnSpooledMapOutput()
       true
     } else if (batchOutputs.hasNext) {
@@ -263,11 +271,41 @@ private[execution] class OrderedGatherIterator(
     }
   }
 
+  /**
+   * Without a limit, starts the next batch once all map outputs of the current batch have arrived,
+   * that is, when only spools of the current batch are left to return. Its map outputs are then
+   * fetched while the spools are returned. Called when `rows` is used up, so that the current
+   * batch's map outputs have all been read.
+   */
+  private def prefetchNextBatch(): Unit = {
+    if (limit < 0 && pendingMapIndexes.isEmpty && prefetchedBatch.isEmpty &&
+        nextBatchStart < numMaps) {
+      // Releases the resources used to fetch the current batch.
+      finishBatch()
+      prefetchedBatch = Some(readNextBatch())
+    }
+  }
+
   /** Starts reading the next batch of map outputs. Returns false if there are none left. */
   private def startNextBatch(): Boolean = {
-    if (nextBatchStart >= numMaps) {
-      return false
+    val next = prefetchedBatch.orElse {
+      if (nextBatchStart < numMaps) Some(readNextBatch()) else None
     }
+    prefetchedBatch = None
+    next match {
+      case Some((start, end, batch)) =>
+        pendingMapIndexes ++= batch.mapIndexes
+        batchOutputs = batch.outputs
+        batchStart = start
+        batchEnd = end
+        nextMapIndex = start
+        true
+      case None => false
+    }
+  }
+
+  /** Reads the next batch of map outputs, and returns its map index range and map outputs. */
+  private def readNextBatch(): (Int, Int, MapOutputBatch) = {
     val start = nextBatchStart
     val end = start + nextBatchSize()
     val batch = readMapOutputs(start, end)
@@ -278,19 +316,14 @@ private[execution] class OrderedGatherIterator(
           s"Map output $mapIndex to read is not in the map outputs [$start, $end)",
           category = "SHUFFLE")
       }
-      pendingMapIndexes += mapIndex
     }
-    batchOutputs = batch.outputs
-    batchStart = start
-    batchEnd = end
-    nextMapIndex = start
     nextBatchStart = end
-    true
+    (start, end, batch)
   }
 
   // Follows how `SparkPlan.executeTake` grows the number of partitions to scan, capped at
-  // `maxBatchSize` to bound the number of map outputs fetched at a time. A batch only starts once
-  // all rows of the previous batches have been returned.
+  // `maxBatchSize` to bound the number of map outputs fetched at a time. With a limit, a batch only
+  // starts once all rows of the previous batches have been returned.
   private def nextBatchSize(): Int = {
     val size = if (limit < 0) {
       maxBatchSize.toLong
@@ -311,6 +344,7 @@ private[execution] class OrderedGatherIterator(
     closed = true
     rows = Iterator.empty
     batchOutputs = Iterator.empty
+    prefetchedBatch = None
     pendingMapIndexes.clear()
     spools.values.foreach(_.delete())
     spools.clear()

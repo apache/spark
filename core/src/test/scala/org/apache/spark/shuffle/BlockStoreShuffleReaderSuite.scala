@@ -155,10 +155,13 @@ class BlockStoreShuffleReaderSuite extends SparkFunSuite with LocalSparkContext 
   /**
    * Creates a reader of local map outputs, listed in reverse. Map output `m` holds the records
    * `(m, value)` for each value in `mapValues(m)`, in one block per reduce partition.
+   *
+   * @param listedMapIndex the map index that the blocks of map output `m` are listed with.
    */
   private def mapOutputReader(
       mapValues: Seq[Seq[Int]],
-      numReducePartitions: Int = 1): BlockStoreShuffleReader[Int, Int] = {
+      numReducePartitions: Int = 1,
+      listedMapIndex: Int => Int = identity): BlockStoreShuffleReader[Int, Int] = {
     val testConf = new SparkConf(false)
     sc = new SparkContext("local", "test", testConf)
 
@@ -183,7 +186,7 @@ class BlockStoreShuffleReaderSuite extends SparkFunSuite with LocalSparkContext 
         val shuffleBlockId = ShuffleBlockId(shuffleId, 100 + mapIndex, reduceId)
         val managedBuffer = new NioManagedBuffer(ByteBuffer.wrap(bytes))
         when(blockManager.getLocalBlockData(meq(shuffleBlockId))).thenReturn(managedBuffer)
-        (shuffleBlockId, bytes.length.toLong, mapIndex)
+        (shuffleBlockId, bytes.length.toLong, listedMapIndex(mapIndex))
       }
     }
 
@@ -231,5 +234,15 @@ class BlockStoreShuffleReaderSuite extends SparkFunSuite with LocalSparkContext 
     val reader = mapOutputReader(Seq(Seq(1), Seq(2)), numReducePartitions = 2)
     val e = intercept[IllegalArgumentException](reader.readMapOutputs())
     assert(e.getMessage.contains("with a single block per map output"))
+  }
+
+  test("readMapOutputs() fails on a block without a single map index") {
+    // A push-merged block holds the blocks of several map outputs, so it is listed with the map
+    // index SHUFFLE_PUSH_MAP_ID, and its rows could not be put in map index order.
+    val reader = mapOutputReader(
+      Seq(Seq(1)), listedMapIndex = _ => MapOutputTracker.SHUFFLE_PUSH_MAP_ID)
+    val (_, mapOutputs) = reader.readMapOutputs()
+    val e = intercept[SparkException](mapOutputs.next())
+    assert(e.getMessage.contains("Unknown map index for shuffle block"))
   }
 }

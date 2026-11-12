@@ -135,9 +135,9 @@ class CollectLimitOrderedGatherSuite extends QueryTest with SharedSparkSession {
         // Without ORDER BY, the partition order is the order of `range`.
         "SELECT id FROM range(0, 80, 1, 8) WHERE id % 7 != 0" -> ids)
       val limitsAndOffsets = Seq((11, 0), (31, 19), (100, 60), (-1, 19), (-1, 100))
-      // With a bypassMergeThreshold of 0, the sort-based shuffle writer spills every 7 rows, to
-      // check that it keeps the order within map outputs. With 200, the bypass writer, which never
-      // spills, writes the map outputs instead.
+      // With a bypassMergeThreshold of 0, the serialized shuffle writer (UnsafeShuffleWriter)
+      // writes the map outputs and spills every 7 rows, to check that it keeps the order within
+      // map outputs. With 200, the bypass writer, which never spills, writes them instead.
       withSparkEnvConf(
         "spark.shuffle.sort.bypassMergeThreshold" -> bypassMergeThreshold.toString,
         "spark.shuffle.spill.numElementsForceSpillThreshold" -> "7") {
@@ -334,14 +334,22 @@ class CollectLimitOrderedGatherSuite extends QueryTest with SharedSparkSession {
       TaskContext.empty()).map(_.getLong(0)).toList
   }
 
-  test("SPARK-61296: ordered gather on the toLocalIterator and Arrow collect paths") {
-    withOrderedGather(
-      SQLConf.SHUFFLE_PARTITIONS.key -> "8",
-      SQLConf.COALESCE_PARTITIONS_ENABLED.key -> "false") {
-      val query = "SELECT id FROM range(0, 80, 1, 8) ORDER BY id DESC OFFSET 19"
-      val expected = (0L until 80L).reverse.drop(19)
-      assert(localIteratorCollect(spark.sql(query)) === expected)
-      assert(arrowCollect(spark.sql(query)) === expected)
+  // The ordered gather is enabled in tests by default, so this also runs the unordered gather,
+  // which production uses by default. In local mode, it returns the map outputs in order too.
+  for (enabled <- Seq(true, false)) {
+    test("SPARK-61296: ordered gather on the toLocalIterator and Arrow collect paths " +
+      s"(enabled = $enabled)") {
+      withSQLConf(
+        SQLConf.COLLECT_LIMIT_ORDERED_GATHER_ENABLED.key -> enabled.toString,
+        SQLConf.SHUFFLE_PARTITIONS.key -> "8",
+        SQLConf.COALESCE_PARTITIONS_ENABLED.key -> "false") {
+        val query = "SELECT id FROM range(0, 80, 1, 8) ORDER BY id DESC OFFSET 19"
+        val expected = (0L until 80L).reverse.drop(19)
+        assert(localIteratorCollect(spark.sql(query)) === expected)
+        val df = spark.sql(query)
+        assert(arrowCollect(df) === expected)
+        assert(executedCollectLimit(df).metrics.contains("orderedGatherNumBatches") === enabled)
+      }
     }
   }
 
@@ -484,6 +492,46 @@ class CollectLimitOrderedGatherSuite extends QueryTest with SharedSparkSession {
     assert(sparseResult.batches === Seq((0, 1), (1, 5)))
   }
 
+  test("OrderedGatherIterator starts the next batch early only without a limit") {
+    // Each batch arrives in reverse, so its first map output is returned while it is read and the
+    // others are spooled.
+    val mapSizes = Seq(3, 2, 2, 2, 1, 1)
+    def rowsReturnedAtEachBatch(limit: Int): (Seq[Long], Seq[Int]) = {
+      // Created on the driver, as the suite is not serializable.
+      val metrics = OrderedGatherMetrics(spark.sparkContext)
+      runInTask(spark.sparkContext) { context =>
+        var numRowsReturned = 0
+        val rowsReturnedAtBatches = mutable.ArrayBuffer.empty[Int]
+        val gathered = new OrderedGatherIterator(
+          context,
+          testOptions(mapSizes.length, limit, maxBatchSize = 4),
+          metrics,
+          new UnsafeRowSerializer(1),
+          (start, end) => {
+            rowsReturnedAtBatches += numRowsReturned
+            syntheticBatch(mapSizes, _.reverse, listEmpty = false)(start, end)
+          })
+        val values = gathered.map { row =>
+          numRowsReturned += 1
+          row.getLong(0)
+        }.toList
+        (values, rowsReturnedAtBatches.toList)
+      }
+    }
+
+    // Without a limit, the second batch starts once all map outputs of the first one have arrived,
+    // right after the 3 rows of map output 0, before the spools of map outputs 1 to 3.
+    val (values, rowsReturnedAtBatches) = rowsReturnedAtEachBatch(limit = -1)
+    assert(values === mapOutputValues(mapSizes))
+    assert(rowsReturnedAtBatches === Seq(0, 3))
+
+    // With a limit, a batch only starts once all rows of the previous batches have been returned:
+    // batch [0, 1) has 3 rows, and batch [1, 5) has 7 more.
+    val (limitedValues, limitedRowsReturnedAtBatches) = rowsReturnedAtEachBatch(limit = 100)
+    assert(limitedValues === mapOutputValues(mapSizes))
+    assert(limitedRowsReturnedAtBatches === Seq(0, 3, 10))
+  }
+
   test("OrderedGatherIterator deletes the spools that are left at the limit") {
     // The second batch reads map outputs [1, 4) in reverse, so the limit is reached while map
     // outputs 2 and 3 are still spooled.
@@ -551,6 +599,30 @@ class CollectLimitOrderedGatherSuite extends QueryTest with SharedSparkSession {
     // A failed task deletes its spools before its failure is reported.
     assert((spoolFiles() -- spoolFilesBefore).isEmpty, s"Spools left after the failure: $message")
     message
+  }
+
+  test("OrderedGatherIterator deletes its spools when reading a map output fails") {
+    val spoolFilesBefore = spoolFiles()
+    val metrics = OrderedGatherMetrics(spark.sparkContext)
+    val message = intercept[SparkException] {
+      runInTask(spark.sparkContext) { context =>
+        // Map outputs 2 and 1 arrive before map output 0. Map output 2 is spooled, and reading map
+        // output 1 fails while it is spooled.
+        val failingRows = longRows(Iterator(100L)) ++
+          Iterator.continually[InternalRow](throw new IllegalStateException("Fetch failed"))
+        val readMapOutputs = (_: Int, _: Int) => new MapOutputBatch(
+          Array(0, 1, 2),
+          Iterator(
+            (2, longRows(Iterator(200L, 201L))),
+            (1, failingRows),
+            (0, longRows(Iterator(0L)))))
+        new OrderedGatherIterator(context, testOptions(numMaps = 3, limit = -1, maxBatchSize = 3),
+          metrics, new UnsafeRowSerializer(1), readMapOutputs).length
+      }
+    }.getMessage
+    assert(message.contains("Fetch failed"))
+    // A failed task deletes its spools before its failure is reported.
+    assert((spoolFiles() -- spoolFilesBefore).isEmpty, s"Spools left after the failure: $message")
   }
 
   test("OrderedGatherIterator fails on unexpected or missing map outputs") {
