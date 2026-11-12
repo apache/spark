@@ -24,11 +24,9 @@ import org.apache.hadoop.conf.Configuration
 import org.apache.spark.SparkException
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.catalyst.InternalRow
-import org.apache.spark.sql.catalyst.analysis.StreamingJoinHelper
 import org.apache.spark.sql.catalyst.analysis.WidenStatefulOpNullability
-import org.apache.spark.sql.catalyst.expressions.{Attribute, AttributeSet, BoundReference, Expression, GenericInternalRow, IsNull, JoinedRow, LessThanOrEqual, Literal, Predicate, UnsafeProjection, UnsafeRow}
+import org.apache.spark.sql.catalyst.expressions.{Attribute, BoundReference, Expression, GenericInternalRow, IsNull, JoinedRow, LessThanOrEqual, Literal, Predicate, UnsafeProjection, UnsafeRow}
 import org.apache.spark.sql.catalyst.plans._
-import org.apache.spark.sql.catalyst.plans.logical.EventTimeWatermark
 import org.apache.spark.sql.catalyst.plans.physical._
 import org.apache.spark.sql.catalyst.streaming.InternalOutputModes
 import org.apache.spark.sql.catalyst.types.DataTypeUtils
@@ -40,7 +38,7 @@ import org.apache.spark.sql.execution.streaming.operators.stateful.join.Symmetri
 import org.apache.spark.sql.execution.streaming.state._
 import org.apache.spark.sql.internal.{SessionState, SQLConf}
 import org.apache.spark.sql.streaming.OutputMode
-import org.apache.spark.sql.types.{StructType, TimestampType}
+import org.apache.spark.sql.types.StructType
 import org.apache.spark.util.{CompletionIterator, SerializableConfiguration}
 
 
@@ -246,6 +244,41 @@ case class StreamingSymmetricHashJoinExec(
     } else {
       (None, None)
     }
+
+  /**
+   * The window of the other side's state that a row of `joinSide` reads in V4, or None to read
+   * every row for the key. V4 orders a side's state by a timestamp, unless the side has a key
+   * ordinal (see getStateKeyOrdinalForLookup), whose lookups read the key's exact timestamp.
+   * That timestamp is the column the side's value-eviction predicate constrains, or its event
+   * time if it has no such predicate. The window bounds that column with the join condition
+   * evaluated on the row; see [[MatchingScanWindow]]. For rightTime BETWEEN leftTime AND expiry,
+   * the left side evicts on expiry: a left row reads right rows with rightTime in
+   * [leftTime, expiry], and a right row reads left rows with expiry at or above rightTime.
+   */
+  private[sql] def matchingScanWindow(joinSide: JoinSide): Option[MatchingScanWindow] = {
+    val (inputAttributes, otherAttributes, otherKeyOrdinal, otherPredicate) = joinSide match {
+      case LeftSide =>
+        (left.output, right.output, stateKeyOrdinalsForLookup._2, stateWatermarkPredicates.right)
+      case RightSide =>
+        (right.output, left.output, stateKeyOrdinalsForLookup._1, stateWatermarkPredicates.left)
+    }
+    if (stateFormatVersion < 4 || otherKeyOrdinal.isDefined) {
+      None
+    } else {
+      SymmetricHashJoinStateManager.valueTimestampColumnOrdinal(otherAttributes,
+        stateValueWatermarkColumnOrdinal(otherPredicate, otherAttributes)).flatMap { ordinal =>
+        MatchingScanWindow(condition.full, inputAttributes, otherAttributes(ordinal))
+      }
+    }
+  }
+
+  // The column that a side's value-eviction predicate constrains: the event-time column or
+  // another timestamp column.
+  private def stateValueWatermarkColumnOrdinal(
+      predicate: Option[JoinStateWatermarkPredicate],
+      attributes: Seq[Attribute]): Option[Int] = predicate.collect {
+    case p: JoinStateValueWatermarkPredicate => attributes.indexWhere(p.expr.references.contains)
+  }
 
   // Determine the store names and metadata version based on format version
   private val (numStoresPerPartition, _stateStoreNames, _operatorStateMetadataVersion) =
@@ -714,11 +747,8 @@ case class StreamingSymmetricHashJoinExec(
       skippedNullValueCount = skippedNullValueCount,
       joinStoreGenerator = joinStateManagerStoreGenerator,
       joinKeyOrdinalForWatermark = joinKeyOrdinalForWatermark,
-      // The predicate can constrain either the event-time column or another timestamp column.
-      stateValueWatermarkColumnOrdinal = stateWatermarkPredicate.collect {
-        case p: JoinStateValueWatermarkPredicate =>
-          inputAttributes.indexWhere(p.expr.references.contains)
-      })
+      stateValueWatermarkColumnOrdinal =
+        stateValueWatermarkColumnOrdinal(stateWatermarkPredicate, inputAttributes))
 
     private[this] val keyGenerator = UnsafeProjection.create(joinKeys, inputAttributes)
 
@@ -786,116 +816,10 @@ case class StreamingSymmetricHashJoinExec(
         (_, _) => false
       }
 
-    // V4 range scan for time-interval joins (SPARK-55147). Extracts constant interval
-    // offsets from the join condition using getStateValueWatermark(eventWatermark=0).
-    // The -1 eviction adjustment widens range by ~1ms/side; postJoinFilter handles exact bounds.
-    private[this] val scanRangeOffsets: Option[(Long, Long)] = {
-      // A row on this side probes the other side's state for the window
-      //   [thisEventTime + lowerOffset, thisEventTime + upperOffset]
-      // on the other side's event time. In V4, a side whose state manager has a key ordinal (see
-      // getStateKeyOrdinalForLookup) indexes that equality key, and a lookup there uses the key's
-      // exact timestamp and ignores the window. Any other side indexes the column its own
-      // value-eviction predicate constrains, or its event-time column if it has no such
-      // predicate. The window can then only select rows from an index on the event-time column.
-      //
-      // So a range scan requires both of the following:
-      // - isV4TimeIntervalJoin: V4 state, and this side evicts by value. Each side chooses key
-      //   or value eviction from the opposite watermark, so the other side may evict by key.
-      // - indexesEventTimeColumns: no value-evicting side indexes a column other than its event
-      //   time. Each side either has no value-eviction predicate, or its predicate constrains
-      //   only its own event-time column. This joiner probes only the other side's index;
-      //   checking both sides keeps the check identical for the two joiners.
-      //
-      // Examples, where leftTime and rightTime are the event-time columns and expiry is another
-      // timestamp column of the left input:
-      // - rightTime BETWEEN leftTime AND leftTime + INTERVAL 10 MINUTES: both sides evict on
-      //   their event-time columns, so both checks pass. A left row probes right rows with
-      //   rightTime in [leftTime, leftTime + 10 minutes], and a right row probes left rows with
-      //   leftTime in [rightTime - 10 minutes, rightTime].
-      // - rightTime <= leftTime + INTERVAL 10 MINUTES: the left side evicts on leftTime. The
-      //   right side has no value-eviction predicate, because a later left row can still match
-      //   any buffered right row, so its index falls back to rightTime. Both checks pass for
-      //   the left joiner. The condition gives only one bound, so the extraction below returns
-      //   None and the left joiner still reads all right rows for the key.
-      // - rightTime BETWEEN leftTime AND expiry: there is no cutoff on leftTime, because a later
-      //   right row can still match any buffered left row. The left side evicts on expiry
-      //   instead, so its index is ordered by expiry. A window on leftTime cannot select rows
-      //   from that index, so indexesEventTimeColumns is false and each joiner reads all rows
-      //   of the other side for the key.
-      // - leftTime = rightKey AND rightTime BETWEEN leftTime AND leftTime + INTERVAL 10 MINUTES,
-      //   where rightKey has no watermark: the leftTime watermark bounds rightKey, so the right
-      //   side evicts by key while the left side evicts on leftTime. Both checks pass for the
-      //   left joiner, and its lookups into the key-indexed right state ignore the window.
-      val isV4TimeIntervalJoin = stateFormatVersion >= 4 && (stateWatermarkPredicate match {
-        case Some(_: JoinStateValueWatermarkPredicate) => true
-        case _ => false
-      })
+    private[this] val scanWindow = matchingScanWindow(joinSide)
 
-      val indexesEventTimeColumns = Seq(
-        (stateWatermarkPredicates.left, left.output),
-        (stateWatermarkPredicates.right, right.output)).forall {
-        case (Some(p: JoinStateValueWatermarkPredicate), attributes) =>
-          attributes.find(_.metadata.contains(EventTimeWatermark.delayKey)).exists { eventTime =>
-            p.expr.references.forall(_.semanticEquals(eventTime))
-          }
-        // No value-eviction predicate: the index falls back to the event-time column, as in the
-        // second example, or holds the selected key, whose lookups ignore the window.
-        case _ => true
-      }
-      if (!isV4TimeIntervalJoin || !indexesEventTimeColumns) {
-        None
-      } else {
-        val (thisSideAttrs, otherSideAttrs) = joinSide match {
-          case LeftSide => (left.output, right.output)
-          case RightSide => (right.output, left.output)
-        }
-
-        // Scan bounds must constrain the event-time columns used by the index and probe.
-        // Bounds on other columns cannot limit this scan. If either event-time bound is
-        // missing, scan all rows for the join key.
-        val thisEventTime = WatermarkSupport.findEventTimeColumn(
-          thisSideAttrs, !allowMultipleStatefulOperators).toSeq
-        val otherEventTime = WatermarkSupport.findEventTimeColumn(
-          otherSideAttrs, !allowMultipleStatefulOperators).toSeq
-        // The scan reads the event time as a long, so a time-window event time, which the
-        // solver bounds by window order, cannot give it offsets. The solver also reads a cast
-        // that drops part of a time as the time itself. For
-        // CAST(rightTime AS BIGINT) >= CAST(leftTime AS BIGINT) + 60, the scan for a left row
-        // at 100.6 seconds would start near 160.6 seconds and miss a right row at 160.2
-        // seconds, although the casts make them match (160 >= 100 + 60). Read all rows for
-        // the key instead.
-        if (!(thisEventTime ++ otherEventTime).forall(_.dataType == TimestampType) ||
-            StreamingJoinHelper.hasTruncatingCast(
-              condition.full, AttributeSet(thisEventTime ++ otherEventTime))) {
-          None
-        } else {
-          val lowerBoundMs = StreamingJoinHelper.getStateValueWatermark(
-            AttributeSet(otherEventTime), AttributeSet(thisEventTime), condition.full, Some(0L))
-          val upperBoundMs = StreamingJoinHelper.getStateValueWatermark(
-            AttributeSet(thisEventTime), AttributeSet(otherEventTime), condition.full, Some(0L))
-
-          (lowerBoundMs, upperBoundMs) match {
-            case (Some(lower), Some(upper)) =>
-              Some((lower * 1000L, -upper * 1000L)) // ms -> us
-            case _ => None
-          }
-        }
-      }
-    }
-
-    private[this] val eventTimeIdxForRangeScan: Int = scanRangeOffsets.map { _ =>
-      WatermarkSupport.findEventTimeColumnIndex(
-        inputAttributes, !allowMultipleStatefulOperators).getOrElse(-1)
-    }.getOrElse(-1)
-
-    private def computeTimestampRange(thisRow: UnsafeRow): Option[(Long, Long)] = {
-      scanRangeOffsets match {
-        case Some((lowerOffset, upperOffset)) if eventTimeIdxForRangeScan >= 0 =>
-          val eventTimeUs = thisRow.getLong(eventTimeIdxForRangeScan)
-          Some((eventTimeUs + lowerOffset, eventTimeUs + upperOffset))
-        case _ => None
-      }
-    }
+    private def computeTimestampRange(thisRow: UnsafeRow): Option[(Long, Long)] =
+      scanWindow.flatMap(_.rangeFor(thisRow))
 
     /**
      * Generate joined rows by consuming input from this side, and matching it with the buffered

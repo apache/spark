@@ -20,6 +20,7 @@ package org.apache.spark.sql.streaming
 import java.io.File
 import java.lang.{Integer => JInteger}
 import java.sql.Timestamp
+import java.time.{LocalDateTime, ZoneId}
 import java.util.{Locale, UUID}
 
 import scala.util.Random
@@ -402,6 +403,27 @@ abstract class StreamingJoinSuite
     val projectedDf = projFn(stateStoreDf)
     checkAnswer(projectedDf, expectedRows)
   }
+
+  /**
+   * Auctions (id, dateTime, expires) and bids (auction, bidTime, price), in the shape of Nexmark
+   * q9: a bid matches an auction between its start and its expiry, so the auction side evicts
+   * on expires rather than on its event time.
+   */
+  protected def setupAuctionBidJoin(joinType: String)
+      : (MemoryStream[(Int, Long, Long)], MemoryStream[(Int, Long, Long)], DataFrame) = {
+    val auctions = MemoryStream[(Int, Long, Long)]
+    val bids = MemoryStream[(Int, Long, Long)]
+    val left = auctions.toDF().toDF("id", "start", "end")
+      .select($"id", timestamp_millis($"start").as("dateTime"),
+        timestamp_millis($"end").as("expires"))
+      .withWatermark("dateTime", "10 seconds")
+    val right = bids.toDF().toDF("auction", "time", "price")
+      .select($"auction", timestamp_millis($"time").as("bidTime"), $"price")
+      .withWatermark("bidTime", "10 seconds")
+    val joined = left.join(right,
+      expr("id = auction AND bidTime BETWEEN dateTime AND expires"), joinType)
+    (auctions, bids, joined)
+  }
 }
 
 @SlowSQLTest
@@ -751,6 +773,39 @@ abstract class StreamingInnerJoinBase extends StreamingJoinSuite {
         CheckNewAnswer(),
         second,
         CheckNewAnswer((1, 100600L, 160200L)))
+    }
+  }
+
+  test("stream stream inner join on a range of whole days across a daylight saving change") {
+    val zone = ZoneId.of("America/Los_Angeles")
+    // Daylight saving time ends on 2026-11-01, so the day after the left row has 25 hours,
+    // and a right row 24.5 hours later is within one day of it.
+    val leftTimeMs = LocalDateTime.of(2026, 10, 31, 12, 0).atZone(zone).toInstant.toEpochMilli
+    val rightTimeMs = leftTimeMs + 24L * 3600 * 1000 + 1800 * 1000
+    withSQLConf(SQLConf.SESSION_LOCAL_TIMEZONE.key -> zone.getId) {
+      for (leftFirst <- Seq(true, false)) {
+        val leftInput = MemoryStream[(Int, Long)]
+        val rightInput = MemoryStream[(Int, Long)]
+        val left = leftInput.toDF().toDF("leftKey", "time")
+          .select($"leftKey", timestamp_millis($"time").as("leftTime"))
+          .withWatermark("leftTime", "2 days")
+        val right = rightInput.toDF().toDF("rightKey", "time")
+          .select($"rightKey", timestamp_millis($"time").as("rightTime"))
+          .withWatermark("rightTime", "2 days")
+        val joined = left.join(right, expr("leftKey = rightKey AND " +
+            "rightTime BETWEEN leftTime AND leftTime + INTERVAL 1 DAY"))
+          .select(unix_millis($"leftTime"), unix_millis($"rightTime"))
+        val leftData = AddData(leftInput, (1, leftTimeMs))
+        val rightData = AddData(rightInput, (1, rightTimeMs))
+        val (first, second) = if (leftFirst) (leftData, rightData) else (rightData, leftData)
+        withClue(s"left first = $leftFirst") {
+          testStream(joined)(
+            first,
+            CheckNewAnswer(),
+            second,
+            CheckNewAnswer((leftTimeMs, rightTimeMs)))
+        }
+      }
     }
   }
 
@@ -1841,6 +1896,20 @@ abstract class StreamingOuterJoinBase extends StreamingJoinSuite {
 
   // When the join condition isn't true, the outer null rows must be generated, even if the join
   // keys themselves have a match.
+  test("left outer join on a range ending at another column of the left input") {
+    val (auctions, bids, joined) = setupAuctionBidJoin("left_outer")
+    testStream(joined.select($"id", $"price"))(
+      MultiAddData(auctions, (1, 100000L, 110000L), (2, 100000L, 200000L),
+        (3, 100000L, 120000L))(bids, (1, 105000L, 1L)),
+      CheckNewAnswer(Row(1, 1L)),
+      // The bid for auction 3 is before its start.
+      AddData(bids, (2, 150000L, 2L), (3, 99000L, 3L)),
+      CheckNewAnswer(Row(2, 2L)),
+      // The watermark passes every expiry; only auction 3 never matched.
+      MultiAddData(auctions, (9, 300000L, 300000L))(bids, (9, 300000L, 9L)),
+      CheckNewAnswer(Row(9, 9L), Row(3, null)))
+  }
+
   test("left outer join with non-key condition violated") {
     val (leftInput, simpleLeftDf) = setupStream("left", 2)
     val (rightInput, simpleRightDf) = setupStream("right", 3)
@@ -2565,6 +2634,21 @@ abstract class StreamingFullOuterJoinBase extends StreamingJoinSuite {
     assert(e.getMessage.contains("is not supported in Update output mode"))
   }
 
+  test("full outer join on a range ending at another column of the left input") {
+    val (auctions, bids, joined) = setupAuctionBidJoin("full_outer")
+    testStream(joined.select($"id", $"price"))(
+      MultiAddData(auctions, (1, 100000L, 110000L), (2, 100000L, 200000L),
+        (3, 100000L, 120000L))(bids, (1, 105000L, 1L)),
+      CheckNewAnswer(Row(1, 1L)),
+      // The bid for auction 3 is before its start.
+      AddData(bids, (2, 150000L, 2L), (3, 99000L, 3L)),
+      CheckNewAnswer(Row(2, 2L)),
+      // The watermark passes every expiry and every bid; only auction 3 and the bid before
+      // its start never matched.
+      MultiAddData(auctions, (9, 300000L, 300000L))(bids, (9, 300000L, 9L)),
+      CheckNewAnswer(Row(9, 9L), Row(3, null), Row(null, 3L)))
+  }
+
   test("windowed full outer join") {
     withTempDir { checkpointDir =>
       val (leftInput, rightInput, joined) = setupWindowedJoin("full_outer")
@@ -3033,9 +3117,6 @@ abstract class StreamingLeftSemiJoinBase extends StreamingJoinSuite {
   }
 
   test("left semi join stores every evicted right row under a bound with a truncating cast") {
-    // The V4 range scan reads the left row's time window without the truncation of the casts, so
-    // it misses the match this test expects.
-    assume(spark.sessionState.conf.getConf(SQLConf.STREAMING_JOIN_STATE_FORMAT_VERSION) < 4)
     withSQLConf(SQLConf.STREAMING_NO_DATA_MICRO_BATCHES_ENABLED.key -> "false") {
       val leftInput = MemoryStream[(Int, Long)]
       val rightInput = MemoryStream[(Int, Long)]
@@ -3061,6 +3142,22 @@ abstract class StreamingLeftSemiJoinBase extends StreamingJoinSuite {
         MultiAddData(leftInput, (1, 100600L))(rightInput, (1, 160200L)),
         CheckNewAnswer((1, 100)))
     }
+  }
+
+  test("left semi join on a range ending at another column of the left input") {
+    val (auctions, bids, joined) = setupAuctionBidJoin("left_semi")
+    testStream(joined.select($"id"))(
+      MultiAddData(auctions, (9, 100000L, 100000L))(
+        bids, (1, 150000L, 1L), (1, 160000L, 2L), (2, 99500L, 3L)),
+      CheckNewAnswer(),
+      // The auctions find the stored bids. The bid for auction 2 is before its start.
+      AddData(auctions, (1, 100000L, 200000L), (2, 100000L, 200000L)),
+      CheckNewAnswer(Row(1)),
+      // A bid after the expiry of auction 2, then one at its expiry.
+      AddData(bids, (2, 200001L, 4L)),
+      CheckNewAnswer(),
+      AddData(bids, (2, 200000L, 5L)),
+      CheckNewAnswer(Row(2)))
   }
 
   testWithAppendAndUpdate("windowed left semi join") { outputMode =>

@@ -254,16 +254,8 @@ class SymmetricHashJoinStateManagerV4(
   protected val keySchema = StructType(
     joinKeys.zipWithIndex.map { case (k, i) => StructField(s"field$i", k.dataType, k.nullable) })
   protected val keyAttributes = toAttributes(keySchema)
-  private val valueTimestampColumnOrdinal = {
-    val eventTimeColIdx = WatermarkSupport.findEventTimeColumnIndex(
-      inputValueAttributes,
-      // NOTE: This does not accept multiple event time columns. This is not the same with the
-      // operator which we offer the backward compatibility, but it involves too many layers to
-      // pass the information. The information is in SQLConf.
-      allowMultipleEventTimeColumns = false)
-    // Validate event-time columns above even when eviction indexes a different timestamp.
-    stateValueWatermarkColumnOrdinal.orElse(eventTimeColIdx)
-  }
+  private val valueTimestampColumnOrdinal = SymmetricHashJoinStateManager
+    .valueTimestampColumnOrdinal(inputValueAttributes, stateValueWatermarkColumnOrdinal)
 
   // When there is no indexed timestamp column in the value and no watermark ordinal in the key,
   // the secondary index (TsWithKey) will never be used for eviction. Skip writing to it
@@ -773,18 +765,21 @@ class SymmetricHashJoinStateManagerV4(
 
     /**
      * Returns entries where minTs <= timestamp <= maxTs (both inclusive), grouped by timestamp.
-     * When maxTs is bounded (< Long.MaxValue), uses rangeScanWithMultiValues for efficient
-     * range access; falls back to prefixScan otherwise to stay within the key's scope.
+     * When either end is bounded, uses rangeScanWithMultiValues for efficient range access;
+     * falls back to prefixScan otherwise to stay within the key's scope.
      *
-     * When prefixScan is used (maxTs == Long.MaxValue), entries outside [minTs, maxTs] are
-     * filtered out so both code paths produce identical results.
+     * When prefixScan is used (no bound), entries outside [minTs, maxTs] are filtered out so
+     * both code paths produce identical results.
      */
     def getValuesInRange(
         key: UnsafeRow, minTs: Long, maxTs: Long): Iterator[GetValuesResult] = {
+      if (minTs > maxTs) return Iterator.empty
       val reusableGetValuesResult = new GetValuesResult()
-      // Only use rangeScan when maxTs < Long.MaxValue, since rangeScan requires
-      // an exclusive end key (maxTs + 1) which would overflow at Long.MaxValue.
-      val useRangeScan = maxTs < Long.MaxValue
+      val useRangeScan = minTs > Long.MinValue || maxTs < Long.MaxValue
+      // rangeScanWithMultiValues needs an exclusive end key, and maxTs + 1 would overflow at
+      // Long.MaxValue. A range open at the top therefore scans up to Long.MaxValue and then
+      // reads the values at Long.MaxValue by key.
+      val readsMaxTsByKey = useRangeScan && maxTs == Long.MaxValue
 
       new NextIterator[GetValuesResult] {
         private val iter = if (useRangeScan) {
@@ -794,12 +789,12 @@ class SymmetricHashJoinStateManagerV4(
           // to independent byte arrays eagerly at call time, and the scope of endKey
           // ends with the call of rangeScanWithMultiValues.
           val startKey = createKeyRow(key, minTs).copy()
-          // rangeScanWithMultiValues endKey is exclusive, so use maxTs + 1
-          val endKey = Some(createKeyRow(key, maxTs + 1))
+          val endKey = Some(createKeyRow(key, if (readsMaxTsByKey) maxTs else maxTs + 1))
           readStateStore.rangeScanWithMultiValues(Some(startKey), endKey, colFamilyName)
         } else {
           readStateStore.prefixScanWithMultiValues(key, colFamilyName)
         }
+        private var maxTsValuesRead = !readsMaxTsByKey
 
         private var currentTs = -1L
         private var pastUpperBound = false
@@ -821,6 +816,11 @@ class SymmetricHashJoinStateManagerV4(
         @tailrec
         override protected def getNext(): GetValuesResult = {
           if (pastUpperBound || !iter.hasNext) {
+            if (valueAndMatchPairs.isEmpty && !maxTsValuesRead) {
+              maxTsValuesRead = true
+              currentTs = Long.MaxValue
+              valueAndMatchPairs ++= get(key, Long.MaxValue)
+            }
             flushAccumulated()
           } else {
             val unsafeRowPair = iter.next()
@@ -2191,6 +2191,23 @@ class JoinStateManagerStoreGenerator() extends Logging {
 object SymmetricHashJoinStateManager {
   val supportedVersions = Seq(1, 2, 3, 4)
   val legacyVersion = 1
+
+  /**
+   * The input column whose timestamp orders V4 state that is not ordered by an equality key: the
+   * column the value-eviction predicate constrains, or else the event-time column.
+   */
+  def valueTimestampColumnOrdinal(
+      inputValueAttributes: Seq[Attribute],
+      stateValueWatermarkColumnOrdinal: Option[Int]): Option[Int] = {
+    val eventTimeColIdx = WatermarkSupport.findEventTimeColumnIndex(
+      inputValueAttributes,
+      // NOTE: This does not accept multiple event time columns. This is not the same with the
+      // operator which we offer the backward compatibility, but it involves too many layers to
+      // pass the information. The information is in SQLConf.
+      allowMultipleEventTimeColumns = false)
+    // Validate event-time columns above even when eviction indexes a different timestamp.
+    stateValueWatermarkColumnOrdinal.orElse(eventTimeColIdx)
+  }
 
   // scalastyle:off argcount
   /** Factory method to determines which version of the join state manager should be created */

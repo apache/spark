@@ -1250,6 +1250,46 @@ class SymmetricHashJoinStateManagerEventTimeInValueSuite
     }
   }
 
+  test("StreamingJoinStateManager V4 - getValuesInRange with a range open at the top") {
+    val valueSchema = new StructType()
+      .add(StructField("key", IntegerType))
+      .add(StructField("time", TimestampType, metadata = watermarkMetadata))
+    val valueAttributes = toAttributes(valueSchema)
+    val keyExprs = Seq[Expression](valueAttributes.head)
+    val valueGen = UnsafeProjection.create(valueAttributes, valueAttributes)
+    val keyGen = UnsafeProjection.create(keyExprs, valueAttributes)
+    def keyRow(key: Int): UnsafeRow =
+      keyGen(valueGen(new GenericInternalRow(Array[Any](key, 0L)))).copy()
+
+    withJoinStateManager(valueAttributes, keyExprs, stateFormatVersion = 4) { manager =>
+      def append(key: Int, time: Long): Unit = {
+        val value = valueGen(new GenericInternalRow(Array[Any](key, time))).copy()
+        manager.append(keyRow(key), value, matched = false)
+      }
+      def timestamps(key: Int, range: (Long, Long)): Seq[Long] = {
+        val dummyRow = new GenericInternalRow(0)
+        manager.getJoinedRows(keyRow(key), row => new JoinedRow(row, dummyRow), _ => true,
+          timestampRange = Some(range)).map(_.getLong(1)).toSeq.sorted
+      }
+
+      Seq(10L, 20L, Long.MaxValue - 1, Long.MaxValue, Long.MaxValue).foreach(append(1, _))
+      // Rows of the neighboring keys must stay out of the scan.
+      append(0, 30L)
+      append(2, 15L)
+      append(2, Long.MaxValue)
+
+      assert(timestamps(1, (15L, Long.MaxValue)) ===
+        Seq(20L, Long.MaxValue - 1, Long.MaxValue, Long.MaxValue))
+      assert(timestamps(1, (Long.MaxValue, Long.MaxValue)) === Seq(Long.MaxValue, Long.MaxValue))
+      assert(timestamps(1, (Long.MaxValue - 1, Long.MaxValue - 1)) === Seq(Long.MaxValue - 1))
+      assert(timestamps(1, (Long.MinValue + 1, Long.MaxValue)) ===
+        Seq(10L, 20L, Long.MaxValue - 1, Long.MaxValue, Long.MaxValue))
+      assert(timestamps(2, (16L, Long.MaxValue)) === Seq(Long.MaxValue))
+      assert(timestamps(3, (0L, Long.MaxValue)) === Seq.empty)
+      assert(timestamps(1, (20L, 10L)) === Seq.empty)
+    }
+  }
+
   test("StreamingJoinStateManager V4 - evictByTimestamp boundary edge cases") {
     withJoinStateManager(
       inputValueAttributes, joinKeyExpressions, stateFormatVersion = 4) { manager =>

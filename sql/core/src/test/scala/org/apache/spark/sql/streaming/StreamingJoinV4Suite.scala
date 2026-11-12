@@ -22,10 +22,11 @@ import org.scalatest.Tag
 
 import org.apache.spark.SparkIllegalArgumentException
 import org.apache.spark.sql.{DataFrame, Row}
+import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.execution.datasources.v2.state.StateSourceOptions
 import org.apache.spark.sql.execution.streaming.checkpointing.CheckpointFileManager
 import org.apache.spark.sql.execution.streaming.operators.stateful.join.StreamingSymmetricHashJoinExec
-import org.apache.spark.sql.execution.streaming.operators.stateful.join.StreamingSymmetricHashJoinHelper.{JoinStateKeyWatermarkPredicate, JoinStateValueWatermarkPredicate}
+import org.apache.spark.sql.execution.streaming.operators.stateful.join.StreamingSymmetricHashJoinHelper.{JoinStateKeyWatermarkPredicate, JoinStateValueWatermarkPredicate, LeftSide, RightSide}
 import org.apache.spark.sql.execution.streaming.runtime.{MemoryStream, StreamExecution}
 import org.apache.spark.sql.execution.streaming.state._
 import org.apache.spark.sql.functions._
@@ -557,6 +558,99 @@ class StreamingInnerJoinV4Suite
         StopStream
       )
     }
+  }
+
+  private def joinExec(query: StreamExecution): StreamingSymmetricHashJoinExec =
+    query.lastExecution.executedPlan.collectFirst {
+      case join: StreamingSymmetricHashJoinExec => join
+    }.getOrElse(fail("StreamingSymmetricHashJoinExec not found"))
+
+  test("matching scans read the column each side's state is ordered by") {
+    // The shape of Nexmark q9: a bid matches an auction between its start and its expiry.
+    val auctions = MemoryStream[(Int, Long, Long)]
+    val bids = MemoryStream[(Int, Long, Long)]
+    val left = auctions.toDF().toDF("id", "start", "end")
+      .select($"id", timestamp_millis($"start").as("dateTime"),
+        timestamp_millis($"end").as("expires"))
+      .withWatermark("dateTime", "10 seconds")
+    val right = bids.toDF().toDF("auction", "time", "price")
+      .select($"auction", timestamp_millis($"time").as("bidTime"), $"price")
+      .withWatermark("bidTime", "10 seconds")
+    val joined = left.join(right, expr("id = auction AND bidTime BETWEEN dateTime AND expires"))
+      .select($"id", $"price")
+
+    testStream(joined)(
+      AddData(auctions, (1, 100000L, 200000L)),
+      CheckNewAnswer(),
+      AddData(bids, (1, 99999L, 1L), (1, 100000L, 2L), (1, 150000L, 3L), (1, 200000L, 4L),
+        (1, 200001L, 5L)),
+      CheckNewAnswer((1, 2L), (1, 3L), (1, 4L)),
+      AddData(auctions, (1, 150000L, 160000L)),
+      CheckNewAnswer((1, 3L)),
+      Execute { query =>
+        val join = joinExec(query)
+        // The left side evicts on expires and the right side on bidTime, so a left row
+        // (id, dateTime, expires) reads bids from dateTime to expires, and a right row
+        // (auction, bidTime, price) reads auctions that expire at or after bidTime.
+        assert(join.matchingScanWindow(LeftSide).flatMap(
+          _.rangeFor(InternalRow(1, 100000000L, 200000000L))) === Some((100000000L, 200000000L)))
+        assert(join.matchingScanWindow(RightSide).flatMap(
+          _.rangeFor(InternalRow(1, 150000000L, 3L))) === Some((150000000L, Long.MaxValue)))
+      })
+  }
+
+  test("matching scans open at one end for a one-sided range") {
+    val leftInput = MemoryStream[(Int, Long)]
+    val rightInput = MemoryStream[(Int, Long)]
+    val left = leftInput.toDF().toDF("leftKey", "time")
+      .select($"leftKey", timestamp_millis($"time").as("leftTime"))
+      .withWatermark("leftTime", "1 hour")
+    val right = rightInput.toDF().toDF("rightKey", "time")
+      .select($"rightKey", timestamp_millis($"time").as("rightTime"))
+      .withWatermark("rightTime", "1 hour")
+    val joined = left.join(right,
+      expr("leftKey = rightKey AND rightTime <= leftTime + INTERVAL 10 SECONDS"))
+      .select(unix_millis($"leftTime"), unix_millis($"rightTime"))
+
+    testStream(joined)(
+      AddData(leftInput, (1, 100000L), (1, 80000L)),
+      CheckNewAnswer(),
+      // A right row reads left rows from 10 seconds before it, open at the top.
+      AddData(rightInput, (1, 90000L), (1, 110000L), (1, 110001L)),
+      CheckNewAnswer((100000L, 90000L), (80000L, 90000L), (100000L, 110000L)),
+      // A left row reads right rows up to 10 seconds after it, open at the bottom.
+      AddData(leftInput, (1, 100001L)),
+      CheckNewAnswer((100001L, 90000L), (100001L, 110000L), (100001L, 110001L)),
+      Execute { query =>
+        val join = joinExec(query)
+        assert(join.matchingScanWindow(LeftSide).flatMap(_.rangeFor(InternalRow(1, 0L))) ===
+          Some((Long.MinValue, 10000000L)))
+        assert(join.matchingScanWindow(RightSide).flatMap(_.rangeFor(InternalRow(1, 0L))) ===
+          Some((-10000000L, Long.MaxValue)))
+      })
+  }
+
+  test("matching scans read every row of a key ordered by an equality key") {
+    val leftInput = MemoryStream[(Int, Long)]
+    val rightInput = MemoryStream[(Int, Long)]
+    val left = leftInput.toDF().toDF("leftKey", "time")
+      .select($"leftKey", timestamp_millis($"time").as("leftTime"))
+      .withWatermark("leftTime", "10 seconds")
+    val right = rightInput.toDF().toDF("rightKey", "time")
+      .select($"rightKey", timestamp_millis($"time").as("rightTime"))
+      .withWatermark("rightTime", "10 seconds")
+    val joined = left.join(right, expr("leftKey = rightKey AND leftTime = rightTime"))
+      .select($"leftKey")
+
+    testStream(joined)(
+      MultiAddData(leftInput, (1, 1000L))(rightInput, (1, 1000L)),
+      CheckNewAnswer(1),
+      Execute { query =>
+        // Both sides are ordered by the event-time key, whose lookups read one timestamp.
+        val join = joinExec(query)
+        assert(join.matchingScanWindow(LeftSide).isEmpty)
+        assert(join.matchingScanWindow(RightSide).isEmpty)
+      })
   }
 }
 
