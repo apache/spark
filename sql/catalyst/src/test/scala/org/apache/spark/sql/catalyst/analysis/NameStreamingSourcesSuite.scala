@@ -75,9 +75,9 @@ class NameStreamingSourcesSuite extends AnalysisTest {
 
   test("preserves user-provided names in enforcement check") {
     withSQLConf(SQLConf.ENABLE_STREAMING_SOURCE_EVOLUTION.key -> "true") {
-      val source1 = NamedStreamingRelation(createStreamingRelation(), Unassigned)
+      val source1 = NamedStreamingRelation(createStreamingRelationV2(), Unassigned)
         .withUserProvidedName(Some("my_source"))
-      val source2 = NamedStreamingRelation(createStreamingRelation(), Unassigned)
+      val source2 = NamedStreamingRelation(createStreamingRelationV2(), Unassigned)
         .withUserProvidedName(Some("other_source"))
       val streamingPlan = Union(Seq(source1, source2))
 
@@ -164,8 +164,10 @@ class NameStreamingSourcesSuite extends AnalysisTest {
 
   test("preserves FlowAssigned names in enforcement check") {
     withSQLConf(SQLConf.ENABLE_STREAMING_SOURCE_EVOLUTION.key -> "true") {
-      val source1 = NamedStreamingRelation(createStreamingRelation(), FlowAssigned("flow_source_1"))
-      val source2 = NamedStreamingRelation(createStreamingRelation(), FlowAssigned("flow_source_2"))
+      val source1 = NamedStreamingRelation(
+        createStreamingRelationV2(), FlowAssigned("flow_source_1"))
+      val source2 = NamedStreamingRelation(
+        createStreamingRelationV2(), FlowAssigned("flow_source_2"))
       val streamingPlan = Union(Seq(source1, source2))
 
       // Should not throw when all sources are flow-assigned
@@ -250,8 +252,8 @@ class NameStreamingSourcesSuite extends AnalysisTest {
 
   test("mixed UserProvided and FlowAssigned names pass enforcement") {
     withSQLConf(SQLConf.ENABLE_STREAMING_SOURCE_EVOLUTION.key -> "true") {
-      val userNamed = NamedStreamingRelation(createStreamingRelation(), UserProvided("user_src"))
-      val flowNamed = NamedStreamingRelation(createStreamingRelation(), FlowAssigned("flow_src"))
+      val userNamed = NamedStreamingRelation(createStreamingRelationV2(), UserProvided("user_src"))
+      val flowNamed = NamedStreamingRelation(createStreamingRelationV2(), FlowAssigned("flow_src"))
       val streamingPlan = Union(Seq(userNamed, flowNamed))
 
       // Should not throw - both are explicitly named
@@ -262,9 +264,9 @@ class NameStreamingSourcesSuite extends AnalysisTest {
 
   test("nested unions with all named sources pass enforcement") {
     withSQLConf(SQLConf.ENABLE_STREAMING_SOURCE_EVOLUTION.key -> "true") {
-      val source1 = NamedStreamingRelation(createStreamingRelation(), UserProvided("source1"))
-      val source2 = NamedStreamingRelation(createStreamingRelation(), UserProvided("source2"))
-      val source3 = NamedStreamingRelation(createStreamingRelation(), UserProvided("source3"))
+      val source1 = NamedStreamingRelation(createStreamingRelationV2(), UserProvided("source1"))
+      val source2 = NamedStreamingRelation(createStreamingRelationV2(), UserProvided("source2"))
+      val source3 = NamedStreamingRelation(createStreamingRelationV2(), UserProvided("source3"))
 
       val innerUnion = Union(Seq(source1, source2))
       val outerUnion = Union(Seq(innerUnion, source3))
@@ -364,7 +366,7 @@ class NameStreamingSourcesSuite extends AnalysisTest {
     }
   }
 
-  test("config disabled - already named source requires every source to be named") {
+  test("config disabled - already attached names defer enforcement to query startup") {
     withSQLConf(
       SQLConf.ENABLE_STREAMING_SOURCE_EVOLUTION.key -> "false"
     ) {
@@ -373,15 +375,30 @@ class NameStreamingSourcesSuite extends AnalysisTest {
       val unnamedSource = NamedStreamingRelation(createStreamingRelation(), Unassigned)
       val streamingPlan = Union(Seq(namedSource, unnamedSource))
 
+      val result = NameStreamingSources.apply(streamingPlan)
+      assert(result.children.head == namedSource)
+      assert(result.children(1) == unnamedSource.child)
+    }
+  }
+
+  gridTest("resolved children that cannot carry a name fail with a user error")(
+      Seq(false, true)) { enabled =>
+    withSQLConf(SQLConf.ENABLE_STREAMING_SOURCE_EVOLUTION.key -> enabled.toString) {
       checkError(
         exception = intercept[AnalysisException] {
-          NameStreamingSources.apply(streamingPlan)
+          NameStreamingSources(NamedStreamingRelation(
+            createStreamingRelation(), UserProvided("events")))
         },
-        condition =
-          "STREAMING_QUERY_EVOLUTION_ERROR.UNNAMED_STREAMING_SOURCES_WITH_ENFORCEMENT",
-        parameters = Map("sourceInfo" -> "(?s).*Leaf position 0.*"),
-        matchPVals = true
-      )
+        condition = "STREAMING_QUERY_EVOLUTION_ERROR.UNSUPPORTED_SOURCE_NAMING",
+        parameters = Map("sourceName" -> "events", "sourceType" -> "LocalRelation"))
+    }
+  }
+
+  gridTest("plans without naming wrappers are returned unchanged")(Seq(false, true)) { enabled =>
+    withSQLConf(SQLConf.ENABLE_STREAMING_SOURCE_EVOLUTION.key -> enabled.toString) {
+      val source = createStreamingRelationV2(UserProvided("events"))
+      val plan = Project(source.output, source)
+      assert(NameStreamingSources(plan) eq plan)
     }
   }
 

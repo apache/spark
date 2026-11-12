@@ -33,7 +33,7 @@ import org.apache.spark.sql.catalyst.analysis.{ResolveDeduplicate, V2Reference}
 import org.apache.spark.sql.catalyst.encoders.ExpressionEncoder
 import org.apache.spark.sql.catalyst.expressions.{Alias, Attribute, CurrentBatchTimestamp, CurrentDate, CurrentTimestamp, CurrentTimestampNanos, FileSourceMetadataAttribute, LocalTimestamp, LocalTimestampNanos}
 import org.apache.spark.sql.catalyst.plans.logical.{Aggregate, Deduplicate, DeduplicateWithinWatermark, Distinct, FlatMapGroupsInPandasWithState, FlatMapGroupsWithState, GlobalLimit, Join, LeafNode, LocalRelation, LogicalPlan, Project, StreamSourceAwareLogicalPlan, TransformWithState, TransformWithStateInPySpark}
-import org.apache.spark.sql.catalyst.streaming.{StreamingRelationV2, StreamingSourceIdentifyingName, Unassigned, WriteToStream}
+import org.apache.spark.sql.catalyst.streaming.{StreamingRelationV2, StreamingSourceIdentifyingName, Unassigned, UserProvided, WriteToStream}
 import org.apache.spark.sql.catalyst.trees.TreePattern.CURRENT_LIKE
 import org.apache.spark.sql.catalyst.util.truncatedString
 import org.apache.spark.sql.classic.{Dataset, SparkSession}
@@ -54,7 +54,7 @@ import org.apache.spark.sql.execution.streaming.state.{OfflineStateRepartitionUt
 import org.apache.spark.sql.execution.streaming.utils.StreamingUtils
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.internal.connector.PartitionOffsetWithIndex
-import org.apache.spark.sql.streaming.Trigger
+import org.apache.spark.sql.streaming.{StreamingNameValidator, Trigger}
 import org.apache.spark.util.{Clock, ErrorNotifier, SerializableConfiguration, Utils}
 
 class MicroBatchExecution(
@@ -247,7 +247,16 @@ class MicroBatchExecution(
 
     checkSourceNames()
     // Every offset log entry records the decision from the query's session.
-    sparkSessionForStream.conf.set(SQLConf.ENABLE_STREAMING_SOURCE_EVOLUTION.key, enforceNamed)
+    val sourceEvolutionKey = SQLConf.ENABLE_STREAMING_SOURCE_EVOLUTION.key
+    val previousValue = sparkSessionForStream.sessionState.conf
+      .getConfString(sourceEvolutionKey, null)
+    if (enforceNamedInCheckpoint.isDefined && previousValue != null &&
+        previousValue != enforceNamed.toString) {
+      logWarning(log"Updating the value of conf '${MDC(CONFIG, sourceEvolutionKey)}' in " +
+        log"current session from '${MDC(OLD_VALUE, previousValue)}' " +
+        log"to '${MDC(NEW_VALUE, enforceNamed.toString)}'.")
+    }
+    sparkSessionForStream.conf.set(sourceEvolutionKey, enforceNamed)
 
     // SPARK-57489: dropDuplicates / dropDuplicatesWithinWatermark resolve their keys with the
     // deterministic order by default, but streaming deduplication binds state-store keys by
@@ -489,6 +498,16 @@ class MicroBatchExecution(
     def unnamedSourcesError: Throwable =
       QueryCompilationErrors.unnamedStreamingSourcesWithEnforcementError(
         unnamedSources.mkString("\n"))
+    if (enforceNamed) {
+      namedSources.foreach {
+        case UserProvided(name) if !enforceNamedInCheckpoint.contains(true) =>
+          StreamingNameValidator.validate(name, "Source")(
+            QueryCompilationErrors.invalidStreamingSourceNameError)
+        case name if name.nameOpt.exists(_.exists(":\r\n".contains(_))) =>
+          throw QueryCompilationErrors.invalidStreamingSourceNameError(name.nameOpt.get)
+        case _ =>
+      }
+    }
     enforceNamedInCheckpoint match {
       case Some(false) if namedSources.nonEmpty =>
         // A positional checkpoint cannot start tracking sources by name. Spark 4.2 ran the named

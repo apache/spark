@@ -27,6 +27,7 @@ import org.mockito.ArgumentMatchers.{any, eq => meq}
 import org.mockito.Mockito._
 import org.scalatest.Tag
 
+import org.apache.spark.SparkIllegalArgumentException
 import org.apache.spark.sql._
 import org.apache.spark.sql.catalyst.streaming.UserProvided
 import org.apache.spark.sql.execution.streaming.checkpointing.{OffsetMap, OffsetSeq, OffsetSeqLog}
@@ -590,7 +591,9 @@ class StreamingSourceEvolutionSuite extends StreamTest {
     }
   }
 
-  test("positional checkpoint written under source names keeps running with those names") {
+  gridTest("positional checkpoint written under source names keeps running with those names")(
+      for (version <- Seq(1, 2); sourceName <- Seq("src", "src-old")) yield (version, sourceName)) {
+    case (version, sourceName) =>
     withTable("legacy_named_source") {
       sql("CREATE TABLE legacy_named_source (id INT) USING parquet")
       sql("INSERT INTO legacy_named_source VALUES (1)")
@@ -609,10 +612,13 @@ class StreamingSourceEvolutionSuite extends StreamTest {
         }
       }
 
-      runSqlQuery("SELECT * FROM STREAM legacy_named_source")
+      withSQLConf(SQLConf.STREAMING_OFFSET_LOG_FORMAT_VERSION.key -> version.toString) {
+        runSqlQuery("SELECT * FROM STREAM legacy_named_source")
+      }
       // Spark 4.2 ran a catalog table named by IDENTIFIED BY by position, with the source
       // metadata in sources/<name>.
-      assert(new File(checkpointDir, "sources/0").renameTo(new File(checkpointDir, "sources/src")))
+      assert(new File(checkpointDir, "sources/0")
+        .renameTo(new File(checkpointDir, s"sources/$sourceName")))
       sql("INSERT INTO legacy_named_source VALUES (2)")
 
       val e = intercept[StreamingQueryException] {
@@ -624,12 +630,17 @@ class StreamingSourceEvolutionSuite extends StreamTest {
         parameters = Map.empty)
       assert(!new File(checkpointDir, "sources/other").exists())
 
-      runSqlQuery("SELECT * FROM STREAM legacy_named_source IDENTIFIED BY src")
+      runSqlQuery(s"SELECT * FROM STREAM legacy_named_source IDENTIFIED BY `$sourceName`")
       checkAnswer(spark.read.parquet(outputDir.getCanonicalPath), Seq(Row(1), Row(2)))
       val offsetLog = new OffsetSeqLog(spark, s"${checkpointDir.getCanonicalPath}/offsets")
       val (latestBatchId, latestOffsets) = offsetLog.getLatest().get
       assert(latestBatchId === 1)
-      assert(latestOffsets.version === 1)
+      assert(latestOffsets.version === version)
+      assert(latestOffsets.metadataOpt.get.conf(
+        SQLConf.ENABLE_STREAMING_SOURCE_EVOLUTION.key) === "false")
+      if (version == 2) {
+        assert(latestOffsets.asInstanceOf[OffsetMap].offsetsMap.keySet === Set("0"))
+      }
     }
   }
 
@@ -732,14 +743,15 @@ class StreamingSourceEvolutionSuite extends StreamTest {
     withTable("named_sql_source", "unnamed_sql_source") {
       sql("CREATE TABLE named_sql_source (id INT) USING parquet")
       sql("CREATE TABLE unnamed_sql_source (id INT) USING parquet")
+      val data = sql("SELECT * FROM STREAM named_sql_source IDENTIFIED BY src " +
+        "UNION ALL SELECT * FROM STREAM unnamed_sql_source")
+      val checkpoint = newMetadataDir
       checkError(
-        exception = intercept[AnalysisException] {
-          sql("SELECT * FROM STREAM named_sql_source IDENTIFIED BY src " +
-            "UNION ALL SELECT * FROM STREAM unnamed_sql_source")
-        },
+        exception = startExpectingFailure(data, new Path(checkpoint)),
         condition = "STREAMING_QUERY_EVOLUTION_ERROR.UNNAMED_STREAMING_SOURCES_WITH_ENFORCEMENT",
-        parameters = Map(
-          "sourceInfo" -> "Leaf position 1 - spark_catalog.default.unnamed_sql_source"))
+        parameters = Map("sourceInfo" -> "(?s)Leaf position 1 - .*"),
+        matchPVals = true)
+      assert(!new File(checkpoint, "sources").exists())
     }
   }
 
@@ -755,6 +767,21 @@ class StreamingSourceEvolutionSuite extends StreamTest {
         parameters = Map("sourceInfo" -> "Leaf position 0 - dummySource"))
     }
     verifyNoSourceCreated()
+  }
+
+  test("new named query rejects separately analyzed named and unnamed sources") {
+    val named = withSQLConf(SQLConf.ENABLE_STREAMING_SOURCE_EVOLUTION.key -> "true") {
+      testSource(Some("a"))
+    }
+    withSQLConf(SQLConf.ENABLE_STREAMING_SOURCE_EVOLUTION.key -> "false") {
+      val checkpointLocation = new Path(newMetadataDir)
+      LastOptions.clear()
+      checkError(
+        exception = startExpectingFailure(named.union(testSource(None)), checkpointLocation),
+        condition = "STREAMING_QUERY_EVOLUTION_ERROR.UNNAMED_STREAMING_SOURCES_WITH_ENFORCEMENT",
+        parameters = Map("sourceInfo" -> "Leaf position 1 - dummySource"))
+      verifyNoSourceCreated()
+    }
   }
 
   test("named checkpoint - restart with an unnamed source is rejected before creating sources") {
@@ -816,6 +843,190 @@ class StreamingSourceEvolutionSuite extends StreamTest {
     verifyNoSourceCreated()
   }
 
+  gridTest("legacy mixed sources recover without re-reading file metadata")(
+      for (version <- Seq(1, 2); api <- Seq("sql", "view", "dataframe")) yield (version, api)) {
+    case (version, api) =>
+      withTable("legacy_left", "legacy_right") {
+        sql("CREATE TABLE legacy_left (id INT) USING parquet")
+        sql("CREATE TABLE legacy_right (id INT) USING parquet")
+        sql("INSERT INTO legacy_left VALUES (1)")
+        sql("INSERT INTO legacy_right VALUES (10)")
+        withTempDir { checkpoint =>
+          withTempDir { output =>
+            withSQLConf(SQLConf.STREAMING_OFFSET_LOG_FORMAT_VERSION.key -> version.toString) {
+              runFileQuery(sql("SELECT * FROM STREAM legacy_left UNION ALL " +
+                "SELECT * FROM STREAM legacy_right"), checkpoint, output)
+            }
+            assert(new File(checkpoint, "sources/0").renameTo(new File(checkpoint, "sources/src")))
+            assert(new File(checkpoint, "sources/1").renameTo(new File(checkpoint, "sources/0")))
+            sql("INSERT INTO legacy_left VALUES (2)")
+            sql("INSERT INTO legacy_right VALUES (20)")
+            withTempView("legacy_view") {
+              spark.readStream.table("legacy_right").createOrReplaceTempView("legacy_view")
+              val data = api match {
+                case "dataframe" => spark.readStream.name("src").table("legacy_left")
+                  .union(spark.readStream.table("legacy_right"))
+                case "view" => sql("SELECT * FROM STREAM legacy_left IDENTIFIED BY src " +
+                  "UNION ALL SELECT * FROM STREAM legacy_view")
+                case _ => sql("SELECT * FROM STREAM legacy_left IDENTIFIED BY src " +
+                  "UNION ALL SELECT * FROM STREAM legacy_right")
+              }
+              runFileQuery(data, checkpoint, output)
+            }
+            checkAnswer(spark.read.parquet(output.getCanonicalPath),
+              Seq(Row(1), Row(10), Row(2), Row(20)))
+            val offsets = new OffsetSeqLog(spark, s"$checkpoint/offsets").getLatest().get._2
+            assert(offsets.version == version)
+            assert(offsets.metadataOpt.get.conf(
+              SQLConf.ENABLE_STREAMING_SOURCE_EVOLUTION.key) == "false")
+          }
+        }
+      }
+  }
+
+  test("legacy recovery requires every source name to retain its metadata directory") {
+    withTable("legacy_first", "legacy_second") {
+      sql("CREATE TABLE legacy_first (id INT) USING parquet")
+      sql("CREATE TABLE legacy_second (id INT) USING parquet")
+      sql("INSERT INTO legacy_first VALUES (1)")
+      sql("INSERT INTO legacy_second VALUES (10)")
+      withTempDir { checkpoint =>
+        withTempDir { output =>
+          runFileQuery(sql("SELECT * FROM STREAM legacy_first UNION ALL " +
+            "SELECT * FROM STREAM legacy_second"), checkpoint, output)
+          assert(new File(checkpoint, "sources/0").renameTo(new File(checkpoint, "sources/a")))
+          assert(new File(checkpoint, "sources/1").renameTo(new File(checkpoint, "sources/b")))
+          val renamed = spark.readStream.name("changed").table("legacy_first")
+            .union(spark.readStream.name("b").table("legacy_second"))
+          checkError(
+            exception = startExpectingFailure(renamed, new Path(checkpoint.getCanonicalPath)),
+            condition = "STREAMING_QUERY_EVOLUTION_ERROR.CANNOT_ENABLE_ON_EXISTING_CHECKPOINT",
+            parameters = Map.empty)
+          assert(!new File(checkpoint, "sources/changed").exists())
+          sql("INSERT INTO legacy_first VALUES (2)")
+          val unchanged = spark.readStream.name("a").table("legacy_first")
+            .union(spark.readStream.name("b").table("legacy_second"))
+          runFileQuery(unchanged, checkpoint, output)
+          checkAnswer(spark.read.parquet(output.getCanonicalPath), Seq(Row(1), Row(10), Row(2)))
+        }
+      }
+    }
+  }
+
+  test("SQL source names are validated before a new named source is created") {
+    withTable("sql_name_validation") {
+      sql("CREATE TABLE sql_name_validation (id INT) USING parquet")
+      Seq("orders:v1", "orders-v1", "orders v1").foreach { name =>
+        withTempDir { checkpoint =>
+          val data = sql(s"SELECT * FROM STREAM sql_name_validation IDENTIFIED BY `$name`")
+          checkError(
+            exception = startExpectingFailure(data, new Path(checkpoint.getCanonicalPath)),
+            condition = "STREAMING_QUERY_EVOLUTION_ERROR.INVALID_SOURCE_NAME",
+            parameters = Map("sourceName" -> name))
+          assert(!new File(checkpoint, "sources").exists())
+        }
+      }
+    }
+  }
+
+  gridTest("valid SQL source names preserve named offsets across restarts")(
+      Seq("orders_v1", "123")) { name =>
+    withTable("sql_named_recovery") {
+      sql("CREATE TABLE sql_named_recovery (id INT) USING parquet")
+      sql("INSERT INTO sql_named_recovery VALUES (1)")
+      withTempDir { checkpoint =>
+        withTempDir { output =>
+          def data: DataFrame =
+            sql(s"SELECT * FROM STREAM sql_named_recovery IDENTIFIED BY `$name`")
+          runFileQuery(data, checkpoint, output)
+          sql("INSERT INTO sql_named_recovery VALUES (2)")
+          runFileQuery(data, checkpoint, output)
+          checkAnswer(spark.read.parquet(output.getCanonicalPath), Seq(Row(1), Row(2)))
+          val offsets = new OffsetSeqLog(spark, s"$checkpoint/offsets").getLatest().get._2
+            .asInstanceOf[OffsetMap]
+          assert(offsets.offsetsMap.keySet == Set(name))
+          val invalid = sql("SELECT * FROM STREAM sql_named_recovery IDENTIFIED BY `orders:v1`")
+          checkError(
+            exception = startExpectingFailure(invalid, new Path(checkpoint.getCanonicalPath)),
+            condition = "STREAMING_QUERY_EVOLUTION_ERROR.INVALID_SOURCE_NAME",
+            parameters = Map("sourceName" -> "orders:v1"))
+          assert(!new File(checkpoint, "sources/orders:v1").exists())
+        }
+      }
+    }
+  }
+
+  test("continuous processing rejects DataFrame and SQL source names before source creation") {
+    withTable("continuous_named_source") {
+      sql("CREATE TABLE continuous_named_source (id INT) USING parquet")
+      Seq[() => DataFrame](
+        () => spark.readStream.format("rate").name("events").load(),
+        () => sql("SELECT * FROM STREAM continuous_named_source IDENTIFIED BY events"))
+        .foreach { read =>
+          withTempDir { checkpoint =>
+            checkError(
+              exception = intercept[SparkIllegalArgumentException] {
+                read().writeStream.format("console")
+                  .option("checkpointLocation", checkpoint.getCanonicalPath)
+                  .trigger(Continuous("1 second")).start()
+              },
+              condition = "STREAMING_QUERY_EVOLUTION_ERROR." +
+                "SOURCE_EVOLUTION_CONTINUOUS_PROCESSING_NOT_SUPPORTED",
+              parameters = Map.empty)
+            assert(!new File(checkpoint, "sources").exists())
+          }
+        }
+    }
+  }
+
+  test("continuous recovery rejects a checkpoint that tracks sources by name") {
+    withTempDir { checkpoint =>
+      val named = spark.readStream.format("rate").option("numPartitions", 1).name("events").load()
+      val microBatch = named.writeStream.format("console")
+        .option("checkpointLocation", checkpoint.getCanonicalPath).trigger(Once()).start()
+      try {
+        microBatch.awaitTermination()
+      } finally {
+        microBatch.stop()
+      }
+      val offsets = new OffsetSeqLog(spark, s"$checkpoint/offsets").getLatest().get._2
+      assert(offsets.metadataOpt.get.conf(SQLConf.ENABLE_STREAMING_SOURCE_EVOLUTION.key) == "true")
+      val unnamed = spark.readStream.format("rate").option("numPartitions", 1).load()
+      val continuous = unnamed.writeStream.format("console")
+        .option("checkpointLocation", checkpoint.getCanonicalPath)
+        .trigger(Continuous("1 second")).start()
+      try {
+        val error = intercept[StreamingQueryException](continuous.awaitTermination())
+        checkError(
+          exception = error.cause.asInstanceOf[SparkIllegalArgumentException],
+          condition = "STREAMING_QUERY_EVOLUTION_ERROR." +
+            "SOURCE_EVOLUTION_CONTINUOUS_PROCESSING_NOT_SUPPORTED",
+          parameters = Map.empty)
+      } finally {
+        continuous.stop()
+      }
+    }
+  }
+
+  gridTest("streaming temporary views cannot be assigned a source name")(Seq(false, true)) {
+    enabled =>
+      withSQLConf(SQLConf.ENABLE_STREAMING_SOURCE_EVOLUTION.key -> enabled.toString) {
+        withTempView("named_streaming_view") {
+          spark.readStream.format("rate").name("underlying").load()
+            .createOrReplaceTempView("named_streaming_view")
+          Seq[() => DataFrame](
+            () => spark.readStream.name("view_name").table("named_streaming_view"),
+            () => sql("SELECT * FROM STREAM named_streaming_view IDENTIFIED BY view_name"))
+            .foreach { read =>
+              checkError(
+                exception = intercept[AnalysisException](read()),
+                condition = "STREAMING_QUERY_EVOLUTION_ERROR.UNSUPPORTED_SOURCE_NAMING",
+                parameters = Map("sourceName" -> "view_name", "sourceType" -> "SubqueryAlias"))
+            }
+        }
+      }
+  }
+
   // ==============
   // Helper Methods
   // ==============
@@ -830,6 +1041,17 @@ class StreamingSourceEvolutionSuite extends StreamTest {
       withSQLConf(SQLConf.ENABLE_STREAMING_SOURCE_EVOLUTION.key -> "true") {
         testBody
       }
+    }
+  }
+
+  private def runFileQuery(data: DataFrame, checkpoint: File, output: File): Unit = {
+    val query = data.writeStream.format("parquet")
+      .option("checkpointLocation", checkpoint.getCanonicalPath)
+      .start(output.getCanonicalPath)
+    try {
+      query.processAllAvailable()
+    } finally {
+      query.stop()
     }
   }
 
