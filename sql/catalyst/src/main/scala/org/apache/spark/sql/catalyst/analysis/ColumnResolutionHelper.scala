@@ -270,7 +270,7 @@ trait ColumnResolutionHelper extends Logging with DataTypeErrorsBase {
               case other => wrapOuterReference(other)
             }
         case other =>
-          resolveChildrenWithHavingScope(other, nameParts).map(wrapOuterReference)
+          resolveChildrenWithoutHavingHelpers(other, nameParts).map(wrapOuterReference)
       }
     } catch {
       case ae: AnalysisException =>
@@ -473,9 +473,10 @@ trait ColumnResolutionHelper extends Logging with DataTypeErrorsBase {
       includeLastResort: Boolean = false,
       throws: Boolean = true): Expression = {
     resolveExpression(
-      tryResolveDataFrameColumns(resolveHavingGroupingExpressions(e, q), q.children),
+      tryResolveDataFrameColumns(
+        resolveHavingGroupingExpressions(e, q), q.children),
       resolveColumnByName = nameParts => {
-        resolveChildrenWithHavingScope(q, nameParts)
+        resolveChildrenWithoutHavingHelpers(q, nameParts)
       },
       getAttrCandidates = () => {
         assert(q.children.length == 1)
@@ -490,34 +491,65 @@ trait ColumnResolutionHelper extends Logging with DataTypeErrorsBase {
       plan: LogicalPlan,
       nameParts: Seq[String]): Option[NamedExpression] = {
     if (conf.getConf(SQLConf.HAVING_WITH_WINDOW_RESOLVES_GROUPING_COLUMN_FIRST)) {
-      val visibleOutput = plan.output.filterNot(
-        _.metadata.contains(ColumnResolutionHelper.HAVING_GROUPING_COLUMN_METADATA_KEY))
-      if (visibleOutput.length != plan.output.length) {
-        return LocalRelation(visibleOutput).resolve(nameParts, conf.resolver)
-      }
+      resolveWithoutHavingHelpers(nameParts, plan.output, plan.resolve(nameParts, conf.resolver))
+    } else {
+      plan.resolve(nameParts, conf.resolver)
     }
-    plan.resolve(nameParts, conf.resolver)
   }
 
   /** Keeps helper grouping outputs out of ordinary SELECT-alias resolution. */
-  private def resolveChildrenWithHavingScope(
+  private def resolveChildrenWithoutHavingHelpers(
       plan: LogicalPlan,
       nameParts: Seq[String]): Option[NamedExpression] = {
-    if (plan.getTagValue(ColumnResolutionHelper.HAVING_GROUPING_SCOPE_TAG).contains(true)) {
-      val visibleOutput = plan.children.flatMap(_.output).filterNot(
-        _.metadata.contains(ColumnResolutionHelper.HAVING_GROUPING_COLUMN_METADATA_KEY))
-      LocalRelation(visibleOutput).resolve(nameParts, conf.resolver)
+    if (conf.getConf(SQLConf.HAVING_WITH_WINDOW_RESOLVES_GROUPING_COLUMN_FIRST)) {
+      resolveWithoutHavingHelpers(
+        nameParts, plan.children.flatMap(_.output), plan.resolveChildren(nameParts, conf.resolver))
     } else {
       plan.resolveChildren(nameParts, conf.resolver)
     }
   }
+
+  /** Keeps ordinary lookup indexed and hides HAVING helpers in resolved results and errors. */
+  private def resolveWithoutHavingHelpers(
+      nameParts: Seq[String],
+      output: => Seq[Attribute],
+      resolve: => Option[NamedExpression]): Option[NamedExpression] = {
+    lazy val allOutput = output
+    lazy val visibleOutput = allOutput.filterNot(
+      _.metadata.contains(ColumnResolutionHelper.HAVING_GROUPING_COLUMN_METADATA_KEY))
+    val resolved = try {
+      resolve
+    } catch {
+      // Helpers can cause ambiguity or a nested-field error before lookup returns a candidate.
+      case _: AnalysisException if visibleOutput.length != allOutput.length =>
+        return LocalRelation(visibleOutput).resolve(nameParts, conf.resolver)
+    }
+    val mayReferenceHelpers = resolved.exists { expression =>
+      val references = expression.references
+      references.exists(
+        _.metadata.contains(ColumnResolutionHelper.HAVING_GROUPING_COLUMN_METADATA_KEY)) ||
+        // NULL field extraction can discard the helper reference during resolution.
+        (nameParts.length > 1 && references.isEmpty &&
+          visibleOutput.length != allOutput.length)
+    }
+    if (mayReferenceHelpers) {
+      LocalRelation(visibleOutput).resolve(nameParts, conf.resolver)
+    } else {
+      resolved
+    }
+  }
+
+  // Shared by ordinary and correlated HAVING lookup, and created only for tagged scope.
+  private lazy val havingGroupingExpressionNormalizer = new HavingGroupingExpressionNormalizer(
+    new FunctionResolution(
+      catalogManager, new RelationResolution(catalogManager, RelationCache.empty)))
 
   /**
    * Resolves complete grouping expressions before SELECT aliases in extracted HAVING filters.
    * Resolve against the full input to retain ambiguity, and only accept actual grouping
    * expressions so ungrouped inputs cannot mask aliases or influence their type coercion.
    */
-  private def resolveHavingGroupingExpressions(
+  protected def resolveHavingGroupingExpressions(
       expression: Expression,
       plan: LogicalPlan,
       wrap: Expression => Expression = identity): Expression = {
@@ -526,23 +558,27 @@ trait ColumnResolutionHelper extends Logging with DataTypeErrorsBase {
     }
     val aggregate = plan.collectFirst { case aggregate: Aggregate => aggregate }
     aggregate.map { aggregate =>
+      val input = aggregate.child
+      val groupingExpressions = aggregate.groupingExpressions
       // Leave lambda parameters and captures alone until the lambda has been bound.
       def resolveGrouping(expression: Expression): Expression = expression match {
         case _ if expression.resolved => expression
         case lambda: LambdaFunction if !lambda.bound => lambda
         case _ =>
-          val candidate = resolveExpressionByPlanOutput(expression, aggregate.child) match {
+          val candidate = resolveExpressionByPlanOutput(expression.clone(), input) match {
             case Alias(child, _) => child
             case other => other
           }
           val grouping = if (candidate.resolved &&
-              aggregate.groupingExpressions.exists(_.semanticEquals(candidate))) {
-            // Keep inputs until aggregate extraction. UpdateOuterReferences then maps
-            // complete correlated grouping expressions to their real aggregate outputs.
+              groupingExpressions.exists(_.semanticEquals(candidate))) {
             Some(candidate)
           } else {
-            None
+            havingGroupingExpressionNormalizer.normalize(candidate).filter { normalized =>
+              groupingExpressions.exists(_.semanticEquals(normalized))
+            }
           }
+          // Keep input bindings until aggregate extraction, including inside aggregate arguments.
+          // On a miss, discard every tentative binding and cast before trying SELECT aliases.
           grouping.map(wrap).getOrElse(expression.mapChildren(resolveGrouping))
       }
       resolveGrouping(expression)

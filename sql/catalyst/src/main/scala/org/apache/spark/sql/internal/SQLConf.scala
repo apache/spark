@@ -468,9 +468,13 @@ object SQLConf {
   val HAVING_WITH_WINDOW_RESOLVES_GROUPING_COLUMN_FIRST =
     buildConf("spark.sql.analyzer.havingWithWindowResolvesGroupingColumnFirst.enabled")
       .internal()
+      .withBindingPolicy(ConfigBindingPolicy.SESSION)
       .doc("When true, preserve HAVING name-resolution scope during window extraction so that " +
-        "grouping columns take precedence over SELECT aliases. When false, retain the legacy " +
-        "SELECT-alias precedence after window extraction.")
+        "grouping columns take precedence over SELECT aliases. For grouping sets, preserve the " +
+        "original grouping-key and aggregate-input scope unless " +
+        "spark.sql.legacy.evaluateHavingAfterInnerWindow is true. When false, retain " +
+        "SELECT-alias precedence after window extraction. HAVING placement relative to windows " +
+        "is controlled independently by spark.sql.legacy.evaluateHavingAfterInnerWindow.")
       .version("4.4.0")
       .booleanConf
       .createWithDefault(false)

@@ -202,11 +202,90 @@ SELECT sum(1) AS a, count(*) OVER () AS n
 FROM VALUES (1), (2) AS t1(k) CROSS JOIN VALUES (9) AS t2(k)
 GROUP BY t1.k HAVING t1.k >= 1 AND k >= 2 ORDER BY a;
 
+-- Nested windows must retain HAVING grouping scope before either window runs.
+SELECT k, sum(rank() OVER (ORDER BY sum(v))) OVER () AS n
+FROM VALUES (1, 10), (2, 20), (3, 30) AS t(k, v)
+GROUP BY k HAVING k = 2 ORDER BY 1;
+
+SELECT k + 10 AS k, sum(rank() OVER (ORDER BY sum(v))) OVER () AS n
+FROM VALUES (1, 10), (2, 20), (3, 30) AS t(k, v)
+GROUP BY k HAVING k = 2 ORDER BY 1;
+
+-- QUALIFY sees SELECT aliases, not hidden HAVING grouping keys.
+SELECT k + 10 AS k, count(*) OVER () AS n
+FROM VALUES (1), (2), (3) AS t(k)
+GROUP BY k HAVING k >= 2 QUALIFY k > 12 ORDER BY 1;
+
+-- QUALIFY can resolve unselected grouping keys without binding synthetic helper identities.
+SELECT sum(v) AS s, count(*) OVER () AS n
+FROM VALUES (1, 10), (2, 20) AS t(k, v)
+GROUP BY k HAVING k > 0 QUALIFY k = 2 ORDER BY 1;
+
+SELECT sum(v) AS s, count(*) OVER () AS n
+FROM VALUES (1, 10), (2, 20) AS t(k, v)
+GROUP BY k HAVING k > 0 QUALIFY t.k = 2 ORDER BY 1;
+
+-- Nested-field lookup must also resolve the grouping input before mapping it to a helper.
+SELECT sum(v) AS s, count(*) OVER () AS n
+FROM VALUES (named_struct('x', 1), 10), (named_struct('x', 2), 20) AS t(k, v)
+GROUP BY k HAVING k.x > 0 QUALIFY k.x = 2 ORDER BY 1;
+
+-- Descendant ORDER BY lookup cannot make synthetic grouping names visible.
+SELECT sum(v) AS a, count(*) OVER () AS n
+FROM VALUES (1, 10), (2, 20) AS t(k, v)
+GROUP BY k + 1 HAVING sum(v) > 0 ORDER BY `(k + 1)`;
+
+-- A field error on a synthetic name must not expose the helper's type either.
+SELECT sum(v) AS a, count(*) OVER () AS n
+FROM VALUES (1, 10), (2, 20) AS t(k, v)
+GROUP BY k + 1 HAVING sum(v) > 0 ORDER BY `(k + 1)`.x;
+
+-- NULL field extraction must not erase a hidden grouping helper's identity.
+SELECT sum(v) AS s, count(*) OVER () AS n
+FROM VALUES (10), (20) AS t(v)
+GROUP BY NULL HAVING sum(v) > 0 ORDER BY `NULL`.x;
+
+-- A real NULL output still permits field extraction when other grouping helpers exist.
+SELECT NULL AS k, sum(v) AS s, count(*) OVER () AS n
+FROM VALUES (10), (20) AS t(v)
+GROUP BY v HAVING sum(v) > 0 ORDER BY k.x, s;
+
+-- Error suggestions within HAVING must not expose hidden grouping keys.
+SELECT sum(v) AS a, count(*) OVER () AS n
+FROM VALUES (1, 10), (2, 20) AS t(k, v)
+GROUP BY k + 1 HAVING missing > 0 ORDER BY 1;
+
+-- Error suggestions above HAVING must not expose hidden grouping keys.
+SELECT k + 10 AS a, count(*) OVER () AS n
+FROM VALUES (1), (2) AS t(k)
+GROUP BY k HAVING k >= 2 QUALIFY missing > 0 ORDER BY 1;
+
 -- Disabling the fix preserves the legacy SELECT-alias precedence and window count.
 SET spark.sql.analyzer.singlePassResolver.dualRunWithLegacy=false;
 SET spark.sql.analyzer.havingWithWindowResolvesGroupingColumnFirst.enabled=false;
 SELECT k + 10 AS k, count(*) OVER () AS n
 FROM VALUES (1), (2), (3) AS t(k)
 GROUP BY k HAVING k >= 2 ORDER BY 1;
+-- Rollback also retains the previous nested-window and QUALIFY behavior.
+SELECT k + 10 AS k, sum(rank() OVER (ORDER BY sum(v))) OVER () AS n
+FROM VALUES (1, 10), (2, 20), (3, 30) AS t(k, v)
+GROUP BY k HAVING k = 2 ORDER BY 1;
+SELECT k + 10 AS k, count(*) OVER () AS n
+FROM VALUES (1), (2), (3) AS t(k)
+GROUP BY k HAVING k >= 2 QUALIFY k > 12 ORDER BY 1;
+-- Unselected grouping keys remain available in QUALIFY with the fix disabled.
+SELECT sum(v) AS s, count(*) OVER () AS n
+FROM VALUES (1, 10), (2, 20) AS t(k, v)
+GROUP BY k HAVING k > 0 QUALIFY k = 2 ORDER BY 1;
+SELECT sum(v) AS s, count(*) OVER () AS n
+FROM VALUES (named_struct('x', 1), 10), (named_struct('x', 2), 20) AS t(k, v)
+GROUP BY k HAVING k.x > 0 QUALIFY k.x = 2 ORDER BY 1;
+-- Rollback rejects the same synthetic NULL name and retains real NULL extraction.
+SELECT sum(v) AS s, count(*) OVER () AS n
+FROM VALUES (10), (20) AS t(v)
+GROUP BY NULL HAVING sum(v) > 0 ORDER BY `NULL`.x;
+SELECT NULL AS k, sum(v) AS s, count(*) OVER () AS n
+FROM VALUES (10), (20) AS t(v)
+GROUP BY v HAVING sum(v) > 0 ORDER BY k.x, s;
 RESET spark.sql.analyzer.havingWithWindowResolvesGroupingColumnFirst.enabled;
 RESET spark.sql.analyzer.singlePassResolver.dualRunWithLegacy;

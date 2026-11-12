@@ -17,6 +17,7 @@
 
 package org.apache.spark.sql.catalyst.analysis
 
+import java.util.Locale
 import java.util.concurrent.atomic.AtomicBoolean
 
 import scala.util.control.NonFatal
@@ -247,6 +248,52 @@ class FunctionResolution(
         unresolvedFunc.nameParts,
         sqlResolutionPathEntriesForAnalysis.map(toSQLId),
         unresolvedFunc.origin)
+    }
+  }
+
+  /**
+   * Resolves only audited stock scalar functions for a detached grouping-key probe. Unknown PATH
+   * ownership, internal calls, and replaced builders are misses; no catalog function is loaded.
+   * Arguments must belong to HavingGroupingExpressionNormalizer's supported grammar. Invalid
+   * arguments may throw AnalysisException, which the speculative caller must discard.
+   */
+  private[analysis] def tryResolveFunctionForGroupingMatch(
+      unresolvedFunc: UnresolvedFunction): Option[Expression] = {
+    if (unresolvedFunc.isInternal || !unresolvedFunc.childrenResolved ||
+        unresolvedFunc.isDistinct || unresolvedFunc.filter.nonEmpty ||
+        unresolvedFunc.ignoreNulls.nonEmpty || unresolvedFunc.orderingWithinGroup.nonEmpty) {
+      return None
+    }
+    val parts = unresolvedFunc.boundOwner.getOrElse(unresolvedFunc.nameParts)
+    val name = parts.lastOption.map(_.toLowerCase(Locale.ROOT)).getOrElse("")
+    name match {
+      case "lower" | "lcase" | "upper" | "ucase" | "substr" | "substring" =>
+      case _ => return None
+    }
+    val builtinOwner = parts.length match {
+      case 1 if unresolvedFunc.boundOwner.isEmpty =>
+        // Read the effective path without populating AnalysisContext's resolution-path memo.
+        val context = AnalysisContext.get
+        CatalogManager.isBuiltinFirstOnPath(catalogManager.resolutionPathEntriesForAnalysis(
+          context.resolutionPathEntries, context.catalogAndNamespace))
+      case 2 if unresolvedFunc.boundOwner.isEmpty =>
+        conf.prioritizeSystemCatalog &&
+          parts.head.equalsIgnoreCase(CatalogManager.BUILTIN_NAMESPACE)
+      case 3 =>
+        isSystemCatalogQualified(parts) &&
+          parts(1).equalsIgnoreCase(CatalogManager.BUILTIN_NAMESPACE)
+      case _ => false
+    }
+    if (!builtinOwner || !v1SessionCatalog.isStockBuiltinFunction(name)) return None
+
+    val ident = FunctionRegistry.builtinFunctionIdentifier(name)
+    val stock = FunctionRegistry.builtin.lookupFunctionBuilder(ident)
+    // Ownership is checked above; a later session replacement cannot invoke a user builder here.
+    stock.map { builder =>
+      withPosition(unresolvedFunc) {
+        validateFunction(builder(unresolvedFunc.arguments), unresolvedFunc.arguments.length,
+          unresolvedFunc)
+      }
     }
   }
 
