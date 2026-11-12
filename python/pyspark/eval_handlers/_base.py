@@ -22,6 +22,7 @@ package ``__init__`` and the concrete-handler submodules can both import it.
 """
 
 import functools
+import os
 from abc import ABCMeta, abstractmethod
 from collections.abc import Iterator
 from typing import TYPE_CHECKING, Any, Callable, ClassVar, Generic, Optional
@@ -330,7 +331,9 @@ class BatchEvalTypeHandler(EvalTypeHandler["pa.RecordBatch", OutputBatch]):
 
     @property
     def serializer(self) -> Serializer:
-        return ArrowStreamSerializer(write_start_stream=True)
+        return ArrowStreamSerializer(
+            write_start_stream=True, flush_per_batch=os.environ.get("SPARK_PIPELINED_UDF") == "1"
+        )
 
 
 class GroupedEvalTypeHandler(EvalTypeHandler[GroupedBatch, OutputBatch]):
@@ -338,7 +341,9 @@ class GroupedEvalTypeHandler(EvalTypeHandler[GroupedBatch, OutputBatch]):
 
     @property
     def serializer(self) -> Serializer:
-        return ArrowStreamGroupSerializer(write_start_stream=True)
+        return ArrowStreamGroupSerializer(
+            write_start_stream=True, flush_per_batch=os.environ.get("SPARK_PIPELINED_UDF") == "1"
+        )
 
 
 class CoGroupedEvalTypeHandler(EvalTypeHandler[CoGroupedBatch, OutputBatch]):
@@ -346,4 +351,6 @@ class CoGroupedEvalTypeHandler(EvalTypeHandler[CoGroupedBatch, OutputBatch]):
 
     @property
     def serializer(self) -> Serializer:
-        return ArrowStreamCoGroupSerializer(write_start_stream=True)
+        return ArrowStreamCoGroupSerializer(
+            write_start_stream=True, flush_per_batch=os.environ.get("SPARK_PIPELINED_UDF") == "1"
+        )
