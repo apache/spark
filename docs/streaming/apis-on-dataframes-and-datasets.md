@@ -1413,7 +1413,9 @@ regarding watermark delays and whether data will be dropped or not.
       Conditionally supported, requires a watermark on the right and a time constraint that
       limits how late a right row can match a left row. A watermark on the left and a reverse
       time constraint also allow right-side state cleanup, which a stateful operator after the
-      join needs to make progress when it uses the right event time.
+      join needs to make progress when it uses the right event time. That constraint is an
+      equality with an exact shift (an interval under one day, or <code>timestampadd</code> in
+      hours, minutes or seconds), or a range condition in place of a shifted equality.
     </td>
   </tr>
   <tr>
@@ -1422,7 +1424,9 @@ regarding watermark delays and whether data will be dropped or not.
       Conditionally supported, requires a watermark on the left and a time constraint that
       limits how late a left row can match a right row. A watermark on the right and a reverse
       time constraint also allow left-side state cleanup, which a stateful operator after the
-      join needs to make progress when it uses the left event time.
+      join needs to make progress when it uses the left event time. That constraint is an
+      equality with an exact shift (an interval under one day, or <code>timestampadd</code> in
+      hours, minutes or seconds), or a range condition in place of a shifted equality.
     </td>
   </tr>
   <tr>
@@ -1453,11 +1457,14 @@ Additional details on supported joins:
 
 - For stream-stream outer and semi joins, an equality key counts as the time constraint in the
   table above when it is the other input's event time, or that event time shifted by constant
-  intervals, such as `leftTime = rightTime + INTERVAL 10 MINUTES`. A key shifted backward by whole
-  days, months or years, such as `leftTime = rightTime - INTERVAL 1 DAY`, or truncated from the
-  other input's event time, such as `leftTime = CAST(CAST(rightTime AS BIGINT) AS TIMESTAMP)`,
-  does not count. When both inputs have watermarks, a time range condition between the two event
-  times, as in the time-interval join example above, can bound such a join instead.
+  intervals, such as `leftTime = rightTime + INTERVAL 10 MINUTES`. A key shifted backward by
+  months, years, or a day-time interval of 24 hours or more, such as
+  `leftTime = rightTime - INTERVAL 1 DAY` or `leftTime = rightTime - INTERVAL 36 HOURS`, or
+  truncated from the other input's event time, such as
+  `leftTime = CAST(CAST(rightTime AS BIGINT) AS TIMESTAMP)`, does not count, while
+  `timestampadd` in hours, minutes or seconds does, whatever the amount. When both inputs
+  have watermarks, a time range condition between the two event times, as in the time-interval
+  join example above, can bound such a join instead.
 
 - Joins can be cascaded, that is, you can do `df1.join(df2, ...).join(df3, ...).join(df4, ....)`.
 
