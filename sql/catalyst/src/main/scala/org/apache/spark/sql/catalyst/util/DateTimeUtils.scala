@@ -536,18 +536,34 @@ object DateTimeUtils extends SparkDateTimeUtils {
     }
   }
 
+  // Long arithmetic: `dayOfWeek - 1 - startDay` and the sum overflow Int near the DATE bounds.
+  private def nextDateForDayOfWeek(startDay: Long, dayOfWeek: Int): Long = {
+    startDay + 1 + Math.floorMod(dayOfWeek - 1 - startDay, 7L)
+  }
+
   /**
    * Returns the first date which is later than startDate and is of the given dayOfWeek.
    * dayOfWeek is an integer ranges in [0, 6], and 0 is Thu, 1 is Fri, etc,.
+   * @throws org.apache.spark.SparkArithmeticException if the result is later than the maximum DATE.
    */
   def getNextDateForDayOfWeek(startDay: Int, dayOfWeek: Int): Int = {
-    startDay + 1 + ((dayOfWeek - 1 - startDay) % 7 + 7) % 7
+    val result = nextDateForDayOfWeek(startDay, dayOfWeek)
+    if (result > Int.MaxValue) {
+      val dayName = DayOfWeek.THURSDAY.plus(dayOfWeek).toString
+      throw QueryExecutionErrors.nextDayOverflowError(startDay, dayName)
+    }
+    result.toInt
   }
 
-  /** Returns last day of the month for the given number of days since 1970-01-01. */
+  /**
+   * Returns last day of the month for the given number of days since 1970-01-01.
+   * @throws org.apache.spark.SparkArithmeticException if the result is later than the maximum DATE.
+   */
   def getLastDayOfMonth(days: Int): Int = {
     val localDate = daysToLocalDate(days)
-    (days - localDate.getDayOfMonth) + localDate.lengthOfMonth()
+    val result = days - localDate.getDayOfMonth.toLong + localDate.lengthOfMonth()
+    if (result > Int.MaxValue) throw QueryExecutionErrors.lastDayOverflowError(days)
+    result.toInt
   }
 
   // The constants are visible for testing purpose only.
@@ -572,20 +588,29 @@ object DateTimeUtils extends SparkDateTimeUtils {
   /**
    * Returns the trunc date from original date and trunc level.
    * Trunc level should be generated using `parseTruncLevel()`, should be between 6 and 9.
+   * @throws org.apache.spark.SparkArithmeticException if the result is earlier than the minimum
+   *                                                   DATE.
    */
   def truncDate(days: Int, level: Int): Int = {
     level match {
-      case TRUNC_TO_WEEK => getNextDateForDayOfWeek(days - 7, MONDAY)
-      case TRUNC_TO_MONTH => days - getDayOfMonth(days) + 1
+      case TRUNC_TO_WEEK => checkTruncDate(days, nextDateForDayOfWeek(days - 7L, MONDAY), "WEEK")
+      case TRUNC_TO_MONTH => checkTruncDate(days, days - getDayOfMonth(days).toLong + 1, "MONTH")
       case TRUNC_TO_QUARTER =>
         val ld = daysToLocalDate(days)
         val firstMonthOfQuarter = ((ld.getMonthValue - 1) / 3) * 3 + 1
-        localDateToDays(ld.withMonth(firstMonthOfQuarter).withDayOfMonth(1))
-      case TRUNC_TO_YEAR => days - getDayInYear(days) + 1
+        val result = ld.withMonth(firstMonthOfQuarter).withDayOfMonth(1).toEpochDay
+        checkTruncDate(days, result, "QUARTER")
+      case TRUNC_TO_YEAR => checkTruncDate(days, days - getDayInYear(days).toLong + 1, "YEAR")
       case _ =>
         // caller make sure that this should never be reached
         throw QueryExecutionErrors.unreachableError(s": Invalid trunc level: $level")
     }
+  }
+
+  // Truncation never moves a date later, so only the minimum DATE can be crossed.
+  private def checkTruncDate(days: Int, result: Long, unit: String): Int = {
+    if (result < Int.MinValue) throw QueryExecutionErrors.truncDateOverflowError(days, unit)
+    result.toInt
   }
 
   private def truncToUnit(micros: Long, zoneId: ZoneId, unit: ChronoUnit): Long = {

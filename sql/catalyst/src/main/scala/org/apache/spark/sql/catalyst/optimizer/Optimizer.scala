@@ -1569,6 +1569,14 @@ object ColumnPruning extends Rule[LogicalPlan] {
     // prune unrequired nested fields from `Generate`.
     case GeneratorNestedColumnAliasing(rewrittenPlan) => rewrittenPlan
 
+    // Pass through only the columns of the child of a Python UDF evaluation that the parent uses,
+    // and prune the child to those and the arguments of the UDFs. The child is pruned here, as
+    // the rule does not visit this Project again.
+    case p @ Project(_, e: BaseEvalPython)
+        if !e.requiredChildOutput.forall(p.references.contains) =>
+      val newEval = e.withRequiredChildOutput(e.requiredChildOutput.filter(p.references.contains))
+      p.copy(child = newEval.withNewChildren(Seq(prunedChild(e.child, newEval.references))))
+
     // Eliminate unneeded attributes from right side of a Left Existence Join.
     case j @ Join(_, right, LeftExistence(_), _, _) =>
       j.copy(right = prunedChild(right, j.references))

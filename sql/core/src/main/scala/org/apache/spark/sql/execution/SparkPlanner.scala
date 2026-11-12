@@ -27,6 +27,7 @@ import org.apache.spark.sql.execution.command.v2.V2CommandStrategy
 import org.apache.spark.sql.execution.datasources.{DataSourceStrategy, FileSourceStrategy}
 import org.apache.spark.sql.execution.datasources.v2.DataSourceV2Strategy
 import org.apache.spark.sql.execution.datasources.v2.ffi.NativeUDFEvals
+import org.apache.spark.sql.execution.joins.ExternalLookupJoinStrategy
 import org.apache.spark.sql.internal.SQLConf
 
 class SparkPlanner(val session: SparkSession, val experimentalMethods: ExperimentalMethods)
@@ -42,6 +43,7 @@ class SparkPlanner(val session: SparkSession, val experimentalMethods: Experimen
       LogicalQueryStageStrategy ::
       PythonEvals ::
       NativeUDFEvals ::
+      ExternalLookupJoinStrategy ::
       new DataSourceV2Strategy(session) ::
       V2CommandStrategy ::
       FileSourceStrategy ::

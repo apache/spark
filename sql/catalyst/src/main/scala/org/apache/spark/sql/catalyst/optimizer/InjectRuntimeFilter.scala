@@ -302,6 +302,8 @@ object InjectRuntimeFilter extends Rule[LogicalPlan] with PredicateHelper with J
 
   /**
    * Extracts the beneficial filter creation plan with check show below:
+   * - Both keys are binary stable. The Bloom filter hashes the bytes of the key, so it could drop
+   *   a row whose key is equal under a non-binary collation but has different bytes
    * - The filterApplicationSideKey can be pushed down through joins, aggregates and windows
    *   (ie the expression references originate from a single leaf node)
    * - The filter creation side has a selective predicate, or its exact materialized row count
@@ -313,11 +315,11 @@ object InjectRuntimeFilter extends Rule[LogicalPlan] with PredicateHelper with J
       filterCreationSide: LogicalPlan,
       filterApplicationSideKey: Expression,
       filterCreationSideKey: Expression): Option[FilterCreationSide] = {
-    if (findExpressionAndTrackLineageDown(
+    if (UnsafeRowUtils.isBinaryStable(filterCreationSideKey.dataType) &&
+      UnsafeRowUtils.isBinaryStable(filterApplicationSideKey.dataType) &&
+      findExpressionAndTrackLineageDown(
       filterApplicationSideKey, filterApplicationSide).isDefined &&
       satisfyByteSizeRequirement(filterApplicationSide)) {
-      val allowMaterializedCache = UnsafeRowUtils.isBinaryStable(filterCreationSideKey.dataType) &&
-        UnsafeRowUtils.isBinaryStable(filterApplicationSideKey.dataType)
       def distinctCount(key: Expression, plan: LogicalPlan): Option[BigInt] = key match {
         case attribute: Attribute =>
           plan.stats.attributeStats.get(attribute).flatMap(_.distinctCount)
@@ -351,34 +353,26 @@ object InjectRuntimeFilter extends Rule[LogicalPlan] with PredicateHelper with J
           currentDistinctCount
         }
       }
-      if (allowMaterializedCache) {
-        var sawMaterializedLeaf = false
-        val selectiveCreationSide = extractSelectiveFilterOverScan(
-          filterCreationSide,
-          filterCreationSideKey,
-          allowMaterializedCache = false,
-          applicationDistinctCount = None,
-          onMaterializedLeaf = { sawMaterializedLeaf = true })
-        selectiveCreationSide
-          .filter(_.plan.stats.sizeInBytes <= conf.runtimeFilterCreationSideThreshold)
-          .orElse {
-            if (sawMaterializedLeaf) {
-              extractSelectiveFilterOverScan(
-                filterCreationSide,
-                filterCreationSideKey,
-                allowMaterializedCache = true,
-                applicationDistinctCount = applicationDistinctCount)
-            } else {
-              selectiveCreationSide
-            }
+      var sawMaterializedLeaf = false
+      val selectiveCreationSide = extractSelectiveFilterOverScan(
+        filterCreationSide,
+        filterCreationSideKey,
+        allowMaterializedCache = false,
+        applicationDistinctCount = None,
+        onMaterializedLeaf = { sawMaterializedLeaf = true })
+      selectiveCreationSide
+        .filter(_.plan.stats.sizeInBytes <= conf.runtimeFilterCreationSideThreshold)
+        .orElse {
+          if (sawMaterializedLeaf) {
+            extractSelectiveFilterOverScan(
+              filterCreationSide,
+              filterCreationSideKey,
+              allowMaterializedCache = true,
+              applicationDistinctCount = applicationDistinctCount)
+          } else {
+            selectiveCreationSide
           }
-      } else {
-        extractSelectiveFilterOverScan(
-          filterCreationSide,
-          filterCreationSideKey,
-          allowMaterializedCache = false,
-          applicationDistinctCount = None)
-      }
+        }
     } else {
       None
     }

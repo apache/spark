@@ -40,20 +40,21 @@ import org.apache.spark.internal.config.BUFFER_PAGESIZE
 import org.apache.spark.memory.{TaskMemoryManager, TestMemoryConsumer, TestMemoryManager}
 import org.apache.spark.sql.{AnalysisException, IntegratedUDFTestUtils, QueryTest, Row}
 import org.apache.spark.sql.catalyst.{FunctionIdentifier, InternalRow}
-import org.apache.spark.sql.catalyst.expressions.{Alias, ArrayTransform, BloomFilterMightContain, LambdaFunction, Literal, NamedLambdaVariable}
+import org.apache.spark.sql.catalyst.expressions.{Alias, And, ArrayTransform, AttributeReference, BloomFilterMightContain, EqualTo, GreaterThan, LambdaFunction, Literal, NamedLambdaVariable}
 import org.apache.spark.sql.catalyst.parser.ParseException
-import org.apache.spark.sql.catalyst.plans.logical.{Aggregate, EvalNativeUDFs, Filter, Join, LocalLimit, OneRowRelation, Project}
+import org.apache.spark.sql.catalyst.plans.{Inner, JoinType, LeftOuter}
+import org.apache.spark.sql.catalyst.plans.logical.{Aggregate, EvalNativeUDFs, Filter, Join, JoinHint, LocalLimit, LocalRelation, LogicalPlan, OneRowRelation, PreparedExternalLookupJoin, Project}
 import org.apache.spark.sql.classic.{DataFrame, SparkSession}
-import org.apache.spark.sql.connector.FakeV2ProviderWithCustomSchema
+import org.apache.spark.sql.connector.{FakeV2ProviderWithCustomSchema, PlanningExternalLookupTable}
 import org.apache.spark.sql.connector.catalog.{InMemoryEnhancedPartitionFilterTable, InMemoryTableEnhancedPartitionFilterCatalog}
 import org.apache.spark.sql.execution.datasources.{CatalogFileIndex, HadoopFsRelation, LogicalRelation}
-import org.apache.spark.sql.execution.datasources.v2.{DataSourceV2ScanRelation, FileScan}
+import org.apache.spark.sql.execution.datasources.v2.{DataSourceV2Relation, DataSourceV2ScanRelation, ExternalLookupRelation, FileScan}
 import org.apache.spark.sql.execution.python.{ArrowEvalPythonExec, BatchEvalPythonExec}
 import org.apache.spark.sql.functions.{call_function, col}
 import org.apache.spark.sql.internal.{SQLConf, StaticSQLConf}
 import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.sql.types._
-import org.apache.spark.sql.util.ArrowUtils
+import org.apache.spark.sql.util.{ArrowUtils, CaseInsensitiveStringMap}
 import org.apache.spark.unsafe.Platform
 import org.apache.spark.unsafe.types.UTF8String
 import org.apache.spark.util.Utils
@@ -1227,6 +1228,34 @@ class NativeUDFSuite extends QueryTest with SharedSparkSession {
         .queryExecution.optimizedPlan
       assert(!plan.exists(_.expressions.exists(_.exists(_.isInstanceOf[BloomFilterMightContain]))),
         plan)
+  }
+
+  private def optimizedLookupJoinOnCall(joinType: JoinType): LogicalPlan = {
+    val session = spark.newSession()
+    registerForPlans(session)
+    val stream = LocalRelation(Seq(AttributeReference("streamId", LongType)()), isStreaming = true)
+    val lookup = ExternalLookupRelation(DataSourceV2Relation.create(
+      PlanningExternalLookupTable("id BIGINT, value STRING NOT NULL"), None, None,
+      CaseInsensitiveStringMap.empty))
+    val lookupId = lookup.output.head
+    val call = session.sessionState.catalog.lookupFunction(FunctionIdentifier("add_one"),
+      Seq(lookupId))
+    session.sessionState.optimizer.execute(Join(stream, lookup, joinType,
+      Some(And(EqualTo(stream.output.head, lookupId), GreaterThan(call, Literal(0L)))),
+      JoinHint.NONE))
+  }
+
+  test("evaluate a call over lookup columns above an inner external lookup join") {
+    val plan = optimizedLookupJoinOnCall(Inner)
+    assert(plan.collect { case Filter(_, e: EvalNativeUDFs) =>
+      e.child.isInstanceOf[PreparedExternalLookupJoin] } == Seq(true), plan)
+  }
+
+  test("reject a call over lookup columns in the condition of a left outer external lookup join") {
+    checkError(
+      exception = intercept[AnalysisException](optimizedLookupJoinOnCall(LeftOuter)),
+      condition = "UNSUPPORTED_FEATURE.NATIVE_UDF_IN_ON_CLAUSE",
+      parameters = Map("joinType" -> "LEFT OUTER"))
   }
 
   private val plansManifest = manifestJson(Seq(function("add_one", Seq("bigint"), "bigint")),
