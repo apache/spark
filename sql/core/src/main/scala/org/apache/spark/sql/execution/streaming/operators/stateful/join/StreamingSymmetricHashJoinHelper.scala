@@ -370,14 +370,20 @@ object StreamingSymmetricHashJoinHelper extends Logging {
    * version, and V4 reads its rows by key prefix. Otherwise each side must have exactly one
    * event-time column, and either its own event time must be the sole watermarked equality key
    * at the same ordinal, or the join must be a time-interval join on the event times (see
-   * [[isOwnEventTimeIntervalJoin]]). This excludes other range bounds. It also excludes a key
-   * computed from the event time by a constant, which older versions evicted at the unshifted
-   * watermark. A NULL selected key does not change the semantics: such a row can never match.
+   * [[isOwnEventTimeIntervalJoin]]). This excludes other range bounds. A key computed from the
+   * event time by a constant is accepted only when it shifts the event time forward, the other
+   * input's key at that ordinal is its own event time, no other equality key uses an event time,
+   * and no stateful operator after the join reads the shifted input's event time. Older versions
+   * evicted both sides at the unshifted watermark at that ordinal. For a forward shift, that is
+   * the cutoff this version uses for the shifted side, and at or below the one it uses for the
+   * other side, which can no longer match rows at or below it, and both versions store V4 rows
+   * at that ordinal. Only the shifted input's bound in the output watermark changes. Older
+   * versions evicted a backward shift before its last match. A NULL selected key does not change
+   * the semantics: such a row can never match.
    * Old V4 state indexed it at timestamp 0 under its own key, and the first batch after the
    * restart scans V4 state from the start, so it evicts the row and a preserved side emits it
-   * unless an older version already joined it. V1 to V3 keep such a row, as older versions did,
-   * because its eviction predicate is unknown.
-   * TODO: evict the NULL-key rows that older versions stored in V1 to V3 state.
+   * unless an older version already joined it. V1 to V3 test every stored row each batch and
+   * also evict such a row.
    */
   private[sql] def isWatermarkCheckpointCompatible(
       leftAttributes: Seq[Attribute],
@@ -412,8 +418,28 @@ object StreamingSymmetricHashJoinHelper extends Logging {
       val rightOrdinal = StreamingJoinHelper.getEventTimeKeyOrdinal(rightKeys, rightAttributes)
       val alignedOwnEventTimeKeys = leftOrdinal.isDefined && leftOrdinal == rightOrdinal &&
         leftOrdinals == leftOrdinal.toSeq && rightOrdinals == rightOrdinal.toSeq
-      alignedOwnEventTimeKeys || isOwnEventTimeIntervalJoin(leftAttributes, rightAttributes,
-        leftKeys, rightKeys, condition, leftEventTime.head, rightEventTime.head, consumedSides)
+      // One input's own event-time key paired with a forward shift of the other input's.
+      def forwardShiftedKey(
+          ownOrdinal: Option[Int],
+          ownWatermarkOrdinals: Seq[Int],
+          shiftedKeys: Seq[Expression],
+          shiftedAttributes: Seq[Attribute],
+          shiftedWatermarkOrdinals: Seq[Int],
+          shiftedSide: JoinSide): Boolean = ownOrdinal.exists { ordinal =>
+        ownWatermarkOrdinals == Seq(ordinal) && shiftedWatermarkOrdinals.isEmpty &&
+          StreamingJoinHelper.isForwardShiftOfEventTime(shiftedKeys(ordinal), shiftedAttributes) &&
+          leftKeys.indices.filter(_ != ordinal).forall { i =>
+            !(leftKeys(i).references ++ rightKeys(i).references)
+              .exists(_.metadata.contains(delayKey))
+          } && !consumedSides(shiftedSide)
+      }
+      alignedOwnEventTimeKeys ||
+        forwardShiftedKey(leftOrdinal, leftOrdinals, rightKeys, rightAttributes, rightOrdinals,
+          RightSide) ||
+        forwardShiftedKey(rightOrdinal, rightOrdinals, leftKeys, leftAttributes, leftOrdinals,
+          LeftSide) ||
+        isOwnEventTimeIntervalJoin(leftAttributes, rightAttributes, leftKeys, rightKeys,
+          condition, leftEventTime.head, rightEventTime.head, consumedSides)
     } else {
       false
     }
@@ -429,9 +455,11 @@ object StreamingSymmetricHashJoinHelper extends Logging {
    * same conjuncts, so they derived the same value predicates, scan starts and V4 index columns,
    * and neither evicts an input that gets no bound. Old V4 stored a null event time at timestamp 0
    * under the row's own key; both versions scan that entry the same way. No equality key may use an
-   * event time: older versions evicted such keys at the unshifted watermark. Time windows are
-   * excluded: this version still derives the older ordering bound for them, but SPARK-61348 later
-   * removes it for windows shorter than the other input's.
+   * event time: older versions evicted both sides of such a key at the unshifted watermark, which
+   * [[isWatermarkCheckpointCompatible]] accepts only for a forward shift whose shifted input no
+   * later stateful operator reads. Time windows are excluded: this version still derives the older
+   * ordering bound for them, but SPARK-61348 later removes it for windows shorter than the other
+   * input's.
    */
   private def isOwnEventTimeIntervalJoin(
       leftAttributes: Seq[Attribute],
