@@ -17,12 +17,14 @@
 
 """Experimental PySpark functions for remote model inference."""
 
-from typing import TYPE_CHECKING, Dict, Iterator, Optional, Tuple, cast
+from contextlib import ExitStack
+from typing import TYPE_CHECKING, Callable, Dict, Iterator, Optional, Tuple, cast
 
 from pyspark.errors import PySparkTypeError, PySparkValueError
 from pyspark.sql._ai_client import (
     _ModelEndpoint,
     _query_batches,
+    _query_session,
     _validate_non_empty_string,
 )
 from pyspark.sql.column import Column
@@ -42,6 +44,23 @@ def _model_registry(session: Optional["SparkSession"]) -> Dict[str, _ModelEndpoi
 
         session = SparkSession.active()
     return cast(Dict[str, _ModelEndpoint], session.__dict__.setdefault("_ai_model_registry", {}))
+
+
+def _validate_on_error(on_error: str) -> None:
+    if not isinstance(on_error, str):
+        raise PySparkTypeError(
+            errorClass="NOT_EXPECTED_TYPE",
+            messageParameters={
+                "arg_name": "on_error",
+                "expected_type": "str",
+                "arg_type": type(on_error).__name__,
+            },
+        )
+    if on_error not in ("raise", "null"):
+        raise PySparkValueError(
+            errorClass="VALUE_NOT_ALLOWED",
+            messageParameters={"arg_name": "on_error", "allowed_values": "raise, null"},
+        )
 
 
 def register_model(
@@ -182,20 +201,7 @@ def ai_query(
             errorClass="AI_QUERY_ENDPOINT_NOT_REGISTERED",
             messageParameters={"endpoint": endpoint},
         )
-    if not isinstance(on_error, str):
-        raise PySparkTypeError(
-            errorClass="NOT_EXPECTED_TYPE",
-            messageParameters={
-                "arg_name": "on_error",
-                "expected_type": "str",
-                "arg_type": type(on_error).__name__,
-            },
-        )
-    if on_error not in ("raise", "null"):
-        raise PySparkValueError(
-            errorClass="VALUE_NOT_ALLOWED",
-            messageParameters={"arg_name": "on_error", "allowed_values": "raise, null"},
-        )
+    _validate_on_error(on_error)
     config = registry[endpoint]
 
     def query(batches: Iterator["pd.Series"]) -> Iterator["pd.Series"]:
@@ -207,23 +213,17 @@ def ai_query(
     return query_udf(request)
 
 
-def register_sql_function(name: str = "ai_query", session: Optional["SparkSession"] = None) -> None:
-    """Register ``name`` as a SQL function backed by the same execution path as :func:`ai_query`.
+def register_sql_function(
+    name: str = "ai_query",
+    session: Optional["SparkSession"] = None,
+    *,
+    on_error: str = "raise",
+) -> None:
+    """Register a session-local SQL function for remote model inference.
 
-    Lets SQL text call the registered models directly, e.g.
-    ``SELECT ai_query('summarizer', description) FROM documents``. The endpoint can also be
-    a column, so a query can route different rows to different registered models in one call.
-    Reuses the same registry, batching, retries, and provider clients as :func:`ai_query` --
-    SQL and the Column API execute through identical code.
-
-    This takes a snapshot of the currently registered aliases. Registrations made after
-    this call do not affect it; call it again to pick up later registrations.
-
-    Unlike :func:`ai_query`, which validates and resolves the alias when the
-    :class:`~pyspark.sql.Column` is built, before any task runs, a SQL argument is a column
-    value rather than a Python-side parameter: the alias is resolved inside the UDF instead,
-    once per distinct value in each Arrow batch. An unregistered alias therefore only fails
-    once a task actually executes it, not when the query is analyzed.
+    Captures the current model aliases. Call again to include later registrations.
+    The endpoint argument can be a literal or a column. Aliases are resolved in Python
+    workers, so an unregistered alias fails during task execution.
 
     .. versionadded:: 4.4.0
 
@@ -234,6 +234,10 @@ def register_sql_function(name: str = "ai_query", session: Optional["SparkSessio
     session : :class:`~pyspark.sql.SparkSession`, optional
         Session that owns both the registration and the snapshot of model aliases it
         resolves. Defaults to the active or default session.
+    on_error : str, optional
+        Error policy for calls to the registered SQL function. ``"raise"`` fails the task.
+        ``"null"`` returns null for known inference and transient failures. Invalid input,
+        client initialization, authentication, and permission errors fail the task.
 
     Examples
     --------
@@ -250,6 +254,7 @@ def register_sql_function(name: str = "ai_query", session: Optional["SparkSessio
     from pyspark.sql.types import StringType
 
     _validate_non_empty_string("name", name)
+    _validate_on_error(on_error)
     target_session = session
     if target_session is None:
         from pyspark.sql.session import SparkSession as _SparkSession
@@ -260,18 +265,23 @@ def register_sql_function(name: str = "ai_query", session: Optional["SparkSessio
     def query(batches: Iterator[Tuple["pd.Series", "pd.Series"]]) -> Iterator["pd.Series"]:
         import pandas as pd
 
-        for aliases, requests in batches:
-            answers = pd.Series(None, index=requests.index, dtype="object")
-            for alias in aliases.unique():
-                if not isinstance(alias, str) or alias not in registry:
-                    raise PySparkValueError(
-                        errorClass="AI_QUERY_ENDPOINT_NOT_REGISTERED",
-                        messageParameters={"endpoint": str(alias)},
-                    )
-                mask = aliases.eq(alias).fillna(False)
-                for response in _query_batches(registry[alias], iter([requests.loc[mask]])):
-                    answers.loc[mask] = response.to_numpy()
-            yield answers
+        with ExitStack() as stack:
+            queries: Dict[str, Callable[[pd.Series], pd.Series]] = {}
+            for aliases, requests in batches:
+                answers = pd.Series(None, index=requests.index, dtype="object")
+                for alias in aliases.unique():
+                    if not isinstance(alias, str) or alias not in registry:
+                        raise PySparkValueError(
+                            errorClass="AI_QUERY_ENDPOINT_NOT_REGISTERED",
+                            messageParameters={"endpoint": str(alias)},
+                        )
+                    if alias not in queries:
+                        queries[alias] = stack.enter_context(
+                            _query_session(registry[alias], on_error=on_error)
+                        )
+                    mask = aliases.eq(alias).fillna(False)
+                    answers.loc[mask] = queries[alias](requests.loc[mask]).to_numpy()
+                yield answers
 
     query_udf = pandas_udf(
         query, returnType=StringType(), functionType=PandasUDFType.SCALAR_ITER

@@ -74,14 +74,18 @@ def main():
         def check(result, label):
             plan = result._jdf.queryExecution().executedPlan().toString()
             if "ArrowEvalPython" not in plan:
-                raise AssertionError(f"{label}: the query did not use Spark's Arrow Python execution")
+                raise AssertionError(
+                    f"{label}: the query did not use Spark's Arrow Python execution"
+                )
             rows = sorted(result.collect(), key=lambda row: row.row_id)
             if len(rows) != len(inputs):
                 raise AssertionError(f"{label}: the output row count changed")
             for row in rows:
                 answer = row.answer.strip() if isinstance(row.answer, str) else row.answer
                 if answer != row.expected:
-                    raise AssertionError(f"{label}: the model response did not match the synthetic prompt")
+                    raise AssertionError(
+                        f"{label}: the model response did not match the synthetic prompt"
+                    )
             return plan, rows
 
         column_plan, column_rows = check(

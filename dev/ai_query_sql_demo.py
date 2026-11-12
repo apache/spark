@@ -35,41 +35,14 @@ import threading
 from collections import Counter
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
-from typing import Iterator, Tuple
 from unittest.mock import patch
 
-import pandas as pd
 import pyspark.sql._ai_client as client_module
 import pyspark.sql.ai as ai_module
-from pyspark.errors import PySparkValueError, PythonException
+from pyspark.errors import PythonException
 from pyspark.sql import SparkSession
-from pyspark.sql._ai_client import _query_batches
-from pyspark.sql.ai import _model_registry, ai_query, register_model
-from pyspark.sql.functions import PandasUDFType, col, pandas_udf
-
-
-def register_sql_ai_query(spark: SparkSession) -> None:
-    """Register a demo SQL adapter with a serializable snapshot of this session's aliases."""
-    registry = dict(_model_registry(spark))
-
-    def query(batches: Iterator[Tuple[pd.Series, pd.Series]]) -> Iterator[pd.Series]:
-        for aliases, requests in batches:
-            answers = pd.Series(None, index=requests.index, dtype="object")
-            for alias in aliases.unique():
-                if not isinstance(alias, str) or alias not in registry:
-                    raise PySparkValueError(
-                        errorClass="AI_QUERY_ENDPOINT_NOT_REGISTERED",
-                        messageParameters={"endpoint": str(alias)},
-                    )
-                mask = aliases.eq(alias).fillna(False)
-                for response in _query_batches(registry[alias], iter([requests.loc[mask]])):
-                    answers.loc[mask] = response.to_numpy()
-            yield answers
-
-    query_udf = pandas_udf(
-        query, returnType="string", functionType=PandasUDFType.SCALAR_ITER
-    ).asNondeterministic()
-    spark.udf.register("ai_query", query_udf)
+from pyspark.sql.ai import ai_query, register_model, register_sql_function
+from pyspark.sql.functions import col
 
 
 def run_demo(spark: SparkSession, received: list) -> dict:
@@ -77,7 +50,7 @@ def run_demo(spark: SparkSession, received: list) -> dict:
         "summarizer", "demo-model", provider="bedrock", region="us-east-1", max_retries=0
     )
     register_model("other", "other-model", provider="bedrock", region="us-east-1", max_retries=0)
-    register_sql_ai_query(spark)
+    register_sql_function(session=spark)
     # Demonstrate that later registrations do not change the SQL adapter's snapshot.
     register_model("other", "replacement", provider="bedrock", region="us-east-1")
     assert not spark.newSession().catalog.functionExists("ai_query")

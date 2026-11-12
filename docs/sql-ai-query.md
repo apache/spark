@@ -18,11 +18,9 @@ license: |
   limitations under the License.
 ---
 
-This prototype queries Databricks or Amazon Bedrock from a DataFrame through an iterator Pandas
-UDF. Register a model alias with `register_model` and use that alias in `ai_query`.
-`register_sql_function` makes the same execution path callable from SQL text. This is not a
-native SQL function yet -- see [SQL text](#sql-text) for what that means in practice. Spark
-Connect and streaming are unvalidated.
+This prototype invokes Databricks or Amazon Bedrock models through an iterator Pandas UDF.
+Register a model with `register_model`, then call `ai_query` from a DataFrame or register it
+for SQL with `register_sql_function`. Spark Connect and streaming are unvalidated.
 
 ## Prerequisites
 
@@ -80,31 +78,24 @@ spark.sql(
 ).show()
 ```
 
-`register_sql_function` registers a SQL function (`ai_query` by default) backed by the exact
-same registry, batching, retries, and provider clients as the Column API above -- SQL and
-`ai_query()` execute through identical code, not two implementations. The endpoint can also be
-a column rather than a literal, so one query can route different rows to different registered
-models.
+The endpoint argument can be a literal or a column, allowing rows to use different models.
 
 This takes a snapshot of the aliases registered so far. A `register_model` call after
 `register_sql_function` does not change it; call `register_sql_function` again to pick up
 later registrations.
 
-This is not a native SQL function like `from_json`, which resolves and validates its schema
-argument during query analysis, before anything runs. Here, because a SQL argument is a
-column value rather than a Python-side parameter, the alias is resolved inside the UDF
-instead, once per distinct value in each Arrow batch. An unregistered alias therefore fails
-once a task actually executes it, not when the query is analyzed. Making this validate at
-analysis time, the way `from_json` does, needs a Catalyst-level piece this prototype does not
-have yet; that is an open design question, not something decided here.
+SQL registration requires Python setup in the same session. Unknown aliases fail during task
+execution. Analysis-time validation remains an open design question.
 
 ## Execution and retries
 
 Aliases belong to a Spark session. Registration requires an active or default session.
 Use `session=spark` with both `register_model` and `ai_query` to select another session.
-Each column captures the registration available at construction time. Invocation errors fail the task by default. Set
-`on_error="null"` to return null for known inference and transient failures. Invalid input,
-client initialization, authentication, and permission errors still fail the task.
+Each column captures the registration available at construction time. Invocation errors fail
+the task by default. Set `on_error="null"` on `ai_query` or `register_sql_function` to return
+null for known inference and transient failures. For SQL, the policy applies to all calls to
+the registered function. Invalid input, client initialization, authentication, and permission
+errors still fail the task.
 
 Concurrency is bounded per active Python task. For example, 20 tasks with
 `max_concurrency=4` can issue up to 80 concurrent requests. The worker invokes the model

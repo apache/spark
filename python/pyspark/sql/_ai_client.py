@@ -23,11 +23,12 @@ import re
 import threading
 import time
 from concurrent.futures import ThreadPoolExecutor
+from contextlib import contextmanager
 from dataclasses import dataclass
 from datetime import timezone
 from email.utils import parsedate_to_datetime
 from itertools import islice
-from typing import TYPE_CHECKING, Any, Iterator, Mapping, Optional, Union
+from typing import TYPE_CHECKING, Any, Callable, Iterator, Mapping, Optional, Union
 from urllib.parse import quote, urlsplit
 
 from pyspark.errors import PySparkRuntimeError, PySparkTypeError, PySparkValueError
@@ -410,12 +411,12 @@ def _can_return_null(error: PySparkRuntimeError) -> bool:
     )
 
 
-def _query_batches(
+@contextmanager
+def _query_session(
     endpoint: _ModelEndpoint,
-    batches: Iterator["pd.Series"],
     *,
     on_error: str = "raise",
-) -> Iterator["pd.Series"]:
+) -> Iterator[Callable[["pd.Series"], "pd.Series"]]:
     import pandas as pd
 
     local = threading.local()
@@ -448,7 +449,8 @@ def _query_batches(
 
     try:
         with ThreadPoolExecutor(max_workers=endpoint.max_concurrency) as pool:
-            for requests in batches:
+
+            def query(requests: "pd.Series") -> "pd.Series":
                 # Chunk submission as well as execution to bound outstanding work.
                 rows = iter(requests)
                 values: list[Optional[str]] = []
@@ -457,7 +459,9 @@ def _query_batches(
                     if not chunk:
                         break
                     values.extend(pool.map(invoke, chunk))
-                yield pd.Series(values, dtype="object")
+                return pd.Series(values, dtype="object")
+
+            yield query
     finally:
         for client in clients:
             try:
@@ -466,3 +470,14 @@ def _query_batches(
                 logging.getLogger(__name__).warning(
                     "Failed to close an AI query client for provider %s", endpoint.provider
                 )
+
+
+def _query_batches(
+    endpoint: _ModelEndpoint,
+    batches: Iterator["pd.Series"],
+    *,
+    on_error: str = "raise",
+) -> Iterator["pd.Series"]:
+    with _query_session(endpoint, on_error=on_error) as query:
+        for requests in batches:
+            yield query(requests)
