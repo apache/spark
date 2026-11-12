@@ -91,9 +91,8 @@ trait TimestampFormatterHelper extends TimeZoneAwareExpression {
   protected def forTimestampNTZ: Boolean = false
 
   @transient final protected lazy val formatterOption: Option[TimestampFormatter] =
-    if (formatString.foldable) {
-      Option(formatString.eval()).map(fmt => getFormatter(fmt.toString))
-    } else None
+    ExprUtils.tryEvalFoldable(formatString).flatMap(Option(_))
+      .map(fmt => getFormatter(fmt.toString))
 
   final protected def getFormatter(fmt: String): TimestampFormatter = {
     TimestampFormatter(
@@ -1627,8 +1626,9 @@ case class NextDay(
   override protected def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
     nullSafeCodeGen(ctx, ev, (sd, dowS) => {
       val dayOfWeekTerm = ctx.freshName("dayOfWeek")
-      if (dayOfWeek.foldable) {
-        val input = dayOfWeek.eval().asInstanceOf[UTF8String]
+      val foldableDayOfWeek = ExprUtils.tryEvalFoldable(dayOfWeek)
+      if (foldableDayOfWeek.isDefined) {
+        val input = foldableDayOfWeek.get.asInstanceOf[UTF8String]
         if (input eq null) {
           s"""${ev.isNull} = true;"""
         } else {
@@ -1809,8 +1809,9 @@ sealed trait UTCTimestamp extends BinaryExpression with ImplicitCastInputTypes {
 
   override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
     val dtu = DateTimeUtils.getClass.getName.stripSuffix("$")
-    if (right.foldable) {
-      val tz = right.eval().asInstanceOf[UTF8String]
+    val foldableTz = ExprUtils.tryEvalFoldable(right)
+    if (foldableTz.isDefined) {
+      val tz = foldableTz.get.asInstanceOf[UTF8String]
       if (tz == null) {
         ev.copy(code = code"""
            |boolean ${ev.isNull} = true;
@@ -2324,7 +2325,8 @@ trait TruncInstant extends BinaryExpression with ImplicitCastInputTypes {
     val dtu = DateTimeUtils.getClass.getName.stripSuffix("$")
 
     val javaType = CodeGenerator.javaType(dataType)
-    if (format.foldable) {
+    // `truncLevel` evaluates the format, so use it only if the format evaluates without an error.
+    if (ExprUtils.tryEvalFoldable(format).isDefined) {
       if (truncLevel < minLevel) {
         ev.copy(code = code"""
           boolean ${ev.isNull} = true;
