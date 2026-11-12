@@ -100,8 +100,10 @@ class _SimpleStreamReaderWrapper(DataSourceStreamReader):
         if end_str != start_str:
             self.cache.append(PrefetchedCacheEntry(start, end, it))
             return
-        # read() may return a list instead of an iterator.
-        if isinstance(it, list):
+        # read() may return any iterable instead of an iterator. Look __next__ up on
+        # the type, as next() does, so instance __getattr__ hooks and instance
+        # attributes cannot misroute the check below.
+        if not hasattr(type(it), "__next__"):
             it = iter(it)
         try:
             next(it)
