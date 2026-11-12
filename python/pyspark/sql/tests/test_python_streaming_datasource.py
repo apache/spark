@@ -421,7 +421,7 @@ class BasePythonStreamingDataSourceTestsMixin:
             wrapper = _SimpleStreamReaderWrapper(
                 NonIteratorIterableReader([0, 1], to_result, advance=True)
             )
-            end = wrapper.latestOffset(start, ReadAllAvailable())
+            end = wrapper.latestOffset()
             self.assertEqual(end, {"offset": 2})
             self.assertEqual(list(wrapper.getCache(start, end)), [0, 1])
 
@@ -429,7 +429,7 @@ class BasePythonStreamingDataSourceTestsMixin:
             wrapper = _SimpleStreamReaderWrapper(
                 NonIteratorIterableReader([], to_result, advance=False)
             )
-            end = wrapper.latestOffset(start, ReadAllAvailable())
+            end = wrapper.latestOffset()
             self.assertEqual(end, start)
             self.assertEqual(len(wrapper.cache), 0)
 
@@ -438,7 +438,7 @@ class BasePythonStreamingDataSourceTestsMixin:
                 NonIteratorIterableReader([0], to_result, advance=False)
             )
             with self.assertRaises(PySparkException) as cm:
-                wrapper.latestOffset(start, ReadAllAvailable())
+                wrapper.latestOffset()
             self.assertEqual(
                 cm.exception.getCondition(),
                 "SIMPLE_STREAM_READER_OFFSET_DID_NOT_ADVANCE",
@@ -446,7 +446,7 @@ class BasePythonStreamingDataSourceTestsMixin:
 
         # Objects that implement only __next__ keep being accepted by next() directly.
         wrapper = _SimpleStreamReaderWrapper(NonIteratorIterableReader([], NextOnly, advance=False))
-        end = wrapper.latestOffset(start, ReadAllAvailable())
+        end = wrapper.latestOffset()
         self.assertEqual(end, start)
         self.assertEqual(len(wrapper.cache), 0)
 
@@ -454,7 +454,7 @@ class BasePythonStreamingDataSourceTestsMixin:
             NonIteratorIterableReader([0], NextOnly, advance=False)
         )
         with self.assertRaises(PySparkException) as cm:
-            wrapper.latestOffset(start, ReadAllAvailable())
+            wrapper.latestOffset()
         self.assertEqual(
             cm.exception.getCondition(),
             "SIMPLE_STREAM_READER_OFFSET_DID_NOT_ADVANCE",
@@ -514,7 +514,7 @@ class BasePythonStreamingDataSourceTestsMixin:
         for to_result in [GetattrReturnsList, GetattrRaisesList, with_instance_next]:
             # Empty result with end == start is allowed and not cached.
             wrapper = _SimpleStreamReaderWrapper(HookedResultReader([], to_result, advance=False))
-            end = wrapper.latestOffset(start, ReadAllAvailable())
+            end = wrapper.latestOffset()
             self.assertEqual(end, start)
             self.assertEqual(len(wrapper.cache), 0)
 
@@ -522,7 +522,7 @@ class BasePythonStreamingDataSourceTestsMixin:
             # not a TypeError and not an exception escaping from a hook.
             wrapper = _SimpleStreamReaderWrapper(HookedResultReader([0], to_result, advance=False))
             with self.assertRaises(PySparkException) as cm:
-                wrapper.latestOffset(start, ReadAllAvailable())
+                wrapper.latestOffset()
             self.assertEqual(
                 cm.exception.getCondition(),
                 "SIMPLE_STREAM_READER_OFFSET_DID_NOT_ADVANCE",
@@ -534,14 +534,14 @@ class BasePythonStreamingDataSourceTestsMixin:
         # which a proxy rebuilt without __init__ cannot survive.
         wrapper = _SimpleStreamReaderWrapper(HookedResultReader([0], IteratorProxy, advance=False))
         with self.assertRaises(PySparkException) as cm:
-            wrapper.latestOffset(start, ReadAllAvailable())
+            wrapper.latestOffset()
         self.assertEqual(
             cm.exception.getCondition(),
             "SIMPLE_STREAM_READER_OFFSET_DID_NOT_ADVANCE",
         )
 
         wrapper = _SimpleStreamReaderWrapper(HookedResultReader([], IteratorProxy, advance=False))
-        end = wrapper.latestOffset(start, ReadAllAvailable())
+        end = wrapper.latestOffset()
         self.assertEqual(end, start)
         self.assertEqual(len(wrapper.cache), 0)
 
