@@ -5186,6 +5186,17 @@ class SQLQuerySuite extends SharedSparkSession with AdaptiveSparkPlanHelper
     checkAnswer(df, Row(1))
   }
 
+  test("SPARK-61379: Don't remove aliases under Union when multiple aliases share same attribute") {
+    val a = spark.range(10).selectExpr("id % 7 AS k", "id % 10 AS v").repartition($"v")
+    val b = spark.range(5).selectExpr("id % 10 AS x").repartition($"x")
+      .selectExpr("x AS x", "x AS x")
+    val df = a.union(b)
+    checkAnswer(df,
+      (0L until 10L).map(id => Row(id % 7, id % 10)) ++
+        (0L until 5L).map(id => Row(id % 10, id % 10))
+    )
+  }
+
   test("SPARK-53734: Prefer table column over LCA when resolving array index") {
     val query = "SELECT 1 AS col1, col2[col1] FROM VALUES(0, ARRAY(1, 2));"
     withSQLConf(SQLConf.PREFER_COLUMN_OVER_LCA_IN_ARRAY_INDEX.key -> "true") {

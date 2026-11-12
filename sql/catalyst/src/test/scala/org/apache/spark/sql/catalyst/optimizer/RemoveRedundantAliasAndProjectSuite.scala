@@ -269,4 +269,56 @@ class RemoveRedundantAliasAndProjectSuite extends PlanTest {
       comparePlans(optimized, Union(Seq(project, projectWithoutAlias)))
     }
   }
+
+  test("SPARK-61379: Don't remove aliases under Union when multiple aliases share same attribute") {
+    val exprId = NamedExpression.newExprId
+    val attribute = AttributeReference("attr", IntegerType)(exprId = exprId)
+    val aAttr = AttributeReference("a", IntegerType)()
+    val bAttr = AttributeReference("b", IntegerType)()
+    val firstChild = LocalRelation(aAttr, bAttr)
+    val secondChild = Project(
+      Seq(
+        Alias(attribute, "attr")(),
+        Alias(attribute, "attr")()
+      ),
+      LocalRelation(attribute)
+    )
+    val secondChildWithoutAlias = Project(
+      Seq(attribute, attribute),
+      LocalRelation(attribute)
+    )
+    val union = Union(Seq(firstChild, secondChild))
+
+    withSQLConf(SQLConf.UNION_IS_RESOLVED_WHEN_DUPLICATES_PER_CHILD_RESOLVED.key -> "true") {
+      val optimized = Optimize.execute(union)
+      comparePlans(union, optimized)
+    }
+
+    withSQLConf(SQLConf.UNION_IS_RESOLVED_WHEN_DUPLICATES_PER_CHILD_RESOLVED.key -> "false") {
+      val optimized = Optimize.execute(union)
+      comparePlans(optimized, Union(Seq(firstChild, secondChildWithoutAlias)))
+    }
+  }
+
+  test("SPARK-61379: Don't remove aliases under Union when Aggregate has duplicate aliases") {
+    val exprId = NamedExpression.newExprId
+    val attribute = AttributeReference("attr", IntegerType)(exprId = exprId)
+    val aAttr = AttributeReference("a", IntegerType)()
+    val bAttr = AttributeReference("b", IntegerType)()
+    val firstChild = LocalRelation(aAttr, bAttr)
+    val secondChild = Aggregate(
+      Seq(attribute),
+      Seq(
+        Alias(attribute, "attr")(),
+        Alias(attribute, "attr")()
+      ),
+      LocalRelation(attribute)
+    )
+    val union = Union(Seq(firstChild, secondChild))
+
+    withSQLConf(SQLConf.UNION_IS_RESOLVED_WHEN_DUPLICATES_PER_CHILD_RESOLVED.key -> "true") {
+      val optimized = Optimize.execute(union)
+      comparePlans(union, optimized)
+    }
+  }
 }

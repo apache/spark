@@ -802,40 +802,30 @@ object RemoveRedundantAliases extends Rule[LogicalPlan] {
   }
 
   /**
-   * In case a [[Project]], [[Aggregate]] or [[Window]] is a child of [[Union]], we don't remove an
-   * [[Alias]] in case it is on top of an [[Attribute]] which exists in the output set of the
-   * operator. This is needed because otherwise, we end up having an operator with duplicates in
-   * its output. When that happens, [[Union]] is not resolved, and we fail (but we shouldn't).
-   * In this example:
-   *
-   * {{{ SELECT col1 FROM values(1) WHERE 100 IN (SELECT col1 UNION SELECT col1); }}}
-   *
-   * Without `shouldRemoveAliasesUnderUnion` check, we would remove the [[Alias]] introduced in
-   * [[DeduplicateRelations]] rule (in a [[Project]] tagged as
-   * `PROJECT_FOR_EXPRESSION_ID_DEDUPLICATION`), the result is unresolved [[Union]] which causes the
-   * failure. With the check, [[Alias]] stays, and we resolve the plan properly.
+   * In case a [[Project]], [[Aggregate]] or [[Window]] is a child of [[Union]], we don't remove
+   * redundant aliases if removing them would introduce duplicate attributes in the operator's
+   * output (either by colliding with an existing output attribute as in SPARK-53308, or because
+   * multiple aliases share the same underlying attribute as in SPARK-61379). When duplicate
+   * attributes appear in a child's output, [[Union]] is not resolved and plan validation fails.
    */
   private def shouldRemoveAliasesUnderUnion(operator: LogicalPlan): Boolean = {
+    def canRemoveWithoutDuplicates(expressions: Seq[NamedExpression]): Boolean = {
+      val targetAttrs = expressions.map {
+        case a @ Alias(attr: Attribute, name)
+            if name == attr.name && (a.metadata == attr.metadata ||
+              (attr.metadata.contains(AUTO_GENERATED_ALIAS) &&
+                a.metadata == attr.metadata.withKeyRemoved(AUTO_GENERATED_ALIAS))) =>
+          attr
+        case other => other.toAttribute
+      }
+      AttributeSet(targetAttrs).size == targetAttrs.size
+    }
+
     operator match {
-      case project: Project =>
-        project.projectList.forall {
-          case Alias(attribute: Attribute, _) =>
-            !project.outputSet.contains(attribute)
-          case _ => true
-        }
-      case aggregate: Aggregate =>
-        aggregate.aggregateExpressions.forall {
-          case Alias(attribute: Attribute, _) =>
-            !aggregate.outputSet.contains(attribute)
-          case _ => true
-        }
-      case window: Window =>
-        window.windowExpressions.forall {
-          case Alias(attribute: Attribute, _) =>
-            !window.outputSet.contains(attribute)
-          case _ => true
-        }
-      case other => true
+      case project: Project => canRemoveWithoutDuplicates(project.projectList)
+      case aggregate: Aggregate => canRemoveWithoutDuplicates(aggregate.aggregateExpressions)
+      case window: Window => canRemoveWithoutDuplicates(window.windowExpressions)
+      case _ => true
     }
   }
 
