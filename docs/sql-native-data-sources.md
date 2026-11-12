@@ -620,7 +620,13 @@ not be evaluated. Put the condition in the arguments instead, as in `f(IF(d <> 0
 `f(try_divide(n, d))`, which pass a null for such a row. When the user-defined functions that a
 `WHERE` clause calls, and their arguments, are deterministic, the deterministic conditions that it
 combines with `AND` and that call none of them are applied before the calls, so the calls only get
-the rows that they keep: for a deterministic `f`, as the functions of a manifest are by default,
+the rows that they keep, with two exceptions. A condition that can raise an error on purpose, such
+as one that calls `raise_error` or `assert_true`, is applied after the calls when it is written
+after a condition that calls one of them. And over a join, a call that reads one side only is
+evaluated on that side, before the join, so it gets the rows that the conditions on that side keep,
+also those that the conditions on the other side or on both sides then drop; a condition that can
+raise an error on purpose is applied after the join there, so after such a call, also when it is
+written before it. For a deterministic `f`, as the functions of a manifest are by default,
 `WHERE d <> 0 AND f(n / d) > 0` never divides by zero.
 
 Spark never evaluates a native function on the driver, also to fold a call whose arguments are

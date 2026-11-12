@@ -41,7 +41,7 @@ import org.apache.spark.sql.{AnalysisException, IntegratedUDFTestUtils, QueryTes
 import org.apache.spark.sql.catalyst.{FunctionIdentifier, InternalRow}
 import org.apache.spark.sql.catalyst.expressions.{Alias, ArrayTransform, BloomFilterMightContain, LambdaFunction, Literal, NamedLambdaVariable}
 import org.apache.spark.sql.catalyst.parser.ParseException
-import org.apache.spark.sql.catalyst.plans.logical.{Aggregate, EvalNativeUDFs, OneRowRelation, Project}
+import org.apache.spark.sql.catalyst.plans.logical.{Aggregate, EvalNativeUDFs, Join, OneRowRelation, Project}
 import org.apache.spark.sql.classic.{DataFrame, SparkSession}
 import org.apache.spark.sql.connector.FakeV2ProviderWithCustomSchema
 import org.apache.spark.sql.connector.catalog.{InMemoryEnhancedPartitionFilterTable, InMemoryTableEnhancedPartitionFilterCatalog}
@@ -1250,6 +1250,35 @@ class NativeUDFSuite extends QueryTest with SharedSparkSession {
     confs.foreach { case (key, value) => session.conf.set(key, value) }
     register(session, defaultPackage.getName, "add_one")
     checkRows(session.sql(query), expected)
+  }
+
+  nativeGridTest("plan an equi-join on a call over one side of an inner join, for")(Seq(
+    Case("a WHERE clause over two relations",
+      "SELECT a.id, b.id FROM range(3) a, range(5) b WHERE add_one(a.id) = b.id" ->
+        Seq(Row(0L, 1L), Row(1L, 2L), Row(2L, 3L))),
+    Case("the ON clause of a join of three relations",
+      "SELECT a.id, b.id, c.id FROM range(3) a JOIN range(5) b ON add_one(a.id) = b.id " +
+        "JOIN range(5) c ON b.id = c.id" ->
+        Seq(Row(0L, 1L, 1L), Row(1L, 2L, 2L), Row(2L, 3L, 3L))))) {
+    case Case(_, (query, rows)) =>
+      val session = newSession(defaultPackage)
+      register(session, defaultPackage.getName, "add_one")
+      val df = session.sql(query)
+      val plan = df.queryExecution.optimizedPlan
+      val joins = plan.collect { case join: Join => join }
+      assert(joins.nonEmpty && joins.forall(_.condition.isDefined), plan)
+      assert(plan.collect { case e: EvalNativeUDFs => e.child.exists(_.isInstanceOf[Join]) } ==
+        Seq(false), plan)
+      checkRows(df, rows)
+  }
+
+  nativeTest("evaluate an IN subquery on a call and both sides of an inner join") {
+    val session = newSession(defaultPackage)
+    register(session, defaultPackage.getName, "add_one")
+    checkRows(
+      session.sql("SELECT a.id, b.id FROM range(3) a, range(5) b " +
+        "WHERE a.id = b.id AND add_one(a.id) + b.id IN (SELECT id FROM range(5))"),
+      Seq(Row(0L, 0L), Row(1L, 1L)))
   }
 
   nativeGridTest("evaluate the calls of a deterministic function once")(Seq(true, false)) {

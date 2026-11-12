@@ -84,7 +84,8 @@
 //                   call on a state that is closed or was never created, two calls on a state at
 //                   the same time, a call after eval failed, an input without rows, with null rows
 //                   or with another number of children than of arguments, a result released after
-//                   its state was closed, and kept input buffers that changed.
+//                   its state was closed, kept input buffers that changed, and a second call of
+//                   spark_udf_init.
 
 #include "spark_udf.h"
 
@@ -960,6 +961,8 @@ int spark_udf_init(const SparkUdfHost* spark, const SparkUdfLibrary** library) {
 #ifdef DS_INIT
   InInit in_init("spark_udf_init");
 #endif
+  static std::atomic<int> calls{0};
+  if (calls.fetch_add(1) > 0) orderViolation("spark_udf_init called again");
   host = spark;
   if (INIT_FAILURE == 1) {
     hostLog(SPARK_UDF_LOG_ERROR, "injected failure in spark_udf_init");
