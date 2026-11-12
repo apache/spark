@@ -309,14 +309,22 @@ object CharVarcharUtils extends Logging with SparkCharVarcharUtils {
           returnNullable = false)
 
       case StructType(fields) =>
-        val struct = CreateNamedStruct(fields.zipWithIndex.flatMap { case (f, i) =>
-          Seq(Literal(f.name), processStringForCharVarchar(
-            GetStructField(expr, i, Some(f.name)), f.dataType, charFuncName, varcharFuncName))
-        }.toImmutableArraySeq)
-        if (struct.valExprs.forall(_.isInstanceOf[GetStructField])) {
+        val fieldExprs = fields.zipWithIndex.map { case (f, i) =>
+          f -> processStringForCharVarchar(
+            GetStructField(expr, i, Some(f.name)), f.dataType, charFuncName, varcharFuncName)
+        }
+        if (fieldExprs.forall(_._2.isInstanceOf[GetStructField])) {
           // No field needs char/varchar processing, just return the original expression.
           expr
         } else {
+          val struct = CreateNamedStruct(fieldExprs.flatMap { case (f, fieldExpr) =>
+            // `GetStructField` of a nullable struct is nullable, so rebuilding the struct would
+            // drop a declared nested NOT NULL. Preserve it; `nullSafeRebuiltStruct` handles the
+            // whole-struct-null case.
+            val typed =
+              if (!f.nullable && fieldExpr.nullable) KnownNotNull(fieldExpr) else fieldExpr
+            Seq(Literal(f.name), typed)
+          }.toImmutableArraySeq)
           nullSafeRebuiltStruct(expr, struct)
         }
 
