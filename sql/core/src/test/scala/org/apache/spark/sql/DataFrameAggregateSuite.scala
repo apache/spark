@@ -5889,6 +5889,41 @@ class DataFrameAggregateSuite extends SharedSparkSession
       ),
       Seq(Row(1, 1, "a"), Row(2, 1, "a"))
     )
+
+    // 5. listagg argument equal to delimiter with listagg listed first
+    checkAnswer(
+      df.groupBy("k").agg(
+        expr("listagg(DISTINCT ',', ',') WITHIN GROUP (ORDER BY ',')"),
+        expr("count(DISTINCT ',')")
+      ),
+      Seq(Row(1, ",", 1), Row(2, ",", 1))
+    )
+
+    // 6. ordered listagg listed before unordered listagg with argument equal to delimiter
+    checkAnswer(
+      df.groupBy("k").agg(
+        expr("listagg(DISTINCT ',', ',') WITHIN GROUP (ORDER BY ',')"),
+        expr("listagg(DISTINCT ',', ',')")
+      ),
+      Seq(Row(1, ",", ","), Row(2, ",", ","))
+    )
+
+    // 7. lone grouped listagg with argument equal to delimiter
+    checkAnswer(
+      df.groupBy("k").agg(
+        expr("listagg(DISTINCT ',', ',') WITHIN GROUP (ORDER BY ',')")
+      ),
+      Seq(Row(1, ","), Row(2, ","))
+    )
+
+    // 8. projected literal column equal to delimiter
+    checkAnswer(
+      df.selectExpr("k", "',' AS c").groupBy("k").agg(
+        expr("listagg(DISTINCT c, ',') WITHIN GROUP (ORDER BY c)"),
+        expr("count(DISTINCT c)")
+      ),
+      Seq(Row(1, ",", 1), Row(2, ",", 1))
+    )
   }
 
   test("SPARK-60124: global constant-only ordered DISTINCT LISTAGG on empty and non-empty input") {
@@ -5904,6 +5939,14 @@ class DataFrameAggregateSuite extends SharedSparkSession
       emptyDf.selectExpr("listagg(DISTINCT 'x', ',') WITHIN GROUP (ORDER BY 'x')", "sum(v)"),
       Seq(Row(null, null))
     )
+    checkAnswer(
+      emptyDf.selectExpr("listagg(DISTINCT ',', ',') WITHIN GROUP (ORDER BY ',')"),
+      Seq(Row(null))
+    )
+    checkAnswer(
+      emptyDf.selectExpr("listagg(DISTINCT ',', ',') WITHIN GROUP (ORDER BY ',')", "sum(v)"),
+      Seq(Row(null, null))
+    )
 
     // On non-empty input: returns 'x' alone and 'x' with sum(v) = 6
     checkAnswer(
@@ -5913,6 +5956,14 @@ class DataFrameAggregateSuite extends SharedSparkSession
     checkAnswer(
       nonEmptyDf.selectExpr("listagg(DISTINCT 'x', ',') WITHIN GROUP (ORDER BY 'x')", "sum(v)"),
       Seq(Row("x", 6))
+    )
+    checkAnswer(
+      nonEmptyDf.selectExpr("listagg(DISTINCT ',', ',') WITHIN GROUP (ORDER BY ',')"),
+      Seq(Row(","))
+    )
+    checkAnswer(
+      nonEmptyDf.selectExpr("listagg(DISTINCT ',', ',') WITHIN GROUP (ORDER BY ',')", "sum(v)"),
+      Seq(Row(",", 6))
     )
   }
 }
