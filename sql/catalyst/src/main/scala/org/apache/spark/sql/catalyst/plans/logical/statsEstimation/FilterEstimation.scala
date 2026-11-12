@@ -25,6 +25,7 @@ import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.Literal.{FalseLiteral, TrueLiteral}
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.plans.logical.statsEstimation.EstimationUtils._
+import org.apache.spark.sql.catalyst.util.CharVarcharUtils
 import org.apache.spark.sql.types._
 
 object FilterEstimation {
@@ -161,7 +162,10 @@ case class FilterEstimation(
   /**
    * Returns a percentage of rows meeting a single condition in Filter node.
    * Currently we only support binary predicates where one side is a column,
-   * and the other is a literal.
+   * and the other is a literal. A side may also be the read-side CHAR padding of a column, which
+   * is what a predicate pushed below the padding Project compares. It is estimated as the column
+   * itself, as `EstimationUtils.getAliasStats` does above the padding Project. The read-side
+   * checks of standard CHAR/VARCHAR semantics are not handled yet, see the SPARK-60830 TODO there.
    *
    * @param condition a single logical expression
    * @param update a boolean flag to specify if we need to update ColumnStat of a column
@@ -170,7 +174,11 @@ case class FilterEstimation(
    *         It returns None if the condition is not supported.
    */
   def calculateSingleCondition(condition: Expression, update: Boolean): Option[Double] = {
-    condition match {
+    val unpadded = condition.mapChildren {
+      case CharVarcharUtils.ReadSidePadding(attr: Attribute, _) => attr
+      case other => other
+    }
+    unpadded match {
       case l: Literal =>
         evaluateLiteral(l)
 
@@ -366,7 +374,8 @@ case class FilterEstimation(
 
     if (!valueInRange) return Some(0.0)
 
-    val percent = if (colStat.histogram.isDefined) {
+    val useHistogram = colStat.histogram.isDefined && canEstimateWithHistogram(attr.dataType)
+    val percent = if (useHistogram) {
       if (colStat.hasMinMaxStats) {
         Some(computeEqualityPossibilityByHistogram(literal, colStat))
       } else {
