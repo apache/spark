@@ -17,6 +17,8 @@
 
 package org.apache.spark.sql.catalyst.util
 
+import java.util.TimeZone
+
 import org.apache.spark.internal.Logging
 import org.apache.spark.internal.LogKeys.EXPR
 import org.apache.spark.sql.catalyst.expressions._
@@ -30,7 +32,7 @@ import org.apache.spark.sql.connector.expressions.aggregate.{AggregateFunc, Avg,
 import org.apache.spark.sql.connector.expressions.filter.{AlwaysFalse, AlwaysTrue, And => V2And, Not => V2Not, Or => V2Or, Predicate => V2Predicate}
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types.{AnyTimestampNanoType, BooleanType, DataType, IntegerType,
-  StringType}
+  StringType, TimestampNTZNanosType, TimestampNTZType}
 import org.apache.spark.unsafe.types.UTF8String
 
 /**
@@ -38,7 +40,45 @@ import org.apache.spark.unsafe.types.UTF8String
  */
 class V2ExpressionBuilder(e: Expression, isPredicate: Boolean = false) extends Logging  {
 
-  def build(): Option[V2Expression] = generateExpression(e, isPredicate)
+  // Set when the time-zone guard in generateExpression rejected a subexpression.
+  private var timeZoneGuardHit = false
+  private var checkTimeZone = true
+
+  def build(): Option[V2Expression] = {
+    timeZoneGuardHit = false
+    checkTimeZone = true
+    val translated = generateExpression(e, isPredicate)
+    if (!timeZoneGuardHit) {
+      translated
+    } else {
+      // The guard dropped a zone-dependent subexpression. Re-translate ignoring the guard and keep
+      // that legacy translation only when the user opts back into zone-ignoring push-down.
+      checkTimeZone = false
+      val legacyTranslated = generateExpression(e, isPredicate)
+      if (SQLConf.get.getConf(SQLConf.LEGACY_PUSH_DOWN_DATETIME_IGNORING_TIME_ZONE)) {
+        legacyTranslated
+      } else {
+        translated
+      }
+    }
+  }
+
+  // A V2 Cast and Extract carry no time zone, and JDBC exchanges timestamps in the JVM default
+  // zone, so a zone-dependent expression whose zone has other rules yields other results remotely.
+  private def pushdownLosesTimeZone(expr: Expression): Boolean = {
+    def zoneOf(e: TimeZoneAwareExpression, input: DataType): Option[String] = input match {
+      case _: TimestampNTZType | _: TimestampNTZNanosType => None
+      case _ => e.timeZoneId
+    }
+    val timeZoneId = expr match {
+      case c: Cast if c.needsTimeZone => c.timeZoneId
+      case f: GetTimeField => zoneOf(f, f.child.dataType)
+      case _ => None
+    }
+    timeZoneId.exists { tz =>
+      DateTimeUtils.getZoneId(tz).getRules != TimeZone.getDefault.toZoneId.getRules
+    }
+  }
 
   def buildPredicate(): Option[V2Predicate] = {
     if (isPredicate) {
@@ -119,6 +159,9 @@ class V2ExpressionBuilder(e: Expression, isPredicate: Boolean = false) extends L
       } else {
         generateExpression(constantExpr, isPredicate)
       }
+    case _ if checkTimeZone && pushdownLosesTimeZone(expr) =>
+      timeZoneGuardHit = true
+      None
     case col @ ColumnOrField(nameParts) =>
       val ref = FieldReference(nameParts)
       if (isPredicate && col.dataType.isInstanceOf[BooleanType]) {
