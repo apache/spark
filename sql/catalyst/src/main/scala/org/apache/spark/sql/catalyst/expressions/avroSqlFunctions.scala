@@ -397,7 +397,7 @@ case class SchemaOfAvro(
 
   private def createReplacement(): Expression = {
     // Copy stateful arguments so a failed evaluation cannot leave a partial map in the CreateMap's
-    // map builder, which would break every later evaluation of this expression.
+    // map builder, which, under the default EXCEPTION policy, makes every later evaluation fail.
     val freshSchema = jsonFormatSchema.freshCopyIfContainsStatefulExpression()
     val schemaValue: String = freshSchema.eval() match {
       case s: UTF8String =>
