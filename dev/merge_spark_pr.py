@@ -698,7 +698,7 @@ def get_json_pages(url):
 
 
 def mergeable_warning(pr_num, pr):
-    """Return the warning to confirm before merging `pr`, the PR as read from GitHub, or None.
+    """Return the warning to confirm before merging `pr` (the PR as read from GitHub), or None.
 
     GitHub computes whether an open PR is mergeable in a background job, and reports
     `mergeable` as null until the job is done, e.g. right after a push to the PR or to its base
@@ -706,15 +706,17 @@ def mergeable_warning(pr_num, pr):
     right after a push to master, though GitHub reported it as mergeable a little later. So an
     open PR that reads as null is read again, up to MERGEABLE_RETRIES times,
     MERGEABLE_RETRY_SECONDS apart. GitHub does not compute it for a closed PR, which always
-    reads as null, so a closed PR is not read again.
+    reads as null, so a closed PR is not read again, and a PR that a re-read finds closed is
+    taken as not mergeable.
 
     >>> from unittest.mock import patch
-    >>> def warning(state, *mergeables):
-    ...     # Read the PR with the first of `mergeables`, and serve the rest to the re-reads.
+    >>> def warning(state, *mergeables, reread_state="open"):
+    ...     # Read the PR with the first of `mergeables`, and serve the rest to the re-reads,
+    ...     # which find the PR in `reread_state`.
     ...     rereads = iter(mergeables[1:])
     ...     def get_json(url):
     ...         assert url == GITHUB_API_BASE + "/pulls/1", url
-    ...         return {"mergeable": next(rereads)}
+    ...         return {"state": reread_state, "mergeable": next(rereads)}
     ...     pr = {"state": state, "mergeable": mergeables[0]}
     ...     with (
     ...         patch.dict(mergeable_warning.__globals__, get_json=get_json),
@@ -745,13 +747,24 @@ def mergeable_warning(pr_num, pr):
 
     >>> warning("closed", None)
     ('Pull request 1 is not mergeable in its current form.', 0)
+
+    A PR closed while it is read again, e.g. merged by another committer, is not mergeable:
+
+    >>> warning("open", None, None, reread_state="closed")
+    Waiting for GitHub to check whether pull request 1 is mergeable...
+    ('Pull request 1 is not mergeable in its current form.', 1)
+    >>> warning("open", None, True, reread_state="closed")
+    Waiting for GitHub to check whether pull request 1 is mergeable...
+    ('Pull request 1 is not mergeable in its current form.', 1)
     """
     mergeable = pr["mergeable"]
     if mergeable is None and pr["state"] == "open":
         print("Waiting for GitHub to check whether pull request %s is mergeable..." % pr_num)
         for _ in range(MERGEABLE_RETRIES):
             time.sleep(MERGEABLE_RETRY_SECONDS)
-            mergeable = get_json("%s/pulls/%s" % (GITHUB_API_BASE, pr_num))["mergeable"]
+            pr = get_json("%s/pulls/%s" % (GITHUB_API_BASE, pr_num))
+            # A PR closed during the wait, e.g. merged by another committer, is not mergeable.
+            mergeable = pr["mergeable"] if pr["state"] == "open" else False
             if mergeable is not None:
                 break
         if mergeable is None:
