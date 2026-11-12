@@ -442,6 +442,9 @@ object ResolveDefaultColumns extends QueryErrorsBase
     // TODO: Normalize persisted unpadded existence defaults in STRING-overlay schemas as well.
     if (CharVarcharUtils.hasCharVarchar(dataType) &&
         CharVarcharUtils.shouldApplyWriteSideLengthCheck(conf) && ret.foldable) {
+      // Literalization must not hide forbidden dependencies from the later DDL validation.
+      validateDefaultValueExpr(
+        DefaultValueExpression(analyzed, defaultSQL), statementType, colName, None)
       val checked = CharVarcharUtils.stringLengthCheck(ret, dataType).eval(EmptyRow)
       Literal(checked, supplanted)
     } else {

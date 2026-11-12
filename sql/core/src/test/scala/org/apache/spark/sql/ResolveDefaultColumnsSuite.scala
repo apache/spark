@@ -486,6 +486,126 @@ class ResolveDefaultColumnsSuite extends SharedSparkSession {
     }
   }
 
+  for {
+    (legacy, preserve) <- Seq((false, false), (true, false), (false, true))
+    ddl <- Seq("CREATE", "ADD", "SET")
+  } {
+    test(s"V1 character defaults reject session variables: " +
+        s"$ddl, legacy=$legacy, preserve=$preserve") {
+      withSQLConf(
+        SQLConf.USE_V1_SOURCE_LIST.key -> "parquet",
+        SQLConf.LEGACY_CHAR_VARCHAR_AS_STRING.key -> legacy.toString,
+        SQLConf.PRESERVE_CHAR_VARCHAR_TYPE_INFO.key -> preserve.toString,
+        SQLConf.CHAR_VARCHAR_STANDARD_SEMANTICS.key -> "false") {
+        sql("DECLARE VARIABLE char_default_var STRING DEFAULT 'EU'")
+        try {
+          val scalarDefaults = Seq(
+            "CHAR(3)" -> "char_default_var",
+            "VARCHAR(3)" -> "concat(char_default_var, ' ')")
+          val nestedDefaults = Seq(
+            "ARRAY<CHAR(3)>" -> "array(char_default_var)",
+            "STRUCT<region:CHAR(3)>" -> "named_struct('region', char_default_var)",
+            "MAP<STRING,VARCHAR(3)>" -> "map('region', concat(char_default_var, '  '))")
+          val defaults = scalarDefaults ++ (if (preserve) Nil else nestedDefaults)
+          defaults.foreach { case (dataType, default) =>
+            withClue(s"dataType=$dataType, default=$default: ") {
+              withTable("t") {
+                if (ddl == "ADD") {
+                  sql("CREATE TABLE t(id INT) USING parquet")
+                } else if (ddl == "SET") {
+                  sql(s"CREATE TABLE t(id INT, c $dataType) USING parquet")
+                }
+                val original = if (ddl == "CREATE") None else {
+                  Some(spark.sessionState.catalog.getTableRawMetadata(TableIdentifier("t")))
+                }
+                val statement = ddl match {
+                  case "CREATE" => s"CREATE TABLE t(c $dataType DEFAULT $default) USING parquet"
+                  case "ADD" => s"ALTER TABLE t ADD COLUMNS (c $dataType DEFAULT $default)"
+                  case "SET" => s"ALTER TABLE t ALTER COLUMN c SET DEFAULT $default"
+                }
+                val error = intercept[AnalysisException](sql(statement))
+                assert(error.getCondition == "INVALID_DEFAULT_VALUE.NOT_CONSTANT")
+                assert(error.getMessageParameters.get("defaultValue") == default)
+                if (ddl == "CREATE") {
+                  assert(!spark.catalog.tableExists("t"))
+                } else {
+                  val retained = spark.sessionState.catalog
+                    .getTableRawMetadata(TableIdentifier("t"))
+                  assert(retained.schema == original.get.schema)
+                }
+              }
+            }
+          }
+        } finally {
+          sql("DROP TEMPORARY VARIABLE char_default_var")
+        }
+      }
+    }
+  }
+
+  for {
+    ddl <- Seq("CREATE", "ADD", "SET")
+    (default, condition) <- Seq(
+      "typeof(rand())" -> "INVALID_DEFAULT_VALUE.NON_DETERMINISTIC",
+      "typeof((SELECT 1))" -> "INVALID_DEFAULT_VALUE.SUBQUERY_EXPRESSION",
+      "typeof((SELECT char_default_dependency_var))" ->
+        "INVALID_DEFAULT_VALUE.SUBQUERY_EXPRESSION")
+  } {
+    test(s"V1 character defaults preserve dependency validation: $ddl, $default") {
+      withSQLConf(
+        SQLConf.USE_V1_SOURCE_LIST.key -> "parquet",
+        SQLConf.LEGACY_CHAR_VARCHAR_AS_STRING.key -> "false",
+        SQLConf.PRESERVE_CHAR_VARCHAR_TYPE_INFO.key -> "false",
+        SQLConf.CHAR_VARCHAR_STANDARD_SEMANTICS.key -> "false") {
+        withSessionVariable("char_default_dependency_var") {
+          sql("DECLARE VARIABLE char_default_dependency_var STRING DEFAULT 'EU'")
+          withTable("t") {
+            if (ddl == "ADD") {
+              sql("CREATE TABLE t(id INT) USING parquet")
+            } else if (ddl == "SET") {
+              sql("CREATE TABLE t(id INT, c CHAR(32)) USING parquet")
+            }
+            val before = if (ddl == "CREATE") None else {
+              Some(spark.sessionState.catalog.getTableRawMetadata(TableIdentifier("t")))
+            }
+            val statement = ddl match {
+              case "CREATE" => s"CREATE TABLE t(c CHAR(32) DEFAULT $default) USING parquet"
+              case "ADD" => s"ALTER TABLE t ADD COLUMNS (c CHAR(32) DEFAULT $default)"
+              case "SET" => s"ALTER TABLE t ALTER COLUMN c SET DEFAULT $default"
+            }
+            val error = intercept[AnalysisException](sql(statement))
+            assert(error.getCondition == condition)
+            assert(error.getMessageParameters.get("defaultValue") == default)
+            if (ddl == "CREATE") {
+              assert(!spark.catalog.tableExists("t"))
+            } else {
+              val after = spark.sessionState.catalog.getTableRawMetadata(TableIdentifier("t"))
+              assert(after.schema == before.get.schema)
+            }
+          }
+        }
+      }
+    }
+  }
+
+  test("V1 character defaults allow foldable functions with valid dependencies") {
+    withSQLConf(
+      SQLConf.USE_V1_SOURCE_LIST.key -> "parquet",
+      SQLConf.READ_SIDE_CHAR_PADDING.key -> "false",
+      SQLConf.LEGACY_CHAR_VARCHAR_AS_STRING.key -> "false",
+      SQLConf.PRESERVE_CHAR_VARCHAR_TYPE_INFO.key -> "false",
+      SQLConf.CHAR_VARCHAR_STANDARD_SEMANTICS.key -> "false") {
+      withTable("t") {
+        sql("CREATE TABLE t(id INT) USING parquet")
+        sql("INSERT INTO t VALUES (0)")
+        sql("ALTER TABLE t ADD COLUMNS (c CHAR(8) DEFAULT typeof(1))")
+        sql("INSERT INTO t(id) VALUES (1)")
+        checkAnswer(sql("SELECT id, c, length(c) FROM t"),
+          Seq(Row(0, "int     ", 8), Row(1, "int     ", 8)))
+      }
+    }
+  }
+
   test("SPARK-46958: timestamp should have timezone for resolvable if default values castable") {
     val defaults = Seq("timestamp '2018-11-17'", "CAST(timestamp '2018-11-17' AS STRING)")
     defaults.foreach { default =>
@@ -621,6 +741,46 @@ class ResolveDefaultColumnsSuite extends SharedSparkSession {
           sql("INSERT INTO t (id) VALUES (3)")
           val newDefault = if (legacy) "EU" else "EU" + " " * 98
           checkAnswer(sql(query), expectedRows :+ Row(3, newDefault, if (legacy) 2 else 100))
+        }
+      }
+    }
+  }
+
+  for {
+    legacy <- Seq(false, true)
+    ddl <- Seq("CREATE", "ADD")
+  } {
+    test(s"Nested late-folded character existence defaults: $ddl, legacy=$legacy") {
+      withSQLConf(
+        SQLConf.USE_V1_SOURCE_LIST.key -> "parquet",
+        SQLConf.READ_SIDE_CHAR_PADDING.key -> "false",
+        SQLConf.LEGACY_CHAR_VARCHAR_AS_STRING.key -> legacy.toString,
+        SQLConf.PRESERVE_CHAR_VARCHAR_TYPE_INFO.key -> "false",
+        SQLConf.CHAR_VARCHAR_STANDARD_SEMANTICS.key -> "false") {
+        val user = sql("SELECT current_user()").head().getString(0)
+        val width = user.length + 3
+        val valueType = s"ARRAY<STRUCT<region:CHAR($width),label:VARCHAR(${user.length + 1})>>"
+        val default = "array(named_struct('region', current_user(), " +
+          "'label', concat(current_user(), '  ')))"
+        val assigns = !legacy
+        val expected = Seq(Row(if (assigns) user + "   " else user,
+          if (assigns) user + " " else user + "  "))
+        withTable("t") {
+          if (ddl == "ADD") {
+            sql("CREATE TABLE t(id INT) USING parquet")
+            sql("INSERT INTO t VALUES (0)")
+            sql(s"ALTER TABLE t ADD COLUMNS (c $valueType DEFAULT $default)")
+          } else {
+            sql(s"CREATE TABLE t(id INT, c $valueType DEFAULT $default) USING parquet")
+          }
+          val schema = spark.sessionState.catalog.getTableRawMetadata(TableIdentifier("t")).schema
+          assert(schema("c").getCurrentDefaultValue().contains(default))
+          val existence = schema("c").getExistenceDefaultValue().get
+          checkAnswer(sql(s"SELECT $existence"), Row(expected))
+          sql("INSERT INTO t(id) VALUES (1)")
+          val ids = if (ddl == "ADD") Seq(0, 1) else Seq(1)
+          checkAnswer(sql("SELECT id, c FROM t"), ids.map(Row(_, expected)))
+          checkAnswer(sql("SELECT count(DISTINCT c) FROM t"), Row(1L))
         }
       }
     }

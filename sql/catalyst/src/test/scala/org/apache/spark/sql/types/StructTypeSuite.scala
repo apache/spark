@@ -25,7 +25,7 @@ import org.apache.spark.{SparkException, SparkFunSuite, SparkIllegalArgumentExce
 import org.apache.spark.sql.{AnalysisException, Row}
 import org.apache.spark.sql.catalyst.CatalystTypeConverters
 import org.apache.spark.sql.catalyst.analysis.{caseInsensitiveResolution, caseSensitiveResolution, ResolvedFieldName}
-import org.apache.spark.sql.catalyst.expressions.{CurrentUser, Expression, Literal}
+import org.apache.spark.sql.catalyst.expressions.{CreateArray, CreateMap, CreateNamedStruct, CurrentUser, Expression, Literal}
 import org.apache.spark.sql.catalyst.parser.ParseException
 import org.apache.spark.sql.catalyst.plans.SQLHelper
 import org.apache.spark.sql.catalyst.plans.logical.{AlterColumns, AlterColumnSpec, ColumnDefinition, DefaultValueExpression, LocalRelation, QualifiedColType}
@@ -1517,6 +1517,108 @@ class StructTypeSuite extends SparkFunSuite with SQLHelper {
                 exception = intercept[SparkRuntimeException](convert()),
                 condition = "EXCEED_LIMIT_LENGTH",
                 parameters = Map("limit" -> width.toString))
+            }
+          }
+        }
+      }
+    }
+  }
+
+  Seq("V1", "V2 CREATE", "V2 ADD").foreach { producer =>
+    test(s"Late-folded nested CHAR/VARCHAR defaults are assigned at producer handoffs: $producer") {
+      val structType = new StructType()
+        .add("c", CharType(3)).add("v", VarcharType(3)).add("missing", CharType(3))
+      val stringStructType = new StructType()
+        .add("c", StringType).add("v", StringType).add("missing", StringType)
+      val nullString = Literal.create(null, StringType)
+      val structExpression = CreateNamedStruct(Seq(
+        Literal("c"), CurrentUser(), Literal("v"), Literal("US  "),
+        Literal("missing"), nullString))
+      val structSQL =
+        "named_struct('c', current_user(), 'v', 'US  ', 'missing', CAST(NULL AS STRING))"
+      val rawStruct = Row("EU", "US  ", null)
+      val assignedStruct = Row("EU ", "US ", null)
+      val cases: Seq[(DataType, DataType, Expression, String, Any, Any)] = Seq(
+        (structType, stringStructType, structExpression, structSQL, rawStruct, assignedStruct),
+        (ArrayType(structType), ArrayType(stringStructType),
+          new CreateArray(Seq(structExpression, Literal.create(null, stringStructType))),
+          s"array($structSQL, CAST(NULL AS STRUCT<c: STRING, v: STRING, missing: STRING>))",
+          Seq(rawStruct, null), Seq(assignedStruct, null)),
+        (MapType(CharType(3), VarcharType(3)), MapType(StringType, StringType),
+          new CreateMap(Seq(CurrentUser(), Literal("US  "), Literal("NA"), nullString)),
+          "map(current_user(), 'US  ', 'NA', CAST(NULL AS STRING))",
+          Map("EU" -> "US  ", "NA" -> null), Map("EU " -> "US ", "NA " -> null)))
+
+      Seq(
+        (false, false, false),
+        (true, false, false),
+        (false, true, false),
+        (true, false, true)).foreach { case (legacy, preserve, standard) =>
+        withSQLConf(
+          SQLConf.LEGACY_CHAR_VARCHAR_AS_STRING.key -> legacy.toString,
+          SQLConf.PRESERVE_CHAR_VARCHAR_TYPE_INFO.key -> preserve.toString,
+          SQLConf.CHAR_VARCHAR_STANDARD_SEMANTICS.key -> standard.toString) {
+          val firstClass = preserve || standard
+          val checkLength = !legacy || firstClass
+          cases.foreach { case (dataType, rawType, analyzed, sql, rawValue, assignedValue) =>
+            withClue(s"legacy=$legacy, preserve=$preserve, standard=$standard, $dataType: ") {
+              assert(!analyzed.foldable)
+              assert(analyzed.exists(_.isInstanceOf[CurrentUser]))
+              // Model FinishAnalysis freezing the contents, without early recursive coercion.
+              val frozen = Literal.create(rawValue, rawType)
+              val frozenSQL = frozen.sql
+              val default = DefaultValueExpression(frozen, sql, Some(analyzed))
+              val column = ColumnDefinition("c", dataType, defaultValue = Some(default))
+              val qualified = QualifiedColType(None, "c", dataType, true, None, None,
+                Some(default))
+              val expectedType = if (firstClass) dataType else rawType
+              val expectedValue = if (checkLength) assignedValue else rawValue
+              val expectedLiteral = Literal.create(expectedValue, expectedType)
+              assert(rawValue != assignedValue)
+
+              def checkOriginal(): Unit = {
+                assert(default.child eq frozen)
+                assert(default.analyzedChild.contains(analyzed))
+                assert(!default.analyzedChild.get.foldable)
+                assert(frozen.dataType == rawType)
+                assert(frozen.sql == frozenSQL)
+                assert(CatalystTypeConverters.convertToScala(frozen.eval(), rawType) == rawValue)
+              }
+
+              for (_ <- 0 until 2) {
+                if (producer == "V1") {
+                  val field = column.toV1Column
+                  assert(field.dataType == dataType)
+                  assert(field.getCurrentDefaultValue().contains(sql))
+                  assert(field.getExistenceDefaultValue().contains(expectedLiteral.sql))
+                  // ARRAY elements need analysis to reconcile their STRUCT types. Decode as
+                  // STRING containers under legacy settings without character assignment.
+                  val persisted = withSQLConf(
+                    SQLConf.LEGACY_CHAR_VARCHAR_AS_STRING.key -> "true",
+                    SQLConf.PRESERVE_CHAR_VARCHAR_TYPE_INFO.key -> "false",
+                    SQLConf.CHAR_VARCHAR_STANDARD_SEMANTICS.key -> "false") {
+                    ResolveDefaultColumns.analyze(
+                      "c", rawType, field.getExistenceDefaultValue().get, "CREATE TABLE")
+                  }
+                  assert(persisted.resolved && persisted.foldable)
+                  assert(persisted.dataType == rawType)
+                  assert(CatalystTypeConverters.convertToScala(persisted.eval(), rawType) ==
+                    expectedValue)
+                } else {
+                  val converted = if (producer == "V2 CREATE") {
+                    val convertedColumn = column.toV2Column("CREATE TABLE")
+                    assert(convertedColumn.dataType() == dataType)
+                    convertedColumn.defaultValue()
+                  } else {
+                    qualified.getV2Default("ALTER TABLE")
+                  }
+                  assert(converted.getSql == sql)
+                  assert(converted.getValue.dataType() == expectedType)
+                  assert(CatalystTypeConverters.convertToScala(
+                    converted.getValue.value(), expectedType) == expectedValue)
+                }
+                checkOriginal()
+              }
             }
           }
         }
