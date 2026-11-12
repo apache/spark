@@ -141,20 +141,29 @@ class DeltaBasedColumnUpdateTableSuite extends DeltaBasedUpdateTableSuiteBase
       Row(1, 1, "a  ", "x", Seq("b  "), Map("k" -> "c  "), Row("d  "), "hr") :: Nil)
   }
 
-  test("column-update: CHAR and VARCHAR self-assignments are not reported when the types are " +
-    "preserved") {
-    withSQLConf(SQLConf.PRESERVE_CHAR_VARCHAR_TYPE_INFO.key -> "true") {
-      createTable("pk INT NOT NULL, id INT, c CHAR(3), v VARCHAR(10), " +
-        "a ARRAY<CHAR(3)>, m MAP<STRING, CHAR(3)>, s STRUCT<f: CHAR(3)>, dep STRING")
-      sql(s"INSERT INTO $tableNameAsString VALUES " +
-        "(1, 1, 'a', 'x', array('b'), map('k', 'c'), named_struct('f', 'd'), 'hr')")
+  test("column-update: with preserved types, a CHAR self-assignment is reported only when its " +
+    "read is padded") {
+    Seq(
+      Seq(SQLConf.PRESERVE_CHAR_VARCHAR_TYPE_INFO.key -> "true") -> Seq("id", "c", "a", "m", "s"),
+      Seq(SQLConf.PRESERVE_CHAR_VARCHAR_TYPE_INFO.key -> "true",
+        SQLConf.READ_SIDE_CHAR_PADDING.key -> "false") -> Seq("id")
+    ).foreach { case (confs, updated) =>
+      withTable(tableNameAsString) {
+        withSQLConf(confs: _*) {
+          createTable("pk INT NOT NULL, id INT, c CHAR(3), v VARCHAR(10), " +
+            "a ARRAY<CHAR(3)>, m MAP<STRING, CHAR(3)>, s STRUCT<f: CHAR(3)>, dep STRING")
+          sql(s"INSERT INTO $tableNameAsString VALUES " +
+            "(1, 1, 'a', 'x', array('b'), map('k', 'c'), named_struct('f', 'd'), 'hr')")
 
-      sql(s"UPDATE $tableNameAsString SET id = -1, c = c, v = v, a = a, m = m, s = s WHERE pk = 1")
+          sql(s"UPDATE $tableNameAsString SET id = -1, c = c, v = v, a = a, m = m, s = s " +
+            "WHERE pk = 1")
 
-      checkLastUpdatedColumns("id")
-      checkAnswer(
-        sql(s"SELECT * FROM $tableNameAsString"),
-        Row(1, -1, "a  ", "x", Seq("b  "), Map("k" -> "c  "), Row("d  "), "hr") :: Nil)
+          checkLastUpdatedColumns(updated: _*)
+          checkAnswer(
+            sql(s"SELECT * FROM $tableNameAsString"),
+            Row(1, -1, "a  ", "x", Seq("b  "), Map("k" -> "c  "), Row("d  "), "hr") :: Nil)
+        }
+      }
     }
   }
 
