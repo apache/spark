@@ -39,7 +39,7 @@ jobs:
       # Master docs are built daily in pages.yml, so skip the duplicate post-merge build.
       # Fork pushes keep the reusable workflow's change-based selection.
       jobs: >-
-        ${{ github.repository == 'apache/spark' && format('{{
+        ${{ github.repository == 'apache/spark' && '{
           "build": "true",
           "build-core-utils": "true",
           "pyspark": "true",
@@ -51,11 +51,10 @@ jobs:
           "docker-integration-tests": "true",
           "lint": "true",
           "java25": "true",
-          "docs": "{0}",
           "yarn": "true",
           "k8s-integration-tests": "true",
           "oidc-e2e": "true",
           "buf": "true",
           "ui": "true",
           "transpile": "true"
-        }}', github.ref != 'refs/heads/master') || '' }}
+        }' || '' }}
