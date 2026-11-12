@@ -1489,6 +1489,39 @@ class DataFrameFunctionsSuite extends SharedSparkSession {
     }
   }
 
+  test("arrays_zip with implicitly collated map keys in views") {
+    withSQLConf(
+      SQLConf.ANALYZER_DUAL_RUN_LEGACY_AND_SINGLE_PASS_RESOLVER.key -> "false",
+      SQLConf.ANALYZER_SINGLE_PASS_RESOLVER_ENABLED.key -> "false",
+      SQLConf.ANALYZER_SINGLE_PASS_RESOLVER_ENABLED_TENTATIVELY.key -> "false") {
+      withTable("arrays_zip_names_table") {
+        sql("CREATE TABLE arrays_zip_names_table " +
+          "(m MAP<STRING COLLATE UTF8_BINARY, ARRAY<INT>>) USING parquet")
+        sql("INSERT INTO arrays_zip_names_table VALUES (map('a', array(1)))")
+        // The view's default collation adds a cast even to the direct literal key.
+        withView("arrays_zip_names_view") {
+          sql("CREATE VIEW arrays_zip_names_view DEFAULT COLLATION UTF8_LCASE AS " +
+            "SELECT to_json(arrays_zip(m['a'])) AS x FROM arrays_zip_names_table")
+          Seq((false, false), (false, true), (true, false)).foreach {
+            case (singlePass, tentative) =>
+              withSQLConf(
+                SQLConf.ANALYZER_SINGLE_PASS_RESOLVER_ENABLED.key -> singlePass.toString,
+                SQLConf.ANALYZER_SINGLE_PASS_RESOLVER_ENABLED_TENTATIVELY.key ->
+                  tentative.toString) {
+                withClue(s"singlePass=$singlePass, tentative=$tentative") {
+                  // Forced single-pass analysis does not support RDD deserialization.
+                  QueryTest.checkAnswer(
+                    sql("SELECT x FROM arrays_zip_names_view"),
+                    Row("""[{"0":1}]""") :: Nil,
+                    checkToRDD = false)
+                }
+              }
+          }
+        }
+      }
+    }
+  }
+
   def testSizeOfMap(sizeOfNull: Any): Unit = {
     val df = Seq(
       (Map[Int, Int](1 -> 1, 2 -> 2), "x"),
