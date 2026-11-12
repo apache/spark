@@ -287,7 +287,10 @@ class StreamingQueryListenerBus:
         self._bus_lock = Lock()
 
     def close(self) -> None:
-        for listener in self._listener_bus:
+        # remove() deletes from _listener_bus, so iterate over a snapshot taken under the lock.
+        with self._bus_lock:
+            listeners = list(self._listener_bus)
+        for listener in listeners:
             self.remove(listener)
 
     def append(self, listener: StreamingQueryListener) -> None:
