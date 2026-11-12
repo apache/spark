@@ -112,7 +112,9 @@ object ApplyCharTypePadding extends Rule[LogicalPlan] {
   private def padDeleteConditions(plan: LogicalPlan): LogicalPlan = {
     plan.resolveOperatorsWithPruning(_.containsPattern(COMMAND)) {
       case d: DeleteFromTable => d.copy(condition = padRawTypedColumns(d.condition))
-      case o: OverwriteByExpression => o.copy(deleteExpr = padRawTypedColumns(o.deleteExpr))
+      case o: OverwriteByExpression
+          if !conf.getConf(SQLConf.LEGACY_NO_CHAR_PADDING_IN_OVERWRITE_CONDITION) =>
+        o.copy(deleteExpr = padRawTypedColumns(o.deleteExpr))
     }
   }
 

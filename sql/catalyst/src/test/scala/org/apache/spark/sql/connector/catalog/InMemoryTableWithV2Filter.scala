@@ -233,8 +233,11 @@ object InMemoryTableWithV2Filter {
 
   /**
    * Whether every predicate has a shape [[evalPredicate]] can evaluate: a plain column, or a
-   * column and a literal. A predicate over an expression, e.g. a cast, is not supported and
-   * returned to Spark, as a real connector without expression support would do.
+   * column and a literal. `CHAR_READ_SIDE_PADDING` of a column compared with a literal is
+   * supported only if `acceptCharReadSidePadding` is true, which `canOverwrite` takes from the
+   * [[AcceptCharReadSidePaddingKey]] table property. Any other predicate over an expression,
+   * e.g. a cast, is not supported and returned to Spark, as a real connector without expression
+   * support would do.
    */
   def supportsPredicates(
       predicates: Array[Predicate],

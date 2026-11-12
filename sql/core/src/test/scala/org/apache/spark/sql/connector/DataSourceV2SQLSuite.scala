@@ -252,6 +252,19 @@ abstract class DataSourceV2SQLSuite
     }
   }
 
+  test("SPARK-61512: REPLACE WHERE with a CHAR condition under the legacy config") {
+    val t = s"${catalogAndNamespace}tbl"
+    withTable(t) {
+      sql(s"CREATE TABLE $t (id bigint, dep char(8)) USING foo PARTITIONED BY (dep)")
+      sql(s"INSERT INTO $t VALUES (1L, 'hr')")
+      // the source compares the stored values with the padded literal, as before
+      withSQLConf(SQLConf.LEGACY_NO_CHAR_PADDING_IN_OVERWRITE_CONDITION.key -> "true") {
+        sql(s"INSERT INTO $t REPLACE WHERE dep = 'hr' VALUES (2L, 'hr')")
+      }
+      checkAnswer(spark.table(t), Row(2L, "hr      "))
+    }
+  }
+
   test("SPARK-61512: REPLACE WHERE with a CHAR condition in an OR with a partition condition") {
     val t = s"${catalogAndNamespace}tbl"
     withTable(t) {
