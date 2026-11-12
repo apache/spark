@@ -38,9 +38,10 @@ private[sql] trait DataTypeErrorsBase {
   }
 
   /**
-   * Quotes a free-form name that need not parse as an identifier, such as `Table.name()`, which can
-   * be the path of the table's files. A name that parses is quoted as its parts, as `toSQLId()`
-   * quotes it, and any other name as one part, so that rendering it for an error cannot fail.
+   * Quotes a free-form name that need not parse as an identifier, such as `Table.name()`, which
+   * can be the path of the table's files. A name that parses is quoted as its parts, as
+   * `toSQLId()` quotes it, and any other name as one part, so that rendering it for an error
+   * cannot fail.
    */
   def toSQLFreeFormId(name: String): String = {
     try {
