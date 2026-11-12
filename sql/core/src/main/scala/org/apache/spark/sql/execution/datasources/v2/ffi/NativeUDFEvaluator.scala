@@ -45,7 +45,8 @@ import org.apache.spark.util.Utils
  * arguments to Arrow batches of `maxRecordsPerBatch` rows, or fewer once the arguments and the rows
  * that the batch keeps hold `maxBytesPerBatch` bytes, and calls eval for each call and batch. A
  * batch keeps its rows in a [[HybridRowQueue]], in the memory of the task, or reads them back from
- * the arguments when every column of the child is an argument.
+ * the arguments when every column of the child is an argument of a type that reads back exactly:
+ * not a decimal, an array or a map, also inside a struct.
  *
  * @param packages the packages of the calls, as the executors find them
  */

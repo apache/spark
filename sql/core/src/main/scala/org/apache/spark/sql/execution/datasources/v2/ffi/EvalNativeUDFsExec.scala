@@ -57,7 +57,8 @@ case class EvalNativeUDFsExec(udfs: Seq[NativeUDF], resultAttrs: Seq[Attribute],
   override protected def doExecute(): RDD[InternalRow] = {
     // The executors get the packages as artifacts of the session that runs the query.
     val packages = udfs.map { udf =>
-      NativeDataSourceRegistry.distribute(udf.pkg).asInstanceOf[NativeDataSourcePackage]
+      NativeDataSourceRegistry.distribute(NativeFunctionRegistry.inActiveSession(udf.pkg))
+        .asInstanceOf[NativeDataSourcePackage]
     }
     val evaluator = new NativeUDFEvaluator(child.output, udfs, packages,
       conf.arrowMaxRecordsPerBatch, conf.arrowMaxBytesPerBatch, conf.sessionLocalTimeZone,

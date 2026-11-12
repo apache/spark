@@ -91,6 +91,18 @@ class NativeUDFClusterSuite extends QueryTest {
     checkRows(session.range(0, 20, 1, 4).selectExpr("add_one(id)"), (1L to 20L).map(Row(_)))
   }
 
+  nativeTest("evaluate the functions that a clone inherits from a session that is released") {
+    val session = newSession()
+    val pkg = createPackage(library)
+    session.addArtifact(pkg.getPath)
+    session.sql(s"CREATE TEMPORARY FUNCTION add_one AS 'add_one' USING PACKAGE '${pkg.getName}'")
+    val clone = session.cloneSession()
+    sessions += clone
+    session.artifactManager.close()
+    SparkSession.setActiveSession(clone)
+    checkRows(clone.range(0, 8, 1, 4).selectExpr("add_one(id)"), (1L to 8L).map(Row(_)))
+  }
+
   nativeTest("executors load the distributed copy of the package at a path") {
     val session = newSession()
     val pkg = createPackage(otherLibrary)

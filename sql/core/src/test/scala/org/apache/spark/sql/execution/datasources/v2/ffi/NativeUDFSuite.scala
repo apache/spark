@@ -1135,6 +1135,35 @@ class NativeUDFSuite extends QueryTest with SharedSparkSession {
         plan)
   }
 
+  private val plansManifest = manifestJson(Seq(function("add_one", Seq("bigint"), "bigint")),
+    Map(NativePlatform.current -> "lib.so"))
+
+  gridTest("resolve the package of a call against the packages of the active session, for")(Seq(
+    Case("another package with the same file name", ((artifact: File, dir: File) =>
+      createZip(dir, artifact.getName,
+        NativeDataSourcePackage.MANIFEST_NAME -> plansManifest.getBytes(UTF_8),
+        "lib.so" -> "another library".getBytes(UTF_8)), false)),
+    Case("a copy in another directory", ((artifact: File, dir: File) =>
+      Files.copy(artifact.toPath, new File(dir, artifact.getName).toPath).toFile, true)),
+    Case("a copy with another file name", ((artifact: File, dir: File) =>
+      Files.copy(artifact.toPath, new File(dir, "other.sparkpkg").toPath).toFile, false)))) {
+    case Case(_, (packageFile, usesSessionCopy)) =>
+      try {
+        val artifact = createZip(Utils.createTempDir(), "plans.sparkpkg",
+          NativeDataSourcePackage.MANIFEST_NAME -> plansManifest.getBytes(UTF_8),
+          "lib.so" -> "a library".getBytes(UTF_8))
+        val session = newSession(artifact)
+        val pkg = NativeDataSourcePackage.read(packageFile(artifact, Utils.createTempDir()))
+        val resolved = NativeFunctionRegistry.inActiveSession(pkg)
+        if (usesSessionCopy) {
+          assert(resolved.path ==
+            session.artifactManager.getNativeDataSourcePackages._1.head.getCanonicalPath)
+        } else {
+          assert(resolved eq pkg)
+        }
+      } finally SparkSession.setActiveSession(spark)
+  }
+
   nativeTest("evaluate calls in joins, aggregates and lambda functions") {
     val session = newSession(defaultPackage)
     register(session, defaultPackage.getName, "add_one", "edit_distance")

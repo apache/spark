@@ -115,6 +115,24 @@ object NativeFunctionRegistry extends Logging {
         }
       }
   }
+
+  /**
+   * The package of a call, as the active session has it. A session cloned from another one inherits
+   * its functions, which name the package as that session added it, and that copy is deleted when
+   * that session is released, while the clone has a copy of its own: the package that the active
+   * session added with the same file name and checksum is used instead, the first by path if there
+   * are several, and the package of the call otherwise.
+   */
+  private[ffi] def inActiveSession(pkg: NativeDataSourcePackage): NativeDataSourcePackage = {
+    SparkSession.getActiveSession.toSeq
+      .flatMap(_.artifactManager.getNativeDataSourcePackages._1)
+      .filter(_.getName == pkg.fileName)
+      .sortBy(_.getCanonicalPath)
+      .iterator
+      .flatMap(file => NativeDataSourcePackage.tryRead(file).toOption)
+      .find(_.sha256 == pkg.sha256)
+      .getOrElse(pkg)
+  }
 }
 
 /**

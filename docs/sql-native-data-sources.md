@@ -608,7 +608,8 @@ subquery whose call reads columns of both the query and the subquery.
 ### Evaluation
 
 Spark evaluates the calls of an operator in the tasks of the operator, on Arrow batches of their
-arguments, which end at `spark.sql.execution.arrow.maxRecordsPerBatch` rows, or once they hold
+arguments, which end at `spark.sql.execution.arrow.maxRecordsPerBatch` rows, or once the arguments
+and the input rows that Spark keeps until it has the results of the batch hold
 `spark.sql.execution.arrow.maxBytesPerBatch` bytes. It evaluates a call, and its arguments, for
 every row that reaches the call, also in a branch of `CASE WHEN` or `IF`, in an argument of
 `COALESCE`, or in an operand of `AND` or `OR`, where the query does not use its value. So a

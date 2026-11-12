@@ -149,8 +149,8 @@
  *   the task reaper (spark.task.reaper.enabled and spark.task.reaper.killTimeout), which kills the
  *   executor.
  * - Batches. A batch has at most spark.sql.execution.arrow.maxRecordsPerBatch rows, and also ends
- *   once its arguments hold spark.sql.execution.arrow.maxBytesPerBatch bytes, or at the end of the
- *   rows of the task.
+ *   once its arguments and the input rows that Spark keeps until it has the results of the batch
+ *   hold spark.sql.execution.arrow.maxBytesPerBatch bytes, or at the end of the rows of the task.
  * - Memory accounting. Spark does not manage the memory of a library: what the library allocates,
  *   and the arrays that eval returns, are not accounted by the host. On the JVM host, which reads
  *   the arrays without copying them, they come out of the memory overhead of the executor. Bound
