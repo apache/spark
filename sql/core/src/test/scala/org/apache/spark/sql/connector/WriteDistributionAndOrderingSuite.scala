@@ -1265,18 +1265,20 @@ class WriteDistributionAndOrderingSuite extends DistributionAndOrderingSuiteBase
       tableOrdering, tableNumPartitions, tablePartitionSize, Array.empty,
       distributionStrictlyRequired)
 
-    val df = if (!dataSkewed) {
-      spark.createDataFrame(Seq(
+    val data = if (!dataSkewed) {
+      Seq(
         (1, "a", Date.valueOf("2021-01-01")),
         (2, "b", Date.valueOf("2022-02-02")),
         (3, "c", Date.valueOf("2023-03-03")))
-      ).toDF("id", "data", "day")
     } else {
-      spark.sparkContext.parallelize(
-        (1 to 10).map {
-          i => (if (i > 4) 5 else i, i.toString, Date.valueOf(s"${2020 + i}-$i-$i"))
-        }, 3)
-        .toDF("id", "data", "day")
+      (1 to 10).map {
+        i => (if (i > 4) 5 else i, i.toString, Date.valueOf(s"${2020 + i}-$i-$i"))
+      }
+    }
+    val df = if (!dataSkewed) {
+      spark.createDataFrame(data).toDF("id", "data", "day")
+    } else {
+      spark.sparkContext.parallelize(data, 3).toDF("id", "data", "day")
     }
     val writer = writeTransform(df).writeTo(tableNameAsString)
 
@@ -1348,7 +1350,7 @@ class WriteDistributionAndOrderingSuite extends DistributionAndOrderingSuiteBase
         }
       }
 
-      checkAnswer(spark.table(tableNameAsString), df)
+      checkAnswer(spark.table(tableNameAsString), data.map(Row.fromTuple))
     }
     catalog.dropTable(ident)
   }
