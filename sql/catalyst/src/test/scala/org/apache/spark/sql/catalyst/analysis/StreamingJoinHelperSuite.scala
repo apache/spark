@@ -23,7 +23,7 @@ import org.apache.spark.sql.catalyst.optimizer.SimpleTestOptimizer
 import org.apache.spark.sql.catalyst.parser.CatalystSqlParser
 import org.apache.spark.sql.catalyst.plans.logical.{EventTimeWatermark, Filter, LeafNode, Statistics}
 import org.apache.spark.sql.catalyst.util.DateTimeConstants.MICROS_PER_DAY
-import org.apache.spark.sql.types.{CalendarIntervalType, DayTimeIntervalType, DecimalType, DoubleType, FloatType, IntegerType, LongType, MetadataBuilder, TimestampType, YearMonthIntervalType}
+import org.apache.spark.sql.types.{CalendarIntervalType, DataType, DayTimeIntervalType, DecimalType, DoubleType, FloatType, IntegerType, LongType, MetadataBuilder, TimestampLTZNanosType, TimestampNTZType, TimestampType, YearMonthIntervalType}
 import org.apache.spark.unsafe.types.CalendarInterval
 
 class StreamingJoinHelperSuite extends AnalysisTest {
@@ -50,22 +50,26 @@ class StreamingJoinHelperSuite extends AnalysisTest {
     }
   }
 
-  test("find casts that drop part of a time") {
+  test("find casts of event times to types other than TIMESTAMP") {
     val leftTime = AttributeReference("leftTime", TimestampType)()
     val rightTime = AttributeReference("rightTime", TimestampType)()
-    import StreamingJoinHelper.hasTruncatingCast
+    val leftValue = AttributeReference("leftValue", DoubleType)()
+    val eventTimes = AttributeSet(Seq(leftTime, rightTime))
+    def castsEventTime(e: Expression): Boolean = StreamingJoinHelper.castsEventTime(e, eventTimes)
 
-    assert(hasTruncatingCast(leftTime.cast(LongType) > rightTime.cast(LongType)))
-    assert(hasTruncatingCast(leftTime.cast(IntegerType) > 0))
-    assert(hasTruncatingCast(leftTime.cast(FloatType) > rightTime.cast(DoubleType)))
-    assert(hasTruncatingCast(leftTime.cast(DecimalType(20, 3)) > 0))
-    // Casts that keep every microsecond.
-    assert(!hasTruncatingCast(leftTime.cast(DoubleType) > rightTime.cast(DoubleType)))
-    assert(!hasTruncatingCast(leftTime.cast(DecimalType(20, 6)) > 0))
-    assert(!hasTruncatingCast(Cast(leftTime, TimestampType) > rightTime))
-    // A cast of an integral value drops nothing.
-    assert(!hasTruncatingCast(leftTime.cast(DoubleType) >
-      rightTime.cast(DoubleType) + Cast(Literal(1), LongType).cast(DoubleType)))
+    Seq[DataType](LongType, IntegerType, DoubleType, FloatType, DecimalType(20, 3),
+      DecimalType(20, 6), DecimalType(38, 18), TimestampNTZType, TimestampLTZNanosType(9))
+      .foreach { dataType =>
+        assert(castsEventTime(leftTime.cast(dataType) > rightTime.cast(dataType)), dataType)
+        assert(castsEventTime(rightTime >= leftTime && leftTime.cast(dataType) > 0), dataType)
+      }
+    // A cast back to TIMESTAMP does not hide a cast of the event time below it.
+    assert(castsEventTime(rightTime > Cast(leftTime.cast(DoubleType) + 0.5, TimestampType)))
+    // A TIMESTAMP-to-TIMESTAMP cast, and casts of other values, keep the comparison.
+    assert(!castsEventTime(Cast(leftTime, TimestampType) > rightTime))
+    assert(!castsEventTime(rightTime > leftTime + Cast(Literal(1), LongType)))
+    assert(!castsEventTime(rightTime > leftTime && leftValue.cast(LongType) > 0))
+    assert(!castsEventTime(leftTime > Cast(Literal(1700000000L), TimestampType)))
   }
 
   test("find whole days in a zone whose offset changes, and months") {
@@ -140,18 +144,30 @@ class StreamingJoinHelperSuite extends AnalysisTest {
     // and a sum of the two event times moves the other way.
     Seq(
       leftTime.cast(DoubleType) >= 1.7e9,
-      leftTime.cast(DoubleType) > 0.0,
-      leftTime.cast(DecimalType(20, 6)) >= Literal(BigDecimal(1.7e9))).foreach { constant =>
+      leftTime.cast(DecimalType(20, 6)) >= Literal(BigDecimal(1.7e9)),
+      // No cast of an event time: only the check that the bound moves leaves this out.
+      leftTime > Cast(Literal(1700000000L), TimestampType)).foreach { constant =>
       assert(offsets(rightTime >= leftTime && constant) === None, constant.sql)
     }
-    assert(offsets(leftTime.cast(DoubleType) + rightTime.cast(DoubleType) > 100.0 &&
+    assert(offsets(leftTime.cast(DecimalType(20, 6)) + rightTime.cast(DecimalType(20, 6)) >
+      Literal(BigDecimal(100)) &&
       rightTime <= plus(leftTime, tenMinutes)) === None)
+
+    // A comparison that casts an event time to another type gives no bound, whatever the type:
+    // a DOUBLE rounds an event time far from 1970 by microseconds, and nanosecond timestamps,
+    // which a comparison with such a column casts the event time to, are not read by the solver.
+    Seq[DataType](DoubleType, DecimalType(20, 6), TimestampLTZNanosType(9)).foreach { dataType =>
+      assert(offsets(rightTime.cast(dataType) >= leftTime.cast(dataType) &&
+        rightTime <= plus(leftTime, tenMinutes)) === None, dataType)
+    }
+    assert(offsets(rightTime.cast(DoubleType) > leftTime.cast(DoubleType) - 0.005999 &&
+      rightTime <= plus(leftTime, 10000000L)) === None)
 
     // A bound that is not a whole number of milliseconds: -0.5 ms is solved as 0.
     val subMillisecond = rightTime > plus(leftTime, -500L) && rightTime < plus(leftTime, 1000000L)
     assert(offsets(subMillisecond) === Some((-1000L, 1001000L)))
 
-    // Casts that drop part of a time give no bound.
+    // Casts to BIGINT give no bound either, although eviction still reads them.
     assert(offsets(rightTime.cast(LongType) >= leftTime.cast(LongType) + 60L &&
       rightTime.cast(LongType) <= leftTime.cast(LongType) + 120L) === None)
   }
