@@ -140,7 +140,10 @@ abstract class TypeCoercionBase extends TypeCoercionHelper {
       case alterColumns @ AlterColumns(_, specs, _) if alterColumns.resolved &&
         specs.exists(_.newDefaultExpression.isDefined) =>
         val newSpecs = specs.map { c =>
-          val dataType = c.column.asInstanceOf[ResolvedFieldName].field.dataType
+          val field = c.column.asInstanceOf[ResolvedFieldName].field
+          val dataType = field.dataType
+          val hasCharacterType = CharVarcharUtils.hasCharVarchar(dataType) ||
+            CharVarcharUtils.getRawType(field.metadata).exists(CharVarcharUtils.hasCharVarchar)
           c.copy(newDefaultExpression = c.newDefaultExpression.map(d =>
             d.copy(child = ResolveDefaultColumns.coerceDefaultValue(
               d.child,
@@ -148,7 +151,7 @@ abstract class TypeCoercionBase extends TypeCoercionHelper {
               "ALTER TABLE ALTER COLUMN",
               c.column.name.quoted,
               d.originalSQL), uncoercedChild = d.uncoercedChild.orElse(
-                Option.when(CharVarcharUtils.hasCharVarchar(dataType))(d.child)))))
+                Option.when(hasCharacterType)(d.child)))))
         }
         alterColumns.copy(specs = newSpecs)
     }

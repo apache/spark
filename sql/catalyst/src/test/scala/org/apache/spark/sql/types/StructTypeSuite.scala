@@ -25,7 +25,7 @@ import org.apache.spark.{SparkException, SparkFunSuite, SparkIllegalArgumentExce
 import org.apache.spark.sql.{AnalysisException, Row}
 import org.apache.spark.sql.catalyst.CatalystTypeConverters
 import org.apache.spark.sql.catalyst.analysis.{caseInsensitiveResolution, caseSensitiveResolution, ResolvedFieldName}
-import org.apache.spark.sql.catalyst.expressions.{CreateArray, CreateMap, CreateNamedStruct, CurrentUser, Expression, Literal}
+import org.apache.spark.sql.catalyst.expressions.{CreateArray, CreateMap, CreateNamedStruct, CurrentUser, Expression, Literal, V2ExpressionUtils}
 import org.apache.spark.sql.catalyst.parser.ParseException
 import org.apache.spark.sql.catalyst.plans.SQLHelper
 import org.apache.spark.sql.catalyst.plans.logical.{AlterColumns, AlterColumnSpec, ColumnDefinition, DefaultValueExpression, LocalRelation, QualifiedColType}
@@ -1699,6 +1699,48 @@ class StructTypeSuite extends SparkFunSuite with SQLHelper {
               assert(converted.getValue.value == child.eval())
             }
           }
+        }
+      }
+    }
+  }
+
+  test("V2 current-default literal caches retain unassigned character values") {
+    withSQLConf(
+      SQLConf.LEGACY_CHAR_VARCHAR_AS_STRING.key -> "false",
+      SQLConf.PRESERVE_CHAR_VARCHAR_TYPE_INFO.key -> "true",
+      SQLConf.CHAR_VARCHAR_STANDARD_SEMANTICS.key -> "false") {
+      val cases: Seq[(DataType, String, Any)] = Seq(
+        (CharType(3), "'EU'", "EU"),
+        (VarcharType(3), "'EU  '", "EU  "),
+        (CharType(3), "NULL", null),
+        (ArrayType(CharType(3)), "array('EU', NULL)", Seq("EU", null)),
+        (MapType(CharType(3), VarcharType(3)), "map('EU', 'US  ')", Map("EU" -> "US  ")))
+      cases.foreach { case (dataType, sql, expected) =>
+        // Typed literals with unassigned values model results such as SUBSTRING on CHAR.
+        val raw = Literal(Literal.fromSQL(sql).eval(), dataType)
+        val assigned = ResolveDefaultColumns.normalizeExistenceDefaultValue(
+          raw, dataType, originallyFoldable = true)
+        val default = DefaultValueExpression(assigned, sql, Some(raw), Some(raw))
+        val current = default.toV2CurrentDefault("ALTER TABLE", "c", dataType)
+        val cached = V2ExpressionUtils.toCatalyst(current.getExpression).get
+        assert(!CharVarcharUtils.hasCharVarchar(cached.dataType))
+        assert(CatalystTypeConverters.convertToScala(cached.eval(), cached.dataType) == expected)
+        withSQLConf(
+          SQLConf.LEGACY_CHAR_VARCHAR_AS_STRING.key -> "true",
+          SQLConf.PRESERVE_CHAR_VARCHAR_TYPE_INFO.key -> "false") {
+          val analyzed = ResolveDefaultColumns.analyze("c", dataType, current, "INSERT")
+          assert(CatalystTypeConverters.convertToScala(
+            analyzed.eval(), analyzed.dataType) == expected)
+        }
+      }
+      // Respect the connector folding switch for expressions while keeping literal reuse.
+      val array = CreateArray(Seq(Literal("EU")))
+      val default = DefaultValueExpression(
+        Literal(array.eval(), array.dataType), "array('EU')", Some(array), Some(array))
+      Seq(false, true).foreach { folding =>
+        withSQLConf("spark.sql.optimizer.datasourceV2ExprFolding" -> folding.toString) {
+          val current = default.toV2CurrentDefault("ALTER TABLE", "c", ArrayType(CharType(3)))
+          assert((current.getExpression != null) == folding)
         }
       }
     }

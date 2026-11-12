@@ -309,7 +309,15 @@ case class DefaultValueExpression(
     case Literal(_, _) =>
       val currentDefault = if (CharVarcharUtils.hasCharVarchar(columnType) &&
           CharVarcharUtils.shouldApplyWriteSideLengthCheck(SQLConf.get)) {
-        None
+        // Freeze only context-independent current values, before creating a typed literal:
+        // Literal.create and connector conversion can themselves assign character values.
+        uncoercedChild.filter { expr =>
+          expr.isInstanceOf[Literal] || expr.contextIndependentFoldable &&
+            SQLConf.get.getConfByKeyStrict[Boolean]("spark.sql.optimizer.datasourceV2ExprFolding")
+        }.map { expr =>
+          LiteralValue(expr.eval(),
+            CharVarcharUtils.replaceCharVarcharWithStringAlways(expr.dataType))
+        }
       } else {
         analyzedChild.flatMap(new V2ExpressionBuilder(_).build())
       }

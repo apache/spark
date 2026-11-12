@@ -32,11 +32,11 @@ import org.apache.spark.sql.catalyst.{CatalystTypeConverters, InternalRow, Quali
 import org.apache.spark.sql.catalyst.CurrentUserContext.CURRENT_USER
 import org.apache.spark.sql.catalyst.analysis.{CannotReplaceMissingTableException, NoSuchNamespaceException, TableAlreadyExistsException}
 import org.apache.spark.sql.catalyst.catalog.{CatalogStorageFormat, CatalogTable, CatalogTableType, CatalogUtils}
-import org.apache.spark.sql.catalyst.expressions.{DynamicPruning, GetStructField, Literal, V2ExpressionUtils}
+import org.apache.spark.sql.catalyst.expressions.{DynamicPruning, Expression, GetStructField, Literal, V2ExpressionUtils}
 import org.apache.spark.sql.catalyst.parser.ParseException
 import org.apache.spark.sql.catalyst.plans.logical.ColumnStat
 import org.apache.spark.sql.catalyst.statsEstimation.StatsEstimationTestBase
-import org.apache.spark.sql.catalyst.util.DateTimeUtils
+import org.apache.spark.sql.catalyst.util.{DateTimeUtils, ResolveDefaultColumns}
 import org.apache.spark.sql.connector.catalog.{Column => ColumnV2, _}
 import org.apache.spark.sql.connector.catalog.CatalogManager.SESSION_CATALOG_NAME
 import org.apache.spark.sql.connector.catalog.CatalogV2Util.withDefaultOwnership
@@ -954,8 +954,100 @@ class DataSourceV2SQLSuiteV1Filter
             checkAnswer(sql(s"SELECT id, region, length(region), label, length(label) " +
               s"FROM $tableName"), Seq(1, 2, 3).map(Row(_, "EU", 2, "EU  ", 4)))
           }
-          assert(regionDefault.getExpression == null)
-          assert(labelDefault.getExpression == null)
+          assert(regionDefault.getExpression != null)
+          assert(labelDefault.getExpression != null)
+        }
+      }
+    }
+  }
+
+  Seq(false, true).foreach { definitionLegacy =>
+    test(s"V2 retained current defaults follow scalar and nested settings: $definitionLegacy") {
+      withSQLConf(
+        "spark.sql.catalog.default_expr" -> classOf[DefaultExpressionRetainingCatalog].getName,
+        SQLConf.DEFAULT_COLUMN_ALLOWED_PROVIDERS.key -> "foo",
+        SQLConf.LEGACY_CHAR_VARCHAR_AS_STRING.key -> definitionLegacy.toString,
+        SQLConf.PRESERVE_CHAR_VARCHAR_TYPE_INFO.key -> "false",
+        SQLConf.CHAR_VARCHAR_STANDARD_SEMANTICS.key -> "false",
+        SQLConf.READ_SIDE_CHAR_PADDING.key -> "false") {
+        val tableName = "default_expr.retained_current_defaults"
+        withTable(tableName) {
+          sql(s"CREATE TABLE $tableName(id INT) USING foo")
+          sql(s"INSERT INTO $tableName VALUES (0)")
+          sql(s"ALTER TABLE $tableName ADD COLUMNS (region CHAR(3) DEFAULT 'EU', " +
+            "label VARCHAR(5) DEFAULT 'US', names ARRAY<CHAR(3)> DEFAULT array('EU', NULL))")
+          val table = getTableMetadata(tableName)
+          val fields = CatalogV2Util.v2ColumnsToStructType(table.columns()).fields
+          fields.filter(_.name != "id").foreach { field =>
+            val (_, expression) = field.metadata.getExpression[Expression](
+              ResolveDefaultColumns.CURRENT_DEFAULT_COLUMN_METADATA_KEY)
+            assert(expression.isDefined)
+          }
+          val defaults = table.columns().filter(_.name() != "id").map(_.defaultValue())
+          defaults.foreach(default => assert(default.getExpression != null))
+          val region = V2ExpressionUtils.toCatalyst(defaults.head.getExpression).get
+          assert(region.eval() == UTF8String.fromString("EU"))
+          val historical = if (definitionLegacy) "EU" else "EU "
+          assert(defaults.head.getValue.value == UTF8String.fromString(historical))
+          checkAnswer(sql(s"SELECT id, region, label, names FROM $tableName"),
+            Row(0, historical, "US", Seq(historical, null)))
+
+          withSQLConf(SQLConf.LEGACY_CHAR_VARCHAR_AS_STRING.key -> (!definitionLegacy).toString) {
+            // The first write round-trips the test catalog's defaults through its schema.
+            // Exercise all cached DEFAULT cells together before that lossy boundary.
+            sql(s"INSERT INTO $tableName VALUES " +
+              "(1, DEFAULT, DEFAULT, DEFAULT), (2, DEFAULT, DEFAULT, DEFAULT)")
+            sql(s"INSERT INTO $tableName VALUES (3, 'EU', 'US', array('EU', NULL))")
+            val current = if (definitionLegacy) "EU " else "EU"
+            checkAnswer(sql(s"SELECT id, region, label, names FROM $tableName WHERE id > 0"),
+              Seq(1, 2, 3).map(Row(_, current, "US", Seq(current, null))))
+          }
+        }
+      }
+    }
+  }
+
+  for {
+    ddl <- Seq("CREATE", "REPLACE", "ADD", "SET")
+    preserve <- Seq(false, true)
+  } {
+    test(s"V2 character current defaults preserve resolved session functions: " +
+        s"$ddl, preserve=$preserve") {
+      withSQLConf(
+        "spark.sql.catalog.default_expr" -> classOf[DefaultExpressionRetainingCatalog].getName,
+        SQLConf.DEFAULT_COLUMN_ALLOWED_PROVIDERS.key -> "foo",
+        SQLConf.LEGACY_CHAR_VARCHAR_AS_STRING.key -> "false",
+        SQLConf.PRESERVE_CHAR_VARCHAR_TYPE_INFO.key -> preserve.toString,
+        SQLConf.CHAR_VARCHAR_STANDARD_SEMANTICS.key -> "false",
+        SQLConf.READ_SIDE_CHAR_PADDING.key -> "false") {
+        withUserDefinedFunction("default_v2_type_probe" -> true) {
+          spark.udf.register("default_v2_type_probe", () => "EU")
+          val tableName = "default_expr.session_function_defaults"
+          withTable(tableName) {
+            val default = "typeof(default_v2_type_probe())"
+            val columns = s"c CHAR(6) DEFAULT $default, padded CHAR(8) DEFAULT $default"
+            ddl match {
+              case "CREATE" => sql(s"CREATE TABLE $tableName(id INT, $columns) USING foo")
+              case "REPLACE" =>
+                sql(s"CREATE TABLE $tableName(id INT) USING foo")
+                sql(s"REPLACE TABLE $tableName(id INT, $columns) USING foo")
+              case "ADD" =>
+                sql(s"CREATE TABLE $tableName(id INT) USING foo")
+                sql(s"ALTER TABLE $tableName ADD COLUMNS ($columns)")
+              case "SET" =>
+                sql(s"CREATE TABLE $tableName(id INT, c CHAR(6), padded CHAR(8)) USING foo")
+                sql(s"ALTER TABLE $tableName ALTER COLUMN c SET DEFAULT $default")
+                sql(s"ALTER TABLE $tableName ALTER COLUMN padded SET DEFAULT $default")
+            }
+            sql(s"INSERT INTO $tableName(id) VALUES (1)")
+            checkAnswer(sql(s"SELECT id, c, length(c), padded, length(padded) FROM $tableName"),
+              Row(1, "string", 6, "string  ", 8))
+            sql(s"ALTER TABLE $tableName ALTER COLUMN c SET DEFAULT $default")
+            sql(s"ALTER TABLE $tableName ALTER COLUMN padded SET DEFAULT $default")
+            sql(s"INSERT INTO $tableName VALUES (2, DEFAULT, DEFAULT)")
+            checkAnswer(sql(s"SELECT id, c, length(c), padded, length(padded) FROM $tableName"),
+              Seq(1, 2).map(Row(_, "string", 6, "string  ", 8)))
+          }
         }
       }
     }
@@ -991,10 +1083,9 @@ class DataSourceV2SQLSuiteV1Filter
               Seq("region" -> "'EU'", "label" -> "'EU  '").foreach { case (name, expr) =>
                 val default = defaults(name)
                 assert(default.getSql == expr)
-                assert((default.getExpression == null) == assigned)
-                if (!assigned) {
-                  assert(V2ExpressionUtils.toCatalyst(default.getExpression).isDefined)
-                }
+                val current = V2ExpressionUtils.toCatalyst(default.getExpression).get
+                assert(current.dataType == StringType)
+                assert(current.eval().toString == (if (name == "region") "EU" else "EU  "))
                 val expected = if (assigned) "EU " else if (name == "region") "EU" else "EU  "
                 assert(default.getValue.value == UTF8String.fromString(expected))
               }
@@ -1076,7 +1167,7 @@ class DataSourceV2SQLSuiteV1Filter
                 s"FROM $tableName"
               checkAnswer(sql(query), expected)
               Seq("region", "label").foreach { name =>
-                assert((defaults(name).getExpression == null) == assigned)
+                assert(defaults(name).getExpression != null)
                 sql(s"ALTER TABLE $tableName ALTER COLUMN $name DROP DEFAULT")
               }
               assert(defaults("n").getExpression != null)
