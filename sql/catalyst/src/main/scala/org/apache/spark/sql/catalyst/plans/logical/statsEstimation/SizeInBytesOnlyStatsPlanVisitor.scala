@@ -113,6 +113,12 @@ object SizeInBytesOnlyStatsPlanVisitor extends LogicalPlanVisitor[Statistics] {
       case LeftAnti | LeftSemi =>
         // LeftSemi and LeftAnti won't ever be bigger than left
         p.left.stats
+      case ExistenceJoin(_) =>
+        // An existence join outputs each row of the left side once, with a boolean column added.
+        val leftStats = p.left.stats
+        val sizeInBytes = leftStats.sizeInBytes * EstimationUtils.getSizePerRow(p.output) /
+          EstimationUtils.getSizePerRow(p.left.output)
+        leftStats.copy(sizeInBytes = sizeInBytes)
       case Inner | LeftOuter | RightOuter | FullOuter =>
         p match {
           case ExtractEquiJoinKeys(_, leftKeys, rightKeys, _, _, left, right, _)

@@ -23,7 +23,7 @@ import org.apache.spark.sql.catalyst.analysis.ResolvedNamespace
 import org.apache.spark.sql.catalyst.dsl.expressions._
 import org.apache.spark.sql.catalyst.dsl.plans._
 import org.apache.spark.sql.catalyst.expressions.{Ascending, Attribute, AttributeMap, AttributeReference, Literal, SortOrder}
-import org.apache.spark.sql.catalyst.plans.{Inner, PlanTest}
+import org.apache.spark.sql.catalyst.plans.{ExistenceJoin, Inner, PlanTest}
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.connector.catalog.SupportsNamespaces
 import org.apache.spark.sql.internal.SQLConf
@@ -376,6 +376,19 @@ test("range with invalid long value") {
       join,
       expectedStatsCboOn = Statistics(4871880, Some(tableRowCnt), join.stats.attributeStats),
       expectedStatsCboOff = Statistics(sizeInBytes = 4059900 * 2))
+  }
+
+  test("SPARK-61534: an existence join is estimated from its left side") {
+    // It outputs each of the 10 rows of `plan` once, with a boolean column added.
+    val otherKey = attr("other")
+    val other = plan.copy(outputList = Seq(otherKey))
+    val exists = AttributeReference("exists", BooleanType, nullable = false)()
+    val join = Join(plan, other, ExistenceJoin(exists), Some(attribute === otherKey),
+      JoinHint.NONE)
+    checkStats(join, Statistics(
+      sizeInBytes = 10 * (8 + 4 + 1),
+      rowCount = Some(10),
+      attributeStats = AttributeMap(Seq(attribute -> colStat))))
   }
 
   test("row size and column stats estimation for sort") {
