@@ -8277,6 +8277,7 @@ object SQLConf {
         "that do not support CHAR_READ_SIDE_PADDING, but keeps the rows whose CHAR values are " +
         "stored without padding.")
       .version("4.4.0")
+      .withBindingPolicy(ConfigBindingPolicy.SESSION)
       .booleanConf
       .createWithDefault(false)
 
