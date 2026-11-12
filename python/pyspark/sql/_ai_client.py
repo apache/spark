@@ -268,7 +268,7 @@ class _ChatCompletionsClient:
             raise _invocation_error("Databricks model", "TIMEOUT")
         return remaining
 
-    def invoke(self, request: str) -> str:
+    def invoke(self, request: str, *, deadline: Optional[float] = None) -> str:
         import requests
         from urllib3.exceptions import ReadTimeoutError
 
@@ -277,7 +277,8 @@ class _ChatCompletionsClient:
             "max_tokens": self.endpoint.max_tokens,
             "temperature": self.endpoint.temperature,
         }
-        deadline = time.monotonic() + self.endpoint.timeout
+        if deadline is None:
+            deadline = time.monotonic() + self.endpoint.timeout
         attempt = 0
         last_retry_status: Optional[int] = None
         while True:
@@ -502,11 +503,16 @@ def _query_session(
     def invoke(request: Any) -> Optional[str]:
         if pd.api.types.is_scalar(request) and pd.isna(request):
             return None
+        deadline = None
+        if endpoint.provider == "databricks":
+            deadline = time.monotonic() + endpoint.timeout
         if not hasattr(local, "client"):
             local.client = factory(endpoint)
             with lock:
                 clients.append(local.client)
         try:
+            if deadline is not None:
+                return local.client.invoke(request, deadline=deadline)
             return local.client.invoke(request)
         except PySparkRuntimeError as error:
             if on_error == "null" and _can_return_null(error):

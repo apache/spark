@@ -273,7 +273,7 @@ needed to execute Pandas UDFs, plus the provider SDKs below.
 Package          Supported version Note
 ================ ================= ==============================
 `requests`       >=2.32.5           Required for Databricks
-`urllib3`        >=2.0.7            Enforces HTTP response framing
+`urllib3`        >=2.8.0            Bounds gzip decompression
 `databricks-sdk` >=0.57.0           Required for Databricks OAuth
 `boto3`          >=1.34.131         Required for Bedrock Converse
 ================ ================= ==============================

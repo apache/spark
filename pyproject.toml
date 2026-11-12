@@ -101,7 +101,7 @@ sql = [
 ai = [
     {include-group = "sql"},
     "requests>=2.32.5",
-    "urllib3>=2.0.7",
+    "urllib3>=2.8.0",
     "boto3>=1.34.131",
     "databricks-sdk>=0.57.0",
 ]
@@ -262,8 +262,9 @@ ci_classic_minimum = [
     {include-group = "sql"},
     {include-group = "pandas_on_spark"},
     {include-group = "ml"},
-    # Only the dependency needed so pyspark.sql.tests.test_ai_query does not skip.
-    "requests",
+    # HTTP transport dependencies for pyspark.sql.tests.test_ai_query.
+    "requests>=2.32.5",
+    "urllib3>=2.8.0",
     "numpy==1.23.2",
     "pyarrow==18.0.0",
     "pandas==2.2.0",

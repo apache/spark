@@ -402,7 +402,7 @@ try:
                 "pyarrow>=%s" % _minimum_pyarrow_version,
                 "numpy>=%s" % _minimum_numpy_version,
                 "requests>=2.32.5",
-                "urllib3>=2.0.7",
+                "urllib3>=2.8.0",
                 "boto3>=1.34.131",
                 "databricks-sdk>=0.57.0",
             ],

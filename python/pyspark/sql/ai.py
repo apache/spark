@@ -105,11 +105,11 @@ def register_model(
     max_concurrency : int, optional
         Maximum concurrent invocations per Python task.
     timeout : float, optional
-        Databricks per-row budget across authentication, HTTP attempts, and retry delays,
-        or Bedrock SDK connection and read timeout, in seconds. Databricks checks the
-        budget after authentication and before returning a successful response. Its
-        HTTP timeout limits connection and read inactivity. Authentication and an active
-        response download can exceed the budget before an error is reported.
+        Databricks per-row budget across client initialization, authentication, HTTP attempts,
+        and retry delays, or Bedrock SDK connection and read timeout, in seconds. Databricks
+        checks the budget after authentication and before returning a successful response. Its
+        HTTP timeout limits connection and read inactivity. Client initialization,
+        authentication, and active downloads can exceed the budget before an error is reported.
     max_retries : int, optional
         Maximum retries for a transient failure. Retries can incur additional charges.
     max_tokens : int, optional

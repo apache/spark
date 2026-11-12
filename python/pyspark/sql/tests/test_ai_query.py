@@ -15,6 +15,7 @@
 # limitations under the License.
 #
 
+import gzip
 import json
 import threading
 import time
@@ -24,10 +25,11 @@ from contextlib import contextmanager
 from datetime import datetime, timezone
 from email.utils import format_datetime
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
+from io import BytesIO
 from pathlib import Path
 from tempfile import TemporaryDirectory
 from types import SimpleNamespace
-from unittest.mock import MagicMock, Mock, patch
+from unittest.mock import ANY, MagicMock, Mock, patch
 
 from pyspark.errors import PySparkRuntimeError, PySparkTypeError, PySparkValueError, PythonException
 from pyspark.sql._ai_client import (
@@ -405,6 +407,81 @@ class AIQueryTests(unittest.TestCase, PySparkErrorTestUtils):
         client.http.post.return_value = response
         with patch("pyspark.sql._ai_client._MAX_DATABRICKS_RESPONSE_BYTES", len(payload)):
             self.assertEqual(client.invoke("hello"), "answer")
+
+    def test_gzip_response_is_bounded_before_the_size_check(self):
+        from urllib3.response import HTTPResponse
+
+        payload = gzip.compress(
+            json.dumps({"choices": [{"message": {"content": "x" * (8 * 1024 * 1024)}}]}).encode()
+        )
+        response = requests.Response()
+        response.status_code = 200
+        response.raw = HTTPResponse(
+            body=BytesIO(payload), headers={"Content-Encoding": "gzip"}, preload_content=False
+        )
+        buffered = []
+        iter_content = response.iter_content
+
+        def observed_chunks(*args, **kwargs):
+            for chunk in iter_content(*args, **kwargs):
+                # Older urllib3 versions expand the entire gzip into this buffer first.
+                buffered.append(len(response.raw._decoded_buffer))
+                yield chunk
+
+        response.iter_content = observed_chunks
+        client = self.client()
+        client.http.post.return_value = response
+        with (
+            patch("pyspark.sql._ai_client._MAX_DATABRICKS_RESPONSE_BYTES", 128 * 1024),
+            self.assertRaises(PySparkRuntimeError) as raised,
+        ):
+            client.invoke("hello")
+        self.assertEqual(
+            raised.exception.getCondition(), "AI_QUERY_INVOCATION_FAILED.INVALID_RESPONSE"
+        )
+        self.assertLessEqual(max(buffered), 64 * 1024)
+        self.assertTrue(response.raw.closed)
+
+    def test_first_row_budget_includes_client_initialization(self):
+        for on_error in ("raise", "null"):
+            now = 0.0
+            config = SimpleNamespace(
+                host="https://example.test", authenticate=Mock(return_value={})
+            )
+
+            def make_workspace(**kwargs):
+                nonlocal now
+                now += 2
+                return SimpleNamespace(config=config)
+
+            sdk = SimpleNamespace(WorkspaceClient=make_workspace)
+            http = Mock()
+            http.post.return_value = self.response(choices=[{"message": {"content": "answer"}}])
+            endpoint = _ModelEndpoint(
+                "model", provider="databricks", timeout=1, max_retries=0, max_concurrency=1
+            )
+            with (
+                self.subTest(on_error=on_error),
+                patch.dict("sys.modules", {"databricks.sdk": sdk}),
+                patch("pyspark.sql._ai_client._databricks_session", return_value=http),
+                patch("pyspark.sql._ai_client.time.monotonic", side_effect=lambda: now),
+            ):
+                batches = _query_batches(
+                    endpoint, iter([pd.Series(["first", "later"])]), on_error=on_error
+                )
+                if on_error == "null":
+                    self.assertEqual(list(batches)[0].tolist(), [None, "answer"])
+                    http.post.assert_called_once()
+                    config.authenticate.assert_called_once()
+                else:
+                    with self.assertRaises(PySparkRuntimeError) as raised:
+                        list(batches)
+                    self.assertEqual(
+                        raised.exception.getCondition(), "AI_QUERY_INVOCATION_FAILED.TIMEOUT"
+                    )
+                    http.post.assert_not_called()
+                    config.authenticate.assert_not_called()
+                http.close.assert_called_once()
 
     def test_sdk_constructor_errors_are_sanitized(self):
         sdk = SimpleNamespace(WorkspaceClient=Mock(side_effect=ValueError("synthetic-auth-body")))
@@ -909,7 +986,7 @@ class AIQueryTests(unittest.TestCase, PySparkErrorTestUtils):
         later_started = threading.Event()
         client = Mock()
 
-        def invoke(request):
+        def invoke(request, *, deadline=None):
             if request == "slow":
                 self.assertTrue(later_started.wait(timeout=10))
             elif request == "later":
@@ -939,7 +1016,7 @@ class AIQueryTests(unittest.TestCase, PySparkErrorTestUtils):
             nonlocal active, maximum
             client = Mock()
 
-            def invoke(request):
+            def invoke(request, *, deadline=None):
                 nonlocal active, maximum
                 with lock:
                     active += 1
@@ -981,7 +1058,7 @@ class AIQueryTests(unittest.TestCase, PySparkErrorTestUtils):
                 clients = [Mock(), Mock()]
                 close_error = RuntimeError("close failed")
 
-                def invoke(request):
+                def invoke(request, *, deadline=None):
                     ready.wait(timeout=5)
                     if batch_error is not None:
                         raise batch_error
@@ -1180,7 +1257,7 @@ class AIQueryTests(unittest.TestCase, PySparkErrorTestUtils):
         with patch("pyspark.sql._ai_client._ChatCompletionsClient", return_value=client):
             result = list(query(iter([(pd.Series([None, "model"]), pd.Series(["skip", "hello"]))])))
         self.assertEqual(result[0].tolist(), [None, "answer"])
-        client.invoke.assert_called_once_with("hello")
+        client.invoke.assert_called_once_with("hello", deadline=ANY)
         client.close.assert_called_once()
 
     def test_sql_wrong_arity_has_a_structured_error(self):
@@ -1240,7 +1317,7 @@ class AIQueryTests(unittest.TestCase, PySparkErrorTestUtils):
 
         def make_client(endpoint):
             client = Mock()
-            client.invoke.side_effect = lambda prompt: f"{endpoint.model_id}:{prompt}"
+            client.invoke.side_effect = lambda prompt, **kwargs: f"{endpoint.model_id}:{prompt}"
             clients.append(client)
             return client
 
