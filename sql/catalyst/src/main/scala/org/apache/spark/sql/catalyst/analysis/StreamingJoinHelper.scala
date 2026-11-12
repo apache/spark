@@ -52,6 +52,27 @@ object StreamingJoinHelper extends PredicateHelper with Logging {
   }
 
   /**
+   * Whether a conjunct of the condition that references one of `columns` contains a cast that
+   * drops part of a time, such as CAST(ts AS BIGINT), which drops the fraction of a second. The
+   * solver reads such a cast as its input, so a bound it solves from that conjunct can be up to
+   * a second too narrow.
+   */
+  def hasTruncatingCast(condition: Option[Expression], columns: AttributeSet): Boolean = {
+    def isTruncatingCast(from: DataType, to: DataType): Boolean =
+      !from.isInstanceOf[IntegralType] && (to match {
+        case _: IntegralType | FloatType => true
+        case decimal: DecimalType => decimal.scale < 6
+        case _ => false
+      })
+    condition.toSeq.flatMap(splitConjunctivePredicates).exists { conjunct =>
+      conjunct.references.exists(columns.contains) && conjunct.exists {
+        case Cast(child, dataType, _, _) => isTruncatingCast(child.dataType, dataType)
+        case _ => false
+      }
+    }
+  }
+
+  /**
    * Get state value watermark (see [[StreamingSymmetricHashJoinExec]] for context about it)
    * given the join condition and the event time watermark. This is how it works.
    * - The condition is split into conjunctive predicates, and we find the predicates of the

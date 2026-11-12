@@ -746,15 +746,25 @@ case class StreamingSymmetricHashJoinExec(
           thisSideAttrs, !allowMultipleStatefulOperators).toSeq
         val otherEventTime = WatermarkSupport.findEventTimeColumn(
           otherSideAttrs, !allowMultipleStatefulOperators).toSeq
-        val lowerBoundMs = StreamingJoinHelper.getStateValueWatermark(
-          AttributeSet(otherEventTime), AttributeSet(thisEventTime), condition.full, Some(0L))
-        val upperBoundMs = StreamingJoinHelper.getStateValueWatermark(
-          AttributeSet(thisEventTime), AttributeSet(otherEventTime), condition.full, Some(0L))
+        // The solver reads a cast that drops part of a time as the time itself. For
+        // CAST(rightTime AS BIGINT) >= CAST(leftTime AS BIGINT) + 60, the scan for a left row
+        // at 100.6 seconds would start near 160.6 seconds and miss a right row at 160.2
+        // seconds, although the casts make them match (160 >= 100 + 60). Read all rows for
+        // the key instead.
+        if (StreamingJoinHelper.hasTruncatingCast(
+            condition.full, AttributeSet(thisEventTime ++ otherEventTime))) {
+          None
+        } else {
+          val lowerBoundMs = StreamingJoinHelper.getStateValueWatermark(
+            AttributeSet(otherEventTime), AttributeSet(thisEventTime), condition.full, Some(0L))
+          val upperBoundMs = StreamingJoinHelper.getStateValueWatermark(
+            AttributeSet(thisEventTime), AttributeSet(otherEventTime), condition.full, Some(0L))
 
-        (lowerBoundMs, upperBoundMs) match {
-          case (Some(lower), Some(upper)) =>
-            Some((lower * 1000L, -upper * 1000L)) // ms -> us
-          case _ => None
+          (lowerBoundMs, upperBoundMs) match {
+            case (Some(lower), Some(upper)) =>
+              Some((lower * 1000L, -upper * 1000L)) // ms -> us
+            case _ => None
+          }
         }
       }
     }
