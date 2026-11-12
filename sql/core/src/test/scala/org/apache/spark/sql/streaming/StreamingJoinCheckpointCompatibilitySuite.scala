@@ -26,18 +26,19 @@ import scala.util.Using
 import org.apache.hadoop.fs.Path
 
 import org.apache.spark.sql.{AnalysisException, DataFrame, Row}
-import org.apache.spark.sql.catalyst.expressions.{Alias, Attribute, AttributeReference, Cast, Expression, GreaterThan}
+import org.apache.spark.sql.catalyst.expressions.{Add, Alias, And, Attribute, AttributeReference, Between, Cast, Expression, GreaterThan, GreaterThanOrEqual, LessThan, LessThanOrEqual, Literal, TimestampAddInterval}
 import org.apache.spark.sql.catalyst.plans.logical.EventTimeWatermark
 import org.apache.spark.sql.execution.streaming.checkpointing.{OffsetMap, OffsetSeq, OffsetSeqLog}
 import org.apache.spark.sql.execution.streaming.operators.stateful.join.{StreamingSymmetricHashJoinExec, StreamingSymmetricHashJoinHelper}
-import org.apache.spark.sql.execution.streaming.operators.stateful.join.StreamingSymmetricHashJoinHelper.{JoinStateKeyWatermarkPredicate, JoinStateValueWatermarkPredicate, LeftSide, RightSide}
-import org.apache.spark.sql.execution.streaming.runtime.MemoryStream
+import org.apache.spark.sql.execution.streaming.operators.stateful.join.StreamingSymmetricHashJoinHelper.{JoinSide, JoinStateKeyWatermarkPredicate, JoinStateValueWatermarkPredicate, LeftSide, RightSide}
+import org.apache.spark.sql.execution.streaming.runtime.{MemoryStream, StreamExecution}
 import org.apache.spark.sql.execution.streaming.state.RocksDBStateStoreProvider
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.internal.SQLConf
-import org.apache.spark.sql.types.{IntegerType, LongType, MetadataBuilder, StructField,
-  StructType, TimestampType}
+import org.apache.spark.sql.types.{DayTimeIntervalType, IntegerType, LongType, MetadataBuilder,
+  StructField, StructType, TimestampType}
 import org.apache.spark.tags.SlowSQLTest
+import org.apache.spark.unsafe.types.CalendarInterval
 import org.apache.spark.util.Utils
 
 @SlowSQLTest
@@ -129,9 +130,10 @@ class StreamingJoinCheckpointCompatibilitySuite extends StreamTest {
     }
     val joined = left.join(right, expr(condition))
     val result = if (shape == "unbounded") {
-      // A stateful operator after this key-only join reads its output watermark.
-      joined.select($"leftKey", $"rightKey", $"leftTime".cast("long"),
-        $"rightTime".cast("long")).dropDuplicates()
+      // A stateful operator after this key-only join reads the left input's event time.
+      joined.select($"leftKey", $"rightKey", $"leftTime", $"rightTime".cast("long"))
+        .dropDuplicates()
+        .select($"leftKey", $"rightKey", $"leftTime".cast("long"), $"rightTime")
     } else {
       joined.select($"leftKey", $"rightKey")
     }
@@ -209,22 +211,26 @@ class StreamingJoinCheckpointCompatibilitySuite extends StreamTest {
     assert(!compatible(Seq(leftId), Seq(rightId), Seq(computed), Seq(rightId)))
 
     // A key-only join is accepted only when no stateful operator after it reads its output
-    // watermark. Another condition, or a key that uses an event time, makes it not key-only.
+    // watermark. A key that uses an event time makes it not key-only; another condition that
+    // gives no bound in either version keeps both inputs unbounded.
     val notConsumed = StreamingSymmetricHashJoinHelper.isWatermarkCheckpointCompatible(
       _: Seq[Attribute], _: Seq[Attribute], _: Seq[Expression], _: Seq[Expression],
       _: Option[Expression], consumedSides = Set.empty)
     val leftInput = Seq(leftId, leftTime)
     val rightInput = Seq(rightId, rightTime)
     assert(notConsumed(leftInput, rightInput, Seq(leftId), Seq(rightId), None))
-    assert(!notConsumed(leftInput, rightInput, Seq(leftId), Seq(rightId),
+    assert(notConsumed(leftInput, rightInput, Seq(leftId), Seq(rightId),
       Some(GreaterThan(leftId, rightId))))
+    assert(!notConsumed(leftInput, rightInput, Seq(leftId), Seq(rightId),
+      Some(GreaterThan(leftId, Literal(1)))))
     assert(!notConsumed(leftInput, rightInput, Seq(leftId, Cast(leftTime, LongType)),
       Seq(rightId, Cast(rightTime, LongType)), None))
     assert(!notConsumed(leftInput, rightInput, Seq(leftId, computed), Seq(rightId, rightTime),
       None))
 
-    // Ordering time windows is excluded even when nothing reads the output watermark: older
-    // versions derived an ordering bound for whole windows that this version removes.
+    // Ordering time windows is excluded even when nothing reads the output watermark: this
+    // version still derives the older bound for whole windows, but SPARK-61348 later removes it
+    // for windows shorter than the other input's.
     val windowType = StructType(Seq(
       StructField("start", TimestampType), StructField("end", TimestampType)))
     val leftWindow = AttributeReference("leftWindow", windowType,
@@ -286,6 +292,46 @@ class StreamingJoinCheckpointCompatibilitySuite extends StreamTest {
       leftKey = Some(nonNullKeyNullableInput), rightKey = Some(nonNullRightTime)))
     assert(compatible(nullableLeftTime, nonNullRightTime,
       leftKey = Some(nullableInputNonNullKey), rightKey = Some(nonNullRightTime)))
+  }
+
+  test("checkpoint compatibility ignores conjuncts that no version derives a bound from") {
+    val watermarkMetadata = new MetadataBuilder()
+      .putLong(EventTimeWatermark.delayKey, 0L).build()
+    val leftKey = AttributeReference("leftKey", IntegerType)()
+    val rightKey = AttributeReference("rightKey", IntegerType)()
+    val leftPrice = AttributeReference("leftPrice", IntegerType)()
+    val rightPrice = AttributeReference("rightPrice", IntegerType)()
+    val leftOther = AttributeReference("leftOther", TimestampType)()
+    val leftTime = AttributeReference("leftTime", TimestampType,
+      metadata = watermarkMetadata)()
+    val rightTime = AttributeReference("rightTime", TimestampType,
+      metadata = watermarkMetadata)()
+    def plus(time: Expression, micros: Long): Expression =
+      TimestampAddInterval(time, Literal(micros, DayTimeIntervalType()))
+    val interval = And(GreaterThanOrEqual(rightTime, leftTime),
+      LessThanOrEqual(rightTime, plus(leftTime, 5000000L)))
+    def compatible(condition: Expression, consumedSides: Set[JoinSide]): Boolean =
+      StreamingSymmetricHashJoinHelper.isWatermarkCheckpointCompatible(
+        Seq(leftKey, leftPrice, leftOther, leftTime), Seq(rightKey, rightPrice, rightTime),
+        Seq(leftKey), Seq(rightKey), Some(condition), consumedSides)
+    val both = Set[JoinSide](LeftSide, RightSide)
+
+    // A comparison of columns of both inputs that have no watermark gives no bound.
+    assert(compatible(And(interval, GreaterThanOrEqual(leftPrice, rightPrice)), both))
+    assert(compatible(And(interval, LessThan(Add(leftPrice, Literal(1)), rightPrice)), both))
+    // Each half of a BETWEEN is judged on its own: a month interval gives no bound, so the left
+    // input has none, which is accepted only when nothing after the join reads its event time.
+    val monthBetween = Between(rightTime, leftTime,
+      TimestampAddInterval(leftTime, Literal(new CalendarInterval(1, 0, 0L))))
+    assert(compatible(monthBetween, Set(RightSide)))
+    assert(!compatible(monthBetween, Set(LeftSide)))
+    // A comparison of one input's column with a constant gives a bound in older versions, and so
+    // does a BETWEEN half that bounds a column other than the event time.
+    assert(!compatible(And(interval, GreaterThan(leftPrice, Literal(10))), both))
+    assert(!compatible(And(interval, GreaterThan(leftTime, Literal(1000000L, TimestampType))),
+      both))
+    assert(!compatible(Between(rightTime, leftTime, leftOther), both))
+    assert(!compatible(And(interval, LessThanOrEqual(rightTime, leftOther)), both))
   }
 
   for {
@@ -383,7 +429,7 @@ class StreamingJoinCheckpointCompatibilitySuite extends StreamTest {
     // A run restarted from an emulated old checkpoint produces the same rows as an uninterrupted
     // run. The emulated checkpoint holds no NULL-key row, because this version emits such a row
     // on arrival; a real older checkpoint can hold one at timestamp 0, which the first batch after
-    // the restart evicts.
+    // the restart evicts. The Spark 4.3.0 checkpoint test below covers that stored row.
     Seq(false, true).foreach { restart =>
       withJoinConf(version = 4, logVersion = 2) {
         val (leftInput, rightInput, joined) = nullableAlignedJoinInputs()
@@ -414,6 +460,36 @@ class StreamingJoinCheckpointCompatibilitySuite extends StreamTest {
             testStream(joined)(firstBatch ++ laterBatches: _*)
           }
         }
+      }
+    }
+  }
+
+  // Written by Spark 4.3.0 in state format 4 for the full outer join of nullableAlignedJoinInputs.
+  // Batch 0 added 150 on both inputs, batch 1 added NULL and 160 on the left and 170 on the
+  // right, and batch 2 added 220 on both inputs. Spark 4.3.0 stored the NULL key at timestamp 0
+  // in batch 1, after the scan start had passed it, and never evicted that row.
+  test("resume a Spark 4.3.0 V4 checkpoint that holds a NULL equality key") {
+    withJoinConf(version = 4, logVersion = 1) {
+      val (leftInput, rightInput, joined) = nullableAlignedJoinInputs()
+      withTempDir { checkpointDir =>
+        val resource = getClass.getResource(
+          "/structured-streaming/checkpoint-version-4.3.0-streaming-join-null-equality-key/").toURI
+        Utils.copyDirectory(new File(resource), checkpointDir)
+        // One call per batch of the fixture, because a memory stream's offset counts the calls.
+        Seq(Seq(150), Seq(-1, 160), Seq(220)).foreach(leftInput.addData(_: _*))
+        Seq(Seq(150), Seq(170), Seq(220)).foreach(rightInput.addData(_: _*))
+        testStream(joined)(
+          StartStream(checkpointLocation = checkpointDir.getCanonicalPath),
+          // The watermark of the last batch is 120 seconds, past the timestamp 0 of the NULL key,
+          // and the first batch of this version scans the index from the start.
+          MultiAddData(leftInput, 400)(rightInput, 400),
+          CheckNewAnswer(Row(400L, 400L), Row(null, null)),
+          // The eviction watermark 300 emits the unmatched rows of batch 1, and not the NULL row
+          // again.
+          MultiAddData(leftInput, 600)(rightInput, 600),
+          CheckNewAnswer(Row(600L, 600L), Row(160L, null), Row(null, 170L)),
+          StopStream)
+        assert(pinnedMarker(checkpointDir.getCanonicalPath).contains("0"))
       }
     }
   }
@@ -526,8 +602,10 @@ class StreamingJoinCheckpointCompatibilitySuite extends StreamTest {
   private val intervalCondition =
     "leftKey = rightKey AND rightTime >= leftTime AND rightTime <= leftTime + INTERVAL 5 SECONDS"
 
-  // Old state of a two-sided time-interval join on the inputs' own event times is reusable;
-  // shapes that only resemble it are not.
+  // Old state of a two-sided time-interval join on the inputs' own event times is reusable, and
+  // so is that of a join whose unbounded input's event time no later stateful operator reads,
+  // such as a one-directional interval join or a key-only join; shapes that only resemble them
+  // are not.
   Seq(
     // (shape, join condition, state format versions, session time zone, join type, accepted)
     ("two-sided interval", intervalCondition, Seq(1, 2, 3, 4), "America/Los_Angeles",
@@ -556,10 +634,15 @@ class StreamingJoinCheckpointCompatibilitySuite extends StreamTest {
     ("one-directional interval",
       "leftKey = rightKey AND rightTime <= leftTime + INTERVAL 5 SECONDS", Seq(2, 4),
       "America/Los_Angeles", "inner", true),
-    // A month has no fixed length, so the solver gives it no cutoff.
+    // A month has no fixed length, so neither version reads that conjunct, and neither bounds
+    // the left input. Nothing after this join reads its event time.
     ("month interval",
       "leftKey = rightKey AND rightTime >= leftTime AND rightTime <= leftTime + INTERVAL 1 MONTH",
-      Seq(2), "UTC", "inner", false),
+      Seq(2), "UTC", "inner", true),
+    // Neither version derives a bound from a comparison of columns without a watermark.
+    ("interval with a comparison of other columns of both inputs",
+      intervalCondition + " AND leftKey <= rightKey + 1", Seq(2, 4), "America/Los_Angeles",
+      "left_outer", true),
     // Both versions read a cast of an event time with its own watermark as the event time.
     ("interval with a cast",
       "leftKey = rightKey AND CAST(rightTime AS BIGINT) >= CAST(leftTime AS BIGINT) AND " +
@@ -575,10 +658,16 @@ class StreamingJoinCheckpointCompatibilitySuite extends StreamTest {
     ("interval with a constant conjunct in a left outer join",
       intervalCondition + " AND leftTime > timestamp_seconds(1)", Seq(2),
       "America/Los_Angeles", "left_outer", false),
-    ("interval with a shifted event-time key",
-      "leftKey = rightKey AND leftTime = rightTime + INTERVAL 1 SECOND AND " +
+    // Older versions evicted the left input at the unshifted watermark, too early for a key
+    // shifted backward on the right.
+    ("interval with a backward-shifted event-time key",
+      "leftKey = rightKey AND leftTime = rightTime - INTERVAL 4 SECONDS AND " +
         "rightTime >= leftTime - INTERVAL 5 SECONDS", Seq(2), "America/Los_Angeles", "inner",
       false),
+    // A forward shift keeps old state reusable; nothing after this join reads leftTime.
+    ("interval with a forward-shifted event-time key",
+      "leftKey = rightKey AND leftTime + INTERVAL 4 SECONDS = rightTime AND " +
+        "rightTime >= leftTime", Seq(2, 4), "America/Los_Angeles", "inner", true),
     // Neither version evicts a key-only join; nothing after this one reads its output watermark.
     ("key-only join keeping both event times", "leftKey = rightKey", Seq(2, 4),
       "America/Los_Angeles", "inner", true)
@@ -639,9 +728,23 @@ class StreamingJoinCheckpointCompatibilitySuite extends StreamTest {
     }
   }
 
-  // The first batch after restoring an older-generation checkpoint re-simulates the previous
+  // The scan start of each side of a V4 join, in left, right order.
+  private def scanStarts(join: StreamingSymmetricHashJoinExec): Seq[Option[Long]] = {
+    Seq(join.stateWatermarkPredicates.left, join.stateWatermarkPredicates.right).map {
+      case Some(p: JoinStateKeyWatermarkPredicate) => p.prevStateWatermark
+      case Some(p: JoinStateValueWatermarkPredicate) => p.prevStateWatermark
+      case _ => None
+    }
+  }
+
+  private def joinsOf(query: StreamExecution): Seq[StreamingSymmetricHashJoinExec] = {
+    query.lastExecution.executedPlan.collect { case j: StreamingSymmetricHashJoinExec => j }
+  }
+
+  // The first batch of every run of an older-generation checkpoint re-simulates the previous
   // batch with this version's output watermarks, which the older version may not have evicted
-  // with, so that batch scans V4 join state from the start. Later batches use scan starts again.
+  // with, so that batch scans V4 join state from the start. The pinned marker does not advance,
+  // so a second run does the same. Later batches use scan starts again.
   Seq(true, false).foreach { olderGeneration =>
     test(s"V4 scan start in the first batch after a restart, older generation=$olderGeneration") {
       withJoinConf(version = 4, logVersion = 2) {
@@ -656,16 +759,8 @@ class StreamingJoinCheckpointCompatibilitySuite extends StreamTest {
         val joined = left.join(right, expr(intervalCondition), "left_outer")
           .select($"leftKey", $"rightKey", $"leftTime".cast("long"), $"rightTime".cast("long"))
         def assertScanStarts(defined: Boolean): AssertOnQuery = Execute { query =>
-          val join = query.lastExecution.executedPlan.collect {
-            case j: StreamingSymmetricHashJoinExec => j
-          }.head
-          val scanStarts = Seq(join.stateWatermarkPredicates.left,
-            join.stateWatermarkPredicates.right).map {
-            case Some(p: JoinStateKeyWatermarkPredicate) => p.prevStateWatermark
-            case Some(p: JoinStateValueWatermarkPredicate) => p.prevStateWatermark
-            case _ => None
-          }
-          assert(scanStarts.forall(_.isDefined == defined), s"Unexpected scan starts: $join")
+          val join = joinsOf(query).head
+          assert(scanStarts(join).forall(_.isDefined == defined), s"Unexpected scan starts: $join")
         }
         withTempDir { checkpointDir =>
           val checkpoint = checkpointDir.getCanonicalPath
@@ -680,25 +775,156 @@ class StreamingJoinCheckpointCompatibilitySuite extends StreamTest {
           if (olderGeneration) {
             setMarker(checkpoint, None)
           }
-          testStream(joined)(
-            StartStream(checkpointLocation = checkpoint),
-            AddData(rightInput, (6, 50)),
-            ProcessAllAvailable(),
-            assertScanStarts(defined = !olderGeneration),
-            AddData(rightInput, (7, 60)),
-            ProcessAllAvailable(),
-            assertScanStarts(defined = true),
-            StopStream)
+          Seq(50, 70).foreach { time =>
+            testStream(joined)(
+              StartStream(checkpointLocation = checkpoint),
+              AddData(rightInput, (6, time)),
+              ProcessAllAvailable(),
+              assertScanStarts(defined = !olderGeneration),
+              AddData(rightInput, (7, time + 10)),
+              ProcessAllAvailable(),
+              assertScanStarts(defined = true),
+              StopStream)
+            assert(pinnedMarker(checkpoint).contains(if (olderGeneration) "0" else currentMarker))
+          }
         }
       }
     }
   }
 
-  // A one-directional interval join leaves the right input unbounded in both versions, so the
-  // checkpoint is reusable only when no stateful operator after the join reads rightTime.
-  Seq("leftTime" -> true, "rightTime" -> false).foreach { case (timeColumn, accepted) =>
+  // An upstream join's output watermark depends on the plan above it. Here a stream-static left
+  // outer join between the two joins hides the downstream join from the tracer, so the upstream
+  // join holds back its output watermark for its unbounded click input, at 0, and the downstream
+  // left outer join evicts nothing. Removing the stream-static join between runs lets the tracer
+  // reach the impression time, which raises the re-simulated watermark of the previous batch.
+  // The downstream join must then scan from the start in the first batch, or it would never emit
+  // impressions buffered below that watermark. The upstream join has no join below it and keeps
+  // its scan start.
+  test("V4 chained joins scan from the start after the plan between them changes") {
+    withJoinConf(version = 4, logVersion = 2) {
+      val impressionInput = MemoryStream[(Int, Int)]
+      val clickInput = MemoryStream[(Int, Int)]
+      val conversionInput = MemoryStream[(Int, Int)]
+      val impressions = impressionInput.toDF().toDF("impressionKey", "time")
+        .select($"impressionKey", timestamp_seconds($"time").as("impressionTime"))
+        .withWatermark("impressionTime", "0 seconds")
+      val clicks = clickInput.toDF().toDF("clickKey", "time")
+        .select($"clickKey", timestamp_seconds($"time").as("clickTime"))
+        .withWatermark("clickTime", "0 seconds")
+      val conversions = conversionInput.toDF().toDF("conversionKey", "time")
+        .select($"conversionKey", timestamp_seconds($"time").as("conversionTime"))
+        .withWatermark("conversionTime", "0 seconds")
+      val clicked = impressions.join(clicks, expr("impressionKey = clickKey AND " +
+          "clickTime <= impressionTime + INTERVAL 10 SECONDS"))
+        .select($"impressionKey", $"impressionTime")
+      // A left anti join here would be pushed below the upstream join; an outer join is not.
+      val campaigns = Seq(-1).toDF("campaignKey")
+      def converted(withCampaigns: Boolean): DataFrame = {
+        val upstream = if (withCampaigns) {
+          clicked.join(campaigns, $"impressionKey" === $"campaignKey", "left_outer")
+            .drop("campaignKey")
+        } else {
+          clicked
+        }
+        upstream.join(conversions, expr("impressionKey = conversionKey AND " +
+            "conversionTime BETWEEN impressionTime AND impressionTime + INTERVAL 5 SECONDS"),
+            "left_outer")
+          .select($"impressionKey", $"impressionTime".cast("long"), $"conversionKey",
+            $"conversionTime".cast("long"))
+      }
+      def addAll(
+          impression: (Int, Int),
+          click: (Int, Int),
+          conversion: (Int, Int)): StreamAction =
+        MultiAddData((impressionInput, Seq(impression)), (clickInput, Seq(click)),
+          (conversionInput, Seq(conversion)))
+      def assertScanStarts(upstream: Boolean, downstream: Boolean): AssertOnQuery =
+        Execute { query =>
+          val Seq(downstreamJoin, upstreamJoin) = joinsOf(query)
+          // The click side of the upstream join has no bound and no scan start.
+          assert(scanStarts(upstreamJoin).head.isDefined == upstream, s"$upstreamJoin")
+          assert(scanStarts(downstreamJoin).forall(_.isDefined == downstream), s"$downstreamJoin")
+        }
+      withTempDir { checkpointDir =>
+        val checkpoint = checkpointDir.getCanonicalPath
+        testStream(converted(withCampaigns = true))(
+          StartStream(checkpointLocation = checkpoint),
+          addAll((1, 10), (1, 10), (5, 10)),
+          CheckNewAnswer(),
+          addAll((2, 100), (2, 100), (6, 100)),
+          CheckNewAnswer(),
+          AddData(conversionInput, (7, 101)),
+          // The upstream join holds the downstream input watermark at 0, so nothing is evicted.
+          CheckNewAnswer(),
+          StopStream)
+        testStream(converted(withCampaigns = false))(
+          StartStream(checkpointLocation = checkpoint),
+          addAll((3, 200), (3, 200), (8, 200)),
+          // The re-simulated watermark of the previous batch is 100 seconds less 10 seconds and
+          // 1 ms. The impression at 10 seconds lies below the scan start it would give.
+          CheckNewAnswer(Row(1, 10L, null, null)),
+          assertScanStarts(upstream = true, downstream = false),
+          AddData(conversionInput, (9, 201)),
+          CheckNewAnswer(Row(2, 100L, null, null)),
+          assertScanStarts(upstream = true, downstream = true),
+          StopStream)
+      }
+    }
+  }
+
+  // Written by Spark 4.3.0 in state format 4: the left outer join below on a left input whose
+  // event time can be NULL. Batch 0 added (key 1, 100 s) on the left and (key 1, 102 s) on the
+  // right, batch 1 added (key 3, 150 s) and (key 3, 152 s), and batch 2 added (key 2, NULL) and
+  // (key 4, 300 s) on the left and (key 4, 302 s) on the right. Spark 4.3.0 stored the NULL event
+  // time at timestamp 0 in batch 2, after its scan start had passed 0, and never evicted that row.
+  // The first batch of this version scans the index from the start and emits it.
+  test("resume a Spark 4.3.0 V4 checkpoint that holds a row with a NULL event time") {
+    withJoinConf(version = 4, logVersion = 1) {
+      val leftInput = MemoryStream[(Int, Int)]
+      val rightInput = MemoryStream[(Int, Int)]
+      val left = leftInput.toDF().toDF("leftKey", "time")
+        .select($"leftKey", when($"time" >= 0, timestamp_seconds($"time")).as("leftTime"))
+        .withWatermark("leftTime", "5 seconds")
+      val right = rightInput.toDF().toDF("rightKey", "time")
+        .select($"rightKey", timestamp_seconds($"time").as("rightTime"))
+        .withWatermark("rightTime", "5 seconds")
+      val joined = left.join(right, expr(intervalCondition), "left_outer")
+        .select($"leftKey", $"rightKey", $"leftTime".cast("long"), $"rightTime".cast("long"))
+      withTempDir { checkpointDir =>
+        val resource = getClass.getResource(
+          "/structured-streaming/checkpoint-version-4.3.0-streaming-join-null-event-time/").toURI
+        Utils.copyDirectory(new File(resource), checkpointDir)
+        // One call per batch of the fixture, because a memory stream's offset counts the calls.
+        Seq(Seq((1, 100)), Seq((3, 150)), Seq((2, -1), (4, 300)))
+          .foreach(leftInput.addData(_: _*))
+        Seq(Seq((1, 102)), Seq((3, 152)), Seq((4, 302))).foreach(rightInput.addData(_: _*))
+        testStream(joined)(
+          StartStream(checkpointLocation = checkpointDir.getCanonicalPath),
+          // The watermark of the last batch is 295 seconds, past the timestamp 0 of the NULL row.
+          AddData(rightInput, (5, 400)),
+          CheckNewAnswer(Row(2, null, null, null)),
+          AddData(rightInput, (6, 500)),
+          CheckNewAnswer(),
+          StopStream)
+        assert(pinnedMarker(checkpointDir.getCanonicalPath).contains("0"))
+      }
+    }
+  }
+
+  // A one-directional interval join leaves the right input unbounded in both versions, and a
+  // month interval leaves the left input unbounded, so the checkpoint is reusable only when no
+  // stateful operator after the join reads the unbounded input's event time.
+  Seq(
+    ("one-directional interval", "rightTime <= leftTime + INTERVAL 5 SECONDS", "leftTime", true),
+    ("one-directional interval", "rightTime <= leftTime + INTERVAL 5 SECONDS", "rightTime",
+      false),
+    ("month interval", "rightTime BETWEEN leftTime AND leftTime + INTERVAL 1 MONTH",
+      "rightTime", true),
+    ("month interval", "rightTime BETWEEN leftTime AND leftTime + INTERVAL 1 MONTH",
+      "leftTime", false)
+  ).foreach { case (shape, timeCondition, timeColumn, accepted) =>
     val action = if (accepted) "resume" else "reject"
-    test(s"$action old one-directional interval checkpoint deduplicated on $timeColumn") {
+    test(s"$action old $shape checkpoint deduplicated on $timeColumn") {
       withJoinConf(version = 4, logVersion = 1) {
         val leftInput = MemoryStream[(Int, Int)]
         val rightInput = MemoryStream[(Int, Int)]
@@ -708,8 +934,7 @@ class StreamingJoinCheckpointCompatibilitySuite extends StreamTest {
         val right = rightInput.toDF().toDF("rightKey", "time")
           .select($"rightKey", timestamp_seconds($"time").as("rightTime"))
           .withWatermark("rightTime", "5 seconds")
-        val deduplicated = left.join(right,
-            expr("leftKey = rightKey AND rightTime <= leftTime + INTERVAL 5 SECONDS"))
+        val deduplicated = left.join(right, expr(s"leftKey = rightKey AND $timeCondition"))
           .select($"leftKey", col(timeColumn).as("t"))
           .dropDuplicates("leftKey", "t")
           .select($"leftKey", $"t".cast("long"))
@@ -725,7 +950,7 @@ class StreamingJoinCheckpointCompatibilitySuite extends StreamTest {
             testStream(deduplicated)(
               StartStream(checkpointLocation = checkpoint),
               AddData(rightInput, (1, 14)),
-              CheckNewAnswer(Row(1, 10L)),
+              CheckNewAnswer(Row(1, if (timeColumn == "leftTime") 10L else 14L)),
               StopStream)
             assert(pinnedMarker(checkpoint).contains("0"))
           } else {
@@ -739,6 +964,206 @@ class StreamingJoinCheckpointCompatibilitySuite extends StreamTest {
               }))
             assert(snapshot(new File(checkpoint, "state")) == stateBefore)
           }
+        }
+      }
+    }
+  }
+
+  // A join that neither version bounds on one input keeps its checkpoint when no stateful
+  // operator after it uses its watermark: one with no event-time column in its input, no
+  // event-time timeouts and no user code that can read the watermark.
+  Seq(
+    ("key-only join", "leftKey = rightKey", "count", true),
+    ("one-directional interval",
+      "leftKey = rightKey AND rightTime <= leftTime + INTERVAL 5 SECONDS", "count", true),
+    ("key-only join", "leftKey = rightKey", "window count", false),
+    ("key-only join", "leftKey = rightKey", "processing-time transformWithState", false)
+  ).foreach { case (shape, condition, downstream, accepted) =>
+    val action = if (accepted) "resume" else "reject"
+    test(s"$action old $shape checkpoint followed by an update-mode $downstream") {
+      withJoinConf(version = 4, logVersion = 1) {
+        val leftInput = MemoryStream[(Int, Int)]
+        val rightInput = MemoryStream[(Int, Int)]
+        val left = leftInput.toDF().toDF("leftKey", "time")
+          .select($"leftKey", timestamp_seconds($"time").as("leftTime"))
+          .withWatermark("leftTime", "5 seconds")
+        val right = rightInput.toDF().toDF("rightKey", "time")
+          .select($"rightKey", timestamp_seconds($"time").as("rightTime"))
+          .withWatermark("rightTime", "5 seconds")
+        val joined = left.join(right, expr(condition))
+        // Each operator reads leftTime, so the join keeps its event-time columns, but only the
+        // window count reads it as an event time.
+        val counted = downstream match {
+          case "count" =>
+            joined.groupBy($"leftKey").agg(count($"leftTime".cast("long")).as("count"))
+          case "window count" =>
+            joined.groupBy(window($"leftTime", "10 seconds"), $"leftKey").count()
+              .select($"leftKey", $"count")
+          case _ =>
+            joined.select(concat_ws(":", $"leftKey", $"leftTime".cast("long"))).as[String]
+              .groupByKey(identity)
+              .transformWithState(new RunningCountStatefulProcessor(), TimeMode.ProcessingTime(),
+                OutputMode.Update())
+              .toDF("key", "count")
+              .select(split($"key", ":")(0).cast("int"), $"count".cast("long"))
+        }
+        withTempDir { checkpointDir =>
+          val checkpoint = checkpointDir.getCanonicalPath
+          testStream(counted, OutputMode.Update())(
+            StartStream(checkpointLocation = checkpoint),
+            MultiAddData(leftInput, (1, 10))(rightInput, (1, 10)),
+            CheckNewAnswer(Row(1, 1L)),
+            StopStream)
+          setMarker(checkpoint, None)
+          if (accepted) {
+            testStream(counted, OutputMode.Update())(
+              StartStream(checkpointLocation = checkpoint),
+              AddData(rightInput, (1, 14)),
+              CheckNewAnswer(Row(1, 2L)),
+              StopStream)
+            assert(pinnedMarker(checkpoint).contains("0"))
+          } else {
+            val stateBefore = snapshot(new File(checkpoint, "state"))
+            testStream(counted, OutputMode.Update())(
+              StartStream(checkpointLocation = checkpoint),
+              AddData(rightInput, (1, 14)),
+              ExpectFailure[AnalysisException](assertFailure = error => {
+                assert(error.asInstanceOf[AnalysisException].getCondition ==
+                  "STREAMING_JOIN_CHECKPOINT_INCOMPATIBLE")
+              }))
+            assert(snapshot(new File(checkpoint, "state")) == stateBefore)
+          }
+        }
+      }
+    }
+  }
+
+  // For an equality key that shifts one input's event time forward, older versions evicted both
+  // sides at the unshifted watermark: the cutoff this version uses for the shifted side, and at
+  // or below the one it uses for the other side. Old state is reusable when no stateful operator
+  // after the join reads the shifted input's event time, whose output watermark bound changed.
+  Seq(
+    // (shape, join condition, left time, right time, deduplicated column, versions, accepted)
+    ("forward shift", "leftTime = rightTime + INTERVAL 10 SECONDS", 20, 10, None,
+      Seq(1, 2, 3, 4), true),
+    ("forward timestampadd shift", "leftTime = timestampadd(SECOND, 10, rightTime)", 20, 10,
+      None, Seq(2, 4), true),
+    ("forward whole-day shift", "leftTime = rightTime + INTERVAL 1 DAY", 86410, 10, None,
+      Seq(2, 4), true),
+    ("forward shift on the left key", "leftTime + INTERVAL 10 SECONDS = rightTime", 10, 20,
+      None, Seq(2, 4), true),
+    ("forward shift deduplicated on the unshifted time",
+      "leftTime = rightTime + INTERVAL 10 SECONDS", 20, 10, Some("leftTime"), Seq(2, 4), true),
+    ("forward shift deduplicated on the shifted time",
+      "leftTime = rightTime + INTERVAL 10 SECONDS", 20, 10, Some("rightTime"), Seq(2, 4), false),
+    ("backward shift", "leftTime = rightTime - INTERVAL 10 SECONDS", 10, 20, None, Seq(2, 4),
+      false),
+    ("shift on both keys", "leftTime + INTERVAL 1 SECOND = rightTime + INTERVAL 11 SECONDS", 20,
+      10, None, Seq(2, 4), false)
+  ).foreach { case (shape, timeCondition, leftTime, rightTime, deduplicated, versions,
+      accepted) =>
+    for {
+      version <- versions
+      joinType <- if (version == 1) Seq("inner") else Seq("inner", "left_outer")
+    } {
+      val action = if (accepted) "resume" else "reject"
+      test(s"$action old $shape equality checkpoint, $joinType, V$version") {
+        withJoinConf(version, logVersion = 1) {
+          val leftInput = MemoryStream[(Int, Int)]
+          val rightInput = MemoryStream[(Int, Int)]
+          val left = leftInput.toDF().toDF("leftKey", "time")
+            .select($"leftKey", timestamp_seconds($"time").as("leftTime"))
+            .withWatermark("leftTime", "5 seconds")
+          val right = rightInput.toDF().toDF("rightKey", "time")
+            .select($"rightKey", timestamp_seconds($"time").as("rightTime"))
+            .withWatermark("rightTime", "5 seconds")
+          val joined = left.join(right, expr(s"leftKey = rightKey AND $timeCondition"), joinType)
+          val result = deduplicated match {
+            case Some(column) =>
+              joined.select($"leftKey", col(column).as("t")).dropDuplicates("leftKey", "t")
+                .select($"leftKey", $"t".cast("long"))
+            case None =>
+              joined.select($"leftKey", $"rightKey", $"leftTime".cast("long"),
+                $"rightTime".cast("long"))
+          }
+          def expected(key: Int): Row = deduplicated match {
+            case Some("leftTime") => Row(key, leftTime.toLong)
+            case Some(_) => Row(key, rightTime.toLong)
+            case None => Row(key, key, leftTime.toLong, rightTime.toLong)
+          }
+          withTempDir { checkpointDir =>
+            val checkpoint = checkpointDir.getCanonicalPath
+            // Each row waits in state for its match, which arrives after the restart.
+            testStream(result)(
+              StartStream(checkpointLocation = checkpoint),
+              MultiAddData(leftInput, (1, leftTime))(rightInput, (2, rightTime)),
+              CheckNewAnswer(),
+              StopStream)
+            setMarker(checkpoint, None)
+            if (accepted) {
+              testStream(result)(
+                StartStream(checkpointLocation = checkpoint),
+                MultiAddData(leftInput, (2, leftTime))(rightInput, (1, rightTime)),
+                CheckNewAnswer(expected(1), expected(2)),
+                StopStream)
+              assert(pinnedMarker(checkpoint).contains("0"))
+            } else {
+              val stateBefore = snapshot(new File(checkpoint, "state"))
+              testStream(result)(
+                StartStream(checkpointLocation = checkpoint),
+                MultiAddData(leftInput, (2, leftTime))(rightInput, (1, rightTime)),
+                ExpectFailure[AnalysisException](assertFailure = error => {
+                  assert(error.asInstanceOf[AnalysisException].getCondition ==
+                    "STREAMING_JOIN_CHECKPOINT_INCOMPATIBLE")
+                }))
+              assert(snapshot(new File(checkpoint, "state")) == stateBefore)
+            }
+          }
+        }
+      }
+    }
+  }
+
+  // Earlier versions stored a row whose eviction column is NULL and never evicted it from V1 to
+  // V3 state. Here the first run has no time condition and no watermark, so nothing bounds the
+  // state and this version stores the NULL-time left row the same way. After the restart with
+  // the time condition and the watermarks, V1 to V3 eviction must remove that row and emit it
+  // padded with nulls. A watermark on the right input alone would not do: since SPARK-61347 it
+  // already bounds the left state, so the first run would emit the row on arrival.
+  Seq(2, 3).foreach { version =>
+    test(s"evict a restored left row with a NULL event time, V$version") {
+      withJoinConf(version, logVersion = 1) {
+        val leftInput = MemoryStream[(Int, Int)]
+        val rightInput = MemoryStream[(Int, Int)]
+        def joined(firstRun: Boolean): DataFrame = {
+          // A negative time is a null event time.
+          val left = leftInput.toDF().toDF("leftKey", "time")
+            .select($"leftKey", when($"time" < 0, lit(null).cast(TimestampType))
+              .otherwise(timestamp_seconds($"time")).as("leftTime"))
+          val right = rightInput.toDF().toDF("rightKey", "time")
+            .select($"rightKey", timestamp_seconds($"time").as("rightTime"))
+          val result = if (firstRun) {
+            left.join(right, expr("leftKey = rightKey"))
+          } else {
+            left.withWatermark("leftTime", "5 seconds")
+              .join(right.withWatermark("rightTime", "5 seconds"), expr(intervalCondition),
+                "left_outer")
+          }
+          result.select($"leftKey", $"rightKey", $"leftTime".cast("long"),
+            $"rightTime".cast("long"))
+        }
+        withTempDir { checkpointDir =>
+          val checkpoint = checkpointDir.getCanonicalPath
+          testStream(joined(firstRun = true))(
+            StartStream(checkpointLocation = checkpoint),
+            AddData(leftInput, (1, -1), (2, 10)),
+            CheckNewAnswer(),
+            StopStream)
+          testStream(joined(firstRun = false))(
+            StartStream(checkpointLocation = checkpoint),
+            AddData(rightInput, (2, 12), (3, 30)),
+            CheckNewAnswer(Row(2, 2, 10L, 12L), Row(1, null, null, null)),
+            StopStream)
         }
       }
     }

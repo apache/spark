@@ -26,6 +26,7 @@ import org.apache.spark.sql.catalyst.analysis.StreamingJoinHelper
 import org.apache.spark.sql.catalyst.expressions.{And, Attribute, AttributeSet, Between, BinaryComparison, BoundReference, Cast, Expression, GreaterThan, GreaterThanOrEqual, LessThan, LessThanOrEqual, Literal, NamedExpression, PredicateHelper, TimestampAddInterval}
 import org.apache.spark.sql.catalyst.plans.logical.EventTimeWatermark._
 import org.apache.spark.sql.catalyst.util.DateTimeConstants.MICROS_PER_DAY
+import org.apache.spark.sql.catalyst.util.DateTimeUtils
 import org.apache.spark.sql.execution.SparkPlan
 import org.apache.spark.sql.execution.streaming.operators.stateful.{StatefulOperatorStateInfo, WatermarkSupport}
 import org.apache.spark.sql.execution.streaming.operators.stateful.WatermarkSupport.watermarkExpression
@@ -367,14 +368,20 @@ object StreamingSymmetricHashJoinHelper extends Logging {
    * version, and V4 reads its rows by key prefix. Otherwise each side must have exactly one
    * event-time column, and either its own event time must be the sole watermarked equality key
    * at the same ordinal, or the join must be a time-interval join on the event times (see
-   * [[isOwnEventTimeIntervalJoin]]). This excludes other range bounds. It also excludes a key
-   * computed from the event time by a constant, which older versions evicted at the unshifted
-   * watermark. A NULL selected key does not change the semantics: such a row can never match.
+   * [[isOwnEventTimeIntervalJoin]]). This excludes other range bounds. A key computed from the
+   * event time by a constant is accepted only when it shifts the event time forward, the other
+   * input's key at that ordinal is its own event time, no other equality key uses an event time,
+   * and no stateful operator after the join reads the shifted input's event time. Older versions
+   * evicted both sides at the unshifted watermark at that ordinal. For a forward shift, that is
+   * the cutoff this version uses for the shifted side, and at or below the one it uses for the
+   * other side, which can no longer match rows at or below it, and both versions store V4 rows
+   * at that ordinal. Only the shifted input's bound in the output watermark changes. Older
+   * versions evicted a backward shift before its last match. A NULL selected key does not change
+   * the semantics: such a row can never match.
    * Old V4 state indexed it at timestamp 0 under its own key, and the first batch after the
    * restart scans V4 state from the start, so it evicts the row and a preserved side emits it
-   * unless an older version already joined it. V1 to V3 keep such a row, as older versions did,
-   * because its eviction predicate is unknown.
-   * TODO: evict the NULL-key rows that older versions stored in V1 to V3 state.
+   * unless an older version already joined it. V1 to V3 test every stored row each batch and
+   * also evict such a row.
    */
   private[sql] def isWatermarkCheckpointCompatible(
       leftAttributes: Seq[Attribute],
@@ -409,24 +416,48 @@ object StreamingSymmetricHashJoinHelper extends Logging {
       val rightOrdinal = StreamingJoinHelper.getEventTimeKeyOrdinal(rightKeys, rightAttributes)
       val alignedOwnEventTimeKeys = leftOrdinal.isDefined && leftOrdinal == rightOrdinal &&
         leftOrdinals == leftOrdinal.toSeq && rightOrdinals == rightOrdinal.toSeq
-      alignedOwnEventTimeKeys || isOwnEventTimeIntervalJoin(leftAttributes, rightAttributes,
-        leftKeys, rightKeys, condition, leftEventTime.head, rightEventTime.head, consumedSides)
+      // One input's own event-time key paired with a forward shift of the other input's.
+      def forwardShiftedKey(
+          ownOrdinal: Option[Int],
+          ownWatermarkOrdinals: Seq[Int],
+          shiftedKeys: Seq[Expression],
+          shiftedAttributes: Seq[Attribute],
+          shiftedWatermarkOrdinals: Seq[Int],
+          shiftedSide: JoinSide): Boolean = ownOrdinal.exists { ordinal =>
+        ownWatermarkOrdinals == Seq(ordinal) && shiftedWatermarkOrdinals.isEmpty &&
+          StreamingJoinHelper.isForwardShiftOfEventTime(shiftedKeys(ordinal), shiftedAttributes) &&
+          leftKeys.indices.filter(_ != ordinal).forall { i =>
+            !(leftKeys(i).references ++ rightKeys(i).references)
+              .exists(_.metadata.contains(delayKey))
+          } && !consumedSides(shiftedSide)
+      }
+      alignedOwnEventTimeKeys ||
+        forwardShiftedKey(leftOrdinal, leftOrdinals, rightKeys, rightAttributes, rightOrdinals,
+          RightSide) ||
+        forwardShiftedKey(rightOrdinal, rightOrdinals, leftKeys, leftAttributes, leftOrdinals,
+          LeftSide) ||
+        isOwnEventTimeIntervalJoin(leftAttributes, rightAttributes, leftKeys, rightKeys,
+          condition, leftEventTime.head, rightEventTime.head, consumedSides)
     } else {
       false
     }
   }
 
   /**
-   * Whether every ordering conjunct compares the two inputs' TIMESTAMP event times, each only
-   * cast or offset by constants (see [[StreamingJoinHelper.isConstantOffsetOf]]), and each event
-   * time either gets a range bound or gets none and is not in `consumedSides`. Older versions
-   * and this one solve such conjuncts the same way for columns with their own watermark, and
-   * older versions solved every column of an input but then found bounds only in the same
-   * conjuncts, so they derived the same value predicates, scan starts and V4 index columns, and
-   * neither evicts an input that gets no bound. Old V4 stored a null event time at timestamp 0
-   * under the row's own key; both versions scan that entry the same way. No equality key may
-   * use an event time: older versions evicted such keys at the unshifted watermark. Time windows
-   * are excluded: older versions derived an ordering bound for them that this version removes.
+   * Whether every ordering conjunct compares the two inputs' TIMESTAMP event times, each only cast
+   * or offset by constants (see [[StreamingJoinHelper.isConstantOffsetOf]]), or gives no bound to
+   * either input in either version, and each event time either gets a range bound or gets none and
+   * is not in `consumedSides`. Each half of a BETWEEN counts as one conjunct, as the solver reads
+   * it. Older versions and this one solve such conjuncts the same way for columns with their own
+   * watermark, and older versions solved every column of an input but then found bounds only in the
+   * same conjuncts, so they derived the same value predicates, scan starts and V4 index columns,
+   * and neither evicts an input that gets no bound. Old V4 stored a null event time at timestamp 0
+   * under the row's own key; both versions scan that entry the same way. No equality key may use an
+   * event time: older versions evicted both sides of such a key at the unshifted watermark, which
+   * [[isWatermarkCheckpointCompatible]] accepts only for a forward shift whose shifted input no
+   * later stateful operator reads. Time windows are excluded: this version still derives the older
+   * ordering bound for them, but SPARK-61348 later removes it for windows shorter than the other
+   * input's.
    */
   private def isOwnEventTimeIntervalJoin(
       leftAttributes: Seq[Attribute],
@@ -448,14 +479,31 @@ object StreamingSymmetricHashJoinHelper extends Logging {
         case (Some(x), Some(y)) => !x.semanticEquals(y)
         case _ => false
       }
+    // Whether the comparison references both inputs and neither version derives a bound for
+    // either input from it, as for one between columns of both inputs that have no watermark,
+    // or one with a month interval, which the solver cannot read. Older versions solved every
+    // column of an input against the other input; this version solves one candidate column at a
+    // time. A comparison within one input stays excluded: older versions read some of them, such
+    // as one with a numeric constant, as a bound.
+    def givesNoBound(comparison: Expression): Boolean = {
+      val inputs = Seq(leftAttributes -> rightAttributes, rightAttributes -> leftAttributes)
+      inputs.forall { case (input, _) =>
+        comparison.references.exists(a => input.exists(_.semanticEquals(a)))
+      } && inputs.forall { case (input, other) =>
+        StreamingJoinHelper.getStateValueWatermark(AttributeSet(input), AttributeSet(other),
+          Some(comparison), Some(1000000L)).isEmpty &&
+          getStateValueWatermarkForInput(input, other, Some(comparison), Some(1000000L)).isEmpty
+      }
+    }
     // The solver reads bounds only from these conjunct shapes; other conjuncts give no bound in
     // either version.
     val conditionIsInterval = condition.toSeq.flatMap(conjuncts).forall {
       case c @ (_: LessThan | _: LessThanOrEqual | _: GreaterThan | _: GreaterThanOrEqual) =>
         val comparison = c.asInstanceOf[BinaryComparison]
-        comparesInputs(comparison.left, comparison.right)
+        comparesInputs(comparison.left, comparison.right) || givesNoBound(comparison)
       case Between(input, lower, upper, _) =>
-        comparesInputs(input, lower) && comparesInputs(input, upper)
+        (comparesInputs(input, lower) || givesNoBound(GreaterThanOrEqual(input, lower))) &&
+          (comparesInputs(input, upper) || givesNoBound(LessThanOrEqual(input, upper)))
       case _ => true
     }
     val keysUseEventTime = (leftKeys ++ rightKeys).exists(
@@ -493,11 +541,13 @@ object StreamingSymmetricHashJoinHelper extends Logging {
    * The key cutoff applies when the left input's late-filtered column is the left join key at an
    * ordinal: the right key at that ordinal must then be above the late-events watermark. The
    * value cutoff is on the right event time, solved only from conjuncts that compare it with the
-   * left input's late-filtered column, each shifted only by literal intervals without a day or
-   * month part, and with no cast. Any other conjunct can give a cutoff that is too high, so it
-   * gives none here: for example a bound on another right column, an interval with whole days,
-   * or a truncating cast.
-   * TODO(SPARK-61344, SPARK-61381): derive exact cutoffs for those conditions too.
+   * left input's late-filtered column, each shifted only by literal intervals without a month
+   * part, and with no cast other than one from timestamp to timestamp. A day part counts only in
+   * a time zone with a fixed offset, such as UTC, where Spark adds a day as 24 hours, as the
+   * solver counts it. Any other conjunct can give a cutoff that is too high, so it gives none
+   * here: for example an interval with whole days in a time zone with daylight saving time, or a
+   * truncating cast.
+   * TODO(SPARK-61381): derive exact cutoffs for those conditions too.
    */
   def getLeftSemiExactRightCutoffs(
       leftAttributes: Seq[Attribute],
@@ -524,15 +574,19 @@ object StreamingSymmetricHashJoinHelper extends Logging {
     }
 
     // Whether the expression is the column shifted only by literal intervals that the solver
-    // counts exactly: no whole days, which Spark adds in the session time zone, and no months.
+    // counts exactly: no months, and whole days only where the zone that the shift adds them in
+    // has a fixed offset. Elsewhere a day can be 23 or 25 hours, but the solver counts 24.
+    def addsDaysExactly(shift: TimestampAddInterval): Boolean =
+      shift.timeZoneId.exists(zone => DateTimeUtils.getZoneId(zone).getRules.isFixedOffset)
     def isExactShiftOf(e: Expression, column: Attribute): Boolean = e match {
       case a: Attribute => a.semanticEquals(column)
       case Cast(child, TimestampType, _, _) if child.dataType == TimestampType =>
         isExactShiftOf(child, column)
-      case TimestampAddInterval(start, Literal(micros: Long, _: DayTimeIntervalType), _) =>
-        -MICROS_PER_DAY < micros && micros < MICROS_PER_DAY && isExactShiftOf(start, column)
-      case TimestampAddInterval(start, Literal(i: CalendarInterval, CalendarIntervalType), _) =>
-        i.months == 0 && i.days == 0 && isExactShiftOf(start, column)
+      case s @ TimestampAddInterval(start, Literal(micros: Long, _: DayTimeIntervalType), _) =>
+        (-MICROS_PER_DAY < micros && micros < MICROS_PER_DAY || addsDaysExactly(s)) &&
+          isExactShiftOf(start, column)
+      case s @ TimestampAddInterval(start, Literal(i: CalendarInterval, CalendarIntervalType), _) =>
+        i.months == 0 && (i.days == 0 || addsDaysExactly(s)) && isExactShiftOf(start, column)
       case _ => false
     }
     def conjuncts(e: Expression): Seq[Expression] = e match {
