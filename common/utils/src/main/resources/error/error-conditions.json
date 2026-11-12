@@ -3296,6 +3296,96 @@
     ],
     "sqlState" : "39000"
   },
+  "GAP_FILL_ARGUMENT_TYPE_MISMATCH" : {
+    "message" : [
+      "The <clause> expression type <argType> must match the time column type <timeType>."
+    ],
+    "sqlState" : "42K09"
+  },
+  "GAP_FILL_COLUMNS_NOT_IN_INPUT" : {
+    "message" : [
+      "Column <columnName> in the GAP FILL <clause> clause is not a visible column of the input relation."
+    ],
+    "sqlState" : "42703"
+  },
+  "GAP_FILL_CONSTANT_TYPE_MISMATCH" : {
+    "message" : [
+      "The CONSTANT value of type <valueType> cannot be cast to type <columnType> of FILL column <columnName>."
+    ],
+    "sqlState" : "42846"
+  },
+  "GAP_FILL_CORRELATED_INPUT" : {
+    "message" : [
+      "GAP FILL is not supported on an input that references an outer query."
+    ],
+    "sqlState" : "0A000"
+  },
+  "GAP_FILL_DUPLICATE_FILL_COLUMN" : {
+    "message" : [
+      "Column <columnName> appears multiple times in the GAP FILL FILL clause."
+    ],
+    "sqlState" : "42713"
+  },
+  "GAP_FILL_INVALID_DATE_BIN_WIDTH" : {
+    "message" : [
+      "The BIN WIDTH of a DATE time column must be a whole number of days, but got <binWidth>."
+    ],
+    "sqlState" : "22023"
+  },
+  "GAP_FILL_INVALID_FILL_COLUMN" : {
+    "message" : [
+      "Column <columnName> cannot be listed in FILL because it is the time column or a PARTITION BY column."
+    ],
+    "sqlState" : "42P10"
+  },
+  "GAP_FILL_INVALID_INTERVAL_TYPE" : {
+    "message" : [
+      "The <clause> expression must be of type \"INTERVAL DAY TO SECOND\", but got <inputType>."
+    ],
+    "sqlState" : "42K09"
+  },
+  "GAP_FILL_INVALID_PARTITION_COLUMN" : {
+    "message" : [
+      "Column <columnName> cannot be listed in PARTITION BY because it is the time column."
+    ],
+    "sqlState" : "42P10"
+  },
+  "GAP_FILL_INVALID_RANGE" : {
+    "message" : [
+      "The GAP FILL range has range_start <rangeStart> greater than range_end <rangeEnd>. GAP FILL requires range_start <= range_end."
+    ],
+    "sqlState" : "22023"
+  },
+  "GAP_FILL_LINEAR_TYPE_MISMATCH" : {
+    "message" : [
+      "LINEAR in GAP FILL requires a numeric column. Column <columnName> has type <columnType>."
+    ],
+    "sqlState" : "42K09"
+  },
+  "GAP_FILL_METADATA_COLUMN_NOT_SUPPORTED" : {
+    "message" : [
+      "Metadata column <columnName> cannot be used after GAP FILL. Select it as a column of the input relation before GAP FILL."
+    ],
+    "sqlState" : "0A000"
+  },
+  "GAP_FILL_REQUIRES_TOP_LEVEL_COLUMN" : {
+    "message" : [
+      "GAP FILL requires a top-level column, but <columnName> is a nested or computed field. Alias it to a top-level column in a select before GAP FILL."
+    ],
+    "sqlState" : "0A000"
+  },
+  "GAP_FILL_STREAMING_NOT_SUPPORTED" : {
+    "message" : [
+      "GAP FILL is not supported on streaming input."
+    ],
+    "sqlState" : "0A000"
+  },
+  "GAP_FILL_TIME_TYPE_MISMATCH" : {
+    "message" : [
+      "The time column in GAP FILL must be TIMESTAMP, TIMESTAMP_NTZ, DATE, or TIMESTAMP(9). Column <columnName> has type <columnType>."
+    ],
+    "sqlState" : "42K09"
+  },
   "GENERATED_COLUMN_WITH_DEFAULT_VALUE" : {
     "message" : [
       "A column cannot have both a default value and a generation expression but column <colName> has default value: (<defaultValue>) and generation expression: (<genExpr>)."
@@ -9690,6 +9780,21 @@
       "GAP_FILL" : {
         "message" : [
           "The GAP FILL relation operator is not yet supported."
+        ]
+      },
+      "GAP_FILL_FILL_METHOD_TYPE" : {
+        "message" : [
+          "<fillMethod> in GAP FILL for column <columnName> of type <columnType>."
+        ]
+      },
+      "GAP_FILL_PARTITION_KEY_TYPE" : {
+        "message" : [
+          "GAP FILL with PARTITION BY column <columnName> of type <columnType>."
+        ]
+      },
+      "GAP_FILL_TIMESTAMP_NANOS" : {
+        "message" : [
+          "GAP FILL with time column <columnName> of type <columnType>."
         ]
       },
       "GEOSPATIAL_DISABLED" : {

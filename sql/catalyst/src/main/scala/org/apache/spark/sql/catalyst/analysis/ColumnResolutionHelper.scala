@@ -85,6 +85,10 @@ trait ColumnResolutionHelper extends Logging with DataTypeErrorsBase {
                 (exprs, a)
               }
 
+            // Only partition columns can pass through GAP FILL, because it adds rows.
+            case g: Generate if g.generator.isInstanceOf[GapFillGenerator] =>
+              (exprs, g)
+
             case g: Generate =>
               (newExprs, g.copy(unrequiredChildIndex = Nil, child = newChild))
 
