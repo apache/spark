@@ -20,7 +20,8 @@
 name: GitHub Pages deployment
 
 on:
-  # Deploy the latest master documentation artifact once a day.
+  # Deploy once a day instead of on every push to master, to save CI resources.
+  # This runs after the daily docs image refresh in build_infra_images_cache.yml (04:00 UTC).
   schedule:
     - cron: '30 12 * * *'
   workflow_dispatch:
@@ -31,85 +32,53 @@ concurrency:
 
 jobs:
   docs:
-    name: Deploy documentation
+    name: Build and deploy documentation
     runs-on: ubuntu-latest
     permissions:
-      actions: read
       id-token: write
       pages: write
     environment:
       name: github-pages # https://github.com/actions/deploy-pages/issues/271
+    container:
+      image: ghcr.io/apache/spark/apache-spark-github-action-image-docs-cache:master-static
+    env:
+      SPARK_TESTING: 1 # Reduce some noise in the logs
+      RELEASE_VERSION: 'In-Progress'
+      LC_ALL: C.UTF-8
+      LANG: C.UTF-8
     if: github.repository == 'apache/spark'
     steps:
-      - name: Find latest documentation preview
-        id: preview
-        uses: actions/github-script@v9
+      - name: Checkout Spark repository
+        uses: actions/checkout@v7
         with:
-          script: |
-            let latest;
-            for await (const {data} of github.paginate.iterator(
-              github.rest.actions.listArtifactsForRepo,
-              {...context.repo, per_page: 100}
-            )) {
-              for (const artifact of data) {
-                if (artifact.name.startsWith('docs-preview-master-') && !artifact.expired &&
-                    artifact.workflow_run?.head_branch === 'master' &&
-                    (!latest || artifact.created_at > latest.created_at ||
-                     (artifact.created_at === latest.created_at && artifact.id > latest.id))) {
-                  latest = artifact;
-                }
-              }
-            }
-            if (!latest) {
-              core.setFailed('No unexpired master documentation preview artifact is available.');
-              return;
-            }
-            core.setOutput('artifact-id', latest.id);
-            core.setOutput('run-id', latest.workflow_run.id);
-            core.info(`Deploying ${latest.name} built at ${latest.created_at}`);
-      - name: Download documentation preview
-        uses: actions/download-artifact@v8
-        with:
-          artifact-ids: ${{ steps.preview.outputs.artifact-id }}
-          path: .
-          github-token: ${{ secrets.GITHUB_TOKEN }}
-          run-id: ${{ steps.preview.outputs.run-id }}
-      - name: Extract documentation preview
-        run: tar xjf site-*.tar.bz2
-      - name: Prepare documentation preview
-        env:
-          RELEASE_VERSION: In-Progress
+          repository: apache/spark
+          ref: 'master'
+      - name: Add GITHUB_WORKSPACE to git trust safe.directory
         run: |
-          python3 - <<'PYTHON'
-          from pathlib import Path
-          import os
-          import re
-
-          version = os.environ['RELEASE_VERSION']
-          replacement = rf'\g<1>{version}\2'
-
-          def prepare(path, patterns):
-              original = path.read_text(encoding='utf-8')
-              preview = original
-              for pattern in patterns:
-                  preview = re.sub(pattern, replacement, preview)
-              if preview != original:
-                  path.write_text(preview, encoding='utf-8')
-
-          patterns = (
-              r'(<title>.* - Spark )[^<]+( Documentation</title>)',
-              r'(<span class="version">)[^<]+(</span>)',
-              r"""('facetFilters':\s*\[\s*["']version:)[^"']+(["'])""",
-              r'(<title>[^<]*PySpark )[^<]+( documentation</title>)',
-              r"""(DOCUMENTATION_OPTIONS\.theme_switcher_version_match\s*=\s*['"])[^'"]+(['"])""",
-          )
-          site = Path('docs/_site')
-          for path in site.rglob('*.html'):
-              prepare(path, patterns)
-          options = site / 'api/python/_static/documentation_options.js'
-          if options.is_file():
-              prepare(options, (r"""(\bVERSION:\s*['"])[^'"]*(['"])""",))
-          PYTHON
+          git config --global --add safe.directory ${GITHUB_WORKSPACE}
+      - name: Free up disk space
+        run: ./dev/free_disk_space_container
+      - name: Install Java 21
+        uses: actions/setup-java@v6
+        with:
+          distribution: zulu
+          java-version: 21
+      - name: Install dependencies for documentation generation
+        run: |
+          # Keep the version of Bundler here in sync with the following locations:
+          #   - dev/create-release/spark-rm/Dockerfile
+          #   - docs/README.md
+          gem install bundler -v 2.4.22
+          cd docs
+          bundle install --retry=100
+      - name: Run documentation build
+        run: |
+          sed -i".tmp1" 's/SPARK_VERSION:.*$/SPARK_VERSION: '"$RELEASE_VERSION"'/g' docs/_config.yml
+          sed -i".tmp2" 's/SPARK_VERSION_SHORT:.*$/SPARK_VERSION_SHORT: '"$RELEASE_VERSION"'/g' docs/_config.yml
+          sed -i".tmp3" "s/'facetFilters':.*$/'facetFilters': [\"version:$RELEASE_VERSION\"]/g" docs/_config.yml
+          sed -i".tmp4" 's/__version__: str = .*$/__version__: str = "'"$RELEASE_VERSION"'"/' python/pyspark/version.py
+          cd docs
+          SKIP_RDOC=1 bundle exec jekyll build
       - name: Setup Pages
         uses: actions/configure-pages@v6
       - name: Upload artifact

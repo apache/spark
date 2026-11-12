@@ -40,28 +40,6 @@ Without these benefits, some GitHub Actions patterns become more difficult or im
 
 If in the future GitHub somehow allows workflows to run `on: pull_request` while counting those jobs against the forks' limits instead of ours, that would help eliminate various distortions of our build caused by the move away from `on: pull_request`. We would get the best functionality from GitHub Actions without hitting job run limits.
 
-## Documentation previews
-
-Documentation builds on `apache/spark` upload the generated site as a
-`docs-preview-<branch>-<sha>-<attempt>` artifact, retained for one day. The archive
-is named `site-<sha>-<attempt>.tar.bz2`. Names include the checked-out commit hash
-and workflow run attempt so reruns can upload without replacing existing artifacts.
-Change-based skipping of Python and R API docs applies only to fork builds.
-
-CI builds keep their source versions unchanged. Upstream builds export
-`SKIP_RDOC=1` before the complete Jekyll build; forks build R API documentation
-when SparkR changes. The initial build without API docs still checks that the
-documentation builds independently of generated API docs.
-
-The Pages workflow selects the unexpired master preview artifact with the newest
-creation date, using its artifact ID to download that exact build. Commit hashes
-do not determine artifact order. After extraction, Pages applies the `In-Progress`
-Spark and PySpark version labels, search filter, and PySpark version-switcher
-settings to the generated site. Pages runs daily or on manual dispatch without
-rebuilding the documentation. It can use a completed documentation build even if
-another job in the same CI run fails. If no preview artifact is available, Pages
-fails and leaves the existing deployment in place.
-
 ## Composite actions
 
 If you find yourself repeating the same set of instructions across multiple jobs, extract them into a reusable [composite action] under [`actions/`](../actions/).
