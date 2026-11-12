@@ -16,8 +16,6 @@
  */
 package org.apache.spark.sql.execution.datasources.v2.parquet
 
-import scala.jdk.CollectionConverters._
-
 import org.apache.hadoop.fs.FileStatus
 
 import org.apache.spark.sql.SparkSession
@@ -41,7 +39,7 @@ case class ParquetTable(
     ParquetScanBuilder(sparkSession, fileIndex, schema, dataSchema, mergedOptions(options))
 
   override def inferSchema(files: Seq[FileStatus]): Option[StructType] =
-    ParquetUtils.inferSchema(sparkSession, options.asScala.toMap, files)
+    ParquetUtils.inferSchema(sparkSession, schemaInferenceOptions, files)
 
   override def newWriteBuilder(info: LogicalWriteInfo): WriteBuilder = {
     new WriteBuilder {

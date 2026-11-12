@@ -49,20 +49,32 @@ import org.apache.spark.util.Utils
 object DataSourceUtils extends PredicateHelper {
 
   /**
-   * Merges write options into a Hadoop configuration. Keys "path" and "paths" are excluded.
-   * This ensures per-write options are present in the conf even if they were added to the
-   * options map after the Hadoop conf was originally created.
+   * Merges data source options into a Hadoop configuration. Keys "path" and "paths" are excluded.
+   * Data Source V2 callers pass a map with original key casing (`asCaseSensitiveMap`), while
+   * Data Source V1 callers pass a [[CaseInsensitiveMap]] that is unwrapped to `originalMap` here
+   * unless `legacyLowercaseKeys` is enabled. When `originalMap` contains multiple spellings of
+   * the same key that differ only in case, only the entry matching the case-insensitive lookup is
+   * set so the Hadoop configuration agrees with `CaseInsensitiveMap.get`.
    */
-  def mergeWriteOptionsIntoHadoopConf(
-      options: Map[String, String], conf: Configuration): Unit = {
-    // CaseInsensitiveMap.iterator yields lowercased keys, but Hadoop Configuration is
-    // case-sensitive. Use the original map to preserve the user's key casing.
-    val rawOptions = options match {
-      case ci: CaseInsensitiveMap[String @unchecked] => ci.originalMap
+  def mergeOptionsIntoHadoopConf(
+      options: Map[String, String],
+      conf: Configuration,
+      legacyLowercaseKeys: Boolean = false): Unit = {
+    val rawOptions: Iterable[(String, String)] = options match {
+      case ci: CaseInsensitiveMap[String @unchecked] if !legacyLowercaseKeys =>
+        if (ci.originalMap.size == ci.keyLowerCasedMap.size) {
+          ci.originalMap
+        } else {
+          // Deduplicate case-colliding keys in originalMap, keeping the last spelling per
+          // lowercased key to match keyLowerCasedMap.
+          ci.originalMap.foldLeft(Map.empty[String, (String, String)]) { case (acc, (k, v)) =>
+            acc.updated(k.toLowerCase(Locale.ROOT), (k, v))
+          }.values
+        }
       case other => other
     }
     rawOptions.foreach { case (k, v) =>
-      if ((v ne null) && k != "path" && k != "paths") {
+      if ((v ne null) && !k.equalsIgnoreCase("path") && !k.equalsIgnoreCase("paths")) {
         conf.set(k, v)
       }
     }
@@ -70,7 +82,7 @@ object DataSourceUtils extends PredicateHelper {
 
   /**
    * Sets a key in the Hadoop configuration only if it is not already present. Per-write
-   * options should be merged into the conf first (via [[mergeWriteOptionsIntoHadoopConf]]),
+   * options should be merged into the conf first (via [[mergeOptionsIntoHadoopConf]]),
    * so a non-null value means the user explicitly set a per-write option which should take
    * precedence over the session-level SQLConf default.
    */

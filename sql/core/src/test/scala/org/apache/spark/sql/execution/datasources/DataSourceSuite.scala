@@ -27,6 +27,8 @@ import org.scalatest.PrivateMethodTester
 
 import org.apache.spark.{SparkIllegalArgumentException, SparkUnsupportedOperationException}
 import org.apache.spark.sql.{AnalysisException, SaveMode}
+import org.apache.spark.sql.catalyst.util.CaseInsensitiveMap
+import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.util.Utils
 
@@ -239,6 +241,43 @@ class DataSourceSuite extends SharedSparkSession with PrivateMethodTester {
       condition = "_LEGACY_ERROR_TEMP_2050",
       parameters = Map("paths" -> "/path1, /path2"))
     )
+  }
+
+  test("SPARK-60887: newHadoopConfWithOptions preserves key casing for CaseInsensitiveMap") {
+    val options = CaseInsensitiveMap(Map(
+      "fs.azure.skipUserGroupMetadataDuringInitialization" -> "true",
+      "Path" -> "/tmp/a",
+      "PATHS" -> "/tmp/b"
+    ))
+    val conf = spark.sessionState.newHadoopConfWithOptions(options)
+    assert(conf.get("fs.azure.skipUserGroupMetadataDuringInitialization") === "true")
+    assert(conf.get("fs.azure.skipusergroupmetadataduringinitialization") === null)
+    assert(conf.get("path") === null)
+    assert(conf.get("Path") === null)
+    assert(conf.get("paths") === null)
+    assert(conf.get("PATHS") === null)
+
+    val plainConf = spark.sessionState.newHadoopConfWithOptions(Map(
+      "fs.azure.skipUserGroupMetadataDuringInitialization" -> "true",
+      "Path" -> "/tmp/a",
+      "PATHS" -> "/tmp/b"
+    ))
+    assert(plainConf.get("fs.azure.skipUserGroupMetadataDuringInitialization") === "true")
+    assert(plainConf.get("Path") === null)
+    assert(plainConf.get("PATHS") === null)
+
+    val dupCaseOptions = CaseInsensitiveMap(new scala.collection.immutable.ListMap() +
+      ("parquet.filter.columnindex.enabled" -> "true") +
+      ("PARQUET.FILTER.COLUMNINDEX.ENABLED" -> "false"))
+    val dupConf = spark.sessionState.newHadoopConfWithOptions(dupCaseOptions)
+    assert(dupConf.get("parquet.filter.columnindex.enabled") === null)
+    assert(dupConf.get("PARQUET.FILTER.COLUMNINDEX.ENABLED") === "false")
+
+    withSQLConf(SQLConf.LEGACY_LOWERCASE_DATA_SOURCE_OPTIONS_IN_HADOOP_CONF.key -> "true") {
+      val legacyConf = spark.sessionState.newHadoopConfWithOptions(options)
+      assert(legacyConf.get("fs.azure.skipUserGroupMetadataDuringInitialization") === null)
+      assert(legacyConf.get("fs.azure.skipusergroupmetadataduringinitialization") === "true")
+    }
   }
 }
 

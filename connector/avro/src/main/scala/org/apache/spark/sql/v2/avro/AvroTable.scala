@@ -16,8 +16,6 @@
  */
 package org.apache.spark.sql.v2.avro
 
-import scala.jdk.CollectionConverters._
-
 import org.apache.hadoop.fs.FileStatus
 
 import org.apache.spark.sql.SparkSession
@@ -40,7 +38,7 @@ case class AvroTable(
     AvroScanBuilder(sparkSession, fileIndex, schema, dataSchema, mergedOptions(options))
 
   override def inferSchema(files: Seq[FileStatus]): Option[StructType] =
-    AvroUtils.inferSchema(sparkSession, options.asScala.toMap, files)
+    AvroUtils.inferSchema(sparkSession, schemaInferenceOptions, files)
 
   override def newWriteBuilder(info: LogicalWriteInfo): WriteBuilder = {
     new WriteBuilder {

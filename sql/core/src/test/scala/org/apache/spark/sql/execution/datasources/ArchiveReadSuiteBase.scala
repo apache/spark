@@ -430,10 +430,19 @@ trait ArchiveReadSuiteBase extends QueryTest with SharedSparkSession {
           s"keep/data.$fileExtension" -> encodeFile(sampleDf((1, "keep"))),
           s"skip/data.$fileExtension" ->
             encodeFile(Seq((2, "skip", "x")).toDF("id", "name", "extra"))))
-        val schema = inferredSchema(
-          Seq(archive.getCanonicalPath), Map("archivePathFilter" -> "keep/*"))
-        assert(!schema.fieldNames.contains("extra"),
-          s"inference read a filtered-out entry; got $schema")
+        val optionSets = if (inferenceSamplesOneFile) {
+          Seq(
+            Map("archivePathFilter" -> "keep/*"),
+            Map("archivePathFilter" -> "keep/*", "mergeSchema" -> "true"),
+            Map("archivepathfilter" -> "keep/*", "mergeSchema" -> "true"))
+        } else {
+          Seq(Map("archivePathFilter" -> "keep/*"))
+        }
+        optionSets.foreach { opts =>
+          val schema = inferredSchema(Seq(archive.getCanonicalPath), opts)
+          assert(!schema.fieldNames.contains("extra"),
+            s"inference read a filtered-out entry ($opts); got $schema")
+        }
       }
     }
 

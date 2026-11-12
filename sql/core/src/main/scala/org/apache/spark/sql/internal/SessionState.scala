@@ -36,7 +36,7 @@ import org.apache.spark.sql.classic.{SparkSession, StreamingCheckpointManager, S
 import org.apache.spark.sql.connector.catalog.CatalogManager
 import org.apache.spark.sql.execution._
 import org.apache.spark.sql.execution.adaptive.AdaptiveRulesHolder
-import org.apache.spark.sql.execution.datasources.DataSourceManager
+import org.apache.spark.sql.execution.datasources.{DataSourceManager, DataSourceUtils}
 import org.apache.spark.sql.util.ExecutionListenerManager
 import org.apache.spark.util.{DependencyUtils, Utils}
 
@@ -120,11 +120,10 @@ private[sql] class SessionState(
 
   def newHadoopConfWithOptions(options: Map[String, String]): Configuration = {
     val hadoopConf = newHadoopConf()
-    options.foreach { case (k, v) =>
-      if ((v ne null) && k != "path" && k != "paths") {
-        hadoopConf.set(k, v)
-      }
-    }
+    DataSourceUtils.mergeOptionsIntoHadoopConf(
+      options,
+      hadoopConf,
+      conf.getConf(SQLConf.LEGACY_LOWERCASE_DATA_SOURCE_OPTIONS_IN_HADOOP_CONF))
     hadoopConf
   }
 
