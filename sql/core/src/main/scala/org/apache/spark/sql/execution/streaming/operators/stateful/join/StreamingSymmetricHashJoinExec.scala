@@ -762,9 +762,13 @@ case class StreamingSymmetricHashJoinExec(
           val upperBoundMs = StreamingJoinHelper.getStateValueWatermark(
             AttributeSet(thisEventTime), AttributeSet(otherEventTime), condition.full, Some(0L))
 
+          // The solver returns whole milliseconds, truncated toward zero, so a bound that is
+          // not a whole number of milliseconds can move inward by less than 1 ms: for
+          // rightTime > leftTime - INTERVAL 500 MICROSECONDS the lower offset of -0.5 ms
+          // becomes 0. Widen each end by 1 ms.
           (lowerBoundMs, upperBoundMs) match {
             case (Some(lower), Some(upper)) =>
-              Some((lower * 1000L, -upper * 1000L)) // ms -> us
+              Some(((lower - 1) * 1000L, (-upper + 1) * 1000L)) // ms -> us
             case _ => None
           }
         }
