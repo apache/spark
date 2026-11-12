@@ -26,10 +26,9 @@ import org.apache.spark.sql.connector.expressions.Expression;
  * Connectors can define generated columns using either a SQL string (Spark SQL dialect) or a more
  * portable connector {@link Expression expression}, whose semantics follow the ANSI SQL standard.
  * <p>
- * Spark computes a generated value on a write only from the SQL string, so a column without one is
- * not auto-filled. To check a provided value, Spark parses the SQL string if one is provided, also
- * when an expression is provided. Otherwise, Spark converts the given expression to its internal
- * representation.
+ * To compute a missing generated value or check a provided value, Spark first attempts to convert
+ * the connector expression to its internal representation. If the expression is absent or cannot
+ * be converted, Spark falls back to parsing the SQL string, if provided.
  *
  * @since 4.3.0
  */

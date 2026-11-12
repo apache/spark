@@ -17,8 +17,9 @@
 
 package org.apache.spark.sql.catalyst.util
 
-import org.apache.spark.sql.catalyst.expressions.{Attribute, AttributeReference}
+import org.apache.spark.sql.catalyst.expressions.{Attribute, AttributeReference, Expression, V2ExpressionUtils}
 import org.apache.spark.sql.catalyst.plans.logical.ColumnDefinition
+import org.apache.spark.sql.catalyst.util.TypeUtils.toSQLId
 import org.apache.spark.sql.connector.catalog.{Column, GenerationExpression, Identifier, Table,
   TableCapability, TableCatalog, TableCatalogCapability}
 import org.apache.spark.sql.errors.QueryCompilationErrors
@@ -132,31 +133,28 @@ object GeneratedColumn {
   }
 
   /**
-   * Returns `relation`'s output with every generated column's generation expression recorded in
-   * the attribute's metadata, which is where [[TableOutputResolver]] looks when it auto-fills the
-   * generated columns a write does not provide a value for.
-   *
-   * Generation expressions are internal metadata: they should neither surface in a DataFrame's
-   * schema nor propagate into tables created from it. A table's V2 columns are the persisted form
-   * and the source of truth, so the write path copies the expression into plan attribute metadata
-   * only for as long as resolving the write takes.
-   *
-   * The output is returned unchanged if the table does not ask Spark to handle generated columns.
+   * Converts a generation expression for both auto-fill and validation. Try the modeled expression
+   * first, falling back to SQL text when it is absent or cannot be converted, as defaults and CHECK
+   * constraints do.
    */
-  def attachGenerationExpressions(relation: DataSourceV2Relation): Seq[AttributeReference] = {
-    if (!supportsGeneratedColumnsOnWrite(relation.table)) {
-      return relation.output
-    }
-    val genExprs = relation.table.columns()
-      .flatMap(col => Option(col.generationExpression()).map(col.name -> _))
-      .toMap
-    relation.output.map { attr =>
-      genExprs.get(attr.name) match {
-        case Some(genExpr) =>
-          withMetadataEntry(attr, GENERATION_EXPRESSION_METADATA_KEY, genExpr)
-        case None => attr
+  def toCatalyst(
+      relation: DataSourceV2Relation,
+      colName: String,
+      genExpr: GenerationExpression,
+      readSql: String => Expression = StoredExpressionText.parse): Expression = {
+    Option(genExpr.getExpression)
+      .flatMap(V2ExpressionUtils.toCatalyst)
+      .orElse(Option(genExpr.getSql).map(readSql))
+      .getOrElse {
+        val operation = s"a value for the generated column ${toSQLId(colName)}, because " +
+          s"Spark cannot convert its expression ${genExpr.getExpression}"
+        // A relation of a TableProvider has no catalog and no identifier.
+        throw ((relation.catalog, relation.identifier) match {
+          case (Some(catalog), Some(ident)) =>
+            QueryCompilationErrors.unsupportedTableOperationError(catalog, ident, operation)
+          case _ => QueryCompilationErrors.unsupportedTableOperationError(relation.table, operation)
+        })
       }
-    }
   }
 
   /**

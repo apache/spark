@@ -20,10 +20,11 @@ package org.apache.spark.sql.catalyst.analysis
 import java.util.{Locale, Set => JSet}
 
 import org.apache.spark.sql.AnalysisException
+import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.catalog.{InMemoryCatalog, SessionCatalog}
 import org.apache.spark.sql.catalyst.dsl.expressions._
 import org.apache.spark.sql.catalyst.dsl.plans._
-import org.apache.spark.sql.catalyst.expressions.{Alias, ArrayTransform, AttributeReference, Cast, CreateNamedStruct, GetStructField, If, IsNull, LessThanOrEqual, Literal}
+import org.apache.spark.sql.catalyst.expressions.{Alias, ArrayTransform, AttributeReference, BindReferences, Cast, CreateNamedStruct, GetStructField, If, IsNull, LessThanOrEqual, Literal}
 import org.apache.spark.sql.catalyst.expressions.objects.AssertNotNull
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.rules.Rule
@@ -33,10 +34,39 @@ import org.apache.spark.sql.connector.catalog.{CatalogManager, Column, DefaultCa
 import org.apache.spark.sql.execution.datasources.v2.DataSourceV2Relation
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.internal.SQLConf.StoreAssignmentPolicy
+import org.apache.spark.sql.internal.connector.ColumnImpl
 import org.apache.spark.sql.types._
 import org.apache.spark.sql.util.CaseInsensitiveStringMap
 
 class V2ResolveOutputRelationSuite extends AnalysisTest {
+
+  test("write output resolution reads the legacy SQL-only generation expression getter") {
+    val legacyColumn = new ColumnImpl(
+        name = "b",
+        dataType = IntegerType,
+        nullable = true,
+        comment = null,
+        defaultValue = null,
+        columnGenerationExpression = null,
+        identityColumnSpec = null,
+        metadataInJSON = null) {
+      override def generationExpression(): String = "a + 1"
+    }
+    val table = new Table {
+      override def name(): String = "generated"
+      override def columns(): Array[Column] = Array(Column.create("a", IntegerType), legacyColumn)
+      override def capabilities(): JSet[TableCapability] =
+        JSet.of(TableCapability.GENERATE_COLUMN_VALUES_ON_WRITE)
+    }
+    val target = DataSourceV2Relation.create(table, None, None)
+    val input = LocalRelation(AttributeReference("a", IntegerType)())
+    val write = getAnalyzer.execute(AppendData.byName(target, input)).asInstanceOf[AppendData]
+    assert(write.query.resolved)
+    assert(write.query.output.map(_.name) == Seq("a", "b"))
+    val projection = write.query.asInstanceOf[Project]
+    val generated = BindReferences.bindReference(projection.projectList(1), projection.child.output)
+    assert(generated.eval(InternalRow(1)) == 2)
+  }
 
   test("ResolveOutputRelation preserves tags on a rebuilt DSv2 write target") {
     val table = new Table {

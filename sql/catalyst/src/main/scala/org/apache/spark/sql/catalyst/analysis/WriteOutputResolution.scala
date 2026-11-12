@@ -18,9 +18,10 @@
 package org.apache.spark.sql.catalyst.analysis
 
 import org.apache.spark.sql.catalyst.analysis.TableOutputResolver.DefaultValueFillMode._
-import org.apache.spark.sql.catalyst.expressions.{Expression, NamedExpression}
+import org.apache.spark.sql.catalyst.expressions.{Attribute, Expression, NamedExpression}
 import org.apache.spark.sql.catalyst.plans.logical.{LogicalPlan, Project, V2WriteCommand}
 import org.apache.spark.sql.catalyst.util.{CharVarcharUtils, GeneratedColumn, StoredExpressionText}
+import org.apache.spark.sql.connector.catalog.GenerationExpression
 import org.apache.spark.sql.execution.datasources.v2.{DataSourceV2Relation, ExtractV2Table}
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.internal.connector.{SchemaAlignmentConfig, SupportsConfigurableSchemaAlignment}
@@ -46,23 +47,31 @@ private[sql] object WriteOutputResolution {
     val defaultValueFillMode =
       if (conf.coerceInsertNestedTypes && v2Write.schemaEvolutionEnabled) RECURSE
       else FILL
-    // Generation expressions live on the table's columns, so attach them to the expected
-    // output for TableOutputResolver, which auto-fills the generated columns the query is
-    // missing.
-    val expected = v2Write.table match {
-      case r: DataSourceV2Relation => GeneratedColumn.attachGenerationExpressions(r)
-      case _ => v2Write.table.output
-    }
     val schemaAlignmentConfig = v2Write.table match {
       case ExtractV2Table(table: SupportsConfigurableSchemaAlignment) =>
         table.schemaAlignmentConfig()
       case _ => SchemaAlignmentConfig.DEFAULT
     }
-    def resolveOutput(readGenerationExpr: String => Expression) =
+    def resolveOutput(readSql: String => Expression) = {
+      // Read directly from the V2 columns so modeled expressions do not pass through SQL text
+      // or schema metadata. Only tables with the write capability ask Spark to generate values.
+      val readGenerationExpr: Attribute => Option[() => Expression] = v2Write.table match {
+        case r: DataSourceV2Relation if GeneratedColumn.supportsGeneratedColumnsOnWrite(r.table) =>
+          val expressions = r.table.columns().flatMap { col =>
+            Option(col.columnGenerationExpression())
+              .orElse(Option(col.generationExpression()).map(new GenerationExpression(_)))
+              .map(col.name -> _)
+          }.toMap
+          attr => expressions.get(attr.name).map { expr =>
+            () => GeneratedColumn.toCatalyst(r, attr.name, expr, readSql)
+          }
+        case _ => _ => None
+      }
       TableOutputResolver.resolveOutputColumnsWithGeneratedInfo(
-        v2Write.table.name, expected, v2Write.query, v2Write.isByName, conf,
+        v2Write.table.name, v2Write.table.output, v2Write.query, v2Write.isByName, conf,
         defaultValueFillMode, schemaAlignmentConfig.ansiStoreAssignmentCastCheck(),
         readGenerationExpr)
+    }
     val (projection, autoFilledGenCols) = resolveOutput(StoredExpressionText.parse)
     if (projection != v2Write.query) {
       val cleanedTable = v2Write.table match {
