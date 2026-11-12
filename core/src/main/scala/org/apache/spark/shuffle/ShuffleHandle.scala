@@ -33,8 +33,12 @@ abstract class ShuffleHandle(val shuffleId: Int) extends Serializable {
    * remote shuffle service). If so, executor or worker loss keeps its map output registered.
    *
    * Overrides `ShuffleDriverComponents.supportsReliableStorage()` for this shuffle. Empty (the
-   * default) falls back to that flag. The driver reads it once, when it registers the shuffle.
-   * A pipelined shuffle must leave it empty.
+   * default) falls back to that flag. With the flag on, an empty value marks the shuffle reliable,
+   * so worker removal keeps its map output (dropping only push-merge results), and a map-output
+   * FetchFailed clears only the failed shuffle. A pipelined shuffle must leave it empty.
+   *
+   * The driver reads it once, when it registers the shuffle and before any map output is
+   * written. Later loss handling and task-set checks use that recorded value.
    *
    * TODO(SPARK-59806, SPARK-59807): executor retirement (`SparkContext.executorHoldSupported`,
    * `ExecutorAllocationManager`) still reads only the global flag.
