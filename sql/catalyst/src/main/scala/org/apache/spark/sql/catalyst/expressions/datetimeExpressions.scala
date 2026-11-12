@@ -2548,7 +2548,10 @@ case class FromUnixTime(sec: Expression, format: Expression, timeZoneId: Option[
  * Returns the last day of the month which the date belongs to.
  */
 @ExpressionDescription(
-  usage = "_FUNC_(date) - Returns the last day of the month which the date belongs to.",
+  usage = """_FUNC_(date) - Returns the last day of the month which the date belongs to.
+      If that day is later than the maximum DATE `+5881580-07-11`, the function fails with
+      `DATETIME_OVERFLOW` regardless of `spark.sql.ansi.enabled`.
+      """,
   arguments = """
     Arguments:
       * date - The date whose month's last day is returned.
@@ -2600,6 +2603,7 @@ case class LastDay(startDate: Expression)
       The function returns NULL if at least one of the input parameters is NULL.
       When both of the input parameters are not NULL and day_of_week is an invalid input,
       the function throws SparkIllegalArgumentException if `spark.sql.ansi.enabled` is set to true, otherwise NULL.
+      If the result is later than the maximum DATE `+5881580-07-11`, the function fails with `DATETIME_OVERFLOW` regardless of `spark.sql.ansi.enabled`.
       """,
   arguments = """
     Arguments:
@@ -2639,6 +2643,7 @@ case class NextDay(
       DateTimeExpressionUtils.getNextDateExact(
         start.asInstanceOf[Int], dayOfW.asInstanceOf[UTF8String])
     } else {
+      // NULL only for an invalid day of week; DATETIME_OVERFLOW propagates in both modes.
       try {
         val dow = DateTimeUtils.getDayOfWeekFromString(dayOfW.asInstanceOf[UTF8String])
         DateTimeUtils.getNextDateForDayOfWeek(start.asInstanceOf[Int], dow)
@@ -2656,9 +2661,9 @@ case class NextDay(
       sd: String,
       dowS: String): String = {
     if (failOnError) {
-      // In ANSI mode the only exception (SparkIllegalArgumentException for an
-      // invalid day-of-week) must propagate, so the previous catch merely
-      // rethrew it. Delegate to the helper and drop the no-op try/catch.
+      // In ANSI mode an invalid day-of-week (SparkIllegalArgumentException) must
+      // propagate like the overflow error, so the previous catch merely rethrew
+      // it. Delegate to the helper and drop the no-op try/catch.
       val utils = classOf[DateTimeExpressionUtils].getName
       s"${ev.value} = $utils.getNextDateExact($sd, $dowS);"
     } else {
@@ -3593,6 +3598,7 @@ trait TruncInstant extends BinaryExpression with ImplicitCastInputTypes {
 @ExpressionDescription(
   usage = """
     _FUNC_(date, fmt) - Returns `date` with the time portion of the day truncated to the unit specified by the format model `fmt`.
+      If the result is earlier than the minimum DATE `-5877641-06-23`, the function fails with `DATETIME_OVERFLOW` regardless of `spark.sql.ansi.enabled`.
   """,
   arguments = """
     Arguments:
