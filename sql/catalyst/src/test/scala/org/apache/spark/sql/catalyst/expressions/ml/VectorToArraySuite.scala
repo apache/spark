@@ -18,7 +18,9 @@
 package org.apache.spark.sql.catalyst.expressions.ml
 
 import org.apache.spark.SparkFunSuite
-import org.apache.spark.sql.catalyst.InternalRow
+import org.apache.spark.sql.AnalysisException
+import org.apache.spark.sql.catalyst.{FunctionIdentifier, InternalRow}
+import org.apache.spark.sql.catalyst.analysis.FunctionRegistry
 import org.apache.spark.sql.catalyst.expressions.{BoundReference, ExpressionEvalHelper, Literal, UnsafeArrayData, UnwrapUDT}
 import org.apache.spark.sql.types._
 
@@ -91,6 +93,43 @@ class VectorToArraySuite extends SparkFunSuite with ExpressionEvalHelper {
       val expression = VectorToArray(
         BoundReference(0, inputType, nullable = true), elementType)
       assert(expression.checkInputDataTypes().isFailure)
+    }
+  }
+
+  test("vector to array is registered only as an internal function") {
+    val name = FunctionIdentifier("vector_to_array")
+    val input = BoundReference(0, new VectorToArrayTestUDT, nullable = true)
+    val vector = InternalRow(1.toByte, null, null,
+      UnsafeArrayData.fromPrimitiveArray(Array(1.1, -2.5)))
+    assert(!FunctionRegistry.builtin.functionExists(name))
+    for ((dtype, elementType) <- Seq("float64" -> DoubleType, "float32" -> FloatType)) {
+      val expression = FunctionRegistry.internal.lookupFunction(name, Seq(input, Literal(dtype)))
+        .asInstanceOf[VectorToArray]
+      assert(expression.child === UnwrapUDT(input))
+      assert(expression.dataType === ArrayType(elementType, containsNull = false))
+      val expected = if (elementType == FloatType) Seq(1.1f, -2.5f) else Seq(1.1, -2.5)
+      checkEvaluation(expression, expected, InternalRow(vector))
+    }
+  }
+
+  test("internal vector to array validates dtype and argument count") {
+    val name = FunctionIdentifier("vector_to_array")
+    val input = BoundReference(0, new VectorToArrayTestUDT, nullable = true)
+    for (arguments <- Seq(Seq.empty, Seq(input), Seq(input, Literal("float64"), Literal(1)))) {
+      val error = intercept[AnalysisException] {
+        FunctionRegistry.internal.lookupFunction(name, arguments)
+      }
+      assert(error.getCondition === "WRONG_NUM_ARGS.WITHOUT_SUGGESTION")
+    }
+    for ((dtype, condition) <- Seq(
+        Literal("float16") -> "INVALID_PARAMETER_VALUE.DTYPE",
+        Literal(1) -> "INVALID_PARAMETER_VALUE.STRING",
+        BoundReference(1, StringType, nullable = false) ->
+          "INVALID_PARAMETER_VALUE.STRING")) {
+      val error = intercept[AnalysisException] {
+        FunctionRegistry.internal.lookupFunction(name, Seq(input, dtype))
+      }
+      assert(error.getCondition === condition)
     }
   }
 

@@ -21,13 +21,11 @@ import org.apache.spark.ml.stat._
 import org.apache.spark.sql.{SparkSessionExtensions, SparkSessionExtensionsProvider}
 import org.apache.spark.sql.catalyst.FunctionIdentifier
 import org.apache.spark.sql.catalyst.analysis.FunctionRegistry
-import org.apache.spark.sql.catalyst.expressions.{Expression, StringLiteral, UnwrapUDT}
-import org.apache.spark.sql.catalyst.expressions.ml.VectorToArray
+import org.apache.spark.sql.catalyst.expressions.Expression
 import org.apache.spark.sql.classic.UserDefinedFunctionUtils.toScalaUDF
 import org.apache.spark.sql.errors.QueryCompilationErrors
 import org.apache.spark.sql.expressions.{SparkUserDefinedFunction, UserDefinedFunction}
 import org.apache.spark.sql.functions.udf
-import org.apache.spark.sql.types.{DoubleType, FloatType}
 
 /**
  * Register ML vector conversion functions in the internal function registry.
@@ -45,19 +43,6 @@ object InternalFunctionRegistration {
   private def registerFunction(name: String)(builder: Seq[Expression] => Expression): Unit = {
     FunctionRegistry.internal.registerFunction(
       FunctionIdentifier(name), builder, "internal")
-  }
-
-  registerFunction("vector_to_array") {
-    case Seq(input, StringLiteral("float64")) =>
-      VectorToArray(UnwrapUDT(input), DoubleType)
-    case Seq(input, StringLiteral("float32")) =>
-      VectorToArray(UnwrapUDT(input), FloatType)
-    case Seq(_, invalid @ StringLiteral(_)) =>
-      throw QueryCompilationErrors.invalidParameter("DTYPE", "vector_to_array", "dtype", invalid)
-    case Seq(_, invalid) =>
-      throw QueryCompilationErrors.invalidStringParameter("vector_to_array", "dtype", invalid)
-    case exprs =>
-      throw QueryCompilationErrors.wrongNumArgsError("vector_to_array", "2", exprs.size)
   }
 
   private val arrayToVectorUdf = udf { array: Seq[Double] =>

@@ -18,8 +18,9 @@
 package org.apache.spark.sql.catalyst.expressions.ml
 
 import org.apache.spark.sql.catalyst.analysis.TypeCheckResult
-import org.apache.spark.sql.catalyst.expressions.{Cast, EqualTo, Expression, GetStructField, If, Literal, RuntimeReplaceable}
+import org.apache.spark.sql.catalyst.expressions.{Cast, EqualTo, Expression, GetStructField, If, Literal, RuntimeReplaceable, StringLiteral, UnwrapUDT}
 import org.apache.spark.sql.catalyst.trees.UnaryLike
+import org.apache.spark.sql.errors.QueryCompilationErrors
 import org.apache.spark.sql.types._
 
 /**
@@ -31,6 +32,10 @@ case class VectorToArray(child: Expression, elementType: DataType)
 
   require(elementType == DoubleType || elementType == FloatType,
     "VectorToArray requires a double or float element type.")
+
+  def this(input: Expression, dtype: Expression) = {
+    this(UnwrapUDT(input), VectorToArray.elementType(dtype))
+  }
 
   override def prettyName: String = "vector_to_array"
 
@@ -50,5 +55,16 @@ case class VectorToArray(child: Expression, elementType: DataType)
 
   override protected def withNewChildInternal(newChild: Expression): VectorToArray = {
     copy(child = newChild)
+  }
+}
+
+object VectorToArray {
+  private def elementType(dtype: Expression): DataType = dtype match {
+    case StringLiteral("float64") => DoubleType
+    case StringLiteral("float32") => FloatType
+    case invalid @ StringLiteral(_) =>
+      throw QueryCompilationErrors.invalidParameter("DTYPE", "vector_to_array", "dtype", invalid)
+    case invalid =>
+      throw QueryCompilationErrors.invalidStringParameter("vector_to_array", "dtype", invalid)
   }
 }
