@@ -588,54 +588,6 @@ class StreamingSourceEvolutionSuite extends StreamTest {
     }
   }
 
-  test("positional checkpoint written under source names keeps running with those names") {
-    withTable("legacy_named_source") {
-      sql("CREATE TABLE legacy_named_source (id INT) USING parquet")
-      sql("INSERT INTO legacy_named_source VALUES (1)")
-      val checkpointDir = Utils.createTempDir(namePrefix = "streaming.metadata")
-      val outputDir = Utils.createTempDir(namePrefix = "streaming.output")
-      def runSqlQuery(query: String): Unit = {
-        val q = sql(query).writeStream
-          .format("parquet")
-          .option("path", outputDir.getCanonicalPath)
-          .option("checkpointLocation", checkpointDir.getCanonicalPath)
-          .start()
-        try {
-          q.processAllAvailable()
-        } finally {
-          q.stop()
-        }
-      }
-
-      // Naming a source needs the config, which a v1 checkpoint rejects.
-      withSQLConf(SQLConf.STREAMING_OFFSET_LOG_FORMAT_VERSION.key -> "2") {
-        runSqlQuery("SELECT * FROM STREAM legacy_named_source")
-      }
-      // Spark 4.2 and 4.3 ran a catalog table named by IDENTIFIED BY by position, with the source
-      // metadata in sources/<name>.
-      assert(new File(checkpointDir, "sources/0").renameTo(new File(checkpointDir, "sources/src")))
-      sql("INSERT INTO legacy_named_source VALUES (2)")
-
-      withSQLConf(SQLConf.ENABLE_STREAMING_SOURCE_EVOLUTION.key -> "true") {
-        val e = intercept[StreamingQueryException] {
-          runSqlQuery("SELECT * FROM STREAM legacy_named_source IDENTIFIED BY other")
-        }
-        checkError(
-          exception = e.cause.asInstanceOf[AnalysisException],
-          condition = "STREAMING_QUERY_EVOLUTION_ERROR.CANNOT_ENABLE_ON_EXISTING_CHECKPOINT",
-          parameters = Map("existingVersion" -> "2"))
-        assert(!new File(checkpointDir, "sources/other").exists())
-
-        runSqlQuery("SELECT * FROM STREAM legacy_named_source IDENTIFIED BY src")
-      }
-      checkAnswer(spark.read.parquet(outputDir.getCanonicalPath), Seq(Row(1), Row(2)))
-      val offsetLog = new OffsetSeqLog(spark, s"${checkpointDir.getCanonicalPath}/offsets")
-      val (latestBatchId, latestOffsets) = offsetLog.getLatest().get
-      assert(latestBatchId === 1)
-      assert(latestOffsets.asInstanceOf[OffsetMap].offsetsMap.keySet === Set("0"))
-    }
-  }
-
   test("named and unnamed sources analyzed separately are rejected before creating sources") {
     LastOptions.clear()
     val checkpointLocation = new Path(newMetadataDir)
@@ -683,41 +635,23 @@ class StreamingSourceEvolutionSuite extends StreamTest {
     verifyNoSourceCreated()
   }
 
-  test("positional checkpoint - restart is rejected unless every named source is written under " +
-      "its name") {
+  test("positional checkpoint - restart with named and unnamed sources is rejected before " +
+      "creating sources") {
     val checkpointLocation = new Path(newMetadataDir)
     withSQLConf(SQLConf.STREAMING_OFFSET_LOG_FORMAT_VERSION.key -> "2") {
       runQuery(testSource(None).union(testSource(None)), checkpointLocation)
     }
-    assert(new File(checkpointLocation.toString, "sources/a").mkdirs())
-
-    LastOptions.clear()
-    withSQLConf(SQLConf.ENABLE_STREAMING_SOURCE_EVOLUTION.key -> "true") {
-      checkError(
-        exception = startExpectingFailure(
-          testSource(Some("a")).union(testSource(Some("b"))), checkpointLocation),
-        condition = "STREAMING_QUERY_EVOLUTION_ERROR.CANNOT_ENABLE_ON_EXISTING_CHECKPOINT",
-        parameters = Map("existingVersion" -> "2"))
-    }
-    verifyNoSourceCreated()
-  }
-
-  test("positional checkpoint written under source names keeps running with an unnamed source") {
-    val checkpointLocation = new Path(newMetadataDir)
-    withSQLConf(SQLConf.STREAMING_OFFSET_LOG_FORMAT_VERSION.key -> "2") {
-      runQuery(testSource(None).union(testSource(None)), checkpointLocation)
-    }
-    // Spark 4.2 and 4.3 kept the metadata of a catalog table named by IDENTIFIED BY in
-    // sources/<name>, and that of an unnamed source in the same query in sources/0.
-    assert(new File(checkpointLocation.toString, "sources/a").mkdirs())
 
     LastOptions.clear()
     val unnamed = testSource(None)
     withSQLConf(SQLConf.ENABLE_STREAMING_SOURCE_EVOLUTION.key -> "true") {
-      runQuery(testSource(Some("a")).union(unnamed), checkpointLocation)
+      checkError(
+        exception = startExpectingFailure(
+          testSource(Some("a")).union(unnamed), checkpointLocation),
+        condition = "STREAMING_QUERY_EVOLUTION_ERROR.UNNAMED_STREAMING_SOURCES_WITH_ENFORCEMENT",
+        parameters = Map("sourceInfo" -> "Leaf position 1 - dummySource"))
     }
-    verifySourcePath(checkpointLocation, "a")
-    verifySourcePath(checkpointLocation, "0")
+    verifyNoSourceCreated()
   }
 
   test("positional checkpoint without offset metadata - restart with names is rejected before " +
@@ -768,7 +702,6 @@ class StreamingSourceEvolutionSuite extends StreamTest {
     df.writeStream
       .format("org.apache.spark.sql.streaming.test")
       .option("checkpointLocation", checkpointLocation.toString)
-      .trigger(ProcessingTime(10.seconds))
       .start()
   }
 

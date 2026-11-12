@@ -8223,7 +8223,7 @@
       },
       "CANNOT_ENABLE_ON_EXISTING_CHECKPOINT" : {
         "message" : [
-          "Cannot enable streaming source evolution on a checkpoint that was created without it. The existing checkpoint uses offset log format version <existingVersion>, which does not support the named source tracking required by streaming source evolution. To use source evolution, start the query with a fresh checkpoint."
+          "Cannot enable streaming source evolution on a checkpoint that was created without it. The existing checkpoint, with offset log format version <existingVersion>, tracks streaming sources by position rather than by name. To use source evolution, start the query with a fresh checkpoint."
         ]
       },
       "CONTINUOUS_PROCESSING_NOT_SUPPORTED" : {

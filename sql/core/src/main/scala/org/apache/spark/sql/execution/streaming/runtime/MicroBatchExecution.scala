@@ -474,7 +474,7 @@ class MicroBatchExecution(
       enforceNamed: Boolean,
       enforceNamedInCheckpoint: Option[Boolean]): Unit = {
     val sources = StreamingSourceIdentifyingName.collectSources(analyzedPlan)
-    val namedSources = sources.map(_._2).filter(_.nameOpt.isDefined)
+    val hasNamedSources = sources.exists(_._2.nameOpt.isDefined)
     val unnamedSources = sources.zipWithIndex.collect {
       case ((source, Unassigned), i) => s"Leaf position $i - $source"
     }
@@ -488,25 +488,16 @@ class MicroBatchExecution(
         throw QueryCompilationErrors.cannotEnableSourceEvolutionOnExistingCheckpointError(version)
       }
     }
+    // Once any source is named, every source must be, whatever the checkpoint tracks.
+    if (hasNamedSources && unnamedSources.nonEmpty) {
+      throw unnamedSourcesError
+    }
     (enforceNamedInCheckpoint, checkpointVersion) match {
-      case (Some(false), Some(version)) if namedSources.nonEmpty =>
-        // A positional checkpoint cannot start tracking sources by name. Spark 4.2 and 4.3 ran the
-        // named sources of catalog tables by position, with their metadata in sources/<name>, and
-        // a checkpoint written that way keeps running as before.
-        val fileManager = CheckpointFileManager.create(
-          new Path(resolvedCheckpointRoot), sparkSession.sessionState.newHadoopConf())
-        val writtenUnderNames = namedSources.forall { name =>
-          fileManager.exists(new Path(
-            StreamingUtils.getMetadataPath(name, new AtomicLong(0L), resolvedCheckpointRoot)))
-        }
-        if (!writtenUnderNames) {
-          throw QueryCompilationErrors.cannotEnableSourceEvolutionOnExistingCheckpointError(version)
-        }
-      case _ if namedSources.nonEmpty && unnamedSources.nonEmpty =>
-        throw unnamedSourcesError
+      case (Some(false), Some(version)) if hasNamedSources =>
+        throw QueryCompilationErrors.cannotEnableSourceEvolutionOnExistingCheckpointError(version)
       case (Some(true), _) if unnamedSources.nonEmpty =>
         throw QueryCompilationErrors.cannotDisableSourceEvolutionOnExistingCheckpointError()
-      case _ if enforceNamed && unnamedSources.nonEmpty =>
+      case (None, _) if enforceNamed && unnamedSources.nonEmpty =>
         throw unnamedSourcesError
       case _ =>
     }
