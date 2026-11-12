@@ -46,11 +46,12 @@ Documentation builds on `apache/spark` upload the generated site as a
 `docs-preview-<branch>-<sha>-<attempt>` artifact, retained for one day. The archive
 is named `site-<sha>-<attempt>.tar.bz2`. Names include the checked-out commit hash
 and workflow run attempt so reruns can upload without replacing existing artifacts.
-Change-based skipping of Python and R API docs applies only to fork builds.
+Change-based skipping of Python API docs applies only to fork builds.
 
-CI builds keep their source versions unchanged. Upstream master builds skip R API
-documentation. The initial build without API docs still checks that the
-documentation builds independently of generated API docs.
+CI builds keep their source versions unchanged and export `SKIP_RDOC=1` before
+the complete Jekyll build to skip R API documentation. The initial build without
+API docs still checks that the documentation builds independently of generated
+API docs.
 
 The Pages workflow selects the unexpired master preview artifact with the newest
 creation date, using its artifact ID to download that exact build. Commit hashes

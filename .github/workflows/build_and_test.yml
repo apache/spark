@@ -1022,11 +1022,8 @@ jobs:
           if [ `./dev/is-changed.py -m sparkr` = false ]; then export SKIP_RDOC=1; fi
         fi
         cd docs
-        if ${{ github.repository == 'apache/spark' && inputs.branch == 'master' }}; then
-          SKIP_RDOC=1 bundle exec jekyll build
-        else
-          bundle exec jekyll build
-        fi
+        export SKIP_RDOC=1
+        bundle exec jekyll build
     - name: Tar documentation
       id: documentation
       run: |
