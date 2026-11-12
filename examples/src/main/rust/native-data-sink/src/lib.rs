@@ -803,7 +803,8 @@ mod tests {
         let source = directory.source();
         commit_ids(&source, WriteMode::Append, vec![Some(1)]);
         let before = fs::read(directory.0.join("manifest.json")).unwrap();
-        let cases: [(fn(&JsonWrite, &mut [CommitMessage]), &str); 4] = [
+        type Invalidate = fn(&JsonWrite, &mut [CommitMessage]);
+        let cases: [(Invalidate, &str); 4] = [
             (
                 |_, messages| messages[1].operation = "another".into(),
                 "Invalid or duplicate",
