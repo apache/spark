@@ -4213,4 +4213,25 @@ class DateExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
         "actualNum" -> "2",
         "docroot" -> SPARK_DOC_ROOT))
   }
+
+  test("SPARK-61552: datetime functions with a foldable argument that fails to evaluate") {
+    // `ConstantFolding` leaves such an argument in a conditional branch. Only a row that
+    // evaluates the argument should fail, also in generated code.
+    withSQLConf(SQLConf.ANSI_ENABLED.key -> "true") {
+      val str = Cast(Divide(Literal(1.0), Literal(0.0)), StringType)
+      val date = BoundReference(0, DateType, nullable = true)
+      val ts = BoundReference(0, TimestampType, nullable = true)
+      val time = BoundReference(0, TimeType(TimeType.DEFAULT_PRECISION), nullable = true)
+      Seq(
+        (date, NextDay(date, str), 0),
+        (ts, FromUTCTimestamp(ts, str), 0L),
+        (date, TruncDate(date, str), 0),
+        (ts, DateFormatClass(ts, str, UTC_OPT), 0L),
+        (time, DateFormatClass(time, str, UTC_OPT), 0L)).foreach { case (input, e, value) =>
+        val expr = If(IsNull(input), Literal.create(null, e.dataType), e)
+        checkEvaluation(expr, null, create_row(null))
+        checkExceptionInExpression[ArithmeticException](expr, create_row(value), "DIVIDE_BY_ZERO")
+      }
+    }
+  }
 }
