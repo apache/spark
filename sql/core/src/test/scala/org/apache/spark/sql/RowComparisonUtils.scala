@@ -94,6 +94,16 @@ private[sql] object RowComparisonUtils {
       a.size == b.size && a.keys.forall { aKey =>
         b.keys.find(bKey => compare(aKey, bKey)).exists(bKey => compare(a(aKey), b(bKey)))
       }
+    // Sets have no defined iteration order, so match each element of `a` with a distinct
+    // element of `b` instead of comparing them position by position.
+    case (a: scala.collection.Set[_], b: scala.collection.Set[_]) =>
+      a.size == b.size && {
+        val unmatched = scala.collection.mutable.ArrayBuffer[Any](b.toSeq: _*)
+        a.forall { aElem =>
+          val i = unmatched.indexWhere(bElem => compare(aElem, bElem))
+          i >= 0 && { unmatched.remove(i); true }
+        }
+      }
     case (a: Iterable[_], b: Iterable[_]) =>
       a.size == b.size && a.zip(b).forall { case (l, r) => compare(l, r)}
     case (a: Product, b: Product) =>
