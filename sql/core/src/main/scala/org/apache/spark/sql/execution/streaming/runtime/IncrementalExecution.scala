@@ -62,6 +62,8 @@ import org.apache.spark.util.{SerializableConfiguration, Utils}
  *                             It is passed in by reference from MicrobatchExecution, so it is
  *                             populated during planning in the first batch, and passed in to the
  *                             StatefulOperatorStateInfo on every subsequent batch
+ * @param pushedFilterRewrites the rewrites of the pushed filters of the query, which its
+ *                             micro-batches share, see StreamingV2ScanPushDown.checkPushedFilters
  */
 class IncrementalExecution(
     sparkSession: SparkSession,
@@ -84,7 +86,9 @@ class IncrementalExecution(
       MutableMap[Long, StateSchemaBroadcast](),
     mode: CommandExecutionMode.Value = CommandExecutionMode.ALL,
     val isTerminatingTrigger: Boolean = false,
-    val isRealTimeMode: Boolean = false)
+    val isRealTimeMode: Boolean = false,
+    pushedFilterRewrites: StreamingV2ScanPushDown.PushedFilterRewrites =
+      new StreamingV2ScanPushDown.PushedFilterRewrites)
   extends QueryExecution(sparkSession, logicalPlan, mode = mode,
     shuffleCleanupModeOpt =
       Some(QueryExecution.determineShuffleCleanupMode(sparkSession.sessionState.conf)),
@@ -150,6 +154,10 @@ class IncrementalExecution(
         ts.toLiteral
       case e: ExpressionWithRandomSeed => e.withNewSeed(Utils.random.nextLong())
     }
+    // The scans of the sources may drop the rows that fail the filters that they got when the
+    // query started, which the plan must still apply to all the rows that it reads, see
+    // StreamingV2ScanPushDown.
+    StreamingV2ScanPushDown.checkPushedFilters(sparkSession, optimized, pushedFilterRewrites)
     WidenStatefulOperatorAttributeNullability(optimized)
   }
 
@@ -404,13 +412,14 @@ class IncrementalExecution(
           eventTimeWatermarkForLateEvents = None,
           eventTimeWatermarkForEviction = None)
 
-      case StreamingDeduplicateWithinWatermarkExec(keys, child, None, None, None) =>
+      case StreamingDeduplicateWithinWatermarkExec(keys, child, None, None, None, _) =>
         StreamingDeduplicateWithinWatermarkExec(
           keys,
           child,
           Some(nextStatefulOperationStateInfo()),
           eventTimeWatermarkForLateEvents = None,
-          eventTimeWatermarkForEviction = None)
+          eventTimeWatermarkForEviction = None,
+          isRealTimeMode = isRealTimeMode)
 
       case m: FlatMapGroupsWithStateExec =>
         // We set this to true only for the first batch of the streaming query.

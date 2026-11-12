@@ -59,6 +59,13 @@ RETURNS INT RETURN (SELECT (SELECT x));
 -- UDF parameter is visible via outer reference when no other binding is in scope.
 SELECT outer_param_pure(42);
 
+CREATE OR REPLACE TEMPORARY FUNCTION derived_col_vs_paramless(u STRING)
+RETURNS STRING RETURN (SELECT current_user FROM (SELECT u AS current_user));
+
+-- A derived-table column aliased from a UDF parameter is a real column, so it wins over the
+-- parameterless function ('x' = column won).
+SELECT derived_col_vs_paramless('x');
+
 DECLARE x = 999;
 
 -- UDF parameter wins over session variable.
@@ -91,6 +98,7 @@ DROP TEMPORARY FUNCTION paramless_vs_param_grouping;
 DROP TEMPORARY FUNCTION lca_vs_param;
 DROP TEMPORARY FUNCTION outer_vs_param;
 DROP TEMPORARY FUNCTION outer_param_pure;
+DROP TEMPORARY FUNCTION derived_col_vs_paramless;
 DROP TEMPORARY FUNCTION inner_fn;
 DROP TEMPORARY FUNCTION outer_fn;
 DROP TEMPORARY FUNCTION tvf_paramless_vs_param;

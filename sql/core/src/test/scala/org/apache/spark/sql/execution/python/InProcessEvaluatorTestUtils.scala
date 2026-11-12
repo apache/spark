@@ -98,7 +98,7 @@ private[python] object InProcessEvaluatorTestUtils {
 
     def iterator(): Iterator[InternalRow] = {
       // The byte limit always applies; 64 MB is its default.
-      new InProcessArrowEvalPythonEvaluatorFactory(Seq(column), Seq.empty, Seq(column),
+      new InProcessArrowEvalPythonEvaluatorFactory(Seq(column), Seq.empty, Seq(column), Seq.empty,
           batchSize, 64L << 20, "UTC", false, false, false, false, true, allMetrics()) {
         override private[python] def runtimeSession = session
       }.evaluateBatches(Seq.empty, Array.empty, rows,

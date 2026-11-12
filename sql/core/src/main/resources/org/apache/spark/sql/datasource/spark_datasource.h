@@ -24,7 +24,7 @@
  * Spark calls them with the Foreign Function and Memory API of Java, so native data sources
  * require Java 22 or later. Each library has its own table, so any number of libraries can be
  * loaded side by side. Spark adapts a native data source to Data Source V2, with batch and
- * micro-batch streaming reads, batch and streaming writes, and column and limit pushdown.
+ * micro-batch streaming reads, batch and streaming writes, and filter, limit and column pushdown.
  *
  * This header is self-contained: it only depends on the C standard library, and defines the
  * structs of the Arrow C data interface unless they are already defined, as by Arrow C++. A library
@@ -55,11 +55,11 @@
  * of a write can override, so Spark checks the capabilities of each operation again.
  *
  * - Batch reads. On the driver, Spark creates a reader with create_reader, pushes operations down
- *   by calling, each at most once and in this order, push_limit and prune_columns, plans the
- *   partitions with partitions, which also returns the state of the reader, and closes it. Then it
- *   calls read on the executors for each partition, with the schema to read and the state of the
- *   reader, in tasks that may each read several partitions, for example after a coalesce or a
- *   union. If Spark never plans the partitions, for example to only explain the plan
+ *   by calling, each at most once and in this order, push_domains, push_limit and prune_columns,
+ *   plans the partitions with partitions, which also returns the state of the reader, and closes
+ *   it. Then it calls read on the executors for each partition, with the schema to read and the
+ *   state of the reader, in tasks that may each read several partitions, for example after a
+ *   coalesce or a union. If Spark never plans the partitions, for example to only explain the plan
  *   of the query, it closes the reader once the reader is no longer referenced.
  * - Streaming reads. On the driver, Spark creates a stream reader with create_stream_reader, with
  *   the columns to read and the location of the checkpoint of the source, and keeps it until the
@@ -119,10 +119,11 @@
  *   the same when the query restarts from its checkpoint, so the ID of the query and the epoch ID
  *   identify the output of a micro-batch, also when other queries write to the same destination. A
  *   micro-batch streaming query creates a new stream writer for each micro-batch, and Spark closes
- *   the previous stream writer of the query when the query creates a new one. Spark is not told
- *   when a streaming query stops, so it closes the last stream writer of the query once the writer
- *   is no longer referenced, or when the query is restarted. Streaming writes are micro-batch only:
- *   a query with continuous processing fails before create_writer.
+ *   it once it committed or aborted the micro-batch, as for a batch write. A stream writer that
+ *   Spark neither commits nor aborts is closed before the query calls create_writer for its next
+ *   one, or, since Spark is not told when a streaming query stops, once the writer is no longer
+ *   referenced. Streaming writes are micro-batch only: a query with continuous processing fails
+ *   before create_writer.
  *
  * Conventions
  * -----------
@@ -137,10 +138,11 @@
  *   NULL handle as an error. Spark releases each handle exactly once, with the close function of
  *   its kind: close, close_reader, close_stream_reader, close_writer or close_data_writer, and no
  *   other function releases a handle. A handle is not always released right after its last use: a
- *   batch reader whose partitions are never planned and the last stream writer of a query are
- *   released once they are no longer referenced (see Lifecycle above). A reader or writer handle
- *   must not depend on the data source handle it was created from, because Spark closes the data
- *   source handle right after creating it.
+ *   batch reader whose partitions are never planned may only be released once it is no longer
+ *   referenced, and a stream writer that is neither committed nor aborted before the query
+ *   creates its next one or once it is no longer referenced (see Lifecycle above). A reader or
+ *   writer handle must not depend on the data source handle it was created from, because Spark
+ *   closes the data source handle right after creating it.
  * - Order of the calls. After a function on a handle fails, Spark calls no other function on the
  *   handle than its close function, except that it aborts a writer whose commit failed and a data
  *   writer whose write or commit failed. It does not abort a writer or a data writer whose commit
@@ -153,8 +155,8 @@
  *   them. The data writers of the task attempts that Spark kills, such as speculative ones, may
  *   still be written to, aborted and closed after Spark committed or aborted their writer and
  *   closed it.
- * - Memory. What Spark passes to a function, such as strings, byte arrays and the structs whose
- *   names end with Info, is only valid during the call, except for SparkDsHost and
+ * - Memory. What Spark passes to a function, such as strings, byte arrays, SparkDsDomain and the
+ *   structs whose names end with Info, is only valid during the call, except for SparkDsHost and
  *   SparkDsTaskContext, which document how long they live. Strings are UTF-8 and NUL-terminated:
  *   Spark fails an operation whose options or column names contain the character U+0000. The
  *   library returns strings and byte arrays by passing them to a SparkDsSink, which copies them.
@@ -201,8 +203,8 @@
  * - Threads. Spark calls the library from multiple threads, and calls on different handles may
  *   run concurrently. Calls on the same handle never run concurrently. A handle may be released
  *   from a thread other than the threads that used it, such as a JVM Cleaner thread when Spark
- *   releases a handle once it is no longer referenced, for example the last stream writer of a
- *   streaming query. A SparkDsSink must be called on the thread of the call that it was passed
+ *   releases a handle once it is no longer referenced, for example a batch reader whose partitions
+ *   are never planned. A SparkDsSink must be called on the thread of the call that it was passed
  *   to, during that call. The functions of SparkDsHost and SparkDsTaskContext, and the callbacks
  *   of the stream that read initializes, can be called from any thread. The callbacks of the
  *   stream never run concurrently.
@@ -371,6 +373,71 @@ typedef struct SparkDsPartitionsInfo {
   int64_t size;
 } SparkDsPartitionsInfo;
 
+/*
+ * The domain of a column, which push_domains gets: the values that the column can have in the
+ * rows that match the filters of a query. A value is in the domain when it is:
+ * - null, if null_allowed is true;
+ * - NaN, if nan_allowed is true, for a float or double column;
+ * - another value, if ranges is NULL, or if it is in one of the ranges.
+ * A reader can skip the data whose statistics show that it has no value in the domain of a column,
+ * such as a file or a row group whose values are all below the ranges. But it must never skip a
+ * row whose values are all in their domains, which Spark cannot detect. Spark evaluates the
+ * filters again after reading, so the rows that a reader returns do not need to match them.
+ *
+ * Values are compared with the order of Spark SQL:
+ * - numbers, dates and timestamps by their values. The bounds of the ranges of a float or double
+ *   column are never NaN, and -0.0 is equal to 0.0: compare them with the comparisons of IEEE 754,
+ *   as the operators of C, C++ and Rust do, not with a total order, such as f64::total_cmp in Rust,
+ *   that puts -0.0 before 0.0. Data that has NaN values, or may have, can only be skipped if
+ *   nan_allowed is false;
+ * - strings by their UTF-8 bytes, which order the characters outside the Basic Multilingual Plane
+ *   after all the others, unlike comparisons of UTF-16 strings;
+ * - binary values as unsigned bytes, in lexicographic order: X'80' is greater than X'7F', and a
+ *   value is greater than its prefixes;
+ * - booleans with false before true.
+ */
+typedef struct SparkDsDomain {
+  /* The size of this struct in the header that Spark was built with, as in SparkDsHost. */
+  int64_t size;
+  /*
+   * The column, by the path_length indices of its fields: the index of the column in the schema
+   * that create_reader got, and then the index of the field in each struct, for a field of a
+   * struct. {2, 0} is the first field of the third column. Spark prunes the columns after it
+   * pushes the domains down, so the schema to read that read gets in SparkDsReadInfo may have
+   * fewer columns, at other indices: a library that applies a domain in read must map its column
+   * to that schema.
+   */
+  const int32_t* path;
+  int64_t path_length;
+  /*
+   * Whether null is in the domain. A field of a struct is null in the rows where the struct, or a
+   * struct that contains it, is null, whatever the child array of the field holds there. Spark
+   * never sets it for a field of a struct, since statistics computed from that child array may not
+   * count these rows as nulls.
+   */
+  bool null_allowed;
+  /*
+   * Whether NaN is in the domain. Always false for the columns of types other than float and
+   * double.
+   */
+  bool nan_allowed;
+  /*
+   * The ranges of the other values in the domain, or NULL if they are all in it. Otherwise, a
+   * struct array with one row for each range, sorted, and with ranges that do not overlap, whose
+   * fields are:
+   * - low and high: the bounds of the range, of the Arrow type of the column in the schema that
+   *   create_reader got. A null bound is unbounded: the range has no lower or no upper bound;
+   * - low_inclusive and high_inclusive, booleans that are not nullable: whether the bound is in the
+   *   range. They are false for a null bound.
+   * A single value is a range whose bounds are equal and inclusive. An array without rows means
+   * that no other value than null or NaN is in the domain. The ranges are an input struct: see
+   * "Arrow data" above.
+   */
+  struct ArrowArray* ranges;
+  /* The schema of ranges, or NULL if ranges is NULL. */
+  struct ArrowSchema* ranges_schema;
+} SparkDsDomain;
+
 /* A micro-batch streaming scan, as create_stream_reader gets it. */
 typedef struct SparkDsStreamReaderInfo {
   /* The size of this struct in the header that Spark was built with, as in SparkDsHost. */
@@ -471,8 +538,12 @@ typedef struct SparkDsCommitOffsetInfo {
  * Spark itself may read a stream on a thread that the task does not wait for, for example the one
  * of a PipedRDD. The task stays valid until then too, and for a read, is_interrupted then also
  * returns true once the task failed or completed, so the library may stop reading then. Such an
- * engine may also keep the arrays and the schemas of the stream after it released the stream, so
- * the release of an array or a schema must not use the stream or the task.
+ * engine may also keep the arrays and the schemas of the stream after it released the stream, and
+ * so may Spark: when a query stops reading a stream before its end, as with a LIMIT, Spark may
+ * release the last array that it read only once it no longer references the batch, from a JVM
+ * Cleaner thread. So the release of an array or a schema must not use the stream or the task. It
+ * should also be quick and not block, e.g. on a lock or on a runtime that another thread holds:
+ * Spark shares that thread with the release of the other objects that it no longer references.
  */
 typedef struct SparkDsTaskContext {
   /* The size of this struct in the header that Spark was built with, as in SparkDsHost. */
@@ -887,6 +958,38 @@ typedef struct SparkDsLibrary {
    * limit: the limit to set, initialized by Spark with its size and SPARK_DS_READ_ALL_AVAILABLE
    */
   int (*default_read_limit)(void* reader, SparkDsReadLimit* limit);
+
+  /* -------------------------------------------------------------------------------------------
+   * Batch reader (driver), continued. These functions were added after the others, so they are at
+   * the end of the table: a library built against a header without them has a smaller table, and
+   * Spark does not call them. See Compatibility above.
+   * ------------------------------------------------------------------------------------------- */
+
+  /*
+   * Pushes the domains of the columns that the filters of the query constrain down to the reader,
+   * so that it can skip data: see SparkDsDomain. Spark derives them from the filters that compare
+   * a column with literals, with =, <>, <=> (equal, with null equal to null), <, <=, >, >=, IN,
+   * IS NULL, IS NOT NULL and STARTS_WITH, combined with AND, OR and NOT. A domain has all the
+   * values that its column has in the rows for which the filters are true, and may have others:
+   * a column that only one side of an OR constrains gets no domain from it, and the other filters,
+   * such as id + 1 > 5, a = b or ENDS_WITH(s, 'x'), constrain no column. Spark evaluates all the
+   * filters after reading anyway.
+   *
+   * Spark passes domains for the columns and the fields of structs of the types boolean, tinyint,
+   * smallint, int, bigint, float, double, decimal, string, binary, date, timestamp and
+   * timestamp_ntz, but not for strings with a non-binary collation, such as UTF8_LCASE, and only
+   * domains without null for the fields of structs (see null_allowed). A later version of Spark
+   * may pass domains for other columns, so a reader must ignore a domain that it cannot use. Spark
+   * calls it at most once for a reader, before push_limit and prune_columns, with at least one
+   * domain, and at most one domain for each column.
+   *
+   * domains: the count domains
+   * used: an array of count values, all false, to set to true for the domains that the reader
+   *       uses. Spark shows the filters of the used domains as pushed in the formatted plan of
+   *       the query (EXPLAIN FORMATTED) and in the SQL tab of the Spark UI.
+   */
+  int (*push_domains)(void* reader, const SparkDsDomain* const* domains, int64_t count,
+                      bool* used);
 } SparkDsLibrary;
 
 /*

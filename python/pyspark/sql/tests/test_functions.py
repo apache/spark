@@ -1630,9 +1630,121 @@ class FunctionsTestsMixin:
         self.assertTrue(isinstance(aqt[1], list))
         self.assertEqual(len(aqt[1]), 3)
         self.assertTrue(all(isinstance(q, float) for q in aqt[1]))
+        self.assertEqual(df.stat.approxQuantile("a", [0, 0.5, 1], 0.0), [0.0, 4.0, 9.0])
         self.assertRaises(TypeError, lambda: df.stat.approxQuantile(123, [0.1, 0.9], 0.1))
         self.assertRaises(TypeError, lambda: df.stat.approxQuantile(("a", 123), [0.1, 0.9], 0.1))
         self.assertRaises(TypeError, lambda: df.stat.approxQuantile(["a", 123], [0.1, 0.9], 0.1))
+
+        with self.assertRaises(PySparkTypeError) as pe:
+            df.stat.approxQuantile("a", [0.1, "0.9"], 0.1)
+
+        self.check_error(
+            exception=pe.exception,
+            errorClass="NOT_EXPECTED_TYPE",
+            messageParameters={
+                "arg_name": "probabilities",
+                "expected_type": "list[float, int]",
+                "arg_type": "str",
+            },
+        )
+
+        with self.assertRaises(PySparkValueError) as pe:
+            df.stat.approxQuantile("a", [0.1, 1.5], 0.1)
+
+        self.check_error(
+            exception=pe.exception,
+            errorClass="VALUE_OUT_OF_BOUNDS",
+            messageParameters={
+                "arg_name": "probabilities",
+                "lower_bound": "0",
+                "upper_bound": "1",
+                "actual": "1.5",
+            },
+        )
+
+        with self.assertRaises(PySparkValueError) as pe:
+            df.stat.approxQuantile("a", [0.1, -0.1], 0.1)
+
+        self.check_error(
+            exception=pe.exception,
+            errorClass="VALUE_OUT_OF_BOUNDS",
+            messageParameters={
+                "arg_name": "probabilities",
+                "lower_bound": "0",
+                "upper_bound": "1",
+                "actual": "-0.1",
+            },
+        )
+
+        with self.assertRaises(PySparkValueError) as pe:
+            df.stat.approxQuantile("a", [0.1, float("nan")], 0.1)
+
+        self.check_error(
+            exception=pe.exception,
+            errorClass="VALUE_OUT_OF_BOUNDS",
+            messageParameters={
+                "arg_name": "probabilities",
+                "lower_bound": "0",
+                "upper_bound": "1",
+                "actual": "nan",
+            },
+        )
+
+        with self.assertRaises(PySparkTypeError) as pe:
+            df.stat.approxQuantile("a", [0.1, True], 0.1)
+
+        self.check_error(
+            exception=pe.exception,
+            errorClass="NOT_EXPECTED_TYPE",
+            messageParameters={
+                "arg_name": "probabilities",
+                "expected_type": "list[float, int]",
+                "arg_type": "bool",
+            },
+        )
+
+        # A value error earlier in the list must not hide a type error later in the list:
+        # types are validated for every element before any value is checked, regardless
+        # of which order the bad elements appear in.
+        with self.assertRaises(PySparkTypeError) as pe:
+            df.stat.approxQuantile("a", [1.5, "0.9"], 0.1)
+
+        self.check_error(
+            exception=pe.exception,
+            errorClass="NOT_EXPECTED_TYPE",
+            messageParameters={
+                "arg_name": "probabilities",
+                "expected_type": "list[float, int]",
+                "arg_type": "str",
+            },
+        )
+
+        with self.assertRaises(PySparkTypeError) as pe:
+            df.stat.approxQuantile("a", ["0.9", 1.5], 0.1)
+
+        self.check_error(
+            exception=pe.exception,
+            errorClass="NOT_EXPECTED_TYPE",
+            messageParameters={
+                "arg_name": "probabilities",
+                "expected_type": "list[float, int]",
+                "arg_type": "str",
+            },
+        )
+
+        with self.assertRaises(PySparkValueError) as pe:
+            df.stat.approxQuantile("a", (0.1, 1.5), 0.1)
+
+        self.check_error(
+            exception=pe.exception,
+            errorClass="VALUE_OUT_OF_BOUNDS",
+            messageParameters={
+                "arg_name": "probabilities",
+                "lower_bound": "0",
+                "upper_bound": "1",
+                "actual": "1.5",
+            },
+        )
 
     def test_sorting_functions_with_column(self):
         self.check_sorting_functions_with_column(Column)

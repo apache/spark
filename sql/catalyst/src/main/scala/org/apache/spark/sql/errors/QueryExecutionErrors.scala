@@ -2527,6 +2527,19 @@ private[sql] object QueryExecutionErrors extends QueryErrorsBase with ExecutionE
       cause = null)
   }
 
+  def streamingScanFiltersChangedError(
+      source: Seq[String],
+      filters: Seq[Expression],
+      cause: Throwable = null): Throwable = {
+    new SparkException(
+      errorClass = "STREAMING_SCAN_FILTERS_CHANGED",
+      messageParameters = Map(
+        "filters" -> filters.map(toSQLExpr).mkString(", "),
+        "source" -> toSQLId(source),
+        "config" -> toSQLConf(SQLConf.STREAMING_V2_FILTER_PUSHDOWN_ENABLED.key)),
+      cause = cause)
+  }
+
   def streamingScanInvalidReadSchemaError(
       source: Seq[String],
       reason: String,
@@ -2908,6 +2921,36 @@ private[sql] object QueryExecutionErrors extends QueryErrorsBase with ExecutionE
       messageParameters = Map(
         "operation" -> (s"add ${toSQLValue(amount, LongType)} $unit to " +
           s"${toSQLValue(DateTimeUtils.microsToInstant(micros), TimestampType)}")),
+      context = Array.empty,
+      summary = "")
+  }
+
+  def nextDayOverflowError(days: Int, dayOfWeek: String): SparkArithmeticException = {
+    new SparkArithmeticException(
+      errorClass = "DATETIME_OVERFLOW",
+      messageParameters = Map(
+        "operation" -> (s"find the next $dayOfWeek after " +
+          s"${toSQLValue(DateTimeUtils.daysToLocalDate(days), DateType)}")),
+      context = Array.empty,
+      summary = "")
+  }
+
+  def lastDayOverflowError(days: Int): SparkArithmeticException = {
+    new SparkArithmeticException(
+      errorClass = "DATETIME_OVERFLOW",
+      messageParameters = Map(
+        "operation" -> (s"find the last day of the month of " +
+          s"${toSQLValue(DateTimeUtils.daysToLocalDate(days), DateType)}")),
+      context = Array.empty,
+      summary = "")
+  }
+
+  def truncDateOverflowError(days: Int, unit: String): SparkArithmeticException = {
+    new SparkArithmeticException(
+      errorClass = "DATETIME_OVERFLOW",
+      messageParameters = Map(
+        "operation" -> (s"truncate ${toSQLValue(DateTimeUtils.daysToLocalDate(days), DateType)} " +
+          s"to $unit")),
       context = Array.empty,
       summary = "")
   }
@@ -3572,6 +3615,22 @@ private[sql] object QueryExecutionErrors extends QueryErrorsBase with ExecutionE
     )
   }
 
+  def storagePartitionJoinKeyTypeMismatchError(
+      transform: String,
+      columnType: DataType,
+      inputTypes: Seq[DataType],
+      key: Expression): Throwable = {
+    new SparkException(
+      errorClass = "STORAGE_PARTITION_JOIN_KEY_TYPE_MISMATCH",
+      messageParameters = Map(
+        "transform" -> transform,
+        "columnType" -> toSQLType(columnType),
+        "inputTypes" -> inputTypes.map(toSQLType).mkString("(", ", ", ")"),
+        "key" -> toSQLExpr(key),
+        "keyType" -> toSQLType(key.dataType)),
+      cause = null)
+  }
+
   def storagePartitionJoinIncompatibleReducedTypesError(
       leftReducers: Option[Seq[Option[KeyReducer]]],
       leftReducedDataTypes: Seq[DataType],
@@ -3812,5 +3871,14 @@ private[sql] object QueryExecutionErrors extends QueryErrorsBase with ExecutionE
     new SparkRuntimeException(
       errorClass = "PARSE_SQL_ANALYZE_UNSUPPORTED_SCRIPT",
       messageParameters = Map("functionName" -> toSQLId("parse_sql")))
+  }
+
+  def invalidDataSourceExternalLookupError(
+      table: String,
+      errorSubClass: String,
+      messageParameters: Map[String, String] = Map.empty): Throwable = {
+    new SparkRuntimeException(
+      errorClass = s"DATA_SOURCE_INVALID_EXTERNAL_LOOKUP.$errorSubClass",
+      messageParameters = Map("table" -> toSQLId(table)) ++ messageParameters)
   }
 }

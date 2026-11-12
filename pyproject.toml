@@ -262,6 +262,15 @@ ci_classic_minimum = [
     "psutil",
 ]
 
+# pandas 2 does not have Python 3.15 wheels, so install only compatible dependencies.
+ci_python_315 = [
+    {include-group = "internal_py4j"},
+    {include-group = "internal_pyarrow"},
+    "psutil",
+    "six",
+    "unittest-xml-reporting",
+]
+
 ci_classic_pandas_3 = [
     {include-group = "internal_numpy"},
     {include-group = "internal_py4j"},

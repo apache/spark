@@ -43,8 +43,8 @@ import org.apache.spark.sql.connector.catalog.TableChange._
 import org.apache.spark.sql.connector.catalog.functions.UnboundFunction
 import org.apache.spark.sql.connector.catalog.index.TableIndex
 import org.apache.spark.sql.connector.expressions.{Expression, GeneralScalarExpression, Literal,
-  NamedReference}
-import org.apache.spark.sql.connector.expressions.aggregate.AggregateFunc
+  NamedReference, SortOrder}
+import org.apache.spark.sql.connector.expressions.aggregate.{AggregateFunc, Aggregation}
 import org.apache.spark.sql.connector.expressions.filter.{AlwaysFalse, AlwaysTrue, Predicate}
 import org.apache.spark.sql.connector.util.V2ExpressionSQLBuilder
 import org.apache.spark.sql.errors.QueryCompilationErrors
@@ -961,6 +961,15 @@ abstract class JdbcDialect extends Serializable with Logging {
    * Returns true if dialect supports JOIN operator.
    */
   def supportsJoin: Boolean = false
+
+  /**
+   * Returns false if the dialect cannot run the given ORDER BY ... LIMIT (top N) when pushed.
+   * `aggregation` is the aggregate already pushed into the same query, if any; it stays pushed
+   * either way. Returning true does not guarantee the push, as other pushdown checks still apply.
+   * Defaults to true.
+   */
+  @Since("4.4.0")
+  def supportsTopN(orders: Array[SortOrder], aggregation: Option[Aggregation]): Boolean = true
 
   /**
    * Return the DB-specific quoted and fully qualified table name
