@@ -78,11 +78,12 @@ case class FromAvro(
     child: Expression,
     jsonFormatSchema: Expression,
     options: Expression,
-    // PERSISTED: copy()/views keep analysis-time CHAR/VARCHAR flags. FromAvro is
+    // PERSISTED: copy()/views keep analysis-time settings. FromAvro is
     // RuntimeReplaceable, so a new replacement would otherwise re-read SQLConf.
     // FunctionRegistry matches Expression-only ctors; keep 2-arg and 3-arg.
     charVarcharStandardSemantics: Boolean,
-    charVarcharFirstClassTypes: Boolean)
+    charVarcharFirstClassTypes: Boolean,
+    mapKeyDedupPolicy: SQLConf.MapKeyDedupPolicy.Value)
   extends TernaryExpression with RuntimeReplaceable {
   override def first: Expression = child
   override def second: Expression = jsonFormatSchema
@@ -95,7 +96,8 @@ case class FromAvro(
       jsonFormatSchema,
       options,
       SQLConf.get.charVarcharStandardSemantics,
-      SQLConf.get.charVarcharFirstClassTypes)
+      SQLConf.get.charVarcharFirstClassTypes,
+      SQLConf.get.getConf(SQLConf.MAP_KEY_DEDUP_POLICY))
 
   def this(child: Expression, jsonFormatSchema: Expression) =
     this(child, jsonFormatSchema, Literal.create(null))
@@ -134,14 +136,28 @@ case class FromAvro(
   }
 
   override lazy val replacement: Expression = {
-    val schemaValue: String = jsonFormatSchema.eval() match {
+    val conf = SQLConf.get
+    if (conf.getConf(SQLConf.MAP_KEY_DEDUP_POLICY) == mapKeyDedupPolicy) {
+      createReplacement()
+    } else {
+      val evalConf = conf.clone()
+      evalConf.setConf(SQLConf.MAP_KEY_DEDUP_POLICY, mapKeyDedupPolicy)
+      SQLConf.withExistingConf(evalConf) {
+        createReplacement()
+      }
+    }
+  }
+
+  private def createReplacement(): Expression = {
+    // Concurrent canonicalization can evaluate the same CreateMap and corrupt its map builder.
+    // Copy stateful arguments to avoid duplicate-key errors and mismatched key/value array lengths.
+    val freshSchema = jsonFormatSchema.freshCopyIfContainsStatefulExpression()
+    val schemaValue: String = freshSchema.eval() match {
       case s: UTF8String =>
         s.toString
       case null =>
         ""
     }
-    // Concurrent canonicalization can evaluate the same CreateMap and corrupt its map builder.
-    // Copy stateful options to avoid duplicate-key errors and mismatched key/value array lengths.
     val freshOptions = options.freshCopyIfContainsStatefulExpression()
     val optionsValue: Map[String, String] = freshOptions.eval() match {
       case a: ArrayBasedMapData if a.keyArray.array.nonEmpty =>
@@ -174,7 +190,7 @@ case class FromAvro(
   override def prettyName: String =
     getTagValue(FunctionRegistry.FUNC_ALIAS).getOrElse("from_avro")
 
-  // Persist flags are not user arguments; omit them from EXPLAIN / Connect goldens.
+  // Persisted settings are not user arguments; omit them from EXPLAIN / Connect goldens.
   override protected def stringArgs: Iterator[Any] = super.stringArgs.take(3)
 }
 
@@ -214,8 +230,16 @@ case class FromAvro(
   since = "4.0.0"
 )
 // scalastyle:on line.size.limit
-case class ToAvro(child: Expression, jsonFormatSchema: Expression)
+case class ToAvro(
+    child: Expression,
+    jsonFormatSchema: Expression,
+    // PERSISTED: spark.sql.mapKeyDedupPolicy at analysis time. A constructor parameter, so that
+    // copies keep it and evaluate the arguments the same way.
+    mapKeyDedupPolicy: SQLConf.MapKeyDedupPolicy.Value)
   extends BinaryExpression with RuntimeReplaceable {
+
+  def this(child: Expression, jsonFormatSchema: Expression) =
+    this(child, jsonFormatSchema, SQLConf.get.getConf(SQLConf.MAP_KEY_DEDUP_POLICY))
 
   def this(child: Expression) = this(child, Literal(null))
 
@@ -243,7 +267,23 @@ case class ToAvro(child: Expression, jsonFormatSchema: Expression)
   }
 
   override lazy val replacement: Expression = {
-    val schemaValue: Option[String] = jsonFormatSchema.eval() match {
+    val conf = SQLConf.get
+    if (conf.getConf(SQLConf.MAP_KEY_DEDUP_POLICY) == mapKeyDedupPolicy) {
+      createReplacement()
+    } else {
+      val evalConf = conf.clone()
+      evalConf.setConf(SQLConf.MAP_KEY_DEDUP_POLICY, mapKeyDedupPolicy)
+      SQLConf.withExistingConf(evalConf) {
+        createReplacement()
+      }
+    }
+  }
+
+  private def createReplacement(): Expression = {
+    // Concurrent canonicalization can evaluate the same CreateMap and corrupt its map builder.
+    // Copy stateful arguments to avoid duplicate-key errors and mismatched key/value array lengths.
+    val freshSchema = jsonFormatSchema.freshCopyIfContainsStatefulExpression()
+    val schemaValue: Option[String] = freshSchema.eval() match {
       case null =>
         None
       case s: UTF8String =>
@@ -258,6 +298,9 @@ case class ToAvro(child: Expression, jsonFormatSchema: Expression)
     val expr = constructor.newInstance(child, schemaValue)
     expr.asInstanceOf[Expression]
   }
+
+  // The map key policy is not a user argument; keep it out of EXPLAIN output.
+  override protected def stringArgs: Iterator[Any] = super.stringArgs.take(2)
 
   override def prettyName: String =
     getTagValue(FunctionRegistry.FUNC_ALIAS).getOrElse("to_avro")
@@ -291,7 +334,12 @@ case class ToAvro(child: Expression, jsonFormatSchema: Expression)
   since = "4.0.0"
 )
 // scalastyle:on line.size.limit
-case class SchemaOfAvro(jsonFormatSchema: Expression, options: Expression)
+case class SchemaOfAvro(
+    jsonFormatSchema: Expression,
+    options: Expression,
+    // PERSISTED: spark.sql.mapKeyDedupPolicy at analysis time. A constructor parameter, so that
+    // copies keep it and evaluate the arguments the same way.
+    mapKeyDedupPolicy: SQLConf.MapKeyDedupPolicy.Value)
   extends BinaryExpression with RuntimeReplaceable {
 
   override def left: Expression = jsonFormatSchema
@@ -300,6 +348,9 @@ case class SchemaOfAvro(jsonFormatSchema: Expression, options: Expression)
   override protected def withNewChildrenInternal(
       newLeft: Expression, newRight: Expression): Expression =
     copy(jsonFormatSchema = newLeft, options = newRight)
+
+  def this(jsonFormatSchema: Expression, options: Expression) =
+    this(jsonFormatSchema, options, SQLConf.get.getConf(SQLConf.MAP_KEY_DEDUP_POLICY))
 
   def this(jsonFormatSchema: Expression) =
     this(jsonFormatSchema, Literal.create(null))
@@ -332,14 +383,28 @@ case class SchemaOfAvro(jsonFormatSchema: Expression, options: Expression)
   }
 
   override lazy val replacement: Expression = {
-    val schemaValue: String = jsonFormatSchema.eval() match {
+    val conf = SQLConf.get
+    if (conf.getConf(SQLConf.MAP_KEY_DEDUP_POLICY) == mapKeyDedupPolicy) {
+      createReplacement()
+    } else {
+      val evalConf = conf.clone()
+      evalConf.setConf(SQLConf.MAP_KEY_DEDUP_POLICY, mapKeyDedupPolicy)
+      SQLConf.withExistingConf(evalConf) {
+        createReplacement()
+      }
+    }
+  }
+
+  private def createReplacement(): Expression = {
+    // Copy stateful arguments so a failed evaluation cannot leave a partial map in the CreateMap's
+    // map builder, which would break every later evaluation of this expression.
+    val freshSchema = jsonFormatSchema.freshCopyIfContainsStatefulExpression()
+    val schemaValue: String = freshSchema.eval() match {
       case s: UTF8String =>
         s.toString
       case null =>
         ""
     }
-    // Copy stateful options so a failed evaluation cannot leave a partial map in the CreateMap's
-    // map builder, which would break every later evaluation of this expression.
     val freshOptions = options.freshCopyIfContainsStatefulExpression()
     val optionsValue: Map[String, String] = freshOptions.eval() match {
       case a: ArrayBasedMapData if a.keyArray.array.nonEmpty =>
@@ -359,6 +424,9 @@ case class SchemaOfAvro(jsonFormatSchema: Expression, options: Expression)
     val expr = constructor.newInstance(schemaValue, optionsValue)
     expr.asInstanceOf[Expression]
   }
+
+  // The map key policy is not a user argument; keep it out of EXPLAIN output.
+  override protected def stringArgs: Iterator[Any] = super.stringArgs.take(2)
 
   override def prettyName: String =
     getTagValue(FunctionRegistry.FUNC_ALIAS).getOrElse("schema_of_avro")
