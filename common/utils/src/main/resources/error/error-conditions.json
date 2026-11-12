@@ -8246,6 +8246,11 @@
           "Invalid streaming source name '<sourceName>'. Source names must only contain ASCII letters (a-z, A-Z), digits (0-9), and underscores (_)."
         ]
       },
+      "SOURCE_EVOLUTION_CONTINUOUS_PROCESSING_NOT_SUPPORTED" : {
+        "message" : [
+          "Streaming source evolution is not supported with continuous processing. Use a micro-batch trigger, or start a new continuous query with a fresh checkpoint, without source names and with spark.sql.streaming.queryEvolution.enableSourceEvolution set to false."
+        ]
+      },
       "SOURCE_NAMING_NOT_SUPPORTED" : {
         "message" : [
           "Streaming source naming is not supported for the flow-assigned source name '<name>', because streaming source evolution is not enabled for the query. Flow-assigned names take effect only when spark.sql.streaming.queryEvolution.enableSourceEvolution is true."
@@ -8259,6 +8264,11 @@
       "UNNAMED_STREAMING_SOURCES_WITH_ENFORCEMENT" : {
         "message" : [
           "All streaming sources must be named when any source in the query is named, or when spark.sql.streaming.queryEvolution.enableSourceEvolution is enabled. Unnamed sources found: <sourceInfo>. Name every streaming source with the name() method or IDENTIFIED BY."
+        ]
+      },
+      "UNSUPPORTED_SOURCE_NAMING" : {
+        "message" : [
+          "Source name '<sourceName>' cannot be assigned to <sourceType>. Assign names directly to streaming source relations instead of views or table-valued functions."
         ]
       }
     },

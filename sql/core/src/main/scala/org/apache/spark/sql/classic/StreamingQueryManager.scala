@@ -30,7 +30,7 @@ import org.apache.spark.internal.Logging
 import org.apache.spark.internal.LogKeys.{CLASS_NAME, QUERY_ID, RUN_ID}
 import org.apache.spark.sql.catalyst.catalog.CatalogTable
 import org.apache.spark.sql.catalyst.plans.logical.Except
-import org.apache.spark.sql.catalyst.streaming.{WriteToStream, WriteToStreamStatement}
+import org.apache.spark.sql.catalyst.streaming.{StreamingSourceIdentifyingName, WriteToStream, WriteToStreamStatement}
 import org.apache.spark.sql.connector.catalog.{Identifier, SupportsWrite, Table, TableCatalog}
 import org.apache.spark.sql.errors.QueryExecutionErrors
 import org.apache.spark.sql.execution.streaming._
@@ -329,6 +329,12 @@ class StreamingQueryManager private[sql] (
 
     (sink, trigger) match {
       case (_: SupportsWrite, trigger: ContinuousTrigger) =>
+        if (StreamingSourceIdentifyingName.collectSources(analyzedStreamWritePlan)
+            .exists(_._2.nameOpt.isDefined)) {
+          throw new SparkIllegalArgumentException(
+            errorClass = "STREAMING_QUERY_EVOLUTION_ERROR." +
+              "SOURCE_EVOLUTION_CONTINUOUS_PROCESSING_NOT_SUPPORTED")
+        }
         // Sink evolution persists per-sink metadata via the V3 commit log, which is written only
         // by MicroBatchExecution.markMicroBatchEnd. ContinuousExecution.commit writes just V1
         // commit metadata and never goes through that path, so the sink metadata would be silently
