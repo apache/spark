@@ -135,7 +135,9 @@ cases it skipped.
 
 A nonempty diff is printed between ``=== BEGIN GOLDEN DIFF ===`` and
 ``=== END GOLDEN DIFF ===`` markers after the test class runs. A filtered verification
-run keeps the unrun cases from the existing golden file in the diff.
+run keeps the unrun cases from the existing golden file in the diff. Patches copied
+from ``python/run-tests`` logs have CRLF line endings; strip carriage returns before
+applying them: ``tr -d '\\r' < golden.patch | git apply``.
 
 Adding golden tests
 -------------------
@@ -153,6 +155,7 @@ file; it is refused when it is set up.
 import difflib
 import hashlib
 import inspect
+import io
 import math
 import os
 import re
@@ -325,8 +328,8 @@ def _golden_diff(test_file, new_content):
         old_path = "/dev/null"
     new_path = "b/{}/{}".format(_GOLDEN_REL_DIR, os.path.basename(test_file))
     lines = difflib.unified_diff(
-        old_content.splitlines(keepends=True),
-        new_content.splitlines(keepends=True),
+        io.StringIO(old_content, newline="\n").readlines(),
+        io.StringIO(new_content, newline="\n").readlines(),
         fromfile=old_path,
         tofile=new_path,
     )
