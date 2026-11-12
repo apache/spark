@@ -99,6 +99,7 @@ module.exports = async ({github, context, core, env = process.env, log = console
                     nodes {
                       status
                       conclusion
+                      updatedAt
                       branch { name }
                       workflowRun { databaseId file { path } }
                     }
@@ -170,6 +171,7 @@ module.exports = async ({github, context, core, env = process.env, log = console
       id: s.workflowRun.databaseId,
       status: lower(s.status),
       conclusion: lower(s.conclusion),
+      updatedAt: s.updatedAt,
       workflow: s.workflowRun.file?.path,
       branch: s.branch?.name
     }))
@@ -236,6 +238,12 @@ module.exports = async ({github, context, core, env = process.env, log = console
   const label = (state) => state.status == 'completed' ? state.conclusion : state.status
   const sameState = (a, b) => a.status == b.status
     && (a.status != 'completed' || a.conclusion == b.conclusion)
+  // The check suite's update time advances when a workflow run is rerun.
+  const isNewerRun = (a, b) => {
+    const aUpdatedAt = Date.parse(a.updatedAt)
+    const bUpdatedAt = Date.parse(b.updatedAt)
+    return aUpdatedAt > bUpdatedAt || (aUpdatedAt == bUpdatedAt && a.id > b.id)
+  }
 
   // Record PR-specific failures and fail the step after syncing the rest.
   // A failed page query instead aborts the pass.
@@ -385,12 +393,22 @@ module.exports = async ({github, context, core, env = process.env, log = console
         }
       }
 
-      // Link a new check to the tracked run if no check shows its current state: the PR
-      // has none yet, its check completed before a rerun, an update was not applied, or
-      // its checks link to other runs (e.g. an older build of the same commit).
+      // Link a new check to the tracked run if no check shows its current state and no
+      // newer build from another branch already represents this shared commit.
       if (trackedRun && !trackedRunShown && !unlistedRun) {
-        await createCheck(pr, ref, trackedRun,
-          trackedRunReran ? 'rerun' : previousBuildState)
+        // Checks are shared by PRs at the same commit. Let a newer build from another
+        // non-master branch of this fork represent it instead of creating competing
+        // checks; the suite update time also covers a rerun with the same run ID.
+        const newerOtherBranchBuild = pr.buildChecks.some(cr => {
+          const run = pr.forkRuns.get(String(runIdOf(cr)))
+          return run?.workflow == BUILD_WORKFLOW && run.branch
+            && run.branch != 'master' && run.branch != pr.branch
+            && isNewerRun(run, trackedRun)
+        })
+        if (!newerOtherBranchBuild) {
+          await createCheck(pr, ref, trackedRun,
+            trackedRunReran ? 'rerun' : previousBuildState)
+        }
       } else if (!trackedRun && !syncableBuildCheck) {
         // No run exists, it was skipped, or the PR is from fork master: create
         // action_required guidance, unless the PR already has it or is still within
