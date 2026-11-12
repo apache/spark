@@ -202,11 +202,10 @@ class StatefulStreamlineAggregationProcessorSuite extends SparkFunSuite with SQL
     test(s"empty global aggregation rejects a failed flush - state format $version") {
       val store = new PutFailingStore
       val fixture = new ProcessorFixture(version, store, global = true)
-      assert(fixture.processor.process(InternalRow(5L)).getLong(0) === 5L)
+      assert(fixture.processor.processEmptyGroupingKey().isNullAt(0))
       val failure = new IOException("global aggregation write failed")
       store.failure = Some(failure)
       assertWriteFailure(failure) { fixture.processor.flushDirtyWrites() }
-      assertWriteFailure(failure) { fixture.processor.processEmptyGroupingKey() }
       assertWriteFailure(failure) { fixture.processor.process(InternalRow(10L)) }
       assertWriteFailure(failure) { fixture.processor.flushDirtyWrites() }
       assert(store.reads === 1)

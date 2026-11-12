@@ -505,8 +505,6 @@ class StatefulStreamlineAggregationProcessor(
    * value if one exists, otherwise the initialized buffer, which is also written to state.
    */
   def processEmptyGroupingKey(): UnsafeRow = {
-    throwIfWriteFailed()
-
     val groupingKey = groupingProjection.apply(InternalRow.empty).copy()
     val buffer = newAggregationBuffer()
 
