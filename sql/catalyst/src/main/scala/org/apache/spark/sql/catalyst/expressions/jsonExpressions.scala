@@ -96,9 +96,9 @@ case class GetJsonObject(json: Expression, path: Expression)
 
   protected def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
     val evaluatorClass = classOf[GetJsonObjectEvaluator].getName
-    val initEvaluator = path.foldable match {
-      case true if path.eval() != null =>
-        val cachedPath = path.eval().asInstanceOf[UTF8String]
+    val foldablePath = ExprUtils.tryEvalFoldable(path)
+    val initEvaluator = foldablePath match {
+      case Some(cachedPath) if cachedPath != null =>
         val refCachedPath = ctx.addReferenceObj("cachedPath", cachedPath)
         s"new $evaluatorClass($refCachedPath)"
       case _ => s"new $evaluatorClass()"
@@ -117,7 +117,7 @@ case class GetJsonObject(json: Expression, path: Expression)
          |  $evaluator.setJson(${jsonEval.value});
          |}
          |""".stripMargin
-    val setPath = if (!path.foldable) {
+    val setPath = if (foldablePath.isEmpty) {
       s"""
          |if (${pathEval.isNull}) {
          |  $evaluator.setPath(null);
