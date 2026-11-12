@@ -26,7 +26,7 @@ import pyspark
 import pyspark.sql._ai_client as client_module
 import pyspark.sql.ai as ai_module
 from pyspark.sql import SparkSession
-from pyspark.sql.ai import ai_query, register_model
+from pyspark.sql.ai import ai_query, register_model, register_sql_function
 
 
 def main():
@@ -70,17 +70,34 @@ def main():
             max_tokens=256,
         )
         frame = spark.createDataFrame(inputs, "row_id int, prompt string, expected string")
-        result = frame.repartition(2).withColumn("answer", ai_query("live", "prompt"))
-        plan = result._jdf.queryExecution().executedPlan().toString()
-        if "ArrowEvalPython" not in plan:
-            raise AssertionError("The query did not use Spark's Arrow Python execution")
-        rows = sorted(result.collect(), key=lambda row: row.row_id)
-        if len(rows) != len(inputs):
-            raise AssertionError("The output row count changed")
-        for row in rows:
-            answer = row.answer.strip() if isinstance(row.answer, str) else row.answer
-            if answer != row.expected:
-                raise AssertionError("The model response did not match the synthetic prompt")
+
+        def check(result, label):
+            plan = result._jdf.queryExecution().executedPlan().toString()
+            if "ArrowEvalPython" not in plan:
+                raise AssertionError(f"{label}: the query did not use Spark's Arrow Python execution")
+            rows = sorted(result.collect(), key=lambda row: row.row_id)
+            if len(rows) != len(inputs):
+                raise AssertionError(f"{label}: the output row count changed")
+            for row in rows:
+                answer = row.answer.strip() if isinstance(row.answer, str) else row.answer
+                if answer != row.expected:
+                    raise AssertionError(f"{label}: the model response did not match the synthetic prompt")
+            return plan, rows
+
+        column_plan, column_rows = check(
+            frame.repartition(2).withColumn("answer", ai_query("live", "prompt")), "Column API"
+        )
+
+        register_sql_function()
+        frame.repartition(2).createOrReplaceTempView("ai_query_e2e_inputs")
+        sql_plan, sql_rows = check(
+            spark.sql(
+                "SELECT row_id, prompt, expected, ai_query('live', prompt) AS answer "
+                "FROM ai_query_e2e_inputs"
+            ),
+            "SQL",
+        )
+
         report = {
             "spark_version": pyspark.__version__,
             "provider": args.provider,
@@ -88,8 +105,8 @@ def main():
             "auth_type": args.auth_type,
             "master": spark.sparkContext.master,
             "arrow_execution": True,
-            "rows": [row.asDict() for row in rows],
-            "plan": plan,
+            "column_api": {"rows": [row.asDict() for row in column_rows], "plan": column_plan},
+            "sql": {"rows": [row.asDict() for row in sql_rows], "plan": sql_plan},
         }
         args.report.write_text(json.dumps(report, indent=2) + "\n")
         print(json.dumps(report, indent=2))
