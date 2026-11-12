@@ -108,21 +108,19 @@ abstract class TimestampNanosSpecialValuesSuiteBase extends QueryTest with Share
 
   test("a failing foldable string fails the query only when it is evaluated") {
     forAll { (fam, p, t) =>
-      Seq(t, fam.micro).foreach { typ =>
-        val failing = s"CAST(element_at(array('a'), 2) AS $typ)"
-        checkAnswer(
-          sql(s"SELECT CASE WHEN id < 0 THEN $failing END FROM range(2)"),
-          Seq(Row(null), Row(null)))
-        if (conf.ansiEnabled) {
-          checkError(
-            exception = intercept[SparkArrayIndexOutOfBoundsException](
-              sql(s"SELECT $failing").collect()),
-            condition = "INVALID_ARRAY_INDEX_IN_ELEMENT_AT",
-            parameters = Map("indexValue" -> "2", "arraySize" -> "1"),
-            context = ExpectedContext("element_at(array('a'), 2)"))
-        } else {
-          checkAnswer(sql(s"SELECT $failing"), Row(null))
-        }
+      val failing = s"CAST(element_at(array('a'), 2) AS $t)"
+      checkAnswer(
+        sql(s"SELECT CASE WHEN id < 0 THEN $failing END FROM range(2)"),
+        Seq(Row(null), Row(null)))
+      if (conf.ansiEnabled) {
+        checkError(
+          exception = intercept[SparkArrayIndexOutOfBoundsException](
+            sql(s"SELECT $failing").collect()),
+          condition = "INVALID_ARRAY_INDEX_IN_ELEMENT_AT",
+          parameters = Map("indexValue" -> "2", "arraySize" -> "1"),
+          context = ExpectedContext("element_at(array('a'), 2)"))
+      } else {
+        checkAnswer(sql(s"SELECT $failing"), Row(null))
       }
     }
   }

@@ -333,7 +333,8 @@ object SpecialDatetimeValues extends Rule[LogicalPlan] {
 
   /**
    * The constant string that `cast` casts, or None if it casts something else or evaluating the
-   * string fails.
+   * string fails. Unlike the rule on a cast to DATE, TIMESTAMP or TIMESTAMP_NTZ, this does not
+   * throw.
    */
   private[sql] def constantString(cast: Cast): Option[UTF8String] = cast.child match {
     case e if isConstantString(e) =>
@@ -346,9 +347,13 @@ object SpecialDatetimeValues extends Rule[LogicalPlan] {
   }
 
   private val specialDatetimeRewrite: PartialFunction[Expression, Expression] = {
-    case cast @ Cast(_, dt, _, _) if rewrites(dt) =>
-      // A failing input is left to the cast, so that it fails the query only if evaluated.
-      constantString(cast)
+    case cast @ Cast(e, dt, _, _) if rewrites(dt) && isConstantString(e) =>
+      val str = dt match {
+        // A failing input is left to a nanos cast, which this rule did not rewrite before.
+        case _: AnyTimestampNanoType => constantString(cast)
+        case _ => Option(e.eval())
+      }
+      str
         .flatMap(s => conv(dt)(s.toString, cast.zoneId))
         .map(Literal(_, dt))
         .getOrElse(cast)

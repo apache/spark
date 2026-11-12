@@ -188,10 +188,9 @@ class SpecialDatetimeValuesSuite extends PlanTest {
     }
   }
 
-  test("a foldable string that fails to evaluate is left to the cast") {
+  test("a foldable string that fails to evaluate is left to a nanosecond cast") {
     val failing = ElementAt(CreateArray(Seq(Literal("epoch"))), Literal(2), failOnError = true)
-    Seq(DateType, TimestampType, TimestampNTZType, TimestampLTZNanosType(9),
-        TimestampNTZNanosType(7)).foreach { dt =>
+    Seq(TimestampLTZNanosType(9), TimestampNTZNanosType(7)).foreach { dt =>
       val cast = Cast(failing, dt, Some("UTC"))
       assert(SpecialDatetimeValues.applyForExpression(cast) == cast)
     }

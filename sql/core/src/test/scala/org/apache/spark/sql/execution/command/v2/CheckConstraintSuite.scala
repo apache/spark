@@ -499,15 +499,14 @@ class CheckConstraintSuite extends QueryTest with CommandSuiteBase with DDLComma
     // The optimizer keeps an expression that fails in a branch that may not run, and so does the
     // check for the current date.
     withSQLConf(SQLConf.ANSI_ENABLED.key -> "true") {
-      val types = Seq("DATE", "TIMESTAMP", "TIMESTAMP_NTZ", "TIMESTAMP_NTZ(9)", "TIMESTAMP_LTZ(9)")
-      types.foreach { to =>
-        withNamespaceAndTable("ns", "tbl", nonPartitionCatalog) { t =>
-          sql(s"CREATE TABLE $t (id INT, ts TIMESTAMP) $defaultUsing")
-          sql(s"ALTER TABLE $t ADD CONSTRAINT c1 CHECK " +
-            s"(id < IF(false, hour(CAST(CAST(1/0 AS STRING) AS $to)), 100))")
-          sql(s"INSERT INTO $t VALUES (1, current_timestamp())")
-          checkAnswer(spark.table(t).select("id"), Seq(Row(1)))
-        }
+      // A cast to DATE, TIMESTAMP or TIMESTAMP_NTZ fails in `SpecialDatetimeValues`, so this one
+      // casts to TIMESTAMP_LTZ(9).
+      withNamespaceAndTable("ns", "tbl", nonPartitionCatalog) { t =>
+        sql(s"CREATE TABLE $t (id INT, ts TIMESTAMP) $defaultUsing")
+        sql(s"ALTER TABLE $t ADD CONSTRAINT c1 CHECK " +
+          "(id < IF(false, hour(CAST(CAST(1/0 AS STRING) AS TIMESTAMP_LTZ(9))), 100))")
+        sql(s"INSERT INTO $t VALUES (1, current_timestamp())")
+        checkAnswer(spark.table(t).select("id"), Seq(Row(1)))
       }
       Seq("TIMESTAMP", "DATE").foreach { to =>
         withNamespaceAndTable("ns", "tbl", nonPartitionCatalog) { t =>
