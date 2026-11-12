@@ -502,8 +502,7 @@ class MicroBatchExecution(
         throw QueryCompilationErrors.cannotEnableSourceEvolutionOnExistingCheckpointError(version)
       }
     }
-    // Once any source is named, every source must be, whatever the checkpoint tracks.
-    if (hasNamedSources && unnamedSources.nonEmpty) {
+    if (enforceNamed && hasNamedSources && unnamedSources.nonEmpty) {
       throw unnamedSourcesError
     }
     (enforceNamedInCheckpoint, checkpointVersion) match {
