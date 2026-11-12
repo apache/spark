@@ -3765,6 +3765,62 @@ class PlanParserSuite extends AnalysisTest {
     assert(filter.exists(f => gapFillNodes(f).size == 1))
   }
 
+  test("GAP FILL: works after the single-character pipe") {
+    val clause = "GAP FILL (ORDER BY ts BIN WIDTH INTERVAL '5' MINUTE)"
+    withSQLConf(SQLConf.SINGLE_CHARACTER_PIPE_OPERATOR_ENABLED.key -> "true") {
+      assert(parsePlan(s"FROM t | $clause") == parsePlan(s"FROM t |> $clause"))
+      assert(parsePlan(s"TABLE t | $clause") == parsePlan(s"TABLE t |> $clause"))
+      assert(parsePlan(s"FROM t | $clause | WHERE a > 0") ==
+        parsePlan(s"FROM t |> $clause |> WHERE a > 0"))
+      // A column named gap after `|` is still a bitwise OR.
+      assert(gapFillNodes(parsePlan("SELECT 1 | gap FROM t")).isEmpty)
+      assert(gapFillNodes(parsePlan("SELECT a | gap fill FROM t")).isEmpty)
+    }
+    withSQLConf(SQLConf.SINGLE_CHARACTER_PIPE_OPERATOR_ENABLED.key -> "false") {
+      assert(parseException(s"FROM t | $clause").getCondition == "PARSE_SYNTAX_ERROR")
+      assert(gapFillNodes(parsePlan("SELECT 1 | gap FROM t")).isEmpty)
+    }
+  }
+
+  test("GAP FILL: unit-to-unit interval literals still parse in both keyword modes") {
+    // The GAP FILL range lets TO follow an expression, which must not change how a query
+    // without GAP FILL reads `INTERVAL ... DAY TO HOUR`.
+    def literals(plan: LogicalPlan): Seq[Literal] = plan.collectWithSubqueries {
+      case p => p.expressions.flatMap(_.collect { case l: Literal => l })
+    }.flatten
+    Seq("true", "false").foreach { enforceReserved =>
+      withSQLConf(
+          SQLConf.ANSI_ENABLED.key -> "true",
+          SQLConf.ENFORCE_RESERVED_KEYWORDS.key -> enforceReserved) {
+        Seq(
+          "SELECT * FROM t WHERE d IN (SELECT INTERVAL '1 2' DAY TO HOUR)" ->
+            "INTERVAL '1 2' DAY TO HOUR",
+          "SELECT (SELECT INTERVAL '2-1' YEAR TO MONTH)" -> "INTERVAL '2-1' YEAR TO MONTH",
+          "SELECT * FROM (SELECT INTERVAL '10:20' MINUTE TO SECOND) s" ->
+            "INTERVAL '10:20' MINUTE TO SECOND",
+          "SELECT extract(YEAR FROM INTERVAL '2-1' YEAR TO MONTH)" ->
+            "INTERVAL '2-1' YEAR TO MONTH"
+        ).foreach { case (query, interval) =>
+          assert(literals(parsePlan(query)).contains(parseExpression(interval)), query)
+        }
+      }
+    }
+  }
+
+  test("GAP FILL: a range start can end in an interval literal") {
+    Seq("true", "false").foreach { enforceReserved =>
+      withSQLConf(
+          SQLConf.ANSI_ENABLED.key -> "true",
+          SQLConf.ENFORCE_RESERVED_KEYWORDS.key -> enforceReserved) {
+        val gapFill = singleGapFill(parsePlan(
+          "SELECT * FROM t GAP FILL (ORDER BY ts BIN WIDTH INTERVAL '5' MINUTE " +
+            "FROM s - INTERVAL '1' YEAR TO month)"))
+        assert(gapFill.rangeStartExpr.contains(parseExpression("s - INTERVAL '1' YEAR")))
+        assert(gapFill.rangeEndExpr.contains(UnresolvedAttribute(Seq("month"))))
+      }
+    }
+  }
+
   test("GAP FILL: malformed clauses raise PARSE_SYNTAX_ERROR") {
     Seq(
       "SELECT * FROM t GAP FILL (BIN WIDTH INTERVAL '5' MINUTE)" -> ("'BIN'", ""),
@@ -3801,6 +3857,22 @@ class PlanParserSuite extends AnalysisTest {
       case UnresolvedAttribute(Seq("a")) => UnresolvedAttribute(Seq("renamed"))
     }.asInstanceOf[UnresolvedGapFill]
     assert(renamed.fillColumns.head.column == UnresolvedAttribute(Seq("renamed")))
+
+    // Rewriting the CONSTANT value and a LINEAR column rebuilds both entries with their methods.
+    val rewritten = gapFill.transformExpressions {
+      case UnresolvedAttribute(Seq("b")) => UnresolvedAttribute(Seq("b2"))
+      case Literal(value, _) if value == UTF8String.fromString("x") => Literal("y")
+    }.asInstanceOf[UnresolvedGapFill]
+    assert(rewritten.fillColumns.size == 2)
+    val constantEntry = rewritten.fillColumns.head
+    val linearEntry = rewritten.fillColumns(1)
+    assert(constantEntry.column == UnresolvedAttribute(Seq("a")))
+    constantEntry.method match {
+      case GapFillMethod.Constant(value) =>
+        assert(value.collect { case l: Literal => l } == Seq(Literal("y")))
+      case other => fail(s"Expected a CONSTANT fill method, got $other")
+    }
+    assert(linearEntry == GapFillColumn(UnresolvedAttribute(Seq("b2")), GapFillMethod.Linear))
   }
 
   test("GAP FILL: parses when the operator is not enabled") {

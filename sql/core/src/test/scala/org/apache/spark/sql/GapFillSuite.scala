@@ -17,20 +17,27 @@
 
 package org.apache.spark.sql
 
+import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSparkSession
 
 class GapFillSuite extends QueryTest with SharedSparkSession {
 
-  test("GAP FILL in SQL text is rejected as not yet supported") {
-    withTempView("metrics") {
-      spark.sql("SELECT TIMESTAMP_NTZ '2024-01-01 00:00:00' AS ts, 1 AS v")
-        .createOrReplaceTempView("metrics")
-      checkError(
-        exception = intercept[AnalysisException] {
-          spark.sql("SELECT * FROM metrics GAP FILL (ORDER BY ts BIN WIDTH INTERVAL '5' MINUTE)")
-        },
-        condition = "UNSUPPORTED_FEATURE.GAP_FILL",
-        parameters = Map.empty[String, String])
+  // With the gate on, the rule waits for the temp view to resolve and then rejects the query.
+  Seq(false, true).foreach { enabled =>
+    test(s"GAP FILL in SQL text is rejected as not yet supported (enabled=$enabled)") {
+      withSQLConf(SQLConf.GAP_FILL_ENABLED.key -> enabled.toString) {
+        withTempView("metrics") {
+          spark.sql("SELECT TIMESTAMP_NTZ '2024-01-01 00:00:00' AS ts, 1 AS v")
+            .createOrReplaceTempView("metrics")
+          checkError(
+            exception = intercept[AnalysisException] {
+              spark.sql(
+                "SELECT * FROM metrics GAP FILL (ORDER BY ts BIN WIDTH INTERVAL '5' MINUTE)")
+            },
+            condition = "UNSUPPORTED_FEATURE.GAP_FILL",
+            parameters = Map.empty[String, String])
+        }
+      }
     }
   }
 }

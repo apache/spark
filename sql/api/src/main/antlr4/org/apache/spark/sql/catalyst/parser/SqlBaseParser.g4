@@ -83,7 +83,9 @@ options { tokenVocab = SqlBaseLexer; }
            la == ANTI || la == ASOF || la == JOIN || la == UNION || la == EXCEPT ||
            la == SETMINUS || la == INTERSECT || la == ORDER || la == CLUSTER ||
            la == DISTRIBUTE || la == SORT || la == LIMIT || la == OFFSET ||
-           la == AGGREGATE || la == WINDOW || la == LATERAL || la == BIN;
+           la == AGGREGATE || la == WINDOW || la == LATERAL || la == BIN ||
+           // GAP starts a pipe step only before FILL (, so `a | gap` stays a bitwise OR.
+           (la == GAP && _input.LA(3) == FILL && _input.LA(4) == LEFT_PAREN);
   }
 
   /**
@@ -1941,8 +1943,11 @@ booleanValue
     : TRUE | FALSE
     ;
 
+// The unit-to-unit form comes first on purpose. The GAP FILL range `FROM start TO end` lets TO
+// follow an expression, so the first (SLL) parsing stage can see both forms as viable for
+// `INTERVAL '1 2' DAY TO HOUR`. ANTLR then picks the first one, and it must be this one.
 interval
-    : INTERVAL (errorCapturingMultiUnitsInterval | errorCapturingUnitToUnitInterval)
+    : INTERVAL (errorCapturingUnitToUnitInterval | errorCapturingMultiUnitsInterval)
     ;
 
 errorCapturingMultiUnitsInterval

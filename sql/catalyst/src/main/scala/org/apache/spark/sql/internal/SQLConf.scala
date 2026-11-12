@@ -6430,8 +6430,10 @@ object SQLConf {
 
   val GAP_FILL_ENABLED =
     buildConf("spark.sql.gapFillRelationOperator.enabled")
-      .doc("Enable the GAP FILL relation operator, which adds a row at each bin start of a " +
-        "regular time grid that has no input row at exactly that time.")
+      .doc("Gate for the GAP FILL relation operator, which is under development. GAP FILL " +
+        "queries are rejected whatever the value. When true, the rejection waits until the " +
+        "input relation resolves, so errors that leave it unresolved, such as a missing " +
+        "table, are reported first.")
       .internal()
       .version("4.4.0")
       .withBindingPolicy(ConfigBindingPolicy.SESSION)
