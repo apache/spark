@@ -22,10 +22,8 @@ package org.apache.spark.sql.catalyst.analysis.resolver
  * only looking at the unresolved plan. [[Resolver]] will throw this control-flow exception
  * when it encounters some explicitly unsupported feature. Like a [[ResolverGuard]] rejection, it
  * marks a known coverage gap rather than a single-pass failure: [[HybridAnalyzer]] falls back to
- * the fixed-point result and records `resolutionGap` as the single-pass resolution gap. The
- * `ANALYZER_SINGLE_PASS_RESOLVER_EXPOSE_EXPLICITLY_UNSUPPORTED_FEATURE_IN_*` flags expose it as a
- * failure instead. `reason` only appears in the exception message, so unlike `resolutionGap` it
- * may carry details that must not be logged unredacted.
+ * the fixed-point result instead of comparing it with the single-pass one. `resolutionGap`
+ * identifies the known gap, and `reason` describes it in the exception message.
  *
  * For example, [[UnresolvedRelation]] can be intermediately resolved by [[ResolveRelations]] as
  * [[UnresolvedCatalogRelation]] or a [[View]] (among all others). Say that for now the views

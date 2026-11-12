@@ -31,18 +31,18 @@ import org.apache.spark.sql.types.{DataType, StringType}
  * This type coercion object is only used in the single-pass analyzer and is not part of the
  * [[TypeCoercion]] rules used in the fixed-point analyzer.
  *
- * When the database object (e.g. [[View]] or [[SQLStoredProcedure]]) or the session has a custom
- * default collation and a resolving expression's dataType is the companion object [[StringType]],
- * we need to treat the dataType as a collated [[StringType]]. To do this, we wrap the expression
- * with a cast to a [[StringType]] with the default collation or change the dataType to
- * [[StringType]] with the default collation. Note that when the dataType is equal to the
- * companion object [[StringType]], but isn't the same by reference, we shouldn't change the
- * dataType, since that means the user explicitly specified UTF8_BINARY collation.
+ * When the database object (e.g. [[View]]) or the session has a custom default collation and a
+ * resolving expression's dataType is the companion object [[StringType]], we need to treat the
+ * dataType as a collated [[StringType]]. To do this, we wrap the expression with a cast to a
+ * [[StringType]] with the default collation or change the dataType to [[StringType]] with the
+ * default collation. Note that when the dataType is equal to the companion object [[StringType]],
+ * but isn't the same by reference, we shouldn't change the dataType, since that means the user
+ * explicitly specified UTF8_BINARY collation.
  */
 object DefaultCollationTypeCoercion {
 
   /**
-   * Apply default collation from a [[View]], [[SQLStoredProcedure]], or session to the expression.
+   * Apply default collation from a [[View]] or session to the expression.
    *
    * If the default collation is UTF8_BINARY, it does not need to be applied since it's a noop.
    */

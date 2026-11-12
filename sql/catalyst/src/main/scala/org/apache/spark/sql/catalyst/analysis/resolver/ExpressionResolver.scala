@@ -1534,7 +1534,7 @@ class ExpressionResolver(
    *
    * The `x` in the function body is resolved from the lambda variable map. The `y` is resolved
    * from the underlying table `t` since it is not present in the argument list of the above
-   * [[LabmdaFunction]]. Thus, the following plan would look like:
+   * [[LambdaFunction]]. Thus, the following plan would look like:
    *
    * {{{
    *   Project [filter(array(a), lambdafunction((lambda x#2 = y#1), lambda x#2, false)) AS ...]

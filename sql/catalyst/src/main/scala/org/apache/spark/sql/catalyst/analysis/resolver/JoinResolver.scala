@@ -49,7 +49,7 @@ class JoinResolver(
    *  - Return the resulting [[Project]] or [[Join]] with new children optionally wrapped in
    *    [[WithCTE]]. See [[CteScope]] scaladoc for more info.
    *  - Since joins interact with Recursive CTEs in such a way that they disallow self references if
-   *    the self reference is on a specific side of the join operator, the appropriate [[CTEScope]]
+   *    the self reference is on a specific side of the join operator, the appropriate [[CteScope]]
    *    is marked as disallowing self references according to the rules defined in
    *    [[ResolveWithCTE.checkIfSelfReferenceIsPlacedCorrectly]]
    */

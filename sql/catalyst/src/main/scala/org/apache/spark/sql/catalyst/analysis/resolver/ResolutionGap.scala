@@ -18,10 +18,8 @@
 package org.apache.spark.sql.catalyst.analysis.resolver
 
 /**
- * A known single-pass coverage gap reported by [[ExplicitlyUnsupportedResolverFeature]]. Its
- * `name` is logged unredacted as the single-pass resolution gap, so it must never contain customer
- * identifiers or data. The class is sealed so that every gap is defined in this file, with a `name`
- * built from constant strings or class names only.
+ * A known single-pass coverage gap reported by [[ExplicitlyUnsupportedResolverFeature]]. The
+ * class is sealed so that every known gap is listed in this file.
  */
 sealed abstract class ResolutionGap(val name: String)
 
