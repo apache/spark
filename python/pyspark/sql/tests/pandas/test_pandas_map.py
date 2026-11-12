@@ -662,8 +662,9 @@ class MapInPandasTests(MapInPandasTestsMixin, ReusedSQLTestCase):
                     self.assertEqual(
                         metrics.apply("pythonNumTimedBatches").value(), (num_rows + 1) // 2
                     )
+                    for name in phase_names:
+                        self.assertFalse(metrics.apply(name).isZero(), name)
                     phases = [metrics.apply(name).value() for name in phase_names]
-                    self.assertTrue(all(value >= 0 for value in phases))
                     self.assertGreaterEqual(phases[2], 10)
                     self.assertLessEqual(sum(phases), metrics.apply("pythonProcessingTime").value())
 
