@@ -102,8 +102,6 @@ jobs:
           fi
           ls -lh compile-target.tar.zst compile-m2-spark.tar.zst
       - name: Upload compile artifact
-        id: upload-compile
-        continue-on-error: true
         uses: actions/upload-artifact@v7
         with:
           name: spark-maven-compile-${{ inputs.branch }}-java${{ inputs.java }}-${{ github.run_id }}
@@ -112,17 +110,6 @@ jobs:
             compile-m2-spark.tar.zst
           retention-days: 7
           if-no-files-found: error
-      - name: Retry compile artifact upload
-        if: steps.upload-compile.outcome == 'failure'
-        uses: actions/upload-artifact@v7
-        with:
-          name: spark-maven-compile-${{ inputs.branch }}-java${{ inputs.java }}-${{ github.run_id }}
-          path: |
-            compile-target.tar.zst
-            compile-m2-spark.tar.zst
-          retention-days: 7
-          if-no-files-found: error
-          overwrite: true
 
   # Build: build Spark and run the tests for specified modules using maven
   build:
