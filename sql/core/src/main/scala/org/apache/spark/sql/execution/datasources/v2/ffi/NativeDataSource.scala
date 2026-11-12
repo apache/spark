@@ -51,7 +51,6 @@ import org.apache.spark.sql.connector.write.{DataWriter, WriterCommitMessage}
 import org.apache.spark.sql.errors.{QueryCompilationErrors, QueryExecutionErrors}
 import org.apache.spark.sql.execution.arrow.ArrowWriter
 import org.apache.spark.sql.execution.datasources.v2.columnar.{ColumnarBatchPlanner, ColumnarDataSource, ColumnarOnlyPartitionReaderFactory, ColumnarPlannedBatch, ColumnarStreamReader, ColumnarStreamWriter, ColumnarWriter, ColumnDomain}
-import org.apache.spark.sql.execution.vectorized.ReusedArrowColumnVector
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
 import org.apache.spark.sql.util.{ArrowUtils, CaseInsensitiveStringMap}
@@ -646,9 +645,28 @@ object NativeWriterCommitMessage {
  * `PipedRDD`, while `DataSourceRDD` closes the reader once the task completes. The library must
  * not get the release of the stream during get_next, and the task context must stay valid until
  * then, so [[close]] then leaves the release to [[next]], once get_next returns, rather than wait
- * for it and keep the task from completing. That [[next]] then returns false, or throws the error
- * of its read. A [[next]] called once the reader is closed returns false without calling the
- * library.
+ * for it and keep the task from completing. That [[next]] then throws the error of its read, or
+ * fails as a [[next]] called once the reader is closed does, without reading from the library: so
+ * such a thread does not take the close for the end of the data, whether or not it was in
+ * get_next then. Script transformation, for example, then destroys its process.
+ *
+ * Such a thread may also still read the batch that [[next]] returned last when another thread
+ * closes the reader: script transformation gets its first batch on the task thread, and reads its
+ * rows on a thread of its own. The column vectors read the buffers of the batch at their
+ * addresses, so [[close]] frees these buffers at once only if [[next]] was called again since it
+ * returned the batch, as at the end of the stream, after which consumers no longer read the
+ * batch. Otherwise, it releases the stream, the dictionaries and the task at once, since the
+ * arrays of a stream may outlive it, and their release does not use the task (see
+ * `SparkDsTaskContext` in the header). A Cleaner then frees the buffers of the batch and the
+ * allocator once the reader is unreachable, which each of its column vectors keeps it from being,
+ * or once a thread calls [[next]] again, which then fails: that thread no longer reads the batch.
+ * So a reader closed before the end of its stream, as with a LIMIT, and not called again holds the
+ * buffers of one batch until a garbage collection, which these buffers do not trigger: the JVM
+ * does not count them. Under `DataSourceRDD`, only a garbage collection frees them: its
+ * `PartitionIterator` drops the reader once it closes it, and never calls [[next]] on it again,
+ * even for a thread that then asks the iterator for the next batch. That is the only effect of
+ * `DataSourceRDD` here: however the iterator then answers that thread, the thread does not get
+ * the batch, and a [[next]] called on the reader would free the buffers at once and fail.
  *
  * @param kind the kind of the scan, `NativeLibrary.READ_BATCH` or `READ_MICRO_BATCH`
  * @param partition the partition, whose index in the scan the library gets as `partition_id`
@@ -675,14 +693,25 @@ class NativePartitionReader(
   // The task that reads the partition, which the library may use until the stream is released.
   private var task: NativeLibrary.Task = _
   private var root: VectorSchemaRoot = _
+  // The column vectors of the batch, which read the buffers of each batch that `readNext` imports.
+  private var columns: Array[NativeColumnVector] = _
   private var batch: ColumnarBatch = _
   @GuardedBy("this")
   private var closed = false
   // Whether a thread is in next. While it is, only that thread uses the stream and the vectors,
   // and it releases them if the reader was closed meanwhile. Otherwise, they are only released
-  // under the lock.
+  // under the lock, except for the buffers of a batch that may still be read when the reader is
+  // closed, which a Cleaner frees once no thread can use them (see close).
   @GuardedBy("this")
   private var reading = false
+  // Whether next returned the batch and was not called again since, so that a consumer may still
+  // read the batch.
+  @GuardedBy("this")
+  private var batchReturned = false
+  // Frees the buffers of the batch that a consumer may still read once the reader is closed: the
+  // Cleaner does when the reader is unreachable, and next does when it is called again.
+  @GuardedBy("this")
+  private var batchCleanable: Cleaner.Cleanable = _
 
   // Synchronized so that a close on another thread sees the task and the vectors.
   synchronized {
@@ -691,7 +720,10 @@ class NativePartitionReader(
         timeZoneId, stream.memoryAddress())(task = _)
       root = VectorSchemaRoot.create(importSchema(), allocator)
       checkSchema()
-      batch = new ColumnarBatch(root.getFieldVectors.asScala.map(columnVector).toArray)
+      columns = root.getFieldVectors.asScala.zip(schema.fields).map { case (vector, field) =>
+        columnVector(vector, field.nullable)
+      }.toArray
+      batch = new ColumnarBatch(columns.toArray[ColumnVector])
     } catch {
       case e: Throwable =>
         close()
@@ -733,22 +765,29 @@ class NativePartitionReader(
    * Checks that the data agrees with the nullability of the schema to read: a column, a field,
    * an element or a map value that it declares not nullable has no null, except where its parent
    * is null. Spark relies on the nullability, for example to evaluate `isnull` of such a column to
-   * false without reading it.
+   * false without reading it. `nullCounts` are the null_counts that the library exported for the
+   * columns.
    */
-  private def checkNulls(): Unit = {
-    root.getFieldVectors.asScala.zip(schema.fields).foreach { case (vector, field) =>
-      checkNulls(vector, field.dataType, field.nullable, field.name, _ => true)
+  private def checkNulls(nullCounts: Array[Long]): Unit = {
+    root.getFieldVectors.asScala.lazyZip(schema.fields).lazyZip(nullCounts).foreach {
+      case (vector, field, nullCount) =>
+        checkNulls(vector, field.dataType, field.nullable, field.name, _ => true, nullCount)
     }
   }
 
-  /** `referenced` tells whether a value belongs to a value of the parent that is not null. */
+  /**
+   * `referenced` tells whether a value belongs to a value of the parent that is not null.
+   * `nullCount` is the null_count that the library exported for the vector, if known, and -1
+   * otherwise.
+   */
   private def checkNulls(
       vector: ValueVector,
       dataType: DataType,
       nullable: Boolean,
       column: String,
-      referenced: Int => Boolean): Unit = {
-    if (!nullable && vector.getNullCount > 0 &&
+      referenced: Int => Boolean,
+      nullCount: Long = -1): Unit = {
+    if (!nullable && NativeColumnVector.hasNulls(vector, nullCount) &&
         (0 until vector.getValueCount).exists(i => vector.isNull(i) && referenced(i))) {
       throw error(name, "read", s"The column $column has a null, but the schema to read " +
         "declares it not nullable.")
@@ -836,14 +875,20 @@ class NativePartitionReader(
   }
 
   /**
-   * Wraps a vector of the root, into which every batch is imported. It is not freeable between
-   * batches: Spark must not close it when it moves to the next batch, as `ColumnarToRowExec` does
-   * with the column vectors that are freeable, because closing a struct column also drops its
-   * child column vectors. The reader closes the Arrow vectors at the end.
+   * Wraps a vector of the root, into which every batch is imported, in a `NativeColumnVector`,
+   * which reads the buffers of the batch that `readNext` imported last, and keeps the reader
+   * reachable, so that a Cleaner frees these buffers only once the column vector is unreachable
+   * too (see the class doc). Like the other `ReusedArrowColumnVector`s, it is not freeable
+   * between batches: Spark must not close it when it moves to the next batch, as
+   * `ColumnarToRowExec` does with the column vectors that are freeable, because closing a struct
+   * column also drops its child column vectors. The reader closes the Arrow vectors at the end.
+   * `nullable` is the nullability of the column in the schema to read, which `checkNulls` enforces
+   * on each batch after the column vector is refreshed: the batch has no rows until the check
+   * passes.
    */
-  private def columnVector(vector: FieldVector): ColumnVector = {
+  private def columnVector(vector: FieldVector, nullable: Boolean): NativeColumnVector = {
     try {
-      new ReusedArrowColumnVector(vector)
+      NativeColumnVector.create(vector, nullable, this)
     } catch {
       case NonFatal(e) =>
         throw QueryExecutionErrors.nativeDataSourceError("read", name,
@@ -853,20 +898,50 @@ class NativePartitionReader(
   }
 
   override def next(): Boolean = {
-    // A reader that was closed while it read has released the batch that it read.
-    startReading() && Utils.tryWithSafeFinally(readNext())(stopReading()) && synchronized(!closed)
+    startReading()
+    val hasBatch = Utils.tryWithSafeFinally(readNext())(stopReading())
+    synchronized {
+      // A reader that was closed while it read has released the batch that it read, and fails as
+      // it does for a next called once it is closed (see the class doc).
+      if (closed) {
+        throw closedError()
+      }
+      batchReturned = hasBatch
+      batchReturned
+    }
   }
 
-  private def startReading(): Boolean = synchronized {
-    reading = !closed
-    reading
+  /**
+   * Fails once the reader is closed. In either case, the caller no longer reads the batch that
+   * next returned last, if any, so a closed reader frees its buffers at once. This assumes that no
+   * other thread still reads that batch, as an open reader does when it imports the next batch,
+   * which releases the buffers of the previous one: a consumer that hands a batch to another
+   * thread must not call next until that thread is done with the batch.
+   */
+  private def startReading(): Unit = synchronized {
+    if (closed) {
+      if (batchCleanable != null) {
+        // The Cleaner action does not refer to the batch, which then has no rows, so that it is
+        // not read at the freed addresses.
+        batch.setNumRows(0)
+        batchCleanable.clean()
+      }
+      throw closedError()
+    }
+    reading = true
+    batchReturned = false
   }
+
+  // Not an internal error: a thread that the task does not wait for gets it as the task completes.
+  private def closedError(): Throwable = error(name, "read", "The partition reader is closed.")
 
   private def stopReading(): Unit = synchronized {
     reading = false
     if (closed) {
-      // The reader was closed by another thread, which no longer gets a failure from here.
-      Utils.tryLogNonFatalError(closeResources())
+      // The reader was closed by another thread, which no longer gets a failure from here. No
+      // consumer reads the batch: next does not return the one that it read, and it was called
+      // since it returned the previous one.
+      Utils.tryLogNonFatalError(closeResources(freeBatch = true))
     }
   }
 
@@ -879,15 +954,19 @@ class NativePartitionReader(
         // The end of the stream.
         false
       } else {
-        try {
+        val nullCounts = try {
           checkArrays(snapshot)
         } catch {
           case e: Throwable =>
             array.release()
             throw e
         }
+        // The import releases the buffers of the previous batch: the batch has no rows until the
+        // new one passes the check, and the column vectors read its buffers before the check.
+        batch.setNumRows(0)
         call(name, "read")(Data.importIntoVectorSchemaRoot(allocator, array, root, dictionaries))
-        checkNulls()
+        columns.zip(nullCounts).foreach { case (column, nullCount) => column.refresh(nullCount) }
+        checkNulls(nullCounts)
         batch.setNumRows(root.getRowCount)
         true
       }
@@ -915,8 +994,9 @@ class NativePartitionReader(
    *    which also rejects them, the nulls are counted when the library did not count them.
    * The buffers are not checked, since the C data interface does not carry their sizes: Arrow
    * Java takes them from the lengths, so the library must export buffers that hold every value.
+   * Returns the null_count that the library exported for each column.
    */
-  private def checkArrays(batch: ArrowArray.Snapshot): Unit = {
+  private def checkArrays(batch: ArrowArray.Snapshot): Array[Long] = {
     // The arrays of the children, one for each field of the type: Arrow Java only checks their
     // number when an array has children, and imports the missing columns of a batch as nulls.
     def children(
@@ -1020,15 +1100,16 @@ class NativePartitionReader(
         "but Spark only reads batches without null rows: mark the values of the columns as null " +
         "instead.")
     }
-    val columns = root.getSchema.getFields.size
-    children(batch, columns, "The batch", s"the schema has $columns columns")
-        .zip(root.getSchema.getFields.asScala).foreach { case (column, field) =>
+    val numColumns = root.getSchema.getFields.size
+    val arrays = children(batch, numColumns, "The batch", s"the schema has $numColumns columns")
+    arrays.zip(root.getSchema.getFields.asScala).foreach { case (column, field) =>
       if (column.length < batch.length) {
         throw error(name, "read", s"The column ${field.getName} has a length of " +
           s"${column.length}, but the batch has a length of ${batch.length}.")
       }
       checkColumn(column, field, field.getName)
     }
+    arrays.map(_.null_count).toArray
   }
 
   override def get(): ColumnarBatch = batch
@@ -1036,16 +1117,27 @@ class NativePartitionReader(
   override def close(): Unit = synchronized {
     if (!closed) {
       closed = true
+      // A thread in next releases the reader once get_next returns, see stopReading. Otherwise, a
+      // consumer may still read the batch that next returned, unless next was called since.
       if (!reading) {
-        closeResources()
+        closeResources(freeBatch = !batchReturned)
       }
     }
   }
 
-  private def closeResources(): Unit = {
+  /**
+   * Releases the stream, the dictionaries and the task, and frees the buffers of the batch and then
+   * the allocator: at once with `freeBatch`, and otherwise once the reader is unreachable or next
+   * is called again, as a consumer may still read the batch (see the class doc).
+   */
+  private def closeResources(freeBatch: Boolean): Unit = {
     Utils.tryWithSafeFinally {
       Utils.tryWithSafeFinally {
-        if (root != null) {
+        if (freeBatch && root != null) {
+          // The batch has no rows, so that it is not read at the freed addresses.
+          if (batch != null) {
+            batch.setNumRows(0)
+          }
           root.close()
         }
         dictionaries.close()
@@ -1059,7 +1151,15 @@ class NativePartitionReader(
       if (task != null) {
         task.close()
       }
-      Utils.tryLogNonFatalError(allocator.close())
+      if (freeBatch) {
+        Utils.tryLogNonFatalError(allocator.close())
+      } else {
+        // The action must not refer to the reader, which would then never become unreachable.
+        val (batchRoot, batchAllocator) = (root, allocator)
+        batchCleanable = NativeHandle.cleaner.register(this, () =>
+          Utils.tryLogNonFatalError(
+            Utils.tryWithSafeFinally(batchRoot.close())(batchAllocator.close())))
+      }
     }
   }
 }
@@ -1380,7 +1480,9 @@ final class NativeHandle(handle: Long, release: Long => Unit) {
 }
 
 object NativeHandle extends Logging {
-  private val cleaner = Cleaner.create()
+  // Also frees the buffers of the batches that may still be read when their readers are closed,
+  // see `NativePartitionReader`.
+  private[ffi] val cleaner = Cleaner.create()
 
   // Must not refer to the handle, which would then never become unreachable.
   private class State(value: Long, release: Long => Unit) extends Runnable {
