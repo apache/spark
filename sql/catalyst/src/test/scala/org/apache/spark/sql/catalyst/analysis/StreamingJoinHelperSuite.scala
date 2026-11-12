@@ -18,7 +18,7 @@
 package org.apache.spark.sql.catalyst.analysis
 
 import org.apache.spark.sql.catalyst.dsl.expressions._
-import org.apache.spark.sql.catalyst.expressions.{Attribute, AttributeReference, AttributeSet, Expression, Literal, TimestampAdd, TimestampAddInterval, TimestampAddYMInterval}
+import org.apache.spark.sql.catalyst.expressions.{Attribute, AttributeReference, AttributeSet, Cast, Expression, Literal, TimestampAdd, TimestampAddInterval, TimestampAddYMInterval}
 import org.apache.spark.sql.catalyst.optimizer.SimpleTestOptimizer
 import org.apache.spark.sql.catalyst.parser.CatalystSqlParser
 import org.apache.spark.sql.catalyst.plans.logical.{EventTimeWatermark, Filter, LeafNode, Statistics}
@@ -50,55 +50,110 @@ class StreamingJoinHelperSuite extends AnalysisTest {
     }
   }
 
-  test("find truncating casts in conjuncts on the given columns") {
+  test("find casts that drop part of a time") {
     val leftTime = AttributeReference("leftTime", TimestampType)()
     val rightTime = AttributeReference("rightTime", TimestampType)()
-    val other = AttributeReference("other", LongType)()
-    val times = AttributeSet(Seq(leftTime, rightTime))
-    def truncates(condition: Expression): Boolean =
-      StreamingJoinHelper.hasTruncatingCast(Some(condition), times)
+    import StreamingJoinHelper.hasTruncatingCast
 
-    assert(truncates(leftTime.cast(LongType) > rightTime.cast(LongType)))
-    assert(truncates(leftTime.cast(IntegerType) > 0))
-    assert(truncates(leftTime.cast(FloatType) > rightTime.cast(DoubleType)))
-    assert(truncates(leftTime.cast(DecimalType(20, 3)) > 0))
-    assert(truncates((other > 0) && (leftTime.cast(LongType) > rightTime.cast(LongType))))
-    // Casts that keep every microsecond, or of an integral value.
-    assert(!truncates(leftTime.cast(DoubleType) > rightTime.cast(DoubleType)))
-    assert(!truncates(leftTime.cast(DecimalType(20, 6)) > 0))
-    assert(!truncates(leftTime.cast(TimestampType) > rightTime))
-    assert(!truncates(leftTime > rightTime && other.cast(IntegerType) > 0))
-    assert(!StreamingJoinHelper.hasTruncatingCast(None, times))
+    assert(hasTruncatingCast(leftTime.cast(LongType) > rightTime.cast(LongType)))
+    assert(hasTruncatingCast(leftTime.cast(IntegerType) > 0))
+    assert(hasTruncatingCast(leftTime.cast(FloatType) > rightTime.cast(DoubleType)))
+    assert(hasTruncatingCast(leftTime.cast(DecimalType(20, 3)) > 0))
+    // Casts that keep every microsecond.
+    assert(!hasTruncatingCast(leftTime.cast(DoubleType) > rightTime.cast(DoubleType)))
+    assert(!hasTruncatingCast(leftTime.cast(DecimalType(20, 6)) > 0))
+    assert(!hasTruncatingCast(Cast(leftTime, TimestampType) > rightTime))
+    // A cast of an integral value drops nothing.
+    assert(!hasTruncatingCast(leftTime.cast(DoubleType) >
+      rightTime.cast(DoubleType) + Cast(Literal(1), LongType).cast(DoubleType)))
   }
 
-  test("find whole days or months added to times in conjuncts on the given columns") {
+  test("find whole days in a zone whose offset changes, and months") {
     val leftTime = AttributeReference("leftTime", TimestampType)()
     val rightTime = AttributeReference("rightTime", TimestampType)()
     val delay = AttributeReference("delay", DayTimeIntervalType())()
-    val times = AttributeSet(Seq(leftTime, rightTime))
     def dayTime(micros: Long): Expression = Literal(micros, DayTimeIntervalType())
-    def plus(interval: Expression): Expression = TimestampAddInterval(leftTime, interval)
     def calendar(months: Int, days: Int, micros: Long): Expression =
       Literal(new CalendarInterval(months, days, micros), CalendarIntervalType)
-    def hasCalendar(condition: Expression): Boolean =
-      StreamingJoinHelper.hasCalendarInterval(Some(condition), times)
+    def bound(
+        interval: Expression,
+        zone: Option[String] = Some("America/Los_Angeles")): Expression =
+      rightTime <= TimestampAddInterval(leftTime, interval, zone)
+    import StreamingJoinHelper.hasCalendarInterval
 
-    assert(hasCalendar(rightTime <= plus(dayTime(MICROS_PER_DAY))))
-    assert(hasCalendar(rightTime >= plus(dayTime(-MICROS_PER_DAY))))
-    assert(hasCalendar(rightTime <= plus(calendar(0, 1, 0))))
-    assert(hasCalendar(rightTime <= plus(calendar(1, 0, 0))))
-    assert(hasCalendar(rightTime <= plus(delay)))
-    assert(hasCalendar(
+    assert(hasCalendarInterval(bound(dayTime(MICROS_PER_DAY))))
+    assert(hasCalendarInterval(bound(dayTime(-MICROS_PER_DAY))))
+    assert(hasCalendarInterval(bound(calendar(0, 1, 0))))
+    assert(hasCalendarInterval(bound(dayTime(MICROS_PER_DAY), None)))
+    assert(hasCalendarInterval(bound(calendar(1, 0, 0), Some("UTC"))))
+    assert(hasCalendarInterval(bound(delay, Some("UTC"))))
+    assert(hasCalendarInterval(
       rightTime <= TimestampAddYMInterval(leftTime, Literal(1, YearMonthIntervalType()))))
-    assert(hasCalendar(rightTime <= TimestampAdd("DAY", Literal(1), leftTime)))
-    // Intervals shorter than a day are exact.
-    assert(!hasCalendar(rightTime <= plus(dayTime(MICROS_PER_DAY - 1))))
-    assert(!hasCalendar(rightTime <= plus(calendar(0, 0, MICROS_PER_DAY))))
-    assert(!hasCalendar(rightTime <= TimestampAdd("HOUR", Literal(25), leftTime)))
-    assert(!hasCalendar(rightTime >= leftTime))
-    assert(!StreamingJoinHelper.hasCalendarInterval(
-      Some(TimestampAddInterval(Literal(0L, TimestampType), dayTime(MICROS_PER_DAY)) >
-        Literal(0L, TimestampType)), times))
+    assert(hasCalendarInterval(rightTime <= TimestampAdd("DAY", Literal(1), leftTime)))
+    // A day is 24 hours in a zone with a fixed offset.
+    Seq("UTC", "Etc/GMT+5", "+05:00").foreach { zone =>
+      assert(!hasCalendarInterval(bound(dayTime(MICROS_PER_DAY), Some(zone))), zone)
+      assert(!hasCalendarInterval(bound(calendar(0, 1, 0), Some(zone))), zone)
+    }
+    // Spark adds these as fixed durations, or the expression has no interval.
+    assert(!hasCalendarInterval(bound(dayTime(MICROS_PER_DAY - 1))))
+    assert(!hasCalendarInterval(bound(calendar(0, 0, MICROS_PER_DAY))))
+    assert(!hasCalendarInterval(rightTime <= TimestampAdd("HOUR", Literal(25), leftTime)))
+    assert(!hasCalendarInterval(rightTime >= leftTime))
+  }
+
+  test("V4 range scan offsets come only from comparisons that give exact offsets") {
+    val metadata = new MetadataBuilder().putLong(EventTimeWatermark.delayKey, 1000).build()
+    val leftTime = AttributeReference("leftTime", TimestampType, metadata = metadata)()
+    val rightTime = AttributeReference("rightTime", TimestampType, metadata = metadata)()
+    val leftExpiry = AttributeReference("leftExpiry", TimestampType)()
+    val leftValue = AttributeReference("leftValue", DoubleType)()
+    def plus(t: Expression, micros: Long, zone: String = "America/Los_Angeles"): Expression =
+      TimestampAddInterval(t, Literal(micros, DayTimeIntervalType()), Some(zone))
+    def offsets(condition: Expression, leftProbes: Boolean = true): Option[(Long, Long)] =
+      if (leftProbes) {
+        StreamingJoinHelper.getRangeScanOffsets(Some(condition), leftTime, rightTime)
+      } else {
+        StreamingJoinHelper.getRangeScanOffsets(Some(condition), rightTime, leftTime)
+      }
+    val tenMinutes = 600000000L
+    // Each end is the solved bound, less 1 ms for a non-strict comparison, widened by 1 ms.
+    val exact = rightTime >= leftTime && rightTime <= plus(leftTime, tenMinutes)
+    assert(offsets(exact) === Some((-2000L, 600002000L)))
+    assert(offsets(exact, leftProbes = false) === Some((-600002000L, 2000L)))
+
+    // Whole days are exact in a zone with a fixed offset.
+    val oneDay = rightTime >= leftTime && rightTime <= plus(leftTime, MICROS_PER_DAY, "UTC")
+    assert(offsets(oneDay) === Some((-2000L, 86400002000L)))
+    assert(offsets(rightTime >= leftTime && rightTime <= plus(leftTime, MICROS_PER_DAY))
+      === None)
+
+    // A comparison the window does not need drops neither end.
+    Seq(
+      rightTime <= plus(leftExpiry, MICROS_PER_DAY),
+      rightTime.cast(LongType) <= leftTime.cast(LongType) + 7200L,
+      leftValue.cast(LongType) > 0L).foreach { other =>
+      assert(offsets(exact && other) === Some((-2000L, 600002000L)), other.sql)
+    }
+
+    // A comparison of one event time with a constant gives an absolute time, not an offset,
+    // and a sum of the two event times moves the other way.
+    Seq(
+      leftTime.cast(DoubleType) >= 1.7e9,
+      leftTime.cast(DoubleType) > 0.0,
+      leftTime.cast(DecimalType(20, 6)) >= Literal(BigDecimal(1.7e9))).foreach { constant =>
+      assert(offsets(rightTime >= leftTime && constant) === None, constant.sql)
+    }
+    assert(offsets(leftTime.cast(DoubleType) + rightTime.cast(DoubleType) > 100.0 &&
+      rightTime <= plus(leftTime, tenMinutes)) === None)
+
+    // A bound that is not a whole number of milliseconds: -0.5 ms is solved as 0.
+    val subMillisecond = rightTime > plus(leftTime, -500L) && rightTime < plus(leftTime, 1000000L)
+    assert(offsets(subMillisecond) === Some((-1000L, 1001000L)))
+
+    // Casts that drop part of a time give no bound.
+    assert(offsets(rightTime.cast(LongType) >= leftTime.cast(LongType) + 60L &&
+      rightTime.cast(LongType) <= leftTime.cast(LongType) + 120L) === None)
   }
 
   test("extract watermark from time condition") {

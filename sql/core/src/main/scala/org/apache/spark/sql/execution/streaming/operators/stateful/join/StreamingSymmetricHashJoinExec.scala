@@ -26,7 +26,7 @@ import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.analysis.StreamingJoinHelper
 import org.apache.spark.sql.catalyst.analysis.WidenStatefulOpNullability
-import org.apache.spark.sql.catalyst.expressions.{Attribute, AttributeSet, Expression, GenericInternalRow, JoinedRow, Literal, Predicate, UnsafeProjection, UnsafeRow}
+import org.apache.spark.sql.catalyst.expressions.{Attribute, Expression, GenericInternalRow, JoinedRow, Literal, Predicate, UnsafeProjection, UnsafeRow}
 import org.apache.spark.sql.catalyst.plans._
 import org.apache.spark.sql.catalyst.plans.physical._
 import org.apache.spark.sql.catalyst.streaming.InternalOutputModes
@@ -722,9 +722,9 @@ case class StreamingSymmetricHashJoinExec(
     private[this] val allowMultipleStatefulOperators: Boolean =
       conf.getConf(SQLConf.STATEFUL_OPERATOR_ALLOW_MULTIPLE)
 
-    // V4 range scan for time-interval joins (SPARK-55147). Extracts constant interval
-    // offsets from the join condition using getStateValueWatermark(eventWatermark=0).
-    // The -1 eviction adjustment widens range by ~1ms/side; postJoinFilter handles exact bounds.
+    // V4 range scan for time-interval joins (SPARK-55147). Takes the offsets of the other side's
+    // event time from the comparisons of the join condition that give them exactly; see
+    // StreamingJoinHelper.getRangeScanOffsets. postJoinFilter handles exact bounds.
     private[this] val scanRangeOffsets: Option[(Long, Long)] = {
       val isV4TimeIntervalJoin = stateFormatVersion >= 4 && (stateWatermarkPredicate match {
         case Some(_: JoinStateValueWatermarkPredicate) => true
@@ -743,35 +743,14 @@ case class StreamingSymmetricHashJoinExec(
         // Bounds on other columns cannot limit this scan. If either event-time bound is
         // missing, scan all rows for the join key.
         val thisEventTime = WatermarkSupport.findEventTimeColumn(
-          thisSideAttrs, !allowMultipleStatefulOperators).toSeq
+          thisSideAttrs, !allowMultipleStatefulOperators)
         val otherEventTime = WatermarkSupport.findEventTimeColumn(
-          otherSideAttrs, !allowMultipleStatefulOperators).toSeq
-        // The solver reads a cast that drops part of a time as the time itself. For
-        // CAST(rightTime AS BIGINT) >= CAST(leftTime AS BIGINT) + 60, the scan for a left row
-        // at 100.6 seconds would start near 160.6 seconds and miss a right row at 160.2
-        // seconds, although the casts make them match (160 >= 100 + 60). It also counts a day
-        // as 24 hours, so for rightTime <= leftTime + INTERVAL 1 DAY the scan would miss a
-        // right row 24.5 hours later on a 25-hour day. Read all rows for the key instead.
-        val eventTimes = AttributeSet(thisEventTime ++ otherEventTime)
-        if (StreamingJoinHelper.hasTruncatingCast(condition.full, eventTimes) ||
-            StreamingJoinHelper.hasCalendarInterval(condition.full, eventTimes)) {
-          None
-        } else {
-          val lowerBoundMs = StreamingJoinHelper.getStateValueWatermark(
-            AttributeSet(otherEventTime), AttributeSet(thisEventTime), condition.full, Some(0L))
-          val upperBoundMs = StreamingJoinHelper.getStateValueWatermark(
-            AttributeSet(thisEventTime), AttributeSet(otherEventTime), condition.full, Some(0L))
-
-          // The solver returns whole milliseconds, truncated toward zero, so a bound that is
-          // not a whole number of milliseconds can move inward by less than 1 ms: for
-          // rightTime > leftTime - INTERVAL 500 MICROSECONDS the lower offset of -0.5 ms
-          // becomes 0. Widen each end by 1 ms.
-          (lowerBoundMs, upperBoundMs) match {
-            case (Some(lower), Some(upper)) =>
-              Some(((lower - 1) * 1000L, (-upper + 1) * 1000L)) // ms -> us
-            case _ => None
-          }
-        }
+          otherSideAttrs, !allowMultipleStatefulOperators)
+        for {
+          thisTime <- thisEventTime
+          otherTime <- otherEventTime
+          offsets <- StreamingJoinHelper.getRangeScanOffsets(condition.full, thisTime, otherTime)
+        } yield offsets
       }
     }
 
