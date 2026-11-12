@@ -210,11 +210,10 @@ class MicroBatchExecution(
 
   /** Whether the last written offset log entry tracks sources by name, if there is one. */
   private lazy val enforceNamedInCheckpoint: Option[Boolean] =
-    initialLatestOffsetSeq.flatMap { case (_, offsetSeq) =>
+    initialLatestOffsetSeq.map { case (_, offsetSeq) =>
       offsetSeq.metadataOpt.flatMap { metadata =>
         OffsetSeqMetadata.readValueOpt(metadata, SQLConf.ENABLE_STREAMING_SOURCE_EVOLUTION)
-          .map(_.toBoolean)
-      }
+      }.exists(_.toBoolean)
     }
 
   /**
@@ -479,7 +478,7 @@ class MicroBatchExecution(
 
   /**
    * Rejects source names that do not fit the source tracking of this run. Runs before any source is
-   * created, so that a rejected run leaves nothing behind in the checkpoint.
+   * created, so that a rejected run writes nothing under the checkpoint's sources/ directory.
    */
   private def checkSourceNames(): Unit = {
     val sources = StreamingSourceIdentifyingName.collectSources(analyzedPlan)
@@ -508,7 +507,7 @@ class MicroBatchExecution(
         throw unnamedSourcesError
       case Some(true) if unnamedSources.nonEmpty =>
         throw QueryCompilationErrors.cannotDisableSourceEvolutionOnExistingCheckpointError()
-      case _ if enforceNamed && unnamedSources.nonEmpty =>
+      case None if enforceNamed && unnamedSources.nonEmpty =>
         throw unnamedSourcesError
       case _ =>
     }
