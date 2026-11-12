@@ -35,34 +35,115 @@ all_modules = []
 # - `.gitignore`-style patterns would be ideal but don't have support in the
 #   standard library.
 ignored_file_patterns = (
-    ".asf.yaml",
-    ".gitignore",
+    # Contributor docs.
     "AGENTS.md",
+    "CLAUDE.md",
     "CONTRIBUTING.md",
+    "PULL_REQUEST_TEMPLATE",
     "README.md",
+    "SECURITY.md",
+    # License and NOTICE files, including bundled third-party licenses.
     "/LICENSE-binary",
+    "/LICENSE",
+    "/licenses-binary/",
+    "/licenses/",
     "/NOTICE-binary",
-    "/scalastyle-config.xml",
-    "/SECURITY.md",
+    "/NOTICE",
+    # Git and ASF metadata.
+    ".asf.yaml",
+    ".gitattributes",
+    ".gitignore",
+    # Build and test workflow wrappers or schedulers.
+    "/.github/workflows/benchmark.yml",
+    "/.github/workflows/branch*_scheduler.yml",
+    "/.github/workflows/build_codegen_jdk.yml",
+    "/.github/workflows/build_coverage.yml",
+    "/.github/workflows/build_java*.yml",
+    "/.github/workflows/build_maven*.yml",
+    "/.github/workflows/build_non_ansi.yml",
+    "/.github/workflows/build_python_3*.yml",
+    "/.github/workflows/build_python_connect*.yml",
+    "/.github/workflows/build_python_minimum.yml",
+    "/.github/workflows/build_python_pypy3.10.yml",
+    "/.github/workflows/build_rockdb_as_ui_backend.yml",
+    "/.github/workflows/build_scala213.yml",
+    "/.github/workflows/build_sparkr_window.yml",
+    "/.github/workflows/build_uds.yml",
+    "/.github/workflows/maven_test.yml",
+    "/.github/workflows/python_hosted_runner_test.yml",
+    # GitHub Pages.
+    ".nojekyll",
+    "/.github/workflows/pages.yml",
+    # Release and publishing.
+    "/.github/workflows/publish_snapshot.yml",
+    "/.github/workflows/release.yml",
+    # GitHub housekeeping and repo automation.
+    "/.github/workflows/build_infra_images_cache.yml",
+    "/.github/workflows/images/",
+    "/.github/workflows/stale.yml",
+    "/.github/workflows/test_report.yml",
+    "/.github/workflows/update_build_status.yml",
+    # Linters, formatters, and their configs. These are typically triggered by
+    # the `precondition` job regardless of modifications to these files.
+    ".pre-commit-config.yaml",
+    "/dev/.rat-excludes",
+    "/dev/.scalafmt.conf",
+    "/dev/check_pyspark_custom_errors.py",
+    "/dev/check-license",
+    "/dev/check-protos.py",
     "/dev/checkstyle-suppressions.xml",
     "/dev/checkstyle.xml",
+    "/dev/connect-jvm-client-mima-check",
+    "/dev/eslint.js",
+    "/dev/java-file-header",
+    "/dev/lint-java",
+    "/dev/lint-js",
+    "/dev/lint-python",
+    "/dev/lint-r*",
+    "/dev/lint-scala",
+    "/dev/mima",
+    "/dev/package-lock.json",
+    "/dev/package.json",
+    "/dev/reformat-python",
+    "/dev/sbt-checkstyle",
+    "/dev/scalafmt",
+    "/dev/scalastyle",
+    "/dev/spark-test-image/lint/",
+    "/dev/structured_logging_style.py",
+    "/scalastyle-config.xml",
+    # Maintainer tools.
+    "/dev/*gen-protos.sh",
+    "/dev/change-scala-version.sh",
     "/dev/create_jira_and_branch.py",
     "/dev/create_spark_jira.py",
     "/dev/create-release/",
-    "/dev/lint-python",
-    "/dev/lint-scala",
+    "/dev/generate_srs_registry.py",
     "/dev/make-distribution.sh",
     "/dev/merge_spark_pr.py",
+    "/dev/next_version_candidates.py",
     "/dev/pr_merge_status.py",
-    "/dev/reformat-python",
-    "/dev/requirements.txt",
+    "/dev/protobuf-breaking-changes-check.sh",
+    "/dev/py-cleanup",
+    "/dev/requirements.txt",  # legacy, replaced in CI by pyproject.toml
+    "/dev/spark_jira_utils.py",
     "/dev/spark_merge_footer.py",
-    "/dev/spark-test-image/lint/Dockerfile",
-    # Always run by the precondition job in build_and_test.yml.
+    "/dev/spark-test-image/connect-gen-protos/",
+    # Always run by the `precondition` job in build_and_test.yml.
     "/dev/sparktestsupport/tests/",
-    "/dev/structured_logging_style.py",
-    "/ui-test/package-lock.json",
-    "/ui-test/package.json",
+    "/sql/create-docs.sh",
+    # CLI wrappers and other user executables.
+    "/bin/beeline*",
+    "/bin/spark-connect-shell",
+    "/bin/spark-pipelines",
+    "/bin/sparkR*",
+    # Default config templates. Some CI jobs copy log4j2.properties.template
+    # only to reduce log noise; they do not test these templates.
+    "/conf/",
+    # Binder infra. CI does not test this.
+    "/binder/",
+    # UI tests. These are typically triggered by the `precondition` job
+    # regardless of modifications to these files.
+    "/ui-test/",
 )
 
 
@@ -76,9 +157,9 @@ def is_ignored_file(filename: str) -> bool:
     True
 
     Leading slashes anchor at the repository root:
-    >>> is_ignored_file("SECURITY.md")
+    >>> is_ignored_file("LICENSE")
     True
-    >>> is_ignored_file("docs/SECURITY.md")
+    >>> is_ignored_file("docs/LICENSE")
     False
 
     A trailing slash ignores a directory subtree:
