@@ -551,6 +551,93 @@ class InjectRuntimeFilterSuite extends SharedSparkSession
     }
   }
 
+  test("SPARK-60871: no runtime filters for nonbinary collated join keys") {
+    withSQLConf(
+        SQLConf.RUNTIME_BLOOM_FILTER_APPLICATION_SIDE_SCAN_SIZE_THRESHOLD.key -> "0",
+        SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key -> "-1",
+        SQLConf.RUNTIME_BLOOM_FILTER_CREATION_SIDE_THRESHOLD.key -> "1MB") {
+      withTable("bf_variant_fact", "bf_variant_dim") {
+        sql("CREATE TABLE bf_variant_fact (id INT, v VARIANT) USING parquet")
+        sql("""INSERT INTO bf_variant_fact SELECT id, parse_json(j) FROM VALUES
+              |  (1, '{"k": "Open"}'), (2, '{"k": "x"}') AS t(id, j)""".stripMargin)
+        sql("CREATE TABLE bf_variant_dim (id INT, v VARIANT) USING parquet")
+        sql("""INSERT INTO bf_variant_dim SELECT id, parse_json(j) FROM VALUES
+              |  (10, '{"k": "open"}'), (20, '{"k": "y"}') AS t(id, j)""".stripMargin)
+
+        val dim = "(SELECT * FROM bf_variant_dim WHERE id = 10) d"
+        def queries(targetType: String): Seq[String] = {
+          val on = s"ON variant_get(f.v, '$$.k', '$targetType') = " +
+            s"variant_get(d.v, '$$.k', '$targetType')"
+          Seq(
+            s"SELECT f.id FROM bf_variant_fact f JOIN $dim $on",
+            s"SELECT f.id FROM bf_variant_fact f LEFT SEMI JOIN $dim $on",
+            s"SELECT f.id FROM bf_variant_fact f RIGHT OUTER JOIN $dim $on",
+            s"SELECT f.id FROM $dim LEFT OUTER JOIN bf_variant_fact f $on")
+        }
+
+        // Binary keys get a Bloom filter on the fact side.
+        queries("STRING").foreach(assertRewroteWithBloomFilter(_))
+        // A Bloom filter over UTF8_LCASE keys would drop the fact row 'Open', which the join
+        // matches with 'open'.
+        queries("STRING COLLATE UTF8_LCASE").foreach { query =>
+          assertDidNotRewriteWithBloomFilter(query)
+          checkAnswer(sql(query), Row(1))
+        }
+      }
+    }
+  }
+
+  test("SPARK-60871: runtime filters for casts of collated join key columns") {
+    withSQLConf(
+        SQLConf.RUNTIME_BLOOM_FILTER_APPLICATION_SIDE_SCAN_SIZE_THRESHOLD.key -> "0",
+        SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key -> "-1",
+        SQLConf.RUNTIME_BLOOM_FILTER_CREATION_SIDE_THRESHOLD.key -> "1MB") {
+      withTable("bf_cast_fact", "bf_cast_dim") {
+        Seq("bf_cast_fact", "bf_cast_dim").foreach { t =>
+          sql(s"CREATE TABLE $t (id INT, k STRING COLLATE UTF8_LCASE, p STRING) USING parquet")
+        }
+        sql("INSERT INTO bf_cast_fact VALUES (1, 'Open', 'Open'), (2, 'x', 'x')")
+        sql("INSERT INTO bf_cast_dim VALUES (10, 'open', 'open'), (20, 'y', 'y')")
+
+        val dim = "(SELECT * FROM bf_cast_dim WHERE id = 10) d"
+        // Inner, left semi, right outer and left outer joins with the fact table as the
+        // application side.
+        def queries(key: String => String): Seq[String] = {
+          val on = s"ON ${key("f")} = ${key("d")}"
+          Seq(
+            s"SELECT f.id FROM bf_cast_fact f JOIN $dim $on",
+            s"SELECT f.id FROM bf_cast_fact f LEFT SEMI JOIN $dim $on",
+            s"SELECT f.id FROM bf_cast_fact f RIGHT OUTER JOIN $dim $on",
+            s"SELECT f.id FROM $dim LEFT OUTER JOIN bf_cast_fact f $on")
+        }
+        val matched = Seq.fill(4)(Seq(Row(1)))
+        val unmatched = Seq(Seq.empty, Seq.empty, Seq(Row(null)), Seq(Row(null)))
+
+        // Column keys get a Bloom filter on their collation keys.
+        queries(t => s"$t.k").zip(matched).foreach { case (query, answer) =>
+          assertRewroteWithBloomFilter(query)
+          checkAnswer(sql(query), answer)
+        }
+        // Casts of the UTF8_LCASE column to STRING are binary keys, so 'Open' and 'open' differ.
+        Seq[String => String](t => s"CAST($t.k AS STRING)", t => s"$t.k::STRING").foreach { key =>
+          queries(key).zip(unmatched).foreach { case (query, answer) =>
+            assertRewroteWithBloomFilter(query)
+            checkAnswer(sql(query), answer)
+          }
+        }
+        // Casts to UTF8_LCASE are non-binary expression keys, so they get no Bloom filter.
+        Seq[String => String](
+            t => s"CAST($t.p AS STRING COLLATE UTF8_LCASE)",
+            t => s"$t.p::STRING COLLATE UTF8_LCASE").foreach { key =>
+          queries(key).zip(matched).foreach { case (query, answer) =>
+            assertDidNotRewriteWithBloomFilter(query)
+            checkAnswer(sql(query), answer)
+          }
+        }
+      }
+    }
+  }
+
   test("SPARK-58272: use materialized caches without predicates only with pruning statistics") {
     withSQLConf(
         SQLConf.RUNTIME_BLOOM_FILTER_APPLICATION_SIDE_SCAN_SIZE_THRESHOLD.key -> "0",
