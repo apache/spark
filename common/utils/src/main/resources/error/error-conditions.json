@@ -8211,6 +8211,13 @@
     ],
     "sqlState" : "42K09"
   },
+  "STORAGE_PARTITION_JOIN_KEY_TYPE_MISMATCH" : {
+    "message" : [
+      "Cannot shuffle a side onto the other side's storage partitioning: its key <key> of type <keyType> does not match the partition transform <transform> over a column of type <columnType>, which declares the input types <inputTypes>.",
+      "Cast the keys on both sides to one type."
+    ],
+    "sqlState" : "42K09"
+  },
   "STREAMING_ASYNC_OPERATION_FAILED" : {
     "message" : [
       "Asynchronous streaming operation failed with exception: <message>"
