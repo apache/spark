@@ -396,6 +396,12 @@ try:
                 "zstandard>=%s" % _minimum_zstandard_version,
                 "pyyaml>=%s" % _minimum_pyyaml_version,
             ],
+            # Used by the experimental pyspark.sql.ai prototype (DataFrame.ai_query).
+            "ai": [
+                "requests",
+                "boto3",
+                "databricks-sdk",
+            ],
         },
         python_requires=">=3.11",
         classifiers=[

@@ -98,6 +98,13 @@ sql = [
     {include-group = "internal_pyarrow"},
 ]
 
+ai = [
+    # Used by the experimental pyspark.sql.ai prototype (DataFrame.ai_query).
+    "requests",
+    "boto3",
+    "databricks-sdk",
+]
+
 pandas_on_spark = [
     {include-group = "internal_py4j"},
     {include-group = "internal_pandas"},
@@ -214,6 +221,7 @@ dev = [
     {include-group = "pandas_on_spark"},
     {include-group = "pandas_on_spark_extra"},
     {include-group = "pipelines"},
+    {include-group = "ai"},
 ]
 
 internal_ci_connect = [
@@ -244,6 +252,7 @@ ci_classic_standard = [
     # torch should be installed with ml_torch group
     {include-group = "ml_extra_base"},
     {include-group = "internal_test"},
+    {include-group = "ai"},
     "pyarrow>=23.0.0",
     "pandas==2.3.3",
 ]
@@ -252,6 +261,8 @@ ci_classic_minimum = [
     {include-group = "sql"},
     {include-group = "pandas_on_spark"},
     {include-group = "ml"},
+    # Only the dependency needed so pyspark.sql.tests.test_ai_query does not skip.
+    "requests",
     "numpy==1.23.2",
     "pyarrow==18.0.0",
     "pandas==2.2.0",

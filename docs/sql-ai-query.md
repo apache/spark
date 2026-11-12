@@ -54,6 +54,7 @@ register_model(
     region="us-east-1",
 )
 
+documents = spark.createDataFrame([("A document to summarize.",)], ["description"])
 prompt = concat(lit("Summarize in one sentence: "), col("description"))
 result = documents.select(
     ai_query("databricks-summary", prompt).alias("databricks_summary"),
