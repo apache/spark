@@ -75,7 +75,8 @@ from pyspark.sql.ai import register_sql_function
 register_sql_function()
 documents.createOrReplaceTempView("documents")
 spark.sql(
-    "SELECT ai_query('databricks-summary', description) AS summary FROM documents"
+    "SELECT ai_query('databricks-summary', "
+    "CONCAT('Summarize in one sentence: ', description)) AS summary FROM documents"
 ).show()
 ```
 
