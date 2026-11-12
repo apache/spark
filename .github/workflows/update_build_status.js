@@ -194,18 +194,17 @@ module.exports = async ({github, context, core, env = process.env, log = console
     }
   }
 
-  // New checks and updates use external IDs; output text is a temporary fallback.
-  // Remove it once legacy-only checks no longer need support. Unchanged checks are
-  // not proactively migrated.
+  // New checks and updates use external IDs; output text is a temporary fallback for
+  // checks written by older versions. Bulk migration would exceed GitHub's write rate
+  // limits, so legacy checks gain an external ID only when their state changes.
+  // Remove the fallback once legacy-only checks no longer need support.
   const runIdOf = (cr) => {
     if (cr.externalId) {
       return cr.externalId
     }
     try {
-      const runId = JSON.parse(cr.text).run_id
-      const validNumber = Number.isSafeInteger(runId) && runId > 0
-      const validString = typeof runId == 'string' && /^[1-9]\d*$/.test(runId)
-      return validNumber || validString ? runId : undefined
+      const runId = JSON.parse(cr.text)?.run_id
+      return runId ? String(runId) : undefined
     } catch {
       return undefined
     }
@@ -339,7 +338,7 @@ module.exports = async ({github, context, core, env = process.env, log = console
           continue
         }
         const runId = runIdOf(cr)
-        const run = pr.forkRuns.get(String(runId))
+        const run = pr.forkRuns.get(runId)
         if (!run) {
           if (runId && pr.forkRunsTruncated) {
             // The run may be among the fork's check suites the page left out. Keep

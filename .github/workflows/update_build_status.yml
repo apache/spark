@@ -23,12 +23,14 @@
 # `pull_request_target` and needs no maintainer approval for fork PRs.
 #
 # Each pass:
-# - Syncs existing checks with their fork runs.
+# - Syncs existing run-linked checks, including those from older versions of this
+#   workflow, with their fork runs.
 # - Creates a check for the PR branch's latest build when needed, including reruns.
 # - Provides `action_required` guidance after a grace period if neither a usable
 #   build nor a syncable check exists.
 #
-# Fork master is reserved for syncing upstream; PR builds use other branches.
+# Fork master is reserved for syncing upstream, so new checks link only to builds on
+# other branches.
 # GitHub may delay or drop scheduled runs, so status changes are not immediate.
 
 name: Build Status
