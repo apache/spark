@@ -3412,11 +3412,11 @@ class SubquerySuite extends SharedSparkSession
       // is still optimized and planned, and fails when it runs.
       def checkFailsAtRuntime[T <: SparkThrowable : ClassTag](
           query: String,
-          condition: String): Unit = {
+          condition: String): Unit = withClue(query) {
         val df = sql(query)
         df.queryExecution.executedPlan
         val e = intercept[T](df.collect())
-        assert(e.getCondition === condition, query)
+        assert(e.getCondition === condition)
       }
 
       withSQLConf(SQLConf.ANSI_ENABLED.key -> "true") {

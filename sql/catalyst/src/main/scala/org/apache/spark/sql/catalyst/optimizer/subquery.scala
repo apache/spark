@@ -826,7 +826,7 @@ object RewriteCorrelatedScalarSubquery extends Rule[LogicalPlan] with AliasHelpe
             case Literal(true, BooleanType) => bindings
             case bindCondition =>
               // We can't evaluate the condition, because it is not foldable or its evaluation
-              // failed. Evaluate it in query runtime.
+              // failed. Keep it in an `If`, see `tryEvalExpr`.
               bindings.map { case (id, expr) =>
                 val newExpr = If(bindCondition, expr, Literal.create(null, expr.dataType))
                 (id, newExpr)

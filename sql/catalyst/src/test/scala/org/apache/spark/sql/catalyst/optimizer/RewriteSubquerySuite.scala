@@ -20,10 +20,11 @@ package org.apache.spark.sql.catalyst.optimizer
 import org.apache.spark.sql.catalyst.QueryPlanningTracker
 import org.apache.spark.sql.catalyst.dsl.expressions._
 import org.apache.spark.sql.catalyst.dsl.plans._
-import org.apache.spark.sql.catalyst.expressions.{Cast, EqualTo, Exists, InSubquery, IsNull, ListQuery, Literal, Not, Or}
+import org.apache.spark.sql.catalyst.expressions.{Alias, Cast, Coalesce, EqualTo, Exists, Expression, InSubquery, IsNull, ListQuery, Literal, Not, Or}
 import org.apache.spark.sql.catalyst.plans.{ExistenceJoin, LeftSemi, PlanTest}
-import org.apache.spark.sql.catalyst.plans.logical.{Filter, Join, LocalRelation, LogicalPlan}
+import org.apache.spark.sql.catalyst.plans.logical.{Aggregate, Filter, Join, LocalRelation, LogicalPlan}
 import org.apache.spark.sql.catalyst.rules.RuleExecutor
+import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types.LongType
 
 
@@ -160,5 +161,28 @@ class RewriteSubquerySuite extends PlanTest {
     val existsOptimized = OptimizeWithPullup.execute(existsQuery.analyze)
     val existsExpected = LocalRelation(existsQuery.analyze.output).analyze
     comparePlans(existsOptimized, existsExpected)
+  }
+
+  test("SPARK-61444: keep the result on zero rows of an Aggregate that fails to evaluate") {
+    def resultOnZeroRows(): Expression = {
+      val agg = LocalRelation($"v".int)
+        .groupBy()((Literal(10) / Coalesce(Seq(max($"v"), Literal(0)))).as("d"))
+        .analyze.asInstanceOf[Aggregate]
+      RewriteCorrelatedScalarSubquery.evalAggregateOnZeroTups(agg)(
+        agg.aggregateExpressions.head.exprId)
+    }
+    // 10 / 0 fails with DIVIDE_BY_ZERO in ANSI mode. The expression is kept without its Alias,
+    // and tagged so that ConstantFolding does not evaluate it again.
+    withSQLConf(SQLConf.ANSI_ENABLED.key -> "true") {
+      val result = resultOnZeroRows()
+      assert(!result.isInstanceOf[Literal], result)
+      assert(result.find(_.isInstanceOf[Alias]).isEmpty, result)
+      assert(result.containsTag(ConstantFolding.FAILED_TO_EVALUATE), result)
+    }
+    // Without ANSI mode, it evaluates to null.
+    withSQLConf(SQLConf.ANSI_ENABLED.key -> "false") {
+      val result = resultOnZeroRows()
+      assert(result.isInstanceOf[Literal] && result.asInstanceOf[Literal].value == null, result)
+    }
   }
 }
