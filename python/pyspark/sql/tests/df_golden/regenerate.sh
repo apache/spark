@@ -39,13 +39,14 @@ cd "$REPO_ROOT"
 
 REL_DIR="python/pyspark/sql/tests/df_golden"
 
-# Every module declaring golden cases, i.e. every test module under inputs/ with
-# a top-level class mixing in DFGoldenTestMixin. Adding one needs no change here.
+# Every test module under inputs/: the directory holds nothing but golden test
+# modules, so there is no need to look inside them, and adding one needs no
+# change here.
 MODULES=()
 for file in "$THIS_DIR"/inputs/test_*.py; do
-  if grep -q "^class .*(DFGoldenTestMixin" "$file"; then
-    MODULES+=("pyspark.sql.tests.df_golden.inputs.$(basename "$file" .py)")
-  fi
+  # Without a match, the pattern itself is what the loop sees.
+  [[ -e "$file" ]] || continue
+  MODULES+=("pyspark.sql.tests.df_golden.inputs.$(basename "$file" .py)")
 done
 if [[ ${#MODULES[@]} -eq 0 ]]; then
   echo "ERROR: no golden test modules found in $REL_DIR/inputs" >&2

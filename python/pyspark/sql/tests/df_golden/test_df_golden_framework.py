@@ -20,15 +20,17 @@ Unit tests for the ``pyspark.sql.tests.df_golden.df_golden`` write/validation ma
 
 These exercise the pure golden file plumbing -- parsing, serialization,
 validation, output normalization, result rendering and case registration --
-without a Spark session, so they are fast and run anywhere.  The end-to-end
-golden runs that need a Spark Connect server live in the ``inputs/test_<topic>.py``
-modules.
+and the life cycle of a golden test class over a fake session, all without a
+Spark session, so they are fast and run anywhere.  The end-to-end golden runs
+that need a Spark Connect server live in the ``inputs/test_<topic>.py`` modules.
 """
 
 import os
 import tempfile
 import unittest
+from unittest import mock
 
+from pyspark.sql.tests.df_golden import df_golden
 from pyspark.sql.tests.df_golden.df_golden import (
     DFGoldenTestMixin,
     _validate_test_file,
@@ -63,11 +65,7 @@ class DFGoldenFrameworkTests(unittest.TestCase):
 
     def test_parse_basic_case(self):
         path = self._write(
-            "--! name\n"
-            "my_case\n"
-            "--! expected_output_schema\n"
-            "struct<k:bigint>\n"
-            "!-- end\n"
+            "--! name\nmy_case\n--! expected_output_schema\nstruct<k:bigint>\n!-- end\n"
         )
         cases = parse_test_file(path)
         self.assertEqual(list(cases), ["my_case"])
@@ -343,6 +341,13 @@ class DFGoldenFrameworkTests(unittest.TestCase):
                 {"expected_error": "[ERR] boom"},
             )
 
+    def test_compare_case_checks_tags(self):
+        # Tags are data: a golden file recording a tag the case no longer carries
+        # is a mismatch, reported like any other section.
+        compare_case(self, {"name": "c", "tags": "unordered"}, {"tags": "unordered"})
+        with self.assertRaisesRegex(AssertionError, "expected section `tags`"):
+            compare_case(self, {"name": "c", "tags": "unordered"}, {})
+
     # -- under-assertion guards ------------------------------------------
 
     def test_validate_accepts_result_with_hash(self):
@@ -480,15 +485,6 @@ class DFGoldenFrameworkTests(unittest.TestCase):
             with self.assertRaisesRegex(AssertionError, "tab or newline"):
                 _format_value(bad, StringType())
 
-    # -- regeneration ----------------------------------------------------
-
-    def test_compare_case_checks_tags(self):
-        # Tags are data: a golden file recording a tag the case no longer carries
-        # is a mismatch, reported like any other section.
-        compare_case(self, {"name": "c", "tags": "unordered"}, {"tags": "unordered"})
-        with self.assertRaisesRegex(AssertionError, "expected section `tags`"):
-            compare_case(self, {"name": "c", "tags": "unordered"}, {})
-
     # -- case registration ------------------------------------------------
 
     def test_mixin_registers_a_test_per_case_sorted_by_name(self):
@@ -521,107 +517,24 @@ class DFGoldenFrameworkTests(unittest.TestCase):
         self.assertTrue(callable(Derived.test_inherited))
         self.assertIn("test_added", vars(Derived))
 
-    def test_mixin_allows_a_subclass_to_define_set_up_class(self):
-        # A -> B(setUpClass) -> DFGoldenTestMixin is a legitimate chain: the
-        # ordering requirement is checked when the class runs, not declared.
-        class Base(DFGoldenTestMixin, unittest.TestCase):
-            @classmethod
-            def setUpClass(cls):
-                super().setUpClass()
+    def test_mixin_registers_cases_declared_on_a_plain_base_class(self):
+        # A class that knows nothing of the mixin registers no test methods, so
+        # the golden test class mixing it in does that for the cases it brings.
+        class Shared:
+            def _test_shared(self, spark):
+                """Shared case."""
 
-        class Derived(Base):
-            def _test_case(self, spark):
+        class Cases(Shared, DFGoldenTestMixin, unittest.TestCase):
+            def _test_own(self, spark):
                 pass
 
-        self.assertEqual(Derived.case_names(), ["case"])
-
-    # -- session lifecycle -------------------------------------------------
-
-    def _fake_golden_class(self, fail_setup=False):
-        """
-        Return a golden test class over a fake session, and the list its client
-        records ``release``/``close`` calls in.
-
-        The caller drives the class the way a test runner does: ``setUpClass``,
-        then ``tearDownClass`` (which a runner skips when ``setUpClass`` raises),
-        then ``doClassCleanups``.
-        """
-        calls = []
-
-        class FakeClient:
-            def release_session(self):
-                calls.append("release")
-
-            def close(self):
-                calls.append("close")
-
-        class FakeConf:
-            def set(self, key, value):
-                pass
-
-        class FakeSession:
-            client = FakeClient()
-            conf = FakeConf()
-
-        class FakeProviderSession:
-            is_stopped = False
-
-            def newSession(self):
-                return FakeSession()
-
-        golden = self._write("--! name\nc\n--! expected_output_schema\nx\n!-- end\n")
-
-        class Cases(DFGoldenTestMixin, unittest.TestCase):
-            spark = FakeProviderSession()
-
-            @classmethod
-            def golden_file_path(cls):
-                return golden
-
-            @classmethod
-            def setup_session(cls, spark):
-                if fail_setup:
-                    raise RuntimeError("setup_session failed")
-
-            def _test_c(self, spark):
-                pass
-
-        # A runner resets the class cleanups before calling setUpClass.
-        Cases._class_cleanups = []
-        # The class runs its checking path; an ambient SPARK_GENERATE_GOLDEN_FILES
-        # would send teardown down the regeneration path, writing the file instead.
-        generating = os.environ.pop("SPARK_GENERATE_GOLDEN_FILES", None)
-        if generating is not None:
-            self.addCleanup(os.environ.update, {"SPARK_GENERATE_GOLDEN_FILES": generating})
-        return Cases, calls
-
-    def test_session_is_released_by_the_class_cleanup(self):
-        cases, calls = self._fake_golden_class()
-        cases.setUpClass()
-        cases.tearDownClass()
-        # Nothing releases the session before the cleanup does.
-        self.assertEqual(calls, [])
-        cases.doClassCleanups()
-        self.assertEqual(calls, ["release", "close"])
-
-    def test_session_is_released_when_set_up_class_fails(self):
-        # A runner skips tearDownClass when setUpClass raises, so the cleanup is
-        # what releases the session, here before the provider stopped anything.
-        cases, calls = self._fake_golden_class(fail_setup=True)
-        with self.assertRaisesRegex(RuntimeError, "setup_session failed"):
-            cases.setUpClass()
-        cases.doClassCleanups()
-        self.assertEqual(calls, ["release", "close"])
-
-    def test_session_release_is_skipped_once_the_provider_session_stopped(self):
-        # The session it was made from is gone, and with it the server holding
-        # the session to release; only the client is left to close.
-        cases, calls = self._fake_golden_class()
-        cases.setUpClass()
-        cases.tearDownClass()
-        cases.spark.is_stopped = True
-        cases.doClassCleanups()
-        self.assertEqual(calls, ["close"])
+        self.assertEqual(Cases.case_names(), ["own", "shared"])
+        # Every case has a test: one that is counted but never run would make
+        # regeneration refuse, and the golden file demand a block no run writes.
+        self.assertEqual(
+            unittest.defaultTestLoader.getTestCaseNames(Cases), ["test_own", "test_shared"]
+        )
+        self.assertEqual(Cases.test_shared.__doc__, "Shared case.")
 
     # -- golden file location ---------------------------------------------
 
@@ -644,6 +557,348 @@ class DFGoldenFrameworkTests(unittest.TestCase):
 
         with self.assertRaisesRegex(AssertionError, "must live in the `inputs` directory"):
             Cases.golden_file_path()
+
+
+class DFGoldenTestMixinTests(unittest.TestCase):
+    """
+    The life cycle of a golden test class, run over a fake session.
+
+    Each test declares a golden test class and hands it to a real unittest
+    runner, so that its ``setUpClass``, registered tests, ``tearDownClass`` and
+    class cleanups run in the order, and under the conditions, of an actual run.
+    """
+
+    # The golden file of a class whose only case is ``c``.
+    GOLDEN_C = "--! name\nc\n--! expected_output_schema\nstruct<_test_c:int>\n!-- end\n"
+
+    def setUp(self):
+        # How a golden test class runs depends on the environment, so each test
+        # starts from a known one, and the real one is put back afterwards.
+        self._start(mock.patch.dict(os.environ))
+        for variable in ("SPARK_GENERATE_GOLDEN_FILES", "SPARK_LOCAL_REMOTE"):
+            os.environ.pop(variable, None)
+
+        # A golden file stays claimed for as long as the process runs.
+        self._start(mock.patch.dict(df_golden._golden_file_owners, clear=True))
+
+        # The golden test classes of a test all resolve to this temp file,
+        # rather than to a file under ``results`` next to their module.
+        fd, self.golden = tempfile.mkstemp(suffix=".py.out")
+        os.close(fd)
+        self.addCleanup(os.remove, self.golden)
+        self._start(mock.patch.object(df_golden, "golden_file_for_input", return_value=self.golden))
+
+        # Running a case takes a real session, so a stand-in notes in ``ran``
+        # the case it is asked to run instead.
+        self.ran = []
+        self._start(
+            mock.patch.object(df_golden, "compute_case_outputs", self._compute_case_outputs)
+        )
+
+        # What happens to the sessions, in order: ``stop`` for the providing
+        # one, ``release`` and ``close`` for the client of the golden one.
+        self.calls = []
+
+    def _start(self, patcher):
+        patcher.start()
+        self.addCleanup(patcher.stop)
+
+    def _compute_case_outputs(self, spark, build_df):
+        self.ran.append(build_df.__name__)
+        # A schema naming the case, and its tags: no two cases produce the same.
+        sections = {"expected_output_schema": "struct<{}:int>".format(build_df.__name__)}
+        if case_tags(build_df):
+            sections["tags"] = format_tags(case_tags(build_df))
+        return sections
+
+    def _provider(self, in_process_server=True):
+        """
+        Return a stand-in for ``ReusedConnectTestCase``: a test class whose
+        ``setUpClass`` creates the session, without chaining to the next class
+        (``PySparkBaseTestCase.setUpClass`` does not either), and whose
+        ``tearDownClass`` stops it.
+
+        With *in_process_server*, the session starts its server in this process
+        and takes it down again when stopped, which is how the tests run by
+        default.  Without, the server outlives the session, as a remote one does.
+        """
+        calls = self.calls
+
+        class FakeClient:
+            closed = False
+
+            def release_session(self):
+                # As for the real client, there is no releasing once it is closed.
+                if self.closed:
+                    raise RuntimeError("the client is closed")
+                calls.append("release")
+
+            def close(self):
+                if not self.closed:
+                    calls.append("close")
+                self.closed = True
+
+        class FakeConf:
+            def set(self, key, value):
+                pass
+
+        class FakeSession:
+            def __init__(self):
+                self.client = FakeClient()
+                self.conf = FakeConf()
+
+            def __del__(self):
+                # As the real session does when it is garbage collected.
+                self.client.close()
+
+        class FakeProviderSession:
+            is_stopped = False
+
+            def newSession(self):
+                return FakeSession()
+
+            def stop(self):
+                calls.append("stop")
+                self.is_stopped = True
+                # As the real ``stop()`` does, once the server it started is down.
+                os.environ.pop("SPARK_LOCAL_REMOTE", None)
+
+        class Provider(unittest.TestCase):
+            @classmethod
+            def setUpClass(cls):
+                cls.spark = FakeProviderSession()
+                if in_process_server:
+                    os.environ["SPARK_LOCAL_REMOTE"] = "1"
+
+            @classmethod
+            def tearDownClass(cls):
+                cls.spark.stop()
+
+        return Provider
+
+    def _run(self, test_class, *names):
+        """
+        Run *test_class* -- all of its tests, or only those in *names* -- the
+        way a test runner does, and return the result.
+        """
+        if names:
+            suite = unittest.TestSuite(test_class(name) for name in names)
+        else:
+            suite = unittest.defaultTestLoader.loadTestsFromTestCase(test_class)
+        result = unittest.TestResult()
+        suite.run(result)
+        return result
+
+    def _run_passing(self, test_class, *names):
+        """Run *test_class* like :meth:`_run`, expecting its tests to run and pass."""
+        result = self._run(test_class, *names)
+        self.assertEqual(result.errors + result.failures, [])
+        self.assertGreater(result.testsRun, 0)
+
+    def _write_golden(self, text):
+        with open(self.golden, "w") as f:
+            f.write(text)
+
+    def _read_golden(self):
+        with open(self.golden) as f:
+            return f.read()
+
+    # -- session release ---------------------------------------------------
+
+    def test_session_is_released_when_the_server_outlives_the_provider(self):
+        # The class cleanup runs after the providing class stopped its session.
+        # A remote server, or the persistent local one, is still up by then, and
+        # would hold the golden session and its temp views until they idle out.
+        self._write_golden(self.GOLDEN_C)
+
+        class Cases(DFGoldenTestMixin, self._provider(in_process_server=False)):
+            def _test_c(self, spark):
+                pass
+
+        self._run_passing(Cases)
+        self.assertEqual(self.calls, ["stop", "release", "close"])
+
+    def test_session_release_is_skipped_once_the_in_process_server_stopped(self):
+        # The providing session took the server it had started down with it, and
+        # with that the session to release; only the client is left to close.
+        self._write_golden(self.GOLDEN_C)
+
+        class Cases(DFGoldenTestMixin, self._provider()):
+            def _test_c(self, spark):
+                pass
+
+        self._run_passing(Cases)
+        self.assertEqual(self.calls, ["stop", "close"])
+
+    def test_session_is_released_when_set_up_class_fails(self):
+        # A runner skips tearDownClass when setUpClass raises, so nothing has
+        # stopped the providing session: its server is up, in process or not.
+        self._write_golden(self.GOLDEN_C)
+
+        class Cases(DFGoldenTestMixin, self._provider()):
+            @classmethod
+            def setup_session(cls, spark):
+                raise RuntimeError("setup_session failed")
+
+            def _test_c(self, spark):
+                pass
+
+        [(_, error)] = self._run(Cases).errors
+        self.assertIn("setup_session failed", error)
+        self.assertEqual(self.calls, ["release", "close"])
+
+    # -- base classes ------------------------------------------------------
+
+    def test_mixin_listed_after_the_session_provider_is_reported_by_each_case(self):
+        # The provider's setUpClass does not chain to the mixin's, which never
+        # runs; the cases are the first to notice, and say what to change.
+        class Cases(self._provider(), DFGoldenTestMixin):
+            def _test_a(self, spark):
+                pass
+
+            def _test_b(self, spark):
+                pass
+
+        result = self._run(Cases)
+        self.assertEqual(result.errors, [])
+        self.assertEqual(len(result.failures), 2)
+        for _, failure in result.failures:
+            self.assertIn("list DFGoldenTestMixin before the session-providing test class", failure)
+        self.assertEqual(self.ran, [])
+
+    def test_mixin_without_a_session_provider_is_reported(self):
+        # Listed first, but no class after it creates a session: a different
+        # mistake, which reordering the bases would not fix.
+        self._write_golden(self.GOLDEN_C)
+
+        class Cases(DFGoldenTestMixin, unittest.TestCase):
+            def _test_c(self, spark):
+                pass
+
+        [(_, error)] = self._run(Cases).errors
+        self.assertIn("mix DFGoldenTestMixin into a session-providing test class", error)
+
+    def test_mixin_allows_a_subclass_to_define_set_up_class(self):
+        # A -> B(setUpClass) -> DFGoldenTestMixin is a legitimate chain: the
+        # ordering requirement is checked when the class runs, not declared.
+        self._write_golden(self.GOLDEN_C)
+
+        class Base(DFGoldenTestMixin, self._provider()):
+            @classmethod
+            def setUpClass(cls):
+                super().setUpClass()
+
+        class Derived(Base):
+            def _test_c(self, spark):
+                pass
+
+        self._run_passing(Derived)
+        self.assertEqual(self.ran, ["_test_c"])
+
+    # -- case dispatch -----------------------------------------------------
+
+    def test_registered_tests_each_run_their_own_case(self):
+        self._write_golden(
+            "--! name\na\n--! expected_output_schema\nstruct<_test_a:int>\n!-- end\n"
+            "\n\n"
+            "--! name\nb\n--! expected_output_schema\nstruct<_test_b:int>\n!-- end\n"
+        )
+
+        class Cases(DFGoldenTestMixin, self._provider()):
+            def _test_a(self, spark):
+                pass
+
+            def _test_b(self, spark):
+                pass
+
+        self._run_passing(Cases)
+        # Not the case registered last twice over, which is what tests sharing
+        # the registration loop's variable would run.
+        self.assertEqual(self.ran, ["_test_a", "_test_b"])
+
+    # -- regeneration ------------------------------------------------------
+
+    def test_regeneration_writes_the_golden_file_from_the_run(self):
+        os.environ["SPARK_GENERATE_GOLDEN_FILES"] = "1"
+        # The old file is replaced without being read, so it is no obstacle that
+        # this one is no golden file at all, let alone in sync with the class.
+        self._write_golden("not a golden file\n")
+
+        class Cases(DFGoldenTestMixin, self._provider()):
+            def _test_b(self, spark):
+                pass
+
+            @unordered
+            def _test_a(self, spark):
+                pass
+
+        self._run_passing(Cases)
+        self.assertEqual(
+            self._read_golden(),
+            "--! name\n__file_metadata__\n--! source\n{}.{}\n!-- end\n"
+            "\n\n"
+            "--! name\na\n--! tags\nunordered\n"
+            "--! expected_output_schema\nstruct<_test_a:int>\n!-- end\n"
+            "\n\n"
+            "--! name\nb\n--! expected_output_schema\nstruct<_test_b:int>\n!-- end\n".format(
+                Cases.__module__, Cases.__qualname__
+            ),
+        )
+
+    def test_regeneration_refuses_a_run_that_skipped_a_case(self):
+        os.environ["SPARK_GENERATE_GOLDEN_FILES"] = "1"
+        self._write_golden("the previous golden file\n")
+
+        class Cases(DFGoldenTestMixin, self._provider()):
+            def _test_a(self, spark):
+                pass
+
+            def _test_b(self, spark):
+                pass
+
+        [(_, error)] = self._run(Cases, "test_a").errors
+        self.assertIn("these cases did not run", error)
+        # Writing the one case that ran would have dropped ``b`` from the file.
+        self.assertEqual(self._read_golden(), "the previous golden file\n")
+
+    # -- golden file ownership ---------------------------------------------
+
+    def test_second_class_resolving_to_a_golden_file_is_refused(self):
+        # As two golden test classes in one module would, these resolve to the
+        # same file, which the second one to finish would otherwise overwrite.
+        os.environ["SPARK_GENERATE_GOLDEN_FILES"] = "1"
+        provider = self._provider()
+
+        class First(DFGoldenTestMixin, provider):
+            def _test_a(self, spark):
+                pass
+
+        class Second(DFGoldenTestMixin, provider):
+            def _test_b(self, spark):
+                pass
+
+        self._run_passing(First)
+        written = self._read_golden()
+
+        [(_, error)] = self._run(Second).errors
+        self.assertIn("already belongs to", error)
+        self.assertIn(First.__qualname__, error)
+        self.assertIn(Second.__qualname__, error)
+        self.assertIn("its own `inputs/test_<topic>.py` module", error)
+        # Refused before it started a session or ran a case.
+        self.assertEqual(self.calls, ["stop", "close"])
+        self.assertEqual(self.ran, ["_test_a"])
+        self.assertEqual(self._read_golden(), written)
+
+    def test_class_set_up_again_keeps_its_golden_file(self):
+        self._write_golden(self.GOLDEN_C)
+
+        class Cases(DFGoldenTestMixin, self._provider()):
+            def _test_c(self, spark):
+                pass
+
+        self._run_passing(Cases)
+        self._run_passing(Cases)
 
 
 if __name__ == "__main__":

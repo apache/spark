@@ -123,9 +123,7 @@ class GroupByGoldenTests(DFGoldenTestMixin, ReusedConnectTestCase):
     def _test_group_by_struct(self, spark):
         """struct() in group by."""
         return (
-            spark.table("testData")
-            .groupBy(struct((col("a") + 0.1).alias("aa")))
-            .agg(count(lit(1)))
+            spark.table("testData").groupBy(struct((col("a") + 0.1).alias("aa"))).agg(count(lit(1)))
         )
 
     def _test_agg_stats_with_nulls(self, spark):
@@ -293,9 +291,7 @@ class GroupByGoldenTests(DFGoldenTestMixin, ReusedConnectTestCase):
     def _test_count_if_group_by(self, spark):
         """count_if() with grouping expression reference."""
         return (
-            spark.table("testData")
-            .groupBy(col("a") + 1)
-            .agg(count_if((col("a") + 1) == col("b")))
+            spark.table("testData").groupBy(col("a") + 1).agg(count_if((col("a") + 1) == col("b")))
         )
 
     @staticmethod

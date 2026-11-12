@@ -64,19 +64,23 @@ Golden file format::
     --! tags
     unordered
     --! expected_analysis_output
-    Sort [k#x ASC NULLS FIRST], true
+    Aggregate [a#x], [a#x, count(b#x) AS count(b)#xL]
     +- ...
     --! expected_optimized_output
-    ...
+    Aggregate [a#x], [a#x, count(b#x) AS count(b)#xL]
+    +- LocalRelation [a#x, b#x]
     --! expected_output_schema
-    struct<k:bigint>
+    struct<a:int,count(b):bigint>
     --! expected_result
-    +---+
-    | k |
-    +---+
-    | 1 |
-    +---+
-    printed all 1 rows.
+    +------+----------+
+    | a    | count(b) |
+    +------+----------+
+    | 1    | 2        |
+    | 2    | 2        |
+    | 3    | 2        |
+    | NULL | 1        |
+    +------+----------+
+    printed all 4 rows.
     --! expected_result_hash
     <sha256 over the result rows>
     !-- end
@@ -119,7 +123,7 @@ Running the tests::
 Regenerating golden files
 -------------------------
 Set ``SPARK_GENERATE_GOLDEN_FILES=1`` before running the tests, or use the
-wrapper script, which covers every golden test module under ``inputs``::
+wrapper script, which runs every ``inputs/test_*.py`` module::
 
     python/pyspark/sql/tests/df_golden/regenerate.sh [--verify]
 
@@ -134,6 +138,11 @@ Add a case method to an existing class, or add an ``inputs/test_<topic>.py``
 module with a new class (registering it in ``dev/sparktestsupport/modules.py``,
 as for any PySpark test module).  Then regenerate: the file under ``results`` is
 created or extended from the class, so it needs no hand-editing.
+
+Each golden test class needs a module of its own.  The golden file is named
+after the module but records the cases of a single class, so a second class in
+the same module would share, and on regeneration overwrite, the first one's
+file; it is refused when it is set up.
 """
 
 import hashlib
@@ -799,6 +808,30 @@ def assert_cases_in_sync(test_file, declared, golden):
     )
 
 
+# The test class that each golden file used in this process belongs to, by name.
+_golden_file_owners = {}
+
+
+def claim_golden_file(golden_file, owner):
+    """
+    Record that *golden_file* belongs to the test class named *owner*.
+
+    A golden file is named after the test module but records the cases of one
+    class, so a second golden test class in the same module resolves to the same
+    file.  Checking, it could only ever be out of sync with it; regenerating,
+    whichever class finished last would overwrite the other's outputs.  So a
+    file belongs to the first class to claim it for as long as the process runs,
+    and another class claiming it is refused.
+    """
+    claimed_by = _golden_file_owners.setdefault(golden_file, owner)
+    assert claimed_by == owner, (
+        "{}: golden file already belongs to {}, so {} cannot use it too; give each "
+        "golden test class its own `{}/test_<topic>.py` module".format(
+            golden_file, claimed_by, owner, _INPUTS_DIR
+        )
+    )
+
+
 # ---------------------------------------------------------------------------
 # Test class integration
 # ---------------------------------------------------------------------------
@@ -819,7 +852,8 @@ class DFGoldenTestMixin:
     under test; a ``test_<case>`` method is registered for each, so cases run,
     report and can be selected individually like any other unittest test.  The
     golden file is derived from the test module (see
-    :func:`golden_file_for_input`), so there is nothing to declare.
+    :func:`golden_file_for_input`), so there is nothing to declare.  It records
+    the cases of this one class, which therefore needs a module of its own.
 
     The cases of a class share one Spark Connect session (``newSession()`` off
     the session the test class provides, the Connect counterpart of
@@ -828,13 +862,18 @@ class DFGoldenTestMixin:
     confs -- is discarded with the session and cannot leak into other classes.
     """
 
+    # The session the cases run in, from setUpClass until its class cleanup.
+    _golden_session = None
+
     def __init_subclass__(cls, **kwargs):
         super().__init_subclass__(**kwargs)
-        # Only the cases this class declares: an inherited one already has its
-        # test method on the class that declares it.
-        for attr, method in list(vars(cls).items()):
-            if attr.startswith(_CASE_METHOD_PREFIX) and inspect.isfunction(method):
-                cls._register_case_test(attr[len(_CASE_METHOD_PREFIX) :], method)
+        for name in cls.case_names():
+            attr = _CASE_METHOD_PREFIX + name
+            # A case inherited from a golden test class already has its test
+            # method there.  One declared here needs one, and so does one that
+            # comes from a plain base class, which registers nothing itself.
+            if attr in vars(cls) or not hasattr(cls, "test_" + name):
+                cls._register_case_test(name, getattr(cls, attr))
 
     @classmethod
     def _register_case_test(cls, name, case_method):
@@ -863,6 +902,11 @@ class DFGoldenTestMixin:
         return golden_file_for_input(inspect.getfile(cls))
 
     @classmethod
+    def _golden_source(cls):
+        """The name the golden file records as its ``source``: this class."""
+        return "{}.{}".format(cls.__module__, cls.__qualname__)
+
+    @classmethod
     def setup_session(cls, spark):
         """
         Hook: prepare the session shared by this class's cases.
@@ -887,6 +931,7 @@ class DFGoldenTestMixin:
         # neither reads nor requires an existing one.
         if case_names:
             cls._golden_path = cls.golden_file_path()
+            claim_golden_file(cls._golden_path, cls._golden_source())
             if not cls._golden_regenerating:
                 cls._golden_cases = parse_test_file(cls._golden_path)
                 assert_cases_in_sync(cls._golden_path, case_names, list(cls._golden_cases))
@@ -895,14 +940,17 @@ class DFGoldenTestMixin:
 
         if not case_names:
             return
-        # This mixin has to precede the session-providing test class in the base
-        # list, so that its setUpClass body runs once that class has created the
-        # session.  Checking here rather than when the class is declared keeps
-        # legitimate chains -- a subclass with a setUpClass of its own -- working.
+        # No session here means that no class after this mixin provides one.  (A
+        # session-providing class listed before it keeps this setUpClass from
+        # running at all, which _run_golden_case reports.)
         assert hasattr(cls, "spark"), (
-            "{}: no session was created; list DFGoldenTestMixin before the "
-            "session-providing test class".format(cls.__name__)
+            "{}: no session to run the cases in; mix DFGoldenTestMixin into a "
+            "session-providing test class such as ReusedConnectTestCase".format(cls.__name__)
         )
+        # Stopping the providing session takes the server down with it when that
+        # session started the server in this process, which is how the tests run
+        # by default.  ``stop()`` clears this variable, so it is read here.
+        cls._golden_server_in_process = "SPARK_LOCAL_REMOTE" in os.environ
         # The one place the session below is released.  A class cleanup runs
         # after tearDownClass, and also after a setUpClass that raised (which
         # skips tearDownClass), so registering it before the session exists
@@ -935,16 +983,22 @@ class DFGoldenTestMixin:
         """
         if cls._golden_session is None:
             return
-        client = cls._golden_session.client
+        # The session itself is held until the end, not just its client: once
+        # garbage collected it closes that client, which can then release nothing.
+        session = cls._golden_session
         cls._golden_session = None
-        # Release this session server-side only while the session it was made
-        # from is alive.  Stopping that one takes the local Connect server down
-        # with it (what ``stop()`` does under ``SPARK_LOCAL_REMOTE``, which is
-        # how the tests run), so there is nothing left to release, and the
-        # request would retry against a dead server until the test times out.
+        client = session.client
+        # Release this session server-side unless the server is gone: stopping
+        # the session this one was made from takes down a server started in
+        # this process (what ``stop()`` does under ``SPARK_LOCAL_REMOTE``), and
+        # the request would then retry against a dead server until the test
+        # times out.  A server that outlives that session -- a remote one, or
+        # the persistent local one -- would otherwise keep this session and its
+        # temp views until it idles out.
         # For the same reason this must NOT call ``session.stop()`` on the
         # session it is releasing: that would take the server down mid-suite.
-        if not cls.spark.is_stopped:
+        server_is_gone = cls._golden_server_in_process and cls.spark.is_stopped
+        if not server_is_gone:
             try:
                 client.release_session()
             except Exception:
@@ -966,7 +1020,7 @@ class DFGoldenTestMixin:
             "{}: cannot regenerate, these cases did not run (a failing case, or a run "
             "filtered to a subset): {}".format(cls._golden_path, ", ".join(missing))
         )
-        header = {"source": "{}.{}".format(cls.__module__, cls.__qualname__)}
+        header = {"source": cls._golden_source()}
         # A case's identity is its name; everything else it records comes from
         # the run, tags included.
         cases = [dict(cls._golden_actual[name], name=name) for name in names]
@@ -974,6 +1028,16 @@ class DFGoldenTestMixin:
 
     def _run_golden_case(self, name):
         cls = type(self)
+        # setUpClass above leaves a session behind, and a runner does not get
+        # here when it raises, so no session means it never ran: a class listed
+        # before this mixin has a setUpClass that does not chain to the next one
+        # (that of PySparkBaseTestCase does not).  Declaration time is too early
+        # to tell, as a subclass may legitimately define a setUpClass of its own.
+        assert cls._golden_session is not None, (
+            "{}: DFGoldenTestMixin.setUpClass did not run; list DFGoldenTestMixin before "
+            "the session-providing test class, and have any setUpClass override call "
+            "super().setUpClass()".format(cls.__name__)
+        )
         build_df = getattr(self, _CASE_METHOD_PREFIX + name)
         actual = compute_case_outputs(cls._golden_session, build_df)
         if cls._golden_regenerating:
