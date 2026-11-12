@@ -4743,6 +4743,150 @@ class RocksDBSuite extends AlsoTestWithRocksDBFeatures with SharedSparkSession
     }
   }
 
+  private def commitVersions(db: RocksDB, versions: Range): Unit = {
+    versions.foreach { version =>
+      db.load(version)
+      db.put(s"k$version", s"v$version")
+      db.commit()
+    }
+  }
+
+  private def lineageVersions(db: RocksDB): Seq[Int] =
+    db.lineageManager.getLineageForCurrVersion().map(_.version.toInt).toSeq
+
+  Seq(true, false).foreach { trimLineageOnLoad =>
+    testWithChangelogCheckpointingEnabled("V2 load trims the lineage to the loaded snapshot - " +
+        s"trimLineageOnLoad = $trimLineageOnLoad") {
+      withSQLConf(
+          SQLConf.STATE_STORE_TRIM_LINEAGE_ON_LOAD_ENABLED.key -> trimLineageOnLoad.toString) {
+        withTempDir { dir =>
+          val remoteDir = dir.getCanonicalPath
+          val conf = dbConf.copy(minDeltasForSnapshot = 5, compactOnCommit = false)
+          val versionToUniqueId = mutable.Map[Long, String]()
+
+          // Maintenance runs once at the end, so only the snapshot at version 10 is uploaded
+          // and the changelogs keep the full lineage.
+          withDB(remoteDir, conf = conf, enableStateStoreCheckpointIds = true,
+              versionToUniqueId = versionToUniqueId) { db =>
+            commitVersions(db, 0 until 12)
+            db.doMaintenance()
+          }
+
+          val expectedLineage = if (trimLineageOnLoad) 10 to 12 else 1 to 12
+          withDB(remoteDir, version = 12, conf = conf, enableStateStoreCheckpointIds = true,
+              versionToUniqueId = versionToUniqueId) { db =>
+            assert(lineageVersions(db) === expectedLineage)
+            commitVersions(db, 12 until 13)
+            val changelogReader =
+              db.fileManager.getChangelogReader(13, versionToUniqueId.get(13))
+            assert(changelogReader.lineage.map(_.version.toInt).toSeq === expectedLineage)
+            changelogReader.closeIfNeeded()
+          }
+        }
+      }
+    }
+  }
+
+  testWithChangelogCheckpointingEnabled("V2 load keeps the lineage when the version has its " +
+      "own snapshot or no snapshot exists") {
+    withTempDir { dir =>
+      val remoteDir = dir.getCanonicalPath
+      val conf = dbConf.copy(minDeltasForSnapshot = 5, compactOnCommit = false)
+      val versionToUniqueId = mutable.Map[Long, String]()
+      withDB(remoteDir, conf = conf, enableStateStoreCheckpointIds = true,
+          versionToUniqueId = versionToUniqueId) { db =>
+        commitVersions(db, 0 until 10)
+        db.doMaintenance()
+      }
+      withDB(remoteDir, version = 10, conf = conf, enableStateStoreCheckpointIds = true,
+          versionToUniqueId = versionToUniqueId) { db =>
+        assert(lineageVersions(db) === Seq(10))
+      }
+    }
+
+    withTempDir { dir =>
+      val remoteDir = dir.getCanonicalPath
+      val conf = dbConf.copy(minDeltasForSnapshot = 100, compactOnCommit = false)
+      val versionToUniqueId = mutable.Map[Long, String]()
+      withDB(remoteDir, conf = conf, enableStateStoreCheckpointIds = true,
+          versionToUniqueId = versionToUniqueId) { db =>
+        commitVersions(db, 0 until 5)
+        db.doMaintenance()
+      }
+      withDB(remoteDir, version = 5, conf = conf, enableStateStoreCheckpointIds = true,
+          versionToUniqueId = versionToUniqueId) { db =>
+        assert(lineageVersions(db) === (1 to 5))
+      }
+    }
+  }
+
+  testWithChangelogCheckpointingEnabled("V2 lineage trimmed on load can be loaded with " +
+      "trimLineageOnLoad disabled") {
+    withTempDir { dir =>
+      val remoteDir = dir.getCanonicalPath
+      val versionToUniqueId = mutable.Map[Long, String]()
+      val conf = dbConf.copy(minDeltasForSnapshot = 5, compactOnCommit = false)
+      withDB(remoteDir, conf = conf, enableStateStoreCheckpointIds = true,
+          versionToUniqueId = versionToUniqueId) { db =>
+        commitVersions(db, 0 until 12)
+        db.doMaintenance()
+      }
+      withDB(remoteDir, version = 12, conf = conf, enableStateStoreCheckpointIds = true,
+          versionToUniqueId = versionToUniqueId) { db =>
+        commitVersions(db, 12 until 13)
+      }
+
+      withSQLConf(SQLConf.STATE_STORE_TRIM_LINEAGE_ON_LOAD_ENABLED.key -> false.toString) {
+        val confWithoutTrim = dbConf.copy(minDeltasForSnapshot = 5, compactOnCommit = false)
+        withDB(remoteDir, version = 13, conf = confWithoutTrim,
+            enableStateStoreCheckpointIds = true, versionToUniqueId = versionToUniqueId) { db =>
+          assert(lineageVersions(db) === (10 to 13))
+          (0 until 13).foreach { i => assert(toStr(db.get(s"k$i")) === s"v$i") }
+        }
+      }
+    }
+  }
+
+  testWithChangelogCheckpointingEnabled("V2 auto-repair finds older snapshots through older " +
+      "changelogs after the lineage is trimmed on load") {
+    withSQLConf(
+      SQLConf.STREAMING_CHECKPOINT_FILE_CHECKSUM_ENABLED.key -> false.toString,
+      SQLConf.STATE_STORE_AUTO_SNAPSHOT_REPAIR_ENABLED.key -> true.toString,
+      SQLConf.STATE_STORE_AUTO_SNAPSHOT_REPAIR_NUM_FAILURES_BEFORE_ACTIVATING.key -> "1") {
+      withTempDir { dir =>
+        val remoteDir = dir.getCanonicalPath
+        val conf = dbConf.copy(minDeltasForSnapshot = 5, compactOnCommit = false)
+        val versionToUniqueId = mutable.Map[Long, String]()
+
+        withDB(remoteDir, conf = conf, enableStateStoreCheckpointIds = true,
+            versionToUniqueId = versionToUniqueId) { db =>
+          commitVersions(db, 0 until 5)
+          db.doMaintenance() // uploads the snapshot at 5
+          commitVersions(db, 5 until 12)
+          db.doMaintenance() // uploads the snapshot at 10
+        }
+        // The reload trims the lineage [5, 12] to [10, 12]. Then add a snapshot at 15.
+        withDB(remoteDir, version = 12, conf = conf, enableStateStoreCheckpointIds = true,
+            versionToUniqueId = versionToUniqueId) { db =>
+          assert(lineageVersions(db) === (10 to 12))
+          commitVersions(db, 12 until 15)
+          db.doMaintenance()
+        }
+
+        corruptFile(new File(remoteDir, s"15_${versionToUniqueId(15)}.zip"))
+        corruptFile(new File(remoteDir, s"10_${versionToUniqueId(10)}.zip"))
+
+        withDB(remoteDir, version = 15, conf = conf, enableStateStoreCheckpointIds = true,
+            versionToUniqueId = versionToUniqueId) { db =>
+          (0 until 15).foreach { i => assert(toStr(db.get(s"k$i")) === s"v$i") }
+          assert(lineageVersions(db) === (5 to 15))
+          db.commit()
+          assert(db.metricsOpt.get.numSnapshotsAutoRepaired == 1)
+        }
+      }
+    }
+  }
+
   // Test ensuring a race condition on no-overwrite filesystems (e.g., ABFS)
   // does not occur:
   // 1. Query run 1 uploads snapshot X.zip pointing to SST file Y.SST

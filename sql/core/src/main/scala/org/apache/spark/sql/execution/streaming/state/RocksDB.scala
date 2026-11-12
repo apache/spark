@@ -538,6 +538,11 @@ class RocksDB(
           }
         }
         loadedFromDfs = version > 0
+        if (conf.stateStoreConf.trimLineageOnLoadEnabled) {
+          // Drop versions older than the loaded snapshot, so they are not written to the next
+          // changelog.
+          currVersionLineage = currVersionLineage.filter(_.version >= lastSnapshotVersion)
+        }
         lineageManager.resetLineage(currVersionLineage)
         // After changelog replay the numKeysOnWritingVersion will be updated to
         // the correct number of keys in the loaded version.

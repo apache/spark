@@ -3742,6 +3742,16 @@ object SQLConf {
       .checkValue(k => k > 0, "Must allow at least 1 change file replay")
       .createWithDefault(500)
 
+  val STATE_STORE_TRIM_LINEAGE_ON_LOAD_ENABLED =
+    buildConf("spark.sql.streaming.stateStore.trimLineageOnLoad.enabled")
+      .internal()
+      .doc("When true, the RocksDB state store trims the lineage to start at the loaded " +
+        "snapshot whenever it loads a version from the checkpoint location.")
+      .version("4.4.0")
+      .withBindingPolicy(ConfigBindingPolicy.NOT_APPLICABLE)
+      .booleanConf
+      .createWithDefault(true)
+
   val STATE_STORE_INSTANCE_METRICS_REPORT_LIMIT =
     buildConf("spark.sql.streaming.stateStore.numStateStoreInstanceMetricsToReport")
       .internal()
@@ -9537,6 +9547,9 @@ class SQLConf extends Serializable with Logging with SqlApiConf {
 
   def stateStoreAutoSnapshotRepairMaxChangeFileReplay: Int =
     getConf(STATE_STORE_AUTO_SNAPSHOT_REPAIR_MAX_CHANGE_FILE_REPLAY)
+
+  def stateStoreTrimLineageOnLoadEnabled: Boolean =
+    getConf(STATE_STORE_TRIM_LINEAGE_ON_LOAD_ENABLED)
 
   def stateStoreFormatValidationEnabled: Boolean = getConf(STATE_STORE_FORMAT_VALIDATION_ENABLED)
 
