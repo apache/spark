@@ -149,6 +149,12 @@ private[sql] trait CompilationErrors extends DataTypeErrorsBase {
       errorClass = "CANNOT_MODIFY_CONFIG",
       messageParameters = Map("key" -> toSQLConf(key), "docroot" -> docroot))
   }
+
+  def fileTypeMissingQualifierError(): Throwable = {
+    new AnalysisException(
+      errorClass = "FILE_TYPE_MISSING_QUALIFIER",
+      messageParameters = Map.empty)
+  }
 }
 
 private[sql] object CompilationErrors extends CompilationErrors

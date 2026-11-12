@@ -4074,6 +4074,9 @@ class Analyzer(
   object ResolveOutputRelation extends Rule[LogicalPlan] {
     override def apply(plan: LogicalPlan): LogicalPlan = plan.resolveOperatorsWithPruning(
       _.containsPattern(COMMAND), ruleId) {
+      // The delete condition is resolved against the table output, which this rule replaces with
+      // one without the CHAR/VARCHAR raw types that the padding of the condition needs.
+      case o: OverwriteByExpression if !o.deleteExpr.resolved => o
       case v2Write: V2WriteCommand
           if v2Write.table.resolved && v2Write.query.resolved && !v2Write.outputResolved &&
             v2Write.pendingSchemaChanges.isEmpty =>

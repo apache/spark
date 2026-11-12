@@ -453,6 +453,17 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase with Compilat
     )
   }
 
+  def unsupportedSetOperationOnFileType(fileCol: Attribute, origin: Origin): Throwable = {
+    new AnalysisException(
+      errorClass = "UNSUPPORTED_FEATURE.SET_OPERATION_ON_FILE_TYPE",
+      messageParameters = Map(
+        "colName" -> toSQLId(fileCol.name),
+        "dataType" -> toSQLType(fileCol.dataType)
+      ),
+      origin = origin
+    )
+  }
+
   def nonPartitionColError(partitionName: String): Throwable = {
     new AnalysisException(
       errorClass = "NON_PARTITION_COLUMN",
@@ -4843,6 +4854,23 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase with Compilat
       cause = cause)
   }
 
+  def unsupportedExternalLookupJoinError(
+      errorSubClass: String,
+      messageParameters: Map[String, String] = Map.empty): Throwable = {
+    new AnalysisException(
+      errorClass = s"EXTERNAL_LOOKUP_JOIN_UNSUPPORTED.$errorSubClass",
+      messageParameters = messageParameters)
+  }
+
+  def invalidDataSourceExternalLookupError(
+      table: String,
+      errorSubClass: String,
+      messageParameters: Map[String, String] = Map.empty): Throwable = {
+    new AnalysisException(
+      errorClass = s"DATA_SOURCE_INVALID_EXTERNAL_LOOKUP.$errorSubClass",
+      messageParameters = Map("table" -> toSQLId(table)) ++ messageParameters)
+  }
+
   def foundMultipleXMLDataSourceError(provider: String,
       sourceNames: Seq[String],
       externalSource: String): Throwable = {
@@ -5236,6 +5264,36 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase with Compilat
     new AnalysisException(
       errorClass = "UNSUPPORTED_FILE_TYPE",
       messageParameters = Map.empty)
+  }
+
+  def fileTypeUnknownWriteError(colNames: Seq[Seq[String]]): Throwable = {
+    new AnalysisException(
+      errorClass = "FILE_TYPE_UNKNOWN_WRITE",
+      messageParameters = Map("colNames" -> colNames.map(toSQLId).mkString("[", ", ", "]")))
+  }
+
+  def fileTypeUnsupportedColumnUsageError(field: StructField, usage: String): Throwable = {
+    new AnalysisException(
+      errorClass = s"FILE_TYPE_UNSUPPORTED_COLUMN_USAGE.$usage",
+      messageParameters = Map(
+        "colName" -> toSQLId(field.name),
+        "dataType" -> toSQLType(field.dataType)))
+  }
+
+  def fileTypeInRoutineSignatureUnsupportedQualifierError(
+      routineType: String,
+      routineName: String): Throwable = {
+    new AnalysisException(
+      errorClass = "FILE_TYPE_IN_ROUTINE_SIGNATURE_UNSUPPORTED_QUALIFIER",
+      messageParameters = Map("routineType" -> routineType, "routineName" -> routineName))
+  }
+
+  def fileTypeInRoutineSignatureUnsupportedMapKeyError(
+      routineType: String,
+      routineName: String): Throwable = {
+    new AnalysisException(
+      errorClass = "FILE_TYPE_IN_ROUTINE_SIGNATURE_UNSUPPORTED_MAP_KEY",
+      messageParameters = Map("routineType" -> routineType, "routineName" -> routineName))
   }
 
   def unsupportedTimeTypeError(): Throwable = {

@@ -566,7 +566,7 @@ def handle_worker_exception(
     try:
         exc_info = format_worker_exception(e, hide_traceback)
         write_int(SpecialLengths.PYTHON_EXCEPTION_THROWN, outfile)
-        write_with_length(exc_info.encode("utf-8"), outfile)
+        write_with_length(exc_info.encode("utf-8", "backslashreplace"), outfile)
     except IOError:
         # JVM close the socket
         pass

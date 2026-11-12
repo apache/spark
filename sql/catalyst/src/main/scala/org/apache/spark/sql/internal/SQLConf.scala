@@ -2541,6 +2541,35 @@ object SQLConf {
     .bytesConf(ByteUnit.BYTE)
     .createWithDefault(8L << 30)
 
+  val JOIN_EXTERNAL_LOOKUP_MAX_BATCH_BYTES =
+    buildConf("spark.sql.join.externalLookup.maxBatchBytes")
+      .withBindingPolicy(ConfigBindingPolicy.NOT_APPLICABLE)
+      .doc("Size in bytes of input rows at which an external lookup join stops adding rows to " +
+        "a lookup request. The row that reaches this size stays in the request, so a request " +
+        "can exceed it by one row. A request always takes at least one row, and never more rows " +
+        "than the source allows, or 1000.")
+      .version("4.4.0")
+      .bytesConf(ByteUnit.BYTE)
+      .checkValue(_ > 0, "External lookup join max batch bytes must be positive")
+      .createWithDefaultString("64m")
+
+  val JOIN_EXTERNAL_LOOKUP_STARTUP_CHECK_ENABLED =
+    buildConf("spark.sql.join.externalLookup.startupCheck.enabled")
+      .internal()
+      .withBindingPolicy(ConfigBindingPolicy.NOT_APPLICABLE)
+      .doc("When true, a streaming query plans its external lookup joins once when its " +
+        "execution starts, including the planning calls to their connectors. A planning error " +
+        "of a lookup join or of its connector contract, of the error class " +
+        "EXTERNAL_LOOKUP_JOIN_UNSUPPORTED, DATA_SOURCE_INVALID_EXTERNAL_LOOKUP or " +
+        "DATA_SOURCE_EXTERNAL_LOOKUP_NOT_SUPPORTED, then stops the query before its first " +
+        "micro-batch, also without data. Any other planning error is left to the first " +
+        "micro-batch, such as one that an ordinary join raises too, or an exception that the " +
+        "connector throws while Spark plans the lookup. When false, those lookup join errors " +
+        "fail the first micro-batch that runs.")
+      .version("4.4.0")
+      .booleanConf
+      .createWithDefault(true)
+
   val INTERRUPT_ON_CANCEL = buildConf("spark.sql.execution.interruptOnCancel")
     .doc("When true, all running tasks will be interrupted if one cancels a query.")
     .version("4.0.0")
@@ -4215,8 +4244,14 @@ object SQLConf {
         "eviction happens at batch end. When k, up to k eligible records are removed per input; " +
         "any still-eligible records left over are removed at batch end. Only applies to modes " +
         "that evict (e.g. Append/Update); has no effect in Complete mode, which never evicts. " +
-        "Read by the streamline aggregation and streaming deduplication (dropDuplicates) " +
-        "operators; dropDuplicatesWithinWatermark always evicts at batch end.")
+        "Read by the streamline aggregation and streaming deduplication operators. Real-Time " +
+        "Mode defaults this setting to 2 when it is not explicitly set. For " +
+        "dropDuplicatesWithinWatermark, incremental cleanup only applies in Real-Time Mode; " +
+        "micro-batch queries always evict at batch end, even with a positive factor. When " +
+        "enabled for this operator, all cleanup uses the late-events watermark, including " +
+        "the batch-end drain and no-data batches. This can retain more state than a value of 0. " +
+        "Cleanup progress may change which records outside the guaranteed watermark-delay " +
+        "interval are emitted.")
       .version("4.3.0")
       .withBindingPolicy(ConfigBindingPolicy.NOT_APPLICABLE)
       .longConf
