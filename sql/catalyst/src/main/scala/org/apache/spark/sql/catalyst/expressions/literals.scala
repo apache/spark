@@ -43,7 +43,7 @@ import org.apache.spark.sql.catalyst.{CatalystTypeConverters, FunctionIdentifier
 import org.apache.spark.sql.catalyst.analysis.{FunctionRegistry, UnresolvedFunction}
 import org.apache.spark.sql.catalyst.expressions.codegen._
 import org.apache.spark.sql.catalyst.expressions.variant.VariantExpressionEvalUtils
-import org.apache.spark.sql.catalyst.parser.CatalystSqlParser
+import org.apache.spark.sql.catalyst.parser.{AstBuilder, CatalystSqlParser}
 import org.apache.spark.sql.catalyst.trees.TreePattern
 import org.apache.spark.sql.catalyst.trees.TreePattern.{LITERAL, NULL_LITERAL, TRUE_OR_FALSE_LITERAL}
 import org.apache.spark.sql.catalyst.types._
@@ -361,7 +361,22 @@ object Literal {
     fromSQL(sql, CatalystSqlParser)
   }
 
-  private[sql] def fromSQL(sql: String, parser: CatalystSqlParser): Expression = {
+  // Literal.sql always escapes strings, independently of the session's parser configuration.
+  // Override only that policy so other settings, such as the time zone, remain session-dependent.
+  private lazy val canonicalSqlParser = new CatalystSqlParser {
+    override val astBuilder: AstBuilder = new AstBuilder {
+      override protected def escapedStringLiterals: Boolean = false
+    }
+  }
+
+  /**
+   * Parses [[Literal.sql]] output without depending on the session's string escaping policy.
+   */
+  def fromSQLWithCanonicalEscaping(sql: String): Expression = {
+    fromSQL(sql, canonicalSqlParser)
+  }
+
+  private def fromSQL(sql: String, parser: CatalystSqlParser): Expression = {
     parser.parseExpression(sql).transformUp {
       case u: UnresolvedFunction =>
         assert(u.nameParts.length == 1)

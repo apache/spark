@@ -23,7 +23,8 @@ import org.json4s.{JArray, JBool, JObject, JString, JValue}
 import org.json4s.jackson.JsonMethods.parse
 
 import org.apache.spark.{SparkException, SparkFunSuite, SparkIllegalArgumentException}
-import org.apache.spark.sql.AnalysisException
+import org.apache.spark.sql.{AnalysisException, Row}
+import org.apache.spark.sql.catalyst.CatalystTypeConverters
 import org.apache.spark.sql.catalyst.analysis.{caseInsensitiveResolution, caseSensitiveResolution}
 import org.apache.spark.sql.catalyst.expressions.Literal
 import org.apache.spark.sql.catalyst.parser.{CatalystSqlParser, ParseException}
@@ -1235,6 +1236,44 @@ class StructTypeSuite extends SparkFunSuite with SQLHelper {
         }
       }
     }
+
+    test(s"complex existence defaults preserve escaped literals ($escapedStringLiterals)") {
+      withSQLConf(SQLConf.ESCAPED_STRING_LITERALS.key -> escapedStringLiterals.toString) {
+        val logAppender = new LogAppender("complex existence defaults")
+        withLogAppender(logAppender, level = Some(Level.WARN)) {
+          for (stringType <- Seq(StringType, StringType("UTF8_LCASE"))) {
+            val structType = StructType(Seq(StructField("s", stringType)))
+            val cases: Seq[(DataType, Any)] = Seq(
+              ArrayType(stringType) -> Seq("a\\b'c", "\\n", "\n", "plain", "", null),
+              MapType(StringType, stringType) ->
+                Map("k\\'ey" -> "a\\b'c", "empty" -> "", "null" -> null),
+              structType -> Row("a\\b'c"),
+              ArrayType(structType) -> Seq(Row("a\\b'c"), Row(""), Row(null), null),
+              MapType(StringType, ArrayType(stringType)) ->
+                Map("k\\'ey" -> Seq("a\\b'c", "", null)),
+              ArrayType(stringType) -> Seq.empty[String],
+              MapType(StringType, stringType) -> Map.empty[String, String],
+              structType -> null)
+            for ((dataType, expected) <- cases) {
+              val literal = Literal.create(expected, dataType)
+              withClue(s"dataType=$dataType, default=${literal.sql}: ") {
+                val field = StructField("c", dataType).withExistenceDefaultValue(literal.sql)
+                val schema = DataType.fromJson(StructType(Seq(field)).json)
+                  .asInstanceOf[StructType]
+                val actual = ResolveDefaultColumns.existenceDefaultValues(schema).head
+                assert(CatalystTypeConverters.createToScalaConverter(dataType)(actual) == expected)
+              }
+            }
+          }
+        }
+        val fallbackWarnings = logAppender.loggingEvents.filter { event =>
+          event.getLevel == Level.WARN && event.getMessage.getFormattedMessage
+            .contains("Encountered unresolved exists default value")
+        }
+        assert(fallbackWarnings.isEmpty,
+          fallbackWarnings.map(_.getMessage.getFormattedMessage).mkString("\n"))
+      }
+    }
   }
 
   test("existence default decoding does not repeat deprecated configuration warnings") {
@@ -1298,13 +1337,48 @@ class StructTypeSuite extends SparkFunSuite with SQLHelper {
     }
   }
 
-  test("unresolved existence defaults retain the session's string literal parsing") {
-    withSQLConf(SQLConf.ESCAPED_STRING_LITERALS.key -> "true") {
-      val field = StructField("s", StringType)
-        .withExistenceDefaultValue("""concat('a', '\n')""")
-      assert(ResolveDefaultColumns.existenceDefaultValues(StructType(Seq(field))).toSeq ==
-        Seq(UTF8String.fromString("a\\n")))
-      assert(SQLConf.get.escapedStringLiterals)
+  for (escapedStringLiterals <- Seq(false, true)) {
+    test(s"function existence defaults retain session parsing ($escapedStringLiterals)") {
+      withSQLConf(SQLConf.ESCAPED_STRING_LITERALS.key -> escapedStringLiterals.toString) {
+        val expected = if (escapedStringLiterals) "a\\n" else "a\n"
+        val structType = StructType(Seq(StructField("s", StringType)))
+        val cases: Seq[(DataType, String, Any)] = Seq(
+          (StringType, """concat('a', '\n')""", expected),
+          (StringType, """CAST(concat('a', '\n') AS STRING)""", expected),
+          (ArrayType(StringType), """array(concat('a', '\n'))""", Seq(expected)),
+          (MapType(StringType, StringType),
+            """map('key', concat('a', '\n'))""", Map("key" -> expected)),
+          (structType, """named_struct('s', concat('a', '\n'))""", Row(expected)),
+          (ArrayType(structType),
+            """array(named_struct('s', CAST(concat('a', '\n') AS STRING)))""",
+            Seq(Row(expected))),
+          (MapType(StringType, ArrayType(StringType)),
+            """map('key', array(concat('a', '\n')))""", Map("key" -> Seq(expected))),
+          (ArrayType(StringType),
+            """CAST(array(concat('a', '\n')) AS ARRAY<STRING>)""", Seq(expected)))
+        for ((dataType, defaultSQL, expectedValue) <- cases) {
+          withClue(s"dataType=$dataType, default=$defaultSQL: ") {
+            val field = StructField("c", dataType).withExistenceDefaultValue(defaultSQL)
+            val schema = DataType.fromJson(StructType(Seq(field)).json).asInstanceOf[StructType]
+            val actual = ResolveDefaultColumns.existenceDefaultValues(schema).head
+            assert(CatalystTypeConverters.createToScalaConverter(dataType)(actual) == expectedValue)
+          }
+        }
+        assert(SQLConf.get.escapedStringLiterals == escapedStringLiterals)
+      }
+    }
+
+    test(s"function existence casts retain the session time zone ($escapedStringLiterals)") {
+      withSQLConf(
+          SQLConf.ESCAPED_STRING_LITERALS.key -> escapedStringLiterals.toString,
+          SQLConf.SESSION_LOCAL_TIMEZONE.key -> "Asia/Kathmandu") {
+        val field = StructField("t", TimestampType).withExistenceDefaultValue(
+          """CAST(concat('2020-01-01 ', '00:00:00') AS TIMESTAMP)""")
+        val schema = DataType.fromJson(StructType(Seq(field)).json).asInstanceOf[StructType]
+        // Midnight in Kathmandu is 18:15 UTC on the preceding day.
+        assert(ResolveDefaultColumns.existenceDefaultValues(schema).toSeq ==
+          Seq(1577816100000000L))
+      }
     }
   }
 

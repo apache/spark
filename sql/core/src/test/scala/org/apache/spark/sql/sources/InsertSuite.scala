@@ -2088,6 +2088,40 @@ class InsertSuite extends DataSourceTest with SharedSparkSession {
     }
   }
 
+  test("Complex existence defaults preserve nested escaped literals") {
+    val value = "a\\'b"
+    val defaultSQL = "concat('a', chr(92), chr(39), 'b')"
+    for (escaped <- Seq(false, true); vectorized <- Seq(false, true)) {
+      withSQLConf(
+        SQLConf.ESCAPED_STRING_LITERALS.key -> escaped.toString,
+        SQLConf.PARQUET_VECTORIZED_READER_ENABLED.key -> vectorized.toString) {
+        withTable("t") {
+          sql("create table t(i int) using parquet")
+          sql("insert into t values(1)")
+          sql(s"""alter table t add columns (
+                 |a array<string> default array($defaultSQL, ''),
+                 |m map<string, string> default map($defaultSQL, $defaultSQL),
+                 |s struct<x: string> default named_struct('x', $defaultSQL),
+                 |c array<string collate UTF8_LCASE>
+                 |  default array($defaultSQL collate UTF8_LCASE))""".stripMargin)
+          sql("insert into t values(2, default, default, default, default)")
+
+          for (readEscaped <- Seq(false, true)) {
+            withSQLConf(SQLConf.ESCAPED_STRING_LITERALS.key -> readEscaped.toString) {
+              withClue(s"escaped=$escaped, readEscaped=$readEscaped, vectorized=$vectorized: ") {
+                checkAnswer(
+                  sql("select i, a, m, s, c from t"),
+                  Seq(1, 2).map { id =>
+                    Row(id, Seq(value, ""), Map(value -> value), Row(value), Seq(value))
+                  })
+              }
+            }
+          }
+        }
+      }
+    }
+  }
+
   test("SPARK-39985 Enable implicit DEFAULT column values in inserts from DataFrames") {
     // Negative test: explicit column "default" references are not supported in write operations
     // from DataFrames: since the operators are resolved one-by-one, any .select referring to
