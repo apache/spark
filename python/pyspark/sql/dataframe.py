@@ -78,10 +78,11 @@ if TYPE_CHECKING:
 __all__ = ["DataFrame", "DataFrameNaFunctions", "DataFrameStatFunctions"]
 
 
-def _validate_approx_quantile_probabilities(probabilities: Any) -> List[Union[float, int]]:
+def _validate_approx_quantile_probabilities(probabilities: Any) -> List[float]:
     """
     Validate the ``probabilities`` argument of ``DataFrame.approxQuantile``, shared by the
-    classic and Connect implementations so both stay in sync. Returns it as a ``list``.
+    classic and Connect implementations so both stay in sync. Returns it as a ``list`` of
+    ``float``, since classic passes it to a JVM method that expects ``Double`` elements.
     """
     from pyspark.errors import PySparkTypeError, PySparkValueError
 
@@ -116,7 +117,7 @@ def _validate_approx_quantile_probabilities(probabilities: Any) -> List[Union[fl
                     "actual": str(p),
                 },
             )
-    return probabilities
+    return [float(p) for p in probabilities]
 
 
 class DataFrame:

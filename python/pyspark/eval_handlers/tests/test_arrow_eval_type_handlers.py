@@ -202,6 +202,9 @@ class ArrowBatchedUDFArrowHandlerTests(ArrowEvalTypeHandlerTestCase):
     def test_serializer(self):
         handler = self._handler((lambda a: a, [0], {}, LongType()))
         self.assertIsInstance(handler.serializer, ArrowStreamSerializer)
+        for value, flush in (("0", False), ("1", True)):
+            with patch.dict(os.environ, {"SPARK_PIPELINED_UDF": value}):
+                self.assertEqual(handler.serializer._flush_per_batch, flush)
 
     def test_detailed_timing_uses_handler_gate(self):
         metrics = WorkerMetrics()
