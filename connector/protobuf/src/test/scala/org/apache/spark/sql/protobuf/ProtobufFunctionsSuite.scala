@@ -2607,14 +2607,16 @@ class ProtobufFunctionsSuite extends SharedSparkSession with ProtobufTestBase
         }
       }
 
-      gridTest(s"SPARK-60945: $functionName $argumentName retain the captured map key policy")(
+      gridTest(s"SPARK-60945: canonicalizing $functionName uses the analysis-time " +
+        s"map key policy for $argumentName")(
         Seq("LAST_WIN", "EXCEPTION")) { capturedPolicy =>
         val (expression, data) = withSQLConf(
           SQLConf.MAP_KEY_DEDUP_POLICY.key -> capturedPolicy) {
           val result = protobufExpressionWithStatefulArgument(
             functionName, argumentName, duplicateKey = true)
           if (capturedPolicy == "LAST_WIN") {
-            // Analysis evaluates the original expression before another session compares its plan.
+            // Like analysis, evaluate the expression once before the conf changes. Under EXCEPTION
+            // this would already fail on the duplicate key, so only the LAST_WIN run does it.
             result._1.dataType
           }
           result
