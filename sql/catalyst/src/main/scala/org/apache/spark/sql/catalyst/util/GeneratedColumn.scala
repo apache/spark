@@ -117,8 +117,10 @@ object GeneratedColumn {
   def supportsGeneratedColumnsOnWrite(
       table: Table,
       columns: Array[Column]): Boolean = {
-    supportsGeneratedColumnsOnWrite(table) &&
-      columns.exists(_.columnGenerationExpression() != null)
+    supportsGeneratedColumnsOnWrite(table) && columns.exists { col =>
+      // A connector can implement only the legacy SQL getter, which auto-fill reads as well.
+      col.columnGenerationExpression() != null || col.generationExpression() != null
+    }
   }
 
   /**
