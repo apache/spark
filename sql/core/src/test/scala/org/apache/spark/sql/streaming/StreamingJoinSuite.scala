@@ -1920,8 +1920,6 @@ abstract class StreamingOuterJoinBase extends StreamingJoinSuite {
     }
   }
 
-  // When the join condition isn't true, the outer null rows must be generated, even if the join
-  // keys themselves have a match.
   test("left outer join on a range ending at another column of the left input") {
     val (auctions, bids, joined) = setupAuctionBidJoin("left_outer")
     testStream(joined.select($"id", $"price"))(
@@ -1936,6 +1934,35 @@ abstract class StreamingOuterJoinBase extends StreamingJoinSuite {
       CheckNewAnswer(Row(9, 9L), Row(3, null)))
   }
 
+  for (leftFirst <- Seq(true, false)) {
+    test(s"stream stream join with a constant bound on the left event time, " +
+        s"left first = $leftFirst") {
+      val leftInput = MemoryStream[(Int, Long)]
+      val rightInput = MemoryStream[(Int, Long)]
+      val left = leftInput.toDF().toDF("leftKey", "time")
+        .select($"leftKey", timestamp_millis($"time").as("leftTime"))
+        .withWatermark("leftTime", "1 hour")
+      val right = rightInput.toDF().toDF("rightKey", "time")
+        .select($"rightKey", timestamp_millis($"time").as("rightTime"))
+        .withWatermark("rightTime", "1 hour")
+      // The constant bound on leftTime is an absolute time, not an offset from either row. A
+      // left outer join is rejected here, because a constant bound cannot finalize left rows.
+      val joined = left.join(right, expr("leftKey = rightKey AND rightTime >= leftTime AND " +
+          "CAST(leftTime AS DOUBLE) >= 1700000000"))
+        .select($"leftKey", unix_millis($"leftTime"), unix_millis($"rightTime"))
+      val leftData = AddData(leftInput, (1, 1800000000000L))
+      val rightData = AddData(rightInput, (1, 1800000005000L))
+      val (first, second) = if (leftFirst) (leftData, rightData) else (rightData, leftData)
+      testStream(joined)(
+        first,
+        CheckNewAnswer(),
+        second,
+        CheckNewAnswer((1, 1800000000000L, 1800000005000L)))
+    }
+  }
+
+  // When the join condition isn't true, the outer null rows must be generated, even if the join
+  // keys themselves have a match.
   test("left outer join with non-key condition violated") {
     val (leftInput, simpleLeftDf) = setupStream("left", 2)
     val (rightInput, simpleRightDf) = setupStream("right", 3)
