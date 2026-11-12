@@ -1201,8 +1201,9 @@ class ParquetVectorizedSuite extends ParquetTest with SharedSparkSession {
 
   /**
    * Returns a row group with a single column chunk made of `pages`, in order, each PLAIN or
-   * dictionary encoded. Parquet writers normally fall back from dictionary to PLAIN for good, so
-   * a dictionary page after a PLAIN one can't be produced with `writeDataPage` alone. The
+   * dictionary encoded. Each dictionary-encoded `writeDataPage` call writes its own dictionary
+   * page, and a `MemPageStore` allows only one per column, so each page is written to its own
+   * store and the data pages are then combined behind a single dictionary page. The
    * dictionary pages are written separately, so they must have the same distinct values in the
    * same order of first appearance for their dictionaries to match. `rowIndexRanges` are the row
    * ranges to read, as returned by column index filtering.
