@@ -54,6 +54,7 @@ import org.apache.spark.sql.execution.{
   WholeStageCodegenExec}
 import org.apache.spark.sql.execution.adaptive.{AdaptiveSparkPlanExec, AQEShuffleReadExec, ResultQueryStageExec, ShuffleQueryStageExec}
 import org.apache.spark.sql.execution.aggregate.{BaseAggregateExec, HashAggregateExec, SortAggregateExec}
+import org.apache.spark.sql.execution.columnar.InMemoryTableScanExec
 import org.apache.spark.sql.execution.datasources.v2.{BatchScanExec, DataSourceV2ScanRelation, GroupPartitionsExec, PlannedScan}
 import org.apache.spark.sql.execution.exchange.{EnsureRequirements, ReusedExchangeExec, ShuffleExchangeExec, ShuffleExchangeLike, ValidateRequirements}
 import org.apache.spark.sql.execution.joins.{BroadcastHashJoinExec, ShuffledHashJoinExec, ShuffledJoin, SortMergeJoinExec}
@@ -10074,7 +10075,7 @@ class KeyGroupedPartitioningSuite
           |""".stripMargin
       // SPARK-59272: both settings of partition filtering plan the same join. Were the merge free
       // to narrow a marked layout, the inner join would keep only the [1] intersection, one group
-      // over r's two input partitions, and r would give up its keyed claim on the count clause.
+      // over r's two input partitions, and pruning the other would make r give up its keyed claim.
       Seq(false, true).foreach { partitionFilter =>
         withSQLConf(
             SQLConf.V2_BUCKETING_SHUFFLE_ENABLED.key -> "true",
@@ -10362,13 +10363,19 @@ class KeyGroupedPartitioningSuite
             assert(collectAllShuffles(plan).size == 1,
               s"the join pairs instead of re-shuffling the union side:\n$plan")
           }
+          // A partner holding a subset of the declared keys pairs too. The join aligns both sides
+          // to the merged keys. That only coalesces the union side and pads the partner, so the
+          // union side keeps the claim with its routing lost, as above.
           val smaller = sql(query.replace("JOIN testcat.ns.ja a2", "JOIN testcat.ns.js a2"))
           checkAnswer(smaller, Seq(Row(1, 2), Row(2, 2)))
           if (!aqe) {
             val plan = smaller.queryExecution.executedPlan
             assert(ValidateRequirements.validate(plan))
-            assert(collectAllShuffles(plan).size == 2,
-              s"different declared key sets must fall back to a valid shuffle plan:\n$plan")
+            assert(keyedPartitioningsOf(collectAllGroupPartitions(plan)).exists(kp =>
+              kp.isGrouped && kp.mayContainUnknownPartitionKeys && !kp.unknownKeysRouted),
+              s"the union side keeps the claim and loses the routing:\n$plan")
+            assert(collectAllShuffles(plan).size == 1,
+              s"the join pairs through the alignment instead of re-shuffling:\n$plan")
           }
         }
       }
@@ -11388,14 +11395,13 @@ class KeyGroupedPartitioningSuite
     }
   }
 
-  test("SPARK-59050: SPJ: regrouping a marked layout must not keep the unknown-keyed claim") {
-    // The union declares keys in child order [3, 4, 1, 2]; the first join one-side-shuffles rt's
-    // out-of-set id=5 onto it at hash(5) % 4 and marks the layout. The second join aligns that
-    // marked side to rs's sorted keys [1, 2, 3, 4] with a GroupPartitionsExec, which reorders the
-    // partitions and moves the id=5 row, so the regrouped layout may no longer claim the
-    // hash-routing contract. b is an independent one-side-shuffled marked layout [1, 2, 3, 4] with
-    // id=5 at hash(5) % 4. If the regrouped side kept the claim, the final marked-vs-marked join
-    // would skip the shuffle and the two id=5 rows (at different partitions) would never meet.
+  test("SPARK-59050: SPJ: marked layouts in different key orders still shuffle before they join") {
+    // The union declares keys in child order [3, 4, 1, 2]. The first join one-side-shuffles rt's
+    // out-of-set id=5 onto it at hash(5) % 4 and marks the layout. The second join aligns rs to
+    // that order, so the marked side keeps its routing. b is an independent one-side-shuffled
+    // marked layout [1, 2, 3, 4] with id=5 at hash(5) % 4. The two id=5 rows sit at the same index
+    // but under different keys. Pairing the sides would align one to the other's key order and move
+    // its id=5 row, so the final marked-vs-marked join must shuffle.
     val cols = Array(Column.create("id", IntegerType), Column.create("data", StringType))
     createTable("rp", cols, Array(identity("id")))
     createTable("rq", cols, Array(identity("id")))
@@ -11439,22 +11445,177 @@ class KeyGroupedPartitioningSuite
           SQLConf.ADAPTIVE_EXECUTION_ENABLED.key -> "false") {
         val df = sql(query)
         checkAnswer(df, expected)
-        // The regrouped marked side can no longer claim the hash-routing contract. Four one-side
-        // shuffles, all keyed with unknown partition keys: rt onto the union, rs onto the marked
-        // side once the second join declines, rt2 onto ra2, and the final join's one-side shuffle.
-        // Before SPARK-59050 the final join storage-partitioned (only the first and third
-        // shuffles) and silently lost the id=5 row.
+        // Three one-side shuffles, all keyed with unknown partition keys: rt onto the union, rt2
+        // onto ra2, and the final join's one-side shuffle of b onto r2. Before SPARK-59050 the
+        // final join storage-partitioned (only the first two shuffles) and silently lost the id=5
+        // row.
         //
-        // The second join's shuffle is this fix's. The give-up happens inside the node, so it used
-        // to arrive after that join had already committed to the pairing and skipped both
-        // shuffles, leaving a plan `ValidateRequirements` rejects, which every AQEShuffleReadRule
-        // and OptimizeSkewedJoin then refuses to touch. The join now asks its two built children
-        // whether they still declare the same aligned keys, and declines when they do not. The
-        // validation assert comes first, because it names the reason the shuffle below exists.
+        // The second join needs no shuffle (SPARK-59575). rs is aligned to the marked side's key
+        // order, and it holds only keys the marked side declares. The validation assert pins that
+        // both sides still satisfy the join's distribution.
         assert(ValidateRequirements.validate(df.queryExecution.executedPlan),
           "the executed plan must satisfy every operator's required distribution")
         assertShuffleMayContainUnknownPartitionKeys(df.queryExecution.executedPlan,
-          Seq(true, true, true, true))
+          Seq(true, true, true))
+      }
+    }
+  }
+
+  /** Whether the cached scans in `plan` all report a marked layout whose routing still holds. */
+  private def cachedScansAreRoutedMarked(plan: SparkPlan): Boolean = {
+    val scans = collect(plan) { case s: InMemoryTableScanExec => s }
+    scans.nonEmpty && scans.forall { s =>
+      keyedPartitioningsOf(Seq(s)).exists(kp =>
+        kp.mayContainUnknownPartitionKeys && kp.unknownKeysRouted)
+    }
+  }
+
+  test("SPARK-59575: SPJ: a cached marked layout that partial clustering replicates shuffles") {
+    // A cached plan carries a marked layout into a later join, where partial clustering can make
+    // it the side that replicates. That alignment gives the keyed claim up, so the pairing gate
+    // declines and the join shuffles both sides, which keeps the plan valid.
+    val cols = Array(Column.create("id", IntegerType), Column.create("data", StringType))
+    createTable("gm", cols, Array(identity("id")))
+    createTable("gu", cols, Array.empty)
+    createTable("gp", cols, Array(identity("id")))
+    sql("INSERT INTO testcat.ns.gm VALUES (1, 'm1'), (2, 'm2'), (3, 'm3')")
+    sql("INSERT INTO testcat.ns.gu VALUES (1, 'u1'), (2, 'u2'), (3, 'u3'), (5, 'u5')")
+    sql("INSERT INTO testcat.ns.gp VALUES " +
+      (1 to 10).flatMap(i => Seq(s"(1, 'p$i')", s"(2, 'p$i')")).mkString(", "))
+    val expected = for (id <- 1 to 2; i <- 1 to 10) yield Row(id, s"u$id", s"p$i")
+
+    withSQLConf(
+        SQLConf.V2_BUCKETING_SHUFFLE_ENABLED.key -> "true",
+        "spark.sql.autoBroadcastJoinThreshold" -> "-1") {
+      // The left join one-side-shuffles gu onto gm's [1, 2, 3], and its id=5 row is undeclared.
+      val marked = sql("SELECT /*+ MERGE(gm, gu) */ gu.id AS id, gu.data AS d " +
+        "FROM testcat.ns.gu LEFT JOIN testcat.ns.gm ON gm.id = gu.id")
+      marked.cache()
+      try {
+        marked.count()
+        marked.createOrReplaceTempView("gc")
+        withSQLConf(
+            SQLConf.V2_BUCKETING_PUSH_PART_VALUES_ENABLED.key -> "true",
+            SQLConf.V2_BUCKETING_PARTIALLY_CLUSTERED_DISTRIBUTION_ENABLED.key -> "true") {
+          Seq(false, true).foreach { aqe =>
+            withSQLConf(SQLConf.ADAPTIVE_EXECUTION_ENABLED.key -> aqe.toString) {
+              val df =
+                sql("SELECT gc.id, gc.d, gp.data FROM gc JOIN testcat.ns.gp ON gc.id = gp.id")
+              checkAnswer(df, expected)
+              if (!aqe) {
+                val plan = df.queryExecution.executedPlan
+                assert(cachedScansAreRoutedMarked(plan), s"the cached side is marked:\n$plan")
+                assert(ValidateRequirements.validate(plan))
+                assert(collectAllShuffles(plan).size == 2,
+                  s"the gate declines the pairing and both sides shuffle:\n$plan")
+              }
+            }
+          }
+        }
+      } finally {
+        marked.unpersist()
+        spark.catalog.dropTempView("gc")
+      }
+    }
+  }
+
+  test("SPARK-59575: SPJ: two cached marked layouts in a union's key order pair as they stand") {
+    // Two marked sides pair only while both route their undeclared rows by the hash. Each cached
+    // side declares the union's key order [3, 4, 1, 2]. Partial clustering pushes the merged keys
+    // to both, in that declared order, so neither alignment moves a partition. Both keep their
+    // routing, and the join needs no shuffle.
+    val cols = Array(Column.create("id", IntegerType), Column.create("data", StringType))
+    createTable("hp", cols, Array(identity("id")))
+    createTable("hq", cols, Array(identity("id")))
+    createTable("ht1", cols, Array.empty)
+    createTable("ht2", cols, Array.empty)
+    sql("INSERT INTO testcat.ns.hp VALUES (3, 'p3'), (4, 'p4')")
+    sql("INSERT INTO testcat.ns.hq VALUES (1, 'q1'), (2, 'q2')")
+    sql("INSERT INTO testcat.ns.ht1 VALUES " + (1 to 5).map(i => s"($i, 'a$i')").mkString(", "))
+    sql("INSERT INTO testcat.ns.ht2 VALUES " + (1 to 5).map(i => s"($i, 'b$i')").mkString(", "))
+    val expected = (1 to 5).map(i => Row(i, s"a$i", s"b$i"))
+
+    withSQLConf(
+        SQLConf.V2_BUCKETING_SHUFFLE_ENABLED.key -> "true",
+        "spark.sql.autoBroadcastJoinThreshold" -> "-1") {
+      // Each right join one-side-shuffles its table onto the union, and its id=5 row is undeclared.
+      def markedSide(t: String): DataFrame = sql(s"SELECT tt.id AS id, tt.data AS d FROM (" +
+        "SELECT id FROM testcat.ns.hp UNION ALL SELECT id FROM testcat.ns.hq" +
+        s") u RIGHT OUTER JOIN testcat.ns.$t tt ON u.id = tt.id")
+      var sides = Seq.empty[DataFrame]
+      try {
+        Seq("ht1" -> "hc1", "ht2" -> "hc2").foreach { case (t, view) =>
+          val side = markedSide(t)
+          sides :+= side
+          side.cache()
+          side.count()
+          side.createOrReplaceTempView(view)
+        }
+        withSQLConf(
+            SQLConf.V2_BUCKETING_PUSH_PART_VALUES_ENABLED.key -> "true",
+            SQLConf.V2_BUCKETING_PARTIALLY_CLUSTERED_DISTRIBUTION_ENABLED.key -> "true",
+            SQLConf.ADAPTIVE_EXECUTION_ENABLED.key -> "false") {
+          val df = sql("SELECT hc1.id, hc1.d, hc2.d FROM hc1 JOIN hc2 ON hc1.id = hc2.id")
+          checkAnswer(df, expected)
+          val plan = df.queryExecution.executedPlan
+          assert(cachedScansAreRoutedMarked(plan), s"both cached sides are marked:\n$plan")
+          assert(ValidateRequirements.validate(plan))
+          assert(collectAllShuffles(plan).isEmpty, s"the two sides pair as they stand:\n$plan")
+        }
+      } finally {
+        sides.foreach(_.unpersist())
+        Seq("hc1", "hc2").foreach(spark.catalog.dropTempView)
+      }
+    }
+  }
+
+  test("SPARK-59575: SPJ: a marked side aligned in its own key order stays a shuffle template") {
+    // The union declares keys in child order [3, 4, 1, 2], and the first join marks rt's
+    // one-side-shuffled layout in that order. The second join aligns rs to it rather than to the
+    // sorted keys, so the marked side keeps its hash routing. The third join then shuffles only
+    // the unkeyed t3 onto it. Aligned to the sorted keys, the marked side would lose its routing,
+    // and the third join would shuffle the second join's whole output as well.
+    val cols = Array(Column.create("id", IntegerType), Column.create("data", StringType))
+    createTable("sp", cols, Array(identity("id")))
+    createTable("sq", cols, Array(identity("id")))
+    createTable("ss", cols, Array(identity("id")))
+    sql("INSERT INTO testcat.ns.sp VALUES (3, 'p3'), (4, 'p4')")
+    sql("INSERT INTO testcat.ns.sq VALUES (1, 'q1'), (2, 'q2')")
+    sql("INSERT INTO testcat.ns.ss VALUES (1, 's1'), (2, 's2'), (3, 's3'), (4, 's4')")
+
+    withTable("st", "st3") {
+      sql("CREATE TABLE st (id INT, data STRING) USING parquet")
+      sql("INSERT INTO st VALUES (1,'t1'),(2,'t2'),(3,'t3'),(4,'t4'),(5,'t5')")
+      sql("CREATE TABLE st3 (id INT, data STRING) USING parquet")
+      sql("INSERT INTO st3 VALUES (1,'y1'),(2,'y2'),(3,'y3'),(4,'y4'),(5,'y5')")
+
+      val query =
+        """
+          |SELECT r2.id, t3.data
+          |FROM (
+          |  SELECT r1.id FROM (
+          |    SELECT tt.id AS id FROM (
+          |      SELECT id FROM testcat.ns.sp UNION ALL SELECT id FROM testcat.ns.sq
+          |    ) u RIGHT OUTER JOIN st tt ON u.id = tt.id
+          |  ) r1 LEFT OUTER JOIN testcat.ns.ss ss ON r1.id = ss.id
+          |) r2
+          |JOIN st3 t3 ON r2.id = t3.id
+          |""".stripMargin
+      val expected = (1 to 5).map(i => Row(i, s"y$i"))
+
+      withSQLConf(SQLConf.V2_BUCKETING_ENABLED.key -> "false") {
+        checkAnswer(sql(query), expected)
+      }
+      withSQLConf(
+          SQLConf.V2_BUCKETING_SHUFFLE_ENABLED.key -> "true",
+          "spark.sql.autoBroadcastJoinThreshold" -> "-1",
+          SQLConf.ADAPTIVE_EXECUTION_ENABLED.key -> "false") {
+        val df = sql(query)
+        checkAnswer(df, expected)
+        val plan = df.queryExecution.executedPlan
+        assert(ValidateRequirements.validate(plan))
+        // st onto the union, and st3 onto the marked side. Both are keyed one-side shuffles.
+        assertShuffleMayContainUnknownPartitionKeys(plan, Seq(true, true))
       }
     }
   }
@@ -11488,8 +11649,8 @@ class KeyGroupedPartitioningSuite
       }
       // SPARK-59272: partition filtering must not take this join away. On the `true` arm the merge
       // would otherwise intersect down to [1, 2], two groups over the marked side's three input
-      // partitions, which breaks the count clause of `identityGrouping`, forfeits the claim and
-      // makes the pairing gate decline. Both arms plan the same join.
+      // partitions. Pruning the third would forfeit the claim and make the pairing gate decline.
+      // Both arms plan the same join.
       Seq(false, true).foreach { partitionFilter =>
         withSQLConf(
             SQLConf.V2_BUCKETING_SHUFFLE_ENABLED.key -> "true",

@@ -676,17 +676,13 @@ case class EnsureRequirements(
       l.joinKeyPositions.isEmpty && r.joinKeyPositions.isEmpty
 
     // Whether the merged key list below may be narrowed to what the join type allows. Not when
-    // either side is marked. Narrowing drops groups that side holds, so the expected-key alignment
-    // is non-identity and `GroupPartitionsExec` gives up the marked claim. That costs the pair its
-    // join at the final gate, a poor trade for pruning a few groups.
+    // either side is marked. Narrowing drops groups that side holds, and `GroupPartitionsExec`
+    // gives up the marked claim on an alignment that prunes. That costs the pair its join at the
+    // final gate, a poor trade for pruning a few groups.
     //
     // Narrowing is the only thing here that can shrink the list below a marked side's own keys: the
     // merging arms take the union, and `KeyedShuffleSpec.areKeysCompatible` pairs a marked layout
     // only with one whose keys are a subset of its own.
-    //
-    // Sorting is the other way a regrouping stops being the identity, and this does not address it.
-    // `mergeAndDedupPartitions` sorts, so a marked side whose declared order is not the sorted one
-    // is relabelled even where the key set is unchanged.
     val partitionFilter = conf.getConf(SQLConf.V2_BUCKETING_PARTITION_FILTER_ENABLED)
     def filtersKeys(l: KeyedPartitioning, r: KeyedPartitioning): Boolean =
       partitionFilter && !l.mayContainUnknownPartitionKeys && !r.mayContainUnknownPartitionKeys
@@ -747,7 +743,8 @@ case class EnsureRequirements(
     // Entering the push branch is not the same as taking it. The keys agree for this pair by
     // construction, since `agreeingPairs` filtered on exactly that and an empty result returned
     // above, so what the branch pushes always applies to the pair it was chosen for. The gate at
-    // the end can still discard the result, when a node it builds gives up its keyed claim.
+    // the end can still discard the result, when a node it builds gives up its keyed claim or two
+    // marked sides lose their routing.
     val pushCommonValues =
       (!compatibleAsIs || conf.v2BucketingPartiallyClusteredDistributionEnabled) &&
         (conf.v2BucketingPushPartValuesEnabled ||
@@ -819,6 +816,17 @@ case class EnsureRequirements(
         mergeAndDedupPartitions(leftReducedKeys, rightReducedKeys, joinType, reducedKeyOrdering,
           filterPartitions = filtersKeys(leftPartitioning, rightPartitioning))
           .map((_, 1))
+      // A marked side's spec holds every merged key, because `filtersKeys` keeps the merge from
+      // narrowing it and its partner's keys are a subset of its own. So the merge can take the
+      // order that spec reports instead of the sorted one, and the sizes alone say it applies. For
+      // a grouped marked child that is its declared order, which makes its alignment the identity.
+      // So it keeps its hash routing, and it can still be the shuffle template of a later join. The
+      // spec of an ungrouped child is grouped and sorted already, and a marked partner declares
+      // the same order.
+      Seq((leftPartitioning, leftReducers), (rightPartitioning, rightReducers)).collectFirst {
+        case (p, None) if p.mayContainUnknownPartitionKeys &&
+            p.numPartitions == mergedPartitionKeys.size => p.partitionKeys
+      }.foreach(keys => mergedPartitionKeys = keys.map((_, 1)))
 
       logInfo(log"After merging, there are " +
         log"${MDC(LogKeys.NUM_PARTITIONS, mergedPartitionKeys.size)} partitions")
@@ -982,11 +990,12 @@ case class EnsureRequirements(
     }
 
     // The pairing is only worth committing to if both children still declare the same aligned key
-    // sequence once the grouping has been pushed into them. A `GroupPartitionsExec` gives up its
-    // keyed claim when the grouping re-labels the keys or replicates them into expected slots,
-    // which a layout holding undeclared rows cannot survive (see `KeyLayout.unknownKeysOrigin`),
-    // and only the node knows the permutation it performs, so that answer arrives after the pairing
-    // was chosen.
+    // sequence once the grouping has been pushed into them. A `GroupPartitionsExec` gives up a
+    // marked layout's keyed claim for some groupings (see
+    // `GroupPartitionsExec.computeOutputPartitioning`), and only the node knows what its grouping
+    // does, so that answer arrives after the pairing was chosen. Such a grouping reaches a marked
+    // side, for example, when a cached plan carries the layout into a join under partial
+    // clustering, which can replicate it.
     // Asking before returning is what keeps the join from skipping both shuffles for a child that
     // no longer satisfies its distribution, which is a plan `ValidateRequirements` rejects and
     // every AQE rule that needs a valid plan then refuses to touch.
@@ -998,22 +1007,30 @@ case class EnsureRequirements(
     // `KeyLayout.describesSameKeys` asks exactly that, and it compares the key types as well as
     // the rows.
     //
-    // Check both pushed alignment and plain grouping. Plain grouping retains a marked keyed claim
-    // but loses routing; pushed key rewrites or non-identity expected alignment drop the claim.
+    // Two marked sides were paired because both route their undeclared rows by the hash
+    // (`KeyLayout.routesUndeclaredRowsWith`, which `KeyedShuffleSpec.areKeysCompatible` asks too).
+    // An alignment that moves partitions keeps a marked claim but not its routing, so such a pair
+    // declines once either side lost it. No alignment reaches here with one today, since the
+    // merge keeps a routed side's declared order, and the shapes that would move it give the claim
+    // up. This is defense in depth.
+    //
+    // Check both pushed alignment and plain grouping.
     val (newLeft, newRight) =
       pushed.getOrElse((groupIfNeeded(rawLeft), groupIfNeeded(rawRight)))
     def declaredLayout(plan: SparkPlan): Option[KeyLayout] =
       PartitioningCollection.representativeOf(plan.outputPartitioning).map(_.layout)
     val committed = (declaredLayout(newLeft), declaredLayout(newRight)) match {
-      case (Some(left), Some(right)) => left.describesSameKeys(right)
+      case (Some(left), Some(right)) =>
+        left.describesSameKeys(right) && left.routesUndeclaredRowsWith(right)
       case _ => false
     }
     // Announced here rather than where the branch runs, since the gate can still discard what it
     // built, and a log that names a pushdown should name one that happens.
     if (pushCommonValues) {
       if (!committed) {
-        logInfo("Not storage-partitioning this join after all: the two sides no longer declare " +
-          "the same partition keys once regrouped onto the merged partition values")
+        logInfo("Not storage-partitioning this join after all: once regrouped onto the merged " +
+          "partition values, the two sides no longer declare the same partition keys, or two " +
+          "marked sides no longer route their undeclared rows alike")
       } else if ((newLeft ne rawLeft) || (newRight ne rawRight)) {
         logInfo("Pushing common partition values for storage-partitioned join")
       }

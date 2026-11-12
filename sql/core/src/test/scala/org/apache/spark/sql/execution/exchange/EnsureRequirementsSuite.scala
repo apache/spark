@@ -3201,9 +3201,10 @@ class EnsureRequirementsSuite extends SharedSparkSession {
   test("SPARK-59272: every plan the rule produces for a generated pair of shapes validates") {
     // A generated sweep asserting the property rather than a count: every plan this rule produces
     // for a pair of shapes has to satisfy both children's required distribution. Plain regrouping
-    // keeps a marked layout keyed, with lost routing if partitions move. Rewritten keys or a
-    // non-identity expected-key alignment drop the keyed claim, so either insertion site must
-    // account for the grouping node's output before deciding the child's fate.
+    // keeps a marked layout keyed, with lost routing if partitions move. Rewritten keys, or an
+    // expected-key alignment that prunes, pads, splits or replicates, drop the keyed claim, so
+    // either insertion site must account for the grouping node's output before deciding the child's
+    // fate.
     //
     // `v2BucketingPartiallyClusteredDistributionEnabled` is deliberately not one of the cells.
     // That family leaves both children keyed but ungrouped on purpose, so neither satisfies its
@@ -3288,8 +3289,8 @@ class EnsureRequirementsSuite extends SharedSparkSession {
   test("SPARK-59272: partition filtering leaves a marked pair's merged keys alone") {
     // Both arms of the filter would narrow this pair below the marked side's three declared keys:
     // `Inner` intersects to [1, 2], and `LeftOuter` keeps the unmarked left's [1, 2]. Either way
-    // the marked side regroups two groups over three input partitions, its regrouping stops being
-    // the identity and it forfeits its keyed claim. See `filtersKeys` in
+    // the marked side's alignment would prune one of its three groups, and it would forfeit its
+    // keyed claim. See `filtersKeys` in
     // `EnsureRequirements.checkKeyGroupCompatible`. Both settings push all three keys and neither
     // side is shuffled.
     //
