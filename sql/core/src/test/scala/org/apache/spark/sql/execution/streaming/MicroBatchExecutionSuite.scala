@@ -111,6 +111,56 @@ class MicroBatchExecutionSuite extends StreamTest with BeforeAndAfter with Match
       }
   }
 
+  test("v2 recovers collapsed repeated slots alongside a distinct source") {
+    withTempDir { checkpointDir =>
+      val checkpoint = checkpointDir.getCanonicalPath
+      val repeated = MemoryStream[Int]
+      val distinct = MemoryStream[Int]
+      val repeatedFrame = repeated.toDF()
+      val data = repeatedFrame.union(repeatedFrame).union(distinct.toDF())
+      withSQLConf(SQLConf.STREAMING_OFFSET_LOG_FORMAT_VERSION.key -> "2") {
+        testStream(data)(
+          StartStream(checkpointLocation = checkpoint),
+          AddData(repeated, 1),
+          AddData(distinct, 10),
+          AddData(distinct, 11),
+          CheckNewAnswer(1, 1, 10, 11),
+          StopStream,
+          Execute { _ =>
+            val log = new OffsetSeqLog(spark, s"$checkpoint/offsets")
+            log.get(None, None).foreach { case (batchId, batchOffsets) =>
+              val offsets = batchOffsets.asInstanceOf[OffsetMap]
+              val entries = offsets.offsetsMap.toSeq.filterNot(_._1 == "0").map {
+                case (sourceId, offset) =>
+                  s"$sourceId:${offset.map(_.json).getOrElse(OffsetSeqLog.SERIALIZED_VOID_OFFSET)}"
+              }.mkString("\n")
+              val path = new Path(s"$checkpoint/offsets/$batchId")
+              val output = path.getFileSystem(spark.sessionState.newHadoopConf()).create(path, true)
+              try {
+                output.write(s"v2\n${offsets.metadata.json}\n$entries".getBytes(UTF_8))
+              } finally {
+                output.close()
+              }
+            }
+            assert(new OffsetSeqLog(spark, s"$checkpoint/offsets").getLatest().get._2
+              .asInstanceOf[OffsetMap].offsetsMap.keySet == Set("1", "2"))
+          },
+          StartStream(checkpointLocation = checkpoint),
+          AddData(repeated, 2),
+          AddData(distinct, 20),
+          CheckNewAnswer(2, 2, 20),
+          Execute { _ =>
+            val offsets = new OffsetSeqLog(spark, s"$checkpoint/offsets").getLatest().get._2
+              .asInstanceOf[OffsetMap]
+            assert(offsets.offsetsMap.keySet == Set("0", "1", "2"))
+            assert(offsets.offsetsMap("0") == offsets.offsetsMap("1"))
+            assert(offsets.offsetsMap("1") != offsets.offsetsMap("2"))
+          },
+          StopStream)
+      }
+    }
+  }
+
   test("failed v2 self-union reports both source slots") {
     withTempDir { checkpointDir =>
       val checkpoint = checkpointDir.getCanonicalPath
