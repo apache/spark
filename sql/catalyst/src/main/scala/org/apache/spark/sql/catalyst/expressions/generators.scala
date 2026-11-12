@@ -27,7 +27,7 @@ import org.apache.spark.sql.catalyst.analysis.TypeCheckResult.DataTypeMismatch
 import org.apache.spark.sql.catalyst.expressions.Cast._
 import org.apache.spark.sql.catalyst.expressions.codegen._
 import org.apache.spark.sql.catalyst.expressions.codegen.Block._
-import org.apache.spark.sql.catalyst.plans.logical.{FunctionSignature, InputParameter}
+import org.apache.spark.sql.catalyst.plans.logical.{FunctionSignature, GapFillMethod, InputParameter}
 import org.apache.spark.sql.catalyst.trees.TreePattern.{GENERATOR, TreePattern}
 import org.apache.spark.sql.catalyst.util.{ArrayData, CollationFactory, MapData}
 import org.apache.spark.sql.catalyst.util.SQLKeywordUtils._
@@ -326,6 +326,65 @@ case class ReplicateRows(children: Seq[Expression]) extends Generator with Codeg
 
   override protected def withNewChildrenInternal(
     newChildren: IndexedSeq[Expression]): ReplicateRows = copy(children = newChildren)
+}
+
+/**
+ * The generator of the GAP FILL relation operator. Its children are, in this order, the partition
+ * columns, the time column, the value columns (the other input columns) and the CONSTANT values
+ * of `fillMethods`, which has one method per value column. Each row it makes has the time column,
+ * the value columns, and then BIN_START and IS_GENERATED when they are asked for. `alignTo`,
+ * `rangeStart` and `rangeEnd` are in the unit of the time column. `timeZoneId` is the session time
+ * zone for a TIMESTAMP time column, so that bins of a day or more get the same grid as TIME_BUCKET.
+ * Its Generate is never planned as a GenerateExec, so it is never evaluated row by row.
+ */
+case class GapFillGenerator(
+    partitionColumns: Seq[Expression],
+    timeColumn: Expression,
+    valueColumns: Seq[Expression],
+    fillMethods: Seq[GapFillMethod],
+    binWidthMicros: Long,
+    alignTo: Long,
+    rangeStart: Option[Long],
+    rangeEnd: Option[Long],
+    maxGapMicros: Option[Long],
+    outputBinStart: Boolean,
+    outputIsGenerated: Boolean,
+    timeZoneId: Option[String] = None) extends Generator {
+
+  override def children: Seq[Expression] =
+    partitionColumns ++ (timeColumn +: valueColumns) ++ fillMethods.collect {
+      case GapFillMethod.Constant(value) => value
+    }
+
+  override def elementSchema: StructType = {
+    val columns = (timeColumn +: valueColumns).zipWithIndex.map {
+      case (column, index) => StructField(s"col$index", column.dataType)
+    }
+    StructType(columns ++
+      Option.when(outputBinStart)(StructField("bin_start", timeColumn.dataType)) ++
+      Option.when(outputIsGenerated)(StructField("is_generated", BooleanType, nullable = false)))
+  }
+
+  final override def eval(input: InternalRow = null): IterableOnce[InternalRow] =
+    throw QueryExecutionErrors.cannotEvaluateExpressionError(this)
+
+  final override protected def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode =
+    throw QueryExecutionErrors.cannotGenerateCodeForExpressionError(this)
+
+  override protected def withNewChildrenInternal(
+      newChildren: IndexedSeq[Expression]): GapFillGenerator = {
+    val (newPartitionColumns, rest) = newChildren.splitAt(partitionColumns.length)
+    val (newColumns, newValues) = rest.splitAt(valueColumns.length + 1)
+    val values = newValues.iterator
+    copy(
+      partitionColumns = newPartitionColumns,
+      timeColumn = newColumns.head,
+      valueColumns = newColumns.tail,
+      fillMethods = fillMethods.map {
+        case GapFillMethod.Constant(_) => GapFillMethod.Constant(values.next())
+        case method => method
+      })
+  }
 }
 
 /**

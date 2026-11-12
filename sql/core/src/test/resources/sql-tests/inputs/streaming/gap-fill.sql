@@ -1,22 +1,13 @@
--- GAP FILL is not supported yet, so a streaming flow that uses it fails during analysis.
+SET spark.sql.gapFillRelationOperator.enabled = true;
+
 DROP TABLE IF EXISTS streaming_sql_golden_gap_fill_source;
-DROP TABLE IF EXISTS streaming_sql_golden_gap_fill_sink;
 
-CREATE TABLE streaming_sql_golden_gap_fill_source (ts TIMESTAMP_NTZ, v INT) USING parquet;
-INSERT INTO streaming_sql_golden_gap_fill_source VALUES
-  (TIMESTAMP_NTZ '2024-01-01 00:00:00', 1),
-  (TIMESTAMP_NTZ '2024-01-01 00:10:00', 3);
+CREATE TABLE streaming_sql_golden_gap_fill_source (p STRING, ts TIMESTAMP_NTZ, v INT) USING parquet;
+INSERT INTO streaming_sql_golden_gap_fill_source
+VALUES ('p1', TIMESTAMP_NTZ '2026-01-01 00:00:00', 90), ('p1', TIMESTAMP_NTZ '2026-01-01 00:45:00', 75);
 
-CREATE TABLE streaming_sql_golden_gap_fill_sink (ts TIMESTAMP_NTZ, v INT) USING parquet;
-
-CREATE FLOW streaming_sql_golden_gap_fill_flow AS
-INSERT INTO streaming_sql_golden_gap_fill_sink BY NAME
-SELECT ts, v FROM STREAM(streaming_sql_golden_gap_fill_source)
-GAP FILL (ORDER BY ts BIN WIDTH INTERVAL '5' MINUTE);
-
-REFRESH FLOW streaming_sql_golden_gap_fill_flow;
-
-SELECT * FROM streaming_sql_golden_gap_fill_sink ORDER BY ts;
+-- GAP FILL is not supported on streaming input.
+SELECT * FROM STREAM(streaming_sql_golden_gap_fill_source)
+GAP FILL (PARTITION BY p ORDER BY ts BIN WIDTH INTERVAL 15 MINUTES);
 
 DROP TABLE streaming_sql_golden_gap_fill_source;
-DROP TABLE streaming_sql_golden_gap_fill_sink;

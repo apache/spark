@@ -29,7 +29,7 @@ import org.apache.spark.sql.catalyst.optimizer.InlineCTE
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.trees.TreeNode
 import org.apache.spark.sql.catalyst.trees.TreePattern.{LATERAL_COLUMN_ALIAS_REFERENCE, PLAN_EXPRESSION, UNRESOLVED_WINDOW_EXPRESSION}
-import org.apache.spark.sql.catalyst.util.{CharVarcharUtils, StoredExpressionText, StringUtils, TypeUtils}
+import org.apache.spark.sql.catalyst.util.{CharVarcharUtils, MetadataColumnHelper, StoredExpressionText, StringUtils, TypeUtils}
 import org.apache.spark.sql.connector.catalog.{CatalogManager, CatalogV2Util, LookupCatalog}
 import org.apache.spark.sql.connector.catalog.constraints.Check
 import org.apache.spark.sql.errors.{QueryCompilationErrors, QueryErrorsBase}
@@ -244,6 +244,10 @@ trait CheckAnalysis extends LookupCatalog with QueryErrorsBase with PlanToString
   } else {
     false
   }
+
+  /** The columns of a GAP FILL clause that are not resolved. */
+  private def unresolvedClauseColumns(g: UnresolvedGapFill): Seq[UnresolvedAttribute] =
+    g.expressions.flatMap(_.collect { case a: UnresolvedAttribute => a })
 
   private def failUnresolvedAttribute(
       operator: LogicalPlan,
@@ -523,9 +527,18 @@ trait CheckAnalysis extends LookupCatalog with QueryErrorsBase with PlanToString
           s"V2Reference should be resolved during analysis: ${r.name}")
 
       // ResolveGapFill runs only in the Resolution batch. With the gate on, an input that
-      // resolves in a later batch leaves the node here.
-      case _: UnresolvedGapFill =>
-        throw QueryCompilationErrors.gapFillNotSupportedError()
+      // resolves in a later batch leaves the node here with unresolved clause columns that the
+      // input has, and GAP FILL is not supported. A clause column that the input does not have
+      // is then reported as unresolved. Over an input that resolved in time, every clause error
+      // goes on to the checks below, which report the first one in clause order.
+      case g: UnresolvedGapFill if g.childrenResolved && unresolvedClauseColumns(g).exists(
+          a => g.child.resolve(a.nameParts, g.conf.resolver).isDefined) =>
+        unresolvedClauseColumns(g).find { a =>
+          g.child.resolve(a.nameParts, g.conf.resolver).isEmpty
+        } match {
+          case Some(column) => failUnresolvedAttribute(g, column, "UNRESOLVED_COLUMN")
+          case None => throw QueryCompilationErrors.gapFillNotSupportedError()
+        }
 
       case u: UnresolvedInlineTable
           if !SQLConf.get.getConf(SQLConf.INLINE_TABLE_NON_FOLDABLE_EXPRESSIONS_ENABLED) &&
@@ -836,6 +849,40 @@ trait CheckAnalysis extends LookupCatalog with QueryErrorsBase with PlanToString
               messageParameters = Map(
                 "expression" -> toSQLExpr(rankingExpression),
                 "type" -> toSQLType(rankingExpression.dataType)))
+
+          case g @ Generate(gapFill: GapFillGenerator, _, _, _, _, child) =>
+            // A subquery of the input can refer to the input itself. Only a reference that leaves
+            // the input, here or from such a subquery, refers to an outer query.
+            if (child.exists(_.expressions.exists(_.exists {
+              case _: OuterReference | _: OuterScopeReference => true
+              case _ => false
+            }))) {
+              g.failAnalysis(
+                errorClass = "GAP_FILL_CORRELATED_INPUT",
+                messageParameters = Map.empty)
+            }
+            if (child.isStreaming) {
+              g.failAnalysis(
+                errorClass = "GAP_FILL_STREAMING_NOT_SUPPORTED",
+                messageParameters = Map.empty)
+            }
+            // The generator reads every input column, so a metadata column that it does not read
+            // was added under the Generate after GAP FILL was resolved. Such a column also passes
+            // through, so this check must stay before the next one.
+            child.output.find(c => c.isMetadataCol && !gapFill.references.contains(c)).foreach {
+              column =>
+                g.failAnalysis(
+                  errorClass = "GAP_FILL_METADATA_COLUMN_NOT_SUPPORTED",
+                  messageParameters = Map("columnName" -> toSQLId(column.name)))
+            }
+            // An added row copies its passed columns from an input row of its partition, so only
+            // partition columns can pass through.
+            val partitionColumns = AttributeSet(gapFill.partitionColumns)
+            g.requiredChildOutput.find(!partitionColumns.contains(_)).foreach { column =>
+              throw SparkException.internalError(
+                s"GAP FILL passes the input column $column through, but it is not a PARTITION BY " +
+                  "column.")
+            }
 
           case z: Zip =>
             // ResolveZip succeeded for all valid inputs, so a surviving Zip means the two

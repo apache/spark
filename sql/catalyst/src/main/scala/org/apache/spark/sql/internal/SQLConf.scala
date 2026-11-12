@@ -6656,10 +6656,10 @@ object SQLConf {
 
   val GAP_FILL_ENABLED =
     buildConf("spark.sql.gapFillRelationOperator.enabled")
-      .doc("Gate for the GAP FILL relation operator, which is under development. GAP FILL " +
-        "queries are rejected whatever the value. When true, the rejection waits until the " +
-        "input relation resolves, so errors that leave it unresolved, such as a missing " +
-        "table, are reported first.")
+      .doc("Gate for the GAP FILL relation operator, which is under development. When false, " +
+        "GAP FILL queries are rejected during analysis. When true, they are analyzed, and a " +
+        "query that passes analysis is rejected when it is planned, until the physical " +
+        "operator is added.")
       .internal()
       .version("4.4.0")
       .withBindingPolicy(ConfigBindingPolicy.SESSION)
