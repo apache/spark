@@ -101,9 +101,10 @@ object InjectRuntimeFilter extends Rule[LogicalPlan] with PredicateHelper with J
 
   /**
    * Extracts either a safely materialized leaf with accurate statistics or a simple selective
-   * filter over a scan. Filter conditions and the expressions they reference must remain simple,
-   * so the runtime-filter subquery does not introduce expensive computation. The extracted plan
-   * must produce a superset of the creation side's join keys.
+   * filter over a scan, or in a DSv2 scan that took it in fully. Filter conditions and the
+   * expressions they reference must remain simple, so the runtime-filter subquery does not
+   * introduce expensive computation. The extracted plan must produce a superset of the creation
+   * side's join keys.
    */
   private def extractSelectiveFilterOverScan(
       plan: LogicalPlan,
@@ -240,6 +241,18 @@ object InjectRuntimeFilter extends Rule[LogicalPlan] with PredicateHelper with J
           case _ => None
         }
       case _: LeafNode if hasHitSelectiveFilter =>
+        Some(FilterCreationSide(
+          targetKey,
+          currentPlan,
+          useMaterializedThreshold = false))
+      // A DSv2 scan can take a filter in fully and leave no `Filter` for it, as a built-in file
+      // scan does with its partition filters. With no selective `Filter` above the scan, its
+      // pushed filters count as such a `Filter` would, but only for a scan whose pushed operations
+      // all work on each row by itself, since the bloom filter's subquery reads it again. A pushed
+      // limit, for example, lets the source pick other rows on a second read.
+      case scan: DataSourceV2ScanRelation if scan.onlyRowWisePushdowns &&
+          scan.pushedFilters.forall(isSimpleExpression) &&
+          scan.pushedFilters.exists(isLikelySelective) =>
         Some(FilterCreationSide(
           targetKey,
           currentPlan,
@@ -434,10 +447,11 @@ object InjectRuntimeFilter extends Rule[LogicalPlan] with PredicateHelper with J
   // row by itself. A pushed limit or top-N, for example, lets the source pick other rows on a
   // second read. It must not read a file metadata column either, such as
   // `_metadata.file_block_start`, which depends on how the scan splits its files. The subquery can
-  // split them differently. Its filters, and the projections that the key and the filters need,
-  // must pass `cannotFail`, which takes only expressions that are deterministic in the subquery
-  // and do not fail there. A part of the join side outside that plan can only drop rows from the
-  // join, so the bloom filter still holds every key that the join sees.
+  // split them differently. Its filters, including those pushed into a V2 scan, and the projections
+  // that the key and the filters need, must pass `cannotFail`, which takes only expressions that
+  // are deterministic in the subquery and do not fail there. A part of the join side outside that
+  // plan can only drop rows from the join, so the bloom filter still holds every key that the join
+  // sees.
   private def canEvaluateAgain(creationSide: FilterCreationSide): Boolean = {
     val evaluated =
       ColumnPruning(Project(Seq(Alias(creationSide.key, "key")()), creationSide.plan))
@@ -447,7 +461,8 @@ object InjectRuntimeFilter extends Rule[LogicalPlan] with PredicateHelper with J
       case Project(projectList, _) => !projectList.forall(e => cannotFail(trimAliases(e)))
       case Filter(condition, _) => !splitConjunctivePredicates(condition).forall(cannotFail)
       case _: CTERelationRef => true
-      case scan: DataSourceV2ScanRelation => !scan.onlyRowWisePushdowns
+      case scan: DataSourceV2ScanRelation =>
+        !scan.onlyRowWisePushdowns || !scan.pushedFilters.forall(cannotFail)
       case leaf: MaterializedLeafNode => !leaf.isOutputRepeatable
       case _: LeafNode => false
       case _ => true
