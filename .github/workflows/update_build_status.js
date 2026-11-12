@@ -247,8 +247,8 @@ module.exports = async ({github, context, core, env = process.env, log = console
   const prUrl = `https://github.com/${context.repo.owner}/${context.repo.repo}/pull/`
 
   // Create a Build check linked to a fork run, or action_required guidance if there is
-  // no run. `from` is the state replaced, or 'rerun' for a rerun of the tracked run.
-  const createCheck = async (pr, ref, run, from) => {
+  // no run. The log shows the states of the PR's Build checks it replaces, or 'rerun'.
+  const createCheck = async (pr, ref, run, rerun = false) => {
     const state = run ? checkState(run)
       : {status: 'completed', conclusion: 'action_required'}
     const check = {
@@ -276,6 +276,7 @@ module.exports = async ({github, context, core, env = process.env, log = console
         ]
       }
     }
+    const from = rerun ? 'rerun' : pr.buildChecks.map(label).join(', ') || 'none'
     const change = from + ' -> ' + label(state)
     try {
       await github.rest.checks.create(check)
@@ -311,7 +312,6 @@ module.exports = async ({github, context, core, env = process.env, log = console
       // branches, even if an older workflow ran on master; a skipped run has no result.
       const trackedRun = pr.branch == 'master' || pr.buildRun?.conclusion == 'skipped'
         ? undefined : pr.buildRun
-      const previousBuildState = pr.buildChecks.map(label).join(', ') || 'none'
 
       // Sync every Build check that points at a fork run, not just the first: a commit
       // can carry more than one (e.g. left by the notify workflow this one replaced).
@@ -389,8 +389,7 @@ module.exports = async ({github, context, core, env = process.env, log = console
       // has none yet, its check completed before a rerun, an update was not applied, or
       // its checks link to other runs (e.g. an older build of the same commit).
       if (trackedRun && !trackedRunShown && !unlistedRun) {
-        await createCheck(pr, ref, trackedRun,
-          trackedRunReran ? 'rerun' : previousBuildState)
+        await createCheck(pr, ref, trackedRun, trackedRunReran)
       } else if (!trackedRun && !syncableBuildCheck) {
         // No run exists, it was skipped, or the PR is from fork master: create
         // action_required guidance, unless the PR already has it or is still within
@@ -400,7 +399,7 @@ module.exports = async ({github, context, core, env = process.env, log = console
           count.skipped++
           continue
         }
-        await createCheck(pr, ref, undefined, previousBuildState)
+        await createCheck(pr, ref, undefined)
       }
     }
   }
