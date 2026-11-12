@@ -26,6 +26,9 @@ This README file only contains basic setup instructions.
 
 ## Build Pipeline Status
 
+See the [Apache CI dashboard](https://ci-test.apache.org/#/project/spark) for an overview
+of Spark's CI usage.
+
 | Branch     | Status                                                                                                                                                                                                          |
 |------------|-----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
 | master     | [![GitHub Actions Build](https://github.com/apache/spark/actions/workflows/release.yml/badge.svg)](https://github.com/apache/spark/actions/workflows/release.yml)                                               |

@@ -141,7 +141,8 @@ class InProcessPythonRuntimeSuite extends SparkFunSuite {
     val metrics = allMetrics()
     val context = TaskContext.empty()
     class TestEvaluator extends InProcessArrowEvalPythonEvaluatorFactory(
-        Seq.empty, Seq.empty, Seq.empty, 10, 0L, "UTC", false, false, false, false, true, metrics) {
+        Seq.empty, Seq.empty, Seq.empty, Seq.empty, 10, 0L, "UTC", false, false, false, false, true,
+        metrics) {
       override private[python] def runtimeSession: InProcessPythonRuntime.InterpreterSession =
         runtime
 
@@ -166,7 +167,8 @@ class InProcessPythonRuntimeSuite extends SparkFunSuite {
       PythonEvalType.SQL_SCALAR_ARROW_INPROCESS_UDF, true)
     var lookups = 0
     class TestEvaluator extends InProcessArrowEvalPythonEvaluatorFactory(
-        Seq.empty, Seq(udf), Seq.empty, 10, 0L, "UTC", false, false, false, false, true, metrics) {
+        Seq.empty, Seq(udf), Seq.empty, Seq.empty, 10, 0L, "UTC", false, false, false, false, true,
+        metrics) {
       override private[python] def runtimeSession: InProcessPythonRuntime.InterpreterSession = {
         lookups += 1
         runtime

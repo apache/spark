@@ -21,7 +21,7 @@ import java.sql.{Date, Timestamp}
 
 import org.apache.spark.sql.catalyst.expressions.{Alias, Attribute, AttributeMap, AttributeReference, Literal}
 import org.apache.spark.sql.catalyst.plans.logical._
-import org.apache.spark.sql.catalyst.util.DateTimeUtils
+import org.apache.spark.sql.catalyst.util.{CharVarcharUtils, DateTimeUtils}
 import org.apache.spark.sql.types._
 
 
@@ -161,6 +161,66 @@ class ProjectEstimationSuite extends StatsEstimationTestBase {
       rowCount = Some(2),
       attributeStats = toAttributeMap(expectedColStats2, proj2))
     assert(proj2.stats == expectedStats2)
+  }
+
+  test("SPARK-60810: column stats of a CHAR column survive read-side padding") {
+    val c = charAttr("c", 5)
+    val colStat = ColumnStat(distinctCount = Some(10), nullCount = Some(0),
+      avgLen = Some(5), maxLen = Some(5))
+    val child = StatsTestPlan(
+      outputList = Seq(c),
+      rowCount = 1000,
+      attributeStats = AttributeMap(Seq(c -> colStat)))
+
+    val padded = CharVarcharUtils.addPaddingForScan(c)
+    assert(padded != c, "expected a read-side padding expression for a CHAR column")
+    val proj = Project(Seq(Alias(padded, "c")()), child)
+    assert(proj.stats.attributeStats.get(proj.output.head).contains(colStat))
+
+    // Statistics of values shorter than N, e.g. collected with read-side padding off: every
+    // non-null padded value has at least N characters.
+    val shortStat = colStat.copy(avgLen = Some(3), maxLen = Some(4))
+    val shortChild = child.copy(attributeStats = AttributeMap(Seq(c -> shortStat)))
+    val shortProj = Project(Seq(Alias(padded, "c")()), shortChild)
+    assert(shortProj.stats.attributeStats.get(shortProj.output.head).contains(colStat))
+    // The same without a distinct count, e.g. from a connector that reports only lengths.
+    val noNdvChild = child.copy(
+      attributeStats = AttributeMap(Seq(c -> shortStat.copy(distinctCount = None))))
+    val noNdvProj = Project(Seq(Alias(padded, "c")()), noNdvChild)
+    assert(noNdvProj.stats.attributeStats.get(noNdvProj.output.head)
+      .contains(colStat.copy(distinctCount = None)))
+    // Padding leaves longer values as they are, so lengths above N are kept.
+    val longStat = colStat.copy(avgLen = Some(7), maxLen = Some(9))
+    val longProj = Project(Seq(Alias(padded, "c")()),
+      child.copy(attributeStats = AttributeMap(Seq(c -> longStat))))
+    assert(longProj.stats.attributeStats.get(longProj.output.head).contains(longStat))
+
+    // An all-null column has no values to pad; ANALYZE stores the default size of the string
+    // type, 20, as its lengths, which a CHAR(30) floor must not raise.
+    val wide = charAttr("w", 30)
+    val nullStat = ColumnStat(distinctCount = Some(0), nullCount = Some(1000),
+      avgLen = Some(20), maxLen = Some(20))
+    val nullChild = StatsTestPlan(
+      outputList = Seq(wide),
+      rowCount = 1000,
+      attributeStats = AttributeMap(Seq(wide -> nullStat)))
+    val nullProj = Project(Seq(Alias(CharVarcharUtils.addPaddingForScan(wide), "w")()), nullChild)
+    assert(nullProj.stats.attributeStats.get(nullProj.output.head).contains(nullStat))
+    // An IS NULL filter below the padding Project sets the distinct count to 0 and scales the
+    // null count down, so it no longer covers every row the filter returns.
+    val isNullStat = ColumnStat(distinctCount = Some(0), nullCount = Some(200),
+      avgLen = Some(3), maxLen = Some(4))
+    val isNullProj = Project(Seq(Alias(padded, "c")()),
+      child.copy(attributeStats = AttributeMap(Seq(c -> isNullStat))))
+    assert(isNullProj.stats.attributeStats.get(isNullProj.output.head).contains(isNullStat))
+    // A null count covering every row is not a sign of no values: a filter that leaves 1 of
+    // 1000 rows scales 999 nulls up to 1, while the column still has a value.
+    val scaledStat = ColumnStat(distinctCount = Some(1), nullCount = Some(1),
+      avgLen = Some(2), maxLen = Some(2))
+    val scaledProj = Project(Seq(Alias(padded, "c")()), child.copy(rowCount = 1,
+      attributeStats = AttributeMap(Seq(c -> scaledStat))))
+    assert(scaledProj.stats.attributeStats.get(scaledProj.output.head)
+      .contains(scaledStat.copy(avgLen = Some(5), maxLen = Some(5))))
   }
 
   private def checkProjectStats(

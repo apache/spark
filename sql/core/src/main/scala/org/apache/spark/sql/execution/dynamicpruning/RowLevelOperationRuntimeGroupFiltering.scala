@@ -22,7 +22,7 @@ import org.apache.spark.sql.catalyst.expressions.{Alias, Attribute, AttributeMap
 import org.apache.spark.sql.catalyst.expressions.Literal.TrueLiteral
 import org.apache.spark.sql.catalyst.optimizer.RewritePredicateSubquery
 import org.apache.spark.sql.catalyst.planning.{DeltaBasedRowLevelOperation, GroupBasedRowLevelOperation}
-import org.apache.spark.sql.catalyst.plans.logical.{Aggregate, Filter, LogicalPlan, RowLevelWrite}
+import org.apache.spark.sql.catalyst.plans.logical.{Aggregate, Filter, LogicalPlan, Project, RowLevelWrite}
 import org.apache.spark.sql.catalyst.rules.Rule
 import org.apache.spark.sql.catalyst.trees.TreePattern.{REPLACE_DATA, WRITE_DELTA}
 import org.apache.spark.sql.connector.expressions.NamedReference
@@ -109,7 +109,11 @@ class RowLevelOperationRuntimeGroupFiltering(optimizeSubqueries: Rule[LogicalPla
 
     val matchingRowsPlan = write.operation.command match {
       case DELETE =>
-        Filter(cond, relation)
+        // the condition may refer to aliases computed on top of the read relation, such as the
+        // CHAR columns padded by ApplyCharTypePadding, which must be replaced by their definitions
+        // mapping them to the relation columns by name would compare the stored values instead
+        val aliasMap = getAliasMap(write.query.collect { case p: Project => p.projectList }.flatten)
+        Filter(replaceAlias(cond, aliasMap), relation)
 
       case UPDATE =>
         // UPDATEs with subqueries can be rewritten using UNION with two identical scan relations
