@@ -1888,132 +1888,73 @@ org.apache.spark.sql.catalyst.ExtendedAnalysisException
 SELECT kll_sketch_get_quantile_bigint(kll_sketch_agg_bigint(col1), array(0.5D, NULL))
 FROM t_long_1_5_through_7_11
 -- !query analysis
-org.apache.spark.sql.catalyst.ExtendedAnalysisException
-{
-  "errorClass" : "DATATYPE_MISMATCH.UNEXPECTED_NULL",
-  "sqlState" : "42K09",
-  "messageParameters" : {
-    "exprName" : "rank array elements",
-    "sqlExpr" : "\"kll_sketch_get_quantile_bigint(kll_sketch_agg_bigint(col1), array(0.5, NULL))\""
-  },
-  "queryContext" : [ {
-    "objectType" : "",
-    "objectName" : "",
-    "startIndex" : 8,
-    "stopIndex" : 85,
-    "fragment" : "kll_sketch_get_quantile_bigint(kll_sketch_agg_bigint(col1), array(0.5D, NULL))"
-  } ]
-}
+Aggregate [kll_sketch_get_quantile_bigint(kll_sketch_agg_bigint(col1#xL, None, 0, 0), array(0.5, cast(null as double))) AS kll_sketch_get_quantile_bigint(kll_sketch_agg_bigint(col1), array(0.5, NULL))#x]
++- SubqueryAlias spark_catalog.default.t_long_1_5_through_7_11
+   +- Relation spark_catalog.default.t_long_1_5_through_7_11[col1#xL,col2#xL] parquet
 
 
 -- !query
 SELECT kll_sketch_get_quantile_float(kll_sketch_agg_float(col1), array(NULL, 0.5D))
 FROM t_float_1_5_through_7_11
 -- !query analysis
-org.apache.spark.sql.catalyst.ExtendedAnalysisException
-{
-  "errorClass" : "DATATYPE_MISMATCH.UNEXPECTED_NULL",
-  "sqlState" : "42K09",
-  "messageParameters" : {
-    "exprName" : "rank array elements",
-    "sqlExpr" : "\"kll_sketch_get_quantile_float(kll_sketch_agg_float(col1), array(NULL, 0.5))\""
-  },
-  "queryContext" : [ {
-    "objectType" : "",
-    "objectName" : "",
-    "startIndex" : 8,
-    "stopIndex" : 83,
-    "fragment" : "kll_sketch_get_quantile_float(kll_sketch_agg_float(col1), array(NULL, 0.5D))"
-  } ]
-}
+Aggregate [kll_sketch_get_quantile_float(kll_sketch_agg_float(col1#x, None, 0, 0), array(cast(null as double), 0.5)) AS kll_sketch_get_quantile_float(kll_sketch_agg_float(col1), array(NULL, 0.5))#x]
++- SubqueryAlias spark_catalog.default.t_float_1_5_through_7_11
+   +- Relation spark_catalog.default.t_float_1_5_through_7_11[col1#x,col2#x] parquet
 
 
 -- !query
 SELECT kll_sketch_get_quantile_double(kll_sketch_agg_double(col1), array(0.0D, NULL, 1.0D))
 FROM t_double_1_5_through_7_11
 -- !query analysis
-org.apache.spark.sql.catalyst.ExtendedAnalysisException
-{
-  "errorClass" : "DATATYPE_MISMATCH.UNEXPECTED_NULL",
-  "sqlState" : "42K09",
-  "messageParameters" : {
-    "exprName" : "rank array elements",
-    "sqlExpr" : "\"kll_sketch_get_quantile_double(kll_sketch_agg_double(col1), array(0.0, NULL, 1.0))\""
-  },
-  "queryContext" : [ {
-    "objectType" : "",
-    "objectName" : "",
-    "startIndex" : 8,
-    "stopIndex" : 91,
-    "fragment" : "kll_sketch_get_quantile_double(kll_sketch_agg_double(col1), array(0.0D, NULL, 1.0D))"
-  } ]
-}
+Aggregate [kll_sketch_get_quantile_double(kll_sketch_agg_double(col1#x, None, 0, 0), array(0.0, cast(null as double), 1.0)) AS kll_sketch_get_quantile_double(kll_sketch_agg_double(col1), array(0.0, NULL, 1.0))#x]
++- SubqueryAlias spark_catalog.default.t_double_1_5_through_7_11
+   +- Relation spark_catalog.default.t_double_1_5_through_7_11[col1#x,col2#x] parquet
 
 
 -- !query
 SELECT kll_sketch_get_rank_bigint(kll_sketch_agg_bigint(col1), array(1L, NULL))
 FROM t_long_1_5_through_7_11
 -- !query analysis
-org.apache.spark.sql.catalyst.ExtendedAnalysisException
-{
-  "errorClass" : "DATATYPE_MISMATCH.UNEXPECTED_NULL",
-  "sqlState" : "42K09",
-  "messageParameters" : {
-    "exprName" : "quantile array elements",
-    "sqlExpr" : "\"kll_sketch_get_rank_bigint(kll_sketch_agg_bigint(col1), array(1, NULL))\""
-  },
-  "queryContext" : [ {
-    "objectType" : "",
-    "objectName" : "",
-    "startIndex" : 8,
-    "stopIndex" : 79,
-    "fragment" : "kll_sketch_get_rank_bigint(kll_sketch_agg_bigint(col1), array(1L, NULL))"
-  } ]
-}
+Aggregate [kll_sketch_get_rank_bigint(kll_sketch_agg_bigint(col1#xL, None, 0, 0), array(1, cast(null as bigint))) AS kll_sketch_get_rank_bigint(kll_sketch_agg_bigint(col1), array(1, NULL))#x]
++- SubqueryAlias spark_catalog.default.t_long_1_5_through_7_11
+   +- Relation spark_catalog.default.t_long_1_5_through_7_11[col1#xL,col2#xL] parquet
 
 
 -- !query
 SELECT kll_sketch_get_rank_float(kll_sketch_agg_float(col1), array(NULL, CAST(1 AS FLOAT)))
 FROM t_float_1_5_through_7_11
 -- !query analysis
-org.apache.spark.sql.catalyst.ExtendedAnalysisException
-{
-  "errorClass" : "DATATYPE_MISMATCH.UNEXPECTED_NULL",
-  "sqlState" : "42K09",
-  "messageParameters" : {
-    "exprName" : "quantile array elements",
-    "sqlExpr" : "\"kll_sketch_get_rank_float(kll_sketch_agg_float(col1), array(NULL, CAST(1 AS FLOAT)))\""
-  },
-  "queryContext" : [ {
-    "objectType" : "",
-    "objectName" : "",
-    "startIndex" : 8,
-    "stopIndex" : 91,
-    "fragment" : "kll_sketch_get_rank_float(kll_sketch_agg_float(col1), array(NULL, CAST(1 AS FLOAT)))"
-  } ]
-}
+Aggregate [kll_sketch_get_rank_float(kll_sketch_agg_float(col1#x, None, 0, 0), array(cast(null as float), cast(1 as float))) AS kll_sketch_get_rank_float(kll_sketch_agg_float(col1), array(NULL, CAST(1 AS FLOAT)))#x]
++- SubqueryAlias spark_catalog.default.t_float_1_5_through_7_11
+   +- Relation spark_catalog.default.t_float_1_5_through_7_11[col1#x,col2#x] parquet
 
 
 -- !query
 SELECT kll_sketch_get_rank_double(kll_sketch_agg_double(col1), array(CAST(NULL AS DOUBLE)))
 FROM t_double_1_5_through_7_11
 -- !query analysis
-org.apache.spark.sql.catalyst.ExtendedAnalysisException
-{
-  "errorClass" : "DATATYPE_MISMATCH.UNEXPECTED_NULL",
-  "sqlState" : "42K09",
-  "messageParameters" : {
-    "exprName" : "quantile array elements",
-    "sqlExpr" : "\"kll_sketch_get_rank_double(kll_sketch_agg_double(col1), array(CAST(NULL AS DOUBLE)))\""
-  },
-  "queryContext" : [ {
-    "objectType" : "",
-    "objectName" : "",
-    "startIndex" : 8,
-    "stopIndex" : 91,
-    "fragment" : "kll_sketch_get_rank_double(kll_sketch_agg_double(col1), array(CAST(NULL AS DOUBLE)))"
-  } ]
-}
+Aggregate [kll_sketch_get_rank_double(kll_sketch_agg_double(col1#x, None, 0, 0), array(cast(null as double))) AS kll_sketch_get_rank_double(kll_sketch_agg_double(col1), array(CAST(NULL AS DOUBLE)))#x]
++- SubqueryAlias spark_catalog.default.t_double_1_5_through_7_11
+   +- Relation spark_catalog.default.t_double_1_5_through_7_11[col1#x,col2#x] parquet
+
+
+-- !query
+SELECT kll_sketch_get_quantile_bigint(kll_sketch_agg_bigint(col1),
+  array(CAST(NULL AS DOUBLE), CAST(NULL AS DOUBLE))) AS null_ranks
+FROM VALUES (-10L), (0L), (10L) AS tab(col1)
+-- !query analysis
+Aggregate [kll_sketch_get_quantile_bigint(kll_sketch_agg_bigint(col1#xL, None, 0, 0), array(cast(null as double), cast(null as double))) AS null_ranks#x]
++- SubqueryAlias tab
+   +- LocalRelation [col1#xL]
+
+
+-- !query
+SELECT kll_sketch_get_rank_bigint(kll_sketch_agg_bigint(col1), array(10L, NULL)) AS null_quantile
+FROM VALUES (-10L), (0L), (10L) AS tab(col1)
+-- !query analysis
+Aggregate [kll_sketch_get_rank_bigint(kll_sketch_agg_bigint(col1#xL, None, 0, 0), array(10, cast(null as bigint))) AS null_quantile#x]
++- SubqueryAlias tab
+   +- LocalRelation [col1#xL]
 
 
 -- !query
@@ -2076,24 +2017,13 @@ SetCommand (spark.sql.ansi.enabled,Some(false))
 
 
 -- !query
-SELECT kll_sketch_get_quantile_double(X'00', array(CAST('bad' AS DOUBLE)))
+SELECT kll_sketch_get_quantile_double(kll_sketch_agg_double(col1),
+  array(CAST('bad' AS DOUBLE))) AS null_from_permissive_cast
+FROM t_double_1_5_through_7_11
 -- !query analysis
-org.apache.spark.sql.catalyst.ExtendedAnalysisException
-{
-  "errorClass" : "DATATYPE_MISMATCH.UNEXPECTED_NULL",
-  "sqlState" : "42K09",
-  "messageParameters" : {
-    "exprName" : "rank array elements",
-    "sqlExpr" : "\"kll_sketch_get_quantile_double(X'00', array(CAST(bad AS DOUBLE)))\""
-  },
-  "queryContext" : [ {
-    "objectType" : "",
-    "objectName" : "",
-    "startIndex" : 8,
-    "stopIndex" : 74,
-    "fragment" : "kll_sketch_get_quantile_double(X'00', array(CAST('bad' AS DOUBLE)))"
-  } ]
-}
+Aggregate [kll_sketch_get_quantile_double(kll_sketch_agg_double(col1#x, None, 0, 0), array(cast(bad as double))) AS null_from_permissive_cast#x]
++- SubqueryAlias spark_catalog.default.t_double_1_5_through_7_11
+   +- Relation spark_catalog.default.t_double_1_5_through_7_11[col1#x,col2#x] parquet
 
 
 -- !query

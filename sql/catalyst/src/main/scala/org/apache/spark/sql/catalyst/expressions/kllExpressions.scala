@@ -17,8 +17,6 @@
 
 package org.apache.spark.sql.catalyst.expressions
 
-import scala.util.Try
-
 import org.apache.datasketches.kll.{KllDoublesSketch, KllFloatsSketch, KllLongsSketch}
 import org.apache.datasketches.memory.Memory
 
@@ -379,6 +377,8 @@ abstract class KllSketchMergeBase
     desired quantile given the input rank. The desired quantile can either be a single value
     or an array. In the latter case, the function will return an array of results of equal
     length to the input array.
+    NULL elements in the input rank array are treated as 0.0, requesting the minimum quantile.
+    If either argument is NULL, the function returns NULL.
   """,
   arguments = """
     Arguments:
@@ -418,6 +418,8 @@ case class KllSketchGetQuantileBigint(left: Expression, right: Expression)
     desired quantile given the input rank. The desired quantile can either be a single value
     or an array. In the latter case, the function will return an array of results of equal
     length to the input array.
+    NULL elements in the input rank array are treated as 0.0, requesting the minimum quantile.
+    If either argument is NULL, the function returns NULL.
   """,
   arguments = """
     Arguments:
@@ -457,6 +459,8 @@ case class KllSketchGetQuantileFloat(left: Expression, right: Expression)
     desired quantile given the input rank. The desired quantile can either be a single value
     or an array. In the latter case, the function will return an array of results of equal
     length to the input array.
+    NULL elements in the input rank array are treated as 0.0, requesting the minimum quantile.
+    If either argument is NULL, the function returns NULL.
   """,
   arguments = """
     Arguments:
@@ -552,18 +556,7 @@ abstract class KllSketchGetQuantileBase
           "inputType" -> toSQLType(right.dataType),
           "inputExpr" -> toSQLExpr(right)))
     } else {
-      val typeCheckResult = super.checkInputDataTypes()
-      right.dataType match {
-        case ArrayType(_, true) if typeCheckResult.isSuccess =>
-          Try(right.eval()).toOption match {
-            case Some(array: ArrayData) if (0 until array.numElements()).exists(array.isNullAt) =>
-              TypeCheckResult.DataTypeMismatch(
-                errorSubClass = "UNEXPECTED_NULL",
-                messageParameters = Map("exprName" -> "rank array elements"))
-            case _ => typeCheckResult
-          }
-        case _ => typeCheckResult
-      }
+      super.checkInputDataTypes()
     }
   }
 
@@ -607,6 +600,8 @@ abstract class KllSketchGetQuantileBase
     desired rank given the input quantile. The desired rank can either be a single value
     or an array. In the latter case, the function will return an array of results of equal
     length to the input array.
+    NULL elements in the input quantile array are treated as zero, returning the rank of zero.
+    If either argument is NULL, the function returns NULL.
   """,
   arguments = """
     Arguments:
@@ -642,6 +637,8 @@ case class KllSketchGetRankBigint(left: Expression, right: Expression)
     desired rank given the input quantile. The desired rank can either be a single value
     or an array. In the latter case, the function will return an array of results of equal
     length to the input array.
+    NULL elements in the input quantile array are treated as zero, returning the rank of zero.
+    If either argument is NULL, the function returns NULL.
   """,
   arguments = """
     Arguments:
@@ -677,6 +674,8 @@ case class KllSketchGetRankFloat(left: Expression, right: Expression)
     desired rank given the input quantile. The desired rank can either be a single value
     or an array. In the latter case, the function will return an array of results of equal
     length to the input array.
+    NULL elements in the input quantile array are treated as zero, returning the rank of zero.
+    If either argument is NULL, the function returns NULL.
   """,
   arguments = """
     Arguments:
@@ -749,18 +748,7 @@ abstract class KllSketchGetRankBase
           "inputType" -> toSQLType(right.dataType),
           "inputExpr" -> toSQLExpr(right)))
     } else {
-      val typeCheckResult = super.checkInputDataTypes()
-      right.dataType match {
-        case ArrayType(_, true) if typeCheckResult.isSuccess =>
-          Try(right.eval()).toOption match {
-            case Some(array: ArrayData) if (0 until array.numElements()).exists(array.isNullAt) =>
-              TypeCheckResult.DataTypeMismatch(
-                errorSubClass = "UNEXPECTED_NULL",
-                messageParameters = Map("exprName" -> "quantile array elements"))
-            case _ => typeCheckResult
-          }
-        case _ => typeCheckResult
-      }
+      super.checkInputDataTypes()
     }
   }
 

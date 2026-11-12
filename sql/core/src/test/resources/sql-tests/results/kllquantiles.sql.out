@@ -1964,144 +1964,73 @@ org.apache.spark.sql.catalyst.ExtendedAnalysisException
 SELECT kll_sketch_get_quantile_bigint(kll_sketch_agg_bigint(col1), array(0.5D, NULL))
 FROM t_long_1_5_through_7_11
 -- !query schema
-struct<>
+struct<kll_sketch_get_quantile_bigint(kll_sketch_agg_bigint(col1), array(0.5, NULL)):array<bigint>>
 -- !query output
-org.apache.spark.sql.catalyst.ExtendedAnalysisException
-{
-  "errorClass" : "DATATYPE_MISMATCH.UNEXPECTED_NULL",
-  "sqlState" : "42K09",
-  "messageParameters" : {
-    "exprName" : "rank array elements",
-    "sqlExpr" : "\"kll_sketch_get_quantile_bigint(kll_sketch_agg_bigint(col1), array(0.5, NULL))\""
-  },
-  "queryContext" : [ {
-    "objectType" : "",
-    "objectName" : "",
-    "startIndex" : 8,
-    "stopIndex" : 85,
-    "fragment" : "kll_sketch_get_quantile_bigint(kll_sketch_agg_bigint(col1), array(0.5D, NULL))"
-  } ]
-}
+[4,1]
 
 
 -- !query
 SELECT kll_sketch_get_quantile_float(kll_sketch_agg_float(col1), array(NULL, 0.5D))
 FROM t_float_1_5_through_7_11
 -- !query schema
-struct<>
+struct<kll_sketch_get_quantile_float(kll_sketch_agg_float(col1), array(NULL, 0.5)):array<float>>
 -- !query output
-org.apache.spark.sql.catalyst.ExtendedAnalysisException
-{
-  "errorClass" : "DATATYPE_MISMATCH.UNEXPECTED_NULL",
-  "sqlState" : "42K09",
-  "messageParameters" : {
-    "exprName" : "rank array elements",
-    "sqlExpr" : "\"kll_sketch_get_quantile_float(kll_sketch_agg_float(col1), array(NULL, 0.5))\""
-  },
-  "queryContext" : [ {
-    "objectType" : "",
-    "objectName" : "",
-    "startIndex" : 8,
-    "stopIndex" : 83,
-    "fragment" : "kll_sketch_get_quantile_float(kll_sketch_agg_float(col1), array(NULL, 0.5D))"
-  } ]
-}
+[1.0,4.0]
 
 
 -- !query
 SELECT kll_sketch_get_quantile_double(kll_sketch_agg_double(col1), array(0.0D, NULL, 1.0D))
 FROM t_double_1_5_through_7_11
 -- !query schema
-struct<>
+struct<kll_sketch_get_quantile_double(kll_sketch_agg_double(col1), array(0.0, NULL, 1.0)):array<double>>
 -- !query output
-org.apache.spark.sql.catalyst.ExtendedAnalysisException
-{
-  "errorClass" : "DATATYPE_MISMATCH.UNEXPECTED_NULL",
-  "sqlState" : "42K09",
-  "messageParameters" : {
-    "exprName" : "rank array elements",
-    "sqlExpr" : "\"kll_sketch_get_quantile_double(kll_sketch_agg_double(col1), array(0.0, NULL, 1.0))\""
-  },
-  "queryContext" : [ {
-    "objectType" : "",
-    "objectName" : "",
-    "startIndex" : 8,
-    "stopIndex" : 91,
-    "fragment" : "kll_sketch_get_quantile_double(kll_sketch_agg_double(col1), array(0.0D, NULL, 1.0D))"
-  } ]
-}
+[1.0,1.0,7.0]
 
 
 -- !query
 SELECT kll_sketch_get_rank_bigint(kll_sketch_agg_bigint(col1), array(1L, NULL))
 FROM t_long_1_5_through_7_11
 -- !query schema
-struct<>
+struct<kll_sketch_get_rank_bigint(kll_sketch_agg_bigint(col1), array(1, NULL)):array<double>>
 -- !query output
-org.apache.spark.sql.catalyst.ExtendedAnalysisException
-{
-  "errorClass" : "DATATYPE_MISMATCH.UNEXPECTED_NULL",
-  "sqlState" : "42K09",
-  "messageParameters" : {
-    "exprName" : "quantile array elements",
-    "sqlExpr" : "\"kll_sketch_get_rank_bigint(kll_sketch_agg_bigint(col1), array(1, NULL))\""
-  },
-  "queryContext" : [ {
-    "objectType" : "",
-    "objectName" : "",
-    "startIndex" : 8,
-    "stopIndex" : 79,
-    "fragment" : "kll_sketch_get_rank_bigint(kll_sketch_agg_bigint(col1), array(1L, NULL))"
-  } ]
-}
+[0.14285714285714285,0.0]
 
 
 -- !query
 SELECT kll_sketch_get_rank_float(kll_sketch_agg_float(col1), array(NULL, CAST(1 AS FLOAT)))
 FROM t_float_1_5_through_7_11
 -- !query schema
-struct<>
+struct<kll_sketch_get_rank_float(kll_sketch_agg_float(col1), array(NULL, CAST(1 AS FLOAT))):array<double>>
 -- !query output
-org.apache.spark.sql.catalyst.ExtendedAnalysisException
-{
-  "errorClass" : "DATATYPE_MISMATCH.UNEXPECTED_NULL",
-  "sqlState" : "42K09",
-  "messageParameters" : {
-    "exprName" : "quantile array elements",
-    "sqlExpr" : "\"kll_sketch_get_rank_float(kll_sketch_agg_float(col1), array(NULL, CAST(1 AS FLOAT)))\""
-  },
-  "queryContext" : [ {
-    "objectType" : "",
-    "objectName" : "",
-    "startIndex" : 8,
-    "stopIndex" : 91,
-    "fragment" : "kll_sketch_get_rank_float(kll_sketch_agg_float(col1), array(NULL, CAST(1 AS FLOAT)))"
-  } ]
-}
+[0.0,0.14285714285714285]
 
 
 -- !query
 SELECT kll_sketch_get_rank_double(kll_sketch_agg_double(col1), array(CAST(NULL AS DOUBLE)))
 FROM t_double_1_5_through_7_11
 -- !query schema
-struct<>
+struct<kll_sketch_get_rank_double(kll_sketch_agg_double(col1), array(CAST(NULL AS DOUBLE))):array<double>>
 -- !query output
-org.apache.spark.sql.catalyst.ExtendedAnalysisException
-{
-  "errorClass" : "DATATYPE_MISMATCH.UNEXPECTED_NULL",
-  "sqlState" : "42K09",
-  "messageParameters" : {
-    "exprName" : "quantile array elements",
-    "sqlExpr" : "\"kll_sketch_get_rank_double(kll_sketch_agg_double(col1), array(CAST(NULL AS DOUBLE)))\""
-  },
-  "queryContext" : [ {
-    "objectType" : "",
-    "objectName" : "",
-    "startIndex" : 8,
-    "stopIndex" : 91,
-    "fragment" : "kll_sketch_get_rank_double(kll_sketch_agg_double(col1), array(CAST(NULL AS DOUBLE)))"
-  } ]
-}
+[0.0]
+
+
+-- !query
+SELECT kll_sketch_get_quantile_bigint(kll_sketch_agg_bigint(col1),
+  array(CAST(NULL AS DOUBLE), CAST(NULL AS DOUBLE))) AS null_ranks
+FROM VALUES (-10L), (0L), (10L) AS tab(col1)
+-- !query schema
+struct<null_ranks:array<bigint>>
+-- !query output
+[-10,-10]
+
+
+-- !query
+SELECT kll_sketch_get_rank_bigint(kll_sketch_agg_bigint(col1), array(10L, NULL)) AS null_quantile
+FROM VALUES (-10L), (0L), (10L) AS tab(col1)
+-- !query schema
+struct<null_quantile:array<double>>
+-- !query output
+[1.0,0.6666666666666666]
 
 
 -- !query
@@ -2201,26 +2130,13 @@ spark.sql.ansi.enabled	false
 
 
 -- !query
-SELECT kll_sketch_get_quantile_double(X'00', array(CAST('bad' AS DOUBLE)))
+SELECT kll_sketch_get_quantile_double(kll_sketch_agg_double(col1),
+  array(CAST('bad' AS DOUBLE))) AS null_from_permissive_cast
+FROM t_double_1_5_through_7_11
 -- !query schema
-struct<>
+struct<null_from_permissive_cast:array<double>>
 -- !query output
-org.apache.spark.sql.catalyst.ExtendedAnalysisException
-{
-  "errorClass" : "DATATYPE_MISMATCH.UNEXPECTED_NULL",
-  "sqlState" : "42K09",
-  "messageParameters" : {
-    "exprName" : "rank array elements",
-    "sqlExpr" : "\"kll_sketch_get_quantile_double(X'00', array(CAST(bad AS DOUBLE)))\""
-  },
-  "queryContext" : [ {
-    "objectType" : "",
-    "objectName" : "",
-    "startIndex" : 8,
-    "stopIndex" : 74,
-    "fragment" : "kll_sketch_get_quantile_double(X'00', array(CAST('bad' AS DOUBLE)))"
-  } ]
-}
+[1.0]
 
 
 -- !query

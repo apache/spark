@@ -31288,6 +31288,11 @@ def kll_sketch_get_quantile_bigint(sketch: "ColumnOrName", rank: "ColumnOrName")
         Returns a column that evaluates to a long, or an array of longs if the rank
         argument is an array.
 
+    Notes
+    -----
+    NULL elements in a rank array are treated as 0.0, requesting the minimum quantile.
+    If either argument is NULL, the result is NULL.
+
     Examples
     --------
     >>> from pyspark.sql import functions as sf
@@ -31327,6 +31332,11 @@ def kll_sketch_get_quantile_float(sketch: "ColumnOrName", rank: "ColumnOrName") 
         The quantile value(s).
         Returns a column that evaluates to a float, or an array of floats if the rank
         argument is an array.
+
+    Notes
+    -----
+    NULL elements in a rank array are treated as 0.0, requesting the minimum quantile.
+    If either argument is NULL, the result is NULL.
 
     Examples
     --------
@@ -31368,6 +31378,11 @@ def kll_sketch_get_quantile_double(sketch: "ColumnOrName", rank: "ColumnOrName")
         Returns a column that evaluates to a double, or an array of doubles if the rank
         argument is an array.
 
+    Notes
+    -----
+    NULL elements in a rank array are treated as 0.0, requesting the minimum quantile.
+    If either argument is NULL, the result is NULL.
+
     Examples
     --------
     >>> from pyspark.sql import functions as sf
@@ -31407,6 +31422,11 @@ def kll_sketch_get_rank_bigint(sketch: "ColumnOrName", quantile: "ColumnOrName")
         The rank value(s) (between 0.0 and 1.0).
         Returns a column that evaluates to a double, or an array of doubles if the quantile
         argument is an array.
+
+    Notes
+    -----
+    NULL elements in a quantile array are treated as zero, returning the rank of zero.
+    If either argument is NULL, the result is NULL.
 
     Examples
     --------
@@ -31448,6 +31468,11 @@ def kll_sketch_get_rank_float(sketch: "ColumnOrName", quantile: "ColumnOrName") 
         Returns a column that evaluates to a double, or an array of doubles if the quantile
         argument is an array.
 
+    Notes
+    -----
+    NULL elements in a quantile array are treated as zero, returning the rank of zero.
+    If either argument is NULL, the result is NULL.
+
     Examples
     --------
     >>> from pyspark.sql import functions as sf
@@ -31487,6 +31512,11 @@ def kll_sketch_get_rank_double(sketch: "ColumnOrName", quantile: "ColumnOrName")
         The rank value(s) (between 0.0 and 1.0).
         Returns a column that evaluates to a double, or an array of doubles if the quantile
         argument is an array.
+
+    Notes
+    -----
+    NULL elements in a quantile array are treated as zero, returning the rank of zero.
+    If either argument is NULL, the result is NULL.
 
     Examples
     --------

@@ -703,6 +703,7 @@ FROM (
     GROUP BY col1
 );
 
+-- NULL request array elements are interpreted as zero, unlike a scalar NULL or NULL array.
 SELECT kll_sketch_get_quantile_bigint(kll_sketch_agg_bigint(col1), array(0.5D, NULL))
 FROM t_long_1_5_through_7_11;
 
@@ -720,6 +721,15 @@ FROM t_float_1_5_through_7_11;
 
 SELECT kll_sketch_get_rank_double(kll_sketch_agg_double(col1), array(CAST(NULL AS DOUBLE)))
 FROM t_double_1_5_through_7_11;
+
+-- A zero-valued rank request returns the minimum, not necessarily zero.
+SELECT kll_sketch_get_quantile_bigint(kll_sketch_agg_bigint(col1),
+  array(CAST(NULL AS DOUBLE), CAST(NULL AS DOUBLE))) AS null_ranks
+FROM VALUES (-10L), (0L), (10L) AS tab(col1);
+
+-- A zero-valued quantile request returns the rank of zero, not necessarily zero.
+SELECT kll_sketch_get_rank_bigint(kll_sketch_agg_bigint(col1), array(10L, NULL)) AS null_quantile
+FROM VALUES (-10L), (0L), (10L) AS tab(col1);
 
 SET spark.sql.ansi.enabled=true;
 
@@ -750,7 +760,9 @@ FROM t_float_1_5_through_7_11;
 
 SET spark.sql.ansi.enabled=false;
 
-SELECT kll_sketch_get_quantile_double(X'00', array(CAST('bad' AS DOUBLE)));
+SELECT kll_sketch_get_quantile_double(kll_sketch_agg_double(col1),
+  array(CAST('bad' AS DOUBLE))) AS null_from_permissive_cast
+FROM t_double_1_5_through_7_11;
 
 SET spark.sql.ansi.enabled=true;
 

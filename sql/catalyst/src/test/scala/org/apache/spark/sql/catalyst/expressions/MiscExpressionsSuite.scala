@@ -184,15 +184,15 @@ class MiscExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
     val sketch = valueType match {
       case LongType =>
         val buffer = KllLongsSketch.newHeapInstance()
-        Seq(10L, 20L, 30L).foreach(buffer.update)
+        Seq(-10L, 0L, 10L).foreach(buffer.update)
         buffer.toByteArray
       case FloatType =>
         val buffer = KllFloatsSketch.newHeapInstance()
-        Seq(10.0f, 20.0f, 30.0f).foreach(buffer.update)
+        Seq(-10.0f, 0.0f, 10.0f).foreach(buffer.update)
         buffer.toByteArray
       case DoubleType =>
         val buffer = KllDoublesSketch.newHeapInstance()
-        Seq(10.0d, 20.0d, 30.0d).foreach(buffer.update)
+        Seq(-10.0d, 0.0d, 10.0d).foreach(buffer.update)
         buffer.toByteArray
     }
 
@@ -209,8 +209,19 @@ class MiscExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
 
     Seq(("rank", DoubleType, quantile), ("quantile", valueType, rank)).foreach {
       case (argumentName, argumentType, getter) =>
-        test(s"KLL $valueType $argumentName rejects NULL array elements") {
-          val value = Cast(Literal(0), argumentType).eval()
+        test(s"KLL $valueType $argumentName treats NULL array elements as zero") {
+          val value = Cast(Literal(if (argumentName == "rank") 0.5d else 10.0d),
+            argumentType).eval()
+          val zeroResult = if (argumentName == "rank") {
+            Cast(Literal(-10), valueType).eval()
+          } else {
+            2.0d / 3.0d
+          }
+          val valueResult = if (argumentName == "rank") {
+            Cast(Literal(0), valueType).eval()
+          } else {
+            1.0d
+          }
           Seq(
             Array[Any](null, value, value),
             Array[Any](value, null, value),
@@ -218,13 +229,21 @@ class MiscExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
             Array[Any](null, null)).foreach { values =>
             val array = Literal(new GenericArrayData(values),
               ArrayType(argumentType, containsNull = true))
-            assert(getter(array).checkInputDataTypes() == DataTypeMismatch(
-              errorSubClass = "UNEXPECTED_NULL",
-              messageParameters = Map("exprName" -> s"$argumentName array elements")))
+            val unsafeArray = Literal(UnsafeProjection.create(Seq(array))
+              .apply(InternalRow.empty).getArray(0).copy(), array.dataType)
+            Seq(array, unsafeArray).foreach { request =>
+              val expression = getter(request)
+              assert(expression.checkInputDataTypes().isSuccess)
+              checkEvaluation(expression,
+                values.map(v => if (v == null) zeroResult else valueResult).toSeq)
+              assert(expression.dataType == ArrayType(
+                if (argumentName == "rank") valueType else DoubleType, containsNull = false))
+            }
           }
-          val array = CreateArray(Seq(Cast(Literal(0), argumentType),
+          val array = CreateArray(Seq(Literal(value, argumentType),
             Cast(Literal.create(null, NullType), argumentType)))
-          assert(getter(array).checkInputDataTypes().isFailure)
+          assert(getter(array).checkInputDataTypes().isSuccess)
+          checkEvaluation(getter(array), Seq(valueResult, zeroResult))
         }
 
         test(s"KLL $valueType $argumentName preserves valid arrays and scalar NULL") {
@@ -234,9 +253,9 @@ class MiscExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
           val expression = getter(nullableArray)
           assert(expression.checkInputDataTypes().isSuccess)
           val expected = if (argumentName == "rank") {
-            Cast(Literal(10), valueType).eval()
+            Cast(Literal(-10), valueType).eval()
           } else {
-            0.0d
+            2.0d / 3.0d
           }
           checkEvaluation(expression, Seq(expected))
           val emptyArray = Literal(new GenericArrayData(Array.empty[Any]),
@@ -278,10 +297,16 @@ class MiscExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
           }
           val permissiveCast = CreateArray(Seq(Cast(Literal("invalid"), argumentType,
             evalMode = EvalMode.LEGACY)))
-          assert(getter(permissiveCast).checkInputDataTypes().isFailure)
+          assert(getter(permissiveCast).checkInputDataTypes().isSuccess)
+          val expected = if (argumentName == "rank") {
+            Cast(Literal(-10), valueType).eval()
+          } else {
+            2.0d / 3.0d
+          }
+          checkEvaluation(getter(permissiveCast), Seq(expected))
         }
 
-        test(s"KLL $valueType $argumentName skips inspection of non-nullable elements") {
+        test(s"KLL $valueType $argumentName does not evaluate requests during type checking") {
           val value = Cast(Literal(0), argumentType).eval()
           Seq(false, true).foreach { containsNull =>
             var evaluations = 0
@@ -295,7 +320,7 @@ class MiscExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
             val expression = getter(request)
             assert(expression.checkInputDataTypes().isSuccess)
             assert(expression.checkInputDataTypes().isSuccess)
-            assert(evaluations == (if (containsNull) 2 else 0))
+            assert(evaluations == 0)
           }
           var evaluations = 0
           val request = new ArrayRepeat(Literal(value, argumentType), Literal(10000)) {
