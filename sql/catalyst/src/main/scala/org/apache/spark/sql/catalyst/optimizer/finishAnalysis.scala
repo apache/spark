@@ -349,7 +349,8 @@ object SpecialDatetimeValues extends Rule[LogicalPlan] {
   private val specialDatetimeRewrite: PartialFunction[Expression, Expression] = {
     case cast @ Cast(e, dt, _, _) if rewrites(dt) && isConstantString(e) =>
       val str = dt match {
-        // A failing input is left to a nanos cast, which this rule did not rewrite before.
+        // A nanos cast keeps a failing input, so that it fails only if evaluated. The other
+        // types evaluate the input eagerly.
         case _: AnyTimestampNanoType => constantString(cast)
         case _ => Option(e.eval())
       }
