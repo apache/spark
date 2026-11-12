@@ -61,8 +61,9 @@ object NativeUDFTestUtils {
     compiler.filter(_ => NativeLibrary.isSupported)
 
   /**
-   * Compiles the test library with the given preprocessor definitions, once for each name, with
-   * the native data source library of the tests in the same library if `withDataSources`.
+   * Compiles `test_native_udf.cc` alone into a library, with the given preprocessor definitions,
+   * once for each name. [[compileWithDataSources]] adds the native data source library of the
+   * tests to it.
    */
   def compile(name: String, defines: String*): File = build(name, defines, withDataSources = false)
 

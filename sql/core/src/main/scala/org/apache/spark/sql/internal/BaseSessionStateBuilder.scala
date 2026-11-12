@@ -38,6 +38,7 @@ import org.apache.spark.sql.execution.analysis.DetectAmbiguousSelfJoin
 import org.apache.spark.sql.execution.command.{CheckViewReferences, CommandCheck}
 import org.apache.spark.sql.execution.datasources._
 import org.apache.spark.sql.execution.datasources.v2.{TableCapabilityCheck, V2SessionCatalog}
+import org.apache.spark.sql.execution.datasources.v2.ffi.NativeUDFInLambdaCheck
 import org.apache.spark.sql.execution.streaming.runtime.ResolveWriteToStream
 import org.apache.spark.sql.expressions.UserDefinedAggregateFunction
 import org.apache.spark.sql.util.ExecutionListenerManager
@@ -265,6 +266,7 @@ abstract class BaseSessionStateBuilder(
         TableCapabilityCheck +:
         CommandCheck +:
         CheckViewReferences +:
+        NativeUDFInLambdaCheck +:
         ViewSyncSchemaToMetaStore +:
         customCheckRules
   }

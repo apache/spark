@@ -38,6 +38,7 @@ import org.apache.spark.sql.execution.analysis.DetectAmbiguousSelfJoin
 import org.apache.spark.sql.execution.command.CommandCheck
 import org.apache.spark.sql.execution.datasources._
 import org.apache.spark.sql.execution.datasources.v2.TableCapabilityCheck
+import org.apache.spark.sql.execution.datasources.v2.ffi.NativeUDFInLambdaCheck
 import org.apache.spark.sql.execution.streaming.runtime.ResolveWriteToStream
 import org.apache.spark.sql.hive.HiveShim.HiveFunctionWrapper
 import org.apache.spark.sql.hive.client.HiveClient
@@ -159,6 +160,7 @@ class HiveSessionStateBuilder(
         PreReadCheck +:
         TableCapabilityCheck +:
         CommandCheck +:
+        NativeUDFInLambdaCheck +:
         ViewSyncSchemaToMetaStore +:
         customCheckRules
   }

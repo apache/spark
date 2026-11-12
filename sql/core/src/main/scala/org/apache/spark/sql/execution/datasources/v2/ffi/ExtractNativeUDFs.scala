@@ -25,8 +25,28 @@ import org.apache.spark.sql.catalyst.expressions.aggregate.AggregateExpression
 import org.apache.spark.sql.catalyst.plans.InnerLike
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.rules.Rule
-import org.apache.spark.sql.catalyst.trees.TreePattern.{AGGREGATE, JOIN, NATIVE_UDF}
+import org.apache.spark.sql.catalyst.trees.TreePattern.{AGGREGATE, JOIN, LAMBDA_FUNCTION, NATIVE_UDF}
 import org.apache.spark.sql.errors.QueryCompilationErrors
+
+/**
+ * Rejects the calls of native functions in lambda functions at analysis, as the analyzer rejects
+ * external UDFs there, and Python UDFs that it cannot lift out of the lambda: no operator can
+ * evaluate a call inside a lambda function.
+ */
+object NativeUDFInLambdaCheck extends (LogicalPlan => Unit) {
+
+  override def apply(plan: LogicalPlan): Unit = {
+    if (plan.containsAllPatterns(NATIVE_UDF, LAMBDA_FUNCTION)) {
+      plan.foreach(_.expressions.foreach(_.foreach {
+        case lambda: LambdaFunction =>
+          lambda.function.collectFirst { case udf: NativeUDF => udf }.foreach { udf =>
+            throw QueryCompilationErrors.nativeUdfInLambdaUnsupportedError(udf.name)
+          }
+        case _ =>
+      }))
+    }
+  }
+}
 
 /**
  * Plans the calls of native functions into [[EvalNativeUDFs]] below the operators that use their
@@ -41,22 +61,13 @@ object ExtractNativeUDFs extends Rule[LogicalPlan] with PredicateHelper {
     case subquery: Subquery if subquery.correlated => plan
     case _ if !plan.containsPattern(NATIVE_UDF) => plan
     case _ =>
-      checkNoCallInLambda(plan)
+      // Also a check rule of the analyzer, which a session state builder may leave out.
+      NativeUDFInLambdaCheck(plan)
       val prepared = fromGroupingKeys(overAggregates(fromJoinConditions(plan)))
       prepared.transformUpWithPruning(_.containsPattern(NATIVE_UDF)) {
         case evaluation: EvalNativeUDFs => evaluation
         case other => extract(other)
       }
-  }
-
-  private def checkNoCallInLambda(plan: LogicalPlan): Unit = plan.foreach { node =>
-    node.expressions.foreach(_.foreach {
-      case lambda: LambdaFunction =>
-        lambda.function.collectFirst { case udf: NativeUDF => udf }.foreach { udf =>
-          throw QueryCompilationErrors.nativeUdfInLambdaUnsupportedError(udf.name)
-        }
-      case _ =>
-    })
   }
 
   private def hasCall(expression: Expression): Boolean = expression.containsPattern(NATIVE_UDF)

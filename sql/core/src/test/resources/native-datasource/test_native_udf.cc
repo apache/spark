@@ -76,6 +76,9 @@
 //   INIT_FAILURE    1 to make spark_udf_init fail, after logging why, 2 to make it succeed without
 //                   a table.
 //   NO_INIT         Leaves out spark_udf_init, which makes the library invalid.
+//   DS_INIT         Also exports a minimal spark_ds_init, whose table has no function. The first
+//                   init to start waits up to two seconds for the other one, and an init that
+//                   starts while the other one runs is an order violation.
 //   ORDER_VIOLATIONS_PATH
 //                   A file to which the calls that the header rules out are appended, as lines: a
 //                   call on a state that is closed or was never created, two calls on a state at
@@ -84,6 +87,10 @@
 //                   its state was closed, and kept input buffers that changed.
 
 #include "spark_udf.h"
+
+#ifdef DS_INIT
+#include "spark_datasource.h"
+#endif
 
 #include <algorithm>
 #include <atomic>
@@ -921,6 +928,26 @@ void closeState(void* handle) {
   return table;
 }
 
+#ifdef DS_INIT
+std::atomic<bool> init_running{false};
+std::atomic<int> inits_started{0};
+
+// Marks a call of an init, see DS_INIT.
+class InInit {
+ public:
+  explicit InInit(const char* init) {
+    if (init_running.exchange(true)) orderViolation(std::string(init) + " during the other init");
+    if (inits_started.fetch_add(1) == 0) {
+      auto deadline = std::chrono::steady_clock::now() + std::chrono::seconds(2);
+      while (inits_started.load() < 2 && std::chrono::steady_clock::now() < deadline) {
+        std::this_thread::sleep_for(std::chrono::milliseconds(1));
+      }
+    }
+  }
+  ~InInit() { init_running.store(false); }
+};
+#endif  // DS_INIT
+
 }  // namespace
 
 // ---------------------------------------------------------------------------------------------
@@ -930,6 +957,9 @@ void closeState(void* handle) {
 #ifndef NO_INIT
 
 int spark_udf_init(const SparkUdfHost* spark, const SparkUdfLibrary** library) {
+#ifdef DS_INIT
+  InInit in_init("spark_udf_init");
+#endif
   host = spark;
   if (INIT_FAILURE == 1) {
     hostLog(SPARK_UDF_LOG_ERROR, "injected failure in spark_udf_init");
@@ -943,3 +973,24 @@ int spark_udf_init(const SparkUdfHost* spark, const SparkUdfLibrary** library) {
 }
 
 #endif  // NO_INIT
+
+#ifdef DS_INIT
+
+// ---------------------------------------------------------------------------------------------
+// spark_datasource.h
+// ---------------------------------------------------------------------------------------------
+
+// A library without data sources: its table has no function.
+int spark_ds_init(const SparkDsHost*, const SparkDsLibrary** library) {
+  InInit in_init("spark_ds_init");
+  static const SparkDsLibrary table = [] {
+    SparkDsLibrary empty{};
+    empty.size = sizeof(SparkDsLibrary);
+    empty.abi_version = SPARK_DS_ABI_VERSION;
+    return empty;
+  }();
+  *library = &table;
+  return 0;
+}
+
+#endif  // DS_INIT

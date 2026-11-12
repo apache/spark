@@ -16,14 +16,14 @@
  */
 package org.apache.spark.sql.hive.execution
 
-import org.apache.spark.sql.QueryTest
+import org.apache.spark.sql.{AnalysisException, QueryTest}
 import org.apache.spark.sql.catalyst.catalog.HiveTableRelation
 import org.apache.spark.sql.execution.datasources.v2.ffi.NativeUDFTestUtils
 import org.apache.spark.sql.hive.test.TestHiveSingleton
 
 /**
- * Tests native functions on Hive tables, with a package whose library Spark never loads: the
- * tests only plan queries. NativeUDFSuite tests the rest.
+ * Tests native functions in Hive sessions, with a package whose library Spark never loads: the
+ * tests only analyze and plan queries. NativeUDFSuite tests the rest.
  */
 class NativeUDFHiveSuite extends QueryTest with TestHiveSingleton {
 
@@ -41,5 +41,16 @@ class NativeUDFHiveSuite extends QueryTest with TestHiveSingleton {
       val pruned = plan.collect { case relation: HiveTableRelation => relation.prunedPartitions }
       assert(pruned.map(_.map(_.map(_.spec("p")).sorted)) == Seq(Some(Seq("0", "1"))), plan)
     }
+  }
+
+  test("reject a call in a lambda function at analysis") {
+    val session = spark.newSession()
+    NativeUDFTestUtils.registerForPlans(session)
+    checkError(
+      exception = intercept[AnalysisException] {
+        session.sql("SELECT transform(array(1L, 2L), x -> add_one(x))")
+      },
+      condition = "UNSUPPORTED_FEATURE.NATIVE_UDF_IN_LAMBDA",
+      parameters = Map("functionName" -> "`add_one`"))
   }
 }

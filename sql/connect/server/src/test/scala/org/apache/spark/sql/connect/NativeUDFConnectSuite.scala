@@ -22,7 +22,7 @@ import java.util.UUID
 import org.apache.spark.sql.{AnalysisException, SparkSession}
 import org.apache.spark.sql.execution.datasources.v2.ffi.NativeDataSourceTestUtils.checkingOrderOfCalls
 import org.apache.spark.sql.execution.datasources.v2.ffi.NativeUDFTestUtils._
-import org.apache.spark.sql.functions.{call_function, col}
+import org.apache.spark.sql.functions.{array, call_function, col, transform}
 
 /**
  * Tests native functions with Spark Connect: a client adds a package to its session with
@@ -68,6 +68,21 @@ class NativeUDFConnectSuite extends SparkConnectServerTest {
     withNewSession { other =>
       val e = intercept[AnalysisException](other.sql("SELECT add_one(1)").collect())
       assert(e.getCondition == "UNRESOLVED_ROUTINE", e)
+    }
+  }
+
+  nativeTest("reject a call in a lambda function when the client requests the schema") {
+    val pkg = createPackage(library)
+    withNewSession { session =>
+      session.addArtifact(pkg.getPath)
+      session.sql(
+        s"CREATE TEMPORARY FUNCTION add_one AS 'add_one' USING PACKAGE '${pkg.getName}'")
+      val df =
+        session.range(2).select(transform(array(col("id")), x => call_function("add_one", x)))
+      checkError(
+        exception = intercept[AnalysisException](df.schema),
+        condition = "UNSUPPORTED_FEATURE.NATIVE_UDF_IN_LAMBDA",
+        parameters = Map("functionName" -> "`add_one`"))
     }
   }
 }

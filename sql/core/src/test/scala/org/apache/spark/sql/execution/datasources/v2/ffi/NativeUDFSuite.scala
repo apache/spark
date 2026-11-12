@@ -23,7 +23,7 @@ import java.nio.file.Files
 import java.sql.{Date, Timestamp}
 import java.time.LocalDateTime
 import java.util.{Locale, Properties, UUID}
-import java.util.concurrent.{Callable, Executors, TimeUnit}
+import java.util.concurrent.{Callable, CyclicBarrier, Executors, TimeUnit}
 import java.util.concurrent.atomic.AtomicReference
 
 import scala.collection.mutable.ArrayBuffer
@@ -38,10 +38,10 @@ import org.apache.spark.api.python.PythonEvalType
 import org.apache.spark.internal.config.BUFFER_PAGESIZE
 import org.apache.spark.memory.{TaskMemoryManager, TestMemoryConsumer, TestMemoryManager}
 import org.apache.spark.sql.{AnalysisException, IntegratedUDFTestUtils, QueryTest, Row}
-import org.apache.spark.sql.catalyst.InternalRow
-import org.apache.spark.sql.catalyst.expressions.BloomFilterMightContain
+import org.apache.spark.sql.catalyst.{FunctionIdentifier, InternalRow}
+import org.apache.spark.sql.catalyst.expressions.{Alias, ArrayTransform, BloomFilterMightContain, LambdaFunction, Literal, NamedLambdaVariable}
 import org.apache.spark.sql.catalyst.parser.ParseException
-import org.apache.spark.sql.catalyst.plans.logical.{Aggregate, EvalNativeUDFs}
+import org.apache.spark.sql.catalyst.plans.logical.{Aggregate, EvalNativeUDFs, OneRowRelation, Project}
 import org.apache.spark.sql.classic.{DataFrame, SparkSession}
 import org.apache.spark.sql.connector.FakeV2ProviderWithCustomSchema
 import org.apache.spark.sql.connector.catalog.{InMemoryEnhancedPartitionFilterTable, InMemoryTableEnhancedPartitionFilterCatalog}
@@ -1164,7 +1164,36 @@ class NativeUDFSuite extends QueryTest with SharedSparkSession {
       } finally SparkSession.setActiveSession(spark)
   }
 
-  nativeTest("evaluate calls in joins, aggregates and lambda functions") {
+  private val callInLambda = "SELECT transform(array(1L, 2L), x -> add_one(x))"
+
+  gridTest("reject a call in a lambda function at analysis, for")(Seq(
+    Case("a query", callInLambda),
+    Case("the schema of a query", s"DESCRIBE QUERY $callInLambda"),
+    Case("a temporary view", s"CREATE TEMPORARY VIEW lambda_call AS $callInLambda"))) {
+    case Case(_, query) =>
+      val session = spark.newSession()
+      registerForPlans(session)
+      checkError(
+        exception = intercept[AnalysisException](session.sql(query)),
+        condition = "UNSUPPORTED_FEATURE.NATIVE_UDF_IN_LAMBDA",
+        parameters = Map("functionName" -> "`add_one`"))
+  }
+
+  test("reject a call in a lambda function that reaches the optimizer") {
+    val session = spark.newSession()
+    registerForPlans(session)
+    val x = NamedLambdaVariable("x", LongType, nullable = false)
+    val call = session.sessionState.catalog.lookupFunction(FunctionIdentifier("add_one"), Seq(x))
+    val plan = Project(
+      Seq(Alias(ArrayTransform(Literal(Array(1L)), LambdaFunction(call, Seq(x))), "r")()),
+      OneRowRelation())
+    checkError(
+      exception = intercept[AnalysisException](ExtractNativeUDFs(plan)),
+      condition = "UNSUPPORTED_FEATURE.NATIVE_UDF_IN_LAMBDA",
+      parameters = Map("functionName" -> "`add_one`"))
+  }
+
+  nativeTest("evaluate calls in joins, aggregates and the arguments of higher-order functions") {
     val session = newSession(defaultPackage)
     register(session, defaultPackage.getName, "add_one", "edit_distance")
     checkRows(
@@ -1187,12 +1216,9 @@ class NativeUDFSuite extends QueryTest with SharedSparkSession {
     assert(constant.queryExecution.optimizedPlan.collect {
       case evaluation: EvalNativeUDFs => evaluation.child.exists(_.isInstanceOf[Aggregate])
     } == Seq(true))
-    checkError(
-      exception = intercept[AnalysisException] {
-        session.sql("SELECT transform(array(1L, 2L), x -> add_one(x))").collect()
-      },
-      condition = "UNSUPPORTED_FEATURE.NATIVE_UDF_IN_LAMBDA",
-      parameters = Map("functionName" -> "`add_one`"))
+    checkRows(
+      session.sql("SELECT transform(array(add_one(id), id), x -> x * 10) FROM range(2)"),
+      Seq(Row(Seq(10L, 0L)), Row(Seq(20L, 10L))))
   }
 
   nativeGridTest("evaluate a call on one side of an outer join or in a correlated subquery")({
@@ -1257,6 +1283,23 @@ class NativeUDFSuite extends QueryTest with SharedSparkSession {
         (() => NativeLibraries.getFunctionLibrary(pkg)): Callable[NativeUdfLibrary]
       }.asJava).asScala.map(_.get(1, TimeUnit.MINUTES))
       assert(loaded.forall(_ eq loaded.head))
+    } finally {
+      pool.shutdownNow()
+    }
+  }
+
+  nativeTest("initialize the two interfaces of a library one at a time") {
+    val pkg = NativeDataSourcePackage.read(
+      createPackage(compile("test_native_udf_with_ds_init", "-DDS_INIT")))
+    val start = new CyclicBarrier(2)
+    val pool = Executors.newFixedThreadPool(2)
+    try {
+      val loads = Seq[() => AnyRef](
+        () => NativeLibraries.get(pkg),
+        () => NativeLibraries.getFunctionLibrary(pkg))
+      pool.invokeAll(loads.map { load =>
+        (() => { start.await(); load() }): Callable[AnyRef]
+      }.asJava).asScala.foreach(_.get(1, TimeUnit.MINUTES))
     } finally {
       pool.shutdownNow()
     }
