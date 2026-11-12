@@ -20,10 +20,11 @@ package org.apache.spark.sql.execution.datasources
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.{Attribute, Expression, SpecificInternalRow, UnaryExpression, UnsafeProjection}
 import org.apache.spark.sql.catalyst.expressions.codegen.CodegenFallback
+import org.apache.spark.sql.catalyst.expressions.st.STExpressionUtils.isGeoSpatialType
 import org.apache.spark.sql.catalyst.plans.physical.HashPartitioning
 import org.apache.spark.sql.catalyst.util.{ArrayData, MapData}
 import org.apache.spark.sql.errors.QueryExecutionErrors
-import org.apache.spark.sql.types.{ArrayType, DataType, GeographyType, GeometryType, MapType, StructType}
+import org.apache.spark.sql.types.{ArrayType, DataType, GeographyType, GeometryType, MapType, StructType, UserDefinedType}
 import org.apache.spark.sql.util.SchemaUtils
 
 object BucketingUtils {
@@ -59,6 +60,13 @@ object BucketingUtils {
   }
 
   def canBucketOn(dataType: DataType): Boolean = !SchemaUtils.hasNonUTF8BinaryCollation(dataType)
+
+  // Whether the type is or contains GEOMETRY or GEOGRAPHY. Like the bucket id hash, this looks
+  // through user-defined types.
+  def containsGeoSpatialType(dataType: DataType): Boolean = dataType.existsRecursively {
+    case udt: UserDefinedType[_] => containsGeoSpatialType(udt.sqlType)
+    case other => isGeoSpatialType(other)
+  }
 
   def bucketIdToString(id: Int): String = f"_$id%05d"
 }
@@ -99,6 +107,7 @@ case class RejectGeoSpatialBucketValue(child: Expression)
         val map = value.asInstanceOf[MapData]
         arrayContainsGeoSpatialValue(map.keyArray(), keyType) ||
           arrayContainsGeoSpatialValue(map.valueArray(), valueType)
+      case udt: UserDefinedType[_] => containsGeoSpatialValue(value, udt.sqlType)
       case _ => false
     })
 

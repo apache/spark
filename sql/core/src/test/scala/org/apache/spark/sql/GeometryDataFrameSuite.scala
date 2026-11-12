@@ -20,9 +20,11 @@ package org.apache.spark.sql
 import scala.collection.immutable.Seq
 
 import org.apache.spark.{SparkIllegalArgumentException, SparkRuntimeException}
+import org.apache.spark.sql.catalyst.util.STUtils
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.sql.types._
+import org.apache.spark.unsafe.types.BinaryView
 
 class GeometryDataFrameSuite extends SharedSparkSession {
 
@@ -212,8 +214,9 @@ class GeometryDataFrameSuite extends SharedSparkSession {
   }
 
   test("SPARK-61081: GROUP BY, DISTINCT and hashing on a Geometry column") {
-    // Four input partitions, so the GROUP BY, DISTINCT and DISTRIBUTE BY queries below
-    // hash-partition on `g` in a shuffle.
+    // The GROUP BY, DISTINCT and DISTRIBUTE BY queries below hash-partition on `g` in a shuffle.
+    // With four input partitions, equal values reach that shuffle from different map tasks, so
+    // the test checks that their hashes agree.
     val rdd = sparkContext.parallelize(
       Seq.tabulate(20)(i => Row(Geometry.fromWKB(if (i % 4 == 0) point2 else point1, 4326))), 4)
     val schema = StructType(Seq(StructField("g", GeometryType(4326), nullable = false)))
@@ -251,7 +254,8 @@ class GeometryDataFrameSuite extends SharedSparkSession {
         parameters = Map("type" -> dataType))
     }
 
-    withTable("t", "t_ctas", "t_df", "t_struct", "t_array", "t_map", "t_other") {
+    withTable("t", "t_ctas", "t_df", "t_struct", "t_array", "t_map", "t_map_key", "t_udt",
+        "t_udt_struct", "t_other") {
       sql("CREATE TABLE t (g GEOMETRY(4326)) USING parquet CLUSTERED BY (g) INTO 8 BUCKETS")
       Seq("true", "false").foreach { plannedWrite =>
         withSQLConf(SQLConf.PLANNED_WRITE_ENABLED.key -> plannedWrite) {
@@ -273,17 +277,19 @@ class GeometryDataFrameSuite extends SharedSparkSession {
       sql(values).limit(0).write.bucketBy(8, "g").saveAsTable("t_df")
       checkAnswer(spark.table("t_df"), Seq.empty)
 
-      sql("CREATE TABLE t_struct (s STRUCT<g: GEOMETRY(4326)>) USING parquet " +
+      // In the nested cases, the non-NULL value follows a non-geo field or a NULL element.
+      sql("CREATE TABLE t_struct (s STRUCT<id: INT, g: GEOMETRY(4326)>) USING parquet " +
         "CLUSTERED BY (s) INTO 8 BUCKETS")
       checkBucketedWriteFails(
-        sql(s"INSERT INTO t_struct SELECT named_struct('g', g) FROM ($values)"),
-        "\"STRUCT<g: GEOMETRY(4326) NOT NULL>\"")
-      sql(s"INSERT INTO t_struct SELECT named_struct('g', $nullValue)")
-      checkAnswer(spark.table("t_struct"), Row(Row(null)))
+        sql(s"INSERT INTO t_struct SELECT named_struct('id', 1, 'g', g) FROM ($values)"),
+        "\"STRUCT<id: INT NOT NULL, g: GEOMETRY(4326) NOT NULL>\"")
+      sql(s"INSERT INTO t_struct SELECT named_struct('id', 1, 'g', $nullValue)")
+      checkAnswer(spark.table("t_struct"), Row(Row(1, null)))
       sql("CREATE TABLE t_array (a ARRAY<GEOMETRY(4326)>) USING parquet " +
         "CLUSTERED BY (a) INTO 8 BUCKETS")
       checkBucketedWriteFails(
-        sql(s"INSERT INTO t_array SELECT array(g) FROM ($values)"), "\"ARRAY<GEOMETRY(4326)>\"")
+        sql(s"INSERT INTO t_array SELECT array($nullValue, g) FROM ($values)"),
+        "\"ARRAY<GEOMETRY(4326)>\"")
       sql(s"INSERT INTO t_array SELECT array($nullValue)")
       checkAnswer(spark.table("t_array"), Row(Seq(null)))
       // With planned writes on, the sort that V1Writes adds for a MAP bucket column does not
@@ -296,7 +302,29 @@ class GeometryDataFrameSuite extends SharedSparkSession {
           "\"MAP<INT, GEOMETRY(4326)>\"")
         sql(s"INSERT INTO t_map SELECT map(1, $nullValue)")
         checkAnswer(spark.table("t_map"), Row(Map(1 -> null)))
+        sql("CREATE TABLE t_map_key (m MAP<GEOMETRY(4326), INT>) USING parquet " +
+          "CLUSTERED BY (m) INTO 8 BUCKETS")
+        checkBucketedWriteFails(
+          sql(s"INSERT INTO t_map_key SELECT map(g, 1) FROM ($values)"),
+          "\"MAP<GEOMETRY(4326), INT>\"")
       }
+
+      // The bucket id hash looks through a user-defined type to the geo value.
+      def withUdt(query: String, dataType: DataType): DataFrame = spark.internalCreateDataFrame(
+        sql(query).queryExecution.toRdd, new StructType().add("u", dataType))
+      val udt = new TestGeometryUDT
+      val udtType = "UDT(\"GEOMETRY(4326)\")"
+      checkBucketedWriteFails(
+        withUdt(values, udt).write.bucketBy(8, "u").saveAsTable("t_udt"), udtType)
+      assert(!spark.catalog.tableExists("t_udt"))
+      withUdt(s"SELECT $nullValue", udt).write.bucketBy(8, "u").saveAsTable("t_udt")
+      checkBucketedWriteFails(withUdt(values, udt).write.insertInto("t_udt"), udtType)
+      checkAnswer(spark.table("t_udt"), Row(null))
+      checkBucketedWriteFails(
+        withUdt(s"SELECT named_struct('g', g) FROM ($values)", new StructType().add("g", udt))
+          .write.bucketBy(8, "u").saveAsTable("t_udt_struct"),
+        "\"STRUCT<g: GEOMETRY(4326)>\"")
+      assert(!spark.catalog.tableExists("t_udt_struct"))
 
       // Only bucket columns are checked.
       sql("CREATE TABLE t_other (id INT, g GEOMETRY(4326)) USING parquet " +
@@ -336,4 +364,14 @@ class GeometryDataFrameSuite extends SharedSparkSession {
       )
     }
   }
+}
+
+// A user-defined type whose values are GEOMETRY(4326) values.
+private[sql] class TestGeometryUDT extends UserDefinedType[Geometry] {
+  override def sqlType: DataType = GeometryType(4326)
+  override def serialize(obj: Geometry): Any =
+    STUtils.serializeGeomFromWKB(obj, GeometryType(4326))
+  override def deserialize(datum: Any): Geometry =
+    STUtils.deserializeGeom(datum.asInstanceOf[BinaryView], GeometryType(4326))
+  override def userClass: Class[Geometry] = classOf[Geometry]
 }

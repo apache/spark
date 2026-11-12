@@ -20,7 +20,6 @@ package org.apache.spark.sql.execution.datasources
 import org.apache.spark.sql.catalyst.catalog.BucketSpec
 import org.apache.spark.sql.catalyst.catalog.CatalogTypes.TablePartitionSpec
 import org.apache.spark.sql.catalyst.expressions.{Alias, Ascending, Attribute, AttributeMap, AttributeSet, BitwiseAnd, Empty2Null, Expression, HiveHash, Literal, NamedExpression, Pmod, SortOrder}
-import org.apache.spark.sql.catalyst.expressions.st.STExpressionUtils.isGeoSpatialType
 import org.apache.spark.sql.catalyst.optimizer.{EliminateSorts, FoldablePropagation}
 import org.apache.spark.sql.catalyst.plans.logical.{LogicalPlan, Project, Sort}
 import org.apache.spark.sql.catalyst.plans.physical.HashPartitioning
@@ -123,7 +122,7 @@ object V1WritesUtils {
     bucketSpec.map { spec =>
       val bucketColumns = spec.bucketColumnNames.map { name =>
         val column = dataColumns.find(_.name == name).get
-        if (column.dataType.existsRecursively(isGeoSpatialType)) {
+        if (BucketingUtils.containsGeoSpatialType(column.dataType)) {
           RejectGeoSpatialBucketValue(column)
         } else {
           column
