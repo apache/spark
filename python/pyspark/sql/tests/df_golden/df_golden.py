@@ -89,6 +89,7 @@ omitted.  Regeneration writes all sections the case produces.
 
 import difflib
 import hashlib
+import io
 import math
 import os
 import re
@@ -251,8 +252,8 @@ def _golden_diff(test_file, new_content):
         old_content = f.read()
     rel = "{}/{}".format(_GOLDEN_REL_DIR, os.path.basename(test_file))
     lines = difflib.unified_diff(
-        old_content.splitlines(keepends=True),
-        new_content.splitlines(keepends=True),
+        io.StringIO(old_content, newline="\n").readlines(),
+        io.StringIO(new_content, newline="\n").readlines(),
         fromfile="a/" + rel,
         tofile="b/" + rel,
     )

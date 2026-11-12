@@ -42,6 +42,9 @@ fail a test; only the expected sections are compared. The environment variable s
 controls whether the file is rewritten. With ``--verify`` the wrapper re-runs the tests
 against the regenerated files.
 
+Patches copied from ``python/run-tests`` logs have CRLF line endings. Strip carriage
+returns before applying them: ``tr -d '\\r' < golden.patch | git apply``.
+
 Adding a new test file
 ----------------------
 Drop a new ``<name>.test`` file in this directory and its case scripts under
@@ -189,6 +192,24 @@ class DFGoldenRunnerTests(DFGoldenTestBase):
             self.assertIn("=== END GOLDEN DIFF ===\n", output.getvalue())
             self.assertEqual(path.read_text(), old_content)
             self.assertEqual((path.parent / "executions").read_text().splitlines(), ["0", "1"])
+
+    def test_malformed_golden_prints_diff_before_verification_fails(self):
+        for unterminated in (False, True):
+            with self.subTest(unterminated=unterminated), tempfile.TemporaryDirectory() as root:
+                schema = "struct<id:bigint>" if unterminated else None
+                path = self._golden_file(root, [schema, schema])
+                if unterminated:
+                    path.write_bytes(path.read_bytes().removesuffix(b"!-- end\n"))
+                old_content = path.read_bytes()
+                message = "does not end with" if unterminated else "has no expected_"
+                output = io.StringIO()
+                with self.temp_env({"SPARK_GENERATE_GOLDEN_FILES": None}), redirect_stderr(output):
+                    with self.assertRaisesRegex(AssertionError, message):
+                        self._run_golden_test(path.name)
+                self.assertIn("=== BEGIN GOLDEN DIFF ===\n", output.getvalue())
+                self.assertIn("=== END GOLDEN DIFF ===\n", output.getvalue())
+                self.assertEqual(path.read_bytes(), old_content)
+                self.assertEqual((path.parent / "executions").read_text().splitlines(), ["0", "1"])
 
     def test_regeneration_prints_diff_and_writes_passing_golden(self):
         with tempfile.TemporaryDirectory() as root:

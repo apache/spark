@@ -526,6 +526,21 @@ class DFGoldenFrameworkTests(unittest.TestCase):
                 with open(path) as f:
                     self.assertEqual(f.read(), old)
 
+    def test_golden_diff_preserves_non_newline_separators(self):
+        for separator in ("\x0b", "\x0c", "\x1c", "\x1d", "\x1e", "\x85", chr(0x2028), chr(0x2029)):
+            for in_context in (False, True):
+                with self.subTest(separator=repr(separator), in_context=in_context):
+                    context = f"left{separator}right" if in_context else "context"
+                    before = "old" if in_context else f"old{separator}value"
+                    after = "new" if in_context else f"new{separator}value"
+                    path = self._write(f"{context}\n{before}\n")
+                    rel = "python/pyspark/sql/tests/df_golden/" + os.path.basename(path)
+                    expected = (
+                        f"--- a/{rel}\n+++ b/{rel}\n"
+                        f"@@ -1,2 +1,2 @@\n {context}\n-{before}\n+{after}\n"
+                    )
+                    self.assertEqual(_golden_diff(path, f"{context}\n{after}\n"), expected)
+
     # -- regeneration ----------------------------------------------------
 
     def test_regenerate_replaces_expected_sections_and_carries_identity(self):
