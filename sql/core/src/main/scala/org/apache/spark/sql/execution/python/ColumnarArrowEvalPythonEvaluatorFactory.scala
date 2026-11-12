@@ -20,6 +20,7 @@ import java.io.File
 
 import scala.collection.mutable.ArrayBuffer
 import scala.jdk.CollectionConverters._
+import scala.util.{Left, Right}
 
 import org.apache.spark.{PartitionEvaluator, PartitionEvaluatorFactory, SparkEnv, TaskContext}
 import org.apache.spark.api.python.ChainedPythonFunctions
@@ -34,10 +35,11 @@ import org.apache.spark.sql.execution.vectorized.OnHeapColumnVector
 import org.apache.spark.sql.types.{DataType, StructField, StructType, UserDefinedType}
 import org.apache.spark.sql.types.DataType.equalsIgnoreCompatibleCollation
 import org.apache.spark.sql.vectorized.ColumnarBatch
-import org.apache.spark.util.Utils
+import org.apache.spark.util.{CompletionIterator, Utils}
 
 /**
- * Evaluator factory for Arrow Python UDFs: ColumnarBatch in, ColumnarBatch out.
+ * Evaluator factory for Arrow Python UDFs: ColumnarBatch in, ColumnarBatch out, or rows out
+ * through [[rowOutput]] for a row-based parent.
  *
  * Two execution paths based on the UDF inputs:
  *
@@ -62,6 +64,13 @@ import org.apache.spark.util.Utils
  * results by row, and the joined rows are converted back to
  * [[ColumnarBatch]]. Input batches without rows are released and skipped, so
  * that the UDFs are not called with empty input, as on the row path.
+ *
+ * With [[rowOutput]], the input is handled in the same way, but the joined
+ * rows are returned as they are, and without pass-through columns, the rows of
+ * the result batches, each of which is released with closeIfFreeable once its
+ * rows have been returned, as [[org.apache.spark.sql.execution.ColumnarToRowExec]]
+ * does. So a row-based parent gets the rows without the round trip through
+ * columnar batches.
  *
  * TODO: Add a physical plan rule that inserts a ProjectExec before
  *   ArrowEvalPythonExec to pre-evaluate complex UDF input expressions
@@ -90,10 +99,47 @@ private[python] class ColumnarArrowEvalPythonEvaluatorFactory(
 
   override def createEvaluator()
       : PartitionEvaluator[ColumnarBatch, ColumnarBatch] =
-    new ColumnarArrowEvalPythonPartitionEvaluator
+    new PartitionEvaluator[ColumnarBatch, ColumnarBatch] {
+      override def eval(
+          partitionIndex: Int,
+          iters: Iterator[ColumnarBatch]*): Iterator[ColumnarBatch] = {
+        val evaluation = new ColumnarArrowEvalPython
+        evaluation.evaluate(iters.head) match {
+          case Left(resultBatches) => resultBatches
+          case Right(joinedRows) => evaluation.rowsToColumnarBatches(joinedRows, TaskContext.get())
+        }
+      }
+    }
 
-  private class ColumnarArrowEvalPythonPartitionEvaluator
-      extends PartitionEvaluator[ColumnarBatch, ColumnarBatch] {
+  /** The same evaluation, which returns the output as unsafe rows. */
+  def rowOutput: PartitionEvaluatorFactory[ColumnarBatch, InternalRow] =
+    new PartitionEvaluatorFactory[ColumnarBatch, InternalRow] {
+      override def createEvaluator(): PartitionEvaluator[ColumnarBatch, InternalRow] =
+        new PartitionEvaluator[ColumnarBatch, InternalRow] {
+          override def eval(
+              partitionIndex: Int,
+              iters: Iterator[ColumnarBatch]*): Iterator[InternalRow] = {
+            new ColumnarArrowEvalPython().evaluate(iters.head) match {
+              case Left(resultBatches) =>
+                val toUnsafe = UnsafeProjection.create(resultOutput, resultOutput)
+                rowsOf(resultBatches).map(toUnsafe)
+              case Right(joinedRows) => joinedRows
+            }
+          }
+        }
+    }
+
+  /**
+   * Returns the rows of the batches, releasing each batch with closeIfFreeable once all its
+   * rows have been returned, before the next batch is requested, as ColumnarToRowExec does.
+   */
+  private def rowsOf(batches: Iterator[ColumnarBatch]): Iterator[InternalRow] =
+    batches.flatMap { batch =>
+      CompletionIterator[InternalRow, Iterator[InternalRow]](
+        batch.rowIterator().asScala, batch.closeIfFreeable())
+    }
+
+  private class ColumnarArrowEvalPython {
 
     private def collectFunctions(
         udf: PythonUDF
@@ -112,11 +158,14 @@ private[python] class ColumnarArrowEvalPythonEvaluatorFactory(
       }
     }
 
-    override def eval(
-        partitionIndex: Int,
-        iters: Iterator[ColumnarBatch]*
-    ): Iterator[ColumnarBatch] = {
-      val inputIter = iters.head
+    /**
+     * Evaluates the UDFs over the input batches. Without pass-through columns, returns the
+     * result batches from Python, otherwise the joined rows as unsafe rows, each valid until
+     * the next one is requested.
+     */
+    def evaluate(
+        inputIter: Iterator[ColumnarBatch]
+    ): Either[Iterator[ColumnarBatch], Iterator[UnsafeRow]] = {
       val context = TaskContext.get()
 
       val (pyFuncs, inputs) = udfs.map(collectFunctions).unzip
@@ -166,14 +215,14 @@ private[python] class ColumnarArrowEvalPythonEvaluatorFactory(
         // parent that takes columnar input, e.g. a stacked evaluation or the Arrow cache, gets
         // them at that size, as it gets the batches of any other columnar child. A stacked
         // evaluation does not split its input batches yet either.
-        evalPython(nonEmptyIter, context, pyFuncs, argMetas, allInputs.toSeq, udfInputSchema,
-          inputColumnIndices, onInputRow = None).map { batch =>
+        Left(evalPython(nonEmptyIter, context, pyFuncs, argMetas, allInputs.toSeq,
+          udfInputSchema, inputColumnIndices, onInputRow = None).map { batch =>
           validateOutputTypes(batch, outputTypes)
           batch
-        }
+        })
       } else {
-        evalWithRowQueue(nonEmptyIter, context, pyFuncs, argMetas,
-          allInputs.toSeq, udfInputSchema, outputTypes, inputColumnIndices)
+        Right(evalWithRowQueue(nonEmptyIter, context, pyFuncs, argMetas,
+          allInputs.toSeq, udfInputSchema, outputTypes, inputColumnIndices))
       }
     }
 
@@ -241,8 +290,8 @@ private[python] class ColumnarArrowEvalPythonEvaluatorFactory(
     }
 
     /**
-     * Uses HybridRowQueue for pass-through, joins rows, then
-     * converts back to ColumnarBatch via RowToColumnConverter.
+     * Uses HybridRowQueue for pass-through and joins the pass-through columns of each input
+     * row with its results.
      */
     private def evalWithRowQueue(
         inputIter: Iterator[ColumnarBatch],
@@ -253,7 +302,7 @@ private[python] class ColumnarArrowEvalPythonEvaluatorFactory(
         udfInputSchema: StructType,
         outputTypes: Seq[DataType],
         inputColumnIndices: Option[Array[Int]]
-    ): Iterator[ColumnarBatch] = {
+    ): Iterator[UnsafeRow] = {
 
       // In pipelined mode the queue's add() runs in the writer thread and remove() runs in
       // the task thread; use lock-free mode to skip per-row synchronization.
@@ -275,15 +324,12 @@ private[python] class ColumnarArrowEvalPythonEvaluatorFactory(
       val joined = new JoinedRow
       val resultProj = UnsafeProjection.create(output, output)
 
-      val rowIter = resultIter.flatMap { batch =>
+      rowsOf(resultIter.map { batch =>
         validateOutputTypes(batch, outputTypes)
-        batch.rowIterator.asScala
-      }.map { outputRow =>
+        batch
+      }).map { outputRow =>
         resultProj(joined(queue.remove(), outputRow))
       }
-
-      // Convert joined rows back to ColumnarBatch.
-      rowsToColumnarBatches(rowIter, context)
     }
 
     private def validateOutputTypes(
@@ -301,7 +347,7 @@ private[python] class ColumnarArrowEvalPythonEvaluatorFactory(
      * Converts rows back to ColumnarBatches, which stop at `batchSize` rows, unless it is not
      * positive, or once their rows reach `maxBytesPerBatch`. Each has at least one row.
      */
-    private def rowsToColumnarBatches(
+    def rowsToColumnarBatches(
         rowIter: Iterator[UnsafeRow],
         context: TaskContext): Iterator[ColumnarBatch] = {
       val converters = new RowToColumnConverter(outputSchema)

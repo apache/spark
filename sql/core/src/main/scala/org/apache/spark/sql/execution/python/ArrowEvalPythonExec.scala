@@ -120,15 +120,39 @@ case class ArrowEvalPythonExec(
   // bypassing the ColumnarToRow -> ArrowWriter round-trip. Each input batch is
   // released once it has been written to Python. Without pass-through columns,
   // the result batches from Python are returned as they are; otherwise the
-  // pass-through columns are copied as rows and joined with the results, which
-  // are converted back to columnar batches. This node then outputs only
-  // columnar batches, so the planner inserts a ColumnarToRowExec above it for
-  // a row-based parent.
+  // pass-through columns are copied as rows and joined with the results. This
+  // node then supports both columnar and row-based output: a columnar parent,
+  // e.g. a stacked evaluation or the Arrow cache, gets the joined rows converted
+  // back to columnar batches, and a row-based parent gets them as they are, or
+  // the rows of the result batches, with no ColumnarToRowExec in between.
   // Otherwise it reads rows from its child, even from one that also supports
-  // columnar, such as the scan of the Arrow cache. Either way, the choice is
-  // fixed when the plan is built.
-  override def supportsColumnar: Boolean =
+  // columnar, such as the scan of the Arrow cache.
+  // The choice is made once for this node, when the planner first asks for it,
+  // at the latest when it inserts the transitions, so that `doExecute` reads the
+  // child in the format the planner prepared it for, even if the configuration
+  // changes before the plan is executed.
+  private lazy val columnarInput: Boolean =
     child.supportsColumnar && conf.arrowPySparkUDFColumnarInputEnabled
+
+  override def supportsColumnar: Boolean = columnarInput
+
+  override def supportsRowBased: Boolean = true
+
+  override protected def doExecute(): RDD[InternalRow] = {
+    if (columnarInput) {
+      val inputRDD = child.executeColumnar()
+      val rowEvaluatorFactory = columnarEvaluatorFactory.rowOutput
+      if (conf.usePartitionEvaluator) {
+        inputRDD.mapPartitionsWithEvaluator(rowEvaluatorFactory)
+      } else {
+        inputRDD.mapPartitionsWithIndexInternal { (index, iter) =>
+          rowEvaluatorFactory.createEvaluator().eval(index, iter)
+        }
+      }
+    } else {
+      super.doExecute()
+    }
+  }
 
   override protected def doExecuteColumnar(): RDD[ColumnarBatch] = {
     val inputRDD = child.executeColumnar()

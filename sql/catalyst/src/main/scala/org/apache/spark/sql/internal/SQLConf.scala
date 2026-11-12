@@ -5777,8 +5777,9 @@ object SQLConf {
         "from upstream operators that produce ColumnarBatch. If the inputs of the UDFs " +
         "are plain column references, those of Arrow-backed batches are written to " +
         "Python directly, bypassing the ColumnarToRow and ArrowWriter conversion. The " +
-        "columns that the UDFs pass through are still converted to rows and back, " +
-        "which can cost more than leaving this disabled.")
+        "columns that the UDFs pass through are still copied as rows, and converted back " +
+        "to columnar batches for a columnar downstream operator, which can cost more " +
+        "than leaving this disabled.")
       .version("4.2.0")
       .withBindingPolicy(ConfigBindingPolicy.SESSION)
       .booleanConf
