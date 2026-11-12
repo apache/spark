@@ -61,7 +61,6 @@ db.lck
 build/*
 dist/*
 .*out
-.*out.java21
 .*ipr
 .*iws
 logs

@@ -18,7 +18,7 @@
 package org.apache.spark.ml.evaluation
 
 import org.apache.spark.annotation.Since
-import org.apache.spark.ml.linalg.{Vector, VectorUDT}
+import org.apache.spark.ml.linalg.{SQLDataTypes, Vector}
 import org.apache.spark.ml.param._
 import org.apache.spark.ml.param.shared._
 import org.apache.spark.ml.util._
@@ -115,7 +115,8 @@ class BinaryClassificationEvaluator @Since("1.4.0") (@Since("1.4.0") override va
   @Since("3.1.0")
   def getMetrics(dataset: Dataset[_]): BinaryClassificationMetrics = {
     val schema = dataset.schema
-    SchemaUtils.checkColumnTypes(schema, $(rawPredictionCol), Seq(DoubleType, new VectorUDT))
+    SchemaUtils.checkColumnTypes(schema, $(rawPredictionCol),
+      Seq(DoubleType, SQLDataTypes.VectorType))
     SchemaUtils.checkNumericType(schema, $(labelCol))
     if (isDefined(weightCol)) {
       SchemaUtils.checkNumericType(schema, $(weightCol))

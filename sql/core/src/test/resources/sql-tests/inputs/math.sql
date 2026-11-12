@@ -70,6 +70,64 @@ SELECT bround(525L, -3);
 SELECT bround(9223372036854775807L, -1);
 SELECT bround(-9223372036854775808L, -1);
 
+-- Truncate with Byte input
+SELECT truncate(25y, 1);
+SELECT truncate(25y, 0);
+SELECT truncate(25y, -1);
+SELECT truncate(25y, -2);
+SELECT truncate(25y, -3);
+-- Truncate with negative Byte input: truncation is toward zero, unlike floor.
+SELECT truncate(-25y, 1);
+SELECT truncate(-25y, 0);
+SELECT truncate(-25y, -1);
+SELECT truncate(-25y, -2);
+SELECT truncate(-25y, -3);
+-- Truncate never overflows, unlike round: truncate(-128y, -1) is -120, not an overflow.
+SELECT truncate(127y, -1);
+SELECT truncate(-128y, -1);
+
+-- Truncate with short integer input
+SELECT truncate(525s, 1);
+SELECT truncate(525s, 0);
+SELECT truncate(525s, -1);
+SELECT truncate(525s, -2);
+SELECT truncate(525s, -3);
+-- Truncate with negative short integer input: truncation is toward zero, unlike floor.
+SELECT truncate(-525s, 1);
+SELECT truncate(-525s, 0);
+SELECT truncate(-525s, -1);
+SELECT truncate(-525s, -2);
+SELECT truncate(-525s, -3);
+
+-- Truncate with integer input
+SELECT truncate(525, 1);
+SELECT truncate(525, 0);
+SELECT truncate(525, -1);
+SELECT truncate(525, -2);
+SELECT truncate(525, -3);
+-- Truncate with negative integer input: truncation is toward zero, unlike floor.
+SELECT truncate(-525, 1);
+SELECT truncate(-525, 0);
+SELECT truncate(-525, -1);
+SELECT truncate(-525, -2);
+SELECT truncate(-525, -3);
+
+-- Truncate with big integer input
+SELECT truncate(525L, 1);
+SELECT truncate(525L, 0);
+SELECT truncate(525L, -1);
+SELECT truncate(525L, -2);
+SELECT truncate(525L, -3);
+-- Truncate with negative big integer input: truncation is toward zero, unlike floor.
+SELECT truncate(-525L, 1);
+SELECT truncate(-525L, 0);
+SELECT truncate(-525L, -1);
+SELECT truncate(-525L, -2);
+SELECT truncate(-525L, -3);
+
+-- Truncate with the scale argument omitted; it defaults to 0.
+SELECT truncate(1234.5678);
+
 -- Conv
 SELECT conv('100', 2, 10);
 SELECT conv(-10, 16, -10);

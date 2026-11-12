@@ -586,7 +586,9 @@ private[spark] case class GetShufflePushMergerLocations(shuffleId: Int)
   extends MapOutputTrackerMessage
 private[spark] case object StopMapOutputTracker extends MapOutputTrackerMessage
 
-private[spark] sealed trait MapOutputTrackerMasterMessage
+private[spark] sealed trait MapOutputTrackerMasterMessage {
+  def context: RpcCallContext
+}
 private[spark] case class GetMapOutputMessage(shuffleId: Int,
   context: RpcCallContext) extends MapOutputTrackerMasterMessage
 private[spark] case class GetMapAndMergeOutputMessage(shuffleId: Int,
@@ -799,7 +801,7 @@ private[spark] class MapOutputTrackerMaster(
     conf: SparkConf,
     private[spark] val broadcastManager: BroadcastManager,
     private[spark] val isLocal: Boolean)
-  extends MapOutputTracker(conf) {
+  extends MapOutputTracker(conf) with ShuffleOutputTrackerMaster {
 
   // The size at which we use Broadcast to send the map output statuses to the executors
   private val minSizeForBroadcast = conf.get(SHUFFLE_MAPOUTPUT_MIN_SIZE_FOR_BROADCAST).toInt
@@ -889,17 +891,33 @@ private[spark] class MapOutputTrackerMaster(
       }
     }
 
+    /**
+     * Replies to `message` with `error` after its handler threw. Without this reply the caller's
+     * ask stays pending until its RPC timeout expires. Never throws, so a failing reply cannot
+     * kill the MessageLoop thread.
+     */
+    private def replyFailure(message: MapOutputTrackerMasterMessage, error: Throwable): Unit = {
+      try {
+        message.context.sendFailure(error)
+      } catch {
+        case NonFatal(e) =>
+          logWarning(log"Failed to send the failure reply for " +
+            log"${MDC(CLASS_NAME, message.getClass.getSimpleName)}", e)
+      }
+    }
+
     override def run(): Unit = {
       try {
         while (true) {
-          try {
-            val data = mapOutputTrackerMasterMessages.take()
-            if (data == PoisonPill) {
-              // Put PoisonPill back so that other MessageLoops can see it.
-              mapOutputTrackerMasterMessages.offer(PoisonPill)
-              return
-            }
+          // Taken outside the try below so that its catch can reply on the message's context.
+          val data = mapOutputTrackerMasterMessages.take()
+          if (data == PoisonPill) {
+            // Put PoisonPill back so that other MessageLoops can see it.
+            mapOutputTrackerMasterMessages.offer(PoisonPill)
+            return
+          }
 
+          try {
             data match {
               case GetMapOutputMessage(shuffleId, context) =>
                 handleStatusMessage(shuffleId, context, false)
@@ -912,7 +930,15 @@ private[spark] class MapOutputTrackerMaster(
                   .getOrElse(Seq.empty[BlockManagerId]))
             }
           } catch {
-            case NonFatal(e) => logError(log"${MDC(ERROR, e.getMessage)}", e)
+            case NonFatal(e) =>
+              logError(log"${MDC(ERROR, e.getMessage)}", e)
+              replyFailure(data, e)
+            case t: Throwable =>
+              // Answer the request before rethrowing, as the RPC Inbox does, so the caller sees
+              // the error instead of an RPC timeout. The rethrow ends this MessageLoop as before.
+              logError(log"${MDC(ERROR, t.getMessage)}", t)
+              replyFailure(data, t)
+              throw t
           }
         }
       } catch {
@@ -942,6 +968,10 @@ private[spark] class MapOutputTrackerMaster(
       }
     }
   }
+
+  // ShuffleOutputTrackerMaster: a regular shuffle has no per-job registration, so jobId is ignored.
+  override def registerShuffle(shuffleId: Int, numMaps: Int, numReduces: Int, jobId: Int): Unit =
+    registerShuffle(shuffleId, numMaps, numReduces)
 
   def updateMapOutput(shuffleId: Int, mapId: Long, bmAddress: BlockManagerId): Unit = {
     shuffleStatuses.get(shuffleId) match {
@@ -1030,7 +1060,7 @@ private[spark] class MapOutputTrackerMaster(
   }
 
   /** Unregister shuffle data */
-  def unregisterShuffle(shuffleId: Int): Unit = {
+  override def unregisterShuffle(shuffleId: Int): Unit = {
     shuffleStatuses.remove(shuffleId).foreach { shuffleStatus =>
       shuffleStatus.invalidateSerializedMapOutputStatusCache()
       shuffleStatus.invalidateSerializedMergeOutputStatusCache()
@@ -1077,7 +1107,7 @@ private[spark] class MapOutputTrackerMaster(
   }
 
   /** Check if the given shuffle is being tracked */
-  def containsShuffle(shuffleId: Int): Boolean = shuffleStatuses.contains(shuffleId)
+  override def containsShuffle(shuffleId: Int): Boolean = shuffleStatuses.contains(shuffleId)
 
   def getNumAvailableOutputs(shuffleId: Int): Int = {
     shuffleStatuses.get(shuffleId).map(_.numAvailableMapOutputs).getOrElse(0)

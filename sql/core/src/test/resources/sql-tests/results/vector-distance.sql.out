@@ -4,7 +4,7 @@ SELECT vector_cosine_similarity(array(1.0F, 2.0F, 3.0F), array(4.0F, 5.0F, 6.0F)
 -- !query schema
 struct<vector_cosine_similarity(array(1.0, 2.0, 3.0), array(4.0, 5.0, 6.0)):float>
 -- !query output
-0.9746319
+0.97463185
 
 
 -- !query
@@ -744,3 +744,75 @@ SELECT vector_l2_distance(
 struct<vector_l2_distance(array(1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0, 8.0, 9.0, 10.0, 11.0, 12.0, 13.0, 14.0, 15.0, 16.0), array(16.0, 15.0, 14.0, 13.0, 12.0, 11.0, 10.0, 9.0, 8.0, 7.0, 6.0, 5.0, 4.0, 3.0, 2.0, 1.0)):float>
 -- !query output
 36.878178
+
+
+-- !query
+SELECT vector_cosine_similarity(array(3.0e19F, 4.0e19F), array(3.0e19F, 4.0e19F))
+-- !query schema
+struct<vector_cosine_similarity(array(3.0E19, 4.0E19), array(3.0E19, 4.0E19)):float>
+-- !query output
+1.0
+
+
+-- !query
+SELECT vector_cosine_similarity(array(3.0e19F, 4.0e19F), array(-3.0e19F, -4.0e19F))
+-- !query schema
+struct<vector_cosine_similarity(array(3.0E19, 4.0E19), array(-3.0E19, -4.0E19)):float>
+-- !query output
+-1.0
+
+
+-- !query
+SELECT vector_inner_product(array(1.0e20F, 1.0e20F), array(1.0e20F, -1.0e20F))
+-- !query schema
+struct<vector_inner_product(array(1.0E20, 1.0E20), array(1.0E20, -1.0E20)):float>
+-- !query output
+0.0
+
+
+-- !query
+SELECT vector_l2_distance(array(3.0e19F, 4.0e19F), array(0.0F, 0.0F))
+-- !query schema
+struct<vector_l2_distance(array(3.0E19, 4.0E19), array(0.0, 0.0)):float>
+-- !query output
+5.0E19
+
+
+-- !query
+SELECT vector_cosine_similarity(array(1.0e-23F, 0.0F), array(1.0e-23F, 0.0F))
+-- !query schema
+struct<vector_cosine_similarity(array(1.0E-23, 0.0), array(1.0E-23, 0.0)):float>
+-- !query output
+1.0
+
+
+-- !query
+SELECT vector_cosine_similarity(array(1.0e-23F, 1.0e-23F), array(1.0e-23F, -1.0e-23F))
+-- !query schema
+struct<vector_cosine_similarity(array(1.0E-23, 1.0E-23), array(1.0E-23, -1.0E-23)):float>
+-- !query output
+0.0
+
+
+-- !query
+SELECT vector_cosine_similarity(array(float('inf'), 1.0F), array(1.0F, 1.0F))
+-- !query schema
+struct<vector_cosine_similarity(array(inf, 1.0), array(1.0, 1.0)):float>
+-- !query output
+NaN
+
+
+-- !query
+SELECT vector_inner_product(array(float('inf'), 1.0F), array(1.0F, 1.0F))
+-- !query schema
+struct<vector_inner_product(array(inf, 1.0), array(1.0, 1.0)):float>
+-- !query output
+Infinity
+
+
+-- !query
+SELECT vector_l2_distance(array(float('inf'), 1.0F), array(0.0F, 0.0F))
+-- !query schema
+struct<vector_l2_distance(array(inf, 1.0), array(0.0, 0.0)):float>
+-- !query output
+Infinity

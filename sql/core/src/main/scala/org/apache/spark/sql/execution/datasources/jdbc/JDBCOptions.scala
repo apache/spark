@@ -29,6 +29,7 @@ import org.apache.spark.internal.Logging
 import org.apache.spark.sql.catalyst.util.CaseInsensitiveMap
 import org.apache.spark.sql.errors.QueryExecutionErrors
 import org.apache.spark.sql.internal.SQLConf
+import org.apache.spark.sql.jdbc.JdbcDialects
 import org.apache.spark.sql.types.TimestampNTZType
 import org.apache.spark.util.Utils
 
@@ -255,10 +256,38 @@ class JDBCOptions(
       .map(_.toBoolean)
       .getOrElse(SQLConf.get.timestampType == TimestampNTZType)
 
+  // Infers driver TIMESTAMP columns that report a sub-microsecond fractional-second scale (7-9)
+  // as the nanosecond-capable timestamp types TIMESTAMP_NTZ(p) / TIMESTAMP_LTZ(p). When disabled
+  // (the default) such columns keep the historical microsecond mapping. Only takes effect when the
+  // `spark.sql.timestampNanosTypes.enabled` preview flag is on.
+  val preferTimestampNanos =
+    parameters
+      .get(JDBC_PREFER_TIMESTAMP_NANOS)
+      .map(_.toBoolean)
+      .getOrElse(false)
+
+  private lazy val dialectTimestampNTZAsWallClock: Boolean =
+    JdbcDialects.get(url).timestampNTZAsWallClock
+
+  // Reads and writes TimestampNTZType values as java.time.LocalDateTime.
+  val timestampNTZAsWallClock: Boolean =
+    parameters
+      .get(JDBC_TIMESTAMP_NTZ_WALL_CLOCK)
+      .map(_.toBoolean)
+      .getOrElse(dialectTimestampNTZAsWallClock)
+
+  // Infers zoneless timestamp types as TimestampNTZType. Only honored by OracleDialect for now.
+  val zonelessTimestampAsNTZ: Boolean =
+    parameters
+      .get(JDBC_ZONELESS_TIMESTAMP_AS_NTZ)
+      .map(_.toBoolean)
+      .getOrElse(dialectTimestampNTZAsWallClock)
+
   val hint = parameters.get(JDBC_HINT_STRING).map(value => {
     require(value.matches("(?s)^/\\*\\+ .* \\*/$"),
       s"Invalid value `$value` for option `$JDBC_HINT_STRING`." +
-        s" It should start with `/*+ ` and end with ` */`.")
+        s" It should start with `/*+ ` and end with ` */`," +
+        s" for example `/*+ INDEX(t1 id_idx) */`.")
       s"$value "
     }).getOrElse("")
 
@@ -366,5 +395,8 @@ object JDBCOptions {
   val JDBC_CONNECTION_PROVIDER = newOption("connectionProvider")
   val JDBC_PREPARE_QUERY = newOption("prepareQuery")
   val JDBC_PREFER_TIMESTAMP_NTZ = newOption("preferTimestampNTZ")
+  val JDBC_PREFER_TIMESTAMP_NANOS = newOption("preferTimestampNanos")
   val JDBC_HINT_STRING = newOption("hint")
+  val JDBC_TIMESTAMP_NTZ_WALL_CLOCK = newOption("timestampNTZAsWallClock")
+  val JDBC_ZONELESS_TIMESTAMP_AS_NTZ = newOption("zonelessTimestampAsNTZ")
 }

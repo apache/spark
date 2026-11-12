@@ -20,6 +20,7 @@ package org.apache.spark.sql.catalyst.analysis
 import org.apache.spark.sql.catalyst.expressions.{Alias, Attribute, AttributeReference, EqualNullSafe, Expression, If, Literal, MetadataAttribute, Not, SubqueryExpression}
 import org.apache.spark.sql.catalyst.expressions.Literal.TrueLiteral
 import org.apache.spark.sql.catalyst.plans.logical.{Assignment, Expand, Filter, LogicalPlan, Project, ReplaceData, Union, UpdateTable, WriteDelta}
+import org.apache.spark.sql.catalyst.trees.TreePattern.UPDATE_TABLE
 import org.apache.spark.sql.catalyst.util.RowDeltaUtils._
 import org.apache.spark.sql.connector.catalog.SupportsRowLevelOperations
 import org.apache.spark.sql.connector.write.{RowLevelOperationTable, SupportsDelta}
@@ -34,7 +35,8 @@ import org.apache.spark.sql.types.IntegerType
  */
 object RewriteUpdateTable extends RewriteRowLevelCommand {
 
-  override def apply(plan: LogicalPlan): LogicalPlan = plan resolveOperators {
+  override def apply(plan: LogicalPlan): LogicalPlan = plan.resolveOperatorsWithPruning(
+    _.containsPattern(UPDATE_TABLE)) {
     case u @ UpdateTable(aliasedTable, assignments, cond)
         if u.resolved && u.rewritable && u.aligned =>
 
@@ -69,7 +71,10 @@ object RewriteUpdateTable extends RewriteRowLevelCommand {
     val metadataAttrs = resolveRequiredMetadataAttrs(relation, operationTable.operation)
 
     // construct a read relation and include all required metadata columns
-    val readRelation = buildRelationWithAttrs(relation, operationTable, metadataAttrs)
+    // as well as metadata columns referenced in the condition or assignments
+    val referencedMetadataAttrs = resolveReferencedMetadataAttrs(relation, cond +: assignments)
+    val readRelation = buildRelationWithAttrs(
+      relation, operationTable, metadataAttrs ++ referencedMetadataAttrs)
 
     // build a plan with updated and copied over records
     val query = buildReplaceDataUpdateProjection(readRelation, assignments, cond)
@@ -93,9 +98,12 @@ object RewriteUpdateTable extends RewriteRowLevelCommand {
     val metadataAttrs = resolveRequiredMetadataAttrs(relation, operationTable.operation)
 
     // construct a read relation and include all required metadata columns
+    // as well as metadata columns referenced in the condition or assignments
     // the same read relation will be used to read records that must be updated and copied over
     // the analyzer will take care of duplicated attr IDs
-    val readRelation = buildRelationWithAttrs(relation, operationTable, metadataAttrs)
+    val referencedMetadataAttrs = resolveReferencedMetadataAttrs(relation, cond +: assignments)
+    val readRelation = buildRelationWithAttrs(
+      relation, operationTable, metadataAttrs ++ referencedMetadataAttrs)
 
     // build a plan for updated records that match the condition
     val matchedRowsPlan = Filter(cond, readRelation)
@@ -161,7 +169,10 @@ object RewriteUpdateTable extends RewriteRowLevelCommand {
     val metadataAttrs = resolveRequiredMetadataAttrs(relation, operation)
 
     // construct a read relation and include all required metadata columns
-    val readRelation = buildRelationWithAttrs(relation, operationTable, metadataAttrs, rowIdAttrs)
+    // as well as metadata columns referenced in the condition or assignments
+    val referencedMetadataAttrs = resolveReferencedMetadataAttrs(relation, cond +: assignments)
+    val readRelation = buildRelationWithAttrs(
+      relation, operationTable, metadataAttrs ++ referencedMetadataAttrs, rowIdAttrs)
 
     // build a plan for updated records that match the condition
     val matchedRowsPlan = Filter(cond, readRelation)

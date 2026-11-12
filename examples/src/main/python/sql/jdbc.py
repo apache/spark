@@ -21,8 +21,8 @@ Run with:
   ./bin/spark-submit examples/src/main/python/sql/jdbc.py [jdbc_url]
 """
 import sys
-from pyspark.sql import SparkSession
 
+from pyspark.sql import SparkSession
 
 if __name__ == "__main__":
     if len(sys.argv) < 2:

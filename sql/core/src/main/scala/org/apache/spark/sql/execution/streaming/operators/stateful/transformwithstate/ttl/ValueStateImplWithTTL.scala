@@ -32,7 +32,7 @@ import org.apache.spark.sql.streaming.{TTLConfig, ValueState}
  * @param keyExprEnc - Spark SQL encoder for key
  * @param valEncoder - Spark SQL encoder for value
  * @param ttlConfig  - TTL configuration for values  stored in this state
- * @param batchTimestampMs - current batch processing timestamp.
+ * @param currentTimestampMs - function to get the current processing time timestamp.
  * @param prevBatchTimestampMs - batch timestamp from the previous micro-batch (exclusive).
  *                               Entries with expiration at or below this timestamp are assumed
  *                               to have been already cleaned up and will be skipped during
@@ -46,11 +46,11 @@ class ValueStateImplWithTTL[S](
     keyExprEnc: ExpressionEncoder[Any],
     valEncoder: ExpressionEncoder[Any],
     ttlConfig: TTLConfig,
-    batchTimestampMs: Long,
+    currentTimestampMs: () => Long,
     prevBatchTimestampMs: Option[Long] = None,
     metrics: Map[String, SQLMetric] = Map.empty)
   extends OneToOneTTLState(
-    stateName, store, keyExprEnc.schema, ttlConfig, batchTimestampMs,
+    stateName, store, keyExprEnc.schema, ttlConfig, currentTimestampMs,
     prevBatchTimestampMs, metrics) with ValueState[S] {
 
   private val stateTypesEncoder =
@@ -80,7 +80,7 @@ class ValueStateImplWithTTL[S](
       // Getting the 0th ordinal of the struct using valEncoder
       val resState = stateTypesEncoder.decodeValue(retRow)
 
-      if (!stateTypesEncoder.isExpired(retRow, batchTimestampMs)) {
+      if (!stateTypesEncoder.isExpired(retRow, currentTimestampMs())) {
         resState.asInstanceOf[S]
       } else {
         null.asInstanceOf[S]
@@ -95,7 +95,7 @@ class ValueStateImplWithTTL[S](
     val encodedKey = stateTypesEncoder.encodeGroupingKey()
 
     val ttlExpirationMs = StateTTL
-      .calculateExpirationTimeForDuration(ttlConfig.ttlDuration, batchTimestampMs)
+      .calculateExpirationTimeForDuration(ttlConfig.ttlDuration, currentTimestampMs())
     val encodedValue = stateTypesEncoder.encodeValue(newState, ttlExpirationMs)
 
     updatePrimaryAndSecondaryIndices(encodedKey, encodedValue, ttlExpirationMs)

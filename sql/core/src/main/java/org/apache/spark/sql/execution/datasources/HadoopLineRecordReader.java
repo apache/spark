@@ -141,7 +141,7 @@ public class HadoopLineRecordReader extends RecordReader<LongWritable, Text> {
                     // Try Spark's ZSTD decompression support. This is not available in Hadoop's
                     // version of LineRecordReader.
                     Option<InputStream> decompressedStreamOpt =
-                            HadoopCodecStreams.createZstdInputStream(file, fileIn);
+                            HadoopCodecStreams.createZstdInputStream(job, file, fileIn);
                     if (decompressedStreamOpt.isEmpty()) {
                         // File is either not ZSTD compressed or ZSTD codec is not available.
                         throw e;

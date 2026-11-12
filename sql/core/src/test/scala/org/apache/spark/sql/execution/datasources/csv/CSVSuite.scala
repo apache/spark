@@ -37,17 +37,19 @@ import org.apache.hadoop.io.compress.{CompressionCodecFactory, GzipCodec}
 import org.apache.logging.log4j.Level
 
 import org.apache.spark._
-import org.apache.spark.io.ZStdCompressionCodec
+import org.apache.spark.io.{HadoopCodecStreams, ZStdCompressionCodec}
 import org.apache.spark.sql._
 import org.apache.spark.sql.catalyst.csv.CSVOptions
 import org.apache.spark.sql.catalyst.expressions.ToStringBase
 import org.apache.spark.sql.catalyst.util.{CharsetProvider, DateTimeTestUtils, DateTimeUtils, HadoopCompressionCodec}
 import org.apache.spark.sql.errors.QueryExecutionErrors.toSQLId
 import org.apache.spark.sql.execution.datasources.CommonFileDataSourceSuite
+import org.apache.spark.sql.execution.datasources.v2.{DataSourceV2ScanRelation, FileScan}
 import org.apache.spark.sql.internal.{LegacyBehaviorPolicy, SQLConf}
 import org.apache.spark.sql.internal.SQLConf.BinaryOutputStyle
 import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.sql.types._
+import org.apache.spark.tags.ExtendedSQLTest
 
 abstract class CSVSuite
   extends SharedSparkSession
@@ -865,6 +867,80 @@ abstract class CSVSuite
         }
       }
     }
+  }
+
+  test("treatNullAsEmptyString write option wins over " +
+    "spark.sql.legacy.nullValueWrittenAsQuotedEmptyStringCsv for both values") {
+    // The written bytes are what a downstream consumer relies on to tell null from an actual
+    // empty string. Note Spark's own default CSV reader cannot distinguish them: it maps both a
+    // bare token and a quoted "" back to null (nullSafeDatum treats datum == nullValue ("") as
+    // null), so we assert on the raw file text rather than a read round trip.
+    // The option must win regardless of the session-level legacy config, so a single write can
+    // differentiate null from an actual empty string without changing the session default.
+    Seq("true", "false").foreach { confVal =>
+      withSQLConf(SQLConf.LEGACY_NULL_VALUE_WRITTEN_AS_QUOTED_EMPTY_STRING_CSV.key -> confVal) {
+        // treatNullAsEmptyString = false: null is a bare unquoted token, empty string stays "".
+        withTempPath { path =>
+          Seq(("Tesla", null: String, ""))
+            .toDF("make", "comment", "blank")
+            .write
+            .option("treatNullAsEmptyString", "false")
+            .csv(path.getCanonicalPath)
+          checkAnswer(spark.read.text(path.getCanonicalPath), Row("Tesla,,\"\""))
+        }
+        // treatNullAsEmptyString = true: null is written as the (quoted) empty value, so it is
+        // no longer distinguishable from an actual empty string.
+        withTempPath { path =>
+          Seq(("Tesla", null: String, ""))
+            .toDF("make", "comment", "blank")
+            .write
+            .option("treatNullAsEmptyString", "true")
+            .csv(path.getCanonicalPath)
+          checkAnswer(spark.read.text(path.getCanonicalPath), Row("Tesla,\"\",\"\""))
+        }
+      }
+    }
+  }
+
+  test("treatNullAsEmptyString is a no-op when a non-empty nullValue is set") {
+    // A non-empty nullValue is written verbatim, so the option has no observable effect,
+    // matching how the SQL config it overrides composes with nullValue.
+    Seq("true", "false").foreach { optVal =>
+      withTempPath { path =>
+        Seq(("Tesla", null: String, ""))
+          .toDF("make", "comment", "blank")
+          .write
+          .option("nullValue", "NULL")
+          .option("treatNullAsEmptyString", optVal)
+          .csv(path.getCanonicalPath)
+        checkAnswer(spark.read.text(path.getCanonicalPath), Row("Tesla,NULL,\"\""))
+      }
+    }
+  }
+
+  test("treatNullAsEmptyString handles null and invalid values") {
+    // An explicit null value behaves as if the option were absent (session config decides).
+    withTempPath { path =>
+      Seq(("Tesla", null: String, ""))
+        .toDF("make", "comment", "blank")
+        .write
+        .option("treatNullAsEmptyString", null)
+        .csv(path.getCanonicalPath)
+      checkAnswer(spark.read.text(path.getCanonicalPath), Row("Tesla,,\"\""))
+    }
+    // A non-boolean value raises a structured error naming the option.
+    checkError(
+      exception = intercept[SparkException] {
+        withTempPath { path =>
+          Seq(("Tesla", null: String, ""))
+            .toDF("make", "comment", "blank")
+            .write
+            .option("treatNullAsEmptyString", "yes")
+            .csv(path.getCanonicalPath)
+        }
+      },
+      condition = "_LEGACY_ERROR_TEMP_2147",
+      parameters = Map("paramName" -> "treatNullAsEmptyString"))
   }
 
   test("save csv with compression codec option") {
@@ -3094,6 +3170,41 @@ abstract class CSVSuite
     }
   }
 
+  test("SPARK-58946: reject empty or non-letter file extensions") {
+    Seq("", "ab1", "a/b").foreach { ext =>
+      withTempPath { path =>
+        checkError(
+          exception = intercept[SparkIllegalArgumentException] {
+            spark.range(1).write.option("extension", ext).csv(path.getAbsolutePath)
+          },
+          condition = "INVALID_PARAMETER_VALUE.EXTENSION",
+          parameters = Map(
+            "functionName" -> "`csv`",
+            "parameter" -> "`extension`",
+            "invalidValue" -> s"`$ext`"))
+      }
+    }
+  }
+
+  test("SPARK-58946: allow alphabetic file extensions of arbitrary length") {
+    Seq("a", "abcd").foreach { ext =>
+      withTempPath { path =>
+        val input = Seq(
+          "1423-11-12T23:41:00",
+          "1765-03-28",
+          "2016-01-28T20:00:00"
+        ).toDF().repartition(1)
+        input.write.option("extension", ext).csv(path.getAbsolutePath)
+
+        val files = Files.list(path.toPath)
+          .iterator().asScala.map(_.getFileName.toString)
+          .toList.filter(_.endsWith(s".$ext"))
+
+        assert(files.size == 1)
+      }
+    }
+  }
+
   test("SPARK-50616: We can write with a tsv file extension") {
     withTempPath { path =>
       val input = Seq(
@@ -3341,7 +3452,7 @@ abstract class CSVSuite
   }
 
   test("validate CSV Options") {
-    assert(CSVOptions.getAllOptions.size == 42)
+    assert(CSVOptions.getAllOptions.size == 45)
     // Please add validation on any new CSV options here
     assert(CSVOptions.isValidOption("header"))
     assert(CSVOptions.isValidOption("inferSchema"))
@@ -3371,6 +3482,7 @@ abstract class CSVSuite
     assert(CSVOptions.isValidOption("inputBufferSize"))
     assert(CSVOptions.isValidOption("columnNameOfCorruptRecord"))
     assert(CSVOptions.isValidOption("nullValue"))
+    assert(CSVOptions.isValidOption("treatNullAsEmptyString"))
     assert(CSVOptions.isValidOption("nanValue"))
     assert(CSVOptions.isValidOption("positiveInf"))
     assert(CSVOptions.isValidOption("negativeInf"))
@@ -3379,12 +3491,14 @@ abstract class CSVSuite
     assert(CSVOptions.isValidOption("encoding"))
     assert(CSVOptions.isValidOption("charset"))
     assert(CSVOptions.isValidOption("compression"))
+    assert(CSVOptions.isValidOption("decompression"))
     assert(CSVOptions.isValidOption("codec"))
     assert(CSVOptions.isValidOption("sep"))
     assert(CSVOptions.isValidOption("extension"))
     assert(CSVOptions.isValidOption("delimiter"))
     assert(CSVOptions.isValidOption("singleVariantColumn"))
     assert(CSVOptions.isValidOption("columnPruning"))
+    assert(CSVOptions.isValidOption("variantRespectInferSchema"))
     // Please add validation on any new CSV options with alternative here
     assert(CSVOptions.getAlternativeOption("sep").contains("delimiter"))
     assert(CSVOptions.getAlternativeOption("delimiter").contains("sep"))
@@ -3897,6 +4011,125 @@ abstract class CSVSuite
     }
   }
 
+  test("csv variant retains scalars as strings when inferSchema is disabled") {
+    withTempPath { path =>
+      val data =
+        """field 1,field2
+          |100,1.1
+          |2000-01-01,2000-01-01 01:02:03
+          |,true
+          |1e9,hello,extra
+          |missing
+          |""".stripMargin
+      Files.write(path.toPath, data.getBytes(StandardCharsets.UTF_8))
+
+      def checkSingleVariant(options: Map[String, String], expected: String*): Unit = {
+        val allOptions = options ++ Map("singleVariantColumn" -> "v")
+        checkAnswer(
+          spark.read.options(allOptions).csv(path.getCanonicalPath).selectExpr("cast(v as string)"),
+          expected.map(Row(_))
+        )
+      }
+
+      // A small partition size ensures each value is parsed independently and would otherwise get
+      // its type inferred.
+      withSQLConf(SQLConf.FILES_MAX_PARTITION_BYTES.key -> "10",
+        SQLConf.SESSION_LOCAL_TIMEZONE.key -> "UTC") {
+        // With variantRespectInferSchema on and inferSchema off, scalar values parse as string,
+        // while the null value (empty token) parses as a variant null. inferSchema defaults to
+        // false, so passing it explicitly and omitting it behave the same.
+        for (opts <- Seq(Map("variantRespectInferSchema" -> "true", "inferSchema" -> "false"),
+            Map("variantRespectInferSchema" -> "true"))) {
+          checkSingleVariant(opts,
+            """{"_c0":"field 1","_c1":"field2"}""",
+            """{"_c0":"100","_c1":"1.1"}""",
+            """{"_c0":"2000-01-01","_c1":"2000-01-01 01:02:03"}""",
+            """{"_c0":null,"_c1":"true"}""",
+            """{"_c0":"1e9","_c1":"hello","_c2":"extra"}""",
+            """{"_c0":"missing"}""")
+        }
+
+        // Explicitly enabling inference or disabling variantRespectInferSchema causes types
+        // to be inferred. Timestamps should be inferred correctly for all parsing modes.
+        for ((policy, timestampField) <- Seq(
+            "CORRECTED" -> "\"2000-01-01 01:02:03+00:00\"",
+            "LEGACY" -> "\"2000-01-01 01:02:03\"")) {
+          withSQLConf(SQLConf.LEGACY_TIME_PARSER_POLICY.key -> policy) {
+            // Explicitly enabling inference infers types even with variantRespectInferSchema on.
+            checkSingleVariant(Map("variantRespectInferSchema" -> "true", "inferSchema" -> "true"),
+              """{"_c0":"field 1","_c1":"field2"}""",
+              """{"_c0":100,"_c1":1.1}""",
+              s"""{"_c0":"2000-01-01","_c1":$timestampField}""",
+              """{"_c0":null,"_c1":true}""",
+              """{"_c0":1000000000,"_c1":"hello","_c2":"extra"}""",
+              """{"_c0":"missing"}""")
+
+            // variantRespectInferSchema defaults to false, so scalar types are inferred regardless
+            // of inferSchema.
+            checkSingleVariant(Map("inferSchema" -> "false"),
+              """{"_c0":"field 1","_c1":"field2"}""",
+              """{"_c0":100,"_c1":1.1}""",
+              s"""{"_c0":"2000-01-01","_c1":$timestampField}""",
+              """{"_c0":null,"_c1":true}""",
+              """{"_c0":1000000000,"_c1":"hello","_c2":"extra"}""",
+              """{"_c0":"missing"}""")
+          }
+        }
+      }
+
+      // Works with a header too: field names come from the header, values stay strings.
+      withSQLConf(SQLConf.SESSION_LOCAL_TIMEZONE.key -> "UTC") {
+        checkSingleVariant(
+          Map("header" -> "true", "variantRespectInferSchema" -> "true", "inferSchema" -> "false"),
+          """{"field 1":"100","field2":"1.1"}""",
+          """{"field 1":"2000-01-01","field2":"2000-01-01 01:02:03"}""",
+          """{"field 1":null,"field2":"true"}""",
+          """{"field 1":"1e9","field2":"hello"}""",
+          """{"field 1":"missing"}""")
+      }
+
+      // Values whose textual form is lost by type inference: leading zeros ("0001" -> 1), a leading
+      // sign ("+5" -> 5), and boolean case ("True" -> true). With retention on they are kept
+      // verbatim as strings; with it off they are inferred (the surprising default behavior).
+      val lossyData =
+        """0001,+5
+          |True,007
+          |""".stripMargin
+      Files.write(path.toPath, lossyData.getBytes(StandardCharsets.UTF_8))
+
+      withSQLConf(SQLConf.FILES_MAX_PARTITION_BYTES.key -> "10") {
+        checkSingleVariant(Map("variantRespectInferSchema" -> "true", "inferSchema" -> "false"),
+          """{"_c0":"0001","_c1":"+5"}""",
+          """{"_c0":"True","_c1":"007"}""")
+
+        checkSingleVariant(Map("inferSchema" -> "false"),
+          """{"_c0":1,"_c1":5}""",
+          """{"_c0":true,"_c1":7}""")
+      }
+    }
+  }
+
+  test("csv variant retains explicit schema with variantRespectInferSchema") {
+    // Explicit schemas with VariantType columns share a converter with singleVariantColumn,
+    // so retention applies there too. Check and assert the type using schema_of_variant.
+    withTempPath { path =>
+      Files.write(path.toPath, "1000,0001,'0001'\n".getBytes(StandardCharsets.UTF_8))
+      val schema = "c1 variant, c2 variant, c3 variant"
+      val exprs = Seq("schema_of_variant(c1)", "schema_of_variant(c2)", "schema_of_variant(c3)")
+
+      // With variantRespectInferSchema values should be treated as string
+      val retained = spark.read.schema(schema)
+        .options(Map("inferSchema" -> "false", "variantRespectInferSchema" -> "true"))
+        .csv(path.getCanonicalPath)
+      checkAnswer(retained.selectExpr(exprs: _*), Row("STRING", "STRING", "STRING"))
+
+      // Without variantRespectInferSchema values should be inferred. Integral values are
+      // inferred as BIGINT by default.
+      val inferred = spark.read.schema(schema).csv(path.getCanonicalPath)
+      checkAnswer(inferred.selectExpr(exprs: _*), Row("BIGINT", "BIGINT", "STRING"))
+    }
+  }
+
   test("write variant with csv is disallowed") {
     checkError(
       exception = intercept[AnalysisException] {
@@ -4072,6 +4305,195 @@ abstract class CSVSuite
       }
     }
   }
+
+  // Writes `data` to `file` compressed with `codec` (a short name; "" means no compression), using
+  // Spark's built-in Zstandard codec for zstd (which Hadoop may not be compiled with) and Hadoop's
+  // CompressionCodecFactory otherwise. The file name intentionally does NOT carry the codec's
+  // extension, so extension-based detection cannot pick the right codec and the
+  // `decompression` option is what makes the read succeed.
+  private def writeCompressed(file: File, data: String, codec: String): Unit = {
+    val codecFactory = new CompressionCodecFactory(spark.sessionState.newHadoopConf())
+    val os = new FileOutputStream(file)
+    val out = codec match {
+      case "" => os
+      case "zstd" | "zstandard" | "zst" =>
+        new ZStdCompressionCodec(sparkConf).compressedOutputStream(os)
+      case name => codecFactory.getCodecByName(name).createOutputStream(os)
+    }
+    out.write(data.getBytes(StandardCharsets.UTF_8))
+    out.close()
+  }
+
+  test("SPARK-60217 decompression option overrides file name extension") {
+    val numRecord = 100
+    val records = (1 to numRecord).map(i => (i, s"value_$i"))
+    // Every read-supported codec, including zstd/zstandard/zst which the writers do not support.
+    val codecs = HadoopCompressionCodec.values().map(_.lowerCaseName())
+      .filterNot(c => c == HadoopCompressionCodec.NONE.lowerCaseName() ||
+        c == HadoopCompressionCodec.UNCOMPRESSED.lowerCaseName()) ++ Seq("zstd", "zstandard", "zst")
+    for (multiLine <- Seq(true, false); codec <- codecs) {
+      withTempDir { dir =>
+        val data = ("id,value" +: records.map { case (id, v) => s"$id,$v" }).mkString("\n")
+        // Misleading `.csv` name (no codec suffix): extension-based detection would read it as
+        // plain text and fail. The `decompression` option forces the correct codec.
+        val file = new File(dir, "data.csv")
+        writeCompressed(file, data, codec)
+
+        val df = spark.read
+          .option("decompression", codec)
+          .option("header", "true")
+          .option("inferSchema", "true")
+          .option("multiLine", multiLine.toString)
+          .csv(file.getCanonicalPath)
+        checkAnswer(df, records.map { case (id, v) => Row(id, v) })
+      }
+    }
+  }
+
+  test("SPARK-60217 decompression option decides whether a file is split") {
+    val records = (1 to 2000).map(i => (i, s"value_$i"))
+    val data = records.map { case (id, v) => s"$id,$v" }.mkString("\n")
+    val bzip2 = HadoopCompressionCodec.BZIP2.lowerCaseName()
+    val gzip = HadoopCompressionCodec.GZIP.lowerCaseName()
+    // (codec the file is written with, file name, `decompression`, multiLine, whether it is split)
+    Seq(
+      // bzip2 is splittable even though the `.csv` name says nothing about it.
+      (bzip2, "data.csv", bzip2, false, true),
+      // bzip2 is splittable, but multiLine still reads each file as a single split.
+      (bzip2, "data.csv", bzip2, true, false),
+      // gzip is not splittable, so a forced gzip `.csv` file is read as a single split.
+      (gzip, "data.csv", gzip, false, false),
+      // `none` reads a plain file named `.gz` as-is, so it is split like any plain file.
+      ("", "data.csv.gz", HadoopCompressionCodec.NONE.lowerCaseName(), false, true)
+    ).foreach { case (writeCodec, name, readCodec, multiLine, split) =>
+      withTempDir { dir =>
+        val file = new File(dir, name)
+        writeCompressed(file, data, writeCodec)
+        withSQLConf(SQLConf.FILES_MAX_PARTITION_BYTES.key -> "256") {
+          val df = spark.read
+            .option("decompression", readCodec)
+            .option("multiLine", multiLine.toString)
+            .schema("id INT, value STRING")
+            .csv(file.getCanonicalPath)
+          val numPartitions = df.rdd.getNumPartitions
+          assert(if (split) numPartitions > 1 else numPartitions == 1,
+            s"decompression=$readCodec on $name, multiLine=$multiLine: $numPartitions partitions")
+          checkAnswer(df, records.map { case (id, v) => Row(id, v) })
+        }
+      }
+    }
+  }
+
+  test("SPARK-60217 decompression option accepts codec class names and any letter case") {
+    withTempDir { dir =>
+      val file = new File(dir, "data.csv")
+      writeCompressed(file, "1,a\n2,b", HadoopCompressionCodec.GZIP.lowerCaseName())
+      Seq(classOf[GzipCodec].getName, "GZIP", "GZip").foreach { codec =>
+        val df = spark.read
+          .option("decompression", codec)
+          .schema("id INT, value STRING")
+          .csv(file.getCanonicalPath)
+        checkAnswer(df, Seq(Row(1, "a"), Row(2, "b")))
+      }
+    }
+  }
+
+  test("SPARK-60217 decompression option in table options applies to table reads") {
+    withTempDir { dir =>
+      // A gzip-compressed file whose `.csv` name says nothing about its compression.
+      writeCompressed(
+        new File(dir, "data.csv"), "1,a\n2,b", HadoopCompressionCodec.GZIP.lowerCaseName())
+      withTable("t") {
+        sql(
+          s"""CREATE TABLE t (id INT, value STRING) USING csv
+             |OPTIONS (path '${dir.toURI}', decompression 'gzip')""".stripMargin)
+        checkAnswer(sql("SELECT * FROM t"), Seq(Row(1, "a"), Row(2, "b")))
+      }
+    }
+  }
+
+  test("SPARK-60217 decompression option applies to streaming reads") {
+    withTempDir { dir =>
+      // A gzip-compressed file whose `.csv` name says nothing about its compression.
+      writeCompressed(
+        new File(dir, "data.csv"), "1,a\n2,b", HadoopCompressionCodec.GZIP.lowerCaseName())
+      val query = spark.readStream
+        .option("decompression", HadoopCompressionCodec.GZIP.lowerCaseName())
+        .schema("id INT, value STRING")
+        .csv(dir.getCanonicalPath)
+        .writeStream
+        .format("memory")
+        .queryName("decompression_codec_stream")
+        .start()
+      try {
+        query.processAllAvailable()
+        checkAnswer(
+          spark.table("decompression_codec_stream"), Seq(Row(1, "a"), Row(2, "b")))
+      } finally {
+        query.stop()
+      }
+    }
+  }
+
+  test("SPARK-60217 decompression option none reads a file with a codec extension as-is") {
+    withTempDir { dir =>
+      // A plain-text CSV that happens to carry a `.gz` extension. Extension-based detection would
+      // try (and fail) to gunzip it; `decompression` = none must read the raw bytes.
+      val file = new File(dir, "plain.csv.gz")
+      writeCompressed(file, "id,value\n1,a\n2,b", "")
+
+      val df = spark.read
+        .option("decompression", HadoopCompressionCodec.NONE.lowerCaseName())
+        .option("header", "true")
+        .csv(file.getCanonicalPath)
+      checkAnswer(df, Seq(Row("1", "a"), Row("2", "b")))
+    }
+  }
+
+  test("SPARK-60217 decompression option rejects an invalid codec") {
+    checkErrorMatchPVals(
+      exception = intercept[SparkIllegalArgumentException] {
+        spark.read.option("decompression", "illegal").csv(testFile(carsFile)).collect()
+      },
+      condition = "CODEC_NOT_AVAILABLE.WITH_AVAILABLE_CODECS_SUGGESTION",
+      parameters = Map("codecName" -> "illegal", "availableCodecs" -> ".*zstd.*")
+    )
+  }
+
+  test("SPARK-60217 compression option does not force a codec on read") {
+    withTempDir { dir =>
+      // Unlike `decompression`, the write-side `compression` option (which may be persisted
+      // in a table's options) must not force a codec on read: a plain file is still read as-is.
+      val file = new File(dir, "plain.csv")
+      writeCompressed(file, "id,value\n1,a\n2,b", "")
+
+      val df = spark.read
+        .option("compression", HadoopCompressionCodec.GZIP.lowerCaseName())
+        .option("header", "true")
+        .csv(file.getCanonicalPath)
+      checkAnswer(df, Seq(Row("1", "a"), Row("2", "b")))
+    }
+  }
+
+  test("SPARK-60217 an inherited internal decompression codec key is not honored") {
+    withTempDir { dir =>
+      val file = new File(dir, "plain.csv")
+      writeCompressed(file, "id,value\n1,a\n2,b", "")
+      // Session confs are copied into the read's Hadoop conf; the read and the schema inference
+      // must unset the internal key since they did not set `decompression`, so the plain file is
+      // not gunzipped. multiLine inference reads the files through its own code path.
+      withSQLConf(HadoopCodecStreams.DECOMPRESSION_CODEC_CONF -> classOf[GzipCodec].getName) {
+        Seq(false, true).foreach { multiLine =>
+          val df = spark.read
+            .option("header", "true")
+            .option("inferSchema", "true")
+            .option("multiLine", multiLine.toString)
+            .csv(file.getCanonicalPath)
+          checkAnswer(df, Seq(Row(1, "a"), Row(2, "b")))
+        }
+      }
+    }
+  }
 }
 
 class CSVv1Suite extends CSVSuite {
@@ -4104,11 +4526,35 @@ class CSVv1Suite extends CSVSuite {
   }
 }
 
+@ExtendedSQLTest
 class CSVv2Suite extends CSVSuite {
   override protected def sparkConf: SparkConf =
     super
       .sparkConf
       .set(SQLConf.USE_V1_SOURCE_LIST, "")
+
+  test("SPARK-60217 unsplittable reason reports a forced decompression codec") {
+    withTempDir { dir =>
+      val file = new File(dir, "data.csv")
+      Files.write(file.toPath, "1,a".getBytes(StandardCharsets.UTF_8))
+      def reason(options: Map[String, String]): String = {
+        // A user schema skips inference, so the file is never actually decompressed.
+        val df = spark.read.options(options).schema("id INT, value STRING")
+          .csv(file.getCanonicalPath)
+        val scan = df.queryExecution.optimizedPlan.collectFirst {
+          case r: DataSourceV2ScanRelation => r.scan.asInstanceOf[FileScan]
+        }.get
+        scan.getFileUnSplittableReason(new Path(file.getCanonicalPath))
+      }
+      // The `.csv` name alone is splittable, so the forced codec is what prevents splitting.
+      assert(reason(Map("decompression" -> HadoopCompressionCodec.GZIP.lowerCaseName())) ==
+        "the file is compressed by unsplittable compression codec")
+      // A forced `none` keeps the file splittable, so multiLine is the reason.
+      assert(reason(Map(
+        "decompression" -> HadoopCompressionCodec.NONE.lowerCaseName(),
+        "multiLine" -> "true")) == "the csv datasource is set multiLine mode")
+    }
+  }
 
   test("test for FAILFAST parsing mode on CSV v2") {
     Seq(false, true).foreach { multiLine =>

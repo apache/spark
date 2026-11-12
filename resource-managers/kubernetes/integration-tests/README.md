@@ -142,7 +142,7 @@ The tests are tagged, and the set of tests to run can be controlled via the foll
 
 ## Customising the Build
 
-* `--java-version <version>` - Java version to build Spark and the tests with. The default is `17`.
+* `--java-version <version>` - Java version to build Spark and the tests with. The default is `21`.
 * `--hadoop-profile <profile>` - Hadoop Maven profile to build with. The default is `hadoop-3`.
 * `--skip-building-dependencies` - skip rebuilding the modules the integration tests depend on
   (drops Maven's `-am` flag). Useful for iterating when the current tree is already built.
@@ -413,13 +413,13 @@ The suite is tagged with `YuniKornTag` which is excluded by default via
 
 ## Requirements
 
-- Apache YuniKorn 1.8.0.
+- Apache YuniKorn 1.9.0.
 
 ## Installation
 
     helm repo add yunikorn https://apache.github.io/yunikorn-release
     helm repo update
-    helm install yunikorn yunikorn/yunikorn --namespace yunikorn --version 1.8.0 \
+    helm install yunikorn yunikorn/yunikorn --namespace yunikorn --version 1.9.0 \
         --create-namespace --set embedAdmissionController=false
 
 ## Run tests

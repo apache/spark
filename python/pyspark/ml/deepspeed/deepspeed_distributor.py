@@ -18,12 +18,12 @@ import json
 import sys
 import tempfile
 from typing import (
-    Union,
-    Callable,
-    List,
-    Dict,
-    Optional,
     Any,
+    Callable,
+    Dict,
+    List,
+    Optional,
+    Union,
 )
 
 from pyspark.ml.torch.distributor import TorchDistributor

@@ -117,6 +117,9 @@ class KryoSerializerSuite extends SparkFunSuite with SharedSparkContext {
     check(Array.empty[Int])
     check(Array(Array("1", "2"), Array("1", "2", "3", "4")))
     check(Array(Array(1.toByte)))
+    val javaMap = new java.util.HashMap[String, Int]()
+    javaMap.put("one", 1)
+    check(javaMap)
   }
 
   test("pairs") {

@@ -486,6 +486,26 @@ public class RemoteBlockPushResolverSuite {
   }
 
   @Test
+  public void testExecutorRegisterWithTraversalMergeDirRejected() throws IOException {
+    String testApp = "executorRegisterWithTraversalMergeDir";
+    Path[] activeLocalDirs = createLocalDirs(1);
+    IllegalArgumentException relative = assertThrows(IllegalArgumentException.class,
+      () -> registerExecutor(testApp, prepareLocalDirs(activeLocalDirs, MERGE_DIRECTORY),
+        "shuffleManager:{\"mergeDir\": \"../../other-tenant\", \"attemptId\": \"1\"}"));
+    assertTrue(relative.getMessage().contains("Invalid merge directory name"));
+
+    IllegalArgumentException absolute = assertThrows(IllegalArgumentException.class,
+      () -> registerExecutor(testApp, prepareLocalDirs(activeLocalDirs, MERGE_DIRECTORY),
+        "shuffleManager:{\"mergeDir\": \"/data/other-tenant\", \"attemptId\": \"1\"}"));
+    assertTrue(absolute.getMessage().contains("Invalid merge directory name"));
+
+    IllegalArgumentException dot = assertThrows(IllegalArgumentException.class,
+      () -> registerExecutor(testApp, prepareLocalDirs(activeLocalDirs, MERGE_DIRECTORY),
+        "shuffleManager:{\"mergeDir\": \"..\", \"attemptId\": \"1\"}"));
+    assertTrue(dot.getMessage().contains("Invalid merge directory name"));
+  }
+
+  @Test
   public void testExecutorRegistrationFromTwoAppAttempts() throws IOException {
     String testApp = "testExecutorRegistrationFromTwoAppAttempts";
     Path[] attempt1LocalDirs = createLocalDirs(1);

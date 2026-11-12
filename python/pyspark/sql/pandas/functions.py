@@ -20,13 +20,13 @@ import warnings
 from inspect import getfullargspec, signature
 from typing import get_type_hints
 
-from pyspark.util import PythonEvalType
+from pyspark.errors import PySparkTypeError, PySparkValueError
 from pyspark.sql.pandas.typehints import infer_eval_type
 from pyspark.sql.pandas.utils import require_minimum_pandas_version, require_minimum_pyarrow_version
 from pyspark.sql.types import DataType
 from pyspark.sql.udf import _create_udf
 from pyspark.sql.utils import is_remote
-from pyspark.errors import PySparkTypeError, PySparkValueError
+from pyspark.util import PythonEvalType
 
 
 class PandasUDFType:
@@ -1031,10 +1031,11 @@ def _create_vectorized_udf(f, returnType, evalType, kind):
 
 
 def _test() -> None:
-    import sys
     import doctest
-    from pyspark.sql import SparkSession
+    import sys
+
     import pyspark.sql.pandas.functions
+    from pyspark.sql import SparkSession
     from pyspark.testing.utils import have_pandas, have_pyarrow
 
     globs = pyspark.sql.column.__dict__.copy()

@@ -24,12 +24,12 @@ from pyspark.sql import Row
 from pyspark.sql.functions import col, lit
 from pyspark.sql.readwriter import DataFrameWriterV2
 from pyspark.sql.types import (
-    StructType,
-    StructField,
-    StringType,
-    BinaryType,
     ArrayType,
+    BinaryType,
     MapType,
+    StringType,
+    StructField,
+    StructType,
 )
 from pyspark.testing import assertDataFrameEqual
 from pyspark.testing.sqlutils import ReusedSQLTestCase
@@ -356,7 +356,8 @@ class ReadwriterV2TestsMixin:
 
     def check_partitioning_functions(self, tpe):
         import datetime
-        from pyspark.sql.functions.partitioning import years, months, days, hours, bucket
+
+        from pyspark.sql.functions.partitioning import bucket, days, hours, months, years
 
         df = self.spark.createDataFrame(
             [(1, datetime.datetime(2000, 1, 1), "foo")], ("id", "ts", "value")
@@ -374,7 +375,8 @@ class ReadwriterV2TestsMixin:
 
     def partitioning_functions_user_error(self):
         import datetime
-        from pyspark.sql.functions.partitioning import years, months, days, hours, bucket
+
+        from pyspark.sql.functions.partitioning import bucket, days, hours, months, years
 
         df = self.spark.createDataFrame(
             [(1, datetime.datetime(2000, 1, 1), "foo")], ("id", "ts", "value")
@@ -447,7 +449,16 @@ class ReadwriterV2TestsMixin:
 
 
 class ReadwriterTests(ReadwriterTestsMixin, ReusedSQLTestCase):
-    pass
+    # Classic only: Spark Connect's DataStreamReader.changes does not validate the argument type.
+    def test_streaming_changes_rejects_non_str_table_name(self):
+        with self.assertRaises(PySparkTypeError) as pe:
+            self.spark.readStream.changes(123)
+
+        self.check_error(
+            exception=pe.exception,
+            errorClass="NOT_EXPECTED_TYPE",
+            messageParameters={"arg_name": "tableName", "expected_type": "str", "arg_type": "int"},
+        )
 
 
 class ReadwriterV2Tests(ReadwriterV2TestsMixin, ReusedSQLTestCase):

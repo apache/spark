@@ -20,28 +20,26 @@ A worker for streaming query listener in Spark Connect.
 Usually this is ran on the driver side of the Spark Connect Server.
 """
 
-import os
 import json
-
-from pyspark.worker_util import get_sock_file_to_executor
-from pyspark.serializers import (
-    read_int,
-    write_int,
-    UTF8Deserializer,
-    CPickleSerializer,
-)
-from pyspark import worker
-from pyspark.sql.connect.session import SparkSession
-from pyspark.util import handle_worker_exception
+import os
 from typing import IO
 
-from pyspark.sql.streaming.listener import (
-    QueryStartedEvent,
-    QueryProgressEvent,
-    QueryTerminatedEvent,
-    QueryIdleEvent,
+from pyspark import worker
+from pyspark.serializers import (
+    CPickleSerializer,
+    UTF8Deserializer,
+    read_int,
+    write_int,
 )
-from pyspark.worker_util import check_python_version
+from pyspark.sql.connect.session import SparkSession
+from pyspark.sql.streaming.listener import (
+    QueryIdleEvent,
+    QueryProgressEvent,
+    QueryStartedEvent,
+    QueryTerminatedEvent,
+)
+from pyspark.util import handle_worker_exception
+from pyspark.worker_util import check_python_version, get_sock_file_to_executor
 
 pickle_ser = CPickleSerializer()
 utf8_deserializer = UTF8Deserializer()
@@ -79,7 +77,7 @@ def main(infile: IO, outfile: IO) -> None:
     listener._set_spark_session(spark_connect_session)
     assert listener.spark == spark_connect_session
 
-    def process(listener_event_str, listener_event_type):  # type: ignore[no-untyped-def]
+    def process(listener_event_str: str, listener_event_type: int) -> None:
         global spark
         listener_event = json.loads(listener_event_str)
         if listener_event_type == 0:

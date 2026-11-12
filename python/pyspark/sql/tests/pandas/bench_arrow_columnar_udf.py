@@ -38,8 +38,8 @@ Usage:
 """
 
 import argparse
-import sys
 import os
+import sys
 import time
 
 # Allow running from the Spark root directory.
@@ -48,8 +48,7 @@ sys.path.insert(0, os.path.join(os.path.dirname(__file__), "../../../../.."))
 import pandas as pd
 
 from pyspark.sql import SparkSession
-from pyspark.sql.functions import pandas_udf, col
-
+from pyspark.sql.functions import col, pandas_udf
 
 ARROW_SOURCE = "org.apache.spark.sql.execution.python.ArrowBackedDataSourceV2"
 

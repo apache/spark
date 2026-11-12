@@ -18,11 +18,23 @@
 package org.apache.spark.sql.catalyst.analysis
 
 import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
+import org.apache.spark.sql.connector.catalog.{CatalogPlugin, Identifier}
+import org.apache.spark.sql.util.CaseInsensitiveStringMap
 
 private[sql] trait RelationCache {
-  def lookup(nameParts: Seq[String], resolver: Resolver): Option[LogicalPlan]
+  def lookup(
+      catalog: CatalogPlugin,
+      ident: Identifier,
+      tableId: Option[String],
+      stateOptions: CaseInsensitiveStringMap): Option[LogicalPlan]
 }
 
 private[sql] object RelationCache {
-  val empty: RelationCache = (_, _) => None
+  val empty: RelationCache = (_, _, _, _) => None
 }
+
+/**
+ * A marker interface for tables whose cached relations must not be returned by shared relation
+ * cache lookups for their identifier, e.g. the built-in changelog table.
+ */
+private[sql] trait RelationCacheIneligible

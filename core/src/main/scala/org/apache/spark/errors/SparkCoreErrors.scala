@@ -107,19 +107,25 @@ private[spark] object SparkCoreErrors {
 
   def cannotUseMapSideCombiningWithArrayKeyError(): Throwable = {
     new SparkException(
-      errorClass = "_LEGACY_ERROR_TEMP_3008", messageParameters = Map.empty, cause = null
+      errorClass = "UNSUPPORTED_ARRAY_KEY.MAP_SIDE_COMBINE",
+      messageParameters = Map.empty,
+      cause = null
     )
   }
 
   def hashPartitionerCannotPartitionArrayKeyError(): Throwable = {
     new SparkException(
-      errorClass = "_LEGACY_ERROR_TEMP_3009", messageParameters = Map.empty, cause = null
+      errorClass = "UNSUPPORTED_ARRAY_KEY.HASH_PARTITIONER",
+      messageParameters = Map.empty,
+      cause = null
     )
   }
 
   def reduceByKeyLocallyNotSupportArrayKeysError(): Throwable = {
     new SparkException(
-      errorClass = "_LEGACY_ERROR_TEMP_3010", messageParameters = Map.empty, cause = null
+      errorClass = "UNSUPPORTED_ARRAY_KEY.REDUCE_BY_KEY_LOCALLY",
+      messageParameters = Map.empty,
+      cause = null
     )
   }
 
@@ -140,7 +146,7 @@ private[spark] object SparkCoreErrors {
   }
 
   def emptyCollectionError(): Throwable = {
-    new SparkUnsupportedOperationException("_LEGACY_ERROR_TEMP_3014")
+    new SparkUnsupportedOperationException("EMPTY_COLLECTION_NOT_ALLOWED")
   }
 
   def countByValueApproxNotSupportArraysError(): Throwable = {
@@ -151,22 +157,30 @@ private[spark] object SparkCoreErrors {
 
   def checkpointDirectoryHasNotBeenSetInSparkContextError(): Throwable = {
     new SparkException(
-      errorClass = "_LEGACY_ERROR_TEMP_3016", messageParameters = Map.empty, cause = null
+      errorClass = "CHECKPOINT_DIRECTORY_NOT_SET",
+      messageParameters = Map.empty,
+      cause = null
     )
   }
 
-  def invalidCheckpointFileError(path: Path): Throwable = {
+  def invalidCheckpointDirectoryError(
+      partitionFilePath: Path,
+      expectedFileName: String): Throwable = {
     new SparkException(
-      errorClass = "_LEGACY_ERROR_TEMP_3017",
-      messageParameters = Map("path" -> s"$path"),
+      errorClass = "INVALID_CHECKPOINT_DIRECTORY",
+      messageParameters = Map(
+        "path" -> s"${partitionFilePath.getParent}",
+        "expectedFileName" -> expectedFileName,
+        "fileName" -> partitionFilePath.getName
+      ),
       cause = null
     )
   }
 
   def failToCreateCheckpointPathError(checkpointDirPath: Path): Throwable = {
     new SparkException(
-      errorClass = "_LEGACY_ERROR_TEMP_3018",
-      messageParameters = Map("checkpointDirPath" -> s"$checkpointDirPath"),
+      errorClass = "FAILED_CREATE_CHECKPOINT_DIRECTORY",
+      messageParameters = Map("path" -> s"$checkpointDirPath"),
       cause = null
     )
   }
@@ -177,7 +191,7 @@ private[spark] object SparkCoreErrors {
       newRDDId: Int,
       newRDDLength: Int): Throwable = {
     new SparkException(
-      errorClass = "_LEGACY_ERROR_TEMP_3019",
+      errorClass = "CHECKPOINT_RDD_PARTITION_COUNT_MISMATCH",
       messageParameters = Map(
         "originalRDDId" -> s"$originalRDDId",
         "originalRDDLength" -> s"$originalRDDLength",
@@ -194,20 +208,21 @@ private[spark] object SparkCoreErrors {
   }
 
   def mustSpecifyCheckpointDirError(): Throwable = {
-    new SparkException(
-      errorClass = "_LEGACY_ERROR_TEMP_3020", messageParameters = Map.empty, cause = null
-    )
+    SparkException.internalError(
+      "SparkContext.checkpointDir is unset when creating ReliableRDDCheckpointData.")
   }
 
   def askStandaloneSchedulerToShutDownExecutorsError(e: Exception): Throwable = {
     new SparkException(
-      errorClass = "_LEGACY_ERROR_TEMP_3021", messageParameters = Map.empty, cause = e
+      errorClass = "SCHEDULER_BACKEND_SHUTDOWN_FAILED.EXECUTORS",
+      messageParameters = Map.empty, cause = e
     )
   }
 
   def stopStandaloneSchedulerDriverEndpointError(e: Exception): Throwable = {
     new SparkException(
-      errorClass = "_LEGACY_ERROR_TEMP_3022", messageParameters = Map.empty, cause = e
+      errorClass = "SCHEDULER_BACKEND_SHUTDOWN_FAILED.DRIVER_ENDPOINT",
+      messageParameters = Map.empty, cause = e
     )
   }
 
@@ -242,29 +257,26 @@ private[spark] object SparkCoreErrors {
   }
 
   def cannotRunSubmitMapStageOnZeroPartitionRDDError(): Throwable = {
-    new SparkException(
-      errorClass = "_LEGACY_ERROR_TEMP_3023", messageParameters = Map.empty, cause = null
-    )
+    SparkException.internalError("Can't run submitMapStage on RDD with 0 partitions.")
   }
 
   def accessNonExistentAccumulatorError(id: Long): Throwable = {
-    new SparkException(
-      errorClass = "_LEGACY_ERROR_TEMP_3024", messageParameters = Map("id" -> s"$id"), cause = null
-    )
+    SparkException.internalError(s"Attempted to access non-existent accumulator $id.")
   }
 
   def sendResubmittedTaskStatusForShuffleMapStagesOnlyError(): Throwable = {
-    new SparkException(
-      errorClass = "_LEGACY_ERROR_TEMP_3025", messageParameters = Map.empty, cause = null
-    )
+    SparkException.internalError(
+      "TaskSetManagers should only send Resubmitted task statuses for tasks in ShuffleMapStages.")
   }
 
   def nonEmptyEventQueueAfterTimeoutError(timeoutMillis: Long): Throwable = {
     new TimeoutException(s"The event queue is not empty after $timeoutMillis ms.")
   }
 
-  def durationCalledOnUnfinishedTaskError(): Throwable = {
-    new SparkUnsupportedOperationException("_LEGACY_ERROR_TEMP_3026")
+  def durationCalledOnUnfinishedTaskError(className: String, methodName: String): Throwable = {
+    new SparkUnsupportedOperationException(
+      errorClass = "UNSUPPORTED_CALL.TASK_NOT_FINISHED",
+      messageParameters = Map("className" -> className, "methodName" -> methodName))
   }
 
   def sparkError(errorMsg: String): Throwable = {
@@ -277,7 +289,7 @@ private[spark] object SparkCoreErrors {
 
   def clusterSchedulerError(message: String): Throwable = {
     new SparkException(
-      errorClass = "_LEGACY_ERROR_TEMP_3029",
+      errorClass = "CLUSTER_MANAGER_APPLICATION_FAILURE",
       messageParameters = Map("message" -> message),
       cause = null
     )
@@ -292,22 +304,13 @@ private[spark] object SparkCoreErrors {
   }
 
   def taskHasNotLockedBlockError(currentTaskAttemptId: Long, blockId: BlockId): Throwable = {
-    new SparkException(
-      errorClass = "_LEGACY_ERROR_TEMP_3030",
-      messageParameters = Map(
-        "currentTaskAttemptId" -> s"$currentTaskAttemptId",
-        "blockId" -> s"$blockId"
-      ),
-      cause = null
-    )
+    SparkException.internalError(
+      s"Task $currentTaskAttemptId has not locked block $blockId for writing.",
+      category = "STORAGE")
   }
 
   def blockDoesNotExistError(blockId: BlockId): Throwable = {
-    new SparkException(
-      errorClass = "_LEGACY_ERROR_TEMP_3031",
-      messageParameters = Map("blockId" -> s"$blockId"),
-      cause = null
-    )
+    SparkException.internalError(s"Block $blockId does not exist.", category = "STORAGE")
   }
 
   def cannotSaveBlockOnDecommissionedExecutorError(blockId: BlockId): Throwable = {
@@ -315,54 +318,47 @@ private[spark] object SparkCoreErrors {
   }
 
   def waitingForReplicationToFinishError(e: Throwable): Throwable = {
-    new SparkException(
-      errorClass = "_LEGACY_ERROR_TEMP_3032", messageParameters = Map.empty, cause = e
-    )
+    SparkException.internalError("Error occurred while waiting for replication to finish.", e)
   }
 
   def unableToRegisterWithExternalShuffleServerError(e: Throwable): Throwable = {
     new SparkException(
-      errorClass = "_LEGACY_ERROR_TEMP_3033",
-      messageParameters = Map("message" -> e.getMessage),
+      errorClass = "UNABLE_TO_REGISTER_WITH_EXTERNAL_SHUFFLE_SERVICE",
+      messageParameters = Map("message" -> Option(e.getMessage).getOrElse(e.toString)),
       cause = e
     )
   }
 
   def waitingForAsyncReregistrationError(e: Throwable): Throwable = {
-    new SparkException(
-      errorClass = "_LEGACY_ERROR_TEMP_3034", messageParameters = Map.empty, cause = e
-    )
+    SparkException.internalError("Error occurred while waiting for async. reregistration.", e)
   }
 
-  def unexpectedShuffleBlockWithUnsupportedResolverError(
+  def shuffleBlockMigrationNotSupportedError(
+      blockId: BlockId,
       shuffleBlockResolver: ShuffleBlockResolver,
-      blockId: BlockId): Throwable = {
+      e: Throwable): Throwable = {
     new SparkException(
-      errorClass = "_LEGACY_ERROR_TEMP_3035",
+      errorClass = "SHUFFLE_BLOCK_MIGRATION_NOT_SUPPORTED",
       messageParameters = Map(
         "blockId" -> s"$blockId",
-        "shuffleBlockResolver" -> s"$shuffleBlockResolver"
+        "resolverClass" -> shuffleBlockResolver.getClass.getName
       ),
-      cause = null
+      cause = e
     )
   }
 
   def failToStoreBlockOnBlockManagerError(
       blockManagerId: BlockManagerId,
       blockId: BlockId): Throwable = {
-    new SparkException(
-      errorClass = "_LEGACY_ERROR_TEMP_3036",
-      messageParameters = Map(
-        "blockId" -> s"$blockId",
-        "blockManagerId" -> s"$blockManagerId"
-      ),
-      cause = null
-    )
+    SparkException.internalError(
+      s"Failed to store block $blockId on $blockManagerId. This mostly happens when there is " +
+        "not enough storage memory for the block and its storage level has no disk fallback.",
+      category = "STORAGE")
   }
 
-  def readLockedBlockNotFoundError(blockId: BlockId): Throwable = {
+  def localBlockDataNotFoundError(blockId: BlockId): Throwable = {
     new SparkException(
-      errorClass = "_LEGACY_ERROR_TEMP_3037",
+      errorClass = "LOCAL_BLOCK_DATA_NOT_FOUND",
       messageParameters = Map(
         "blockId" -> s"$blockId"
       ),
@@ -371,13 +367,8 @@ private[spark] object SparkCoreErrors {
   }
 
   def failToGetBlockWithLockError(blockId: BlockId): Throwable = {
-    new SparkException(
-      errorClass = "_LEGACY_ERROR_TEMP_3038",
-      messageParameters = Map(
-        "blockId" -> s"$blockId"
-      ),
-      cause = null
-    )
+    SparkException.internalError(
+      s"get() failed for block $blockId even though we held a lock.", category = "STORAGE")
   }
 
   def blockNotFoundError(blockId: BlockId): Throwable = {
@@ -389,26 +380,19 @@ private[spark] object SparkCoreErrors {
   }
 
   def blockStatusQueryReturnedNullError(blockId: BlockId): Throwable = {
-    new SparkException(
-      errorClass = "_LEGACY_ERROR_TEMP_3039",
-      messageParameters = Map("blockId" -> s"$blockId"),
-      cause = null
-    )
+    SparkException.internalError(
+      s"BlockManager returned null for BlockStatus query: $blockId.", category = "STORAGE")
   }
 
-  def unexpectedBlockManagerMasterEndpointResultError(): Throwable = {
-    new SparkException(
-      errorClass = "_LEGACY_ERROR_TEMP_3040", messageParameters = Map.empty, cause = null
-    )
+  def unexpectedBlockManagerMasterEndpointResultError(message: Any): Throwable = {
+    SparkException.internalError(
+      s"BlockManagerMasterEndpoint returned false for message $message, expected true.",
+      category = "STORAGE")
   }
 
   def failToCreateDirectoryError(path: String, maxAttempts: Int): Throwable = {
     new IOException(
       s"Failed to create directory ${path} with permission 770 after $maxAttempts attempts!")
-  }
-
-  def unsupportedOperationError(): Throwable = {
-    new SparkUnsupportedOperationException("_LEGACY_ERROR_TEMP_3041")
   }
 
   def noSuchElementError(): Throwable = {
@@ -428,10 +412,10 @@ private[spark] object SparkCoreErrors {
 
   def failToGetNonShuffleBlockError(blockId: BlockId, e: Throwable): Throwable = {
     new SparkException(
-      errorClass = "_LEGACY_ERROR_TEMP_3042",
-      messageParameters = Map("blockId" -> s"$blockId"),
-      cause = e
-    )
+      errorClass = "INTERNAL_ERROR_STORAGE",
+      messageParameters = Map(
+        "message" -> s"Failed to get block $blockId, which is not a shuffle block."),
+      cause = e)
   }
 
   def graphiteSinkInvalidProtocolError(invalidProtocol: String): Throwable = {
@@ -448,12 +432,16 @@ private[spark] object SparkCoreErrors {
       cause = null)
   }
 
-  def outOfMemoryError(requestedBytes: Long, receivedBytes: Long): OutOfMemoryError = {
+  def outOfMemoryError(
+      requestedBytes: Long,
+      receivedBytes: Long,
+      consumerBreakdown: String): OutOfMemoryError = {
     new SparkOutOfMemoryError(
       "UNABLE_TO_ACQUIRE_MEMORY",
       Map(
         "requestedBytes" -> requestedBytes.toString,
-        "receivedBytes" -> receivedBytes.toString).asJava)
+        "receivedBytes" -> receivedBytes.toString,
+        "consumerBreakdown" -> consumerBreakdown).asJava)
   }
 
   def failedRenameTempFileError(srcFile: File, dstFile: File): Throwable = {

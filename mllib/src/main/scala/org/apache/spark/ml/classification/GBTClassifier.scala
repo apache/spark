@@ -22,7 +22,7 @@ import org.json4s.JsonDSL._
 
 import org.apache.spark.annotation.Since
 import org.apache.spark.internal.Logging
-import org.apache.spark.ml.linalg.{BLAS, DenseVector, SparseVector, Vector, Vectors}
+import org.apache.spark.ml.linalg.{DenseVector, SparseVector, Vector, Vectors}
 import org.apache.spark.ml.param.ParamMap
 import org.apache.spark.ml.regression.DecisionTreeRegressionModel
 import org.apache.spark.ml.tree._
@@ -32,10 +32,12 @@ import org.apache.spark.ml.util.DatasetUtils.extractInstances
 import org.apache.spark.ml.util.DefaultParamsReader.Metadata
 import org.apache.spark.ml.util.Instrumentation.instrumented
 import org.apache.spark.mllib.tree.configuration.{Algo => OldAlgo}
+import org.apache.spark.mllib.tree.loss.{ClassificationLoss => OldClassificationLoss}
 import org.apache.spark.mllib.tree.model.{GradientBoostedTreesModel => OldGBTModel}
 import org.apache.spark.sql._
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.types.StructType
+import org.apache.spark.storage.StorageLevel
 
 /**
  * Gradient-Boosted Trees (GBTs) (http://en.wikipedia.org/wiki/Gradient_boosting)
@@ -106,6 +108,10 @@ class GBTClassifier @Since("1.4.0") (
    */
   @Since("1.4.0")
   def setCheckpointInterval(value: Int): this.type = set(checkpointInterval, value)
+
+  /** @group expertSetParam */
+  @Since("4.4.0")
+  def setIntermediateStorageLevel(value: String): this.type = set(intermediateStorageLevel, value)
 
   /**
    * The impurity setting is ignored for GBT models.
@@ -188,17 +194,19 @@ class GBTClassifier @Since("1.4.0") (
     instr.logParams(this, labelCol, weightCol, featuresCol, predictionCol, leafCol,
       impurity, lossType, maxDepth, maxBins, maxIter, maxMemoryInMB, minInfoGain,
       minInstancesPerNode, minWeightFractionPerNode, seed, stepSize, subsamplingRate, cacheNodeIds,
-      checkpointInterval, featureSubsetStrategy, validationIndicatorCol, validationTol, thresholds)
+      checkpointInterval, featureSubsetStrategy, validationIndicatorCol, validationTol,
+      thresholds, intermediateStorageLevel)
     instr.logNumClasses(numClasses)
 
     val categoricalFeatures = MetadataUtils.getCategoricalFeatures(dataset.schema($(featuresCol)))
     val boostingStrategy = super.getOldBoostingStrategy(categoricalFeatures, OldAlgo.Classification)
+    val storageLevel = StorageLevel.fromString($(intermediateStorageLevel))
     val (baseLearners, learnerWeights) = if (withValidation) {
       GradientBoostedTrees.runWithValidation(trainDataset, validationDataset, boostingStrategy,
-        $(seed), $(featureSubsetStrategy), Some(instr))
+        $(seed), $(featureSubsetStrategy), Some(instr), storageLevel)
     } else {
       GradientBoostedTrees.run(trainDataset, boostingStrategy, $(seed), $(featureSubsetStrategy),
-        Some(instr))
+        Some(instr), storageLevel)
     }
     baseLearners.foreach(copyValues(_))
 
@@ -304,11 +312,73 @@ class GBTClassificationModel private[ml](
 
     val outputData = super.transform(dataset)
     if ($(leafCol).nonEmpty) {
-      val leafUDF = udf { features: Vector => predictLeaf(features) }
+      val localRootNodes = _trees.map(_.rootNode)
+      val leafUDF = udf { features: Vector =>
+        TreeEnsembleModel.predictLeaf(features, localRootNodes)
+      }
       outputData.withColumn($(leafCol), leafUDF(col($(featuresCol))),
         outputSchema($(leafCol)).metadata)
     } else {
       outputData
+    }
+  }
+
+  override protected def predictRawColumn(features: Column): Column = {
+    val localRootNodes = _trees.map(_.rootNode)
+    val localTreeWeights = _treeWeights.clone()
+    udf((features: Vector) =>
+      GBTClassificationModel.predictRaw(features, localRootNodes, localTreeWeights)
+    ).apply(features)
+  }
+
+  override protected def raw2probabilityColumn(rawPrediction: Column): Column = {
+    val localLoss = loss
+    udf((rawPrediction: Vector) =>
+      GBTClassificationModel.raw2probability(rawPrediction, localLoss)
+    ).apply(rawPrediction)
+  }
+
+  override protected def predictProbabilityColumn(features: Column): Column = {
+    val localRootNodes = _trees.map(_.rootNode)
+    val localTreeWeights = _treeWeights.clone()
+    val localLoss = loss
+    udf((features: Vector) => {
+      val rawPrediction =
+        GBTClassificationModel.predictRaw(features, localRootNodes, localTreeWeights)
+      GBTClassificationModel.raw2probability(rawPrediction, localLoss)
+    }).apply(features)
+  }
+
+  override protected def raw2predictionColumn(rawPrediction: Column): Column = {
+    if (isDefined(thresholds)) {
+      val localThresholds = getThresholds.clone()
+      val localLoss = loss
+      udf((rawPrediction: Vector) => {
+        val probability = GBTClassificationModel.raw2probability(rawPrediction, localLoss)
+        ProbabilisticClassificationModel.probability2prediction(probability, localThresholds)
+      }).apply(rawPrediction)
+    } else {
+      udf((rawPrediction: Vector) => rawPrediction.argmax.toDouble).apply(rawPrediction)
+    }
+  }
+
+  override protected def predictionColumn(features: Column): Column = {
+    val localRootNodes = _trees.map(_.rootNode)
+    val localTreeWeights = _treeWeights.clone()
+    if (isDefined(thresholds)) {
+      val localThresholds = getThresholds.clone()
+      val localLoss = loss
+      udf((features: Vector) => {
+        val rawPrediction =
+          GBTClassificationModel.predictRaw(features, localRootNodes, localTreeWeights)
+        val probability = GBTClassificationModel.raw2probability(rawPrediction, localLoss)
+        ProbabilisticClassificationModel.probability2prediction(probability, localThresholds)
+      }).apply(features)
+    } else {
+      udf((features: Vector) => {
+        val margin = TreeEnsembleModel.predictRaw(features, localRootNodes, localTreeWeights)
+        if (margin > 0.0) 1.0 else 0.0
+      }).apply(features)
     }
   }
 
@@ -317,13 +387,13 @@ class GBTClassificationModel private[ml](
     if (isDefined(thresholds)) {
       super.predict(features)
     } else {
-      if (margin(features) > 0.0) 1.0 else 0.0
+      if (TreeEnsembleModel.predictRaw(features, _trees, _treeWeights) > 0.0) 1.0 else 0.0
     }
   }
 
   @Since("3.0.0")
   override def predictRaw(features: Vector): Vector = {
-    val prediction: Double = margin(features)
+    val prediction = TreeEnsembleModel.predictRaw(features, _trees, _treeWeights)
     Vectors.dense(Array(-prediction, prediction))
   }
 
@@ -365,12 +435,6 @@ class GBTClassificationModel private[ml](
   lazy val featureImportances: Vector =
     TreeEnsembleModel.featureImportances(trees, numFeatures, perTreeNormalization = false)
 
-  /** Raw prediction for the positive class. */
-  private def margin(features: Vector): Double = {
-    val treePredictions = _trees.map(_.rootNode.predictImpl(features).prediction)
-    BLAS.nativeBLAS.ddot(getNumTrees, treePredictions, 1, _treeWeights, 1)
-  }
-
   /** (private[ml]) Convert to a model in the old API */
   private[ml] def toOld: OldGBTModel = {
     new OldGBTModel(OldAlgo.Classification, _trees.map(_.toOld), _treeWeights)
@@ -397,6 +461,23 @@ class GBTClassificationModel private[ml](
 
 @Since("2.0.0")
 object GBTClassificationModel extends MLReadable[GBTClassificationModel] {
+
+  private def predictRaw(
+      features: Vector,
+      rootNodes: Array[Node],
+      treeWeights: Array[Double]): Vector = {
+    val prediction = TreeEnsembleModel.predictRaw(features, rootNodes, treeWeights)
+    Vectors.dense(-prediction, prediction)
+  }
+
+  private def raw2probability(
+      rawPrediction: Vector,
+      loss: OldClassificationLoss): Vector = {
+    val probability = rawPrediction.copy.toDense
+    probability.values(0) = loss.computeProbability(probability.values(0))
+    probability.values(1) = 1.0 - probability.values(0)
+    probability
+  }
 
   private val numFeaturesKey: String = "numFeatures"
   private val numTreesKey: String = "numTrees"

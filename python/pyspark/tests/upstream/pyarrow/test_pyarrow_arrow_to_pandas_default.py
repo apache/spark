@@ -27,6 +27,10 @@ arguments (no types_mapper, no self_destruct, etc.), tracking:
 - How null values are handled (NaN, None, NaT, etc.)
 - Whether values are preserved correctly after conversion
 
+The shared ``_PyArrowToPandasTestBase`` holds the conversion helper and the source-array
+inventory, split into type-family group methods that these and the non-default tests
+reuse whole or by group.
+
 ## Golden File Cell Format
 
 Each cell uses the value@type format:
@@ -55,15 +59,15 @@ import unittest
 from decimal import Decimal
 
 from pyspark.loose_version import LooseVersion
-from pyspark.testing.utils import (
-    have_pyarrow,
-    have_pandas,
-    have_numpy,
-    pyarrow_requirement_message,
-    pandas_requirement_message,
-    numpy_requirement_message,
-)
 from pyspark.testing.goldenutils import GoldenFileTestMixin
+from pyspark.testing.utils import (
+    have_numpy,
+    have_pandas,
+    have_pyarrow,
+    numpy_requirement_message,
+    pandas_requirement_message,
+    pyarrow_requirement_message,
+)
 
 if have_pandas:
     import pandas as pd
@@ -71,23 +75,30 @@ if have_pyarrow:
     import pyarrow as pa
 
 
-@unittest.skipIf(
-    not have_pyarrow or not have_pandas or not have_numpy,
-    pyarrow_requirement_message or pandas_requirement_message or numpy_requirement_message,
-)
-class PyArrowArrayToPandasDefaultTests(GoldenFileTestMixin, unittest.TestCase):
+class _PyArrowToPandasTestBase(GoldenFileTestMixin, unittest.TestCase):
     """
-    Tests pa.Array.to_pandas() with default arguments via golden file comparison.
+    Shared machinery for pa.Array.to_pandas() golden file tests.
 
-    Covers all major Arrow types: integers, floats, bool, string, binary,
-    decimal, date, timestamp, duration, time, null, and nested types.
-    Each type is tested both without and with null values.
+    Holds the conversion helper and the source-array inventory, split into type-family
+    group methods reusable whole (via ``_build_source_arrays``) or one at a time, plus a
+    ``_chunked_sources`` layout group of ChunkedArrays (chunk count is orthogonal to
+    type).  Defines no ``test_*`` of its own.
     """
 
-    def _build_source_arrays(self):
-        """Build an ordered dict of named source PyArrow arrays for testing."""
-        import pyarrow as pa
+    def _to_pandas_cell(self, arr, **to_pandas_kwargs) -> str:
+        """
+        Convert ``arr`` via ``to_pandas(**to_pandas_kwargs)`` and format the
+        result as a golden-file cell, returning ``ERR@<ExceptionClass>`` if the
+        conversion raises.
+        """
+        try:
+            result = arr.to_pandas(**to_pandas_kwargs)
+        except Exception as e:
+            return f"ERR@{type(e).__name__}"
+        return self.repr_value(result, max_len=0)
 
+    def _numeric_sources(self):
+        """Integer, float, and boolean arrays."""
         sources = {}
 
         # =====================================================================
@@ -136,6 +147,12 @@ class PyArrowArrayToPandasDefaultTests(GoldenFileTestMixin, unittest.TestCase):
         sources["bool:nullable"] = pa.array([True, False, None], pa.bool_())
         sources["bool:empty"] = pa.array([], pa.bool_())
 
+        return sources
+
+    def _string_binary_sources(self):
+        """String, binary, and decimal arrays."""
+        sources = {}
+
         # =====================================================================
         # String types
         # =====================================================================
@@ -167,6 +184,12 @@ class PyArrowArrayToPandasDefaultTests(GoldenFileTestMixin, unittest.TestCase):
             [Decimal("1.23"), None, Decimal("4.56")], pa.decimal128(5, 2)
         )
         sources["decimal128:empty"] = pa.array([], pa.decimal128(5, 2))
+
+        return sources
+
+    def _temporal_sources(self):
+        """Date, timestamp, duration, and time arrays."""
+        sources = {}
 
         # =====================================================================
         # Date types
@@ -225,6 +248,12 @@ class PyArrowArrayToPandasDefaultTests(GoldenFileTestMixin, unittest.TestCase):
         sources["time64[ns]:standard"] = pa.array([t1, t2], pa.time64("ns"))
         sources["time64[ns]:nullable"] = pa.array([t1, None], pa.time64("ns"))
         sources["time64[ns]:empty"] = pa.array([], pa.time64("ns"))
+
+        return sources
+
+    def _nested_sources(self):
+        """Null, list, struct, map, and their nested combinations."""
+        sources = {}
 
         # =====================================================================
         # Null type
@@ -307,6 +336,12 @@ class PyArrowArrayToPandasDefaultTests(GoldenFileTestMixin, unittest.TestCase):
             pa.map_(pa.string(), pa.map_(pa.string(), pa.int64())),
         )
 
+        return sources
+
+    def _dictionary_sources(self):
+        """Dictionary-encoded arrays."""
+        sources = {}
+
         # =====================================================================
         # Dictionary type
         # =====================================================================
@@ -325,6 +360,97 @@ class PyArrowArrayToPandasDefaultTests(GoldenFileTestMixin, unittest.TestCase):
 
         return sources
 
+    def _chunked_sources(self):
+        """
+        ChunkedArray inputs covering the chunk-count axis.
+
+        pa.Array and pa.ChunkedArray share one ``to_pandas``, and Spark feeds a
+        ChunkedArray into it on the Table->columns path
+        (``python/pyspark/sql/pandas/conversion.py``): ``df.toPandas()`` builds one per
+        partition (no ``combine_chunks``), the empty-dataset branch uses
+        ``empty_table()`` (a single empty chunk), and the UDF paths ``combine_chunks()``
+        first (one chunk).  Chunk count is orthogonal to type, so these rows reuse a few
+        representative types and vary only how the values are split.
+        """
+        sources = {}
+
+        # =====================================================================
+        # Numeric chunk layouts (int64: the type most Spark columns reduce to)
+        # =====================================================================
+        sources["int64:zero-chunk"] = pa.chunked_array([], type=pa.int64())
+        sources["int64:empty-chunk"] = pa.chunked_array([pa.array([], pa.int64())])
+        sources["int64:single-chunk"] = pa.chunked_array([pa.array([1, 2, 3], pa.int64())])
+        sources["int64:multi-chunk"] = pa.chunked_array(
+            [pa.array([1, 2], pa.int64()), pa.array([3, 4], pa.int64())]
+        )
+        # Null in one chunk, not the other. Reachable via cogrouped applyInPandas, the
+        # one UDF path that does not combine_chunks() first.
+        sources["int64:multi-chunk-nullable"] = pa.chunked_array(
+            [pa.array([1, None], pa.int64()), pa.array([2], pa.int64())]
+        )
+        # Empty chunk between two non-empty ones: concatenation must skip it cleanly.
+        sources["int64:multi-chunk-with-empty"] = pa.chunked_array(
+            [pa.array([1, 2], pa.int64()), pa.array([], pa.int64()), pa.array([3], pa.int64())]
+        )
+        sources["float64:multi-chunk"] = pa.chunked_array(
+            [pa.array([1.5, 2.5], pa.float64()), pa.array([3.5], pa.float64())]
+        )
+
+        # =====================================================================
+        # Variable-width chunk layouts (offset buffers, not just values)
+        # =====================================================================
+        sources["string:single-chunk"] = pa.chunked_array([pa.array(["a", "b"], pa.string())])
+        sources["string:multi-chunk"] = pa.chunked_array(
+            [pa.array(["a", "b"], pa.string()), pa.array(["c"], pa.string())]
+        )
+        sources["string:multi-chunk-nullable"] = pa.chunked_array(
+            [pa.array(["a", None], pa.string()), pa.array(["c"], pa.string())]
+        )
+
+        # =====================================================================
+        # Nested chunk layouts (child arrays split across chunks)
+        # =====================================================================
+        sources["list<int64>:multi-chunk"] = pa.chunked_array(
+            [pa.array([[1, 2], [3]], pa.list_(pa.int64())), pa.array([[4]], pa.list_(pa.int64()))]
+        )
+        struct_type = pa.struct([("x", pa.int64()), ("y", pa.string())])
+        sources["struct:multi-chunk"] = pa.chunked_array(
+            [
+                pa.array([{"x": 1, "y": "a"}], struct_type),
+                pa.array([{"x": 2, "y": "b"}], struct_type),
+            ]
+        )
+
+        return sources
+
+    def _build_source_arrays(self):
+        """Build an ordered dict of named source PyArrow arrays for testing."""
+        sources = {}
+        for group in [
+            self._numeric_sources(),
+            self._string_binary_sources(),
+            self._temporal_sources(),
+            self._nested_sources(),
+            self._dictionary_sources(),
+            self._chunked_sources(),
+        ]:
+            sources.update(group)
+        return sources
+
+
+@unittest.skipIf(
+    not have_pyarrow or not have_pandas or not have_numpy,
+    pyarrow_requirement_message or pandas_requirement_message or numpy_requirement_message,
+)
+class PyArrowArrayToPandasDefaultTests(_PyArrowToPandasTestBase):
+    """
+    Tests pa.Array.to_pandas() with default arguments via golden file comparison.
+
+    Covers all major Arrow types: integers, floats, bool, string, binary,
+    decimal, date, timestamp, duration, time, null, and nested types.
+    Each type is tested both without and with null values.
+    """
+
     def test_to_pandas_default(self):
         """Test pa.Array.to_pandas() with default arguments against golden file."""
         sources = self._build_source_arrays()
@@ -340,6 +466,9 @@ class PyArrowArrayToPandasDefaultTests(GoldenFileTestMixin, unittest.TestCase):
                     ("string:nullable", "pandas series"): ("['hello', nan, 'world']@Series[str]"),
                     ("large_string:standard", "pandas series"): ("['hello', 'world']@Series[str]"),
                     ("large_string:nullable", "pandas series"): "['hello', nan]@Series[str]",
+                    ("string:single-chunk", "pandas series"): "['a', 'b']@Series[str]",
+                    ("string:multi-chunk", "pandas series"): "['a', 'b', 'c']@Series[str]",
+                    ("string:multi-chunk-nullable", "pandas series"): "['a', nan, 'c']@Series[str]",
                 }
             )
             # PyArrow 24 extends the pandas string dtype conversion to empty arrays.
@@ -356,11 +485,7 @@ class PyArrowArrayToPandasDefaultTests(GoldenFileTestMixin, unittest.TestCase):
             if col_name == "pyarrow array":
                 return self.repr_value(arr, max_len=0)
             else:
-                try:
-                    result = arr.to_pandas()
-                    return self.repr_value(result, max_len=0)
-                except Exception as e:
-                    return f"ERR@{type(e).__name__}"
+                return self._to_pandas_cell(arr)
 
         self.compare_or_generate_golden_matrix(
             row_names=row_names,

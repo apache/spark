@@ -17,6 +17,7 @@
 
 import pandas as pd
 
+from pyspark.errors import PySparkAssertionError
 from pyspark.pandas.indexes.base import Index
 from pyspark.pandas.utils import (
     lazy_property,
@@ -27,10 +28,9 @@ from pyspark.pandas.utils import (
 )
 from pyspark.testing.pandasutils import (
     PandasOnSparkTestCase,
-    _assert_pandas_equal,
     _assert_pandas_almost_equal,
+    _assert_pandas_equal,
 )
-from pyspark.errors import PySparkAssertionError
 
 some_global_variable = 0
 

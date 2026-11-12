@@ -16,15 +16,27 @@
  */
 package org.apache.spark.sql.execution.python.streaming
 
-import java.io.DataOutputStream
-import java.nio.channels.ServerSocketChannel
+import java.io.{DataOutputStream, InterruptedIOException}
+import java.net.{InetSocketAddress, Socket}
+import java.nio.ByteBuffer
+import java.nio.channels.{
+  AsynchronousCloseException,
+  ClosedByInterruptException,
+  ClosedChannelException,
+  ServerSocketChannel,
+  SocketChannel
+}
+import java.util.concurrent.atomic.AtomicReference
 
 import scala.collection.mutable
+import scala.concurrent.duration._
 
 import com.google.protobuf.ByteString
 import org.mockito.ArgumentMatchers.{any, argThat}
 import org.mockito.Mockito.{mock, times, verify, when}
+import org.mockito.invocation.InvocationOnMock
 import org.scalatest.BeforeAndAfterEach
+import org.scalatest.concurrent.Eventually.{eventually, timeout}
 
 import org.apache.spark.SparkFunSuite
 import org.apache.spark.sql.{Encoder, Row}
@@ -108,6 +120,34 @@ class TransformWithStateInPySparkStateServerSuite extends SparkFunSuite with Bef
       .thenReturn(Seq(getIntegerRow(1)))
     when(transformWithStateInPySparkDeserializer.readListElements(any, any))
       .thenReturn(Seq(getIntegerRow(1)))
+  }
+
+  test("run closes the accepted socket once the request loop ends") {
+    val acceptedSocket = mock(classOf[SocketChannel])
+    when(serverSocket.accept()).thenReturn(acceptedSocket)
+    when(acceptedSocket.socket()).thenReturn(mock(classOf[Socket]))
+    // Ends the request loop right away: this test is about the socket, not the requests.
+    when(acceptedSocket.isConnected).thenReturn(false)
+
+    stateServer.run()
+
+    verify(acceptedSocket).close()
+  }
+
+  test("run closes the accepted socket when the client disconnects") {
+    val acceptedSocket = mock(classOf[SocketChannel])
+    when(serverSocket.accept()).thenReturn(acceptedSocket)
+    when(acceptedSocket.socket()).thenReturn(mock(classOf[Socket]))
+    when(acceptedSocket.isConnected).thenReturn(true)
+    // Channels.newInputStream synchronizes on this before reading.
+    when(acceptedSocket.blockingLock()).thenReturn(new Object)
+    when(acceptedSocket.isBlocking).thenReturn(true)
+    // No bytes ever arrive, so the read hits EOF and the loop returns early.
+    when(acceptedSocket.read(any(classOf[ByteBuffer]))).thenReturn(-1)
+
+    stateServer.run()
+
+    verify(acceptedSocket).close()
   }
 
   test("set handle state") {
@@ -635,6 +675,100 @@ class TransformWithStateInPySparkStateServerSuite extends SparkFunSuite with Bef
     ).build()
     stateServer.handleUtilsRequest(message)
     verify(outputStream).writeInt(argThat((x: Int) => x > 0))
+  }
+
+  Seq(
+    ("InterruptedException", () => new InterruptedException()),
+    ("InterruptedIOException", () => new InterruptedIOException()),
+    ("ClosedByInterruptException", () => new ClosedByInterruptException())
+  ).foreach { case (name, newException) =>
+    test(s"run handles $name while waiting for the Python worker") {
+      Thread.interrupted()
+      val socket = mock(classOf[ServerSocketChannel])
+      when(socket.accept())
+        .thenAnswer((_: InvocationOnMock) => throw newException())
+
+      try {
+        newStateServer(socket).run()
+        assert(Thread.currentThread().isInterrupted)
+      } finally {
+        Thread.interrupted()
+      }
+
+      verify(statefulProcessorHandle).setHandleState(StatefulProcessorHandleState.CLOSED)
+      verify(outputStream, times(0)).writeInt(any[Int])
+    }
+  }
+
+  Seq(
+    ("AsynchronousCloseException", () => new AsynchronousCloseException()),
+    ("ClosedChannelException", () => new ClosedChannelException())
+  ).foreach { case (name, newException) =>
+    test(s"run handles $name while waiting for the Python worker") {
+      Thread.interrupted()
+      val socket = mock(classOf[ServerSocketChannel])
+      when(socket.accept())
+        .thenAnswer((_: InvocationOnMock) => throw newException())
+
+      newStateServer(socket).run()
+
+      assert(!Thread.currentThread().isInterrupted)
+      verify(statefulProcessorHandle).setHandleState(StatefulProcessorHandleState.CLOSED)
+      verify(outputStream, times(0)).writeInt(any[Int])
+    }
+  }
+
+  Seq(
+    ("before accept", true),
+    ("while blocked in accept", false)
+  ).foreach { case (name, interruptBeforeRun) =>
+    test(s"run handles real channel shutdown $name") {
+      val socket = ServerSocketChannel.open()
+      socket.bind(new InetSocketAddress("127.0.0.1", 0))
+      val failure = new AtomicReference[Throwable]()
+      val listener = new Thread(() => {
+        if (interruptBeforeRun) {
+          Thread.currentThread().interrupt()
+        }
+        try {
+          newStateServer(socket).run()
+        } catch {
+          case t: Throwable => failure.set(t)
+        }
+      })
+
+      try {
+        listener.start()
+        if (!interruptBeforeRun) {
+          eventually(timeout(10.seconds)) {
+            assert(listener.getStackTrace.exists(_.getMethodName == "accept"))
+          }
+          listener.interrupt()
+        }
+        socket.close()
+        listener.join(10000)
+
+        assert(!listener.isAlive)
+        assert(failure.get() == null)
+        assert(!socket.isOpen)
+        verify(statefulProcessorHandle).setHandleState(StatefulProcessorHandleState.CLOSED)
+        verify(outputStream, times(0)).writeInt(any[Int])
+      } finally {
+        listener.interrupt()
+        socket.close()
+        listener.join(10000)
+      }
+    }
+  }
+
+  private def newStateServer(
+      socket: ServerSocketChannel): TransformWithStateInPySparkStateServer = {
+    new TransformWithStateInPySparkStateServer(socket,
+      statefulProcessorHandle, groupingKeySchema, 2,
+      batchTimestampMs, eventTimeWatermarkForEviction,
+      outputStream, valueStateMap, transformWithStateInPySparkDeserializer,
+      listStateMap, mutable.HashMap[String, Iterator[Row]](), mapStateMap,
+      mutable.HashMap[String, Iterator[(Row, Row)]](), expiryTimerIter, listTimerMap)
   }
 
   private def getIntegerRow(value: Int): Row = {

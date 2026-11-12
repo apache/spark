@@ -388,13 +388,23 @@ private[sql] object HoursTransform {
 }
 
 private[sql] final case class LiteralValue[T](value: T, dataType: DataType) extends Literal[T] {
-  override def toString: String = dataType match {
-    case StringType => s"'${s"$value".replace("'", "''")}'"
-    case BinaryType =>
-      assert(value.isInstanceOf[Array[Byte]])
-      val bytes = value.asInstanceOf[Array[Byte]]
-      "0x" + HexFormat.of().withUpperCase().formatHex(bytes)
-    case _ => s"$value"
+  override def toString: String = {
+    if (value == null) {
+      "NULL"
+    } else {
+      dataType match {
+        // The StringType value pattern matches only UTF8_BINARY strings without a length
+        // constraint. Other collations and CHAR/VARCHAR are StringType instances that need the
+        // same quoting and escaping.
+        // Pattern predicates also rely on these quotes when extracting the literal contents.
+        case _: StringType => s"'${s"$value".replace("'", "''")}'"
+        case BinaryType =>
+          assert(value.isInstanceOf[Array[Byte]])
+          val bytes = value.asInstanceOf[Array[Byte]]
+          "0x" + HexFormat.of().withUpperCase().formatHex(bytes)
+        case _ => s"$value"
+      }
+    }
   }
 }
 

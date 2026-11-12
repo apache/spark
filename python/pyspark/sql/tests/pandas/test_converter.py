@@ -16,13 +16,14 @@
 #
 
 import unittest
+
 from pyspark.sql.types import (
     ArrayType,
     IntegerType,
     MapType,
+    Row,
     StringType,
     StructType,
-    Row,
 )
 from pyspark.testing.utils import (
     have_pandas,
@@ -32,10 +33,10 @@ from pyspark.testing.utils import (
 )
 
 if have_pandas:
-    import pandas as pd
     import numpy as np
-
+    import pandas as pd
     from pandas.testing import assert_series_equal
+
     from pyspark.sql.pandas.types import _create_converter_from_pandas, _create_converter_to_pandas
 
 if have_pyarrow:

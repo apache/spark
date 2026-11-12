@@ -17,9 +17,10 @@
 
 import operator
 import time
-from itertools import chain
 from datetime import datetime
+from itertools import chain
 from typing import (
+    TYPE_CHECKING,
     Any,
     Callable,
     Generic,
@@ -30,18 +31,17 @@ from typing import (
     Tuple,
     TypeVar,
     Union,
-    TYPE_CHECKING,
     cast,
     overload,
 )
 
-from py4j.protocol import Py4JJavaError
 from py4j.java_gateway import JavaObject
+from py4j.protocol import Py4JJavaError
 
-from pyspark.storagelevel import StorageLevel
-from pyspark.streaming.util import rddToFileName, TransformFunction
-from pyspark.core.rdd import portable_hash, RDD
+from pyspark.core.rdd import RDD, portable_hash
 from pyspark.resultiterable import ResultIterable
+from pyspark.storagelevel import StorageLevel
+from pyspark.streaming.util import TransformFunction, rddToFileName
 
 if TYPE_CHECKING:
     from pyspark.serializers import Serializer

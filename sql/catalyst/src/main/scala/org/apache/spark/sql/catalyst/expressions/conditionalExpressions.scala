@@ -33,6 +33,12 @@ import org.apache.spark.util.ArrayImplicits._
 // scalastyle:off line.size.limit
 @ExpressionDescription(
   usage = "_FUNC_(expr1, expr2, expr3) - If `expr1` evaluates to true, then returns `expr2`; otherwise returns `expr3`.",
+  arguments = """
+    Arguments:
+      * expr1 - A boolean expression evaluated as the condition.
+      * expr2 - The expression returned when `expr1` evaluates to true.
+      * expr3 - The expression returned when `expr1` evaluates to false or null.
+  """,
   examples = """
     Examples:
       > SELECT _FUNC_(1 < 2, 'a', 'b');
@@ -355,8 +361,14 @@ case class CaseWhen(
     //     } while (false);
     //     return caseWhenResultState;
     //   }
-    val codes = ctx.splitExpressionsWithCurrentInputs(
-      expressions = allConditions,
+    // Under whole stage codegen each method takes the input variables its own branches read in
+    // place of the row `i`, which is why each piece of code goes with the expressions of its
+    // branch; a piece whose inputs no method can take stays inline between the calls, which works
+    // because every piece leaves the same `do { } while (false)` with the same result state.
+    val codes = ctx.splitExpressionsWithSources(
+      pieces = allConditions.zip(
+        branches.map { case (condExpr, valueExpr) => Seq(condExpr, valueExpr) } ++
+          elseValue.map(Seq(_))),
       funcName = "caseWhen",
       returnType = CodeGenerator.JAVA_BYTE,
       makeSplitFunction = func =>

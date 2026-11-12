@@ -23,7 +23,7 @@ import java.util.Random
 import org.apache.spark.sql.SparkSession
 
 /**
- * Usage: GroupByTest [numMappers] [numKVPairs] [KeySize] [numReducers]
+ * Usage: SkewedGroupByTest [numMappers] [numKVPairs] [KeySize] [numReducers]
  */
 object SkewedGroupByTest {
   def main(args: Array[String]): Unit = {

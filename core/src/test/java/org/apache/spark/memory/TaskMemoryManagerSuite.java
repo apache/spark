@@ -18,6 +18,7 @@
 package org.apache.spark.memory;
 
 import java.io.IOException;
+import java.util.Objects;
 import java.util.concurrent.atomic.AtomicInteger;
 
 import org.junit.jupiter.api.Assertions;
@@ -151,6 +152,26 @@ public class TaskMemoryManagerSuite {
     }
   }
 
+  private static final class NonSpillingConsumer extends MemoryConsumer {
+    NonSpillingConsumer(TaskMemoryManager manager) {
+      super(manager, 1024L, MemoryMode.ON_HEAP);
+    }
+
+    void use(long size) {
+      used.getAndAdd(taskMemoryManager.acquireExecutionMemory(size, this));
+    }
+
+    void free(long size) {
+      used.getAndAdd(-size);
+      taskMemoryManager.releaseExecutionMemory(size, this);
+    }
+
+    @Override
+    public long spill(long size, MemoryConsumer trigger) {
+      return 0;
+    }
+  }
+
   private static final class NonSpillingAllocatingConsumer extends TestMemoryConsumer {
     private int spillAttempts;
     private MemoryBlock nestedPage;
@@ -164,6 +185,33 @@ public class TaskMemoryManagerSuite {
       spillAttempts++;
       nestedPage = taskMemoryManager.allocatePage(256, this);
       return 0;
+    }
+  }
+
+  /**
+   * A consumer with value-based equality and string representation: two instances on the same
+   * manager and memory mode are equal, share a hash code and print the same, even though they
+   * track memory independently.
+   */
+  private static final class ValueEqualConsumer extends TestMemoryConsumer {
+    ValueEqualConsumer(TaskMemoryManager memoryManager) {
+      super(memoryManager);
+    }
+
+    @Override
+    public boolean equals(Object other) {
+      return other instanceof ValueEqualConsumer that &&
+        taskMemoryManager == that.taskMemoryManager && getMode() == that.getMode();
+    }
+
+    @Override
+    public int hashCode() {
+      return Objects.hash(taskMemoryManager, getMode());
+    }
+
+    @Override
+    public String toString() {
+      return "ValueEqualConsumer";
     }
   }
 
@@ -839,6 +887,244 @@ public class TaskMemoryManagerSuite {
     c2.use(10);
     Assertions.assertEquals(10, c2.getUsed());  // spilled
     Assertions.assertEquals(80, c1.getUsed());  // not spilled
+  }
+
+  @Test
+  public void equalButDistinctConsumersAreAllSpilled() {
+    final TestMemoryManager memoryManager = new TestMemoryManager(new SparkConf());
+    memoryManager.limit(100);
+    final TaskMemoryManager manager = new TaskMemoryManager(memoryManager, 0);
+
+    ValueEqualConsumer c1 = new ValueEqualConsumer(manager);
+    ValueEqualConsumer c2 = new ValueEqualConsumer(manager);
+    Assertions.assertEquals(c1, c2);
+    TestMemoryConsumer c3 = new TestMemoryConsumer(manager);
+    c1.use(50);
+    c2.use(50);
+
+    // Both equal consumers must be offered for spilling to satisfy the request.
+    c3.use(100);
+    Assertions.assertEquals(0, c1.getUsed());
+    Assertions.assertEquals(0, c2.getUsed());
+    Assertions.assertEquals(100, c3.getUsed());
+
+    c3.free(100);
+    Assertions.assertEquals(0, manager.cleanUpAllAllocatedMemory());
+  }
+
+  @Test
+  public void equalButDistinctConsumerCanSelfSpill() {
+    final TestMemoryManager memoryManager = new TestMemoryManager(new SparkConf());
+    memoryManager.limit(100);
+    final TaskMemoryManager manager = new TaskMemoryManager(memoryManager, 0);
+
+    ValueEqualConsumer c1 = new ValueEqualConsumer(manager);
+    ValueEqualConsumer c2 = new ValueEqualConsumer(manager);
+    c1.use(50);
+    c1.free(50);
+    c2.use(100);
+
+    // The requesting consumer is spilled last, but it must still be spilled when no other
+    // consumer holds memory, even if an equal consumer was registered first.
+    c2.use(50);
+    Assertions.assertEquals(0, c1.getUsed());
+    Assertions.assertEquals(50, c2.getUsed());
+
+    c2.free(50);
+    Assertions.assertEquals(0, manager.cleanUpAllAllocatedMemory());
+  }
+
+  @Test
+  public void equalButDistinctConsumersAreAllSpilledForPageAllocation() {
+    final TestMemoryManager memoryManager = new TestMemoryManager(new SparkConf());
+    memoryManager.limit(5120);
+    final TestAllocator allocator = new TestAllocator(1);
+    final TaskMemoryManager manager = new TaskMemoryManager(memoryManager, 0, allocator);
+    ValueEqualConsumer c1 = new ValueEqualConsumer(manager);
+    ValueEqualConsumer c2 = new ValueEqualConsumer(manager);
+    final PageAllocatingConsumer requestingConsumer = new PageAllocatingConsumer(manager, 4096);
+    c1.use(512);
+    c2.use(512);
+
+    // The grant succeeds without spilling, so only the allocator-failure recovery path spills.
+    final MemoryBlock page = requestingConsumer.allocate(4096);
+    Assertions.assertNotNull(page);
+    Assertions.assertEquals(0, c1.getUsed());
+    Assertions.assertEquals(0, c2.getUsed());
+
+    requestingConsumer.freeAllocatedPage(page);
+    Assertions.assertEquals(0, manager.cleanUpAllAllocatedMemory());
+  }
+
+  @Test
+  public void equalButDistinctConsumersAreAllInMemoryConsumptionBreakdown() {
+    final TestMemoryManager memoryManager = new TestMemoryManager(new SparkConf());
+    memoryManager.limit(100);
+    final TaskMemoryManager manager = new TaskMemoryManager(memoryManager, 0);
+
+    ValueEqualConsumer c1 = new ValueEqualConsumer(manager);
+    ValueEqualConsumer c2 = new ValueEqualConsumer(manager);
+    c1.use(20);
+    c2.use(30);
+
+    String breakdown = manager.getMemoryConsumptionBreakdown();
+    Assertions.assertTrue(breakdown.contains("ValueEqualConsumer: 20.0 B"), breakdown);
+    Assertions.assertTrue(breakdown.contains("ValueEqualConsumer: 30.0 B"), breakdown);
+    Assertions.assertFalse(
+      breakdown.contains("(not attributed to a specific consumer)"), breakdown);
+
+    c1.free(20);
+    c2.free(30);
+    Assertions.assertEquals(0, manager.cleanUpAllAllocatedMemory());
+  }
+
+  @Test
+  public void memoryConsumptionBreakdownIsEmptyWhenThereIsNoMemoryToReport() {
+    final TestMemoryManager memoryManager = new TestMemoryManager(new SparkConf());
+    memoryManager.limit(100);
+    final TaskMemoryManager manager = new TaskMemoryManager(memoryManager, 0);
+    // The breakdown is empty only when the task holds neither attributed nor unattributed memory.
+    // A consumer that has never acquired memory must not appear in the breakdown.
+    new TestMemoryConsumer(manager);
+    Assertions.assertEquals(0, memoryManager.getExecutionMemoryUsageForTask(0));
+    Assertions.assertEquals("", manager.getMemoryConsumptionBreakdown());
+  }
+
+  @Test
+  public void memoryConsumptionBreakdownListsConsumersLargestFirst() {
+    final TestMemoryManager memoryManager = new TestMemoryManager(new SparkConf());
+    memoryManager.limit(100);
+    final TaskMemoryManager manager = new TaskMemoryManager(memoryManager, 0);
+
+    TestMemoryConsumer small = new TestMemoryConsumer(manager);
+    TestMemoryConsumer large = new TestMemoryConsumer(manager);
+    small.use(20);
+    large.use(60);
+
+    String breakdown = manager.getMemoryConsumptionBreakdown();
+    Assertions.assertTrue(breakdown.contains("grouped by consumer"), breakdown);
+    // The larger consumer is listed before the smaller one so the likely culprit surfaces first.
+    int largeIdx = breakdown.indexOf(large.toString());
+    int smallIdx = breakdown.indexOf(small.toString());
+    Assertions.assertTrue(largeIdx >= 0 && smallIdx >= 0, breakdown);
+    Assertions.assertTrue(largeIdx < smallIdx, breakdown);
+
+    small.free(20);
+    large.free(60);
+    Assertions.assertEquals(0, manager.cleanUpAllAllocatedMemory());
+  }
+
+  @Test
+  public void memoryConsumptionBreakdownCapsConsumersAndSummarizesTheRest() {
+    final SparkConf conf = new SparkConf()
+      .set(package$.MODULE$.MEMORY_OOM_ERROR_CONSUMER_BREAKDOWN_LIMIT(), 2);
+    final TestMemoryManager memoryManager = new TestMemoryManager(conf);
+    memoryManager.limit(1000);
+    final TaskMemoryManager manager = new TaskMemoryManager(memoryManager, 0);
+
+    TestMemoryConsumer c1 = new TestMemoryConsumer(manager);
+    TestMemoryConsumer c2 = new TestMemoryConsumer(manager);
+    TestMemoryConsumer c3 = new TestMemoryConsumer(manager);
+    TestMemoryConsumer c4 = new TestMemoryConsumer(manager);
+    c1.use(40);
+    c2.use(30);
+    c3.use(20);
+    c4.use(10);
+
+    String breakdown = manager.getMemoryConsumptionBreakdown();
+    // Only the two largest consumers are listed individually.
+    Assertions.assertTrue(breakdown.contains(c1.toString()), breakdown);
+    Assertions.assertTrue(breakdown.contains(c2.toString()), breakdown);
+    Assertions.assertFalse(breakdown.contains(c3.toString()), breakdown);
+    Assertions.assertFalse(breakdown.contains(c4.toString()), breakdown);
+    // The remaining two are collapsed into a summary line covering their combined 30 bytes.
+    Assertions.assertTrue(breakdown.contains("(2 more consumers): 30.0 B"), breakdown);
+
+    c1.free(40);
+    c2.free(30);
+    c3.free(20);
+    c4.free(10);
+    Assertions.assertEquals(0, manager.cleanUpAllAllocatedMemory());
+  }
+
+  @Test
+  public void memoryConsumptionBreakdownIsOmittedWhenLimitIsZero() {
+    final SparkConf conf = new SparkConf()
+      .set(package$.MODULE$.MEMORY_OOM_ERROR_CONSUMER_BREAKDOWN_LIMIT(), 0);
+    final TestMemoryManager memoryManager = new TestMemoryManager(conf);
+    memoryManager.limit(100);
+    final TaskMemoryManager manager = new TaskMemoryManager(memoryManager, 0);
+    final TestMemoryConsumer c = new TestMemoryConsumer(manager);
+    c.use(50);
+
+    Assertions.assertEquals("", manager.getMemoryConsumptionBreakdown());
+
+    c.free(50);
+    Assertions.assertEquals(0, manager.cleanUpAllAllocatedMemory());
+  }
+
+  @Test
+  public void memoryConsumptionBreakdownReportsMemoryNotAttributedToAConsumer() {
+    final TestMemoryManager memoryManager = new TestMemoryManager(new SparkConf());
+    memoryManager.limit(4096);
+    final TaskMemoryManager manager = new TaskMemoryManager(memoryManager, 0);
+    // Acquire task memory that is not tracked by any registered consumer's getUsed(). The
+    // NonSpillingConsumer intentionally does not increment its `used` counter, so from the
+    // manager's perspective this memory is used by the task but unattributed.
+    final NonSpillingConsumer c = new NonSpillingConsumer(manager);
+    manager.acquireExecutionMemory(2048, c);
+
+    String breakdown = manager.getMemoryConsumptionBreakdown();
+    Assertions.assertTrue(
+      breakdown.contains("(not attributed to a specific consumer)"), breakdown);
+    // The consumer never bumped its own counter, so it must not appear as an attributed line.
+    Assertions.assertFalse(breakdown.contains(c.toString() + ": "), breakdown);
+
+    manager.releaseExecutionMemory(2048, c);
+    Assertions.assertEquals("", manager.getMemoryConsumptionBreakdown());
+  }
+
+  @Test
+  public void outOfMemoryErrorCarriesConsumerBreakdown() {
+    final TestMemoryManager memoryManager = new TestMemoryManager(new SparkConf());
+    memoryManager.limit(1024);
+    final TestAllocator allocator = new TestAllocator(Integer.MAX_VALUE);
+    final TaskMemoryManager manager = new TaskMemoryManager(memoryManager, 0, allocator);
+    // A non-spilling consumer holds all the memory so the page allocation below cannot be
+    // satisfied and MemoryConsumer#throwOom fires.
+    final NonSpillingConsumer hog = new NonSpillingConsumer(manager);
+    hog.use(1024);
+    final PageAllocatingConsumer requestingConsumer = new PageAllocatingConsumer(manager, 4096);
+
+    SparkOutOfMemoryError e = Assertions.assertThrows(
+      SparkOutOfMemoryError.class, () -> requestingConsumer.allocate(4096));
+    Assertions.assertEquals("UNABLE_TO_ACQUIRE_MEMORY", e.getCondition());
+    String breakdown = e.getMessageParameters().get("consumerBreakdown");
+    Assertions.assertNotNull(breakdown);
+    // The breakdown captured at failure time names the consumer that was hogging memory.
+    Assertions.assertTrue(breakdown.contains(hog.toString()), breakdown);
+    Assertions.assertTrue(e.getMessage().contains("grouped by consumer"), e.getMessage());
+
+    hog.free(1024);
+    Assertions.assertEquals(0, manager.cleanUpAllAllocatedMemory());
+  }
+
+  @Test
+  public void logMemoryUsageAndGetBreakdownReturnsSameBreakdownAsRenderer() {
+    final TestMemoryManager memoryManager = new TestMemoryManager(new SparkConf());
+    memoryManager.limit(100);
+    final TaskMemoryManager manager = new TaskMemoryManager(memoryManager, 0);
+    TestMemoryConsumer c = new TestMemoryConsumer(manager);
+    c.use(50);
+
+    // The combined OOM-path method logs and returns the breakdown from a single snapshot; on a
+    // quiescent manager the returned breakdown matches a standalone render of the same state.
+    String combined = manager.logMemoryUsageAndGetBreakdown();
+    Assertions.assertEquals(manager.getMemoryConsumptionBreakdown(), combined);
+    Assertions.assertTrue(combined.contains(c.toString()), combined);
+
+    c.free(50);
+    Assertions.assertEquals(0, manager.cleanUpAllAllocatedMemory());
   }
 
   @Test

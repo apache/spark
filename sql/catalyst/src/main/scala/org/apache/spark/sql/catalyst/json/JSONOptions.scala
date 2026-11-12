@@ -182,6 +182,11 @@ class JSONOptions(
   val encoding: Option[String] = parameters.get(ENCODING)
     .orElse(parameters.get(CHARSET)).map(checkedEncoding)
 
+  // Charset-decoding flags for CreateJacksonParser's per-record decoder, resolved once here (per
+  // reader) rather than via SQLConf.get on every record. See CreateJacksonParser.getStreamDecoder.
+  val legacyJavaCharsets: Boolean = SQLConf.get.legacyJavaCharsets
+  val legacyCodingErrorAction: Boolean = SQLConf.get.legacyCodingErrorAction
+
   val lineSeparatorInRead: Option[Array[Byte]] = lineSeparator.map { lineSep =>
     lineSep.getBytes(encoding.getOrElse(StandardCharsets.UTF_8.name()))
   }
@@ -238,6 +243,10 @@ class JSONOptions(
 
   val useUnsafeRow: Boolean = parameters.get(USE_UNSAFE_ROW).map(_.toBoolean).getOrElse(
     SQLConf.get.getConf(SQLConf.JSON_USE_UNSAFE_ROW))
+
+  val streamMultilineTopLevelArray: Boolean =
+    parameters.get(ENABLE_STREAMING_TOP_LEVEL_ARRAY).map(_.toBoolean).getOrElse(
+      SQLConf.get.getConf(SQLConf.JSON_STREAM_MULTILINE_TOP_LEVEL_ARRAY))
 
   /** Build a Jackson [[JsonFactory]] using JSON options. */
   def buildJsonFactory(): JsonFactory = {
@@ -318,6 +327,7 @@ object JSONOptions extends DataSourceOptions {
   val ALLOW_BACKSLASH_ESCAPING_ANY_CHARACTER = newOption("allowBackslashEscapingAnyCharacter")
   val ALLOW_UNQUOTED_CONTROL_CHARS = newOption("allowUnquotedControlChars")
   val COMPRESSION = newOption("compression")
+  val DECOMPRESSION = newOption(DataSourceOptions.DECOMPRESSION)
   val MODE = newOption("mode")
   val DROP_FIELD_IF_ALL_NULL = newOption("dropFieldIfAllNull")
   val IGNORE_NULL_FIELDS = newOption("ignoreNullFields")
@@ -338,6 +348,7 @@ object JSONOptions extends DataSourceOptions {
   val SINGLE_VARIANT_COLUMN = newOption(DataSourceOptions.SINGLE_VARIANT_COLUMN)
   val EXPLODE_EMBEDDED_ARRAY = newOption(DataSourceOptions.EXPLODE_EMBEDDED_ARRAY)
   val USE_UNSAFE_ROW = newOption("useUnsafeRow")
+  val ENABLE_STREAMING_TOP_LEVEL_ARRAY = newOption("enableStreamingTopLevelArray")
   // Options with alternative
   val ENCODING = "encoding"
   val CHARSET = "charset"

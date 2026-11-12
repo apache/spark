@@ -33,7 +33,7 @@ Please see [Spark Security](security.html) and the specific security sections in
 
 # Launching Spark on YARN
 
-Apache Hadoop supports Java 17 since 3.5.0, while Apache Spark requires at least Java 17 since 4.0.0. When running on a YARN cluster whose Hadoop version is older than 3.5.0, a different JDK should be configured for Spark applications.
+Apache Spark requires at least Java 21 since 5.0.0. When running on a YARN cluster with a Java version older than 21, a different JDK should be configured for Spark applications.
 Please refer to [Configuring different JDKs for Spark Applications](#configuring-different-jdks-for-spark-applications) for details.
 
 Ensure that `HADOOP_CONF_DIR` or `YARN_CONF_DIR` points to the directory which contains the (client side) configuration files for the Hadoop cluster.
@@ -298,7 +298,7 @@ To use a custom metrics.properties for the application master and executors, upd
   <td><code>spark.yarn.historyServer.address</code></td>
   <td>(none)</td>
   <td>
-    The address of the Spark history server, e.g. <code>host.com:18080</code>. The address should not contain a scheme (<code>http://</code>). Defaults to not being set since the history server is an optional service. This address is given to the YARN ResourceManager when the Spark application finishes to link the application from the ResourceManager UI to the Spark history server UI.
+    The address of the Spark history server, e.g. <code>example.com:18080</code>. The address should not contain a scheme (<code>http://</code>). Defaults to not being set since the history server is an optional service. This address is given to the YARN ResourceManager when the Spark application finishes to link the application from the ResourceManager UI to the Spark history server UI.
     For this property, YARN properties can be used as variables, and these are substituted by Spark at runtime. For example, if the Spark history server runs on the same node as the YARN ResourceManager, it can be set to <code>${hadoopconf-yarn.resourcemanager.hostname}:18080</code>.
   </td>
   <td>1.0.0</td>
@@ -773,8 +773,8 @@ Stage level scheduling is supported on YARN:
 - When dynamic allocation is disabled: It allows users to specify different task resource requirements at the stage level and will use the same executors requested at startup.
 - When dynamic allocation is enabled: It allows users to specify task and executor resource requirements at the stage level and will request the extra executors.
 
-One thing to note that is YARN specific is that each ResourceProfile requires a different container priority on YARN. The mapping is simply the ResourceProfile id becomes the priority, on YARN lower numbers are higher priority. This means that profiles created earlier will have a higher priority in YARN. Normally this won't matter as Spark finishes one stage before starting another one, the only case this might have an affect is in a job server type scenario, so its something to keep in mind.
-Note there is a difference in the way custom resources are handled between the base default profile and custom ResourceProfiles. To allow for the user to request YARN containers with extra resources without Spark scheduling on them, the user can specify resources via the <code>spark.yarn.executor.resource.</code> config. Those configs are only used in the base default profile though and do not get propagated into any other custom ResourceProfiles. This is because there would be no way to remove them if you wanted a stage to not have them. This results in your default profile getting custom resources defined in <code>spark.yarn.executor.resource.</code> plus spark defined resources of GPU or FPGA. Spark converts GPU and FPGA resources into the YARN built in types <code>yarn.io/gpu</code>) and <code>yarn.io/fpga</code>, but does not know the mapping of any other resources. Any other Spark custom resources are not propagated to YARN for the default profile. So if you want Spark to schedule based off a custom resource and have it requested from YARN, you must specify it in both YARN (<code>spark.yarn.{driver/executor}.resource.</code>) and Spark (<code>spark.{driver/executor}.resource.</code>) configs. Leave the Spark config off if you only want YARN containers with the extra resources but Spark not to schedule using them. Now for custom ResourceProfiles, it doesn't currently have a way to only specify YARN resources without Spark scheduling off of them. This means for custom ResourceProfiles we propagate all the resources defined in the ResourceProfile to YARN. We still convert GPU and FPGA to the YARN build in types as well. This requires that the name of any custom resources you specify match what they are defined as in YARN.
+One thing to note that is YARN specific is that each ResourceProfile requires a different container priority on YARN. The mapping is simply the ResourceProfile id becomes the priority, on YARN lower numbers are higher priority. This means that profiles created earlier will have a higher priority in YARN. Normally this won't matter as Spark finishes one stage before starting another one, the only case this might have an effect is in a job server type scenario, so it's something to keep in mind.
+Note there is a difference in the way custom resources are handled between the base default profile and custom ResourceProfiles. To allow for the user to request YARN containers with extra resources without Spark scheduling on them, the user can specify resources via the <code>spark.yarn.executor.resource.</code> config. Those configs are only used in the base default profile though and do not get propagated into any other custom ResourceProfiles. This is because there would be no way to remove them if you wanted a stage to not have them. This results in your default profile getting custom resources defined in <code>spark.yarn.executor.resource.</code> plus spark defined resources of GPU or FPGA. Spark converts GPU and FPGA resources into the YARN built in types <code>yarn.io/gpu</code> and <code>yarn.io/fpga</code>, but does not know the mapping of any other resources. Any other Spark custom resources are not propagated to YARN for the default profile. So if you want Spark to schedule based off a custom resource and have it requested from YARN, you must specify it in both YARN (<code>spark.yarn.{driver/executor}.resource.</code>) and Spark (<code>spark.{driver/executor}.resource.</code>) configs. Leave the Spark config off if you only want YARN containers with the extra resources but Spark not to schedule using them. Now for custom ResourceProfiles, it doesn't currently have a way to only specify YARN resources without Spark scheduling off of them. This means for custom ResourceProfiles we propagate all the resources defined in the ResourceProfile to YARN. We still convert GPU and FPGA to the YARN built in types as well. This requires that the name of any custom resources you specify match what they are defined as in YARN.
 
 # Important notes
 
@@ -834,8 +834,8 @@ staging directory of the Spark application.
   <td>(none)</td>
   <td>
     A comma-separated list of Hadoop filesystems for whose hosts will be excluded from delegation
-    token renewal at resource scheduler. For example, <code>spark.yarn.kerberos.renewal.excludeHadoopFileSystems=hdfs://nn1.com:8032,
-    hdfs://nn2.com:8032</code>. This is known to work under YARN for now, so YARN Resource Manager won't renew tokens for the application.
+    token renewal at resource scheduler. For example, <code>spark.yarn.kerberos.renewal.excludeHadoopFileSystems=hdfs://nn1.example.com:8032,
+    hdfs://nn2.example.com:8032</code>. This is known to work under YARN for now, so YARN Resource Manager won't renew tokens for the application.
     Note that as resource scheduler does not renew token, so any application running longer than the original token expiration that tries
     to use that token will likely fail.
   </td>
@@ -873,6 +873,11 @@ will include a list of all tokens obtained, and their expiry details
 
 
 # Configuring the External Shuffle Service
+
+The Spark Shuffle Service runs inside the `NodeManager` JVM, so all `NodeManager`s in your cluster
+must run on a [supported version of Java](index.html#downloading). Unlike Spark applications, the
+shuffle service cannot use a different JDK from the `NodeManager` (see
+[Configuring different JDKs for Spark Applications](#configuring-different-jdks-for-spark-applications)).
 
 To start the Spark Shuffle Service on each `NodeManager` in your YARN cluster, follow these
 instructions:
@@ -1069,13 +1074,13 @@ process.
 Note that, Spark assumes that all JVM processes runs in one application use the same version of JDK, otherwise,
 you may encounter JDK serialization issues.
 
-To configure a Spark application to use a JDK which has been pre-installed on all nodes at `/opt/openjdk-17`:
+To configure a Spark application to use a JDK which has been pre-installed on all nodes at `/opt/openjdk-21`:
 
-    $ export JAVA_HOME=/opt/openjdk-17
+    $ export JAVA_HOME=/opt/openjdk-21
     $ ./bin/spark-submit --class path.to.your.Class \
         --master yarn \
-        --conf spark.yarn.appMasterEnv.JAVA_HOME=/opt/openjdk-17 \
-        --conf spark.executorEnv.JAVA_HOME=/opt/openjdk-17 \
+        --conf spark.yarn.appMasterEnv.JAVA_HOME=/opt/openjdk-21 \
+        --conf spark.executorEnv.JAVA_HOME=/opt/openjdk-21 \
         <app jar> [app options]
 
 Optionally, the user may want to avoid installing a different JDK on the YARN cluster nodes, in such a case,

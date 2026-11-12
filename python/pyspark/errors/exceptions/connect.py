@@ -14,44 +14,90 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 #
-import grpc
 import json
+from typing import TYPE_CHECKING, Any, Dict, List, Optional
+
+import grpc
 from grpc import StatusCode
-from typing import Any, Dict, List, Optional, TYPE_CHECKING
 
 from pyspark.errors.exceptions.base import (
     AnalysisException as BaseAnalysisException,
-    IllegalArgumentException as BaseIllegalArgumentException,
+)
+from pyspark.errors.exceptions.base import (
     ArithmeticException as BaseArithmeticException,
-    UnsupportedOperationException as BaseUnsupportedOperationException,
+)
+from pyspark.errors.exceptions.base import (
     ArrayIndexOutOfBoundsException as BaseArrayIndexOutOfBoundsException,
+)
+from pyspark.errors.exceptions.base import (
     DateTimeException as BaseDateTimeException,
+)
+from pyspark.errors.exceptions.base import (
+    IllegalArgumentException as BaseIllegalArgumentException,
+)
+from pyspark.errors.exceptions.base import (
     NumberFormatException as BaseNumberFormatException,
+)
+from pyspark.errors.exceptions.base import (
     ParseException as BaseParseException,
-    PySparkException,
-    PythonException as BasePythonException,
-    StreamingQueryException as BaseStreamingQueryException,
-    QueryExecutionException as BaseQueryExecutionException,
-    SparkRuntimeException as BaseSparkRuntimeException,
-    SparkNoSuchElementException as BaseNoSuchElementException,
-    SparkUpgradeException as BaseSparkUpgradeException,
-    QueryContext as BaseQueryContext,
-    QueryContextType,
-    StreamingPythonRunnerInitializationException as BaseStreamingPythonRunnerInitException,
+)
+from pyspark.errors.exceptions.base import (
     PickleException as BasePickleException,
-    UnknownException as BaseUnknownException,
+)
+from pyspark.errors.exceptions.base import (
+    PySparkException,
+    QueryContextType,
     recover_python_exception,
+)
+from pyspark.errors.exceptions.base import (
+    PythonException as BasePythonException,
+)
+from pyspark.errors.exceptions.base import (
+    QueryContext as BaseQueryContext,
+)
+from pyspark.errors.exceptions.base import (
+    QueryExecutionException as BaseQueryExecutionException,
+)
+from pyspark.errors.exceptions.base import (
+    SparkNoSuchElementException as BaseNoSuchElementException,
+)
+from pyspark.errors.exceptions.base import (
+    SparkRuntimeException as BaseSparkRuntimeException,
+)
+from pyspark.errors.exceptions.base import (
+    SparkUpgradeException as BaseSparkUpgradeException,
+)
+from pyspark.errors.exceptions.base import (
+    StreamingPythonRunnerInitializationException as BaseStreamingPythonRunnerInitException,
+)
+from pyspark.errors.exceptions.base import (
+    StreamingQueryException as BaseStreamingQueryException,
+)
+from pyspark.errors.exceptions.base import (
+    UnknownException as BaseUnknownException,
+)
+from pyspark.errors.exceptions.base import (
+    UnsupportedOperationException as BaseUnsupportedOperationException,
 )
 
 if TYPE_CHECKING:
-    import pyspark.sql.connect.proto as pb2
     from google.rpc.error_details_pb2 import ErrorInfo
+
+    import pyspark.sql.connect.proto as pb2
 
 
 class SparkConnectException(PySparkException):
     """
     Exception thrown from Spark Connect.
     """
+
+    @property
+    def operation_id(self) -> Optional[str]:
+        """The Spark Connect ExecutePlan operation ID, when available.
+
+        .. versionadded:: 4.3.0
+        """
+        return getattr(self, "_operation_id", None)
 
 
 def convert_exception(
@@ -270,9 +316,8 @@ class SparkConnectGrpcException(SparkConnectException):
     ) -> None:
         if contexts is None:
             contexts = []
-        self._message = message  # type: ignore[assignment]
         if reason is not None:
-            self._message = f"({reason}) {self._message}"
+            message = f"({reason}) {message}"
 
         # PySparkException has the assumption that errorClass and messageParameters are
         # only occurring together. If only one is set, we assume the message to be fully
@@ -285,7 +330,7 @@ class SparkConnectGrpcException(SparkConnectException):
             tmp_message_parameters = None
 
         super().__init__(
-            message=self._message,
+            message=message,
             errorClass=tmp_error_class,
             messageParameters=tmp_message_parameters,
         )

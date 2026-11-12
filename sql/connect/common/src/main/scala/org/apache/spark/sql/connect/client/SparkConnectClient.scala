@@ -19,6 +19,7 @@ package org.apache.spark.sql.connect.client
 
 import java.net.URI
 import java.nio.charset.StandardCharsets.UTF_8
+import java.nio.file.{Files, Paths}
 import java.util.{Base64, Locale, UUID}
 import java.util.concurrent.{Executor, TimeUnit}
 
@@ -39,11 +40,12 @@ import org.apache.spark.connect.proto
 import org.apache.spark.connect.proto.UserContext
 import org.apache.spark.internal.Logging
 import org.apache.spark.internal.LogKeys.{ERROR, RATIO, SIZE, TIME}
+import org.apache.spark.internal.config.ConfigReader
 import org.apache.spark.sql.connect.RuntimeConfig
 import org.apache.spark.sql.connect.common.ProtoUtils
 import org.apache.spark.sql.connect.common.config.ConnectCommon
 import org.apache.spark.sql.util.CloseableIterator
-import org.apache.spark.util.SparkSystemUtils
+import org.apache.spark.util.{MavenUtils, SparkFileUtils, SparkSystemUtils}
 
 /**
  * Conceptually the remote spark session that communicates with the server.
@@ -56,6 +58,14 @@ private[sql] class SparkConnectClient(
   private val userContext: UserContext = configuration.userContext
 
   private[this] val stubState = new SparkConnectStubState(channel, configuration)
+
+  if (configuration.metadata.keys.exists(
+      _.equalsIgnoreCase(SparkConnectClient.OPERATION_ID_HEADER))) {
+    logWarning(
+      s"Connection option ${SparkConnectClient.OPERATION_ID_HEADER} is ignored because " +
+        "Spark Connect sets it for each ExecutePlan request.")
+  }
+
   private[this] val bstub =
     new CustomSparkConnectBlockingStub(channel, stubState)
   private[this] val stub =
@@ -76,6 +86,29 @@ private[sql] class SparkConnectClient(
   private[sql] val sessionId: String = configuration.sessionId.getOrElse(UUID.randomUUID.toString)
 
   private val conf: RuntimeConfig = new RuntimeConfig(this)
+
+  private lazy val serverCapabilities: Set[String] = {
+    val builder = proto.AnalyzePlanRequest
+      .newBuilder()
+      .setSparkVersion(proto.AnalyzePlanRequest.SparkVersion.newBuilder().build())
+      .setUserContext(userContext)
+      .setSessionId(sessionId)
+      .setClientType(userAgent)
+    serverSideSessionId.foreach(builder.setClientObservedServerSideSessionId)
+    bstub
+      .analyzePlan(builder.build())
+      .getSparkVersion
+      .getCapabilitiesList
+      .asScala
+      .toSet
+  }
+
+  private def supportsServerSideMavenArtifacts: Boolean =
+    serverCapabilities.contains(SparkConnectClient.SERVER_SIDE_MAVEN_ARTIFACTS_CAPABILITY)
+
+  private def serverSideMavenResolutionEnabled: Boolean =
+    getArtifactConfigOption(ConnectCommon.CONNECT_SERVER_SIDE_MAVEN_RESOLUTION_ENABLED)
+      .exists(_.trim.toBoolean)
 
   // Cached plan compression options.
   private var _planCompressionOptions: Option[Option[PlanCompressionOptions]] = None
@@ -318,13 +351,12 @@ private[sql] class SparkConnectClient(
 
       serverSideSessionId.foreach(session =>
         request.setClientObservedServerSideSessionId(session))
-      operationId.foreach { opId =>
-        require(
-          isValidUUID(opId),
-          s"Invalid operationId: $opId. The id must be an UUID string of " +
-            "the format `00112233-4455-6677-8899-aabbccddeeff`")
-        request.setOperationId(opId)
-      }
+      val resolvedOperationId = operationId.getOrElse(UUID.randomUUID.toString)
+      require(
+        isValidUUID(resolvedOperationId),
+        s"Invalid operationId: $resolvedOperationId. The id must be an UUID string of " +
+          "the format `00112233-4455-6677-8899-aabbccddeeff`")
+      request.setOperationId(resolvedOperationId)
       if (configuration.useReattachableExecute) {
         bstub.executePlanReattachable(request.build())
       } else {
@@ -575,19 +607,74 @@ private[sql] class SparkConnectClient(
    */
   def preferredArrowChunkSize: Option[Int] = configuration.preferredArrowChunkSize
 
-  /**
-   * Add a single artifact to the client session.
-   *
-   * Currently only local files with extensions .jar and .class are supported.
-   */
-  def addArtifact(path: String): Unit = artifactManager.addArtifact(path)
+  private def getArtifactConfigOption(key: String): Option[String] = {
+    try {
+      conf.getOption(key)
+    } catch {
+      case _: NoSuchElementException => None
+      case e: SparkThrowable
+          if e.getCondition == "SQL_CONF_NOT_FOUND"
+            || e.getCondition == "CONFIG_NOT_AVAILABLE" =>
+        None
+    }
+  }
+
+  private def localIvySettingsPath: Option[String] =
+    new ConfigReader((key: String) => getArtifactConfigOption(key))
+      .get(MavenUtils.JAR_IVY_SETTING_PATH_KEY)
+      .filter(_.trim.nonEmpty)
+      .flatMap { settingsPath =>
+        val localPath =
+          try {
+            val settingsUri = SparkFileUtils.resolveURI(settingsPath)
+            if (settingsUri.getScheme == "file") {
+              val path = Paths.get(settingsUri)
+              Option.when(Files.isRegularFile(path) && Files.isReadable(path))(
+                settingsUri.toString)
+            } else {
+              None
+            }
+          } catch {
+            case NonFatal(_) => None
+          }
+        if (localPath.isEmpty) {
+          logWarning(
+            "Client-side Maven resolution cannot use the session's spark.jars.ivySettings; " +
+              "using default Ivy settings. Provide a readable local file or enable " +
+              "spark.connect.session.serverSideMavenResolution.enabled for URIs without repos.")
+        }
+        localPath
+      }
+
+  private def ivySettingsPathForClientResolution(
+      uris: Seq[URI],
+      serverSideMavenArtifacts: Boolean): Option[String] = {
+    val resolvesIvyOnClient = uris.exists { uri =>
+      uri.getScheme == "ivy" &&
+      (!serverSideMavenArtifacts || !artifactManager.isServerSideMavenCandidate(uri))
+    }
+    if (resolvesIvyOnClient) localIvySettingsPath else None
+  }
 
   /**
    * Add a single artifact to the client session.
    *
-   * Currently only local files with extensions .jar and .class are supported.
+   * Supports local .jar and .class files and Apache Ivy URIs.
    */
-  def addArtifact(uri: URI): Unit = artifactManager.addArtifact(uri)
+  def addArtifact(path: String): Unit = addArtifact(SparkFileUtils.resolveURI(path))
+
+  /**
+   * Add a single artifact to the client session.
+   *
+   * Supports local .jar and .class files and Apache Ivy URIs.
+   */
+  def addArtifact(uri: URI): Unit = {
+    val serverSide = artifactManager.isServerSideMavenCandidate(uri) &&
+      supportsServerSideMavenArtifacts &&
+      serverSideMavenResolutionEnabled
+    val ivySettingsPath = ivySettingsPathForClientResolution(Seq(uri), serverSide)
+    artifactManager.addArtifact(uri, serverSide, ivySettingsPath)
+  }
 
   /**
    * Add a single in-memory artifact to the session while preserving the directory structure
@@ -629,9 +716,15 @@ private[sql] class SparkConnectClient(
   /**
    * Add multiple artifacts to the session.
    *
-   * Currently only local files with extensions .jar and .class are supported.
+   * Supports local .jar and .class files and Apache Ivy URIs.
    */
-  def addArtifacts(uri: Seq[URI]): Unit = artifactManager.addArtifacts(uri)
+  def addArtifacts(uri: Seq[URI]): Unit = {
+    val serverSide = uri.exists(artifactManager.isServerSideMavenCandidate) &&
+      supportsServerSideMavenArtifacts &&
+      serverSideMavenResolutionEnabled
+    val ivySettingsPath = ivySettingsPathForClientResolution(uri, serverSide)
+    artifactManager.addArtifacts(uri, serverSide, ivySettingsPath)
+  }
 
   /**
    * Register a [[ClassFinder]] for dynamically generated classes.
@@ -699,7 +792,32 @@ private[sql] class SparkConnectClient(
 // Options for plan compression
 case class PlanCompressionOptions(thresholdBytes: Int, algorithm: String)
 
+private final class SparkConnectOperationIdException(val operationId: String)
+    extends RuntimeException(s"Spark Connect operation ID: $operationId", null, false, false)
+
 object SparkConnectClient {
+  private[connect] val SERVER_SIDE_MAVEN_ARTIFACTS_CAPABILITY =
+    "serverSideMavenArtifacts.v1"
+
+  private[connect] val OPERATION_ID_HEADER = "spark-connect-operation-id"
+
+  /**
+   * Returns the ExecutePlan operation ID attached to a Spark Connect failure, when available.
+   *
+   * @since 4.3.0
+   */
+  @DeveloperApi
+  def getOperationId(error: Throwable): Option[String] = {
+    error.getSuppressed.collectFirst { case marker: SparkConnectOperationIdException =>
+      marker.operationId
+    }
+  }
+
+  private[client] def attachOperationId(error: Throwable, operationId: String): Unit = {
+    if (getOperationId(error).isEmpty) {
+      error.addSuppressed(new SparkConnectOperationIdException(operationId))
+    }
+  }
 
   private[sql] val SPARK_REMOTE: String = "SPARK_REMOTE"
 
@@ -1158,9 +1276,11 @@ object SparkConnectClient {
 
       // Workaround LocalChannelCredentials are added in
       // https://github.com/grpc/grpc-java/issues/9900
-      var metadataWithOptionalToken = metadata
+      var metadataWithOptionalToken = metadata.filterNot { case (key, _) =>
+        key.equalsIgnoreCase(OPERATION_ID_HEADER)
+      }
       if (!isSslEnabled.contains(true) && isLocal && token.isDefined) {
-        metadataWithOptionalToken = metadata + (("Authorization", s"Bearer ${token.get}"))
+        metadataWithOptionalToken += (("Authorization", s"Bearer ${token.get}"))
       }
 
       if (metadataWithOptionalToken.nonEmpty) {
@@ -1207,7 +1327,7 @@ object SparkConnectClient {
           applier.apply(headers)
         } catch {
           case e: Throwable =>
-            applier.fail(Status.UNAUTHENTICATED.withCause(e));
+            applier.fail(Status.UNAUTHENTICATED.withCause(e))
         }
       })
     }

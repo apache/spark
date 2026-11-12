@@ -30,6 +30,7 @@ import org.apache.spark.sql.execution.datasources.CommonFileDataSourceSuite
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.sql.types._
+import org.apache.spark.tags.ExtendedSQLTest
 import org.apache.spark.util.HadoopFSUtils
 
 abstract class ParquetFileFormatSuite
@@ -269,6 +270,7 @@ class ParquetFileFormatV1Suite extends ParquetFileFormatSuite {
       .set(SQLConf.USE_V1_SOURCE_LIST, "parquet")
 }
 
+@ExtendedSQLTest
 class ParquetFileFormatV2Suite extends ParquetFileFormatSuite {
   override protected def sparkConf: SparkConf =
     super

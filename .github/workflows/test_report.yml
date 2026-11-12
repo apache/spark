@@ -41,20 +41,15 @@ jobs:
         github-token: ${{ secrets.GITHUB_TOKEN }}
         run-id: ${{ github.event.workflow_run.id }}
         pattern: "test-*"
-    - name: Check if test results exist
-      id: check
-      run: |
-        if find . -path '*/target/test-reports/*.xml' -print -quit | grep -q .; then
-          echo "has_results=true" >> $GITHUB_OUTPUT
-        else
-          echo "No test result files found. Skipping report."
-          echo "has_results=false" >> $GITHUB_OUTPUT
-        fi
     - name: Publish test report
-      if: steps.check.outputs.has_results == 'true'
-      uses: scacap/action-surefire-report@5609ce4db72c09db044803b344a8968fd1f315da
+      uses: EnricoMi/publish-unit-test-result-action@d0a4676d0e0b938bc201470d88276b7c74c712b3  # v2.24.0
       with:
         check_name: Report test results
-        github_token: ${{ secrets.GITHUB_TOKEN }}
-        report_paths: "**/target/test-reports/*.xml"
+        files: "**/target/test-reports/*.xml"
+        comment_mode: off
+        large_files: true
         commit: ${{ github.event.workflow_run.head_commit.id }}
+        github_token: ${{ secrets.GITHUB_TOKEN }}
+        compare_to_earlier_commit: false
+        test_changes_limit: 0
+        check_run_annotations: none

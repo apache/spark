@@ -22,7 +22,6 @@ import scala.reflect.ClassTag
 import org.apache.spark.sql.TPCDSQuerySuite
 import org.apache.spark.sql.catalyst.expressions.aggregate.{AggregateExpression, Complete, Final}
 import org.apache.spark.sql.catalyst.plans.logical.{Aggregate, Generate, Join, LocalRelation, LogicalPlan, Range, Sample, Union, Window, WithCTE}
-import org.apache.spark.sql.execution.adaptive.DisableAdaptiveExecutionSuite
 import org.apache.spark.sql.execution.aggregate.{HashAggregateExec, ObjectHashAggregateExec, SortAggregateExec}
 import org.apache.spark.sql.execution.columnar.{InMemoryRelation, InMemoryTableScanExec}
 import org.apache.spark.sql.execution.datasources.LogicalRelation
@@ -31,8 +30,9 @@ import org.apache.spark.sql.execution.exchange.{BroadcastExchangeExec, ReusedExc
 import org.apache.spark.sql.execution.joins._
 import org.apache.spark.sql.execution.window.WindowExec
 
-// Disable AQE because AdaptiveSparkPlanExec does not have a logical plan link
-class LogicalPlanTagInSparkPlanSuite extends TPCDSQuerySuite with DisableAdaptiveExecutionSuite {
+// AQE is disabled by BenchmarkQueryTest, which also matters here because AdaptiveSparkPlanExec
+// does not have a logical plan link.
+class LogicalPlanTagInSparkPlanSuite extends TPCDSQuerySuite {
 
   override protected def checkGeneratedCode(
       plan: SparkPlan, checkMethodCodeSize: Boolean = true): Unit = {

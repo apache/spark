@@ -22,7 +22,8 @@ import org.apache.spark.sql.{AnalysisException, Row}
 import org.apache.spark.sql.QueryTest.withQueryExecutionsCaptured
 import org.apache.spark.sql.catalyst.expressions.CheckInvariant
 import org.apache.spark.sql.catalyst.plans.logical.Filter
-import org.apache.spark.sql.connector.catalog.{Aborted, Committed, InMemoryRowLevelOperationTable, InMemoryTable, InMemoryTruncatableOnlyTable, InMemoryTruncatableOnlyTableCatalog, TableCatalog}
+import org.apache.spark.sql.catalyst.trees.TreePattern.WITH_EXPRESSION
+import org.apache.spark.sql.connector.catalog.{Aborted, Committed, InMemoryRowLevelOperationTable, InMemoryTable, InMemoryTruncatableOnlyTable, InMemoryTruncatableOnlyTableCatalog, TableWritePrivilege}
 import org.apache.spark.sql.connector.write.DeleteSummary
 import org.apache.spark.sql.execution.datasources.v2.{DeleteFromTableExec, ReplaceDataExec, TruncateTableExec, WriteDeltaExec}
 import org.apache.spark.sql.internal.SQLConf
@@ -259,6 +260,35 @@ abstract class DeleteFromTableSuiteBase extends RowLevelOperationSuiteBase {
     checkDeleteMetrics(numDeletedRows = 1, numCopiedRows = 1)
   }
 
+  test("SPARK-59962: delete with a condition reading a computed value twice") {
+    // BETWEEN reads `id + pk` twice. A group-based delete pushes the condition down to the scan
+    // and reuses it for runtime group filtering, where a column pre-evaluated under the write is
+    // not found. The untouched `finance` group is copied only if that filter is missing.
+    createAndInitTable("pk INT NOT NULL, id INT, dep STRING",
+      """{ "pk": 1, "id": 1, "dep": "hr" }
+        |{ "pk": 2, "id": 2, "dep": "software" }
+        |{ "pk": 3, "id": 3, "dep": "hr" }
+        |{ "pk": 4, "id": 10, "dep": "finance" }
+        |""".stripMargin)
+
+    val (cond, groupFilterCond) = executeAndKeepConditions {
+      sql(s"DELETE FROM $tableNameAsString WHERE (id + pk) BETWEEN 2 AND 4")
+    }
+    // The condition reaches the source inlined. A group-based write also has a group filter
+    // condition, only evaluated in the runtime group filter, which keeps the `With` for that
+    // filter to memoize.
+    assert(!cond.containsPattern(WITH_EXPRESSION), s"condition: $cond")
+    assert(groupFilterCond.isDefined == !deltaDelete, s"group filter condition: $groupFilterCond")
+    assert(groupFilterCond.forall(_.containsPattern(WITH_EXPRESSION)),
+      s"group filter condition: $groupFilterCond")
+
+    checkAnswer(
+      sql(s"SELECT * FROM $tableNameAsString"),
+      Row(3, 3, "hr") :: Row(4, 10, "finance") :: Nil)
+
+    checkDeleteMetrics(numDeletedRows = 2, numCopiedRows = 1)
+  }
+
   test("delete with aliases") {
     createAndInitTable("pk INT NOT NULL, id INT, dep STRING",
       """{ "pk": 1, "id": 1, "dep": "hr" }
@@ -271,6 +301,23 @@ abstract class DeleteFromTableSuiteBase extends RowLevelOperationSuiteBase {
     checkAnswer(sql(s"SELECT * FROM $tableNameAsString"), Row(2, 2, "software") :: Nil)
 
     checkDeleteMetrics(numDeletedRows = 2, numCopiedRows = 0)
+  }
+
+  test("SPARK-60978: delete keeps columns whose names differ only by case") {
+    // such a table can only be created and read in a case-sensitive session
+    withSQLConf(SQLConf.CASE_SENSITIVE.key -> "true") {
+      createAndInitTable("pk INT NOT NULL, salary INT, SALARY INT, dep STRING",
+        """{ "pk": 1, "salary": 100, "SALARY": 200, "dep": "hr" }
+          |{ "pk": 2, "salary": 300, "SALARY": 400, "dep": "hr" }
+          |""".stripMargin)
+    }
+
+    // the statement does not name the colliding columns so it is not ambiguous
+    sql(s"DELETE FROM $tableNameAsString WHERE pk <= 1")
+
+    withSQLConf(SQLConf.CASE_SENSITIVE.key -> "true") {
+      checkAnswer(sql(s"SELECT * FROM $tableNameAsString"), Row(2, 300, 400, "hr") :: Nil)
+    }
   }
 
   test("delete with IN predicates") {
@@ -327,6 +374,27 @@ abstract class DeleteFromTableSuiteBase extends RowLevelOperationSuiteBase {
     sql(s"DELETE FROM $tableNameAsString t WHERE t.complex.c1 = id")
 
     checkAnswer(sql(s"SELECT * FROM $tableNameAsString"), Nil)
+    checkDeleteMetrics(numDeletedRows = 1, numCopiedRows = 0)
+  }
+
+  test("SPARK-60673: delete with metadata columns in the condition") {
+    // the metadata columns must be read even if the operation does not require them
+    createAndInitTable("pk INT NOT NULL, id INT, dep STRING",
+      """{ "pk": 1, "id": 1, "dep": "hr" }
+        |{ "pk": 2, "id": 2, "dep": "hr" }
+        |{ "pk": 3, "id": 1, "dep": "software" }
+        |""".stripMargin)
+
+    sql(s"DELETE FROM $tableNameAsString WHERE _partition = 'hr' AND id < 2")
+
+    checkAnswer(
+      sql(s"SELECT * FROM $tableNameAsString"),
+      Row(2, 2, "hr") :: Row(3, 1, "software") :: Nil)
+    checkDeleteMetrics(numDeletedRows = 1, numCopiedRows = 1)
+
+    sql(s"DELETE FROM $tableNameAsString t WHERE t.index = 0 AND t.id > 1")
+
+    checkAnswer(sql(s"SELECT * FROM $tableNameAsString"), Row(3, 1, "software") :: Nil)
     checkDeleteMetrics(numDeletedRows = 1, numCopiedRows = 0)
   }
 
@@ -1047,8 +1115,10 @@ abstract class DeleteFromTableSuiteBase extends RowLevelOperationSuiteBase {
     // replace the row-level plan with a filter-only deleteWhere call via
     // OptimizeMetadataOnlyDeleteFromTable (canDeleteWhere returns false for LessThan).
     checkRowLevelOperationOptions(
-      sql(s"DELETE FROM $tableNameAsString WITH (`write.split-size` = 10) WHERE salary < 200"),
-      "write.split-size" -> "10")
+      sql(s"DELETE FROM $tableNameAsString WITH " +
+        s"(`load-option` = 'load-value', `write-option` = 'write-value') WHERE salary < 200"),
+      "load-option" -> "load-value",
+      "write-option" -> "write-value")
 
     checkAnswer(
       sql(s"SELECT * FROM $tableNameAsString"),
@@ -1101,16 +1171,20 @@ abstract class DeleteFromTableSuiteBase extends RowLevelOperationSuiteBase {
     // dep = 'hr' is an EqualTo on the partition column. OptimizeMetadataOnlyDeleteFromTable
     // converts the row-level plan to a deleteWhere call. Verify options flow into the exec.
     val Seq(qe) = withQueryExecutionsCaptured(spark) {
-      sql(s"DELETE FROM $tableNameAsString WITH (`write.split-size` = 10) WHERE dep = 'hr'")
+      sql(s"DELETE FROM $tableNameAsString WITH " +
+        s"(`load-option` = 'load-value', `write-option` = 'write-value') WHERE dep = 'hr'")
     }
     val exec = qe.executedPlan.collectFirst {
       case e: DeleteFromTableExec => e
     }.getOrElse(fail("expected DeleteFromTableExec for the metadata-only deleteWhere path"))
-    assert(exec.options.get("write.split-size") === "10",
-      "options must reach DeleteFromTableExec on the deleteWhere path")
-    assert(exec.table.asInstanceOf[InMemoryRowLevelOperationTable].lastDeleteOptions
-      .get("write.split-size") === "10",
-      "options must be forwarded to SupportsDeleteV2.deleteWhere(predicates, options)")
+    assert(exec.options.get("load-option") === "load-value")
+    assert(exec.options.get("write-option") === "write-value")
+    val v2Table = exec.table.asInstanceOf[InMemoryRowLevelOperationTable]
+    assert(v2Table.lastDeleteOptions.get("load-option") === "load-value")
+    assert(v2Table.lastDeleteOptions.get("write-option") === "write-value")
+    assertLastTransactionWriteLoadOptions(
+      "load-option" -> "load-value",
+      "write-option" -> "write-value")
 
     checkAnswer(
       sql(s"SELECT * FROM $tableNameAsString"),
@@ -1146,27 +1220,40 @@ abstract class DeleteFromTableSuiteBase extends RowLevelOperationSuiteBase {
     // is planned as TruncateTableExec (not DeleteFromTableExec).
     withSQLConf(
         "spark.sql.catalog.trunccat" ->
-          classOf[InMemoryTruncatableOnlyTableCatalog].getName) {
+          classOf[InMemoryTruncatableOnlyTableCatalog].getName,
+        "spark.sql.catalog.trunccat.tableStateOptionKeys" -> "load-option") {
       withTable("trunccat.ns.tbl") {
         sql("CREATE TABLE trunccat.ns.tbl (pk INT NOT NULL, dep STRING) USING foo")
         sql("INSERT INTO trunccat.ns.tbl VALUES (1, 'hr'), (2, 'software')")
+        val truncCatalog = spark.sessionState.catalogManager
+          .catalog("trunccat").asInstanceOf[InMemoryTruncatableOnlyTableCatalog]
+        truncCatalog.resetLoadTableCalls()
 
         val Seq(qe) = withQueryExecutionsCaptured(spark) {
-          sql("DELETE FROM trunccat.ns.tbl WITH (`write.split-size` = 10)")
+          sql("DELETE FROM trunccat.ns.tbl WITH " +
+            "(`load-option` = 'load-value', `write-option` = 'write-value')")
         }
         val exec = qe.executedPlan.collectFirst {
           case e: TruncateTableExec => e
         }.getOrElse(fail("expected TruncateTableExec for the truncate path"))
-        assert(exec.options.get("write.split-size") === "10",
-          "options must reach TruncateTableExec")
+        assert(exec.options.get("load-option") === "load-value")
+        assert(exec.options.get("write-option") === "write-value")
 
-        val truncTable = spark.sessionState.catalogManager
-          .catalog("trunccat").asInstanceOf[TableCatalog]
+        val targetLoads = truncCatalog.loadTableCalls.filter {
+          case (context, options) =>
+            context.writePrivileges() === java.util.Set.of(TableWritePrivilege.DELETE) &&
+              options.get("load-option") == "load-value" &&
+              options.get("write-option") == null &&
+              options.size() == 1
+        }
+        assert(targetLoads.nonEmpty, "target loadTable did not receive truncate state options")
+
+        val truncTable = truncCatalog
           .loadTable(org.apache.spark.sql.connector.catalog.Identifier.of(
             Array("ns"), "tbl"))
           .asInstanceOf[InMemoryTruncatableOnlyTable]
-        assert(truncTable.lastTruncateOptions.get("write.split-size") === "10",
-          "options must be forwarded to TruncatableTable.truncateTable(options)")
+        assert(truncTable.lastTruncateOptions.get("load-option") === "load-value")
+        assert(truncTable.lastTruncateOptions.get("write-option") === "write-value")
 
         checkAnswer(spark.table("trunccat.ns.tbl"), Nil)
       }

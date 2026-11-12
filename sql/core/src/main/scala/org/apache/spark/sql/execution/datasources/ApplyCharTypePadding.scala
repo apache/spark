@@ -17,10 +17,15 @@
 
 package org.apache.spark.sql.execution.datasources
 
+import java.util.concurrent.atomic.AtomicBoolean
+
+import org.apache.spark.internal.LogKeys
 import org.apache.spark.sql.catalyst.analysis.ApplyCharTypePaddingHelper
 import org.apache.spark.sql.catalyst.catalog.HiveTableRelation
-import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
+import org.apache.spark.sql.catalyst.expressions.AttributeReference
+import org.apache.spark.sql.catalyst.plans.logical.{DeleteFromTable, LogicalPlan}
 import org.apache.spark.sql.catalyst.rules.Rule
+import org.apache.spark.sql.catalyst.trees.TreePattern.DELETE_FROM_TABLE
 import org.apache.spark.sql.catalyst.util.CharVarcharUtils
 import org.apache.spark.sql.execution.datasources.v2.DataSourceV2Relation
 import org.apache.spark.sql.internal.SQLConf
@@ -36,13 +41,31 @@ import org.apache.spark.sql.internal.SQLConf
  */
 object ApplyCharTypePadding extends Rule[LogicalPlan] {
 
+  private val readSidePaddingOverrideWarned = new AtomicBoolean(false)
+
+  private def warnReadSidePaddingOverride(): Unit = {
+    if (readSidePaddingOverrideWarned.compareAndSet(false, true)) {
+      logWarning(log"${MDC(LogKeys.CONFIG, SQLConf.READ_SIDE_CHAR_PADDING.key)} is disabled but " +
+        log"${MDC(LogKeys.CONFIG2, SQLConf.CHAR_VARCHAR_STANDARD_SEMANTICS.key)} is enabled; " +
+        log"read-side CHAR/VARCHAR checks are still applied because standard semantics require " +
+        log"a read to observe the value a write would have produced.")
+    }
+  }
+
   override def apply(plan: LogicalPlan): LogicalPlan = {
-    if (conf.charVarcharAsString) {
+    // standardSemantics takes precedence over legacy charVarcharAsString.
+    if (conf.charVarcharAsString && !conf.charVarcharStandardSemantics) {
       return plan
     }
 
-    if (conf.readSideCharPadding) {
-      val newPlan = plan.resolveOperatorsUpWithNewOutput {
+    if (conf.charVarcharStandardSemantics && !conf.readSideCharPadding) {
+      warnReadSidePaddingOverride()
+    }
+
+    if (conf.readSideCharPadding || conf.charVarcharStandardSemantics) {
+      // A DELETE that is not rewritten as a row-level operation does not read its table, so the
+      // table is not padded, and the condition gets the padding instead, see padDeleteConditions.
+      val newPlan = plan.transformUpWithNewOutput({
         case r: LogicalRelation =>
           ApplyCharTypePaddingHelper.readSidePadding(r, () =>
             r.copy(output = r.output.map(CharVarcharUtils.cleanAttrMetadata)))
@@ -55,11 +78,32 @@ object ApplyCharTypePadding extends Rule[LogicalPlan] {
             val cleanedPartCols = r.partitionCols.map(CharVarcharUtils.cleanAttrMetadata)
             r.copy(dataCols = cleanedDataCols, partitionCols = cleanedPartCols)
           })
-      }
-      ApplyCharTypePaddingHelper.paddingForStringComparison(newPlan, padCharCol = false)
+      }, skipCond = p => p.analyzed || p.isInstanceOf[DeleteFromTable], canGetOutput = _.resolved)
+      padDeleteConditions(
+        ApplyCharTypePaddingHelper.paddingForStringComparison(newPlan, padCharCol = false))
     } else {
       ApplyCharTypePaddingHelper.paddingForStringComparison(
         plan, padCharCol = !conf.getConf(SQLConf.LEGACY_NO_CHAR_PADDING_IN_PREDICATE))
+    }
+  }
+
+  /**
+   * A DELETE that is not rewritten as a row-level operation deletes with filters translated from
+   * its condition, which the data source compares with the stored values. To match what a read of
+   * the table returns, the condition evaluates the read-side padding of the columns itself, after
+   * its comparisons are padded. The data source can only delete with such a filter if it supports
+   * the padding, e.g. `CHAR_READ_SIDE_PADDING`.
+   */
+  private def padDeleteConditions(plan: LogicalPlan): LogicalPlan = {
+    plan.resolveOperatorsWithPruning(_.containsPattern(DELETE_FROM_TABLE)) {
+      case d: DeleteFromTable =>
+        d.copy(condition = d.condition.transform {
+          // the padded value refers to the attribute without the raw type and is not padded again
+          case attr: AttributeReference if CharVarcharUtils.getRawType(attr.metadata).isDefined =>
+            CharVarcharUtils.addPaddingForScan(attr).transform {
+              case a: AttributeReference => CharVarcharUtils.cleanAttrMetadata(a)
+            }
+        })
     }
   }
 }

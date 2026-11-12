@@ -47,6 +47,14 @@
       <classifier>tests</classifier>
       <scope>test</scope>
     </dependency>
+    <!-- Compile-time only: the shade plugin relocates io.grpc references to the
+         copies embedded in the spark-connect-client-jvm jar, so consumers must
+         not pull the unshaded artifact transitively. -->
+    <dependency>
+      <groupId>io.grpc</groupId>
+      <artifactId>grpc-api</artifactId>
+      <scope>provided</scope>
+    </dependency>
   </dependencies>
   <build>
     <outputDirectory>target/scala-${scala.binary.version}/classes</outputDirectory>

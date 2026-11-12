@@ -1,0 +1,630 @@
+/*
+ * Licensed to the Apache Software Foundation (ASF) under one or more
+ * contributor license agreements.  See the NOTICE file distributed with
+ * this work for additional information regarding copyright ownership.
+ * The ASF licenses this file to You under the Apache License, Version 2.0
+ * (the "License"); you may not use this file except in compliance with
+ * the License.  You may obtain a copy of the License at
+ *
+ *    http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
+package org.apache.spark.sql.execution.planmerging
+
+import org.apache.spark.sql.Row
+import org.apache.spark.sql.execution._
+import org.apache.spark.sql.execution.adaptive.{AdaptiveSparkPlanHelper}
+import org.apache.spark.sql.internal.SQLConf
+import org.apache.spark.sql.test.SharedSparkSession
+import org.apache.spark.sql.types.{BooleanType, IntegerType, StructType}
+
+class PlanMergingSuite extends SharedSparkSession
+  with AdaptiveSparkPlanHelper {
+  import testImplicits._
+
+  setupTestData()
+
+  test("Merge non-correlated scalar subqueries") {
+    Seq(false, true).foreach { enableAQE =>
+      withSQLConf(
+        SQLConf.ADAPTIVE_EXECUTION_ENABLED.key -> enableAQE.toString) {
+        val df = sql(
+          """
+            |SELECT
+            |  (SELECT avg(key) FROM testData),
+            |  (SELECT sum(key) FROM testData),
+            |  (SELECT count(distinct key) FROM testData)
+          """.stripMargin)
+
+        checkAnswer(df, Row(50.5, 5050, 100) :: Nil)
+
+        val plan = df.queryExecution.executedPlan
+        val subqueryIds = collectWithSubqueries(plan) { case s: SubqueryExec => s.id }
+        val reusedSubqueryIds = collectWithSubqueries(plan) {
+          case rs: ReusedSubqueryExec => rs.child.id
+        }
+
+        assert(subqueryIds.size == 1, "Missing or unexpected SubqueryExec in the plan")
+        assert(reusedSubqueryIds.size == 2,
+          "Missing or unexpected reused ReusedSubqueryExec in the plan")
+      }
+    }
+  }
+
+  test("Merge non-correlated scalar subqueries in a subquery") {
+    Seq(false, true).foreach { enableAQE =>
+      withSQLConf(
+        SQLConf.ADAPTIVE_EXECUTION_ENABLED.key -> enableAQE.toString) {
+        val df = sql(
+          """
+            |SELECT (
+            |  SELECT
+            |    SUM(
+            |      (SELECT avg(key) FROM testData) +
+            |      (SELECT sum(key) FROM testData) +
+            |      (SELECT count(distinct key) FROM testData))
+            |   FROM testData
+            |)
+          """.stripMargin)
+
+        checkAnswer(df, Row(520050.0) :: Nil)
+
+        val plan = df.queryExecution.executedPlan
+        val subqueryIds = collectWithSubqueries(plan) { case s: SubqueryExec => s.id }
+        val reusedSubqueryIds = collectWithSubqueries(plan) {
+          case rs: ReusedSubqueryExec => rs.child.id
+        }
+
+        assert(subqueryIds.size == 2, "Missing or unexpected SubqueryExec in the plan")
+        assert(reusedSubqueryIds.size == 5,
+          "Missing or unexpected reused ReusedSubqueryExec in the plan")
+      }
+    }
+  }
+
+  test("Merge non-correlated scalar subqueries from different levels") {
+    Seq(false, true).foreach { enableAQE =>
+      withSQLConf(
+        SQLConf.ADAPTIVE_EXECUTION_ENABLED.key -> enableAQE.toString) {
+        val df = sql(
+          """
+            |SELECT
+            |  (SELECT avg(key) FROM testData),
+            |  (
+            |    SELECT
+            |      SUM(
+            |        (SELECT sum(key) FROM testData)
+            |      )
+            |    FROM testData
+            |  )
+          """.stripMargin)
+
+        checkAnswer(df, Row(50.5, 505000) :: Nil)
+
+        val plan = df.queryExecution.executedPlan
+        val subqueryIds = collectWithSubqueries(plan) { case s: SubqueryExec => s.id }
+        val reusedSubqueryIds = collectWithSubqueries(plan) {
+          case rs: ReusedSubqueryExec => rs.child.id
+        }
+
+        assert(subqueryIds.size == 2, "Missing or unexpected SubqueryExec in the plan")
+        assert(reusedSubqueryIds.size == 2,
+          "Missing or unexpected reused ReusedSubqueryExec in the plan")
+      }
+    }
+  }
+
+  test("Merge non-correlated scalar subqueries from different parent plans") {
+    Seq(false, true).foreach { enableAQE =>
+      withSQLConf(
+        SQLConf.ADAPTIVE_EXECUTION_ENABLED.key -> enableAQE.toString) {
+        val df = sql(
+          """
+            |SELECT
+            |  (
+            |    SELECT
+            |      SUM(
+            |        (SELECT avg(key) FROM testData)
+            |      )
+            |    FROM testData
+            |  ),
+            |  (
+            |    SELECT
+            |      SUM(
+            |        (SELECT sum(key) FROM testData)
+            |      )
+            |    FROM testData
+            |  )
+          """.stripMargin)
+
+        checkAnswer(df, Row(5050.0, 505000) :: Nil)
+
+        val plan = df.queryExecution.executedPlan
+        val subqueryIds = collectWithSubqueries(plan) { case s: SubqueryExec => s.id }
+        val reusedSubqueryIds = collectWithSubqueries(plan) {
+          case rs: ReusedSubqueryExec => rs.child.id
+        }
+
+        assert(subqueryIds.size == 2, "Missing or unexpected SubqueryExec in the plan")
+        assert(reusedSubqueryIds.size == 4,
+          "Missing or unexpected reused ReusedSubqueryExec in the plan")
+      }
+    }
+  }
+
+  test("Merge non-correlated scalar subqueries with conflicting names") {
+    Seq(false, true).foreach { enableAQE =>
+      withSQLConf(
+        SQLConf.ADAPTIVE_EXECUTION_ENABLED.key -> enableAQE.toString) {
+        val df = sql(
+          """
+            |SELECT
+            |  (SELECT avg(key) AS key FROM testData),
+            |  (SELECT sum(key) AS key FROM testData),
+            |  (SELECT count(distinct key) AS key FROM testData)
+          """.stripMargin)
+
+        checkAnswer(df, Row(50.5, 5050, 100) :: Nil)
+
+        val plan = df.queryExecution.executedPlan
+        val subqueryIds = collectWithSubqueries(plan) { case s: SubqueryExec => s.id }
+        val reusedSubqueryIds = collectWithSubqueries(plan) {
+          case rs: ReusedSubqueryExec => rs.child.id
+        }
+
+        assert(subqueryIds.size == 1, "Missing or unexpected SubqueryExec in the plan")
+        assert(reusedSubqueryIds.size == 2,
+          "Missing or unexpected reused ReusedSubqueryExec in the plan")
+      }
+    }
+  }
+
+  test("Merge non-grouping aggregates") {
+    Seq(false, true).foreach { enableAQE =>
+      withSQLConf(
+        SQLConf.ADAPTIVE_EXECUTION_ENABLED.key -> enableAQE.toString) {
+        val df = sql(
+          """
+            |SELECT *
+            |FROM (SELECT avg(key) FROM testData)
+            |JOIN (SELECT sum(key) FROM testData)
+            |JOIN (SELECT count(distinct key) FROM testData)
+          """.stripMargin)
+
+        checkAnswer(df, Row(50.5, 5050, 100) :: Nil)
+
+        val plan = df.queryExecution.executedPlan
+        val subqueryIds = collectWithSubqueries(plan) { case s: SubqueryExec => s.id }
+        val reusedSubqueryIds = collectWithSubqueries(plan) {
+          case rs: ReusedSubqueryExec => rs.child.id
+        }
+
+        assert(subqueryIds.size == 1, "Missing or unexpected SubqueryExec in the plan")
+        assert(reusedSubqueryIds.size == 2,
+          "Missing or unexpected reused ReusedSubqueryExec in the plan")
+      }
+    }
+  }
+
+  test("Merge non-grouping aggregates from different levels") {
+    Seq(false, true).foreach { enableAQE =>
+      withSQLConf(
+        SQLConf.ADAPTIVE_EXECUTION_ENABLED.key -> enableAQE.toString) {
+        val df = sql(
+          """
+            |SELECT
+            |  first(avg_key),
+            |  (
+            |    -- Using `testData2` makes the whole subquery plan non-mergeable to the
+            |    -- non-grouping aggregate subplan in the main plan, which uses `testData`, but its
+            |    -- aggregate subplan with `sum(key)` is mergeable
+            |    SELECT first(sum_key)
+            |    FROM (SELECT sum(key) AS sum_key FROM testData)
+            |    JOIN testData2
+            |  ),
+            |  first(count_key)
+            |FROM (SELECT avg(key) AS avg_key, count(distinct key) as count_key FROM testData)
+            |JOIN testData3
+          """.stripMargin)
+
+        checkAnswer(df, Row(50.5, 5050, 100) :: Nil)
+
+        val plan = df.queryExecution.executedPlan
+
+        val subqueryIds = collectWithSubqueries(plan) { case s: SubqueryExec => s.id }
+        val reusedSubqueryIds = collectWithSubqueries(plan) {
+          case rs: ReusedSubqueryExec => rs.child.id
+        }
+
+        assert(subqueryIds.size == 2, "Missing or unexpected SubqueryExec in the plan")
+        assert(reusedSubqueryIds.size == 2,
+          "Missing or unexpected reused ReusedSubqueryExec in the plan")
+      }
+    }
+  }
+
+  test("Merge non-grouping aggregate and subquery") {
+    Seq(false, true).foreach { enableAQE =>
+      withSQLConf(
+        SQLConf.ADAPTIVE_EXECUTION_ENABLED.key -> enableAQE.toString) {
+        val df = sql(
+          """
+            |SELECT
+            |  first(avg_key),
+            |  (
+            |    -- In this case the whole scalar subquery plan is mergeable to the non-grouping
+            |    -- aggregate subplan in the main plan.
+            |    SELECT sum(key) AS sum_key FROM testData
+            |  ),
+            |  first(count_key)
+            |FROM (SELECT avg(key) AS avg_key, count(distinct key) as count_key FROM testData)
+            |JOIN testData3
+          """.stripMargin)
+
+        checkAnswer(df, Row(50.5, 5050, 100) :: Nil)
+
+        val plan = df.queryExecution.executedPlan
+
+        val subqueryIds = collectWithSubqueries(plan) { case s: SubqueryExec => s.id }
+        val reusedSubqueryIds = collectWithSubqueries(plan) {
+          case rs: ReusedSubqueryExec => rs.child.id
+        }
+
+        assert(subqueryIds.size == 1, "Missing or unexpected SubqueryExec in the plan")
+        assert(reusedSubqueryIds.size == 2,
+          "Missing or unexpected reused ReusedSubqueryExec in the plan")
+      }
+    }
+  }
+
+  test("SPARK-40618: Regression test for merging subquery bug with nested subqueries") {
+    // This test contains a subquery expression with another subquery expression nested inside.
+    // It acts as a regression test to ensure that the MergeScalarSubqueries rule does not attempt
+    // to merge them together.
+    withTable("t1", "t2") {
+      sql("create table t1(col int) using csv")
+      checkAnswer(sql("select(select sum((select sum(col) from t1)) from t1)"), Row(null))
+
+      checkAnswer(sql(
+        """
+          |select
+          |  (select sum(
+          |    (select sum(
+          |        (select sum(col) from t1))
+          |     from t1))
+          |  from t1)
+          |""".stripMargin),
+        Row(null))
+
+      sql("create table t2(col int) using csv")
+      checkAnswer(sql(
+        """
+          |select
+          |  (select sum(
+          |    (select sum(
+          |        (select sum(col) from t1))
+          |     from t2))
+          |  from t1)
+          |""".stripMargin),
+        Row(null))
+    }
+  }
+
+  test("SPARK-42346: Rewrite distinct aggregates after merging subqueries") {
+    withTempView("t1") {
+      Seq((1, 2), (3, 4)).toDF("c1", "c2").createOrReplaceTempView("t1")
+
+      checkAnswer(sql(
+        """
+          |SELECT
+          |  (SELECT count(distinct c1) FROM t1),
+          |  (SELECT count(distinct c2) FROM t1)
+          |""".stripMargin),
+        Row(2, 2))
+
+      // In this case we don't merge the subqueries as `RewriteDistinctAggregates` kicks off for the
+      // 2 subqueries first but `MergeScalarSubqueries` is not prepared for the `Expand` nodes that
+      // are inserted by the rewrite.
+      checkAnswer(sql(
+        """
+          |SELECT
+          |  (SELECT count(distinct c1) + sum(distinct c2) FROM t1),
+          |  (SELECT count(distinct c2) + sum(distinct c1) FROM t1)
+          |""".stripMargin),
+        Row(8, 6))
+    }
+  }
+
+  test("SPARK-40193: Merge non-grouping scalar subqueries with different filter conditions") {
+    Seq(false, true).foreach { enableAQE =>
+      withSQLConf(
+        SQLConf.ADAPTIVE_EXECUTION_ENABLED.key -> enableAQE.toString,
+        SQLConf.MERGE_SUBPLANS_SYMMETRIC_FILTER_PROPAGATION_ENABLED.key -> "true") {
+        val df = sql(
+          """
+            |SELECT
+            |  (SELECT sum(key) FROM testData WHERE key > 50),
+            |  (SELECT sum(key) FROM testData WHERE key <= 50)
+          """.stripMargin)
+
+        checkAnswer(df, Row(3775, 1275) :: Nil)
+
+        val plan = df.queryExecution.executedPlan
+        val subqueryIds = collectWithSubqueries(plan) { case s: SubqueryExec => s.id }
+        val reusedSubqueryIds = collectWithSubqueries(plan) {
+          case rs: ReusedSubqueryExec => rs.child.id
+        }
+
+        assert(subqueryIds.size == 1, "Missing or unexpected SubqueryExec in the plan")
+        assert(reusedSubqueryIds.size == 1,
+          "Missing or unexpected ReusedSubqueryExec in the plan")
+      }
+    }
+  }
+
+  test("SPARK-40193: Merge non-grouping scalar subqueries where only one has a filter") {
+    Seq(false, true).foreach { enableAQE =>
+      withSQLConf(
+        SQLConf.ADAPTIVE_EXECUTION_ENABLED.key -> enableAQE.toString,
+        // ObjectSerializerPruning produces different scan shapes depending on whether a Filter is
+        // present. Disabling the rule makes both scans identical so PlanMerger can merge them.
+        SQLConf.OPTIMIZER_EXCLUDED_RULES.key ->
+          "org.apache.spark.sql.catalyst.optimizer.ObjectSerializerPruning") {
+        val df = sql(
+          """
+            |SELECT
+            |  (SELECT sum(key) FROM testData),
+            |  (SELECT sum(key) FROM testData WHERE key > 50)
+          """.stripMargin)
+
+        checkAnswer(df, Row(5050, 3775) :: Nil)
+
+        val plan = df.queryExecution.executedPlan
+        val subqueryIds = collectWithSubqueries(plan) { case s: SubqueryExec => s.id }
+        val reusedSubqueryIds = collectWithSubqueries(plan) {
+          case rs: ReusedSubqueryExec => rs.child.id
+        }
+
+        assert(subqueryIds.size == 1, "Missing or unexpected SubqueryExec in the plan")
+        assert(reusedSubqueryIds.size == 1,
+          "Missing or unexpected ReusedSubqueryExec in the plan")
+      }
+    }
+  }
+
+  test("SPARK-60304: Merge a subquery without filters into subqueries that share a lower filter") {
+    // Excluding PushDownPredicates keeps the stacked Filters apart, so the first two subqueries
+    // merge their outer `fa` and `fb` Filters above the shared `a > 0` Filter. The third one has
+    // no Filter, and the merge has to keep `a > 0` for the first two aggregates, which would
+    // otherwise also read the row where `a <= 0` and return -2 and -5.
+    val schema = new StructType()
+      .add("a", IntegerType, nullable = false)
+      .add("fa", BooleanType, nullable = false)
+      .add("fb", BooleanType, nullable = false)
+    val rows = Seq(Row(-5, true, true), Row(3, true, false))
+    withTempView("t") {
+      spark.createDataFrame(spark.sparkContext.parallelize(rows), schema)
+        .createOrReplaceTempView("t")
+      Seq(false, true).foreach { enableAQE =>
+        withSQLConf(
+          SQLConf.ADAPTIVE_EXECUTION_ENABLED.key -> enableAQE.toString,
+          SQLConf.MERGE_SUBPLANS_SYMMETRIC_FILTER_PROPAGATION_ENABLED.key -> "true",
+          SQLConf.OPTIMIZER_EXCLUDED_RULES.key ->
+            "org.apache.spark.sql.catalyst.optimizer.PushDownPredicates") {
+          val df = sql(
+            """
+              |SELECT
+              |  (SELECT sum(a) FROM (SELECT * FROM t WHERE a > 0) WHERE fa),
+              |  (SELECT max(a) FROM (SELECT * FROM t WHERE a > 0) WHERE fb),
+              |  (SELECT count(a) FROM t)
+            """.stripMargin)
+
+          checkAnswer(df, Row(3, null, 2) :: Nil)
+
+          val plan = df.queryExecution.executedPlan
+          val subqueryIds = collectWithSubqueries(plan) { case s: SubqueryExec => s.id }
+          val reusedSubqueryIds = collectWithSubqueries(plan) {
+            case rs: ReusedSubqueryExec => rs.child.id
+          }
+
+          assert(subqueryIds.size == 1, "Missing or unexpected SubqueryExec in the plan")
+          assert(reusedSubqueryIds.size == 2,
+            "Missing or unexpected ReusedSubqueryExec in the plan")
+        }
+      }
+    }
+  }
+
+  test("SPARK-56677: Merge scalar subqueries with filter propagation through Join") {
+    // subquery1 has no filter; subquery2 filters on b > 1 (a column from the right side of the join
+    // that is not part of the join condition). Predicate pushdown can only push this filter to
+    // testData2, not to testData, so only the right child differs between the two subqueries.
+    Seq(false, true).foreach { enableAQE =>
+      Seq(true, false).foreach { filterPropagationThroughJoinEnabled =>
+        withSQLConf(
+          SQLConf.ADAPTIVE_EXECUTION_ENABLED.key -> enableAQE.toString,
+          SQLConf.MERGE_SUBPLANS_FILTER_PROPAGATION_THROUGH_JOIN_ENABLED.key ->
+            filterPropagationThroughJoinEnabled.toString,
+          // ObjectSerializerPruning produces different scan shapes depending on whether a Filter is
+          // present. Disabling the rule makes both scans identical so PlanMerger can merge them.
+          SQLConf.OPTIMIZER_EXCLUDED_RULES.key ->
+            "org.apache.spark.sql.catalyst.optimizer.ObjectSerializerPruning") {
+          val df = sql(
+            """
+              |SELECT
+              |  (SELECT sum(key) FROM testData JOIN testData2 ON key = a),
+              |  (SELECT sum(key) FROM testData JOIN testData2 ON key = a WHERE b > 1)
+            """.stripMargin)
+
+          checkAnswer(df, Row(12, 6) :: Nil)
+
+          val plan = df.queryExecution.executedPlan
+          val subqueryIds = collectWithSubqueries(plan) { case s: SubqueryExec => s.id }
+          val reusedSubqueryIds = collectWithSubqueries(plan) {
+            case rs: ReusedSubqueryExec => rs.child.id
+          }
+
+          if (filterPropagationThroughJoinEnabled) {
+            assert(subqueryIds.size == 1, "Missing or unexpected SubqueryExec in the plan")
+            assert(reusedSubqueryIds.size == 1,
+              "Missing or unexpected ReusedSubqueryExec in the plan")
+          } else {
+            assert(subqueryIds.size == 2, "Missing or unexpected SubqueryExec in the plan")
+            assert(reusedSubqueryIds.isEmpty,
+              "Missing or unexpected ReusedSubqueryExec in the plan")
+          }
+        }
+      }
+    }
+  }
+
+  test("SPARK-60084: Reuse a filter that an earlier merge folded into a post-join filter") {
+    // Merging the 2nd subquery into the 1st aliases `l.b = 2` below the join, and the 2nd
+    // subquery's post-join filter folds that alias into a new one, so only the new alias is
+    // carried up to the aggregate. The 3rd subquery then reuses the `l.b = 2` alias on its own.
+    Seq(false, true).foreach { enableAQE =>
+      withSQLConf(
+        SQLConf.ADAPTIVE_EXECUTION_ENABLED.key -> enableAQE.toString,
+        SQLConf.MERGE_SUBPLANS_SYMMETRIC_FILTER_PROPAGATION_ENABLED.key -> "true",
+        SQLConf.MERGE_SUBPLANS_FILTER_PROPAGATION_THROUGH_JOIN_ENABLED.key -> "true",
+        // ObjectSerializerPruning produces different scan shapes depending on whether a Filter is
+        // present. Disabling the rule makes both scans identical so PlanMerger can merge them.
+        SQLConf.OPTIMIZER_EXCLUDED_RULES.key ->
+          "org.apache.spark.sql.catalyst.optimizer.ObjectSerializerPruning") {
+        val df = sql(
+          """
+            |SELECT
+            |  (SELECT sum(l.a)
+            |   FROM testData2 l LEFT JOIN testData2 r ON l.a = r.a WHERE l.b = 1),
+            |  (SELECT max(l.a)
+            |   FROM testData2 l LEFT JOIN testData2 r ON l.a = r.a
+            |   WHERE l.b = 2 AND coalesce(r.b, 3) > 1),
+            |  (SELECT count(*)
+            |   FROM testData2 l LEFT JOIN testData2 r ON l.a = r.a WHERE l.b = 2)
+          """.stripMargin)
+
+        checkAnswer(df, Row(12, 3, 6) :: Nil)
+
+        val plan = df.queryExecution.executedPlan
+        val subqueryIds = collectWithSubqueries(plan) { case s: SubqueryExec => s.id }
+        val reusedSubqueryIds = collectWithSubqueries(plan) {
+          case rs: ReusedSubqueryExec => rs.child.id
+        }
+
+        assert(subqueryIds.size == 1, "Missing or unexpected SubqueryExec in the plan")
+        assert(reusedSubqueryIds.size == 2,
+          "Missing or unexpected ReusedSubqueryExec in the plan")
+      }
+    }
+  }
+
+  test("SPARK-59897: Merge scalar subqueries with filters on both Join children") {
+    Seq(false, true).foreach { enableAQE =>
+      withSQLConf(
+        SQLConf.ADAPTIVE_EXECUTION_ENABLED.key -> enableAQE.toString,
+        SQLConf.MERGE_SUBPLANS_FILTER_PROPAGATION_THROUGH_JOIN_ENABLED.key -> "true",
+        SQLConf.OPTIMIZER_EXCLUDED_RULES.key ->
+          "org.apache.spark.sql.catalyst.optimizer.ObjectSerializerPruning") {
+        val df = sql(
+          """
+            |SELECT
+            |  (SELECT sum(l.a)
+            |   FROM testData2 l JOIN testData2 r ON l.a = r.a),
+            |  (SELECT max(l.a)
+            |   FROM testData2 l JOIN testData2 r ON l.a = r.a
+            |   WHERE l.b > 1 AND r.b > 1)
+          """.stripMargin)
+
+        checkAnswer(df, Row(24, 3) :: Nil)
+
+        val plan = df.queryExecution.executedPlan
+        val subqueryIds = collectWithSubqueries(plan) { case s: SubqueryExec => s.id }
+        val reusedSubqueryIds = collectWithSubqueries(plan) {
+          case rs: ReusedSubqueryExec => rs.child.id
+        }
+
+        assert(subqueryIds.size == 1, "Missing or unexpected SubqueryExec in the plan")
+        assert(reusedSubqueryIds.size == 1,
+          "Missing or unexpected ReusedSubqueryExec in the plan")
+      }
+    }
+  }
+
+  test("SPARK-59897: Repeatedly merge filters from both Join children") {
+    Seq(false, true).foreach { enableAQE =>
+      withSQLConf(
+        SQLConf.ADAPTIVE_EXECUTION_ENABLED.key -> enableAQE.toString,
+        SQLConf.MERGE_SUBPLANS_SYMMETRIC_FILTER_PROPAGATION_ENABLED.key -> "true",
+        SQLConf.MERGE_SUBPLANS_FILTER_PROPAGATION_THROUGH_JOIN_ENABLED.key -> "true",
+        SQLConf.OPTIMIZER_EXCLUDED_RULES.key ->
+          "org.apache.spark.sql.catalyst.optimizer.ObjectSerializerPruning") {
+        val df = sql(
+          """
+            |SELECT
+            |  (SELECT sum(l.a)
+            |   FROM testData2 l JOIN testData2 r ON l.a = r.a),
+            |  (SELECT max(l.a)
+            |   FROM testData2 l JOIN testData2 r ON l.a = r.a
+            |   WHERE l.b > 1 AND r.b > 1),
+            |  (SELECT count(*)
+            |   FROM testData2 l JOIN testData2 r ON l.a = r.a
+            |   WHERE l.b = 1 AND r.b = 1)
+          """.stripMargin)
+
+        checkAnswer(df, Row(24, 3, 3) :: Nil)
+
+        val plan = df.queryExecution.executedPlan
+        val subqueryIds = collectWithSubqueries(plan) { case s: SubqueryExec => s.id }
+        val reusedSubqueryIds = collectWithSubqueries(plan) {
+          case rs: ReusedSubqueryExec => rs.child.id
+        }
+
+        assert(subqueryIds.size == 1, "Missing or unexpected SubqueryExec in the plan")
+        assert(reusedSubqueryIds.size == 2,
+          "Missing or unexpected ReusedSubqueryExec in the plan")
+      }
+    }
+  }
+
+  test("SPARK-59897: Reuse a child filter after combining join filters") {
+    Seq(false, true).foreach { enableAQE =>
+      Seq("l", "r").foreach { side =>
+        withSQLConf(
+          SQLConf.ADAPTIVE_EXECUTION_ENABLED.key -> enableAQE.toString,
+          SQLConf.MERGE_SUBPLANS_SYMMETRIC_FILTER_PROPAGATION_ENABLED.key -> "true",
+          SQLConf.MERGE_SUBPLANS_FILTER_PROPAGATION_THROUGH_JOIN_ENABLED.key -> "true",
+          SQLConf.OPTIMIZER_EXCLUDED_RULES.key ->
+            "org.apache.spark.sql.catalyst.optimizer.ObjectSerializerPruning") {
+          val df = sql(s"""
+              |SELECT
+              |  (SELECT sum(l.a)
+              |   FROM testData2 l JOIN testData2 r ON l.a = r.a WHERE l.b = 1),
+              |  (SELECT max(l.a)
+              |   FROM testData2 l JOIN testData2 r ON l.a = r.a
+              |   WHERE l.b = 2 AND r.b = 2),
+              |  (SELECT count(*)
+              |   FROM testData2 l JOIN testData2 r ON l.a = r.a WHERE $side.b = 2)
+              """.stripMargin)
+
+          checkAnswer(df, Row(12, 3, 6) :: Nil)
+
+          val plan = df.queryExecution.executedPlan
+          val subqueryIds = collectWithSubqueries(plan) { case s: SubqueryExec => s.id }
+          val reusedSubqueryIds = collectWithSubqueries(plan) {
+            case rs: ReusedSubqueryExec => rs.child.id
+          }
+
+          assert(subqueryIds.size == 1, "Missing or unexpected SubqueryExec in the plan")
+          assert(reusedSubqueryIds.size == 2,
+            "Missing or unexpected ReusedSubqueryExec in the plan")
+        }
+      }
+    }
+  }
+}

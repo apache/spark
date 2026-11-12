@@ -27,8 +27,10 @@ import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.analysis.WidenStatefulOpNullability
 import org.apache.spark.sql.catalyst.encoders.ExpressionEncoder
 import org.apache.spark.sql.catalyst.expressions.{Attribute, Expression, UnsafeRow}
+import org.apache.spark.sql.catalyst.expressions.codegen.GenerateUnsafeProjection
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.execution._
+import org.apache.spark.sql.execution.datasources.v2.LowLatencyClock
 import org.apache.spark.sql.execution.streaming.operators.stateful.{StatefulOperatorStateInfo, StatefulOperatorsUtils}
 import org.apache.spark.sql.execution.streaming.operators.stateful.join.StreamingSymmetricHashJoinHelper.StateStoreAwareZipPartitionsHelper
 import org.apache.spark.sql.execution.streaming.operators.stateful.transformwithstate.statefulprocessor.{DriverStatefulProcessorHandleImpl, ImplicitGroupingKeyTracker, StatefulProcessorHandleImpl, StatefulProcessorHandleState}
@@ -55,6 +57,7 @@ import org.apache.spark.util.{CompletionIterator, SerializableConfiguration, Uti
  * @param eventTimeWatermarkForLateEvents event time watermark for filtering late events
  * @param eventTimeWatermarkForEviction event time watermark for state eviction
  * @param isStreaming defines whether the query is streaming or batch
+ * @param isRealTimeMode defines whether the query is running in Real-Time Mode
  * @param child the physical plan for the underlying data
  */
 case class TransformWithStateExec(
@@ -74,6 +77,7 @@ case class TransformWithStateExec(
     eventTimeWatermarkForEviction: Option[Long],
     child: SparkPlan,
     isStreaming: Boolean = true,
+    isRealTimeMode: Boolean = false,
     hasInitialState: Boolean = false,
     initialStateGroupingAttrs: Seq[Attribute],
     initialStateDataAttrs: Seq[Attribute],
@@ -87,7 +91,8 @@ case class TransformWithStateExec(
     eventTimeWatermarkForEviction,
     child,
     initialStateGroupingAttrs,
-    initialState)
+    initialState,
+    isRealTimeMode)
   with ObjectProducerExec {
 
   override def output: Seq[Attribute] =
@@ -200,7 +205,10 @@ case class TransformWithStateExec(
     }
   }
 
-  private def handleInputRows(keyRow: UnsafeRow, valueRowIter: Iterator[InternalRow]):
+  private def handleInputRows(
+      keyRow: UnsafeRow,
+      currentProcessingTimeMs: Option[Long],
+      valueRowIter: Iterator[InternalRow]):
     Iterator[InternalRow] = {
 
     val getOutputRow = ObjectOperator.wrapObjectToRow(outputObjectType)
@@ -218,7 +226,7 @@ case class TransformWithStateExec(
      statefulProcessor.handleInputRows(
         keyObj,
         valueObjIter,
-        new TimerValuesImpl(batchTimestampMs, eventTimeWatermarkForEviction)).map { obj =>
+        new TimerValuesImpl(currentProcessingTimeMs, eventTimeWatermarkForEviction)).map { obj =>
         getOutputRow(obj)
       }
     }
@@ -254,20 +262,86 @@ case class TransformWithStateExec(
     val groupedIter = GroupedIterator(dataIter, groupingAttributes, child.output)
     groupedIter.flatMap { case (keyRow, valueRowIter) =>
       val keyUnsafeRow = keyRow.asInstanceOf[UnsafeRow]
-      handleInputRows(keyUnsafeRow, valueRowIter)
+      handleInputRows(keyUnsafeRow, batchTimestampMs, valueRowIter)
+    }
+  }
+
+  // This is used in Real-time mode to process the data and expire timers interleaved; we also
+  // can do incremental cleanup for every record that we process.
+  private def processNewDataAndTimersAndTTL(
+      dataIter: Iterator[InternalRow],
+      processorHandle: StatefulProcessorHandleImpl): Iterator[InternalRow] = {
+    val keyProjection = GenerateUnsafeProjection.generate(groupingAttributes, child.output)
+    val ttlEvictionIntervalMs = conf.getConf(
+      SQLConf.STREAMING_TRANSFORM_WITH_STATE_REAL_TIME_MODE_TTL_EVICTION_INTERVAL_MS)
+    var lastTTLEvictionTriggeredMillis = -1L
+
+    dataIter.flatMap { row =>
+      val keyRow = keyProjection(row)
+      val valueRowIter = watermarkPredicateForDataForLateEvents match {
+        case Some(predicate) if timeMode == TimeMode.EventTime() =>
+          applyRemovingRowsOlderThanWatermark(Iterator.single(row), predicate)
+        case _ =>
+          Iterator.single(row)
+      }
+
+      val outputDataItr = if (valueRowIter.isEmpty) {
+        Iterator.empty
+      } else {
+        handleInputRows(
+          keyRow, Some(LowLatencyClock.getClock.getTimeMillis()), valueRowIter)
+      }
+
+      // handle expired timer rows
+      // late bind for the expired timers to deal with lazy iterators
+      val expiredTimersOutputItr = new Iterator[InternalRow] {
+        private lazy val itr = getIterator()
+        override def hasNext: Boolean = itr.hasNext
+        override def next(): InternalRow = itr.next()
+        private def getIterator(): Iterator[InternalRow] = {
+          processTimers(
+            timeMode,
+            Some(LowLatencyClock.getClock.getTimeMillis()),
+            processorHandle,
+            useReusableIterator = true)
+        }
+      }
+
+      // handle expired state values via ttl cleanup
+      val cleanupTtlIter = new Iterator[InternalRow] {
+        private var yetEvaluated = true
+
+        override def hasNext: Boolean = {
+          if (yetEvaluated) {
+            yetEvaluated = false
+            val currentTimeMs = LowLatencyClock.getClock.getTimeMillis()
+            if (currentTimeMs - lastTTLEvictionTriggeredMillis > ttlEvictionIntervalMs) {
+              processorHandle.doTtlCleanup(currentTimeMs)
+              lastTTLEvictionTriggeredMillis = currentTimeMs
+            }
+          }
+          false
+        }
+
+        override def next(): InternalRow =
+          throw new IllegalStateException("next() should not be called on this iterator")
+      }
+
+      outputDataItr ++ expiredTimersOutputItr ++ cleanupTtlIter
     }
   }
 
   private def handleTimerRows(
       keyObj: Any,
       expiryTimestampMs: Long,
+      currentProcessingTimeMs: Option[Long],
       processorHandle: StatefulProcessorHandleImpl): Iterator[InternalRow] = {
     val getOutputRow = ObjectOperator.wrapObjectToRow(outputObjectType)
     ImplicitGroupingKeyTracker.setImplicitKey(keyObj)
     val mappedIterator = withStatefulProcessorErrorHandling("handleExpiredTimer") {
       statefulProcessor.handleExpiredTimer(
         keyObj,
-        new TimerValuesImpl(batchTimestampMs, eventTimeWatermarkForEviction),
+        new TimerValuesImpl(currentProcessingTimeMs, eventTimeWatermarkForEviction),
         new ExpiredTimerInfoImpl(Some(expiryTimestampMs))).map { obj =>
         getOutputRow(obj)
       }
@@ -281,31 +355,37 @@ case class TransformWithStateExec(
 
   private def processTimers(
       timeMode: TimeMode,
-      processorHandle: StatefulProcessorHandleImpl): Iterator[InternalRow] = {
+      currentProcessingTimeMs: Option[Long],
+      processorHandle: StatefulProcessorHandleImpl,
+      useReusableIterator: Boolean = false): Iterator[InternalRow] = {
     val numExpiredTimers = longMetric("numExpiredTimers")
-    // SPARK-56566: Timers are always scanned without a lower bound (full scan up to the current
-    // batch timestamp / eviction watermark). We intentionally do not pass
-    // prevBatchTimestampMs / lateEventsWatermark as the exclusive lower bound here:
-    // registerTimer has no guard on the registered expiry, so a user-registered timer with expiry
-    // at or below the previous batch's lower bound would be silently dropped by a bounded scan.
-    // Revisit once registerTimer enforces ts > currentBatchTimestamp / watermark.
+    def getExpiredTimers(expiryTimestampMs: Long): Iterator[(Any, Long)] = {
+      if (useReusableIterator) {
+        processorHandle.getExpiredTimersReusableIterator(expiryTimestampMs)
+      } else {
+        processorHandle.getExpiredTimers(expiryTimestampMs)
+      }
+    }
+    // The final batch scan has no lower bound. RTM's reusable per-row scan resumes from its
+    // previous expiration threshold to avoid repeatedly scanning older timer entries.
     timeMode match {
       case ProcessingTime =>
-        assert(batchTimestampMs.isDefined)
-        val batchTimestamp = batchTimestampMs.get
-        processorHandle.getExpiredTimers(batchTimestamp)
+        assert(currentProcessingTimeMs.isDefined)
+        getExpiredTimers(currentProcessingTimeMs.get)
           .flatMap { case (keyObj, expiryTimestampMs) =>
             numExpiredTimers += 1
-            handleTimerRows(keyObj, expiryTimestampMs, processorHandle)
+            handleTimerRows(
+              keyObj, expiryTimestampMs, currentProcessingTimeMs, processorHandle)
           }
 
       case EventTime =>
         assert(eventTimeWatermarkForEviction.isDefined)
         val watermark = eventTimeWatermarkForEviction.get
-        processorHandle.getExpiredTimers(watermark)
+        getExpiredTimers(watermark)
           .flatMap { case (keyObj, expiryTimestampMs) =>
             numExpiredTimers += 1
-            handleTimerRows(keyObj, expiryTimestampMs, processorHandle)
+            handleTimerRows(
+              keyObj, expiryTimestampMs, currentProcessingTimeMs, processorHandle)
           }
 
       case _ => Iterator.empty
@@ -334,17 +414,21 @@ case class TransformWithStateExec(
     val updatesStartTimeNs = currentTimeNs
     var timerProcessingStartTimeNs = currentTimeNs
 
-    // If timeout is based on event time, then filter late data based on watermark
-    val filteredIter = watermarkPredicateForDataForLateEvents match {
-      case Some(predicate) if timeMode == TimeMode.EventTime() =>
-        applyRemovingRowsOlderThanWatermark(iter, predicate)
-      case _ =>
-        iter
+    val dataOutputIter = if (isRealTimeMode) {
+      processNewDataAndTimersAndTTL(iter, processorHandle)
+    } else {
+      // If timeout is based on event time, then filter late data based on watermark.
+      val filteredIter = watermarkPredicateForDataForLateEvents match {
+        case Some(predicate) if timeMode == TimeMode.EventTime() =>
+          applyRemovingRowsOlderThanWatermark(iter, predicate)
+        case _ =>
+          iter
+      }
+      processNewData(filteredIter)
     }
 
-    val newDataProcessorIter =
-      CompletionIterator[InternalRow, Iterator[InternalRow]](
-      processNewData(filteredIter), {
+    val newDataProcessorIter = CompletionIterator[InternalRow, Iterator[InternalRow]](
+      dataOutputIter, {
         // Note: Due to the iterator lazy execution, this metric also captures the time taken
         // by the upstream (consumer) operators in addition to the processing in this operator.
         allUpdatesTimeMs += NANOSECONDS.toMillis(System.nanoTime - updatesStartTimeNs)
@@ -364,7 +448,14 @@ case class TransformWithStateExec(
       override def next() = itr.next()
       private def getIterator(): Iterator[InternalRow] =
         CompletionIterator[InternalRow, Iterator[InternalRow]](
-          processTimers(timeMode, processorHandle), {
+          processTimers(
+            timeMode,
+            if (isRealTimeMode) {
+              Some(LowLatencyClock.getClock.getTimeMillis())
+            } else {
+              batchTimestampMs
+            },
+            processorHandle), {
           // Note: `timerProcessingTimeMs` also includes the time the parent operators take for
           // processing output returned from the timers that fire.
           timerProcessingTimeMs +=
@@ -409,7 +500,8 @@ case class TransformWithStateExec(
     val info = getStateInfo
     val stateSchemaDir = stateSchemaDirPath()
     validateAndWriteStateSchema(hadoopConf, batchId, stateSchemaVersion,
-      info, stateSchemaDir, session, operatorStateMetadataVersion, conf.stateStoreEncodingFormat)
+      info, stateSchemaDir, session, operatorStateMetadataVersion, conf.stateStoreEncodingFormat,
+      isRealTimeMode = isRealTimeMode)
   }
 
   override protected def doExecute(): RDD[InternalRow] = {
@@ -533,9 +625,10 @@ case class TransformWithStateExec(
    */
   private def processData(store: StateStore, singleIterator: Iterator[InternalRow]):
     CompletionIterator[InternalRow, Iterator[InternalRow]] = {
+    val currentTimestampMs = if (isRealTimeMode) Some(currentTimestampMsFn) else None
     val processorHandle = new StatefulProcessorHandleImpl(
       store, getStateInfo.queryRunId, keyEncoder, timeMode,
-      isStreaming, batchTimestampMs, prevBatchTimestampMs, metrics)
+      isStreaming, batchTimestampMs, prevBatchTimestampMs, metrics, currentTimestampMs)
     assert(processorHandle.getHandleState == StatefulProcessorHandleState.CREATED)
     statefulProcessor.setHandle(processorHandle)
     withStatefulProcessorErrorHandling("init") {
@@ -550,8 +643,10 @@ case class TransformWithStateExec(
       childDataIterator: Iterator[InternalRow],
       initStateIterator: Iterator[InternalRow]):
     CompletionIterator[InternalRow, Iterator[InternalRow]] = {
+    val currentTimestampMs = if (isRealTimeMode) Some(currentTimestampMsFn) else None
     val processorHandle = new StatefulProcessorHandleImpl(store, getStateInfo.queryRunId,
-      keyEncoder, timeMode, isStreaming, batchTimestampMs, prevBatchTimestampMs, metrics)
+      keyEncoder, timeMode, isStreaming, batchTimestampMs, prevBatchTimestampMs, metrics,
+      currentTimestampMs)
     assert(processorHandle.getHandleState == StatefulProcessorHandleState.CREATED)
     statefulProcessor.setHandle(processorHandle)
     withStatefulProcessorErrorHandling("init") {
@@ -626,6 +721,7 @@ object TransformWithStateExec {
       None,
       child,
       isStreaming = false,
+      isRealTimeMode = false,
       hasInitialState,
       initialStateGroupingAttrs,
       initialStateDataAttrs,

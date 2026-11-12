@@ -53,7 +53,7 @@ object ValueInterval {
       min: Option[Any],
       max: Option[Any],
       dataType: DataType): ValueInterval = dataType match {
-    case StringType | BinaryType => new DefaultValueInterval()
+    case _: StringType | BinaryType => new DefaultValueInterval()
     case _ if min.isEmpty || max.isEmpty => new NullValueInterval()
     case _ =>
       NumericValueInterval(

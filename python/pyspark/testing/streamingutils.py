@@ -19,7 +19,7 @@ import tempfile
 import time
 import unittest
 
-from pyspark import SparkConf, SparkContext, RDD
+from pyspark import RDD, SparkConf, SparkContext
 from pyspark.streaming import StreamingContext
 from pyspark.testing.sqlutils import search_jar
 

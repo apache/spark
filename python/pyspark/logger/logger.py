@@ -15,11 +15,11 @@
 # limitations under the License.
 #
 
-import logging
 import json
-import traceback
+import logging
 import sys
-from typing import cast, Mapping, Optional, TYPE_CHECKING
+import traceback
+from typing import TYPE_CHECKING, Mapping, Optional, cast
 
 if TYPE_CHECKING:
     from logging import _ArgsType, _ExcInfoType
@@ -314,6 +314,7 @@ class PySparkLogger(logging.Logger):
 
 def _test() -> None:
     import doctest
+
     import pyspark.logger.logger
 
     globs = pyspark.logger.logger.__dict__.copy()

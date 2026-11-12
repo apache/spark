@@ -163,6 +163,10 @@ private[spark] abstract class YarnSchedulerBackend(
     yarnSchedulerEndpointRef.ask[Boolean](prepareRequestExecutors(resourceProfileToTotalExecs))
   }
 
+  // The AM honors a zero executor target without killing the running executors, so the
+  // executors can be held gracefully.
+  private[spark] override def supportsExecutorHold: Boolean = true
+
   /**
    * Request that the ApplicationMaster kill the specified executors.
    */

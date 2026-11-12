@@ -33,7 +33,7 @@ private[repl] object Signaling extends Logging {
       if (!ctx.statusTracker.getActiveJobIds().isEmpty) {
         logWarning("Cancelling all active jobs, this can take a while. " +
           "Press Ctrl+C again to exit now.")
-        ctx.cancelAllJobs()
+        ctx.cancelAllJobs("because the driver process received an interrupt signal (SIGINT)")
         true
       } else {
         false

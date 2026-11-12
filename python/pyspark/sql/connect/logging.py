@@ -17,9 +17,10 @@
 
 
 import logging
-from pyspark.logger import PySparkLogger
 import os
 from typing import Optional
+
+from pyspark.logger import PySparkLogger
 
 __all__ = ["configureLogging", "getLogLevel"]
 

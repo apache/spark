@@ -97,6 +97,7 @@ class PyArrowArrayTypeInferenceTests(unittest.TestCase):
     def test_plain_python_list(self):
         """Test type inference from Python lists."""
         import math
+
         import pyarrow as pa
 
         sg = ZoneInfo("Asia/Singapore")
@@ -295,6 +296,7 @@ class PyArrowArrayTypeInferenceTests(unittest.TestCase):
         import numpy as np
         import pandas as pd
         import pyarrow as pa
+
         from pyspark.loose_version import LooseVersion
 
         # pandas >= 3 infers large_string instead of string for object-dtype string Series
@@ -365,6 +367,7 @@ class PyArrowArrayTypeInferenceTests(unittest.TestCase):
         import numpy as np
         import pandas as pd
         import pyarrow as pa
+
         from pyspark.loose_version import LooseVersion
 
         # pandas >= 3 uses pyarrow-backed StringDtype, which infers large_string

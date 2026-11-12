@@ -25,7 +25,7 @@ import io.fabric8.kubernetes.api.model._
 import io.fabric8.kubernetes.client.{KubernetesClient, PropagationPolicyConfigurable}
 import io.fabric8.kubernetes.client.dsl.{Deletable, NamespaceListVisitFromServerGetDeleteRecreateWaitApplicable, PodResource}
 import org.mockito.{ArgumentMatchers, Mock, MockitoAnnotations}
-import org.mockito.Mockito.{times, verify, when}
+import org.mockito.Mockito.{never, times, verify, when}
 import org.scalatest.BeforeAndAfter
 
 import org.apache.spark.{SparkConf, SparkFunSuite}
@@ -38,6 +38,7 @@ import org.apache.spark.scheduler.cluster.k8s.ExecutorLifecycleTestUtils.TEST_SP
 class K8sSubmitOpSuite extends SparkFunSuite with BeforeAndAfter {
   private val driverPodName1 = "driver1"
   private val driverPodName2 = "driver2"
+  private val missingPodName = "driver3"
   private val driverPod1 = buildDriverPod(driverPodName1, "1")
   private val driverPod2 = buildDriverPod(driverPodName2, "2")
   private val podList = List(driverPod1, driverPod2)
@@ -54,6 +55,11 @@ class K8sSubmitOpSuite extends SparkFunSuite with BeforeAndAfter {
 
   @Mock
   private var driverPodOperations2: PodResource = _
+
+  // The missing pod needs a real mock whose `get` returns null. `executeOnPod` resolves the
+  // handle, so a bare unstubbed name would make `withName` return null and NPE instead.
+  @Mock
+  private var missingPodOperations: PodResource = _
 
   @Mock
   private var kubernetesClient: KubernetesClient = _
@@ -76,10 +82,12 @@ class K8sSubmitOpSuite extends SparkFunSuite with BeforeAndAfter {
     when(podOperations.inNamespace(namespace)).thenReturn(podsWithNamespace)
     when(podsWithNamespace.withName(driverPodName1)).thenReturn(driverPodOperations1)
     when(podsWithNamespace.withName(driverPodName2)).thenReturn(driverPodOperations2)
+    when(podsWithNamespace.withName(missingPodName)).thenReturn(missingPodOperations)
     when(driverPodOperations1.get).thenReturn(driverPod1)
     when(driverPodOperations1.delete()).thenReturn(Arrays.asList(new StatusDetails))
     when(driverPodOperations2.get).thenReturn(driverPod2)
     when(driverPodOperations2.delete()).thenReturn(Arrays.asList(new StatusDetails))
+    doReturn(null).when(missingPodOperations).get
   }
 
   test("List app status") {
@@ -118,6 +126,17 @@ class K8sSubmitOpSuite extends SparkFunSuite with BeforeAndAfter {
     killApp.executeOnPod(driverPodName1, Option(namespace), conf)
     verify(driverPodOperations1, times(1)).withGracePeriod(1L)
     verify(deletable, times(1)).delete()
+  }
+
+  test("SPARK-58725: Kill app that does not exist") {
+    implicit val kubeClient: KubernetesClient = kubernetesClient
+    val killApp = new KillApplication
+    killApp.printStream = err
+    killApp.executeOnPod(missingPodName, Option(namespace), new SparkConf())
+    // scalastyle:off
+    verify(err).println(ArgumentMatchers.eq("Application not found."))
+    // scalastyle:on
+    verify(missingPodOperations, never()).delete()
   }
 
   test("Kill multiple apps with glob without gracePeriod") {

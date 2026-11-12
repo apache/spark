@@ -15,27 +15,27 @@
 # limitations under the License.
 #
 import sys
-from typing import List, Optional, Union, TYPE_CHECKING, cast, Any
 import warnings
+from typing import TYPE_CHECKING, Any, List, Optional, Union, cast
 
 from pyspark.errors import PySparkTypeError
-from pyspark.util import PythonEvalType
 from pyspark.sql.column import Column
 from pyspark.sql.dataframe import DataFrame
 from pyspark.sql.streaming.state import GroupStateTimeout
 from pyspark.sql.streaming.stateful_processor import StatefulProcessor
 from pyspark.sql.types import StructType
+from pyspark.util import PythonEvalType
 
 if TYPE_CHECKING:
+    from pyspark.sql.group import GroupedData
     from pyspark.sql.pandas._typing import (
+        ArrowCogroupedMapFunction,
+        ArrowGroupedMapFunction,
         GroupedMapPandasUserDefinedFunction,
+        PandasCogroupedMapFunction,
         PandasGroupedMapFunction,
         PandasGroupedMapFunctionWithState,
-        PandasCogroupedMapFunction,
-        ArrowGroupedMapFunction,
-        ArrowCogroupedMapFunction,
     )
-    from pyspark.sql.group import GroupedData
 
 
 class PandasGroupedOpsMixin:
@@ -1196,8 +1196,9 @@ class PandasCogroupedOps:
 
 def _test() -> None:
     import doctest
-    from pyspark.sql import SparkSession
+
     import pyspark.sql.pandas.group_ops
+    from pyspark.sql import SparkSession
     from pyspark.testing.utils import have_pandas, have_pyarrow
 
     globs = pyspark.sql.pandas.group_ops.__dict__.copy()

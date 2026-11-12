@@ -32,9 +32,9 @@ import org.apache.spark.annotation.{Since, Stable}
  *               numbers, since a task's amount must map onto discrete resource addresses -
  *               ie amount equals 0.5 translates into 2 tasks per resource address. CPUs
  *               (resource name "cpus") are a plain quantity drawn from the executor's core
- *               pool rather than an addressable resource, so any amount of at least 1e-9 is
- *               valid, e.g. 1.5; the cpus amount is rounded to the nearest 1e-9, so precision
- *               beyond 9 decimal places is not preserved.
+ *               pool rather than an addressable resource, so any amount from 1e-9 through
+ *               Int.MaxValue after rounding is valid, e.g. 1.5; the cpus amount is rounded to
+ *               the nearest 1e-9, so precision beyond 9 decimal places is not preserved.
  */
 @Stable
 @Since("3.1.0")

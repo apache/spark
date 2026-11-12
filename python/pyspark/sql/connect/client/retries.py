@@ -15,17 +15,19 @@
 # limitations under the License.
 #
 
-import grpc
 import random
 import time
 import typing
 import warnings
+from types import TracebackType
+from typing import Callable, Generator, List, Optional, Type, cast
+
+import grpc
 from google.rpc import error_details_pb2
 from grpc_status import rpc_status
-from typing import Optional, Callable, Generator, List, Type, cast
-from types import TracebackType
-from pyspark.sql.connect.logging import logger
+
 from pyspark.errors import PySparkRuntimeError
+from pyspark.sql.connect.logging import logger
 
 """
 This module contains retry system. The system is designed to be

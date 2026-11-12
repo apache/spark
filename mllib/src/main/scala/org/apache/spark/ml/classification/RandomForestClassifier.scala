@@ -36,6 +36,7 @@ import org.apache.spark.mllib.tree.model.{RandomForestModel => OldRandomForestMo
 import org.apache.spark.sql._
 import org.apache.spark.sql.functions.{col, udf}
 import org.apache.spark.sql.types.StructType
+import org.apache.spark.storage.StorageLevel
 
 /**
  * <a href="http://en.wikipedia.org/wiki/Random_forest">Random Forest</a> learning algorithm for
@@ -99,6 +100,10 @@ class RandomForestClassifier @Since("1.4.0") (
    */
   @Since("1.4.0")
   def setCheckpointInterval(value: Int): this.type = set(checkpointInterval, value)
+
+  /** @group expertSetParam */
+  @Since("4.4.0")
+  def setIntermediateStorageLevel(value: String): this.type = set(intermediateStorageLevel, value)
 
   /** @group setParam */
   @Since("1.4.0")
@@ -168,10 +173,12 @@ class RandomForestClassifier @Since("1.4.0") (
     instr.logParams(this, labelCol, featuresCol, weightCol, predictionCol, probabilityCol,
       rawPredictionCol, leafCol, impurity, numTrees, featureSubsetStrategy, maxDepth, maxBins,
       maxMemoryInMB, minInfoGain, pruneTree, minInstancesPerNode, minWeightFractionPerNode, seed,
-      subsamplingRate, thresholds, cacheNodeIds, checkpointInterval, bootstrap)
+      subsamplingRate, thresholds, cacheNodeIds, checkpointInterval, bootstrap,
+      intermediateStorageLevel)
 
     val trees = RandomForest
-      .run(instances, strategy, getNumTrees, getFeatureSubsetStrategy, getSeed, Some(instr))
+      .run(instances, strategy, getNumTrees, getFeatureSubsetStrategy, getSeed, Some(instr),
+        intermediateStorageLevel = StorageLevel.fromString($(intermediateStorageLevel)))
       .map(_.asInstanceOf[DecisionTreeClassificationModel])
     trees.foreach(copyValues(_))
 
@@ -250,11 +257,8 @@ class RandomForestClassificationModel private[ml] (
   @Since("1.4.0")
   override def trees: Array[DecisionTreeClassificationModel] = _trees
 
-  // Note: We may add support for weights (based on tree performance) later on.
-  private lazy val _treeWeights: Array[Double] = Array.fill[Double](_trees.length)(1.0)
-
   @Since("1.4.0")
-  override def treeWeights: Array[Double] = _treeWeights
+  override def treeWeights: Array[Double] = Array.fill[Double](_trees.length)(1.0)
 
   /**
    * Gets summary of model on training set. An exception is thrown
@@ -308,7 +312,10 @@ class RandomForestClassificationModel private[ml] (
 
     val outputData = super.transform(dataset)
     if ($(leafCol).nonEmpty) {
-      val leafUDF = udf { features: Vector => predictLeaf(features) }
+      val localRootNodes = _trees.map(_.rootNode)
+      val leafUDF = udf { features: Vector =>
+        TreeEnsembleModel.predictLeaf(features, localRootNodes)
+      }
       outputData.withColumn($(leafCol), leafUDF(col($(featuresCol))),
         outputSchema($(leafCol)).metadata)
     } else {
@@ -316,25 +323,64 @@ class RandomForestClassificationModel private[ml] (
     }
   }
 
-  @Since("3.0.0")
-  override def predictRaw(features: Vector): Vector = {
-    // TODO: When we add a generic Bagging class, handle transform there: SPARK-7128
-    // Classifies using majority votes.
-    // Ignore the tree weights since all are 1.0 for now.
-    val votes = Array.ofDim[Double](numClasses)
-    _trees.foreach { tree =>
-      val classCounts = tree.rootNode.predictImpl(features).impurityStats.stats
-      val total = classCounts.sum
-      if (total != 0) {
-        var i = 0
-        while (i < numClasses) {
-          votes(i) += classCounts(i) / total
-          i += 1
-        }
-      }
-    }
-    Vectors.dense(votes)
+  override protected def predictRawColumn(features: Column): Column = {
+    val localRootNodes = _trees.map(_.rootNode)
+    val localNumClasses = numClasses
+    udf((features: Vector) =>
+      RandomForestClassificationModel.predictRaw(features, localRootNodes, localNumClasses)
+    ).apply(features)
   }
+
+  override protected def raw2probabilityColumn(rawPrediction: Column): Column = {
+    udf((rawPrediction: Vector) =>
+      RandomForestClassificationModel.raw2probability(rawPrediction)
+    ).apply(rawPrediction)
+  }
+
+  override protected def predictProbabilityColumn(features: Column): Column = {
+    val localRootNodes = _trees.map(_.rootNode)
+    val localNumClasses = numClasses
+    udf((features: Vector) => {
+      val rawPrediction =
+        RandomForestClassificationModel.predictRaw(features, localRootNodes, localNumClasses)
+      RandomForestClassificationModel.raw2probability(rawPrediction)
+    }).apply(features)
+  }
+
+  override protected def raw2predictionColumn(rawPrediction: Column): Column = {
+    if (isDefined(thresholds)) {
+      val localThresholds = getThresholds.clone()
+      udf((rawPrediction: Vector) => {
+        val probability = RandomForestClassificationModel.raw2probability(rawPrediction)
+        ProbabilisticClassificationModel.probability2prediction(probability, localThresholds)
+      }).apply(rawPrediction)
+    } else {
+      udf((rawPrediction: Vector) => rawPrediction.argmax.toDouble).apply(rawPrediction)
+    }
+  }
+
+  override protected def predictionColumn(features: Column): Column = {
+    val localRootNodes = _trees.map(_.rootNode)
+    val localNumClasses = numClasses
+    if (isDefined(thresholds)) {
+      val localThresholds = getThresholds.clone()
+      udf((features: Vector) => {
+        val rawPrediction =
+          RandomForestClassificationModel.predictRaw(features, localRootNodes, localNumClasses)
+        val probability = RandomForestClassificationModel.raw2probability(rawPrediction)
+        ProbabilisticClassificationModel.probability2prediction(probability, localThresholds)
+      }).apply(features)
+    } else {
+      udf((features: Vector) =>
+        RandomForestClassificationModel.predictRaw(
+          features, localRootNodes, localNumClasses).argmax.toDouble
+      ).apply(features)
+    }
+  }
+
+  @Since("3.0.0")
+  override def predictRaw(features: Vector): Vector =
+    RandomForestClassificationModel.predictRaw(features, _trees, numClasses)
 
   override protected def raw2probabilityInPlace(rawPrediction: Vector): Vector = {
     rawPrediction match {
@@ -413,6 +459,50 @@ class RandomForestClassificationModel private[ml] (
 
 @Since("2.0.0")
 object RandomForestClassificationModel extends MLReadable[RandomForestClassificationModel] {
+
+  private def predictRaw(
+      features: Vector,
+      trees: Array[DecisionTreeClassificationModel],
+      numClasses: Int): Vector = {
+    val votes = Array.ofDim[Double](numClasses)
+    trees.foreach { tree =>
+      val classCounts = tree.rootNode.predictImpl(features).impurityStats.stats
+      val total = classCounts.sum
+      if (total != 0) {
+        var i = 0
+        while (i < numClasses) {
+          votes(i) += classCounts(i) / total
+          i += 1
+        }
+      }
+    }
+    Vectors.dense(votes)
+  }
+
+  private def predictRaw(
+      features: Vector,
+      rootNodes: Array[Node],
+      numClasses: Int): Vector = {
+    val votes = Array.ofDim[Double](numClasses)
+    rootNodes.foreach { rootNode =>
+      val classCounts = rootNode.predictImpl(features).impurityStats.stats
+      val total = classCounts.sum
+      if (total != 0) {
+        var i = 0
+        while (i < numClasses) {
+          votes(i) += classCounts(i) / total
+          i += 1
+        }
+      }
+    }
+    Vectors.dense(votes)
+  }
+
+  private def raw2probability(rawPrediction: Vector): Vector = {
+    val probability = rawPrediction.copy.toDense
+    ProbabilisticClassificationModel.normalizeToProbabilitiesInPlace(probability)
+    probability
+  }
 
   @Since("2.0.0")
   override def read: MLReader[RandomForestClassificationModel] =

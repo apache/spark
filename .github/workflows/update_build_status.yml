@@ -17,115 +17,61 @@
 # under the License.
 #
 
-name: Update build status workflow
+# Publishes the status of each open PR's fork build as a `Build` check on the PR.
+# Fork builds still run in contributors' forks on push (build_main.yml); this
+# workflow only reports their results. Running on a schedule avoids
+# `pull_request_target` and needs no maintainer approval for fork PRs.
+#
+# Each pass synchronizes existing `Build` checks with their fork runs. Missing
+# checks are linked to the PR head's fork build, unless no run exists, the run was
+# skipped, or the PR is from fork master. Those cases get `action_required` guidance
+# after the registration grace period. Fork master is reserved for syncing upstream;
+# PR builds should use other branches. Existing run-linked checks remain supported,
+# including older master-branch builds. GitHub may delay or drop scheduled runs, so
+# neither the initial check nor result updates are immediate.
+
+name: Build Status
 
 on:
   schedule:
-  - cron: "*/15 * * * *"
+  # Quick sync: open PRs updated in the last QUICK_SYNC_LOOKBACK_DAYS (set in the script).
+  - cron: "*/10 * * * *"
+  # Full sync: all open PRs every 4 hours, between quick syncs and away from the busy top of
+  # the hour and midnight UTC, when GitHub delays or drops scheduled runs.
+  # FULL_SYNC below must match this schedule.
+  - cron: "35 2-22/4 * * *"
+
+# Passes do not overlap, so two passes cannot both create a missing Build check.
+concurrency:
+  group: ${{ github.workflow }}
+  cancel-in-progress: false
 
 jobs:
   update:
-    name: Update build status
+    name: Update
+    if: github.repository == 'apache/spark'
     runs-on: ubuntu-slim
     permissions:
       actions: read
       checks: write
+      contents: read
+      pull-requests: read
+      statuses: read
     steps:
-      - name: "Update build status"
+      - name: Checkout build status script
+        uses: actions/checkout@v7
+        with:
+          sparse-checkout: .github/workflows/update_build_status.js
+          sparse-checkout-cone-mode: false
+          persist-credentials: false
+      - name: Sync status updates
         uses: actions/github-script@v9
+        env:
+          FULL_SYNC: ${{ github.event.schedule == '35 2-22/4 * * *' }}
         with:
           github-token: ${{ secrets.GITHUB_TOKEN }}
+          # Retry server errors (including GraphQL timeouts) and 429s with a short backoff.
+          retries: 3
           script: |
-            const endpoint = 'GET /repos/:owner/:repo/pulls?state=:state'
-            const params = {
-              owner: context.repo.owner,
-              repo: context.repo.repo,
-              state: 'open'
-            }
-
-            // See https://docs.github.com/en/graphql/reference/enums#mergestatestatus
-            const maybeReady = ['behind', 'clean', 'draft', 'has_hooks', 'unknown', 'unstable'];
-
-            // Iterate open PRs
-            for await (const prs of github.paginate.iterator(endpoint,params)) {
-              // Each page
-              for await (const pr of prs.data) {
-                console.log('SHA: ' + pr.head.sha)
-                console.log('  Mergeable status: ' + pr.mergeable_state)
-                if (pr.mergeable_state == null || maybeReady.includes(pr.mergeable_state)) {
-                  // Paginate with per_page=100 to match notify_test_workflow.yml. The default
-                  // page size is 30, and a SHA can accumulate more check-runs than that (CI
-                  // matrix, external checks, duplicate Build checks from reopened PRs), which
-                  // could push the target Build check off the first page and leave the PR
-                  // stuck in 'queued' forever.
-                  const checkRuns = await github.paginate(
-                    'GET /repos/{owner}/{repo}/commits/{ref}/check-runs',
-                    {
-                      owner: context.repo.owner,
-                      repo: context.repo.repo,
-                      ref: pr.head.sha,
-                      per_page: 100
-                    }
-                  )
-
-                  // Iterator GitHub Checks in the PR
-                  for await (const cr of checkRuns) {
-                    if (cr.name == 'Build' && cr.conclusion != "action_required") {
-                      // text contains parameters to make request in JSON. A Build check
-                      // created by something other than notify_test_workflow.yml (an older
-                      // version, a manual run, or another app) may have empty or malformed
-                      // output text; skip it instead of aborting the whole scheduled run,
-                      // which would block updates for every PR queued behind it.
-                      let params
-                      try {
-                        params = JSON.parse(cr.output.text)
-                      } catch (error) {
-                        console.error('Skipping Build check ' + cr.id + ' with unparseable output text')
-                        console.error(error)
-                        continue
-                      }
-
-                      // Get the workflow run in the forked repository
-                      let run
-                      try {
-                        run = await github.request('GET /repos/{owner}/{repo}/actions/runs/{run_id}', params)
-                      } catch (error) {
-                        console.error(error)
-                        // Run not found. This can happen when the PR author removes GitHub Actions runs or
-                        // disables GitHub Actions.
-                        continue
-                      }
-
-                      // Keep syncing the status of the checks
-                      if (run.data.status == 'completed') {
-                        console.log('    Run ' + cr.id + ': set status (' + run.data.status + ') and conclusion (' + run.data.conclusion + ')')
-                        const response = await github.request('PATCH /repos/{owner}/{repo}/check-runs/{check_run_id}', {
-                          owner: context.repo.owner,
-                          repo: context.repo.repo,
-                          check_run_id: cr.id,
-                          output: cr.output,
-                          status: run.data.status,
-                          conclusion: run.data.conclusion,
-                          details_url: run.data.details_url
-                        })
-                      } else {
-                        // PATCH /check-runs accepts only queued | in_progress | completed,
-                        // but workflow_run may also report requested / waiting / pending.
-                        const status = run.data.status == 'in_progress' ? 'in_progress' : 'queued'
-                        console.log('    Run ' + cr.id + ': set status (' + run.data.status + ' -> ' + status + ')')
-                        const response = await github.request('PATCH /repos/{owner}/{repo}/check-runs/{check_run_id}', {
-                          owner: context.repo.owner,
-                          repo: context.repo.repo,
-                          check_run_id: cr.id,
-                          output: cr.output,
-                          status: status,
-                          details_url: run.data.details_url
-                        })
-                      }
-
-                      break
-                    }
-                  }
-                }
-              }
-            }
+            await require(process.env.GITHUB_WORKSPACE
+              + '/.github/workflows/update_build_status.js')({github, context, core})

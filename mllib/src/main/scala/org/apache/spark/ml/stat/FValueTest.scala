@@ -20,7 +20,7 @@ package org.apache.spark.ml.stat
 import org.apache.commons.math3.distribution.FDistribution
 
 import org.apache.spark.annotation.Since
-import org.apache.spark.ml.linalg.{Vector, Vectors, VectorUDT}
+import org.apache.spark.ml.linalg.{SQLDataTypes, Vector, Vectors}
 import org.apache.spark.ml.util.SchemaUtils
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.{DataFrame, Dataset, Row}
@@ -99,7 +99,7 @@ private[ml] object FValueTest {
       dataset: Dataset[_],
       featuresCol: String,
       labelCol: String): RDD[(Int, Double, Long, Double)] = {
-    SchemaUtils.checkColumnType(dataset.schema, featuresCol, new VectorUDT)
+    SchemaUtils.checkColumnType(dataset.schema, featuresCol, SQLDataTypes.VectorType)
     SchemaUtils.checkNumericType(dataset.schema, labelCol)
 
     val spark = dataset.sparkSession

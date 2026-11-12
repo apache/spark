@@ -14,18 +14,21 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 #
-import uuid
 import json
-from typing import Any, Dict, List, Optional, Set, TYPE_CHECKING
+import uuid
 from abc import ABC, abstractmethod
+from typing import TYPE_CHECKING, Any, Dict, List, Optional, Set, Union
 
-from pyspark.sql import Row
 from pyspark import cloudpickle
+from pyspark.sql.types import Row
 
 __all__ = ["StreamingQueryListener"]
 
 if TYPE_CHECKING:
     from py4j.java_gateway import JavaObject
+
+    from pyspark.sql.connect.session import SparkSession as ConnectSparkSession
+    from pyspark.sql.session import SparkSession
 
 
 class StreamingQueryListener(ABC):
@@ -63,19 +66,21 @@ class StreamingQueryListener(ABC):
     >>> spark.streams.addListener(MyListener())
     """
 
+    _sparkSession: Optional[Union["SparkSession", "ConnectSparkSession"]] = None
+
     def _set_spark_session(
         self,
-        session: "SparkSession",  # type: ignore[name-defined] # noqa: F821
+        session: Union["SparkSession", "ConnectSparkSession"],
     ) -> None:
         if self.spark is None:
             self.spark = session
 
     @property
-    def spark(self) -> Optional["SparkSession"]:  # type: ignore[name-defined] # noqa: F821
-        return getattr(self, "_sparkSession", None)
+    def spark(self) -> Optional[Union["SparkSession", "ConnectSparkSession"]]:
+        return self._sparkSession
 
     @spark.setter
-    def spark(self, session: "SparkSession") -> None:  # type: ignore[name-defined] # noqa: F821
+    def spark(self, session: Union["SparkSession", "ConnectSparkSession"]) -> None:
         # For backward compatibility
         self._sparkSession = session
 
@@ -195,7 +200,7 @@ class QueryStartedEvent:
         job_tags = set()
         java_iterator = jevent.jobTags().iterator()
         while java_iterator.hasNext():
-            job_tags.add(java_iterator.next().toString())
+            job_tags.add(str(java_iterator.next()))
 
         return cls(
             id=uuid.UUID(jevent.id().toString()),
@@ -1112,13 +1117,15 @@ class SinkProgress(dict):
 
 
 def _test() -> None:
-    import sys
     import doctest
     import os
+    import sys
+
+    from py4j.protocol import Py4JError
+
+    import pyspark.sql.streaming.listener
     from pyspark.core.context import SparkContext
     from pyspark.sql import SparkSession
-    import pyspark.sql.streaming.listener
-    from py4j.protocol import Py4JError
 
     os.chdir(os.environ["SPARK_HOME"])
 

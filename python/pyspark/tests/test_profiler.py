@@ -21,12 +21,12 @@ import tempfile
 import unittest
 from io import StringIO
 
-from pyspark import SparkConf, SparkContext, BasicProfiler
+from pyspark import BasicProfiler, SparkConf, SparkContext
+from pyspark.errors import PySparkRuntimeError, PythonException
 from pyspark.memory_profiler_ext import has_memory_profiler
 from pyspark.sql import SparkSession
 from pyspark.sql.functions import udf
-from pyspark.errors import PythonException, PySparkRuntimeError
-from pyspark.testing.utils import PySparkTestCase, PySparkErrorTestUtils
+from pyspark.testing.utils import PySparkErrorTestUtils, PySparkTestCase
 
 
 class ProfilerTests(PySparkTestCase):

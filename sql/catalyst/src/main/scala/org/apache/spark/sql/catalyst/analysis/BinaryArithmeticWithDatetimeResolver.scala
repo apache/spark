@@ -145,7 +145,9 @@ object BinaryArithmeticWithDatetimeResolver {
             TimestampAddInterval(l, UnaryMinus(r, context.evalMode == EvalMode.ANSI))), l.dataType)
         case _
           if AnyTimestampTypeExpression.unapply(l) ||
-            AnyTimestampTypeExpression.unapply(r) =>
+            AnyTimestampTypeExpression.unapply(r) ||
+            AnyTimestampNanoType.acceptsType(l.dataType) ||
+            AnyTimestampNanoType.acceptsType(r.dataType) =>
           SubtractTimestamps(l, r)
         case (_, DateType) => SubtractDates(l, r)
         case (DateType, dt) if dt != StringType => DateSub(l, r)

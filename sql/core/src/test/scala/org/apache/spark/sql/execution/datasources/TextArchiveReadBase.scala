@@ -20,8 +20,9 @@ package org.apache.spark.sql.execution.datasources
 import java.io.File
 import java.nio.charset.StandardCharsets
 import java.nio.file.Files
+import java.util.regex.Pattern
 
-import org.apache.spark.{SparkConf, SparkException}
+import org.apache.spark.{SparkConf, SparkException, SparkUnsupportedOperationException}
 import org.apache.spark.sql.{DataFrame, QueryTest, Row}
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSparkSession
@@ -93,6 +94,27 @@ trait TextArchiveReadBase extends QueryTest with SharedSparkSession {
     }
   }
 
+  Seq(true, false).foreach { ignoreCorrupt =>
+    test(s"decompression is rejected for an archive (ignoreCorruptFiles=$ignoreCorrupt)") {
+      archiveExtensions.foreach { ext =>
+        withArchiveFile(ext) { archive =>
+          writeArchive(archive, Seq("a.txt" -> textBytes("line1\n")))
+          // Raised while planning the scan, so `ignoreCorruptFiles` cannot skip the archive.
+          withSQLConf(SQLConf.IGNORE_CORRUPT_FILES.key -> ignoreCorrupt.toString) {
+            checkErrorMatchPVals(
+              exception = intercept[SparkUnsupportedOperationException] {
+                read(archive.getCanonicalPath, Map("decompression" -> "gzip")).collect()
+              },
+              condition = "UNSUPPORTED_FEATURE.DECOMPRESSION_CODEC_FOR_ARCHIVE",
+              parameters = Map(
+                "option" -> "\"decompression\"",
+                "path" -> s".*${Pattern.quote(archive.getName)}"))
+          }
+        }
+      }
+    }
+  }
+
   test("an empty archive yields no rows") {
     withArchiveFile() { archive =>
       writeArchive(archive, Seq.empty)
@@ -151,6 +173,35 @@ trait TextArchiveReadBase extends QueryTest with SharedSparkSession {
         assert(readDf.rdd.getNumPartitions == 1,
           s"archive should be a single partition; got ${readDf.rdd.getNumPartitions}")
         assert(readDf.count() == 4000L)
+      }
+    }
+  }
+
+  test("_metadata exposes the parent archive file's values, identical for every row") {
+    archiveExtensions.foreach { ext =>
+      withArchiveFile(ext) { archive =>
+        writeArchive(archive, Seq(
+          "a.txt" -> textBytes("l1\nl2\n"), "b.txt" -> textBytes("l3\nl4\n")))
+        val rows = read(archive.getCanonicalPath)
+          .select("_metadata.file_path", "_metadata.file_name", "_metadata.file_size",
+            "_metadata.file_block_start", "_metadata.file_block_length",
+            "_metadata.file_modification_time")
+          .collect()
+        assert(rows.length == 4)
+        val fileSize = archive.length()
+        rows.foreach { r =>
+          assert(r.getString(0).endsWith(archive.getName) && !r.getString(0).contains("a.txt"),
+            s"file_path should be the archive file, got ${r.getString(0)}")
+          assert(r.getString(1) == archive.getName, s"file_name mismatch: ${r.getString(1)}")
+          assert(r.getLong(2) == fileSize, s"file_size mismatch: ${r.getLong(2)} != $fileSize")
+          assert(r.getLong(3) == 0L, s"file_block_start should be 0, got ${r.getLong(3)}")
+          assert(r.getLong(4) == fileSize,
+            s"file_block_length should be the archive size, got ${r.getLong(4)}")
+          assert(r.getAs[java.sql.Timestamp](5).getTime == archive.lastModified(),
+            "file_modification_time should be the archive's mtime")
+        }
+        assert(rows.map(_.toSeq).distinct.length == 1,
+          "every row must carry the same parent-archive metadata")
       }
     }
   }

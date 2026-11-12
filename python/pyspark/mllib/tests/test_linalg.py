@@ -18,24 +18,24 @@
 import array as pyarray
 import unittest
 
-from numpy import array, array_equal, zeros, arange, tile, ones, inf
+from numpy import arange, array, array_equal, inf, ones, tile, zeros
 
 import pyspark.ml.linalg as newlinalg
-from pyspark.serializers import CPickleSerializer
 from pyspark.mllib.linalg import (
-    Vector,
-    SparseVector,
-    DenseVector,
-    VectorUDT,
-    _convert_to_vector,
     DenseMatrix,
-    SparseMatrix,
-    Vectors,
+    DenseVector,
     Matrices,
     MatrixUDT,
+    SparseMatrix,
+    SparseVector,
+    Vector,
+    Vectors,
+    VectorUDT,
+    _convert_to_vector,
 )
-from pyspark.mllib.linalg.distributed import RowMatrix, IndexedRowMatrix, IndexedRow
+from pyspark.mllib.linalg.distributed import IndexedRow, IndexedRowMatrix, RowMatrix
 from pyspark.mllib.regression import LabeledPoint
+from pyspark.serializers import CPickleSerializer
 from pyspark.sql import Row
 from pyspark.testing.mllibutils import MLlibTestCase
 from pyspark.testing.utils import have_scipy
@@ -418,6 +418,10 @@ class VectorUDTTests(MLlibTestCase):
     def test_json_schema(self):
         self.assertEqual(VectorUDT.fromJson(self.udt.jsonValue()), self.udt)
 
+    def test_singleton(self):
+        self.assertIs(VectorUDT(), VectorUDT())
+        self.assertIs(VectorUDT.fromJson(self.udt.jsonValue()), self.udt)
+
     def test_serialization(self):
         for v in [self.dv0, self.dv1, self.sv0, self.sv1]:
             self.assertEqual(v, self.udt.deserialize(self.udt.serialize(v)))
@@ -478,6 +482,10 @@ class MatrixUDTTests(MLlibTestCase):
 
     def test_json_schema(self):
         self.assertEqual(MatrixUDT.fromJson(self.udt.jsonValue()), self.udt)
+
+    def test_singleton(self):
+        self.assertIs(MatrixUDT(), MatrixUDT())
+        self.assertIs(MatrixUDT.fromJson(self.udt.jsonValue()), self.udt)
 
     def test_serialization(self):
         for m in [self.dm1, self.dm2, self.sm1, self.sm2]:
@@ -583,7 +591,7 @@ class SciPyTests(MLlibTestCase):
         self.assertEqual(clusters.predict(data[2]), clusters.predict(data[3]))
 
     def test_classification(self):
-        from pyspark.mllib.classification import LogisticRegressionWithSGD, SVMWithSGD, NaiveBayes
+        from pyspark.mllib.classification import LogisticRegressionWithSGD, NaiveBayes, SVMWithSGD
         from pyspark.mllib.tree import DecisionTree
 
         data = [
@@ -624,8 +632,8 @@ class SciPyTests(MLlibTestCase):
 
     def test_regression(self):
         from pyspark.mllib.regression import (
-            LinearRegressionWithSGD,
             LassoWithSGD,
+            LinearRegressionWithSGD,
             RidgeRegressionWithSGD,
         )
         from pyspark.mllib.tree import DecisionTree

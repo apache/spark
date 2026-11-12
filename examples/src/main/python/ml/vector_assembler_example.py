@@ -16,8 +16,9 @@
 #
 
 # $example on$
-from pyspark.ml.linalg import Vectors
 from pyspark.ml.feature import VectorAssembler
+from pyspark.ml.linalg import Vectors
+
 # $example off$
 from pyspark.sql import SparkSession
 

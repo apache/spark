@@ -2,53 +2,53 @@
 Higher order functions
 ================================================================================================
 
-OpenJDK 64-Bit Server VM 17.0.20+8-LTS on Linux 6.17.0-1020-azure
-AMD EPYC 9V74 80-Core Processor
+OpenJDK 64-Bit Server VM 21.0.12+8-LTS on Linux 6.17.0-1020-azure
+AMD EPYC 7763 64-Core Processor
 transform:                                Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
 ------------------------------------------------------------------------------------------------------------------------
-codegen                                             488            507          22         20.5          48.8       1.0X
-interpreted                                        1729           1770          35          5.8         172.9       0.3X
+codegen                                             432            464          51         23.1          43.2       1.0X
+interpreted                                        2028           2057          15          4.9         202.8       0.2X
 
-OpenJDK 64-Bit Server VM 17.0.20+8-LTS on Linux 6.17.0-1020-azure
-AMD EPYC 9V74 80-Core Processor
+OpenJDK 64-Bit Server VM 21.0.12+8-LTS on Linux 6.17.0-1020-azure
+AMD EPYC 7763 64-Core Processor
 filter:                                   Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
 ------------------------------------------------------------------------------------------------------------------------
-codegen                                             594            607           7         16.8          59.4       1.0X
-interpreted                                        1918           1925           9          5.2         191.8       0.3X
+codegen                                             706            719           7         14.2          70.6       1.0X
+interpreted                                        2308           2319          10          4.3         230.8       0.3X
 
-OpenJDK 64-Bit Server VM 17.0.20+8-LTS on Linux 6.17.0-1020-azure
-AMD EPYC 9V74 80-Core Processor
+OpenJDK 64-Bit Server VM 21.0.12+8-LTS on Linux 6.17.0-1020-azure
+AMD EPYC 7763 64-Core Processor
 forall - fast:                            Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
 ------------------------------------------------------------------------------------------------------------------------
-codegen                                             292            302          20         34.2          29.2       1.0X
-interpreted                                         987            992           4         10.1          98.7       0.3X
+codegen                                             298            305           7         33.5          29.8       1.0X
+interpreted                                        1330           1343          12          7.5         133.0       0.2X
 
-OpenJDK 64-Bit Server VM 17.0.20+8-LTS on Linux 6.17.0-1020-azure
-AMD EPYC 9V74 80-Core Processor
+OpenJDK 64-Bit Server VM 21.0.12+8-LTS on Linux 6.17.0-1020-azure
+AMD EPYC 7763 64-Core Processor
 forall - slow:                            Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
 ------------------------------------------------------------------------------------------------------------------------
-codegen                                             340            343           3         29.5          34.0       1.0X
-interpreted                                        1151           1158           9          8.7         115.1       0.3X
+codegen                                             345            351           4         29.0          34.5       1.0X
+interpreted                                        1358           1370          20          7.4         135.8       0.3X
 
-OpenJDK 64-Bit Server VM 17.0.20+8-LTS on Linux 6.17.0-1020-azure
-AMD EPYC 9V74 80-Core Processor
+OpenJDK 64-Bit Server VM 21.0.12+8-LTS on Linux 6.17.0-1020-azure
+AMD EPYC 7763 64-Core Processor
 exists - fast:                            Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
 ------------------------------------------------------------------------------------------------------------------------
-codegen                                             290            295           4         34.5          29.0       1.0X
-interpreted                                        1058           1077          26          9.5         105.8       0.3X
+codegen                                             290            297           7         34.5          29.0       1.0X
+interpreted                                        1227           1246          14          8.1         122.7       0.2X
 
-OpenJDK 64-Bit Server VM 17.0.20+8-LTS on Linux 6.17.0-1020-azure
-AMD EPYC 9V74 80-Core Processor
+OpenJDK 64-Bit Server VM 21.0.12+8-LTS on Linux 6.17.0-1020-azure
+AMD EPYC 7763 64-Core Processor
 exists - slow:                            Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
 ------------------------------------------------------------------------------------------------------------------------
-codegen                                             334            341           9         29.9          33.4       1.0X
-interpreted                                        1164           1176          14          8.6         116.4       0.3X
+codegen                                             346            350           4         28.9          34.6       1.0X
+interpreted                                        1351           1360           8          7.4         135.1       0.3X
 
-OpenJDK 64-Bit Server VM 17.0.20+8-LTS on Linux 6.17.0-1020-azure
-AMD EPYC 9V74 80-Core Processor
+OpenJDK 64-Bit Server VM 21.0.12+8-LTS on Linux 6.17.0-1020-azure
+AMD EPYC 7763 64-Core Processor
 aggregate:                                Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
 ------------------------------------------------------------------------------------------------------------------------
-codegen                                             556            560           3         18.0          55.6       1.0X
-interpreted                                        1488           1510          31          6.7         148.8       0.4X
+codegen                                             561            621          74         17.8          56.1       1.0X
+interpreted                                        1799           1818          13          5.6         179.9       0.3X
 
 

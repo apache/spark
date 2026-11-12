@@ -107,23 +107,10 @@ two	3.0
 -- !query
 select * from values ("one", rand(5)), ("two", 3.0D) as data(a, b)
 -- !query schema
-struct<>
+struct<a:string,b:double>
 -- !query output
-org.apache.spark.sql.AnalysisException
-{
-  "errorClass" : "INVALID_INLINE_TABLE.CANNOT_EVALUATE_EXPRESSION_IN_INLINE_TABLE",
-  "sqlState" : "42000",
-  "messageParameters" : {
-    "expr" : "\"rand(5)\""
-  },
-  "queryContext" : [ {
-    "objectType" : "",
-    "objectName" : "",
-    "startIndex" : 30,
-    "stopIndex" : 36,
-    "fragment" : "rand(5)"
-  } ]
-}
+one	0.02390696427502892
+two	3.0
 
 
 -- !query
@@ -313,3 +300,103 @@ select * from values (1 as a, 2 as b)
 struct<col1:int,col2:int>
 -- !query output
 1	2
+
+
+-- !query
+select count(distinct u) from values (uuid()), (uuid()), (uuid()) as data(u)
+-- !query schema
+struct<count(DISTINCT u):bigint>
+-- !query output
+3
+
+
+-- !query
+select count(distinct ct), count(distinct r) from values (current_timestamp(), rand()), (current_timestamp(), rand()) as data(ct, r)
+-- !query schema
+struct<count(DISTINCT ct):bigint,count(DISTINCT r):bigint>
+-- !query output
+1	2
+
+
+-- !query
+select a, b is not null from values (1 + 1, rand()), (cast('3' as int), rand()) as data(a, b)
+-- !query schema
+struct<a:int,(b IS NOT NULL):boolean>
+-- !query output
+2	true
+3	true
+
+
+-- !query
+select * from values ((select 1) + (select 2), 'a'), ((select max(c) from values (4), (5) as t(c)), 'b') as data(a, b)
+-- !query schema
+struct<a:int,b:string>
+-- !query output
+3	a
+5	b
+
+
+-- !query
+select * from values (1) as t(a), lateral (values (t.a, rand())) as v(b, r)
+-- !query schema
+struct<>
+-- !query output
+org.apache.spark.sql.AnalysisException
+{
+  "errorClass" : "INVALID_INLINE_TABLE.CANNOT_EVALUATE_EXPRESSION_IN_INLINE_TABLE",
+  "sqlState" : "42000",
+  "messageParameters" : {
+    "expr" : "\"outer(t.a)\""
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 52,
+    "stopIndex" : 54,
+    "fragment" : "t.a"
+  } ]
+}
+
+
+-- !query
+select * from values (exists (select 1), rand()) as data(a, b)
+-- !query schema
+struct<>
+-- !query output
+org.apache.spark.sql.AnalysisException
+{
+  "errorClass" : "INVALID_INLINE_TABLE.CANNOT_EVALUATE_EXPRESSION_IN_INLINE_TABLE",
+  "sqlState" : "42000",
+  "messageParameters" : {
+    "expr" : "\"exists()\""
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 23,
+    "stopIndex" : 39,
+    "fragment" : "exists (select 1)"
+  } ]
+}
+
+
+-- !query
+select * from values (row_number() over (order by 1), rand()) as data(a, b)
+-- !query schema
+struct<>
+-- !query output
+org.apache.spark.sql.AnalysisException
+{
+  "errorClass" : "INVALID_INLINE_TABLE.CANNOT_EVALUATE_EXPRESSION_IN_INLINE_TABLE",
+  "sqlState" : "42000",
+  "messageParameters" : {
+    "expr" : "\"row_number() OVER (ORDER BY 1 ASC NULLS FIRST ROWS BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW)\""
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 23,
+    "stopIndex" : 52,
+    "fragment" : "row_number() over (order by 1)"
+  } ]
+}

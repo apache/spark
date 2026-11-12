@@ -23,7 +23,9 @@ import java.nio.file.Files
 import java.security.PrivilegedExceptionAction
 import java.util.Base64
 
+import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.security.UserGroupInformation
+import org.apache.hadoop.security.alias.CredentialProviderFactory
 
 import org.apache.spark.internal.config._
 import org.apache.spark.internal.config.UI._
@@ -53,7 +55,7 @@ class SecurityManagerSuite extends SparkFunSuite with ResetSystemProperties {
     assert(securityManager.aclsEnabled())
     assert(securityManager.checkUIViewPermissions("user1"))
     assert(securityManager.checkUIViewPermissions("user2"))
-    assert(securityManager.checkUIViewPermissions("user3") === false)
+    assert(!securityManager.checkUIViewPermissions("user3"))
   }
 
   test("set security with conf for groups") {
@@ -65,8 +67,8 @@ class SecurityManagerSuite extends SparkFunSuite with ResetSystemProperties {
     // default ShellBasedGroupsMappingProvider is used to resolve user groups
     val securityManager = new SecurityManager(conf);
     // assuming executing user does not belong to group1,group2
-    assert(securityManager.checkUIViewPermissions("user1") === false)
-    assert(securityManager.checkUIViewPermissions("user2") === false)
+    assert(!securityManager.checkUIViewPermissions("user1"))
+    assert(!securityManager.checkUIViewPermissions("user2"))
 
     val conf2 = new SparkConf
     conf2.set(NETWORK_AUTH_ENABLED, true)
@@ -91,8 +93,8 @@ class SecurityManagerSuite extends SparkFunSuite with ResetSystemProperties {
 
     val securityManager3 = new SecurityManager(conf3)
     // BogusServiceProvider cannot be loaded and an error is logged returning an empty group set
-    assert(securityManager3.checkUIViewPermissions("user1") === false)
-    assert(securityManager3.checkUIViewPermissions("user2") === false)
+    assert(!securityManager3.checkUIViewPermissions("user1"))
+    assert(!securityManager3.checkUIViewPermissions("user2"))
   }
 
   test("set security with api") {
@@ -102,7 +104,7 @@ class SecurityManagerSuite extends SparkFunSuite with ResetSystemProperties {
     securityManager.setAcls(true)
     assert(securityManager.aclsEnabled())
     securityManager.setAcls(false)
-    assert(securityManager.aclsEnabled() === false)
+    assert(!securityManager.aclsEnabled())
 
     // acls are off so doesn't matter what view acls set to
     assert(securityManager.checkUIViewPermissions("user4"))
@@ -110,11 +112,11 @@ class SecurityManagerSuite extends SparkFunSuite with ResetSystemProperties {
     securityManager.setAcls(true)
     assert(securityManager.aclsEnabled())
     securityManager.setViewAcls(Set[String]("user5"), Seq("user6", "user7"))
-    assert(securityManager.checkUIViewPermissions("user1") === false)
+    assert(!securityManager.checkUIViewPermissions("user1"))
     assert(securityManager.checkUIViewPermissions("user5"))
     assert(securityManager.checkUIViewPermissions("user6"))
     assert(securityManager.checkUIViewPermissions("user7"))
-    assert(securityManager.checkUIViewPermissions("user8") === false)
+    assert(!securityManager.checkUIViewPermissions("user8"))
     assert(securityManager.checkUIViewPermissions(null))
   }
 
@@ -132,8 +134,8 @@ class SecurityManagerSuite extends SparkFunSuite with ResetSystemProperties {
 
     // change groups so they do not match
     securityManager.setViewAclsGroups(Seq("group4", "group5"))
-    assert(securityManager.checkUIViewPermissions("user1") === false)
-    assert(securityManager.checkUIViewPermissions("user2") === false)
+    assert(!securityManager.checkUIViewPermissions("user1"))
+    assert(!securityManager.checkUIViewPermissions("user2"))
 
     val conf2 = new SparkConf
     conf.set(USER_GROUPS_MAPPING, "BogusServiceProvider")
@@ -143,13 +145,13 @@ class SecurityManagerSuite extends SparkFunSuite with ResetSystemProperties {
     securityManager2.setViewAclsGroups(Seq("group1", "group2"))
 
     // group1,group2 do not match because of BogusServiceProvider
-    assert(securityManager.checkUIViewPermissions("user1") === false)
-    assert(securityManager.checkUIViewPermissions("user2") === false)
+    assert(!securityManager.checkUIViewPermissions("user1"))
+    assert(!securityManager.checkUIViewPermissions("user2"))
 
     // setting viewAclsGroups to empty should still not match because of BogusServiceProvider
     securityManager2.setViewAclsGroups(Nil)
-    assert(securityManager.checkUIViewPermissions("user1") === false)
-    assert(securityManager.checkUIViewPermissions("user2") === false)
+    assert(!securityManager.checkUIViewPermissions("user1"))
+    assert(!securityManager.checkUIViewPermissions("user2"))
   }
 
   test("set security modify acls") {
@@ -160,7 +162,7 @@ class SecurityManagerSuite extends SparkFunSuite with ResetSystemProperties {
     securityManager.setAcls(true)
     assert(securityManager.aclsEnabled())
     securityManager.setAcls(false)
-    assert(securityManager.aclsEnabled() === false)
+    assert(!securityManager.aclsEnabled())
 
     // acls are off so doesn't matter what view acls set to
     assert(securityManager.checkModifyPermissions("user4"))
@@ -168,11 +170,11 @@ class SecurityManagerSuite extends SparkFunSuite with ResetSystemProperties {
     securityManager.setAcls(true)
     assert(securityManager.aclsEnabled())
     securityManager.setModifyAcls(Set("user5"), Seq("user6", "user7"))
-    assert(securityManager.checkModifyPermissions("user1") === false)
+    assert(!securityManager.checkModifyPermissions("user1"))
     assert(securityManager.checkModifyPermissions("user5"))
     assert(securityManager.checkModifyPermissions("user6"))
     assert(securityManager.checkModifyPermissions("user7"))
-    assert(securityManager.checkModifyPermissions("user8") === false)
+    assert(!securityManager.checkModifyPermissions("user8"))
     assert(securityManager.checkModifyPermissions(null))
   }
 
@@ -190,8 +192,8 @@ class SecurityManagerSuite extends SparkFunSuite with ResetSystemProperties {
 
     // change groups so they do not match
     securityManager.setModifyAclsGroups(Seq("group4", "group5"))
-    assert(securityManager.checkModifyPermissions("user1") === false)
-    assert(securityManager.checkModifyPermissions("user2") === false)
+    assert(!securityManager.checkModifyPermissions("user1"))
+    assert(!securityManager.checkModifyPermissions("user2"))
 
     // change so they match again
     securityManager.setModifyAclsGroups(Seq("group2", "group3"))
@@ -510,8 +512,158 @@ class SecurityManagerSuite extends SparkFunSuite with ResetSystemProperties {
     }
   }
 
+  test("SPARK-58776: SSL RPC password env is empty when RPC SSL is disabled") {
+    val conf = new SparkConf()
+      .set("spark.ssl.rpc.enabled", "false")
+      .set("spark.ssl.rpc.keyStorePassword", "keyStorePass")
+      .set("spark.ssl.rpc.trustStorePassword", "trustStorePass")
+    val mgr = new SecurityManager(conf)
+    assert(mgr.getEnvironmentForSslRpcPasswords.isEmpty)
+    assert(mgr.getEnvironmentForSslRpcPasswordsFromSparkConf.isEmpty)
+  }
+
+  test("SPARK-58776: SSL RPC password env from SparkConf includes passwords set in " +
+    "spark.ssl.rpc.*") {
+    val conf = new SparkConf()
+      .set("spark.ssl.rpc.enabled", "true")
+      .set("spark.ssl.rpc.keyStorePassword", "keyStorePass")
+      .set("spark.ssl.rpc.keyPassword", "keyPass")
+      .set("spark.ssl.rpc.privateKeyPassword", "privateKeyPass")
+      .set("spark.ssl.rpc.trustStorePassword", "trustStorePass")
+    val expected = Map(
+      SSLOptions.ENV_RPC_SSL_KEY_STORE_PASSWORD -> "keyStorePass",
+      SSLOptions.ENV_RPC_SSL_KEY_PASSWORD -> "keyPass",
+      SSLOptions.ENV_RPC_SSL_PRIVATE_KEY_PASSWORD -> "privateKeyPass",
+      SSLOptions.ENV_RPC_SSL_TRUST_STORE_PASSWORD -> "trustStorePass")
+    val mgr = new SecurityManager(conf)
+    assert(mgr.getEnvironmentForSslRpcPasswords === expected)
+    assert(mgr.getEnvironmentForSslRpcPasswordsFromSparkConf === expected)
+  }
+
+  test("SPARK-58776: SSL RPC password env from SparkConf includes passwords inherited " +
+    "from spark.ssl.*") {
+    val conf = new SparkConf()
+      .set("spark.ssl.enabled", "true")
+      .set("spark.ssl.keyStorePassword", "globalKeyStorePass")
+      .set("spark.ssl.rpc.enabled", "true")
+      .set("spark.ssl.rpc.trustStorePassword", "trustStorePass")
+    val mgr = new SecurityManager(conf)
+    assert(mgr.getEnvironmentForSslRpcPasswordsFromSparkConf === Map(
+      SSLOptions.ENV_RPC_SSL_KEY_STORE_PASSWORD -> "globalKeyStorePass",
+      SSLOptions.ENV_RPC_SSL_TRUST_STORE_PASSWORD -> "trustStorePass"))
+  }
+
+  test("SPARK-58776: SSL RPC password env from SparkConf excludes passwords resolved " +
+    "from the environment") {
+    val conf = new SparkConfWithEnv(Map(
+        SSLOptions.ENV_RPC_SSL_KEY_STORE_PASSWORD -> "envKeyStorePass",
+        "TRUST_STORE_PASS" -> "substitutedTrustStorePass"))
+      .set("spark.ssl.rpc.enabled", "true")
+      .set("spark.ssl.rpc.trustStorePassword", "${env:TRUST_STORE_PASS}")
+      .set("spark.ssl.rpc.keyPassword", "keyPass")
+    val mgr = new SecurityManager(conf)
+    assert(mgr.getEnvironmentForSslRpcPasswords === Map(
+      SSLOptions.ENV_RPC_SSL_KEY_STORE_PASSWORD -> "envKeyStorePass",
+      SSLOptions.ENV_RPC_SSL_TRUST_STORE_PASSWORD -> "substitutedTrustStorePass",
+      SSLOptions.ENV_RPC_SSL_KEY_PASSWORD -> "keyPass"))
+    assert(mgr.getEnvironmentForSslRpcPasswordsFromSparkConf === Map(
+      SSLOptions.ENV_RPC_SSL_KEY_PASSWORD -> "keyPass"))
+  }
+
+  test("SPARK-58776: SSL RPC password env from SparkConf excludes passwords from a " +
+    "credential provider") {
+    withTempDir { dir =>
+      val providerPath = s"localjceks://file${dir.getAbsolutePath}/test.jceks"
+      val hadoopConf = new Configuration()
+      hadoopConf.set(CredentialProviderFactory.CREDENTIAL_PROVIDER_PATH, providerPath)
+      val provider = CredentialProviderFactory.getProviders(hadoopConf).get(0)
+      provider.createCredentialEntry(
+        "spark.ssl.rpc.keyStorePassword", "providerKeyStorePass".toCharArray)
+      provider.flush()
+
+      val conf = new SparkConf()
+        .set(s"spark.hadoop.${CredentialProviderFactory.CREDENTIAL_PROVIDER_PATH}", providerPath)
+        .set("spark.ssl.rpc.enabled", "true")
+        .set("spark.ssl.rpc.trustStorePassword", "trustStorePass")
+      val mgr = new SecurityManager(conf)
+      assert(mgr.getEnvironmentForSslRpcPasswords === Map(
+        SSLOptions.ENV_RPC_SSL_KEY_STORE_PASSWORD -> "providerKeyStorePass",
+        SSLOptions.ENV_RPC_SSL_TRUST_STORE_PASSWORD -> "trustStorePass"))
+      assert(mgr.getEnvironmentForSslRpcPasswordsFromSparkConf === Map(
+        SSLOptions.ENV_RPC_SSL_TRUST_STORE_PASSWORD -> "trustStorePass"))
+    }
+  }
+
   private def encodeFileAsBase64(secretFile: File) = {
     Base64.getEncoder.encodeToString(Files.readAllBytes(secretFile.toPath))
+  }
+
+  // ========== SecurityManager.isRpcEncryptionEnabled (shared RPC-encryption predicate) ==========
+  //
+  // This predicate is distinct from the instance method isEncryptionEnabled(): it treats SSL RPC
+  // as encryption (rather than as disabling AES/SASL) and requires spark.authenticate for the
+  // AES/SASL path. The cases below pin that contract, including the combinations that the OIDC
+  // credential-propagation warning and the direct-credential-provider require() both depend on.
+
+  test("isRpcEncryptionEnabled: false when nothing is configured") {
+    assert(!SecurityManager.isRpcEncryptionEnabled(new SparkConf(loadDefaults = false)))
+  }
+
+  test("isRpcEncryptionEnabled: true with SSL RPC encryption") {
+    val conf = new SparkConf(loadDefaults = false).set(SecurityManager.SSL_RPC_ENABLED_CONF, "true")
+    assert(SecurityManager.isRpcEncryptionEnabled(conf))
+  }
+
+  test("isRpcEncryptionEnabled: true with authentication + network crypto") {
+    val conf = new SparkConf(loadDefaults = false)
+      .set(NETWORK_AUTH_ENABLED, true)
+      .set(Network.NETWORK_CRYPTO_ENABLED, true)
+    assert(SecurityManager.isRpcEncryptionEnabled(conf))
+  }
+
+  test("isRpcEncryptionEnabled: true with authentication + SASL encryption") {
+    val conf = new SparkConf(loadDefaults = false)
+      .set(NETWORK_AUTH_ENABLED, true)
+      .set(SASL_ENCRYPTION_ENABLED, true)
+    assert(SecurityManager.isRpcEncryptionEnabled(conf))
+  }
+
+  test("isRpcEncryptionEnabled: true with SSL RPC encryption together with authentication + " +
+      "network crypto") {
+    // SSL RPC is a sufficient condition on its own; combining it with the AES path must stay true.
+    val conf = new SparkConf(loadDefaults = false)
+      .set(SecurityManager.SSL_RPC_ENABLED_CONF, "true")
+      .set(NETWORK_AUTH_ENABLED, true)
+      .set(Network.NETWORK_CRYPTO_ENABLED, true)
+    assert(SecurityManager.isRpcEncryptionEnabled(conf))
+  }
+
+  test("isRpcEncryptionEnabled: true with SSL RPC encryption and network crypto but no auth") {
+    // SSL RPC alone encrypts the channel; the missing spark.authenticate only gates the AES/SASL
+    // path, so the disjunction is still true via SSL.
+    val conf = new SparkConf(loadDefaults = false)
+      .set(SecurityManager.SSL_RPC_ENABLED_CONF, "true")
+      .set(Network.NETWORK_CRYPTO_ENABLED, true)
+    assert(SecurityManager.isRpcEncryptionEnabled(conf))
+  }
+
+  test("isRpcEncryptionEnabled: false when authentication is enabled without encryption") {
+    // Authentication alone (without crypto/SASL encryption) does not encrypt the channel.
+    val conf = new SparkConf(loadDefaults = false).set(NETWORK_AUTH_ENABLED, true)
+    assert(!SecurityManager.isRpcEncryptionEnabled(conf))
+  }
+
+  test("isRpcEncryptionEnabled: false when network crypto is enabled without authentication") {
+    // spark.network.crypto.enabled only takes effect with spark.authenticate=true; on its own it
+    // does not encrypt anything, so it must not be treated as RPC encryption. (This is also where
+    // isEncryptionEnabled() would differ: it returns true here even though nothing is encrypted.)
+    val conf = new SparkConf(loadDefaults = false).set(Network.NETWORK_CRYPTO_ENABLED, true)
+    assert(!SecurityManager.isRpcEncryptionEnabled(conf))
+  }
+
+  test("isRpcEncryptionEnabled: false when SASL encryption is enabled without authentication") {
+    val conf = new SparkConf(loadDefaults = false).set(SASL_ENCRYPTION_ENABLED, true)
+    assert(!SecurityManager.isRpcEncryptionEnabled(conf))
   }
 }
 

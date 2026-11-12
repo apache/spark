@@ -23,24 +23,24 @@ from pyspark.ml.linalg import Vectors
 from pyspark.ml.regression import (
     AFTSurvivalRegression,
     AFTSurvivalRegressionModel,
-    IsotonicRegression,
-    IsotonicRegressionModel,
-    LinearRegression,
-    LinearRegressionModel,
+    DecisionTreeRegressionModel,
+    DecisionTreeRegressor,
+    FMRegressionModel,
+    FMRegressor,
+    GBTRegressionModel,
+    GBTRegressor,
     GeneralizedLinearRegression,
     GeneralizedLinearRegressionModel,
     GeneralizedLinearRegressionSummary,
     GeneralizedLinearRegressionTrainingSummary,
+    IsotonicRegression,
+    IsotonicRegressionModel,
+    LinearRegression,
+    LinearRegressionModel,
     LinearRegressionSummary,
     LinearRegressionTrainingSummary,
-    FMRegressor,
-    FMRegressionModel,
-    DecisionTreeRegressor,
-    DecisionTreeRegressionModel,
-    RandomForestRegressor,
     RandomForestRegressionModel,
-    GBTRegressor,
-    GBTRegressionModel,
+    RandomForestRegressor,
 )
 from pyspark.testing.sqlutils import ReusedSQLTestCase
 
@@ -455,18 +455,26 @@ class RegressionTestsMixin:
             .sortWithinPartitions("weight")
         )
 
+        self.assertEqual(DecisionTreeRegressor().getIntermediateStorageLevel(), "MEMORY_AND_DISK")
         dt = DecisionTreeRegressor(
             maxDepth=2,
             labelCol="label",
             leafCol="leaf",
             seed=1,
+            intermediateStorageLevel="DISK_ONLY",
         )
+        self.assertEqual(dt.getIntermediateStorageLevel(), "DISK_ONLY")
+        dt.setParams(intermediateStorageLevel="MEMORY_ONLY")
+        self.assertEqual(dt.getIntermediateStorageLevel(), "MEMORY_ONLY")
+        dt.setIntermediateStorageLevel("DISK_ONLY")
+        self.assertEqual(dt.getIntermediateStorageLevel(), "DISK_ONLY")
         self.assertEqual(dt.getMaxDepth(), 2)
         self.assertEqual(dt.getSeed(), 1)
         self.assertEqual(dt.getLabelCol(), "label")
         self.assertEqual(dt.getLeafCol(), "leaf")
 
         model = dt.fit(df)
+        self.assertEqual(model.getIntermediateStorageLevel(), "DISK_ONLY")
         self.assertEqual(dt.uid, model.uid)
         self.assertEqual(model.numFeatures, 2)
         self.assertEqual(model.depth, 2)
@@ -524,13 +532,20 @@ class RegressionTestsMixin:
             .sortWithinPartitions("weight")
         )
 
+        self.assertEqual(GBTRegressor().getIntermediateStorageLevel(), "MEMORY_AND_DISK")
         gbt = GBTRegressor(
             maxIter=3,
             maxDepth=2,
             labelCol="label",
             leafCol="leaf",
             seed=1,
+            intermediateStorageLevel="DISK_ONLY",
         )
+        self.assertEqual(gbt.getIntermediateStorageLevel(), "DISK_ONLY")
+        gbt.setParams(intermediateStorageLevel="MEMORY_ONLY")
+        self.assertEqual(gbt.getIntermediateStorageLevel(), "MEMORY_ONLY")
+        gbt.setIntermediateStorageLevel("DISK_ONLY")
+        self.assertEqual(gbt.getIntermediateStorageLevel(), "DISK_ONLY")
         self.assertEqual(gbt.getMaxIter(), 3)
         self.assertEqual(gbt.getMaxDepth(), 2)
         self.assertEqual(gbt.getSeed(), 1)
@@ -538,6 +553,7 @@ class RegressionTestsMixin:
         self.assertEqual(gbt.getLeafCol(), "leaf")
 
         model = gbt.fit(df)
+        self.assertEqual(model.getIntermediateStorageLevel(), "DISK_ONLY")
         self.assertEqual(gbt.uid, model.uid)
         self.assertEqual(model.numFeatures, 2)
         self.assertEqual(model.treeWeights, [1.0, 0.1, 0.1])
@@ -622,13 +638,20 @@ class RegressionTestsMixin:
             .sortWithinPartitions("weight")
         )
 
+        self.assertEqual(RandomForestRegressor().getIntermediateStorageLevel(), "MEMORY_AND_DISK")
         rf = RandomForestRegressor(
             numTrees=3,
             maxDepth=2,
             labelCol="label",
             leafCol="leaf",
             seed=1,
+            intermediateStorageLevel="DISK_ONLY",
         )
+        self.assertEqual(rf.getIntermediateStorageLevel(), "DISK_ONLY")
+        rf.setParams(intermediateStorageLevel="MEMORY_ONLY")
+        self.assertEqual(rf.getIntermediateStorageLevel(), "MEMORY_ONLY")
+        rf.setIntermediateStorageLevel("DISK_ONLY")
+        self.assertEqual(rf.getIntermediateStorageLevel(), "DISK_ONLY")
         self.assertEqual(rf.getNumTrees(), 3)
         self.assertEqual(rf.getMaxDepth(), 2)
         self.assertEqual(rf.getSeed(), 1)
@@ -636,6 +659,7 @@ class RegressionTestsMixin:
         self.assertEqual(rf.getLeafCol(), "leaf")
 
         model = rf.fit(df)
+        self.assertEqual(model.getIntermediateStorageLevel(), "DISK_ONLY")
         self.assertEqual(rf.uid, model.uid)
         self.assertEqual(model.numFeatures, 2)
         self.assertEqual(model.treeWeights, [1.0, 1.0, 1.0])

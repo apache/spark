@@ -38,8 +38,8 @@ import org.apache.spark.ml.util._
 import org.apache.spark.ml.util.Instrumentation.instrumented
 import org.apache.spark.sql.{DataFrame, Dataset}
 import org.apache.spark.sql.types.StructType
+import org.apache.spark.util.{SizeEstimator, ThreadUtils}
 import org.apache.spark.util.ArrayImplicits._
-import org.apache.spark.util.ThreadUtils
 
 /**
  * Params for [[TrainValidationSplit]] and [[TrainValidationSplitModel]].
@@ -292,6 +292,29 @@ class TrainValidationSplitModel private[ml] (
 
   @Since("2.3.0")
   def hasSubModels: Boolean = _subModels.isDefined
+
+  private[spark] override def estimatedSize: Long = {
+    var size = estimateMatadataSize(excluded = Seq(
+      // estimator: Param[Estimator[_]]
+      estimator,
+      // estimatorParamMaps: Param[Array[ParamMap]]
+      estimatorParamMaps,
+      // evaluator: Param[Evaluator]
+      evaluator))
+    // bestModel: Model[_]
+    size += bestModel.estimatedSize
+    // validationMetrics: Array[Double]
+    size += SizeEstimator.estimate(validationMetrics)
+    // _subModels: Option[Array[Model[_]]]
+    _subModels.foreach { modelArray =>
+      modelArray.foreach { model =>
+        if (model != null) {
+          size += model.estimatedSize
+        }
+      }
+    }
+    size
+  }
 
   @Since("2.0.0")
   override def transform(dataset: Dataset[_]): DataFrame = {

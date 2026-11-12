@@ -57,9 +57,8 @@ class AttributeScopeStack {
 
   /**
    * Check if the `attribute` is present in this stack. We check the current scope by default. If
-   * `isOuterReference` is true, we check the outer scopes too. If
-   * `spark.sql.optimizer.supportNestedCorrelatedSubqueries.enabled` is true, we check all the
-   * outer scopes, otherwise we check the first outer scope only.
+   * `isOuterReference` is true, we check the first outer scope only, because only one level of
+   * correlation is supported.
    */
   def contains(attribute: Attribute, isOuterReference: Boolean = false): Boolean = {
     if (!isOuterReference) {

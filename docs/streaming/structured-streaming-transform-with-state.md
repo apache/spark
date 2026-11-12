@@ -29,6 +29,11 @@ This operator has support for an umbrella of features such as object-oriented st
 
 `TransformWithState` is available in Scala, Java and Python.
 
+Starting in Spark 4.3.0, the Scala and Java APIs can also run with a Real-time trigger. The PySpark
+`transformWithState` and `transformWithStateInPandas` APIs are not supported in Real-time Mode. See
+[`transformWithState` in Real-time Mode](./real-time-mode.html#transformwithstate-in-real-time-mode)
+for callback, timer, TTL, watermark, and initial-state behavior in that mode.
+
 Note that in Python, there are two operators named `transformWithStateInPandas` which works with Pandas interface, and `transformWithState` which works with Row interface.
 
 Based on popularity of Pandas and its rich set of API with vectorization, `transformWithStateInPandas` may be the preferred API for most users. The `transformWithState` API is more suitable to handle high key cardinality use case, since the cost of conversion is considerably high for Pandas API. If users aren't familiar with Pandas, Row type API might be easier to learn.
@@ -99,9 +104,15 @@ In Scala, implicit encoders can be provided for case classes and primitive types
 
 State variables can be configured with an optional TTL (Time-To-Live) value. The TTL value is used to automatically evict the state variable after the specified duration. The TTL value can be provided as a Duration.
 
+TTL can be used only with `TimeMode.ProcessingTime`.
+
 ### Handling input rows
 
-The `handleInputRows` method is used to process input rows belonging to a grouping key and emit output if needed. The method is invoked by the Spark query engine for each grouping key value received by the operator. If multiple rows belong to the same grouping key, the provided iterator will include all those rows.
+The `handleInputRows` method is used to process input rows belonging to a grouping key and emit
+output if needed. In micro-batch mode, the method is invoked once for each grouping key received in
+the batch, and the provided iterator includes all rows for that key. In Real-time Mode, the method
+is invoked once for each non-late input row, and the iterator contains one row. A processor that can
+run in either mode must handle repeated invocations for the same grouping key.
 
 ### Handling expired timers
 
@@ -287,15 +298,15 @@ class DowntimeDetector(duration: Duration) extends
     key: String,
     timerValues: TimerValues,
     expiredTimerInfo: ExpiredTimerInfo): Iterator[(String, Duration)] = {
-      val latestTimestamp = _lastSeen.get()
-      val downtimeDuration = new Duration(
-        timerValues.getCurrentProcessingTimeInMs() - latestTimestamp.getTime)
+    val latestTimestamp = _lastSeen.get()
+    val downtimeDuration = Duration.ofMillis(
+      timerValues.getCurrentProcessingTimeInMs() - latestTimestamp.getTime)
 
-      // Register another timer that will fire in 10 seconds.
-      // Timers can be registered anywhere but init()
-      getHandle.registerTimer(timerValues.getCurrentProcessingTimeInMs() + 10000)
+    // Register another timer that will fire in 10 seconds.
+    // Timers can be registered anywhere but init()
+    getHandle.registerTimer(timerValues.getCurrentProcessingTimeInMs() + 10000)
 
-      Iterator((key, downtimeDuration))
+    Iterator((key, downtimeDuration))
   }
 }
 
@@ -319,7 +330,7 @@ q = (df.groupBy("key")
     statefulProcessor=DownTimeDetector(),
     outputStructType=output_schema,
     outputMode="Update",
-    timeMode="None",
+    timeMode="ProcessingTime",
   )
   .writeStream...
 
@@ -335,7 +346,7 @@ q = (df.groupBy("key")
     statefulProcessor=DownTimeDetector(),
     outputStructType=output_schema,
     outputMode="Update",
-    timeMode="None",
+    timeMode="ProcessingTime",
   )
   .writeStream...
   
@@ -345,15 +356,52 @@ q = (df.groupBy("key")
 <div data-lang="scala"  markdown="1">
 
 {% highlight scala %}
-val query = df.groupBy("key")
+val query = df.as[(String, Timestamp)]
+  .groupByKey(_._1)
   .transformWithState(
-    statefulProcessor = new DownTimeDetector(),
-    outputMode = OutputMode.Update,
-    timeMode = TimeMode.None)
+    statefulProcessor = new DowntimeDetector(Duration.ofSeconds(5)),
+    outputMode = OutputMode.Update(),
+    timeMode = TimeMode.ProcessingTime())
   .writeStream...
 {% endhighlight %}
 </div>
 </div>
+
+## Running in Real-time Mode
+
+For a Scala or Java `transformWithState` query, select `OutputMode.Update` and set
+`Trigger.RealTime` on the streaming write. The query must use a
+[supported source, sink, and plan](./real-time-mode.html#supported-queries), satisfy the
+[Real-time Mode requirements](./real-time-mode.html#requirements), and use the required
+[state-store configuration](./real-time-mode.html#state-store-defaults). For example, after
+constructing a result `Dataset` of `(key, value)` tuples with `transformWithState`:
+
+{% highlight scala %}
+import org.apache.spark.sql.streaming.Trigger
+
+val query = result
+  .selectExpr("CAST(_1 AS STRING) AS key", "CAST(_2 AS STRING) AS value")
+  .writeStream
+  .format("kafka")
+  .option("kafka.bootstrap.servers", "host1:port1,host2:port2")
+  .option("topic", "output-topic")
+  .option("checkpointLocation", "/path/to/checkpoint")
+  .outputMode("update")
+  .trigger(Trigger.RealTime("5 minutes"))
+  .start()
+{% endhighlight %}
+
+The trigger duration is the checkpoint interval, not the per-record latency target. During a
+long-running input batch, processing-time timers and TTL use the live clock. Timer scans and
+physical TTL cleanup are driven by arriving rows and by batch completion, so an idle state
+partition does not receive an independent timer wakeup. Event-time watermarks remain fixed during
+a Real-time batch and advance between batches.
+
+If the query supplies initial state, Spark commits that state in a finite bootstrap batch before it
+starts processing Real-time input. Processing-time values passed to `handleInitialState` use that
+bootstrap batch's timestamp rather than the live clock. See
+[`transformWithState` in Real-time Mode](./real-time-mode.html#transformwithstate-in-real-time-mode)
+for the complete execution and recovery behavior.
 
 ## State Schema Evolution
 

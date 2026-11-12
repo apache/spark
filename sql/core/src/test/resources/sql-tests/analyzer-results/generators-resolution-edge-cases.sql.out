@@ -781,3 +781,63 @@ org.apache.spark.sql.catalyst.ExtendedAnalysisException
     "fragment" : "val"
   } ]
 }
+
+
+-- !query
+SELECT explode(array(a)) AS col, count(*) OVER () AS cnt, a
+FROM VALUES (1), (2), (3), (NULL) AS t(a)
+GROUP BY a
+HAVING a IS NOT NULL
+-- !query analysis
+Project [col#x, cnt#xL, a#x]
++- Generate explode(_gen_input_0#x), false, [col#x]
+   +- Project [_gen_input_0#x, cnt#xL, a#x]
+      +- Project [_gen_input_0#x, a#x, cnt#xL, cnt#xL]
+         +- Window [count(1) windowspecdefinition(specifiedwindowframe(RowFrame, unboundedpreceding$(), unboundedfollowing$())) AS cnt#xL]
+            +- Filter isnotnull(a#x)
+               +- Aggregate [a#x], [array(a#x) AS _gen_input_0#x, a#x]
+                  +- SubqueryAlias t
+                     +- LocalRelation [a#x]
+
+
+-- !query
+SELECT explode(array(a)) AS col,
+       count(*) OVER () AS group_count,
+       count(*) AS row_count
+FROM VALUES (1), (1), (2), (3), (3) AS t(a)
+GROUP BY a
+HAVING row_count > 1
+-- !query analysis
+Project [col#x, group_count#xL, row_count#xL]
++- Generate explode(_gen_input_0#x), false, [col#x]
+   +- Project [_gen_input_0#x, group_count#xL, row_count#xL]
+      +- Project [_gen_input_0#x, row_count#xL, group_count#xL, group_count#xL]
+         +- Window [count(1) windowspecdefinition(specifiedwindowframe(RowFrame, unboundedpreceding$(), unboundedfollowing$())) AS group_count#xL]
+            +- Filter (row_count#xL > cast(1 as bigint))
+               +- Aggregate [a#x], [array(a#x) AS _gen_input_0#x, count(1) AS row_count#xL]
+                  +- SubqueryAlias t
+                     +- LocalRelation [a#x]
+
+
+-- !query
+SELECT explode(array(a)) AS col,
+       count(*) OVER () AS cnt,
+       count(*) OVER (
+         ORDER BY a
+         ROWS BETWEEN UNBOUNDED PRECEDING AND UNBOUNDED FOLLOWING
+       ) AS ordered_cnt,
+       a
+FROM VALUES (1), (2), (3), (NULL) AS t(a)
+GROUP BY a
+HAVING a IS NOT NULL
+-- !query analysis
+Project [col#x, cnt#xL, ordered_cnt#xL, a#x]
++- Generate explode(_gen_input_0#x), false, [col#x]
+   +- Project [_gen_input_0#x, cnt#xL, ordered_cnt#xL, a#x]
+      +- Project [_gen_input_0#x, a#x, cnt#xL, ordered_cnt#xL, cnt#xL, ordered_cnt#xL]
+         +- Window [count(1) windowspecdefinition(a#x ASC NULLS FIRST, specifiedwindowframe(RowFrame, unboundedpreceding$(), unboundedfollowing$())) AS ordered_cnt#xL], [a#x ASC NULLS FIRST]
+            +- Window [count(1) windowspecdefinition(specifiedwindowframe(RowFrame, unboundedpreceding$(), unboundedfollowing$())) AS cnt#xL]
+               +- Filter isnotnull(a#x)
+                  +- Aggregate [a#x], [array(a#x) AS _gen_input_0#x, a#x]
+                     +- SubqueryAlias t
+                        +- LocalRelation [a#x]

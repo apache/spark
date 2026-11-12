@@ -24,17 +24,17 @@ import java.util.ServiceLoader
 import java.util.concurrent.{ScheduledExecutorService, TimeUnit}
 
 import scala.collection.mutable
+import scala.util.control.NonFatal
 
 import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.fs.FileSystem
 import org.apache.hadoop.security.{Credentials, UserGroupInformation}
 
-import org.apache.spark.SparkConf
+import org.apache.spark.{SecurityManager, SparkConf}
 import org.apache.spark.deploy.SparkHadoopUtil
 import org.apache.spark.internal.Logging
 import org.apache.spark.internal.LogKeys
 import org.apache.spark.internal.config._
-import org.apache.spark.internal.config.Network.NETWORK_CRYPTO_ENABLED
 import org.apache.spark.rpc.RpcEndpointRef
 import org.apache.spark.scheduler.cluster.CoarseGrainedClusterMessages.UpdateDelegationTokens
 import org.apache.spark.security.HadoopDelegationTokenProvider
@@ -78,14 +78,10 @@ private[spark] class HadoopDelegationTokenManager(
     "Both principal and keytab must be defined, or neither.")
 
   if (sparkConf.get(DIRECT_CREDENTIAL_PROVIDERS_ENABLED)) {
-    val hasEncryption = sparkConf.getBoolean("spark.ssl.rpc.enabled", false) ||
-      (sparkConf.get(NETWORK_AUTH_ENABLED) &&
-        (sparkConf.get(NETWORK_CRYPTO_ENABLED) || sparkConf.get(SASL_ENCRYPTION_ENABLED)))
-    require(hasEncryption,
+    require(SecurityManager.isRpcEncryptionEnabled(sparkConf),
       "RPC channel encryption must be enabled when " +
-      "spark.security.directCredentialProviders.enabled is true: either " +
-      "spark.ssl.rpc.enabled=true, or spark.authenticate=true together with " +
-      "spark.network.crypto.enabled or spark.authenticate.enableSaslEncryption. " +
+      s"${DIRECT_CREDENTIAL_PROVIDERS_ENABLED.key} is true. " +
+      s"${SecurityManager.rpcEncryptionRemediation} " +
       "Credential tokens must not be transmitted over unencrypted channels.")
   }
 
@@ -111,7 +107,16 @@ private[spark] class HadoopDelegationTokenManager(
   def renewalEnabled: Boolean = {
     hasKerberosCredentials ||
       (sparkConf.get(DIRECT_CREDENTIAL_PROVIDERS_ENABLED) &&
-        delegationTokenProviders.values.exists(_.delegationTokensRequired(sparkConf, hadoopConf)))
+        delegationTokenProviders.values.exists { provider =>
+          try {
+            provider.delegationTokensRequired(sparkConf, hadoopConf)
+          } catch {
+            case NonFatal(e) =>
+              logWarning(log"Failed to determine whether credentials are required from " +
+                log"${MDC(LogKeys.SERVICE_NAME, provider.serviceName)}.", e)
+              false
+          }
+        })
   }
 
   /**
@@ -198,24 +203,20 @@ private[spark] class HadoopDelegationTokenManager(
     val creds = new Credentials()
     var failureCount = 0
     val nextRenewal = delegationTokenProviders.values.flatMap { provider =>
-      if (provider.delegationTokensRequired(sparkConf, hadoopConf)) {
-        if (isolateFailures) {
-          try {
-            provider.obtainDelegationTokens(hadoopConf, sparkConf, creds)
-          } catch {
-            case e: Exception =>
-              logWarning(log"Failed to obtain credentials from " +
-                log"${MDC(LogKeys.SERVICE_NAME, provider.serviceName)}.", e)
-              failureCount += 1
-              None
-          }
-        } else {
+      try {
+        if (provider.delegationTokensRequired(sparkConf, hadoopConf)) {
           provider.obtainDelegationTokens(hadoopConf, sparkConf, creds)
+        } else {
+          logDebug(s"Service ${provider.serviceName} does not require a token." +
+            s" Check your configuration to see if security is disabled or not.")
+          None
         }
-      } else {
-        logDebug(s"Service ${provider.serviceName} does not require a token." +
-          s" Check your configuration to see if security is disabled or not.")
-        None
+      } catch {
+        case NonFatal(e) if isolateFailures =>
+          logWarning(log"Failed to obtain credentials from " +
+            log"${MDC(LogKeys.SERVICE_NAME, provider.serviceName)}.", e)
+          failureCount += 1
+          None
       }
     }.foldLeft(Long.MaxValue)(math.min)
     (creds, nextRenewal, failureCount)

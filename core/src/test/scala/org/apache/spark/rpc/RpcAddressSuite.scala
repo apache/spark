@@ -80,4 +80,20 @@ class RpcAddressSuite extends SparkFunSuite {
     val address = RpcAddress("2600::", 1234)
     assert(address.toSparkURL == "spark://[2600::]:1234")
   }
+
+  test("SPARK-58719: Normalize hexadecimal IPv6 addresses") {
+    val expected = RpcAddress("2001:db8::dead:beef", 1234)
+    Seq(
+      "2001:db8::dead:beef",
+      "[2001:db8::dead:beef]",
+      "2001:0DB8:0000::DEAD:BEEF",
+      "[2001:0DB8:0000::DEAD:BEEF]").foreach { host =>
+      val address = RpcAddress(host, 1234)
+      assert(address.host == "[2001:db8::dead:beef]")
+      assert(address.hostPort == "[2001:db8::dead:beef]:1234")
+      assert(address.toSparkURL == "spark://[2001:db8::dead:beef]:1234")
+      assert(address == expected)
+      assert(RpcAddress.fromSparkURL(address.toSparkURL) == address)
+    }
+  }
 }

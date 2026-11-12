@@ -57,6 +57,9 @@ case class Scd2ForeachBatchHandler(
    * consume. Performs no writes: this is the entire pipeline up to (but excluding) the aux/target
    * merges, factored out of [[execute]] so that both [[execute]] and tests exercise the exact same
    * transform chain (they cannot silently desynchronize).
+   *
+   * Ignore-null coalescing applies only to rows pulled into this reconciliation. Changing the
+   * active selection does not trigger a full-history rewrite.
    */
   private[autocdc] def reconcileMicrobatch(
       batchDf: DataFrame,
@@ -68,30 +71,43 @@ case class Scd2ForeachBatchHandler(
       batchId = batchId
     ).validateMicrobatch()
 
-    val preprocessedBatchDf = batchProcessor.preprocessMicrobatch(batchDf)
+    val targetTableDf = batchDf.sparkSession.read.table(targetTableIdentifier.quotedString)
+    val auxTableDf = batchDf.sparkSession.read.table(auxiliaryTableIdentifier.quotedString)
+
+    val preprocessedBatchDf = batchProcessor.preprocessMicrobatch(
+      microbatchDf = batchDf,
+      targetTableDf = targetTableDf
+    )
 
     val perKeyMinimumSequenceInMicrobatchDf = batchProcessor.computeMinimumSequencePerKey(
       preprocessedBatchDf
     )
 
-    val auxTableDf = batchDf.sparkSession.read.table(auxiliaryTableIdentifier.quotedString)
-    val affectedRowsFromAuxiliaryTable = batchProcessor.findAffectedRowsFromAuxiliaryTable(
+    val perKeyAffectedSequenceCutoffDf = batchProcessor.computePerKeyAffectedSequenceCutoff(
       rawAuxiliaryTableDf = auxTableDf,
+      targetTableDf = targetTableDf,
       perKeyMinimumSequenceInMicrobatchDf = perKeyMinimumSequenceInMicrobatchDf,
       batchId = batchId
     )
 
-    val targetTableDf = batchDf.sparkSession.read.table(targetTableIdentifier.quotedString)
-    val affectedRowsFromTargetTable = batchProcessor.findAffectedRowsFromTargetTable(
-      targetTableDf = targetTableDf,
-      perKeyMinimumSequenceInMicrobatchDf = perKeyMinimumSequenceInMicrobatchDf
+    val affectedRowsFromAuxiliaryTable = batchProcessor.findAffectedRowsFromAuxiliaryTable(
+      rawAuxiliaryTableDf = auxTableDf,
+      perKeyAffectedSequenceCutoffDf = perKeyAffectedSequenceCutoffDf,
+      batchId = batchId
     )
 
-    // All three share the canonical schema; findAffectedRowsFromAuxiliaryTable drops the aux-only
+    val affectedRowsFromTargetTable = batchProcessor.findAffectedRowsFromTargetTable(
+      targetTableDf = targetTableDf,
+      perKeyAffectedSequenceCutoffDf = perKeyAffectedSequenceCutoffDf
+    )
+
+    // Preprocessing has already aligned the microbatch to the target schema. Keep
+    // allowMissingColumns here as a safeguard for nested differences between persisted target and
+    // auxiliary rows; findAffectedRowsFromAuxiliaryTable also drops the aux-only
     // deletedByBatchId column.
     val microbatchAndAffectedRows = preprocessedBatchDf
-      .unionByName(affectedRowsFromAuxiliaryTable)
-      .unionByName(affectedRowsFromTargetTable)
+      .unionByName(affectedRowsFromAuxiliaryTable, allowMissingColumns = true)
+      .unionByName(affectedRowsFromTargetTable, allowMissingColumns = true)
 
     val decomposedDf = microbatchAndAffectedRows
       .transform(batchProcessor.decomposeOutOfOrderRows)
@@ -103,7 +119,10 @@ case class Scd2ForeachBatchHandler(
       .transform(d => batchProcessor.assertWellFormedRowsPostDecomposition(d, batchId))
       .transform(batchProcessor.dropRedundantRowsPostDecomposition)
 
-    val reconciledAndRoutedDf = decomposedDf
+    val withCoalescedIgnoredNullsDf =
+      batchProcessor.coalesceIgnoredNulls(decomposedDf)
+
+    val reconciledAndRoutedDf = withCoalescedIgnoredNullsDf
       .transform(batchProcessor.reconcileStartAndEndAt)
       .transform(batchProcessor.dropLeftoverDeletesPostReconciliation)
       .transform(batchProcessor.promoteDecompositionTailsToTombstones)

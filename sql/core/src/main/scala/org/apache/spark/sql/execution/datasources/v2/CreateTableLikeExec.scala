@@ -46,6 +46,10 @@ import org.apache.spark.sql.errors.QueryCompilationErrors
  * ROW FORMAT / STORED AS converted to hive properties (if given), and
  * [[TableCatalog.PROP_OWNER]] set to the current user. Source table properties are intentionally
  * excluded so that connectors can decide which custom properties to clone via [[sourceTable]].
+ *
+ * The source's declared write distribution and ordering are likewise not copied onto the
+ * [[TableInfo]]; a connector that wants to carry them forward should read them from
+ * [[sourceTable]].
  */
 case class CreateTableLikeExec(
     targetCatalog: TableCatalog,

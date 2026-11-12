@@ -40,7 +40,7 @@ SPARK_VERSION - (optional) Version of Spark being built (e.g. 2.1.2)
 
 ASF_USERNAME - Username of ASF committer account
 ASF_PASSWORD - Password of ASF committer account
-ASF_NEXUS_TOKEN - API token in ASF Nexus reposiotry
+ASF_NEXUS_TOKEN - API token in ASF Nexus repository
 
 GPG_KEY - GPG key used to sign release artifacts
 GPG_PASSPHRASE - Passphrase for GPG key
@@ -154,20 +154,14 @@ if [[ "$1" == "finalize" ]]; then
   rm -rf svn-spark
   echo "PySpark uploaded"
 
-  # download the docs from the dev directory and upload it to spark-website
-  echo "Uploading docs to spark-website"
+  # Download the generated docs, then publish them with the website updates below.
+  echo "Preparing spark-website"
   svn co "$RELEASE_STAGING_LOCATION/$RELEASE_TAG-docs" docs
   git clone "https://$ASF_USERNAME:$ASF_PASSWORD@gitbox.apache.org/repos/asf/spark-website.git" -b asf-site
   mv docs/_site "spark-website/site/docs/$RELEASE_VERSION"
   cd spark-website
-  git add site/docs/$RELEASE_VERSION
-  git commit -m "Add docs for Apache Spark $RELEASE_VERSION"
-  git push origin HEAD:asf-site
-  cd ..
-  echo "docs uploaded"
 
-  echo "Uploading release docs to spark-website"
-  cd spark-website
+  echo "Updating spark-website for the release"
 
   # 1. Add download link to documentation.md
   python3 <<EOF
@@ -540,10 +534,14 @@ EOF
   fi
 
   git add .
-  git commit -m "Add release docs for Apache Spark $RELEASE_VERSION"
+  git commit -m "Update docs and website for Apache Spark $RELEASE_VERSION"
+  # One commit and one push.
+  # We want to `git push` the website only once to eliminate the chance that
+  # multiple pushes will race with spark-website CI pushing HTML commits,
+  # creating annoying fast-forward failures.
   git push origin HEAD:asf-site
   cd ..
-  echo "release docs uploaded"
+  echo "spark-website updated"
   rm -rf spark-website
 
   # Moves the docs from dev directory to release directory.
@@ -628,10 +626,12 @@ EOF
   # Extract major.minor prefix
   RELEASE_SERIES=$(echo "$RELEASE_VERSION" | cut -d. -f1-2)
 
-  # Fetch existing dist URLs
+  # Fetch existing dist URLs. For the first release of a series (e.g. x.y.0), `grep -v` selects
+  # nothing and exits with 1, which aborts the script under `set -o pipefail` (DEBUG_MODE=1).
+  # Ignore only that exit status, so a failing `svn ls` still fails the pipeline.
   OLD_VERSION=$(svn ls https://dist.apache.org/repos/dist/release/spark/ | \
     grep "^spark-$RELEASE_SERIES" | \
-    grep -v "^spark-$RELEASE_VERSION/" | \
+    { grep -v "^spark-$RELEASE_VERSION/" || true; } | \
     sed 's#/##' | sed 's/^spark-//' | \
     sort -V | tail -n 1)
   
@@ -683,7 +683,7 @@ SCALA_2_12_PROFILES="-Pscala-2.12"
 HIVE_PROFILES="-Phive -Phive-thriftserver"
 # Profiles for publishing snapshots and release to Maven Central
 # We use Apache Hive 2.3 for publishing
-PUBLISH_PROFILES="$BASE_PROFILES $HIVE_PROFILES -Pspark-ganglia-lgpl -Pkinesis-asl -Phadoop-cloud -Pjvm-profiler"
+PUBLISH_PROFILES="$BASE_PROFILES $HIVE_PROFILES -Pspark-ganglia-lgpl -Pkinesis-asl -Pcredential-aws -Phadoop-cloud -Pjvm-profiler"
 # Profiles for building binary releases
 BASE_RELEASE_PROFILES="$BASE_PROFILES -Psparkr"
 
@@ -691,18 +691,14 @@ if [[ $JAVA_VERSION < "1.8." ]] && [[ $SPARK_VERSION < "4.0" ]]; then
   echo "Java version $JAVA_VERSION is less than required 1.8 for 2.2+"
   echo "Please set JAVA_HOME correctly."
   exit 1
+elif [[ $JAVA_VERSION < "21" ]] && [[ $SPARK_VERSION > "4.99" ]]; then
+  echo "Java version $JAVA_VERSION is less than required 21 for 5.0+"
+  echo "Please set JAVA_HOME correctly."
+  exit 1
 elif [[ $JAVA_VERSION < "17.0." ]] && [[ $SPARK_VERSION > "3.5.99" ]]; then
   echo "Java version $JAVA_VERSION is less than required 17 for 4.0+"
   echo "Please set JAVA_HOME correctly."
   exit 1
-fi
-
-# This is a band-aid fix to avoid the failure of Maven nightly snapshot in some Jenkins
-# machines by explicitly calling /usr/sbin/lsof. Please see SPARK-22377 and the discussion
-# in its pull request.
-LSOF=lsof
-if ! hash $LSOF 2>/dev/null; then
-  LSOF=/usr/sbin/lsof
 fi
 
 if [ -z "$SPARK_PACKAGE_VERSION" ]; then

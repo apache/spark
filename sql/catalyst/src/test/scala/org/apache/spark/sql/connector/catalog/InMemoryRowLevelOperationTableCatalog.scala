@@ -97,9 +97,10 @@ class InMemoryRowLevelOperationTableCatalog
       partitioning = partitioning,
       properties = properties,
       constraints = constraints,
-      tableId = table.id)
+      tableId = table.id,
+      schemaAlignmentConfig = table.schemaAlignmentConfig)
     newTable.alterTableWithData(table.data, schema)
-    newTable.setVersionAndValidatedVersionFrom(table)
+    newTable.copyTableStateFrom(table)
 
     tables.put(ident, newTable)
 
@@ -139,9 +140,10 @@ class PartialSchemaEvolutionCatalog extends InMemoryRowLevelOperationTableCatalo
       schema = schema,
       partitioning = table.partitioning,
       properties = properties,
-      constraints = table.constraints)
+      constraints = table.constraints,
+      schemaAlignmentConfig = table.schemaAlignmentConfig)
     newTable.alterTableWithData(table.data, table.schema)
-    newTable.setVersionAndValidatedVersionFrom(table)
+    newTable.copyTableStateFrom(table)
     tables.put(ident, newTable)
     newTable
   }

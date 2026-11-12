@@ -26,6 +26,7 @@ import org.apache.spark.sql.connector.write.LogicalWriteInfo;
 import org.apache.spark.sql.catalyst.analysis.NoSuchNamespaceException;
 import org.apache.spark.sql.catalyst.analysis.NoSuchTableException;
 import org.apache.spark.sql.catalyst.analysis.TableAlreadyExistsException;
+import org.apache.spark.sql.catalyst.util.WriteDistributionAndOrdering;
 import org.apache.spark.sql.connector.write.BatchWrite;
 import org.apache.spark.sql.connector.write.Write;
 import org.apache.spark.sql.connector.write.WriterCommitMessage;
@@ -95,17 +96,25 @@ public interface StagingTableCatalog extends TableCatalog {
    * table exists when this method is called, the method should throw an exception accordingly. If
    * another process concurrently creates the table before this table's staged changes are
    * committed, an exception should be thrown by {@link StagedTable#commitStagedChanges()}.
+   * <p>
+   * The default implementation rejects a requested write distribution or ordering before
+   * anything is staged; see
+   * {@link TableCatalogCapability#SUPPORTS_CREATE_TABLE_WITH_WRITE_DISTRIBUTION_AND_ORDERING}.
    *
    * @param ident a table identifier
    * @param tableInfo information about the table
    * @return metadata for the new table. This can be null if the catalog does not support atomic
-   *         creation for this table. Spark will call {@link #loadTable(Identifier)} later.
+   *         creation for this table. Spark will call
+   *         {@link #loadTable(Identifier, TableContext, CaseInsensitiveStringMap)} later,
+   *         forwarding the catalog-declared table-state options and required privileges.
    * @throws TableAlreadyExistsException If a table or view already exists for the identifier
-   * @throws UnsupportedOperationException If a requested partition transform is not supported
+   * @throws UnsupportedOperationException If a requested partition transform, write distribution
+   *         or write ordering is not supported
    * @throws NoSuchNamespaceException If the identifier namespace does not exist (optional)
    */
   default StagedTable stageCreate(Identifier ident, TableInfo tableInfo)
       throws TableAlreadyExistsException, NoSuchNamespaceException {
+    WriteDistributionAndOrdering.rejectRequested(this, ident, tableInfo);
     return stageCreate(ident, tableInfo.columns(), tableInfo.partitions(), tableInfo.properties());
   }
 
@@ -159,17 +168,25 @@ public interface StagingTableCatalog extends TableCatalog {
    * {@link #stageCreateOrReplace(Identifier, StructType, Transform[], Map)}, which should create
    * the table in the data source if the table does not exist at the time of committing the
    * operation.
+   * <p>
+   * The default implementation rejects a requested write distribution or ordering before
+   * anything is staged; see
+   * {@link TableCatalogCapability#SUPPORTS_CREATE_TABLE_WITH_WRITE_DISTRIBUTION_AND_ORDERING}.
    *
    * @param ident a table identifier
    * @param tableInfo information about the table
    * @return metadata for the new table. This can be null if the catalog does not support atomic
-   *         creation for this table. Spark will call {@link #loadTable(Identifier)} later.
-   * @throws UnsupportedOperationException If a requested partition transform is not supported
+   *         creation for this table. Spark will call
+   *         {@link #loadTable(Identifier, TableContext, CaseInsensitiveStringMap)} later,
+   *         forwarding the catalog-declared table-state options and required privileges.
+   * @throws UnsupportedOperationException If a requested partition transform, write distribution
+   *         or write ordering is not supported
    * @throws NoSuchNamespaceException If the identifier namespace does not exist (optional)
    * @throws NoSuchTableException If the table does not exist
    */
   default StagedTable stageReplace(Identifier ident, TableInfo tableInfo)
       throws NoSuchNamespaceException, NoSuchTableException {
+    WriteDistributionAndOrdering.rejectRequested(this, ident, tableInfo);
     return stageReplace(ident, tableInfo.columns(), tableInfo.partitions(), tableInfo.properties());
   }
 
@@ -222,16 +239,24 @@ public interface StagingTableCatalog extends TableCatalog {
    * backing data source. This differs from the expected semantics of
    * {@link #stageReplace(Identifier, StructType, Transform[], Map)}, which should fail when
    * the staged changes are committed but the table doesn't exist at commit time.
+   * <p>
+   * The default implementation rejects a requested write distribution or ordering before
+   * anything is staged; see
+   * {@link TableCatalogCapability#SUPPORTS_CREATE_TABLE_WITH_WRITE_DISTRIBUTION_AND_ORDERING}.
    *
    * @param ident a table identifier
    * @param tableInfo information about the table
    * @return metadata for the new table. This can be null if the catalog does not support atomic
-   *         creation for this table. Spark will call {@link #loadTable(Identifier)} later.
-   * @throws UnsupportedOperationException If a requested partition transform is not supported
+   *         creation for this table. Spark will call
+   *         {@link #loadTable(Identifier, TableContext, CaseInsensitiveStringMap)} later,
+   *         forwarding the catalog-declared table-state options and required privileges.
+   * @throws UnsupportedOperationException If a requested partition transform, write distribution
+   *         or write ordering is not supported
    * @throws NoSuchNamespaceException If the identifier namespace does not exist (optional)
    */
   default StagedTable stageCreateOrReplace(Identifier ident, TableInfo tableInfo)
       throws NoSuchNamespaceException {
+    WriteDistributionAndOrdering.rejectRequested(this, ident, tableInfo);
     return stageCreateOrReplace(ident,
         tableInfo.columns(),
         tableInfo.partitions(),

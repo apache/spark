@@ -404,7 +404,7 @@ class ApproxTopKAggregateBuffer[T](val sketch: ItemsSketch[T], private var nullC
           if (UnsafeRowUtils.isBinaryStable(st)) {
             sketch.asInstanceOf[ItemsSketch[String]].update(orig.toString)
           } else {
-            val cKey = CollationFactory.getCollationKey(orig, st.collationId).toString
+            val cKey = CollationFactory.getCollationKeyBytes(orig, st.collationId)
             sketch.asInstanceOf[ItemsSketch[CollatedString]]
               .update(new CollatedString(cKey, orig.toString))
           }
@@ -798,6 +798,15 @@ object CombineInternal {
     _FUNC_(state, maxItemsTracked) - Combines multiple sketches into a single sketch.
       `maxItemsTracked` An optional positive INTEGER literal with upper limit of 1000000. If maxItemsTracked is specified, it will be set for the combined sketch. If maxItemsTracked is not specified, the input sketches must have the same maxItemsTracked value, otherwise an error will be thrown. The output sketch will use the same value from the input sketches.
   """,
+  arguments = """
+    Arguments:
+      * state - The sketch state to combine, as produced by approx_top_k_accumulate.
+          An expression that evaluates to the sketch state struct.
+      * maxItemsTracked - Optional. The maximum number of items to track in the combined
+          sketch, with an upper limit of 1000000. An expression that evaluates to an integer.
+          Must be a constant. If not specified, the input sketches must share the same
+          maxItemsTracked value, which is used for the output sketch.
+  """,
   examples = """
     Examples:
       > SELECT approx_top_k_estimate(_FUNC_(sketch, 10000), 5) FROM (SELECT approx_top_k_accumulate(expr) AS sketch FROM VALUES (0), (0), (1), (1) AS tab(expr) UNION ALL SELECT approx_top_k_accumulate(expr) AS sketch FROM VALUES (2), (3), (4), (4) AS tab(expr));
@@ -896,6 +905,10 @@ case class ApproxTopKCombine(
    */
   override def update(buffer: CombineInternal[Any], input: InternalRow): CombineInternal[Any] = {
     val inputState = state.eval(input).asInstanceOf[InternalRow]
+    if (inputState == null) {
+      // A NULL sketch carries no items, so it contributes nothing to the combined sketch.
+      return buffer
+    }
     val inputSketchBytes = inputState.getBinary(0)
     val inputMaxItemsTracked = inputState.getInt(1)
     val inputItemDataTypeDDL = inputState.getUTF8String(3).toString
@@ -952,7 +965,10 @@ case class ApproxTopKCombine(
   }
 
   override def serialize(buffer: CombineInternal[Any]): Array[Byte] = {
-    resolveEmptyBufferItemDataType(buffer)
+    // Keep a partial buffer that saw no sketch (empty input or only NULL sketches) untyped, so it
+    // stays neutral in the final merge. Resolving it to uncheckedItemDataType here would give it
+    // the coercion-widened type, which need not match the real sketches' item type (SPARK-58164).
+    // eval resolves the type of a buffer that is still untyped at the end.
     buffer.serialize()
   }
 

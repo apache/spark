@@ -18,7 +18,7 @@
 import numpy as np
 
 from pyspark.errors import PySparkException
-from pyspark.ml.linalg import Vectors, DenseVector
+from pyspark.ml.linalg import DenseVector, Vectors
 from pyspark.ml.stat import (
     ChiSquareTest,
     Correlation,
@@ -26,8 +26,8 @@ from pyspark.ml.stat import (
     Summarizer,
     SummaryBuilder,
 )
-from pyspark.sql import functions as F
 from pyspark.sql import DataFrame, Row
+from pyspark.sql import functions as F
 from pyspark.testing.sqlutils import ReusedSQLTestCase
 
 

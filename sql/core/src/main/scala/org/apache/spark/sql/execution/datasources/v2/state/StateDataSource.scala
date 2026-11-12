@@ -320,7 +320,7 @@ class StateDataSource extends TableProvider with DataSourceRegister with Logging
 
       // Read the schema file path from operator metadata version v2 onwards
       // for the transformWithState operator
-      val oldSchemaFilePaths = if (storeMetadata.length > 0 && storeMetadata.head.version == 2) {
+      val oldSchemaFilePaths = if (storeMetadata.nonEmpty && storeMetadata.head.version == 2) {
         val opName = storeMetadata.head.operatorName
         if (StatefulOperatorsUtils.TRANSFORM_WITH_STATE_OP_NAMES.exists(opName.contains)) {
           val storeMetadataEntry = storeMetadata.head
@@ -442,7 +442,7 @@ class StateDataSource extends TableProvider with DataSourceRegister with Logging
       storeMetadata: Array[StateMetadataTableEntry]): KeyStateEncoderSpec = {
     // If operator metadata is not found, then log a warning and continue with using the no-prefix
     // key state encoder
-    val keyStateEncoderSpec = if (storeMetadata.length == 0) {
+    val keyStateEncoderSpec = if (storeMetadata.isEmpty) {
       logWarning("Metadata for state store not found, possible cause is this checkpoint " +
         "is created by older version of spark. If the query has session window aggregation, " +
         "the state can't be read correctly and runtime exception will be thrown. " +

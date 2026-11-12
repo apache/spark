@@ -1163,14 +1163,24 @@ case class ScalaUDF(
     } else {
       s"$resultTerm = ($boxedType)$resultConverter.apply($getFuncResult)"
     }
+    // The names in these strings come from the query, so they stay out of the source.
+    val functionNameTerm = ctx.addReferenceObj("functionName", functionName)
+    val inputTypesTerm = ctx.addReferenceObj("inputTypes", inputTypesString)
+    val outputTypeTerm = ctx.addReferenceObj("outputType", outputType)
+
+    // `failedExecuteUserDefinedFunctionError` returns a checked SparkException; throwing
+    // it directly compiles under Janino but not under the JDK compiler ("unreported
+    // exception"). Re-throw via Platform.throwException (no declared `throws`), the same
+    // sneaky-throw used elsewhere in codegen, to stay compatible with both backends.
     val callFunc =
       s"""
          |$boxedType $resultTerm = null;
          |try {
          |  $funcInvocation;
          |} catch (Throwable e) {
-         |  throw QueryExecutionErrors.failedExecuteUserDefinedFunctionError(
-         |    "$functionName", "$inputTypesString", "$outputType", e);
+         |  org.apache.spark.unsafe.Platform.throwException(
+         |    QueryExecutionErrors.failedExecuteUserDefinedFunctionError(
+         |      $functionNameTerm, $inputTypesTerm, $outputTypeTerm, e));
          |}
        """.stripMargin
 

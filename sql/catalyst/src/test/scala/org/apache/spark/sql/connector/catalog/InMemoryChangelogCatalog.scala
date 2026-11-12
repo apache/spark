@@ -20,8 +20,6 @@ package org.apache.spark.sql.connector.catalog
 import scala.collection.mutable
 
 import org.apache.spark.sql.catalyst.InternalRow
-import org.apache.spark.sql.catalyst.analysis.NoSuchTableException
-import org.apache.spark.sql.connector.catalog.CatalogV2Implicits._
 import org.apache.spark.sql.connector.catalog.ChangelogRange.{TimestampRange, UnboundedRange, VersionRange}
 import org.apache.spark.sql.connector.expressions.{FieldReference, NamedReference}
 import org.apache.spark.sql.connector.read._
@@ -40,13 +38,16 @@ class InMemoryChangelogCatalog extends InMemoryCatalog {
   private val changeData: mutable.Map[String, mutable.ArrayBuffer[InternalRow]] =
     mutable.Map.empty
 
-  // Stores the most recent ChangelogContext and options passed to loadChangelog(), so tests
-  // can verify that the parser/DataFrame API correctly constructed and forwarded them.
-  private var _lastChangelogContext: Option[ChangelogContext] = None
-  def lastChangelogContext: Option[ChangelogContext] = _lastChangelogContext
+  private val _loadChangelogCalls =
+    mutable.ArrayBuffer.empty[(ChangelogContext, CaseInsensitiveStringMap)]
+  def loadChangelogCalls: Seq[(ChangelogContext, CaseInsensitiveStringMap)] =
+    _loadChangelogCalls.toSeq
+  def resetLoadChangelogCalls(): Unit = _loadChangelogCalls.clear()
+  def lastChangelogContext: Option[ChangelogContext] = _loadChangelogCalls.lastOption.map(_._1)
+  def lastOptions: Option[CaseInsensitiveStringMap] = _loadChangelogCalls.lastOption.map(_._2)
 
-  private var _lastOptions: Option[CaseInsensitiveStringMap] = None
-  def lastOptions: Option[CaseInsensitiveStringMap] = _lastOptions
+  private var _lastScanOptions: Option[CaseInsensitiveStringMap] = None
+  def lastScanOptions: Option[CaseInsensitiveStringMap] = _lastScanOptions
 
   // Per-table overrides for Changelog properties (carry-over rows, intermediate changes,
   // update representation, row identity). Tests can set these to exercise post-processing.
@@ -68,12 +69,9 @@ class InMemoryChangelogCatalog extends InMemoryCatalog {
       ident: Identifier,
       changelogContext: ChangelogContext,
       options: CaseInsensitiveStringMap): Changelog = {
-    _lastChangelogContext = Some(changelogContext)
-    _lastOptions = Some(options)
-    if (!tableExists(ident)) {
-      throw new NoSuchTableException(ident.asMultipartIdentifier)
-    }
-    val table = loadTable(ident)
+    _loadChangelogCalls += ((changelogContext, options))
+    // Access the connector's own metadata without invoking the ordinary table-loading API.
+    val table = liveTable(ident)
     val allRows = changeData.getOrElse(
       ident.toString, mutable.ArrayBuffer.empty)
     val numDataCols = table.columns.length
@@ -82,7 +80,8 @@ class InMemoryChangelogCatalog extends InMemoryCatalog {
     val filtered = filterByRange(allRows.toSeq, commitVersionIdx, changelogContext.range())
     val props = changelogProperties.getOrElse(ident.toString, ChangelogProperties())
     new InMemoryChangelog(
-      table.name + "_changelog", table.columns, filtered, props)
+      table.name + "_changelog", table.columns, filtered, props,
+      scanOptions => _lastScanOptions = Some(scanOptions))
   }
 
   /**
@@ -172,16 +171,28 @@ class InMemoryChangelog(
     tableName: String,
     dataColumns: Array[Column],
     changeRows: Seq[InternalRow],
-    properties: ChangelogProperties = ChangelogProperties()) extends Changelog {
+    properties: ChangelogProperties = ChangelogProperties(),
+    onScan: CaseInsensitiveStringMap => Unit = _ => ()) extends Changelog {
 
   private val cdcColumns: Array[Column] = dataColumns ++ Array(
     Column.create("_change_type", StringType),
     Column.create("_commit_version", LongType),
     Column.create("_commit_timestamp", TimestampType, properties.commitTimestampNullable))
 
+  private val rows = changeRows.iterator.map(_.copy()).toVector
+  // Independent loads can share cached results only when their captured read states match.
+  private val readIdentity = (tableName, dataColumns.toVector, rows, properties)
+
   override def name(): String = tableName
 
   override def columns(): Array[Column] = cdcColumns
+
+  override def equals(other: Any): Boolean = other match {
+    case that: InMemoryChangelog => getClass == that.getClass && readIdentity == that.readIdentity
+    case _ => false
+  }
+
+  override def hashCode(): Int = readIdentity.hashCode()
 
   override def containsCarryoverRows(): Boolean = properties.containsCarryoverRows
 
@@ -205,7 +216,8 @@ class InMemoryChangelog(
 
   override def newScanBuilder(
       options: CaseInsensitiveStringMap): ScanBuilder = {
-    new InMemoryChangelogScanBuilder(readSchema, changeRows)
+    onScan(options)
+    new InMemoryChangelogScanBuilder(readSchema, rows)
   }
 
   def readSchema: StructType = {

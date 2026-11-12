@@ -19,11 +19,11 @@ import array as pyarray
 
 from numpy import array
 
-from pyspark.mllib.linalg import Vectors, Matrices
+from pyspark.errors import IllegalArgumentException
+from pyspark.mllib.linalg import Matrices, Vectors
 from pyspark.mllib.random import RandomRDDs
 from pyspark.mllib.regression import LabeledPoint
 from pyspark.mllib.stat import Statistics
-from pyspark.errors import IllegalArgumentException
 from pyspark.testing.mllibutils import MLlibTestCase
 
 

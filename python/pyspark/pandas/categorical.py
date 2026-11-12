@@ -14,7 +14,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 #
-from typing import Any, Callable, List, Optional, Union, TYPE_CHECKING, cast
+from typing import TYPE_CHECKING, Any, Callable, List, Optional, Union, cast
 
 import pandas as pd
 from pandas.api.types import (
@@ -23,8 +23,8 @@ from pandas.api.types import (
     is_list_like,
 )
 
-from pyspark.pandas.internal import InternalField
 from pyspark.pandas.data_type_ops.categorical_ops import _to_cat
+from pyspark.pandas.internal import InternalField
 from pyspark.sql import functions as F
 from pyspark.sql.types import StructField
 
@@ -455,16 +455,13 @@ class CategoricalAccessor:
         dtype: category
         Categories (3, object): ['a', 'b', 'c']
         """
-        categories = set(self._data.drop_duplicates()._to_pandas())
-        removals = [cat for cat in self.categories if cat not in categories]
-        categories = [cat for cat in removals if cat is not None]  # type: ignore[assignment]
-        if len(categories) == 0:
+        observed_values = set(self._data.drop_duplicates()._to_pandas())
+        retained_categories = [cat for cat in self.categories if cat in observed_values]
+        if len(retained_categories) == len(self.categories):
             return self._data.copy()
-        else:
-            dtype = CategoricalDtype(
-                [cat for cat in self.categories if cat not in categories], ordered=self.ordered
-            )
-            return self._data.astype(dtype)
+
+        dtype = CategoricalDtype(retained_categories, ordered=self.ordered)
+        return self._data.astype(dtype)
 
     def rename_categories(
         self, new_categories: Union[list, dict, Callable]
@@ -769,11 +766,12 @@ class CategoricalAccessor:
 
 
 def _test() -> None:
-    import os
     import doctest
+    import os
     import sys
-    from pyspark.sql import SparkSession
+
     import pyspark.pandas.categorical
+    from pyspark.sql import SparkSession
 
     os.chdir(os.environ["SPARK_HOME"])
 

@@ -148,7 +148,7 @@ class CoalesceShufflePartitionsSuite extends SparkFunSuite with SQLConfHelper
           spark.range(0, 20).selectExpr("id", "50 as cnt").collect().toImmutableArraySeq)
 
         // Then, let's look at the number of post-shuffle partitions estimated
-        // by the ExchangeCoordinator.
+        // by the CoalesceShufflePartitions rule.
         val finalPlan = stripAQEPlan(agg.queryExecution.executedPlan)
         val shuffleReads = finalPlan.collect {
           case r @ CoalescedShuffleRead() => r
@@ -193,7 +193,7 @@ class CoalesceShufflePartitionsSuite extends SparkFunSuite with SQLConfHelper
           expectedAnswer.collect().toImmutableArraySeq)
 
         // Then, let's look at the number of post-shuffle partitions estimated
-        // by the ExchangeCoordinator.
+        // by the CoalesceShufflePartitions rule.
         val finalPlan = stripAQEPlan(join.queryExecution.executedPlan)
         val shuffleReads = finalPlan.collect {
           case r @ CoalescedShuffleRead() => r
@@ -248,7 +248,7 @@ class CoalesceShufflePartitionsSuite extends SparkFunSuite with SQLConfHelper
           expectedAnswer.collect().toImmutableArraySeq)
 
         // Then, let's look at the number of post-shuffle partitions estimated
-        // by the ExchangeCoordinator.
+        // by the CoalesceShufflePartitions rule.
         val finalPlan = stripAQEPlan(join.queryExecution.executedPlan)
         val shuffleReads = finalPlan.collect {
           case r @ CoalescedShuffleRead() => r
@@ -298,7 +298,7 @@ class CoalesceShufflePartitionsSuite extends SparkFunSuite with SQLConfHelper
           expectedAnswer.collect().toImmutableArraySeq)
 
         // Then, let's look at the number of post-shuffle partitions estimated
-        // by the ExchangeCoordinator.
+        // by the CoalesceShufflePartitions rule.
         val finalPlan = stripAQEPlan(join.queryExecution.executedPlan)
         val shuffleReads = finalPlan.collect {
           case r @ CoalescedShuffleRead() => r

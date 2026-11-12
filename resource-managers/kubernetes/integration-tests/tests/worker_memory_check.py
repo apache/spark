@@ -20,7 +20,6 @@ import sys
 
 from pyspark.sql import SparkSession
 
-
 if __name__ == "__main__":
     """
         Usage: worker_memory_check [Memory_in_Mi]

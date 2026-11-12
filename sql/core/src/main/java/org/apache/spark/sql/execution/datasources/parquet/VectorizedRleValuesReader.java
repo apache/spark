@@ -62,6 +62,9 @@ public final class VectorizedRleValuesReader extends ValuesReader
   private int bytesWidth;
   private BytePacker packer;
 
+  // True if the dictionary id section of the page is empty, not even holding the bit width.
+  private boolean emptyIdSection;
+
   // Current decoding mode and values
   private MODE mode;
   private int currentCount;
@@ -96,16 +99,35 @@ public final class VectorizedRleValuesReader extends ValuesReader
   @Override
   public void initFromPage(int valueCount, ByteBufferInputStream in) throws IOException {
     this.in = in;
+    this.emptyIdSection = false;
     if (fixedWidth) {
       // Initialize for repetition and definition levels
       if (readLength) {
+        if (in.available() < 4) {
+          throw new ParquetDecodingException("Corrupted RLE data: the 4-byte length is cut off, " +
+            "only " + in.available() + " bytes are left in the page");
+        }
         int length = readIntLittleEndian();
+        if (length < 0 || length > in.available()) {
+          throw new ParquetDecodingException("Corrupted RLE data: invalid length " + length +
+            ", " + in.available() + " bytes are left in the page");
+        }
         this.in = in.sliceStream(length);
       }
     } else {
       // Initialize for values
       if (in.available() > 0) {
-        init(in.read());
+        int width = in.read();
+        if (width > 32) {
+          throw new ParquetDecodingException("Corrupted RLE data: invalid bit width " + width);
+        }
+        init(width);
+      } else {
+        // No encoded values (e.g. an all-null page). Do not treat this as a bit width of 0,
+        // which would decode every value as 0; any read fails in `readNextGroup` instead.
+        this.emptyIdSection = true;
+        this.currentCount = 0;
+        return;
       }
     }
     if (bitWidth == 0) {
@@ -208,7 +230,7 @@ public final class VectorizedRleValuesReader extends ValuesReader
     int leftInPage = state.valuesToReadInPage;
 
     while (leftInBatch > 0 && leftInPage > 0) {
-      if (currentCount == 0 && !readNextGroup()) break;
+      if (currentCount == 0) readNextGroup();
       int n = Math.min(leftInBatch, Math.min(leftInPage, this.currentCount));
 
       long rangeStart = state.currentRangeStart();
@@ -318,7 +340,7 @@ public final class VectorizedRleValuesReader extends ValuesReader
     int leftInPage = state.valuesToReadInPage;
 
     while (leftInBatch > 0 && leftInPage > 0) {
-      if (currentCount == 0 && !readNextGroup()) break;
+      if (currentCount == 0) readNextGroup();
       int n = Math.min(leftInBatch, Math.min(leftInPage, this.currentCount));
 
       long rangeStart = state.currentRangeStart();
@@ -431,7 +453,7 @@ public final class VectorizedRleValuesReader extends ValuesReader
       values, nulls, valuesReused, valueReader, updater);
 
     while ((leftInBatch > 0 || !state.lastListCompleted) && leftInPage > 0) {
-      if (currentCount == 0 && !readNextGroup()) break;
+      if (currentCount == 0) readNextGroup();
 
       // Values to read in the current RLE/PACKED block, must be <= what's left in the page
       int valuesLeftInBlock = Math.min(leftInPage, currentCount);
@@ -637,7 +659,7 @@ public final class VectorizedRleValuesReader extends ValuesReader
     int n = total;
     int initialValueOffset = state.valueOffset;
     while (n > 0) {
-      if (currentCount == 0 && !readNextGroup()) break;
+      if (currentCount == 0) readNextGroup();
       int num = Math.min(n, this.currentCount);
       readValuesN(num, state, defLevels, values, nulls, valueReader, updater);
       state.levelOffset += num;
@@ -731,7 +753,7 @@ public final class VectorizedRleValuesReader extends ValuesReader
       VectorizedValuesReader valuesReader,
       ParquetVectorUpdater updater) {
     while (n > 0) {
-      if (currentCount == 0 && !readNextGroup()) break;
+      if (currentCount == 0) readNextGroup();
       int num = Math.min(n, this.currentCount);
       switch (mode) {
         case RLE -> {
@@ -764,7 +786,7 @@ public final class VectorizedRleValuesReader extends ValuesReader
   public void readIntegers(int total, WritableColumnVector c, int rowId) {
     int left = total;
     while (left > 0) {
-      if (currentCount == 0 && !readNextGroup()) break;
+      if (currentCount == 0) readNextGroup();
       int n = Math.min(left, this.currentCount);
       switch (mode) {
         case RLE -> c.putInts(rowId, n, currentValue);
@@ -957,7 +979,6 @@ public final class VectorizedRleValuesReader extends ValuesReader
    */
   private int readIntLittleEndianPaddedOnBitWidth() throws IOException {
     return switch (bytesWidth) {
-      case 0 -> 0;
       case 1 -> in.read();
       case 2 -> {
         int ch2 = in.read();
@@ -976,14 +997,30 @@ public final class VectorizedRleValuesReader extends ValuesReader
   }
 
   /**
-   * Reads the next group. Returns false if no more group available.
+   * Reads the next non-empty group, so that `currentCount` is positive on return.
+   * <p>
+   * Callers never read more values than the page declares, so running out of encoded data here
+   * means the page is corrupted. With a bit width of 0, `initFromPage` already provides all the
+   * values of the page, so reaching here also means reading past the end.
    */
-  private boolean readNextGroup() {
-    if (in.available() <= 0) {
-      currentCount = 0;
-      return false;
+  private void readNextGroup() {
+    if (emptyIdSection) {
+      throw new ParquetDecodingException(
+        "Corrupted RLE data: the dictionary id section is empty, not even the bit width");
     }
+    do {
+      if (bitWidth == 0 || in.available() <= 0) {
+        throw new ParquetDecodingException(
+          "Corrupted RLE data: reading past the end of the encoded values");
+      }
+      readGroup();
+    } while (this.currentCount == 0);
+  }
 
+  /**
+   * Reads the next group, which may be empty.
+   */
+  private void readGroup() {
     try {
       int header = readUnsignedVarInt();
       this.mode = (header & 1) == 0 ? MODE.RLE : MODE.PACKED;
@@ -994,6 +1031,17 @@ public final class VectorizedRleValuesReader extends ValuesReader
         }
         case PACKED -> {
           int numGroups = header >>> 1;
+          // Validate before allocating the buffer, so a corrupted header can neither overflow
+          // `currentCount` nor make us allocate more than the remaining bytes can fill.
+          if (numGroups > Integer.MAX_VALUE / 8) {
+            throw new ParquetDecodingException(
+              "Corrupted RLE data: bit-packed run of " + numGroups + " groups is too long");
+          }
+          if ((long) numGroups * bitWidth > in.available()) {
+            throw new ParquetDecodingException("Corrupted RLE data: bit-packed run of " +
+              numGroups + " groups needs " + (long) numGroups * bitWidth + " bytes, but only " +
+              in.available() + " bytes are left");
+          }
           this.currentCount = numGroups * 8;
 
           if (this.currentBuffer.length < this.currentCount) {
@@ -1014,10 +1062,8 @@ public final class VectorizedRleValuesReader extends ValuesReader
         }
       }
     } catch (IOException e) {
-      throw new ParquetDecodingException("Failed to read from input stream", e);
+      throw new ParquetDecodingException("Corrupted RLE data: failed to read from input stream", e);
     }
-
-    return true;
   }
 
   /**
@@ -1026,7 +1072,7 @@ public final class VectorizedRleValuesReader extends ValuesReader
   private void skipValues(int n) {
     int left = n;
     while (left > 0) {
-      if (this.currentCount == 0 && !readNextGroup()) break;
+      if (this.currentCount == 0) readNextGroup();
       int num = Math.min(left, this.currentCount);
       switch (mode) {
         case RLE -> {}

@@ -20,8 +20,8 @@ from typing import Iterable, Optional
 import numpy as np
 from numpy import ndarray
 
-from pyspark.mllib.common import callMLlibFunc
 from pyspark.core.rdd import RDD
+from pyspark.mllib.common import callMLlibFunc
 
 
 class KernelDensity:

@@ -170,7 +170,7 @@ Data source options of JSON can be set via:
     <td><code>PERMISSIVE</code></td>
     <td>Allows a mode for dealing with corrupt records during parsing.<br>
     <ul>
-      <li><code>PERMISSIVE</code>: when it meets a corrupted record, puts the malformed string into a field configured by <code>columnNameOfCorruptRecord</code>, and sets malformed fields to <code>null</code>. To keep corrupt records, an user can set a string type field named <code>columnNameOfCorruptRecord</code> in an user-defined schema. If a schema does not have the field, it drops corrupt records during parsing. When inferring a schema, it implicitly adds a <code>columnNameOfCorruptRecord</code> field in an output schema.</li>
+      <li><code>PERMISSIVE</code>: when it meets a corrupted record, puts the malformed string into a field configured by <code>columnNameOfCorruptRecord</code>, and sets malformed fields to <code>null</code>. To capture the malformed string, a user can set a string type field named <code>columnNameOfCorruptRecord</code> in a user-defined schema. If a schema does not have the field, the corrupt record is still retained with its malformed fields set to <code>null</code>, but the malformed string is not available. When inferring a schema, it implicitly adds a <code>columnNameOfCorruptRecord</code> field in an output schema.</li>
       <li><code>DROPMALFORMED</code>: ignores the whole corrupted records. This mode is unsupported in the JSON built-in functions.</li>
       <li><code>FAILFAST</code>: throws an exception when it meets corrupted records.</li>
     </ul>
@@ -238,6 +238,12 @@ Data source options of JSON can be set via:
     <td>read</td>
   </tr>
   <tr>
+    <td><code>enableStreamingTopLevelArray</code></td>
+    <td>(value of <code>spark.sql.json.enableStreamingTopLevelArray</code> configuration)</td>
+    <td>When <code>multiLine</code> is enabled and a file holds a top-level JSON array, read the array's elements one at a time instead of materializing the whole array before returning rows. It applies to reads into a struct schema, and has no effect on reads using <code>singleVariantColumn</code> or <code>explodeEmbeddedArray</code>. While streaming, <code>mode</code> applies to an individual element rather than the whole document: <code>PERMISSIVE</code> fills the field configured by <code>columnNameOfCorruptRecord</code> for the malformed element alone, leaving it null on the valid rows of the same document, and <code>DROPMALFORMED</code> drops that element rather than the document. An element whose failure leaves the parser at an unknown position, such as a nested value of the wrong shape, still ends the document, as does a failure outside any element, such as a syntax error between two elements or a missing closing bracket.</td>
+    <td>read</td>
+  </tr>
+  <tr>
     <td><code>allowUnquotedControlChars</code></td>
     <td><code>false</code></td>
     <td>Allows JSON Strings to contain unquoted control characters (ASCII characters with value less than 32, including tab and line feed characters) or not.</td>
@@ -248,6 +254,18 @@ Data source options of JSON can be set via:
     <td>Detected automatically when <code>multiLine</code> is set to <code>true</code> (for reading), <code>UTF-8</code> (for writing)</td>
     <td>For reading, allows to forcibly set one of standard basic or extended encoding for the JSON files. For example UTF-16BE, UTF-32LE. For writing, Specifies encoding (charset) of saved json files. JSON built-in functions ignore this option.</td>
     <td>read/write</td>
+  </tr>
+  <tr>
+    <td><code>pretty</code></td>
+    <td><code>false</code></td>
+    <td>If true, writes the generated JSON with the default pretty printer, indenting nested structures over multiple lines instead of emitting each record on a single line.</td>
+    <td>write</td>
+  </tr>
+  <tr>
+    <td><code>writeNonAsciiCharacterAsCodePoint</code></td>
+    <td><code>false</code></td>
+    <td>If true, writes non-ASCII characters as \uXXXX escape sequences instead of emitting them literally.</td>
+    <td>write</td>
   </tr>
   <tr>
     <td><code>lineSep</code></td>
@@ -290,6 +308,12 @@ Data source options of JSON can be set via:
     <td>(none)</td>
     <td>Compression codec to use when saving to file. This can be one of the known case-insensitive shorten names (none, bzip2, gzip, lz4, snappy and deflate). JSON built-in functions ignore this option.</td>
     <td>write</td>
+  </tr>
+  <tr>
+    <td><code>decompression</code></td>
+    <td>(none)</td>
+    <td>Compression codec used to decompress the input files, instead of inferring it from each file name extension. This can be one of the known case-insensitive short names (<code>none</code>, <code>uncompressed</code>, <code>bzip2</code>, <code>deflate</code>, <code>gzip</code>, <code>lz4</code>, <code>snappy</code>, <code>zstd</code>, <code>zstandard</code> and <code>zst</code>) or a fully qualified Hadoop <code>CompressionCodec</code> class name. <code>none</code> and <code>uncompressed</code> read the files as-is, even when the file name carries a compression extension. The codec applies to every file read. When archive reading is enabled (<code>spark.sql.files.archive.reader.enabled</code>), setting it when the input includes an archive file (<code>.tar</code>, <code>.tar.gz</code>, <code>.tgz</code>, <code>.zip</code> or <code>.7z</code>) is not supported and fails the query. Unlike the write option <code>compression</code>, which is ignored on read, it does not affect writes. JSON built-in functions ignore this option.</td>
+    <td>read</td>
   </tr>
   <tr>
     <td><code>ignoreNullFields</code></td>

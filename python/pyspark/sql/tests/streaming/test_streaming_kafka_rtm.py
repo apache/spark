@@ -31,7 +31,7 @@ import unittest
 import uuid
 
 from pyspark.sql.tests.streaming.kafka_utils import KafkaUtils
-from pyspark.testing.sqlutils import ReusedSQLTestCase, search_jar, read_classpath
+from pyspark.testing.sqlutils import ReusedSQLTestCase, read_classpath, search_jar
 from pyspark.testing.utils import (
     have_kafka,
     have_testcontainers,

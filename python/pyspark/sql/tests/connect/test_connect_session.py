@@ -20,26 +20,27 @@ import unittest
 import uuid
 from typing import Optional
 
-from pyspark.util import is_remote_only
 from pyspark.errors import PySparkException
 from pyspark.sql import SparkSession as PySparkSession
 from pyspark.testing.connectutils import (
-    should_test_connect,
     ReusedConnectTestCase,
     connect_requirement_message,
+    should_test_connect,
 )
 from pyspark.testing.utils import timeout
+from pyspark.util import is_remote_only
 
 if should_test_connect:
     import grpc
-    from pyspark.sql.connect.session import SparkSession as RemoteSparkSession
-    from pyspark.sql.connect.client import ChannelBuilder, DefaultChannelBuilder
+
     from pyspark.errors.exceptions.connect import (
         AnalysisException,
         SparkConnectException,
         SparkConnectGrpcException,
         SparkUpgradeException,
     )
+    from pyspark.sql.connect.client import ChannelBuilder, DefaultChannelBuilder
+    from pyspark.sql.connect.session import SparkSession as RemoteSparkSession
 
     class CustomChannelBuilder(DefaultChannelBuilder):
         @property
@@ -81,6 +82,20 @@ class SparkConnectSessionTests(ReusedConnectTestCase):
         self.spark.clearProgressHandlers()
         self.spark.sql("select 1").collect()
         self.assertGreaterEqual(len(handler_called), 0)
+
+    @timeout(10)
+    def test_operation_id_in_execution_info_and_exception(self):
+        df = self.spark.sql("select 1")
+        df.collect()
+        self.assertIsNotNone(df.executionInfo)
+        operation_id = df.executionInfo.operation_id
+        self.assertIsNotNone(operation_id)
+        uuid.UUID(operation_id)
+
+        with self.assertRaises(SparkConnectException) as error:
+            self.spark.sql("select raise_error('expected')").collect()
+        self.assertIsNotNone(error.exception.operation_id)
+        uuid.UUID(error.exception.operation_id)
 
     def _check_no_active_session_error(self, e: PySparkException):
         self.check_error(exception=e, errorClass="NO_ACTIVE_SESSION", messageParameters=dict())

@@ -781,3 +781,49 @@ org.apache.spark.sql.catalyst.ExtendedAnalysisException
     "fragment" : "val"
   } ]
 }
+
+
+-- !query
+SELECT explode(array(a)) AS col, count(*) OVER () AS cnt, a
+FROM VALUES (1), (2), (3), (NULL) AS t(a)
+GROUP BY a
+HAVING a IS NOT NULL
+-- !query schema
+struct<col:int,cnt:bigint,a:int>
+-- !query output
+1	3	1
+2	3	2
+3	3	3
+
+
+-- !query
+SELECT explode(array(a)) AS col,
+       count(*) OVER () AS group_count,
+       count(*) AS row_count
+FROM VALUES (1), (1), (2), (3), (3) AS t(a)
+GROUP BY a
+HAVING row_count > 1
+-- !query schema
+struct<col:int,group_count:bigint,row_count:bigint>
+-- !query output
+1	2	2
+3	2	2
+
+
+-- !query
+SELECT explode(array(a)) AS col,
+       count(*) OVER () AS cnt,
+       count(*) OVER (
+         ORDER BY a
+         ROWS BETWEEN UNBOUNDED PRECEDING AND UNBOUNDED FOLLOWING
+       ) AS ordered_cnt,
+       a
+FROM VALUES (1), (2), (3), (NULL) AS t(a)
+GROUP BY a
+HAVING a IS NOT NULL
+-- !query schema
+struct<col:int,cnt:bigint,ordered_cnt:bigint,a:int>
+-- !query output
+1	3	3	1
+2	3	3	2
+3	3	3	3

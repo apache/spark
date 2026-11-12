@@ -17,16 +17,18 @@
 
 package org.apache.spark.sql.catalyst.expressions.aggregate
 
+import java.time.LocalTime
+
 import scala.collection.immutable.NumericRange
 import scala.util.Random
 
 import org.apache.datasketches.hll.HllSketch
 import org.apache.datasketches.memory.Memory
 
-import org.apache.spark.SparkFunSuite
+import org.apache.spark.{SparkFunSuite, SparkRuntimeException}
 import org.apache.spark.sql.catalyst.InternalRow
-import org.apache.spark.sql.catalyst.expressions.{BoundReference, HllSketchEstimate}
-import org.apache.spark.sql.types.{BinaryType, DataType, IntegerType, LongType, StringType}
+import org.apache.spark.sql.catalyst.expressions.{BoundReference, HllSketchEstimate, HllUnion, Literal}
+import org.apache.spark.sql.types.{BinaryType, DataType, IntegerType, LongType, StringType, TimeType, TypeCollection}
 import org.apache.spark.unsafe.types.UTF8String
 
 
@@ -86,6 +88,63 @@ class DatasketchesHllSketchSuite extends SparkFunSuite {
     val (binaryEstimate, binaryEstimateRange) = simulateUpdateMerge(BinaryType, binaryRange)
     assert(binaryEstimate == binaryRange.size ||
       binaryEstimateRange.contains(binaryRange.size.toLong))
+  }
+
+  test("Test hll_sketch_agg and hll_union_agg over the TIME type") {
+    // The analyzer admits TIME as a value to sketch.
+    assert(
+      new HllSketchAgg(BoundReference(0, TimeType(6), nullable = true), 12)
+        .checkInputDataTypes().isSuccess)
+
+    // TIME is physically a long of nanos-of-day, so distinct-counting a TIME column behaves
+    // exactly like counting the underlying longs.
+    val timeRange = (0 until 1000).map(_.toLong * 1000000000L) // 0s..999s of the day, in nanos
+    val (estimate, estimateRange) = simulateUpdateMerge(TimeType(), timeRange)
+    assert(estimate == timeRange.size || estimateRange.contains(timeRange.size.toLong))
+
+    val nineAm = LocalTime.of(9, 0, 0).toNanoOfDay
+    val noon = LocalTime.of(12, 0, 0).toNanoOfDay
+    val fivePm = LocalTime.of(17, 0, 0).toNanoOfDay
+
+    def timeSketch(precision: Int, values: Seq[Long]): Array[Byte] = {
+      val agg = new HllSketchAgg(BoundReference(0, TimeType(precision), nullable = true), 12)
+      val buf = values.foldLeft(agg.createAggregationBuffer())((b, v) =>
+        agg.update(b, InternalRow(v)))
+      agg.eval(buf).asInstanceOf[Array[Byte]]
+    }
+
+    // Repeated values are counted once (deduplication).
+    assert(estimateOf(timeSketch(9, Seq(noon, noon, noon, nineAm, nineAm))) == 2L)
+
+    // The full nanos-of-day is hashed: times that differ only in sub-microsecond digits are
+    // distinct. A regression that truncated to micros before hashing would under-count these.
+    assert(estimateOf(timeSketch(9, Seq(noon, noon + 1L, noon + 2L))) == 3L)
+
+    // Sketches built from TIME columns of different precisions round-trip through hll_union_agg,
+    // which only ever sees the serialized BINARY sketch and so needs no TIME-specific handling.
+    val merged = unionAgg(
+      Seq[Any](timeSketch(3, Seq(nineAm, noon)), timeSketch(9, Seq(noon, fivePm))),
+      allowDifferentLgConfigK = false)
+    assert(estimateOf(merged) == 3L) // distinct {09:00, 12:00, 17:00}
+  }
+
+  test("hll_sketch_agg keeps AnyTimeType last in its input TypeCollection (SPARK-59440)") {
+    // ANSI implicit coercion walks the value TypeCollection in order, casting a non-accepted input
+    // to the first member that canANSIStoreAssign permits. A TIMESTAMP/TIMESTAMP_NTZ store-assigns
+    // to both STRING and TIME, so the string member MUST precede AnyTimeType; otherwise a datetime
+    // would coerce to TIME (nanos-of-day only) and silently under-count distinct values. This locks
+    // in the ordering so a future reorder cannot reintroduce that regression with green CI.
+    val members = new HllSketchAgg(BoundReference(0, IntegerType, nullable = true), 12)
+      .inputTypes.head match {
+        case TypeCollection(types) => types
+        case other => fail(s"expected the value input type to be a TypeCollection, got $other")
+      }
+    val stringIdx = members.indexWhere(_.acceptsType(StringType))
+    val timeIdx = members.indexWhere(_.acceptsType(TimeType(6)))
+    assert(stringIdx >= 0, "no string-accepting member in the input TypeCollection")
+    assert(timeIdx >= 0, "no TIME-accepting member in the input TypeCollection")
+    assert(stringIdx < timeIdx,
+      "the string member must precede AnyTimeType so datetimes coerce to STRING, not TIME")
   }
 
   test("Test lgMaxK results in downsampling sketches with larger lgConfigK") {
@@ -152,5 +211,131 @@ class DatasketchesHllSketchSuite extends SparkFunSuite {
       s"Expected HLL_INVALID_INPUT_SKETCH_BUFFER error, " +
         s"but got: ${exception.getClass.getName}: ${exception.getMessage}"
     )
+  }
+  /** Runs HllUnionAgg over `inputs` (a NULL entry stands for a NULL sketch) for a single group. */
+  private def unionAgg(inputs: Seq[Any], allowDifferentLgConfigK: Boolean): Array[Byte] = {
+    val aggFunc = new HllUnionAgg(
+      BoundReference(0, BinaryType, nullable = true), allowDifferentLgConfigK)
+    val buffer = inputs.foldLeft(aggFunc.createAggregationBuffer()) { (buf, input) =>
+      aggFunc.update(buf, InternalRow(input))
+    }
+    aggFunc.eval(buffer).asInstanceOf[Array[Byte]]
+  }
+
+  /** Runs HllSketchAgg at `lgConfigK` over `values` (a NULL entry stands for a NULL value). */
+  private def sketchAgg(values: Seq[Any], lgConfigK: Int): Array[Byte] = {
+    val aggFunc = new HllSketchAgg(BoundReference(0, StringType, nullable = true), lgConfigK)
+    val buffer = values.foldLeft(aggFunc.createAggregationBuffer()) { (buf, value) =>
+      aggFunc.update(buf, InternalRow(value))
+    }
+    aggFunc.eval(buffer).asInstanceOf[Array[Byte]]
+  }
+
+  /** Evaluates the scalar hll_union over two serialized sketches. */
+  private def scalarUnion(
+      left: Array[Byte], right: Array[Byte], allowDifferentLgConfigK: Boolean): Array[Byte] =
+    HllUnion(
+      Literal(left, BinaryType),
+      Literal(right, BinaryType),
+      Literal(allowDifferentLgConfigK)).eval(InternalRow.empty).asInstanceOf[Array[Byte]]
+
+  private def lgConfigKOf(sketch: Array[Byte]): Int =
+    HllSketch.heapify(Memory.wrap(sketch)).getLgConfigK
+
+  private def estimateOf(sketch: Array[Byte]): Long =
+    HllSketchEstimate(BoundReference(0, BinaryType, nullable = true))
+      .eval(InternalRow(sketch)).asInstanceOf[Long]
+
+  private def stringValues(n: Int): Seq[Any] =
+    Seq.tabulate(n)(i => UTF8String.fromString(i.toString))
+
+  test("hll_union_agg on a group with no non-NULL sketch yields an empty default-lgConfigK " +
+    "sketch") {
+    // The aggregate has no lgConfigK parameter and never saw a sketch, so it has no precision to
+    // report and falls back to the Datasketches default. Documented here because the resulting
+    // sketch is observable, and must stay harmless to later unions (see the tests below).
+    val allNull = unionAgg(Seq(null, null), allowDifferentLgConfigK = false)
+    assert(estimateOf(allNull) == 0L)
+    assert(lgConfigKOf(allNull) == HllSketch.DEFAULT_LG_K)
+
+    // hll_sketch_agg does not share the problem only because it has the parameter: it builds its
+    // buffer eagerly at the requested lgConfigK. Without the argument it defaults to 12 as well.
+    val emptyAt15 = sketchAgg(Seq(null, null), 15)
+    assert(estimateOf(emptyAt15) == 0L)
+    assert(lgConfigKOf(emptyAt15) == 15)
+  }
+
+  test("hll_union_agg merges an empty sketch of a different lgConfigK without an error") {
+    // An empty sketch holds no coupons, so unioning it cannot lose information at any lgConfigK.
+    // This is the shape produced by the test above, i.e. what a persisted table ends up holding
+    // for a group whose sketches were all NULL.
+    val emptyAtDefaultLgK = unionAgg(Seq(null), allowDifferentLgConfigK = false)
+    val sketchAt15 = sketchAgg(stringValues(1000), 15)
+
+    Seq(true, false).foreach { allowDifferentLgConfigK =>
+      Seq(
+        ("empty sketch first", Seq[Any](emptyAtDefaultLgK, sketchAt15)),
+        ("empty sketch last", Seq[Any](sketchAt15, emptyAtDefaultLgK))
+      ).foreach { case (order, inputs) =>
+        val merged = unionAgg(inputs, allowDifferentLgConfigK)
+        // The non-empty sketch decides the precision, whichever order the rows arrive in: the
+        // result must not depend on which row the aggregate happens to see first.
+        assert(lgConfigKOf(merged) == 15,
+          s"$order (allowDifferentLgConfigK=$allowDifferentLgConfigK) changed the lgConfigK")
+        assert(estimateOf(merged) == estimateOf(sketchAt15),
+          s"$order (allowDifferentLgConfigK=$allowDifferentLgConfigK) changed the estimate")
+      }
+    }
+  }
+
+  test("hll_union_agg still rejects non-empty sketches with different lgConfigK") {
+    val sketchAt12 = sketchAgg(stringValues(1000), 12)
+    val sketchAt15 = sketchAgg(stringValues(1000), 15)
+
+    Seq(
+      Seq[Any](sketchAt12, sketchAt15),
+      Seq[Any](sketchAt15, sketchAt12)
+    ).foreach { inputs =>
+      val exception = intercept[SparkRuntimeException] {
+        unionAgg(inputs, allowDifferentLgConfigK = false)
+      }
+      assert(exception.getCondition == "HLL_UNION_DIFFERENT_LG_K")
+    }
+
+    // And still downsamples rather than erroring when the caller opts in.
+    assert(lgConfigKOf(unionAgg(Seq(sketchAt15, sketchAt12), allowDifferentLgConfigK = true)) == 12)
+  }
+
+  test("hll_union merges an empty sketch of a different lgConfigK without an error") {
+    val emptyAtDefaultLgK = unionAgg(Seq(null), allowDifferentLgConfigK = false)
+    val sketchAt15 = sketchAgg(stringValues(1000), 15)
+
+    Seq(true, false).foreach { allowDifferentLgConfigK =>
+      Seq(
+        ("empty sketch first", emptyAtDefaultLgK, sketchAt15),
+        ("empty sketch last", sketchAt15, emptyAtDefaultLgK)
+      ).foreach { case (order, left, right) =>
+        val merged = scalarUnion(left, right, allowDifferentLgConfigK)
+        assert(lgConfigKOf(merged) == 15,
+          s"$order (allowDifferentLgConfigK=$allowDifferentLgConfigK) changed the lgConfigK")
+        assert(estimateOf(merged) == estimateOf(sketchAt15),
+          s"$order (allowDifferentLgConfigK=$allowDifferentLgConfigK) changed the estimate")
+      }
+    }
+  }
+
+  test("hll_union still rejects non-empty sketches with different lgConfigK") {
+    val sketchAt12 = sketchAgg(stringValues(1000), 12)
+    val sketchAt15 = sketchAgg(stringValues(1000), 15)
+
+    Seq((sketchAt12, sketchAt15), (sketchAt15, sketchAt12)).foreach { case (left, right) =>
+      val exception = intercept[SparkRuntimeException] {
+        scalarUnion(left, right, allowDifferentLgConfigK = false)
+      }
+      assert(exception.getCondition == "HLL_UNION_DIFFERENT_LG_K")
+    }
+
+    // Two populated sketches still downsample to the smaller lgConfigK when opted in.
+    assert(lgConfigKOf(scalarUnion(sketchAt15, sketchAt12, allowDifferentLgConfigK = true)) == 12)
   }
 }

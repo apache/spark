@@ -41,7 +41,7 @@ import org.apache.spark.util.ArrayImplicits._
  */
 @Since("1.6.0")
 class BisectingKMeansModel private[clustering] (
-    private[clustering] val root: ClusteringTreeNode,
+    private[spark] val root: ClusteringTreeNode,
     @Since("2.4.0") val distanceMeasure: String,
     @Since("3.0.0") val trainingCost: Double
   ) extends Serializable with Saveable with Logging {

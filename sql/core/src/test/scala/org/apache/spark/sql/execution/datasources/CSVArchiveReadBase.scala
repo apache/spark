@@ -43,6 +43,8 @@ trait CSVArchiveReadBase extends ArchiveReadSuiteBase {
 
   override protected def readSchema: String = "id INT, name STRING"
 
+  override protected def supportsDecompressionCodec: Boolean = true
+
   // CSV infers its schema from row content (supportsSchemaInference defaults true); inference is
   // triggered by the `inferSchema` option. CSV is positional/header-keyed and cannot represent
   // nested types, so it opts out of the schema-merge and complex-type tests.
@@ -131,11 +133,8 @@ trait CSVArchiveReadBase extends ArchiveReadSuiteBase {
   }
 
   test("CSV: the DSv2 path refuses to infer a schema for an archive (UNABLE_TO_INFER_SCHEMA)") {
-    // Archive scanning is wired into the V1 file source only, so the DSv2 reader cannot read
-    // archives. On the V2 path inference must keep returning None for an archive input -- raising
-    // UNABLE_TO_INFER_SCHEMA -- rather than inferring a schema and letting the V2 scan parse the
-    // raw archive bytes as CSV. Forcing csv off the V1 source list routes the read through
-    // CSVTable.
+    // Forcing csv off the V1 source list routes the archive read through the DSv2 CSVTable, which
+    // cannot read archives and must fail with UNABLE_TO_INFER_SCHEMA, not parse raw bytes.
     withArchiveFile() { archive =>
       writeArchive(archive, Seq(entryName(0) -> encodeFile(sampleDf((1, "Alice"), (2, "Bob")))))
       withSQLConf(SQLConf.USE_V1_SOURCE_LIST.key -> "") {

@@ -20,6 +20,7 @@ import java.io.IOException;
 import java.nio.ByteBuffer;
 
 import org.apache.parquet.bytes.ByteBufferInputStream;
+import org.apache.parquet.io.ParquetDecodingException;
 import org.apache.parquet.io.api.Binary;
 
 import org.apache.spark.sql.execution.vectorized.WritableColumnVector;
@@ -50,7 +51,10 @@ public class VectorizedByteStreamSplitValuesReader
   /** Width of each value in bytes (4 for FLOAT/INT32, 8 for DOUBLE/INT64). */
   private final int typeWidth;
 
-  /** Total number of values in the current page. */
+  /**
+   * Number of values encoded in the current page. For a column with definition levels this
+   * excludes nulls, so it can be smaller than the page value count.
+   */
   private int valueCount;
 
   /** Raw encoded page data: W streams of valueCount bytes each. */
@@ -59,8 +63,20 @@ public class VectorizedByteStreamSplitValuesReader
   /** Current read position (number of values consumed so far). */
   private int offset;
 
+  /**
+   * Whether the page value count is exactly the number of encoded values. This holds for a
+   * column without definition levels (max definition level 0), where every row has a value.
+   * Otherwise the page value count includes nulls and is only an upper bound.
+   */
+  private final boolean exactValueCount;
+
   public VectorizedByteStreamSplitValuesReader(int typeWidth) {
+    this(typeWidth, false);
+  }
+
+  public VectorizedByteStreamSplitValuesReader(int typeWidth, boolean exactValueCount) {
     this.typeWidth = typeWidth;
+    this.exactValueCount = exactValueCount;
   }
 
   @Override
@@ -69,7 +85,30 @@ public class VectorizedByteStreamSplitValuesReader
     // but valueCount includes nulls. Use the actual bytes available in the stream
     // to derive the real number of encoded values.
     int totalBytes = in.available();
-    this.valueCount = totalBytes / typeWidth;
+    // The page stores no value count and the Parquet spec allows no padding in a data
+    // page, so the page length must be an exact multiple of the value width. Otherwise
+    // the page is truncated or has trailing bytes, and the stream boundaries derived from
+    // its length may be wrong.
+    if (totalBytes % typeWidth != 0) {
+      throw new ParquetDecodingException("Corrupted BYTE_STREAM_SPLIT page: page data length " +
+        totalBytes + " is not a multiple of the value width " + typeWidth);
+    }
+    int encodedValues = totalBytes / typeWidth;
+    // Without definition levels the page value count must match the encoded values exactly.
+    if (exactValueCount && encodedValues != valueCount) {
+      throw new ParquetDecodingException("Corrupted BYTE_STREAM_SPLIT page: " + encodedValues +
+        " encoded values do not match the page value count " + valueCount);
+    }
+    // Otherwise the page value count includes nulls and is only an upper bound. A page with
+    // more encoded values than that is rejected below, but a page that is off by whole values
+    // within the bound is not detected here, and its values are decoded with the wrong stream
+    // stride. With fewer encoded values than non-null rows, a read or skip past the last
+    // encoded value fails. With more, the page is not detected.
+    if (encodedValues > valueCount) {
+      throw new ParquetDecodingException("Corrupted BYTE_STREAM_SPLIT page: " + encodedValues +
+        " encoded values exceed the page value count " + valueCount);
+    }
+    this.valueCount = encodedValues;
     this.offset = 0;
     this.pageData = new byte[totalBytes];
     // Read the entire page into pageData. ByteBufferInputStream.slice() returns a
@@ -80,6 +119,28 @@ public class VectorizedByteStreamSplitValuesReader
   }
 
   // --------------- helpers ---------------
+
+  /**
+   * Checks that the page has at least {@code total} values left. Batch reads and skips call
+   * this once per batch, so the per-value loops need no bound check of their own.
+   */
+  private void checkRemaining(int total) {
+    if (total < 0) {
+      throw new IllegalArgumentException("Cannot read or skip a negative number of values: " +
+        total);
+    }
+    if (total > valueCount - offset) {
+      throw new ParquetDecodingException("Corrupted BYTE_STREAM_SPLIT page: cannot read or " +
+        "skip " + total + " values, only " + (valueCount - offset) + " of " + valueCount +
+        " values are left");
+    }
+  }
+
+  /** Returns the index of the next value for a single-value read and advances past it. */
+  private int nextIndex() {
+    checkRemaining(1);
+    return offset++;
+  }
 
   /** Assembles a single 4-byte little-endian int from 4 streams at the given index. */
   private int assembleInt(int idx) {
@@ -115,31 +176,36 @@ public class VectorizedByteStreamSplitValuesReader
 
   @Override
   public int readInteger() {
-    return assembleInt(offset++);
+    return assembleInt(nextIndex());
   }
 
   @Override
   public long readLong() {
-    return assembleLong(offset++);
+    return assembleLong(nextIndex());
   }
 
   @Override
   public float readFloat() {
-    return Float.intBitsToFloat(assembleInt(offset++));
+    return Float.intBitsToFloat(assembleInt(nextIndex()));
   }
 
   @Override
   public double readDouble() {
-    return Double.longBitsToDouble(assembleLong(offset++));
+    return Double.longBitsToDouble(assembleLong(nextIndex()));
   }
 
   @Override
   public Binary readBinary(int len) {
-    byte[] result = new byte[len];
-    for (int b = 0; b < len; b++) {
-      result[b] = pageData[b * valueCount + offset];
+    // Each value has one byte in each of the typeWidth streams.
+    if (len != typeWidth) {
+      throw new IllegalArgumentException(
+        "Cannot read a value of length " + len + " from values of width " + typeWidth);
     }
-    offset++;
+    byte[] result = new byte[typeWidth];
+    int idx = nextIndex();
+    for (int b = 0; b < typeWidth; b++) {
+      result[b] = pageData[b * valueCount + idx];
+    }
     return Binary.fromConstantByteArray(result);
   }
 
@@ -147,6 +213,7 @@ public class VectorizedByteStreamSplitValuesReader
 
   @Override
   public void readBytes(int total, WritableColumnVector c, int rowId) {
+    checkRemaining(total);
     for (int i = 0; i < total; i++) {
       c.putByte(rowId + i, (byte) assembleInt(offset + i));
     }
@@ -155,6 +222,7 @@ public class VectorizedByteStreamSplitValuesReader
 
   @Override
   public void readShorts(int total, WritableColumnVector c, int rowId) {
+    checkRemaining(total);
     for (int i = 0; i < total; i++) {
       c.putShort(rowId + i, (short) assembleInt(offset + i));
     }
@@ -163,6 +231,7 @@ public class VectorizedByteStreamSplitValuesReader
 
   @Override
   public void readIntegers(int total, WritableColumnVector c, int rowId) {
+    checkRemaining(total);
     for (int i = 0; i < total; i++) {
       c.putInt(rowId + i, assembleInt(offset + i));
     }
@@ -171,6 +240,7 @@ public class VectorizedByteStreamSplitValuesReader
 
   @Override
   public void readIntegersAsLongs(int total, WritableColumnVector c, int rowId) {
+    checkRemaining(total);
     for (int i = 0; i < total; i++) {
       c.putLong(rowId + i, assembleInt(offset + i));
     }
@@ -179,6 +249,7 @@ public class VectorizedByteStreamSplitValuesReader
 
   @Override
   public void readIntegersAsDoubles(int total, WritableColumnVector c, int rowId) {
+    checkRemaining(total);
     for (int i = 0; i < total; i++) {
       c.putDouble(rowId + i, (double) assembleInt(offset + i));
     }
@@ -187,6 +258,7 @@ public class VectorizedByteStreamSplitValuesReader
 
   @Override
   public void readLongs(int total, WritableColumnVector c, int rowId) {
+    checkRemaining(total);
     for (int i = 0; i < total; i++) {
       c.putLong(rowId + i, assembleLong(offset + i));
     }
@@ -195,6 +267,7 @@ public class VectorizedByteStreamSplitValuesReader
 
   @Override
   public void readLongsAsInts(int total, WritableColumnVector c, int rowId) {
+    checkRemaining(total);
     for (int i = 0; i < total; i++) {
       c.putInt(rowId + i, (int) assembleLong(offset + i));
     }
@@ -203,6 +276,7 @@ public class VectorizedByteStreamSplitValuesReader
 
   @Override
   public void readFloats(int total, WritableColumnVector c, int rowId) {
+    checkRemaining(total);
     for (int i = 0; i < total; i++) {
       c.putFloat(rowId + i, Float.intBitsToFloat(assembleInt(offset + i)));
     }
@@ -211,6 +285,7 @@ public class VectorizedByteStreamSplitValuesReader
 
   @Override
   public void readFloatsAsDoubles(int total, WritableColumnVector c, int rowId) {
+    checkRemaining(total);
     for (int i = 0; i < total; i++) {
       c.putDouble(rowId + i, (double) Float.intBitsToFloat(assembleInt(offset + i)));
     }
@@ -219,6 +294,7 @@ public class VectorizedByteStreamSplitValuesReader
 
   @Override
   public void readDoubles(int total, WritableColumnVector c, int rowId) {
+    checkRemaining(total);
     for (int i = 0; i < total; i++) {
       c.putDouble(rowId + i, Double.longBitsToDouble(assembleLong(offset + i)));
     }
@@ -227,6 +303,7 @@ public class VectorizedByteStreamSplitValuesReader
 
   @Override
   public void readBinary(int total, WritableColumnVector c, int rowId) {
+    checkRemaining(total);
     // Reuse a single scratch buffer to avoid per-value byte[] + Binary allocation.
     byte[] scratch = new byte[typeWidth];
     for (int i = 0; i < total; i++) {
@@ -244,30 +321,36 @@ public class VectorizedByteStreamSplitValuesReader
   }
 
   // --------------- skip methods ---------------
-  // All types share the same page layout, so skipping is just advancing the offset.
+  // All types share the same page layout, so skipping is just advancing the offset
+  // after checking the page has enough values left.
   // skipBooleans is not overridden: BSS never encodes booleans; the base class throws.
 
-  @Override
-  public void skipBytes(int total) { offset += total; }
+  private void skipValues(int total) {
+    checkRemaining(total);
+    offset += total;
+  }
 
   @Override
-  public void skipShorts(int total) { offset += total; }
+  public void skipBytes(int total) { skipValues(total); }
 
   @Override
-  public void skipIntegers(int total) { offset += total; }
+  public void skipShorts(int total) { skipValues(total); }
 
   @Override
-  public void skipLongs(int total) { offset += total; }
+  public void skipIntegers(int total) { skipValues(total); }
 
   @Override
-  public void skipFloats(int total) { offset += total; }
+  public void skipLongs(int total) { skipValues(total); }
 
   @Override
-  public void skipDoubles(int total) { offset += total; }
+  public void skipFloats(int total) { skipValues(total); }
 
   @Override
-  public void skipBinary(int total) { offset += total; }
+  public void skipDoubles(int total) { skipValues(total); }
 
   @Override
-  public void skipFixedLenByteArray(int total, int len) { offset += total; }
+  public void skipBinary(int total) { skipValues(total); }
+
+  @Override
+  public void skipFixedLenByteArray(int total, int len) { skipValues(total); }
 }

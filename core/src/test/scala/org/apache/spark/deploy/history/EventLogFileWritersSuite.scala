@@ -352,6 +352,20 @@ class SingleEventLogFileWriterSuite extends EventLogFileWritersSuite {
         "a fine:mind$dollar{bills}.1", None, Some(CompressionCodec.LZ4)))
   }
 
+  test("Event log file names") {
+    Seq(None, Some("attempt1")).foreach { attemptId =>
+      val baseName = attemptId.map(id => s"app1_$id").getOrElse("app1")
+      val names = SingleEventLogFileWriter.getLogFileNames("app1", attemptId)
+      assert(names.head === baseName)
+      assert(names.contains(s"$baseName.inprogress"))
+      assert(names.size === (1 + CompressionCodec.shortCompressionCodecNames.size) * 2)
+      CompressionCodec.shortCompressionCodecNames.keys.foreach { codec =>
+        assert(names.contains(s"$baseName.$codec"))
+        assert(names.contains(s"$baseName.$codec.inprogress"))
+      }
+    }
+  }
+
   override protected def createWriter(
       appId: String,
       appAttemptId: Option[String],

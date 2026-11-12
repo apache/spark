@@ -41,7 +41,8 @@ import org.apache.spark.sql.types.{DataType, TimestampLTZNanosType, TimestampNTZ
  *     (OrcSerializer.newConverter)
  *   - Row-based read (deserialize): ORC WritableComparable -> Catalyst value
  *     (OrcDeserializer.newWriter)
- *   - Predicate pushdown: PredicateLeaf.Type mapping + literal casting (OrcFilters)
+ *   - Predicate pushdown: PredicateLeaf.Type mapping + literal casting + read type check
+ *     (OrcFilters)
  *
  * DELIBERATELY NOT ON THE TRAIT:
  *   - Vectorized read. ORC's vectorized path (OrcAtomicColumnVector, a Java class) dispatches via
@@ -84,7 +85,7 @@ import org.apache.spark.sql.types.{DataType, TimestampLTZNanosType, TimestampNTZ
  *
  * @see TimeTypeOrcOps for a reference implementation (primitive Long-backed type)
  * @see TimestampLTZNanosOrcOps / TimestampNTZNanosOrcOps for OrcTimestamp-backed types
- * @since 5.0.0
+ * @since 4.3.0
  */
 private[orc] trait OrcTypeOps extends Serializable {
 
@@ -145,9 +146,9 @@ private[orc] trait OrcTypeOps extends Serializable {
    * conversion, override castFilterLiteral); returning None is only safe for a type that can never
    * reach getPredicateLeafType.
    *
-   * TimeType returns Some(LONG). The nanosecond-timestamp types return None: they had no
-   * getPredicateLeafType arm before this change either, so the behavior (throw if ever reached) is
-   * preserved, not newly introduced.
+   * TimeType and the nanosecond-timestamp types return Some (LONG and TIMESTAMP respectively) so
+   * their pushed filters convert to search arguments. A type that returns None (there are none
+   * today) would reach the throw arm if ever pushed.
    */
   def predicateLeafType: Option[PredicateLeaf.Type] = None
 
@@ -156,6 +157,15 @@ private[orc] trait OrcTypeOps extends Serializable {
    * Only meaningful for types that also return a predicateLeafType. Default is identity.
    */
   def castFilterLiteral(value: Any): Any = value
+
+  /**
+   * Whether a predicate with a value is pushable for a field of this type in the ORC file that is
+   * read as `readType`, the Spark type in the read schema (OrcFilters.createFilter). ORC evaluates
+   * a pushed down predicate against the stored values, so this is false when the reader changes
+   * them for `readType`, e.g. truncates them to a lower precision. IsNull and IsNotNull are pushed
+   * down regardless. Default is true.
+   */
+  def acceptsReadType(readType: DataType): Boolean = true
 }
 
 /**

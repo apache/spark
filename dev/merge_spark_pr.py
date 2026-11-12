@@ -37,16 +37,21 @@
 # have added remotes corresponding to both (i) the github apache Spark
 # mirror and (ii) the apache git repo.
 
+import argparse
 import json
 import os
 import re
 import subprocess
 import sys
 import traceback
-from typing import List
-from urllib.request import urlopen
-from urllib.request import Request
+from typing import Iterator, List, Optional, Union
 from urllib.error import HTTPError
+from urllib.request import Request, urlopen
+
+# Shared with dev/pr_merge_status.py so the two committer tools agree on where a PR landed.
+# Importable because Python puts this script's own directory first on sys.path.
+from spark_merge_footer import branches_with_merge_footer as _branches_with_merge_footer
+from spark_merge_footer import has_merge_footer
 
 try:
     import jira.client
@@ -73,16 +78,33 @@ JIRA_ACCESS_TOKEN = os.environ.get("JIRA_ACCESS_TOKEN")
 # Connection timeout (in seconds) for the JIRA client. Raise this if the default is too
 # short for your network, e.g. when the TLS handshake goes through a slow proxy.
 JIRA_CONNECT_TIMEOUT = float(os.environ.get("JIRA_CONNECT_TIMEOUT", "3.05"))
+# Read timeout (in seconds) for a single JIRA request. Doubles as the budget for the startup
+# liveness probe, so a server that is down or too slow to answer disables JIRA for this run
+# rather than failing or stalling the merge.
+JIRA_READ_TIMEOUT = float(os.environ.get("JIRA_READ_TIMEOUT", "30"))
 # OAuth key used for issuing requests against the GitHub API. If this is not defined, then requests
 # will be unauthenticated. You should only need to configure this if you find yourself regularly
 # exceeding your IP's unauthenticated request rate limit. You can create an OAuth key at
 # https://github.com/settings/tokens. This script only requires the "public_repo" scope.
 GITHUB_OAUTH_KEY = os.environ.get("GITHUB_OAUTH_KEY")
+# Setting the DRY_RUN env var to any non-empty value makes the --dry-run/-n flag default to on
+# (see build_arg_parser); the flag is the primary interface and can also turn it on explicitly.
+# Consistent with the SKIP_VERSION_CHECK env toggle above. In a dry run every read-only step and
+# local git op still runs -- fetching the PR, JIRA lookup, project_versions, JIRA/GitHub token
+# validation, and the local squash-merge and cherry-picks on the throwaway PR_TOOL_* branches so
+# conflicts and the computed merge hash stay realistic -- but every outbound effect is routed
+# through a DryRun* client (see Git/GitHub/Jira below) that logs a "DRY-RUN: would ..." line
+# instead of executing it: the git push to PUSH_REMOTE_NAME, the GitHub PR close/comment, and all
+# JIRA writes (component and fixVersion updates, assignment, and resolve/reopen transitions).
+DRY_RUN_ENV = bool(os.environ.get("DRY_RUN"))
 
 
 GITHUB_BASE = "https://github.com/apache/spark/pull"
 GITHUB_COMMIT_BASE = "https://github.com/apache/spark/commit"
 GITHUB_API_BASE = "https://api.github.com/repos/apache/spark"
+# Items per page that get_json_pages asks GitHub list endpoints for: the most GitHub allows.
+# Without it, GitHub returns 30.
+GITHUB_PAGE_SIZE = 100
 JIRA_BASE = "https://issues.apache.org/jira/browse"
 JIRA_API_BASE = "https://issues.apache.org/jira"
 # Prefix added to temporary branches
@@ -92,6 +114,14 @@ BRANCH_PREFIX = "PR_TOOL"
 SKIP_VERSION_CHECK = os.environ.get("SKIP_VERSION_CHECK", "")
 # Path of this script relative to the repo root, used to fetch the canonical copy from master.
 MERGE_SCRIPT_REPO_PATH = "dev/merge_spark_pr.py"
+
+# Run the push-triggered post-merge workflows at each branch's configured commit interval.
+# Other commits get GitHub's documented workflow-skip trailer after a visible warning.
+# See https://docs.github.com/en/actions/how-tos/manage-workflow-runs/skip-workflow-runs
+POST_MERGE_CI_INTERVALS = {"master": 10, "branch-4.x": 10}
+POST_MERGE_CI_SKIP_TRAILER = "skip-checks: true"
+# Covers the trailer plus the cherry-pick attribution and committer sign-off added by -sx.
+POST_MERGE_CI_TRAILER_SEARCH_LENGTH = 256
 
 
 def semver_branch_rank(name):
@@ -122,6 +152,25 @@ def semver_branch_rank(name):
     return (-1, -1)
 
 
+def parse_version(name: str) -> Optional[tuple[int, int, int]]:
+    """Parse a dotted ``x.y.z`` version name into an ``(int, int, int)`` tuple.
+
+    Returns None for anything that is not a plain three-part numeric version, so the
+    result can be compared directly and non-version names are skipped by callers.
+
+    >>> parse_version("4.4.0")
+    (4, 4, 0)
+    >>> parse_version("4.10.2")
+    (4, 10, 2)
+    >>> parse_version("branch-4.x") is None
+    True
+    >>> parse_version("4.4") is None
+    True
+    """
+    m = re.match(r"^(\d+)\.(\d+)\.(\d+)$", name)
+    return tuple(int(g) for g in m.groups()) if m else None
+
+
 def _semver_max_version(names):
     """
     Highest dotted version by numeric semver (SPARK Fix Version naming).
@@ -131,9 +180,10 @@ def _semver_max_version(names):
     >>> _semver_max_version(["5.0.0", "6.0.0"])
     '6.0.0'
     """
-    if not names:
+    parsed = [(parse_version(n), n) for n in names]
+    parsed = [(t, n) for t, n in parsed if t is not None]
+    if not parsed:
         return None
-    parsed = [(tuple(int(p) for p in n.split(".")), n) for n in names]
     return max(parsed)[1]
 
 
@@ -175,7 +225,7 @@ def compute_merge_default_fix_versions(merge_branches, unreleased_version_names)
     contain the commit, leveraging the Upstream-First backporting policy (cherry-picks flow
     master -> branch-M.x -> branch-M.N):
       - master contributes the greatest unreleased N.0.0;
-      - branch-M.x with master contributes that major's greatest unreleased minor.0;
+      - branch-M.x contributes that major's greatest unreleased minor.0;
       - branch-M.N contributes its greatest unreleased M.N.patch.
     Redundant entries are then suppressed: master's N.0.0 is dropped when any branch-M.x is in
     the merge set (a cherry-pick to branch-M.x has already landed on master); branch-M.x's
@@ -212,7 +262,7 @@ def compute_merge_default_fix_versions(merge_branches, unreleased_version_names)
     ([], 1, True)
 
     >>> compute_merge_default_fix_versions(["branch-4.x"], ["4.3.0"])
-    ([], [])
+    (['4.3.0'], [])
 
     >>> d, w = compute_merge_default_fix_versions(["branch-4.99"], ["4.3.0"])
     >>> d == [] and len(w) == 1 and "branch-4.99" in w[0]
@@ -272,8 +322,6 @@ def compute_merge_default_fix_versions(merge_branches, unreleased_version_names)
             continue
         line_major = _integration_major_from_branch(b)
         if line_major is not None:
-            if "master" not in merge_branches:
-                continue
             line_versions = [n for n in names if re.match(r"^%s\.\d+\.\d+$" % line_major, n)]
             chosen = _semver_max_version(line_versions)
             if chosen:
@@ -281,11 +329,11 @@ def compute_merge_default_fix_versions(merge_branches, unreleased_version_names)
             else:
                 warnings.append(
                     "Could not infer an unreleased Spark %s (minor.maintenance) fix version "
-                    "for branch-%s.x + master merge; enter version(s) manually when prompted."
+                    "for branch-%s.x merge; enter version(s) manually when prompted."
                     % (line_major, line_major)
                 )
             continue
-        prefix = b.replace("branch-", "")
+        prefix = b.replace("branch-", "") + "."
         found_versions = [n for n in names if n.startswith(prefix)]
         chosen = _semver_max_version(found_versions)
         if chosen:
@@ -318,6 +366,175 @@ def compute_merge_default_fix_versions(merge_branches, unreleased_version_names)
 
     filtered = [item for item in contributions if keep(item)]
     return list(dict.fromkeys(v for _, v in filtered)), warnings
+
+
+def compute_revert_fix_versions(merge_branches, unreleased_version_names, existing_version_names):
+    """Suggest recorded Fix Versions to remove for the branches receiving a revert.
+
+    Infer each branch separately so that redundant versions recorded by separate merge
+    runs are included in the removal candidates.
+
+    >>> versions = ["5.0.0", "4.3.0", "4.2.0", "3.5.2"]
+    >>> compute_revert_fix_versions(
+    ...     ["master", "branch-4.x", "branch-4.2"], versions, versions)
+    (['5.0.0', '4.3.0', '4.2.0'], [])
+    >>> compute_revert_fix_versions(["master"], versions, versions)
+    (['5.0.0'], [])
+    >>> compute_revert_fix_versions(["branch-4.2"], versions, ["4.3.0", "3.5.2"])
+    ([], [])
+    >>> compute_revert_fix_versions(["branch-4.x"], versions, ["4.3.0", "4.2.0"])
+    (['4.3.0'], [])
+    >>> compute_revert_fix_versions(
+    ...     ["branch-4.2"], ["4.2.1", "4.20.0"], ["4.2.1", "4.20.0"])
+    (['4.2.1'], [])
+    """
+    candidates = set()
+    warnings = []
+    for branch in merge_branches:
+        versions, branch_warnings = compute_merge_default_fix_versions(
+            [branch], unreleased_version_names
+        )
+        candidates.update(versions)
+        warnings.extend(branch_warnings)
+    return [v for v in existing_version_names if v in candidates], warnings
+
+
+def additional_fix_versions(inferred_versions, existing_versions):
+    """Return inferred Fix Versions not already present on a JIRA issue.
+
+    Existing versions are preserved separately when the issue is updated, so this only
+    identifies the additions needed after a later backport.
+
+    >>> additional_fix_versions(["4.4.0"], ["5.0.0"])
+    ['4.4.0']
+    >>> additional_fix_versions(["4.4.0"], ["5.0.0", "4.4.0"])
+    []
+    >>> additional_fix_versions(["4.4.0", "4.3.4"], ["5.0.0", "4.4.0"])
+    ['4.3.4']
+    """
+    existing = set(existing_versions)
+    return [version for version in inferred_versions if version not in existing]
+
+
+def fix_version_additions(inferred_versions, existing_versions):
+    """Return (additions, all_inferred_present).
+
+    An empty ``additions`` list is ambiguous on its own: either the issue already carries
+    every inferred version, or nothing was inferred. Only the first means there is nothing
+    to do; the second still needs the committer prompted.
+
+    >>> fix_version_additions(["4.3.0"], ["5.0.0"])
+    (['4.3.0'], False)
+    >>> fix_version_additions(["5.0.0"], ["5.0.0"])
+    ([], True)
+    >>> fix_version_additions([], ["5.0.0"])
+    ([], False)
+    """
+    additions = additional_fix_versions(inferred_versions, existing_versions)
+    return additions, bool(inferred_versions) and not additions
+
+
+def parse_version_list(raw: str) -> list[str]:
+    """Split a comma-separated version string into trimmed, de-duplicated names.
+
+    Surrounding whitespace on each entry is stripped and empty entries are dropped, so a
+    blank or all-separator string yields no names. Input order is preserved. Shared by the
+    Fix Version and Affects Version prompts so both parse committer input the same way.
+
+    >>> parse_version_list("5.0.0, 4.3.0")
+    ['5.0.0', '4.3.0']
+    >>> parse_version_list(" 4.4.0 , , 4.4.0 ")
+    ['4.4.0']
+    >>> parse_version_list("   ")
+    []
+    """
+    names = [segment.strip() for segment in raw.split(",")]
+    return list(dict.fromkeys(n for n in names if n))
+
+
+def fix_versions_from_input(raw_input, default_fix_versions):
+    """Resolve the Fix Version prompt's raw input into a list of version names.
+
+    Blank falls back to the inferred default. With no default to fall back on, blank means
+    skip: the empty list, not [""], which no known version can match.
+
+    >>> fix_versions_from_input("4.2.2", "")
+    ['4.2.2']
+    >>> fix_versions_from_input("", "5.0.0")
+    ['5.0.0']
+    >>> fix_versions_from_input("5.0.0, 4.3.0", "")
+    ['5.0.0', '4.3.0']
+    >>> fix_versions_from_input("", "")
+    []
+    >>> fix_versions_from_input("   ", "")
+    []
+    """
+    if raw_input == "":
+        raw_input = default_fix_versions
+    return parse_version_list(raw_input)
+
+
+def fix_precedes_affects(fix_version_names: list[str], affects_version_names: list[str]) -> bool:
+    """Whether the earliest fix version is below the earliest recorded Affects Version.
+
+    True means the affected floor sits above a fixed release, so the ticket omits a
+    version the fix reaches -- either too-high on a fresh resolve (fixed 4.4.0, affects
+    only 5.0.0) or a backport to an earlier line (affects 4.4.0, backport adds fix 4.3.x).
+    Non-``x.y.z`` names and empty lists compare as absent, so they never trigger a prompt.
+
+    >>> fix_precedes_affects(["4.4.0"], ["5.0.0"])
+    True
+    >>> fix_precedes_affects(["4.4.0"], ["4.3.0"])
+    False
+    >>> fix_precedes_affects(["4.4.0"], ["4.4.0"])
+    False
+    >>> fix_precedes_affects(["4.4.0", "4.3.1"], ["4.4.0"])
+    True
+    >>> fix_precedes_affects(["4.4.0"], ["4.10.0"])
+    True
+    >>> fix_precedes_affects([], ["5.0.0"])
+    False
+    """
+    fix = [t for t in map(parse_version, fix_version_names) if t is not None]
+    affects = [t for t in map(parse_version, affects_version_names) if t is not None]
+    if not fix or not affects:
+        return False
+    return min(fix) < min(affects)
+
+
+def suggest_affects_version(
+    fix_version_names: list[str], unreleased_version_names: list[str]
+) -> str:
+    """Suggest the earliest fix version only if it is an unreleased major or minor release.
+
+    An unreleased x.y.0 can identify affected development builds. A patch fix version
+    does not identify the earlier release affected by the bug.
+
+    >>> unreleased = ["5.0.0", "4.4.0", "4.2.1"]
+    >>> suggest_affects_version(["4.4.0"], unreleased)
+    '4.4.0'
+    >>> suggest_affects_version(["5.0.0"], unreleased)
+    '5.0.0'
+    >>> suggest_affects_version(["5.0.0", "4.4.0"], unreleased)
+    '4.4.0'
+    >>> suggest_affects_version(["4.2.1"], unreleased)
+    ''
+    >>> suggest_affects_version(["4.4.0", "4.2.1"], unreleased)
+    ''
+    >>> suggest_affects_version(["4.3.0", "4.4.0"], unreleased)
+    ''
+    >>> suggest_affects_version(["4.10.0", "4.9.0"], ["4.10.0", "4.9.0"])
+    '4.9.0'
+    >>> suggest_affects_version([], unreleased)
+    ''
+    >>> suggest_affects_version(["unknown", "4.4.0"], unreleased)
+    ''
+    """
+    versions = [(parse_version(name), name) for name in fix_version_names]
+    if not versions or any(version is None for version, _ in versions):
+        return ""
+    version, name = min(versions)
+    return name if version[2] == 0 and name in unreleased_version_names else ""
 
 
 def red(text):
@@ -391,12 +608,13 @@ def get_input(prompt, options, bold=True, ignore_case=True):
                     return option
 
 
-def get_json(url):
+def open_github_url(url):
+    """Open the GitHub API `url`, with GITHUB_OAUTH_KEY if set, and exit on an HTTP error."""
     try:
         request = Request(url)
         if GITHUB_OAUTH_KEY:
             request.add_header("Authorization", "token %s" % GITHUB_OAUTH_KEY)
-        return json.load(urlopen(request))
+        return urlopen(request)
     except HTTPError as e:
         if "X-RateLimit-Remaining" in e.headers and e.headers["X-RateLimit-Remaining"] == "0":
             print_error(
@@ -415,34 +633,212 @@ def get_json(url):
         sys.exit(-1)
 
 
-def close_pr(pr_num):
-    url = "%s/pulls/%s" % (GITHUB_API_BASE, pr_num)
-    data = json.dumps({"state": "closed"}).encode("utf-8")
-    request = Request(url, data=data, method="PATCH")
-    request.add_header("Content-Type", "application/json")
-    request.add_header("Accept", "application/vnd.github+json")
-    if GITHUB_OAUTH_KEY:
+def get_json(url):
+    return json.load(open_github_url(url))
+
+
+def get_json_pages(url):
+    """Return every item of the GitHub list endpoint at `url`, reading all of its pages.
+
+    `get_json` reads only the first page, and GitHub fills it with 30 items unless asked for
+    more. On a PR with a long history, that misses the `closed` event that records the merge
+    commit, so a merged PR looks unmerged (#60129, with 38 events). It also drops the commits
+    after the 30th, so their authors get no Co-authored-by, and the release branches after
+    the 30th, so they cannot be picked into. Each page asks for GITHUB_PAGE_SIZE items, and
+    reading follows the `rel="next"` URL of each page's `Link` header until a page has none,
+    as `gh api --paginate` does, so a page with fewer items does not end the read early.
+
+    >>> import io
+    >>> from unittest.mock import patch
+    >>> base = "https://api.github.com/repos/apache/spark"
+    >>> def read(path, *pages):
+    ...     # Serve `pages` in order, with Link headers like the ones GitHub sends.
+    ...     requested = []
+    ...     def links(*rels):
+    ...         return ", ".join('<%s/p?page=%d>; rel="%s"' % (base, n, rel) for rel, n in rels)
+    ...     def open_page(page_url):
+    ...         requested.append(page_url[len(base) :])
+    ...         n = len(requested)
+    ...         page = io.BytesIO(json.dumps(pages[n - 1]).encode())
+    ...         page.headers = {}
+    ...         if n < len(pages):
+    ...             page.headers["Link"] = links(("next", n + 1), ("last", len(pages)))
+    ...         elif n > 1:
+    ...             page.headers["Link"] = links(("prev", n - 1), ("first", 1))
+    ...         return page
+    ...     with patch.dict(get_json_pages.__globals__, open_github_url=open_page):
+    ...         return get_json_pages(base + path), requested
+
+    Every page is read in order, including the page after one with fewer items, and the last
+    page's links back to earlier pages are not followed:
+
+    >>> read("/issues/1/events", ["a", "b"], ["c"], ["d", "e"])
+    (['a', 'b', 'c', 'd', 'e'], ['/issues/1/events?per_page=100', '/p?page=2', '/p?page=3'])
+
+    A list that fits on one page comes without a Link header and costs one request, and a URL
+    that already has a query string gets the page size appended to it:
+
+    >>> read("/branches?protected=false", ["master", "branch-4.x"])
+    (['master', 'branch-4.x'], ['/branches?protected=false&per_page=100'])
+    """
+    separator = "&" if "?" in url else "?"
+    url = "%s%sper_page=%d" % (url, separator, GITHUB_PAGE_SIZE)
+    items = []
+    while url is not None:
+        response = open_github_url(url)
+        items.extend(json.load(response))
+        next_link = re.search(r'<([^>]*)>;\s*rel="next"', response.headers.get("Link") or "")
+        url = next_link.group(1) if next_link else None
+    return items
+
+
+def merge_commit_candidates(pr_events):
+    """Split `pr_events` into (closed_commits, referenced_commits), each oldest-first.
+
+    Ordered by time so that a PR reopened and merged again yields its latest merge last.
+
+    >>> merge_commit_candidates([{"event": "closed", "commit_id": "a", "created_at": "t2"},
+    ...                          {"event": "referenced", "commit_id": "b", "created_at": "t1"}])
+    (['a'], ['b'])
+    >>> merge_commit_candidates([{"event": "closed", "commit_id": None, "created_at": "t1"}])
+    ([], [])
+    >>> merge_commit_candidates([{"event": "referenced", "commit_id": "c", "created_at": "t2"},
+    ...                          {"event": "referenced", "commit_id": "b", "created_at": "t1"}])
+    ([], ['b', 'c'])
+    """
+
+    def commits_of(event_name):
+        matched = [e for e in pr_events if e["event"] == event_name and e["commit_id"] is not None]
+        return [e["commit_id"] for e in sorted(matched, key=lambda x: x["created_at"])]
+
+    return commits_of("closed"), commits_of("referenced")
+
+
+def find_merge_commit(pr_num, pr_events):
+    """Return (hash, message) of the commit that merged `pr_num`, or (None, None).
+
+    GitHub attributes the merge commit to the `closed` event only when that commit lands
+    on the default branch (master), because the "Closes #N" keyword in the commit message
+    is what closes the PR and the keyword is honored only there. A PR merged into any
+    other branch -- e.g. one opened against a rolling branch-M.x -- is instead closed by
+    this script through the API, and that `closed` event carries no commit, so the merge
+    survives only as a `referenced` event. Prefer the `closed` commit, which GitHub itself
+    linked; otherwise fall back to `referenced` events, which are also raised by any commit
+    merely mentioning the PR, so confirm each against the merge footer `merge_pr` generates.
+
+    A GitHub squash-button merge, e.g. #52460 or #47309, links its commit to the `merged`
+    event, which is not read; its `closed` event has no commit, and its message has no merge
+    footer, so a `referenced` event for the commit, as #47309 has, does not count either:
+
+    >>> from unittest.mock import patch
+    >>> events = [{"event": "merged", "commit_id": "s", "created_at": "t1"},
+    ...           {"event": "closed", "commit_id": None, "created_at": "t1"},
+    ...           {"event": "referenced", "commit_id": "s", "created_at": "t2"}]
+    >>> squash = {"commit": {"message": "[SPARK-1][SQL] Fix (#1)\\n\\nBody"}}
+    >>> with patch.dict(find_merge_commit.__globals__, get_json=lambda url: squash):
+    ...     find_merge_commit(1, events)
+    (None, None)
+    """
+
+    def message_of(commit_hash):
+        return get_json("%s/commits/%s" % (GITHUB_API_BASE, commit_hash))["commit"]["message"]
+
+    closed_commits, referenced_commits = merge_commit_candidates(pr_events)
+    if closed_commits:
+        return closed_commits[-1], message_of(closed_commits[-1])
+
+    for commit_hash in reversed(referenced_commits):
+        message = message_of(commit_hash)
+        if has_merge_footer(message, pr_num):
+            return commit_hash, message
+    return None, None
+
+
+def committed_title(pr_num: Union[int, str], message: Optional[str]) -> Optional[str]:
+    """Return the subject of the merge commit ``message`` if ``merge_pr`` made it for this PR.
+
+    That is the title that was committed, and a backport run reads it for the JIRA update
+    instead of the current PR title, which may have been edited since the merge. It is
+    used only when the merge footer of ``message`` closes ``pr_num``; otherwise this
+    returns None, and the PR title is used as before, e.g. for a commit of another PR that
+    :func:`find_merge_commit` takes from the PR's ``closed`` event. A commit made with the
+    GitHub squash button, whose subject ends with ``(#N)``, does not get here: GitHub links
+    it to the PR's ``merged`` event, not its ``closed`` event, and it has no merge footer,
+    so :func:`find_merge_commit` does not find it.
+
+    >>> footer = "\\n\\nBody\\n\\nCloses #1 from a/b.\\n\\nAuthored-by: A <a@e.org>"
+    >>> committed_title(1, 'Revert "Revert "[SPARK-1][SQL] Fix"" \\r' + footer)
+    'Revert "Revert "[SPARK-1][SQL] Fix""'
+    >>> committed_title("1", "[SPARK-1][SQL] Fix" + footer)
+    '[SPARK-1][SQL] Fix'
+    >>> # A squash-button message has no merge footer, so it gives None.
+    >>> committed_title(1, 'Revert "[SPARK-1][SQL] Fix" (#1)\\n\\nBody') is None
+    True
+    >>> committed_title(1, "[SPARK-2][SQL] Other" + footer.replace("#1", "#2")) is None
+    True
+    >>> committed_title(1, None) is None
+    True
+    """
+    if message is None or not has_merge_footer(message, pr_num):
+        return None
+    return message.split("\n", 1)[0].strip()
+
+
+class GitHub:
+    """GitHub REST writes used by the merge script -- the single seam for PR mutations.
+
+    Reads go through the module-level get_json() and get_json_pages(); only the two mutations
+    (closing the PR and posting a comment) live here, so DryRunGitHub can override them without
+    touching any read path. main() constructs GitHub() normally and DryRunGitHub() for a dry run.
+    """
+
+    def close_pr(self, pr_num):
+        url = "%s/pulls/%s" % (GITHUB_API_BASE, pr_num)
+        data = json.dumps({"state": "closed"}).encode("utf-8")
+        request = Request(url, data=data, method="PATCH")
+        request.add_header("Content-Type", "application/json")
+        request.add_header("Accept", "application/vnd.github+json")
+        if GITHUB_OAUTH_KEY:
+            request.add_header("Authorization", "token %s" % GITHUB_OAUTH_KEY)
+        try:
+            return json.load(urlopen(request))
+        except HTTPError as e:
+            print_error("Failed to close PR #%s: HTTP %s %s" % (pr_num, e.code, e.reason))
+            return None
+
+    def comment(self, pr_num, body):
+        # Posting a comment is a write and needs auth; without a token, skip rather than 401.
+        if not GITHUB_OAUTH_KEY:
+            print_error("GITHUB_OAUTH_KEY is not set; skipping the comment.")
+            return None
+        url = "%s/issues/%s/comments" % (GITHUB_API_BASE, pr_num)
+        data = json.dumps({"body": body}).encode("utf-8")
+        request = Request(url, data=data, method="POST")
+        request.add_header("Content-Type", "application/json")
+        request.add_header("Accept", "application/vnd.github+json")
         request.add_header("Authorization", "token %s" % GITHUB_OAUTH_KEY)
-    try:
-        return json.load(urlopen(request))
-    except HTTPError as e:
-        print_error("Failed to close PR #%s: HTTP %s %s" % (pr_num, e.code, e.reason))
+        try:
+            return json.load(urlopen(request))
+        except HTTPError as e:
+            print_error("Failed to comment on PR #%s: HTTP %s %s" % (pr_num, e.code, e.reason))
+            return None
+
+
+class DryRunGitHub(GitHub):
+    """Logs the intended PR close/comment instead of calling the GitHub API."""
+
+    def close_pr(self, pr_num):
+        print("DRY-RUN: would close PR #%s via the GitHub API." % pr_num)
+        return None
+
+    def comment(self, pr_num, body):
+        print("DRY-RUN: would post the following comment on PR #%s:\n%s" % (pr_num, body))
         return None
 
 
-def comment_pr(pr_num, body):
-    url = "%s/issues/%s/comments" % (GITHUB_API_BASE, pr_num)
-    data = json.dumps({"body": body}).encode("utf-8")
-    request = Request(url, data=data, method="POST")
-    request.add_header("Content-Type", "application/json")
-    request.add_header("Accept", "application/vnd.github+json")
-    if GITHUB_OAUTH_KEY:
-        request.add_header("Authorization", "token %s" % GITHUB_OAUTH_KEY)
-    try:
-        return json.load(urlopen(request))
-    except HTTPError as e:
-        print_error("Failed to comment on PR #%s: HTTP %s %s" % (pr_num, e.code, e.reason))
-        return None
+# Set in main(): GitHub() normally, DryRunGitHub() for a dry run. Module-level default so the
+# top-level except handler and any early failure path have a usable client.
+github = GitHub()
 
 
 def post_merge_comment(pr_num, merged_commits):
@@ -458,12 +854,14 @@ def post_merge_comment(pr_num, merged_commits):
         "- merged into %s %s/%s" % (ref, GITHUB_COMMIT_BASE, commit_hash)
         for ref, commit_hash in merged_commits
     ]
-    body = "**Merge Summary:**\n" + "\n".join(lines) + "\n\n*Posted by `merge_spark_pr.py`*"
-    print("\n%s\n\n%s" % (bold("Posting merge comment on PR #%s:" % pr_num), body))
-    if not GITHUB_OAUTH_KEY:
-        print_error("GITHUB_OAUTH_KEY is not set; skipping the merge comment.")
-        return
-    comment_pr(pr_num, body)
+    summary = "**Merge Summary:**\n" + "\n".join(lines)
+    attribution = "*Posted by `merge_spark_pr.py`*"
+    body = "%s\n\n%s" % (summary, attribution)
+    print(
+        "\n%s\n\n%s\n%s"
+        % (bold("Posting merge comment on PR #%s:" % pr_num), bold(summary), attribution)
+    )
+    github.comment(pr_num, body)
 
 
 def fail(msg):
@@ -472,47 +870,163 @@ def fail(msg):
     sys.exit(-1)
 
 
-def run_cmd(cmd):
-    print(cmd)
-    if isinstance(cmd, list):
-        return subprocess.check_output(cmd).decode("utf-8")
-    else:
-        return subprocess.check_output(cmd.split(" ")).decode("utf-8")
+class Git:
+    """Runs the merge-flow git commands for the merge script.
+
+    This is the seam for the merge/backport flow, not every git invocation:
+    check_script_up_to_date() shells out to git merge-base directly. ``run`` executes read-only
+    and local commands (fetch, checkout, merge, commit, cherry-pick, rev-parse, config, branch
+    bookkeeping); those are safe even in a dry run because the merge and cherry-picks happen on
+    the throwaway PR_TOOL_* branches that clean_up removes. ``push`` is the only command that
+    mutates the shared repo at PUSH_REMOTE_NAME, so it is the one method DryRunGit overrides;
+    everything else it inherits and runs for real, keeping conflict detection and the computed
+    merge hash realistic. main() constructs Git() normally and DryRunGit() for a dry run.
+    """
+
+    def run(self, cmd):
+        print(cmd)
+        if isinstance(cmd, list):
+            return subprocess.check_output(cmd).decode("utf-8")
+        else:
+            return subprocess.check_output(cmd.split(" ")).decode("utf-8")
+
+    def push(self, remote, local_ref, remote_ref):
+        return self.run("git push %s %s:%s" % (remote, local_ref, remote_ref))
+
+
+class DryRunGit(Git):
+    """Logs the intended push instead of updating the remote; all other git runs for real."""
+
+    def push(self, remote, local_ref, remote_ref):
+        print("DRY-RUN: would push %s to %s:%s" % (local_ref, remote, remote_ref))
+        return ""
+
+
+# Set in main(): Git() normally, DryRunGit() for a dry run. Module-level default so clean_up and
+# the top-level except handler have a usable client even if main() fails early.
+git = Git()
+
+
+class SkipCherryPick(Exception):
+    """Signals that the committer declined to resolve a conflicting cherry-pick.
+
+    A backport conflict is routine, and by the time one is hit the merge into the target
+    branch (and any earlier cherry-picks) has already been pushed. Declining it must skip
+    only that one branch -- letting the caller offer another branch and, crucially, still
+    resolve the JIRA -- instead of aborting the whole merge the way a hard `fail()` would.
+    """
 
 
 def continue_maybe(prompt, cherry=False):
     if get_input(f"{prompt} (y/N): ", ["y", "n", ""]) != "y":
         if cherry:
             try:
-                run_cmd("git cherry-pick --abort")
+                git.run("git cherry-pick --abort")
             except Exception:
                 print_error("Unable to abort and get back to the state before cherry-pick")
+            print("Skipping this cherry-pick; the merge continues.")
+            clean_up()
+            raise SkipCherryPick()
         fail("Okay, exiting")
 
 
 def clean_up():
     if "original_head" in globals():
         print("Restoring head pointer to %s" % original_head)
-        run_cmd("git checkout %s" % original_head)
+        git.run("git checkout %s" % original_head)
 
-        branches = run_cmd("git branch").replace(" ", "").split("\n")
+        branches = git.run("git branch").replace(" ", "").split("\n")
 
         for branch in list(filter(lambda x: x.startswith(BRANCH_PREFIX), branches)):
             print("Deleting local branch %s" % branch)
-            run_cmd("git branch -D %s" % branch)
+            git.run("git branch -D %s" % branch)
+
+
+def should_skip_post_merge_ci(target_ref):
+    """Return whether the next commit on ``target_ref`` should skip post-merge CI.
+
+    The branch history count matches the check formerly performed in ``build_main.yml``.
+    """
+    interval = POST_MERGE_CI_INTERVALS.get(target_ref)
+    if interval is None:
+        return False
+
+    commit_count = int(git.run(["git", "rev-list", "--count", "HEAD"]).strip()) + 1
+    if commit_count % interval == 0:
+        print(
+            "Post-merge CI will run on %s: commit count %s is divisible by %s."
+            % (target_ref, commit_count, interval)
+        )
+        return False
+
+    print_error(
+        "WARNING: Post-merge CI will be skipped on %s because commit count %s is not "
+        "divisible by %s. GitHub's %r trailer will be added."
+        % (target_ref, commit_count, interval, POST_MERGE_CI_SKIP_TRAILER)
+    )
+    return True
+
+
+def append_post_merge_ci_skip(message):
+    """Append the workflow-skip trailer after GitHub's required two empty lines.
+
+    >>> append_post_merge_ci_skip("Subject\\n")
+    'Subject\\n\\n\\nskip-checks: true\\n'
+    """
+    return "%s\n\n\n%s\n" % (message.rstrip(), POST_MERGE_CI_SKIP_TRAILER)
+
+
+def remove_inherited_post_merge_ci_skip(message):
+    """Remove an inherited skip trailer found near the end of a cherry-pick message.
+
+    >>> message = "Subject\\n\\nskip-checks: true\\n(cherry picked from commit abc)\\n"
+    >>> remove_inherited_post_merge_ci_skip(message)
+    'Subject\\n\\n(cherry picked from commit abc)\\n'
+    >>> distant = "Subject\\n\\nskip-checks: true\\n" + "x" * 256 + "\\n"
+    >>> remove_inherited_post_merge_ci_skip(distant) == distant
+    True
+    """
+    tail = message[-POST_MERGE_CI_TRAILER_SEARCH_LENGTH:]
+    marker = "\n%s\n" % POST_MERGE_CI_SKIP_TRAILER
+    marker_index = tail.rfind(marker)
+    if marker_index == -1:
+        return message
+
+    marker_index += len(message) - len(tail)
+    before = message[:marker_index].rstrip()
+    after = message[marker_index + len(marker) :].strip()
+    return "\n\n".join(part for part in (before, after) if part) + "\n"
+
+
+def amend_commit_message(message):
+    """Replace the current commit's message with the in-memory multi-line ``message``."""
+    # The command is an argument list rather than a shell string, so -m safely receives the
+    # complete multi-line message without shell quoting or a temporary file.
+    git.run(
+        [
+            "git",
+            "commit",
+            "--amend",
+            "--allow-empty",
+            "--cleanup=verbatim",
+            "-m",
+            message,
+        ]
+    )
 
 
 # merge the requested PR and return the merge hash
 def merge_pr(pr_num, target_ref, title, body, pr_repo_desc, pr_author, co_authors):
     pr_branch_name = "%s_MERGE_PR_%s" % (BRANCH_PREFIX, pr_num)
     target_branch_name = "%s_MERGE_PR_%s_%s" % (BRANCH_PREFIX, pr_num, target_ref.upper())
-    run_cmd("git fetch %s pull/%s/head:%s" % (PR_REMOTE_NAME, pr_num, pr_branch_name))
-    run_cmd("git fetch %s %s:%s" % (PUSH_REMOTE_NAME, target_ref, target_branch_name))
-    run_cmd("git checkout %s" % target_branch_name)
+    git.run("git fetch %s pull/%s/head:%s" % (PR_REMOTE_NAME, pr_num, pr_branch_name))
+    git.run("git fetch %s %s:%s" % (PUSH_REMOTE_NAME, target_ref, target_branch_name))
+    git.run("git checkout %s" % target_branch_name)
+    skip_post_merge_ci = should_skip_post_merge_ci(target_ref)
 
     had_conflicts = False
     try:
-        run_cmd(["git", "merge", pr_branch_name, "--squash"])
+        git.run(["git", "merge", pr_branch_name, "--squash"])
     except Exception as e:
         msg = "Error merging: %s\nWould you like to manually fix-up this merge?" % e
         continue_maybe(msg)
@@ -535,8 +1049,8 @@ def merge_pr(pr_num, target_ref, title, body, pr_repo_desc, pr_author, co_author
         # to people every time someone creates a public fork of Spark.
         merge_message_flags += ["-m", body.replace("@", "")]
 
-    committer_name = run_cmd("git config --get user.name").strip()
-    committer_email = run_cmd("git config --get user.email").strip()
+    committer_name = git.run("git config --get user.name").strip()
+    committer_email = git.run("git config --get user.email").strip()
 
     if had_conflicts:
         message = "This patch had conflicts when merged, resolved by\nCommitter: %s <%s>" % (
@@ -556,19 +1070,27 @@ def merge_pr(pr_num, target_ref, title, body, pr_repo_desc, pr_author, co_author
 
     merge_message_flags += ["-m", authors]
 
-    run_cmd(["git", "commit", '--author="%s"' % primary_author] + merge_message_flags)
+    if skip_post_merge_ci:
+        # A leading newline plus git's paragraph separator leaves the two empty lines which
+        # GitHub requires before the skip-checks trailer. --cleanup=verbatim preserves them.
+        merge_message_flags += ["-m", "\n%s" % POST_MERGE_CI_SKIP_TRAILER]
+
+    git.run(
+        ["git", "commit", "--cleanup=verbatim", '--author="%s"' % primary_author]
+        + merge_message_flags
+    )
 
     continue_maybe(
         "Merge complete (local ref %s). Push to %s?" % (target_branch_name, PUSH_REMOTE_NAME)
     )
 
     try:
-        run_cmd("git push %s %s:%s" % (PUSH_REMOTE_NAME, target_branch_name, target_ref))
+        git.push(PUSH_REMOTE_NAME, target_branch_name, target_ref)
     except Exception as e:
         clean_up()
         print_error("Exception while pushing: %s" % e)
 
-    merge_hash = run_cmd("git rev-parse %s" % target_branch_name).strip()
+    merge_hash = git.run("git rev-parse %s" % target_branch_name).strip()
     clean_up()
     print("Pull request #%s merged!" % pr_num)
     print("Merge hash: %s" % merge_hash)
@@ -578,36 +1100,110 @@ def merge_pr(pr_num, target_ref, title, body, pr_repo_desc, pr_author, co_author
 def _do_cherry_pick(pr_num, merge_hash, pick_ref):
     """Cherry-pick `merge_hash` onto `pick_ref` and push.
 
-    Returns the (pushed ref, pushed commit hash) pair.
+    Returns the (pushed ref, pushed commit hash) pair. Raises `SkipCherryPick` if the
+    cherry-pick conflicts and the committer declines to resolve it, after attempting to
+    abort the cherry-pick and restore the working tree.
     """
     pick_branch_name = "%s_PICK_PR_%s_%s" % (BRANCH_PREFIX, pr_num, pick_ref.upper())
 
-    run_cmd("git fetch %s %s:%s" % (PUSH_REMOTE_NAME, pick_ref, pick_branch_name))
-    run_cmd("git checkout %s" % pick_branch_name)
+    git.run("git fetch %s %s:%s" % (PUSH_REMOTE_NAME, pick_ref, pick_branch_name))
+    git.run("git checkout %s" % pick_branch_name)
+    pick_head = git.run("git rev-parse HEAD").strip()
+    skip_post_merge_ci = should_skip_post_merge_ci(pick_ref)
 
     try:
-        run_cmd("git cherry-pick -sx %s" % merge_hash)
+        git.run(
+            [
+                "git",
+                "-c",
+                "commit.cleanup=scissors",
+                "cherry-pick",
+                "-sx",
+                merge_hash,
+            ]
+        )
     except Exception as e:
         msg = "Error cherry-picking: %s\nWould you like to manually fix-up this merge?" % e
         continue_maybe(msg, True)
-        msg = "Okay, please fix any conflicts and finish the cherry-pick. Finished?"
+        msg = "Okay, please fix any conflicts and 'git add' conflicting files... Finished?"
         continue_maybe(msg, True)
+        if git.run("git rev-parse HEAD").strip() == pick_head:
+            # Important to use `scissors` and `--edit` otherwise git will strip lines starting
+            # with `#` when calling `--continue`. See: https://github.com/apache/spark/pull/58214
+            git.run(
+                [
+                    "git",
+                    "-c",
+                    "commit.cleanup=scissors",
+                    "cherry-pick",
+                    "--continue",
+                    "--edit",
+                ]
+            )
+        else:
+            print("Cherry-pick already completed manually; continuing with the backport.")
+
+    raw_message = git.run(["git", "log", "-1", "--format=%B"])
+    updated_message = remove_inherited_post_merge_ci_skip(raw_message)
+    if skip_post_merge_ci:
+        updated_message = append_post_merge_ci_skip(updated_message)
+    if updated_message != raw_message:
+        amend_commit_message(updated_message)
 
     continue_maybe(
         "Pick complete (local ref %s). Push to %s?" % (pick_branch_name, PUSH_REMOTE_NAME)
     )
 
     try:
-        run_cmd("git push %s %s:%s" % (PUSH_REMOTE_NAME, pick_branch_name, pick_ref))
+        git.push(PUSH_REMOTE_NAME, pick_branch_name, pick_ref)
     except Exception as e:
         fail("Exception while pushing: %s" % e)
 
-    pick_hash = run_cmd("git rev-parse %s" % pick_branch_name).strip()
+    pick_hash = git.run("git rev-parse %s" % pick_branch_name).strip()
     clean_up()
 
     print("Pull request #%s picked into %s!" % (pr_num, pick_ref))
     print("Pick hash: %s" % pick_hash)
     return pick_ref, pick_hash
+
+
+def branches_with_merge_footer(pr_num, branch_names):
+    """Release branches from `branch_names` that already carry `pr_num`'s merge footer.
+
+    Thin wrapper over the shared reader in `spark_merge_footer`, adding this script's own
+    policy: a git failure here must not abort a merge that may already have pushed, so it
+    warns and reports nothing rather than exiting. Per that module's refresh policy no fetch
+    is issued, so a backport not yet fetched into PUSH_REMOTE_NAME's tracking refs is simply
+    not reported -- the committer is still prompted and can type any branch.
+    """
+    try:
+        landed = _branches_with_merge_footer(
+            pr_num, PUSH_REMOTE_NAME, lambda args: git.run(["git"] + args)
+        )
+    except Exception as e:
+        print_error("Could not scan for existing backports of #%s (%s)." % (pr_num, e))
+        return []
+    # Keep branch_names' newest-first order, and drop anything not a known release branch.
+    return [b for b in branch_names if b in landed]
+
+
+def default_pick_branch(branch_names, already_picked):
+    """Highest-ranked release branch that has not already received the change, or None.
+
+    `branch_names` is ordered newest-first (see `semver_branch_rank`) and `already_picked`
+    holds the branches the change is known to be on, so the prompt never defaults to a
+    branch where the cherry-pick would come up empty. Returns None when every known branch
+    already has it, so callers can say so instead of offering an empty pick.
+
+    >>> default_pick_branch(["branch-4.x", "branch-4.3", "branch-4.2"], ("branch-4.x",))
+    'branch-4.3'
+    >>> default_pick_branch(["branch-4.x", "branch-4.3"], ())
+    'branch-4.x'
+    >>> default_pick_branch(["branch-4.x"], ("branch-4.x",)) is None
+    True
+    """
+    remaining = [b for b in branch_names if b not in already_picked]
+    return remaining[0] if remaining else None
 
 
 def _upstream_first_sibling(target_ref, pick_ref, branch_names, already_picked):
@@ -649,7 +1245,9 @@ def cherry_pick(pr_num, merge_hash, default_branch, branch_names, target_ref, al
     BOTH (the policy-compliant default) or branch-M.N only (treated as a
     maintenance-only bugfix). Returns the list of (ref, commit_hash) pairs actually
     picked into, so the main loop can advance its remaining-branches list correctly
-    and record each backport commit for the merge comment.
+    and record each backport commit for the merge comment. The list is empty (or, for the
+    Upstream-First two-branch path, holds only what landed) when the committer declines to
+    resolve a conflict, so the caller simply offers the next branch and still resolves JIRA.
     """
     while True:
         pick_ref = bold_input(f"Enter a branch name [{default_branch}]: ")
@@ -681,17 +1279,30 @@ def cherry_pick(pr_num, merge_hash, default_branch, branch_names, target_ref, al
             {"b": ["b", "both", ""], "o": ["o", "only"], "a": ["a", "abort"]},
         )
         if choice == "b":
-            picked_x = _do_cherry_pick(pr_num, merge_hash, sibling_x)
-            picked_n = _do_cherry_pick(pr_num, merge_hash, pick_ref)
-            return [picked_x, picked_n]
+            # Preserve any pick that was already pushed: if the branch-M.N pick is skipped after
+            # branch-M.x landed, still return branch-M.x so it's recorded and JIRA/comment
+            # reflect it.
+            picked = []
+            try:
+                picked.append(_do_cherry_pick(pr_num, merge_hash, sibling_x))
+                picked.append(_do_cherry_pick(pr_num, merge_hash, pick_ref))
+            except SkipCherryPick:
+                pass
+            return picked
         elif choice == "o":
-            return [_do_cherry_pick(pr_num, merge_hash, pick_ref)]
+            try:
+                return [_do_cherry_pick(pr_num, merge_hash, pick_ref)]
+            except SkipCherryPick:
+                return []
         elif choice == "a":
             fail("Aborted by user at Upstream-First policy prompt.")
         else:
             fail("Unrecognized choice %r; aborting." % choice)
 
-    return [_do_cherry_pick(pr_num, merge_hash, pick_ref)]
+    try:
+        return [_do_cherry_pick(pr_num, merge_hash, pick_ref)]
+    except SkipCherryPick:
+        return []
 
 
 # Common words carry no signal when comparing a PR title to a JIRA summary, so they are
@@ -755,7 +1366,7 @@ def title_similarity(pr_title, summary):
     >>> title_similarity("[SPARK-1][FOLLOWUP] Fix a typo", "Add a cache")
     0.0
 
-    A Revert PR keeps its title verbatim (the "Revert" prefix and quotes are not
+    A Revert PR keeps its title as is (the "Revert" prefix and quotes are not
     tags), so the extra word lowers the score but a genuine match still scores high:
 
     >>> round(title_similarity('Revert "[SPARK-1] Add a cache"', "Add a cache"), 2)
@@ -775,7 +1386,15 @@ def title_similarity(pr_title, summary):
 
 
 def format_jira_verification(
-    pr_num, pr_title, jira_id, summary, status, issuetype, use_color=False, is_followup=False
+    pr_num,
+    pr_title,
+    jira_id,
+    summary,
+    status,
+    issuetype,
+    resolution=None,
+    use_color=False,
+    is_followup=False,
 ):
     """Render the JIRA-vs-PR match block shown before merging.
 
@@ -842,6 +1461,7 @@ def format_jira_verification(
       Match:   0.00   (FOLLOWUP: title intentionally differs, not checked)
     """
     status_warning = ""
+    resolution_suffix = " (%s)" % resolution if resolution else ""
     if status in ("Resolved", "Closed"):
         status_warning = "   <-- WARNING: already Resolved/Closed"
         if use_color:
@@ -862,7 +1482,7 @@ def format_jira_verification(
             "=== Verify JIRA matches PR #%s ===" % pr_num,
             "PR title:  %s" % pr_title,
             "JIRA %s: %s" % (jira_id, summary),
-            "  Status:  %s%s" % (status, status_warning),
+            "  Status:  %s%s%s" % (status, resolution_suffix, status_warning),
             "  Type:    %s" % issuetype,
             "  Match:   %.2f%s" % (score, match_suffix),
         ]
@@ -876,6 +1496,9 @@ def print_jira_issue_summary(issue):
         assignee = assignee.displayName
     assignee = "Assignee\t%s\n" % assignee
     status = "Status\t\t%s\n" % issue.fields.status.name
+    resolution = ""
+    if issue.fields.resolution is not None:
+        resolution = "Resolution\t%s\n" % issue.fields.resolution.name
     components = "Components\t%s\n" % [x.name for x in issue.fields.components]
     url = "Url\t\t%s/%s\n" % (JIRA_BASE, issue.key)
     target_versions = "Affected\t%s\n" % [x.name for x in issue.fields.versions]
@@ -884,9 +1507,77 @@ def print_jira_issue_summary(issue):
         fix_versions = "Fixed\t\t%s\n" % [x.name for x in issue.fields.fixVersions]
     print("=== JIRA %s ===" % issue.key)
     print(
-        "%s%s%s%s%s%s%s"
-        % (summary, assignee, status, components, url, target_versions, fix_versions)
+        "%s%s%s%s%s%s%s%s"
+        % (summary, assignee, status, resolution, components, url, target_versions, fix_versions)
     )
+
+
+def check_linked_jira_issues(pr_num, title):
+    """Check the JIRA tickets that open ``title`` before merging, failing on a mismatch.
+
+    Only the leading ids count (see :func:`leading_jira_ids`), so a ticket that
+    the title body mentions is neither fetched nor checked.  Requires
+    ``asf_jira`` to be set unless JIRA was disabled for this run, in which case
+    both checks are skipped (see :func:`jira_ids_to_verify`).
+    """
+    jira_ids = jira_ids_to_verify(title)
+    # Epic / Umbrella tickets group related work and must not be resolved by a single PR.
+    # Collect every offender so the committer sees the full list in one shot rather than
+    # discovering them one-by-one across repeated merge attempts.
+    blocking_issue_types = {"Epic", "Umbrella"}
+    blockers = []
+    linked_issues = []
+    for jira_id in jira_ids:
+        try:
+            issue = asf_jira.issue(jira_id)
+        except Exception:
+            print_error("Unable to fetch summary of %s" % jira_id)
+            continue
+        print_jira_issue_summary(issue)
+        linked_issues.append((jira_id, issue))
+        issue_type = issue.fields.issuetype.name
+        if issue_type in blocking_issue_types:
+            blockers.append((jira_id, issue_type))
+    if blockers:
+        ids_str = ", ".join("%s (%s)" % (jid, t) for jid, t in blockers)
+        fail(
+            "Cannot merge PR #%s. Linked JIRA(s) %s are Umbrella or Epic "
+            "tickets and MUST not be resolved by a single PR. File "
+            "Sub-task(s) under %s and update the PR title to reference "
+            "the Sub-task(s) instead." % (pr_num, ids_str, ids_str)
+        )
+
+    # Confirm each linked JIRA actually matches this PR before merging. A committer can
+    # reference the wrong ticket -- e.g. mistaking a GitHub PR number in the body
+    # ("Closes #NNNNN") for a SPARK JIRA id -- which resolves an unrelated ticket on merge.
+    # Show the PR title next to each ticket's summary, warn when a ticket is already
+    # Resolved/Closed (a fresh merge should target an open one), and require confirmation.
+    # For [FOLLOWUP] PRs the title describes the follow-up fix rather than the ticket, so
+    # its low similarity to the JIRA summary is expected and the warning is suppressed.
+    # The tag is read inside Revert/Reapply wrappers too.
+    is_followup = "FOLLOWUP" in leading_title_tags(title)
+    for jira_id, issue in linked_issues:
+        print()
+        print(
+            format_jira_verification(
+                pr_num,
+                title,
+                jira_id,
+                issue.fields.summary,
+                issue.fields.status.name,
+                issue.fields.issuetype.name,
+                resolution=(
+                    issue.fields.resolution.name if issue.fields.resolution is not None else None
+                ),
+                use_color=True,
+                is_followup=is_followup,
+            )
+        )
+        if get_input("Does %s match this PR? (y/N): " % jira_id, ["y", "n", ""]) != "y":
+            fail(
+                "Aborting: %s does not match PR #%s. Fix the PR title to reference the "
+                "correct JIRA ticket and retry." % (jira_id, pr_num)
+            )
 
 
 def jira_components_from_title_tags(tags):
@@ -905,6 +1596,8 @@ def jira_components_from_title_tags(tags):
     ['PySpark', 'Documentation']
     >>> jira_components_from_title_tags(["SQL", "TEST"])
     ['SQL', 'Tests']
+    >>> jira_components_from_title_tags(["UDF"])
+    ['UDF']
     >>> jira_components_from_title_tags(["SQL", "FOLLOWUP", "4.X", "BOGUS"])
     ['SQL']
     >>> jira_components_from_title_tags(["SQL", "SQL"])
@@ -956,11 +1649,81 @@ def reconcile_jira_components(issue, title_components):
         # Append the PR title's components, keeping the existing ones first.
         new_names = list(dict.fromkeys(current + title_jira_components))
 
-    try:
-        issue.update(fields={"components": [{"name": n} for n in new_names]})
-        print("Updated JIRA %s components to: %s" % (issue.key, ", ".join(new_names)))
-    except Exception as e:
-        print_error("Failed to update components on JIRA %s: %s" % (issue.key, e))
+    jira_ops.update_components(issue, new_names)
+
+
+def reconcile_jira_affects_versions(
+    issue,
+    fix_version_names: list[str],
+    affects_available: set[str],
+    unreleased_version_names: list[str],
+) -> None:
+    """Prompt the committer to correct Affects Version/s newer than the earliest fix.
+
+    Blank input accepts the suggested version, or skips when none is available. Versions
+    are validated against ``affects_available`` before the committer chooses to append
+    (default), overwrite, or keep. Entering 'skip' or [k]eep leaves the field untouched.
+    Writes go through ``jira_ops`` so a dry run only logs them.
+    """
+    current_names = [v.name for v in issue.fields.versions]
+    default_affects_version = suggest_affects_version(fix_version_names, unreleased_version_names)
+    if default_affects_version:
+        prompt_suffix = f"[{default_affects_version}] (or 'skip')"
+        skip_hint = "enter 'skip'"
+    else:
+        prompt_suffix = "(blank to skip)"
+        skip_hint = "leave blank to skip"
+    print()
+    print("=" * 80)
+    print(
+        f"JIRA {issue.key} Affects Version/s {current_names if current_names else '(none)'} "
+        f"vs Fix Version/s {fix_version_names}: at least one Affects Version must be at or before "
+        f"the earliest Fix Version, so the recorded affected version is likely wrong."
+    )
+    print("=" * 80)
+    while True:
+        try:
+            raw = bold_input(f"Enter comma-separated affects version(s) {prompt_suffix}: ").strip()
+            if raw.lower() == "skip" or (not raw and not default_affects_version):
+                print(f"Affects Version/s left unchanged; update {issue.key} manually.")
+                return
+            new_names = parse_version_list(raw or default_affects_version)
+            if new_names and set(new_names).issubset(affects_available):
+                break
+            print(
+                f"Specified version(s) [{', '.join(new_names)}] not found in the available "
+                f"versions, try again (or {skip_hint})."
+            )
+        except KeyboardInterrupt:
+            raise
+        except BaseException:
+            traceback.print_exc()
+            print(f"Error setting affects version(s), try again (or {skip_hint}).")
+
+    if current_names:
+        choice = get_input(
+            f"[a]ppend to / [o]verwrite existing {current_names} / [k]eep as is "
+            "(default: append): ",
+            {"a": ["a", "append", ""], "o": ["o", "overwrite"], "k": ["k", "keep"]},
+        )
+        if choice == "k":
+            print(f"Keeping JIRA {issue.key} Affects Version/s unchanged.")
+            return
+        if choice == "a":
+            # Keep the existing versions first, then add the entered ones.
+            new_names = list(dict.fromkeys(current_names + new_names))
+
+    jira_ops.update_affects_versions(issue, new_names)
+
+
+def maybe_reconcile_jira_affects_versions(
+    issue, fix_version_names, affects_available, unreleased_version_names
+):
+    """Reconcile the Affects Version/s only when they fail to precede the fix version(s)."""
+    if fix_precedes_affects(fix_version_names, [v.name for v in issue.fields.versions]):
+        reconcile_jira_affects_versions(
+            issue, fix_version_names, affects_available, unreleased_version_names
+        )
 
 
 def get_jira_issue(prompt, default_jira_id=""):
@@ -975,35 +1738,57 @@ def get_jira_issue(prompt, default_jira_id=""):
         print_jira_issue_summary(issue)
         status = issue.fields.status.name
         if status == "Resolved" or status == "Closed":
-            print("JIRA issue %s already has status '%s'" % (jira_id, status))
-            return None
+            resolution = issue.fields.resolution
+            resolution_name = resolution.name if resolution is not None else None
+            print("JIRA issue %s already has status '%s' (%s)" % (jira_id, status, resolution_name))
+            # Only Fixed resolutions permit updates to resolved or closed tickets.
+            if resolution_name != "Fixed":
+                return None
         if get_input("Check if the JIRA information is as expected (y/N): ", ["y", "n", ""]) == "y":
             return issue
         else:
-            return get_jira_issue("Enter the revised JIRA ID again or leave blank to skip")
+            return get_jira_issue(
+                "Enter the revised JIRA ID again or leave blank to skip",
+            )
     except Exception as e:
         print_error("ASF JIRA could not find %s: %s" % (jira_id, e))
-        return get_jira_issue("Enter the revised JIRA ID again or leave blank to skip")
+        return get_jira_issue(
+            "Enter the revised JIRA ID again or leave blank to skip",
+        )
 
 
-def resolve_jira_issue(merge_branches, comment, default_jira_id="", title_components=()):
+def resolve_jira_issue(
+    merge_branches,
+    comment,
+    default_jira_id="",
+    title_components=(),
+):
     issue = get_jira_issue("Enter a JIRA id", default_jira_id)
     if issue is None:
         return
 
-    if issue.fields.assignee is None:
-        choose_jira_assignee(issue)
+    status = issue.fields.status.name
+    is_resolved = status == "Resolved" or status == "Closed"
 
-    reconcile_jira_components(issue, title_components)
+    if not is_resolved:
+        if issue.fields.assignee is None:
+            choose_jira_assignee(issue)
 
-    versions = asf_jira.project_versions("SPARK")
+        reconcile_jira_components(issue, title_components)
+
+    all_versions = asf_jira.project_versions("SPARK")
     # Consider only x.y.z, unreleased, unarchived versions
     versions = [
         x
-        for x in versions
-        if not x.raw["released"] and not x.raw["archived"] and re.match(r"\d+\.\d+\.\d+", x.name)
+        for x in all_versions
+        if not x.raw["released"] and not x.raw["archived"] and parse_version(x.name) is not None
     ]
     versions = sorted(versions, key=lambda x: x.name, reverse=True)
+    # Affects Version/s may name an already-released version, so validate the affects prompt
+    # against all unarchived x.y.z versions, not just the unreleased fix candidates.
+    affects_available = {
+        x.name for x in all_versions if not x.raw["archived"] and parse_version(x.name) is not None
+    }
 
     unreleased_names = [v.name for v in versions]
     default_fix_list, infer_warnings = compute_merge_default_fix_versions(
@@ -1011,17 +1796,57 @@ def resolve_jira_issue(merge_branches, comment, default_jira_id="", title_compon
     )
     for w in infer_warnings:
         print_error(w)
+
+    existing_fix_versions = list(issue.fields.fixVersions) if is_resolved else []
+    existing_fix_version_names = [v.name for v in existing_fix_versions]
+    if is_resolved:
+        # A later backport run must preserve the versions recorded by the original merge and
+        # only add versions inferred from the newly discovered branches.
+        default_fix_list, all_inferred_present = fix_version_additions(
+            default_fix_list, existing_fix_version_names
+        )
+        if all_inferred_present:
+            print(
+                "JIRA issue %s already contains all inferred fix versions; no fix version "
+                "update needed." % issue.key
+            )
+            # A re-run may still have Affects Version/s sitting above the unchanged fix set.
+            maybe_reconcile_jira_affects_versions(
+                issue, existing_fix_version_names, affects_available, unreleased_names
+            )
+            return
+        if default_fix_list:
+            print(
+                "JIRA issue %s has fix version(s) %s; inferred addition(s): %s"
+                % (issue.key, existing_fix_version_names, default_fix_list)
+            )
+            if get_input("Add these fix version(s)? (y/N): ", ["y", "n", ""]) != "y":
+                # Declining the addition still leaves any Affects Version/s that sit above
+                # the already-recorded fix version(s) to reconcile.
+                maybe_reconcile_jira_affects_versions(
+                    issue, existing_fix_version_names, affects_available, unreleased_names
+                )
+                return
+        else:
+            # Nothing inferred, so there is nothing to confirm; fall through to the prompt.
+            print(
+                "JIRA issue %s has fix version(s) %s; no additional fix version could be "
+                "inferred." % (issue.key, existing_fix_version_names)
+            )
     default_fix_versions = ",".join(default_fix_list)
 
     available_versions = set(list(map(lambda v: v.name, versions)))
     while True:
         try:
-            fix_versions = bold_input(
-                "Enter comma-separated fix version(s) [%s]: " % default_fix_versions
+            prompt = "Enter comma-separated fix version(s) [%s]: "
+            if is_resolved:
+                prompt = "Enter comma-separated additional fix version(s) [%s]: "
+            fix_versions = fix_versions_from_input(
+                bold_input(prompt % default_fix_versions), default_fix_versions
             )
-            if fix_versions == "":
-                fix_versions = default_fix_versions
-            fix_versions = fix_versions.replace(" ", "").split(",")
+            if not fix_versions:
+                print("No fix version entered; update %s manually." % issue.key)
+                return
             if set(fix_versions).issubset(available_versions):
                 break
             else:
@@ -1035,28 +1860,109 @@ def resolve_jira_issue(merge_branches, comment, default_jira_id="", title_compon
             traceback.print_exc()
             print("Error setting fix version(s), try again (or leave blank and fix manually)")
 
+    # On a fresh resolve, offer to update the Affects Version/s when they sit above the fix
+    # version(s) just chosen; the already-resolved paths handle their own cases.
+    if not is_resolved:
+        maybe_reconcile_jira_affects_versions(
+            issue, fix_versions, affects_available, unreleased_names
+        )
+
     def get_version_json(version_str):
         return list(filter(lambda v: v.name == version_str, versions))[0].raw
 
     jira_fix_versions = list(map(lambda v: get_version_json(v), fix_versions))
 
+    if is_resolved:
+        existing_names = set(existing_fix_version_names)
+        jira_fix_versions = [v for v in jira_fix_versions if v["name"] not in existing_names]
+        if not jira_fix_versions:
+            print("No new fix versions selected for JIRA issue %s; no update needed." % issue.key)
+            maybe_reconcile_jira_affects_versions(
+                issue, existing_fix_version_names, affects_available, unreleased_names
+            )
+            return
+        # A backport adds an earlier fix line, which usually means that line is affected too;
+        # offer to extend the Affects Version/s down when they miss the full fix set.
+        full_fix_names = existing_fix_version_names + [v["name"] for v in jira_fix_versions]
+        maybe_reconcile_jira_affects_versions(
+            issue, full_fix_names, affects_available, unreleased_names
+        )
+        jira_ops.add_fix_versions(issue, existing_fix_versions, jira_fix_versions)
+        return
+
     resolve = list(filter(lambda a: a["name"] == "Resolve Issue", asf_jira.transitions(issue.key)))[
         0
     ]
     resolution = list(filter(lambda r: r.raw["name"] == "Fixed", asf_jira.resolutions()))[0]
-    asf_jira.transition_issue(
-        issue.key,
-        resolve["id"],
-        fixVersions=jira_fix_versions,
-        comment=comment,
-        resolution={"id": resolution.raw["id"]},
+    jira_ops.resolve_issue(
+        issue, resolve["id"], jira_fix_versions, comment, resolution.raw["id"], fix_versions
     )
 
+
+def revert_jira_issue(merge_branches, default_jira_id=""):
+    issue = get_jira_issue("Enter the JIRA id for the reverted change", default_jira_id)
+    if issue is None:
+        return
+
+    remove_jira_fix_versions(issue, merge_branches)
+    if issue.fields.status.name not in ("Resolved", "Closed"):
+        return
+
+    prompt = "Reopen JIRA issue %s so the change can be reworked? (y/N): " % issue.key
+    if get_input(prompt, ["y", "n", ""]) != "y":
+        return
     try:
-        print_jira_issue_summary(asf_jira.issue(issue.key))
-    except Exception:
-        print("Unable to fetch JIRA issue %s after resolving" % issue.key)
-    print("Successfully resolved %s with fixVersions=%s!" % (issue.key, fix_versions))
+        reopen = next(
+            (t for t in asf_jira.transitions(issue.key) if t["name"] == "Reopen Issue"), None
+        )
+        if reopen is None:
+            print_error(
+                "No Reopen Issue transition available for %s; reopen it manually." % issue.key
+            )
+            return
+        jira_ops.reopen_issue(issue, reopen["id"])
+    except Exception as e:
+        print_error("Failed to reopen %s; reopen it manually: %s" % (issue.key, e))
+
+
+def remove_jira_fix_versions(issue, merge_branches):
+    versions = asf_jira.project_versions("SPARK")
+    unreleased_names = [
+        v.name
+        for v in versions
+        if not v.raw["released"] and not v.raw["archived"] and parse_version(v.name) is not None
+    ]
+    existing_names = [v.name for v in issue.fields.fixVersions]
+    available_names = set(existing_names).intersection(unreleased_names)
+    if not available_names:
+        print("JIRA issue %s has no unreleased fix versions to remove." % issue.key)
+        return
+
+    defaults, warnings = compute_revert_fix_versions(
+        merge_branches, unreleased_names, existing_names
+    )
+    for warning in warnings:
+        print_error(warning)
+    print("Revert merged into: %s" % ", ".join(merge_branches))
+    print("JIRA issue %s has fix version(s): %s" % (issue.key, existing_names))
+    print("Available unreleased fix version(s) to remove: %s" % sorted(available_names))
+    while True:
+        raw = bold_input(
+            "Enter comma-separated fix version(s) to remove [%s], or 'skip': " % ",".join(defaults)
+        )
+        if raw.strip().lower() == "skip":
+            return
+        removals = fix_versions_from_input(raw, ",".join(defaults))
+        if not removals:
+            print("No fix version selected; update %s manually if needed." % issue.key)
+            return
+        if set(removals).issubset(available_names):
+            break
+        print_error("Select only unreleased fix versions currently recorded on this JIRA.")
+
+    prompt = "Remove fix version(s) %s from %s? (y/N): " % (removals, issue.key)
+    if get_input(prompt, ["y", "n", ""]) == "y":
+        jira_ops.remove_fix_versions(issue, removals)
 
 
 def choose_jira_assignee(issue):
@@ -1092,7 +1998,7 @@ def choose_jira_assignee(issue):
                     # assume it's a user id, and try to assign (might fail, we just prompt again)
                     assignee = asf_jira.user(raw_assignee)
                 try:
-                    assign_issue(issue.key, assignee.name)
+                    jira_ops.assign(issue.key, assignee.name)
                 except Exception as e:
                     if (
                         e.__class__.__name__ == "JIRAError"
@@ -1103,8 +2009,8 @@ def choose_jira_assignee(issue):
                             "User '%s' cannot be assigned, add to contributors role and try again?"
                             % assignee.name
                         )
-                        grant_contributor_role(assignee.name)
-                        assign_issue(issue.key, assignee.name)
+                        jira_ops.grant_contributor(assignee.name)
+                        jira_ops.assign(issue.key, assignee.name)
                     else:
                         raise e
                 return assignee
@@ -1115,32 +2021,405 @@ def choose_jira_assignee(issue):
             print("Error assigning JIRA, try again (or leave blank and fix manually)")
 
 
-def grant_contributor_role(user: str):
-    role = asf_jira.project_role("SPARK", 10010)
-    role.add_user(user)
-    print("Successfully added user '%s' to contributors role" % user)
+class Jira:
+    """ASF JIRA writes used by the merge script -- the single seam for JIRA mutations.
 
-
-def assign_issue(issue: int, assignee: str) -> bool:
+    The pre-write JIRA lookups stay on the module-level asf_jira client; the writes (components,
+    fix versions, workflow transitions, assignment, and the contributor-role grant) go through
+    here, so DryRunJira can log them. Two Production writes (add_fix_versions, resolve_issue) also
+    read the issue back afterward to print the updated summary; DryRunJira skips the write and that
+    read-back alike. main() builds Jira(asf_jira) normally and DryRunJira(asf_jira) for a dry run,
+    after initialize_jira() sets asf_jira.
     """
-    Assign an issue to a user, which is a shorthand for jira.client.JIRA.assign_issue.
-    The original one has an issue that it will search users again and only choose the assignee
-    from 20 candidates. If it's unmatched, it picks the head blindly. In our case, the assignee
-    is already resolved.
-    """
-    url = getattr(asf_jira, "_get_latest_url")(f"issue/{issue}/assignee")
-    payload = {"name": assignee}
-    getattr(asf_jira, "_session").put(url, data=json.dumps(payload))
-    return True
+
+    def __init__(self, client):
+        self._client = client
+
+    def update_components(self, issue, new_names):
+        try:
+            issue.update(fields={"components": [{"name": n} for n in new_names]})
+            print("Updated JIRA %s components to: %s" % (issue.key, ", ".join(new_names)))
+        except Exception as e:
+            print_error("Failed to update components on JIRA %s: %s" % (issue.key, e))
+
+    def update_affects_versions(self, issue, new_names: list[str]) -> None:
+        try:
+            issue.update(fields={"versions": [{"name": n} for n in new_names]})
+            print(f"Updated JIRA {issue.key} Affects Version/s to: {', '.join(new_names)}")
+        except Exception as e:
+            print_error(f"Failed to update Affects Version/s on JIRA {issue.key}: {e}")
+
+    def add_fix_versions(self, issue, existing_fix_versions, new_version_jsons):
+        issue.update(
+            fields={"fixVersions": [v.raw for v in existing_fix_versions] + new_version_jsons}
+        )
+        try:
+            print_jira_issue_summary(self._client.issue(issue.key))
+        except Exception:
+            print("Unable to fetch JIRA issue %s after updating fix versions" % issue.key)
+        print(
+            "Successfully updated %s with additional fixVersions=%s!"
+            % (issue.key, [v["name"] for v in new_version_jsons])
+        )
+
+    def remove_fix_versions(self, issue, version_names):
+        issue.update(update={"fixVersions": [{"remove": {"name": name}} for name in version_names]})
+        print("Successfully removed fixVersions=%s from %s!" % (version_names, issue.key))
+
+    def resolve_issue(
+        self, issue, resolve_id, fix_version_jsons, comment, resolution_id, fix_version_names
+    ):
+        self._client.transition_issue(
+            issue.key,
+            resolve_id,
+            fixVersions=fix_version_jsons,
+            comment=comment,
+            resolution={"id": resolution_id},
+        )
+        try:
+            print_jira_issue_summary(self._client.issue(issue.key))
+        except Exception:
+            print("Unable to fetch JIRA issue %s after resolving" % issue.key)
+        print("Successfully resolved %s with fixVersions=%s!" % (issue.key, fix_version_names))
+
+    def reopen_issue(self, issue, reopen_id):
+        # Spark's Reopen Issue workflow clears the resolution.
+        self._client.transition_issue(issue.key, reopen_id)
+        print("Successfully reopened %s!" % issue.key)
+
+    def assign(self, issue_key, assignee):
+        # Shorthand for jira.client.JIRA.assign_issue. The library's own assign_issue re-searches
+        # users and blindly picks the first of 20 candidates when unmatched; here the assignee is
+        # already resolved, so PUT it directly.
+        url = getattr(self._client, "_get_latest_url")(f"issue/{issue_key}/assignee")
+        getattr(self._client, "_session").put(url, data=json.dumps({"name": assignee}))
+        return True
+
+    def grant_contributor(self, user):
+        role = self._client.project_role("SPARK", 10010)
+        role.add_user(user)
+        print("Successfully added user '%s' to contributors role" % user)
 
 
-def resolve_jira_issues(title, merge_branches, comment, title_components=()):
-    jira_ids = re.findall("SPARK-[0-9]{4,5}", title)
+class DryRunJira(Jira):
+    """Logs the intended JIRA writes instead of calling the API; reads still go through."""
 
+    def update_components(self, issue, new_names):
+        print("DRY-RUN: would set JIRA %s components to: %s" % (issue.key, ", ".join(new_names)))
+
+    def update_affects_versions(self, issue, new_names: list[str]) -> None:
+        print(f"DRY-RUN: would set JIRA {issue.key} Affects Version/s to: {', '.join(new_names)}")
+
+    def add_fix_versions(self, issue, existing_fix_versions, new_version_jsons):
+        print(
+            "DRY-RUN: would add fixVersions=%s to JIRA %s."
+            % ([v["name"] for v in new_version_jsons], issue.key)
+        )
+
+    def remove_fix_versions(self, issue, version_names):
+        print("DRY-RUN: would remove fixVersions=%s from JIRA %s." % (version_names, issue.key))
+
+    def resolve_issue(
+        self, issue, resolve_id, fix_version_jsons, comment, resolution_id, fix_version_names
+    ):
+        print(
+            "DRY-RUN: would resolve JIRA %s as Fixed with fixVersions=%s and add comment:\n%s"
+            % (issue.key, fix_version_names, comment)
+        )
+
+    def reopen_issue(self, issue, reopen_id):
+        print("DRY-RUN: would reopen JIRA %s." % issue.key)
+
+    def assign(self, issue_key, assignee):
+        print("DRY-RUN: would assign JIRA %s to '%s'." % (issue_key, assignee))
+        return True
+
+    def grant_contributor(self, user):
+        print("DRY-RUN: would add user '%s' to the SPARK contributors role." % user)
+
+
+# Set in main() after initialize_jira(): Jira(asf_jira) normally, DryRunJira(asf_jira) for a dry
+# run. None until then; only the JIRA-write flow, well after construction, uses it.
+jira_ops = None
+
+# Set True by initialize_jira() when the liveness probe fails, leaving asf_jira None and every JIRA
+# step skipped. A module-level default (unlike asf_jira, which only exists after initialize_jira())
+# so callers can short-circuit on it without JIRA being set up -- which the doctests rely on.
+jira_disabled = False
+
+
+def resolve_jira_issues(jira_ids, merge_branches, comment, title_components=()):
     if len(jira_ids) == 0:
-        resolve_jira_issue(merge_branches, comment, title_components=title_components)
+        resolve_jira_issue(
+            merge_branches,
+            comment,
+            title_components=title_components,
+        )
     for jira_id in jira_ids:
-        resolve_jira_issue(merge_branches, comment, jira_id, title_components=title_components)
+        resolve_jira_issue(
+            merge_branches,
+            comment,
+            jira_id,
+            title_components=title_components,
+        )
+
+
+def jira_action(title: str) -> tuple[str, list[str]]:
+    """Return what :func:`update_jira_for_pr` does for ``title``, as ``(action, detail)``.
+
+    ``action`` is ``"skip"`` when the title has skip tags (``detail`` lists them; [MINOR]
+    and [TRIVIAL] next to a leading JIRA id do not count), and
+    otherwise ``"revert"`` or ``"resolve"``, with the leading JIRA ids as ``detail``; with
+    no id, the committer enters one at the prompt. A title whose ``Revert "..."`` /
+    ``Reapply "..."`` wrappers net to a revert (see :func:`_is_net_revert`) is a revert.
+    Whether JIRA is reachable is up to the caller.
+
+    >>> jira_action("[SPARK-1234][SPARK-5678][SQL] Fix")
+    ('resolve', ['SPARK-1234', 'SPARK-5678'])
+    >>> jira_action('Revert "Fix"')
+    ('revert', [])
+    >>> jira_action('Revert "Revert "[SPARK-1234][SQL] Fix""')
+    ('resolve', ['SPARK-1234'])
+    >>> jira_action('Revert "[MINOR][SQL] Fix"')
+    ('skip', ['MINOR'])
+    >>> jira_action("[SPARK-1234][SQL][FOLLOWUP][MINOR] Fix")
+    ('skip', ['FOLLOWUP'])
+    >>> jira_action('Revert "[SPARK-1234][SQL][MINOR] Fix"')
+    ('revert', ['SPARK-1234'])
+    """
+    skip_jira_title_tags = ("MINOR", "TRIVIAL", "FOLLOWUP")
+    jira_ids = leading_jira_ids(title)
+    # Revert/Reapply PRs keep their title as is, so the tags are read inside the wrappers,
+    # without Title.parse, which rejects some older titles such as [SPARK-N][FOLLOWUP][MINOR].
+    tags = leading_title_tags(title)
+    if jira_ids:
+        # Title.parse rejects an id next to [MINOR] or [TRIVIAL], and prompt_for_components()
+        # rejects both markers, so only a subject that predates the rule or was not merged with
+        # this script, or a current PR title chosen on a backport, which is not parsed (see
+        # jira_title_for_backport), has both. Such a title normally names the fix for that id,
+        # so the id is updated.
+        tags -= _LEADING_TAGS
+    skipped = [tag for tag in skip_jira_title_tags if tag in tags]
+    if skipped:
+        return "skip", skipped
+    return ("revert" if _is_net_revert(_unwrap_wrappers(title)[1]) else "resolve"), jira_ids
+
+
+def update_jira_for_pr(pr_num, title, merge_branches):
+    """Resolve or revert the JIRA ticket(s) of a merged ``title``.
+
+    Everything is read from ``title``: :func:`jira_action` decides whether JIRA is skipped
+    and otherwise whether the ticket(s) are reverted, which removes fix versions, or
+    resolved, and the component tags of a resolved title are reconciled with an unresolved
+    ticket. On a merge, ``title`` is the result of :func:`prepare_merge_title`, which wrote
+    the normalized components into it. On a backport, it is the merge commit subject (see
+    :func:`committed_title`), which an older version of this script may have committed;
+    the current PR title as is, apart from surrounding whitespace, if the committer chose
+    it (see :func:`jira_title_for_backport`); or the prepared PR title when the commit has
+    no merge footer of the PR (see :func:`title_for_run`). So the components are
+    normalized again here. The components of a Revert/Reapply title, or of a title that
+    :meth:`Title.parse` rejects, are not reconciled.
+    """
+    if jira_disabled:
+        # JIRA was disabled at startup (unreachable); nothing to update.
+        print()
+        print_error(
+            f"JIRA is disabled; skipping JIRA update for PR #{pr_num}. "
+            f"Reconcile the ticket(s) manually."
+        )
+        return
+
+    action, detail = jira_action(title)
+    if action == "skip":
+        print()
+        print_error(
+            "Skipping JIRA operations for PR #%s because title has %s."
+            % (pr_num, _bracketed(detail))
+        )
+        return
+
+    # asf_jira is set here: the jira_disabled guard above returns when JIRA is unreachable, and
+    # initialize_jira() fails fast on a missing library/credentials when JIRA is live.
+    print()
+    continue_maybe("Would you like to update an associated JIRA?")
+    jira_ids = detail
+    if action == "revert":
+        for jira_id in jira_ids or [""]:
+            revert_jira_issue(merge_branches, jira_id)
+        return
+
+    jira_comment = "Issue resolved by pull request %s\n[%s/%s]" % (
+        pr_num,
+        GITHUB_BASE,
+        pr_num,
+    )
+    try:
+        # A Revert/Reapply title is not reconciled, as before: Title.parse rejects it.
+        title_components = [Component.normalize(t) for t in Title.parse(title).components]
+    except ValueError:
+        title_components = []
+    resolve_jira_issues(
+        jira_ids,
+        merge_branches,
+        jira_comment,
+        title_components,
+    )
+
+
+def _bracketed(tags):
+    """Format tags as in a title, e.g. ``[MINOR], [FOLLOWUP]``, for messages."""
+    return ", ".join("[%s]" % tag for tag in tags)
+
+
+def committed_title_notice(subject: str, pr_title: str) -> Optional[str]:
+    """Say that ``subject`` and ``pr_title`` would update JIRA differently, or return None.
+
+    Both are compared by :func:`jira_action`: whether JIRA is skipped, and if not, which
+    tickets and in which direction. The components are not compared: they differ whenever
+    one was entered at the merge prompt, and are only reconciled with an unresolved ticket.
+    A resolve of a ticket that is already resolved as Fixed offers to add fix versions, and
+    may offer to correct the Affects Version/s, without reconciling components (see
+    :func:`resolve_jira_issue`); a ticket resolved other than as Fixed is left as is (see
+    :func:`get_jira_issue`).
+
+    >>> print(committed_title_notice(
+    ...     'Revert "Revert "[SPARK-1][SQL] Fix""', ' Revert "[SPARK-1][SQL] Fix" '))
+    The merge commit subject and the current PR title would update JIRA differently:
+      merge commit subject: Revert "Revert "[SPARK-1][SQL] Fix""
+        -> resolve SPARK-1, or add fix versions to it
+      current PR title:     Revert "[SPARK-1][SQL] Fix"
+        -> offer to remove fix versions from SPARK-1, and to reopen it if resolved
+    A ticket resolved other than as Fixed is left as is either way.
+    >>> print(committed_title_notice(
+    ...     "[SPARK-1][SQL][FOLLOWUP] Fix", "  [SPARK-2][SPARK-3][SQL] Fix  "))
+    The merge commit subject and the current PR title would update JIRA differently:
+      merge commit subject: [SPARK-1][SQL][FOLLOWUP] Fix
+        -> skip JIRA ([FOLLOWUP])
+      current PR title:     [SPARK-2][SPARK-3][SQL] Fix
+        -> resolve SPARK-2 and SPARK-3, or add fix versions to them
+    A ticket resolved other than as Fixed is left as is either way.
+    >>> print(committed_title_notice("[SPARK-1][SQL] Fix", "Fix").splitlines()[-2])
+        -> resolve a ticket entered at the prompt, or add fix versions to it
+
+    Titles that update the same tickets in the same direction, or that both skip JIRA, are
+    not reported, whatever their components, text, case, or whitespace:
+
+    >>> for subject, pr_title in (
+    ...     ("[SPARK-1][CORE] Fix", "[SPARK-1] Fix"),
+    ...     ("[SPARK-1][CORE] Fix", " [spark-1][TESTS] Fixed "),
+    ...     ("[SPARK-1][SPARK-2][SQL] Fix", "[SPARK-2][SPARK-1][SQL] Fix"),
+    ...     ("[SPARK-1][SQL][FOLLOWUP] Fix", "[SPARK-2][SQL][FOLLOWUP] Fix"),
+    ...     ("[MINOR][SQL] Fix", "[TRIVIAL][SQL] Fix"),
+    ... ):
+    ...     print(committed_title_notice(subject, pr_title))
+    None
+    None
+    None
+    None
+    None
+    """
+    pr_title = pr_title.strip()
+    subject_action, pr_title_action = jira_action(subject), jira_action(pr_title)
+
+    def compared(action_detail):
+        action, detail = action_detail
+        return "skip" if action == "skip" else (action, sorted(detail))
+
+    def described(action_detail):
+        action, detail = action_detail
+        if action == "skip":
+            return "skip JIRA (%s)" % _bracketed(detail)
+        ids = " and ".join(detail) or "a ticket entered at the prompt"
+        them = "them" if len(detail) > 1 else "it"
+        if action == "revert":
+            return "offer to remove fix versions from %s, and to reopen %s if resolved" % (
+                ids,
+                them,
+            )
+        return "resolve %s, or add fix versions to %s" % (ids, them)
+
+    if compared(subject_action) == compared(pr_title_action):
+        return None
+    return "\n".join(
+        [
+            "The merge commit subject and the current PR title would update JIRA differently:",
+            "  merge commit subject: %s" % subject,
+            "    -> %s" % described(subject_action),
+            "  current PR title:     %s" % pr_title,
+            "    -> %s" % described(pr_title_action),
+            "A ticket resolved other than as Fixed is left as is either way.",
+        ]
+    )
+
+
+def jira_title_for_backport(subject: str, pr_title: str) -> str:
+    """Return the title that the JIRA update of a backport of the committed ``subject`` reads.
+
+    ``subject`` is the committed title (see :func:`committed_title`); ``main()`` calls this
+    only on a backport of a commit with the PR's merge footer. When the current PR title
+    would update JIRA differently (see :func:`committed_title_notice`), e.g. because it was
+    edited after the merge, or because a tag such as [FOLLOWUP] was entered at the merge
+    prompt, the notice is printed, and the committer may choose the PR title instead, e.g.
+    after fixing a wrong JIRA id in it. The PR title is then used as is, apart from
+    surrounding whitespace: it is not prepared, so no component is asked for, and it is not
+    checked with :func:`check_wrapped_title`; the notice has shown what it would do. When
+    JIRA is disabled, the notice is printed without the question, so the committer knows
+    which title to reconcile by hand. In every other case ``subject`` is returned silently.
+
+    >>> from unittest.mock import Mock, patch
+    >>> def choose(answer, pr_title, disabled=False):
+    ...     ask = Mock(return_value=answer)
+    ...     with patch.dict(jira_title_for_backport.__globals__, get_input=ask,
+    ...                     print_error=print, jira_disabled=disabled):
+    ...         title = jira_title_for_backport("[SPARK-1][SQL] Fix", pr_title)
+    ...     return title, ask.called
+    >>> choose("y", " [SPARK-2][SQL] Fix ")  # doctest: +ELLIPSIS
+    <BLANKLINE>
+    The merge commit subject and the current PR title would update JIRA differently:
+    ...
+    ('[SPARK-2][SQL] Fix', True)
+    >>> choose("n", "[SPARK-2][SQL] Fix")  # doctest: +ELLIPSIS
+    <BLANKLINE>
+    The merge commit subject ...
+    ('[SPARK-1][SQL] Fix', True)
+    >>> choose("", "[SPARK-2][SQL] Fix")  # doctest: +ELLIPSIS
+    <BLANKLINE>
+    The merge commit subject ...
+    ('[SPARK-1][SQL] Fix', True)
+    >>> choose("y", "[SPARK-1][sql] Fixed")
+    ('[SPARK-1][SQL] Fix', False)
+    >>> choose("y", "[SPARK-2][SQL] Fix", disabled=True)  # doctest: +ELLIPSIS
+    <BLANKLINE>
+    The merge commit subject ...
+    ('[SPARK-1][SQL] Fix', False)
+    """
+    notice = committed_title_notice(subject, pr_title)
+    if notice is None:
+        return subject
+    print()
+    print_error(notice)
+    if jira_disabled:
+        return subject
+    prompt = "Update JIRA from the current PR title instead of the merge commit subject? (y/N): "
+    if get_input(prompt, ["y", "n", ""]) == "y":
+        return pr_title.strip()
+    return subject
+
+
+def jira_ids_to_verify(title):
+    """Leading JIRA ids of the PR title, for check_linked_jira_issues().
+
+    Empty -- after a printed reminder to reconcile by hand -- when JIRA was disabled for this
+    run, so both checks are skipped instead of failing on asf_jira being None.
+    """
+    jira_ids = leading_jira_ids(title)
+    if jira_disabled:
+        print_error(
+            f"JIRA is disabled; skipping the Epic/Umbrella check and ticket verification. "
+            f"Confirm {', '.join(jira_ids) or 'the linked ticket(s)'} manually."
+        )
+        return []
+    return jira_ids
 
 
 class Component:
@@ -1183,6 +2462,16 @@ class Component:
                 return c
         return None
 
+    @classmethod
+    def normalize(cls, token):
+        """Return the registered tag for ``token``, or the stripped, upper-cased token if none.
+
+        >>> Component.normalize(" follow-up "), Component.normalize(" bogus ")
+        ('FOLLOWUP', 'BOGUS')
+        """
+        c = cls.find(token)
+        return c.tag if c is not None else token.strip().upper()
+
 
 # Full SPARK JIRA component list (sorted alphabetically by tag), followed
 # by status markers. Keep in sync with the components in JIRA — fetch the
@@ -1201,7 +2490,7 @@ COMPONENTS = (
     Component("DOC", ("DOCS", "DOCUMENTATION"), primary=True, jira_name="Documentation"),
     Component("DOCKER", primary=True, jira_name="Spark Docker"),
     Component("EC2", jira_name="EC2"),
-    Component("EXAMPLE", ("EXAMPLES",), jira_name="Examples"),
+    Component("EXAMPLES", ("EXAMPLE",), primary=True, jira_name="Examples"),
     Component("GRAPHX", primary=True, jira_name="GraphX"),
     Component("INFRA", ("PROJECT_INFRA",), primary=True, jira_name="Project Infra"),
     Component("IO", jira_name="Input/Output"),
@@ -1225,6 +2514,7 @@ COMPONENTS = (
     Component("STREAMING", ("DSTREAM", "DSTREAMS"), primary=True, jira_name="DStreams"),
     Component("SUBMIT", jira_name="Spark Submit"),
     Component("TEST", ("TESTS", "TEST-ONLY", "TESTS-ONLY"), jira_name="Tests"),
+    Component("UDF", primary=True, jira_name="UDF"),
     Component("UI", ("WEBUI", "WEB_UI"), primary=True, jira_name="Web UI"),
     Component("WINDOWS", primary=True, jira_name="Windows"),
     Component("YARN", primary=True, jira_name="YARN"),
@@ -1239,6 +2529,36 @@ _BRACKET_TAG_RE = re.compile(r"\[\s*([A-Za-z0-9._-]+)\s*\]")
 _SPARK_ID_RE = re.compile(r"^SPARK-\d+$", re.IGNORECASE)
 _VERSION_TAG_RE = re.compile(r"^\d+\.(\d+|X)$")
 _LEADING_TAGS = frozenset({"MINOR", "TRIVIAL"})
+# A SPARK id that opens a title without brackets, e.g. the old subject "SPARK-49004".
+_BARE_SPARK_ID_RE = re.compile(r"SPARK-[0-9]+\b", re.IGNORECASE | re.ASCII)
+# A Revert "..." / Reapply "..." wrapper, which prepare_merge_title() keeps in the PR title.
+_WRAPPER_RE = re.compile(r'(Revert|Reapply) "(.*)"', re.DOTALL)
+# Revert or Reapply, or a form of either such as Reverting, Reapplied, or Re-apply, still
+# opening a title after unwrapping, e.g. 'Revert [SPARK-N] ...', which check_wrapped_title()
+# warns about. Case is ignored, as older subjects include 'revert [SPARK-N] ...'.
+_WRAPPER_WORD_RE = re.compile(r"Revert|Re-?appl", re.IGNORECASE)
+# A quote, or one word and a quote with at most one space between, opening a title after
+# unwrapping, e.g. the doubled quote in 'Revert ""[SPARK-N] ...""' or the misspelled wrapper
+# in 'Revert "Reaply "[SPARK-N] ...""', which check_wrapped_title() warns about too.
+_WRAPPER_LIKE_RE = re.compile(r'"|[A-Za-z][A-Za-z-]* ?"')
+
+
+def _iter_bracket_tags(raw: str) -> Iterator[tuple[str, int]]:
+    """Yield ``(TAG, end)`` for each tag in the leading run of bracket tags of ``raw``.
+
+    ``TAG`` is upper-cased, and ``end`` is the position just past the tag and
+    the spaces that follow it.  Scanning stops at the first position where no
+    complete bracket tag starts.
+
+    >>> list(_iter_bracket_tags("[SPARK-1] [sql]Fix [X]"))
+    [('SPARK-1', 10), ('SQL', 15)]
+    """
+    pos = 0
+    while m := _BRACKET_TAG_RE.match(raw, pos):
+        pos = m.end()
+        while pos < len(raw) and raw[pos] == " ":
+            pos += 1
+        yield m.group(1).upper(), pos
 
 
 class Title:
@@ -1337,12 +2657,8 @@ class Title:
             raise ValueError("title must start with [SPARK-NNNNN], [MINOR], or [TRIVIAL]: %r" % raw)
 
         past_leading = False
-        pos = 0
-        while pos < len(raw):
-            m = _BRACKET_TAG_RE.match(raw, pos)
-            if not m:
-                break
-            tag = m.group(1).upper()
+        end = 0
+        for tag, end in _iter_bracket_tags(raw):
             if _SPARK_ID_RE.match(tag):
                 if past_leading:
                     raise ValueError(
@@ -1354,11 +2670,8 @@ class Title:
             else:
                 components.append(tag)
                 past_leading = True
-            pos = m.end()
-            while pos < len(raw) and raw[pos] == " ":
-                pos += 1
 
-        text = raw[pos:].lstrip()
+        text = raw[end:].lstrip()
         markers = [t for t in leading if t in _LEADING_TAGS]
         if len(markers) > 1 or (markers and len(leading) > len(markers)):
             raise ValueError("[SPARK-NNNNN], [MINOR], and [TRIVIAL] cannot coexist")
@@ -1372,14 +2685,159 @@ class Title:
         return parts + (" " if parts else "") + self.text
 
 
+def _unwrap_wrappers(title: str) -> tuple[str, list[str]]:
+    """Return the innermost title and the wrapper words (``Revert``/``Reapply``), outermost first.
+
+    ``prepare_merge_title()`` keeps Revert and Reapply PR titles as they are, apart
+    from surrounding whitespace, so the JIRA id, leading markers, and components all
+    live inside the quotes.  Unwrapping lets the id-extraction and skip-tag logic see
+    them, and the wrapper words decide the direction (see :func:`_is_net_revert`).
+    Wrappers are stripped repeatedly, so a revert-of-revert (``Revert "Revert "...""``),
+    including mixed ``Revert``/``Reapply`` nesting, is reduced to its innermost title.
+    Surrounding whitespace is stripped from the title and from each unwrapped layer.  A
+    title without such a wrapper is otherwise returned unchanged, with no words.
+
+    >>> _unwrap_wrappers('Revert "[SPARK-1234][SQL] Fix"')
+    ('[SPARK-1234][SQL] Fix', ['Revert'])
+    >>> _unwrap_wrappers('Reapply "[SPARK-1234][SQL] Fix"')
+    ('[SPARK-1234][SQL] Fix', ['Reapply'])
+    >>> _unwrap_wrappers('Revert "Revert "[SPARK-1234][SQL] Fix""')
+    ('[SPARK-1234][SQL] Fix', ['Revert', 'Revert'])
+    >>> _unwrap_wrappers('Revert "Reapply "[SPARK-1234][SQL] Fix""')
+    ('[SPARK-1234][SQL] Fix', ['Revert', 'Reapply'])
+    >>> _unwrap_wrappers(' Revert " Reapply " [SPARK-1234][SQL] Fix"" ')
+    ('[SPARK-1234][SQL] Fix', ['Revert', 'Reapply'])
+    >>> _unwrap_wrappers('[SPARK-1234][SQL] Fix')
+    ('[SPARK-1234][SQL] Fix', [])
+    >>> _unwrap_wrappers('Revert "')
+    ('Revert "', [])
+    """
+    title = title.strip()
+    words = []
+    while m := _WRAPPER_RE.fullmatch(title):
+        words.append(m.group(1))
+        title = m.group(2).strip()
+    return title, words
+
+
+def _is_net_revert(words: list[str]) -> bool:
+    """Whether the wrapper words from :func:`_unwrap_wrappers` net to a revert.
+
+    A net revert takes the revert path of :func:`update_jira_for_pr`, which removes fix
+    versions instead of resolving. The direction is decided by all the wrappers (see
+    :func:`_unwrap_wrappers`), not only the outermost one: each ``Revert`` flips it, while
+    a ``Reapply``, which git uses for a revert of a revert, flips it twice and so leaves
+    it unchanged. So the title is a revert when it has an odd number of ``Revert``
+    wrappers.
+
+    >>> for t in ('[SPARK-1234][SQL] Fix',
+    ...           'Revert "[SPARK-1234][SQL] Fix"',
+    ...           'Reapply "[SPARK-1234][SQL] Fix"',
+    ...           'Revert "Revert "[SPARK-1234][SQL] Fix""',
+    ...           'Revert "Reapply "[SPARK-1234][SQL] Fix""',
+    ...           'Reapply "Revert "[SPARK-1234][SQL] Fix""',
+    ...           'Reapply "Reapply "[SPARK-1234][SQL] Fix""',
+    ...           'Revert "Revert "Revert "[SPARK-1234][SQL] Fix\"\"\"',
+    ...           'Revert "Reapply "Revert "[SPARK-1234][SQL] Fix\"\"\"',
+    ...           ' Revert "[SPARK-1234][SQL] Fix" ',
+    ...           'Revert "',
+    ...           'Reapply "'):
+    ...     print(_is_net_revert(_unwrap_wrappers(t)[1]), repr(t))
+    False '[SPARK-1234][SQL] Fix'
+    True 'Revert "[SPARK-1234][SQL] Fix"'
+    False 'Reapply "[SPARK-1234][SQL] Fix"'
+    False 'Revert "Revert "[SPARK-1234][SQL] Fix""'
+    True 'Revert "Reapply "[SPARK-1234][SQL] Fix""'
+    True 'Reapply "Revert "[SPARK-1234][SQL] Fix""'
+    False 'Reapply "Reapply "[SPARK-1234][SQL] Fix""'
+    True 'Revert "Revert "Revert "[SPARK-1234][SQL] Fix\"\"\"'
+    False 'Revert "Reapply "Revert "[SPARK-1234][SQL] Fix\"\"\"'
+    True ' Revert "[SPARK-1234][SQL] Fix" '
+    False 'Revert "'
+    False 'Reapply "'
+    """
+    return words.count("Revert") % 2 == 1
+
+
+def leading_jira_ids(title: str) -> list[str]:
+    """Return the JIRA ids that open ``title``, in order, upper-cased, without duplicates.
+
+    ``Revert "..."`` / ``Reapply "..."`` wrappers, including nested ones, are
+    stripped first (see :func:`_unwrap_wrappers`), so those PRs still yield the
+    wrapped id.  The ids are the run of ``[SPARK-N]`` bracket tags at the start
+    of the title.  Scanning stops at the first other tag, so a SPARK id later in
+    the title, such as a reference to a related ticket in the body, is not
+    collected.  The tags after the ids are not validated, so a title that
+    :meth:`Title.parse` rejects, such as ``[SPARK-1234][SQL][MINOR] Fix``, still
+    yields its id.  A title that opens with a bare id instead of a bracket, such
+    as the old subject ``SPARK-49004``, yields only that first id.  Any other
+    title, including one whose id follows another tag, yields an empty list.
+
+    >>> leading_jira_ids("[SPARK-1234][SPARK-5678][SQL] Follow up to SPARK-9999")
+    ['SPARK-1234', 'SPARK-5678']
+    >>> leading_jira_ids('Reapply "[SPARK-1234][SQL] Fix"')
+    ['SPARK-1234']
+    >>> leading_jira_ids('Revert "Revert "[SPARK-1234][SQL] Fix""')
+    ['SPARK-1234']
+    >>> leading_jira_ids("[SPARK-1234][spark-1234] Fix")
+    ['SPARK-1234']
+    >>> leading_jira_ids("[SPARK-123456][SQL] Fix")
+    ['SPARK-123456']
+    >>> leading_jira_ids("[SPARK-1234][SQL][MINOR] Fix")
+    ['SPARK-1234']
+    >>> leading_jira_ids('Revert " [SPARK-1234][SQL][MINOR] Fix"')
+    ['SPARK-1234']
+    >>> leading_jira_ids('Revert "SPARK-49004"')
+    ['SPARK-49004']
+    >>> leading_jira_ids('Revert "SPARK-9545, SPARK-9547: Fix"')
+    ['SPARK-9545']
+    >>> leading_jira_ids("[MINOR][SQL] Fix typo")
+    []
+    >>> leading_jira_ids("[WIP][SPARK-1234] Fix")
+    []
+    >>> leading_jira_ids("No leading tag, mentions SPARK-5678")
+    []
+    """
+    title = _unwrap_wrappers(title)[0]
+    m = _BARE_SPARK_ID_RE.match(title)
+    if m:
+        return [m.group(0).upper()]
+    ids = []
+    for tag, _ in _iter_bracket_tags(title):
+        if not _SPARK_ID_RE.match(tag):
+            break
+        ids.append(tag)
+    return list(dict.fromkeys(ids))
+
+
+def leading_title_tags(title: str) -> set[str]:
+    """Return the tags in the leading run of bracket tags of ``title``, normalized.
+
+    ``Revert "..."`` / ``Reapply "..."`` wrappers are stripped first (see
+    :func:`_unwrap_wrappers`), and aliases are normalized (see
+    :meth:`Component.normalize`).  Like :func:`leading_jira_ids`, the run is not
+    validated, so a title that :meth:`Title.parse` rejects still yields its tags.
+
+    >>> sorted(leading_title_tags('Revert "[SPARK-1234][FOLLOW-UP][SQL][MINOR] Fix [X]"'))
+    ['FOLLOWUP', 'MINOR', 'SPARK-1234', 'SQL']
+    >>> leading_title_tags("SPARK-49004")
+    set()
+    """
+    return {Component.normalize(tag) for tag, _ in _iter_bracket_tags(_unwrap_wrappers(title)[0])}
+
+
 def prompt_for_components():
     """
     Prompt the committer for component(s) when the PR title lacks a primary
-    component. Each entered token is normalized via Component.find
-    (e.g. "DOCS" -> "DOC", "PYSPARK" -> "PYTHON"). Unrecognized tokens are
-    passed through as-is. Re-prompts until at least one entered token resolves
-    to a primary Component (one with primary=True). Returns an uppercase list
-    of tags in insertion order.
+    component. Each entered token is normalized via Component.normalize
+    (e.g. "DOCS" -> "DOC", "PYSPARK" -> "PYTHON"); unrecognized tokens are only
+    upper-cased. Re-prompts until at least one entered token resolves to a
+    primary Component (one with primary=True) and every token is one that the
+    bracket-tag scan reads back from the title as a component. So a token with
+    other characters, such as "SPARK CORE", is rejected. A SPARK id is rejected
+    too: it belongs in the PR title. So are [MINOR] and [TRIVIAL]: they mark a PR
+    without a JIRA ticket and belong at the start of its title, where Title.parse
+    checks them. Returns an uppercase list of tags in insertion order.
     """
     print("PR title is missing a primary [COMPONENT] tag.")
     print("Primary components (one of these is required):")
@@ -1399,9 +2857,31 @@ def prompt_for_components():
                 c = Component.find(t)
                 if c is not None and c.primary:
                     has_primary = True
-                components.append(c.tag if c else t)
+                components.append(Component.normalize(t))
         if not components:
             print_error("Component(s) cannot be empty. Please enter at least one.")
+            continue
+        # A tag that the bracket scan cannot read would hide the tags after it, such as
+        # FOLLOWUP, from the JIRA skip check, at this merge and at a later revert. A SPARK id
+        # would become an extra linked ticket or an id after a component.
+        invalid = [
+            t
+            for t in components
+            if not _BRACKET_TAG_RE.fullmatch("[%s]" % t) or _SPARK_ID_RE.match(t)
+        ]
+        if invalid:
+            print_error(
+                "Invalid component(s): %s. Use letters, digits, '.', '_', or '-', and no SPARK id."
+                % ", ".join(invalid)
+            )
+            continue
+        markers = [t for t in components if t in _LEADING_TAGS]
+        if markers:
+            print_error(
+                "%s cannot be entered here. A PR without a JIRA ticket puts [MINOR] or "
+                "[TRIVIAL] at the start of its title instead; a PR with one cannot be marked so."
+                % _bracketed(markers)
+            )
             continue
         if not has_primary:
             print_error(
@@ -1412,28 +2892,233 @@ def prompt_for_components():
         return components
 
 
+def prepare_merge_title(raw_title: str) -> str:
+    """Return the title to merge for the PR title ``raw_title``.
+
+    Surrounding whitespace is stripped. A ``Revert "..."`` / ``Reapply "..."`` title is
+    otherwise kept as is: the wrapped title is an existing commit subject, which may
+    predate the current title rules, so it is not parsed and has no components (see
+    :func:`check_wrapped_title` for what the merge path checks in it). Any other title
+    is parsed with :meth:`Title.parse`, which fails on a malformed title, and its
+    component tags are normalized, with a prompt for a primary component when there is
+    none, and written back into the title, from which :func:`update_jira_for_pr` reads
+    them. A title that changes is printed.
+    """
+    title = raw_title.strip()
+    if not _unwrap_wrappers(title)[1]:
+        # Parse; fail on a malformed title.
+        try:
+            parsed = Title.parse(title)
+        except ValueError as e:
+            fail("Malformed PR title: %s" % e)
+
+        # Normalize component tags via the registry and track primary.
+        components = []
+        has_primary = False
+        for tag in parsed.components:
+            c = Component.find(tag)
+            if c is not None and c.primary:
+                has_primary = True
+            components.append(Component.normalize(tag))
+        if not has_primary:
+            new_tags = prompt_for_components()
+            components = new_tags + components
+
+        # Deduplicate tags in insertion order.
+        components = list(dict.fromkeys(components))
+
+        # Move version tags (e.g. [4.X], [4.2]) to the head of components.
+        versions = [t for t in components if _VERSION_TAG_RE.match(t)]
+        if versions:
+            others = [t for t in components if not _VERSION_TAG_RE.match(t)]
+            components = versions + others
+
+        # Move FOLLOWUP to the last tag.
+        non_followup = [t for t in components if t != "FOLLOWUP"]
+        if len(non_followup) < len(components):
+            components = non_followup + ["FOLLOWUP"]
+
+        # Warn about tags that are neither known components nor version tags.
+        unknown = [
+            t for t in components if Component.find(t) is None and not _VERSION_TAG_RE.match(t)
+        ]
+        if unknown:
+            print_error("Title has unknown tag(s): %s" % _bracketed(unknown))
+
+        parsed.components = components
+        title = str(parsed)
+    if title != raw_title:
+        print("Normalized title: %s" % title)
+    return title
+
+
+def check_wrapped_title(title: str) -> None:
+    """Check the ``Revert "..."`` / ``Reapply "..."`` wrappers of a PR title before merging.
+
+    An innermost title that is empty, or made only of quotes and whitespace, fails, since
+    the commit subject would say nothing. An innermost title that still looks like a wrapper
+    is warned about and needs a confirmation, since only the outer wrappers decide the
+    direction, and no JIRA id or skip tag is read from it:
+
+    - It starts with ``Revert`` or ``Reapply``, or a form of either such as ``Reverting``
+      (see ``_WRAPPER_WORD_RE``). Such a title may have a dropped quote, e.g.
+      ``Revert "Revert "[SPARK-N] ..."``, or wrap a subject that is not a wrapper, e.g.
+      ``Revert to using ...``. The shape does not tell which: the revert of an existing
+      subject that GitHub truncated without its closing quote looks like a dropped quote.
+    - It starts with a quote, or with one word and a quote (see ``_WRAPPER_LIKE_RE``),
+      e.g. a doubled quote, ``Revert ""[SPARK-N] ...""``, or a misspelled wrapper,
+      ``Revert "Reaply "[SPARK-N] ...""``. A subject that starts with a quoted word, or
+      quotes one after its first word, e.g. ``Rename "jobs" to ...``, looks the same.
+
+    Other titles pass silently.
+    """
+    inner, words = _unwrap_wrappers(title)
+    if not words:
+        return
+    if not inner.replace('"', "").strip():
+        fail("Empty title inside the Revert/Reapply wrappers of the PR title: %s" % title)
+    if _WRAPPER_WORD_RE.match(inner):
+        shape = "still starts with Revert or Reapply"
+        fix = (
+            "If a quote was dropped, or the innermost title is the subject of a revert commit, "
+            "e.g. Revert [SPARK-N] ..., retitle the PR"
+        )
+        keep = "If it only starts with the word, as in Revert to using ..."
+    elif _WRAPPER_LIKE_RE.match(inner):
+        shape = (
+            "starts with a quote" if inner.startswith('"') else "starts with one word and a quote"
+        )
+        fix = (
+            'If a quote is doubled or a wrapper misspelled, e.g. Revert ""..."" or Reaply "...", '
+            "fix it"
+        )
+        keep = 'If the subject only quotes something, as in Rename "jobs" to ... or "launch" ...'
+    else:
+        return
+    if _is_net_revert(words):
+        direction = "a revert, which offers to remove fix versions"
+    else:
+        direction = "a re-land, which resolves the ticket or adds fix versions"
+    if jira_disabled:
+        update = "JIRA update (disabled for this run): would be %s" % direction
+        after = "reconcile the ticket by hand after the merge"
+    else:
+        update = "JIRA update: %s" % direction
+        after = "enter the JIRA id at the prompt after the merge, or leave it blank to skip"
+    print_error(
+        "\n".join(
+            [
+                "The innermost title of %s %s." % (title, shape),
+                "  %s (decided by the outer wrappers alone; no JIRA id or skip tag is read from"
+                " the innermost title)." % update,
+                '  %s so that each layer is Revert "..." or Reapply "...", e.g. Reapply'
+                ' "[SPARK-N] ..." for a revert of a revert.' % fix,
+                "  %s, keep the title, and %s." % (keep, after),
+            ]
+        )
+    )
+    continue_maybe("Merge with this title?")
+
+
+def title_for_run(raw_title: str, subject: Optional[str], *, merging: bool) -> str:
+    """Return the title of a run on the PR titled ``raw_title``.
+
+    ``subject`` is the committed title of a backport of a commit that ``merge_pr`` made for
+    the PR (see :func:`committed_title`), and None otherwise. ``merging`` is whether this
+    run merges the PR, i.e. no merge commit was found, e.g. for an open PR or one that was
+    reopened after a merge; ``main()`` passes it instead of this function inferring it from
+    the commit message. A run with a ``subject`` is a backport, so it never merges. With a
+    ``subject``, the title is the subject, and the current PR title is not prepared: it is
+    not passed to :meth:`Title.parse`, and no component is asked for. Otherwise the title is
+    prepared with :func:`prepare_merge_title` and, when ``merging``, checked with
+    :func:`check_wrapped_title`. The result is what a merge commits; on a backport, it is
+    what the JIRA update reads unless the committer chooses the PR title (see
+    :func:`jira_title_for_backport`).
+
+    >>> from unittest.mock import Mock, patch
+    >>> prepare, check = Mock(return_value="prepared"), Mock()
+    >>> def run(subject, merging):
+    ...     prepare.reset_mock()
+    ...     check.reset_mock()
+    ...     with patch.dict(title_for_run.__globals__, prepare_merge_title=prepare,
+    ...                     check_wrapped_title=check):
+    ...         result = title_for_run("[SPARK-1] Fix", subject, merging=merging)
+    ...     return result, prepare.called, check.called
+    >>> run(None, True)
+    ('prepared', True, True)
+    >>> run("[SPARK-1][CORE] Fix", False)
+    ('[SPARK-1][CORE] Fix', False, False)
+    >>> run(None, False)
+    ('prepared', True, False)
+    """
+    if subject is not None:
+        return subject
+    title = prepare_merge_title(raw_title)
+    if merging:
+        check_wrapped_title(title)
+    return title
+
+
 def get_current_ref():
-    ref = run_cmd("git rev-parse --abbrev-ref HEAD").strip()
+    ref = git.run("git rev-parse --abbrev-ref HEAD").strip()
     if ref == "HEAD":
         # The current ref is a detached HEAD, so grab its SHA.
-        return run_cmd("git rev-parse HEAD").strip()
+        return git.run("git rev-parse HEAD").strip()
     else:
         return ref
 
 
+def jira_is_live():
+    """Quick liveness probe for the SPARK JIRA backend, to decide whether to touch JIRA at all.
+
+    Returns (True, None) when the backend looks reachable, and (False, reason) -- so the merge
+    proceeds with JIRA disabled rather than failing or hanging -- when JIRA is down, errors out,
+    or takes longer than JIRA_READ_TIMEOUT to answer. The reason names what the probe hit (an
+    HTTP status or the raised exception) so the disable message can tell the committer why.
+    The ASF JIRA instance goes down for infra maintenance often enough to be worth tolerating.
+    """
+    # issues.apache.org is a reverse proxy in front of several backends, so the front door can be
+    # up while the backend serving SPARK returns 503. Probe a SPARK-specific endpoint so the result
+    # reflects whether SPARK operations will actually work. A 4xx still means a backend answered
+    # (up); a 5xx (e.g. that 503) or a connection/timeout error means it is effectively dead.
+    url = f"{JIRA_API_BASE}/rest/api/2/project/SPARK"
+    try:
+        with urlopen(Request(url), timeout=JIRA_READ_TIMEOUT):
+            return True, None
+    except HTTPError as e:
+        if e.code < 500:
+            return True, None
+        return False, f"server answered HTTP {e.code}"
+    except Exception as e:
+        return False, f"{e.__class__.__name__}: {e}"
+
+
 def initialize_jira():
-    # JIRA access is mandatory: a successful merge must resolve the associated ticket. Bail out
-    # early -- before any git work -- if a prerequisite is missing, rather than silently merging
-    # and leaving the JIRA open (which is easy to miss and tedious to reconcile after the fact).
-    global asf_jira
+    # A successful merge should resolve its ticket, so JIRA access is normally mandatory and we
+    # bail out early -- before any git work -- on a missing library or credentials. But the ASF
+    # JIRA instance is not always up; probe it first and, if it is unreachable or too slow, disable
+    # JIRA for this run (asf_jira stays None) and let the merge proceed, reconciling by hand later.
+    global asf_jira, jira_disabled
     asf_jira = None
+    jira_disabled = False
     jira_server = {"server": JIRA_API_BASE}
+
+    live, reason = jira_is_live()
+    if not live:
+        jira_disabled = True
+        print_error(
+            f"JIRA is unreachable or unhealthy ({reason}); disabling all JIRA steps for this "
+            f"merge. Resolve the associated ticket(s) manually."
+        )
+        return
 
     if not JIRA_IMPORTED:
         fail("ERROR finding jira library. Run 'pip3 install jira' to install, then retry.")
     elif JIRA_ACCESS_TOKEN:
         client = jira.client.JIRA(
-            jira_server, token_auth=JIRA_ACCESS_TOKEN, timeout=(JIRA_CONNECT_TIMEOUT, 30)
+            jira_server,
+            token_auth=JIRA_ACCESS_TOKEN,
+            timeout=(JIRA_CONNECT_TIMEOUT, JIRA_READ_TIMEOUT),
         )
         try:
             # Eagerly check if the token is valid to align with the behavior of username/password
@@ -1456,7 +3141,7 @@ def initialize_jira():
         asf_jira = jira.client.JIRA(
             jira_server,
             basic_auth=(JIRA_USERNAME, JIRA_PASSWORD),
-            timeout=(JIRA_CONNECT_TIMEOUT, 30),
+            timeout=(JIRA_CONNECT_TIMEOUT, JIRA_READ_TIMEOUT),
         )
     else:
         fail(
@@ -1520,25 +3205,63 @@ def check_script_up_to_date():
     )
 
 
+def build_arg_parser():
+    """CLI parser: an optional PR number plus the --dry-run/-n flag.
+
+    --dry-run defaults to on when the DRY_RUN env var is set to any non-empty value (see the
+    DRY_RUN_ENV note near the top of this file), so either the flag or the env var enables a
+    dry run; passing the flag forces it on regardless.
+    """
+    parser = argparse.ArgumentParser(description="Merge a Spark pull request.")
+    parser.add_argument(
+        "pr_num",
+        nargs="?",
+        help="Pull request number to merge; prompted for interactively if omitted.",
+    )
+    parser.add_argument(
+        "--dry-run",
+        "-n",
+        action="store_true",
+        default=DRY_RUN_ENV,
+        help="Run every read-only step for real but suppress all outbound effects (git push, "
+        "GitHub PR close/comment, JIRA writes), logging each as a 'DRY-RUN: would ...' line. "
+        "Also enabled by setting the DRY_RUN environment variable.",
+    )
+    return parser
+
+
 def main():
+    global git, github, jira_ops, original_head
+    args = build_arg_parser().parse_args()
+    if args.dry_run:
+        # Swap the outbound clients for their logging-only variants; everything else is unchanged.
+        git = DryRunGit()
+        github = DryRunGitHub()
+        print(
+            bold(
+                "=== DRY-RUN: read-only steps run for real, but the git push to %s, the GitHub "
+                "PR close/comment, and all JIRA writes are suppressed and only logged. ==="
+                % PUSH_REMOTE_NAME
+            )
+        )
+
     check_script_up_to_date()
     initialize_jira()
-    global original_head
+    jira_ops = DryRunJira(asf_jira) if args.dry_run else Jira(asf_jira)
 
     os.chdir(SPARK_HOME)
     original_head = get_current_ref()
 
-    branches = get_json("%s/branches" % GITHUB_API_BASE)
+    branches = get_json_pages("%s/branches" % GITHUB_API_BASE)
     branch_names = list(filter(lambda x: x.startswith("branch-"), [x["name"] for x in branches]))
     branch_names = sorted(branch_names, key=semver_branch_rank, reverse=True)
 
-    if len(sys.argv) == 1:
+    if args.pr_num is None:
         pr_num = get_input("Which pull request would you like to merge? (e.g. 34): ", r"^\d+$")
     else:
-        pr_num = sys.argv[1]
+        pr_num = args.pr_num
         print("Start to merge pull request #%s" % (pr_num))
     pr = get_json("%s/pulls/%s" % (GITHUB_API_BASE, pr_num))
-    pr_events = get_json("%s/issues/%s/events" % (GITHUB_API_BASE, pr_num))
 
     url = pr["url"]
     title = pr["title"]
@@ -1547,61 +3270,28 @@ def main():
     if pr.get("draft", False) or "[WIP]" in title or "[DO-NOT-MERGE]" in title:
         fail("Cannot merge a draft PR #%s: %s" % (pr_num, title))
 
-    # e.g. 'Revert "[SPARK-56357][BUILD] Upgrade sbt to 1.12.8"'
-    is_revert_pr = title.startswith('Revert "') and title.endswith('"')
-    # e.g. 'Reapply "[SPARK-56357][BUILD] Upgrade sbt to 1.12.8"'
-    is_reapply_pr = title.startswith('Reapply "') and title.endswith('"')
-
-    # Normalized PR-title component tags, used later to reconcile JIRA components. Empty for
-    # Revert/Reapply PRs, whose titles are kept verbatim and not parsed for components.
-    title_components: List[str] = []
-
-    # Revert and Reapply PRs keep their title verbatim.
-    if not (is_revert_pr or is_reapply_pr):
-        # Parse; fail on a malformed title.
-        try:
-            parsed = Title.parse(title)
-        except ValueError as e:
-            fail("Malformed PR title: %s" % e)
-
-        # Normalize component tags via the registry and track primary.
-        components = []
-        has_primary = False
-        for tag in parsed.components:
-            c = Component.find(tag)
-            if c is not None and c.primary:
-                has_primary = True
-            components.append(c.tag if c is not None else tag)
-        if not has_primary:
-            new_tags = prompt_for_components()
-            components = new_tags + components
-
-        # Deduplicate tags in insertion order.
-        components = list(dict.fromkeys(components))
-
-        # Move version tags (e.g. [4.X], [4.2]) to the head of components.
-        versions = [t for t in components if _VERSION_TAG_RE.match(t)]
-        if versions:
-            others = [t for t in components if not _VERSION_TAG_RE.match(t)]
-            components = versions + others
-
-        # Move FOLLOWUP to the last tag.
-        non_followup = [t for t in components if t != "FOLLOWUP"]
-        if len(non_followup) < len(components):
-            components = non_followup + ["FOLLOWUP"]
-
-        # Warn about tags that are neither known components nor version tags.
-        unknown = [
-            t for t in components if Component.find(t) is None and not _VERSION_TAG_RE.match(t)
-        ]
-        if unknown:
-            print_error("Title has unknown tag(s): %s" % ", ".join("[%s]" % t for t in unknown))
-
-        parsed.components = components
-        title_components = list(parsed.components)
-        title = str(parsed)
-        if title != pr["title"]:
-            print("Normalized title: %s" % title)
+    # Merged pull requests don't appear as merged in the GitHub API;
+    # Instead, they're closed by committers.
+    # A PR might have multiple merge commits, if it's reopened and merged again. We shall
+    # cherry-pick PRs in closed state with the latest merge hash.
+    # If the PR is still open (reopened), we shall not cherry-pick it but perform the normal
+    # merge as it could have been reverted earlier.
+    merge_hash, message = (None, None)
+    if pr["state"] == "closed":
+        pr_events = get_json_pages("%s/issues/%s/events" % (GITHUB_API_BASE, pr_num))
+        merge_hash, message = find_merge_commit(pr_num, pr_events)
+    if merge_hash is not None:
+        print("Pull request %s has already been merged, assuming you want to backport" % pr_num)
+        commit_is_downloaded = (
+            git.run(["git", "rev-parse", "--quiet", "--verify", "%s^{commit}" % merge_hash]).strip()
+            != ""
+        )
+        if not commit_is_downloaded:
+            fail("Couldn't find any merge commit for #%s, you may need to update HEAD." % pr_num)
+        print("Found commit %s:\n%s" % (merge_hash, message))
+    # The committed title of a backport of a commit that merge_pr made for the PR, if any.
+    subject = committed_title(pr_num, message)
+    title = title_for_run(title, subject, merging=merge_hash is None)
 
     body = pr["body"]
     if body is None:
@@ -1625,11 +3315,53 @@ def main():
     base_ref = pr["head"]["ref"]
     pr_repo_desc = "%s/%s" % (user_login, base_ref)
 
+    if merge_hash is not None:
+        # The change is already on target_ref and on any branch a previous run backported it
+        # to, so exclude all of them: defaulting to one would cherry-pick an empty commit.
+        picked_refs = [target_ref] + [
+            b for b in branches_with_merge_footer(pr_num, branch_names) if b != target_ref
+        ]
+        if len(picked_refs) > 1:
+            print("Already backported to: %s" % ", ".join(picked_refs[1:]))
+        # Loop so one invocation can reach several maintenance branches, as the merge path does.
+        picked_commits = []
+        try:
+            while True:
+                default = default_pick_branch(branch_names, tuple(picked_refs))
+                if default is None:
+                    print(
+                        "Every known release branch already contains #%s; nothing to pick." % pr_num
+                    )
+                    break
+                picked = cherry_pick(
+                    pr_num,
+                    merge_hash,
+                    default,
+                    branch_names,
+                    target_ref,
+                    already_picked=tuple(picked_refs),
+                )
+                picked_refs = picked_refs + [ref for ref, _ in picked]
+                picked_commits = picked_commits + picked
+                prompt = "Would you like to pick %s into another branch?" % merge_hash
+                if get_input(f"\n{prompt} (y/N): ", ["y", "n", ""]) != "y":
+                    break
+        finally:
+            # Report whatever was pushed even if a later pick is aborted, since the earlier
+            # pushes have already landed.
+            if picked_commits:
+                post_merge_comment(pr_num, picked_commits)
+            # Reconcile JIRA with every branch that contains the merge or revert.
+            if subject is not None:
+                title = jira_title_for_backport(subject, pr["title"])
+            update_jira_for_pr(pr_num, title, picked_refs)
+        sys.exit(0)
+
     # Fetch PR author's GitHub profile and PR commits for commit attribution
     pr_author_info = get_json("https://api.github.com/users/%s" % user_login)
     pr_author_name = pr_author_info.get("name") or user_login
     pr_author_email = pr_author_info.get("email")
-    pr_commits = get_json("%s/pulls/%s/commits" % (GITHUB_API_BASE, pr_num))
+    pr_commits = get_json_pages("%s/pulls/%s/commits" % (GITHUB_API_BASE, pr_num))
     if not pr_author_email:
         # If the GitHub profile has no public email, find the author's email from the
         # PR's git commits. Only use it if GitHub links the commit to the PR author's
@@ -1656,35 +3388,6 @@ def main():
             seen.add(raw)
             co_authors.append(raw)
 
-    # Merged pull requests don't appear as merged in the GitHub API;
-    # Instead, they're closed by committers.
-    merge_commits = [e for e in pr_events if e["event"] == "closed" and e["commit_id"] is not None]
-
-    if merge_commits and pr["state"] == "closed":
-        # A PR might have multiple merge commits, if it's reopened and merged again. We shall
-        # cherry-pick PRs in closed state with the latest merge hash.
-        # If the PR is still open(reopened), we shall not cherry-pick it but perform the normal
-        # merge as it could have been reverted earlier.
-        merge_commits = sorted(merge_commits, key=lambda x: x["created_at"])
-        merge_hash = merge_commits[-1]["commit_id"]
-        message = get_json("%s/commits/%s" % (GITHUB_API_BASE, merge_hash))["commit"]["message"]
-
-        print("Pull request %s has already been merged, assuming you want to backport" % pr_num)
-        commit_is_downloaded = (
-            run_cmd(["git", "rev-parse", "--quiet", "--verify", "%s^{commit}" % merge_hash]).strip()
-            != ""
-        )
-        if not commit_is_downloaded:
-            fail("Couldn't find any merge commit for #%s, you may need to update HEAD." % pr_num)
-
-        print("Found commit %s:\n%s" % (merge_hash, message))
-        default = branch_names[0]
-        picked = cherry_pick(
-            pr_num, merge_hash, default, branch_names, target_ref, already_picked=()
-        )
-        post_merge_comment(pr_num, picked)
-        sys.exit(0)
-
     if not bool(pr["mergeable"]):
         msg = (
             "Pull request %s is not mergeable in its current form.\n" % pr_num
@@ -1692,61 +3395,7 @@ def main():
         )
         continue_maybe(msg)
 
-    # asf_jira is guaranteed to be set here: initialize_jira() fails fast otherwise.
-    jira_ids = re.findall("SPARK-[0-9]{4,5}", title)
-    # Epic / Umbrella tickets group related work and must not be resolved by a single PR.
-    # Collect every offender so the committer sees the full list in one shot rather than
-    # discovering them one-by-one across repeated merge attempts.
-    blocking_issue_types = {"Epic", "Umbrella"}
-    blockers = []
-    linked_issues = []
-    for jira_id in jira_ids:
-        try:
-            issue = asf_jira.issue(jira_id)
-        except Exception:
-            print_error("Unable to fetch summary of %s" % jira_id)
-            continue
-        print_jira_issue_summary(issue)
-        linked_issues.append((jira_id, issue))
-        issue_type = issue.fields.issuetype.name
-        if issue_type in blocking_issue_types:
-            blockers.append((jira_id, issue_type))
-    if blockers:
-        ids_str = ", ".join("%s (%s)" % (jid, t) for jid, t in blockers)
-        fail(
-            "Cannot merge PR #%s. Linked JIRA(s) %s are Umbrella or Epic "
-            "tickets and MUST not be resolved by a single PR. File "
-            "Sub-task(s) under %s and update the PR title to reference "
-            "the Sub-task(s) instead." % (pr_num, ids_str, ids_str)
-        )
-
-    # Confirm each linked JIRA actually matches this PR before merging. A committer can
-    # reference the wrong ticket -- e.g. mistaking a GitHub PR number in the body
-    # ("Closes #NNNNN") for a SPARK JIRA id -- which resolves an unrelated ticket on merge.
-    # Show the PR title next to each ticket's summary, warn when a ticket is already
-    # Resolved/Closed (a fresh merge should target an open one), and require confirmation.
-    # For [FOLLOWUP] PRs the title describes the follow-up fix rather than the ticket, so
-    # its low similarity to the JIRA summary is expected and the warning is suppressed.
-    is_followup = "FOLLOWUP" in title_components
-    for jira_id, issue in linked_issues:
-        print()
-        print(
-            format_jira_verification(
-                pr_num,
-                title,
-                jira_id,
-                issue.fields.summary,
-                issue.fields.status.name,
-                issue.fields.issuetype.name,
-                use_color=True,
-                is_followup=is_followup,
-            )
-        )
-        if get_input("Does %s match this PR? (y/N): " % jira_id, ["y", "n", ""]) != "y":
-            fail(
-                "Aborting: %s does not match PR #%s. Fix the PR title to reference the "
-                "correct JIRA ticket and retry." % (jira_id, pr_num)
-            )
+    check_linked_jira_issues(pr_num, title)
 
     print("\n=== Pull Request #%s ===" % pr_num)
     print("title\t%s\nsource\t%s\ntarget\t%s\nurl\t%s" % (title, pr_repo_desc, target_ref, url))
@@ -1760,19 +3409,20 @@ def main():
     # then each cherry-pick target as it is picked.
     merged_commits = [(target_ref, merge_hash)]
 
-    # Walk a mutable remaining-branches list so the next default correctly skips any
-    # branches already picked, including branches consumed by the Upstream-First two-branch
-    # path inside cherry_pick (e.g. picking branch-M.x + branch-M.N in a single prompt).
-    # merged_refs doubles as the already_picked set passed to cherry_pick: it starts with
-    # target_ref (the merge sink, never to be re-picked) and grows with every cherry-pick.
-    remaining_branches = [b for b in branch_names if b != target_ref]
+    # merged_refs drives both the next prompt default and the already_picked set passed to
+    # cherry_pick, so each grows with every cherry-pick -- including branches consumed by the
+    # Upstream-First two-branch path inside cherry_pick (e.g. picking branch-M.x + branch-M.N
+    # in a single prompt). It starts with target_ref, the merge sink, never to be re-picked.
     pick_prompt = "Would you like to pick %s into another branch?" % merge_hash
     # Always record the merge summary for what actually landed, even if a later
     # cherry-pick is aborted or cancelled: the merge into the target branch has
     # already been pushed, so cancelling a backport must not drop that line.
     try:
         while get_input(f"\n{pick_prompt} (y/N): ", ["y", "n", ""]) == "y":
-            default = remaining_branches[0] if remaining_branches else branch_names[0]
+            default = default_pick_branch(branch_names, tuple(merged_refs))
+            if default is None:
+                print("Every known release branch already contains #%s; nothing to pick." % pr_num)
+                break
             picked = cherry_pick(
                 pr_num,
                 merge_hash,
@@ -1781,12 +3431,8 @@ def main():
                 target_ref,
                 already_picked=tuple(merged_refs),
             )
-            picked_refs = [ref for ref, _ in picked]
-            merged_refs = merged_refs + picked_refs
+            merged_refs = merged_refs + [ref for ref, _ in picked]
             merged_commits = merged_commits + picked
-            for b in picked_refs:
-                if b in remaining_branches:
-                    remaining_branches.remove(b)
     finally:
         if merged_commits:
             # The "Closes #N" keyword in the commit message only auto-closes the PR when the
@@ -1796,18 +3442,921 @@ def main():
             if pr_state != "closed":
                 close_message = "PR #%s is still open after push; closing it explicitly." % pr_num
                 print("\n%s\n" % bold(close_message))
-                close_pr(pr_num)
+                github.close_pr(pr_num)
             # Record every branch that successfully received the change on the PR.
             post_merge_comment(pr_num, merged_commits)
+        # This is deliberately in the finally block: once the target branch has been pushed,
+        # cancelling a later cherry-pick must not bypass the JIRA update decision.
+        update_jira_for_pr(pr_num, title, merged_refs)
 
-    # asf_jira is guaranteed to be set here: initialize_jira() fails fast otherwise.
-    continue_maybe("Would you like to update an associated JIRA?")
-    jira_comment = "Issue resolved by pull request %s\n[%s/%s]" % (
-        pr_num,
-        GITHUB_BASE,
-        pr_num,
-    )
-    resolve_jira_issues(title, merged_refs, jira_comment, title_components)
+
+__test__ = {
+    "revert_jira_issue": """
+    A revert removes the versions for its branches while preserving released, archived,
+    and unrelated versions. JIRA receives individual removals so concurrent additions survive.
+
+    >>> from contextlib import redirect_stdout
+    >>> from io import StringIO
+    >>> from types import SimpleNamespace
+    >>> from unittest.mock import Mock, call, patch
+    >>> def version(name, released=False, archived=False):
+    ...     return SimpleNamespace(
+    ...         name=name, raw={"name": name, "released": released, "archived": archived})
+    >>> versions = [version("5.0.0"), version("4.3.0"), version("4.2.1", released=True),
+    ...             version("4.2.0", archived=True), version("3.5.2")]
+    >>> issue = Mock(key="SPARK-1234")
+    >>> issue.fields.fixVersions = versions
+    >>> issue.fields.status.name = "Open"
+    >>> client = Mock()
+    >>> client.project_versions.return_value = versions
+    >>> writer = Jira(client)
+    >>> def run_revert(answers):
+    ...     issue.reset_mock()
+    ...     client.reset_mock()
+    ...     output = StringIO()
+    ...     with (
+    ...         patch.dict(revert_jira_issue.__globals__, asf_jira=client,
+    ...                    jira_ops=writer, get_jira_issue=Mock(return_value=issue)),
+    ...         patch("builtins.input", side_effect=answers),
+    ...         redirect_stdout(output),
+    ...     ):
+    ...         revert_jira_issue(["master", "branch-4.x"], "SPARK-1234")
+    ...     return output.getvalue()
+    >>> output = run_revert(["", "y"])
+    >>> issue.update.assert_called_once_with(update={"fixVersions": [
+    ...     {"remove": {"name": "5.0.0"}}, {"remove": {"name": "4.3.0"}}]})
+    >>> client.mock_calls
+    [call.project_versions('SPARK')]
+
+    The committer can narrow the selection, decline confirmation, or skip the update.
+
+    >>> output = run_revert(["5.0.0", "y"])
+    >>> issue.update.assert_called_once_with(
+    ...     update={"fixVersions": [{"remove": {"name": "5.0.0"}}]})
+    >>> for answers in (["", "n"], ["", ""], ["skip"]):
+    ...     output = run_revert(answers)
+    ...     issue.update.assert_not_called()
+
+    Released, archived, and unrecorded versions are rejected even when entered manually.
+
+    >>> output = run_revert(["4.2.1", "4.2.0", "9.9.9", "", "y"])
+    >>> output.count("Select only unreleased fix versions currently recorded on this JIRA.")
+    3
+    >>> issue.update.assert_called_once_with(update={"fixVersions": [
+    ...     {"remove": {"name": "5.0.0"}}, {"remove": {"name": "4.3.0"}}]})
+
+    Dry runs log the removal without writing to JIRA.
+
+    >>> writer = DryRunJira(client)
+    >>> output = run_revert(["", "y"])
+    >>> "DRY-RUN: would remove fixVersions=['5.0.0', '4.3.0'] from JIRA SPARK-1234." in output
+    True
+    >>> issue.update.assert_not_called()
+    >>> client.mock_calls
+    [call.project_versions('SPARK')]
+
+    Removing the last fix versions is allowed. A rerun with no matching versions is a no-op.
+
+    >>> writer = Jira(client)
+    >>> issue.fields.fixVersions = versions[:2]
+    >>> output = run_revert(["", "y"])
+    >>> issue.update.assert_called_once_with(update={"fixVersions": [
+    ...     {"remove": {"name": "5.0.0"}}, {"remove": {"name": "4.3.0"}}]})
+    >>> issue.fields.fixVersions = versions[2:]
+    >>> output = run_revert([""])
+    >>> issue.update.assert_not_called()
+    >>> issue.fields.fixVersions = []
+    >>> output = run_revert([])
+    >>> "no unreleased fix versions to remove" in output
+    True
+    >>> issue.update.assert_not_called()
+
+    Resolved and closed tickets can be reopened even when no fix versions remain.
+
+    >>> client.transitions.return_value = [
+    ...     {"id": "701", "name": "Close Issue"}, {"id": "3", "name": "Reopen Issue"}]
+    >>> for status in ("Resolved", "Closed"):
+    ...     issue.fields.status.name = status
+    ...     output = run_revert(["y"])
+    ...     client.transitions.assert_called_once_with("SPARK-1234")
+    ...     client.transition_issue.assert_called_once_with("SPARK-1234", "3")
+    ...     issue.update.assert_not_called()
+
+    Reopening is optional and independent of fix-version removal.
+
+    >>> for answer in ("n", ""):
+    ...     output = run_revert([answer])
+    ...     client.transitions.assert_not_called()
+    ...     client.transition_issue.assert_not_called()
+    >>> issue.fields.fixVersions = versions
+    >>> output = run_revert(["", "y", "y"])
+    >>> issue.update.assert_called_once_with(update={"fixVersions": [
+    ...     {"remove": {"name": "5.0.0"}}, {"remove": {"name": "4.3.0"}}]})
+    >>> client.transition_issue.assert_called_once_with("SPARK-1234", "3")
+    >>> for answers in (["skip", "y"], ["", "n", "y"]):
+    ...     output = run_revert(answers)
+    ...     issue.update.assert_not_called()
+    ...     client.transition_issue.assert_called_once_with("SPARK-1234", "3")
+    >>> output = run_revert(["", "y", "n"])
+    >>> issue.update.assert_called_once()
+    >>> client.transition_issue.assert_not_called()
+
+    Dry runs log both updates and leave JIRA untouched.
+
+    >>> writer = DryRunJira(client)
+    >>> output = run_revert(["", "y", "y"])
+    >>> "DRY-RUN: would remove fixVersions=" in output
+    True
+    >>> "DRY-RUN: would reopen JIRA SPARK-1234." in output
+    True
+    >>> issue.update.assert_not_called()
+    >>> client.transition_issue.assert_not_called()
+
+    Unavailable transitions report that manual action is needed.
+
+    >>> writer = Jira(client)
+    >>> client.transitions.return_value = [{"id": "701", "name": "Close Issue"}]
+    >>> output = run_revert(["skip", "y"])
+    >>> "No Reopen Issue transition available for SPARK-1234; reopen it manually." in output
+    True
+    >>> client.transition_issue.assert_not_called()
+
+    Lookup and transition failures are nonfatal and request manual reopening.
+
+    >>> client.transitions.side_effect = RuntimeError("lookup failed")
+    >>> output = run_revert(["skip", "y"])
+    >>> "Failed to reopen SPARK-1234; reopen it manually: lookup failed" in output
+    True
+    >>> client.transition_issue.assert_not_called()
+    >>> client.transitions.side_effect = None
+    >>> client.transitions.return_value = [{"id": "3", "name": "Reopen Issue"}]
+    >>> client.transition_issue.side_effect = RuntimeError("permission denied")
+    >>> output = run_revert(["skip", "y"])
+    >>> "Failed to reopen SPARK-1234; reopen it manually: permission denied" in output
+    True
+    >>> client.transition_issue.assert_called_once_with("SPARK-1234", "3")
+    >>> client.transition_issue.side_effect = None
+
+    Active tickets require no reopening prompt or transition lookup.
+
+    >>> issue.fields.fixVersions = []
+    >>> for status in ("Open", "In Progress", "Reopened"):
+    ...     issue.fields.status.name = status
+    ...     output = run_revert([])
+    ...     client.transitions.assert_not_called()
+    ...     client.transition_issue.assert_not_called()
+    """,
+    "update_jira_for_revert": """
+    Reverts update each leading JIRA id once and bypass the resolve/add path. The
+    direction comes from the title's wrappers (see _is_net_revert), so a net re-land
+    resolves.
+
+    >>> from contextlib import redirect_stdout
+    >>> from io import StringIO
+    >>> from unittest.mock import Mock, call, patch
+    >>> reverter, resolver, confirm = Mock(), Mock(), Mock()
+    >>> def update(title, branches):
+    ...     reverter.reset_mock()
+    ...     resolver.reset_mock()
+    ...     confirm.reset_mock()
+    ...     with (
+    ...         patch.dict(update_jira_for_pr.__globals__, revert_jira_issue=reverter,
+    ...                    resolve_jira_issue=resolver, continue_maybe=confirm),
+    ...         redirect_stdout(StringIO()),
+    ...     ):
+    ...         update_jira_for_pr("123", title, branches)
+    >>> title = 'Revert "[SPARK-1234][SPARK-5678][SQL] Fix mentions SPARK-9999"'
+    >>> update(title, ["master", "branch-4.x"])
+    >>> assert reverter.call_args_list == [
+    ...     call(['master', 'branch-4.x'], 'SPARK-1234'),
+    ...     call(['master', 'branch-4.x'], 'SPARK-5678')]
+    >>> resolver.assert_not_called()
+
+    Backport-only runs use the same revert path. A missing JIRA id is entered interactively.
+
+    >>> update('Revert "[SPARK-1234][SQL] Fix"', ["branch-4.2"])
+    >>> reverter.assert_called_once_with(["branch-4.2"], "SPARK-1234")
+    >>> update('Revert "Fix"', ["master"])
+    >>> reverter.assert_called_once_with(["master"], "")
+
+    A bare leading id, as in the old subject SPARK-49004, still reaches the revert path.
+
+    >>> update('Revert "SPARK-49004"', ["master"])
+    >>> reverter.assert_called_once_with(["master"], "SPARK-49004")
+
+    Wrapped skip tags follow the same policy as direct merges for FOLLOWUP, including the
+    FOLLOW-UP alias, and for MINOR and TRIVIAL when the title has no leading id. The tags are
+    read even from a wrapped title that Title.parse rejects.
+
+    >>> for title in ('Revert "[MINOR][SQL] Fix"', 'Revert "[TRIVIAL][SQL] Fix"',
+    ...               'Revert "[SPARK-1234][SQL][FOLLOWUP] Fix"',
+    ...               'Revert "[SPARK-1234][SQL][FOLLOW-UP] Fix"',
+    ...               'Revert "[SPARK-1234][SQL][FOLLOWUP][MINOR] Fix"',
+    ...               'Revert "[MINOR][TRIVIAL][SQL] Fix"', 'Revert "[SQL][MINOR] Fix"',
+    ...               'Revert "[MINOR][SPARK-1234] Fix"'):
+    ...     update(title, ["master"])
+    ...     reverter.assert_not_called()
+    ...     resolver.assert_not_called()
+    ...     confirm.assert_not_called()
+
+    Title.parse rejects an id next to MINOR or TRIVIAL, and so does the component prompt, so
+    only an older subject opens with an id and has one. Such a commit was normally merged as
+    the fix for its id, so the id is updated.
+
+    >>> update('Revert "[SPARK-1234][SQL][MINOR] Fix"', ["master"])
+    >>> reverter.assert_called_once_with(["master"], "SPARK-1234")
+
+    The skip tags come from the title alone, so direct merges skip through it.
+
+    >>> for title in ("[MINOR][SQL] Fix", "[TRIVIAL][SQL] Fix", "[SPARK-1234][SQL][FOLLOWUP] Fix"):
+    ...     update(title, ["master"])
+    ...     reverter.assert_not_called()
+    ...     resolver.assert_not_called()
+    ...     confirm.assert_not_called()
+
+    Reapply titles are unwrapped too, so their skip tags apply as well.
+
+    >>> for title in ('Reapply "[MINOR][SQL] Fix"', 'Reapply "[SPARK-1234][SQL][FOLLOWUP] Fix"',
+    ...               'Reapply "[SPARK-1234][SQL][FOLLOW-UP] Fix"',
+    ...               'Reapply "[SPARK-1234][SQL][FOLLOWUP][MINOR] Fix"'):
+    ...     update(title, ["master"])
+    ...     reverter.assert_not_called()
+    ...     resolver.assert_not_called()
+    ...     confirm.assert_not_called()
+
+    Nested wrappers are unwrapped before the skip-tag and id checks, so an inner
+    skip tag is still honored and an inner id still reaches the revert path. A
+    revert of a reapply nets to a revert.
+
+    >>> update('Revert "Reapply "[MINOR][SQL] Fix""', ["master"])
+    >>> reverter.assert_not_called()
+    >>> resolver.assert_not_called()
+    >>> confirm.assert_not_called()
+    >>> update('Revert "Reapply "[SPARK-1234][SQL] Fix""', ["master"])
+    >>> reverter.assert_called_once_with(["master"], "SPARK-1234")
+
+    Ordinary merges and reapplies resolve the leading id, not an id in the title body. The
+    components to reconcile are read from an ordinary title; a Revert/Reapply title, or an
+    older subject that Title.parse rejects, has none.
+
+    >>> for title, components in (('[SPARK-1234][SQL] Fix mentions SPARK-9999', ['SQL']),
+    ...                           ('[SPARK-1234][sql][DOCS] Fix', ['SQL', 'DOC']),
+    ...                           ('Reapply "[SPARK-1234][SQL] Fix"', []),
+    ...                           ('Reapply "[SPARK-1234][SQL][TRIVIAL] Fix"', []),
+    ...                           ('[SPARK-1234][SQL][MINOR] Fix', [])):
+    ...     update(title, ["master"])
+    ...     reverter.assert_not_called()
+    ...     resolver.assert_called_once_with(
+    ...         ["master"],
+    ...         "Issue resolved by pull request 123\\n[https://github.com/apache/spark/pull/123]",
+    ...         "SPARK-1234", title_components=components)
+    >>> update("[SPARK-1234][SPARK-5678][SQL] Fix", ["master"])
+    >>> [c.args[2] for c in resolver.call_args_list]
+    ['SPARK-1234', 'SPARK-5678']
+
+    The direction is decided by all the wrappers, not only the outermost one: a revert
+    of a revert re-lands the change and resolves the id, while a reapply of a revert
+    reverts it.
+
+    >>> update('Revert "Revert "[SPARK-1234][SQL] Fix""', ["master"])
+    >>> reverter.assert_not_called()
+    >>> resolver.assert_called_once_with(
+    ...     ["master"],
+    ...     "Issue resolved by pull request 123\\n[https://github.com/apache/spark/pull/123]",
+    ...     "SPARK-1234", title_components=[])
+    >>> update('Reapply "Revert "[SPARK-1234][SQL] Fix""', ["master"])
+    >>> reverter.assert_called_once_with(["master"], "SPARK-1234")
+    >>> resolver.assert_not_called()
+
+    A title without an id still offers to resolve one that the committer enters.
+
+    >>> update('Reapply "Fix"', ["master"])
+    >>> resolver.assert_called_once_with(
+    ...     ["master"],
+    ...     "Issue resolved by pull request 123\\n[https://github.com/apache/spark/pull/123]",
+    ...     title_components=[])
+
+    When JIRA was disabled at startup (unreachable), every shape of update is skipped: no
+    prompt, no resolve, no revert. The disabled message is the one printed even for titles
+    carrying skip tags, so the committer is told JIRA was the reason.
+
+    >>> def update_disabled(title):
+    ...     reverter.reset_mock()
+    ...     resolver.reset_mock()
+    ...     confirm.reset_mock()
+    ...     output = StringIO()
+    ...     with (
+    ...         patch.dict(update_jira_for_pr.__globals__, revert_jira_issue=reverter,
+    ...                    resolve_jira_issue=resolver, continue_maybe=confirm,
+    ...                    jira_disabled=True),
+    ...         redirect_stdout(output),
+    ...     ):
+    ...         update_jira_for_pr("123", title, ["master"])
+    ...     assert not reverter.called
+    ...     assert not resolver.called
+    ...     assert not confirm.called
+    ...     return output.getvalue()
+    >>> disabled_outputs = [
+    ...     update_disabled(t)
+    ...     for t in ('[SPARK-1234][SQL] Fix', 'Revert "[SPARK-1234][SQL] Fix"',
+    ...               'Revert "[MINOR][SQL] Fix"', '[SPARK-1234][SQL][FOLLOWUP] Fix')]
+    >>> all("JIRA is disabled; skipping JIRA update for PR #123" in o for o in disabled_outputs)
+    True
+    >>> all("because title has" not in o for o in disabled_outputs)
+    True
+    """,
+    "prompt_for_components": """
+    The prompt rejects MINOR and TRIVIAL, which belong at the start of the title, tokens that
+    the bracket-tag scan cannot read back, and SPARK ids, and asks again until the components
+    include a primary one.
+
+    >>> from contextlib import redirect_stdout
+    >>> from io import StringIO
+    >>> from unittest.mock import patch
+    >>> output = StringIO()
+    >>> answers = ["sql,minor", " Trivial ", "sql, spark core", "sql,[tests]", "sql,spark-2",
+    ...            "sql][minor", "tests", "sql, follow-up"]
+    >>> with (
+    ...     patch.dict(prompt_for_components.__globals__, bold_input=lambda _: answers.pop(0)),
+    ...     redirect_stdout(output),
+    ... ):
+    ...     components = prompt_for_components()
+    >>> components
+    ['SQL', 'FOLLOWUP']
+    >>> answers
+    []
+    >>> "[MINOR] cannot be entered here" in output.getvalue()
+    True
+    >>> "[TRIVIAL] cannot be entered here" in output.getvalue()
+    True
+    >>> for bad in ("SPARK CORE", "[TESTS]", "SPARK-2", "SQL][MINOR"):
+    ...     assert "Invalid component(s): %s." % bad in output.getvalue(), bad
+    """,
+    "prepare_merge_title": """
+    An ordinary title is parsed and its components are normalized in it, prompting for a
+    primary component when there is none. A changed title is printed.
+
+    >>> from unittest.mock import Mock, patch
+    >>> stop, prompt = Mock(side_effect=SystemExit), Mock(return_value=["CORE"])
+    >>> def prepare(title):
+    ...     stop.reset_mock()
+    ...     prompt.reset_mock()
+    ...     with patch.dict(prepare_merge_title.__globals__, fail=stop,
+    ...                     prompt_for_components=prompt):
+    ...         try:
+    ...             return prepare_merge_title(title)
+    ...         except SystemExit:
+    ...             return stop.call_args.args[0]
+    >>> prepare("[SPARK-1234][SQL] Fix")
+    '[SPARK-1234][SQL] Fix'
+    >>> prepare("[SPARK-1234][FOLLOWUP][sql] Fix")
+    Normalized title: [SPARK-1234][SQL][FOLLOWUP] Fix
+    '[SPARK-1234][SQL][FOLLOWUP] Fix'
+    >>> prepare("[SPARK-1234] Fix")
+    Normalized title: [SPARK-1234][CORE] Fix
+    '[SPARK-1234][CORE] Fix'
+    >>> prepare("[SPARK-1234][SQL][4.2][sql] Fix")
+    Normalized title: [SPARK-1234][4.2][SQL] Fix
+    '[SPARK-1234][4.2][SQL] Fix'
+    >>> with patch.dict(prepare_merge_title.__globals__, print_error=print):
+    ...     prepare("[SPARK-1234][SQL][BOGUS] Fix")
+    Title has unknown tag(s): [BOGUS]
+    '[SPARK-1234][SQL][BOGUS] Fix'
+    >>> prepare("[SQL] Fix")
+    "Malformed PR title: title must start with [SPARK-NNNNN], [MINOR], or [TRIVIAL]: '[SQL] Fix'"
+
+    A Revert/Reapply title, nested or not, is kept as is, without a prompt.
+
+    >>> for title in ('Revert "[SPARK-1234][SQL] Fix"', 'Revert "Revert "[SPARK-1234][SQL] Fix""',
+    ...               'Reapply "[SPARK-1234][SQL] Fix"',
+    ...               'Revert "Revert to using comma-delimited split"'):
+    ...     print(prepare(title) == title, prompt.called)
+    True False
+    True False
+    True False
+    True False
+
+    Surrounding whitespace is stripped from either kind of title, and the result printed.
+
+    >>> prepare(' Revert "[SPARK-1234][SQL] Fix" ')
+    Normalized title: Revert "[SPARK-1234][SQL] Fix"
+    'Revert "[SPARK-1234][SQL] Fix"'
+    >>> prepare(" [SPARK-1234][SQL] Fix ")
+    Normalized title: [SPARK-1234][SQL] Fix
+    '[SPARK-1234][SQL] Fix'
+
+    A bare Revert " is not a wrapper, so it is parsed as an ordinary title and rejected.
+
+    >>> print(prepare('Revert "'))
+    Malformed PR title: title must start with [SPARK-NNNNN], [MINOR], or [TRIVIAL]: 'Revert "'
+    >>> print(prepare('Reapply "'))
+    Malformed PR title: title must start with [SPARK-NNNNN], [MINOR], or [TRIVIAL]: 'Reapply "'
+    """,
+    "check_wrapped_title": """
+    A title whose innermost title still starts with Revert or Reapply, or a form of either,
+    is warned about with the direction it takes, and the merge asks for a confirmation.
+
+    >>> from contextlib import redirect_stdout
+    >>> from io import StringIO
+    >>> from unittest.mock import Mock, patch
+    >>> stop, confirm = Mock(side_effect=SystemExit), Mock()
+    >>> def check(title):
+    ...     stop.reset_mock()
+    ...     confirm.reset_mock()
+    ...     output = StringIO()
+    ...     with (
+    ...         patch.dict(check_wrapped_title.__globals__, fail=stop, continue_maybe=confirm),
+    ...         redirect_stdout(output),
+    ...     ):
+    ...         try:
+    ...             check_wrapped_title(title)
+    ...         except SystemExit:
+    ...             return "fail: " + stop.call_args.args[0]
+    ...     if confirm.called:
+    ...         confirm.assert_called_once_with("Merge with this title?")
+    ...         said = output.getvalue()
+    ...         shape = ("word" if "still starts with Revert or Reapply" in said
+    ...                  else "quote" if "starts with a quote." in said else "one word")
+    ...         line = said.splitlines()[1]
+    ...         assert line.startswith("  JIRA update") and said.count("JIRA update") == 1, said
+    ...         taken = ("a revert" if "a revert, which offers to remove fix versions" in line
+    ...                  else "a re-land" if "a re-land, which resolves the ticket or adds"
+    ...                  " fix versions" in line else line)
+    ...         return "confirm: %s (%s)" % (taken, shape)
+    ...     return output.getvalue() or "pass"
+    >>> for title in ('Revert "Revert "[SPARK-1234][SQL] Fix"',
+    ...               'Reapply "Revert "[SPARK-1234][SQL] Fix"',
+    ...               'Revert "Revert [SPARK-1234][SQL] Fix""',
+    ...               'Revert "revert [SPARK-1234][SQL] Fix"',
+    ...               'Revert "Reverted [SPARK-1234][SQL] Fix"',
+    ...               'Revert "Reapply "[SPARK-1234][SQL] Fix"',
+    ...               'Revert "Reapplied [SPARK-1234][SQL] Fix"',
+    ...               'Revert "Re-apply [SPARK-1234][SQL] Fix"',
+    ...               'Revert "Revert to using comma-delimited split"',
+    ...               'Reapply "Revert to using comma-delimited split"',
+    ...               'Revert "Revert "Revert "[SPARK-1234][SQL] Fix""'):
+    ...     print(check(title))
+    confirm: a revert (word)
+    confirm: a re-land (word)
+    confirm: a revert (word)
+    confirm: a revert (word)
+    confirm: a revert (word)
+    confirm: a revert (word)
+    confirm: a revert (word)
+    confirm: a revert (word)
+    confirm: a revert (word)
+    confirm: a re-land (word)
+    confirm: a re-land (word)
+
+    So is an innermost title that starts with a quote, or with one word and a quote, as a
+    doubled or misspelled wrapper would, including a subject that only quotes something
+    after its first word. A quote later in the title is not warned about.
+
+    >>> for title in ('Revert ""[SPARK-1234][SQL] Fix""',
+    ...               'Revert "Reaply "[SPARK-1234][SQL] Fix""',
+    ...               'Reapply "Revet "[SPARK-1234][SQL] Fix""',
+    ...               'Revert "Reaply"[SPARK-1234][SQL] Fix""',
+    ...               'Revert ""launch" scripts is more accurate terminology"',
+    ...               'Revert "Rename "jobs" to "applications""',
+    ...               'Revert "[SPARK-1234][SQL] Support "foo" in X"',
+    ...               'Revert "[SPARK-1234][SQL] Fix "foo""'):
+    ...     print(check(title))
+    confirm: a revert (quote)
+    confirm: a revert (one word)
+    confirm: a re-land (one word)
+    confirm: a revert (one word)
+    confirm: a revert (quote)
+    confirm: a revert (one word)
+    pass
+    pass
+
+    The whole warning, here for a misspelled wrapper:
+
+    >>> said = []
+    >>> with patch.dict(check_wrapped_title.__globals__,
+    ...                 print_error=lambda msg: said.append(msg) or print(msg)):
+    ...     print(check('Revert "Reaply "[SPARK-1234][SQL] Fix""'))
+    confirm: a revert (one word)
+    >>> print(said[0])  # doctest: +NORMALIZE_WHITESPACE
+    The innermost title of Revert "Reaply "[SPARK-1234][SQL] Fix"" starts with one word and
+    a quote.
+      JIRA update: a revert, which offers to remove fix versions (decided by the outer
+      wrappers alone; no JIRA id or skip tag is read from the innermost title).
+      If a quote is doubled or a wrapper misspelled, e.g. Revert ""..."" or Reaply "...", fix
+      it so that each layer is Revert "..." or Reapply "...", e.g. Reapply "[SPARK-N] ..."
+      for a revert of a revert.
+      If the subject only quotes something, as in Rename "jobs" to ... or "launch" ..., keep
+      the title, and enter the JIRA id at the prompt after the merge, or leave it blank to
+      skip.
+
+    When JIRA is disabled, the warning says to reconcile the ticket by hand instead of
+    entering an id at a prompt that will not come.
+
+    >>> said = []
+    >>> with patch.dict(check_wrapped_title.__globals__, jira_disabled=True,
+    ...                 print_error=lambda msg: said.append(msg) or print(msg)):
+    ...     print(check('Revert "Revert to using comma-delimited split"'))
+    confirm: a revert (word)
+    >>> print(said[0])  # doctest: +NORMALIZE_WHITESPACE
+    The innermost title of Revert "Revert to using comma-delimited split" still starts with
+    Revert or Reapply.
+      JIRA update (disabled for this run): would be a revert, which offers to remove fix
+      versions (decided by the outer wrappers alone; no JIRA id or skip tag is read from the
+      innermost title).
+      If a quote was dropped, or the innermost title is the subject of a revert commit, e.g.
+      Revert [SPARK-N] ..., retitle the PR so that each layer is Revert "..." or
+      Reapply "...", e.g. Reapply "[SPARK-N] ..." for a revert of a revert.
+      If it only starts with the word, as in Revert to using ..., keep the title, and
+      reconcile the ticket by hand after the merge.
+
+    An innermost title that is empty, or made only of quotes and spaces, fails. Balanced
+    wrappers and ordinary titles pass.
+
+    >>> for title in ('Revert ""', 'Revert " "', 'Reapply ""', 'Revert "Revert \"\"\"'):
+    ...     print(check(title))
+    fail: Empty title inside the Revert/Reapply wrappers of the PR title: Revert ""
+    fail: Empty title inside the Revert/Reapply wrappers of the PR title: Revert " "
+    fail: Empty title inside the Revert/Reapply wrappers of the PR title: Reapply ""
+    fail: Empty title inside the Revert/Reapply wrappers of the PR title: Revert "Revert \"\"\"
+    >>> for title in ('Revert \"\"\"\"', 'Revert \"\"\"', 'Revert "Revert \"\"\"\"',
+    ...               'Revert "" ""'):
+    ...     print(check(title).split(" inside ")[0])
+    fail: Empty title
+    fail: Empty title
+    fail: Empty title
+    fail: Empty title
+    >>> for title in ('Revert "[SPARK-1234][SQL] Fix"', 'Revert "Reapply "[SPARK-1234] Fix""',
+    ...               'Revert "SPARK-49004"', 'Revert "Fix"', '[SPARK-1234][SQL] Revert X',
+    ...               'Revert "[SPARK-1234][SQL] Revert X"'):
+    ...     print(check(title))
+    pass
+    pass
+    pass
+    pass
+    pass
+    pass
+    """,
+    "main_titles": """
+    main() hands the title that title_for_run() returns to the commit, the JIRA checks, and
+    the JIRA update: on a merge the prepared title, with a component entered at the prompt;
+    on a backport of a commit with the PR's merge footer, the committed subject, or, when
+    the current PR title would update JIRA differently and the committer answers y at the
+    question printed after the cherry-picks, right before the JIRA update, the current PR
+    title; and on a backport without that footer, the prepared current PR title. Every
+    GitHub, git, and JIRA call is mocked. Each run prints what it does, and returns the
+    title that update_jira_for_pr() receives, the title committed and checked against
+    JIRA (None on a backport), whether a component was asked for, and the exit code.
+
+    >>> import sys
+    >>> from unittest.mock import Mock, patch
+    >>> footer = "\\n\\nBody\\n\\nCloses #1 from x/h.\\n\\nAuthored-by: X <x@x>"
+    >>> def run(pr_title, message=None, answer="n"):
+    ...     pr = {"url": "u", "title": pr_title, "draft": False, "body": "b",
+    ...           "base": {"ref": "master"}, "user": {"login": "x"}, "head": {"ref": "h"},
+    ...           "state": "open" if message is None else "closed", "mergeable": True}
+    ...     requested = []
+    ...     def get_json(url):
+    ...         requested.append(url)
+    ...         if url.endswith("/branches"):
+    ...             return [{"name": "master"}, {"name": "branch-4.x"}]
+    ...         if url.endswith("/pulls/1"):
+    ...             return pr
+    ...         if url.endswith("/users/x"):
+    ...             return {"name": "X", "email": "x@x", "id": 1}
+    ...         return []
+    ...     def ask(prompt, *args, **kwargs):
+    ...         if prompt.startswith("Update JIRA from the current PR title"):
+    ...             print("asked: use the current PR title?")
+    ...             return answer
+    ...         if "into another branch" in prompt and message is not None:
+    ...             print("asked: pick another?")
+    ...         return "n"
+    ...     prompt = Mock(return_value=["CORE"])
+    ...     update = Mock(side_effect=lambda *args: print("JIRA update"))
+    ...     merge, check = Mock(return_value="abc"), Mock()
+    ...     pick = Mock(side_effect=lambda *a, **k: print("picked") or [("branch-4.x", "d")])
+    ...     found = (None, None) if message is None else ("abc", message)
+    ...     pick_default = Mock(return_value="branch-4.x")
+    ...     with (
+    ...         patch.object(sys, "argv", ["merge_spark_pr.py", "1"]), patch("os.chdir"),
+    ...         patch.dict(main.__globals__, DRY_RUN_ENV=False, check_script_up_to_date=Mock(),
+    ...                    initialize_jira=Mock(), asf_jira=Mock(), jira_disabled=False,
+    ...                    clean_up=Mock(), get_current_ref=Mock(return_value="master"),
+    ...                    get_json=get_json, get_json_pages=get_json,
+    ...                    find_merge_commit=Mock(return_value=found),
+    ...                    git=Mock(), github=Mock(), check_linked_jira_issues=check,
+    ...                    continue_maybe=Mock(), get_input=ask, merge_pr=merge,
+    ...                    post_merge_comment=Mock(), prompt_for_components=prompt,
+    ...                    branches_with_merge_footer=Mock(return_value=[]),
+    ...                    default_pick_branch=pick_default,
+    ...                    cherry_pick=pick, update_jira_for_pr=update, print=Mock(),
+    ...                    print_error=lambda msg: print(msg.splitlines()[0])),
+    ...     ):
+    ...         code = None
+    ...         try:
+    ...             main()
+    ...         except SystemExit as e:
+    ...             code = e.code
+    ...     committed = merge.call_args.args[2] if merge.called else None
+    ...     assert committed == (check.call_args.args[1] if check.called else None)
+    ...     assert all(c.args[0] == ["branch-4.x"] for c in pick_default.call_args_list)
+    ...     # A merge reads no events, and a backport reads neither commits nor the author.
+    ...     unused = ("/issues/1/events",) if message is None else ("/pulls/1/commits", "/users/x")
+    ...     assert not [url for url in requested if url.endswith(unused)], requested
+    ...     return update.call_args.args[1], committed, prompt.called, code
+
+    A merge commits, checks, and updates JIRA from the prepared title:
+
+    >>> run("[SPARK-1] Fix")
+    JIRA update
+    ('[SPARK-1][CORE] Fix', '[SPARK-1][CORE] Fix', True, None)
+
+    A merge runs the wrapper check, which warns here:
+
+    >>> run('Revert "Revert to using X"')
+    The innermost title of Revert "Revert to using X" still starts with Revert or Reapply.
+    JIRA update
+    ('Revert "Revert to using X"', 'Revert "Revert to using X"', False, None)
+
+    A backport of a commit with the PR's merge footer reads the committed subject without
+    preparing the current PR title, whether the PR title is the same, differs only in how a
+    tag is spelled, or also lacks the component entered at the merge prompt:
+
+    >>> run("[SPARK-1][SQL] Fix", "[SPARK-1][SQL] Fix" + footer)
+    picked
+    asked: pick another?
+    JIRA update
+    ('[SPARK-1][SQL] Fix', None, False, 0)
+    >>> run("[SPARK-1][CORE][TESTS] Fix", "[SPARK-1][CORE][TEST] Fix" + footer)
+    picked
+    asked: pick another?
+    JIRA update
+    ('[SPARK-1][CORE][TEST] Fix', None, False, 0)
+    >>> run("[SPARK-1][TESTS] Fix", "[SPARK-1][CORE][TEST] Fix" + footer)
+    picked
+    asked: pick another?
+    JIRA update
+    ('[SPARK-1][CORE][TEST] Fix', None, False, 0)
+
+    For a PR title edited to another id since, the notice and the question come after the
+    cherry-picks, right before the JIRA update:
+
+    >>> run("[SPARK-2][SQL] Fix", "[SPARK-1][SQL] Fix" + footer)
+    picked
+    asked: pick another?
+    The merge commit subject and the current PR title would update JIRA differently:
+    asked: use the current PR title?
+    JIRA update
+    ('[SPARK-1][SQL] Fix', None, False, 0)
+    >>> run("[SPARK-2][SQL] Fix", "[SPARK-1][SQL] Fix" + footer, answer="y")
+    picked
+    asked: pick another?
+    The merge commit subject and the current PR title would update JIRA differently:
+    asked: use the current PR title?
+    JIRA update
+    ('[SPARK-2][SQL] Fix', None, False, 0)
+
+    A backport does not run the wrapper check, which is for titles about to be committed,
+    even when it prepares the current PR title for a commit without the PR's merge footer:
+
+    >>> wrapped = 'Revert "Revert to using comma-delimited split"'
+    >>> run(wrapped, wrapped + footer)
+    picked
+    asked: pick another?
+    JIRA update
+    ('Revert "Revert to using comma-delimited split"', None, False, 0)
+    >>> run(wrapped, "[SPARK-3][SQL] Other" + footer.replace("#1", "#3"))
+    picked
+    asked: pick another?
+    JIRA update
+    ('Revert "Revert to using comma-delimited split"', None, False, 0)
+
+    A backport of a commit without the PR's merge footer, e.g. another PR's merge commit
+    linked to the PR's closed event, prepares the current PR title, as before:
+
+    >>> run("[SPARK-2] Fix", "[SPARK-3][SQL] Other" + footer.replace("#1", "#3"))
+    picked
+    asked: pick another?
+    JIRA update
+    ('[SPARK-2][CORE] Fix', None, True, 0)
+    """,
+    "check_linked_jira_issues": """
+    Only the leading ids are fetched and checked, so an Epic that the title body mentions
+    neither blocks the merge nor asks for confirmation.
+
+    >>> from contextlib import redirect_stdout
+    >>> from io import StringIO
+    >>> from unittest.mock import Mock, call, patch
+    >>> def issue(issue_type):
+    ...     i = Mock()
+    ...     i.fields.issuetype.name = issue_type
+    ...     return i
+    >>> client = Mock()
+    >>> client.issue.side_effect = {
+    ...     "SPARK-60328": issue("Sub-task"), "SPARK-60329": issue("Bug"),
+    ...     "SPARK-34261": issue("Epic"), "SPARK-34262": issue("Umbrella")}.__getitem__
+    >>> verify = Mock(return_value="")
+    >>> stop = Mock(side_effect=SystemExit)
+    >>> def check(title, answers=("y",)):
+    ...     for m in (client, verify, stop):
+    ...         m.reset_mock()
+    ...     with (
+    ...         patch.dict(check_linked_jira_issues.__globals__, asf_jira=client,
+    ...                    print_jira_issue_summary=Mock(), format_jira_verification=verify,
+    ...                    fail=stop),
+    ...         patch("builtins.input", side_effect=answers),
+    ...         redirect_stdout(StringIO()),
+    ...     ):
+    ...         check_linked_jira_issues("123", title)
+    >>> check("[SPARK-60328][SQL][TESTS] Use a unique jar copy in the HiveDDLSuite "
+    ...       "SPARK-34261 test")
+    >>> client.issue.call_args_list
+    [call('SPARK-60328')]
+    >>> stop.assert_not_called()
+    >>> verify.call_args.args[2]
+    'SPARK-60328'
+
+    Each leading id is confirmed, and declining one aborts the merge.
+
+    >>> check("[SPARK-60328][SPARK-60329][SQL] Fix", answers=("y", "y"))
+    >>> [c.args[2] for c in verify.call_args_list]
+    ['SPARK-60328', 'SPARK-60329']
+    >>> stop.assert_not_called()
+    >>> try:
+    ...     check("[SPARK-60328][SQL] Fix", answers=("n",))
+    ... except SystemExit:
+    ...     pass
+    >>> stop.call_args.args[0].startswith("Aborting: SPARK-60328 does not match PR #123.")
+    True
+    >>> try:
+    ...     check("[SPARK-60328][SQL] Fix", answers=("",))
+    ... except SystemExit:
+    ...     pass
+    >>> stop.call_count
+    1
+
+    A ticket that cannot be fetched is skipped.
+
+    >>> check("[SPARK-1][SQL] Fix")
+    >>> client.issue.call_args_list
+    [call('SPARK-1')]
+    >>> verify.assert_not_called()
+    >>> stop.assert_not_called()
+    >>> try:
+    ...     check("[SPARK-1][SPARK-34261][SQL] Fix")
+    ... except SystemExit:
+    ...     pass
+    >>> "SPARK-34261 (Epic)" in stop.call_args.args[0]
+    True
+
+    When JIRA was disabled for this run, nothing is fetched or confirmed.
+
+    >>> client.reset_mock()
+    >>> output = StringIO()
+    >>> with (
+    ...     patch.dict(check_linked_jira_issues.__globals__, asf_jira=client, jira_disabled=True),
+    ...     redirect_stdout(output),
+    ... ):
+    ...     check_linked_jira_issues("123", "[SPARK-60328][SQL] Fix")
+    >>> client.issue.assert_not_called()
+    >>> "skipping the Epic/Umbrella check" in output.getvalue()
+    True
+
+    Leading Epic and Umbrella tickets block the merge, all listed at once, before any
+    confirmation.
+
+    >>> try:
+    ...     check("[SPARK-34261][SPARK-60328][SPARK-34262][SQL] Fix")
+    ... except SystemExit:
+    ...     pass
+    >>> msg = stop.call_args.args[0]
+    >>> "SPARK-34261 (Epic), SPARK-34262 (Umbrella)" in msg
+    True
+    >>> verify.assert_not_called()
+
+    A FOLLOWUP tag suppresses the similarity check inside Revert/Reapply wrappers and
+    under the FOLLOW-UP alias too, while a title without the tag is still checked.
+
+    >>> for title in ('[SPARK-60328][SQL][FOLLOWUP] Fix', 'Revert "[SPARK-60328][SQL] Fix"',
+    ...               '[SPARK-60328][SQL] Fix FOLLOWUP handling',
+    ...               'Revert "[SPARK-60328][SQL][FOLLOW-UP] Fix"',
+    ...               'Reapply "[SPARK-60328][FOLLOWUP][SQL][MINOR] Fix"'):
+    ...     check(title)
+    ...     print(verify.call_args.kwargs["is_followup"])
+    True
+    False
+    False
+    True
+    True
+    """,
+    "reconcile_jira_affects_versions": """
+    Blank input accepts the suggested version and appends it to the existing versions:
+
+    >>> from contextlib import redirect_stdout
+    >>> from io import StringIO
+    >>> from types import SimpleNamespace
+    >>> from unittest.mock import Mock, patch
+    >>> issue = SimpleNamespace(
+    ...     key="SPARK-1", fields=SimpleNamespace(versions=[SimpleNamespace(name="5.0.0")]))
+    >>> available = {"5.0.0", "4.4.0"}
+    >>> writer = Mock(spec=Jira)
+    >>> with (
+    ...     patch.dict(reconcile_jira_affects_versions.__globals__, jira_ops=writer),
+    ...     patch("builtins.input", side_effect=["", "", KeyboardInterrupt]) as user_input,
+    ...     redirect_stdout(StringIO()),
+    ... ):
+    ...     reconcile_jira_affects_versions(issue, ["4.4.0"], available, ["4.4.0"])
+    >>> writer.update_affects_versions.assert_called_once_with(issue, ["5.0.0", "4.4.0"])
+    >>> user_input.call_count
+    2
+
+    Explicitly skipping an eligible suggestion leaves the JIRA writer untouched:
+
+    >>> writer.reset_mock()
+    >>> with (
+    ...     patch.dict(reconcile_jira_affects_versions.__globals__, jira_ops=writer),
+    ...     patch("builtins.input", side_effect=["skip", KeyboardInterrupt]) as user_input,
+    ...     redirect_stdout(StringIO()),
+    ... ):
+    ...     reconcile_jira_affects_versions(issue, ["4.4.0"], available, ["4.4.0"])
+    >>> writer.mock_calls
+    []
+    >>> user_input.call_count
+    1
+    """,
+    "jira_is_live": """
+    The probe classifies what urlopen hit: a response -- even a 4xx -- means live, a 5xx or
+    any non-HTTP error (DNS failure, connection refused, TLS error) means dead, and the
+    reason names it so the committer can tell an ASF outage from a local network problem.
+
+    >>> from unittest.mock import MagicMock, Mock, patch
+    >>> from urllib.error import HTTPError, URLError
+    >>> import socket
+    >>> def probe(error=None):
+    ...     opener = MagicMock() if error is None else Mock(side_effect=error)
+    ...     with patch.dict(jira_is_live.__globals__, urlopen=opener):
+    ...         return jira_is_live()
+    >>> probe()
+    (True, None)
+    >>> probe(HTTPError("https://issues.apache.org/jira", 404, "Not Found", {}, None))
+    (True, None)
+    >>> probe(HTTPError("https://issues.apache.org/jira", 503, "Service Unavailable", {}, None))
+    (False, 'server answered HTTP 503')
+    >>> probe(URLError("connection refused"))
+    (False, 'URLError: <urlopen error connection refused>')
+    >>> live, reason = probe(socket.timeout("timed out"))
+    >>> live, "timed out" in reason
+    (False, True)
+    """,
+    "initialize_jira": """
+    An unreachable or unhealthy JIRA disables this run's JIRA steps without touching the
+    client library or credentials, which are only checked once the probe says JIRA is live.
+
+    >>> from contextlib import redirect_stdout
+    >>> from io import StringIO
+    >>> from unittest.mock import Mock, patch
+    >>> def initialize_with_probe(result):
+    ...     output = StringIO()
+    ...     with (
+    ...         patch.dict(initialize_jira.__globals__, jira_is_live=Mock(return_value=result)),
+    ...         redirect_stdout(output),
+    ...     ):
+    ...         initialize_jira()
+    ...         g = initialize_jira.__globals__
+    ...         return (g["jira_disabled"], g["asf_jira"]), output.getvalue()
+    >>> state, output = initialize_with_probe((False, "server answered HTTP 503"))
+    >>> state
+    (True, None)
+    >>> "JIRA is unreachable or unhealthy (server answered HTTP 503)" in output
+    True
+    >>> "disabling all JIRA steps for this merge" in output
+    True
+    """,
+    "jira_ids_to_verify": """
+    The leading ids of the title feed the Epic/Umbrella and match checks; with JIRA disabled
+    they are dropped -- with a reminder naming them, or the generic fallback -- so the checks
+    are skipped rather than failing on asf_jira being None.
+
+    >>> from contextlib import redirect_stdout
+    >>> from io import StringIO
+    >>> from unittest.mock import patch
+    >>> def ids_for(title, disabled):
+    ...     output = StringIO()
+    ...     with (
+    ...         patch.dict(jira_ids_to_verify.__globals__, jira_disabled=disabled),
+    ...         redirect_stdout(output),
+    ...     ):
+    ...         return jira_ids_to_verify(title), output.getvalue()
+    >>> ids_for("[SPARK-1234][SPARK-5678][SQL] Fix", False)
+    (['SPARK-1234', 'SPARK-5678'], '')
+    >>> ids, output = ids_for("[SPARK-1234][SQL] Fix mentions SPARK-9999", True)
+    >>> ids, "Confirm SPARK-1234 manually" in output
+    ([], True)
+    >>> ids, output = ids_for("[SQL] Fix", True)
+    >>> ids, "the linked ticket(s)" in output
+    ([], True)
+    """,
+}
 
 
 if __name__ == "__main__":

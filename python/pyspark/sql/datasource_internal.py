@@ -16,11 +16,13 @@
 #
 
 
-import json
 import copy
+import json
 from itertools import chain
-from typing import Iterator, List, Optional, Sequence, Tuple, Type, Dict
+from typing import Dict, Iterator, List, Optional, Sequence, Tuple, Type
 
+from pyspark.errors import PySparkNotImplementedError
+from pyspark.errors.exceptions.base import PySparkException
 from pyspark.sql.datasource import (
     DataSource,
     DataSourceStreamReader,
@@ -31,13 +33,11 @@ from pyspark.sql.streaming.datasource import (
     ReadAllAvailable,
     ReadLimit,
     ReadMaxBytes,
+    ReadMaxFiles,
     ReadMaxRows,
     ReadMinRows,
-    ReadMaxFiles,
 )
 from pyspark.sql.types import StructType
-from pyspark.errors import PySparkNotImplementedError
-from pyspark.errors.exceptions.base import PySparkException
 
 
 def _streamReader(datasource: DataSource, schema: StructType) -> "DataSourceStreamReader":
@@ -105,6 +105,9 @@ class _SimpleStreamReaderWrapper(DataSourceStreamReader):
         if end_str != start_str:
             self.cache.append(PrefetchedCacheEntry(start, end, it))
             return
+        # read() may return a list instead of an iterator.
+        if isinstance(it, list):
+            it = iter(it)
         try:
             next(it)
         except StopIteration:

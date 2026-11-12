@@ -15,29 +15,29 @@
 # limitations under the License.
 #
 
-import unittest
 import tempfile
 import textwrap
+import unittest
 from pathlib import Path
 
 from pyspark.errors import PySparkException
 from pyspark.testing.connectutils import (
     ReusedConnectTestCase,
-    should_test_connect,
     connect_requirement_message,
+    should_test_connect,
 )
 from pyspark.testing.utils import have_yaml, yaml_requirement_message
 
 if should_test_connect and have_yaml:
     from pyspark.pipelines.cli import (
+        LibrariesGlob,
+        PipelineSpec,
         change_dir,
         find_pipeline_spec,
         load_pipeline_spec,
         register_definitions,
-        unpack_pipeline_spec,
-        LibrariesGlob,
-        PipelineSpec,
         run,
+        unpack_pipeline_spec,
     )
     from pyspark.pipelines.tests.local_graph_element_registry import LocalGraphElementRegistry
 

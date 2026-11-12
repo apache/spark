@@ -78,15 +78,15 @@ class XmlOptions(
   }
 
   private def getBool(paramName: String, default: Boolean = false): Boolean = {
-    val param = parameters.getOrElse(paramName, default.toString)
-    if (param == null) {
-      default
-    } else if (param.toLowerCase(Locale.ROOT) == "true") {
-      true
-    } else if (param.toLowerCase(Locale.ROOT) == "false") {
-      false
-    } else {
-      throw QueryExecutionErrors.paramIsNotBooleanValueError(paramName)
+    val paramValue = parameters.get(paramName)
+    paramValue match {
+      case None => default
+      case Some(null) => default
+      case Some(value) => value.toLowerCase(Locale.ROOT) match {
+        case "true" => true
+        case "false" => false
+        case _ => throw QueryExecutionErrors.paramIsNotBooleanValueError(paramName)
+      }
     }
   }
 
@@ -239,6 +239,7 @@ object XmlOptions extends DataSourceOptions {
   val MODE = newOption("mode")
   val LOCALE = newOption("locale")
   val COMPRESSION = newOption("compression")
+  val DECOMPRESSION = newOption(DataSourceOptions.DECOMPRESSION)
   val MULTI_LINE = newOption("multiLine")
   val SAMPLING_RATIO = newOption("samplingRatio")
   val COLUMN_NAME_OF_CORRUPT_RECORD = newOption(DataSourceOptions.COLUMN_NAME_OF_CORRUPT_RECORD)

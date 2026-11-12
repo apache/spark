@@ -79,10 +79,11 @@ class ElementwiseProduct @Since("1.4.0") (@Since("1.4.0") override val uid: Stri
 
   override protected def validateInputType(inputType: DataType): Unit = {
     require(inputType.isInstanceOf[VectorUDT],
-      s"Input type must be ${(new VectorUDT).catalogString} but got ${inputType.catalogString}.")
+      s"Input type must be ${SQLDataTypes.VectorType.catalogString} " +
+        s"but got ${inputType.catalogString}.")
   }
 
-  override protected def outputDataType: DataType = new VectorUDT()
+  override protected def outputDataType: DataType = SQLDataTypes.VectorType
 
   override def transformSchema(schema: StructType): StructType = {
     var outputSchema = super.transformSchema(schema)

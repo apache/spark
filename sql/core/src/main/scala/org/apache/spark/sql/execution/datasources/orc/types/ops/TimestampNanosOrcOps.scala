@@ -17,13 +17,17 @@
 
 package org.apache.spark.sql.execution.datasources.orc.types.ops
 
+import java.sql.Timestamp
+import java.time.{Instant, LocalDateTime, ZoneOffset}
+
+import org.apache.hadoop.hive.ql.io.sarg.PredicateLeaf
 import org.apache.hadoop.io.WritableComparable
 import org.apache.orc.TypeDescription
 import org.apache.orc.mapred.OrcTimestamp
 
 import org.apache.spark.sql.catalyst.expressions.SpecializedGetters
 import org.apache.spark.sql.catalyst.util.DateTimeUtils
-import org.apache.spark.sql.types.{TimestampLTZNanosType, TimestampNTZNanosType}
+import org.apache.spark.sql.types.{DataType, TimestampLTZNanosType, TimestampNTZNanosType}
 import org.apache.spark.unsafe.types.TimestampNanosVal
 
 /**
@@ -35,10 +39,16 @@ import org.apache.spark.unsafe.types.TimestampNanosVal
  * ORC does not reuse the OrcTimestamp object (the conversion is already expensive), so the
  * serializer runs with reuse disabled regardless of the reuseObj hint.
  *
- * No predicate pushdown: the inline OrcFilters code never added a nanos arm, so predicateLeafType
- * stays None (inherited default).
+ * Predicate pushdown uses PredicateLeaf.Type.TIMESTAMP (matching the physical category). ORC's
+ * SearchArgument builder requires the literal's class to be exactly java.sql.Timestamp (it rejects
+ * the OrcTimestamp subclass), and ORC compares against a TIMESTAMP_INSTANT column by first shifting
+ * the stored UTC value into the JVM default zone (the default useUTCTimestamp=false read mode Spark
+ * uses). So the filter literal (an external java.time.Instant, already truncated to the column
+ * precision upstream) is cast to a java.sql.Timestamp whose *local* wall clock equals the instant's
+ * UTC wall clock, via Timestamp.valueOf(LocalDateTime.ofInstant(instant, UTC)). This keeps the
+ * pushed predicate consistent with the ORC min/max statistics regardless of the JVM time zone.
  *
- * @since 5.0.0
+ * @since 4.3.0
  */
 case class TimestampLTZNanosOrcOps(t: TimestampLTZNanosType) extends OrcTypeOps {
 
@@ -69,6 +79,30 @@ case class TimestampLTZNanosOrcOps(t: TimestampLTZNanosType) extends OrcTypeOps 
       val instant = ts.toInstant
       set(ordinal, DateTimeUtils.instantToTimestampNanos(instant, t.precision))
     }
+
+  // The physical ORC category is a timestamp, so the search argument uses the TIMESTAMP leaf type.
+  override def predicateLeafType: Option[PredicateLeaf.Type] = Some(PredicateLeaf.Type.TIMESTAMP)
+
+  // The filter literal is an external java.time.Instant (see CatalystTypeConverters). ORC evaluates
+  // a TIMESTAMP_INSTANT predicate against the stored UTC value shifted into the JVM default zone,
+  // so the literal must be a java.sql.Timestamp whose local wall clock equals the instant's UTC
+  // wall clock; Timestamp.valueOf(LocalDateTime at UTC) produces exactly that. Any non-Instant
+  // value is passed through unchanged.
+  override def castFilterLiteral(value: Any): Any = value match {
+    case i: Instant => Timestamp.valueOf(LocalDateTime.ofInstant(i, ZoneOffset.UTC))
+    case other => other
+  }
+
+  // The reader truncates the stored values to the read precision (see makeDeserializer and
+  // OrcAtomicColumnVector.getTimestampLTZNanos), while ORC evaluates a pushed down predicate
+  // against the stored values. E.g. a stored 00:00:00.123456789 of a TIMESTAMP_LTZ(9) file is read
+  // as 00:00:00.1234567 for TIMESTAMP_LTZ(7), so a pushed down `ts = 00:00:00.1234567` would skip
+  // it. The values of a TIMESTAMP_LTZ(p) file have at most p fractional digits, so a read
+  // precision of at least p keeps them. Any other read type does not keep them either.
+  override def acceptsReadType(readType: DataType): Boolean = readType match {
+    case r: TimestampLTZNanosType => r.precision >= t.precision
+    case _ => false
+  }
 }
 
 /**
@@ -79,9 +113,16 @@ case class TimestampLTZNanosOrcOps(t: TimestampLTZNanosType) extends OrcTypeOps 
  * read from the CATALYST_TYPE_ATTRIBUTE_NAME attribute. As with the LTZ variant, the OrcTimestamp
  * object is not reused.
  *
- * No predicate pushdown (predicateLeafType stays None).
+ * Predicate pushdown uses PredicateLeaf.Type.TIMESTAMP (matching the physical category). The filter
+ * literal is an external java.time.LocalDateTime (already truncated to the column precision
+ * upstream); it is cast to a plain java.sql.Timestamp via Timestamp.valueOf, the same conversion
+ * the write path applies before wrapping the result in an OrcTimestamp. ORC's SearchArgument
+ * builder requires the literal's class to be exactly java.sql.Timestamp (it rejects the
+ * OrcTimestamp subclass), while the stored OrcTimestamp compares as its java.sql.Timestamp
+ * super-value, so the two are value-equal and the pushed predicate is consistent with the ORC
+ * min/max statistics.
  *
- * @since 5.0.0
+ * @since 4.3.0
  */
 case class TimestampNTZNanosOrcOps(t: TimestampNTZNanosType) extends OrcTypeOps {
 
@@ -97,7 +138,7 @@ case class TimestampNTZNanosOrcOps(t: TimestampNTZNanosType) extends OrcTypeOps 
     (getter: SpecializedGetters, ordinal: Int) => {
       val v = getter.get(ordinal, t).asInstanceOf[TimestampNanosVal]
       val localDateTime = DateTimeUtils.timestampNanosToLocalDateTime(v)
-      val ts = java.sql.Timestamp.valueOf(localDateTime)
+      val ts = Timestamp.valueOf(localDateTime)
       val result = new OrcTimestamp(ts.getTime)
       result.setNanos(ts.getNanos)
       result
@@ -112,4 +153,27 @@ case class TimestampNTZNanosOrcOps(t: TimestampNTZNanosType) extends OrcTypeOps 
       val localDateTime = ts.toLocalDateTime
       set(ordinal, DateTimeUtils.localDateTimeToTimestampNanos(localDateTime, t.precision))
     }
+
+  // The physical ORC category is a timestamp, so the search argument uses the TIMESTAMP leaf type.
+  override def predicateLeafType: Option[PredicateLeaf.Type] = Some(PredicateLeaf.Type.TIMESTAMP)
+
+  // The filter literal is an external java.time.LocalDateTime (see CatalystTypeConverters); convert
+  // it to a plain java.sql.Timestamp via the same Timestamp.valueOf the serializer uses, so it is
+  // value-equal to the written OrcTimestamp. Any non-LocalDateTime value is passed through
+  // unchanged.
+  override def castFilterLiteral(value: Any): Any = value match {
+    case ldt: LocalDateTime => Timestamp.valueOf(ldt)
+    case other => other
+  }
+
+  // The reader truncates the stored values to the read precision (see makeDeserializer and
+  // OrcAtomicColumnVector.getTimestampNTZNanos), while ORC evaluates a pushed down predicate
+  // against the stored values. E.g. a stored 00:00:00.123456789 of a TIMESTAMP_NTZ(9) file is read
+  // as 00:00:00.1234567 for TIMESTAMP_NTZ(7), so a pushed down `ts = 00:00:00.1234567` would skip
+  // it. The values of a TIMESTAMP_NTZ(p) file have at most p fractional digits, so a read
+  // precision of at least p keeps them. Any other read type does not keep them either.
+  override def acceptsReadType(readType: DataType): Boolean = readType match {
+    case r: TimestampNTZNanosType => r.precision >= t.precision
+    case _ => false
+  }
 }

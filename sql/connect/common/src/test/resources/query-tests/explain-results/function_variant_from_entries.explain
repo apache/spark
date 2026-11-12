@@ -1,0 +1,2 @@
+Project [variant_from_entries(array(struct(col1, a, col2, 1), struct(col1, b, col2, 2))) AS variant_from_entries(array(struct(a, 1), struct(b, 2)))#0]
++- LocalRelation <empty>, [id#0L, a#0, b#0, d#0, e#0, f#0, g#0]

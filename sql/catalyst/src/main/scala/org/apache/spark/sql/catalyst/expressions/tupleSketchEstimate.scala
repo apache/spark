@@ -27,6 +27,11 @@ import org.apache.spark.sql.types.{AbstractDataType, BinaryType, DataType, Doubl
     _FUNC_(child) - Returns the estimated number of unique values
     given the binary representation of a Datasketches TupleSketch. The sketch's
     summary type must be a double. """,
+  arguments = """
+    Arguments:
+      * child - A binary value holding a serialized Datasketches TupleSketch
+          with a double summary.
+  """,
   examples = """
     Examples:
       > SELECT _FUNC_(tuple_sketch_agg_double(key, summary)) FROM VALUES (1, 1.0D), (1, 2.0D), (2, 3.0D) tab(key, summary);
@@ -64,6 +69,11 @@ case class TupleSketchEstimateDouble(child: Expression)
     _FUNC_(child) - Returns the estimated number of unique values
     given the binary representation of a Datasketches TupleSketch. The sketch's
     summary type must be an integer. """,
+  arguments = """
+    Arguments:
+      * child - A binary value holding a serialized Datasketches TupleSketch
+          with an integer summary.
+  """,
   examples = """
     Examples:
       > SELECT _FUNC_(tuple_sketch_agg_integer(key, summary)) FROM VALUES (1, 1), (1, 2), (2, 3) tab(key, summary);
@@ -101,6 +111,11 @@ case class TupleSketchEstimateInteger(child: Expression)
     _FUNC_(child) - Returns the theta value (sampling rate) from a Datasketches TupleSketch.
     The theta value represents the effective sampling rate of the sketch, between 0.0 and 1.0.
     The sketch's summary type must be a double. """,
+  arguments = """
+    Arguments:
+      * child - A binary value holding a serialized Datasketches TupleSketch
+          with a double summary.
+  """,
   examples = """
     Examples:
       > SELECT _FUNC_(tuple_sketch_agg_double(key, summary)) FROM VALUES (1, 1.0D), (2, 2.0D), (3, 3.0D) tab(key, summary);
@@ -138,6 +153,11 @@ case class TupleSketchThetaDouble(child: Expression)
     _FUNC_(child) - Returns the theta value (sampling rate) from a Datasketches TupleSketch.
     The theta value represents the effective sampling rate of the sketch, between 0.0 and 1.0.
     The sketch's summary type must be an integer. """,
+  arguments = """
+    Arguments:
+      * child - A binary value holding a serialized Datasketches TupleSketch
+          with an integer summary.
+  """,
   examples = """
     Examples:
       > SELECT _FUNC_(tuple_sketch_agg_integer(key, summary)) FROM VALUES (1, 1), (2, 2), (3, 3) tab(key, summary);

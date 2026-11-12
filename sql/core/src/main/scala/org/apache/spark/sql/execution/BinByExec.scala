@@ -23,7 +23,8 @@ import org.apache.spark.SparkException
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.{Attribute, AttributeMap, AttributeSet, BindReferences, BoundReference, Cast, Expression, GenericInternalRow, JoinedRow, Literal, Multiply, NamedExpression, UnsafeProjection}
-import org.apache.spark.sql.catalyst.util.{DateTimeUtils, TimestampFormatter}
+import org.apache.spark.sql.catalyst.plans.logical.BinBy
+import org.apache.spark.sql.catalyst.util.{DateTimeUtils, MathUtils, TimestampFormatter}
 import org.apache.spark.sql.errors.QueryExecutionErrors
 import org.apache.spark.sql.execution.metric.{SQLMetric, SQLMetrics}
 import org.apache.spark.sql.types.DoubleType
@@ -66,6 +67,18 @@ case class BinByExec(
   override def producedAttributes: AttributeSet =
     AttributeSet(scaledDistributeColumns ++ appendedAttributes)
 
+  override protected def stringArgs: Iterator[Any] = {
+    BinBy.explainStringArgs(
+      rangeStart = rangeStart,
+      rangeEnd = rangeEnd,
+      binWidthMicros = binWidthMicros,
+      originMicros = originMicros,
+      distributeColumns = distributeColumns,
+      scaledDistributeColumns = scaledDistributeColumns,
+      appendedAttributes = appendedAttributes,
+      timeZoneId = timeZoneId)
+  }
+
   // The trait keeps a child partitioning only when its keys are in the output: a partitioning keyed
   // on a pass-through column survives; one keyed on a scaled DISTRIBUTE column (fresh ExprId) does
   // not, because that column is absent from the output.
@@ -96,6 +109,15 @@ case class BinByExec(
       val joined = new JoinedRow
       val fmt = TimestampFormatter.getFractionFormatter(zone)
 
+      def withBinByOverflow[T](f: => T): T = {
+        try {
+          f
+        } catch {
+          case _: ArithmeticException =>
+            throw QueryExecutionErrors.binByOverflowError()
+        }
+      }
+
       rows.flatMap { row =>
         joined.withLeft(row)
         val rowIter: Iterator[InternalRow] =
@@ -107,31 +129,40 @@ case class BinByExec(
             if (rs > re) {
               throw QueryExecutionErrors.binByInvalidRangeError(fmt.format(rs), fmt.format(re))
             } else if (rs == re) {
-              val (k, binStart) = DateTimeUtils.timeBucketFromTimestampDTInterval(width, rs, origin,
-                zone)
-              val binEnd = DateTimeUtils.timeBucketFromIndexDTInterval(width, k + 1, origin, zone)
+              val (k, binStart) = withBinByOverflow {
+                DateTimeUtils.timeBucketFromTimestampDTInterval(width, rs, origin, zone)
+              }
+              val binEnd = withBinByOverflow {
+                val nextK = MathUtils.addExact(k, 1L)
+                DateTimeUtils.timeBucketFromIndexDTInterval(width, nextK, origin, zone)
+              }
               appended.update(0, binStart)
               appended.update(1, binEnd)
               appended.update(2, 1.0d)
               Iterator.single(proj(joined.withRight(appended)))
             } else {
-              val total = Math.subtractExact(re, rs)
+              val total = withBinByOverflow(MathUtils.subtractExact(re, rs))
               new Iterator[InternalRow] {
                 // Advance the bucket index and read each boundary off the grid, rather than
                 // walking one bin end to the next start.
-                private var (k, curStart) =
+                private var (k, curStart) = withBinByOverflow {
                   DateTimeUtils.timeBucketFromTimestampDTInterval(width, rs, origin, zone)
+                }
 
                 override def hasNext: Boolean = curStart < re
 
                 override def next(): InternalRow = {
-                  val curEnd =
-                    DateTimeUtils.timeBucketFromIndexDTInterval(width, k + 1, origin, zone)
+                  val (nextK, curEnd) = withBinByOverflow {
+                    val index = MathUtils.addExact(k, 1L)
+                    val end =
+                      DateTimeUtils.timeBucketFromIndexDTInterval(width, index, origin, zone)
+                    (index, end)
+                  }
                   val overlap = math.min(re, curEnd) - math.max(rs, curStart)
                   appended.update(0, curStart)
                   appended.update(1, curEnd)
                   appended.update(2, overlap.toDouble / total.toDouble)
-                  k += 1
+                  k = nextK
                   curStart = curEnd
                   proj(joined.withRight(appended))
                 }

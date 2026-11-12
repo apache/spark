@@ -17,29 +17,33 @@
 import json
 import sys
 import warnings
-from typing import TYPE_CHECKING, Any, cast, Dict, List, Optional, Union, Iterator
-from threading import Thread, Lock
+from threading import Lock, Thread
+from typing import TYPE_CHECKING, Any, Dict, Iterator, List, Optional, Union, cast
 
-from pyspark.errors import StreamingQueryException, PySparkValueError
 import pyspark.sql.connect.proto as pb2
+from pyspark.errors import PySparkValueError, StreamingQueryException
+from pyspark.errors.exceptions.connect import (
+    StreamingQueryException as CapturedStreamingQueryException,
+)
 from pyspark.sql.connect import proto
+from pyspark.sql.metrics import ObservedMetrics, PlanMetrics
 from pyspark.sql.streaming import StreamingQueryListener
 from pyspark.sql.streaming.listener import (
-    QueryStartedEvent,
-    QueryProgressEvent,
     QueryIdleEvent,
+    QueryProgressEvent,
+    QueryStartedEvent,
     QueryTerminatedEvent,
     StreamingQueryProgress,
 )
 from pyspark.sql.streaming.query import (
     StreamingQuery as PySparkStreamingQuery,
-    StreamingQueryManager as PySparkStreamingQueryManager,
 )
-from pyspark.errors.exceptions.connect import (
-    StreamingQueryException as CapturedStreamingQueryException,
+from pyspark.sql.streaming.query import (
+    StreamingQueryManager as PySparkStreamingQueryManager,
 )
 
 if TYPE_CHECKING:
+    from pyspark.sql.connect.client.core import _ExecutePlanResponseItem
     from pyspark.sql.connect.session import SparkSession
 
 
@@ -274,7 +278,13 @@ class StreamingQueryListenerBus:
         self._sqm = sqm
         self._listener_bus: List[StreamingQueryListener] = []
         self._execution_thread: Optional[Thread] = None
-        self._lock = Lock()
+        # _thread_lock serializes listener lifecycle ops (append/remove) so at most one
+        # event-handling thread exists at a time. It is held across the thread join in
+        # remove(), so the handler thread must never acquire it.
+        self._thread_lock = Lock()
+        # _bus_lock guards _listener_bus and is acquired by the handler thread in
+        # post_to_all(); it must stay free while remove() joins, to avoid deadlock.
+        self._bus_lock = Lock()
 
     def close(self) -> None:
         for listener in self._listener_bus:
@@ -286,10 +296,12 @@ class StreamingQueryListenerBus:
         the first listener, request the server to create the server side listener
         and start a thread to handle query events.
         """
-        with self._lock:
-            self._listener_bus.append(listener)
+        with self._thread_lock:
+            with self._bus_lock:
+                self._listener_bus.append(listener)
+                is_first_listener = len(self._listener_bus) == 1
 
-            if len(self._listener_bus) == 1:
+            if is_first_listener:
                 assert self._execution_thread is None
                 try:
                     result_iter = self._register_server_side_listener()
@@ -298,7 +310,8 @@ class StreamingQueryListenerBus:
                         f"Failed to add the listener because of exception: {e}\n"
                         f"The listener is not added, please add it again."
                     )
-                    self._listener_bus.remove(listener)
+                    with self._bus_lock:
+                        self._listener_bus.remove(listener)
                     return
                 self._execution_thread = Thread(
                     target=self._query_event_handler, args=(result_iter,)
@@ -317,11 +330,13 @@ class StreamingQueryListenerBus:
         will return after processing remaining listener events. This function blocks until
         all events are processed.
         """
-        with self._lock:
-            if listener not in self._listener_bus:
-                return
+        with self._thread_lock:
+            with self._bus_lock:
+                if listener not in self._listener_bus:
+                    return
+                is_last_listener = len(self._listener_bus) == 1
 
-            if len(self._listener_bus) == 1:
+            if is_last_listener:
                 cmd = pb2.StreamingQueryListenerBusCommand()
                 cmd.remove_listener_bus_listener = True
                 exec_cmd = pb2.Command()
@@ -334,13 +349,45 @@ class StreamingQueryListenerBus:
                         f"The listener is not removed, please remove it again."
                     )
                     return
-                if self._execution_thread is not None:
-                    self._execution_thread.join()
+                # Join without holding _bus_lock so the handler thread can keep
+                # acquiring it in post_to_all() to drain remaining events and exit.
+                # _thread_lock still blocks a concurrent append() from starting a
+                # second handler thread. Snapshot the reference first, since the
+                # handler's error path may clear it concurrently.
+                execution_thread = self._execution_thread
+                if execution_thread is not None:
+                    execution_thread.join()
                     self._execution_thread = None
 
-            self._listener_bus.remove(listener)
+            with self._bus_lock:
+                # The handler's error path may have cleared the bus while we joined.
+                if listener in self._listener_bus:
+                    self._listener_bus.remove(listener)
 
-    def _register_server_side_listener(self) -> Iterator[Dict[str, Any]]:
+    @staticmethod
+    def _iter_listener_events(
+        results: Iterator["_ExecutePlanResponseItem"],
+    ) -> Iterator[pb2.StreamingQueryListenerEventsResult]:
+        for result in results:
+            if isinstance(result, (PlanMetrics, ObservedMetrics)):
+                continue
+            if (
+                not isinstance(result, dict)
+                or "streaming_query_listener_events_result" not in result
+            ):
+                raise PySparkValueError(
+                    errorClass="UNKNOWN_RESPONSE",
+                    messageParameters={"response": str(result)},
+                )
+            response = result["streaming_query_listener_events_result"]
+            if not isinstance(response, pb2.StreamingQueryListenerEventsResult):
+                raise PySparkValueError(
+                    errorClass="UNKNOWN_RESPONSE",
+                    messageParameters={"response": str(result)},
+                )
+            yield response
+
+    def _register_server_side_listener(self) -> Iterator["_ExecutePlanResponseItem"]:
         """
         Send add listener request to the server, after received confirmation from the server,
         start a new thread to handle these events.
@@ -351,27 +398,19 @@ class StreamingQueryListenerBus:
         exec_cmd.streaming_query_listener_bus_command.CopyFrom(cmd)
         result_iter = self._sqm._session.client.execute_command_as_iterator(exec_cmd)
         # Main thread should block until received listener_added_success message
-        for result in result_iter:
-            response = cast(
-                pb2.StreamingQueryListenerEventsResult,
-                result["streaming_query_listener_events_result"],
-            )
+        for response in self._iter_listener_events(result_iter):
             if response.HasField("listener_bus_listener_added"):
                 break
         return result_iter
 
-    def _query_event_handler(self, iter: Iterator[Dict[str, Any]]) -> None:
+    def _query_event_handler(self, iter: Iterator["_ExecutePlanResponseItem"]) -> None:
         """
         Handler function passed to the new thread, if there is any error while receiving
         listener events, it means the connection is unstable. In this case, remove all listeners
         and tell the user to add back the listeners.
         """
         try:
-            for result in iter:
-                response = cast(
-                    pb2.StreamingQueryListenerEventsResult,
-                    result["streaming_query_listener_events_result"],
-                )
+            for response in self._iter_listener_events(iter):
                 for event in response.events:
                     deserialized_event = self.deserialize(event)
                     self.post_to_all(deserialized_event)
@@ -381,7 +420,7 @@ class StreamingQueryListenerBus:
                 "StreamingQueryListenerBus Handler thread received exception, all client side "
                 f"listeners are removed and handler thread is terminated. The error is: {e}"
             )
-            with self._lock:
+            with self._bus_lock:
                 self._execution_thread = None
                 self._listener_bus.clear()
             return
@@ -412,7 +451,7 @@ class StreamingQueryListenerBus:
         Post listener events to all active listeners, note that if one listener throws,
         it should not affect other listeners.
         """
-        with self._lock:
+        with self._bus_lock:
             for listener in self._listener_bus:
                 try:
                     if isinstance(event, QueryStartedEvent):
@@ -432,8 +471,9 @@ class StreamingQueryListenerBus:
 def _test() -> None:
     import doctest
     import os
-    from pyspark.sql import SparkSession as PySparkSession
+
     import pyspark.sql.connect.streaming.query
+    from pyspark.sql import SparkSession as PySparkSession
 
     os.chdir(os.environ["SPARK_HOME"])
 

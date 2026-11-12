@@ -34,7 +34,7 @@ import org.apache.spark.annotation.Experimental
  *
  * Implementations expose only lifecycle. Data transmission happens at
  * the [[WorkerSession]] level -- this trait is solely about whether the
- * channel is open.
+ * channel remains open or recoverable.
  *
  * '''Relationship to other classes (direct creation mode):'''
  * {{{
@@ -44,6 +44,11 @@ import org.apache.spark.annotation.Experimental
  */
 @Experimental
 trait WorkerConnection extends AutoCloseable {
-  /** Returns true if the underlying transport channel is still usable. */
+  /**
+   * Returns true while the connection remains open or can recover for a future
+   * session. An implementation may return true during a transient transport
+   * failure if it reconnects automatically. False means the worker must not be
+   * reused through this connection.
+   */
   def isActive: Boolean
 }

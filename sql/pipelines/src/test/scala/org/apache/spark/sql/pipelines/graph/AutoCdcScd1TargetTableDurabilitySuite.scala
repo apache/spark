@@ -35,11 +35,10 @@ class AutoCdcScd1TargetTableDurabilitySuite
     with SharedSparkSession
     with AutoCdcGraphExecutionTestMixin {
 
+  import testImplicits._
+
   test("pre-loaded rows: an event with a lower sequence is suppressed and a higher one " +
     "wins") {
-    val session = spark
-    import session.implicits._
-
     spark.sql(
       s"CREATE TABLE $catalog.$namespace.target " +
       s"(id INT NOT NULL, name STRING, version BIGINT NOT NULL, $scd1MetadataDdl)"
@@ -75,9 +74,6 @@ class AutoCdcScd1TargetTableDurabilitySuite
 
   test("pre-loaded target rows merge correctly on the first AutoCDC run, and the " +
     "auxiliary table is created lazily") {
-    val session = spark
-    import session.implicits._
-
     // Target was populated by some external process; this is the first AutoCDC run.
     spark.sql(
       s"CREATE TABLE $catalog.$namespace.target " +
@@ -118,9 +114,6 @@ class AutoCdcScd1TargetTableDurabilitySuite
 
   test("a target table created without the CDC metadata column gets the column " +
     "auto-added on the first AutoCDC run") {
-    val session = spark
-    import session.implicits._
-
     // User creates the target without the AutoCDC metadata column. DatasetManager evolves
     // the existing table schema by merging it with the AutoCdcMergeFlow's output schema,
     // which includes the metadata column. The first run therefore proceeds normally, and

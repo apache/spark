@@ -75,7 +75,7 @@ private[mllib] object LocalKMeans extends Logging {
 
     }
 
-    val distanceMeasureInstance = new EuclideanDistanceMeasure
+    val distanceMeasureInstance = EuclideanDistanceMeasure
 
     // Run up to maxIterations iterations of Lloyd's algorithm
     val oldClosest = Array.fill(points.length)(-1)

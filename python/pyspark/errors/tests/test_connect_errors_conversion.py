@@ -17,15 +17,15 @@
 
 import unittest
 
-from pyspark.testing.utils import should_test_connect, connect_requirement_message
+from pyspark.testing.utils import connect_requirement_message, should_test_connect
 
 if should_test_connect:
     from pyspark.errors.exceptions.connect import (
-        convert_exception,
         EXCEPTION_CLASS_MAPPING,
-        SparkConnectGrpcException,
-        PythonException,
         AnalysisException,
+        PythonException,
+        SparkConnectGrpcException,
+        convert_exception,
     )
 
 
@@ -116,6 +116,7 @@ class ConnectErrorsTest(unittest.TestCase):
     def test_convert_exception_with_stacktrace(self):
         # Mock FetchErrorDetailsResponse with stacktrace
         from google.rpc.error_details_pb2 import ErrorInfo
+
         from pyspark.sql.connect.proto import FetchErrorDetailsResponse as pb2
 
         resp = pb2(
@@ -190,9 +191,10 @@ class ConnectErrorsTest(unittest.TestCase):
 
     def test_convert_exception_with_breaking_change_info(self):
         """Test that breaking change info is correctly extracted from protobuf response."""
-        import pyspark.sql.connect.proto as pb2
         from google.rpc.error_details_pb2 import ErrorInfo
         from grpc import StatusCode
+
+        import pyspark.sql.connect.proto as pb2
 
         # Create mock FetchErrorDetailsResponse with breaking change info
         resp = pb2.FetchErrorDetailsResponse()
@@ -245,9 +247,10 @@ class ConnectErrorsTest(unittest.TestCase):
 
     def test_convert_exception_without_breaking_change_info(self):
         """Test that getBreakingChangeInfo returns None when no breaking change info."""
-        import pyspark.sql.connect.proto as pb2
         from google.rpc.error_details_pb2 import ErrorInfo
         from grpc import StatusCode
+
+        import pyspark.sql.connect.proto as pb2
 
         # Create mock FetchErrorDetailsResponse without breaking change info
         resp = pb2.FetchErrorDetailsResponse()
@@ -325,9 +328,10 @@ class ConnectErrorsTest(unittest.TestCase):
 
     def test_breaking_change_info_without_mitigation_config(self):
         """Test breaking change info that only has migration messages."""
-        import pyspark.sql.connect.proto as pb2
         from google.rpc.error_details_pb2 import ErrorInfo
         from grpc import StatusCode
+
+        import pyspark.sql.connect.proto as pb2
 
         # Create mock FetchErrorDetailsResponse with breaking change info (no mitigation config)
         resp = pb2.FetchErrorDetailsResponse()
@@ -367,9 +371,10 @@ class ConnectErrorsTest(unittest.TestCase):
     def test_convert_exception_error_class_from_fetch_error_details(self):
         """Test that errorClass is extracted from FetchErrorDetailsResponse
         when not present in ErrorInfo metadata (e.g., when messageParameters exceed limit)."""
-        import pyspark.sql.connect.proto as pb2
         from google.rpc.error_details_pb2 import ErrorInfo
         from grpc import StatusCode
+
+        import pyspark.sql.connect.proto as pb2
 
         # Create mock FetchErrorDetailsResponse with errorClass
         resp = pb2.FetchErrorDetailsResponse()

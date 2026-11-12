@@ -92,6 +92,17 @@ class HashExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
     checkConsistencyBetweenInterpretedAndCodegen(Crc32, BinaryType)
   }
 
+  test("xxh3_64 and xxh3_128") {
+    // Concrete values match the reference implementation; XXH3Suite covers the full vector set.
+    checkEvaluation(Xxh364(Literal("Spark".getBytes(StandardCharsets.UTF_8))), 80997306238743657L)
+    checkEvaluation(Xxh3128(Literal("Spark".getBytes(StandardCharsets.UTF_8))),
+      "7d57dd84c60c86ca1f4e82ab91a12b5e")
+    checkEvaluation(Xxh364(Literal.create(null, BinaryType)), null)
+    checkEvaluation(Xxh3128(Literal.create(null, BinaryType)), null)
+    checkConsistencyBetweenInterpretedAndCodegen(Xxh364, BinaryType)
+    checkConsistencyBetweenInterpretedAndCodegen(Xxh3128, BinaryType)
+  }
+
   def checkHiveHash(input: Any, dataType: DataType, expected: Long): Unit = {
     // Note : All expected hashes need to be computed using Hive 1.2.1
     val actual = HiveHashFunction.hash(

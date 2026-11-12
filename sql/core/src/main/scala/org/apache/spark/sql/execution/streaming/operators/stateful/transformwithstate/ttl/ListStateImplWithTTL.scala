@@ -16,6 +16,8 @@
  */
 package org.apache.spark.sql.execution.streaming.operators.stateful.transformwithstate.ttl
 
+import scala.collection.mutable.ArrayBuffer
+
 import org.apache.spark.sql.catalyst.encoders.ExpressionEncoder
 import org.apache.spark.sql.catalyst.expressions.UnsafeRow
 import org.apache.spark.sql.execution.metric.SQLMetric
@@ -34,7 +36,7 @@ import org.apache.spark.util.NextIterator
  * @param keyExprEnc - Spark SQL encoder for key
  * @param valEncoder - Spark SQL encoder for value
  * @param ttlConfig  - TTL configuration for values  stored in this state
- * @param batchTimestampMs - current batch processing timestamp.
+ * @param currentTimestampMs - function to get the current processing time timestamp.
  * @param prevBatchTimestampMs - batch timestamp from the previous micro-batch (exclusive).
  *                               Entries with expiration at or below this timestamp are assumed
  *                               to have been already cleaned up and will be skipped during
@@ -48,11 +50,11 @@ class ListStateImplWithTTL[S](
     keyExprEnc: ExpressionEncoder[Any],
     valEncoder: ExpressionEncoder[Any],
     ttlConfig: TTLConfig,
-    batchTimestampMs: Long,
+    currentTimestampMs: () => Long,
     prevBatchTimestampMs: Option[Long] = None,
     metrics: Map[String, SQLMetric])
   extends OneToManyTTLState(
-    stateName, store, keyExprEnc.schema, ttlConfig, batchTimestampMs,
+    stateName, store, keyExprEnc.schema, ttlConfig, currentTimestampMs,
     prevBatchTimestampMs, metrics) with ListState[S] {
 
   private lazy val stateTypesEncoder = StateTypesEncoder(keyExprEnc, valEncoder,
@@ -83,7 +85,7 @@ class ListStateImplWithTTL[S](
 
       override protected def getNext(): S = {
         val iter = unsafeRowValuesIterator.dropWhile { row =>
-          stateTypesEncoder.isExpired(row, batchTimestampMs)
+          stateTypesEncoder.isExpired(row, currentTimestampMs())
         }
 
         if (iter.hasNext) {
@@ -161,22 +163,18 @@ class ListStateImplWithTTL[S](
   override def clearExpiredValues(elementKey: UnsafeRow): ValueExpirationResult = {
     var numValuesExpired = 0L
     val unsafeRowValuesIterator = store.valuesIterator(elementKey, stateName)
-    // We clear the list, and use the iterator to put back all of the non-expired values
+    // We clear the list, and put back all of the non-expired values with a single write.
     store.remove(elementKey, stateName)
 
     var newMinExpirationMsOpt: Option[Long] = None
-    var isFirst = true
+    val unexpiredValues = new ArrayBuffer[UnsafeRow]()
     unsafeRowValuesIterator.foreach { encodedValue =>
-      if (!stateTypesEncoder.isExpired(encodedValue, batchTimestampMs)) {
-        if (isFirst) {
-          isFirst = false
-          store.put(elementKey, encodedValue, stateName)
-        } else {
-          store.merge(elementKey, encodedValue, stateName)
-        }
+      if (!stateTypesEncoder.isExpired(encodedValue, currentTimestampMs())) {
+        // The iterator may reuse the row, so copy it before buffering.
+        unexpiredValues += encodedValue.copy()
 
-        // If it is not expired, it needs to be reinserted (either via put or merge), but
-        // it also has an expiration time that might be the new minimum.
+        // If it is not expired, it needs to be reinserted, but it also has an expiration
+        // time that might be the new minimum.
         val currentExpirationMs = stateTypesEncoder.decodeTtlExpirationMs(encodedValue)
 
         newMinExpirationMsOpt = newMinExpirationMsOpt match {
@@ -188,6 +186,9 @@ class ListStateImplWithTTL[S](
       } else {
         numValuesExpired += 1
       }
+    }
+    if (unexpiredValues.nonEmpty) {
+      store.putList(elementKey, unexpiredValues.toArray, stateName)
     }
 
     ValueExpirationResult(numValuesExpired, newMinExpirationMsOpt)

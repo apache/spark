@@ -44,7 +44,7 @@ object InsertSortForLimitAndOffset extends Rule[SparkPlan] {
           _,
           // Should not match AQE shuffle stage because we only target un-submitted stages which
           // we can still rewrite the query plan.
-          s @ ShuffleExchangeExec(SinglePartition, child, _, _),
+          s @ ShuffleExchangeExec(SinglePartition, child, _, _, _),
           _) if child.logicalLink.isDefined =>
         extractOrderingAndPropagateOrderingColumns(child) match {
           case Some((ordering, newChild)) =>
@@ -75,10 +75,27 @@ object InsertSortForLimitAndOffset extends Rule[SparkPlan] {
     case p: UnaryExecNode if
         p.isInstanceOf[LocalLimitExec] ||
           p.isInstanceOf[WholeStageCodegenExec] ||
-          p.isInstanceOf[FilterExec] ||
-          p.isInstanceOf[EvalPythonExec] =>
+          p.isInstanceOf[FilterExec] =>
       extractOrderingAndPropagateOrderingColumns(p.child) match {
         case Some((ordering, newChild)) => Some((ordering, p.withNewChildren(Seq(newChild))))
+        case _ => None
+      }
+    case p: EvalPythonExec =>
+      extractOrderingAndPropagateOrderingColumns(p.child) match {
+        case Some((ordering, newChild)) =>
+          // The evaluation passes through only the columns of its child that its parent uses, so
+          // we must also pass through the ordering columns that it does not.
+          val newEval = p.withNewChildren(Seq(newChild)).asInstanceOf[EvalPythonExec]
+          val missingCols = ordering.flatMap(_.references).distinct
+            .filterNot(newEval.outputSet.contains)
+          if (missingCols.isEmpty) {
+            Some((ordering, newEval))
+          } else {
+            val newEvalWithCols =
+              newEval.withRequiredChildOutput(newEval.requiredChildOutput ++ missingCols)
+            newEvalWithCols.copyTagsFrom(p)
+            Some((ordering, newEvalWithCols))
+          }
         case _ => None
       }
     case p: ProjectExec =>

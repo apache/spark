@@ -25,6 +25,19 @@ import org.apache.spark.util.ArrayImplicits._
 
 class ANNSuite extends SparkFunSuite with MLlibTestSparkContext {
 
+  test("layer models share one dense weights array") {
+    val topology = FeedForwardTopology.multiLayerPerceptron(Array(2, 3, 2))
+    val numWeights = topology.layers.map(_.weightSize).sum
+    val weights = Vectors.sparse(numWeights, Array(0, numWeights - 1), Array(1.0, 2.0))
+
+    val model = topology.model(weights)
+    val affineLayers = model.layerModels.collect { case layer: AffineLayerModel => layer }
+
+    assert(affineLayers.length === 2)
+    assert(affineLayers.forall(_.weights.data eq affineLayers.head.weights.data))
+    assert(affineLayers.head.weights.data.length === numWeights)
+  }
+
   // TODO: test for weights comparison with Weka MLP
   test("ANN with Sigmoid learns XOR function with LBFGS optimizer") {
     val inputs = Array(

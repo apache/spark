@@ -270,6 +270,20 @@ class StreamingShuffleOutputTrackerSuite
     assert(tracker.getAllShuffleWriterTaskLocations(0).isEmpty)
   }
 
+  test("StreamingShuffleOutputTrackerMaster - containsShuffle reflects register/unregister") {
+    val conf = new SparkConf(false)
+    val tracker = newTrackerMaster(conf)
+
+    // A shuffle that was never registered is absent.
+    assert(!tracker.containsShuffle(0))
+
+    tracker.registerShuffle(shuffleId = 0, numMaps = 1, numReduces = 1, jobId = 1)
+    assert(tracker.containsShuffle(0))
+
+    tracker.unregisterShuffle(0)
+    assert(!tracker.containsShuffle(0))
+  }
+
   test("StreamingShuffleOutputTrackerMaster - register writer before shuffle fails") {
     val conf = new SparkConf(false)
     val tracker = newTrackerMaster(conf)

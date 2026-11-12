@@ -21,8 +21,9 @@ import scala.reflect.ClassTag
 
 /**
  * A fast hash map implementation for nullable keys. This hash map supports insertions and updates,
- * but not deletions. This map is about 5X faster than java.util.HashMap, while using much less
- * space overhead.
+ * but not deletions. This map uses much less space than java.util.HashMap and is competitive with
+ * it for aggregation workloads (`changeValue`), while java.util.HashMap is faster for pure
+ * insertions and lookups on modern JDKs. See `OpenHashMapBenchmark` for details.
  *
  * Under the hood, it uses our OpenHashSet implementation.
  *

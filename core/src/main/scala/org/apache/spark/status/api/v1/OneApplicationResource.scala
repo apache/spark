@@ -57,7 +57,7 @@ private[v1] class AbstractApplicationResource extends BaseAppResource {
   @Path("executors/{executorId}/threads")
   def threadDump(@PathParam("executorId") execId: String): Array[ThreadStackTrace] = withUI { ui =>
     checkExecutorId(execId)
-    val safeSparkContext = checkAndGetSparkContext()
+    val safeSparkContext = checkAndGetSparkContext("Thread dumps")
     ui.store.asOption(ui.store.executorSummary(execId)) match {
       case Some(executorSummary) if executorSummary.isActive =>
           val safeThreadDump = safeSparkContext.getExecutorThreadDump(execId).getOrElse {
@@ -75,7 +75,7 @@ private[v1] class AbstractApplicationResource extends BaseAppResource {
       @QueryParam("taskId") taskId: Long,
       @QueryParam("executorId") execId: String): ThreadStackTrace = {
     checkExecutorId(execId)
-    val safeSparkContext = checkAndGetSparkContext()
+    val safeSparkContext = checkAndGetSparkContext("Thread dumps")
     safeSparkContext
       .getTaskThreadDump(taskId, execId)
       .getOrElse {
@@ -91,6 +91,18 @@ private[v1] class AbstractApplicationResource extends BaseAppResource {
   @GET
   @Path("allmiscellaneousprocess")
   def allProcessList(): Seq[ProcessSummary] = withUI(_.store.miscellaneousProcessList(false))
+
+  @GET
+  @Path("holdstatus")
+  def holdStatus(): ApplicationHoldStatus = {
+    val safeSparkContext = checkAndGetSparkContext("Hold status")
+    val held = safeSparkContext.executorsHeld
+    new ApplicationHoldStatus(
+      supported = safeSparkContext.executorHoldSupported,
+      held = held,
+      // The executors that have not exited yet are still draining their running tasks.
+      draining = if (held) safeSparkContext.getExecutorIds().size else 0)
+  }
 
   @Path("stages")
   def stages(): Class[StagesResource] = classOf[StagesResource]
@@ -188,9 +200,13 @@ private[v1] class AbstractApplicationResource extends BaseAppResource {
     }
   }
 
-  private def checkAndGetSparkContext(): SparkContext = withUI { ui =>
+  /**
+   * Returns the live `SparkContext` for live-only endpoints. `feature` is the subject of the
+   * error message, e.g. "Thread dumps" -> "Thread dumps not available through the history server."
+   */
+  private def checkAndGetSparkContext(feature: String): SparkContext = withUI { ui =>
     ui.sc.getOrElse {
-      throw new ServiceUnavailable("Thread dumps not available through the history server.")
+      throw new ServiceUnavailable(s"$feature not available through the history server.")
     }
   }
 }

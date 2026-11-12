@@ -17,20 +17,20 @@
 
 import atexit
 import os
-import signal
+import platform
 import shlex
 import shutil
-import platform
+import signal
 import tempfile
 import time
-from subprocess import Popen, PIPE
+from subprocess import PIPE, Popen
 
-from py4j.java_gateway import java_import, JavaGateway, JavaObject, GatewayParameters
 from py4j.clientserver import ClientServer, JavaParameters, PythonParameters
-from pyspark.serializers import read_int, UTF8Deserializer
+from py4j.java_gateway import GatewayParameters, JavaGateway, JavaObject, java_import
 
-from pyspark.find_spark_home import _find_spark_home
 from pyspark.errors import PySparkRuntimeError
+from pyspark.find_spark_home import _find_spark_home
+from pyspark.serializers import UTF8Deserializer, read_int
 
 # for backward compatibility references.
 from pyspark.util import local_connect_and_auth  # noqa: F401

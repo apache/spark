@@ -18,17 +18,20 @@
 package org.apache.spark.sql.catalyst.analysis
 
 import java.sql.Timestamp
-import java.time.{Duration, LocalDateTime, Period}
+import java.time.{Duration, LocalDateTime, LocalTime, Period}
 
 import org.apache.spark.internal.config.Tests.IS_TESTING
 import org.apache.spark.sql.catalyst.analysis.TypeCoercion._
 import org.apache.spark.sql.catalyst.dsl.expressions._
 import org.apache.spark.sql.catalyst.dsl.plans._
 import org.apache.spark.sql.catalyst.expressions._
+import org.apache.spark.sql.catalyst.expressions.aggregate.{ApproximatePercentile, Median,
+  Percentile, PercentileCont, PercentileDisc}
 import org.apache.spark.sql.catalyst.plans.ReferenceAllColumns
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.rules.{Rule, RuleExecutor}
 import org.apache.spark.sql.catalyst.types.DataTypeUtils
+import org.apache.spark.sql.catalyst.util.DateTimeUtils
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
 import org.apache.spark.unsafe.types.CalendarInterval
@@ -43,6 +46,8 @@ abstract class TypeCoercionSuiteBase extends AnalysisTest {
   assert(Utils.isTesting, s"${IS_TESTING.key} is not set to true")
 
   protected def implicitCast(e: Expression, expectedType: AbstractDataType): Option[Expression]
+
+  protected def implicitTypeCastsRule: TypeCoercionRule
 
   protected def dateTimeOperationsRule: TypeCoercionRule
 
@@ -217,6 +222,58 @@ abstract class TypeCoercionSuiteBase extends AnalysisTest {
     shouldNotCast(checkedType, IntegralType)
   }
 
+  test("time_bucket implicitly casts date and string timestamp arguments") {
+    val bucketSize = Literal(Duration.ofMinutes(15))
+    val date = Literal(0, DateType)
+    val string = Literal("2024-01-01 00:00:00")
+
+    ruleTest(
+      rule = implicitTypeCastsRule,
+      initial = TimeBucket(bucketSize = bucketSize, ts = date, originTs = string),
+      transformed = TimeBucket(
+        bucketSize = bucketSize,
+        ts = Cast(date, TimestampType),
+        originTs = Cast(string, TimestampType)))
+  }
+
+  test("time_bucket does not implicitly cast time arguments to timestamp") {
+    val bucketSize = Literal(Duration.ofMinutes(15))
+    val time = Literal(LocalTime.of(10, 23, 0))
+    val timeBucket = TimeBucket(bucketSize = bucketSize, ts = time, originTs = time)
+
+    ruleTest(
+      rule = implicitTypeCastsRule,
+      initial = timeBucket,
+      transformed = timeBucket)
+  }
+
+  test("time_bucket does not implicitly cast string bucket size") {
+    val bucketSize = Literal("0 00:15:00")
+    val timestamp = Literal(Timestamp.valueOf("2024-01-01 00:00:00"))
+    val timeBucket = TimeBucket(
+      bucketSize = bucketSize,
+      ts = timestamp,
+      originTs = timestamp)
+
+    ruleTest(
+      rule = implicitTypeCastsRule,
+      initial = timeBucket,
+      transformed = timeBucket)
+  }
+
+  test("time_bucket implicitly casts null bucket size to day-time interval") {
+    val bucketSize = Literal(null)
+    val timestamp = Literal(Timestamp.valueOf("2024-01-01 00:00:00"))
+
+    ruleTest(
+      rule = implicitTypeCastsRule,
+      initial = TimeBucket(bucketSize = bucketSize, ts = timestamp, originTs = timestamp),
+      transformed = TimeBucket(
+        bucketSize = Cast(bucketSize, DayTimeIntervalType()),
+        ts = timestamp,
+        originTs = timestamp))
+  }
+
   test("SPARK-56152: implicit type cast - TimeType") {
     val checkedType = TimeType()
     checkTypeCasting(checkedType, castableTypes = Seq(checkedType, StringType) ++ datetimeTypes)
@@ -301,6 +358,94 @@ abstract class TypeCoercionSuiteBase extends AnalysisTest {
     shouldNotCast(IntegerType, TypeCollection(DateType, TimestampType))
   }
 
+  test("implicit type cast - nanosecond-precision timestamps are not narrowed") {
+    Seq(
+      TimestampNTZNanosType(7),
+      TimestampNTZNanosType(9),
+      TimestampLTZNanosType(8),
+      TimestampLTZNanosType(9)).foreach { nanos =>
+      // Dropping sub-microsecond digits or the date needs an explicit CAST.
+      Seq(TimestampType, TimestampNTZType, AnyTimestampType, TimeType(), AnyTimeType).foreach {
+        shouldNotCast(nanos, _)
+      }
+      // DATE stays a direct target for date-valued functions.
+      shouldCast(nanos, DateType, DateType)
+      shouldCast(nanos, StringType, StringType)
+      // A TypeCollection fallback picks neither DATE nor TIME.
+      shouldNotCast(nanos, TypeCollection(NumericType, DateType, TimestampType, TimestampNTZType))
+      shouldNotCast(nanos, TypeCollection(NumericType, AnyTimeType))
+      shouldCast(nanos, TypeCollection(DateType, StringType), StringType)
+      shouldCast(nanos, TypeCollection(AnyTimestampType, AnyTimestampNanoType), nanos)
+    }
+
+    // Widening to a higher precision or the other family is kept.
+    shouldCast(TimestampType, TimestampLTZNanosType(9), TimestampLTZNanosType(9))
+    shouldCast(TimestampNTZNanosType(7), TimestampNTZNanosType(9), TimestampNTZNanosType(9))
+    shouldCast(TimestampNTZNanosType(9), TimestampLTZNanosType(9), TimestampLTZNanosType(9))
+    shouldCast(
+      TimestampLTZNanosType(8),
+      TypeCollection(DateType, TimestampLTZNanosType(9)),
+      TimestampLTZNanosType(9))
+    shouldNotCast(TimestampNTZNanosType(9), TimestampNTZNanosType(7))
+    shouldNotCast(TimestampLTZNanosType(9), TimestampNTZNanosType(8))
+
+    // The same holds inside arrays, maps and structs.
+    val ntz9 = TimestampNTZNanosType(9)
+    Seq(
+      ArrayType(TimeType()),
+      ArrayType(TimestampNTZType),
+      TypeCollection(ArrayType(DateType), ArrayType(TimeType()))).foreach {
+      shouldNotCast(ArrayType(ntz9), _)
+    }
+    shouldNotCast(MapType(StringType, ntz9), MapType(StringType, TimeType()))
+    shouldNotCast(MapType(ntz9, StringType), MapType(TimeType(), StringType))
+    shouldNotCast(new StructType().add("a", ntz9), new StructType().add("a", TimeType()))
+    shouldCast(ArrayType(ntz9), ArrayType(DateType), ArrayType(DateType))
+    shouldCast(
+      ArrayType(ntz9),
+      TypeCollection(ArrayType(DateType), ArrayType(StringType)),
+      ArrayType(StringType))
+    shouldCast(
+      MapType(ntz9, StringType),
+      TypeCollection(MapType(DateType, StringType), MapType(StringType, StringType)),
+      MapType(StringType, StringType))
+    shouldCast(ArrayType(TimestampNTZNanosType(7)), ArrayType(ntz9), ArrayType(ntz9))
+
+    // Micro timestamps are unchanged, including the DATE fallback.
+    shouldCast(TimestampType, AnyTimestampType, TimestampType)
+    shouldCast(TimestampNTZType, TypeCollection(NumericType, DateType), DateType)
+  }
+
+  test("implicit type cast - nanos arguments of functions without nanos support") {
+    val nanos = Literal.default(TimestampNTZNanosType(9))
+    Seq(
+      MonthsBetween(nanos, nanos, Literal(true)),
+      TimeTrunc(Literal("HOUR"), nanos),
+      new ApproximatePercentile(nanos, Literal(0.5))).foreach { e =>
+      ruleTest(implicitTypeCastsRule, e, e)
+    }
+    // A date-valued function still takes the nanos input as DATE.
+    ruleTest(implicitTypeCastsRule, LastDay(nanos), LastDay(Cast(nanos, DateType)))
+  }
+
+  test("SPARK-60542: implicit type cast - percentile family over nanos and micro timestamps") {
+    val nanos = Literal.default(TimestampNTZNanosType(9))
+    Seq(
+      new Percentile(nanos, Literal(0.5)),
+      Median(nanos),
+      PercentileCont(nanos, Literal(0.5)),
+      PercentileDisc(nanos, Literal(0.5))).foreach { e =>
+      ruleTest(implicitTypeCastsRule, e, e)
+    }
+    // The nanos member is last in the input TypeCollection, so a micro timestamp keeps its
+    // implicit cast and is never widened to nanos.
+    val inputType = new Percentile(nanos, Literal(0.5)).inputTypes.head
+    Seq(TimestampType, TimestampNTZType).foreach { micro =>
+      assert(!implicitCast(Literal.default(micro), inputType)
+        .exists(_.dataType.isInstanceOf[AnyTimestampNanoType]))
+    }
+  }
+
   test("type coercion for Concat") {
     val rule = TypeCoercion.ConcatCoercion
 
@@ -352,6 +497,22 @@ abstract class TypeCoercionSuiteBase extends AnalysisTest {
       ruleTest(rule,
         Concat(Seq(Literal("123".getBytes), Literal("456".getBytes))),
         Concat(Seq(Literal("123".getBytes), Literal("456".getBytes))))
+    }
+
+    withSQLConf(SQLConf.CHAR_VARCHAR_STANDARD_SEMANTICS.key -> "true") {
+      val charLit = Literal.create("ab", CharType(2))
+      val collatedChar = Literal.create("ab", CharType(2, "UTF8_LCASE"))
+      val collatedString = StringType("UTF8_LCASE")
+      Seq(TypeCoercion.ConcatCoercion, AnsiTypeCoercion.ConcatCoercion).foreach { r =>
+        ruleTest(r,
+          Concat(Seq(charLit, charLit)),
+          Concat(Seq(Cast(charLit, StringType), Cast(charLit, StringType))))
+        ruleTest(r,
+          Concat(Seq(collatedChar, collatedChar)),
+          Concat(Seq(
+            Cast(collatedChar, collatedString),
+            Cast(collatedChar, collatedString))))
+      }
     }
   }
 
@@ -407,6 +568,23 @@ abstract class TypeCoercionSuiteBase extends AnalysisTest {
         Elt(Seq(Literal(1), Literal("123".getBytes), Literal("456".getBytes))),
         Elt(Seq(Literal(1), Literal("123".getBytes), Literal("456".getBytes))))
     }
+
+    withSQLConf(SQLConf.CHAR_VARCHAR_STANDARD_SEMANTICS.key -> "true") {
+      val charLit = Literal.create("ab", CharType(5))
+      val collatedChar = Literal.create("ab", CharType(5, "UTF8_LCASE"))
+      val collatedString = StringType("UTF8_LCASE")
+      Seq(TypeCoercion.EltCoercion, AnsiTypeCoercion.EltCoercion).foreach { r =>
+        ruleTest(r,
+          Elt(Seq(Literal(1), charLit, charLit)),
+          Elt(Seq(Literal(1), Cast(charLit, StringType), Cast(charLit, StringType))))
+        ruleTest(r,
+          Elt(Seq(Literal(1), collatedChar, collatedChar)),
+          Elt(Seq(
+            Literal(1),
+            Cast(collatedChar, collatedString),
+            Cast(collatedChar, collatedString))))
+      }
+    }
   }
 
   test("Datetime operations") {
@@ -436,6 +614,77 @@ abstract class TypeCoercionSuiteBase extends AnalysisTest {
     ruleTest(rule,
       SubtractTimestamps(timestampNTZLiteral, timestampLiteral),
       SubtractTimestamps(timestampNTZLiteral, Cast(timestampLiteral, TimestampNTZType)))
+
+    // SPARK-57832: subtraction accepts nanosecond-precision timestamps. A DATE operand takes the
+    // nanos type of the other side; a timestamp pair that differs only in precision or family is
+    // widened to a common type before being handed to SubtractTimestamps.
+    val ntzNanos9 = Literal.create(
+      DateTimeUtils.localDateTimeToTimestampNanos(
+        LocalDateTime.parse("2021-01-01T00:00:00"), precision = 9),
+      TimestampNTZNanosType(9))
+    val ltzNanos9 = Literal.create(
+      DateTimeUtils.instantToTimestampNanos(
+        java.time.Instant.parse("2021-01-01T00:00:00Z"), precision = 9),
+      TimestampLTZNanosType(9))
+    val ntzNanos7 = Literal.create(
+      DateTimeUtils.localDateTimeToTimestampNanos(
+        LocalDateTime.parse("2021-01-01T00:00:00"), precision = 7),
+      TimestampNTZNanosType(7))
+
+    // DATE - nanos and nanos - DATE cast the DATE side to the nanos type. Both the NTZ-nanos and
+    // the LTZ-nanos side are covered so the DATE-adopts-the-other-family arm is exercised in both
+    // time-zone families and both operand orders.
+    ruleTest(rule,
+      SubtractTimestamps(dateLiteral, ntzNanos9),
+      SubtractTimestamps(Cast(dateLiteral, TimestampNTZNanosType(9)), ntzNanos9))
+    ruleTest(rule,
+      SubtractTimestamps(ntzNanos9, dateLiteral),
+      SubtractTimestamps(ntzNanos9, Cast(dateLiteral, TimestampNTZNanosType(9))))
+    ruleTest(rule,
+      SubtractTimestamps(dateLiteral, ltzNanos9),
+      SubtractTimestamps(Cast(dateLiteral, TimestampLTZNanosType(9)), ltzNanos9))
+    ruleTest(rule,
+      SubtractTimestamps(ltzNanos9, dateLiteral),
+      SubtractTimestamps(ltzNanos9, Cast(dateLiteral, TimestampLTZNanosType(9))))
+    // Same-precision same-family pair is already the same type -> left untouched.
+    ruleTest(rule,
+      SubtractTimestamps(ntzNanos9, ntzNanos9),
+      SubtractTimestamps(ntzNanos9, ntzNanos9))
+    // Cross-family nanos pair (LTZ vs NTZ) unifies in the NTZ family at the max precision.
+    ruleTest(rule,
+      SubtractTimestamps(ltzNanos9, ntzNanos7),
+      SubtractTimestamps(
+        Cast(ltzNanos9, TimestampNTZNanosType(9)), Cast(ntzNanos7, TimestampNTZNanosType(9))))
+    // Micro NTZ vs nanos NTZ: same family, widen precision to the nanos type.
+    ruleTest(rule,
+      SubtractTimestamps(timestampNTZLiteral, ntzNanos9),
+      SubtractTimestamps(Cast(timestampNTZLiteral, TimestampNTZNanosType(9)), ntzNanos9))
+    // Micro LTZ (TIMESTAMP) vs nanos LTZ: same LTZ family, widen precision to the nanos LTZ type
+    // so the subtraction still runs in the session time zone.
+    ruleTest(rule,
+      SubtractTimestamps(timestampLiteral, ltzNanos9),
+      SubtractTimestamps(Cast(timestampLiteral, TimestampLTZNanosType(9)), ltzNanos9))
+    // Cross-family micro/nanos pairs: a micro operand on one side and a nanos operand of the other
+    // family on the other. Both unify in the NTZ family at the nanos precision (the cross-family
+    // rule prefers NTZ), so the micro operand widens across both axes at once.
+    ruleTest(rule,
+      SubtractTimestamps(timestampLiteral, ntzNanos9),
+      SubtractTimestamps(Cast(timestampLiteral, TimestampNTZNanosType(9)), ntzNanos9))
+    ruleTest(rule,
+      SubtractTimestamps(timestampNTZLiteral, ltzNanos9),
+      SubtractTimestamps(
+        Cast(timestampNTZLiteral, TimestampNTZNanosType(9)),
+        Cast(ltzNanos9, TimestampNTZNanosType(9))))
+
+    // SPARK-60543: date_add/date_sub cast a nanos start to DATE, like the micro types.
+    Seq(ntzNanos9, ltzNanos9, ntzNanos7).foreach { nanosLiteral =>
+      ruleTest(rule,
+        DateAdd(nanosLiteral, intLiteral),
+        DateAdd(Cast(nanosLiteral, DateType), intLiteral))
+      ruleTest(rule,
+        DateSub(nanosLiteral, intLiteral),
+        DateSub(Cast(nanosLiteral, DateType), intLiteral))
+    }
   }
 
   test("datetime comparison") {
@@ -504,6 +753,9 @@ class TypeCoercionSuite extends TypeCoercionSuiteBase {
   // scalastyle:on line.size.limit
   override def implicitCast(e: Expression, expectedType: AbstractDataType): Option[Expression] =
     TypeCoercion.implicitCast(e, expectedType)
+
+  override protected def implicitTypeCastsRule: TypeCoercionRule =
+    TypeCoercion.ImplicitTypeCasts
 
   override def dateTimeOperationsRule: TypeCoercionRule = TypeCoercion.DateTimeOperations
 
@@ -1021,6 +1273,34 @@ class TypeCoercionSuite extends TypeCoercionSuiteBase {
     ruleTest(TypeCoercion.ImplicitTypeCasts,
       NumericTypeUnaryExpression(Literal.create(null, NullType)),
       NumericTypeUnaryExpression(Literal.create(null, DoubleType)))
+
+    withSQLConf(SQLConf.CHAR_VARCHAR_STANDARD_SEMANTICS.key -> "true") {
+      val charLit = Literal.create("ab", CharType(2))
+      ruleTest(TypeCoercion.ImplicitTypeCasts,
+        Upper(charLit),
+        Upper(Cast(charLit, StringType)))
+    }
+  }
+
+  test("coerce JsonTuple children without the NullType rewrite") {
+    val json = Literal("""{"a":1}""")
+    val nullField = Literal.create(null, NullType)
+    val intField = Literal(1)
+
+    // JsonTuple keeps its own NON_STRING_TYPE check, so these stay for checkInputDataTypes.
+    ruleTest(TypeCoercion.ImplicitTypeCasts,
+      JsonTuple(Seq(json, nullField)),
+      JsonTuple(Seq(json, nullField)))
+    ruleTest(TypeCoercion.ImplicitTypeCasts,
+      JsonTuple(Seq(json, intField)),
+      JsonTuple(Seq(json, intField)))
+
+    withSQLConf(SQLConf.CHAR_VARCHAR_STANDARD_SEMANTICS.key -> "true") {
+      val charLit = Literal.create("ab", CharType(2))
+      ruleTest(TypeCoercion.ImplicitTypeCasts,
+        JsonTuple(Seq(charLit, charLit)),
+        JsonTuple(Seq(Cast(charLit, StringType), Cast(charLit, StringType))))
+    }
   }
 
   test("cast NullType for binary operators") {
@@ -1624,10 +1904,10 @@ class TypeCoercionSuite extends TypeCoercionSuiteBase {
       In(Literal("test"), Seq(UnresolvedAttribute("a"), Literal(1))),
       In(Literal("test"), Seq(UnresolvedAttribute("a"), Literal(1)))
     )
+    // Only the children that are not already of the common type are cast.
     ruleTest(inConversion,
       In(Literal("a"), Seq(Literal(1), Literal("b"))),
-      In(Cast(Literal("a"), StringType),
-        Seq(Cast(Literal(1), StringType), Cast(Literal("b"), StringType)))
+      In(Literal("a"), Seq(Cast(Literal(1), StringType), Literal("b")))
     )
   }
 
@@ -1656,6 +1936,23 @@ class TypeCoercionSuite extends TypeCoercionSuiteBase {
     val nullLit = Literal.create(null, NullType)
     ruleTest(rules, Divide(1L, nullLit), Divide(Cast(1L, DoubleType), Cast(nullLit, DoubleType)))
     ruleTest(rules, Divide(nullLit, 1L), Divide(Cast(nullLit, DoubleType), Cast(1L, DoubleType)))
+  }
+
+  test("date arithmetic preserves foldable NULL string day counts") {
+    val date = Literal(0, DateType)
+    val nullString = Literal.create(null, StringType)
+    for (days <- Seq(
+        nullString,
+        If(Literal(true), nullString, Literal("2")),
+        Cast(Literal.create(null, IntegerType), StringType))) {
+      for (expression <- Seq(DateAdd(date, days), DateSub(date, days))) {
+        val coerced = StringLiteralTypeCoercion(expression)
+        assert(coerced.children(1) == Literal.create(null, IntegerType))
+        assert(coerced.eval() == null)
+      }
+    }
+    assert(StringLiteralTypeCoercion(DateAdd(date, Literal("2"))).eval() == 2)
+    assert(StringLiteralTypeCoercion(DateSub(date, Literal("2"))).eval() == -2)
   }
 
   test("Do not promote strings in binary arithmetic with intervals") {

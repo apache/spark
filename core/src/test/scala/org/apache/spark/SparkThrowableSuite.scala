@@ -125,12 +125,35 @@ class SparkThrowableSuite extends SparkFunSuite {
       errorClassesJson.openStream(), new TypeReference[Map[String, String]]() {})
     val errorStates = mapper.readValue(
       errorStatesJson.openStream(), new TypeReference[Map[String, ErrorStateInfo]]() {})
-    val errorConditionStates = errorReader.errorInfoMap.values.toSeq.flatMap(_.sqlState).toSet
+    val errorConditionStates = errorReader.errorInfoMap.values.toSeq.flatMap { i =>
+      i.sqlState ++ i.subClass.getOrElse(Map.empty).values.flatMap(_.sqlState)
+    }.toSet
     assert(Set("22012", "22003", "42601").subsetOf(errorStates.keySet))
     assert(errorClasses.keySet.filter(!_.matches("[A-Z0-9]{2}")).isEmpty)
     assert(errorStates.keySet.filter(!_.matches("[A-Z0-9]{5}")).isEmpty)
     assert(errorStates.keySet.map(_.substring(0, 2)).diff(errorClasses.keySet).isEmpty)
     assert(errorConditionStates.diff(errorStates.keySet).isEmpty)
+  }
+
+  test("Sub-condition SQLSTATE overrides are limited to the documented exceptions") {
+    // Sub-conditions inherit their condition's SQLSTATE. The only permitted overrides are
+    // the wire-compatibility exceptions documented in the error README's SQLSTATE section.
+    val allowedOverrides = Set(
+      "INVALID_HANDLE.SESSION_CHANGED",
+      "INVALID_HANDLE.SESSION_CLOSED",
+      "INVALID_HANDLE.SESSION_NOT_FOUND")
+    errorReader.errorInfoMap.foreach { case (condition, info) =>
+      info.subClass.getOrElse(Map.empty).foreach { case (sub, subInfo) =>
+        subInfo.sqlState.foreach { subState =>
+          val name = s"$condition.$sub"
+          assert(
+            allowedOverrides(name),
+            s"$name declares its own SQLSTATE ($subState). Sub-conditions inherit their " +
+              "condition's SQLSTATE; do not add new overrides. See the SQLSTATE section " +
+              "of the error README.")
+        }
+      }
+    }
   }
 
   test("Message invariants") {
@@ -547,6 +570,56 @@ class SparkThrowableSuite extends SparkFunSuite {
     }
   }
 
+  test("getMessageTemplate and getMessageParameters allow a bare main class with sub-classes") {
+    withTempDir { dir =>
+      val json = new File(dir, "errors.json")
+      Files.writeString(json.toPath(),
+        """
+          |{
+          |  "MAIN_NO_SUBCLASS" : {
+          |    "message" : [
+          |      "abc <p1>"
+          |    ]
+          |  },
+          |  "MAIN_WITH_SUBCLASS" : {
+          |    "message" : [
+          |      "abc <p1>"
+          |    ],
+          |    "subClass" : {
+          |      "VALID_SUB" : {
+          |        "message" : [
+          |          "def <p2>"
+          |        ]
+          |      }
+          |    }
+          |  }
+          |}
+          |""".stripMargin, StandardCharsets.UTF_8)
+      val reader = new ErrorClassesJsonReader(Seq(errorJsonFilePath.toUri.toURL, json.toURI.toURL))
+
+      assert(reader.getMessageTemplate("MAIN_NO_SUBCLASS") == "abc <p1>")
+      assert(reader.getMessageTemplate("MAIN_WITH_SUBCLASS") == "abc <p1>")
+      assert(reader.getMessageTemplate("MAIN_WITH_SUBCLASS.VALID_SUB") == "abc <p1> def <p2>")
+
+      assert(reader.getMessageParameters("MAIN_NO_SUBCLASS") == Seq("p1"))
+      assert(reader.getMessageParameters("MAIN_WITH_SUBCLASS") == Seq("p1"))
+      assert(reader.getMessageParameters("MAIN_WITH_SUBCLASS.VALID_SUB") == Seq("p1", "p2"))
+
+      val noSubClasses = intercept[SparkException] {
+        reader.getMessageTemplate("MAIN_NO_SUBCLASS.NON_EXISTENT")
+      }
+      assert(noSubClasses.getMessage.contains(
+        "Error class 'MAIN_NO_SUBCLASS' has no subclasses, " +
+          "but subclass 'NON_EXISTENT' was requested."))
+
+      val unknownSubClass = intercept[SparkException] {
+        reader.getMessageTemplate("MAIN_WITH_SUBCLASS.NON_EXISTENT_SUB")
+      }
+      assert(unknownSubClass.getMessage.contains(
+        "Error class 'MAIN_WITH_SUBCLASS' has no 'NON_EXISTENT_SUB' subclass."))
+    }
+  }
+
   test("breaking changes info") {
     assert(SparkThrowableHelper.getBreakingChangeInfo(null).isEmpty)
 
@@ -629,6 +702,70 @@ class SparkThrowableSuite extends SparkFunSuite {
             Seq("Subclass migration message with <param3>."),
             Some(new MitigationConfig("config.key2", "config.value2")))))
     }
+  }
+
+  test("sub-condition SQLSTATE overrides the main condition's SQLSTATE") {
+    withTempDir { dir =>
+      val json = new File(dir, "errors.json")
+      Files.writeString(
+        json.toPath,
+        """
+          |{
+          |  "TEST_MAIN_STATE": {
+          |    "message": [
+          |      "Main message."
+          |    ],
+          |    "sqlState": "42000",
+          |    "subClass": {
+          |      "SUB_WITHOUT_STATE": {
+          |        "message": [
+          |          "Sub-condition without its own SQLSTATE."
+          |        ]
+          |      },
+          |      "SUB_WITH_STATE": {
+          |        "message": [
+          |          "Sub-condition with its own SQLSTATE."
+          |        ],
+          |        "sqlState": "08003"
+          |      }
+          |    }
+          |  }
+          |}
+          |""".stripMargin,
+        StandardCharsets.UTF_8)
+
+      val reader =
+        new ErrorClassesJsonReader(Seq(errorJsonFilePath.toUri.toURL, json.toURI.toURL))
+      // A sub-condition with its own SQLSTATE overrides the main condition's.
+      assert(reader.getSqlState("TEST_MAIN_STATE.SUB_WITH_STATE") == "08003")
+      // A sub-condition without its own SQLSTATE inherits the main condition's.
+      assert(reader.getSqlState("TEST_MAIN_STATE.SUB_WITHOUT_STATE") == "42000")
+      assert(reader.getSqlState("TEST_MAIN_STATE") == "42000")
+      // Degenerate inputs keep the pre-existing non-throwing behavior: anything that is not
+      // a known "MAIN.SUB" pair resolves to the main condition's SQLSTATE, or null.
+      assert(reader.getSqlState("TEST_MAIN_STATE.NON_EXISTENT_SUB") == "42000")
+      assert(reader.getSqlState("TEST_MAIN_STATE.SUB_WITH_STATE.EXTRA") == "42000")
+      assert(reader.getSqlState("NON_EXISTENT") == null)
+      assert(reader.getSqlState(null) == null)
+    }
+  }
+
+  test("INVALID_HANDLE session sub-conditions carry SQLSTATE 08003") {
+    // The session sub-conditions mean the server-side session backing a Connect client is
+    // gone (08003, connection does not exist); the wire-visible names are unchanged.
+    val sessionSubConditions = Seq("SESSION_CHANGED", "SESSION_CLOSED", "SESSION_NOT_FOUND")
+    sessionSubConditions.foreach { sub =>
+      assert(errorReader.getSqlState(s"INVALID_HANDLE.$sub") == "08003", sub)
+    }
+    // Every other sub-condition concerns a single operation on a healthy session and keeps
+    // the condition's SQLSTATE.
+    val otherSubConditions = errorReader
+      .errorInfoMap("INVALID_HANDLE").subClass.get.keys.toSeq.diff(sessionSubConditions)
+    assert(otherSubConditions.nonEmpty)
+    otherSubConditions.foreach { sub =>
+      assert(errorReader.getSqlState(s"INVALID_HANDLE.$sub") == "HY000", sub)
+    }
+    assert(errorReader.getSqlState("INVALID_HANDLE") == "HY000")
   }
 
   test("detect unused message parameters") {

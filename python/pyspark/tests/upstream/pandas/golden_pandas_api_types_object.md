@@ -1,0 +1,28 @@
+| object \ predicate   | input type                 | is_list_like   | is_hashable   | is_dict_like   | is_scalar   | is_number   | is_integer   | is_sequence   |
+|----------------------|----------------------------|----------------|---------------|----------------|-------------|-------------|--------------|---------------|
+| int 5                | int                        | False          | True          | False          | True        | True        | True         | False         |
+| np.int64(5)          | int64                      | False          | True          | False          | True        | True        | True         | False         |
+| float 5.0            | float                      | False          | True          | False          | True        | True        | False        | False         |
+| bool True            | bool                       | False          | True          | False          | True        | True        | False        | False         |
+| None                 | NoneType                   | False          | True          | False          | True        | False       | False        | False         |
+| np.nan               | float                      | False          | True          | False          | True        | True        | False        | False         |
+| pd.NA                | NAType                     | False          | True          | False          | True        | False       | False        | False         |
+| pd.NaT               | NaTType                    | False          | True          | False          | True        | False       | False        | False         |
+| str 'abc'            | str                        | False          | True          | False          | True        | False       | False        | False         |
+| bytes b'x'           | bytes                      | False          | True          | False          | True        | False       | False        | False         |
+| list [1,2]           | list                       | True           | False         | False          | False       | False       | False        | True          |
+| tuple (1,)           | tuple                      | True           | True          | False          | False       | False       | False        | True          |
+| label ('a','b')      | tuple                      | True           | True          | False          | False       | False       | False        | True          |
+| tuple ([1],)         | tuple                      | True           | False         | False          | False       | False       | False        | True          |
+| dict {'a':1}         | dict                       | True           | False         | True           | False       | False       | False        | True          |
+| set {1,2}            | set                        | True           | False         | False          | False       | False       | False        | True          |
+| generator            | generator                  | True           | True          | False          | False       | False       | False        | False         |
+| range(3)             | range                      | True           | True          | False          | False       | False       | False        | True          |
+| slice(1,2)           | slice                      | False          | False         | False          | False       | False       | False        | False         |
+| np.ndarray([1,2])    | ndarray                    | True           | False         | False          | False       | False       | False        | True          |
+| pd.Series([1])       | Series                     | True           | False         | True           | False       | False       | False        | True          |
+| pd.DataFrame         | DataFrame                  | True           | False         | True           | False       | False       | False        | True          |
+| pd.Index([1])        | Index                      | True           | False         | False          | False       | False       | False        | True          |
+| pd.Categorical       | Categorical                | True           | False         | False          | False       | False       | False        | True          |
+| np.dtype('int64')    | Int64DType                 | False          | True          | False          | False       | False       | False        | False         |
+| callable len         | builtin_function_or_method | False          | True          | False          | False       | False       | False        | False         |

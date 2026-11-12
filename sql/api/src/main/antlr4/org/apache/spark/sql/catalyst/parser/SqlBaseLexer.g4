@@ -50,19 +50,13 @@ import java.util.Deque;
   }
 
   /**
-   * This method will be called when we see '/*' and try to match it as a bracketed comment.
-   * If the next character is '+', it should be parsed as hint later, and we cannot match
-   * it as a bracketed comment.
+   * Called after a top-level '/*' opener to distinguish hints from bracketed comments.
+   * Nested comment openers are handled by NESTED_BRACKETED_COMMENT.
    *
    * Returns true if the next character is '+'.
    */
   public boolean isHint() {
-    int nextChar = _input.LA(1);
-    if (nextChar == '+') {
-      return true;
-    } else {
-      return false;
-    }
+    return _input.LA(1) == '+';
   }
 
   /**
@@ -122,12 +116,13 @@ BANG: '!';
 
 // NOTE: If you add a new token in the list below, you should update the list of keywords
 // and reserved tag in `docs/sql-ref-ansi-compliance.md#sql-keywords`, and
-// modify `ParserUtils.toExprAlias()` which assumes all keywords are between `ADD` and `ZONE`.
+// modify `ParserUtils.toExprAlias()` which assumes all keywords are between `ABSENT` and `ZONE`.
 
 //============================
 // Start of the keywords list
 //============================
 //--SPARK-KEYWORD-LIST-START
+ABSENT: 'ABSENT';
 ADD: 'ADD';
 AFTER: 'AFTER';
 AGGREGATE: 'AGGREGATE';
@@ -201,6 +196,7 @@ COMPENSATION: 'COMPENSATION';
 COMPUTE: 'COMPUTE';
 CONCATENATE: 'CONCATENATE';
 CONDITION: 'CONDITION';
+CONDITIONAL: 'CONDITIONAL';
 CONSTRAINT: 'CONSTRAINT';
 CONTAINS: 'CONTAINS';
 CONTINUE: 'CONTINUE';
@@ -248,14 +244,17 @@ DIRECTORY: 'DIRECTORY';
 DISTANCE: 'DISTANCE';
 DISTINCT: 'DISTINCT';
 DISTRIBUTE: 'DISTRIBUTE';
+DISTRIBUTED: 'DISTRIBUTED';
 DIV: 'DIV';
 DO: 'DO';
 DOUBLE: 'DOUBLE';
 DROP: 'DROP';
 ELSE: 'ELSE';
 ELSEIF: 'ELSEIF';
+EMPTY: 'EMPTY';
 END: 'END';
 ENFORCED: 'ENFORCED';
+ERROR: 'ERROR';
 ESCAPE: 'ESCAPE';
 ESCAPED: 'ESCAPED';
 EVOLUTION: 'EVOLUTION';
@@ -275,6 +274,7 @@ EXTRACT: 'EXTRACT';
 FALSE: 'FALSE';
 FETCH: 'FETCH';
 FIELDS: 'FIELDS';
+FILE: 'FILE';
 FILTER: 'FILTER';
 FILEFORMAT: 'FILEFORMAT';
 FIRST: 'FIRST';
@@ -333,6 +333,13 @@ ITEMS: 'ITEMS';
 ITERATE: 'ITERATE';
 JOIN: 'JOIN';
 JSON: 'JSON';
+JSON_ARRAY: 'JSON_ARRAY';
+JSON_EXISTS: 'JSON_EXISTS';
+JSON_OBJECT: 'JSON_OBJECT';
+JSON_QUERY: 'JSON_QUERY';
+JSON_TABLE: 'JSON_TABLE';
+JSON_VALUE: 'JSON_VALUE';
+KEEP: 'KEEP';
 KEY: 'KEY';
 KEYS: 'KEYS';
 LANGUAGE: 'LANGUAGE';
@@ -350,6 +357,7 @@ LINES: 'LINES';
 LIST: 'LIST';
 LOAD: 'LOAD';
 LOCAL: 'LOCAL';
+LOCALLY: 'LOCALLY';
 LOCALTIME: 'LOCALTIME';
 LOCATION: 'LOCATION';
 LOCK: 'LOCK';
@@ -391,8 +399,10 @@ NULL: 'NULL';
 NULLS: 'NULLS';
 NUMERIC: 'NUMERIC';
 NORELY: 'NORELY';
+OBJECT: 'OBJECT';
 OF: 'OF';
 OFFSET: 'OFFSET';
+OMIT: 'OMIT';
 ON: 'ON';
 ONLY: 'ONLY';
 OPEN: 'OPEN';
@@ -400,6 +410,7 @@ OPTION: 'OPTION';
 OPTIONS: 'OPTIONS';
 OR: 'OR';
 ORDER: 'ORDER';
+ORDERED: 'ORDERED';
 ORDINALITY: 'ORDINALITY';
 OUT: 'OUT';
 OUTER: 'OUTER';
@@ -426,6 +437,7 @@ PURGE: 'PURGE';
 QUALIFY: 'QUALIFY';
 QUARTER: 'QUARTER';
 QUERY: 'QUERY';
+QUOTES: 'QUOTES';
 RANGE: 'RANGE';
 READ: 'READ';
 READS: 'READS';
@@ -448,6 +460,7 @@ RESET: 'RESET';
 RESPECT: 'RESPECT';
 RESTRICT: 'RESTRICT';
 RETURN: 'RETURN';
+RETURNING: 'RETURNING';
 RETURNS: 'RETURNS';
 REVOKE: 'REVOKE';
 RIGHT: 'RIGHT';
@@ -535,16 +548,19 @@ TYPE: 'TYPE';
 UNARCHIVE: 'UNARCHIVE';
 UNBOUNDED: 'UNBOUNDED';
 UNCACHE: 'UNCACHE';
+UNCONDITIONAL: 'UNCONDITIONAL';
 UNIFORM: 'UNIFORM';
 UNION: 'UNION';
 UNIQUE: 'UNIQUE';
 UNKNOWN: 'UNKNOWN';
 UNLOCK: 'UNLOCK';
 UNNEST: 'UNNEST';
+UNORDERED: 'UNORDERED';
 UNPIVOT: 'UNPIVOT';
 UNSET: 'UNSET';
 UNTIL: 'UNTIL';
 UPDATE: 'UPDATE';
+UPDATES: 'UPDATES';
 USE: 'USE';
 USER: 'USER';
 USING: 'USING';
@@ -569,6 +585,7 @@ WINDOW: 'WINDOW';
 WITH: 'WITH';
 WITHIN: 'WITHIN';
 WITHOUT: 'WITHOUT';
+WRAPPER: 'WRAPPER';
 YEAR: 'YEAR';
 YEARS: 'YEARS';
 ZONE: 'ZONE';
@@ -710,7 +727,15 @@ SIMPLE_COMMENT
     ;
 
 BRACKETED_COMMENT
-    : '/*' {!isHint()}? ( BRACKETED_COMMENT | . )*? ('*/' | {markUnclosedComment();} EOF) -> channel(HIDDEN)
+    : '/*' {!isHint()}? COMMENT_BODY ('*/' | {markUnclosedComment();} EOF) -> channel(HIDDEN)
+    ;
+
+fragment COMMENT_BODY
+    : (NESTED_BRACKETED_COMMENT | .)*?
+    ;
+
+fragment NESTED_BRACKETED_COMMENT
+    : '/*' COMMENT_BODY ('*/' | EOF)
     ;
 
 WS

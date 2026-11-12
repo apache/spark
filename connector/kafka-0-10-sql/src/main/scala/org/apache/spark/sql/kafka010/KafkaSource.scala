@@ -125,7 +125,7 @@ private[kafka010] class KafkaSource(
       val offsets = startingOffsets match {
         case EarliestOffsetRangeLimit => KafkaSourceOffset(kafkaReader.fetchEarliestOffsets())
         case LatestOffsetRangeLimit => KafkaSourceOffset(kafkaReader.fetchLatestOffsets(None))
-        case SpecificOffsetRangeLimit(p) => kafkaReader.fetchSpecificOffsets(p, reportDataLoss)
+        case o: SpecificOffsetRangeLimit => kafkaReader.fetchSpecificOffsets(o, reportDataLoss)
         case SpecificTimestampRangeLimit(p, strategy) =>
           kafkaReader.fetchSpecificTimestampBasedOffsets(p, isStartingOffsets = true, strategy)
         case GlobalTimestampRangeLimit(ts, strategy) =>

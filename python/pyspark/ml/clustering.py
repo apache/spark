@@ -15,50 +15,51 @@
 # limitations under the License.
 #
 
+import functools
 import sys
 import warnings
-from typing import Any, Dict, List, Optional, TYPE_CHECKING
-import functools
+from typing import TYPE_CHECKING, Any, Dict, List, Optional
 
 import numpy as np
 
-from pyspark import since, keyword_only
+from pyspark import keyword_only, since
+from pyspark.ml.common import inherit_doc
+from pyspark.ml.linalg import Matrix, Vector
 from pyspark.ml.param.shared import (
-    HasMaxIter,
-    HasFeaturesCol,
-    HasSeed,
-    HasPredictionCol,
     HasAggregationDepth,
-    HasWeightCol,
-    HasTol,
-    HasProbabilityCol,
-    HasDistanceMeasure,
     HasCheckpointInterval,
-    HasSolver,
-    HasMaxBlockSizeInMB,
+    HasDistanceMeasure,
+    HasFeaturesCol,
     HasIntermediateStorageLevel,
+    HasMaxBlockSizeInMB,
+    HasMaxIter,
+    HasPredictionCol,
+    HasProbabilityCol,
+    HasSeed,
+    HasSolver,
+    HasTol,
+    HasWeightCol,
     Param,
     Params,
     TypeConverters,
 )
+from pyspark.ml.stat import MultivariateGaussian
 from pyspark.ml.util import (
-    JavaMLWritable,
-    JavaMLReadable,
     GeneralJavaMLWritable,
     HasTrainingSummary,
-    try_remote_attribute_relation,
+    JavaMLReadable,
+    JavaMLWritable,
     invoke_helper_relation,
+    try_remote_attribute_relation,
 )
 from pyspark.ml.wrapper import JavaEstimator, JavaModel, JavaParams, JavaWrapper
-from pyspark.ml.common import inherit_doc
-from pyspark.ml.stat import MultivariateGaussian
 from pyspark.sql import DataFrame
-from pyspark.ml.linalg import Vector, Matrix
 from pyspark.sql.utils import is_remote
 
 if TYPE_CHECKING:
-    from pyspark.ml._typing import M
     from py4j.java_gateway import JavaObject
+
+    from pyspark.ml._typing import M
 
 
 __all__ = [
@@ -795,12 +796,14 @@ class KMeans(JavaEstimator[KMeansModel], _KMeansParams, JavaMLWritable, JavaMLRe
         weightCol: Optional[str] = None,
         solver: str = "auto",
         maxBlockSizeInMB: float = 0.0,
+        intermediateStorageLevel: str = "MEMORY_AND_DISK",
     ):
         """
         __init__(self, \\*, featuresCol="features", predictionCol="prediction", k=2, \
                  initMode="k-means||", initSteps=2, tol=1e-4, maxIter=20, seed=None, \
                  distanceMeasure="euclidean", weightCol=None, solver="auto", \
-                 maxBlockSizeInMB=0.0)
+                 maxBlockSizeInMB=0.0, \
+                 intermediateStorageLevel="MEMORY_AND_DISK")
         """
         super().__init__()
         self._java_obj = self._new_java_obj("org.apache.spark.ml.clustering.KMeans", self.uid)
@@ -827,12 +830,14 @@ class KMeans(JavaEstimator[KMeansModel], _KMeansParams, JavaMLWritable, JavaMLRe
         weightCol: Optional[str] = None,
         solver: str = "auto",
         maxBlockSizeInMB: float = 0.0,
+        intermediateStorageLevel: str = "MEMORY_AND_DISK",
     ) -> "KMeans":
         """
         setParams(self, \\*, featuresCol="features", predictionCol="prediction", k=2, \
                   initMode="k-means||", initSteps=2, tol=1e-4, maxIter=20, seed=None, \
                   distanceMeasure="euclidean", weightCol=None, solver="auto", \
-                  maxBlockSizeInMB=0.0)
+                  maxBlockSizeInMB=0.0, \
+                  intermediateStorageLevel="MEMORY_AND_DISK")
 
         Sets params for KMeans.
         """
@@ -923,7 +928,7 @@ class KMeans(JavaEstimator[KMeansModel], _KMeansParams, JavaMLWritable, JavaMLRe
         """
         return self._set(maxBlockSizeInMB=value)
 
-    @since("5.0.0")
+    @since("4.3.0")
     def setIntermediateStorageLevel(self, value: str) -> "KMeans":
         """
         Sets the value of :py:attr:`intermediateStorageLevel`.
@@ -2180,7 +2185,9 @@ class PowerIterationClustering(
 
 if __name__ == "__main__":
     import doctest
+
     import numpy
+
     import pyspark.ml.clustering
     from pyspark.sql import SparkSession
 

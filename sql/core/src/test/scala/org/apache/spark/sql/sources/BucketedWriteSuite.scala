@@ -252,8 +252,9 @@ abstract class BucketedWriteSuite extends QueryTest {
         .bucketBy(8, "j", "k")
         .sortBy("k")
         .saveAsTable("bucketed_table")),
-      condition = "_LEGACY_ERROR_TEMP_1166",
-      parameters = Map("bucketCol" -> "j", "normalizedPartCols" -> "i, j"))
+      condition = "BUCKET_COLUMN_IN_PARTITION_COLUMNS",
+      sqlState = "42713",
+      parameters = Map("bucketColumn" -> "`j`", "partitionColumns" -> "`i`, `j`"))
 
     checkError(
       exception = intercept[AnalysisException](df.write
@@ -261,8 +262,23 @@ abstract class BucketedWriteSuite extends QueryTest {
         .bucketBy(8, "k")
         .sortBy("i")
         .saveAsTable("bucketed_table")),
-      condition = "_LEGACY_ERROR_TEMP_1167",
-      parameters = Map("sortCol" -> "i", "normalizedPartCols" -> "i, j"))
+      condition = "BUCKET_SORT_COLUMN_IN_PARTITION_COLUMNS",
+      sqlState = "42713",
+      parameters = Map("sortColumn" -> "`i`", "partitionColumns" -> "`i`, `j`"))
+  }
+
+  test("SPARK-59040: overlapping column names are quoted as single identifiers") {
+    // A name is already resolved here, so it must not be parsed: "x.y" is one column rather than
+    // a qualified reference, and a name holding a backtick has it escaped rather than rejected.
+    val df = Seq((1, "a", 2)).toDF("x.y", "z`w", "k")
+    checkError(
+      exception = intercept[AnalysisException](df.write
+        .partitionBy("x.y", "z`w")
+        .bucketBy(8, "x.y")
+        .saveAsTable("bucketed_table")),
+      condition = "BUCKET_COLUMN_IN_PARTITION_COLUMNS",
+      sqlState = "42713",
+      parameters = Map("bucketColumn" -> "`x.y`", "partitionColumns" -> "`x.y`, `z``w`"))
   }
 
   test("write bucketed data without partitionBy") {

@@ -371,6 +371,7 @@ class ALS:
 
 def _test() -> None:
     import doctest
+
     import pyspark.mllib.recommendation
     from pyspark.sql import SQLContext
 

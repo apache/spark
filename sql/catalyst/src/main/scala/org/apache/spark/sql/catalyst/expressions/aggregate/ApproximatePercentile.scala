@@ -66,6 +66,16 @@ import org.apache.spark.util.ArrayImplicits._
       In this case, returns the approximate percentile array of column `col` at the given
       percentage array.
   """,
+  arguments = """
+    Arguments:
+      * col - The numeric, ANSI interval or TIME column whose percentile is
+          computed.
+      * percentage - A value (or array of values) between 0.0 and 1.0 specifying
+          the percentile(s) to compute.
+      * accuracy - Optional. A positive numeric literal (default: 10000) that
+          controls approximation accuracy at the cost of memory. Higher values
+          yield better accuracy; `1.0/accuracy` is the relative error.
+  """,
   examples = """
     Examples:
       > SELECT _FUNC_(col, array(0.5, 0.4, 0.1), 100) FROM VALUES (0), (1), (2), (10) AS tab(col);

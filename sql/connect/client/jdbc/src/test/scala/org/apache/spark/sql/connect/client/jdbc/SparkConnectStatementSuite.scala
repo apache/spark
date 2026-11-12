@@ -173,4 +173,17 @@ class SparkConnectStatementSuite extends ConnectFunSuite with RemoteSparkSession
       }
     }
   }
+
+  test("execute throws SQLException with server-provided SQLState on query failure") {
+    withStatement { stmt =>
+      val e = intercept[SQLException] {
+        stmt.execute("SELECT * FROM this_table_does_not_exist")
+      }
+      // TABLE_OR_VIEW_NOT_FOUND
+      assert(e.getSQLState === "42P01")
+      assert(!e.isInstanceOf[SQLNonTransientConnectionException])
+      assert(!e.isInstanceOf[SQLTransientConnectionException])
+      assert(e.getCause != null)
+    }
+  }
 }

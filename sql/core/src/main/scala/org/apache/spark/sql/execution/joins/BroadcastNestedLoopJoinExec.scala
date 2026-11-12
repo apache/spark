@@ -177,7 +177,7 @@ case class BroadcastNestedLoopJoinExec(
             nextIndex += 1
             if (boundCondition(resultRow)) {
               if (foundMatch && singleJoin) {
-                throw QueryExecutionErrors.scalarSubqueryReturnsMultipleRows();
+                throw QueryExecutionErrors.scalarSubqueryReturnsMultipleRows()
               }
               foundMatch = true
               return true

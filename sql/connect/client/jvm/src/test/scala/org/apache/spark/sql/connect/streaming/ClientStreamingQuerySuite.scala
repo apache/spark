@@ -555,6 +555,8 @@ class ClientStreamingQuerySuite extends QueryTest with RemoteSparkSession with L
     // Remove the listener, length should be 1.
     spark.streams.removeListener(listener)
     assert(spark.streams.listListeners().length == 0)
+    // Wait for the executionThread to complete. See SPARK-58000.
+    Thread.sleep(5000)
   }
 
   test("listener events") {
@@ -617,7 +619,7 @@ class ClientStreamingQuerySuite extends QueryTest with RemoteSparkSession with L
           .sql(s"select * from $tableName")
           .collect()
           .toSeq
-        assert(rows.size > 0)
+        assert(rows.nonEmpty)
         assert(rows.map(_.getLong(1)).sum > 0)
         logInfo(s"Rows in $tableName: $rows")
       }
@@ -660,7 +662,7 @@ class ClientStreamingQuerySuite extends QueryTest with RemoteSparkSession with L
           .sql(s"select * from $tableName")
           .collect()
           .toSeq
-        assert(rows.size > 0)
+        assert(rows.nonEmpty)
         assert(rows.map(_.getLong(1)).sum > 0)
         logInfo(s"Rows in $tableName: $rows")
       }
@@ -768,6 +770,19 @@ class ClientStreamingQuerySuite extends QueryTest with RemoteSparkSession with L
   }
 
   // Tests for DataStreamReader.name() method
+  test("stream reader table source name is serialized") {
+    Seq(None, Some("orders_source")).foreach { sourceName =>
+      val reader = spark.readStream.option("maxFilesPerTrigger", "1")
+      sourceName.foreach(reader.name)
+      val read = reader.table("db.orders").plan.getRoot.getRead
+      assert(read.getIsStreaming)
+      assert(read.getNamedTable.getUnparsedIdentifier == "db.orders")
+      assert(read.getNamedTable.getOptionsMap.get("maxFilesPerTrigger") == "1")
+      assert(read.getNamedTable.hasSourceName == sourceName.isDefined)
+      sourceName.foreach(name => assert(read.getNamedTable.getSourceName == name))
+    }
+  }
+
   testWithSourceEvolution("stream reader name() with valid source names") {
     Seq("mySource", "my_source", "MySource123", "_private", "source_123_test", "123source")
       .foreach { name =>

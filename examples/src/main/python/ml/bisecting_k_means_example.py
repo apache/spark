@@ -23,6 +23,7 @@ Run with:
 # $example on$
 from pyspark.ml.clustering import BisectingKMeans
 from pyspark.ml.evaluation import ClusteringEvaluator
+
 # $example off$
 from pyspark.sql import SparkSession
 

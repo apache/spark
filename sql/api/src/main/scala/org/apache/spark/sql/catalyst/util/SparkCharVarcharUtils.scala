@@ -31,11 +31,23 @@ trait SparkCharVarcharUtils {
   }
 
   /**
-   * Validate the given [[DataType]] to fail if it is char or varchar types or contains nested
-   * ones
+   * Logical type name for CHAR/VARCHAR, used when stamping `spark.sql.catalyst.type` on STRING
+   * storage (ORC/Avro). None for other types, including unbounded STRING.
+   */
+  def charVarcharTypeName(dt: DataType): Option[String] = dt match {
+    case c: CharType => Some(c.typeName)
+    case v: VarcharType => Some(v.typeName)
+    case _ => None
+  }
+
+  /**
+   * Fail if the type contains CHAR/VARCHAR unless legacy-as-string or first-class CHAR/VARCHAR is
+   * enabled (standard semantics or preserveCharVarcharTypeInfo).
    */
   def failIfHasCharVarchar(dt: DataType): DataType = {
-    if (!SqlApiConf.get.charVarcharAsString && hasCharVarchar(dt)) {
+    if (SqlApiConf.get.charVarcharFirstClassTypes) {
+      dt
+    } else if (!SqlApiConf.get.charVarcharAsString && hasCharVarchar(dt)) {
       throw DataTypeErrors.charOrVarcharTypeAsStringUnsupportedError()
     } else {
       replaceCharVarcharWithString(dt)
@@ -43,20 +55,37 @@ trait SparkCharVarcharUtils {
   }
 
   /**
-   * Replaces CharType/VarcharType with StringType recursively in the given data type.
+   * Replaces CharType/VarcharType with StringType recursively in the given data type. First-class
+   * CHAR/VARCHAR (standard semantics or preserveCharVarcharTypeInfo) is left as-is.
    */
-  def replaceCharVarcharWithString(dt: DataType): DataType = dt match {
+  def replaceCharVarcharWithString(dt: DataType): DataType = {
+    if (SqlApiConf.get.charVarcharFirstClassTypes) {
+      dt
+    } else {
+      replaceCharVarcharWithStringAlways(dt)
+    }
+  }
+
+  /**
+   * Always replaces CharType/VarcharType with unbounded StringType, including when first-class
+   * CHAR/VARCHAR types are enabled. Used for Hive TRANSFORM script I/O, which is
+   * STRING-on-the-wire regardless of the declared AS types.
+   */
+  private[sql] def replaceCharVarcharWithStringAlways(dt: DataType): DataType = dt match {
     case ArrayType(et, nullable) =>
-      ArrayType(replaceCharVarcharWithString(et), nullable)
+      ArrayType(replaceCharVarcharWithStringAlways(et), nullable)
     case MapType(kt, vt, nullable) =>
-      MapType(replaceCharVarcharWithString(kt), replaceCharVarcharWithString(vt), nullable)
+      MapType(
+        replaceCharVarcharWithStringAlways(kt),
+        replaceCharVarcharWithStringAlways(vt),
+        nullable)
     case StructType(fields) =>
       StructType(fields.map { field =>
-        field.copy(dataType = replaceCharVarcharWithString(field.dataType))
+        field.copy(dataType = replaceCharVarcharWithStringAlways(field.dataType))
       })
-    case c: CharType if !SqlApiConf.get.preserveCharVarcharTypeInfo => c.toStringType
-    case v: VarcharType if !SqlApiConf.get.preserveCharVarcharTypeInfo => v.toStringType
-    case _ => dt
+    case c: CharType => c.toStringType
+    case v: VarcharType => v.toStringType
+    case other => other
   }
 }
 

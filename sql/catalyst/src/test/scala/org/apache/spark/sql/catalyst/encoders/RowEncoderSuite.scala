@@ -21,9 +21,10 @@ import scala.collection.mutable
 import scala.util.Random
 
 import org.apache.spark.{SparkException, SparkRuntimeException}
-import org.apache.spark.sql.{RandomDataGenerator, Row}
+import org.apache.spark.sql.{AnalysisException, RandomDataGenerator, Row}
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.plans.CodegenInterpretedPlanTest
+import org.apache.spark.sql.catalyst.types.DataTypeUtils.toAttributes
 import org.apache.spark.sql.catalyst.util.{ArrayData, DateTimeUtils, GenericArrayData, IntervalUtils}
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
@@ -253,6 +254,17 @@ class RowEncoderSuite extends CodegenInterpretedPlanTest {
     assert(encoder.serializer.head.nullable == false)
   }
 
+  test("SPARK-60528: RowEncoder should support nested empty structs") {
+    val schema = new StructType().add(
+      "s",
+      new StructType().add("a", new StructType(), nullable = false),
+      nullable = false)
+    val encoder = ExpressionEncoder(schema).resolveAndBind()
+    assert(encoder.schema === schema)
+    val row = Row(Row(Row()))
+    assert(roundTrip(encoder, row) === row)
+  }
+
   test("RowEncoder should support primitive arrays") {
     val schema = new StructType()
       .add("booleanPrimitiveArray", ArrayType(BooleanType, false))
@@ -336,6 +348,16 @@ class RowEncoderSuite extends CodegenInterpretedPlanTest {
     }
     assert(e4.getCause.getMessage.contains("The external type java.lang.String is not valid " +
       "for the type \"TIMESTAMP\""))
+  }
+
+  test("SPARK-60528: RowEncoder should validate the input of empty structs") {
+    val schema = new StructType().add("s", new StructType(), nullable = false)
+    val encoder = ExpressionEncoder(schema)
+    val e1 = intercept[RuntimeException](toRow(encoder, Row(null)))
+    assert(e1.getCause.getMessage.contains("The 0th field 's' of input row cannot be null."))
+    val e2 = intercept[RuntimeException](toRow(encoder, Row("a")))
+    assert(e2.getCause.getMessage.contains("The external type java.lang.String is not valid " +
+      "for the type \"STRUCT<>\""))
   }
 
   private def roundTripArray[T](dt: DataType, nullable: Boolean, data: Array[T]): Unit = {
@@ -473,6 +495,19 @@ class RowEncoderSuite extends CodegenInterpretedPlanTest {
     assert(readback.get(0).equals(localTime))
   }
 
+  test("SPARK-60346: encoding/decoding an array of TimeType(p) to/from java.time.LocalTime") {
+    val nanos = DateTimeUtils.localTimeToNanos(java.time.LocalTime.parse("20:38:45.123456789"))
+    (TimeType.MIN_PRECISION to TimeType.MAX_PRECISION).foreach { p =>
+      val schema = new StructType().add("a", ArrayType(TimeType(p)))
+      // Bind to the declared schema, as `Dataset.collect` binds to the plan output.
+      val encoder = ExpressionEncoder(schema).resolveAndBind(toAttributes(schema))
+      assert(encoder.schema === schema)
+      val time = DateTimeUtils.nanosToLocalTime(DateTimeUtils.truncateTimeToPrecision(nanos, p))
+      val row = Row(Seq(time))
+      assert(roundTrip(encoder, row) === row)
+    }
+  }
+
   test("SPARK-34605: encoding/decoding DayTimeIntervalType to/from java.time.Duration") {
     dayTimeIntervalTypes.foreach { dayTimeIntervalType =>
       val schema = new StructType().add("d", dayTimeIntervalType)
@@ -590,40 +625,77 @@ class RowEncoderSuite extends CodegenInterpretedPlanTest {
     val row = encoder.createSerializer()(data)
   }
 
+  test("SPARK-58794: encoderFor rejects CHAR/VARCHAR when first-class types are off") {
+    Seq(CharType(4), VarcharType(6)).foreach { dt =>
+      val schema = new StructType().add("c", dt)
+      withSQLConf(
+          SQLConf.CHAR_VARCHAR_STANDARD_SEMANTICS.key -> "false",
+          SQLConf.PRESERVE_CHAR_VARCHAR_TYPE_INFO.key -> "false") {
+        checkError(
+          exception = intercept[AnalysisException] {
+            RowEncoder.encoderFor(schema)
+          },
+          condition = "UNSUPPORTED_DATA_TYPE_FOR_ENCODER",
+          sqlState = "0A000",
+          parameters = Map("dataType" -> s"\"${dt.sql}\"")
+        )
+        // Engine-produced result schemas still decode on the Connect client.
+        RowEncoder.encoderForResultSchema(schema)
+      }
+    }
+  }
+
   test("do not allow serializing too long strings into char/varchar") {
     Seq(CharType(5), VarcharType(5)).foreach { typ =>
-      withSQLConf(SQLConf.PRESERVE_CHAR_VARCHAR_TYPE_INFO.key -> "true") {
-        val schema = new StructType().add("c", typ)
-        val encoder = ExpressionEncoder(schema).resolveAndBind()
-        val value = "abcdef"
-        checkError(
-          exception = intercept[SparkRuntimeException]({
-            val row = toRow(encoder, Row(value))
-          }),
-          condition = "EXCEED_LIMIT_LENGTH",
-          parameters = Map("limit" -> "5")
-        )
+      Seq(
+        SQLConf.PRESERVE_CHAR_VARCHAR_TYPE_INFO.key -> "true",
+        SQLConf.CHAR_VARCHAR_STANDARD_SEMANTICS.key -> "true").foreach { conf =>
+        withSQLConf(conf) {
+          val schema = new StructType().add("c", typ)
+          val encoder = ExpressionEncoder(schema).resolveAndBind()
+          val value = "abcdef"
+          checkError(
+            exception = intercept[SparkRuntimeException]({
+              val row = toRow(encoder, Row(value))
+            }),
+            condition = "EXCEED_LIMIT_LENGTH",
+            parameters = Map("limit" -> "5")
+          )
+        }
       }
     }
   }
 
   test("do not allow deserializing too long strings into char/varchar") {
     Seq(CharType(5), VarcharType(5)).foreach { typ =>
-      withSQLConf(SQLConf.PRESERVE_CHAR_VARCHAR_TYPE_INFO.key -> "true") {
-        val fromSchema = new StructType().add("c", StringType)
-        val fromEncoder = ExpressionEncoder(fromSchema).resolveAndBind()
-        val toSchema = new StructType().add("c", typ)
-        val toEncoder = ExpressionEncoder(toSchema).resolveAndBind()
-        val value = "abcdef"
-        val row = toRow(fromEncoder, Row(value))
-        checkError(
-          exception = intercept[SparkRuntimeException]({
-            val value = fromRow(toEncoder, row)
-          }),
-          condition = "EXCEED_LIMIT_LENGTH",
-          parameters = Map("limit" -> "5")
-        )
+      Seq(
+        SQLConf.PRESERVE_CHAR_VARCHAR_TYPE_INFO.key -> "true",
+        SQLConf.CHAR_VARCHAR_STANDARD_SEMANTICS.key -> "true").foreach { conf =>
+        withSQLConf(conf) {
+          val fromSchema = new StructType().add("c", StringType)
+          val fromEncoder = ExpressionEncoder(fromSchema).resolveAndBind()
+          val toSchema = new StructType().add("c", typ)
+          val toEncoder = ExpressionEncoder(toSchema).resolveAndBind()
+          val value = "abcdef"
+          val row = toRow(fromEncoder, Row(value))
+          checkError(
+            exception = intercept[SparkRuntimeException]({
+              val value = fromRow(toEncoder, row)
+            }),
+            condition = "EXCEED_LIMIT_LENGTH",
+            parameters = Map("limit" -> "5")
+          )
+        }
       }
+    }
+  }
+
+  test("SPARK-58803: RowEncoder pads CHAR under standardSemantics") {
+    withSQLConf(SQLConf.CHAR_VARCHAR_STANDARD_SEMANTICS.key -> "true") {
+      val schema = new StructType().add("c", CharType(5)).add("v", VarcharType(5))
+      val encoder = ExpressionEncoder(schema).resolveAndBind()
+      val row = toRow(encoder, Row("ab", "cd"))
+      assert(fromRow(encoder, row) === Row("ab   ", "cd"))
     }
   }
 }

@@ -14,36 +14,38 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 #
+import filecmp
 import os
 import sys
 import warnings
-import filecmp
 from collections.abc import Sized
-from functools import reduce, cached_property
+from functools import cached_property, reduce
 from threading import RLock
 from types import TracebackType
 from typing import (
+    TYPE_CHECKING,
     Any,
     Callable,
     ClassVar,
     Dict,
-    Iterable,
     Generic,
+    Iterable,
     List,
     Optional,
+    Set,
     Tuple,
     Type,
     TypeVar,
     Union,
-    Set,
     cast,
     no_type_check,
     overload,
-    TYPE_CHECKING,
 )
+from urllib.parse import urlparse
 
 from pyspark.conf import SparkConf
-from pyspark.util import default_api_mode, is_remote_only
+from pyspark.errors import PySparkRuntimeError, PySparkTypeError, PySparkValueError
+from pyspark.errors.exceptions.captured import install_exception_handler
 from pyspark.sql.conf import RuntimeConfig
 from pyspark.sql.dataframe import DataFrame
 from pyspark.sql.functions import lit
@@ -57,40 +59,41 @@ from pyspark.sql.types import (
     DataType,
     StructType,
     VariantVal,
-    _make_type_verifier,
-    _infer_schema,
-    _has_nulltype,
-    _merge_type,
     _create_converter,
+    _has_nulltype,
+    _infer_schema,
+    _make_type_verifier,
+    _merge_type,
 )
-from pyspark.errors.exceptions.captured import install_exception_handler
 from pyspark.sql.utils import (
+    remote_only,
     to_str,
     try_remote_session_classmethod,
-    remote_only,
 )
-from pyspark.errors import PySparkValueError, PySparkTypeError, PySparkRuntimeError
+from pyspark.util import default_api_mode, is_remote_only
 
 if TYPE_CHECKING:
-    from py4j.java_gateway import JavaClass, JavaObject, JVMView
     import pyarrow as pa
+    from py4j.java_gateway import JavaClass, JavaObject, JVMView
+
     from pyspark.core.context import SparkContext
     from pyspark.core.rdd import RDD
-    from pyspark.sql._typing import AtomicValue, RowLike, OptionalPrimitiveType
+    from pyspark.sql._typing import AtomicValue, OptionalPrimitiveType, RowLike
     from pyspark.sql.catalog import Catalog
-    from pyspark.sql.pandas._typing import ArrayLike, DataFrameLike as PandasDataFrameLike
-    from pyspark.sql.streaming import StreamingQueryManager
-    from pyspark.sql.streaming.query import StreamingCheckpointManager
-    from pyspark.sql.tvf import TableValuedFunction
-    from pyspark.sql.udf import UDFRegistration
-    from pyspark.sql.udtf import UDTFRegistration
-    from pyspark.sql.datasource import DataSourceRegistration
-    from pyspark.sql.dataframe import DataFrame as ParentDataFrame
 
     # Running MyPy type checks will always require pandas and
     # other dependencies so importing here is fine.
     from pyspark.sql.connect.client import SparkConnectClient
     from pyspark.sql.connect.shell.progress import ProgressHandler
+    from pyspark.sql.dataframe import DataFrame as ParentDataFrame
+    from pyspark.sql.datasource import DataSourceRegistration
+    from pyspark.sql.pandas._typing import ArrayLike
+    from pyspark.sql.pandas._typing import DataFrameLike as PandasDataFrameLike
+    from pyspark.sql.streaming import StreamingQueryManager
+    from pyspark.sql.streaming.query import StreamingCheckpointManager
+    from pyspark.sql.tvf import TableValuedFunction
+    from pyspark.sql.udf import UDFRegistration
+    from pyspark.sql.udtf import UDTFRegistration
 
 
 __all__ = ["SparkSession"]
@@ -1308,6 +1311,7 @@ class SparkSession(SparkConversionMixin):
         that script, which would expose those to users.
         """
         import py4j
+
         from pyspark.core.context import SparkContext
 
         try:
@@ -2264,10 +2268,21 @@ class SparkSession(SparkConversionMixin):
         .. versionchanged:: 4.0.0
             Supports Spark Classic.
 
+        .. versionchanged:: 4.4.0
+            Supports native data source packages (``.sparkpkg`` files).
+
         Parameters
         ----------
         *path : tuple of str
-            Artifact's URIs to add.
+            Artifact's URIs to add. A native data source package (a ``.sparkpkg`` file) makes
+            the native data sources it contains available to the session. The call fails for a
+            file that is not a valid package, for a package whose version Spark does not
+            support, or that has no library for the platform of the driver; the session then
+            does not get the package. With ``spark.sql.dataSource.native.enabled`` set to false,
+            such a file is added as a file of the session, without the check. A package that is
+            rejected also stops the rest of the call: without Spark Connect, the packages are
+            added first, one at a time, so only the packages before it are added; with Spark
+            Connect, the paths are added one at a time, so the paths before it are added.
         pyfile : bool
             Whether to add them as Python dependencies such as .py, .egg, .zip or .jar files.
             The pyfiles are directly inserted into the path when executing Python functions
@@ -2289,6 +2304,18 @@ class SparkSession(SparkConversionMixin):
                     "condition": "True together",
                 },
             )
+        # Native data source packages are artifacts of the session in the JVM, whatever the
+        # flags, as with Spark Connect. The JVM resolves file URIs, such as
+        # file:///tmp/a.sparkpkg, but resolves a relative path against its own working directory,
+        # so it gets an absolute path instead. Anything else is a path, such as C:/a.sparkpkg on
+        # Windows, or a file name with a colon, such as a:1.sparkpkg.
+        for p in path:
+            if p.endswith(".sparkpkg"):
+                if urlparse(p).scheme == "file":
+                    self._jsparkSession.addArtifact(p)
+                else:
+                    self._jsparkSession.addArtifact(os.path.abspath(p))
+        path = tuple(p for p in path if not p.endswith(".sparkpkg"))
         for p in path:
             normalized_path = os.path.abspath(p)
             target_dir = os.path.join(
@@ -2574,8 +2601,9 @@ class SparkSession(SparkConversionMixin):
 
 
 def _test() -> None:
-    import os
     import doctest
+    import os
+
     import pyspark.sql.session
 
     os.chdir(os.environ["SPARK_HOME"])

@@ -111,6 +111,8 @@ object NormalizePlan extends PredicateHelper {
         udf.copy(resultId = ExprId(0))
       case udaf: PythonUDAF =>
         udaf.copy(resultId = ExprId(0))
+      case agg: PythonAggregate =>
+        agg.copy(resultId = ExprId(0))
       case a: FunctionTableSubqueryArgumentExpression =>
         a.copy(plan = normalizeExprIds(a.plan), exprId = ExprId(0))
     }

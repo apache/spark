@@ -20,17 +20,17 @@ import uuid
 from datetime import datetime
 
 from pyspark import Row
+from pyspark.sql.functions import col, count, lit
 from pyspark.sql.streaming import StreamingQueryListener
 from pyspark.sql.streaming.listener import (
-    QueryStartedEvent,
     QueryProgressEvent,
+    QueryStartedEvent,
     QueryTerminatedEvent,
     SinkProgress,
     SourceProgress,
     StateOperatorProgress,
     StreamingQueryProgress,
 )
-from pyspark.sql.functions import count, col, lit
 from pyspark.testing.sqlutils import ReusedSQLTestCase
 
 
@@ -375,6 +375,7 @@ class StreamingListenerTests(StreamingListenerTestsMixin, ReusedSQLTestCase):
 
             try:
                 self.spark.streams.addListener(test_listener)
+                self.spark.sparkContext.addJobTag("listener-job-tag")
 
                 df = self.spark.readStream.format("rate").option("rowsPerSecond", 10).load()
 
@@ -399,6 +400,7 @@ class StreamingListenerTests(StreamingListenerTestsMixin, ReusedSQLTestCase):
                 self.spark.sparkContext._jsc.sc().listenerBus().waitUntilEmpty()
 
                 self.check_start_event(start_event)
+                self.assertIn("listener-job-tag", start_event.jobTags)
                 self.check_progress_event(progress_event, True)
                 self.check_terminated_event(terminated_event)
 
@@ -423,6 +425,7 @@ class StreamingListenerTests(StreamingListenerTestsMixin, ReusedSQLTestCase):
                 )
 
             finally:
+                self.spark.sparkContext.clearJobTags()
                 self.spark.streams.removeListener(test_listener)
 
         verify(TestListenerV1())

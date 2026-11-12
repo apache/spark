@@ -16,11 +16,11 @@
  */
 package org.apache.spark.sql.execution.datasources.parquet
 
-import java.io.IOException
+import java.io.{ByteArrayOutputStream, IOException}
 import java.nio.ByteBuffer
 import java.util.Random
 
-import org.apache.parquet.bytes.{ByteBufferInputStream, DirectByteBufferAllocator}
+import org.apache.parquet.bytes.{ByteBufferInputStream, BytesUtils, DirectByteBufferAllocator}
 import org.apache.parquet.column.values.ValuesWriter
 import org.apache.parquet.column.values.delta.{DeltaBinaryPackingValuesWriterForInteger, DeltaBinaryPackingValuesWriterForLong}
 import org.apache.parquet.io.ParquetDecodingException
@@ -170,6 +170,59 @@ abstract class ParquetDeltaEncodingSuite[T] extends ParquetCompatibilityTest
         // No more values to read. Total values read:  641, total count: 641, trying to read 1 more.
         assert(e.getMessage.startsWith("No more values to read."))
     }
+  }
+
+  test("reject invalid DELTA_BINARY_PACKED page header") {
+    // A corrupt header declaring blockSizeInValues = 2^30 would force multi-gigabyte scratch
+    // allocations from a few-byte page. The reader must reject it before allocating anything.
+    def craftHeader(blockSize: Int, miniBlockNum: Int, totalCount: Int): ByteBufferInputStream = {
+      val out = new ByteArrayOutputStream()
+      BytesUtils.writeUnsignedVarInt(blockSize, out)
+      BytesUtils.writeUnsignedVarInt(miniBlockNum, out)
+      BytesUtils.writeUnsignedVarInt(totalCount, out)
+      out.write(0) // firstValue (zigzag var long 0)
+      ByteBufferInputStream.wrap(ByteBuffer.wrap(out.toByteArray))
+    }
+
+    reader = new VectorizedDeltaBinaryPackedReader
+    val e = intercept[ParquetDecodingException] {
+      reader.initFromPage(100, craftHeader(1 << 30, 1, 1))
+    }
+    assert(e.getMessage.contains("Invalid DELTA_BINARY_PACKED block size"))
+
+    // A mini block count larger than the block size (mini blocks of zero values) is likewise
+    // rejected.
+    reader = new VectorizedDeltaBinaryPackedReader
+    val e2 = intercept[ParquetDecodingException] {
+      reader.initFromPage(100, craftHeader(128, 256, 1))
+    }
+    assert(e2.getMessage.contains("mini block count"))
+
+    // A negative total value count is rejected as well.
+    reader = new VectorizedDeltaBinaryPackedReader
+    val e3 = intercept[ParquetDecodingException] {
+      reader.initFromPage(100, craftHeader(128, 4, -1))
+    }
+    assert(e3.getMessage.contains("total value count"))
+
+    // The mini blocks must have a multiple of 8 values: 128 values do not split into 3 mini
+    // blocks, and split into 32 mini blocks of 4 values.
+    Seq(3, 32).foreach { miniBlockNum =>
+      reader = new VectorizedDeltaBinaryPackedReader
+      val e4 = intercept[ParquetDecodingException] {
+        reader.initFromPage(100, craftHeader(128, miniBlockNum, 1))
+      }
+      assert(e4.getMessage == s"Invalid DELTA_BINARY_PACKED mini block count: $miniBlockNum " +
+        "(block size in values: 128, the mini block size must be a multiple of 8)")
+    }
+
+    // A page must have at least one value.
+    reader = new VectorizedDeltaBinaryPackedReader
+    val e5 = intercept[ParquetDecodingException] {
+      reader.initFromPage(0, craftHeader(128, 4, 1))
+    }
+    assert(e5.getMessage ==
+      "Invalid DELTA_BINARY_PACKED page: it must have at least one value, but it has 0")
   }
 
   test("skip()") {

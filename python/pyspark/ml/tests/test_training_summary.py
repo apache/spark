@@ -18,12 +18,12 @@
 
 from pyspark.ml.classification import (
     BinaryRandomForestClassificationSummary,
-    FMClassifier,
     FMClassificationSummary,
+    FMClassifier,
     LinearSVC,
     LinearSVCSummary,
-    MultilayerPerceptronClassifier,
     MultilayerPerceptronClassificationSummary,
+    MultilayerPerceptronClassifier,
     RandomForestClassificationSummary,
     RandomForestClassifier,
 )

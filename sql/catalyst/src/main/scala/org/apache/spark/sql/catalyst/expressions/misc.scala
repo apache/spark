@@ -84,6 +84,7 @@ case class RaiseError(errorClass: Expression, errorParms: Expression, dataType: 
 
   override def foldable: Boolean = false
   override def nullable: Boolean = true
+  override lazy val throwable: Boolean = true
   override def inputTypes: Seq[AbstractDataType] =
     Seq(
       StringTypeWithCollation(supportsTrimCollation = true),
@@ -317,6 +318,11 @@ case class Uuid(randomSeed: Option[Long] = None) extends LeafExpression with Non
 
   override def stateful: Boolean = true
 
+  // Stateful fresh copies use this hook even for leaves. The default leaf hook returns this,
+  // which would share randomGenerator across evaluators; copy preserves the seed without
+  // sharing the initialized generator.
+  override def withNewChildrenInternal(newChildren: IndexedSeq[Expression]): Expression = copy()
+
   @transient private[this] var randomGenerator: RandomUUIDGenerator = _
 
   override protected def initializeInternal(partitionIndex: Int): Unit =
@@ -364,6 +370,10 @@ case class SparkVersion()
 
 @ExpressionDescription(
   usage = """_FUNC_(expr) - Return DDL-formatted type string for the data type of the input.""",
+  arguments = """
+    Arguments:
+      * expr - An expression of any type whose data type is returned as a DDL-formatted string.
+  """,
   examples = """
     Examples:
       > SELECT _FUNC_(1);

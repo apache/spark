@@ -198,11 +198,11 @@ case object NO_BROADCAST_AND_REPLICATION extends JoinStrategyHint {
   override def hintAliases: Set[String] = Set.empty
 }
 
-abstract class AggregateHint;
+abstract class AggregateHint
 
-abstract class WindowHint;
+abstract class WindowHint
 
-abstract class SortHint;
+abstract class SortHint
 
 /**
  * The callback for implementing customized strategies of handling hint errors.

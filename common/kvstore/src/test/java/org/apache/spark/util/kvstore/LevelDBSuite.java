@@ -99,6 +99,32 @@ public class LevelDBSuite {
   }
 
   @Test
+  public void testGetOrNullMissingKey() throws Exception {
+    // getOrNull() returns null for a missing key so expected misses (e.g. the write path
+    // looking up an existing entry) skip the cost of building an exception, while read()
+    // still surfaces a missing key as NoSuchElementException.
+    byte[] missingKey = db.getTypeInfo(CustomType1.class).naturalIndex().start(null, "missing");
+    assertNull(db.getOrNull(missingKey, CustomType1.class));
+    assertThrows(NoSuchElementException.class, () -> db.read(CustomType1.class, "missing"));
+
+    CustomType1 t = createCustomType1(1);
+    db.write(t);
+    assertEquals(t, db.read(CustomType1.class, t.key));
+  }
+
+  @Test
+  public void testDeleteEdgeCases() throws Exception {
+    // Never-written type: type info is created on the fly, lookup misses, nothing happens.
+    db.delete(CustomType1.class, "missing");
+    assertEquals(0L, db.count(CustomType1.class));
+
+    // Never-written key of a written type.
+    db.write(createCustomType1(1));
+    db.delete(CustomType1.class, "missing");
+    assertEquals(1L, db.count(CustomType1.class));
+  }
+
+  @Test
   public void testMultipleObjectWriteReadDelete() throws Exception {
     CustomType1 t1 = createCustomType1(1);
     CustomType1 t2 = createCustomType1(2);

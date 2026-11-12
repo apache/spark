@@ -15,9 +15,12 @@
 # limitations under the License.
 #
 
+import ast
 import json
+import os
 import unittest
 
+import pyspark
 from pyspark.errors import PySparkRuntimeError, PySparkValueError
 from pyspark.errors.error_classes import ERROR_CLASSES_JSON
 from pyspark.errors.utils import ErrorClassesReader
@@ -49,6 +52,68 @@ class ErrorsTest(unittest.TestCase):
 
         json.loads(ERROR_CLASSES_JSON, object_pairs_hook=detect_duplication)
 
+    def test_error_classes_used_in_source_are_valid(self):
+        # PySparkException builds its message from error-conditions.json whenever no message is
+        # passed. For every such call with a literal errorClass, whatever the exception class is
+        # named, the condition must be defined and the literal messageParameters keys must match
+        # the placeholders of the message template. Otherwise building the exception fails and
+        # the intended error message is lost.
+
+        # Known issues tracked separately. Remove the entry when the linked issue is fixed.
+        known_issues = {
+            # SPARK-57965
+            (
+                os.path.join("pipelines", "spark_connect_graph_element_registry.py"),
+                "UNSUPPORTED_PIPELINES_DATASET_TYPE",
+            ),
+        }
+
+        error_reader = ErrorClassesReader()
+        root = os.path.dirname(pyspark.__file__)
+        failures = []
+        for dirpath, _, filenames in os.walk(root):
+            if "tests" in os.path.relpath(dirpath, root).split(os.sep):
+                continue
+            for filename in filenames:
+                if not filename.endswith(".py"):
+                    continue
+                path = os.path.join(dirpath, filename)
+                relpath = os.path.relpath(path, root)
+                with open(path, encoding="utf-8") as f:
+                    tree = ast.parse(f.read(), filename=path)
+                for node in ast.walk(tree):
+                    if not isinstance(node, ast.Call):
+                        continue
+                    kwargs = {kw.arg: kw.value for kw in node.keywords}
+                    # A message passed positionally or as message= is used as is, and the
+                    # condition may then be a JVM one that is not in error-conditions.json.
+                    message = kwargs.get("message", ast.Constant(value=None))
+                    if node.args or not (
+                        isinstance(message, ast.Constant) and message.value is None
+                    ):
+                        continue
+                    error_class = kwargs.get("errorClass")
+                    if not (
+                        isinstance(error_class, ast.Constant) and isinstance(error_class.value, str)
+                    ):
+                        continue
+                    if (relpath, error_class.value) in known_issues:
+                        continue
+                    params = kwargs.get("messageParameters", ast.Dict(keys=[], values=[]))
+                    try:
+                        if isinstance(params, ast.Dict) and all(
+                            isinstance(k, ast.Constant) for k in params.keys
+                        ):
+                            keys = [k.value for k in params.keys]
+                            error_reader.get_error_message(error_class.value, {k: "" for k in keys})
+                        else:
+                            # Parameters are not a literal dict, so only check the condition.
+                            error_reader.get_message_template(error_class.value)
+                    except (AssertionError, ValueError) as e:
+                        failures.append(f"{relpath}:{node.lineno}: {e}")
+
+        self.assertEqual(failures, [], "\n".join(failures))
+
     def test_invalid_error_class(self):
         with self.assertRaisesRegex(ValueError, "Cannot find main error class"):
             PySparkValueError(errorClass="invalid", messageParameters={})
@@ -71,6 +136,9 @@ class ErrorsTest(unittest.TestCase):
                     "mitigation_config": {"key": "config.key1", "value": "config.value1"},
                     "needsAudit": False,
                 },
+                "sub_class": {
+                    "SUBCLASS_WITHOUT_INFO": {"message": ["Subclass message without info."]},
+                },
             },
             "TEST_ERROR_WITH_SUB_CLASS": {
                 "message": ["Error message 2 with <param>."],
@@ -85,7 +153,8 @@ class ErrorsTest(unittest.TestCase):
                             },
                             "needsAudit": True,
                         },
-                    }
+                    },
+                    "SUBCLASS_WITHOUT_INFO": {"message": ["Subclass message without info."]},
                 },
             },
         }
@@ -114,15 +183,68 @@ class ErrorsTest(unittest.TestCase):
         subclass_map = error_reader.error_info_map["TEST_ERROR_WITH_SUB_CLASS"]["sub_class"]
         self.assertEqual(breaking_change_info2, subclass_map["SUBCLASS"]["breaking_change_info"])
 
+        # A sub-class without breaking_change_info falls back to the main class's one.
+        self.assertEqual(
+            error_reader.get_breaking_change_info("TEST_ERROR.SUBCLASS_WITHOUT_INFO"),
+            breaking_change_info1,
+        )
+        # None when neither the sub-class nor the main class declares it, or no error class.
+        self.assertIsNone(error_reader.get_breaking_change_info("TEST_ERROR_WITH_SUB_CLASS"))
+        self.assertIsNone(
+            error_reader.get_breaking_change_info("TEST_ERROR_WITH_SUB_CLASS.SUBCLASS_WITHOUT_INFO")
+        )
+        self.assertIsNone(error_reader.get_breaking_change_info(None))
+        # Unknown main or sub error classes raise.
+        with self.assertRaisesRegex(ValueError, "Cannot find main error class 'NON_EXISTENT'"):
+            error_reader.get_breaking_change_info("NON_EXISTENT")
+        with self.assertRaisesRegex(ValueError, "Cannot find sub error class 'NON_EXISTENT_SUB'"):
+            error_reader.get_breaking_change_info("TEST_ERROR_WITH_SUB_CLASS.NON_EXISTENT_SUB")
+
+    def test_message_template_sub_class_not_found(self):
+        # get_message_template raises when the main class exists but the sub-class does not.
+        error_reader = ErrorClassesReader()
+        error_reader.error_info_map = {
+            "TEST_ERROR": {
+                "message": ["Error message."],
+                "sub_class": {"SUBCLASS": {"message": ["Subclass message."]}},
+            },
+        }
+        with self.assertRaisesRegex(ValueError, "Cannot find sub error class 'NON_EXISTENT_SUB'"):
+            error_reader.get_message_template("TEST_ERROR.NON_EXISTENT_SUB")
+
     def test_sqlstate(self):
         error = PySparkRuntimeError(errorClass="APPLICATION_NAME_NOT_SET", messageParameters={})
         self.assertIsNone(error.getSqlState())
 
+        # Neither the sub-class nor the main class declares a sqlState.
         error = PySparkRuntimeError(
             errorClass="SESSION_MUTATION_IN_DECLARATIVE_PIPELINE.SET_RUNTIME_CONF",
             messageParameters={"method": "set"},
         )
         self.assertIsNone(error.getSqlState())
+
+        # A sub-class inherits the main class's sqlState.
+        error = PySparkRuntimeError(
+            errorClass="NEAREST_BY_JOIN.UNSUPPORTED_MODE",
+            messageParameters={"mode": "invalid", "supported": "nearest"},
+        )
+        self.assertEqual(error.getSqlState(), "42604")
+
+    def test_sqlstate_is_taken_from_the_main_class(self):
+        # The sqlState is looked up on the main class only, so a sub-class entry never
+        # takes precedence and an unknown sub-class name still resolves.
+        error_reader = ErrorClassesReader()
+        error_reader.error_info_map = {
+            "TEST_ERROR": {
+                "message": ["Error message."],
+                "sqlState": "42604",
+                "sub_class": {"SUBCLASS": {"message": ["Subclass message."], "sqlState": "08003"}},
+            },
+        }
+        self.assertEqual(error_reader.get_sqlstate("TEST_ERROR.SUBCLASS"), "42604")
+        self.assertEqual(error_reader.get_sqlstate("TEST_ERROR.NON_EXISTENT_SUB"), "42604")
+        self.assertIsNone(error_reader.get_sqlstate("NON_EXISTENT_ERROR.SUBCLASS"))
+        self.assertIsNone(error_reader.get_sqlstate(None))
 
 
 if __name__ == "__main__":

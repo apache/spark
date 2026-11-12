@@ -1054,6 +1054,42 @@ class RocksDBSuite extends AlsoTestWithRocksDBFeatures with SharedSparkSession
       }
   }
 
+  test("RocksDB: split maintenance methods upload snapshots and clean up separately") {
+    val remoteDir = Utils.createTempDir().toString
+    new File(remoteDir).delete()
+    val conf = dbConf.copy(enableChangelogCheckpointing = true,
+      minVersionsToRetain = 3, minDeltasForSnapshot = 1, minVersionsToDelete = 3)
+    withDB(remoteDir, conf = conf) { db =>
+      // Commit 5 versions, uploading snapshots after each via doSnapshotMaintenance.
+      for (version <- 0 to 4) {
+        db.load(version)
+        db.put(version.toString, version.toString)
+        db.commit()
+        db.doSnapshotMaintenance()
+      }
+      assert(snapshotVersionsPresent(remoteDir) == (1 to 5))
+      assert(changelogVersionsPresent(remoteDir) == (1 to 5))
+
+      // Commit 1 more version without maintenance.
+      // stale versions: (1, 2, 3), keep versions: (4, 5, 6)
+      db.load(5)
+      db.put("5", "5")
+      db.commit()
+      assert(snapshotVersionsPresent(remoteDir) == (1 to 5))
+      assert(changelogVersionsPresent(remoteDir) == (1 to 6))
+
+      // doSnapshotMaintenance should upload version 6 and not clean up.
+      db.doSnapshotMaintenance()
+      assert(snapshotVersionsPresent(remoteDir) == (1 to 6))
+      assert(changelogVersionsPresent(remoteDir) == (1 to 6))
+
+      // doCleanupMaintenance should delete stale versions (1, 2, 3) and not upload a snapshot.
+      db.doCleanupMaintenance()
+      assert(snapshotVersionsPresent(remoteDir) == Seq(4, 5, 6))
+      assert(changelogVersionsPresent(remoteDir) == Seq(4, 5, 6))
+    }
+  }
+
   testWithStateStoreCheckpointIdsAndColumnFamilies(
     "RocksDB: minDeltasForSnapshot",
     TestWithChangelogCheckpointingEnabled) {
@@ -4743,7 +4779,7 @@ class RocksDBSuite extends AlsoTestWithRocksDBFeatures with SharedSparkSession
       val db0 = new RocksDB(
         remoteDir, conf = conf, localRootDir = localDir0,
         hadoopConf = noOverwriteConf,
-        loggingId = s"[Thread-${Thread.currentThread.getId}]")
+        loggingId = s"[Thread-${Thread.currentThread.threadId}]")
       try {
         db0.load(0)
         db0.put("setup_key", "setup_value")
@@ -4771,7 +4807,7 @@ class RocksDBSuite extends AlsoTestWithRocksDBFeatures with SharedSparkSession
       val db1 = new RocksDB(
         remoteDir, conf = conf, localRootDir = localDir1,
         hadoopConf = noOverwriteConf,
-        loggingId = s"[Thread-${Thread.currentThread.getId}]")
+        loggingId = s"[Thread-${Thread.currentThread.threadId}]")
       try {
         db1.load(19)
         db1.put("key", "value_from_run1")
@@ -4803,7 +4839,7 @@ class RocksDBSuite extends AlsoTestWithRocksDBFeatures with SharedSparkSession
         conf = conf,
         localRootDir = localDir2,
         hadoopConf = noOverwriteConf,
-        loggingId = s"[Thread-${Thread.currentThread.getId}]")
+        loggingId = s"[Thread-${Thread.currentThread.threadId}]")
       try {
         db2.load(19)
         db2.put("key", "value_from_run2")
@@ -4843,7 +4879,7 @@ class RocksDBSuite extends AlsoTestWithRocksDBFeatures with SharedSparkSession
           conf = conf,
           localRootDir = localDir3,
           hadoopConf = noOverwriteConf,
-          loggingId = s"[Thread-${Thread.currentThread.getId}]")
+          loggingId = s"[Thread-${Thread.currentThread.threadId}]")
         try {
           db3.load(29)
           val value = new String(db3.get("key"), "UTF-8")
@@ -5170,7 +5206,7 @@ class RocksDBSuite extends AlsoTestWithRocksDBFeatures with SharedSparkSession
           conf = conf,
           localRootDir = localDir,
           hadoopConf = hadoopConf,
-          loggingId = s"[Thread-${Thread.currentThread.getId}]",
+          loggingId = s"[Thread-${Thread.currentThread.threadId}]",
           useColumnFamilies = useColumnFamilies,
           versionToUniqueId = versionToUniqueId)
       } else {
@@ -5179,7 +5215,7 @@ class RocksDBSuite extends AlsoTestWithRocksDBFeatures with SharedSparkSession
           conf = conf,
           localRootDir = localDir,
           hadoopConf = hadoopConf,
-          loggingId = s"[Thread-${Thread.currentThread.getId}]",
+          loggingId = s"[Thread-${Thread.currentThread.threadId}]",
           useColumnFamilies = useColumnFamilies)
       }
       db.load(version, versionToUniqueId.get(version))
@@ -5280,7 +5316,7 @@ object RocksDBSuite {
         dfsRootDir = Utils.createTempDir().getAbsolutePath,
         conf = RocksDBConf().copy(compactOnCommit = false, minVersionsToRetain = 100),
         hadoopConf = new Configuration(),
-        loggingId = s"[Thread-${Thread.currentThread.getId}]")
+        loggingId = s"[Thread-${Thread.currentThread.threadId}]")
 
       func
     } finally {

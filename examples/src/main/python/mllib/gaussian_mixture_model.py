@@ -19,10 +19,10 @@
 A Gaussian Mixture Model clustering program using MLlib.
 """
 
-import random
 import argparse
-import numpy as np
+import random
 
+import numpy as np
 from pyspark import SparkConf, SparkContext
 from pyspark.mllib.clustering import GaussianMixture
 

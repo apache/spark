@@ -34,6 +34,15 @@ import org.apache.spark.unsafe.types.UTF8String
     _FUNC_(tupleSketch1, tupleSketch2, mode) - Intersects two binary representations of Datasketches
     TupleSketch objects with double summary data type using a TupleSketch Intersection object.
     Users can set mode to 'sum', 'min', 'max', or 'alwaysone' (defaults to 'sum'). """,
+  arguments = """
+    Arguments:
+      * tupleSketch1 - The binary representation of a Datasketches TupleSketch with a double
+          summary data type.
+      * tupleSketch2 - The binary representation of a Datasketches TupleSketch with a double
+          summary data type.
+      * mode - The summary combination mode: 'sum', 'min', 'max', or 'alwaysone'
+          (optional, defaults to 'sum').
+  """,
   examples = """
     Examples:
       > SELECT tuple_sketch_estimate_double(_FUNC_(tuple_sketch_agg_double(col1, val1), tuple_sketch_agg_double(col2, val2))) FROM VALUES (1, 1.0D, 1, 4.0D), (2, 2.0D, 2, 5.0D), (3, 3.0D, 4, 6.0D) tab(col1, val1, col2, val2);
@@ -80,6 +89,15 @@ case class TupleIntersectionDouble(first: Expression, second: Expression, third:
     _FUNC_(tupleSketch1, tupleSketch2, mode) - Intersects two binary representations of Datasketches
     TupleSketch objects with integer summary data type using a TupleSketch Intersection object.
     Users can set mode to 'sum', 'min', 'max', or 'alwaysone' (defaults to 'sum'). """,
+  arguments = """
+    Arguments:
+      * tupleSketch1 - The binary representation of a Datasketches TupleSketch with an integer
+          summary data type.
+      * tupleSketch2 - The binary representation of a Datasketches TupleSketch with an integer
+          summary data type.
+      * mode - The summary combination mode: 'sum', 'min', 'max', or 'alwaysone'
+          (optional, defaults to 'sum').
+  """,
   examples = """
     Examples:
       > SELECT tuple_sketch_estimate_integer(_FUNC_(tuple_sketch_agg_integer(col1, val1), tuple_sketch_agg_integer(col2, val2))) FROM VALUES (1, 1, 1, 4), (2, 2, 2, 5), (3, 3, 4, 6) tab(col1, val1, col2, val2);
@@ -131,6 +149,14 @@ case class TupleIntersectionInteger(first: Expression, second: Expression, third
     assigned a default double summary value based on the mode: 0.0 for 'sum' mode, +Infinity for
     'min' mode, -Infinity for 'max' mode, or 1.0 for 'alwaysone' mode. Users can set mode to 'sum',
     'min', 'max', or 'alwaysone' (defaults to 'sum'). """,
+  arguments = """
+    Arguments:
+      * tupleSketch - The binary representation of a Datasketches TupleSketch with a double
+          summary data type.
+      * thetaSketch - The binary representation of a Datasketches ThetaSketch.
+      * mode - The summary combination mode: 'sum', 'min', 'max', or 'alwaysone'
+          (optional, defaults to 'sum').
+  """,
   examples = """
     Examples:
       > SELECT tuple_sketch_estimate_double(_FUNC_(tuple_sketch_agg_double(col1, val1), theta_sketch_agg(col2))) FROM VALUES (1, 1.0D, 1), (2, 2.0D, 2), (3, 3.0D, 4) tab(col1, val1, col2);
@@ -182,6 +208,14 @@ case class TupleIntersectionThetaDouble(first: Expression, second: Expression, t
     assigned a default integer summary value based on the mode: 0 for 'sum' mode, Integer.MAX_VALUE
     for 'min' mode, Integer.MIN_VALUE for 'max' mode, or 1 for 'alwaysone' mode. Users can set mode
     to 'sum', 'min', 'max', or 'alwaysone' (defaults to 'sum'). """,
+  arguments = """
+    Arguments:
+      * tupleSketch - The binary representation of a Datasketches TupleSketch with an integer
+          summary data type.
+      * thetaSketch - The binary representation of a Datasketches ThetaSketch.
+      * mode - The summary combination mode: 'sum', 'min', 'max', or 'alwaysone'
+          (optional, defaults to 'sum').
+  """,
   examples = """
     Examples:
       > SELECT tuple_sketch_estimate_integer(_FUNC_(tuple_sketch_agg_integer(col1, val1), theta_sketch_agg(col2))) FROM VALUES (1, 1, 1), (2, 2, 2), (3, 3, 4) tab(col1, val1, col2);

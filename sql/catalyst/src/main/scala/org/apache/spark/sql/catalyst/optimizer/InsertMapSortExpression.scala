@@ -17,33 +17,49 @@
 
 package org.apache.spark.sql.catalyst.optimizer
 
+import scala.collection.immutable.VectorMap
 import scala.collection.mutable
 
-import org.apache.spark.sql.catalyst.expressions.{Alias, ArrayTransform, CreateNamedStruct, Expression, GetStructField, If, IsNull, LambdaFunction, Literal, MapFromArrays, MapKeys, MapSort, MapValues, NamedExpression, NamedLambdaVariable}
+import org.apache.spark.sql.catalyst.expressions.{Alias, ArrayTransform, Attribute, CreateNamedStruct, Expression, GetStructField, If, IsNull, LambdaFunction, Literal, MapFromArrays, MapKeys, MapSort, MapValues, NamedExpression, NamedLambdaVariable}
+import org.apache.spark.sql.catalyst.expressions.aggregate.{AggregateExpression, AggregateFunction}
 import org.apache.spark.sql.catalyst.plans.logical.{Aggregate, LogicalPlan, Project, RepartitionByExpression}
 import org.apache.spark.sql.catalyst.rules.Rule
 import org.apache.spark.sql.catalyst.trees.TreePattern.{AGGREGATE, REPARTITION_OPERATION}
+import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types.{ArrayType, MapType, StructType}
 import org.apache.spark.util.ArrayImplicits.SparkArrayOps
 
 /**
- * Adds [[MapSort]] to [[Aggregate]] expressions containing map columns,
- * as the key/value pairs need to be in the correct order before grouping:
+ * Adds [[MapSort]] to grouping expressions and distinct aggregate arguments that contain maps,
+ * ensuring key/value pairs have a consistent order before aggregation:
  *
  * SELECT map_column, COUNT(*) FROM TABLE GROUP BY map_column =>
  * SELECT _groupingmapsort as map_column, COUNT(*) FROM (
  *   SELECT map_sort(map_column) as _groupingmapsort FROM TABLE
  * ) GROUP BY _groupingmapsort
+ *
+ * SELECT COUNT(DISTINCT map_column) FROM TABLE =>
+ * SELECT COUNT(DISTINCT _distinctmapsort) FROM (
+ *   SELECT map_sort(map_column) as _distinctmapsort FROM TABLE
+ * )
+ *
+ * Distinct arguments are normalized here instead of in [[RewriteDistinctAggregates]] because a
+ * single distinct group without a filter bypasses that rule and is handled by the physical planner.
  */
-object InsertMapSortInGroupingExpressions extends Rule[LogicalPlan] {
+object InsertMapSortInAggregate extends Rule[LogicalPlan] {
   import InsertMapSortExpression._
 
   override def apply(plan: LogicalPlan): LogicalPlan = {
     if (!plan.containsPattern(AGGREGATE)) {
       return plan
     }
+    val normalizeDistinctAggregates =
+      conf.getConf(SQLConf.INSERT_MAP_SORT_IN_DISTINCT_AGGREGATES_ENABLED)
     val shouldRewrite = plan.exists {
-      case agg: Aggregate if agg.groupingExpressions.exists(mapTypeExistsRecursively) => true
+      case agg: Aggregate =>
+        agg.groupingExpressions.exists(mapTypeExistsRecursively) ||
+          (normalizeDistinctAggregates &&
+            distinctAggregateChildren(agg.aggregateExpressions).exists(mapTypeExistsRecursively))
       case _ => false
     }
     if (!shouldRewrite) {
@@ -52,31 +68,103 @@ object InsertMapSortInGroupingExpressions extends Rule[LogicalPlan] {
 
     plan transformUpWithNewOutput {
       case agg @ Aggregate(groupingExprs, aggregateExpressions, child, hint) =>
-        val exprToMapSort = new mutable.HashMap[Expression, NamedExpression]
-        val newGroupingKeys = groupingExprs.map { expr =>
-          val inserted = insertMapSortRecursively(expr)
-          if (expr.ne(inserted)) {
-            exprToMapSort.getOrElseUpdate(
-              expr.canonicalized,
-              Alias(inserted, "_groupingmapsort")()
-            ).toAttribute
-          } else {
-            expr
+        val distinctExpressions = if (normalizeDistinctAggregates) {
+          distinctAggregateChildren(aggregateExpressions)
+        } else {
+          Seq.empty
+        }
+        val expressionsToNormalize = groupingExprs ++ distinctExpressions
+        if (!expressionsToNormalize.exists(mapTypeExistsRecursively)) {
+          agg -> Nil
+        } else {
+          val groupingMapSortAliases = insertMapSortInExpressions(
+            expressions = groupingExprs,
+            aliasName = "_groupingmapsort")
+          val distinctInputAliases = createDistinctInputAliases(distinctExpressions)
+          val distinctMapSortAliases = insertMapSortInExpressions(
+            expressions = distinctExpressions,
+            aliasName = "_distinctmapsort",
+            reusableAliases = groupingMapSortAliases,
+            inputAliases = distinctInputAliases)
+          val newGroupingKeys = groupingExprs.map { expr =>
+            groupingMapSortAliases.get(expr.canonicalized).map(_.toAttribute).getOrElse(expr)
           }
+          val newAggregateExprs = aggregateExpressions.map {
+            case named if groupingMapSortAliases.contains(named.canonicalized) =>
+              // If we replace the top-level named expr, then should add back the original name
+              groupingMapSortAliases(named.canonicalized).toAttribute.withName(named.name)
+            case other =>
+              // This must be top-down so distinct arguments are normalized before their children.
+              // Continuing downward also substitutes grouping aliases in other arguments.
+              other.transformDown {
+                case ae: AggregateExpression if ae.isDistinct =>
+                  ae.copy(aggregateFunction = ae.aggregateFunction.withNewChildren(
+                    ae.aggregateFunction.children.map { child =>
+                      distinctMapSortAliases.get(child.canonicalized)
+                        .map(_.toAttribute).getOrElse(child)
+                    }).asInstanceOf[AggregateFunction])
+                case e =>
+                  groupingMapSortAliases.get(e.canonicalized).map(_.toAttribute).getOrElse(e)
+              }.asInstanceOf[NamedExpression]
+          }
+          val distinctInput = if (distinctInputAliases.nonEmpty) {
+            // Project complex inputs once because recursive normalization can reference them
+            // repeatedly. The operator optimization batch later removes these temporary projection
+            // layers with CollapseProject and ColumnPruning.
+            Project(child.output ++ distinctInputAliases.values, child)
+          } else {
+            child
+          }
+          val newChild = Project(
+            child.output ++ (groupingMapSortAliases ++ distinctMapSortAliases).values,
+            distinctInput)
+          val newAgg = Aggregate(newGroupingKeys, newAggregateExprs, newChild, hint)
+          newAgg -> agg.output.zip(newAgg.output)
         }
-        val newAggregateExprs = aggregateExpressions.map {
-          case named if exprToMapSort.contains(named.canonicalized) =>
-            // If we replace the top-level named expr, then should add back the original name
-            exprToMapSort(named.canonicalized).toAttribute.withName(named.name)
-          case other =>
-            other.transformUp {
-              case e => exprToMapSort.get(e.canonicalized).map(_.toAttribute).getOrElse(e)
-            }.asInstanceOf[NamedExpression]
-        }
-        val newChild = Project(child.output ++ exprToMapSort.values, child)
-        val newAgg = Aggregate(newGroupingKeys, newAggregateExprs, newChild, hint)
-        newAgg -> agg.output.zip(newAgg.output)
     }
+  }
+
+  private def distinctAggregateChildren(
+      aggregateExpressions: Seq[NamedExpression]): Seq[Expression] = {
+    aggregateExpressions
+      .flatMap(_.collect {
+        case ae: AggregateExpression if ae.isDistinct => ae
+      })
+      .flatMap(_.aggregateFunction.children)
+  }
+
+  private def createDistinctInputAliases(
+      expressions: Seq[Expression]): VectorMap[Expression, NamedExpression] = {
+    val aliases = new mutable.LinkedHashMap[Expression, NamedExpression]
+    expressions.foreach {
+      case _: Attribute =>
+      case expr if mapTypeExistsRecursively(expr) =>
+        aliases.getOrElseUpdate(
+          expr.canonicalized,
+          Alias(expr, "_distinctaggregateexpression")())
+      case _ =>
+    }
+    VectorMap.from(aliases)
+  }
+
+  private def insertMapSortInExpressions(
+      expressions: Seq[Expression],
+      aliasName: String,
+      reusableAliases: Map[Expression, NamedExpression] = Map.empty,
+      inputAliases: Map[Expression, NamedExpression] = Map.empty)
+    : VectorMap[Expression, NamedExpression] = {
+    val aliases = new mutable.LinkedHashMap[Expression, NamedExpression]
+    expressions.foreach { expr =>
+      val canonicalized = expr.canonicalized
+      val input = inputAliases.get(canonicalized).map(_.toAttribute).getOrElse(expr)
+      val inserted = insertMapSortRecursively(input)
+      if (input.ne(inserted)) {
+        aliases.getOrElseUpdate(
+          canonicalized,
+          reusableAliases.getOrElse(canonicalized, Alias(inserted, aliasName)()))
+      }
+    }
+    VectorMap.from(aliases)
   }
 }
 

@@ -15,6 +15,7 @@
 # limitations under the License.
 #
 import unittest
+
 from pyspark.resource import ExecutorResourceRequests, ResourceProfileBuilder, TaskResourceRequests
 from pyspark.sql import SparkSession
 from pyspark.testing.utils import (
@@ -56,7 +57,7 @@ class ResourceProfileTests(unittest.TestCase):
         assert_request_contents(ereqs.requests, treqs.requests)
         rp = rpb.require(ereqs).require(treqs).build
         assert_request_contents(rp.executorResources, rp.taskResources)
-        from pyspark import SparkContext, SparkConf
+        from pyspark import SparkConf, SparkContext
 
         sc = SparkContext(conf=SparkConf())
         rdd = sc.parallelize(range(10)).withResources(rp)

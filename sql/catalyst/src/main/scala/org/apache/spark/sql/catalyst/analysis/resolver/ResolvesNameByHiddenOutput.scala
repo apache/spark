@@ -284,7 +284,7 @@ trait ResolvesNameByHiddenOutput extends SQLConfHelper {
       val (metadataCols, nonMetadataCols) =
         operatorOutput.partition(_.toAttribute.qualifiedAccessOnly)
 
-      operator match {
+      val expandedOperator = operator match {
         case aggregate: Aggregate =>
           val newAggregateList = nonMetadataCols ++ filteredMissingExpressions ++ metadataCols
           aggregate.copy(aggregateExpressions = newAggregateList)
@@ -306,8 +306,23 @@ trait ResolvesNameByHiddenOutput extends SQLConfHelper {
 
           project.copy(projectList = newProjectList, child = expandedChild)
       }
+
+      checkMissingInput(expandedOperator)
+
+      expandedOperator
     } else {
       operator
+    }
+  }
+
+  /**
+   * Rejects an expanded `operator` whose child does not produce an appended hidden-output
+   * expression, e.g. an ORDER BY on a column an operator re-outputs under a fresh id.
+   */
+  private def checkMissingInput(operator: LogicalPlan): Unit = {
+    val missingInput = operator.missingInput
+    if (missingInput.nonEmpty) {
+      Resolver.throwMissingAttributesError(operator, missingInput)
     }
   }
 

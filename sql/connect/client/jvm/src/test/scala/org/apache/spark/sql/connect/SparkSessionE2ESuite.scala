@@ -433,6 +433,7 @@ class SparkSessionE2ESuite extends ConnectFunSuite with RemoteSparkSession {
     }
 
     assert(e.getMessage.contains("[INVALID_HANDLE.SESSION_CHANGED]"))
+    assert(e.getSqlState == "08003")
     assert(!session1.client.isSessionValid)
     assert(SparkSession.getActiveSession.isEmpty)
     assert(SparkSession.getDefaultSession.isEmpty)

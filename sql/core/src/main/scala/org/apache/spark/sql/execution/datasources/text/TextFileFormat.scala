@@ -64,6 +64,7 @@ case class TextFileFormat()
       path: Path): Boolean = {
     val textOptions = new TextOptions(options)
     if (textOptions.archiveFormatEnabled && SupportsArchiveFormat.isArchivePath(path)) {
+      SupportsArchiveFormat.checkNoDecompressionCodec(path, textOptions.decompressionCodec)
       // A tar archive is read as one sequential stream (entry by entry), so it is never split.
       return false
     }
@@ -142,7 +143,9 @@ case class TextFileFormat()
       textOptions: TextOptions): PartitionedFile => Iterator[UnsafeRow] = {
     (file: PartitionedFile) => {
       val confValue = conf.value.value
-      SupportsArchiveFormat.readArchiveEntries(file.toPath, confValue) { (_, in) =>
+      val entryGlob = textOptions.archivePathFilterPattern
+      SupportsArchiveFormat.readArchiveEntries(
+          file.toPath, confValue, archivePathFilter = entryGlob) { (_, in) =>
         // Each entry is read as a standalone text file, so it gets its own row writer, exactly as
         // `readToUnsafeMem` builds one per file.
         val emptyUnsafeRow = new UnsafeRow(0)

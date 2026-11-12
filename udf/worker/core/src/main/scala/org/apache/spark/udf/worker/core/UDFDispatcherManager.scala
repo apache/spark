@@ -44,9 +44,10 @@ class UDFDispatcherManager(
     workerLogger: WorkerLogger = WorkerLogger.NoOp
 ) {
 
-  // Guarded by `rwLock`. The read lock is used by getDispatcher
-  // (with upgrade when a new dispatcher must be added) and the
-  // write lock is used by close.
+  // Guarded by `rwLock`. getDispatcher takes the read lock, releasing it
+  // and re-acquiring the write lock when a new dispatcher must be added
+  // (ReentrantReadWriteLock does not support upgrading a held read lock);
+  // close takes the write lock.
   private val rwLock = new ReentrantReadWriteLock()
   private val dispatchers =
     new HashMap[UDFWorkerSpecification, WorkerDispatcher]()

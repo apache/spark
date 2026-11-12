@@ -296,3 +296,45 @@ SELECT hmac('key', 'message', 'SHA-3')
 -- !query analysis
 Project [hmac(cast(key as binary), cast(message as binary), SHA-3) AS hmac(key, message, SHA-3)#x]
 +- OneRowRelation
+
+
+-- !query
+SELECT xxh3_64('Spark')
+-- !query analysis
+Project [xxh3_64(cast(Spark as binary)) AS xxh3_64(Spark)#xL]
++- OneRowRelation
+
+
+-- !query
+SELECT xxh3_64(CAST('Spark' AS BINARY))
+-- !query analysis
+Project [xxh3_64(cast(Spark as binary)) AS xxh3_64(CAST(Spark AS BINARY))#xL]
++- OneRowRelation
+
+
+-- !query
+SELECT xxh3_128('Spark')
+-- !query analysis
+Project [xxh3_128(cast(Spark as binary)) AS xxh3_128(Spark)#x]
++- OneRowRelation
+
+
+-- !query
+SELECT xxh3_128(CAST('Spark' AS BINARY))
+-- !query analysis
+Project [xxh3_128(cast(Spark as binary)) AS xxh3_128(CAST(Spark AS BINARY))#x]
++- OneRowRelation
+
+
+-- !query
+SELECT xxh3_64(CAST(NULL AS STRING))
+-- !query analysis
+Project [xxh3_64(cast(cast(null as string) as binary)) AS xxh3_64(CAST(NULL AS STRING))#xL]
++- OneRowRelation
+
+
+-- !query
+SELECT xxh3_128(CAST(NULL AS BINARY))
+-- !query analysis
+Project [xxh3_128(cast(null as binary)) AS xxh3_128(CAST(NULL AS BINARY))#x]
++- OneRowRelation

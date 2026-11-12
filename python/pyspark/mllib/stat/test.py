@@ -17,7 +17,7 @@
 
 from typing import Generic, Tuple, TypeVar
 
-from pyspark.mllib.common import inherit_doc, JavaModelWrapper
+from pyspark.mllib.common import JavaModelWrapper, inherit_doc
 
 __all__ = ["ChiSqTestResult", "KolmogorovSmirnovTestResult"]
 

@@ -15,12 +15,12 @@
 # limitations under the License.
 #
 
+import decimal
 import functools
 import shutil
 import tempfile
 import warnings
 from contextlib import contextmanager
-import decimal
 from typing import Any, Union
 
 try:
@@ -47,15 +47,15 @@ try:
 except ImportError:
     pass
 
-from pyspark.loose_version import LooseVersion
 import pyspark.pandas as ps
+from pyspark.errors import PySparkAssertionError
+from pyspark.loose_version import LooseVersion
 from pyspark.pandas.frame import DataFrame
 from pyspark.pandas.indexes import Index
 from pyspark.pandas.series import Series
 from pyspark.pandas.utils import SPARK_CONF_ARROW_ENABLED
 from pyspark.testing.sqlutils import ReusedSQLTestCase
 from pyspark.testing.utils import is_ansi_mode_test
-from pyspark.errors import PySparkAssertionError
 
 
 def _assert_pandas_equal(

@@ -42,6 +42,14 @@ private[sql] trait SqlApiConf {
   def allowNegativeScaleOfDecimalEnabled: Boolean
   def charVarcharAsString: Boolean
   def preserveCharVarcharTypeInfo: Boolean
+  def charVarcharStandardSemantics: Boolean
+
+  /**
+   * True when CHAR/VARCHAR may appear as first-class types in schemas and plans (either the
+   * legacy preserve path or SQL standard semantics).
+   */
+  def charVarcharFirstClassTypes: Boolean =
+    preserveCharVarcharTypeInfo || charVarcharStandardSemantics
   def datetimeJava8ApiEnabled: Boolean
   def sessionLocalTimeZone: String
   def legacyTimeParserPolicy: LegacyBehaviorPolicy.Value
@@ -54,6 +62,7 @@ private[sql] trait SqlApiConf {
   def legacyParameterSubstitutionConstantsOnly: Boolean
   def legacyIdentifierClauseOnly: Boolean
   def timestampNanosTypesEnabled: Boolean
+  def isFileTypeEnabled: Boolean
   def allowCreatingUDTFromString: Boolean
   def allowedDynamicUDTClasses: Seq[String]
 }
@@ -104,6 +113,7 @@ private[sql] object DefaultSqlApiConf extends SqlApiConf {
   override def allowNegativeScaleOfDecimalEnabled: Boolean = false
   override def charVarcharAsString: Boolean = false
   override def preserveCharVarcharTypeInfo: Boolean = false
+  override def charVarcharStandardSemantics: Boolean = false
   override def datetimeJava8ApiEnabled: Boolean = false
   override def sessionLocalTimeZone: String = TimeZone.getDefault.getID
   override def legacyTimeParserPolicy: LegacyBehaviorPolicy.Value = LegacyBehaviorPolicy.CORRECTED
@@ -116,6 +126,7 @@ private[sql] object DefaultSqlApiConf extends SqlApiConf {
   override def legacyParameterSubstitutionConstantsOnly: Boolean = false
   override def legacyIdentifierClauseOnly: Boolean = false
   override def timestampNanosTypesEnabled: Boolean = SparkEnvUtils.isTesting
+  override def isFileTypeEnabled: Boolean = false
   override def allowCreatingUDTFromString: Boolean = true
   override def allowedDynamicUDTClasses: Seq[String] = Nil
 }

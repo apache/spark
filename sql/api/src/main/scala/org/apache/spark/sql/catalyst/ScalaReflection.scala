@@ -40,7 +40,7 @@ private[catalyst] object ScalaSubtypeLock
  * A default version of ScalaReflection that uses the runtime universe.
  */
 object ScalaReflection extends ScalaReflection {
-  val universe: scala.reflect.runtime.universe.type = scala.reflect.runtime.universe
+  lazy val universe: scala.reflect.runtime.universe.type = scala.reflect.runtime.universe
   // Since we are creating a runtime mirror using the class loader of current thread,
   // we need to use def at here. So, every time we call mirror, it is using the
   // class loader of the current thread.
@@ -218,7 +218,7 @@ object ScalaReflection extends ScalaReflection {
   }
 
   def encodeFieldNameToIdentifier(fieldName: String): String = {
-    TermName(fieldName).encodedName.toString
+    scala.reflect.NameTransformer.encode(fieldName)
   }
 
   /**
@@ -330,7 +330,7 @@ object ScalaReflection extends ScalaReflection {
       case t if isSubtype(t, localTypeOf[java.sql.Timestamp]) => STRICT_TIMESTAMP_ENCODER
       case t if isSubtype(t, localTypeOf[java.time.Instant]) => STRICT_INSTANT_ENCODER
       case t if isSubtype(t, localTypeOf[java.time.LocalDateTime]) => LocalDateTimeEncoder
-      case t if isSubtype(t, localTypeOf[java.time.LocalTime]) => LocalTimeEncoder
+      case t if isSubtype(t, localTypeOf[java.time.LocalTime]) => DEFAULT_LOCAL_TIME_ENCODER
       case t if isSubtype(t, localTypeOf[VariantVal]) => VariantEncoder
       case t if isSubtype(t, localTypeOf[Geography]) =>
         DEFAULT_GEOGRAPHY_ENCODER

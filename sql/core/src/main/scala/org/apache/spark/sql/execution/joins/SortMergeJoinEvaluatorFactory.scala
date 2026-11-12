@@ -37,7 +37,9 @@ class SortMergeJoinEvaluatorFactory(
     sizeInBytesSpillThreshold: Long,
     numOutputRows: SQLMetric,
     spillSize: SQLMetric,
-    onlyBufferFirstMatchedRow: Boolean)
+    onlyBufferFirstMatchedRow: Boolean,
+    streamedOnlyCondition: Option[Expression] = None,
+    restCondition: Option[Expression] = None)
     extends PartitionEvaluatorFactory[InternalRow, InternalRow] {
   override def createEvaluator(): PartitionEvaluator[InternalRow, InternalRow] =
     new SortMergeJoinEvaluator
@@ -136,10 +138,17 @@ class SortMergeJoinEvaluatorFactory(
             spillSize,
             cleanupResources)
           val rightNullRow = new GenericInternalRow(right.output.length)
+          val boundStreamedOnly: InternalRow => Boolean = streamedOnlyCondition.map {
+            Predicate.create(_, left.output).eval _
+          }.getOrElse((_: InternalRow) => true)
+          val boundRest: InternalRow => Boolean = restCondition.map {
+            Predicate.create(_, left.output ++ right.output).eval _
+          }.getOrElse((_: InternalRow) => true)
           new LeftOuterIterator(
             smjScanner,
             rightNullRow,
-            boundCondition,
+            boundStreamedOnly,
+            boundRest,
             resultProj,
             numOutputRows).toScala
 
@@ -156,10 +165,17 @@ class SortMergeJoinEvaluatorFactory(
             spillSize,
             cleanupResources)
           val leftNullRow = new GenericInternalRow(left.output.length)
+          val boundStreamedOnly: InternalRow => Boolean = streamedOnlyCondition.map {
+            Predicate.create(_, right.output).eval _
+          }.getOrElse((_: InternalRow) => true)
+          val boundRest: InternalRow => Boolean = restCondition.map {
+            Predicate.create(_, left.output ++ right.output).eval _
+          }.getOrElse((_: InternalRow) => true)
           new RightOuterIterator(
             smjScanner,
             leftNullRow,
-            boundCondition,
+            boundStreamedOnly,
+            boundRest,
             resultProj,
             numOutputRows).toScala
 
@@ -217,6 +233,12 @@ class SortMergeJoinEvaluatorFactory(
           }.toScala
 
         case LeftAnti =>
+          val boundStreamedOnly: InternalRow => Boolean = streamedOnlyCondition.map {
+            Predicate.create(_, left.output).eval _
+          }.getOrElse((_: InternalRow) => true)
+          val boundRest: InternalRow => Boolean = restCondition.map {
+            Predicate.create(_, left.output ++ right.output).eval _
+          }.getOrElse((_: InternalRow) => true)
           new RowIterator {
             private[this] var currentLeftRow: InternalRow = _
             private[this] val smjScanner = new SortMergeJoinScanner(
@@ -236,6 +258,11 @@ class SortMergeJoinEvaluatorFactory(
             override def advanceNext(): Boolean = {
               while (smjScanner.findNextOuterJoinRows()) {
                 currentLeftRow = smjScanner.getStreamedRow
+                if (!boundStreamedOnly(currentLeftRow)) {
+                  // streamed-only predicate is false/null -> full condition is false -> emit row
+                  numOutputRows += 1
+                  return true
+                }
                 val currentRightMatches = smjScanner.getBufferedMatches
                 if (currentRightMatches == null || currentRightMatches.length == 0) {
                   numOutputRows += 1
@@ -245,7 +272,7 @@ class SortMergeJoinEvaluatorFactory(
                 val rightMatchesIterator = currentRightMatches.generateIterator()
                 while (!found && rightMatchesIterator.hasNext) {
                   joinRow(currentLeftRow, rightMatchesIterator.next())
-                  if (boundCondition(joinRow)) {
+                  if (boundRest(joinRow)) {
                     found = true
                   }
                 }
@@ -261,6 +288,12 @@ class SortMergeJoinEvaluatorFactory(
           }.toScala
 
         case j: ExistenceJoin =>
+          val boundStreamedOnly: InternalRow => Boolean = streamedOnlyCondition.map {
+            Predicate.create(_, left.output).eval _
+          }.getOrElse((_: InternalRow) => true)
+          val boundRest: InternalRow => Boolean = restCondition.map {
+            Predicate.create(_, left.output ++ right.output).eval _
+          }.getOrElse((_: InternalRow) => true)
           new RowIterator {
             private[this] var currentLeftRow: InternalRow = _
             private[this] val result: InternalRow = new GenericInternalRow(Array[Any](null))
@@ -281,13 +314,20 @@ class SortMergeJoinEvaluatorFactory(
             override def advanceNext(): Boolean = {
               while (smjScanner.findNextOuterJoinRows()) {
                 currentLeftRow = smjScanner.getStreamedRow
+                if (!boundStreamedOnly(currentLeftRow)) {
+                  // streamed-only predicate is false/null -> full condition is false ->
+                  // exists=false
+                  result.setBoolean(0, false)
+                  numOutputRows += 1
+                  return true
+                }
                 val currentRightMatches = smjScanner.getBufferedMatches
                 var found = false
                 if (currentRightMatches != null && currentRightMatches.length > 0) {
                   val rightMatchesIterator = currentRightMatches.generateIterator()
                   while (!found && rightMatchesIterator.hasNext) {
                     joinRow(currentLeftRow, rightMatchesIterator.next())
-                    if (boundCondition(joinRow)) {
+                    if (boundRest(joinRow)) {
                       found = true
                     }
                   }

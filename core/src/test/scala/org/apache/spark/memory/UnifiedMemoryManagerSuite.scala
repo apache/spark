@@ -19,11 +19,12 @@ package org.apache.spark.memory
 
 import org.scalatest.PrivateMethodTester
 
-import org.apache.spark.SparkConf
+import org.apache.spark.{SparkConf, SparkIllegalArgumentException}
 import org.apache.spark.internal.config._
 import org.apache.spark.internal.config.Tests._
 import org.apache.spark.storage.TestBlockId
 import org.apache.spark.storage.memory.MemoryStore
+import org.apache.spark.unsafe.Platform
 import org.apache.spark.util.Utils
 
 class UnifiedMemoryManagerSuite extends MemoryManagerSuite with PrivateMethodTester {
@@ -42,12 +43,14 @@ class UnifiedMemoryManagerSuite extends MemoryManagerSuite with PrivateMethodTes
 
   override protected def createMemoryManager(
       maxOnHeapExecutionMemory: Long,
-      maxOffHeapExecutionMemory: Long): UnifiedMemoryManager = {
+      maxOffHeapExecutionMemory: Long,
+      isOffHeapEnabled: Boolean = false ): UnifiedMemoryManager = {
     val conf = new SparkConf()
       .set(MEMORY_FRACTION, 1.0)
       .set(TEST_MEMORY, maxOnHeapExecutionMemory)
       .set(MEMORY_OFFHEAP_SIZE, maxOffHeapExecutionMemory)
       .set(MEMORY_STORAGE_FRACTION, storageFraction)
+      .set(MEMORY_OFFHEAP_ENABLED, isOffHeapEnabled)
     UnifiedMemoryManager(conf, numCores = 1)
   }
 
@@ -234,10 +237,16 @@ class UnifiedMemoryManagerSuite extends MemoryManagerSuite with PrivateMethodTes
 
     // Try using a system memory that's too small
     val conf2 = conf.clone().set(TEST_MEMORY, reservedMemory / 2)
-    val exception = intercept[IllegalArgumentException] {
+    val exception = intercept[SparkIllegalArgumentException] {
       UnifiedMemoryManager(conf2, numCores = 1)
     }
-    assert(exception.getMessage.contains("increase heap size"))
+    checkError(
+      exception,
+      condition = "INVALID_DRIVER_MEMORY.SYSTEM_MEMORY",
+      parameters = Map(
+        "systemMemory" -> (reservedMemory / 2).toString,
+        "minSystemMemory" -> (reservedMemory * 1.5).ceil.toLong.toString,
+        "config" -> DRIVER_MEMORY.key))
   }
 
   test("insufficient executor memory") {
@@ -253,10 +262,38 @@ class UnifiedMemoryManagerSuite extends MemoryManagerSuite with PrivateMethodTes
 
     // Try using an executor memory that's too small
     val conf2 = conf.clone().set(EXECUTOR_MEMORY.key, (reservedMemory / 2).toString)
-    val exception = intercept[IllegalArgumentException] {
+    val exception = intercept[SparkIllegalArgumentException] {
       UnifiedMemoryManager(conf2, numCores = 1)
     }
-    assert(exception.getMessage.contains("increase executor memory"))
+    checkError(
+      exception,
+      condition = "INVALID_EXECUTOR_MEMORY.CONFIG_MEMORY",
+      parameters = Map(
+        "executorMemory" -> (reservedMemory / 2).toString,
+        "minSystemMemory" -> (reservedMemory * 1.5).ceil.toLong.toString,
+        "config" -> EXECUTOR_MEMORY.key))
+  }
+
+  test("SPARK-58513: executor validates executor heap") {
+    val systemMemory = 400L * 1024
+    val reservedMemory = 300L * 1024
+    val memoryFraction = 0.8
+    val conf = new SparkConf()
+      .set(MEMORY_FRACTION, memoryFraction)
+      .set(TEST_MEMORY, systemMemory)
+      .set(TEST_RESERVED_MEMORY, reservedMemory)
+      .set(EXECUTOR_MEMORY.key, (500L * 1024).toString)
+
+    val exception = intercept[SparkIllegalArgumentException] {
+      UnifiedMemoryManager(conf, numCores = 1, isDriver = false)
+    }
+    checkError(
+      exception,
+      condition = "INVALID_EXECUTOR_MEMORY.SYSTEM_MEMORY",
+      parameters = Map(
+        "systemMemory" -> systemMemory.toString,
+        "minSystemMemory" -> (reservedMemory * 1.5).ceil.toLong.toString,
+        "config" -> EXECUTOR_MEMORY.key))
   }
 
   test("execution can evict cached blocks when there are multiple active tasks (SPARK-12155)") {
@@ -342,6 +379,18 @@ class UnifiedMemoryManagerSuite extends MemoryManagerSuite with PrivateMethodTes
     assertEvictBlocksToFreeSpaceCalled(ms, 50)
     assert(mm.storageMemoryUsed === 600L)
     UnifiedMemoryManager.shutdownUnmanagedMemoryPoller()
+  }
+
+  test("SPARK-61257: growing pages leave room for the array header with the default page size") {
+    // Under G1, ZGC and Shenandoah, the default on-heap page size leaves room for the header of a
+    // long[] (SPARK-37593), and the growing pages of hash join maps leave the same room.
+    val mm = createMemoryManager(1000L, isOffHeapEnabled = false)
+    val expected = if (Utils.isG1GC || Utils.isZGC || Utils.isShenandoahGC) {
+      Platform.LONG_ARRAY_OFFSET.toLong
+    } else {
+      0L
+    }
+    assert(TaskMemoryManager.growingPageHeaderBytes(mm.pageSizeBytes) === expected)
   }
 
   test("unmanaged memory tracking with memory mode separation") {

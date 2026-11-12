@@ -139,7 +139,7 @@ private[sql] object DataTypeErrors extends DataTypeErrorsBase {
 
   def decimalCannotGreaterThanPrecisionError(scale: Int, precision: Int): Throwable = {
     new AnalysisException(
-      errorClass = "_LEGACY_ERROR_TEMP_1228",
+      errorClass = "DECIMAL_SCALE_EXCEEDS_PRECISION",
       messageParameters = Map("scale" -> scale.toString, "precision" -> precision.toString))
   }
 
@@ -202,15 +202,24 @@ private[sql] object DataTypeErrors extends DataTypeErrorsBase {
     numericValueOutOfRange(value, decimalPrecision, decimalScale, context)
   }
 
+  // A decimal whose scale is below -MAX_PLAIN_STRING_TRAILING_ZEROS (that is, with more than
+  // this many zeros implied by a negative scale) is rendered in scientific notation in error
+  // messages instead of plain notation.
+  private val MAX_PLAIN_STRING_TRAILING_ZEROS = 1000
+
   private def numericValueOutOfRange(
       value: Decimal,
       decimalPrecision: Int,
       decimalScale: Int,
       context: QueryContext): ArithmeticException = {
+    // A huge negative scale (legacy mode only) makes the plain string too long to build,
+    // e.g. for 1E+2147483647.
+    val valueString =
+      if (value.scale < -MAX_PLAIN_STRING_TRAILING_ZEROS) value.toString else value.toPlainString
     new SparkArithmeticException(
       errorClass = "NUMERIC_VALUE_OUT_OF_RANGE.WITH_SUGGESTION",
       messageParameters = Map(
-        "value" -> value.toPlainString,
+        "value" -> valueString,
         "precision" -> decimalPrecision.toString,
         "scale" -> decimalScale.toString,
         "config" -> toSQLConf("spark.sql.ansi.enabled")),

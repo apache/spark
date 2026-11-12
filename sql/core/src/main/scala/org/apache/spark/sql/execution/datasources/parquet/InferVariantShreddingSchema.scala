@@ -279,7 +279,7 @@ class InferVariantShreddingSchema(val schema: StructType) {
             }
           }
         // If we weren't able to retain any fields, just use VariantType
-        if (newFields.size() > 0) StructType(newFields) else VariantType
+        if (!newFields.isEmpty) StructType(newFields) else VariantType
       case ArrayType(elementType, _) =>
         ArrayType(finalizeSimpleSchema(elementType, minCardinality, maxFields))
       case ByteType | ShortType | IntegerType | LongType =>
@@ -365,16 +365,23 @@ class InferVariantShreddingSchema(val schema: StructType) {
     v.getType match {
       case Type.OBJECT =>
         val size = v.objectSize()
-        // Validate fields are sorted (per variant spec)
+        var utf8Sorted = true
+        var utf16Sorted = true
+        var previousKey = if (size > 0) v.getFieldAtIndex(0).key else null
+        var previousKeyBytes = if (size > 0) VariantUtil.encodeKey(previousKey) else null
         for (i <- 1 until size) {
-          val prevKey = v.getFieldAtIndex(i - 1).key
-          val currKey = v.getFieldAtIndex(i).key
-          if (prevKey >= currKey) {
-            throw new SparkRuntimeException(
-              errorClass = "MALFORMED_VARIANT",
-              messageParameters = Map.empty
-            )
-          }
+          val currentKey = v.getFieldAtIndex(i).key
+          val currentKeyBytes = VariantUtil.encodeKey(currentKey)
+          utf8Sorted &&= VariantUtil.compareKeys(previousKeyBytes, currentKeyBytes) < 0
+          utf16Sorted &&= previousKey.compareTo(currentKey) < 0
+          previousKey = currentKey
+          previousKeyBytes = currentKeyBytes
+        }
+        if (!utf8Sorted && !utf16Sorted) {
+          throw new SparkRuntimeException(
+            errorClass = "MALFORMED_VARIANT",
+            messageParameters = Map.empty
+          )
         }
 
         // Process each field

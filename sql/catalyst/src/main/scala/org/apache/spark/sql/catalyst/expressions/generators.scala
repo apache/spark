@@ -105,11 +105,10 @@ case class UserDefinedGenerator(
     children: Seq[Expression])
   extends Generator with CodegenFallback {
 
-  @transient private[this] var inputRow: InterpretedProjection = _
   @transient private[this] var convertToScala: (InternalRow) => Row = _
+  @transient private lazy val inputExpressions = children.toArray
 
   private def initializeConverters(): Unit = {
-    inputRow = new InterpretedProjection(children)
     convertToScala = {
       val inputSchema = StructType(children.map { e =>
         StructField(e.simpleString(SQLConf.get.maxToStringFields), e.dataType, nullable = true)
@@ -119,11 +118,22 @@ case class UserDefinedGenerator(
   }
 
   override def eval(input: InternalRow): IterableOnce[InternalRow] = {
-    if (inputRow == null) {
+    if (convertToScala == null) {
       initializeConverters()
     }
+    // GenerateExec initializes these children for the partition. A projection would fresh-copy
+    // stateful expressions without initializing the copies. Fill the final array directly to
+    // avoid creating an intermediate collection for each row.
+    val expressions = inputExpressions
+    val outputArray = new Array[Any](expressions.length)
+    var i = 0
+    while (i < expressions.length) {
+      outputArray(i) = expressions(i).eval(input)
+      i += 1
+    }
+    val inputRow = new GenericInternalRow(outputArray)
     // Convert the objects into Scala Type before calling function, we need schema to support UDT
-    function(convertToScala(inputRow(input)))
+    function(convertToScala(inputRow))
   }
 
   override def toString: String = s"UserDefinedGenerator(${children.mkString(",")})"
@@ -143,6 +153,13 @@ case class UserDefinedGenerator(
 // scalastyle:off line.size.limit line.contains.tab
 @ExpressionDescription(
   usage = "_FUNC_(n, expr1, ..., exprk) - Separates `expr1`, ..., `exprk` into `n` rows. Uses column names col0, col1, etc. by default unless specified otherwise.",
+  arguments = """
+    Arguments:
+      * n - The number of rows to separate the expressions into. Must be a
+          positive integer literal.
+      * exprN - The expressions to separate into rows. Their values are laid out
+          row-major across the `n` output rows.
+  """,
   examples = """
     Examples:
       > SELECT _FUNC_(2, 1, 2, 3);
@@ -437,6 +454,10 @@ trait ExplodeGeneratorBuilderBase extends GeneratorBuilder {
 // scalastyle:off line.size.limit
 @ExpressionDescription(
   usage = "_FUNC_(expr) - Separates the elements of array `expr` into multiple rows, or the elements of map `expr` into multiple rows and columns. Unless specified otherwise, uses the default column name `col` for elements of the array or `key` and `value` for the elements of the map.",
+  arguments = """
+    Arguments:
+      * expr - An array or map expression whose elements are separated into rows.
+  """,
   examples = """
     Examples:
       > SELECT _FUNC_(array(10, 20));
@@ -522,6 +543,11 @@ trait PosExplodeGeneratorBuilderBase extends GeneratorBuilder {
 // scalastyle:off line.size.limit line.contains.tab
 @ExpressionDescription(
   usage = "_FUNC_(expr) - Separates the elements of array `expr` into multiple rows with positions, or the elements of map `expr` into multiple rows and columns with positions. Unless specified otherwise, uses the column name `pos` for position, `col` for elements of the array or `key` and `value` for elements of the map.",
+  arguments = """
+    Arguments:
+      * expr - An array or map expression whose elements are separated into rows,
+          each paired with its position.
+  """,
   examples = """
     Examples:
       > SELECT _FUNC_(array(10,20));
@@ -643,6 +669,11 @@ trait InlineGeneratorBuilderBase extends GeneratorBuilder {
 // scalastyle:off line.size.limit line.contains.tab
 @ExpressionDescription(
   usage = "_FUNC_(expr) - Explodes an array of structs into a table. Uses column names col1, col2, etc. by default unless specified otherwise.",
+  arguments = """
+    Arguments:
+      * expr - An array-of-structs expression whose struct fields become the
+          columns of each generated row.
+  """,
   examples = """
     Examples:
       > SELECT _FUNC_(array(struct(1, 'a'), struct(2, 'b')));

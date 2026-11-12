@@ -497,6 +497,14 @@ object LiteralValueProtoConverter {
         true
       case (proto.Expression.Literal.LiteralTypeCase.TIME, proto.DataType.KindCase.TIME) =>
         true
+      case (
+            proto.Expression.Literal.LiteralTypeCase.TIMESTAMP_NTZ_NANOS,
+            proto.DataType.KindCase.TIMESTAMP_NTZ_NANOS) =>
+        true
+      case (
+            proto.Expression.Literal.LiteralTypeCase.TIMESTAMP_LTZ_NANOS,
+            proto.DataType.KindCase.TIMESTAMP_LTZ_NANOS) =>
+        true
       case (proto.Expression.Literal.LiteralTypeCase.ARRAY, proto.DataType.KindCase.ARRAY) =>
         true
       case (proto.Expression.Literal.LiteralTypeCase.MAP, proto.DataType.KindCase.MAP) =>

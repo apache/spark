@@ -19,7 +19,7 @@ package org.apache.spark.sql.pipelines.graph
 
 import org.apache.spark.sql.catalyst.TableIdentifier
 import org.apache.spark.sql.pipelines.autocdc.ScdType
-import org.apache.spark.sql.types.{StructField, StructType}
+import org.apache.spark.sql.types.{DataType, StructField, StructType}
 
 /**
  * A specification for an internal auxiliary table whose lifecycle follows a materialized
@@ -70,6 +70,13 @@ sealed trait AuxiliaryTableSpec {
  *                             it already exists, in order (names and types).
  * @param expectedScdType      the SCD type the auxiliary table is expected to have recorded, if it
  *                             already exists.
+ * @param expectedSequencingType the resolved [[org.apache.spark.sql.types.DataType]] of the
+ *                             AutoCDC sequencing expression. The expression may change across runs
+ *                             but its result type must not, so the persisted interval/recordStartAt
+ *                             values stay comparable.
+ * @param expectedTrackHistoryColumnNames the resolved SCD2 track-history column names the auxiliary
+ *                             table is expected to have recorded, in order. `None` for SCD1 (which
+ *                             has no track-history concept), so the check is skipped there.
  */
 final case class AutoCdcAuxiliaryTableSpec(
     identifier: TableIdentifier,
@@ -77,4 +84,6 @@ final case class AutoCdcAuxiliaryTableSpec(
     properties: Map[String, String],
     targetTableIdentifier: TableIdentifier,
     expectedKeyFields: Seq[StructField],
-    expectedScdType: ScdType) extends AuxiliaryTableSpec
+    expectedScdType: ScdType,
+    expectedSequencingType: DataType,
+    expectedTrackHistoryColumnNames: Option[Seq[String]]) extends AuxiliaryTableSpec

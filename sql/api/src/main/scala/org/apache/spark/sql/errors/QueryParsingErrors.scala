@@ -138,6 +138,13 @@ private[sql] object QueryParsingErrors extends DataTypeErrorsBase {
       ctx)
   }
 
+  def duplicateJsonTableColumnError(columnName: String, ctx: JsonTableContext): Throwable = {
+    new ParseException(
+      errorClass = "INVALID_SQL_SYNTAX.DUPLICATE_JSON_TABLE_COLUMN",
+      messageParameters = Map("columnName" -> toSQLId(columnName)),
+      ctx)
+  }
+
   def clausesWithPipeOperatorsUnsupportedError(
       ctx: QueryOrganizationContext,
       clauses: String): Throwable = {
@@ -1022,6 +1029,18 @@ private[sql] object QueryParsingErrors extends DataTypeErrorsBase {
 
   def clusterByWithBucketing(ctx: ParserRuleContext): Throwable = {
     new ParseException(errorClass = "SPECIFY_CLUSTER_BY_WITH_BUCKETING_IS_NOT_ALLOWED", ctx)
+  }
+
+  def clusterByWithDistributedByPartition(ctx: ParserRuleContext): Throwable = {
+    new ParseException(
+      errorClass = "SPECIFY_CLUSTER_BY_WITH_DISTRIBUTED_BY_PARTITION_IS_NOT_ALLOWED",
+      ctx)
+  }
+
+  def distributedByPartitionWithoutPartitioningError(ctx: ParserRuleContext): Throwable = {
+    new ParseException(
+      errorClass = "SPECIFY_DISTRIBUTED_BY_PARTITION_WITHOUT_PARTITIONING_IS_NOT_ALLOWED",
+      ctx)
   }
 
   def invalidConstraintCharacteristics(

@@ -15,20 +15,19 @@
 # limitations under the License.
 #
 
-import unittest
 import datetime
+import unittest
 
-from pyspark.sql.functions import udf, pandas_udf, PandasUDFType, assert_true, lit
+from pyspark.errors import ParseException, PySparkTypeError, PythonException
+from pyspark.sql.functions import PandasUDFType, assert_true, lit, pandas_udf, udf
 from pyspark.sql.types import (
-    DoubleType,
-    StructType,
-    StructField,
-    LongType,
     DayTimeIntervalType,
+    DoubleType,
+    LongType,
+    StructField,
+    StructType,
     VariantType,
 )
-from pyspark.errors import ParseException, PythonException, PySparkTypeError
-from pyspark.util import PythonEvalType
 from pyspark.testing.sqlutils import ReusedSQLTestCase
 from pyspark.testing.utils import (
     have_pandas,
@@ -36,6 +35,7 @@ from pyspark.testing.utils import (
     pandas_requirement_message,
     pyarrow_requirement_message,
 )
+from pyspark.util import PythonEvalType
 
 
 @unittest.skipIf(
@@ -313,8 +313,8 @@ class PandasUDFTestsMixin:
         )
 
     def test_pandas_udf_detect_unsafe_type_conversion(self):
-        import pandas as pd
         import numpy as np
+        import pandas as pd
 
         values = [1.0] * 3
         pdf = pd.DataFrame({"A": values})
@@ -352,8 +352,9 @@ class PandasUDFTestsMixin:
             df.withColumn("udf", udf("id")).collect()
 
     def test_pandas_udf_int_to_decimal_coercion(self):
-        import pandas as pd
         from decimal import Decimal
+
+        import pandas as pd
 
         df = self.spark.range(0, 3)
 

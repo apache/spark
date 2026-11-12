@@ -22,6 +22,7 @@ Run with:
 """
 # $example on$
 from pyspark.ml.fpm import PrefixSpan
+
 # $example off$
 from pyspark.sql import Row, SparkSession
 

@@ -113,16 +113,17 @@ case class BinaryFileFormat() extends FileFormat
     val caseInsensitiveOptions = CaseInsensitiveMap(options)
     val archiveReadEnabled = !caseInsensitiveOptions.get(WHOLE_FILE).forall(_.toBoolean) &&
       getSqlConf(sparkSession).getConf(SQLConf.ARCHIVE_FORMAT_READER_ENABLED)
+    val fileSourceOptions = new FileSourceOptions(caseInsensitiveOptions)
 
     file: PartitionedFile => {
       val path = file.toPath
       val fs = path.getFileSystem(broadcastedHadoopConf.value.value)
       val status = fs.getFileStatus(path)
       if (archiveReadEnabled && SupportsArchiveFormat.isArchivePath(path)) {
-        val ignoredPathSegmentRegex =
-          new FileSourceOptions(caseInsensitiveOptions).ignoredPathSegmentRegexPattern
         SupportsArchiveFormat.readArchiveEntries(
-            path, broadcastedHadoopConf.value.value, ignoredPathSegmentRegex) { (entry, in) =>
+            path, broadcastedHadoopConf.value.value,
+            fileSourceOptions.ignoredPathSegmentRegexPattern,
+            fileSourceOptions.archivePathFilterPattern) { (entry, in) =>
           val entryStatus = new FileStatus(
             entry.getSize, false, 0, 0, status.getModificationTime,
             new Path(s"${status.getPath}!/${entry.getName}"))

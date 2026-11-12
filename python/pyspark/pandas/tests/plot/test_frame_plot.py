@@ -15,13 +15,13 @@
 # limitations under the License.
 #
 
-import pandas as pd
 import numpy as np
+import pandas as pd
 
 from pyspark import pandas as ps
-from pyspark.pandas.config import set_option, reset_option, option_context
-from pyspark.pandas.plot import TopNPlotBase, SampledPlotBase, HistogramPlotBase, BoxPlotBase
+from pyspark.pandas.config import option_context, reset_option, set_option
 from pyspark.pandas.exceptions import PandasNotImplementedError
+from pyspark.pandas.plot import BoxPlotBase, HistogramPlotBase, SampledPlotBase, TopNPlotBase
 from pyspark.testing.pandasutils import PandasOnSparkTestCase
 
 

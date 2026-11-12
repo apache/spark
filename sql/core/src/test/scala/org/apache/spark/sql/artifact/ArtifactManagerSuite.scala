@@ -20,12 +20,14 @@ import java.io.File
 import java.nio.charset.StandardCharsets
 import java.nio.file.{Files, Path, Paths}
 
+import scala.collection.mutable.ArrayBuffer
+
 import org.apache.spark.{SparkConf, SparkException, SparkRuntimeException}
 import org.apache.spark.metrics.source.CodegenMetrics
-import org.apache.spark.sql.Artifact
+import org.apache.spark.sql.{AnalysisException, Artifact}
 import org.apache.spark.sql.classic.SparkSession
 import org.apache.spark.sql.functions.col
-import org.apache.spark.sql.internal.SQLConf
+import org.apache.spark.sql.internal.{SQLConf, StaticSQLConf}
 import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.sql.types.DataTypes
 import org.apache.spark.storage.CacheId
@@ -253,6 +255,30 @@ class ArtifactManagerSuite extends SharedSparkSession {
     assert(copiedClassFile.exists())
   }
 
+  test("SPARK-58531: allowDestLocal cannot be set from a session") {
+    // The conf gates writes to a local filesystem destination on the driver, so it must stay a
+    // static conf: a session that could turn it on would be able to write to arbitrary paths on
+    // the driver. Guard against it being made session-settable again.
+    val key = StaticSQLConf.ARTIFACT_COPY_FROM_LOCAL_TO_FS_ALLOW_DEST_LOCAL.key
+    assert(SQLConf.isStaticConfigKey(key))
+    checkError(
+      exception = intercept[AnalysisException](spark.conf.set(key, "true")),
+      condition = "CANNOT_MODIFY_STATIC_CONFIG",
+      parameters = Map("key" -> s""""$key""""))
+  }
+
+  test("SPARK-58531: StaticSQLConf can initialize before SQLConf") {
+    // Use a fresh process because both objects may already be initialized in this test JVM.
+    val sparkHome = sys.props.getOrElse("spark.test.home", fail("spark.test.home is not set!"))
+    val process = Utils.executeCommand(
+      Seq(
+        s"$sparkHome/bin/spark-class",
+        StaticSQLConfInitializationTestApp.getClass.getCanonicalName.stripSuffix("$")),
+      new File(sparkHome),
+      Map("SPARK_TESTING" -> "1", "SPARK_HOME" -> sparkHome))
+    assert(process.waitFor() === 0)
+  }
+
   test("Removal of resources") {
 
     withTempPath { path =>
@@ -404,6 +430,31 @@ class ArtifactManagerSuite extends SharedSparkSession {
       val buffer = Files.readAllBytes(classPath)
       spark.addArtifact(buffer, filePath)
       filePath
+    }
+  }
+
+  test("Add local artifacts through the public addArtifact") {
+    // A subclass that overrides addArtifact, for example to audit what a session adds, sees the
+    // local files that addLocalArtifacts adds, other than a native data source package that Spark
+    // checks, which goes through a private overload, as it sees the in-memory ones.
+    val added = ArrayBuffer.empty[Path]
+    val manager = new ArtifactManager(spark.newSession()) {
+      override def addArtifact(
+          remoteRelativePath: Path,
+          serverLocalStagingPath: Path,
+          fragment: Option[String],
+          deleteStagedFile: Boolean): Unit = {
+        added += remoteRelativePath
+        super.addArtifact(remoteRelativePath, serverLocalStagingPath, fragment, deleteStagedFile)
+      }
+    }
+    try {
+      val file = Files.writeString(Utils.createTempDir().toPath.resolve("audited.txt"), "audited")
+      manager.addLocalArtifacts(
+        Artifact.newFileArtifact(Paths.get("audited.txt"), new Artifact.LocalFile(file)) :: Nil)
+      assert(added.toSeq == Seq(Paths.get("files", "audited.txt")))
+    } finally {
+      manager.close()
     }
   }
 
@@ -712,5 +763,12 @@ class ArtifactManagerSuite extends SharedSparkSession {
       assert(count4 == count3,
         s"$msg: codegen should not happen again as classloader is not changed")
     }
+  }
+}
+
+object StaticSQLConfInitializationTestApp {
+  def main(args: Array[String]): Unit = {
+    val key = StaticSQLConf.ARTIFACT_COPY_FROM_LOCAL_TO_FS_ALLOW_DEST_LOCAL.key
+    require(key == "spark.sql.artifact.copyFromLocalToFs.allowDestLocal")
   }
 }

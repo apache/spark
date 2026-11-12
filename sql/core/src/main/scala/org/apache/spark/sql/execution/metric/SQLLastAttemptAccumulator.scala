@@ -23,7 +23,7 @@ import scala.util.control.NonFatal
 import org.apache.spark.SparkContext
 import org.apache.spark.internal.{LogEntry, Logging}
 import org.apache.spark.sql.Dataset
-import org.apache.spark.sql.execution.{BaseSubqueryExec, QueryExecution, ReusedSubqueryExec, SparkPlan, SubqueryAdaptiveBroadcastExec, SubqueryBroadcastExec, SubqueryExec, WholeStageCodegenExec}
+import org.apache.spark.sql.execution.{BaseSubqueryExec, ProjectedBroadcastValueSubqueryExec, QueryExecution, ReusedSubqueryExec, SparkPlan, SubqueryAdaptiveBroadcastExec, SubqueryBroadcastExec, SubqueryExec, WholeStageCodegenExec}
 import org.apache.spark.sql.execution.adaptive.AdaptiveSparkPlanHelper
 import org.apache.spark.sql.execution.exchange.{BroadcastExchangeExec, BroadcastExchangeLike, ReusedExchangeExec, ShuffleExchangeExec, ShuffleExchangeLike}
 import org.apache.spark.util.{AccumulatorV2, LastAttemptAccumulator}
@@ -218,19 +218,21 @@ trait SQLLastAttemptAccumulator[IN, OUT, PARTIAL, DRIVER_ACC]
         exception = Some(e))
   }
 
-  override def logAccumulatorState: LogEntry = try {
-    val driverQEVals = Option(lastAttemptDirectDriverQueryExecutionValues)
-      .map(_.map { case (key, acc) => s"$key -> ${driverAccValue(acc)}" }.mkString("\n"))
-      .getOrElse("<not initialized>")
-    super.logAccumulatorState +
+  override def logAccumulatorState: LogEntry = super.logAccumulatorState + LogEntry.from {
+    // The formatting runs when the entry is read, so the try goes inside the by-name argument.
+    try {
+      val driverQEVals = Option(lastAttemptDirectDriverQueryExecutionValues)
+        .map(_.map { case (key, acc) => s"$key -> ${driverAccValue(acc)}" }.mkString("\n"))
+        .getOrElse("<not initialized>")
       log"""
          |Direct driver QE values:
          |${MDC(logKeyAccumulatorState, driverQEVals)}
          """.stripMargin
-  } catch {
-    case NonFatal(e) =>
-      logWarning(log"Unexpected exception in logAccumulatorState", e)
-      log"<Unexpected exception in logAccumulatorState>"
+    } catch {
+      case NonFatal(e) =>
+        logWarning(log"Unexpected exception in logAccumulatorState", e)
+        log"<Unexpected exception in logAccumulatorState>"
+    }
   }
 
   /**
@@ -368,7 +370,7 @@ object SQLLastAttemptAccumulator extends Logging {
           // ```
           // will launch stages in scope of child.
           scopeIds(s.child)
-        case _: SubqueryBroadcastExec =>
+        case _: SubqueryBroadcastExec | _: ProjectedBroadcastValueSubqueryExec =>
           // Used by DPP filter only, not part of main flow of query execution.
           Nil
         case _: SubqueryAdaptiveBroadcastExec =>

@@ -17,11 +17,14 @@
 
 package org.apache.spark.sql.kafka010
 
+import java.util.Locale
+
 import scala.collection.mutable.HashMap
 import scala.util.control.NonFatal
 
 import org.apache.kafka.common.TopicPartition
-import org.json4s.{Formats, NoTypeHints}
+import org.json4s.{Formats, JObject, JString, NoTypeHints}
+import org.json4s.jackson.JsonMethods.parse
 import org.json4s.jackson.Serialization
 
 /**
@@ -74,6 +77,50 @@ private object JsonUtils {
         throw new IllegalArgumentException(
           s"""Expected e.g. {"topicA":{"0":23,"1":-1},"topicB":{"0":-2}}, got $str""")
     }
+  }
+
+  /**
+   * Read the offsets of the `startingOffsets` / `endingOffsets` json string. On top of the
+   * per-TopicPartition form read by [[partitionOffsets]], a topic may bind to "earliest" or
+   * "latest" as a whole, e.g. {"topicA":"earliest","topicB":{"0":23,"1":-1}}. Such topic-level
+   * values are returned unexpanded in `SpecificOffsetRangeLimit.topicOffsets`, since the
+   * partitions of the topic are only known once the offsets get resolved against Kafka.
+   */
+  def specificOffsets(str: String): SpecificOffsetRangeLimit = {
+    def fail(): Nothing = throw new IllegalArgumentException(
+      s"""Expected e.g. {"topicA":{"0":23,"1":-1},"topicB":{"0":-2}} or
+         |{"topicA":"earliest","topicB":"latest"}, got $str""".stripMargin)
+
+    val partitionOffsets = new HashMap[TopicPartition, Long]
+    val topicOffsets = new HashMap[String, Long]
+    try {
+      parse(str) match {
+        case JObject(topics) =>
+          topics.foreach {
+            case (topic, JString(value)) =>
+              topicOffsets += topic -> (value.toLowerCase(Locale.ROOT) match {
+                case "earliest" => KafkaOffsetRangeLimit.EARLIEST
+                case "latest" => KafkaOffsetRangeLimit.LATEST
+                case _ => fail()
+              })
+            case (topic, partOffsets) =>
+              partOffsets.extract[Map[Int, Long]].foreach { case (part, offset) =>
+                partitionOffsets += new TopicPartition(topic, part) -> offset
+              }
+          }
+        case _ => fail()
+      }
+    } catch {
+      case NonFatal(_) => fail()
+    }
+    val bothForms = topicOffsets.keySet.intersect(partitionOffsets.keySet.map(_.topic))
+    if (bothForms.nonEmpty) {
+      throw new IllegalArgumentException(
+        s"""Topic(s) ${bothForms.toSeq.sorted.mkString(", ")} are given both a topic-level offset
+           |and per-partition offsets, only one of the two forms is allowed per topic,
+           |got $str""".stripMargin)
+    }
+    SpecificOffsetRangeLimit(partitionOffsets.toMap, topicOffsets.toMap)
   }
 
   def partitionTimestamps(str: String): Map[TopicPartition, Long] = {
