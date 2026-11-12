@@ -142,16 +142,17 @@ abstract class TypeCoercionBase extends TypeCoercionHelper {
         val newSpecs = specs.map { c =>
           val field = c.column.asInstanceOf[ResolvedFieldName].field
           val dataType = field.dataType
-          val hasCharacterType = CharVarcharUtils.hasCharVarchar(dataType) ||
-            CharVarcharUtils.getRawType(field.metadata).exists(CharVarcharUtils.hasCharVarchar)
           c.copy(newDefaultExpression = c.newDefaultExpression.map(d =>
             d.copy(child = ResolveDefaultColumns.coerceDefaultValue(
               d.child,
               dataType,
               "ALTER TABLE ALTER COLUMN",
               c.column.name.quoted,
-              d.originalSQL), uncoercedChild = d.uncoercedChild.orElse(
-                Option.when(hasCharacterType)(d.child)))))
+              d.originalSQL), uncoercedChild = d.uncoercedChild.orElse {
+                Option.when(CharVarcharUtils.hasCharVarchar(dataType) ||
+                  CharVarcharUtils.getRawType(field.metadata)
+                    .exists(CharVarcharUtils.hasCharVarchar))(d.child)
+              })))
         }
         alterColumns.copy(specs = newSpecs)
     }

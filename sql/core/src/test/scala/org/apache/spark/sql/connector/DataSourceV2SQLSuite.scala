@@ -961,6 +961,27 @@ class DataSourceV2SQLSuiteV1Filter
     }
   }
 
+  test("V2 nested current defaults preserve first-class assignment types") {
+    withSQLConf(
+      "spark.sql.catalog.default_expr" -> classOf[DefaultExpressionRetainingCatalog].getName,
+      SQLConf.DEFAULT_COLUMN_ALLOWED_PROVIDERS.key -> "foo",
+      SQLConf.LEGACY_CHAR_VARCHAR_AS_STRING.key -> "false",
+      SQLConf.PRESERVE_CHAR_VARCHAR_TYPE_INFO.key -> "true",
+      SQLConf.CHAR_VARCHAR_STANDARD_SEMANTICS.key -> "false",
+      SQLConf.READ_SIDE_CHAR_PADDING.key -> "false") {
+      val tableName = "default_expr.nested_current_types"
+      withTable(tableName) {
+        // SET supplies only a current default, avoiding nested existence SQL serialization.
+        sql(s"CREATE TABLE $tableName(id INT, names ARRAY<CHAR(3)>, missing CHAR(3)) USING foo")
+        sql(s"ALTER TABLE $tableName ALTER COLUMN names SET DEFAULT " +
+          "array(substring(CAST('EUX' AS CHAR(3)), 1, 2))")
+        sql(s"ALTER TABLE $tableName ALTER COLUMN missing SET DEFAULT CAST(NULL AS CHAR(3))")
+        sql(s"INSERT INTO $tableName VALUES (1, DEFAULT, DEFAULT)")
+        checkAnswer(sql(s"SELECT id, names, missing FROM $tableName"), Row(1, Seq("EU "), null))
+      }
+    }
+  }
+
   Seq(false, true).foreach { definitionLegacy =>
     test(s"V2 retained current defaults follow scalar and nested settings: $definitionLegacy") {
       withSQLConf(

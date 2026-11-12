@@ -309,14 +309,13 @@ case class DefaultValueExpression(
     case Literal(_, _) =>
       val currentDefault = if (CharVarcharUtils.hasCharVarchar(columnType) &&
           CharVarcharUtils.shouldApplyWriteSideLengthCheck(SQLConf.get)) {
-        // Freeze only context-independent current values, before creating a typed literal:
-        // Literal.create and connector conversion can themselves assign character values.
+        // Keep pre-assignment values and types without folding through Literal.create, which
+        // can itself assign character values. Nested assignment still needs the original types.
         uncoercedChild.filter { expr =>
           expr.isInstanceOf[Literal] || expr.contextIndependentFoldable &&
             SQLConf.get.getConfByKeyStrict[Boolean]("spark.sql.optimizer.datasourceV2ExprFolding")
         }.map { expr =>
-          LiteralValue(expr.eval(),
-            CharVarcharUtils.replaceCharVarcharWithStringAlways(expr.dataType))
+          LiteralValue(expr.eval(), expr.dataType)
         }
       } else {
         analyzedChild.flatMap(new V2ExpressionBuilder(_).build())

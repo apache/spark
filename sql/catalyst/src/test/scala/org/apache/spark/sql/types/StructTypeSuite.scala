@@ -24,7 +24,7 @@ import org.json4s.jackson.JsonMethods.parse
 import org.apache.spark.{SparkException, SparkFunSuite, SparkIllegalArgumentException, SparkRuntimeException}
 import org.apache.spark.sql.{AnalysisException, Row}
 import org.apache.spark.sql.catalyst.CatalystTypeConverters
-import org.apache.spark.sql.catalyst.analysis.{caseInsensitiveResolution, caseSensitiveResolution, ResolvedFieldName}
+import org.apache.spark.sql.catalyst.analysis.{caseInsensitiveResolution, caseSensitiveResolution, AnsiTypeCoercion, ResolvedFieldName, TypeCoercion}
 import org.apache.spark.sql.catalyst.expressions.{CreateArray, CreateMap, CreateNamedStruct, CurrentUser, Expression, Literal, V2ExpressionUtils}
 import org.apache.spark.sql.catalyst.parser.ParseException
 import org.apache.spark.sql.catalyst.plans.SQLHelper
@@ -1627,6 +1627,65 @@ class StructTypeSuite extends SparkFunSuite with SQLHelper {
     }
   }
 
+  test("ALTER default coercion skips unused character metadata") {
+    val invalidRawType = new MetadataBuilder()
+      .putString(CharVarcharUtils.CHAR_VARCHAR_TYPE_STRING_METADATA_KEY, "invalid type !").build()
+    Seq(TypeCoercion.DefaultValueExpressionCoercion,
+      AnsiTypeCoercion.DefaultValueExpressionCoercion).foreach { rule =>
+      val commentOnly = AlterColumnSpec(
+        ResolvedFieldName(Seq.empty, StructField("comment", StringType, metadata = invalidRawType)),
+        None, None, Some("new comment"), None, None)
+      val raw = Literal("EU")
+      val default = DefaultValueExpression(raw, "'EU'", uncoercedChild = Some(raw))
+      val retained = AlterColumnSpec(
+        ResolvedFieldName(Seq.empty,
+          StructField("retained", StringType, metadata = invalidRawType)),
+        None, None, None, None, Some(default))
+      val plan = AlterColumns(LocalRelation(), Seq(commentOnly, retained))
+      val coerced = rule(plan).asInstanceOf[AlterColumns]
+      assert(coerced.specs.head == commentOnly)
+      val result = coerced.specs(1).newDefaultExpression.get
+      assert(result.uncoercedChild.exists(_ eq raw))
+      assert(result.child.eval() == UTF8String.fromString("EU"))
+      assert(result.originalSQL == "'EU'")
+    }
+  }
+
+  test("ALTER default coercion captures character snapshots only once") {
+    withSQLConf(
+      SQLConf.LEGACY_CHAR_VARCHAR_AS_STRING.key -> "false",
+      SQLConf.PRESERVE_CHAR_VARCHAR_TYPE_INFO.key -> "true",
+      SQLConf.CHAR_VARCHAR_STANDARD_SEMANTICS.key -> "false") {
+      val rawMetadata = new MetadataBuilder()
+        .putString(CharVarcharUtils.CHAR_VARCHAR_TYPE_STRING_METADATA_KEY, "char(3)").build()
+      val invalidRawType = new MetadataBuilder()
+        .putString(CharVarcharUtils.CHAR_VARCHAR_TYPE_STRING_METADATA_KEY, "invalid type !").build()
+      for {
+        rule <- Seq(TypeCoercion.DefaultValueExpressionCoercion,
+          AnsiTypeCoercion.DefaultValueExpressionCoercion)
+        field <- Seq(StructField("c", CharType(3), metadata = invalidRawType),
+          StructField("c", StringType, metadata = rawMetadata))
+      } {
+        val raw = Literal("EU")
+        val spec = AlterColumnSpec(ResolvedFieldName(Seq.empty, field),
+          None, None, None, None, Some(DefaultValueExpression(raw, "'EU'")))
+        val first = rule(AlterColumns(LocalRelation(), Seq(spec))).asInstanceOf[AlterColumns]
+        val firstDefault = first.specs.head.newDefaultExpression.get
+        assert(firstDefault.uncoercedChild.exists(_ eq raw))
+        val expected = if (field.dataType == StringType) "EU" else "EU "
+        assert(firstDefault.child.eval() == UTF8String.fromString(expected))
+        // A parse failure makes unwanted metadata inspection observable on the later visit.
+        val secondSpec = first.specs.head.copy(column = ResolvedFieldName(Seq.empty,
+          field.copy(metadata = invalidRawType)))
+        val second = rule(AlterColumns(LocalRelation(), Seq(secondSpec)))
+          .asInstanceOf[AlterColumns].specs.head.newDefaultExpression.get
+        assert(second.uncoercedChild.exists(_ eq raw))
+        assert(second.child.eval() == firstDefault.child.eval())
+        assert(second.originalSQL == "'EU'")
+      }
+    }
+  }
+
   test("V2 SET DEFAULT cache uses the resolved target type and raw metadata") {
     val rawChar = new MetadataBuilder()
       .putString(CharVarcharUtils.CHAR_VARCHAR_TYPE_STRING_METADATA_KEY, "char(3)").build()
@@ -1709,13 +1768,14 @@ class StructTypeSuite extends SparkFunSuite with SQLHelper {
       SQLConf.LEGACY_CHAR_VARCHAR_AS_STRING.key -> "false",
       SQLConf.PRESERVE_CHAR_VARCHAR_TYPE_INFO.key -> "true",
       SQLConf.CHAR_VARCHAR_STANDARD_SEMANTICS.key -> "false") {
-      val cases: Seq[(DataType, String, Any)] = Seq(
-        (CharType(3), "'EU'", "EU"),
-        (VarcharType(3), "'EU  '", "EU  "),
-        (CharType(3), "NULL", null),
-        (ArrayType(CharType(3)), "array('EU', NULL)", Seq("EU", null)),
-        (MapType(CharType(3), VarcharType(3)), "map('EU', 'US  ')", Map("EU" -> "US  ")))
-      cases.foreach { case (dataType, sql, expected) =>
+      val cases: Seq[(DataType, String, Any, Any)] = Seq(
+        (CharType(3), "'EU'", "EU", "EU "),
+        (VarcharType(3), "'EU  '", "EU  ", "EU "),
+        (CharType(3), "NULL", null, null),
+        (ArrayType(CharType(3)), "array('EU', NULL)", Seq("EU", null), Seq("EU ", null)),
+        (MapType(CharType(3), VarcharType(3)), "map('EU', 'US  ')",
+          Map("EU" -> "US  "), Map("EU " -> "US ")))
+      cases.foreach { case (dataType, sql, expected, expectedAssigned) =>
         // Typed literals with unassigned values model results such as SUBSTRING on CHAR.
         val raw = Literal(Literal.fromSQL(sql).eval(), dataType)
         val assigned = ResolveDefaultColumns.normalizeExistenceDefaultValue(
@@ -1723,8 +1783,13 @@ class StructTypeSuite extends SparkFunSuite with SQLHelper {
         val default = DefaultValueExpression(assigned, sql, Some(raw), Some(raw))
         val current = default.toV2CurrentDefault("ALTER TABLE", "c", dataType)
         val cached = V2ExpressionUtils.toCatalyst(current.getExpression).get
-        assert(!CharVarcharUtils.hasCharVarchar(cached.dataType))
-        assert(CatalystTypeConverters.convertToScala(cached.eval(), cached.dataType) == expected)
+        assert(cached.dataType == raw.dataType)
+        // CharConverter itself pads; decode the raw cache contents as STRING instead.
+        val rawType = CharVarcharUtils.replaceCharVarcharWithStringAlways(cached.dataType)
+        assert(CatalystTypeConverters.convertToScala(cached.eval(), rawType) == expected)
+        val currentAssigned = ResolveDefaultColumns.analyze("c", dataType, current, "INSERT")
+        assert(CatalystTypeConverters.convertToScala(
+          currentAssigned.eval(), currentAssigned.dataType) == expectedAssigned)
         withSQLConf(
           SQLConf.LEGACY_CHAR_VARCHAR_AS_STRING.key -> "true",
           SQLConf.PRESERVE_CHAR_VARCHAR_TYPE_INFO.key -> "false") {
