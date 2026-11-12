@@ -1996,6 +1996,12 @@ object TestSettings {
       Seq("org.apache.spark.tags.ExtendedLevelDBTest")
     } else Seq.empty)
 
+  // Snapshot taken when the build loads: plugins can set http.* properties later in the
+  // session (the Develocity agent sets http.keepAlive=false), which must not reach tests.
+  private val httpSystemProperties = sys.props.toList.filter {
+    case (key, _) => key.startsWith("http.") || key.startsWith("https.")
+  }
+
   lazy val settings = Seq (
     // Fork new JVMs for tests and set Java options for those
     fork := true,
@@ -2023,13 +2029,9 @@ object TestSettings {
     // Copy system properties to forked JVMs so that tests know proxy settings
     (Test / javaOptions) ++= {
       val q = "\""
-      sys.props.toList
-        .filter {
-          case (key, value) => key.startsWith("http.") || key.startsWith("https.")
-        }
-        .map {
-          case (key, value) => s"-D$key=$q$value$q"
-        }
+      httpSystemProperties.map {
+        case (key, value) => s"-D$key=$q$value$q"
+      }
     },
 
     (Test / javaOptions) += s"-Djava.io.tmpdir=$testTempDir",
