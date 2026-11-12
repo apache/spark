@@ -463,7 +463,7 @@ abstract class BaseScriptTransformationSuite extends QueryTest {
     // destroyed script is not logged as an error. The writer threads of earlier tests, which have
     // the same name, may still log, so only those of this test are checked.
     assert(uncaughtExceptionHandler.exception.isEmpty)
-    val earlierThreads = before.map(_.threadId())
+    val earlierThreads = before.map(_.getId)
     val errors = logAppender.loggingEvents.filter { event =>
       event.getThreadName.endsWith("WriterThread-Feed") &&
         !earlierThreads.contains(event.getThreadId)
