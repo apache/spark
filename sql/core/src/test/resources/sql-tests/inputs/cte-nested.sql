@@ -60,6 +60,61 @@ SELECT * FROM VALUES (0) AS o(id) WHERE EXISTS (
   SELECT * FROM correlated
 );
 
+-- The fixed-point analyzer keeps an un-referenced CTE with its original body, so it validates a
+-- subquery in that body without inlining the subquery's own CTEs. The single-pass resolver
+-- doesn't know yet whether the CTE is referenced when it validates such a subquery, so these
+-- cases run with the fixed-point analyzer only.
+set spark.sql.analyzer.singlePassResolver.dualRunWithLegacy = false;
+
+-- un-referenced CTE of the main query: holds a scalar subquery whose own correlated CTE is on the
+-- right side of a left join
+WITH unreferenced AS (
+  SELECT (
+    WITH correlated AS (SELECT * FROM VALUES (0), (1) AS r(id) WHERE r.id = o.id)
+    SELECT count(*) FROM VALUES (0), (1) AS l(id) LEFT JOIN correlated ON l.id = correlated.id
+  ) FROM VALUES (0) AS o(id)
+)
+SELECT 1;
+
+-- un-referenced CTE of the main query, read only by another un-referenced CTE: holds a scalar
+-- subquery whose own correlated CTE is on the right side of a left join
+WITH unreferenced AS (
+  SELECT (
+    WITH correlated AS (SELECT * FROM VALUES (0), (1) AS r(id) WHERE r.id = o.id)
+    SELECT count(*) FROM VALUES (0), (1) AS l(id) LEFT JOIN correlated ON l.id = correlated.id
+  ) FROM VALUES (0) AS o(id)
+),
+other_unreferenced AS (SELECT * FROM unreferenced)
+SELECT 1;
+
+-- un-referenced CTE of the main query: holds an EXISTS subquery, nested in another subquery,
+-- whose own correlated CTE is in a full outer join
+WITH unreferenced AS (
+  SELECT * FROM VALUES (0) AS o(id) WHERE EXISTS (
+    SELECT * FROM VALUES (0) AS m(id) WHERE EXISTS (
+      WITH correlated AS (SELECT * FROM VALUES (0), (1) AS r(id) WHERE r.id = m.id)
+      SELECT 1 FROM VALUES (0), (1) AS l(id) FULL OUTER JOIN correlated ON l.id = correlated.id
+    )
+  )
+)
+SELECT 1;
+
+-- a view whose text has an un-referenced CTE that holds such a subquery
+CREATE OR REPLACE VIEW unreferenced_cte_view AS
+WITH unreferenced AS (
+  SELECT (
+    WITH correlated AS (SELECT * FROM VALUES (0), (1) AS r(id) WHERE r.id = o.id)
+    SELECT count(*) FROM VALUES (0), (1) AS l(id) LEFT JOIN correlated ON l.id = correlated.id
+  ) FROM VALUES (0) AS o(id)
+)
+SELECT 1 AS one;
+
+SELECT * FROM unreferenced_cte_view;
+
+DROP VIEW unreferenced_cte_view;
+
+reset spark.sql.analyzer.singlePassResolver.dualRunWithLegacy;
+
 -- Make sure CTE in subquery is scoped to that subquery rather than global
 -- the 2nd half of the union should fail because the cte is scoped to the first half
 SELECT * FROM

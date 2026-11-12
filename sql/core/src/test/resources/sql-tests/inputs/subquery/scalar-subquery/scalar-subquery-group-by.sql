@@ -62,6 +62,8 @@ select *, (with cte as (select y1, count(*) as cnt from y where y1 = 2 group by 
 -- An unreferenced CTE references the correlated CTE on the right side of a left join
 select *, (with cte as (select * from y where y1 = x1), unused as (select * from z left join cte on z1 = y1) select count(*) from z) from x;
 select *, (with cte as (select * from y where y1 = x1), unused as (select * from z left join cte on z1 = y1) select count(*) from cte) from x;
+-- The scalar subquery sits in the body of a CTE that the main query references
+with t as (select *, (with cte as (select y1, count(*) as cnt from y where y1 = x1 group by y1) select cnt from cte) as n from x) select * from t;
 -- Illegal queries
 select *, (with cte as (select y1, count(*) as cnt from y where y1 > x1 group by y1) select cnt from cte) from x;
 select *, (with cte as (select y2 from y where y1 = x1) select y2 from cte) from x;
@@ -69,6 +71,8 @@ select *, (with unused as (select 1 as one), cte as (select * from y where y1 = 
 -- The correlated CTE is on the right side of a left join
 select *, (with cte as (select * from y where y1 = x1) select count(*) from z left join cte on z1 = y1 where z1 = x1 group by z1) from x;
 select *, (with cte as (select * from y where y1 = x1) select count(*) from z left join cte on z1 = y1) from x;
+-- The correlated CTE is read on both sides of a left join, so each reference is checked in its own position
+select *, (with cte as (select * from y where y1 = x1) select count(*) from cte a left join cte b on a.y2 = b.y2) from x;
 -- The correlated CTE is referenced only from a nested subquery
 select *, (with cte as (select y1 from y full outer join (select * from z where z1 = x1) s on y1 = s.z1) select count(*) from z where exists (select * from cte)) from x;
 -- The group-by column is equal to a constant only in another reference to the CTE
@@ -78,5 +82,10 @@ select *, (with cte as (select * from y where y1 = 2) select count(*) from (sele
 select *, (with cte as (select * from y where y1 = x1) select count(*) from cte a join cte b on a.y2 = b.y2 group by b.y1) from x;
 -- Also when it comes from a reference to a CTE that passes on the columns of another reference
 select *, (with cte as (select * from y where y1 = x1), other as (select * from cte) select count(*) from other a join cte b on a.y2 = b.y2 group by a.y1) from x;
+-- The fixed-point analyzer keeps a CTE that nothing references with its original body, so it validates the scalar subquery
+-- in that body without inlining the subquery's own CTE. This case runs with the fixed-point analyzer only.
+set spark.sql.analyzer.singlePassResolver.dualRunWithLegacy = false;
+with unused as (select *, (with cte as (select y1, count(*) as cnt from y where y1 = x1 group by y1) select cnt from cte) as n from x) select 1;
+reset spark.sql.analyzer.singlePassResolver.dualRunWithLegacy;
 reset spark.sql.legacy.scalarSubqueryAllowGroupByNonEqualityCorrelatedPredicate;
 reset spark.sql.optimizer.scalarSubqueryUseSingleJoin;

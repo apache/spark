@@ -36,12 +36,24 @@ object ValidateSubqueryExpression
 
   /**
    * Validates subquery expressions in the plan. Upon failure, returns an user facing error.
+   *
+   * @param lookThroughCteReferences If true, a [[CTERelationRef]] that `InlineCTE` replaces with
+   *   the body of a CTE defined in the subquery is validated as that body, as if the CTE were
+   *   inlined. The single-pass resolver sets it because it validates a subquery before inlining
+   *   its CTEs. The fixed-point analyzer validates after `InlineCTE`, whose remaining references
+   *   point to CTEs that are never inlined or sit in unreferenced CTEs that it keeps with their
+   *   original bodies, so it validates the references as they are.
    */
   def apply(
       plan: LogicalPlan,
       expr: SubqueryExpression,
-      skipOuterReferenceValidationInFilter: Boolean = false): Unit = {
-    lazy val inlinedCtes = inlinedCteReferences(expr.plan)
+      skipOuterReferenceValidationInFilter: Boolean = false,
+      lookThroughCteReferences: Boolean = false): Unit = {
+    lazy val inlinedCtes = if (lookThroughCteReferences) {
+      inlinedCteReferences(expr.plan)
+    } else {
+      Map.empty[CTERelationRef, InlinedCteReference]
+    }
     lazy val inlinedCteIds = inlinedCtes.values.map(_.cteDef.id).toSet
 
     def checkAggregateInScalarSubquery(
@@ -215,7 +227,7 @@ object ValidateSubqueryExpression
         }
         // Validate to make sure the correlations appearing in the query are valid and
         // allowed by spark.
-        checkCorrelationsInSubquery(expr.plan, isScalar = true)
+        checkCorrelationsInSubquery(expr.plan, lookThroughCteReferences, isScalar = true)
 
       case _: LateralSubquery =>
         assert(plan.isInstanceOf[LateralJoin])
@@ -245,7 +257,7 @@ object ValidateSubqueryExpression
         }
         // Validate to make sure the correlations appearing in the query are valid and
         // allowed by spark.
-        checkCorrelationsInSubquery(expr.plan, isLateral = true)
+        checkCorrelationsInSubquery(expr.plan, lookThroughCteReferences, isLateral = true)
 
       case _: FunctionTableSubqueryArgumentExpression =>
         // Do nothing here, since we will check for this pattern later.
@@ -262,7 +274,7 @@ object ValidateSubqueryExpression
         }
         // Validate to make sure the correlations appearing in the query are valid and
         // allowed by spark.
-        checkCorrelationsInSubquery(expr.plan)
+        checkCorrelationsInSubquery(expr.plan, lookThroughCteReferences)
     }
   }
 
@@ -318,11 +330,13 @@ object ValidateSubqueryExpression
 
   /**
    * Validates to make sure the outer references appearing inside the subquery
-   * are allowed. A [[CTERelationRef]] that inlining replaces with the body of a CTE defined in
-   * `sub` is validated as that body in place of the reference, as if the CTE were inlined.
+   * are allowed. If `lookThroughCteReferences` is true, a [[CTERelationRef]] that inlining
+   * replaces with the body of a CTE defined in `sub` is validated as that body in place of the
+   * reference, as if the CTE were inlined.
    */
   private def checkCorrelationsInSubquery(
       sub: LogicalPlan,
+      lookThroughCteReferences: Boolean,
       isScalar: Boolean = false,
       isLateral: Boolean = false): Unit = {
     // Some query shapes are only supported with the DecorrelateInnerQuery framework.
@@ -456,7 +470,11 @@ object ValidateSubqueryExpression
     val simplifiedSub = AnalysisHelper.allowInvokingTransformsInAnalyzer {
       BooleanSimplification(sub)
     }
-    val inlinedCtes = inlinedCteReferences(simplifiedSub)
+    val inlinedCtes = if (lookThroughCteReferences) {
+      inlinedCteReferences(simplifiedSub)
+    } else {
+      Map.empty[CTERelationRef, InlinedCteReference]
+    }
     // checkPlan doesn't descend into nested subquery expressions, so it checks a definition at its
     // references only if one of them sits outside of those.
     val cteIdsCheckedAtReferences =

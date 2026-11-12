@@ -104,6 +104,98 @@ struct<id:int>
 
 
 -- !query
+set spark.sql.analyzer.singlePassResolver.dualRunWithLegacy = false
+-- !query schema
+struct<key:string,value:string>
+-- !query output
+spark.sql.analyzer.singlePassResolver.dualRunWithLegacy	false
+
+
+-- !query
+WITH unreferenced AS (
+  SELECT (
+    WITH correlated AS (SELECT * FROM VALUES (0), (1) AS r(id) WHERE r.id = o.id)
+    SELECT count(*) FROM VALUES (0), (1) AS l(id) LEFT JOIN correlated ON l.id = correlated.id
+  ) FROM VALUES (0) AS o(id)
+)
+SELECT 1
+-- !query schema
+struct<1:int>
+-- !query output
+1
+
+
+-- !query
+WITH unreferenced AS (
+  SELECT (
+    WITH correlated AS (SELECT * FROM VALUES (0), (1) AS r(id) WHERE r.id = o.id)
+    SELECT count(*) FROM VALUES (0), (1) AS l(id) LEFT JOIN correlated ON l.id = correlated.id
+  ) FROM VALUES (0) AS o(id)
+),
+other_unreferenced AS (SELECT * FROM unreferenced)
+SELECT 1
+-- !query schema
+struct<1:int>
+-- !query output
+1
+
+
+-- !query
+WITH unreferenced AS (
+  SELECT * FROM VALUES (0) AS o(id) WHERE EXISTS (
+    SELECT * FROM VALUES (0) AS m(id) WHERE EXISTS (
+      WITH correlated AS (SELECT * FROM VALUES (0), (1) AS r(id) WHERE r.id = m.id)
+      SELECT 1 FROM VALUES (0), (1) AS l(id) FULL OUTER JOIN correlated ON l.id = correlated.id
+    )
+  )
+)
+SELECT 1
+-- !query schema
+struct<1:int>
+-- !query output
+1
+
+
+-- !query
+CREATE OR REPLACE VIEW unreferenced_cte_view AS
+WITH unreferenced AS (
+  SELECT (
+    WITH correlated AS (SELECT * FROM VALUES (0), (1) AS r(id) WHERE r.id = o.id)
+    SELECT count(*) FROM VALUES (0), (1) AS l(id) LEFT JOIN correlated ON l.id = correlated.id
+  ) FROM VALUES (0) AS o(id)
+)
+SELECT 1 AS one
+-- !query schema
+struct<>
+-- !query output
+
+
+
+-- !query
+SELECT * FROM unreferenced_cte_view
+-- !query schema
+struct<one:int>
+-- !query output
+1
+
+
+-- !query
+DROP VIEW unreferenced_cte_view
+-- !query schema
+struct<>
+-- !query output
+
+
+
+-- !query
+reset spark.sql.analyzer.singlePassResolver.dualRunWithLegacy
+-- !query schema
+struct<>
+-- !query output
+
+
+
+-- !query
 SELECT * FROM
   (
    WITH cte AS (SELECT * FROM range(10))

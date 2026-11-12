@@ -833,9 +833,16 @@ class Resolver(
     val subqueryExpressions =
       operatorResolutionContextStack.current.subqueryExpressionsToValidate.asScala.toSeq
     for (subqueryExpression <- subqueryExpressions) {
+      // The fixed-point analyzer validates a subquery after inlining its CTEs, while here they are
+      // not inlined yet, so validation looks through the references to them.
+      // TODO: The fixed-point analyzer keeps an unreferenced CTE with its original body, so it
+      // validates a subquery inside that body without looking through. Here it is not known yet
+      // whether the CTE whose body is being resolved is referenced, so for such subqueries the
+      // two analyzers can disagree.
       ValidateSubqueryExpression(
         plan = operator,
-        expr = subqueryExpression
+        expr = subqueryExpression,
+        lookThroughCteReferences = true
       )
     }
   }

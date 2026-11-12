@@ -134,6 +134,98 @@ Project [id#x]
 
 
 -- !query
+set spark.sql.analyzer.singlePassResolver.dualRunWithLegacy = false
+-- !query analysis
+SetCommand (spark.sql.analyzer.singlePassResolver.dualRunWithLegacy,Some(false))
+
+
+-- !query
+WITH unreferenced AS (
+  SELECT (
+    WITH correlated AS (SELECT * FROM VALUES (0), (1) AS r(id) WHERE r.id = o.id)
+    SELECT count(*) FROM VALUES (0), (1) AS l(id) LEFT JOIN correlated ON l.id = correlated.id
+  ) FROM VALUES (0) AS o(id)
+)
+SELECT 1
+-- !query analysis
+Project [1 AS 1#x]
++- OneRowRelation
+
+
+-- !query
+WITH unreferenced AS (
+  SELECT (
+    WITH correlated AS (SELECT * FROM VALUES (0), (1) AS r(id) WHERE r.id = o.id)
+    SELECT count(*) FROM VALUES (0), (1) AS l(id) LEFT JOIN correlated ON l.id = correlated.id
+  ) FROM VALUES (0) AS o(id)
+),
+other_unreferenced AS (SELECT * FROM unreferenced)
+SELECT 1
+-- !query analysis
+Project [1 AS 1#x]
++- OneRowRelation
+
+
+-- !query
+WITH unreferenced AS (
+  SELECT * FROM VALUES (0) AS o(id) WHERE EXISTS (
+    SELECT * FROM VALUES (0) AS m(id) WHERE EXISTS (
+      WITH correlated AS (SELECT * FROM VALUES (0), (1) AS r(id) WHERE r.id = m.id)
+      SELECT 1 FROM VALUES (0), (1) AS l(id) FULL OUTER JOIN correlated ON l.id = correlated.id
+    )
+  )
+)
+SELECT 1
+-- !query analysis
+Project [1 AS 1#x]
++- OneRowRelation
+
+
+-- !query
+CREATE OR REPLACE VIEW unreferenced_cte_view AS
+WITH unreferenced AS (
+  SELECT (
+    WITH correlated AS (SELECT * FROM VALUES (0), (1) AS r(id) WHERE r.id = o.id)
+    SELECT count(*) FROM VALUES (0), (1) AS l(id) LEFT JOIN correlated ON l.id = correlated.id
+  ) FROM VALUES (0) AS o(id)
+)
+SELECT 1 AS one
+-- !query analysis
+CreateViewCommand `spark_catalog`.`default`.`unreferenced_cte_view`, WITH unreferenced AS (
+  SELECT (
+    WITH correlated AS (SELECT * FROM VALUES (0), (1) AS r(id) WHERE r.id = o.id)
+    SELECT count(*) FROM VALUES (0), (1) AS l(id) LEFT JOIN correlated ON l.id = correlated.id
+  ) FROM VALUES (0) AS o(id)
+)
+SELECT 1 AS one, false, true, PersistedView, COMPENSATION, true
+   +- Project [1 AS one#x]
+      +- OneRowRelation
+
+
+-- !query
+SELECT * FROM unreferenced_cte_view
+-- !query analysis
+Project [one#x]
++- SubqueryAlias spark_catalog.default.unreferenced_cte_view
+   +- View (`spark_catalog`.`default`.`unreferenced_cte_view`, [one#x])
+      +- Project [cast(one#x as int) AS one#x]
+         +- Project [1 AS one#x]
+            +- OneRowRelation
+
+
+-- !query
+DROP VIEW unreferenced_cte_view
+-- !query analysis
+DropTableCommand `spark_catalog`.`default`.`unreferenced_cte_view`, false, true, false
+
+
+-- !query
+reset spark.sql.analyzer.singlePassResolver.dualRunWithLegacy
+-- !query analysis
+ResetCommand spark.sql.analyzer.singlePassResolver.dualRunWithLegacy
+
+
+-- !query
 SELECT * FROM
   (
    WITH cte AS (SELECT * FROM range(10))
