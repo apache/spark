@@ -25,7 +25,7 @@ import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.util.{ArrayBasedMapData, GenericArrayData}
 import org.apache.spark.sql.connector.catalog.functions.{BoundFunction, ScalarFunction}
 import org.apache.spark.sql.errors.QueryExecutionErrors
-import org.apache.spark.sql.types.{ArrayType, BinaryType, DataType, DateType, Decimal, DecimalType, DoubleType, IntegerType, LongType, MapType, ShortType, StringType, StructType, TimestampNTZType, TimestampType, UserDefinedType, VarcharType}
+import org.apache.spark.sql.types.{ArrayType, BinaryType, DataType, DateType, DayTimeIntervalType, Decimal, DecimalType, DoubleType, IntegerType, LongType, MapType, ShortType, StringType, StructType, TimestampNTZType, TimestampType, TimeType, UserDefinedType, VarcharType, YearMonthIntervalType}
 import org.apache.spark.unsafe.types.UTF8String
 
 class TransformExpressionSuite extends SparkFunSuite {
@@ -342,7 +342,8 @@ class TransformExpressionSuite extends SparkFunSuite {
     // A cogroup pairs the groups of its two sides by comparing their key rows, so a key shuffled
     // onto a layout has to be stored as the layout's column is: apart from nullability and field
     // names, and, for a decimal of one scale, its precision, while both are stored as a `long` or
-    // both as bytes. The answer does not depend on which side is which.
+    // both as bytes. Two datetime or interval types also have to count in one unit. The answer
+    // does not depend on which side is which.
     class IntUDT extends UserDefinedType[Integer] {
       override def sqlType: DataType = IntegerType
       override def serialize(obj: Integer): Any = obj
@@ -353,6 +354,7 @@ class TransformExpressionSuite extends SparkFunSuite {
       (IntegerType, IntegerType, true),
       (DateType, IntegerType, true),
       (TimestampNTZType, TimestampType, true),
+      (TimeType(3), TimeType(6), true),
       (StringType, VarcharType(5), true),
       (new IntUDT, IntegerType, true),
       (new StructType().add("x", IntegerType, nullable = false),
@@ -370,6 +372,10 @@ class TransformExpressionSuite extends SparkFunSuite {
       (StringType, StringType("UTF8_LCASE"), false),
       (DecimalType(10, 2), DecimalType(20, 2), false),
       (DecimalType(10, 2), DecimalType(10, 3), false),
+      // One `long` or `int`, but other units, so equal bytes do not hold one value.
+      (TimeType(), TimestampType, false),
+      (YearMonthIntervalType(), DateType, false),
+      (DayTimeIntervalType(), TimestampType, false),
       (new StructType().add("x", IntegerType), new StructType().add("x", LongType), false),
       (ArrayType(IntegerType), ArrayType(LongType), false),
       (new StructType().add("x", IntegerType),
@@ -377,6 +383,46 @@ class TransformExpressionSuite extends SparkFunSuite {
     ).foreach { case (one, other, alike) =>
       assert(TransformExpression.keysStoredAlike(one, other) == alike, s"$one and $other")
       assert(TransformExpression.keysStoredAlike(other, one) == alike, s"$other and $one")
+    }
+  }
+
+  test("SPARK-60813: eval takes a datetime or interval argument only in the unit declared") {
+    // A function declaring `declared` reads the raw `long` or `int`, so a value of another unit
+    // would be read wrongly, e.g. the nanoseconds of a `TIME` as the microseconds of a
+    // `TIMESTAMP`. That is refused, at the top level and nested. A `TIMESTAMP_NTZ` holds
+    // microseconds since the epoch as a `TIMESTAMP` does, so it is taken.
+    def function(declared: DataType)(read: InternalRow => Long): ScalarFunction[Int] =
+      new ScalarFunction[Int] {
+        override def inputTypes(): Array[DataType] = Array(IntegerType, declared)
+        override def resultType(): DataType = IntegerType
+        override def name(): String = "bucket"
+        override def canonicalName(): String = "test.bucket"
+        override def produceResult(input: InternalRow): Int =
+          Math.floorMod(read(input), input.getInt(0).toLong).toInt
+      }
+    def struct(dataType: DataType): StructType = new StructType().add("t", dataType)
+    val topLevel = (row: InternalRow) => row.getLong(1)
+    val nestedField = (row: InternalRow) => row.getStruct(1, 1).getLong(0)
+    // (what, the argument's type, the declared type, the value, how the function reads it,
+    //  whether it is taken)
+    Seq(
+      ("a TIME against a TIMESTAMP", TimeType(), TimestampType, 5L, topLevel, false),
+      ("a DAY TO SECOND interval against a TIMESTAMP", DayTimeIntervalType(), TimestampType, 5L,
+        topLevel, false),
+      ("a nested TIME against a nested TIMESTAMP", struct(TimeType()), struct(TimestampType),
+        InternalRow(5L), nestedField, false),
+      ("a TIMESTAMP_NTZ against a TIMESTAMP", TimestampNTZType, TimestampType, 5L, topLevel, true),
+      ("a nested TIMESTAMP_NTZ against a nested TIMESTAMP", struct(TimestampNTZType),
+        struct(TimestampType), InternalRow(5L), nestedField, true),
+      ("a TIME of another precision", TimeType(3), TimeType(6), 5L, topLevel, true)
+    ).foreach { case (what, argumentType, declared, value, read, taken) =>
+      val argument = BoundReference(0, argumentType, nullable = true)
+      val transform = TransformExpression(function(declared)(read), Seq(argument), Some(4))
+      assert(transform.evaluableFunction.isDefined == taken, what)
+      if (taken) {
+        val unsafe = UnsafeProjection.create(Seq(argument)).apply(InternalRow(value))
+        assert(transform.eval(unsafe) == 1, what)
+      }
     }
   }
 

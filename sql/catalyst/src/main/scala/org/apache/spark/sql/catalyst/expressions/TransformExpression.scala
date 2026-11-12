@@ -31,7 +31,7 @@ import org.apache.spark.sql.catalyst.expressions.codegen.{CodegenContext, ExprCo
 import org.apache.spark.sql.catalyst.types.{PhysicalDataType, UninitializedPhysicalType}
 import org.apache.spark.sql.connector.catalog.functions.{BoundFunction, Reducer, ReducibleFunction, ScalarFunction}
 import org.apache.spark.sql.errors.QueryExecutionErrors
-import org.apache.spark.sql.types.{ArrayType, DataType, DecimalType, MapType, StructType, UpCastRule, UserDefinedType}
+import org.apache.spark.sql.types.{AnsiIntervalType, ArrayType, DataType, DatetimeType, DecimalType, MapType, StructType, TimestampNTZType, TimestampType, UpCastRule, UserDefinedType}
 
 /**
  * The identity of a partition transform function. It holds the two values
@@ -459,7 +459,9 @@ object TransformExpression extends Logging {
    * reads a `long` at a smaller precision than its value has as it is. An array element, or a
    * map's key or value, is read with a check that fails for a value of more digits than that
    * precision, as one stored as bytes is anywhere. So a cogroup over such keys can fail, but never
-   * pairs its groups wrongly.
+   * pairs its groups wrongly. Two datetime or interval types of other units are refused as for a
+   * function, see `countInOtherUnits`, although their bytes can be the same: a `TIME` key and a
+   * `TIMESTAMP` column holding one `long` do not hold one value.
    */
   private[sql] def keysStoredAlike(from: DataType, to: DataType): Boolean =
     storedAlike(from, to, nested = true, anyPrecision = true)
@@ -469,7 +471,8 @@ object TransformExpression extends Logging {
    * declaring `to` reads it as it is:
    *  - two types with one physical type, e.g. a `VARCHAR` and a string of the same collation, a
    *    `DATE` and an `INT`, or a `TIMESTAMP` and a `BIGINT`. A user-defined type is stored as its
-   *    `sqlType`;
+   *    `sqlType`. Two datetime or interval types also have to count in one unit, see
+   *    `countInOtherUnits`;
    *  - two structs, arrays or maps whose fields, elements, keys and values are stored alike, by
    *    position. Field names and nullability do not change how a value is stored. A function
    *    declaring a non-nullable field gets the values a nullable one holds;
@@ -503,8 +506,25 @@ object TransformExpression extends Logging {
       case (f: DecimalType, t: DecimalType) =>
         f.scale == t.scale && (!nested || ((anyPrecision || f.precision <= t.precision) &&
           DecimalType.isByteArrayDecimalType(f) == DecimalType.isByteArrayDecimalType(t)))
+      case _ if countInOtherUnits(from, to) => false
       case _ =>
         val physical = PhysicalDataType(from)
         physical != UninitializedPhysicalType && physical == PhysicalDataType(to)
     }
+
+  /**
+   * Whether `from` and `to` are datetime or interval types that count in different units, so that
+   * a function declaring one would read the other wrongly, although both can share a physical
+   * type: a `TIME` holds nanoseconds of the day in a `long`, where a `TIMESTAMP` holds
+   * microseconds since the epoch, a `YEAR TO MONTH` interval holds months in an `int`, where a
+   * `DATE` holds days, and a `DAY TO SECOND` interval holds a duration, where a `TIMESTAMP` holds
+   * an instant. A `TIMESTAMP` and a `TIMESTAMP_NTZ` both hold microseconds since the epoch, and
+   * two types of one class with other fields or precision count in one unit too.
+   */
+  private def countInOtherUnits(from: DataType, to: DataType): Boolean = (from, to) match {
+    case (TimestampType | TimestampNTZType, TimestampType | TimestampNTZType) => false
+    case (_: DatetimeType | _: AnsiIntervalType, _: DatetimeType | _: AnsiIntervalType) =>
+      from.getClass != to.getClass
+    case _ => false
+  }
 }

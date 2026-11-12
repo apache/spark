@@ -25,7 +25,7 @@ import org.apache.spark.sql.catalyst.plans.physical._
 import org.apache.spark.sql.catalyst.util.{ArrayBasedMapData, GenericArrayData}
 import org.apache.spark.sql.connector.catalog.functions.{FlipLowBitFunction, NonScalarBucketFunction, Reducer, ReducibleFunction, ScalarFunction}
 import org.apache.spark.sql.internal.SQLConf
-import org.apache.spark.sql.types.{ArrayType, CharType, DataType, DateType, DecimalType, DoubleType, IntegerType, LongType, MapType, ShortType, StringType, StructType, TimestampNTZType, TimestampType, VarcharType}
+import org.apache.spark.sql.types.{ArrayType, CharType, DataType, DateType, DayTimeIntervalType, DecimalType, DoubleType, IntegerType, LongType, MapType, ShortType, StringType, StructType, TimestampNTZType, TimestampType, TimeType, VarcharType, YearMonthIntervalType}
 
 class ShuffleSpecSuite extends SparkFunSuite with SQLHelper {
 
@@ -846,6 +846,53 @@ class ShuffleSpecSuite extends SparkFunSuite with SQLHelper {
       }
       withSQLConf(SQLConf.V2_BUCKETING_SHUFFLE_ENABLED.key -> "true") {
         assert(yearsSpec.canEvaluatePartitioning == evaluable, s"DATE against $declared")
+      }
+    }
+  }
+
+  test("SPARK-60813: a datetime or interval argument of another unit is refused") {
+    // Two datetime or interval types can share a physical type and count in different units: a
+    // `TIME` holds nanoseconds of the day where a `TIMESTAMP` holds microseconds since the epoch,
+    // a `YEAR TO MONTH` interval holds months where a `DATE` holds days, and a `DAY TO SECOND`
+    // interval holds a duration where a `TIMESTAMP` holds an instant. Such an argument is refused,
+    // while two types that count in one unit, or a datetime type against the integer it is held
+    // as, are taken as they are.
+    def yearsFunction(declared: DataType): ScalarFunction[Int] = new ScalarFunction[Int] {
+      override def inputTypes(): Array[DataType] = Array(declared)
+      override def resultType(): DataType = IntegerType
+      override def name(): String = "years"
+      override def canonicalName(): String = "test.years"
+      override def produceResult(input: InternalRow): Int = 0
+    }
+    def spec(expression: Expression): KeyedShuffleSpec = KeyedShuffleSpec(
+      // The key is a placeholder: compatibility compares partition keys only when they are unknown.
+      KeyedPartitioning(Seq(expression), Seq(InternalRow(1))),
+      ClusteredDistribution(expression.references.toSeq))
+    Seq(
+      (TimeType(), TimestampType, false),
+      (TimeType(), TimestampNTZType, false),
+      (TimeType(), DayTimeIntervalType(), false),
+      (YearMonthIntervalType(), DateType, false),
+      (DayTimeIntervalType(), TimestampType, false),
+      (TimestampNTZType, TimestampType, true),
+      (TimeType(3), TimeType(6), true),
+      (DayTimeIntervalType(0, 1), DayTimeIntervalType(), true),
+      (YearMonthIntervalType(0, 0), YearMonthIntervalType(), true),
+      (TimestampType, LongType, true),
+      (YearMonthIntervalType(), IntegerType, true)
+    ).foreach { case (columnType, declared, evaluable) =>
+      val name = s"$columnType against $declared"
+      val column = AttributeReference("c", columnType)()
+      val years = spec(TransformExpression(yearsFunction(declared), Seq(column)))
+      val identity = spec(column)
+      withSQLConf(
+          SQLConf.V2_BUCKETING_PUSH_PART_VALUES_ENABLED.key -> "true",
+          SQLConf.V2_BUCKETING_PARTIALLY_CLUSTERED_DISTRIBUTION_ENABLED.key -> "false",
+          SQLConf.V2_BUCKETING_ALLOW_COMPATIBLE_TRANSFORMS.key -> "true") {
+        assert(identity.areKeysCompatible(years, allowReduce = true) == evaluable, name)
+      }
+      withSQLConf(SQLConf.V2_BUCKETING_SHUFFLE_ENABLED.key -> "true") {
+        assert(years.canEvaluatePartitioning == evaluable, name)
       }
     }
   }
