@@ -65,7 +65,11 @@ class StreamingJoinHelperSuite extends AnalysisTest {
     withLogAppender(logAppender, level = Some(Level.WARN)) {
       conditions.foreach { condition =>
         withClue(condition.sql) {
-          // Eviction passes only the constrained column and the opposite event time.
+          // The first condition reaches the references check through the V4 range scan and the
+          // left semi exact cutoff, which pass only the opposite event time; eviction passes the
+          // whole opposite input, so its occurrence check already returns None. The second
+          // condition also reaches it through eviction, which passes only the constrained column
+          // because leftOffset is in neither attribute set.
           assert(StreamingJoinHelper.getStateValueWatermark(
             AttributeSet(Seq(leftTime)), AttributeSet(Seq(rightTime)),
             Some(condition), Some(10000L)) === None)
