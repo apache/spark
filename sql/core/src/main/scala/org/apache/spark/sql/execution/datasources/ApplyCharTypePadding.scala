@@ -23,9 +23,9 @@ import org.apache.spark.internal.LogKeys
 import org.apache.spark.sql.catalyst.analysis.ApplyCharTypePaddingHelper
 import org.apache.spark.sql.catalyst.catalog.HiveTableRelation
 import org.apache.spark.sql.catalyst.expressions.{Alias, AttributeMap, AttributeReference, Expression, NamedExpression, OuterReference, SubExprUtils, SubqueryExpression}
-import org.apache.spark.sql.catalyst.plans.logical.{DeleteFromTable, LogicalPlan, Project, ReplaceData, WriteDelta}
+import org.apache.spark.sql.catalyst.plans.logical.{DeleteFromTable, LogicalPlan, OverwriteByExpression, Project, ReplaceData, WriteDelta}
 import org.apache.spark.sql.catalyst.rules.Rule
-import org.apache.spark.sql.catalyst.trees.TreePattern.{DELETE_FROM_TABLE, REPLACE_DATA, WRITE_DELTA}
+import org.apache.spark.sql.catalyst.trees.TreePattern.{COMMAND, REPLACE_DATA, WRITE_DELTA}
 import org.apache.spark.sql.catalyst.util.CharVarcharUtils
 import org.apache.spark.sql.connector.write.RowLevelOperationTable
 import org.apache.spark.sql.errors.QueryCompilationErrors
@@ -102,23 +102,26 @@ object ApplyCharTypePadding extends Rule[LogicalPlan] {
   }
 
   /**
-   * A DELETE that is not rewritten as a row-level operation deletes with filters translated from
-   * its condition, which the data source compares with the stored values. To match what a read of
-   * the table returns, the condition evaluates the read-side padding of the columns itself, after
-   * its comparisons are padded. The data source can only delete with such a filter if it supports
-   * the padding, e.g. `CHAR_READ_SIDE_PADDING`.
+   * A DELETE that is not rewritten as a row-level operation, and an overwrite by expression such
+   * as `INSERT INTO ... REPLACE WHERE`, delete with filters translated from their condition, which
+   * the data source compares with the stored values. To match what a read of the table returns,
+   * the condition evaluates the read-side padding of the columns itself, after its comparisons are
+   * padded. The data source can only delete with such a filter if it supports the padding, e.g.
+   * `CHAR_READ_SIDE_PADDING`.
    */
   private def padDeleteConditions(plan: LogicalPlan): LogicalPlan = {
-    plan.resolveOperatorsWithPruning(_.containsPattern(DELETE_FROM_TABLE)) {
-      case d: DeleteFromTable =>
-        d.copy(condition = d.condition.transform {
-          // the padded value refers to the attribute without the raw type and is not padded again
-          case attr: AttributeReference if CharVarcharUtils.getRawType(attr.metadata).isDefined =>
-            CharVarcharUtils.addPaddingForScan(attr).transform {
-              case a: AttributeReference => CharVarcharUtils.cleanAttrMetadata(a)
-            }
-        })
+    plan.resolveOperatorsWithPruning(_.containsPattern(COMMAND)) {
+      case d: DeleteFromTable => d.copy(condition = padRawTypedColumns(d.condition))
+      case o: OverwriteByExpression => o.copy(deleteExpr = padRawTypedColumns(o.deleteExpr))
     }
+  }
+
+  private def padRawTypedColumns(condition: Expression): Expression = condition.transform {
+    // the padded value refers to the attribute without the raw type and is not padded again
+    case attr: AttributeReference if CharVarcharUtils.getRawType(attr.metadata).isDefined =>
+      CharVarcharUtils.addPaddingForScan(attr).transform {
+        case a: AttributeReference => CharVarcharUtils.cleanAttrMetadata(a)
+      }
   }
 
   /**
