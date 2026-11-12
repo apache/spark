@@ -25,7 +25,7 @@ import org.apache.spark.sql.catalyst.plans.PlanTest
 import org.apache.spark.sql.catalyst.plans.logical.{Filter, LocalRelation, LogicalPlan}
 import org.apache.spark.sql.catalyst.rules.RuleExecutor
 import org.apache.spark.sql.internal.SQLConf
-import org.apache.spark.sql.types.{DoubleType, StringType}
+import org.apache.spark.sql.types.{DoubleType, IntegerType, StringType}
 
 /**
  * Unit tests for constant propagation in expressions.
@@ -323,5 +323,51 @@ class ConstantPropagationSuite extends PlanTest {
     val trimmed = LocalRelation(AttributeReference("s", StringType("UTF8_BINARY_RTRIM"))())
     val lengthOfTrimmed = trimmed.where($"s" === "a" && Length($"s") === 2).analyze
     comparePlans(Optimize.execute(lengthOfTrimmed), lengthOfTrimmed)
+  }
+
+  test("SPARK-61704: Do not propagate an EqualTo with a NULL literal under a NOT") {
+    val nullInt = Literal(null, IntegerType)
+    Seq(true, false).foreach { ansi =>
+      withSQLConf(SQLConf.ANSI_ENABLED.key -> ansi.toString) {
+        // `d = NULL` is NULL on every row, so the condition under the `NOT` is NULL or FALSE.
+        // Replacing `d` with NULL would make `d + 0 <=> 5` FALSE, and the condition FALSE where it
+        // is NULL, or `d > b` NULL, and the condition NULL where it is FALSE. Also below an `OR`.
+        Seq(
+          Not(columnD === nullInt && (columnD + 0 <=> 5)),
+          Not(nullInt === columnD && (columnD + 0 <=> 5)),
+          Not(columnD === nullInt && columnD > columnB),
+          Not((columnD === nullInt && columnD > columnB) || columnB > 0)
+        ).foreach { condition =>
+          val withNull = testRelation.where(condition).analyze
+          comparePlans(ConstantPropagation(withNull), withNull)
+        }
+        // An `EqualTo` with another literal, on either side, still is.
+        Seq(Literal(1) === columnD, columnD === Literal(1)).foreach { equality =>
+          comparePlans(
+            ConstantPropagation(testRelation.where(Not(equality && columnD > columnB)).analyze),
+            testRelation.where(Not(equality && Literal(1) > columnB)).analyze)
+        }
+        // Outside a `NOT`, where NULL counts as FALSE, the condition is never TRUE whatever `a` is
+        // replaced with, so it is still propagated, as before.
+        Seq(columnA === nullInt, nullInt === columnA).foreach { equality =>
+          comparePlans(
+            ConstantPropagation(testRelation.where(equality && columnA > 5).analyze),
+            testRelation.where(equality && nullInt > 5).analyze)
+        }
+        // An `EqualNullSafe` with a NULL literal is TRUE exactly where the attribute is NULL, so
+        // it is still propagated ...
+        Seq(columnA <=> nullInt, nullInt <=> columnA).foreach { nullSafe =>
+          comparePlans(
+            Optimize.execute(testRelation.where(nullSafe && (columnA + 0 <=> 5)).analyze),
+            testRelation.where(Literal(false)).analyze)
+        }
+        // ... also under a `NOT`, for an attribute that is not nullable.
+        Seq(columnD <=> nullInt, nullInt <=> columnD).foreach { nullSafe =>
+          comparePlans(
+            ConstantPropagation(testRelation.where(Not(nullSafe && columnD > columnB)).analyze),
+            testRelation.where(Not(nullSafe && nullInt > columnB)).analyze)
+        }
+      }
+    }
   }
 }
