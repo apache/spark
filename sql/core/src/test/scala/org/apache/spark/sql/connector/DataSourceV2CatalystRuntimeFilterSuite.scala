@@ -70,9 +70,8 @@ class DataSourceV2CatalystRuntimeFilterSuite extends SharedSparkSession {
     val dim = s"$catalogName.dim1"
     withTable(tbl, dim) {
       sql(s"CREATE TABLE $tbl (id INT, part INT) USING $v2Source PARTITIONED BY (part)")
-      for (i <- 0 until 5) {
-        sql(s"INSERT INTO $tbl VALUES ($i, $i)")
-      }
+      val values = (0 until 5).map(i => s"($i, $i)").mkString(", ")
+      sql(s"INSERT INTO $tbl VALUES $values")
       sql(s"CREATE TABLE $dim (val INT) USING $v2Source")
       sql(s"INSERT INTO $dim VALUES (3)")
 
@@ -102,9 +101,8 @@ class DataSourceV2CatalystRuntimeFilterSuite extends SharedSparkSession {
         "TBLPROPERTIES('fully-pushed-filter-attributes' = 'part')")
       // Matching and nonmatching partitions: the scan must prune nonmatching ones itself
       // because Spark drops the post-scan FilterExec for fully pushed attributes.
-      for (i <- 0 until 5) {
-        sql(s"INSERT INTO $tbl VALUES ($i, $i)")
-      }
+      val values = (0 until 5).map(i => s"($i, $i)").mkString(", ")
+      sql(s"INSERT INTO $tbl VALUES $values")
       sql(s"CREATE TABLE $dim (val INT) USING $v2Source")
       sql(s"INSERT INTO $dim VALUES (3)")
 
@@ -282,9 +280,8 @@ class DataSourceV2CatalystRuntimeFilterSuite extends SharedSparkSession {
     withTable(tbl, dim) {
       sql(s"CREATE TABLE $tbl (id INT, part INT) USING $v2Source PARTITIONED BY (part) " +
         "TBLPROPERTIES('fully-pushed-filter-attributes' = 'part')")
-      for (i <- 0 until 5) {
-        sql(s"INSERT INTO $tbl VALUES ($i, $i)")
-      }
+      val values = (0 until 5).map(i => s"($i, $i)").mkString(", ")
+      sql(s"INSERT INTO $tbl VALUES $values")
       sql(s"CREATE TABLE $dim (val INT) USING $v2Source")
       sql(s"INSERT INTO $dim VALUES (3)")
 
@@ -309,9 +306,8 @@ class DataSourceV2CatalystRuntimeFilterSuite extends SharedSparkSession {
       sql(s"CREATE TABLE $tbl (id INT, p1 INT, p2 INT) USING $v2Source " +
         "PARTITIONED BY (p1, p2) " +
         "TBLPROPERTIES('fully-pushed-filter-attributes' = 'p1')")
-      for (i <- 0 until 5) {
-        sql(s"INSERT INTO $tbl VALUES ($i, 1, 2)")
-      }
+      val values = (0 until 5).map(i => s"($i, 1, 2)").mkString(", ")
+      sql(s"INSERT INTO $tbl VALUES $values")
       sql(s"CREATE TABLE $dim (val INT) USING $v2Source")
       sql(s"INSERT INTO $dim VALUES (3)")
 
@@ -333,9 +329,8 @@ class DataSourceV2CatalystRuntimeFilterSuite extends SharedSparkSession {
     val dim = s"$catalogName.dim2"
     withTable(tbl, dim) {
       sql(s"CREATE TABLE $tbl (id INT, part INT) USING $v2Source PARTITIONED BY (part)")
-      for (i <- 0 until 5) {
-        sql(s"INSERT INTO $tbl VALUES ($i, $i)")
-      }
+      val values = (0 until 5).map(i => s"($i, $i)").mkString(", ")
+      sql(s"INSERT INTO $tbl VALUES $values")
       sql(s"CREATE TABLE $dim (val INT) USING $v2Source")
       sql(s"INSERT INTO $dim VALUES (2)")
 
@@ -357,9 +352,8 @@ class DataSourceV2CatalystRuntimeFilterSuite extends SharedSparkSession {
     val dim = s"$catalogName.dim_merged"
     withTable(tbl, dim) {
       sql(s"CREATE TABLE $tbl (id INT, part INT) USING $v2Source PARTITIONED BY (part)")
-      for (i <- 0 until 5) {
-        sql(s"INSERT INTO $tbl VALUES ($i, $i)")
-      }
+      val values = (0 until 5).map(i => s"($i, $i)").mkString(", ")
+      sql(s"INSERT INTO $tbl VALUES $values")
       sql(s"CREATE TABLE $dim (val INT) USING $v2Source")
       sql(s"INSERT INTO $dim VALUES (1), (3)")
 
@@ -383,9 +377,8 @@ class DataSourceV2CatalystRuntimeFilterSuite extends SharedSparkSession {
     val dim = s"$catalogName.dim_untranslatable"
     withTable(tbl, dim) {
       sql(s"CREATE TABLE $tbl (id INT, part STRING) USING $v2Source PARTITIONED BY (part)")
-      for (i <- 0 until 5) {
-        sql(s"INSERT INTO $tbl VALUES ($i, '$i')")
-      }
+      val values = (0 until 5).map(i => s"($i, '$i')").mkString(", ")
+      sql(s"INSERT INTO $tbl VALUES $values")
       sql(s"CREATE TABLE $dim (val STRING) USING $v2Source")
       sql(s"INSERT INTO $dim VALUES ('3')")
 
@@ -409,9 +402,8 @@ class DataSourceV2CatalystRuntimeFilterSuite extends SharedSparkSession {
     val dim = s"$catalogName.dim3"
     withTable(fact, dim) {
       sql(s"CREATE TABLE $fact (id INT, part INT) USING $v2Source PARTITIONED BY (part)")
-      for (i <- 0 until 5) {
-        sql(s"INSERT INTO $fact VALUES ($i, $i)")
-      }
+      val values = (0 until 5).map(i => s"($i, $i)").mkString(", ")
+      sql(s"INSERT INTO $fact VALUES $values")
       sql(s"CREATE TABLE $dim (dim_id INT, dim_val STRING) USING $v2Source")
       sql(s"INSERT INTO $dim VALUES (2, 'two')")
 
@@ -707,9 +699,8 @@ class DataSourceV2CatalystRuntimeFilterSuite extends SharedSparkSession {
       sql(s"CREATE TABLE $tbl (id INT, p1 INT, p2 INT) USING $v2Source " +
         "PARTITIONED BY (p1, p2) " +
         "TBLPROPERTIES('filter-attributes' = 'p1')")
-      for (i <- 0 until 5) {
-        sql(s"INSERT INTO $tbl VALUES ($i, $i, $i)")
-      }
+      val values = (0 until 5).map(i => s"($i, $i, $i)").mkString(", ")
+      sql(s"INSERT INTO $tbl VALUES $values")
       sql(s"CREATE TABLE $dim (val INT) USING $v2Source")
       sql(s"INSERT INTO $dim VALUES (3)")
 
@@ -732,9 +723,8 @@ class DataSourceV2CatalystRuntimeFilterSuite extends SharedSparkSession {
     val dim2 = s"$catalogName.dim_two_predicates2"
     withTable(tbl, dim1, dim2) {
       sql(s"CREATE TABLE $tbl (id INT, p1 INT, p2 INT) USING $v2Source PARTITIONED BY (p1, p2)")
-      for (i <- 0 until 5) {
-        sql(s"INSERT INTO $tbl VALUES ($i, $i, ${i * 10})")
-      }
+      val values = (0 until 5).map(i => s"($i, $i, ${i * 10})").mkString(", ")
+      sql(s"INSERT INTO $tbl VALUES $values")
       sql(s"CREATE TABLE $dim1 (val INT) USING $v2Source")
       sql(s"INSERT INTO $dim1 VALUES (3)")
       sql(s"CREATE TABLE $dim2 (val INT) USING $v2Source")
@@ -760,9 +750,10 @@ class DataSourceV2CatalystRuntimeFilterSuite extends SharedSparkSession {
     withTable(tbl, dim) {
       sql(s"CREATE TABLE $tbl (id INT, s STRUCT<tz: STRING>) USING $v2Source " +
         "PARTITIONED BY (s.tz)")
-      for (i <- 0 until 3) {
-        sql(s"INSERT INTO $tbl VALUES ($i, named_struct('tz', 'tz$i'))")
-      }
+      val values = (0 until 3)
+        .map(i => s"($i, named_struct('tz', 'tz$i'))")
+        .mkString(", ")
+      sql(s"INSERT INTO $tbl VALUES $values")
       sql(s"CREATE TABLE $dim (val STRING) USING $v2Source")
       sql(s"INSERT INTO $dim VALUES ('tz1')")
 
@@ -792,9 +783,10 @@ class DataSourceV2CatalystRuntimeFilterSuite extends SharedSparkSession {
       // 30, so binding a filter on the nested field to the top-level slot would find nothing.
       sql(s"CREATE TABLE $tbl (id INT, `x.y` INT, x STRUCT<y: INT>) USING $v2Source " +
         "PARTITIONED BY (`x.y`, x.y)")
-      for (i <- 0 until 5) {
-        sql(s"INSERT INTO $tbl VALUES ($i, $i, named_struct('y', ${i * 10}))")
-      }
+      val values = (0 until 5)
+        .map(i => s"($i, $i, named_struct('y', ${i * 10}))")
+        .mkString(", ")
+      sql(s"INSERT INTO $tbl VALUES $values")
       sql(s"CREATE TABLE $dim (val INT) USING $v2Source")
       sql(s"INSERT INTO $dim VALUES (30)")
 
@@ -820,9 +812,8 @@ class DataSourceV2CatalystRuntimeFilterSuite extends SharedSparkSession {
     val tbl = s"$catalogName.tbl5"
     withTable(tbl) {
       sql(s"CREATE TABLE $tbl (id INT, part INT) USING $v2Source PARTITIONED BY (part)")
-      for (i <- 0 until 5) {
-        sql(s"INSERT INTO $tbl VALUES ($i, $i)")
-      }
+      val values = (0 until 5).map(i => s"($i, $i)").mkString(", ")
+      sql(s"INSERT INTO $tbl VALUES $values")
 
       val df = sql(s"SELECT * FROM $tbl WHERE part = 3")
       checkAnswer(df, Row(3, 3))
@@ -837,9 +828,8 @@ class DataSourceV2CatalystRuntimeFilterSuite extends SharedSparkSession {
     val dim = s"$catalogName.dim_screened"
     withTable(fact, dim) {
       sql(s"CREATE TABLE $fact (id INT, part INT) USING $v2Source PARTITIONED BY (part)")
-      for (i <- 0 until 5) {
-        sql(s"INSERT INTO $fact VALUES ($i, $i)")
-      }
+      val values = (0 until 5).map(i => s"($i, $i)").mkString(", ")
+      sql(s"INSERT INTO $fact VALUES $values")
       sql(s"CREATE TABLE $dim (dim_id INT, dim_val STRING) USING $v2Source")
       sql(s"INSERT INTO $dim VALUES (2, 'two')")
 
