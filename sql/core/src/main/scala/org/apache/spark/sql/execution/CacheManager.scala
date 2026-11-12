@@ -658,8 +658,9 @@ class CacheManager extends Logging with AdaptiveSparkPlanHelper {
    * [[org.apache.spark.sql.execution.datasources.FileIndex]] of file-backed relations under
    * `qualifiedPath`, refreshes each matching index that is not in `refreshedIndexes` yet, and
    * returns whether any was found. Every match is refreshed because the rebuilt cache entry reuses
-   * these indexes. Each distinct index is checked against the path once, and an index already in
-   * `refreshedIndexes` passed that check earlier in the same call.
+   * these indexes. Each distinct index in `plan` is checked against the path at most once, and an
+   * index already in `refreshedIndexes` passed that check for an earlier entry of the same
+   * `recacheByPath` call.
    */
   private def lookupAndRefresh(
       plan: LogicalPlan,
