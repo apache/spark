@@ -239,8 +239,8 @@ object DataTypeUtils {
                (VariantType, _: StructType | _: ArrayType | _: MapType) =>
             throw QueryCompilationErrors.incompatibleDataToTableCannotSafelyCastError(
               tableName, context, w.catalogString, r.catalogString)
-          // Datetime types a variant can't store (e.g. TIME) also fail checkAnalysis; report them,
-          // top-level or nested, as a table write error.
+          // Datetime types Spark's variant can't store (e.g. TIME) also fail checkAnalysis;
+          // report them, top-level or nested, as a table write error.
           case (_, VariantType) if w.existsRecursively(t => t.isInstanceOf[DatetimeType] &&
               !VariantGet.canCastToVariant(t, allowStructsAndMaps = false)) =>
             throw QueryCompilationErrors.incompatibleDataToTableCannotSafelyCastError(

@@ -1893,7 +1893,7 @@ abstract class CastSuiteBase extends SparkFunSuite with ExpressionEvalHelper {
           DataTypeMismatch(
             "CAST_WITHOUT_SUGGESTION",
             Map("srcType" -> s""""${from.sql}"""", "targetType" -> s""""${to.sql}"""")))
-        // The read direction is unchanged.
+        // Reading back is allowed.
         assert(Cast.canCast(to, from))
         assert(Cast.canAnsiCast(to, from))
         assert(Cast.canTryCast(to, from))

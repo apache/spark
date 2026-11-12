@@ -1315,7 +1315,7 @@ class VariantExpressionSuite extends SparkFunSuite with ExpressionEvalHelper {
       }
     }
 
-    // DATE and microsecond timestamps are still accepted.
+    // DATE and microsecond timestamps can be written.
     Seq(DateType, TimestampType, TimestampNTZType).foreach { t =>
       (valueWrites(t) ++ objectWrites(t).map(_._1)).foreach { e =>
         assert(e.checkInputDataTypes().isSuccess, e)

@@ -131,8 +131,8 @@ case class IsVariantNull(child: Expression) extends UnaryExpression
   arguments = """
     Arguments:
       * expr - A nested value of array, map, or struct type. Maps must have string keys. Nested
-          values can be structs or maps, or of any type that can be cast to a variant other than
-          NULL.
+          values can be arrays, structs or maps, or of any type that can be cast to a variant
+          except VOID.
   """,
   examples = """
     Examples:
@@ -684,9 +684,8 @@ case class VariantCastArgs(
 case object VariantGet {
   /**
    * Returns whether a value of `dataType` can be cast to a variant. A datetime type can be cast
-   * only if the variant format has a primitive for it; the others (e.g. TIME) can only be read.
-   * `allowStructsAndMaps` is true for the variant object builders and false for CAST, which
-   * rejects structs and maps at any level.
+   * only if Spark's variant encoding has a primitive for it; the others (e.g. TIME) can only be
+   * read. `allowStructsAndMaps = false` rejects structs and maps at any level.
    */
   def canCastToVariant(dataType: DataType, allowStructsAndMaps: Boolean): Boolean =
     checkDataType(dataType, toVariant = true, allowStructsAndMaps)
