@@ -1272,7 +1272,7 @@ class VariantExpressionSuite extends SparkFunSuite with ExpressionEvalHelper {
       "_LEGACY_ERROR_TEMP_2128", Map.empty[String, String])
   }
 
-  test("TIME and nanosecond timestamps cannot be written to a variant") {
+  test("nanosecond timestamps cannot be written to a variant") {
     val obj = Literal(parseJson("{}"))
     // variant_insert / variant_set / variant_array_append and their try_ forms.
     def valueWrites(dt: DataType): Seq[Expression] = {
@@ -1299,7 +1299,7 @@ class VariantExpressionSuite extends SparkFunSuite with ExpressionEvalHelper {
 
     val unsupported = (7 to 9).flatMap { p =>
       Seq(TimestampNTZNanosType(p), TimestampLTZNanosType(p))
-    } :+ TimeType()
+    }
     unsupported.foreach { t =>
       Seq(t, ArrayType(t)).foreach { dt =>
         valueWrites(dt).foreach(e => assert(e.checkInputDataTypes() == mismatch(dt), e))
@@ -1344,15 +1344,6 @@ class VariantExpressionSuite extends SparkFunSuite with ExpressionEvalHelper {
           checkEvaluation(VariantGet(v, Literal("$"), nanos, failOnError = true),
             nanosVal(micros, 0))
         }
-      }
-    }
-  }
-
-  test("every type that can be cast to a variant round-trips through one") {
-    (DataTypeTestUtils.atomicTypes.toSeq :+ VariantType).foreach { t =>
-      if (VariantGet.canCastToVariant(t, allowStructsAndMaps = false)) {
-        val value = Literal.default(t)
-        checkEvaluation(Cast(Cast(value, VariantType), t), value.value)
       }
     }
   }

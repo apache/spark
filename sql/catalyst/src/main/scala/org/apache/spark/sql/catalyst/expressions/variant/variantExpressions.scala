@@ -683,9 +683,9 @@ case class VariantCastArgs(
 
 case object VariantGet {
   /**
-   * Returns whether a value of `dataType` can be cast to a variant. A datetime type can be cast
-   * only if Spark's variant encoding has a primitive for it; the others (e.g. TIME) can only be
-   * read. `allowStructsAndMaps = false` rejects structs and maps at any level.
+   * Returns whether a value of `dataType` can be cast to a variant. Nanosecond timestamps can only
+   * be read, because Spark's variant encoding has no primitive for them.
+   * `allowStructsAndMaps = false` rejects structs and maps at any level.
    */
   def canCastToVariant(dataType: DataType, allowStructsAndMaps: Boolean): Boolean =
     checkDataType(dataType, toVariant = true, allowStructsAndMaps)
@@ -702,10 +702,10 @@ case object VariantGet {
       allowStructsAndMaps: Boolean): Boolean =
     dataType match {
     case _: CharType | _: VarcharType => false
-    case _: NumericType | BooleanType | _: StringType | BinaryType | DateType | TimestampType |
-        TimestampNTZType | VariantType =>
+    case _: AnyTimestampNanoType => !toVariant
+    case _: NumericType | BooleanType | _: StringType | BinaryType | _: DatetimeType |
+        VariantType =>
       true
-    case _: DatetimeType => !toVariant
     case ArrayType(elementType, _) => checkDataType(elementType, toVariant, allowStructsAndMaps)
     case MapType(_: CharType | _: VarcharType, _, _) => false
     case MapType(_: StringType, valueType, _) if allowStructsAndMaps =>

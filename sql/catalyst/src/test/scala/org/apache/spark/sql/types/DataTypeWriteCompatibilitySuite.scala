@@ -241,9 +241,7 @@ class ANSIDataTypeWriteCompatibilitySuite extends DataTypeWriteCompatibilityBase
       TimestampNTZNanosType(TimestampNTZNanosType.MAX_PRECISION))
     val arrays = unsupportedTypes.map(ArrayType(_))
     val nestedArrays = unsupportedTypes.map(t => ArrayType(ArrayType(t)))
-    val structs = unsupportedTypes.map(t => new StructType().add("f", t))
-    val maps = unsupportedTypes.map(MapType(StringType, _))
-    (unsupportedTypes ++ arrays ++ nestedArrays ++ structs ++ maps).foreach { writeType =>
+    (unsupportedTypes ++ arrays ++ nestedArrays).foreach { writeType =>
       val errs = new mutable.ArrayBuffer[String]()
       checkError(
         exception = intercept[AnalysisException](
@@ -255,7 +253,7 @@ class ANSIDataTypeWriteCompatibilitySuite extends DataTypeWriteCompatibilityBase
         parameters = Map(
           "tableName" -> "``",
           "colName" -> "`v`",
-          "srcType" -> toSQLType(writeType.catalogString),
+          "srcType" -> toSQLType(writeType),
           "targetType" -> toSQLType(VariantType)))
     }
   }

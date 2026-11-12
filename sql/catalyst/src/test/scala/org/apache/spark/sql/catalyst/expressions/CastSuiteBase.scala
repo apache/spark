@@ -1873,10 +1873,10 @@ abstract class CastSuiteBase extends SparkFunSuite with ExpressionEvalHelper {
     }
   }
 
-  test("TIME and nanosecond timestamps cast from but not to VARIANT") {
+  test("nanosecond timestamps cast from but not to VARIANT") {
     val types = (7 to 9).flatMap { p =>
       Seq(TimestampNTZNanosType(p), TimestampLTZNanosType(p))
-    } :+ TimeType()
+    }
     types.foreach { t =>
       Seq(
         t -> VariantType,

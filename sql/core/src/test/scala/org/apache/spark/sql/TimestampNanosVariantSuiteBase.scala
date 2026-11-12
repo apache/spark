@@ -108,16 +108,6 @@ abstract class TimestampNanosVariantSuiteBase extends QueryTest with SharedSpark
     }
   }
 
-  test("TIME cannot be written to a VARIANT either") {
-    checkWriteError(sql("SELECT CAST(CAST('12:34:56' AS TIME(6)) AS VARIANT)"), "TIME(6)")
-    checkWriteError(
-      sql("SELECT to_variant_object(array(CAST('12:34:56' AS TIME(6))))"), "ARRAY<TIME(6)>")
-    checkAnswer(
-      sql("""SELECT CAST(variant_get(parse_json('"12:34:56.123456"'), '$', 'TIME(6)')
-            |  AS STRING)""".stripMargin),
-      Row("12:34:56.123456"))
-  }
-
   test("reading a nanosecond timestamp from a VARIANT at the target precision") {
     val v = """parse_json('{"t": "2020-01-01 00:00:00.123456789",
       |"a": ["2020-01-01 00:00:00.123456789"]}')""".stripMargin
