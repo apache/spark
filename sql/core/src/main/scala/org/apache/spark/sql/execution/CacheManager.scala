@@ -658,7 +658,8 @@ class CacheManager extends Logging with AdaptiveSparkPlanHelper {
    * [[org.apache.spark.sql.execution.datasources.FileIndex]] of file-backed relations under
    * `qualifiedPath`, refreshes each matching index that is not in `refreshedIndexes` yet, and
    * returns whether any was found. Every match is refreshed because the rebuilt cache entry reuses
-   * these indexes.
+   * these indexes. Each distinct index is checked against the path once, and an index already in
+   * `refreshedIndexes` passed that check earlier in the same call.
    */
   private def lookupAndRefresh(
       plan: LogicalPlan,
@@ -666,23 +667,24 @@ class CacheManager extends Logging with AdaptiveSparkPlanHelper {
       qualifiedPath: Path,
       includeTimeTravel: Boolean,
       refreshedIndexes: java.util.Set[FileIndex]): Boolean = {
-    def fileIndexToRefresh(node: LogicalPlan): Option[FileIndex] = {
-      val fileIndex: Option[FileIndex] = node match {
-        case lr: LogicalRelation => lr.relation match {
-          case hr: HadoopFsRelation => Some(hr.location)
-          case _ => None
-        }
-
-        case relation @ ExtractV2Table(fileTable: FileTable)
-            if includeTimeTravel || relation.timeTravelSpec.isEmpty =>
-          Some(fileTable.fileIndex)
-
+    def fileIndexOf(node: LogicalPlan): Option[FileIndex] = node match {
+      case lr: LogicalRelation => lr.relation match {
+        case hr: HadoopFsRelation => Some(hr.location)
         case _ => None
       }
-      fileIndex.filter(needToRefresh(_, fs, qualifiedPath, includeTimeTravel))
+
+      case relation @ ExtractV2Table(fileTable: FileTable)
+          if includeTimeTravel || relation.timeTravelSpec.isEmpty =>
+        Some(fileTable.fileIndex)
+
+      case _ => None
     }
 
-    val fileIndexes = (plan +: subqueryPlans(plan)).flatMap(_.flatMap(fileIndexToRefresh))
+    val seenIndexes = Collections.newSetFromMap(new IdentityHashMap[FileIndex, java.lang.Boolean])
+    val fileIndexes = (plan +: subqueryPlans(plan)).flatMap(_.flatMap(fileIndexOf)).filter {
+      fileIndex => seenIndexes.add(fileIndex) && (refreshedIndexes.contains(fileIndex) ||
+        needToRefresh(fileIndex, fs, qualifiedPath, includeTimeTravel))
+    }
     fileIndexes.foreach { fileIndex =>
       if (refreshedIndexes.add(fileIndex)) fileIndex.refresh()
     }
