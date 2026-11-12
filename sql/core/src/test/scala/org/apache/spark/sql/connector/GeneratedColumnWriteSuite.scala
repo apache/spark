@@ -464,6 +464,23 @@ class GeneratedColumnWriteSuite extends QueryTest with DatasourceV2SQLBase {
     }
   }
 
+  test("SPARK-61550: INSERT validates a provided value of a legacy SQL-only generated column") {
+    val tblName = "my_tab"
+    withTable(s"testcat.$tblName") {
+      catalog("testcat").asTableCatalog.createTable(
+        Identifier.of(Array(), tblName),
+        Array(
+          Column.create("id", IntegerType),
+          legacyGeneratedColumn("doubled", IntegerType, "id * 2")),
+        Array.empty[Transform],
+        Collections.emptyMap[String, String])
+      val ex = intercept[SparkRuntimeException] {
+        sql(s"INSERT INTO testcat.$tblName(id, doubled) VALUES (1, 3)")
+      }
+      assert(ex.getCondition == "CHECK_CONSTRAINT_VIOLATION")
+    }
+  }
+
   test("SPARK-60764: INSERT by name with a double quote in the generation expression") {
     val tblName = "my_tab"
     withTable(s"testcat.$tblName") {
@@ -1546,6 +1563,10 @@ class GeneratedColumnWriteSuite extends QueryTest with DatasourceV2SQLBase {
           assert(ex.getCondition == "UNSUPPORTED_FEATURE.TABLE_OPERATION")
           assert(ex.getMessage.contains(s"$command with generated columns"))
         }
+        // INSERT auto-fills the column from the legacy getter. Write last, because a write to
+        // this in-memory table rebuilds its columns with `columnGenerationExpression()`.
+        sql(s"INSERT INTO $legacyCat.$tblName(id, data) VALUES (1, 'a')")
+        checkAnswer(spark.table(s"$legacyCat.$tblName"), Row(1, "a", 2))
       }
     }
   }
