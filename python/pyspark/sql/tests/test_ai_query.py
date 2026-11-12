@@ -17,7 +17,10 @@
 
 import json
 import threading
+import traceback
 import unittest
+from datetime import datetime, timezone
+from email.utils import format_datetime
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from tempfile import TemporaryDirectory
@@ -30,6 +33,7 @@ from pyspark.sql._ai_client import (
     _ConverseClient,
     _ModelEndpoint,
     _query_batches,
+    _retry_delay,
 )
 from pyspark.sql.ai import ai_query, register_model
 from pyspark.testing import sqlutils
@@ -197,52 +201,170 @@ class AIQueryTests(unittest.TestCase, PySparkErrorTestUtils):
                     client.close()
 
     def test_transient_retry_keeps_body_and_refreshes_auth(self):
-        client = self.client()
+        client = self.client(max_retries=3)
         client.http.post.side_effect = [
             self.response(429),
             requests.ConnectionError("sensitive diagnostic"),
+            requests.exceptions.ChunkedEncodingError("sensitive framing diagnostic"),
             self.response(choices=[{"message": {"content": "answer"}}]),
         ]
         with patch("pyspark.sql._ai_client.time.sleep"):
             self.assertEqual(client.invoke("hello"), "answer")
         calls = client.http.post.call_args_list
-        self.assertEqual(len(calls), 3)
-        self.assertEqual(calls[0].kwargs["json"], calls[2].kwargs["json"])
+        self.assertEqual(len(calls), 4)
+        self.assertEqual(calls[0].kwargs["json"], calls[3].kwargs["json"])
         self.assertFalse(calls[0].kwargs["allow_redirects"])
-        self.assertEqual(client.workspace.config.authenticate.call_count, 3)
+        self.assertEqual(client.workspace.config.authenticate.call_count, 4)
 
     def test_retry_after_is_respected(self):
-        client = self.client()
-        retry = self.response(429)
-        retry.headers = {"Retry-After": "3"}
-        client.http.post.side_effect = [
-            retry,
-            self.response(choices=[{"message": {"content": "answer"}}]),
-        ]
-        with patch("pyspark.sql._ai_client.time.sleep") as sleep:
-            self.assertEqual(client.invoke("hello"), "answer")
-        sleep.assert_called_once_with(3)
+        now = 1700000000
+        date = format_datetime(datetime.fromtimestamp(now + 3, timezone.utc), usegmt=True)
+        for value in ("3", date):
+            with self.subTest(retry_after=value):
+                client = self.client()
+                retry = self.response(429)
+                retry.headers = {"Retry-After": value}
+                client.http.post.side_effect = [
+                    retry,
+                    self.response(choices=[{"message": {"content": "answer"}}]),
+                ]
+                with (
+                    patch("pyspark.sql._ai_client.time.time", return_value=now),
+                    patch("pyspark.sql._ai_client.time.sleep") as sleep,
+                ):
+                    self.assertEqual(client.invoke("hello"), "answer")
+                sleep.assert_called_once_with(3)
 
     def test_retry_after_exceeding_budget_preserves_http_status(self):
+        now = 1700000000
+        date = format_datetime(datetime.fromtimestamp(now + 30, timezone.utc), usegmt=True)
         for status in (429, 503):
-            with self.subTest(status=status):
-                client = self.client(timeout=5)
-                response = self.response(status)
-                response.headers = {"Retry-After": "30"}
-                client.http.post.return_value = response
-                with (
-                    patch("pyspark.sql._ai_client.time.monotonic", return_value=0),
-                    patch("pyspark.sql._ai_client.time.sleep") as sleep,
-                    self.assertRaises(PySparkRuntimeError) as raised,
+            for value in ("30", date):
+                with self.subTest(status=status, retry_after=value):
+                    client = self.client(timeout=5)
+                    response = self.response(status)
+                    response.headers = {"Retry-After": value}
+                    client.http.post.return_value = response
+                    with (
+                        patch("pyspark.sql._ai_client.time.time", return_value=now),
+                        patch("pyspark.sql._ai_client.time.monotonic", return_value=0),
+                        patch("pyspark.sql._ai_client.time.sleep") as sleep,
+                        self.assertRaises(PySparkRuntimeError) as raised,
+                    ):
+                        client.invoke("private prompt")
+                    self.check_error(
+                        raised.exception,
+                        "AI_QUERY_INVOCATION_FAILED.RETRY_AFTER_EXCEEDS_TIMEOUT",
+                        {
+                            "target": "Databricks model",
+                            "status": str(status),
+                            "retry_after": "30.0",
+                        },
+                    )
+                    sleep.assert_not_called()
+                    client.http.post.assert_called_once()
+
+    def test_retry_after_invalid_and_past_values_use_backoff(self):
+        now = 1700000000
+        past = format_datetime(datetime.fromtimestamp(now - 30, timezone.utc), usegmt=True)
+        for value in (past, "invalid", "", "-3", "0", "nan", "inf"):
+            with (
+                self.subTest(retry_after=value),
+                patch("pyspark.sql._ai_client.time.time", return_value=now),
+                patch("pyspark.sql._ai_client.time.monotonic", return_value=0),
+            ):
+                self.assertEqual(_retry_delay({"Retry-After": value}, 0, 5, 429), 1)
+
+    def test_http_body_failures_are_sanitized_and_follow_null_policy(self):
+        received = []
+        marker = "synthetic-body-diagnostic"
+
+        class Handler(BaseHTTPRequestHandler):
+            def do_POST(self):
+                self.rfile.read(int(self.headers["Content-Length"]))
+                received.append(self.path)
+                self.send_response(200)
+                if self.path == "/chunked":
+                    self.send_header("Transfer-Encoding", "chunked")
+                    body = marker.encode() + b"\r\ninvalid\r\n"
+                elif self.path == "/truncated":
+                    self.send_header("Content-Length", "1000")
+                    body = marker.encode()
+                else:
+                    body = marker.encode()
+                    self.send_header("Content-Encoding", "gzip")
+                    self.send_header("Content-Length", str(len(body)))
+                self.end_headers()
+                self.wfile.write(body)
+                self.wfile.flush()
+                self.close_connection = True
+
+            def log_message(self, *args):
+                pass
+
+        with ThreadingHTTPServer(("127.0.0.1", 0), Handler) as server:
+            thread = threading.Thread(target=server.serve_forever, daemon=True)
+            thread.start()
+            try:
+                for path, condition, attempts in (
+                    ("chunked", "CONNECTION_ERROR", 3),
+                    ("truncated", "CONNECTION_ERROR", 3),
+                    ("encoding", "INVALID_RESPONSE", 1),
                 ):
-                    client.invoke("private prompt")
-                self.check_error(
-                    raised.exception,
-                    "AI_QUERY_INVOCATION_FAILED.RETRY_AFTER_EXCEEDS_TIMEOUT",
-                    {"target": "Databricks model", "status": str(status), "retry_after": "30.0"},
-                )
-                sleep.assert_not_called()
-                client.http.post.assert_called_once()
+                    for on_error in ("raise", "null"):
+                        with self.subTest(path=path, on_error=on_error):
+                            client = self.client(timeout=5, max_retries=2)
+                            client.url = f"http://127.0.0.1:{server.server_port}/{path}"
+                            client.http = requests.Session()
+                            client.http.trust_env = False
+                            before = len(received)
+                            with (
+                                patch("pyspark.sql._ai_client.time.sleep"),
+                                patch(
+                                    "pyspark.sql._ai_client._ChatCompletionsClient",
+                                    return_value=client,
+                                ),
+                                patch.object(client, "close", wraps=client.close) as close,
+                            ):
+                                batches = iter([pd.Series(["private prompt"])])
+                                if on_error == "null":
+                                    result = list(
+                                        _query_batches(client.endpoint, batches, on_error=on_error)
+                                    )
+                                    self.assertEqual(result[0].tolist(), [None])
+                                else:
+                                    with self.assertRaises(PySparkRuntimeError) as raised:
+                                        list(_query_batches(client.endpoint, batches))
+                                    self.check_error(
+                                        raised.exception,
+                                        f"AI_QUERY_INVOCATION_FAILED.{condition}",
+                                        {"target": "Databricks model"},
+                                    )
+                                    rendered = "".join(traceback.format_exception(raised.exception))
+                                    self.assertNotIn(marker, rendered)
+                                    self.assertNotIn("private prompt", rendered)
+                                close.assert_called_once()
+                            self.assertEqual(len(received) - before, attempts)
+            finally:
+                server.shutdown()
+                thread.join()
+
+    def test_framing_errors_respect_retry_deadline(self):
+        client = self.client(timeout=1, max_retries=2)
+        client.http.post.side_effect = requests.exceptions.ChunkedEncodingError(
+            "private diagnostic"
+        )
+        with (
+            patch("pyspark.sql._ai_client.time.monotonic", side_effect=[0, 0, 2, 2]),
+            patch("pyspark.sql._ai_client.time.sleep") as sleep,
+            self.assertRaises(PySparkRuntimeError) as raised,
+        ):
+            client.invoke("private prompt")
+        self.check_error(
+            raised.exception, "AI_QUERY_INVOCATION_FAILED.TIMEOUT", {"target": "Databricks model"}
+        )
+        client.http.post.assert_called_once()
+        sleep.assert_called_once_with(0)
 
     def test_http_errors_do_not_leak_or_retry(self):
         for status in (302, 400, 409):

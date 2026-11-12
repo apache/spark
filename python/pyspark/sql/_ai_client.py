@@ -24,6 +24,8 @@ import threading
 import time
 from concurrent.futures import ThreadPoolExecutor
 from dataclasses import dataclass
+from datetime import timezone
+from email.utils import parsedate_to_datetime
 from itertools import islice
 from typing import TYPE_CHECKING, Any, Iterator, Mapping, Optional, Union
 from urllib.parse import quote, urlsplit
@@ -160,11 +162,18 @@ def _validate_endpoint_options(endpoint: _ModelEndpoint) -> None:
 def _retry_delay(
     headers: Mapping[str, str], failures: int, deadline: float, status: Optional[int]
 ) -> float:
+    value = headers.get("Retry-After", "0")
     try:
-        retry_after = float(headers.get("Retry-After", "0"))
-        if not math.isfinite(retry_after):
-            retry_after = 0.0
+        retry_after = float(value)
     except ValueError:
+        try:
+            retry_date = parsedate_to_datetime(value)
+            if retry_date.tzinfo is None:
+                retry_date = retry_date.replace(tzinfo=timezone.utc)
+            retry_after = retry_date.timestamp() - time.time()
+        except (TypeError, ValueError, OverflowError):
+            retry_after = 0.0
+    if not math.isfinite(retry_after):
         retry_after = 0.0
     remaining = max(0, deadline - time.monotonic())
     if retry_after > 0 and retry_after >= remaining:
@@ -275,7 +284,13 @@ class _ChatCompletionsClient:
                 raise
             except requests.exceptions.InvalidURL:
                 raise _invocation_error("Databricks model", "INVALID_URL") from None
-            except (requests.Timeout, requests.ConnectionError):
+            except requests.exceptions.ContentDecodingError:
+                raise _invocation_error("Databricks model", "INVALID_RESPONSE") from None
+            except (
+                requests.Timeout,
+                requests.ConnectionError,
+                requests.exceptions.ChunkedEncodingError,
+            ):
                 if attempt == self.endpoint.max_retries:
                     raise _invocation_error("Databricks model", "CONNECTION_ERROR") from None
             time.sleep(_retry_delay(retry_headers, attempt, deadline, retry_status))
