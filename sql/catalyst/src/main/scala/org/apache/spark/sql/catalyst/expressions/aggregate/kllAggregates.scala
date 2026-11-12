@@ -113,6 +113,9 @@ case class KllSketchAggBigint(
   override def nullable: Boolean = false
   override def prettyName: String = "kll_sketch_agg_bigint"
 
+  // KLL compaction randomly chooses which values to retain.
+  override lazy val deterministic: Boolean = false
+
   override def checkInputDataTypes(): TypeCheckResult = {
     val defaultCheck = super.checkInputDataTypes()
     if (defaultCheck.isFailure) {
@@ -263,6 +266,9 @@ case class KllSketchAggFloat(
   override def nullable: Boolean = false
   override def prettyName: String = "kll_sketch_agg_float"
 
+  // KLL compaction randomly chooses which values to retain.
+  override lazy val deterministic: Boolean = false
+
   override def checkInputDataTypes(): TypeCheckResult = {
     val defaultCheck = super.checkInputDataTypes()
     if (defaultCheck.isFailure) {
@@ -406,6 +412,9 @@ case class KllSketchAggDouble(
   }
   override def nullable: Boolean = false
   override def prettyName: String = "kll_sketch_agg_double"
+
+  // KLL compaction randomly chooses which values to retain.
+  override lazy val deterministic: Boolean = false
 
   override def checkInputDataTypes(): TypeCheckResult = {
     val defaultCheck = super.checkInputDataTypes()
@@ -746,6 +755,9 @@ abstract class KllMergeAggBase[T <: KllSketch]
   }
 
   override def nullable: Boolean = false
+
+  // Merging KLL sketches can trigger randomized compaction.
+  override lazy val deterministic: Boolean = false
 
   override def checkInputDataTypes(): TypeCheckResult = {
     val defaultCheck = super.checkInputDataTypes()

@@ -21,7 +21,8 @@ import org.apache.spark.SparkException
 import org.apache.spark.sql.catalyst.analysis.TestRelation
 import org.apache.spark.sql.catalyst.dsl.expressions._
 import org.apache.spark.sql.catalyst.dsl.plans._
-import org.apache.spark.sql.catalyst.expressions.{OuterReference, OuterScopeReference, ScalarSubquery}
+import org.apache.spark.sql.catalyst.expressions.{Literal, OuterReference, OuterScopeReference, ScalarSubquery}
+import org.apache.spark.sql.catalyst.expressions.aggregate._
 import org.apache.spark.sql.catalyst.plans.PlanTest
 import org.apache.spark.sql.catalyst.plans.logical.{AppendData, CTERelationDef, CTERelationRef, LogicalPlan, OneRowRelation, WithCTE}
 import org.apache.spark.sql.catalyst.rules.RuleExecutor
@@ -30,6 +31,27 @@ class InlineCTESuite extends PlanTest {
 
   object Optimize extends RuleExecutor[LogicalPlan] {
     val batches = Batch("inline CTE", FixedPoint(100), InlineCTE()) :: Nil
+  }
+
+  for (k <- Seq(None, Some(Literal(8)))) {
+    val aggregates = Seq(
+      KllSketchAggBigint(Literal(1L), k),
+      KllSketchAggFloat(Literal(1.0f), k),
+      KllSketchAggDouble(Literal(1.0d), k),
+      KllMergeAggBigint(Literal(Array.emptyByteArray), k),
+      KllMergeAggFloat(Literal(Array.emptyByteArray), k),
+      KllMergeAggDouble(Literal(Array.emptyByteArray), k))
+
+    aggregates.foreach { aggregate =>
+      test(s"Do not inline a reused CTE containing ${aggregate.prettyName} with k=$k") {
+        // KLL compaction is randomized, so both references must share the same sketch.
+        val cteDef = CTERelationDef(
+          OneRowRelation().groupBy()(aggregate.toAggregateExpression().as("sketch")))
+        val cteRef = CTERelationRef(cteDef.id, cteDef.resolved, cteDef.output, cteDef.isStreaming)
+        val plan = WithCTE(cteRef.union(cteRef), Seq(cteDef)).analyze
+        comparePlans(Optimize.execute(plan), plan)
+      }
+    }
   }
 
   test("SPARK-48307: not-inlined CTE relation in command") {

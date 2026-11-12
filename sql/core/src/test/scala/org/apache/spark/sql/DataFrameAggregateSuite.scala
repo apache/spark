@@ -33,7 +33,8 @@ import org.scalatestplus.scalacheck.ScalaCheckDrivenPropertyChecks
 
 import org.apache.spark.{SparkArithmeticException, SparkRuntimeException}
 import org.apache.spark.sql.catalyst.expressions.aggregate.{Complete, Final, Partial}
-import org.apache.spark.sql.catalyst.plans.logical.{Aggregate, Expand}
+import org.apache.spark.sql.catalyst.optimizer.InlineCTE
+import org.apache.spark.sql.catalyst.plans.logical.{Aggregate, Expand, WithCTE}
 import org.apache.spark.sql.catalyst.util.AUTO_GENERATED_ALIAS
 import org.apache.spark.sql.errors.DataTypeErrors.toSQLId
 import org.apache.spark.sql.execution.{FileSourceScanExec, WholeStageCodegenExec}
@@ -4218,6 +4219,38 @@ class DataFrameAggregateSuite extends SharedSparkSession
       .groupBy().agg(lit(1).as("col1"), lit(2).as("col2"), lit(3).as("col3"))
       .groupBy($"col1").agg(max("col1"))
     checkAnswer(df, Seq(Row(1, 1)))
+  }
+
+  test("kll_sketch aggregates share results across CTE references") {
+    for {
+      aqe <- Seq(true, false)
+      dataType <- Seq("bigint", "float", "double")
+    } {
+      withSQLConf(
+          SQLConf.ADAPTIVE_EXECUTION_ENABLED.key -> aqe.toString,
+          SQLConf.SHUFFLE_PARTITIONS.key -> "4") {
+        withClue(s"dataType=$dataType, aqe=$aqe: ") {
+          // Each group has enough values to trigger randomized sketch compaction with k = 8.
+          val result = sql(
+            s"""
+               |WITH sketches AS (
+               |  SELECT id % 8 AS g,
+               |    kll_sketch_agg_$dataType(CAST(id AS $dataType), 8) AS sketch
+               |  FROM range(0, 4096, 1, 4)
+               |  GROUP BY id % 8
+               |)
+               |SELECT count(*), count_if(l.sketch <> r.sketch),
+               |  count_if(kll_sketch_get_quantile_$dataType(l.sketch, 0.5D) <>
+               |    kll_sketch_get_quantile_$dataType(r.sketch, 0.5D))
+               |FROM sketches l JOIN sketches r ON l.g = r.g
+               |""".stripMargin)
+          // Check sharing directly so this regression does not depend on random outputs differing.
+          val inlined = InlineCTE().apply(result.queryExecution.analyzed)
+          assert(inlined.exists(_.isInstanceOf[WithCTE]))
+          checkAnswer(result, Row(8L, 0L, 0L))
+        }
+      }
+    }
   }
 
   test("kll_sketch_agg_bigint basic functionality") {
