@@ -1138,4 +1138,16 @@ class JsonExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
         StructType(StructField("f", FileType.external) :: Nil))
     }
   }
+
+  test("SPARK-61552: get_json_object with a foldable path that fails to evaluate") {
+    // `ConstantFolding` leaves such a path in a conditional branch. Only a row that evaluates
+    // the path should fail, also in generated code.
+    withSQLConf(SQLConf.ANSI_ENABLED.key -> "true") {
+      val json = BoundReference(0, StringType, nullable = true)
+      val path = Cast(Divide(Literal(1.0), Literal(0.0)), StringType)
+      val expr = If(IsNull(json), Literal.create(null, StringType), GetJsonObject(json, path))
+      checkEvaluation(expr, null, create_row(null))
+      checkExceptionInExpression[ArithmeticException](expr, create_row("{}"), "DIVIDE_BY_ZERO")
+    }
+  }
 }
