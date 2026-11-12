@@ -28,7 +28,7 @@ import warnings
 import zipimport
 from contextlib import contextmanager
 from inspect import currentframe, getframeinfo
-from typing import IO, Any, Generator, Optional, Union, overload
+from typing import IO, Any, Generator, Iterator, Optional, Union, overload
 
 from pyspark.messages import ZeroCopyByteStream
 
@@ -314,6 +314,90 @@ def send_accumulator_updates(outfile: IO) -> None:
     write_int(len(_accumulatorRegistry), outfile)
     for aid, accum in _accumulatorRegistry.items():
         pickleSer._write_with_length((aid, accum._value), outfile)
+
+
+class _EndOfInput:
+    """Last item ``read_in_thread`` queues, carrying the exception that ended the source."""
+
+    __slots__ = ("error",)
+
+    def __init__(self) -> None:
+        self.error: Optional[BaseException] = None
+
+
+@contextmanager
+def read_in_thread(
+    iterator: Iterator[Any], queue_depth: int
+) -> Generator[Iterator[Any], None, None]:
+    """
+    Read ``iterator`` in a background thread and yield an iterator over the same items. The
+    reader runs ahead of the caller by up to ``queue_depth`` queued items plus the one it is
+    waiting to enqueue.
+
+    This lets reading and deserializing the input overlap with the caller's work. Items that are
+    themselves iterators (e.g. lazy per-group iterators that still read the input stream) are
+    materialized into lists on the reader thread, so the caller never reads the stream. An
+    exception raised by ``iterator`` is re-raised to the caller once the items before it are
+    consumed.
+
+    On exit the reader is stopped and joined for up to 5 seconds. The input is never closed, as
+    the stream it reads may be reused by the next task of a reused worker; if the reader is still
+    blocked reading it, a RuntimeWarning is emitted instead.
+    """
+    import queue
+    import threading
+
+    item_queue: queue.Queue = queue.Queue(maxsize=queue_depth)
+    stop_event = threading.Event()
+    end = _EndOfInput()
+
+    def _read() -> None:
+        # A put that blocks on a full queue is released by the drain on exit, after which the
+        # stop check returns.
+        try:
+            for item in iterator:
+                if hasattr(item, "__next__"):
+                    item = list(item)
+                item_queue.put(item)
+                if stop_event.is_set():
+                    return
+        except BaseException as e:
+            end.error = e
+        finally:
+            if not stop_event.is_set():
+                item_queue.put(end)
+
+    def _consume() -> Iterator[Any]:
+        while True:
+            item = item_queue.get()
+            if item is end:
+                if end.error is not None:
+                    raise end.error
+                return
+            yield item
+
+    reader = threading.Thread(target=_read, name="pyspark-pipelined-reader", daemon=True)
+    reader.start()
+    try:
+        yield _consume()
+    finally:
+        # Stop the reader and drain the queue to unblock a pending put. A reader blocked in a
+        # read of the input stream only sees the stop between items, so the join is bounded.
+        stop_event.set()
+        try:
+            while not item_queue.empty():
+                item_queue.get_nowait()
+        except queue.Empty:
+            pass
+        reader.join(timeout=5)
+        if reader.is_alive():
+            warnings.warn(
+                "pipelined reader thread did not exit within 5s; "
+                "it may still be blocked in input_data_stream.read() and could "
+                "read data intended for a subsequent reused-worker task. "
+                "Consider disabling spark.python.worker.reuse if this recurs.",
+                RuntimeWarning,
+            )
 
 
 class Conf:

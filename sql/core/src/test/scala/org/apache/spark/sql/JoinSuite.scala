@@ -521,8 +521,7 @@ class JoinSuite extends SharedSparkSession with AdaptiveSparkPlanHelper
           Row(null, null, 5, "E") ::
           Row(null, null, 6, "F") :: Nil)
 
-      // Make sure we are UnknownPartitioning as the outputPartitioning for the outer join
-      // operator.
+      // Make sure the outer join's output is not clustered by one side's join key.
       checkAnswer(
         sql(
           """

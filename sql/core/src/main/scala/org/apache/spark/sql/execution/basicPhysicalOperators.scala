@@ -1110,7 +1110,9 @@ case class UnionExec(children: Seq[SparkPlan]) extends SparkPlan with CodegenSup
 
   /**
    * Returns the output partitionings of the children, with the attributes converted to this
-   * union's output attributes at the same position.
+   * union's output attributes at the same position. A member that does not map is dropped, and a
+   * child with no member left reports `UnknownPartitioning`. A partitioning that references no
+   * attribute, such as `SinglePartition`, passes through.
    */
   private def prepareOutputPartitioning(): Seq[Partitioning] = {
     // Map every child's partitioning attributes to this union's output attributes, so all
@@ -1122,18 +1124,39 @@ case class UnionExec(children: Seq[SparkPlan]) extends SparkPlan with CodegenSup
     // a partitioning built inside a view or subquery carries that relation's qualifier.
     // `AttributeMap` is keyed by `ExprId`, so remapping every child (including the first)
     // normalizes all of those.
+    //
+    // A member that references an attribute the child does not output, such as the key a
+    // `MapGroups` or a column-pruned cached scan passes through, is dropped: left unmapped, it
+    // could equal another child's real output attribute. A child with no member left reports
+    // unknown, which leaves the whole union unknown. A child that repeats an `ExprId` does not
+    // reach here (see `rawPartitioning`).
     val unionOutput = output
-    val attributesMap = children.map(_.output).map { childAttrs =>
-      AttributeMap(childAttrs.zip(unionOutput))
-    }
-    children.map(_.outputPartitioning).zip(attributesMap).map { case (p, attributeMap) =>
-      p match {
-        case e: Expression =>
-          e.transform {
-            case a: Attribute if attributeMap.contains(a) =>
-              attributeMap(a)
-          }.asInstanceOf[Partitioning]
-        case _ => p
+    children.map { child =>
+      child.outputPartitioning match {
+        case p: Expression =>
+          val attributeMap = AttributeMap(child.output.zip(unionOutput))
+          def remap(member: Partitioning): Partitioning = member match {
+            case e: Expression =>
+              e.transform {
+                case a: Attribute if attributeMap.contains(a) =>
+                  attributeMap(a)
+              }.asInstanceOf[Partitioning]
+            case _ => member
+          }
+          // The common case: keep the partitioning as it is, which also keeps its shape, so a
+          // single `KeyedPartitioning` stays one. Otherwise each member is checked on its own.
+          if (p.references.subsetOf(child.outputSet)) {
+            remap(p)
+          } else {
+            PartitioningCollection.flatten(p).filter {
+              case e: Expression => e.references.subsetOf(child.outputSet)
+              case _ => true
+            } match {
+              case Seq() => UnknownPartitioning(p.numPartitions)
+              case survivors => PartitioningCollection(survivors.map(remap))
+            }
+          }
+        case p => p
       }
     }
   }
