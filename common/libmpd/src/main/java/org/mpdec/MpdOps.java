@@ -37,6 +37,9 @@ public final class MpdOps {
     final Mpd tmp = Mpd.work();
     final Mpd tmp2 = Mpd.work();
     final Mpd tmp3 = Mpd.work();
+    /** Reused elevated-precision context for Newton (sqrt). */
+    final MpdContext workCtx = new MpdContext(
+        Mpd.MAX_DIGITS, 999999, -999999, MpdRound.HALF_EVEN, 0);
   }
 
   private static final ThreadLocal<Scratch> TL =
@@ -126,13 +129,13 @@ public final class MpdOps {
     if (ae != be) {
       return ae < be ? -1 : 1;
     }
-    // same adjusted exponent: compare coefficients aligned to same digits
-    Scratch s = scratch();
     int ad = a.digits;
     int bd = b.digits;
     if (ad == bd) {
       return MpdLimbs.cmpAbs(a.data, a.len, b.data, b.len);
     }
+    // same adjusted exponent, different digit counts: align by shifting.
+    Scratch s = scratch();
     if (ad > bd) {
       int bl = MpdLimbs.mulPow10(b.data, b.len, ad - bd, s.b);
       return MpdLimbs.cmpAbs(a.data, a.len, s.b, bl);
@@ -210,7 +213,6 @@ public final class MpdOps {
       result.len = len;
       System.arraycopy(s.c, 0, result.data, 0, len);
     }
-    result.digits = MpdLimbs.digitsOf(result.data, result.len);
     finish(result, ctx, s);
   }
 
@@ -226,12 +228,27 @@ public final class MpdOps {
       finish(result, ctx, s);
       return;
     }
+    // Fast path: both single-limb, product fits in a long.
+    if (a.len == 1 && b.len == 1) {
+      long prod = a.data[0] * b.data[0];
+      result.flags = neg ? Mpd.SIGN_MASK : 0;
+      result.exp = a.exp + b.exp;
+      result.data[0] = prod % Mpd.RADIX;
+      long hi = prod / Mpd.RADIX;
+      if (hi == 0L) {
+        result.len = 1;
+      } else {
+        result.data[1] = hi;
+        result.len = 2;
+      }
+      finish(result, ctx, s);
+      return;
+    }
     int len = MpdLimbs.mulAbs(a.data, a.len, b.data, b.len, s.a);
     result.flags = neg ? Mpd.SIGN_MASK : 0;
     result.exp = a.exp + b.exp;
     result.len = len;
     System.arraycopy(s.a, 0, result.data, 0, len);
-    result.digits = MpdLimbs.digitsOf(result.data, len);
     finish(result, ctx, s);
   }
 
@@ -314,18 +331,8 @@ public final class MpdOps {
     result.exp = a.exp - b.exp - shift;
     result.len = qLen;
     System.arraycopy(s.c, 0, result.data, 0, qLen);
-    result.digits = MpdLimbs.digitsOf(result.data, qLen);
-    boolean remNonZero = MpdLimbs.digitsOf(s.d, Math.max(b.len, 1)) != 0;
-    if (remNonZero) {
-      // Fold remainder into a sticky low digit so rounding sees inexactness.
-      int len = MpdLimbs.mulPow10(result.data, result.len, 1, s.a);
-      len = MpdLimbs.addAbs(s.a, len, ONE, 1, s.b);
-      System.arraycopy(s.b, 0, result.data, 0, len);
-      result.len = len;
-      result.exp -= 1;
-      result.digits = MpdLimbs.digitsOf(result.data, len);
-    }
-    finish(result, ctx, s);
+    // Remainder is sticky for rounding; keep the prec+1 guard digit as-is.
+    finish(result, ctx, s, remainderNonZero(s.d, b.len));
   }
 
   private static void sqrt(Mpd result, Mpd a, MpdContext ctx, Scratch s) {
@@ -358,26 +365,15 @@ public final class MpdOps {
 
     // Newton: y' = (y + a/y)/2 at slightly elevated precision.
     int workPrec = Math.min(Mpd.MAX_DIGITS, ctx.prec + 3);
-    MpdContext work = new MpdContext(
-        workPrec, ctx.emax, ctx.emin, ctx.round, ctx.clamp);
+    MpdContext work = s.workCtx;
+    work.prec = workPrec;
+    work.emax = ctx.emax;
+    work.emin = ctx.emin;
+    work.round = ctx.round;
+    work.clamp = ctx.clamp;
+    work.status.clear();
 
-    // Seed from double sqrt when finite; otherwise 10^(adjExp/2).
-    int adj = a.adjExp();
-    int halfAdj = adj >= 0 ? adj / 2 : -((-adj + 1) / 2);
-    double dv = Double.NaN;
-    try {
-      dv = MpdFormat.toBigDecimal(a).doubleValue();
-    } catch (RuntimeException ignored) {
-      // keep NaN
-    }
-    if (Double.isFinite(dv) && dv > 0.0) {
-      MpdFormat.parse(s.tmp, Double.toString(Math.sqrt(dv)));
-    } else {
-      MpdFormat.parse(s.tmp, "1E" + halfAdj);
-    }
-    if (s.tmp.isSpecial() || s.tmp.isZero() || s.tmp.isNegative()) {
-      MpdFormat.parse(s.tmp, "1E" + halfAdj);
-    }
+    seedSqrt(s.tmp, a, s);
 
     // Double seed already has ~15 digits; each Newton roughly doubles digits.
     int iters = 2;
@@ -391,13 +387,38 @@ public final class MpdOps {
       iters = 5;
     }
     for (int i = 0; i < iters; i++) {
-      div(s.tmp2, a, s.tmp, work, s);          // a/y
+      div(s.tmp2, a, s.tmp, work, s); // a/y
       addSub(s.tmp3, s.tmp, s.tmp2, false, work, s); // y + a/y
-      // divide by 2: shift coefficient if even, else mul by 5 and exp--
       halve(s.tmp, s.tmp3, work, s);
     }
     result.copyFrom(s.tmp);
     finish(result, ctx, s);
+  }
+
+  /**
+   * Seed sqrt from a double approximation built from the leading limbs,
+   * avoiding BigDecimal. Falls back to 10^(adjExp/2) when needed.
+   */
+  private static void seedSqrt(Mpd out, Mpd a, Scratch s) {
+    int adj = a.adjExp();
+    int halfAdj = adj >= 0 ? adj / 2 : -((-adj + 1) / 2);
+    int drop = Math.max(0, a.digits - 15);
+    MpdLimbs.Result rr = MpdLimbs.divPow10(a.data, a.len, drop, s.a);
+    double coeff = 0.0;
+    for (int i = rr.len - 1; i >= 0; i--) {
+      coeff = coeff * (double) Mpd.RADIX + (double) s.a[i];
+    }
+    double dv = coeff * Math.pow(10.0, a.exp + drop);
+    if (Double.isFinite(dv) && dv > 0.0) {
+      double root = Math.sqrt(dv);
+      if (Double.isFinite(root) && root > 0.0) {
+        MpdFormat.parse(out, Double.toString(root));
+        if (!out.isSpecial() && !out.isZero() && !out.isNegative()) {
+          return;
+        }
+      }
+    }
+    MpdFormat.parse(out, "1E" + halfAdj);
   }
 
   /** result = value / 2 with context rounding. */
@@ -415,11 +436,14 @@ public final class MpdOps {
     result.exp = value.exp - 1;
     result.len = len;
     System.arraycopy(s.a, 0, result.data, 0, len);
-    result.digits = MpdLimbs.digitsOf(result.data, len);
     finish(result, ctx, s);
   }
 
   static void finish(Mpd result, MpdContext ctx, Scratch s) {
+    finish(result, ctx, s, false);
+  }
+
+  static void finish(Mpd result, MpdContext ctx, Scratch s, boolean stickyIn) {
     if (result.isSpecial()) {
       return;
     }
@@ -441,15 +465,10 @@ public final class MpdOps {
     // Round to precision.
     if (result.digits > ctx.prec) {
       int drop = result.digits - ctx.prec;
-      MpdLimbs.Result rr = MpdLimbs.divPow10(
+      MpdLimbs.RoundResult rr = MpdLimbs.divPow10Round(
           result.data, result.len, drop, s.a);
-      // round digit is the MSD of discarded part - reconstruct:
-      // Get the first discarded digit.
-      int roundDigit = roundDigitOf(result.data, result.len, drop);
-      int sticky = rr.sticky;
-      // If sticky folded the round digit, recompute carefully:
-      roundDigit = leadingDiscardedDigit(result.data, result.len, drop);
-      sticky = discardedSticky(result.data, result.len, drop, roundDigit);
+      int roundDigit = rr.roundDigit;
+      int sticky = (rr.sticky != 0 || stickyIn) ? 1 : 0;
 
       boolean bump = shouldRoundUp(
           result.isNegative(), roundDigit, sticky != 0,
@@ -471,6 +490,26 @@ public final class MpdOps {
         result.digits = MpdLimbs.digitsOf(result.data, len);
         if (result.digits > ctx.prec) {
           // 999..9 -> 1000..0
+          MpdLimbs.Result trim = MpdLimbs.divPow10(
+              result.data, result.len, 1, s.a);
+          System.arraycopy(s.a, 0, result.data, 0, trim.len);
+          result.len = trim.len;
+          result.exp += 1;
+          result.digits = MpdLimbs.digitsOf(result.data, result.len);
+        }
+      }
+    } else if (stickyIn) {
+      // Exact digit count but non-zero remainder from division: round from sticky.
+      ctx.status.set(MpdStatus.INEXACT | MpdStatus.ROUNDED);
+      boolean bump = shouldRoundUp(
+          result.isNegative(), 0, true,
+          (int) (result.data[0] & 1L), ctx.round, result.len, result.data);
+      if (bump) {
+        int len = MpdLimbs.addAbs(result.data, result.len, ONE, 1, s.b);
+        System.arraycopy(s.b, 0, result.data, 0, len);
+        result.len = len;
+        result.digits = MpdLimbs.digitsOf(result.data, len);
+        if (result.digits > ctx.prec) {
           MpdLimbs.Result trim = MpdLimbs.divPow10(
               result.data, result.len, 1, s.a);
           System.arraycopy(s.a, 0, result.data, 0, trim.len);
@@ -551,6 +590,16 @@ public final class MpdOps {
     }
   }
 
+  private static boolean remainderNonZero(long[] rem, int vLen) {
+    int n = Math.max(vLen, 1);
+    for (int i = 0; i < n; i++) {
+      if (rem[i] != 0L) {
+        return true;
+      }
+    }
+    return false;
+  }
+
   private static final long[] ONE = {1L};
 
   private static boolean shouldRoundUp(
@@ -620,9 +669,6 @@ public final class MpdOps {
     return 0;
   }
 
-  private static int roundDigitOf(long[] data, int len, int drop) {
-    return leadingDiscardedDigit(data, len, drop);
-  }
 
   private static boolean roundOverflowToInf(boolean neg, MpdRound mode) {
     return switch (mode) {

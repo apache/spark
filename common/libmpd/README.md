@@ -34,17 +34,21 @@ yet, and Maven / SBT publication is disabled until a consumer lands.
 
 Supported quiet operations:
 
-- add, subtract, multiply, divide
-- compare (numeric)
-- square root
-- fused multiply-add (exact mul+add then one round)
-- quantize / round-to-precision
+- add, subtract, multiply, divide, compare
+- square root, fused multiply-add
+- unary: abs, plus, minus
+- min, max, min_mag, max_mag
+- integer rounding: trunc, floor, ceil, round_to_int
+- quantize, samequantum, reduce
+- rem, rem_near, divint, divmod
+- scaleb, logb
+- transcendental: exp, ln, log10, pow, powmod
 - parse / toString
 - non-finite values: +/-Inf, qNaN, sNaN, signed zero
 - context: precision, Emin/Emax, clamp, rounding, status flags
 
-Not in this cut: transcendental `exp` / `ln` / `log10` / `pow`, trig, or
-arbitrary-precision FFT multiply.
+Not in this cut: trigonometric functions, or arbitrary-precision FFT multiply.
+Precision is capped at 100 digits.
 
 ## Run the harness
 

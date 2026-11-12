@@ -32,7 +32,7 @@ import java.util.Random;
 public final class MpdBenchmark {
   private static final int SIZE = 1024;
   private static final int MASK = SIZE - 1;
-  private static final int[] DEFAULT_PRECS = {16, 34, 70};
+  private static final int[] DEFAULT_PRECS = {7, 16, 25, 34, 43, 52, 61, 70};
 
   private MpdBenchmark() {
   }
@@ -59,21 +59,12 @@ public final class MpdBenchmark {
   }
 
   private static void printTable(int[] precs, Profile profile, boolean withBid) {
-    System.out.println(withBid
-        ? "Mpd vs BigDecimal vs LibBID (optional jar)"
-        : "Mpd mutable API vs BigDecimal");
+    System.out.println("BD/MPD ratio per DECFLOAT width (>1 = MPD faster)");
     StringBuilder header = new StringBuilder("| Function / workload");
     StringBuilder rule = new StringBuilder("| ---");
     for (int p : precs) {
-      header.append(" | MPD").append(p)
-          .append(" | BD").append(p)
-          .append(" | BD/MPD");
-      rule.append(" | ---: | ---: | ---:");
-      if (withBid && (p == 16 || p == 34)) {
-        header.append(" | BID").append(p)
-            .append(" | BD/BID");
-        rule.append(" | ---: | ---:");
-      }
+      header.append(" | p=").append(p);
+      rule.append(" | ---:");
     }
     header.append(" |");
     rule.append(" |");
@@ -448,17 +439,7 @@ public final class MpdBenchmark {
       StringBuilder sb = new StringBuilder("| ").append(name);
       for (Sample s : samples) {
         double ratio = s.mpdNs == 0.0 ? 0.0 : s.bdNs / s.mpdNs;
-        sb.append(String.format(Locale.ROOT,
-            " | %.2f | %.2f | %.2fx", s.mpdNs, s.bdNs, ratio));
-        if (s.bidSlot) {
-          if (s.bidNs != null) {
-            double br = s.bidNs == 0.0 ? 0.0 : s.bdNs / s.bidNs;
-            sb.append(String.format(Locale.ROOT,
-                " | %.2f | %.2fx", s.bidNs, br));
-          } else {
-            sb.append(" | n/a | n/a");
-          }
-        }
+        sb.append(String.format(Locale.ROOT, " | %.2fx", ratio));
       }
       sb.append(" |");
       return sb.toString();
