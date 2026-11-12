@@ -656,14 +656,10 @@ private[sql] object CatalogV2Util {
       catalog: CatalogPlugin,
       ident: Identifier,
       table: Table,
-      stateOptions: CaseInsensitiveStringMap,
-      conf: SQLConf): Option[DataSourceV2Relation] = {
-    cache.lookup(
-      catalog,
-      ident,
-      Some(table.id),
-      stateOptions,
-      conf.resolver).collect { case r: DataSourceV2Relation => r }
+      stateOptions: CaseInsensitiveStringMap): Option[DataSourceV2Relation] = {
+    cache.lookup(catalog, ident, Some(table.id), stateOptions).collect {
+      case r: DataSourceV2Relation => r
+    }
   }
 
   def isSessionCatalog(catalog: CatalogPlugin): Boolean = {

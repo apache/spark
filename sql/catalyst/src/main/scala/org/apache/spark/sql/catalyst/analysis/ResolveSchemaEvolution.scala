@@ -21,12 +21,12 @@ import scala.util.control.NonFatal
 
 import org.apache.spark.SparkThrowable
 import org.apache.spark.internal.LogKeys.{DATA_SOURCE, TABLE_NAME}
-import org.apache.spark.sql.catalyst.expressions.{Attribute, AttributeMap}
+import org.apache.spark.sql.catalyst.expressions.{Attribute, AttributeMap, MetadataAttributeWithLogicalName}
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.rules.Rule
 import org.apache.spark.sql.catalyst.trees.TreePattern.COMMAND
 import org.apache.spark.sql.catalyst.types.DataTypeUtils
-import org.apache.spark.sql.catalyst.util.CaseInsensitiveMap
+import org.apache.spark.sql.catalyst.util.{CaseInsensitiveMap, TypeUtils}
 import org.apache.spark.sql.connector.catalog.{CatalogV2Util, Identifier, SupportsSchemaEvolution, Table, TableCatalog, TableChange}
 import org.apache.spark.sql.connector.catalog.TableChange.ColumnChange
 import org.apache.spark.sql.errors.{QueryCompilationErrors, QueryExecutionErrors}
@@ -50,6 +50,14 @@ object ResolveSchemaEvolution extends Rule[LogicalPlan] {
     case write: WriteWithSchemaEvolution if write.pendingSchemaChanges.nonEmpty =>
       write.table match {
         case relation @ ExtractV2CatalogAndIdentifier(catalog, ident) =>
+          // A table cannot store a FILE without a qualifier, so schema evolution cannot add one.
+          // This is checked before the catalog changes the table.
+          TypeUtils.checkNoUnknownFileTypeInColumns(write.pendingSchemaChanges.collect {
+            case add: TableChange.AddColumn =>
+              add.fieldNames.toImmutableArraySeq -> add.dataType
+            case update: TableChange.UpdateColumnType =>
+              update.fieldNames.toImmutableArraySeq -> update.newDataType
+          })
           if (relation.skipSchemaResolution && relation.autoSchemaEvolution) {
             val dataSource = relation.table.properties().getOrDefault(
               TableCatalog.PROP_PROVIDER, relation.table.getClass.getName)
@@ -100,7 +108,9 @@ object ResolveSchemaEvolution extends Rule[LogicalPlan] {
     val newOutput = DataTypeUtils.toAttributes(newTable.columns)
     val newRelation = relation.copy(table = newTable, output = newOutput)
     val writeWithNewTargetTable = write.withNewTable(newRelation)
-    rewriteAttrs(writeWithNewTargetTable, oldOutput, newOutput)
+    val writeWithNewMetadataAttrs =
+      rewriteMetadataAttrs(writeWithNewTargetTable, relation, newRelation)
+    rewriteAttrs(writeWithNewMetadataAttrs, oldOutput, newOutput)
   }
 
   private def rewriteAttrs[T <: LogicalPlan](
@@ -108,6 +118,27 @@ object ResolveSchemaEvolution extends Rule[LogicalPlan] {
       oldOutput: Seq[Attribute],
       newOutput: Seq[Attribute]): T = {
     val attrMap = AttributeMap(oldOutput.zip(newOutput))
+    plan.rewriteAttrs(attrMap).asInstanceOf[T]
+  }
+
+  /**
+   * Rewrites references to the metadata columns of the old relation (e.g. in MERGE conditions)
+   * to the metadata columns of the new relation, which exposes them with new expression IDs.
+   * Metadata columns are matched by their logical name, which stays the same even if a data column
+   * of the new table renames a conflicting metadata column. References to metadata columns that
+   * the new relation does not expose are left unchanged.
+   */
+  private def rewriteMetadataAttrs[T <: LogicalPlan](
+      plan: T,
+      oldRelation: DataSourceV2Relation,
+      newRelation: DataSourceV2Relation): T = {
+    val newMetadataAttrs: Map[String, Attribute] = newRelation.metadataOutput.collect {
+      case MetadataAttributeWithLogicalName(attr, name) => name -> attr
+    }.toMap
+    val attrMap = AttributeMap(oldRelation.metadataOutput.collect {
+      case MetadataAttributeWithLogicalName(attr, name) if newMetadataAttrs.contains(name) =>
+        attr -> newMetadataAttrs(name)
+    })
     plan.rewriteAttrs(attrMap).asInstanceOf[T]
   }
 

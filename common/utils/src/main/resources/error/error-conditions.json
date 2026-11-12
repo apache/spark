@@ -11,6 +11,12 @@
     ],
     "sqlState" : "42845"
   },
+  "AGGREGATE_OR_WINDOW_FUNCTION_IN_CHECK_CONSTRAINT" : {
+    "message" : [
+      "The check constraint `<checkCondition>` calls an aggregate or window function. Check constraints apply to each row and cannot call these functions."
+    ],
+    "sqlState" : "42621"
+  },
   "AGGREGATE_OUT_OF_MEMORY" : {
     "message" : [
       "No enough memory for aggregation"
@@ -191,6 +197,16 @@
       "Invalid as-of join."
     ],
     "subClass" : {
+      "INVALID_KEY_EXPRESSION" : {
+        "message" : [
+          "The as-of join key contains an invalid expression: <expr>. Use keys without subqueries, aggregate functions, window functions, generator functions, or non-deterministic functions."
+        ]
+      },
+      "KEY_REFERENCE" : {
+        "message" : [
+          "Each as-of join key must reference exactly one join input, and the two keys must reference different inputs. Got: <refs1> and <refs2>."
+        ]
+      },
       "TOLERANCE_IS_NON_NEGATIVE" : {
         "message" : [
           "The input argument `tolerance` must be non-negative."
@@ -206,9 +222,19 @@
           "Unsupported as-of join direction '<direction>'. Supported as-of join direction include: <supported>."
         ]
       },
+      "UNSUPPORTED_KEY_TYPE" : {
+        "message" : [
+          "The as-of join keys must be of an orderable, mutually comparable type. Got: <type1> and <type2>."
+        ]
+      },
       "UNSUPPORTED_NEAREST_KEY_TYPE" : {
         "message" : [
-          "Nearest sort-merge as-of joins do not support <dataType> keys. Cast the keys to a numeric or datetime type."
+          "Nearest as-of joins do not support <dataType> keys. Cast the keys to a numeric or datetime type."
+        ]
+      },
+      "UNSUPPORTED_TOLERANCE_KEY_TYPE" : {
+        "message" : [
+          "Sort-merge as-of joins with a tolerance do not support <dataType> keys. Cast the keys to a numeric or datetime type."
         ]
       }
     },
@@ -614,6 +640,12 @@
       "The provided URL cannot be decoded: <url>. Please ensure that the URL is properly formatted and try again."
     ],
     "sqlState" : "22546"
+  },
+  "CANNOT_INSTANTIATE_FUNCTION_CLASS" : {
+    "message" : [
+      "Cannot instantiate class <className> when registering the function <functionName>: <msg>. Please make sure the class has a public no-arg constructor that succeeds."
+    ],
+    "sqlState" : "46103"
   },
   "CANNOT_INSTANTIATE_HIVE_FUNCTION" : {
     "message" : [
@@ -2027,6 +2059,11 @@
           "Filter expression <filter> of type <type> is not a boolean."
         ]
       },
+      "HASH_FILE_TYPE" : {
+        "message" : [
+          "The function <functionName> does not support elements of the \"FILE\" type."
+        ]
+      },
       "HASH_MAP_TYPE" : {
         "message" : [
           "Input to the function <functionName> cannot contain elements of the \"MAP\" type. In Spark, same maps may have different hashcode, thus hash expressions are prohibited on \"MAP\" elements. To restore previous behavior set \"spark.sql.legacy.allowHashOnMapType\" to \"true\"."
@@ -2326,6 +2363,12 @@
     ],
     "sqlState" : "0A000"
   },
+  "DATA_SOURCE_CONTINUOUS_WRITE_NOT_SUPPORTED" : {
+    "message" : [
+      "<description>: Continuous write is not supported."
+    ],
+    "sqlState" : "0A000"
+  },
   "DATA_SOURCE_DELTA_BATCH_WRITE_NOT_SUPPORTED" : {
     "message" : [
       "<description>: Delta batch write is not supported."
@@ -2343,6 +2386,75 @@
       "Encountered error when saving to external data source."
     ],
     "sqlState" : "KD010"
+  },
+  "DATA_SOURCE_EXTERNAL_LOOKUP_NOT_SUPPORTED" : {
+    "message" : [
+      "<description>: External lookup is not supported."
+    ],
+    "sqlState" : "0A000"
+  },
+  "DATA_SOURCE_INVALID_EXTERNAL_LOOKUP" : {
+    "message" : [
+      "Data source table <table> violates the external lookup contract:"
+    ],
+    "subClass" : {
+      "DECIMAL_OUT_OF_RANGE" : {
+        "message" : [
+          "The lookup result cursor returned a value in the field <field> that does not fit its type <type>."
+        ]
+      },
+      "DUPLICATE_SCAN_FIELD" : {
+        "message" : [
+          "The lookup scan returned the field <field> more than once."
+        ]
+      },
+      "DUPLICATE_SELECTED_PREDICATE" : {
+        "message" : [
+          "`selectLookupPredicates()` returned the predicate <predicate> more than once."
+        ]
+      },
+      "INVALID_INPUT_ORDINAL" : {
+        "message" : [
+          "The lookup result cursor returned the input ordinal <ordinal>, but the request had <numParameterRows> parameter rows."
+        ]
+      },
+      "LOOKUP_ONLY_TABLE_WITH_V1_READ" : {
+        "message" : [
+          "The table reports EXTERNAL_LOOKUP without BATCH_READ, but its provider <provider> also has a V1 read path. A table that supports both batch reads and lookups must report BATCH_READ and EXTERNAL_LOOKUP. Otherwise, remove the V1 read path from the provider."
+        ]
+      },
+      "MISSING_SCAN_FIELD" : {
+        "message" : [
+          "The lookup scan did not return the table column <field>, which the join requires."
+        ]
+      },
+      "NON_POSITIVE_MAX_PARAMETER_ROWS" : {
+        "message" : [
+          "`maxParameterRowsPerRequest()` returned <value>, but it must be positive."
+        ]
+      },
+      "NULL_IN_NOT_NULL_FIELD" : {
+        "message" : [
+          "The lookup result cursor returned NULL in the field <field>, which the table or the read schema declares NOT NULL."
+        ]
+      },
+      "NULL_RESULT" : {
+        "message" : [
+          "`<method>` returned null."
+        ]
+      },
+      "UNKNOWN_SCAN_FIELD" : {
+        "message" : [
+          "The lookup scan returned the field <field>, which matches no table column by name and data type."
+        ]
+      },
+      "UNOFFERED_SELECTED_PREDICATE" : {
+        "message" : [
+          "`selectLookupPredicates()` returned the predicate <predicate>, which is not one of the candidate instances offered by Spark."
+        ]
+      }
+    },
+    "sqlState" : "KD000"
   },
   "DATA_SOURCE_INVALID_RUNTIME_FILTER_ATTRIBUTE" : {
     "message" : [
@@ -2394,6 +2506,18 @@
   "DATA_SOURCE_ROW_ID_SCHEMA_NOT_IMPLEMENTED" : {
     "message" : [
       "<class> does not implement rowIdSchema."
+    ],
+    "sqlState" : "0A000"
+  },
+  "DATA_SOURCE_STORAGE_FILTER_CHECKED_COLUMN_MISSING" : {
+    "message" : [
+      "A reader of <class> was asked for the column that marks the rows a storage filter checked, right after the <numScanColumns> columns of the scan's read schema. That column is missing, not a boolean, or not the last one. The reader returned <numColumns> columns."
+    ],
+    "sqlState" : "KD000"
+  },
+  "DATA_SOURCE_STORAGE_FILTER_READER_NOT_SUPPORTED" : {
+    "message" : [
+      "<class> cannot create a reader that applies a storage filter."
     ],
     "sqlState" : "0A000"
   },
@@ -2799,6 +2923,74 @@
     ],
     "sqlState" : "42822"
   },
+  "EXTERNAL_LOOKUP_JOIN_UNSUPPORTED" : {
+    "message" : [
+      "The join cannot be executed as an external lookup join:"
+    ],
+    "subClass" : {
+      "CHAR_VARCHAR_COLUMN" : {
+        "message" : [
+          "The column <column> of the lookup-only table <relation> needs read-side CHAR padding or a VARCHAR length check, which an external lookup join does not support."
+        ]
+      },
+      "CONFLICTING_JOIN_STRATEGY" : {
+        "message" : [
+          "The join strategy hint <strategy> cannot be honored by an external lookup join over <relation>. Remove the <strategy> hint."
+        ]
+      },
+      "JOIN_TYPE" : {
+        "message" : [
+          "The join type <joinType> is not supported by an external lookup join over <relation>. Supported join types are <supportedJoinTypes>."
+        ]
+      },
+      "LOOKUP_PLAN" : {
+        "message" : [
+          "The lookup side must be a DSv2 table, with no other operator between the table and the join."
+        ]
+      },
+      "LOOKUP_TABLE_ON_LEFT" : {
+        "message" : [
+          "The lookup-only table <relation> must be on the right side of the join."
+        ]
+      },
+      "MISSING_JOIN_CONDITION" : {
+        "message" : [
+          "The join has no join condition. Write the lookup condition in the join itself, such as in its `ON` clause or the condition argument of `join()`, rather than in a later `WHERE` clause or filter."
+        ]
+      },
+      "NO_LOOKUP_CANDIDATE" : {
+        "message" : [
+          "The join condition has no lookup predicate that Spark can offer to table <table>. A lookup predicate is an equality `=` between a lookup column, with no cast or other expression applied to it, and an expression over the streaming side. The lookup column must have a type that stores compare as Spark does; the Javadoc of `SupportsExternalLookup.selectLookupPredicates()` lists these types. Instead of casting the lookup column, cast the streaming-side expression to its type, if every streaming-side value is exactly representable in that type."
+        ]
+      },
+      "NO_LOOKUP_PREDICATE" : {
+        "message" : [
+          "The data source of table <table> did not select any of the lookup predicates that Spark offered from the join condition."
+        ]
+      },
+      "SCAN_BUILDER" : {
+        "message" : [
+          "The scan builder of table <table> does not implement `SupportsExternalLookup`."
+        ]
+      },
+      "STATIC_LEFT_SIDE" : {
+        "message" : [
+          "An external lookup join must be a stream-static join, but the left side of the join over <relation> is not a streaming query."
+        ]
+      },
+      "SUBQUERY_IN_JOIN_CONDITION" : {
+        "message" : [
+          "The join condition of an external lookup join over <relation> cannot contain a subquery."
+        ]
+      },
+      "TABLE" : {
+        "message" : [
+          "Table <table> does not support external lookup."
+        ]
+      }
+    },
+    "sqlState" : "0A000"
+  },
   "FAILED_CREATE_CHECKPOINT_DIRECTORY" : {
     "message" : [
       "Failed to create the checkpoint directory <path> as FileSystem.mkdirs returned false."
@@ -3023,6 +3215,53 @@
     ],
     "sqlState" : "42704"
   },
+  "FILE_TYPE_IN_ROUTINE_SIGNATURE_UNSUPPORTED_MAP_KEY" : {
+    "message" : [
+      "The FILE type cannot be a map key in the return type of <routineType> <routineName>. Use FILE only as a map value, array element, or struct field."
+    ],
+    "sqlState" : "42601"
+  },
+  "FILE_TYPE_IN_ROUTINE_SIGNATURE_UNSUPPORTED_QUALIFIER" : {
+    "message" : [
+      "The FILE type in <routineType> <routineName> does not support the EXTERNAL qualifier. Use FILE without a qualifier."
+    ],
+    "sqlState" : "42601"
+  },
+  "FILE_TYPE_MISSING_QUALIFIER" : {
+    "message" : [
+      "FILE type requires the EXTERNAL qualifier in a column definition. Use FILE EXTERNAL."
+    ],
+    "sqlState" : "42601"
+  },
+  "FILE_TYPE_UNKNOWN_WRITE" : {
+    "message" : [
+      "Column(s) <colNames> contain a FILE without the EXTERNAL qualifier, which a table cannot store."
+    ],
+    "sqlState" : "42K01"
+  },
+  "FILE_TYPE_UNSUPPORTED_COLUMN_USAGE" : {
+    "message" : [
+      "The column <colName> of type <dataType> holds a FILE, which is not comparable."
+    ],
+    "subClass" : {
+      "CLUSTERING_COLUMN" : {
+        "message" : [
+          "It cannot be a clustering column."
+        ]
+      },
+      "PARTITION_COLUMN" : {
+        "message" : [
+          "It cannot be a partition column."
+        ]
+      },
+      "WRITE_ORDERING_COLUMN" : {
+        "message" : [
+          "It cannot be a write-ordering column."
+        ]
+      }
+    },
+    "sqlState" : "0A000"
+  },
   "FLATMAPGROUPSWITHSTATE_USER_FUNCTION_ERROR" : {
     "message" : [
       "An error occurred in the user provided function in flatMapGroupsWithState. Reason: <reason>"
@@ -3052,6 +3291,12 @@
       "A column cannot have both a default value and a generation expression but column <colName> has default value: (<defaultValue>) and generation expression: (<genExpr>)."
     ],
     "sqlState" : "42623"
+  },
+  "GENERATOR_IN_CHECK_CONSTRAINT" : {
+    "message" : [
+      "The check constraint `<checkCondition>` calls a generator function. Check constraints compute one value for each row and cannot call functions that return multiple rows."
+    ],
+    "sqlState" : "42621"
   },
   "GEO_ENCODER_SRID_MISMATCH_ERROR" : {
     "message" : [
@@ -4812,6 +5057,57 @@
     ],
     "sqlState" : "42000"
   },
+  "INVALID_NATIVE_DATA_SOURCE_LIBRARY" : {
+    "message" : [
+      "Invalid native data source library <path>:"
+    ],
+    "subClass" : {
+      "CANNOT_LOAD" : {
+        "message" : [
+          "<reason>"
+        ]
+      },
+      "REPLACED" : {
+        "message" : [
+          "The library was replaced after Spark loaded it: Spark loaded the build with the SHA-256 checksum <loadedChecksum>, but the file now has the checksum <checksum>. A JVM cannot load another build of a library from the same path, so restart the Spark application to use the new build."
+        ]
+      },
+      "UNSUPPORTED_ABI_VERSION" : {
+        "message" : [
+          "It implements version <version> of the native data source interface, but Spark supports version <supported>."
+        ]
+      }
+    },
+    "sqlState" : "22023"
+  },
+  "INVALID_NATIVE_DATA_SOURCE_PACKAGE" : {
+    "message" : [
+      "Invalid native data source package <path>:"
+    ],
+    "subClass" : {
+      "INVALID_LIBRARY" : {
+        "message" : [
+          "Cannot load the library <library>: <reason>"
+        ]
+      },
+      "INVALID_MANIFEST" : {
+        "message" : [
+          "<reason>"
+        ]
+      },
+      "UNSUPPORTED_ABI_VERSION" : {
+        "message" : [
+          "It implements version <version> of the native data source interface, but Spark supports version <supported>."
+        ]
+      },
+      "UNSUPPORTED_PLATFORM" : {
+        "message" : [
+          "It has no library for the platform <platform>. It has libraries for: <platforms>."
+        ]
+      }
+    },
+    "sqlState" : "22023"
+  },
   "INVALID_NON_DETERMINISTIC_EXPRESSIONS" : {
     "message" : [
       "The operator expects a deterministic expression, but the actual expression is <sqlExprs>."
@@ -4999,6 +5295,11 @@
       "OCCURRENCE" : {
         "message" : [
           "expects a positive integer, but got <actual>."
+        ]
+      },
+      "PARSE_SQL_MODE" : {
+        "message" : [
+          "expects one of 'PARSE', 'ANALYZE', but got <invalidValue>."
         ]
       },
       "PATTERN" : {
@@ -6298,6 +6599,42 @@
     ],
     "sqlState" : "0A000"
   },
+  "NATIVE_DATA_SOURCE_ERROR" : {
+    "message" : [
+      "Failed to <action> native data source <name>: <msg>"
+    ],
+    "sqlState" : "38000"
+  },
+  "NATIVE_DATA_SOURCE_LIBRARY_NOT_FOUND" : {
+    "message" : [
+      "Cannot find the native data source library <fileName> with the SHA-256 checksum <checksum>, which is installed at <path> on the driver. Install the same build of the library on every node, at the same path or in the native library path."
+    ],
+    "sqlState" : "42K02"
+  },
+  "NATIVE_DATA_SOURCE_PACKAGE_CONFLICT" : {
+    "message" : [
+      "More than one native data source package under `spark.sql.dataSource.native.paths` provides the data source <name>: <packages>. Remove all but one of them."
+    ],
+    "sqlState" : "42710"
+  },
+  "NATIVE_DATA_SOURCE_PACKAGE_NOT_FOUND" : {
+    "message" : [
+      "Cannot find the native data source package <fileName> with the SHA-256 checksum <checksum>. Add the package with `spark.addArtifact`, or install the same package under `spark.sql.dataSource.native.paths` on every node."
+    ],
+    "sqlState" : "42K02"
+  },
+  "NATIVE_DATA_SOURCE_UNSUPPORTED_JAVA_VERSION" : {
+    "message" : [
+      "Native data sources require Java <required> or later, but Spark runs on Java <current>."
+    ],
+    "sqlState" : "0A000"
+  },
+  "NATIVE_DATA_SOURCE_UNSUPPORTED_PLATFORM" : {
+    "message" : [
+      "Native data sources are not supported on the platform <platform>: the JNI library of the C data interface of Arrow Java, with which Spark exchanges their data, failed to load: <reason>"
+    ],
+    "sqlState" : "0A000"
+  },
   "NEAREST_BY_JOIN" : {
     "message" : [
       "Invalid nearest-by join."
@@ -6796,6 +7133,18 @@
       "The function <funcName> doesn't support the <mode> mode. Acceptable modes are PERMISSIVE and FAILFAST."
     ],
     "sqlState" : "42601"
+  },
+  "PARSE_SQL_ANALYZE_REQUIRES_SESSION" : {
+    "message" : [
+      "<functionName> ANALYZE needs an active Spark session with catalog access. ANALYZE is evaluated on the driver; a missing session usually means the call ran in a task."
+    ],
+    "sqlState" : "0A000"
+  },
+  "PARSE_SQL_ANALYZE_UNSUPPORTED_SCRIPT" : {
+    "message" : [
+      "<functionName> ANALYZE does not analyze SQL scripts. Use PARSE for BEGIN ... END, or analyze each statement separately."
+    ],
+    "sqlState" : "0A000"
   },
   "PARSE_SYNTAX_ERROR" : {
     "message" : [
@@ -7386,9 +7735,23 @@
     ],
     "sqlState" : "42908"
   },
+  "SPECIFY_CLUSTER_BY_WITH_DISTRIBUTED_BY_PARTITION_IS_NOT_ALLOWED" : {
+    "message" : [
+      "Cannot specify both CLUSTER BY and DISTRIBUTED BY PARTITION.",
+      "Please replace CLUSTER BY with PARTITIONED BY or CLUSTERED BY ... INTO ... BUCKETS, or drop DISTRIBUTED BY PARTITION."
+    ],
+    "sqlState" : "42908"
+  },
   "SPECIFY_CLUSTER_BY_WITH_PARTITIONED_BY_IS_NOT_ALLOWED" : {
     "message" : [
       "Cannot specify both CLUSTER BY and PARTITIONED BY."
+    ],
+    "sqlState" : "42908"
+  },
+  "SPECIFY_DISTRIBUTED_BY_PARTITION_WITHOUT_PARTITIONING_IS_NOT_ALLOWED" : {
+    "message" : [
+      "Cannot specify DISTRIBUTED BY PARTITION for a table that has no partitioning.",
+      "Please add PARTITIONED BY or CLUSTERED BY ... INTO ... BUCKETS, or drop the clause. A cluster_by(...) transform in PARTITIONED BY is clustering, not partitioning. A statement that defines no schema (no column list, no typed partition columns, and no AS SELECT) cannot declare partitioning, so it cannot use DISTRIBUTED BY PARTITION."
     ],
     "sqlState" : "42908"
   },
@@ -7397,6 +7760,13 @@
       "A CREATE TABLE without explicit column list cannot specify PARTITIONED BY.",
       "Please use the form with explicit column list and specify PARTITIONED BY.",
       "Alternatively, allow partitioning to be inferred by omitting the PARTITION BY clause."
+    ],
+    "sqlState" : "42601"
+  },
+  "SPECIFY_WRITE_ORDERING_IS_NOT_ALLOWED" : {
+    "message" : [
+      "A CREATE or REPLACE TABLE that defines no schema (no column list, no typed partition columns, and no AS SELECT) cannot specify ORDERED BY, because there is no schema to resolve the ordering against.",
+      "Please add a column list, or use the AS SELECT form."
     ],
     "sqlState" : "42601"
   },
@@ -7928,11 +8298,24 @@
     ],
     "sqlState" : "42601"
   },
+  "STORAGE_FILTER_NOT_APPLIED" : {
+    "message" : [
+      "A storage filter could not be evaluated. The data source's reader should have read the rows without it instead of failing."
+    ],
+    "sqlState" : "KD000"
+  },
   "STORAGE_PARTITION_JOIN_INCOMPATIBLE_REDUCED_TYPES" : {
     "message" : [
       "Storage-partition join partition transforms produced incompatible reduced types,",
       "left reducers: <leftReducers> returned: <leftReducedDataTypes>,",
       "right reducers: <rightReducers> returned: <rightReducedDataTypes>."
+    ],
+    "sqlState" : "42K09"
+  },
+  "STORAGE_PARTITION_JOIN_KEY_TYPE_MISMATCH" : {
+    "message" : [
+      "Cannot shuffle a side onto the other side's storage partitioning: its key <key> of type <keyType> does not match the partition transform <transform> over a column of type <columnType>, which declares the input types <inputTypes>.",
+      "Cast the keys on both sides to one type."
     ],
     "sqlState" : "42K09"
   },
@@ -7965,6 +8348,12 @@
       "Checkpoint location <checkpointLocation> is in an inconsistent state: the metadata file is missing but offset and/or commit logs contain data. Please restore the metadata file or create a new checkpoint directory."
     ],
     "sqlState" : "42K03"
+  },
+  "STREAMING_FILE_SINK_PARTITIONING_MISMATCH" : {
+    "message" : [
+      "The streaming sink of the table <tableName> writes with the partition columns [<expectedPartCols>], but the files that the sink already committed to it have the partition columns [<recordedPartCols>]. Appending files in another layout hides the committed files from reads. Write to a new table location with a new checkpoint location, or rewrite the committed files with the partition columns of the table."
+    ],
+    "sqlState" : "55019"
   },
   "STREAMING_OUTPUT_MODE" : {
     "message" : [
@@ -8114,6 +8503,24 @@
     },
     "sqlState" : "0A000"
   },
+  "STREAMING_SCAN_FILTERS_CHANGED" : {
+    "message" : [
+      "The streaming query no longer applies the filters <filters> to all the rows that it reads from the source <source>, which the scan of the source got when the query started, or Spark cannot tell that it does. The scan may drop rows that the query keeps, so the micro-batch fails before it reads them. This happens when the value of an expression in these filters changes after the query starts, for example, a function of the time that Spark does not replace when the query starts, after the configuration of the optimizer changes in the session of the query, or when the optimizer rewrites these filters in the plan of the micro-batch in a way that Spark does not follow, for example, with an equality that it infers through a join. Set <config> to \"false\" so that the scans of streaming sources get no filter."
+    ],
+    "sqlState" : "55019"
+  },
+  "STREAMING_SCAN_INVALID_READ_SCHEMA" : {
+    "message" : [
+      "The read schema of the scan of all the columns of the streaming source <source> <reason>. The table of the source has the capability STREAMING_COLUMN_PRUNING, so the readers of its streams return the columns of the read schema of the scan, which must be columns of the relation, each once and with its type. Set <config> to \"false\" so that the scans of streaming sources read all their columns, which their scan nodes output in the order of the relation."
+    ],
+    "sqlState" : "KD000"
+  },
+  "STREAMING_SCAN_MISSING_COLUMNS" : {
+    "message" : [
+      "The streaming query reads the columns <columns> of the source <source>, which the scan of the source does not read. Spark builds the scan of a streaming source when the query starts, to read only the columns that the query reads from the source then, so the query cannot read other columns of the source later, for example, after the configuration of the optimizer changes in the session of the query. Set that configuration before the query starts, or set <config> to \"false\" so that the scans of streaming sources read all their columns."
+    ],
+    "sqlState" : "55019"
+  },
   "STREAMING_SHUFFLE_CHECKSUM_VERIFICATION_FAILED" : {
     "message" : [
       "Checksum verification failed for buffer from writer <writerId>. Expected: <expectedChecksum>, Calculated: <calculatedChecksum>, Data length: <dataLength>."
@@ -8225,6 +8632,12 @@
     ],
     "sqlState" : "22023"
   },
+  "SUBQUERY_IN_CHECK_CONSTRAINT" : {
+    "message" : [
+      "The check constraint `<checkCondition>` contains a subquery. Check constraints cannot contain subqueries."
+    ],
+    "sqlState" : "42621"
+  },
   "SUM_OF_LIMIT_AND_OFFSET_EXCEEDS_MAX_INT" : {
     "message" : [
       "The sum of the LIMIT clause and the OFFSET clause must not be greater than the maximum 32-bit integer value (2,147,483,647) but found limit = <limit>, offset = <offset>."
@@ -8299,6 +8712,24 @@
       "If you want to allow it, please set \"spark.sql.allowMultipleTableArguments.enabled\" to \"true\""
     ],
     "sqlState" : "54023"
+  },
+  "TASK_SERIALIZATION_TOO_LARGE" : {
+    "message" : [
+      "Cannot run stage <stageId> because a serialized task exceeds the 2 GB size limit."
+    ],
+    "subClass" : {
+      "TASK" : {
+        "message" : [
+          "Partition <partitionId> holds too much data created on the driver. Read the data from files or a table, or split it into more partitions."
+        ]
+      },
+      "TASK_BINARY" : {
+        "message" : [
+          "The functions or objects shared by its tasks are too large. Use broadcast variables for large objects instead of capturing them in functions."
+        ]
+      }
+    },
+    "sqlState" : "54000"
   },
   "TASK_WRITE_FAILED" : {
     "message" : [
@@ -9124,6 +9555,16 @@
           "Direct execution of a CREATE ... <pipelineDatasetType> query. To create a pipeline dataset, create and execute a pipeline with a SQL file containing your query attached in the pipeline definition."
         ]
       },
+      "DECOMPRESSION_CODEC_FOR_ARCHIVE" : {
+        "message" : [
+          "The <option> option for the archive file <path>. Archives are always decompressed based on their file name extension. Remove the option, or read the archive files separately from the other files."
+        ]
+      },
+      "DECOMPRESSION_CODEC_WITH_LEGACY_LINE_READER" : {
+        "message" : [
+          "The <option> option when <config> is false, because Hadoop's line reader infers the codec from the file name extension. Set <config> to true, or remove the option."
+        ]
+      },
       "DESC_TABLE_COLUMN_JSON" : {
         "message" : [
           "DESC TABLE COLUMN AS JSON not supported for individual columns."
@@ -9306,6 +9747,11 @@
           "Parameter markers are not allowed in <statement>."
         ]
       },
+      "PARTITION_BY_FILE" : {
+        "message" : [
+          "Cannot use FILE type expressions to partition a DataFrame, but the type of expression <expr> is <dataType>."
+        ]
+      },
       "PARTITION_BY_VARIANT" : {
         "message" : [
           "Cannot use VARIANT producing expressions to partition a DataFrame, but the type of expression <expr> is <dataType>."
@@ -9376,6 +9822,11 @@
       "SET_NAMESPACE_PROPERTY" : {
         "message" : [
           "<property> is a reserved namespace property, <msg>."
+        ]
+      },
+      "SET_OPERATION_ON_FILE_TYPE" : {
+        "message" : [
+          "Cannot have FILE type columns in a DataFrame that calls set operations (INTERSECT, EXCEPT, etc.), but the type of column <colName> is <dataType>."
         ]
       },
       "SET_OPERATION_ON_MAP_TYPE" : {
@@ -9486,6 +9937,11 @@
       "TEMPORARY_VIEW_WITH_SCHEMA_BINDING_MODE" : {
         "message" : [
           "Temporary views cannot be created with the WITH SCHEMA clause. Recreate the temporary view when the underlying schema changes, or use a persisted view."
+        ]
+      },
+      "TIMESTAMP_NANOS_SUBTRACTION" : {
+        "message" : [
+          "Subtracting nanosecond-precision timestamps (TIMESTAMP_LTZ/TIMESTAMP_NTZ with precision in [7, 9]) in <sqlExpr>. The interval result has microsecond precision. Cast both operands to TIMESTAMP_LTZ or TIMESTAMP_NTZ to subtract at microsecond precision, or cast them to TIMESTAMP_LTZ(9) or TIMESTAMP_NTZ(9) and use `unix_nanos(end) - unix_nanos(start)` for the elapsed time in nanoseconds."
         ]
       },
       "TIMESTAMP_NANOS_WITH_LEGACY_TIME_PARSER" : {
@@ -9607,12 +10063,6 @@
         ]
       }
     },
-    "sqlState" : "0A000"
-  },
-  "UNSUPPORTED_HIVE_METASTORE_VERSION_FOR_JAVA" : {
-    "message" : [
-      "Hive metastore version <version> requires Java <requiredJavaVersion> or later, but the current JVM is Java <currentJavaVersion>. Please upgrade your Java version or use an earlier Hive metastore version."
-    ],
     "sqlState" : "0A000"
   },
   "UNSUPPORTED_HIVE_TYPE" : {
@@ -10033,6 +10483,12 @@
     },
     "sqlState" : "42601"
   },
+  "USER_DEFINED_FUNCTION_IN_CHECK_CONSTRAINT" : {
+    "message" : [
+      "The check constraint `<checkCondition>` calls the user-defined function <functionName>. Check constraints can only call built-in functions."
+    ],
+    "sqlState" : "42621"
+  },
   "USER_RAISED_EXCEPTION" : {
     "message" : [
       "<errorMessage>"
@@ -10105,7 +10561,7 @@
   },
   "VARIANT_CONSTRUCTOR_SIZE_LIMIT" : {
     "message" : [
-      "Cannot construct a Variant larger than 16 MiB. The maximum allowed size of a Variant value is 16 MiB."
+      "Cannot construct a Variant larger than <sizeLimit>. The maximum allowed size of a Variant value is <sizeLimit>."
     ],
     "sqlState" : "22023"
   },
@@ -10197,6 +10653,12 @@
       "Error parsing WKB: <parseError> at position <pos>"
     ],
     "sqlState" : "22023"
+  },
+  "WRITE_ORDERING_WITH_UNKNOWN_COLUMN" : {
+    "message" : [
+      "Invalid write ordering: cannot resolve <cols> against the columns of the table."
+    ],
+    "sqlState" : "42703"
   },
   "WRITE_STREAM_NOT_ALLOWED" : {
     "message" : [

@@ -101,4 +101,15 @@ class PartitioningUtilsSuite extends SparkFunSuite {
         null, StringType, validatePartitionColumns = false) === null
     )
   }
+
+  test("SPARK-60818: removeLeadingZerosFromNumberTypePartition with an out-of-range value") {
+    for ((dataType, value) <- Seq(ByteType -> "300", ShortType -> "70000")) {
+      intercept[NumberFormatException] {
+        PartitioningUtils.removeLeadingZerosFromNumberTypePartition(
+          value, dataType, validatePartitionColumns = true)
+      }
+      assert(PartitioningUtils.removeLeadingZerosFromNumberTypePartition(
+        value, dataType, validatePartitionColumns = false) === value)
+    }
+  }
 }

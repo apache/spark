@@ -93,6 +93,7 @@ class SpecialLengths:
     NULL = -5
     START_ARROW_STREAM = -6
     START_OF_INIT_MESSAGE = -8
+    START_OF_INIT_RESPONSE = -9
 
 
 class Serializer:
@@ -160,7 +161,7 @@ class FramedSerializer(Serializer):
         serialized = self.dumps(obj)
         if serialized is None:
             raise ValueError("serialized value should not be None")
-        if len(serialized) > (1 << 31):
+        if len(serialized) >= (1 << 31):
             raise ValueError("can not serialize object larger than 2G")
         write_int(len(serialized), stream)
         stream.write(serialized)
@@ -365,7 +366,6 @@ if os.environ.get("PYSPARK_ENABLE_NAMEDTUPLE_PATCH") == "1":
             return (_restore, (name, fields, tuple(self)))
 
         cls.__reduce__ = __reduce__
-        cls._is_namedtuple_ = True
         return cls
 
     def _hijack_namedtuple():

@@ -52,6 +52,8 @@ object EvaluateUnresolvedInlineTable extends SQLConfHelper
       ignoreCollation: Boolean = false): LogicalPlan = {
     validateInputDimension(table)
     validateInputEvaluable(table)
+    // Rows may be evaluated here, before the analyzed plan is checked.
+    table.rows.flatten.foreach(NanosTimestampSubtractionCheck.checkExpression)
     val resolvedTable = findCommonTypesAndCast(table, ignoreCollation)
     if (canEvalAllDuringAnalysis(table)) {
       earlyEvalIfPossible(resolvedTable)

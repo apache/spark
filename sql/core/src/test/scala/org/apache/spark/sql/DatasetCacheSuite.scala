@@ -22,6 +22,8 @@ import java.time.LocalTime
 import org.scalatest.concurrent.TimeLimits
 import org.scalatest.time.SpanSugar._
 
+import org.apache.spark.sql.catalyst.expressions.Expression
+import org.apache.spark.sql.catalyst.plans.physical.ClusteredDistribution
 import org.apache.spark.sql.execution.ColumnarToRowExec
 import org.apache.spark.sql.execution.adaptive.AdaptiveSparkPlanHelper
 import org.apache.spark.sql.execution.columnar.{InMemoryRelation, InMemoryTableScanExec}
@@ -364,5 +366,40 @@ class DatasetCacheSuite extends SharedSparkSession
       assert(freshTables.contains(t1))
       assert(freshTables.contains(t2))
     }
+  }
+
+  test("SPARK-61326: cache should not report the partitioning and the ordering over the columns " +
+      "it does not output") {
+    val src = spark.range(0, 16, 1, 4)
+    // A typed `map` reports the partitioning of its input, which is not in its output.
+    val c1 = src.as[Long].map(x => x).toDF().cache()
+    val agg = broadcast(src).join(c1, src("id") % 2 === c1("value") % 2)
+      .groupBy(src("id")).count()
+    checkAnswer(agg, (0L until 16L).map(Row(_, 8L)))
+
+    withSQLConf(SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key -> "-1") {
+      // A scan of a cached join pruned to `b` reports the partitioning and the ordering over `a`
+      // as well, so the cache of that scan does.
+      val a = src.select($"id".as("a"))
+      val b = src.select($"id".as("b"))
+      val c2 = a.join(b, $"a" === $"b").cache().select($"b").cache()
+      c2.collect()
+      val scan = collectFirst(c2.queryExecution.executedPlan) {
+        case s: InMemoryTableScanExec => s
+      }.get
+      assert(scan.outputPartitioning.satisfies(ClusteredDistribution(scan.output)))
+      assert(scan.outputPartitioning.asInstanceOf[Expression].references === scan.outputSet)
+      assert(scan.outputOrdering.map(_.references) === Seq(scan.outputSet))
+    }
+
+    // A scan of a cache sorted by `a` and `b` pruned to `b` reports the ordering by `a` and `b`,
+    // which the cache of that scan cannot report even partially.
+    val c3 = src.select($"id".as("a"), ($"id" % 2).as("b"))
+      .sortWithinPartitions("a", "b").cache().select($"b").cache()
+    c3.collect()
+    val ordering = collectFirst(c3.queryExecution.executedPlan) {
+      case s: InMemoryTableScanExec => s.outputOrdering
+    }.get
+    assert(ordering.isEmpty)
   }
 }

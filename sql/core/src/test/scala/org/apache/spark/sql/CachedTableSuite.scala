@@ -2013,8 +2013,7 @@ class CachedTableSuite extends SharedSparkSession
           catalog("testcat"),
           Identifier.of(Array(), "tbl"),
           tableId = None,
-          CaseInsensitiveStringMap.empty(),
-          spark.sessionState.conf.resolver).isEmpty)
+          CaseInsensitiveStringMap.empty()).isEmpty)
         assert(cacheManager.numCachedEntries == 1)
         assert(CopyCountingNode.numCopies.get() == 0)
 
@@ -2043,8 +2042,7 @@ class CachedTableSuite extends SharedSparkSession
         catalog("testcat"),
         Identifier.of(Array(), "tbl"),
         tableId = None,
-        CaseInsensitiveStringMap.empty(),
-        spark.sessionState.conf.resolver).isDefined)
+        CaseInsensitiveStringMap.empty()).isDefined)
 
       cacheManager.uncacheTableOrView(spark, Seq("testcat", "tbl"), cascade = false)
       assert(cacheManager.lookupCachedData(df).isEmpty)

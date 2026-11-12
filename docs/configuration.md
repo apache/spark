@@ -450,6 +450,17 @@ of the most common options to set are:
   <td>3.5.0</td>
 </tr>
 <tr>
+  <td><code>spark.log.level.&lt;logger&gt;</code></td>
+  <td>(none)</td>
+  <td>
+    When set, overrides the level of the named logger on the driver and the executors, for example
+    <code>spark.log.level.org.apache.spark.sql.execution=DEBUG</code>. Applied after
+    <code>spark.log.level</code>, which sets the root logger, so it wins for that logger. Valid log
+    levels include: "ALL", "DEBUG", "ERROR", "FATAL", "INFO", "OFF", "TRACE", "WARN".
+  </td>
+  <td>5.0.0</td>
+</tr>
+<tr>
   <td><code>spark.driver.supervise</code></td>
   <td>false</td>
   <td>
@@ -865,9 +876,11 @@ Apart from these, the following properties are also available, and may be useful
     <code>PYTHON_UDF_BATCH_SIZE</code>, a session may still set it and Spark's value wins.
     <code>PYTHONPATH</code> is the one name that is neither reserved nor simply overridden: Spark
     merges the session's value into the path it computes for the worker, so a session adds to the
-    worker's import path. The relative order is not guaranteed -- Spark contributes no entries of
-    its own when <code>SPARK_HOME</code> is unset and its classes did not come from a jar, which can
-    leave the session's path first -- so do not rely on a session entry being shadowed by Spark's.
+    worker's import path. The relative order is not guaranteed -- Spark puts no entries of its own
+    ahead of the session's when <code>SPARK_HOME</code> is unset where the worker runs, as on YARN
+    executors, which receive Spark's <code>pyspark.zip</code> through the inherited
+    <code>PYTHONPATH</code> after the session's entries -- so do not rely on a session entry being
+    shadowed by Spark's.
     <br /><br />
     Each variable is a separate configuration, so setting several is not atomic: a client that sets
     a batch may have some applied and then one rejected, leaving the earlier ones in place. Read the
@@ -1081,6 +1094,8 @@ Apart from these, the following properties are also available, and may be useful
     Path to specify the Ivy user directory, used for the local Ivy cache and package files from
     <code>spark.jars.packages</code>. This will override the Ivy property <code>ivy.default.ivy.user.dir</code>
     which defaults to ~/.ivy2.
+    <code>SparkSession.addArtifact</code> reads the local repository search path from the session
+    configuration. Its runtime cache and downloaded jars remain session-local.
   </td>
   <td>1.3.0</td>
 </tr>
@@ -1091,13 +1106,15 @@ Apart from these, the following properties are also available, and may be useful
     Path to an Ivy settings file to customize resolution of jars specified using
     <code>spark.jars.packages</code> or <code>ivy://</code> URIs passed to
     <code>SparkSession.addArtifact</code> instead of the built-in defaults, such as maven central.
+    <code>SparkSession.addArtifact</code> reads this setting from its session, including values
+    inherited from SparkConf. Updates through <code>spark.conf.set</code> are blocked by default.
     For <code>spark.jars.packages</code>, additional repositories from
     <code>spark.jars.repositories</code> will also be included.
     The <code>spark-submit --repositories</code> option applies to submission-time resolution.
-    In Spark Connect, Ivy URIs with a <code>repos</code> query parameter or sent to a server without
-    server-side Maven resolution are resolved by the client and do not use this setting. Other Ivy
-    URIs are resolved by the server, so Maven and Ivy repositories local to the client, such as
-    <code>~/.m2/repository</code> and <code>~/.ivy2.5.2/local</code>, are not searched.
+    Spark Connect JVM clients use the server session's value only if Config RPC exposes it and
+    the file is readable locally; otherwise, they use the built-in defaults.
+    Enable <code>spark.connect.session.serverSideMavenResolution.enabled</code> to resolve Ivy URIs
+    without <code>repos</code> on a supporting server.
     Useful for allowing Spark to resolve artifacts from behind a firewall e.g. via an in-house
     artifact server like Artifactory. Details on the settings file format can be
     found at <a href="http://ant.apache.org/ivy/history/latest-milestone/settings.html">Settings Files</a>.
@@ -1116,7 +1133,7 @@ Apart from these, the following properties are also available, and may be useful
     Connection timeout for Ivy repository requests made by
     <code>SparkSession.addArtifact</code>.
     Client-resolved Spark Connect Ivy URIs do not use this setting.
-    This must be set before the SparkContext starts.
+    The session configuration value is captured on first use of the artifact APIs.
   </td>
   <td>4.4.0</td>
 </tr>
@@ -1126,7 +1143,7 @@ Apart from these, the following properties are also available, and may be useful
   <td>
     Read timeout for Ivy repository requests made by <code>SparkSession.addArtifact</code>.
     Client-resolved Spark Connect Ivy URIs do not use this setting.
-    This must be set before the SparkContext starts.
+    The session configuration value is captured on first use of the artifact APIs.
   </td>
   <td>4.4.0</td>
 </tr>
@@ -1562,6 +1579,17 @@ Apart from these, the following properties are also available, and may be useful
   <td>3.0.0</td>
 </tr>
 <tr>
+  <td><code>spark.shuffle.service.verifyBlockPathsAtRead</code></td>
+  <td>true</td>
+  <td>
+    Whether the ExternalShuffleService re-resolves the path of a shuffle or RDD block file when
+    serving it, and refuses the file if the resolved path is no longer under the executor's
+    registered local directories. Disabling it skips the path canonicalization done on each
+    block fetch.
+  </td>
+  <td>4.1.4</td>
+</tr>
+<tr>
   <td><code>spark.shuffle.service.db.enabled</code></td>
   <td>true</td>
   <td>
@@ -1870,7 +1898,7 @@ Apart from these, the following properties are also available, and may be useful
     If the Spark UI should be served through another front-end reverse proxy, this is the URL
     for accessing the Spark master UI through that reverse proxy.
     This is useful when running proxy for authentication e.g. an OAuth proxy. The URL may contain
-    a path prefix, like <code>http://mydomain.com/path/to/spark/</code>, allowing you to serve the
+    a path prefix, like <code>http://example.com/path/to/spark/</code>, allowing you to serve the
     UI for multiple Spark clusters and other web applications through the same virtual host and
     port.
     Normally, this should be an absolute URL including scheme (http/https), host and port.
@@ -1882,8 +1910,8 @@ Apart from these, the following properties are also available, and may be useful
     <ul>
       <li>stripping a path prefix before forwarding the request,</li>
       <li>rewriting redirects which point directly to the Spark master,</li>
-      <li>redirecting access from <code>http://mydomain.com/path/to/spark</code> to
-      <code>http://mydomain.com/path/to/spark/</code> (trailing slash after path prefix); otherwise
+      <li>redirecting access from <code>http://example.com/path/to/spark</code> to
+      <code>http://example.com/path/to/spark/</code> (trailing slash after path prefix); otherwise
       relative links on the master page do not work correctly.</li>
     </ul>
     This setting affects all the workers and application UIs running in the cluster and must be set
@@ -3873,6 +3901,14 @@ Command types in proto.</td>
   </td>
   <td>The interval at which the progress of a query is reported to the client. If the value is set to a negative value the progress reports will be disabled.</td>
   <td>4.0.0</td>
+</tr>
+<tr>
+  <td><code>spark.connect.session.serverSideMavenResolution.enabled</code></td>
+  <td>
+    false
+  </td>
+  <td>When true, the Spark Connect JVM client resolves eligible Maven dependencies on the server when it advertises support. Dependencies that specify repositories are always resolved on the client. When false, the JVM client resolves all Maven dependencies locally. This is a client routing preference, not a server-side enforcement setting.</td>
+  <td>4.4.0</td>
 </tr>
 </table>
 

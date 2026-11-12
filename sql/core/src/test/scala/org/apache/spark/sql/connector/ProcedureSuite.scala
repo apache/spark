@@ -370,6 +370,12 @@ class ProcedureSuite extends SharedSparkSession with BeforeAndAfter {
     assert(explain2.toString.contains("cat.ns.sum(10, 10)"))
   }
 
+  test("SPARK-61554: EXPLAIN does not run a CALL inside EXECUTE IMMEDIATE") {
+    catalog.createProcedure(Identifier.of(Array("ns"), "sum"), UnboundNonExecutableSum)
+    val explain = sql("EXPLAIN EXECUTE IMMEDIATE 'CALL cat.ns.sum(5, 5)'").head().getString(0)
+    assert(explain.contains("Call cat.ns.sum(5, 5)"), explain)
+  }
+
   test("void procedure") {
     catalog.createProcedure(Identifier.of(Array("ns"), "proc"), UnboundVoidProcedure)
     checkAnswer(sql("CALL cat.ns.proc('A', 'B')"), Nil)

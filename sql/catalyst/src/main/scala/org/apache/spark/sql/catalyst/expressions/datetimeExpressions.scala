@@ -93,9 +93,8 @@ trait TimestampFormatterHelper extends TimeZoneAwareExpression {
   protected def forTimestampNTZ: Boolean = false
 
   @transient final protected lazy val formatterOption: Option[TimestampFormatter] =
-    if (formatString.foldable) {
-      Option(formatString.eval()).map(fmt => getFormatter(fmt.toString))
-    } else None
+    ExprUtils.tryEvalFoldable(formatString).flatMap(Option(_))
+      .map(fmt => getFormatter(fmt.toString))
 
   final protected def getFormatter(fmt: String): TimestampFormatter = {
     TimestampFormatter(
@@ -1693,8 +1692,9 @@ case class DateFormatClass(left: Expression, right: Expression, timeZoneId: Opti
   }
 
   @transient private lazy val timeFormatterOption: Option[TimeFormatter] =
-    if (left.dataType.isInstanceOf[TimeType] && right.foldable) {
-      Option(right.eval()).map(fmt => TimeFormatter(fmt.toString, isParsing = false))
+    if (left.dataType.isInstanceOf[TimeType]) {
+      ExprUtils.tryEvalFoldable(right).flatMap(Option(_))
+        .map(fmt => TimeFormatter(fmt.toString, isParsing = false))
     } else None
 
   override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
@@ -2548,7 +2548,10 @@ case class FromUnixTime(sec: Expression, format: Expression, timeZoneId: Option[
  * Returns the last day of the month which the date belongs to.
  */
 @ExpressionDescription(
-  usage = "_FUNC_(date) - Returns the last day of the month which the date belongs to.",
+  usage = """_FUNC_(date) - Returns the last day of the month which the date belongs to.
+      If that day is later than the maximum DATE `+5881580-07-11`, the function fails with
+      `DATETIME_OVERFLOW` regardless of `spark.sql.ansi.enabled`.
+      """,
   arguments = """
     Arguments:
       * date - The date whose month's last day is returned.
@@ -2600,6 +2603,7 @@ case class LastDay(startDate: Expression)
       The function returns NULL if at least one of the input parameters is NULL.
       When both of the input parameters are not NULL and day_of_week is an invalid input,
       the function throws SparkIllegalArgumentException if `spark.sql.ansi.enabled` is set to true, otherwise NULL.
+      If the result is later than the maximum DATE `+5881580-07-11`, the function fails with `DATETIME_OVERFLOW` regardless of `spark.sql.ansi.enabled`.
       """,
   arguments = """
     Arguments:
@@ -2639,6 +2643,7 @@ case class NextDay(
       DateTimeExpressionUtils.getNextDateExact(
         start.asInstanceOf[Int], dayOfW.asInstanceOf[UTF8String])
     } else {
+      // NULL only for an invalid day of week; DATETIME_OVERFLOW propagates in both modes.
       try {
         val dow = DateTimeUtils.getDayOfWeekFromString(dayOfW.asInstanceOf[UTF8String])
         DateTimeUtils.getNextDateForDayOfWeek(start.asInstanceOf[Int], dow)
@@ -2656,9 +2661,9 @@ case class NextDay(
       sd: String,
       dowS: String): String = {
     if (failOnError) {
-      // In ANSI mode the only exception (SparkIllegalArgumentException for an
-      // invalid day-of-week) must propagate, so the previous catch merely
-      // rethrew it. Delegate to the helper and drop the no-op try/catch.
+      // In ANSI mode an invalid day-of-week (SparkIllegalArgumentException) must
+      // propagate like the overflow error, so the previous catch merely rethrew
+      // it. Delegate to the helper and drop the no-op try/catch.
       val utils = classOf[DateTimeExpressionUtils].getName
       s"${ev.value} = $utils.getNextDateExact($sd, $dowS);"
     } else {
@@ -2676,8 +2681,9 @@ case class NextDay(
   override protected def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
     nullSafeCodeGen(ctx, ev, (sd, dowS) => {
       val dayOfWeekTerm = ctx.freshName("dayOfWeek")
-      if (dayOfWeek.foldable) {
-        val input = dayOfWeek.eval().asInstanceOf[UTF8String]
+      val foldableDayOfWeek = ExprUtils.tryEvalFoldable(dayOfWeek)
+      if (foldableDayOfWeek.isDefined) {
+        val input = foldableDayOfWeek.get.asInstanceOf[UTF8String]
         if (input eq null) {
           s"""${ev.isNull} = true;"""
         } else {
@@ -2941,8 +2947,9 @@ sealed trait UTCTimestamp extends BinaryExpression with ImplicitCastInputTypes {
     val tnv = classOf[TimestampNanosVal].getName
     val javaType = CodeGenerator.javaType(dataType)
     val defaultValue = CodeGenerator.defaultValue(dataType)
-    if (right.foldable) {
-      val tz = right.eval().asInstanceOf[UTF8String]
+    val foldableTz = ExprUtils.tryEvalFoldable(right)
+    if (foldableTz.isDefined) {
+      val tz = foldableTz.get.asInstanceOf[UTF8String]
       if (tz == null) {
         ev.copy(code = code"""
            |boolean ${ev.isNull} = true;
@@ -3548,7 +3555,8 @@ trait TruncInstant extends BinaryExpression with ImplicitCastInputTypes {
     val dtu = DateTimeUtils.getClass.getName.stripSuffix("$")
 
     val javaType = CodeGenerator.javaType(dataType)
-    if (format.foldable) {
+    // `truncLevel` evaluates the format, so use it only if the format evaluates without an error.
+    if (ExprUtils.tryEvalFoldable(format).isDefined) {
       if (truncLevel < minLevel) {
         ev.copy(code = code"""
           boolean ${ev.isNull} = true;
@@ -3593,6 +3601,7 @@ trait TruncInstant extends BinaryExpression with ImplicitCastInputTypes {
 @ExpressionDescription(
   usage = """
     _FUNC_(date, fmt) - Returns `date` with the time portion of the day truncated to the unit specified by the format model `fmt`.
+      If the result is earlier than the minimum DATE `-5877641-06-23`, the function fails with `DATETIME_OVERFLOW` regardless of `spark.sql.ansi.enabled`.
   """,
   arguments = """
     Arguments:
@@ -4946,9 +4955,9 @@ object Extract {
  *   - Otherwise the expression returns `DayTimeIntervalType` with the difference in microseconds
  *     between given timestamps.
  *
- * Both microsecond and nanosecond-precision timestamp types are accepted as operands. Because the
- * difference is reported on the microsecond grid in either mode, a nanosecond operand contributes
- * only its `epochMicros`; the sub-microsecond remainder is truncated.
+ * Nanosecond-precision operands are only used by the as-of join ordering distance;
+ * `NanosTimestampSubtractionCheck` rejects them anywhere else, since the interval result has
+ * microsecond precision. A nanosecond operand contributes only its `epochMicros`.
  */
 case class SubtractTimestamps(
     left: Expression,
@@ -4963,16 +4972,15 @@ case class SubtractTimestamps(
   def this(endTimestamp: Expression, startTimestamp: Expression) =
     this(endTimestamp, startTimestamp, SQLConf.get.legacyIntervalEnabled)
 
-  // Nanosecond-precision timestamps are accepted alongside the microsecond types. The difference is
-  // always reported on the microsecond grid (both result types -- DayTimeIntervalType and, in
-  // legacy mode, CalendarIntervalType -- carry microsecond resolution), so each operand contributes
-  // only its epochMicros; the sub-microsecond remainder is truncated.
+  // Nanosecond operands are accepted for the as-of join distance (see the class doc).
   override def inputTypes: Seq[AbstractDataType] =
     Seq(
       TypeCollection(AnyTimestampType, AnyTimestampNanoType),
       TypeCollection(AnyTimestampType, AnyTimestampNanoType))
   override def dataType: DataType =
     if (legacyInterval) CalendarIntervalType else DayTimeIntervalType()
+
+  override def nodePatternsInternal(): Seq[TreePattern] = Seq(SUBTRACT_TIMESTAMPS)
 
   override def withTimeZone(timeZoneId: String): TimeZoneAwareExpression =
     copy(timeZoneId = Option(timeZoneId))

@@ -3417,6 +3417,17 @@ private[spark] class DAGScheduler(
 
         // Abort execution
         return
+      case e: OutOfMemoryError if Utils.isJavaArraySizeLimitExceeded(e) =>
+        // The task binary is too large for a Java array. Report it with a user-facing error and
+        // without the OutOfMemoryError as cause, so it is not mistaken for heap exhaustion.
+        val failure = JavaArraySizeLimitExceeded.forTaskBinary(e, stage.id)
+        logError(log"Failed to serialize the task binary of ${MDC(STAGE, stage)} because it " +
+          log"exceeded Java's maximum array size: ${MDC(ERROR, failure.jvmMessage)}")
+        abortStage(stage, failure.getMessage, Some(failure))
+        runningStages -= stage
+
+        // Abort execution
+        return
       case e: Throwable =>
         abortStage(stage, s"Task serialization failed: $e\n${Utils.exceptionString(e)}", Some(e))
         runningStages -= stage
@@ -3517,10 +3528,12 @@ private[spark] class DAGScheduler(
       val id = updates.id
       try {
         // Find the corresponding accumulator on the driver and update it
-        val acc: AccumulatorV2[Any, Any] = AccumulatorContext.get(id) match {
-          case Some(accum) => accum.asInstanceOf[AccumulatorV2[Any, Any]]
-          case None =>
+        val acc: AccumulatorV2[Any, Any] = {
+          val accum = AccumulatorContext.getOrNull(id)
+          if (accum == null) {
             throw SparkCoreErrors.accessNonExistentAccumulatorError(id)
+          }
+          accum.asInstanceOf[AccumulatorV2[Any, Any]]
         }
         acc.merge(updates.asInstanceOf[AccumulatorV2[Any, Any]])
         if (acc.isInstanceOf[LastAttemptAccumulator[_, _, _]]) {

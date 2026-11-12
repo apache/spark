@@ -339,7 +339,7 @@ ________________________________________________________________________________
 def _parse_memory(s: str) -> int:
     """
     Parse a memory string in the format supported by Java (e.g. 1g, 200m) and
-    return the value in MiB
+    return the value in MiB. Raise ValueError for empty or invalid memory strings.
 
     Examples
     --------
@@ -349,7 +349,7 @@ def _parse_memory(s: str) -> int:
     2048
     """
     units = {"g": 1024, "m": 1, "t": 1 << 20, "k": 1.0 / 1024}
-    if s[-1].lower() not in units:
+    if not s or s[-1].lower() not in units:
         raise ValueError("invalid format: " + s)
     return int(float(s[:-1]) * units[s[-1].lower()])
 
@@ -529,6 +529,22 @@ def _format_exception(
     return "".join(te.format())
 
 
+def format_worker_exception(e: BaseException, hide_traceback: Optional[bool] = None) -> str:
+    """
+    Formats an exception raised in the Python worker as it is reported to the JVM, honoring the
+    SPARK_HIDE_TRACEBACK, SPARK_SIMPLIFIED_TRACEBACK and SPARK_TRACEBACK_WITH_LOCALS environment
+    variables. Must be called while handling ``e``.
+    """
+    if hide_traceback is None:
+        hide_traceback = bool(os.environ.get("SPARK_HIDE_TRACEBACK", False))
+    return _format_exception(
+        e,
+        hide_traceback,
+        bool(os.environ.get("SPARK_SIMPLIFIED_TRACEBACK", False)),
+        bool(os.environ.get("SPARK_TRACEBACK_WITH_LOCALS", False)),
+    )
+
+
 def handle_worker_exception(
     e: BaseException, outfile: IO, hide_traceback: Optional[bool] = None
 ) -> None:
@@ -547,19 +563,10 @@ def handle_worker_exception(
         Whether to hide the traceback in the output.
         By default, hides the traceback if environment variable SPARK_HIDE_TRACEBACK is set.
     """
-
-    if hide_traceback is None:
-        hide_traceback = bool(os.environ.get("SPARK_HIDE_TRACEBACK", False))
-
     try:
-        exc_info = _format_exception(
-            e,
-            hide_traceback,
-            bool(os.environ.get("SPARK_SIMPLIFIED_TRACEBACK", False)),
-            bool(os.environ.get("SPARK_TRACEBACK_WITH_LOCALS", False)),
-        )
+        exc_info = format_worker_exception(e, hide_traceback)
         write_int(SpecialLengths.PYTHON_EXCEPTION_THROWN, outfile)
-        write_with_length(exc_info.encode("utf-8"), outfile)
+        write_with_length(exc_info.encode("utf-8", "backslashreplace"), outfile)
     except IOError:
         # JVM close the socket
         pass

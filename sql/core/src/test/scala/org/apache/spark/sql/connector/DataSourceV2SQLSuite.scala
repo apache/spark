@@ -2310,24 +2310,34 @@ class DataSourceV2SQLSuiteV1Filter
       val schema = new StructType()
         .add("catalog", StringType, nullable = false)
         .add("namespace", StringType, nullable = false)
-      val df = sql("SHOW CURRENT NAMESPACE")
-      val rows = df.collect()
+      Seq("NAMESPACE", "DATABASE", "SCHEMA").foreach { alias =>
+        val df = sql(s"SHOW CURRENT $alias")
+        val rows = df.collect()
 
-      assert(df.schema === schema)
-      assert(rows.length == 1)
-      assert(rows(0).getAs[String](0) === expectedCatalogName)
-      assert(rows(0).getAs[String](1) === expectedNamespace)
+        assert(df.schema === schema)
+        assert(rows.length == 1)
+        assert(rows(0).getAs[String](0) === expectedCatalogName)
+        assert(rows(0).getAs[String](1) === expectedNamespace)
+      }
     }
 
     // Initially, the v2 session catalog is set as a current catalog.
     testShowCurrentNamespace("spark_catalog", "default")
 
-    sql("USE testcat")
-    testShowCurrentNamespace("testcat", "")
+    withNamespace("testcat.ns1.ns2", "testcat.ns1.`inner.ns`") {
+      withCurrentCatalogAndNamespace {
+        sql("SET CATALOG 'testcat'")
+        testShowCurrentNamespace("testcat", "")
 
-    sql("CREATE NAMESPACE testcat.ns1.ns2")
-    sql("USE testcat.ns1.ns2")
-    testShowCurrentNamespace("testcat", "ns1.ns2")
+        sql("CREATE NAMESPACE testcat.ns1.ns2")
+        sql("USE testcat.ns1.ns2")
+        testShowCurrentNamespace("testcat", "ns1.ns2")
+
+        sql("CREATE NAMESPACE testcat.ns1.`inner.ns`")
+        sql("USE testcat.ns1.`inner.ns`")
+        testShowCurrentNamespace("testcat", "ns1.`inner.ns`")
+      }
+    }
   }
 
   test("tableCreation: partition column case insensitive resolution") {
@@ -3994,6 +4004,14 @@ class DataSourceV2SQLSuiteV1Filter
 
     assert(sql("SHOW CATALOGS LIKE 'testcat*'").collect() === Array(
       Row("testcat"), Row("testcat2")))
+
+    assert(sql("SHOW CATALOGS LIKE 'TESTCAT*'").collect() === Array(
+      Row("testcat"), Row("testcat2")))
+
+    assert(sql("SHOW CATALOGS 'TESTCAT*'").collect() === Array(
+      Row("testcat"), Row("testcat2")))
+
+    assert(sql("SHOW CATALOGS 'non_existing_catalog_pattern'").collect().isEmpty)
   }
 
   test("SPARK-49543: ShowCollations") {
@@ -5622,6 +5640,37 @@ class DataSourceV2SQLSuiteV2Filter extends DataSourceV2SQLSuite {
       }
       assert(postScanConditions.exists(!_.deterministic),
         s"Expected the non-deterministic filter above the scan, got $postScanConditions")
+    }
+  }
+
+  test("SPARK-60569: scalar subquery filters merged by MergeSubplans are pushed to the scan") {
+    val tbl = s"${catalogAndNamespace}tbl"
+    val dim = s"${catalogAndNamespace}dim"
+    withTable(tbl, dim) {
+      sql(s"CREATE TABLE $tbl (id INT, part INT) USING $v2Format PARTITIONED BY (part)")
+      for (i <- 0 until 10) {
+        sql(s"INSERT INTO $tbl VALUES ($i, $i)")
+      }
+
+      sql(s"CREATE TABLE $dim (val INT) USING $v2Format")
+      sql(s"INSERT INTO $dim VALUES (1), (3)")
+
+      // `MergeSubplans` merges the two subqueries into one, and each filter reads its result out
+      // of the struct the merged one returns.
+      val df = sql(s"SELECT * FROM $tbl " +
+        s"WHERE part = (SELECT max(val) FROM $dim) AND id > (SELECT min(val) FROM $dim)")
+      checkAnswer(df, Row(3, 3))
+
+      val batchScan = collect(df.queryExecution.executedPlan) {
+        case b: BatchScanExec => b
+      }.head
+      assert(batchScan.runtimeFilters.exists(_.exists(_.isInstanceOf[GetStructField])),
+        s"Expected a runtime filter on a merged scalar subquery, got ${batchScan.runtimeFilters}")
+
+      // Verify partition pruning: only 1 of 10 partitions should remain
+      val numPartitions = batchScan.filteredPartitions.count(_.isDefined)
+      assert(numPartitions == 1,
+        s"Expected 1 partition after scalar subquery pruning, got $numPartitions")
     }
   }
 }

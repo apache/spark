@@ -245,6 +245,44 @@ abstract class UpdateTableSuiteBase extends RowLevelOperationSuiteBase {
     checkUpdateMetrics(numUpdatedRows = 1, numCopiedRows = 1)
   }
 
+  test("SPARK-60978: update keeps columns whose names differ only by case") {
+    // such a table can only be created and read in a case-sensitive session
+    withSQLConf(SQLConf.CASE_SENSITIVE.key -> "true") {
+      createAndInitTable("pk INT NOT NULL, salary INT, SALARY INT, dep STRING",
+        """{ "pk": 1, "salary": 100, "SALARY": 200, "dep": "hr" }
+          |{ "pk": 2, "salary": 300, "SALARY": 400, "dep": "hr" }
+          |""".stripMargin)
+    }
+
+    // the statement does not name the colliding columns so it is not ambiguous
+    sql(s"UPDATE $tableNameAsString SET pk = 3 WHERE pk = 1")
+
+    withSQLConf(SQLConf.CASE_SENSITIVE.key -> "true") {
+      checkAnswer(
+        sql(s"SELECT * FROM $tableNameAsString"),
+        Row(3, 100, 200, "hr") :: Row(2, 300, 400, "hr") :: Nil)
+    }
+  }
+
+  test("SPARK-60979: update keeps columns whose names differ only by case and type") {
+    // such a table can only be created and read in a case-sensitive session
+    withSQLConf(SQLConf.CASE_SENSITIVE.key -> "true") {
+      createAndInitTable("pk INT NOT NULL, salary INT NOT NULL, SALARY STRING, dep STRING",
+        """{ "pk": 1, "salary": 100, "SALARY": null, "dep": "hr" }
+          |{ "pk": 2, "salary": 300, "SALARY": "x", "dep": "hr" }
+          |""".stripMargin)
+    }
+
+    // the statement does not name the colliding columns so it is not ambiguous
+    sql(s"UPDATE $tableNameAsString SET pk = 3 WHERE pk = 1")
+
+    withSQLConf(SQLConf.CASE_SENSITIVE.key -> "true") {
+      checkAnswer(
+        sql(s"SELECT * FROM $tableNameAsString"),
+        Row(3, 100, null, "hr") :: Row(2, 300, "x", "hr") :: Nil)
+    }
+  }
+
   test("update non-existing records") {
     createAndInitTable("pk INT NOT NULL, salary INT, dep STRING",
       """{ "pk": 1, "salary": 100, "dep": "hr" }
@@ -521,6 +559,67 @@ abstract class UpdateTableSuiteBase extends RowLevelOperationSuiteBase {
       Row(1, -1, Row(300, "v1"), "hr") :: Row(2, 200, Row(200, "v2"), "software") :: Nil)
 
     checkUpdateMetrics(numUpdatedRows = 1, numCopiedRows = 0)
+  }
+
+  test("SPARK-60673: update with metadata columns in the condition and assignments") {
+    // the metadata columns must be read even if the operation does not require them
+    createAndInitTable("pk INT NOT NULL, id INT, dep STRING",
+      """{ "pk": 1, "id": 1, "dep": "hr" }
+        |{ "pk": 2, "id": 2, "dep": "hr" }
+        |{ "pk": 3, "id": 1, "dep": "software" }
+        |""".stripMargin)
+
+    sql(s"UPDATE $tableNameAsString SET id = -1 WHERE _partition = 'hr' AND id < 2")
+
+    checkAnswer(
+      sql(s"SELECT * FROM $tableNameAsString"),
+      Row(1, -1, "hr") :: Row(2, 2, "hr") :: Row(3, 1, "software") :: Nil)
+    checkUpdateMetrics(numUpdatedRows = 1, numCopiedRows = 1)
+
+    sql(s"UPDATE $tableNameAsString t SET t.id = t.index + 10 WHERE t.pk = 3")
+
+    checkAnswer(
+      sql(s"SELECT * FROM $tableNameAsString"),
+      Row(1, -1, "hr") :: Row(2, 2, "hr") :: Row(3, 10, "software") :: Nil)
+    checkUpdateMetrics(numUpdatedRows = 1, numCopiedRows = 0)
+  }
+
+  test("SPARK-60721: update with assignments to metadata columns") {
+    createAndInitTable("pk INT NOT NULL, id INT, dep STRING",
+      """{ "pk": 1, "id": 1, "dep": "hr" }
+        |{ "pk": 2, "id": 2, "dep": "software" }
+        |""".stripMargin)
+
+    Seq(
+      s"UPDATE $tableNameAsString SET index = 5 WHERE pk = 1" -> "index",
+      s"UPDATE $tableNameAsString t SET t.id = -1, t._partition = 'x' WHERE t.pk = 1" ->
+        "_partition",
+      // the implicit cast in the condition resolves the command in a later analyzer iteration
+      s"UPDATE $tableNameAsString SET index = 5 WHERE id < 1.5" -> "index"
+    ).foreach { case (updateStmt, metadataCol) =>
+      val e = intercept[AnalysisException](sql(updateStmt))
+      assert(e.getCondition == "DATATYPE_MISMATCH.INVALID_ROW_LEVEL_OPERATION_ASSIGNMENTS")
+      assert(e.getMessage.contains(s"Cannot assign to metadata column '$metadataCol'"))
+    }
+
+    checkAnswer(
+      sql(s"SELECT * FROM $tableNameAsString"),
+      Row(1, 1, "hr") :: Row(2, 2, "software") :: Nil)
+  }
+
+  test("SPARK-60721: update ignores assignments to metadata columns in legacy mode") {
+    createAndInitTable("pk INT NOT NULL, id INT, dep STRING",
+      """{ "pk": 1, "id": 1, "dep": "hr" }
+        |{ "pk": 2, "id": 2, "dep": "software" }
+        |""".stripMargin)
+
+    withSQLConf(SQLConf.LEGACY_IGNORE_METADATA_COLUMN_ASSIGNMENTS.key -> "true") {
+      sql(s"UPDATE $tableNameAsString SET id = -1, index = 5 WHERE pk = 1")
+    }
+
+    checkAnswer(
+      sql(s"SELECT * FROM $tableNameAsString"),
+      Row(1, -1, "hr") :: Row(2, 2, "software") :: Nil)
   }
 
   test("update with IN subqueries") {
@@ -890,6 +989,176 @@ abstract class UpdateTableSuiteBase extends RowLevelOperationSuiteBase {
         Row(3, Row("x  ", "y"), "hr") :: Nil)
 
     checkUpdateMetrics(numUpdatedRows = 2, numCopiedRows = 0)
+  }
+
+  test("SPARK-61462: update with a condition on a CHAR column") {
+    createTable("pk INT NOT NULL, c CHAR(3), id INT, dep STRING")
+
+    append("pk INT NOT NULL, c STRING, id INT, dep STRING",
+      """{ "pk": 1, "c": "a", "id": 1, "dep": "hr" }
+        |{ "pk": 2, "c": "x", "id": 2, "dep": "software" }
+        |{ "pk": 3, "c": "b", "id": 3, "dep": "hr" }
+        |""".stripMargin)
+
+    // the new values that an UPDATE projects on top of the read relation are not paddings
+    sql(s"UPDATE $tableNameAsString SET id = -1 WHERE c IN ('a', 'b', 'c')")
+
+    checkAnswer(
+      sql(s"SELECT * FROM $tableNameAsString"),
+      Row(1, "a  ", -1, "hr") :: Row(2, "x  ", 2, "software") :: Row(3, "b  ", -1, "hr") :: Nil)
+  }
+
+  test("SPARK-60708: update char/varchar table with metadata columns") {
+    createTable("pk INT NOT NULL, id INT, dep STRING, name VARCHAR(10)")
+
+    append("pk INT NOT NULL, id INT, dep STRING, name STRING",
+      """{ "pk": 1, "id": 1, "dep": "hr", "name": "a" }
+        |{ "pk": 2, "id": 2, "dep": "software", "name": "b" }
+        |{ "pk": 3, "id": 3, "dep": "hr", "name": "c" }
+        |""".stripMargin)
+
+    sql(s"UPDATE $tableNameAsString SET id = -1 WHERE id IN (1, 2) AND _partition = 'hr'")
+
+    checkAnswer(
+      sql(s"SELECT * FROM $tableNameAsString"),
+      Row(1, -1, "hr", "a") :: Row(2, 2, "software", "b") :: Row(3, 3, "hr", "c") :: Nil)
+    checkUpdateMetrics(numUpdatedRows = 1, numCopiedRows = 1)
+
+    sql(s"UPDATE $tableNameAsString t SET t.id = t.index + 10 WHERE t.pk = 2")
+
+    checkAnswer(
+      sql(s"SELECT * FROM $tableNameAsString"),
+      Row(1, -1, "hr", "a") :: Row(2, 10, "software", "b") :: Row(3, 3, "hr", "c") :: Nil)
+    checkUpdateMetrics(numUpdatedRows = 1, numCopiedRows = 0)
+  }
+
+  test("SPARK-60708: update char/varchar table with an outer metadata reference") {
+    createTable("pk INT NOT NULL, id INT, dep STRING, name VARCHAR(10)")
+
+    append("pk INT NOT NULL, id INT, dep STRING, name STRING",
+      """{ "pk": 1, "id": 1, "dep": "hr", "name": "a" }
+        |{ "pk": 2, "id": 2, "dep": "software", "name": "b" }
+        |{ "pk": 3, "id": 3, "dep": "hr", "name": "c" }
+        |""".stripMargin)
+
+    withTempView("deps") {
+      Seq("hr").toDF("d").createOrReplaceTempView("deps")
+      sql(s"UPDATE $tableNameAsString t SET id = -1 " +
+        "WHERE id IN (1, 2) AND EXISTS (SELECT 1 FROM deps WHERE deps.d = t._partition)")
+    }
+
+    checkAnswer(
+      sql(s"SELECT * FROM $tableNameAsString"),
+      Row(1, -1, "hr", "a") :: Row(2, 2, "software", "b") :: Row(3, 3, "hr", "c") :: Nil)
+  }
+
+  test("SPARK-61479: update with conditions on CHAR columns stored without padding") {
+    withTempView("updated") {
+      createTable("pk INT NOT NULL, c CHAR(3), id INT, dep STRING")
+      // read-side padding also covers values that are not padded in the storage, so the rows to
+      // update must be found by comparing the padded values
+      withSQLConf(SQLConf.LEGACY_CHAR_VARCHAR_AS_STRING.key -> "true") {
+        append("pk INT NOT NULL, c STRING, id INT, dep STRING",
+          """{ "pk": 1, "c": "a", "id": 1, "dep": "hr" }
+            |{ "pk": 2, "c": "b", "id": 2, "dep": "software" }
+            |{ "pk": 3, "c": "x", "id": 3, "dep": "hr" }
+            |{ "pk": 4, "c": "y", "id": 4, "dep": "finance" }
+            |""".stripMargin)
+      }
+
+      sql(s"UPDATE $tableNameAsString SET id = -1 WHERE c IN ('a', 'b', 'c')")
+
+      checkAnswer(
+        sql(s"SELECT * FROM $tableNameAsString"),
+        Row(1, "a  ", -1, "hr") :: Row(2, "b  ", -1, "software") ::
+          Row(3, "x  ", 3, "hr") :: Row(4, "y  ", 4, "finance") :: Nil)
+
+      Seq("x  ").toDF("v").createOrReplaceTempView("updated")
+
+      sql(s"UPDATE $tableNameAsString SET id = -2 WHERE c IN (SELECT v FROM updated)")
+
+      checkAnswer(
+        sql(s"SELECT * FROM $tableNameAsString"),
+        Row(1, "a  ", -1, "hr") :: Row(2, "b  ", -1, "software") ::
+          Row(3, "x  ", -2, "hr") :: Row(4, "y  ", 4, "finance") :: Nil)
+
+      Seq("y  ").toDF("v").createOrReplaceTempView("updated")
+
+      sql(
+        s"""UPDATE $tableNameAsString t
+           |SET id = -3
+           |WHERE EXISTS (SELECT 1 FROM updated WHERE updated.v = t.c)
+           |""".stripMargin)
+
+      checkAnswer(
+        sql(s"SELECT * FROM $tableNameAsString"),
+        Row(1, "a  ", -1, "hr") :: Row(2, "b  ", -1, "software") ::
+          Row(3, "x  ", -2, "hr") :: Row(4, "y  ", -3, "finance") :: Nil)
+
+      // only the conditions read the padded values, the rows keep what is stored
+      withSQLConf(SQLConf.LEGACY_CHAR_VARCHAR_AS_STRING.key -> "true") {
+        checkAnswer(
+          sql(s"SELECT c FROM $tableNameAsString"),
+          Row("a") :: Row("b") :: Row("x") :: Row("y") :: Nil)
+      }
+    }
+  }
+
+  test("SPARK-61479: update with a condition on a CHAR partition column stored without padding") {
+    createTable("pk INT NOT NULL, id INT, dep CHAR(8)")
+    withSQLConf(SQLConf.LEGACY_CHAR_VARCHAR_AS_STRING.key -> "true") {
+      append("pk INT NOT NULL, id INT, dep STRING",
+        """{ "pk": 1, "id": 1, "dep": "hr" }
+          |{ "pk": 2, "id": 2, "dep": "software" }
+          |""".stripMargin)
+    }
+
+    sql(s"UPDATE $tableNameAsString SET id = -1 WHERE dep = 'hr'")
+
+    checkAnswer(
+      sql(s"SELECT * FROM $tableNameAsString"),
+      Row(1, -1, "hr      ") :: Row(2, 2, "software") :: Nil)
+  }
+
+  test("SPARK-61479: update with values from CHAR columns stored without padding") {
+    createTable("pk INT NOT NULL, c CHAR(3), id INT, v STRING, dep STRING")
+    withSQLConf(SQLConf.LEGACY_CHAR_VARCHAR_AS_STRING.key -> "true") {
+      append("pk INT NOT NULL, c STRING, id INT, v STRING, dep STRING",
+        """{ "pk": 1, "c": "a", "id": 1, "dep": "hr" }
+          |{ "pk": 2, "c": "b", "id": 2, "dep": "software" }
+          |""".stripMargin)
+    }
+
+    sql(s"UPDATE $tableNameAsString SET v = c, id = IF(c = 'a', 10, 20)")
+
+    checkAnswer(
+      sql(s"SELECT pk, id, v FROM $tableNameAsString"),
+      Row(1, 10, "a  ") :: Row(2, 20, "b  ") :: Nil)
+  }
+
+  test("SPARK-61479: update reads CHAR columns as the read-side configs define") {
+    createTable("pk INT NOT NULL, c CHAR(3), id INT, dep STRING")
+    withSQLConf(SQLConf.LEGACY_CHAR_VARCHAR_AS_STRING.key -> "true") {
+      append("pk INT NOT NULL, c STRING, id INT, dep STRING",
+        """{ "pk": 1, "c": "a", "id": 1, "dep": "hr" }
+          |""".stripMargin)
+    }
+
+    Seq(
+      Seq(SQLConf.READ_SIDE_CHAR_PADDING.key -> "false") -> 1,
+      Seq(SQLConf.LEGACY_CHAR_VARCHAR_AS_STRING.key -> "true") -> 1,
+      Seq(
+        SQLConf.CHAR_VARCHAR_STANDARD_SEMANTICS.key -> "true",
+        SQLConf.READ_SIDE_CHAR_PADDING.key -> "false") -> 3,
+      Seq(
+        SQLConf.CHAR_VARCHAR_STANDARD_SEMANTICS.key -> "true",
+        SQLConf.LEGACY_CHAR_VARCHAR_AS_STRING.key -> "true") -> 3
+    ).foreach { case (confs, expectedLength) =>
+      withSQLConf(confs: _*) {
+        sql(s"UPDATE $tableNameAsString SET id = length(c)")
+      }
+      checkAnswer(sql(s"SELECT id FROM $tableNameAsString"), Row(expectedLength))
+    }
   }
 
   test("update with NOT NULL checks") {

@@ -25,7 +25,8 @@ import org.apache.spark.sql.catalyst.analysis.TypeCoercion._
 import org.apache.spark.sql.catalyst.dsl.expressions._
 import org.apache.spark.sql.catalyst.dsl.plans._
 import org.apache.spark.sql.catalyst.expressions._
-import org.apache.spark.sql.catalyst.expressions.aggregate.ApproximatePercentile
+import org.apache.spark.sql.catalyst.expressions.aggregate.{ApproximatePercentile, Median,
+  Percentile, PercentileCont, PercentileDisc}
 import org.apache.spark.sql.catalyst.plans.ReferenceAllColumns
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.rules.{Rule, RuleExecutor}
@@ -425,6 +426,24 @@ abstract class TypeCoercionSuiteBase extends AnalysisTest {
     }
     // A date-valued function still takes the nanos input as DATE.
     ruleTest(implicitTypeCastsRule, LastDay(nanos), LastDay(Cast(nanos, DateType)))
+  }
+
+  test("SPARK-60542: implicit type cast - percentile family over nanos and micro timestamps") {
+    val nanos = Literal.default(TimestampNTZNanosType(9))
+    Seq(
+      new Percentile(nanos, Literal(0.5)),
+      Median(nanos),
+      PercentileCont(nanos, Literal(0.5)),
+      PercentileDisc(nanos, Literal(0.5))).foreach { e =>
+      ruleTest(implicitTypeCastsRule, e, e)
+    }
+    // The nanos member is last in the input TypeCollection, so a micro timestamp keeps its
+    // implicit cast and is never widened to nanos.
+    val inputType = new Percentile(nanos, Literal(0.5)).inputTypes.head
+    Seq(TimestampType, TimestampNTZType).foreach { micro =>
+      assert(!implicitCast(Literal.default(micro), inputType)
+        .exists(_.dataType.isInstanceOf[AnyTimestampNanoType]))
+    }
   }
 
   test("type coercion for Concat") {
@@ -1917,6 +1936,23 @@ class TypeCoercionSuite extends TypeCoercionSuiteBase {
     val nullLit = Literal.create(null, NullType)
     ruleTest(rules, Divide(1L, nullLit), Divide(Cast(1L, DoubleType), Cast(nullLit, DoubleType)))
     ruleTest(rules, Divide(nullLit, 1L), Divide(Cast(nullLit, DoubleType), Cast(1L, DoubleType)))
+  }
+
+  test("date arithmetic preserves foldable NULL string day counts") {
+    val date = Literal(0, DateType)
+    val nullString = Literal.create(null, StringType)
+    for (days <- Seq(
+        nullString,
+        If(Literal(true), nullString, Literal("2")),
+        Cast(Literal.create(null, IntegerType), StringType))) {
+      for (expression <- Seq(DateAdd(date, days), DateSub(date, days))) {
+        val coerced = StringLiteralTypeCoercion(expression)
+        assert(coerced.children(1) == Literal.create(null, IntegerType))
+        assert(coerced.eval() == null)
+      }
+    }
+    assert(StringLiteralTypeCoercion(DateAdd(date, Literal("2"))).eval() == 2)
+    assert(StringLiteralTypeCoercion(DateSub(date, Literal("2"))).eval() == -2)
   }
 
   test("Do not promote strings in binary arithmetic with intervals") {

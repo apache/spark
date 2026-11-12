@@ -56,33 +56,52 @@ object TableOutputResolver extends SQLConfHelper with Logging {
   def resolveVariableOutputColumns(
       expected: Seq[VariableReference],
       query: LogicalPlan,
-      conf: SQLConf): LogicalPlan = {
+      conf: SQLConf): LogicalPlan =
+    resolveVariableOutputColumns(
+      expected = expected,
+      query = query,
+      conf = conf,
+      outputColumns = query.output,
+      newAlias = (child, name) => Alias(child, name)())
 
-    if (expected.size != query.output.size) {
+  /**
+   * Resolves variable output against explicitly supplied attributes, avoiding recursive
+   * [[LogicalPlan.output]] access.
+   *
+   * @param outputColumns The resolved output attributes of `query`, in output order.
+   * @param newAlias Factory for aliases wrapping assignment casts.
+   */
+  def resolveVariableOutputColumns(
+      expected: Seq[VariableReference],
+      query: LogicalPlan,
+      conf: SQLConf,
+      outputColumns: Seq[Attribute],
+      newAlias: (Expression, String) => Alias): LogicalPlan = {
+    if (expected.size != outputColumns.size) {
       throw new AnalysisException(
         errorClass = "ASSIGNMENT_ARITY_MISMATCH",
         messageParameters = Map(
           "numTarget" -> expected.size.toString,
-          "numExpr" -> query.output.size.toString))
+          "numExpr" -> outputColumns.size.toString))
     }
 
     val resolved: Seq[NamedExpression] = {
-      query.output.zip(expected).map { case (inputCol, expected) =>
-        if (DataTypeUtils.sameType(inputCol.dataType, expected.dataType)) {
-          inputCol
+      outputColumns.zip(expected).map { case (inputColumn, expectedVariable) =>
+        if (DataTypeUtils.sameType(inputColumn.dataType, expectedVariable.dataType)) {
+          inputColumn
         } else {
           // SET VAR always uses the ANSI store assignment policy
           val cast = Cast(
-            inputCol,
-            expected.dataType,
+            inputColumn,
+            expectedVariable.dataType,
             Option(conf.sessionLocalTimeZone),
             ansiEnabled = true)
-          Alias(cast, expected.identifier.name)()
+          newAlias(cast, expectedVariable.identifier.name)
         }
       }
     }
 
-    if (resolved == query.output) {
+    if (resolved == outputColumns) {
       query
     } else {
       Project(resolved, query)
@@ -100,10 +119,11 @@ object TableOutputResolver extends SQLConfHelper with Logging {
         AnsiStoreAssignmentCastCheck.DEFAULT): LogicalPlan = {
     resolveOutputColumnsInternal(
       tableName, expected, query, byName, conf, defaultValueFillMode,
-      ansiStoreAssignmentCastCheck)._1
+      ansiStoreAssignmentCastCheck, CatalystSqlParser.parseExpression)._1
   }
 
   /**
+   * @param readGenerationExpr reads the stored text of a generation expression.
    * @return a tuple of:
    *   - the resolved write plan (same as [[resolveOutputColumns]]); and
    *   - the names of the generated columns that were auto-filled, i.e. computed from their
@@ -116,11 +136,12 @@ object TableOutputResolver extends SQLConfHelper with Logging {
       byName: Boolean,
       conf: SQLConf,
       defaultValueFillMode: DefaultValueFillMode.Value = NONE,
-      ansiStoreAssignmentCastCheck: AnsiStoreAssignmentCastCheck
+      ansiStoreAssignmentCastCheck: AnsiStoreAssignmentCastCheck,
+      readGenerationExpr: String => Expression
   ): (LogicalPlan, Set[String]) = {
     resolveOutputColumnsInternal(
       tableName, expected, query, byName, conf, defaultValueFillMode,
-      ansiStoreAssignmentCastCheck)
+      ansiStoreAssignmentCastCheck, readGenerationExpr)
   }
 
   private def resolveOutputColumnsInternal(
@@ -130,7 +151,8 @@ object TableOutputResolver extends SQLConfHelper with Logging {
       byName: Boolean,
       conf: SQLConf,
       defaultValueFillMode: DefaultValueFillMode.Value,
-      ansiStoreAssignmentCastCheck: AnsiStoreAssignmentCastCheck
+      ansiStoreAssignmentCastCheck: AnsiStoreAssignmentCastCheck,
+      readGenerationExpr: String => Expression
   ): (LogicalPlan, Set[String]) = {
 
     if (expected.size < query.output.size) {
@@ -157,7 +179,8 @@ object TableOutputResolver extends SQLConfHelper with Logging {
         Nil,
         defaultValueFillMode,
         enforceFullOutput = true,
-        ansiStoreAssignmentCastCheck)
+        ansiStoreAssignmentCastCheck,
+        readGenerationExpr)
     } else {
       if (expected.size > query.output.size && !fillDefaultValue) {
         throw QueryCompilationErrors.cannotWriteNotEnoughColumnsToTableError(
@@ -166,7 +189,8 @@ object TableOutputResolver extends SQLConfHelper with Logging {
       resolveColumnsByPosition(
         tableName, query.output, expected, conf, errors += _,
         fillDefaultValue = fillDefaultValue,
-        ansiStoreAssignmentCastCheck = ansiStoreAssignmentCastCheck)
+        ansiStoreAssignmentCastCheck = ansiStoreAssignmentCastCheck,
+        readGenerationExpr = readGenerationExpr)
     }
 
     if (errors.nonEmpty) {
@@ -174,7 +198,15 @@ object TableOutputResolver extends SQLConfHelper with Logging {
         tableName, expected.map(col => toSQLId(Seq(col.name))).mkString(", "))
     }
 
-    val plan = if (resolved == query.output) {
+    val plan = if (autoFilledGenCols.nonEmpty) {
+      // The analyzer resolves the generation expressions of the auto-filled generated columns
+      // against a projection of the stored columns, after any store assignment cast. Each stored
+      // value is computed once per row, also when a lambda function reads it.
+      val stored = Project(resolved.filterNot(col => autoFilledGenCols.contains(col.name)), query)
+      Project(resolved.map { col =>
+        if (autoFilledGenCols.contains(col.name)) col else col.toAttribute
+      }, stored)
+    } else if (resolved == query.output) {
       query
     } else {
       Project(resolved, query)
@@ -388,7 +420,8 @@ object TableOutputResolver extends SQLConfHelper with Logging {
       colPath: Seq[String] = Nil,
       defaultValueFillMode: DefaultValueFillMode.Value,
       enforceFullOutput: Boolean = false,
-      ansiStoreAssignmentCastCheck: AnsiStoreAssignmentCastCheck
+      ansiStoreAssignmentCastCheck: AnsiStoreAssignmentCastCheck,
+      readGenerationExpr: String => Expression = CatalystSqlParser.parseExpression
   ): (Seq[NamedExpression], Set[String]) = {
     // Names of generated columns that were auto-filled (not provided by the user). Only populated
     // for top-level columns, since generated columns cannot be nested.
@@ -403,11 +436,10 @@ object TableOutputResolver extends SQLConfHelper with Logging {
         GeneratedColumn.getGenerationExpression(expectedCol.metadata) match {
           case Some(genExprSql) =>
             autoFilledGenCols += expectedCol.name
-            // The parsed references here are placeholders: they are resolved against the post-cast
-            // stored columns after this loop (see below), so the generated value is computed from
-            // the values as they will be written. References to other generated columns are not
-            // allowed.
-            val genExpr = CatalystSqlParser.parseExpression(genExprSql)
+            // The references are left unresolved here. `resolveOutputColumnsInternal` resolves them
+            // against the stored columns, so the generated value is computed from the values as
+            // they will be written. References to other generated columns are not allowed.
+            val genExpr = readGenerationExpr(genExprSql)
             Some(applyColumnMetadata(genExpr, expectedCol))
           case None =>
             val useNullAsDefault = useNullAsDefaultForMissingColumn(expectedCols, conf)
@@ -459,23 +491,6 @@ object TableOutputResolver extends SQLConfHelper with Logging {
       }
     }
 
-    // Resolve auto-filled generated column references against the post-cast stored columns, so the
-    // generated value is computed from the values as they will be written (after any
-    // store-assignment cast). Generated columns only exist at the top level,
-    // so this only applies when colPath is empty.
-    val finalCols = if (colPath.isEmpty && autoFilledGenCols.nonEmpty) {
-      val storedCols = reordered.filterNot(col => autoFilledGenCols.contains(col.name))
-      reordered.map { col =>
-        if (autoFilledGenCols.contains(col.name)) {
-          resolveGenerationExprReferences(col, storedCols, conf).asInstanceOf[NamedExpression]
-        } else {
-          col
-        }
-      }
-    } else {
-      reordered
-    }
-
     val output = if (reordered.length == expectedCols.length) {
       if (matchedCols.size < inputCols.length) {
         val extraCols = inputCols.filterNot(col => matchedCols.contains(col.name))
@@ -488,7 +503,7 @@ object TableOutputResolver extends SQLConfHelper with Logging {
             tableName, colPath.quoted, extraCols)
         }
       } else {
-        finalCols
+        reordered
       }
     } else if (enforceFullOutput) {
       val colName =
@@ -509,7 +524,8 @@ object TableOutputResolver extends SQLConfHelper with Logging {
       addError: String => Unit,
       colPath: Seq[String] = Nil,
       fillDefaultValue: Boolean = false,
-      ansiStoreAssignmentCastCheck: AnsiStoreAssignmentCastCheck
+      ansiStoreAssignmentCastCheck: AnsiStoreAssignmentCastCheck,
+      readGenerationExpr: String => Expression = CatalystSqlParser.parseExpression
   ): (Seq[NamedExpression], Set[String]) = {
     // Names of generated columns that were auto-filled (not provided by the user). Only populated
     // for top-level columns, since generated columns cannot be nested.
@@ -581,12 +597,10 @@ object TableOutputResolver extends SQLConfHelper with Logging {
         GeneratedColumn.getGenerationExpression(expectedCol.metadata) match {
           case Some(genExprSql) =>
             autoFilledGenCols += expectedCol.name
-            val genExpr = CatalystSqlParser.parseExpression(genExprSql)
-            // For by-position, manually resolve references against matched columns
-            // since the query may use different column names than the table. References to
-            // other generated columns are not allowed.
-            val resolvedGenExpr = resolveGenerationExprReferences(genExpr, matched, conf)
-            applyColumnMetadata(resolvedGenExpr, expectedCol)
+            // The references are resolved as in the by-name path. The stored columns have the
+            // names of the table columns, even when the query uses different names.
+            val genExpr = readGenerationExpr(genExprSql)
+            applyColumnMetadata(genExpr, expectedCol)
           case None =>
             val useNullAsDefault = useNullAsDefaultForMissingColumn(actualExpectedCols, conf)
             val defaultExpr = if (fillDefaultValue) {
@@ -806,18 +820,6 @@ object TableOutputResolver extends SQLConfHelper with Logging {
     conf.useNullsForMissingDefaultColumnValues &&
       (conf.generatedColumnAllowNullableIngest ||
         !expectedCols.exists(c => GeneratedColumn.isGeneratedColumn(c.metadata)))
-  }
-
-  private def resolveGenerationExprReferences(
-      genExpr: Expression,
-      matched: Seq[NamedExpression],
-      conf: SQLConf): Expression = {
-    genExpr.transform {
-      case u: UnresolvedAttribute if u.nameParts.size == 1 =>
-        matched.collectFirst {
-          case alias: Alias if conf.resolver(alias.name, u.nameParts.head) => alias.child
-        }.getOrElse(u)
-    }
   }
 
   // For table insertions, capture the overflow errors and show proper message.

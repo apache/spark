@@ -48,7 +48,7 @@ import org.apache.spark.sql.catalyst.trees.{Origin, TreeNode}
 import org.apache.spark.sql.catalyst.util.{
   sideBySide, CharsetProvider, CharVarcharUtils, DateTimeUtils, FailFastMode, IntervalUtils, MapData
 }
-import org.apache.spark.sql.connector.catalog.{CatalogNotFoundException, Table, TableProvider}
+import org.apache.spark.sql.connector.catalog.{CatalogNotFoundException, CatalogPlugin, Identifier, Table, TableProvider}
 import org.apache.spark.sql.connector.catalog.CatalogV2Implicits._
 import org.apache.spark.sql.connector.expressions.Transform
 import org.apache.spark.sql.internal.SQLConf
@@ -755,6 +755,19 @@ private[sql] object QueryExecutionErrors extends QueryErrorsBase with ExecutionE
       cause = null)
   }
 
+  def storageFilterCheckedColumnMissingError(
+      factoryClass: String,
+      numScanColumns: Int,
+      numColumns: Int): Throwable = {
+    new SparkException(
+      errorClass = "DATA_SOURCE_STORAGE_FILTER_CHECKED_COLUMN_MISSING",
+      messageParameters = Map(
+        "class" -> factoryClass,
+        "numScanColumns" -> numScanColumns.toString,
+        "numColumns" -> numColumns.toString),
+      cause = null)
+  }
+
   def dataPathNotSpecifiedError(): SparkIllegalArgumentException = {
     new SparkIllegalArgumentException("_LEGACY_ERROR_TEMP_2047")
   }
@@ -796,6 +809,66 @@ private[sql] object QueryExecutionErrors extends QueryErrorsBase with ExecutionE
       errorClass = "DATA_SOURCE_NOT_FOUND",
       messageParameters = Map("provider" -> provider),
       cause = error)
+  }
+
+  def nativeDataSourceError(
+      action: String, name: String, msg: String, cause: Throwable): SparkRuntimeException = {
+    new SparkRuntimeException(
+      errorClass = "NATIVE_DATA_SOURCE_ERROR",
+      messageParameters = Map("action" -> action, "name" -> name, "msg" -> msg),
+      cause = cause)
+  }
+
+  def invalidNativeDataSourcePackageError(
+      path: String,
+      subClass: String,
+      messageParameters: Map[String, String],
+      cause: Throwable = null): SparkRuntimeException = {
+    new SparkRuntimeException(
+      errorClass = s"INVALID_NATIVE_DATA_SOURCE_PACKAGE.$subClass",
+      messageParameters = Map("path" -> path) ++ messageParameters,
+      cause = cause)
+  }
+
+  def nativeDataSourcePackageNotFoundError(
+      fileName: String, checksum: String): SparkRuntimeException = {
+    new SparkRuntimeException(
+      errorClass = "NATIVE_DATA_SOURCE_PACKAGE_NOT_FOUND",
+      messageParameters = Map("fileName" -> fileName, "checksum" -> checksum))
+  }
+
+  def invalidNativeDataSourceLibraryError(
+      path: String,
+      subClass: String,
+      messageParameters: Map[String, String],
+      cause: Throwable = null): SparkRuntimeException = {
+    new SparkRuntimeException(
+      errorClass = s"INVALID_NATIVE_DATA_SOURCE_LIBRARY.$subClass",
+      messageParameters = Map("path" -> path) ++ messageParameters,
+      cause = cause)
+  }
+
+  def nativeDataSourceLibraryNotFoundError(
+      fileName: String, checksum: String, path: String): SparkRuntimeException = {
+    new SparkRuntimeException(
+      errorClass = "NATIVE_DATA_SOURCE_LIBRARY_NOT_FOUND",
+      messageParameters = Map("fileName" -> fileName, "checksum" -> checksum, "path" -> path))
+  }
+
+  def nativeDataSourceUnsupportedJavaVersionError(
+      required: Int, current: Int): SparkUnsupportedOperationException = {
+    new SparkUnsupportedOperationException(
+      errorClass = "NATIVE_DATA_SOURCE_UNSUPPORTED_JAVA_VERSION",
+      messageParameters = Map("required" -> required.toString, "current" -> current.toString))
+  }
+
+  def nativeDataSourceUnsupportedPlatformError(
+      platform: String, cause: Throwable): SparkUnsupportedOperationException = {
+    val e = new SparkUnsupportedOperationException(
+      errorClass = "NATIVE_DATA_SOURCE_UNSUPPORTED_PLATFORM",
+      messageParameters = Map("platform" -> platform, "reason" -> cause.toString))
+    e.initCause(cause)
+    e
   }
 
   def removedClassInSpark2Error(className: String, e: Throwable): SparkClassNotFoundException = {
@@ -943,6 +1016,21 @@ private[sql] object QueryExecutionErrors extends QueryErrorsBase with ExecutionE
       errorClass = "FAILED_READ_FILE.NO_HINT",
       messageParameters = Map("path" -> path),
       cause = e)
+  }
+
+  def decompressionCodecForArchiveUnsupportedError(
+      path: String): SparkUnsupportedOperationException = {
+    new SparkUnsupportedOperationException(
+      errorClass = "UNSUPPORTED_FEATURE.DECOMPRESSION_CODEC_FOR_ARCHIVE",
+      messageParameters = Map("option" -> toDSOption("decompression"), "path" -> path))
+  }
+
+  def decompressionCodecWithLegacyLineReaderError(): SparkUnsupportedOperationException = {
+    new SparkUnsupportedOperationException(
+      errorClass = "UNSUPPORTED_FEATURE.DECOMPRESSION_CODEC_WITH_LEGACY_LINE_READER",
+      messageParameters = Map(
+        "option" -> toDSOption("decompression"),
+        "config" -> toSQLConf(SQLConf.HADOOP_LINE_RECORD_READER_ENABLED.key)))
   }
 
   def cannotReadZipEntry(entry: String, path: String): SparkRuntimeException = {
@@ -1176,6 +1264,17 @@ private[sql] object QueryExecutionErrors extends QueryErrorsBase with ExecutionE
     new SparkUnsupportedOperationException(
       errorClass = "UNSUPPORTED_FEATURE.TABLE_OPERATION",
       messageParameters = Map("tableName" -> toSQLId(tableName), "operation" -> ddl))
+  }
+
+  def unsupportedTableOperationError(
+      catalog: CatalogPlugin,
+      ident: Identifier,
+      operation: String): SparkUnsupportedOperationException = {
+    new SparkUnsupportedOperationException(
+      errorClass = "UNSUPPORTED_FEATURE.TABLE_OPERATION",
+      messageParameters = Map(
+        "tableName" -> toSQLId((catalog.name +: ident.namespace.toSeq) :+ ident.name),
+        "operation" -> operation))
   }
 
   def executeBroadcastTimeoutError(timeout: Long, ex: Option[TimeoutException]): Throwable = {
@@ -1829,18 +1928,6 @@ private[sql] object QueryExecutionErrors extends QueryErrorsBase with ExecutionE
         "key" -> key))
   }
 
-  def unsupportedHiveMetastoreVersionForJavaError(
-      version: String,
-      requiredJavaVersion: Int,
-      currentJavaVersion: Int): SparkUnsupportedOperationException = {
-    new SparkUnsupportedOperationException(
-      errorClass = "UNSUPPORTED_HIVE_METASTORE_VERSION_FOR_JAVA",
-      messageParameters = Map(
-        "version" -> version,
-        "requiredJavaVersion" -> requiredJavaVersion.toString,
-        "currentJavaVersion" -> currentJavaVersion.toString))
-  }
-
   def loadHiveClientCausesNoClassDefFoundError(
       cnf: NoClassDefFoundError,
       execJars: Seq[URL],
@@ -2430,6 +2517,42 @@ private[sql] object QueryExecutionErrors extends QueryErrorsBase with ExecutionE
       cause = null)
   }
 
+  def streamingScanMissingColumnsError(source: Seq[String], columns: Seq[String]): Throwable = {
+    new SparkException(
+      errorClass = "STREAMING_SCAN_MISSING_COLUMNS",
+      messageParameters = Map(
+        "columns" -> columns.map(column => toSQLId(Seq(column))).mkString(", "),
+        "source" -> toSQLId(source),
+        "config" -> toSQLConf(SQLConf.STREAMING_V2_COLUMN_PRUNING_ENABLED.key)),
+      cause = null)
+  }
+
+  def streamingScanFiltersChangedError(
+      source: Seq[String],
+      filters: Seq[Expression],
+      cause: Throwable = null): Throwable = {
+    new SparkException(
+      errorClass = "STREAMING_SCAN_FILTERS_CHANGED",
+      messageParameters = Map(
+        "filters" -> filters.map(toSQLExpr).mkString(", "),
+        "source" -> toSQLId(source),
+        "config" -> toSQLConf(SQLConf.STREAMING_V2_FILTER_PUSHDOWN_ENABLED.key)),
+      cause = cause)
+  }
+
+  def streamingScanInvalidReadSchemaError(
+      source: Seq[String],
+      reason: String,
+      cause: Throwable = null): Throwable = {
+    new SparkException(
+      errorClass = "STREAMING_SCAN_INVALID_READ_SCHEMA",
+      messageParameters = Map(
+        "source" -> toSQLId(source),
+        "reason" -> reason,
+        "config" -> toSQLConf(SQLConf.STREAMING_V2_COLUMN_PRUNING_ENABLED.key)),
+      cause = cause)
+  }
+
   def cannotPurgeAsBreakInternalStateError(): SparkUnsupportedOperationException = {
     new SparkUnsupportedOperationException(errorClass = "_LEGACY_ERROR_TEMP_2260")
   }
@@ -2798,6 +2921,36 @@ private[sql] object QueryExecutionErrors extends QueryErrorsBase with ExecutionE
       messageParameters = Map(
         "operation" -> (s"add ${toSQLValue(amount, LongType)} $unit to " +
           s"${toSQLValue(DateTimeUtils.microsToInstant(micros), TimestampType)}")),
+      context = Array.empty,
+      summary = "")
+  }
+
+  def nextDayOverflowError(days: Int, dayOfWeek: String): SparkArithmeticException = {
+    new SparkArithmeticException(
+      errorClass = "DATETIME_OVERFLOW",
+      messageParameters = Map(
+        "operation" -> (s"find the next $dayOfWeek after " +
+          s"${toSQLValue(DateTimeUtils.daysToLocalDate(days), DateType)}")),
+      context = Array.empty,
+      summary = "")
+  }
+
+  def lastDayOverflowError(days: Int): SparkArithmeticException = {
+    new SparkArithmeticException(
+      errorClass = "DATETIME_OVERFLOW",
+      messageParameters = Map(
+        "operation" -> (s"find the last day of the month of " +
+          s"${toSQLValue(DateTimeUtils.daysToLocalDate(days), DateType)}")),
+      context = Array.empty,
+      summary = "")
+  }
+
+  def truncDateOverflowError(days: Int, unit: String): SparkArithmeticException = {
+    new SparkArithmeticException(
+      errorClass = "DATETIME_OVERFLOW",
+      messageParameters = Map(
+        "operation" -> (s"truncate ${toSQLValue(DateTimeUtils.daysToLocalDate(days), DateType)} " +
+          s"to $unit")),
       context = Array.empty,
       summary = "")
   }
@@ -3462,6 +3615,22 @@ private[sql] object QueryExecutionErrors extends QueryErrorsBase with ExecutionE
     )
   }
 
+  def storagePartitionJoinKeyTypeMismatchError(
+      transform: String,
+      columnType: DataType,
+      inputTypes: Seq[DataType],
+      key: Expression): Throwable = {
+    new SparkException(
+      errorClass = "STORAGE_PARTITION_JOIN_KEY_TYPE_MISMATCH",
+      messageParameters = Map(
+        "transform" -> transform,
+        "columnType" -> toSQLType(columnType),
+        "inputTypes" -> inputTypes.map(toSQLType).mkString("(", ", ", ")"),
+        "key" -> toSQLExpr(key),
+        "keyType" -> toSQLType(key.dataType)),
+      cause = null)
+  }
+
   def storagePartitionJoinIncompatibleReducedTypesError(
       leftReducers: Option[Seq[Option[KeyReducer]]],
       leftReducedDataTypes: Seq[DataType],
@@ -3690,5 +3859,26 @@ private[sql] object QueryExecutionErrors extends QueryErrorsBase with ExecutionE
       messageParameters = Map("operation" -> "compute BIN BY bucket boundaries"),
       context = Array.empty,
       summary = "")
+  }
+
+  def parseSqlAnalyzeRequiresSession(): SparkRuntimeException = {
+    new SparkRuntimeException(
+      errorClass = "PARSE_SQL_ANALYZE_REQUIRES_SESSION",
+      messageParameters = Map("functionName" -> toSQLId("parse_sql")))
+  }
+
+  def parseSqlAnalyzeUnsupportedScript(): SparkRuntimeException = {
+    new SparkRuntimeException(
+      errorClass = "PARSE_SQL_ANALYZE_UNSUPPORTED_SCRIPT",
+      messageParameters = Map("functionName" -> toSQLId("parse_sql")))
+  }
+
+  def invalidDataSourceExternalLookupError(
+      table: String,
+      errorSubClass: String,
+      messageParameters: Map[String, String] = Map.empty): Throwable = {
+    new SparkRuntimeException(
+      errorClass = s"DATA_SOURCE_INVALID_EXTERNAL_LOOKUP.$errorSubClass",
+      messageParameters = Map("table" -> toSQLId(table)) ++ messageParameters)
   }
 }

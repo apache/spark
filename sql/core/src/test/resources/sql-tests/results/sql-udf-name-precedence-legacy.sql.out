@@ -159,6 +159,23 @@ struct<outer_param_pure(42):int>
 
 
 -- !query
+CREATE OR REPLACE TEMPORARY FUNCTION derived_col_vs_paramless(u STRING)
+RETURNS STRING RETURN (SELECT current_user FROM (SELECT u AS current_user))
+-- !query schema
+struct<>
+-- !query output
+
+
+
+-- !query
+SELECT derived_col_vs_paramless('x')
+-- !query schema
+struct<derived_col_vs_paramless(x):string>
+-- !query output
+x
+
+
+-- !query
 DECLARE x = 999
 -- !query schema
 struct<>
@@ -297,6 +314,14 @@ struct<>
 
 -- !query
 DROP TEMPORARY FUNCTION outer_param_pure
+-- !query schema
+struct<>
+-- !query output
+
+
+
+-- !query
+DROP TEMPORARY FUNCTION derived_col_vs_paramless
 -- !query schema
 struct<>
 -- !query output
