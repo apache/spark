@@ -20,11 +20,11 @@ package org.apache.spark.sql.execution.datasources
 import org.apache.spark.sql.catalyst.catalog.BucketSpec
 import org.apache.spark.sql.catalyst.catalog.CatalogTypes.TablePartitionSpec
 import org.apache.spark.sql.catalyst.expressions.{Alias, Ascending, Attribute, AttributeMap, AttributeSet, BitwiseAnd, Empty2Null, Expression, HiveHash, Literal, NamedExpression, Pmod, SortOrder}
+import org.apache.spark.sql.catalyst.expressions.st.STExpressionUtils.isGeoSpatialType
 import org.apache.spark.sql.catalyst.optimizer.{EliminateSorts, FoldablePropagation}
 import org.apache.spark.sql.catalyst.plans.logical.{LogicalPlan, Project, Sort}
 import org.apache.spark.sql.catalyst.plans.physical.HashPartitioning
 import org.apache.spark.sql.catalyst.rules.Rule
-import org.apache.spark.sql.errors.QueryCompilationErrors
 import org.apache.spark.sql.execution.SparkPlan
 import org.apache.spark.sql.execution.command.DataWritingCommand
 import org.apache.spark.sql.internal.SQLConf
@@ -121,9 +121,13 @@ object V1WritesUtils {
       dataColumns: Seq[Attribute],
       options: Map[String, String]): Option[WriterBucketSpec] = {
     bucketSpec.map { spec =>
-      val bucketColumns = spec.bucketColumnNames.map(c => dataColumns.find(_.name == c).get)
-      bucketColumns.find(c => !BucketingUtils.canWriteBucketsOn(c.dataType)).foreach { c =>
-        throw QueryCompilationErrors.invalidBucketColumnDataTypeError(c.dataType)
+      val bucketColumns = spec.bucketColumnNames.map { name =>
+        val column = dataColumns.find(_.name == name).get
+        if (column.dataType.existsRecursively(isGeoSpatialType)) {
+          RejectGeoSpatialBucketValue(column)
+        } else {
+          column
+        }
       }
 
       if (options.getOrElse(BucketingUtils.optionForHiveCompatibleBucketWrite, "false") ==

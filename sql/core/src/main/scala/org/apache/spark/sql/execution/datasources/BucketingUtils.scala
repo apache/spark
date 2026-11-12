@@ -17,10 +17,13 @@
 
 package org.apache.spark.sql.execution.datasources
 
-import org.apache.spark.sql.catalyst.expressions.{Attribute, SpecificInternalRow, UnsafeProjection}
-import org.apache.spark.sql.catalyst.expressions.st.STExpressionUtils.isGeoSpatialType
+import org.apache.spark.sql.catalyst.InternalRow
+import org.apache.spark.sql.catalyst.expressions.{Attribute, Expression, SpecificInternalRow, UnaryExpression, UnsafeProjection}
+import org.apache.spark.sql.catalyst.expressions.codegen.CodegenFallback
 import org.apache.spark.sql.catalyst.plans.physical.HashPartitioning
-import org.apache.spark.sql.types.DataType
+import org.apache.spark.sql.catalyst.util.{ArrayData, MapData}
+import org.apache.spark.sql.errors.QueryExecutionErrors
+import org.apache.spark.sql.types.{ArrayType, DataType, GeographyType, GeometryType, MapType, StructType}
 import org.apache.spark.sql.util.SchemaUtils
 
 object BucketingUtils {
@@ -57,10 +60,53 @@ object BucketingUtils {
 
   def canBucketOn(dataType: DataType): Boolean = !SchemaUtils.hasNonUTF8BinaryCollation(dataType)
 
-  // The bucket id of a GEOMETRY or GEOGRAPHY value hashes the WKB it was created from, but
-  // Parquet stores the value as re-encoded little-endian WKB. The value read back can then
-  // hash to a different bucket than the file it is in.
-  def canWriteBucketsOn(dataType: DataType): Boolean = !dataType.existsRecursively(isGeoSpatialType)
-
   def bucketIdToString(id: Int): String = f"_$id%05d"
+}
+
+/**
+ * Returns the value of a bucket column, and fails the write on the first non-NULL GEOMETRY or
+ * GEOGRAPHY value in it, at the top level or nested. The bucket id of such a value hashes the WKB
+ * the value was created from, but Parquet stores the value as re-encoded little-endian WKB, so
+ * the value read back can hash to a different bucket than the file it is in. A NULL value hashes
+ * the same before and after the round trip, so it is written.
+ *
+ * TODO: Support bucketed writes of GEOMETRY and GEOGRAPHY values, with bucket ids computed from
+ * the bytes that the file format stores.
+ */
+case class RejectGeoSpatialBucketValue(child: Expression)
+  extends UnaryExpression with CodegenFallback {
+
+  override def dataType: DataType = child.dataType
+
+  override protected def nullSafeEval(input: Any): Any = {
+    if (containsGeoSpatialValue(input, dataType)) {
+      throw QueryExecutionErrors.invalidBucketColumnDataTypeError(dataType)
+    }
+    input
+  }
+
+  private def containsGeoSpatialValue(value: Any, dataType: DataType): Boolean =
+    value != null && (dataType match {
+      case _: GeometryType | _: GeographyType => true
+      case st: StructType =>
+        val row = value.asInstanceOf[InternalRow]
+        st.fields.indices.exists { i =>
+          containsGeoSpatialValue(row.get(i, st(i).dataType), st(i).dataType)
+        }
+      case ArrayType(elementType, _) =>
+        arrayContainsGeoSpatialValue(value.asInstanceOf[ArrayData], elementType)
+      case MapType(keyType, valueType, _) =>
+        val map = value.asInstanceOf[MapData]
+        arrayContainsGeoSpatialValue(map.keyArray(), keyType) ||
+          arrayContainsGeoSpatialValue(map.valueArray(), valueType)
+      case _ => false
+    })
+
+  private def arrayContainsGeoSpatialValue(array: ArrayData, elementType: DataType): Boolean =
+    (0 until array.numElements()).exists { i =>
+      containsGeoSpatialValue(array.get(i, elementType), elementType)
+    }
+
+  override protected def withNewChildInternal(newChild: Expression): RejectGeoSpatialBucketValue =
+    copy(child = newChild)
 }

@@ -232,50 +232,67 @@ class GeographyDataFrameSuite extends SharedSparkSession {
     }
   }
 
-  test("SPARK-61081: writes to a table bucketed by a Geography column fail") {
+  test("SPARK-61081: bucketed writes of non-NULL Geography values fail") {
     // POINT(1 2) as little-endian and as big-endian WKB. Parquet stores both as little-endian
     // WKB, so a bucket id computed from the big-endian bytes would not match the stored bytes.
     val littleEndian = "X'0101000000000000000000F03F0000000000000040'"
     val bigEndian = "X'00000000013FF00000000000004000000000000000'"
     val values = s"SELECT ST_GeogFromWKB($littleEndian) AS g " +
       s"UNION ALL SELECT ST_GeogFromWKB($bigEndian) AS g"
+    val nullValue = "ST_GeogFromWKB(CAST(NULL AS BINARY))"
     def checkBucketedWriteFails(write: => Any, dataType: String = "\"GEOGRAPHY(4326)\""): Unit = {
       checkError(
-        exception = intercept[AnalysisException](write),
+        exception = intercept[SparkRuntimeException](write),
         condition = "INVALID_BUCKET_COLUMN_DATA_TYPE",
         parameters = Map("type" -> dataType))
     }
 
-    withTable("t", "t_ctas", "t_df", "t_struct", "t_array", "t_other") {
-      // Creating the table still succeeds. Only writes to it fail.
+    withTable("t", "t_ctas", "t_df", "t_struct", "t_array", "t_map", "t_other") {
       sql("CREATE TABLE t (g GEOGRAPHY(4326)) USING parquet CLUSTERED BY (g) INTO 8 BUCKETS")
       Seq("true", "false").foreach { plannedWrite =>
         withSQLConf(SQLConf.PLANNED_WRITE_ENABLED.key -> plannedWrite) {
           checkBucketedWriteFails(sql(s"INSERT INTO t $values"))
-          // The check is on the column type, so a write of only NULL values fails too.
-          checkBucketedWriteFails(sql("INSERT INTO t SELECT ST_GeogFromWKB(CAST(NULL AS BINARY))"))
+          // A NULL value hashes to the same bucket before and after the Parquet round trip.
+          sql(s"INSERT INTO t SELECT $nullValue")
         }
       }
-      checkAnswer(spark.table("t"), Seq.empty)
+      checkAnswer(spark.table("t"), Seq(Row(null), Row(null)))
 
       checkBucketedWriteFails(
         sql(s"CREATE TABLE t_ctas USING parquet CLUSTERED BY (g) INTO 8 BUCKETS AS $values"))
-      checkBucketedWriteFails(sql("CREATE TABLE t_ctas USING parquet CLUSTERED BY (g) " +
-        s"INTO 8 BUCKETS AS SELECT * FROM ($values) WHERE false"))
       assert(!spark.catalog.tableExists("t_ctas"))
+      sql("CREATE TABLE t_ctas USING parquet CLUSTERED BY (g) " +
+        s"INTO 8 BUCKETS AS SELECT * FROM ($values) WHERE false")
+      checkAnswer(spark.table("t_ctas"), Seq.empty)
       checkBucketedWriteFails(sql(values).write.bucketBy(8, "g").saveAsTable("t_df"))
-      checkBucketedWriteFails(sql(values).limit(0).write.bucketBy(8, "g").saveAsTable("t_df"))
       assert(!spark.catalog.tableExists("t_df"))
+      sql(values).limit(0).write.bucketBy(8, "g").saveAsTable("t_df")
+      checkAnswer(spark.table("t_df"), Seq.empty)
 
       sql("CREATE TABLE t_struct (s STRUCT<g: GEOGRAPHY(4326)>) USING parquet " +
         "CLUSTERED BY (s) INTO 8 BUCKETS")
       checkBucketedWriteFails(
         sql(s"INSERT INTO t_struct SELECT named_struct('g', g) FROM ($values)"),
         "\"STRUCT<g: GEOGRAPHY(4326) NOT NULL>\"")
+      sql(s"INSERT INTO t_struct SELECT named_struct('g', $nullValue)")
+      checkAnswer(spark.table("t_struct"), Row(Row(null)))
       sql("CREATE TABLE t_array (a ARRAY<GEOGRAPHY(4326)>) USING parquet " +
         "CLUSTERED BY (a) INTO 8 BUCKETS")
       checkBucketedWriteFails(
         sql(s"INSERT INTO t_array SELECT array(g) FROM ($values)"), "\"ARRAY<GEOGRAPHY(4326)>\"")
+      sql(s"INSERT INTO t_array SELECT array($nullValue)")
+      checkAnswer(spark.table("t_array"), Row(Seq(null)))
+      // With planned writes on, the sort that V1Writes adds for a MAP bucket column does not
+      // resolve, because the hash expression does not accept maps.
+      withSQLConf(SQLConf.PLANNED_WRITE_ENABLED.key -> "false") {
+        sql("CREATE TABLE t_map (m MAP<INT, GEOGRAPHY(4326)>) USING parquet " +
+          "CLUSTERED BY (m) INTO 8 BUCKETS")
+        checkBucketedWriteFails(
+          sql(s"INSERT INTO t_map SELECT map(1, g) FROM ($values)"),
+          "\"MAP<INT, GEOGRAPHY(4326)>\"")
+        sql(s"INSERT INTO t_map SELECT map(1, $nullValue)")
+        checkAnswer(spark.table("t_map"), Row(Map(1 -> null)))
+      }
 
       // Only bucket columns are checked.
       sql("CREATE TABLE t_other (id INT, g GEOGRAPHY(4326)) USING parquet " +
