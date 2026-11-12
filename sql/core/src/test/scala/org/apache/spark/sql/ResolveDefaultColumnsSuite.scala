@@ -425,6 +425,57 @@ class ResolveDefaultColumnsSuite extends SharedSparkSession {
     }
   }
 
+  for {
+    ddl <- Seq("CREATE", "ALTER")
+    legacy <- Seq(false, true)
+  } {
+    test(s"CHAR late-folded existence defaults use write-side values: $ddl, legacy=$legacy") {
+      withSQLConf(
+        SQLConf.READ_SIDE_CHAR_PADDING.key -> "false",
+        SQLConf.LEGACY_CHAR_VARCHAR_AS_STRING.key -> legacy.toString,
+        SQLConf.PRESERVE_CHAR_VARCHAR_TYPE_INFO.key -> "false",
+        SQLConf.CHAR_VARCHAR_STANDARD_SEMANTICS.key -> "false") {
+        val currentUser = sql("SELECT current_user(), length(current_user())").head()
+        val user = currentUser.getString(0)
+        val userLength = currentUser.getInt(1)
+        assert(userLength < 100)
+        val expectedUser = if (legacy) user else user + " " * (100 - userLength)
+        val expectedLength = if (legacy) userLength else 100
+        withTable("t") {
+          if (ddl == "CREATE") {
+            sql("CREATE TABLE t(id INT, region CHAR(100) DEFAULT current_user()) USING parquet")
+          } else {
+            sql("CREATE TABLE t(id INT) USING parquet")
+            sql("INSERT INTO t VALUES (1)")
+            sql("ALTER TABLE t ADD COLUMNS (region CHAR(100) DEFAULT current_user())")
+          }
+          sql("INSERT INTO t (id) VALUES (2)")
+          val ids = if (ddl == "ALTER") Seq(1, 2) else Seq(2)
+          val query = "SELECT id, region, length(region) FROM t"
+          val expectedRows = ids.map(Row(_, expectedUser, expectedLength))
+          checkAnswer(sql(query), expectedRows)
+          checkAnswer(sql("SELECT count(DISTINCT region) FROM t"), Row(1L))
+          checkAnswer(sql("SELECT region, count(*) FROM t GROUP BY region"),
+            Row(expectedUser, ids.size.toLong))
+
+          val field = spark.table("t").schema("region")
+          assert(field.getCurrentDefaultValue().contains("current_user()"))
+          val existenceSql = field.getExistenceDefaultValue().get
+          checkAnswer(sql(s"SELECT $existenceSql, length($existenceSql)"),
+            Row(expectedUser, expectedLength))
+
+          sql("ALTER TABLE t ALTER COLUMN region SET DEFAULT 'EU'")
+          val updatedField = spark.table("t").schema("region")
+          assert(updatedField.getCurrentDefaultValue().contains("'EU'"))
+          assert(updatedField.getExistenceDefaultValue().contains(existenceSql))
+          sql("INSERT INTO t (id) VALUES (3)")
+          val newDefault = if (legacy) "EU" else "EU" + " " * 98
+          checkAnswer(sql(query), expectedRows :+ Row(3, newDefault, if (legacy) 2 else 100))
+        }
+      }
+    }
+  }
+
   test("SPARK-57187: foldable default exceeding CHAR/VARCHAR length fails at DDL time") {
     // Foldable expressions are still validated eagerly at DDL time (existing behavior)
     Seq("CHAR", "VARCHAR").foreach { typeName =>

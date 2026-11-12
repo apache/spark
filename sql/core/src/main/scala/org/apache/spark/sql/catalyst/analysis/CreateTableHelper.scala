@@ -67,7 +67,7 @@ private[sql] object CreateTableHelper extends SQLConfHelper with Logging with Al
         val fields = c.columns.map { col =>
           col.defaultValue.map { defaultValue =>
             val existsDefaultSQL = constantFoldDefaultValue(
-              defaultValue, col.name, col.dataType, "CREATE TABLE")
+              defaultValue, col.name, col.dataType, "CREATE TABLE", forExistenceDefault = true)
             // toV1Column already sets CURRENT_DEFAULT, so just update EXISTS_DEFAULT
             val field = col.toV1Column
             val newMetadata = new MetadataBuilder().withMetadata(field.metadata)
@@ -294,7 +294,8 @@ private[sql] object CreateTableHelper extends SQLConfHelper with Logging with Al
       defaultValue: DefaultValueExpression,
       colName: String,
       colType: DataType,
-      statementType: String): String = {
+      statementType: String,
+      forExistenceDefault: Boolean = false): String = {
     validateDefaultValueExpr(defaultValue, statementType, colName, Some(colType))
     val fakePlan = Project(Seq(Alias(defaultValue.child, colName)()), OneRowRelation())
     val optimizedPlan = ConstantFolding(DefaultColumnOptimizer.FinishAnalysis(fakePlan))
@@ -305,7 +306,12 @@ private[sql] object CreateTableHelper extends SQLConfHelper with Logging with Al
       throw QueryCompilationErrors.defaultValueNotConstantError(statementType, colName,
         defaultValue.originalSQL)
     }
-    constantFolded.sql
+    if (forExistenceDefault) {
+      DefaultCols.normalizeExistenceDefaultValue(
+        constantFolded, colType, defaultValue.child.foldable).sql
+    } else {
+      constantFolded.sql
+    }
   }
 
   /** Checks partitioning and bucketing when a V1 CREATE TABLE has no schema. */

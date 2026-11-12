@@ -24,12 +24,13 @@ import org.apache.spark.sql.catalyst.parser.ParserInterface
 import org.apache.spark.sql.catalyst.trees.TreePattern.{ANALYSIS_AWARE_EXPRESSION, TreePattern}
 import org.apache.spark.sql.catalyst.util.{CharVarcharUtils, GeneratedColumn, IdentityColumn, V2ExpressionBuilder}
 import org.apache.spark.sql.catalyst.util.FieldMetadataUtils.FIELD_ID_METADATA_KEY
-import org.apache.spark.sql.catalyst.util.ResolveDefaultColumns.validateDefaultValueExpr
+import org.apache.spark.sql.catalyst.util.ResolveDefaultColumns.{normalizeExistenceDefaultValue, validateDefaultValueExpr}
 import org.apache.spark.sql.catalyst.util.ResolveDefaultColumnsUtils.{CURRENT_DEFAULT_COLUMN_METADATA_KEY, EXISTS_DEFAULT_COLUMN_METADATA_KEY}
 import org.apache.spark.sql.connector.catalog.{Column => V2Column, ColumnDefaultValue, DefaultValue, IdentityColumnSpec}
 import org.apache.spark.sql.connector.catalog.CatalogV2Implicits.MultipartIdentifierHelper
 import org.apache.spark.sql.connector.expressions.LiteralValue
 import org.apache.spark.sql.errors.QueryCompilationErrors
+import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.internal.connector.ColumnImpl
 import org.apache.spark.sql.types.{DataType, Metadata, MetadataBuilder, StructField}
 import org.apache.spark.sql.util.SchemaUtils
@@ -96,7 +97,8 @@ case class ColumnDefinition(
       metadataBuilder.putString("comment", c)
     }
     defaultValue.foreach { default =>
-      if (CharVarcharUtils.hasCharVarchar(dataType)) {
+      if (CharVarcharUtils.hasCharVarchar(dataType) &&
+          CharVarcharUtils.shouldApplyWriteSideLengthCheck(SQLConf.get)) {
         // The assigned child can contain padding/truncation that depends on the DDL's SQLConf.
         // Reanalyze the original current default under the insertion session's settings.
         metadataBuilder.putString(CURRENT_DEFAULT_COLUMN_METADATA_KEY, default.originalSQL)
@@ -105,6 +107,9 @@ case class ColumnDefinition(
           CURRENT_DEFAULT_COLUMN_METADATA_KEY, default.originalSQL, Some(default.child))
       }
       val existsSQL = default.child match {
+        case l: Literal if default.analyzedChild.isDefined =>
+          normalizeExistenceDefaultValue(
+            l, dataType, default.analyzedChild.getOrElse(default.child).foldable).sql
         case l: Literal => l.sql
         case _ => default.originalSQL
       }
@@ -289,14 +294,16 @@ case class DefaultValueExpression(
       statement: String,
       colName: String,
       columnType: DataType): ColumnDefaultValue = child match {
-    case Literal(value, dataType) =>
+    case literal: Literal =>
       // Only the existence value may freeze the definition session's CHAR/VARCHAR assignment.
       val currentDefault = if (CharVarcharUtils.hasCharVarchar(columnType)) {
         None
       } else {
         analyzedChild.flatMap(new V2ExpressionBuilder(_).build())
       }
-      val existsDefault = LiteralValue(value, dataType)
+      val assigned = normalizeExistenceDefaultValue(
+        literal, columnType, analyzedChild.getOrElse(child).foldable).asInstanceOf[Literal]
+      val existsDefault = LiteralValue(assigned.value, assigned.dataType)
       new ColumnDefaultValue(originalSQL, currentDefault.orNull, existsDefault)
     case _ =>
       throw QueryCompilationErrors.defaultValueNotConstantError(statement, colName, originalSQL)

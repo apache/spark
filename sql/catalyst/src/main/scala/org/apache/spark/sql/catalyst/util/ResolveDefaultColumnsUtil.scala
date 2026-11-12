@@ -21,7 +21,7 @@ import scala.collection.mutable.ArrayBuffer
 import scala.util.{Failure, Success, Try}
 import scala.util.control.NonFatal
 
-import org.apache.spark.{SparkException, SparkUnsupportedOperationException}
+import org.apache.spark.{SparkException, SparkRuntimeException, SparkUnsupportedOperationException}
 import org.apache.spark.internal.Logging
 import org.apache.spark.internal.LogKeys._
 import org.apache.spark.sql.AnalysisException
@@ -446,6 +446,28 @@ object ResolveDefaultColumns extends QueryErrorsBase
       Literal(checked, supplanted)
     } else {
       ret
+    }
+  }
+
+  /** Applies CHAR/VARCHAR assignment to a frozen existence value after FinishAnalysis. */
+  def normalizeExistenceDefaultValue(
+      expression: Expression,
+      dataType: DataType,
+      originallyFoldable: Boolean): Expression = {
+    if (CharVarcharUtils.hasCharVarchar(dataType) &&
+        CharVarcharUtils.shouldApplyWriteSideLengthCheck(conf) && expression.foldable) {
+      try {
+        val checked = CharVarcharUtils.stringLengthCheck(expression, dataType).eval(EmptyRow)
+        Literal(checked, CharVarcharUtils.replaceCharVarcharWithString(dataType))
+      } catch {
+        case e: SparkRuntimeException
+            if !originallyFoldable && e.getCondition == "EXCEED_LIMIT_LENGTH" =>
+          // SPARK-57187 defers oversized nonfoldable defaults' length errors until INSERT.
+          // Preserve that timing while assigning valid values frozen by FinishAnalysis.
+          expression
+      }
+    } else {
+      expression
     }
   }
 
