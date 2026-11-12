@@ -32,8 +32,10 @@ import org.apache.spark.{SparkConf, SparkException, SparkUnsupportedOperationExc
 import org.apache.spark.sql.{DataFrame, QueryTest, Row}
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.{AttributeReference, GenericInternalRow}
+import org.apache.spark.sql.catalyst.util.STUtils
 import org.apache.spark.sql.columnar.CachedBatch
 import org.apache.spark.sql.execution.arrow.ArrowWriter
+import org.apache.spark.sql.execution.vectorized.OnHeapColumnVector
 import org.apache.spark.sql.internal.{SQLConf, StaticSQLConf}
 import org.apache.spark.sql.test.{ExamplePoint, ExamplePointUDT, SharedSparkSession}
 import org.apache.spark.sql.types._
@@ -2639,6 +2641,35 @@ class ArrowCachedBatchSerializerSuite extends QueryTest with SharedSparkSession 
           }
         }
       }
+    }
+  }
+
+  test("SPARK-61081: geometry and geography from non-Arrow columnar input keep their WKB bytes") {
+    // POINT(1 2) as big-endian WKB, which the cache must not re-encode as little-endian WKB.
+    val bigEndian = "00000000013FF00000000000004000000000000000"
+      .grouped(2).map(Integer.parseInt(_, 16).toByte).toArray
+    val conf = spark.sessionState.conf
+    val ser = new ArrowCachedBatchSerializer
+    Seq[(DataType, Array[Byte])](
+      (GeometryType(4326), STUtils.stGeomFromWKB(bigEndian, 4326).getBytes),
+      (GeographyType(4326), STUtils.stGeogFromWKB(bigEndian, 4326).getBytes)).foreach {
+      case (dt, physical) =>
+        val schema = Seq(AttributeReference("g", dt, nullable = true)())
+        val batchRdd = spark.sparkContext.parallelize(Seq(0), 1).mapPartitions { _ =>
+          val vector = new OnHeapColumnVector(1, dt)
+          vector.putByteArray(0, physical)
+          Iterator(new ColumnarBatch(Array[ColumnVector](vector), 1))
+        }
+        val cached = ser.convertColumnarBatchToCachedBatch(
+          batchRdd, schema, StorageLevel.MEMORY_ONLY, conf)
+        cached.persist()
+        try {
+          val values = ser.convertCachedBatchToInternalRow(cached, schema, schema, conf)
+            .map(_.getBinaryView(0).getBytes.clone()).collect()
+          assert(values.length == 1 && values.head.sameElements(physical), dt.toString)
+        } finally {
+          cached.unpersist()
+        }
     }
   }
 

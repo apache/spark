@@ -44,17 +44,10 @@ object ArrowWriter {
     create(root)
   }
 
-  def create(root: VectorSchemaRoot): ArrowWriter = create(root, keepGeoSpatialBytes = false)
-
-  /**
-   * With `keepGeoSpatialBytes`, GEOMETRY and GEOGRAPHY values keep the WKB they were created from,
-   * instead of the little-endian WKB written for other consumers. Values read back then have the
-   * same bytes, and so the same hash, as the values written.
-   */
-  def create(root: VectorSchemaRoot, keepGeoSpatialBytes: Boolean): ArrowWriter = {
+  def create(root: VectorSchemaRoot): ArrowWriter = {
     val children = root.getFieldVectors().asScala.map { vector =>
       vector.allocateNew()
-      createFieldWriter(vector, keepGeoSpatialBytes)
+      createFieldWriter(vector)
     }
     new ArrowWriter(root, children.toArray)
   }
@@ -76,19 +69,15 @@ object ArrowWriter {
     nanos
   }
 
-  private[sql] def createFieldWriter(vector: ValueVector): ArrowFieldWriter =
-    createFieldWriter(vector, keepGeoSpatialBytes = false)
-
-  private def createFieldWriter(
-      vector: ValueVector, keepGeoSpatialBytes: Boolean): ArrowFieldWriter = {
+  private[sql] def createFieldWriter(vector: ValueVector): ArrowFieldWriter = {
     val field = vector.getField()
     val dt = ArrowUtils.fromArrowField(field)
     TypeOps(dt).flatMap(_.createArrowFieldWriter(vector))
-      .getOrElse(createFieldWriterDefault(dt, vector, keepGeoSpatialBytes))
+      .getOrElse(createFieldWriterDefault(dt, vector))
   }
 
   private def createFieldWriterDefault(
-      dt: DataType, vector: ValueVector, keepGeoSpatialBytes: Boolean): ArrowFieldWriter = {
+      dt: DataType, vector: ValueVector): ArrowFieldWriter = {
     (dt, vector) match {
       case (BooleanType, vector: BitVector) => new BooleanWriter(vector)
       case (ByteType, vector: TinyIntVector) => new ByteWriter(vector)
@@ -107,18 +96,16 @@ object ArrowWriter {
       case (TimestampType, vector: TimeStampMicroTZVector) => new TimestampWriter(vector)
       case (TimestampNTZType, vector: TimeStampMicroVector) => new TimestampNTZWriter(vector)
       case (ArrayType(_, _), vector: ListVector) =>
-        val elementVector = createFieldWriter(vector.getDataVector(), keepGeoSpatialBytes)
+        val elementVector = createFieldWriter(vector.getDataVector())
         new ArrayWriter(vector, elementVector)
       case (MapType(_, _, _), vector: MapVector) =>
         val structVector = vector.getDataVector.asInstanceOf[StructVector]
-        val keyWriter =
-          createFieldWriter(structVector.getChild(MapVector.KEY_NAME), keepGeoSpatialBytes)
-        val valueWriter =
-          createFieldWriter(structVector.getChild(MapVector.VALUE_NAME), keepGeoSpatialBytes)
+        val keyWriter = createFieldWriter(structVector.getChild(MapVector.KEY_NAME))
+        val valueWriter = createFieldWriter(structVector.getChild(MapVector.VALUE_NAME))
         new MapWriter(vector, structVector, keyWriter, valueWriter)
       case (StructType(_), vector: StructVector) =>
         val children = (0 until vector.size()).map { ordinal =>
-          createFieldWriter(vector.getChildByOrdinal(ordinal), keepGeoSpatialBytes)
+          createFieldWriter(vector.getChildByOrdinal(ordinal))
         }
         new StructWriter(vector, children.toArray)
       case (NullType, vector: NullVector) => new NullWriter(vector)
@@ -130,7 +117,7 @@ object ArrowWriter {
       // losslessInternalTypes = true).
       case (CalendarIntervalType, vector: StructVector) =>
         val children = (0 until vector.size()).map { ordinal =>
-          createFieldWriter(vector.getChildByOrdinal(ordinal), keepGeoSpatialBytes)
+          createFieldWriter(vector.getChildByOrdinal(ordinal))
         }
         new CalendarIntervalStructWriter(vector, children.toArray)
       // Lossless struct representation of nanosecond timestamps (ArrowUtils.toArrowField with
@@ -138,29 +125,31 @@ object ArrowWriter {
       // the TypeOps hook; only the struct-backed shape reaches this default matching.
       case (_: TimestampNTZNanosType, vector: StructVector) =>
         val children = (0 until vector.size()).map { ordinal =>
-          createFieldWriter(vector.getChildByOrdinal(ordinal), keepGeoSpatialBytes)
+          createFieldWriter(vector.getChildByOrdinal(ordinal))
         }
         new TimestampNTZNanosStructWriter(vector, children.toArray)
       case (_: TimestampLTZNanosType, vector: StructVector) =>
         val children = (0 until vector.size()).map { ordinal =>
-          createFieldWriter(vector.getChildByOrdinal(ordinal), keepGeoSpatialBytes)
+          createFieldWriter(vector.getChildByOrdinal(ordinal))
         }
         new TimestampLTZNanosStructWriter(vector, children.toArray)
       case (VariantType, vector: StructVector) =>
         val children = (0 until vector.size()).map { ordinal =>
-          createFieldWriter(vector.getChildByOrdinal(ordinal), keepGeoSpatialBytes)
+          createFieldWriter(vector.getChildByOrdinal(ordinal))
         }
         new StructWriter(vector, children.toArray)
       case (dt: GeometryType, vector: StructVector) =>
         val children = (0 until vector.size()).map { ordinal =>
-          createFieldWriter(vector.getChildByOrdinal(ordinal), keepGeoSpatialBytes)
+          createFieldWriter(vector.getChildByOrdinal(ordinal))
         }
-        new GeometryWriter(dt, vector, children.toArray, keepGeoSpatialBytes)
+        new GeometryWriter(
+          dt, vector, children.toArray, ArrowUtils.keepsGeoWkbAsCreated(vector.getField))
       case (dt: GeographyType, vector: StructVector) =>
         val children = (0 until vector.size()).map { ordinal =>
-          createFieldWriter(vector.getChildByOrdinal(ordinal), keepGeoSpatialBytes)
+          createFieldWriter(vector.getChildByOrdinal(ordinal))
         }
-        new GeographyWriter(dt, vector, children.toArray, keepGeoSpatialBytes)
+        new GeographyWriter(
+          dt, vector, children.toArray, ArrowUtils.keepsGeoWkbAsCreated(vector.getField))
       // The Arrow view types are readable through ArrowColumnVector but have no field writers.
       // Their Spark types resolve to the non-view vector cases above, so without this case they
       // would fall through to UNSUPPORTED_DATATYPE naming a fully supported Spark type; report
@@ -547,18 +536,20 @@ private[arrow] class StructWriter(
   }
 }
 
+// Writes the SRID and the WKB of each value. With `keepWkbAsCreated`, the WKB is copied as the
+// value was created; otherwise it is written as little-endian WKB.
 private[arrow] class GeographyWriter(
     dt: GeographyType,
     valueVector: StructVector,
     children: Array[ArrowFieldWriter],
-    keepBytes: Boolean) extends StructWriter(valueVector, children) {
+    keepWkbAsCreated: Boolean) extends StructWriter(valueVector, children) {
 
   override def setValue(input: SpecializedGetters, ordinal: Int): Unit = {
     valueVector.setIndexDefined(count)
 
     val value = input.getBinaryView(ordinal)
-    val row = if (keepBytes) {
-      InternalRow(STUtils.stGeogSrid(value), STUtils.wkbAsCreated(value))
+    val row = if (keepWkbAsCreated) {
+      InternalRow(STUtils.geoSrid(value), STUtils.geoWkbAsCreated(value))
     } else {
       val geog = STUtils.deserializeGeog(value, dt)
       InternalRow(geog.getSrid, geog.getBytes)
@@ -568,18 +559,20 @@ private[arrow] class GeographyWriter(
   }
 }
 
+// Writes the SRID and the WKB of each value. With `keepWkbAsCreated`, the WKB is copied as the
+// value was created; otherwise it is written as little-endian WKB.
 private[arrow] class GeometryWriter(
     dt: GeometryType,
     valueVector: StructVector,
     children: Array[ArrowFieldWriter],
-    keepBytes: Boolean) extends StructWriter(valueVector, children) {
+    keepWkbAsCreated: Boolean) extends StructWriter(valueVector, children) {
 
   override def setValue(input: SpecializedGetters, ordinal: Int): Unit = {
     valueVector.setIndexDefined(count)
 
     val value = input.getBinaryView(ordinal)
-    val row = if (keepBytes) {
-      InternalRow(STUtils.stGeomSrid(value), STUtils.wkbAsCreated(value))
+    val row = if (keepWkbAsCreated) {
+      InternalRow(STUtils.geoSrid(value), STUtils.geoWkbAsCreated(value))
     } else {
       val geom = STUtils.deserializeGeom(value, dt)
       InternalRow(geom.getSrid, geom.getBytes)

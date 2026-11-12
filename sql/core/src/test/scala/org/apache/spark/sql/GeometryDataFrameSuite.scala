@@ -277,7 +277,8 @@ class GeometryDataFrameSuite extends SharedSparkSession {
       sql(values).limit(0).write.bucketBy(8, "g").saveAsTable("t_df")
       checkAnswer(spark.table("t_df"), Seq.empty)
 
-      // In the nested cases, the non-NULL value follows a non-geo field or a NULL element.
+      // In the nested cases, the non-NULL value follows a non-geo field or a NULL element, or
+      // is a map key.
       sql("CREATE TABLE t_struct (s STRUCT<id: INT, g: GEOMETRY(4326)>) USING parquet " +
         "CLUSTERED BY (s) INTO 8 BUCKETS")
       checkBucketedWriteFails(

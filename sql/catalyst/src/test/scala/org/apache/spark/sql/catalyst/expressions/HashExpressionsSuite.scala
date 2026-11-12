@@ -985,18 +985,22 @@ class HashExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
   test("SPARK-61081: GEOMETRY and GEOGRAPHY hash their physical bytes") {
     val bytes = Array[Byte](1, 2, 3, 4, 5, 6, 7, 8, 9)
     // A view into the middle of a larger array, so a hash that ignores the view's offset or
-    // length does not match the expected value.
+    // length does not match the expected value. It is passed in the input row, which, unlike a
+    // literal, is not serialized into an array of its own.
     val padded = Array[Byte](-1, -1) ++ bytes ++ Array[Byte](-1)
-    val view = BinaryView.fromBytes(padded, 2, bytes.length)
+    val input = InternalRow(BinaryView.fromBytes(padded, 2, bytes.length))
     val offset = Platform.BYTE_ARRAY_OFFSET
     Seq(GeometryType(4326), GeographyType(4326)).foreach { dt =>
-      val lit = Literal(view, dt)
+      val ref = BoundReference(0, dt, nullable = false)
       // checkEvaluation runs both the interpreted and the codegen path.
       checkEvaluation(
-        Murmur3Hash(Seq(lit), 42), Murmur3_x86_32.hashUnsafeBytes(bytes, offset, bytes.length, 42))
+        Murmur3Hash(Seq(ref), 42),
+        Murmur3_x86_32.hashUnsafeBytes(bytes, offset, bytes.length, 42),
+        input)
       checkEvaluation(
-        XxHash64(Seq(lit), 42L), XXH64.hashUnsafeBytes(bytes, offset, bytes.length, 42L))
-      checkEvaluation(HiveHash(Seq(lit)), HiveHasher.hashUnsafeBytes(bytes, offset, bytes.length))
+        XxHash64(Seq(ref), 42L), XXH64.hashUnsafeBytes(bytes, offset, bytes.length, 42L), input)
+      checkEvaluation(
+        HiveHash(Seq(ref)), HiveHasher.hashUnsafeBytes(bytes, offset, bytes.length), input)
     }
   }
 
