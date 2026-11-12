@@ -69,7 +69,7 @@ object NameStreamingSources extends Rule[LogicalPlan] {
       .zipWithIndex.collect {
         case ((source, Unassigned), index) =>
           s"Leaf position $index - ${getSourceDescriptor(source)}"
-    }
+      }
     if (unnamedSourcesInfo.nonEmpty) {
       throw QueryCompilationErrors.unnamedStreamingSourcesWithEnforcementError(
         unnamedSourcesInfo.mkString("\n"))

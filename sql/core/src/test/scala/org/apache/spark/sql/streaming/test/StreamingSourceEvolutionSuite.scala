@@ -593,7 +593,8 @@ class StreamingSourceEvolutionSuite extends StreamTest {
 
   gridTest("positional checkpoint written under source names keeps running with those names")(
       for (version <- Seq(1, 2); sourceName <- Seq("src", "src-old")) yield (version, sourceName)) {
-    case (version, sourceName) =>
+    testCase =>
+    val (version, sourceName) = testCase
     withTable("legacy_named_source") {
       sql("CREATE TABLE legacy_named_source (id INT) USING parquet")
       sql("INSERT INTO legacy_named_source VALUES (1)")
@@ -1025,6 +1026,17 @@ class StreamingSourceEvolutionSuite extends StreamTest {
             }
         }
       }
+  }
+
+  gridTest("stream TVF naming fails with a user error")(Seq(false, true)) { enabled =>
+    withSQLConf(SQLConf.ENABLE_STREAMING_SOURCE_EVOLUTION.key -> enabled.toString) {
+      checkError(
+        exception = intercept[AnalysisException] {
+          sql("SELECT * FROM STREAM range(1) IDENTIFIED BY events")
+        },
+        condition = "STREAMING_QUERY_EVOLUTION_ERROR.UNSUPPORTED_SOURCE_NAMING",
+        parameters = Map("sourceName" -> "events", "sourceType" -> "Range"))
+    }
   }
 
   // ==============
