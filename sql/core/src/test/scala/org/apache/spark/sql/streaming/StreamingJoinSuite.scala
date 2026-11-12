@@ -2503,6 +2503,36 @@ abstract class StreamingLeftSemiJoinBase extends StreamingJoinSuite {
     }
   }
 
+  test("left semi join keeps a same-batch match bounded by another right column when both " +
+      "watermarks are equal") {
+    withSQLConf(SQLConf.STREAMING_NO_DATA_MICRO_BATCHES_ENABLED.key -> "false",
+        SQLConf.STATEFUL_OPERATOR_ALLOW_MULTIPLE.key -> "false") {
+      val leftInput = MemoryStream[(Int, Int, Int)]
+      val rightInput = MemoryStream[(Int, Int, Int)]
+      val left = leftInput.toDF()
+        .select($"_1".as("leftKey"), timestamp_seconds($"_2").as("leftTime"))
+        .withWatermark("leftTime", "0 seconds")
+      val right = rightInput.toDF()
+        .select($"_1".as("rightKey"), timestamp_seconds($"_2").as("rightTime"),
+          timestamp_seconds($"_3").as("rightExpiry"))
+        .withWatermark("rightTime", "0 seconds")
+      val joined = left.join(right, expr("leftKey = rightKey AND " +
+        "rightExpiry >= leftTime + INTERVAL 30 SECONDS AND " +
+        "leftTime >= rightTime - INTERVAL 1 HOUR"), "left_semi")
+        .select($"leftKey", $"leftTime".cast("int"))
+
+      testStream(joined)(
+        MultiAddData(leftInput, (7, 100, 0))(rightInput, (8, 100, 100)),
+        CheckNewAnswer(),
+        // Both watermarks are 100 seconds, and the right cutoff is 130 seconds less 1 ms. The
+        // right row passes late filtering but is at or below the cutoff on rightTime, and the
+        // left row of the same batch must still find it. The output stays the same when
+        // SPARK-61344 applies the cutoff to rightExpiry and the row is no longer evicted.
+        MultiAddData(leftInput, (1, 120, 0))(rightInput, (1, 110, 1000)),
+        CheckNewAnswer((1, 120)))
+    }
+  }
+
   private def leftSemiJoin(
       condition: String,
       leftWatermark: Boolean = true,
@@ -2525,41 +2555,46 @@ abstract class StreamingLeftSemiJoinBase extends StreamingJoinSuite {
   // An exact cutoff at the late-events watermark shows that no left row passing late filtering
   // can match an evicted right row at or below it, so such a row is not stored, although the
   // join otherwise stores the right rows a batch evicts.
-  private val minuteToHour =
-    "rightTime BETWEEN leftTime + INTERVAL 1 MINUTE AND leftTime + INTERVAL 1 HOUR"
+  // The same bound with the right event time first, and with the left event time first.
+  private val minuteToHourBounds = Seq(
+    "" -> "rightTime BETWEEN leftTime + INTERVAL 1 MINUTE AND leftTime + INTERVAL 1 HOUR",
+    ", left-first bound" ->
+      "leftTime + INTERVAL 1 MINUTE <= rightTime AND leftTime + INTERVAL 1 HOUR >= rightTime")
 
-  test("left semi join skips evicted right rows below an exact cutoff when both " +
-      "watermarks are equal") {
-    withSQLConf(SQLConf.STREAMING_NO_DATA_MICRO_BATCHES_ENABLED.key -> "false",
-        SQLConf.STATEFUL_OPERATOR_ALLOW_MULTIPLE.key -> "false") {
-      val (leftInput, rightInput, joined) = leftSemiJoin(minuteToHour)
-      testStream(joined)(
-        MultiAddData(leftInput, (1, 100))(rightInput, (9, 100)),
-        CheckNewAnswer(),
-        assertNumStateRows(Seq(2L), Seq(2L), Seq(0L), Some(Seq(0L))),
-        // Both watermarks are 100 seconds, so the right cutoff is 160 seconds less 1 ms. A left
-        // row matching (2, 130) needs a time of at most 70 seconds, which is late.
-        AddData(rightInput, (2, 130)),
-        CheckNewAnswer(),
-        assertNumStateRows(Seq(1L), Seq(0L), Seq(0L), Some(Seq(1L))))
+  for ((orientation, minuteToHour) <- minuteToHourBounds) {
+    test("left semi join skips evicted right rows below an exact cutoff when both " +
+        s"watermarks are equal$orientation") {
+      withSQLConf(SQLConf.STREAMING_NO_DATA_MICRO_BATCHES_ENABLED.key -> "false",
+          SQLConf.STATEFUL_OPERATOR_ALLOW_MULTIPLE.key -> "false") {
+        val (leftInput, rightInput, joined) = leftSemiJoin(minuteToHour)
+        testStream(joined)(
+          MultiAddData(leftInput, (1, 100))(rightInput, (9, 100)),
+          CheckNewAnswer(),
+          assertNumStateRows(Seq(2L), Seq(2L), Seq(0L), Some(Seq(0L))),
+          // Both watermarks are 100 seconds, so the right cutoff is 160 seconds less 1 ms. A left
+          // row matching (2, 130) needs a time of at most 70 seconds, which is late.
+          AddData(rightInput, (2, 130)),
+          CheckNewAnswer(),
+          assertNumStateRows(Seq(1L), Seq(0L), Seq(0L), Some(Seq(1L))))
+      }
     }
-  }
 
-  test("left semi join skips evicted right rows below an exact value cutoff") {
-    withSQLConf(SQLConf.STREAMING_NO_DATA_MICRO_BATCHES_ENABLED.key -> "false") {
-      val (leftInput, rightInput, joined) = leftSemiJoin(minuteToHour)
-      testStream(joined)(
-        MultiAddData(leftInput, (7, 100))(rightInput, (8, 100)),
-        CheckNewAnswer(),
-        MultiAddData(leftInput, (7, 150))(rightInput, (8, 150)),
-        CheckNewAnswer(),
-        assertNumStateRows(total = 2, updated = 4),
-        // Late-events watermark 100 seconds, so the exact cutoff is 160 seconds less 1 ms, and
-        // eviction watermark 150 seconds. (2, 130) is below the exact cutoff and is not stored;
-        // (1, 190) is above it but evicted, so it is stored for the left row (1, 125).
-        MultiAddData(leftInput, (1, 125))(rightInput, (2, 130), (1, 190)),
-        CheckNewAnswer((1, 125)),
-        assertNumStateRows(total = 2, updated = 1))
+    test(s"left semi join skips evicted right rows below an exact value cutoff$orientation") {
+      withSQLConf(SQLConf.STREAMING_NO_DATA_MICRO_BATCHES_ENABLED.key -> "false") {
+        val (leftInput, rightInput, joined) = leftSemiJoin(minuteToHour)
+        testStream(joined)(
+          MultiAddData(leftInput, (7, 100))(rightInput, (8, 100)),
+          CheckNewAnswer(),
+          MultiAddData(leftInput, (7, 150))(rightInput, (8, 150)),
+          CheckNewAnswer(),
+          assertNumStateRows(total = 2, updated = 4),
+          // Late-events watermark 100 seconds, so the exact cutoff is 160 seconds less 1 ms, and
+          // eviction watermark 150 seconds. (2, 130) is below the exact cutoff and is not stored;
+          // (1, 190) is above it but evicted, so it is stored for the left row (1, 125).
+          MultiAddData(leftInput, (1, 125))(rightInput, (2, 130), (1, 190)),
+          CheckNewAnswer((1, 125)),
+          assertNumStateRows(total = 2, updated = 1))
+      }
     }
   }
 
@@ -2582,12 +2617,14 @@ abstract class StreamingLeftSemiJoinBase extends StreamingJoinSuite {
     }
   }
 
-  // Each condition bounds rightTime below by leftTime plus a whole day, in a different form.
+  // Each condition bounds rightTime below by leftTime plus a whole day, in a different form; the
+  // last one writes the left event time first.
   private val wholeDayBounds = Seq(
     "rightTime BETWEEN leftTime + INTERVAL 1 DAY AND leftTime + INTERVAL 2 DAYS",
     "rightTime - INTERVAL 1 DAY >= leftTime AND rightTime <= leftTime + INTERVAL 2 DAYS",
     "rightTime >= leftTime + CAST('1 day' AS INTERVAL) AND " +
-      "rightTime <= leftTime + INTERVAL 2 DAYS")
+      "rightTime <= leftTime + INTERVAL 2 DAYS",
+    "leftTime + INTERVAL 1 DAY <= rightTime AND leftTime + INTERVAL 2 DAYS >= rightTime")
 
   // America/Los_Angeles has daylight saving time, so a day there can be 23 or 25 hours, and UTC
   // has a fixed offset, so a day there is 24 hours, as the solver counts it.
