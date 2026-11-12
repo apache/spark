@@ -5839,7 +5839,7 @@ class DataFrameAggregateSuite extends SharedSparkSession
       Seq(Row(2, 3, "c|a|a|b"))
     )
 
-    // 2. Distinct listagg with ORDER BY separate integer column ensuring numeric ordering
+    // 2. Distinct listagg ordered by i itself; it aggregates CAST(i AS STRING), so order is numeric
     // Numerically 9 < 10 ("9,10"), whereas lexicographically "10" < "9" ("10,9").
     val df2 = Seq((9, 1), (10, 1), (2, 0)).toDF("i", "keep")
 
@@ -5848,6 +5848,71 @@ class DataFrameAggregateSuite extends SharedSparkSession
         "listagg(DISTINCT i, ',') WITHIN GROUP (ORDER BY i) FILTER (WHERE keep = 1)"
       ),
       Seq(Row("9,10"))
+    )
+  }
+
+  test("SPARK-60124: grouped distinct aggregates with constant WITHIN GROUP keys") {
+    val df = Seq((1, "x"), (1, "y"), (2, "z")).toDF("k", "v")
+
+    // 1. count(DISTINCT 'a') next to listagg(DISTINCT 'a', ',') WITHIN GROUP (ORDER BY 'a')
+    checkAnswer(
+      df.groupBy("k").agg(
+        expr("count(DISTINCT 'a')"),
+        expr("listagg(DISTINCT 'a', ',') WITHIN GROUP (ORDER BY 'a')")
+      ),
+      Seq(Row(1, 1, "a"), Row(2, 1, "a"))
+    )
+
+    // 2. Reversed order so either aggregate can supply the planner's single-distinct key
+    checkAnswer(
+      df.groupBy("k").agg(
+        expr("listagg(DISTINCT 'a', ',') WITHIN GROUP (ORDER BY 'a')"),
+        expr("count(DISTINCT 'a')")
+      ),
+      Seq(Row(1, "a", 1), Row(2, "a", 1))
+    )
+
+    // 3. Unordered listagg(DISTINCT 'a', ',') next to ordered listagg(DISTINCT 'a', ',')
+    checkAnswer(
+      df.groupBy("k").agg(
+        expr("listagg(DISTINCT 'a', ',')"),
+        expr("listagg(DISTINCT 'a', ',') WITHIN GROUP (ORDER BY 'a')")
+      ),
+      Seq(Row(1, "a", "a"), Row(2, "a", "a"))
+    )
+
+    // 4. Constant key originating from a subquery column projected as a literal
+    checkAnswer(
+      df.selectExpr("k", "'a' AS c").groupBy("k").agg(
+        expr("count(DISTINCT c)"),
+        expr("listagg(DISTINCT c, ',') WITHIN GROUP (ORDER BY c)")
+      ),
+      Seq(Row(1, 1, "a"), Row(2, 1, "a"))
+    )
+  }
+
+  test("SPARK-60124: global constant-only ordered DISTINCT LISTAGG on empty and non-empty input") {
+    val emptyDf = Seq.empty[(Int, String)].toDF("v", "s")
+    val nonEmptyDf = Seq((1, "a"), (2, "b"), (3, "c")).toDF("v", "s")
+
+    // On empty input: returns NULL alone and NULL with sum(v)
+    checkAnswer(
+      emptyDf.selectExpr("listagg(DISTINCT 'x', ',') WITHIN GROUP (ORDER BY 'x')"),
+      Seq(Row(null))
+    )
+    checkAnswer(
+      emptyDf.selectExpr("listagg(DISTINCT 'x', ',') WITHIN GROUP (ORDER BY 'x')", "sum(v)"),
+      Seq(Row(null, null))
+    )
+
+    // On non-empty input: returns 'x' alone and 'x' with sum(v) = 6
+    checkAnswer(
+      nonEmptyDf.selectExpr("listagg(DISTINCT 'x', ',') WITHIN GROUP (ORDER BY 'x')"),
+      Seq(Row("x"))
+    )
+    checkAnswer(
+      nonEmptyDf.selectExpr("listagg(DISTINCT 'x', ',') WITHIN GROUP (ORDER BY 'x')", "sum(v)"),
+      Seq(Row("x", 6))
     )
   }
 }

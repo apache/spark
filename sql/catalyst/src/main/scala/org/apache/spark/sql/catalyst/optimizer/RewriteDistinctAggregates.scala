@@ -219,6 +219,11 @@ object RewriteDistinctAggregates extends Rule[LogicalPlan] {
     // foldable, we need to rewrite the query, e.g. SELECT COUNT(DISTINCT 1). Without this case,
     // non-grouping aggregation queries with distinct aggregate expressions will be incorrectly
     // handled by the aggregation strategy, causing wrong results when working with empty tables.
+    // An ordered distinct aggregate whose arguments and WITHIN GROUP keys are all constants
+    // (e.g. listagg(DISTINCT 'x', ',') WITHIN GROUP (ORDER BY 'x')) counts as all-foldable here
+    // because evalChildren unwraps SortOrder before checking foldability. The rule must not rely
+    // on the planner keeping a SortOrder-wrapped constant as the single-distinct key, and the
+    // extra Expand cost for such queries is accepted to guarantee correct empty-table results.
     distinctAggs.exists(_.filter.isDefined) || (groupingExpressions.isEmpty &&
       distinctAggs.exists(e => evalChildren(e.aggregateFunction.children).forall(_.foldable)))
   }
