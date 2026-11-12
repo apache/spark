@@ -66,13 +66,15 @@ import org.apache.spark.sql.execution.SparkPlan
  *         nondeterministically (wrong results), a reader short of `numMaps` markers hangs, and
  *         the first to finish abandons the queue and discards the others' data. The fan-out check
  *         does not catch it (one consumer RDD, computed many times), nor the width-1 require.
- *       - `CollectLimitExec` / `CollectTailExec` / `TakeOrderedAndProjectExec`: each builds a
+ *       - `CollectLimitExec` / `CollectTailExec` / `TakeOrderedAndProjectExec`: each can build a
  *         hidden regular (`pipelined = false`) shuffle inside `doExecute` via
  *         `prepareShuffleDependency`, invisible to this plan walk. A flipped exchange below one of
  *         them would sit under that unmaterialized regular boundary and the job would hard-fail at
- *         submission (`classifyJobShuffleShape`'s pipelined-below-regular rejection). (`.collect()`
- *         on a limit takes `executeTake` and never hits `doExecute`; `.write` / `.toLocalIterator`
- *         / a non-root position do.)
+ *         submission (`classifyJobShuffleShape`'s pipelined-below-regular rejection). Their
+ *         `executeCollect` implementations bypass their own `doExecute`; a non-root position can
+ *         invoke it.
+ *         A non-root top-K can also build a hidden shuffle without a visible input exchange;
+ *         this plan walk does not detect that shape.
  *       - `AttachDistributedSequenceExec(cache = true)`: distributed-sequence index construction
  *         can persist or locally checkpoint its child RDD before its counting job. Keep child
  *         shuffles regular because persistence can skip channel readers.
@@ -129,11 +131,11 @@ object EnablePipelinedShuffle extends Rule[SparkPlan] {
   }
 
   /**
-   * True if any [[ShuffleExchangeExec]] in `plan` is read by an operator the channel transport
-   * cannot serve. The unsupported operators (see class doc for why each is fatal) are
+   * True if any visible [[ShuffleExchangeExec]] in `plan` is read by an operator the channel
+   * transport cannot serve. The unsupported operators (see class doc for why each is fatal) are
    * `CoalesceExec`, `CartesianProductExec`, and the limit operators `CollectLimitExec` /
    * `CollectTailExec` / `TakeOrderedAndProjectExec`, plus cached `AttachDistributedSequenceExec`.
-   * A shuffle above an unsupported operator with shuffle-free input does not disqualify the plan.
+   * Shuffles created inside an operator's execution are not inspected by this check.
    */
   private[exchange] def readsShuffleThroughUnsupportedConsumer(plan: SparkPlan): Boolean = {
     def visit(p: SparkPlan, unsupportedAncestor: Boolean): Boolean = {

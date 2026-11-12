@@ -75,14 +75,11 @@ class EnablePipelinedShuffleSuite extends SparkFunSuite {
     assert(readsShuffleThroughUnsupportedConsumer(plan))
   }
 
-  test("coalesce, cartesian product and limit consumers require a shuffle input") {
+  test("coalesce and cartesian product require a shuffle input") {
     def consumers(child: SparkPlan): Seq[SparkPlan] = Seq(
       CoalesceExec(1, child),
       CartesianProductExec(child, leaf, None),
-      CartesianProductExec(leaf, child, None),
-      CollectLimitExec(1, child),
-      CollectTailExec(1, child),
-      TakeOrderedAndProjectExec(1, Nil, Nil, child))
+      CartesianProductExec(leaf, child, None))
 
     for (plan <- consumers(leaf)) {
       withClue(s"${plan.nodeName} with no shuffle input: ") {
@@ -91,6 +88,19 @@ class EnablePipelinedShuffleSuite extends SparkFunSuite {
       }
     }
     for (plan <- consumers(shuffle(leaf))) {
+      withClue(s"${plan.nodeName} with a shuffle input: ") {
+        assert(readsShuffleThroughUnsupportedConsumer(plan))
+      }
+    }
+  }
+
+  test("limit consumers reject visible shuffle inputs") {
+    val child = shuffle(leaf)
+    val consumers = Seq(
+      CollectLimitExec(1, child),
+      CollectTailExec(1, child),
+      TakeOrderedAndProjectExec(1, Nil, Nil, child))
+    for (plan <- consumers) {
       withClue(s"${plan.nodeName} with a shuffle input: ") {
         assert(readsShuffleThroughUnsupportedConsumer(plan))
       }
