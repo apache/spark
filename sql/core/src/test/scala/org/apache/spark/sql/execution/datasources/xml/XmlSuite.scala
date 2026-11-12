@@ -3678,6 +3678,25 @@ class XmlSuite
     }
   }
 
+  test("SPARK-61087: XML reads truncate TIME values to the precision of the field") {
+    import java.time.LocalTime
+    val schema = new StructType()
+      .add("t6", TimeType(6)).add("_t3", TimeType(3)).add("t9", TimeType(9))
+    val expected =
+      Row(LocalTime.of(0, 0, 0, 123456000), LocalTime.of(12, 0, 0, 123000000),
+        LocalTime.of(12, 0, 0, 123456789))
+    def read(input: String, options: Map[String, String]): DataFrame =
+      spark.read.schema(schema).option("rowTag", "row").options(options).xml(Seq(input).toDS())
+    checkAnswer(
+      read("""<row t3="12:00:00.123456"><t6>00:00:00.1234567</t6>""" +
+        "<t9>12:00:00.123456789</t9></row>", Map.empty),
+      expected)
+    checkAnswer(
+      read("""<row t3="12:00:00.123456789"><t6>00:00:00.123456789</t6>""" +
+        "<t9>12:00:00.123456789</t9></row>", Map("timeFormat" -> "HH:mm:ss.SSSSSSSSS")),
+      expected)
+  }
+
   test("validate XML Options") {
     assert(XmlOptions.getAllOptions.size == 33)
     // Please add validation on any new XML options here

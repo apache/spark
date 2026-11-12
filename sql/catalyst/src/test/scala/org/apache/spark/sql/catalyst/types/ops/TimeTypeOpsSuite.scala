@@ -19,8 +19,9 @@ package org.apache.spark.sql.catalyst.types.ops
 
 import org.apache.spark.SparkFunSuite
 import org.apache.spark.sql.AnalysisException
-import org.apache.spark.sql.catalyst.{DeserializerBuildHelper, SerializerBuildHelper}
+import org.apache.spark.sql.catalyst.{CatalystTypeConverters, DeserializerBuildHelper, SerializerBuildHelper}
 import org.apache.spark.sql.catalyst.encoders.AgnosticEncoders.DEFAULT_LOCAL_TIME_ENCODER
+import org.apache.spark.sql.catalyst.expressions.Literal
 import org.apache.spark.sql.catalyst.plans.SQLHelper
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types.{ObjectType, TimeType}
@@ -72,5 +73,17 @@ class TimeTypeOpsSuite extends SparkFunSuite with SQLHelper {
       val deserializer = DeserializerBuildHelper.createDeserializer(DEFAULT_LOCAL_TIME_ENCODER)
       assert(deserializer.dataType === ObjectType(classOf[java.time.LocalTime]))
     }
+  }
+
+  test("SPARK-61087: LocalTime values are truncated to the precision of the TIME type") {
+    val localTime = java.time.LocalTime.of(12, 0, 0, 123456789)
+    val noon = 12L * 3600 * 1000 * 1000 * 1000
+    Seq(0 -> noon, 3 -> (noon + 123000000), 6 -> (noon + 123456000), 9 -> (noon + 123456789))
+      .foreach { case (p, expected) =>
+        val convert = CatalystTypeConverters.createToCatalystConverter(TimeType(p))
+        assert(convert(localTime) === expected)
+        assert(Literal.create(localTime, TimeType(p)).value === expected)
+      }
+    assert(Literal(localTime) === Literal(noon + 123456000, TimeType()))
   }
 }

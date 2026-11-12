@@ -2459,6 +2459,22 @@ class DatasetSuite extends SharedSparkSession
     assert(spark.range(1).map { _ => localTime }.head() === localTime)
   }
 
+  test("SPARK-61087: LocalTime values are truncated to the precision of the TIME type") {
+    val localTime = java.time.LocalTime.of(0, 0, 0, 123456789)
+    val micros = java.time.LocalTime.of(0, 0, 0, 123456000)
+    checkAnswer(
+      spark.range(1).select(lit(localTime) === expr("TIME'00:00:00.123456'")), Row(true))
+    assert(Seq(localTime).toDS().head() === micros)
+    assert(spark.range(1).map(_ => localTime).head() === micros)
+
+    val schema = new StructType()
+      .add("t3", TimeType(3)).add("t6", TimeType(6)).add("t9", TimeType(9))
+    val rows = java.util.Arrays.asList(Row(localTime, localTime, localTime))
+    checkAnswer(
+      spark.createDataFrame(rows, schema),
+      Row(java.time.LocalTime.of(0, 0, 0, 123000000), micros, localTime))
+  }
+
   test("SPARK-60346: collect an array of TIME(p)") {
     val nanos = DateTimeUtils.localTimeToNanos(java.time.LocalTime.parse("12:00:00.123456789"))
     (TimeType.MIN_PRECISION to TimeType.MAX_PRECISION).foreach { p =>

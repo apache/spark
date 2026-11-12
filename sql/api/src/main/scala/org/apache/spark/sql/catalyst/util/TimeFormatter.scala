@@ -30,6 +30,10 @@ import org.apache.spark.unsafe.types.UTF8String
 sealed trait TimeFormatter extends Serializable {
   def parse(s: String): Long // returns nanoseconds since midnight
 
+  // Parses a value of `TIME(precision)`: the fractional digits beyond `precision` are truncated,
+  // as CAST does.
+  def parse(s: String, precision: Int): Long = truncateTimeToPrecision(parse(s), precision)
+
   // A non-throwing variant of `parse`, returning None instead of throwing when the input cannot be
   // parsed. Used by schema inference to probe the time type without paying an exception per
   // non-time value; subclasses override it with a more efficient, exception-free implementation.

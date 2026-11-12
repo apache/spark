@@ -135,19 +135,15 @@ case class ToTimeParser(fmt: Option[String]) {
     }
   }
 
-  // The parser keeps up to 9 fractional digits, but `ToTime` returns `TimeType()`, so drop the
-  // digits beyond its precision as CAST does.
-  private def toResultPrecision(nanos: Long): Long =
-    DateTimeUtils.truncateTimeToPrecision(nanos, TimeType.DEFAULT_PRECISION)
-
+  // `ToTime` returns `TimeType()`, so the parsed value is truncated to its precision.
   def parse(s: UTF8String): Long = withErrorCondition(s, fmt) {
-    toResultPrecision(formatter.parse(s.toString))
+    formatter.parse(s.toString, TimeType.DEFAULT_PRECISION)
   }
 
   def parse(s: UTF8String, fmt: UTF8String): Long = {
     val format = fmt.toString
     withErrorCondition(s, Some(format)) {
-      toResultPrecision(TimeFormatter(format, isParsing = true).parse(s.toString))
+      TimeFormatter(format, isParsing = true).parse(s.toString, TimeType.DEFAULT_PRECISION)
     }
   }
 }

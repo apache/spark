@@ -2078,6 +2078,21 @@ Project [time_from_seconds(-1E-7) AS time_from_seconds(-1E-7)#x]
 
 
 -- !query
+SELECT time_from_seconds(2.49E-4D), time_from_seconds(1.0E-6D), time_from_seconds(0.7D),
+  time_from_seconds(0.7F)
+-- !query analysis
+Project [time_from_seconds(2.49E-4) AS time_from_seconds(2.49E-4)#x, time_from_seconds(1.0E-6) AS time_from_seconds(1.0E-6)#x, time_from_seconds(0.7) AS time_from_seconds(0.7)#x, time_from_seconds(0.7) AS time_from_seconds(0.7)#x]
++- OneRowRelation
+
+
+-- !query
+SELECT time_from_seconds(1.0E10D)
+-- !query analysis
+Project [time_from_seconds(1.0E10) AS time_from_seconds(1.0E10)#x]
++- OneRowRelation
+
+
+-- !query
 SELECT time_from_millis(0)
 -- !query analysis
 Project [time_from_millis(0) AS time_from_millis(0)#x]

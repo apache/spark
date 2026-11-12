@@ -385,6 +385,13 @@ trait SparkDateTimeUtils {
   def localTimeToNanos(localTime: LocalTime): Long = localTime.getLong(NANO_OF_DAY)
 
   /**
+   * Converts the local time to a value of `TIME(precision)`: the number of nanoseconds within the
+   * day, with the fractional digits beyond `precision` truncated, as CAST does.
+   */
+  def localTimeToNanos(localTime: LocalTime, precision: Int): Long =
+    truncateTimeToPrecision(localTimeToNanos(localTime), precision)
+
+  /**
    * Converts the number of nanoseconds within the day to the local time.
    */
   def nanosToLocalTime(nanos: Long): LocalTime = LocalTime.ofNanoOfDay(nanos)

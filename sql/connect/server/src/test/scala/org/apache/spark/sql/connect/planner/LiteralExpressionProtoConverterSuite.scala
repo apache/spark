@@ -74,6 +74,15 @@ class LiteralExpressionProtoConverterSuite extends AnyFunSuite { // scalastyle:i
     }
   }
 
+  test("SPARK-61087: TIME literal proto is truncated to the precision of its type") {
+    val localTime = LocalTime.of(0, 0, 0, 123456789)
+    Seq(3 -> 123000000L, 6 -> 123456000L, 9 -> 123456789L).foreach { case (p, nanos) =>
+      assertResult(expressions.Literal(nanos, TimeType(p))) {
+        LiteralExpressionProtoConverter.toCatalystExpression(toLiteralProto(localTime, TimeType(p)))
+      }
+    }
+  }
+
   test("SPARK-57566: TIME literal proto propagates a non-default precision") {
     val literalProto = toLiteralProto(LocalTime.of(1, 2, 3), TimeType(3))
     assert(literalProto.getTime.getPrecision == 3)

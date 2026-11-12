@@ -4621,6 +4621,24 @@ class CSVv2Suite extends CSVSuite {
       checkAnswer(readBackCustom, customDF)
     }
   }
+
+  test("SPARK-61087: CSV reads truncate TIME values to the precision of the field") {
+    val schema = new StructType()
+      .add("t6", TimeType(6)).add("t3", TimeType(3)).add("t9", TimeType(9))
+    val expected =
+      Row(LocalTime.of(0, 0, 0, 123456000), LocalTime.of(12, 0, 0, 123000000),
+        LocalTime.of(12, 0, 0, 123456789))
+    checkAnswer(
+      spark.read.schema(schema)
+        .csv(spark.createDataset(
+          Seq("00:00:00.1234567,12:00:00.123456,12:00:00.123456789"))(Encoders.STRING)),
+      expected)
+    checkAnswer(
+      spark.read.schema(schema).option("timeFormat", "HH:mm:ss.SSSSSSSSS")
+        .csv(spark.createDataset(
+          Seq("00:00:00.123456789,12:00:00.123456789,12:00:00.123456789"))(Encoders.STRING)),
+      expected)
+  }
 }
 
 class CSVLegacyTimeParserSuite extends CSVSuite {

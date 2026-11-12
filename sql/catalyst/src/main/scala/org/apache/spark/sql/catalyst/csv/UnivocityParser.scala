@@ -273,9 +273,9 @@ class UnivocityParser(
         timestampFormatter.parseNanos(datum, t.precision)
       }
 
-    case _: TimeType => (d: String) =>
+    case t: TimeType => (d: String) =>
       nullSafeDatum(d, name, nullable, options) { datum =>
-        timeFormatter.parse(datum)
+        timeFormatter.parse(datum, t.precision)
       }
 
     case dt: StringType => (d: String) =>

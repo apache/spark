@@ -32,6 +32,7 @@ import org.apache.spark.sql.catalyst.plans.logical
 import org.apache.spark.sql.catalyst.plans.logical.{Aggregate, LogicalPlan}
 import org.apache.spark.sql.catalyst.trees.{CurrentOrigin, TreePattern}
 import org.apache.spark.sql.catalyst.types.DataTypeUtils
+import org.apache.spark.sql.catalyst.util.GenericArrayData
 import org.apache.spark.sql.classic.Dataset
 import org.apache.spark.sql.connect.SparkConnectTestUtils
 import org.apache.spark.sql.connect.common.InvalidPlanInput
@@ -708,6 +709,24 @@ class SparkConnectPlannerSuite extends SparkFunSuite with SparkConnectPlanTest {
     }
   }
 
+  test("SPARK-61087: TIME values of a local relation are truncated to their precision") {
+    val nanos = 123456789L
+    val schema = StructType(Seq(
+      StructField("t3", TimeType(3)),
+      StructField("t6", TimeType(6)),
+      StructField("t9", TimeType(9)),
+      StructField("nested", StructType(Seq(StructField("t3", TimeType(3))))),
+      StructField("array", ArrayType(TimeType(6)))))
+    val row =
+      InternalRow(nanos, nanos, nanos, InternalRow(nanos), new GenericArrayData(Array(nanos)))
+    val localRelation = createLocalRelationProto(schema, Seq(row))
+    val df = Dataset.ofRows(spark, transform(localRelation))
+    val t3 = java.time.LocalTime.ofNanoOfDay(123000000L)
+    val t6 = java.time.LocalTime.ofNanoOfDay(123456000L)
+    assert(df.collect().toSeq ===
+      Seq(Row(t3, t6, java.time.LocalTime.ofNanoOfDay(nanos), Row(t3), Seq(t6))))
+  }
+
   test("SPARK-59276: restore an ordinary requested UDT in a local relation") {
     val ordinaryUdt = new PythonUserDefinedType(
       ArrayType(DoubleType, containsNull = false),
@@ -1309,12 +1328,13 @@ class SparkConnectPlannerSuite extends SparkFunSuite with SparkConnectPlanTest {
     assertResult(df.schema.fields(1).dataType)(TimeType(TimeType.MAX_PRECISION))
     assertResult(df.schema.fields(2).dataType)(TimeType(TimeType.DEFAULT_PRECISION))
     assertResult(df.schema.fields(3).dataType)(TimeType(TimeType.DEFAULT_PRECISION))
+    // Each value is truncated to the precision of its literal.
     assertResult(df.collect()(0).toString)(
       InternalRow(
+        "23:59:59",
         "23:59:59.999999999",
-        "23:59:59.999999999",
-        "23:59:59.999999999",
-        "23:59:59.999999999").toString)
+        "23:59:59.999999",
+        "23:59:59.999999").toString)
   }
 
   test("No handler found for extension shows extension type URL - Relation extension") {

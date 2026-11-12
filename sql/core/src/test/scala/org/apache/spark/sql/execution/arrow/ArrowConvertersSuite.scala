@@ -757,7 +757,7 @@ class ArrowConvertersSuite extends SharedSparkSession {
          |      "name" : "time",
          |      "count" : 3,
          |      "VALIDITY" : [ 1, 1, 1 ],
-         |      "DATA" : [ 0, 43200000000000, 3723123456789 ]
+         |      "DATA" : [ 0, 43200000000000, 3723123456000 ]
          |    } ]
          |  } ]
          |}
@@ -765,7 +765,7 @@ class ArrowConvertersSuite extends SharedSparkSession {
 
     val t1 = LocalTime.of(0, 0, 0)
     val t2 = LocalTime.of(12, 0, 0)
-    val t3 = LocalTime.of(1, 2, 3, 123456789)
+    val t3 = LocalTime.of(1, 2, 3, 123456000)
 
     val df = Seq(t1, t2, t3).toDF("time")
 

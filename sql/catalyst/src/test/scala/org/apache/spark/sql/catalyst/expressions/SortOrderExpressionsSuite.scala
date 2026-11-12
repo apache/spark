@@ -53,7 +53,7 @@ class SortOrderExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper 
     val dec3 = Literal(Decimal(20132983L, 21, 2))
     val list1 = Literal.create(Seq(1, 2), ArrayType(IntegerType))
     val nullVal = Literal.create(null, IntegerType)
-    val tm1LocalTime = LocalTime.of(21, 15, 1, 123456)
+    val tm1LocalTime = LocalTime.of(21, 15, 1, 123456000)
     val tm1Nano = SparkDateTimeUtils.localTimeToNanos(tm1LocalTime)
     val tm1 = Literal.create(tm1LocalTime, TimeType(6))
 

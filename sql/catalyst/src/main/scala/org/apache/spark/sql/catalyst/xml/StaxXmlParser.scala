@@ -758,7 +758,7 @@ class StaxXmlParser(
         case t: TimestampNTZNanosType =>
           timestampNTZFormatter.parseWithoutTimeZoneNanos(datum, t.precision, false)
         case _: DateType => parseXmlDate(datum, options)
-        case _: TimeType => timeFormatter.parse(datum)
+        case t: TimeType => timeFormatter.parse(datum, t.precision)
         case dt: StringType =>
           CharVarcharUtils.applyTextParseSemantics(UTF8String.fromString(datum), dt)
         case _: BinaryType => binaryParser(UTF8String.fromString(datum))
@@ -811,7 +811,7 @@ class StaxXmlParser(
         case TimestampNTZType => castTo(value, TimestampNTZType)
         case t: TimestampLTZNanosType => castTo(value, t)
         case t: TimestampNTZNanosType => castTo(value, t)
-        case _: TimeType => castTo(value, TimeType())
+        case t: TimeType => castTo(value, t)
         case FloatType => signSafeToFloat(value)
         case ByteType => castTo(value, ByteType)
         case ShortType => castTo(value, ShortType)

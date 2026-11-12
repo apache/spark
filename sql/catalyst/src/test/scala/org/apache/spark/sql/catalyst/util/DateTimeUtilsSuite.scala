@@ -1952,7 +1952,7 @@ class DateTimeUtilsSuite extends SparkFunSuite with Matchers with SQLHelper {
 
     checkError(
       exception = intercept[SparkArithmeticException] {
-        timeAddInterval(1, 6, MICROS_PER_DAY, SECOND, 6)
+        timeAddInterval(1, 9, MICROS_PER_DAY, SECOND, 9)
       },
       condition = "DATETIME_OVERFLOW",
       parameters = Map("operation" ->
@@ -2540,6 +2540,34 @@ class DateTimeUtilsSuite extends SparkFunSuite with Matchers with SQLHelper {
         assert(DateTimeUtils.localDateTimeToMicros(ntzBack) === expectedMicros)
         assert(ntzBack.getNano % 1000 === expectedSubMicro)
       }
+    }
+  }
+
+  test("SPARK-61087: time_from_seconds floors the shortest decimal form of a DOUBLE") {
+    // The shortest decimal form is what `BigDecimal.valueOf` uses.
+    def shortestDecimalFloorMicros(seconds: Double): Long = java.math.BigDecimal.valueOf(seconds)
+      .movePointRight(6).setScale(0, java.math.RoundingMode.FLOOR).longValueExact()
+    def ulpsAround(seconds: Double): Seq[Double] =
+      Iterator.iterate(seconds)(Math.nextUp).slice(1, 4).toSeq ++
+        Iterator.iterate(seconds)(Math.nextDown).slice(1, 4).toSeq
+
+    val random = new scala.util.Random(61087)
+    val alignedMicros = Seq.fill(20000)(random.nextLong(86400L * MICROS_PER_SECOND))
+    val aligned = alignedMicros.flatMap(micros => Seq(micros / 1e6, micros * 1e-6))
+    val inRange = Seq.fill(20000)(random.nextDouble() * 86400)
+    val outOfRange = Seq.fill(5000)((random.nextDouble() * 2 - 1) * 1e9)
+    val tiny = Seq.fill(5000) {
+      val magnitude = random.nextDouble() * Math.pow(10, -3 - random.nextInt(318))
+      if (random.nextBoolean()) magnitude else -magnitude
+    }
+    val large = Seq(1e9, -1e9, Math.nextDown(1e9), Math.nextUp(-1e9), 1.0E10, 9.2e12)
+    val specific = Seq(0.0, -0.0, Double.MinPositiveValue, -Double.MinPositiveValue, 2.49E-4,
+      1.0E-6, 0.7, 0.7f.toDouble, 52200.1234567, -1.0E-7, 0.3 - 0.1 - 0.2)
+    val samples = aligned ++ aligned.flatMap(ulpsAround) ++ inRange ++
+      inRange.flatMap(ulpsAround) ++ outOfRange ++ tiny ++ large ++ specific
+    samples.foreach { seconds =>
+      assert(secondsToFlooredMicros(seconds) === shortestDecimalFloorMicros(seconds),
+        s"seconds = $seconds")
     }
   }
 }

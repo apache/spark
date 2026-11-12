@@ -774,7 +774,7 @@ class XmlFunctionsSuite extends SharedSparkSession {
       assert(parseResult == time, s"from_xml failed for precision $precision")
 
       // Test to_xml
-      val df = Seq(time).toDF("time").select($"time".cast(TimeType(precision)))
+      val df = spark.createDataFrame(java.util.List.of(Row(time)), schema)
       val xmlResult = df.select(to_xml(struct($"time"), Map("rowTag" -> "record").asJava))
         .collect().head.getString(0)
       assert(xmlResult.contains(timeStr), s"to_xml failed for precision $precision")
@@ -804,5 +804,29 @@ class XmlFunctionsSuite extends SharedSparkSession {
       .select(from_xml($"xml", customSchema, customOptions).as("struct"))
       .select($"struct.time").collect().head.getAs[LocalTime](0)
     assert(customRoundtrip == customTime, "Custom format roundtrip failed")
+  }
+
+  test("SPARK-61087: from_xml truncates TIME values to the precision of the field") {
+    import java.time.LocalTime
+    val schema = new StructType()
+      .add("t6", TimeType(6)).add("_t3", TimeType(3)).add("t9", TimeType(9))
+    Seq(
+      Map("rowTag" -> "record") ->
+        """<record t3="12:00:00.123456"><t6>00:00:00.1234567</t6>""",
+      Map("rowTag" -> "record", "timeFormat" -> "HH:mm:ss.SSSSSSSSS") ->
+        """<record t3="12:00:00.123456789"><t6>00:00:00.123456789</t6>"""
+    ).foreach { case (options, prefix) =>
+      val xml = prefix + "<t9>12:00:00.123456789</t9></record>"
+      checkAnswer(
+        Seq(xml).toDS().select(from_xml($"value", schema, options.asJava).as("s")).select("s.*"),
+        Row(LocalTime.of(0, 0, 0, 123456000), LocalTime.of(12, 0, 0, 123000000),
+          LocalTime.of(12, 0, 0, 123456789)))
+    }
+    checkAnswer(
+      sql("""SELECT from_xml('<r><t>00:00:00.1234567</t></r>', 't TIME').t = TIME'00:00:00.123456',
+            |  from_xml('<r><t>00:00:00.1234567</t></r>', 't TIME').t =
+            |    to_time('00:00:00.1234567')
+            |""".stripMargin),
+      Row(true, true))
   }
 }

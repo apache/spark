@@ -2941,7 +2941,7 @@ abstract class CastSuiteBase extends SparkFunSuite with ExpressionEvalHelper {
       // 23:59:59.000000001 -> 86399.000000001
       (LocalTime.of(23, 59, 59, 1), Decimal(86399.000000001))
     ).foreach { case (time, expectedDecimal) =>
-      checkEvaluation(Cast(Literal(time), DecimalType(14, 9)), expectedDecimal)
+      checkEvaluation(Cast(Literal.create(time, TimeType(9)), DecimalType(14, 9)), expectedDecimal)
     }
 
     // Test with different decimal precision and scale. The precision and scale of the
@@ -2986,7 +2986,7 @@ abstract class CastSuiteBase extends SparkFunSuite with ExpressionEvalHelper {
       (LocalTime.of(0, 0, 0, 999999999), 1)
     ).foreach { case (timeValue, decimalValue) =>
       checkEvaluation(
-        expression = Cast(Literal(timeValue), DecimalType(precision, scale)),
+        expression = Cast(Literal.create(timeValue, TimeType(9)), DecimalType(precision, scale)),
         expected = Decimal(decimalValue, precision, scale)
       )
     }
@@ -3014,7 +3014,7 @@ abstract class CastSuiteBase extends SparkFunSuite with ExpressionEvalHelper {
       (LocalTime.of(0, 0, 0, 999999999), 1.0)
     ).foreach { case (timeValue, decimalValue) =>
       checkEvaluation(
-        expression = Cast(Literal(timeValue), DecimalType(precision, scale)),
+        expression = Cast(Literal.create(timeValue, TimeType(9)), DecimalType(precision, scale)),
         expected = Decimal(decimalValue, precision, scale)
       )
     }

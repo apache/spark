@@ -232,8 +232,9 @@ class ApproxCountDistinctForIntervalsSuite extends SparkFunSuite {
           intEndpoints.map(DateTimeUtils.toJavaTimestamp(_)), TimestampType),
       (intRecords.map(DateTimeUtils.microsToLocalDateTime(_)),
         intEndpoints.map(DateTimeUtils.microsToLocalDateTime(_)), TimestampNTZType),
-      (intRecords.map(i => LocalTime.ofNanoOfDay(i.toLong)),
-        intEndpoints.map(i => LocalTime.ofNanoOfDay(i.toLong)), TimeType())
+      // TIME(6) values are whole microseconds.
+      (intRecords.map(i => LocalTime.ofNanoOfDay(i * 1000L)),
+        intEndpoints.map(i => LocalTime.ofNanoOfDay(i * 1000L)), TimeType())
     )
 
     inputs.foreach { case (records, endpoints, dataType) =>

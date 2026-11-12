@@ -327,6 +327,10 @@ SELECT time_from_seconds(0.0000001), time_from_seconds(52200.1234567), time_from
 SELECT time_from_seconds(0.0000001) = time'00:00:00';
 SELECT time_from_seconds(0.0000001) AS v UNION SELECT time'00:00:00';
 SELECT time_from_seconds(-0.0000001);  -- invalid: negative -> exception
+-- a DOUBLE uses its shortest decimal form, and a FLOAT is converted to DOUBLE first
+SELECT time_from_seconds(2.49E-4D), time_from_seconds(1.0E-6D), time_from_seconds(0.7D),
+  time_from_seconds(0.7F);
+SELECT time_from_seconds(1.0E10D);  -- invalid: overflow -> exception
 
 -- time_from_millis (valid: 0 to 86399999)
 SELECT time_from_millis(0);

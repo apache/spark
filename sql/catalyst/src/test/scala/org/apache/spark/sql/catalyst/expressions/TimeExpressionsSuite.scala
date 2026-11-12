@@ -93,11 +93,28 @@ class TimeExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
     checkEvaluation(TimeFromSeconds(Literal(1.0E-7)), 0L)
     checkEvaluation(TimeFromSeconds(Literal(3.0E-6)), 3000L)
     checkEvaluation(TimeFromSeconds(Literal(52200.5)), 52200500000000L)
+    // A DOUBLE uses its shortest decimal form. Flooring `seconds * 1e6` gives 248 microseconds for
+    // 2.49E-4, and flooring the exact binary value gives 0 for 1.0E-6 and 699999 for 0.7.
+    checkEvaluation(TimeFromSeconds(Literal(2.49E-4)), 249000L)
+    checkEvaluation(TimeFromSeconds(Literal(1.0E-6)), 1000L)
+    checkEvaluation(TimeFromSeconds(Literal(0.7)), 700000000L)
+    checkEvaluation(TimeFromSeconds(Literal(52200.1234567)), 52200123456000L)
+    checkEvaluation(TimeFromSeconds(Literal(Math.nextDown(2.49E-4))), 248000L)
+    checkEvaluation(TimeFromSeconds(Literal(Math.nextUp(2.49E-4))), 249000L)
+    checkEvaluation(TimeFromSeconds(Literal(0.7f)), 699999000L)
     // A negative input below one microsecond is still out of range.
     checkExceptionInExpression[SparkDateTimeException](
       TimeFromSeconds(Literal(Decimal("-0.0000001"))), "Invalid TIME value")
     checkExceptionInExpression[SparkDateTimeException](
       TimeFromSeconds(Literal(-1.0E-7)), "Invalid TIME value")
+    checkExceptionInExpression[SparkDateTimeException](
+      TimeFromSeconds(Literal(0.3 - 0.1 - 0.2)), "Invalid TIME value")
+    Seq(Double.NaN, Double.PositiveInfinity, Double.NegativeInfinity).foreach { seconds =>
+      checkExceptionInExpression[SparkDateTimeException](
+        TimeFromSeconds(Literal(seconds)), "Cannot convert NaN or Infinite value to TIME")
+    }
+    checkExceptionInExpression[SparkDateTimeException](
+      TimeFromSeconds(Literal(1.0E10)), "Overflow in TIME conversion")
   }
 
   test("HourExpressionBuilder") {
