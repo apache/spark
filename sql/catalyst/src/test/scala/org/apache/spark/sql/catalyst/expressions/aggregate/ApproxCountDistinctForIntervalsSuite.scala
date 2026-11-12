@@ -259,13 +259,13 @@ class ApproxCountDistinctForIntervalsSuite extends SparkFunSuite {
   }
 
   test("TIME type with realistic nanos-of-day magnitudes") {
-    // Realistic time-of-day values in nanos: midnight, 06:00, 12:00, 18:00, near max
-    // LocalTime.MAX is 23:59:59.999999999 = 86_399_999_999_999 nanos
+    // Realistic time-of-day values in nanos: midnight, 06:00, 12:00, 18:00, near max. The
+    // endpoints are TIME(6) literals, so every value is a whole number of microseconds.
     val midnight = 0L
     val sixAm = 6L * 3600L * 1000000000L       // 21_600_000_000_000
     val noon = 12L * 3600L * 1000000000L        // 43_200_000_000_000
     val sixPm = 18L * 3600L * 1000000000L       // 64_800_000_000_000
-    val nearMax = 86399999999999L                // 23:59:59.999999999
+    val nearMax = 86399999999000L                // 23:59:59.999999
 
     val endpoints = Array(midnight, sixAm, noon, sixPm, nearMax)
       .map(n => LocalTime.ofNanoOfDay(n))

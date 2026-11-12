@@ -467,7 +467,7 @@ object JdbcUtils extends Logging with SQLConfHelper {
       options: Option[JDBCOptions]): JDBCValueGetter = dt match {
     case BooleanType => JDBCValueGetter.BooleanGetter
     case DateType => JDBCValueGetter.DateGetter(dialect)
-    case _: TimeType => JDBCValueGetter.TimeGetter
+    case t: TimeType => JDBCValueGetter.TimeGetter(t.precision)
     case DecimalType.Fixed(p, s) => JDBCValueGetter.DecimalGetter(p, s)
     case DoubleType => JDBCValueGetter.DoubleGetter
     case FloatType => JDBCValueGetter.FloatGetter

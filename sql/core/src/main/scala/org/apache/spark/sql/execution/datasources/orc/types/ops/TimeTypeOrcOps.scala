@@ -34,7 +34,13 @@ import org.apache.spark.sql.types.{LongType, TimeType}
  * so it is stored in the LONG physical category with the true Spark type recovered on read from
  * the CATALYST_TYPE_ATTRIBUTE_NAME attribute. Read and write are pure Long pass-through: the
  * internal nanos-of-day value IS the stored LONG (no unit conversion, unlike Parquet which may
- * store MICROS). Precision affects only display, so nothing is truncated here.
+ * store MICROS).
+ *
+ * The readers do not truncate the stored values to the read precision. ORC evaluates a pushed down
+ * predicate against the stored values, and a file can hold more fractional digits than its TIME(p)
+ * type, e.g. values written before SPARK-61087. A reader that truncated them would disagree with
+ * the pushed down predicates, so that a filter could skip a matching row.
+ * TODO: truncate to the read precision once predicate pushdown accounts for the truncation.
  *
  * @param t the TimeType (precision is unused on the ORC path; kept for symmetry with the other
  *          storage ops and possible future precision-aware behavior).

@@ -619,6 +619,18 @@ private[sql] object ArrowUtils {
       case (a, d) => a == d
     }
 
+  /**
+   * The TIME precision that `toArrowField` records in the field metadata. Foreign Arrow data has no
+   * precision key, and a present-but-invalid value (out of [0, 9] or non-numeric) is unusable, so
+   * both give None.
+   */
+  def declaredTimePrecision(field: Field): Option[Int] = {
+    Option(field.getMetadata)
+      .flatMap(m => Option(m.get(timePrecisionKey)))
+      .flatMap(s => scala.util.Try(s.toInt).toOption)
+      .filter(p => p >= TimeType.MIN_PRECISION && p <= TimeType.MAX_PRECISION)
+  }
+
   def fromArrowField(field: Field): DataType = {
     field.getType match {
       case _: ArrowType.Map =>
@@ -687,15 +699,10 @@ private[sql] object ArrowUtils {
           case None => fromArrowType(ts)
         }
       // Recover the exact precision of TIME from the field metadata written by `toArrowField`.
-      // Foreign Arrow data has no precision key, and a present-but-invalid value (out of [0, 9] or
-      // non-numeric) is unusable, so either way fall back to the canonical microsecond precision
-      // via `fromArrowType`.
+      // Without a usable precision key, fall back to the canonical microsecond precision via
+      // `fromArrowType`.
       case t: ArrowType.Time if t.getUnit == TimeUnit.NANOSECOND =>
-        Option(field.getMetadata.get(timePrecisionKey))
-          .flatMap(s => scala.util.Try(s.toInt).toOption)
-          .filter(p => p >= TimeType.MIN_PRECISION && p <= TimeType.MAX_PRECISION)
-          .map(TimeType(_))
-          .getOrElse(fromArrowType(t))
+        declaredTimePrecision(field).map(TimeType(_)).getOrElse(fromArrowType(t))
       case arrowType => fromArrowType(arrowType)
     }
   }

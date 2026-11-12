@@ -24,7 +24,7 @@ import org.apache.arrow.vector.types.pojo.ArrowType
 
 import org.apache.spark.sql.catalyst.encoders.AgnosticEncoder
 import org.apache.spark.sql.catalyst.encoders.AgnosticEncoders.LocalTimeEncoder
-import org.apache.spark.sql.catalyst.util.{FractionTimeFormatter, TimeFormatter}
+import org.apache.spark.sql.catalyst.util.{FractionTimeFormatter, SparkDateTimeUtils, TimeFormatter}
 import org.apache.spark.sql.types.{DataType, TimeType}
 
 /**
@@ -74,11 +74,13 @@ class TimeTypeApiOps(val t: TimeType) extends TypeApiOps {
 
   override def needConversionInPython: Option[Boolean] = Some(true)
 
+  // PySpark's `TimeType.toInternal` gives microseconds as nanoseconds whatever the precision, so
+  // drop the digits beyond it, as CAST does.
   override def makeFromJava: Option[Any => Any] = Some((obj: Any) =>
     nullSafeConvert(obj) {
-      case c: Long => c
+      case c: Long => SparkDateTimeUtils.truncateTimeToPrecision(c, t.precision)
       // Py4J serializes values between MIN_INT and MAX_INT as Ints, not Longs
-      case c: Int => c.toLong
+      case c: Int => SparkDateTimeUtils.truncateTimeToPrecision(c.toLong, t.precision)
     })
 
   override def formatExternal(value: Any): Option[String] = {

@@ -2942,6 +2942,70 @@ class TypesTestsMixin:
                     self.assertEqual(2, df.where(f"ts = {floored_literal}").count())
                     self.assertEqual([pd.Timestamp(floored)] * 2, list(df.toPandas()["ts"]))
 
+    def test_time_type_arrow_precision_tag(self):
+        # SPARK-61087: Arrow Time(NANOSECOND) has no precision, so PySpark records the declared
+        # TIME(p) precision under the key the JVM reads, also on nested fields.
+        from pyspark.sql.pandas.types import time_precision_key, to_arrow_schema
+
+        schema = StructType(
+            [
+                StructField("t3", TimeType(3)),
+                StructField("arr", ArrayType(TimeType(9))),
+                StructField("mp", MapType(TimeType(7), TimeType(0))),
+                StructField("st", StructType([StructField("a", TimeType(8))])),
+            ]
+        )
+        arrow_schema = to_arrow_schema(schema)
+
+        def precision(field):
+            return field.metadata[time_precision_key].decode("utf-8")
+
+        self.assertEqual("3", precision(arrow_schema.field("t3")))
+        self.assertEqual("9", precision(arrow_schema.field("arr").type.value_field))
+        self.assertEqual("7", precision(arrow_schema.field("mp").type.key_field))
+        self.assertEqual("0", precision(arrow_schema.field("mp").type.item_field))
+        self.assertEqual("8", precision(arrow_schema.field("st").type.field("a")))
+
+    def test_time_type_arrow_conversion_truncates_to_precision(self):
+        # SPARK-61087: an Arrow time64[ns] value keeps the digits its declared precision allows.
+        import pyarrow as pa
+
+        table = pa.table({"t": pa.array([123456789], type=pa.time64("ns"))})
+        expected = {
+            9: "00:00:00.123456789",
+            6: "00:00:00.123456",
+            3: "00:00:00.123",
+        }
+        with self.sql_conf(
+            {
+                "spark.sql.timeType.enabled": True,
+                "spark.sql.execution.arrow.pyspark.enabled": True,
+            }
+        ):
+            for p, value in expected.items():
+                schema = StructType([StructField("t", TimeType(p))])
+                df = self.spark.createDataFrame(table, schema)
+                self.assertEqual(schema, df.schema)
+                self.assertEqual(value, df.select(F.col("t").cast("string")).first()[0])
+                self.assertEqual(1, df.where(f"t = TIME'{value}'").count())
+
+    def test_time_type_python_objects_truncate_to_precision(self):
+        # SPARK-61087: a datetime.time carries microseconds, which TIME(0) to TIME(5) do not hold.
+        from pyspark.sql.functions import udf
+
+        value = datetime.time(12, 0, 0, 123456)
+        with self.sql_conf(
+            {
+                "spark.sql.timeType.enabled": True,
+                "spark.sql.execution.arrow.pyspark.enabled": False,
+            }
+        ):
+            df = self.spark.createDataFrame([(value,)], "t time(3)")
+            self.assertEqual("12:00:00.123", df.select(F.col("t").cast("string")).first()[0])
+            to_time3 = udf(lambda: value, returnType=TimeType(3), useArrow=False)
+            row = self.spark.range(1).select(to_time3().cast("string").alias("t")).first()
+            self.assertEqual("12:00:00.123", row.t)
+
     def test_timestamp_nanos_type_arrow_udf(self):
         # SPARK-57462 follow-up: with the eager Arrow-conversion reject removed, an Arrow-optimized
         # Python UDF (useArrow=True) can take and return the nanosecond timestamp types through the

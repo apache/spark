@@ -1196,12 +1196,12 @@ object DateTimeUtils extends SparkDateTimeUtils {
   private val maxSecondsForPrimitiveConversion = 1e9
 
   /**
-   * Returns the shortest decimal form of `seconds`, as `CAST(seconds AS DECIMAL)` gives it, floored
-   * to whole microseconds. The shortest decimal form matters: `2.49E-4 * 1e6` is
+   * Returns the shortest decimal form of `seconds`, as `BigDecimal.valueOf` gives it, floored to
+   * whole microseconds. The shortest decimal form matters: `2.49E-4 * 1e6` is
    * `248.99999999999997`, and the exact binary value of `1.0E-6` is below one microsecond, so
    * flooring the product or the exact value loses one microsecond. Below
-   * `maxSecondsForPrimitiveConversion` this uses only primitive arithmetic, so that it is cheap
-   * per row.
+   * `maxSecondsForPrimitiveConversion` this uses primitive arithmetic, and calls `Math.fma` only
+   * when the product is a whole number, so that it is cheap per row on every JVM.
    */
   private[util] def secondsToFlooredMicros(seconds: Double): Long = {
     if (Math.abs(seconds) >= maxSecondsForPrimitiveConversion) {
@@ -1214,10 +1214,12 @@ object DateTimeUtils extends SparkDateTimeUtils {
         nearestMicros
       } else {
         // No whole number of microseconds rounds to `seconds`, so the shortest decimal form has
-        // the same floor as the exact value of `seconds`. `micros` can be rounded up to the next
-        // whole number, and the exact sign of `seconds * 1e6 - floor` from `fma` detects that.
+        // the same floor as the exact value of `seconds`. Rounding is monotonic, so `micros` can
+        // be above the exact product only when it was rounded up to a whole number. Only then
+        // the exact sign of `seconds * 1e6 - floor` from `fma` is needed. Without the FMA
+        // intrinsic, `fma` uses BigDecimal, so it must not run for every row.
         val floor = Math.floor(micros)
-        if (Math.fma(seconds, MICROS_PER_SECOND.toDouble, -floor) < 0) {
+        if (micros == floor && Math.fma(seconds, MICROS_PER_SECOND.toDouble, -floor) < 0) {
           floor.toLong - 1
         } else {
           floor.toLong

@@ -87,18 +87,27 @@ metadata_key = b"SPARK::metadata::json"
 # Spark Connect, which reconstructs the schema from the Arrow field rather than a passed schema).
 timestamp_nanos_precision_key = b"SPARK::timestampNanos::precision"
 
+# Should keep in line with org.apache.spark.sql.util.ArrowUtils.timePrecisionKey. TimeType maps to
+# an Arrow Time(NANOSECOND) field, which has no precision, so the JVM reads the precision from this
+# field-metadata key. Without the key the JVM reads the field as TIME(6) and keeps its values as
+# they are, because it cannot know which digits are extra.
+time_precision_key = b"SPARK::time::precision"
 
-def _with_timestamp_nanos_precision(
+
+def _with_precision_tag(
     dt: DataType, metadata: Optional[Dict[bytes, bytes]]
 ) -> Optional[Dict[bytes, bytes]]:
-    """Merge the nanosecond-precision tag into an Arrow field's metadata for a nanosecond
-    timestamp type, mirroring the JVM's ``toPrecisionTaggedArrowField``; other types are
-    unchanged."""
+    """Merge the precision tag into an Arrow field's metadata for a nanosecond timestamp type or a
+    TimeType, mirroring the JVM's ``toPrecisionTaggedArrowField``; other types are unchanged."""
     if isinstance(dt, AnyTimestampNanoType):
-        merged = dict(metadata) if metadata else {}
-        merged[timestamp_nanos_precision_key] = str(dt.precision).encode("utf-8")
-        return merged
-    return metadata
+        key = timestamp_nanos_precision_key
+    elif isinstance(dt, TimeType):
+        key = time_precision_key
+    else:
+        return metadata
+    merged = dict(metadata) if metadata else {}
+    merged[key] = str(dt.precision).encode("utf-8")
+    return merged
 
 
 def to_arrow_metadata(metadata: Optional[Dict[str, Any]] = None) -> Optional[Dict[bytes, bytes]]:
@@ -191,7 +200,7 @@ def to_arrow_type(
                 prefers_large_types=prefers_large_types,
             ),
             nullable=dt.containsNull,
-            metadata=_with_timestamp_nanos_precision(dt.elementType, None),
+            metadata=_with_precision_tag(dt.elementType, None),
         )
         arrow_type = pa.list_(field)
     elif isinstance(dt, MapType):
@@ -204,7 +213,7 @@ def to_arrow_type(
                 prefers_large_types=prefers_large_types,
             ),
             nullable=False,
-            metadata=_with_timestamp_nanos_precision(dt.keyType, None),
+            metadata=_with_precision_tag(dt.keyType, None),
         )
         value_field = pa.field(
             "value",
@@ -215,7 +224,7 @@ def to_arrow_type(
                 prefers_large_types=prefers_large_types,
             ),
             nullable=dt.valueContainsNull,
-            metadata=_with_timestamp_nanos_precision(dt.valueType, None),
+            metadata=_with_precision_tag(dt.valueType, None),
         )
         arrow_type = pa.map_(key_field, value_field)
     elif isinstance(dt, StructType):
@@ -235,9 +244,7 @@ def to_arrow_type(
                     prefers_large_types=prefers_large_types,
                 ),
                 nullable=field.nullable,
-                metadata=_with_timestamp_nanos_precision(
-                    field.dataType, to_arrow_metadata(field.metadata)
-                ),
+                metadata=_with_precision_tag(field.dataType, to_arrow_metadata(field.metadata)),
             )
             for field in dt
         ]
@@ -325,9 +332,7 @@ def to_arrow_schema(
                 prefers_large_types=prefers_large_types,
             ),
             nullable=field.nullable,
-            metadata=_with_timestamp_nanos_precision(
-                field.dataType, to_arrow_metadata(field.metadata)
-            ),
+            metadata=_with_precision_tag(field.dataType, to_arrow_metadata(field.metadata)),
         )
         for field in schema
     ]

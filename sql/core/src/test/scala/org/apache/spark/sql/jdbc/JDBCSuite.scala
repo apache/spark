@@ -845,6 +845,22 @@ class JDBCSuite extends SharedSparkSession {
     assert(rows(0).getAs[java.time.LocalTime](0) === java.time.LocalTime.of(12, 34, 56))
   }
 
+  test("SPARK-61087: JDBC TIME values are truncated to the column precision") {
+    val query = "SELECT CAST('12:00:00.123456' AS TIME(6)) AS T"
+    Seq(
+      "T TIME(3)" -> java.time.LocalTime.of(12, 0, 0, 123000000),
+      "T TIME(6)" -> java.time.LocalTime.of(12, 0, 0, 123456000),
+      "T TIME(9)" -> java.time.LocalTime.of(12, 0, 0, 123456000)
+    ).foreach { case (customSchema, expected) =>
+      val df = spark.read.format("jdbc")
+        .option("url", urlWithUserAndPass)
+        .option("query", query)
+        .option("customSchema", customSchema)
+        .load()
+      checkAnswer(df, Row(expected))
+    }
+  }
+
   test("SPARK-57555: legacy.jdbc.timeMapping escape hatch keeps TIME as TimestampType") {
     // The escape hatch forces the legacy TIME-to-timestamp mapping even when the TIME type is
     // enabled, so workloads relying on the old behavior are not silently broken.
