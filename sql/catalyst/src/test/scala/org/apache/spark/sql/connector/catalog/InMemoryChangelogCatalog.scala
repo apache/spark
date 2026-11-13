@@ -73,16 +73,19 @@ class InMemoryChangelogCatalog extends InMemoryCatalog {
     _loadChangelogCalls += ((changelogContext, options))
     // Access the connector's own metadata without invoking the ordinary table-loading API.
     val table = liveTable(ident)
-    val allRows = changeData.getOrElse(
-      ident.toString, mutable.ArrayBuffer.empty)
     val numDataCols = table.columns.length
     // _commit_version is at index numDataCols + 1 (after _change_type)
     val commitVersionIdx = numDataCols + 1
-    val filtered = filterByRange(allRows.toSeq, commitVersionIdx, changelogContext.range())
+    def currentRows(): Seq[InternalRow] = changeData.synchronized {
+      val allRows = changeData.getOrElse(ident.toString, mutable.ArrayBuffer.empty).toVector
+      filterByRange(allRows, commitVersionIdx, changelogContext.range())
+    }
+    val filtered = currentRows()
     val props = changelogProperties.getOrElse(ident.toString, ChangelogProperties())
     new InMemoryChangelog(
       table.name + "_changelog", table.columns, filtered, props,
-      scanOptions => _lastScanOptions = Some(scanOptions))
+      scanOptions => _lastScanOptions = Some(scanOptions),
+      streamingRows = Some(() => currentRows()))
   }
 
   /**
@@ -122,13 +125,13 @@ class InMemoryChangelogCatalog extends InMemoryCatalog {
    * (data columns..., _change_type STRING, _commit_version LONG, _commit_timestamp LONG),
    * followed by any metadata columns declared in ChangelogProperties.
    */
-  def addChangeRows(ident: Identifier, rows: Seq[InternalRow]): Unit = {
+  def addChangeRows(ident: Identifier, rows: Seq[InternalRow]): Unit = changeData.synchronized {
     val buf = changeData.getOrElseUpdate(
       ident.toString, mutable.ArrayBuffer.empty)
     buf ++= rows
   }
 
-  def clearChangeRows(ident: Identifier): Unit = {
+  def clearChangeRows(ident: Identifier): Unit = changeData.synchronized {
     changeData.remove(ident.toString)
   }
 }
@@ -176,7 +179,8 @@ class InMemoryChangelog(
     dataColumns: Array[Column],
     changeRows: Seq[InternalRow],
     properties: ChangelogProperties = ChangelogProperties(),
-    onScan: CaseInsensitiveStringMap => Unit = _ => ()) extends Changelog {
+    onScan: CaseInsensitiveStringMap => Unit = _ => (),
+    streamingRows: Option[() => Seq[InternalRow]] = None) extends Changelog {
 
   private val cdcColumns: Array[Column] = dataColumns ++ Array(
     Column.create("_change_type", StringType),
@@ -227,7 +231,7 @@ class InMemoryChangelog(
       StructField(column.name(), column.dataType(), column.isNullable())
     }
     val scanSchema = StructType(readSchema.fields.toSeq ++ metadataFields)
-    new InMemoryChangelogScanBuilder(scanSchema, rows)
+    new InMemoryChangelogScanBuilder(scanSchema, rows, streamingRows)
   }
 
   def readSchema: StructType = {
@@ -237,7 +241,9 @@ class InMemoryChangelog(
 
 private class InMemoryChangelogScanBuilder(
     schema: StructType,
-    rows: Seq[InternalRow]) extends ScanBuilder with SupportsPushDownRequiredColumns {
+    rows: Seq[InternalRow],
+    streamingRows: Option[() => Seq[InternalRow]])
+  extends ScanBuilder with SupportsPushDownRequiredColumns {
   private var projectedSchema = schema
 
   override def pruneColumns(requiredSchema: StructType): Unit = {
@@ -247,23 +253,27 @@ private class InMemoryChangelogScanBuilder(
 
   override def build(): Scan = {
     val ordinals = projectedSchema.fields.map(field => schema.fieldIndex(field.name))
-    val projectedRows = rows.map { row =>
+    def project(input: Seq[InternalRow]): Seq[InternalRow] = input.map { row =>
       new GenericInternalRow(ordinals.map(ordinal => row.get(ordinal, schema(ordinal).dataType)))
     }
-    new InMemoryChangelogScan(projectedSchema, projectedRows)
+    // Batch reads retain their captured snapshot. Streaming reads see appended rows, with
+    // the same projection applied when planning every micro-batch, including after a restart.
+    new InMemoryChangelogScan(
+      projectedSchema, project(rows), () => project(streamingRows.fold(rows)(_.apply())))
   }
 }
 
 private class InMemoryChangelogScan(
     schema: StructType,
-    rows: Seq[InternalRow]) extends Scan with Batch {
+    rows: Seq[InternalRow],
+    streamingRows: () => Seq[InternalRow]) extends Scan with Batch {
 
   override def readSchema(): StructType = schema
 
   override def toBatch: Batch = this
 
   override def toMicroBatchStream(checkpointLocation: String): MicroBatchStream = {
-    new InMemoryChangelogMicroBatchStream(schema, rows)
+    new InMemoryChangelogMicroBatchStream(streamingRows)
   }
 
   override def planInputPartitions(): Array[InputPartition] = {
@@ -306,27 +316,27 @@ private class InMemoryChangelogReader(
 
 /**
  * A simple offset for [[InMemoryChangelogMicroBatchStream]].
- * The offset value represents the number of rows consumed so far.
+ * The offset value is the zero-based index of the last consumed row (-1 before any rows).
  */
 private class InMemoryChangelogOffset(val offset: Long) extends Offset {
   override def json(): String = offset.toString
 }
 
 /**
- * A [[MicroBatchStream]] that serves pre-populated change rows in a single batch.
+ * A [[MicroBatchStream]] that serves appended change rows using stable row-index offsets.
+ * Tests append only after processAllAvailable() returns, so each append forms a new batch.
  */
 private class InMemoryChangelogMicroBatchStream(
-    schema: StructType,
-    rows: Seq[InternalRow]) extends MicroBatchStream {
+    rows: () => Seq[InternalRow]) extends MicroBatchStream {
 
   override def initialOffset(): Offset = new InMemoryChangelogOffset(-1)
 
-  override def latestOffset(): Offset = new InMemoryChangelogOffset(rows.size - 1)
+  override def latestOffset(): Offset = new InMemoryChangelogOffset(rows().size - 1)
 
   override def planInputPartitions(start: Offset, end: Offset): Array[InputPartition] = {
     val startIdx = start.asInstanceOf[InMemoryChangelogOffset].offset.toInt + 1
     val endIdx = end.asInstanceOf[InMemoryChangelogOffset].offset.toInt + 1
-    val slice = rows.slice(startIdx, endIdx)
+    val slice = rows().slice(startIdx, endIdx)
     Array(InMemoryChangelogPartition(slice))
   }
 
