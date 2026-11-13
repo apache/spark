@@ -1395,6 +1395,8 @@ class Frame(object, metaclass=ABCMeta):
                         spark_type_to_pandas_dtype(spark_type), spark_type.simpleString()
                     )
                 )
+            if not isinstance(spark_type, BooleanType):
+                spark_column = psser._dtype_op.nan_to_null(psser).spark.column
             return F.coalesce(F.sum(spark_column), F.lit(0))
 
         return self._reduce_for_stat_function(
