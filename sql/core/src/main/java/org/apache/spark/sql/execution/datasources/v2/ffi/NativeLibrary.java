@@ -92,7 +92,7 @@ final class NativeLibrary {
   static final int READ_MAX_ROWS = 1;
 
   // The C types of the parameters and the results of the functions.
-  private enum C { VOID, BOOL, I32, I64, PTR }
+  enum C { VOID, BOOL, I32, I64, PTR }
 
   /** The functions of the table {@code SparkDsLibrary}, in their order in the table. */
   enum Function {
@@ -413,7 +413,7 @@ final class NativeLibrary {
   }
 
   /** The method handles of the FFM API, initialized when the first library is loaded. */
-  private static final class Ffm {
+  static final class Ffm {
     static final Class<?> LAYOUT_CLASS;
     static final Object LINKER;
     static final Object GLOBAL_ARENA;
@@ -597,7 +597,7 @@ final class NativeLibrary {
     }
   }
 
-  private static Throwable rootCause(Throwable e) {
+  static Throwable rootCause(Throwable e) {
     Throwable cause = e;
     while (cause.getCause() != null && cause.getCause() != cause) {
       cause = cause.getCause();
@@ -634,7 +634,7 @@ final class NativeLibrary {
    * The SPARK_DS_LOG_* levels, which {@link #log} and {@link #isLogEnabled} share: a level that
    * is not one of them is treated as SPARK_DS_LOG_INFO.
    */
-  private enum LogLevel {
+  enum LogLevel {
     ERROR, WARN, INFO, DEBUG, TRACE;
 
     static LogLevel of(int level) {
@@ -1186,7 +1186,7 @@ final class NativeLibrary {
   // ---------------------------------------------------------------------------------------------
 
   /** Native memory for the arguments of a call, freed after the call. */
-  private static final class Memory implements AutoCloseable {
+  static final class Memory implements AutoCloseable {
     private final List<Long> allocations = new ArrayList<>();
 
     long zeroed(long size) {
@@ -1235,7 +1235,7 @@ final class NativeLibrary {
   }
 
   /** Copies a string to native memory, as a NUL-terminated UTF-8 string, which the caller frees. */
-  private static long toCString(String value) {
+  static long toCString(String value) {
     byte[] bytes = value.getBytes(StandardCharsets.UTF_8);
     long address = Platform.allocateMemory(bytes.length + 1L);
     Platform.copyMemory(bytes, Platform.BYTE_ARRAY_OFFSET, null, address, bytes.length);
@@ -1243,7 +1243,7 @@ final class NativeLibrary {
     return address;
   }
 
-  private static byte[] readCString(long address) {
+  static byte[] readCString(long address) {
     int length = 0;
     while (Platform.getByte(null, address + length) != 0) {
       length++;

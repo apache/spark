@@ -23,6 +23,7 @@ import org.apache.spark.sql.catalyst.planning.PhysicalOperation
 import org.apache.spark.sql.catalyst.plans.logical.{Filter, LeafNode, LogicalPlan, Project}
 import org.apache.spark.sql.catalyst.plans.logical.statsEstimation.FilterEstimation
 import org.apache.spark.sql.catalyst.rules.Rule
+import org.apache.spark.sql.catalyst.trees.TreePattern.NATIVE_UDF
 
 /**
  * Prune the partitions of file source based table using partition filters. Currently, this rule
@@ -65,8 +66,9 @@ private[sql] object PruneFileSourcePartitions extends Rule[LogicalPlan] {
         filters.filter { f =>
           f.deterministic &&
             !SubqueryExpression.hasSubquery(f) &&
-            // Python UDFs might exist because this rule is applied before ``ExtractPythonUDFs``.
-            !f.exists(_.isInstanceOf[PythonUDF])
+            // Python and native UDFs might exist because this rule is applied before they are
+            // extracted, and partition pruning evaluates the filters on the driver.
+            !f.exists(_.isInstanceOf[PythonUDF]) && !f.containsPattern(NATIVE_UDF)
         },
         logicalRelation.output)
       val (partitionKeyFilters, _) = DataSourceUtils

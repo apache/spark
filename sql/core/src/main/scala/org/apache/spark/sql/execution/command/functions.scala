@@ -22,13 +22,15 @@ import scala.collection.mutable.ArrayBuffer
 import org.apache.spark.sql.{Row, SparkSession}
 import org.apache.spark.sql.catalyst.FunctionIdentifier
 import org.apache.spark.sql.catalyst.analysis.FunctionRegistry
-import org.apache.spark.sql.catalyst.catalog.{CatalogFunction, FunctionResource, SQLFunction, SqlPathFormat}
+import org.apache.spark.sql.catalyst.catalog.{CatalogFunction, FunctionResource, PackageResource, SQLFunction, SqlPathFormat}
 import org.apache.spark.sql.catalyst.expressions.{Attribute, ExpressionInfo}
 import org.apache.spark.sql.catalyst.parser.ParserInterface
 import org.apache.spark.sql.catalyst.types.DataTypeUtils.toAttributes
 import org.apache.spark.sql.catalyst.util.StringUtils
+import org.apache.spark.sql.classic.ClassicConversions.castToImpl
 import org.apache.spark.sql.connector.catalog.CatalogManager
 import org.apache.spark.sql.errors.{QueryCompilationErrors, QueryExecutionErrors}
+import org.apache.spark.sql.execution.datasources.v2.ffi.NativeFunctionRegistry
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types.{NullType, StringType, StructField, StructType}
 
@@ -39,6 +41,13 @@ import org.apache.spark.sql.types.{NullType, StringType, StructField, StructType
  * {{{
  *    CREATE [OR REPLACE] TEMPORARY FUNCTION functionName
  *    AS className [USING JAR\FILE 'uri' [, JAR|FILE 'uri']]
+ * }}}
+ *
+ * To create a temporary native function, implemented by the library of a native package, with
+ * the types that the manifest of the package gives:
+ * {{{
+ *    CREATE [OR REPLACE] TEMPORARY FUNCTION functionName
+ *    AS 'name in the manifest' USING PACKAGE 'package file name, path or URI'
  * }}}
  *
  * To create a permanent function, the syntax in SQL is:
@@ -63,13 +72,23 @@ case class CreateFunctionCommand(
   override def run(sparkSession: SparkSession): Seq[Row] = {
     val catalog = sparkSession.sessionState.catalog
     val func = CatalogFunction(identifier, className, resources)
+    val isNative = resources.exists(_.resourceType == PackageResource)
+    if (isNative && !isTemp) {
+      throw QueryCompilationErrors.persistentNativeUdfUnsupportedError(identifier)
+    }
     if (isTemp) {
       if (!replace && catalog.isRegisteredFunction(identifier)) {
         throw QueryCompilationErrors.functionAlreadyExistsError(identifier)
       }
-      // We first load resources and then put the builder in the function registry.
-      catalog.loadFunctionResources(resources)
-      catalog.registerFunction(func, overrideIfExists = replace)
+      val builder = if (isNative) {
+        Some(NativeFunctionRegistry.functionBuilder(
+          sparkSession, identifier, className, resources.head.uri))
+      } else {
+        // We first load resources and then put the builder in the function registry.
+        catalog.loadFunctionResources(resources)
+        None
+      }
+      catalog.registerFunction(func, overrideIfExists = replace, functionBuilder = builder)
     } else {
       // Handles `CREATE OR REPLACE FUNCTION AS ... USING ...`
       if (replace && catalog.functionExists(identifier)) {

@@ -481,6 +481,20 @@ object StaticSQLConf {
       .booleanConf
       .createWithDefault(true)
 
+  val NATIVE_UDF_ENABLED =
+    buildStaticConf("spark.sql.udf.native.enabled")
+      .doc("When true, sessions can register native functions: scalar functions implemented in " +
+        "native code such as Rust or C++, with CREATE TEMPORARY FUNCTION ... USING PACKAGE. The " +
+        "library of a native function comes in a native package (.sparkpkg file), whose " +
+        "manifest lists the functions and their types: a package added with spark.addArtifact " +
+        "or under spark.sql.dataSource.native.paths, or the package at the path or URI of " +
+        "USING PACKAGE. Spark evaluates native functions in the executor processes, with Java " +
+        "22 or later.")
+      .version("5.0.0")
+      .withBindingPolicy(ConfigBindingPolicy.NOT_APPLICABLE)
+      .booleanConf
+      .createWithDefault(true)
+
   val KAFKA_DISALLOWED_OPTIONS =
     buildStaticConf("spark.sql.kafka.disallowedOptions")
       .internal()

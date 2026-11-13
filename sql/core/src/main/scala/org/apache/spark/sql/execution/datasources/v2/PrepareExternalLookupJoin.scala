@@ -33,6 +33,7 @@ import org.apache.spark.sql.connector.expressions.{Expression => V2Expression, F
 import org.apache.spark.sql.connector.expressions.filter.{Predicate => V2Predicate}
 import org.apache.spark.sql.connector.read.{LookupParameter, SupportsExternalLookup}
 import org.apache.spark.sql.errors.{QueryCompilationErrors, QueryErrorsBase}
+import org.apache.spark.sql.execution.datasources.v2.ffi.NativeUDF
 import org.apache.spark.sql.types.{ArrayType, BooleanType, DataType, MapType, StructType}
 
 /** Finalizes an optimized external lookup side immediately before ordinary V2 scan preparation. */
@@ -91,13 +92,15 @@ object PrepareExternalLookupJoin extends Rule[LogicalPlan] with PredicateHelper
           "TABLE", Map("table" -> toSQLId(tableName)))
     }
     val conjuncts = join.condition.toSeq.flatMap(splitConjunctivePredicates)
-    // A Python or external UDF over lookup columns cannot run in the residual. The rules that move
-    // one out of a join condition match only Join and run later, so this rule does it: an inner
-    // join evaluates the conjunct in a filter above the join, and an outer join is rejected.
+    // A Python, external or native UDF over lookup columns cannot run in the residual. The rules
+    // that move one out of a join condition match only Join and run later, so this rule does it: an
+    // inner join evaluates the conjunct in a filter above the join, and an outer join is rejected.
     if (join.joinType == LeftOuter) {
       conjuncts.flatMap(lookupSideUDF(join, _)).headOption.foreach {
         case _: ExternalUserDefinedFunction =>
           throw QueryCompilationErrors.useExternalUDFInJoinConditionUnsupportedError(join.joinType)
+        case _: NativeUDF =>
+          throw QueryCompilationErrors.nativeUdfInJoinConditionUnsupportedError(join.joinType)
         case _ =>
           throw QueryCompilationErrors.usePythonUDFInJoinConditionUnsupportedError(join.joinType)
       }
@@ -245,11 +248,11 @@ object PrepareExternalLookupJoin extends Rule[LogicalPlan] with PredicateHelper
       case _ => readType
     }
 
-  /** A Python or external UDF in the conjunct that reads lookup columns. */
+  /** A Python, external or native UDF in the conjunct that reads lookup columns. */
   private def lookupSideUDF(join: ExternalLookupJoin, conjunct: Expression): Option[Expression] =
     conjunct.find { e =>
-      (PythonUDF.isScalarPythonUDF(e) || e.isInstanceOf[ExternalUserDefinedFunction]) &&
-        !e.references.subsetOf(join.left.outputSet)
+      (PythonUDF.isScalarPythonUDF(e) || e.isInstanceOf[ExternalUserDefinedFunction] ||
+        e.isInstanceOf[NativeUDF]) && !e.references.subsetOf(join.left.outputSet)
     }
 
   /**

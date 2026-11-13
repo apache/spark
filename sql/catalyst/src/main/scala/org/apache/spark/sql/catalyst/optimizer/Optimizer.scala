@@ -1033,7 +1033,7 @@ object LimitPushDown extends Rule[LogicalPlan] {
     // Push down local limit 1 if join type is LeftSemiOrAnti and join condition is empty.
     case j @ Join(_, right, LeftSemiOrAnti(_), None, _) if !right.maxRows.exists(_ <= 1) =>
       j.copy(right = maybePushLocalLimit(Literal(1, IntegerType), right))
-    // Push down limits through Python UDFs.
+    // Push down limits through Python, external and native UDFs.
     case LocalLimit(le, udf: BatchEvalPython) =>
       LocalLimit(le, udf.copy(child = maybePushLocalLimit(le, udf.child)))
     case LocalLimit(le, p @ Project(_, udf: BatchEvalPython)) =>
@@ -1045,6 +1045,10 @@ object LimitPushDown extends Rule[LogicalPlan] {
     case LocalLimit(le, udf: ExecuteExternalUDF) =>
       LocalLimit(le, udf.copy(child = maybePushLocalLimit(le, udf.child)))
     case LocalLimit(le, p @ Project(_, udf: ExecuteExternalUDF)) =>
+      LocalLimit(le, p.copy(child = udf.copy(child = maybePushLocalLimit(le, udf.child))))
+    case LocalLimit(le, udf: EvalNativeUDFs) =>
+      LocalLimit(le, udf.copy(child = maybePushLocalLimit(le, udf.child)))
+    case LocalLimit(le, p @ Project(_, udf: EvalNativeUDFs)) =>
       LocalLimit(le, p.copy(child = udf.copy(child = maybePushLocalLimit(le, udf.child))))
   }
 }
@@ -2855,6 +2859,7 @@ object PushPredicateThroughNonJoin extends Rule[LogicalPlan] with PredicateHelpe
     case _: ScriptTransformation => true
     case _: Sort => true
     case _: ExecuteExternalUDF => true
+    case _: EvalNativeUDFs => true
     case _: BatchEvalPython => true
     case _: ArrowEvalPython => true
     case _: Expand => true

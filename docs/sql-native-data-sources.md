@@ -462,6 +462,10 @@ is a zip file with the extension `.sparkpkg`, which contains a manifest named
   with glibc: Linux with musl, as Alpine Linux, is `linux-<arch>-musl`, such as `linux-x86_64-musl`,
   on which native data sources do not run yet.
 
+A package can also contain native functions, which its manifest lists in two more fields. A package
+with only functions needs neither `abiVersion` nor `dataSources`: see
+[Native Scalar Functions](#native-scalar-functions).
+
 A session finds the packages in two places, and the executors get them automatically:
 
 - **Artifacts of a session**: `spark.addArtifact` adds a package to a session, in Scala, Java and
@@ -503,6 +507,134 @@ Java 22, a valid package is added, and the queries fail with
 `NATIVE_DATA_SOURCE_UNSUPPORTED_JAVA_VERSION`; on a platform where the C data interface of Arrow
 Java does not load, such as Linux with musl, only a package with a library for that platform is
 added, and the queries fail with `NATIVE_DATA_SOURCE_UNSUPPORTED_PLATFORM`.
+
+## Native Scalar Functions
+
+A native package can also contain scalar functions that its library implements: functions that
+return one value for each row, which Spark evaluates in the executors on Arrow batches of their
+arguments, through the C interface declared in the header
+[`spark_udf.h`]({{site.SPARK_GITHUB_URL}}/blob/v{{site.SPARK_VERSION_SHORT}}/sql/core/src/main/resources/org/apache/spark/sql/datasource/spark_udf.h),
+with no Python worker. Version 1 of the interface has scalar functions. A Spark distribution
+contains the header next to `spark_datasource.h`, as `$SPARK_HOME/include/spark_udf.h`, and the
+`spark-sql` JAR contains it as `org/apache/spark/sql/datasource/spark_udf.h`. Like native data
+sources, native functions require Java 22 or later.
+
+The library exports `spark_udf_init`, which returns a table of function pointers, a
+`SparkUdfLibrary`. Each task that evaluates a call of a function creates a state for the call with
+`create`, which gets the name of the function and the schemas of its arguments and of its result,
+evaluates the batches of its rows with `eval`, and releases the state with `close`. The comments of
+the header specify each function. A library can implement both interfaces: it then includes both
+headers and exports both `spark_ds_init` and `spark_udf_init`, and its package lists both its data
+sources and its functions.
+
+### Functions in a Package
+
+The manifest of a package lists the functions of its library:
+
+```json
+{
+  "udfAbiVersion": 1,
+  "functions": [
+    {"name": "add_one", "kind": "scalar", "arguments": ["bigint"], "returns": "bigint"},
+    {"name": "random_id", "kind": "scalar", "arguments": [], "returns": "string",
+     "deterministic": false}
+  ],
+  "libraries": {
+    "linux-x86_64": "linux-x86_64/libmy_functions.so",
+    "osx-aarch64": "osx-aarch64/libmy_functions.dylib"
+  }
+}
+```
+
+- `udfAbiVersion` is the oldest version of `spark_udf.h` that the library implements, currently 1.
+  It is independent of `abiVersion`, the version of `spark_datasource.h`.
+- `functions` lists the functions. Each has a `name`, which is case-insensitive and which Spark
+  passes to `create`, a `kind`, `scalar` in version 1, the types of its `arguments` and of the
+  value that it `returns`, in Spark SQL, such as `bigint` or `array<string>`, and `deterministic`,
+  true by default, which tells whether the function returns the same result for the same
+  arguments: Spark may then evaluate the identical calls of a query only once.
+
+The types of version 1 are `boolean`, `tinyint`, `smallint`, `int`, `bigint`, `float`, `double`,
+`decimal`, `string`, `binary`, `date`, `timestamp` and `timestamp_ntz`, and arrays, maps and structs
+of them, with the Arrow types that the header lists. Spark rejects a manifest with another type,
+such as an interval, `variant` or `time`, or `char` and `varchar`, whose length Arrow does not
+carry, and a manifest in which the name of a function, or of a field of a struct, contains the
+character U+0000.
+
+A package may contain only functions, and then needs neither `dataSources` nor `abiVersion`. A
+package with data sources still needs its `abiVersion`.
+
+Spark skips the functions of a kind that it does not know, which a later version may add, so that
+the rest of the package stays usable: registering one of them fails with
+`NATIVE_UDF_UNSUPPORTED_KIND`. Spark rejects a package whose `udfAbiVersion` it does not support,
+whatever its functions declare: `spark.addArtifact` fails for it with
+`INVALID_NATIVE_DATA_SOURCE_PACKAGE.UNSUPPORTED_UDF_ABI_VERSION`, as for the other invalid packages
+(see [Packages](#packages)), and so does registering one of its functions. A package of such a
+version in `spark.sql.dataSource.native.paths` still provides its data sources.
+
+### Registering and Calling Functions
+
+A session registers a function of a package with `CREATE TEMPORARY FUNCTION`, under a name of its
+choice, and then calls it by that name, from SQL or with `call_function` in the DataFrame API, also
+from a Spark Connect client:
+
+```sql
+CREATE TEMPORARY FUNCTION add_one AS 'add_one' USING PACKAGE 'my_functions.sparkpkg';
+SELECT add_one(id) FROM range(3);
+```
+
+`USING PACKAGE` takes the file name of a package that the session added with `spark.addArtifact`,
+or else of a package in `spark.sql.dataSource.native.paths`, or else the path or the URI of a
+package: Spark fetches a package at a URI that is not a local file each time it registers a
+function from it. See [CREATE FUNCTION](sql-ref-syntax-ddl-create-function.html). A function
+lives as long as its session, and `CREATE OR REPLACE TEMPORARY FUNCTION` replaces it.
+`CREATE FUNCTION` without `TEMPORARY` fails with `UNSUPPORTED_FEATURE.PERSISTENT_NATIVE_UDF`:
+native functions cannot be persistent yet.
+
+The driver reads the manifest of the package, and never loads the library: the analyzer casts the
+arguments of a call to the types of the manifest, as for other functions with declared types, and
+only the executors load the library, to evaluate the calls. Registering a function still fails if
+the package has no library for the platform of the driver, with
+`INVALID_NATIVE_DATA_SOURCE_PACKAGE.UNSUPPORTED_PLATFORM`, and before Java 22, with
+`NATIVE_UDF_UNSUPPORTED_JAVA_VERSION`. A function that fails reports its error to Spark, which
+fails the query with `NATIVE_UDF_ERROR`.
+
+A native call cannot be in a lambda function, such as the function of `transform`: that fails with
+`UNSUPPORTED_FEATURE.NATIVE_UDF_IN_LAMBDA`. Nor can a call in the condition of a join other than an
+inner join read the columns of both sides: that fails with
+`UNSUPPORTED_FEATURE.NATIVE_UDF_IN_ON_CLAUSE`, also for the condition of a correlated `EXISTS`
+subquery whose call reads columns of both the query and the subquery.
+
+### Evaluation
+
+Spark evaluates the calls of an operator in the tasks of the operator, on Arrow batches of their
+arguments, which end at `spark.sql.execution.arrow.maxRecordsPerBatch` rows, or once the arguments
+and the input rows that Spark keeps until it has the results of the batch hold
+`spark.sql.execution.arrow.maxBytesPerBatch` bytes. It evaluates a call, and its arguments, for
+every row that reaches the call, also in a branch of `CASE WHEN` or `IF`, in an argument of
+`COALESCE`, or in an operand of `AND` or `OR`, where the query does not use its value. So a
+function that fails on some arguments must not rely on a condition in the query to avoid them, and
+neither must its arguments: with ANSI mode, as by default, `CASE WHEN d <> 0 THEN f(n / d) END`
+fails with `DIVIDE_BY_ZERO` on a row whose `d` is 0, where a built-in function in place of `f` would
+not be evaluated. Put the condition in the arguments instead, as in `f(IF(d <> 0, n / d, NULL))` or
+`f(try_divide(n, d))`, which pass a null for such a row. When the user-defined functions that a
+`WHERE` clause calls, and their arguments, are deterministic, the deterministic conditions that it
+combines with `AND` and that call none of them are applied before the calls, so the calls only get
+the rows that they keep, with two exceptions. A condition that can raise an error on purpose, such
+as one that calls `raise_error` or `assert_true`, is applied after the calls when it is written
+after a condition that calls one of them. And over a join, a call that reads one side only is
+evaluated on that side, before the join, so it gets the rows that the conditions on that side keep,
+also those that the conditions on the other side or on both sides then drop; a condition that can
+raise an error on purpose is applied after the join there, so after such a call, also when it is
+written before it. For a deterministic `f`, as the functions of a manifest are by default,
+`WHERE d <> 0 AND f(n / d) > 0` never divides by zero.
+
+Spark never evaluates a native function on the driver, also to fold a call whose arguments are
+constants. It may evaluate a function for rows that the query drops afterwards, such as the rows
+that a later filter rejects, and it evaluates rows again when a task runs again. As for native data
+sources, Spark cannot interrupt native code, so an `eval` that runs for long should check the
+`is_interrupted` function of its task, and Spark does not manage the memory of a library: see
+[Memory](#memory).
 
 ## Example in Rust
 
@@ -957,6 +1089,7 @@ statically, or install them on the nodes.
 | `spark.sql.dataSource.native.enabled` | true | Whether Spark loads native data sources. It is a static configuration, so it can only be set when the Spark application starts. When false, `spark.addArtifact` adds a `.sparkpkg` file as a file of the session, without checking it as a package. |
 | `spark.sql.dataSource.native.paths` | (none) | Comma-separated list of native data source packages, and of directories that contain them, on the local file system of the driver. They take precedence over the installed libraries, and the packages that a session adds with `spark.addArtifact` take precedence over them. |
 | `spark.sql.dataSource.native.filterPushdown.enabled` | true | Whether Spark passes the domains of the filtered columns of a batch scan to native data sources, so that they can skip data: see [Filter Pushdown](#filter-pushdown). Spark evaluates the filters after reading anyway. |
+| `spark.sql.udf.native.enabled` | true | Whether sessions can register native functions with `CREATE TEMPORARY FUNCTION ... USING PACKAGE`: see [Native Scalar Functions](#native-scalar-functions). It is a static configuration, so it can only be set when the Spark application starts. When false, registering a native function fails with `NATIVE_UDF_DISABLED`. It is independent of `spark.sql.dataSource.native.enabled`. |
 
 ## Security
 
@@ -970,3 +1103,8 @@ untrusted users write to the directories of the native library path, or to the d
 Connect client, can also add a package, as they can add JAR files. Set
 `spark.sql.dataSource.native.enabled` to false to prevent loading native data sources, for example
 on a server shared by several users.
+
+A native function also runs native code, in the executor processes. A user who can run SQL can
+register one from a package at any path or URI that the driver can read, as they can create a
+function from a JAR file with `USING JAR`. `spark.sql.dataSource.native.enabled` does not prevent
+native functions: set `spark.sql.udf.native.enabled` to false to prevent them.

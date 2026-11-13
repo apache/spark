@@ -5104,6 +5104,11 @@
         "message" : [
           "It has no library for the platform <platform>. It has libraries for: <platforms>."
         ]
+      },
+      "UNSUPPORTED_UDF_ABI_VERSION" : {
+        "message" : [
+          "It implements version <version> of the native function interface, but Spark supports version <supported>."
+        ]
       }
     },
     "sqlState" : "22023"
@@ -6632,6 +6637,48 @@
   "NATIVE_DATA_SOURCE_UNSUPPORTED_PLATFORM" : {
     "message" : [
       "Native data sources are not supported on the platform <platform>: the JNI library of the C data interface of Arrow Java, with which Spark exchanges their data, failed to load: <reason>"
+    ],
+    "sqlState" : "0A000"
+  },
+  "NATIVE_UDF_DISABLED" : {
+    "message" : [
+      "Cannot register the native function <functionName>: native functions are disabled. Start Spark with <config> set to true to enable them."
+    ],
+    "sqlState" : "0A000"
+  },
+  "NATIVE_UDF_ERROR" : {
+    "message" : [
+      "Failed to evaluate the native function <function>, the function <name> of the native package <package>: <msg>"
+    ],
+    "sqlState" : "38000"
+  },
+  "NATIVE_UDF_NOT_FOUND" : {
+    "message" : [
+      "The native package <package> does not have the function <name>: its manifest lists the functions [<functions>]."
+    ],
+    "sqlState" : "42883"
+  },
+  "NATIVE_UDF_PACKAGE_NOT_FOUND" : {
+    "message" : [
+      "Cannot find the native package <package> of the function <functionName>. Add the package with `spark.addArtifact`, install it under `spark.sql.dataSource.native.paths`, or give its path or URI."
+    ],
+    "sqlState" : "42K02"
+  },
+  "NATIVE_UDF_UNSUPPORTED_JAVA_VERSION" : {
+    "message" : [
+      "Native functions require Java <required> or later, but Spark runs on Java <current>."
+    ],
+    "sqlState" : "0A000"
+  },
+  "NATIVE_UDF_UNSUPPORTED_KIND" : {
+    "message" : [
+      "The function <name> of the native package <package> has the kind <kind>, which this version of Spark does not support. It supports the kinds: <kinds>."
+    ],
+    "sqlState" : "0A000"
+  },
+  "NATIVE_UDF_UNSUPPORTED_PLATFORM" : {
+    "message" : [
+      "Native functions are not supported on the platform <platform>: the JNI library of the C data interface of Arrow Java, with which Spark exchanges their data, failed to load: <reason>"
     ],
     "sqlState" : "0A000"
   },
@@ -9722,6 +9769,16 @@
           "The target JDBC server hosting table <tableName> does not support ALTER TABLE with multiple actions. Split the ALTER TABLE up into individual actions to avoid this error."
         ]
       },
+      "NATIVE_UDF_IN_LAMBDA" : {
+        "message" : [
+          "The native function <functionName> in a lambda function, such as the function of transform."
+        ]
+      },
+      "NATIVE_UDF_IN_ON_CLAUSE" : {
+        "message" : [
+          "Native function in the ON clause of a <joinType> JOIN. In case of an INNER JOIN consider rewriting to a CROSS JOIN with a WHERE clause."
+        ]
+      },
       "OBJECT_LEVEL_COLLATIONS" : {
         "message" : [
           "Default collation for the specified object."
@@ -9760,6 +9817,11 @@
       "PARTITION_WITH_NESTED_COLUMN_IS_UNSUPPORTED" : {
         "message" : [
           "Invalid partitioning: <cols> is missing or is in a map or array."
+        ]
+      },
+      "PERSISTENT_NATIVE_UDF" : {
+        "message" : [
+          "The persistent native function <functionName>. Create a temporary function with CREATE TEMPORARY FUNCTION ... USING PACKAGE instead."
         ]
       },
       "PIPE_OPERATOR_AGGREGATE_UNSUPPORTED_CASE" : {

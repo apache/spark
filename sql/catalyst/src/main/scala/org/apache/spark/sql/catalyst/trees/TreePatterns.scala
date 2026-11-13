@@ -77,6 +77,7 @@ object TreePattern extends Enumeration  {
   val MEASURE: Value = Value
   val MIN: Value = Value
   val MULTI_ALIAS: Value = Value
+  val NATIVE_UDF: Value = Value
   val NEW_INSTANCE: Value = Value
   val NOT: Value = Value
   val NULL_CHECK: Value = Value

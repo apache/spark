@@ -20,6 +20,7 @@ import scala.collection.mutable
 
 import org.apache.spark.sql.{sources, SparkSession}
 import org.apache.spark.sql.catalyst.expressions.{Expression, PythonUDF, SubqueryExpression}
+import org.apache.spark.sql.catalyst.trees.TreePattern.NATIVE_UDF
 import org.apache.spark.sql.connector.expressions.filter.Predicate
 import org.apache.spark.sql.connector.read.{ScanBuilder, SupportsPushDownRequiredColumns}
 import org.apache.spark.sql.execution.datasources.{DataSourceStrategy, DataSourceUtils, PartitioningAwareFileIndex, PartitioningUtils}
@@ -74,8 +75,10 @@ abstract class FileScanBuilder(
     val (partitionFilters, dataFilters) =
       DataSourceUtils.getPartitionFiltersAndDataFilters(partitionSchema, deterministicFilters)
     val (partitionFiltersToPush, postScanPartitionFilters) = partitionFilters.partition { f =>
-      // Python UDFs might exist because this rule is applied before ``ExtractPythonUDFs``.
-      !SubqueryExpression.hasSubquery(f) && !f.exists(_.isInstanceOf[PythonUDF])
+      // Python and native UDFs might exist because this rule is applied before they are
+      // extracted, and partition pruning evaluates the filters on the driver.
+      !SubqueryExpression.hasSubquery(f) && !f.exists(_.isInstanceOf[PythonUDF]) &&
+        !f.containsPattern(NATIVE_UDF)
     }
     this.partitionFilters = partitionFiltersToPush
     this.dataFilters = dataFilters

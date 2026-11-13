@@ -226,6 +226,10 @@ trait PredicateHelper extends AliasHelper with Logging {
     // For PythonUDFs that can't be evaluated in join condition, `ExtractPythonUDFFromJoinCondition`
     // will pull them out later.
     case _: PythonUDF => true
+    // A native function call, which catalyst cannot name, is evaluated by its own operator too:
+    // `ExtractNativeUDFs` evaluates the calls of a join condition below their side, or above an
+    // inner join when they need both sides.
+    case e: Unevaluable if e.containsPattern(NATIVE_UDF) => e.children.forall(canEvaluateWithinJoin)
     case e: Unevaluable => false
     case e => e.children.forall(canEvaluateWithinJoin)
   }
