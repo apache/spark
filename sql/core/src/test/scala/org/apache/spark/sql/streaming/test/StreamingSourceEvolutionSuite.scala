@@ -25,7 +25,12 @@ import org.mockito.Mockito._
 import org.scalatest.Tag
 
 import org.apache.spark.sql._
+import org.apache.spark.sql.catalyst.plans.logical.Union
+import org.apache.spark.sql.catalyst.streaming.{FlowAssigned, StreamingRelationV2, UserProvided}
+import org.apache.spark.sql.classic.Dataset.ofRows
+import org.apache.spark.sql.connector.catalog.{SupportsRead, TableCapability}
 import org.apache.spark.sql.execution.streaming.checkpointing.{OffsetMap, OffsetSeqLog}
+import org.apache.spark.sql.execution.streaming.runtime.{MemoryStream, StreamingRelation}
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.streaming.StreamTest
 import org.apache.spark.sql.streaming.Trigger._
@@ -38,6 +43,8 @@ import org.apache.spark.util.Utils
  */
 @SlowSQLTest
 class StreamingSourceEvolutionSuite extends StreamTest {
+
+  import testImplicits._
 
   private def newMetadataDir =
     Utils.createTempDir(namePrefix = "streaming.metadata").getCanonicalPath
@@ -143,6 +150,90 @@ class StreamingSourceEvolutionSuite extends StreamTest {
   // ==========================
   // Duplicate Detection Tests
   // ==========================
+
+  testWithSourceEvolution("SPARK-60249: reuse a named parquet source in unionByName") {
+    withSQLConf(SQLConf.USE_V1_SOURCE_LIST.key -> "parquet") {
+      withTempPath { input =>
+        withTempDir { checkpoint =>
+          val queryName = "spark60249_reused_source"
+          withTempView(queryName) {
+            Seq(1L, 2L, 2L, 3L).toDF("id").write.parquet(input.getCanonicalPath)
+            val source = spark.readStream.schema("id LONG").format("parquet")
+              .name("events").load(input.getCanonicalPath)
+            assert(source.queryExecution.analyzed.isInstanceOf[StreamingRelation])
+            val transformed = source.filter("id > 1").selectExpr("id + 10 AS id")
+            val query = source.unionByName(transformed).writeStream
+              .format("memory")
+              .outputMode("append")
+              .queryName(queryName)
+              .option("checkpointLocation", checkpoint.getCanonicalPath)
+              .start()
+            try {
+              query.processAllAvailable()
+              checkAnswer(spark.table(queryName),
+                Seq(1L, 2L, 2L, 3L, 12L, 12L, 13L).map(Row(_)))
+              assert(query.recentProgress.exists(_.sources.length == 1))
+            } finally {
+              query.stop()
+            }
+          }
+        }
+      }
+    }
+  }
+
+  testWithSourceEvolution("SPARK-60249: reuse a named V2 source in unionByName") {
+    val input = MemoryStream[Long]
+    val relation = input.toDF().queryExecution.analyzed.asInstanceOf[StreamingRelationV2]
+      .copy(sourceIdentifyingName = UserProvided("events"))
+    val source = ofRows(spark, relation).toDF("id")
+    val transformed = source.filter("id > 1").selectExpr("id + 10 AS id")
+
+    testStream(source.unionByName(transformed))(
+      AddData(input, 1L, 2L, 2L, 3L),
+      CheckAnswer(1L, 2L, 2L, 3L, 12L, 12L, 13L))
+  }
+
+  Seq("V1", "V2", "V2 fallback").foreach { route =>
+    testWithSourceEvolution(s"SPARK-60249: source reuse uses relation equality - $route") {
+      val v1 = spark.readStream.format("org.apache.spark.sql.streaming.test")
+        .name("events").load().queryExecution.analyzed.asInstanceOf[StreamingRelation]
+        .copy(sourceIdentifyingName = FlowAssigned("events"))
+      val v2 = MemoryStream[Int].toDF().queryExecution.analyzed.asInstanceOf[StreamingRelationV2]
+        .copy(sourceIdentifyingName = FlowAssigned("events"))
+      val relation = route match {
+        case "V1" => v1
+        case "V2" => v2
+        case "V2 fallback" =>
+          val table = mock(classOf[SupportsRead])
+          // omit MICRO_BATCH_READ to force the V1 fallback
+          when(table.capabilities()).thenReturn(
+            java.util.Collections.singleton(TableCapability.CONTINUOUS_READ))
+          v2.copy(table = table, v1Relation = Some(v1))
+      }
+      val (equalRelation, distinctRelation) = relation match {
+        case r: StreamingRelation => (r.copy(), r.newInstance())
+        case r: StreamingRelationV2 => (r.copy(), r.newInstance())
+      }
+      assert(relation == equalRelation)
+      assert(relation ne equalRelation)
+      testStream(ofRows(spark, Union(Seq(relation, equalRelation))))(ProcessAllAvailable())
+
+      assert(relation != distinctRelation)
+      assert(relation.sameResult(distinctRelation))
+      withTempDir { checkpoint =>
+        checkError(
+          exception = intercept[AnalysisException] {
+            ofRows(spark, Union(Seq(relation, distinctRelation))).writeStream
+              .format("org.apache.spark.sql.streaming.test")
+              .option("checkpointLocation", checkpoint.getCanonicalPath)
+              .start()
+          },
+          condition = "STREAMING_QUERY_EVOLUTION_ERROR.DUPLICATE_SOURCE_NAMES",
+          parameters = Map("names" -> "'events'"))
+      }
+    }
+  }
 
   testWithSourceEvolution("duplicate source names - rejected when starting stream") {
     withTempDir { checkpointDir =>
