@@ -29,6 +29,7 @@ import org.apache.spark.sql.catalyst.catalog.BucketSpec
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.plans.QueryPlan
 import org.apache.spark.sql.catalyst.plans.physical.{HashPartitioning, Partitioning, SinglePartition, UnknownPartitioning}
+import org.apache.spark.sql.catalyst.trees.TreeNodeTag
 import org.apache.spark.sql.catalyst.util.{truncatedString, CaseInsensitiveMap}
 import org.apache.spark.sql.connector.read.streaming.SparkDataStream
 import org.apache.spark.sql.errors.QueryExecutionErrors
@@ -743,14 +744,22 @@ case class FileSourceScanExec(
 
   // Note that some vals referring the file-based relation are lazy intentionally
   // so that this plan can be canonicalized on executor side too. See SPARK-23731.
-  override lazy val supportsColumnar: Boolean = {
-    val conf = getSqlConf(relation.sparkSession)
-    // Only output columnar if there is WSCG to read it.
-    val requiredWholeStageCodegenSettings =
-      conf.wholeStageEnabled && !WholeStageCodegenExec.isTooManyFields(conf, schema)
-    requiredWholeStageCodegenSettings &&
-      relation.fileFormat.supportBatch(relation.sparkSession, schema)
-  }
+  //
+  // The decision is also kept in a tag, which a copy of this node takes over. The transitions
+  // around this node are planned against it, and a copy made after them, such as the one
+  // `ReuseExchangeAndSubquery` makes when it rewrites a dynamic pruning filter, would otherwise
+  // decide again from the conf at the time it is first asked.
+  override lazy val supportsColumnar: Boolean =
+    getTagValue(FileSourceScanExec.SUPPORTS_COLUMNAR).getOrElse {
+      val conf = getSqlConf(relation.sparkSession)
+      // Only output columnar if there is WSCG to read it.
+      val requiredWholeStageCodegenSettings =
+        conf.wholeStageEnabled && !WholeStageCodegenExec.isTooManyFields(conf, schema)
+      val decision = requiredWholeStageCodegenSettings &&
+        relation.fileFormat.supportBatch(relation.sparkSession, schema)
+      setTagValue(FileSourceScanExec.SUPPORTS_COLUMNAR, decision)
+      decision
+    }
 
   private lazy val needsUnsafeRowConversion: Boolean = {
     if (relation.fileFormat.isInstanceOf[ParquetSource]) {
@@ -986,4 +995,9 @@ case class FileSourceScanExec(
   }
 
   override def getStream: Option[SparkDataStream] = stream
+}
+
+object FileSourceScanExec {
+  /** The columnar decision of a [[FileSourceScanExec]]. See `supportsColumnar`. */
+  private val SUPPORTS_COLUMNAR = TreeNodeTag[Boolean]("fileSourceScanSupportsColumnar")
 }
