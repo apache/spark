@@ -23,6 +23,7 @@ import java.util.Locale
 import scala.collection.mutable.ArrayBuffer
 import scala.util.Random
 
+import org.apache.datasketches.kll.{KllDoublesSketch, KllFloatsSketch, KllLongsSketch}
 import org.apache.datasketches.memory.Memory
 import org.apache.datasketches.tuple.{Sketches => TupleSketches}
 import org.apache.datasketches.tuple.adouble.{DoubleSummary, DoubleSummaryDeserializer}
@@ -4486,6 +4487,64 @@ class DataFrameAggregateSuite extends SharedSparkSession
 
     val n = merged.select(kll_sketch_get_n_bigint($"merged_sketch")).collect()(0)(0)
     assert(n == 5L)
+  }
+
+  private def kllSketch(sketchType: String, k: Int, n: Int): Array[Byte] =
+    spark.range(n).selectExpr(s"kll_sketch_agg_$sketchType(CAST(id AS $sketchType), $k)")
+      .head().getAs[Array[Byte]](0)
+
+  // Puts `sketches` in order into `numPartitions` partitions, merges them, and returns the k and
+  // n of the result.
+  private def kllMergedKAndN(
+      sketchType: String,
+      sketches: Seq[Array[Byte]],
+      numPartitions: Int,
+      lowestCompactingK: Boolean,
+      kArg: String = ""): (Int, Long) = {
+    withSQLConf(SQLConf.KLL_MERGE_AGG_LOWEST_COMPACTING_K.key -> lowestCompactingK.toString) {
+      val bytes = spark.sparkContext.parallelize(sketches, numPartitions).toDF("s")
+        .agg(expr(s"kll_merge_agg_$sketchType(s$kArg)"))
+        .head().getAs[Array[Byte]](0)
+      val mem = Memory.wrap(bytes)
+      val merged = sketchType match {
+        case "bigint" => KllLongsSketch.heapify(mem)
+        case "float" => KllFloatsSketch.heapify(mem)
+        case "double" => KllDoublesSketch.heapify(mem)
+      }
+      (merged.getK, merged.getN)
+    }
+  }
+
+  for (sketchType <- Seq("bigint", "float", "double")) {
+    test(s"SPARK-61368: kll_merge_agg_$sketchType without k takes the lowest k among the " +
+        "inputs that have started compacting") {
+      // Input sketches as (k, n), then the expected k with the conf on. n = 10000 compacts at
+      // every k here, the other inputs stay exact, and n = 0 is an empty sketch.
+      val cases = Seq(
+        Seq((200, 0), (400, 10000)) -> 400,
+        Seq((200, 0), (400, 10)) -> 400,
+        Seq((400, 10000), (100, 10000)) -> 100,
+        Seq((8, 3), (200, 10000)) -> 200,
+        Seq((1000, 10), (200, 10000)) -> 200)
+      for ((inputs, lowestK) <- cases) {
+        val sketches = inputs.map { case (k, n) => kllSketch(sketchType, k, n) }
+        val n = inputs.map(_._2.toLong).sum
+        val orders = Seq(sketches -> inputs.head._1, sketches.reverse -> inputs.last._1)
+        for ((ordered, firstK) <- orders) {
+          // One partition: the sketches arrive in this order.
+          assert(kllMergedKAndN(sketchType, ordered, 1, lowestCompactingK = false) == ((firstK, n)))
+          assert(kllMergedKAndN(sketchType, ordered, 1, lowestCompactingK = true) == ((lowestK, n)))
+          // One sketch per partition: the final aggregate merges the partial sketches.
+          assert(kllMergedKAndN(sketchType, ordered, ordered.size, lowestCompactingK = true) ==
+            ((lowestK, n)))
+        }
+      }
+
+      // An explicit k is kept.
+      val compacted = Seq.fill(2)(kllSketch(sketchType, 100, 10000))
+      assert(kllMergedKAndN(sketchType, compacted, 1, lowestCompactingK = true, kArg = ", 400") ==
+        ((400, 20000L)))
+    }
   }
 
   test("SPARK-54179: tuple_sketch_agg_double basic functionality") {
