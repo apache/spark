@@ -19,6 +19,9 @@ package org.apache.spark.deploy
 
 import scala.collection.Map
 
+import org.apache.spark.SparkConf
+import org.apache.spark.util.Utils
+
 private[spark] case class Command(
     mainClass: String,
     arguments: Seq[String],
@@ -26,4 +29,8 @@ private[spark] case class Command(
     classPathEntries: Seq[String],
     libraryPathEntries: Seq[String],
     javaOpts: Seq[String]) {
+
+  private[deploy] def redactedCopy(conf: SparkConf): Command = copy(
+    environment = Utils.redact(conf, environment.toSeq).toMap,
+    javaOpts = Utils.redactCommandLineArgs(conf, javaOpts))
 }
