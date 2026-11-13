@@ -4745,26 +4745,6 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase with Compilat
         "missingColumns" -> columnSQLIds(missingColumns)))
   }
 
-  def splitUpdateRowIdNotDeclaredError(
-      connectorClass: String,
-      rowIds: Seq[Seq[String]]): Throwable = {
-    new AnalysisException(
-      errorClass = "COLUMN_UPDATE_SPLIT_ROW_ID_NOT_DECLARED",
-      messageParameters = Map(
-        "connector" -> connectorClass,
-        "rowIds" -> columnSQLIds(rowIds)))
-  }
-
-  def splitUpdateRowIdReassignmentError(
-      connectorClass: String,
-      rowIds: Seq[Seq[String]]): Throwable = {
-    new AnalysisException(
-      errorClass = "COLUMN_UPDATE_SPLIT_ROW_ID_REASSIGNMENT",
-      messageParameters = Map(
-        "connector" -> connectorClass,
-        "rowIds" -> columnSQLIds(rowIds)))
-  }
-
   def unknownRequiredDataAttributeError(
       connectorClass: String,
       unknownAttributes: Seq[Seq[String]]): Throwable = {

@@ -608,9 +608,8 @@ class InMemoryRowLevelOperationTable private (
     }
   }
 
-  // Test-only: a split-update fixture whose row ID is the given column. The dispatcher declares
-  // only the updated columns, to exercise which undeclared row-ID columns still reach the REINSERT
-  // row.
+  // Test-only: a split-update fixture whose row ID is the given column, which the dispatcher does
+  // not declare: it declares only the updated columns.
   class DeltaBasedColumnUpdateSplitOperationWithRowId(
       command: Command,
       rowIdCol: String,

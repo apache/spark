@@ -87,19 +87,11 @@ public interface SupportsColumnUpdates extends RowLevelOperation {
    * <p>
    * If the returned array is non-empty and this operation also mixes in {@link SupportsDelta} and
    * represents updates as deletes and inserts
-   * ({@link SupportsDelta#representUpdateAsDeleteAndInsert()} returns {@code true}), every row-ID
-   * column ({@link SupportsDelta#rowId()}) must reach the reinserted row: a data row-ID column must
-   * be declared here, and a metadata row-ID column must be returned by
-   * {@link #requiredMetadataAttributes()} with
-   * {@link org.apache.spark.sql.connector.catalog.MetadataColumn#PRESERVE_ON_REINSERT} set. In this
-   * mode, an UPDATE that assigns a new value to a row-ID column is also rejected, unless every data
-   * column is declared here and the aligned assignments include no metadata column, not even an
-   * identity assignment. A self-assignment that {@link RowLevelOperationInfo#updatedColumns()}
-   * reports, such as one on a CHAR or VARCHAR row-ID column, counts as a new value. Only on a table
-   * that accepts any schema can the aligned assignments include a metadata column: when SET lists
-   * one, or when the UPDATE references one, which can add every metadata column to the columns the
-   * connector's alignment rule must assign. Spark rejects both a row-ID column that does not reach
-   * the reinserted row and such an assignment with an analysis exception.
+   * ({@link SupportsDelta#representUpdateAsDeleteAndInsert()} returns {@code true}), the reinserted
+   * row carries only the columns declared here, and its metadata keeps only the values of the
+   * columns returned by {@link #requiredMetadataAttributes()} that are preserved on reinsert
+   * ({@link org.apache.spark.sql.connector.catalog.MetadataColumn#PRESERVE_ON_REINSERT}); the
+   * others are null. Spark does not relate a reinserted row to the deleted row.
    * <p>
    * Data columns the write needs must be declared here too, even if the command does not
    * reference them, such as the source columns of partition transforms and any columns used by

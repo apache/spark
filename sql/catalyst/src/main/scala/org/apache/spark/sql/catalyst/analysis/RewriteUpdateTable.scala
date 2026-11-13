@@ -55,7 +55,7 @@ object RewriteUpdateTable extends RewriteRowLevelCommand {
           val writeAttrs = narrowAttrs.getOrElse(r.output)
           table.operation match {
             case _: SupportsDelta =>
-              buildWriteDeltaPlan(r, table, assignments, updateCond, narrowAttrs, updatedAttrs)
+              buildWriteDeltaPlan(r, table, assignments, updateCond, writeAttrs)
             case _ if SubqueryExpression.hasSubquery(updateCond) =>
               buildReplaceDataWithUnionPlan(r, table, assignments, updateCond, writeAttrs)
             case _ =>
@@ -170,22 +170,14 @@ object RewriteUpdateTable extends RewriteRowLevelCommand {
       operationTable: RowLevelOperationTable,
       assignments: Seq[Assignment],
       cond: Expression,
-      narrowAttrs: Option[Seq[AttributeReference]],
-      updatedAttrs: Seq[AttributeReference]): WriteDelta = {
+      writeAttrs: Seq[AttributeReference]): WriteDelta = {
 
     val operation = operationTable.operation.asInstanceOf[SupportsDelta]
-    val writeAttrs = narrowAttrs.getOrElse(relation.output)
 
     // resolve all needed attrs (e.g. row ID and any required metadata attrs)
     val rowIdAttrs = resolveRowIdAttrs(relation, operation)
     val metadataAttrs = resolveRequiredMetadataAttrs(relation, operation)
     val splitUpdates = operation.representUpdateAsDeleteAndInsert
-
-    if (splitUpdates && narrowAttrs.isDefined) {
-      val declared = AttributeSet(writeAttrs)
-      validateNoRowIdReassignment(operation, relation, declared, updatedAttrs, rowIdAttrs)
-      validateRowIdDeclared(operation, declared, rowIdAttrs, metadataAttrs)
-    }
 
     // construct a read relation and include all required metadata columns
     // as well as metadata columns referenced in the condition or assignments
@@ -324,54 +316,6 @@ object RewriteUpdateTable extends RewriteRowLevelCommand {
     if (missing.nonEmpty) {
       throw QueryCompilationErrors.requiredDataAttributesMissingUpdatedColumnsError(
         operation.getClass.getName, missing)
-    }
-  }
-
-  /**
-   * For connectors that opt into narrow column updates AND represent UPDATE as delete + insert,
-   * reject reassignment of any row-ID column, unless `requiredDataAttributes()` covers every
-   * column of the relation. In that case the REINSERT payload already is the full row with
-   * the new row-ID value, and the DELETE half still carries the original row-ID via
-   * `newLazyRowIdProjection`, so reassignment is safe. Otherwise the REINSERT path has no row-ID
-   * channel to reconstruct columns outside `requiredDataAttributes()`.
-   */
-  private def validateNoRowIdReassignment(
-      operation: RowLevelOperation,
-      relation: DataSourceV2Relation,
-      declared: AttributeSet,
-      updatedAttrs: Seq[AttributeReference],
-      rowIdAttrs: Seq[Attribute]): Unit = {
-    if (!relation.outputSet.subsetOf(declared)) {
-      val rowIdAttrSet = AttributeSet(rowIdAttrs)
-      val reassigned = updatedAttrs.filter(rowIdAttrSet.contains).map(a => Seq(a.name))
-      if (reassigned.nonEmpty) {
-        throw QueryCompilationErrors.splitUpdateRowIdReassignmentError(
-          operation.getClass.getName, reassigned)
-      }
-    }
-  }
-
-  /**
-   * For connectors that opt into narrow column updates AND represent UPDATE as delete + insert,
-   * requires every row-ID column to reach the REINSERT row. A data column reaches it only if it
-   * is declared in `requiredDataAttributes()`. A metadata column reaches it only through the
-   * metadata projection, so it must be in `requiredMetadataAttributes()` and preserved on
-   * reinsert (see `deltaReinsertOutput`/`MetadataAttribute.isPreservedOnReinsert`). Otherwise the
-   * reinserted row would have no identity for the connector to place it by.
-   */
-  private def validateRowIdDeclared(
-      operation: RowLevelOperation,
-      declared: AttributeSet,
-      rowIdAttrs: Seq[Attribute],
-      metadataAttrs: Seq[Attribute]): Unit = {
-    val reinsertedMetadata =
-      AttributeSet(metadataAttrs.filter(MetadataAttribute.isPreservedOnReinsert))
-    val undeclared = rowIdAttrs
-      .filterNot(a => declared.contains(a) || reinsertedMetadata.contains(a))
-      .map(a => Seq(a.name)).distinct
-    if (undeclared.nonEmpty) {
-      throw QueryCompilationErrors.splitUpdateRowIdNotDeclaredError(
-        operation.getClass.getName, undeclared)
     }
   }
 }

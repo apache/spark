@@ -1309,18 +1309,6 @@
     ],
     "sqlState" : "42000"
   },
-  "COLUMN_UPDATE_SPLIT_ROW_ID_NOT_DECLARED" : {
-    "message" : [
-      "Connector <connector> mixes in `SupportsColumnUpdates` and represents UPDATE as delete and insert, but row ID column(s) <rowIds> do not reach the reinserted row, which then has no identity for the connector to place it by. Declare each data row ID column in `requiredDataAttributes()`, and return each metadata row ID column from `requiredMetadataAttributes()` with `MetadataColumn.PRESERVE_ON_REINSERT` set."
-    ],
-    "sqlState" : "42000"
-  },
-  "COLUMN_UPDATE_SPLIT_ROW_ID_REASSIGNMENT" : {
-    "message" : [
-      "Connector <connector> mixes in `SupportsColumnUpdates` and represents UPDATE as delete and insert, so UPDATE cannot assign row ID column(s) <rowIds>. The reinserted row carries only the columns in `requiredDataAttributes()`, and with a new row ID it cannot be matched to the row whose other columns the connector must preserve. Do not assign row ID columns, or include every data column in `requiredDataAttributes()` and do not reference metadata columns in the UPDATE."
-    ],
-    "sqlState" : "42000"
-  },
   "COLUMN_UPDATE_UNDECLARED_WRITE_REQUIREMENT_COLUMNS" : {
     "message" : [
       "Connector <connector> mixes in `SupportsColumnUpdates`, but its write requires a distribution or ordering by column(s) <columns> that cannot be resolved against the columns passed to the write. Declare each data column in `requiredDataAttributes()` and each metadata column in `requiredMetadataAttributes()`."

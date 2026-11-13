@@ -17,8 +17,6 @@
 
 package org.apache.spark.sql.connector
 
-import scala.jdk.CollectionConverters._
-
 import org.apache.spark.{SparkRuntimeException, SparkUnsupportedOperationException}
 import org.apache.spark.sql.{AnalysisException, Row}
 import org.apache.spark.sql.catalyst.analysis.RewriteRowLevelCommand
@@ -63,9 +61,6 @@ class DeltaBasedColumnUpdateTableSuite extends DeltaBasedUpdateTableSuiteBase
 
   private val splitOperationClass =
     classOf[InMemoryRowLevelOperationTable#DeltaBasedColumnUpdateSplitOperation].getName
-
-  private val splitWithRowIdOperationClass =
-    classOf[InMemoryRowLevelOperationTable#DeltaBasedColumnUpdateSplitOperationWithRowId].getName
 
   private def splitReqAttrsTableProps(reqAttrs: String): java.util.Map[String, String] = {
     tablePropsWith(reqAttrsTableProps(reqAttrs), "split-updates" -> "true")
@@ -488,87 +483,51 @@ class DeltaBasedColumnUpdateTableSuite extends DeltaBasedUpdateTableSuiteBase
       Row(1, 1, -1, "hr") :: Row(2, 2, 200, "hr") :: Nil)
   }
 
-  test("column-update split: row-ID reassignment is rejected when requiredDataAttributes leaves " +
-    "out a column") {
-    // the declared [pk, dep, salary] leaves out `extra`
-    createAndInitTable("pk INT NOT NULL, salary INT, dep STRING, extra STRING",
-      """{ "pk": 1, "salary": 100, "dep": "hr", "extra": "x" }
-        |{ "pk": 2, "salary": 200, "dep": "software", "extra": "y" }
-        |""".stripMargin,
-      splitTableProps)
-
-    checkError(
-      exception = intercept[AnalysisException] {
-        sql(s"UPDATE $tableNameAsString SET pk = pk + 10, salary = -1 WHERE dep = 'hr'")
-      },
-      condition = "COLUMN_UPDATE_SPLIT_ROW_ID_REASSIGNMENT",
-      parameters = Map("connector" -> splitOperationClass, "rowIds" -> "[`pk`]"))
-  }
-
-  test("column-update split: row-ID reassignment is allowed when requiredDataAttributes " +
-    "covers every table column, also with a metadata column in the condition") {
-    Seq(
-      "dep = 'hr'",
-      "_partition = 'hr'",
-      // the coerced `salary > 0.5` makes the analyzer resolve the UPDATE in a later iteration
-      "dep = 'hr' AND _partition = 'hr' AND salary > 0.5"
-    ).foreach { cond =>
-      withTable(tableNameAsString) {
-        createAndInitTable("pk INT NOT NULL, salary INT, dep STRING",
-          """{ "pk": 1, "salary": 100, "dep": "hr" }
-            |{ "pk": 2, "salary": 200, "dep": "software" }
-            |""".stripMargin,
-          splitReqAttrsTableProps("pk,salary,dep"))
-
-        sql(s"UPDATE $tableNameAsString SET pk = pk + 10, salary = -1 WHERE $cond")
-
-        checkAnswer(
-          sql(s"SELECT * FROM $tableNameAsString ORDER BY pk"),
-          Row(2, 200, "software") :: Row(11, -1, "hr") :: Nil)
-      }
-    }
-  }
-
-  test("column-update split: row-ID reassignment is rejected when metadata columns are listed") {
-    // on a table that accepts any schema, the aligned assignments also list the metadata columns,
-    // so the relation has columns that no declaration can cover
+  test("column-update split: a row-ID reassignment is written when every column is declared") {
     createAndInitTable("pk INT NOT NULL, salary INT, dep STRING",
       """{ "pk": 1, "salary": 100, "dep": "hr" }
+        |{ "pk": 2, "salary": 200, "dep": "software" }
         |""".stripMargin,
-      tablePropsWith(splitReqAttrsTableProps("pk,salary,dep"), "accept-any-schema" -> "true"))
+      splitReqAttrsTableProps("pk,salary,dep"))
 
-    checkError(
-      exception = intercept[AnalysisException] {
-        sql(s"UPDATE $tableNameAsString SET pk = 2, salary = salary, dep = dep, " +
-          "index = index, _partition = _partition")
-      },
-      condition = "COLUMN_UPDATE_SPLIT_ROW_ID_REASSIGNMENT",
-      parameters = Map("connector" -> splitOperationClass, "rowIds" -> "[`pk`]"))
+    sql(s"UPDATE $tableNameAsString SET pk = pk + 10, salary = -1 WHERE dep = 'hr'")
+
+    checkAnswer(
+      sql(s"SELECT * FROM $tableNameAsString ORDER BY pk"),
+      Row(2, 200, "software") :: Row(11, -1, "hr") :: Nil)
   }
 
-  test("column-update split: a row-ID column that does not reach the REINSERT row must be " +
-    "declared") {
+  test("column-update split: Spark does not check whether the row ID reaches the reinserted " +
+    "row") {
+    // the fixture cannot commit a reinserted row without its row ID, so this checks the plan
     Seq(
-      Map("column-update-split-row-id" -> "pk"),
-      // `index` is a required metadata attribute, but its REINSERT value is null
-      Map("column-update-split-row-id" -> "index"),
+      // reassigns the row ID, and the declared [pk, dep, salary] leaves out `extra`
+      ("pk INT NOT NULL, salary INT, dep STRING, extra STRING", splitTableProps,
+        "pk = pk + 10, salary = -1 WHERE dep = 'hr'", Seq("pk", "dep", "salary")),
+      // a table that accepts any schema lists the metadata columns in SET
+      ("pk INT NOT NULL, salary INT, dep STRING",
+        tablePropsWith(splitReqAttrsTableProps("pk,salary,dep"), "accept-any-schema" -> "true"),
+        "pk = 2, salary = salary, dep = dep, index = index, _partition = _partition",
+        Seq("pk", "salary", "dep")),
+      // the row ID is undeclared
+      ("pk INT NOT NULL, salary INT, dep STRING",
+        java.util.Map.of("column-update-split-row-id", "pk"), "salary = -1", Seq("salary")),
       // without required metadata attributes, nothing projects `_partition` into the REINSERT row
-      Map("column-update-split-row-id" -> "_partition", "no-metadata" -> "true")
-    ).foreach { props =>
+      ("pk INT NOT NULL, salary INT, dep STRING",
+        java.util.Map.of("column-update-split-row-id", "_partition", "no-metadata", "true"),
+        "salary = -1", Seq("salary"))
+    ).foreach { case (schema, props, assignments, writeColumns) =>
       withTable(tableNameAsString) {
-        createAndInitTable("pk INT NOT NULL, salary INT, dep STRING",
-          """{ "pk": 1, "salary": 100, "dep": "hr" }
-            |""".stripMargin,
-          props.asJava)
+        createAndInitTable(schema, """{ "pk": 1, "salary": 100, "dep": "hr" }""", props)
 
-        checkError(
-          exception = intercept[AnalysisException] {
-            sql(s"UPDATE $tableNameAsString SET salary = -1 WHERE dep = 'hr'")
-          },
-          condition = "COLUMN_UPDATE_SPLIT_ROW_ID_NOT_DECLARED",
-          parameters = Map(
-            "connector" -> splitWithRowIdOperationClass,
-            "rowIds" -> s"[`${props("column-update-split-row-id")}`]"))
+        val analyzed = spark.sessionState.executePlan(
+          spark.sessionState.sqlParser.parsePlan(
+            s"UPDATE $tableNameAsString SET $assignments"),
+          CommandExecutionMode.SKIP).analyzed
+
+        val write = analyzed.collectFirst { case w: WriteDelta => w }
+          .getOrElse(fail("couldn't find WriteDelta in the analyzed plan"))
+        assert(write.table.output.map(_.name) == writeColumns)
       }
     }
   }
@@ -648,7 +607,7 @@ class DeltaBasedColumnUpdateTableSuite extends DeltaBasedUpdateTableSuiteBase
       Row(1, 100, "hr") :: Row(2, 200, "software") :: Nil)
   }
 
-  test("column-update split: metadata row ID preserved on reinsert need not be declared") {
+  test("column-update split: a reinserted row carries a metadata row ID preserved on reinsert") {
     // `_partition` is a required metadata attribute with PRESERVE_ON_REINSERT, so the REINSERT
     // row carries it through the metadata projection.
     // Each partition holds one row, so `_partition` identifies it.
