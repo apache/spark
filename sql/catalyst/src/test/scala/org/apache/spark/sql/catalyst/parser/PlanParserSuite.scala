@@ -19,6 +19,9 @@ package org.apache.spark.sql.catalyst.parser
 
 import scala.annotation.nowarn
 
+import org.antlr.v4.runtime.{CharStreams, CommonTokenStream}
+import org.antlr.v4.runtime.atn.PredictionMode
+
 import org.apache.spark.SparkThrowable
 import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.{FunctionIdentifier, TableIdentifier}
@@ -3812,11 +3815,58 @@ class PlanParserSuite extends AnalysisTest {
       withSQLConf(
           SQLConf.ANSI_ENABLED.key -> "true",
           SQLConf.ENFORCE_RESERVED_KEYWORDS.key -> enforceReserved) {
-        val gapFill = singleGapFill(parsePlan(
-          "SELECT * FROM t GAP FILL (ORDER BY ts BIN WIDTH INTERVAL '5' MINUTE " +
-            "FROM s - INTERVAL '1' YEAR TO month)"))
-        assert(gapFill.rangeStartExpr.contains(parseExpression("s - INTERVAL '1' YEAR")))
-        assert(gapFill.rangeEndExpr.contains(UnresolvedAttribute(Seq("month"))))
+        Seq("s - INTERVAL '1' YEAR", "s - INTERVAL '1' DAY '2' HOUR").foreach { start =>
+          val gapFill = singleGapFill(parsePlan(
+            s"SELECT * FROM t GAP FILL (ORDER BY ts BIN WIDTH INTERVAL '5' MINUTE " +
+              s"FROM $start TO month)"))
+          assert(gapFill.rangeStartExpr.contains(parseExpression(start)))
+          assert(gapFill.rangeEndExpr.contains(UnresolvedAttribute(Seq("month"))))
+        }
+      }
+    }
+  }
+
+  test("GAP FILL: invalid interval literals keep their error in both keyword modes") {
+    // An interval literal with a second from-to part is rejected by AstBuilder. The GAP FILL
+    // range must not turn that error into a syntax error at TO.
+    Seq("true", "false").foreach { enforceReserved =>
+      withSQLConf(
+          SQLConf.ANSI_ENABLED.key -> "true",
+          SQLConf.ENFORCE_RESERVED_KEYWORDS.key -> enforceReserved) {
+        Seq(
+          "SELECT (SELECT INTERVAL '1' DAY '2' HOUR TO MINUTE)",
+          "SELECT * FROM t WHERE d IN (SELECT INTERVAL '1' DAY '2' HOUR TO MINUTE)",
+          "SELECT * FROM (SELECT INTERVAL '1' DAY '2' HOUR TO MINUTE) s",
+          "SELECT (INTERVAL '1' DAY '2' HOUR TO MINUTE)",
+          "SELECT (SELECT INTERVAL '1 2' DAY TO HOUR '3 4' DAY TO HOUR)",
+          "SELECT * FROM (SELECT INTERVAL '1 2' DAY TO HOUR '3 4' DAY TO HOUR) s",
+          "SELECT extract(DAY FROM INTERVAL '1 2' DAY TO HOUR '3 4' DAY TO HOUR)"
+        ).foreach { query =>
+          assert(parseException(query).getCondition == "_LEGACY_ERROR_TEMP_0024", query)
+        }
+      }
+    }
+  }
+
+  test("GAP FILL: interval literals parse in SLL mode without the LL fallback") {
+    // The GAP FILL range lets TO follow an expression. Statements without GAP FILL must still
+    // parse in the first (SLL) stage, in both keyword modes.
+    Seq(true, false).foreach { enforceReserved =>
+      Seq(
+        "SELECT * FROM T WHERE D IN (SELECT INTERVAL '1 2' DAY TO HOUR)",
+        "SELECT (SELECT INTERVAL '2-1' YEAR TO MONTH)",
+        "SELECT EXTRACT(YEAR FROM INTERVAL '2-1' YEAR TO MONTH)",
+        "SELECT (SELECT INTERVAL '1' DAY '2' HOUR TO MINUTE)",
+        "SELECT EXTRACT(DAY FROM INTERVAL '1' DAY '2' HOUR TO MINUTE)",
+        "SELECT (SELECT INTERVAL '1 2' DAY TO HOUR '3 4' DAY TO HOUR)",
+        "SELECT INTERVAL -1 MONTH 1 DAY -1 SECOND"
+      ).foreach { query =>
+        val parser = new SqlBaseParser(
+          new CommonTokenStream(new SqlBaseLexer(CharStreams.fromString(query))))
+        parser.SQL_standard_keyword_behavior = enforceReserved
+        parser.setErrorHandler(new SparkParserBailErrorStrategy())
+        parser.getInterpreter.setPredictionMode(PredictionMode.SLL)
+        parser.singleStatement()
       }
     }
   }

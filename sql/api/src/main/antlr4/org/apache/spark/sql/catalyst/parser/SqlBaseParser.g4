@@ -1943,15 +1943,25 @@ booleanValue
     : TRUE | FALSE
     ;
 
-// The unit-to-unit form comes first on purpose. The GAP FILL range `FROM start TO end` lets TO
-// follow an expression, so the first (SLL) parsing stage can see both forms as viable for
-// `INTERVAL '1 2' DAY TO HOUR`. ANTLR then picks the first one, and it must be this one.
+// The GAP FILL range `FROM start TO end` lets TO follow an expression. So the first (SLL)
+// parsing stage can see two readings of an interval literal: one that ends before TO, and one
+// that goes on through TO. ANTLR then picks the first viable alternative, so in `interval`,
+// `errorCapturingMultiUnitsInterval` and `errorCapturingUnitToUnitInterval` the alternative that
+// goes on through TO comes first.
 interval
     : INTERVAL (errorCapturingUnitToUnitInterval | errorCapturingMultiUnitsInterval)
     ;
 
+// The first alternative captures units followed by a from-to part, such as
+// `INTERVAL '1' DAY '2' HOUR TO MINUTE`, which AstBuilder rejects.
 errorCapturingMultiUnitsInterval
-    : body=multiUnitsInterval unitToUnitInterval?
+    : multiUnitsBeforeUnitToUnit unitToUnitInterval
+    | body=multiUnitsInterval unitToUnitInterval?
+    ;
+
+// The non-greedy loop stops before the from-to part that follows it.
+multiUnitsBeforeUnitToUnit
+    : (intervalValue unitInMultiUnits)+?
     ;
 
 multiUnitsInterval
@@ -1959,7 +1969,7 @@ multiUnitsInterval
     ;
 
 errorCapturingUnitToUnitInterval
-    : body=unitToUnitInterval (error1=multiUnitsInterval | error2=unitToUnitInterval)?
+    : body=unitToUnitInterval (error2=unitToUnitInterval | error1=multiUnitsInterval)?
     ;
 
 unitToUnitInterval
