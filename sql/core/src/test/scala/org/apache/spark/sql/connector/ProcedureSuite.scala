@@ -251,6 +251,15 @@ class ProcedureSuite extends SharedSparkSession with BeforeAndAfter {
           "searchPath" -> "[`system`.`builtin`, `system`.`session`, `spark_catalog`.`default`]"),
         context = ExpectedContext(fragment = "CALL nullcat.ns.missing()", start = 0, stop = 24))
 
+      checkError(
+        exception = intercept[AnalysisException](sql("DESC PROCEDURE nullcat.ns.missing")),
+        condition = "UNRESOLVED_ROUTINE",
+        parameters = Map(
+          "routineName" -> "`nullcat`.`ns`.`missing`",
+          "searchPath" -> "[`system`.`builtin`, `system`.`session`, `spark_catalog`.`default`]"),
+        context = ExpectedContext(
+          fragment = "DESC PROCEDURE nullcat.ns.missing", start = 0, stop = 32))
+
       withSQLConf(SQLConf.PATH_ENABLED.key -> "true") {
         try {
           catalog("cat2").createProcedure(Identifier.of(Array("ns_hit"), "sum"), UnboundLongSum)
