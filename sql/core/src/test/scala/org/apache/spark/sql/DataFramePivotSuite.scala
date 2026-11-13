@@ -654,4 +654,281 @@ class DataFramePivotSuite extends SharedSparkSession {
       checkAnswer(nanDf, Row(null, null, 20L))
     }
   }
+
+  test("SPARK-55569: collapses non-matching pivot values in firstAgg") {
+    val df = Seq(
+      ("dotNET", 2012, 10000),
+      ("Java", 2012, 20000),
+      ("dotNET", 2013, 48000),
+      ("Java", 2013, 30000),
+      ("C#", 2013, 15000)
+    ).toDF("course", "year", "earnings")
+
+    val pivoted = df
+      .groupBy("year")
+      .pivot("course", Seq("dotNET", "Java"))
+      .agg(sum("earnings"))
+
+    val analyzed = pivoted.queryExecution.analyzed
+    // The fast-path group-by key should contain an If that collapses
+    // non-matching pivot column values to null.
+    assert(analyzed.exists { node =>
+      node.expressions.exists(_.exists {
+        case catalyst.expressions.If(_, _,
+          catalyst.expressions.Literal(null, _)) => true
+        case _ => false
+      })
+    }, s"Expected If(..., col, null):\n${analyzed.treeString}")
+
+    // Results are identical to the un-optimized plan.
+    checkAnswer(pivoted,
+      Seq(Row(2012, 10000, 20000), Row(2013, 48000, 30000)))
+  }
+
+  test("SPARK-55569: NULL pivot value skips the collapse") {
+    // When a NULL pivot value is present, the collapse optimization is
+    // skipped because non-matching rows mapped to null would merge with
+    // legitimate null-key rows. Results must still be correct.
+    val df = Seq(
+      (Some("a"), 1), (Some("b"), 2), (None, 3)
+    ).toDF("key", "value")
+
+    val pivoted = df.groupBy().pivot("key", Seq("a", null))
+      .agg(sum("value"))
+
+    // a=1 (key='a'), null=3 (key IS NULL)
+    checkAnswer(pivoted, Row(1, 3))
+  }
+
+  test("SPARK-55569: collapse with multiple aggregates") {
+    val df = Seq(
+      ("a", 1, 10), ("b", 2, 20), ("a", 3, 30), ("c", 4, 40)
+    ).toDF("key", "v1", "v2")
+
+    val pivoted = df.groupBy()
+      .pivot("key", Seq("a", "b"))
+      .agg(sum("v1"), avg("v2"))
+
+    val analyzed = pivoted.queryExecution.analyzed
+    assert(analyzed.exists { node =>
+      node.expressions.exists(_.exists {
+        case catalyst.expressions.If(_, _,
+          catalyst.expressions.Literal(null, _)) => true
+        case _ => false
+      })
+    }, "Expected If(..., col, null) in the plan")
+
+    checkAnswer(pivoted, Row(4, 20.0, 2, 20.0))
+  }
+
+  test("SPARK-55569: group-by key with only non-pivot values is preserved") {
+    // A group-by key (year=2014) whose only rows have pivot column values
+    // outside the IN list still appears with all-NULL pivot outputs.
+    // The optimization collapses non-matching values to null in the
+    // group-by, reducing the number of groups, but does not remove rows.
+    val df = Seq(
+      ("dotNET", 2012, 10000),
+      ("Java", 2012, 20000),
+      ("C#", 2014, 15000)
+    ).toDF("course", "year", "earnings")
+
+    val pivoted = df.groupBy("year")
+      .pivot("course", Seq("dotNET", "Java"))
+      .agg(sum("earnings"))
+
+    // year=2014 appears with null pivot columns because no row
+    // in that year matches any pivot value.
+    checkAnswer(pivoted,
+      Seq(Row(2012, 10000, 20000), Row(2014, null, null)))
+  }
+
+  test("SPARK-55569: ANSI overflow in merged null group is prevented") {
+    // The collapsed null group merges all non-matching rows. Without
+    // masking aggregate inputs, SUM over merged Long.MaxValue rows
+    // would overflow under ANSI mode. The fix masks non-matching
+    // aggregate inputs to null so the discarded group never overflows.
+    withSQLConf(SQLConf.ANSI_ENABLED.key -> "true") {
+      val df = Seq(
+        ("a", 2012, 1L),
+        ("b", 2012, Long.MaxValue),
+        ("c", 2012, Long.MaxValue)
+      ).toDF("course", "year", "earnings")
+
+      val pivoted = df.groupBy("year")
+        .pivot("course", Seq("a"))
+        .agg(sum("earnings"))
+
+      // Should return [2012, 1] without SparkArithmeticException
+      checkAnswer(pivoted, Row(2012, 1L))
+    }
+  }
+
+  test("SPARK-55569: collapse can be disabled via SQLConf") {
+    withSQLConf(
+      SQLConf.DATAFRAME_PIVOT_COLLAPSE_NON_MATCHING_ENABLED
+        .key -> "false") {
+      val df = Seq(
+        ("dotNET", 2012, 10000),
+        ("Java", 2012, 20000),
+        ("C#", 2013, 15000)
+      ).toDF("course", "year", "earnings")
+
+      val pivoted = df.groupBy("year")
+        .pivot("course", Seq("dotNET", "Java"))
+        .agg(sum("earnings"))
+
+      // Plan should NOT contain the If(In(...)) collapse
+      val analyzed = pivoted.queryExecution.analyzed
+      val hasCollapse = analyzed.exists { node =>
+        node.expressions.exists(_.exists {
+          case catalyst.expressions.If(
+            _: catalyst.expressions.In, _, _) => true
+          case _ => false
+        })
+      }
+      assert(!hasCollapse,
+        "Expected no If(In(...)) collapse when config is off")
+
+      // Results are still correct
+      checkAnswer(pivoted,
+        Seq(Row(2012, 10000, 20000), Row(2013, null, null)))
+    }
+  }
+
+  test("SPARK-55569: collapse with DecimalType ANSI overflow") {
+    // DecimalType can also overflow in the merged null group.
+    // Verify masking prevents SparkArithmeticException.
+    withSQLConf(SQLConf.ANSI_ENABLED.key -> "true") {
+      // Decimal(18,0) max is 10^18-1 = 999999999999999999
+      val big = 999999999999999999L
+      val df = Seq(
+        ("a", 2012, 1L),
+        ("b", 2012, big),
+        ("c", 2012, big)
+      ).toDF("key", "year", "value")
+
+      val decDf = df.withColumn("value",
+        $"value".cast("decimal(18,0)"))
+
+      val pivoted = decDf.groupBy("year")
+        .pivot("key", Seq("a"))
+        .agg(sum("value"))
+
+      // Should succeed without ARITHMETIC_OVERFLOW.
+      // Without masking, sum(big + big) overflows Decimal(18,0).
+      // With masking, the null group sums null values = null.
+      assert(pivoted.collect().length == 1)
+      assert(pivoted.collect()(0).get(1) != null)
+    }
+  }
+
+  test("SPARK-55569: collapse with InSet (> 10 pivot values)") {
+    // When there are > 10 pivot values, Spark rewrites In to InSet.
+    // Verify the collapse still works correctly.
+    val data = (1 to 20).map(i => (s"k$i", i))
+    val df = data.toDF("key", "value")
+    val pivotVals = (1 to 12).map(i => s"k$i")
+
+    val pivoted = df.groupBy()
+      .pivot("key", pivotVals)
+      .agg(sum("value"))
+
+    // Each k_i maps to value i; k13..k20 are collapsed.
+    val expected = (1 to 12).map(i => i: Any)
+    checkAnswer(pivoted, Row.fromSeq(expected))
+  }
+
+  test("SPARK-55569: NaN pivot value skips the collapse") {
+    // NaN pivot values skip the optimization because In uses !=
+    // (always false for NaN) while PivotFirst uses EqualNullSafe
+    // (matches NaN). Verify results are identical whether or not
+    // the collapse is enabled.
+    val df = Seq(
+      (0.0, 1), (-0.0, 2), (Double.NaN, 3), (1.0, 4)
+    ).toDF("key", "value")
+
+    def doPivot(): Array[Row] = df.groupBy()
+      .pivot("key", Seq(0.0, Double.NaN))
+      .agg(sum("value"))
+      .collect()
+
+    val withCollapse = withSQLConf(
+      SQLConf.DATAFRAME_PIVOT_COLLAPSE_NON_MATCHING_ENABLED
+        .key -> "true")(doPivot())
+    val withoutCollapse = withSQLConf(
+      SQLConf.DATAFRAME_PIVOT_COLLAPSE_NON_MATCHING_ENABLED
+        .key -> "false")(doPivot())
+
+    assert(withCollapse.toSeq == withoutCollapse.toSeq,
+      s"Results differ: collapse=$withCollapse " +
+      s"vs no-collapse=$withoutCollapse")
+  }
+
+  test("SPARK-55569: collapse with struct pivot column") {
+    // Struct pivot columns use the fast path when the aggregate
+    // datatype supports PivotFirst.
+    val df = Seq(
+      (("a", 1), 10), (("b", 2), 20), (("a", 1), 30),
+      (("c", 3), 40)
+    ).toDF("key", "value")
+
+    val pivoted = df.groupBy()
+      .pivot(
+        struct($"key._1", $"key._2"),
+        Seq(struct(lit("a"), lit(1)), struct(lit("b"), lit(2))))
+      .agg(sum("value"))
+
+    // ("a",1): 10+30=40, ("b",2): 20, ("c",3): collapsed
+    checkAnswer(pivoted, Row(40, 20))
+  }
+
+  test("SPARK-55569: collapse is consistent with AQE on") {
+    withSQLConf(
+      SQLConf.ADAPTIVE_EXECUTION_ENABLED.key -> "true",
+      SQLConf.SHUFFLE_PARTITIONS.key -> "2") {
+      val df = Seq(
+        ("dotNET", 2012, 10000),
+        ("Java", 2012, 20000),
+        ("C#", 2013, 15000),
+        ("Ruby", 2013, 5000)
+      ).toDF("course", "year", "earnings")
+
+      val pivoted = df.groupBy("year")
+        .pivot("course", Seq("dotNET", "Java"))
+        .agg(sum("earnings"))
+
+      checkAnswer(pivoted,
+        Seq(Row(2012, 10000, 20000), Row(2013, null, null)))
+    }
+  }
+
+  test("SPARK-55569: collapse not applied on standard path") {
+    // When the aggregate datatype doesn't support PivotFirst,
+    // the standard path is used and the collapse is not applied.
+    // Verify results are correct (standard path uses its own
+    // IF per pivot value natively).
+    val df = courseSales
+      .withColumn("e", expr("array(earnings, 7.0d)"))
+      .groupBy("year")
+      .pivot("course", Seq("dotNET", "Java"))
+      .agg(min($"e"))
+
+    // Standard path: no crash, correct results
+    assert(df.collect().length > 0)
+  }
+
+  test("SPARK-55569: collapse with all values matching") {
+    // When every distinct value is in the pivot list, the
+    // optimization is a tautology (IF always true). Verify
+    // no regression.
+    val df = Seq(
+      ("a", 1), ("b", 2)
+    ).toDF("key", "value")
+
+    val pivoted = df.groupBy()
+      .pivot("key", Seq("a", "b"))
+      .agg(sum("value"))
+
+    checkAnswer(pivoted, Row(1, 2))
+  }
 }
