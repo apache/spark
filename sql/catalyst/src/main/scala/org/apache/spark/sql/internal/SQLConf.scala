@@ -6718,6 +6718,27 @@ object SQLConf {
       .booleanConf
       .createWithDefault(true)
 
+  val NESTED_SCHEMA_PRUNING_THROUGH_GENERATE_ENABLED =
+    buildConf("spark.sql.optimizer.nestedSchemaPruning.throughGenerate.enabled")
+      .internal()
+      .doc(s"When true and ${NESTED_SCHEMA_PRUNING_ENABLED.key} is true, nested fields read " +
+        "from the element of an explode or posexplode of an array column also prune that " +
+        "column at the scan below the generator. Not applied to ORC scans yet.")
+      .version("4.4.0")
+      .withBindingPolicy(ConfigBindingPolicy.NOT_APPLICABLE)
+      .booleanConf
+      .createWithDefault(true)
+
+  val NESTED_SCHEMA_PRUNING_THROUGH_GENERATE_REJECT_FOR_TESTING =
+    buildConf("spark.sql.optimizer.nestedSchemaPruning.throughGenerate.rejectForTesting")
+      .internal()
+      .doc("Only for testing: reject every rewrite of pruning through generators after the " +
+        "scan is pruned, to exercise the fallback to the unpruned plan.")
+      .version("4.4.0")
+      .withBindingPolicy(ConfigBindingPolicy.NOT_APPLICABLE)
+      .booleanConf
+      .createWithDefault(false)
+
   val DISABLE_HINTS =
     buildConf("spark.sql.optimizer.disableHints")
       .internal()
@@ -10680,6 +10701,9 @@ class SQLConf extends Serializable with Logging with SqlApiConf {
   }
 
   def nestedSchemaPruningEnabled: Boolean = getConf(NESTED_SCHEMA_PRUNING_ENABLED)
+
+  def nestedSchemaPruningThroughGenerateEnabled: Boolean =
+    getConf(NESTED_SCHEMA_PRUNING_THROUGH_GENERATE_ENABLED)
 
   def serializerNestedSchemaPruningEnabled: Boolean =
     getConf(SERIALIZER_NESTED_SCHEMA_PRUNING_ENABLED)
