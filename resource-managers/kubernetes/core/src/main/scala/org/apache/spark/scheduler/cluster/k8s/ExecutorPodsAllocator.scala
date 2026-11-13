@@ -113,6 +113,10 @@ class ExecutorPodsAllocator(
   // snapshot yet. Mapped to the (ResourceProfile id, timestamp) when they were created.
   protected val newlyCreatedExecutors = mutable.LinkedHashMap.empty[Long, (Int, Long)]
 
+  // PVC claim names of executor pods that have been requested from Kubernetes but have not been
+  // detected in any snapshot yet. These claims are in use even though no snapshot shows them.
+  protected val newlyCreatedExecutorPVCs = mutable.HashMap.empty[Long, Seq[String]]
+
   // Executor IDs that have been requested from Kubernetes but have not been detected in any POD
   // snapshot yet but already known by the scheduler backend. Mapped to the ResourceProfile id.
   protected val schedulerKnownNewlyCreatedExecs = mutable.LinkedHashMap.empty[Long, Int]
@@ -191,15 +195,20 @@ class ExecutorPodsAllocator(
     val k8sKnownExecIds = aggregatedPods.keySet
     newlyCreatedExecutors --= k8sKnownExecIds
     schedulerKnownNewlyCreatedExecs --= k8sKnownExecIds
+    newlyCreatedExecutorPVCs.filterInPlace { case (execId, _) =>
+      newlyCreatedExecutors.contains(execId) || schedulerKnownNewlyCreatedExecs.contains(execId)
+    }
 
     // Although we are going to delete some executors due to timeout in this function,
     // it takes undefined time before the actual deletion. Hence, we should collect all PVCs
     // in use at the beginning. False positive is okay in this context in order to be safe.
-    // Optimization: iterate over the aggregated pod set (already deduplicated by exec ID)
-    // instead of iterating all snapshots which contain massive overlap.
+    // This function also runs when no new snapshot arrived (`snapshots` is empty), so the pods
+    // of this batch alone are not enough: include the last known snapshot and the executor pods
+    // requested but not yet seen in any snapshot. Otherwise a PVC mounted by a live executor
+    // looks reusable and gets attached to a new executor pod.
     val k8sKnownPVCNames: Set[String] = {
       val pvcNameSet = mutable.HashSet.empty[String]
-      aggregatedPods.valuesIterator.foreach { state =>
+      (lastSnapshot.executorPods.valuesIterator ++ aggregatedPods.valuesIterator).foreach { state =>
         state.pod.getSpec.getVolumes.asScala.foreach { v =>
           val pvc = v.getPersistentVolumeClaim
           if (pvc != null) {
@@ -207,6 +216,7 @@ class ExecutorPodsAllocator(
           }
         }
       }
+      newlyCreatedExecutorPVCs.valuesIterator.foreach(pvcNameSet ++= _)
       pvcNameSet.toSet
     }
     val snapshotPreprocessMs = clock.getTimeMillis() - snapshotProcessStartTime
@@ -583,6 +593,9 @@ class ExecutorPodsAllocator(
               PVC_COUNTER.incrementAndGet()
             }
           newlyCreatedExecutors(newExecutorId) = (resourceProfileId, clock.getTimeMillis())
+          newlyCreatedExecutorPVCs(newExecutorId) =
+            podWithAttachedContainer.getSpec.getVolumes.asScala.toSeq
+              .flatMap(v => Option(v.getPersistentVolumeClaim).map(_.getClaimName))
           logDebug(s"Requested executor with id $newExecutorId from Kubernetes.")
         } catch {
           case NonFatal(e) =>
