@@ -2882,6 +2882,29 @@ class CachedTableSuite extends SharedSparkSession
     }
   }
 
+  test("SPARK-61570: cached query with a session-context function is not reused " +
+    "under a different session context") {
+    Seq(false, true).foreach { ignoreContext =>
+      withSQLConf(
+          SQLConf.CACHE_IGNORE_SESSION_CONTEXT_IN_PLAN_MATCHING.key -> ignoreContext.toString) {
+        withTempView("tz_cache") {
+          val query = "SELECT id, current_timezone() AS tz FROM range(3)"
+          withSQLConf(SQLConf.SESSION_LOCAL_TIMEZONE.key -> "UTC") {
+            sql(s"CACHE TABLE tz_cache AS $query")
+            assertCached(sql(query))
+          }
+          withSQLConf(SQLConf.SESSION_LOCAL_TIMEZONE.key -> "Asia/Tokyo") {
+            // Fixed: the UTC-cached entry is not reused for a Tokyo session, so tz is recomputed
+            // as 'Asia/Tokyo'. Legacy (gate on): the stale UTC entry is reused, so tz stays 'UTC'.
+            checkAnswer(
+              sql(s"SELECT count(*) FROM ($query) WHERE tz = 'Asia/Tokyo'"),
+              Row(if (ignoreContext) 0L else 3L))
+          }
+        }
+      }
+    }
+  }
+
   private def cacheManager = spark.sharedState.cacheManager
 
   private def pinTable(
