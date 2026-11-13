@@ -117,7 +117,7 @@ public abstract class RowBasedKeyValueBatch extends MemoryConsumer implements Cl
   public final int numRows() { return numRows; }
 
   @Override
-  public final void close() {
+  public void close() {
     if (page != null) {
       freePage(page);
       page = null;
