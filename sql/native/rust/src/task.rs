@@ -25,6 +25,10 @@ use crate::Result;
 /// It cannot retain it beyond the lifetime of its returned reader or writer.
 /// Blocking I/O still needs its own timeouts.
 ///
+/// Partition identifiers belong to [`crate::ReaderContext::partition_index`] and
+/// [`crate::WriterContext::partition_id`]: the native ABI supplies a scan partition index
+/// for readers, which need not be the Spark task's partition ID.
+///
 /// ```compile_fail
 /// use spark_datasource::TaskContext;
 ///
@@ -36,7 +40,6 @@ use crate::Result;
 pub struct TaskContext<'task> {
     stage_id: i32,
     stage_attempt_number: i32,
-    partition_id: i32,
     attempt_number: i32,
     task_attempt_id: i64,
     interruption: Interruption<'task>,
@@ -67,7 +70,6 @@ impl TaskContext<'static> {
         Self {
             stage_id: 0,
             stage_attempt_number: 0,
-            partition_id: 0,
             attempt_number: 0,
             task_attempt_id: 0,
             interruption: Interruption::Never,
@@ -83,12 +85,6 @@ impl TaskContext<'static> {
     #[must_use]
     pub fn with_stage_attempt_number(mut self, stage_attempt_number: i32) -> Self {
         self.stage_attempt_number = stage_attempt_number;
-        self
-    }
-
-    #[must_use]
-    pub fn with_partition_id(mut self, partition_id: i32) -> Self {
-        self.partition_id = partition_id;
         self
     }
 
@@ -116,29 +112,32 @@ impl TaskContext<'static> {
 }
 
 impl TaskContext<'_> {
-    /// Wraps a host context, which has every field of version 1 of the ABI.
+    /// Wraps a host context and returns its operation-specific partition index separately.
+    /// The context must have every field of version 1 of the ABI.
     ///
     /// # Safety
     /// The host must keep the context and its callbacks valid for `'task`, including calls from
     /// other threads. Spark keeps it alive until the Arrow stream is released or
     /// data writer closes.
-    pub(crate) unsafe fn from_raw(pointer: *const SparkDsTaskContext) -> Result<Self> {
+    pub(crate) unsafe fn from_raw(pointer: *const SparkDsTaskContext) -> Result<(Self, i32)> {
         let context = unsafe { abi::input(pointer)? };
-        Ok(Self {
-            stage_id: context.stage_id,
-            stage_attempt_number: context.stage_attempt_number,
-            partition_id: context.partition_id,
-            attempt_number: context.attempt_number,
-            task_attempt_id: context.task_attempt_id,
-            interruption: match context.is_interrupted {
-                Some(callback) => Interruption::Host {
-                    context: pointer,
-                    callback,
-                    lifetime: PhantomData,
+        Ok((
+            Self {
+                stage_id: context.stage_id,
+                stage_attempt_number: context.stage_attempt_number,
+                attempt_number: context.attempt_number,
+                task_attempt_id: context.task_attempt_id,
+                interruption: match context.is_interrupted {
+                    Some(callback) => Interruption::Host {
+                        context: pointer,
+                        callback,
+                        lifetime: PhantomData,
+                    },
+                    None => Interruption::Never,
                 },
-                None => Interruption::Never,
             },
-        })
+            context.partition_id,
+        ))
     }
 
     /// The ID of the stage of the task.
@@ -149,13 +148,6 @@ impl TaskContext<'_> {
     /// The attempt number of the stage of the task.
     pub fn stage_attempt_number(&self) -> i32 {
         self.stage_attempt_number
-    }
-
-    /// For a reader, the index of its partition in the plan of its scan or micro-batch, which
-    /// is not the partition of the task when a task reads several partitions, for example
-    /// after a coalesce or a union. For a writer, the partition of the task.
-    pub fn partition_id(&self) -> i32 {
-        self.partition_id
     }
 
     /// The attempt number of the task.
@@ -215,10 +207,10 @@ mod tests {
             },
             interrupted: AtomicBool::new(false),
         };
-        let context = unsafe { TaskContext::from_raw(&host.task) }.unwrap();
+        let (context, partition) = unsafe { TaskContext::from_raw(&host.task) }.unwrap();
         assert_eq!(context.stage_id(), 3);
         assert_eq!(context.stage_attempt_number(), 4);
-        assert_eq!(context.partition_id(), 5);
+        assert_eq!(partition, 5);
         assert_eq!(context.attempt_number(), 6);
         assert_eq!(context.task_attempt_id(), 7);
         assert!(!context.is_interrupted());
@@ -242,25 +234,20 @@ mod tests {
         let context = TaskContext::for_testing()
             .with_stage_id(1)
             .with_stage_attempt_number(2)
-            .with_partition_id(3)
             .with_attempt_number(4)
             .with_task_attempt_id(5);
         assert_eq!(
             (
                 context.stage_id(),
                 context.stage_attempt_number(),
-                context.partition_id(),
                 context.attempt_number(),
                 context.task_attempt_id()
             ),
-            (1, 2, 3, 4, 5)
+            (1, 2, 4, 5)
         );
         assert!(!context.is_interrupted());
         let flag = AtomicBool::new(false);
-        let context = TaskContext::for_testing()
-            .with_partition_id(8)
-            .interrupted_by(&flag);
-        assert_eq!(context.partition_id(), 8);
+        let context = TaskContext::for_testing().interrupted_by(&flag);
         assert!(!context.is_interrupted());
         flag.store(true, Ordering::SeqCst);
         assert!(context.is_interrupted());

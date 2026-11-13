@@ -471,7 +471,7 @@ impl DataWriterFactory for JsonWriterFactory {
         for _ in 0..16 {
             let filename = format!(
                 "part-{}-attempt-{}-{}.jsonl",
-                task.partition_id(),
+                context.partition_id,
                 task.task_attempt_id(),
                 unique_id()?
             );
@@ -484,7 +484,7 @@ impl DataWriterFactory for JsonWriterFactory {
                         message: CommitMessage {
                             operation: self.operation.clone(),
                             filename,
-                            partition: task.partition_id(),
+                            partition: context.partition_id,
                             rows: 0,
                         },
                         writer: Some(BufWriter::new(file)),
@@ -659,9 +659,9 @@ mod tests {
         factory: &JsonWriterFactory,
         partition: i32,
     ) -> PartitionWriter<'static, CommitMessage> {
-        let task = TaskContext::for_testing().with_partition_id(partition);
+        let task = TaskContext::for_testing();
         factory
-            .open(WriterContext::new(sink_schema(), task))
+            .open(WriterContext::new(sink_schema(), partition, task))
             .unwrap()
     }
 
@@ -789,7 +789,7 @@ mod tests {
         );
         let task = TaskContext::for_testing();
         assert!(factory
-            .open(WriterContext::new(sink_schema(), task))
+            .open(WriterContext::new(sink_schema(), 0, task))
             .is_err());
     }
 
@@ -875,7 +875,7 @@ mod tests {
         let interrupted = AtomicBool::new(true);
         let task = TaskContext::for_testing().interrupted_by(&interrupted);
         let error = factory
-            .open(WriterContext::new(sink_schema(), task))
+            .open(WriterContext::new(sink_schema(), 0, task))
             .err()
             .unwrap();
         assert!(error.to_string().contains("before opening"), "{error}");
@@ -885,7 +885,7 @@ mod tests {
             let interrupted = AtomicBool::new(false);
             let task = TaskContext::for_testing().interrupted_by(&interrupted);
             let mut writer = factory
-                .open(WriterContext::new(sink_schema(), task))
+                .open(WriterContext::new(sink_schema(), 0, task))
                 .unwrap();
             writer.write(batch(vec![Some(1)])).unwrap();
             assert_eq!(staged(), 1);
@@ -924,7 +924,7 @@ mod tests {
         assert_eq!(committed_rows(&directory.0).len(), 1);
         let task = TaskContext::for_testing();
         assert!(factory
-            .open(WriterContext::new(sink_schema(), task))
+            .open(WriterContext::new(sink_schema(), 0, task))
             .is_err());
     }
 

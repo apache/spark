@@ -331,8 +331,9 @@ pub unsafe fn open_reader<F: PartitionReaderFactory>(
 ) -> Result<FFI_ArrowArrayStream> {
     stream::validate_schema(&schema)?;
     let factory: F = decode(state)?;
-    let task = unsafe { TaskContext::from_raw(task)? };
-    let reader = factory.open(decode(partition)?, ReaderContext::new(schema.clone(), task))?;
+    let (task, partition_index) = unsafe { TaskContext::from_raw(task)? };
+    let context = ReaderContext::new(schema.clone(), partition_index, task);
+    let reader = factory.open(decode(partition)?, context)?;
     Ok(unsafe { stream::export(reader, &schema) })
 }
 
@@ -777,6 +778,53 @@ mod tests {
                 assert_eq!(ids.values(), &[42 + [2, 7][index]]);
                 assert!(reader.next().is_none());
             }
+        }
+    }
+
+    #[test]
+    fn reader_partition_indices_are_independent_of_task_identity() {
+        #[derive(Serialize, Deserialize)]
+        struct ContextFactory;
+
+        impl PartitionReaderFactory for ContextFactory {
+            type Partition = ();
+
+            fn open<'task>(
+                &self,
+                _: (),
+                context: ReaderContext<'task>,
+            ) -> Result<PartitionReader<'task>> {
+                let task = context.task;
+                let values = Arc::new(Int64Array::from(vec![
+                    i64::from(context.partition_index),
+                    i64::from(task.stage_id()),
+                    i64::from(task.stage_attempt_number()),
+                    i64::from(task.attempt_number()),
+                    task.task_attempt_id(),
+                ]));
+                let batch = RecordBatch::try_new(id_schema(), vec![values])?;
+                Ok(Box::new(std::iter::once(Ok(batch))))
+            }
+        }
+
+        let state = encode(&ContextFactory).unwrap();
+        let partition = encode(&()).unwrap();
+        for index in [3, 9] {
+            // A coalesced task can read several scan partitions under the same task identity.
+            let mut host = task(index, 2);
+            host.task_attempt_id = 42;
+            let stream =
+                unsafe { open_reader::<ContextFactory>(&host, id_schema(), &state, &partition) }
+                    .unwrap();
+            let mut reader = ArrowArrayStreamReader::try_new(stream).unwrap();
+            let batch = reader.next().unwrap().unwrap();
+            let values = batch
+                .column(0)
+                .as_any()
+                .downcast_ref::<Int64Array>()
+                .unwrap();
+            assert_eq!(values.values(), &[i64::from(index), 1, 0, 2, 42]);
+            assert!(reader.next().is_none());
         }
     }
 

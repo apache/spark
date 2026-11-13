@@ -146,6 +146,15 @@ creating or accessing the driver registry, and passes the schema to the reader i
 `ReaderContext`. Closing the driver handles cannot invalidate factory or partition
 bytes already copied to Spark, including for retried tasks.
 
+`ReaderContext::partition_index` is the partition's index in its scan or micro-batch's plan,
+not the Spark task's partition ID. One task can read several source partitions, for example
+after a coalesce or union, and different scans can reuse the same index. The task's stage
+and attempt identifiers are in `ReaderContext::task`; `task_attempt_id()` identifies an
+attempt within the Spark application. For writers, `WriterContext::partition_id` is the
+Spark task's partition ID and the position of its winning commit message. `TaskContext`
+does not expose a partition ID, since the ABI does not supply the task's partition ID for
+readers.
+
 The reader owns its executor resources and cannot borrow its temporary factory.
 It may borrow `TaskContext` until the returned Arrow stream is released. Every host
 provides the task IDs of version 1 of the ABI, so the SDK rejects a task context shorter
@@ -270,8 +279,8 @@ state of the writer that native `create_writer` returns. Restoring an executor w
 uses only those bytes and the schema that Spark passes with them, without creating a
 driver registry.
 
-Each `DataWriterFactory::open` receives a `WriterContext` with the input schema and
-the task, and returns a task-bound writer. `write` takes ownership of a
+Each `DataWriterFactory::open` receives a `WriterContext` with the input schema, partition ID,
+and task, and returns a task-bound writer. `write` takes ownership of a
 `RecordBatch`, so its Arrow buffers can be retained after the callback, until the writer
 is dropped: they belong to the data writer of Spark, and the ABI requires the library to
 release them before Spark closes the writer. Spark cannot free a batch that is still
@@ -351,16 +360,25 @@ Executor, per task:
 Spark creates a stream when a query starts or restarts from its checkpoint, and closes it
 when the query stops. It keeps the initial offset in the checkpoint, and asks for it only
 when the checkpoint does not have it yet. For each micro-batch, it asks for the latest
-offset after the end of the previous micro-batch, and plans the data up to that offset.
+offset and plans the data between the previous and latest progress boundaries.
 The executors read the partitions of a micro-batch exactly as those of a batch scan: the
 two share `read`, which gets the kind of the read. `MicroBatchStreamInfo::schema` has the
 columns to read, which are all the columns of the schema until Spark prunes the columns of
 streaming scans.
 
+Offsets are progress boundaries defined by the connector, which decides how they map to
+records. The Range example stores the next row to read: `{"next":10}` to `{"next":13}`
+reads rows 10, 11, and 12, the range `[10, 13)`. Equal boundaries describe no data, and
+adjacent ranges must neither repeat nor skip records. Committing an offset acknowledges
+the data represented by that progress boundary.
+
 `MicroBatchStream::default_read_limit` limits the data of each micro-batch, for example
 to `ReadLimit::MaxRows` from an option of the source; the default reads all the available
-data. Spark passes the limit to `latest_offset` in `LatestOffsetInfo::limit`, and with
-`Trigger.AvailableNow` and a `ReadLimit::MaxRows` limit, the end of the run in
+data. A `MaxRows` value must be in `1..=i64::MAX`, the range supported by the native ABI.
+The SDK rejects invalid values both when returning a default limit to Spark and when
+receiving a limit from Spark. Spark passes the limit to `latest_offset` in
+`LatestOffsetInfo::limit`. With `Trigger.AvailableNow` and a `ReadLimit::MaxRows` limit,
+it also passes the end of the run in
 `LatestOffsetInfo::run_end`, which the latest offset must not go beyond. Spark also asks
 without a limit for the progress of the query, so a stream does not count the calls of
 `latest_offset` as micro-batches.

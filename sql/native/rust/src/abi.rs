@@ -702,7 +702,7 @@ pub unsafe fn latest_offset_info(
     let limit = unsafe { input(info.limit)? };
     let limit = match limit.kind {
         READ_ALL_AVAILABLE => ReadLimit::AllAvailable,
-        READ_MAX_ROWS => ReadLimit::MaxRows(u64::try_from(limit.max_rows)?),
+        READ_MAX_ROWS => ReadLimit::MaxRows(checked_max_rows(i128::from(limit.max_rows))? as u64),
         kind => return Err(format!("unsupported kind of read limit: {kind}").into()),
     };
     Ok(LatestOffsetInfo {
@@ -722,11 +722,22 @@ pub unsafe fn set_read_limit(output: *mut SparkDsReadLimit, limit: ReadLimit) ->
         ReadLimit::AllAvailable => value.kind = READ_ALL_AVAILABLE,
         ReadLimit::MaxRows(rows) => {
             value.kind = READ_MAX_ROWS;
-            value.max_rows = i64::try_from(rows)
-                .map_err(|_| format!("a read limit of {rows} rows exceeds the native ABI"))?;
+            value.max_rows = checked_max_rows(i128::from(rows))?;
         }
     }
     unsafe { fill(output, &value) }
+}
+
+/// Checks the common range of row limits from the Rust API and the native ABI.
+fn checked_max_rows(rows: i128) -> Result<i64> {
+    match i64::try_from(rows) {
+        Ok(rows) if rows > 0 => Ok(rows),
+        _ => Err(format!(
+            "a read limit must be between 1 and {} rows, got {rows}",
+            i64::MAX
+        )
+        .into()),
+    }
 }
 
 /// # Safety
@@ -1031,11 +1042,66 @@ mod tests {
             kind: READ_ALL_AVAILABLE,
             max_rows: 0,
         };
-        unsafe { set_read_limit(&mut limit, ReadLimit::MaxRows(4)) }.unwrap();
-        assert_eq!((limit.kind, limit.max_rows), (READ_MAX_ROWS, 4));
+        for rows in [1, 4, i64::MAX as u64] {
+            unsafe { set_read_limit(&mut limit, ReadLimit::MaxRows(rows)) }.unwrap();
+            assert_eq!((limit.kind, limit.max_rows), (READ_MAX_ROWS, rows as i64));
+        }
+        limit.max_rows = -1;
         unsafe { set_read_limit(&mut limit, ReadLimit::AllAvailable) }.unwrap();
-        assert_eq!(limit.kind, READ_ALL_AVAILABLE);
-        assert!(unsafe { set_read_limit(&mut limit, ReadLimit::MaxRows(u64::MAX)) }.is_err());
+        assert_eq!((limit.kind, limit.max_rows), (READ_ALL_AVAILABLE, -1));
+    }
+
+    #[test]
+    fn latest_offset_info_validates_max_rows_only_for_row_limits() {
+        let mut limit = SparkDsReadLimit {
+            size: size_of::<SparkDsReadLimit>() as i64,
+            kind: READ_MAX_ROWS,
+            max_rows: 1,
+        };
+        let mut info = SparkDsLatestOffsetInfo {
+            size: size_of::<SparkDsLatestOffsetInfo>() as i64,
+            start: c"0".as_ptr(),
+            limit: &limit,
+            run_end: std::ptr::null(),
+        };
+        for rows in [1, i64::MAX] {
+            limit.max_rows = rows;
+            info.limit = &limit;
+            let parsed = unsafe { latest_offset_info(&info) }.unwrap();
+            assert_eq!(parsed.limit, ReadLimit::MaxRows(rows as u64));
+        }
+        for rows in [i64::MIN, -1, 0] {
+            limit.max_rows = rows;
+            info.limit = &limit;
+            let error = unsafe { latest_offset_info(&info) }.unwrap_err();
+            assert!(error
+                .to_string()
+                .contains("a read limit must be between 1 and"));
+        }
+        limit.kind = READ_ALL_AVAILABLE;
+        for rows in [i64::MIN, 0, i64::MAX] {
+            limit.max_rows = rows;
+            info.limit = &limit;
+            let parsed = unsafe { latest_offset_info(&info) }.unwrap();
+            assert_eq!(parsed.limit, ReadLimit::AllAvailable);
+        }
+    }
+
+    #[test]
+    fn invalid_default_read_limits_leave_output_unchanged() {
+        let mut limit = SparkDsReadLimit {
+            size: size_of::<SparkDsReadLimit>() as i64,
+            kind: READ_ALL_AVAILABLE,
+            max_rows: 0,
+        };
+        for rows in [0, i64::MAX as u64 + 1, u64::MAX] {
+            let error =
+                unsafe { set_read_limit(&mut limit, ReadLimit::MaxRows(rows)) }.unwrap_err();
+            assert!(error
+                .to_string()
+                .contains("a read limit must be between 1 and"));
+            assert_eq!((limit.kind, limit.max_rows), (READ_ALL_AVAILABLE, 0));
+        }
     }
 
     #[test]

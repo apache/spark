@@ -202,6 +202,7 @@ impl DataWriterFactory for Factory {
         }
         Ok(Box::new(Writer {
             task: context.task,
+            partition: context.partition_id,
             failure: self.failure.clone(),
             batches: vec![],
         }))
@@ -210,6 +211,7 @@ impl DataWriterFactory for Factory {
 
 struct Writer<'task> {
     task: TaskContext<'task>,
+    partition: i32,
     failure: String,
     batches: Vec<RecordBatch>,
 }
@@ -253,7 +255,7 @@ impl DataWriter for Writer<'_> {
             })
             .collect();
         Ok(Message {
-            partition: self.task.partition_id(),
+            partition: self.partition,
             attempt: self.task.task_attempt_id(),
             values,
             batches: self.batches.len(),
@@ -637,6 +639,7 @@ fn serialized_factory_and_messages_roundtrip_without_driver_source_or_input_buff
             Event::TaskDropped(false),
             Event::TaskCommit,
             Event::TaskDropped(false),
+            // The writer context preserves the input partition ID separately from its task ID.
             Event::DriverCommit(vec![
                 Message {
                     partition: 7,

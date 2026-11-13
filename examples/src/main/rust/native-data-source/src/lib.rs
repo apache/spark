@@ -398,9 +398,12 @@ mod tests {
             .into_iter()
             .enumerate()
             .flat_map(|(index, partition)| {
-                let task = TaskContext::for_testing().with_partition_id(index as i32);
+                let task = TaskContext::for_testing();
                 plan.factory
-                    .open(partition, ReaderContext::new(schema.clone(), task))
+                    .open(
+                        partition,
+                        ReaderContext::new(schema.clone(), index as i32, task),
+                    )
                     .unwrap()
                     .map(|batch| batch.unwrap())
                     .collect::<Vec<_>>()
@@ -611,8 +614,11 @@ mod tests {
             ("batchsize", "2"),
         ]);
         let plan = scan(&source).plan().unwrap();
-        let context =
-            ReaderContext::new(source.infer_schema().unwrap(), TaskContext::for_testing());
+        let context = ReaderContext::new(
+            source.infer_schema().unwrap(),
+            0,
+            TaskContext::for_testing(),
+        );
         let mut reader = plan
             .factory
             .open(plan.partitions[0].clone(), context)

@@ -206,9 +206,9 @@ unsafe fn open_writer<F: DataWriterFactory>(
 ) -> Result<*mut c_void> {
     validate_schema(&schema)?;
     let factory: F = decode(state)?;
-    let task = unsafe { TaskContext::from_raw(task)? };
+    let (task, partition_id) = unsafe { TaskContext::from_raw(task)? };
     let data_type = DataType::Struct(schema.fields().clone());
-    let mut context = WriterContext::new(schema, task);
+    let mut context = WriterContext::new(schema, partition_id, task);
     context.epoch_id = epoch_id;
     let opened = provider_call(|| factory.open(context));
     // Keep guarded writer destruction in place before dropping the temporary
