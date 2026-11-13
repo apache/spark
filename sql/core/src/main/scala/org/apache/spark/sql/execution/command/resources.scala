@@ -19,8 +19,10 @@ package org.apache.spark.sql.execution.command
 
 import java.io.File
 
+import org.apache.spark.JobArtifactSet
 import org.apache.spark.sql.{Row, SparkSession}
 import org.apache.spark.sql.catalyst.expressions.{Attribute, AttributeReference}
+import org.apache.spark.sql.classic.ClassicConversions.castToImpl
 import org.apache.spark.sql.types.StringType
 import org.apache.spark.util.Utils
 
@@ -56,6 +58,18 @@ case class AddArchivesCommand(paths: Seq[String]) extends LeafRunnableCommand {
 }
 
 /**
+ * The jars, files and archives that the jobs of a session ship to its tasks: those added to the
+ * session when its artifacts are isolated, as with Spark Connect, and else all those added to the
+ * [[org.apache.spark.SparkContext]].
+ */
+private object SessionResources {
+  def apply(sparkSession: SparkSession): JobArtifactSet =
+    sparkSession.artifactManager.withResources {
+      JobArtifactSet.getActiveOrDefault(sparkSession.sparkContext)
+    }
+}
+
+/**
  * Returns a list of file paths that are added to resources.
  * If file paths are provided, return the ones that are added to resources.
  */
@@ -64,7 +78,7 @@ case class ListFilesCommand(files: Seq[String] = Seq.empty[String]) extends Leaf
     AttributeReference("Results", StringType, nullable = false)() :: Nil
   }
   override def run(sparkSession: SparkSession): Seq[Row] = {
-    val fileList = sparkSession.sparkContext.listFiles()
+    val fileList = SessionResources(sparkSession).files.keySet.toSeq
     if (files.nonEmpty) {
       files.map { f =>
         val uri = Utils.resolveURI(f)
@@ -90,7 +104,7 @@ case class ListJarsCommand(jars: Seq[String] = Seq.empty[String]) extends LeafRu
     AttributeReference("Results", StringType, nullable = false)() :: Nil
   }
   override def run(sparkSession: SparkSession): Seq[Row] = {
-    val jarList = sparkSession.sparkContext.listJars()
+    val jarList = SessionResources(sparkSession).jars.keySet.toSeq
     if (jars.nonEmpty) {
       for {
         jarName <- jars.map(f => Utils.resolveURI(f).toString.split("/").last)
@@ -112,7 +126,7 @@ case class ListArchivesCommand(archives: Seq[String] = Seq.empty[String])
     AttributeReference("Results", StringType, nullable = false)() :: Nil
   }
   override def run(sparkSession: SparkSession): Seq[Row] = {
-    val archiveList = sparkSession.sparkContext.listArchives()
+    val archiveList = SessionResources(sparkSession).archives.keySet.toSeq
     if (archives.nonEmpty) {
       for {
         archiveName <- archives.map(f => Utils.resolveURI(f).toString.split("/").last)

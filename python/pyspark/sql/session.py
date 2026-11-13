@@ -2345,6 +2345,68 @@ class SparkSession(SparkConversionMixin):
 
     addArtifact = addArtifacts
 
+    def listFiles(self) -> List[str]:
+        """
+        Returns the paths of the files added to resources, as :attr:`SparkContext.listFiles`.
+
+        These are the files that the jobs of this session make available to their tasks, such
+        as those added with :meth:`SparkSession.addArtifacts` with ``file`` or ``pyfile`` set, or
+        with the ``ADD FILE`` SQL statement. Without Spark Connect, these are all the files added
+        to the :class:`SparkContext`, also by other sessions. With Spark Connect, these are only
+        the files added to this session, as the URIs of their copies on the server.
+
+        .. versionadded:: 4.4.0
+
+        Returns
+        -------
+        list of str
+            The paths of the files, in no particular order.
+
+        See Also
+        --------
+        :meth:`SparkSession.addArtifacts`
+        :meth:`SparkSession.listArchives`
+
+        Examples
+        --------
+        >>> spark.addArtifacts("/tmp/my_file.txt", file=True)  # doctest: +SKIP
+        >>> spark.listFiles()  # doctest: +SKIP
+        ['file:/tmp/my_file.txt']
+        """
+        return self._sc.listFiles
+
+    def listArchives(self) -> List[str]:
+        """
+        Returns the paths of the archives added to resources, as
+        :attr:`SparkContext.listArchives`.
+
+        These are the archives that the jobs of this session unpack for their tasks, such as
+        those added with :meth:`SparkSession.addArtifacts` with ``archive`` set, or with the
+        ``ADD ARCHIVE`` SQL statement. A path keeps the fragment, such as ``#name``, that it was
+        added with. Without Spark Connect, these are all the archives added to the
+        :class:`SparkContext`, also by other sessions. With Spark Connect, these are only the
+        archives added to this session, as the URIs of their copies on the server.
+
+        .. versionadded:: 4.4.0
+
+        Returns
+        -------
+        list of str
+            The paths of the archives, in no particular order.
+
+        See Also
+        --------
+        :meth:`SparkSession.addArtifacts`
+        :meth:`SparkSession.listFiles`
+
+        Examples
+        --------
+        >>> spark.addArtifacts("/tmp/my_archive.zip#my_files", archive=True)  # doctest: +SKIP
+        >>> spark.listArchives()  # doctest: +SKIP
+        ['file:/tmp/my_archive.zip#my_files']
+        """
+        return self._sc.listArchives
+
     @remote_only
     def registerProgressHandler(self, handler: "ProgressHandler") -> None:
         """
