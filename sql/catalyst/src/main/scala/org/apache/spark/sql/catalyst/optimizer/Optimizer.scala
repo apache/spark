@@ -2320,7 +2320,12 @@ object InferFiltersFromConstraints extends Rule[LogicalPlan]
     // that follows from the left constraints and the ON condition can drop it before the join.
     // An inner join also drops the left rows without a match, so its left side gets one too.
     case j: AsOfJoin =>
+      // Leave out IN and correlated EXISTS filters. They become joins below the as-of join. A
+      // sort-merge semi join keeps only the key order, so the as-of join sorts that input again.
+      // A NOT IN anti join runs over every row of that input, and it is a nested-loop join when
+      // spark.sql.optimizeNullAwareAntiJoin is off.
       val allConstraints = getAllConstraints(j.left, j.right, j.condition)
+        .filterNot(SubqueryExpression.hasInOrCorrelatedExistsSubquery)
       val newLeft = j.joinType match {
         case Inner => inferNewFilter(j.left, allConstraints)
         case LeftOuter => j.left

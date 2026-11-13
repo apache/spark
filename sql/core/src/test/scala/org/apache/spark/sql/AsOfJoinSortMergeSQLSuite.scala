@@ -30,7 +30,7 @@ import org.apache.spark.sql.catalyst.plans.logical.AsOfJoin
 import org.apache.spark.sql.execution.{FileSourceScanExec, InputAdapter, SparkPlan,
   WholeStageCodegenExec}
 import org.apache.spark.sql.execution.adaptive.AdaptiveSparkPlanHelper
-import org.apache.spark.sql.execution.joins.SortMergeAsOfJoinExec
+import org.apache.spark.sql.execution.joins.{BaseJoinExec, SortMergeAsOfJoinExec}
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.sql.types.{IntegerType, StringType, StructType}
@@ -175,6 +175,16 @@ class AsOfJoinSortMergeSQLSuite extends QueryTest
   /** Names of the columns that the scan of `table` filters on. */
   private def scanFilterColumns(df: DataFrame, table: String): Set[String] =
     scanDataFilters(df, table).flatMap(_.references.map(_.name)).toSet
+
+  /** The joins below the left input and below the right input of the as-of join of `df`. */
+  private def joinsBelowAsOfInputs(df: DataFrame): (Seq[BaseJoinExec], Seq[BaseJoinExec]) = {
+    val plan = df.queryExecution.executedPlan
+    val asOfJoins = collect(plan) { case j: SortMergeAsOfJoinExec => j }
+    assert(asOfJoins.length == 1, s"Expected one SortMergeAsOfJoinExec in plan:\n$plan")
+    def joinsBelow(input: SparkPlan): Seq[BaseJoinExec] =
+      collect(input) { case j: BaseJoinExec => j }
+    (joinsBelow(asOfJoins.head.left), joinsBelow(asOfJoins.head.right))
+  }
 
   /** Whether the scan of `table` keeps only the rows where string `column` equals `value`. */
   private def scanFiltersOnEquality(
@@ -1357,7 +1367,7 @@ class AsOfJoinSortMergeSQLSuite extends QueryTest
           Row(Timestamp.valueOf("2026-06-29 10:00:05"), null),
           Row(Timestamp.valueOf("2026-06-29 10:00:11"), null),
           Row(Timestamp.valueOf("2026-06-29 10:00:12"), 420.50)))
-      assert(!scanFiltersOnEquality(leftOuterQuery, "trades_t", "symbol", "MSFT"))
+      assert(scanFilterColumns(leftOuterQuery, "trades_t").isEmpty)
 
       val innerQuery = sql(
         """
@@ -1368,6 +1378,27 @@ class AsOfJoinSortMergeSQLSuite extends QueryTest
           |""".stripMargin)
       checkSortMergeAsOf(innerQuery, Row(Timestamp.valueOf("2026-06-29 10:00:12"), 420.50) :: Nil)
       assert(scanFiltersOnEquality(innerQuery, "trades_t", "symbol", "MSFT"))
+    }
+  }
+
+  test("filter inference keeps a left row with a NULL ON key in a LEFT ASOF JOIN") {
+    // The NULL key never matches, but a left outer join must still return the row.
+    withTable("null_key_t") {
+      sql(
+        """
+          |CREATE TABLE null_key_t USING parquet AS
+          |SELECT * FROM VALUES (1, 'A', 5), (2, NULL, 5) AS t(id, k, ts)
+          |""".stripMargin)
+      checkSortMergeAsOf(
+        sql(
+          """
+            |SELECT t.id, r.tag
+            |FROM null_key_t t
+            |LEFT ASOF JOIN VALUES ('A', 1, 'a1'), (NULL, 1, 'n1') AS r(k, ts, tag)
+            |  MATCH_CONDITION (t.ts >= r.ts)
+            |  ON t.k = r.k
+            |""".stripMargin),
+        Seq(Row(1, "a1"), Row(2, null)))
     }
   }
 
@@ -1392,6 +1423,69 @@ class AsOfJoinSortMergeSQLSuite extends QueryTest
               |WHERE t.lo = 0
               |""".stripMargin),
           Seq(Row(1, "42"), Row(2, null)))
+      }
+    }
+  }
+
+  test("an IN or NOT IN subquery on the ON key adds no join below the other input") {
+    // The subqueries run as joins below the as-of join. On the other input, a sort-merge semi
+    // join for IN would keep only the key order, so the as-of join would sort that input again.
+    // A NOT IN anti join would run over every row of that input.
+    withTradeQuoteTables {
+      withTable("symbols_t") {
+        sql(
+          """
+            |CREATE TABLE symbols_t USING parquet AS
+            |SELECT * FROM VALUES ('MSFT'), ('GOOG') AS s(symbol)
+            |""".stripMargin)
+        def subqueryOnLeft(join: String, in: String): String =
+          s"""
+             |SELECT t.trade_time, q.bid_price
+             |FROM trades_t t $join quotes_t q
+             |  MATCH_CONDITION (t.trade_time >= q.quote_time)
+             |  ON t.symbol = q.symbol
+             |WHERE t.symbol $in (SELECT symbol FROM symbols_t)
+             |""".stripMargin
+        def subqueryOnRight(in: String): String =
+          s"""
+             |SELECT t.trade_time, q.bid_price
+             |FROM trades_t t ASOF JOIN
+             |  (SELECT * FROM quotes_t WHERE symbol $in (SELECT symbol FROM symbols_t)) q
+             |  MATCH_CONDITION (t.trade_time >= q.quote_time)
+             |  ON t.symbol = q.symbol
+             |""".stripMargin
+        val msft = Row(Timestamp.valueOf("2026-06-29 10:00:12"), 420.50)
+        val goog = Row(Timestamp.valueOf("2026-06-29 09:59:59"), null)
+        val aapl = Seq(
+          Row(Timestamp.valueOf("2026-06-29 10:00:05"), 180.10),
+          Row(Timestamp.valueOf("2026-06-29 10:00:11"), 180.20))
+        // The query, whether its subquery is on the left input, and the expected rows.
+        val cases = Seq(
+          (subqueryOnLeft("LEFT ASOF JOIN", "IN"), true, Seq(msft, goog)),
+          (subqueryOnLeft("LEFT ASOF JOIN", "NOT IN"), true, aapl),
+          (subqueryOnLeft("ASOF JOIN", "IN"), true, Seq(msft)),
+          (subqueryOnLeft("ASOF JOIN", "NOT IN"), true, aapl),
+          (subqueryOnRight("IN"), false, Seq(msft)),
+          (subqueryOnRight("NOT IN"), false, aapl))
+        // No broadcast, so the IN subquery runs as a sort-merge semi join.
+        withSQLConf(SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key -> "-1") {
+          for ((query, onLeftInput, expected) <- cases) {
+            withClue(query) {
+              withSQLConf(
+                  SQLConf.OPTIMIZER_EXCLUDED_RULES.key -> InferFiltersFromConstraints.ruleName) {
+                checkSortMergeAsOf(sql(query), expected)
+              }
+              val df = sql(query)
+              checkSortMergeAsOf(df, expected)
+              val (leftJoins, rightJoins) = joinsBelowAsOfInputs(df)
+              val (subqueryJoins, otherJoins) =
+                if (onLeftInput) (leftJoins, rightJoins) else (rightJoins, leftJoins)
+              assert(subqueryJoins.nonEmpty && otherJoins.isEmpty,
+                s"Expected a join below only the input with the subquery in plan:\n" +
+                  df.queryExecution.executedPlan)
+            }
+          }
+        }
       }
     }
   }
