@@ -2519,8 +2519,9 @@ class SortMergeAsOfJoinSuite extends QueryTest
       spark.createDataFrame(rightRows.asJava, schema).coalesce(1))
   }
 
+  // A nearest join has no generated scan to compare with.
   for {
-    direction <- Seq("backward", "forward", "nearest")
+    direction <- Seq("backward", "forward")
     joinType <- Seq("inner", "left")
   } {
     test(s"$direction $joinType join returns the same rows with the ASOF join codegen off and on") {
@@ -2531,7 +2532,9 @@ class SortMergeAsOfJoinSuite extends QueryTest
         residual <- Seq(false, true)
         tolerance <- Seq(None, Some(2))
         allowExactMatches <- Seq(false, true)
-        cursorScan <- Seq(false, true)
+        // A residual condition or a tolerance keeps the buffered scan, so the cursor scan
+        // config changes nothing there.
+        cursorScan <- if (residual || tolerance.nonEmpty) Seq(false) else Seq(false, true)
       } {
         withClue(s"equi-key $equiKey, residual $residual, tolerance $tolerance, " +
             s"exact matches $allowExactMatches, cursor scan $cursorScan: ") {
@@ -2558,7 +2561,9 @@ class SortMergeAsOfJoinSuite extends QueryTest
               } else {
                 interpreted = query.collect().toSeq
               }
-              assertAsOfJoinCodegen(query, codegen)
+              val op = assertAsOfJoinCodegen(query, codegen)
+              assert((op.metrics("numAsOfCursorTasks").value > 0) == cursorScan,
+                "Unexpected scan: the cursor scan runs exactly when it is on")
             }
             if (joinType == "left") assert(interpreted.length == leftRowCount)
             matchedRows += interpreted.count(!_.isNullAt(7))

@@ -57,12 +57,19 @@ class SortMergeAsOfJoinScannerSuite extends SparkFunSuite with LocalSparkContext
   test("nearest join has no cursor scan") {
     val leftKey = AttributeReference("leftKey", IntegerType)()
     val rightKey = AttributeReference("rightKey", IntegerType)()
-    // A scanner built by hand must fail, not run the cursor of another direction.
-    val error = intercept[SparkException] {
-      runScan(Seq(5), Seq(1, 9), leftKey, rightKey, Literal.TrueLiteral, Nearest,
-        useCursorScan = true)
+    // A scanner built by hand must fail, not run the cursor of another direction. It fails when
+    // it is built, so also with no rows, where the cursor would not check any right row.
+    Seq((Seq(5), Seq(1, 9)), (Seq(5), Seq.empty[Int]), (Seq.empty[Int], Seq.empty[Int])).foreach {
+      case (leftValues, rightValues) =>
+        val error = intercept[SparkException] {
+          runScan(leftValues, rightValues, leftKey, rightKey, Literal.TrueLiteral, Nearest,
+            useCursorScan = true)
+        }
+        checkError(
+          exception = error.getCause.asInstanceOf[SparkException],
+          condition = "INTERNAL_ERROR",
+          parameters = Map("message" -> "The Nearest AS-OF join has no cursor scan"))
     }
-    assert(error.getMessage.contains("The Nearest AS-OF join has no ordered scan"))
   }
 
   test("nearest scan stops at the first eligible row after the left key") {
