@@ -17,6 +17,8 @@
 
 package org.apache.spark.sql.catalyst.expressions
 
+import scala.util.control.NonFatal
+
 import com.fasterxml.jackson.core.{JsonFactory, JsonProcessingException}
 
 import org.apache.spark.SparkException
@@ -2023,9 +2025,15 @@ abstract class JsonPathExpressionBuilder extends ExpressionBuilder {
     val pathExpr = expressions(1)
     pathExpr.dataType match {
       case _: StringType if pathExpr.foldable =>
-        // TODO(SPARK-59244): wrap eval() so a foldable-but-throwing path re-throws as a clean
-        // invalid-argument analysis error naming `path`.
-        val pathValue = pathExpr.eval()
+        // A foldable path can still fail to evaluate (e.g. `element_at(array('$.a'), 0)`); report
+        // it as an invalid `path` argument, keeping the runtime error as the cause.
+        val pathValue =
+          try pathExpr.eval()
+          catch {
+            case NonFatal(e) =>
+              throw QueryCompilationErrors.cannotEvaluateParameterError(
+                funcName, "path", pathExpr, e)
+          }
         if (pathValue == null) {
           throw QueryCompilationErrors.unexpectedNullError("path", pathExpr)
         }
