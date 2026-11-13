@@ -106,7 +106,8 @@ object StreamingJoinHelper extends PredicateHelper with Logging {
   /**
    * Whether the expression casts one of the event times in `eventTimes` to a type other than
    * TIMESTAMP, such as BIGINT, DOUBLE, DECIMAL or a TIMESTAMP with nanoseconds. The solver reads
-   * such a cast as its input, but it can drop or round part of a time.
+   * a cast to a number as its input, although the cast can drop or round part of a time, and it
+   * derives no bound through any other cast, such as to TIMESTAMP_NTZ or a nanosecond TIMESTAMP.
    */
   def castsEventTime(expr: Expression, eventTimes: AttributeSet): Boolean = expr.exists {
     case Cast(child, dataType, _, _) =>

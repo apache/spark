@@ -1713,8 +1713,6 @@ abstract class StreamingOuterJoinBase extends StreamingJoinSuite {
     }
   }
 
-  // When the join condition isn't true, the outer null rows must be generated, even if the join
-  // keys themselves have a match.
   for (leftFirst <- Seq(true, false)) {
     test(s"left outer join with a constant bound on the left event time, left first = $leftFirst") {
       val leftInput = MemoryStream[(Int, Long)]
@@ -1740,6 +1738,8 @@ abstract class StreamingOuterJoinBase extends StreamingJoinSuite {
     }
   }
 
+  // When the join condition isn't true, the outer null rows must be generated, even if the join
+  // keys themselves have a match.
   test("left outer join with non-key condition violated") {
     val (leftInput, simpleLeftDf) = setupStream("left", 2)
     val (rightInput, simpleRightDf) = setupStream("right", 3)
