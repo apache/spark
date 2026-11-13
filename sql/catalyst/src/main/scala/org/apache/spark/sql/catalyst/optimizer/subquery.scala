@@ -769,14 +769,21 @@ object RewriteCorrelatedScalarSubquery extends Rule[LogicalPlan] with AliasHelpe
     // in the expression with the value they would return for zero input tuples.
     // Also replace attribute refs (for example, for grouping columns) with NULL.
     val rewrittenExpr = expr transform {
-      case a @ AggregateExpression(aggFunc, _, _, resultId, _) =>
-        aggFunc.defaultResult.getOrElse(Literal.create(null, aggFunc.dataType))
+      case AggregateExpression(aggFunc, _, _, _, _) => aggregateDefaultResult(aggFunc)
 
       case a: AttributeReference => Literal.create(null, a.dataType)
     }
 
     tryEvalExpr(rewrittenExpr)
   }
+
+  /**
+   * The value an aggregate function returns over an empty input: its `defaultResult` if it
+   * defines one (e.g. 0 for `count`), or `NULL` otherwise. Shared with [[DecorrelateInnerQuery]],
+   * which also corrects aggregate functions for the COUNT bug.
+   */
+  def aggregateDefaultResult(aggFunc: AggregateFunction): Literal =
+    aggFunc.defaultResult.getOrElse(Literal.create(null, aggFunc.dataType))
 
   /**
    * Statically evaluate an [[Aggregate]] on an empty input and return a mapping
@@ -973,6 +980,11 @@ object RewriteCorrelatedScalarSubquery extends Rule[LogicalPlan] with AliasHelpe
 
             if (havingNode.isEmpty) {
               // CASE 2: Subquery with no HAVING clause
+              // TODO(SPARK-61660): when `resultWithZeroTups` applies a scalar Python UDF to an
+              // aggregate function, e.g. `inv(count(*))`, the UDF is kept in this conditional
+              // branch and `ExtractPythonUDFs` evaluates it on the values over zero rows for every
+              // outer row, so the query can fail even when every outer row has matching rows. See
+              // SPARK-61482 for the same fix on the `DecorrelateInnerQuery` path.
               val subqueryResultExpr =
                 Alias(If(IsNull(alwaysTrueRef),
                   resultWithZeroTups.get,

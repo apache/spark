@@ -17,6 +17,7 @@
 
 package org.apache.spark.sql.catalyst.optimizer
 
+import org.apache.spark.api.python.PythonEvalType
 import org.apache.spark.sql.catalyst.dsl.expressions._
 import org.apache.spark.sql.catalyst.dsl.plans._
 import org.apache.spark.sql.catalyst.expressions._
@@ -829,5 +830,178 @@ class DecorrelateInnerQuerySuite extends PlanTest {
           Limit(1, testRelation2))
       check(outputPlan, joinCond, correctAnswer, Seq(a < b))
     }
+  }
+
+  test("SPARK-61482: COUNT bug handling pulls an aggregate function out of a Python UDF") {
+    val outerPlan = testRelation2
+    val cnt = count(Literal(1))
+    val udf = PythonUDF("udf", null, LongType, Seq(cnt),
+      PythonEvalType.SQL_BATCHED_UDF, udfDeterministic = true)
+    val d = Alias(udf, "d")()
+    val innerPlan =
+      Aggregate(Nil, Seq(d),
+        Filter(OuterReference(x) === a,
+          testRelation))
+    val (outputPlan, joinCond) =
+      DecorrelateInnerQuery(innerPlan, outerPlan.select(), handleCountBug = true)
+
+    val cntRes = Alias(cnt, "count")()
+    val alwaysTrue = Alias(Literal.TrueLiteral, "alwaysTrue")()
+    val alwaysTrueRef = alwaysTrue.toAttribute.withNullability(true)
+    val x2 = x.newInstance()
+    // The `count` is evaluated by the aggregate and corrected for zero rows; the Python UDF is
+    // computed in the Project above the join, so it runs once per row on that row's value.
+    val correctAnswer =
+      Project(Seq(
+          Alias(udf.copy(children =
+            Seq(If(IsNull(alwaysTrueRef), Literal(0L),
+              cntRes.toAttribute.withNullability(true)))), "d")(d.exprId),
+          x2),
+        DomainJoin(Seq(x2),
+          Aggregate(Seq(a), Seq(cntRes, a, alwaysTrue),
+            testRelation),
+          LeftOuter,
+          Some(x2 === a)))
+    check(outputPlan, joinCond, correctAnswer, Seq(x2 <=> x))
+    assert(outputPlan.output.exists(_.exprId == d.exprId))
+  }
+
+  test("SPARK-61482: COUNT bug handling pulls a NULL-default aggregate out of a Python UDF") {
+    val outerPlan = testRelation2
+    val mx = max(b)
+    val udf = PythonUDF("udf", null, IntegerType, Seq(mx),
+      PythonEvalType.SQL_BATCHED_UDF, udfDeterministic = true)
+    val d = Alias(udf, "d")()
+    val innerPlan =
+      Aggregate(Nil, Seq(d),
+        Filter(OuterReference(x) === a,
+          testRelation))
+    val (outputPlan, joinCond) =
+      DecorrelateInnerQuery(innerPlan, outerPlan.select(), handleCountBug = true)
+
+    val mxRes = Alias(mx, "max")()
+    val alwaysTrue = Alias(Literal.TrueLiteral, "alwaysTrue")()
+    val x2 = x.newInstance()
+    // `max` has a NULL result over zero rows, so the pulled-out column is read directly, with no
+    // `if(isnull(alwaysTrue), ...)` correction, and the UDF is computed above the join.
+    val correctAnswer =
+      Project(Seq(
+          Alias(udf.copy(children =
+            Seq(mxRes.toAttribute.withNullability(true))), "d")(d.exprId),
+          x2),
+        DomainJoin(Seq(x2),
+          Aggregate(Seq(a), Seq(mxRes, a, alwaysTrue),
+            testRelation),
+          LeftOuter,
+          Some(x2 === a)))
+    check(outputPlan, joinCond, correctAnswer, Seq(x2 <=> x))
+  }
+
+  test("SPARK-61482: COUNT bug handling pulls multiple aggregate functions out of a Python UDF") {
+    val outerPlan = testRelation2
+    val mx = max(b)
+    val cnt = count(Literal(1))
+    val udf = PythonUDF("udf", null, IntegerType, Seq(mx, cnt),
+      PythonEvalType.SQL_BATCHED_UDF, udfDeterministic = true)
+    val d = Alias(udf, "d")()
+    val innerPlan =
+      Aggregate(Nil, Seq(d),
+        Filter(OuterReference(x) === a,
+          testRelation))
+    val (outputPlan, joinCond) =
+      DecorrelateInnerQuery(innerPlan, outerPlan.select(), handleCountBug = true)
+
+    val mxRes = Alias(mx, "max")()
+    val cntRes = Alias(cnt, "count")()
+    val alwaysTrue = Alias(Literal.TrueLiteral, "alwaysTrue")()
+    val alwaysTrueRef = alwaysTrue.toAttribute.withNullability(true)
+    val x2 = x.newInstance()
+    // Both aggregate functions are pulled out; `max` (NULL default) is read directly and `count`
+    // (0 default) gets the `if(isnull(alwaysTrue), 0, count)` correction, and the UDF over both is
+    // computed above the join.
+    val correctAnswer =
+      Project(Seq(
+          Alias(udf.copy(children = Seq(
+            mxRes.toAttribute.withNullability(true),
+            If(IsNull(alwaysTrueRef), Literal(0L),
+              cntRes.toAttribute.withNullability(true)))), "d")(d.exprId),
+          x2),
+        DomainJoin(Seq(x2),
+          Aggregate(Seq(a), Seq(mxRes, cntRes, a, alwaysTrue),
+            testRelation),
+          LeftOuter,
+          Some(x2 === a)))
+    check(outputPlan, joinCond, correctAnswer, Seq(x2 <=> x))
+  }
+
+  test("SPARK-61482: COUNT bug handling does not pull out a Python UDF inside an aggregate") {
+    val outerPlan = testRelation2
+    val udf = PythonUDF("udf", null, IntegerType, Seq(b),
+      PythonEvalType.SQL_BATCHED_UDF, udfDeterministic = true)
+    val cnt = count(udf)
+    val c = Alias(cnt, "c")()
+    val innerPlan =
+      Aggregate(Nil, Seq(c),
+        Filter(OuterReference(x) === a,
+          testRelation))
+    val (outputPlan, joinCond) =
+      DecorrelateInnerQuery(innerPlan, outerPlan.select(), handleCountBug = true)
+
+    val cRef = c.newInstance()
+    val alwaysTrue = Alias(Literal.TrueLiteral, "alwaysTrue")()
+    val alwaysTrueRef = alwaysTrue.toAttribute.withNullability(true)
+    val x2 = x.newInstance()
+    // The Python UDF is an argument of `count`, not applied to its result, so the column keeps the
+    // `if(isnull(alwaysTrue), 0, c)` correction in place and `count(udf(b))` stays in the
+    // aggregate; the UDF is not lifted out.
+    val correctAnswer =
+      Project(Seq(
+          Alias(If(IsNull(alwaysTrueRef), Literal(0L),
+            cRef.toAttribute.withNullability(true)), "c")(c.exprId),
+          x2),
+        DomainJoin(Seq(x2),
+          Aggregate(Seq(a), Seq(cRef, a, alwaysTrue),
+            testRelation),
+          LeftOuter,
+          Some(x2 === a)))
+    check(outputPlan, joinCond, correctAnswer, Seq(x2 <=> x))
+  }
+
+  test("SPARK-61482: COUNT bug handling pulls aggregates only out of a Python UDF column") {
+    val outerPlan = testRelation2
+    val cnt = count(Literal(1))
+    val udf = PythonUDF("udf", null, LongType, Seq(cnt),
+      PythonEvalType.SQL_BATCHED_UDF, udfDeterministic = true)
+    val d = Alias(udf, "d")()
+    val c = Alias(cnt, "c")()
+    val innerPlan =
+      Aggregate(Nil, Seq(d, c),
+        Filter(OuterReference(x) === a,
+          testRelation))
+    val (outputPlan, joinCond) =
+      DecorrelateInnerQuery(innerPlan, outerPlan.select(), handleCountBug = true)
+
+    val udfCnt = Alias(cnt, "count")()
+    val cRef = c.newInstance()
+    val alwaysTrue = Alias(Literal.TrueLiteral, "alwaysTrue")()
+    val alwaysTrueRef = alwaysTrue.toAttribute.withNullability(true)
+    val x2 = x.newInstance()
+    // The UDF column `d` is rebuilt above the join from the corrected `count`, while the plain
+    // aggregate column `c`, which has no Python UDF, keeps the `if(isnull(alwaysTrue), ...)`
+    // correction in place and is not pulled out of the aggregate.
+    val correctAnswer =
+      Project(Seq(
+          Alias(udf.copy(children =
+            Seq(If(IsNull(alwaysTrueRef), Literal(0L),
+              udfCnt.toAttribute.withNullability(true)))), "d")(d.exprId),
+          Alias(If(IsNull(alwaysTrueRef), Literal(0L),
+            cRef.toAttribute.withNullability(true)), "c")(c.exprId),
+          x2),
+        DomainJoin(Seq(x2),
+          Aggregate(Seq(a), Seq(udfCnt, cRef, a, alwaysTrue),
+            testRelation),
+          LeftOuter,
+          Some(x2 === a)))
+    check(outputPlan, joinCond, correctAnswer, Seq(x2 <=> x))
   }
 }

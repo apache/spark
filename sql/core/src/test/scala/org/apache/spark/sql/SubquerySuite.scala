@@ -3514,4 +3514,59 @@ class SubquerySuite extends SharedSparkSession
       }
     }
   }
+
+  test("SPARK-61482: COUNT bug of a lower aggregate with a PythonUDF over aggregate functions") {
+    import IntegratedUDFTestUtils._
+
+    assume(shouldTestPythonUDFs)
+
+    val pythonTestUDF = TestPythonUDF(name = "udf")
+    registerTestUDF(pythonTestUDF, spark)
+
+    // `ml` keeps only the rows of `l` with matching rows in `r`. The Python UDF is evaluated
+    // once per row on the value of that row, and not also on the result over zero tuples,
+    // `udf(10 / 0)`. Without this change the UDF is lifted out of the conditional branch by
+    // `ExtractPythonUDFs` and evaluated on `10 / 0` for every row, failing in ANSI mode.
+    withTempView("ml") {
+      sql("CREATE TEMPORARY VIEW ml AS SELECT * FROM l WHERE a > 1")
+      withSQLConf(SQLConf.ANSI_ENABLED.key -> "true") {
+        checkAnswer(
+          sql("SELECT l.a, (SELECT SUM(d) FROM (SELECT udf(10 / COUNT(*)) d FROM r " +
+            "WHERE l.a = r.c)) FROM ml l"),
+          Row(2, 5.0) :: Row(2, 5.0) :: Row(3, 10.0) :: Row(6, 10.0) :: Nil)
+        checkAnswer(
+          sql("SELECT l.a, t.d FROM ml l, LATERAL (SELECT udf(10 / COUNT(*)) d FROM r " +
+            "WHERE l.a = r.c) t"),
+          Row(2, 5.0) :: Row(2, 5.0) :: Row(3, 10.0) :: Row(6, 10.0) :: Nil)
+      }
+    }
+    checkAnswer(
+      sql("SELECT l.a, (SELECT SUM(d) FROM (SELECT udf(COUNT(*)) + 1 d FROM r " +
+        "WHERE l.a = r.c)) FROM l"),
+      Row(1, 1L) :: Row(1, 1L) :: Row(2, 3L) :: Row(2, 3L) :: Row(3, 2L) ::
+        Row(null, 1L) :: Row(null, 1L) :: Row(6, 2L) :: Nil)
+  }
+
+  test("SPARK-61482: a Python UDF guarded by an aggregate value has its argument evaluated " +
+    "on the zero-row values for an outer row without matching rows") {
+    import IntegratedUDFTestUtils._
+
+    assume(shouldTestPythonUDFs)
+
+    registerTestUDF(TestPythonUDF(name = "udf"), spark)
+
+    // Behavior change: the UDF column is rebuilt above the domain join, so `ExtractPythonUDFs`
+    // lifts the UDF argument out of the `CASE` branch and evaluates it for every outer row,
+    // including rows without matching rows, where the aggregate's value over zero rows is used.
+    // This matches the uncorrelated form, which already evaluates the argument eagerly, but it
+    // turns a query that worked before into a failing one. In ANSI mode the lifted argument
+    // `10 / 0` fails at runtime for such a row.
+    withSQLConf(SQLConf.ANSI_ENABLED.key -> "true") {
+      val df = sql("SELECT l.a, t.d FROM l, LATERAL (SELECT " +
+        "CASE WHEN COUNT(*) = 0 THEN 0 ELSE udf(10 / COUNT(*)) END d FROM r WHERE l.a = r.c) t")
+      df.queryExecution.optimizedPlan
+      val e = intercept[SparkArithmeticException](df.collect())
+      assert(e.getCondition == "DIVIDE_BY_ZERO")
+    }
+  }
 }
