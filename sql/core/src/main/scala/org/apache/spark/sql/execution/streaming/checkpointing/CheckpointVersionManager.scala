@@ -19,7 +19,6 @@ package org.apache.spark.sql.execution.streaming.checkpointing
 
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.SparkSession
-import org.apache.spark.sql.errors.QueryCompilationErrors
 import org.apache.spark.sql.internal.SQLConf
 
 /**
@@ -40,8 +39,7 @@ case object CommitLogType extends CheckpointLogType
 /**
  * The `CheckpointVersionManager` is responsible for managing the versioning of the streaming
  * checkpoint. It determines which version of each system-managed log format to use when starting
- * a streaming query, and validates that the requested feature set is compatible with the existing
- * checkpoint when restarting.
+ * a streaming query.
  *
  * Writer versions are typically used only while starting a new streaming query and are not
  * intended to be exposed directly to users; once set, they are not intended to change for the
@@ -146,26 +144,13 @@ object CheckpointVersionManager extends Logging {
    * Determines the offset log format version for this query run. For existing queries, reads from
    * the last written offset log entry. For new queries, delegates to the session config (honoring
    * any feature-driven minimums).
-   *
-   * Also validates that the session config is compatible with the existing checkpoint. Currently,
-   * enabling streaming source evolution on a checkpoint whose offset log is below VERSION_2 is
-   * rejected, since the OffsetMap-based named source tracking required by source evolution is not
-   * available in earlier versions.
    */
   def resolveOffsetLogVersion(
       sparkSessionForStream: SparkSession,
       latestStartedBatch: Option[(Long, OffsetSeqBase)]): Int = {
     latestStartedBatch match {
-      case Some((_, offsetSeq)) =>
-        val existingVersion = offsetSeq.version
-        if (existingVersion < OffsetSeqLog.VERSION_2 &&
-            sparkSessionForStream.sessionState.conf.enableStreamingSourceEvolution) {
-          throw QueryCompilationErrors.cannotEnableSourceEvolutionOnExistingCheckpointError(
-            existingVersion)
-        }
-        existingVersion
-      case None =>
-        getFormatVersionFromSession(sparkSessionForStream, OffsetLogType)
+      case Some((_, offsetSeq)) => offsetSeq.version
+      case None => getFormatVersionFromSession(sparkSessionForStream, OffsetLogType)
     }
   }
 
