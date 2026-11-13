@@ -22,6 +22,7 @@ import java.io.File
 import org.apache.hadoop.fs.Path
 import org.apache.orc.OrcConf
 
+import org.apache.spark.{SparkException, SparkUnsupportedOperationException}
 import org.apache.spark.sql.{AnalysisException, Row}
 import org.apache.spark.sql.catalyst.TableIdentifier
 import org.apache.spark.sql.catalyst.catalog.HiveTableRelation
@@ -30,7 +31,7 @@ import org.apache.spark.sql.execution.datasources.orc.OrcQueryTest
 import org.apache.spark.sql.hive.{HiveSessionCatalog, HiveUtils}
 import org.apache.spark.sql.hive.test.TestHiveSingleton
 import org.apache.spark.sql.internal.SQLConf
-import org.apache.spark.sql.types.{GeographyType, GeometryType, TimeType}
+import org.apache.spark.sql.types.{GeographyType, GeometryType, StructType, TimestampNTZType, TimeType}
 import org.apache.spark.util.Utils
 
 class HiveOrcQuerySuite extends OrcQueryTest with TestHiveSingleton {
@@ -480,6 +481,97 @@ class HiveOrcQuerySuite extends OrcQueryTest with TestHiveSingleton {
               condition = "UNSUPPORTED_DATA_TYPE_FOR_DATASOURCE",
               parameters = expectedParams)
           }
+        }
+      }
+    }
+  }
+
+  test("SPARK-61132: TIMESTAMP_NTZ writes are rejected in Hive ORC") {
+    withSQLConf(SQLConf.ORC_IMPLEMENTATION.key -> "hive") {
+      withTempDir { dir =>
+        val tempDir = new File(dir, "files").getCanonicalPath
+        val expectedParams = Map(
+          "columnName" -> "`ts`",
+          "columnType" -> s"\"${TimestampNTZType.sql}\"",
+          "format" -> "ORC")
+        // The write fails on the driver with an analysis error, not inside a task.
+        checkError(
+          exception = intercept[AnalysisException] {
+            sql("SELECT TIMESTAMP_NTZ'1970-01-01 00:00:01' AS ts")
+              .write.format("orc").mode("overwrite").save(tempDir)
+          },
+          condition = "UNSUPPORTED_DATA_TYPE_FOR_DATASOURCE",
+          parameters = expectedParams)
+        // nested
+        val nestedType = new StructType().add("ts", TimestampNTZType, nullable = false)
+        checkError(
+          exception = intercept[AnalysisException] {
+            sql("SELECT named_struct('ts', TIMESTAMP_NTZ'1970-01-01 00:00:01') AS s")
+              .write.format("orc").mode("overwrite").save(tempDir)
+          },
+          condition = "UNSUPPORTED_DATA_TYPE_FOR_DATASOURCE",
+          parameters = Map(
+            "columnName" -> "`s`",
+            "columnType" -> s"\"${nestedType.sql}\"",
+            "format" -> "ORC"))
+        // A table with a TIMESTAMP_NTZ column can still be created and read (its data may be
+        // written by the native implementation, see the next test); a write through the Hive
+        // implementation fails.
+        withTable("t") {
+          sql("CREATE TABLE t (ts TIMESTAMP_NTZ) USING ORC")
+          checkError(
+            exception = intercept[AnalysisException] {
+              sql("INSERT INTO t VALUES (TIMESTAMP_NTZ'1970-01-01 00:00:01')")
+            },
+            condition = "UNSUPPORTED_DATA_TYPE_FOR_DATASOURCE",
+            parameters = expectedParams)
+        }
+      }
+    }
+  }
+
+  test("SPARK-61132: Hive ORC reads TIMESTAMP_NTZ data written by native ORC") {
+    withTempPath { path =>
+      withTable("t") {
+        val ntz = "CAST(c AS TIMESTAMP_NTZ)"
+        val df = sql(s"SELECT $ntz AS ts, named_struct('ts', $ntz) AS s, array($ntz) AS a, " +
+          s"map('k', $ntz) AS m, 1 AS id " +
+          "FROM VALUES ('1970-01-01 00:00:01'), ('2020-02-29 12:34:56.789012') AS t(c)")
+        withSQLConf(SQLConf.ORC_IMPLEMENTATION.key -> "hive") {
+          sql("CREATE TABLE t (ts TIMESTAMP_NTZ, s STRUCT<ts: TIMESTAMP_NTZ>, " +
+            "a ARRAY<TIMESTAMP_NTZ>, m MAP<STRING, TIMESTAMP_NTZ>, id INT) USING ORC")
+        }
+        // The native implementation stores TIMESTAMP_NTZ as an ORC LONG column holding the micros.
+        withSQLConf(SQLConf.ORC_IMPLEMENTATION.key -> "native") {
+          df.write.orc(path.getCanonicalPath)
+          df.write.insertInto("t")
+        }
+        withSQLConf(SQLConf.ORC_IMPLEMENTATION.key -> "hive") {
+          spark.catalog.refreshTable("t")
+          checkAnswer(spark.read.schema(df.schema).orc(path.getCanonicalPath), df)
+          checkAnswer(spark.table("t"), df)
+          checkAnswer(sql("SELECT id FROM t"), df.select("id"))
+        }
+      }
+    }
+  }
+
+  test("SPARK-61132: Hive ORC rejects reading a Hive timestamp column as TIMESTAMP_NTZ") {
+    // A Hive timestamp holds an instant. Reinterpreting it as a wall-clock TIMESTAMP_NTZ value
+    // would shift it by the session time zone, so the read fails like the native ORC reader does.
+    withSQLConf(SQLConf.ORC_IMPLEMENTATION.key -> "hive") {
+      withTempPath { path =>
+        sql("SELECT TIMESTAMP_LTZ'1970-01-01 00:00:01' AS ts, " +
+          "named_struct('ts', TIMESTAMP_LTZ'1970-01-01 00:00:01') AS s")
+          .write.orc(path.getCanonicalPath)
+        Seq("ts TIMESTAMP_NTZ", "s STRUCT<ts: TIMESTAMP_NTZ>").foreach { schema =>
+          val e = intercept[SparkException] {
+            spark.read.schema(schema).orc(path.getCanonicalPath).collect()
+          }
+          checkError(
+            exception = e.getCause.asInstanceOf[SparkUnsupportedOperationException],
+            condition = "UNSUPPORTED_FEATURE.ORC_TYPE_CAST",
+            parameters = Map("orcType" -> "\"TIMESTAMP\"", "toType" -> "\"TIMESTAMP_NTZ\""))
         }
       }
     }

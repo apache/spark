@@ -46,6 +46,7 @@ import org.apache.spark.sql.SparkSession
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.util.DateTimeConstants.NANOS_PER_MILLIS
+import org.apache.spark.sql.errors.QueryCompilationErrors
 import org.apache.spark.sql.execution.datasources._
 import org.apache.spark.sql.execution.datasources.orc.{OrcFilters, OrcOptions, OrcUtils}
 import org.apache.spark.sql.hive.{HiveInspectors, HiveShim}
@@ -89,6 +90,16 @@ case class OrcFileFormat() extends FileFormat
       job: Job,
       options: Map[String, String],
       dataSchema: StructType): OutputWriterFactory = {
+
+    // The Hive ORC serializer has no type mapping for TIMESTAMP_NTZ, unlike TIMESTAMP_NTZ(7..9),
+    // which it stores as a Hive timestamp. The type string would reach Hive's type parser and fail
+    // inside a task, so reject the type here, on the driver, with the error that `supportDataType`
+    // raises for the other unsupported types. It is not rejected in `supportDataType` itself
+    // because that also gates reads, and TIMESTAMP_NTZ data written by the native ORC
+    // implementation (an ORC LONG column holding the micros) is readable by this implementation.
+    dataSchema.find(f => containsTimestampNTZ(f.dataType)).foreach { field =>
+      throw QueryCompilationErrors.dataTypeUnsupportedByDataSourceError(toString, field)
+    }
 
     val orcOptions = new OrcOptions(options, getSqlConf(sparkSession))
 
@@ -213,6 +224,17 @@ case class OrcFileFormat() extends FileFormat
 
     case udt: UserDefinedType[_] => supportDataType(udt.sqlType)
 
+    case _ => false
+  }
+
+  // Whether the type holds a TIMESTAMP_NTZ at any nesting level; see `prepareWrite`.
+  private def containsTimestampNTZ(dataType: DataType): Boolean = dataType match {
+    case _: TimestampNTZType => true
+    case st: StructType => st.exists(f => containsTimestampNTZ(f.dataType))
+    case ArrayType(elementType, _) => containsTimestampNTZ(elementType)
+    case MapType(keyType, valueType, _) =>
+      containsTimestampNTZ(keyType) || containsTimestampNTZ(valueType)
+    case udt: UserDefinedType[_] => containsTimestampNTZ(udt.sqlType)
     case _ => false
   }
 
@@ -422,9 +444,13 @@ private[orc] object OrcFileFormat extends HiveInspectors with Logging {
       val unwrappers = fieldRefs.zip(requiredSchema).map {
         case (null, _) => null
         // Nanos timestamps (including those nested in struct/array/map) need the target Catalyst
-        // type to produce TimestampNanosVal; the data-type-aware unwrapper handles both the
-        // top-level and nested cases, while everything else keeps the primitive fast paths.
-        case (fieldRef, field) if field.dataType.existsRecursively(isNanosTimestamp) =>
+        // type to produce TimestampNanosVal, and a TIMESTAMP_NTZ target needs it to reject a Hive
+        // timestamp column, whose instant cannot be read as a wall-clock value (an ORC LONG column
+        // written by the native implementation still decodes directly); the data-type-aware
+        // unwrapper handles both the top-level and nested cases, while everything else keeps the
+        // primitive fast paths.
+        case (fieldRef, field) if field.dataType.existsRecursively(
+            dt => isNanosTimestamp(dt) || dt.isInstanceOf[TimestampNTZType]) =>
           val unwrapper = unwrapperFor(fieldRef.getFieldObjectInspector, field.dataType)
           (value: Any, row: InternalRow, ordinal: Int) => row.update(ordinal, unwrapper(value))
         case (fieldRef, _) =>

@@ -35,6 +35,7 @@ import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.util._
 import org.apache.spark.sql.errors.DataTypeErrors.toSQLType
+import org.apache.spark.sql.errors.QueryExecutionErrors
 import org.apache.spark.sql.execution.datasources.DaysWritable
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types
@@ -846,11 +847,16 @@ private[hive] trait HiveInspectors {
    * `unwrapperFor(ObjectInspector)` cannot do this because a Hive `TimestampObjectInspector`
    * maps to micros by default; here the nanos timestamp types are produced as `TimestampNanosVal`,
    * recursing through array/map/struct so nested nanos timestamps round-trip correctly. CHAR and
-   * VARCHAR targets also apply their read-side length and padding checks. Any other type is
-   * delegated to the `ObjectInspector`-only overload.
+   * VARCHAR targets also apply their read-side length and padding checks. A `TimestampNTZType`
+   * target rejects a Hive timestamp, which holds an instant that cannot be read as a wall-clock
+   * value. Any other type is delegated to the `ObjectInspector`-only overload.
    */
   def unwrapperFor(objectInspector: ObjectInspector, dataType: DataType): Any => Any =
     (objectInspector, dataType) match {
+      case (_: TimestampObjectInspector, TimestampNTZType) =>
+        // Reinterpreting the instant as a wall-clock value would shift it by the session time
+        // zone. Fail as the native ORC reader does for the same conversion.
+        throw QueryExecutionErrors.cannotConvertOrcTimestampToTimestampNTZError()
       case (ti: TimestampObjectInspector, t: TimestampNTZNanosType) =>
         data: Any => {
           if (data != null) {
