@@ -36,6 +36,8 @@ object PullOutNondeterministic extends Rule[LogicalPlan] {
     case p if !p.resolved => p // Skip unresolved nodes.
     case p: Project => p
     case f: Filter => f
+    // A CALL must keep its procedure as its child, which `Call.bound` and `checkArgTypes` read.
+    case c: Call => c
 
     case a: Aggregate if a.groupingExpressions.exists(!_.deterministic) =>
       val nondeterToAttr =

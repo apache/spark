@@ -26,9 +26,13 @@ import org.scalatest.BeforeAndAfter
 import org.apache.spark.{SPARK_DOC_ROOT, SparkException, SparkNumberFormatException}
 import org.apache.spark.sql.{AnalysisException, Row}
 import org.apache.spark.sql.catalyst.InternalRow
+import org.apache.spark.sql.catalyst.analysis.ResolvedProcedure
+import org.apache.spark.sql.catalyst.expressions.Literal
+import org.apache.spark.sql.catalyst.plans.logical.{Call, LocalRelation}
 import org.apache.spark.sql.catalyst.util.TypeUtils.toSQLId
+import org.apache.spark.sql.classic.Dataset
 import org.apache.spark.sql.connector.catalog.{BasicInMemoryTableCatalog, DefaultValue, Identifier, InMemoryCatalog}
-import org.apache.spark.sql.connector.catalog.procedures.{BoundProcedure, ProcedureParameter, SimpleProcedure, UnboundProcedure}
+import org.apache.spark.sql.connector.catalog.procedures.{BoundProcedure, Procedure, ProcedureParameter, SimpleProcedure, UnboundProcedure}
 import org.apache.spark.sql.connector.catalog.procedures.ProcedureParameter.Mode
 import org.apache.spark.sql.connector.catalog.procedures.ProcedureParameter.Mode.{IN, INOUT, OUT}
 import org.apache.spark.sql.connector.expressions.{Expression, GeneralScalarExpression, LiteralValue}
@@ -58,6 +62,12 @@ class ProcedureSuite extends SharedSparkSession with BeforeAndAfter {
   private def catalog(name: String): InMemoryCatalog = {
     val catalog = spark.sessionState.catalogManager.catalog(name)
     catalog.asInstanceOf[InMemoryCatalog]
+  }
+
+  private def explain(sqlText: String): String = {
+    val output = sql(s"EXPLAIN $sqlText").collect().map(_.getString(0)).mkString("\n")
+    assert(output.startsWith("== Physical Plan =="))
+    output
   }
 
   test("position arguments") {
@@ -101,8 +111,8 @@ class ProcedureSuite extends SharedSparkSession with BeforeAndAfter {
   }
 
   test("SPARK-59962: an argument reading a value twice") {
-    // NULLIF reads the scalar subquery twice. Pre-evaluating it in a `Project` over the
-    // `ResolvedProcedure` would leave a plan `InvokeProcedures` does not expect.
+    // NULLIF reads the scalar subquery twice. Pre-evaluating it in a `Project` over the procedure
+    // would leave a plan `InvokeProcedures` does not expect.
     catalog.createProcedure(Identifier.of(Array("ns"), "sum"), UnboundSum)
     checkAnswer(sql("CALL cat.ns.sum(nullif((SELECT 5), 3), 1)"), Row(6) :: Nil)
   }
@@ -514,8 +524,9 @@ class ProcedureSuite extends SharedSparkSession with BeforeAndAfter {
   }
 
   test("SPARK-61506: simple procedure with a late-resolving argument") {
-    // `ResolveBinaryArithmetic` resolves the timestamp subtraction after `BindProcedures` in the
-    // same analyzer iteration.
+    // `ResolveBinaryArithmetic` rewrites the timestamp subtraction into an interval addition that
+    // still needs a time zone. `ResolveTimeZone` sets it in the next analyzer iteration, after
+    // `BindProcedures` has run in that iteration.
     catalog.createProcedure(Identifier.of(Array("ns"), "simple_ts"), SimpleTimestampProcedure)
     val tsExpr = "TIMESTAMP '2026-01-02 00:00:00' - INTERVAL '1' DAY"
     val expected = Timestamp.valueOf("2026-01-01 00:00:00")
@@ -535,6 +546,18 @@ class ProcedureSuite extends SharedSparkSession with BeforeAndAfter {
         "docroot" -> SPARK_DOC_ROOT))
   }
 
+  test("SPARK-61506: other late-resolving arguments") {
+    catalog.createProcedure(Identifier.of(Array("ns"), "simple_ts"), SimpleTimestampProcedure)
+    val expected = Row(Timestamp.valueOf("2026-01-01 00:00:00"), "x") :: Nil
+    Seq(
+      "(SELECT TIMESTAMP '2026-01-01 00:00:00')",
+      "CAST('2026-01-01 00:00:00' AS TIMESTAMP)",
+      // A DATE, which needs an implicit cast to the TIMESTAMP parameter once bound.
+      "DATE '2026-01-02' - INTERVAL '1' DAY").foreach { ts =>
+      checkAnswer(sql(s"CALL cat.ns.simple_ts(label => 'x', ts => $ts)"), expected)
+    }
+  }
+
   test("SPARK-61506: procedure that is both unbound and bound is used only after binding") {
     val binds = new AtomicInteger()
     catalog.createProcedure(
@@ -544,12 +567,65 @@ class ProcedureSuite extends SharedSparkSession with BeforeAndAfter {
       sql("CALL cat.ns.rebinding_ts(TIMESTAMP '2026-01-02 00:00:00' - INTERVAL '1' DAY, 'x')"),
       Row(Timestamp.valueOf("2026-01-01 00:00:00"), "x") :: Nil)
     assert(binds.get() == 1)
-    // EXPLAIN does not run the procedure, so the `Call` stays in the plan for later iterations.
-    val explain =
-      sql("EXPLAIN CALL cat.ns.rebinding_ts(label => 'x', ts => TIMESTAMP '2026-01-01')")
-        .head().getString(0)
+    // EXPLAIN does not run the procedure, so later iterations see the bound `Call` again and must
+    // not bind it again.
+    val plan = explain("CALL cat.ns.rebinding_ts(label => 'x', ts => TIMESTAMP '2026-01-01')")
     assert(binds.get() == 2)
-    assert(explain.contains("Call cat.ns.rebinding_ts(2026-01-01 00:00:00, x)"), explain)
+    assert(plan.contains("Call cat.ns.rebinding_ts(2026-01-01 00:00:00, x)"))
+  }
+
+  test("SPARK-61506: EXPLAIN CALL with a nondeterministic argument") {
+    catalog.createProcedure(Identifier.of(Array("ns"), "sum"), UnboundNonExecutableSum)
+    val plan = explain("CALL cat.ns.sum(rand(0), 1)")
+    assert(plan.contains("Call cat.ns.sum(cast(rand(0) as int), 1)"))
+  }
+
+  test("SPARK-61506: CALL with a nondeterministic argument of the wrong type") {
+    catalog.createProcedure(Identifier.of(Array("ns"), "simple_date"), SimpleDateProcedure)
+    val call = "CALL cat.ns.simple_date(rand())"
+    checkError(
+      exception = intercept[AnalysisException](sql(call)),
+      condition = "DATATYPE_MISMATCH.UNEXPECTED_INPUT_TYPE",
+      parameters = Map(
+        "sqlExpr" -> "CALL",
+        "paramIndex" -> "first",
+        "inputSql" -> "\"rand()\"",
+        "inputType" -> toSQLType("DOUBLE"),
+        "requiredType" -> toSQLType("DATE")),
+      context = ExpectedContext(fragment = call, start = 0, stop = call.length - 1))
+  }
+
+  test("SPARK-61506: CALL over a procedure that is only bound") {
+    // Spark loads procedures as `UnboundProcedure`s, but `ResolvedProcedure` takes any procedure.
+    val ident = Identifier.of(Array("ns"), "proc")
+    val sum = Call(ResolvedProcedure(catalog, ident, new Sum), Seq(Literal(1), Literal(2)))
+    checkAnswer(Dataset.ofRows(spark, sum), Row(3) :: Nil)
+    // `BindProcedures` keeps `execute`, so this CALL is bound but not invoked.
+    val notInvoked = Dataset.ofRows(spark, sum.copy(execute = false)).queryExecution.analyzed
+    notInvoked match {
+      case c: Call => assert(c.bound)
+      case other => fail(s"expected a bound Call: $other")
+    }
+
+    val ts = Timestamp.valueOf("2026-01-01 00:00:00")
+    val procedure = new TimestampProcedure { override def name: String = "proc" }
+    val tsCall = Call(ResolvedProcedure(catalog, ident, procedure), Seq(Literal(ts)))
+    checkAnswer(Dataset.ofRows(spark, tsCall), Row(ts, "none") :: Nil)
+
+    val neither = new Procedure { override def name: String = "proc" }
+    val neitherCall = Call(ResolvedProcedure(catalog, ident, neither), Seq(Literal(1)))
+    checkError(
+      exception = intercept[SparkException](Dataset.ofRows(spark, neitherCall)),
+      condition = "INTERNAL_ERROR",
+      parameters = Map("message" -> s"Unsupported procedure: ${neither.getClass.getName}"))
+  }
+
+  test("SPARK-61506: a resolved CALL that is not bound fails analysis") {
+    val call = Call(LocalRelation(), Seq(Literal(1)))
+    checkError(
+      exception = intercept[SparkException](Dataset.ofRows(spark, call)),
+      condition = "INTERNAL_ERROR",
+      parameters = Map("message" -> "CALL is resolved but not bound: LocalRelation"))
   }
 
   test("SPARK-51780: Implement DESC PROCEDURE") {
@@ -1048,10 +1124,24 @@ class ProcedureSuite extends SharedSparkSession with BeforeAndAfter {
       new RebindingTimestampProcedure(binds, isBound = true)
     }
 
+    override def parameters: Array[ProcedureParameter] = {
+      assert(isBound, "only the procedure returned by bind can be used")
+      super.parameters
+    }
+
     override def call(input: InternalRow): java.util.Iterator[Scan] = {
-      assert(isBound, "only the procedure returned by bind can be called")
+      assert(isBound, "only the procedure returned by bind can be used")
       super.call(input)
     }
+  }
+
+  object SimpleDateProcedure extends SimpleProcedure {
+    override def name: String = "simple_date"
+    override def description: String = "date procedure"
+    override def isDeterministic: Boolean = true
+    override def parameters: Array[ProcedureParameter] = Array(
+      ProcedureParameter.in("d", DataTypes.DateType).build())
+    override def call(input: InternalRow): java.util.Iterator[Scan] = Collections.emptyIterator
   }
 
   object SimpleZeroParameterProcedure extends SimpleProcedure {

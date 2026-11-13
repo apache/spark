@@ -43,8 +43,9 @@ public interface UnboundProcedure extends Procedure {
    * not be set and the name will be assigned randomly.
    * <p>
    * When analyzing a CALL statement, Spark calls this method once, after all arguments are
-   * resolved, and invokes only the returned procedure, even if this procedure also implements
-   * {@link BoundProcedure}.
+   * resolved. From then on, Spark uses only the returned procedure: it reads the returned
+   * procedure's {@link BoundProcedure#parameters() parameters} and invokes it, even if this
+   * procedure also implements {@link BoundProcedure}.
    *
    * @param inputType the input types to bind to
    * @return the bound procedure that is most suitable for the given input types

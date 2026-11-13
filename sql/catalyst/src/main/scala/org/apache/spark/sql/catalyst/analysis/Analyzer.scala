@@ -2644,19 +2644,25 @@ class Analyzer(
   }
 
   /**
-   * A rule that binds procedures to the input types and rearranges arguments as needed.
+   * A rule that binds procedures to the input types and rearranges arguments as needed, and
+   * records the bound procedure in a [[ResolvedBoundProcedure]].
    */
   object BindProcedures extends Rule[LogicalPlan] {
     def apply(plan: LogicalPlan): LogicalPlan = plan resolveOperators {
-      case c @ Call(ResolvedProcedure(catalog, ident, unbound: UnboundProcedure), args, execute, _)
-          if !c.bound && args.forall(_.resolved) =>
-        val inputType = extractInputType(args)
-        val boundProcedure = unbound.bind(inputType)
+      case c @ Call(ResolvedProcedure(catalog, ident, procedure), args, _)
+          if args.forall(_.resolved) =>
+        val boundProcedure = procedure match {
+          case unbound: UnboundProcedure => unbound.bind(extractInputType(args))
+          case bound: BoundProcedure => bound
+          case other =>
+            throw SparkException.internalError(s"Unsupported procedure: ${other.getClass.getName}")
+        }
         validateParameterModes(boundProcedure)
         val rearrangedArgs =
           NamedParametersSupport.defaultRearrange(boundProcedure, args, SQLConf.get.resolver)
-        Call(
-          ResolvedProcedure(catalog, ident, boundProcedure), rearrangedArgs, execute, bound = true)
+        c.copy(
+          procedure = ResolvedBoundProcedure(catalog, ident, boundProcedure),
+          args = rearrangedArgs)
     }
 
     private def extractInputType(args: Seq[Expression]): StructType = {
