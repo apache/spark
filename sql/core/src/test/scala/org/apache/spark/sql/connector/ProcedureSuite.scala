@@ -111,6 +111,21 @@ class ProcedureSuite extends SharedSparkSession with BeforeAndAfter {
         "paramType" -> toSQLType("INT")))
   }
 
+  test("SPARK-61669: an argument evaluated by an operator under the CALL") {
+    // The optimizer inlines the scalar subquery, and `RewritePredicateSubquery` then evaluates
+    // the IN subquery in a join under the `Call`.
+    catalog.createProcedure(Identifier.of(Array("ns"), "sum"), UnboundSum)
+    checkError(
+      exception = intercept[AnalysisException] {
+        sql("CALL cat.ns.sum(1, (SELECT CAST(1 IN (SELECT 1) AS INT)))")
+      },
+      condition = "NON_FOLDABLE_ARGUMENT",
+      parameters = Map(
+        "funcName" -> toSQLId("sum"),
+        "paramName" -> toSQLId("in2"),
+        "paramType" -> toSQLType("INT")))
+  }
+
   test("SPARK-59962: an argument reading a value twice") {
     // NULLIF reads the scalar subquery twice. Pre-evaluating it in a `Project` over the
     // `ResolvedProcedure` would leave a plan `InvokeProcedures` does not expect.
