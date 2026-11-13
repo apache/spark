@@ -296,10 +296,15 @@ class VariantUtils:
         raise PySparkValueError(errorClass="MALFORMED_VARIANT", messageParameters={})
 
     @classmethod
-    def _check_decimal(cls, unscaled: int, scale: int, max_unscaled: int, max_scale: int) -> None:
-        # max_unscaled == 10**max_scale, but we pass a literal parameter to avoid redundant
-        # computation.
-        if unscaled >= max_unscaled or unscaled <= -max_unscaled or scale > max_scale:
+    def _check_decimal(cls, unscaled: int, scale: int, max_unscaled: int) -> None:
+        # max_unscaled == 10**max_precision, but we pass a literal parameter to avoid redundant
+        # computation. The physical type only bounds the precision. The scale of every decimal type
+        # may be up to MAX_DECIMAL16_PRECISION.
+        if (
+            unscaled >= max_unscaled
+            or unscaled <= -max_unscaled
+            or scale > cls.MAX_DECIMAL16_PRECISION
+        ):
             raise PySparkValueError(errorClass="MALFORMED_VARIANT", messageParameters={})
 
     @classmethod
@@ -312,16 +317,14 @@ class VariantUtils:
         unscaled = 0
         if type_info == VariantUtils.DECIMAL4:
             unscaled = cls._read_long(value, pos + 2, 4, signed=True)
-            cls._check_decimal(unscaled, scale, cls.MAX_DECIMAL4_VALUE, cls.MAX_DECIMAL4_PRECISION)
+            cls._check_decimal(unscaled, scale, cls.MAX_DECIMAL4_VALUE)
         elif type_info == VariantUtils.DECIMAL8:
             unscaled = cls._read_long(value, pos + 2, 8, signed=True)
-            cls._check_decimal(unscaled, scale, cls.MAX_DECIMAL8_VALUE, cls.MAX_DECIMAL8_PRECISION)
+            cls._check_decimal(unscaled, scale, cls.MAX_DECIMAL8_VALUE)
         elif type_info == VariantUtils.DECIMAL16:
             cls._check_index(pos + 17, len(value))
             unscaled = int.from_bytes(value[pos + 2 : pos + 18], byteorder="little", signed=True)
-            cls._check_decimal(
-                unscaled, scale, cls.MAX_DECIMAL16_VALUE, cls.MAX_DECIMAL16_PRECISION
-            )
+            cls._check_decimal(unscaled, scale, cls.MAX_DECIMAL16_VALUE)
         else:
             raise PySparkValueError(errorClass="MALFORMED_VARIANT", messageParameters={})
         return decimal.Decimal(unscaled) * (decimal.Decimal(10) ** (-scale))
