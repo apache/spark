@@ -863,6 +863,16 @@ trait CheckAnalysis extends LookupCatalog with QueryErrorsBase with PlanToString
             // - Is not a distinct aggregate function;
             // - Has only non-deterministic functions that are nested inside an aggregate function;
             // - Has only attributes that are nested inside an aggregate function.
+            def deterministicOutsideAggregates(e: Expression): Boolean = {
+              // Scalar wrappers inherit aggregate nondeterminism. Check their own behavior with
+              // aggregate results replaced by deterministic values, then validate the original
+              // aggregate expressions and their inputs in checkMetric below.
+              e.transformDown {
+                case a: AggregateExpression => Literal.default(a.dataType)
+                case a: AggregateFunction => Literal.default(a.dataType)
+              }.deterministic
+            }
+
             def checkMetric(s: Expression, e: Expression, seenAggregate: Boolean = false): Unit = {
               e match {
                 case _: WindowExpression =>
@@ -889,7 +899,8 @@ trait CheckAnalysis extends LookupCatalog with QueryErrorsBase with PlanToString
                     Map("expr" -> toSQLExpr(s)))
                 case a: Alias =>
                   checkMetric(s, a.child, seenAggregate)
-                case a if !e.deterministic && !seenAggregate =>
+                case a if !e.deterministic && !seenAggregate &&
+                    !deterministicOutsideAggregates(e) =>
                   e.failAnalysis(
                     "INVALID_OBSERVED_METRICS.NON_AGGREGATE_FUNC_ARG_IS_NON_DETERMINISTIC",
                     Map("expr" -> toSQLExpr(s)))

@@ -22,6 +22,7 @@ import scala.jdk.CollectionConverters._
 import org.apache.spark.SparkException
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.ExprUtils.toSQLExpr
+import org.apache.spark.sql.catalyst.expressions.aggregate.AggregateExpression
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.rules.Rule
 
@@ -37,12 +38,17 @@ object PullOutNondeterministic extends Rule[LogicalPlan] {
     case p: Project => p
     case f: Filter => f
 
-    case a: Aggregate if a.groupingExpressions.exists(!_.deterministic) =>
+    case a: Aggregate if a.groupingExpressions.exists(!_.deterministic) ||
+        nondeterministicScalarSubqueriesInAggregateArguments(a).nonEmpty =>
+      val expressionsToExtract = a.groupingExpressions ++
+        nondeterministicScalarSubqueriesInAggregateArguments(a)
+      validateNondeterministicScalarSubqueries(a, expressionsToExtract)
       val nondeterToAttr =
-        NondeterministicExpressionCollection.getNondeterministicToAttributes(a.groupingExpressions)
+        NondeterministicExpressionCollection.getNondeterministicToAttributes(expressionsToExtract)
       val newChild = Project(a.child.output ++ nondeterToAttr.values.asScala.toSeq, a.child)
       val deterministicAggregate = a.transformExpressions { case e =>
-        Option(nondeterToAttr.get(e.canonicalized)).map(_.toAttribute).getOrElse(e)
+        Option(nondeterToAttr.get(NondeterministicExpressionCollection.getExpressionKey(e)))
+          .map(_.toAttribute).getOrElse(e)
       }.copy(child = newChild)
 
       deterministicAggregate.groupingExpressions.foreach(expr => if (!expr.deterministic) {
@@ -66,12 +72,36 @@ object PullOutNondeterministic extends Rule[LogicalPlan] {
     // from LogicalPlan, currently we only do it for UnaryNode which has same output
     // schema with its child.
     case p: UnaryNode if p.output == p.child.output && p.expressions.exists(!_.deterministic) =>
+      validateNondeterministicScalarSubqueries(p, p.expressions)
       val nondeterToAttr =
         NondeterministicExpressionCollection.getNondeterministicToAttributes(p.expressions)
       val newPlan = p.transformExpressions { case e =>
-        Option(nondeterToAttr.get(e.canonicalized)).map(_.toAttribute).getOrElse(e)
+        Option(nondeterToAttr.get(NondeterministicExpressionCollection.getExpressionKey(e)))
+          .map(_.toAttribute).getOrElse(e)
       }
       val newChild = Project(p.child.output ++ nondeterToAttr.values.asScala.toSeq, p.child)
       Project(p.output, newPlan.withNewChildren(newChild :: Nil))
+  }
+
+  private def nondeterministicScalarSubqueriesInAggregateArguments(
+      aggregate: Aggregate): Seq[ScalarSubquery] = {
+    // Only scalar subqueries may be extracted from aggregate arguments. Direct nondeterministic
+    // inputs, such as rand() and nondeterministic UDFs, must retain their validation errors.
+    aggregate.aggregateExpressions
+      .flatMap(_.collect { case expression: AggregateExpression => expression })
+      .flatMap(_.aggregateFunction.children)
+      .flatMap(_.collect { case scalar: ScalarSubquery if !scalar.deterministic => scalar })
+  }
+
+  private def validateNondeterministicScalarSubqueries(
+      plan: LogicalPlan,
+      expressions: Seq[Expression]): Unit = {
+    expressions.foreach(_.foreach {
+      // Moving a correlated scalar into a Project must not bypass its original host's
+      // restrictions, including grouping-only correlated scalar subqueries.
+      case scalar: ScalarSubquery if !scalar.deterministic && scalar.isCorrelated =>
+        ValidateSubqueryExpression(plan, scalar)
+      case _ =>
+    })
   }
 }

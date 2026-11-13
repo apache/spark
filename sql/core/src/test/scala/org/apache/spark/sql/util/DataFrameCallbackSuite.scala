@@ -27,7 +27,7 @@ import scala.jdk.CollectionConverters._
 import org.apache.spark._
 import org.apache.spark.internal.config.EXECUTOR_HEARTBEAT_INTERVAL
 import org.apache.spark.scheduler.{SparkListener, SparkListenerEvent, SparkListenerExecutorMetricsUpdate}
-import org.apache.spark.sql.{functions, Encoder, Encoders, Row}
+import org.apache.spark.sql.{functions, Encoder, Encoders, Observation, Row}
 import org.apache.spark.sql.catalyst.expressions.{Attribute, AttributeReference}
 import org.apache.spark.sql.catalyst.plans.logical.{Aggregate, LogicalPlan, Project}
 import org.apache.spark.sql.classic.Dataset
@@ -297,6 +297,31 @@ class DataFrameCallbackSuite extends SharedSparkSession
         avg($"id").cast("int").as("avg_val"))
 
     validateObservedMetrics(df)
+  }
+
+  test("observe scalar wrappers around KLL aggregates") {
+    for (valueType <- Seq("bigint", "float", "double"); merge <- Seq(false, true)) {
+      val values = spark.range(0, 10, 1, 2)
+      val input = if (merge) {
+        values.agg(expr(s"kll_sketch_agg_$valueType(CAST(id AS $valueType))").as("sketch"))
+      } else {
+        values
+      }
+      val function = if (merge) s"kll_merge_agg_$valueType" else s"kll_sketch_agg_$valueType"
+      val argument = if (merge) "sketch" else s"CAST(id AS $valueType)"
+      val count = s"kll_sketch_get_n_$valueType($function($argument))"
+      val countWithK = s"kll_sketch_get_n_$valueType($function($argument, 8))"
+      val observation = Observation()
+      val observed = input
+        .observe("kll_metrics",
+          expr(count).as("n"), expr(s"CAST($countWithK AS INT)").as("n_with_k"))
+        .observe(observation,
+          expr(count).as("n"), expr(s"CAST($countWithK AS INT)").as("n_with_k"))
+
+      observed.collect()
+      assert(observation.get == Map("n" -> 10L, "n_with_k" -> 10))
+      assert(observed.queryExecution.observedMetrics("kll_metrics") == Row(10L, 10))
+    }
   }
 
   test("SPARK-35296: observe should work even if a task contains multiple partitions") {

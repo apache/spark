@@ -22,19 +22,23 @@ import java.util.{Locale, TimeZone}
 
 import scala.annotation.tailrec
 
+import org.apache.hadoop.fs.Path
 import org.scalatest.Assertions
 
 import org.apache.spark.{SparkEnv, SparkException, SparkUnsupportedOperationException}
 import org.apache.spark.rdd.BlockRDD
 import org.apache.spark.sql.{AnalysisException, Row}
 import org.apache.spark.sql.catalyst.InternalRow
+import org.apache.spark.sql.catalyst.expressions.aggregate.KllSketchAggBigint
 import org.apache.spark.sql.catalyst.plans.logical.Aggregate
 import org.apache.spark.sql.catalyst.plans.physical.{HashPartitioning, SinglePartition}
 import org.apache.spark.sql.catalyst.util.DateTimeConstants._
 import org.apache.spark.sql.classic.{DataFrame, Dataset, SparkSession}
 import org.apache.spark.sql.execution.{SparkPlan, UnaryExecNode}
+import org.apache.spark.sql.execution.aggregate.BaseAggregateExec
 import org.apache.spark.sql.execution.exchange.Exchange
 import org.apache.spark.sql.execution.streaming._
+import org.apache.spark.sql.execution.streaming.checkpointing.{OffsetMap, OffsetSeq, OffsetSeqLog}
 import org.apache.spark.sql.execution.streaming.operators.stateful.{StateStoreRestoreExec, StateStoreSaveExec, StreamingAggregationStateManager}
 import org.apache.spark.sql.execution.streaming.runtime.{LongOffset, MemoryStream, StreamExecution}
 import org.apache.spark.sql.execution.streaming.sources.MemorySink
@@ -139,6 +143,63 @@ class StreamingAggregationSuite extends StateStoreMetricsTest with Assertions {
         AddData(inputData, (0, 4)),
         CheckLastBatch((0, 2, 4)),
         StopStream)
+    }
+  }
+
+  testWithAllStateVersions("KLL aggregates preserve checkpoint-pinned buffer sharing") {
+    val key = "spark.sql.streaming.aggregation.legacyKllSharing.enabled"
+    Seq(true, false).foreach { legacy =>
+      withTempDir { checkpoint =>
+        val input = MemoryStream[Int]
+        val sketches = input.toDF().agg(
+          expr("kll_sketch_agg_bigint(value, 8)").as("a"),
+          expr("kll_sketch_agg_bigint(value, 8)").as("b"),
+          count("*").as("n"))
+        val result = sketches.selectExpr(
+          "kll_sketch_get_n_bigint(a)", "kll_sketch_get_n_bigint(b)", "n")
+
+        def hasExpectedSketchBuffers: AssertOnQuery = AssertOnQuery { query =>
+          val aggregates = query.lastExecution.executedPlan.collect {
+            case a: BaseAggregateExec if a.aggregateExpressions.exists(
+                _.aggregateFunction.isInstanceOf[KllSketchAggBigint]) => a
+          }
+          aggregates.nonEmpty && aggregates.forall { a =>
+            a.aggregateExpressions.count(
+              _.aggregateFunction.isInstanceOf[KllSketchAggBigint]) == (if (legacy) 1 else 2)
+          }
+        }
+
+        testStream(result, Complete)(
+          StartStream(checkpointLocation = checkpoint.getAbsolutePath,
+            additionalConfs = Map(key -> legacy.toString)),
+          AddData(input, 1, 2, 3),
+          CheckLastBatch(Row(3L, 3L, 3L)),
+          hasExpectedSketchBuffers,
+          StopStream)
+
+        val logPath = new File(checkpoint, "offsets").getAbsolutePath
+        if (legacy) {
+          // Simulate a released checkpoint: retain its shared state and remove only the new key.
+          val (batchId, offsets) = new OffsetSeqLog(spark, logPath).getLatest().get
+          val historical = offsets match {
+            case o: OffsetSeq =>
+              o.copy(metadataOpt = o.metadataOpt.map(m => m.copy(conf = m.conf - key)))
+            case o: OffsetMap => o.copy(metadata = o.metadata.copy(conf = o.metadata.conf - key))
+          }
+          val path = new Path(logPath, batchId.toString)
+          assert(path.getFileSystem(spark.sessionState.newHadoopConf()).delete(path, false))
+          assert(new OffsetSeqLog(spark, logPath).add(batchId, historical))
+        }
+        testStream(result, Complete)(
+          StartStream(checkpointLocation = checkpoint.getAbsolutePath,
+            additionalConfs = Map(key -> (!legacy).toString)),
+          AddData(input, 4),
+          CheckLastBatch(Row(4L, 4L, 4L)),
+          hasExpectedSketchBuffers,
+          StopStream)
+        val recovered = new OffsetSeqLog(spark, logPath).getLatest().get._2
+        assert(recovered.metadataOpt.get.conf(key) == legacy.toString)
+      }
     }
   }
 

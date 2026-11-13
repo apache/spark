@@ -19,6 +19,8 @@ package org.apache.spark.sql.execution
 
 import java.util.Locale
 
+import scala.collection.mutable
+
 import org.apache.spark.{SparkException, SparkUnsupportedOperationException}
 import org.apache.spark.api.python.PythonEvalType
 import org.apache.spark.rdd.RDD
@@ -27,6 +29,7 @@ import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.analysis.{EliminateSubqueryAliases, NamedRelation}
 import org.apache.spark.sql.catalyst.encoders.ExpressionEncoder
 import org.apache.spark.sql.catalyst.expressions._
+import org.apache.spark.sql.catalyst.expressions.aggregate.{AggregateExpression, KllMergeAggBase, KllSketchAggBigint, KllSketchAggDouble, KllSketchAggFloat}
 import org.apache.spark.sql.catalyst.optimizer.{BuildRight, BuildSide, JoinSelectionHelper, NormalizeFloatingNumbers}
 import org.apache.spark.sql.catalyst.planning._
 import org.apache.spark.sql.catalyst.plans._
@@ -52,6 +55,7 @@ import org.apache.spark.sql.execution.streaming.runtime.{StreamingExecutionRelat
 import org.apache.spark.sql.execution.streaming.sources.MemoryPlan
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.streaming.OutputMode
+import org.apache.spark.sql.types.DataType
 
 /**
  * Converts a logical plan into zero or more SparkPlans.  This API is exposed for experimenting
@@ -472,11 +476,62 @@ abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
    * [[org.apache.spark.sql.execution.streaming.StreamExecution]]
    */
   object StatefulAggregationStrategy extends Strategy {
+    // This wrapper is used only for historical buffer matching, never for evaluation. Reusing
+    // EquivalentExpressions preserves its eligibility exclusions and expression-height matching.
+    private case class LegacyKllAggregate(child: Expression)
+        extends UnaryExpression with Unevaluable {
+      override lazy val deterministic: Boolean = true
+      override def dataType: DataType = child.dataType
+      override def nullable: Boolean = child.nullable
+      override protected def withNewChildInternal(newChild: Expression): Expression =
+        copy(child = newChild)
+    }
+
+    private def preserveLegacyKllSharing(
+        aggregates: Seq[AggregateExpression],
+        results: Seq[NamedExpression]): (Seq[AggregateExpression], Seq[NamedExpression]) = {
+      if (!conf.getConf(SQLConf.STREAMING_AGGREGATION_LEGACY_KLL_SHARING)) {
+        return (aggregates, results)
+      }
+      val equivalent = new EquivalentExpressions
+      val replacements = mutable.HashMap.empty[ExprId, Attribute]
+      val retained = aggregates.filter { aggregate =>
+        val isKll = aggregate.aggregateFunction match {
+          case _: KllSketchAggBigint | _: KllSketchAggFloat | _: KllSketchAggDouble |
+              _: KllMergeAggBase[_] => true
+          case _ => false
+        }
+        if (isKll && aggregate.aggregateFunction.children.forall(_.deterministic) &&
+            aggregate.filter.forall(_.deterministic)) {
+          val key = LegacyKllAggregate(aggregate)
+          if (equivalent.addExpr(key)) {
+            val first = equivalent.getExprState(key).get.expr
+              .asInstanceOf[LegacyKllAggregate].child.asInstanceOf[AggregateExpression]
+            replacements(aggregate.resultId) = first.resultAttribute
+            false
+          } else {
+            true
+          }
+        } else {
+          true
+        }
+      }
+      val rewritten = results.map(_.transform {
+        case a: Attribute if replacements.contains(a.exprId) => replacements(a.exprId)
+      }.asInstanceOf[NamedExpression])
+      (retained, rewritten)
+    }
+
     override def apply(plan: LogicalPlan): Seq[SparkPlan] = plan match {
       case _ if !plan.isStreaming => Nil
 
       case PhysicalAggregation(
-        namedGroupingExpressions, aggregateExpressions, rewrittenResultExpressions, child) =>
+        namedGroupingExpressions, extractedAggregates, extractedResults, child) =>
+
+        // Released checkpoints may contain one buffer for equivalent KLL calls. Restore their
+        // ordered buffer layout before selecting any stateful aggregation implementation.
+        val (aggregateExpressions, rewrittenResultExpressions) =
+          preserveLegacyKllSharing(extractedAggregates, extractedResults)
 
         if (aggregateExpressions.exists(ae =>
             ae.aggregateFunction.isInstanceOf[PythonUDAF] ||

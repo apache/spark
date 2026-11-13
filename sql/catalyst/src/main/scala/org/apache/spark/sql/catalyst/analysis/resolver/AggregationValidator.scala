@@ -24,7 +24,7 @@ import org.apache.spark.sql.catalyst.plans.logical.Aggregate
  * Validates [[Aggregate]] operators in the single-pass resolver. Delegates to
  * [[ExprUtils.assertValidAggregation]] with canonicalized expression equality since
  * non-deterministic expressions are still not extracted (done in [[PullOutNondeterministic]] post
- * hoc rule).
+ * hoc rule). Scalar aggregate arguments are checked as they will be after extraction.
  *
  * TODO: [[ExprUtils.assertValidAggregation]] does a post-traversal. This is discouraged in the
  * single-pass Analyzer.
@@ -38,7 +38,8 @@ object AggregationValidator {
     ExprUtils.assertValidAggregation(
       aggregate,
       (groupingExpression, checkedExpression) =>
-        groupingExpression.canonicalized == checkedExpression.canonicalized
+        groupingExpression.canonicalized == checkedExpression.canonicalized,
+      aggregateArgumentIsDeterministic = ExprUtils.isDeterministicAfterScalarSubqueryExtraction
     )
   }
 }

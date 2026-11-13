@@ -4253,6 +4253,133 @@ class DataFrameAggregateSuite extends SharedSparkSession
     }
   }
 
+  test("kll scalar subqueries in grouping expressions") {
+    checkAnswer(
+      sql("""
+          |SELECT count(*) FROM range(1)
+          |GROUP BY (SELECT kll_sketch_agg_bigint(id) FROM range(1))
+          |""".stripMargin),
+      Row(1L))
+
+    for {
+      dataType <- Seq("bigint", "float", "double")
+      merge <- Seq(false, true)
+      k <- Seq(None, Some(8))
+      correlated <- Seq(false, true)
+    } {
+      val function = if (merge) s"kll_merge_agg_$dataType" else s"kll_sketch_agg_$dataType"
+      val input = if (merge) "i.sketch" else s"CAST(i.id AS $dataType)"
+      val source = if (merge) {
+        s"""(SELECT id, kll_sketch_agg_$dataType(CAST(id AS $dataType), 8) AS sketch
+           |FROM range(1) GROUP BY id)""".stripMargin
+      } else {
+        "range(1)"
+      }
+      val kArgument = k.map(value => s", $value").getOrElse("")
+      val predicate = if (correlated) "WHERE i.id = o.id" else ""
+      val scalar = s"(SELECT $function($input$kArgument) FROM $source i $predicate)"
+      withClue(s"$function, k=$k, correlated=$correlated: ") {
+        // GROUP BY 1 shares the scalar with the output, including through its getter wrapper.
+        checkAnswer(
+          sql(s"""
+                 |SELECT kll_sketch_get_n_$dataType($scalar) AS n, count(*)
+                 |FROM range(1) o GROUP BY 1
+                 |""".stripMargin),
+          Row(1L, 1L))
+      }
+    }
+  }
+
+  test("kll scalar subqueries as aggregate arguments") {
+    checkAnswer(
+      sql("""
+          |SELECT sum((
+          |  SELECT kll_sketch_get_n_bigint(kll_sketch_agg_bigint(id)) FROM range(3)
+          |)) FROM range(2)
+          |""".stripMargin),
+      Row(6L))
+    checkAnswer(
+      sql("""
+          |SELECT sum((
+          |  SELECT kll_sketch_get_n_bigint(kll_sketch_agg_bigint(i.id))
+          |  FROM range(1) i WHERE i.id = o.id
+          |)) FROM range(2) o
+          |""".stripMargin),
+      Row(1L))
+
+    val randomArgument = intercept[AnalysisException] {
+      sql("SELECT sum(rand()) FROM range(2)")
+    }
+    assert(randomArgument.getCondition == "AGGREGATE_FUNCTION_WITH_NONDETERMINISTIC_EXPRESSION")
+    val mixedRandomArgument = intercept[AnalysisException] {
+      sql("""
+          |SELECT sum(rand() + (
+          |  SELECT kll_sketch_get_n_bigint(kll_sketch_agg_bigint(id)) FROM range(3)
+          |)) FROM range(2)
+          |""".stripMargin)
+    }
+    assert(mixedRandomArgument.getCondition ==
+      "AGGREGATE_FUNCTION_WITH_NONDETERMINISTIC_EXPRESSION")
+    val nondeterministicUdf = udf((value: Long) => value).asNondeterministic()
+    val udfArgument = intercept[AnalysisException] {
+      spark.range(2).agg(sum(nondeterministicUdf($"id")))
+    }
+    assert(udfArgument.getCondition == "AGGREGATE_FUNCTION_WITH_NONDETERMINISTIC_EXPRESSION")
+  }
+
+  test("kll scalar subquery arguments in single-pass analysis") {
+    def singlePassSql(query: String): DataFrame = {
+      withSQLConf(
+          SQLConf.ANALYZER_SINGLE_PASS_RESOLVER_ENABLED.key -> "true",
+          SQLConf.ANALYZER_SINGLE_PASS_RESOLVER_ENABLED_TENTATIVELY.key -> "false",
+          SQLConf.ANALYZER_DUAL_RUN_LEGACY_AND_SINGLE_PASS_RESOLVER.key -> "false") {
+        val df = sql(query)
+        df.queryExecution.assertAnalyzed()
+        df
+      }
+    }
+    // Keep QueryTest's deserialization outside the forced single-pass analysis configuration.
+    checkAnswer(
+      singlePassSql("""
+          |SELECT sum((SELECT count(*) FROM VALUES (0), (1), (2) AS i(id)))
+          |FROM VALUES (0), (1) AS o(id)
+          |""".stripMargin),
+      Row(6L))
+    checkAnswer(
+      singlePassSql("""
+          |SELECT sum((
+          |  SELECT kll_sketch_get_n_bigint(kll_sketch_agg_bigint(id))
+          |  FROM VALUES (0), (1), (2) AS i(id)
+          |)) FROM VALUES (0), (1) AS o(id)
+          |""".stripMargin),
+      Row(6L))
+    checkAnswer(
+      singlePassSql("""
+          |SELECT sum((
+          |  SELECT kll_sketch_get_n_bigint(kll_sketch_agg_bigint(i.id))
+          |  FROM VALUES (0) AS i(id) WHERE i.id = o.id
+          |)) FROM VALUES (0), (1) AS o(id)
+          |""".stripMargin),
+      Row(1L))
+    checkAnswer(
+      singlePassSql("""
+          |SELECT kll_sketch_get_n_bigint((
+          |  SELECT kll_sketch_agg_bigint(id) FROM VALUES (0), (1), (2) AS i(id)
+          |)) AS n, count(*)
+          |FROM VALUES (0), (1) AS o(id) GROUP BY 1
+          |""".stripMargin),
+      Row(3L, 2L))
+    checkAnswer(
+      singlePassSql("""
+          |SELECT kll_sketch_get_n_bigint((
+          |  SELECT kll_sketch_agg_bigint(i.id)
+          |  FROM VALUES (0) AS i(id) WHERE i.id = o.id
+          |)) AS n, count(*)
+          |FROM VALUES (0), (1) AS o(id) GROUP BY 1
+          |""".stripMargin),
+      Seq(Row(null, 1L), Row(1L, 1L)))
+  }
+
   test("kll_sketch_agg_bigint basic functionality") {
     val df = Seq(1, 2, 3, 4, 5).toDF("value")
 

@@ -51,7 +51,30 @@ class InlineCTESuite extends PlanTest {
         val plan = WithCTE(cteRef.union(cteRef), Seq(cteDef)).analyze
         comparePlans(Optimize.execute(plan), plan)
       }
+
+      test(s"Inline a correlated KLL CTE containing ${aggregate.prettyName} with k=$k") {
+        val cteDef = CTERelationDef(
+          OneRowRelation()
+            .where(Literal(1L) === OuterReference($"outer".long))
+            .groupBy()(aggregate.toAggregateExpression().as("sketch")))
+        val cteRef = CTERelationRef(cteDef.id, cteDef.resolved, cteDef.output, cteDef.isStreaming)
+        val plan = WithCTE(cteRef.union(cteRef), Seq(cteDef)).analyze
+        assert(!Optimize.execute(plan).exists(_.isInstanceOf[WithCTE]))
+      }
     }
+  }
+
+  test("A nested subquery's correlation does not force its enclosing KLL CTE to inline") {
+    val a = $"a".long
+    val nestedQuery = ScalarSubquery(
+      OneRowRelation().select(OuterReference(a).as("b")), outerAttrs = Seq(a))
+    val cteDef = CTERelationDef(
+      TestRelation(Seq(a))
+        .where(nestedQuery === Literal(1L))
+        .groupBy()(KllSketchAggBigint(a).toAggregateExpression().as("sketch")))
+    val cteRef = CTERelationRef(cteDef.id, cteDef.resolved, cteDef.output, cteDef.isStreaming)
+    val plan = WithCTE(cteRef.union(cteRef), Seq(cteDef)).analyze
+    comparePlans(Optimize.execute(plan), plan)
   }
 
   test("SPARK-48307: not-inlined CTE relation in command") {

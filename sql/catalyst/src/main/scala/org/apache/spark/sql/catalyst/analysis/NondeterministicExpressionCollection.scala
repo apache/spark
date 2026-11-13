@@ -22,14 +22,25 @@ import java.util.LinkedHashMap
 import org.apache.spark.sql.catalyst.expressions._
 
 object NondeterministicExpressionCollection {
+  private[analysis] def getExpressionKey(expression: Expression): (Expression, Seq[ExprId]) = {
+    // Canonicalization removes subquery IDs, but separate nondeterministic subqueries must
+    // retain independent evaluations, including when they are children of a collected UDF.
+    val scalarIds = expression.collect {
+      case scalar: ScalarSubquery if !scalar.deterministic => scalar.exprId
+    }
+    (expression.canonicalized, scalarIds)
+  }
+
   def getNondeterministicToAttributes(
-      expressions: Seq[Expression]): LinkedHashMap[Expression, NamedExpression] = {
-    val nonDeterministicToAttributes = new LinkedHashMap[Expression, NamedExpression]
+      expressions: Seq[Expression]): LinkedHashMap[(Expression, Seq[ExprId]), NamedExpression] = {
+    val nonDeterministicToAttributes =
+      new LinkedHashMap[(Expression, Seq[ExprId]), NamedExpression]
 
     for (expr <- expressions) {
       if (!expr.deterministic) {
         val leafNondeterministic = expr.collect {
           case nondeterministicExpr: Nondeterministic => nondeterministicExpr
+          case scalar: ScalarSubquery if !scalar.deterministic => scalar
           case udf: UserDefinedExpression if !udf.deterministic => udf
           case udf: ExternalUserDefinedFunction if !udf.deterministic => udf
         }
@@ -39,7 +50,7 @@ object NondeterministicExpressionCollection {
             case namedExpression: NamedExpression => namedExpression
             case _ => Alias(nondeterministicExpr, "_nondeterministic")()
           }
-          nonDeterministicToAttributes.put(nondeterministicExpr.canonicalized, namedExpression)
+          nonDeterministicToAttributes.put(getExpressionKey(nondeterministicExpr), namedExpression)
         }
       }
     }

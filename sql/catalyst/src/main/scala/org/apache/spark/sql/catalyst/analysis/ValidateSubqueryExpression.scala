@@ -107,7 +107,11 @@ object ValidateSubqueryExpression
 
     // Check whether the given expressions contains the subquery expression.
     def containsExpr(expressions: Seq[Expression]): Boolean = {
-      expressions.exists(_.exists(_.semanticEquals(expr)))
+      expressions.exists(_.exists {
+        // A shared nondeterministic scalar is not semantically equal even to itself.
+        case scalar: ScalarSubquery if scalar.exprId == expr.exprId => true
+        case other => other.semanticEquals(expr)
+      })
     }
 
     /**
