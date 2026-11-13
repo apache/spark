@@ -873,27 +873,52 @@ private[execution] final class LongToUnsafeRowMap private (
     }
   }
 
-  private def growArray(): Unit = {
-    var old_array = array
-    val n = Math.toIntExact(array.size())
+  /**
+   * Rehashes every occupied (key, address) pair of the current array into a freshly
+   * allocated array of the given size, then frees the old array. Shared by growArray()
+   * and shrinkArray(), which only differ in how they compute newSize.
+   */
+  private def rehashInto(newSize: Long): Unit = {
+    val oldArray = array
     numKeys = 0
-    array = allocateArray(n * 2)
+    array = allocateArray(newSize)
     array.zeroOut()
-    mask = n * 2 - 2
+    mask = Math.toIntExact(newSize - 2)
     var i = 0
-    while (i < old_array.size()) {
-      if (old_array.get(i + 1) > 0) {
-        val key = old_array.get(i)
-        updateIndex(key, findKeyPosition(key), old_array.get(i + 1))
+    while (i < oldArray.size()) {
+      if (oldArray.get(i + 1) > 0) {
+        val key = oldArray.get(i)
+        updateIndex(key, findKeyPosition(key), oldArray.get(i + 1))
       }
       i += 2
     }
-    freeArray(old_array)
-    old_array = null  // release the reference to old array
+    freeArray(oldArray)
+  }
+
+  private def growArray(): Unit = {
+    rehashInto(array.size() * 2)
   }
 
   /**
-   * Try to turn the map into dense mode, which is faster to probe.
+   * Shrink the sparse array to the smallest power-of-two size that keeps the load factor
+   * invariant (numKeys * 4 <= array.size(), see updateIndex). The initial size comes from
+   * the estimated row count, so a build with many rows sharing few keys ends with a
+   * mostly-empty array, and a serialized broadcast keeps paying for the headroom on every
+   * executor. Never grow: a map at the array-size ceiling may hold more keys than a
+   * minimal table could take (see updateIndex).
+   */
+  private def shrinkArray(): Unit = {
+    var target = 2L
+    while (target < numKeys * 4) target *= 2
+    if (target < array.size()) {
+      rehashInto(target)
+    }
+  }
+
+  /**
+   * Try to turn the map into dense mode, which is faster to probe. If dense mode is not
+   * applicable, shrink the sparse array to the minimal size that keeps the load factor
+   * invariant, dropping the headroom the initial capacity over-allocated.
    */
   def optimize(): Unit = {
     val range = maxKey - minKey
@@ -921,6 +946,8 @@ private[execution] final class LongToUnsafeRowMap private (
       freeArray(array)
       array = denseArray
       isDense = true
+    } else {
+      shrinkArray()
     }
   }
 
