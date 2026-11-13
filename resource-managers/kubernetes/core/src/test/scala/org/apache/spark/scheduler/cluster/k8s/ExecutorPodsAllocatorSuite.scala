@@ -350,20 +350,39 @@ class ExecutorPodsAllocatorSuite extends SparkFunSuite with BeforeAndAfter {
       .resource(podWithAttachedContainerForId(podAllocationSize + 1))
   }
 
-  test("SPARK-53907: Support spark.kubernetes.allocation.maximum") {
-    val confWithAllocationMaximum = conf.clone.set(KUBERNETES_ALLOCATION_MAXIMUM.key, "1")
-    podsAllocatorUnderTest = new ExecutorPodsAllocator(confWithAllocationMaximum, secMgr,
-      executorBuilder, kubernetesClient, snapshotsStore, waitForExecutorPodsClock)
-    podsAllocatorUnderTest.setExecutorPodsLifecycleManager(lifecycleManager)
-    podsAllocatorUnderTest.start(TEST_SPARK_APP_ID, schedulerBackend)
+  gridTest("SPARK-60804: Allow exactly spark.kubernetes.allocation.maximum creation attempts")(
+      Seq((1, 0), (3, 0), (Int.MaxValue, Int.MaxValue - 1))) {
+    case (maximum, initialCount) =>
+      val confWithAllocationMaximum = conf.clone.set(KUBERNETES_ALLOCATION_MAXIMUM, maximum)
+      podsAllocatorUnderTest = new ExecutorPodsAllocator(confWithAllocationMaximum, secMgr,
+        executorBuilder, kubernetesClient, snapshotsStore, waitForExecutorPodsClock)
+      podsAllocatorUnderTest.setExecutorPodsLifecycleManager(lifecycleManager)
+      podsAllocatorUnderTest.start(TEST_SPARK_APP_ID, schedulerBackend)
 
-    val counter = PrivateMethod[AtomicInteger](Symbol("EXECUTOR_ID_COUNTER"))()
-    assert(podsAllocatorUnderTest.invokePrivate(counter).get() === 0)
+      val counter = PrivateMethod[AtomicInteger](Symbol("EXECUTOR_ID_COUNTER"))()
+      val executorIdCounter = podsAllocatorUnderTest.invokePrivate(counter)
+      executorIdCounter.set(initialCount)
+      val remaining = maximum - initialCount
 
-    val m = intercept[SparkException] {
-      podsAllocatorUnderTest.setTotalExpectedExecutors(Map(defaultProfile -> 2))
-    }.getMessage
-    assert(m.contains("Exceed the pod creation limit: 1"))
+      val m = intercept[SparkException] {
+        podsAllocatorUnderTest.setTotalExpectedExecutors(Map(defaultProfile -> (remaining + 1)))
+      }.getMessage
+      assert(m.contains(s"Exceed the pod creation limit: $maximum"))
+      for (offset <- 1 to remaining) {
+        verify(podsWithNamespace).resource(podWithAttachedContainerForId(initialCount + offset))
+      }
+      verify(podResource, times(remaining)).create()
+      assert(executorIdCounter.get() === maximum)
+
+      // Further allocation attempts must not create pods or overflow the executor ID counter.
+      for (offset <- 1 to remaining) {
+        snapshotsStore.updatePod(runningExecutor(initialCount + offset))
+      }
+      intercept[SparkException] {
+        snapshotsStore.notifySubscribers()
+      }
+      verify(podResource, times(remaining)).create()
+      assert(executorIdCounter.get() === maximum)
   }
 
   test("SPARK-58776: executor conf carries the auth secret and SparkConf SSL RPC passwords") {
