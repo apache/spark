@@ -86,15 +86,15 @@ class TableCapabilityCheckSuite extends AnalysisTest with SharedSparkSession {
     val left = LocalRelation(AttributeReference("id", IntegerType)())
     val lookupOnly = DataSourceV2Relation.create(
       CapabilityTable(EXTERNAL_LOOKUP), None, None, emptyMap)
+    val noCache =
+      ExternalLookupCacheOptions(enabled = false, maxBytes = 1, ttlMillis = 0)
     TableCapabilityCheck.apply(ExternalLookupJoin(
-      left, lookupOnly, Inner, Some(Literal(true)),
-      lookupOnly.output))
+      left, lookupOnly, Inner, Some(Literal(true)), noCache, lookupOnly.output))
 
     val noCapability = DataSourceV2Relation.create(CapabilityTable(), None, None, emptyMap)
     val e = intercept[AnalysisException] {
       TableCapabilityCheck.apply(ExternalLookupJoin(
-        left, noCapability, Inner, Some(Literal(true)),
-        noCapability.output))
+        left, noCapability, Inner, Some(Literal(true)), noCache, noCapability.output))
     }
     assert(e.message.contains("does not support batch scan"))
   }
