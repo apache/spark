@@ -25,7 +25,7 @@ import org.apache.spark.sql.{AnalysisException, IntegratedUDFTestUtils, Row}
 import org.apache.spark.sql.execution.{FilterExec, LimitExec}
 import org.apache.spark.sql.execution.adaptive.AdaptiveSparkPlanHelper
 import org.apache.spark.sql.execution.datasources.DataSourceManager
-import org.apache.spark.sql.execution.datasources.v2.{BatchScanExec, DataSourceV2ScanRelation}
+import org.apache.spark.sql.execution.datasources.v2.{BatchScanExec, DataSourceV2ScanRelation, PackScanPartitionsExec}
 import org.apache.spark.sql.execution.datasources.v2.python.PythonScan
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSparkSession
@@ -169,6 +169,36 @@ class PythonDataSourceSuite extends PythonDataSourceSuiteBase {
       case _ => fail(s"Plan did not match the expected pattern. Actual plan:\n$plan")
     }
     checkAnswer(df, Seq(Row(0, 0), Row(0, 1), Row(1, 0), Row(1, 1), Row(2, 0), Row(2, 1)))
+  }
+
+  test("SPARK-60265: scan partition packing groups Python data source partitions by count") {
+    assume(shouldTestPandasUDFs)
+    val dataSourceScript =
+      s"""
+        |from pyspark.sql.datasource import DataSource
+        |$simpleDataSourceReaderScript
+        |
+        |class $dataSourceName(DataSource):
+        |    def reader(self, schema):
+        |        return SimpleDataSourceReader()
+        |""".stripMargin
+    spark.dataSource.registerPython(dataSourceName, createUserDefinedPythonDataSource(
+      name = dataSourceName, pythonScript = dataSourceScript))
+    // Python partitions report no size, so packing groups them only under the count cap.
+    Seq(None -> 2, Some(1) -> 1).foreach { case (maxPartitionNum, numPartitions) =>
+      val conf = Seq(SQLConf.V2_SCAN_PARTITION_PACKING_ENABLED.key -> "true") ++
+        maxPartitionNum.map(SQLConf.V2_SCAN_PARTITION_PACKING_MAX_PARTITION_NUM.key -> _.toString)
+      withSQLConf(conf: _*) {
+        val df = spark.read.format(dataSourceName).schema("id INT, partition INT").load()
+          .repartition(2)
+        val node = collectFirst(df.queryExecution.executedPlan) {
+          case p: PackScanPartitionsExec => p
+        }.get
+        assert(collectFirst(node) { case s: BatchScanExec => s.scan }.get.isInstanceOf[PythonScan])
+        assert(node.execute().getNumPartitions == numPartitions)
+        checkAnswer(df, Seq(Row(0, 0), Row(0, 1), Row(1, 0), Row(1, 1), Row(2, 0), Row(2, 1)))
+      }
+    }
   }
 
   test("simple data source with string schema") {
