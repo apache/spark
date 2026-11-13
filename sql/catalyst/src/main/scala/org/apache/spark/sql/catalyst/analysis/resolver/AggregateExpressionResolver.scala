@@ -22,6 +22,7 @@ import org.apache.spark.sql.catalyst.analysis.TypeCoercionValidation
 import org.apache.spark.sql.catalyst.expressions.{
   Expression,
   OuterReference,
+  PythonUDAF,
   SubExprUtils
 }
 import org.apache.spark.sql.catalyst.expressions.aggregate.{
@@ -127,7 +128,7 @@ class AggregateExpressionResolver(
    *       Window [sum(_w0#2) windowspecdefinition...#3]
    *       +- Aggregate [col2#1], [sum(col1#0) AS _w0#2]
    *  - Validation:
-   *   1. Validate that the type coercion is doen properly for the underlying aggregate function.
+   *   1. Validate that the type coercion is done properly for the underlying aggregate function.
    *   2. [[ListAgg]] is not allowed in DISTINCT aggregates if the order value is ambiguous
    *      after deduplication. When [[SQLConf.LISTAGG_ALLOW_DISTINCT_CAST_WITH_ORDER]] is
    *      enabled, a mismatch is tolerated if the child value uniquely determines the order
@@ -155,8 +156,9 @@ class AggregateExpressionResolver(
    *      GROUP BY col2
    *      }}}
    *
-   *   5. Nondeterministic expressions in the subtree of a related aggregate function are not
-   *      allowed;
+   *   5. Nondeterministic expressions directly under an aggregate function are not allowed, unless
+   *      the aggregate function represents a [[WindowExpression.windowFunction]], e.g.
+   *      `COUNT(RAND()) OVER (...)` is accepted;
    *   6. The mix of outer and local references is not allowed;
    */
   private def handleAggregateExpressionWithChildrenResolved(
@@ -164,6 +166,8 @@ class AggregateExpressionResolver(
     val expressionResolutionContext = expressionResolutionContextStack.peek()
 
     validateResolvedAggregateExpression(aggregateExpressionWithChildrenResolved)
+
+    expressionResolutionContext.hasAggregateOrWindowAggregateExpressions = true
 
     // There are two different cases that we handle regarding the value of the flag:
     //
@@ -193,21 +197,26 @@ class AggregateExpressionResolver(
 
   private def validateResolvedAggregateExpression(aggregateExpression: AggregateExpression): Unit =
     aggregateExpression match {
-      case _ @AggregateExpression(aggregateFunction: AggregateFunction, _, _, _, _)
+      case AggregateExpression(aggregateFunction: AggregateFunction, _, _, _, _)
           if aggregateFunction.checkInputDataTypes().isFailure =>
         TypeCoercionValidation.failOnTypeCheckResult(aggregateFunction)
       case agg @ AggregateExpression(listAgg: ListAgg, _, _, _, _)
           if agg.isDistinct && listAgg.hasDistinctOrderAmbiguity =>
         listAgg.throwDistinctOrderError()
+      case AggregateExpression(_: PythonUDAF, _, _, _, _)
+          if expressionResolutionContextStack.peek().resolvingPivotAggregates =>
+        throw QueryCompilationErrors.pandasUDFAggregateNotSupportedInPivotError()
       case _ =>
         val expressionResolutionContext = expressionResolutionContextStack.peek()
-        if (expressionResolutionContext.windowFunctionNestednessLevel != 1 &&
+        val isWindowAggregateFunction =
+          expressionResolutionContext.windowFunctionNestednessLevel == 1
+        if (!isWindowAggregateFunction &&
           expressionResolutionContext.hasAggregateExpressionsOutsideWindow) {
           throwNestedAggregateFunction(aggregateExpression)
         }
 
         aggregateExpression.aggregateFunction.children.foreach { child =>
-          if (!child.deterministic) {
+          if (!isWindowAggregateFunction && !child.deterministic) {
             throwAggregateFunctionWithNondeterministicExpression(
               aggregateExpression,
               child

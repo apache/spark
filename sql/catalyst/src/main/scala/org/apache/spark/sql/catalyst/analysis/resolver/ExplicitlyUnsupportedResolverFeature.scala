@@ -20,22 +20,23 @@ package org.apache.spark.sql.catalyst.analysis.resolver
 /**
  * This is an addon to [[ResolverGuard]] functionality for features that cannot be determined by
  * only looking at the unresolved plan. [[Resolver]] will throw this control-flow exception
- * when it encounters some explicitly unsupported feature. It will later be caught by
- * [[HybridAnalyzer]] to abort single-pass analysis without comparing single-pass and fixed-point
- * results. The motivation for this feature is the same as for the [[ResolverGuard]] - we want to
- * have an explicit allowlist of unimplemented features that we are aware of, and
- * `UNSUPPORTED_SINGLE_PASS_ANALYZER_FEATURE` will signal us the rest of the gaps.
+ * when it encounters some explicitly unsupported feature. Like a [[ResolverGuard]] rejection, it
+ * marks a known coverage gap rather than a single-pass failure: [[HybridAnalyzer]] falls back to
+ * the fixed-point result instead of comparing it with the single-pass one. `resolutionGap`
+ * identifies the known gap, and `reason` describes it in the exception message.
  *
  * For example, [[UnresolvedRelation]] can be intermediately resolved by [[ResolveRelations]] as
  * [[UnresolvedCatalogRelation]] or a [[View]] (among all others). Say that for now the views
  * are not implemented, and we are aware of that, so [[ExplicitlyUnsupportedResolverFeature]] will
  * be thrown in the middle of the single-pass analysis to abort it.
  */
-class ExplicitlyUnsupportedResolverFeature(reason: String)
+class ExplicitlyUnsupportedResolverFeature(val resolutionGap: ResolutionGap, reason: String)
     extends Exception(
       s"The single-pass analyzer cannot process this query or command because it does not yet " +
       s"support $reason."
     ) {
+  def this(resolutionGap: ResolutionGap) = this(resolutionGap, resolutionGap.name)
+
   override def getStackTrace(): Array[StackTraceElement] = new Array[StackTraceElement](0)
   override def fillInStackTrace(): Throwable = this
 }

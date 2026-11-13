@@ -17,7 +17,12 @@
 
 package org.apache.spark.sql.catalyst.analysis.resolver
 
-import org.apache.spark.sql.catalyst.analysis.{FunctionResolution, UnresolvedTableValuedFunction}
+import org.apache.spark.sql.catalyst.analysis.{
+  FunctionResolution,
+  SQLTableFunction,
+  UnresolvedTableValuedFunction
+}
+import org.apache.spark.sql.catalyst.expressions.Expression
 import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
 
 /**
@@ -35,7 +40,11 @@ class TableValuedFunctionResolver(
    * The resolution happens in several steps:
    *  - Resolve all the function arguments using [[ExpressionResolver]].
    *  - Resolve the function itself using [[FunctionResolution]] getting a [[LogicalPlan]].
-   *  - Recursively resolve the resulting [[LogicalPlan]].
+   *  - Recursively resolve the resulting [[LogicalPlan]]. A SQL table function
+   *    ([[SQLTableFunction]]) is not supported yet, so it throws
+   *    [[ExplicitlyUnsupportedResolverFeature]] to fall back to the fixed-point Analyzer.
+   *    [[ResolverGuard]] cannot reject it upfront because a builtin name such as `range` can
+   *    resolve to a persistent SQL table function through the SQL path.
    *
    * Examples:
    *  - `range(...)` resolves to [[Range]] operator.
@@ -68,13 +77,33 @@ class TableValuedFunctionResolver(
    *  }}}
    */
   def resolve(unresolvedTVF: UnresolvedTableValuedFunction): LogicalPlan = {
-    val resolvedArguments = unresolvedTVF.functionArgs.map(
-      expressionResolver.resolveExpressionTreeInOperator(_, unresolvedTVF)
-    )
+    val resolvedArguments = resolveArguments(unresolvedTVF)
     val unresolvedTVFWithResolvedArguments =
       unresolvedTVF.copy(functionArgs = resolvedArguments)
     val resolvedTVF =
       functionResolution.resolveTableValuedFunction(unresolvedTVFWithResolvedArguments)
-    resolver.resolve(resolvedTVF)
+    resolvedTVF match {
+      case _: SQLTableFunction =>
+        throw new ExplicitlyUnsupportedResolverFeature(ResolutionGap.SQLTableFunctions)
+      case _ =>
+        resolver.resolve(resolvedTVF)
+    }
   }
+
+  /**
+   * Resolves the function arguments in an isolated [[ExpressionIdAssigner]] mapping.
+   *
+   * Arguments are resolved before the function is resolved into a [[LogicalPlan]], so no leaf
+   * operator has created a mapping in the current [[ExpressionIdAssigner]] scope yet. A top-level
+   * [[Alias]] argument, such as the one the `:` semi-structured extraction produces for
+   * `f(column:field)`, would otherwise reach [[ExpressionIdAssigner.mapExpression]] with no
+   * current mapping and fail with an internal error.
+   */
+  private def resolveArguments(
+      unresolvedTVF: UnresolvedTableValuedFunction): Seq[Expression] =
+    expressionResolver.getExpressionIdAssigner.withMappingForStandaloneExpression {
+      unresolvedTVF.functionArgs.map(
+        expressionResolver.resolveExpressionTreeInOperator(_, unresolvedTVF)
+      )
+    }
 }

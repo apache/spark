@@ -19,13 +19,15 @@ package org.apache.spark.sql.catalyst.analysis.resolver
 
 import org.apache.spark.sql.catalyst.analysis.{
   AnalysisErrorAt,
+  AnsiTypeCoercion,
   FunctionResolution,
   LambdaBinder,
   SubqueryExpressionInLambdaOrHigherOrderFunctionValidator,
+  TypeCoercion,
+  TypeCoercionValidation,
   UnresolvedFunction
 }
-import org.apache.spark.sql.catalyst.analysis.TypeCoercion.MapZipWithTypeCoercion
-import org.apache.spark.sql.catalyst.expressions.{Expression, HigherOrderFunction}
+import org.apache.spark.sql.catalyst.expressions.{Expression, HigherOrderFunction, MapZipWith}
 import org.apache.spark.sql.errors.QueryCompilationErrors
 
 /**
@@ -50,9 +52,10 @@ class HigherOrderFunctionResolver(
    *  3. Validate that the resolved function is indeed a higher-order function. Otherwise, throw an
    *     exception.
    *  4. Recursively resolve all arguments of the higher-order function.
-   *  5. Apply the [[MapZipWithTypeCoercion]] type coercion transformation to the higher-order
-   *     function. It must be done before binding the higher-order function so that the
-   *     [[MapZipWith]] arguments have the correct types.
+   *  5. Coerce the [[MapZipWith]] key types before binding so the arguments - and the key lambda
+   *     variable - have the correct types (see [[coerceMapZipWithArgumentTypesForBinding]]), then
+   *     fail with a type-check error if the key types cannot be unified (see
+   *     [[failOnUnresolvableMapZipWithKeyTypes]]).
    *  6. Validate that there are no subquery expressions within the higher-order function. If there
    *     are, throw an exception.
    *  7. Bind the higher-order function using the [[LambdaBinder]]. See more in the [[LambdaBinder]]
@@ -124,8 +127,9 @@ class HigherOrderFunctionResolver(
         .withNewChildren(resolvedArguments ++ partiallyResolvedHigherOrderFunction.functions)
 
     val functionWithCoercedArguments =
-      MapZipWithTypeCoercion(higherOrderFunctionWithResolvedArguments)
-        .asInstanceOf[HigherOrderFunction]
+      coerceMapZipWithArgumentTypesForBinding(higherOrderFunctionWithResolvedArguments)
+
+    failOnUnresolvableMapZipWithKeyTypes(functionWithCoercedArguments)
 
     SubqueryExpressionInLambdaOrHigherOrderFunctionValidator(functionWithCoercedArguments)
 
@@ -169,4 +173,22 @@ class HigherOrderFunctionResolver(
         )
     }
   }
+
+  private def coerceMapZipWithArgumentTypesForBinding(
+      higherOrderFunction: Expression): HigherOrderFunction = {
+    val coercedFunction = if (traversals.current.ansiMode) {
+      AnsiTypeCoercion.MapZipWithTypeCoercion(higherOrderFunction)
+    } else {
+      TypeCoercion.MapZipWithTypeCoercion(higherOrderFunction)
+    }
+    coercedFunction.asInstanceOf[HigherOrderFunction]
+  }
+
+  private def failOnUnresolvableMapZipWithKeyTypes(
+      higherOrderFunction: HigherOrderFunction): Unit =
+    higherOrderFunction match {
+      case mapZipWith: MapZipWith if mapZipWith.checkInputDataTypes().isFailure =>
+        TypeCoercionValidation.failOnTypeCheckResult(mapZipWith)
+      case _ =>
+    }
 }

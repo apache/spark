@@ -18,14 +18,24 @@
 package org.apache.spark.sql.catalyst.analysis.resolver
 
 import org.apache.spark.sql.catalyst.SQLConfHelper
-import org.apache.spark.sql.catalyst.analysis.{RelationResolution, UnresolvedRelation}
+import org.apache.spark.sql.catalyst.analysis.{
+  RelationResolution,
+  UnresolvedRelation,
+  UnresolvedStarExceptOrReplace
+}
 import org.apache.spark.sql.catalyst.plans.logical.{
   AnalysisHelper,
   LogicalPlan,
+  OneRowRelation,
+  Project,
   SubqueryAlias,
   UnresolvedWith
 }
-import org.apache.spark.sql.catalyst.trees.TreePattern.{UNRESOLVED_RELATION, UNRESOLVED_WITH}
+import org.apache.spark.sql.catalyst.trees.TreePattern.{
+  UNRESOLVED_RELATION,
+  UNRESOLVED_STAR_EXCEPT_OR_REPLACE,
+  UNRESOLVED_WITH
+}
 import org.apache.spark.sql.connector.catalog.CatalogManager
 
 /**
@@ -70,12 +80,19 @@ class MetadataResolver(
    * Traverse the `unresolvedPlan` and handle all the [[UnresolvedRelation]]s.
    *
    * [[UnresolvedWith]]s are matched explicitly, because they don't expose their CTE definitions
-   * as children.
+   * as children. Operators carrying an [[UnresolvedStarExceptOrReplace]] are matched explicitly for
+   * the same reason: it is a leaf expression, so its replacement expressions (e.g. a scalar
+   * subquery in a pipe `|> SET` target) are not children and relations nested in them would
+   * otherwise be invisible to this traversal.
    */
   private def handleAllUnresolvedRelations(unresolvedPlan: LogicalPlan): Unit = {
     AnalysisHelper.allowInvokingTransformsInAnalyzer {
       unresolvedPlan.transformDownWithSubqueriesAndPruning(
-        _.containsAnyPattern(UNRESOLVED_RELATION, UNRESOLVED_WITH)
+        _.containsAnyPattern(
+          UNRESOLVED_RELATION,
+          UNRESOLVED_STAR_EXCEPT_OR_REPLACE,
+          UNRESOLVED_WITH
+        )
       ) {
         case unresolvedRelation: UnresolvedRelation =>
           tryResolveRelation(unresolvedRelation)
@@ -88,8 +105,35 @@ class MetadataResolver(
           }
 
           unresolvedWith
+
+        case operator if carriesStarExceptOrReplace(operator) =>
+          handleStarExceptOrReplaceReplacements(operator)
+
+          operator
       }
     }
+  }
+
+  /**
+   * True if `operator`'s own expressions carry an [[UnresolvedStarExceptOrReplace]]. Matched on the
+   * node's tree pattern so this is a cheap bit test rather than an expression-tree walk.
+   */
+  private def carriesStarExceptOrReplace(operator: LogicalPlan): Boolean =
+    operator.expressions.exists(_.containsPattern(UNRESOLVED_STAR_EXCEPT_OR_REPLACE))
+
+  /**
+   * Resolves metadata of relations nested in the replacement expressions of every
+   * [[UnresolvedStarExceptOrReplace]] carried by `operator`. The replacements are wrapped in a
+   * synthetic [[Project]] so the standard relation traversal descends into their subqueries.
+   */
+  private def handleStarExceptOrReplaceReplacements(operator: LogicalPlan): Unit = {
+    operator.expressions.foreach(_.foreach {
+      case star: UnresolvedStarExceptOrReplace =>
+        star.replacements.foreach { replacements =>
+          handleAllUnresolvedRelations(Project(replacements, OneRowRelation()))
+        }
+      case _ =>
+    })
   }
 
   def tryResolveRelation(unresolvedRelation: UnresolvedRelation): Unit = {

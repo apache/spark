@@ -89,7 +89,7 @@ trait RewritesAliasesInTopLcaProject {
    * single-pass we need to handle the following:
    *  1. all aliases from top-level [[Project]] (because they originate from the unresolved
    *  aggregate list);
-   *  2. all references to aliases from the base aggregate (because they are became attribute
+   *  2. all references to aliases from the base aggregate (because they became attribute
    *  references during LCA resolution);
    *
    * This same issue also applies to HAVING resolution.
@@ -170,9 +170,10 @@ trait RewritesAliasesInTopLcaProject {
       scopes: NameScopeStack,
       missingExpressions: Seq[NamedExpression]): (Expression, Seq[NamedExpression]) = {
     val replacedAttributeReferences = new HashSet[ExprId]
+    val aggregateListAliases = scopes.current.queryBlockScope.getAggregateListAliases
     val expressionWithReplacedAliases = sortOrderOrCondition.transformDown {
       case attributeReference: AttributeReference =>
-        scopes.current.aggregateListAliases
+        aggregateListAliases
           .collectFirst {
             case alias
                 if alias.child.semanticEquals(attributeReference) &&
@@ -182,7 +183,7 @@ trait RewritesAliasesInTopLcaProject {
           }
           .getOrElse(attributeReference)
       case expression: Expression =>
-        scopes.current.aggregateListAliases
+        aggregateListAliases
           .collectFirst {
             case alias if alias.child.semanticEquals(expression) =>
               alias.toAttribute
@@ -226,11 +227,9 @@ trait RewritesAliasesInTopLcaProject {
 
   private def rewriteNamedExpressionsInProject(
       project: Project,
-      candiidateExpressions: HashMap[ExprId, NamedExpression]): Project = {
-    val newProjectList = project.projectList.map {
-      case namedExpression: NamedExpression =>
-        candiidateExpressions.getOrDefault(namedExpression.exprId, namedExpression)
-      case other => other
+      candidateExpressions: HashMap[ExprId, NamedExpression]): Project = {
+    val newProjectList = project.projectList.map { namedExpression =>
+      candidateExpressions.getOrDefault(namedExpression.exprId, namedExpression)
     }
     project.copy(projectList = newProjectList)
   }

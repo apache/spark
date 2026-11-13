@@ -78,6 +78,14 @@ class ResolveHintsSuite extends AnalysisTest {
       caseSensitive = false)
   }
 
+  test("merge into an existing hint directly over the matched relation") {
+    checkAnalysisWithoutViewWrapper(
+      UnresolvedHint("MERGE", Seq("table"),
+        ResolvedHint(table("table"), HintInfo(strategy = Some(BROADCAST)))),
+      ResolvedHint(testRelation, HintInfo(strategy = Some(SHUFFLE_MERGE))),
+      caseSensitive = false)
+  }
+
   test("should work for subqueries") {
     checkAnalysisWithoutViewWrapper(
       UnresolvedHint("MAPJOIN", Seq("tableAlias"), table("table").as("tableAlias")),

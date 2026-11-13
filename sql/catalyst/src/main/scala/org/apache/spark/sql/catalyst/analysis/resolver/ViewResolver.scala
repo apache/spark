@@ -19,7 +19,6 @@ package org.apache.spark.sql.catalyst.analysis.resolver
 
 import java.util.ArrayDeque
 
-import org.apache.spark.sql.catalyst.QueryPlanningTracker
 import org.apache.spark.sql.catalyst.analysis.{AnalysisContext, UnresolvedRelation}
 import org.apache.spark.sql.catalyst.plans.logical.{LogicalPlan, View}
 import org.apache.spark.sql.connector.catalog.CatalogManager
@@ -33,12 +32,14 @@ import org.apache.spark.sql.util.CaseInsensitiveStringMap
  */
 class ViewResolver(
     resolver: Resolver,
-    catalogManager: CatalogManager,
-    tracker: Option[QueryPlanningTracker] = None)
+    catalogManager: CatalogManager)
     extends TreeNodeResolver[View, View]
     with ResolverMetricTracker
     {
   private val cteRegistry = resolver.getCteRegistry
+  private val queryBlockScopes = resolver.getQueryBlockScopes
+  private val nestedObjectRegistry = resolver.getNestedObjectRegistry
+  private val scopes = resolver.getNameScopes
   private val sourceUnresolvedRelationStack = new ArrayDeque[UnresolvedRelation]
   private val viewResolutionContextStack = new ArrayDeque[ViewResolutionContext]
 
@@ -79,12 +80,14 @@ class ViewResolver(
   /**
    * Resolve the `unresolvedView` and its underlying plan. This method uses parent [[Resolver]] to
    * resolve the view child. [[View]] resolution consists of the following steps:
-   *   - Check if the single-pass resolver fully supports the view plan using the [[ResolverGuard]].
-   *     Throw [[ExplicitlyUnsupportedResolverFeature]] if the view plan is not supported.
+   *   - Check if the single-pass resolver fully supports the view plan using the [[ResolverGuard]],
+   *     both before and after the view plan is preprocessed by the [[PlanPreprocessor]]. Throw
+   *     [[ExplicitlyUnsupportedResolverFeature]] if the view plan is not supported.
    *   - Set the [[ViewResolutionContext]] for the view plan resolution.
    *   - Replace the necessary configurations in [[SQLConf]] with those that were stored with the
    *     view.
-   *   - Resolve the view plan using parent [[Resolver]].
+   *   - Resolve the view plan using parent [[Resolver]] in an opaque [[NameScope]], so that outer
+   *     references from the view body cannot leak into the enclosing query.
    *   - Sets the views child as analyzed in order to avoid recursing into it using rewrite rules.
    *   - Return the resolved [[View]] with the resolved child and the original
    *     [[UnresolvedRelation.options]].
@@ -98,12 +101,20 @@ class ViewResolver(
           createSparkVersion = unresolvedView.desc.createVersion)
       ) {
         checkResolverGuard(unresolvedView)
+        val planPreprocessor =
+          new PlanPreprocessor(resolver, resolveExpressionIdentifiersInRootScope = false)
+        val preprocessedView = planPreprocessor.substitutePlan(unresolvedView)
+        checkResolverGuard(preprocessedView)
 
         cteRegistry.pushScope(isRoot = true, isOpaque = true)
+        queryBlockScopes.push()
+        scopes.pushScope(scopeType = NameScopeType.Opaque)
 
         try {
           resolver.lookupMetadataAndResolve(unresolvedView.child)
         } finally {
+          popViewBodyScopeIntoOuter()
+          queryBlockScopes.pop()
           cteRegistry.popScope()
         }
       }
@@ -139,25 +150,61 @@ class ViewResolver(
 
       val viewResolutionContext = prevContext.copy(
         nestedViewDepth = prevContext.nestedViewDepth + 1,
-        referredTempVariableNames = unresolvedView.desc.viewReferredTempVariableNames,
-        collation = unresolvedView.desc.collation,
         catalogAndNamespace = Some(unresolvedView.desc.viewCatalogAndNamespace)
       )
       viewResolutionContext.validate(unresolvedView)
 
       viewResolutionContextStack.push(viewResolutionContext)
+      nestedObjectRegistry.pushScope(
+        defaultCollation = unresolvedView.desc.collation,
+        referredTempVariableNames = unresolvedView.desc.viewReferredTempVariableNames
+      )
       try {
         (body, viewResolutionContext)
       } finally {
+        nestedObjectRegistry.popScope()
         viewResolutionContextStack.pop()
       }
     }
   }
-  private def checkResolverGuard(unresolvedView: View): Unit = {
-    val resolverGuard = new ResolverGuard(catalogManager, tracker = tracker)
-    resolverGuard(unresolvedView).planUnsupportedReason match {
+  /**
+   * Pops the view body's isolated scope and re-establishes the outer scope with the view body's
+   * output and plan-id targets.
+   *
+   * The view body resolves in its own opaque [[NameScope]], but a DataFrame can persist a
+   * plan-id-tagged plan as a temp view and then reference that plan's column from outside the view,
+   * so the view body's [[PlanIdTargetRegistry]] must reach the outer scope. For example:
+   *
+   * {{{
+   * val df1 = spark.range(2)
+   * df1.createOrReplaceTempView("v")
+   * val df2 = spark.table("v")
+   * df2.select(df1("id"))
+   * }}}
+   *
+   * `df1("id")` carries `df1`'s plan id, but `df1` now sits inside the `v` view body; its target
+   * is recorded there, so carrying that registry out lets the outer `select` resolve the reference.
+   */
+  private def popViewBodyScopeIntoOuter(): Unit = {
+    val viewOutput = scopes.current.output
+    val viewPlanIdTargetRegistry = scopes.current.planIdTargetRegistry
+    scopes.popScope()
+    scopes.overwriteCurrent(
+      output = Some(viewOutput),
+      planIdTargetRegistry = Some(viewPlanIdTargetRegistry)
+    )
+  }
+
+  private def checkResolverGuard(unresolvedPlan: LogicalPlan): Unit = {
+    ResolverGuard(
+      catalogManager = catalogManager,
+      resolverExtensions = resolver.extensions
+    )(unresolvedPlan).planUnsupportedReason match {
       case Some(reason) =>
-        throw new ExplicitlyUnsupportedResolverFeature(s"View body is not supported: $reason")
+        throw new ExplicitlyUnsupportedResolverFeature(
+          ResolutionGap.ViewBody,
+          s"View body is not supported: $reason"
+        )
       case None =>
     }
   }
@@ -169,16 +216,12 @@ class ViewResolver(
  *
  * @param nestedViewDepth Current nested view depth. Cannot exceed the `maxNestedViewDepth`.
  * @param maxNestedViewDepth Maximum allowed nested view depth. Configured in the upper context
- * @param referredTempVariableNames All the temporary variables referred in the view.
  *   based on [[SQLConf.MAX_NESTED_VIEW_DEPTH]].
- * @param collation View's default collation if explicitly set.
  * @param catalogAndNamespace Catalog and namespace under which the [[View]] was created.
  */
 case class ViewResolutionContext(
     nestedViewDepth: Int,
     maxNestedViewDepth: Int,
-    referredTempVariableNames: Seq[Seq[String]] = Seq.empty,
-    collation: Option[String] = None,
     catalogAndNamespace: Option[Seq[String]] = None) {
   def validate(unresolvedView: View): Unit = {
     if (nestedViewDepth > maxNestedViewDepth) {

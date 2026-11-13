@@ -1731,6 +1731,29 @@ class CollationSuite extends DatasourceV2SQLBase with AdaptiveSparkPlanHelper {
     }
   }
 
+  test("CommonExpressionRef of BETWEEN inherits different collation strengths") {
+    val table = "table"
+    // Implicit collation strength
+    withTable(table) {
+      sql(s"CREATE TABLE $table (c1 STRING COLLATE UTF8_LCASE)")
+      sql(s"INSERT INTO $table VALUES ('test'), ('OTHER')")
+      checkAnswer(
+        sql(s"SELECT c1 BETWEEN 'TEST' AND 'TEST' FROM $table"),
+        Seq(Row(true), Row(false))
+      )
+    }
+
+    // Explicit collation strength
+    withTable(table) {
+      sql(s"CREATE TABLE $table (c1 STRING COLLATE UNICODE)")
+      sql(s"INSERT INTO $table VALUES ('TEST'), ('OTHER')")
+      checkAnswer(
+        sql(s"SELECT 'test' COLLATE UTF8_LCASE BETWEEN c1 AND c1 FROM $table"),
+        Seq(Row(true), Row(false))
+      )
+    }
+  }
+
   test("hash join should be used for collated strings if sort merge join is not forced") {
     val t1 = "T_1"
     val t2 = "T_2"
