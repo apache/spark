@@ -391,4 +391,30 @@ class NameStreamingSourcesSuite extends AnalysisTest {
       assert(!hasNamedRelation, "All NamedStreamingRelation nodes should be unwrapped")
     }
   }
+
+  // ===================================
+  // Tests for collecting source names
+  // ===================================
+
+  test("collectSources returns wrapped and already named sources in plan order") {
+    val wrapped = createStreamingRelationV2()
+    val named = createStreamingRelationV2(UserProvided("named"))
+    val unnamed = createStreamingRelationV2()
+    // A wrapper's own name wins; its child is not collected again.
+    val plan = Union(Seq(
+      NamedStreamingRelation(wrapped, UserProvided("wrapped")),
+      Project(named.output, named),
+      unnamed))
+
+    assert(StreamingSourceIdentifyingName.collectSources(plan) === Seq(
+      wrapped -> UserProvided("wrapped"),
+      named -> UserProvided("named"),
+      unnamed -> Unassigned))
+  }
+
+  test("collectSources ignores leaves that cannot carry a source name") {
+    val plan = Union(Seq(createStreamingRelation(), createBatchRelation()))
+
+    assert(StreamingSourceIdentifyingName.collectSources(plan).isEmpty)
+  }
 }

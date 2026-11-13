@@ -2790,6 +2790,12 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase with Compilat
       messageParameters = Map("existingVersion" -> existingVersion.toString))
   }
 
+  def cannotDisableSourceEvolutionOnExistingCheckpointError(): Throwable = {
+    new AnalysisException(
+      errorClass = "STREAMING_QUERY_EVOLUTION_ERROR.CANNOT_DISABLE_ON_EXISTING_CHECKPOINT",
+      messageParameters = Map.empty)
+  }
+
   def columnNotFoundInExistingColumnsError(
       columnType: String, columnName: String, validColumnNames: Seq[String]): Throwable = {
     new AnalysisException(
