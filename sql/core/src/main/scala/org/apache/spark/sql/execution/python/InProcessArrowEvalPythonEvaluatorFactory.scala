@@ -41,6 +41,7 @@ import org.apache.spark.sql.catalyst.expressions.{Attribute, Expression, JoinedR
 import org.apache.spark.sql.execution.arrow.ArrowWriter
 import org.apache.spark.sql.execution.metric.SQLMetric
 import org.apache.spark.sql.execution.python.EvalPythonExec.ArgumentMetadata
+import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
 import org.apache.spark.sql.util.ArrowUtils
 import org.apache.spark.sql.vectorized.{ArrowColumnVector, ColumnarBatch, ColumnVector}
@@ -144,7 +145,8 @@ class InProcessArrowEvalPythonEvaluatorFactory(
     // Only the consumer holding the iterator's lock adds and removes rows.
     class InProcessRowQueue(localDir: File, serializerManager: SerializerManager)
       extends HybridRowQueue(context.taskMemoryManager(), localDir, childOutput.length,
-        serializerManager, lockFree = true) {
+        serializerManager, lockFree = true,
+        maxMemoryBytes = SQLConf.get.pythonUDFRowQueueMaxMemoryBytes) {
       // Spill files go into a directory of the queue's own, created with the first disk queue,
       // so that task completion can delete them when it cannot close the queue.
       @volatile private var spillDir: File = null
