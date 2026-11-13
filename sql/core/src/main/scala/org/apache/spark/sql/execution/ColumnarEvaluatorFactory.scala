@@ -26,7 +26,6 @@ import org.apache.spark.sql.execution.metric.SQLMetric
 import org.apache.spark.sql.execution.vectorized.{OffHeapColumnVector, OnHeapColumnVector, WritableColumnVector}
 import org.apache.spark.sql.types.StructType
 import org.apache.spark.sql.vectorized.ColumnarBatch
-import org.apache.spark.util.ArrayImplicits._
 import org.apache.spark.util.CompletionIterator
 
 class ColumnarToRowEvaluatorFactory(
@@ -78,10 +77,10 @@ class RowToColumnarEvaluatorFactory(
       val rowIterator = inputs.head
       new Iterator[ColumnarBatch] {
         private lazy val converters = new RowToColumnConverter(schema)
-        private lazy val vectors: Seq[WritableColumnVector] = if (enableOffHeapColumnVector) {
-          OffHeapColumnVector.allocateColumns(numRows, schema).toImmutableArraySeq
+        private lazy val vectors: Array[WritableColumnVector] = if (enableOffHeapColumnVector) {
+          OffHeapColumnVector.allocateColumns(numRows, schema).toArray
         } else {
-          OnHeapColumnVector.allocateColumns(numRows, schema).toImmutableArraySeq
+          OnHeapColumnVector.allocateColumns(numRows, schema).toArray
         }
         private lazy val cb: ColumnarBatch = new ColumnarBatch(vectors.toArray)
 
@@ -99,7 +98,7 @@ class RowToColumnarEvaluatorFactory(
           var rowCount = 0
           while (rowCount < numRows && rowIterator.hasNext) {
             val row = rowIterator.next()
-            converters.convert(row, vectors.toArray)
+            converters.convert(row, vectors)
             rowCount += 1
           }
           cb.setNumRows(rowCount)
