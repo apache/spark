@@ -18,6 +18,7 @@
 package org.apache.spark.api.python
 
 import java.net.SocketTimeoutException
+import java.util.concurrent.TimeUnit
 
 import scala.collection.mutable
 // scalastyle:off executioncontextglobal
@@ -29,7 +30,7 @@ import scala.concurrent.duration._
 import org.apache.spark.SharedSparkContext
 import org.apache.spark.SparkException
 import org.apache.spark.SparkFunSuite
-import org.apache.spark.util.ThreadUtils
+import org.apache.spark.util.{ThreadUtils, Utils}
 
 // Tests for PythonWorkerFactory.
 class PythonWorkerFactorySuite extends SparkFunSuite with SharedSparkContext {
@@ -55,7 +56,67 @@ class PythonWorkerFactorySuite extends SparkFunSuite with SharedSparkContext {
     }
 
     // Timeout ensures that the test fails in 5 minutes if createSimplerWorker() doesn't return.
-    ThreadUtils.awaitReady(createFuture, 5.minutes)
+    try {
+      ThreadUtils.awaitReady(createFuture, 5.minutes)
+    } finally {
+      workerFactory.stop()
+    }
+  }
+
+  test("SPARK-54055: stopping a factory terminates its idle worker monitor") {
+    assume(!Utils.isWindows)
+    val factory = new PythonWorkerFactory("python3", "pyspark.worker", Map.empty, true)
+    val monitor = factory.monitorThread.get
+    try {
+      assert(monitor.isAlive)
+      factory.stop()
+      monitor.join(TimeUnit.SECONDS.toMillis(10))
+      assert(!monitor.isAlive)
+      // Stopping an already stopped factory is harmless.
+      factory.stop()
+    } finally {
+      factory.stop()
+    }
+  }
+
+  test("SPARK-54055: stopping a factory terminates its daemon and worker processes") {
+    assume(!Utils.isWindows)
+    val pythonPath = Seq(
+      getWorkspaceFilePath("python").toString,
+      getWorkspaceFilePath("python", "lib", PythonUtils.PY4J_ZIP_NAME).toString)
+      .mkString(java.io.File.pathSeparator)
+    val factory = new PythonWorkerFactory(
+      PythonUtils.defaultPythonExec, "pyspark.worker", Map("PYTHONPATH" -> pythonPath), true)
+    var worker: PythonWorker = null
+    try {
+      val (created, handle) = factory.create()
+      worker = created
+      val child = ProcessHandle.of(handle.get.asInstanceOf[LocalPythonWorkerHandle].pid).get()
+      val daemon = child.parent().get()
+      assert(child.isAlive)
+      assert(daemon.isAlive)
+
+      factory.stop()
+
+      daemon.onExit().get(10, TimeUnit.SECONDS)
+      child.onExit().get(10, TimeUnit.SECONDS)
+      assert(!daemon.isAlive)
+      assert(!child.isAlive)
+    } finally {
+      factory.stop()
+      if (worker != null) {
+        worker.stop()
+      }
+    }
+  }
+
+  test("SPARK-54055: non-daemon factories do not start an idle worker monitor") {
+    val factory = new PythonWorkerFactory("python3", "pyspark.worker", Map.empty, false)
+    try {
+      assert(factory.monitorThread.isEmpty)
+    } finally {
+      factory.stop()
+    }
   }
 
   test("idle worker pool is unbounded when idleWorkerMaxPoolSize is not set") {
@@ -77,6 +138,7 @@ class PythonWorkerFactorySuite extends SparkFunSuite with SharedSparkContext {
 
     } finally {
       mockWorkers.foreach(factory.stopWorker)
+      factory.stop()
     }
   }
 
@@ -139,6 +201,7 @@ class PythonWorkerFactorySuite extends SparkFunSuite with SharedSparkContext {
       assert(factory.idleWorkers.size === 2)
     } finally {
       mockWorkers.foreach(factory.stopWorker)
+      factory.stop()
     }
   }
 }
