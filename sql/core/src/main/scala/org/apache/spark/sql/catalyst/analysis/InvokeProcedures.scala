@@ -22,7 +22,7 @@ import scala.jdk.CollectionConverters.IteratorHasAsScala
 import org.apache.spark.SparkException
 import org.apache.spark.sql.SparkSession
 import org.apache.spark.sql.catalyst.InternalRow
-import org.apache.spark.sql.catalyst.expressions.{Expression, GenericInternalRow}
+import org.apache.spark.sql.catalyst.expressions.{Expression, GenericInternalRow, SubqueryExpression}
 import org.apache.spark.sql.catalyst.plans.logical.{Call, CommandResult, LocalRelation, LogicalPlan}
 import org.apache.spark.sql.catalyst.rules.Rule
 import org.apache.spark.sql.catalyst.types.DataTypeUtils
@@ -39,7 +39,10 @@ class InvokeProcedures(session: SparkSession) extends Rule[LogicalPlan] {
   }
 
   private def invokeProcedures(plan: LogicalPlan): LogicalPlan = plan resolveOperators {
-    case c: Call if c.resolved && c.bound && c.execute && c.checkArgTypes().isSuccess =>
+    // A CALL with an IN or correlated EXISTS subquery in an argument is left for CheckAnalysis to
+    // reject. The optimizer would rewrite the subquery into a join under the `Call`.
+    case c: Call if c.resolved && c.bound && c.execute && c.checkArgTypes().isSuccess &&
+        !c.args.exists(SubqueryExpression.hasInOrCorrelatedExistsSubquery) =>
       session.sessionState.optimizer.execute(c) match {
         case Call(ResolvedProcedure(_, _, procedure: BoundProcedure), args, _) =>
           invoke(procedure, args, c)
