@@ -50,6 +50,7 @@ class InitCLITests(ReusedConnectTestCase):
                 spec_path = find_pipeline_spec(Path.cwd())
                 spec = load_pipeline_spec(spec_path)
                 assert spec.name == project_name
+                self.assertEqual(spec.configuration, {"spark.sql.catalogImplementation": "hive"})
 
                 # Verify that the storage path is an absolute URI with file scheme
                 expected_storage_path = f"file://{Path.cwd() / 'pipeline-storage'}"

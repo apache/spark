@@ -23,6 +23,10 @@ storage: {{ storage_root }}
 libraries:
   - glob:
       include: transformations/**
+configuration:
+  # Keep table metadata in a local Hive metastore (metastore_db/ in the directory the pipeline
+  # is run from) so that tables survive across runs and can be queried after a run.
+  spark.sql.catalogImplementation: hive
 """
 
 PYTHON_EXAMPLE = """from pyspark import pipelines as dp
