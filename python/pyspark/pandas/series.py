@@ -2189,6 +2189,16 @@ class Series(Frame, IndexOpsMixin, Generic[T]):
         5    6.0
         Name: x, dtype: float64
 
+        We can also fill using values from another Series, aligned
+        by index.
+
+        >>> df = ps.DataFrame({'x': [np.nan, 2, 3], 'y': [10, 20, 30]})
+        >>> df.x.fillna(df.y).sort_index()
+        0  10.0
+        1   2.0
+        2   3.0
+        Name: x, dtype: float64
+
         We can also propagate non-null values forward or backward.
 
         >>> s.fillna(method='ffill')  # doctest: +SKIP
@@ -2278,11 +2288,30 @@ class Series(Frame, IndexOpsMixin, Generic[T]):
         cond = self.isnull().spark.column
 
         if value is not None:
-            if not isinstance(value, (float, int, str, bool)):
+            if not isinstance(value, (float, int, str, bool, Series)):
                 raise TypeError("Unsupported type %s" % type(value).__name__)
             if limit is not None:
                 raise NotImplementedError("limit parameter for value is not support now")
-            scol = F.when(cond, value).otherwise(scol)
+            if isinstance(value, Series):
+                if same_anchor(self, value):
+                    scol = F.when(cond, value.spark.column).otherwise(scol)
+                else:
+                    psdf = self.to_frame()
+                    tmp_value_col = verify_temp_column_name(psdf,
+                    "__tmp_fillna_value_col__")
+                    psdf[tmp_value_col] = value
+                    this_psser = first_series(psdf)
+                    new_scol = (
+                        F.when(this_psser.isnull(), psdf[tmp_value_col].spark.column)
+                        .otherwise(this_psser.spark.column)
+                    ).alias(psdf._internal.data_spark_column_names[0])
+                    )
+                    internal = psdf._internal.with_new_columns(
+                        {new_scol}, column_labels=self._internal.column_labels
+                    )
+                    return first_series(DataFrame(internal))
+            else:
+                scol = F.when(cond, value).otherwise(scol)
         else:
             if method in ["ffill", "pad"]:
                 func = F.last
