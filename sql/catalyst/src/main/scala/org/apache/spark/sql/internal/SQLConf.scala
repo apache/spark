@@ -4600,13 +4600,13 @@ object SQLConf {
       .booleanConf
       .createWithDefault(false)
 
-  val LEGACY_ALLOW_TEMP_TABLE_FUNCTION_IN_PERSISTED_SQL_FUNCTION =
-    buildConf("spark.sql.legacy.allowTempTableFunctionInPersistedSQLFunction")
+  val LEGACY_ALLOW_TEMP_FUNCTION_IN_PERSISTED_SQL_FUNCTION =
+    buildConf("spark.sql.legacy.allowTempFunctionInPersistedSQLFunction")
       .internal()
       .doc("When true, CREATE FUNCTION for a persistent SQL function accepts a body that calls " +
-        "a temporary table function, or a temporary function qualified with `session.` rather " +
-        "than `system.session.`. Such a function fails when called from a session that does " +
-        "not have the temporary function.")
+        "an unqualified temporary table function, or a temporary function through an " +
+        "IDENTIFIER clause. Such a function fails when called from a session that does not " +
+        "have the temporary function.")
       .version("4.4.0")
       .withBindingPolicy(ConfigBindingPolicy.NOT_APPLICABLE)
       .booleanConf

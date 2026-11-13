@@ -599,7 +599,7 @@ class SQLFunctionSuite extends SharedSparkSession {
         "temp_tbl_caller" -> true) {
       sql("CREATE TEMPORARY FUNCTION temp_fn() RETURNS INT RETURN 1")
       sql("CREATE TEMPORARY FUNCTION temp_tbl() RETURNS TABLE (a INT) RETURN SELECT 1")
-      // A temp function may.
+      // A temporary function may call another temporary function through `system.session.`.
       sql("CREATE TEMPORARY FUNCTION temp_caller() RETURNS INT RETURN system.session.temp_fn()")
       checkAnswer(sql("SELECT temp_caller()"), Row(1))
       sql("CREATE TEMPORARY FUNCTION temp_tbl_caller() RETURNS TABLE (a INT) " +
@@ -608,6 +608,8 @@ class SQLFunctionSuite extends SharedSparkSession {
       Seq(
         "CREATE FUNCTION perm_fn() RETURNS INT RETURN session.temp_fn()",
         "CREATE FUNCTION perm_fn() RETURNS INT RETURN system.session.temp_fn()",
+        "CREATE FUNCTION perm_fn() RETURNS INT RETURN IDENTIFIER('temp_fn')()",
+        "CREATE FUNCTION perm_fn() RETURNS INT RETURN IDENTIFIER('session.temp_fn')() + 1",
         "CREATE FUNCTION perm_fn() RETURNS TABLE (a INT) RETURN SELECT * FROM temp_tbl()",
         "CREATE FUNCTION perm_fn() RETURNS TABLE (a INT) RETURN SELECT * FROM session.temp_tbl()",
         "CREATE FUNCTION perm_fn() RETURNS TABLE (a INT) " +
@@ -617,23 +619,29 @@ class SQLFunctionSuite extends SharedSparkSession {
         val e = intercept[AnalysisException](sql(ddl))
         assert(e.getCondition == "INVALID_TEMP_OBJ_REFERENCE", s"$ddl: ${e.getMessage}")
       }
-      // The legacy flag restores the previous check.
-      val legacyKey = SQLConf.LEGACY_ALLOW_TEMP_TABLE_FUNCTION_IN_PERSISTED_SQL_FUNCTION.key
+      // The legacy flag re-allows only the forms earlier versions accepted at creation.
+      val legacyKey = SQLConf.LEGACY_ALLOW_TEMP_FUNCTION_IN_PERSISTED_SQL_FUNCTION.key
       withUserDefinedFunction("perm_legacy" -> false, "perm_legacy_tbl" -> false,
           "perm_outer" -> false) {
         withSQLConf(legacyKey -> "true") {
-          Seq("temp_tbl()", "session.temp_tbl()", "IDENTIFIER('temp_tbl')()").foreach { call =>
+          Seq("temp_tbl()", "IDENTIFIER('temp_tbl')()").foreach { call =>
             sql("CREATE OR REPLACE FUNCTION perm_legacy_tbl() RETURNS TABLE (a INT) " +
               s"RETURN SELECT * FROM $call")
             checkAnswer(sql("SELECT * FROM perm_legacy_tbl()"), Row(1))
           }
-          sql("CREATE FUNCTION perm_legacy() RETURNS INT RETURN session.temp_fn()")
+          sql("CREATE FUNCTION perm_legacy() RETURNS INT RETURN IDENTIFIER('temp_fn')()")
           checkAnswer(sql("SELECT perm_legacy()"), Row(1))
-          Seq("temp_fn()", "system.session.temp_fn()").foreach { call =>
+          Seq(
+            "RETURNS INT RETURN temp_fn()",
+            "RETURNS INT RETURN session.temp_fn()",
+            "RETURNS INT RETURN system.session.temp_fn()",
+            "RETURNS TABLE (a INT) RETURN SELECT * FROM session.temp_tbl()",
+            "RETURNS TABLE (a INT) RETURN SELECT * FROM system.session.temp_tbl()"
+          ).foreach { body =>
             val e = intercept[AnalysisException] {
-              sql(s"CREATE OR REPLACE FUNCTION perm_legacy() RETURNS INT RETURN $call")
+              sql(s"CREATE OR REPLACE FUNCTION perm_legacy_rej() $body")
             }
-            assert(e.getCondition == "INVALID_TEMP_OBJ_REFERENCE", s"$call: ${e.getMessage}")
+            assert(e.getCondition == "INVALID_TEMP_OBJ_REFERENCE", s"$body: ${e.getMessage}")
           }
         }
         // Without the flag, calling a function that depends on a temp TVF is rejected too.
