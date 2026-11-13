@@ -163,8 +163,7 @@ class KubernetesClusterSchedulerBackendSuite extends SparkFunSuite with BeforeAn
       eventQueue,
       podAllocator,
       lifecycleManager,
-      watchEvents,
-      pollEvents)
+      Seq(watchEvents, pollEvents))
   }
 
   private def registerExecutor(
@@ -489,8 +488,7 @@ class KubernetesClusterSchedulerBackendSuite extends SparkFunSuite with BeforeAn
       eventQueue,
       podAllocator,
       lifecycleManager,
-      watchEvents,
-      pollEvents)
+      Seq(watchEvents, pollEvents))
     val id1 = backendWithoutAppId.applicationId()
     val id2 = backendWithoutAppId.applicationId()
     assert(id1 === id2, "applicationId() must return the same value on repeated calls")
