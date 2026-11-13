@@ -40,7 +40,6 @@ from pyspark.sql.pandas.types import (
     _dedup_names,
     _deduplicate_field_names,
     from_arrow_schema,
-    time_precision_key,
     to_arrow_schema,
 )
 from pyspark.sql.pandas.utils import require_minimum_pyarrow_version
@@ -226,101 +225,6 @@ class ArrowBatchTransformer:
         else:
             struct = pa.StructArray.from_arrays(batch.columns, fields=pa.struct(list(batch.schema)))
         return pa.RecordBatch.from_arrays([struct], ["_0"])
-
-    @staticmethod
-    def reconcile_time_precision(
-        batch: "pa.RecordBatch", return_type: Optional[StructType]
-    ) -> "pa.RecordBatch":
-        """
-        Set the TIME precision key of each field of ``batch`` that carries one to the precision
-        of the field of ``return_type`` at the same position, at the top level and in nested
-        struct fields, array elements and map keys and values. A field without the key stays
-        untagged. ``return_type`` is the declared return schema, or None when it has no
-        TimeType, in which case ``batch`` is returned unchanged.
-
-        The JVM truncates a TIME value to the precision key of its Arrow field. A UDF result can
-        keep the key of an input field of another precision, for example by reusing the input
-        batch's schema or a nested field's type, so the key must match the declared field the
-        JVM reads the result as.
-
-        Used by: the mapInArrow and applyInArrow handlers, before wrap_struct().
-        """
-        import pyarrow as pa
-
-        if return_type is None or batch.num_columns == 0:
-            return batch
-
-        # Each helper returns None when nothing in the field or type changes.
-        def reconcile_field(field: "pa.Field", dt: DataType) -> Optional["pa.Field"]:
-            if isinstance(dt, UserDefinedType):
-                dt = dt.sqlType()
-            changed = None
-            metadata = field.metadata
-            if (
-                isinstance(dt, TimeType)
-                and pa.types.is_time64(field.type)
-                and metadata is not None
-                and time_precision_key in metadata
-            ):
-                precision = str(dt.precision).encode("utf-8")
-                if metadata[time_precision_key] != precision:
-                    merged = dict(metadata)
-                    merged[time_precision_key] = precision
-                    changed = field.with_metadata(merged)
-            arrow_type = reconcile_type(field.type, dt)
-            if arrow_type is not None:
-                changed = (field if changed is None else changed).with_type(arrow_type)
-            return changed
-
-        def reconcile_type(arrow_type: "pa.DataType", dt: DataType) -> Optional["pa.DataType"]:
-            if pa.types.is_struct(arrow_type) and isinstance(dt, StructType):
-                children = list(arrow_type)
-                reconciled = [
-                    reconcile_field(child, dt.fields[i].dataType) if i < len(dt.fields) else None
-                    for i, child in enumerate(children)
-                ]
-                if all(r is None for r in reconciled):
-                    return None
-                return pa.struct([c if r is None else r for c, r in zip(children, reconciled)])
-            if pa.types.is_map(arrow_type) and isinstance(dt, MapType):
-                key = reconcile_field(arrow_type.key_field, dt.keyType)
-                item = reconcile_field(arrow_type.item_field, dt.valueType)
-                if key is None and item is None:
-                    return None
-                return pa.map_(
-                    arrow_type.key_field if key is None else key,
-                    arrow_type.item_field if item is None else item,
-                    keys_sorted=arrow_type.keys_sorted,
-                )
-            if isinstance(dt, ArrayType) and (
-                pa.types.is_list(arrow_type)
-                or pa.types.is_large_list(arrow_type)
-                or pa.types.is_fixed_size_list(arrow_type)
-            ):
-                value = reconcile_field(arrow_type.value_field, dt.elementType)
-                if value is None:
-                    return None
-                if pa.types.is_large_list(arrow_type):
-                    return pa.large_list(value)
-                if pa.types.is_fixed_size_list(arrow_type):
-                    return pa.list_(value, arrow_type.list_size)
-                return pa.list_(value)
-            return None
-
-        fields = list(batch.schema)
-        declared = return_type.fields
-        reconciled = [
-            reconcile_field(field, declared[i].dataType) if i < len(declared) else None
-            for i, field in enumerate(fields)
-        ]
-        if all(r is None for r in reconciled):
-            return batch
-        schema = pa.schema(
-            [f if r is None else r for f, r in zip(fields, reconciled)],
-            metadata=batch.schema.metadata,
-        )
-        # The new schema differs only in field metadata, so the columns are kept as they are.
-        return pa.RecordBatch.from_arrays(batch.columns, schema=schema)
 
     @classmethod
     def enforce_schema(

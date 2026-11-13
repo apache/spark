@@ -1170,7 +1170,7 @@ object DateTimeUtils extends SparkDateTimeUtils {
 
   /**
    * Creates a TIME(6) value from seconds since midnight (decimal type). The digits beyond
-   * microseconds are truncated.
+   * microseconds are floored.
    * @param seconds Seconds (0 to 86399.999999)
    * @return Nanoseconds since midnight
    */
@@ -1180,7 +1180,7 @@ object DateTimeUtils extends SparkDateTimeUtils {
 
   /**
    * Creates a TIME(6) value from seconds since midnight (floating point type). The digits beyond
-   * microseconds are truncated.
+   * microseconds are floored.
    * @param seconds Seconds (0 to 86399.999999)
    * @return Nanoseconds since midnight
    */

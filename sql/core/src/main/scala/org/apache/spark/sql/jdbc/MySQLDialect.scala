@@ -197,9 +197,15 @@ private case class MySQLDialect() extends JdbcDialect with SQLConfHelper with No
       case Types.TIME if conf.isTimeTypeEnabled && !conf.legacyJdbcTimeMappingEnabled =>
         // MySQL Connector/J reports a scale of 0 for every TIME column, so the generic mapping,
         // which takes the TIME precision from the reported scale, would type TIME(n) as TIME(0)
-        // and the TIME getter would drop its fractional seconds. MySQL TIME holds at most six
-        // fractional digits, so TIME(6) keeps the fractional seconds of every stored value.
-        Some(TimeType(TimeType.MICROS_PRECISION))
+        // and the TIME getter would drop its fractional seconds. The reported size is the display
+        // width: 10 for TIME and 11 + n for TIME(n), as in -838:59:59.ffffff. For another size,
+        // TIME(6), the largest MySQL TIME precision, keeps the fractional seconds.
+        val precision = size match {
+          case 10 => 0
+          case s if s >= 12 && s <= 17 => s - 11
+          case _ => TimeType.MICROS_PRECISION
+        }
+        Some(TimeType(precision))
       case _ => None
     }
   }

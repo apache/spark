@@ -1652,13 +1652,16 @@ class JDBCSuite extends SharedSparkSession {
         assert(jdbcType.databaseTypeDefinition === "DATETIME")
       }
     }
-    // Connector/J reports a scale of 0 for every TIME column, so the dialect maps TIME to TIME(6),
-    // the largest MySQL TIME precision, instead of taking the precision from the scale.
+    // Connector/J reports a scale of 0 for every TIME column, so the dialect takes the precision
+    // from the display width, 10 for TIME and 11 + n for TIME(n), and uses TIME(6) otherwise.
     withSQLConf(
         SQLConf.TIME_TYPE_ENABLED.key -> "true",
         SQLConf.LEGACY_JDBC_TIME_MAPPING_ENABLED.key -> "false") {
-      assert(mySqlDialect.getCatalystType(java.sql.Types.TIME, "TIME", 8, metadata) ===
-        Some(TimeType(6)))
+      Seq(10 -> 0, 12 -> 1, 14 -> 3, 17 -> 6, 8 -> 6, 11 -> 6, 18 -> 6).foreach {
+        case (size, precision) =>
+          assert(mySqlDialect.getCatalystType(java.sql.Types.TIME, "TIME", size, metadata) ===
+            Some(TimeType(precision)), s"size $size")
+      }
     }
     Seq(
       SQLConf.TIME_TYPE_ENABLED.key -> "false",

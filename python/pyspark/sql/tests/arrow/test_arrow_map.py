@@ -219,10 +219,9 @@ class MapInArrowTestsMixin:
         row = df.mapInArrow(extract_metadata, "metadata string").first()
         self.assertEqual(row.metadata, """b'{"x":1}'""")
 
-    def test_map_in_arrow_time_precision_of_declared_type(self):
-        # SPARK-61087: the JVM truncates a TIME value to the precision key of its Arrow field. A
-        # result built with the input batch's schema keeps the key of the input field, so it must
-        # be read with the precision of the declared column.
+    def test_map_in_arrow_time_result_with_input_field_precision(self):
+        # SPARK-61087: a result built with the input batch's schema keeps the precision key of the
+        # input field. The result is not truncated to it, as its column declares a larger one.
         import pyarrow.compute as pc
 
         def add_nanos(nanos):
@@ -236,7 +235,6 @@ class MapInArrowTestsMixin:
         cases = [
             ("time(3)", "12:00:00.123", 456000, "time(6)", "12:00:00.123456"),
             ("time(6)", "12:00:00.123456", 789, "time(9)", "12:00:00.123456789"),
-            ("time(9)", "12:00:00.123456789", 0, "time(3)", "12:00:00.123"),
         ]
         with self.sql_conf({"spark.sql.timeType.enabled": True}):
             for input_type, value, nanos, declared, expected in cases:

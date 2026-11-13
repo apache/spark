@@ -544,11 +544,12 @@ private[sql] object ArrowConverters extends Logging {
   }
 
   /**
-   * Convert an arrow batch container into an iterator of InternalRow.
+   * Convert an arrow batch container into an iterator of InternalRow. TIME values are truncated to
+   * the precision their field declares, which Spark and PySpark record when they write the batches.
    */
   private def vectorSchemaRootToIter(root: VectorSchemaRoot): Iterator[InternalRow] = {
     val columns = root.getFieldVectors.asScala.map { vector =>
-      new ArrowColumnVector(vector).asInstanceOf[ColumnVector]
+      ArrowColumnVector.withDeclaredTimePrecision(vector).asInstanceOf[ColumnVector]
     }.toArray
 
     val batch = new ColumnarBatch(columns)

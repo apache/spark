@@ -47,6 +47,8 @@ public class ArrowColumnVector extends ColumnVector {
 
   ArrowVectorAccessor accessor;
   ArrowColumnVector[] childColumns;
+  // See withDeclaredTimePrecision.
+  private boolean truncateTimeToDeclaredPrecision;
 
   public ValueVector getValueVector() { return accessor.vector; }
 
@@ -186,8 +188,24 @@ public class ArrowColumnVector extends ColumnVector {
   }
 
   public ArrowColumnVector(ValueVector vector) {
+    this(vector, false);
+  }
+
+  private ArrowColumnVector(ValueVector vector, boolean truncateTimeToDeclaredPrecision) {
     this(ArrowUtils.fromArrowField(vector.getField()));
+    this.truncateTimeToDeclaredPrecision = truncateTimeToDeclaredPrecision;
     initAccessor(vector);
+  }
+
+  /**
+   * Returns a column vector that truncates TIME values, also in nested fields, to the precision
+   * their Arrow field declares in the {@code SPARK::time::precision} metadata. Use it only for
+   * Arrow data that Spark wrote from a schema, such as Spark Connect local relations, PySpark Arrow
+   * batches for createDataFrame and the Arrow cache. Other producers, such as Python UDFs, can keep
+   * the metadata of an input field for values of another precision.
+   */
+  public static ArrowColumnVector withDeclaredTimePrecision(ValueVector vector) {
+    return new ArrowColumnVector(vector, true);
   }
 
   void initAccessor(ValueVector vector) {
@@ -231,17 +249,19 @@ public class ArrowColumnVector extends ColumnVector {
     } else if (vector instanceof TimeStampMicroVector timeStampMicroVector) {
       accessor = new TimestampNTZAccessor(timeStampMicroVector);
     } else if (vector instanceof TimeNanoVector timeNanoVector) {
-      accessor = new TimeNanoAccessor(timeNanoVector, declaredTimePrecision(timeNanoVector));
+      int precision = truncateTimeToDeclaredPrecision
+        ? declaredTimePrecision(timeNanoVector) : TimeType.MAX_PRECISION();
+      accessor = new TimeNanoAccessor(timeNanoVector, precision);
     } else if (vector instanceof TimeStampNanoTZVector timeStampNanoTZVector) {
       accessor = new TimestampLTZNanosAccessor(timeStampNanoTZVector, nanosPrecision(type));
     } else if (vector instanceof TimeStampNanoVector timeStampNanoVector) {
       accessor = new TimestampNTZNanosAccessor(timeStampNanoVector, nanosPrecision(type));
     } else if (vector instanceof MapVector mapVector) {
-      accessor = new MapAccessor(mapVector);
+      accessor = new MapAccessor(mapVector, truncateTimeToDeclaredPrecision);
     } else if (vector instanceof ListVector listVector) {
-      accessor = new ArrayAccessor<>(listVector);
+      accessor = new ArrayAccessor<>(listVector, truncateTimeToDeclaredPrecision);
     } else if (vector instanceof ListViewVector listViewVector) {
-      accessor = new ArrayAccessor<>(listViewVector);
+      accessor = new ArrayAccessor<>(listViewVector, truncateTimeToDeclaredPrecision);
     } else if (vector instanceof StructVector structVector) {
       if (ArrowUtils.isTimestampNanosStructField(structVector.getField())) {
         // Lossless struct representation of a nanosecond timestamp (ArrowUtils.toArrowField with
@@ -255,7 +275,8 @@ public class ArrowColumnVector extends ColumnVector {
 
         childColumns = new ArrowColumnVector[structVector.size()];
         for (int i = 0; i < childColumns.length; ++i) {
-          childColumns[i] = new ArrowColumnVector(structVector.getVectorById(i));
+          childColumns[i] = new ArrowColumnVector(
+            structVector.getVectorById(i), truncateTimeToDeclaredPrecision);
         }
       }
     } else if (vector instanceof NullVector nullVector) {
@@ -672,9 +693,10 @@ public class ArrowColumnVector extends ColumnVector {
 
   // Spark and PySpark record the TIME precision in the field metadata. A field without it reads as
   // TIME(6), but its values are kept as they are: the reader cannot know which digits are extra.
-  // TODO: TIME values in fields without the precision key, such as mapInArrow, Arrow UDF and Python
-  // data source results and data from older Spark Connect clients, still keep more digits than a
-  // TIME(0) to TIME(8) column holds, until each consumer applies its declared precision.
+  // TODO: TIME values that are not read through withDeclaredTimePrecision, such as mapInArrow,
+  // Arrow UDF and Python data source results, and values in fields without the precision key, such
+  // as data from older Spark Connect clients, still keep more digits than a TIME(0) to TIME(8)
+  // column holds, until each consumer applies its declared precision.
   private static int declaredTimePrecision(ValueVector vector) {
     scala.Option<Object> precision = ArrowUtils.declaredTimePrecision(vector.getField());
     return precision.isDefined() ? (Integer) precision.get() : TimeType.MAX_PRECISION();
@@ -793,10 +815,11 @@ public class ArrowColumnVector extends ColumnVector {
     private final T accessor;
     private final ArrowColumnVector arrayData;
 
-    ArrayAccessor(T vector) {
+    ArrayAccessor(T vector, boolean truncateTimeToDeclaredPrecision) {
       super(vector);
       this.accessor = vector;
-      this.arrayData = new ArrowColumnVector(vector.getDataVector());
+      this.arrayData =
+        new ArrowColumnVector(vector.getDataVector(), truncateTimeToDeclaredPrecision);
     }
 
     @Override
@@ -827,12 +850,14 @@ public class ArrowColumnVector extends ColumnVector {
     private final ArrowColumnVector keys;
     private final ArrowColumnVector values;
 
-    MapAccessor(MapVector vector) {
+    MapAccessor(MapVector vector, boolean truncateTimeToDeclaredPrecision) {
       super(vector);
       this.accessor = vector;
       StructVector entries = (StructVector) vector.getDataVector();
-      this.keys = new ArrowColumnVector(entries.getChild(MapVector.KEY_NAME));
-      this.values = new ArrowColumnVector(entries.getChild(MapVector.VALUE_NAME));
+      this.keys = new ArrowColumnVector(
+        entries.getChild(MapVector.KEY_NAME), truncateTimeToDeclaredPrecision);
+      this.values = new ArrowColumnVector(
+        entries.getChild(MapVector.VALUE_NAME), truncateTimeToDeclaredPrecision);
     }
 
     @Override

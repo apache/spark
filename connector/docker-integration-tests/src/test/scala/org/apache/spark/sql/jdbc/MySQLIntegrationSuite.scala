@@ -223,11 +223,11 @@ class MySQLIntegrationSuite extends SharedJDBCIntegrationSuite {
     withSQLConf(
         SQLConf.TIME_TYPE_ENABLED.key -> "true",
         SQLConf.LEGACY_JDBC_TIME_MAPPING_ENABLED.key -> "false") {
-      // MySQL Connector/J reports a scale of 0 for every TIME column, so MySQLDialect maps TIME
-      // to TIME(6), the largest fractional-seconds precision MySQL TIME supports.
+      // MySQL Connector/J reports a scale of 0 for every TIME column, so MySQLDialect takes the
+      // precision from the display width of the column.
       val df = spark.read.jdbc(jdbcUrl, "dates", new Properties).select("t", "t1")
-      assert(df.schema("t").dataType === TimeType(TimeType.MICROS_PRECISION))
-      assert(df.schema("t1").dataType === TimeType(TimeType.MICROS_PRECISION))
+      assert(df.schema("t").dataType === TimeType(0))
+      assert(df.schema("t1").dataType === TimeType(3))
       checkAnswer(df, Row(LocalTime.of(13, 31, 24), LocalTime.of(13, 31, 24, 123000000)))
       // A customSchema still truncates to the precision it names.
       Seq(

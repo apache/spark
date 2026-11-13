@@ -946,11 +946,11 @@ class ArrowColumnVectorSuite extends SparkFunSuite {
     allocator.close()
   }
 
-  test("TIME values are truncated to the precision their field declares") {
+  test("withDeclaredTimePrecision truncates TIME values to the precision their field declares") {
     val allocator = ArrowUtils.rootAllocator.newChildAllocator("time", 0, Long.MaxValue)
-    // A field from another Arrow producer, an older Spark Connect client or a mapInArrow result
-    // has no precision metadata. It reads as TIME(6), but its value is kept: the reader cannot
-    // know which digits are extra, e.g. for a TIME(9) column.
+    // A field from another Arrow producer or an older Spark Connect client has no precision
+    // metadata. It reads as TIME(6), but its value is kept: the reader cannot know which digits
+    // are extra, e.g. for a TIME(9) column.
     val foreignVector = new TimeNanoVector("t", allocator)
     val vectors = Seq(3, 6, 9).map { p =>
       ArrowUtils.toArrowField("t", TimeType(p), nullable = true, null)
@@ -964,11 +964,40 @@ class ArrowColumnVectorSuite extends SparkFunSuite {
         vector.allocateNew()
         vector.setSafe(0, 123456789L)
         vector.setValueCount(1)
-        val columnVector = new ArrowColumnVector(vector)
-        assert(columnVector.dataType === expectedType)
-        assert(columnVector.getLong(0) === expected, s"${columnVector.dataType}")
-        columnVector.close()
+        val truncating = ArrowColumnVector.withDeclaredTimePrecision(vector)
+        assert(truncating.dataType === expectedType)
+        assert(truncating.getLong(0) === expected, s"${truncating.dataType}")
+        // The constructor keeps the values: a producer such as a Python UDF can keep the precision
+        // metadata of an input field for values of another precision.
+        val keeping = new ArrowColumnVector(vector)
+        assert(keeping.dataType === expectedType)
+        assert(keeping.getLong(0) === 123456789L, s"${keeping.dataType}")
+        keeping.close()
     }
+
+    // Nested TIME fields follow the vector they are read through.
+    val structVector = ArrowUtils.toArrowField(
+      "s", new StructType().add("t", TimeType(3)), nullable = true, null)
+      .createVector(allocator).asInstanceOf[StructVector]
+    structVector.allocateNew()
+    structVector.getChild("t").asInstanceOf[TimeNanoVector].setSafe(0, 123456789L)
+    structVector.setIndexDefined(0)
+    structVector.setValueCount(1)
+    val listVector = ArrowUtils.toArrowField("a", ArrayType(TimeType(3)), nullable = true, null)
+      .createVector(allocator).asInstanceOf[ListVector]
+    listVector.allocateNew()
+    listVector.startNewValue(0)
+    listVector.getDataVector.asInstanceOf[TimeNanoVector].setSafe(0, 123456789L)
+    listVector.endValue(0, 1)
+    listVector.setValueCount(1)
+    assert(ArrowColumnVector.withDeclaredTimePrecision(structVector).getChild(0).getLong(0) ===
+      123000000L)
+    assert(new ArrowColumnVector(structVector).getChild(0).getLong(0) === 123456789L)
+    assert(ArrowColumnVector.withDeclaredTimePrecision(listVector).getArray(0).getLong(0) ===
+      123000000L)
+    assert(new ArrowColumnVector(listVector).getArray(0).getLong(0) === 123456789L)
+    structVector.close()
+    listVector.close()
     allocator.close()
   }
 

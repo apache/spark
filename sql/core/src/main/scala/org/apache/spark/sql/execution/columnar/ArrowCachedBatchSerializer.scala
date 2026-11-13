@@ -1342,11 +1342,13 @@ private class ArrowCachedBatchToColumnarBatchIterator(
 
     // When projected on load, the root already holds only the selected columns in output order,
     // so wrap its vectors directly. Otherwise it holds all cache columns and must be selected.
+    // The cache schema records each TIME precision, so TIME values are read truncated to it.
     val selectedColumns = if (canProjectOnLoad) {
-      root.getFieldVectors.asScala.map(v => new ArrowColumnVector(v)).toArray[ColumnVector]
+      root.getFieldVectors.asScala
+        .map(v => ArrowColumnVector.withDeclaredTimePrecision(v)).toArray[ColumnVector]
     } else {
       val allColumns = root.getFieldVectors.asScala.map { vector =>
-        new ArrowColumnVector(vector)
+        ArrowColumnVector.withDeclaredTimePrecision(vector)
       }.toArray[ColumnVector]
       columnIndices.map(allColumns(_))
     }
@@ -1453,7 +1455,7 @@ private object ArrowColumnReader {
         writer.write(ordinal, _accessor(rowIndex))
     }
     case t: TimeType => new ArrowColumnReader {
-      // Truncates like ArrowColumnVector, which the columnar scan of the same cached batch uses.
+      // Truncates like the columnar scan of the same cached batch.
       private val precision = t.precision
       private var _vector: TimeNanoVector = _
       def vector: FieldVector = _vector
