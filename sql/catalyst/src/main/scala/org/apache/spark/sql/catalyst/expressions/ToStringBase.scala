@@ -17,7 +17,7 @@
 
 package org.apache.spark.sql.catalyst.expressions
 
-import java.time.ZoneOffset
+import java.time.{ZoneId, ZoneOffset}
 
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.codegen._
@@ -29,7 +29,7 @@ import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.internal.SQLConf.BinaryOutputStyle
 import org.apache.spark.sql.types._
 import org.apache.spark.unsafe.UTF8StringBuilder
-import org.apache.spark.unsafe.types.{CalendarInterval, UTF8String}
+import org.apache.spark.unsafe.types.{CalendarInterval, UTF8String, VariantVal}
 import org.apache.spark.util.ArrayImplicits._
 import org.apache.spark.util.SparkStringUtils
 
@@ -100,6 +100,8 @@ trait ToStringBase { self: UnaryExpression with TimeZoneAwareExpression =>
       acceptAny[Long](t => UTF8String.fromString(timestampFormatter.format(t)))
     case TimestampNTZType =>
       acceptAny[Long](t => UTF8String.fromString(timestampNTZFormatter.format(t)))
+    case VariantType =>
+      acceptAny[VariantVal](v => UTF8String.fromString(v.toJson(zoneId)))
     case ArrayType(et, _) =>
       acceptAny[ArrayData](array => {
         val builder = new UTF8StringBuilder
@@ -268,6 +270,11 @@ trait ToStringBase { self: UnaryExpression with TimeZoneAwareExpression =>
           ctx.addReferenceObj("timestampNTZFormatter", timestampNTZFormatter),
           timestampNTZFormatter.getClass)
         (c, evPrim) => code"$evPrim = UTF8String.fromString($tf.format($c));"
+      case VariantType =>
+        val zid = JavaCode.global(
+          ctx.addReferenceObj("zoneId", zoneId, classOf[ZoneId].getName),
+          classOf[ZoneId])
+        (c, evPrim) => code"$evPrim = UTF8String.fromString($c.toJson($zid));"
       case _: AnyTimestampNanoType =>
         // Route nanosecond timestamp cast-to-string through the Types Framework: emit a runtime
         // call into the ops reference object. The cast's session zone is threaded into the lookup
