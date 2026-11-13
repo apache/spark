@@ -653,6 +653,7 @@ object FunctionRegistry {
     expressionBuilder("to_timestamp", ParseToTimestampExpressionBuilder),
     expression[ParseToDate]("to_date"),
     expression[TimeDiff]("time_diff"),
+    expression[TimeFormat]("time_format"),
     expression[ToTime]("to_time"),
     expression[ToUnixTimestamp]("to_unix_timestamp"),
     expression[ToUTCTimestamp]("to_utc_timestamp"),
