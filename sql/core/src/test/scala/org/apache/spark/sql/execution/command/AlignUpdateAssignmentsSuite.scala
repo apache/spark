@@ -609,9 +609,14 @@ class AlignUpdateAssignmentsSuite extends AlignAssignmentsSuiteBase {
 
   test("legacy mode assignments") {
     withSQLConf(SQLConf.STORE_ASSIGNMENT_POLICY.key -> StoreAssignmentPolicy.LEGACY.toString) {
-      assertAnalysisException(
-        "UPDATE nested_struct_table SET s.n_s = named_struct('dn_i', 1)",
-        "LEGACY store assignment policy is disallowed in Spark data source V2")
+      val e = intercept[AnalysisException] {
+        parseAndResolve("UPDATE nested_struct_table SET s.n_s = named_struct('dn_i', 1)")
+      }
+      checkError(
+        exception = e,
+        condition = "UNSUPPORTED_STORE_ASSIGNMENT_POLICY",
+        parameters = Map("configKey" -> "\"spark.sql.storeAssignmentPolicy\"")
+      )
     }
   }
 
