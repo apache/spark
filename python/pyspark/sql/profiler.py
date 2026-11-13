@@ -152,10 +152,16 @@ class WorkerSamplingProfiler:
         self,
         task_context: "TaskContext",
         sampling_interval: float = 100,
+        aggregation: str = "stage",
     ) -> None:
-        self._callstack_data: dict[int, dict] = {}
+        # Keyed by thread name, so that threads from different tasks can be merged.
+        self._callstack_data: dict[str, dict] = {}
+        # Thread names by thread id, kept across samples: a thread is removed from
+        # threading.enumerate() before its last frames are gone.
+        self._thread_names: dict[int, str] = {}
         self._task_context = task_context
         self._sampling_interval = sampling_interval
+        self._aggregation = aggregation
         self._sampling_thread: Optional[threading.Thread] = None
         self._stop_event = threading.Event()
 
@@ -186,19 +192,25 @@ class WorkerSamplingProfiler:
     def _sample_loop(self) -> None:
         self_tid = threading.get_ident()
         while not self._stop_event.wait(self._sampling_interval / 1000):
-            for tid, frame in sys._current_frames().items():
+            # Take the frames first, then update the names, so that a thread started in
+            # between is found. A reused thread id gets the new thread's name.
+            frames = sys._current_frames()
+            self._thread_names.update(
+                (t.ident, t.name) for t in threading.enumerate() if t.ident is not None
+            )
+            for tid, frame in frames.items():
                 if tid != self_tid:
-                    self._add_sample(tid, frame)
+                    self._add_sample(self._thread_names.get(tid, str(tid)), frame)
 
-    def _add_sample(self, tid: int, frame: Optional[FrameType]) -> None:
-        if tid not in self._callstack_data:
-            self._callstack_data[tid] = {}
+    def _add_sample(self, thread_name: str, frame: Optional[FrameType]) -> None:
+        if thread_name not in self._callstack_data:
+            self._callstack_data[thread_name] = {}
         frames: list[FrameType] = []
         while frame is not None:
             frames.append(frame)
             frame = frame.f_back
 
-        d = self._callstack_data[tid]
+        d = self._callstack_data[thread_name]
         for f in reversed(frames):
             ident = self._get_ident_from_frame(f)
             if ident not in d:
@@ -211,8 +223,31 @@ class WorkerSamplingProfiler:
         return f"{code.co_qualname} ({code.co_filename}:{code.co_firstlineno})"
 
     def _get_task_key(self) -> str:
+        # The "sampling_" prefix keeps these keys apart from the other profilers' keys,
+        # which are UDF result ids (int) or worker module names.
         tc = self._task_context
-        return f"{tc.stageId()}_{tc.partitionId()}.{tc.attemptNumber()}_{tc.taskAttemptId()}"
+        if self._aggregation == "query":
+            # Each micro-batch of a streaming query is its own SQL execution, so prefer the
+            # streaming query id to group all of them together. Neither id is set when the
+            # UDF does not run in a SQL query, e.g. under `df.rdd`.
+            query_id = tc.getLocalProperty("sql.streaming.queryId") or tc.getLocalProperty(
+                "spark.sql.execution.root.id"
+            )
+            return f"sampling_query_{query_id if query_id is not None else 'unknown'}"
+        elif self._aggregation == "stage":
+            return f"sampling_stage_{tc.stageId()}"
+        elif self._aggregation == "task":
+            # Stage ids are unique in the application, so this identifies a task. All
+            # attempts of the task, e.g. retries, are merged together.
+            return f"sampling_task_{tc.stageId()}_{tc.partitionId()}"
+        else:
+            raise PySparkValueError(
+                errorClass="VALUE_NOT_ALLOWED",
+                messageParameters={
+                    "arg_name": "spark.sql.pyspark.udf.profiler.samplingAggregation",
+                    "allowed_values": str(["query", "stage", "task"]),
+                },
+            )
 
 
 class WorkerPerfProfiler:
