@@ -599,6 +599,33 @@ mod tests {
     }
 
     #[test]
+    fn the_sdk_resolves_the_columns_again_when_a_batch_reorders_them() {
+        let id = Field::new("id", DataType::Int64, false);
+        let flag = Field::new("flag", DataType::Boolean, false);
+        let flags = || Arc::new(BooleanArray::from(vec![true, false]));
+        let first = RecordBatch::try_new(
+            Arc::new(Schema::new(vec![id.clone(), flag.clone()])),
+            vec![Arc::new(Int64Array::from(vec![3, 5])), flags()],
+        )
+        .unwrap();
+        let second = RecordBatch::try_new(
+            Arc::new(Schema::new(vec![flag, id.clone()])),
+            vec![flags(), Arc::new(Int64Array::from(vec![7, 9]))],
+        )
+        .unwrap();
+        let expected = Arc::new(Schema::new(vec![id]));
+        let exported = export_with(reader_of(vec![first, second]), &expected);
+        let mut stream = ArrowArrayStreamReader::try_new(exported).unwrap();
+        for ids in [vec![3, 5], vec![7, 9]] {
+            let read = stream.next().unwrap().unwrap();
+            assert_eq!(read.schema(), expected);
+            let column = read.column(0).as_any().downcast_ref::<Int64Array>();
+            assert_eq!(column, Some(&Int64Array::from(ids)));
+        }
+        assert!(stream.next().is_none());
+    }
+
+    #[test]
     fn get_next_may_read_the_first_batch_before_get_schema() {
         let mut stream = export(reader());
         let mut array = FFI_ArrowArray::empty();

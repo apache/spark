@@ -65,7 +65,7 @@ impl DataSource for RangeSource {
     type MicroBatchStream = RangeStream; // streaming reads, by new_micro_batch_stream
     type BatchWrite = Unsupported; // no batch writes
     type StreamingWrite = Unsupported; // no streaming writes
-    // new, schema, new_scan, and new_micro_batch_stream
+    // new, infer_schema, new_scan, and new_micro_batch_stream
 }
 ```
 

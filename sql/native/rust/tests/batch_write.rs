@@ -97,6 +97,7 @@ impl DataSource for Source {
         match self.capabilities.as_str() {
             "none" => Capabilities::empty(),
             "append" => Capabilities::all().without(Capabilities::BATCH_TRUNCATE),
+            "no_batch_write" => Capabilities::all().without(Capabilities::BATCH_WRITE),
             _ => Capabilities::all(),
         }
     }
@@ -544,7 +545,13 @@ fn write_types_and_options_control_capabilities() {
     assert!(library.create_writer.is_some());
     assert!(library.write.is_some());
 
-    for (capabilities, expected) in [("", 4 | 16), ("append", 4), ("none", 0)] {
+    // Truncation goes with the write that supports it.
+    for (capabilities, expected) in [
+        ("", 4 | 16),
+        ("append", 4),
+        ("none", 0),
+        ("no_batch_write", 0),
+    ] {
         let (source, mask) = source(library, "", capabilities);
         assert_eq!(mask, expected);
         for mode in [0, 1] {

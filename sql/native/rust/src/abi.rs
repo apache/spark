@@ -910,6 +910,48 @@ mod tests {
     }
 
     #[test]
+    fn initialization_checks_the_abi_version_and_reads_only_the_fields_of_the_host() {
+        // Fails when it receives a Spark version, to show whether initialize read it.
+        fn init(host: &HostInfo) -> Result<()> {
+            match &host.spark_version {
+                None => Ok(()),
+                Some(version) => Err(format!("init received Spark {version}").into()),
+            }
+        }
+        fn error() -> String {
+            let error = unsafe { CStr::from_ptr(last_error()) };
+            error.to_str().unwrap().to_owned()
+        }
+        // SAFETY: the table has only numbers and nullable function pointers.
+        let table = unsafe { MaybeUninit::<SparkDsLibrary>::zeroed().assume_init() };
+        let library: &'static SparkDsLibrary = Box::leak(Box::new(table));
+        let mut host = SparkDsHost {
+            size: size_of::<SparkDsHost>() as i64,
+            abi_version: 0,
+            spark_version: c"4.4.0".as_ptr(),
+            log: None,
+            is_log_enabled: None,
+        };
+        let mut output: *const SparkDsLibrary = library;
+        assert_ne!(unsafe { initialize(&host, &mut output, library, init) }, 0);
+        assert!(output.is_null(), "an older host receives no table");
+        assert_eq!(
+            error(),
+            format!("host ABI 0 does not support ABI {ABI_VERSION}")
+        );
+
+        host.abi_version = ABI_VERSION;
+        assert_ne!(unsafe { initialize(&host, &mut output, library, init) }, 0);
+        assert_eq!(error(), "init received Spark 4.4.0");
+
+        // A host whose size ends after abi_version passes no Spark version, even though a
+        // valid pointer follows in memory.
+        host.size = (offset_of!(SparkDsHost, abi_version) + size_of::<i32>()) as i64;
+        assert_eq!(unsafe { initialize(&host, &mut output, library, init) }, 0);
+        assert!(std::ptr::eq(output, library));
+    }
+
+    #[test]
     fn create_info_carries_the_source_name_and_options() {
         let keys = [c"path".as_ptr()];
         let values = [c"/tmp/data".as_ptr()];

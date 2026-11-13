@@ -1005,7 +1005,12 @@ mod tests {
         // The output mode complete replaces the output of the previous micro-batches.
         commit_epoch(&source, "query", WriteMode::Truncate, 2, vec![Some(6)]);
         assert_eq!(committed_rows(&directory.0), rows(&[6]));
-        assert_eq!(read_manifest(&directory.0).unwrap().epochs["query"], 2);
+        // The epochs of the other queries survive a truncate and a batch write.
+        let epochs = BTreeMap::from([("other".to_owned(), 0), ("query".to_owned(), 2)]);
+        assert_eq!(read_manifest(&directory.0).unwrap().epochs, epochs);
+        commit_ids(&source, WriteMode::Append, vec![Some(7)]);
+        assert_eq!(committed_rows(&directory.0), rows(&[6, 7]));
+        assert_eq!(read_manifest(&directory.0).unwrap().epochs, epochs);
     }
 
     #[test]
