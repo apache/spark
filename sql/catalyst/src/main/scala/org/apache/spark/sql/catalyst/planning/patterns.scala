@@ -74,8 +74,14 @@ trait OperationHelper extends AliasHelper with PredicateHelper {
         //   1) no Project collected so far or the collected Projects are all deterministic
         //   2) this filter does not repeat any expensive expressions from the collected
         //      projects.
+        //   3) this filter does not use the result of a Python UDF of the collected projects.
+        //      The projects still evaluate the UDF, and `ExtractPythonUDFs` shares an evaluation
+        //      only within one operator, so the filter would evaluate it a second time.
+        val usesPythonUDF = condition.references.exists { attr =>
+          aliases.get(attr).exists(_.child.exists(_.isInstanceOf[PythonUDF]))
+        }
         val canPushFilterThroughProject = fields.forall(_.forall(_.deterministic)) &&
-          canCollapseExpressions(Seq(condition), aliases, alwaysInline)
+          canCollapseExpressions(Seq(condition), aliases, alwaysInline) && !usesPythonUDF
         if (canPushFilterThroughProject) {
           // Ideally we can't combine non-deterministic filters, but if `collectAllFilters` is true,
           // we relax this restriction and assume the caller will take care of it.
