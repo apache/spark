@@ -366,13 +366,10 @@ case class CreateSQLFunctionCommand(
       case e: SubqueryExpression => collectTempFunctions(e.plan)
       case e: UnresolvedFunction if isTemporaryFunctionName(catalog, e.nameParts) =>
         Seq(e.nameParts.last)
-      // An IDENTIFIER-clause call with a constant name: check the call it builds. The body
-      // has already been analyzed, so the name evaluates.
-      case e: ExpressionWithUnresolvedIdentifier
-          if !legacyTempFunctionCheck && e.identifierExpr.resolved =>
-        val nameParts = IdentifierResolution.evalIdentifierExpr(e.identifierExpr)
-        e.exprBuilder(nameParts, e.otherExprs) match {
-          case f: UnresolvedFunction if isTemporaryFunctionName(catalog, f.nameParts) =>
+      // An IDENTIFIER-clause call: check the call it builds from its constant name.
+      case e: ExpressionWithUnresolvedIdentifier if !legacyTempFunctionCheck =>
+        identifierNameParts(analyzer, e.identifierExpr).map(e.exprBuilder(_, e.otherExprs)) match {
+          case Some(f: UnresolvedFunction) if isTemporaryFunctionName(catalog, f.nameParts) =>
             Seq(f.nameParts.last)
           case _ => Seq.empty
         }
@@ -389,8 +386,7 @@ case class CreateSQLFunctionCommand(
     def collectTempFunctions(child: LogicalPlan): Seq[String] = {
       child.flatMap {
         case w: UnresolvedWith if !w.resolved => w.innerChildren.flatMap(collectTempFunctions)
-        // A qualified temp table function call. Resolution's recorded names cover the others,
-        // and the legacy flag does not re-allow this form, which earlier versions rejected.
+        // A qualified temp table function call. Resolution's recorded names cover the others.
         case u: UnresolvedTableValuedFunction =>
           val qualified = if (u.name.length > 1 && isTemporaryFunctionName(catalog, u.name)) {
             Seq(u.name.last)
@@ -411,6 +407,26 @@ case class CreateSQLFunctionCommand(
   private def legacyTempFunctionCheck: Boolean =
     conf.getConf(SQLConf.LEGACY_ALLOW_TEMP_FUNCTION_IN_PERSISTED_SQL_FUNCTION)
 
+  // The name an IDENTIFIER clause evaluates to, resolved and evaluated as the body's analysis
+  // did. None when it is not a constant string.
+  private def identifierNameParts(analyzer: Analyzer, expr: Expression): Option[Seq[String]] =
+    try {
+      val resolved = if (expr.resolved) {
+        Some(expr)
+      } else {
+        // A fresh context keeps the names its lookups record out of this statement's context.
+        AnalysisContext.withNewAnalysisContext {
+          analyzer.execute(Project(Seq(Alias(expr, "name")()), OneRowRelation()))
+        } match {
+          case Project(Seq(a: Alias), _) if a.resolved => Some(a.child)
+          case _ => None
+        }
+      }
+      resolved.map(IdentifierResolution.evalIdentifierExpr)
+    } catch {
+      case _: AnalysisException => None
+    }
+
   // Whether `nameParts` (unqualified, or `session.` / `system.session.`-qualified) names a temp
   // function.
   private def isTemporaryFunctionName(catalog: SessionCatalog, nameParts: Seq[String]): Boolean =
@@ -419,8 +435,18 @@ case class CreateSQLFunctionCommand(
       // Check the in-memory registry first: the lookup may probe the metastore.
       case _ =>
         catalog.identifierFromSystemNameParts(nameParts).exists(catalog.isTemporaryFunction) &&
-          functionIdentifierForLookup(catalog, nameParts).exists(_._2)
+          functionIdentifierForLookup(catalog, nameParts).exists(_._2) &&
+          // Legacy: earlier versions took a `session.f` call to be the persistent `session.f`
+          // whenever that function existed.
+          !(legacyTempFunctionCheck && nameParts.length == 2 &&
+            persistentFunctionExists(catalog, nameParts.asFunctionIdentifier))
     }
+
+  // Check the registry first: a loaded persistent function needs no metastore call.
+  private def persistentFunctionExists(
+      catalog: SessionCatalog,
+      ident: FunctionIdentifier): Boolean =
+    catalog.isRegisteredFunction(ident) || catalog.isPersistentFunction(ident)
 
   // The identifier to look up `nameParts` by, and whether it is in a system namespace. A
   // `builtin.` / `session.` name follows function resolution's candidate order. None for another
@@ -435,16 +461,13 @@ case class CreateSQLFunctionCommand(
         Some(FunctionIdentifier(f, Some(db), Some(CatalogManager.SESSION_CATALOG_NAME)))
       case _ => None
     }
-    // Check the registry first: a loaded persistent function needs no metastore call.
-    def persistentFunctionExists(ident: FunctionIdentifier): Boolean =
-      catalog.isRegisteredFunction(ident) || catalog.isPersistentFunction(ident)
     def systemFunctionExists(ident: FunctionIdentifier): Boolean =
       catalog.lookupFunctionInfoByIdentifier(ident, tableFunction = false).isDefined ||
         catalog.lookupFunctionInfoByIdentifier(ident, tableFunction = true).isDefined
     catalog.identifierFromSystemNameParts(nameParts) match {
       case Some(ident) if nameParts.length > 2 ||
           (conf.prioritizeSystemCatalog && systemFunctionExists(ident)) ||
-          !persistentFunctionExists(persistentIdent.get) =>
+          !persistentFunctionExists(catalog, persistentIdent.get) =>
         Some((ident, true))
       case _ => persistentIdent.map((_, false))
     }
@@ -507,7 +530,7 @@ case class CreateSQLFunctionCommand(
       plan: LogicalPlan): Unit = {
 
     // Returns `functionIdentifierForLookup`'s result when `nameParts` names a SQL function, and
-    // None otherwise.
+    // None otherwise. A missing function outside the system namespace makes the lookup throw.
     def sqlFunctionIdentifier(
         nameParts: Seq[String],
         tableFunction: Boolean): Option[(FunctionIdentifier, Boolean)] =

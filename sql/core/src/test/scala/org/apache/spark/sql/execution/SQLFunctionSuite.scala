@@ -610,6 +610,10 @@ class SQLFunctionSuite extends SharedSparkSession {
         "CREATE FUNCTION perm_fn() RETURNS INT RETURN system.session.temp_fn()",
         "CREATE FUNCTION perm_fn() RETURNS INT RETURN IDENTIFIER('temp_fn')()",
         "CREATE FUNCTION perm_fn() RETURNS INT RETURN IDENTIFIER('session.temp_fn')() + 1",
+        "CREATE FUNCTION perm_fn() RETURNS INT RETURN IDENTIFIER(concat('temp', '_fn'))()",
+        "CREATE FUNCTION perm_fn() RETURNS INT RETURN IDENTIFIER(lower('TEMP_FN'))()",
+        "CREATE FUNCTION perm_fn() RETURNS INT RETURN (SELECT a FROM temp_tbl())",
+        "CREATE FUNCTION perm_fn() RETURNS INT RETURN (SELECT a FROM IDENTIFIER('temp_tbl')())",
         "CREATE FUNCTION perm_fn() RETURNS TABLE (a INT) RETURN SELECT * FROM temp_tbl()",
         "CREATE FUNCTION perm_fn() RETURNS TABLE (a INT) RETURN SELECT * FROM session.temp_tbl()",
         "CREATE FUNCTION perm_fn() RETURNS TABLE (a INT) " +
@@ -618,6 +622,13 @@ class SQLFunctionSuite extends SharedSparkSession {
       ).foreach { ddl =>
         val e = intercept[AnalysisException](sql(ddl))
         assert(e.getCondition == "INVALID_TEMP_OBJ_REFERENCE", s"$ddl: ${e.getMessage}")
+      }
+      withUserDefinedFunction("temp_built" -> true, "perm_built" -> false) {
+        sql("CREATE TEMPORARY FUNCTION temp_built() RETURNS INT " +
+          "RETURN IDENTIFIER(concat('temp', '_fn'))()")
+        checkAnswer(sql("SELECT temp_built()"), Row(1))
+        sql("CREATE FUNCTION perm_built() RETURNS INT RETURN IDENTIFIER(concat('ab', 's'))(-1)")
+        checkAnswer(sql("SELECT perm_built()"), Row(1))
       }
       // The legacy flag re-allows only the forms earlier versions accepted at creation.
       val legacyKey = SQLConf.LEGACY_ALLOW_TEMP_FUNCTION_IN_PERSISTED_SQL_FUNCTION.key
@@ -629,8 +640,10 @@ class SQLFunctionSuite extends SharedSparkSession {
               s"RETURN SELECT * FROM $call")
             checkAnswer(sql("SELECT * FROM perm_legacy_tbl()"), Row(1))
           }
-          sql("CREATE FUNCTION perm_legacy() RETURNS INT RETURN IDENTIFIER('temp_fn')()")
-          checkAnswer(sql("SELECT perm_legacy()"), Row(1))
+          Seq("IDENTIFIER('temp_fn')()", "IDENTIFIER(concat('temp', '_fn'))()").foreach { call =>
+            sql(s"CREATE OR REPLACE FUNCTION perm_legacy() RETURNS INT RETURN $call")
+            checkAnswer(sql("SELECT perm_legacy()"), Row(1))
+          }
           Seq(
             "RETURNS INT RETURN temp_fn()",
             "RETURNS INT RETURN session.temp_fn()",
@@ -651,6 +664,11 @@ class SQLFunctionSuite extends SharedSparkSession {
         }
         assert(e.getCondition == "INVALID_TEMP_OBJ_REFERENCE", e.getMessage)
         assert(e.getMessageParameters.get("tempObjName") == "`temp_tbl`", e.getMessage)
+        val scalar = intercept[AnalysisException] {
+          sql("CREATE FUNCTION perm_outer() RETURNS INT RETURN (SELECT a FROM perm_legacy_tbl())")
+        }
+        assert(scalar.getCondition == "INVALID_TEMP_OBJ_REFERENCE", scalar.getMessage)
+        assert(scalar.getMessageParameters.get("tempObjName") == "`temp_tbl`", scalar.getMessage)
       }
     }
   }
@@ -746,6 +764,10 @@ class SQLFunctionSuite extends SharedSparkSession {
         // By default the temp function owns `session.sf`.
         val e = intercept[AnalysisException](sql(createPerm))
         assert(e.getCondition == "INVALID_TEMP_OBJ_REFERENCE", e.getMessage)
+        // Earlier versions took it to be the persistent function, as the legacy flag does.
+        withSQLConf(SQLConf.LEGACY_ALLOW_TEMP_FUNCTION_IN_PERSISTED_SQL_FUNCTION.key -> "true") {
+          sql(createPerm)
+        }
         withSQLConf(SQLConf.PERSISTENT_CATALOG_FIRST.key -> "true") {
           // The persistent function owns it.
           sql(createPerm)
@@ -769,12 +791,24 @@ class SQLFunctionSuite extends SharedSparkSession {
             "RETURN SELECT * FROM session.pt()")
         }
         assert(cycle.getCondition == "CYCLIC_FUNCTION_REFERENCE", cycle.getMessage)
+        withSQLConf(SQLConf.LEGACY_ALLOW_TEMP_FUNCTION_IN_PERSISTED_SQL_FUNCTION.key -> "true") {
+          sql(createPerm)
+        }
         withSQLConf(SQLConf.PERSISTENT_CATALOG_FIRST.key -> "true") {
           sql(createPerm)
           checkAnswer(sql("SELECT * FROM perm_pt()"), Row(3))
         }
       }
     }
+  }
+
+  test("SPARK-60805: a call to another catalog's function is left to analysis") {
+    val query = intercept[AnalysisException](sql("SELECT no_such_cat.ns.f()"))
+    val create = intercept[AnalysisException] {
+      sql("CREATE FUNCTION perm_cat() RETURNS INT RETURN no_such_cat.ns.f()")
+    }
+    assert(create.getCondition == query.getCondition, create.getMessage)
+    assert(create.getCondition != "IDENTIFIER_TOO_MANY_NAME_PARTS", create.getMessage)
   }
 
   test("SPARK-60805: a catalog-qualified cycle is detected under case-sensitive analysis") {
