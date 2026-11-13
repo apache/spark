@@ -115,6 +115,7 @@ options for deployment:
 * [PySpark](api/python/getting_started/index.html): processing data with Spark in Python
 * [Spark SQL CLI](sql-distributed-sql-engine-spark-sql-cli.html): processing data with SQL on the command line
 * [Declarative Pipelines](declarative-pipelines-programming-guide.html): building data pipelines that create and maintain multiple tables
+  * [Declarative Pipelines Quick Start](declarative-pipelines-quick-start.html): install, create, run and query a first pipeline
 
 **API Docs:**
 

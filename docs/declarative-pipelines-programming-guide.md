@@ -43,7 +43,7 @@ A quick way to install SDP is with pip:
 pip install "pyspark[pipelines]"
 ```
 
-See the [downloads page](https://spark.apache.org/downloads.html) for more installation options.
+See the [downloads page](https://spark.apache.org/downloads.html) for more installation options, and the [Quick Start](declarative-pipelines-quick-start.html) for a step-by-step walkthrough from installation to a running pipeline.
 
 ## Key Concepts
 
