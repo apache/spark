@@ -19,7 +19,6 @@ package org.apache.spark.sql.execution.columnar
 
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.{Attribute, AttributeMap, AttributeReference, UnsafeArrayData, UnsafeMapData, UnsafeRow}
-import org.apache.spark.sql.catalyst.util.DateTimeUtils
 import org.apache.spark.sql.types._
 import org.apache.spark.unsafe.types.{BinaryView, TimestampNanosVal, UTF8String}
 
@@ -206,41 +205,6 @@ private[columnar] final class LongColumnStats extends ColumnStats {
 
   override def collectedStatistics: Array[Any] =
     Array[Any](lower, upper, nullCount, count, sizeInBytes)
-}
-
-/**
- * Statistics for a TIME(p) column of the Arrow cache. The cache keeps the values it is given, which
- * can have more than p fractional digits (e.g. values read from ORC files written before
- * SPARK-61087), but its scans return them truncated to p digits. The bounds are truncated the same
- * way so that batch pruning agrees with the scans. Truncation keeps order, so the truncated bounds
- * are the bounds of the truncated values.
- */
-private[columnar] final class TimeColumnStats(precision: Int) extends ColumnStats {
-  protected var upper = Long.MinValue
-  protected var lower = Long.MaxValue
-
-  override def gatherStats(row: InternalRow, ordinal: Int): Unit = {
-    if (!row.isNullAt(ordinal)) {
-      val value = row.getLong(ordinal)
-      if (value > upper) upper = value
-      if (value < lower) lower = value
-      sizeInBytes += LONG.defaultSize
-      count += 1
-    } else {
-      gatherNullStats()
-    }
-  }
-
-  override def collectedStatistics: Array[Any] = {
-    if (count > nullCount) {
-      Array[Any](
-        DateTimeUtils.truncateTimeToPrecision(lower, precision),
-        DateTimeUtils.truncateTimeToPrecision(upper, precision),
-        nullCount, count, sizeInBytes)
-    } else {
-      Array[Any](lower, upper, nullCount, count, sizeInBytes)
-    }
-  }
 }
 
 private[columnar] final class FloatColumnStats extends ColumnStats {

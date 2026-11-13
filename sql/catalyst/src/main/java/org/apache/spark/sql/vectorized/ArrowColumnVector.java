@@ -200,9 +200,9 @@ public class ArrowColumnVector extends ColumnVector {
   /**
    * Returns a column vector that truncates TIME values, also in nested fields, to the precision
    * their Arrow field declares in the {@code SPARK::time::precision} metadata. Use it only for
-   * Arrow data that Spark wrote from a schema, such as Spark Connect local relations, PySpark Arrow
-   * batches for createDataFrame and the Arrow cache. Other producers, such as Python UDFs, can keep
-   * the metadata of an input field for values of another precision.
+   * Arrow data that Spark wrote from a schema, such as Spark Connect local relations and PySpark
+   * Arrow batches for createDataFrame. Other producers, such as Python UDFs, can keep the metadata
+   * of an input field for values of another precision.
    */
   public static ArrowColumnVector withDeclaredTimePrecision(ValueVector vector) {
     return new ArrowColumnVector(vector, true);

@@ -2991,8 +2991,8 @@ class TypesTestsMixin:
 
     def test_time_type_python_objects_truncate_to_precision(self):
         # SPARK-61087: a datetime.time carries microseconds, which TIME(0) to TIME(5) do not hold.
-        # A time in the first two seconds of the day reaches the JVM as an int, a later one as a
-        # long.
+        # A time before about 00:00:02.147 (Int.MaxValue nanoseconds) reaches the JVM as an int, a
+        # later one as a long.
         from pyspark.sql.functions import udf
 
         cases = [

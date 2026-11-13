@@ -996,8 +996,26 @@ class ArrowColumnVectorSuite extends SparkFunSuite {
     assert(ArrowColumnVector.withDeclaredTimePrecision(listVector).getArray(0).getLong(0) ===
       123000000L)
     assert(new ArrowColumnVector(listVector).getArray(0).getLong(0) === 123456789L)
+    val mapVector = ArrowUtils.toArrowField(
+      "m", MapType(TimeType(3), TimeType(3)), nullable = true, null)
+      .createVector(allocator).asInstanceOf[MapVector]
+    mapVector.allocateNew()
+    mapVector.startNewValue(0)
+    val entries = mapVector.getDataVector.asInstanceOf[StructVector]
+    entries.getChild(MapVector.KEY_NAME).asInstanceOf[TimeNanoVector].setSafe(0, 123456789L)
+    entries.getChild(MapVector.VALUE_NAME).asInstanceOf[TimeNanoVector].setSafe(0, 223456789L)
+    entries.setIndexDefined(0)
+    mapVector.endValue(0, 1)
+    mapVector.setValueCount(1)
+    val truncatedMap = ArrowColumnVector.withDeclaredTimePrecision(mapVector).getMap(0)
+    assert(truncatedMap.keyArray.getLong(0) === 123000000L)
+    assert(truncatedMap.valueArray.getLong(0) === 223000000L)
+    val keptMap = new ArrowColumnVector(mapVector).getMap(0)
+    assert(keptMap.keyArray.getLong(0) === 123456789L)
+    assert(keptMap.valueArray.getLong(0) === 223456789L)
     structVector.close()
     listVector.close()
+    mapVector.close()
     allocator.close()
   }
 
