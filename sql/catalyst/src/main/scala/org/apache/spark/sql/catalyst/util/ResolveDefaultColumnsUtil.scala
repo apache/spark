@@ -351,10 +351,15 @@ object ResolveDefaultColumns extends QueryErrorsBase
     val defaultSQL = field.metadata.getString(EXISTS_DEFAULT_COLUMN_METADATA_KEY)
 
     val parsedExpr = Try {
-      val parsed = Literal.fromSQLWithCanonicalEscaping(defaultSQL)
-      // External expressions, including resolved casts containing functions, retain session
-      // parsing. Recognizing a resolved cast alone does not establish literal serialization.
-      if (isSerializedLiteral(parsed)) parsed else Literal.fromSQL(defaultSQL)
+      if (!SQLConf.get.escapedStringLiterals) {
+        // The session parser already uses canonical escaping in this mode.
+        Literal.fromSQL(defaultSQL)
+      } else {
+        val parsed = Literal.fromSQLWithCanonicalEscaping(defaultSQL)
+        // External expressions, including resolved casts containing functions, retain session
+        // parsing. Recognizing a resolved cast alone does not establish literal serialization.
+        if (isSerializedLiteral(parsed)) parsed else Literal.fromSQL(defaultSQL)
+      }
     }
     val resolvedExpr = parsedExpr match {
       case Success(expr) if useFullAnalysis =>
