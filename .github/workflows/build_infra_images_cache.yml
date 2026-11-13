@@ -52,7 +52,19 @@ on:
   workflow_dispatch:
 jobs:
   main:
-    if: github.repository == 'apache/spark'
+    if: >-
+      github.repository == 'apache/spark' &&
+      (
+        github.event_name != 'create' ||
+        (
+          github.ref_type == 'branch' &&
+          (github.ref_name == 'master' || startsWith(github.ref_name, 'branch-'))
+        ) ||
+        (
+          github.ref_type == 'tag' &&
+          startsWith(github.ref_name, 'v')
+        )
+      )
     runs-on: ubuntu-latest
     timeout-minutes: 180
     permissions:
