@@ -635,28 +635,54 @@ object PullupCorrelatedPredicates extends Rule[LogicalPlan] with PredicateHelper
    * expressions, aggregate functions whose result does not depend on the order of the rows, and
    * leaves other than a CTE that is not inlined (which may be a non-deterministic one; a
    * CTERelationRef does not tell) and a streaming source, for which the domain joins fail. It
-   * also checks the plans of the subqueries in `input`. Anything else, e.g. a LIMIT, a window
-   * function, a sample or a FIRST, keeps the previous handling.
+   * also checks the plans of the subqueries in `input`. Anything else, e.g. a LIMIT (other than
+   * over rows of constants), a window function, a sample or a FIRST, keeps the previous
+   * handling.
    */
-  private def repeatableInput(input: LogicalPlan): Boolean = !input.exists { p =>
-    val known = p match {
-      case _: Project | _: Filter | _: Join | _: Union | _: Distinct | _: Intersect | _: Except |
-           _: Sort | _: SubqueryAlias | _: RepartitionOperation => true
-      case a: Aggregate => !a.aggregateExpressions.exists(_.exists {
-        case ae: AggregateExpression => !orderIrrelevant(ae.aggregateFunction)
+  private def repeatableInput(input: LogicalPlan, inSubquery: Boolean = false): Boolean =
+    !input.exists { p =>
+      val known = p match {
+        case _: Project | _: Filter | _: Join | _: Union | _: Distinct | _: Intersect | _: Except |
+             _: Sort | _: SubqueryAlias | _: RepartitionOperation | _: LateralJoin => true
+        // The domain join of a subquery of an operator in `input` takes its domain from the input
+        // of that operator, which this check accepts too. Directly in `input`, its domain comes
+        // from outside the plan this rule sees.
+        case _: DomainJoin => inSubquery
+        // E.g. the LIMIT 1 that RewriteNonCorrelatedExists adds for an uncorrelated EXISTS.
+        case l @ (_: LocalLimit | _: GlobalLimit) => constantOutput(l.children.head)
+        case a: Aggregate => !a.aggregateExpressions.exists(_.exists {
+          case ae: AggregateExpression => !orderIrrelevant(ae.aggregateFunction)
+          case _ => false
+        })
+        case _: CTERelationRef => false
+        case l: LeafNode => !l.isStreaming
         case _ => false
-      })
-      case _: CTERelationRef => false
-      case l: LeafNode => !l.isStreaming
-      case _ => false
+      }
+      !known || !p.expressions.forall(_.deterministic) ||
+        !p.subqueries.forall(repeatableInput(_, inSubquery = true))
     }
-    !known || !p.expressions.forall(_.deterministic) || !p.subqueries.forall(repeatableInput)
+
+  // Whether every row of `plan` is the same row of constants, so that a LIMIT over it gives the
+  // same rows whichever rows it keeps.
+  private def constantOutput(plan: LogicalPlan): Boolean = plan match {
+    case Project(projectList, _) => projectList.forall {
+      case Alias(child, _) => child.foldable
+      case e => e.foldable
+    }
+    case l @ (_: LocalLimit | _: GlobalLimit) => constantOutput(l.children.head)
+    case _ => false
   }
 
+  // Whether `f` gives the same value when computed again over the same rows in another order.
+  // This is stricter than EliminateSorts.isOrderIrrelevantAggFunction, which only needs the
+  // result not to depend on a Sort below the aggregate: floating-point addition is not
+  // associative, so neither a SUM of floating-point values nor an AVG of anything but decimals
+  // and ANSI intervals, which AVG adds up as DOUBLE, nor a CentralMomentAgg qualifies.
   private def orderIrrelevant(f: AggregateFunction): Boolean = f match {
     case _: Min | _: Max | _: Count | _: BitAndAgg | _: BitOrAgg | _: BitXorAgg => true
-    case _: Sum | _: Average => !f.children.exists(c =>
-      c.dataType == FloatType || c.dataType == DoubleType)
+    case _: Sum => !f.children.exists(c => c.dataType == FloatType || c.dataType == DoubleType)
+    case _: Average => f.children.forall(c =>
+      c.dataType.isInstanceOf[DecimalType] || c.dataType.isInstanceOf[AnsiIntervalType])
     case _ => false
   }
 
@@ -666,23 +692,41 @@ object PullupCorrelatedPredicates extends Rule[LogicalPlan] with PredicateHelper
    * OptimizeSubqueries optimizes it), may put something into its outer input that gives other
    * rows when computed again, through the rules that run before RewriteCorrelatedScalarSubquery
    * builds the domain joins: PushDownPredicates can push a filter or join condition there, and
-   * LimitPushDown a LIMIT, into the inputs of a join or, for a LIMIT 1, below an aggregate. The
-   * check is conservative and looks at all of `root`.
+   * LimitPushDown a LIMIT, into the inputs of some joins or, for a LIMIT 1, below a group-only
+   * aggregate (see limitMayBePushedIn). The check is conservative and looks at all of `root`.
    */
   private def mayMoveIntoOuterInput(root: LogicalPlan, exprId: ExprId): Boolean =
     root.exists {
       case p @ (_: Filter | _: Join) =>
         !p.expressions.forall(_.deterministic) || p.expressions.exists(_.exists {
-          case s: SubqueryExpression => s.exprId != exprId && !repeatableInput(s.plan)
+          case s: SubqueryExpression =>
+            s.exprId != exprId && !repeatableInput(s.plan, inSubquery = true)
           case _ => false
         })
-      case l @ (_: LocalLimit | _: GlobalLimit | _: Offset | _: Tail) => l.exists {
-        case _: Join | _: Aggregate | _: Distinct | _: Intersect | _: Except | _: Deduplicate =>
-          true
-        case _ => false
-      }
+      case l @ LocalLimit(limitExpr, child) =>
+        limitMayBePushedIn(child, limitExpr == Literal(1))
       case _ => false
     }
+
+  // Whether LimitPushDown can push a LIMIT above `plan` (a LIMIT 1 if `one`) into the input of a
+  // join or below a group-only aggregate in it, following its cases: through a UNION ALL, an
+  // OFFSET and a Project over a join, into the sides of an outer join with a condition that it
+  // keeps the rows of, and into a join without a condition, and, for a LIMIT 1, below a
+  // group-only aggregate, which a DISTINCT, INTERSECT, EXCEPT or Deduplicate becomes.
+  private def limitMayBePushedIn(plan: LogicalPlan, one: Boolean): Boolean = plan match {
+    case u: Union => u.children.exists(limitMayBePushedIn(_, one))
+    case o: Offset => limitMayBePushedIn(o.child, one = false)
+    case Project(_, j: Join) => limitMayBePushedIn(j, one)
+    case j: Join => (j.joinType, j.condition) match {
+      case (LeftOuter | RightOuter, Some(_)) => true
+      case (_: InnerLike | LeftOuter | RightOuter | FullOuter | LeftSemi | LeftAnti, None) => true
+      case _ => false
+    }
+    case Project(_, child) if one => limitMayBePushedIn(child, one)
+    case a: Aggregate => one && a.groupOnly
+    case _: Distinct | _: Intersect | _: Except | _: Deduplicate => one
+    case _ => false
+  }
 
   private def rewriteSubQueries(plan: LogicalPlan, root: LogicalPlan): LogicalPlan = {
     /**
@@ -726,7 +770,7 @@ object PullupCorrelatedPredicates extends Rule[LogicalPlan] with PredicateHelper
         // than before: where the outer input may give other rows when computed again (see
         // repeatableInput and mayMoveIntoOuterInput), and for outer references that are not
         // orderable, for which the domain joins fail.
-        lazy val domainJoinsWork = plan.children.forall(repeatableInput) &&
+        lazy val domainJoinsWork = plan.children.forall(repeatableInput(_)) &&
           !mayMoveIntoOuterInput(root, exprId) &&
           outerAttrs.forall(e => RowOrdering.isOrderable(e.dataType))
         lazy val onlyDefaultResultSelectsDecorrelation =

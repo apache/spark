@@ -3500,6 +3500,26 @@ class SubquerySuite extends SharedSparkSession
     }
   }
 
+  test("SPARK-60501: outer inputs that give the same rows again get the fix") {
+    withTempView("b", "o") {
+      spark.range(3).selectExpr("id k", "id v").createOrReplaceTempView("b")
+      spark.range(4).selectExpr("id k").createOrReplaceTempView("o")
+      val subquery = "(SELECT COUNT(*) FROM (SELECT MAX(b.v) FROM b WHERE b.k = o.k))"
+      // k = 3 has no rows in b, and COUNT(*) over the MAX is 1 for it: under a LIMIT over an
+      // aggregate or an inner join, with an uncorrelated EXISTS, a subquery decorrelated with a
+      // domain join, and a LATERAL join in the outer input.
+      Seq(s"SELECT o.k, $subquery FROM (SELECT k, SUM(k) s FROM o GROUP BY k) o LIMIT 21",
+          s"SELECT o.k, $subquery FROM o JOIN (SELECT k j FROM o) p ON o.k = p.j LIMIT 21",
+          s"SELECT o.k, $subquery FROM o WHERE EXISTS (SELECT 1 FROM b)",
+          s"SELECT o.k, $subquery FROM (SELECT o.*, (SELECT MAX(b.v) FROM b WHERE b.k > o.k) mx " +
+            "FROM o) o",
+          s"SELECT o.k, $subquery FROM (SELECT o.k, l.m FROM o, LATERAL (SELECT MAX(b.v) m " +
+            "FROM b WHERE b.k = o.k) l) o").foreach { query =>
+        checkAnswer(sql(query), (0 until 4).map(k => Row(k, 1)))
+      }
+    }
+  }
+
   test("SPARK-60501: outer references that are not orderable keep the count bug handling of " +
       "before, and a map lookup that is pulled out gets the fix") {
     withTempView("b") {

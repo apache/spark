@@ -213,19 +213,34 @@ class PullupCorrelatedPredicatesSuite extends PlanTest {
     }
     assert(countBugHandling(correlated(max($"d")), above = _.limit(10)) == (Some(false), true))
     // Only operators and aggregate functions known to give the same rows again: FIRST, a SUM of
-    // DOUBLEs, a Deduplicate (which becomes a FIRST later) and a subquery with a LIMIT in a
-    // projection do not, a SUM of INTs does.
+    // DOUBLEs, an AVG of INTs (which AVG adds up as DOUBLE), a Deduplicate (which becomes a FIRST
+    // later) and a subquery with a LIMIT in a projection do not, a SUM of INTs and the LIMIT 1
+    // of an uncorrelated EXISTS do.
     val inLegacy = (Some(true), false)
     val inDecorrelation = (Some(false), true)
     Seq(testRelation.groupBy($"a")($"a", first($"b").as("f")),
         testRelation.groupBy($"a")($"a", sum($"b").as("s")),
+        testRelation.groupBy($"a")($"a", avg($"a").as("m")),
         Deduplicate(Seq($"a"), testRelation),
         testRelation.select($"a", ScalarSubquery(testRelation2.select($"c").limit(1)).as("x"))
     ).foreach { outer =>
       assert(countBugHandling(correlated(max($"d")), outer = outer) == inLegacy, outer)
     }
-    assert(countBugHandling(correlated(max($"d")),
-      outer = testRelation.groupBy($"a")($"a", sum($"a").as("s"))) == inDecorrelation)
+    val groupedOuter = testRelation.groupBy($"a")($"a", sum($"a").as("s"))
+    assert(countBugHandling(correlated(max($"d")), outer = groupedOuter) == inDecorrelation)
+    val uncorrelatedExists =
+      IsNotNull(ScalarSubquery(testRelation2.select(Literal(1).as("col")).limit(1)))
+    assert(countBugHandling(correlated(max($"d")), outer = testRelation.where(uncorrelatedExists))
+      == inDecorrelation)
+    // LimitPushDown pushes a LIMIT other than 1 neither below an aggregate nor into an inner join
+    // with a condition.
+    assert(countBugHandling(correlated(max($"d")), outer = groupedOuter, above = _.limit(21)) ==
+      inDecorrelation)
+    assert(countBugHandling(correlated(max($"d")), outer = groupedOuter, above = _.limit(1)) ==
+      inDecorrelation)
+    val innerOuter = testRelation.join(testRelation2, Inner, Some($"a" === $"c"))
+    assert(countBugHandling(correlated(max($"d")), outer = innerOuter, above = _.limit(21)) ==
+      inDecorrelation)
     // Above the subquery: a LIMIT 1 above a DISTINCT, which LimitPushDown can push below it, and
     // a filter with a subquery that may give other rows, which PushDownPredicates can push, but
     // not a deterministic filter.
