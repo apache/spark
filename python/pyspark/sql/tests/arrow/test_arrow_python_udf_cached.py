@@ -187,6 +187,27 @@ class ArrowPythonUDFCachedInputTests(ReusedSQLTestCase):
         finally:
             df.unpersist()
 
+    def test_udf_on_cached_geospatial_columns(self):
+        # The cache keeps the WKB of GEOMETRY and GEOGRAPHY values as created, here big-endian,
+        # and tags those fields, so the columnar path converts them instead of forwarding them
+        # verbatim. The UDF then sees the same little-endian WKB as without the cache.
+        big_endian = "00000000013FF00000000000004000000000000000"
+        little_endian = "0101000000000000000000F03F0000000000000040"
+        df = self.spark.sql(
+            f"SELECT ST_GeomFromWKB(X'{big_endian}', 4326) AS g, "
+            f"ST_GeogFromWKB(X'{big_endian}') AS h"
+        )
+        to_hex = udf(lambda v: v.getBytes().hex().upper(), "string")
+        expected = [Row(little_endian, little_endian)]
+        assertDataFrameEqual(df.select(to_hex(col("g")), to_hex(col("h"))), expected)
+        df = df.cache()
+        try:
+            result = df.select(to_hex(col("g")), to_hex(col("h")))
+            self._assert_columnar_arrow_eval(result, expected_nodes=1)
+            assertDataFrameEqual(result, expected)
+        finally:
+            df.unpersist()
+
 
 if __name__ == "__main__":
     from pyspark.testing import main
