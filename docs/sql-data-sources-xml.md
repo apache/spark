@@ -184,7 +184,14 @@ Data source options of XML can be set via:
   <tr>
     <td><code>dateFormat</code></td>
     <td><code>yyyy-MM-dd</code></td>
-    <td>Sets the string that indicates a date format. Custom date formats follow the formats at <a href="https://spark.apache.org/docs/latest/sql-ref-datetime-pattern.html"> datetime pattern</a>. This applies to date type.</td>
+    <td>Sets the string that indicates a date format. Custom date formats follow the formats at <a href="https://spark.apache.org/docs/latest/sql-ref-datetime-pattern.html"> datetime pattern</a>. This applies to date type.
+    With <code>spark.sql.legacy.timeParserPolicy=LEGACY</code>, an explicit format and a Gregorian
+    <code>locale</code>, XML date reads try ISO dates before this pattern for spark-xml compatibility.
+    Non-Gregorian calendars continue to use the configured pattern. Writes still use this pattern,
+    so ISO-ambiguous formats such as <code>yyyy-dd-MM</code> do not necessarily round-trip under
+    <code>LEGACY</code>. <code>CORRECTED</code> and <code>EXCEPTION</code> keep configured-format
+    precedence; <code>EXCEPTION</code> does not report differences when both interpretations
+    successfully parse.</td>
     <td>read/write</td>
   </tr>
 
