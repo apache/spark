@@ -3738,4 +3738,17 @@ class CollectionExpressionsSuite
       checkEvaluation(ElementAt(a, Literal(Int.MinValue), None, failOnError = false), null)
     }
   }
+
+  test("SPARK-61552: array_insert with a foldable position that fails to evaluate") {
+    // `ConstantFolding` leaves such a position in a conditional branch. Only a row that evaluates
+    // the position should fail, also in generated code.
+    withSQLConf(SQLConf.ANSI_ENABLED.key -> "true") {
+      val arr = BoundReference(0, ArrayType(IntegerType), nullable = true)
+      val pos = Cast(Divide(Literal(1.0), Literal(0.0)), IntegerType)
+      val e = ArrayInsert(arr, pos, Literal(1), legacyNegativeIndex = false)
+      val expr = If(IsNull(arr), Literal.create(null, e.dataType), e)
+      checkEvaluation(expr, null, create_row(null))
+      checkExceptionInExpression[ArithmeticException](expr, create_row(Seq(2)), "DIVIDE_BY_ZERO")
+    }
+  }
 }

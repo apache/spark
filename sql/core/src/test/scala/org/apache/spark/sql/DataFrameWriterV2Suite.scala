@@ -279,6 +279,19 @@ class DataFrameWriterV2Suite extends SharedSparkSession with BeforeAndAfter {
       Seq(Row(1L, "a"), Row(2L, "b"), Row(4L, "d"), Row(5L, "e"), Row(6L, "f")))
   }
 
+  test("SPARK-61504: Overwrite: overwrite by expression on a CHAR column") {
+    spark.sql(
+      "CREATE TABLE testcat.table_name (id bigint, dep char(8)) USING foo PARTITIONED BY (dep)")
+    spark.sql("INSERT INTO testcat.table_name VALUES (1L, 'hr'), (2L, 'software')")
+
+    // the query is not resolved when the command is created, unlike the query of a SQL INSERT
+    Seq((3L, "hr")).toDF("id", "dep").writeTo("testcat.table_name").overwrite($"dep" === "hr")
+
+    checkAnswer(
+      spark.table("testcat.table_name"),
+      Seq(Row(2L, "software"), Row(3L, "hr      ")))
+  }
+
   test("Overwrite: write to a temp view of v2 relation") {
     spark.sql("CREATE TABLE testcat.table_name (id bigint, data string) USING foo")
     spark.table("source").writeTo("testcat.table_name").append()

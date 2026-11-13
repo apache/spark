@@ -101,9 +101,9 @@ case class GetJsonObject(json: Expression, path: Expression)
 
   protected def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
     val evaluatorClass = classOf[GetJsonObjectEvaluator].getName
-    val initEvaluator = path.foldable match {
-      case true if path.eval() != null =>
-        val cachedPath = path.eval().asInstanceOf[UTF8String]
+    val foldablePath = ExprUtils.tryEvalFoldable(path)
+    val initEvaluator = foldablePath match {
+      case Some(cachedPath) if cachedPath != null =>
         val refCachedPath = ctx.addReferenceObj("cachedPath", cachedPath)
         s"new $evaluatorClass($refCachedPath)"
       case _ => s"new $evaluatorClass()"
@@ -122,7 +122,7 @@ case class GetJsonObject(json: Expression, path: Expression)
          |  $evaluator.setJson(${jsonEval.value});
          |}
          |""".stripMargin
-    val setPath = if (!path.foldable) {
+    val setPath = if (foldablePath.isEmpty) {
       s"""
          |if (${pathEval.isNull}) {
          |  $evaluator.setPath(null);
@@ -1356,6 +1356,13 @@ object ImplicitlyFormattedAsJson {
     case _ => false
   }
 
+  /** Drops the `Alias`es that [[splicesThroughCollationCast]] sees through, for SQL rendering. */
+  private[sql] def stripAliases(e: Expression): Expression = e match {
+    case a: Alias => stripAliases(a.child)
+    case c: Collate => c.copy(child = stripAliases(c.child))
+    case _ => e
+  }
+
   private def isAnalyzerCollationCast(c: Cast): Boolean = {
     // The default-collation rules only recolor a string producer of the default `StringType`, and
     // never mark the cast user-specified or recolored. `string(...)` has no user mark, but it wraps
@@ -1672,7 +1679,11 @@ case class JsonArray(
       case i: ImplicitlyFormattedAsJson => i.emitsImplicitJsonText
       case _ => false
     }
-    val valuesSQL = values.zip(formatJson).map { case (v, isJson) =>
+    // `Alias.sql` renders `AS name`, which cannot precede `FORMAT JSON`.
+    val rendered = values.zip(formatJson).map { case (v, isJson) =>
+      (if (isJson) ImplicitlyFormattedAsJson.stripAliases(v) else v, isJson)
+    }
+    val valuesSQL = rendered.map { case (v, isJson) =>
       // Emit SQL that reparses to the same splice/quote decision as the frozen `formatJson` flag.
       // The parser splices a value iff it is an explicit `FORMAT JSON` or a lexically-nested JSON
       // constructor (see `AstBuilder.visitJsonArray`), so the rendering depends on the flag and the
@@ -1711,7 +1722,7 @@ case class JsonArray(
     // Add `RETURNING STRING` so a clause-free render still means the built-in when reparsed (a
     // clause-free call, even a nested one, could bind a shadow). A rendered FORMAT JSON, null, or
     // RETURNING clause already does that.
-    val rendersFormatJson = values.zip(formatJson).exists {
+    val rendersFormatJson = rendered.exists {
       case (v, isJson) => isJson && !directlyImplicit(v)
     }
     val ownershipClause =
@@ -2783,7 +2794,9 @@ case class JsonObjectExpr(
   private[sql] def sqlString(
       forceBuiltinOwnership: Boolean,
       renderChild: Expression => String): String = {
-    val membersSQL = members.zip(rawJson).map { case ((k, v), raw) =>
+    val membersSQL = members.zip(rawJson).map { case ((k, child), raw) =>
+      // `Alias.sql` renders `AS name`, which cannot precede `FORMAT JSON`.
+      val v = if (raw) ImplicitlyFormattedAsJson.stripAliases(child) else child
       // Render SQL that reparses to the frozen `raw` flag, regardless of optimizer rewrites of the
       // child:
       //  - raw + child still a bare implicit producer (bare, or under a pass-through COLLATE):
