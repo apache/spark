@@ -39,6 +39,7 @@ jobs:
   schedule:
     if: github.repository == 'apache/spark'
     runs-on: ubuntu-latest
+    timeout-minutes: 10
     env:
       GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
       SCALA213_CRON: *scala213_cron

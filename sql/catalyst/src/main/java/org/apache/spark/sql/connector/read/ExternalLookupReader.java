@@ -65,24 +65,27 @@ public interface ExternalLookupReader extends Closeable {
    *   => row 0 has two matches, row 1 is a miss, row 2 has one match
    * }</pre>
    * Spark guarantees that {@code uniqueParameters} is non-null and holds between 1 and
-   * {@link ExternalLookup#maxParameterRowsPerRequest()} rows, none of them null. Field {@code i}
-   * of each row is the value for the {@code i}-th selected predicate, in Spark's internal
-   * representation: an integral or BOOLEAN value as its Java primitive; DECIMAL as a
-   * {@code Decimal} at the column's precision and scale; DATE as days since 1970-01-01 in the
-   * proleptic Gregorian calendar; TIMESTAMP as microseconds since 1970-01-01 00:00:00 UTC;
-   * TIMESTAMP_NTZ as microseconds since 1970-01-01 00:00:00 of the local date and time, with no
-   * time zone; BINARY as its bytes; and STRING as UTF-8 bytes, compared byte by byte. A conversion
-   * that loses precision, such as to milliseconds, can lose matches.
+   * {@link ExternalLookup#maxParameterRowsPerRequest()} rows, none of them null. When a selected
+   * predicate is a range comparison whose parameter reads a stream column, each request holds
+   * exactly one parameter row. Field {@code i} of each row is the value for the {@code i}-th
+   * selected predicate, in Spark's internal representation: an integral or BOOLEAN value as its
+   * Java primitive; DECIMAL as a {@code Decimal} at the column's precision and scale; DATE as days
+   * since 1970-01-01 in the proleptic Gregorian calendar; TIMESTAMP as microseconds since
+   * 1970-01-01 00:00:00 UTC; TIMESTAMP_NTZ as microseconds since 1970-01-01 00:00:00 of the local
+   * date and time, with no time zone; BINARY as its bytes; and STRING as UTF-8 bytes, compared
+   * byte by byte. A conversion that loses precision, such as to milliseconds, can lose matches.
    * No two rows are equal; a null {@code <=>} parameter equals a null. Only {@code <=>} parameters
-   * may be null at the top level.
+   * may be null at the top level, and a null one matches the rows whose column is null.
    * <p>
-   * The cursor must be non-null. Each row's results must be complete, with no cap and no row lost
-   * to paging, and depend only on the row; Spark may reuse them for equal rows. A stored row that
-   * matches several parameter rows is returned once with each of their ordinals, and equal stored
-   * rows are each returned. A source that matches more loosely than Spark may also return pairs
-   * of a row and a parameter row that do not match; Spark drops them. Spark checks the selected
-   * predicates on every returned row, but cannot find a missing one. The input is read-only and
-   * must not be kept after the cursor closes.
+   * The cursor must be non-null. Each row's results must be complete: every stored row that
+   * passes the filters this source reports as pushed and for which all selected predicates hold,
+   * under Spark semantics, with no cap and no row lost to paging. They may omit a row that fails a
+   * pushed filter. They depend only on the row; Spark may reuse them for equal rows. A stored row
+   * that matches several parameter rows is returned once with each of their ordinals, and equal
+   * stored rows are each returned. A source that matches more loosely than Spark may also return
+   * pairs of a row and a parameter row that do not match; Spark drops them. Spark checks the
+   * selected predicates on every returned row, but cannot find a missing one. The input is
+   * read-only and must not be kept after the cursor closes.
    * <p>
    * When Spark closes the returned cursor, also at the end of the task, is stated in the
    * documentation of this interface.

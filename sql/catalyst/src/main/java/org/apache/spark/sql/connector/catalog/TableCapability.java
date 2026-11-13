@@ -169,9 +169,11 @@ public enum TableCapability {
    * implement {@link org.apache.spark.sql.connector.read.Scan#toExternalLookup()}.
    * <p>
    * A table that supports both batch reads and lookups reports both {@link #BATCH_READ} and this
-   * capability. A table that reports this capability without {@link #BATCH_READ} is lookup-only,
-   * and its provider should have no V1 read path, such as {@code RelationProvider}, because which
-   * of the two Spark uses depends on how the table is reached:
+   * capability. Spark reads such a table by lookups only in a stream-static join whose lookup
+   * side carries the {@code EXTERNAL_LOOKUP} hint, and by batch scans when no hint opts a join
+   * in. A table that reports this capability without {@link #BATCH_READ} is lookup-only and needs
+   * no hint. Its provider should have no V1 read path, such as {@code RelationProvider}, because
+   * which of the two Spark uses depends on how the table is reached:
    * <ul>
    *   <li>{@code spark.read} and {@code CREATE TEMPORARY VIEW ... USING} fail for such a
    *   provider.</li>

@@ -20,6 +20,8 @@ package org.apache.spark.sql.catalyst.expressions
 import java.text.{DecimalFormat, DecimalFormatSymbols, ParsePosition}
 import java.util.Locale
 
+import scala.util.control.NonFatal
+
 import org.apache.spark.sql.catalyst.analysis._
 import org.apache.spark.sql.catalyst.analysis.TypeCheckResult
 import org.apache.spark.sql.catalyst.analysis.TypeCheckResult.{DataTypeMismatch, TypeCheckSuccess}
@@ -93,6 +95,23 @@ object ExprUtils extends EvalHelper with QueryErrorsBase {
       throw QueryCompilationErrors.keyValueInMapNotStringError(m)
     case _ =>
       throw QueryCompilationErrors.nonMapFunctionNotAllowedError()
+  }
+
+  /**
+   * Returns the value, possibly null, of a foldable expression, or None if the expression is not
+   * foldable or fails to evaluate. `ConstantFolding` keeps a foldable expression that fails to
+   * evaluate in a conditional branch, which no row may reach. An expression that uses the value
+   * of such a child once, e.g. in generated code, should evaluate the child for each row instead,
+   * so that the error is raised only when a row evaluates it, as in `eval`.
+   */
+  def tryEvalFoldable(exp: Expression): Option[Any] = if (exp.foldable) {
+    try {
+      Some(exp.eval())
+    } catch {
+      case NonFatal(_) => None
+    }
+  } else {
+    None
   }
 
   /**
