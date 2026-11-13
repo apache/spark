@@ -21,7 +21,7 @@ import org.apache.spark.api.python.PythonEvalType
 import org.apache.spark.sql.catalyst.analysis.EliminateSubqueryAliases
 import org.apache.spark.sql.catalyst.dsl.expressions._
 import org.apache.spark.sql.catalyst.dsl.plans._
-import org.apache.spark.sql.catalyst.expressions.{Alias, Collate, CreateArray, Expression, GetArrayItem, Literal, PythonUDF, Rand, ResolvedCollation, Substring, UpdateFields}
+import org.apache.spark.sql.catalyst.expressions.{Alias, Collate, CreateArray, ElementAt, Expression, GetArrayItem, Literal, PythonUDF, Rand, ResolvedCollation, Substring, UpdateFields}
 import org.apache.spark.sql.catalyst.plans.PlanTest
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.rules.RuleExecutor
@@ -135,6 +135,36 @@ class CollapseProjectSuite extends PlanTest {
 
     val optimized = Optimize.execute(query)
     comparePlans(optimized, query)
+  }
+
+  test("SPARK-60406: do not collapse project if non-cheap expressions are referenced with " +
+      "different qualifiers") {
+    val lower = testRelation.select(($"a" + 1).as("a_plus_1")).analyze
+    val aPlus1 = lower.output.head
+    val query = Project(
+      Seq(Alias(aPlus1 + aPlus1.withQualifier(Seq("t")), "a_2_plus_2")()),
+      lower)
+    comparePlans(Optimize.execute(query), query)
+
+    val aggregate = testRelation.groupBy($"a")(($"a" + 1).as("a_plus_1")).analyze
+    val aggregateOutput = aggregate.output.head
+    val queryOverAggregate = Project(
+      Seq(Alias(aggregateOutput + aggregateOutput.withQualifier(Seq("t")), "a_2_plus_2")()),
+      aggregate)
+    comparePlans(Optimize.execute(queryOverAggregate), queryOverAggregate)
+  }
+
+  test("SPARK-60406: do not collapse project if a collection creation expression is accessed " +
+      "non-cheaply with different qualifiers") {
+    val lower = testRelation.select(CreateArray(Seq($"a" + 1, $"b" + 1)).as("arr")).analyze
+    val arr = lower.output.head
+    def read(arr: Expression, i: Int): Expression = ElementAt(arr, Literal(i))
+    val query = Project(
+      Seq(
+        Alias(read(arr, 1), "first")(),
+        Alias(read(arr.withQualifier(Seq("t")), 2), "second")()),
+      lower)
+    comparePlans(Optimize.execute(query), query)
   }
 
   test("SPARK-39699: collapse project with collection creation expressions") {
