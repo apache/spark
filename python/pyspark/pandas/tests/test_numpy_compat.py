@@ -978,6 +978,61 @@ class NumPyCompatTestsMixin:
             psdf = ps.from_pandas(pdf)
             self.assert_eq(np.signbit(psdf.a), np.signbit(pdf.a))
 
+    def test_np_floor_special_values(self):
+        import math
+
+        values = [
+            np.inf,
+            -np.inf,
+            np.nan,
+            1e20,
+            -1e20,
+            1e100,
+            -1e100,
+            2.7,
+            -2.7,
+            0.2,
+            -0.2,
+            0.0,
+            -0.0,
+            float(2**52),
+            -float(2**52),
+        ]
+
+        for dtype in ("float64", "float32"):
+            pser = pd.Series(values, dtype=dtype)
+            expected = np.floor(pser)
+            actual = np.floor(ps.from_pandas(pser)).to_pandas()
+
+            for expected_value, actual_value in zip(expected, actual):
+                if pd.isna(expected_value):
+                    self.assertTrue(pd.isna(actual_value))
+                else:
+                    self.assertEqual(expected_value, actual_value)
+                    if expected_value == 0.0:
+                        self.assertEqual(
+                            math.copysign(1.0, expected_value),
+                            math.copysign(1.0, actual_value),
+                        )
+
+    def test_np_floor_preserves_decimal_and_integer_values(self):
+        cases = [
+            pd.Series(
+                [
+                    Decimal("12345678901234567890.75"),
+                    Decimal("-12345678901234567890.25"),
+                    Decimal("2.75"),
+                ]
+            ),
+            pd.Series([7, -3, 0]),
+        ]
+
+        for pser in cases:
+            expected = np.floor(pser)
+            actual = np.floor(ps.from_pandas(pser)).to_pandas()
+
+            self.assertEqual(list(expected), list(actual))
+
     def test_np_spark_compat_series(self):
         from pyspark.pandas.numpy_compat import binary_np_spark_mappings, unary_np_spark_mappings
 
