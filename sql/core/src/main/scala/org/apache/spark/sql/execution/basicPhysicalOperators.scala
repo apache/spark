@@ -283,7 +283,11 @@ trait GeneratePredicateHelper extends PredicateHelper {
    * The caller binds `otherPreds` against the output with the checked columns, those of
    * `nonNullAttrExprIds`, tightened to non-nullable, in `boundOtherPreds`. `subExprStates` holds
    * the states of the common subexpressions to eliminate from `boundOtherPreds`, if any. The
-   * caller must have evaluated the input variables they read before this code.
+   * caller must have generated them with the code of the input columns hidden, so no state
+   * carries a column's code: inline a state would embed a copy of it, and split it would move it
+   * to `exprCodesNeedEvaluate`, which is dropped. This code then loads each column itself, before
+   * the first check or conjunct that reads it, and a state after the loads of the conjunct that
+   * first references it (4).
    *
    * The conjuncts are generated one by one, loading a column only when it is needed, so that a
    * FALSE conjunct skips the rest. This is very perf sensitive. The invariants:
@@ -506,28 +510,39 @@ case class FilterExec(condition: Expression, child: SparkPlan)
     val numOutput = metricTerm(ctx, "numOutputRows")
 
     // Eliminate the common subexpressions of `otherPreds` only when one of them is not cheap,
-    // per `CollapseProject.isCheap`. Elimination has a cost: the input columns of `otherPreds`
-    // are all evaluated at the top of the row loop, below, while without it each column is
-    // loaded lazily, just before the first conjunct that needs it, and not at all on a row that
-    // an earlier conjunct drops. Sharing a cheap subexpression, such as the struct field of
-    // `s.x > 5 AND s.x < 100`, does not pay for that. A column that conjuncts share is never a
-    // common subexpression, as `EquivalentExpressions` skips leaf expressions.
-    // `subexpressionElimination.filterExec.enabled` turns this off independently of
-    // subexpression elimination elsewhere.
+    // per `CollapseProject.isCheap`. Elimination has a cost: a state adds a local variable, or
+    // with the split above `methodSplitThreshold` a method and two mutable fields, per common
+    // subexpression. Sharing a cheap subexpression, such as the struct field of
+    // `s.x > 5 AND s.x < 100`, does not pay for that, since computing it again is a slot read.
+    // A column that conjuncts share is never a common subexpression, as `EquivalentExpressions`
+    // skips leaf expressions. `subexpressionElimination.filterExec.enabled` turns this off
+    // independently of subexpression elimination elsewhere.
     val eliminateSubExprs = conf.subexpressionEliminationEnabled &&
       conf.subexpressionEliminationFilterExecEnabled && otherPreds.nonEmpty &&
       otherPredsEquivalentExpressions.getCommonSubexpressions.exists(!CollapseProject.isCheap(_))
 
-    val (inputVarsEvalCode, subExprStates) = if (eliminateSubExprs) {
-      // Evaluate the input variables before the states are generated: generating a state takes
-      // the code of the input variables it reads, and the conjuncts read the same variables.
-      val otherPredInputAttrs = AttributeSet(otherPreds.flatMap(_.references))
-      val evalCode = evaluateRequiredVariables(child.output, input, otherPredInputAttrs)
+    val subExprStates = if (eliminateSubExprs) {
+      // Generating a state takes the code of the input columns it reads: inline it embeds a copy,
+      // which the conjunct that reads the column would then declare again, and split it moves the
+      // code to `exprCodesNeedEvaluate`, which this does not emit, so the column is never
+      // declared. The conjuncts read the same columns. Hide the code from the state generation
+      // and put it back after, so `generatePredicateCode` loads each column lazily, just before
+      // the first conjunct that reads it, and not on a row that an earlier conjunct drops, rather
+      // than all at the top of the row loop. `.toIndexedSeq` forces the snapshot now, while the
+      // code is still there: `input` can be a lazy sequence (a `LazyList` that `consume` forced
+      // but whose `map` defers each element again), and a lazy `map` would read each column's
+      // code only during the restore below, after it has been blanked.
+      val inputCode = input.map(_.code).toIndexedSeq
+      input.foreach(_.code = EmptyBlock)
       val subExprs =
         ctx.subexpressionEliminationForWholeStageCodegen(otherPredsEquivalentExpressions)
-      (evalCode, subExprs.states)
+      input.zip(inputCode).foreach { case (ev, code) => ev.code = code }
+      // Every input column's code was hidden, so no column was hoisted to be evaluated before the
+      // states; `generatePredicateCode` loads them all.
+      assert(subExprs.exprCodesNeedEvaluate.isEmpty)
+      subExprs.states
     } else {
-      ("", Map.empty[ExpressionEquals, SubExprEliminationState])
+      Map.empty[ExpressionEquals, SubExprEliminationState]
     }
 
     val predicateCode = generatePredicateCode(
@@ -546,7 +561,6 @@ case class FilterExec(condition: Expression, child: SparkPlan)
     // Note: wrap in "do { } while (false);", so the generated checks can jump out with "continue;"
     s"""
        |do {
-       |  $inputVarsEvalCode
        |  $predicateCode
        |  $numOutput.add(1);
        |  ${consume(ctx, resultVars)}
