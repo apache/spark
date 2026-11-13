@@ -43,7 +43,13 @@ on:
         description: Additional environment variables to set when running the tests. Should be in JSON format.
         required: false
         type: string
-        default: '{"PYSPARK_IMAGE_TO_TEST": "python-312", "PYTHON_TO_TEST": "python3.12"}'
+        # Temporarily exercise the Python 3.15 no-GIL image in PR CI.
+        default: >-
+          {
+            "PYSPARK_IMAGE_TO_TEST": "python-315-nogil",
+            "PYTHON_TO_TEST": "python3.15t",
+            "PYTHON_GIL": "0"
+          }
       jobs:
         description: >-
           Jobs to run, and should be in JSON format. The values should be matched with the job's key defined
@@ -688,6 +694,11 @@ jobs:
         SPARK_CONNECT_TESTING_REMOTE: sc://localhost
       if: ${{ matrix.modules == 'pyspark-connect-old-client' && inputs.branch == 'master' }}
       run: |
+        if ! python3 -c "import pandas"; then
+          echo "Skipping old-client tests because pandas is not installed."
+          exit 0
+        fi
+
         # Make less noisy
         cp conf/log4j2.properties.template conf/log4j2.properties
         sed -i 's/rootLogger.level = info/rootLogger.level = warn/g' conf/log4j2.properties

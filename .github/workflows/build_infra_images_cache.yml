@@ -44,7 +44,7 @@ on:
     - 'dev/spark-test-image/python-313/Dockerfile'
     - 'dev/spark-test-image/python-314/Dockerfile'
     - 'dev/spark-test-image/python-315/Dockerfile'
-    - 'dev/spark-test-image/python-314-nogil/Dockerfile'
+    - 'dev/spark-test-image/python-315-nogil/Dockerfile'
     - '.github/workflows/build_infra_images_cache.yml'
     - 'pyproject.toml'
   # Create infra image when cutting down branches/tags
@@ -244,22 +244,22 @@ jobs:
       - name: Image digest (PySpark with Python 3.15)
         if: hashFiles('dev/spark-test-image/python-315/Dockerfile') != ''
         run: echo ${{ steps.docker_build_pyspark_python_315.outputs.digest }}
-      - name: Build and push (PySpark with Python 3.14 no GIL)
-        if: hashFiles('dev/spark-test-image/python-314-nogil/Dockerfile') != ''
-        id: docker_build_pyspark_python_314_nogil
+      - name: Build and push (PySpark with Python 3.15 no GIL)
+        if: hashFiles('dev/spark-test-image/python-315-nogil/Dockerfile') != ''
+        id: docker_build_pyspark_python_315_nogil
         continue-on-error: true
         uses: docker/build-push-action@c3c9e263c25d99ce0380d002d59b67737d91b0dc
         with:
-          context: ./dev/spark-test-image/python-314-nogil/
+          context: ./dev/spark-test-image/python-315-nogil/
           build-contexts: |
             root=./
           push: true
-          tags: ghcr.io/apache/spark/apache-spark-github-action-image-pyspark-python-314-nogil-cache:${{ github.ref_name }}-static
-          cache-from: type=registry,ref=ghcr.io/apache/spark/apache-spark-github-action-image-pyspark-python-314-nogil-cache:${{ github.ref_name }}
-          cache-to: type=registry,ref=ghcr.io/apache/spark/apache-spark-github-action-image-pyspark-python-314-nogil-cache:${{ github.ref_name }},mode=max
-      - name: Image digest (PySpark with Python 3.14 no GIL)
-        if: hashFiles('dev/spark-test-image/python-314-nogil/Dockerfile') != ''
-        run: echo ${{ steps.docker_build_pyspark_python_314_nogil.outputs.digest }}
+          tags: ghcr.io/apache/spark/apache-spark-github-action-image-pyspark-python-315-nogil-cache:${{ github.ref_name }}-static
+          cache-from: type=registry,ref=ghcr.io/apache/spark/apache-spark-github-action-image-pyspark-python-315-nogil-cache:${{ github.ref_name }}
+          cache-to: type=registry,ref=ghcr.io/apache/spark/apache-spark-github-action-image-pyspark-python-315-nogil-cache:${{ github.ref_name }},mode=max
+      - name: Image digest (PySpark with Python 3.15 no GIL)
+        if: hashFiles('dev/spark-test-image/python-315-nogil/Dockerfile') != ''
+        run: echo ${{ steps.docker_build_pyspark_python_315_nogil.outputs.digest }}
       - name: Fail if any image build failed
         if: always()
         run: |
@@ -283,7 +283,7 @@ jobs:
           check "pyspark-python-313"              "${{ steps.docker_build_pyspark_python_313.outcome }}"
           check "pyspark-python-314"              "${{ steps.docker_build_pyspark_python_314.outcome }}"
           check "pyspark-python-315"              "${{ steps.docker_build_pyspark_python_315.outcome }}"
-          check "pyspark-python-314-nogil"        "${{ steps.docker_build_pyspark_python_314_nogil.outcome }}"
+          check "pyspark-python-315-nogil"        "${{ steps.docker_build_pyspark_python_315_nogil.outcome }}"
           if [ "$status" -ne 0 ]; then
             echo "::error::One or more image builds failed; see entries above marked 'failure'."
           fi

@@ -22,9 +22,16 @@ here and the Spark Connect parity suite, so both front ends are held to the same
 """
 
 import os
+import unittest
 
 from pyspark.sql.functions import lit, udf
 from pyspark.testing.sqlutils import ReusedSQLTestCase
+from pyspark.testing.utils import (
+    have_pandas,
+    have_pyarrow,
+    pandas_requirement_message,
+    pyarrow_requirement_message,
+)
 
 PREFIX = "spark.pythonWorkerEnv."
 
@@ -193,6 +200,10 @@ class PythonWorkerEnvMixin:
 
     # -- the vectorized and specialized families -------------------------------
 
+    @unittest.skipIf(
+        not have_pandas or not have_pyarrow,
+        pandas_requirement_message or pyarrow_requirement_message,
+    )
     def test_env_var_reaches_map_in_pandas(self):
         import pandas as pd
 
@@ -229,6 +240,10 @@ class PythonWorkerEnvMixin:
         finally:
             self._unset_env("MAP_SETTING")
 
+    @unittest.skipIf(
+        not have_pandas or not have_pyarrow,
+        pandas_requirement_message or pyarrow_requirement_message,
+    )
     def test_env_var_reaches_scalar_pandas_udf(self):
         import pandas as pd
 
@@ -248,6 +263,10 @@ class PythonWorkerEnvMixin:
         finally:
             self._unset_env("PANDAS_SETTING")
 
+    @unittest.skipIf(
+        not have_pandas or not have_pyarrow,
+        pandas_requirement_message or pyarrow_requirement_message,
+    )
     def test_env_var_reaches_scalar_pandas_iter_udf(self):
         from typing import Iterator
 
@@ -271,6 +290,10 @@ class PythonWorkerEnvMixin:
         finally:
             self._unset_env("PANDAS_SETTING")
 
+    @unittest.skipIf(
+        not have_pandas or not have_pyarrow,
+        pandas_requirement_message or pyarrow_requirement_message,
+    )
     def test_env_var_reaches_apply_in_pandas(self):
         import pandas as pd
 
@@ -287,6 +310,10 @@ class PythonWorkerEnvMixin:
         finally:
             self._unset_env("GROUP_SETTING")
 
+    @unittest.skipIf(
+        not have_pandas or not have_pyarrow,
+        pandas_requirement_message or pyarrow_requirement_message,
+    )
     def test_env_var_reaches_cogrouped_apply_in_pandas(self):
         # The cogrouped path has a runner of its own, so it is not covered by the grouped test.
         import pandas as pd
@@ -311,6 +338,10 @@ class PythonWorkerEnvMixin:
         finally:
             self._unset_env("COGROUP_SETTING")
 
+    @unittest.skipIf(
+        not have_pandas or not have_pyarrow,
+        pandas_requirement_message or pyarrow_requirement_message,
+    )
     def test_env_var_reaches_grouped_agg_pandas_udf(self):
         import pandas as pd
 
@@ -330,6 +361,10 @@ class PythonWorkerEnvMixin:
         finally:
             self._unset_env("AGG_SETTING")
 
+    @unittest.skipIf(
+        not have_pandas or not have_pyarrow,
+        pandas_requirement_message or pyarrow_requirement_message,
+    )
     def test_env_var_reaches_window_agg_pandas_udf(self):
         import pandas as pd
 

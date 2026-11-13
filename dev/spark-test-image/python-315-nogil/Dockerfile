@@ -20,11 +20,11 @@
 FROM ubuntu:noble
 LABEL org.opencontainers.image.authors="Apache Spark project <dev@spark.apache.org>"
 LABEL org.opencontainers.image.licenses="Apache-2.0"
-LABEL org.opencontainers.image.ref.name="Apache Spark Infra Image For PySpark with Python 3.13 (no GIL)"
+LABEL org.opencontainers.image.ref.name="Apache Spark Infra Image For PySpark with Python 3.15 (no GIL)"
 # Overwrite this label to avoid exposing the underlying Ubuntu OS version label
 LABEL org.opencontainers.image.version=""
 
-ENV FULL_REFRESH_DATE=20260210
+ENV FULL_REFRESH_DATE=20261013
 
 ENV DEBIAN_FRONTEND=noninteractive
 ENV DEBCONF_NONINTERACTIVE_SEEN=true
@@ -49,25 +49,26 @@ RUN apt-get update && apt-get install -y \
     zlib1g-dev \
     zstd
 
-# Install Python 3.14 (no GIL)
+# Install Python 3.15 (no GIL)
 RUN add-apt-repository ppa:deadsnakes/ppa
 RUN apt-get update && apt-get install -y \
-    python3.14-nogil \
-    python3.14-venv \
+    python3.15-dev \
+    python3.15-nogil \
+    python3.15-venv \
     && apt-get autoremove --purge -y \
     && apt-get clean \
     && rm -rf /var/lib/apt/lists/*
 
 # Setup virtual environment
 ENV VIRTUAL_ENV=/opt/spark-venv
-RUN python3.14t -m venv $VIRTUAL_ENV
+RUN python3.15t -m venv $VIRTUAL_ENV
 ENV PATH="$VIRTUAL_ENV/bin:$PATH"
 
 COPY --from=root pyproject.toml ./pyproject.toml
 
-RUN python3.14 -m pip install -U pip
+RUN python3.15t -m pip install -U pip
 
-# TODO: Add connect packages when grpcio supports Python 3.14 free threaded
-RUN python3.14 -m pip install --group ml_torch --index-url https://download.pytorch.org/whl/cpu && \
-    python3.14 -m pip install --group ci_classic_standard && \
-    python3.14 -m pip cache purge
+# pandas<3 does not have Python 3.15 wheels yet. Install PyArrow without pandas.
+RUN python3.15t -m pip install --group ml_torch --index-url https://download.pytorch.org/whl/cpu && \
+    python3.15t -m pip install -U pyarrow py4j psutil six unittest-xml-reporting && \
+    python3.15t -m pip cache purge
