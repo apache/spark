@@ -610,9 +610,7 @@ object Cast extends QueryErrorsBase {
    */
   def isNoThrowLegacyCast(from: DataType, to: DataType): Boolean = (from, to) match {
     case (_: NumericType | BooleanType | _: StringType, _: NumericType | BooleanType) => true
-    case (_: NumericType | BooleanType | _: StringType, s: StringType) =>
-      StringHelper.isPlainString(s)
-    case _ => false
+    case _ => isToPlainString(from, to)
   }
 
   /**
@@ -632,9 +630,14 @@ object Cast extends QueryErrorsBase {
    * and of the ones that can not fail in `evalMode`, so it does not depend on the order of the
    * checks.
    */
-  def isTotalCast(from: DataType, to: DataType, evalMode: EvalMode.Value): Boolean =
+  def isTotalCast(from: DataType, to: DataType, evalMode: EvalMode.Value): Boolean = {
+    // Whether a decimal of a negative scale (`spark.sql.legacy.allowNegativeScaleOfDecimal`) is
+    // cast from or to.
+    val negativeScale = TypeUtils.hasNegativeScale(from) || TypeUtils.hasNegativeScale(to)
     !tellsSignedZeros(from, to) && !hasUserDefinedType(from) && !hasUserDefinedType(to) &&
-      (cannotFailInAnyMode(from, to) || cannotFailInMode(from, to, evalMode))
+      (cannotFailInAnyMode(from, to, negativeScale) ||
+        cannotFailInMode(from, to, evalMode, negativeScale))
+  }
 
   // Whether the source type has a FLOAT or DOUBLE and the target type a STRING or VARIANT in it,
   // so that the cast may keep the sign of a zero, e.g. -0.0 as '-0.0'. This is conservative: it
@@ -647,39 +650,31 @@ object Cast extends QueryErrorsBase {
   private def hasUserDefinedType(dt: DataType): Boolean =
     dt.existsRecursively(_.isInstanceOf[UserDefinedType[_]])
 
-  /**
-   * Returns true if the type has a decimal of a negative scale in it
-   * (`spark.sql.legacy.allowNegativeScaleOfDecimal`).
-   */
-  private[expressions] def hasNegativeScale(dt: DataType): Boolean = dt.existsRecursively {
-    case d: DecimalType => d.scale < 0
-    case _ => false
-  }
-
   // The casts that can not fail in any eval mode, also in ANSI mode.
-  private def cannotFailInAnyMode(from: DataType, to: DataType): Boolean =
+  private def cannotFailInAnyMode(
+      from: DataType, to: DataType, negativeScale: Boolean): Boolean =
     // A numeric up-cast holds also from or to a decimal of a negative scale, as a widening between
     // decimals never calls `Decimal.toLong`; a change to a negative scale only checks that
     // `spark.sql.legacy.allowNegativeScaleOfDecimal` is on. So does a decimal to a FLOAT or a
     // DOUBLE. The other ones do not: `Decimal.toLong` raises for a decimal of a negative scale.
     isNumericUpCast(from, to) || isDecimalToFloatOrDouble(from, to) ||
-      (!hasNegativeScale(from) && !hasNegativeScale(to) &&
-        (isTimestampToDate(from, to) || isToPlainString(from, to)))
+      (!negativeScale && (isTimestampToDate(from, to) || isToPlainString(from, to)))
 
   // The casts that can not fail in the given eval mode but can in another one: outside ANSI mode,
   // the casts that return NULL, wrap or clamp for a value they can not convert.
-  private def cannotFailInMode(from: DataType, to: DataType, evalMode: EvalMode.Value): Boolean = {
-    val negativeScale = hasNegativeScale(from) || hasNegativeScale(to)
-    evalMode match {
-      // TRY mode catches the errors of the cast, but not from a string, which runs the LEGACY
-      // cast, and that one raises for a decimal of a negative scale.
-      case EvalMode.TRY => !negativeScale || !from.isInstanceOf[StringType]
-      // A cast of a date to a timestamp is left out also in LEGACY mode, as converting a date far
-      // from the epoch to microseconds overflows there.
-      case EvalMode.LEGACY =>
-        !negativeScale && (isStringToDatetime(from, to) || isNoThrowLegacyCast(from, to))
-      case EvalMode.ANSI => false
-    }
+  private def cannotFailInMode(
+      from: DataType,
+      to: DataType,
+      evalMode: EvalMode.Value,
+      negativeScale: Boolean): Boolean = evalMode match {
+    // TRY mode catches the errors of the cast, but not from a string, which runs the LEGACY cast,
+    // and that one raises for a decimal of a negative scale.
+    case EvalMode.TRY => !negativeScale || !from.isInstanceOf[StringType]
+    // A cast of a date to a timestamp is left out also in LEGACY mode, as converting a date far
+    // from the epoch to microseconds overflows there.
+    case EvalMode.LEGACY =>
+      !negativeScale && (isStringToDatetime(from, to) || isNoThrowLegacyCast(from, to))
+    case EvalMode.ANSI => false
   }
 
   // Only the numeric pairs are taken from `canUpCast`, which also covers e.g. DATE to TIMESTAMP,

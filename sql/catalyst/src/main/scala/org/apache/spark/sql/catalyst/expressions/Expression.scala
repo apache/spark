@@ -183,6 +183,9 @@ abstract class Expression extends TreeNode[Expression] {
    * modes, such as [[Cast]] and the arithmetic expressions, overrides this method instead. Before
    * returning true, check every path of `eval` and of the generated code, in every eval mode and
    * for every input type the expression accepts.
+   *
+   * This is meant for resolved expressions: an override may read the data types of the children,
+   * which fails for an unresolved one.
    */
   def isTotal: Boolean = false
 
@@ -596,8 +599,10 @@ trait Nondeterministic extends Expression {
  * Mixing it in is a promise by the author of the expression that it is always total, as
  * [[Expression.isTotal]] defines it: it must not raise for any input of its children, in any eval
  * mode, and it must give equal results for equal children of a binary-stable type. The promise
- * covers every subclass of the expression that mixes it in. An expression that is total only
- * for some input types or in some eval modes overrides [[Expression.isTotal]] instead.
+ * covers every subclass of the expression that mixes it in, which cannot override
+ * [[Expression.isTotal]] any more, so mix it into concrete expressions and not into a base class
+ * or trait that other expressions may extend later. An expression that is total only for some
+ * input types or in some eval modes overrides [[Expression.isTotal]] instead.
  */
 trait NoThrow extends Expression {
   final override def isTotal: Boolean = true

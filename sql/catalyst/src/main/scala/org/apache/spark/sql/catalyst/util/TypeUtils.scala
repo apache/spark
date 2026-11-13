@@ -33,6 +33,15 @@ import org.apache.spark.util.ArrayImplicits._
  */
 object TypeUtils extends QueryErrorsBase {
 
+  /**
+   * Returns true if the type has a decimal of a negative scale in it
+   * (`spark.sql.legacy.allowNegativeScaleOfDecimal`).
+   */
+  def hasNegativeScale(dt: DataType): Boolean = dt.existsRecursively {
+    case d: DecimalType => d.scale < 0
+    case _ => false
+  }
+
   def checkForOrderingExpr(dt: DataType, caller: String): TypeCheckResult = {
     if (RowOrdering.isOrderable(dt)) {
       TypeCheckResult.TypeCheckSuccess

@@ -268,61 +268,26 @@ object ExprUtils extends EvalHelper with QueryErrorsBase {
    * branch of an If/CaseWhen, or hoisting a streamed-side join conjunct above the probe
    * so it also runs for streamed rows that have no match.
    *
-   * Only total, deterministic expressions qualify. Each expression declares whether it is total
-   * itself, with [[Expression.isTotal]], so there is no list to keep here; the ones that do are:
-   *   - leaves: attribute references, literals and the collation of a Collate;
-   *   - total accessors: GetStructField, GetArrayStructFields and GetMapValue never throw.
-   *     Note that GetArrayItem/ElementAt are NOT included: they throw on invalid ordinals
-   *     when ANSI mode is on;
-   *   - CreateArray and CreateNamedStruct, which only build a value from their children, as
-   *     `ConstantFolding` assumes too;
-   *   - logic/predicates: And, Or, Not, comparisons, IsNull, IsNotNull, IsNaN, NullIf,
-   *     Coalesce, In and InSet are total boolean functions;
-   *   - Size, which returns -1 or NULL for a NULL input rather than raising;
-   *   - StartsWith, EndsWith and Contains, which are total for every collation, unlike Like
-   *     and RLike, which raise on an invalid pattern;
-   *   - Length and OctetLength, which only count the characters or bytes of a string or binary,
-   *     and with which `LikeSimplification` guards a StartsWith and an EndsWith;
-   *   - Collate, which only changes the collation in the type of a string (`COLLATE`);
-   *   - Substring, which returns an empty string for a position out of range;
-   *   - the fields of a date or a timestamp, such as Year and Hour (GetDateField and
-   *     GetTimeField), which only read the date or time of a valid value;
-   *   - in every mode: a cast that widens a numeric type to another one (`Cast.canUpCast`),
-   *     such as the INT to BIGINT cast that type coercion adds to a comparison, or a cast of a
-   *     DECIMAL(18, 0), whose values all fit, to BIGINT; a cast of a DECIMAL to a FLOAT or a
-   *     DOUBLE, which rounds; a cast of a timestamp to a date; and a cast of a number other than
-   *     a FLOAT or DOUBLE, a boolean or a string to a STRING of any collation, not to a CHAR or
-   *     VARCHAR, which checks the length;
-   *   - outside ANSI mode, the casts that return NULL, wrap or clamp for a value they can not
-   *     convert (`Cast.isTotalCast`): in LEGACY mode, the ones `Cast.isNoThrowLegacyCast`
-   *     accepts, between numbers, booleans and strings, except to a CHAR or VARCHAR, and from a
-   *     string to a date or a timestamp; in TRY mode (`try_cast`), every cast, which either
-   *     catches the errors of the cast or, from a string to a fractional or datetime type, runs
-   *     the LEGACY cast;
-   *   - outside ANSI mode, numeric arithmetic, which returns NULL on a division by zero or a
-   *     decimal overflow, and wraps an integral overflow in LEGACY mode and returns NULL for it
-   *     in TRY mode: in LEGACY mode, Add, Subtract, Multiply, Divide, IntegralDivide, Remainder
-   *     and Pmod, UnaryMinus and Abs; in TRY mode, which only catches the errors of Add,
-   *     Subtract and Multiply, and in which Divide and Remainder behave as in LEGACY mode, those
-   *     five. Arithmetic over intervals is left out, which over a DAY TO SECOND or YEAR TO MONTH
-   *     interval can overflow in every mode;
-   *   - in every mode, also in ANSI mode, Add, Subtract and Multiply over FLOAT and DOUBLE, which
-   *     return an infinity or NaN rather than raising, and UnaryMinus and Abs over FLOAT, DOUBLE
-   *     and DECIMAL, which only check for an overflow over the integral types.
-   * In every mode, a cast of a value with a FLOAT or DOUBLE in it to a type with a STRING or a
-   * VARIANT in it is left out, although such a cast to a STRING or a VARIANT can not fail: it
-   * tells -0.0 from 0.0, which are equal, and `InferFiltersFromConstraints` and
-   * `ConstantPropagation` replace an attribute with a value equal to it under the operators this
-   * check accepts (`isTotalOperator`). For the same reason, so is every cast from or to a type
-   * with a UDT in it, which renders its value with its own `stringifyValue`, or a Python UDT as
-   * its `sqlType`. Outside TRY mode, and in TRY mode from a string, the casts from or to a decimal
-   * of a negative scale (`spark.sql.legacy.allowNegativeScaleOfDecimal`) other than the widenings
-   * between decimals and the casts to a FLOAT or DOUBLE are left out, as `Decimal.toLong` raises
-   * for one, and in every mode so is the binary arithmetic over one, as `Decimal.%` raises for a
-   * very negative one. UnaryMinus and Abs only negate one and are kept.
-   * Anything else (other arithmetic, other casts, other functions, UDFs, nested IF/CASE
-   * WHEN, ...) conservatively returns false. On top of that, the expression must be
-   * deterministic and must not contain subqueries.
+   * Only a tree of these qualifies:
+   *   - at the leaves, attribute references, literals and the collation of a Collate, which
+   *     evaluate to a value they hold or read. They are accepted here, and declare nothing;
+   *   - above them, the expressions that declare themselves total with [[Expression.isTotal]].
+   *     The declaration is on each expression, next to how it evaluates, and says why it holds:
+   *     the expressions that are always total mix in [[NoThrow]], e.g. And, a comparison, IsNull,
+   *     Coalesce, GetStructField, Size, StartsWith, Substring and Year, and [[Cast]]
+   *     (`Cast.isTotalCast`), Add, Subtract, Multiply, Divide, IntegralDivide, Remainder, Pmod,
+   *     UnaryMinus and Abs are total for some input types and eval modes only. `ExprUtilsSuite`
+   *     checks the classes of both kinds against a list.
+   * Some expressions that look alike are not total: GetArrayItem and ElementAt raise on an invalid
+   * ordinal in ANSI mode, Like and RLike on an invalid pattern, and CreateMap on a NULL or a
+   * duplicate key.
+   * Being total is more than not raising: `InferFiltersFromConstraints` and `ConstantPropagation`
+   * replace an attribute with a value equal to it under the operators this check accepts
+   * (`isTotalOperator`), so e.g. a cast of a value with a FLOAT or DOUBLE in it to a type with a
+   * STRING or a VARIANT in it is left out, although it can not fail: it tells -0.0 from 0.0,
+   * which are equal.
+   * Anything else (other functions, UDFs, nested IF/CASE WHEN, ...) conservatively returns false.
+   * On top of that, the expression must be deterministic and must not contain subqueries.
    *
    * Note: this deliberately does not rely on [[Expression.throwable]], which is opt-in
    * metadata that most expressions do not override. A throwing ScalaUDF with
@@ -343,8 +308,7 @@ object ExprUtils extends EvalHelper with QueryErrorsBase {
    * Returns true if `e` itself cannot raise an error, whatever the values of its children of
    * their current types. Each expression declares it itself, see [[Expression.isTotal]]: one that
    * is always total mixes in [[NoThrow]], and one that is total only for some input types or in
-   * some eval modes, such as [[Cast]] and the arithmetic expressions, overrides the method. See
-   * [[canEvaluateUnconditionally]] for the expressions that do so.
+   * some eval modes, such as [[Cast]] and the arithmetic expressions, overrides the method.
    * `ConstantPropagation` replaces a child with a value equal to it under such an expression, so
    * it must also give equal results for equal children, e.g. a cast of a DOUBLE to a STRING is
    * left out, as it tells -0.0 from 0.0, and so is a cast of a UDT. Strings of a non-binary

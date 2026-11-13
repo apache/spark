@@ -18,6 +18,7 @@
 package org.apache.spark.sql.catalyst.expressions
 
 import java.io.File
+import java.lang.reflect.Modifier
 import java.util.jar.JarFile
 
 import scala.jdk.CollectionConverters._
@@ -693,8 +694,11 @@ class ExprUtilsSuite extends SparkFunSuite with SQLHelper {
   }
 
   test("isTotalOperator: the expression classes that declare themselves total") {
-    // Every expression class of catalyst, from its jar or its classes directory.
-    val root = new File(classOf[Expression].getProtectionDomain.getCodeSource.getLocation.toURI)
+    // Every expression class of catalyst, from its jar or its classes directory, in whichever
+    // package it is: a subclass of a marked class anywhere is marked too.
+    val source = Option(classOf[Expression].getProtectionDomain.getCodeSource)
+    assume(source.isDefined, "the classes of catalyst cannot be located")
+    val root = new File(source.get.getLocation.toURI)
     val files: Seq[String] = if (root.isDirectory) {
       def walk(f: File): Seq[File] =
         if (f.isDirectory) f.listFiles().toSeq.flatMap(walk) else Seq(f)
@@ -702,22 +706,30 @@ class ExprUtilsSuite extends SparkFunSuite with SQLHelper {
     } else {
       SparkErrorUtils.tryWithResource(new JarFile(root))(_.entries().asScala.map(_.getName).toList)
     }
-    val classes: Seq[Class[_]] = files.filter(_.endsWith(".class")).map { path =>
+    val classes: Seq[Class[_]] = files.filter(_.endsWith(".class")).flatMap { path =>
       val name = path.stripSuffix(".class").replace('/', '.')
-      Utils.classForName[Any](name, initialize = false)
+      // A class may not load for a reason that has nothing to do with this test, e.g. a stale
+      // class file of an incremental build, or a dependency that is not on the test classpath.
+      try {
+        Some(Utils.classForName[Any](name, initialize = false))
+      } catch {
+        case _: LinkageError | _: ClassNotFoundException => None
+      }
     }.filter(c => classOf[Expression].isAssignableFrom(c) && !c.isAnonymousClass)
     assert(classes.size > 500, classes.size)
 
     // Adding a class to one of these lists is a promise that it is total, see
     // `Expression.isTotal`. The lists also notice a class that becomes total only by extending
-    // another one: a subclass of a class marked `NoThrow` is marked too.
+    // another one: a subclass of a class marked `NoThrow` is marked too. `NoThrow` is mixed into
+    // concrete classes only, so that a new subclass of e.g. `BinaryComparison` is not.
     val (always, others) = classes.partition(classOf[NoThrow].isAssignableFrom)
+    always.foreach(c => assert(!Modifier.isAbstract(c.getModifiers), c))
     assert(always.map(_.getSimpleName).sorted === Seq(
-      "And", "BinaryComparison", "Coalesce", "Collate", "Contains", "CreateArray",
-      "CreateNamedStruct", "DayName", "DayOfMonth", "DayOfWeek", "DayOfYear", "EndsWith",
-      "EqualNullSafe", "EqualTo", "GetArrayStructFields", "GetMapValue", "GetStructField",
-      "GreaterThan", "GreaterThanOrEqual", "Hour", "In", "InSet", "IsNaN", "IsNotNull", "IsNull",
-      "Length", "LessThan", "LessThanOrEqual", "Minute", "Month", "MonthName", "Not", "NullIf",
+      "And", "Coalesce", "Collate", "Contains", "CreateArray", "CreateNamedStruct", "DayName",
+      "DayOfMonth", "DayOfWeek", "DayOfYear", "EndsWith", "EqualNullSafe", "EqualTo",
+      "GetArrayStructFields", "GetMapValue", "GetStructField", "GreaterThan",
+      "GreaterThanOrEqual", "Hour", "In", "InSet", "IsNaN", "IsNotNull", "IsNull", "Length",
+      "LessThan", "LessThanOrEqual", "Minute", "Month", "MonthName", "Not", "NullIf",
       "OctetLength", "Or", "Quarter", "Second", "SecondWithFraction", "Size", "StartsWith",
       "Substring", "WeekDay", "WeekOfYear", "Year", "YearOfWeek"))
     // The ones that decide it by their input types or eval mode.

@@ -368,6 +368,7 @@ class ConstantFoldingSuite extends PlanTest {
         CreateArray(Seq($"i", Literal(1))) -> true,
         CreateNamedStruct(Seq(Literal("f"), $"s")) -> true,
         // The other expressions marked `NoThrow` are evaluated, although they cannot fail.
+        // SPARK-61667 is to fold them too, and then these become true.
         ($"i" > 1) -> false,
         ($"i".isNull || $"s".startsWith("a")) -> false,
         Coalesce(Seq($"i", Literal(0))) -> false,

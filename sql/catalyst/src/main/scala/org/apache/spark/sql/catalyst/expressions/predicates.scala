@@ -1044,7 +1044,7 @@ case class Or(left: Expression, right: Expression) extends BinaryOperator with P
 }
 
 
-abstract class BinaryComparison extends BinaryOperator with Predicate with NoThrow {
+abstract class BinaryComparison extends BinaryOperator with Predicate {
 
   // Note that we need to give a superset of allowable input types since orderable types are not
   // finitely enumerable. The allowable types are checked below by checkInputDataTypes.
@@ -1133,7 +1133,7 @@ object Equality {
   since = "1.0.0",
   group = "predicate_funcs")
 case class EqualTo(left: Expression, right: Expression)
-    extends BinaryComparison {
+    extends BinaryComparison with NoThrow {
   override def nullIntolerant: Boolean = true
   override def symbol: String = "="
 
@@ -1181,7 +1181,8 @@ case class EqualTo(left: Expression, right: Expression)
   """,
   since = "1.1.0",
   group = "predicate_funcs")
-case class EqualNullSafe(left: Expression, right: Expression) extends BinaryComparison {
+case class EqualNullSafe(left: Expression, right: Expression)
+    extends BinaryComparison with NoThrow {
 
   override def symbol: String = "<=>"
 
@@ -1285,7 +1286,7 @@ case class EqualNull(left: Expression, right: Expression, replacement: Expressio
   since = "1.0.0",
   group = "predicate_funcs")
 case class LessThan(left: Expression, right: Expression)
-    extends BinaryComparison {
+    extends BinaryComparison with NoThrow {
   override def nullIntolerant: Boolean = true
   override def symbol: String = "<"
 
@@ -1321,7 +1322,7 @@ case class LessThan(left: Expression, right: Expression)
   since = "1.0.0",
   group = "predicate_funcs")
 case class LessThanOrEqual(left: Expression, right: Expression)
-    extends BinaryComparison {
+    extends BinaryComparison with NoThrow {
   override def nullIntolerant: Boolean = true
   override def symbol: String = "<="
 
@@ -1357,7 +1358,7 @@ case class LessThanOrEqual(left: Expression, right: Expression)
   since = "1.0.0",
   group = "predicate_funcs")
 case class GreaterThan(left: Expression, right: Expression)
-    extends BinaryComparison {
+    extends BinaryComparison with NoThrow {
   override def nullIntolerant: Boolean = true
 
   override def symbol: String = ">"
@@ -1394,7 +1395,7 @@ case class GreaterThan(left: Expression, right: Expression)
   since = "1.0.0",
   group = "predicate_funcs")
 case class GreaterThanOrEqual(left: Expression, right: Expression)
-    extends BinaryComparison {
+    extends BinaryComparison with NoThrow {
   override def nullIntolerant: Boolean = true
 
   override def symbol: String = ">="
