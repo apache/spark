@@ -19,11 +19,12 @@
 import argparse
 import contextlib
 import io
-from pathlib import Path
 import tempfile
+from pathlib import Path
 
 from pyspark.errors import AnalysisException
-from pyspark.sql import SparkSession, functions as F
+from pyspark.sql import SparkSession
+from pyspark.sql import functions as F
 
 
 def main():

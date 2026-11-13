@@ -18,8 +18,8 @@
 
 import argparse
 import json
-from pathlib import Path
 import tempfile
+from pathlib import Path
 
 from pyspark.errors import AnalysisException
 from pyspark.sql import SparkSession
