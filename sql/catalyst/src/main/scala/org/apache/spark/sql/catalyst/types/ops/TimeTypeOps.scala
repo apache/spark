@@ -79,7 +79,7 @@ case class TimeTypeOps(override val t: TimeType) extends TimeTypeApiOps(t) with 
   // ==================== External Type Conversion ====================
 
   override def toCatalystImpl(scalaValue: Any): Any = {
-    DateTimeUtils.localTimeToNanos(scalaValue.asInstanceOf[LocalTime])
+    DateTimeUtils.localTimeToNanos(scalaValue.asInstanceOf[LocalTime], t.precision)
   }
 
   override def toScala(catalystValue: Any): Any = {
@@ -110,7 +110,7 @@ case class TimeTypeOps(override val t: TimeType) extends TimeTypeApiOps(t) with 
       DateTimeUtils.getClass,
       t,
       "localTimeToNanos",
-      input :: Nil,
+      input :: Literal(t.precision) :: Nil,
       returnNullable = false))
   }
 

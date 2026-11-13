@@ -142,7 +142,7 @@ class ArrowWriterSuite extends SparkFunSuite {
     check(DateType, Seq(0, 1, 2, null, 4))
     check(TimestampType, Seq(0L, 3.6e9.toLong, null, 8.64e10.toLong), "America/Los_Angeles")
     check(TimestampNTZType, Seq(0L, 3.6e9.toLong, null, 8.64e10.toLong))
-    DataTypeTestUtils.timeTypes.foreach(check(_, Seq(0L, 4.32e4.toLong, null, 3723123456789L)))
+    DataTypeTestUtils.timeTypes.foreach(check(_, Seq(0L, 4.32e10.toLong, null, 3723123456000L)))
     check(NullType, Seq(null, null, null))
     DataTypeTestUtils.yearMonthIntervalTypes
       .foreach(check(_, Seq(null, 0, 1, -1, Int.MaxValue, Int.MinValue)))

@@ -89,7 +89,7 @@ object Literal {
     case l: LocalDateTime => Literal(DateTimeUtils.localDateTimeToMicros(l), TimestampNTZType)
     case ld: LocalDate => Literal(ld.toEpochDay.toInt, DateType)
     case d: Date => Literal(DateTimeUtils.fromJavaDate(d), DateType)
-    case lt: LocalTime => Literal(localTimeToNanos(lt), TimeType())
+    case lt: LocalTime => Literal(localTimeToNanos(lt, TimeType.DEFAULT_PRECISION), TimeType())
     case d: Duration => Literal(durationToMicros(d), DayTimeIntervalType())
     case p: Period => Literal(periodToMonths(p), YearMonthIntervalType())
     case a: Array[Byte] => Literal(a, BinaryType)
@@ -169,6 +169,9 @@ object Literal {
       case _: YearMonthIntervalType if v.isInstanceOf[Period] =>
         Literal(CatalystTypeConverters.createToCatalystConverter(dataType)(v), dataType)
       case _: DayTimeIntervalType if v.isInstanceOf[Duration] =>
+        Literal(CatalystTypeConverters.createToCatalystConverter(dataType)(v), dataType)
+      // The converter of the type truncates the value to its precision.
+      case _: TimeType if v.isInstanceOf[LocalTime] =>
         Literal(CatalystTypeConverters.createToCatalystConverter(dataType)(v), dataType)
       case _: ObjectType => Literal(v, dataType)
       case _: CharType | _: VarcharType if SQLConf.get.charVarcharFirstClassTypes =>

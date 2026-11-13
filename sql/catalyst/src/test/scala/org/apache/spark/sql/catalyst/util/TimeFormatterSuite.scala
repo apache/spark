@@ -224,4 +224,17 @@ class TimeFormatterSuite extends SparkFunSuite with SQLHelper {
     // A prefix/partial match must be rejected (full-string consumption).
     assert(isoFormatter.parseOptional("01:02:03xxx").isEmpty)
   }
+
+  test("SPARK-61087: parse a value of TIME(p) truncates the digits beyond p") {
+    val defaultFormatter = TimeFormatter(isParsing = true)
+    val nanosFormatter = TimeFormatter("HH:mm:ss.SSSSSSSSS", isParsing = true)
+    Seq(defaultFormatter, nanosFormatter).foreach { formatter =>
+      val input = "12:00:00.123456789"
+      assert(formatter.parse(input, 0) === localTime(12))
+      assert(formatter.parse(input, 3) === localTime(12, 0, 0, 123000))
+      assert(formatter.parse(input, 6) === localTime(12, 0, 0, 123456))
+      assert(formatter.parse(input, 9) === formatter.parse(input))
+    }
+    assert(defaultFormatter.parse("00:00:00.1234567", 6) === localTime(0, 0, 0, 123456))
+  }
 }

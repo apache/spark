@@ -1970,8 +1970,7 @@ class ParquetIOSuite extends ParquetTest with SharedSparkSession {
             new StructType().add("time_nanos", TimeType(TimeType.NANOS_PRECISION))
           }
           val lt = LocalTime.of(23, 59, 59, 123456789)
-          val expected = (0 until numRecords).map { _ => lt }.toDF()
-          checkAnswer(df, expected)
+          checkAnswer(df, (0 until numRecords).map(_ => Row(lt)))
         }
       }
     }

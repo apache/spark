@@ -2171,12 +2171,13 @@ class JsonFunctionsSuite extends SharedSparkSession {
       assert(parseResult == time, s"from_json failed for precision $precision")
 
       // Test to_json
-      val jsonResult = Seq(time).toDF("time")
+      val df = spark.createDataFrame(java.util.List.of(Row(time)), schema)
+      val jsonResult = df
         .select(to_json(struct($"time"))).collect().head.getString(0)
       assert(jsonResult == s"""{"time":"$timeStr"}""", s"to_json failed for precision $precision")
 
       // Test roundtrip
-      val roundtrip = Seq(time).toDF("time")
+      val roundtrip = df
         .select(to_json(struct($"time")).as("json"))
         .select(from_json($"json", schema).as("struct"))
         .select($"struct.time").collect().head.getAs[LocalTime](0)
@@ -2197,6 +2198,28 @@ class JsonFunctionsSuite extends SharedSparkSession {
     checkAnswer(
       Seq(customTime).toDF("time").select(to_json(struct($"time"), customFormat)),
       Row("""{"time":"14-30-45.123456"}""") :: Nil)
+  }
+
+  test("SPARK-61087: from_json truncates TIME values to the precision of the field") {
+    import java.time.LocalTime
+    val schema = new StructType()
+      .add("t6", TimeType(6)).add("t3", TimeType(3)).add("t9", TimeType(9))
+    val input = Seq(
+      """{"t6": "00:00:00.1234567", "t3": "12:00:00.123456", "t9": "12:00:00.123456789"}""",
+      """{"t6": "00:00:00.123456789", "t3": "12:00:00.123456789", "t9": "12:00:00.123456789"}""")
+    val nanosFormat = Map("timeFormat" -> "HH:mm:ss.SSSSSSSSS")
+    Seq(Map.empty[String, String] -> input.take(1), nanosFormat -> input.drop(1))
+      .foreach { case (options, json) =>
+        checkAnswer(
+          json.toDS().select(from_json($"value", schema, options).as("s")).select("s.*"),
+          Row(LocalTime.of(0, 0, 0, 123456000), LocalTime.of(12, 0, 0, 123000000),
+            LocalTime.of(12, 0, 0, 123456789)))
+      }
+    checkAnswer(
+      sql("""SELECT from_json('{"t":"00:00:00.1234567"}', 't TIME').t = TIME'00:00:00.123456',
+            |  from_json('{"t":"00:00:00.1234567"}', 't TIME').t = to_time('00:00:00.1234567')
+            |""".stripMargin),
+      Row(true, true))
   }
 
   test("TIME type with arrays and nulls") {

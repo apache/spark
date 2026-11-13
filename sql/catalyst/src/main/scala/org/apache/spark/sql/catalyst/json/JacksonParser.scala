@@ -479,10 +479,10 @@ class JacksonParser(
           java.lang.Long.valueOf(expr.eval(EmptyRow).asInstanceOf[Long])
       }
 
-    case _: TimeType => (parser: JsonParser) =>
+    case t: TimeType => (parser: JsonParser) =>
       parseJsonToken[java.lang.Long](parser, dataType) {
         case VALUE_STRING if parser.getTextLength >= 1 =>
-          timeFormatter.parse(parser.getText)
+          timeFormatter.parse(parser.getText, t.precision)
       }
 
     case st: StructType =>

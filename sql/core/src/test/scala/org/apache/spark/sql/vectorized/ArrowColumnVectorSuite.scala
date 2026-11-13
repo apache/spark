@@ -946,6 +946,32 @@ class ArrowColumnVectorSuite extends SparkFunSuite {
     allocator.close()
   }
 
+  test("TIME values are truncated to the precision their field declares") {
+    val allocator = ArrowUtils.rootAllocator.newChildAllocator("time", 0, Long.MaxValue)
+    // A field from another Arrow producer, an older Spark Connect client or a mapInArrow result
+    // has no precision metadata. It reads as TIME(6), but its value is kept: the reader cannot
+    // know which digits are extra, e.g. for a TIME(9) column.
+    val foreignVector = new TimeNanoVector("t", allocator)
+    val vectors = Seq(3, 6, 9).map { p =>
+      ArrowUtils.toArrowField("t", TimeType(p), nullable = true, null)
+        .createVector(allocator).asInstanceOf[TimeNanoVector]
+    } :+ foreignVector
+    vectors.zip(Seq(
+      TimeType(3) -> 123000000L,
+      TimeType(6) -> 123456000L,
+      TimeType(9) -> 123456789L,
+      TimeType(6) -> 123456789L)).foreach { case (vector, (expectedType, expected)) =>
+        vector.allocateNew()
+        vector.setSafe(0, 123456789L)
+        vector.setValueCount(1)
+        val columnVector = new ArrowColumnVector(vector)
+        assert(columnVector.dataType === expectedType)
+        assert(columnVector.getLong(0) === expected, s"${columnVector.dataType}")
+        columnVector.close()
+    }
+    allocator.close()
+  }
+
   test("timestamp nanos vectors whose time zone disagrees with the vector class") {
     val allocator = ArrowUtils.rootAllocator.newChildAllocator("mismatch", 0, Long.MaxValue)
     // A TZ vector without a time zone reads as NTZ; a plain vector with one reads as LTZ.

@@ -3955,6 +3955,23 @@ abstract class AvroSuite
     }
   }
 
+  test("SPARK-61087: TIME read with a lower precision is truncated to it") {
+    withTempPath { dir =>
+      spark.sql("SELECT CAST(TIME '12:34:56.123456' AS TIME(6)) AS t")
+        .write.format("avro").save(dir.toString)
+      Seq(
+        3 -> java.time.LocalTime.of(12, 34, 56, 123000000),
+        6 -> java.time.LocalTime.of(12, 34, 56, 123456000),
+        9 -> java.time.LocalTime.of(12, 34, 56, 123456000)
+      ).foreach { case (p, expected) =>
+        val readDf = spark.read.schema(s"t TIME($p)").format("avro").load(dir.toString)
+        assert(readDf.schema("t").dataType == TimeType(p))
+        checkAnswer(readDf, Row(expected))
+        checkAnswer(readDf.where(s"t = TIME'$expected'"), Row(expected))
+      }
+    }
+  }
+
   test("SPARK-57581: TIME read from a plain time-micros Avro file (no catalyst prop)") {
     withTempDir { dir =>
       // Build an Avro file the way an external tool (Hive/Trino/fastavro) would: a `time-micros`

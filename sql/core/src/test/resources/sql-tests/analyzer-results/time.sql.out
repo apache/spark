@@ -152,6 +152,21 @@ org.apache.spark.sql.AnalysisException
 
 
 -- !query
+select to_time('00:00:00.1234567'), try_to_time('00:00:00.123456789'),
+  to_time('12:00:00.123456789', 'HH:mm:ss.SSSSSSSSS')
+-- !query analysis
+Project [to_time(00:00:00.1234567, None) AS to_time(00:00:00.1234567)#x, try_to_time(to_time(00:00:00.123456789, None)) AS try_to_time(to_time(00:00:00.123456789))#x, to_time(12:00:00.123456789, Some(HH:mm:ss.SSSSSSSSS)) AS to_time(12:00:00.123456789, HH:mm:ss.SSSSSSSSS)#x]
++- OneRowRelation
+
+
+-- !query
+select to_time('00:00:00.1234567') = time'00:00:00.123456'
+-- !query analysis
+Project [(to_time(00:00:00.1234567, None) = 00:00:00.123456) AS (to_time(00:00:00.1234567) = TIME '00:00:00.123456')#x]
++- OneRowRelation
+
+
+-- !query
 select make_time(1, 18, 19.87)
 -- !query analysis
 Project [make_time(1, 18, cast(19.87 as decimal(16,6))) AS make_time(1, 18, 19.87)#x]
@@ -2027,6 +2042,53 @@ Project [time_from_seconds(90000) AS time_from_seconds(90000)#x]
 SELECT time_from_seconds(NULL)
 -- !query analysis
 Project [time_from_seconds(null) AS time_from_seconds(NULL)#x]
++- OneRowRelation
+
+
+-- !query
+SELECT time_from_seconds(0.0000001), time_from_seconds(52200.1234567), time_from_seconds(3.0E-6D)
+-- !query analysis
+Project [time_from_seconds(1E-7) AS time_from_seconds(1E-7)#x, time_from_seconds(52200.1234567) AS time_from_seconds(52200.1234567)#x, time_from_seconds(3.0E-6) AS time_from_seconds(3.0E-6)#x]
++- OneRowRelation
+
+
+-- !query
+SELECT time_from_seconds(0.0000001) = time'00:00:00'
+-- !query analysis
+Project [(time_from_seconds(1E-7) = 00:00:00) AS (time_from_seconds(1E-7) = TIME '00:00:00')#x]
++- OneRowRelation
+
+
+-- !query
+SELECT time_from_seconds(0.0000001) AS v UNION SELECT time'00:00:00'
+-- !query analysis
+Distinct
++- Union false, false
+   :- Project [time_from_seconds(1E-7) AS v#x]
+   :  +- OneRowRelation
+   +- Project [00:00:00 AS TIME '00:00:00'#x]
+      +- OneRowRelation
+
+
+-- !query
+SELECT time_from_seconds(-0.0000001)
+-- !query analysis
+Project [time_from_seconds(-1E-7) AS time_from_seconds(-1E-7)#x]
++- OneRowRelation
+
+
+-- !query
+SELECT time_from_seconds(2.49E-4D), time_from_seconds(1.0E-6D), time_from_seconds(0.7D),
+  time_from_seconds(0.7F)
+-- !query analysis
+Project [time_from_seconds(2.49E-4) AS time_from_seconds(2.49E-4)#x, time_from_seconds(1.0E-6) AS time_from_seconds(1.0E-6)#x, time_from_seconds(0.7) AS time_from_seconds(0.7)#x, time_from_seconds(0.7) AS time_from_seconds(0.7)#x]
++- OneRowRelation
+
+
+-- !query
+SELECT time_from_seconds(1.0E10D)
+-- !query analysis
+Project [time_from_seconds(1.0E10) AS time_from_seconds(1.0E10)#x]
 +- OneRowRelation
 
 

@@ -135,12 +135,15 @@ case class ToTimeParser(fmt: Option[String]) {
     }
   }
 
-  def parse(s: UTF8String): Long = withErrorCondition(s, fmt)(formatter.parse(s.toString))
+  // `ToTime` returns `TimeType()`, so the parsed value is truncated to its precision.
+  def parse(s: UTF8String): Long = withErrorCondition(s, fmt) {
+    formatter.parse(s.toString, TimeType.DEFAULT_PRECISION)
+  }
 
   def parse(s: UTF8String, fmt: UTF8String): Long = {
     val format = fmt.toString
     withErrorCondition(s, Some(format)) {
-      TimeFormatter(format, isParsing = true).parse(s.toString)
+      TimeFormatter(format, isParsing = true).parse(s.toString, TimeType.DEFAULT_PRECISION)
     }
   }
 }

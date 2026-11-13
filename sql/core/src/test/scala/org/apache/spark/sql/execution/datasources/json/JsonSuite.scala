@@ -4465,6 +4465,23 @@ abstract class JsonSuite
     }
   }
 
+  test("SPARK-61087: JSON reads truncate TIME values to the precision of the field") {
+    import java.time.LocalTime
+    val schema = new StructType()
+      .add("t6", TimeType(6)).add("t3", TimeType(3)).add("t9", TimeType(9))
+    val expected =
+      Row(LocalTime.of(0, 0, 0, 123456000), LocalTime.of(12, 0, 0, 123000000),
+        LocalTime.of(12, 0, 0, 123456789))
+    val input = Seq(
+      """{"t6": "00:00:00.1234567", "t3": "12:00:00.123456", "t9": "12:00:00.123456789"}""")
+    checkAnswer(spark.read.schema(schema).json(input.toDS()), expected)
+    val nanosInput = Seq(
+      """{"t6": "00:00:00.123456789", "t3": "12:00:00.123456789", "t9": "12:00:00.123456789"}""")
+    checkAnswer(
+      spark.read.schema(schema).option("timeFormat", "HH:mm:ss.SSSSSSSSS").json(nanosInput.toDS()),
+      expected)
+  }
+
   test("SPARK-40667: validate JSON Options") {
     assert(JSONOptions.getAllOptions.size == 35)
     // Please add validation on any new Json options here

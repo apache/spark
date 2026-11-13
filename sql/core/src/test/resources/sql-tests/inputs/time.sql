@@ -26,6 +26,10 @@ select try_to_time('12:48:31 abc');
 select try_to_time('10:11:12.', 'HH:mm:ss.SSSSSS');
 select try_to_time("02-69", "HH-mm");
 select try_to_time('11:12:13', 'HH:mm:ss', 'SSSSSS');
+-- the result is TIME(6), so the digits beyond microseconds are truncated
+select to_time('00:00:00.1234567'), try_to_time('00:00:00.123456789'),
+  to_time('12:00:00.123456789', 'HH:mm:ss.SSSSSSSSS');
+select to_time('00:00:00.1234567') = time'00:00:00.123456';
 
 select make_time(1, 18, 19.87);
 -- invalid cases
@@ -318,6 +322,15 @@ SELECT time_from_seconds(-1);           -- invalid: negative -> exception
 SELECT time_from_seconds(86400);        -- invalid: >= 86400 -> exception
 SELECT time_from_seconds(90000);        -- invalid: >= 86400 -> exception
 SELECT time_from_seconds(NULL);
+-- the result is TIME(6), so the digits beyond microseconds are truncated
+SELECT time_from_seconds(0.0000001), time_from_seconds(52200.1234567), time_from_seconds(3.0E-6D);
+SELECT time_from_seconds(0.0000001) = time'00:00:00';
+SELECT time_from_seconds(0.0000001) AS v UNION SELECT time'00:00:00';
+SELECT time_from_seconds(-0.0000001);  -- invalid: negative -> exception
+-- a DOUBLE uses its shortest decimal form, and a FLOAT is converted to DOUBLE first
+SELECT time_from_seconds(2.49E-4D), time_from_seconds(1.0E-6D), time_from_seconds(0.7D),
+  time_from_seconds(0.7F);
+SELECT time_from_seconds(1.0E10D);  -- invalid: overflow -> exception
 
 -- time_from_millis (valid: 0 to 86399999)
 SELECT time_from_millis(0);

@@ -1240,17 +1240,18 @@ object DateTimeUtils extends SparkDateTimeUtils {
   }
 
   /**
-   * Creates a TIME value from seconds since midnight (decimal type).
+   * Creates a TIME(6) value from seconds since midnight (decimal type). The digits beyond
+   * microseconds are truncated.
    * @param seconds Seconds (0 to 86399.999999)
    * @return Nanoseconds since midnight
    */
   def timeFromSeconds(seconds: Decimal): Long = withTimeConversionErrorHandling {
-    val operand = new java.math.BigDecimal(NANOS_PER_SECOND)
-    seconds.toJavaBigDecimal.multiply(operand).longValueExact()
+    secondsToMicrosPrecisionNanos(seconds.toJavaBigDecimal)
   }
 
   /**
-   * Creates a TIME value from seconds since midnight (floating point type).
+   * Creates a TIME(6) value from seconds since midnight (floating point type). The digits beyond
+   * microseconds are truncated.
    * @param seconds Seconds (0 to 86399.999999)
    * @return Nanoseconds since midnight
    */
@@ -1258,8 +1259,53 @@ object DateTimeUtils extends SparkDateTimeUtils {
     if (seconds.isNaN || seconds.isInfinite) {
       throw new DateTimeException("Cannot convert NaN or Infinite value to TIME")
     }
-    (seconds * NANOS_PER_SECOND).toLong
+    Math.multiplyExact(secondsToFlooredMicros(seconds), NANOS_PER_MICROS)
   }
+
+  // Seconds at or above this magnitude use the BigDecimal conversion. Below it, one microsecond is
+  // much wider than the spacing between doubles, which the primitive conversion relies on.
+  private val maxSecondsForPrimitiveConversion = 1e9
+
+  /**
+   * Returns the shortest decimal form of `seconds`, as `BigDecimal.valueOf` gives it, floored to
+   * whole microseconds. The shortest decimal form matters: `2.49E-4 * 1e6` is
+   * `248.99999999999997`, and the exact binary value of `1.0E-6` is below one microsecond, so
+   * flooring the product or the exact value loses one microsecond. Below
+   * `maxSecondsForPrimitiveConversion` this uses primitive arithmetic, and calls `Math.fma` only
+   * when the product is a whole number, so that it is cheap per row on every JVM.
+   */
+  private[util] def secondsToFlooredMicros(seconds: Double): Long = {
+    if (Math.abs(seconds) >= maxSecondsForPrimitiveConversion) {
+      floorToMicros(java.math.BigDecimal.valueOf(seconds))
+    } else {
+      val micros = seconds * MICROS_PER_SECOND
+      val nearestMicros = Math.round(micros)
+      if (nearestMicros / MICROS_PER_SECOND.toDouble == seconds) {
+        // A whole number of microseconds rounds to `seconds`, so it is the shortest decimal form.
+        nearestMicros
+      } else {
+        // No whole number of microseconds rounds to `seconds`, so the shortest decimal form has
+        // the same floor as the exact value of `seconds`. Rounding is monotonic, so `micros` can
+        // be above the exact product only when it was rounded up to a whole number. Only then
+        // the exact sign of `seconds * 1e6 - floor` from `fma` is needed. Without the FMA
+        // intrinsic, `fma` uses BigDecimal, so it must not run for every row.
+        val floor = Math.floor(micros)
+        if (micros == floor && Math.fma(seconds, MICROS_PER_SECOND.toDouble, -floor) < 0) {
+          floor.toLong - 1
+        } else {
+          floor.toLong
+        }
+      }
+    }
+  }
+
+  // `time_from_seconds` returns TIME(6). Floor (not truncate toward zero) to microseconds, so that
+  // a negative input below one microsecond stays negative and fails the range check.
+  private def floorToMicros(seconds: java.math.BigDecimal): Long =
+    seconds.movePointRight(6).setScale(0, java.math.RoundingMode.FLOOR).longValueExact()
+
+  private def secondsToMicrosPrecisionNanos(seconds: java.math.BigDecimal): Long =
+    Math.multiplyExact(floorToMicros(seconds), NANOS_PER_MICROS)
 
   /**
    * Creates a TIME value from milliseconds since midnight.

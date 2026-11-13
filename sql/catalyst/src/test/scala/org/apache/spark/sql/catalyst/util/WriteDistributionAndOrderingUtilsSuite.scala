@@ -124,6 +124,8 @@ class WriteDistributionAndOrderingUtilsSuite extends SparkFunSuite with SQLHelpe
     "time(9) without trailing zeros" ->
       f(literal(LocalTime.of(12, 0, 0, 123456789), TimeType(9))),
     "time(7) at a whole second" -> f(literal(LocalTime.of(12, 0), TimeType(7))),
+    // Catalyst truncates the value to TIME(6), so the key replays as TIME '00:00:00'.
+    "time(6) holding a nanosecond" -> f(literal(LocalTime.ofNanoOfDay(1))),
     "day-time interval" -> f(literal(Duration.ofHours(1))),
     "year-month interval" -> f(literal(Period.ofMonths(14))),
     "bucket" -> transform("bucket", literal(16), id),
@@ -149,7 +151,6 @@ class WriteDistributionAndOrderingUtilsSuite extends SparkFunSuite with SQLHelpe
     "NaN" -> f(literal(Float.NaN)),
     "infinity" -> f(literal(Double.PositiveInfinity)),
     "maximal float" -> f(literal(Float.MaxValue)),
-    "time(6) holding a nanosecond" -> f(literal(LocalTime.ofNanoOfDay(1))),
     "year interval not in whole years" ->
       f(literal(13, YearMonthIntervalType(YearMonthIntervalType.YEAR))),
     "hour interval not in whole hours" ->

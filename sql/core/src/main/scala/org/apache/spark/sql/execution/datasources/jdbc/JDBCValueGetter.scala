@@ -57,11 +57,13 @@ private[jdbc] object JDBCValueGetter {
     }
   }
 
-  case object TimeGetter extends JDBCValueGetter {
+  // The database value can have more fractional digits than the column precision, e.g. with a
+  // `customSchema` of TIME(3), so drop the digits beyond it, as CAST does.
+  final case class TimeGetter(precision: Int) extends JDBCValueGetter {
     def apply(rs: ResultSet, row: InternalRow, pos: Int): Unit = {
       val localTime = rs.getObject(pos + 1, classOf[java.time.LocalTime])
       if (localTime != null) {
-        row.setLong(pos, localTime.toNanoOfDay)
+        row.setLong(pos, localTimeToNanos(localTime, precision))
       } else {
         row.update(pos, null)
       }

@@ -231,7 +231,7 @@ public class ArrowColumnVector extends ColumnVector {
     } else if (vector instanceof TimeStampMicroVector timeStampMicroVector) {
       accessor = new TimestampNTZAccessor(timeStampMicroVector);
     } else if (vector instanceof TimeNanoVector timeNanoVector) {
-      accessor = new TimeNanoAccessor(timeNanoVector);
+      accessor = new TimeNanoAccessor(timeNanoVector, declaredTimePrecision(timeNanoVector));
     } else if (vector instanceof TimeStampNanoTZVector timeStampNanoTZVector) {
       accessor = new TimestampLTZNanosAccessor(timeStampNanoTZVector, nanosPrecision(type));
     } else if (vector instanceof TimeStampNanoVector timeStampNanoVector) {
@@ -651,16 +651,33 @@ public class ArrowColumnVector extends ColumnVector {
   static class TimeNanoAccessor extends ArrowVectorAccessor {
 
     private final TimeNanoVector accessor;
+    private final int precision;
 
-    TimeNanoAccessor(TimeNanoVector vector) {
+    TimeNanoAccessor(TimeNanoVector vector, int precision) {
       super(vector);
       this.accessor = vector;
+      this.precision = precision;
     }
 
+    // Below p = 9 it truncates to the declared precision, as producers may send extra digits.
     @Override
     final long getLong(int rowId) {
-      return accessor.get(rowId);
+      long nanos = accessor.get(rowId);
+      if (precision < TimeType.MAX_PRECISION()) {
+        return DateTimeUtils.truncateTimeToPrecision(nanos, precision);
+      }
+      return nanos;
     }
+  }
+
+  // Spark and PySpark record the TIME precision in the field metadata. A field without it reads as
+  // TIME(6), but its values are kept as they are: the reader cannot know which digits are extra.
+  // TODO: TIME values in fields without the precision key, such as mapInArrow, Arrow UDF and Python
+  // data source results and data from older Spark Connect clients, still keep more digits than a
+  // TIME(0) to TIME(6) column holds, until each consumer applies its declared precision.
+  private static int declaredTimePrecision(ValueVector vector) {
+    scala.Option<Object> precision = ArrowUtils.declaredTimePrecision(vector.getField());
+    return precision.isDefined() ? (Integer) precision.get() : TimeType.MAX_PRECISION();
   }
 
   // The vector class and its field's time zone can disagree, so accept either nanos type.

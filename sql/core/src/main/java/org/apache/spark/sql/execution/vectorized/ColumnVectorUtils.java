@@ -237,8 +237,8 @@ public class ColumnVectorUtils {
         dst.appendLong(DateTimeUtils.fromJavaTimestamp((Timestamp) o));
       } else if (t instanceof TimestampNTZType) {
         dst.appendLong(DateTimeUtils.localDateTimeToMicros((LocalDateTime) o));
-      } else if (t instanceof TimeType) {
-        dst.appendLong(DateTimeUtils.localTimeToNanos((LocalTime) o));
+      } else if (t instanceof TimeType tt) {
+        dst.appendLong(DateTimeUtils.localTimeToNanos((LocalTime) o, tt.precision()));
       } else {
         throw new SparkUnsupportedOperationException(
           "UNSUPPORTED_DATATYPE", Map.of("typeName", QueryExecutionErrors.toSQLType(t)));

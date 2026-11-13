@@ -1102,7 +1102,7 @@ class CsvFunctionsSuite extends SharedSparkSession {
         .collect().head.getAs[Row](0).getAs[LocalTime](0)
       assert(parseResult == time, s"from_csv failed for precision $precision")
 
-      val df = Seq(time).toDF("time").select($"time".cast(TimeType(precision)))
+      val df = spark.createDataFrame(java.util.List.of(Row(time)), schema)
       val csvResult = df.select(to_csv(struct($"time"))).collect().head.getString(0)
       assert(csvResult == timeStr, s"to_csv failed for precision $precision")
 
@@ -1127,6 +1127,27 @@ class CsvFunctionsSuite extends SharedSparkSession {
     val customCsv = customDF.select(to_csv(struct($"time"), customOptions.asJava))
       .collect().head.getString(0)
     assert(customCsv == "14-30-45.123456", "Custom format to_csv failed")
+  }
+
+  test("SPARK-61087: from_csv truncates TIME values to the precision of the field") {
+    import java.time.LocalTime
+    val schema = new StructType()
+      .add("t6", TimeType(6)).add("t3", TimeType(3)).add("t9", TimeType(9))
+    Seq(
+      Map.empty[String, String] -> "00:00:00.1234567,12:00:00.123456,12:00:00.123456789",
+      Map("timeFormat" -> "HH:mm:ss.SSSSSSSSS") ->
+        "00:00:00.123456789,12:00:00.123456789,12:00:00.123456789")
+      .foreach { case (options, csv) =>
+        checkAnswer(
+          Seq(csv).toDS().select(from_csv($"value", schema, options).as("s")).select("s.*"),
+          Row(LocalTime.of(0, 0, 0, 123456000), LocalTime.of(12, 0, 0, 123000000),
+            LocalTime.of(12, 0, 0, 123456789)))
+      }
+    checkAnswer(
+      sql("""SELECT from_csv('00:00:00.1234567', 't TIME').t = TIME'00:00:00.123456',
+            |  from_csv('00:00:00.1234567', 't TIME').t = to_time('00:00:00.1234567')
+            |""".stripMargin),
+      Row(true, true))
   }
 
   test("TIME type with nulls") {
