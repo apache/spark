@@ -98,6 +98,19 @@ class ProcedureSuite extends QueryTest with SharedSparkSession with BeforeAndAft
     checkAnswer(sql("CALL cat.ns.sum((1 + 1) * 2, in2 => (2 + 1) / 3)"), Row(5) :: Nil)
   }
 
+  test("SPARK-61557: non-foldable arguments") {
+    catalog.createProcedure(Identifier.of(Array("ns"), "sum"), UnboundSum)
+    checkError(
+      exception = intercept[AnalysisException] {
+        sql("CALL cat.ns.sum(1, CAST(rand() * 10 AS INT))")
+      },
+      condition = "NON_FOLDABLE_ARGUMENT",
+      parameters = Map(
+        "funcName" -> toSQLId("sum"),
+        "paramName" -> toSQLId("in2"),
+        "paramType" -> toSQLType("INT")))
+  }
+
   test("type coercion") {
     catalog.createProcedure(Identifier.of(Array("ns"), "sum"), UnboundLongSum)
     checkAnswer(sql("CALL cat.ns.sum(1, 2)"), Row(3) :: Nil)
