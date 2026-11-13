@@ -2437,6 +2437,91 @@ class InsertSuite extends DataSourceTest with SharedSparkSession {
     }
   }
 
+  test("ALTER TABLE ADD COLUMN with map default on files written before the column") {
+    val configs = for {
+      dataSource <- Seq("parquet", "orc")
+      (vectorized, offHeap) <- Seq((true, false), (true, true), (false, false))
+      batchSize <- Seq(2, 4096)
+    } yield (dataSource, vectorized, offHeap, batchSize)
+    configs.foreach { case (dataSource, vectorized, offHeap, batchSize) =>
+      val sqlConfs = Seq(
+        SQLConf.PARQUET_VECTORIZED_READER_ENABLED.key -> vectorized.toString,
+        SQLConf.ORC_VECTORIZED_READER_ENABLED.key -> vectorized.toString,
+        SQLConf.PARQUET_VECTORIZED_READER_BATCH_SIZE.key -> batchSize.toString,
+        SQLConf.ORC_VECTORIZED_READER_BATCH_SIZE.key -> batchSize.toString,
+        SQLConf.COLUMN_VECTOR_OFFHEAP_ENABLED.key -> offHeap.toString)
+      withSQLConf(sqlConfs: _*) {
+        withTable("t") {
+          sql(s"create table t(id int) using $dataSource")
+          sql("insert into t values (1), (2), (3), (4), (5)")
+          sql("alter table t add column m map<string, int> default map('a', 1, 'b', 2)")
+          checkAnswer(
+            sql("select id, size(m), map_entries(m) from t order by id"),
+            (1 to 5).map(id => Row(id, 2, Seq(Row("a", 1), Row("b", 2)))))
+        }
+      }
+    }
+  }
+
+  test("ALTER TABLE ADD COLUMN with complex defaults on files written before the column") {
+    case class Config(
+        dataSource: String,
+        vectorized: Boolean,
+        offHeap: Boolean,
+        batchSize: Int)
+    val configs = for {
+      dataSource <- Seq("parquet", "orc")
+      (vectorized, offHeap) <- Seq((true, false), (true, true), (false, false))
+      batchSize <- Seq(2, 4096)
+    } yield Config(dataSource, vectorized, offHeap, batchSize)
+    configs.foreach { config =>
+      val sqlConfs = Seq(
+        SQLConf.PARQUET_VECTORIZED_READER_ENABLED.key -> config.vectorized.toString,
+        SQLConf.ORC_VECTORIZED_READER_ENABLED.key -> config.vectorized.toString,
+        SQLConf.PARQUET_VECTORIZED_READER_BATCH_SIZE.key -> config.batchSize.toString,
+        SQLConf.ORC_VECTORIZED_READER_BATCH_SIZE.key -> config.batchSize.toString,
+        SQLConf.COLUMN_VECTOR_OFFHEAP_ENABLED.key -> config.offHeap.toString)
+      withSQLConf(sqlConfs: _*) {
+        withTable("t") {
+          sql(s"create table t(id int) using ${config.dataSource}")
+          sql("insert into t values (1), (2), (3), (4), (5)")
+          sql("alter table t add column m map<string, int> default map('a', 1, 'b', 2)")
+          sql("alter table t add column e map<string, int> default map()")
+          sql("alter table t add column n map<string, int> default map('a', cast(null as int))")
+          sql("alter table t add column a array<int> default array(1, null, 3)")
+          sql("alter table t add column s struct<x: int, y: string> default struct(7, null)")
+          sql("alter table t add column b binary default x'0102'")
+          sql("alter table t add column mb map<string, array<binary>> " +
+            "default map('k', array(x'0908', null))")
+          val rows = sql(
+            """
+              select id, size(m), map_entries(m), size(e), size(n), map_entries(n), a, s, b,
+                map_entries(mb)
+              from t order by id""").collect()
+          assert(rows.length == 5)
+          rows.zipWithIndex.foreach { case (row, i) =>
+            assert(row.getInt(0) == i + 1)
+            assert(row.getInt(1) == 2)
+            assert(row.getSeq[Row](2) == Seq(Row("a", 1), Row("b", 2)))
+            assert(row.getInt(3) == 0)
+            assert(row.getInt(4) == 1)
+            assert(row.getSeq[Row](5) == Seq(Row("a", null)))
+            assert(row.getSeq[Any](6) == Seq(1, null, 3))
+            assert(row.getStruct(7) == Row(7, null))
+            assert(row.getAs[Array[Byte]](8).toSeq == Seq[Byte](1, 2))
+            val mb = row.getSeq[Row](9)
+            assert(mb.length == 1)
+            assert(mb.head.getString(0) == "k")
+            val values = mb.head.getSeq[Any](1)
+            assert(values.length == 2)
+            assert(values.head.asInstanceOf[Array[Byte]].toSeq == Seq[Byte](9, 8))
+            assert(values(1) == null)
+          }
+        }
+      }
+    }
+  }
+
   test("SPARK-39643 Prohibit subquery expressions in DEFAULT values") {
     checkError(
       exception = intercept[AnalysisException] {

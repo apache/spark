@@ -825,6 +825,17 @@ public abstract class WritableColumnVector extends ColumnVector {
    * or Optional.empty() otherwise.
    */
   public Optional<Integer> appendObjects(int length, Object value) {
+    if (value == null) {
+      for (int i = 0; i < length; ++i) {
+        if (type instanceof StructType || type instanceof VariantType
+            || type instanceof CalendarIntervalType || type instanceof AnyTimestampNanoType) {
+          appendStruct(true);
+        } else {
+          appendNull();
+        }
+      }
+      return Optional.of(length);
+    }
     if (value instanceof Boolean) {
       return Optional.of(appendBooleans(length, (Boolean) value));
     }
@@ -832,11 +843,10 @@ public abstract class WritableColumnVector extends ColumnVector {
       return Optional.of(appendBytes(length, (Byte) value));
     }
     if (value instanceof Decimal decimal) {
-      long unscaled = decimal.toUnscaledLong();
       if (decimal.precision() <= Decimal.MAX_INT_DIGITS()) {
-        return Optional.of(appendInts(length, (int) unscaled));
+        return Optional.of(appendInts(length, (int) decimal.toUnscaledLong()));
       } else if (decimal.precision() <= Decimal.MAX_LONG_DIGITS()) {
-        return Optional.of(appendLongs(length, unscaled));
+        return Optional.of(appendLongs(length, decimal.toUnscaledLong()));
       } else {
         BigInteger integer = decimal.toJavaBigDecimal().unscaledValue();
         byte[] bytes = integer.toByteArray();
@@ -864,6 +874,13 @@ public abstract class WritableColumnVector extends ColumnVector {
     }
     if (value instanceof UTF8String utf8) {
       byte[] bytes = utf8.getBytes();
+      int result = 0;
+      for (int i = 0; i < length; ++i) {
+        result += appendByteArray(bytes, 0, bytes.length);
+      }
+      return Optional.of(result);
+    }
+    if (value instanceof byte[] bytes) {
       int result = 0;
       for (int i = 0; i < length; ++i) {
         result += appendByteArray(bytes, 0, bytes.length);
@@ -898,9 +915,9 @@ public abstract class WritableColumnVector extends ColumnVector {
       return Optional.of(result);
     }
     if (value instanceof ArrayBasedMapData data) {
-      appendArray(length);
       int result = 0;
       for (int i = 0; i < length; ++i) {
+        appendArray(data.numElements());
         for (Object key : data.keyArray().array()) {
           if (childColumns[0].appendObjects(1, key).isEmpty()) {
             return Optional.empty();

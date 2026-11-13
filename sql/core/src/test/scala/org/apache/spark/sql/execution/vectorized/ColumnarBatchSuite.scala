@@ -37,7 +37,7 @@ import org.apache.spark.memory.MemoryMode
 import org.apache.spark.sql.{RandomDataGenerator, Row}
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.GenericInternalRow
-import org.apache.spark.sql.catalyst.util.{ArrayBasedMapBuilder, DateTimeUtils, GenericArrayData, MapData}
+import org.apache.spark.sql.catalyst.util.{ArrayBasedMapBuilder, ArrayBasedMapData, DateTimeUtils, GenericArrayData, MapData}
 import org.apache.spark.sql.execution.RowToColumnConverter
 import org.apache.spark.sql.execution.datasources.parquet.VectorizedPlainValuesReader
 import org.apache.spark.sql.types._
@@ -2021,6 +2021,171 @@ class ColumnarBatchSuite extends SparkFunSuite {
       assert(columns(0).getStruct(2).getInterval(0) === new CalendarInterval(4, 5, 6))
     } finally {
       columns.foreach(_.close())
+    }
+  }
+
+  test("appendObjects repeats a map default once per row") {
+    val mapType = MapType(StringType, IntegerType)
+    val default = ArrayBasedMapData(
+      Array(UTF8String.fromString("a"), UTF8String.fromString("b")), Array(1, 2))
+    Seq(MemoryMode.ON_HEAP, MemoryMode.OFF_HEAP).foreach { memMode =>
+      val column = allocate(5, mapType, memMode)
+      try {
+        assert(column.appendObjects(5, default).isPresent)
+        assert(column.getElementsAppended == 5)
+        (0 until 5).foreach { i =>
+          assert(!column.isNullAt(i))
+          val map = column.getMap(i)
+          assert(map.numElements() == 2)
+          assert(map.keyArray().getUTF8String(0) == UTF8String.fromString("a"))
+          assert(map.keyArray().getUTF8String(1) == UTF8String.fromString("b"))
+          assert(map.valueArray().getInt(0) == 1)
+          assert(map.valueArray().getInt(1) == 2)
+        }
+        assert(column.getChild(0).getElementsAppended == 10)
+        assert(column.getChild(1).getElementsAppended == 10)
+      } finally {
+        column.close()
+      }
+    }
+  }
+
+  test("appendObjects repeats an empty map default once per row") {
+    val mapType = MapType(StringType, IntegerType)
+    Seq(MemoryMode.ON_HEAP, MemoryMode.OFF_HEAP).foreach { memMode =>
+      val column = allocate(3, mapType, memMode)
+      try {
+        assert(column.appendObjects(3, ArrayBasedMapData(Array.empty[Any], Array.empty[Any]))
+          .isPresent)
+        assert(column.getElementsAppended == 3)
+        (0 until 3).foreach { i =>
+          assert(!column.isNullAt(i))
+          assert(column.getMap(i).numElements() == 0)
+        }
+      } finally {
+        column.close()
+      }
+    }
+  }
+
+  test("appendObjects keeps appended map defaults apart from earlier rows") {
+    val mapType = MapType(IntegerType, IntegerType)
+    Seq(MemoryMode.ON_HEAP, MemoryMode.OFF_HEAP).foreach { memMode =>
+      val column = allocate(4, mapType, memMode)
+      try {
+        assert(column.appendObjects(2, ArrayBasedMapData(Array(1), Array(10))).isPresent)
+        assert(column.appendObjects(2, ArrayBasedMapData(Array(2, 3), Array(20, 30))).isPresent)
+        assert(column.getElementsAppended == 4)
+        Seq(0, 1).foreach { i =>
+          val map = column.getMap(i)
+          assert(map.numElements() == 1)
+          assert(map.keyArray().getInt(0) == 1)
+          assert(map.valueArray().getInt(0) == 10)
+        }
+        Seq(2, 3).foreach { i =>
+          val map = column.getMap(i)
+          assert(map.numElements() == 2)
+          assert(map.keyArray().toIntArray().toSeq == Seq(2, 3))
+          assert(map.valueArray().toIntArray().toSeq == Seq(20, 30))
+        }
+      } finally {
+        column.close()
+      }
+    }
+  }
+
+  test("appendObjects supports null values in a map default") {
+    val mapType = MapType(StringType, IntegerType)
+    val default = ArrayBasedMapData(
+      Array(UTF8String.fromString("a"), UTF8String.fromString("b")), Array(null, 2))
+    Seq(MemoryMode.ON_HEAP, MemoryMode.OFF_HEAP).foreach { memMode =>
+      val column = allocate(3, mapType, memMode)
+      try {
+        assert(column.appendObjects(3, default).isPresent)
+        (0 until 3).foreach { i =>
+          val map = column.getMap(i)
+          assert(map.numElements() == 2)
+          assert(map.valueArray().isNullAt(0))
+          assert(map.valueArray().getInt(1) == 2)
+        }
+      } finally {
+        column.close()
+      }
+    }
+  }
+
+  test("appendObjects supports large decimal values") {
+    val dt = DecimalType(38, 0)
+    val big = Decimal(new java.math.BigDecimal("123456789012345678901234567890"))
+    Seq(MemoryMode.ON_HEAP, MemoryMode.OFF_HEAP).foreach { memMode =>
+      val column = allocate(3, dt, memMode)
+      try {
+        assert(column.appendObjects(3, big).isPresent)
+        (0 until 3).foreach { i =>
+          assert(column.getDecimal(i, 38, 0) == big)
+        }
+      } finally {
+        column.close()
+      }
+    }
+  }
+
+  test("appendObjects supports binary values") {
+    Seq(MemoryMode.ON_HEAP, MemoryMode.OFF_HEAP).foreach { memMode =>
+      val column = allocate(3, BinaryType, memMode)
+      try {
+        assert(column.appendObjects(3, Array[Byte](1, 2, 3)).isPresent)
+        (0 until 3).foreach { i =>
+          assert(column.getBinary(i).toSeq == Seq[Byte](1, 2, 3))
+        }
+      } finally {
+        column.close()
+      }
+    }
+  }
+
+  test("appendObjects supports binary and null elements in nested defaults") {
+    val arrayType = ArrayType(IntegerType)
+    val structType = new StructType().add("x", IntegerType).add("y", StringType)
+    val mapType = MapType(StringType, ArrayType(BinaryType))
+    Seq(MemoryMode.ON_HEAP, MemoryMode.OFF_HEAP).foreach { memMode =>
+      val arrays = allocate(3, arrayType, memMode)
+      val structs = allocate(3, structType, memMode)
+      val maps = allocate(3, mapType, memMode)
+      try {
+        assert(arrays.appendObjects(3, new GenericArrayData(Array[Any](1, null, 3))).isPresent)
+        (0 until 3).foreach { i =>
+          val array = arrays.getArray(i)
+          assert(array.numElements() == 3)
+          assert(array.getInt(0) == 1)
+          assert(array.isNullAt(1))
+          assert(array.getInt(2) == 3)
+        }
+
+        assert(structs.appendObjects(3, new GenericInternalRow(Array[Any](7, null))).isPresent)
+        (0 until 3).foreach { i =>
+          val struct = structs.getStruct(i)
+          assert(struct.getInt(0) == 7)
+          assert(struct.isNullAt(1))
+        }
+
+        val default = ArrayBasedMapData(
+          Array(UTF8String.fromString("k")),
+          Array(new GenericArrayData(Array[Any](Array[Byte](9, 8), null))))
+        assert(maps.appendObjects(3, default).isPresent)
+        (0 until 3).foreach { i =>
+          val map = maps.getMap(i)
+          assert(map.numElements() == 1)
+          val values = map.valueArray().getArray(0)
+          assert(values.numElements() == 2)
+          assert(values.getBinary(0).toSeq == Seq[Byte](9, 8))
+          assert(values.isNullAt(1))
+        }
+      } finally {
+        arrays.close()
+        structs.close()
+        maps.close()
+      }
     }
   }
 
