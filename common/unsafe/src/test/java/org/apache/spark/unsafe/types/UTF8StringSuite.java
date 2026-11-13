@@ -1632,4 +1632,83 @@ public class UTF8StringSuite {
       assert(usb.build().equals(UTF8String.fromString(sb.toString())));
     }
   }
+
+  /**
+   * Internal byte reads skip `getByte`'s bounds check where the caller's loop already keeps the
+   * index in range. Exercise those callers on the inputs at the edges of their loops: empty, all
+   * whitespace, a lone sign, and truncated or invalid multi-byte sequences, both on heap at a
+   * non-zero offset and off heap.
+   */
+  @Test
+  public void internalByteReadsOnEdgeCaseInputs() {
+    byte[][] inputs = {
+      {}, {' '}, {' ', ' ', ' '}, {'\t', ' ', '\n'}, {'-'}, {'+'}, {'1', '.'}, {','}, {'a', ','},
+      {(byte) 0xE4}, {'a', (byte) 0xE4}, {'a', (byte) 0xE4, (byte) 0xB8},
+      {(byte) 0xF0, (byte) 0x9F, (byte) 0x98}, {(byte) 0x80}, {(byte) 0xC3, ' '}, {(byte) 0xFF},
+      {' ', (byte) 0xE4, (byte) 0xB8, (byte) 0xAD, ' '}
+    };
+    long address = Platform.allocateMemory(16);
+    try {
+      for (byte[] input : inputs) {
+        byte[] padded = new byte[input.length + 2];
+        System.arraycopy(input, 0, padded, 1, input.length);
+        Platform.copyMemory(input, BYTE_ARRAY_OFFSET, null, address, input.length);
+        UTF8String onHeap = fromAddress(padded, BYTE_ARRAY_OFFSET + 1, input.length);
+        UTF8String offHeap = fromAddress(null, address, input.length);
+        for (UTF8String s : new UTF8String[] {onHeap, offHeap}) {
+          String message = Arrays.toString(input);
+          s.numChars();
+          s.isValid();
+          s.makeValid();
+          s.isFullAscii();
+          s.codePointIterator().forEachRemaining(c -> { });
+          s.reverseCodePointIterator().forEachRemaining(c -> { });
+          for (int i = -1; i <= input.length + 1; i++) {
+            s.substring(i, i + 2);
+            s.substring(i, Integer.MAX_VALUE);
+            s.charPosToByte(i);
+            s.bytePosToChar(i);
+            for (int occurrence = 1; occurrence <= 2; occurrence++) {
+              s.indexOf(fromString(","), i, occurrence);
+            }
+            s.indexOf(fromString(","), i);
+          }
+          s.reverse();
+          s.toUpperCase();
+          s.toLowerCase();
+          s.toTitleCase();
+          s.findInSet(fromString("a"));
+          s.soundex();
+          s.trimLeft(SPACE_UTF8);
+          s.trimRight(SPACE_UTF8);
+          boolean allSpaces = true;
+          for (byte b : input) {
+            allSpaces &= b == ' ';
+          }
+          if (allSpaces) {
+            assertEquals(EMPTY_UTF8, s.trim(), message);
+            assertEquals(EMPTY_UTF8, s.trimLeft(), message);
+            assertEquals(EMPTY_UTF8, s.trimRight(), message);
+          } else {
+            s.trim();
+            s.trimLeft();
+            s.trimRight();
+          }
+          if (s.trimAll().numBytes() == 0) {
+            assertFalse(s.toInt(new IntWrapper()), message);
+            assertFalse(s.toLong(new LongWrapper()), message);
+          } else {
+            s.toInt(new IntWrapper());
+            s.toLong(new LongWrapper());
+          }
+        }
+      }
+      for (String sign : new String[] {"-", "+", " - ", "\t+\n"}) {
+        assertFalse(fromString(sign).toInt(new IntWrapper()), sign);
+        assertFalse(fromString(sign).toLong(new LongWrapper()), sign);
+      }
+    } finally {
+      Platform.freeMemory(address);
+    }
+  }
 }
