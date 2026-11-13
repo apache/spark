@@ -22,7 +22,7 @@ import org.apache.spark.rdd.RDD
 import org.apache.spark.serializer.JavaSerializer
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.{Ascending, Attribute, AttributeReference, CodegenObjectFactoryMode, SortOrder, TransformExpression}
-import org.apache.spark.sql.catalyst.plans.physical.{ClusteredDistribution, HASH_ROUTING, KeyedPartitioning, KeyedShuffleSpec, KeyReducer, OrderedDistribution, Partitioning, PartitioningCollection, REPLICATED_FOR_JOIN, SPLIT_FOR_JOIN, UnknownPartitioning}
+import org.apache.spark.sql.catalyst.plans.physical.{ClusteredDistribution, HASH_ROUTING, KeyedPartitioning, KeyedShuffleSpec, KeyReducer, OrderedDistribution, Partitioning, PartitioningCollection, REPLICATED_FOR_JOIN, SPLIT_FOR_JOIN, UngroupingOrigin, UnknownPartitioning}
 import org.apache.spark.sql.catalyst.util.DateTimeTestUtils.date
 import org.apache.spark.sql.catalyst.util.InternalRowComparableWrapper
 import org.apache.spark.sql.connector.catalog.functions.{BucketFunction, BucketReducer, DaysFunctionWithToYearsReducerWithLongResult, DaysToYearsReducerWithLongResult, Reducer, YearsFunction, YearsFunctionWithToYearsReducerWithLongResult}
@@ -89,6 +89,19 @@ class GroupPartitionsExecSuite extends SharedSparkSession {
         ungroupingOrigin = Some(SPLIT_FOR_JOIN))
     }
     assert(e.getMessage.contains("more splits"))
+  }
+
+  test("SPARK-59575: repeated expected partition keys fail fast") {
+    // A repeated key the child holds would emit one group twice under a grouped report.
+    def keyOf(a: Int): InternalRowComparableWrapper =
+      InternalRowComparableWrapper(row(a), Seq(exprA))
+    val child = DummySparkPlan(
+      outputPartitioning = KeyedPartitioning(Seq(exprA), Seq(row(1), row(2), row(3))))
+    val e = intercept[AssertionError] {
+      GroupPartitionsExec(child,
+        expectedPartitionKeys = Some(Seq(keyOf(1) -> 1, keyOf(1) -> 1, keyOf(2) -> 1)))
+    }
+    assert(e.getMessage.contains("must be distinct"))
   }
 
   test("SPARK-59234: the replicate branch emits numSplits entries and does not overflow") {
@@ -432,7 +445,8 @@ class GroupPartitionsExecSuite extends SharedSparkSession {
     // does not carry is never emitted. When the dropped key is trailing, every kept group
     // still reads as the identity, but the partition count shrank and the hash modulus with
     // it: the child's undeclared rows sit at hash(key) % 3 while the retained claim would
-    // promise hash(key) % 2. The count check catches what the per-group check cannot.
+    // promise hash(key) % 2. The count check catches what the per-group check cannot. The dropped
+    // key's partition is pruned, which is what gives the claim up.
     val child = DummySparkPlan(
       outputPartitioning = KeyedPartitioning(Seq(exprA), Seq(row(1), row(2), row(3)))
         .withLayout(_.copy(unknownKeysOrigin = Some(HASH_ROUTING))))
@@ -449,10 +463,66 @@ class GroupPartitionsExecSuite extends SharedSparkSession {
     }
   }
 
+  test("SPARK-59575: an expected-key alignment keeps the claim where every group stays whole") {
+    // A join keeps a grouped marked side in its declared order and aligns an ungrouped one, such
+    // as a union's, to the sorted merged keys. An alignment that only reorders or coalesces emits
+    // every input partition once and declares no new key, so each key's rows stay in one group, as
+    // through a plain regrouping. Only the routing is lost. The other shapes give the claim up, as
+    // a prune does above:
+    // - a pad declares a key the child did not, whose rows may sit undeclared in another group;
+    // - a replicated key, or a split one that moves partitions. Partial clustering asks for that,
+    //   and a cached marked layout can meet it.
+    // A split that is the identity leaves every partition where it was, so it keeps even the
+    // routing.
+    def keyOf(a: Int): InternalRowComparableWrapper =
+      InternalRowComparableWrapper(row(a), Seq(exprA))
+    def aligned(
+        childKeys: Seq[Int],
+        expected: Seq[(Int, Int)],
+        ungroupingOrigin: Option[UngroupingOrigin] = None): Partitioning = {
+      val child = DummySparkPlan(
+        outputPartitioning = KeyedPartitioning(Seq(exprA), childKeys.map(row(_)))
+          .withLayout(_.copy(unknownKeysOrigin = Some(HASH_ROUTING))))
+      GroupPartitionsExec(child,
+        expectedPartitionKeys = Some(expected.map { case (k, n) => keyOf(k) -> n }),
+        ungroupingOrigin = ungroupingOrigin).outputPartitioning
+    }
+
+    Seq(
+      // The declared order a one-side shuffle onto a union leaves behind.
+      "reorder" -> aligned(Seq(3, 4, 1, 2), Seq(1 -> 1, 2 -> 1, 3 -> 1, 4 -> 1)),
+      "coalesce" -> aligned(Seq(2, 1, 2), Seq(1 -> 1, 2 -> 1))
+    ).foreach {
+      case (name, kp: KeyedPartitioning) =>
+        assert(kp.isGrouped && kp.mayContainUnknownPartitionKeys && !kp.unknownKeysRouted,
+          s"$name: the alignment keeps the claim and loses the routing, got $kp")
+      case (name, other) =>
+        fail(s"$name: the alignment should keep the keyed claim, got $other")
+    }
+    aligned(Seq(1, 1, 2), Seq(1 -> 2, 2 -> 1), Some(SPLIT_FOR_JOIN)) match {
+      case kp: KeyedPartitioning =>
+        assert(kp.mayContainUnknownPartitionKeys && kp.unknownKeysRouted,
+          s"an identity split keeps the claim and the routing, got $kp")
+      case other =>
+        fail(s"an identity split should keep the keyed claim, got $other")
+    }
+
+    Seq(
+      "pad" -> aligned(Seq(2, 1), Seq(1 -> 1, 2 -> 1, 3 -> 1)),
+      "replicate" -> aligned(Seq(2, 1), Seq(1 -> 2, 2 -> 1)),
+      "split" -> aligned(Seq(2, 1, 1), Seq(1 -> 2, 2 -> 1), Some(SPLIT_FOR_JOIN))
+    ).foreach {
+      case (name, u: UnknownPartitioning) =>
+        assert(u.numPartitions === 3, s"$name: the give-up count must match the physical count")
+      case (name, other) =>
+        fail(s"$name: the alignment should give the keyed claim up, got $other")
+    }
+  }
+
   test("SPARK-59050: unknown-keyed child with reducers gives up the keyed claim at the real " +
     "count") {
-    // The reducer instance of the give-up: a reduction regroups by the reduced keys, a
-    // non-identity grouping, so the unknown-keyed claim is dropped at the physical grouped
+    // The reducer instance of the give-up: a reduction regroups by the reduced keys, a key
+    // rewrite, so the unknown-keyed claim is dropped at the physical grouped
     // count. The node must report `UnknownPartitioning` with its physical grouped count;
     // reporting zero partitions is what threw once a parent join built a
     // `PartitioningCollection` over both sides. (`areKeysCompatible` pairs a marked layout

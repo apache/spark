@@ -18,7 +18,7 @@
 
 package org.apache.spark.sql.execution.datasources.v2
 
-import scala.collection.mutable.ArrayBuffer
+import scala.collection.mutable.{ArrayBuffer, BitSet}
 
 import org.apache.spark.{Partition, SparkException}
 import org.apache.spark.rdd.{CoalescedRDD, PartitionCoalescer, PartitionGroup, RDD, SortedMergeCoalescedRDD}
@@ -587,6 +587,16 @@ private[sql] case class PartitionGrouping(
     numReplicatedPartitionReads: Int) {
 
   def isGrouped: Boolean = layout.isGrouped
+
+  /**
+   * Whether the grouping is the identity, or only moves or merges the child's partitions and keeps
+   * each key in one slot. Every input partition lands in exactly one output group, and every output
+   * group holds at least one. So, unless `keysRewritten`, the node declares the child's keys and no
+   * others, each in one slot, or as the child had them for an identity. Always true outside the
+   * alignment path.
+   */
+  def keepsGroupsWhole: Boolean =
+    isIdentity || (numPrunedPartitions == 0 && isGrouped && partitions.forall(_._2.nonEmpty))
 }
 
 private[sql] object GroupPartitionsExec {
@@ -625,9 +635,7 @@ private[sql] object GroupPartitionsExec {
     val grouping = computeGrouping(
       childKp, joinKeyPositions, expectedPartitionKeys, reducers, ungroupingOrigin)
     GroupPartitionsExec(child, grouping,
-      computeOutputPartitioning(
-        childExpr, grouping, joinKeyPositions, reducers,
-        hasExpectedKeys = expectedPartitionKeys.isDefined),
+      computeOutputPartitioning(childExpr, grouping, joinKeyPositions, reducers),
       childPartitioning, joinKeyPositions, expectedPartitionKeys.map(_.size), reducers,
       ungroupingOrigin, sortedMergeOrdering)
   }
@@ -642,8 +650,7 @@ private[sql] object GroupPartitionsExec {
       p: Partitioning with Expression,
       grouping: PartitionGrouping,
       joinKeyPositions: Option[Seq[Int]],
-      reducers: Option[Seq[Option[KeyReducer]]],
-      hasExpectedKeys: Boolean): Partitioning = {
+      reducers: Option[Seq[Option[KeyReducer]]]): Partitioning = {
     // There can be multiple `KeyedPartitioning`s in an output partitioning of a join, but they
     // can only differ in `expressions`, since they share one `KeyLayout` (enforced by
     // `PartitioningCollection`). So the grouping is computed once, and the layout it describes
@@ -657,17 +664,26 @@ private[sql] object GroupPartitionsExec {
     // A marked layout keeps its keyed claim through a plain regrouping: coalescing the partitions
     // that share a key leaves every key's rows, declared or not, in the group named for the
     // declared key they reached, and full-key clustering is all a `ClusteredDistribution` reads.
-    // `computeGrouping` reports that layout as `ROUTING_LOST`, since the regrouping moved an
-    // undeclared key's group off `hash(key) % numPartitions`.
+    // An expected-key alignment that keeps the groups whole, because it only reorders or coalesces
+    // them, is a plain regrouping too. `computeGrouping` reports such a layout as `ROUTING_LOST`,
+    // since the regrouping moved an undeclared key's group off `hash(key) % numPartitions`.
     //
-    // A key rewrite or non-identity expected-key alignment re-labels or replicates the groups, so
-    // those shapes give the keyed claim up, and only the physical output count is reported, which
-    // is the count a parent's `PartitioningCollection` needs for uniformity.
+    // The other shapes give the keyed claim up:
+    // - a key rewrite re-labels the groups;
+    // - a pruned group takes its undeclared rows with it, though the join pruned it by the
+    //   declared keys alone;
+    // - a padded slot declares a key the child did not, whose rows may sit undeclared in another
+    //   key's group;
+    // - a key expected in several slots, to split or replicate it, unless the split is the
+    //   identity and leaves every partition where it was. A join asks for that under partial
+    //   clustering, which a cached marked layout can meet.
+    // Only the physical output count is reported then, which is the count a parent's
+    // `PartitioningCollection` needs for uniformity.
     //
     // The state read off `p` is the one `computeGrouping` copies into `grouping.layout`; a change
     // to that copy has to move this guard with it.
     if (PartitioningCollection.keyedUnknownKeysOf(p).isDefined &&
-        (grouping.keysRewritten || (hasExpectedKeys && !grouping.isIdentity))) {
+        (grouping.keysRewritten || !grouping.keepsGroupsWhole)) {
       UnknownPartitioning(grouping.partitions.size)
     } else {
       // One instance for every member, so they share it by reference. It already carries the
@@ -724,9 +740,12 @@ private[sql] object GroupPartitionsExec {
       numInputPartitions: Int) = {
     var isGrouped = true
     var numReplicatedPartitionReads = 0
-    // Splits the alignment references, accumulated over the expected keys. Every producer of
-    // `expectedPartitionKeys` deduplicates the keys, so no split is counted twice here.
-    var numMatchedPartitions = 0
+    // The splits the alignment references. Every producer of `expectedPartitionKeys` deduplicates
+    // the keys. A repeated key the child holds would emit one group twice under a grouped report,
+    // so a split referenced twice is rejected here, which needs no key hash. A repeated key the
+    // child does not hold only pads, and a pad gives a marked claim up anyway
+    // (`PartitionGrouping.keepsGroupsWhole`).
+    val referencedPartitions = new BitSet(numInputPartitions)
     val alignedPartitions = expectedPartitionKeys.flatMap { case (key, numSplits) =>
       // Every producer derives the split counts from a `groupBy` size or the literal 1; a
       // non-positive count would emit a different partition count for the key than the other
@@ -734,7 +753,10 @@ private[sql] object GroupPartitionsExec {
       assert(numSplits > 0, s"expected partition key split count must be positive: $numSplits")
       if (numSplits > 1) isGrouped = false
       val splits = keyMap.getOrElse(key, Seq.empty)
-      numMatchedPartitions += splits.size
+      splits.foreach { i =>
+        assert(!referencedPartitions.contains(i), "expected partition keys must be distinct")
+        referencedPartitions += i
+      }
       if (distributePartitions) {
         // `padTo` only pads, never truncates, so a key holding more splits than its expected
         // count would be emitted more times than the count says, while `isGrouped` can still
@@ -759,8 +781,8 @@ private[sql] object GroupPartitionsExec {
       }
     }
     // The keyMap's groups partition the input indices between them, so the pruned inputs are the
-    // total minus the matched.
-    val numPrunedPartitions = numInputPartitions - numMatchedPartitions
+    // ones no expected key references.
+    val numPrunedPartitions = numInputPartitions - referencedPartitions.size
     (alignedPartitions, isGrouped, numPrunedPartitions, numReplicatedPartitionReads)
   }
 

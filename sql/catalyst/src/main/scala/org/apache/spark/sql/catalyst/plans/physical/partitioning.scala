@@ -476,9 +476,10 @@ case object ROUTING_LOST extends UnknownKeysOrigin
  * they share are unique.
  *
  * @param partitionKeys One key row per partition, wrapped for comparison and grouping. Typically in
- *                      sorted order when produced by a data source or `GroupPartitionsExec`, but
- *                      this is not guaranteed after a projection. May contain duplicates while
- *                      ungrouped. Driver-side only.
+ *                      sorted order when produced by a data source or `GroupPartitionsExec`. A
+ *                      projection can leave them unsorted, and so can an alignment to another
+ *                      order, which `KeyedPartitioning.groupedKeyRowOrdering` lists. May contain
+ *                      duplicates while ungrouped. Driver-side only.
  * @param dataTypes The types the keys are compared at, one per partition expression, which is
  *                  `InternalRowComparableWrapper.comparableTypes` of the types they were computed
  *                  from. Held rather than read off a key row, because a layout with no partition
@@ -555,6 +556,17 @@ case class KeyLayout(
   /** The unknown-keys state after a change that moved the keys, which gives the routing up. */
   def unknownKeysRoutingLost: Option[UnknownKeysOrigin] =
     unknownKeysOrigin.map(_ => ROUTING_LOST)
+
+  /**
+   * Whether this layout and `other` can pair index by index as far as their undeclared rows go.
+   * That holds unless both are marked, and for two marked layouts only while both still route
+   * those rows by the hash, so that the rows of one undeclared key sit at the same index on both.
+   * It does not compare the keys. The index claim also needs both to declare the same keys in the
+   * same order, which each caller checks on its own.
+   */
+  def routesUndeclaredRowsWith(other: KeyLayout): Boolean =
+    !(mayContainUnknownPartitionKeys && other.mayContainUnknownPartitionKeys) ||
+      (unknownKeysRouted && other.unknownKeysRouted)
 
   /**
    * Whether `other` describes the same partition keys as this layout, which is the question every
@@ -962,9 +974,10 @@ case class KeyedPartitioning(
 
   /**
    * Whether the keys ascend in the sequence `o` reads them: the half of an ordering claim the
-   * key space does not carry. A grouped layout's keys are sorted by construction (`toGrouped`
-   * and the sources both sort with `groupedKeyRowOrdering`), but an ungrouped one has no
-   * producer that sorted it, so this check is what keeps `satisfies` from answering for a
+   * key space does not carry. A grouped layout's keys are usually sorted (`toGrouped` and the
+   * sources sort with `groupedKeyRowOrdering`). A one-side shuffle onto a union's key order, or a
+   * join aligned to a marked side's declared order, leaves them unsorted, and an ungrouped layout
+   * has no producer that sorted it. So this check is what keeps `satisfies` from answering for a
    * layout that cannot back the answer. `EnsureRequirements.resolveChild` asks the same
    * question to decide keep-versus-spread, on this same construction. An empty zip is
    * vacuously sorted, the answer for a single key.
@@ -1331,8 +1344,9 @@ object KeyedPartitioning {
    * orders, and silently return wrong results.
    *
    * It is the keys' own ordering, the one `InternalRowComparableWrapper.equals` compares with, so
-   * one definition answers both. `EnsureRequirements`' `OrderedDistribution` arm is the one place
-   * that lays grouped keys out in another order, the distribution's own.
+   * one definition answers both. `EnsureRequirements` lays grouped keys out in another order in two
+   * places: the `OrderedDistribution` arm, in the distribution's own order, and
+   * `checkKeyGroupCompatible`, in a marked side's declared order.
    */
   def groupedKeyRowOrdering(dataTypes: Seq[DataType]): BaseOrdering =
     InternalRowComparableWrapper.getInternalRowComparableWrapperFactory(dataTypes).ordering
@@ -2372,7 +2386,7 @@ case class KeyedShuffleSpec(
         partitioning.expressionsDescribeKeys && other.partitioning.expressionsDescribeKeys && {
           if (partitioning.mayContainUnknownPartitionKeys &&
               other.partitioning.mayContainUnknownPartitionKeys) {
-            partitioning.unknownKeysRouted && other.partitioning.unknownKeysRouted &&
+            partitioning.layout.routesUndeclaredRowsWith(other.partitioning.layout) &&
               partitioning.partitionKeys == other.partitioning.partitionKeys
           } else if (partitioning.mayContainUnknownPartitionKeys) {
             val declared = partitioning.partitionKeys.toSet
