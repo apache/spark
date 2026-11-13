@@ -22,7 +22,7 @@ import org.apache.spark.sql.catalyst.dsl.plans._
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.aggregate.{CollectList, CollectSet, ListAgg, StddevSamp}
 import org.apache.spark.sql.catalyst.plans.{Inner, LeftOuter, PlanTest}
-import org.apache.spark.sql.catalyst.plans.logical.{Assignment, CTERelationRef, DeleteAction, DeleteFromTable, DomainJoin, InsertAction, LateralJoin, LocalRelation, LogicalPlan, MergeIntoTable, Sample, Tail, UpdateTable}
+import org.apache.spark.sql.catalyst.plans.logical.{Assignment, CTERelationRef, Deduplicate, DeleteAction, DeleteFromTable, Distinct, DomainJoin, InsertAction, LateralJoin, LocalRelation, LogicalPlan, MergeIntoTable, Sample, Tail, UpdateTable}
 import org.apache.spark.sql.catalyst.rules.RuleExecutor
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types.{IntegerType, MapType, StringType}
@@ -176,9 +176,9 @@ class PullupCorrelatedPredicatesSuite extends PlanTest {
     assert(countBugHandling(correlated(max($"d")), outer = streamingOuter) == (Some(true), false))
     assert(countBugHandling(correlated(count($"d")), outer = streamingOuter) ==
       (Some(false), true))
-    // So do a non-deterministic expression anywhere in the query, a CTE that is not inlined,
-    // an outer input that may keep other rows when computed again, and outer references that
-    // are not orderable; a lower COUNT is still handled in decorrelation there.
+    // So do an outer input that may give other rows when computed again, an operator above it
+    // that a later rule may move into it, and outer references that are not orderable; a lower
+    // COUNT is still handled in decorrelation there.
     val nonDeterministicOuter = testRelation.where(Rand(0) > 0.5)
     assert(countBugHandling(correlated(max($"d")), outer = nonDeterministicOuter) ==
       (Some(true), false))
@@ -188,10 +188,11 @@ class PullupCorrelatedPredicatesSuite extends PlanTest {
     val cteOuter = CTERelationRef(0, _resolved = true, testRelation.output, isStreaming = false)
     assert(countBugHandling(correlated(max($"d")), outer = cteOuter) == (Some(true), false))
     assert(countBugHandling(correlated(count($"d")), outer = cteOuter) == (Some(false), true))
-    // A non-deterministic expression next to the subquery, or in a filter above it, which a
-    // later rule can push below it.
+    // A non-deterministic filter above the subquery, which a later rule can push below it, but
+    // not a non-deterministic expression next to the subquery, which the domain joins do not
+    // compute again.
     assert(countBugHandling(correlated(max($"d")), others = Seq(Rand(0).as("r"))) ==
-      (Some(true), false))
+      (Some(false), true))
     assert(countBugHandling(correlated(max($"d")), above = _.where(Rand(0) > 0.5)) ==
       (Some(true), false))
     assert(countBugHandling(correlated(count($"d")), above = _.where(Rand(0) > 0.5)) ==
@@ -211,6 +212,26 @@ class PullupCorrelatedPredicatesSuite extends PlanTest {
       assert(countBugHandling(correlated(count($"d")), outer = outer) == (Some(false), true))
     }
     assert(countBugHandling(correlated(max($"d")), above = _.limit(10)) == (Some(false), true))
+    // Only operators and aggregate functions known to give the same rows again: FIRST, a SUM of
+    // DOUBLEs and a Deduplicate (which becomes a FIRST later) do not, a SUM of INTs does.
+    val inLegacy = (Some(true), false)
+    val inDecorrelation = (Some(false), true)
+    Seq(testRelation.groupBy($"a")($"a", first($"b").as("f")),
+        testRelation.groupBy($"a")($"a", sum($"b").as("s")),
+        Deduplicate(Seq($"a"), testRelation)).foreach { outer =>
+      assert(countBugHandling(correlated(max($"d")), outer = outer) == inLegacy, outer)
+    }
+    assert(countBugHandling(correlated(max($"d")),
+      outer = testRelation.groupBy($"a")($"a", sum($"a").as("s"))) == inDecorrelation)
+    // Above the subquery: a LIMIT 1 above a DISTINCT, which LimitPushDown can push below it, and
+    // a filter with a subquery that may give other rows, which PushDownPredicates can push, but
+    // not a deterministic filter.
+    assert(countBugHandling(correlated(max($"d")), outer = Distinct(testRelation.select($"a")),
+      above = _.limit(1)) == inLegacy)
+    assert(countBugHandling(correlated(max($"d")), others = Seq($"a"),
+      above = _.where(limitInSubquery)) == inLegacy)
+    assert(countBugHandling(correlated(max($"d")), others = Seq($"a"),
+      above = _.where($"a" > 1)) == inDecorrelation)
     val joinOuter = testRelation.join(testRelation2, LeftOuter, Some($"a" === $"c"))
     assert(countBugHandling(correlated(max($"d")), outer = joinOuter, above = _.limit(10)) ==
       (Some(true), false))

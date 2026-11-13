@@ -629,33 +629,62 @@ object PullupCorrelatedPredicates extends Rule[LogicalPlan] with PredicateHelper
   }
 
   /**
-   * Whether the domain joins of [[DecorrelateInnerQuery]], which compute the outer query of a
-   * correlated subquery again, can be relied on to work and to see the same outer rows the
-   * second time, as far as `root`, the plan this rule runs on, tells: the whole query, or the
-   * plan of a subquery when OptimizeSubqueries optimizes it. The check is conservative and looks
-   * at all of `root`, since later rules can still move operators into the outer input, e.g.
-   * PushDownPredicates can push a non-deterministic filter below the operator with the
-   * subquery, and LimitPushDown a LIMIT into the inputs of a join. It rejects a streaming
-   * source, for which the domain joins fail, a non-deterministic expression, a CTE that is not
-   * inlined (which may be a non-deterministic one; a CTERelationRef does not tell), and a LIMIT
-   * or OFFSET above a join.
+   * Whether `input`, the outer input of an operator with a correlated subquery, gives the same
+   * rows when the domain joins of [[DecorrelateInnerQuery]] compute it again. The check is
+   * conservative: it accepts only operators known to keep the same rows, deterministic
+   * expressions, aggregate functions whose result does not depend on the order of the rows, and
+   * leaves other than a CTE that is not inlined (which may be a non-deterministic one; a
+   * CTERelationRef does not tell) and a streaming source, for which the domain joins fail. It
+   * also checks the plans of the subqueries in `input`. Anything else, e.g. a LIMIT, a window
+   * function, a sample or a FIRST, keeps the previous handling.
    */
-  private def outerQueryRepeatable(root: LogicalPlan): Boolean = !root.isStreaming &&
-    !root.exists {
-      case _: CTERelationRef => true
-      case l @ (_: LocalLimit | _: GlobalLimit | _: Offset) => l.exists(_.isInstanceOf[Join])
-      case p => !p.expressions.forall(_.deterministic)
+  private def repeatableInput(input: LogicalPlan): Boolean = !input.exists { p =>
+    val known = p match {
+      case _: Project | _: Filter | _: Join | _: Union | _: Distinct | _: Intersect | _: Except |
+           _: Sort | _: SubqueryAlias | _: RepartitionOperation => true
+      case a: Aggregate => !a.aggregateExpressions.exists(_.exists {
+        case ae: AggregateExpression => !orderIrrelevant(ae.aggregateFunction)
+        case _ => false
+      })
+      case _: CTERelationRef => false
+      case l: LeafNode => !l.isStreaming
+      case _ => false
     }
-
-  // Whether the outer input `input` of an operator with a correlated subquery can keep other
-  // rows when it is computed again although it is deterministic: a LIMIT, OFFSET or tail without
-  // a total order, a window function over ties, or a sample, also inside a subquery of it.
-  private def mayKeepOtherRows(input: LogicalPlan): Boolean = input.exists {
-    case _: LocalLimit | _: GlobalLimit | _: Offset | _: Tail | _: Window | _: Sample => true
-    case p => p.subqueries.exists(mayKeepOtherRows)
+    !known || !p.expressions.forall(_.deterministic) || !p.subqueries.forall(repeatableInput)
   }
 
-  private def rewriteSubQueries(plan: LogicalPlan, repeatable: Boolean): LogicalPlan = {
+  private def orderIrrelevant(f: AggregateFunction): Boolean = f match {
+    case _: Min | _: Max | _: Count | _: BitAndAgg | _: BitOrAgg | _: BitXorAgg => true
+    case _: Sum | _: Average => !f.children.exists(c =>
+      c.dataType == FloatType || c.dataType == DoubleType)
+    case _ => false
+  }
+
+  /**
+   * Whether the operators above the operator with the correlated subquery `exprId` in `root`,
+   * the plan this rule runs on (the whole query, or the plan of a subquery when
+   * OptimizeSubqueries optimizes it), may put something into its outer input that gives other
+   * rows when computed again, through the rules that run before RewriteCorrelatedScalarSubquery
+   * builds the domain joins: PushDownPredicates can push a filter or join condition there, and
+   * LimitPushDown a LIMIT, into the inputs of a join or, for a LIMIT 1, below an aggregate. The
+   * check is conservative and looks at all of `root`.
+   */
+  private def mayMoveIntoOuterInput(root: LogicalPlan, exprId: ExprId): Boolean =
+    root.isStreaming || root.exists {
+      case p @ (_: Filter | _: Join) =>
+        !p.expressions.forall(_.deterministic) || p.expressions.exists(_.exists {
+          case s: SubqueryExpression => s.exprId != exprId && !repeatableInput(s.plan)
+          case _ => false
+        })
+      case l @ (_: LocalLimit | _: GlobalLimit | _: Offset | _: Tail) => l.exists {
+        case _: Join | _: Aggregate | _: Distinct | _: Intersect | _: Except | _: Deduplicate =>
+          true
+        case _ => false
+      }
+      case _ => false
+    }
+
+  private def rewriteSubQueries(plan: LogicalPlan, root: LogicalPlan): LogicalPlan = {
     /**
      * This function is used as a aid to enforce idempotency of pullUpCorrelatedPredicate rule.
      * In the first call to rewriteSubqueries, all the outer references from the subplan are
@@ -694,10 +723,11 @@ object PullupCorrelatedPredicates extends Rule[LogicalPlan] with PredicateHelper
         // qualifies, correlated or not, as before SPARK-60501. Only such an Aggregate does with
         // LEGACY_SCALAR_SUBQUERY_NESTED_AGGREGATE_COUNT_BUG_BEHAVIOR, and where the domain joins
         // of DecorrelateInnerQuery are known not to work, so as not to make such queries worse
-        // than before: where the outer query may give other rows when computed again (see
-        // outerQueryRepeatable and mayKeepOtherRows), and for outer references that are not
+        // than before: where the outer input may give other rows when computed again (see
+        // repeatableInput and mayMoveIntoOuterInput), and for outer references that are not
         // orderable, for which the domain joins fail.
-        lazy val domainJoinsWork = repeatable && !plan.children.exists(mayKeepOtherRows) &&
+        lazy val domainJoinsWork = plan.children.forall(repeatableInput) &&
+          !mayMoveIntoOuterInput(root, exprId) &&
           outerAttrs.forall(e => RowOrdering.isOrderable(e.dataType))
         lazy val onlyDefaultResultSelectsDecorrelation =
           conf.getConf(SQLConf.LEGACY_SCALAR_SUBQUERY_NESTED_AGGREGATE_COUNT_BUG_BEHAVIOR) ||
@@ -779,10 +809,9 @@ object PullupCorrelatedPredicates extends Rule[LogicalPlan] with PredicateHelper
    * Pull up the correlated predicates and rewrite all subqueries in an operator tree..
    */
   def apply(plan: LogicalPlan): LogicalPlan = {
-    lazy val repeatable = outerQueryRepeatable(plan)
     plan.transformUpWithPruning(_.containsPattern(PLAN_EXPRESSION)) {
       case j: LateralJoin =>
-        val newPlan = rewriteSubQueries(j, repeatable)
+        val newPlan = rewriteSubQueries(j, plan)
         // Since a lateral join's output depends on its left child output and its lateral
         // subquery's plan output, we need to trim the domain attributes added to the subquery's
         // plan output to preserve the original output of the join.
@@ -792,12 +821,12 @@ object PullupCorrelatedPredicates extends Rule[LogicalPlan] with PredicateHelper
           newPlan
         }
       case j: Join if conf.getConf(DECORRELATE_PREDICATE_SUBQUERIES_IN_JOIN_CONDITION) =>
-        rewriteSubQueries(j, repeatable)
+        rewriteSubQueries(j, plan)
       // Only a few unary nodes (Project/Filter/Aggregate) can contain subqueries.
       case q: UnaryNode =>
-        rewriteSubQueries(q, repeatable)
+        rewriteSubQueries(q, plan)
       case s: SupportsSubquery =>
-        rewriteSubQueries(s, repeatable)
+        rewriteSubQueries(s, plan)
     }
   }
 }
