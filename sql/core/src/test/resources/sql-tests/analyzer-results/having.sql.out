@@ -749,3 +749,656 @@ org.apache.spark.sql.catalyst.ExtendedAnalysisException
 DROP VIEW hav_outer
 -- !query analysis
 DropTempViewCommand hav_outer, false
+
+
+-- !query
+SET spark.sql.analyzer.havingWithWindowResolvesGroupingColumnFirst.enabled=true
+-- !query analysis
+SetCommand (spark.sql.analyzer.havingWithWindowResolvesGroupingColumnFirst.enabled,Some(true))
+
+
+-- !query
+SELECT k + 10 AS k, avg(score) AS score, count(*) OVER () AS n
+FROM VALUES (1, 2), (1, 3), (2, 2), (2, 3) AS t(k, score)
+GROUP BY k HAVING k >= 2 AND score >= 2.5 ORDER BY 1
+-- !query analysis
+Sort [k#x ASC NULLS FIRST], true
++- Project [k#x, score#x, n#xL]
+   +- Project [k#x, score#x, n#xL, n#xL]
+      +- Window [count(1) windowspecdefinition(specifiedwindowframe(RowFrame, unboundedpreceding$(), unboundedfollowing$())) AS n#xL]
+         +- Project [k#x, score#x]
+            +- Filter ((k#x >= 2) AND (score#x >= cast(2.5 as double)))
+               +- Aggregate [k#x], [(k#x + 10) AS k#x, avg(score#x) AS score#x, k#x AS k#x]
+                  +- SubqueryAlias t
+                     +- LocalRelation [k#x, score#x]
+
+
+-- !query
+SELECT sum(1) AS k, (g + 1) + 10 AS g, count(*) OVER () AS n
+FROM VALUES (1, 1), (1, 2) AS t1(k, g) CROSS JOIN VALUES (2) AS t2(k)
+GROUP BY t1.k, t2.k, g + 1 HAVING k >= 1 AND g + 1 >= 3 ORDER BY g
+-- !query analysis
+Sort [g#x ASC NULLS FIRST], true
++- Project [k#xL, g#x, n#xL]
+   +- Project [k#xL, g#x, n#xL, n#xL]
+      +- Window [count(1) windowspecdefinition(specifiedwindowframe(RowFrame, unboundedpreceding$(), unboundedfollowing$())) AS n#xL]
+         +- Project [k#xL, g#x]
+            +- Filter ((k#xL >= cast(1 as bigint)) AND ((g + 1)#x >= 3))
+               +- Aggregate [k#x, k#x, (g#x + 1)], [sum(1) AS k#xL, ((g#x + 1) + 10) AS g#x, k#x AS k#x, k#x AS k#x, (g#x + 1) AS (g + 1)#x]
+                  +- Join Cross
+                     :- SubqueryAlias t1
+                     :  +- LocalRelation [k#x, g#x]
+                     +- SubqueryAlias t2
+                        +- LocalRelation [k#x]
+
+
+-- !query
+CREATE TEMPORARY FUNCTION having_id(v INT) RETURNS INT RETURN v
+-- !query analysis
+CreateSQLFunctionCommand having_id, v INT, INT, v, false, true, false, false
+
+
+-- !query
+SELECT sum(k) AS k, sum(1) AS a, count(*) OVER () AS n
+FROM (
+  SELECT having_id(having_id(having_id(k))) AS k FROM VALUES (1), (1), (2) AS t(k)
+) AS s
+GROUP BY k HAVING exists(array(a), x -> k >= 2) ORDER BY a, k
+-- !query analysis
+Sort [a#xL ASC NULLS FIRST, k#xL ASC NULLS FIRST], true
++- Project [k#xL, a#xL, n#xL]
+   +- Project [k#xL, a#xL, n#xL, n#xL]
+      +- Window [count(1) windowspecdefinition(specifiedwindowframe(RowFrame, unboundedpreceding$(), unboundedfollowing$())) AS n#xL]
+         +- Project [k#xL, a#xL]
+            +- Filter cast(exists(array(a#xL), lambdafunction((k#x >= 2), lambda x#xL, false)) as boolean)
+               +- Aggregate [k#x], [sum(k#x) AS k#xL, sum(1) AS a#xL, k#x AS k#x]
+                  +- SubqueryAlias s
+                     +- Project [having_id(v#x) AS k#x]
+                        +- Project [k#x, v#x, v#x, cast(having_id(v#x) as int) AS v#x]
+                           +- Project [k#x, v#x, cast(having_id(v#x) as int) AS v#x]
+                              +- Project [k#x, cast(k#x as int) AS v#x]
+                                 +- SubqueryAlias t
+                                    +- LocalRelation [k#x]
+
+
+-- !query
+DROP TEMPORARY FUNCTION having_id
+-- !query analysis
+DropFunctionCommand having_id, false, true
+
+
+-- !query
+SELECT sum(k) AS k, count(*) OVER () AS n
+FROM VALUES (1), (1), (2) AS t(k)
+GROUP BY k HAVING (SELECT k) >= 2 ORDER BY k
+-- !query analysis
+Sort [k#xL ASC NULLS FIRST], true
++- Project [k#xL, n#xL]
+   +- Project [k#xL, n#xL, n#xL]
+      +- Window [count(1) windowspecdefinition(specifiedwindowframe(RowFrame, unboundedpreceding$(), unboundedfollowing$())) AS n#xL]
+         +- Project [k#xL]
+            +- Filter (scalar-subquery#x [k#x] >= 2)
+               :  +- Project [outer(k#x) AS k#x]
+               :     +- OneRowRelation
+               +- Aggregate [k#x], [sum(k#x) AS k#xL, k#x AS k#x]
+                  +- SubqueryAlias t
+                     +- LocalRelation [k#x]
+
+
+-- !query
+SELECT (g + 1) + 10 AS g, count(*) OVER () AS n
+FROM VALUES (1), (2) AS t(g)
+GROUP BY g + 1 HAVING (SELECT g + 1) >= 3 ORDER BY 1
+-- !query analysis
+Sort [g#x ASC NULLS FIRST], true
++- Project [g#x, n#xL]
+   +- Project [g#x, n#xL, n#xL]
+      +- Window [count(1) windowspecdefinition(specifiedwindowframe(RowFrame, unboundedpreceding$(), unboundedfollowing$())) AS n#xL]
+         +- Project [g#x]
+            +- Filter (scalar-subquery#x [(g + 1)#x] >= 3)
+               :  +- Project [outer((g + 1)#x) AS (outer(t.g) + 1)#x]
+               :     +- OneRowRelation
+               +- Aggregate [(g#x + 1)], [((g#x + 1) + 10) AS g#x, (g#x + 1) AS (g + 1)#x]
+                  +- SubqueryAlias t
+                     +- LocalRelation [g#x]
+
+
+-- !query
+SELECT named_struct('x', s.x + 10) AS s, count(*) OVER () AS n
+FROM VALUES (named_struct('x', 1)), (named_struct('x', 2)) AS t(s)
+GROUP BY s.x HAVING s.x >= 2 ORDER BY s.x
+-- !query analysis
+Sort [s#x.x ASC NULLS FIRST], true
++- Project [s#x, n#xL]
+   +- Project [s#x, n#xL, n#xL]
+      +- Window [count(1) windowspecdefinition(specifiedwindowframe(RowFrame, unboundedpreceding$(), unboundedfollowing$())) AS n#xL]
+         +- Project [s#x]
+            +- Filter (s.x#x >= 2)
+               +- Aggregate [s#x.x], [named_struct(x, (s#x.x + 10)) AS s#x, s#x.x AS s.x#x]
+                  +- SubqueryAlias t
+                     +- LocalRelation [s#x]
+
+
+-- !query
+SELECT sum(v) AS k, count(*) OVER () AS n
+FROM VALUES (1, 10), (2, 20) AS t(k, v)
+GROUP BY k + 1 HAVING k >= 15 ORDER BY 1
+-- !query analysis
+Sort [k#xL ASC NULLS FIRST], true
++- Project [k#xL, n#xL]
+   +- Project [k#xL, n#xL, n#xL]
+      +- Window [count(1) windowspecdefinition(specifiedwindowframe(RowFrame, unboundedpreceding$(), unboundedfollowing$())) AS n#xL]
+         +- Project [k#xL]
+            +- Filter (k#xL >= cast(15 as bigint))
+               +- Aggregate [(k#x + 1)], [sum(v#x) AS k#xL, (k#x + 1) AS (k + 1)#x]
+                  +- SubqueryAlias t
+                     +- LocalRelation [k#x, v#x]
+
+
+-- !query
+SELECT sum(1) AS k, sum(1) AS a, count(*) OVER () AS n
+FROM VALUES (1), (2) AS t1(k) CROSS JOIN VALUES (9) AS t2(k)
+GROUP BY t1.k HAVING exists(array(a), x -> k >= 2) ORDER BY 1
+-- !query analysis
+Sort [k#xL ASC NULLS FIRST], true
++- Project [k#xL, a#xL, n#xL]
+   +- Project [k#xL, a#xL, n#xL, n#xL]
+      +- Window [count(1) windowspecdefinition(specifiedwindowframe(RowFrame, unboundedpreceding$(), unboundedfollowing$())) AS n#xL]
+         +- Project [k#xL, a#xL]
+            +- Filter cast(exists(array(a#xL), lambdafunction((k#xL >= cast(2 as bigint)), lambda x#xL, false)) as boolean)
+               +- Aggregate [k#x], [sum(1) AS k#xL, sum(1) AS a#xL, k#x AS k#x]
+                  +- Join Cross
+                     :- SubqueryAlias t1
+                     :  +- LocalRelation [k#x]
+                     +- SubqueryAlias t2
+                        +- LocalRelation [k#x]
+
+
+-- !query
+SELECT k AS a, count(*) OVER () AS n
+FROM VALUES (1), (2) AS t(k)
+GROUP BY k HAVING sum(k) >= 2 ORDER BY a
+-- !query analysis
+Sort [a#x ASC NULLS FIRST], true
++- Project [a#x, n#xL]
+   +- Project [a#x, n#xL, n#xL]
+      +- Window [count(1) windowspecdefinition(specifiedwindowframe(RowFrame, unboundedpreceding$(), unboundedfollowing$())) AS n#xL]
+         +- Project [a#x]
+            +- Filter (sum(k)#xL >= cast(2 as bigint))
+               +- Aggregate [k#x], [k#x AS a#x, sum(k#x) AS sum(k)#xL]
+                  +- SubqueryAlias t
+                     +- LocalRelation [k#x]
+
+
+-- !query
+SELECT k AS a, k, count(*) OVER () AS n
+FROM VALUES (1), (2) AS t(k)
+GROUP BY k HAVING EXISTS (
+  SELECT 1 FROM VALUES (0) AS u(v) WHERE sum(k) >= 2
+) ORDER BY a
+-- !query analysis
+Sort [a#x ASC NULLS FIRST], true
++- Project [a#x, k#x, n#xL]
+   +- Project [a#x, k#x, n#xL, n#xL]
+      +- Window [count(1) windowspecdefinition(specifiedwindowframe(RowFrame, unboundedpreceding$(), unboundedfollowing$())) AS n#xL]
+         +- Project [a#x, k#x]
+            +- Filter exists#x [sum(k)#xL]
+               :  +- Project [1 AS 1#x]
+               :     +- Filter (outer(sum(k)#xL) >= cast(2 as bigint))
+               :        +- SubqueryAlias u
+               :           +- LocalRelation [v#x]
+               +- Aggregate [k#x], [k#x AS a#x, k#x, sum(k#x) AS sum(k)#xL]
+                  +- SubqueryAlias t
+                     +- LocalRelation [k#x]
+
+
+-- !query
+SELECT k, count(*) OVER () AS n
+FROM VALUES (1), (2) AS t(k)
+GROUP BY k, k + 1 HAVING EXISTS (
+  SELECT 1 FROM VALUES (0) AS u(v) WHERE sum(k + 1) >= 3
+) ORDER BY k
+-- !query analysis
+Sort [k#x ASC NULLS FIRST], true
++- Project [k#x, n#xL]
+   +- Project [k#x, n#xL, n#xL]
+      +- Window [count(1) windowspecdefinition(specifiedwindowframe(RowFrame, unboundedpreceding$(), unboundedfollowing$())) AS n#xL]
+         +- Project [k#x]
+            +- Project [k#x, (k + 1)#x]
+               +- Filter exists#x [sum((k + 1))#xL]
+                  :  +- Project [1 AS 1#x]
+                  :     +- Filter (outer(sum((k + 1))#xL) >= cast(3 as bigint))
+                  :        +- SubqueryAlias u
+                  :           +- LocalRelation [v#x]
+                  +- Aggregate [k#x, (k#x + 1)], [k#x, (k#x + 1) AS (k + 1)#x, sum((k#x + 1)) AS sum((k + 1))#xL]
+                     +- SubqueryAlias t
+                        +- LocalRelation [k#x]
+
+
+-- !query
+SELECT sum(1) AS a, count(*) OVER () AS n
+FROM VALUES (1), (2) AS t1(k) CROSS JOIN VALUES (9) AS t2(k)
+GROUP BY t1.k HAVING k >= 2 ORDER BY a
+-- !query analysis
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
+{
+  "errorClass" : "UNRESOLVED_COLUMN.WITH_SUGGESTION",
+  "sqlState" : "42703",
+  "messageParameters" : {
+    "objectName" : "`k`",
+    "proposal" : "`a`"
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 125,
+    "stopIndex" : 125,
+    "fragment" : "k"
+  } ]
+}
+
+
+-- !query
+SELECT sum(1) AS a, count(*) OVER () AS n
+FROM VALUES (1), (2) AS t1(k) CROSS JOIN VALUES (9) AS t2(k)
+GROUP BY t1.k HAVING t1.k >= 1 AND k >= 2 ORDER BY a
+-- !query analysis
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
+{
+  "errorClass" : "UNRESOLVED_COLUMN.WITH_SUGGESTION",
+  "sqlState" : "42703",
+  "messageParameters" : {
+    "objectName" : "`k`",
+    "proposal" : "`a`"
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 139,
+    "stopIndex" : 139,
+    "fragment" : "k"
+  } ]
+}
+
+
+-- !query
+SELECT k, sum(rank() OVER (ORDER BY sum(v))) OVER () AS n
+FROM VALUES (1, 10), (2, 20), (3, 30) AS t(k, v)
+GROUP BY k HAVING k = 2 ORDER BY 1
+-- !query analysis
+Sort [k#x ASC NULLS FIRST], true
++- Project [k#x, n#xL]
+   +- Project [k#x, _w0#xL, _w0#x, _w0#x, n#xL, n#xL]
+      +- Window [sum(_w0#x) windowspecdefinition(specifiedwindowframe(RowFrame, unboundedpreceding$(), unboundedfollowing$())) AS n#xL]
+         +- Project [k#x, _w0#xL, _w0#x, _w0#x]
+            +- Window [rank(_w0#xL) windowspecdefinition(_w0#xL ASC NULLS FIRST, specifiedwindowframe(RowFrame, unboundedpreceding$(), currentrow$())) AS _w0#x], [_w0#xL ASC NULLS FIRST]
+               +- Filter (k#x = 2)
+                  +- Aggregate [k#x], [k#x, sum(v#x) AS _w0#xL]
+                     +- SubqueryAlias t
+                        +- LocalRelation [k#x, v#x]
+
+
+-- !query
+SELECT k + 10 AS k, sum(rank() OVER (ORDER BY sum(v))) OVER () AS n
+FROM VALUES (1, 10), (2, 20), (3, 30) AS t(k, v)
+GROUP BY k HAVING k = 2 ORDER BY 1
+-- !query analysis
+Sort [k#x ASC NULLS FIRST], true
++- Project [k#x, n#xL]
+   +- Project [k#x, _w0#xL, _w0#x, _w0#x, n#xL, n#xL]
+      +- Window [sum(_w0#x) windowspecdefinition(specifiedwindowframe(RowFrame, unboundedpreceding$(), unboundedfollowing$())) AS n#xL]
+         +- Project [k#x, _w0#xL, _w0#x, _w0#x]
+            +- Window [rank(_w0#xL) windowspecdefinition(_w0#xL ASC NULLS FIRST, specifiedwindowframe(RowFrame, unboundedpreceding$(), currentrow$())) AS _w0#x], [_w0#xL ASC NULLS FIRST]
+               +- Project [k#x, _w0#xL]
+                  +- Filter (k#x = 2)
+                     +- Aggregate [k#x], [(k#x + 10) AS k#x, sum(v#x) AS _w0#xL, k#x AS k#x]
+                        +- SubqueryAlias t
+                           +- LocalRelation [k#x, v#x]
+
+
+-- !query
+SELECT k + 10 AS k, count(*) OVER () AS n
+FROM VALUES (1), (2), (3) AS t(k)
+GROUP BY k HAVING k >= 2 QUALIFY k > 12 ORDER BY 1
+-- !query analysis
+Sort [k#x ASC NULLS FIRST], true
++- Filter (k#x > 12)
+   +- Project [k#x, n#xL]
+      +- Project [k#x, n#xL, n#xL]
+         +- Window [count(1) windowspecdefinition(specifiedwindowframe(RowFrame, unboundedpreceding$(), unboundedfollowing$())) AS n#xL]
+            +- Project [k#x]
+               +- Filter (k#x >= 2)
+                  +- Aggregate [k#x], [(k#x + 10) AS k#x, k#x AS k#x]
+                     +- SubqueryAlias t
+                        +- LocalRelation [k#x]
+
+
+-- !query
+SELECT sum(v) AS s, count(*) OVER () AS n
+FROM VALUES (1, 10), (2, 20) AS t(k, v)
+GROUP BY k HAVING k > 0 QUALIFY k = 2 ORDER BY 1
+-- !query analysis
+Sort [s#xL ASC NULLS FIRST], true
++- Project [s#xL, n#xL]
+   +- Filter (k#x = 2)
+      +- Project [s#xL, n#xL, k#x]
+         +- Project [s#xL, n#xL, n#xL, k#x]
+            +- Window [count(1) windowspecdefinition(specifiedwindowframe(RowFrame, unboundedpreceding$(), unboundedfollowing$())) AS n#xL]
+               +- Project [s#xL, k#x]
+                  +- Filter (k#x > 0)
+                     +- Aggregate [k#x], [sum(v#x) AS s#xL, k#x AS k#x]
+                        +- SubqueryAlias t
+                           +- LocalRelation [k#x, v#x]
+
+
+-- !query
+SELECT sum(v) AS s, count(*) OVER () AS n
+FROM VALUES (1, 10), (2, 20) AS t(k, v)
+GROUP BY k HAVING k > 0 QUALIFY t.k = 2 ORDER BY 1
+-- !query analysis
+Sort [s#xL ASC NULLS FIRST], true
++- Project [s#xL, n#xL]
+   +- Filter (k#x = 2)
+      +- Project [s#xL, n#xL, k#x]
+         +- Project [s#xL, n#xL, n#xL, k#x]
+            +- Window [count(1) windowspecdefinition(specifiedwindowframe(RowFrame, unboundedpreceding$(), unboundedfollowing$())) AS n#xL]
+               +- Project [s#xL, k#x]
+                  +- Filter (k#x > 0)
+                     +- Aggregate [k#x], [sum(v#x) AS s#xL, k#x AS k#x]
+                        +- SubqueryAlias t
+                           +- LocalRelation [k#x, v#x]
+
+
+-- !query
+SELECT sum(v) AS s, count(*) OVER () AS n
+FROM VALUES (named_struct('x', 1), 10), (named_struct('x', 2), 20) AS t(k, v)
+GROUP BY k HAVING k.x > 0 QUALIFY k.x = 2 ORDER BY 1
+-- !query analysis
+Sort [s#xL ASC NULLS FIRST], true
++- Project [s#xL, n#xL]
+   +- Filter (k#x.x = 2)
+      +- Project [s#xL, n#xL, k#x]
+         +- Project [s#xL, n#xL, n#xL, k#x]
+            +- Window [count(1) windowspecdefinition(specifiedwindowframe(RowFrame, unboundedpreceding$(), unboundedfollowing$())) AS n#xL]
+               +- Project [s#xL, k#x]
+                  +- Filter (k#x.x > 0)
+                     +- Aggregate [k#x], [sum(v#x) AS s#xL, k#x AS k#x]
+                        +- SubqueryAlias t
+                           +- LocalRelation [k#x, v#x]
+
+
+-- !query
+SELECT sum(v) AS a, count(*) OVER () AS n
+FROM VALUES (1, 10), (2, 20) AS t(k, v)
+GROUP BY k + 1 HAVING sum(v) > 0 ORDER BY `(k + 1)`
+-- !query analysis
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
+{
+  "errorClass" : "UNRESOLVED_COLUMN.WITH_SUGGESTION",
+  "sqlState" : "42703",
+  "messageParameters" : {
+    "objectName" : "`(k + 1)`",
+    "proposal" : "`a`, `n`"
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 125,
+    "stopIndex" : 133,
+    "fragment" : "`(k + 1)`"
+  } ]
+}
+
+
+-- !query
+SELECT sum(v) AS a, count(*) OVER () AS n
+FROM VALUES (1, 10), (2, 20) AS t(k, v)
+GROUP BY k + 1 HAVING sum(v) > 0 ORDER BY `(k + 1)`.x
+-- !query analysis
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
+{
+  "errorClass" : "UNRESOLVED_COLUMN.WITH_SUGGESTION",
+  "sqlState" : "42703",
+  "messageParameters" : {
+    "objectName" : "`(k + 1)`.`x`",
+    "proposal" : "`a`, `n`"
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 125,
+    "stopIndex" : 135,
+    "fragment" : "`(k + 1)`.x"
+  } ]
+}
+
+
+-- !query
+SELECT sum(v) AS s, count(*) OVER () AS n
+FROM VALUES (10), (20) AS t(v)
+GROUP BY NULL HAVING sum(v) > 0 ORDER BY `NULL`.x
+-- !query analysis
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
+{
+  "errorClass" : "UNRESOLVED_COLUMN.WITH_SUGGESTION",
+  "sqlState" : "42703",
+  "messageParameters" : {
+    "objectName" : "`NULL`.`x`",
+    "proposal" : "`n`, `s`"
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 115,
+    "stopIndex" : 122,
+    "fragment" : "`NULL`.x"
+  } ]
+}
+
+
+-- !query
+SELECT NULL AS k, sum(v) AS s, count(*) OVER () AS n
+FROM VALUES (10), (20) AS t(v)
+GROUP BY v HAVING sum(v) > 0 ORDER BY k.x, s
+-- !query analysis
+Sort [null ASC NULLS FIRST, s#xL ASC NULLS FIRST], true
++- Project [k#x, s#xL, n#xL]
+   +- Project [k#x, s#xL, n#xL, n#xL]
+      +- Window [count(1) windowspecdefinition(specifiedwindowframe(RowFrame, unboundedpreceding$(), unboundedfollowing$())) AS n#xL]
+         +- Project [k#x, s#xL]
+            +- Filter (s#xL > cast(0 as bigint))
+               +- Aggregate [v#x], [null AS k#x, sum(v#x) AS s#xL, v#x AS v#x]
+                  +- SubqueryAlias t
+                     +- LocalRelation [v#x]
+
+
+-- !query
+SELECT sum(v) AS a, count(*) OVER () AS n
+FROM VALUES (1, 10), (2, 20) AS t(k, v)
+GROUP BY k + 1 HAVING missing > 0 ORDER BY 1
+-- !query analysis
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
+{
+  "errorClass" : "UNRESOLVED_COLUMN.WITH_SUGGESTION",
+  "sqlState" : "42703",
+  "messageParameters" : {
+    "objectName" : "`missing`",
+    "proposal" : "`a`"
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 105,
+    "stopIndex" : 111,
+    "fragment" : "missing"
+  } ]
+}
+
+
+-- !query
+SELECT k + 10 AS a, count(*) OVER () AS n
+FROM VALUES (1), (2) AS t(k)
+GROUP BY k HAVING k >= 2 QUALIFY missing > 0 ORDER BY 1
+-- !query analysis
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
+{
+  "errorClass" : "UNRESOLVED_COLUMN.WITH_SUGGESTION",
+  "sqlState" : "42703",
+  "messageParameters" : {
+    "objectName" : "`missing`",
+    "proposal" : "`n`, `a`"
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 105,
+    "stopIndex" : 111,
+    "fragment" : "missing"
+  } ]
+}
+
+
+-- !query
+SET spark.sql.analyzer.singlePassResolver.dualRunWithLegacy=false
+-- !query analysis
+SetCommand (spark.sql.analyzer.singlePassResolver.dualRunWithLegacy,Some(false))
+
+
+-- !query
+SET spark.sql.analyzer.havingWithWindowResolvesGroupingColumnFirst.enabled=false
+-- !query analysis
+SetCommand (spark.sql.analyzer.havingWithWindowResolvesGroupingColumnFirst.enabled,Some(false))
+
+
+-- !query
+SELECT k + 10 AS k, count(*) OVER () AS n
+FROM VALUES (1), (2), (3) AS t(k)
+GROUP BY k HAVING k >= 2 ORDER BY 1
+-- !query analysis
+Sort [k#x ASC NULLS FIRST], true
++- Project [k#x, n#xL]
+   +- Project [k#x, n#xL, n#xL]
+      +- Window [count(1) windowspecdefinition(specifiedwindowframe(RowFrame, unboundedpreceding$(), unboundedfollowing$())) AS n#xL]
+         +- Filter (k#x >= 2)
+            +- Aggregate [k#x], [(k#x + 10) AS k#x]
+               +- SubqueryAlias t
+                  +- LocalRelation [k#x]
+
+
+-- !query
+SELECT k + 10 AS k, sum(rank() OVER (ORDER BY sum(v))) OVER () AS n
+FROM VALUES (1, 10), (2, 20), (3, 30) AS t(k, v)
+GROUP BY k HAVING k = 2 ORDER BY 1
+-- !query analysis
+Sort [k#x ASC NULLS FIRST], true
++- Project [k#x, n#xL]
+   +- Project [k#x, _w0#xL, _w0#x, _w0#x, n#xL, n#xL]
+      +- Window [sum(_w0#x) windowspecdefinition(specifiedwindowframe(RowFrame, unboundedpreceding$(), unboundedfollowing$())) AS n#xL]
+         +- Project [k#x, _w0#xL, _w0#x, _w0#x]
+            +- Window [rank(_w0#xL) windowspecdefinition(_w0#xL ASC NULLS FIRST, specifiedwindowframe(RowFrame, unboundedpreceding$(), currentrow$())) AS _w0#x], [_w0#xL ASC NULLS FIRST]
+               +- Filter (k#x = 2)
+                  +- Aggregate [k#x], [(k#x + 10) AS k#x, sum(v#x) AS _w0#xL]
+                     +- SubqueryAlias t
+                        +- LocalRelation [k#x, v#x]
+
+
+-- !query
+SELECT k + 10 AS k, count(*) OVER () AS n
+FROM VALUES (1), (2), (3) AS t(k)
+GROUP BY k HAVING k >= 2 QUALIFY k > 12 ORDER BY 1
+-- !query analysis
+Sort [k#x ASC NULLS FIRST], true
++- Filter (k#x > 12)
+   +- Project [k#x, n#xL]
+      +- Project [k#x, n#xL, n#xL]
+         +- Window [count(1) windowspecdefinition(specifiedwindowframe(RowFrame, unboundedpreceding$(), unboundedfollowing$())) AS n#xL]
+            +- Filter (k#x >= 2)
+               +- Aggregate [k#x], [(k#x + 10) AS k#x]
+                  +- SubqueryAlias t
+                     +- LocalRelation [k#x]
+
+
+-- !query
+SELECT sum(v) AS s, count(*) OVER () AS n
+FROM VALUES (1, 10), (2, 20) AS t(k, v)
+GROUP BY k HAVING k > 0 QUALIFY k = 2 ORDER BY 1
+-- !query analysis
+Sort [s#xL ASC NULLS FIRST], true
++- Project [s#xL, n#xL]
+   +- Filter (k#x = 2)
+      +- Project [s#xL, n#xL, k#x]
+         +- Project [s#xL, n#xL, n#xL, k#x]
+            +- Window [count(1) windowspecdefinition(specifiedwindowframe(RowFrame, unboundedpreceding$(), unboundedfollowing$())) AS n#xL]
+               +- Project [s#xL, k#x]
+                  +- Filter (k#x > 0)
+                     +- Aggregate [k#x], [sum(v#x) AS s#xL, k#x]
+                        +- SubqueryAlias t
+                           +- LocalRelation [k#x, v#x]
+
+
+-- !query
+SELECT sum(v) AS s, count(*) OVER () AS n
+FROM VALUES (named_struct('x', 1), 10), (named_struct('x', 2), 20) AS t(k, v)
+GROUP BY k HAVING k.x > 0 QUALIFY k.x = 2 ORDER BY 1
+-- !query analysis
+Sort [s#xL ASC NULLS FIRST], true
++- Project [s#xL, n#xL]
+   +- Filter (k#x.x = 2)
+      +- Project [s#xL, n#xL, k#x]
+         +- Project [s#xL, n#xL, n#xL, k#x]
+            +- Window [count(1) windowspecdefinition(specifiedwindowframe(RowFrame, unboundedpreceding$(), unboundedfollowing$())) AS n#xL]
+               +- Project [s#xL, k#x]
+                  +- Filter (k#x.x > 0)
+                     +- Aggregate [k#x], [sum(v#x) AS s#xL, k#x]
+                        +- SubqueryAlias t
+                           +- LocalRelation [k#x, v#x]
+
+
+-- !query
+SELECT sum(v) AS s, count(*) OVER () AS n
+FROM VALUES (10), (20) AS t(v)
+GROUP BY NULL HAVING sum(v) > 0 ORDER BY `NULL`.x
+-- !query analysis
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
+{
+  "errorClass" : "UNRESOLVED_COLUMN.WITH_SUGGESTION",
+  "sqlState" : "42703",
+  "messageParameters" : {
+    "objectName" : "`NULL`.`x`",
+    "proposal" : "`n`, `s`"
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 115,
+    "stopIndex" : 122,
+    "fragment" : "`NULL`.x"
+  } ]
+}
+
+
+-- !query
+SELECT NULL AS k, sum(v) AS s, count(*) OVER () AS n
+FROM VALUES (10), (20) AS t(v)
+GROUP BY v HAVING sum(v) > 0 ORDER BY k.x, s
+-- !query analysis
+Sort [null ASC NULLS FIRST, s#xL ASC NULLS FIRST], true
++- Project [k#x, s#xL, n#xL]
+   +- Project [k#x, s#xL, n#xL, n#xL]
+      +- Window [count(1) windowspecdefinition(specifiedwindowframe(RowFrame, unboundedpreceding$(), unboundedfollowing$())) AS n#xL]
+         +- Filter (s#xL > cast(0 as bigint))
+            +- Aggregate [v#x], [null AS k#x, sum(v#x) AS s#xL]
+               +- SubqueryAlias t
+                  +- LocalRelation [v#x]
+
+
+-- !query
+RESET spark.sql.analyzer.havingWithWindowResolvesGroupingColumnFirst.enabled
+-- !query analysis
+ResetCommand spark.sql.analyzer.havingWithWindowResolvesGroupingColumnFirst.enabled
+
+
+-- !query
+RESET spark.sql.analyzer.singlePassResolver.dualRunWithLegacy
+-- !query analysis
+ResetCommand spark.sql.analyzer.singlePassResolver.dualRunWithLegacy

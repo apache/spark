@@ -257,6 +257,8 @@ trait CheckAnalysis extends LookupCatalog with QueryErrorsBase with PlanToString
     }
     val missingCol = a.sql
     val candidates = operator.inputSet.toSeq
+      // HAVING helpers are implementation details, not user-visible column names.
+      .filterNot(_.metadata.contains(ColumnResolutionHelper.HAVING_GROUPING_COLUMN_METADATA_KEY))
       .map(attr => attr.qualifier :+ attr.name)
     val orderedCandidates =
       StringUtils.orderSuggestedIdentifiersBySimilarity(missingCol, candidates)

@@ -28,6 +28,7 @@ import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.SubExprUtils.wrapOuterReference
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.trees.CurrentOrigin.withOrigin
+import org.apache.spark.sql.catalyst.trees.TreeNodeTag
 import org.apache.spark.sql.catalyst.trees.TreePattern._
 import org.apache.spark.sql.catalyst.util.toPrettySQL
 import org.apache.spark.sql.connector.catalog.CatalogManager
@@ -45,16 +46,21 @@ trait ColumnResolutionHelper extends Logging with DataTypeErrorsBase {
    * This method tries to resolve expressions and find missing attributes recursively.
    * Specifically, when the expressions used in `Sort` or `Filter` contain unresolved attributes
    * or resolved attributes which are missing from child output. This method tries to find the
-   * missing attributes and add them into the projection.
+   * missing attributes and add them into the projection. When preserving HAVING scope, leave
+   * aggregate inputs to aggregate resolution so propagation cannot expose new name candidates.
    */
   protected def resolveExprsAndAddMissingAttrs(
-      exprs: Seq[Expression], plan: LogicalPlan): (Seq[Expression], LogicalPlan) = {
+      exprs: Seq[Expression],
+      plan: LogicalPlan,
+      preserveHavingScope: Boolean = false): (Seq[Expression], LogicalPlan) = {
     // Missing attributes can be unresolved attributes or resolved attributes which are not in
     // the output attributes of the plan.
     if (exprs.forall(e => e.resolved && e.references.subsetOf(plan.outputSet))) {
       (exprs, plan)
     } else {
       plan match {
+        case _: Aggregate if preserveHavingScope => (exprs, plan)
+
         // For `Distinct` and `SubqueryAlias` and `PipeOperator`, we can't recursively resolve and
         // add attributes via its children.
         case u: UnaryNode if !u.isInstanceOf[Distinct] && !u.isInstanceOf[SubqueryAlias]
@@ -63,7 +69,7 @@ trait ColumnResolutionHelper extends Logging with DataTypeErrorsBase {
             // Resolving expressions against current plan.
             val maybeResolvedExprs = exprs.map(resolveExpressionByPlanOutput(_, u))
             // Recursively resolving expressions on the child of current plan.
-            resolveExprsAndAddMissingAttrs(maybeResolvedExprs, u.child)
+            resolveExprsAndAddMissingAttrs(maybeResolvedExprs, u.child, preserveHavingScope)
           }
           // If some attributes used by expressions are resolvable only on the rewritten child
           // plan, we need to add them into original projection.
@@ -264,7 +270,7 @@ trait ColumnResolutionHelper extends Logging with DataTypeErrorsBase {
               case other => wrapOuterReference(other)
             }
         case other =>
-          other.resolveChildren(nameParts, conf.resolver).map(wrapOuterReference)
+          resolveChildrenWithoutHavingHelpers(other, nameParts).map(wrapOuterReference)
       }
     } catch {
       case ae: AnalysisException =>
@@ -272,7 +278,13 @@ trait ColumnResolutionHelper extends Logging with DataTypeErrorsBase {
         None
     }
 
-    e.transformWithPruning(
+    val withGroupingScope = outerPlan.get match {
+      case plan if plan.getTagValue(ColumnResolutionHelper.HAVING_GROUPING_SCOPE_TAG)
+          .contains(true) =>
+        resolveHavingGroupingExpressions(e, plan, wrapOuterReference)
+      case _ => e
+    }
+    withGroupingScope.transformWithPruning(
       _.containsAnyPattern(UNRESOLVED_ATTRIBUTE, TEMP_RESOLVED_COLUMN)) {
       case u: UnresolvedAttribute =>
         resolve(u.nameParts).getOrElse(u)
@@ -440,7 +452,7 @@ trait ColumnResolutionHelper extends Logging with DataTypeErrorsBase {
     resolveExpression(
       tryResolveDataFrameColumns(expr, Seq(plan)),
       resolveColumnByName = nameParts => {
-        plan.resolve(nameParts, conf.resolver)
+        resolveOutputWithoutHavingHelpers(plan, nameParts)
       },
       getAttrCandidates = () => plan.output,
       throws = throws,
@@ -461,9 +473,10 @@ trait ColumnResolutionHelper extends Logging with DataTypeErrorsBase {
       includeLastResort: Boolean = false,
       throws: Boolean = true): Expression = {
     resolveExpression(
-      tryResolveDataFrameColumns(e, q.children),
+      tryResolveDataFrameColumns(
+        resolveHavingGroupingExpressions(e, q), q.children),
       resolveColumnByName = nameParts => {
-        q.resolveChildren(nameParts, conf.resolver)
+        resolveChildrenWithoutHavingHelpers(q, nameParts)
       },
       getAttrCandidates = () => {
         assert(q.children.length == 1)
@@ -471,6 +484,105 @@ trait ColumnResolutionHelper extends Logging with DataTypeErrorsBase {
       },
       throws,
       includeLastResort = includeLastResort)
+  }
+
+  /** Hides helper grouping outputs when missing-column resolution searches an Aggregate. */
+  private def resolveOutputWithoutHavingHelpers(
+      plan: LogicalPlan,
+      nameParts: Seq[String]): Option[NamedExpression] = {
+    if (conf.getConf(SQLConf.HAVING_WITH_WINDOW_RESOLVES_GROUPING_COLUMN_FIRST)) {
+      resolveWithoutHavingHelpers(nameParts, plan.output, plan.resolve(nameParts, conf.resolver))
+    } else {
+      plan.resolve(nameParts, conf.resolver)
+    }
+  }
+
+  /** Keeps helper grouping outputs out of ordinary SELECT-alias resolution. */
+  private def resolveChildrenWithoutHavingHelpers(
+      plan: LogicalPlan,
+      nameParts: Seq[String]): Option[NamedExpression] = {
+    if (conf.getConf(SQLConf.HAVING_WITH_WINDOW_RESOLVES_GROUPING_COLUMN_FIRST)) {
+      resolveWithoutHavingHelpers(
+        nameParts, plan.children.flatMap(_.output), plan.resolveChildren(nameParts, conf.resolver))
+    } else {
+      plan.resolveChildren(nameParts, conf.resolver)
+    }
+  }
+
+  /** Keeps ordinary lookup indexed and hides HAVING helpers in resolved results and errors. */
+  private def resolveWithoutHavingHelpers(
+      nameParts: Seq[String],
+      output: => Seq[Attribute],
+      resolve: => Option[NamedExpression]): Option[NamedExpression] = {
+    lazy val allOutput = output
+    lazy val visibleOutput = allOutput.filterNot(
+      _.metadata.contains(ColumnResolutionHelper.HAVING_GROUPING_COLUMN_METADATA_KEY))
+    val resolved = try {
+      resolve
+    } catch {
+      // Helpers can cause ambiguity or a nested-field error before lookup returns a candidate.
+      case _: AnalysisException if visibleOutput.length != allOutput.length =>
+        return LocalRelation(visibleOutput).resolve(nameParts, conf.resolver)
+    }
+    val mayReferenceHelpers = resolved.exists { expression =>
+      val references = expression.references
+      references.exists(
+        _.metadata.contains(ColumnResolutionHelper.HAVING_GROUPING_COLUMN_METADATA_KEY)) ||
+        // NULL field extraction can discard the helper reference during resolution.
+        (nameParts.length > 1 && references.isEmpty &&
+          visibleOutput.length != allOutput.length)
+    }
+    if (mayReferenceHelpers) {
+      LocalRelation(visibleOutput).resolve(nameParts, conf.resolver)
+    } else {
+      resolved
+    }
+  }
+
+  // Shared by ordinary and correlated HAVING lookup, and created only for tagged scope.
+  private lazy val havingGroupingExpressionNormalizer = new HavingGroupingExpressionNormalizer(
+    new FunctionResolution(
+      catalogManager, new RelationResolution(catalogManager, RelationCache.empty)))
+
+  /**
+   * Resolves complete grouping expressions before SELECT aliases in extracted HAVING filters.
+   * Resolve against the full input to retain ambiguity, and only accept actual grouping
+   * expressions so ungrouped inputs cannot mask aliases or influence their type coercion.
+   */
+  protected def resolveHavingGroupingExpressions(
+      expression: Expression,
+      plan: LogicalPlan,
+      wrap: Expression => Expression = identity): Expression = {
+    if (!plan.getTagValue(ColumnResolutionHelper.HAVING_GROUPING_SCOPE_TAG).contains(true)) {
+      return expression
+    }
+    val aggregate = plan.collectFirst { case aggregate: Aggregate => aggregate }
+    aggregate.map { aggregate =>
+      val input = aggregate.child
+      val groupingExpressions = aggregate.groupingExpressions
+      // Leave lambda parameters and captures alone until the lambda has been bound.
+      def resolveGrouping(expression: Expression): Expression = expression match {
+        case _ if expression.resolved => expression
+        case lambda: LambdaFunction if !lambda.bound => lambda
+        case _ =>
+          val candidate = resolveExpressionByPlanOutput(expression.clone(), input) match {
+            case Alias(child, _) => child
+            case other => other
+          }
+          val grouping = if (candidate.resolved &&
+              groupingExpressions.exists(_.semanticEquals(candidate))) {
+            Some(candidate)
+          } else {
+            havingGroupingExpressionNormalizer.normalize(candidate).filter { normalized =>
+              groupingExpressions.exists(_.semanticEquals(normalized))
+            }
+          }
+          // Keep input bindings until aggregate extraction, including inside aggregate arguments.
+          // On a miss, discard every tentative binding and cast before trying SELECT aliases.
+          grouping.map(wrap).getOrElse(expression.mapChildren(resolveGrouping))
+      }
+      resolveGrouping(expression)
+    }.getOrElse(expression)
   }
 
   // Try to resolve `UnresolvedAttribute` by the children with Plan Ids.
@@ -769,4 +881,10 @@ trait ColumnResolutionHelper extends Logging with DataTypeErrorsBase {
       n.metadata.contains(SessionCatalog.SQL_FUNCTION_PARAMETER_ALIAS_METADATA_KEY)
     case _ => false
   }
+}
+
+/** Carries HAVING grouping scope across window extraction. */
+object ColumnResolutionHelper {
+  private[analysis] val HAVING_GROUPING_SCOPE_TAG = TreeNodeTag[Boolean]("havingGroupingScope")
+  private[analysis] val HAVING_GROUPING_COLUMN_METADATA_KEY = "__having_grouping_column"
 }
