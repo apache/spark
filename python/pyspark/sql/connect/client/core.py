@@ -96,7 +96,7 @@ from pyspark.sql.connect.expressions import (
     LiteralExpression,
     PythonUDF,
 )
-from pyspark.sql.connect.logging import logger
+from pyspark.sql.connect.logging import getLogger
 from pyspark.sql.connect.observation import Observation
 from pyspark.sql.connect.plan import (
     CommonInlineUserDefinedDataSource,
@@ -125,6 +125,8 @@ if TYPE_CHECKING:
     from pyspark.sql.connect.session import SparkSession
     from pyspark.sql.datasource import DataSource
 
+
+logger = getLogger(__name__)
 
 PYSPARK_ROOT = os.path.dirname(pyspark.__file__)
 _OPERATION_ID_METADATA_KEY = "spark-connect-operation-id"
