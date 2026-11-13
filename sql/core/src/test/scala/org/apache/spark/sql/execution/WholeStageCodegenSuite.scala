@@ -17,10 +17,12 @@
 
 package org.apache.spark.sql.execution
 
+import java.io.{ByteArrayOutputStream, ObjectOutputStream}
 import java.math.{BigDecimal => JBigDecimal}
 import java.time.Duration
 import java.util.concurrent.{ConcurrentLinkedQueue, CountDownLatch, TimeUnit}
 
+import scala.collection.mutable
 import scala.util.{Failure, Success, Try}
 
 import org.apache.logging.log4j.Level
@@ -33,6 +35,7 @@ import org.apache.spark.sql.{DataFrame, Dataset, Row, SaveMode}
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.{And, Attribute, Cast, CodegenObjectFactoryMode, Expression, IsNotNull, Literal, With}
 import org.apache.spark.sql.catalyst.expressions.codegen.{ByteCodeStats, CodeAndComment, CodegenContext, CodeGenerator, ExprCode, ExprValue, GlobalValue, JavaCode, WholeStageSplit, WholeStageSplitKey}
+import org.apache.spark.sql.catalyst.optimizer.{BuildLeft, BuildRight}
 import org.apache.spark.sql.catalyst.plans.logical.MergeRows
 import org.apache.spark.sql.catalyst.plans.logical.MergeRows.{Keep, Update}
 import org.apache.spark.sql.classic
@@ -559,6 +562,72 @@ class WholeStageCodegenSuite extends SharedSparkSession
         }.size === 2)
         checkAnswer(twoLeftJoinsDf,
           Seq(Row(0, null, null), Row(1, 1, null), Row(2, 2, 2), Row(3, 3, 3), Row(4, 4, 4)))
+      }
+    }
+  }
+
+  test("SPARK-61668: ShuffledHashJoin codegen references do not serialize plan nodes") {
+    // What a codegen stage adds to the task binary (its closure, with the references of the
+    // generated code) is serialized into every task. A plan node in it would drag its whole child
+    // subtrees along, through the exchanges below the join.
+    def serializedPlanNodes(stage: WholeStageCodegenExec): Seq[String] = {
+      // Serialize the RDD that the stage adds on top of its input RDDs, as the task binary does:
+      // its closure or evaluator factory with the generated code references. The input RDDs are
+      // not followed, since they belong to the operators below this stage.
+      val rdd = stage.execute()
+      val planNodes = mutable.ArrayBuffer[String]()
+      val out = new ObjectOutputStream(new ByteArrayOutputStream()) {
+        enableReplaceObject(true)
+        override def replaceObject(obj: AnyRef): AnyRef = obj match {
+          case p: SparkPlan => planNodes += p.nodeName; p
+          case r: RDD[_] if r ne rdd => null
+          case o => o
+        }
+      }
+      out.writeObject(rdd)
+      out.close()
+      planNodes.toSeq
+    }
+
+    val df1 = spark.range(0, 20, 1, 2).select(($"id" % 7).as("k1"), $"id".as("v1"))
+    val df2 = spark.range(0, 15, 1, 2).select(($"id" % 5).as("k2"), $"id".as("v2"))
+    val cond = $"k1" === $"k2" && $"v1" =!= $"v2"
+    // (join type, hint the left side, expected build side). The hinted side is the build side.
+    val cases = Seq(
+      ("inner", false, BuildRight),
+      ("inner", true, BuildLeft),
+      // Stream-side outer join.
+      ("left_outer", false, BuildRight),
+      // Build-side outer joins.
+      ("left_outer", true, BuildLeft),
+      ("right_outer", false, BuildRight),
+      ("full_outer", false, BuildRight),
+      ("full_outer", true, BuildLeft),
+      ("left_semi", false, BuildRight),
+      ("left_anti", false, BuildRight))
+    for {
+      (joinType, hintLeft, buildSide) <- cases
+      usePartitionEvaluator <- Seq(false, true)
+    } {
+      def join(): DataFrame = if (hintLeft) {
+        df1.hint("SHUFFLE_HASH").join(df2, cond, joinType)
+      } else {
+        df1.join(df2.hint("SHUFFLE_HASH"), cond, joinType)
+      }
+      val expected = withSQLConf(SQLConf.WHOLESTAGE_CODEGEN_ENABLED.key -> "false") {
+        join().collect().toSeq
+      }
+      withSQLConf(SQLConf.USE_PARTITION_EVALUATOR.key -> usePartitionEvaluator.toString) {
+        val df = join()
+        val stages = df.queryExecution.executedPlan.collect {
+          case s @ WholeStageCodegenExec(j: ShuffledHashJoinExec) =>
+            assert(j.buildSide == buildSide, s"$joinType: ${s.treeString}")
+            s
+        }
+        assert(stages.length == 1, s"$joinType: ${df.queryExecution.executedPlan}")
+        val planNodes = serializedPlanNodes(stages.head)
+        assert(planNodes.isEmpty, s"$joinType: $planNodes referenced by\n${stages.head.treeString}")
+        checkAnswer(df, expected)
       }
     }
   }
