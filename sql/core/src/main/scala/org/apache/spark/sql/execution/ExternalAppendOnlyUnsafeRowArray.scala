@@ -168,7 +168,7 @@ class ExternalAppendOnlyUnsafeRowArray(
           pageSizeBytes,
           numRowsSpillThreshold,
           sizeInBytesSpillThreshold,
-          -1, // bounded merge not applicable — this class does not sort
+          -1, // bounded merge not applicable - this class does not sort
           false)
 
         // populate with existing in-memory buffered rows
