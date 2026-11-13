@@ -1171,6 +1171,17 @@ class SparkSession:
 
     addArtifact = addArtifacts
 
+    def listFiles(self) -> List[str]:
+        # The server lists the files of this session only, as the URIs of their copies.
+        return [row[0] for row in self.sql("LIST FILES").collect()]
+
+    listFiles.__doc__ = PySparkSession.listFiles.__doc__
+
+    def listArchives(self) -> List[str]:
+        return [row[0] for row in self.sql("LIST ARCHIVES").collect()]
+
+    listArchives.__doc__ = PySparkSession.listArchives.__doc__
+
     def _cache_local_relation(
         self,
         local_relation: LocalRelation,
