@@ -62,6 +62,11 @@ abstract class QueryStageExec extends LeafExecNode {
   val name: String = s"${this.getClass.getSimpleName}-$id"
 
   /**
+   * The canonicalized plan before applying query stage optimizer rules.
+   */
+  val _canonicalized: SparkPlan
+
+  /**
    * Materialize this query stage, to prepare for the execution, like submitting map stages,
    * broadcasting data, etc. The caller side can use the returned [[Future]] to wait until this
    * stage is ready.
@@ -73,6 +78,8 @@ abstract class QueryStageExec extends LeafExecNode {
 
   protected def doMaterialize(): Future[Any]
 
+
+  override def doCanonicalize(): SparkPlan = _canonicalized
   /**
    * Returns the runtime statistics after stage materialization.
    */
@@ -178,13 +185,6 @@ abstract class ExchangeQueryStageExec extends QueryStageExec {
 
   protected def doCancel(reason: String): Unit
 
-  /**
-   * The canonicalized plan before applying query stage optimizer rules.
-   */
-  val _canonicalized: SparkPlan
-
-  override def doCanonicalize(): SparkPlan = _canonicalized
-
   def newReuseInstance(newStageId: Int, newOutput: Seq[Attribute]): ExchangeQueryStageExec
 }
 
@@ -283,7 +283,8 @@ case class BroadcastQueryStageExec(
  */
 case class TableCacheQueryStageExec(
     override val id: Int,
-    override val plan: SparkPlan) extends QueryStageExec {
+    override val plan: SparkPlan,
+    override val _canonicalized: SparkPlan) extends QueryStageExec {
 
   @transient val inMemoryTableScan = plan match {
     case i: InMemoryTableScanLike => i
@@ -315,7 +316,12 @@ case class TableCacheQueryStageExec(
 case class ResultQueryStageExec(
     override val id: Int,
     override val plan: SparkPlan,
+    override val _canonicalized: SparkPlan,
     resultHandler: SparkPlan => Any) extends QueryStageExec {
+
+  override def doCanonicalize(): SparkPlan = {
+    ResultQueryStageExec(-1, _canonicalized, _canonicalized, resultHandler)
+  }
 
   override def resetMetrics(): Unit = {
     plan.resetMetrics()
