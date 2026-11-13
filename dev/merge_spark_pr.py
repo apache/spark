@@ -973,7 +973,7 @@ def should_skip_post_merge_ci(target_ref, pr_num):
         )
         return False
 
-    labels = get_json("%s/issues/%s/labels?per_page=100" % (GITHUB_API_BASE, pr_num))
+    labels = get_json_pages("%s/issues/%s/labels" % (GITHUB_API_BASE, pr_num))
     # GitHub matches label names case-insensitively.
     if any(label["name"].lower() == POST_MERGE_CI_FORCE_LABEL for label in labels):
         print(
@@ -1046,15 +1046,7 @@ def amend_commit_message(message):
 
 
 # merge the requested PR and return the merge hash
-def merge_pr(
-    pr_num,
-    target_ref,
-    title,
-    body,
-    pr_repo_desc,
-    pr_author,
-    co_authors,
-):
+def merge_pr(pr_num, target_ref, title, body, pr_repo_desc, pr_author, co_authors):
     pr_branch_name = "%s_MERGE_PR_%s" % (BRANCH_PREFIX, pr_num)
     target_branch_name = "%s_MERGE_PR_%s_%s" % (BRANCH_PREFIX, pr_num, target_ref.upper())
     git.run("git fetch %s pull/%s/head:%s" % (PR_REMOTE_NAME, pr_num, pr_branch_name))
@@ -1281,14 +1273,7 @@ def _upstream_first_sibling(target_ref, pick_ref, branch_names, already_picked):
     return None
 
 
-def cherry_pick(
-    pr_num,
-    merge_hash,
-    default_branch,
-    branch_names,
-    target_ref,
-    already_picked=(),
-):
+def cherry_pick(pr_num, merge_hash, default_branch, branch_names, target_ref, already_picked=()):
     """Prompt for a target branch and cherry-pick `merge_hash` onto it.
 
     Enforces the Upstream-First policy (see header comment) via
@@ -3456,15 +3441,7 @@ def main():
 
     merged_refs = [target_ref]
 
-    merge_hash = merge_pr(
-        pr_num,
-        target_ref,
-        title,
-        body,
-        pr_repo_desc,
-        pr_author,
-        co_authors,
-    )
+    merge_hash = merge_pr(pr_num, target_ref, title, body, pr_repo_desc, pr_author, co_authors)
 
     # Ordered (branch, commit_hash) pairs for the merge comment: the merge sink first,
     # then each cherry-pick target as it is picked.
