@@ -8565,8 +8565,24 @@ object SQLConf {
     buildConf("spark.sql.optionalReferences.enabled")
       .internal()
       .doc("When true, a `?` after an identifier of a column, field, or variable reference, or " +
-        "after a named parameter marker, makes that identifier optional: when it cannot be " +
-        "resolved, the reference evaluates to a NULL of type VOID instead of raising an error.")
+        "after a named parameter marker, makes that identifier optional: when no name matches " +
+        "the identifier, the reference evaluates to a NULL of type VOID instead of raising a " +
+        "not-found error. Ambiguous references and type errors are still raised. UPDATE, " +
+        "DELETE, MERGE, the condition of INSERT ... REPLACE, AUTO CDC flows, partition " +
+        "specifications, and table definitions reject optional references.")
+      .version("4.4.0")
+      .withBindingPolicy(ConfigBindingPolicy.SESSION)
+      .booleanConf
+      .createWithDefault(false)
+
+  val LEGACY_SQL_FUNCTION_BODY_RESOLVES_OUTER_REFERENCES =
+    buildConf("spark.sql.legacy.sqlFunctionBodyResolvesOuterReferences")
+      .internal()
+      .doc("When true (legacy behavior), the body of a SQL function that is called in a " +
+        "subquery resolves names that are neither its parameters nor its own columns as " +
+        "columns of the query around the subquery, before session variables. When false (the " +
+        "default), the body does not reference the calling query, like the body of a view. " +
+        s"This conf has no effect while ${OPTIONAL_REFERENCES_ENABLED.key} is true.")
       .version("4.4.0")
       .withBindingPolicy(ConfigBindingPolicy.SESSION)
       .booleanConf

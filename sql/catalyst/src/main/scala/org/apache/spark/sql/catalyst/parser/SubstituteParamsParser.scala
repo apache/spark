@@ -92,6 +92,15 @@ class SubstituteParamsParser extends Logging {
       case parsed =>
         parsed
     }
+    // In a statement with optional references, a `?` after an identifier or a non-reserved keyword
+    // is an optional reference where the syntax allows a reference. The remaining markers must
+    // not take the values of such a `?` silently, so a value without a marker is an error.
+    val numPositionalMarkers = parameterLocations.positionalParameterLocations.length
+    if (parameterLocations.hasOptionalReferences &&
+        positionalParams.length > numPositionalMarkers) {
+      throw QueryCompilationErrors.unusedSqlParameterValuesError(
+        numPositionalMarkers, positionalParams.length)
+    }
     // Optional named parameter markers are substituted before the AstBuilder sees them.
     if (parameterLocations.namedParameterLocations.values.exists(_.exists(_.optional))) {
       OptionalReferenceValidation.validateNamedParameterMarkers(ctx, sqlText)
@@ -215,10 +224,12 @@ class SubstituteParamsParser extends Logging {
       sqlText: String,
       location: ParameterLocation,
       value: String): String = {
-    val nextIndex = sqlText.offsetByCodePoints(0, location.end)
-    val isFollowedByWord = location.optional && nextIndex < sqlText.length && {
-      val nextCodePoint = sqlText.codePointAt(nextIndex)
-      Character.isLetterOrDigit(nextCodePoint) || nextCodePoint == '_'
+    val isFollowedByWord = location.optional && {
+      val nextIndex = sqlText.offsetByCodePoints(0, location.end)
+      nextIndex < sqlText.length && {
+        val nextCodePoint = sqlText.codePointAt(nextIndex)
+        Character.isLetterOrDigit(nextCodePoint) || nextCodePoint == '_'
+      }
     }
     if (isFollowedByWord) s"$value " else value
   }

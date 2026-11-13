@@ -17,21 +17,26 @@
 
 package org.apache.spark.sql.catalyst.analysis
 
+import java.util.Locale
+
 import scala.annotation.tailrec
 import scala.util.{Left => EitherLeft, Right => EitherRight}
 
 import org.apache.spark.SparkThrowable
+import org.apache.spark.sql.catalyst.SqlScriptingContextManager
 import org.apache.spark.sql.catalyst.expressions.{
   Alias,
   Attribute,
   Expression,
   ExtractValue,
   Literal,
-  NonNullLiteral
+  NonNullLiteral,
+  SubqueryExpression
 }
 import org.apache.spark.sql.catalyst.trees.TreeNodeTag
 import org.apache.spark.sql.catalyst.util.{toPrettySQL, MetadataColumnHelper}
 import org.apache.spark.sql.connector.catalog.CatalogManager
+import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types.{NullType, StringType}
 
 /**
@@ -61,12 +66,16 @@ object OptionalReferences {
    */
   val OPTIONAL_REFERENCE: TreeNodeTag[Unit] = TreeNodeTag[Unit]("optionalReference")
 
-  /** Marks an optional [[UnresolvedExtractValue]] as a last resort, see [[markLastResort]]. */
-  val LAST_RESORT: TreeNodeTag[Unit] = TreeNodeTag[Unit]("optionalReferenceLastResort")
-
   /**
    * Marks the NULL that an unresolvable optional reference resolves to, see [[nullReference]], and
    * the alias that names it, see [[implicitAlias]].
+   *
+   * The three tags describe the statement: they are facts about the reference as written, which
+   * stay true in every analysis of the plan. The generic transforms of a tree copy them to the
+   * nodes that replace a tagged node; a rule that rebuilds a reference in another way forwards
+   * them with [[withOptionalNamePartsOf]]. The one decision that an analysis makes about an
+   * optional reference, that no resolution step of its operator can resolve a field extraction,
+   * is a node of the plan that the analysis builds, see [[LastResortExtractValue]].
    */
   val NULL_REFERENCE: TreeNodeTag[Unit] = TreeNodeTag[Unit]("optionalReferenceNull")
 
@@ -103,23 +112,27 @@ object OptionalReferences {
     isOptional(expression) || optionalNamePartIndices(expression).nonEmpty
 
   /**
-   * Marks the optional field extraction `extractValue` as one that no name resolution step of its
-   * operator could resolve, so that its missing field is NULL in the next step that resolves its
-   * child. Until then, a step whose errors are not final leaves it unresolved, like the same
-   * extraction without `?`, because a later step can still resolve it. For example, ORDER BY
-   * resolves names against the SELECT list before the columns of the FROM clause:
-   *
-   * {{{
-   *   -- `t.arr` is an ARRAY<STRUCT<a INT, b INT>>, so ORDER BY sorts by its field `b`.
-   *   SELECT array(named_struct('a', 1)) AS arr FROM t ORDER BY arr[0].b?;
-   * }}}
+   * Gives `expression`, a multipart name that a rule rebuilt from `source`, the optional name
+   * parts of `source`, which a case class copy or a constructor does not keep.
    */
-  def markLastResort(extractValue: UnresolvedExtractValue): Unit =
-    extractValue.setTagValue(LAST_RESORT, ())
+  def withOptionalNamePartsOf[T <: Expression](expression: T, source: Expression): T = {
+    markNamePartsOptional(expression, optionalNamePartIndices(source))
+    expression
+  }
 
-  /** Returns true if `extractValue` is marked as a last resort, see [[markLastResort]]. */
-  def isLastResort(extractValue: UnresolvedExtractValue): Boolean =
-    extractValue.getTagValue(LAST_RESORT).isDefined
+  /**
+   * Returns the first unresolved expression in `expression` that is an optional reference or has
+   * an optional name part, including in the plans of its subquery expressions, or None.
+   */
+  def unresolvedOptionalReference(expression: Expression): Option[Expression] = {
+    expression.find(e => !e.resolved && hasOptionalMarker(e)).orElse {
+      expression
+        .collect { case subquery: SubqueryExpression => subquery.plan }
+        .iterator
+        .flatMap(_.flatMap(_.expressions).iterator.flatMap(unresolvedOptionalReference))
+        .nextOption()
+    }
+  }
 
   /** The static NULL of type VOID that an unresolvable optional reference resolves to. */
   def nullReference(): Literal = {
@@ -215,8 +228,10 @@ object OptionalReferences {
   /**
    * Returns the index of the first name part of `nameParts` that does not continue any reference
    * path to `attributes`, where a path is a suffix of the attribute qualifier, the attribute name,
-   * and then the names of nested fields. Session variable qualifiers are valid paths too. A
-   * qualifier is not a reference by itself, so the last name part never matches a qualifier.
+   * and then the names of nested fields. The qualifiers of session variables and of the variables
+   * of an active SQL scripting scope, i.e. the label of a compound statement or the variable of a
+   * FOR statement, are valid paths too. A qualifier is not a reference by itself, so the last name
+   * part never matches a qualifier.
    * Returns None if the whole name matches a path, which means that the name was found but was not
    * usable, e.g. because it references a column that is not grouped.
    *
@@ -234,9 +249,27 @@ object OptionalReferences {
       resolver: Resolver): Option[Int] = {
     val matchedNamePartCounts =
       attributes.iterator.map(matchedNamePartCount(nameParts, _, resolver)) ++
-      SESSION_VARIABLE_QUALIFIERS.iterator.map(matchedQualifierPartCount(nameParts, _, resolver))
+      SESSION_VARIABLE_QUALIFIERS.iterator.map(matchedQualifierPartCount(nameParts, _, resolver)) ++
+      Iterator(matchedScriptingScopeLabelCount(nameParts))
     val longestMatch = matchedNamePartCounts.max
     if (longestMatch < nameParts.length) Some(longestMatch) else None
+  }
+
+  /**
+   * Returns 1 if `nameParts` is a two-part name whose first part is the label of an active SQL
+   * scripting scope, so that the name can reference a variable of that scope, and 0 otherwise.
+   */
+  private def matchedScriptingScopeLabelCount(nameParts: Seq[String]): Int = {
+    val isScopeLabel = nameParts.length == 2 && {
+      // Scope labels are normalized like variable names, see `VariableResolution.lookupVariable`.
+      val label = if (SQLConf.get.caseSensitiveAnalysis) {
+        nameParts.head
+      } else {
+        nameParts.head.toLowerCase(Locale.ROOT)
+      }
+      SqlScriptingContextManager.get().flatMap(_.getVariableManager).exists(_.isScopeLabel(label))
+    }
+    if (isScopeLabel) 1 else 0
   }
 
   /**

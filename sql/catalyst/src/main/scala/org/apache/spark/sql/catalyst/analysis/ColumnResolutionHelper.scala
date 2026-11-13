@@ -188,50 +188,23 @@ trait ColumnResolutionHelper extends Logging with DataTypeErrorsBase {
         // but failed. If we still can't resolve it, we should keep it as `TempResolvedColumn`,
         // so that it won't become a fresh `TempResolvedColumn` again.
         case t: TempResolvedColumn if t.hasTried => withPosition(t) {
-          innerResolve(UnresolvedAttribute(t.nameParts), isTopLevel) match {
+          val rebuilt =
+            OptionalReferences.withOptionalNamePartsOf(UnresolvedAttribute(t.nameParts), t)
+          innerResolve(rebuilt, isTopLevel) match {
             case _: UnresolvedAttribute => t
             case other => other
           }
         }
 
-        case u @ UnresolvedExtractValue(child, field) =>
-          val newChild = innerResolve(child, isTopLevel = false)
-          val resolvedField = if (conf.getConf(SQLConf.PREFER_COLUMN_OVER_LCA_IN_ARRAY_INDEX)) {
-            innerResolve(field, isTopLevel = false)
-          } else {
-            field
-          }
-          // Like a missing optional field of a name, see above.
-          val missingOptionalFieldAliasName = if (throws || OptionalReferences.isLastResort(u)) {
-            OptionalReferences.missingOptionalFieldAliasName(
-              unresolvedExtractValue = u,
-              child = newChild,
-              extraction = resolvedField,
-              resolver = resolver)
-          } else {
-            None
-          }
-          if (missingOptionalFieldAliasName.isDefined) {
-            OptionalReferences.implicitAlias(
-              OptionalReferences.nullReference(),
-              missingOptionalFieldAliasName.get
-            )
-          } else if (newChild.resolved) {
-            // applyOrNull propagates NULL when the base is NullType instead of throwing
-            // INVALID_EXTRACT_BASE_FIELD_TYPE, consistent with multipart field access (col.a).
-            val extracted = ExtractValue.applyOrNull(
-              child = newChild, extraction = resolvedField, resolver = resolver)
-            // A NullType base yields a bare NULL literal, which would otherwise produce an output
-            // column named `NULL`. Alias it with the extraction's text (e.g. `col[0]`) to keep a
-            // stable column name; CleanupAliases later trims this alias where it's not a top-level
-            // projection output.
-            if (newChild.dataType == NullType) {
-              Alias(extracted, toPrettySQL(u.copy(child = newChild, extraction = resolvedField)))()
-            } else {
-              extracted
-            }
-          } else {
-            u.copy(child = newChild, extraction = resolvedField)
+        case u: UnresolvedExtractValue =>
+          resolveExtractValue(u, isLastResort = false)
+
+        // The missing optional field of a last-resort extraction is NULL in the first step that
+        // resolves its child, see `LastResortExtractValue`. Until then, it stays wrapped.
+        case LastResortExtractValue(u) =>
+          resolveExtractValue(u, isLastResort = true) match {
+            case unresolved: UnresolvedExtractValue => LastResortExtractValue(unresolved)
+            case other => other
           }
 
         // Default value expression can not reference real columns,
@@ -243,6 +216,51 @@ trait ColumnResolutionHelper extends Logging with DataTypeErrorsBase {
         case _ => e.mapChildren(innerResolve(_, isTopLevel = false))
       }
       resolved.copyTagsFrom(e)
+      resolved
+    }
+
+    def resolveExtractValue(u: UnresolvedExtractValue, isLastResort: Boolean): Expression = {
+      val newChild = innerResolve(u.child, isTopLevel = false)
+      val resolvedField = if (conf.getConf(SQLConf.PREFER_COLUMN_OVER_LCA_IN_ARRAY_INDEX)) {
+        innerResolve(u.extraction, isTopLevel = false)
+      } else {
+        u.extraction
+      }
+      // Like a missing optional field of a name, see above.
+      val missingOptionalFieldAliasName = if (throws || isLastResort) {
+        OptionalReferences.missingOptionalFieldAliasName(
+          unresolvedExtractValue = u,
+          child = newChild,
+          extraction = resolvedField,
+          resolver = resolver)
+      } else {
+        None
+      }
+      val resolved = if (missingOptionalFieldAliasName.isDefined) {
+        OptionalReferences.implicitAlias(
+          OptionalReferences.nullReference(),
+          missingOptionalFieldAliasName.get
+        )
+      } else if (newChild.resolved) {
+        // applyOrNull propagates NULL when the base is NullType instead of throwing
+        // INVALID_EXTRACT_BASE_FIELD_TYPE, consistent with multipart field access (col.a).
+        val extracted = ExtractValue.applyOrNull(
+          child = newChild, extraction = resolvedField, resolver = resolver)
+        // A NullType base yields a bare NULL literal, which would otherwise produce an output
+        // column named `NULL`. Alias it with the extraction's text (e.g. `col[0]`) to keep a
+        // stable column name; CleanupAliases later trims this alias where it's not a top-level
+        // projection output.
+        if (newChild.dataType == NullType) {
+          Alias(extracted, toPrettySQL(u.copy(child = newChild, extraction = resolvedField)))()
+        } else {
+          extracted
+        }
+      } else {
+        u.copy(child = newChild, extraction = resolvedField)
+      }
+      // The wrapper of a last-resort extraction has no tags of its own, so the ones of the
+      // extraction are copied here rather than by `innerResolve`.
+      resolved.copyTagsFrom(u)
       resolved
     }
 
@@ -337,7 +355,7 @@ trait ColumnResolutionHelper extends Logging with DataTypeErrorsBase {
         // Re-resolves `TempResolvedColumn` as variable references if it has tried to be
         // resolved with Aggregate but failed.
         case t: TempResolvedColumn if t.hasTried => withPosition(t) {
-          resolve(t.nameParts).getOrElse(t) match {
+          resolve(t.nameParts, OptionalReferences.optionalNamePartIndices(t)).getOrElse(t) match {
             case _: UnresolvedAttribute => t
             case other => other
           }

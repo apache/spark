@@ -304,6 +304,15 @@ struct<addr:struct<state:string>>
 
 
 -- !query
+SELECT named_struct('state', 'CA') AS addr FROM people GROUP BY id HAVING addr.city? IS NULL
+-- !query schema
+struct<addr:struct<state:string>>
+-- !query output
+{"state":"CA"}
+{"state":"CA"}
+
+
+-- !query
 SELECT DISTINCT id FROM people ORDER BY addr?, id DESC
 -- !query schema
 struct<id:int>
@@ -1050,6 +1059,48 @@ struct<local_known:int,local_unknown:void>
 
 
 -- !query
+BEGIN
+  lbl: BEGIN
+    DECLARE x INT DEFAULT 1;
+    FOR r AS SELECT id, addr FROM people WHERE id = 1 DO
+      SELECT lbl.x?, lbl.y?, r.id?, r.addr.city?, r.missing?, r.addr.state?;
+    END FOR;
+  END;
+END
+-- !query schema
+struct<x:int,y:void,id:int,city:string,missing:void,state:void>
+-- !query output
+1	NULL	1	SF	NULL	NULL
+
+
+-- !query
+BEGIN
+  lbl: BEGIN
+    DECLARE x INT DEFAULT 1;
+    SELECT other.x?;
+  END;
+END
+-- !query schema
+struct<>
+-- !query output
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
+{
+  "errorClass" : "UNRESOLVED_COLUMN.WITHOUT_SUGGESTION",
+  "sqlState" : "42703",
+  "messageParameters" : {
+    "objectName" : "`other`.`x`"
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 60,
+    "stopIndex" : 67,
+    "fragment" : "other.x?"
+  } ]
+}
+
+
+-- !query
 SELECT id, (SELECT max(o.missing?) FROM people i WHERE i.id = o.id) AS m FROM people o ORDER BY id
 -- !query schema
 struct<id:int,m:void>
@@ -1288,6 +1339,27 @@ org.apache.spark.sql.catalyst.ExtendedAnalysisException
 
 
 -- !query
+SELECT CAST(v?:a AS STRING) AS a, CAST(missing?:a AS STRING) AS b, missing?:a::INT AS i
+FROM VALUES (parse_json('{"a": 1}')) AS t(v)
+-- !query schema
+struct<a:string,b:string,i:int>
+-- !query output
+1	NULL	NULL
+
+
+-- !query
+SELECT NULL:a
+-- !query schema
+struct<>
+-- !query output
+org.apache.spark.sql.AnalysisException
+{
+  "errorClass" : "COLUMN_IS_NOT_VARIANT_TYPE",
+  "sqlState" : "42K09"
+}
+
+
+-- !query
 SELECT IDENTIFIER('id')?, IDENTIFIER('name')? FROM people
 -- !query schema
 struct<id:int,name:void>
@@ -1453,6 +1525,30 @@ SELECT (SELECT variable_fn()) AS r FROM VALUES (5) AS t(fn_variable)
 struct<r:int>
 -- !query output
 100
+
+
+-- !query
+SET spark.sql.legacy.sqlFunctionBodyResolvesOuterReferences=true
+-- !query schema
+struct<key:string,value:string>
+-- !query output
+spark.sql.legacy.sqlFunctionBodyResolvesOuterReferences	true
+
+
+-- !query
+SELECT (SELECT variable_fn()) AS r FROM VALUES (5) AS t(fn_variable)
+-- !query schema
+struct<r:int>
+-- !query output
+100
+
+
+-- !query
+RESET spark.sql.legacy.sqlFunctionBodyResolvesOuterReferences
+-- !query schema
+struct<>
+-- !query output
+
 
 
 -- !query
@@ -1774,9 +1870,65 @@ NULL	2
 -- !query
 EXECUTE IMMEDIATE 'SELECT missing?, first(DISTINCT ?) AS f FROM people' USING 5
 -- !query schema
-struct<missing:void,f:void>
+struct<>
 -- !query output
-NULL	NULL
+org.apache.spark.sql.AnalysisException
+{
+  "errorClass" : "UNUSED_SQL_PARAMETER_VALUES",
+  "sqlState" : "07001",
+  "messageParameters" : {
+    "numMarkers" : "0",
+    "numValues" : "1"
+  }
+}
+
+
+-- !query
+EXECUTE IMMEDIATE 'SELECT first(DISTINCT ?) AS f, ? AS g FROM people' USING 5, 6
+-- !query schema
+struct<f:int,g:int>
+-- !query output
+5	6
+
+
+-- !query
+EXECUTE IMMEDIATE 'SELECT missing?, first(DISTINCT ?) AS f, ? AS g FROM people' USING 5, 6
+-- !query schema
+struct<>
+-- !query output
+org.apache.spark.sql.AnalysisException
+{
+  "errorClass" : "UNUSED_SQL_PARAMETER_VALUES",
+  "sqlState" : "07001",
+  "messageParameters" : {
+    "numMarkers" : "1",
+    "numValues" : "2"
+  }
+}
+
+
+-- !query
+EXECUTE IMMEDIATE 'SELECT missing? FROM people' USING 5
+-- !query schema
+struct<>
+-- !query output
+org.apache.spark.sql.AnalysisException
+{
+  "errorClass" : "UNUSED_SQL_PARAMETER_VALUES",
+  "sqlState" : "07001",
+  "messageParameters" : {
+    "numMarkers" : "0",
+    "numValues" : "1"
+  }
+}
+
+
+-- !query
+EXECUTE IMMEDIATE 'SELECT id FROM people WHERE id = ? AND deleted? IS NULL' USING 1
+-- !query schema
+struct<id:int>
+-- !query output
+1
 
 
 -- !query
@@ -2134,6 +2286,23 @@ struct<id:int,m:string>
 
 
 -- !query
+INSERT OVERWRITE target SELECT id?, addr FROM people WHERE missing? IS NULL
+-- !query schema
+struct<>
+-- !query output
+
+
+
+-- !query
+SELECT * FROM target ORDER BY id
+-- !query schema
+struct<id:int,addr:struct<city:string,zip:string>>
+-- !query output
+1	{"city":"SF","zip":"94105"}
+2	{"city":"NYC","zip":"10001"}
+
+
+-- !query
 DROP TABLE ctas
 -- !query schema
 struct<>
@@ -2148,7 +2317,7 @@ struct<>
 -- !query output
 org.apache.spark.sql.catalyst.parser.ParseException
 {
-  "errorClass" : "OPTIONAL_COLUMN_REFERENCE_NOT_SUPPORTED.IN_DML",
+  "errorClass" : "OPTIONAL_REFERENCE_NOT_SUPPORTED.IN_DML",
   "sqlState" : "0A000",
   "messageParameters" : {
     "context" : "UPDATE"
@@ -2170,7 +2339,7 @@ struct<>
 -- !query output
 org.apache.spark.sql.catalyst.parser.ParseException
 {
-  "errorClass" : "OPTIONAL_COLUMN_REFERENCE_NOT_SUPPORTED.IN_DML",
+  "errorClass" : "OPTIONAL_REFERENCE_NOT_SUPPORTED.IN_DML",
   "sqlState" : "0A000",
   "messageParameters" : {
     "context" : "UPDATE"
@@ -2192,7 +2361,7 @@ struct<>
 -- !query output
 org.apache.spark.sql.catalyst.parser.ParseException
 {
-  "errorClass" : "OPTIONAL_COLUMN_REFERENCE_NOT_SUPPORTED.IN_DML",
+  "errorClass" : "OPTIONAL_REFERENCE_NOT_SUPPORTED.IN_DML",
   "sqlState" : "0A000",
   "messageParameters" : {
     "context" : "UPDATE"
@@ -2214,7 +2383,7 @@ struct<>
 -- !query output
 org.apache.spark.sql.catalyst.parser.ParseException
 {
-  "errorClass" : "OPTIONAL_COLUMN_REFERENCE_NOT_SUPPORTED.IN_DML",
+  "errorClass" : "OPTIONAL_REFERENCE_NOT_SUPPORTED.IN_DML",
   "sqlState" : "0A000",
   "messageParameters" : {
     "context" : "DELETE"
@@ -2236,7 +2405,7 @@ struct<>
 -- !query output
 org.apache.spark.sql.catalyst.parser.ParseException
 {
-  "errorClass" : "OPTIONAL_COLUMN_REFERENCE_NOT_SUPPORTED.IN_DML",
+  "errorClass" : "OPTIONAL_REFERENCE_NOT_SUPPORTED.IN_DML",
   "sqlState" : "0A000",
   "messageParameters" : {
     "context" : "DELETE"
@@ -2258,7 +2427,7 @@ struct<>
 -- !query output
 org.apache.spark.sql.catalyst.parser.ParseException
 {
-  "errorClass" : "OPTIONAL_COLUMN_REFERENCE_NOT_SUPPORTED.IN_DML",
+  "errorClass" : "OPTIONAL_REFERENCE_NOT_SUPPORTED.IN_DML",
   "sqlState" : "0A000",
   "messageParameters" : {
     "context" : "DELETE"
@@ -2280,7 +2449,7 @@ struct<>
 -- !query output
 org.apache.spark.sql.catalyst.parser.ParseException
 {
-  "errorClass" : "OPTIONAL_COLUMN_REFERENCE_NOT_SUPPORTED.IN_DML",
+  "errorClass" : "OPTIONAL_REFERENCE_NOT_SUPPORTED.IN_DML",
   "sqlState" : "0A000",
   "messageParameters" : {
     "context" : "MERGE"
@@ -2303,7 +2472,7 @@ struct<>
 -- !query output
 org.apache.spark.sql.catalyst.parser.ParseException
 {
-  "errorClass" : "OPTIONAL_COLUMN_REFERENCE_NOT_SUPPORTED.IN_DML",
+  "errorClass" : "OPTIONAL_REFERENCE_NOT_SUPPORTED.IN_DML",
   "sqlState" : "0A000",
   "messageParameters" : {
     "context" : "MERGE"
@@ -2326,7 +2495,7 @@ struct<>
 -- !query output
 org.apache.spark.sql.catalyst.parser.ParseException
 {
-  "errorClass" : "OPTIONAL_COLUMN_REFERENCE_NOT_SUPPORTED.IN_DML",
+  "errorClass" : "OPTIONAL_REFERENCE_NOT_SUPPORTED.IN_DML",
   "sqlState" : "0A000",
   "messageParameters" : {
     "context" : "MERGE"
@@ -2348,7 +2517,7 @@ struct<>
 -- !query output
 org.apache.spark.sql.catalyst.parser.ParseException
 {
-  "errorClass" : "OPTIONAL_COLUMN_REFERENCE_NOT_SUPPORTED.IN_DML",
+  "errorClass" : "OPTIONAL_REFERENCE_NOT_SUPPORTED.IN_DML",
   "sqlState" : "0A000",
   "messageParameters" : {
     "context" : "DELETE"
@@ -2370,7 +2539,7 @@ struct<>
 -- !query output
 org.apache.spark.sql.catalyst.parser.ParseException
 {
-  "errorClass" : "OPTIONAL_COLUMN_REFERENCE_NOT_SUPPORTED.IN_DML",
+  "errorClass" : "OPTIONAL_REFERENCE_NOT_SUPPORTED.IN_DML",
   "sqlState" : "0A000",
   "messageParameters" : {
     "context" : "INSERT"
@@ -2392,7 +2561,7 @@ struct<>
 -- !query output
 org.apache.spark.sql.catalyst.parser.ParseException
 {
-  "errorClass" : "OPTIONAL_COLUMN_REFERENCE_NOT_SUPPORTED.IN_DML",
+  "errorClass" : "OPTIONAL_REFERENCE_NOT_SUPPORTED.IN_PARTITION_SPEC",
   "sqlState" : "0A000",
   "messageParameters" : {
     "context" : "PARTITION"
@@ -2414,7 +2583,7 @@ struct<>
 -- !query output
 org.apache.spark.sql.catalyst.parser.ParseException
 {
-  "errorClass" : "OPTIONAL_COLUMN_REFERENCE_NOT_SUPPORTED.IN_DML",
+  "errorClass" : "OPTIONAL_REFERENCE_NOT_SUPPORTED.IN_PARTITION_SPEC",
   "sqlState" : "0A000",
   "messageParameters" : {
     "context" : "PARTITION"
@@ -2476,7 +2645,7 @@ struct<>
 -- !query output
 org.apache.spark.sql.catalyst.parser.ParseException
 {
-  "errorClass" : "OPTIONAL_COLUMN_REFERENCE_NOT_SUPPORTED.IN_DDL",
+  "errorClass" : "OPTIONAL_REFERENCE_NOT_SUPPORTED.IN_DDL",
   "sqlState" : "0A000",
   "messageParameters" : {
     "context" : "GENERATED ALWAYS AS"
@@ -2498,7 +2667,7 @@ struct<>
 -- !query output
 org.apache.spark.sql.catalyst.parser.ParseException
 {
-  "errorClass" : "OPTIONAL_COLUMN_REFERENCE_NOT_SUPPORTED.IN_DDL",
+  "errorClass" : "OPTIONAL_REFERENCE_NOT_SUPPORTED.IN_DDL",
   "sqlState" : "0A000",
   "messageParameters" : {
     "context" : "DEFAULT"
@@ -2520,7 +2689,7 @@ struct<>
 -- !query output
 org.apache.spark.sql.catalyst.parser.ParseException
 {
-  "errorClass" : "OPTIONAL_COLUMN_REFERENCE_NOT_SUPPORTED.IN_DDL",
+  "errorClass" : "OPTIONAL_REFERENCE_NOT_SUPPORTED.IN_DDL",
   "sqlState" : "0A000",
   "messageParameters" : {
     "context" : "CHECK"
@@ -2542,7 +2711,7 @@ struct<>
 -- !query output
 org.apache.spark.sql.catalyst.parser.ParseException
 {
-  "errorClass" : "OPTIONAL_COLUMN_REFERENCE_NOT_SUPPORTED.IN_DDL",
+  "errorClass" : "OPTIONAL_REFERENCE_NOT_SUPPORTED.IN_DDL",
   "sqlState" : "0A000",
   "messageParameters" : {
     "context" : "OPTIONS"
@@ -2572,7 +2741,7 @@ struct<>
 -- !query output
 org.apache.spark.sql.catalyst.parser.ParseException
 {
-  "errorClass" : "OPTIONAL_COLUMN_REFERENCE_NOT_SUPPORTED.IN_DDL",
+  "errorClass" : "OPTIONAL_REFERENCE_NOT_SUPPORTED.IN_DDL",
   "sqlState" : "0A000",
   "messageParameters" : {
     "context" : "DEFAULT"
@@ -2594,7 +2763,7 @@ struct<>
 -- !query output
 org.apache.spark.sql.catalyst.parser.ParseException
 {
-  "errorClass" : "OPTIONAL_COLUMN_REFERENCE_NOT_SUPPORTED.IN_DDL",
+  "errorClass" : "OPTIONAL_REFERENCE_NOT_SUPPORTED.IN_DDL",
   "sqlState" : "0A000",
   "messageParameters" : {
     "context" : "CHECK"

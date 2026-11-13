@@ -26,6 +26,7 @@ import org.apache.spark.connect.proto.{Expression, OutputType, PipelineCommand, 
 import org.apache.spark.connect.proto.PipelineCommand.{DefineFlow, DefineOutput}
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.connect.service.{SessionKey, SparkConnectService}
+import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.pipelines.autocdc.{ColumnSelection, UnqualifiedColumnName}
 import org.apache.spark.sql.pipelines.graph.AutoCdcFlow
 
@@ -163,6 +164,48 @@ class SparkDeclarativePipelinesServerSuite
       .setTargetDatasetName("target")
       .setAutoCdcFlowDetails(autoCdcDetails)
       .build()
+  }
+
+  private def expressionString(sql: String): Expression =
+    Expression
+      .newBuilder()
+      .setExpressionString(Expression.ExpressionString.newBuilder().setExpression(sql))
+      .build()
+
+  test("AutoCDC: optional references in the change arguments are rejected server-side") {
+    // Like the SQL form of the flow: a column that the source does not have must not silently
+    // change which rows the flow deletes, or how it sequences them.
+    withRawBlockingStub { implicit stub =>
+      val graphId = createDataflowGraph
+      val session = getDefaultSessionHolder.session
+      session.conf.set(SQLConf.OPTIONAL_REFERENCES_ENABLED.key, "true")
+      try {
+        Seq[DefineFlow.AutoCdcFlowDetails.Builder => Unit](
+          _.setApplyAsDeletes(expressionString("deleted? = true")),
+          _.setSequenceBy(expressionString("ts?")),
+          _.setApplyAsDeletes(expressionString("(SELECT max(deleted?) FROM src) = true")),
+          _.addKeys(expressionString("other_key?")),
+          _.addColumnList(expressionString("other_column?"))).foreach { addArgument =>
+          val flow = autoCdcDefineFlow(graphId, DefineFlow.SCDType.SCD_TYPE_1).toBuilder
+          addArgument(flow.getAutoCdcFlowDetailsBuilder)
+          val ex = intercept[Exception] {
+            sendPlan(
+              buildPlanFromPipelineCommand(
+                PipelineCommand.newBuilder().setDefineFlow(flow.build()).build()))
+          }
+          assert(ex.getMessage.contains("OPTIONAL_REFERENCE_NOT_SUPPORTED.IN_DML"), ex.getMessage)
+          assert(ex.getMessage.contains("AUTO CDC"), ex.getMessage)
+        }
+        // The same kind of argument without `?` is accepted.
+        val flow = autoCdcDefineFlow(graphId, DefineFlow.SCDType.SCD_TYPE_1).toBuilder
+        flow.getAutoCdcFlowDetailsBuilder.setApplyAsDeletes(expressionString("deleted = true"))
+        sendPlan(
+          buildPlanFromPipelineCommand(
+            PipelineCommand.newBuilder().setDefineFlow(flow.build()).build()))
+      } finally {
+        session.conf.unset(SQLConf.OPTIONAL_REFERENCES_ENABLED.key)
+      }
+    }
   }
 
   test("AutoCDC: specifying both column_list and except_column_list is rejected server-side") {

@@ -7039,7 +7039,7 @@
     ],
     "sqlState" : "HY008"
   },
-  "OPTIONAL_COLUMN_REFERENCE_NOT_SUPPORTED" : {
+  "OPTIONAL_REFERENCE_NOT_SUPPORTED" : {
     "message" : [
       "The `?` optional-reference operator is not supported in <context>."
     ],
@@ -7052,6 +7052,11 @@
       "IN_DML" : {
         "message" : [
           "Statements that modify table data must not contain optional references."
+        ]
+      },
+      "IN_PARTITION_SPEC" : {
+        "message" : [
+          "Partition specifications must not contain optional references."
         ]
       }
     },
@@ -10447,6 +10452,12 @@
       "3. set \"spark.sql.legacy.allowUntypedScalaUDF\" to \"true\" and use this API with caution."
     ],
     "sqlState" : "42K0E"
+  },
+  "UNUSED_SQL_PARAMETER_VALUES" : {
+    "message" : [
+      "The statement has <numMarkers> positional parameter marker(s) but <numValues> value(s) were supplied. In a statement with optional references, a `?` after an identifier or a non-reserved keyword is an optional reference, not a parameter marker."
+    ],
+    "sqlState" : "07001"
   },
   "USER_DEFINED_FUNCTIONS" : {
     "message" : [

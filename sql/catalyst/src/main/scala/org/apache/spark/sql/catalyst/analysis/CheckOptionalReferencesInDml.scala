@@ -17,7 +17,7 @@
 
 package org.apache.spark.sql.catalyst.analysis
 
-import org.apache.spark.sql.catalyst.expressions.{Expression, SubqueryExpression}
+import org.apache.spark.sql.catalyst.expressions.Expression
 import org.apache.spark.sql.catalyst.plans.logical.{
   DeleteFromTable,
   LogicalPlan,
@@ -62,15 +62,11 @@ object CheckOptionalReferencesInDml extends Rule[LogicalPlan] {
   }
 
   private def checkExpression(expression: Expression, statement: String): Unit = {
-    expression.foreach {
-      case reference if !reference.resolved && OptionalReferences.hasOptionalMarker(reference) =>
-        throw QueryCompilationErrors.optionalReferenceInDmlNotSupportedError(
-          statement,
-          reference.origin
-        )
-      case subquery: SubqueryExpression =>
-        subquery.plan.foreach(_.expressions.foreach(checkExpression(_, statement)))
-      case _ =>
+    OptionalReferences.unresolvedOptionalReference(expression).foreach { reference =>
+      throw QueryCompilationErrors.optionalReferenceInDmlNotSupportedError(
+        statement,
+        reference.origin
+      )
     }
   }
 }

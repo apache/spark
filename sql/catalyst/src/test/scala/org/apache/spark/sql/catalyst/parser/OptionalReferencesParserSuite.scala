@@ -338,7 +338,10 @@ class OptionalReferencesParserSuite extends PlanTest {
         "SELECT CASE ? WHEN ? THEN ? ELSE ? END" -> 4,
         "SELECT trim(BOTH ? FROM s) FROM t" -> 1,
         "SELECT a FROM t WHERE b = ? AND c IN (?, ?) LIMIT ?" -> 4,
-        "SELECT a? FROM t WHERE b? = ?" -> 1
+        "SELECT a? FROM t WHERE b? = ?" -> 1,
+        // The first parse uses the `?` before the optional reference as a marker before it fails.
+        "SELECT ?, a? FROM t" -> 1,
+        "SELECT a FROM t WHERE b = ? AND c? IS NULL" -> 1
       ).foreach {
         case (sqlText, expectedPositionalParameters) =>
           val plan = parsePlan(sqlText, optionalReferences = true)
@@ -502,7 +505,7 @@ class OptionalReferencesParserSuite extends PlanTest {
         case (sqlText, statement, fragment) =>
           checkError(
             exception = intercept[ParseException](CatalystSqlParser.parsePlan(sqlText)),
-            condition = "OPTIONAL_COLUMN_REFERENCE_NOT_SUPPORTED.IN_DML",
+            condition = "OPTIONAL_REFERENCE_NOT_SUPPORTED.IN_DML",
             sqlState = Some("0A000"),
             parameters = Map("context" -> statement),
             context = expectedContext(sqlText, fragment)
@@ -522,7 +525,7 @@ class OptionalReferencesParserSuite extends PlanTest {
       ).foreach { parse =>
         checkError(
           exception = intercept[ParseException](parse()),
-          condition = "OPTIONAL_COLUMN_REFERENCE_NOT_SUPPORTED.IN_DML",
+          condition = "OPTIONAL_REFERENCE_NOT_SUPPORTED.IN_DML",
           sqlState = Some("0A000"),
           parameters = Map("context" -> "UPDATE"),
           context = expectedContext(sqlText, ":v?")
@@ -544,7 +547,7 @@ class OptionalReferencesParserSuite extends PlanTest {
         ).foreach { parse =>
           checkError(
             exception = intercept[ParseException](parse()),
-            condition = "OPTIONAL_COLUMN_REFERENCE_NOT_SUPPORTED.IN_DML",
+            condition = "OPTIONAL_REFERENCE_NOT_SUPPORTED.IN_PARTITION_SPEC",
             sqlState = Some("0A000"),
             parameters = Map("context" -> "PARTITION"),
             context = expectedContext(sqlText, ":v?")
@@ -568,10 +571,26 @@ class OptionalReferencesParserSuite extends PlanTest {
         case (sqlText, clause) =>
           checkError(
             exception = intercept[ParseException](CatalystSqlParser.parsePlan(sqlText)),
-            condition = "OPTIONAL_COLUMN_REFERENCE_NOT_SUPPORTED.IN_DDL",
+            condition = "OPTIONAL_REFERENCE_NOT_SUPPORTED.IN_DDL",
             sqlState = Some("0A000"),
             parameters = Map("context" -> clause),
             context = expectedContext(sqlText, "a?")
+          )
+      }
+      // An optional field of an expression and an optional IDENTIFIER clause.
+      Seq(
+        ("CREATE TABLE t (a ARRAY<STRUCT<b: INT>>, CONSTRAINT c CHECK (a[0].b? > 0))", "CHECK",
+          "a[0].b?"),
+        ("CREATE TABLE t (a INT, b INT GENERATED ALWAYS AS (IDENTIFIER('a' || '')? + 1))",
+          "GENERATED ALWAYS AS", "IDENTIFIER('a' || '')?")
+      ).foreach {
+        case (sqlText, clause, fragment) =>
+          checkError(
+            exception = intercept[ParseException](CatalystSqlParser.parsePlan(sqlText)),
+            condition = "OPTIONAL_REFERENCE_NOT_SUPPORTED.IN_DDL",
+            sqlState = Some("0A000"),
+            parameters = Map("context" -> clause),
+            context = expectedContext(sqlText, fragment)
           )
       }
     }

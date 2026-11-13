@@ -33,6 +33,7 @@ class SubstituteParmsAstBuilder extends SqlBaseParserBaseVisitor[AnyRef] {
   private val positionalParams = mutable.ListBuffer[Int]()
   private val namedParamLocations = mutable.Map[String, mutable.ListBuffer[ParameterLocation]]()
   private val positionalParamLocations = mutable.ListBuffer[ParameterLocation]()
+  private var hasOptionalReferences = false
 
   /**
    * Extract parameter location information from a parse context. This method traverses the parse
@@ -44,13 +45,32 @@ class SubstituteParmsAstBuilder extends SqlBaseParserBaseVisitor[AnyRef] {
     positionalParams.clear()
     namedParamLocations.clear()
     positionalParamLocations.clear()
+    hasOptionalReferences = false
 
     // Visit the context to collect parameters and their locations
     visit(ctx)
 
     ParameterLocationInfo(
       namedParamLocations.view.mapValues(_.toList).toMap,
-      positionalParamLocations.toList)
+      positionalParamLocations.toList,
+      hasOptionalReferences)
+  }
+
+  // The `?` of an optional reference (`x?`) is not a parameter marker. Record that the statement
+  // has one, see `ParameterLocationInfo.hasOptionalReferences`.
+  override def visitColumnReference(ctx: ColumnReferenceContext): AnyRef = {
+    hasOptionalReferences |= ctx.optionalMarker != null
+    visitChildren(ctx)
+  }
+
+  override def visitDereference(ctx: DereferenceContext): AnyRef = {
+    hasOptionalReferences |= ctx.optionalMarker != null
+    visitChildren(ctx)
+  }
+
+  override def visitOptionalIdentifierClause(ctx: OptionalIdentifierClauseContext): AnyRef = {
+    hasOptionalReferences = true
+    visitChildren(ctx)
   }
 
   /**
@@ -191,6 +211,12 @@ class SubstituteParmsAstBuilder extends SqlBaseParserBaseVisitor[AnyRef] {
         visitPositionalParameterMarkerRule(ctx)
       case ctx: SingleStringLitContext =>
         visitSingleStringLit(ctx)
+      case ctx: ColumnReferenceContext =>
+        visitColumnReference(ctx)
+      case ctx: DereferenceContext =>
+        visitDereference(ctx)
+      case ctx: OptionalIdentifierClauseContext =>
+        visitOptionalIdentifierClause(ctx)
       case ruleNode: RuleNode =>
         // Continue traversing children for rule nodes (this handles ParameterStringValueContext,
         // ParameterIntegerValueContext, StringLiteralInContextContext, and other rule nodes
@@ -235,10 +261,15 @@ class SubstituteParmsAstBuilder extends SqlBaseParserBaseVisitor[AnyRef] {
 
 /**
  * Data class to hold parameter location information for substitution.
+ *
+ * @param hasOptionalReferences
+ *   Whether the statement has an optional column, field, or variable reference (`x?`). Its `?` is
+ *   not a parameter marker.
  */
 case class ParameterLocationInfo(
     namedParameterLocations: Map[String, List[ParameterLocation]],
-    positionalParameterLocations: List[ParameterLocation]) {
+    positionalParameterLocations: List[ParameterLocation],
+    hasOptionalReferences: Boolean = false) {
 
   def isEmpty: Boolean = namedParameterLocations.isEmpty && positionalParameterLocations.isEmpty
   def nonEmpty: Boolean = !isEmpty

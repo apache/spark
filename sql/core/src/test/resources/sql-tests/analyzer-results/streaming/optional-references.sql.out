@@ -59,7 +59,7 @@ SEQUENCE BY id
 -- !query analysis
 org.apache.spark.sql.catalyst.parser.ParseException
 {
-  "errorClass" : "OPTIONAL_COLUMN_REFERENCE_NOT_SUPPORTED.IN_DML",
+  "errorClass" : "OPTIONAL_REFERENCE_NOT_SUPPORTED.IN_DML",
   "sqlState" : "0A000",
   "messageParameters" : {
     "context" : "AUTO CDC"

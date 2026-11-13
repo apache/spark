@@ -64,6 +64,9 @@ SELECT id, named_struct('city', addr.city) AS addr FROM people ORDER BY addr?.st
 SELECT named_struct('state', 'CA') AS addr FROM people GROUP BY addr HAVING addr.state? = 'CA';
 SELECT named_struct('state', 'CA') AS addr FROM people GROUP BY addr
 HAVING addr.country? IS NULL;
+-- `addr.city` exists below the SELECT list but is not grouped, so HAVING falls back to the alias
+-- `addr` of the SELECT list, which has no `city`.
+SELECT named_struct('state', 'CA') AS addr FROM people GROUP BY id HAVING addr.city? IS NULL;
 -- A column that is out of scope is not found.
 SELECT DISTINCT id FROM people ORDER BY addr?, id DESC;
 
@@ -159,6 +162,25 @@ BEGIN
   SELECT local_known?, local_unknown?;
 END;
 --QUERY-DELIMITER-END
+-- The label of a compound statement and the variable of a FOR statement qualify variables.
+--QUERY-DELIMITER-START
+BEGIN
+  lbl: BEGIN
+    DECLARE x INT DEFAULT 1;
+    FOR r AS SELECT id, addr FROM people WHERE id = 1 DO
+      SELECT lbl.x?, lbl.y?, r.id?, r.addr.city?, r.missing?, r.addr.state?;
+    END FOR;
+  END;
+END;
+--QUERY-DELIMITER-END
+--QUERY-DELIMITER-START
+BEGIN
+  lbl: BEGIN
+    DECLARE x INT DEFAULT 1;
+    SELECT other.x?;
+  END;
+END;
+--QUERY-DELIMITER-END
 
 -- Correlated subqueries resolve against the same scopes as without `?`.
 SELECT id, (SELECT max(o.missing?) FROM people i WHERE i.id = o.id) AS m FROM people o ORDER BY id;
@@ -206,6 +228,11 @@ SELECT missing?[0], missing?['key'] FROM people LIMIT 1;
 SELECT id, items[0].qty?, items[0].price? FROM orders ORDER BY items[0].qty? DESC;
 SELECT id FROM orders ORDER BY items[0].price?, id DESC;
 SELECT id FROM orders ORDER BY items?[0].price, id DESC;
+-- A path extraction from a missing optional VARIANT column is NULL, like a field of a missing
+-- struct column. A written NULL is not a VARIANT.
+SELECT CAST(v?:a AS STRING) AS a, CAST(missing?:a AS STRING) AS b, missing?:a::INT AS i
+FROM VALUES (parse_json('{"a": 1}')) AS t(v);
+SELECT NULL:a;
 
 -- IDENTIFIER clause.
 SELECT IDENTIFIER('id')?, IDENTIFIER('name')? FROM people;
@@ -233,6 +260,10 @@ SELECT p.id, f.x, f.y FROM people p, LATERAL optional_table_fn(p.id) f ORDER BY 
 DECLARE OR REPLACE VARIABLE fn_variable INT DEFAULT 100;
 CREATE TEMPORARY FUNCTION variable_fn() RETURNS INT RETURN fn_variable;
 SELECT (SELECT variable_fn()) AS r FROM VALUES (5) AS t(fn_variable);
+-- The legacy conf has no effect while optional references are enabled.
+SET spark.sql.legacy.sqlFunctionBodyResolvesOuterReferences=true;
+SELECT (SELECT variable_fn()) AS r FROM VALUES (5) AS t(fn_variable);
+RESET spark.sql.legacy.sqlFunctionBodyResolvesOuterReferences;
 DROP TEMPORARY FUNCTION optional_fn;
 DROP TEMPORARY FUNCTION optional_qualified_fn;
 DROP TEMPORARY FUNCTION optional_table_fn;
@@ -285,8 +316,14 @@ EXECUTE IMMEDIATE
   USING 2, 1, 2, 1;
 -- In a statement that is not valid without optional references, a `?` after a keyword marks a
 -- reference to a column with the name of the keyword where the syntax allows a reference, so
--- `distinct?` is NULL here.
+-- `distinct?` is NULL here. A value that no marker takes is an error, so that the following
+-- markers do not take the values of the preceding ones silently.
 EXECUTE IMMEDIATE 'SELECT missing?, first(DISTINCT ?) AS f FROM people' USING 5;
+EXECUTE IMMEDIATE 'SELECT first(DISTINCT ?) AS f, ? AS g FROM people' USING 5, 6;
+EXECUTE IMMEDIATE 'SELECT missing?, first(DISTINCT ?) AS f, ? AS g FROM people' USING 5, 6;
+EXECUTE IMMEDIATE 'SELECT missing? FROM people' USING 5;
+-- A marker before an optional reference.
+EXECUTE IMMEDIATE 'SELECT id FROM people WHERE id = ? AND deleted? IS NULL' USING 1;
 
 -- Views are the primary use case: a view stays valid while its source table evolves.
 CREATE OR REPLACE TEMPORARY VIEW people_v AS SELECT id, addr, deleted_at? FROM people;
@@ -302,9 +339,11 @@ SELECT * FROM evolving_v;
 ALTER TABLE evolving ADD COLUMNS (deleted_at STRING);
 INSERT INTO evolving VALUES (2, 'yesterday');
 SELECT * FROM evolving_v ORDER BY id;
--- A view that is not created WITH SCHEMA EVOLUTION keeps the types of its columns. A missing
--- optional reference has the type VOID, which the column that appears later cannot be cast to,
--- so such a view should cast the reference to the type of that column.
+-- A view WITH SCHEMA BINDING or COMPENSATION, the default, keeps the types of its columns, and a
+-- missing optional reference has the type VOID, which a column that appears later cannot be cast
+-- to, so such a view should cast the reference. WITH SCHEMA [TYPE] EVOLUTION takes the new type.
+-- An expression over an optional reference is named after NULL while the reference is missing,
+-- so it needs an alias for the view to keep its column names.
 SELECT * FROM evolving_cast_v ORDER BY id;
 SELECT * FROM evolving_void_v ORDER BY id;
 DROP VIEW evolving_v;
@@ -328,7 +367,9 @@ DROP VIEW events_v;
 DROP VIEW events_strict_v;
 DROP TABLE events;
 
--- The read-only query source of an INSERT, VALUES lists, and CREATE TABLE AS SELECT are allowed.
+-- The query of an INSERT, including INSERT OVERWRITE, VALUES lists, and the query of a CREATE
+-- TABLE AS SELECT are allowed: like any query, they only read data, and the rows that an
+-- overwrite replaces do not depend on the query.
 CREATE TABLE target (id INT, addr STRUCT<city: STRING, zip: STRING>) USING parquet;
 INSERT INTO target SELECT id?, addr
 FROM (SELECT named_struct('city', 'LA', 'zip', '90001') AS addr);
@@ -338,9 +379,12 @@ SELECT * FROM target ORDER BY id NULLS FIRST, addr NULLS LAST;
 SELECT * FROM VALUES (missing?, 1) AS t(a, b);
 CREATE TABLE ctas USING parquet AS SELECT id, CAST(missing? AS STRING) AS m FROM people;
 SELECT * FROM ctas ORDER BY id;
+INSERT OVERWRITE target SELECT id?, addr FROM people WHERE missing? IS NULL;
+SELECT * FROM target ORDER BY id;
 DROP TABLE ctas;
 
--- Statements that modify table data reject `?`.
+-- UPDATE, DELETE, MERGE, and the condition of INSERT ... REPLACE reject `?`: a missing column must
+-- not change which rows they modify.
 UPDATE target SET id = other? WHERE id = 1;
 UPDATE target SET id = 1 WHERE missing? IS NULL;
 EXECUTE IMMEDIATE 'UPDATE target SET id = :v? WHERE id = 1' USING 1 AS v;

@@ -1778,30 +1778,28 @@ primaryExpression
     | identifier ARROW expression                                                              #lambda
     | LEFT_PAREN identifier (COMMA identifier)+ RIGHT_PAREN ARROW expression                   #lambda
     | value=primaryExpression LEFT_BRACKET index=valueExpression RIGHT_BRACKET                 #subscript
-    | leadingReferenceNamePart                                                                 #columnReference
-    | base=primaryExpression DOT fieldName=referenceNamePart                                   #dereference
+    | identifier optionalMarker=QUESTION_WITH_OPTIONAL_REFERENCES?                            #columnReference
+    | IDENTIFIER_KW LEFT_PAREN expression RIGHT_PAREN QUESTION_WITH_OPTIONAL_REFERENCES         #optionalIdentifierClause
+    | base=primaryExpression DOT fieldName=identifier
+      optionalMarker=QUESTION_WITH_OPTIONAL_REFERENCES?                                        #dereference
     | LEFT_PAREN expression RIGHT_PAREN                                                        #parenthesizedExpression
     | EXTRACT LEFT_PAREN field=simpleIdentifier FROM source=valueExpression RIGHT_PAREN              #extract
     | (SUBSTR | SUBSTRING) LEFT_PAREN str=valueExpression (FROM | COMMA) pos=valueExpression
       ((FOR | COMMA) len=valueExpression)? RIGHT_PAREN                                         #substring
     | TRIM LEFT_PAREN trimOption=(BOTH | LEADING | TRAILING)? (trimStr=valueExpression)?
        FROM srcStr=valueExpression RIGHT_PAREN                                                 #trim
-    | OVERLAY LEFT_PAREN input=valueExpression PLACING replace=valueExpression
-      FROM position=valueExpression (FOR length=valueExpression)? RIGHT_PAREN                  #overlay
+    | overlayExpression                                                                        #overlay
     ;
 
-// A name part of a column, field, or variable reference. A `?` after it makes it optional: the
-// reference is NULL if the name part is not found.
-// Kept out of `primaryExpression` so its generated method stays under the JIT size limit.
-referenceNamePart
-    : identifier optionalMarker=QUESTION_WITH_OPTIONAL_REFERENCES?
-    ;
-
-// The first name part of a reference. The second alternative is an optional IDENTIFIER clause
-// with any expression as the name of a column, which is a `functionCall` without the `?`.
-leadingReferenceNamePart
-    : identifier optionalMarker=QUESTION_WITH_OPTIONAL_REFERENCES?
-    | IDENTIFIER_KW LEFT_PAREN expression RIGHT_PAREN optionalMarker=QUESTION_WITH_OPTIONAL_REFERENCES
+// Kept out of `primaryExpression` so its generated method stays under the JIT size limit: the
+// optional `?` after a column reference and a dereferenced field (`#columnReference`,
+// `#dereference`) and the `#optionalIdentifierClause` alternative, an IDENTIFIER clause with any
+// expression as the name of a column that is a `#functionCall` without the `?`, are inlined there
+// instead of being rules of their own, because a rule of their own would cost every column
+// reference a rule invocation. The marker alternatives themselves still cost a lookahead check.
+overlayExpression
+    : OVERLAY LEFT_PAREN input=valueExpression PLACING replace=valueExpression
+      FROM position=valueExpression (FOR length=valueExpression)? RIGHT_PAREN
     ;
 
 // The behavior selected by a JSON_VALUE `... ON EMPTY` / `... ON ERROR` clause. NULL and ERROR are

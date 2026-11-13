@@ -24,7 +24,9 @@ import org.apache.spark.sql.catalyst.expressions.{
   LateralColumnAliasReference,
   NamedExpression,
   PipeOperator,
-  SubqueryExpression
+  SubqueryExpression,
+  UnaryExpression,
+  Unevaluable
 }
 import org.apache.spark.sql.catalyst.plans.logical.{
   Aggregate,
@@ -39,6 +41,7 @@ import org.apache.spark.sql.catalyst.plans.logical.{
 }
 import org.apache.spark.sql.catalyst.rules.Rule
 import org.apache.spark.sql.catalyst.trees.TreePattern.{PARAMETERIZED_QUERY, PLAN_EXPRESSION}
+import org.apache.spark.sql.types.DataType
 
 /**
  * Replaces the optional references that the fixed-point "Resolution" batch could not resolve
@@ -63,6 +66,9 @@ import org.apache.spark.sql.catalyst.trees.TreePattern.{PARAMETERIZED_QUERY, PLA
  * or resolves the alias of a generator. The rule therefore only replaces the references of a
  * subquery plan after it could not resolve the operator of the subquery expression, which it
  * signals by wrapping the subquery plan in [[ResolveOptionalReferencesInSubquery]].
+ *
+ * The rule never changes the plan that it is given, which can be analyzed again later, e.g. from a
+ * plan cache: its decisions are nodes of the plan that it returns.
  */
 class ResolveOptionalReferences(resolveAgain: LogicalPlan => LogicalPlan)
     extends Rule[LogicalPlan] {
@@ -89,10 +95,13 @@ class ResolveOptionalReferences(resolveAgain: LogicalPlan => LogicalPlan)
     }
     if (!resolvedPlan.fastEquals(plan)) {
       resolvedPlan
-    } else if (markOptionalFieldsAsLastResort(plan)) {
-      resolveAgain(plan)
     } else {
-      plan
+      val wrappedPlan = wrapOptionalFieldsAsLastResort(plan)
+      if (wrappedPlan.fastEquals(plan)) {
+        plan
+      } else {
+        unwrapLastResortExtractValues(resolveAgain(wrappedPlan))
+      }
     }
   }
 
@@ -197,25 +206,34 @@ class ResolveOptionalReferences(resolveAgain: LogicalPlan => LogicalPlan)
   }
 
   /**
-   * Marks the optional field extractions of the lowest operators of `plan` that are not resolved
-   * as a last resort, and returns whether it marked any. See
-   * [[OptionalReferences.markLastResort]].
+   * Wraps the optional field extractions of the lowest operators of `plan` that are not resolved
+   * in [[LastResortExtractValue]].
    */
-  private def markOptionalFieldsAsLastResort(plan: LogicalPlan): Boolean = {
-    var marked = false
-    plan.foreach { operator =>
-      if (operator.childrenResolved && !operator.resolved) {
-        operator.expressions.foreach(_.foreach {
-          case extractValue: UnresolvedExtractValue
-              if OptionalReferences.isOptional(extractValue) &&
-              !OptionalReferences.isLastResort(extractValue) =>
-            OptionalReferences.markLastResort(extractValue)
-            marked = true
-          case _ =>
-        })
-      }
+  private def wrapOptionalFieldsAsLastResort(plan: LogicalPlan): LogicalPlan = {
+    plan.resolveOperatorsDown {
+      case operator if operator.childrenResolved && !operator.resolved =>
+        operator.mapExpressions(wrapOptionalFields)
     }
-    marked
+  }
+
+  private def wrapOptionalFields(expression: Expression): Expression = expression match {
+    case lastResort: LastResortExtractValue =>
+      lastResort
+    case extractValue: UnresolvedExtractValue if OptionalReferences.isOptional(extractValue) =>
+      // The children are wrapped first, so the wrapped extraction is still an extraction.
+      LastResortExtractValue(
+        extractValue.mapChildren(wrapOptionalFields).asInstanceOf[UnresolvedExtractValue])
+    case other if !other.resolved =>
+      other.mapChildren(wrapOptionalFields)
+    case other =>
+      other
+  }
+
+  /** Unwraps the extractions of `plan` that the analyzer did not resolve. */
+  private def unwrapLastResortExtractValues(plan: LogicalPlan): LogicalPlan = {
+    plan.resolveExpressions {
+      case LastResortExtractValue(extractValue) => extractValue
+    }
   }
 
   /**
@@ -285,6 +303,38 @@ object ResolveOptionalReferences {
    */
   def isUnfinishedSubqueryPlan(plan: LogicalPlan): Boolean =
     isPlanOfSubquery && !plan.resolved && hasUnresolvedOptionalReferences(plan)
+}
+
+/**
+ * Wraps an optional [[UnresolvedExtractValue]] that no name resolution step of its operator could
+ * resolve, so that its missing field is NULL in the next step that resolves its child. Until then,
+ * a step whose errors are not final leaves the extraction unresolved, like the same extraction
+ * without `?`, because a later step can still resolve it. For example, ORDER BY resolves names
+ * against the SELECT list before the columns of the FROM clause:
+ *
+ * {{{
+ *   -- `t.arr` is an ARRAY<STRUCT<a INT, b INT>>, so ORDER BY sorts by its field `b`.
+ *   SELECT array(named_struct('a', 1)) AS arr FROM t ORDER BY arr[0].b?;
+ * }}}
+ *
+ * [[ResolveOptionalReferences]] adds the wrapper to the plan that it returns and removes the ones
+ * that are left after the analyzer resolved that plan again. A tag on the extraction would outlive
+ * the analysis instead, and make the field NULL in a later analysis of the same unresolved plan,
+ * e.g. from a plan cache, even once a column has the field.
+ */
+case class LastResortExtractValue(child: UnresolvedExtractValue)
+    extends UnaryExpression
+    with Unevaluable {
+  override lazy val resolved: Boolean = false
+  override def dataType: DataType = throw new UnresolvedException("dataType")
+  override def nullable: Boolean = throw new UnresolvedException("nullable")
+  override def sql: String = child.sql
+  override def toString: String = child.toString
+  override protected def withNewChildInternal(newChild: Expression): Expression = newChild match {
+    case extractValue: UnresolvedExtractValue => copy(child = extractValue)
+    // The extraction is resolved, with or without the field.
+    case resolved => resolved
+  }
 }
 
 /**

@@ -141,8 +141,10 @@ private[parser] class UpperCaseCharStream(wrapped: CodePointCharStream) extends 
 }
 
 /**
- * Counts the `?` tokens that a parse uses as positional parameter markers. A parse of a statement
- * that fails, or that uses a `?` in another way, uses fewer of them than the statement has.
+ * Counts the `?` tokens that a parse uses as positional parameter markers. A parse that uses a
+ * `?` in another way, e.g. as the free text of a `SET` command, uses fewer of them than the
+ * statement has. A parse can also use every `?` as a marker and still fail, as
+ * `SELECT ? FROM t WHERE` does.
  */
 private class PositionalParameterMarkerCounter extends SqlBaseParserBaseListener {
   var count: Int = 0
@@ -534,8 +536,8 @@ object AbstractParser extends Logging {
    * consistent error handling and performance optimization across all parsers.
    *
    * If optional references (`x?`) are enabled, the operation is executed again with optional
-   * references if it does not use every `?` of the statement as a positional parameter marker
-   * without them, see [[restartWithOptionalReferences]].
+   * references if it fails without using every `?` as a positional parameter marker, or if it
+   * succeeds but stops before a `?` it did not parse, see [[restartWithOptionalReferences]].
    *
    * @param parser
    *   The configured SqlBaseParser to use

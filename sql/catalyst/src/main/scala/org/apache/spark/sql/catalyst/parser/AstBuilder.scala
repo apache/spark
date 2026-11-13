@@ -4226,10 +4226,11 @@ class AstBuilder extends DataTypeAstBuilder
    * Create a Overlay expression.
    */
   override def visitOverlay(ctx: OverlayContext): Expression = withOrigin(ctx) {
-    val input = expression(ctx.input)
-    val replace = expression(ctx.replace)
-    val position = expression(ctx.position)
-    val lengthOpt = Option(ctx.length).map(expression)
+    val overlay = ctx.overlayExpression
+    val input = expression(overlay.input)
+    val replace = expression(overlay.replace)
+    val position = expression(overlay.position)
+    val lengthOpt = Option(overlay.length).map(expression)
     lengthOpt match {
       case Some(length) => Overlay(input, replace, position, length)
       case None => new Overlay(input, replace, position)
@@ -4746,9 +4747,9 @@ class AstBuilder extends DataTypeAstBuilder
    * it can be [[UnresolvedExtractValue]].
    */
   override def visitDereference(ctx: DereferenceContext): Expression = withOrigin(ctx) {
-    val optionalMarker = ctx.fieldName.optionalMarker
+    val optionalMarker = ctx.optionalMarker
     // Use getIdentifierText to handle both regular identifiers and IDENTIFIER('literal')
-    val attr = getIdentifierText(ctx.fieldName.identifier)
+    val attr = getIdentifierText(ctx.fieldName)
     expression(ctx.base) match {
       case unresolved_attr @ UnresolvedAttribute(nameParts) =>
         // For regex check, we need the original text before identifier-lite resolution
@@ -4803,7 +4804,6 @@ class AstBuilder extends DataTypeAstBuilder
    * quoted in ``
    */
   override def visitColumnReference(ctx: ColumnReferenceContext): Expression = withOrigin(ctx) {
-    val namePart = ctx.leadingReferenceNamePart
     // For regex check, we need the original text before identifier-lite resolution
     ctx.getStart.getText match {
       case escapedIdentifier(columnNameRegex)
@@ -4813,35 +4813,39 @@ class AstBuilder extends DataTypeAstBuilder
           throw QueryParsingErrors.unexpectedOptionalReferenceMarkerError(ctx, marker)
         }
         UnresolvedRegex(columnNameRegex, None, conf.caseSensitiveAnalysis)
-      case _ if namePart.identifier == null =>
-        // IDENTIFIER(expression)?
-        OptionalReferenceValidation.validate(ctx)
-        val identifierExpr = withOrigin(namePart.expression) { expression(namePart.expression) }
-        val identifierClause = new ExpressionWithUnresolvedIdentifier(
-          identifierExpr,
-          nameParts => {
-            val attribute = UnresolvedAttribute(nameParts)
-            OptionalReferences.markNamePartsOptional(attribute, Set(nameParts.length - 1))
-            attribute
-          })
-        OptionalReferences.markOptional(identifierClause)
-        identifierClause
       case _ =>
         // Use getIdentifierParts to handle IDENTIFIER('literal') correctly
         // This allows IDENTIFIER('t').c1 to work like t.c1
-        val parts = getIdentifierParts(namePart.identifier)
-        withOptionalNamePart(
-          UnresolvedAttribute(parts), parts.length - 1, namePart.optionalMarker, ctx)
+        val parts = getIdentifierParts(ctx.identifier)
+        withOptionalNamePart(UnresolvedAttribute(parts), parts.length - 1, ctx.optionalMarker, ctx)
     }
+  }
 
+  /**
+   * Create an [[ExpressionWithUnresolvedIdentifier]] for `IDENTIFIER(expression)?`, an optional
+   * reference to the column that the expression names.
+   */
+  override def visitOptionalIdentifierClause(
+      ctx: OptionalIdentifierClauseContext): Expression = withOrigin(ctx) {
+    OptionalReferenceValidation.validate(ctx)
+    val identifierExpr = withOrigin(ctx.expression) { expression(ctx.expression) }
+    val identifierClause = new ExpressionWithUnresolvedIdentifier(
+      identifierExpr,
+      nameParts => {
+        val attribute = UnresolvedAttribute(nameParts)
+        OptionalReferences.markNamePartsOptional(attribute, Set(nameParts.length - 1))
+        attribute
+      })
+    OptionalReferences.markOptional(identifierClause)
+    identifierClause
   }
 
   /** Returns the first `?` optional-reference marker of the multipart name `ctx`, if any. */
   private def firstOptionalMarker(ctx: PrimaryExpressionContext): Option[Token] = ctx match {
     case columnReference: ColumnReferenceContext =>
-      Option(columnReference.leadingReferenceNamePart.optionalMarker)
+      Option(columnReference.optionalMarker)
     case dereference: DereferenceContext =>
-      firstOptionalMarker(dereference.base).orElse(Option(dereference.fieldName.optionalMarker))
+      firstOptionalMarker(dereference.base).orElse(Option(dereference.optionalMarker))
     case _ =>
       None
   }

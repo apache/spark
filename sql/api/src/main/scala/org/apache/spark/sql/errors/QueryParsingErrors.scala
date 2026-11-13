@@ -1087,7 +1087,7 @@ private[sql] object QueryParsingErrors extends DataTypeErrorsBase {
       statement: String,
       ctx: ParserRuleContext): Throwable = {
     new ParseException(
-      errorClass = "OPTIONAL_COLUMN_REFERENCE_NOT_SUPPORTED.IN_DML",
+      errorClass = "OPTIONAL_REFERENCE_NOT_SUPPORTED.IN_DML",
       messageParameters = Map("context" -> toSQLStmt(statement)),
       ctx)
   }
@@ -1096,8 +1096,15 @@ private[sql] object QueryParsingErrors extends DataTypeErrorsBase {
       clause: String,
       ctx: ParserRuleContext): Throwable = {
     new ParseException(
-      errorClass = "OPTIONAL_COLUMN_REFERENCE_NOT_SUPPORTED.IN_DDL",
+      errorClass = "OPTIONAL_REFERENCE_NOT_SUPPORTED.IN_DDL",
       messageParameters = Map("context" -> toSQLStmt(clause)),
+      ctx)
+  }
+
+  def optionalReferenceInPartitionSpecNotSupportedError(ctx: ParserRuleContext): Throwable = {
+    new ParseException(
+      errorClass = "OPTIONAL_REFERENCE_NOT_SUPPORTED.IN_PARTITION_SPEC",
+      messageParameters = Map("context" -> toSQLStmt("PARTITION")),
       ctx)
   }
 

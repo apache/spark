@@ -33,11 +33,16 @@ object OptionalReferenceValidation {
    * statement, of the condition of INSERT ... REPLACE, of a partition specification, or of an
    * expression that defines a table object.
    *
+   * The query of an INSERT, including INSERT OVERWRITE, and of a CREATE OR REPLACE TABLE AS
+   * SELECT is allowed to have optional references: like any query, it only reads data, and the
+   * rows that these statements replace do not depend on it.
+   *
    * {{{
    *   UPDATE t SET a = b?;                                  -- IN_DML
    *   WITH s AS (SELECT a? FROM u) DELETE FROM t WHERE ...; -- IN_DML
+   *   TRUNCATE TABLE t PARTITION (p = :p?);                 -- IN_PARTITION_SPEC
    *   CREATE TABLE t (a INT, b INT DEFAULT a?);             -- IN_DDL
-   *   INSERT INTO t SELECT a? FROM s;                       -- allowed: the query only reads data
+   *   INSERT OVERWRITE t SELECT a? FROM s;                  -- allowed
    * }}}
    */
   def validate(ctx: ParserRuleContext): Unit = {
@@ -87,8 +92,8 @@ object OptionalReferenceValidation {
       Some(QueryParsingErrors.optionalReferenceInDmlNotSupportedError("AUTO CDC", ctx))
     case _: PartitionSpecContext =>
       // An unbound `:name?` would make e.g. TRUNCATE TABLE or INSERT target the NULL partition.
-      // For simplicity, statements that only read a partition reject it as well.
-      Some(QueryParsingErrors.optionalReferenceInDmlNotSupportedError("PARTITION", ctx))
+      // Statements that only read a partition, such as SHOW PARTITIONS, reject it as well.
+      Some(QueryParsingErrors.optionalReferenceInPartitionSpecNotSupportedError(ctx))
     case _: GeneratedColumnContext =>
       Some(QueryParsingErrors.optionalReferenceInDdlNotSupportedError("GENERATED ALWAYS AS", ctx))
     case _: DefaultExpressionContext =>

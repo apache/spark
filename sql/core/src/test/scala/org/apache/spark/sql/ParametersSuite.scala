@@ -1424,6 +1424,34 @@ class ParametersSuite extends SharedSparkSession {
     }
   }
 
+  test("positional parameter values that a statement with optional references does not use") {
+    Seq(false, true).foreach { constantsOnly =>
+      withSQLConf(
+        SQLConf.OPTIONAL_REFERENCES_ENABLED.key -> "true",
+        SQLConf.LEGACY_PARAMETER_SUBSTITUTION_CONSTANTS_ONLY.key -> constantsOnly.toString
+      ) {
+        // A statement that is valid without optional references keeps its markers.
+        checkAnswer(spark.sql("SELECT first(DISTINCT ?) AS f, ? AS g", Array(5, 6)), Row(5, 6))
+        // In a statement with optional references, a `?` after a non-reserved keyword where the
+        // syntax allows a reference is an optional reference, so the remaining markers would
+        // take the values of the following ones silently.
+        checkError(
+          exception = intercept[AnalysisException] {
+            spark.sql("SELECT missing?, first(DISTINCT ?) AS f, ? AS g", Array(5, 6))
+          },
+          condition = "UNUSED_SQL_PARAMETER_VALUES",
+          parameters = Map("numMarkers" -> "1", "numValues" -> "2"))
+        checkError(
+          exception = intercept[AnalysisException] {
+            spark.sql("SELECT missing? FROM range(1)", Array(5))
+          },
+          condition = "UNUSED_SQL_PARAMETER_VALUES",
+          parameters = Map("numMarkers" -> "0", "numValues" -> "1"))
+        checkAnswer(spark.sql("SELECT missing?, ? AS g", Array(6)), Row(null, 6))
+      }
+    }
+  }
+
   // =============================================
   // Legacy Mode Comprehensive Tests
   // =============================================

@@ -4639,9 +4639,17 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase with Compilat
 
   def optionalReferenceInDmlNotSupportedError(statement: String, origin: Origin): Throwable = {
     new AnalysisException(
-      errorClass = "OPTIONAL_COLUMN_REFERENCE_NOT_SUPPORTED.IN_DML",
+      errorClass = "OPTIONAL_REFERENCE_NOT_SUPPORTED.IN_DML",
       messageParameters = Map("context" -> toSQLStmt(statement)),
       origin = origin)
+  }
+
+  def unusedSqlParameterValuesError(numMarkers: Int, numValues: Int): Throwable = {
+    new AnalysisException(
+      errorClass = "UNUSED_SQL_PARAMETER_VALUES",
+      messageParameters = Map(
+        "numMarkers" -> numMarkers.toString,
+        "numValues" -> numValues.toString))
   }
 
   def ambiguousLateralColumnAliasError(name: String, numOfMatches: Int): Throwable = {

@@ -299,10 +299,24 @@ class MergeIntoDataFrameSuite extends RowLevelOperationSuiteBase {
               .delete()
               .merge()
           },
-          condition = "OPTIONAL_COLUMN_REFERENCE_NOT_SUPPORTED.IN_DML",
+          condition = "OPTIONAL_REFERENCE_NOT_SUPPORTED.IN_DML",
           sqlState = "0A000",
           parameters = Map("context" -> "MERGE"),
           context = ExpectedContext(fragment = "source.archived?", start = 0, stop = 15))
+
+        // Also in the plan of a subquery of an assignment.
+        checkError(
+          exception = intercept[AnalysisException] {
+            spark.table("source")
+              .mergeInto(tableNameAsString, $"source.pk" === col(tableNameAsString + ".pk"))
+              .whenMatched()
+              .update(Map("salary" -> expr("(SELECT max(bonus?) FROM source)")))
+              .merge()
+          },
+          condition = "OPTIONAL_REFERENCE_NOT_SUPPORTED.IN_DML",
+          sqlState = "0A000",
+          parameters = Map("context" -> "MERGE"),
+          context = ExpectedContext(fragment = "bonus?", start = 12, stop = 17))
       }
 
       checkAnswer(sql(s"SELECT * FROM $tableNameAsString"), Seq(Row(1, 100, "hr")))

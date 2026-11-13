@@ -303,7 +303,7 @@ class DataFrameWriterV2Suite extends SharedSparkSession with BeforeAndAfter {
         exception = intercept[AnalysisException] {
           spark.table("source2").writeTo("testcat.table_name").overwrite(expr("deleted? IS NULL"))
         },
-        condition = "OPTIONAL_COLUMN_REFERENCE_NOT_SUPPORTED.IN_DML",
+        condition = "OPTIONAL_REFERENCE_NOT_SUPPORTED.IN_DML",
         sqlState = "0A000",
         parameters = Map("context" -> "INSERT"),
         context = ExpectedContext(fragment = "deleted?", start = 0, stop = 7))

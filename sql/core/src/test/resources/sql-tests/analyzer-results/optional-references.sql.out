@@ -459,6 +459,19 @@ Filter isnull(null)
 
 
 -- !query
+SELECT named_struct('state', 'CA') AS addr FROM people GROUP BY id HAVING addr.city? IS NULL
+-- !query analysis
+Filter isnull(null)
++- Aggregate [id#x], [named_struct(state, CA) AS addr#x]
+   +- SubqueryAlias people
+      +- View (`people`, [id#x, addr#x])
+         +- Project [cast(id#x as int) AS id#x, cast(addr#x as struct<city:string,zip:string>) AS addr#x]
+            +- Project [id#x, addr#x]
+               +- SubqueryAlias t
+                  +- LocalRelation [id#x, addr#x]
+
+
+-- !query
 SELECT DISTINCT id FROM people ORDER BY addr?, id DESC
 -- !query analysis
 Sort [null ASC NULLS FIRST, id#x DESC NULLS LAST], true
@@ -1311,6 +1324,44 @@ LocalRelation [local_known#x, local_unknown#x]
 
 
 -- !query
+BEGIN
+  lbl: BEGIN
+    DECLARE x INT DEFAULT 1;
+    FOR r AS SELECT id, addr FROM people WHERE id = 1 DO
+      SELECT lbl.x?, lbl.y?, r.id?, r.addr.city?, r.missing?, r.addr.state?;
+    END FOR;
+  END;
+END
+-- !query analysis
+LocalRelation [x#x, y#x, id#x, city#x, missing#x, state#x]
+
+
+-- !query
+BEGIN
+  lbl: BEGIN
+    DECLARE x INT DEFAULT 1;
+    SELECT other.x?;
+  END;
+END
+-- !query analysis
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
+{
+  "errorClass" : "UNRESOLVED_COLUMN.WITHOUT_SUGGESTION",
+  "sqlState" : "42703",
+  "messageParameters" : {
+    "objectName" : "`other`.`x`"
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 60,
+    "stopIndex" : 67,
+    "fragment" : "other.x?"
+  } ]
+}
+
+
+-- !query
 SELECT id, (SELECT max(o.missing?) FROM people i WHERE i.id = o.id) AS m FROM people o ORDER BY id
 -- !query analysis
 Sort [id#x ASC NULLS FIRST], true
@@ -1722,6 +1773,25 @@ org.apache.spark.sql.catalyst.ExtendedAnalysisException
 
 
 -- !query
+SELECT CAST(v?:a AS STRING) AS a, CAST(missing?:a AS STRING) AS b, missing?:a::INT AS i
+FROM VALUES (parse_json('{"a": 1}')) AS t(v)
+-- !query analysis
+Project [cast(variant_get(v#x, $.a, VariantType, true, Some(America/Los_Angeles), false) as string) AS a#x, cast(null as string) AS b#x, cast(null as int) AS i#x]
++- SubqueryAlias t
+   +- LocalRelation [v#x]
+
+
+-- !query
+SELECT NULL:a
+-- !query analysis
+org.apache.spark.sql.AnalysisException
+{
+  "errorClass" : "COLUMN_IS_NOT_VARIANT_TYPE",
+  "sqlState" : "42K09"
+}
+
+
+-- !query
 SELECT IDENTIFIER('id')?, IDENTIFIER('name')? FROM people
 -- !query analysis
 Project [id#x, null AS name#x]
@@ -1909,6 +1979,29 @@ Project [scalar-subquery#x [] AS r#x]
 :        +- OneRowRelation
 +- SubqueryAlias t
    +- LocalRelation [fn_variable#x]
+
+
+-- !query
+SET spark.sql.legacy.sqlFunctionBodyResolvesOuterReferences=true
+-- !query analysis
+SetCommand (spark.sql.legacy.sqlFunctionBodyResolvesOuterReferences,Some(true))
+
+
+-- !query
+SELECT (SELECT variable_fn()) AS r FROM VALUES (5) AS t(fn_variable)
+-- !query analysis
+Project [scalar-subquery#x [] AS r#x]
+:  +- Project [variable_fn() AS variable_fn()#x]
+:     +- Project
+:        +- OneRowRelation
++- SubqueryAlias t
+   +- LocalRelation [fn_variable#x]
+
+
+-- !query
+RESET spark.sql.legacy.sqlFunctionBodyResolvesOuterReferences
+-- !query analysis
+ResetCommand spark.sql.legacy.sqlFunctionBodyResolvesOuterReferences
 
 
 -- !query
@@ -2295,13 +2388,68 @@ GlobalLimit 1
 -- !query
 EXECUTE IMMEDIATE 'SELECT missing?, first(DISTINCT ?) AS f FROM people' USING 5
 -- !query analysis
-Aggregate [null AS missing#x, first(null, false) AS f#x]
+org.apache.spark.sql.AnalysisException
+{
+  "errorClass" : "UNUSED_SQL_PARAMETER_VALUES",
+  "sqlState" : "07001",
+  "messageParameters" : {
+    "numMarkers" : "0",
+    "numValues" : "1"
+  }
+}
+
+
+-- !query
+EXECUTE IMMEDIATE 'SELECT first(DISTINCT ?) AS f, ? AS g FROM people' USING 5, 6
+-- !query analysis
+Aggregate [first(distinct 5, false) AS f#x, 6 AS g#x]
 +- SubqueryAlias people
    +- View (`people`, [id#x, addr#x])
       +- Project [cast(id#x as int) AS id#x, cast(addr#x as struct<city:string,zip:string>) AS addr#x]
          +- Project [id#x, addr#x]
             +- SubqueryAlias t
                +- LocalRelation [id#x, addr#x]
+
+
+-- !query
+EXECUTE IMMEDIATE 'SELECT missing?, first(DISTINCT ?) AS f, ? AS g FROM people' USING 5, 6
+-- !query analysis
+org.apache.spark.sql.AnalysisException
+{
+  "errorClass" : "UNUSED_SQL_PARAMETER_VALUES",
+  "sqlState" : "07001",
+  "messageParameters" : {
+    "numMarkers" : "1",
+    "numValues" : "2"
+  }
+}
+
+
+-- !query
+EXECUTE IMMEDIATE 'SELECT missing? FROM people' USING 5
+-- !query analysis
+org.apache.spark.sql.AnalysisException
+{
+  "errorClass" : "UNUSED_SQL_PARAMETER_VALUES",
+  "sqlState" : "07001",
+  "messageParameters" : {
+    "numMarkers" : "0",
+    "numValues" : "1"
+  }
+}
+
+
+-- !query
+EXECUTE IMMEDIATE 'SELECT id FROM people WHERE id = ? AND deleted? IS NULL' USING 1
+-- !query analysis
+Project [id#x]
++- Filter ((id#x = 1) AND isnull(null))
+   +- SubqueryAlias people
+      +- View (`people`, [id#x, addr#x])
+         +- Project [cast(id#x as int) AS id#x, cast(addr#x as struct<city:string,zip:string>) AS addr#x]
+            +- Project [id#x, addr#x]
+               +- SubqueryAlias t
+                  +- LocalRelation [id#x, addr#x]
 
 
 -- !query
@@ -2685,6 +2833,30 @@ Sort [id#x ASC NULLS FIRST], true
 
 
 -- !query
+INSERT OVERWRITE target SELECT id?, addr FROM people WHERE missing? IS NULL
+-- !query analysis
+InsertIntoHadoopFsRelationCommand file:[not included in comparison]/{warehouse_dir}/target, false, Parquet, [path=file:[not included in comparison]/{warehouse_dir}/target], Overwrite, `spark_catalog`.`default`.`target`, org.apache.spark.sql.execution.datasources.InMemoryFileIndex(file:[not included in comparison]/{warehouse_dir}/target), [id, addr]
++- Project [id#x AS id#x, named_struct(city, addr#x.city, zip, addr#x.zip) AS addr#x]
+   +- Project [id#x, addr#x]
+      +- Filter isnull(null)
+         +- SubqueryAlias people
+            +- View (`people`, [id#x, addr#x])
+               +- Project [cast(id#x as int) AS id#x, cast(addr#x as struct<city:string,zip:string>) AS addr#x]
+                  +- Project [id#x, addr#x]
+                     +- SubqueryAlias t
+                        +- LocalRelation [id#x, addr#x]
+
+
+-- !query
+SELECT * FROM target ORDER BY id
+-- !query analysis
+Sort [id#x ASC NULLS FIRST], true
++- Project [id#x, addr#x]
+   +- SubqueryAlias spark_catalog.default.target
+      +- Relation spark_catalog.default.target[id#x,addr#x] parquet
+
+
+-- !query
 DROP TABLE ctas
 -- !query analysis
 DropTable false, false
@@ -2696,7 +2868,7 @@ UPDATE target SET id = other? WHERE id = 1
 -- !query analysis
 org.apache.spark.sql.catalyst.parser.ParseException
 {
-  "errorClass" : "OPTIONAL_COLUMN_REFERENCE_NOT_SUPPORTED.IN_DML",
+  "errorClass" : "OPTIONAL_REFERENCE_NOT_SUPPORTED.IN_DML",
   "sqlState" : "0A000",
   "messageParameters" : {
     "context" : "UPDATE"
@@ -2716,7 +2888,7 @@ UPDATE target SET id = 1 WHERE missing? IS NULL
 -- !query analysis
 org.apache.spark.sql.catalyst.parser.ParseException
 {
-  "errorClass" : "OPTIONAL_COLUMN_REFERENCE_NOT_SUPPORTED.IN_DML",
+  "errorClass" : "OPTIONAL_REFERENCE_NOT_SUPPORTED.IN_DML",
   "sqlState" : "0A000",
   "messageParameters" : {
     "context" : "UPDATE"
@@ -2736,7 +2908,7 @@ EXECUTE IMMEDIATE 'UPDATE target SET id = :v? WHERE id = 1' USING 1 AS v
 -- !query analysis
 org.apache.spark.sql.catalyst.parser.ParseException
 {
-  "errorClass" : "OPTIONAL_COLUMN_REFERENCE_NOT_SUPPORTED.IN_DML",
+  "errorClass" : "OPTIONAL_REFERENCE_NOT_SUPPORTED.IN_DML",
   "sqlState" : "0A000",
   "messageParameters" : {
     "context" : "UPDATE"
@@ -2756,7 +2928,7 @@ EXECUTE IMMEDIATE 'DELETE FROM target WHERE id = :v?'
 -- !query analysis
 org.apache.spark.sql.catalyst.parser.ParseException
 {
-  "errorClass" : "OPTIONAL_COLUMN_REFERENCE_NOT_SUPPORTED.IN_DML",
+  "errorClass" : "OPTIONAL_REFERENCE_NOT_SUPPORTED.IN_DML",
   "sqlState" : "0A000",
   "messageParameters" : {
     "context" : "DELETE"
@@ -2776,7 +2948,7 @@ DELETE FROM target WHERE missing? IS NULL
 -- !query analysis
 org.apache.spark.sql.catalyst.parser.ParseException
 {
-  "errorClass" : "OPTIONAL_COLUMN_REFERENCE_NOT_SUPPORTED.IN_DML",
+  "errorClass" : "OPTIONAL_REFERENCE_NOT_SUPPORTED.IN_DML",
   "sqlState" : "0A000",
   "messageParameters" : {
     "context" : "DELETE"
@@ -2796,7 +2968,7 @@ DELETE FROM target WHERE id IN (SELECT id? FROM people)
 -- !query analysis
 org.apache.spark.sql.catalyst.parser.ParseException
 {
-  "errorClass" : "OPTIONAL_COLUMN_REFERENCE_NOT_SUPPORTED.IN_DML",
+  "errorClass" : "OPTIONAL_REFERENCE_NOT_SUPPORTED.IN_DML",
   "sqlState" : "0A000",
   "messageParameters" : {
     "context" : "DELETE"
@@ -2816,7 +2988,7 @@ MERGE INTO target t USING people s ON t.id = s.id WHEN MATCHED THEN UPDATE SET t
 -- !query analysis
 org.apache.spark.sql.catalyst.parser.ParseException
 {
-  "errorClass" : "OPTIONAL_COLUMN_REFERENCE_NOT_SUPPORTED.IN_DML",
+  "errorClass" : "OPTIONAL_REFERENCE_NOT_SUPPORTED.IN_DML",
   "sqlState" : "0A000",
   "messageParameters" : {
     "context" : "MERGE"
@@ -2837,7 +3009,7 @@ MERGE INTO target t USING (SELECT id? AS id FROM people) s ON t.id = s.id
 -- !query analysis
 org.apache.spark.sql.catalyst.parser.ParseException
 {
-  "errorClass" : "OPTIONAL_COLUMN_REFERENCE_NOT_SUPPORTED.IN_DML",
+  "errorClass" : "OPTIONAL_REFERENCE_NOT_SUPPORTED.IN_DML",
   "sqlState" : "0A000",
   "messageParameters" : {
     "context" : "MERGE"
@@ -2858,7 +3030,7 @@ WITH s AS (SELECT id? AS id FROM people) MERGE INTO target t USING s ON t.id = s
 -- !query analysis
 org.apache.spark.sql.catalyst.parser.ParseException
 {
-  "errorClass" : "OPTIONAL_COLUMN_REFERENCE_NOT_SUPPORTED.IN_DML",
+  "errorClass" : "OPTIONAL_REFERENCE_NOT_SUPPORTED.IN_DML",
   "sqlState" : "0A000",
   "messageParameters" : {
     "context" : "MERGE"
@@ -2878,7 +3050,7 @@ WITH s AS (SELECT id? AS id FROM people) DELETE FROM target WHERE id IN (SELECT 
 -- !query analysis
 org.apache.spark.sql.catalyst.parser.ParseException
 {
-  "errorClass" : "OPTIONAL_COLUMN_REFERENCE_NOT_SUPPORTED.IN_DML",
+  "errorClass" : "OPTIONAL_REFERENCE_NOT_SUPPORTED.IN_DML",
   "sqlState" : "0A000",
   "messageParameters" : {
     "context" : "DELETE"
@@ -2898,7 +3070,7 @@ INSERT INTO target REPLACE WHERE missing? IS NULL SELECT * FROM target
 -- !query analysis
 org.apache.spark.sql.catalyst.parser.ParseException
 {
-  "errorClass" : "OPTIONAL_COLUMN_REFERENCE_NOT_SUPPORTED.IN_DML",
+  "errorClass" : "OPTIONAL_REFERENCE_NOT_SUPPORTED.IN_DML",
   "sqlState" : "0A000",
   "messageParameters" : {
     "context" : "INSERT"
@@ -2918,7 +3090,7 @@ EXECUTE IMMEDIATE 'TRUNCATE TABLE target PARTITION (id = :p?)'
 -- !query analysis
 org.apache.spark.sql.catalyst.parser.ParseException
 {
-  "errorClass" : "OPTIONAL_COLUMN_REFERENCE_NOT_SUPPORTED.IN_DML",
+  "errorClass" : "OPTIONAL_REFERENCE_NOT_SUPPORTED.IN_PARTITION_SPEC",
   "sqlState" : "0A000",
   "messageParameters" : {
     "context" : "PARTITION"
@@ -2938,7 +3110,7 @@ EXECUTE IMMEDIATE 'INSERT INTO target PARTITION (id = :p?) SELECT NULL' USING 1 
 -- !query analysis
 org.apache.spark.sql.catalyst.parser.ParseException
 {
-  "errorClass" : "OPTIONAL_COLUMN_REFERENCE_NOT_SUPPORTED.IN_DML",
+  "errorClass" : "OPTIONAL_REFERENCE_NOT_SUPPORTED.IN_PARTITION_SPEC",
   "sqlState" : "0A000",
   "messageParameters" : {
     "context" : "PARTITION"
@@ -2993,7 +3165,7 @@ CREATE TABLE ddl (a INT, b INT GENERATED ALWAYS AS (a? + 1)) USING parquet
 -- !query analysis
 org.apache.spark.sql.catalyst.parser.ParseException
 {
-  "errorClass" : "OPTIONAL_COLUMN_REFERENCE_NOT_SUPPORTED.IN_DDL",
+  "errorClass" : "OPTIONAL_REFERENCE_NOT_SUPPORTED.IN_DDL",
   "sqlState" : "0A000",
   "messageParameters" : {
     "context" : "GENERATED ALWAYS AS"
@@ -3013,7 +3185,7 @@ CREATE TABLE ddl (a INT, b INT DEFAULT missing?) USING parquet
 -- !query analysis
 org.apache.spark.sql.catalyst.parser.ParseException
 {
-  "errorClass" : "OPTIONAL_COLUMN_REFERENCE_NOT_SUPPORTED.IN_DDL",
+  "errorClass" : "OPTIONAL_REFERENCE_NOT_SUPPORTED.IN_DDL",
   "sqlState" : "0A000",
   "messageParameters" : {
     "context" : "DEFAULT"
@@ -3033,7 +3205,7 @@ CREATE TABLE ddl (a INT, CONSTRAINT c CHECK (a? > 0)) USING parquet
 -- !query analysis
 org.apache.spark.sql.catalyst.parser.ParseException
 {
-  "errorClass" : "OPTIONAL_COLUMN_REFERENCE_NOT_SUPPORTED.IN_DDL",
+  "errorClass" : "OPTIONAL_REFERENCE_NOT_SUPPORTED.IN_DDL",
   "sqlState" : "0A000",
   "messageParameters" : {
     "context" : "CHECK"
@@ -3053,7 +3225,7 @@ CREATE TABLE ddl (a INT) USING parquet OPTIONS (compression = codec?)
 -- !query analysis
 org.apache.spark.sql.catalyst.parser.ParseException
 {
-  "errorClass" : "OPTIONAL_COLUMN_REFERENCE_NOT_SUPPORTED.IN_DDL",
+  "errorClass" : "OPTIONAL_REFERENCE_NOT_SUPPORTED.IN_DDL",
   "sqlState" : "0A000",
   "messageParameters" : {
     "context" : "OPTIONS"
@@ -3079,7 +3251,7 @@ ALTER TABLE ddl ALTER COLUMN a SET DEFAULT missing?
 -- !query analysis
 org.apache.spark.sql.catalyst.parser.ParseException
 {
-  "errorClass" : "OPTIONAL_COLUMN_REFERENCE_NOT_SUPPORTED.IN_DDL",
+  "errorClass" : "OPTIONAL_REFERENCE_NOT_SUPPORTED.IN_DDL",
   "sqlState" : "0A000",
   "messageParameters" : {
     "context" : "DEFAULT"
@@ -3099,7 +3271,7 @@ ALTER TABLE ddl ADD CONSTRAINT c CHECK (a? > 0)
 -- !query analysis
 org.apache.spark.sql.catalyst.parser.ParseException
 {
-  "errorClass" : "OPTIONAL_COLUMN_REFERENCE_NOT_SUPPORTED.IN_DDL",
+  "errorClass" : "OPTIONAL_REFERENCE_NOT_SUPPORTED.IN_DDL",
   "sqlState" : "0A000",
   "messageParameters" : {
     "context" : "CHECK"

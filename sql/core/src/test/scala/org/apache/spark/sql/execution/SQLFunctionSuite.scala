@@ -150,9 +150,17 @@ class SQLFunctionSuite extends SharedSparkSession {
         sql("CREATE TEMPORARY FUNCTION outer_name_fn() RETURNS INT RETURN outer_name")
         // `outer_name` in the body is the variable, not the column of the calling query.
         checkAnswer(sql("SELECT outer_name_fn() FROM VALUES (5) AS t(outer_name)"), Row(100))
-        checkAnswer(
-          sql("SELECT (SELECT outer_name_fn()) FROM VALUES (5) AS t(outer_name)"),
-          Row(100))
+        val inSubquery = "SELECT (SELECT outer_name_fn()) FROM VALUES (5) AS t(outer_name)"
+        checkAnswer(sql(inSubquery), Row(100))
+        // The legacy conf restores the column of the calling query, also for a function that was
+        // created before it was set, unless optional references are enabled.
+        withSQLConf(
+          SQLConf.LEGACY_SQL_FUNCTION_BODY_RESOLVES_OUTER_REFERENCES.key -> "true") {
+          checkAnswer(sql(inSubquery), Row(5))
+          withSQLConf(SQLConf.OPTIONAL_REFERENCES_ENABLED.key -> "true") {
+            checkAnswer(sql(inSubquery), Row(100))
+          }
+        }
       } finally {
         sql("DROP TEMPORARY VARIABLE IF EXISTS outer_name")
       }

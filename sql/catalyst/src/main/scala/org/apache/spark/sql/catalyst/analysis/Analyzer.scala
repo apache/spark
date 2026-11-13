@@ -314,8 +314,16 @@ object AnalysisContext {
           mutable.LinkedHashSet.empty
         },
       // The body of a SQL function is not a part of the query that calls it. If the call is in a
-      // subquery, the body must not resolve its names as outer references of that query.
-      outerPlan = None,
+      // subquery, the body must not resolve its names as outer references of that query. The
+      // legacy conf restores that, except while optional references are enabled, because their
+      // resolution tells the plan of a subquery from other plans by the outer plan.
+      outerPlan = if (
+        SQLConf.get.getConf(SQLConf.LEGACY_SQL_FUNCTION_BODY_RESOLVES_OUTER_REFERENCES) &&
+        !SQLConf.get.getConf(SQLConf.OPTIONAL_REFERENCES_ENABLED)) {
+        originContext.outerPlan
+      } else {
+        None
+      },
       collation = function.collation)
     set(context)
     try f finally { set(originContext) }
@@ -3363,7 +3371,7 @@ class Analyzer(
               // This column is neither inside aggregate functions nor a grouping column. It
               // shouldn't be resolved with `agg.child.output`. Mark it as "hasTried", so that it
               // can be re-resolved later or go back to `UnresolvedAttribute` at the end.
-              withOrigin(t.origin)(t.copy(hasTried = true))
+              withOrigin(t.origin)(markTried(t))
             } else {
               // This is a nested column, we still have a chance to match grouping expressions with
               // the top-level column. Here we wrap the underlying `Attribute` with
@@ -3373,7 +3381,7 @@ class Analyzer(
               }
               val newChild = buildAggExprList(childWithTempCol, agg, aggExprMap)
               if (newChild.containsPattern(TEMP_RESOLVED_COLUMN)) {
-                withOrigin(t.origin)(t.copy(hasTried = true))
+                withOrigin(t.origin)(markTried(t))
               } else {
                 newChild
               }
@@ -3382,6 +3390,16 @@ class Analyzer(
             other.withNewChildren(other.children.map(buildAggExprList(_, agg, aggExprMap)))
         }
       }
+    }
+
+    /**
+     * Marks `t` as tried. A case class copy does not keep the tree node tags, such as the optional
+     * name parts of the column, which the re-resolution of the column needs.
+     */
+    private def markTried(t: TempResolvedColumn): TempResolvedColumn = {
+      val tried = t.copy(hasTried = true)
+      tried.copyTagsFrom(t)
+      tried
     }
 
     def resolveOperatorWithAggregate(
