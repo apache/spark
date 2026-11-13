@@ -1199,7 +1199,7 @@ class DAGSchedulerSuite extends SparkFunSuite with TempLocalSparkContext with Ti
 
     runEvent(ExecutorLost("hostA-exec", ExecutorKilled))
 
-    // Some(true) keeps hostA's output despite the global flag; Some(false) loses it despite it.
+    // Some(true) keeps hostA's output; Some(false) loses it despite the global flag.
     assert(mapOutputTracker.getMapSizesByExecutorId(reliableDep.shuffleId, 0).map(_._1).toSet ===
       HashSet(makeBlockManagerId("hostA"), makeBlockManagerId("hostB")))
     intercept[MetadataFetchFailedException] {
@@ -1275,10 +1275,13 @@ class DAGSchedulerSuite extends SparkFunSuite with TempLocalSparkContext with Ti
   test("SPARK-59138: with global supportsReliableStorage and empty handles, worker removal keeps " +
     "outputs and a FetchFailed clears only the failed shuffle") {
     val (depA, depB) = submitGlobalReliableEmptyHandleJob()
+    val epochBefore = mapOutputTracker.getEpoch
 
     runEvent(WorkerRemoved("worker-hostA", "hostA", "ignored"))
     assert(mapOutputTracker.getNumAvailableOutputs(depA.shuffleId) === 2)
     assert(mapOutputTracker.getNumAvailableOutputs(depB.shuffleId) === 2)
+    // Only reliable output on hostA and no merge result: nothing removed, so no epoch bump.
+    assert(mapOutputTracker.getEpoch === epochBefore)
 
     runEvent(makeCompletionEvent(taskSets(2).tasks(0),
       FetchFailed(makeBlockManagerId("hostA"), depA.shuffleId, 0L, 0, 0, "ignored"), null))
@@ -1586,6 +1589,38 @@ class DAGSchedulerSuite extends SparkFunSuite with TempLocalSparkContext with Ti
       FetchFailed(makeBlockManagerId("hostA"), shuffleDep.shuffleId, -1L, -1, 0, "ignored"),
       null))
     assert(mapOutputTracker.getNumAvailableOutputs(shuffleDep.shuffleId) === 1)
+  }
+
+  test("SPARK-59138: a FetchFailed cleanup that removes nothing still advances the epoch") {
+    // Shuffle B has no output on hostA, and A's output there is reliable, so the cleanup removes
+    // nothing. It still bumps the epoch, or a map task later finishing on hostA-exec at the old
+    // epoch would be ignored as possibly bogus.
+    conf.set(config.SHUFFLE_SERVICE_ENABLED.key, "false")
+    conf.set(config.SHUFFLE_IO_PLUGIN_CLASS.key,
+      classOf[TestShuffleDataIOWithMockedComponents].getName)
+    when(sc.shuffleDriverComponents.supportsReliableStorage()).thenReturn(true)
+    val depA = new ShuffleDependency(new MyRDD(sc, 2, Nil), new HashPartitioner(2))
+    val depB = new ShuffleDependency(new MyRDD(sc, 2, Nil), new HashPartitioner(2))
+    submit(new MyRDD(sc, 2, List(depA, depB), tracker = mapOutputTracker), Array(0, 1))
+    completeShuffleMapStageSuccessfully(0, 0, 2)
+    completeShuffleMapStageSuccessfully(1, 0, 2, hostNames = Seq("hostB", "hostB"))
+
+    val task0 = taskSets(2).tasks(0)
+    val task1 = taskSets(2).tasks(1)
+    val taskEpoch = task0.epoch
+    assert(taskEpoch === mapOutputTracker.getEpoch && task1.epoch === taskEpoch)
+    runEvent(makeCompletionEvent(task0,
+      FetchFailed(makeBlockManagerId("hostA"), depB.shuffleId, -1L, -1, 0, "ignored"), null))
+    assert(mapOutputTracker.getNumAvailableOutputs(depA.shuffleId) === 2)
+    val epochAfterCleanup = mapOutputTracker.getEpoch
+    assert(epochAfterCleanup > taskEpoch)
+
+    // A stale FetchFailed from a task launched before that cleanup is still fenced.
+    runEvent(makeCompletionEvent(task1,
+      FetchFailed(makeBlockManagerId("hostA"), depB.shuffleId, -1L, -1, 1, "ignored"), null))
+    verify(mapOutputTracker, times(1))
+      .removeOutputsOnExecutor("hostA-exec", true, Some(depB.shuffleId), false)
+    assert(mapOutputTracker.getEpoch === epochAfterCleanup)
   }
 
   test("SPARK-59138: with the external shuffle service on, executor loss skips the shuffle " +

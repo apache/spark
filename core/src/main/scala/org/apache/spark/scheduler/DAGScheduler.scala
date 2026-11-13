@@ -4995,7 +4995,7 @@ private[spark] class DAGScheduler(
       }
       if (passesExecutorFence || reliableFetchFailedBypass) {
         // A bypass cleans only the failed shuffle, so recomputed co-located output survives.
-        hostToUnregisterOutputs match {
+        val outcome = hostToUnregisterOutputs match {
           case Some(host) =>
             logInfo(log"Shuffle files lost for host: ${MDC(HOST, host)} (epoch " +
               log"${MDC(EPOCH, currentEpoch)}")
@@ -5014,6 +5014,12 @@ private[spark] class DAGScheduler(
                 mapOutputTracker.removeOutputsOnExecutor(execId, respectReliablyStored, failed,
                   restrictToFailedShuffle = reliableFetchFailedBypass)
             }
+        }
+        // The no-bump rule is for executor and worker loss. A FetchFailed may have just stamped
+        // executorFailureEpoch at this epoch, so without a bump, map output that later finishes
+        // on that executor would be ignored as possibly bogus until the epoch moves.
+        if (failedShuffleId.isDefined && !outcome.shouldBumpEpoch) {
+          mapOutputTracker.incrementEpoch()
         }
         // Only a genuine cleanup advances the executor fence. Stamp the per-shuffle fence at the
         // executor fence so older stragglers stay fenced; skip it once the map stage is gone.

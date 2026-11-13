@@ -51,7 +51,8 @@ import org.apache.spark.util.io.{ChunkedByteBuffer, ChunkedByteBufferOutputStrea
  * `preservedReliable`: reliable map output on the target was kept.
  */
 private[spark] case class CleanupOutcome(metadataChanged: Boolean, preservedReliable: Boolean) {
-  // A no-op that only kept reliable output skips the bump; any other no-op bumps for fencing.
+  // A no-op that only kept reliable output skips the bump (DAGScheduler still bumps after a
+  // FetchFailed cleanup); any other no-op bumps for fencing.
   def shouldBumpEpoch: Boolean = metadataChanged || !preservedReliable
 }
 
