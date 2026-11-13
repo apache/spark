@@ -633,4 +633,36 @@ class BitmapExpressionsQuerySuite extends SharedSparkSession {
         "inputType" -> "\"INT\""),
       context = ExpectedContext(fragment = "bitmap_xor_agg(a)", start = 0, stop = 16))
   }
+
+  test("bitmap_or_agg rejects input larger than 4096 bytes") {
+    // 4097 bytes exceeds the 4096-byte limit
+    val oversized = Array.fill[Byte](4097)(0xFF.toByte)
+    val df = Seq(oversized).toDF("a")
+    checkError(
+      exception = intercept[SparkRuntimeException] {
+        df.select(bitmap_or_agg(col("a"))).collect()
+      },
+      condition = "BITMAP_INPUT_TOO_LARGE",
+      parameters = Map(
+        "inputNumBytes" -> "4097",
+        "maxNumBytes" -> "4096"
+      )
+    )
+  }
+
+  test("bitmap_and_agg rejects input larger than 4096 bytes") {
+    // 4097 bytes exceeds the 4096-byte limit
+    val oversized = Array.fill[Byte](4097)(0xFF.toByte)
+    val df = Seq(oversized).toDF("a")
+    checkError(
+      exception = intercept[SparkRuntimeException] {
+        df.select(bitmap_and_agg(col("a"))).collect()
+      },
+      condition = "BITMAP_INPUT_TOO_LARGE",
+      parameters = Map(
+        "inputNumBytes" -> "4097",
+        "maxNumBytes" -> "4096"
+      )
+    )
+  }
 }
