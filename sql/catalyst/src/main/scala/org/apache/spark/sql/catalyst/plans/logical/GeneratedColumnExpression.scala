@@ -151,9 +151,12 @@ case class GeneratedColumnExpression(
   // the analyzed (pre-optimization) child so that context-dependent functions such as
   // CURRENT_TIMESTAMP are not frozen into definition-time literals. When the analyzed child cannot
   // be represented as a V2 expression (e.g. CURRENT_TIMESTAMP), the V2 expression is null and the
-  // connector falls back to the SQL-string form.
+  // connector falls back to the SQL-string form. The V2 expression describes the generated value
+  // rather than a source evaluation, so it keeps its time-zone-dependent casts and datetime fields
+  // (`checkTimeZone = false`).
   def toV2: GenerationExpression = {
-    val v2Expr = analyzedChild.flatMap(new V2ExpressionBuilder(_).build()).orNull
+    val v2Expr =
+      analyzedChild.flatMap(new V2ExpressionBuilder(_, checkTimeZone = false).build()).orNull
     new GenerationExpression(originalSQL, v2Expr)
   }
 }

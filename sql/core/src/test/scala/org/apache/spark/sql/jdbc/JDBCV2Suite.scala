@@ -1670,9 +1670,12 @@ class JDBCV2Suite extends SharedSparkSession with ExplainSuiteHelper {
   // time1 is midnight in the JVM default zone (America/Los_Angeles in tests), which is 21:00 of the
   // previous day in Pacific/Honolulu. A zone-dependent field of a TIMESTAMP must be evaluated in
   // the session time zone, not pushed to the source (which evaluates it in its own zone).
+  // ANSI is pinned because `dayofmonth(time1)` casts `time1` to DATE and only an ANSI cast is
+  // translated to a V2 cast: without it the cast is never pushed, whatever the time zone.
   private def checkDatetimeFieldsInSessionTimeZone(fixed: Boolean): Unit = {
     assert(TimeZone.getDefault.getID == "America/Los_Angeles")
-    withSQLConf(SQLConf.SESSION_LOCAL_TIMEZONE.key -> "Pacific/Honolulu") {
+    withSQLConf(SQLConf.SESSION_LOCAL_TIMEZONE.key -> "Pacific/Honolulu",
+        SQLConf.ANSI_ENABLED.key -> "true") {
       // hour(time1) is 21 for both rows in Honolulu (midnight LA -> 21:00 of the previous day).
       val hour = sql("SELECT name FROM h2.test.datetime WHERE hour(time1) = 21")
       checkFiltersRemoved(hour, removed = !fixed)

@@ -20,7 +20,7 @@ package org.apache.spark.sql.connector
 import java.sql.Timestamp
 import java.time.{Duration, LocalDate, Period}
 import java.util
-import java.util.Locale
+import java.util.{Locale, TimeZone}
 
 import scala.concurrent.duration.MICROSECONDS
 import scala.jdk.CollectionConverters._
@@ -34,15 +34,15 @@ import org.apache.spark.sql.catalyst.analysis.{CannotReplaceMissingTableExceptio
 import org.apache.spark.sql.catalyst.catalog.{CatalogStorageFormat, CatalogTable, CatalogTableType, CatalogUtils}
 import org.apache.spark.sql.catalyst.expressions.{DynamicPruning, GetStructField}
 import org.apache.spark.sql.catalyst.parser.ParseException
-import org.apache.spark.sql.catalyst.plans.logical.ColumnStat
+import org.apache.spark.sql.catalyst.plans.logical.{AlterColumns, ColumnStat}
 import org.apache.spark.sql.catalyst.statsEstimation.StatsEstimationTestBase
 import org.apache.spark.sql.catalyst.util.DateTimeUtils
 import org.apache.spark.sql.connector.catalog.{Column => ColumnV2, _}
 import org.apache.spark.sql.connector.catalog.CatalogManager.SESSION_CATALOG_NAME
 import org.apache.spark.sql.connector.catalog.CatalogV2Util.withDefaultOwnership
-import org.apache.spark.sql.connector.expressions.{LiteralValue, Transform}
+import org.apache.spark.sql.connector.expressions.{Cast => V2Cast, Extract => V2Extract, LiteralValue, Transform}
 import org.apache.spark.sql.errors.QueryErrorsBase
-import org.apache.spark.sql.execution.FilterExec
+import org.apache.spark.sql.execution.{CommandExecutionMode, FilterExec}
 import org.apache.spark.sql.execution.adaptive.AdaptiveSparkPlanHelper
 import org.apache.spark.sql.execution.columnar.InMemoryRelation
 import org.apache.spark.sql.execution.datasources.{HadoopFsRelation, LogicalRelationWithTable}
@@ -2231,6 +2231,57 @@ class DataSourceV2SQLSuiteV1Filter
     }
   }
 
+  test("SPARK-61560: column default and generation expression with a time-zone-dependent " +
+      "expression in another session time zone") {
+    // The V2 forms describe the default and the generated value rather than a source evaluation,
+    // so they are kept whatever the session time zone.
+    assert(TimeZone.getDefault.getID == "America/Los_Angeles")
+    val tblName = "my_tab"
+    val t = s"testcat.$tblName"
+    def v2Columns(): Map[String, ColumnV2] = catalog("testcat").asTableCatalog
+      .loadTable(Identifier.of(Array(), tblName)).columns().map(c => c.name -> c).toMap
+    withSQLConf(SQLConf.SESSION_LOCAL_TIMEZONE.key -> "UTC") {
+      Seq("CREATE TABLE", "REPLACE TABLE").foreach { statement =>
+        withTable(t) {
+          if (statement == "REPLACE TABLE") {
+            sql(s"CREATE TABLE $t (a INT) USING foo")
+          }
+          sql(
+            s"""
+               |$statement $t (
+               |  ts TIMESTAMP,
+               |  d DATE DEFAULT CAST(TIMESTAMP '2024-01-01 00:00:00' AS DATE),
+               |  h INT DEFAULT hour(TIMESTAMP '2024-01-01 21:00:00'),
+               |  ts_date DATE GENERATED ALWAYS AS (CAST(ts AS DATE)),
+               |  ts_hour INT GENERATED ALWAYS AS (hour(ts))
+               |) USING foo
+               |""".stripMargin)
+          val columns = v2Columns()
+          assert(columns("d").defaultValue().getExpression.isInstanceOf[V2Cast], statement)
+          assert(columns("h").defaultValue().getExpression.isInstanceOf[V2Extract], statement)
+          assert(columns("ts_date").columnGenerationExpression().getExpression
+            .isInstanceOf[V2Cast], statement)
+          assert(columns("ts_hour").columnGenerationExpression().getExpression
+            .isInstanceOf[V2Extract], statement)
+
+          // The in-memory catalog keeps only the SQL of a default set by ALTER TABLE, so read the
+          // V2 form from the table change the command hands to the catalog.
+          val plan = spark.sessionState.sqlParser.parsePlan(
+            s"ALTER TABLE $t ALTER COLUMN h SET DEFAULT hour(TIMESTAMP '2024-01-01 22:00:00')")
+          val qe = spark.sessionState.executePlan(plan, CommandExecutionMode.SKIP)
+          val newDefault = qe.optimizedPlan.collectFirst {
+            case a: AlterColumns => a.changes.collectFirst {
+              case c: TableChange.UpdateColumnDefaultValue => c.newCurrentDefault()
+            }
+          }.flatten.getOrElse {
+            fail(s"Expected a default value change, but got: ${qe.optimizedPlan}")
+          }
+          assert(newDefault.getExpression.isInstanceOf[V2Extract], statement)
+        }
+      }
+    }
+  }
+
   test("SPARK-48824: Column cannot have both an identity column spec and a default value") {
     val tblName = "my_tab"
     val tableDefinition =
@@ -2705,6 +2756,32 @@ class DataSourceV2SQLSuiteV1Filter
         parameters = Map(
           "table" -> "testcat.ns1.ns2.tbl",
           "filters" -> "[(id + CAST(p AS long)) >= 0, (id + CAST(p AS long)) <= 4]"))
+    }
+  }
+
+  test("SPARK-61560: DeleteFrom: a time-zone-dependent condition in another session time zone") {
+    // The condition has to reach the source, so Spark cannot keep `hour(ts)` to evaluate it in the
+    // session time zone: the DELETE fails and deletes nothing.
+    assert(TimeZone.getDefault.getID == "America/Los_Angeles")
+    val t = s"${catalogAndNamespace}tbl"
+    withTable(t) {
+      sql(s"CREATE TABLE $t (id bigint, ts timestamp) USING foo")
+      sql(s"INSERT INTO $t VALUES (1L, TIMESTAMP '2024-01-01 21:00:00'), " +
+        "(2L, TIMESTAMP '2024-01-01 22:00:00')")
+      withSQLConf(SQLConf.SESSION_LOCAL_TIMEZONE.key -> "Pacific/Honolulu") {
+        val error = analysisException(s"DELETE FROM $t WHERE hour(ts) = 21")
+        assert(error.getCondition == "_LEGACY_ERROR_TEMP_1109")
+        assert(error.getMessageParameters.get("f").startsWith("(hour(ts"))
+        assert(spark.table(t).count() === 2)
+        // The legacy conf hands the condition to the table, which does not support it.
+        withSQLConf(SQLConf.LEGACY_PUSH_DOWN_DATETIME_IGNORING_TIME_ZONE.key -> "true") {
+          checkError(
+            exception = analysisException(s"DELETE FROM $t WHERE hour(ts) = 21"),
+            condition = "_LEGACY_ERROR_TEMP_1110",
+            parameters = Map("table" -> t, "filters" -> "[EXTRACT(HOUR FROM ts) = 21]"))
+        }
+        assert(spark.table(t).count() === 2)
+      }
     }
   }
 
