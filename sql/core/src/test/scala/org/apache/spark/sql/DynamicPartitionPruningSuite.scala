@@ -1976,6 +1976,51 @@ abstract class DynamicPartitionPruningSuiteBase
     }
   }
 
+  // The CTE body, with a dynamic pruning filter on fact_stats, is copied into the second reference
+  // by ReplaceCTERefWithRepartition.
+  private val spark51692Body =
+    """SELECT f.date_id, f.store_id, f.product_id, f.units_sold
+      |FROM fact_stats f JOIN dim_stats s ON f.store_id = s.store_id
+      |WHERE s.country = 'DE'""".stripMargin
+
+  private def assertPartitionPruned(df: DataFrame): Unit = {
+    // a pruning subquery, not the `true` literal that replaces DPP when it cannot be planned
+    assert(collectDynamicPruningExpressions(df.queryExecution.executedPlan).exists {
+      case _: InSubqueryExec => true
+      case _ => false
+    }, df.queryExecution)
+  }
+
+  test("SPARK-51692: DPP in a materialized CTE referenced twice in a UNION ALL") {
+    withSQLConf(SQLConf.DYNAMIC_PARTITION_PRUNING_ENABLED.key -> "true") {
+      val body = spark51692Body
+      val all = sql(s"SELECT count(*), sum(units_sold) FROM ($body)").head()
+      val big = sql(s"SELECT count(*), sum(units_sold) FROM ($body) WHERE units_sold > 10").head()
+      assert(all !== big)
+
+      val union = sql(
+        s"""WITH t AS MATERIALIZED ($body)
+           |SELECT 'all', count(*), sum(units_sold) FROM t
+           |UNION ALL
+           |SELECT 'big', count(*), sum(units_sold) FROM t WHERE units_sold > 10""".stripMargin)
+      checkAnswer(union,
+        Row("all", all.getLong(0), all.get(1)) :: Row("big", big.getLong(0), big.get(1)) :: Nil)
+      assertPartitionPruned(union)
+    }
+  }
+
+  test("SPARK-51692: DPP in a materialized CTE joined with itself") {
+    withSQLConf(SQLConf.DYNAMIC_PARTITION_PRUNING_ENABLED.key -> "true") {
+      val body = spark51692Body
+      val on = "a.date_id = b.date_id AND a.product_id = b.product_id"
+      val expected = sql(s"SELECT count(*) FROM ($body) a JOIN ($body) b ON $on").head().getLong(0)
+
+      val selfJoin = sql(s"WITH t AS MATERIALIZED ($body) SELECT count(*) FROM t a JOIN t b ON $on")
+      checkAnswer(selfJoin, Row(expected))
+      assertPartitionPruned(selfJoin)
+    }
+  }
+
   test("SPARK-39217: Makes DPP support the pruning side has Union") {
     withSQLConf(SQLConf.DYNAMIC_PARTITION_PRUNING_ENABLED.key -> "true") {
       val df = sql(

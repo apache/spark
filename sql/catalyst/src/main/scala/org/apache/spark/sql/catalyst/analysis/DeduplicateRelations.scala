@@ -20,7 +20,7 @@ package org.apache.spark.sql.catalyst.analysis
 import scala.collection.mutable
 
 import org.apache.spark.sql.catalyst.analysis.resolver.ResolverTag
-import org.apache.spark.sql.catalyst.expressions.{Alias, Attribute, AttributeMap, AttributeReference, AttributeSet, Expression, NamedExpression, OuterReference, SubqueryExpression}
+import org.apache.spark.sql.catalyst.expressions.{Alias, Attribute, AttributeMap, AttributeReference, AttributeSet, DynamicPruningSubquery, Expression, NamedExpression, OuterReference, SubqueryExpression}
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.rules.Rule
 import org.apache.spark.sql.catalyst.trees.TreePattern._
@@ -255,6 +255,11 @@ object DeduplicateRelations extends Rule[LogicalPlan] {
       }
 
       val planWithNewSubquery = plan.transformExpressions {
+        // A dynamic pruning subquery is a self-contained copy of the join's build side, and its
+        // build keys refer to that plan's output. Renewing the plan would leave the keys on the
+        // old attributes, so keep it as is: copies of the subtree can share it, as they do when
+        // a filter is pushed through a Union.
+        case d: DynamicPruningSubquery => d
         case subquery: SubqueryExpression =>
           val (renewed, changed) = renewDuplicatedRelations(existingRelations, subquery.plan)
           if (changed) planChanged = true
