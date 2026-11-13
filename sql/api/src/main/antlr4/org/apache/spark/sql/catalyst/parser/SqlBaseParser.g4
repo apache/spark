@@ -577,7 +577,7 @@ statement
     | SHOW TABLE EXTENDED ((FROM | IN) ns=identifierReference)?
         LIKE pattern=stringLit partitionSpec? (AS JSON)?                  #showTableExtended
     | SHOW TBLPROPERTIES table=identifierReference
-        (LEFT_PAREN key=propertyKeyOrStringLit RIGHT_PAREN)?           #showTblProperties
+        (LEFT_PAREN key=propertyKeyOrStringLit RIGHT_PAREN)? (AS JSON)? #showTblProperties
     | SHOW COLUMNS (FROM | IN) table=identifierReference
         ((FROM | IN) ns=multipartIdentifier)?                          #showColumns
     | SHOW VIEWS ((FROM | IN) identifierReference)?
