@@ -909,6 +909,7 @@ class PairRDDFunctions[K, V](self: RDD[(K, V)])
    * Return an RDD with the pairs from `this` whose keys are not in `other`.
    */
   def subtractByKey[W: ClassTag](other: RDD[(K, W)], p: Partitioner): RDD[(K, V)] = self.withScope {
+    failOnHashPartitionerWithArrayKey(p)
     new SubtractedRDD[K, V, W](self, other, p)
   }
 
@@ -1101,6 +1102,14 @@ class PairRDDFunctions[K, V](self: RDD[(K, V)])
   private[spark] def keyOrdering: Option[Ordering[K]] = Option(ord)
 
   private def failOnHashPartitionerWithArrayKey(partitioner: Partitioner): Unit = {
+    PairRDDFunctions.failOnHashPartitionerWithArrayKey(partitioner, keyClass)
+  }
+}
+
+private[spark] object PairRDDFunctions {
+  def failOnHashPartitionerWithArrayKey(
+      partitioner: Partitioner,
+      keyClass: Class[_]): Unit = {
     if (partitioner.isInstanceOf[HashPartitioner] && keyClass.isArray) {
       throw SparkCoreErrors.hashPartitionerCannotPartitionArrayKeyError()
     }

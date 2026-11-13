@@ -174,7 +174,10 @@ class JavaRDD[T](val rdd: RDD[T])(implicit val classTag: ClassTag[T])
    * Return the union of this RDD and another one. Any identical elements will appear multiple
    * times (use `.distinct()` to eliminate them).
    */
-  def union(other: JavaRDD[T]): JavaRDD[T] = wrapRDD(rdd.union(other.rdd))
+  def union(other: JavaRDD[T]): JavaRDD[T] = {
+    val tag: ClassTag[T] = JavaSparkContext.mergeClassTags(classTag, other.classTag)
+    new JavaRDD[T](rdd.context.union(rdd, other.rdd)(tag))(tag)
+  }
 
 
   /**

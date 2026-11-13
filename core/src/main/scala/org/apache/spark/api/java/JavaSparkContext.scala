@@ -152,9 +152,17 @@ class JavaSparkContext(val sc: SparkContext) extends Closeable {
   /** Distribute a local Scala collection to form an RDD. */
   def parallelizePairs[K, V](list: java.util.List[Tuple2[K, V]], numSlices: Int)
   : JavaPairRDD[K, V] = {
-    implicit val ctagK: ClassTag[K] = fakeClassTag
+    val seq = list.asScala.toSeq
+    val keyClasses = seq.iterator.collect { case (k, _) if k != null => k.getClass }
+    val first: Class[_] = if (keyClasses.hasNext) keyClasses.next() else null
+    implicit val ctagK: ClassTag[K] =
+      if (first != null && first.isArray && keyClasses.forall(_ == first)) {
+        new JavaSparkContext.InferredArrayClassTag[K](first)
+      } else {
+        fakeClassTag[K]
+      }
     implicit val ctagV: ClassTag[V] = fakeClassTag
-    JavaPairRDD.fromRDD(sc.parallelize(list.asScala.toSeq, numSlices))
+    JavaPairRDD.fromRDD(sc.parallelize(seq, numSlices))
   }
 
   /** Distribute a local Scala collection to form an RDD. */
@@ -519,18 +527,21 @@ class JavaSparkContext(val sc: SparkContext) extends Closeable {
   @varargs
   def union[T](rdds: JavaRDD[T]*): JavaRDD[T] = {
     require(rdds.nonEmpty, "Union called on no RDDs")
-    implicit val ctag: ClassTag[T] = rdds.head.classTag
-    sc.union(rdds.map(_.rdd))
+    val ctag: ClassTag[T] =
+      JavaSparkContext.mergeClassTags(rdds.head.classTag, rdds.tail.map(_.classTag): _*)
+    new JavaRDD[T](sc.union(rdds.map(_.rdd))(ctag))(ctag)
   }
 
   /** Build the union of JavaPairRDDs. */
   @varargs
   def union[K, V](rdds: JavaPairRDD[K, V]*): JavaPairRDD[K, V] = {
     require(rdds.nonEmpty, "Union called on no RDDs")
-    implicit val ctag: ClassTag[(K, V)] = rdds.head.classTag
-    implicit val ctagK: ClassTag[K] = rdds.head.kClassTag
-    implicit val ctagV: ClassTag[V] = rdds.head.vClassTag
-    new JavaPairRDD(sc.union(rdds.map(_.rdd)))
+    val ctag: ClassTag[(K, V)] = rdds.head.classTag
+    val ctagK: ClassTag[K] =
+      JavaSparkContext.mergeClassTags(rdds.head.kClassTag, rdds.tail.map(_.kClassTag): _*)
+    val ctagV: ClassTag[V] =
+      JavaSparkContext.mergeClassTags(rdds.head.vClassTag, rdds.tail.map(_.vClassTag): _*)
+    new JavaPairRDD(sc.union(rdds.map(_.rdd))(ctag))(ctagK, ctagV)
   }
 
   /** Build the union of JavaDoubleRDDs. */
@@ -871,4 +882,16 @@ object JavaSparkContext {
    */
   private[spark]
   def fakeClassTag[T]: ClassTag[T] = ClassTag.AnyRef.asInstanceOf[ClassTag[T]]
+
+  private[spark] class InferredArrayClassTag[T](override val runtimeClass: Class[_])
+    extends ClassTag[T]
+
+  private[spark] def mergeClassTags[T](tag1: ClassTag[T], others: ClassTag[T]*): ClassTag[T] = {
+    val allTags = tag1 +: others
+    if (allTags.exists(_.isInstanceOf[InferredArrayClassTag[_]]) && allTags.exists(_ != tag1)) {
+      fakeClassTag[T]
+    } else {
+      tag1
+    }
+  }
 }

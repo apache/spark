@@ -24,6 +24,8 @@ license: |
 
 ## Upgrading from Core 4.3 to 4.4
 
+- Since Spark 4.4, calling `subtractByKey`, `RDD.subtract`, or `repartitionAndSortWithinPartitions` with array keys under a `HashPartitioner` fails fast with `SparkException: [UNSUPPORTED_ARRAY_KEY.HASH_PARTITIONER]`. In addition, Java pair RDD operations with array keys (created via `JavaSparkContext.parallelizePairs` or `JavaPairRDD.fromJavaRDD(rdd, keyClass)`) now enforce array-key guards (`UNSUPPORTED_ARRAY_KEY.*`) instead of silently returning incorrect results due to reference-based array equality. To adapt, callers should use keys with content-based equality or a non-hash partitioner.
+
 - Since Spark 4.4, reading an RDD checkpoint ignores names beginning with `part-` unless the suffix consists of one or more ASCII digits. Previously, names such as `part-00000.bak`, `part-backup`, or `part-` caused checkpoint recovery to fail with `NumberFormatException`. Validation of numeric partition names and the contiguous partition sequence is unchanged.
 
 - Since Spark 4.4, an executor pod template that names a service account in `serviceAccountName` keeps it: Spark applies `spark.kubernetes.authenticate.executor.serviceAccountName`, or `spark.kubernetes.authenticate.driver.serviceAccountName` as a fallback, only when the template names no account in either `serviceAccount` or `serviceAccountName`. Earlier versions decided by reading the deprecated `serviceAccount` field alone, so with either configuration set, a template that named the account in `serviceAccountName` had it overwritten; with neither set, the template's account was kept already. Spark logs a warning when `spark.kubernetes.authenticate.executor.serviceAccountName` named an account the template displaced.
