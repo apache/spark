@@ -27,7 +27,8 @@ import org.apache.spark.sql.pipelines.autocdc.{AutoCdcReservedNames, Scd1BatchPr
 import org.apache.spark.sql.pipelines.util.SchemaInferenceUtils
 import org.apache.spark.sql.pipelines.utils.{ExecutionTest, TestGraphRegistrationContext}
 import org.apache.spark.sql.test.SharedSparkSession
-import org.apache.spark.sql.types.{ArrayType, IntegerType, LongType, StringType, StructType}
+import org.apache.spark.sql.types.{ArrayType, IntegerType, LongType, MapType, StringType,
+  StructType}
 
 /**
  * Materialization-level tests for AUTO CDC's engine-owned reserved metadata column (SPARK-58118).
@@ -1027,5 +1028,198 @@ class AutoCdcReservedColumnMaterializationSuite
     // evolveTable diffs the persisted (pre-existing) schema against the reconciled one; with the
     // nested nullability preserved this must not raise the unsupported nested-array evolution.
     SchemaInferenceUtils.diffSchemas(currentSchema = declaredSchema, targetSchema = reconciled)
+  }
+
+  test("SPARK-58118: reconciliation preserves a declared nested field's spelling inside the SCD1 " +
+    "__VERSION_MAP value, so a case-sensitive same-graph reader resolves it") {
+    // For a struct SEQUENCE BY the SCD1 metadata carries __VERSION_MAP: MAP<STRING, STRUCT<...>>. A
+    // case-insensitive declaration may spell the map's value field in a different case.
+    // reconcileReservedType must descend the map value and keep that declared spelling; otherwise
+    // the materialized target, and the analysis-time read path that reconciles the same way, carry
+    // the engine's canonical lower-case name, and a case-sensitive same-graph SELECT * cannot
+    // resolve the field the target declared (SPARK-58118).
+    val resolver = SchemaInferenceUtils.resolverFor(caseSensitive = false)
+    val meta = AutoCdcReservedNames.cdcMetadataColName
+    val del = Scd1BatchProcessor.cdcDeleteSequenceFieldName
+    val ups = Scd1BatchProcessor.cdcUpsertSequenceFieldName
+    val vm = Scd1BatchProcessor.versionMapFieldName
+    // Engine shape for a struct SEQUENCE BY: sequencing type STRUCT<ordinal>.
+    val engineSeq = new StructType().add("ordinal", LongType)
+    val engineMeta = new StructType()
+      .add(del, engineSeq)
+      .add(ups, engineSeq)
+      .add(vm, MapType(StringType, engineSeq, valueContainsNull = true))
+    val flowInferredSchema = new StructType()
+      .add("id", IntegerType, nullable = false)
+      .add("version", LongType)
+      .add(meta, engineMeta)
+    // The declaration spells the map value field ORDINAL (upper) under case-insensitive analysis.
+    val declaredSeq = new StructType().add("ORDINAL", LongType)
+    val declaredMeta = new StructType()
+      .add(del, engineSeq)
+      .add(ups, engineSeq)
+      .add(vm, MapType(StringType, declaredSeq, valueContainsNull = true))
+    val declaredSchema = new StructType()
+      .add("id", IntegerType, nullable = false)
+      .add("version", LongType)
+      .add(meta, declaredMeta)
+
+    val reconciled =
+      AutoCdcReservedNames.appendEngineOwnedReservedFields(declaredSchema, flowInferredSchema,
+        resolver)
+    val reconciledVmValue = reconciled(meta).dataType.asInstanceOf[StructType](vm).dataType
+      .asInstanceOf[MapType].valueType.asInstanceOf[StructType]
+    assert(reconciledVmValue.fieldNames.toSeq == Seq("ORDINAL"),
+      s"reconciliation should keep the declared __VERSION_MAP value spelling ORDINAL, got " +
+        reconciledVmValue.fieldNames.mkString(","))
+  }
+
+  test("SPARK-58118: reservedFieldCasingDrifts detects a case-only change inside the SCD1 " +
+    "__VERSION_MAP value struct") {
+    // On an incremental run the casing-drift guard compares the persisted target schema against the
+    // one this run resolves. For a struct SEQUENCE BY the __VERSION_MAP value is a struct, so a
+    // case-only change to one of its fields (a target persisted with ORDINAL vs this run's ordinal)
+    // must be reported, matching diffSchemas' recursion through map key/value. Otherwise the
+    // planned and persisted schemas disagree inside the map and a case-sensitive downstream
+    // SELECT * fails at execution instead of being rejected up front (SPARK-58118).
+    val resolver = SchemaInferenceUtils.resolverFor(caseSensitive = false)
+    val meta = AutoCdcReservedNames.cdcMetadataColName
+    val vm = Scd1BatchProcessor.versionMapFieldName
+    def metaWith(ordinalName: String): StructType = {
+      val valueStruct = new StructType().add(ordinalName, LongType)
+      new StructType().add(vm, MapType(StringType, valueStruct, valueContainsNull = true))
+    }
+    val existing = new StructType().add("id", IntegerType).add(meta, metaWith("ORDINAL"))
+    val desired = new StructType().add("id", IntegerType).add(meta, metaWith("ordinal"))
+
+    val drifts = AutoCdcReservedNames.reservedFieldCasingDrifts(existing, desired, resolver)
+    assert(drifts.nonEmpty,
+      "a case-only change inside the __VERSION_MAP value struct must be reported as a drift")
+    assert(drifts.exists { case (existingName, _) =>
+      existingName.contains("value") && existingName.endsWith("ORDINAL") },
+      s"the drift path should descend through the map value, got ${drifts.mkString(", ")}")
+  }
+
+  test("SPARK-58118: a partial declaration appends an omitted engine nested field fully " +
+    "nullable, matching the omitted-whole-column path so dropping the declaration later " +
+    "evolves cleanly") {
+    // reconcileReservedStruct appends an engine nested field the declaration omits. It must append
+    // it fully nullable (asNullable), the same shape the omitted-whole-column path produces, so a
+    // later run that drops the declaration -- whose desired schema comes through asNullable -- does
+    // not need to relax nullability beneath a nested array or map. diffSchemas rejects such a relax
+    // as an unsupported nested-complex-type evolution, which would otherwise break the upgrade,
+    // full refresh included (SPARK-58118).
+    val resolver = SchemaInferenceUtils.resolverFor(caseSensitive = false)
+    val meta = AutoCdcReservedNames.cdcMetadataColName
+    val del = Scd1BatchProcessor.cdcDeleteSequenceFieldName
+    val ups = Scd1BatchProcessor.cdcUpsertSequenceFieldName
+    val vm = Scd1BatchProcessor.versionMapFieldName
+
+    // Engine shape: a sequencing type ARRAY<ARRAY<STRUCT<ordinal: BIGINT NOT NULL>>>, non-null
+    // element and leaf (as a coalesce'd nested sequencing expression infers it), and the SCD1
+    // __VERSION_MAP carrying the same type as its value.
+    val notNullLeaf = new StructType().add("ordinal", LongType, nullable = false)
+    val seqType = ArrayType(ArrayType(notNullLeaf, containsNull = false), containsNull = false)
+    val engineMeta = new StructType()
+      .add(del, seqType, nullable = false)
+      .add(ups, seqType, nullable = false)
+      .add(vm, MapType(StringType, seqType, valueContainsNull = true))
+    val flowInferredSchema = new StructType()
+      .add("id", IntegerType, nullable = false)
+      .add("version", LongType, nullable = false)
+      .add(meta, engineMeta, nullable = false)
+
+    def leafOrdinalNullable(schema: StructType, seqField: String): Boolean = {
+      val m = schema(meta).dataType.asInstanceOf[StructType]
+      val outer = m(seqField).dataType.asInstanceOf[ArrayType]
+      val inner = outer.elementType.asInstanceOf[ArrayType]
+      inner.elementType.asInstanceOf[StructType]("ordinal").nullable
+    }
+    // Guard against a vacuous pass: the engine really infers the omitted field's leaf as NOT NULL.
+    assert(!leafOrdinalNullable(flowInferredSchema, ups),
+      "the engine-inferred upsertSequence leaf should be NOT NULL for this test to be meaningful")
+
+    // A partial declaration listing only deleteSequence (declared with the engine's nullable shape
+    // so the declared field itself does not churn), omitting upsertSequence and __VERSION_MAP.
+    val nullableLeaf = new StructType().add("ordinal", LongType, nullable = true)
+    val nullableSeqType =
+      ArrayType(ArrayType(nullableLeaf, containsNull = true), containsNull = true)
+    val partialMeta = new StructType().add(del, nullableSeqType)
+    val declaredSchema = new StructType()
+      .add("id", IntegerType, nullable = false)
+      .add("version", LongType, nullable = false)
+      .add(meta, partialMeta, nullable = false)
+
+    val partial =
+      AutoCdcReservedNames.appendEngineOwnedReservedFields(declaredSchema, flowInferredSchema,
+        resolver)
+    // Dropping the declaration entirely: the whole metadata column is appended via asNullable.
+    val dataOnly = new StructType()
+      .add("id", IntegerType, nullable = false)
+      .add("version", LongType, nullable = false)
+    val fullyOmitted =
+      AutoCdcReservedNames.appendEngineOwnedReservedFields(dataOnly, flowInferredSchema, resolver)
+
+    // The omitted-then-appended upsertSequence must match the omitted-whole-column shape.
+    val partialUps = partial(meta).dataType.asInstanceOf[StructType](ups)
+    val omittedUps = fullyOmitted(meta).dataType.asInstanceOf[StructType](ups)
+    assert(partialUps == omittedUps,
+      s"an omitted appended field must match the omitted-whole-column shape; partial=$partialUps " +
+        s"omitted=$omittedUps")
+    // Evolving the partial-declaration target to the dropped-declaration shape must not raise the
+    // unsupported nested-array change.
+    SchemaInferenceUtils.diffSchemas(currentSchema = partial, targetSchema = fullyOmitted)
+  }
+
+  test("SPARK-58118: a declared __VERSION_MAP value's nested casing is preserved for a " +
+    "case-sensitive downstream SELECT *") {
+    // End-to-end companion to the unit-level reconcile test, mirroring the array-of-struct
+    // nested-casing test above but through the map container. SEQUENCE BY yields a struct, so the
+    // SCD1 __VERSION_MAP is MAP<STRING, STRUCT<...>>. A case-insensitive declaration spells the map
+    // value field ORDINAL; the materialized target and a case-sensitive downstream reader must both
+    // carry that spelling, or the reader cannot resolve the field the target actually has.
+    val meta = AutoCdcReservedNames.cdcMetadataColName
+    val del = Scd1BatchProcessor.cdcDeleteSequenceFieldName
+    val ups = Scd1BatchProcessor.cdcUpsertSequenceFieldName
+    val vm = Scd1BatchProcessor.versionMapFieldName
+    // Engine sequencing struct is STRUCT<ordinal>; declare del/ups in the engine's spelling and
+    // only the __VERSION_MAP value field upper-cased, so this isolates the map-value reconcile.
+    val engineSeq = new StructType().add("ordinal", LongType)
+    val declaredVmValue = new StructType().add("ORDINAL", LongType)
+    val metadataType = new StructType()
+      .add(del, engineSeq)
+      .add(ups, engineSeq)
+      .add(vm, MapType(StringType, declaredVmValue, valueContainsNull = true))
+    val declaredSchema = new StructType()
+      .add("id", IntegerType, nullable = false)
+      .add("version", LongType)
+      .add(meta, metadataType)
+
+    val stream = MemoryStream[(Int, Option[Long])]
+    stream.addData((1, Some(5L)))
+    val ctx = new TestGraphRegistrationContext(spark) {
+      registerTable("target", catalog = Some(catalog), database = Some(namespace),
+        specifiedSchema = Some(declaredSchema))
+      registerFlow(autoCdcFlow(name = "auto_cdc_flow", target = "target",
+        query = dfFlowFunc(stream.toDF().toDF("id", "version")),
+        keys = Seq("id"),
+        sequencing = functions.struct(functions.col("version").as("ordinal"))))
+      registerMaterializedView("copy", catalog = Some(catalog), database = Some(namespace),
+        sqlConf = Map(SQLConf.CASE_SENSITIVE.key -> "true"),
+        query = readFlowFunc(s"$catalog.$namespace.target"))
+    }
+    runPipeline(ctx)
+
+    def vmValueNames(table: String): Seq[String] = {
+      val metaType = spark.table(table).schema(meta).dataType.asInstanceOf[StructType]
+      val vmValue = metaType(vm).dataType.asInstanceOf[MapType].valueType
+      vmValue.asInstanceOf[StructType].fieldNames.toSeq
+    }
+    val target = vmValueNames(s"$catalog.$namespace.target")
+    val copy = vmValueNames(s"$catalog.$namespace.copy")
+    assert(target == Seq("ORDINAL"),
+      s"target __VERSION_MAP value should keep declared ORDINAL, got ${target.mkString(",")}")
+    assert(copy == target,
+      s"downstream __VERSION_MAP value ${copy.mkString(",")} != target ${target.mkString(",")}")
   }
 }

@@ -24,12 +24,13 @@ import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.pipelines.autocdc.{
   AutoCdcReservedNames,
   ChangeArgs,
+  Scd1BatchProcessor,
   ScdType,
   UnqualifiedColumnName
 }
 import org.apache.spark.sql.pipelines.utils.{PipelineTest, TestGraphRegistrationContext}
 import org.apache.spark.sql.test.SharedSparkSession
-import org.apache.spark.sql.types.{ArrayType, DataType, IntegerType, LongType, StringType,
+import org.apache.spark.sql.types.{ArrayType, DataType, IntegerType, LongType, MapType, StringType,
   StructField, StructType}
 
 /**
@@ -382,6 +383,37 @@ class UserSpecifiedSchemaValidationSuite extends PipelineTest with SharedSparkSe
 
     val ex = intercept[AnalysisException](
       validateGraph(autoCdcGraph("auto_cdc_flow", Some(schema), sequencing = arraySeq)))
+    assert(ex.getCondition == "AUTOCDC_INVALID_RESERVED_SCHEMA.UNKNOWN_NESTED_FIELD")
+  }
+
+  test("a declared reserved metadata column with an unknown nested field inside the SCD1 " +
+    "__VERSION_MAP value is rejected for an AUTO CDC flow") {
+    // When SEQUENCE BY yields a struct, the SCD1 metadata carries __VERSION_MAP: MAP<STRING,
+    // STRUCT<...>> (Scd1VersionMap). Validation must descend through the map value, matching
+    // reconcileReservedType, so a bogus field inside the map's value struct is rejected up front
+    // instead of reconciled into the target, where the SCD1 MERGE would then fail on the
+    // incompatible sequencing type (SPARK-58118).
+    val structSeq = functions.expr("named_struct('ordinal', version)")
+    val meta = autoCdcInferredSchema("target", sequencing = structSeq).fields
+      .find(_.name == AutoCdcReservedNames.cdcMetadataColName).get
+    val metaStruct = meta.dataType.asInstanceOf[StructType]
+
+    // Guard against a vacuous pass: the version map's value must really be a struct here.
+    val vmField = Scd1BatchProcessor.versionMapFieldName
+    val vmType = metaStruct(vmField).dataType.asInstanceOf[MapType]
+    assert(vmType.valueType.isInstanceOf[StructType],
+      s"expected the __VERSION_MAP value to be a struct, got ${vmType.valueType.sql}")
+
+    // Declare the same column with a bogus field added to the struct inside the map value.
+    val mutatedVm = vmType.copy(
+      valueType = vmType.valueType.asInstanceOf[StructType].add("bogus", LongType))
+    val mutatedMeta = meta.copy(dataType = StructType(metaStruct.fields.map { f =>
+      if (f.name == vmField) f.copy(dataType = mutatedVm) else f
+    }))
+    val schema = StructType(dataSchema.fields :+ mutatedMeta)
+
+    val ex = intercept[AnalysisException](
+      validateGraph(autoCdcGraph("auto_cdc_flow", Some(schema), sequencing = structSeq)))
     assert(ex.getCondition == "AUTOCDC_INVALID_RESERVED_SCHEMA.UNKNOWN_NESTED_FIELD")
   }
 }

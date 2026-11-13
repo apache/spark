@@ -20,7 +20,7 @@ package org.apache.spark.sql.pipelines.autocdc
 import org.apache.spark.SparkException
 import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.analysis.Resolver
-import org.apache.spark.sql.types.{ArrayType, DataType, StructField, StructType}
+import org.apache.spark.sql.types.{ArrayType, DataType, MapType, StructField, StructType}
 
 /**
  * Names that AutoCDC reserves for its own use, both for internal columns it inserts during
@@ -151,7 +151,7 @@ private[pipelines] object AutoCdcReservedNames {
    * materialization, and
    * `VirtualTableInput.load` on the same-graph read path, which runs during flow analysis -- before
    * graph validation -- and so must validate the declaration itself rather than rely on that later
-   * pass. Recursively through structs and array-of-struct elements it throws a user-facing
+   * pass. Recursively through structs, array elements, and map values it throws a user-facing
    * `AnalysisException` when a declared reserved-prefixed field has no engine-owned counterpart (a
    * typo or an extra reserved-namespace column), when two declared fields resolve to one engine
    * field, or when a declared nested field under a reserved column is not one the engine produces.
@@ -217,11 +217,12 @@ private[pipelines] object AutoCdcReservedNames {
   }
 
   // Descend a matched reserved field's type to validate its nested fields: a struct checks its
-  // fields one level down, and an array recurses into its element type so the struct inside an
-  // arbitrarily nested sequencing type (e.g. `ARRAY<ARRAY<STRUCT<...>>>`) is still reached. This
-  // mirrors how `reconcileReservedType` descends, so validation rejects exactly the nested shapes
-  // reconciliation would otherwise carry into the target. Any other type has no reserved nested
-  // field to check.
+  // fields one level down, an array recurses into its element type, and a map recurses into its
+  // key and value types, so the struct inside an arbitrarily nested sequencing type (e.g.
+  // `ARRAY<ARRAY<STRUCT<...>>>`, or the SCD1 `__VERSION_MAP: MAP<STRING, <sequencing type>>`) is
+  // still reached. This mirrors how `reconcileReservedType` descends, so validation rejects
+  // exactly the nested shapes reconciliation would otherwise carry into the target. Any other type
+  // has no reserved nested field to check.
   private def validateReservedType(
       tableName: String,
       reservedColumn: Option[String],
@@ -233,6 +234,9 @@ private[pipelines] object AutoCdcReservedNames {
         validateReservedLevel(tableName, reservedColumn, ds.fields.toSeq, es.fields.toSeq, resolver)
       case (da: ArrayType, ea: ArrayType) =>
         validateReservedType(tableName, reservedColumn, da.elementType, ea.elementType, resolver)
+      case (dm: MapType, em: MapType) =>
+        validateReservedType(tableName, reservedColumn, dm.keyType, em.keyType, resolver)
+        validateReservedType(tableName, reservedColumn, dm.valueType, em.valueType, resolver)
       case _ =>
     }
 
@@ -240,7 +244,7 @@ private[pipelines] object AutoCdcReservedNames {
    * Reconcile a declared reserved field against its engine-owned counterpart: keep the declared
    * field's spelling and its metadata (e.g. a user `COMMENT`), take the engine field's type and the
    * union of the declared and engine nullability, and reconcile the types recursively (see
-   * `reconcileReservedType`) so declared nested spelling survives through structs and arrays.
+   * `reconcileReservedType`) so declared nested spelling survives structs, arrays, and maps.
    * Building from the declared field is what keeps the comment: `SchemaInferenceUtils` merges the
    * declaration in to carry such metadata, and dropping it here would lose it from the created
    * target and the analysis-time read path.
@@ -258,9 +262,11 @@ private[pipelines] object AutoCdcReservedNames {
   /**
    * Reconcile a declared data type against its engine-owned counterpart: keep the declared nested
    * spelling and the engine's field ordering and types, and union the declared and engine
-   * nullability (`containsNull` for arrays). Recurse through structs -- the AUTO CDC metadata
-   * column is one -- and through array element types, since a sequencing column can be
-   * `ARRAY<STRUCT<...>>`; any other shape takes the engine's type as-is.
+   * nullability (`containsNull` for arrays, `valueContainsNull` for maps). Recurse through
+   * structs -- the AUTO CDC metadata column is one -- through array element types, since a
+   * sequencing column can be `ARRAY<STRUCT<...>>`, and through map key/value types, since the SCD1
+   * `__VERSION_MAP` is a `MAP<STRING, <sequencing type>>`; any other shape takes the engine's type
+   * as-is.
    */
   private def reconcileReservedType(
       declared: DataType,
@@ -276,14 +282,23 @@ private[pipelines] object AutoCdcReservedNames {
           // Union `containsNull` for the same reason as field nullability: keep a declared
           // non-nullable element the engine also produces so an unchanged target does not churn.
           containsNull = declaredArray.containsNull || engineArray.containsNull)
+      case (declaredMap: MapType, engineMap: MapType) =>
+        engineMap.copy(
+          keyType = reconcileReservedType(declaredMap.keyType, engineMap.keyType, resolver),
+          valueType = reconcileReservedType(declaredMap.valueType, engineMap.valueType, resolver),
+          // Union `valueContainsNull` for the same reason as array `containsNull`.
+          valueContainsNull = declaredMap.valueContainsNull || engineMap.valueContainsNull)
       case _ => engine
     }
 
   /**
    * Rebuild `engine`'s struct in the engine's field order, carrying the declared nested spelling
    * and metadata: each engine nested field takes a matching declared field's name and comment
-   * (recursively), and engine nested fields the declaration omitted stay in canonical form. The
-   * order is the engine's, not the declaration's. These structs are engine-owned, and a sequencing
+   * (recursively); an engine nested field the declaration omitted is kept fully nullable
+   * (`asNullable`), matching the omitted whole-column path so a later run that drops the
+   * declaration does not need to relax nullability beneath a nested array or map (which
+   * `diffSchemas` rejects). The order is the engine's, not the declaration's. These structs are
+   * engine-owned, and a sequencing
    * struct -- the type of a reserved sequencing field (`${prefix}metadata.upsertSequence` /
    * `deleteSequence` for SCD1, `recordStartAt` for SCD2) when `SEQUENCE BY` yields a struct -- is
    * compared positionally during AUTO CDC processing (struct ordering is name-blind). A partial or
@@ -304,7 +319,14 @@ private[pipelines] object AutoCdcReservedNames {
         case Some(df) =>
           usedDeclaredNames += df.name
           reconcileReservedField(df, ef, resolver)
-        case None => ef
+        case None =>
+          // An engine nested field the declaration omitted: append it fully nullable, matching the
+          // omitted whole-column path (`appendEngineOwnedReservedFields` uses `.asNullable`). A
+          // partial declaration must not leave it at the engine's non-null nesting, or a later run
+          // that drops the declaration would need to relax that nullability beneath a nested
+          // array/map -- which `diffSchemas` rejects as an unsupported nested-complex-type
+          // evolution.
+          ef.copy(dataType = ef.dataType.asNullable, nullable = true)
       }
     }
     StructType(rebuilt ++ declared.fields.filterNot(df => usedDeclaredNames.contains(df.name)))
@@ -335,8 +357,8 @@ private[pipelines] object AutoCdcReservedNames {
    * Case-only spelling differences between `existing` and `desired` for a reserved field and,
    * recursively, its nested fields, as `(existingName, desiredName)` pairs. Nested names are
    * qualified by their parent, e.g. `__spark_autocdc_metadata.DELETESEQUENCE`, so the same drift
-   * policy covers the metadata column's nested fields -- through structs and arrays -- as well as
-   * the column itself.
+   * policy covers the metadata column's nested fields -- through structs, arrays, and maps -- as
+   * well as the column itself.
    */
   private def fieldCasingDrifts(
       existing: StructField,
@@ -351,9 +373,10 @@ private[pipelines] object AutoCdcReservedNames {
 
   /**
    * Case-only spelling drifts among the nested fields of two data types, as `(existingName,
-   * desiredName)` pairs qualified by their path. Recurses through structs and through array element
-   * types, so a sequencing column such as `ARRAY<STRUCT<...>>` is covered as well as a nested
-   * struct. Any other shape has no nested names to drift.
+   * desiredName)` pairs qualified by their path. Recurses through structs, through array element
+   * types, and through map key/value types, so a sequencing column such as `ARRAY<STRUCT<...>>` or
+   * the SCD1 `__VERSION_MAP: MAP<STRING, <sequencing type>>` is covered as well as a nested struct.
+   * Any other shape has no nested names to drift.
    */
   private def typeCasingDrifts(
       existing: DataType,
@@ -371,6 +394,13 @@ private[pipelines] object AutoCdcReservedNames {
         // Mark the array hop so a nested drift reads `col.element.field`, matching diffSchemas.
         typeCasingDrifts(existingArray.elementType, desiredArray.elementType, resolver)
           .map { case (e, r) => (s"element.$e", s"element.$r") }
+      case (existingMap: MapType, desiredMap: MapType) =>
+        // Mark the map hop with `key`/`value` so a nested drift reads `col.value.field`, matching
+        // diffSchemas (SchemaInferenceUtils uses `key`/`value` path segments for maps).
+        typeCasingDrifts(existingMap.keyType, desiredMap.keyType, resolver)
+          .map { case (e, r) => (s"key.$e", s"key.$r") } ++
+          typeCasingDrifts(existingMap.valueType, desiredMap.valueType, resolver)
+            .map { case (e, r) => (s"value.$e", s"value.$r") }
       case _ => Seq.empty
     }
 }
