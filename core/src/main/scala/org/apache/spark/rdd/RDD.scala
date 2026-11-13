@@ -1328,40 +1328,65 @@ abstract class RDD[T: ClassTag](
       combOp: (U, U) => U,
       depth: Int,
       finalAggregateOnExecutor: Boolean): U = withScope {
-      require(depth >= 1, s"Depth must be greater than or equal to 1 but got $depth.")
+    require(depth >= 1, s"Depth must be greater than or equal to 1 but got $depth.")
     if (partitions.length == 0) {
       Utils.clone(zeroValue, context.env.closureSerializer.newInstance())
     } else {
-      val cleanSeqOp = context.clean(seqOp)
-      val cleanCombOp = context.clean(combOp)
-      val aggregatePartition =
-        (it: Iterator[T]) => it.foldLeft(zeroValue)(cleanSeqOp)
-      var partiallyAggregated: RDD[U] = mapPartitions(it => Iterator(aggregatePartition(it)))
-      var numPartitions = partiallyAggregated.partitions.length
-      val scale = math.max(math.ceil(math.pow(numPartitions, 1.0 / depth)).toInt, 2)
-      // If creating an extra level doesn't help reduce
-      // the wall-clock time, we stop tree aggregation.
-
-      // Don't trigger TreeAggregation when it doesn't save wall-clock time
-      while (numPartitions > scale + math.ceil(numPartitions.toDouble / scale)) {
-        numPartitions /= scale
-        val curNumPartitions = numPartitions
-        partiallyAggregated = partiallyAggregated.mapPartitionsWithIndex {
-          (i, iter) => iter.map((i % curNumPartitions, _))
-        }.foldByKey(zeroValue, new HashPartitioner(curNumPartitions))(cleanCombOp).values
-      }
-      if (finalAggregateOnExecutor && partiallyAggregated.partitions.length > 1) {
-        // map the partially aggregated rdd into a key-value rdd
-        // do the computation in the single executor with one partition
-        // get the new RDD[U]
-        partiallyAggregated = partiallyAggregated
-          .map(v => (0.toByte, v))
-          .foldByKey(zeroValue, new ConstantPartitioner)(cleanCombOp)
-          .values
-      }
+      val partiallyAggregated = treeAggregateToRDDInternal(
+        zeroValue, seqOp, combOp, depth, finalAggregateOnExecutor)
       val copiedZeroValue = Utils.clone(zeroValue, sc.env.closureSerializer.newInstance())
-      partiallyAggregated.fold(copiedZeroValue)(cleanCombOp)
+      partiallyAggregated.fold(copiedZeroValue)(context.clean(combOp))
     }
+  }
+
+  /**
+   * Aggregates the elements of this RDD in a multi-level tree pattern and returns the result as a
+   * single-partition RDD. This allows a caller to transform a large aggregate on an executor before
+   * returning a smaller result to the driver.
+   */
+  private[spark] def treeAggregateToRDD[U: ClassTag](
+      zeroValue: U,
+      seqOp: (U, T) => U,
+      combOp: (U, U) => U,
+      depth: Int): RDD[U] = withScope {
+    require(depth >= 1, s"Depth must be greater than or equal to 1 but got $depth.")
+    if (partitions.length == 0) {
+      context.parallelize(
+        Seq(Utils.clone(zeroValue, context.env.closureSerializer.newInstance())), 1)
+    } else {
+      treeAggregateToRDDInternal(
+        zeroValue, seqOp, combOp, depth, finalAggregateOnExecutor = true)
+    }
+  }
+
+  private def treeAggregateToRDDInternal[U: ClassTag](
+      zeroValue: U,
+      seqOp: (U, T) => U,
+      combOp: (U, U) => U,
+      depth: Int,
+      finalAggregateOnExecutor: Boolean): RDD[U] = {
+    val cleanSeqOp = context.clean(seqOp)
+    val cleanCombOp = context.clean(combOp)
+    val aggregatePartition = (it: Iterator[T]) => it.foldLeft(zeroValue)(cleanSeqOp)
+    var partiallyAggregated: RDD[U] = mapPartitions(it => Iterator(aggregatePartition(it)))
+    var numPartitions = partiallyAggregated.partitions.length
+    val scale = math.max(math.ceil(math.pow(numPartitions, 1.0 / depth)).toInt, 2)
+
+    // Don't trigger tree aggregation when it doesn't save wall-clock time.
+    while (numPartitions > scale + math.ceil(numPartitions.toDouble / scale)) {
+      numPartitions /= scale
+      val curNumPartitions = numPartitions
+      partiallyAggregated = partiallyAggregated.mapPartitionsWithIndex {
+        (i, iter) => iter.map((i % curNumPartitions, _))
+      }.foldByKey(zeroValue, new HashPartitioner(curNumPartitions))(cleanCombOp).values
+    }
+    if (finalAggregateOnExecutor && partiallyAggregated.partitions.length > 1) {
+      partiallyAggregated = partiallyAggregated
+        .map(v => (0.toByte, v))
+        .foldByKey(zeroValue, new ConstantPartitioner)(cleanCombOp)
+        .values
+    }
+    partiallyAggregated
   }
 
   /**
