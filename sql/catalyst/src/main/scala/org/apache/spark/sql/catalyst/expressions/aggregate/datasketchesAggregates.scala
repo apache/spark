@@ -134,6 +134,9 @@ case class HllSketchAgg(
 
   override def nullable: Boolean = false
 
+  override def defaultResult: Option[Literal] =
+    Option(Literal.create(eval(createAggregationBuffer()), dataType))
+
   /**
    * Instantiate an HllSketch instance using the lgConfigK param.
    *
@@ -321,6 +324,9 @@ case class HllUnionAgg(
   override def dataType: DataType = BinaryType
 
   override def nullable: Boolean = false
+
+  override def defaultResult: Option[Literal] =
+    Option(Literal.create(eval(createAggregationBuffer()), dataType))
 
   /**
    * Defer instantiation of the Union instance until we've deserialized

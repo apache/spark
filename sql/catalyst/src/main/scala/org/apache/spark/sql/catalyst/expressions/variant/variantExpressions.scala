@@ -2335,6 +2335,9 @@ case class SchemaOfVariantAgg(
 
   override def nullable: Boolean = false
 
+  override def defaultResult: Option[Literal] =
+    Option(Literal.create(eval(createAggregationBuffer()), dataType))
+
   override def createAggregationBuffer(): DataType = NullType
 
   override def update(buffer: DataType, input: InternalRow): DataType = {
