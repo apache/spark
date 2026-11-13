@@ -1116,9 +1116,11 @@ class InjectRuntimeFilterSuite extends SharedSparkSession
       val query = "select * from (select c1 from bf1 where a1 = 5) a left join bf2 on a.c1 = bf2.c2"
       assertRewroteWithBloomFilter(query)
       assert(bloomFilterKeyNames(query) == Seq("c2"))
-      // A shuffle hash hint rules out broadcasting the small side of an inner join too.
-      assertRewroteWithBloomFilter("select /*+ shuffle_hash(a) */ * from bf2 join " +
-        "(select c1 from bf1 where a1 = 5) a on a.c1 = bf2.c2")
+      // A shuffle hash or merge hint rules out broadcasting the small side of an inner join too.
+      def hinted(hint: String): String = s"select /*+ $hint(a) */ * from bf2 join " +
+        "(select c1 from bf1 where a1 = 5) a on a.c1 = bf2.c2"
+      assertRewroteWithBloomFilter(hinted("shuffle_hash"))
+      assertRewroteWithBloomFilter(hinted("merge"))
       // Below a broadcast hash join, the same join shuffles `bf1`. A broadcast nested loop join
       // broadcasts the small side instead.
       def belowBroadcastJoin(condition: String): String = "select * from (select c1 from bf1) a " +

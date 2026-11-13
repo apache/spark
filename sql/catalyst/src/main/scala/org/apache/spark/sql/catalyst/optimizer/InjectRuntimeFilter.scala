@@ -263,7 +263,10 @@ object InjectRuntimeFilter extends Rule[LogicalPlan] with PredicateHelper with J
   // A broadcast hash join can build only a side that its join type allows, and a hint can rule it
   // out. A join without equi-join keys is not a hash join, so its join type does not matter here.
   private def isProbablyShuffleJoin(join: Join): Boolean = join match {
-    case ExtractEquiJoinKeys(_, _, _, _, _, _, _, _) => !canPlanAsBroadcastHashJoin(join, conf)
+    case ExtractEquiJoinKeys(_, _, _, _, _, _, _, _) =>
+      // A hinted broadcast outranks a merge hint, which outranks a size-based broadcast.
+      getBroadcastBuildSide(join, hintOnly = true, conf).isEmpty &&
+        (hintToSortMergeJoin(join.hint) || !canPlanAsBroadcastHashJoin(join, conf))
     case Join(left, right, _, _, hint) =>
       !hintToBroadcastLeft(hint) && !hintToBroadcastRight(hint) &&
         !canBroadcastBySize(left, conf) && !canBroadcastBySize(right, conf)
