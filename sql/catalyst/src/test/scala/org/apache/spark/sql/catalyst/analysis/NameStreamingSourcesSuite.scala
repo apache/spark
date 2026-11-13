@@ -75,9 +75,9 @@ class NameStreamingSourcesSuite extends AnalysisTest {
 
   test("preserves user-provided names in enforcement check") {
     withSQLConf(SQLConf.ENABLE_STREAMING_SOURCE_EVOLUTION.key -> "true") {
-      val source1 = NamedStreamingRelation(createStreamingRelation(), Unassigned)
+      val source1 = NamedStreamingRelation(createStreamingRelationV2(), Unassigned)
         .withUserProvidedName(Some("my_source"))
-      val source2 = NamedStreamingRelation(createStreamingRelation(), Unassigned)
+      val source2 = NamedStreamingRelation(createStreamingRelationV2(), Unassigned)
         .withUserProvidedName(Some("other_source"))
       val streamingPlan = Union(Seq(source1, source2))
 
@@ -164,8 +164,10 @@ class NameStreamingSourcesSuite extends AnalysisTest {
 
   test("preserves FlowAssigned names in enforcement check") {
     withSQLConf(SQLConf.ENABLE_STREAMING_SOURCE_EVOLUTION.key -> "true") {
-      val source1 = NamedStreamingRelation(createStreamingRelation(), FlowAssigned("flow_source_1"))
-      val source2 = NamedStreamingRelation(createStreamingRelation(), FlowAssigned("flow_source_2"))
+      val source1 = NamedStreamingRelation(
+        createStreamingRelationV2(), FlowAssigned("flow_source_1"))
+      val source2 = NamedStreamingRelation(
+        createStreamingRelationV2(), FlowAssigned("flow_source_2"))
       val streamingPlan = Union(Seq(source1, source2))
 
       // Should not throw when all sources are flow-assigned
@@ -250,8 +252,8 @@ class NameStreamingSourcesSuite extends AnalysisTest {
 
   test("mixed UserProvided and FlowAssigned names pass enforcement") {
     withSQLConf(SQLConf.ENABLE_STREAMING_SOURCE_EVOLUTION.key -> "true") {
-      val userNamed = NamedStreamingRelation(createStreamingRelation(), UserProvided("user_src"))
-      val flowNamed = NamedStreamingRelation(createStreamingRelation(), FlowAssigned("flow_src"))
+      val userNamed = NamedStreamingRelation(createStreamingRelationV2(), UserProvided("user_src"))
+      val flowNamed = NamedStreamingRelation(createStreamingRelationV2(), FlowAssigned("flow_src"))
       val streamingPlan = Union(Seq(userNamed, flowNamed))
 
       // Should not throw - both are explicitly named
@@ -262,9 +264,9 @@ class NameStreamingSourcesSuite extends AnalysisTest {
 
   test("nested unions with all named sources pass enforcement") {
     withSQLConf(SQLConf.ENABLE_STREAMING_SOURCE_EVOLUTION.key -> "true") {
-      val source1 = NamedStreamingRelation(createStreamingRelation(), UserProvided("source1"))
-      val source2 = NamedStreamingRelation(createStreamingRelation(), UserProvided("source2"))
-      val source3 = NamedStreamingRelation(createStreamingRelation(), UserProvided("source3"))
+      val source1 = NamedStreamingRelation(createStreamingRelationV2(), UserProvided("source1"))
+      val source2 = NamedStreamingRelation(createStreamingRelationV2(), UserProvided("source2"))
+      val source3 = NamedStreamingRelation(createStreamingRelationV2(), UserProvided("source3"))
 
       val innerUnion = Union(Seq(source1, source2))
       val outerUnion = Union(Seq(innerUnion, source3))
@@ -329,19 +331,71 @@ class NameStreamingSourcesSuite extends AnalysisTest {
     }
   }
 
-  test("config disabled - throws error for UserProvided name") {
+  test("config disabled - UserProvided name enables source naming") {
     withSQLConf(
       SQLConf.ENABLE_STREAMING_SOURCE_EVOLUTION.key -> "false"
     ) {
       val streamingV2 = createStreamingRelationV2()
       val wrapped = NamedStreamingRelation(streamingV2, UserProvided("my_source"))
 
+      NameStreamingSources.apply(wrapped) match {
+        case s: StreamingRelationV2 =>
+          assert(s.sourceIdentifyingName == UserProvided("my_source"))
+        case other =>
+          fail(s"Expected StreamingRelationV2 but got ${other.getClass.getSimpleName}")
+      }
+    }
+  }
+
+  test("config disabled - mixed wrapper names defer enforcement to query startup") {
+    withSQLConf(
+      SQLConf.ENABLE_STREAMING_SOURCE_EVOLUTION.key -> "false"
+    ) {
+      val namedSource = NamedStreamingRelation(createStreamingRelationV2(), UserProvided("named"))
+      val unnamedSource = NamedStreamingRelation(createStreamingRelationV2(), Unassigned)
+      val streamingPlan = Union(Seq(namedSource, unnamedSource))
+
+      val result = NameStreamingSources(streamingPlan)
+      assert(StreamingSourceIdentifyingName.collectSources(result).map(_._2) ===
+        Seq(UserProvided("named"), Unassigned))
+      assert(!result.containsPattern(
+        org.apache.spark.sql.catalyst.trees.TreePattern.NAMED_STREAMING_RELATION))
+    }
+  }
+
+  test("config disabled - already attached names defer enforcement to query startup") {
+    withSQLConf(
+      SQLConf.ENABLE_STREAMING_SOURCE_EVOLUTION.key -> "false"
+    ) {
+      // The named source was analyzed on its own, so it carries its name without a wrapper.
+      val namedSource = createStreamingRelationV2(UserProvided("named"))
+      val unnamedSource = NamedStreamingRelation(createStreamingRelation(), Unassigned)
+      val streamingPlan = Union(Seq(namedSource, unnamedSource))
+
+      val result = NameStreamingSources.apply(streamingPlan)
+      assert(result.children.head == namedSource)
+      assert(result.children(1) == unnamedSource.child)
+    }
+  }
+
+  gridTest("resolved children that cannot carry a name fail with a user error")(
+      Seq(false, true)) { enabled =>
+    withSQLConf(SQLConf.ENABLE_STREAMING_SOURCE_EVOLUTION.key -> enabled.toString) {
       checkError(
         exception = intercept[AnalysisException] {
-          NameStreamingSources.apply(wrapped)
+          NameStreamingSources(NamedStreamingRelation(
+            createStreamingRelation(), UserProvided("events")))
         },
-        condition = "STREAMING_QUERY_EVOLUTION_ERROR.SOURCE_NAMING_NOT_SUPPORTED",
-        parameters = Map("name" -> "my_source"))
+        condition = "STREAMING_QUERY_EVOLUTION_ERROR.UNSUPPORTED_SOURCE_NAMING",
+        parameters = Map("sourceName" -> "events", "sourceType" -> "LocalRelation"))
+    }
+  }
+
+  gridTest("plans without naming wrappers are returned unchanged")(Seq(false, true)) { enabled =>
+    withSQLConf(SQLConf.ENABLE_STREAMING_SOURCE_EVOLUTION.key -> enabled.toString) {
+      val source = createStreamingRelationV2(UserProvided("events"))
+      val plan = Project(source.output, source)
+      assert(NameStreamingSources(plan) eq plan)
     }
   }
 
@@ -390,5 +444,31 @@ class NameStreamingSourcesSuite extends AnalysisTest {
       }.nonEmpty
       assert(!hasNamedRelation, "All NamedStreamingRelation nodes should be unwrapped")
     }
+  }
+
+  // ===================================
+  // Tests for collecting source names
+  // ===================================
+
+  test("collectSources returns wrapped and already named sources in plan order") {
+    val wrapped = createStreamingRelationV2()
+    val named = createStreamingRelationV2(UserProvided("named"))
+    val unnamed = createStreamingRelationV2()
+    // A wrapper's own name wins; its child is not collected again.
+    val plan = Union(Seq(
+      NamedStreamingRelation(wrapped, UserProvided("wrapped")),
+      Project(named.output, named),
+      unnamed))
+
+    assert(StreamingSourceIdentifyingName.collectSources(plan) === Seq(
+      wrapped -> UserProvided("wrapped"),
+      named -> UserProvided("named"),
+      unnamed -> Unassigned))
+  }
+
+  test("collectSources ignores leaves that cannot carry a source name") {
+    val plan = Union(Seq(createStreamingRelation(), createBatchRelation()))
+
+    assert(StreamingSourceIdentifyingName.collectSources(plan).isEmpty)
   }
 }

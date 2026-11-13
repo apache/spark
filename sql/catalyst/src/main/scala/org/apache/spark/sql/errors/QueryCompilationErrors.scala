@@ -2766,10 +2766,16 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase with Compilat
       messageParameters = Map("name" -> name))
   }
 
-  def invalidStreamingSourceNameError(sourceName: String): Throwable = {
+  def invalidStreamingSourceNameError(sourceName: String): AnalysisException = {
     new AnalysisException(
       errorClass = "STREAMING_QUERY_EVOLUTION_ERROR.INVALID_SOURCE_NAME",
       messageParameters = Map("sourceName" -> sourceName))
+  }
+
+  def unsupportedStreamingSourceNamingError(sourceName: String, sourceType: String): Throwable = {
+    new AnalysisException(
+      errorClass = "STREAMING_QUERY_EVOLUTION_ERROR.UNSUPPORTED_SOURCE_NAMING",
+      messageParameters = Map("sourceName" -> sourceName, "sourceType" -> sourceType))
   }
 
   def invalidStreamingSinkNameError(sinkName: String): Throwable = {
@@ -2784,10 +2790,16 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase with Compilat
       messageParameters = Map("names" -> duplicateNames.mkString(", ")))
   }
 
-  def cannotEnableSourceEvolutionOnExistingCheckpointError(existingVersion: Int): Throwable = {
+  def cannotEnableSourceEvolutionOnExistingCheckpointError(): Throwable = {
     new AnalysisException(
       errorClass = "STREAMING_QUERY_EVOLUTION_ERROR.CANNOT_ENABLE_ON_EXISTING_CHECKPOINT",
-      messageParameters = Map("existingVersion" -> existingVersion.toString))
+      messageParameters = Map.empty)
+  }
+
+  def cannotDisableSourceEvolutionOnExistingCheckpointError(): Throwable = {
+    new AnalysisException(
+      errorClass = "STREAMING_QUERY_EVOLUTION_ERROR.CANNOT_DISABLE_ON_EXISTING_CHECKPOINT",
+      messageParameters = Map.empty)
   }
 
   def columnNotFoundInExistingColumnsError(

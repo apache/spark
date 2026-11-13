@@ -17,6 +17,7 @@
 
 package org.apache.spark.sql.catalyst.streaming
 
+import org.apache.spark.sql.catalyst.analysis.NamedStreamingRelation
 import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
 
 /**
@@ -73,6 +74,22 @@ sealed trait StreamingSourceIdentifyingName {
     case UserProvided(name) => Some(name)
     case FlowAssigned(name) => Some(name)
     case Unassigned => None
+  }
+}
+
+object StreamingSourceIdentifyingName {
+  /**
+   * Returns each streaming source in `plan` with its identifying name, in plan order. A source is
+   * either wrapped in a [[NamedStreamingRelation]] or a [[HasStreamingSourceIdentifyingName]] that
+   * already carries its name: a plan analyzed on its own, such as one side of a union of
+   * DataFrames, has no wrappers left.
+   */
+  def collectSources(plan: LogicalPlan): Seq[(LogicalPlan, StreamingSourceIdentifyingName)] = {
+    plan match {
+      case n: NamedStreamingRelation => Seq(n.child -> n.sourceIdentifyingName)
+      case h: HasStreamingSourceIdentifyingName => Seq(plan -> h.sourceIdentifyingName)
+      case other => other.children.flatMap(collectSources)
+    }
   }
 }
 

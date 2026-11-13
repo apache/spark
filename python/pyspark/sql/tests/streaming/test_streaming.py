@@ -545,20 +545,22 @@ class StreamingTestsMixin:
         config = "spark.sql.streaming.queryEvolution.enableSourceEvolution"
         with self.table(table_name), tempfile.TemporaryDirectory() as tmpdir:
             self.spark.range(1).write.format("parquet").saveAsTable(table_name)
-            with self.sql_conf({config: "true"}):
+
+            def check_named_query(subdir):
                 frame = self.spark.readStream.name("orders_source").table(table_name)
                 self.assertTrue(frame.isStreaming)
-                output_path = os.path.join(tmpdir, "output")
+                output_path = os.path.join(tmpdir, subdir, "output")
+                checkpoint_path = os.path.join(tmpdir, subdir, "checkpoint")
                 query = (
                     frame.writeStream.format("parquet")
-                    .option("checkpointLocation", os.path.join(tmpdir, "checkpoint"))
+                    .option("checkpointLocation", checkpoint_path)
                     .trigger(availableNow=True)
                     .start(output_path)
                 )
                 try:
                     self.assertTrue(query.awaitTermination(60))
                     self.assertEqual(self.spark.read.parquet(output_path).collect(), [Row(id=0)])
-                    with open(os.path.join(tmpdir, "checkpoint", "offsets", "0")) as offset_file:
+                    with open(os.path.join(checkpoint_path, "offsets", "0")) as offset_file:
                         offset_lines = offset_file.read().splitlines()
                     self.assertEqual(offset_lines[0], "v2")
                     self.assertTrue(any(line.startswith("orders_source:") for line in offset_lines))
@@ -566,6 +568,8 @@ class StreamingTestsMixin:
                     query.stop()
                     self.spark.streams.resetTerminated()
 
+            with self.sql_conf({config: "true"}):
+                check_named_query("with_config")
                 with self.assertRaises(AnalysisException) as context:
                     self.spark.readStream.table(table_name).schema
                 self.check_error(
@@ -582,13 +586,8 @@ class StreamingTestsMixin:
                     self.spark.readStream.table(table_name).schema,
                     self.spark.table(table_name).schema,
                 )
-                with self.assertRaises(AnalysisException) as context:
-                    self.spark.readStream.name("orders_source").table(table_name).schema
-                self.check_error(
-                    context.exception,
-                    errorClass="STREAMING_QUERY_EVOLUTION_ERROR.SOURCE_NAMING_NOT_SUPPORTED",
-                    messageParameters={"name": "orders_source"},
-                )
+                # Naming the source enables source evolution for its query without the config.
+                check_named_query("without_config")
 
     def test_name_method_chaining(self):
         """Test that name() returns the reader for method chaining."""
