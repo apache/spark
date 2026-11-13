@@ -17,17 +17,32 @@
 
 package org.apache.spark.sql.pipelines.util
 
+import org.apache.spark.internal.{Logging, LogKeys}
+import org.apache.spark.internal.config.ConfigEntry
 import org.apache.spark.sql.SparkSession
+import org.apache.spark.sql.internal.SQLConf
 
-object SparkSessionUtils {
+object SparkSessionUtils extends Logging {
 
   /**
    * Sets all SQL configurations specified in `pairs`, calls `f`, and then restores all SQL
    * configurations.
+   *
+   * Configurations that cannot be changed on a running session (static SQL configurations and
+   * Spark core configurations) are skipped: a pipeline's `configuration` is also used to create
+   * the session, which is the only place where those can take effect.
    */
   def withSqlConf[T](spark: SparkSession, pairs: (String, String)*)(f: => T): T = {
     val conf = spark.conf
-    val (keys, values) = pairs.unzip
+    val (runtimePairs, nonRuntimePairs) = pairs.partition { case (k, _) => isRuntimeConf(k) }
+    nonRuntimePairs.foreach { case (k, v) =>
+      if (!conf.getOption(k).contains(v)) {
+        logWarning(log"Ignoring ${MDC(LogKeys.CONFIG, k)}=${MDC(LogKeys.VALUE, v)} because it " +
+          log"cannot be modified on a running session. Set it when the session is created, " +
+          log"for example with --conf on the spark-pipelines command line.")
+      }
+    }
+    val (keys, values) = runtimePairs.unzip
     val currentValues = keys.map(conf.getOption)
     keys.lazyZip(values).foreach((k, v) => conf.set(k, v))
     try f
@@ -37,5 +52,11 @@ object SparkSessionUtils {
         case (key, None) => conf.unset(key)
       }
     }
+  }
+
+  /** Whether `key` can be changed on a running session with `spark.conf.set`. */
+  private def isRuntimeConf(key: String): Boolean = {
+    !SQLConf.isStaticConfigKey(key) &&
+      (SQLConf.containsConfigKey(key) || ConfigEntry.findEntry(key) == null)
   }
 }
