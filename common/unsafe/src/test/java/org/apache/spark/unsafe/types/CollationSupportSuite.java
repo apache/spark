@@ -1410,6 +1410,9 @@ public class CollationSupportSuite {
     assertInitCap("ÄBĆΔE", UNICODE_CI, "Äbćδe");
     assertInitCap("êéfgh", "AF_CI_AI", "Êéfgh");
     assertInitCap("öoAÄ", "DE_CI_AI", "Öoaä");
+    assertInitCap("erik ijzermans", "NL", "Erik IJzermans");
+    assertInitCap("erik ijzermans", "NL_CI", "Erik IJzermans");
+    assertInitCap("erik ijzermans", UNICODE, "Erik Ijzermans");
     // Case-variable character length
     assertInitCap("İo", UTF8_BINARY, "İo", "I\u0307o");
     assertInitCap("İo", UTF8_LCASE, "İo");
