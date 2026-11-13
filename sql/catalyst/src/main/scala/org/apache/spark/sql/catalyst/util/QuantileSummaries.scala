@@ -98,7 +98,8 @@ class QuantileSummaries(
     while (opsIdx < sorted.length) {
       val currentSample = sorted(opsIdx)
       // Add all the samples before the next observation.
-      while (sampleIdx < sampled.length && sampled(sampleIdx).value <= currentSample) {
+      while (sampleIdx < sampled.length &&
+          SQLOrderingUtil.compareDoubles(sampled(sampleIdx).value, currentSample) <= 0) {
         newSamples += sampled(sampleIdx)
         sampleIdx += 1
       }
@@ -201,7 +202,8 @@ class QuantileSummaries(
         val otherSample = other.sampled(otherIdx)
 
         // Detect next sample
-        val (nextSample, additionalDelta) = if (selfSample.value < otherSample.value) {
+        val (nextSample, additionalDelta) = if (
+          SQLOrderingUtil.compareDoubles(selfSample.value, otherSample.value) < 0) {
           selfIdx += 1
           (selfSample, if (otherIdx > 0) additionalSelfDelta else 0)
         } else {
@@ -383,7 +385,8 @@ object QuantileSummaries {
     val currHead = currentSamples.head
     // don't add the minimum element if `currentSamples` has only one element (both `currHead` and
     // `head` point to the same element)
-    if (currHead.value <= head.value && currentSamples.length > 1) {
+    if (SQLOrderingUtil.compareDoubles(currHead.value, head.value) <= 0 &&
+        currentSamples.length > 1) {
       res.prepend(currentSamples.head)
     }
     res.toArray
