@@ -1326,6 +1326,26 @@ object SQLConf {
     .checkValue(_ > 0, "The value of spark.sql.shuffle.partitions must be positive")
     .createWithDefault(200)
 
+  val MAX_SHUFFLE_WRITE_BYTES =
+    buildConf("spark.sql.maxShuffleWriteBytes")
+      .doc("Maximum cumulative shuffle-write bytes of successful tasks in a single SQL query " +
+        "before the query is cancelled, or the application is stopped when " +
+        "spark.sql.maxShuffleWriteBytes.stopApplication is true. When unset, the guard is " +
+        "disabled.")
+      .version("4.4.0")
+      .withBindingPolicy(ConfigBindingPolicy.NOT_APPLICABLE)
+      .bytesConf(ByteUnit.BYTE)
+      .createOptional
+
+  val MAX_SHUFFLE_WRITE_BYTES_STOP_APPLICATION =
+    buildConf("spark.sql.maxShuffleWriteBytes.stopApplication")
+      .doc("When true, exceeding spark.sql.maxShuffleWriteBytes stops the whole application " +
+        "instead of cancelling only the offending query.")
+      .version("4.4.0")
+      .withBindingPolicy(ConfigBindingPolicy.NOT_APPLICABLE)
+      .booleanConf
+      .createWithDefault(false)
+
   val SHUFFLE_SPREAD_NULL_JOIN_KEYS_ENABLED =
     buildConf("spark.sql.shuffle.spreadNullJoinKeys.enabled")
       .doc("When true, Spark may spread rows with NULL equi-join keys across shuffle partitions " +

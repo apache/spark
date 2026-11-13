@@ -34,7 +34,7 @@ import org.apache.spark.internal.LogKeys.{CONFIG, CONFIG2, PATH, VALUE}
 import org.apache.spark.sql.catalyst.analysis.RelationCache
 import org.apache.spark.sql.catalyst.catalog._
 import org.apache.spark.sql.errors.QueryExecutionErrors
-import org.apache.spark.sql.execution.CacheManager
+import org.apache.spark.sql.execution.{CacheManager, MaxShuffleWriteBytesListener}
 import org.apache.spark.sql.execution.streaming.runtime.StreamExecution
 import org.apache.spark.sql.execution.ui.{SQLAppStatusListener, SQLAppStatusStore, SQLTab, StreamingQueryStatusStore}
 import org.apache.spark.sql.internal.StaticSQLConf._
@@ -126,6 +126,16 @@ private[sql] class SharedState(
     val statusStore = new SQLAppStatusStore(kvStore, Some(listener))
     sparkContext.ui.foreach(new SQLTab(statusStore, _))
     statusStore
+  }
+
+  // Registered unconditionally, not only when spark.sql.maxShuffleWriteBytes is set, because the
+  // threshold may be changed at runtime via setConf/withSQLConf, which is not visible from the
+  // SparkConf available at construction. The handlers return early while the guard is disabled,
+  // so the per-event cost is a few map lookups.
+  private val maxShuffleWriteBytesListener: MaxShuffleWriteBytesListener = {
+    val listener = new MaxShuffleWriteBytesListener(sparkContext)
+    sparkContext.listenerBus.addToSharedQueue(listener)
+    listener
   }
 
   /**
