@@ -616,6 +616,93 @@ class InjectRuntimeFilterSuite extends SharedSparkSession
     }
   }
 
+  test("SPARK-60871: no runtime filters for nonbinary collated join keys") {
+    withSQLConf(
+        SQLConf.RUNTIME_BLOOM_FILTER_APPLICATION_SIDE_SCAN_SIZE_THRESHOLD.key -> "0",
+        SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key -> "-1",
+        SQLConf.RUNTIME_BLOOM_FILTER_CREATION_SIDE_THRESHOLD.key -> "1MB") {
+      withTable("bf_variant_fact", "bf_variant_dim") {
+        sql("CREATE TABLE bf_variant_fact (id INT, v VARIANT) USING parquet")
+        sql("""INSERT INTO bf_variant_fact SELECT id, parse_json(j) FROM VALUES
+              |  (1, '{"k": "Open"}'), (2, '{"k": "x"}') AS t(id, j)""".stripMargin)
+        sql("CREATE TABLE bf_variant_dim (id INT, v VARIANT) USING parquet")
+        sql("""INSERT INTO bf_variant_dim SELECT id, parse_json(j) FROM VALUES
+              |  (10, '{"k": "open"}'), (20, '{"k": "y"}') AS t(id, j)""".stripMargin)
+
+        val dim = "(SELECT * FROM bf_variant_dim WHERE id = 10) d"
+        def queries(targetType: String): Seq[String] = {
+          val on = s"ON variant_get(f.v, '$$.k', '$targetType') = " +
+            s"variant_get(d.v, '$$.k', '$targetType')"
+          Seq(
+            s"SELECT f.id FROM bf_variant_fact f JOIN $dim $on",
+            s"SELECT f.id FROM bf_variant_fact f LEFT SEMI JOIN $dim $on",
+            s"SELECT f.id FROM bf_variant_fact f RIGHT OUTER JOIN $dim $on",
+            s"SELECT f.id FROM $dim LEFT OUTER JOIN bf_variant_fact f $on")
+        }
+
+        // Binary keys get a Bloom filter on the fact side.
+        queries("STRING").foreach(assertRewroteWithBloomFilter(_))
+        // A Bloom filter over UTF8_LCASE keys would drop the fact row 'Open', which the join
+        // matches with 'open'.
+        queries("STRING COLLATE UTF8_LCASE").foreach { query =>
+          assertDidNotRewriteWithBloomFilter(query)
+          checkAnswer(sql(query), Row(1))
+        }
+      }
+    }
+  }
+
+  test("SPARK-60871: runtime filters for casts of collated join key columns") {
+    withSQLConf(
+        SQLConf.RUNTIME_BLOOM_FILTER_APPLICATION_SIDE_SCAN_SIZE_THRESHOLD.key -> "0",
+        SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key -> "-1",
+        SQLConf.RUNTIME_BLOOM_FILTER_CREATION_SIDE_THRESHOLD.key -> "1MB") {
+      withTable("bf_cast_fact", "bf_cast_dim") {
+        Seq("bf_cast_fact", "bf_cast_dim").foreach { t =>
+          sql(s"CREATE TABLE $t (id INT, k STRING COLLATE UTF8_LCASE, p STRING) USING parquet")
+        }
+        sql("INSERT INTO bf_cast_fact VALUES (1, 'Open', 'Open'), (2, 'x', 'x')")
+        sql("INSERT INTO bf_cast_dim VALUES (10, 'open', 'open'), (20, 'y', 'y')")
+
+        val dim = "(SELECT * FROM bf_cast_dim WHERE id = 10) d"
+        // Inner, left semi, right outer and left outer joins with the fact table as the
+        // application side.
+        def queries(key: String => String): Seq[String] = {
+          val on = s"ON ${key("f")} = ${key("d")}"
+          Seq(
+            s"SELECT f.id FROM bf_cast_fact f JOIN $dim $on",
+            s"SELECT f.id FROM bf_cast_fact f LEFT SEMI JOIN $dim $on",
+            s"SELECT f.id FROM bf_cast_fact f RIGHT OUTER JOIN $dim $on",
+            s"SELECT f.id FROM $dim LEFT OUTER JOIN bf_cast_fact f $on")
+        }
+        val matched = Seq.fill(4)(Seq(Row(1)))
+        val unmatched = Seq(Seq.empty, Seq.empty, Seq(Row(null)), Seq(Row(null)))
+
+        // Column keys get a Bloom filter on their collation keys.
+        queries(t => s"$t.k").zip(matched).foreach { case (query, answer) =>
+          assertRewroteWithBloomFilter(query)
+          checkAnswer(sql(query), answer)
+        }
+        // Casts of the UTF8_LCASE column to STRING are binary keys, so 'Open' and 'open' differ.
+        Seq[String => String](t => s"CAST($t.k AS STRING)", t => s"$t.k::STRING").foreach { key =>
+          queries(key).zip(unmatched).foreach { case (query, answer) =>
+            assertRewroteWithBloomFilter(query)
+            checkAnswer(sql(query), answer)
+          }
+        }
+        // Casts to UTF8_LCASE are non-binary expression keys, so they get no Bloom filter.
+        Seq[String => String](
+            t => s"CAST($t.p AS STRING COLLATE UTF8_LCASE)",
+            t => s"$t.p::STRING COLLATE UTF8_LCASE").foreach { key =>
+          queries(key).zip(matched).foreach { case (query, answer) =>
+            assertDidNotRewriteWithBloomFilter(query)
+            checkAnswer(sql(query), answer)
+          }
+        }
+      }
+    }
+  }
+
   test("SPARK-58272: use materialized caches without predicates only with pruning statistics") {
     withSQLConf(
         SQLConf.RUNTIME_BLOOM_FILTER_APPLICATION_SIDE_SCAN_SIZE_THRESHOLD.key -> "0",
@@ -1393,6 +1480,7 @@ class InjectRuntimeFilterSuite extends SharedSparkSession
     // null, so no inferred `isnotnull` evaluates the key on every partition first.
     // Through a union, every branch counts, and without DPP each gets a bloom filter. A narrowing
     // cast can fail too, also over an up-cast or under the normalization of a floating point key.
+    // Each of these keys can fail in ANSI mode only, so the queries are analyzed in it.
     Seq(
       "select * from bf5part join bf2 on bf5part.f5 + 1 = bf2.c2 where bf2.a2 = 36" -> 1,
       "select * from (select coalesce(f5 + 1, 0) as k, a5 from bf5part) p " +
@@ -1407,7 +1495,7 @@ class InjectRuntimeFilterSuite extends SharedSparkSession
       "select * from bf5part join (select cast(c2 as double) k, a2 from bf2) d " +
         "on cast(bf5part.f5 as tinyint) = d.k where d.a2 = 36" -> 1
     ).foreach { case (query, numBloomFilters) =>
-      withDppTestConf() {
+      withDppTestConf(SQLConf.ANSI_ENABLED.key -> "true") {
         assertBloomFilterWithoutDpp(query, numBloomFilters)
         assert(bloomFilterKeys(query).isEmpty)
         val filters = dynamicPruningFilters(query)
@@ -1444,6 +1532,25 @@ class InjectRuntimeFilterSuite extends SharedSparkSession
     }
   }
 
+  test("SPARK-60882: add bloom filter for a key and a creation side with a dropped dpp filter " +
+    "that can not fail with ANSI mode off") {
+    // With ANSI mode off, an addition and a subtraction wrap instead of failing, so the key or the
+    // creation side with them gets a bloom filter, and the query returns the same rows as without
+    // it. With ANSI mode on, they can fail.
+    val inKey = "select * from bf5part join bf2 on bf5part.f5 - 1 = bf2.c2 where bf2.a2 = 57"
+    val inCreationSide = "select * from bf5part join bf2 on bf5part.f5 = bf2.c2 + 1 " +
+      "where bf2.a2 - 1 = 56"
+    Seq(inKey, inCreationSide).foreach { query =>
+      withDppTestConf(SQLConf.ANSI_ENABLED.key -> "false") {
+        assert(sql(query).collect().nonEmpty, query)
+        assertRewroteWithBloomFilterForDroppedDpp(query)
+      }
+      withDppTestConf(SQLConf.ANSI_ENABLED.key -> "true") {
+        assert(bloomFilterKeys(query).isEmpty, query)
+      }
+    }
+  }
+
   test("SPARK-60702: add bloom filter for a key with a dropped dpp filter of a floating point " +
     "type") {
     // `NormalizeFloatingNumbers` wraps the `double` join keys, which cannot fail, also over a
@@ -1467,7 +1574,7 @@ class InjectRuntimeFilterSuite extends SharedSparkSession
 
   test("SPARK-60702: check each cast in the creation side against its own child") {
     // Type coercion puts an up-cast into the `coalesce`. The first query casts the `coalesce` down,
-    // which can fail, and the second casts it up. Neither may fail to optimize.
+    // which can fail in ANSI mode, and the second casts it up. Neither may fail to optimize.
     val narrow = "select * from bf5part join bf2 on bf5part.f5 = bf2.c2 " +
       "where cast(coalesce(bf2.a2, 0L) as int) = 36"
     val wide = "select * from bf5part join bf2 on bf5part.f5 = bf2.c2 " +
@@ -1476,7 +1583,7 @@ class InjectRuntimeFilterSuite extends SharedSparkSession
     val nested = (1 to 28).foldLeft("b2 + 1") { (acc, k) =>
       s"if(d2 > $k, $acc, cast(b2 as decimal(${10 + k}, 0)))"
     }
-    withDppTestConf() {
+    withDppTestConf(SQLConf.ANSI_ENABLED.key -> "true") {
       assertBloomFilterWithoutDpp(narrow)
       assert(bloomFilterKeys(narrow).isEmpty)
       assertRewroteWithBloomFilterForDroppedDpp(wide)
@@ -1535,8 +1642,9 @@ class InjectRuntimeFilterSuite extends SharedSparkSession
 
   test("SPARK-60702: do not add bloom filter for a key with a dropped dpp filter under a " +
     "decimal to bigint cast") {
-    // `9999999999999999999` overflows `BIGINT`, so the cast is no up-cast (SPARK-60943). The
-    // query casts it only on rows with `v > 0`, which that partition does not have.
+    // `9999999999999999999` overflows `BIGINT`, so the cast is no up-cast (SPARK-60943), and it
+    // fails in ANSI mode. The query casts it only on rows with `v > 0`, which that partition does
+    // not have.
     withTable("fd") {
       sql("create table fd (v int, d decimal(19,0)) using parquet partitioned by (d)")
       sql("insert into fd select cast(id as int) + 1, 36 from range(100)")
@@ -1545,7 +1653,8 @@ class InjectRuntimeFilterSuite extends SharedSparkSession
       val query = "select * from fd join bf2 on cast(fd.d as bigint) = bf2.c2 " +
         "where fd.v > 0 and bf2.a2 = 36"
       withDppTestConf(SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key -> "-1",
-          SQLConf.RUNTIME_BLOOM_FILTER_APPLICATION_SIDE_SCAN_SIZE_THRESHOLD.key -> "1") {
+          SQLConf.RUNTIME_BLOOM_FILTER_APPLICATION_SIDE_SCAN_SIZE_THRESHOLD.key -> "1",
+          SQLConf.ANSI_ENABLED.key -> "true") {
         assertBloomFilterWithoutDpp(query)
         assert(bloomFilterKeys(query).isEmpty)
         sql(query).collect()
@@ -1557,7 +1666,8 @@ class InjectRuntimeFilterSuite extends SharedSparkSession
     "does not reach") {
     // The lineage of `u.k` stops at the inner union of the second branch, but pushdown moves the
     // bloom filter into both inner branches, where it would cast `p` on every partition. Each
-    // row of `p = 'abc'` has `v <= 0`, so the query itself never casts `'abc'`.
+    // row of `p = 'abc'` has `v <= 0`, so the query itself never casts `'abc'`, which fails in ANSI
+    // mode only.
     withTable("sp") {
       sql("create table sp (v int, p string) using parquet partitioned by (p)")
       sql("insert into sp select cast(id as int) + 1, '36' from range(100)")
@@ -1566,7 +1676,7 @@ class InjectRuntimeFilterSuite extends SharedSparkSession
         "select coalesce(cast(x as int), 0) as k, sum(v) as v from (select p as x, v from sp " +
         "where v > 0 union all select p, v from sp where v > 0) group by x) u " +
         "join bf2 on u.k = bf2.c2 where bf2.a2 = 36"
-      withDppTestConf() {
+      withDppTestConf(SQLConf.ANSI_ENABLED.key -> "true") {
         // Without DPP, pushdown puts a bloom filter into each of the three branches.
         assertBloomFilterWithoutDpp(query, 3)
         assert(bloomFilterKeys(query).isEmpty)
@@ -1631,7 +1741,12 @@ class InjectRuntimeFilterSuite extends SharedSparkSession
         val query = "select v from testcat.cf where k in (select k from testcat.cd where flag = 1)"
         withDppTestConf(SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key -> "-1",
             SQLConf.RUNTIME_BLOOM_FILTER_APPLICATION_SIDE_SCAN_SIZE_THRESHOLD.key -> "0") {
-          assertBloomFilterWithoutDpp(query)
+          // Nothing wraps the semi join's keys in CollationKey, so they get no bloom filter
+          // without DPP either (SPARK-60871).
+          assertBloomFilterWithoutDpp(query, numBloomFilters = 0)
+          withSQLConf(SQLConf.DYNAMIC_PARTITION_PRUNING_ENABLED.key -> "false") {
+            checkAnswer(sql(query), Row(1))
+          }
           assert(bloomFilterKeys(query).isEmpty)
           checkAnswer(sql(query), Row(1))
         }
@@ -1680,8 +1795,10 @@ class InjectRuntimeFilterSuite extends SharedSparkSession
       sql("insert into rd values (10, 1), (20, 1)")
       sql("create table rx (k1 int, k2 int) using parquet")
       sql("insert into rx values (1, 10), (2, 20)")
+      // A cast of `'abc'` fails in ANSI mode only.
       val confs = Seq(SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key -> "-1",
-        SQLConf.RUNTIME_BLOOM_FILTER_APPLICATION_SIDE_SCAN_SIZE_THRESHOLD.key -> "1")
+        SQLConf.RUNTIME_BLOOM_FILTER_APPLICATION_SIDE_SCAN_SIZE_THRESHOLD.key -> "1",
+        SQLConf.ANSI_ENABLED.key -> "true")
       val castInKey = "select /*+ broadcast(d) */ f.v from ra f join rc c " +
         "on f.a = cast(c.s as int) join rd d on c.q = d.k " +
         "where f.x = 1 and c.flag = 1 and d.dflag = 1"
@@ -1727,8 +1844,10 @@ class InjectRuntimeFilterSuite extends SharedSparkSession
       sql("insert into sc values (1, 1, 10), (2, 1, 20)")
       val query = "select f.s, c.q from sf f join sc c on f.y = c.y and cast(f.s as int) = c.q " +
         "where f.x = 1 and c.flag = 1"
+      // The cast fails in ANSI mode only.
       withDppTestConf(SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key -> "-1",
-          SQLConf.RUNTIME_BLOOM_FILTER_APPLICATION_SIDE_SCAN_SIZE_THRESHOLD.key -> "1") {
+          SQLConf.RUNTIME_BLOOM_FILTER_APPLICATION_SIDE_SCAN_SIZE_THRESHOLD.key -> "1",
+          SQLConf.ANSI_ENABLED.key -> "true") {
         assertBloomFilterWithoutDpp(query, 2)
         assert(bloomFilterKeyNames(query) == Seq("y"))
         checkAnswer(sql(query), Seq(Row("10", 10), Row("20", 20)))

@@ -26,7 +26,7 @@ import scala.util.{Failure, Success, Try}
 import org.apache.logging.log4j.Level
 import org.scalatest.time.SpanSugar._
 
-import org.apache.spark.{SparkArithmeticException, SparkException, SparkNumberFormatException}
+import org.apache.spark.{SparkArithmeticException, SparkException, SparkNumberFormatException, SparkThrowable}
 import org.apache.spark.metrics.source.CodegenMetrics
 import org.apache.spark.rdd.{MapPartitionsWithEvaluatorRDD, RDD}
 import org.apache.spark.sql.{DataFrame, Dataset, Row, SaveMode}
@@ -41,7 +41,7 @@ import org.apache.spark.sql.execution.adaptive.DisableAdaptiveExecutionSuite
 import org.apache.spark.sql.execution.aggregate.{HashAggregateExec, SortAggregateExec}
 import org.apache.spark.sql.execution.columnar.InMemoryTableScanExec
 import org.apache.spark.sql.execution.debug.{codegenString, codegenStringSeq}
-import org.apache.spark.sql.execution.joins.{BroadcastHashJoinExec, BroadcastNestedLoopJoinExec, ShuffledHashJoinExec, SortMergeJoinExec}
+import org.apache.spark.sql.execution.joins.{BroadcastHashJoinExec, BroadcastNestedLoopJoinExec, CartesianProductExec, ShuffledHashJoinExec, SortMergeAsOfJoinExec, SortMergeJoinExec}
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSparkSession
@@ -637,6 +637,100 @@ class WholeStageCodegenSuite extends SharedSparkSession
            WholeStageCodegenExec(_ : SortMergeJoinExec) => true
     }.size === 2)
     checkAnswer(twoJoinsDF, Seq(Row(6), Row(7), Row(8), Row(9)))
+  }
+
+  test("Backward and forward sort-merge ASOF joins should be included in WholeStageCodegen") {
+    // One partition puts every key in one task, so the scan has to move between keys.
+    withSQLConf(
+        SQLConf.SORT_MERGE_AS_OF_JOIN_ENABLED.key -> "true",
+        SQLConf.SHUFFLE_PARTITIONS.key -> "1") {
+      val trades = Seq((5, 1), (11, 1), (12, 2), (3, 3)).toDF("ts", "k")
+      val quotes = Seq((0, 1, "a"), (7, 1, "b"), (10, 1, "c"), (8, 2, "d"), (9, 3, "e"))
+        .toDF("ts", "k", "v")
+      def asOfJoin(joinType: String, direction: String, tolerance: Option[Int]): DataFrame =
+        trades.joinAsOf(
+          quotes, trades("ts"), quotes("ts"), usingColumns = Seq("k"), joinType = joinType,
+          tolerance = tolerance.map(lit).orNull, allowExactMatches = true, direction = direction)
+      // Whether the ASOF join runs in a codegen stage, and not only in a stage below it.
+      def isGenerated(df: DataFrame): Boolean = {
+        def inStage(plan: SparkPlan): Boolean = plan match {
+          case _: SortMergeAsOfJoinExec => true
+          case _: InputAdapter => false
+          case other => other.children.exists(inStage)
+        }
+        df.queryExecution.executedPlan.collect {
+          case stage: WholeStageCodegenExec if inStage(stage.child) => stage
+        }.nonEmpty
+      }
+      // Whether the plan has the ASOF join at all, so a "not generated" check cannot pass on a
+      // plan without it.
+      def hasAsOfJoin(df: DataFrame): Boolean =
+        df.queryExecution.executedPlan.exists(_.isInstanceOf[SortMergeAsOfJoinExec])
+      // How many tasks of the ASOF join used the cursor scan, read after the join ran.
+      def cursorTasks(df: DataFrame): Long = df.queryExecution.executedPlan.collect {
+        case j: SortMergeAsOfJoinExec => j.metrics("numAsOfCursorTasks").value
+      }.sum
+
+      // Cursor scan: the last quote at or before each trade. The only quote of key 3 is after
+      // trade 3, so trade 3 gets none. A cursor that kept key 2's quote would give it "d".
+      val backward = asOfJoin("inner", "backward", None)
+      assert(isGenerated(backward))
+      checkAnswer(backward,
+        Seq(Row(5, 1, 0, 1, "a"), Row(11, 1, 10, 1, "c"), Row(12, 2, 8, 2, "d")))
+      assert(cursorTasks(backward) > 0, "Expected the cursor scan")
+
+      // Cursor scan, forward: a trade with no later quote keeps nulls in a left outer join.
+      val forward = asOfJoin("leftouter", "forward", None)
+      assert(isGenerated(forward))
+      checkAnswer(forward, Seq(Row(5, 1, 7, 1, "b"), Row(11, 1, null, null, null),
+        Row(12, 2, null, null, null), Row(3, 3, 9, 3, "e")))
+      assert(cursorTasks(forward) > 0, "Expected the cursor scan")
+
+      // Buffered scan: with a tolerance of 2, only trade 11 has a quote close enough.
+      val buffered = asOfJoin("inner", "backward", Some(2))
+      assert(isGenerated(buffered))
+      checkAnswer(buffered, Seq(Row(11, 1, 10, 1, "c")))
+      assert(cursorTasks(buffered) == 0, "Expected the buffered scan")
+
+      // Nearest joins keep the interpreted scan.
+      val nearest = asOfJoin("inner", "nearest", None)
+      assert(hasAsOfJoin(nearest) && !isGenerated(nearest))
+      checkAnswer(nearest, Seq(Row(5, 1, 7, 1, "b"), Row(11, 1, 10, 1, "c"),
+        Row(12, 2, 8, 2, "d"), Row(3, 3, 9, 3, "e")))
+
+      // With the codegen off, the interpreted scan gives the same rows.
+      withSQLConf(SQLConf.ENABLE_SORT_MERGE_AS_OF_JOIN_CODEGEN.key -> "false") {
+        val off = asOfJoin("inner", "backward", None)
+        assert(hasAsOfJoin(off) && !isGenerated(off))
+        checkAnswer(off, Seq(Row(5, 1, 0, 1, "a"), Row(11, 1, 10, 1, "c"), Row(12, 2, 8, 2, "d")))
+      }
+    }
+  }
+
+  test("A skewed sort-merge ASOF join should generate code that compiles") {
+    withSQLConf(SQLConf.SORT_MERGE_AS_OF_JOIN_ENABLED.key -> "true") {
+      val trades = Seq((5, 1), (11, 1)).toDF("ts", "k")
+      val quotes = Seq((0, 1, "a"), (10, 1, "c")).toDF("ts", "k", "v")
+      val df = trades.joinAsOf(
+        quotes, trades("ts"), quotes("ts"), usingColumns = Seq("k"), joinType = "inner",
+        tolerance = null, allowExactMatches = true, direction = "backward")
+      // No skew rule marks an ASOF join here, so mark it by hand. The skew changes its name.
+      val skewed = df.queryExecution.executedPlan.transform {
+        case j: SortMergeAsOfJoinExec => j.copy(isSkewJoin = true)
+      }
+      def inStage(plan: SparkPlan): Boolean = plan match {
+        case j: SortMergeAsOfJoinExec => j.isSkewJoin
+        case _: InputAdapter => false
+        case other => other.children.exists(inStage)
+      }
+      val stages = skewed.collect {
+        case stage: WholeStageCodegenExec if inStage(stage.child) => stage
+      }
+      assert(stages.length == 1, s"Expected the skewed join in one codegen stage:\n$skewed")
+      // Without its own variable prefix, the join names its variables after
+      // "SortMergeAsOfJoin(skew=true)" and the code does not compile.
+      CodeGenerator.compile(stages.head.doCodeGen()._2)
+    }
   }
 
   test("Inner/Cross BroadcastNestedLoopJoinExec should be included in WholeStageCodegen") {
@@ -1409,11 +1503,10 @@ class WholeStageCodegenSuite extends SharedSparkSession
   }
 
   test("SPARK-51356: FilterExec CSE emits IsNotNull on a nested field before its otherPred") {
-    // Same defect as above, on the CSE branch of `FilterExec.doConsume`, which inlines its own
-    // copy of the interleaving. Two otherPreds share the non-cheap `f(c)`, so the branch is
-    // taken (a bare `b.c` is cheap and would fall back to `generatePredicateCode`). The
-    // guarding `IsNotNull(b.c)` has to be emitted ahead of the shared CSE precompute, not after
-    // the predicates that consume it.
+    // Same defect as above, with a common subexpression eliminated in `FilterExec.doConsume`.
+    // Two otherPreds share the non-cheap `f(c)`, so it is eliminated (a bare `b.c` is cheap
+    // and would not be). The guarding `IsNotNull(b.c)` has to be emitted ahead of the shared CSE
+    // precompute, not after the predicates that consume it.
     val data = Seq(
       Spark51356Outer(null),
       Spark51356Outer(Spark51356Mid(null)), // the row that used to trigger the failure
@@ -3060,10 +3153,17 @@ class WholeStageCodegenSuite extends SharedSparkSession
       val noRaise = "SELECT a FROM t WHERE (a > 0 OR b > 0) AND x = 1 AND y = 0"
       checkAnswer(sql(noRaise), Row(0))
       assert(!hasNullConjunctFlag(noRaise))
-      // `y + 1 > 0` can raise, so the flag is generated.
+      // `y + 1 > 0` can raise in ANSI mode, so the flag is generated.
       val raise = "SELECT a FROM t WHERE (a > 0 OR b > 0) AND x = 1 AND y + 1 > 0"
-      checkAnswer(sql(raise), Row(0))
-      assert(hasNullConjunctFlag(raise))
+      withSQLConf(SQLConf.ANSI_ENABLED.key -> "true") {
+        checkAnswer(sql(raise), Row(0))
+        assert(hasNullConjunctFlag(raise))
+      }
+      // With ANSI mode off, it can not, so no flag is generated.
+      withSQLConf(SQLConf.ANSI_ENABLED.key -> "false") {
+        checkAnswer(sql(raise), Row(0))
+        assert(!hasNullConjunctFlag(raise))
+      }
     }
   }
 
@@ -3074,8 +3174,8 @@ class WholeStageCodegenSuite extends SharedSparkSession
       // generated just before the first conjunct that references `x`, or after all of them, so
       // after a NULL conjunct it has to be generated before the conjuncts it precedes.
       //
-      // The common `b * 2` takes the CSE path of FilterExec. The overflowing `y + 1` is not
-      // common because `GeneratePredicate` (codegen off) evaluates common subexpressions first.
+      // The common `b * 2` takes the CSE path of FilterExec, while the overflowing `y + 1` is
+      // not common, so it is evaluated at its conjunct in both modes.
       val cseQuery = "SELECT a FROM t WHERE x IS NOT NULL AND NOT (a > 0 AND b > 0) AND " +
         "y + 1 > 0 AND b * 2 > 0 AND b * 2 > -1"
       def multiplyExactCount(filterExecCSE: Boolean): Int = {
@@ -3196,6 +3296,192 @@ class WholeStageCodegenSuite extends SharedSparkSession
           checkAnswer(sql(query), Row(1))
         } else {
           checkArithmeticOverflow(query)
+        }
+      }
+    }
+  }
+
+  test("SPARK-60332: a filter evaluates a common subexpression after the conjuncts before it") {
+    withNullConjunctTable(Int.MaxValue) {
+      // With codegen off, the condition is evaluated by a generated predicate with subexpression
+      // elimination, where `y + 1`, common to the last two conjuncts, overflows on the first row.
+      // The predicate evaluates it just before the first conjunct that references it, as the CSE
+      // branch of FilterExec does with codegen on, so the FALSE `isnotnull(x)`, or `b < 0`, drops
+      // the row first in every combination, as `And.eval` does.
+      withNullConjunctConfs(SQLConf.ANSI_ENABLED.key -> "true") { skipsAtNull =>
+        checkAnswer(
+          sql("SELECT a FROM t WHERE x IS NOT NULL AND NOT (a > 0 AND b > 0) AND y + 1 > 0 AND " +
+            "y + 1 > -1"),
+          Row(0))
+        checkAnswer(sql("SELECT a FROM t WHERE b < 0 AND y + 1 > 0 AND y + 1 > -1"), Seq.empty)
+        // A NULL conjunct does not stop the evaluation, so the common `y + 1` is evaluated,
+        // unless the legacy behavior skips the row at the NULL conjunct.
+        val nullConjunct =
+          "SELECT a FROM t WHERE NOT (a > 0 AND b > 0) AND y + 1 > 0 AND y + 1 > -1"
+        if (skipsAtNull) {
+          checkAnswer(sql(nullConjunct), Row(0))
+        } else {
+          checkArithmeticOverflow(nullConjunct)
+        }
+      }
+      // A join condition is evaluated by the same generated predicate on the join paths without
+      // whole-stage codegen, here a cartesian product. Every conjunct references both sides, so
+      // none is pushed down into a filter, and the FALSE `b < k` stops the evaluation before
+      // the common `y + 1` overflows, whatever the whole-stage codegen config.
+      withTempView("u") {
+        Seq(0).toDF("k").createOrReplaceTempView("u")
+        val join = "SELECT a FROM t JOIN u ON b < k AND y + 1 > k AND y + 1 > k - 1"
+        Seq(true, false).foreach { codegen =>
+          withSQLConf(
+              SQLConf.ANSI_ENABLED.key -> "true",
+              SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key -> "-1",
+              SQLConf.PARQUET_FILTER_PUSHDOWN_ENABLED.key -> "false",
+              SQLConf.WHOLESTAGE_CODEGEN_ENABLED.key -> codegen.toString) {
+            val df = sql(join)
+            assert(df.queryExecution.executedPlan.exists(_.isInstanceOf[CartesianProductExec]))
+            checkAnswer(df, Seq.empty)
+          }
+        }
+      }
+    }
+    // `(a + c) + b` in the IF branch of the first conjunct is `(a + b) + c`, common to the next
+    // two conjuncts, under the canonicalization of `+`, but holds no `a + b`, common to the last
+    // three. `a + b` is evaluated before the first conjunct, which the function of `(a + b) + c`
+    // reads, not before the second, or `(a + b) + c` would read the previous row's `a + b`, -5,
+    // and drop the last row. The filter runs through the generated predicate both when the
+    // optimizer filters the local data, with `ConvertToLocalRelation`, which the shared session
+    // excludes, and in `FilterExec` without whole-stage codegen.
+    val localData = "SELECT a FROM VALUES (3, 3, 1, 1, 0), (-5, 0, 1, 1, 0), (3, 3, 1, 1, 1) " +
+      "AS t(a, b, c, d, x) WHERE IF(x > 0, a + c + b, d) > 0 AND a + b + c > 1 AND " +
+      "a + b + c < 10 AND a + b > 5"
+    Seq(
+      SQLConf.OPTIMIZER_EXCLUDED_RULES.key -> "",
+      SQLConf.WHOLESTAGE_CODEGEN_ENABLED.key -> "false").foreach { conf =>
+      withSQLConf(
+          conf,
+          SQLConf.CODEGEN_FACTORY_MODE.key -> CodegenObjectFactoryMode.CODEGEN_ONLY.toString) {
+        checkAnswer(sql(localData), Seq(Row(3), Row(3)))
+      }
+    }
+    // The common subexpressions are found in the whole predicate, as before, so that a predicate
+    // with a subquery gets no elimination inside a task (SPARK-38333), and the conjuncts are not
+    // compared with a subquery plan on an executor.
+    withSQLConf(
+        SQLConf.WHOLESTAGE_CODEGEN_ENABLED.key -> "false",
+        SQLConf.CODEGEN_FACTORY_MODE.key -> CodegenObjectFactoryMode.CODEGEN_ONLY.toString) {
+      withTempView("u") {
+        spark.range(10).toDF("k").cache().createOrReplaceTempView("u")
+        spark.table("u").collect()
+        checkAnswer(
+          spark.range(10).selectExpr("id AS x", "id AS y")
+            .where("x > (SELECT max(k) - 20 FROM u) AND y + 1 > 0 AND y + 1 < 100")
+            .selectExpr("count(*)"),
+          Row(10))
+      }
+    }
+  }
+
+  // The conditions of the test below, with whether FilterExec eliminates a common subexpression
+  // from them. They mix columns that can be NULL, IS NOT NULL checks that are written or inferred,
+  // on columns and on expressions, before and after the conjuncts that reference them, conjuncts
+  // that can be NULL, common subexpressions, and conjuncts that can raise an error.
+  private val filterConjunctions: Seq[(String, Boolean)] = Seq(
+    "NOT (a > 0 AND b > 0) AND y + 1 > 0" -> false,
+    "NOT (a > 0 AND b > 0) AND y + 1 > 0 AND y + 1 > -1" -> true,
+    "(a > 0 OR b < 0) AND y + 1 > 0" -> false,
+    "b > 0 AND y > -1" -> false,
+    "(a > 0 OR b > 0) AND x = 1 AND y + 1 > 0" -> false,
+    "x IS NOT NULL AND NOT (a > 0 AND b > 0) AND y + 1 > 0 AND b * 2 > 0 AND b * 2 > -1" -> true,
+    "NOT (a > 0 AND b > 0) AND y + 1 > 0 AND x > 0" -> false,
+    "NOT (a > 0 AND b > 0) AND y + 1 > 0 AND x IS NOT NULL" -> false,
+    "NOT (a > 0 AND b > 0) AND y + 1 > 0 AND x IS NOT NULL AND b * 2 > 0 AND b * 2 > -1" -> true,
+    "NOT (a > 0 AND b > 0) AND b * 2 > 0 AND b * 2 > -1 AND " +
+      "coalesce(b, cast(s AS INT)) < 2 AND cast(s AS INT) IS NOT NULL" -> true,
+    "NOT (a > 0 AND b > 0) AND coalesce(b, cast(s AS INT)) < 2 AND " +
+      "cast(s AS INT) IS NOT NULL" -> false,
+    "NOT (a > 0 AND b > 0) AND b * 2 > 0 AND b * 2 > -1 AND " +
+      "coalesce(b, cast(s AS INT)) < 0 AND cast(s AS INT) IS NOT NULL" -> true,
+    "NOT (a > 0 AND b > 0) AND coalesce(b, cast(s AS INT)) < 0 AND " +
+      "cast(s AS INT) IS NOT NULL" -> false,
+    "cast(s AS INT) IS NOT NULL AND (a > 0 OR b > 0) AND y < 0" -> false,
+    "x IS NOT NULL AND NOT (a > 0 AND b > 0) AND y + 1 > 0 AND y + 1 > -1" -> true,
+    "b < 0 AND y + 1 > 0 AND y + 1 > -1" -> true,
+    "a > 0 AND x > 0 AND a * x > 3 AND a * x < 100" -> true,
+    "cast(s AS INT) > 0 AND cast(s AS INT) < 10 AND a > 0" -> true,
+    "a > 1 AND cast(s AS INT) + x > 0 AND cast(s AS INT) + x < 10 AND " +
+      "cast(s AS INT) IS NOT NULL" -> true,
+    "st.c.d > 0 AND st.c.d < 100" -> false,
+    "st.c.d > 0 AND st.c.d * a > 3 AND st.c.d * a < 100" -> true,
+    "st.c IS NOT NULL AND st.c.d + y > 0 AND st.c.d + y < 5 AND x IS NOT NULL" -> true,
+    "upper(s) = 'X' AND length(upper(s)) > 0 AND a IS NOT NULL" -> true)
+
+  test("SPARK-61556: a filter gives the same result with and without subexpression " +
+      "elimination") {
+    // The rows of a query, or the error condition that it fails with.
+    def outcome(query: String): Either[String, Seq[String]] = {
+      try {
+        Right(sql(query).collect().map(_.toString).sorted.toSeq)
+      } catch {
+        case e: Throwable =>
+          val error = Iterator.iterate(e)(_.getCause).takeWhile(_ != null).collectFirst {
+            case t: SparkThrowable if t.getCondition != null => t.getCondition
+          }
+          Left(error.getOrElse(throw e))
+      }
+    }
+    // With whole-stage codegen, FilterExec eliminates the common subexpressions under both
+    // configs. Without it, the condition is a generated predicate under the first config alone.
+    val subExprConfs = Seq(("true", "true"), ("true", "false"), ("false", "false"))
+    // On the first set of rows, `y + 1` overflows and `cast(s AS INT)` fails in ANSI mode.
+    val rowSets = Seq(
+      s"(NULL, 1, ${Int.MaxValue}, NULL, 'x'), (0, 1, 0, 1, '1'), (1, NULL, 3, 2, '2'), " +
+        s"(2, 5, ${Int.MaxValue}, 1, NULL), (3, 2, 1, NULL, '7'), (1, 1, 1, 1, 'x')",
+      "(NULL, 1, 5, NULL, '3'), (0, 1, 0, 1, '1'), (1, NULL, 3, 2, '2'), (2, 5, 7, 1, NULL), " +
+        "(3, 2, 1, NULL, '7'), (1, 1, 1, 1, '4'), (2, 3, -1, 2, 'X'), " +
+        "(NULL, NULL, NULL, NULL, NULL)")
+    rowSets.foreach { rows =>
+      withTable("t") {
+        // A Parquet table, so that the optimizer does not evaluate the filter. A single file
+        // keeps the order of the rows, and so the first row that a query fails on.
+        sql("CREATE TABLE t USING parquet AS SELECT /*+ COALESCE(1) */ *, " +
+          "IF(a = 3, NULL, named_struct('c', named_struct('d', b))) AS st " +
+          s"FROM VALUES $rows AS v(a, b, y, x, s)")
+        for (ansi <- Seq(true, false); legacy <- Seq(true, false);
+            (condition, eliminates) <- filterConjunctions) {
+          val query = s"SELECT a, b, y, x, s FROM t WHERE $condition"
+          def run(wholeStage: Boolean, subExprConf: (String, String)): Either[String, Seq[String]] =
+            withSQLConf(
+                SQLConf.ANSI_ENABLED.key -> ansi.toString,
+                SQLConf.LEGACY_FILTER_SHORT_CIRCUIT_ON_NULL_CONJUNCT.key -> legacy.toString,
+                SQLConf.PARQUET_FILTER_PUSHDOWN_ENABLED.key -> "false",
+                SQLConf.WHOLESTAGE_CODEGEN_ENABLED.key -> wholeStage.toString,
+                SQLConf.SUBEXPRESSION_ELIMINATION_ENABLED.key -> subExprConf._1,
+                SQLConf.SUBEXPRESSION_ELIMINATION_FILTER_EXEC_ENABLED.key -> subExprConf._2) {
+              outcome(query)
+            }
+          withClue(s"ansi=$ansi, legacy=$legacy, condition=$condition: ") {
+            val outcomes = Seq(true, false).map { wholeStage =>
+              val results = subExprConfs.map(run(wholeStage, _))
+              assert(results.distinct.size == 1, s"wholeStage=$wholeStage")
+              results.head
+            }
+            // The legacy behavior drops a row at its first NULL conjunct with whole-stage
+            // codegen alone, so the two can differ under it.
+            if (!legacy) {
+              assert(outcomes.distinct.size == 1)
+            }
+            // The conditions take the code path that they are meant to cover.
+            val codes = Seq("true", "false").map { filterExecCSE =>
+              withSQLConf(
+                  SQLConf.ANSI_ENABLED.key -> ansi.toString,
+                  SQLConf.LEGACY_FILTER_SHORT_CIRCUIT_ON_NULL_CONJUNCT.key -> legacy.toString,
+                  SQLConf.PARQUET_FILTER_PUSHDOWN_ENABLED.key -> "false",
+                  SQLConf.SUBEXPRESSION_ELIMINATION_FILTER_EXEC_ENABLED.key -> filterExecCSE) {
+                genCode(sql(query)).map(_.body)
+              }
+            }
+            assert((codes.head != codes.last) == eliminates)
+          }
         }
       }
     }

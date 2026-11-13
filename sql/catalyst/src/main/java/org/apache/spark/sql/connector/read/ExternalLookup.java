@@ -27,7 +27,10 @@ import org.apache.spark.annotation.Evolving;
  */
 @Evolving
 public interface ExternalLookup {
-  /** Returns the maximum number of parameter rows per request, which must be positive. */
+  /**
+   * Returns the maximum number of parameter rows per request, which must be positive. The source
+   * must return complete results for a request of that size, with no cap on the number of rows.
+   */
   int maxParameterRowsPerRequest();
 
   /** Returns the factory that Spark serializes and sends to executors. */

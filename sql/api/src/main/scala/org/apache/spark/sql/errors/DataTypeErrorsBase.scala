@@ -19,6 +19,7 @@ package org.apache.spark.sql.errors
 import java.util.Locale
 
 import org.apache.spark.QueryContext
+import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.util.{AttributeNameParser, QuotingUtils}
 import org.apache.spark.sql.types._
 import org.apache.spark.unsafe.types.UTF8String
@@ -34,6 +35,20 @@ private[sql] trait DataTypeErrorsBase {
       case other => other
     }
     cleaned.map(QuotingUtils.quoteIdentifier).mkString(".")
+  }
+
+  /**
+   * Quotes a free-form name that need not parse as an identifier, such as `Table.name()`, which
+   * can be the path of the table's files. A name that parses is quoted as its parts, as
+   * `toSQLId()` quotes it, and any other name as one part, so that rendering it for an error
+   * cannot fail.
+   */
+  def toSQLFreeFormId(name: String): String = {
+    try {
+      toSQLId(name)
+    } catch {
+      case _: AnalysisException => toSQLId(Seq(name))
+    }
   }
 
   def toSQLStmt(text: String): String = {

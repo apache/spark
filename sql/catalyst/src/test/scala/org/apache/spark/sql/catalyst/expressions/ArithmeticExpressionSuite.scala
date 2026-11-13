@@ -156,6 +156,20 @@ class ArithmeticExpressionSuite extends SparkFunSuite with ExpressionEvalHelper 
     }
   }
 
+  test("SPARK-45438: UnaryMinus and Abs keep every digit of a 38-digit decimal") {
+    Seq("12345678901234567890123456789012345.67", "-99999999999999999999999999999999999999")
+      .foreach { s =>
+        val value = new java.math.BigDecimal(s)
+        val input = Literal(Decimal(value, 38, value.scale), DecimalType(38, value.scale))
+        Seq("true", "false").foreach { ansi =>
+          withSQLConf(SQLConf.ANSI_ENABLED.key -> ansi) {
+            checkEvaluation(UnaryMinus(input), Decimal(value.negate(), 38, value.scale))
+            checkEvaluation(Abs(input), Decimal(value.abs(), 38, value.scale))
+          }
+        }
+      }
+  }
+
   test("- (Minus)") {
     testNumericDataTypes { convert =>
       val left = Literal(convert(1))
@@ -336,8 +350,13 @@ class ArithmeticExpressionSuite extends SparkFunSuite with ExpressionEvalHelper 
           val quotResult = Decimal(quotExact.setScale(quotType.scale, RoundingMode.HALF_UP))
           val quotExpected =
             if (quotResult.precision > DecimalType.MAX_PRECISION) null else quotResult
-          checkEvaluationOrException(quotActual,
-            if (quotExpected == null) null else quotExpected.toLong)
+          if (SQLConf.get.ansiEnabled && quotExpected != null &&
+              !BigInt(quotExact.toBigInteger).isValidLong) {
+            checkExceptionInExpression[SparkArithmeticException](quotActual, "ARITHMETIC_OVERFLOW")
+          } else {
+            checkEvaluationOrException(quotActual,
+              if (quotExpected == null) null else quotExpected.toLong)
+          }
         }
       }
 
@@ -612,6 +631,120 @@ class ArithmeticExpressionSuite extends SparkFunSuite with ExpressionEvalHelper 
     }
   }
 
+  test("SPARK-60655: pandas_mod takes the sign of the divisor") {
+    testNumericDataTypes { convert =>
+      // A zero with a negative divisor is -0.0 for floating types, so it is checked below.
+      Seq((7, 3, 1), (-7, 3, 2), (7, -3, -2), (-7, -3, -1), (-6, 3, 0)).foreach {
+        case (a, n, expected) =>
+          checkEvaluation(PandasMod(Literal(convert(a)), Literal(convert(n))), convert(expected))
+      }
+      val operand = Literal(convert(7))
+      Seq("true", "false").foreach { ansi =>
+        withSQLConf(SQLConf.ANSI_ENABLED.key -> ansi) {
+          // A zero or null divisor gives null in every mode.
+          checkEvaluation(PandasMod(operand, Literal(convert(0))), null)
+          checkEvaluation(PandasMod(operand, Literal.create(null, operand.dataType)), null)
+          checkEvaluation(PandasMod(Literal.create(null, operand.dataType), operand), null)
+        }
+      }
+    }
+
+    // Adding the divisor to the remainder does not overflow.
+    checkEvaluation(PandasMod(Literal(-1.toByte), Literal(Byte.MaxValue)), 126.toByte)
+    checkEvaluation(PandasMod(Literal(1.toShort), Literal(Short.MinValue)), (-32767).toShort)
+    checkEvaluation(PandasMod(Literal(-1), Literal(Int.MaxValue)), Int.MaxValue - 1)
+    checkEvaluation(PandasMod(Literal(1), Literal(Int.MinValue)), Int.MinValue + 1)
+    checkEvaluation(PandasMod(Literal(-1L), Literal(Long.MaxValue)), Long.MaxValue - 1)
+    checkEvaluation(PandasMod(Literal(1L), Literal(Long.MinValue)), Long.MinValue + 1)
+    checkEvaluation(PandasMod(Literal(Long.MinValue), Literal(-1L)), 0L)
+
+    val inf = Double.PositiveInfinity
+    checkEvaluation(PandasMod(Literal(1.0), Literal(inf)), 1.0)
+    checkEvaluation(PandasMod(Literal(-1.0), Literal(inf)), inf)
+    checkEvaluation(PandasMod(Literal(1.0), Literal(-inf)), -inf)
+    checkEvaluation(PandasMod(Literal(-1.0), Literal(-inf)), -1.0)
+    checkEvaluation(PandasMod(Literal(-1.0f), Literal(Float.PositiveInfinity)),
+      Float.PositiveInfinity)
+    checkEvaluation(PandasMod(Literal(1e-20), Literal(1e20)), 1e-20)
+    // The bit pattern of a NaN result is not specified, so only check that it is NaN.
+    Seq(PandasMod(Literal(inf), Literal(2.0)), PandasMod(Literal(1.0), Literal(Double.NaN)))
+      .foreach { expr =>
+        Seq(evaluateWithoutCodegen(expr), evaluateWithMutableProjection(expr)).foreach { result =>
+          assert(result.asInstanceOf[Double].isNaN, s"$expr returned $result")
+        }
+      }
+
+    // A zero result takes the sign of the divisor.
+    Seq(
+      PandasMod(Literal(2.0), Literal(-2.0)) -> -0.0,
+      PandasMod(Literal(-2.0), Literal(2.0)) -> 0.0,
+      PandasMod(Literal(-0.0), Literal(2.0)) -> 0.0,
+      PandasMod(Literal(0.0), Literal(-2.0)) -> -0.0,
+      PandasMod(Literal(2.0f), Literal(-2.0f)) -> -0.0f,
+      PandasMod(Literal(-2.0f), Literal(2.0f)) -> 0.0f).foreach { case (expr, expected) =>
+      Seq(evaluateWithoutCodegen(expr), evaluateWithMutableProjection(expr)).foreach { result =>
+        val sameSign = (result, expected) match {
+          case (r: Double, e: Double) => java.lang.Double.compare(r, e) == 0
+          case (r: Float, e: Float) => java.lang.Float.compare(r, e) == 0
+          case _ => false
+        }
+        assert(sameSign, s"$expr returned $result, expected $expected")
+      }
+    }
+
+    Seq("true", "false").foreach { ansi =>
+      withSQLConf(SQLConf.ANSI_ENABLED.key -> ansi) {
+        DataTypeTestUtils.numericTypeWithoutDecimal.foreach { tpe =>
+          checkConsistencyBetweenInterpretedAndCodegen(PandasMod(_, _), tpe, tpe)
+        }
+      }
+    }
+  }
+
+  test("SPARK-60655: pandas_mod keeps the decimal type of the Python-style formula") {
+    def dec(value: String, precision: Int, scale: Int): Literal =
+      Literal.create(new java.math.BigDecimal(value), DecimalType(precision, scale))
+    def baseFormulaType(l: Expression, r: Expression): DataType =
+      Remainder(Add(Remainder(l, r), r), r).dataType
+
+    Seq((38, 18) -> (38, 18), (18, 2) -> (18, 2), (10, 2) -> (10, 2)).foreach {
+      case ((p, s), (expectedP, expectedS)) =>
+        val operand = Literal.create(null, DecimalType(p, s))
+        assert(PandasMod(operand, operand).dataType === DecimalType(expectedP, expectedS))
+    }
+    Seq("true", "false").foreach { allowPrecisionLoss =>
+      withSQLConf(SQLConf.DECIMAL_OPERATIONS_ALLOW_PREC_LOSS.key -> allowPrecisionLoss) {
+        Seq((38, 18) -> (38, 18), (10, 2) -> (20, 5), (38, 0) -> (10, 4), (5, 5) -> (38, 2))
+          .foreach { case ((p1, s1), (p2, s2)) =>
+            val l = Literal.create(null, DecimalType(p1, s1))
+            val r = Literal.create(null, DecimalType(p2, s2))
+            assert(PandasMod(l, r).dataType === baseFormulaType(l, r))
+          }
+      }
+    }
+
+    // The result is exact, also where `(left % right) + right` would lose a fraction digit.
+    checkEvaluation(
+      PandasMod(dec("0.100000000000000001", 38, 18), dec("0.300000000000000009", 38, 18)),
+      Decimal("0.100000000000000001"))
+    checkEvaluation(
+      PandasMod(dec("1.000000000000000001", 38, 18), dec("1", 38, 18)),
+      Decimal("0.000000000000000001"))
+    checkEvaluation(PandasMod(dec("7.25", 18, 2), dec("-2", 18, 2)), Decimal("-0.75"))
+    checkEvaluation(PandasMod(dec("-1.5", 18, 2), dec("4", 18, 2)), Decimal("2.5"))
+    Seq("true", "false").foreach { legacy =>
+      withSQLConf(SQLConf.LEGACY_RETAIN_FRACTION_DIGITS_FIRST.key -> legacy) {
+        Seq("true", "false").foreach { ansi =>
+          withSQLConf(SQLConf.ANSI_ENABLED.key -> ansi) {
+            checkEvaluation(
+              PandasMod(dec("-1.5", 38, 18), dec("1000000000000000000000", 22, 0)),
+              Decimal("999999999999999999998.5"))
+          }
+        }
+      }
+    }
+  }
+
   test("function least") {
     val row = create_row(1, 2, "a", "b", "c")
     val c1 = $"a".int.at(0)
@@ -764,15 +897,26 @@ class ArithmeticExpressionSuite extends SparkFunSuite with ExpressionEvalHelper 
       checkExceptionInExpression[ArithmeticException](
         IntegralDivide(Literal(Decimal(0.2)), Literal(Decimal(0.0))), "Division by zero")
     }
-    // overflows long and so returns a wrong result
+    // overflows long and so returns a wrong result in LEGACY mode
     checkEvaluation(IntegralDivide(
-      Literal(Decimal("99999999999999999999999999999999999")), Literal(Decimal(0.001))),
+      Literal(Decimal("99999999999999999999999999999999999")), Literal(Decimal(0.001)),
+      EvalMode.LEGACY),
       687399551400672280L)
     // overflow during promote precision
     withSQLConf(SQLConf.ANSI_ENABLED.key -> "false") {
       checkEvaluation(IntegralDivide(
         Literal(Decimal("99999999999999999999999999999999999999")), Literal(Decimal(0.00001))),
         null)
+    }
+  }
+
+  test("SPARK-61131: IntegralDivide of decimals fails when the quotient overflows long") {
+    val one = Literal(Decimal(1), DecimalType(1, 0))
+    def dividend(v: BigInt): Literal = Literal(Decimal(BigDecimal(v)), DecimalType(19, 0))
+    Seq(BigInt(Long.MaxValue), BigInt(Long.MinValue)).foreach { bound =>
+      checkEvaluation(IntegralDivide(dividend(bound), one, EvalMode.ANSI), bound.toLong)
+      checkExceptionInExpression[SparkArithmeticException](
+        IntegralDivide(dividend(bound + bound.signum), one, EvalMode.ANSI), "ARITHMETIC_OVERFLOW")
     }
   }
 

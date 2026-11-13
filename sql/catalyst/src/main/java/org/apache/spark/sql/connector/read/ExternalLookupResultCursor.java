@@ -29,8 +29,12 @@ import org.apache.spark.sql.catalyst.InternalRow;
  * ordinal is a miss. If the read schema has no columns, each match is still one (empty) row.
  * <p>
  * {@link #inputOrdinal()} and {@link #get()} are valid after {@link #next()} returns
- * {@code true}, until the next {@code next} or {@link #close()}. The row may be reused; Spark
- * copies the rows it keeps. Spark closes every cursor, which may be before its end.
+ * {@code true}, until the next {@code next} or {@link #close()}. The row and its buffers, byte
+ * arrays included, may be reused: Spark copies each row before it calls {@code next} again.
+ * Each value, nested values included, must fit its type: a null only where both the table and
+ * the read schema allow one, and a decimal within its precision and scale. Otherwise the task
+ * fails. Spark may close a cursor before its end; when it closes it, also at the end of the task,
+ * is stated in {@link ExternalLookupReader}.
  *
  * @since 4.4.0
  */
@@ -42,6 +46,6 @@ public interface ExternalLookupResultCursor extends Closeable {
   /** Returns the current result's parameter-row index, in {@code [0, uniqueParameters.length)}. */
   int inputOrdinal();
 
-  /** Returns the current value row, whose schema is {@link Scan#readSchema()}. */
+  /** Returns the current value row, never null, whose schema is {@link Scan#readSchema()}. */
   InternalRow get();
 }

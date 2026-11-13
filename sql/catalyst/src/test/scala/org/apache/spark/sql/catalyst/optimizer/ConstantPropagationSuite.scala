@@ -286,4 +286,42 @@ class ConstantPropagationSuite extends PlanTest {
       assert(first(conjunct) == "(a = 1)")
     }
   }
+
+  test("SPARK-60882: Propagate a constant into an expression that can not fail") {
+    // An addition with ANSI mode off can not fail, so `b` is replaced in it, although `c` is not.
+    val legacy = NumericEvalContext(EvalMode.LEGACY)
+    comparePlans(
+      Optimize.execute(
+        testRelation.where(columnA > Add(columnC, columnB, legacy) && columnB === 2).analyze),
+      testRelation.where(columnA > Add(columnC, Literal(2), legacy) && columnB === 2).analyze)
+
+    // In ANSI mode it can overflow, so it keeps `b`, and the equality goes first.
+    val ansi = NumericEvalContext(EvalMode.ANSI)
+    comparePlans(
+      Optimize.execute(
+        testRelation.where(columnA > Add(columnC, columnB, ansi) && columnB === 2).analyze),
+      testRelation.where(columnB === 2 && columnA > Add(columnC, columnB, ansi)).analyze)
+
+    // Also under a `COLLATE`.
+    val strings = LocalRelation($"s".string, $"n".int)
+    comparePlans(
+      Optimize.execute(strings.where($"s" === "ab" &&
+        Length(Collate(Substring($"s", Literal(1), $"n"), ResolvedCollation("UNICODE_CI"))) > 1)
+        .analyze),
+      strings.where($"s" === "ab" &&
+        Length(Collate(Substring(Literal("ab"), Literal(1), $"n"), ResolvedCollation("UNICODE_CI")))
+          > 1).analyze)
+
+    // Not into a cast of a DOUBLE to a string: a row with `x` = -0.0 passes `x = 0.0`, but
+    // `CAST(x * y AS STRING)` keeps the sign.
+    val doubles = LocalRelation($"x".double, $"y".double)
+    val signed = doubles.where($"x" === 0.0 &&
+      Cast(Multiply($"x", $"y", ansi), StringType) === "-0.0").analyze
+    comparePlans(Optimize.execute(signed), signed)
+
+    // Nor a string of a trim collation into `length`: a row with `s` = 'a ' passes `s = 'a'`.
+    val trimmed = LocalRelation(AttributeReference("s", StringType("UTF8_BINARY_RTRIM"))())
+    val lengthOfTrimmed = trimmed.where($"s" === "a" && Length($"s") === 2).analyze
+    comparePlans(Optimize.execute(lengthOfTrimmed), lengthOfTrimmed)
+  }
 }
