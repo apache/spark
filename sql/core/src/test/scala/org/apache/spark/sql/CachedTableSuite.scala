@@ -856,17 +856,6 @@ class CachedTableSuite extends SharedSparkSession
     }
   }
 
-  private def appendParquetWithoutRefresh(path: String, value: Long): Unit = {
-    withTempDir { staging =>
-      val output = new File(staging, "data")
-      spark.range(value, value + 1).write.parquet(output.getCanonicalPath)
-      // Move files externally so Spark does not refresh the destination before refreshByPath.
-      output.listFiles().filter(_.getName.endsWith(".parquet")).foreach { file =>
-        Files.move(file.toPath, new File(path, file.getName).toPath)
-      }
-    }
-  }
-
   for {
     useV1SourceList <- Seq("parquet", "")
     relationCount <- Seq(1, 2, 3)
@@ -896,6 +885,17 @@ class CachedTableSuite extends SharedSparkSession
             cached.unpersist(blocking = true)
           }
         }
+      }
+    }
+  }
+
+  private def appendParquetWithoutRefresh(path: String, value: Long): Unit = {
+    withTempDir { staging =>
+      val output = new File(staging, "data")
+      spark.range(value, value + 1).write.parquet(output.getCanonicalPath)
+      // Move files externally so Spark does not refresh the destination before refreshByPath.
+      output.listFiles().filter(_.getName.endsWith(".parquet")).foreach { file =>
+        Files.move(file.toPath, new File(path, file.getName).toPath)
       }
     }
   }

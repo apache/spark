@@ -647,7 +647,7 @@ class CacheManager extends Logging with AdaptiveSparkPlanHelper {
         var refreshed = false
         // lookupAndRefresh has side effects: exists would stop after the first matching read.
         // Refresh matching indexes in the operator tree before rebuilding a multi-read cache.
-        // As before, this traversal does not enter plans held by subquery expressions.
+        // This traversal does not enter plans held by subquery expressions.
         cached.plan.foreach { plan =>
           if (lookupAndRefresh(plan, fs, qualifiedPath, includeTimeTravel, refreshedIndexes)) {
             refreshed = true
