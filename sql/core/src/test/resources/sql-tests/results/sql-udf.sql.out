@@ -3638,6 +3638,42 @@ struct<spark_catalog.default.foo3_2e1(array(struct(2022-01-01 10:11:12, 1), stru
 
 
 -- !query
+CREATE FUNCTION foo3_2e2(x INT) RETURNS INT RETURN
+WITH t AS (SELECT c1, SUM(c2) AS s FROM t2 WHERE c1 = x GROUP BY c1)
+SELECT s FROM t
+-- !query schema
+struct<>
+-- !query output
+
+
+
+-- !query
+SET spark.sql.optimizer.scalarSubqueryUseSingleJoin=false
+-- !query schema
+struct<key:string,value:string>
+-- !query output
+spark.sql.optimizer.scalarSubqueryUseSingleJoin	false
+
+
+-- !query
+SELECT c1, foo3_2e2(c1) FROM t1
+-- !query schema
+struct<c1:int,spark_catalog.default.foo3_2e2(c1):int>
+-- !query output
+0	5
+0	5
+1	NULL
+
+
+-- !query
+RESET spark.sql.optimizer.scalarSubqueryUseSingleJoin
+-- !query schema
+struct<>
+-- !query output
+
+
+
+-- !query
 SET spark.sql.ansi.enabled=true
 -- !query schema
 struct<key:string,value:string>
@@ -5738,6 +5774,14 @@ struct<>
 
 -- !query
 DROP FUNCTION IF EXISTS foo3_2e1
+-- !query schema
+struct<>
+-- !query output
+
+
+
+-- !query
+DROP FUNCTION IF EXISTS foo3_2e2
 -- !query schema
 struct<>
 -- !query output

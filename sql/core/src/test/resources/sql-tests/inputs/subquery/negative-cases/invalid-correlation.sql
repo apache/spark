@@ -80,4 +80,13 @@ AS t1(t1a, t1b, t1c);
 SELECT t1.t1a
 FROM   t1
 JOIN   t1_copy
-ON     EXISTS (SELECT 1 FROM t2 WHERE t2a > t1a)
+ON     EXISTS (SELECT 1 FROM t2 WHERE t2a > t1a);
+
+-- invalid because the correlated CTE is used on the right side of a left outer join.
+SELECT *
+FROM   t1
+WHERE  EXISTS (WITH cte AS (SELECT * FROM t2 WHERE t2a = t1.t1a)
+               SELECT *
+               FROM   t3
+                      LEFT JOIN cte
+                             ON t3b = cte.t2b);
