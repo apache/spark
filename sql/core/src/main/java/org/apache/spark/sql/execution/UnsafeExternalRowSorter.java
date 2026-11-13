@@ -81,8 +81,10 @@ public final class UnsafeExternalRowSorter {
       UnsafeExternalRowSorter.PrefixComputer prefixComputer,
       long pageSizeBytes,
       boolean canUseRadixSort) throws IOException {
+    // Conservative: this path (e.g. ShuffleExchangeExec) does not supply the sort key's
+    // nullability, so treat the key as nullable and keep the record-comparator tie-break.
     return new UnsafeExternalRowSorter(schema, recordComparatorSupplier, prefixComparator,
-      prefixComputer, pageSizeBytes, canUseRadixSort);
+      prefixComputer, pageSizeBytes, canUseRadixSort, true /* keyNullable */);
   }
 
   public static UnsafeExternalRowSorter create(
@@ -91,11 +93,12 @@ public final class UnsafeExternalRowSorter {
       PrefixComparator prefixComparator,
       UnsafeExternalRowSorter.PrefixComputer prefixComputer,
       long pageSizeBytes,
-      boolean canUseRadixSort) throws IOException {
+      boolean canUseRadixSort,
+      boolean keyNullable) throws IOException {
     Supplier<RecordComparator> recordComparatorSupplier =
       () -> new RowComparator(ordering, schema.length());
     return new UnsafeExternalRowSorter(schema, recordComparatorSupplier, prefixComparator,
-      prefixComputer, pageSizeBytes, canUseRadixSort);
+      prefixComputer, pageSizeBytes, canUseRadixSort, keyNullable);
   }
 
   private UnsafeExternalRowSorter(
@@ -104,7 +107,8 @@ public final class UnsafeExternalRowSorter {
       PrefixComparator prefixComparator,
       UnsafeExternalRowSorter.PrefixComputer prefixComputer,
       long pageSizeBytes,
-      boolean canUseRadixSort) {
+      boolean canUseRadixSort,
+      boolean keyNullable) {
     this.schema = schema;
     this.prefixComputer = prefixComputer;
     final SparkEnv sparkEnv = SparkEnv.get();
@@ -123,7 +127,8 @@ public final class UnsafeExternalRowSorter {
       (long) SparkEnv.get().conf().get(
         package$.MODULE$.SHUFFLE_SPILL_MAX_SIZE_FORCE_SPILL_THRESHOLD()),
       (int) sparkEnv.conf().get(package$.MODULE$.UNSAFE_SORTER_SPILL_MERGE_FACTOR()),
-      canUseRadixSort
+      canUseRadixSort,
+      keyNullable
     );
   }
 

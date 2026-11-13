@@ -98,7 +98,8 @@ case class SortExec(
 
     val pageSize = SparkEnv.get.memoryManager.pageSizeBytes
     rowSorter = UnsafeExternalRowSorter.create(
-      schema, ordering, prefixComparator, prefixComputer, pageSize, canUseRadixSort)
+      schema, ordering, prefixComparator, prefixComputer, pageSize, canUseRadixSort,
+      sortOrder.head.child.nullable)
 
     if (testSpillFrequency > 0) {
       rowSorter.setTestSpillFrequency(testSpillFrequency)
