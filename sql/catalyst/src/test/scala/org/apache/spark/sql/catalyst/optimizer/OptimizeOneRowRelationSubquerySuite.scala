@@ -201,4 +201,16 @@ class OptimizeOneRowRelationSubquerySuite extends PlanTest {
     optimized.exists(_.isInstanceOf[Generate])
     assertHasDomainJoin(optimized)
   }
+
+  test("SPARK-60564: should not optimize left outer lateral subquery with Generate") {
+    // A left outer lateral join keeps the left rows for which the generator returns no rows,
+    // which a Generate over the left side does not.
+    Seq(
+      t0.generate(Explode($"arr")),
+      t0.generate(Explode($"arr")).select($"col".as("v"))).foreach { inner =>
+      val query = t3.lateralJoin(inner, LeftOuter, None)
+      val optimized = Optimize.execute(query.analyze)
+      assertHasDomainJoin(optimized)
+    }
+  }
 }
