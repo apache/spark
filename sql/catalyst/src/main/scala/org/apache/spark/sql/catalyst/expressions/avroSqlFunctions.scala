@@ -83,7 +83,8 @@ case class FromAvro(
     // FunctionRegistry matches Expression-only ctors; keep 2-arg and 3-arg.
     charVarcharStandardSemantics: Boolean,
     charVarcharFirstClassTypes: Boolean,
-    mapKeyDedupPolicy: SQLConf.MapKeyDedupPolicy.Value)
+    mapKeyDedupPolicy: SQLConf.MapKeyDedupPolicy.Value,
+    disableMapKeyNormalization: Boolean)
   extends TernaryExpression with RuntimeReplaceable {
   override def first: Expression = child
   override def second: Expression = jsonFormatSchema
@@ -97,7 +98,8 @@ case class FromAvro(
       options,
       SQLConf.get.charVarcharStandardSemantics,
       SQLConf.get.charVarcharFirstClassTypes,
-      SQLConf.get.getConf(SQLConf.MAP_KEY_DEDUP_POLICY))
+      SQLConf.get.getConf(SQLConf.MAP_KEY_DEDUP_POLICY),
+      SQLConf.get.getConf(SQLConf.DISABLE_MAP_KEY_NORMALIZATION))
 
   def this(child: Expression, jsonFormatSchema: Expression) =
     this(child, jsonFormatSchema, Literal.create(null))
@@ -137,11 +139,13 @@ case class FromAvro(
 
   override lazy val replacement: Expression = {
     val conf = SQLConf.get
-    if (conf.getConf(SQLConf.MAP_KEY_DEDUP_POLICY) == mapKeyDedupPolicy) {
+    if (conf.getConf(SQLConf.MAP_KEY_DEDUP_POLICY) == mapKeyDedupPolicy &&
+        conf.getConf(SQLConf.DISABLE_MAP_KEY_NORMALIZATION) == disableMapKeyNormalization) {
       createReplacement()
     } else {
       val evalConf = conf.clone()
       evalConf.setConf(SQLConf.MAP_KEY_DEDUP_POLICY, mapKeyDedupPolicy)
+      evalConf.setConf(SQLConf.DISABLE_MAP_KEY_NORMALIZATION, disableMapKeyNormalization)
       SQLConf.withExistingConf(evalConf) {
         createReplacement()
       }
@@ -233,13 +237,19 @@ case class FromAvro(
 case class ToAvro(
     child: Expression,
     jsonFormatSchema: Expression,
-    // PERSISTED: spark.sql.mapKeyDedupPolicy at analysis time. A constructor parameter, so that
-    // copies keep it and evaluate the arguments the same way.
-    mapKeyDedupPolicy: SQLConf.MapKeyDedupPolicy.Value)
+    // PERSISTED: the map builder settings at analysis time, spark.sql.mapKeyDedupPolicy and
+    // spark.sql.legacy.disableMapKeyNormalization. Constructor parameters, so that copies keep
+    // them and evaluate the arguments the same way.
+    mapKeyDedupPolicy: SQLConf.MapKeyDedupPolicy.Value,
+    disableMapKeyNormalization: Boolean)
   extends BinaryExpression with RuntimeReplaceable {
 
   def this(child: Expression, jsonFormatSchema: Expression) =
-    this(child, jsonFormatSchema, SQLConf.get.getConf(SQLConf.MAP_KEY_DEDUP_POLICY))
+    this(
+      child,
+      jsonFormatSchema,
+      SQLConf.get.getConf(SQLConf.MAP_KEY_DEDUP_POLICY),
+      SQLConf.get.getConf(SQLConf.DISABLE_MAP_KEY_NORMALIZATION))
 
   def this(child: Expression) = this(child, Literal(null))
 
@@ -268,11 +278,13 @@ case class ToAvro(
 
   override lazy val replacement: Expression = {
     val conf = SQLConf.get
-    if (conf.getConf(SQLConf.MAP_KEY_DEDUP_POLICY) == mapKeyDedupPolicy) {
+    if (conf.getConf(SQLConf.MAP_KEY_DEDUP_POLICY) == mapKeyDedupPolicy &&
+        conf.getConf(SQLConf.DISABLE_MAP_KEY_NORMALIZATION) == disableMapKeyNormalization) {
       createReplacement()
     } else {
       val evalConf = conf.clone()
       evalConf.setConf(SQLConf.MAP_KEY_DEDUP_POLICY, mapKeyDedupPolicy)
+      evalConf.setConf(SQLConf.DISABLE_MAP_KEY_NORMALIZATION, disableMapKeyNormalization)
       SQLConf.withExistingConf(evalConf) {
         createReplacement()
       }
@@ -299,7 +311,7 @@ case class ToAvro(
     expr.asInstanceOf[Expression]
   }
 
-  // The map key policy is not a user argument; keep it out of EXPLAIN output.
+  // The map builder settings are not user arguments; keep them out of EXPLAIN output.
   override protected def stringArgs: Iterator[Any] = super.stringArgs.take(2)
 
   override def prettyName: String =
@@ -337,9 +349,11 @@ case class ToAvro(
 case class SchemaOfAvro(
     jsonFormatSchema: Expression,
     options: Expression,
-    // PERSISTED: spark.sql.mapKeyDedupPolicy at analysis time. A constructor parameter, so that
-    // copies keep it and evaluate the arguments the same way.
-    mapKeyDedupPolicy: SQLConf.MapKeyDedupPolicy.Value)
+    // PERSISTED: the map builder settings at analysis time, spark.sql.mapKeyDedupPolicy and
+    // spark.sql.legacy.disableMapKeyNormalization. Constructor parameters, so that copies keep
+    // them and evaluate the arguments the same way.
+    mapKeyDedupPolicy: SQLConf.MapKeyDedupPolicy.Value,
+    disableMapKeyNormalization: Boolean)
   extends BinaryExpression with RuntimeReplaceable {
 
   override def left: Expression = jsonFormatSchema
@@ -350,7 +364,11 @@ case class SchemaOfAvro(
     copy(jsonFormatSchema = newLeft, options = newRight)
 
   def this(jsonFormatSchema: Expression, options: Expression) =
-    this(jsonFormatSchema, options, SQLConf.get.getConf(SQLConf.MAP_KEY_DEDUP_POLICY))
+    this(
+      jsonFormatSchema,
+      options,
+      SQLConf.get.getConf(SQLConf.MAP_KEY_DEDUP_POLICY),
+      SQLConf.get.getConf(SQLConf.DISABLE_MAP_KEY_NORMALIZATION))
 
   def this(jsonFormatSchema: Expression) =
     this(jsonFormatSchema, Literal.create(null))
@@ -384,11 +402,13 @@ case class SchemaOfAvro(
 
   override lazy val replacement: Expression = {
     val conf = SQLConf.get
-    if (conf.getConf(SQLConf.MAP_KEY_DEDUP_POLICY) == mapKeyDedupPolicy) {
+    if (conf.getConf(SQLConf.MAP_KEY_DEDUP_POLICY) == mapKeyDedupPolicy &&
+        conf.getConf(SQLConf.DISABLE_MAP_KEY_NORMALIZATION) == disableMapKeyNormalization) {
       createReplacement()
     } else {
       val evalConf = conf.clone()
       evalConf.setConf(SQLConf.MAP_KEY_DEDUP_POLICY, mapKeyDedupPolicy)
+      evalConf.setConf(SQLConf.DISABLE_MAP_KEY_NORMALIZATION, disableMapKeyNormalization)
       SQLConf.withExistingConf(evalConf) {
         createReplacement()
       }
@@ -425,7 +445,7 @@ case class SchemaOfAvro(
     expr.asInstanceOf[Expression]
   }
 
-  // The map key policy is not a user argument; keep it out of EXPLAIN output.
+  // The map builder settings are not user arguments; keep them out of EXPLAIN output.
   override protected def stringArgs: Iterator[Any] = super.stringArgs.take(2)
 
   override def prettyName: String =
