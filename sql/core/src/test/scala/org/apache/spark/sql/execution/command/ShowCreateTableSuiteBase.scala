@@ -18,6 +18,7 @@
 package org.apache.spark.sql.execution.command
 
 import org.apache.spark.sql.QueryTest
+import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.sources.SimpleInsertSource
 import org.apache.spark.util.Utils
 
@@ -181,6 +182,27 @@ trait ShowCreateTableSuiteBase extends QueryTest with DDLCommandTestUtils {
       val expected = s"CREATE TABLE $fullName ( a INT, b STRING COLLATE UTF8_BINARY," +
         s" c DECIMAL(2,1)) USING json TBLPROPERTIES ( 'a' = '1')"
       assert(getShowCreateDDL(t).mkString(" ") == expected)
+    }
+  }
+
+  test("SPARK-59433: SHOW CREATE TABLE keeps TIMESTAMP_LTZ columns when the default timestamp " +
+      "type is TIMESTAMP_NTZ") {
+    withSQLConf(SQLConf.TIMESTAMP_TYPE.key -> SQLConf.TimestampTypes.TIMESTAMP_NTZ.toString) {
+      withNamespaceAndTable(ns, table) { t =>
+        sql(
+          s"""
+             |CREATE TABLE $t (
+             |  ltz TIMESTAMP_LTZ,
+             |  ntz TIMESTAMP_NTZ,
+             |  arr ARRAY<TIMESTAMP_LTZ>
+             |)
+             |USING ${classOf[SimpleInsertSource].getName}
+           """.stripMargin)
+        val showDDL = getShowCreateDDL(t)
+        assert(showDDL(1) == "ltz TIMESTAMP_LTZ,")
+        assert(showDDL(2) == "ntz TIMESTAMP_NTZ,")
+        assert(showDDL(3) == "arr ARRAY<TIMESTAMP_LTZ>)")
+      }
     }
   }
 
