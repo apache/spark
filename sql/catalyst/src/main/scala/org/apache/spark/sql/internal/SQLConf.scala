@@ -666,7 +666,7 @@ object SQLConf {
       "reference its expensive (UDF, etc.) elements in between, so an expensive element is only " +
       "evaluated for the rows which survived the filters below it. Costs an extra operator per " +
       s"split, and only applies when ${AVOID_DOUBLE_FILTER_EVAL.key} is also enabled.")
-    .version("4.3.0")
+    .version("4.4.0")
     .booleanConf
     .createWithDefault(true)
 
