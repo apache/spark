@@ -383,6 +383,9 @@ trait JoinSelectionHelper extends Logging {
 
     // The side to broadcast by hint, or by size, if any. `BroadcastNestedLoopJoinExec` can't build
     // the left side of a LeftSingle join, so that side never qualifies.
+    // TODO: teach `BroadcastNestedLoopJoinExec` to build the left side of a LeftSingle join by
+    // detecting more than one match per left row, so a small outer side can be broadcast instead
+    // of a large subquery side.
     def broadcastSide(onlyLookingAtHint: Boolean): Option[BuildSide] = {
       val buildLeft = if (joinType == LeftSingle) {
         false
