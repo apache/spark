@@ -49,7 +49,7 @@ def toposort(data):
         return
 
     # Copy the input so as to leave it unmodified.
-    data = data.copy()
+    data = {item: set(dependencies) for item, dependencies in data.items()}
 
     # Ignore self dependencies.
     for k, v in data.items():
