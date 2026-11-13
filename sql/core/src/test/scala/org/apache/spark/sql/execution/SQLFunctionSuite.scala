@@ -22,7 +22,7 @@ import java.util.Locale
 
 import org.apache.spark.sql.{AnalysisException, Row}
 import org.apache.spark.sql.catalyst.{FunctionIdentifier, TableIdentifier}
-import org.apache.spark.sql.catalyst.analysis.SQLFunctionExpression
+import org.apache.spark.sql.catalyst.analysis.{AnalysisContext, SQLFunctionExpression}
 import org.apache.spark.sql.catalyst.catalog.SQLFunction
 import org.apache.spark.sql.catalyst.expressions.{Expression, Literal}
 import org.apache.spark.sql.connector.catalog.CatalogManager
@@ -724,6 +724,38 @@ class SQLFunctionSuite extends SharedSparkSession {
           check()
         } finally {
           sql("SET PATH = DEFAULT_PATH")
+        }
+      }
+    }
+  }
+
+  test("SPARK-60806: the cycle check reads the path the body resolves under") {
+    // A CREATE FUNCTION that a procedure issues runs inside the CALL's analysis pass. Memoize a
+    // path on an enclosing context, as that pass would, before the SET PATH that precedes it.
+    val session = Seq(CatalogManager.SYSTEM_CATALOG_NAME, CatalogManager.SESSION_NAMESPACE)
+    val builtin = Seq(CatalogManager.SYSTEM_CATALOG_NAME, CatalogManager.BUILTIN_NAMESPACE)
+    val default = Seq(CatalogManager.SESSION_CATALOG_NAME, "default")
+    val cycle = Seq("a", "pf", "a").map("spark_catalog.default." + _).mkString(" -> ")
+    withUserDefinedFunction("a" -> false, "pf" -> false) {
+      withSQLConf(SQLConf.PATH_ENABLED.key -> "true") {
+        sql("CREATE FUNCTION a() RETURNS INT RETURN 1")
+        sql("CREATE FUNCTION pf() RETURNS INT RETURN a()")
+        sql("CREATE TEMPORARY FUNCTION pf() RETURNS INT RETURN 42")
+        try {
+          AnalysisContext.withNewAnalysisContext {
+            AnalysisContext.get.memoizedResolutionPath(Seq(session, builtin, default))
+            sql("SET PATH = spark_catalog.default, system.session, system.builtin")
+            checkError(
+              exception = intercept[AnalysisException] {
+                sql("CREATE OR REPLACE FUNCTION a() RETURNS INT RETURN pf()")
+              },
+              condition = "CYCLIC_FUNCTION_REFERENCE",
+              parameters = Map("path" -> cycle))
+          }
+          checkAnswer(sql("SELECT a()"), Row(1))
+        } finally {
+          sql("SET PATH = DEFAULT_PATH")
+          sql("DROP TEMPORARY FUNCTION IF EXISTS pf")
         }
       }
     }

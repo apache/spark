@@ -20,7 +20,7 @@ package org.apache.spark.sql.execution.command
 import org.apache.spark.SparkException
 import org.apache.spark.sql.{AnalysisException, Row, SparkSession}
 import org.apache.spark.sql.catalyst.FunctionIdentifier
-import org.apache.spark.sql.catalyst.analysis.{withPosition, Analyzer, SQLFunctionExpression, SQLFunctionNode, SQLScalarFunction, SQLTableFunction, UnresolvedAlias, UnresolvedAttribute, UnresolvedFunction, UnresolvedRelation, UnresolvedTableValuedFunction}
+import org.apache.spark.sql.catalyst.analysis.{withPosition, AnalysisContext, Analyzer, SQLFunctionExpression, SQLFunctionNode, SQLScalarFunction, SQLTableFunction, UnresolvedAlias, UnresolvedAttribute, UnresolvedFunction, UnresolvedRelation, UnresolvedTableValuedFunction}
 import org.apache.spark.sql.catalyst.catalog.{SessionCatalog, SQLFunction, UserDefinedFunction, UserDefinedFunctionErrors}
 import org.apache.spark.sql.catalyst.catalog.UserDefinedFunction._
 import org.apache.spark.sql.catalyst.expressions.{Alias, Cast, Expression, Generator, LateralSubquery, Literal, ScalarSubquery, SubqueryExpression, UnresolvedJsonConstructor, WindowExpression}
@@ -406,10 +406,15 @@ case class CreateSQLFunctionCommand(
       plan: LogicalPlan): Unit = {
 
     // Look up an unqualified call that a persistent function owns by its qualified name, since
-    // the unqualified lookup tries built-in and temp functions first.
+    // the unqualified lookup tries built-in and temp functions first. A fresh context reads the
+    // current SQL path: a CREATE FUNCTION that a procedure issues runs inside the CALL's analysis
+    // pass, whose cached path may predate a SET PATH.
     def lookupIdentifier(nameParts: Seq[String]): FunctionIdentifier = {
-      val owner =
-        if (nameParts.length == 1) analyzer.unqualifiedFunctionOwner(nameParts.head) else None
+      val owner = if (nameParts.length == 1) {
+        AnalysisContext.withNewAnalysisContext(analyzer.unqualifiedFunctionOwner(nameParts.head))
+      } else {
+        None
+      }
       owner match {
         case Some(Seq(catalogName, db, funcName))
             if catalogName.equalsIgnoreCase(CatalogManager.SESSION_CATALOG_NAME) =>
