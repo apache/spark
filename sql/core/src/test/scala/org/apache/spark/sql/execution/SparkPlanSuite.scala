@@ -340,15 +340,13 @@ class SparkPlanSuite extends SharedSparkSession {
       case _ => false
     }
     val args = scan.productIterator.map(_.asInstanceOf[AnyRef]).toArray
-    // The node plans first, as in `EnsureRequirements`, and later rules copy it.
-    scan.inputPartitions
 
     // Copies through `makeCopy` or `clone` share what the node planned, but not over another
-    // `Scan`. So does the canonical form, whose `equals` compares the planned `Batch`.
+    // `Scan`. A case-class `copy` plans its own.
     assert(sharesPlanning(scan.makeCopy(args)))
     assert(sharesPlanning(scan.clone()))
     assert(!sharesPlanning(scan.makeCopy(args.updated(1, new NewBatchScan))))
-    assert(sharesPlanning(scan.canonicalized))
+    assert(!sharesPlanning(scan.copy(runtimeFilters = Nil)))
   }
 }
 
