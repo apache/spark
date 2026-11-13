@@ -22,6 +22,7 @@ import org.apache.spark.sql.catalyst.analysis.TestRelation
 import org.apache.spark.sql.catalyst.dsl.expressions._
 import org.apache.spark.sql.catalyst.dsl.plans._
 import org.apache.spark.sql.catalyst.expressions.{AesEncrypt, Literal, OuterReference, OuterScopeReference, ScalarSubquery}
+import org.apache.spark.sql.catalyst.expressions.ToBinary
 import org.apache.spark.sql.catalyst.expressions.objects.StaticInvoke
 import org.apache.spark.sql.catalyst.plans.PlanTest
 import org.apache.spark.sql.catalyst.plans.logical.{AppendData, CTERelationDef, CTERelationRef, LogicalPlan, OneRowRelation, Sample, WithCTE}
@@ -215,5 +216,22 @@ class InlineCTESuite extends PlanTest {
     val optimized = InlineCTE().apply(ReplaceExpressions.apply(plan))
     assert(!optimized.exists(_.isInstanceOf[WithCTE]),
       "an explicit IV is deterministic, so the CTE is inlined")
+  }
+
+  test("SPARK-60934: multi-reference CTE with a to_binary IV is inlined") {
+    // to_binary is unfoldable until ReplaceExpressions. A fixed non-empty IV
+    // does not draw, so the CTE is inlined the same way as a literal IV.
+    val aes = new AesEncrypt(
+      Literal("abc".getBytes),
+      Literal("1234567890123456".getBytes),
+      Literal("GCM"),
+      Literal("NONE"),
+      new ToBinary(Literal("000000000000000000000000"), Literal("hex")))
+    val cteDef = CTERelationDef(OneRowRelation().select(aes.as("c")))
+    val cteRef = CTERelationRef(cteDef.id, cteDef.resolved, cteDef.output, cteDef.isStreaming)
+    val plan = WithCTE(cteRef.union(cteRef), Seq(cteDef)).analyze
+    val optimized = InlineCTE().apply(ReplaceExpressions.apply(plan))
+    assert(!optimized.exists(_.isInstanceOf[WithCTE]),
+      "a fixed to_binary IV is deterministic, so the CTE is inlined")
   }
 }

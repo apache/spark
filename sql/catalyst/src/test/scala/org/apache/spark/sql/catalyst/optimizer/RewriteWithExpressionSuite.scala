@@ -27,14 +27,16 @@ import org.apache.spark.sql.catalyst.catalog.{InMemoryCatalog, SessionCatalog}
 import org.apache.spark.sql.catalyst.dsl.expressions._
 import org.apache.spark.sql.catalyst.dsl.plans._
 import org.apache.spark.sql.catalyst.expressions._
+import org.apache.spark.sql.catalyst.expressions.objects.StaticInvoke
 import org.apache.spark.sql.catalyst.plans.{Inner, PlanTest}
 import org.apache.spark.sql.catalyst.plans.logical.{CreateVariable, DefaultValueExpression, DeleteFromTable, ExternalLookupJoin, LocalRelation, LogicalPlan, Project}
 import org.apache.spark.sql.catalyst.rules.RuleExecutor
 import org.apache.spark.sql.catalyst.util.DateTimeUtils
 import org.apache.spark.sql.connector.catalog.{DefaultCatalogManager, Identifier}
 import org.apache.spark.sql.connector.catalog.CatalogV2Implicits._
+import org.apache.spark.sql.connector.catalog.functions.ScalarFunction
 import org.apache.spark.sql.internal.SQLConf
-import org.apache.spark.sql.types.{BinaryType, DateType, IntegerType, StringType, TimestampNTZType, TimestampType, TimeType}
+import org.apache.spark.sql.types.{BinaryType, DataType, DateType, IntegerType, StringType, TimestampNTZType, TimestampType, TimeType}
 
 class RewriteWithExpressionSuite extends PlanTest {
 
@@ -158,6 +160,35 @@ class RewriteWithExpressionSuite extends PlanTest {
     assert(RewriteWithExpression.applyForExpression(expr) == EqualTo(aes, aes))
   }
 
+  test("SPARK-60934: only a built-in static call is safe to duplicate") {
+    // A ScalarFunction declares isDeterministic itself. The call is still a
+    // StaticInvoke, but that flag is not Spark's, so a second copy is rejected.
+    val fn = new ScalarFunction[Int] {
+      override def inputTypes(): Array[DataType] = Array(IntegerType)
+      override def resultType(): DataType = IntegerType
+      override def name(): String = "int_identity"
+      override def produceResult(input: InternalRow): Int = input.getInt(0)
+    }
+    val declared = StaticInvoke(
+      fn.getClass,
+      IntegerType,
+      "invoke",
+      Seq(Literal(1)),
+      isDeterministic = true,
+      scalarFunction = Some(fn))
+    intercept[SparkException] {
+      RewriteWithExpression.applyForExpression(With(declared) { case Seq(ref) =>
+        EqualTo(ref, ref)
+      })
+    }
+
+    // The same call with no scalar function is a built-in static method.
+    val builtin = declared.copy(scalarFunction = None)
+    assert(RewriteWithExpression.applyForExpression(With(builtin) { case Seq(ref) =>
+      EqualTo(ref, ref)
+    }) == EqualTo(builtin, builtin))
+  }
+
   test("SPARK-60934: ECB aes_encrypt does not draw an IV") {
     val aes = ReplaceExpressions.replace(new AesEncrypt(
       Literal("abc".getBytes),
@@ -232,6 +263,48 @@ class RewriteWithExpressionSuite extends PlanTest {
     val columnMode = ReplaceExpressions.replace(
       new AesEncrypt(input, key, AttributeReference("mode", StringType)()))
     assert(!columnMode.deterministic)
+  }
+
+  test("SPARK-60934: runtime-replaceable IV builders are classified by value") {
+    // to_binary and encode report foldable = false until ReplaceExpressions, and
+    // to_binary utf-8 replaces with encode. CheckAnalysis reads the flag first, so
+    // a fixed non-empty IV must already count as present. An empty result and a
+    // column IV still draw.
+    val input = Literal("abc".getBytes)
+    val key = Literal("1234567890123456".getBytes)
+
+    def encrypt(mode: String, padding: String, iv: Expression): Expression =
+      new AesEncrypt(
+        input, key, Literal(mode), Literal(padding), iv, Literal(Array.empty[Byte]))
+
+    def assertFixedIv(iv: Expression, mode: String, padding: String): Unit = {
+      val aes = encrypt(mode, padding, iv)
+      assert(aes.deterministic)
+      val replaced = ReplaceExpressions.replace(aes)
+      assert(replaced.deterministic)
+      assert(replaced.foldable)
+      val first = replaced.eval(EmptyRow).asInstanceOf[Array[Byte]]
+      val second = replaced.eval(EmptyRow).asInstanceOf[Array[Byte]]
+      assert(java.util.Arrays.equals(first, second))
+    }
+
+    assertFixedIv(
+      new ToBinary(Literal("000000000000000000000000"), Literal("hex")), "GCM", "NONE")
+    assertFixedIv(
+      Encode(Literal("0123456789abcdef"), Literal("UTF-8")), "CBC", "PKCS")
+    assertFixedIv(
+      new ToBinary(Literal("0123456789ab"), Literal("utf-8")), "GCM", "NONE")
+    assertFixedIv(
+      new TryToBinary(Literal("000000000000000000000000"), Literal("hex")),
+      "GCM", "NONE")
+
+    val empty = encrypt("GCM", "NONE", new ToBinary(Literal(""), Literal("hex")))
+    assert(!empty.deterministic)
+    assert(!ReplaceExpressions.replace(empty).deterministic)
+    val column = encrypt(
+      "GCM", "NONE", new ToBinary(AttributeReference("token", StringType)(), Literal("hex")))
+    assert(!column.deterministic)
+    assert(!ReplaceExpressions.replace(column).deterministic)
   }
 
   test("SPARK-60934: CBC and lowercase GCM draw an IV") {

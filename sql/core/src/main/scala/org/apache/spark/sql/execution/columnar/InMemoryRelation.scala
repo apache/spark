@@ -499,8 +499,9 @@ object InMemoryRelation extends PredicateHelper {
       analyzedPlan: LogicalPlan,
       plan: LogicalPlan,
       onOptimizedNode: LogicalPlan => Unit): Boolean = {
-    // A generated-IV aes_encrypt is non-deterministic (see AesEncrypt). An explicit IV
-    // is deterministic, and other runtime-replaceable calls can still become a
+    // A generated IV, an empty IV, and a per-row IV are non-deterministic (see
+    // AesEncrypt), so the plan is not repeatable. A fixed non-empty IV is
+    // deterministic, and other runtime-replaceable calls can still become a
     // deterministic StaticInvoke. Inspect the analyzed expressions before trusting
     // the optimized shape; hasSafeExpressions rejects AesEncrypt either way.
     var repeatable = analyzedPlan.deterministic
