@@ -33,9 +33,9 @@ with a path dependency on a Spark source tree, as the examples do, until SPARK-6
 it to crates.io. It is versioned on its own, from 0.x, and may need a breaking release in any
 release of Spark: for a new major version of Arrow, whose types it exposes, or for a new kind
 of operation, which adds an associated type to `DataSource` that every connector must name.
-Growth within an operation, such as a method with a default implementation or a field of an
-info struct, does not break connectors. The crate supports version 1 of the ABI, which Spark
-supports from 4.4.0 in all the releases of Spark 4.
+Growth within an operation can preserve Rust source compatibility, for example by adding
+fields to non-exhaustive input structs under the conditions described below. The crate
+supports version 1 of the ABI, which Spark supports from 4.4.0 in all the releases of Spark 4.
 
 The API uses the types of Arrow 58, such as `RecordBatch`, `SchemaRef`, and `ArrowError`, so
 a connector must use the same major version of Arrow: the SDK re-exports the crates as
@@ -91,12 +91,19 @@ Write support is independent: a write-only connector sets `ScanBuilder` and
 `DataSource::new_streaming_write` and `StreamingWrite`, with the same task writers. The
 write lifecycle is described below.
 
-The inputs of these methods are `#[non_exhaustive]` structs, so that new ABI fields can
-reach connectors without breaking them: `*Info` structs on the driver (`CreateInfo`,
-`ScanInfo`, `MicroBatchStreamInfo`, `LatestOffsetInfo`, `MicroBatchInfo`, `CommitOffsetInfo`,
-`WriteInfo`, `CommitInfo`, `AbortInfo`, `StreamingWriteInfo`, `StreamingCommitInfo`, and
-`StreamingAbortInfo`), `*Context` structs, which carry the live `TaskContext`, on the
-executors (`ReaderContext` and `WriterContext`), and `HostInfo`, which `DataSource::init`
+Non-exhaustive input structs can gain fields while preserving Rust source compatibility.
+Compatible additions retain existing constructor signatures, field types, and trait
+implementations (including auto traits), and provide defaults that preserve existing behavior.
+These Rust structs stay inside the connector. Binary compatibility is governed by the
+versioned C ABI and its size-prefixed structs. Fields absent on older Spark versions must
+map to documented defaults.
+
+The inputs of these methods are `#[non_exhaustive]` structs: `*Info` structs on the driver
+(`CreateInfo`, `ScanInfo`, `MicroBatchStreamInfo`, `LatestOffsetInfo`, `MicroBatchInfo`,
+`CommitOffsetInfo`, `WriteInfo`, `CommitInfo`, `AbortInfo`, `StreamingWriteInfo`,
+`StreamingCommitInfo`, and `StreamingAbortInfo`), `*Context` structs, which carry the live
+`TaskContext`, on the executors (`ReaderContext` and `WriterContext`), and `HostInfo`, which
+`DataSource::init`
 receives in every JVM that loads the library, executors included. `ScanPlan` has a
 constructor for the same reason. The methods whose function of the header passes nothing but
 the size of its info struct yet take no struct: `ScanBuilder::plan`,
