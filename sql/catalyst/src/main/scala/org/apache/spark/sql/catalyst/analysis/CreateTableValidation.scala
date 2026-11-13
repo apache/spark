@@ -18,15 +18,19 @@
 package org.apache.spark.sql.catalyst.analysis
 
 import org.apache.spark.sql.AnalysisException
-import org.apache.spark.sql.catalyst.plans.logical.V2CreateTablePlan
+import org.apache.spark.sql.catalyst.plans.logical.{V2CreateTableAsSelectPlan, V2CreateTablePlan}
 import org.apache.spark.sql.catalyst.util.{TypeUtils, WriteDistributionAndOrdering}
 import org.apache.spark.sql.connector.catalog.CatalogV2Implicits._
+import org.apache.spark.sql.connector.expressions.ClusterByTransform
 import org.apache.spark.sql.errors.DataTypeErrors.toSQLId
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.util.SchemaUtils
 import org.apache.spark.util.ArrayImplicits._
 
-/** Validates partition references, column types, write ordering and generated columns. */
+/**
+ * Validates partition references, column types (including the FILE type rules), write ordering
+ * and generated columns.
+ */
 private[sql] object CreateTableValidation {
   def validateV2CreateTablePlan(create: V2CreateTablePlan, conf: SQLConf): Unit = {
     val references = create.partitioning.flatMap(_.references).toSet
@@ -61,6 +65,30 @@ private[sql] object CreateTableValidation {
     create.tableSchema.foreach(f => TypeUtils.failWithIntervalType(f.dataType))
     TypeUtils.failUnsupportedDataType(create.tableSchema, conf)
     SchemaUtils.checkIndeterminateCollationInSchema(create.tableSchema)
+    create match {
+      // The columns of CREATE TABLE AS SELECT come from its query, not from DDL.
+      case ctas: V2CreateTableAsSelectPlan =>
+        TypeUtils.checkNoUnknownFileTypeWrite(ctas.query.output)
+      case _ =>
+        TypeUtils.checkFileTypeHasQualifier(create.tableSchema)
+    }
+    // FILE is not comparable, so it cannot be a partition, clustering or write-ordering column.
+    create.partitioning.foreach { transform =>
+      val usage = transform match {
+        case _: ClusterByTransform => "CLUSTERING_COLUMN"
+        case _ => "PARTITION_COLUMN"
+      }
+      transform.references.foreach { ref =>
+        create.tableSchema.findNestedField(ref.fieldNames.toImmutableArraySeq).foreach {
+          case (_, field) => TypeUtils.checkNoFileTypeInColumnUsage(field, usage)
+        }
+      }
+    }
+    create.writeOrdering.flatMap(_.expression.references).foreach { ref =>
+      create.tableSchema.findNestedField(ref.fieldNames.toImmutableArraySeq).foreach {
+        case (_, field) => TypeUtils.checkNoFileTypeInColumnUsage(field, "WRITE_ORDERING_COLUMN")
+      }
+    }
 
     // Validate generated column expressions
     create.columns.foreach { col =>

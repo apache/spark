@@ -25,6 +25,7 @@ import org.apache.spark.sql.catalyst.analysis.TypeCheckResult.{DataTypeMismatch,
 import org.apache.spark.sql.catalyst.expressions.Cast.{toSQLId, toSQLValue}
 import org.apache.spark.sql.catalyst.util.DateTimeTestUtils._
 import org.apache.spark.sql.catalyst.util.SparkDateTimeUtils.localTimeToNanos
+import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types.{DayTimeIntervalType, Decimal, DecimalType, IntegerType, LongType, StringType, TimeType}
 import org.apache.spark.sql.types.DayTimeIntervalType.{DAY, HOUR, SECOND}
 
@@ -71,6 +72,20 @@ class TimeExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
     // Sanity: the branches that were already correct.
     assert(new ToTime(Literal("00:00:00")).dataType === TimeType())
     assert(new ToTime(Literal("00:00:00"), Literal("HH:mm:ss")).dataType === TimeType())
+  }
+
+  test("SPARK-61575: to_time with a foldable format that fails to evaluate") {
+    // `ConstantFolding` leaves such a format in a conditional branch. Only a row that
+    // evaluates the format should fail.
+    withSQLConf(SQLConf.ANSI_ENABLED.key -> "true") {
+      val str = BoundReference(0, StringType, nullable = true)
+      val expr = If(
+        IsNull(str),
+        Literal.create(null, TimeType()),
+        ToTime(str, Some(Cast(Divide(Literal(1.0), Literal(0.0)), StringType))))
+      checkEvaluation(expr, null, create_row(null))
+      checkExceptionInExpression[ArithmeticException](expr, create_row("10:00"), "DIVIDE_BY_ZERO")
+    }
   }
 
   test("HourExpressionBuilder") {

@@ -22,7 +22,7 @@ import scala.collection.mutable
 import org.apache.spark.SparkException
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.planning.PhysicalAggregation
-import org.apache.spark.sql.catalyst.plans.logical.{Aggregate, Call, Command, CreateVariable, LogicalPlan, PlanHelper, Project, ReplaceData, WriteDelta}
+import org.apache.spark.sql.catalyst.plans.logical.{Aggregate, Call, Command, CreateVariable, ExternalLookupJoin, LogicalPlan, PlanHelper, Project, ReplaceData, WriteDelta}
 import org.apache.spark.sql.catalyst.rules.Rule
 import org.apache.spark.sql.catalyst.trees.TreePattern.{COMMON_EXPR_REF, CURRENT_LIKE, WITH_EXPRESSION}
 import org.apache.spark.sql.internal.SQLConf
@@ -108,6 +108,12 @@ object RewriteWithExpression extends Rule[LogicalPlan] {
       // fold, so a definition there worth memoizing keeps its `With`.
       case c @ (_: Command | _: Call) =>
         c.mapExpressions(inlineCommandWiths)
+      // No definition is evaluated in a projection below an external lookup join. One over its
+      // lookup side would become a lookup-side stage, which cannot hold every expression that the
+      // condition can, such as a Python UDF. The condition is deterministic, as analysis requires
+      // of any join condition, so every definition is inlined at its references.
+      case j: ExternalLookupJoin =>
+        j.mapExpressions(inlineCommandWiths)
       case p if p.expressions.exists(_.containsPattern(WITH_EXPRESSION)) =>
         applyInternal(p)
     }
