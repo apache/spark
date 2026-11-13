@@ -274,6 +274,31 @@ abstract class TypeCoercionSuiteBase extends AnalysisTest {
         originTs = timestamp))
   }
 
+  test("SPARK-61239: map subscript with an integral key of a wider type than the map keys") {
+    val tinyintMap = AttributeReference("m", MapType(ByteType, StringType))()
+    val intMap = AttributeReference("m", MapType(IntegerType, StringType))()
+    val bigintMap = AttributeReference("m", MapType(LongType, StringType))()
+
+    // A key that may be out of the range of the map key type is cast with TRY.
+    ruleTest(implicitTypeCastsRule,
+      GetMapValue(tinyintMap, Literal(300)),
+      GetMapValue(tinyintMap, Cast(Literal(300), ByteType, evalMode = EvalMode.TRY)))
+    ruleTest(implicitTypeCastsRule,
+      GetMapValue(tinyintMap, $"k".short),
+      GetMapValue(tinyintMap, Cast($"k".short, ByteType, evalMode = EvalMode.TRY)))
+    ruleTest(implicitTypeCastsRule,
+      GetMapValue(intMap, $"k".long),
+      GetMapValue(intMap, Cast($"k".long, IntegerType, evalMode = EvalMode.TRY)))
+
+    // Other keys are cast as before.
+    ruleTest(implicitTypeCastsRule,
+      GetMapValue(bigintMap, $"k".int),
+      GetMapValue(bigintMap, Cast($"k".int, LongType)))
+    ruleTest(implicitTypeCastsRule,
+      GetMapValue(intMap, $"k".int),
+      GetMapValue(intMap, $"k".int))
+  }
+
   test("SPARK-56152: implicit type cast - TimeType") {
     val checkedType = TimeType()
     checkTypeCasting(checkedType, castableTypes = Seq(checkedType, StringType) ++ datetimeTypes)
