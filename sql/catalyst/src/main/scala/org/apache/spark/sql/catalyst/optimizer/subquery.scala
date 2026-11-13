@@ -670,7 +670,7 @@ object PullupCorrelatedPredicates extends Rule[LogicalPlan] with PredicateHelper
    * check is conservative and looks at all of `root`.
    */
   private def mayMoveIntoOuterInput(root: LogicalPlan, exprId: ExprId): Boolean =
-    root.isStreaming || root.exists {
+    root.exists {
       case p @ (_: Filter | _: Join) =>
         !p.expressions.forall(_.deterministic) || p.expressions.exists(_.exists {
           case s: SubqueryExpression => s.exprId != exprId && !repeatableInput(s.plan)

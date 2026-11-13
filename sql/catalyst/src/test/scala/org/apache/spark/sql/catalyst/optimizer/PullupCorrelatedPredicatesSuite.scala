@@ -131,7 +131,7 @@ class PullupCorrelatedPredicatesSuite extends PlanTest {
     val optimized = Optimize.execute(plan)
     comparePlans(Optimize.execute(optimized), optimized, false)
     val subqueries = optimized.flatMap(_.expressions).flatMap(_.collect {
-      case s: ScalarSubquery => s
+      case s: ScalarSubquery if s.children.nonEmpty => s
     })
     assert(subqueries.size == 1)
     val countBugDomainJoin = subqueries.head.plan.exists {
@@ -213,12 +213,15 @@ class PullupCorrelatedPredicatesSuite extends PlanTest {
     }
     assert(countBugHandling(correlated(max($"d")), above = _.limit(10)) == (Some(false), true))
     // Only operators and aggregate functions known to give the same rows again: FIRST, a SUM of
-    // DOUBLEs and a Deduplicate (which becomes a FIRST later) do not, a SUM of INTs does.
+    // DOUBLEs, a Deduplicate (which becomes a FIRST later) and a subquery with a LIMIT in a
+    // projection do not, a SUM of INTs does.
     val inLegacy = (Some(true), false)
     val inDecorrelation = (Some(false), true)
     Seq(testRelation.groupBy($"a")($"a", first($"b").as("f")),
         testRelation.groupBy($"a")($"a", sum($"b").as("s")),
-        Deduplicate(Seq($"a"), testRelation)).foreach { outer =>
+        Deduplicate(Seq($"a"), testRelation),
+        testRelation.select($"a", ScalarSubquery(testRelation2.select($"c").limit(1)).as("x"))
+    ).foreach { outer =>
       assert(countBugHandling(correlated(max($"d")), outer = outer) == inLegacy, outer)
     }
     assert(countBugHandling(correlated(max($"d")),
