@@ -204,6 +204,13 @@ import org.apache.spark.util.collection.Utils
  * techniques.
  */
 object RewriteDistinctAggregates extends Rule[LogicalPlan] {
+  private def evalChildren(exprs: Seq[Expression]): Seq[Expression] = {
+    exprs.flatMap {
+      case so: SortOrder => so.children
+      case other => Seq(other)
+    }
+  }
+
   private def mustRewrite(
       distinctAggs: Seq[AggregateExpression],
       groupingExpressions: Seq[Expression]): Boolean = {
@@ -212,8 +219,13 @@ object RewriteDistinctAggregates extends Rule[LogicalPlan] {
     // foldable, we need to rewrite the query, e.g. SELECT COUNT(DISTINCT 1). Without this case,
     // non-grouping aggregation queries with distinct aggregate expressions will be incorrectly
     // handled by the aggregation strategy, causing wrong results when working with empty tables.
+    // An ordered distinct aggregate whose arguments and WITHIN GROUP keys are all constants
+    // (e.g. listagg(DISTINCT 'x', ',') WITHIN GROUP (ORDER BY 'x')) counts as all-foldable here
+    // because evalChildren unwraps SortOrder before checking foldability. The rule must not rely
+    // on the planner keeping a SortOrder-wrapped constant as the single-distinct key, and the
+    // extra Expand cost for such queries is accepted to guarantee correct empty-table results.
     distinctAggs.exists(_.filter.isDefined) || (groupingExpressions.isEmpty &&
-      distinctAggs.exists(_.aggregateFunction.children.forall(_.foldable)))
+      distinctAggs.exists(e => evalChildren(e.aggregateFunction.children).forall(_.foldable)))
   }
 
   private def mayNeedtoRewrite(a: Aggregate): Boolean = {
@@ -237,7 +249,8 @@ object RewriteDistinctAggregates extends Rule[LogicalPlan] {
   private def groupDistinctAggs(
       aggExpressions: Seq[AggregateExpression]): Map[ExpressionSet, Seq[AggregateExpression]] = {
     aggExpressions.filter(_.isDistinct).groupBy { e =>
-      val unfoldableChildren = ExpressionSet(e.aggregateFunction.children.filter(!_.foldable))
+      val unfoldableChildren = ExpressionSet(
+        evalChildren(e.aggregateFunction.children).filter(!_.foldable))
       if (unfoldableChildren.nonEmpty) {
         // Only expand the unfoldable children
         unfoldableChildren
@@ -248,7 +261,7 @@ object RewriteDistinctAggregates extends Rule[LogicalPlan] {
         // count(distinct 1) will be explained to count(1) after the rewrite function.
         // Generally, the distinct aggregateFunction should not run
         // foldable TypeCheck for the first child.
-        ExpressionSet(e.aggregateFunction.children.take(1))
+        ExpressionSet(evalChildren(e.aggregateFunction.children).take(1))
       }
     }
   }
@@ -285,7 +298,12 @@ object RewriteDistinctAggregates extends Rule[LogicalPlan] {
       def patchAggregateFunctionChildren(
           af: AggregateFunction)(
           attrs: Expression => Option[Expression]): AggregateFunction = {
-        val newChildren = af.children.map(c => attrs(c).getOrElse(c))
+        val newChildren = af.children.map {
+          case so: SortOrder =>
+            so.withNewChildren(so.children.map(c => attrs(c).getOrElse(c)))
+          case c =>
+            attrs(c).getOrElse(c)
+        }
         af.withNewChildren(newChildren).asInstanceOf[AggregateFunction]
       }
 
@@ -362,7 +380,7 @@ object RewriteDistinctAggregates extends Rule[LogicalPlan] {
           val operators = expressions.map { e =>
             val af = e.aggregateFunction
             val condition = e.filter.flatMap(distinctAggFilterAttrLookup.get)
-            val naf = if (af.children.forall(_.foldable)) {
+            val naf = if (evalChildren(af.children).forall(_.foldable)) {
               af
             } else {
               patchAggregateFunctionChildren(af) { x =>
@@ -386,7 +404,7 @@ object RewriteDistinctAggregates extends Rule[LogicalPlan] {
       val regularAggExprs = aggExpressions
         .filter(e => !e.isDistinct && e.children.exists(!_.foldable))
       val regularAggFunChildren = regularAggExprs
-        .flatMap(_.aggregateFunction.children.filter(!_.foldable))
+        .flatMap(e => evalChildren(e.aggregateFunction.children).filter(!_.foldable))
       val regularAggFilterAttrs = regularAggExprs.flatMap(_.filterAttributes)
       val regularAggChildren = (regularAggFunChildren ++ regularAggFilterAttrs).distinct
       val regularAggChildAttrMap = regularAggChildren.map(expressionAttributePair)

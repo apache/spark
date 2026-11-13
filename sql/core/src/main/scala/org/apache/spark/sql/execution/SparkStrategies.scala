@@ -625,8 +625,14 @@ abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
           ae.aggregateFunction.isInstanceOf[PythonAggregate]) =>
         val (functionsWithDistinct, functionsWithoutDistinct) =
           aggExpressions.partition(_.isDistinct)
+        def evalDistinctChildren(ae: aggregate.AggregateExpression): Seq[Expression] = {
+          ae.aggregateFunction.children.flatMap {
+            case s: SortOrder => s.children
+            case e => Seq(e)
+          }.filterNot(_.foldable)
+        }
         val distinctAggChildSets = functionsWithDistinct.map { ae =>
-          ExpressionSet(ae.aggregateFunction.children.filterNot(_.foldable))
+          ExpressionSet(evalDistinctChildren(ae))
         }.distinct
         if (distinctAggChildSets.length > 1) {
           // This is a sanity check. We should not reach here when we have multiple distinct
@@ -659,13 +665,7 @@ abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
             // to be [COUNT(DISTINCT foo), MAX(DISTINCT foo)], but
             // [COUNT(DISTINCT bar), COUNT(DISTINCT foo)] is disallowed because those two distinct
             // aggregates have different column expressions.
-            val distinctExpressions =
-            functionsWithDistinct.head.aggregateFunction.children
-              .filterNot(_.foldable)
-              .map {
-                case s: SortOrder => s.child
-                case e => e
-              }
+            val distinctExpressions = evalDistinctChildren(functionsWithDistinct.head)
             val normalizedNamedDistinctExpressions = distinctExpressions.map { e =>
               // Ideally this should be done in `NormalizeFloatingNumbers`, but we do it here
               // because `distinctExpressions` is not extracted during logical phase.
