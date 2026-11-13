@@ -53,6 +53,11 @@ case class LogicalRelation(
     output = output.map(QueryPlan.normalizeExpressions(_, output)),
     catalogTable = None)
 
+  // A batch read is taken to return the same rows every time, as a DSv2 scan without a pushed
+  // limit, sample or aggregate is. A source that picks its own rows on each read, such as a JDBC
+  // query with a `LIMIT`, can return other rows, which Spark cannot see.
+  override def isOutputRepeatable: Boolean = !isStreaming
+
   override def computeStats(): Statistics = {
     catalogTable
       .flatMap(_.stats.map(_.toPlanStats(output, conf.cboEnabled || conf.planStatsEnabled)))

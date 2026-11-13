@@ -19,7 +19,7 @@ package org.apache.spark.sql.execution.dynamicpruning
 
 import org.apache.spark.sql.catalyst.catalog.HiveTableRelation
 import org.apache.spark.sql.catalyst.expressions._
-import org.apache.spark.sql.catalyst.optimizer.{JoinSelectionHelper, ReusableBroadcastValueProjection}
+import org.apache.spark.sql.catalyst.optimizer.{BuildLeft, BuildRight, InjectRuntimeFilter, JoinSelectionHelper, ReusableBroadcastValueProjection}
 import org.apache.spark.sql.catalyst.planning.ExtractEquiJoinKeys
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.rules.Rule
@@ -103,7 +103,8 @@ object PartitionPruning extends Rule[LogicalPlan] with PredicateHelper with Join
       filteringKeys: Seq[Expression],
       filteringPlan: LogicalPlan,
       joinKeys: Seq[Expression],
-      partScan: LogicalPlan): LogicalPlan = {
+      partScan: LogicalPlan,
+      hinted: Boolean): LogicalPlan = {
     val reuseEnabled = conf.exchangeReuseEnabled
     require(filteringKeys.size == 1, "DPP Filters should only have a single broadcasting key " +
       "since there are no usage for multiple broadcasting keys at the moment.")
@@ -113,18 +114,26 @@ object PartitionPruning extends Rule[LogicalPlan] with PredicateHelper with Join
     } else {
       None
     }
-    lazy val hasBenefit = pruningHasBenefit(
+    // A [[RuntimeFilterHint]] on the filtering side asserts the benefit `pruningHasBenefit`
+    // estimates, so take it as given rather than guessing from statistics and filter ratios.
+    lazy val hasBenefit = hinted || pruningHasBenefit(
       pruningKey, partScan, filteringKeys.head, filteringPlan, hasSelectivePredicate(filteringPlan))
     if (reuseEnabled || hasBenefit) {
+      // `reuseBroadcastOnly` keeps DPP from re-executing the filtering side unless a broadcast
+      // can be reused, i.e. unless pruning is free. That is a cost bound, and the cost is what
+      // a [[RuntimeFilterHint]] asks to spend: a hinted filter is applied whether or not a
+      // broadcast turns up, rather than degrading to `true` in [[PlanDynamicPruningFilters]].
+      val onlyInBroadcast = !hinted &&
+        (conf.dynamicPartitionPruningReuseBroadcastOnly || !hasBenefit)
       // insert a DynamicPruning wrapper to identify the subquery during query planning
-      Filter(
-        DynamicPruningSubquery(
-          pruningKey,
-          filteringPlan,
-          joinKeys,
-          indices,
-          conf.dynamicPartitionPruningReuseBroadcastOnly || !hasBenefit)(broadcastValueProjection),
-        pruningPlan)
+      val pruning = DynamicPruningSubquery(
+        pruningKey,
+        filteringPlan,
+        joinKeys,
+        indices,
+        onlyInBroadcast)(broadcastValueProjection)
+      if (hinted) pruning.setTagValue(DynamicPruning.HONORS_RUNTIME_FILTER_HINT, ())
+      Filter(pruning, pruningPlan)
     } else {
       // abort dynamic partition pruning
       pruningPlan
@@ -312,17 +321,24 @@ object PartitionPruning extends Rule[LogicalPlan] with PredicateHelper with Join
    * meet the following requirements:
    *   (1) it can not be a stream
    *   (2) it needs to contain a selective predicate or a cheaply-recomputable materialized input
+   *
+   * (2) is evidence that pruning pays off, which a [[RuntimeFilterHint]] on the filtering side
+   * supplies directly once honored (`hinted`).
    */
-  private def hasPartitionPruningFilter(plan: LogicalPlan): Boolean = {
-    !plan.isStreaming &&
-      (hasSelectivePredicate(plan) || isCheaplyRecomputableMaterializedPlan(plan))
+  private def hasPartitionPruningFilter(plan: LogicalPlan, hinted: Boolean): Boolean = {
+    hinted || (!plan.isStreaming &&
+      (hasSelectivePredicate(plan) || isCheaplyRecomputableMaterializedPlan(plan)))
   }
 
   private def prune(plan: LogicalPlan): LogicalPlan = {
+    lazy val cteDefs = cteDefinitions(plan)
     plan transformUp {
       // skip this rule if there's already a DPP subquery on the LHS of a join
       case j @ Join(Filter(_: DynamicPruningSubquery, _), _, _, _, _) => j
       case j @ Join(_, Filter(_: DynamicPruningSubquery, _), _, _, _) => j
+      // An earlier pass decided the join's runtime filter hint and built its filters, or reported
+      // why not. A new DPP filter here would honor a hint that was reported, or prune its side.
+      case j: Join if isRuntimeFilterHintDecided(j.hint) => j
       case j @ Join(left, right, joinType, Some(condition), hint) =>
         var newLeft = left
         var newRight = right
@@ -333,6 +349,38 @@ object PartitionPruning extends Rule[LogicalPlan] with PredicateHelper with Join
           case _ => (Nil, Nil)
         }
 
+        // A side hinted as the runtime filter source is the filtering side, so the other side is
+        // the one pruned, and the hinted side is never itself pruned. The hint is ignored, as by
+        // [[InjectRuntimeFilter]], which reports it, when it is ambiguous or when the hinted side
+        // cannot be a runtime filter source on any join key.
+        val hintedSource = runtimeFilterSourceSide(hint)
+        lazy val hintCheck = hintedSource.map { side =>
+          runtimeFilterHintCheck(if (side == BuildLeft) left else right, cteDefs)
+        }
+        // Why the hinted side cannot prune the other side on the key pair `l` and `r`. A DPP
+        // filter's subquery runs the hinted side as it is, so it checks the functions the whole
+        // side calls (`checkFunctions`).
+        def hintRejection(l: Expression, r: Expression, checkFunctions: Boolean): Option[String] =
+          hintCheck.flatMap { check =>
+            if (hintedSource.contains(BuildRight)) check.rejection(l, r, checkFunctions)
+            else check.rejection(r, l, checkFunctions)
+          }
+        val keyRejections =
+          leftKeys.lazyZip(rightKeys).map(hintRejection(_, _, checkFunctions = false))
+        val declined = hintedSource.isDefined && keyRejections.forall(_.isDefined)
+        // Until the pass over the outer query decides the hint, the join gets no DPP filter.
+        val leftToOuterQuery = leavesRuntimeFilterHintToOuterQuery(plan, keyRejections)
+        val pruneLeftHinted = !declined && hintedSource.contains(BuildRight)
+        val pruneRightHinted = !declined && hintedSource.contains(BuildLeft)
+        // Whether the hinted side honors the hint for pruning on the key pair. Otherwise DPP
+        // decides from its own estimates, as without the hint. The pruning key must not fail: the
+        // hint waives the estimates that keep a DPP filter off most keys (SPARK-60809).
+        def honorsHint(l: Expression, r: Expression): Boolean =
+          hintRejection(l, r, checkFunctions = true).isEmpty && {
+            if (hintedSource.contains(BuildRight)) InjectRuntimeFilter.hintedKeyCannotFail(l, left)
+            else InjectRuntimeFilter.hintedKeyCannotFail(r, right)
+          }
+
         // checks if two expressions are on opposite sides of the join
         def fromDifferentSides(x: Expression, y: Expression): Boolean = {
           def fromLeftRight(x: Expression, y: Expression) =
@@ -341,7 +389,7 @@ object PartitionPruning extends Rule[LogicalPlan] with PredicateHelper with Join
           fromLeftRight(x, y) || fromLeftRight(y, x)
         }
 
-        splitConjunctivePredicates(condition).foreach {
+        (if (leftToOuterQuery) Nil else splitConjunctivePredicates(condition)).foreach {
           case EqualTo(a: Expression, b: Expression)
               if fromDifferentSides(a, b) =>
             val (l, r) = if (a.references.subsetOf(left.outputSet) &&
@@ -354,14 +402,18 @@ object PartitionPruning extends Rule[LogicalPlan] with PredicateHelper with Join
             // there should be a partitioned table and a filter on the dimension table,
             // otherwise the pruning will not trigger
             var filterableScan = getFilterableTableScan(l, left)
-            if (filterableScan.isDefined && canPruneLeft(joinType) &&
-                hasPartitionPruningFilter(right)) {
-              newLeft = insertPredicate(l, newLeft, Seq(r), right, rightKeys, filterableScan.get)
+            lazy val leftHinted = pruneLeftHinted && honorsHint(l, r)
+            if (filterableScan.isDefined && canPruneLeft(joinType) && !pruneRightHinted &&
+                !isStatefulStream(left) && hasPartitionPruningFilter(right, leftHinted)) {
+              newLeft = insertPredicate(
+                l, newLeft, Seq(r), right, rightKeys, filterableScan.get, leftHinted)
             } else {
               filterableScan = getFilterableTableScan(r, right)
-              if (filterableScan.isDefined && canPruneRight(joinType) &&
-                  hasPartitionPruningFilter(left) ) {
-                newRight = insertPredicate(r, newRight, Seq(l), left, leftKeys, filterableScan.get)
+              lazy val rightHinted = pruneRightHinted && honorsHint(l, r)
+              if (filterableScan.isDefined && canPruneRight(joinType) && !pruneLeftHinted &&
+                  !isStatefulStream(right) && hasPartitionPruningFilter(left, rightHinted)) {
+                newRight = insertPredicate(
+                  r, newRight, Seq(l), left, leftKeys, filterableScan.get, rightHinted)
               }
             }
           case _ =>

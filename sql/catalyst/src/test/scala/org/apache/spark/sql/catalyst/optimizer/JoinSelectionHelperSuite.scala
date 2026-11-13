@@ -18,11 +18,13 @@
 package org.apache.spark.sql.catalyst.optimizer
 
 import org.apache.spark.sql.catalyst.dsl.expressions._
-import org.apache.spark.sql.catalyst.expressions.{Attribute, AttributeMap, EqualTo, IsNull, Or}
+import org.apache.spark.sql.catalyst.expressions.{Add, Alias, Attribute, AttributeMap, EqualTo, Expression, ExternalUserDefinedFunction, IsNull, LessThan, Literal, Or, Rand}
 import org.apache.spark.sql.catalyst.plans.{Inner, LeftAnti, LeftOuter, PlanTest, RightOuter}
-import org.apache.spark.sql.catalyst.plans.logical.{BROADCAST, HintInfo, Join, JoinHint, LeafNode, LogicalPlan, NO_BROADCAST_AND_REPLICATION, NO_BROADCAST_HASH, SHUFFLE_HASH, SHUFFLE_REPLICATE_NL, Statistics}
+import org.apache.spark.sql.catalyst.plans.logical.{BROADCAST, CTERelationDef, CTERelationRef, Filter, HintInfo, Join, JoinHint, LeafNode, LocalRelation, LogicalPlan, NO_BROADCAST_AND_REPLICATION, NO_BROADCAST_HASH, Project, SHUFFLE_HASH, SHUFFLE_REPLICATE_NL, Statistics, WithCTE}
 import org.apache.spark.sql.catalyst.statsEstimation.StatsTestPlan
 import org.apache.spark.sql.internal.SQLConf
+import org.apache.spark.sql.types.IntegerType
+import org.apache.spark.udf.worker.UDFWorkerSpecification
 
 class JoinSelectionHelperSuite extends PlanTest with JoinSelectionHelper {
 
@@ -358,5 +360,51 @@ class JoinSelectionHelperSuite extends PlanTest with JoinSelectionHelper {
         nullAwareAntiJoin(runtimeRight), SQLConf.get) === Some(BuildRight))
     }
 
+  }
+
+  test("runtimeFilterHintCheck checks the functions the hinted side calls") {
+    val relation = LocalRelation($"k".int, $"x".int)
+    val k = relation.output.head
+    val x = relation.output.last
+    val applicationKey = $"a".int
+    def externalUDF(child: Expression): ExternalUserDefinedFunction = ExternalUserDefinedFunction(
+      name = Some("f"),
+      workerSpec = UDFWorkerSpecification.getDefaultInstance,
+      payload = Array.emptyByteArray,
+      dataType = IntegerType,
+      children = Seq(child),
+      inputTypes = None,
+      udfDeterministic = true,
+      udfNullable = false)
+    val check = runtimeFilterHintCheck(
+      Project(Seq(k, Alias(externalUDF(x), "y")()), relation), Map.empty)
+    val reason = RuntimeFilterSourceAnalysis.ExtractedFunction
+    assert(check.rejection(applicationKey, k) === Some(reason))
+    // A Bloom filter checks the subquery it builds, which reads only what the key needs.
+    assert(check.rejection(applicationKey, k, checkFunctions = false) === None)
+    // A DPP filter's subquery evaluates the key itself.
+    assert(check.rejection(applicationKey, Add(k, externalUDF(k)), checkFunctions = false) ===
+      Some(reason))
+  }
+
+  test("runtimeFilterHintCheck reads a CTE through its definition") {
+    val relation = LocalRelation($"k".int)
+    val applicationKey = $"a".int
+    def rejection(definition: LogicalPlan, withDefinitions: Boolean = true): Option[String] = {
+      val cteDef = CTERelationDef(definition)
+      val ref = CTERelationRef(cteDef.id, _resolved = true, cteDef.output.map(_.newInstance()),
+        isStreaming = false)
+      val cteDefs = if (withDefinitions) {
+        cteDefinitions(WithCTE(ref, Seq(cteDef)))
+      } else {
+        Map.empty[Long, CTERelationDef]
+      }
+      runtimeFilterHintCheck(ref, cteDefs).rejection(applicationKey, ref.output.head)
+    }
+    assert(rejection(relation) === None)
+    assert(rejection(Filter(LessThan(Rand(Literal(1L)), Literal(2.0)), relation))
+      .exists(_.contains("may produce different rows or join keys")))
+    assert(rejection(relation, withDefinitions = false)
+      .exists(_.contains("reads a CTE defined outside the plan")))
   }
 }
