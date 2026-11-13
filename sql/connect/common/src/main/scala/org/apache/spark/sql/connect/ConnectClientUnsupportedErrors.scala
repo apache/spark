@@ -39,6 +39,9 @@ private[sql] object ConnectClientUnsupportedErrors {
   def experimental(): SparkUnsupportedOperationException =
     unsupportedFeatureException("SESSION_EXPERIMENTAL_METHODS")
 
+  def getOrCreate(): SparkUnsupportedOperationException =
+    unsupportedFeatureException("SESSION_GET_OR_CREATE")
+
   def listenerManager(): SparkUnsupportedOperationException =
     unsupportedFeatureException("SESSION_LISTENER_MANAGER")
 

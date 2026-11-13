@@ -9365,6 +9365,11 @@
           "Access to SparkSession Experimental (methods). This is server side developer API"
         ]
       },
+      "SESSION_GET_OR_CREATE" : {
+        "message" : [
+          "Invoking SparkSession 'getOrCreate'."
+        ]
+      },
       "SESSION_LISTENER_MANAGER" : {
         "message" : [
           "Access to the SparkSession Listener Manager. This is server side developer API"
