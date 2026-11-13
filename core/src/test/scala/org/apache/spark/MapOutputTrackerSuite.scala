@@ -36,7 +36,7 @@ import org.apache.spark.internal.config.Tests.IS_TESTING
 import org.apache.spark.network.shuffle.ExternalBlockStoreClient
 import org.apache.spark.rpc.{RpcAddress, RpcCallContext, RpcEndpoint, RpcEndpointRef, RpcEnv}
 import org.apache.spark.scheduler.{CompressedMapStatus, HighlyCompressedMapStatus, MapStatus, MergeStatus}
-import org.apache.spark.shuffle.FetchFailedException
+import org.apache.spark.shuffle.{FetchFailedException, MetadataFetchFailedException}
 import org.apache.spark.storage.{BlockManagerId, BlockManagerMasterEndpoint, ShuffleBlockId, ShuffleMergedBlockId}
 import org.apache.spark.util.collection.Utils.createArray
 
@@ -51,6 +51,19 @@ class MapOutputTrackerSuite extends SparkFunSuite with LocalSparkContext {
   def createRpcEnv(name: String, host: String = "localhost", port: Int = 0,
       securityManager: SecurityManager = new SecurityManager(conf)): RpcEnv = {
     RpcEnv.create(name, host, port, conf, securityManager)
+  }
+
+  /** Build a MapStatus the way a mapper running with `sparkConf` would, checksum included. */
+  private def stampedMapStatus(
+      loc: BlockManagerId,
+      uncompressedSizes: Array[Long],
+      mapTaskId: Long,
+      sparkConf: SparkConf): MapStatus = {
+    val prevEnv = SparkEnv.get
+    val env = mock(classOf[SparkEnv])
+    when(env.conf).thenReturn(sparkConf)
+    SparkEnv.set(env)
+    try MapStatus(loc, uncompressedSizes, mapTaskId) finally SparkEnv.set(prevEnv)
   }
 
   test("master start and stop") {
@@ -379,6 +392,48 @@ class MapOutputTrackerSuite extends SparkFunSuite with LocalSparkContext {
       assert(1 == masterTracker.getNumCachedSerializedBroadcast)
       masterTracker.unregisterShuffle(20)
       assert(0 == masterTracker.getNumCachedSerializedBroadcast)
+    }
+  }
+
+  test("MapStatus checksum is verified on the reducer's fetch, once per shuffle") {
+    val newConf = new SparkConf
+    newConf.set(SHUFFLE_MAP_STATUS_CHECKSUM_ENABLED, true)
+
+    val rpcEnv = createRpcEnv("spark")
+    val masterTracker = newTrackerMaster(newConf)
+    masterTracker.trackerEndpoint = rpcEnv.setupEndpoint(MapOutputTracker.ENDPOINT_NAME,
+      new MapOutputTrackerMasterEndpoint(rpcEnv, masterTracker, newConf))
+
+    val workerRpcEnv = createRpcEnv("spark-worker")
+    val workerTracker = new MapOutputTrackerWorker(newConf)
+    workerTracker.trackerEndpoint =
+      workerRpcEnv.setupEndpointRef(rpcEnv.address, MapOutputTracker.ENDPOINT_NAME)
+
+    try {
+      // A healthy shuffle must still verify.
+      masterTracker.registerShuffle(30, 2, MergeStatus.SHUFFLE_PUSH_DUMMY_NUM_REDUCES)
+      masterTracker.registerMapOutput(30, 0,
+        stampedMapStatus(BlockManagerId("a", "hostA", 1000), Array(1000L), 5, newConf))
+      masterTracker.registerMapOutput(30, 1,
+        stampedMapStatus(BlockManagerId("b", "hostB", 1000), Array(2000L), 6, newConf))
+      workerTracker.updateEpoch(masterTracker.getEpoch)
+      assert(workerTracker.getMapSizesByExecutorId(30, 0).length === 2)
+
+      // An unstamped status carries a zero, which fails as a corrupted value would.
+      masterTracker.registerShuffle(31, 1, MergeStatus.SHUFFLE_PUSH_DUMMY_NUM_REDUCES)
+      masterTracker.registerMapOutput(31, 0,
+        MapStatus(BlockManagerId("c", "hostC", 1000), Array(1000L), 7))
+      workerTracker.updateEpoch(masterTracker.getEpoch)
+      val e = intercept[MetadataFetchFailedException] {
+        workerTracker.getMapSizesByExecutorId(31, 0)
+      }
+      assert(e.getMessage.contains("MapStatus checksum verification failed"))
+      assert(e.getMessage.contains("mapId=7"))
+    } finally {
+      masterTracker.stop()
+      workerTracker.stop()
+      rpcEnv.shutdown()
+      workerRpcEnv.shutdown()
     }
   }
 
