@@ -207,7 +207,7 @@ trait ExtractValue extends Expression with QueryErrorsBase {
  * For example, when get field `yEAr` from `<year: int, month: int>`, we should pass in `yEAr`.
  */
 case class GetStructField(child: Expression, ordinal: Int, name: Option[String] = None)
-  extends UnaryExpression with ExtractValue with ExpectsInputTypes {
+  extends UnaryExpression with ExtractValue with ExpectsInputTypes with NoThrow {
 
   override def inputTypes: Seq[AbstractDataType] = Seq(StructType, IntegralType)
 
@@ -274,7 +274,7 @@ case class GetArrayStructFields(
     field: StructField,
     ordinal: Int,
     numFields: Int,
-    containsNull: Boolean) extends UnaryExpression with ExtractValue {
+    containsNull: Boolean) extends UnaryExpression with ExtractValue with NoThrow {
 
   override def checkInputDataTypes(): TypeCheckResult = child.dataType match {
     case ArrayType(_: StructType, _) => TypeCheckResult.TypeCheckSuccess
@@ -816,7 +816,7 @@ trait GetMapValueUtil extends BinaryExpression with ImplicitCastInputTypes {
  * We need to do type checking here as `key` expression maybe unresolved.
  */
 case class GetMapValue(child: Expression, key: Expression)
-  extends GetMapValueUtil with ExtractValue {
+  extends GetMapValueUtil with ExtractValue with NoThrow {
 
   @transient private lazy val ordering: Ordering[Any] =
     TypeUtils.getInterpretedOrdering(keyType)

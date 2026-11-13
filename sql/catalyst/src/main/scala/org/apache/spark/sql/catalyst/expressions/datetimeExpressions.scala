@@ -601,7 +601,7 @@ case class DateSub(startDate: Expression, days: Expression)
 }
 
 trait GetTimeField extends UnaryExpression
-  with TimeZoneAwareExpression with ImplicitCastInputTypes {
+  with TimeZoneAwareExpression with ImplicitCastInputTypes with NoThrow {
   override def nullIntolerant: Boolean = true
   val func: (Long, ZoneId) => Any
   val funcName: String
@@ -736,7 +736,7 @@ case class SecondWithFractionNanos(child: Expression, timeZoneId: Option[String]
     copy(child = newChild)
 }
 
-trait GetDateField extends UnaryExpression with ImplicitCastInputTypes {
+trait GetDateField extends UnaryExpression with ImplicitCastInputTypes with NoThrow {
   override def nullIntolerant: Boolean = true
   val func: Int => Any
   val funcName: String
