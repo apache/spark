@@ -452,7 +452,7 @@ class JsonArraySuite extends QueryTest with SharedSparkSession {
       Literal("""{"a":{"x":1}}"""), "$.a", StringType, JsonQueryWrapper.Without, quotes,
       JsonQueryBehavior.Null, JsonQueryBehavior.Null)
     // KEEP QUOTES emits JSON text, so a nested JSON_QUERY stays spliced: reparse re-derives the
-    // implicit FORMAT JSON. Each clause-free level carries a default RETURNING STRING.
+    // implicit FORMAT JSON. The outer level renders the default `ABSENT ON NULL`.
     val keep = jsonQuery(JsonQueryQuotes.Keep)
     val splicedKeep = JsonArray(
       Seq(keep), Seq(true), Seq(false), JsonConstructorNullBehavior.Absent, StringType)
@@ -536,6 +536,14 @@ class JsonArraySuite extends QueryTest with SharedSparkSession {
     val empty = JsonArray(
       Seq.empty, Seq.empty, Seq.empty, JsonConstructorNullBehavior.Absent, StringType)
     assert(empty.sql == "JSON_ARRAY(ABSENT ON NULL)")
+    val emptyKeepNull = JsonArray(
+      Seq.empty, Seq.empty, Seq.empty, JsonConstructorNullBehavior.Null, StringType)
+    assert(emptyKeepNull.sql == "JSON_ARRAY(NULL ON NULL)")
+    // The pretty column name has no stray space either, and the reparse evaluates the same.
+    val df = sql("SELECT json_array(NULL ON NULL)")
+    assert(df.schema.head.name == "JSON_ARRAY(NULL ON NULL)")
+    checkAnswer(df, Row("[]"))
+    checkAnswer(sql(s"SELECT ${emptyKeepNull.sql}"), Row("[]"))
   }
 
   test("a constant JSON_ARRAY is foldable unless it has an explicit FORMAT JSON") {

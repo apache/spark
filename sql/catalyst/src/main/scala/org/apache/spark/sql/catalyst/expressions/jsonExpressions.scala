@@ -1724,7 +1724,7 @@ case class JsonArray(
       case JsonConstructorNullBehavior.Absent =>
         if (forceBuiltinOwnership) " ABSENT ON NULL" else ""
     }
-    // `trim` drops the leading space of the clauses in the no-element case (`JSON_ARRAY()`).
+    // `trim` drops the leading space when only a clause renders (`JSON_ARRAY(ABSENT ON NULL)`).
     s"JSON_ARRAY(${s"$valuesSQL$nullSQL$returningSQL".trim})"
   }
 
