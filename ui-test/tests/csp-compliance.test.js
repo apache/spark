@@ -91,7 +91,7 @@ test('All inline scripts use CSP nonce', async function () {
   }
 
   if (violations.length > 0) {
-    const message = violations.map(v => 
+    const message = violations.map(v =>
       `${v.file}:${v.line} - Missing nonce: ${v.tag}`
     ).join('\n');
     throw new Error(`Found inline scripts without CSP nonce:\n${message}`);
