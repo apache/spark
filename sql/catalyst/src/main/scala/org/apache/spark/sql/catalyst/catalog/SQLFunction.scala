@@ -204,7 +204,7 @@ object SQLFunction {
 
   /**
    * Marks the nodes of a parameter default that named-argument filling inserts into a call, so
-   * the analyzer can treat temporary objects the default binds as the called function's
+   * the analyzer can treat temporary functions the default binds as the called function's
    * dependencies. See `AnalysisContext.withTempReferencesOfInsertedDefault`.
    */
   val INSERTED_PARAMETER_DEFAULT = TreeNodeTag[Unit]("insertedParameterDefault")
