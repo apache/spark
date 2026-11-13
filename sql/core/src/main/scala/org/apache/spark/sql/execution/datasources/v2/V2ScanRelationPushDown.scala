@@ -978,11 +978,13 @@ object V2ScanRelationPushDown extends Rule[LogicalPlan] with PredicateHelper {
         s"${holder.output.length}: scan=[${realOutput.map(_.name).mkString(",")}], " +
         s"plan=[${holder.output.map(_.name).mkString(",")}]")
       val wrappedScan = getWrappedScan(scan, holder)
-      // Note: holder.pushedFilterExpressions is not propagated here because the output schema
-      // changes with variant extraction. When validConstraints is wired up, this needs revisiting.
+      // As in pruneColumns, the fully pushed filters reference the relation's output, not
+      // `realOutput`, whose attributes are new. When validConstraints is wired up, this needs
+      // revisiting.
       // Pushed variant extraction cannot be reproduced by rebuilding the scan, so this scan stays
       // not-mergeable (the default `mergeableScan = false`).
       val scanRelation = DataSourceV2ScanRelation(holder.relation, wrappedScan, realOutput,
+        pushedFilters = holder.pushedFilterExpressions,
         onlyRowWisePushdowns = !hasRowSelectingPushdown(holder))
 
       // Create projection to map real output to expected output (with transformed types)

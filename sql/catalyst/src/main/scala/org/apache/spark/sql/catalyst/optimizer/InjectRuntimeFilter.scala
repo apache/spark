@@ -240,19 +240,17 @@ object InjectRuntimeFilter extends Rule[LogicalPlan] with PredicateHelper with J
               useMaterializedThreshold = false))
           case _ => None
         }
-      case _: LeafNode if hasHitSelectiveFilter =>
-        Some(FilterCreationSide(
-          targetKey,
-          currentPlan,
-          useMaterializedThreshold = false))
-      // A DSv2 scan can take a filter in fully and leave no `Filter` for it, as a built-in file
-      // scan does with its partition filters. With no selective `Filter` above the scan, its
-      // pushed filters count as such a `Filter` would, but only for a scan whose pushed operations
-      // all work on each row by itself, since the bloom filter's subquery reads it again. A pushed
-      // limit, for example, lets the source pick other rows on a second read.
-      case scan: DataSourceV2ScanRelation if scan.onlyRowWisePushdowns &&
-          scan.pushedFilters.forall(isSimpleExpression) &&
-          scan.pushedFilters.exists(isLikelySelective) =>
+      // The bloom filter's subquery reads a DSv2 scan again, so only a scan marked with
+      // `onlyRowWisePushdowns` counts, with or without a selective `Filter` above it. A pushed
+      // limit, for example, lets the source pick other rows on a second read. Its pushed filters
+      // must be simple, as the condition of a `Filter` must.
+      case scan: DataSourceV2ScanRelation
+          if !scan.onlyRowWisePushdowns || !scan.pushedFilters.forall(isSimpleExpression) => None
+      // A filter that a DSv2 scan took in fully leaves no `Filter` for it, as a built-in file scan
+      // does with its partition filters, so a selective one counts as a selective `Filter` does.
+      // The size check still uses the scan's estimate, which for a V2 file scan covers all its
+      // partitions.
+      case leaf: LeafNode if hasHitSelectiveFilter || hasSelectivePushedFilters(leaf) =>
         Some(FilterCreationSide(
           targetKey,
           currentPlan,
@@ -266,6 +264,11 @@ object InjectRuntimeFilter extends Rule[LogicalPlan] with PredicateHelper with J
     } else {
       None
     }
+  }
+
+  private def hasSelectivePushedFilters(leaf: LeafNode): Boolean = leaf match {
+    case scan: DataSourceV2ScanRelation => scan.hasSelectivePushedFilters
+    case _ => false
   }
 
   private def isSimpleExpression(e: Expression): Boolean = {

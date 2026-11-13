@@ -22,7 +22,7 @@ import java.util.{Collections, Optional, OptionalLong}
 import org.apache.spark.{SparkException, SparkIllegalArgumentException}
 import org.apache.spark.sql.catalyst.analysis.{MultiInstanceRelation, NamedRelation, TimeTravelSpec}
 import org.apache.spark.sql.catalyst.catalog.{CatalogColumnStat, CatalogStatistics}
-import org.apache.spark.sql.catalyst.expressions.{And, Attribute, AttributeMap, AttributeReference, AttributeSeq, AttributeSet, Expression, ExpressionSet, Literal, ProjectionOverSchema, SortOrder, V2ExpressionUtils}
+import org.apache.spark.sql.catalyst.expressions.{And, Attribute, AttributeMap, AttributeReference, AttributeSeq, AttributeSet, Expression, ExpressionSet, Literal, PredicateHelper, ProjectionOverSchema, SortOrder, V2ExpressionUtils}
 import org.apache.spark.sql.catalyst.plans.QueryPlan
 import org.apache.spark.sql.catalyst.plans.logical.{ColumnStat, ExposesMetadataColumns, Histogram, HistogramBin, LeafNode, LogicalPlan, Statistics}
 import org.apache.spark.sql.catalyst.plans.logical.statsEstimation.{EstimationUtils, FilterEstimation}
@@ -269,7 +269,8 @@ case class DataSourceV2ScanRelation(
     pushedFilters: Seq[Expression] = Seq.empty,
     inferredFilters: Seq[Expression] = Seq.empty,
     mergeableScan: Boolean = false,
-    onlyRowWisePushdowns: Boolean = false) extends LeafNode with NamedRelation {
+    onlyRowWisePushdowns: Boolean = false)
+  extends LeafNode with NamedRelation with PredicateHelper {
 
   // TODO: Override validConstraints to return ExpressionSet(pushedFilters) so that pushed
   // filters participate in constraint propagation (InferFiltersFromConstraints, PruneFilters).
@@ -278,6 +279,15 @@ case class DataSourceV2ScanRelation(
   // This changes which filters InferFiltersFromConstraints adds or removes (e.g., it may
   // skip adding IsNotNull when the scan already implies it, or infer new filters across
   // joins), so plan stability testing is needed first.
+
+  /**
+   * Whether a rule that reads this scan again in a subquery, as DPP and a runtime bloom filter
+   * do, can count its pushed filters as a selective `Filter` above it: one of them is likely
+   * selective, and every operation pushed into the scan works on each row by itself. A filter
+   * the scan took in fully leaves no `Filter` above it, where V1 keeps one.
+   */
+  def hasSelectivePushedFilters: Boolean =
+    onlyRowWisePushdowns && pushedFilters.exists(isLikelySelective)
 
   /**
    * Resolved attributes that the scan declares for runtime filtering via
