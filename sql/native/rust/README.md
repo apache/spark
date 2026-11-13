@@ -91,22 +91,15 @@ Write support is independent: a write-only connector sets `ScanBuilder` and
 `DataSource::new_streaming_write` and `StreamingWrite`, with the same task writers. The
 write lifecycle is described below.
 
-Non-exhaustive input structs can gain fields while preserving Rust source compatibility.
-Compatible additions retain existing constructor signatures, field types, and trait
-implementations (including auto traits), and provide defaults that preserve existing behavior.
-These Rust structs stay inside the connector. Binary compatibility is governed by the
-versioned C ABI and its size-prefixed structs. Fields absent on older Spark versions must
-map to documented defaults.
-
 The inputs of these methods are `#[non_exhaustive]` structs: `*Info` structs on the driver
 (`CreateInfo`, `ScanInfo`, `MicroBatchStreamInfo`, `LatestOffsetInfo`, `MicroBatchInfo`,
 `CommitOffsetInfo`, `WriteInfo`, `CommitInfo`, `AbortInfo`, `StreamingWriteInfo`,
 `StreamingCommitInfo`, and `StreamingAbortInfo`), `*Context` structs, which carry the live
 `TaskContext`, on the executors (`ReaderContext` and `WriterContext`), and `HostInfo`, which
-`DataSource::init`
-receives in every JVM that loads the library, executors included. `ScanPlan` has a
-constructor for the same reason. The methods whose function of the header passes nothing but
-the size of its info struct yet take no struct: `ScanBuilder::plan`,
+`DataSource::init` receives in every JVM that loads the library, executors included. Fields
+may be added to them: construct them with `new`, as in tests, and destructure them with `..`.
+`ScanPlan` has a constructor for the same reason. The methods whose function of the header
+passes nothing but the size of its info struct yet take no struct: `ScanBuilder::plan`,
 `MicroBatchStream::initial_offset`, and the `commit` and `abort` of `DataWriter`. A field
 added there would be a breaking change of the SDK, which its 0.x version allows.
 
@@ -298,7 +291,10 @@ releases imported resources on failures. Input slices need not have zero offsets
 the zero-offset restriction applies to arrays exported to Spark by readers. When Spark
 writes the batches of a native scan without converting them to rows, it copies their
 values as the scan returned them, without the checks of a conversion, such as the
-precision of a decimal. Check cancellation during lengthy writes and use I/O timeouts.
+precision of a decimal. The SDK does validate each incoming batch fully, since the safe
+Arrow accessors rely on it, so a write fails on a string that is not UTF-8, such as one
+cast from binary, which a JVM sink writes through as it is. Check cancellation during
+lengthy writes and use I/O timeouts.
 
 Task `commit()` returns a typed, serde-serializable message, the `Message` of the
 `BatchWrite`. Driver `commit` receives a `CommitInfo` with one winning message per partition,
@@ -345,7 +341,8 @@ Constructors must therefore avoid irreversible changes. The epoch ID tells the t
 of batch writes, whose epoch ID is `-1`, from those of micro-batches.
 
 The [file sink][sink] demonstrates append/truncate using staged JSONL files and
-atomic publication of a manifest on a local or shared filesystem. Its documented
+atomic publication of a manifest on a local or shared filesystem. It is a demonstration of
+the write lifecycle, not a production template. Its documented
 single-writer assumption and orphan cleanup limitations are example constraints,
 not transaction guarantees provided by the SDK.
 

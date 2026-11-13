@@ -24,15 +24,6 @@
 //! owns handles, plan/message serialization, C ABI adaptation, and Arrow import/export.
 //! Rust traits stay inside the plugin; they are not an ABI between dynamic libraries.
 //!
-//! Non-exhaustive input structs can gain fields while preserving Rust source compatibility.
-//! Compatible additions retain existing constructor signatures, field types, and trait
-//! implementations (including auto traits), and provide defaults that preserve existing behavior.
-//! The experimental 0.x SDK may still introduce breaking Rust API changes.
-//!
-//! These Rust structs stay inside the connector. Binary compatibility is governed by the
-//! versioned C ABI and its size-prefixed structs. Fields absent on older Spark versions must
-//! map to documented defaults.
-//!
 //! Methods receive their inputs in `#[non_exhaustive]` structs: `*Info` structs on the driver
 //! ([`CreateInfo`], [`ScanInfo`], [`MicroBatchStreamInfo`], [`LatestOffsetInfo`],
 //! [`MicroBatchInfo`], [`CommitOffsetInfo`], [`WriteInfo`], [`CommitInfo`], [`AbortInfo`],

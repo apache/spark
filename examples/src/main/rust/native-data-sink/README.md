@@ -17,6 +17,10 @@ limitations under the License.
 
 # Rust native sink
 
+This example demonstrates the write lifecycle of the SDK; it is not a production template.
+It supports only POSIX filesystems and one write operation per destination at a time; see
+[Limits of this example](#limits-of-this-example).
+
 This write-only example implements `DataSource`, `BatchWrite`, `StreamingWrite`,
 `DataWriterFactory`, and `DataWriter` from the [Rust native data source SDK][sdk]. Its
 `DataSource` sets `type ScanBuilder = Unsupported` and `type MicroBatchStream = Unsupported`,

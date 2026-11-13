@@ -38,7 +38,7 @@ use crate::{
 #[path = "stream.rs"]
 pub(crate) mod stream;
 
-const STATE_VERSION: u32 = 4;
+const STATE_VERSION: u32 = 1;
 
 type HandleMap<T> = Mutex<HashMap<i64, Arc<Mutex<T>>>>;
 
