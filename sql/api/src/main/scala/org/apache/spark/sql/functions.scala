@@ -447,6 +447,11 @@ object functions {
    * `RESPECT NULLS` clause is only available through SQL (e.g.
    * `expr("collect_union(col) RESPECT NULLS")`).
    *
+   * It can also be used as a window function, e.g.
+   * `collect_union(col).over(Window.partitionBy("k"))`. Like `collect_set`, it cannot remove rows
+   * from its aggregation buffer, so when the lower bound of the window frame moves (e.g.
+   * `rowsBetween(-1, 1)`), the set is rebuilt from all rows in the frame for every output row.
+   *
    * @param e
    *   The array column to collect the union of. A column of type array.
    * @note
