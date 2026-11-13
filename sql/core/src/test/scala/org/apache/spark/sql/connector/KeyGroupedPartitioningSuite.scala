@@ -54,7 +54,7 @@ import org.apache.spark.sql.execution.{
   WholeStageCodegenExec}
 import org.apache.spark.sql.execution.adaptive.{AdaptiveSparkPlanExec, AQEShuffleReadExec, ResultQueryStageExec, ShuffleQueryStageExec}
 import org.apache.spark.sql.execution.aggregate.{BaseAggregateExec, HashAggregateExec, SortAggregateExec}
-import org.apache.spark.sql.execution.datasources.v2.{BatchScanExec, DataSourceV2ScanRelation, GroupPartitionsExec, PlannedScan}
+import org.apache.spark.sql.execution.datasources.v2.{BatchScanExec, DataSourceV2ScanRelation, GroupPartitionsExec}
 import org.apache.spark.sql.execution.exchange.{EnsureRequirements, ReusedExchangeExec, ShuffleExchangeExec, ShuffleExchangeLike, ValidateRequirements}
 import org.apache.spark.sql.execution.joins.{BroadcastHashJoinExec, ShuffledHashJoinExec, ShuffledJoin, SortMergeJoinExec}
 import org.apache.spark.sql.execution.metric.SQLMetricsTestUtils
@@ -2494,12 +2494,11 @@ class KeyGroupedPartitioningSuite
           }
         }
         try {
-          // A new `PlannedScan` makes the copy plan the connector's replacement partitions, and a
-          // rewritten runtime filter makes it distinct for tree replacement, while the true literal
-          // leaves those partitions unchanged.
+          // A case-class copy plans the connector's replacement partitions, and a rewritten runtime
+          // filter makes it distinct for tree replacement, while the true literal leaves those
+          // partitions unchanged.
           inMemoryScan.data = newData
-          val rebuilt = leftScan.copy(plannedScan = new PlannedScan(leftScan.scan),
-            runtimeFilters = Seq(Literal.TrueLiteral))
+          val rebuilt = leftScan.copy(runtimeFilters = Seq(Literal.TrueLiteral))
           assert(rebuilt.outputPartitioning.numPartitions == replacementKeys.size)
           assert(rebuilt.outputPartitioning != leftScan.outputPartitioning ||
             replacementKeys == Seq(1, 2))
