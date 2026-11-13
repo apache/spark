@@ -182,4 +182,44 @@ class ReuseExchangeAndSubquerySuite extends SharedSparkSession with AdaptiveSpar
       }
     }
   }
+
+  test("SPARK-61574: A scan copied by ReuseExchangeAndSubquery keeps its columnar decision") {
+    withSQLConf(SQLConf.ADAPTIVE_EXECUTION_ENABLED.key -> "false") {
+      withTable("df1", "df2") {
+        spark.range(100)
+          .select(col("id"), (col("id") % 10).as("k"))
+          .write
+          .partitionBy("k")
+          .format(tableFormat)
+          .saveAsTable("df1")
+
+        spark.range(10)
+          .select(col("id"), col("id").as("k"))
+          .write
+          .format(tableFormat)
+          .saveAsTable("df2")
+
+        // The broadcast side comes first, so the dynamic pruning subquery of the `df1` scan reuses
+        // its exchange, and the scan is copied after the columnar transitions are in place.
+        val df = sql(
+          """
+            |SELECT /*+ BROADCAST(df2) */ df1.id
+            |FROM df2 JOIN df1 ON df2.k = df1.k
+            |WHERE df2.id = 3
+            |""".stripMargin)
+
+        val copiedScans = df.queryExecution.executedPlan.collect {
+          case s: FileSourceScanExec if s.partitionFilters.exists(_.exists {
+            case e: ExecSubqueryExpression => e.plan.exists(_.isInstanceOf[ReusedExchangeExec])
+            case _ => false
+          }) => s
+        }
+        assert(copiedScans.size == 1)
+
+        withSQLConf(SQLConf.WHOLESTAGE_CODEGEN_ENABLED.key -> "false") {
+          assert(df.collect().map(_.getLong(0)).sorted.toSeq === (3L until 100L by 10))
+        }
+      }
+    }
+  }
 }
