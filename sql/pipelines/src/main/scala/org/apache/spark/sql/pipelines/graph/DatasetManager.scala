@@ -682,7 +682,9 @@ object DatasetManager extends Logging {
       caseSensitive: Boolean): Unit = {
     val currentSchema = v2ColumnsToStructType(existingTable.columns())
     val targetSchema = if (mergeWithExistingSchema) {
-      SchemaMergingUtils.mergeSchemas(currentSchema, desiredSchema, caseSensitive)
+      // Column metadata (e.g. comments) of columns present in both schemas comes from the desired
+      // schema, so that metadata changes are diffed and applied below rather than dropped.
+      SchemaMergingUtils.mergeSchemasWithDataMetadata(currentSchema, desiredSchema, caseSensitive)
     } else {
       desiredSchema
     }
