@@ -271,13 +271,18 @@ impl JsonWrite {
         // A killed attempt that is still running, such as a losing speculative one,
         // may have resolved the staging directory just before this rename and create
         // its file after the sweep below. That file stays in the sealed directory,
-        // unlisted, so readers never see it.
+        // unlisted, so readers never see it. Such an attempt may also be aborting, and
+        // its unlink can remove a losing file after the listing below returns it.
         fs::rename(&self.staging, &self.objects)?;
         self.sealed = true;
         for entry in fs::read_dir(&self.objects)? {
             let entry = entry?;
             if !filenames.contains(&entry.file_name().to_string_lossy().into_owned()) {
-                fs::remove_file(entry.path())?;
+                match fs::remove_file(entry.path()) {
+                    Ok(()) => {}
+                    Err(error) if error.kind() == ErrorKind::NotFound => {}
+                    Err(error) => return Err(error.into()),
+                }
             }
         }
 
