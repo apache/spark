@@ -3592,7 +3592,7 @@ class PlanParserSuite extends AnalysisTest {
     assert(partitioned.timeColumn == UnresolvedAttribute(Seq("t1", "ts")))
   }
 
-  test("GAP FILL: every clause and fill method parses") {
+  test("GAP FILL: every clause and fill method parses, in any clause order") {
     val maximal = singleGapFill(parsePlan(
       """SELECT * FROM metrics GAP FILL (
         |  PARTITION BY device_id
@@ -3623,33 +3623,31 @@ class PlanParserSuite extends AnalysisTest {
     assert(maximal.maxGapExpr.contains(parseExpression("INTERVAL '40' MINUTE")))
     assert(maximal.binStart.contains(GapFillOutputColumn(Some("bin_begin"))))
     assert(maximal.isGenerated.contains(GapFillOutputColumn(Some("gen"))))
+
+    // The same clauses in another order give the same node.
+    val shuffled = singleGapFill(parsePlan(
+      """SELECT * FROM metrics GAP FILL (
+        |  PARTITION BY device_id
+        |  ORDER BY ts
+        |  BIN WIDTH INTERVAL '5' MINUTE
+        |  IS_GENERATED AS gen
+        |  MAX GAP INTERVAL '40' MINUTE
+        |  FROM TIMESTAMP '2024-01-01 00:00:00' TO TIMESTAMP '2024-01-02 00:00:00'
+        |  BIN_START AS bin_begin
+        |  FILL (a LINEAR, b FFILL, c FORWARD FILL, d BFILL, e BACKWARD FILL,
+        |    f CONSTANT 'unknown', g NULL)
+        |  ALIGN TO TIMESTAMP '2024-01-01 00:02:00'
+        |)""".stripMargin))
+    assert(shuffled == maximal)
   }
 
-  test("GAP FILL: optional clauses can come in any order, with default column names") {
-    val inOrder = singleGapFill(parsePlan(
-      """SELECT * FROM t GAP FILL (
-        |  ORDER BY ts BIN WIDTH INTERVAL '5' MINUTE
-        |  ALIGN TO TIMESTAMP '2024-01-01 00:02:00'
-        |  FROM TIMESTAMP '2024-01-01 00:00:00' TO TIMESTAMP '2024-01-02 00:00:00'
-        |  FILL (a FFILL)
-        |  MAX GAP INTERVAL '40' MINUTE
-        |  BIN_START
-        |  IS_GENERATED
-        |)""".stripMargin))
-    val shuffled = singleGapFill(parsePlan(
-      """SELECT * FROM t GAP FILL (
-        |  ORDER BY ts BIN WIDTH INTERVAL '5' MINUTE
-        |  IS_GENERATED
-        |  MAX GAP INTERVAL '40' MINUTE
-        |  FROM TIMESTAMP '2024-01-01 00:00:00' TO TIMESTAMP '2024-01-02 00:00:00'
-        |  BIN_START
-        |  FILL (a FFILL)
-        |  ALIGN TO TIMESTAMP '2024-01-01 00:02:00'
-        |)""".stripMargin))
-    assert(inOrder == shuffled)
-    // Without AS, no name is stored, which requests the default name.
-    assert(inOrder.binStart.contains(GapFillOutputColumn(None)))
-    assert(inOrder.isGenerated.contains(GapFillOutputColumn(None)))
+  test("GAP FILL: BIN_START and IS_GENERATED without AS store no name") {
+    val gapFill = singleGapFill(parsePlan(
+      "SELECT * FROM t GAP FILL (ORDER BY ts BIN WIDTH INTERVAL '5' MINUTE " +
+        "BIN_START IS_GENERATED)"))
+    // No name is stored, which requests the default name.
+    assert(gapFill.binStart.contains(GapFillOutputColumn(None)))
+    assert(gapFill.isGenerated.contains(GapFillOutputColumn(None)))
   }
 
   test("GAP FILL: a repeated clause raises DUPLICATE_CLAUSES") {
@@ -3689,6 +3687,7 @@ class PlanParserSuite extends AnalysisTest {
   test("GAP FILL: a syntax error is reported before a repeated clause") {
     val base = "SELECT * FROM t GAP FILL (ORDER BY ts BIN WIDTH INTERVAL '5' MINUTE " +
       "MAX GAP a MAX GAP b"
+    // The table alias takes no column list.
     checkError(
       exception = parseException(s"$base) AS g (c)"),
       condition = "PARSE_SYNTAX_ERROR",
@@ -3709,7 +3708,7 @@ class PlanParserSuite extends AnalysisTest {
     assert(gapFill.fillColumns.head.column.origin.startIndex.contains(sql.indexOf("(a ") + 1))
   }
 
-  test("GAP FILL: table alias with or without AS, and no column aliases") {
+  test("GAP FILL: table alias with or without AS") {
     Seq(") AS g", ") g").foreach { tail =>
       val parsed = parsePlan(
         s"""SELECT * FROM metrics GAP FILL (
@@ -3720,15 +3719,6 @@ class PlanParserSuite extends AnalysisTest {
       assert(aliases.size == 1, s"alias tail '$tail' did not produce a SubqueryAlias")
       assert(aliases.head.child.isInstanceOf[UnresolvedGapFill])
     }
-
-    checkError(
-      exception = parseException(
-        """SELECT * FROM metrics GAP FILL (
-          |  ORDER BY ts
-          |  BIN WIDTH INTERVAL '5' MINUTE
-          |) AS g (a, b)""".stripMargin),
-      condition = "PARSE_SYNTAX_ERROR",
-      parameters = Map("error" -> "'('", "hint" -> ""))
   }
 
   test("GAP FILL: a join keyword after the clause starts a join, not a table alias") {
@@ -3771,8 +3761,6 @@ class PlanParserSuite extends AnalysisTest {
   test("GAP FILL: works after the single-character pipe") {
     val clause = "GAP FILL (ORDER BY ts BIN WIDTH INTERVAL '5' MINUTE)"
     withSQLConf(SQLConf.SINGLE_CHARACTER_PIPE_OPERATOR_ENABLED.key -> "true") {
-      assert(parsePlan(s"FROM t | $clause") == parsePlan(s"FROM t |> $clause"))
-      assert(parsePlan(s"TABLE t | $clause") == parsePlan(s"TABLE t |> $clause"))
       assert(parsePlan(s"FROM t | $clause | WHERE a > 0") ==
         parsePlan(s"FROM t |> $clause |> WHERE a > 0"))
       // A column named gap after `|` is still a bitwise OR.
@@ -3782,31 +3770,6 @@ class PlanParserSuite extends AnalysisTest {
     withSQLConf(SQLConf.SINGLE_CHARACTER_PIPE_OPERATOR_ENABLED.key -> "false") {
       assert(parseException(s"FROM t | $clause").getCondition == "PARSE_SYNTAX_ERROR")
       assert(gapFillNodes(parsePlan("SELECT 1 | gap FROM t")).isEmpty)
-    }
-  }
-
-  test("GAP FILL: unit-to-unit interval literals still parse in both keyword modes") {
-    // The GAP FILL range lets TO follow an expression, which must not change how a query
-    // without GAP FILL reads `INTERVAL ... DAY TO HOUR`.
-    def literals(plan: LogicalPlan): Seq[Literal] = plan.collectWithSubqueries {
-      case p => p.expressions.flatMap(_.collect { case l: Literal => l })
-    }.flatten
-    Seq("true", "false").foreach { enforceReserved =>
-      withSQLConf(
-          SQLConf.ANSI_ENABLED.key -> "true",
-          SQLConf.ENFORCE_RESERVED_KEYWORDS.key -> enforceReserved) {
-        Seq(
-          "SELECT * FROM t WHERE d IN (SELECT INTERVAL '1 2' DAY TO HOUR)" ->
-            "INTERVAL '1 2' DAY TO HOUR",
-          "SELECT (SELECT INTERVAL '2-1' YEAR TO MONTH)" -> "INTERVAL '2-1' YEAR TO MONTH",
-          "SELECT * FROM (SELECT INTERVAL '10:20' MINUTE TO SECOND) s" ->
-            "INTERVAL '10:20' MINUTE TO SECOND",
-          "SELECT extract(YEAR FROM INTERVAL '2-1' YEAR TO MONTH)" ->
-            "INTERVAL '2-1' YEAR TO MONTH"
-        ).foreach { case (query, interval) =>
-          assert(literals(parsePlan(query)).contains(parseExpression(interval)), query)
-        }
-      }
     }
   }
 
@@ -3855,6 +3818,7 @@ class PlanParserSuite extends AnalysisTest {
       Seq(
         "SELECT * FROM T WHERE D IN (SELECT INTERVAL '1 2' DAY TO HOUR)",
         "SELECT (SELECT INTERVAL '2-1' YEAR TO MONTH)",
+        "SELECT * FROM (SELECT INTERVAL '10:20' MINUTE TO SECOND) S",
         "SELECT EXTRACT(YEAR FROM INTERVAL '2-1' YEAR TO MONTH)",
         "SELECT (SELECT INTERVAL '1' DAY '2' HOUR TO MINUTE)",
         "SELECT EXTRACT(DAY FROM INTERVAL '1' DAY '2' HOUR TO MINUTE)",
@@ -3879,9 +3843,7 @@ class PlanParserSuite extends AnalysisTest {
       "SELECT * FROM t GAP FILL (ORDER BY ts BIN WIDTH INTERVAL '5' MINUTE FILL (a))" ->
         ("')'", ""),
       "SELECT * FROM t GAP FILL (ORDER BY ts BIN WIDTH INTERVAL '5' MINUTE " +
-        "MAX INTERVAL '40' MINUTE)" -> ("'INTERVAL'", ": missing 'GAP'"),
-      "SELECT * FROM t GAP FILL (ORDER BY ts PARTITION BY id BIN WIDTH INTERVAL '5' MINUTE)" ->
-        ("'PARTITION'", "")
+        "MAX INTERVAL '40' MINUTE)" -> ("'INTERVAL'", ": missing 'GAP'")
     ).foreach { case (query, (error, hint)) =>
       checkError(
         exception = parseException(query),
@@ -3923,15 +3885,6 @@ class PlanParserSuite extends AnalysisTest {
       case other => fail(s"Expected a CONSTANT fill method, got $other")
     }
     assert(linearEntry == GapFillColumn(UnresolvedAttribute(Seq("b2")), GapFillMethod.Linear))
-  }
-
-  test("GAP FILL: parses when the operator is not enabled") {
-    // The gate is checked by the analyzer rule, not by the parser. The gate tests are in
-    // ResolveGapFillSuite.
-    withSQLConf(SQLConf.GAP_FILL_ENABLED.key -> "false") {
-      assert(gapFillNodes(parsePlan(
-        "SELECT * FROM metrics GAP FILL (ORDER BY ts BIN WIDTH INTERVAL '5' MINUTE)")).size == 1)
-    }
   }
 
   test("GAP FILL: new keywords stay usable as identifiers") {

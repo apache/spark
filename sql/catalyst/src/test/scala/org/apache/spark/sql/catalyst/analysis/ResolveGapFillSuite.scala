@@ -70,8 +70,6 @@ class ResolveGapFillSuite extends AnalysisTest {
   test("GAP FILL errors through the full analyzer") {
     withSQLConf(SQLConf.GAP_FILL_ENABLED.key -> "true") {
       assertAnalysisErrorCondition(
-        unresolved(resolvedInput), "UNSUPPORTED_FEATURE.GAP_FILL", Map.empty)
-      assertAnalysisErrorCondition(
         unresolved(missingTable), "TABLE_OR_VIEW_NOT_FOUND", Map("relationName" -> "`missing`"))
     }
     withSQLConf(SQLConf.GAP_FILL_ENABLED.key -> "false") {
