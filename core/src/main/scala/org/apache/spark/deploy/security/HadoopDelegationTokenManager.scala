@@ -173,15 +173,9 @@ private[spark] class HadoopDelegationTokenManager(
       Option(currentUser.getRealUser()).getOrElse(currentUser).hasKerberosCredentials()
 
     if (hasKerberosCreds) {
-      val freshUGI = doLogin()
-      freshUGI.doAs(new PrivilegedExceptionAction[Unit]() {
-        override def run(): Unit = {
-          val (newTokens, _, _) = obtainDelegationTokens()
-          creds.addAll(newTokens)
-        }
-      })
-      if (!currentUser.equals(freshUGI)) {
-        FileSystem.closeAllForUGI(freshUGI)
+      doAsFreshUser {
+        val (newTokens, _, _) = obtainDelegationTokens()
+        creds.addAll(newTokens)
       }
     } else if (sparkConf.get(DIRECT_CREDENTIAL_PROVIDERS_ENABLED)) {
       val (newTokens, _, _) = obtainDelegationTokens(isolateFailures = true)
@@ -273,13 +267,9 @@ private[spark] class HadoopDelegationTokenManager(
    */
   private def obtainTokensAndScheduleRenewal(): Credentials = {
     val (creds, nextRenewal, failureCount) = if (hasKerberosCredentials) {
-      val freshUGI = doLogin()
-      freshUGI.doAs(
-        new PrivilegedExceptionAction[(Credentials, Long, Int)]() {
-          override def run(): (Credentials, Long, Int) = {
-            obtainDelegationTokens()
-          }
-        })
+      doAsFreshUser {
+        obtainDelegationTokens()
+      }
     } else if (sparkConf.get(DIRECT_CREDENTIAL_PROVIDERS_ENABLED)) {
       obtainDelegationTokens(isolateFailures = true)
     } else {
@@ -311,6 +301,20 @@ private[spark] class HadoopDelegationTokenManager(
       log" and current time ${MDC(LogKeys.CURRENT_TIME, now)}")
     scheduleRenewal(delay)
     creds
+  }
+
+  private def doAsFreshUser[T](action: => T): T = {
+    val currentUser = UserGroupInformation.getCurrentUser()
+    val freshUGI = doLogin()
+    try {
+      freshUGI.doAs(new PrivilegedExceptionAction[T]() {
+        override def run(): T = action
+      })
+    } finally {
+      if (!currentUser.equals(freshUGI)) {
+        FileSystem.closeAllForUGI(freshUGI)
+      }
+    }
   }
 
   private def doLogin(): UserGroupInformation = {
