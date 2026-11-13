@@ -1383,8 +1383,8 @@ private[v2] trait V2JDBCTest
       }
 
       // A filter cast is pushed down, so only 2.6 truncates to 2.
-      Seq("double_col", "decimal_col").foreach { col =>
-        val filtered = sql(s"SELECT label FROM $tbl WHERE CAST($col AS INT) = 2")
+      for (col <- Seq("double_col", "decimal_col"); target <- Seq("INT", "BIGINT")) {
+        val filtered = sql(s"SELECT label FROM $tbl WHERE CAST($col AS $target) = 2")
         checkFilterPushed(filtered)
         assert(filtered.collect().map(_.getString(0)) === Array("b"))
       }

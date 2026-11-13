@@ -460,7 +460,13 @@ abstract class JdbcDialect extends Serializable with Logging {
 
     override def visitCast(expr: String, exprDataType: DataType, dataType: DataType): String = {
       val databaseTypeDefinition =
-        getJDBCType(dataType).map(_.databaseTypeDefinition).getOrElse(dataType.typeName)
+        getJDBCType(dataType).map(_.databaseTypeDefinition).getOrElse(dataType match {
+          // Spark's type names `short` and `long` are not valid SQL types in most databases.
+          case ShortType => "SMALLINT"
+          case IntegerType => "INTEGER"
+          case LongType => "BIGINT"
+          case _ => dataType.typeName
+        })
       // Spark truncates toward zero when casting a fractional value to an integral type, but many
       // databases round instead, so a pushed down cast can return a different result than Spark.
       // Dialects for such databases override `truncateFractionalValue` to truncate the value first.
@@ -562,7 +568,7 @@ abstract class JdbcDialect extends Serializable with Logging {
    * @param expr The SQL string of the value being cast.
    * @return The SQL string to cast instead of `expr`.
    */
-  @Since("4.3.0")
+  @Since("4.4.0")
   def truncateFractionalValue(expr: String): String = expr
 
   /**

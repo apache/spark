@@ -1401,10 +1401,10 @@ class JDBCSuite extends SharedSparkSession {
     "when needed") {
     val cast = new V2Cast(FieldReference("a"), DoubleType, IntegerType)
 
-    assert(JdbcDialects.get("jdbc:").compileExpression(cast).get === """CAST("a" AS integer)""")
+    assert(JdbcDialects.get("jdbc:").compileExpression(cast).get === """CAST("a" AS INTEGER)""")
 
     assert(JdbcDialects.get("jdbc:postgresql://127.0.0.1/db").compileExpression(cast).get ===
-      """CAST(TRUNC("a") AS integer)""")
+      """CAST(TRUNC("a") AS INTEGER)""")
     assert(JdbcDialects.get("jdbc:oracle://127.0.0.1/db").compileExpression(cast).get ===
       """CAST(TRUNC("a") AS NUMBER(10))""")
     assert(JdbcDialects.get("jdbc:snowflake://127.0.0.1/db").compileExpression(cast).get ===
@@ -1414,13 +1414,38 @@ class JDBCSuite extends SharedSparkSession {
 
     withSQLConf(SQLConf.LEGACY_JDBC_ROUND_INTEGRAL_CAST_PUSHDOWN.key -> "true") {
       assert(JdbcDialects.get("jdbc:postgresql://127.0.0.1/db").compileExpression(cast).get ===
-        """CAST("a" AS integer)""")
+        """CAST("a" AS INTEGER)""")
       assert(JdbcDialects.get("jdbc:oracle://127.0.0.1/db").compileExpression(cast).get ===
         """CAST("a" AS NUMBER(10))""")
       assert(JdbcDialects.get("jdbc:snowflake://127.0.0.1/db").compileExpression(cast).get ===
         """CAST("a" AS INTEGER)""")
       assert(JdbcDialects.get("jdbc:mysql://127.0.0.1/db").compileExpression(cast).get ===
         "CAST(`a` AS SIGNED)")
+    }
+  }
+
+  test("SPARK-58372: H2 truncates fractional to integral casts") {
+    val h2 = JdbcDialects.get("jdbc:h2:mem:testdb0")
+    Seq(DoubleType, DecimalType(10, 2)).foreach { from =>
+      val cast = new V2Cast(FieldReference("a"), from, IntegerType)
+      assert(h2.compileExpression(cast).get === """CAST(TRUNC("a") AS INTEGER)""")
+      withSQLConf(SQLConf.LEGACY_JDBC_ROUND_INTEGRAL_CAST_PUSHDOWN.key -> "true") {
+        assert(h2.compileExpression(cast).get === """CAST("a" AS INTEGER)""")
+      }
+    }
+  }
+
+  test("SPARK-58372: integral cast targets without a dialect mapping use SQL type names") {
+    val toBigint = new V2Cast(FieldReference("a"), IntegerType, LongType)
+    Seq("jdbc:", "jdbc:postgresql://127.0.0.1/db", "jdbc:sqlserver://127.0.0.1/db",
+      "jdbc:db2://127.0.0.1/db", "jdbc:derby:memory:db", "jdbc:teradata://127.0.0.1/db"
+    ).foreach { url =>
+      assert(JdbcDialects.get(url).compileExpression(toBigint).get === """CAST("a" AS BIGINT)""")
+    }
+    val toSmallint = new V2Cast(FieldReference("a"), IntegerType, ShortType)
+    Seq("jdbc:", "jdbc:teradata://127.0.0.1/db").foreach { url =>
+      assert(
+        JdbcDialects.get(url).compileExpression(toSmallint).get === """CAST("a" AS SMALLINT)""")
     }
   }
 

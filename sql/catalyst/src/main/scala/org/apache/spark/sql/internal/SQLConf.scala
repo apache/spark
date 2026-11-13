@@ -7634,7 +7634,7 @@ object SQLConf {
         "a JDBC data source is not wrapped in the dialect's truncating function, so the result " +
         "follows the database's own cast semantics (the legacy behavior). Databases that round " +
         "such casts then return different results than Spark, which truncates toward zero.")
-      .version("4.3.0")
+      .version("4.4.0")
       .withBindingPolicy(ConfigBindingPolicy.SESSION)
       .booleanConf
       .createWithDefault(false)

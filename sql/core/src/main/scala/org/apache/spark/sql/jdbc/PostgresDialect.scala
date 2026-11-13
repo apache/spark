@@ -55,7 +55,8 @@ private case class PostgresDialect()
   override def isSupportedFunction(funcName: String): Boolean =
     supportedFunctions.contains(funcName)
 
-  // Postgres rounds half away from zero when casting to an integral type.
+  // Postgres rounds when casting to an integral type (float8 half to even, numeric half away from
+  // zero).
   override def truncateFractionalValue(expr: String): String = s"TRUNC($expr)"
 
   override def isObjectNotFoundException(e: SQLException): Boolean = {
