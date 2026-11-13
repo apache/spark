@@ -30,7 +30,7 @@ import org.apache.spark.sql.connector.catalog.{CatalogPlugin, FunctionCatalog, I
 import org.apache.spark.sql.connector.catalog.CatalogV2Implicits._
 import org.apache.spark.sql.connector.catalog.TableChange.ColumnPosition
 import org.apache.spark.sql.connector.catalog.functions.UnboundFunction
-import org.apache.spark.sql.connector.catalog.procedures.Procedure
+import org.apache.spark.sql.connector.catalog.procedures.{BoundProcedure, Procedure}
 import org.apache.spark.sql.types.{DataType, StructField}
 import org.apache.spark.sql.util.CaseInsensitiveStringMap
 import org.apache.spark.util.ArrayImplicits._
@@ -219,12 +219,30 @@ case class ResolvedFieldName(path: Seq[String], field: StructField) extends Fiel
 
 case class ResolvedFieldPosition(position: ColumnPosition) extends FieldPosition
 
+/**
+ * A resolved procedure that a CALL refers to, before or after `BindProcedures` binds it.
+ */
+sealed trait ProcedureReference extends LeafNodeWithoutStats {
+  def catalog: ProcedureCatalog
+  def ident: Identifier
+  override def output: Seq[Attribute] = Nil
+}
+
 case class ResolvedProcedure(
     catalog: ProcedureCatalog,
     ident: Identifier,
-    procedure: Procedure) extends LeafNodeWithoutStats {
-  override def output: Seq[Attribute] = Nil
-}
+    procedure: Procedure) extends ProcedureReference
+
+/**
+ * A procedure that `BindProcedures` has bound to the arguments of a CALL, or accepted as already
+ * bound, with the arguments rearranged to match its parameters. It is a separate node from
+ * [[ResolvedProcedure]] because a procedure may implement both `UnboundProcedure` and
+ * `BoundProcedure`, so its type does not show whether it was bound.
+ */
+case class ResolvedBoundProcedure(
+    catalog: ProcedureCatalog,
+    ident: Identifier,
+    procedure: BoundProcedure) extends ProcedureReference
 
 /**
  * A plan containing a resolved persistent view.

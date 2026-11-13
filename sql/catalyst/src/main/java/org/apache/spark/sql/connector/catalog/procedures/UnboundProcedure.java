@@ -41,6 +41,11 @@ public interface UnboundProcedure extends Procedure {
    * set to {@code true}. In such cases, the field name will match the name of the target procedure
    * parameter. If the argument is not named, {@link ProcedureParameter#BY_NAME_METADATA_KEY} will
    * not be set and the name will be assigned randomly.
+   * <p>
+   * Spark calls this method once per analysis of a CALL statement, after all arguments are
+   * resolved. From then on, Spark uses only the returned procedure: it reads the returned
+   * procedure's {@link BoundProcedure#parameters() parameters} and invokes it, even if this
+   * procedure also implements {@link BoundProcedure}.
    *
    * @param inputType the input types to bind to
    * @return the bound procedure that is most suitable for the given input types

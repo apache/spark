@@ -19,7 +19,7 @@ package org.apache.spark.sql.catalyst.plans.logical
 
 import org.apache.spark.{SparkException, SparkIllegalArgumentException, SparkUnsupportedOperationException}
 import org.apache.spark.sql.AnalysisException
-import org.apache.spark.sql.catalyst.analysis.{AnalysisContext, AssignmentUtils, EliminateSubqueryAliases, FieldName, NamedRelation, PartitionSpec, ResolvedIdentifier, ResolvedProcedure, ResolveSchemaEvolution, TypeCheckResult, UnresolvedAttribute, UnresolvedException, UnresolvedProcedure, ViewSchemaMode}
+import org.apache.spark.sql.catalyst.analysis.{AnalysisContext, AssignmentUtils, EliminateSubqueryAliases, FieldName, NamedRelation, PartitionSpec, ProcedureReference, ResolvedBoundProcedure, ResolvedIdentifier, ResolveSchemaEvolution, TypeCheckResult, UnresolvedAttribute, UnresolvedException, UnresolvedProcedure, ViewSchemaMode}
 import org.apache.spark.sql.catalyst.analysis.TypeCheckResult.{DataTypeMismatch, TypeCheckSuccess}
 import org.apache.spark.sql.catalyst.catalog.{FunctionResource, RoutineLanguage}
 import org.apache.spark.sql.catalyst.catalog.CatalogTypes.TablePartitionSpec
@@ -31,9 +31,8 @@ import org.apache.spark.sql.catalyst.types.DataTypeUtils
 import org.apache.spark.sql.catalyst.util._
 import org.apache.spark.sql.catalyst.util.TypeUtils.{ordinalNumber, toSQLExpr}
 import org.apache.spark.sql.connector.catalog._
-import org.apache.spark.sql.connector.catalog.CatalogV2Implicits.{IdentifierHelper, MultipartIdentifierHelper}
+import org.apache.spark.sql.connector.catalog.CatalogV2Implicits.MultipartIdentifierHelper
 import org.apache.spark.sql.connector.catalog.constraints.Constraint
-import org.apache.spark.sql.connector.catalog.procedures.BoundProcedure
 import org.apache.spark.sql.connector.expressions.{SortOrder => V2SortOrder, Transform}
 import org.apache.spark.sql.connector.expressions.filter.Predicate
 import org.apache.spark.sql.connector.write.{DeltaWrite, RowLevelOperation, RowLevelOperationTable, SupportsDelta, Write}
@@ -2373,22 +2372,27 @@ case class Call(
     procedure: LogicalPlan,
     args: Seq[Expression],
     execute: Boolean = true)
-  extends UnaryNode with ExecutableDuringAnalysis {
+  extends UnaryNode with ExecutableDuringAnalysis with SupportsNonDeterministicExpression {
 
   override def output: Seq[Attribute] = Nil
 
   override def child: LogicalPlan = procedure
 
-  def bound: Boolean = procedure match {
-    case ResolvedProcedure(_, _, _: BoundProcedure) => true
-    case _ => false
-  }
+  /**
+   * Whether `BindProcedures` has bound the procedure and rearranged the arguments to match its
+   * parameters.
+   */
+  def bound: Boolean = procedure.isInstanceOf[ResolvedBoundProcedure]
+
+  // Lets a CALL that is not invoked, such as under EXPLAIN, pass analysis with a nondeterministic
+  // argument.
+  override def allowNonDeterministicExpression: Boolean = true
 
   def checkArgTypes(): TypeCheckResult = {
     require(resolved && bound, "can check arg types only after resolution and binding")
 
     val params = procedure match {
-      case ResolvedProcedure(_, _, bound: BoundProcedure) => bound.parameters
+      case ResolvedBoundProcedure(_, _, boundProcedure) => boundProcedure.parameters
     }
     require(args.length == params.length, "number of args and params must match after binding")
 
@@ -2407,9 +2411,8 @@ case class Call(
 
   override def simpleString(maxFields: Int): String = {
     procedure match {
-      case ResolvedProcedure(catalog, ident, _) =>
-        val name = s"${quoteIfNeeded(catalog.name)}.${ident.quoted}"
-        simpleString(name, maxFields)
+      case p: ProcedureReference =>
+        simpleString(V2TableUtil.toQualifiedName(p.catalog, p.ident), maxFields)
       case UnresolvedProcedure(nameParts) =>
         val name = nameParts.quoted
         simpleString(name, maxFields)
