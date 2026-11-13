@@ -194,7 +194,7 @@ case class FromProtobuf(
     val freshMessageName = messageName.freshCopyIfContainsStatefulExpression()
     val messageNameValue: String = freshMessageName.eval() match {
       case null =>
-        throw new IllegalArgumentException("Message name cannot be null")
+        throw QueryCompilationErrors.nullArgumentError("from_protobuf", "messageName")
       case s: UTF8String =>
         s.toString
     }
@@ -406,7 +406,7 @@ case class ToProtobuf(
     val freshMessageName = messageName.freshCopyIfContainsStatefulExpression()
     val messageNameValue: String = freshMessageName.eval() match {
       case null =>
-        throw new IllegalArgumentException("Message name cannot be null")
+        throw QueryCompilationErrors.nullArgumentError("to_protobuf", "messageName")
       case s: UTF8String =>
         s.toString
     }
