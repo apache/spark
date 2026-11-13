@@ -24,6 +24,7 @@ import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.plans.QueryPlan
 import org.apache.spark.sql.catalyst.plans.physical.SinglePartition
+import org.apache.spark.sql.catalyst.trees.TreeNodeTag
 import org.apache.spark.sql.catalyst.util.truncatedString
 import org.apache.spark.sql.connector.catalog.Table
 import org.apache.spark.sql.connector.read._
@@ -39,8 +40,6 @@ import org.apache.spark.util.ArrayImplicits._
 /**
  * Physical plan node for scanning a batch of data from a data source v2.
  *
- * @param plannedScan The `Scan` to read, with the `Batch` and the input partitions planned from it,
- *                    see [[PlannedScan]].
  * @param storageFilters Predicates the scan's readers may evaluate, to skip reading the other
  *                       columns of the rows they reject, see [[SupportsStorageFilters]]. Non-empty
  *                       only for a scan that declared their columns. Each task's readers get them
@@ -51,7 +50,7 @@ import org.apache.spark.util.ArrayImplicits._
  */
 case class BatchScanExec(
     output: Seq[AttributeReference],
-    @transient plannedScan: PlannedScan,
+    @transient scan: Scan,
     runtimeFilters: Seq[Expression],
     ordering: Option[Seq[SortOrder]] = None,
     @transient table: Table,
@@ -69,7 +68,17 @@ case class BatchScanExec(
   private def scanOutput: Seq[AttributeReference] =
     if (appendsCheckedColumn) output.init else output
 
-  override def scan: Scan = if (plannedScan == null) null else plannedScan.scan
+  // What this node plans from `scan`, see [[PlannedScan]]. It is kept in a tag, set when the node
+  // first asks for its `Batch` or partitions. `makeCopy`, `clone` and the tree transforms carry the
+  // tag over to the copies made after that, so they share it. A copy over another `Scan`, and one
+  // the case-class `copy` makes, plan their own.
+  private def plannedScan: PlannedScan = synchronized {
+    getTagValue(PlannedScan.TAG).filter(_.scan eq scan).getOrElse {
+      val planned = new PlannedScan(scan)
+      setTagValue(PlannedScan.TAG, planned)
+      planned
+    }
+  }
 
   def batch: Batch = if (scan == null) null else plannedScan.batch
 
@@ -149,7 +158,7 @@ case class BatchScanExec(
   }
 
   override def doCanonicalize(): BatchScanExec = {
-    this.copy(
+    val canonicalized = this.copy(
       output = output.map(QueryPlan.normalizeExpressions(_, output)),
       runtimeFilters = QueryPlan.normalizePredicates(
         runtimeFilters.filterNot(_ == DynamicPruningExpression(Literal.TrueLiteral)),
@@ -159,6 +168,9 @@ case class BatchScanExec(
       // Storage filters change what the scan returns, so a scan carrying one must not be reused for
       // a plain scan of the same table.
       storageFilters = QueryPlan.normalizePredicates(storageFilters, output))
+    // `copy` carries no tags, and `equals` compares the planned `Batch`.
+    if (scan != null) canonicalized.setTagValue(PlannedScan.TAG, plannedScan)
+    canonicalized
   }
 
   override def simpleString(maxFields: Int): String = {
@@ -192,22 +204,19 @@ case class BatchScanExec(
 
 /**
  * A `Scan`, with the `Batch` and the input partitions a [[BatchScanExec]] plans from it once, when
- * a node first asks for them. The copies later rules make of the node share it, so they read the
- * partitions the first node planned, with a reader factory from the `Batch` that planned them.
- * The partitions have to be the planned ones, because the `Scan` can be shared with another node
- * whose runtime filter prunes it first, e.g. the build side of a DPP subquery (SPARK-60752). A
- * runtime filter replans them, through `planInputPartitionsWithRuntimeFilters` or from a new
- * `Batch` after a pushed `filter`, but keeps the planned `Batch`'s reader factory.
- *
- * A rule that rebuilds a node over the same `Scan` passes on its `plannedScan`, or uses `copy`. A
- * new `PlannedScan` is for a node that is planned again, or one over another `Scan`.
+ * a node first asks for them. The node keeps it in a tag, so the copies later rules make of it
+ * share it, and read the partitions the first node planned, with a reader factory from the `Batch`
+ * that planned them. The partitions have to be the planned ones, because the `Scan` can be shared
+ * with another node whose runtime filter prunes it first, e.g. the build side of a DPP subquery
+ * (SPARK-60752). A runtime filter replans them, through `planInputPartitionsWithRuntimeFilters` or
+ * from a new `Batch` after a pushed `filter`, but keeps the planned `Batch`'s reader factory.
  */
-final class PlannedScan(val scan: Scan) {
+private[v2] final class PlannedScan(val scan: Scan) {
   lazy val batch: Batch = scan.toBatch
   lazy val inputPartitions: Seq[InputPartition] = batch.planInputPartitions().toImmutableArraySeq
   lazy val readerFactory: PartitionReaderFactory = batch.createReaderFactory()
 }
 
-object PlannedScan {
-  def unapply(plannedScan: PlannedScan): Some[Scan] = Some(plannedScan.scan)
+private[v2] object PlannedScan {
+  val TAG = TreeNodeTag[PlannedScan]("batchScanPlannedScan")
 }
