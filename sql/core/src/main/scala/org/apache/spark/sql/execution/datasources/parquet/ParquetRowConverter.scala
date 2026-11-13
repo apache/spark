@@ -40,7 +40,7 @@ import org.apache.spark.sql.catalyst.util.RebaseDateTime.RebaseSpec
 import org.apache.spark.sql.catalyst.util.ResolveDefaultColumns._
 import org.apache.spark.sql.errors.QueryCompilationErrors
 import org.apache.spark.sql.errors.QueryExecutionErrors
-import org.apache.spark.sql.execution.datasources.{DataSourceUtils, VariantMetadata}
+import org.apache.spark.sql.execution.datasources.{DataSourceUtils, SchemaColumnConvertNotSupportedException, VariantMetadata}
 import org.apache.spark.sql.execution.datasources.parquet.types.ops.ParquetTypeOps
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
@@ -329,6 +329,15 @@ private[parquet] class ParquetRowConverter(
       }
     }
 
+    def canReadAsDecimal: Boolean = {
+      parquetType.getLogicalTypeAnnotation match {
+        case _: DecimalLogicalTypeAnnotation => true
+        case null => true
+        case i: IntLogicalTypeAnnotation => i.isSigned
+        case _ => false
+      }
+    }
+
     catalystType match {
       case NullType
         if parquetType.getLogicalTypeAnnotation.isInstanceOf[UnknownLogicalTypeAnnotation] =>
@@ -374,7 +383,8 @@ private[parquet] class ParquetRowConverter(
         }
 
       // For INT32 backed decimals
-      case _: DecimalType if parquetType.asPrimitiveType().getPrimitiveTypeName == INT32 =>
+      case _: DecimalType
+          if parquetType.asPrimitiveType().getPrimitiveTypeName == INT32 && canReadAsDecimal =>
         parquetType.asPrimitiveType().getLogicalTypeAnnotation match {
           case decimalType: DecimalLogicalTypeAnnotation =>
             new ParquetIntDictionaryAwareDecimalConverter(
@@ -395,7 +405,8 @@ private[parquet] class ParquetRowConverter(
         }
 
       // For INT64 backed decimals
-      case t: DecimalType if parquetType.asPrimitiveType().getPrimitiveTypeName == INT64 =>
+      case t: DecimalType
+          if parquetType.asPrimitiveType().getPrimitiveTypeName == INT64 && canReadAsDecimal =>
         parquetType.asPrimitiveType().getLogicalTypeAnnotation match {
           case decimalType: DecimalLogicalTypeAnnotation =>
             new ParquetLongDictionaryAwareDecimalConverter(
@@ -421,11 +432,25 @@ private[parquet] class ParquetRowConverter(
         }
 
       case t: DecimalType =>
-        throw QueryExecutionErrors.cannotCreateParquetConverterForDecimalTypeError(
-          t, parquetType.toString)
+        parquetType.asPrimitiveType().getPrimitiveTypeName match {
+          case INT32 | INT64 =>
+            throw new SchemaColumnConvertNotSupportedException(
+              parquetType.getName,
+              parquetType.asPrimitiveType().getPrimitiveTypeName.toString,
+              t.catalogString)
+          case _ =>
+            throw QueryExecutionErrors.cannotCreateParquetConverterForDecimalTypeError(
+              t, parquetType.toString)
+        }
 
-      case _: StringType =>
+      case _: StringType if parquetType.asPrimitiveType().getPrimitiveTypeName == BINARY =>
         new ParquetStringConverter(updater)
+
+      case t: StringType =>
+        throw new SchemaColumnConvertNotSupportedException(
+          parquetType.getName,
+          parquetType.asPrimitiveType().getPrimitiveTypeName.toString,
+          t.catalogString)
 
       case geom: GeometryType =>
         new ParquetGeometryConverter(geom.srid, updater)
