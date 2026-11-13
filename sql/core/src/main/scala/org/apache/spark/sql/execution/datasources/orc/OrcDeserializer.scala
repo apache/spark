@@ -40,6 +40,12 @@ class OrcDeserializer(
 
   private lazy val bitmask = ResolveDefaultColumns.existenceDefaultsBitmask(requiredSchema)
 
+  // The existence default values are a pure function of `requiredSchema`, so compute them once
+  // here rather than re-deriving them from the schema on every record.
+  private lazy val existenceDefaults: Array[Any] =
+    ResolveDefaultColumns.existenceDefaultValues(requiredSchema)
+  private lazy val hasExistenceDefaults: Boolean = existenceDefaults.exists(_ != null)
+
   // `fieldWriters(index)` is
   // - null if the respective source column is missing, since the output value
   //   is always null in this case
@@ -49,14 +55,13 @@ class OrcDeserializer(
     // ADD COLUMN c DEFAULT <value>" on the Orc table, this adds one field to the Catalyst schema.
     // Then if we query the old files with the new Catalyst schema, we should only apply the
     // existence default value to the columns whose IDs are not explicitly requested.
-    val existingValues = ResolveDefaultColumns.existenceDefaultValues(requiredSchema)
-    if (ResolveDefaultColumns.hasExistenceDefaultValues(requiredSchema)) {
-      for (i <- 0 until existingValues.length) {
+    if (hasExistenceDefaults) {
+      for (i <- 0 until existenceDefaults.length) {
         bitmask(i) =
           if (requestedColIds(i) != -1) {
             false
           } else {
-            existingValues(i) != null
+            existenceDefaults(i) != null
           }
       }
     }
@@ -85,7 +90,9 @@ class OrcDeserializer(
       }
       targetColumnIndex += 1
     }
-    applyExistenceDefaultValuesToRow(requiredSchema, resultRow, bitmask)
+    if (hasExistenceDefaults) {
+      applyExistenceDefaultValuesToRow(existenceDefaults, resultRow, bitmask)
+    }
     resultRow
   }
 
@@ -102,7 +109,9 @@ class OrcDeserializer(
       }
       targetColumnIndex += 1
     }
-    applyExistenceDefaultValuesToRow(requiredSchema, resultRow, bitmask)
+    if (hasExistenceDefaults) {
+      applyExistenceDefaultValuesToRow(existenceDefaults, resultRow, bitmask)
+    }
     resultRow
   }
 
