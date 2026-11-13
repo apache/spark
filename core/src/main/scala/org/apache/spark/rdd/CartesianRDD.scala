@@ -50,7 +50,8 @@ private[spark]
 class CartesianRDD[T: ClassTag, U: ClassTag](
     sc: SparkContext,
     var rdd1 : RDD[T],
-    var rdd2 : RDD[U])
+    var rdd2 : RDD[U],
+    preferLeftLocations: Boolean = false)
   extends RDD[(T, U)](sc, Nil)
   with Serializable {
 
@@ -72,7 +73,11 @@ class CartesianRDD[T: ClassTag, U: ClassTag](
 
   override def getPreferredLocations(split: Partition): Seq[String] = {
     val currSplit = split.asInstanceOf[CartesianPartition]
-    (rdd1.preferredLocations(currSplit.s1) ++ rdd2.preferredLocations(currSplit.s2)).distinct
+    if (preferLeftLocations) {
+      rdd1.preferredLocations(currSplit.s1).distinct
+    } else {
+      (rdd1.preferredLocations(currSplit.s1) ++ rdd2.preferredLocations(currSplit.s2)).distinct
+    }
   }
 
   override def compute(split: Partition, context: TaskContext): Iterator[(T, U)] = {

@@ -454,6 +454,9 @@ class StateStoreInvalidStateMachineTransition(
     )
   )
 
+private[state] class StateStoreProviderClosed(storeId: StateStoreId)
+  extends StateStoreInvalidStateMachineTransition("CLOSED", "ACQUIRED", "load", storeId)
+
 class StateStoreInvalidStamp(providedStamp: Long, currentStamp: Long)
   extends SparkRuntimeException(
     errorClass = "STATE_STORE_INVALID_STAMP",
