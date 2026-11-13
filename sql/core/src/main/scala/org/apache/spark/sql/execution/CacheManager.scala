@@ -25,7 +25,7 @@ import org.apache.hadoop.fs.{FileSystem, Path}
 import org.apache.spark.SparkException
 import org.apache.spark.internal.{Logging, MessageWithContext}
 import org.apache.spark.internal.LogKeys._
-import org.apache.spark.sql.catalyst.analysis.Resolver
+import org.apache.spark.sql.catalyst.analysis.{RelationCacheIneligible, Resolver}
 import org.apache.spark.sql.catalyst.catalog.HiveTableRelation
 import org.apache.spark.sql.catalyst.expressions.{Attribute, SubqueryExpression}
 import org.apache.spark.sql.catalyst.optimizer.EliminateResolvedHint
@@ -34,7 +34,7 @@ import org.apache.spark.sql.catalyst.trees.TreePattern.PLAN_EXPRESSION
 import org.apache.spark.sql.catalyst.util.sideBySide
 import org.apache.spark.sql.classic.{Dataset, SparkSession}
 import org.apache.spark.sql.connector.catalog.{CatalogPlugin, CatalogV2Util}
-import org.apache.spark.sql.connector.catalog.CatalogV2Implicits.{IdentifierHelper, MultipartIdentifierHelper}
+import org.apache.spark.sql.connector.catalog.CatalogV2Implicits.IdentifierHelper
 import org.apache.spark.sql.connector.catalog.Identifier
 import org.apache.spark.sql.connector.catalog.transactions.Transaction
 import org.apache.spark.sql.execution.adaptive.AdaptiveSparkPlanHelper
@@ -294,14 +294,6 @@ class CacheManager extends Logging with AdaptiveSparkPlanHelper {
 
   private def isSameName(
       name: Seq[String],
-      catalog: CatalogPlugin,
-      ident: Identifier,
-      resolver: Resolver): Boolean = {
-    isSameName(name, ident.toQualifiedNameParts(catalog), resolver)
-  }
-
-  private def isSameName(
-      name: Seq[String],
       nameInCache: Seq[String],
       resolver: Resolver): Boolean = {
     nameInCache.length == name.length && nameInCache.zip(name).forall(resolver.tupled)
@@ -474,39 +466,31 @@ class CacheManager extends Logging with AdaptiveSparkPlanHelper {
       catalog: CatalogPlugin,
       ident: Identifier,
       tableId: Option[String],
-      stateOptions: CaseInsensitiveStringMap,
-      resolver: Resolver): Option[LogicalPlan] = {
-    val name = ident.toQualifiedNameParts(catalog)
-    val cachedRelations = findCachedRelations(name, resolver)
-    // Changelog loads have their own context and state options, so they cannot supply an
-    // ordinary table's metadata even when the catalog and identifier match.
-    val cachedRelation = cachedRelations.collectFirst {
-      case r: DataSourceV2Relation
-          if !r.table.isInstanceOf[ChangelogTable] &&
-            r.catalog.contains(catalog) && r.identifier.contains(ident) &&
-            tableId.forall(_ == r.table.id) &&
-            CatalogV2Util.extractTableStateOptions(catalog, r.options) == stateOptions =>
-        r
-    }
-    cachedRelation.foreach { _ =>
-      CacheManager.logCacheOperation(
-        log"Relation cache hit for table ${MDC(TABLE_NAME, name.quoted)}")
+      stateOptions: CaseInsensitiveStringMap): Option[LogicalPlan] = {
+    val cachedRelation = findCachedRelation(catalog, ident, tableId, stateOptions)
+    cachedRelation.foreach { r =>
+      CacheManager.logCacheOperation(log"Relation cache hit for table ${MDC(TABLE_NAME, r.name)}")
     }
     cachedRelation
   }
 
-  private def findCachedRelations(
-      name: Seq[String],
-      resolver: Resolver): Seq[LogicalPlan] = {
-    cachedData.flatMap { cd =>
-      val plan = stripRootSubqueryAliases(cd.plan)
-      plan match {
-        case r @ ExtractV2CatalogAndIdentifier(catalog, ident)
-            if isSameName(name, catalog, ident, resolver) && r.timeTravelSpec.isEmpty =>
-          Some(r)
-        case _ =>
-          None
-      }
+  // finds a relation cached directly (e.g. CACHE TABLE t) for the given table and state,
+  // ignoring time travel relations and tables marked ineligible for the relation cache
+  private def findCachedRelation(
+      catalog: CatalogPlugin,
+      ident: Identifier,
+      tableId: Option[String],
+      stateOptions: CaseInsensitiveStringMap): Option[DataSourceV2Relation] = {
+    val cachedPlans = cachedData.map(cd => stripRootSubqueryAliases(cd.plan))
+    cachedPlans.collectFirst {
+      case r: DataSourceV2Relation
+          if !r.table.isInstanceOf[RelationCacheIneligible] &&
+            r.catalog.contains(catalog) &&
+            r.identifier.contains(ident) &&
+            r.timeTravelSpec.isEmpty &&
+            tableId.forall(_ == r.table.id) &&
+            CatalogV2Util.extractTableStateOptions(catalog, r.options) == stateOptions =>
+        r
     }
   }
 
@@ -705,8 +689,9 @@ class CacheManager extends Logging with AdaptiveSparkPlanHelper {
   }
 
   /**
-   * If `CAN_CHANGE_CACHED_PLAN_OUTPUT_PARTITIONING` is enabled, return the session with disabled
-   * `ADAPTIVE_EXECUTION_APPLY_FINAL_STAGE_SHUFFLE_OPTIMIZATIONS`.
+   * If `CAN_CHANGE_CACHED_PLAN_OUTPUT_PARTITIONING` is disabled, return the session with disabled
+   * `ADAPTIVE_EXECUTION_APPLY_FINAL_STAGE_SHUFFLE_OPTIMIZATIONS` and
+   * `PUSH_DOWN_SHUFFLE_THROUGH_UNION_ENABLED`.
    * `AUTO_BUCKETED_SCAN_ENABLED` is always disabled.
    */
   private def getOrCloneSessionWithConfigsOff(session: SparkSession): SparkSession = {
@@ -719,8 +704,9 @@ class CacheManager extends Logging with AdaptiveSparkPlanHelper {
     if (!session.sessionState.conf.getConf(SQLConf.CAN_CHANGE_CACHED_PLAN_OUTPUT_PARTITIONING)) {
       // Allowing changing cached plan output partitioning might lead to regression as it introduces
       // extra shuffle
-      disableConfigs =
-        disableConfigs :+ SQLConf.ADAPTIVE_EXECUTION_APPLY_FINAL_STAGE_SHUFFLE_OPTIMIZATIONS
+      disableConfigs ++= Seq(
+        SQLConf.ADAPTIVE_EXECUTION_APPLY_FINAL_STAGE_SHUFFLE_OPTIMIZATIONS,
+        SQLConf.PUSH_DOWN_SHUFFLE_THROUGH_UNION_ENABLED)
     }
     SparkSession.getOrCloneSessionWithConfigsOff(session, disableConfigs)
   }

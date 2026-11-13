@@ -23,7 +23,7 @@ import java.util.concurrent.atomic.LongAdder
 import scala.collection.mutable.ArrayBuffer
 import scala.jdk.CollectionConverters._
 
-import org.mockito.ArgumentMatchers.any
+import org.mockito.ArgumentMatchers.{any, isA}
 import org.mockito.Mockito._
 import org.mockito.invocation.InvocationOnMock
 import org.roaringbitmap.RoaringBitmap
@@ -206,6 +206,101 @@ class MapOutputTrackerSuite extends SparkFunSuite with LocalSparkContext {
 
     masterTracker.stop()
     rpcEnv.shutdown()
+  }
+
+  // SPARK-60950: for the queued request kinds the endpoint only posts the request, so on both
+  // routes the handler runs, and throws, on a map-output-dispatcher MessageLoop thread. These
+  // tests post directly so they can drive the MessageLoop with mocked call contexts, including
+  // ones whose reply or sendFailure throws, without setting up an RpcEnv and endpoint.
+
+  /** Creates a master tracker that has shuffle 10 with a single registered map output. */
+  private def newTrackerMasterWithOneMapOutput(sparkConf: SparkConf): MapOutputTrackerMaster = {
+    val tracker = newTrackerMaster(sparkConf)
+    tracker.registerShuffle(10, 1, MergeStatus.SHUFFLE_PUSH_DUMMY_NUM_REDUCES)
+    tracker.registerMapOutput(10, 0, MapStatus(
+      BlockManagerId("88", "mph", 1000), createArray(10, 0L), 5))
+    tracker
+  }
+
+  /** Creates a mock call context; `name` shows up in Mockito verification failures. */
+  private def newCallContext(name: String): RpcCallContext = {
+    val context = mock(classOf[RpcCallContext], withSettings().name(name))
+    when(context.senderAddress).thenReturn(RpcAddress("localhost", 12345))
+    context
+  }
+
+  test("SPARK-60950: master replies with a failure when a map output request handler throws") {
+    val masterTracker = newTrackerMaster()
+    try {
+      // Shuffle 10 is not registered, so looking up its status throws NoSuchElementException.
+      val requests: Seq[(String, RpcCallContext => MapOutputTrackerMasterMessage)] = Seq(
+        ("GetMapOutputMessage", GetMapOutputMessage(10, _)),
+        ("GetMapAndMergeOutputMessage", GetMapAndMergeOutputMessage(10, _)))
+      requests.foreach { case (name, request) =>
+        val context = newCallContext(name)
+        masterTracker.post(request(context))
+        verify(context, timeout(30000)).sendFailure(isA(classOf[NoSuchElementException]))
+        verify(context, never()).reply(any())
+      }
+    } finally {
+      masterTracker.stop()
+    }
+  }
+
+  test("SPARK-60950: master replies with a failure when sending the reply throws") {
+    val masterTracker = newTrackerMasterWithOneMapOutput(conf)
+    try {
+      // Models a reply that cannot be delivered, e.g. one that fails to serialize.
+      val replyError = new IllegalStateException("injected reply failure")
+      val requests: Seq[(String, RpcCallContext => MapOutputTrackerMasterMessage)] = Seq(
+        ("GetMapOutputMessage", GetMapOutputMessage(10, _)),
+        ("GetShufflePushMergersMessage", GetShufflePushMergersMessage(10, _)))
+      requests.foreach { case (name, request) =>
+        val context = newCallContext(name)
+        doThrow(replyError).when(context).reply(any())
+        masterTracker.post(request(context))
+        verify(context, timeout(30000)).sendFailure(replyError)
+      }
+    } finally {
+      masterTracker.stop()
+    }
+  }
+
+  test("SPARK-60950: master replies with a failure when the handler throws a fatal error") {
+    val masterTracker = newTrackerMasterWithOneMapOutput(conf)
+    try {
+      // A fatal error is rethrown after the reply and ends the MessageLoop that handled it, so
+      // this test does not rely on that loop serving any later request.
+      val fatalError = new LinkageError("injected fatal reply failure")
+      val context = newCallContext("GetMapOutputMessage")
+      doThrow(fatalError).when(context).reply(any())
+      masterTracker.post(GetMapOutputMessage(10, context))
+      verify(context, timeout(30000)).sendFailure(fatalError)
+    } finally {
+      masterTracker.stop()
+    }
+  }
+
+  test("SPARK-60950: MessageLoop keeps serving requests when the failure reply also throws") {
+    // A single dispatcher thread, so the second request is served by the same MessageLoop that
+    // handled the failure.
+    val masterTracker = newTrackerMasterWithOneMapOutput(
+      new SparkConf().set(SHUFFLE_MAPOUTPUT_DISPATCHER_NUM_THREADS, 1))
+    try {
+      val failingContext = newCallContext("failingContext")
+      doThrow(new IllegalStateException("injected sendFailure failure"))
+        .when(failingContext).sendFailure(any())
+      // Shuffle 11 is not registered, so the handler throws and the loop calls sendFailure.
+      masterTracker.post(GetMapOutputMessage(11, failingContext))
+      verify(failingContext, timeout(30000)).sendFailure(any())
+
+      val context = newCallContext("context")
+      masterTracker.post(GetMapOutputMessage(10, context))
+      verify(context, timeout(30000)).reply(any())
+      verify(context, never()).sendFailure(any())
+    } finally {
+      masterTracker.stop()
+    }
   }
 
   test("min broadcast size exceeds max RPC message size") {

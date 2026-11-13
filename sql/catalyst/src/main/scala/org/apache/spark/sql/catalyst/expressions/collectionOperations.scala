@@ -5632,15 +5632,9 @@ case class ArrayInsert(
     }
   }
 
-  private lazy val positivePos = if (second.foldable) {
-    val pos = second.eval().asInstanceOf[Int]
-    if (pos > 0) {
-      Some(pos)
-    } else {
-      None
-    }
-  } else {
-    None
+  private lazy val positivePos = ExprUtils.tryEvalFoldable(second) match {
+    case Some(pos: Int) if pos > 0 => Some(pos)
+    case _ => None
   }
 
   override def eval(input: InternalRow): Any = {

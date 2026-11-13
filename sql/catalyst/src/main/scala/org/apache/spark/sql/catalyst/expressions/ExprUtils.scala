@@ -20,6 +20,8 @@ package org.apache.spark.sql.catalyst.expressions
 import java.text.{DecimalFormat, DecimalFormatSymbols, ParsePosition}
 import java.util.Locale
 
+import scala.util.control.NonFatal
+
 import org.apache.spark.sql.catalyst.analysis._
 import org.apache.spark.sql.catalyst.analysis.TypeCheckResult
 import org.apache.spark.sql.catalyst.analysis.TypeCheckResult.{DataTypeMismatch, TypeCheckSuccess}
@@ -93,6 +95,23 @@ object ExprUtils extends EvalHelper with QueryErrorsBase {
       throw QueryCompilationErrors.keyValueInMapNotStringError(m)
     case _ =>
       throw QueryCompilationErrors.nonMapFunctionNotAllowedError()
+  }
+
+  /**
+   * Returns the value, possibly null, of a foldable expression, or None if the expression is not
+   * foldable or fails to evaluate. `ConstantFolding` keeps a foldable expression that fails to
+   * evaluate in a conditional branch, which no row may reach. An expression that uses the value
+   * of such a child once, e.g. in generated code, should evaluate the child for each row instead,
+   * so that the error is raised only when a row evaluates it, as in `eval`.
+   */
+  def tryEvalFoldable(exp: Expression): Option[Any] = if (exp.foldable) {
+    try {
+      Some(exp.eval())
+    } catch {
+      case NonFatal(_) => None
+    }
+  } else {
+    None
   }
 
   /**
@@ -225,8 +244,10 @@ object ExprUtils extends EvalHelper with QueryErrorsBase {
           messageParameters = Map("sqlExpr" -> expr.sql))
       }
 
-      // Check if the data type of expr is orderable.
-      if (expr.dataType.existsRecursively(_.isInstanceOf[VariantType])) {
+      // VARIANT and FILE have no defined equality or ordering, so they cannot be grouping keys.
+      // Other types that are not orderable, such as MAP, are handled elsewhere.
+      if (expr.dataType.existsRecursively(
+        t => t.isInstanceOf[VariantType] || t.isInstanceOf[FileType])) {
         expr.failAnalysis(
           errorClass = "GROUP_EXPRESSION_TYPE_IS_NOT_ORDERABLE",
           messageParameters = Map(

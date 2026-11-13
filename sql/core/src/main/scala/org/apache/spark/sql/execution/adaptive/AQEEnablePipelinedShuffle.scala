@@ -50,9 +50,15 @@ object AQEEnablePipelinedShuffle extends Rule[SparkPlan] {
    * The plan-shape core of the rule, factored out of [[apply]]'s environment guards (opt-in flag,
    * local mode, channel manager) so it can be unit-tested on a hand-built plan directly. Collects
    * the eligible exchanges and returns the plan with each flipped to `pipelined = true`.
+   *
+   * The pipelined field participates in canonicalization, so already-flipped exchanges do not
+   * pair with unflipped twins in the duplicate scan. Reuse normally collapses twins before this
+   * rule runs; if a shared pipelined producer escapes the scan, the scheduler's fan-out check
+   * rejects it rather than producing wrong results.
    */
   private[adaptive] def flipEligibleExchanges(plan: SparkPlan): SparkPlan = {
-    val shared = if (conf.exchangeReuseEnabled) duplicatedShuffleForms(plan) else Set.empty[Any]
+    val shared =
+      if (conf.exchangeReuseEnabled) AQEUtils.duplicatedShuffleForms(plan) else Set.empty[SparkPlan]
     // Collect the exchanges to flip BY IDENTITY (SparkPlan.id, unique per instance), not by the
     // node itself: TreeNode overrides hashCode but not equals, so a HashSet[ShuffleExchangeExec]
     // matches structurally, and the transformDown below would then flip EVERY exchange
@@ -91,8 +97,8 @@ object AQEEnablePipelinedShuffle extends Rule[SparkPlan] {
     }
   }
 
-  private def isCandidate(s: ShuffleExchangeExec, shared: Set[Any]): Boolean =
-    !s.pipelined && !shared.contains(s.canonicalized)
+  private def isCandidate(s: ShuffleExchangeExec, shared: Set[SparkPlan]): Boolean =
+    !s.pipelined && (shared.isEmpty || !shared.contains(s.canonicalized))
 
   /**
    * Top-down walk collecting exchanges to flip. `blocked` is true once the path from the
@@ -101,7 +107,7 @@ object AQEEnablePipelinedShuffle extends Rule[SparkPlan] {
   private def collectCandidates(
       plan: SparkPlan,
       blocked: Boolean,
-      shared: Set[Any],
+      shared: Set[SparkPlan],
       out: mutable.HashSet[Int]): Unit = plan match {
     case s: ShuffleExchangeExec =>
       val flipped = !blocked && isCandidate(s, shared)
@@ -147,7 +153,7 @@ object AQEEnablePipelinedShuffle extends Rule[SparkPlan] {
    */
   private def immediateShuffleInput(
       plan: SparkPlan,
-      shared: Set[Any]): Option[ShuffleExchangeExec] = plan match {
+      shared: Set[SparkPlan]): Option[ShuffleExchangeExec] = plan match {
     case s: ShuffleExchangeExec => Some(s).filter(isCandidate(_, shared))
     case _: QueryStageExec => None
     case p if isStatsSensitive(p) => None
@@ -163,43 +169,4 @@ object AQEEnablePipelinedShuffle extends Rule[SparkPlan] {
     case _ => false
   }
 
-  /**
-   * Canonicalized forms of shuffle exchanges occurring more than once across the plan,
-   * materialized stages, and subquery plans -- flipping one of these loses stage reuse.
-   *
-   * Note: `ShuffleExchangeExec.pipelined` is a plain case-class field with no doCanonicalize
-   * override, so it PARTICIPATES in the canonical form. An already-flipped (pipelined = true)
-   * exchange and a structurally identical unflipped twin therefore canonicalize DIFFERENTLY and
-   * would not be paired here. The counts are taken over the CURRENT plan on each replanning
-   * round (and this rule does re-run in later rounds on a plan that may already contain an
-   * earlier round's flip -- it is NOT a before-any-flip pass). That is still safe: a flipped and
-   * an unflipped structural twin cannot coexist as a real duplicate, because reuse collapses
-   * twins (ReuseExchangeAndSubquery / ShuffleQueryStageExec) before this rule runs, and if one
-   * somehow slipped through, the DAGScheduler's fan-out check rejects a multi-consumer pipelined
-   * producer rather than producing wrong results. So missing such a pair here is fail-safe.
-   */
-  private def duplicatedShuffleForms(plan: SparkPlan): Set[Any] = {
-    val counts = mutable.HashMap.empty[Any, Int]
-    def inc(s: ShuffleExchangeExec): Unit = {
-      val c = s.canonicalized
-      counts.update(c, counts.getOrElse(c, 0) + 1)
-    }
-    def visit(p: SparkPlan): Unit = p.foreach {
-      case s: ShuffleExchangeExec => inc(s)
-      case q: ShuffleQueryStageExec =>
-        q.plan match {
-          case s: ShuffleExchangeExec => inc(s)
-          case r: ReusedExchangeExec =>
-            r.child match {
-              case s: ShuffleExchangeExec => inc(s)
-              case _ =>
-            }
-          case _ =>
-        }
-      case _ =>
-    }
-    visit(plan)
-    plan.subqueriesAll.foreach(visit)
-    counts.filter(_._2 > 1).keys.toSet
-  }
 }

@@ -218,6 +218,13 @@ test("range with invalid long value") {
     checkStats(offset, plan.stats.copy(attributeStats = AttributeMap(Nil)))
   }
 
+  test("SPARK-61558: offset estimation: child's rowCount is unknown") {
+    val childStats = Statistics(sizeInBytes = 120)
+    val offset = Offset(Literal(2), DummyLogicalPlan(childStats, childStats))
+    // The number of skipped rows is unknown, so the child's size is used as an upper bound.
+    checkStats(offset, childStats)
+  }
+
   test("limit estimation: limit < child's rowCount") {
     val localLimit = LocalLimit(Literal(2), plan)
     val globalLimit = GlobalLimit(Literal(2), plan)

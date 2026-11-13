@@ -2035,6 +2035,20 @@ class UtilsSuite extends SparkFunSuite with ResetSystemProperties {
       assert(Utils.medianInPlace(input.clone()) === Utils.median(input, false))
     }
   }
+
+  test("SPARK-61322: isJavaArraySizeLimitExceeded distinguishes array-size limits from heap " +
+    "exhaustion") {
+    Seq(
+      "Required array length 2147483639 + 626 is too large",
+      "Requested array size exceeds VM limit"
+    ).foreach { message =>
+      assert(Utils.isJavaArraySizeLimitExceeded(new OutOfMemoryError(message)))
+    }
+    assert(!Utils.isJavaArraySizeLimitExceeded(new OutOfMemoryError("Java heap space")))
+    assert(!Utils.isJavaArraySizeLimitExceeded(new OutOfMemoryError()))
+    assert(!Utils.isJavaArraySizeLimitExceeded(
+      new RuntimeException("Requested array size exceeds VM limit")))
+  }
 }
 
 private class SimpleExtension
