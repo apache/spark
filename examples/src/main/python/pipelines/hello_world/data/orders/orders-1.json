@@ -1,0 +1,3 @@
+{"order_id": 1, "customer_id": 1, "amount": 20.0, "order_ts": "2026-01-01T10:00:00Z"}
+{"order_id": 2, "customer_id": 2, "amount": 35.5, "order_ts": "2026-01-01T11:30:00Z"}
+{"order_id": 3, "customer_id": 1, "amount": 12.5, "order_ts": "2026-01-02T09:15:00Z"}
