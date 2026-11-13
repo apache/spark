@@ -287,6 +287,15 @@ class StreamingQueryListenerBus:
         self._bus_lock = Lock()
 
     def close(self) -> None:
+        if self._sqm._session.client.is_closed:
+            # The client is closed, e.g. by SparkSession.stop(), whose release of the session
+            # already removed the server side listener, so no removal can or needs to be sent.
+            # Only clear the local listeners; the handler thread ends with the event stream.
+            with self._thread_lock:
+                with self._bus_lock:
+                    self._listener_bus.clear()
+                    self._execution_thread = None
+            return
         # remove() deletes from _listener_bus, so iterate over a snapshot taken under the lock.
         with self._bus_lock:
             listeners = list(self._listener_bus)
