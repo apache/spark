@@ -394,8 +394,9 @@ class ArrowColumnarPythonUDFSuite extends SharedSparkSession {
         // A limit stops consuming the output batches early, possibly before the input batches
         // that have been read are all released: the source closes them when the task completes,
         // and closing its allocator then fails the task if any of their buffers is referenced.
-        // The rows are taken from the plan as CollectLimitExec takes them, since a limit in the
-        // query is pushed below the evaluation (LimitPushDown), which then reads rows.
+        // A limit in the query would be pushed below the evaluation (LimitPushDown), which would
+        // then read rows through a ColumnarToRowExec, so the rows are taken from this plan as
+        // CollectLimitExec takes them.
         val limited = SQLExecution.withSQLConfPropagated(spark)(plan.executeTake(10))
         assert(limited.map(_.getString(4)).toSeq == (0 until 10).map(id => s"row_$id$suffix"))
       }
@@ -557,7 +558,7 @@ class ArrowColumnarPythonUDFSuite extends SharedSparkSession {
     }
   }
 
-  test("SPARK-61657: Without pass-through columns, the results of Python are the output batches") {
+  test("Without pass-through columns, the results of Python are the output batches") {
     assume(shouldTestPandasUDFs)
     val pandasUDF = TestScalarPandasUDF(name = "arrow_direct_udf", returnType = Some(StringType))
     registerTestUDF(pandasUDF, spark)
@@ -611,8 +612,9 @@ class ArrowColumnarPythonUDFSuite extends SharedSparkSession {
           .map(_.getString(0)).toSet ==
           (0 until numRows).map(id => s"row_$id$suffix").filter(_.startsWith("row_1"))
             .map(_ + "!").toSet)
-        // A limit above: the rows are taken from the plan as CollectLimitExec takes them, since a
-        // limit in the query is pushed below the evaluation (LimitPushDown).
+        // A limit in the query would be pushed below the evaluation (LimitPushDown), which would
+        // then read rows through a ColumnarToRowExec, so the rows are taken from this plan as
+        // CollectLimitExec takes them.
         val limited = SQLExecution.withSQLConfPropagated(spark) {
           result.queryExecution.executedPlan.executeTake(10)
         }
