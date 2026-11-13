@@ -365,6 +365,1120 @@ Project [col1#x]
 
 
 -- !query
+SELECT
+  k,
+  SUM(RANK() OVER (ORDER BY SUM(v) DESC)) OVER () AS rank_sum
+FROM VALUES ('drop', 2), ('keep', 1) AS input(k, v)
+GROUP BY k
+HAVING k = 'keep'
+ORDER BY k
+-- !query analysis
+Sort [k#x ASC NULLS FIRST], true
++- Project [k#x, rank_sum#xL]
+   +- Project [k#x, _w0#xL, _w0#x, _w0#x, rank_sum#xL, rank_sum#xL]
+      +- Window [sum(_w0#x) windowspecdefinition(specifiedwindowframe(RowFrame, unboundedpreceding$(), unboundedfollowing$())) AS rank_sum#xL]
+         +- Project [k#x, _w0#xL, _w0#x, _w0#x]
+            +- Window [rank(_w0#xL) windowspecdefinition(_w0#xL DESC NULLS LAST, specifiedwindowframe(RowFrame, unboundedpreceding$(), currentrow$())) AS _w0#x], [_w0#xL DESC NULLS LAST]
+               +- Filter (k#x = keep)
+                  +- Aggregate [k#x], [k#x, sum(v#x) AS _w0#xL]
+                     +- SubqueryAlias input
+                        +- LocalRelation [k#x, v#x]
+
+
+-- !query
+SELECT
+  k,
+  SUM(RANK() OVER (ORDER BY SUM(v) DESC)) OVER (
+    PARTITION BY RANK() OVER (ORDER BY SUM(v) DESC)) AS partition_rank_sum,
+  SUM(RANK() OVER (ORDER BY SUM(v) DESC)) OVER (
+    ORDER BY RANK() OVER (ORDER BY SUM(v) DESC)) AS ordered_rank_sum
+FROM VALUES ('drop', 2), ('keep', 1) AS input(k, v)
+GROUP BY k
+HAVING k = 'keep'
+ORDER BY k
+-- !query analysis
+Sort [k#x ASC NULLS FIRST], true
++- Project [k#x, partition_rank_sum#xL, ordered_rank_sum#xL]
+   +- Project [k#x, _w0#xL, _w0#x, _w0#x, partition_rank_sum#xL, ordered_rank_sum#xL, partition_rank_sum#xL, ordered_rank_sum#xL]
+      +- Window [sum(_w0#x) windowspecdefinition(_w0#x ASC NULLS FIRST, specifiedwindowframe(RangeFrame, unboundedpreceding$(), currentrow$())) AS ordered_rank_sum#xL], [_w0#x ASC NULLS FIRST]
+         +- Window [sum(_w0#x) windowspecdefinition(_w0#x, specifiedwindowframe(RowFrame, unboundedpreceding$(), unboundedfollowing$())) AS partition_rank_sum#xL], [_w0#x]
+            +- Project [k#x, _w0#xL, _w0#x, _w0#x]
+               +- Window [rank(_w0#xL) windowspecdefinition(_w0#xL DESC NULLS LAST, specifiedwindowframe(RowFrame, unboundedpreceding$(), currentrow$())) AS _w0#x], [_w0#xL DESC NULLS LAST]
+                  +- Filter (k#x = keep)
+                     +- Aggregate [k#x], [k#x, sum(v#x) AS _w0#xL]
+                        +- SubqueryAlias input
+                           +- LocalRelation [k#x, v#x]
+
+
+-- !query
+SELECT
+  k,
+  COUNT(*) OVER () AS group_count,
+  SUM(RANK() OVER (ORDER BY SUM(v) DESC)) OVER () AS rank_sum,
+  MAX(SUM(RANK() OVER (ORDER BY SUM(v) DESC)) OVER ()) OVER () AS max_rank_sum
+FROM VALUES ('drop', 2), ('keep', 1) AS input(k, v)
+GROUP BY k
+HAVING k = 'keep'
+ORDER BY k
+-- !query analysis
+Sort [k#x ASC NULLS FIRST], true
++- Project [k#x, group_count#xL, rank_sum#xL, max_rank_sum#xL]
+   +- Project [k#x, _w0#xL, _w0#xL, _w1#x, _w1#x, _w0#x, _w1#xL, _w0#x, _w1#xL, group_count#xL, rank_sum#xL, max_rank_sum#xL, group_count#xL, rank_sum#xL, max_rank_sum#xL]
+      +- Window [count(1) windowspecdefinition(specifiedwindowframe(RowFrame, unboundedpreceding$(), unboundedfollowing$())) AS group_count#xL, sum(_w0#x) windowspecdefinition(specifiedwindowframe(RowFrame, unboundedpreceding$(), unboundedfollowing$())) AS rank_sum#xL, max(_w1#xL) windowspecdefinition(specifiedwindowframe(RowFrame, unboundedpreceding$(), unboundedfollowing$())) AS max_rank_sum#xL]
+         +- Project [k#x, _w0#xL, _w0#xL, _w1#x, _w1#x, _w0#x, _w1#xL, _w0#x, _w1#xL]
+            +- Window [sum(_w1#x) windowspecdefinition(specifiedwindowframe(RowFrame, unboundedpreceding$(), unboundedfollowing$())) AS _w1#xL]
+               +- Window [rank(_w0#xL) windowspecdefinition(_w0#xL DESC NULLS LAST, specifiedwindowframe(RowFrame, unboundedpreceding$(), currentrow$())) AS _w0#x], [_w0#xL DESC NULLS LAST]
+                  +- Project [k#x, _w0#xL, _w0#xL, _w1#x, _w1#x]
+                     +- Window [rank(_w0#xL) windowspecdefinition(_w0#xL DESC NULLS LAST, specifiedwindowframe(RowFrame, unboundedpreceding$(), currentrow$())) AS _w1#x], [_w0#xL DESC NULLS LAST]
+                        +- Filter (k#x = keep)
+                           +- Aggregate [k#x], [k#x, sum(v#x) AS _w0#xL, sum(v#x) AS _w0#xL]
+                              +- SubqueryAlias input
+                                 +- LocalRelation [k#x, v#x]
+
+
+-- !query
+SELECT
+  k,
+  COUNT(*) AS row_count,
+  SUM(RANK() OVER (ORDER BY SUM(v) DESC)) OVER () AS rank_sum
+FROM VALUES ('drop', 1), ('drop', 1), ('keep', 1) AS input(k, v)
+GROUP BY k
+HAVING row_count = 1
+ORDER BY k
+-- !query analysis
+Sort [k#x ASC NULLS FIRST], true
++- Project [k#x, row_count#xL, rank_sum#xL]
+   +- Project [k#x, row_count#xL, _w0#xL, _w0#x, _w0#x, rank_sum#xL, rank_sum#xL]
+      +- Window [sum(_w0#x) windowspecdefinition(specifiedwindowframe(RowFrame, unboundedpreceding$(), unboundedfollowing$())) AS rank_sum#xL]
+         +- Project [k#x, row_count#xL, _w0#xL, _w0#x, _w0#x]
+            +- Window [rank(_w0#xL) windowspecdefinition(_w0#xL DESC NULLS LAST, specifiedwindowframe(RowFrame, unboundedpreceding$(), currentrow$())) AS _w0#x], [_w0#xL DESC NULLS LAST]
+               +- Filter (row_count#xL = cast(1 as bigint))
+                  +- Aggregate [k#x], [k#x, count(1) AS row_count#xL, sum(v#x) AS _w0#xL]
+                     +- SubqueryAlias input
+                        +- LocalRelation [k#x, v#x]
+
+
+-- !query
+SELECT
+  k,
+  SUM(RANK() OVER (ORDER BY SUM(v) DESC)) OVER () AS rank_sum
+FROM VALUES ('drop', 2), ('keep', 1) AS input(k, v)
+GROUP BY k
+HAVING rank_sum = 1
+-- !query analysis
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
+{
+  "errorClass" : "UNRESOLVED_COLUMN.WITH_SUGGESTION",
+  "sqlState" : "42703",
+  "messageParameters" : {
+    "objectName" : "`rank_sum`",
+    "proposal" : "`_w0`, `input`.`k`"
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 145,
+    "stopIndex" : 152,
+    "fragment" : "rank_sum"
+  } ]
+}
+
+
+-- !query
+SELECT
+  k,
+  SUM(RANK() OVER (ORDER BY SUM(v) DESC)) OVER () AS rank_sum
+FROM VALUES ('drop', 2), ('keep', 1) AS input(k, v)
+GROUP BY ROLLUP(k)
+HAVING k = 'keep'
+ORDER BY k
+-- !query analysis
+Sort [k#x ASC NULLS FIRST], true
++- Project [k#x, rank_sum#xL]
+   +- Project [k#x, _w0#x, rank_sum#xL, rank_sum#xL]
+      +- Window [sum(_w0#x) windowspecdefinition(specifiedwindowframe(RowFrame, unboundedpreceding$(), unboundedfollowing$())) AS rank_sum#xL]
+         +- Project [k#x, _w0#x]
+            +- Project [k#x, _w0#xL, _w0#x, _w0#x]
+               +- Window [rank(_w0#xL) windowspecdefinition(_w0#xL DESC NULLS LAST, specifiedwindowframe(RowFrame, unboundedpreceding$(), currentrow$())) AS _w0#x], [_w0#xL DESC NULLS LAST]
+                  +- Filter (k#x = keep)
+                     +- Aggregate [k#x, spark_grouping_id#xL], [k#x, sum(v#x) AS _w0#xL]
+                        +- Expand [[k#x, v#x, k#x, 0], [k#x, v#x, null, 1]], [k#x, v#x, k#x, spark_grouping_id#xL]
+                           +- Project [k#x, v#x, k#x AS k#x]
+                              +- SubqueryAlias input
+                                 +- LocalRelation [k#x, v#x]
+
+
+-- !query
+SELECT
+  k,
+  COUNT(*) OVER () AS group_count
+FROM VALUES ('drop', 2), ('keep', 1) AS input(k, v)
+GROUP BY GROUPING SETS ((k), ())
+HAVING k = 'keep'
+ORDER BY k
+-- !query analysis
+Sort [k#x ASC NULLS FIRST], true
++- Project [k#x, group_count#xL]
+   +- Project [k#x, group_count#xL, group_count#xL]
+      +- Window [count(1) windowspecdefinition(specifiedwindowframe(RowFrame, unboundedpreceding$(), unboundedfollowing$())) AS group_count#xL]
+         +- Filter (k#x = keep)
+            +- Aggregate [k#x, spark_grouping_id#xL], [k#x]
+               +- Expand [[k#x, v#x, k#x, 0], [k#x, v#x, null, 1]], [k#x, v#x, k#x, spark_grouping_id#xL]
+                  +- Project [k#x, v#x, k#x AS k#x]
+                     +- SubqueryAlias input
+                        +- LocalRelation [k#x, v#x]
+
+
+-- !query
+SELECT
+  k,
+  SUM(v) AS s,
+  s * 2 AS s2,
+  s2 + 1 AS s3,
+  SUM(SUM(v)) OVER (PARTITION BY k) AS partition_sum
+FROM VALUES ('a', 1), ('b', 2) AS input(k, v)
+GROUP BY ROLLUP(k)
+HAVING k IS NOT NULL
+ORDER BY k
+-- !query analysis
+Sort [k#x ASC NULLS FIRST], true
++- Project [k#x, s#xL, s2#xL, s3#xL, partition_sum#xL]
+   +- Project [k#x, s#xL, s2#xL, s3#xL, sum(v)#xL, partition_sum#xL, partition_sum#xL]
+      +- Window [sum(sum(v)#xL) windowspecdefinition(k#x, specifiedwindowframe(RowFrame, unboundedpreceding$(), unboundedfollowing$())) AS partition_sum#xL], [k#x]
+         +- Project [k#x, s#xL, s2#xL, (s2#xL + cast(1 as bigint)) AS s3#xL, sum(v)#xL]
+            +- Project [k#x, sum(v)#xL, s#xL, (s#xL * cast(2 as bigint)) AS s2#xL]
+               +- Project [k#x, sum(v)#xL, sum(v)#xL AS s#xL]
+                  +- Filter isnotnull(k#x)
+                     +- Aggregate [k#x, spark_grouping_id#xL], [k#x, sum(v#x) AS sum(v)#xL]
+                        +- Expand [[k#x, v#x, k#x, 0], [k#x, v#x, null, 1]], [k#x, v#x, k#x, spark_grouping_id#xL]
+                           +- Project [k#x, v#x, k#x AS k#x]
+                              +- SubqueryAlias input
+                                 +- LocalRelation [k#x, v#x]
+
+
+-- !query
+SELECT
+  k,
+  SUM(v) AS s,
+  s * 2 AS s2,
+  COUNT(*) OVER () AS group_count
+FROM VALUES ('drop', 2), ('keep', 1) AS input(k, v)
+GROUP BY ROLLUP(k)
+HAVING k = 'keep'
+ORDER BY k
+-- !query analysis
+Sort [k#x ASC NULLS FIRST], true
++- Project [k#x, s#xL, s2#xL, group_count#xL]
+   +- Project [k#x, s#xL, s2#xL, group_count#xL, group_count#xL]
+      +- Window [count(1) windowspecdefinition(specifiedwindowframe(RowFrame, unboundedpreceding$(), unboundedfollowing$())) AS group_count#xL]
+         +- Project [k#x, s#xL, (s#xL * cast(2 as bigint)) AS s2#xL]
+            +- Project [k#x, sum(v)#xL, sum(v)#xL AS s#xL]
+               +- Filter (k#x = keep)
+                  +- Aggregate [k#x, spark_grouping_id#xL], [k#x, sum(v#x) AS sum(v)#xL]
+                     +- Expand [[k#x, v#x, k#x, 0], [k#x, v#x, null, 1]], [k#x, v#x, k#x, spark_grouping_id#xL]
+                        +- Project [k#x, v#x, k#x AS k#x]
+                           +- SubqueryAlias input
+                              +- LocalRelation [k#x, v#x]
+
+
+-- !query
+SELECT
+  k,
+  SUM(v) AS s,
+  s * 2 AS s2,
+  COUNT(*) OVER () AS group_count
+FROM VALUES ('drop', 2), ('keep', 1) AS input(k, v)
+GROUP BY ROLLUP(k)
+HAVING s = 1L
+ORDER BY k
+-- !query analysis
+Sort [k#x ASC NULLS FIRST], true
++- Project [k#x, s#xL, s2#xL, group_count#xL]
+   +- Project [k#x, s#xL, s2#xL, group_count#xL, group_count#xL]
+      +- Window [count(1) windowspecdefinition(specifiedwindowframe(RowFrame, unboundedpreceding$(), unboundedfollowing$())) AS group_count#xL]
+         +- Project [k#x, s#xL, (s#xL * cast(2 as bigint)) AS s2#xL]
+            +- Filter (s#xL = 1)
+               +- Project [k#x, sum(v)#xL, sum(v)#xL AS s#xL]
+                  +- Aggregate [k#x, spark_grouping_id#xL], [k#x, sum(v#x) AS sum(v)#xL]
+                     +- Expand [[k#x, v#x, k#x, 0], [k#x, v#x, null, 1]], [k#x, v#x, k#x, spark_grouping_id#xL]
+                        +- Project [k#x, v#x, k#x AS k#x]
+                           +- SubqueryAlias input
+                              +- LocalRelation [k#x, v#x]
+
+
+-- !query
+SELECT
+  k,
+  COUNT(*) OVER () AS group_count
+FROM VALUES ('drop', 2), ('keep', 1) AS input(k, v)
+GROUP BY GROUPING SETS ((k), ())
+HAVING group_count = 3L
+ORDER BY k
+-- !query analysis
+Sort [k#x ASC NULLS FIRST], true
++- Filter (group_count#xL = 3)
+   +- Project [k#x, group_count#xL]
+      +- Project [k#x, group_count#xL, group_count#xL]
+         +- Window [count(1) windowspecdefinition(specifiedwindowframe(RowFrame, unboundedpreceding$(), unboundedfollowing$())) AS group_count#xL]
+            +- Aggregate [k#x, spark_grouping_id#xL], [k#x]
+               +- Expand [[k#x, v#x, k#x, 0], [k#x, v#x, null, 1]], [k#x, v#x, k#x, spark_grouping_id#xL]
+                  +- Project [k#x, v#x, k#x AS k#x]
+                     +- SubqueryAlias input
+                        +- LocalRelation [k#x, v#x]
+
+
+-- !query
+SELECT
+  k,
+  COUNT(*) OVER () AS group_count
+FROM VALUES ('drop', 2), ('keep', 1) AS input(k, v)
+GROUP BY GROUPING SETS ((k), ())
+HAVING GROUPING_ID() = 1L
+ORDER BY k
+-- !query analysis
+Sort [k#x ASC NULLS FIRST], true
++- Project [k#x, group_count#xL]
+   +- Filter (spark_grouping_id#xL = 1)
+      +- Project [k#x, group_count#xL, spark_grouping_id#xL]
+         +- Project [k#x, group_count#xL, group_count#xL, spark_grouping_id#xL]
+            +- Window [count(1) windowspecdefinition(specifiedwindowframe(RowFrame, unboundedpreceding$(), unboundedfollowing$())) AS group_count#xL]
+               +- Aggregate [k#x, spark_grouping_id#xL], [k#x, spark_grouping_id#xL]
+                  +- Expand [[k#x, v#x, k#x, 0], [k#x, v#x, null, 1]], [k#x, v#x, k#x, spark_grouping_id#xL]
+                     +- Project [k#x, v#x, k#x AS k#x]
+                        +- SubqueryAlias input
+                           +- LocalRelation [k#x, v#x]
+
+
+-- !query
+SELECT
+  k,
+  COUNT(*) OVER () AS group_count
+FROM VALUES ('drop', 1), ('drop', 2), ('keep', 1) AS input(k, v)
+GROUP BY ROLLUP(k)
+HAVING COUNT(*) = 1L
+ORDER BY k
+-- !query analysis
+Sort [k#x ASC NULLS FIRST], true
++- Project [k#x, group_count#xL]
+   +- Project [k#x, group_count#xL, count(1)#xL]
+      +- Project [k#x, count(1)#xL, group_count#xL, group_count#xL]
+         +- Window [count(1) windowspecdefinition(specifiedwindowframe(RowFrame, unboundedpreceding$(), unboundedfollowing$())) AS group_count#xL]
+            +- Filter (count(1)#xL = 1)
+               +- Aggregate [k#x, spark_grouping_id#xL], [k#x, count(1) AS count(1)#xL]
+                  +- Expand [[k#x, v#x, k#x, 0], [k#x, v#x, null, 1]], [k#x, v#x, k#x, spark_grouping_id#xL]
+                     +- Project [k#x, v#x, k#x AS k#x]
+                        +- SubqueryAlias input
+                           +- LocalRelation [k#x, v#x]
+
+
+-- !query
+SELECT
+  k,
+  SUM(v) AS s,
+  s * 2 AS s2,
+  COUNT(*) OVER () AS group_count
+FROM VALUES ('drop', 2), ('keep', 1) AS input(k, v)
+GROUP BY ROLLUP(k)
+HAVING GROUPING_ID() = 0L
+ORDER BY k
+-- !query analysis
+Sort [k#x ASC NULLS FIRST], true
++- Project [k#x, s#xL, s2#xL, group_count#xL]
+   +- Filter (spark_grouping_id#xL = 0)
+      +- Project [k#x, s#xL, s2#xL, group_count#xL, spark_grouping_id#xL]
+         +- Project [k#x, s#xL, s2#xL, group_count#xL, group_count#xL, spark_grouping_id#xL]
+            +- Window [count(1) windowspecdefinition(specifiedwindowframe(RowFrame, unboundedpreceding$(), unboundedfollowing$())) AS group_count#xL]
+               +- Project [k#x, s#xL, (s#xL * cast(2 as bigint)) AS s2#xL, spark_grouping_id#xL]
+                  +- Project [k#x, sum(v)#xL, sum(v)#xL AS s#xL, spark_grouping_id#xL]
+                     +- Aggregate [k#x, spark_grouping_id#xL], [k#x, sum(v#x) AS sum(v)#xL, spark_grouping_id#xL]
+                        +- Expand [[k#x, v#x, k#x, 0], [k#x, v#x, null, 1]], [k#x, v#x, k#x, spark_grouping_id#xL]
+                           +- Project [k#x, v#x, k#x AS k#x]
+                              +- SubqueryAlias input
+                                 +- LocalRelation [k#x, v#x]
+
+
+-- !query
+SELECT
+  k,
+  COUNT(*) OVER () AS group_count
+FROM VALUES ('drop', 2), ('keep', 1) AS input(k, v)
+GROUP BY ROLLUP(k)
+HAVING k = (SELECT 'keep')
+ORDER BY k
+-- !query analysis
+Sort [k#x ASC NULLS FIRST], true
++- Project [k#x, group_count#xL]
+   +- Project [k#x, group_count#xL, group_count#xL]
+      +- Window [count(1) windowspecdefinition(specifiedwindowframe(RowFrame, unboundedpreceding$(), unboundedfollowing$())) AS group_count#xL]
+         +- Filter (k#x = scalar-subquery#x [])
+            :  +- Project [keep AS keep#x]
+            :     +- OneRowRelation
+            +- Aggregate [k#x, spark_grouping_id#xL], [k#x]
+               +- Expand [[k#x, v#x, k#x, 0], [k#x, v#x, null, 1]], [k#x, v#x, k#x, spark_grouping_id#xL]
+                  +- Project [k#x, v#x, k#x AS k#x]
+                     +- SubqueryAlias input
+                        +- LocalRelation [k#x, v#x]
+
+
+-- !query
+SELECT
+  k,
+  (SELECT MAX(rn) FROM (
+    SELECT ROW_NUMBER() OVER (ORDER BY x) AS rn FROM VALUES (1) AS query_input(x))) AS sq
+FROM VALUES ('drop', 2), ('keep', 1) AS input(k, v)
+GROUP BY ROLLUP(k)
+HAVING k = 'keep'
+ORDER BY SUM(v)
+-- !query analysis
+Project [k#x, sq#x]
++- Sort [sum(v)#xL ASC NULLS FIRST], true
+   +- Filter (k#x = keep)
+      +- Aggregate [k#x, spark_grouping_id#xL], [k#x, scalar-subquery#x [] AS sq#x, sum(v#x) AS sum(v)#xL]
+         :  +- Aggregate [max(rn#x) AS max(rn)#x]
+         :     +- SubqueryAlias __auto_generated_subquery_name
+         :        +- Project [rn#x]
+         :           +- Project [x#x, rn#x, rn#x]
+         :              +- Window [row_number() windowspecdefinition(x#x ASC NULLS FIRST, specifiedwindowframe(RowFrame, unboundedpreceding$(), currentrow$())) AS rn#x], [x#x ASC NULLS FIRST]
+         :                 +- Project [x#x]
+         :                    +- SubqueryAlias query_input
+         :                       +- LocalRelation [x#x]
+         +- Expand [[k#x, v#x, k#x, 0], [k#x, v#x, null, 1]], [k#x, v#x, k#x, spark_grouping_id#xL]
+            +- Project [k#x, v#x, k#x AS k#x]
+               +- SubqueryAlias input
+                  +- LocalRelation [k#x, v#x]
+
+
+-- !query
+SELECT
+  k,
+  (SELECT MAX(rn) FROM (
+    SELECT ROW_NUMBER() OVER (ORDER BY x) AS rn FROM VALUES (1) AS query_input(x))) AS sq,
+  COUNT(*) OVER () AS group_count
+FROM VALUES ('drop', 2), ('keep', 1) AS input(k, v)
+GROUP BY ROLLUP(k)
+HAVING sq = 1 AND k = 'keep'
+ORDER BY k
+-- !query analysis
+Sort [k#x ASC NULLS FIRST], true
++- Project [k#x, sq#x, group_count#xL]
+   +- Project [k#x, sq#x, group_count#xL, group_count#xL]
+      +- Window [count(1) windowspecdefinition(specifiedwindowframe(RowFrame, unboundedpreceding$(), unboundedfollowing$())) AS group_count#xL]
+         +- Filter ((sq#x = 1) AND (k#x = keep))
+            +- Aggregate [k#x, spark_grouping_id#xL], [k#x, scalar-subquery#x [] AS sq#x]
+               :  +- Aggregate [max(rn#x) AS max(rn)#x]
+               :     +- SubqueryAlias __auto_generated_subquery_name
+               :        +- Project [rn#x]
+               :           +- Project [x#x, rn#x, rn#x]
+               :              +- Window [row_number() windowspecdefinition(x#x ASC NULLS FIRST, specifiedwindowframe(RowFrame, unboundedpreceding$(), currentrow$())) AS rn#x], [x#x ASC NULLS FIRST]
+               :                 +- Project [x#x]
+               :                    +- SubqueryAlias query_input
+               :                       +- LocalRelation [x#x]
+               +- Expand [[k#x, v#x, k#x, 0], [k#x, v#x, null, 1]], [k#x, v#x, k#x, spark_grouping_id#xL]
+                  +- Project [k#x, v#x, k#x AS k#x]
+                     +- SubqueryAlias input
+                        +- LocalRelation [k#x, v#x]
+
+
+-- !query
+SELECT
+  k,
+  COUNT(*) OVER () AS group_count
+FROM VALUES ('drop', 2), ('keep', 1) AS input(k, v)
+GROUP BY ROLLUP(k)
+HAVING k = 'keep'
+QUALIFY group_count > 0
+ORDER BY k
+-- !query analysis
+Sort [k#x ASC NULLS FIRST], true
++- Filter (group_count#xL > cast(0 as bigint))
+   +- Project [k#x, group_count#xL]
+      +- Project [k#x, group_count#xL, group_count#xL]
+         +- Window [count(1) windowspecdefinition(specifiedwindowframe(RowFrame, unboundedpreceding$(), unboundedfollowing$())) AS group_count#xL]
+            +- Filter (k#x = keep)
+               +- Aggregate [k#x, spark_grouping_id#xL], [k#x]
+                  +- Expand [[k#x, v#x, k#x, 0], [k#x, v#x, null, 1]], [k#x, v#x, k#x, spark_grouping_id#xL]
+                     +- Project [k#x, v#x, k#x AS k#x]
+                        +- SubqueryAlias input
+                           +- LocalRelation [k#x, v#x]
+
+
+-- !query
+SELECT
+  SUM(v) AS s,
+  s * 2 AS s2,
+  COUNT(*) OVER () AS group_count
+FROM VALUES ('drop', 2), ('keep', 1) AS input(k, v)
+GROUP BY ROLLUP(k)
+HAVING k = 'keep'
+QUALIFY k = 'keep' AND group_count > 0
+ORDER BY s
+-- !query analysis
+Sort [s#xL ASC NULLS FIRST], true
++- Project [s#xL, s2#xL, group_count#xL]
+   +- Filter ((k#x = keep) AND (group_count#xL > cast(0 as bigint)))
+      +- Project [s#xL, s2#xL, group_count#xL, k#x]
+         +- Project [s#xL, s2#xL, group_count#xL, k#x]
+            +- Project [s#xL, s2#xL, k#x, group_count#xL, group_count#xL]
+               +- Window [count(1) windowspecdefinition(specifiedwindowframe(RowFrame, unboundedpreceding$(), unboundedfollowing$())) AS group_count#xL]
+                  +- Project [s#xL, (s#xL * cast(2 as bigint)) AS s2#xL, k#x]
+                     +- Project [sum(v)#xL, k#x, sum(v)#xL AS s#xL]
+                        +- Filter (k#x = keep)
+                           +- Aggregate [k#x, spark_grouping_id#xL], [sum(v#x) AS sum(v)#xL, k#x]
+                              +- Expand [[k#x, v#x, k#x, 0], [k#x, v#x, null, 1]], [k#x, v#x, k#x, spark_grouping_id#xL]
+                                 +- Project [k#x, v#x, k#x AS k#x]
+                                    +- SubqueryAlias input
+                                       +- LocalRelation [k#x, v#x]
+
+
+-- !query
+SELECT
+  k,
+  COUNT(*) OVER () AS group_count
+FROM VALUES ('drop', 2), ('keep', 1) AS input(k, v)
+GROUP BY ROLLUP(k)
+HAVING k = 'keep' AND RAND(0) < 2D
+ORDER BY k
+-- !query analysis
+[Analyzer test output redacted due to nondeterminism]
+
+
+-- !query
+CREATE NAMESPACE testcat.having_window
+-- !query analysis
+CreateNamespace false
++- ResolvedNamespace org.apache.spark.sql.connector.catalog.InMemoryTableCatalog@xxxxxxxx, [having_window]
+
+
+-- !query
+CREATE TABLE testcat.having_window.ctas USING parquet AS
+SELECT
+  k,
+  COUNT(*) OVER () AS group_count
+FROM VALUES ('drop', 2), ('keep', 1) AS input(k, v)
+GROUP BY ROLLUP(k)
+HAVING k = 'keep'
+-- !query analysis
+CreateTableAsSelect TableSpec(Map(),Some(parquet),Map(),None,None,None,None,false,List()), false, true
+   :- ResolvedIdentifier org.apache.spark.sql.connector.catalog.InMemoryTableCatalog@xxxxxxxx, having_window.ctas
+   +- Project [k#x, group_count#xL]
+      +- Project [k#x, group_count#xL, group_count#xL]
+         +- Window [count(1) windowspecdefinition(specifiedwindowframe(RowFrame, unboundedpreceding$(), unboundedfollowing$())) AS group_count#xL]
+            +- Filter (k#x = keep)
+               +- Aggregate [k#x, spark_grouping_id#xL], [k#x]
+                  +- Expand [[k#x, v#x, k#x, 0], [k#x, v#x, null, 1]], [k#x, v#x, k#x, spark_grouping_id#xL]
+                     +- Project [k#x, v#x, k#x AS k#x]
+                        +- SubqueryAlias input
+                           +- LocalRelation [k#x, v#x]
+
+
+-- !query
+SELECT * FROM testcat.having_window.ctas ORDER BY k
+-- !query analysis
+Sort [k#x ASC NULLS FIRST], true
++- Project [k#x, group_count#xL]
+   +- SubqueryAlias testcat.having_window.ctas
+      +- RelationV2[k#x, group_count#xL] testcat.having_window.ctas
+
+
+-- !query
+CREATE TABLE testcat.having_window.rtas (k STRING, group_count BIGINT) USING parquet
+-- !query analysis
+CreateTable [columndefinition(k, StringType, true, None, None, None, None, {}), columndefinition(group_count, LongType, true, None, None, None, None, {})], TableSpec(Map(),Some(parquet),Map(),None,None,None,None,false,List()), false
++- ResolvedIdentifier org.apache.spark.sql.connector.catalog.InMemoryTableCatalog@xxxxxxxx, having_window.rtas, [k#x, group_count#xL]
+
+
+-- !query
+REPLACE TABLE testcat.having_window.rtas USING parquet AS
+SELECT
+  k,
+  COUNT(*) OVER () AS group_count
+FROM VALUES ('drop', 2), ('keep', 1) AS input(k, v)
+GROUP BY ROLLUP(k)
+HAVING k = 'keep'
+-- !query analysis
+ReplaceTableAsSelect TableSpec(Map(),Some(parquet),Map(),None,None,None,None,false,List()), false, true
+   :- ResolvedIdentifier org.apache.spark.sql.connector.catalog.InMemoryTableCatalog@xxxxxxxx, having_window.rtas
+   +- Project [k#x, group_count#xL]
+      +- Project [k#x, group_count#xL, group_count#xL]
+         +- Window [count(1) windowspecdefinition(specifiedwindowframe(RowFrame, unboundedpreceding$(), unboundedfollowing$())) AS group_count#xL]
+            +- Filter (k#x = keep)
+               +- Aggregate [k#x, spark_grouping_id#xL], [k#x]
+                  +- Expand [[k#x, v#x, k#x, 0], [k#x, v#x, null, 1]], [k#x, v#x, k#x, spark_grouping_id#xL]
+                     +- Project [k#x, v#x, k#x AS k#x]
+                        +- SubqueryAlias input
+                           +- LocalRelation [k#x, v#x]
+
+
+-- !query
+SELECT * FROM testcat.having_window.rtas ORDER BY k
+-- !query analysis
+Sort [k#x ASC NULLS FIRST], true
++- Project [k#x, group_count#xL]
+   +- SubqueryAlias testcat.having_window.rtas
+      +- RelationV2[k#x, group_count#xL] testcat.having_window.rtas
+
+
+-- !query
+CREATE TABLE testcat.having_window.lateral_ctas USING parquet AS
+SELECT
+  k,
+  SUM(v) AS s,
+  s * 2 AS s2,
+  COUNT(*) OVER () AS group_count
+FROM VALUES ('drop', 2), ('keep', 1) AS input(k, v)
+GROUP BY ROLLUP(k)
+HAVING k = 'keep'
+-- !query analysis
+CreateTableAsSelect TableSpec(Map(),Some(parquet),Map(),None,None,None,None,false,List()), false, true
+   :- ResolvedIdentifier org.apache.spark.sql.connector.catalog.InMemoryTableCatalog@xxxxxxxx, having_window.lateral_ctas
+   +- Project [k#x, s#xL, s2#xL, group_count#xL]
+      +- Project [k#x, s#xL, s2#xL, group_count#xL, group_count#xL]
+         +- Window [count(1) windowspecdefinition(specifiedwindowframe(RowFrame, unboundedpreceding$(), unboundedfollowing$())) AS group_count#xL]
+            +- Project [k#x, s#xL, (s#xL * cast(2 as bigint)) AS s2#xL]
+               +- Project [k#x, sum(v)#xL, sum(v)#xL AS s#xL]
+                  +- Filter (k#x = keep)
+                     +- Aggregate [k#x, spark_grouping_id#xL], [k#x, sum(v#x) AS sum(v)#xL]
+                        +- Expand [[k#x, v#x, k#x, 0], [k#x, v#x, null, 1]], [k#x, v#x, k#x, spark_grouping_id#xL]
+                           +- Project [k#x, v#x, k#x AS k#x]
+                              +- SubqueryAlias input
+                                 +- LocalRelation [k#x, v#x]
+
+
+-- !query
+SELECT * FROM testcat.having_window.lateral_ctas ORDER BY k
+-- !query analysis
+Sort [k#x ASC NULLS FIRST], true
++- Project [k#x, s#xL, s2#xL, group_count#xL]
+   +- SubqueryAlias testcat.having_window.lateral_ctas
+      +- RelationV2[k#x, s#xL, s2#xL, group_count#xL] testcat.having_window.lateral_ctas
+
+
+-- !query
+CREATE VIEW having_window_view AS
+SELECT
+  k,
+  COUNT(*) OVER () AS group_count
+FROM VALUES ('drop', 2), ('keep', 1) AS input(k, v)
+GROUP BY ROLLUP(k)
+HAVING k IN (SELECT value FROM VALUES ('keep') AS keep_values(value))
+-- !query analysis
+CreateViewCommand `spark_catalog`.`default`.`having_window_view`, SELECT
+  k,
+  COUNT(*) OVER () AS group_count
+FROM VALUES ('drop', 2), ('keep', 1) AS input(k, v)
+GROUP BY ROLLUP(k)
+HAVING k IN (SELECT value FROM VALUES ('keep') AS keep_values(value)), false, false, PersistedView, COMPENSATION, true
+   +- Project [k#x, group_count#xL]
+      +- Project [k#x, group_count#xL, group_count#xL]
+         +- Window [count(1) windowspecdefinition(specifiedwindowframe(RowFrame, unboundedpreceding$(), unboundedfollowing$())) AS group_count#xL]
+            +- Filter k#x IN (list#x [])
+               :  +- Project [value#x]
+               :     +- SubqueryAlias keep_values
+               :        +- LocalRelation [value#x]
+               +- Aggregate [k#x, spark_grouping_id#xL], [k#x]
+                  +- Expand [[k#x, v#x, k#x, 0], [k#x, v#x, null, 1]], [k#x, v#x, k#x, spark_grouping_id#xL]
+                     +- Project [k#x, v#x, k#x AS k#x]
+                        +- SubqueryAlias input
+                           +- LocalRelation [k#x, v#x]
+
+
+-- !query
+SELECT * FROM having_window_view ORDER BY k
+-- !query analysis
+Sort [k#x ASC NULLS FIRST], true
++- Project [k#x, group_count#xL]
+   +- SubqueryAlias spark_catalog.default.having_window_view
+      +- View (`spark_catalog`.`default`.`having_window_view`, [k#x, group_count#xL])
+         +- Project [cast(k#x as string) AS k#x, cast(group_count#xL as bigint) AS group_count#xL]
+            +- Project [k#x, group_count#xL]
+               +- Project [k#x, group_count#xL, group_count#xL]
+                  +- Window [count(1) windowspecdefinition(specifiedwindowframe(RowFrame, unboundedpreceding$(), unboundedfollowing$())) AS group_count#xL]
+                     +- Filter k#x IN (list#x [])
+                        :  +- Project [value#x]
+                        :     +- SubqueryAlias keep_values
+                        :        +- LocalRelation [value#x]
+                        +- Aggregate [k#x, spark_grouping_id#xL], [k#x]
+                           +- Expand [[k#x, v#x, k#x, 0], [k#x, v#x, null, 1]], [k#x, v#x, k#x, spark_grouping_id#xL]
+                              +- Project [k#x, v#x, k#x AS k#x]
+                                 +- SubqueryAlias input
+                                    +- LocalRelation [k#x, v#x]
+
+
+-- !query
+ALTER VIEW having_window_view AS
+SELECT
+  k,
+  COUNT(*) OVER () AS group_count
+FROM VALUES ('drop', 2), ('keep', 1) AS input(k, v)
+GROUP BY ROLLUP(k)
+HAVING k = 'keep' AND EXISTS (
+  SELECT 1 FROM VALUES ('keep') AS keep_values(value) WHERE value = 'keep')
+-- !query analysis
+AlterViewAsCommand `spark_catalog`.`default`.`having_window_view`, SELECT
+  k,
+  COUNT(*) OVER () AS group_count
+FROM VALUES ('drop', 2), ('keep', 1) AS input(k, v)
+GROUP BY ROLLUP(k)
+HAVING k = 'keep' AND EXISTS (
+  SELECT 1 FROM VALUES ('keep') AS keep_values(value) WHERE value = 'keep'), true
+   +- Project [k#x, group_count#xL]
+      +- Project [k#x, group_count#xL, group_count#xL]
+         +- Window [count(1) windowspecdefinition(specifiedwindowframe(RowFrame, unboundedpreceding$(), unboundedfollowing$())) AS group_count#xL]
+            +- Filter ((k#x = keep) AND exists#x [])
+               :  +- Project [1 AS 1#x]
+               :     +- Filter (value#x = keep)
+               :        +- SubqueryAlias keep_values
+               :           +- LocalRelation [value#x]
+               +- Aggregate [k#x, spark_grouping_id#xL], [k#x]
+                  +- Expand [[k#x, v#x, k#x, 0], [k#x, v#x, null, 1]], [k#x, v#x, k#x, spark_grouping_id#xL]
+                     +- Project [k#x, v#x, k#x AS k#x]
+                        +- SubqueryAlias input
+                           +- LocalRelation [k#x, v#x]
+
+
+-- !query
+SELECT * FROM having_window_view ORDER BY k
+-- !query analysis
+Sort [k#x ASC NULLS FIRST], true
++- Project [k#x, group_count#xL]
+   +- SubqueryAlias spark_catalog.default.having_window_view
+      +- View (`spark_catalog`.`default`.`having_window_view`, [k#x, group_count#xL])
+         +- Project [cast(k#x as string) AS k#x, cast(group_count#xL as bigint) AS group_count#xL]
+            +- Project [k#x, group_count#xL]
+               +- Project [k#x, group_count#xL, group_count#xL]
+                  +- Window [count(1) windowspecdefinition(specifiedwindowframe(RowFrame, unboundedpreceding$(), unboundedfollowing$())) AS group_count#xL]
+                     +- Filter ((k#x = keep) AND exists#x [])
+                        :  +- Project [1 AS 1#x]
+                        :     +- Filter (value#x = keep)
+                        :        +- SubqueryAlias keep_values
+                        :           +- LocalRelation [value#x]
+                        +- Aggregate [k#x, spark_grouping_id#xL], [k#x]
+                           +- Expand [[k#x, v#x, k#x, 0], [k#x, v#x, null, 1]], [k#x, v#x, k#x, spark_grouping_id#xL]
+                              +- Project [k#x, v#x, k#x AS k#x]
+                                 +- SubqueryAlias input
+                                    +- LocalRelation [k#x, v#x]
+
+
+-- !query
+CACHE TABLE having_window_cache AS
+SELECT
+  k,
+  COUNT(*) OVER () AS group_count
+FROM VALUES ('drop', 2), ('keep', 1) AS input(k, v)
+GROUP BY ROLLUP(k)
+HAVING k IN (SELECT value FROM VALUES ('keep') AS keep_values(value))
+-- !query analysis
+CacheTableAsSelect having_window_cache, SELECT
+  k,
+  COUNT(*) OVER () AS group_count
+FROM VALUES ('drop', 2), ('keep', 1) AS input(k, v)
+GROUP BY ROLLUP(k)
+HAVING k IN (SELECT value FROM VALUES ('keep') AS keep_values(value)), false, true
+   +- Project [k#x, group_count#xL]
+      +- Project [k#x, group_count#xL, group_count#xL]
+         +- Window [count(1) windowspecdefinition(specifiedwindowframe(RowFrame, unboundedpreceding$(), unboundedfollowing$())) AS group_count#xL]
+            +- Filter k#x IN (list#x [])
+               :  +- Project [value#x]
+               :     +- SubqueryAlias keep_values
+               :        +- LocalRelation [value#x]
+               +- Aggregate [k#x, spark_grouping_id#xL], [k#x]
+                  +- Expand [[k#x, v#x, k#x, 0], [k#x, v#x, null, 1]], [k#x, v#x, k#x, spark_grouping_id#xL]
+                     +- Project [k#x, v#x, k#x AS k#x]
+                        +- SubqueryAlias input
+                           +- LocalRelation [k#x, v#x]
+
+
+-- !query
+SELECT * FROM having_window_cache ORDER BY k
+-- !query analysis
+Sort [k#x ASC NULLS FIRST], true
++- Project [k#x, group_count#xL]
+   +- SubqueryAlias having_window_cache
+      +- View (`having_window_cache`, [k#x, group_count#xL])
+         +- Project [cast(k#x as string) AS k#x, cast(group_count#xL as bigint) AS group_count#xL]
+            +- Project [k#x, group_count#xL]
+               +- Project [k#x, group_count#xL, group_count#xL]
+                  +- Window [count(1) windowspecdefinition(specifiedwindowframe(RowFrame, unboundedpreceding$(), unboundedfollowing$())) AS group_count#xL]
+                     +- Filter k#x IN (list#x [])
+                        :  +- Project [value#x]
+                        :     +- SubqueryAlias keep_values
+                        :        +- LocalRelation [value#x]
+                        +- Aggregate [k#x, spark_grouping_id#xL], [k#x]
+                           +- Expand [[k#x, v#x, k#x, 0], [k#x, v#x, null, 1]], [k#x, v#x, k#x, spark_grouping_id#xL]
+                              +- Project [k#x, v#x, k#x AS k#x]
+                                 +- SubqueryAlias input
+                                    +- LocalRelation [k#x, v#x]
+
+
+-- !query
+UNCACHE TABLE having_window_cache
+-- !query analysis
+UncacheTable false, true
+   +- SubqueryAlias having_window_cache
+      +- View (`having_window_cache`, [k#x, group_count#xL])
+         +- Project [cast(k#x as string) AS k#x, cast(group_count#xL as bigint) AS group_count#xL]
+            +- Project [k#x, group_count#xL]
+               +- Project [k#x, group_count#xL, group_count#xL]
+                  +- Window [count(1) windowspecdefinition(specifiedwindowframe(RowFrame, unboundedpreceding$(), unboundedfollowing$())) AS group_count#xL]
+                     +- Filter k#x IN (list#x [])
+                        :  +- Project [value#x]
+                        :     +- SubqueryAlias keep_values
+                        :        +- LocalRelation [value#x]
+                        +- Aggregate [k#x, spark_grouping_id#xL], [k#x]
+                           +- Expand [[k#x, v#x, k#x, 0], [k#x, v#x, null, 1]], [k#x, v#x, k#x, spark_grouping_id#xL]
+                              +- Project [k#x, v#x, k#x AS k#x]
+                                 +- SubqueryAlias input
+                                    +- LocalRelation [k#x, v#x]
+
+
+-- !query
+DROP VIEW having_window_view
+-- !query analysis
+DropTableCommand `spark_catalog`.`default`.`having_window_view`, false, true, false
+
+
+-- !query
+DROP TABLE testcat.having_window.ctas
+-- !query analysis
+DropTable false, false
++- ResolvedIdentifier org.apache.spark.sql.connector.catalog.InMemoryTableCatalog@xxxxxxxx, having_window.ctas
+
+
+-- !query
+DROP TABLE testcat.having_window.rtas
+-- !query analysis
+DropTable false, false
++- ResolvedIdentifier org.apache.spark.sql.connector.catalog.InMemoryTableCatalog@xxxxxxxx, having_window.rtas
+
+
+-- !query
+DROP TABLE testcat.having_window.lateral_ctas
+-- !query analysis
+DropTable false, false
++- ResolvedIdentifier org.apache.spark.sql.connector.catalog.InMemoryTableCatalog@xxxxxxxx, having_window.lateral_ctas
+
+
+-- !query
+DROP NAMESPACE testcat.having_window
+-- !query analysis
+DropNamespace false, false
++- ResolvedNamespace org.apache.spark.sql.connector.catalog.InMemoryTableCatalog@xxxxxxxx, [having_window]
+
+
+-- !query
+SET spark.sql.legacy.evaluateHavingAfterInnerWindow=true
+-- !query analysis
+SetCommand (spark.sql.legacy.evaluateHavingAfterInnerWindow,Some(true))
+
+
+-- !query
+SELECT
+  k,
+  SUM(v) AS s,
+  s * 2 AS s2,
+  s2 + 1 AS s3,
+  SUM(SUM(v)) OVER (PARTITION BY k) AS partition_sum
+FROM VALUES ('a', 1), ('b', 2) AS input(k, v)
+GROUP BY ROLLUP(k)
+HAVING k IS NOT NULL
+ORDER BY k
+-- !query analysis
+Sort [k#x ASC NULLS FIRST], true
++- Filter isnotnull(k#x)
+   +- Project [k#x, s#xL, s2#xL, s3#xL, partition_sum#xL]
+      +- Project [k#x, s#xL, s2#xL, s3#xL, sum(v)#xL, partition_sum#xL, partition_sum#xL]
+         +- Window [sum(sum(v)#xL) windowspecdefinition(k#x, specifiedwindowframe(RowFrame, unboundedpreceding$(), unboundedfollowing$())) AS partition_sum#xL], [k#x]
+            +- Project [k#x, s#xL, s2#xL, (s2#xL + cast(1 as bigint)) AS s3#xL, sum(v)#xL]
+               +- Project [k#x, sum(v)#xL, s#xL, (s#xL * cast(2 as bigint)) AS s2#xL]
+                  +- Project [k#x, sum(v)#xL, sum(v)#xL AS s#xL]
+                     +- Aggregate [k#x, spark_grouping_id#xL], [k#x, sum(v#x) AS sum(v)#xL]
+                        +- Expand [[k#x, v#x, k#x, 0], [k#x, v#x, null, 1]], [k#x, v#x, k#x, spark_grouping_id#xL]
+                           +- Project [k#x, v#x, k#x AS k#x]
+                              +- SubqueryAlias input
+                                 +- LocalRelation [k#x, v#x]
+
+
+-- !query
+SELECT
+  k,
+  SUM(v) AS s,
+  s * 2 AS s2,
+  COUNT(*) OVER () AS group_count
+FROM VALUES ('drop', 2), ('keep', 1) AS input(k, v)
+GROUP BY ROLLUP(k)
+HAVING k = 'keep'
+ORDER BY k
+-- !query analysis
+Sort [k#x ASC NULLS FIRST], true
++- Filter (k#x = keep)
+   +- Project [k#x, s#xL, s2#xL, group_count#xL]
+      +- Project [k#x, s#xL, s2#xL, group_count#xL, group_count#xL]
+         +- Window [count(1) windowspecdefinition(specifiedwindowframe(RowFrame, unboundedpreceding$(), unboundedfollowing$())) AS group_count#xL]
+            +- Project [k#x, s#xL, (s#xL * cast(2 as bigint)) AS s2#xL]
+               +- Project [k#x, sum(v)#xL, sum(v)#xL AS s#xL]
+                  +- Aggregate [k#x, spark_grouping_id#xL], [k#x, sum(v#x) AS sum(v)#xL]
+                     +- Expand [[k#x, v#x, k#x, 0], [k#x, v#x, null, 1]], [k#x, v#x, k#x, spark_grouping_id#xL]
+                        +- Project [k#x, v#x, k#x AS k#x]
+                           +- SubqueryAlias input
+                              +- LocalRelation [k#x, v#x]
+
+
+-- !query
+SELECT
+  k,
+  SUM(v) AS s,
+  s * 2 AS s2,
+  COUNT(*) OVER () AS group_count
+FROM VALUES ('drop', 2), ('keep', 1) AS input(k, v)
+GROUP BY ROLLUP(k)
+HAVING s = 1L
+ORDER BY k
+-- !query analysis
+Sort [k#x ASC NULLS FIRST], true
++- Filter (s#xL = 1)
+   +- Project [k#x, s#xL, s2#xL, group_count#xL]
+      +- Project [k#x, s#xL, s2#xL, group_count#xL, group_count#xL]
+         +- Window [count(1) windowspecdefinition(specifiedwindowframe(RowFrame, unboundedpreceding$(), unboundedfollowing$())) AS group_count#xL]
+            +- Project [k#x, s#xL, (s#xL * cast(2 as bigint)) AS s2#xL]
+               +- Project [k#x, sum(v)#xL, sum(v)#xL AS s#xL]
+                  +- Aggregate [k#x, spark_grouping_id#xL], [k#x, sum(v#x) AS sum(v)#xL]
+                     +- Expand [[k#x, v#x, k#x, 0], [k#x, v#x, null, 1]], [k#x, v#x, k#x, spark_grouping_id#xL]
+                        +- Project [k#x, v#x, k#x AS k#x]
+                           +- SubqueryAlias input
+                              +- LocalRelation [k#x, v#x]
+
+
+-- !query
+SELECT
+  k,
+  SUM(RANK() OVER (ORDER BY SUM(v) DESC)) OVER () AS rank_sum
+FROM VALUES ('drop', 2), ('keep', 1) AS input(k, v)
+GROUP BY k
+HAVING k = 'keep'
+ORDER BY k
+-- !query analysis
+Sort [k#x ASC NULLS FIRST], true
++- Project [k#x, rank_sum#xL]
+   +- Project [k#x, _w0#x, rank_sum#xL, rank_sum#xL]
+      +- Window [sum(_w0#x) windowspecdefinition(specifiedwindowframe(RowFrame, unboundedpreceding$(), unboundedfollowing$())) AS rank_sum#xL]
+         +- Filter (k#x = keep)
+            +- Project [k#x, _w0#x]
+               +- Project [k#x, _w0#xL, _w0#x, _w0#x]
+                  +- Window [rank(_w0#xL) windowspecdefinition(_w0#xL DESC NULLS LAST, specifiedwindowframe(RowFrame, unboundedpreceding$(), currentrow$())) AS _w0#x], [_w0#xL DESC NULLS LAST]
+                     +- Aggregate [k#x], [k#x, sum(v#x) AS _w0#xL]
+                        +- SubqueryAlias input
+                           +- LocalRelation [k#x, v#x]
+
+
+-- !query
+SELECT
+  k,
+  SUM(RANK() OVER (ORDER BY SUM(v) DESC)) OVER () AS rank_sum
+FROM VALUES ('drop', 2), ('keep', 1) AS input(k, v)
+GROUP BY ROLLUP(k)
+HAVING k = 'keep'
+ORDER BY k
+-- !query analysis
+Sort [k#x ASC NULLS FIRST], true
++- Filter (k#x = keep)
+   +- Project [k#x, rank_sum#xL]
+      +- Project [k#x, _w0#x, rank_sum#xL, rank_sum#xL]
+         +- Window [sum(_w0#x) windowspecdefinition(specifiedwindowframe(RowFrame, unboundedpreceding$(), unboundedfollowing$())) AS rank_sum#xL]
+            +- Project [k#x, _w0#x]
+               +- Project [k#x, _w0#xL, _w0#x, _w0#x]
+                  +- Window [rank(_w0#xL) windowspecdefinition(_w0#xL DESC NULLS LAST, specifiedwindowframe(RowFrame, unboundedpreceding$(), currentrow$())) AS _w0#x], [_w0#xL DESC NULLS LAST]
+                     +- Aggregate [k#x, spark_grouping_id#xL], [k#x, sum(v#x) AS _w0#xL]
+                        +- Expand [[k#x, v#x, k#x, 0], [k#x, v#x, null, 1]], [k#x, v#x, k#x, spark_grouping_id#xL]
+                           +- Project [k#x, v#x, k#x AS k#x]
+                              +- SubqueryAlias input
+                                 +- LocalRelation [k#x, v#x]
+
+
+-- !query
+SELECT
+  k,
+  COUNT(*) OVER () AS group_count
+FROM VALUES ('drop', 2), ('keep', 1) AS input(k, v)
+GROUP BY GROUPING SETS ((k), ())
+HAVING k = 'keep'
+ORDER BY k
+-- !query analysis
+Sort [k#x ASC NULLS FIRST], true
++- Filter (k#x = keep)
+   +- Project [k#x, group_count#xL]
+      +- Project [k#x, group_count#xL, group_count#xL]
+         +- Window [count(1) windowspecdefinition(specifiedwindowframe(RowFrame, unboundedpreceding$(), unboundedfollowing$())) AS group_count#xL]
+            +- Aggregate [k#x, spark_grouping_id#xL], [k#x]
+               +- Expand [[k#x, v#x, k#x, 0], [k#x, v#x, null, 1]], [k#x, v#x, k#x, spark_grouping_id#xL]
+                  +- Project [k#x, v#x, k#x AS k#x]
+                     +- SubqueryAlias input
+                        +- LocalRelation [k#x, v#x]
+
+
+-- !query
+SELECT
+  k,
+  COUNT(*) OVER () AS group_count
+FROM VALUES ('drop', 2), ('keep', 1) AS input(k, v)
+GROUP BY GROUPING SETS ((k), ())
+HAVING group_count = 3L
+ORDER BY k
+-- !query analysis
+Sort [k#x ASC NULLS FIRST], true
++- Filter (group_count#xL = 3)
+   +- Project [k#x, group_count#xL]
+      +- Project [k#x, group_count#xL, group_count#xL]
+         +- Window [count(1) windowspecdefinition(specifiedwindowframe(RowFrame, unboundedpreceding$(), unboundedfollowing$())) AS group_count#xL]
+            +- Aggregate [k#x, spark_grouping_id#xL], [k#x]
+               +- Expand [[k#x, v#x, k#x, 0], [k#x, v#x, null, 1]], [k#x, v#x, k#x, spark_grouping_id#xL]
+                  +- Project [k#x, v#x, k#x AS k#x]
+                     +- SubqueryAlias input
+                        +- LocalRelation [k#x, v#x]
+
+
+-- !query
+SELECT
+  k,
+  (SELECT MAX(rn) FROM (
+    SELECT ROW_NUMBER() OVER (ORDER BY x) AS rn FROM VALUES (1) AS query_input(x))) AS sq,
+  COUNT(*) OVER () AS group_count
+FROM VALUES ('drop', 2), ('keep', 1) AS input(k, v)
+GROUP BY ROLLUP(k)
+HAVING sq = 1 AND k = 'keep'
+ORDER BY k
+-- !query analysis
+Sort [k#x ASC NULLS FIRST], true
++- Filter ((sq#x = 1) AND (k#x = keep))
+   +- Project [k#x, sq#x, group_count#xL]
+      +- Project [k#x, sq#x, group_count#xL, group_count#xL]
+         +- Window [count(1) windowspecdefinition(specifiedwindowframe(RowFrame, unboundedpreceding$(), unboundedfollowing$())) AS group_count#xL]
+            +- Aggregate [k#x, spark_grouping_id#xL], [k#x, scalar-subquery#x [] AS sq#x]
+               :  +- Aggregate [max(rn#x) AS max(rn)#x]
+               :     +- SubqueryAlias __auto_generated_subquery_name
+               :        +- Project [rn#x]
+               :           +- Project [x#x, rn#x, rn#x]
+               :              +- Window [row_number() windowspecdefinition(x#x ASC NULLS FIRST, specifiedwindowframe(RowFrame, unboundedpreceding$(), currentrow$())) AS rn#x], [x#x ASC NULLS FIRST]
+               :                 +- Project [x#x]
+               :                    +- SubqueryAlias query_input
+               :                       +- LocalRelation [x#x]
+               +- Expand [[k#x, v#x, k#x, 0], [k#x, v#x, null, 1]], [k#x, v#x, k#x, spark_grouping_id#xL]
+                  +- Project [k#x, v#x, k#x AS k#x]
+                     +- SubqueryAlias input
+                        +- LocalRelation [k#x, v#x]
+
+
+-- !query
+SELECT
+  k,
+  COUNT(*) OVER () AS group_count
+FROM VALUES ('drop', 2), ('keep', 1) AS input(k, v)
+GROUP BY ROLLUP(k)
+HAVING k = 'keep'
+QUALIFY group_count > 0
+ORDER BY k
+-- !query analysis
+Sort [k#x ASC NULLS FIRST], true
++- Filter (group_count#xL > cast(0 as bigint))
+   +- Filter (k#x = keep)
+      +- Project [k#x, group_count#xL]
+         +- Project [k#x, group_count#xL, group_count#xL]
+            +- Window [count(1) windowspecdefinition(specifiedwindowframe(RowFrame, unboundedpreceding$(), unboundedfollowing$())) AS group_count#xL]
+               +- Aggregate [k#x, spark_grouping_id#xL], [k#x]
+                  +- Expand [[k#x, v#x, k#x, 0], [k#x, v#x, null, 1]], [k#x, v#x, k#x, spark_grouping_id#xL]
+                     +- Project [k#x, v#x, k#x AS k#x]
+                        +- SubqueryAlias input
+                           +- LocalRelation [k#x, v#x]
+
+
+-- !query
+SELECT
+  k,
+  COUNT(*) OVER () AS group_count
+FROM VALUES ('drop', 2), ('keep', 1) AS input(k, v)
+GROUP BY ROLLUP(k)
+HAVING k = 'keep' AND RAND(0) < 2D
+ORDER BY k
+-- !query analysis
+[Analyzer test output redacted due to nondeterminism]
+
+
+-- !query
+SELECT
+  k,
+  COUNT(*) OVER () AS group_count
+FROM VALUES ('drop', 2), ('keep', 1) AS input(k, v)
+GROUP BY GROUPING SETS ((k), ())
+HAVING GROUPING_ID() = 1L
+ORDER BY k
+-- !query analysis
+Sort [k#x ASC NULLS FIRST], true
++- Project [k#x, group_count#xL]
+   +- Filter (spark_grouping_id#xL = 1)
+      +- Project [k#x, group_count#xL, spark_grouping_id#xL]
+         +- Project [k#x, group_count#xL, group_count#xL, spark_grouping_id#xL]
+            +- Window [count(1) windowspecdefinition(specifiedwindowframe(RowFrame, unboundedpreceding$(), unboundedfollowing$())) AS group_count#xL]
+               +- Aggregate [k#x, spark_grouping_id#xL], [k#x, spark_grouping_id#xL]
+                  +- Expand [[k#x, v#x, k#x, 0], [k#x, v#x, null, 1]], [k#x, v#x, k#x, spark_grouping_id#xL]
+                     +- Project [k#x, v#x, k#x AS k#x]
+                        +- SubqueryAlias input
+                           +- LocalRelation [k#x, v#x]
+
+
+-- !query
+SELECT
+  k,
+  COUNT(*) OVER () AS group_count
+FROM VALUES ('drop', 1), ('drop', 2), ('keep', 1) AS input(k, v)
+GROUP BY ROLLUP(k)
+HAVING COUNT(*) = 1L
+ORDER BY k
+-- !query analysis
+Sort [k#x ASC NULLS FIRST], true
++- Project [k#x, group_count#xL]
+   +- Filter (count(1)#xL = 1)
+      +- Project [k#x, group_count#xL, count(1)#xL]
+         +- Project [k#x, count(1)#xL, group_count#xL, group_count#xL]
+            +- Window [count(1) windowspecdefinition(specifiedwindowframe(RowFrame, unboundedpreceding$(), unboundedfollowing$())) AS group_count#xL]
+               +- Aggregate [k#x, spark_grouping_id#xL], [k#x, count(1) AS count(1)#xL]
+                  +- Expand [[k#x, v#x, k#x, 0], [k#x, v#x, null, 1]], [k#x, v#x, k#x, spark_grouping_id#xL]
+                     +- Project [k#x, v#x, k#x AS k#x]
+                        +- SubqueryAlias input
+                           +- LocalRelation [k#x, v#x]
+
+
+-- !query
+SELECT
+  k,
+  SUM(v) AS s,
+  s * 2 AS s2,
+  COUNT(*) OVER () AS group_count
+FROM VALUES ('drop', 2), ('keep', 1) AS input(k, v)
+GROUP BY ROLLUP(k)
+HAVING GROUPING_ID() = 0L
+ORDER BY k
+-- !query analysis
+Sort [k#x ASC NULLS FIRST], true
++- Project [k#x, s#xL, s2#xL, group_count#xL]
+   +- Filter (spark_grouping_id#xL = 0)
+      +- Project [k#x, s#xL, s2#xL, group_count#xL, spark_grouping_id#xL]
+         +- Project [k#x, s#xL, s2#xL, group_count#xL, group_count#xL, spark_grouping_id#xL]
+            +- Window [count(1) windowspecdefinition(specifiedwindowframe(RowFrame, unboundedpreceding$(), unboundedfollowing$())) AS group_count#xL]
+               +- Project [k#x, s#xL, (s#xL * cast(2 as bigint)) AS s2#xL, spark_grouping_id#xL]
+                  +- Project [k#x, sum(v)#xL, sum(v)#xL AS s#xL, spark_grouping_id#xL]
+                     +- Aggregate [k#x, spark_grouping_id#xL], [k#x, sum(v#x) AS sum(v)#xL, spark_grouping_id#xL]
+                        +- Expand [[k#x, v#x, k#x, 0], [k#x, v#x, null, 1]], [k#x, v#x, k#x, spark_grouping_id#xL]
+                           +- Project [k#x, v#x, k#x AS k#x]
+                              +- SubqueryAlias input
+                                 +- LocalRelation [k#x, v#x]
+
+
+-- !query
+RESET spark.sql.legacy.evaluateHavingAfterInnerWindow
+-- !query analysis
+ResetCommand spark.sql.legacy.evaluateHavingAfterInnerWindow
+
+
+-- !query
 SELECT lead(COL1) OVER (ORDER BY COL1) AS flag, * FROM t1
 -- !query analysis
 Project [flag#x, col1#x, col2#x]
