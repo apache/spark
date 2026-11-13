@@ -17,6 +17,8 @@
 
 package org.apache.spark.sql.execution.joins
 
+import java.io.Closeable
+
 import org.apache.spark.{PartitionEvaluator, PartitionEvaluatorFactory}
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.{Attribute, Expression, GenericInternalRow, JoinedRow, Predicate, Projection, RowOrdering, UnsafeProjection, UnsafeRow}
@@ -54,6 +56,11 @@ class SortMergeJoinEvaluatorFactory(
 
     private def createRightKeyGenerator(): Projection =
       UnsafeProjection.create(rightKeys, right.output)
+
+    private def closeIterator(iterator: Iterator[UnsafeRow]): Unit = iterator match {
+      case closeable: Closeable => closeable.close()
+      case _ =>
+    }
 
     override def eval(
         partitionIndex: Int,
@@ -217,12 +224,16 @@ class SortMergeJoinEvaluatorFactory(
                 currentLeftRow = smjScanner.getStreamedRow
                 if (currentRightMatches != null && currentRightMatches.length > 0) {
                   val rightMatchesIterator = currentRightMatches.generateIterator()
-                  while (rightMatchesIterator.hasNext) {
-                    joinRow(currentLeftRow, rightMatchesIterator.next())
-                    if (boundCondition(joinRow)) {
-                      numOutputRows += 1
-                      return true
+                  try {
+                    while (rightMatchesIterator.hasNext) {
+                      joinRow(currentLeftRow, rightMatchesIterator.next())
+                      if (boundCondition(joinRow)) {
+                        numOutputRows += 1
+                        return true
+                      }
                     }
+                  } finally {
+                    closeIterator(rightMatchesIterator)
                   }
                 }
               }
@@ -270,11 +281,15 @@ class SortMergeJoinEvaluatorFactory(
                 }
                 var found = false
                 val rightMatchesIterator = currentRightMatches.generateIterator()
-                while (!found && rightMatchesIterator.hasNext) {
-                  joinRow(currentLeftRow, rightMatchesIterator.next())
-                  if (boundRest(joinRow)) {
-                    found = true
+                try {
+                  while (!found && rightMatchesIterator.hasNext) {
+                    joinRow(currentLeftRow, rightMatchesIterator.next())
+                    if (boundRest(joinRow)) {
+                      found = true
+                    }
                   }
+                } finally {
+                  closeIterator(rightMatchesIterator)
                 }
                 if (!found) {
                   numOutputRows += 1
@@ -325,11 +340,15 @@ class SortMergeJoinEvaluatorFactory(
                 var found = false
                 if (currentRightMatches != null && currentRightMatches.length > 0) {
                   val rightMatchesIterator = currentRightMatches.generateIterator()
-                  while (!found && rightMatchesIterator.hasNext) {
-                    joinRow(currentLeftRow, rightMatchesIterator.next())
-                    if (boundRest(joinRow)) {
-                      found = true
+                  try {
+                    while (!found && rightMatchesIterator.hasNext) {
+                      joinRow(currentLeftRow, rightMatchesIterator.next())
+                      if (boundRest(joinRow)) {
+                        found = true
+                      }
                     }
+                  } finally {
+                    closeIterator(rightMatchesIterator)
                   }
                 }
                 result.setBoolean(0, found)

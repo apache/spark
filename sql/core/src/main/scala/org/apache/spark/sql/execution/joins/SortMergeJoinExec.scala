@@ -577,8 +577,9 @@ case class SortMergeJoinExec(
          |${streamedBeforeLoop.trim}
          |$streamedOnlyPre
          |$existsVarDecl
-         |scala.collection.Iterator<UnsafeRow> $iterator = $matches.generateIterator();
        """.stripMargin
+    val createIterator =
+      s"scala.collection.Iterator<UnsafeRow> $iterator = $matches.generateIterator();"
     val outputRow =
       s"""
          |$numOutput.add(1);
@@ -614,8 +615,9 @@ case class SortMergeJoinExec(
            |  $guardOutputRow
            |  continue;
            |}
+           |$createIterator
          """.stripMargin
-      case None => beforeLoopWithoutGuard
+      case None => s"$beforeLoopWithoutGuard\n$createIterator"
     }
 
     val doJoin = joinType match {
@@ -654,6 +656,14 @@ case class SortMergeJoinExec(
        |  $addHookToRecordMetrics
        |}
        |$doJoin
+     """.stripMargin
+  }
+
+  private def closeIteratorCode(iterator: String): String = {
+    s"""
+       |if ($iterator instanceof java.io.Closeable) {
+       |  ((java.io.Closeable) $iterator).close();
+       |}
      """.stripMargin
   }
 
@@ -743,11 +753,15 @@ case class SortMergeJoinExec(
        |  $beforeLoop
        |  boolean $hasOutputRow = false;
        |
-       |  while (!$hasOutputRow && $matchIterator.hasNext()) {
-       |    InternalRow $bufferedRow = (InternalRow) $matchIterator.next();
-       |    $conditionCheck
-       |    $hasOutputRow = true;
-       |    $outputRow
+       |  try {
+       |    while (!$hasOutputRow && $matchIterator.hasNext()) {
+       |      InternalRow $bufferedRow = (InternalRow) $matchIterator.next();
+       |      $conditionCheck
+       |      $hasOutputRow = true;
+       |      $outputRow
+       |    }
+       |  } finally {
+       |    ${closeIteratorCode(matchIterator)}
        |  }
        |  if (shouldStop()) return;
        |}
@@ -776,10 +790,14 @@ case class SortMergeJoinExec(
        |  $beforeLoop
        |  boolean $hasMatchedRow = false;
        |
-       |  while (!$hasMatchedRow && $matchIterator.hasNext()) {
-       |    InternalRow $bufferedRow = (InternalRow) $matchIterator.next();
-       |    $conditionCheck
-       |    $hasMatchedRow = true;
+       |  try {
+       |    while (!$hasMatchedRow && $matchIterator.hasNext()) {
+       |      InternalRow $bufferedRow = (InternalRow) $matchIterator.next();
+       |      $conditionCheck
+       |      $hasMatchedRow = true;
+       |    }
+       |  } finally {
+       |    ${closeIteratorCode(matchIterator)}
        |  }
        |
        |  if (!$hasMatchedRow) {
@@ -813,10 +831,14 @@ case class SortMergeJoinExec(
        |  $findNextJoinRows;
        |  $beforeLoop
        |
-       |  while (!$exists && $matchIterator.hasNext()) {
-       |    InternalRow $bufferedRow = (InternalRow) $matchIterator.next();
-       |    $conditionCheck
-       |    $exists = true;
+       |  try {
+       |    while (!$exists && $matchIterator.hasNext()) {
+       |      InternalRow $bufferedRow = (InternalRow) $matchIterator.next();
+       |      $conditionCheck
+       |      $exists = true;
+       |    }
+       |  } finally {
+       |    ${closeIteratorCode(matchIterator)}
        |  }
        |
        |  if (!$exists) {
