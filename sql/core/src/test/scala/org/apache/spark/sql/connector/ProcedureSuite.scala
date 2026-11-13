@@ -98,6 +98,19 @@ class ProcedureSuite extends SharedSparkSession with BeforeAndAfter {
     checkAnswer(sql("CALL cat.ns.sum((1 + 1) * 2, in2 => (2 + 1) / 3)"), Row(5) :: Nil)
   }
 
+  test("SPARK-61557: non-foldable arguments") {
+    catalog.createProcedure(Identifier.of(Array("ns"), "sum"), UnboundSum)
+    checkError(
+      exception = intercept[AnalysisException] {
+        sql("CALL cat.ns.sum(1, CAST(rand() * 10 AS INT))")
+      },
+      condition = "NON_FOLDABLE_ARGUMENT",
+      parameters = Map(
+        "funcName" -> toSQLId("sum"),
+        "paramName" -> toSQLId("in2"),
+        "paramType" -> toSQLType("INT")))
+  }
+
   test("SPARK-59962: an argument reading a value twice") {
     // NULLIF reads the scalar subquery twice. Pre-evaluating it in a `Project` over the
     // `ResolvedProcedure` would leave a plan `InvokeProcedures` does not expect.
@@ -237,6 +250,37 @@ class ProcedureSuite extends SharedSparkSession with BeforeAndAfter {
         checkAnswer(sql("CALL sum(1, 2)"), Row(3L) :: Nil)
       } finally {
         sql("SET PATH = DEFAULT_PATH")
+      }
+    }
+  }
+
+  test("SPARK-61553: a null from loadProcedure means the procedure is not found") {
+    withSQLConf("spark.sql.catalog.nullcat" -> classOf[NullReturningProcedureCatalog].getName) {
+      checkError(
+        exception = intercept[AnalysisException](sql("CALL nullcat.ns.missing()")),
+        condition = "UNRESOLVED_ROUTINE",
+        parameters = Map(
+          "routineName" -> "`nullcat`.`ns`.`missing`",
+          "searchPath" -> "[`system`.`builtin`, `system`.`session`, `spark_catalog`.`default`]"),
+        context = ExpectedContext(fragment = "CALL nullcat.ns.missing()", start = 0, stop = 24))
+
+      checkError(
+        exception = intercept[AnalysisException](sql("DESC PROCEDURE nullcat.ns.missing")),
+        condition = "UNRESOLVED_ROUTINE",
+        parameters = Map(
+          "routineName" -> "`nullcat`.`ns`.`missing`",
+          "searchPath" -> "[`system`.`builtin`, `system`.`session`, `spark_catalog`.`default`]"),
+        context = ExpectedContext(
+          fragment = "DESC PROCEDURE nullcat.ns.missing", start = 0, stop = 32))
+
+      withSQLConf(SQLConf.PATH_ENABLED.key -> "true") {
+        try {
+          catalog("cat2").createProcedure(Identifier.of(Array("ns_hit"), "sum"), UnboundLongSum)
+          sql("SET PATH = nullcat.ns_miss, cat2.ns_hit")
+          checkAnswer(sql("CALL sum(1, 2)"), Row(3L) :: Nil)
+        } finally {
+          sql("SET PATH = DEFAULT_PATH")
+        }
       }
     }
   }
@@ -987,4 +1031,9 @@ class ProcedureSuite extends SharedSparkSession with BeforeAndAfter {
     override def parameters: Array[ProcedureParameter] = Array.empty
     override def call(input: InternalRow): java.util.Iterator[Scan] = Collections.emptyIterator
   }
+}
+
+/** A procedure catalog that returns null for an unknown procedure instead of throwing. */
+class NullReturningProcedureCatalog extends InMemoryCatalog {
+  override def loadProcedure(ident: Identifier): UnboundProcedure = procedures.get(ident)
 }

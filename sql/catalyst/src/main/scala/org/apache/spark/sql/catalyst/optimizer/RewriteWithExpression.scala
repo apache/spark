@@ -108,9 +108,10 @@ object RewriteWithExpression extends Rule[LogicalPlan] {
       // fold, so a definition there worth memoizing keeps its `With`.
       case c @ (_: Command | _: Call) =>
         c.mapExpressions(inlineCommandWiths)
-      // An external lookup join reads its lookup side directly, so no definition can be evaluated
-      // in a projection below it. Its condition is deterministic, as analysis requires of any join
-      // condition, so every definition is inlined at its references.
+      // No definition is evaluated in a projection below an external lookup join. One over its
+      // lookup side would become a lookup-side stage, which cannot hold every expression that the
+      // condition can, such as a Python UDF. The condition is deterministic, as analysis requires
+      // of any join condition, so every definition is inlined at its references.
       case j: ExternalLookupJoin =>
         j.mapExpressions(inlineCommandWiths)
       case p if p.expressions.exists(_.containsPattern(WITH_EXPRESSION)) =>

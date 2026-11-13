@@ -160,6 +160,84 @@ class ExternalLookupJoinStartupCheckSuite extends QueryTest with SharedSparkSess
     start(stream.join(lookup, Seq("id"))).stop()
   }
 
+  test("MISSING_JOIN_CONDITION fails start() for a hinted join") {
+    val stream = MemoryStream[Int].toDF().toDF("id")
+    checkError(
+      exception = startFailure(stream.join(lookupOnly.hint("external_lookup"))),
+      condition = "EXTERNAL_LOOKUP_JOIN_UNSUPPORTED.MISSING_JOIN_CONDITION",
+      parameters = Map.empty)
+  }
+
+  test("the start plans a lookup side read through a WITH clause") {
+    withTempView("startup_stream", "startup_bigint_stream", "startup_lookup", "startup_dual") {
+      MemoryStream[Long].toDF().toDF("id").createOrReplaceTempView("startup_bigint_stream")
+      lookupOnly.createOrReplaceTempView("startup_lookup")
+      spark.read.format(classOf[DualCapabilityExternalLookupDataSource].getName).load()
+        .createOrReplaceTempView("startup_dual")
+      def withClause(stream: String, table: String, hint: String = ""): DataFrame = spark.sql(
+        s"WITH lk AS (TABLE $table) SELECT $hint lk.department " +
+          s"FROM $stream s JOIN lk ON s.id = lk.id")
+      checkError(
+        exception = queryFailure[AnalysisException](
+          withClause("startup_bigint_stream", "startup_lookup")),
+        condition = "EXTERNAL_LOOKUP_JOIN_UNSUPPORTED.NO_LOOKUP_CANDIDATE",
+        parameters = Map("table" -> "`SimpleExternalLookupTable`"))
+      Seq(("startup_lookup", ""), ("startup_dual", "/*+ EXTERNAL_LOOKUP(lk) */")).foreach {
+        case (table, hint) =>
+          val input = MemoryStream[Int]
+          input.toDF().toDF("id").createOrReplaceTempView("startup_stream")
+          var query: StreamingQuery = null
+          assert(startupWarnings {
+            query = start(withClause("startup_stream", table, hint))
+            awaitInitialization(query)
+          }.isEmpty)
+          try {
+            input.addData(1, 3)
+            query.processAllAvailable()
+            checkAnswer(spark.table(query.name), Seq(Row("engineering"), Row("research")))
+          } finally {
+            query.stop()
+          }
+      }
+    }
+  }
+
+  test("NO_LOOKUP_CANDIDATE stops a hinted join over a dual-capability table when it starts") {
+    withTempView("startup_bigint_stream", "startup_dual") {
+      MemoryStream[Long].toDF().toDF("id").createOrReplaceTempView("startup_bigint_stream")
+      spark.read.format(classOf[DualCapabilityExternalLookupDataSource].getName).load()
+        .createOrReplaceTempView("startup_dual")
+      // A BIGINT stream key casts the INT lookup column, so Spark has no candidate to offer. The
+      // table also serves batch scans, so only the hint makes it a lookup side, directly or
+      // through a WITH clause.
+      Seq(
+        "SELECT /*+ EXTERNAL_LOOKUP(d) */ d.department FROM startup_bigint_stream s " +
+          "JOIN startup_dual d ON s.id = d.id",
+        "WITH lk AS (TABLE startup_dual) SELECT /*+ EXTERNAL_LOOKUP(lk) */ lk.department " +
+          "FROM startup_bigint_stream s JOIN lk ON s.id = lk.id").foreach { query =>
+        checkError(
+          exception = queryFailure[AnalysisException](spark.sql(query)),
+          condition = "EXTERNAL_LOOKUP_JOIN_UNSUPPORTED.NO_LOOKUP_CANDIDATE",
+          parameters = Map("table" -> "`DualCapabilityExternalLookupTable`"))
+      }
+    }
+  }
+
+  test("NO_LOOKUP_CANDIDATE names a table whose name does not parse as an identifier") {
+    withSQLConf(
+        "spark.sql.catalog.startup_lookup_cat" -> classOf[ExternalLookupTestCatalog].getName) {
+      val stream = MemoryStream[Long].toDF().toDF("id")
+      val lookup = spark.table("startup_lookup_cat.ns.path_dual").hint("external_lookup")
+      // A BIGINT stream key casts the INT lookup column, so Spark has no candidate to offer. The
+      // error renders the table's name, `./users`, as one quoted part.
+      checkError(
+        exception = queryFailure[AnalysisException](
+          stream.join(lookup, stream("id") === lookup("id"))),
+        condition = "EXTERNAL_LOOKUP_JOIN_UNSUPPORTED.NO_LOOKUP_CANDIDATE",
+        parameters = Map("table" -> "`./users`"))
+    }
+  }
+
   test("NO_LOOKUP_CANDIDATE stops the query when it starts, before any data arrives") {
     val stream = MemoryStream[Long].toDF().toDF("id")
     val lookup = lookupOnly

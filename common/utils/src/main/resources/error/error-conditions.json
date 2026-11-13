@@ -2928,11 +2928,6 @@
       "The join cannot be executed as an external lookup join:"
     ],
     "subClass" : {
-      "CHAR_VARCHAR_COLUMN" : {
-        "message" : [
-          "The column <column> of the lookup-only table <relation> needs read-side CHAR padding or a VARCHAR length check, which an external lookup join does not support."
-        ]
-      },
       "CONFLICTING_JOIN_STRATEGY" : {
         "message" : [
           "The join strategy hint <strategy> cannot be honored by an external lookup join over <relation>. Remove the <strategy> hint."
@@ -2945,12 +2940,22 @@
       },
       "LOOKUP_PLAN" : {
         "message" : [
-          "The lookup side must be a DSv2 table, with no other operator between the table and the join."
+          "The lookup side must be a DSv2 table, optionally under projections and filters, which Spark evaluates on the lookup results. They cannot contain Python UDFs, external UDFs, subqueries or non-deterministic expressions: Spark evaluates them on each returned row, so a non-deterministic one could give one stored row different values for different stream rows. No other operator can be between the table and the join."
         ]
       },
       "LOOKUP_TABLE_ON_LEFT" : {
         "message" : [
           "The lookup-only table <relation> must be on the right side of the join."
+        ]
+      },
+      "MATERIALIZED_CTE" : {
+        "message" : [
+          "The lookup side reads the CTE <cteName>, which Spark evaluates once instead of inlining it, as for a `MATERIALIZED` CTE. An external lookup join must read the lookup table itself. Remove the `MATERIALIZED` option of the CTE."
+        ]
+      },
+      "METADATA_COLUMN" : {
+        "message" : [
+          "An external lookup join over <relation> cannot read a metadata column of the table."
         ]
       },
       "MISSING_JOIN_CONDITION" : {
@@ -2960,7 +2965,7 @@
       },
       "NO_LOOKUP_CANDIDATE" : {
         "message" : [
-          "The join condition has no lookup predicate that Spark can offer to table <table>. A lookup predicate is an equality `=` between a lookup column, with no cast or other expression applied to it, and an expression over the streaming side. The lookup column must have a type that stores compare as Spark does; the Javadoc of `SupportsExternalLookup.selectLookupPredicates()` lists these types. Instead of casting the lookup column, cast the streaming-side expression to its type, if every streaming-side value is exactly representable in that type."
+          "The join condition has no lookup predicate that Spark can offer to table <table>. A lookup predicate is a comparison `=`, `<=>`, `<`, `<=`, `>` or `>=` between a lookup column, with no cast or other expression applied to it, and an expression over the streaming side. The lookup column must have a type that stores compare as Spark does, and a range comparison needs a streaming-side expression that cannot fail; the Javadoc of `SupportsExternalLookup.selectLookupPredicates()` lists both. Instead of casting the lookup column, cast the streaming-side expression to its type, if every streaming-side value is exactly representable in that type."
         ]
       },
       "NO_LOOKUP_PREDICATE" : {
@@ -2976,6 +2981,11 @@
       "STATIC_LEFT_SIDE" : {
         "message" : [
           "An external lookup join must be a stream-static join, but the left side of the join over <relation> is not a streaming query."
+        ]
+      },
+      "STREAMING_LOOKUP_SIDE" : {
+        "message" : [
+          "The lookup side cannot be a streaming relation."
         ]
       },
       "SUBQUERY_IN_JOIN_CONDITION" : {
@@ -4481,6 +4491,29 @@
       "Expression type must be string type but got <exprType>."
     ],
     "sqlState" : "42K09"
+  },
+  "INVALID_EXTERNAL_LOOKUP_HINT" : {
+    "message" : [
+      "The `EXTERNAL_LOOKUP` hint is invalid:"
+    ],
+    "subClass" : {
+      "NOT_ON_LOOKUP_SIDE" : {
+        "message" : [
+          "The hint must be placed on the right lookup side of the join."
+        ]
+      },
+      "RELATION_NOT_FOUND" : {
+        "message" : [
+          "Cannot find the relation(s) <relations> named by the hint."
+        ]
+      },
+      "UNSUPPORTED_PARAMETER" : {
+        "message" : [
+          "The hint accepts only relation names, but got <parameter>."
+        ]
+      }
+    },
+    "sqlState" : "42601"
   },
   "INVALID_EXTERNAL_TYPE" : {
     "message" : [

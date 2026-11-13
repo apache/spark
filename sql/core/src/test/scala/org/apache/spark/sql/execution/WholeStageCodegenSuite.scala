@@ -26,7 +26,7 @@ import scala.util.{Failure, Success, Try}
 import org.apache.logging.log4j.Level
 import org.scalatest.time.SpanSugar._
 
-import org.apache.spark.{SparkArithmeticException, SparkException, SparkNumberFormatException}
+import org.apache.spark.{SparkArithmeticException, SparkException, SparkNumberFormatException, SparkThrowable}
 import org.apache.spark.metrics.source.CodegenMetrics
 import org.apache.spark.rdd.{MapPartitionsWithEvaluatorRDD, RDD}
 import org.apache.spark.sql.{DataFrame, Dataset, Row, SaveMode}
@@ -1503,11 +1503,10 @@ class WholeStageCodegenSuite extends SharedSparkSession
   }
 
   test("SPARK-51356: FilterExec CSE emits IsNotNull on a nested field before its otherPred") {
-    // Same defect as above, on the CSE branch of `FilterExec.doConsume`, which inlines its own
-    // copy of the interleaving. Two otherPreds share the non-cheap `f(c)`, so the branch is
-    // taken (a bare `b.c` is cheap and would fall back to `generatePredicateCode`). The
-    // guarding `IsNotNull(b.c)` has to be emitted ahead of the shared CSE precompute, not after
-    // the predicates that consume it.
+    // Same defect as above, with a common subexpression eliminated in `FilterExec.doConsume`.
+    // Two otherPreds share the non-cheap `f(c)`, so it is eliminated (a bare `b.c` is cheap
+    // and would not be). The guarding `IsNotNull(b.c)` has to be emitted ahead of the shared CSE
+    // precompute, not after the predicates that consume it.
     val data = Seq(
       Spark51356Outer(null),
       Spark51356Outer(Spark51356Mid(null)), // the row that used to trigger the failure
@@ -3378,6 +3377,112 @@ class WholeStageCodegenSuite extends SharedSparkSession
             .where("x > (SELECT max(k) - 20 FROM u) AND y + 1 > 0 AND y + 1 < 100")
             .selectExpr("count(*)"),
           Row(10))
+      }
+    }
+  }
+
+  // The conditions of the test below, with whether FilterExec eliminates a common subexpression
+  // from them. They mix columns that can be NULL, IS NOT NULL checks that are written or inferred,
+  // on columns and on expressions, before and after the conjuncts that reference them, conjuncts
+  // that can be NULL, common subexpressions, and conjuncts that can raise an error.
+  private val filterConjunctions: Seq[(String, Boolean)] = Seq(
+    "NOT (a > 0 AND b > 0) AND y + 1 > 0" -> false,
+    "NOT (a > 0 AND b > 0) AND y + 1 > 0 AND y + 1 > -1" -> true,
+    "(a > 0 OR b < 0) AND y + 1 > 0" -> false,
+    "b > 0 AND y > -1" -> false,
+    "(a > 0 OR b > 0) AND x = 1 AND y + 1 > 0" -> false,
+    "x IS NOT NULL AND NOT (a > 0 AND b > 0) AND y + 1 > 0 AND b * 2 > 0 AND b * 2 > -1" -> true,
+    "NOT (a > 0 AND b > 0) AND y + 1 > 0 AND x > 0" -> false,
+    "NOT (a > 0 AND b > 0) AND y + 1 > 0 AND x IS NOT NULL" -> false,
+    "NOT (a > 0 AND b > 0) AND y + 1 > 0 AND x IS NOT NULL AND b * 2 > 0 AND b * 2 > -1" -> true,
+    "NOT (a > 0 AND b > 0) AND b * 2 > 0 AND b * 2 > -1 AND " +
+      "coalesce(b, cast(s AS INT)) < 2 AND cast(s AS INT) IS NOT NULL" -> true,
+    "NOT (a > 0 AND b > 0) AND coalesce(b, cast(s AS INT)) < 2 AND " +
+      "cast(s AS INT) IS NOT NULL" -> false,
+    "NOT (a > 0 AND b > 0) AND b * 2 > 0 AND b * 2 > -1 AND " +
+      "coalesce(b, cast(s AS INT)) < 0 AND cast(s AS INT) IS NOT NULL" -> true,
+    "NOT (a > 0 AND b > 0) AND coalesce(b, cast(s AS INT)) < 0 AND " +
+      "cast(s AS INT) IS NOT NULL" -> false,
+    "cast(s AS INT) IS NOT NULL AND (a > 0 OR b > 0) AND y < 0" -> false,
+    "x IS NOT NULL AND NOT (a > 0 AND b > 0) AND y + 1 > 0 AND y + 1 > -1" -> true,
+    "b < 0 AND y + 1 > 0 AND y + 1 > -1" -> true,
+    "a > 0 AND x > 0 AND a * x > 3 AND a * x < 100" -> true,
+    "cast(s AS INT) > 0 AND cast(s AS INT) < 10 AND a > 0" -> true,
+    "a > 1 AND cast(s AS INT) + x > 0 AND cast(s AS INT) + x < 10 AND " +
+      "cast(s AS INT) IS NOT NULL" -> true,
+    "st.c.d > 0 AND st.c.d < 100" -> false,
+    "st.c.d > 0 AND st.c.d * a > 3 AND st.c.d * a < 100" -> true,
+    "st.c IS NOT NULL AND st.c.d + y > 0 AND st.c.d + y < 5 AND x IS NOT NULL" -> true,
+    "upper(s) = 'X' AND length(upper(s)) > 0 AND a IS NOT NULL" -> true)
+
+  test("SPARK-61556: a filter gives the same result with and without subexpression " +
+      "elimination") {
+    // The rows of a query, or the error condition that it fails with.
+    def outcome(query: String): Either[String, Seq[String]] = {
+      try {
+        Right(sql(query).collect().map(_.toString).sorted.toSeq)
+      } catch {
+        case e: Throwable =>
+          val error = Iterator.iterate(e)(_.getCause).takeWhile(_ != null).collectFirst {
+            case t: SparkThrowable if t.getCondition != null => t.getCondition
+          }
+          Left(error.getOrElse(throw e))
+      }
+    }
+    // With whole-stage codegen, FilterExec eliminates the common subexpressions under both
+    // configs. Without it, the condition is a generated predicate under the first config alone.
+    val subExprConfs = Seq(("true", "true"), ("true", "false"), ("false", "false"))
+    // On the first set of rows, `y + 1` overflows and `cast(s AS INT)` fails in ANSI mode.
+    val rowSets = Seq(
+      s"(NULL, 1, ${Int.MaxValue}, NULL, 'x'), (0, 1, 0, 1, '1'), (1, NULL, 3, 2, '2'), " +
+        s"(2, 5, ${Int.MaxValue}, 1, NULL), (3, 2, 1, NULL, '7'), (1, 1, 1, 1, 'x')",
+      "(NULL, 1, 5, NULL, '3'), (0, 1, 0, 1, '1'), (1, NULL, 3, 2, '2'), (2, 5, 7, 1, NULL), " +
+        "(3, 2, 1, NULL, '7'), (1, 1, 1, 1, '4'), (2, 3, -1, 2, 'X'), " +
+        "(NULL, NULL, NULL, NULL, NULL)")
+    rowSets.foreach { rows =>
+      withTable("t") {
+        // A Parquet table, so that the optimizer does not evaluate the filter. A single file
+        // keeps the order of the rows, and so the first row that a query fails on.
+        sql("CREATE TABLE t USING parquet AS SELECT /*+ COALESCE(1) */ *, " +
+          "IF(a = 3, NULL, named_struct('c', named_struct('d', b))) AS st " +
+          s"FROM VALUES $rows AS v(a, b, y, x, s)")
+        for (ansi <- Seq(true, false); legacy <- Seq(true, false);
+            (condition, eliminates) <- filterConjunctions) {
+          val query = s"SELECT a, b, y, x, s FROM t WHERE $condition"
+          def run(wholeStage: Boolean, subExprConf: (String, String)): Either[String, Seq[String]] =
+            withSQLConf(
+                SQLConf.ANSI_ENABLED.key -> ansi.toString,
+                SQLConf.LEGACY_FILTER_SHORT_CIRCUIT_ON_NULL_CONJUNCT.key -> legacy.toString,
+                SQLConf.PARQUET_FILTER_PUSHDOWN_ENABLED.key -> "false",
+                SQLConf.WHOLESTAGE_CODEGEN_ENABLED.key -> wholeStage.toString,
+                SQLConf.SUBEXPRESSION_ELIMINATION_ENABLED.key -> subExprConf._1,
+                SQLConf.SUBEXPRESSION_ELIMINATION_FILTER_EXEC_ENABLED.key -> subExprConf._2) {
+              outcome(query)
+            }
+          withClue(s"ansi=$ansi, legacy=$legacy, condition=$condition: ") {
+            val outcomes = Seq(true, false).map { wholeStage =>
+              val results = subExprConfs.map(run(wholeStage, _))
+              assert(results.distinct.size == 1, s"wholeStage=$wholeStage")
+              results.head
+            }
+            // The legacy behavior drops a row at its first NULL conjunct with whole-stage
+            // codegen alone, so the two can differ under it.
+            if (!legacy) {
+              assert(outcomes.distinct.size == 1)
+            }
+            // The conditions take the code path that they are meant to cover.
+            val codes = Seq("true", "false").map { filterExecCSE =>
+              withSQLConf(
+                  SQLConf.ANSI_ENABLED.key -> ansi.toString,
+                  SQLConf.LEGACY_FILTER_SHORT_CIRCUIT_ON_NULL_CONJUNCT.key -> legacy.toString,
+                  SQLConf.PARQUET_FILTER_PUSHDOWN_ENABLED.key -> "false",
+                  SQLConf.SUBEXPRESSION_ELIMINATION_FILTER_EXEC_ENABLED.key -> filterExecCSE) {
+                genCode(sql(query)).map(_.body)
+              }
+            }
+            assert((codes.head != codes.last) == eliminates)
+          }
+        }
       }
     }
   }
