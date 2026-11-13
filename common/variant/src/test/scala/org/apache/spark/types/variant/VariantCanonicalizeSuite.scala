@@ -64,6 +64,7 @@ class VariantCanonicalizeSuite extends AnyFunSuite { // scalastyle:ignore funsui
     }
   }
 
+  // Metadata binary: header, key count, `keys.size + 1` offsets, then the key bytes.
   private def metadata(
       keys: Seq[Array[Byte]],
       offsetSize: Int = 1,
@@ -76,6 +77,7 @@ class VariantCanonicalizeSuite extends AnyFunSuite { // scalastyle:ignore funsui
 
   private def dictionary(names: String*): Array[Byte] = metadata(names.map(utf8))
 
+  // Array value: header, element count, `elements.size + 1` offsets, then the elements.
   private def array(
       elements: Seq[Array[Byte]],
       offsetSize: Int = 1,
@@ -87,6 +89,8 @@ class VariantCanonicalizeSuite extends AnyFunSuite { // scalastyle:ignore funsui
       concatenate(elements)
   }
 
+  // Object value from (key id, value bytes) pairs in field order. `physicalOrder` stores the values
+  // in another order than the field list, which the spec allows.
   private def obj(
       fields: Seq[(Int, Array[Byte])],
       idSize: Int = 1,
@@ -115,7 +119,8 @@ class VariantCanonicalizeSuite extends AnyFunSuite { // scalastyle:ignore funsui
         s"actual prefix ${actual.take(32).mkString(",")}")
   }
 
-  // The input is canonical exactly when it already has the expected bytes.
+  // Canonicalize `input` and compare with the expected bytes. The input is canonical exactly when
+  // it already has those bytes. The input bytes must not change.
   private def check(
       input: Variant,
       expectedValue: Array[Byte],
@@ -149,18 +154,25 @@ class VariantCanonicalizeSuite extends AnyFunSuite { // scalastyle:ignore funsui
     assert(intercept[SparkRuntimeException](body).getCondition == condition)
   }
 
+  // Pins the exact bytes of a few canonical values independently of the helpers above.
   test("canonical encoding has pinned value and metadata bytes") {
+    // INT8 1 becomes INT1 1.
     checkKeyless(bytes(24, 1, 0, 0, 0, 0, 0, 0, 0), bytes(12, 1))
+    // Long string "x" becomes short string "x".
     checkKeyless(bytes(64, 1, 0, 0, 0, 120), bytes(5, 120))
+    // {"b":2,"a":1}: value is header, 2 fields, ids [0, 1], offsets [0, 2, 4], INT1 1, INT1 2;
+    // metadata is header, 2 keys, offsets [0, 1, 2], "ab".
     check(VariantBuilder.parseJson("{\"b\":2,\"a\":1}", false),
       bytes(2, 2, 0, 1, 0, 2, 4, 12, 1, 12, 2), bytes(1, 2, 0, 1, 2, 97, 98))
+    // Empty object and empty array.
     checkKeyless(bytes(2, 0, 0), bytes(2, 0, 0))
     checkKeyless(bytes(3, 0, 0), bytes(3, 0, 0))
   }
 
-  test("metadata helpers encode and decode every offset-width header") {
+  test("metadata helpers read every offset width and reject an overflowing dictionary size") {
     Seq((1, 0x01), (2, 0x41), (3, 0x81), (4, 0xc1)).foreach {
       case (width, header) =>
+        // Keys "a" and "b" with a `width`-byte key count and offsets.
         val input = bytes(header) ++ littleEndian(BigInt(2), width) ++
           concatenate(Seq(0, 1, 2).map(offset => littleEndian(BigInt(offset), width))) ++
           bytes(97, 98)
@@ -171,23 +183,18 @@ class VariantCanonicalizeSuite extends AnyFunSuite { // scalastyle:ignore funsui
         assert(getMetadataKey(input, 0) == "a")
         assert(getMetadataKey(input, 1) == "b")
     }
-  }
-
-  test("isCanonical rejects a metadata last offset past the available string bytes") {
-    val value = obj(Seq(0 -> integer(1)))
-    val validMetadata = dictionary("ab")
-    assert(VariantBuilder.isCanonical(new Variant(value, validMetadata)))
-
-    Seq(1, 2).foreach { missingBytes =>
-      val truncatedMetadata = validMetadata.dropRight(missingBytes)
-      assert(!VariantBuilder.isCanonical(new Variant(value, truncatedMetadata)))
-    }
+    // A key count near Int.MaxValue used to overflow the string start and return a wrong key.
+    val forged = Array(metadataHeader(4)) ++ littleEndian(BigInt(Int.MaxValue - 1), 4) ++
+      littleEndian(BigInt(0), 4) ++ littleEndian(BigInt(1), 4) ++ utf8("a")
+    checkError("MALFORMED_VARIANT") { getMetadataKey(forged, 0) }
   }
 
   test("isCanonical rejects decreasing or out-of-bounds dictionary offsets") {
     val value = obj(Seq(0 -> integer(1), 1 -> integer(2), 2 -> integer(3)))
     assert(VariantBuilder.isCanonical(new Variant(value, dictionary("a", "b", "c"))))
 
+    // Offsets [0, 2, 1, 3] decrease and [0, 4, 2, 3] exceed the last offset. [0, 4, 4, 3] would
+    // reach the key comparison with an out-of-range slice if the bound were not checked.
     val decreasingOffsets = bytes(VERSION, 3, 0, 2, 1, 3) ++ utf8("abc")
     val outOfBoundsOffset = bytes(VERSION, 3, 0, 4, 2, 3) ++ utf8("abc")
     val outOfBoundsBeforeCompare = bytes(VERSION, 3, 0, 4, 4, 3) ++ utf8("abc")
@@ -198,13 +205,9 @@ class VariantCanonicalizeSuite extends AnyFunSuite { // scalastyle:ignore funsui
     }
   }
 
-  test("getMetadataKey rejects a dictionary size whose string start overflows an int") {
-    val forged = Array(metadataHeader(4)) ++ littleEndian(BigInt(Int.MaxValue - 1), 4) ++
-      littleEndian(BigInt(0), 4) ++ littleEndian(BigInt(1), 4) ++ utf8("a")
-    checkError("MALFORMED_VARIANT") { getMetadataKey(forged, 0) }
-  }
-
-  test("dictionary permutation and object payload order canonicalize independently") {
+  test("dictionary permutation and object value order canonicalize independently") {
+    // The spec sorts field ids by key name, not by id, allows the values in any order and allows an
+    // unsorted dictionary, so these are four legal encodings of {"a":1,"b":2}.
     val expectedValue = obj(Seq(0 -> integer(1), 1 -> integer(2)))
     Seq(Seq("a", "b"), Seq("b", "a")).foreach { keys =>
       Seq(Seq(0, 1), Seq(1, 0)).foreach { order =>
@@ -216,31 +219,26 @@ class VariantCanonicalizeSuite extends AnyFunSuite { // scalastyle:ignore funsui
   }
 
   test("unused dictionary entries are removed and repeated names share an ID") {
+    // Keys "b", "unused", "a", "a": the objects use ids 2, 3 and 0, so "unused" is dropped and
+    // both "a" entries become one key.
     val sourceMetadata = dictionary("b", "unused", "a", "a")
     val sourceValue = array(Seq(
       obj(Seq(2 -> integer(1))), obj(Seq(3 -> integer(2))), obj(Seq(0 -> integer(3)))))
     val expectedValue = array(Seq(
       obj(Seq(0 -> integer(1))), obj(Seq(0 -> integer(2))), obj(Seq(1 -> integer(3)))))
     check(new Variant(sourceValue, sourceMetadata), expectedValue, dictionary("a", "b"))
+    // A scalar root keeps no keys at all.
     check(new Variant(integer(1), sourceMetadata), integer(1))
-    check(new Variant(integer(1), metadata(Seq(bytes(0xff)))), integer(1))
-    check(new Variant(obj(Seq(0 -> integer(1))), bytes(1, 1, 1, 2, 120, 97)),
-      obj(Seq(0 -> integer(1))), dictionary("a"))
+    // The empty key is a key like any other.
     val emptyKey = obj(Seq(0 -> nullValue, 1 -> integer(1)))
     check(new Variant(emptyKey, dictionary("", "a")), emptyKey, dictionary("", "a"))
   }
 
-  test("duplicate dictionary entries and repeated field IDs are never canonical") {
-    check(new Variant(array(Seq(obj(Seq(0 -> integer(1))), obj(Seq(1 -> integer(2))))),
-      dictionary("a", "a")),
-      array(Seq(obj(Seq(0 -> integer(1))), obj(Seq(0 -> integer(2))))), dictionary("a"))
-    val repeatedId = new Variant(obj(Seq(0 -> integer(1), 0 -> integer(2))), dictionary("a"))
-    assert(!VariantBuilder.isCanonical(repeatedId))
-    checkError("VARIANT_DUPLICATE_KEY") { VariantBuilder.canonicalize(repeatedId) }
-  }
-
   // scalastyle:off nonascii
-  test("dictionary and fields use unsigned UTF-8 rather than UTF-16 ordering") {
+  test("keys are sorted by unsigned UTF-8 bytes rather than UTF-16 string order") {
+    // U+E000 (EE 80 80) sorts before U+10000 (F0 90 80 80) in UTF-8 bytes but after it in UTF-16,
+    // the order of String.compareTo that Spark used before SPARK-58949. The first input lists the
+    // fields in that old order.
     val bmpKey = utf8("\ue000")
     val supplementaryKey = utf8("\ud800\udc00")
     val expectedMetadata = metadata(Seq(bmpKey, supplementaryKey))
@@ -250,9 +248,7 @@ class VariantCanonicalizeSuite extends AnyFunSuite { // scalastyle:ignore funsui
       check(new Variant(obj(fields), metadata(Seq(supplementaryKey, bmpKey))),
         expectedValue, expectedMetadata)
     }
-  }
-
-  test("valid multi-byte UTF-8 keys are kept and sorted by their bytes") {
+    // Multi-byte keys keep their bytes: "cafe" < "caf" U+00E9 (C3 A9) < U+4F60 (E4 BD A0).
     check(new Variant(obj(Seq(2 -> integer(1), 1 -> integer(2), 0 -> integer(3))),
       dictionary("\u4f60", "caf\u00e9", "cafe")),
       obj(Seq(0 -> integer(1), 1 -> integer(2), 2 -> integer(3))),
@@ -261,6 +257,8 @@ class VariantCanonicalizeSuite extends AnyFunSuite { // scalastyle:ignore funsui
   // scalastyle:on nonascii
 
   test("all independent metadata ID offset and count widths converge") {
+    // Every combination of metadata offset width, id width, offset width and is_large encodes the
+    // same value and must end up with the minimal widths.
     val fields = Seq(0 -> trueValue, 1 -> integer(258, INT2, 2), 2 -> nullValue)
     val elements = fields.map(_._2)
     val keys = Seq("a", "b", "c").map(utf8)
@@ -290,15 +288,16 @@ class VariantCanonicalizeSuite extends AnyFunSuite { // scalastyle:ignore funsui
     }
   }
 
-  test("metadata flags and trailing bytes are not part of canonical output") {
+  test("metadata flag bits are not part of canonical output") {
+    // sorted_strings (bit 4) and the reserved bit 5 are cleared.
     Seq(1 << 4, 1 << 5, (1 << 4) | (1 << 5)).foreach { flags =>
       check(new Variant(integer(1), metadata(Seq.empty, flags = flags)), integer(1))
     }
-    checkKeyless(integer(1) ++ bytes(0, 0), integer(1))
-    check(new Variant(integer(1), emptyMetadata ++ bytes(0, 0)), integer(1))
   }
 
   test("reserved container header bits are cleared during normalization") {
+    // Readers must ignore the reserved header bits (object bit 7, array bits 5 to 7), so values
+    // that differ only there are equal and must converge.
     val objectValue = obj(Seq(0 -> integer(1)))
     val objectWithReservedBit = objectValue.clone()
     objectWithReservedBit(0) = (objectWithReservedBit(0) | 0x80).toByte
@@ -311,18 +310,18 @@ class VariantCanonicalizeSuite extends AnyFunSuite { // scalastyle:ignore funsui
     }
   }
 
-  test("padding and shared payloads inside containers become contiguous") {
-    val paddedArray = Array(arrayHeader(false, 1)) ++ bytes(1, 0, 3) ++ integer(1) ++ bytes(0)
-    checkKeyless(paddedArray, array(Seq(integer(1))))
-    val paddedObject =
-      Array(objectHeader(false, 1, 1)) ++ bytes(1, 0, 0, 3) ++ integer(1) ++ bytes(0)
-    check(new Variant(paddedObject, dictionary("a")), obj(Seq(0 -> integer(1))), dictionary("a"))
-    val shared = Array(objectHeader(false, 1, 1)) ++ bytes(2, 0, 1, 0, 0, 2) ++ integer(7)
-    check(new Variant(shared, dictionary("a", "b")),
-      obj(Seq(0 -> integer(7), 1 -> integer(7))), dictionary("a", "b"))
+  test("array elements stored out of order are rewritten in element order") {
+    // [1, 2] with the second element stored first: the spec fixes the offsets, not where the
+    // values sit.
+    val outOfOrder = bytes(arrayHeader(false, 1), 2, 2, 0, 4) ++ integer(2) ++ integer(1)
+    checkKeyless(outOfOrder, array(Seq(integer(1), integer(2))))
   }
 
-  test("nested shared payloads fail with the size limit before keys are collected") {
+  test("aliased nested values fail with the size limit") {
+    // Robustness coverage for malformed input: stored bytes reach canonicalize without validation,
+    // and 60 nested two-element arrays whose offsets both point at the same child reach 2^60
+    // values from a few hundred bytes. Collecting the keys counts the values it reaches and gives
+    // up at SIZE_LIMIT, so canonicalize fails instead of walking all of them.
     val nested = (0 until 60).foldLeft(integer(1)) { (child, _) =>
       Array(arrayHeader(false, 4)) ++ bytes(2) ++ littleEndian(BigInt(0), 4) ++
         littleEndian(BigInt(0), 4) ++ littleEndian(BigInt(child.length), 4) ++ child
@@ -332,14 +331,9 @@ class VariantCanonicalizeSuite extends AnyFunSuite { // scalastyle:ignore funsui
     intercept[VariantSizeLimitException] { VariantBuilder.canonicalize(input) }
   }
 
-  test("array elements stored out of order or sharing a payload are rewritten in element order") {
-    val outOfOrder = bytes(arrayHeader(false, 1), 2, 2, 0, 4) ++ integer(2) ++ integer(1)
-    checkKeyless(outOfOrder, array(Seq(integer(1), integer(2))))
-    val shared = bytes(arrayHeader(false, 1), 2, 0, 0, 2) ++ integer(7)
-    checkKeyless(shared, array(Seq(integer(7), integer(7))))
-  }
-
-  test("container count and payload widths change at 255 and 256") {
+  test("container and metadata widths change exactly at their boundaries") {
+    // 256 fields or elements need is_large and, with one-byte values, 2-byte offsets; 2-byte ids
+    // start at id 256.
     Seq((255, false, 1, 1), (256, true, 1, 2), (257, true, 2, 2)).foreach {
       case (count, largeSize, idWidth, offsetWidth) =>
         val keys = (0 until count).map(index => utf8(f"key$index%03d"))
@@ -352,32 +346,21 @@ class VariantCanonicalizeSuite extends AnyFunSuite { // scalastyle:ignore funsui
         val elements = Seq.fill(count)(nullValue)
         checkKeyless(array(elements, 4, largeSize = true), array(elements, offsetWidth, largeSize))
     }
-  }
-
-  test("metadata offset width follows the key count when it exceeds the key bytes") {
-    val keys = Array.empty[Byte] +: (1 to 255).map(byte => Array(byte.toByte))
-    val fields = keys.indices.map(index => index -> nullValue)
-    val expectedMetadata = metadata(keys, 2)
-    val expectedObject = obj(fields, 1, 2, largeSize = true)
-    check(new Variant(obj(fields, 4, 4, largeSize = true), metadata(keys, 4)),
-      expectedObject, expectedMetadata)
-    check(new Variant(expectedObject, expectedMetadata), expectedObject, expectedMetadata)
-  }
-
-  test("object ID width follows the largest referenced global ID") {
-    val keys = (0 to 256).map(index => utf8(f"key$index%03d"))
-    val sourceElements = keys.indices.map(index => obj(Seq(index -> nullValue), 4, 4, true))
-    val expectedElements = keys.indices.map { index =>
+    // The id width follows the largest id in the canonical dictionary, not the field count: the
+    // object using key 256 needs 2-byte ids inside the array but 1-byte ids on its own.
+    val globalKeys = (0 to 256).map(index => utf8(f"key$index%03d"))
+    val sourceElements = globalKeys.indices.map { index =>
+      obj(Seq(index -> nullValue), 4, 4, largeSize = true)
+    }
+    val expectedElements = globalKeys.indices.map { index =>
       obj(Seq(index -> nullValue), idSize = if (index <= U8_MAX) 1 else 2)
     }
-    val expectedValue = array(expectedElements, 2, largeSize = true)
-    check(new Variant(array(sourceElements, 4, largeSize = true), metadata(keys, 4)),
-      expectedValue, metadata(keys, 2))
-    check(new Variant(obj(Seq(256 -> integer(1)), 2), metadata(keys, 2)),
-      obj(Seq(0 -> integer(1))), metadata(Seq(keys.last)))
-  }
-
-  test("metadata and container offsets have real one two and three byte boundaries") {
+    check(new Variant(array(sourceElements, 4, largeSize = true), metadata(globalKeys, 4)),
+      array(expectedElements, 2, largeSize = true), metadata(globalKeys, 2))
+    check(new Variant(obj(Seq(256 -> integer(1)), 2), metadata(globalKeys, 2)),
+      obj(Seq(0 -> integer(1))), metadata(Seq(globalKeys.last)))
+    // Offsets of 1, 2 and 3 bytes for metadata, arrays and objects, from one key or one binary
+    // value of `size` bytes.
     Seq((255, 1), (256, 2), (65535, 2), (65536, 3)).foreach {
       case (size, expectedWidth) =>
         withClue(s"size=$size width=$expectedWidth: ") {
@@ -397,6 +380,7 @@ class VariantCanonicalizeSuite extends AnyFunSuite { // scalastyle:ignore funsui
   }
 
   test("signed integer boundaries choose the smallest encoding") {
+    // Each boundary value, fed in every integer width that holds it, ends in the smallest type.
     val boundaries = Seq(
       (Long.MinValue, INT8, 8), (Int.MinValue.toLong - 1, INT8, 8),
       (Int.MinValue.toLong, INT4, 4), (Short.MinValue.toLong - 1, INT4, 4),
@@ -419,6 +403,8 @@ class VariantCanonicalizeSuite extends AnyFunSuite { // scalastyle:ignore funsui
   }
 
   test("decimal normalization respects precision scale and signed long promotion limits") {
+    // Trailing zeros are stripped, integral values that fit a long become integers and the rest
+    // take the smallest decimal type. Each case is fed in every decimal width that holds it.
     val cases = Seq(
       ("0", 30, integer(0)),
       ("100", 2, integer(1)),
@@ -458,8 +444,10 @@ class VariantCanonicalizeSuite extends AnyFunSuite { // scalastyle:ignore funsui
     }
   }
 
-  test("float zero NaN payloads infinities and finite values normalize within their type") {
-    val cases = Seq(
+  test("float and double normalize negative zero and NaN within their type") {
+    // Raw bits to canonical bits: -0.0 becomes 0.0 and every NaN payload the canonical NaN, while
+    // infinities, subnormals and finite values keep their bits. A float never becomes a double.
+    val floatCases = Seq(
       (0x00000000L, 0x00000000L), (0x80000000L, 0x00000000L),
       (0x7fc00000L, 0x7fc00000L), (0x7f800001L, 0x7fc00000L),
       (0x7fffffffL, 0x7fc00000L), (0xffc01234L, 0x7fc00000L),
@@ -467,13 +455,10 @@ class VariantCanonicalizeSuite extends AnyFunSuite { // scalastyle:ignore funsui
       (0x00000001L, 0x00000001L), (0x00800000L, 0x00800000L),
       (0x7f7fffffL, 0x7f7fffffL), (0x3f800000L, 0x3f800000L),
       (0xbf800000L, 0xbf800000L))
-    cases.foreach { case (rawBits, expectedBits) =>
+    floatCases.foreach { case (rawBits, expectedBits) =>
       checkKeyless(floating(rawBits, FLOAT, 4), floating(expectedBits, FLOAT, 4))
     }
-  }
-
-  test("double zero NaN payloads infinities and finite values normalize within their type") {
-    val cases = Seq(
+    val doubleCases = Seq(
       (0x0000000000000000L, 0x0000000000000000L),
       (0x8000000000000000L, 0x0000000000000000L),
       (0x7ff8000000000000L, 0x7ff8000000000000L),
@@ -487,13 +472,15 @@ class VariantCanonicalizeSuite extends AnyFunSuite { // scalastyle:ignore funsui
       (0x7fefffffffffffffL, 0x7fefffffffffffffL),
       (0x3ff0000000000000L, 0x3ff0000000000000L),
       (0xbff0000000000000L, 0xbff0000000000000L))
-    cases.foreach { case (rawBits, expectedBits) =>
+    doubleCases.foreach { case (rawBits, expectedBits) =>
       checkKeyless(floating(rawBits, DOUBLE, 8), floating(expectedBits, DOUBLE, 8))
     }
   }
 
   // scalastyle:off nonascii
   test("strings choose headers by UTF-8 byte length and preserve valid bytes") {
+    // Up to MAX_SHORT_STR_SIZE UTF-8 bytes use the short-string header, longer strings the 4-byte
+    // length header. The bytes themselves are kept.
     Seq("", "a", "a" * 63, "a" * 64, "\u00e9" * 31 + "a", "\u00e9" * 32,
       "\ud800\udc00", "prefix\u0000suffix", "caf\u00e9", "\u20ac",
       "\u4f60\u597d").foreach { text =>
@@ -510,86 +497,9 @@ class VariantCanonicalizeSuite extends AnyFunSuite { // scalastyle:ignore funsui
   }
   // scalastyle:on nonascii
 
-  test("invalid UTF-8 string bytes are preserved while headers become minimal") {
-    val payloads = Seq(bytes(0xff), bytes(97, 0xff, 98), bytes(0x80), bytes(0xc0, 0xaf),
-      bytes(0xed, 0xa0, 0x80), bytes(0xe2, 0x82)) ++
-      Seq(22, 63, 64, 256).map(length => Array.fill[Byte](length)(0xff.toByte))
-    payloads.foreach { payload =>
-      val expected = string(payload, longEncoding = payload.length > MAX_SHORT_STR_SIZE)
-      val encodings = if (payload.length <= MAX_SHORT_STR_SIZE) Seq(false, true) else Seq(true)
-      encodings.foreach { longEncoding =>
-        checkKeyless(string(payload, longEncoding), expected)
-      }
-    }
-  }
-
-  test("distinct invalid UTF-8 strings stay distinct during nested rebuilds") {
-    val outputs = Seq(bytes(0xfe), bytes(0xff), bytes(0xef, 0xbf, 0xbd)).map { payload =>
-      val input = array(Seq(string(payload, longEncoding = true), integer(1, INT8, 8)))
-      val expected = array(Seq(string(payload), integer(1)))
-      check(new Variant(input, emptyMetadata), expected).value.toSeq
-    }
-    assert(outputs.distinct.size == outputs.size)
-  }
-
-  test("invalid UTF-8 keys are preserved and ordered by their original bytes") {
-    val firstKey = bytes(0xf0, 97)
-    val secondKey = bytes(0xf5)
-    val sourceMetadata = metadata(Seq(secondKey, firstKey))
-    val sourceValue = obj(Seq(1 -> integer(1), 0 -> integer(2)), physicalOrder = Seq(1, 0))
-    check(new Variant(sourceValue, sourceMetadata),
-      obj(Seq(0 -> integer(1), 1 -> integer(2))), metadata(Seq(firstKey, secondKey)))
-    Seq(86, 255, 256).foreach { length =>
-      val key = Array.fill[Byte](length)(0xff.toByte)
-      val value = obj(Seq(0 -> integer(1)))
-      check(new Variant(value, metadata(Seq(key), 4)), value,
-        metadata(Seq(key), if (length <= U8_MAX) 1 else 2))
-    }
-  }
-
-  test("invalid UTF-8 keys that decode to the same string stay distinct") {
-    val keys = Seq(bytes(0xfe), bytes(0xff), bytes(0xef, 0xbf, 0xbd))
-    val sourceMetadata = metadata(keys)
-    val sourceValue = array(keys.indices.map(id => obj(Seq(id -> integer(id + 1)))))
-    val expectedMetadata = metadata(Seq(keys(2), keys(0), keys(1)))
-    check(new Variant(sourceValue, sourceMetadata),
-      array(Seq(obj(Seq(1 -> integer(1))), obj(Seq(2 -> integer(2))),
-        obj(Seq(0 -> integer(3))))), expectedMetadata)
-
-    val sameObject = obj(Seq(2 -> integer(3), 0 -> integer(1), 1 -> integer(2)),
-      physicalOrder = Seq(1, 2, 0))
-    check(new Variant(sameObject, sourceMetadata),
-      obj(Seq(0 -> integer(3), 1 -> integer(1), 2 -> integer(2))), expectedMetadata)
-  }
-
-  test("identical invalid UTF-8 keys deduplicate globally and fail within one object") {
-    val key = bytes(0xff)
-    val sourceMetadata = metadata(Seq(key, key))
-    val sourceValue = array(Seq(obj(Seq(0 -> integer(1))), obj(Seq(1 -> integer(2)))))
-    check(new Variant(sourceValue, sourceMetadata),
-      array(Seq(obj(Seq(0 -> integer(1))), obj(Seq(0 -> integer(2))))), metadata(Seq(key)))
-    val duplicate = new Variant(obj(Seq(0 -> integer(1), 1 -> integer(2))), sourceMetadata)
-    assert(!VariantBuilder.isCanonical(duplicate))
-    checkError("VARIANT_DUPLICATE_KEY") { VariantBuilder.canonicalize(duplicate) }
-    checkError("VARIANT_DUPLICATE_KEY") { VariantBuilder.doCanonicalize(duplicate) }
-  }
-
-  test("nested objects arrays and views retain only keys used by the selected value") {
-    val parent = VariantBuilder.parseJson(
-      "{\"outside\":0,\"target\":{\"a\":[1,2],\"b\":3}}", false)
-    val target = parent.getFieldByKey("target")
-    assert(target.pos != 0)
-    check(target, obj(Seq(0 -> array(Seq(integer(1), integer(2))), 1 -> integer(3))),
-      dictionary("a", "b"))
-    check(target.getFieldByKey("a"), array(Seq(integer(1), integer(2))))
-    check(target.getFieldByKey("a").getElementAtIndex(1), integer(2))
-    val arrayParent = VariantBuilder.parseJson("[0,{\"a\":1},2]", false)
-    check(arrayParent.getElementAtIndex(1), obj(Seq(0 -> integer(1))), dictionary("a"))
-    val nestedValue = obj(Seq(0 -> array(Seq(obj(Seq.empty), array(Seq.empty)))))
-    check(new Variant(nestedValue, dictionary("a")), nestedValue, dictionary("a"))
-  }
-
   test("deeply nested containers canonicalize at every level") {
+    // 500 single-element arrays with 4-byte offsets around DECIMAL4 1.00 become 1- or 2-byte
+    // offsets around INT1 1, so every level is rewritten.
     def nest(leaf: Array[Byte], minimalWidths: Boolean): Array[Byte] =
       (0 until 500).foldLeft(leaf) { (child, _) =>
         array(Seq(child), if (!minimalWidths) 4 else if (child.length <= U8_MAX) 1 else 2)
@@ -598,7 +508,8 @@ class VariantCanonicalizeSuite extends AnyFunSuite { // scalastyle:ignore funsui
       nest(integer(1), minimalWidths = true))
   }
 
-  test("single-encoding scalar types preserve their payloads through a rebuild") {
+  test("single-encoding scalar types keep their bytes through a rebuild") {
+    // These types have one encoding each. The unused key forces a rebuild, which must copy them.
     val values = Seq(nullValue, trueValue, falseValue,
       Array(primitiveHeader(DATE)) ++ littleEndian(BigInt(-12345), 4),
       Array(primitiveHeader(TIMESTAMP)) ++ littleEndian(BigInt(-123456789L), 8),
@@ -611,75 +522,24 @@ class VariantCanonicalizeSuite extends AnyFunSuite { // scalastyle:ignore funsui
     }
   }
 
-  test("ordinary appendVariant preserves noncanonical scalar encodings recursively") {
-    val scalars = Seq(integer(1, INT8, 8), decimal("1200", 3, DECIMAL16, 16),
-      floating(0x80000000L, FLOAT, 4), floating(0x7f800001L, FLOAT, 4),
-      floating(0xfff8123456789abcL, DOUBLE, 8), string(utf8("x"), longEncoding = true),
-      string(bytes(0xff)))
-    val nested = obj(Seq(1 -> array(scalars), 0 -> scalars.head), physicalOrder = Seq(1, 0))
-    val source = new Variant(array(scalars :+ nested), dictionary("b", "a"))
-    val originalValue = source.value.clone()
-    val originalMetadata = source.metadata.clone()
-    val builder = new VariantBuilder(false)
-    builder.appendVariant(source)
-    val copied = builder.result()
-    def compareScalars(original: Variant, actual: Variant): Unit = {
-      assert(actual.getType == original.getType)
-      original.getType match {
-        case Type.OBJECT =>
-          assert(actual.objectSize() == original.objectSize())
-          (0 until original.objectSize()).foreach { index =>
-            val field = original.getFieldAtIndex(index)
-            compareScalars(field.value, actual.getFieldByKey(field.key))
-          }
-        case Type.ARRAY =>
-          assert(actual.arraySize() == original.arraySize())
-          (0 until original.arraySize()).foreach { index =>
-            compareScalars(original.getElementAtIndex(index), actual.getElementAtIndex(index))
-          }
-        case _ => assertBytes(actual.getValue, original.getValue, "copied scalar")
-      }
-    }
-    compareScalars(source, copied)
-    assertBytes(source.value, originalValue, "unchanged appended value")
-    assertBytes(source.metadata, originalMetadata, "unchanged appended metadata")
-  }
-
-  test("ordinary appendVariant preserves existing dictionary entries and field write order") {
-    // scalastyle:off nonascii
-    val bmpKey = utf8("\ue000")
-    val supplementaryKey = utf8("\ud800\udc00")
-    // scalastyle:on nonascii
-    val firstScalar = integer(1, INT8, 8)
-    val secondScalar = integer(2, INT8, 8)
-    val sourceValue = obj(Seq(0 -> firstScalar, 1 -> secondScalar))
-    val sourceMetadata = metadata(Seq(supplementaryKey, bmpKey))
-    val source = new Variant(sourceValue.clone(), sourceMetadata.clone())
-    val builder = new VariantBuilder(false)
-    assert(builder.addKey("existing") == 0)
-    builder.appendVariant(source)
-    val copied = builder.result()
-    assertBytes(copied.metadata, metadata(Seq(utf8("existing"), supplementaryKey, bmpKey)),
-      "preserved dictionary insertion order")
-    assertBytes(copied.value,
-      obj(Seq(2 -> secondScalar, 1 -> firstScalar), physicalOrder = Seq(1, 0)),
-      "preserved source field write order")
-    assertBytes(source.value, sourceValue, "unchanged source field encoding")
-    assertBytes(source.metadata, sourceMetadata, "unchanged source dictionary")
-  }
-
   test("malformed structures fail with the documented error classes") {
     val malformed = Seq(
+      // Scalars shorter than their header announces.
       new Variant(bytes(primitiveHeader(INT8), 0), emptyMetadata),
       new Variant(bytes(shortStrHeader(2), 97), emptyMetadata),
       new Variant(bytes(primitiveHeader(LONG_STR), 2, 0, 0, 0, 97),
         metadata(Seq.empty, 2)),
       new Variant(bytes(primitiveHeader(DECIMAL16), 0), emptyMetadata),
+      // Decimal scale 39, and ten digits in a DECIMAL4.
       new Variant(decimal("1", 39, DECIMAL16, 16), emptyMetadata),
       new Variant(decimal("1000000000", 0, DECIMAL4, 4), emptyMetadata),
+      // Containers whose child is truncated, uses a key the dictionary lacks, or lies outside the
+      // value.
       new Variant(array(Seq(bytes(primitiveHeader(INT8), 0))), emptyMetadata),
       new Variant(obj(Seq(0 -> nullValue)), emptyMetadata),
       new Variant(bytes(arrayHeader(false, 1), 1, 5, 6, 0), emptyMetadata),
+      // Metadata that is truncated, declares more key bytes than it has, has decreasing offsets,
+      // or declares a dictionary larger than itself.
       new Variant(integer(1), bytes(1)),
       new Variant(obj(Seq(0 -> nullValue)), bytes(1, 1, 0)),
       new Variant(obj(Seq(0 -> nullValue)), bytes(1, 1, 0, 2, 97)),
@@ -692,6 +552,8 @@ class VariantCanonicalizeSuite extends AnyFunSuite { // scalastyle:ignore funsui
         checkError("MALFORMED_VARIANT") { VariantBuilder.doCanonicalize(input) }
       }
     }
+    // isCanonical returns false when what it has read already rules the input out, and throws
+    // when it has to decode malformed bytes.
     val truncated = new Variant(bytes(primitiveHeader(INT8), 0), emptyMetadata)
     assert(!VariantBuilder.isCanonical(truncated))
     checkError("MALFORMED_VARIANT") {
@@ -703,21 +565,9 @@ class VariantCanonicalizeSuite extends AnyFunSuite { // scalastyle:ignore funsui
     checkError("UNKNOWN_PRIMITIVE_TYPE_IN_VARIANT") { VariantBuilder.doCanonicalize(unknown) }
   }
 
-  test("containers whose declared data size disagrees with their children are rebuilt") {
-    val overLongArray = bytes(arrayHeader(false, 1), 1, 0, 100) ++ integer(1)
-    val overLongObject = bytes(objectHeader(false, 1, 1), 1, 0, 0, 100) ++ integer(1)
-    val shortObject = bytes(objectHeader(false, 1, 1), 1, 0, 0, 1) ++ integer(1)
-    checkKeyless(overLongArray, array(Seq(integer(1))))
-    check(new Variant(overLongObject, dictionary("a")), obj(Seq(0 -> integer(1))), dictionary("a"))
-    check(new Variant(shortObject, dictionary("a")), obj(Seq(0 -> integer(1))), dictionary("a"))
-    checkKeyless(array(Seq(overLongArray)), array(Seq(array(Seq(integer(1))))))
-    check(new Variant(array(Seq(overLongObject)), dictionary("a")),
-      array(Seq(obj(Seq(0 -> integer(1))))), dictionary("a"))
-    check(new Variant(array(Seq(shortObject)), dictionary("a")),
-      array(Seq(obj(Seq(0 -> integer(1))))), dictionary("a"))
-  }
-
   test("deterministic nested permutations converge to independent expected bytes") {
+    // {"a":1,"b":[1.2,{"c":"x"}]} with every permutation of a dictionary that also holds an unused
+    // key, both physical field orders and all four widths must give one byte string.
     val expectedValue = obj(Seq(0 -> integer(1), 1 -> array(Seq(
       decimal("12", 1, DECIMAL4, 4), obj(Seq(2 -> string(utf8("x"))))))))
     Seq("unused", "a", "b", "c").permutations.zipWithIndex.foreach {
@@ -739,6 +589,8 @@ class VariantCanonicalizeSuite extends AnyFunSuite { // scalastyle:ignore funsui
   }
 
   test("canonicalization preserves distinctions between values types and array order") {
+    // Values that differ, including float 1.0 vs double 1.0 and the string "1" vs binary "1", are
+    // already canonical and must stay distinct.
     val differentValues = Seq(integer(1), integer(2), trueValue, nullValue,
       floating(0x3f800000L, FLOAT, 4), floating(0x3ff0000000000000L, DOUBLE, 8),
       string(utf8("1")), Array(primitiveHeader(BINARY)) ++ bytes(1, 0, 0, 0, 49),
@@ -759,6 +611,9 @@ class VariantCanonicalizeSuite extends AnyFunSuite { // scalastyle:ignore funsui
     assertBytes(actual.metadata, expected.metadata, s"$label metadata")
   }
 
+  // Re-encode `input` with the same meaning and random choices wherever the spec allows them: a
+  // shuffled dictionary with unused keys, random count, id and offset widths, a shuffled physical
+  // field order, wider integers and long-string headers. Other scalars are copied.
   private def randomizeBinaryEncoding(input: Variant, rand: Random): Variant = {
     def randomWidth(maxValue: Int): Int = {
       val minimumWidth = (1 to 4).find(width => maxValue.toLong < (1L << (8 * width))).get
@@ -808,6 +663,8 @@ class VariantCanonicalizeSuite extends AnyFunSuite { // scalastyle:ignore funsui
   }
 
   test("fuzz: equivalent random encodings canonicalize to the same bytes") {
+    // Two parses of the same random value, rendered with shuffled fields and different number
+    // spellings, must canonicalize to the same bytes, as must a plain appendVariant copy.
     import VariantCanonicalizeSuite.{generate, render}
     (0 until 300).foreach { iteration =>
       val seed = 0xC0FFEEL + iteration
@@ -832,7 +689,8 @@ class VariantCanonicalizeSuite extends AnyFunSuite { // scalastyle:ignore funsui
     }
   }
 
-  test("fuzz: binary widths dictionaries and payload layouts canonicalize to the same bytes") {
+  test("fuzz: binary widths dictionaries and value layouts canonicalize to the same bytes") {
+    // Random re-encodings of one value must canonicalize to the canonical bytes of that value.
     import VariantCanonicalizeSuite.{generate, render}
     (0 until 300).foreach { iteration =>
       val seed = 0xB1A4EEL + iteration

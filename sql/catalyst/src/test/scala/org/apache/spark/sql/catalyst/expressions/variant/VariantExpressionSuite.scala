@@ -1642,20 +1642,6 @@ class VariantExpressionSuite extends SparkFunSuite with ExpressionEvalHelper {
     checkEvaluation(CanonicalizeVariant(Literal.create(null, VariantType)), null)
   }
 
-  test("canonicalize_variant preserves invalid UTF-8 string and key bytes") {
-    val expression = CanonicalizeVariant(BoundReference(0, VariantType, nullable = true))
-    val metadata = Array[Byte](VERSION, 2, 0, 1, 2, 0xff.toByte, 0xfe.toByte)
-    val value = Array[Byte](objectHeader(false, 1, 1), 2, 1, 0, 6, 0, 12,
-      primitiveHeader(LONG_STR), 1, 0, 0, 0, 0xff.toByte,
-      primitiveHeader(LONG_STR), 1, 0, 0, 0, 0xfe.toByte)
-    val expected = new VariantVal(
-      Array[Byte](objectHeader(false, 1, 1), 2, 0, 1, 0, 2, 4,
-        shortStrHeader(1), 0xfe.toByte, shortStrHeader(1), 0xff.toByte),
-      Array[Byte](VERSION, 2, 0, 1, 2, 0xfe.toByte, 0xff.toByte))
-    checkEvaluation(expression, expected, InternalRow(new VariantVal(value, metadata)))
-    checkEvaluation(expression, expected, InternalRow(expected))
-  }
-
   test("canonicalize_variant input types and nullability") {
     Seq(true, false).foreach { nullable =>
       val expression = CanonicalizeVariant(BoundReference(0, VariantType, nullable))

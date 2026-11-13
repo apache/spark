@@ -213,46 +213,53 @@ public class VariantBuilder {
    * picks one encoding per value, so that values which are equal under the variant equality rules
    * have identical {@code value} and {@code metadata} bytes and can be compared, hashed and
    * grouped bytewise. It is a Spark-internal normalization, not part of the variant spec, and
-   * nothing outside Spark is expected to produce or require it.
+   * nothing outside Spark is expected to produce or require it. Only valid variants are supported;
+   * malformed bytes fail with {@code MALFORMED_VARIANT} where they are detected.
    * <p>
-   * A variant is canonical when all of the following hold.
+   * A variant is canonical when its {@code metadata} and {@code value} satisfy all of the following
+   * rules. The scalar and container encoding rules apply recursively to every nested value.
    * <ul>
-   *   <li>Metadata header: version {@link VariantUtil#VERSION}, the minimal offset size for
-   *       {@code max(lastOffset, numKeys)}, i.e. 1, 2, 3 or 4 bytes as given by
-   *       {@code getIntegerSize}, and {@code sorted_strings} and the unused bit 5 clear.
-   *       {@code sorted_strings} stays clear although canonical keys are sorted, so that builder
-   *       output, which never sets it, is already canonical.</li>
-   *   <li>Metadata dictionary: the first offset is 0, offsets are non-decreasing, the key bytes
-   *       end exactly at the last offset (no trailing bytes), keys are strictly increasing under
-   *       unsigned byte comparison (so they are unique), and every key is referenced by at least
-   *       one object field. Key bytes are preserved as is, including invalid UTF-8.</li>
-   *   <li>Value root: starts at position 0 and spans exactly {@code value.length} bytes.</li>
-   *   <li>Object: field ids strictly increasing (fields are stored in key order and no key is
-   *       repeated), field data stored contiguously in field order, the end offset equal to the
-   *       data size, and the header using the minimal id size for the largest id, the minimal
-   *       offset size for the data size, {@code is_large} only for more than 255 fields, and the
-   *       reserved bit 7 clear.</li>
-   *   <li>Array: element order preserved, element data stored contiguously in element order, the
-   *       end offset equal to the data size, and the header using the minimal offset size for the
-   *       data size, {@code is_large} only for more than 255 elements, and the reserved bits 5 to
-   *       7 clear.</li>
+   *   <li>Metadata header: version {@link VariantUtil#VERSION}, {@code sorted_strings} and the
+   *       reserved bit 5 clear, and the smallest offset size (1 to 4 bytes) that holds both the
+   *       key count and the total key length, as the key count is stored with the same size.
+   *       {@code sorted_strings} stays clear although the keys are sorted: this builder never sets
+   *       it, and keeping it clear avoids rebuilding otherwise canonical builder output only to
+   *       set it.</li>
+   *   <li>Metadata dictionary: the first offset is 0 and the offsets are non-decreasing, the key
+   *       bytes end exactly at the last offset, the keys are strictly increasing under unsigned
+   *       byte comparison (so each key appears once), and every key is used by some object
+   *       field.</li>
+   *   <li>Value: {@code value} holds exactly one encoded value, with no bytes after it.</li>
+   *   <li>Object: the field ids are strictly increasing, which stores the fields in key order and
+   *       rules out a repeated key; the field values are canonical and stored contiguously in
+   *       field order, so each offset is the sum of the preceding value sizes and the last offset
+   *       is the total size; the header uses the smallest id size for the largest id (one byte for
+   *       an empty object), the smallest offset size for the total size, {@code is_large} only for
+   *       more than 255 fields, and has the reserved bit 7 clear.</li>
+   *   <li>Array: the elements are canonical and stored contiguously in element order, so each
+   *       offset is the sum of the preceding element sizes and the last offset is the total size;
+   *       the header uses the smallest offset size for the total size, {@code is_large} only for
+   *       more than 255 elements, and has the reserved bits 5 to 7 clear.</li>
    *   <li>Integer: the smallest of INT1, INT2, INT4 and INT8 that holds the value.</li>
-   *   <li>Decimal: trailing zeros stripped, and a scale that stripping made negative (for example
-   *       1E+20 for 10^20) set back to 0. An integral decimal that fits in a signed 64-bit integer
-   *       is stored as an integer instead. Otherwise the smallest of DECIMAL4 (precision and scale
-   *       at most 9), DECIMAL8 (at most 18) and DECIMAL16 that holds the value.</li>
+   *   <li>Decimal: trailing zeros stripped, and a scale that stripping made negative (1E+20 for
+   *       10^20) set back to 0. An integral value that fits in a signed 64-bit integer is stored
+   *       as an integer instead. Otherwise the smallest of DECIMAL4 (precision and scale at most
+   *       9), DECIMAL8 (at most 18) and DECIMAL16 that holds the value.</li>
    *   <li>Float and double: -0.0 is stored as 0.0 and NaN as the canonical NaN bit pattern of
    *       {@link Float#floatToIntBits} and {@link Double#doubleToLongBits}. The type is kept, so
    *       a float and a double are never identical.</li>
-   *   <li>String: at most {@link VariantUtil#MAX_SHORT_STR_SIZE} bytes uses the short-string
-   *       encoding, anything longer the long-string encoding. Bytes are preserved as is, including
-   *       invalid UTF-8.</li>
-   *   <li>Every other type (null, boolean, date, timestamps, binary, uuid, ...) has a single
-   *       encoding in the spec and is copied unchanged.</li>
+   *   <li>String: strings of at most {@link VariantUtil#MAX_SHORT_STR_SIZE} bytes use the
+   *       short-string encoding, longer strings the long-string encoding.</li>
+   *   <li>Null, boolean, date, microsecond timestamp and timestamp_ntz, binary and uuid have a
+   *       single encoding in the spec and are kept as they are.</li>
    * </ul>
-   * {@code isCanonical} checks exactly these rules and {@code doCanonicalize} produces them; the
-   * two must be changed together when a rule changes or a type with alternative encodings is
-   * added to the spec.
+   * These are all the supported types; a value of any other type fails with
+   * {@code UNKNOWN_PRIMITIVE_TYPE_IN_VARIANT}.
+   * <p>
+   * A view into a larger variant ({@code v.pos != 0}) is never canonical; its canonical form is a
+   * new root value with its own metadata. {@code isCanonical} checks exactly these rules and
+   * {@code doCanonicalize} produces them; the two must be changed together when a rule changes or
+   * a type is added to the spec.
    */
   public static Variant canonicalize(Variant v) {
     if (isCanonical(v)) {
@@ -416,8 +423,9 @@ public class VariantBuilder {
         // Single encoding in the spec; copied unchanged by the rebuild.
         return true;
       default:
-        // A type added to the spec must be classified here before it can be canonical.
-        return false;
+        // A type added to the spec must be classified here and in `appendCanonicalizedScalar`
+        // before it can be canonicalized.
+        throw unknownPrimitiveTypeInVariant(getTypeInfo(value, pos));
     }
   }
 
@@ -428,6 +436,80 @@ public class VariantBuilder {
     VariantBuilder builder = new VariantBuilder(false);
     builder.buildCanonicalized(v.value, v.metadata, v.pos);
     return builder.result();
+  }
+
+  // Rebuild the value at `pos` into this builder: collect the keys it uses in sorted order, then
+  // append it with the remapped field IDs and canonical scalar encodings.
+  private void buildCanonicalized(byte[] value, byte[] metadata, int pos) {
+    int offsetSize = getMetadataOffsetSize(metadata);
+    int numKeys = getMetadataNumKeys(metadata, offsetSize);
+    // Validate metadata table bounds before allocating the key-ID mapping.
+    getMetadataStringStart(metadata, numKeys, offsetSize);
+    int[] canonicalIds = new int[numKeys];
+    Arrays.fill(canonicalIds, -1);
+    TreeMap<byte[], Integer> keys = new TreeMap<>(VariantUtil::compareKeys);
+    collectAllObjectKeys(value, metadata, pos, canonicalIds, keys, new int[1]);
+    // Remap the IDs assigned during collection to unsigned byte order without decoding keys.
+    int[] sortedIds = new int[keys.size()];
+    for (java.util.Map.Entry<byte[], Integer> key : keys.entrySet()) {
+      sortedIds[key.getValue()] = dictionaryKeys.size();
+      dictionaryKeys.add(key.getKey());
+    }
+    for (int i = 0; i < canonicalIds.length; ++i) {
+      if (canonicalIds[i] >= 0) {
+        canonicalIds[i] = sortedIds[canonicalIds[i]];
+      }
+    }
+    appendVariantImpl(value, metadata, pos, canonicalIds);
+  }
+
+  // Container offsets may point several entries at the same child, so a small value can reach far
+  // more values than its size. The rebuild writes at least one byte per reached value, so fail with
+  // `VariantSizeLimitException` once more than `SIZE_LIMIT` values are reached.
+  private static void collectAllObjectKeys(
+      byte[] value, byte[] metadata, int pos, int[] canonicalIds, TreeMap<byte[], Integer> keys,
+      int[] visitedValues) {
+    if (++visitedValues[0] > SIZE_LIMIT) {
+      throw new VariantSizeLimitException();
+    }
+    checkIndex(pos, value.length);
+    switch (value[pos] & BASIC_TYPE_MASK) {
+      case OBJECT:
+        handleObject(value, pos, (size, idSize, offsetSize, idStart, offsetStart, dataStart) -> {
+          for (int fieldIndex = 0; fieldIndex < size; ++fieldIndex) {
+            int keyId = readUnsigned(value, idStart + idSize * fieldIndex, idSize);
+            int offset = readUnsigned(value, offsetStart + offsetSize * fieldIndex, offsetSize);
+            if (keyId >= canonicalIds.length) {
+              throw malformedVariant();
+            }
+            if (canonicalIds[keyId] < 0) {
+              byte[] key = getMetadataKeyBytes(metadata, keyId);
+              Integer id = keys.get(key);
+              if (id == null) {
+                id = keys.size();
+                keys.put(key, id);
+              }
+              canonicalIds[keyId] = id;
+            }
+            collectAllObjectKeys(
+                value, metadata, dataStart + offset, canonicalIds, keys, visitedValues);
+          }
+          return null;
+        });
+        break;
+      case ARRAY:
+        handleArray(value, pos, (size, offsetSize, offsetStart, dataStart) -> {
+          for (int elementIndex = 0; elementIndex < size; ++elementIndex) {
+            int offset = readUnsigned(value, offsetStart + offsetSize * elementIndex, offsetSize);
+            collectAllObjectKeys(
+                value, metadata, dataStart + offset, canonicalIds, keys, visitedValues);
+          }
+          return null;
+        });
+        break;
+      default:
+        break;
+    }
   }
 
   // Build the variant metadata from `dictionaryKeys` and return the variant result.
@@ -859,81 +941,20 @@ public class VariantBuilder {
         appendString(value, pos + headerSize, size - headerSize);
         break;
       }
-      default:
+      case NULL:
+      case BOOLEAN:
+      case DATE:
+      case TIMESTAMP:
+      case TIMESTAMP_NTZ:
+      case BINARY:
+      case UUID:
+        // Single encoding in the spec; copy the bytes unchanged.
         shallowAppendVariantImpl(value, pos);
         break;
-    }
-  }
-
-  private void buildCanonicalized(byte[] value, byte[] metadata, int pos) {
-    int offsetSize = getMetadataOffsetSize(metadata);
-    int numKeys = getMetadataNumKeys(metadata, offsetSize);
-    // Validate metadata table bounds before allocating the key-ID mapping.
-    getMetadataStringStart(metadata, numKeys, offsetSize);
-    int[] canonicalIds = new int[numKeys];
-    Arrays.fill(canonicalIds, -1);
-    TreeMap<byte[], Integer> keys = new TreeMap<>(VariantUtil::compareKeys);
-    collectAllObjectKeys(value, metadata, pos, canonicalIds, keys, new int[1]);
-    // Remap the IDs assigned during collection to unsigned byte order without decoding keys.
-    int[] sortedIds = new int[keys.size()];
-    for (java.util.Map.Entry<byte[], Integer> key : keys.entrySet()) {
-      sortedIds[key.getValue()] = dictionaryKeys.size();
-      dictionaryKeys.add(key.getKey());
-    }
-    for (int i = 0; i < canonicalIds.length; ++i) {
-      if (canonicalIds[i] >= 0) {
-        canonicalIds[i] = sortedIds[canonicalIds[i]];
-      }
-    }
-    appendVariantImpl(value, metadata, pos, canonicalIds);
-  }
-
-  // Container offsets may point several entries at the same child, so a small value can reach far
-  // more values than its size. The rebuild writes at least one byte per reached value, so fail with
-  // `VariantSizeLimitException` once more than `SIZE_LIMIT` values are reached.
-  private static void collectAllObjectKeys(
-      byte[] value, byte[] metadata, int pos, int[] canonicalIds, TreeMap<byte[], Integer> keys,
-      int[] visitedValues) {
-    if (++visitedValues[0] > SIZE_LIMIT) {
-      throw new VariantSizeLimitException();
-    }
-    checkIndex(pos, value.length);
-    switch (value[pos] & BASIC_TYPE_MASK) {
-      case OBJECT:
-        handleObject(value, pos, (size, idSize, offsetSize, idStart, offsetStart, dataStart) -> {
-          for (int fieldIndex = 0; fieldIndex < size; ++fieldIndex) {
-            int keyId = readUnsigned(value, idStart + idSize * fieldIndex, idSize);
-            int offset = readUnsigned(value, offsetStart + offsetSize * fieldIndex, offsetSize);
-            if (keyId >= canonicalIds.length) {
-              throw malformedVariant();
-            }
-            if (canonicalIds[keyId] < 0) {
-              byte[] key = getMetadataKeyBytes(metadata, keyId);
-              Integer id = keys.get(key);
-              if (id == null) {
-                id = keys.size();
-                keys.put(key, id);
-              }
-              canonicalIds[keyId] = id;
-            }
-            collectAllObjectKeys(
-                value, metadata, dataStart + offset, canonicalIds, keys, visitedValues);
-          }
-          return null;
-        });
-        break;
-      case ARRAY:
-        handleArray(value, pos, (size, offsetSize, offsetStart, dataStart) -> {
-          for (int elementIndex = 0; elementIndex < size; ++elementIndex) {
-            int offset = readUnsigned(value, offsetStart + offsetSize * elementIndex, offsetSize);
-            collectAllObjectKeys(
-                value, metadata, dataStart + offset, canonicalIds, keys, visitedValues);
-          }
-          return null;
-        });
-        break;
       default:
-        break;
+        // A type added to the spec must be classified here and in `isValueCanonical` before it
+        // can be canonicalized.
+        throw unknownPrimitiveTypeInVariant(getTypeInfo(value, pos));
     }
   }
 
