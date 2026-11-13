@@ -17,10 +17,12 @@
 
 package org.apache.spark.sql.execution
 
+import java.io.{ByteArrayOutputStream, ObjectOutputStream}
 import java.math.{BigDecimal => JBigDecimal}
 import java.time.Duration
 import java.util.concurrent.{ConcurrentLinkedQueue, CountDownLatch, TimeUnit}
 
+import scala.collection.mutable
 import scala.util.{Failure, Success, Try}
 
 import org.apache.logging.log4j.Level
@@ -637,6 +639,80 @@ class WholeStageCodegenSuite extends SharedSparkSession
            WholeStageCodegenExec(_ : SortMergeJoinExec) => true
     }.size === 2)
     checkAnswer(twoJoinsDF, Seq(Row(6), Row(7), Row(8), Row(9)))
+  }
+
+  test("SPARK-61666: Sort and sort merge join codegen do not serialize plan nodes") {
+    // The RDD a codegen stage adds on top of its input RDDs, with the references of its
+    // generated code, is serialized into every task binary. A plan node written with it would drag
+    // its whole child subtree along, so the stage must not reference one.
+    def serializedPlanNodes(stage: WholeStageCodegenExec): Seq[String] = {
+      val rdd = stage.execute()
+      // The input RDDs are cached by the plans below, so these are the ones `rdd` reads.
+      val inputs = stage.child.asInstanceOf[CodegenSupport].inputRDDs()
+      val planNodes = mutable.ArrayBuffer[String]()
+      val out = new ObjectOutputStream(new ByteArrayOutputStream()) {
+        enableReplaceObject(true)
+        override def replaceObject(obj: AnyRef): AnyRef = obj match {
+          // Cut the lineage below the stage: the input RDDs belong to other stages.
+          case r: RDD[_] if inputs.exists(_ eq r) => "input RDD"
+          case p: SparkPlan =>
+            planNodes += p.nodeName
+            p
+          case _ => obj
+        }
+      }
+      out.writeObject(rdd)
+      out.close()
+      planNodes.toSeq
+    }
+    // The codegen stages that run a sort or a sort merge join themselves.
+    def checkStages(df: => DataFrame, expectedNodes: Set[String]): Unit = {
+      def inStage(plan: SparkPlan): Seq[SparkPlan] = plan match {
+        case _: InputAdapter => Nil
+        case other => other +: other.children.flatMap(inStage)
+      }
+      val expected = withSQLConf(SQLConf.WHOLESTAGE_CODEGEN_ENABLED.key -> "false") {
+        df.collect().toSeq
+      }
+      Seq(false, true).foreach { usePartitionEvaluator =>
+        withSQLConf(SQLConf.USE_PARTITION_EVALUATOR.key -> usePartitionEvaluator.toString) {
+          val result = df
+          val stages = result.queryExecution.executedPlan.collect {
+            case stage: WholeStageCodegenExec
+                if inStage(stage.child).exists(p => expectedNodes.contains(p.nodeName)) =>
+              stage -> inStage(stage.child).map(_.nodeName).filter(expectedNodes.contains)
+          }
+          assert(stages.flatMap(_._2).toSet == expectedNodes)
+          stages.foreach { case (stage, _) =>
+            val planNodes = serializedPlanNodes(stage)
+            assert(planNodes.isEmpty, s"$planNodes referenced by\n${stage.treeString}")
+          }
+          checkAnswer(result, expected)
+        }
+      }
+    }
+
+    withSQLConf(SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key -> "-1") {
+      val df1 = spark.range(0, 100, 1, 2).select(($"id" % 10).as("k1"), $"id".as("v1"))
+      val df2 = spark.range(0, 30, 1, 2).select(($"id" % 7).as("k2"), $"id".as("v2"))
+      checkStages(df1.orderBy($"v1".desc), Set("Sort"))
+      Seq("inner", "left_outer", "right_outer", "left_semi", "left_anti").foreach { joinType =>
+        checkStages(
+          df1.join(df2.hint("SHUFFLE_MERGE"), $"k1" === $"k2", joinType),
+          Set("Sort", "SortMergeJoin"))
+      }
+    }
+
+    withSQLConf(SQLConf.SORT_MERGE_AS_OF_JOIN_ENABLED.key -> "true") {
+      val trades = Seq((5, 1), (11, 1), (12, 2), (3, 3)).toDF("ts", "k")
+      val quotes = Seq((0, 1, "a"), (7, 1, "b"), (10, 1, "c"), (8, 2, "d"), (9, 3, "e"))
+        .toDF("ts", "k", "v")
+      checkStages(
+        trades.joinAsOf(
+          quotes, trades("ts"), quotes("ts"), usingColumns = Seq("k"), joinType = "inner",
+          tolerance = null, allowExactMatches = true, direction = "backward"),
+        Set("Sort", "SortMergeAsOfJoin"))
+    }
   }
 
   test("Backward and forward sort-merge ASOF joins should be included in WholeStageCodegen") {

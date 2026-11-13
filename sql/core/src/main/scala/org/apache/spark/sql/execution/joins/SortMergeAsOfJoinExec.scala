@@ -191,7 +191,7 @@ case class SortMergeAsOfJoinExec(
     val skipUnmatched = if (joinType == LeftOuter) "" else s"if ($matched == null) continue;"
     val numOutput = metricTerm(ctx, "numOutputRows")
     val initJoin = ctx.addMutableState(CodeGenerator.JAVA_BOOLEAN, "initJoin")
-    val thisPlan = ctx.addReferenceObj("plan", this)
+    val eagerCleanup = SortExec.genCleanupSorters(ctx, this)
 
     s"""
        |if (!$initJoin) {
@@ -207,7 +207,7 @@ case class SortMergeAsOfJoinExec(
        |  ${consume(ctx, leftVars ++ rightVars)}
        |  if (shouldStop()) return;
        |}
-       |$thisPlan.cleanupResources();
+       |$eagerCleanup
      """.stripMargin
   }
 
