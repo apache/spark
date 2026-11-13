@@ -201,6 +201,44 @@ class StreamingQueryManagerSuite extends StreamTest {
     }
   }
 
+  test("SPARK-60730: a query restarted from a checkpoint without the legacy config pushes " +
+    "filters ahead of expensive conditions as before") {
+    // Runs in ANSI mode, in which the addition can fail and so is kept above the projection.
+    withSQLConf(SQLConf.ANSI_ENABLED.key -> "true") {
+      withTempDir { checkpointDir =>
+        val input = MemoryStream[Int]
+        val f = org.apache.spark.sql.functions.udf((i: Int) => i)
+        val result = input.toDF()
+          .select($"value", f($"value") as "f")
+          .where($"f" > 5 && $"value" + 1 > 6)
+
+        def run(data: Int): Boolean = {
+          val query = result.writeStream
+            .format("noop")
+            .option("checkpointLocation", checkpointDir.getCanonicalPath)
+            .start()
+          try {
+            input.addData(data)
+            query.processAllAvailable()
+            // Whether the addition is pushed below the projection.
+            query.asInstanceOf[StreamingQueryWrapper].streamingQuery.lastExecution.optimizedPlan
+              .exists {
+                case Project(_, _: Filter) => true
+                case _ => false
+              }
+          } finally {
+            query.stop()
+          }
+        }
+
+        assert(!run(1))
+        rewriteOffsetLogConf(checkpointDir)(
+          _ - SQLConf.LEGACY_PUSH_FILTER_AHEAD_OF_EXPENSIVE_CONJUNCT.key)
+        assert(run(2))
+      }
+    }
+  }
+
   test("streaming EXCEPT compatibility uses the query session checkpoint location") {
     withTempDir { checkpointRoot =>
       withTempDir { otherCheckpointRoot =>

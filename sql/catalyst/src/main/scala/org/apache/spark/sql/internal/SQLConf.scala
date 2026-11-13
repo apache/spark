@@ -670,6 +670,41 @@ object SQLConf {
     .booleanConf
     .createWithDefault(true)
 
+  val LEGACY_PUSH_FILTER_AHEAD_OF_EXPENSIVE_CONJUNCT =
+    buildConf("spark.sql.legacy.pushFilterAheadOfExpensiveConjunct")
+      .internal()
+      .doc(s"When ${AVOID_DOUBLE_FILTER_EVAL.key} is true, a filter over a projection with " +
+        "expensive (UDF, etc.) elements pushes its cheap conditions below the projection and " +
+        "keeps the expensive ones above it. When this config is true, a cheap condition " +
+        "written after an expensive one is pushed, and so evaluated ahead of it, unless it " +
+        "is throwable (e.g. raise_error). When false, it is pushed only when the optimizer " +
+        "can tell that it is a deterministic condition over columns and literals that can " +
+        "not fail, such as a comparison, IN, IS NULL or, with ANSI mode off, numeric " +
+        "arithmetic, where a column the projection defines with a cheap expression counts as " +
+        "that expression; otherwise it stays above in its written order, so it is only " +
+        "evaluated where none of the conditions before it is false, and an error the " +
+        "condition itself would raise on other rows (e.g. a division by zero or an invalid " +
+        "cast in ANSI mode, or an exception in a UDF) is not raised, unless two conditions " +
+        "of the filter share a subexpression, the optimizer infers an IS NOT NULL check for " +
+        "it, it is an equality the optimizer moves in front of the condition, or it reads a " +
+        "column the projection computes on every row, as an interpreted projection without " +
+        "whole-stage codegen does, or as one does for an expression two columns share. This " +
+        "covers the expensive elements evaluated in the projection, such as Scala UDFs, also " +
+        "over Python UDFs, but not Python UDFs alone, which are evaluated below it; after a " +
+        "condition over a Python UDF, a cheap condition is pushed when it is deterministic " +
+        "and not throwable. When false, the projection is also not split when a condition " +
+        "kept above after another one is not one the optimizer can tell is deterministic and " +
+        "can not fail, where a column the projection defines with an expensive expression " +
+        "counts as a plain column. Otherwise, the projection split may still compute the " +
+        "expensive element a later condition reads ahead of the conditions before it. A " +
+        "streaming query records this config in its checkpoint, and one restarted from a " +
+        "checkpoint that does not record it uses true; start it from a new checkpoint to " +
+        "change it.")
+      .version("4.4.0")
+      .withBindingPolicy(ConfigBindingPolicy.NOT_APPLICABLE)
+      .booleanConf
+      .createWithDefault(false)
+
   val REGEX_PATTERN_COST_ESTIMATE_VERSION =
     buildConf("spark.sql.optimizer.regexPatternCostEstimateVersion")
     .internal()
@@ -10802,6 +10837,9 @@ class SQLConf extends Serializable with Logging with SqlApiConf {
 
   def splitProjectionForExpensiveFilters: Boolean =
     getConf(SPLIT_PROJECTION_FOR_EXPENSIVE_FILTERS)
+
+  def legacyPushFilterAheadOfExpensiveConjunct: Boolean =
+    getConf(LEGACY_PUSH_FILTER_AHEAD_OF_EXPENSIVE_CONJUNCT)
 
   def structPredicateDecomposeEnabled: Boolean = getConf(STRUCT_PREDICATE_DECOMPOSE_ENABLED)
 
