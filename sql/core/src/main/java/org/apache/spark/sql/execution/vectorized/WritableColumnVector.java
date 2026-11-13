@@ -142,6 +142,10 @@ public abstract class WritableColumnVector extends ColumnVector {
   public abstract boolean isFree();
 
   public void reserveAdditional(int additionalCapacity) {
+    if (additionalCapacity < 0) {
+      throw new IllegalArgumentException(
+          "Invalid negative additional capacity: " + additionalCapacity);
+    }
     reserve(elementsAppended + additionalCapacity);
   }
 
@@ -177,7 +181,7 @@ public abstract class WritableColumnVector extends ColumnVector {
         "refer to " + SQLConf.ORC_VECTORIZED_READER_BATCH_SIZE().key() +
         " (default " + SQLConf.ORC_VECTORIZED_READER_BATCH_SIZE().defaultValueString() +
         ") and " + SQLConf.ORC_VECTORIZED_READER_ENABLED().key() + ".";
-    throw new RuntimeException(message, cause);
+    throw new VectorizedReaderCapacityOverflowException(message, cause);
   }
 
   @Override
@@ -476,6 +480,9 @@ public abstract class WritableColumnVector extends ColumnVector {
   }
 
   final int appendBytes(int length, ByteBuffer src, int srcPosition) {
+    if (length < 0) {
+      throw new IllegalArgumentException("Invalid negative length: " + length);
+    }
     reserve(elementsAppended + length);
     int result = elementsAppended;
     putBytes(elementsAppended, length, src, srcPosition);
@@ -648,6 +655,9 @@ public abstract class WritableColumnVector extends ColumnVector {
   }
 
   public final int appendBytes(int count, byte v) {
+    if (count < 0) {
+      throw new IllegalArgumentException("Invalid negative count: " + count);
+    }
     reserve(elementsAppended + count);
     int result = elementsAppended;
     putBytes(elementsAppended, count, v);
@@ -656,6 +666,9 @@ public abstract class WritableColumnVector extends ColumnVector {
   }
 
   public final int appendBytes(int length, byte[] src, int offset) {
+    if (length < 0) {
+      throw new IllegalArgumentException("Invalid negative length: " + length);
+    }
     reserve(elementsAppended + length);
     int result = elementsAppended;
     putBytes(elementsAppended, length, src, offset);
