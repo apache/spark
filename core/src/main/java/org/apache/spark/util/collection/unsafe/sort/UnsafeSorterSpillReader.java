@@ -30,6 +30,7 @@ import org.apache.spark.network.util.JavaUtils;
 import org.apache.spark.serializer.SerializerManager;
 import org.apache.spark.storage.BlockId;
 import org.apache.spark.unsafe.Platform;
+import org.apache.spark.unsafe.array.ByteArrayMethods;
 
 import java.io.*;
 
@@ -44,6 +45,10 @@ public final class UnsafeSorterSpillReader extends UnsafeSorterIterator implemen
 
   private InputStream in;
   private DataInputStream din;
+  // Closes `in` at the end of the task if the reader is abandoned before its last record. The
+  // task completion listener holds only this, not the reader, so that a reader that is done
+  // with, and its record buffer, can be garbage collected before the task ends.
+  private final StreamCloser streamCloser = new StreamCloser();
 
   // Variables that change with every record read:
   private int recordLength;
@@ -51,7 +56,9 @@ public final class UnsafeSorterSpillReader extends UnsafeSorterIterator implemen
   private int numRecords;
   private int numRecordsRemaining;
 
-  private byte[] arr = new byte[1024 * 1024];
+  // Grown to the longest record read: a sort-merge join whose matches spilled creates a reader
+  // for every streamed row, so most readers read only a few records.
+  private byte[] arr = new byte[1024];
   private Object baseObject = arr;
   private final TaskContext taskContext = TaskContext.get();
 
@@ -86,10 +93,12 @@ public final class UnsafeSorterSpillReader extends UnsafeSorterIterator implemen
       Closeables.close(bs, /* swallowIOException = */ true);
       throw e;
     }
+    streamCloser.in = this.in;
     if (taskContext != null) {
+      final StreamCloser closer = streamCloser;
       taskContext.addTaskCompletionListener(context -> {
         try {
-          close();
+          closer.close();
         } catch (IOException e) {
           logger.info("error while closing UnsafeSorterSpillReader", e);
         }
@@ -125,7 +134,8 @@ public final class UnsafeSorterSpillReader extends UnsafeSorterIterator implemen
     recordLength = din.readInt();
     keyPrefix = din.readLong();
     if (recordLength > arr.length) {
-      arr = new byte[recordLength];
+      arr = new byte[(int) Math.max(recordLength,
+        Math.min(2L * arr.length, ByteArrayMethods.MAX_ROUNDED_ARRAY_LENGTH))];
       baseObject = arr;
     }
     JavaUtils.readFully(in, arr, 0, recordLength);
@@ -157,13 +167,27 @@ public final class UnsafeSorterSpillReader extends UnsafeSorterIterator implemen
 
   @Override
   public void close() throws IOException {
-   if (in != null) {
-     try {
-       in.close();
-     } finally {
-       in = null;
-       din = null;
-     }
-   }
+    try {
+      streamCloser.close();
+    } finally {
+      in = null;
+      din = null;
+    }
+  }
+
+  /** Closes the stream it holds, at most once. */
+  private static final class StreamCloser implements Closeable {
+    private InputStream in;
+
+    @Override
+    public void close() throws IOException {
+      if (in != null) {
+        try {
+          in.close();
+        } finally {
+          in = null;
+        }
+      }
+    }
   }
 }
