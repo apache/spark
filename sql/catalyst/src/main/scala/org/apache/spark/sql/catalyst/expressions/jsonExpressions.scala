@@ -1724,8 +1724,10 @@ case class JsonArray(
       case JsonConstructorNullBehavior.Absent =>
         if (forceBuiltinOwnership) " ABSENT ON NULL" else ""
     }
-    // `trim` drops the leading space when only a clause renders (`JSON_ARRAY(ABSENT ON NULL)`).
-    s"JSON_ARRAY(${s"$valuesSQL$nullSQL$returningSQL".trim})"
+    // A zero-element array drops the leading space of its clauses (`JSON_ARRAY(ABSENT ON NULL)`).
+    val clausesSQL = s"$nullSQL$returningSQL"
+    val inner = if (values.isEmpty) clausesSQL.stripPrefix(" ") else s"$valuesSQL$clausesSQL"
+    s"JSON_ARRAY($inner)"
   }
 
   override protected def withNewChildrenInternal(

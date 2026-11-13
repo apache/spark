@@ -534,7 +534,7 @@ class JsonArraySuite extends QueryTest with SharedSparkSession {
     val keepNull = JsonArray(
       Seq(Literal(1)), Seq(false), Seq(false), JsonConstructorNullBehavior.Null, StringType)
     assert(keepNull.sql == "JSON_ARRAY(1 NULL ON NULL)")
-    // A zero-element array renders the clause alone, with no stray leading space (`trim`).
+    // A zero-element array renders the clause alone, with no stray leading space.
     val empty = JsonArray(
       Seq.empty, Seq.empty, Seq.empty, JsonConstructorNullBehavior.Absent, StringType)
     assert(empty.sql == "JSON_ARRAY(ABSENT ON NULL)")
@@ -546,6 +546,18 @@ class JsonArraySuite extends QueryTest with SharedSparkSession {
     assert(df.schema.head.name == "JSON_ARRAY(NULL ON NULL)")
     checkAnswer(df, Row("[]"))
     checkAnswer(sql(s"SELECT ${emptyKeepNull.sql}"), Row("[]"))
+    val emptyCollated = JsonArray(
+      Seq.empty, Seq.empty, Seq.empty, JsonConstructorNullBehavior.Absent, StringType("UTF8_LCASE"))
+    assert(emptyCollated.sql == "JSON_ARRAY(ABSENT ON NULL RETURNING STRING COLLATE UTF8_LCASE)")
+    checkAnswer(sql(s"SELECT ${emptyCollated.sql}"), Row("[]"))
+  }
+
+  test("SPARK-59728: auto-generated column names keep whitespace of edge values") {
+    val names = sql(
+      "SELECT json_array(' a'), json_array('a '), json_array(' a' NULL ON NULL), " +
+        "json_array(' '), json_array()").columns.toSeq
+    assert(names == Seq("JSON_ARRAY( a)", "JSON_ARRAY(a )", "JSON_ARRAY( a NULL ON NULL)",
+      "JSON_ARRAY( )", "JSON_ARRAY()"))
   }
 
   test("a constant JSON_ARRAY is foldable unless it has an explicit FORMAT JSON") {
