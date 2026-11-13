@@ -590,6 +590,9 @@ private[sql] object ArrowUtils {
    */
   def isCompatibleWithDeclaredField(actual: Field, declared: Field): Boolean = {
     actual.getDictionary == null &&
+    // TODO: Let ColumnarArrowPythonInput copy the congruent columns of a batch and convert only
+    // the others, as ArrowBatchingDataWriter.canCopy decides per column for columnar writes.
+    // Today one tagged GEOMETRY or GEOGRAPHY column makes it convert the whole batch row by row.
     (!isGeoWkbAsCreated(actual) || isGeoWkbAsCreated(declared)) &&
     sameLayoutArrowType(actual.getType, declared.getType) &&
     actual.getChildren.size == declared.getChildren.size &&

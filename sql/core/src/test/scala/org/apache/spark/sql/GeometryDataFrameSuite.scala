@@ -21,6 +21,7 @@ import scala.collection.immutable.Seq
 
 import org.apache.spark.{SparkIllegalArgumentException, SparkRuntimeException}
 import org.apache.spark.sql.catalyst.util.STUtils
+import org.apache.spark.sql.execution.aggregate.SortAggregateExec
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.sql.types._
@@ -236,6 +237,17 @@ class GeometryDataFrameSuite extends SharedSparkSession {
     // Forces the hash aggregate to spill into its sort-based fallback, which orders the keys.
     withSQLConf("spark.sql.TungstenAggregate.testFallbackStartsAt" -> "1,2") {
       checkAnswer(spark.sql(groupBy), Seq(Row(5L), Row(15L)))
+    }
+
+    // The hash aggregate cannot hold a STRING max, so this GROUP BY is a sort-based aggregate,
+    // which sorts the geo keys after the shuffle.
+    withSQLConf(SQLConf.ADAPTIVE_EXECUTION_ENABLED.key -> "false") {
+      val sortAggregate =
+        spark.sql("SELECT COUNT(*), max(hex(ST_AsBinary(g))) FROM geo_t GROUP BY g")
+      assert(sortAggregate.queryExecution.executedPlan.exists(_.isInstanceOf[SortAggregateExec]))
+      checkAnswer(sortAggregate, Seq(
+        Row(5L, "010100000000000000000035400000000000001E40"),
+        Row(15L, "010100000000000000000031400000000000001C40")))
     }
   }
 

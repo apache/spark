@@ -115,6 +115,18 @@ public final class STUtils {
     return org.apache.spark.sql.types.Geography.fromWKB(wkb, geographySrid);
   }
 
+  // Returns the SRID of a GEOMETRY or GEOGRAPHY value, read from its header without a copy.
+  public static int geoSrid(BinaryView geo) {
+    int srid = geo.getInt(Geo.SRID_OFFSET);
+    return ByteOrder.nativeOrder() == Geo.DEFAULT_ENDIANNESS ? srid : Integer.reverseBytes(srid);
+  }
+
+  // Returns a copy of the WKB of a GEOMETRY or GEOGRAPHY value as it was created, without
+  // re-encoding it.
+  public static byte[] geoWkbAsCreated(BinaryView geo) {
+    return geo.slice(Geo.WKB_OFFSET, geo.numBytes() - Geo.WKB_OFFSET).getBytes();
+  }
+
   /** Methods for implementing ST expressions.
    *
    * The ST_AsBinary, ST_AsEWKT, ST_Srid, and ST_SetSrid expression families each have a
@@ -139,18 +151,6 @@ public final class STUtils {
 
   public static byte[] stGeogAsBinary(BinaryView geo, UTF8String endianness) {
     return geogFromPhysVal(geo).toWkb(parseEndianness(endianness));
-  }
-
-  // Returns the SRID of a GEOMETRY or GEOGRAPHY value, read from its header without a copy.
-  public static int geoSrid(BinaryView geo) {
-    int srid = geo.getInt(Geo.SRID_OFFSET);
-    return ByteOrder.nativeOrder() == Geo.DEFAULT_ENDIANNESS ? srid : Integer.reverseBytes(srid);
-  }
-
-  // Returns a copy of the WKB of a GEOMETRY or GEOGRAPHY value as it was created, without
-  // re-encoding it.
-  public static byte[] geoWkbAsCreated(BinaryView geo) {
-    return geo.slice(Geo.WKB_OFFSET, geo.numBytes() - Geo.WKB_OFFSET).getBytes();
   }
 
   public static byte[] stGeomAsBinary(BinaryView geo) {
