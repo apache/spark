@@ -69,6 +69,7 @@ import org.apache.spark.sql.hive.{HiveExternalCatalog, HiveUtils}
 import org.apache.spark.sql.hive.HiveExternalCatalog.DATASOURCE_SCHEMA
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
+import org.apache.spark.sql.util.SchemaUtils
 import org.apache.spark.util.{CircularBuffer, Utils}
 
 /**
@@ -112,6 +113,10 @@ private[hive] class HiveClientImpl(
 
     override def hiveTableProps(): Map[String, String] = {
       rawTable.getParameters.asScala.toMap
+    }
+
+    override def hivePartitionColumnNames(): Seq[String] = {
+      rawTable.getPartCols.asScala.map(_.getName).toSeq
     }
   }
 
@@ -173,6 +178,27 @@ private[hive] class HiveClientImpl(
     log"Warehouse location for Hive client (version " +
       log"${MDC(HIVE_CLIENT_VERSION, version.fullVersion)}) is " +
     log"${MDC(PATH, conf.getVar(HiveConf.getConfVars("hive.metastore.warehouse.dir")))}")
+
+  // Hive 4 creates its metastore connection pool without a JDBC driver class name, so the pool
+  // gets the driver from java.sql.DriverManager. DriverManager loads the drivers listed in
+  // META-INF/services only once per JVM, through the context class loader of its first caller,
+  // and returns only drivers that the caller's class loader resolves to the same class. When an
+  // isolated client opens the metastore database itself, load the configured JDBC driver through
+  // the client class loader so that the driver registers itself with DriverManager.
+  if (clientLoader.isolationOn) {
+    val msUri = conf.getVar(HiveConf.getConfVars("hive.metastore.uris"))
+    if (msUri == null || msUri.trim.isEmpty) {
+      val driver = conf.getVar(HiveConf.getConfVars("javax.jdo.option.ConnectionDriverName"))
+      try {
+        // scalastyle:off classforname
+        Class.forName(driver, true, clientLoader.classLoader)
+        // scalastyle:on classforname
+      } catch {
+        case NonFatal(e) =>
+          logWarning(log"Failed to load the metastore JDBC driver ${MDC(CLASS_NAME, driver)}", e)
+      }
+    }
+  }
 
   private def newState(): SessionState = {
     val hiveConf = newHiveConf(sparkConf, hadoopConf, extraConfig, Some(initClassLoader))
@@ -587,6 +613,21 @@ private[hive] class HiveClientImpl(
 
   override def createTable(table: CatalogTable, ignoreIfExists: Boolean): Unit = withHiveState {
     shim.createTable(client, toHiveTable(table, Some(userName)), ignoreIfExists)
+  }
+
+  override def validateTable(table: CatalogTable): Unit = withHiveState {
+    val hiveTable = toHiveTable(table, Some(userName))
+    // These are the checks of `Hive.createTable` before it calls Hive metastore. Like it, wrap
+    // their errors in `HiveException`.
+    try {
+      if (hiveTable.getCols.isEmpty || hiveTable.getSd.getColsSize == 0) {
+        // `Hive.createTable` gets the columns from the SerDe here, e.g., for an Avro table.
+        hiveTable.getDeserializer
+      }
+      hiveTable.checkValidity(conf)
+    } catch {
+      case NonFatal(e) => throw new HiveException(e)
+    }
   }
 
   override def dropTable(
@@ -1114,17 +1155,38 @@ private[hive] object HiveClientImpl extends Logging {
   // See org.apache.hadoop.hive.metastore.MetaStoreUtils#validateColumnType for more details.
 
   lazy val INCOMPATIBLE_PARTITION_TYPE_PLACEHOLDER = "<derived from deserializer>"
+  // The collation clause of a type string, e.g. ` collate UTF8_LCASE` of
+  // `char(3) collate UTF8_LCASE`.
+  private val COLLATION_CLAUSE = " collate \\w+".r
   /** Converts the native StructField to Hive's FieldSchema. */
   def toHiveColumn(c: StructField): FieldSchema = {
+    // Hive has no collations, so collated strings are passed to Hive as regular strings.
+    val dataType = SchemaUtils.replaceCollatedStringWithString(c.dataType)
     // For Hive Serde, we still need to to restore the raw type for char and varchar type.
     // When reading data in parquet, orc, or avro file format with string type for char,
     // the tailing spaces may lost if we are not going to pad it.
     val typeString = if (SQLConf.get.charVarcharAsString) {
-      c.dataType.catalogString
+      dataType.catalogString
     } else {
-      CharVarcharUtils.getRawTypeString(c.metadata).getOrElse(c.dataType.catalogString)
+      // The raw type string keeps the collations of char and varchar types. Remove them without
+      // parsing the string again because the parsing depends on the session configurations,
+      // e.g. `timestamp` becomes TIMESTAMP_NTZ with spark.sql.timestampType=TIMESTAMP_NTZ.
+      CharVarcharUtils.getRawTypeString(c.metadata)
+        .map(COLLATION_CLAUSE.replaceAllIn(_, ""))
+        .getOrElse(dataType.catalogString)
     }
     new FieldSchema(c.name, typeString, c.getComment().orNull)
+  }
+
+  /**
+   * Parses a Hive type string. The parser resolves `timestamp` by spark.sql.timestampType, but
+   * Hive `timestamp` is always TIMESTAMP_LTZ in Spark and Hive has no TIMESTAMP_NTZ type, so map
+   * TIMESTAMP_NTZ back to TIMESTAMP_LTZ.
+   */
+  def parseHiveType(typeStr: String): DataType = {
+    CatalystSqlParser.parseDataType(typeStr).transformRecursively {
+      case TimestampNTZType => TimestampType
+    }
   }
 
   /** Get the Spark SQL native DataType from Hive's FieldSchema. */
@@ -1141,7 +1203,7 @@ private[hive] object HiveClientImpl extends Logging {
     //   map<string,struct<x:int,y.z:int>> -> map<string,struct<`x`:int,`y.z`:int>>
     val typeStr = hc.getType.replaceAll("(?<=struct<|,)([^,<:]+)(?=:)", "`$1`")
     try {
-      CatalystSqlParser.parseDataType(typeStr)
+      parseHiveType(typeStr)
     } catch {
       case e: ParseException =>
         // Hive's union type (uniontype<...>) is not supported by Spark SQL and makes the parser

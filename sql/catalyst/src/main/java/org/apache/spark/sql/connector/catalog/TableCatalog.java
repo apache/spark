@@ -23,6 +23,7 @@ import org.apache.spark.sql.connector.expressions.Transform;
 import org.apache.spark.sql.catalyst.analysis.NoSuchNamespaceException;
 import org.apache.spark.sql.catalyst.analysis.NoSuchTableException;
 import org.apache.spark.sql.catalyst.analysis.TableAlreadyExistsException;
+import org.apache.spark.sql.catalyst.util.WriteDistributionAndOrdering;
 import org.apache.spark.sql.errors.QueryCompilationErrors;
 import org.apache.spark.sql.errors.QueryExecutionErrors;
 import org.apache.spark.sql.types.StructType;
@@ -123,6 +124,25 @@ public interface TableCatalog extends CatalogPlugin {
    * @since 4.3.0
    */
   default Set<String> tableStateOptionKeys() { return Set.of(); }
+
+  /**
+   * Returns the connector-specific option keys needed to load a changelog or determine its
+   * metadata, such as branch, tag, or schema selection. Parameters that Spark parses into
+   * {@link ChangelogContext}, such as the range and post-processing options, must not be listed.
+   * <p>
+   * Spark passes only the declared options to {@link #loadChangelog} and uses them, together with
+   * the changelog context, to identify reusable changelog state. The complete user option map
+   * remains on each resolved relation for subsequent scan planning.
+   * <p>
+   * The default implementation returns {@link #tableStateOptionKeys()}. An override declares the
+   * complete set of changelog state option keys; Spark does not add the table state option keys.
+   * Option key matching is case-insensitive, while option values remain case-sensitive.
+   *
+   * @return a non-null set of case-insensitive option keys
+   *
+   * @since 4.3.0
+   */
+  default Set<String> changelogStateOptionKeys() { return tableStateOptionKeys(); }
 
   /**
    * List the tables in a namespace from the catalog.
@@ -266,13 +286,17 @@ public interface TableCatalog extends CatalogPlugin {
    * Load a {@link Changelog} for the given table, representing the row-level changes within the
    * range specified by {@code context}.
    * <p>
-   * The default implementation throws an analysis exception indicating that the catalog does
-   * not support CDC. Catalogs that support CDC must override this method.
+   * Spark passes only the options declared by {@link #changelogStateOptionKeys()}. The range and
+   * post-processing parameters are supplied through {@code context}. The complete user option
+   * map is retained for {@link Changelog#newScanBuilder(CaseInsensitiveStringMap)}.
+   * <p>
+   * The default implementation throws {@link UnsupportedOperationException} to indicate that
+   * the catalog does not support CDC. Catalogs that support CDC must override this method.
    *
    * @param ident a table identifier
    * @param context the CDC query context (range, deduplication mode, etc.)
-   * @param options all options passed to the changelog query, including the CDC-recognized
-   *                keys (range, deduplication mode, etc.) that are also parsed into {@code context}
+   * @param stateOptions options declared to affect changelog state; Spark-parsed parameters are
+   *                     provided through {@code context} instead
    * @return a Changelog instance for the requested table and range
    * @throws NoSuchTableException If the table doesn't exist
    *
@@ -281,7 +305,7 @@ public interface TableCatalog extends CatalogPlugin {
   default Changelog loadChangelog(
       Identifier ident,
       ChangelogContext context,
-      CaseInsensitiveStringMap options) throws NoSuchTableException {
+      CaseInsensitiveStringMap stateOptions) throws NoSuchTableException {
     throw new UnsupportedOperationException(name() + " does not support Change Data Capture (CDC)");
   }
 
@@ -342,6 +366,13 @@ public interface TableCatalog extends CatalogPlugin {
 
   /**
    * Create a table in the catalog.
+   * <p>
+   * The default implementation rejects a requested write distribution or ordering; see
+   * {@link TableCatalogCapability#SUPPORTS_CREATE_TABLE_WITH_WRITE_DISTRIBUTION_AND_ORDERING}.
+   * A catalog that is not a {@link StagingTableCatalog} sees a {@code REPLACE TABLE} or
+   * {@code CREATE OR REPLACE TABLE} here only after Spark has dropped the existing table; a
+   * {@link StagingTableCatalog} gets {@code stageReplace} or {@code stageCreateOrReplace}
+   * instead, before anything is dropped.
    *
    * @param ident a table identifier
    * @param tableInfo information about the table
@@ -352,12 +383,14 @@ public interface TableCatalog extends CatalogPlugin {
    *         privileges.
    *
    * @throws TableAlreadyExistsException If a table already exists for the identifier
-   * @throws UnsupportedOperationException If a requested partition transform is not supported
+   * @throws UnsupportedOperationException If a requested partition transform, write distribution
+   *         or write ordering is not supported
    * @throws NoSuchNamespaceException If the identifier namespace does not exist (optional)
    * @since 4.1.0
    */
   default Table createTable(Identifier ident, TableInfo tableInfo)
       throws TableAlreadyExistsException, NoSuchNamespaceException {
+    WriteDistributionAndOrdering.rejectRequested(this, ident, tableInfo);
     return createTable(ident, tableInfo.columns(), tableInfo.partitions(), tableInfo.properties());
   }
 
@@ -372,13 +405,17 @@ public interface TableCatalog extends CatalogPlugin {
    * excluded from {@code tableInfo}; connectors may read {@code sourceTable.properties()} to
    * clone additional format-specific or custom state as appropriate for their implementation.
    * <p>
+   * The source table's write distribution and ordering are not copied either:
+   * {@code tableInfo.writeDistributionMode()} is null and {@code tableInfo.writeOrdering()} is
+   * empty. Connectors that want to carry them forward may read them from {@code sourceTable}.
+   * <p>
    * The default implementation throws {@link UnsupportedOperationException}. Connectors that
    * support {@code CREATE TABLE ... LIKE ...} must override this method.
    *
    * @param ident a table identifier for the new table
    * @param tableInfo complete description of the new table: columns, partitioning, constraints,
    *                  explicit properties (user overrides + owner); source table properties
-   *                  are NOT included
+   *                  and the source's write distribution and ordering are NOT included
    * @param sourceTable the resolved source table; connectors may read format-specific properties
    *                    or other custom state from this object to clone additional metadata
    * @return metadata for the new table

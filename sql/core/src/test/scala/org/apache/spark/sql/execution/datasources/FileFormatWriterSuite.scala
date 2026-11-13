@@ -17,8 +17,11 @@
 
 package org.apache.spark.sql.execution.datasources
 
+import org.apache.hadoop.mapreduce.JobContext
+
 import org.apache.spark.sql.Row
 import org.apache.spark.sql.catalyst.plans.CodegenInterpretedPlanTest
+import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSparkSession
 
 class FileFormatWriterSuite
@@ -75,5 +78,32 @@ class FileFormatWriterSuite
         checkAnswer(spark.table(t), Seq(Row(0), Row(100)))
       }
     }
+  }
+
+  test("SPARK-60023: writeJobUUID should be set before setupJob") {
+    withSQLConf(SQLConf.FILE_COMMIT_PROTOCOL_CLASS.key ->
+        classOf[WriteJobUUIDCheckingCommitProtocol].getName) {
+      withTempPath { path =>
+        // WriteJobUUIDCheckingCommitProtocol fails setupJob if the UUID is not set yet.
+        spark.range(10).write.parquet(path.getCanonicalPath)
+        checkAnswer(spark.read.parquet(path.getCanonicalPath), spark.range(10).toDF())
+      }
+    }
+  }
+}
+
+/**
+ * A file commit protocol that fails in setupJob if "spark.sql.sources.writeJobUUID" is not set,
+ * like committers (e.g. Hadoop's ManifestCommitter) that read it to build the job UUID.
+ */
+private class WriteJobUUIDCheckingCommitProtocol(
+    jobId: String,
+    path: String,
+    dynamicPartitionOverwrite: Boolean)
+  extends SQLHadoopMapReduceCommitProtocol(jobId, path, dynamicPartitionOverwrite) {
+  override def setupJob(jobContext: JobContext): Unit = {
+    assert(jobContext.getConfiguration.get("spark.sql.sources.writeJobUUID") != null,
+      "spark.sql.sources.writeJobUUID should be set before setupJob")
+    super.setupJob(jobContext)
   }
 }

@@ -36,7 +36,7 @@ import org.apache.spark.sql.execution.aggregate.HashAggregateExec
 import org.apache.spark.sql.execution.command.DataWritingCommandExec
 import org.apache.spark.sql.execution.datasources.{BasicWriteJobStatsTracker, InsertIntoHadoopFsRelationCommand, SQLHadoopMapReduceCommitProtocol, V1WriteCommand}
 import org.apache.spark.sql.execution.exchange.{BroadcastExchangeExec, ShuffleExchangeExec}
-import org.apache.spark.sql.execution.joins.{BroadcastHashJoinExec, ShuffledHashJoinExec}
+import org.apache.spark.sql.execution.joins.{BroadcastHashJoinExec, ShuffledHashJoinExec, SortMergeAsOfJoinExec}
 import org.apache.spark.sql.execution.window.WindowGroupLimitExec
 import org.apache.spark.sql.expressions.Window
 import org.apache.spark.sql.functions._
@@ -443,6 +443,65 @@ class SQLMetricsSuite extends SharedSparkSession with SQLMetricsTestUtils
           enableWholeStage
         )
       }
+    }
+  }
+
+  test("SortMergeAsOfJoin metrics") {
+    // Only numOutputRows here; spillSize is covered in SortMergeAsOfJoinSuite. Each check runs
+    // with the ASOF join codegen off and on, on a new DataFrame each time, since a DataFrame
+    // keeps the plan it got first.
+    def checkNumOutputRows(df: => DataFrame, expected: Long): Unit = {
+      // Whether the join runs in a codegen stage, and not only in a stage below it.
+      def inStage(plan: SparkPlan): Boolean = plan match {
+        case _: SortMergeAsOfJoinExec => true
+        case _: InputAdapter => false
+        case other => other.children.exists(inStage)
+      }
+      Seq(false, true).foreach { codegen =>
+        withClue(s"ASOF join codegen $codegen: ") {
+          withSQLConf(SQLConf.ENABLE_SORT_MERGE_AS_OF_JOIN_CODEGEN.key -> codegen.toString) {
+            val query = df
+            query.collect()
+            val plan = query.queryExecution.executedPlan
+            val op = plan.collectFirst { case s: SortMergeAsOfJoinExec => s }
+            assert(op.isDefined, "The query plan should have SortMergeAsOfJoin")
+            val generated = plan.collect {
+              case stage: WholeStageCodegenExec if inStage(stage.child) => stage
+            }.nonEmpty
+            assert(generated == codegen, s"Unexpected ASOF join codegen in:\n$plan")
+            testMetricsInSparkPlanOperator(op.get, Map("numOutputRows" -> expected))
+          }
+        }
+      }
+    }
+
+    withSQLConf(SQLConf.SORT_MERGE_AS_OF_JOIN_ENABLED.key -> "true") {
+      // No equi-key. Left key 0 has no match: INNER drops it (2), LEFT OUTER null-pads (3).
+      val left = Seq((0, 0), (5, 5), (10, 10)).toDF("a", "left_val")
+      val right = Seq((1, 1), (3, 3), (7, 7)).toDF("a", "right_val")
+      checkNumOutputRows(
+        left.joinAsOf(
+          right, left.col("a"), right.col("a"), usingColumns = Seq.empty,
+          joinType = "inner", tolerance = null,
+          allowExactMatches = true, direction = "backward"),
+        2L)
+      checkNumOutputRows(
+        left.joinAsOf(
+          right, left.col("a"), right.col("a"), usingColumns = Seq.empty,
+          joinType = "leftouter", tolerance = null,
+          allowExactMatches = true, direction = "backward"),
+        3L)
+
+      // NULL left equi-key never matches, so LEFT OUTER null-pads it (a separate path).
+      val nullLeft = Seq((Some(1), 5), (None, 5), (None, 10)).toDF("grp", "ts")
+      val nullRight = Seq((Some(1), 4), (None, 3), (None, 8)).toDF("grp", "ts")
+      checkNumOutputRows(
+        nullLeft.joinAsOf(
+          nullRight, nullLeft.col("ts"), nullRight.col("ts"),
+          usingColumns = Seq("grp"),
+          joinType = "leftouter", tolerance = null,
+          allowExactMatches = true, direction = "backward"),
+        3L)
     }
   }
 

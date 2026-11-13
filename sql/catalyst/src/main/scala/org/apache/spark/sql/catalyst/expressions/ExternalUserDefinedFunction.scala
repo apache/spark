@@ -47,7 +47,8 @@ import org.apache.spark.udf.worker.UDFWorkerSpecification
  * @param children         Input argument expressions.
  * @param inputTypes       Optional declared input types for validation.
  * @param udfDeterministic Whether this UDF is deterministic.
- * @param udfNullable      Whether this UDF can return null.
+ * @param udfNullable      Declared return nullability. Scalar external UDF planning currently
+ *                         retains this metadata but treats every result as nullable.
  * @param resultId         Unique expression ID for this invocation.
  */
 @Experimental
@@ -65,7 +66,10 @@ case class ExternalUserDefinedFunction(
 
   override lazy val deterministic: Boolean = udfDeterministic && children.forall(_.deterministic)
 
-  override def nullable: Boolean = udfNullable
+  // Match PythonUDF: an external worker may return null even when the function metadata declares
+  // a non-nullable result.
+  // TODO(SPARK-55278): Honor declared non-nullability once the worker protocol can enforce it.
+  override def nullable: Boolean = true
 
   override def checkInputDataTypes(): TypeCheckResult = {
     inputTypes match {

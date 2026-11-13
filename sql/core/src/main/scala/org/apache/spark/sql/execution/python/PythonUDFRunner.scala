@@ -54,7 +54,11 @@ abstract class BasePythonUDFRunner(
   override def runnerConf: Map[String, String] = {
     super.runnerConf ++ SQLConf.get.pythonUDFProfiler.map(p =>
       Map(SQLConf.PYTHON_UDF_PROFILER.key -> p)
-    ).getOrElse(Map.empty)
+    ).getOrElse(Map.empty) ++
+    Map(
+      SQLConf.PYTHON_UDF_PROFILER_SAMPLING_INTERVAL.key ->
+        SQLConf.get.pythonUDFProfilerSamplingInterval.toString
+    )
   }
 
   override val pythonExec: String =
@@ -129,8 +133,8 @@ abstract class BasePythonUDFRunner(
               batchesProcessed += 1
               totalDataReceived += length
               obj
-            case SpecialLengths.TIMING_DATA =>
-              handleTimingData()
+            case SpecialLengths.METRICS_DATA =>
+              handleMetricsData()
               read()
             case SpecialLengths.PYTHON_EXCEPTION_THROWN =>
               throw handlePythonException()

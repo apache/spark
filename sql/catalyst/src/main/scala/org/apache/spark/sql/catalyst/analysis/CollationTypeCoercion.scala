@@ -21,8 +21,10 @@ import org.apache.spark.sql.catalyst.SQLConfHelper
 import org.apache.spark.sql.catalyst.analysis.CollationStrength.{Default, Explicit, Implicit, Indeterminate}
 import org.apache.spark.sql.catalyst.analysis.TypeCoercion.haveSameType
 import org.apache.spark.sql.catalyst.expressions._
+import org.apache.spark.sql.catalyst.expressions.variant.VariantGet
 import org.apache.spark.sql.catalyst.plans.logical.{Aggregate, LogicalPlan, Project}
 import org.apache.spark.sql.catalyst.trees.TreeNodeTag
+import org.apache.spark.sql.catalyst.types.DataTypeUtils
 import org.apache.spark.sql.catalyst.util.TypeUtils.toSQLExpr
 import org.apache.spark.sql.errors.QueryCompilationErrors
 import org.apache.spark.sql.types.{
@@ -111,12 +113,12 @@ object CollationTypeCoercion extends SQLConfHelper {
   /**
    * Changes the data type of the expression to the given `newType`.
    *
-   * Never retarget an existing Cast (`cast.copy(dataType = ...)`). Explicit CAST
-   * truncation / overflow (ISO 6.13) and CHAR padding must stay on the inner node;
-   * LCT is an outer Cast. Uncollated TypeCoercion already nests.
-   *
-   * Literals: `copy(dataType)` is enough when only collation changes. When a string
-   * constraint changes (CHAR(2) to CHAR(4)), wrap in Cast so padding is re-applied.
+   * Literal and Cast: wrap in a new Cast when the CHAR/VARCHAR constraint
+   * changes so truncation, overflow, and padding stay on the original node.
+   * Collation-only changes retarget with `copy(dataType)` and copy
+   * `USER_SPECIFIED_CAST` (truncation). Do not copy all tags: a stale
+   * `COLLATION_CONTEXT_TAG` would reuse the pre-LCT collation. That keeps
+   * a non-string Cast child non-string and therefore Default strength.
    */
   private def changeType(expr: Expression, newType: DataType): Expression = {
     mergeTypes(expr.dataType, newType) match {
@@ -127,8 +129,14 @@ object CollationTypeCoercion extends SQLConfHelper {
           case lit: Literal if stringConstraintChanged(lit.dataType, newDataType) =>
             Cast(lit, newDataType, timeZoneId = Some(conf.sessionLocalTimeZone))
           case lit: Literal => lit.copy(dataType = newDataType)
-          case cast: Cast =>
+          case cast: Cast if stringConstraintChanged(cast.dataType, newDataType) =>
             Cast(cast, newDataType, timeZoneId = Some(conf.sessionLocalTimeZone))
+          case cast: Cast =>
+            val retargeted = cast.copy(dataType = newDataType)
+            if (cast.containsTag(Cast.USER_SPECIFIED_CAST)) {
+              retargeted.setTagValue(Cast.USER_SPECIFIED_CAST, ())
+            }
+            retargeted
           case subquery: SubqueryExpression =>
             changeTypeInSubquery(subquery, newType)
 
@@ -393,6 +401,12 @@ object CollationTypeCoercion extends SQLConfHelper {
 
       Some(addContextToStringType(cast.dataType, castStrength))
 
+    // An explicitly collated target or RETURNING type (even UTF8_BINARY), not the arguments,
+    // decides the collation, like a column of that type.
+    case e @ (_: VariantGet | _: JsonValue | _: JsonQuery | _: JsonArray | _: JsonObjectExpr)
+        if DataTypeUtils.hasNonDefaultStringCharOrVarcharType(e.dataType) =>
+      Some(addContextToStringType(e.dataType, Implicit))
+
     case expr @ (_: NamedExpression | _: SubqueryExpression | _: VariableReference) =>
       Some(addContextToStringType(expr.dataType, Implicit))
 
@@ -448,19 +462,13 @@ object CollationTypeCoercion extends SQLConfHelper {
   /**
    * Resolves collation strength independently of CHAR/VARCHAR length.
    *
-   * This rule always runs. First-class CHAR/VARCHAR appear whenever
-   * `charVarcharFirstClassTypes` is true (`standardSemantics` or
-   * `preserveCharVarcharTypeInfo`), not only under `standardSemantics`.
+   * Runs whenever first-class CHAR/VARCHAR are enabled (`standardSemantics` or
+   * `preserveCharVarcharTypeInfo`).
    *
-   * Same collation, including mixed strength: take the string-family LCT `max(n, m)`
-   * (pads, never truncates) and attach the stronger strength. Example:
-   * `coalesce(CAST('a' AS CHAR(2) COLLATE UTF8_LCASE),
-   * CAST(1 AS CHAR(4) COLLATE UTF8_LCASE))` is CHAR(4) COLLATE UTF8_LCASE
-   * (Implicit CHAR(2) from a string CAST vs Default CHAR(4) from a non-string CAST).
-   *
-   * Different collations at equal strength: mismatch (error if Explicit, else
-   * indeterminate). Different collations at unequal strength: the stronger operand
-   * wins in full, including its length (SQL collation precedence).
+   * Same collation: string-family LCT `max(n, m)` with the stronger strength.
+   * Different collations, equal strength: mismatch (error if Explicit, else
+   * indeterminate). Different collations, unequal strength: the stronger
+   * operand wins in full, including its length.
    */
   private def getWinningStringType(
       left: StringTypeWithContext,
@@ -507,8 +515,12 @@ object CollationTypeCoercion extends SQLConfHelper {
       case _: Throwable => NullType
     }
 
-    expression.children.exists(child =>
-      shouldFailWithIndeterminateCollation(expression, getDataTypeSafe(child)))
+    // Most expressions can contain indeterminate collation, so check the expression before
+    // typing its children. Some children have no data type and throw an internal error when
+    // asked for one, such as the WithField, DropField and UpdateNestedField operations of an
+    // UpdateFields.
+    !canContainIndeterminateCollation(expression) &&
+      expression.children.exists(child => hasIndeterminateCollation(getDataTypeSafe(child)))
   }
 
   /**
@@ -540,8 +552,7 @@ object CollationTypeCoercion extends SQLConfHelper {
     case _: BinaryComparison | _: StringPredicate | _: Upper | _: Lower | _: InitCap |
          _: FindInSet | _: StringInstr | _: StringReplace | _: StringLocate | _: SubstringIndex |
          _: StringTrim | _: StringTrimLeft | _: StringTrimRight | _: StringTranslate |
-         _: StringSplitSQL | _: In | _: InSubquery | _: FindInSet |
-         _: StringInstrWithOccurrence => false
+         _: StringSplitSQL | _: In | _: InSubquery | _: StringInstrWithOccurrence => false
     case _ => true
   }
 

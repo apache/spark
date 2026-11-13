@@ -18,8 +18,10 @@
 package org.apache.spark.sql.catalyst.parser
 
 import org.apache.spark.SparkFunSuite
+import org.apache.spark.sql.catalyst.plans.SQLHelper
+import org.apache.spark.sql.internal.SQLConf
 
-class SqlStatementSplitterSuite extends SparkFunSuite {
+class SqlStatementSplitterSuite extends SparkFunSuite with SQLHelper {
 
   private def split(sql: String): SqlStatementSplitResult = SqlStatementSplitter.split(sql)
 
@@ -229,6 +231,24 @@ class SqlStatementSplitterSuite extends SparkFunSuite {
     assert(result.partialStatement.isEmpty)
   }
 
+  test("SPARK-59536: nested bracketed comment containing a hint-shaped comment") {
+    val result = split("SELECT 1; /* outer /*+ inner; */ outer tail */; SELECT 2;")
+    assert(result.completeStatements == Seq(statement("SELECT 1"), statement("SELECT 2")))
+    assert(result.partialStatement.isEmpty)
+  }
+
+  test("SPARK-59536: unclosed outer comment containing a hint-shaped comment") {
+    val sql = "/* SELECT /*+ HINT() 4; */ SELECT 1;"
+    assert(split(sql) == SqlStatementSplitResult(Nil, sql, hasUnclosedComment = true))
+    assert(split(s"SELECT 1; $sql") == SqlStatementSplitResult(
+      Seq(statement("SELECT 1")), sql, hasUnclosedComment = true))
+  }
+
+  test("SPARK-59536: EOF inside an unclosed hint-shaped nested comment") {
+    val sql = "SELECT 1 /* outer /*+ inner"
+    assert(split(sql) == SqlStatementSplitResult(Nil, sql, hasUnclosedComment = true))
+  }
+
   test("statement ending with bracketed comment retained") {
     val result = split("SELECT 1; SELECT 2 /* trailer */")
     assert(result.completeStatements == Seq(statement("SELECT 1")))
@@ -250,6 +270,15 @@ class SqlStatementSplitterSuite extends SparkFunSuite {
     val result = split(block + ";")
     assert(result.completeStatements == Seq(statement(block)))
     assert(result.partialStatement.isEmpty)
+  }
+
+  test("BEGIN..END block that declares a FILE column is a single statement") {
+    val block = "BEGIN CREATE TABLE t (f FILE EXTERNAL); SELECT 1; END"
+    withSQLConf(SQLConf.FILE_TYPE_ENABLED.key -> "true") {
+      val result = split(block + ";")
+      assert(result.completeStatements == Seq(statement(block)))
+      assert(result.partialStatement.isEmpty)
+    }
   }
 
   test("BEGIN..END block followed by another statement") {

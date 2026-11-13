@@ -129,6 +129,39 @@ public class JavaDataFrameSuite {
     df.show(1000);
   }
 
+  @Test
+  public void testBinBy() {
+    spark.conf().set("spark.sql.binByRelationOperator.enabled", "true");
+    Dataset<Row> input = spark.sql(
+      "SELECT TIMESTAMP_NTZ '2024-01-01 00:00:00' AS start, " +
+      "TIMESTAMP_NTZ '2024-01-01 00:10:00' AS end, 100.0D AS value, 20.0F AS value2");
+    Column width = expr("INTERVAL 5 MINUTES");
+    Column origin = expr("TIMESTAMP_NTZ '2024-01-01 00:00:00'");
+    Dataset<Row> result = input.binBy(
+      input.col("start"), input.col("end"), width,
+      new Column[] {input.col("value"), input.col("value2")}, origin,
+      "lower", "upper", "ratio");
+    Assertions.assertArrayEquals(
+      new String[] {"start", "end", "value", "value2", "lower", "upper", "ratio"},
+      result.columns());
+    Assertions.assertEquals(
+      Arrays.asList(RowFactory.create(50.0, 10.0f, 0.5), RowFactory.create(50.0, 10.0f, 0.5)),
+      result.select("value", "value2", "ratio").collectAsList());
+
+    Column[] distributeColumns = {input.col("value")};
+    Dataset<Row> snapshotResult = input.binBy(
+      input.col("start"), input.col("end"), width, distributeColumns);
+    Dataset<Row> aligned = input.binBy(
+      input.col("start"), input.col("end"), width, distributeColumns, origin);
+
+    distributeColumns[0] = input.col("value2");
+
+    Assertions.assertEquals(
+      Arrays.asList(RowFactory.create(50.0, 20.0f), RowFactory.create(50.0, 20.0f)),
+      snapshotResult.select("value", "value2").collectAsList());
+    Assertions.assertEquals(snapshotResult.collectAsList(), aligned.collectAsList());
+  }
+
   public static class Bean implements Serializable {
     private double a = 0.0;
     private Integer[] b = { 0, 1 };

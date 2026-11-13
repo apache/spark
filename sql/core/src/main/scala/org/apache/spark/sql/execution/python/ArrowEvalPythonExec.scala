@@ -28,6 +28,7 @@ import org.apache.spark.sql.errors.QueryExecutionErrors
 import org.apache.spark.sql.execution.SparkPlan
 import org.apache.spark.sql.execution.metric.SQLMetric
 import org.apache.spark.sql.execution.python.EvalPythonExec.ArgumentMetadata
+import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types.{StructType, UserDefinedType}
 import org.apache.spark.sql.types.DataType.equalsIgnoreCompatibleCollation
 import org.apache.spark.sql.vectorized.ColumnarBatch
@@ -82,12 +83,29 @@ private[spark] class BatchIterator[T](iter: Iterator[T], batchSize: Int)
  */
 case class ArrowEvalPythonExec(
     udfs: Seq[PythonUDF],
+    requiredChildOutput: Seq[Attribute],
     resultAttrs: Seq[Attribute],
     child: SparkPlan,
-    evalType: Int) extends EvalPythonExec with PythonSQLMetrics {
+    evalType: Int)(
+    val columnarInputEnabled: Boolean) extends EvalPythonExec with PythonSQLMetrics {
   if (!supportedPythonEvalTypes.contains(evalType)) {
     throw SparkException.internalError(s"Unexpected eval type $evalType")
   }
+
+  override protected def additionalMetrics: Map[String, SQLMetric] = {
+    if (evalType == PythonEvalType.SQL_ARROW_BATCHED_UDF &&
+        !conf.legacyPandasConversionUDF && conf.pythonUDFDetailedTimingEnabled) {
+      createPythonPhaseMetrics()
+    } else {
+      Map.empty
+    }
+  }
+
+  // SQL metrics are fixed with the plan; use that decision if the session setting changes later.
+  private def pythonRunnerConfMap: Map[String, String] =
+    ArrowPythonRunner.getPythonRunnerConfMap(conf).updated(
+      SQLConf.PYTHON_UDF_DETAILED_TIMING_ENABLED.key,
+      pythonMetrics.contains("pythonNumTimingReports").toString)
 
   private[this] val jobArtifactUUID = JobArtifactSet.getCurrentJobArtifactState.map(_.uuid)
   private[this] val sessionUUID = {
@@ -97,26 +115,40 @@ case class ArrowEvalPythonExec(
     }
   }
 
-  // When the child supports columnar output (e.g., Arrow-backed DSv2 connectors),
-  // accept columnar input to avoid the ColumnarToRow -> ArrowWriter round-trip.
-  // The Arrow FieldVectors are extracted directly from ArrowColumnVector and
-  // serialized to IPC, bypassing the row-based ArrowWriter conversion.
-  override def supportsColumnar: Boolean =
-    child.supportsColumnar && conf.arrowPySparkUDFColumnarInputEnabled
-  override def supportsRowBased: Boolean = true
+  // When the child supports columnar output (e.g., Arrow-backed DSv2 connectors)
+  // and columnar input is enabled, accept columnar input: the UDF inputs of a
+  // batch whose columns are ArrowColumnVectors are serialized to IPC directly,
+  // bypassing the ColumnarToRow -> ArrowWriter round-trip. Each input batch is
+  // released once it has been written to Python. Without pass-through columns,
+  // the result batches from Python are the output batches, which a row-based
+  // parent reads through a ColumnarToRowExec, fused into its whole-stage codegen
+  // stage. Otherwise the pass-through columns are copied as rows and joined with
+  // the results, and this node also supports row-based output: a row-based parent
+  // gets the joined rows as they are, with no ColumnarToRowExec in between, and a
+  // columnar parent, i.e. a stacked evaluation, gets them converted back to
+  // columnar batches.
+  // Otherwise it reads rows from its child, even from one that also supports
+  // columnar, such as the scan of the Arrow cache.
+  // Whether columnar input is enabled is fixed when the node is planned, and
+  // carried over to its copies, so that any copy, including one that a rule makes
+  // after the transitions are inserted, reads its child in the format the planner
+  // prepared it for, even if the configuration changes before the plan is executed.
+  override def supportsColumnar: Boolean = columnarInputEnabled && child.supportsColumnar
+
+  override def supportsRowBased: Boolean = !supportsColumnar || requiredChildOutput.nonEmpty
 
   override protected def doExecute(): RDD[InternalRow] = {
-    if (child.supportsColumnar) {
-      // Columnar path: delegate to doExecuteColumnar, flatten to
-      // UnsafeRow. ColumnarBatchRow from rowIterator() is NOT
-      // UnsafeRow, and downstream operators (e.g., outer
-      // EvalPythonExec) may cast to UnsafeRow.
-      doExecuteColumnar().mapPartitionsInternal { batchIter =>
-        val toUnsafe = UnsafeProjection.create(schema)
-        batchIter.flatMap(_.rowIterator().asScala.map(toUnsafe))
+    if (supportsColumnar) {
+      val inputRDD = child.executeColumnar()
+      val rowEvaluatorFactory = columnarEvaluatorFactory.rowOutput
+      if (conf.usePartitionEvaluator) {
+        inputRDD.mapPartitionsWithEvaluator(rowEvaluatorFactory)
+      } else {
+        inputRDD.mapPartitionsWithIndexInternal { (index, iter) =>
+          rowEvaluatorFactory.createEvaluator().eval(index, iter)
+        }
       }
     } else {
-      // Row-based path: unchanged.
       super.doExecute()
     }
   }
@@ -136,13 +168,14 @@ case class ArrowEvalPythonExec(
     new ColumnarArrowEvalPythonEvaluatorFactory(
       child.output,
       udfs,
-      output,
-      output.toStructType,
+      requiredChildOutput,
+      resultAttrs,
       conf.arrowMaxRecordsPerBatch,
+      conf.arrowMaxBytesPerBatch,
       evalType,
       conf.sessionLocalTimeZone,
       conf.arrowUseLargeVarTypes,
-      ArrowPythonRunner.getPythonRunnerConfMap(conf),
+      pythonRunnerConfMap,
       pythonMetrics,
       jobArtifactUUID,
       sessionUUID)
@@ -151,19 +184,27 @@ case class ArrowEvalPythonExec(
     new ArrowEvalPythonEvaluatorFactory(
       child.output,
       udfs,
-      output,
+      requiredChildOutput,
+      resultAttrs,
       conf.arrowMaxRecordsPerBatch,
       evalType,
       conf.sessionLocalTimeZone,
       conf.arrowUseLargeVarTypes,
-      ArrowPythonRunner.getPythonRunnerConfMap(conf),
+      pythonRunnerConfMap,
       pythonMetrics,
       jobArtifactUUID,
       sessionUUID)
   }
 
+  override def withRequiredChildOutput(
+      requiredChildOutput: Seq[Attribute]): ArrowEvalPythonExec =
+    copy(requiredChildOutput = requiredChildOutput)(columnarInputEnabled)
+
   override protected def withNewChildInternal(newChild: SparkPlan): SparkPlan =
-    copy(child = newChild)
+    copy(child = newChild)(columnarInputEnabled)
+
+  override protected def otherCopyArgs: Seq[AnyRef] =
+    Seq(columnarInputEnabled.asInstanceOf[java.lang.Boolean])
 
   private def supportedPythonEvalTypes: Array[Int] =
     Array(
@@ -182,7 +223,8 @@ case class ArrowEvalPythonExec(
 class ArrowEvalPythonEvaluatorFactory(
     childOutput: Seq[Attribute],
     udfs: Seq[PythonUDF],
-    output: Seq[Attribute],
+    passThroughOutput: Seq[Attribute],
+    resultOutput: Seq[Attribute],
     batchSize: Int,
     evalType: Int,
     sessionLocalTimeZone: String,
@@ -191,7 +233,7 @@ class ArrowEvalPythonEvaluatorFactory(
     pythonMetrics: Map[String, SQLMetric],
     jobArtifactUUID: Option[String],
     sessionUUID: Option[String])
-  extends EvalPythonEvaluatorFactory(childOutput, udfs, output) {
+  extends EvalPythonEvaluatorFactory(childOutput, udfs, passThroughOutput, resultOutput) {
 
   override def evaluate(
       funcs: Seq[(ChainedPythonFunctions, Long)],
@@ -200,7 +242,7 @@ class ArrowEvalPythonEvaluatorFactory(
       schema: StructType,
       context: TaskContext): Iterator[InternalRow] = {
 
-    val outputTypes = output.drop(childOutput.length).map(_.dataType.transformRecursively {
+    val outputTypes = resultOutput.map(_.dataType.transformRecursively {
       case udt: UserDefinedType[_] => udt.sqlType
     })
 

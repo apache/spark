@@ -22,8 +22,7 @@ import scala.collection.mutable
 import org.apache.spark.SparkException
 import org.apache.spark.sql.catalyst.analysis.DeduplicateRelations
 import org.apache.spark.sql.catalyst.expressions.{Alias, OuterReference, OuterScopeReference, SubqueryExpression}
-import org.apache.spark.sql.catalyst.plans.Inner
-import org.apache.spark.sql.catalyst.plans.logical.{CTERelationDef, CTERelationRef, Join, JoinHint, LogicalPlan, Project, Subquery, UnionLoop, WithCTE}
+import org.apache.spark.sql.catalyst.plans.logical.{CTERelationDef, CTERelationRef, LogicalPlan, Project, Subquery, UnionLoop, WithCTE}
 import org.apache.spark.sql.catalyst.rules.Rule
 import org.apache.spark.sql.catalyst.trees.TreePattern.{CTE, PLAN_EXPRESSION}
 
@@ -84,9 +83,8 @@ case class InlineCTE(
   }
 
   private def shouldInline(cteDef: CTERelationDef, refCount: Int): Boolean = {
-    // A CTE definition that requests to skip inlining is never inlined, even in `alwaysInline`
-    // mode, so that a producer can guarantee the CTE is materialized rather than duplicated.
-    !cteDef.forceSkipInline && (alwaysInline || (cteDef.materialized match {
+    val kept = InlineCTE.keepsDefinition(cteDef, alwaysInline)
+    !kept && (alwaysInline || (cteDef.materialized match {
       // The user-specified MATERIALIZED / NOT MATERIALIZED option overrides the default decision.
       case Some(materialized) => !materialized
       case None =>
@@ -287,27 +285,7 @@ case class InlineCTE(
             refInfo.cteDef.child
           }
           if (refInfo.shouldInline) {
-            if (ref.outputSet == refInfo.cteDef.outputSet) {
-              cteBody
-            } else {
-              val ctePlan = DeduplicateRelations(
-                Join(
-                  cteBody,
-                  cteBody,
-                  Inner,
-                  None,
-                  JoinHint(None, None)
-                )
-              ).children(1)
-              val projectList = ref.output.zip(ctePlan.output).map { case (tgtAttr, srcAttr) =>
-                if (srcAttr.semanticEquals(tgtAttr)) {
-                  tgtAttr
-                } else {
-                  Alias(srcAttr, tgtAttr.name)(exprId = tgtAttr.exprId)
-                }
-              }
-              Project(projectList, ctePlan)
-            }
+            InlineCTE.inlineReference(ref, refInfo.cteDef, cteBody)
           } else {
             ref
           }
@@ -334,6 +312,43 @@ case class InlineCTE(
         ul.copy(limit = Some(-1))
       case other =>
         other.withNewChildren(plan.children.map(child => setUnlimitedRecursion(child, id)))
+    }
+  }
+}
+
+object InlineCTE {
+  /**
+   * Whether InlineCTE keeps `cteDef` whatever its references. A CTE definition that requests to
+   * skip inlining is never inlined, even in `alwaysInline` mode, so that a producer can guarantee
+   * the CTE is materialized rather than duplicated. A `MATERIALIZED` CTE is not inlined either,
+   * except in `alwaysInline` mode.
+   */
+  private[sql] def keepsDefinition(
+      cteDef: CTERelationDef,
+      alwaysInline: Boolean = false): Boolean =
+    cteDef.forceSkipInline || !alwaysInline && cteDef.materialized.contains(true)
+
+  /**
+   * The plan that replaces `ref` when its CTE definition, whose plan is `cteBody`, is inlined.
+   * When attribute de-duplication gave the reference other attributes than the definition, the
+   * plan is a copy of `cteBody` under a projection to the reference's attributes.
+   */
+  private[sql] def inlineReference(
+      ref: CTERelationRef,
+      cteDef: CTERelationDef,
+      cteBody: LogicalPlan): LogicalPlan = {
+    if (ref.outputSet == cteDef.outputSet) {
+      cteBody
+    } else {
+      val ctePlan = DeduplicateRelations.deduplicateRight(cteBody, cteBody)
+      val projectList = ref.output.zip(ctePlan.output).map { case (tgtAttr, srcAttr) =>
+        if (srcAttr.semanticEquals(tgtAttr)) {
+          tgtAttr
+        } else {
+          Alias(srcAttr, tgtAttr.name)(exprId = tgtAttr.exprId)
+        }
+      }
+      Project(projectList, ctePlan)
     }
   }
 }

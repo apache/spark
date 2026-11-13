@@ -1,0 +1,23 @@
+- text: Setting up Spark Connect
+  url: spark-connect-setup.html
+  subitems:
+    - text: Starting a Spark Connect server
+      url: spark-connect-setup.html#starting-a-spark-connect-server
+    - text: Interactive analysis
+      url: spark-connect-setup.html#interactive-analysis-with-spark-connect
+    - text: Connection strings
+      url: spark-connect-setup.html#connection-strings
+    - text: Persistent local server
+      url: spark-connect-setup.html#faster-local-iteration-with-a-persistent-connect-server
+    - text: Standalone applications
+      url: spark-connect-setup.html#spark-connect-in-standalone-applications
+    - text: Switching between Spark Connect and Spark Classic
+      url: spark-connect-setup.html#switching-between-spark-connect-and-spark-classic
+    - text: Client application authentication
+      url: spark-connect-setup.html#client-application-authentication
+    - text: Routing through a shared ingress
+      url: spark-connect-setup.html#routing-through-a-shared-ingress-or-reverse-proxy
+- text: "Eager vs Lazy: Spark Connect vs Spark Classic"
+  url: spark-connect-gotchas.html
+- text: Extending Spark with Spark Server Libraries
+  url: spark-connect-server-libs.html

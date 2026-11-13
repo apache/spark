@@ -29,6 +29,7 @@ import org.apache.spark.sql.catalyst.catalog.BucketSpec
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.plans.QueryPlan
 import org.apache.spark.sql.catalyst.plans.physical.{HashPartitioning, Partitioning, SinglePartition, UnknownPartitioning}
+import org.apache.spark.sql.catalyst.trees.TreeNodeTag
 import org.apache.spark.sql.catalyst.util.{truncatedString, CaseInsensitiveMap}
 import org.apache.spark.sql.connector.read.streaming.SparkDataStream
 import org.apache.spark.sql.errors.QueryExecutionErrors
@@ -303,6 +304,10 @@ trait FileSourceScanLike extends DataSourceScanExec with SessionStateHelper {
 
   // Filters on non-partition columns.
   def dataFilters: Seq[Expression]
+  // Filters the storage layer evaluates to skip reading the other columns of the rows they reject,
+  // see `FileFormat.buildReaderWithStorageFilters`. Their subqueries are materialized on the
+  // driver while the RDD is built.
+  def storageFilters: Seq[Expression] = Nil
   // Disable bucketed scan based on physical query plan, see rule
   // [[DisableUnnecessaryBucketedScan]] for details.
   def disableBucketedScan: Boolean
@@ -515,12 +520,10 @@ trait FileSourceScanLike extends DataSourceScanExec with SessionStateHelper {
 
   private def translateToV1Filters(
       dataFilters: Seq[Expression],
-      scalarSubqueryToLiteral: execution.ScalarSubquery => Literal): Seq[Filter] = {
-    val scalarSubqueryReplaced = dataFilters.map(_.transform {
-      // Replace scalar subquery to literal so that `DataSourceStrategy.translateFilter` can
-      // support translating it.
-      case scalarSubquery: execution.ScalarSubquery => scalarSubqueryToLiteral(scalarSubquery)
-    })
+      replaceScalarSubqueries: Expression => Expression): Seq[Filter] = {
+    // Replace scalar subquery to literal so that `DataSourceStrategy.translateFilter` can
+    // support translating it.
+    val scalarSubqueryReplaced = dataFilters.map(replaceScalarSubqueries)
 
     val supportNestedPredicatePushdown = DataSourceUtils.supportNestedPredicatePushdown(relation)
     // `dataFilters` should not include any constant metadata col filters
@@ -535,7 +538,8 @@ trait FileSourceScanLike extends DataSourceScanExec with SessionStateHelper {
 
   // This field may execute subquery expressions and should not be accessed during planning.
   @transient
-  protected lazy val pushedDownFilters: Seq[Filter] = translateToV1Filters(dataFilters, _.toLiteral)
+  protected lazy val pushedDownFilters: Seq[Filter] =
+    translateToV1Filters(dataFilters, execution.ScalarSubquery.replaceWithLiterals)
 
   override lazy val metadata: Map[String, String] = {
     def seqToString(seq: Seq[Any]) = seq.mkString("[", ", ", "]")
@@ -544,9 +548,21 @@ trait FileSourceScanLike extends DataSourceScanExec with SessionStateHelper {
       location.getClass.getSimpleName +
         Utils.buildLocationMetadata(location.rootPaths, maxMetadataValueLength)
     // `metadata` is accessed during planning and the scalar subquery is not executed yet. Here
-    // we get the pretty string of the scalar subquery, for display purpose only.
+    // we get the pretty string of the scalar subquery, for display purpose only. A filter with an
+    // `In` that has a scalar subquery in its list is not displayed, since the values of an `In`
+    // are converted to the type of its column, which the string does not have. A field read out
+    // of a subquery that `MergeSubplans` merged with others gets the string as a whole, since the
+    // string has no field to read.
     val pushedFiltersForDisplay = translateToV1Filters(
-      dataFilters, s => Literal("ScalarSubquery#" + s.exprId.id))
+      dataFilters.filterNot(_.exists {
+        case in: In => in.list.exists(_.exists(_.isInstanceOf[execution.ScalarSubquery]))
+        case _ => false
+      }),
+      _.transform {
+        case GetStructField(s: execution.ScalarSubquery, _, _) =>
+          Literal("ScalarSubquery#" + s.exprId.id)
+        case s: execution.ScalarSubquery => Literal("ScalarSubquery#" + s.exprId.id)
+      })
     val metadata =
       Map(
         "Format" -> relation.fileFormat.toString,
@@ -555,7 +571,9 @@ trait FileSourceScanLike extends DataSourceScanExec with SessionStateHelper {
         "PartitionFilters" -> seqToString(partitionFilters),
         "PushedFilters" -> seqToString(pushedFiltersForDisplay),
         "DataFilters" -> seqToString(dataFilters),
-        "Location" -> locationDesc)
+        "Location" -> locationDesc) ++
+      // Only when there are some, since `simpleString` would render an empty entry too.
+      Option.when(storageFilters.nonEmpty)("StorageFilters" -> seqToString(storageFilters))
 
     relation.bucketSpec.map { spec =>
       val bucketedKey = "Bucketed"
@@ -642,7 +660,14 @@ trait FileSourceScanLike extends DataSourceScanExec with SessionStateHelper {
     } else {
       None
     }
-  } ++ driverMetrics
+  } ++ storageFilterMetrics ++ driverMetrics
+
+  // The format creates these, and this node carries them into `metrics` for the SQL UI.
+  protected lazy val storageFilterMetrics: Map[String, SQLMetric] = if (storageFilters.nonEmpty) {
+    relation.fileFormat.storageFilterMetrics(sparkContext)
+  } else {
+    Map.empty
+  }
 
   /**
    * A file listing that represents a file list as an array of [[PartitionDirectory]]. This extends
@@ -715,6 +740,9 @@ trait FileSourceScanLike extends DataSourceScanExec with SessionStateHelper {
  * @param tableIdentifier Identifier for the table in the metastore.
  * @param disableBucketedScan Disable bucketed scan based on physical query plan, see rule
  *                            [[DisableUnnecessaryBucketedScan]] for details.
+ * @param storageFilters Filters evaluated by the storage layer (e.g. parquet reader) to drive
+ *                       value-column IO pruning based on key-column evaluation. May contain
+ *                       subqueries, which `preparedStorageFilters` materializes on the driver.
  */
 case class FileSourceScanExec(
     @transient override val relation: HadoopFsRelation,
@@ -727,19 +755,28 @@ case class FileSourceScanExec(
     override val dataFilters: Seq[Expression],
     override val tableIdentifier: Option[TableIdentifier],
     override val disableBucketedScan: Boolean = false,
-    override val markedForSingleTaskExecution: Boolean = false)
+    override val markedForSingleTaskExecution: Boolean = false,
+    override val storageFilters: Seq[Expression] = Nil)
   extends FileSourceScanLike {
 
   // Note that some vals referring the file-based relation are lazy intentionally
   // so that this plan can be canonicalized on executor side too. See SPARK-23731.
-  override lazy val supportsColumnar: Boolean = {
-    val conf = getSqlConf(relation.sparkSession)
-    // Only output columnar if there is WSCG to read it.
-    val requiredWholeStageCodegenSettings =
-      conf.wholeStageEnabled && !WholeStageCodegenExec.isTooManyFields(conf, schema)
-    requiredWholeStageCodegenSettings &&
-      relation.fileFormat.supportBatch(relation.sparkSession, schema)
-  }
+  //
+  // The decision is also kept in a tag, which a copy of this node takes over. The transitions
+  // around this node are planned against it, and a copy made after them, such as the one
+  // `ReuseExchangeAndSubquery` makes when it rewrites a dynamic pruning filter, would otherwise
+  // decide again from the conf at the time it is first asked.
+  override lazy val supportsColumnar: Boolean =
+    getTagValue(FileSourceScanExec.SUPPORTS_COLUMNAR).getOrElse {
+      val conf = getSqlConf(relation.sparkSession)
+      // Only output columnar if there is WSCG to read it.
+      val requiredWholeStageCodegenSettings =
+        conf.wholeStageEnabled && !WholeStageCodegenExec.isTooManyFields(conf, schema)
+      val decision = requiredWholeStageCodegenSettings &&
+        relation.fileFormat.supportBatch(relation.sparkSession, schema)
+      setTagValue(FileSourceScanExec.SUPPORTS_COLUMNAR, decision)
+      decision
+    }
 
   private lazy val needsUnsafeRowConversion: Boolean = {
     if (relation.fileFormat.isInstanceOf[ParquetSource]) {
@@ -752,15 +789,34 @@ case class FileSourceScanExec(
   lazy val inputRDD: RDD[InternalRow] = {
     val options = relation.options +
       (FileFormat.OPTION_RETURNING_BATCH -> supportsColumnar.toString)
-    val readFile: (PartitionedFile) => Iterator[InternalRow] =
-      relation.fileFormat.buildReaderWithPartitionValues(
+    // The storage-filter entry point is only asked when there is something to push, so a format
+    // that customizes `buildReaderWithPartitionValues` keeps it on every other query. Each builder
+    // gets a conf of its own, so a declining builder's setup cannot reach the fallback.
+    val storageFilterReader = if (preparedStorageFilters.isEmpty) {
+      None
+    } else {
+      relation.fileFormat.buildReaderWithStorageFilters(
         sparkSession = relation.sparkSession,
         dataSchema = relation.dataSchema,
         partitionSchema = relation.partitionSchema,
         requiredSchema = requiredSchema,
         filters = pushedDownFilters,
+        storageFilters = preparedStorageFilters,
         options = options,
-        hadoopConf = getHadoopConf(relation.sparkSession, relation.options))
+        hadoopConf = getHadoopConf(relation.sparkSession, relation.options),
+        storageFilterMetrics = storageFilterMetrics)
+    }
+    val readFile: (PartitionedFile) => Iterator[InternalRow] =
+      storageFilterReader.getOrElse {
+        relation.fileFormat.buildReaderWithPartitionValues(
+          sparkSession = relation.sparkSession,
+          dataSchema = relation.dataSchema,
+          partitionSchema = relation.partitionSchema,
+          requiredSchema = requiredSchema,
+          filters = pushedDownFilters,
+          options = options,
+          hadoopConf = getHadoopConf(relation.sparkSession, relation.options))
+      }
 
     val readRDD = if (bucketedScan) {
       createBucketedReadRDD(relation.bucketSpec.get, readFile, dynamicallySelectedPartitions)
@@ -769,6 +825,21 @@ case class FileSourceScanExec(
     }
     sendDriverMetrics()
     readRDD
+  }
+
+  // The storage filters with their scalar subqueries materialized, bound to `requiredSchema`.
+  // `output` is `readDataColumns ++ generatedMetadataColumns ++ storageFilterCheckedColumn ++
+  // partitionColumns ++ constantMetadataColumns`, and `requiredSchema` is the first three groups,
+  // so its fields are the first `requiredSchema.length` attributes of `output`. Subqueries must
+  // be prepared before this is forced, as for `pushedDownFilters`. The conf is not checked again
+  // here, since it decides at planning time whether a scan gets storage filters at all.
+  @transient
+  protected lazy val preparedStorageFilters: Seq[Expression] = {
+    val requestedDataAttrs = output.take(requiredSchema.length)
+    storageFilters.map { expr =>
+      BindReferences.bindReference(
+        StorageFilterPlanning.withSubqueryResults(expr), requestedDataAttrs)
+    }
   }
 
   override def inputRDDs(): Seq[RDD[InternalRow]] = {
@@ -971,8 +1042,14 @@ case class FileSourceScanExec(
       QueryPlan.normalizePredicates(dataFilters, output),
       None,
       disableBucketedScan,
-      markedForSingleTaskExecution)
+      markedForSingleTaskExecution,
+      QueryPlan.normalizePredicates(storageFilters, output))
   }
 
   override def getStream: Option[SparkDataStream] = stream
+}
+
+object FileSourceScanExec {
+  /** The columnar decision of a [[FileSourceScanExec]]. See `supportsColumnar`. */
+  private val SUPPORTS_COLUMNAR = TreeNodeTag[Boolean]("fileSourceScanSupportsColumnar")
 }

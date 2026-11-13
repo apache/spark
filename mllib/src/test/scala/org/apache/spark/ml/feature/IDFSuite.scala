@@ -21,8 +21,6 @@ import org.apache.spark.ml.linalg.{DenseVector, SparseVector, Vector, Vectors}
 import org.apache.spark.ml.param.ParamsSuite
 import org.apache.spark.ml.util.{DefaultReadWriteTest, MLTest, MLTestingUtils}
 import org.apache.spark.ml.util.TestingUtils._
-import org.apache.spark.mllib.feature.{IDFModel => OldIDFModel}
-import org.apache.spark.mllib.linalg.VectorImplicits._
 import org.apache.spark.sql.Row
 import org.apache.spark.util.ArrayImplicits._
 
@@ -45,7 +43,7 @@ class IDFSuite extends MLTest with DefaultReadWriteTest {
 
   test("params") {
     ParamsSuite.checkParams(new IDF)
-    val model = new IDFModel("idf", new OldIDFModel(Vectors.dense(1.0), Array(1L), 1))
+    val model = new IDFModel("idf", Vectors.dense(1.0), Array(1L), 1)
     ParamsSuite.checkParams(model)
   }
 
@@ -129,8 +127,8 @@ class IDFSuite extends MLTest with DefaultReadWriteTest {
   }
 
   test("IDFModel read/write") {
-    val instance = new IDFModel("myIDFModel",
-      new OldIDFModel(Vectors.dense(1.0, 2.0), Array(1, 2), 2))
+    val instance = new IDFModel(
+      "myIDFModel", Vectors.dense(1.0, 2.0), Array(1, 2), 2)
       .setInputCol("myInputCol")
       .setOutputCol("myOutputCol")
 
@@ -140,5 +138,19 @@ class IDFSuite extends MLTest with DefaultReadWriteTest {
       assert(newInstance.docFreq === instance.docFreq)
       assert(newInstance.numDocs === instance.numDocs)
     }
+  }
+
+  test("Load IDFModel saved by Spark 4.0.0") {
+    val modelPath = testFile("ml-models/idf-4.0.0")
+
+    val loadedModel = IDFModel.load(modelPath)
+    assert(loadedModel.idf === Vectors.dense(
+      0.0, 0.6931471805599453, 0.28768207245178085, 0.28768207245178085))
+    assert(loadedModel.docFreq === Array(0L, 1L, 2L, 2L))
+    assert(loadedModel.numDocs === 3L)
+
+    val metadata = spark.read.json(s"$modelPath/metadata")
+    val sparkVersionStr = metadata.select("sparkVersion").first().getString(0)
+    assert(sparkVersionStr === "4.0.0")
   }
 }

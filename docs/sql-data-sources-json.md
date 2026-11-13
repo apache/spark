@@ -238,6 +238,12 @@ Data source options of JSON can be set via:
     <td>read</td>
   </tr>
   <tr>
+    <td><code>enableStreamingTopLevelArray</code></td>
+    <td>(value of <code>spark.sql.json.enableStreamingTopLevelArray</code> configuration)</td>
+    <td>When <code>multiLine</code> is enabled and a file holds a top-level JSON array, read the array's elements one at a time instead of materializing the whole array before returning rows. It applies to reads into a struct schema, and has no effect on reads using <code>singleVariantColumn</code> or <code>explodeEmbeddedArray</code>. While streaming, <code>mode</code> applies to an individual element rather than the whole document: <code>PERMISSIVE</code> fills the field configured by <code>columnNameOfCorruptRecord</code> for the malformed element alone, leaving it null on the valid rows of the same document, and <code>DROPMALFORMED</code> drops that element rather than the document. An element whose failure leaves the parser at an unknown position, such as a nested value of the wrong shape, still ends the document, as does a failure outside any element, such as a syntax error between two elements or a missing closing bracket.</td>
+    <td>read</td>
+  </tr>
+  <tr>
     <td><code>allowUnquotedControlChars</code></td>
     <td><code>false</code></td>
     <td>Allows JSON Strings to contain unquoted control characters (ASCII characters with value less than 32, including tab and line feed characters) or not.</td>
@@ -302,6 +308,12 @@ Data source options of JSON can be set via:
     <td>(none)</td>
     <td>Compression codec to use when saving to file. This can be one of the known case-insensitive shorten names (none, bzip2, gzip, lz4, snappy and deflate). JSON built-in functions ignore this option.</td>
     <td>write</td>
+  </tr>
+  <tr>
+    <td><code>decompression</code></td>
+    <td>(none)</td>
+    <td>Compression codec used to decompress the input files, instead of inferring it from each file name extension. This can be one of the known case-insensitive short names (<code>none</code>, <code>uncompressed</code>, <code>bzip2</code>, <code>deflate</code>, <code>gzip</code>, <code>lz4</code>, <code>snappy</code>, <code>zstd</code>, <code>zstandard</code> and <code>zst</code>) or a fully qualified Hadoop <code>CompressionCodec</code> class name. <code>none</code> and <code>uncompressed</code> read the files as-is, even when the file name carries a compression extension. The codec applies to every file read. When archive reading is enabled (<code>spark.sql.files.archive.reader.enabled</code>), setting it when the input includes an archive file (<code>.tar</code>, <code>.tar.gz</code>, <code>.tgz</code>, <code>.zip</code> or <code>.7z</code>) is not supported and fails the query. Unlike the write option <code>compression</code>, which is ignored on read, it does not affect writes. JSON built-in functions ignore this option.</td>
+    <td>read</td>
   </tr>
   <tr>
     <td><code>ignoreNullFields</code></td>

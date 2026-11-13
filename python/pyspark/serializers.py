@@ -62,6 +62,7 @@ which contains two batches of two objects:
 
 import codecs
 import collections
+import io
 import itertools
 import marshal
 import os
@@ -87,11 +88,12 @@ __all__ = [
 class SpecialLengths:
     END_OF_DATA_SECTION = -1
     PYTHON_EXCEPTION_THROWN = -2
-    TIMING_DATA = -3
+    METRICS_DATA = -3
     END_OF_STREAM = -4
     NULL = -5
     START_ARROW_STREAM = -6
     START_OF_INIT_MESSAGE = -8
+    START_OF_INIT_RESPONSE = -9
 
 
 class Serializer:
@@ -159,7 +161,7 @@ class FramedSerializer(Serializer):
         serialized = self.dumps(obj)
         if serialized is None:
             raise ValueError("serialized value should not be None")
-        if len(serialized) > (1 << 31):
+        if len(serialized) >= (1 << 31):
             raise ValueError("can not serialize object larger than 2G")
         write_int(len(serialized), stream)
         stream.write(serialized)
@@ -364,7 +366,6 @@ if os.environ.get("PYSPARK_ENABLE_NAMEDTUPLE_PATCH") == "1":
             return (_restore, (name, fields, tuple(self)))
 
         cls.__reduce__ = __reduce__
-        cls._is_namedtuple_ = True
         return cls
 
     def _hijack_namedtuple():
@@ -414,6 +415,17 @@ if os.environ.get("PYSPARK_ENABLE_NAMEDTUPLE_PATCH") == "1":
     _hijack_namedtuple()
 
 
+class _RestrictedUnpickler(pickle.Unpickler):
+    def __init__(self, file, allowed_names, *, encoding="bytes"):
+        super().__init__(file, encoding=encoding)
+        self.allowed_names = allowed_names
+
+    def find_class(self, module, name):
+        if (module, name) not in self.allowed_names:
+            raise pickle.UnpicklingError(f"Unpickling {module}.{name} is not allowed")
+        return super().find_class(module, name)
+
+
 class PickleSerializer(FramedSerializer):
     """
     Serializes objects using Python's pickle serializer:
@@ -432,6 +444,18 @@ class PickleSerializer(FramedSerializer):
 
 
 class CloudPickleSerializer(FramedSerializer):
+    # Class-level default for `allowed_names`. Instances of this serializer are pickled and
+    # shipped across the driver and workers, which may run different Spark versions. Pickle
+    # restores an instance via __new__ + __dict__ without calling __init__, so an instance
+    # pickled by a version that predates `allowed_names` would otherwise lack the attribute
+    # entirely. Declaring the default here keeps `self.allowed_names` resolvable in that
+    # cross-version case; only a version-matched, explicitly restricted instance sets it.
+    allowed_names = None
+
+    def __init__(self, allowed_names=None):
+        super().__init__()
+        self.allowed_names = allowed_names
+
     def dumps(self, obj):
         from pyspark.util import print_exec
 
@@ -449,6 +473,9 @@ class CloudPickleSerializer(FramedSerializer):
             raise pickle.PicklingError(msg)
 
     def loads(self, obj, encoding="bytes"):
+        if self.allowed_names is not None:
+            unpickler = _RestrictedUnpickler(io.BytesIO(obj), self.allowed_names, encoding=encoding)
+            return unpickler.load()
         return cloudpickle.loads(obj, encoding=encoding)
 
 

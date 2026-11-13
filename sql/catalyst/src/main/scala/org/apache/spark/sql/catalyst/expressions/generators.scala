@@ -105,11 +105,10 @@ case class UserDefinedGenerator(
     children: Seq[Expression])
   extends Generator with CodegenFallback {
 
-  @transient private[this] var inputRow: InterpretedProjection = _
   @transient private[this] var convertToScala: (InternalRow) => Row = _
+  @transient private lazy val inputExpressions = children.toArray
 
   private def initializeConverters(): Unit = {
-    inputRow = new InterpretedProjection(children)
     convertToScala = {
       val inputSchema = StructType(children.map { e =>
         StructField(e.simpleString(SQLConf.get.maxToStringFields), e.dataType, nullable = true)
@@ -119,11 +118,22 @@ case class UserDefinedGenerator(
   }
 
   override def eval(input: InternalRow): IterableOnce[InternalRow] = {
-    if (inputRow == null) {
+    if (convertToScala == null) {
       initializeConverters()
     }
+    // GenerateExec initializes these children for the partition. A projection would fresh-copy
+    // stateful expressions without initializing the copies. Fill the final array directly to
+    // avoid creating an intermediate collection for each row.
+    val expressions = inputExpressions
+    val outputArray = new Array[Any](expressions.length)
+    var i = 0
+    while (i < expressions.length) {
+      outputArray(i) = expressions(i).eval(input)
+      i += 1
+    }
+    val inputRow = new GenericInternalRow(outputArray)
     // Convert the objects into Scala Type before calling function, we need schema to support UDT
-    function(convertToScala(inputRow(input)))
+    function(convertToScala(inputRow))
   }
 
   override def toString: String = s"UserDefinedGenerator(${children.mkString(",")})"

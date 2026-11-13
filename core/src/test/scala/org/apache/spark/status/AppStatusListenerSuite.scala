@@ -1875,6 +1875,7 @@ abstract class AppStatusListenerSuite extends SparkFunSuite with BeforeAndAfter 
       val memoryMetrics = d.info.memoryMetrics.get
       assert(memoryMetrics.usedOffHeapStorageMemory == 0)
       assert(memoryMetrics.usedOnHeapStorageMemory == 0)
+      assert(memoryMetrics.totalOffHeapStorageMemory == 0)
     }
   }
 
@@ -1977,6 +1978,45 @@ abstract class AppStatusListenerSuite extends SparkFunSuite with BeforeAndAfter 
     listener.onExecutorRemoved(SparkListenerExecutorRemoved(time, "2", "Test"))
 
     assert(listener.deadExecutors.size === 0)
+  }
+
+  test("SPARK-59819: Resubmitted should not update speculative active tasks and task duration") {
+    val listener = new AppStatusListener(store, conf, true)
+    val appStore = new AppStatusStore(store)
+
+    listener.onExecutorAdded(createExecutorAddedEvent(1))
+    listener.onExecutorAdded(createExecutorAddedEvent(2))
+    val stage = new StageInfo(1, 0, "stage", 4, Nil, Nil, "details",
+      resourceProfileId = ResourceProfile.DEFAULT_RESOURCE_PROFILE_ID)
+    listener.onJobStart(SparkListenerJobStart(1, time, Seq(stage), null))
+
+    time += 1
+    stage.submissionTime = Some(time)
+    listener.onStageSubmitted(SparkListenerStageSubmitted(stage, new Properties()))
+
+    val tasks = createTasks(2, Array("1", "2"))
+    tasks.foreach { task =>
+      listener.onTaskStart(SparkListenerTaskStart(stage.stageId, stage.attemptNumber(), task))
+    }
+    val speculativeTask = tasks(1)
+    assert(speculativeTask.speculative)
+
+    time += 1
+    speculativeTask.markFinished(TaskState.FINISHED, time)
+    listener.onTaskEnd(SparkListenerTaskEnd(stage.stageId, stage.attemptNumber(), "taskType",
+      Success, speculativeTask, new ExecutorMetrics, null))
+
+    // executor lost, success speculative task will be resubmitted with the same TaskInfo
+    time += 1
+    listener.onTaskEnd(SparkListenerTaskEnd(stage.stageId, stage.attemptNumber(), "taskType",
+      Resubmitted, speculativeTask, new ExecutorMetrics, null))
+
+    val execId = speculativeTask.executorId
+    assert(appStore.speculationSummary(stage.stageId, stage.attemptNumber())
+      .map(_.numActiveTasks) === Some(0))
+    assert(appStore.executorSummary(stage.stageId, stage.attemptNumber())(execId).taskTime ===
+      speculativeTask.duration)
+    assert(appStore.executorSummary(execId).totalDuration === speculativeTask.duration)
   }
 
   test("SPARK-41683: Should correctly calculate numActiveStages if some stages are not submitted") {

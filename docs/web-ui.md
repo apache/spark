@@ -88,6 +88,21 @@ drain cannot complete. The control only appears when `spark.ui.holdEnabled` is t
 cluster manager can hold executors (Standalone, YARN, and Kubernetes with the `direct` pods
 allocator); see [Configuration](configuration.html#spark-ui).
 
+Scripts can hold and resume the application through the same `/jobs/hold/` and `/jobs/resume/`
+endpoints the buttons submit to. Like the buttons, a request must be a POST (GET is accepted as
+well only when `spark.ui.actionsViaGetEnabled` is on) carrying the random per-UI `csrfToken`,
+the value of the hidden `csrfToken` field in the jobs page, which does not change for the
+lifetime of the UI. A request without a valid token is rejected with 403, and one without the
+trailing slash is only redirected, without taking effect. For example:
+
+```bash
+curl -X POST -d "csrfToken=<csrf-token>" http://<driver-host>:4040/jobs/hold/
+curl http://<driver-host>:4040/api/v1/applications/<app-id>/holdstatus
+```
+
+If the web UI requires authentication, reading the token and sending the request both need
+the same credentials.
+
 <p style="text-align: center;">
   <img src="img/AllJobsPage.png" title="All Jobs page" alt="All Jobs page" width="100%"/>
 </p>
@@ -364,7 +379,8 @@ Here is the list of SQL metrics:
 <tr><td> <code>sort time</code> </td><td> the time spent on sorting </td><td> Sort </td></tr>
 <tr><td> <code>peak memory</code> </td><td> the peak memory usage in the operator </td><td> Sort, HashAggregate </td></tr>
 <tr><td> <code>spill size</code> </td><td> number of bytes spilled to disk from memory in the operator </td><td> Sort, HashAggregate </td></tr>
-<tr><td> <code>time in aggregation build</code> </td><td> the time spent on aggregation </td><td> HashAggregate, ObjectHashAggregate </td></tr>
+<tr><td> <code>time in aggregation build</code> </td><td> the time spent on aggregation. For a HashAggregate that passes rows through (see <a href="sql-performance-tuning.html#adaptive-partial-aggregation">adaptive partial aggregation</a>), it excludes the passed-through rows </td><td> HashAggregate, ObjectHashAggregate </td></tr>
+<tr><td> <code>number of pass-through output rows</code> </td><td> the number of rows that <a href="sql-performance-tuning.html#adaptive-partial-aggregation">adaptive partial aggregation</a> passed through to the final aggregation without aggregating them </td><td> HashAggregate </td></tr>
 <tr><td> <code>avg hash probe bucket list iters</code> </td><td> the average bucket list iterations per lookup during aggregation </td><td> HashAggregate </td></tr>
 <tr><td> <code>data size of build side</code> </td><td> the size of built hash map </td><td> ShuffledHashJoin </td></tr>
 <tr><td> <code>time to build hash map</code> </td><td> the time spent on building hash map </td><td> ShuffledHashJoin </td></tr>

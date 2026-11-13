@@ -35,7 +35,9 @@ import org.apache.spark.sql.catalyst.expressions.codegen._
 import org.apache.spark.sql.catalyst.optimizer.CollapseProject
 import org.apache.spark.sql.catalyst.plans.logical.Sample
 import org.apache.spark.sql.catalyst.plans.physical._
-import org.apache.spark.sql.execution.joins.{ShuffledHashJoinExec, SortMergeJoinExec}
+import org.apache.spark.sql.catalyst.trees.TreeNodeTag
+import org.apache.spark.sql.execution.joins.{ShuffledHashJoinExec, SortMergeAsOfJoinExec,
+  SortMergeJoinExec}
 import org.apache.spark.sql.execution.metric.{SQLMetric, SQLMetrics}
 import org.apache.spark.sql.internal.{SQLConf, StaticSQLConf}
 import org.apache.spark.sql.types.{LongType, StructType}
@@ -136,62 +138,253 @@ trait GeneratePredicateHelper extends PredicateHelper {
       condition: Expression,
       inputAttrs: Seq[Attribute],
       inputExprCode: Seq[ExprCode]): String = {
-    val (notNullPreds, otherPreds) = splitConjunctivePredicates(condition).partition {
-      case IsNotNull(a) => isNullIntolerant(a) && a.references.subsetOf(AttributeSet(inputAttrs))
-      case _ => false
-    }
+    val (notNullPreds, otherPreds, precedingNotNulls) =
+      splitNotNullPreds(condition, AttributeSet(inputAttrs))
     val nonNullAttrExprIds = notNullPreds.flatMap(_.references).distinct.map(_.exprId)
     val outputAttrs = outputWithNullability(inputAttrs, nonNullAttrExprIds)
     generatePredicateCode(
-      ctx, inputAttrs, inputExprCode, outputAttrs, notNullPreds, otherPreds,
+      ctx, inputAttrs, inputExprCode, notNullPreds, otherPreds,
+      otherPreds.map(BindReferences.bindReference(_, outputAttrs)), precedingNotNulls,
       nonNullAttrExprIds)
   }
 
+  /**
+   * Splits `condition` into the `IsNotNull` checks on null-intolerant expressions over
+   * `inputAttrs`, the other conjuncts, and for each of the other conjuncts the number of the
+   * checks that precede it in `condition`. The conjuncts keep their order within each group, so
+   * the checks before the k-th other conjunct are the first `precedingNotNulls(k)` checks.
+   */
+  protected def splitNotNullPreds(
+      condition: Expression,
+      inputAttrs: AttributeSet): (Seq[Expression], Seq[Expression], Seq[Int]) = {
+    val notNullPreds = mutable.ArrayBuffer.empty[Expression]
+    val otherPreds = mutable.ArrayBuffer.empty[Expression]
+    val precedingNotNulls = mutable.ArrayBuffer.empty[Int]
+    splitConjunctivePredicates(condition).foreach {
+      case p @ IsNotNull(a) if isNullIntolerant(a) && a.references.subsetOf(inputAttrs) =>
+        notNullPreds += p
+      case p =>
+        otherPreds += p
+        precedingNotNulls += notNullPreds.length
+    }
+    (notNullPreds.toSeq, otherPreds.toSeq, precedingNotNulls.toSeq)
+  }
+
+  /**
+   * Whether evaluating `e` on a row can be observed other than through its value: it can raise
+   * an error, is nondeterministic or may have side effects, such as a UDF. Such an expression
+   * has to be evaluated on the rows, and in the order, that `And.eval` evaluates it on.
+   */
+  protected def mayRaise(e: Expression): Boolean = !ExprUtils.canEvaluateUnconditionally(e)
+
+  /**
+   * Returns a fresh name for the flag that records a conjunct evaluated to NULL, or None if the
+   * row is dropped at the first NULL conjunct (the legacy behavior), if none of `otherPreds`,
+   * bound with the nullability they are generated with in `boundOtherPreds`, can be NULL, or if
+   * neither a conjunct after the first one that can be NULL nor one of the `notNullPreds` checks
+   * `mayRaise`: the evaluation after a NULL conjunct is then not observable, and the generated
+   * code is the same as without the flag.
+   *
+   * A row is kept only when the whole condition is TRUE, so both FALSE and NULL drop it. Only
+   * a FALSE conjunct decides the result of the AND on its own, though: after a NULL one, the
+   * remaining conjuncts must still be evaluated, as in `And.eval`, so that an error they raise
+   * on the row is raised (SPARK-60315). The flag drops the row once all of them are evaluated.
+   */
+  protected def nullConjunctFlag(
+      ctx: CodegenContext,
+      otherPreds: Seq[Expression],
+      boundOtherPreds: Seq[Expression],
+      notNullPreds: Seq[Expression]): Option[String] = {
+    val firstNullable = boundOtherPreds.indexWhere(_.nullable)
+    if (conf.legacyFilterShortCircuitOnNullConjunct || firstNullable == -1 ||
+        !(otherPreds.drop(firstNullable + 1).exists(mayRaise) || notNullPreds.exists(mayRaise))) {
+      None
+    } else {
+      Some(ctx.freshName("nullConjunct"))
+    }
+  }
+
+  /**
+   * Generates the check that drops the row when the conjunct evaluated into `ev` is FALSE, or
+   * when it is NULL and `nullFlag` is None. With `nullFlag`, a NULL conjunct sets the flag.
+   */
+  protected def conjunctCheck(ev: ExprCode, nullable: Boolean, nullFlag: Option[String]): String = {
+    (nullable, nullFlag) match {
+      case (false, _) => s"if (!${ev.value}) continue;"
+      case (true, None) => s"if (${ev.isNull} || !${ev.value}) continue;"
+      case (true, Some(flag)) =>
+        s"if (${ev.isNull}) { $flag = true; } else if (!${ev.value}) continue;"
+    }
+  }
+
+  /** Wraps the checks of all conjuncts in `code` with the declaration and test of `nullFlag`. */
+  protected def withNullConjunctFlag(code: String, nullFlag: Option[String]): String = {
+    nullFlag match {
+      case Some(flag) =>
+        s"""
+           |boolean $flag = false;
+           |$code
+           |if ($flag) continue;
+         """.stripMargin
+      case None => code
+    }
+  }
+
+  /**
+   * Returns the checks of `notNullPreds` that precede the k-th other conjunct `conjunct` in the
+   * condition and are not generated yet, and marks them generated, when `afterNullable` is set
+   * and the conjunct or one of these checks `mayRaise`, or Nil.
+   *
+   * With the NULL-conjunct flag, a NULL conjunct no longer drops the row, so the conjuncts after
+   * it are evaluated in the order of the condition, as `And.eval` does: a FALSE IsNotNull check
+   * drops the row before an error a later conjunct raises on it (SPARK-60315). `afterNullable`
+   * is set once a conjunct that can be NULL has been generated. The conjuncts before it are
+   * never reached after a NULL conjunct, so the checks before them keep the lazy placement. So
+   * do the checks before a conjunct when neither it nor one of them can raise: their order is
+   * not observable, and the checks are still generated before the next conjunct that can raise.
+   *
+   * The exception to the order is a check on a column, or on an expression over the column, that
+   * a later conjunct references: the check on the column is generated before the first such
+   * conjunct even when it is written after it, since the conjunct is bound with the column
+   * non-nullable, and so before the conjuncts between that one and its own position. The check
+   * is never NULL, so it only drops a row that `And.eval` drops too, unless one of these
+   * conjuncts raises an error on the row first. Also, the first conjunct that can be NULL keeps
+   * the checks on the expressions it contains before it (SPARK-51356).
+   */
+  protected def precedingNotNullChecks(
+      notNullPreds: Seq[Expression],
+      precedingNotNulls: Seq[Int],
+      k: Int,
+      conjunct: Expression,
+      afterNullable: Boolean,
+      generated: Array[Boolean]): Seq[Expression] = {
+    if (afterNullable) {
+      val pending = notNullPreds.take(precedingNotNulls(k)).zipWithIndex.filterNot {
+        case (_, idx) => generated(idx)
+      }
+      if (pending.nonEmpty && (mayRaise(conjunct) || pending.exists(p => mayRaise(p._1)))) {
+        pending.map { case (p, idx) =>
+          generated(idx) = true
+          p
+        }
+      } else {
+        Nil
+      }
+    } else {
+      Nil
+    }
+  }
+
+  /**
+   * Generates the code that jumps out of the enclosing loop body, with `continue`, unless every
+   * conjunct of a condition, split by `splitNotNullPreds`, is TRUE on the row. This is the only
+   * place that decides the order in which the conjuncts and the IsNotNull checks are evaluated.
+   *
+   * The caller binds `otherPreds` against the output with the checked columns, those of
+   * `nonNullAttrExprIds`, tightened to non-nullable, in `boundOtherPreds`. `subExprStates` holds
+   * the states of the common subexpressions to eliminate from `boundOtherPreds`, if any. The
+   * caller must have evaluated the input variables they read before this code.
+   *
+   * The conjuncts are generated one by one, loading a column only when it is needed, so that a
+   * FALSE conjunct skips the rest. This is very perf sensitive. The invariants:
+   *  1. Before a conjunct, the check on each column it references is generated, as the conjunct
+   *     is bound with the column non-nullable. A column that only a check on an expression over
+   *     it covers gets a synthetic check instead, so that the expression, which may be expensive
+   *     or raise an error, is not evaluated on a row that an earlier conjunct drops.
+   *  2. A check on an expression that a conjunct contains is generated before the conjunct
+   *     (SPARK-51356).
+   *  3. With the NULL-conjunct flag, once a conjunct that can be NULL is generated, the checks
+   *     are evaluated in the order of the condition, as `And.eval` does (SPARK-60315): the ones
+   *     written before a conjunct go before it, see `precedingNotNullChecks`, and (2) does not
+   *     move a check written after it.
+   *  4. A common subexpression is evaluated right before the first conjunct that references it,
+   *     so not on a row that an earlier conjunct drops, and after the checks of that conjunct:
+   *     its state is computed with the checked columns non-nullable, and would otherwise hold
+   *     the NULL of such a column, which the code reading the state does not expect.
+   *  5. The checks are bound with the nullability the child produced, unlike the states, so they
+   *     are generated without the states.
+   *  6. The checks left are generated after all the conjuncts.
+   */
   protected def generatePredicateCode(
       ctx: CodegenContext,
       inputAttrs: Seq[Attribute],
       inputExprCode: Seq[ExprCode],
-      outputAttrs: Seq[Attribute],
       notNullPreds: Seq[Expression],
       otherPreds: Seq[Expression],
-      nonNullAttrExprIds: Seq[ExprId]): String = {
+      boundOtherPreds: Seq[Expression],
+      precedingNotNulls: Seq[Int],
+      nonNullAttrExprIds: Seq[ExprId],
+      subExprStates: Map[ExpressionEquals, SubExprEliminationState] = Map.empty): String = {
+    // The IsNotNull checks are never NULL, so only `otherPreds` can need the flag.
+    val nullFlag = nullConjunctFlag(ctx, otherPreds, boundOtherPreds, notNullPreds)
+
+    // The states by the index of the first conjunct that references them. Evaluating a state
+    // evaluates the states it depends on first and clears the code of each, so a state that an
+    // earlier conjunct evaluated is not evaluated again.
+    val statesByFirstUse: Map[Int, Seq[SubExprEliminationState]] =
+      subExprStates.toSeq.groupBy { case (subExpr, _) =>
+        ctx.firstReferencingExpression(boundOtherPreds, subExpr)
+      }.map { case (k, states) => k -> states.map(_._2) }
+
+    /** Generates code with `states` as the common subexpressions that it reads. */
+    def withSubExprStates(states: Map[ExpressionEquals, SubExprEliminationState])(
+        gen: => String): String = {
+      if (subExprStates.isEmpty) {
+        // No subexpression is eliminated here: leave the context as the caller set it.
+        gen
+      } else {
+        var code: String = null
+        ctx.withSubExprEliminationExprs(states) {
+          code = gen
+          Seq.empty
+        }
+        code
+      }
+    }
+
     /**
-     * Generates code for `c`, using `in` for input attributes and `attrs` for nullability.
+     * Generates code for `c`, given as `bound` after binding against the attributes whose
+     * nullability it is generated with, after `subExprsCode`, the code of the states it is the
+     * first to reference. A NULL value sets `flag`, or drops the row if None.
      */
-    def genPredicate(c: Expression, in: Seq[ExprCode], attrs: Seq[Attribute]): String = {
-      val bound = BindReferences.bindReference(c, attrs)
-      val evaluated = evaluateRequiredVariables(inputAttrs, in, c.references)
+    def genPredicate(
+        c: Expression,
+        bound: Expression,
+        flag: Option[String],
+        subExprsCode: String = ""): String = {
+      val evaluated =
+        evaluateRequiredVariables(inputAttrs, inputExprCode, c.references) + subExprsCode
 
       // Generate the code for the predicate.
       val ev = ExpressionCanonicalizer.execute(bound).genCode(ctx)
-      val nullCheck = if (bound.nullable) {
-        s"${ev.isNull} || "
-      } else {
-        ""
-      }
 
       s"""
          |$evaluated
          |${ev.code}
-         |if (${nullCheck}!${ev.value}) continue;
+         |${conjunctCheck(ev, bound.nullable, flag)}
        """.stripMargin
     }
 
-    // To generate the predicates we will follow this algorithm.
-    // For each predicate that is not IsNotNull, we will generate them one by one loading attributes
-    // as necessary. For each of both attributes, if there is an IsNotNull predicate we will
-    // generate that check *before* the predicate. After all of these predicates, we will generate
-    // the remaining IsNotNull checks that were not part of other predicates.
-    // This has the property of not doing redundant IsNotNull checks and taking better advantage of
-    // short-circuiting, not loading attributes until they are needed.
-    // This is very perf sensitive.
-    // NOTE: `FilterExec.doConsume`'s CSE branch inlines the same interleaving so it can
-    // emit CSE state precomputes between the IsNotNull checks and each otherPred body.
-    // Any change to this algorithm must be mirrored there (and vice versa).
+    /**
+     * Generates an IsNotNull check with the nullability the child produced, and so without the
+     * states, see (5). The check is never NULL, and must drop the row before the conjuncts and
+     * the states bound with its column non-nullable, so it does not get the flag.
+     */
+    def genNotNull(c: Expression): String = withSubExprStates(Map.empty) {
+      genPredicate(c, BindReferences.bindReference(c, inputAttrs), None)
+    }
+
     // TODO: revisit this. We can consider reordering predicates as well.
     val generatedIsNotNullChecks = new Array[Boolean](notNullPreds.length)
     val extraIsNotNullAttrs = mutable.Set[Attribute]()
-    val generated = otherPreds.map { c =>
+    var nullableSeen = false
+    val generated = otherPreds.zip(boundOtherPreds).zipWithIndex.map { case ((c, bound), k) =>
+      val afterNullable = nullFlag.isDefined && nullableSeen
+      val precedingChecks = precedingNotNullChecks(
+        notNullPreds, precedingNotNulls, k, c, afterNullable,
+        generatedIsNotNullChecks).map(genNotNull).mkString("\n").trim
+      nullableSeen ||= bound.nullable
+
       val nullChecks = c.references.map { r =>
         val idx = notNullPreds.indexWhere {
           case IsNotNull(n) => n.semanticEquals(r)
@@ -200,44 +393,67 @@ trait GeneratePredicateHelper extends PredicateHelper {
         if (idx != -1 && !generatedIsNotNullChecks(idx)) {
           generatedIsNotNullChecks(idx) = true
           // Use the child's output. The nullability is what the child produced.
-          genPredicate(notNullPreds(idx), inputExprCode, inputAttrs)
-        } else if (nonNullAttrExprIds.contains(r.exprId) && !extraIsNotNullAttrs.contains(r)) {
+          genNotNull(notNullPreds(idx))
+        } else if ((idx == -1 || !afterNullable) && nonNullAttrExprIds.contains(r.exprId) &&
+            !extraIsNotNullAttrs.contains(r)) {
+          // A synthetic check for a column covered only by a check on an expression, or, before
+          // the flag applies, for a column whose check was generated before an earlier predicate.
+          // After a predicate that can be NULL, the check generated by `precedingNotNullChecks`
+          // already covers the column.
           extraIsNotNullAttrs += r
-          genPredicate(IsNotNull(r), inputExprCode, inputAttrs)
+          genNotNull(IsNotNull(r))
         } else {
           ""
         }
       }.mkString("\n").trim
 
-      val nestedNullChecks = notNullPreds.zipWithIndex.collect {
+      // A check on an expression that the predicate contains is generated before the predicate
+      // (SPARK-51356). After a predicate that can be NULL, the checks written before this one
+      // are generated above when one of them or the predicate can raise, and a check written
+      // after it is left to the remaining checks, as `And.eval` evaluates it after the
+      // predicate, so that it does not raise an error on a row that the predicate drops. The
+      // columns of the expression are covered by the checks above.
+      val nestedNullChecks = if (afterNullable) "" else notNullPreds.zipWithIndex.collect {
         case (p @ IsNotNull(n), idx)
             if !generatedIsNotNullChecks(idx) && !n.isInstanceOf[Attribute] &&
               c.exists(_.semanticEquals(n)) =>
           generatedIsNotNullChecks(idx) = true
-          genPredicate(p, inputExprCode, inputAttrs)
+          genNotNull(p)
       }.mkString("\n").trim
+
+      val subExprsCode = statesByFirstUse.get(k).map { states =>
+        ctx.evaluateSubExprEliminationState(states) + "\n"
+      }.getOrElse("")
 
       // Here we use *this* operator's output with this output's nullability since we already
       // enforced them with the IsNotNull checks above.
+      val predicate = withSubExprStates(subExprStates) {
+        genPredicate(c, bound, nullFlag, subExprsCode)
+      }
       s"""
+         |$precedingChecks
          |$nullChecks
          |$nestedNullChecks
-         |${genPredicate(c, inputExprCode, outputAttrs)}
+         |$predicate
        """.stripMargin.trim
     }.mkString("\n")
 
+    // A check on an expression is also left here when its columns got synthetic checks: those
+    // only make the tightened binding safe, and the expression itself can still be NULL.
     val nullChecks = notNullPreds.zipWithIndex.map { case (c, idx) =>
       if (!generatedIsNotNullChecks(idx)) {
-        genPredicate(c, inputExprCode, inputAttrs)
+        genNotNull(c)
       } else {
         ""
       }
     }.mkString("\n")
 
-    s"""
-       |$generated
-       |$nullChecks
-     """.stripMargin
+    withNullConjunctFlag(
+      s"""
+         |$generated
+         |$nullChecks
+       """.stripMargin,
+      nullFlag)
   }
 }
 
@@ -245,18 +461,17 @@ trait GeneratePredicateHelper extends PredicateHelper {
 case class FilterExec(condition: Expression, child: SparkPlan)
   extends UnaryExecNode with CodegenSupport with GeneratePredicateHelper with SafeForKWayMerge {
 
-  // Split out all the IsNotNulls from condition.
-  private val (notNullPreds, otherPreds) = splitConjunctivePredicates(condition).partition {
-    case IsNotNull(a) => isNullIntolerant(a) && a.references.subsetOf(child.outputSet)
-    case _ => false
-  }
+  // Split out all the IsNotNulls from condition, keeping how many of them precede each of the
+  // other conjuncts.
+  private val (notNullPreds, otherPreds, precedingNotNulls) =
+    splitNotNullPreds(condition, child.outputSet)
 
   // The columns that will filtered out by `IsNotNull` could be considered as not nullable.
   private val notNullAttributes = notNullPreds.flatMap(_.references).distinct.map(_.exprId)
 
-  // `otherPreds` bound against this operator's `output`, shared between the CSE gate in
-  // `doConsume` and the CSE codegen itself. Codegen-only derived state, so `@transient`: it is
-  // computed on the driver during code generation and never accessed on executors.
+  // `otherPreds` bound against this operator's `output`, shared by the CSE gate in `doConsume`
+  // and `generatePredicateCode`. Codegen-only derived state, so `@transient`: it is computed on
+  // the driver during code generation and never accessed on executors.
   @transient private lazy val boundOtherPreds: Seq[Expression] =
     otherPreds.map(BindReferences.bindReference(_, output))
 
@@ -290,171 +505,34 @@ case class FilterExec(condition: Expression, child: SparkPlan)
   override def doConsume(ctx: CodegenContext, input: Seq[ExprCode], row: ExprCode): String = {
     val numOutput = metricTerm(ctx, "numOutputRows")
 
-    // Apply CSE to otherPreds, mirroring the non-CSE branch's ordering so we preserve
-    // short-circuit semantics. The non-CSE branch lives in `generatePredicateCode`
-    // above; any future change to that algorithm should be reflected here (and vice
-    // versa) -- the two paths must stay in lockstep on notNullPreds/otherPreds
-    // interleaving. Three invariants:
-    //   (a) Between otherPreds: emit each common subexpression's precompute *just
-    //       before* the first otherPred that references it, not at the top of the
-    //       `do { }` block. A later otherPred still reuses the cached value -- it just
-    //       doesn't pay the cost for rows an earlier otherPred rejected. See #55471.
-    //   (b) Between notNullPreds and otherPreds: `notNullPreds` may include
-    //       `IsNotNull(expensive_or_throwing)` inferred by `InferFiltersFromConstraints`,
-    //       so emitting all notNullPreds up front would evaluate the inner expression
-    //       on rows an earlier-ordered otherPred would have rejected -- same class of
-    //       bug as (a) but across the notNullPreds / otherPreds boundary. Per-otherPred,
-    //       for each reference `r`: if `notNullPreds` has a direct `IsNotNull(r)`, emit
-    //       it; else if `r` is covered by `notNullAttributes` through some complex
-    //       `IsNotNull(expr(r))` in `notNullPreds`, emit a synthetic `IsNotNull(r)` so
-    //       the tightened-output binding below is safe without evaluating the
-    //       throw-capable inner expression. Then emit the otherPred's CSE precompute
-    //       and body. Remaining notNullPreds (including complex-child forms whose refs
-    //       got synthetic coverage) emit after all otherPreds.
-    //   (c) CSE state materialization: binding otherPreds (and the CSE analysis)
-    //       against `output` (with `notNullAttributes` tightened to non-nullable)
-    //       requires that the matching IsNotNull has already short-circuited -- else
-    //       CSE's `value_X = isNull ? default : compute` materializes `null` into
-    //       `value_X` for non-primitive types, which downstream accessors may NPE on
-    //       without consulting `isNull_X`. The (b) interleaving gives us that ordering
-    //       for free, since the IsNotNull check fires before the CSE precompute keyed
-    //       off the same reference.
-    // Only take the CSE path when there is actually a common subexpression to eliminate. That
-    // path emits the `inputVarsEvalCode` prologue below, which eagerly evaluates every
-    // `otherPreds` input column at the top of the row loop -- required so eliminated
-    // subexpressions can be materialized into shared variables, but it defeats the
-    // short-circuiting the non-CSE path gets from loading columns lazily, just before the
-    // predicate that needs them. With no common subexpression the prologue is pure overhead
-    // (e.g. decoding a decimal column for rows a cheaper earlier predicate would reject), so we
-    // fall back to `generatePredicateCode`.
-    //
-    // A *cheap* common subexpression does not count either. Caching a cheap load saves nothing:
-    // the non-CSE path already loads each column lazily into a variable on demand, so taking the
-    // CSE path for it would only add the eager prologue that decodes every referenced column up
-    // front. Note bare columns never reach this point: `EquivalentExpressions` skips
-    // `LeafExpression`s (which includes `BoundReference`/`Attribute`), and
-    // `splitConjunctivePredicates` feeds each conjunct to a separate `addExprTree` call, so a
-    // column repeated across conjuncts (e.g. the `c >= lo` / `c <= hi` that `c BETWEEN lo AND hi`
-    // lowers to) is never recorded as a common subexpression. The cheap-but-recorded case is a
-    // shared *non-leaf* such as a struct field access -- `s.x > 5 AND s.x < 100` shares
-    // `GetStructField(s, x)` -- which is just a slot read. Require a non-cheap common
-    // subexpression (per `CollapseProject.isCheap`) so such filters keep the lazy,
-    // short-circuiting path and only genuine repeated computation takes the CSE path.
-    //
-    // `subexpressionElimination.filterExec.enabled` additionally gates this path so it can be
-    // turned off independently of subexpression elimination elsewhere.
-    val (prologueCode, predicateCode) =
-      if (conf.subexpressionEliminationEnabled && conf.subexpressionEliminationFilterExecEnabled &&
-          otherPreds.nonEmpty &&
-          otherPredsEquivalentExpressions.getCommonSubexpressions
-            .exists(!CollapseProject.isCheap(_))) {
-        // Pre-evaluate input variables before CSE analysis: CSE clears
-        // ctx.currentVars[i].code as a side effect; without this pre-evaluation, Janino
-        // fails when otherPreds reference the same input columns that CSE already
-        // consumed.
-        val otherPredInputAttrs = AttributeSet(otherPreds.flatMap(_.references))
-        val inputVarsEvalCode = evaluateRequiredVariables(
-          child.output, input, otherPredInputAttrs)
+    // Eliminate the common subexpressions of `otherPreds` only when one of them is not cheap,
+    // per `CollapseProject.isCheap`. Elimination has a cost: the input columns of `otherPreds`
+    // are all evaluated at the top of the row loop, below, while without it each column is
+    // loaded lazily, just before the first conjunct that needs it, and not at all on a row that
+    // an earlier conjunct drops. Sharing a cheap subexpression, such as the struct field of
+    // `s.x > 5 AND s.x < 100`, does not pay for that. A column that conjuncts share is never a
+    // common subexpression, as `EquivalentExpressions` skips leaf expressions.
+    // `subexpressionElimination.filterExec.enabled` turns this off independently of
+    // subexpression elimination elsewhere.
+    val eliminateSubExprs = conf.subexpressionEliminationEnabled &&
+      conf.subexpressionEliminationFilterExecEnabled && otherPreds.nonEmpty &&
+      otherPredsEquivalentExpressions.getCommonSubexpressions.exists(!CollapseProject.isCheap(_))
 
-        val subExprs =
-          ctx.subexpressionEliminationForWholeStageCodegen(otherPredsEquivalentExpressions)
+    val (inputVarsEvalCode, subExprStates) = if (eliminateSubExprs) {
+      // Evaluate the input variables before the states are generated: generating a state takes
+      // the code of the input variables it reads, and the conjuncts read the same variables.
+      val otherPredInputAttrs = AttributeSet(otherPreds.flatMap(_.references))
+      val evalCode = evaluateRequiredVariables(child.output, input, otherPredInputAttrs)
+      val subExprs =
+        ctx.subexpressionEliminationForWholeStageCodegen(otherPredsEquivalentExpressions)
+      (evalCode, subExprs.states)
+    } else {
+      ("", Map.empty[ExpressionEquals, SubExprEliminationState])
+    }
 
-        // Group CSE states by the index of the first otherPred that references them.
-        // `evaluateSubExprEliminationState` recursively emits each state's children
-        // before the state itself and marks emitted code as `EmptyBlock`, so emitting
-        // a later group whose states depend on an earlier group's states is a no-op
-        // for the already-emitted dependencies.
-        val statesByFirstUse: Map[Int, Seq[SubExprEliminationState]] =
-          subExprs.states.toSeq.groupBy { case (exprEq, _) =>
-            boundOtherPreds.indexWhere(_.exists(e => ExpressionEquals(e) == exprEq))
-          }.map { case (idx, kvs) => idx -> kvs.map(_._2) }
-
-        // Emit an IsNotNull check, binding against child.output so the inner expression
-        // is evaluated with its original nullability (the tightened-nullability `output`
-        // is only appropriate inside otherPreds, where the required checks have fired).
-        // The `bound.nullable` gate below is defensive -- `IsNotNull` always produces a
-        // non-nullable Boolean, so this branch is structurally unreachable today; it
-        // mirrors the non-CSE helper's shape to keep future refactors safe.
-        def genNotNull(pred: Expression): String = {
-          val bound = BindReferences.bindReference(pred, child.output)
-          val evaluated = evaluateRequiredVariables(child.output, input, pred.references)
-          val ev = ExpressionCanonicalizer.execute(bound).genCode(ctx)
-          val nullCheck = if (bound.nullable) s"${ev.isNull} || " else ""
-          s"""
-             |$evaluated
-             |${ev.code}
-             |if (${nullCheck}!${ev.value}) continue;
-           """.stripMargin
-        }
-
-        val generatedIsNotNullChecks = new Array[Boolean](notNullPreds.length)
-        val extraIsNotNullAttrs = mutable.Set[Attribute]()
-
-        val predCode: String = {
-          val parts = new StringBuilder
-          ctx.withSubExprEliminationExprs(subExprs.states) {
-            otherPreds.zip(boundOtherPreds).zipWithIndex.foreach {
-              case ((orig, bound), idx) =>
-                orig.references.foreach { r =>
-                  val ni = notNullPreds.indexWhere {
-                    case IsNotNull(c) => c.semanticEquals(r)
-                    case _ => false
-                  }
-                  if (ni != -1 && !generatedIsNotNullChecks(ni)) {
-                    generatedIsNotNullChecks(ni) = true
-                    parts.append(genNotNull(notNullPreds(ni)))
-                    parts.append('\n')
-                  } else if (notNullAttributes.contains(r.exprId) &&
-                      !extraIsNotNullAttrs.contains(r)) {
-                    extraIsNotNullAttrs += r
-                    parts.append(genNotNull(IsNotNull(r)))
-                    parts.append('\n')
-                  }
-                }
-                notNullPreds.zipWithIndex.foreach {
-                  case (p @ IsNotNull(n), ni)
-                      if !generatedIsNotNullChecks(ni) && !n.isInstanceOf[Attribute] &&
-                        orig.exists(_.semanticEquals(n)) =>
-                    generatedIsNotNullChecks(ni) = true
-                    var checkCode: String = null
-                    ctx.withSubExprEliminationExprs(Map.empty) {
-                      checkCode = genNotNull(p)
-                      Seq.empty
-                    }
-                    parts.append(checkCode)
-                    parts.append('\n')
-                  case _ =>
-                }
-                statesByFirstUse.get(idx).foreach { states =>
-                  parts.append(ctx.evaluateSubExprEliminationState(states))
-                  parts.append('\n')
-                }
-                val ev = ExpressionCanonicalizer.execute(bound).genCode(ctx)
-                val nullCheck = if (bound.nullable) s"${ev.isNull} || " else ""
-                parts.append(ev.code.toString)
-                parts.append(s"\nif (${nullCheck}!${ev.value}) continue;\n")
-            }
-            Seq.empty
-          }
-          parts.toString
-        }
-
-        // Leftover notNullPreds: any IsNotNull that no otherPred's reference matched by
-        // `semanticEquals`. These run after all otherPreds to match the non-CSE ordering.
-        // Note: a complex `IsNotNull(expr(r))` can still land here even when the (b) path
-        // already emitted a synthetic `IsNotNull(r)` ahead of some otherPred -- the
-        // synthetic check only guards the tightened-output binding; the inner expression
-        // itself may still need its null check (e.g. under non-ANSI `cast(s as int)` can
-        // return null for unparseable strings, so we must filter the resulting row).
-        val leftoverNotNull = notNullPreds.zipWithIndex.collect {
-          case (p, i) if !generatedIsNotNullChecks(i) => genNotNull(p)
-        }.mkString("\n")
-
-        (inputVarsEvalCode, predCode + "\n" + leftoverNotNull)
-      } else {
-        ("", generatePredicateCode(
-          ctx, child.output, input, output, notNullPreds, otherPreds, notNullAttributes))
-      }
+    val predicateCode = generatePredicateCode(
+      ctx, child.output, input, notNullPreds, otherPreds, boundOtherPreds, precedingNotNulls,
+      notNullAttributes, subExprStates)
 
     // Reset the isNull to false for the not-null columns, then the followed operators could
     // generate better code (remove dead branches).
@@ -468,7 +546,7 @@ case class FilterExec(condition: Expression, child: SparkPlan)
     // Note: wrap in "do { } while (false);", so the generated checks can jump out with "continue;"
     s"""
        |do {
-       |  $prologueCode
+       |  $inputVarsEvalCode
        |  $predicateCode
        |  $numOutput.add(1);
        |  ${consume(ctx, resultVars)}
@@ -917,9 +995,11 @@ case class UnionExec(children: Seq[SparkPlan]) extends SparkPlan with CodegenSup
 
   /**
    * Returns the output partitionings of the children, with the attributes converted to this
-   * union's output attributes at the same position.
+   * union's output attributes at the same position. A member that does not map is dropped, and a
+   * child with no member left reports `UnknownPartitioning`. A partitioning that references no
+   * attribute, such as `SinglePartition`, passes through.
    */
-  private def prepareOutputPartitioning(): Seq[Partitioning] = {
+  private[execution] def prepareOutputPartitioning(): Seq[Partitioning] = {
     // Map every child's partitioning attributes to this union's output attributes, so all
     // partitionings are expressed in the same attribute space before comparison. A child's
     // `outputPartitioning` may reference attributes that differ from its own `output` in any
@@ -929,25 +1009,46 @@ case class UnionExec(children: Seq[SparkPlan]) extends SparkPlan with CodegenSup
     // a partitioning built inside a view or subquery carries that relation's qualifier.
     // `AttributeMap` is keyed by `ExprId`, so remapping every child (including the first)
     // normalizes all of those.
+    //
+    // A member that references an attribute the child does not output, such as the key a
+    // `MapGroups` or a column-pruned cached scan passes through, is dropped: left unmapped, it
+    // could equal another child's real output attribute. A child with no member left reports
+    // unknown, which leaves the whole union unknown. A child that repeats an `ExprId` does not
+    // reach here (see `rawPartitioning`).
     val unionOutput = output
-    val attributesMap = children.map(_.output).map { childAttrs =>
-      AttributeMap(childAttrs.zip(unionOutput))
-    }
-    children.map(_.outputPartitioning).zip(attributesMap).map { case (p, attributeMap) =>
-      p match {
-        case e: Expression =>
-          e.transform {
-            case a: Attribute if attributeMap.contains(a) =>
-              attributeMap(a)
-          }.asInstanceOf[Partitioning]
-        case _ => p
+    children.map { child =>
+      child.outputPartitioning match {
+        case p: Expression =>
+          val attributeMap = AttributeMap(child.output.zip(unionOutput))
+          def remap(member: Partitioning): Partitioning = member match {
+            case e: Expression =>
+              e.transform {
+                case a: Attribute if attributeMap.contains(a) =>
+                  attributeMap(a)
+              }.asInstanceOf[Partitioning]
+            case _ => member
+          }
+          // The common case: keep the partitioning as it is, which also keeps its shape, so a
+          // single `KeyedPartitioning` stays one. Otherwise each member is checked on its own.
+          if (p.references.subsetOf(child.outputSet)) {
+            remap(p)
+          } else {
+            PartitioningCollection.flatten(p).filter {
+              case e: Expression => e.references.subsetOf(child.outputSet)
+              case _ => true
+            } match {
+              case Seq() => UnknownPartitioning(p.numPartitions)
+              case survivors => PartitioningCollection(survivors.map(remap))
+            }
+          }
+        case p => p
       }
     }
   }
 
   // Compares two leaf partitionings for union pass-through equivalence. Callers pass leaf
   // partitionings only; a `PartitioningCollection` is flattened to its members by
-  // `outputPartitioning` before reaching here.
+  // `rawPartitioning` before reaching here.
   private def comparePartitioning(left: Partitioning, right: Partitioning): Boolean = {
     (left, right) match {
       case (SinglePartition, SinglePartition) => true
@@ -956,7 +1057,7 @@ case class UnionExec(children: Seq[SparkPlan]) extends SparkPlan with CodegenSup
       // have already been remapped to this union's output attributes by
       // `prepareOutputPartitioning`), and so must the types their keys were built with. The
       // partition keys themselves are intentionally not compared: children typically carry
-      // different key sets, and `outputPartitioning` merges them. Their types cannot be merged the
+      // different key sets, and `rawPartitioning` merges them. Their types cannot be merged the
       // same way, since one type list has to stand for every row of the concatenation, and a
       // wrapper compares its types before its values, so keys of two types would never be found
       // equal to one another.
@@ -976,8 +1077,30 @@ case class UnionExec(children: Seq[SparkPlan]) extends SparkPlan with CodegenSup
     }
   }
 
-  override def outputPartitioning: Partitioning = {
-    if (!conf.getConf(SQLConf.UNION_OUTPUT_PARTITIONING)) {
+  // Whether the output of a child repeats an `ExprId`. Fixed for the given children, so it is
+  // derived once rather than on every read of the partitioning.
+  @transient private[execution] lazy val childOutputRepeatsExprId: Boolean =
+    children.exists { child =>
+      val exprIds = child.output.map(_.exprId)
+      exprIds.distinct.size < exprIds.size
+    }
+
+  /**
+   * The SPARK-52921 candidate partitioning derived from the children, which `outputPartitioning`
+   * reports when the decision says this union is not a plain concatenation. That decision comes out
+   * plain on either of two grounds: `UNION_OUTPUT_PARTITIONING` being off, which is taken from the
+   * record `SnapshotUnionPreparationConf` writes rather than read here, or this coming back
+   * `UnknownPartitioning`. Under that conf the candidate can still be concrete while the union
+   * reports unknown.
+   */
+  private def rawPartitioning: Partitioning = {
+    // An attribute is read from the first position that carries its `ExprId` (see
+    // `AttributeSeq.indexOf`), so the positions of an output that repeats one cannot be told
+    // apart by attribute, and they hold different values when a union sits below. A child's
+    // partitioning then has no reliable counterpart among this union's output attributes, whether
+    // the repeat is in that child's output or, through the first child, in this union's own.
+    // The analyzer normally leaves no such child (`DeduplicateUnionChildOutput`).
+    if (childOutputRepeatsExprId) {
       return super.outputPartitioning
     }
 
@@ -995,13 +1118,9 @@ case class UnionExec(children: Seq[SparkPlan]) extends SparkPlan with CodegenSup
     if (partitionings.forall(_.isInstanceOf[KeyedPartitioning])) {
       val kps = partitionings.map(_.asInstanceOf[KeyedPartitioning])
       val headKp = kps.head
-      // To merge, the `KeyedPartitioning`s must agree on the partition expressions and no leg
-      // may carry the marker: the merged set declares the other legs' keys, so an out-of-set row
-      // can sit in the wrong partition for the merged claim (rule (1) of the
-      // `KeyedPartitioning.mayContainUnknownPartitionKeys` doc). Unlike a join, a union keeps
-      // every leg's rows: an unmarked leg does not excuse a marked one.
-      val compatible = kps.forall(kp =>
-        !kp.mayContainUnknownPartitionKeys && comparePartitioning(kp, headKp))
+      // To merge, the `KeyedPartitioning`s must agree on the partition expressions, and a leg
+      // carrying the marker must declare what the others declare.
+      val compatible = kps.forall(kp => comparePartitioning(kp, headKp)) && canMergeMarkedKeys(kps)
       if (compatible) {
         return KeyedPartitioning.concat(kps)
       }
@@ -1035,47 +1154,186 @@ case class UnionExec(children: Seq[SparkPlan]) extends SparkPlan with CodegenSup
     }
   }
 
-  // True when the codegen path applies: `outputPartitioning` is `UnknownPartitioning`,
-  // and `unionedInputRDD` matches the semantics of `sparkContext.union(...)` in `unionRDDs`.
-  // A `KeyedPartitioning` union also uses `sparkContext.union(...)` in `unionRDDs`, but
-  // codegen is disabled for it (`supportCodegenFailureReason` reports "partitioning-aware"):
-  // the per-partition key descriptor is consumed by a downstream `GroupPartitionsExec`, and
-  // keeping these unions out of whole-stage codegen matches the `HashPartitioning` union case.
-  private[sql] def isPlainUnion: Boolean = outputPartitioning.isInstanceOf[UnknownPartitioning]
+  /**
+   * Whether the legs' markers let their keys be merged. A marked leg may hold rows of a key it
+   * does not declare, and `KeyGroupedPartitioner` routes those into the partition of some declared
+   * key. Two conditions keep every key's rows in one group, which is what a clustering reads:
+   *
+   *   - a marked leg declares every key the other legs declare, so its rows of such a key do not
+   *     land in a partition the merge names for another key;
+   *   - marked legs declare the same keys in the same order, and when more than one is marked,
+   *     each still routes by the hash. A routed leg is grouped, so its keys are unique and the
+   *     list length is the modulus the hash is taken over: the position in that list is the name a
+   *     key no leg declares reaches, and equal lists agree on both. A leg whose routing is lost
+   *     names such a key by an earlier layout's order, which its list does not show. One marked
+   *     leg needs no agreement, since its undeclared rows reach one group either way.
+   *
+   * The merged layout cannot claim that a partition holds only the key it names, which
+   * [[KeyedPartitioning.concat]] records.
+   */
+  private def canMergeMarkedKeys(kps: Seq[KeyedPartitioning]): Boolean = {
+    val marked = kps.filter(_.mayContainUnknownPartitionKeys)
+    if (marked.isEmpty) {
+      true
+    } else {
+      val declared = marked.head.partitionKeys
+      marked.tail.forall(_.partitionKeys == declared) &&
+        (marked.size == 1 || marked.forall(_.unknownKeysRouted)) && {
+          val unmarked = kps.filterNot(_.mayContainUnknownPartitionKeys)
+          if (unmarked.isEmpty) {
+            true
+          } else {
+            val declaredSet = declared.toSet
+            unmarked.forall(_.partitionKeys.forall(declaredSet.contains))
+          }
+        }
+    }
+  }
 
-  // Per-child projection from the child's output to the union's output. The wrapped
-  // child is always the source `Attribute` (deterministic by construction); the Alias
-  // only remaps the exprId/name/metadata. `WidenSetOperationTypes` aligns top-level
-  // dataTypes, but nested nullability differences bypass it; those cases are caught
-  // by the `type-mismatch` gate below, which is the single source of truth for the
-  // `src.dataType == tgt.dataType` invariant `doConsume` relies on.
-  @transient private lazy val perChildProjections: IndexedSeq[Seq[NamedExpression]] =
-    children.toIndexedSeq.map { child =>
-      child.output.zip(output).map { case (src, tgt) =>
-        Alias(src, tgt.name)(
-          exprId = tgt.exprId,
-          qualifier = tgt.qualifier,
-          explicitMetadata = Some(tgt.metadata))
-      }
+  /**
+   * True when this union behaves as a plain concatenation, so `unionedInputRDD` matches the
+   * semantics of `sparkContext.union(...)` in `unionRDDs`. It satisfies the partitioning gate on
+   * the codegen path, not the whole of it: `supportCodegenFailureReason` still applies its other
+   * checks. When this union merges its children's `KeyedPartitioning` instead, it concatenates all
+   * the same, but codegen stays off, with the reason "partitioning-aware", because a downstream
+   * `GroupPartitionsExec` consumes its key descriptor.
+   *
+   * Stamped, because the answer moves under its consumers.
+   * `InMemoryTableScanExec.outputPartitioning` reports `UnknownPartitioning` while its inner
+   * `AdaptiveSparkPlanExec` has no final plan, so a union can look plain when
+   * `CollapseCodegenStages` gates on it and partitioning-aware by the time the stage runs. The
+   * shell that gate builds wraps a `withNewChildren` copy where a child had to be adapted, and a
+   * copy that re-derived here came back with empty `metrics` while `doProduce` asked `metricTerm`
+   * for `numOutputRows`. A fresh copy inherits the answer instead, since `withNewChildren` ends in
+   * `copyTagsFrom`.
+   *
+   * `UNION_OUTPUT_PARTITIONING` is taken from `recordPreparationConf`, recorded before
+   * `EnsureRequirements`, so the value the exchanges are planned against is the value execution
+   * uses. Reading it live here would let a later read see a different value: `conf` is live, and
+   * another thread setting it between `EnsureRequirements` and the stamp would let a parent drop
+   * an exchange over a concrete partitioning and then have the stamp freeze plain concatenation
+   * under it. A node created after that pass carries no record of its own and takes the same
+   * preparation's value when stamped; only a union no barrier reached falls back to the live conf.
+   *
+   * A read before `StampUnionDecisions` answers from the children as they are then, and does not
+   * write, so observing an unprepared plan cannot decide anything for the prepared one.
+   */
+  private[execution] def isPlainUnion: Boolean = isPlainUnion(rawPartitioning)
+
+  /**
+   * The same decision, for a caller that has already derived the raw partitioning: deriving it
+   * builds an `AttributeMap` per child and intersects the candidates, and `outputPartitioning`
+   * needs the value the answer was derived from. By name so that a stamped node never derives it.
+   */
+  private def isPlainUnion(raw: => Partitioning): Boolean =
+    stampedDecisions.map(_.plainUnion).getOrElse {
+      !outputPartitioningEnabled || raw.isInstanceOf[UnknownPartitioning]
     }
 
-  // Memoized: consulted by `supportCodegen` (called multiple times by
-  // `CollapseCodegenStages`) and by `metrics`. Conf and children are stable
-  // for a given UnionExec instance; cross-plan staleness is impossible since
-  // UnionExec is a case class and `withNewChildren` produces a fresh instance.
-  @transient private lazy val supportCodegenFailureReason: Option[String] = {
-    if (!conf.getConf(SQLConf.WHOLESTAGE_UNION_CODEGEN_ENABLED)) {
-      Some("union-codegen-disabled")
-    } else if (!isPlainUnion) {
-      Some("partitioning-aware")
-    } else if (children.exists(_.exists(_.isInstanceOf[UnionExec]))) {
+  private def stampedDecisions: Option[UnionExec.Decisions] =
+    getTagValue(UnionExec.DECISIONS)
+
+  private def preparationConf: Option[UnionConfSnapshot] =
+    getTagValue(UnionExec.PREPARATION_CONF)
+
+  private def outputPartitioningEnabled: Boolean =
+    preparationConf.map(_.outputPartitioning)
+      .getOrElse(conf.getConf(SQLConf.UNION_OUTPUT_PARTITIONING))
+
+  /**
+   * Records the confs this node answers from until its decisions are stamped, read once per
+   * preparation into a `UnionConfSnapshot` and passed in here. `SnapshotUnionPreparationConf` does
+   * it ahead of `EnsureRequirements`, whose reads the following stamp has to agree with, and ahead
+   * of the two injected lists that can still change an exchange. Two more writers cover the rules
+   * that are folded over rather than listed: each injected columnar rule's transitions carry the
+   * record behind them, and `optimizeQueryStage` writes it on every rule result that changed the
+   * plan. `stampDecisions` does it for a node no such pass saw. Only the confs, never
+   * a partitioning: the exchanges `EnsureRequirements` adds are not there yet, so a decision taken
+   * there would freeze plain on a union whose children only become co-partitioned in it.
+   */
+  private[execution] def recordPreparationConf(snapshot: UnionConfSnapshot): Unit =
+    if (preparationConf.isEmpty) {
+      setTagValue(UnionExec.PREPARATION_CONF, snapshot)
+    }
+
+  /**
+   * Fixes this node's decisions for the rest of the plan's life. Called by `StampUnionDecisions`,
+   * first after `EnsureRequirements` and, in the AQE list, after shuffle push-down. Execution uses
+   * the decision the exchanges were planned against; the confs come from one read per preparation.
+   * Nothing else writes this tag on an existing node, and freshly planned nodes are not yet
+   * published, so no reader can be looking at one. Metrics and the codegen gate read it later;
+   * nodes already carrying it keep it, including the copy in the codegen shell.
+   */
+  private[execution] def stampDecisions(snapshot: UnionConfSnapshot): Unit =
+    if (stampedDecisions.isEmpty) {
+      // A node the pass ahead of `EnsureRequirements` never saw takes that pass's value now rather
+      // than the live conf, so a late barrier cannot decide from a conf changed since. Reachable
+      // for a union an injected rule added, and for one it rebuilt carrying tags of its own, which
+      // is enough to stop `copyTagsFrom` from bringing this tag across.
+      recordPreparationConf(snapshot)
+      setTagValue(UnionExec.DECISIONS, UnionExec.Decisions(plainUnion = isPlainUnion))
+    }
+
+  /**
+   * A node stamped plain reports `UnknownPartitioning` even once its children agree on a concrete
+   * one: a fused union concatenates, and claiming their partitioning would let a parent skip an
+   * exchange it needs. The cost is SPARK-52921's exchange elimination for such a union.
+   *
+   * Only the decision is stamped, never the `Partitioning` itself. AQE coalescing changes the
+   * children's `numPartitions` after the stamp, and a stale count is what `unionRDDs` would hand
+   * `SQLPartitioningAwareUnionRDD`, which builds exactly that many partitions from each child.
+   *
+   * The reverse costs fusion. A rule that runs after the stamp and drops a child's partitioning
+   * leaves the node stamped non-plain, so the codegen gate answers "partitioning-aware" and
+   * `numOutputRows` goes unregistered, whereas re-deriving at the gate would have fused it.
+   * `DisableUnnecessaryBucketedScan` does that to a union over two bucketed scans with a projection
+   * on each side. Results are unaffected, since the branch below re-derives and concatenates.
+   *
+   * That branch is derived per call, so `unionRDDs` can take the concatenating arm even though
+   * `EnsureRequirements` planned the parent against a concrete partitioning: `comparePartitioning`
+   * compares `HashPartitioningLike` by equality, so a change to one child's partitioning that its
+   * siblings do not mirror can empty the intersection. AQE reconciles that, by validating a
+   * partitioning change against the parents' requirements; an injected rule can skip it.
+   */
+  override def outputPartitioning: Partitioning = {
+    // Derived at most once per call, and only when the decision is not stamped yet: `isPlainUnion`
+    // needs the same value to answer. Not held across calls -- AQE changes the children's partition
+    // counts, and the answer has to follow them.
+    lazy val raw = rawPartitioning
+    if (isPlainUnion(raw)) super.outputPartitioning else raw
+  }
+
+  // The confs the gate reads, taken from the record rather than live for the reason the plain-union
+  // decision is stamped: `conf` is live, so the gate, `metrics` and the copy `insertInputAdapter`
+  // puts inside the codegen shell would otherwise be free to read different values. When a child is
+  // not `CodegenSupport` that copy is real and its first evaluation lands at execution, which is
+  // where reading the conf produced the failure described on `isPlainUnion`. A stamped node always
+  // carries a record, so these do not need a branch for the stamp.
+  private def unionCodegenEnabled: Boolean =
+    preparationConf.map(_.codegenEnabled)
+      .getOrElse(conf.getConf(SQLConf.WHOLESTAGE_UNION_CODEGEN_ENABLED))
+
+  private def maxCodegenChildren: Int =
+    preparationConf.map(_.maxChildren)
+      .getOrElse(conf.getConf(SQLConf.WHOLESTAGE_UNION_MAX_CHILDREN))
+
+  // Memoized per instance rather than stamped on the tag. Every term here reads the children, and a
+  // tag outlives them: `SQLExecution` builds the initial `SparkPlanInfo` before execution, forcing
+  // `metrics` on every node it visits, so a rule that replaces a child after that would inherit an
+  // allowing answer and fuse a topology that `hasPartitionIndexDependentCodegen` or
+  // `supportsColumnar` rejects. That is a trade rather than a free win: a rule placed after
+  // `CollapseCodegenStages` that weakened a child would instead leave a stamped union with empty
+  // `metrics` inside a shell that still fuses, which `doProduce` reports as a missing
+  // `numOutputRows`. Nothing in the tree does that. The copy in the codegen shell agrees with the
+  // gate either way: `InputAdapter` delegates `output` and `supportsColumnar` to its child, the
+  // other terms walk the subtree through it, and each is fixed for a given set of children.
+  @transient private lazy val childTopologyFailureReason: Option[String] = {
+    if (children.exists(_.exists(_.isInstanceOf[UnionExec]))) {
       Some("nested-union")
     } else if (children.exists(_.exists(UnionExec.isKnownMultiInputRDDCodegen))) {
       Some("multi-rdd-child")
     } else if (children.exists(UnionExec.hasPartitionIndexDependentCodegen)) {
       Some("partition-index-dependent-child")
-    } else if (children.size > conf.getConf(SQLConf.WHOLESTAGE_UNION_MAX_CHILDREN)) {
-      Some("max-children-exceeded")
     } else if (supportsColumnar) {
       Some("columnar")
     } else if (children.exists(c =>
@@ -1083,6 +1341,26 @@ case class UnionExec(children: Seq[SparkPlan]) extends SparkPlan with CodegenSup
       Some("type-mismatch")
     } else {
       None
+    }
+  }
+
+  // The three preparation-scoped terms are recomputed per call. `isPlainUnion` has to be: it
+  // derives `rawPartitioning` from the children, so a read before `stampDecisions` would otherwise
+  // settle the gate on children that move. The two conf terms have to be for a different reason: a
+  // node with no record answers live, and a pass can write the record afterwards, so a memoized
+  // answer would keep the live value while the copy `insertInputAdapter` builds, a fresh instance
+  // carrying that record, reads it. No Spark rule reads this gate before `CollapseCodegenStages`,
+  // which every barrier precedes; a late extension hook can, and so can a caller inspecting
+  // `sparkPlan`.
+  private def supportCodegenFailureReason: Option[String] = {
+    if (!unionCodegenEnabled) {
+      Some("union-codegen-disabled")
+    } else if (!isPlainUnion) {
+      Some("partitioning-aware")
+    } else if (children.size > maxCodegenChildren) {
+      Some("max-children-exceeded")
+    } else {
+      childTopologyFailureReason
     }
   }
 
@@ -1098,11 +1376,15 @@ case class UnionExec(children: Seq[SparkPlan]) extends SparkPlan with CodegenSup
     }
   }
 
-  // Registered only when fusion will actually run, so plans that fall back
-  // to `doExecute` (which never updates the metric) do not surface a
-  // 0-valued row count in the SQL UI. `doConsume` is the sole incrementer.
+  // Registered only when this union's own codegen gate allows fusion, so a union the gate rejects
+  // does not surface a 0-valued row count in the SQL UI; `doConsume` is the sole incrementer, and
+  // `doExecute` never touches it. An unstamped node is the exception: its gate is provisional,
+  // because `isPlainUnion` derives from children that can still move, so the stamp can land either
+  // way and a map built without the metric would leave `doProduce` asking `metricTerm` for one that
+  // is not there. Registering it then costs an unused metric on a union an extension inspected and
+  // the stamp went on to reject.
   override lazy val metrics: Map[String, SQLMetric] =
-    if (supportCodegenFailureReason.isEmpty) {
+    if (stampedDecisions.isEmpty || supportCodegenFailureReason.isEmpty) {
       Map("numOutputRows" -> SQLMetrics.createMetric(sparkContext, "number of output rows"))
     } else {
       Map.empty
@@ -1129,7 +1411,7 @@ case class UnionExec(children: Seq[SparkPlan]) extends SparkPlan with CodegenSup
   // Per-emission codegen state, set in `doProduce` and read in `doConsume`.
   // `numOutputRowsTerm` is registered once per stage so the metric appears in
   // `references[]` exactly once instead of once per child; `currentEmittingChild`
-  // tells `doConsume` which child's projection to bind.
+  // tells `doConsume` which child's output it reads by position.
   //
   // A single `UnionExec` instance can have its codegen driven by more than one
   // thread at the same time: a reused exchange/subquery stage is generated
@@ -1224,12 +1506,17 @@ case class UnionExec(children: Seq[SparkPlan]) extends SparkPlan with CodegenSup
       ctx: CodegenContext, input: Seq[ExprCode], row: ExprCode): String = {
     val i = currentEmittingChild.get
     require(i >= 0, "UnionExec.doConsume invoked outside doProduce emission window")
-    // Route BoundReference reads through `currentVars` (the incoming row is
-    // delivered as variables under WSCG, not via ctx.INPUT_ROW).
-    val bound = BindReferences.bindReferences(perChildProjections(i), children(i).output)
+    // Read the incoming row (delivered as `currentVars` under WSCG) by position. Binding by
+    // `ExprId` would resolve a child output that repeats an `ExprId` (e.g. `SELECT a, a`) to
+    // the first occurrence, so the second union output column would take the first column's
+    // value and its declaration would be emitted twice. `doExecute` is positional too, since
+    // it concatenates child rows as they are.
     ctx.currentVars = input
     ctx.INPUT_ROW = null
-    val projectedExprCodes = bound.map(_.genCode(ctx))
+    val childOutput = children(i).output
+    val projectedExprCodes = childOutput.zipWithIndex.map { case (attr, pos) =>
+      BoundReference(pos, attr.dataType, attr.nullable).genCode(ctx)
+    }
 
     s"""
        |${numOutputRowsTerm.get}.add(1L);
@@ -1285,12 +1572,44 @@ case class UnionExec(children: Seq[SparkPlan]) extends SparkPlan with CodegenSup
 
 object UnionExec {
   /**
+   * What `StampUnionDecisions` fixes on a `UnionExec`: whether it is a plain concatenation. That is
+   * the one answer the confs alone do not give, since it also depends on the children. The confs
+   * themselves stay on `PREPARATION_CONF`, which a stamped node always carries. Everything else the
+   * gate asks is derived per instance, so a rule replacing a child cannot inherit an answer taken
+   * from the topology it replaced.
+   */
+  private case class Decisions(plainUnion: Boolean)
+
+  /**
+   * The stamped decisions. See `isPlainUnion` and `stampDecisions`.
+   *
+   * `withNewChildren` copies the tag onto a rebuilt node, and so does a transform rule's
+   * replacement, but only where the target carries no tags of its own: `copyTagsFrom` leaves a node
+   * that already has some untouched. Such a node is stamped when a barrier next reaches it, and one
+   * that reaches execution unstamped answers from the state it sees then.
+   */
+  private val DECISIONS = TreeNodeTag[Decisions]("unionDecisions")
+
+  /**
+   * The [[UnionConfSnapshot]] this node answers from, and the one a stamped node's codegen gate
+   * keeps answering from. See `recordPreparationConf`. `SnapshotUnionPreparationConf` writes it
+   * before `EnsureRequirements`, and the stamp after it reads what that rule wrote, so both phases
+   * use one value; the same rule runs ahead of the two injected lists that can still change an
+   * exchange, behind each injected columnar rule's transitions, and on every rule result
+   * `optimizeQueryStage` sees changed, and `stampDecisions` writes it itself for a node no such
+   * pass saw. The tag travels onto rebuilt nodes the same way `DECISIONS` does, which is what
+   * carries it across the copies `EnsureRequirements` makes.
+   */
+  private val PREPARATION_CONF = TreeNodeTag[UnionConfSnapshot]("unionPreparationConf")
+
+  /**
    * Codegen operators that return more than one RDD from `inputRDDs()`.
    * `UnionExec`'s fusion assumes each direct child contributes one RDD.
    */
   def isKnownMultiInputRDDCodegen(p: SparkPlan): Boolean = p match {
     case _: SortMergeJoinExec => true
     case _: ShuffledHashJoinExec => true
+    case j: SortMergeAsOfJoinExec => j.supportCodegen
     case _ => false
   }
 

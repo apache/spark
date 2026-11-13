@@ -17,7 +17,7 @@
 
 package org.apache.spark.mllib.linalg
 
-import java.util.{Arrays, Objects, Random}
+import java.util.{Arrays, Random}
 
 import scala.collection.mutable.{ArrayBuffer, ArrayBuilder => MArrayBuilder, HashSet => MHashSet}
 import scala.language.implicitConversions
@@ -313,9 +313,7 @@ class DenseMatrix @Since("1.3.0") (
     case _ => false
   }
 
-  override def hashCode: Int = {
-    Objects.hash(numRows: Integer, numCols: Integer, toArray)
-  }
+  override def hashCode: Int = asML.hashCode
 
   private[mllib] def asBreeze: BM[Double] = {
     if (!isTransposed) {
@@ -342,7 +340,7 @@ class DenseMatrix @Since("1.3.0") (
   }
 
   @Since("1.4.0")
-  override def copy: DenseMatrix = new DenseMatrix(numRows, numCols, values.clone())
+  override def copy: DenseMatrix = new DenseMatrix(numRows, numCols, values.clone(), isTransposed)
 
   private[spark] def map(f: Double => Double) = new DenseMatrix(numRows, numCols, values.map(f),
     isTransposed)
@@ -623,7 +621,7 @@ class SparseMatrix @Since("1.3.0") (
     case _ => false
   }
 
-  override def hashCode(): Int = asBreeze.hashCode
+  override def hashCode(): Int = asML.hashCode
 
   private[mllib] def asBreeze: BM[Double] = {
      if (!isTransposed) {
@@ -662,7 +660,7 @@ class SparseMatrix @Since("1.3.0") (
 
   @Since("1.4.0")
   override def copy: SparseMatrix = {
-    new SparseMatrix(numRows, numCols, colPtrs, rowIndices, values.clone())
+    new SparseMatrix(numRows, numCols, colPtrs, rowIndices, values.clone(), isTransposed)
   }
 
   private[spark] def map(f: Double => Double) =

@@ -559,6 +559,244 @@ class BasePythonStreamingDataSourceTestsMixin:
         self.assertEqual(end, start)
         self.assertEqual(len(wrapper.cache), 0)
 
+    def test_simple_stream_reader_returns_list(self):
+        """read() returning a list instead of an iterator is handled like an iterator."""
+        from pyspark.sql.datasource_internal import _SimpleStreamReaderWrapper
+
+        class ListReader(SimpleDataSourceStreamReader):
+            def __init__(self, rows, advance):
+                self.rows = rows
+                self.advance = advance
+
+            def initialOffset(self):
+                return {"offset": 0}
+
+            def read(self, start: dict):
+                end = {"offset": start["offset"] + len(self.rows)} if self.advance else start
+                return (list(self.rows), end)
+
+            def readBetweenOffsets(self, start: dict, end: dict):
+                return iter([])
+
+            def commit(self, end: dict):
+                pass
+
+        start = {"offset": 0}
+
+        # Non-empty list with an advanced end offset is cached and readable.
+        wrapper = _SimpleStreamReaderWrapper(ListReader([(0,), (1,)], advance=True))
+        end = wrapper.latestOffset(start, ReadAllAvailable())
+        self.assertEqual(end, {"offset": 2})
+        self.assertEqual(list(wrapper.getCache(start, end)), [(0,), (1,)])
+
+        # Empty list with end == start is allowed and not cached.
+        wrapper = _SimpleStreamReaderWrapper(ListReader([], advance=False))
+        end = wrapper.latestOffset(start, ReadAllAvailable())
+        self.assertEqual(end, start)
+        self.assertEqual(len(wrapper.cache), 0)
+
+        # Non-empty list with end == start raises the offset validation error.
+        wrapper = _SimpleStreamReaderWrapper(ListReader([(0,)], advance=False))
+        with self.assertRaises(PySparkException) as cm:
+            wrapper.latestOffset(start, ReadAllAvailable())
+        self.assertEqual(
+            cm.exception.getCondition(),
+            "SIMPLE_STREAM_READER_OFFSET_DID_NOT_ADVANCE",
+        )
+
+    def test_simple_stream_reader_returns_non_iterator_iterables(self):
+        """read() returning a non-iterator iterable (e.g. tuple, range) is handled like a list."""
+        from collections import deque
+
+        from pyspark.sql.datasource_internal import _SimpleStreamReaderWrapper
+
+        class IterableOnly:
+            """An iterable that implements __iter__ but not __next__."""
+
+            def __init__(self, rows):
+                self._rows = rows
+
+            def __iter__(self):
+                return iter(self._rows)
+
+        class NextOnly:
+            """Implements only __next__ without __iter__, which next() accepts."""
+
+            def __init__(self, rows):
+                self._rows = iter(rows)
+
+            def __next__(self):
+                return next(self._rows)
+
+        class GetitemOnly:
+            """An iterable that implements only __getitem__, without __iter__ or __next__."""
+
+            def __init__(self, rows):
+                self._rows = rows
+
+            def __getitem__(self, index):
+                return self._rows[index]
+
+        class NonIteratorIterableReader(SimpleDataSourceStreamReader):
+            def __init__(self, rows, to_result, advance):
+                self.rows = rows
+                self.to_result = to_result
+                self.advance = advance
+
+            def initialOffset(self):
+                return {"offset": 0}
+
+            def read(self, start: dict):
+                end = {"offset": start["offset"] + len(self.rows)} if self.advance else start
+                return (self.to_result(self.rows), end)
+
+            def readBetweenOffsets(self, start: dict, end: dict):
+                return iter([])
+
+            def commit(self, end: dict):
+                pass
+
+        start = {"offset": 0}
+        # Examples of non-iterator iterables that read() may return instead of an iterator.
+        # GetitemOnly is included because it is the one kind that a guard narrowing the
+        # conversion to isinstance(it, Iterable) would mishandle.
+        non_iterator_results = [
+            tuple,
+            lambda rows: range(len(rows)),
+            lambda rows: deque(rows),
+            IterableOnly,
+            GetitemOnly,
+        ]
+
+        for to_result in non_iterator_results:
+            # Non-empty iterable with an advanced end offset is cached and readable.
+            wrapper = _SimpleStreamReaderWrapper(
+                NonIteratorIterableReader([0, 1], to_result, advance=True)
+            )
+            end = wrapper.latestOffset(start, ReadAllAvailable())
+            self.assertEqual(end, {"offset": 2})
+            self.assertEqual(list(wrapper.getCache(start, end)), [0, 1])
+
+            # Empty iterable with end == start is allowed and not cached.
+            wrapper = _SimpleStreamReaderWrapper(
+                NonIteratorIterableReader([], to_result, advance=False)
+            )
+            end = wrapper.latestOffset(start, ReadAllAvailable())
+            self.assertEqual(end, start)
+            self.assertEqual(len(wrapper.cache), 0)
+
+            # Non-empty iterable with end == start raises the offset validation error.
+            wrapper = _SimpleStreamReaderWrapper(
+                NonIteratorIterableReader([0], to_result, advance=False)
+            )
+            with self.assertRaises(PySparkException) as cm:
+                wrapper.latestOffset(start, ReadAllAvailable())
+            self.assertEqual(
+                cm.exception.getCondition(),
+                "SIMPLE_STREAM_READER_OFFSET_DID_NOT_ADVANCE",
+            )
+
+        # Objects that implement only __next__ keep being accepted by next() directly.
+        wrapper = _SimpleStreamReaderWrapper(NonIteratorIterableReader([], NextOnly, advance=False))
+        end = wrapper.latestOffset(start, ReadAllAvailable())
+        self.assertEqual(end, start)
+        self.assertEqual(len(wrapper.cache), 0)
+
+        wrapper = _SimpleStreamReaderWrapper(
+            NonIteratorIterableReader([0], NextOnly, advance=False)
+        )
+        with self.assertRaises(PySparkException) as cm:
+            wrapper.latestOffset(start, ReadAllAvailable())
+        self.assertEqual(
+            cm.exception.getCondition(),
+            "SIMPLE_STREAM_READER_OFFSET_DID_NOT_ADVANCE",
+        )
+
+    def test_simple_stream_reader_next_lookup_uses_type(self):
+        """The __next__ check uses the type, so __getattr__ hooks and instance attributes
+        on the result cannot misroute the empty/non-empty validation."""
+        from pyspark.sql.datasource_internal import _SimpleStreamReaderWrapper
+
+        class GetattrReturnsList(list):
+            def __getattr__(self, name):
+                return None
+
+        class GetattrRaisesList(list):
+            def __getattr__(self, name):
+                raise KeyError(name)
+
+        class IteratorProxy:
+            def __init__(self, rows):
+                self._rows = iter(rows)
+
+            def __getattr__(self, name):
+                return getattr(self._rows, name)
+
+            def __iter__(self):
+                return self._rows
+
+        def with_instance_next(rows):
+            # An instance __next__ attribute must not be consulted by the check.
+            result = GetattrReturnsList(rows)
+            result.__next__ = lambda: (_ for _ in ()).throw(AssertionError("unused"))
+            return result
+
+        class HookedResultReader(SimpleDataSourceStreamReader):
+            def __init__(self, rows, to_result, advance):
+                self.rows = rows
+                self.to_result = to_result
+                self.advance = advance
+
+            def initialOffset(self):
+                return {"offset": 0}
+
+            def read(self, start: dict):
+                end = {"offset": start["offset"] + len(self.rows)} if self.advance else start
+                return (self.to_result(self.rows), end)
+
+            def readBetweenOffsets(self, start: dict, end: dict):
+                return iter([])
+
+            def commit(self, end: dict):
+                pass
+
+        start = {"offset": 0}
+        # Instance lookups answer __next__ (or raise for it), but the type does not
+        # define it, so the result must be treated as the plain iterable it is.
+        for to_result in [GetattrReturnsList, GetattrRaisesList, with_instance_next]:
+            # Empty result with end == start is allowed and not cached.
+            wrapper = _SimpleStreamReaderWrapper(HookedResultReader([], to_result, advance=False))
+            end = wrapper.latestOffset(start, ReadAllAvailable())
+            self.assertEqual(end, start)
+            self.assertEqual(len(wrapper.cache), 0)
+
+            # Non-empty result with end == start raises the offset validation error,
+            # not a TypeError and not an exception escaping from a hook.
+            wrapper = _SimpleStreamReaderWrapper(HookedResultReader([0], to_result, advance=False))
+            with self.assertRaises(PySparkException) as cm:
+                wrapper.latestOffset(start, ReadAllAvailable())
+            self.assertEqual(
+                cm.exception.getCondition(),
+                "SIMPLE_STREAM_READER_OFFSET_DID_NOT_ADVANCE",
+            )
+
+        # A proxy forwarding __getattr__ and __iter__ to an iterator is converted with
+        # iter() and validated like any other iterable. It is only checked on paths
+        # where the guard runs: the cache readback copies entries with copy.copy,
+        # which a proxy rebuilt without __init__ cannot survive.
+        wrapper = _SimpleStreamReaderWrapper(HookedResultReader([0], IteratorProxy, advance=False))
+        with self.assertRaises(PySparkException) as cm:
+            wrapper.latestOffset(start, ReadAllAvailable())
+        self.assertEqual(
+            cm.exception.getCondition(),
+            "SIMPLE_STREAM_READER_OFFSET_DID_NOT_ADVANCE",
+        )
+
+        wrapper = _SimpleStreamReaderWrapper(HookedResultReader([], IteratorProxy, advance=False))
+        end = wrapper.latestOffset(start, ReadAllAvailable())
+        self.assertEqual(end, start)
+        self.assertEqual(len(wrapper.cache), 0)
+
     def test_stream_writer(self):
         input_dir = tempfile.TemporaryDirectory(prefix="test_data_stream_write_input")
         output_dir = tempfile.TemporaryDirectory(prefix="test_data_stream_write_output")

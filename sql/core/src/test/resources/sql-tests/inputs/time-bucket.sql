@@ -37,13 +37,22 @@ SELECT time_bucket(INTERVAL '1' HOUR, TIMESTAMP_NTZ '2024-01-01 11:27:00', TIMES
 -- bucket_size must be an interval (not a string)
 SELECT time_bucket('15 minutes', TIMESTAMP '2024-01-15 10:23:00');
 
--- ts must be TIMESTAMP or TIMESTAMP_NTZ (not DATE or string)
+-- Implicit casts for timestamp arguments
+
+-- DATE and string ts values cast to TIMESTAMP
 SELECT time_bucket(INTERVAL '15' MINUTE, DATE '2024-01-15');
 SELECT time_bucket(INTERVAL '15' MINUTE, '2024-01-15 10:23:00');
 
--- origin must be TIMESTAMP or TIMESTAMP_NTZ (not DATE or string)
+-- DATE and string origin values cast to TIMESTAMP
 SELECT time_bucket(INTERVAL '15' MINUTE, TIMESTAMP '2024-01-15 10:23:00', DATE '2024-01-01');
 SELECT time_bucket(INTERVAL '15' MINUTE, TIMESTAMP '2024-01-15 10:23:00', '2024-01-01 00:00:00');
+
+-- DATE and string cast to TIMESTAMP (LTZ). Mixing them with TIMESTAMP_NTZ
+-- makes ts and origin different types, so the call is rejected.
+SELECT time_bucket(INTERVAL '15' MINUTE, TIMESTAMP_NTZ '2024-01-15 10:23:00', DATE '2024-01-01');
+SELECT time_bucket(INTERVAL '15' MINUTE, TIMESTAMP_NTZ '2024-01-15 10:23:00', '2024-01-01 00:00:00');
+SELECT time_bucket(INTERVAL '15' MINUTE, DATE '2024-01-15', TIMESTAMP_NTZ '2024-01-01 00:00:00');
+SELECT time_bucket(INTERVAL '15' MINUTE, '2024-01-15 10:23:00', TIMESTAMP_NTZ '2024-01-01 00:00:00');
 
 
 -- Error: bucket_size and origin must be foldable

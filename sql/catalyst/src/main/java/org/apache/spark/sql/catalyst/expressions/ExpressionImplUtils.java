@@ -351,9 +351,9 @@ public class ExpressionImplUtils {
     if (str == null) return null;
     Locale locale;
     if (language != null && country != null) {
-      locale = new Locale(language.toString(), country.toString());
+      locale = Locale.of(language.toString(), country.toString());
     } else if (language != null) {
-      locale = new Locale(language.toString());
+      locale = Locale.of(language.toString());
     } else {
       locale = Locale.US;
     }
