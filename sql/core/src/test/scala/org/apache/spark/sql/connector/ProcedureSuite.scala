@@ -118,6 +118,18 @@ class ProcedureSuite extends SharedSparkSession with BeforeAndAfter {
     checkAnswer(sql("CALL cat.ns.sum(nullif((SELECT 5), 3), 1)"), Row(6) :: Nil)
   }
 
+  test("SPARK-61656: an argument with an IN subquery") {
+    catalog.createProcedure(Identifier.of(Array("ns"), "sum"), UnboundSum)
+    checkError(
+      exception = intercept[AnalysisException] {
+        sql("CALL cat.ns.sum(1, CAST(1 IN (SELECT 1) AS INT))")
+      },
+      condition = "UNSUPPORTED_SUBQUERY_EXPRESSION_CATEGORY.UNSUPPORTED_IN_EXISTS_SUBQUERY",
+      parameters = Map("treeNode" -> "(?s)Call cat.ns.sum.*"),
+      matchPVals = true,
+      queryContext = Array(ExpectedContext(fragment = "IN (SELECT 1)", start = 26, stop = 38)))
+  }
+
   test("type coercion") {
     catalog.createProcedure(Identifier.of(Array("ns"), "sum"), UnboundLongSum)
     checkAnswer(sql("CALL cat.ns.sum(1, 2)"), Row(3) :: Nil)
