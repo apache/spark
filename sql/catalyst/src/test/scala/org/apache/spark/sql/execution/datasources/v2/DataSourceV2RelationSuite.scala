@@ -27,6 +27,8 @@ import org.apache.spark.sql.catalyst.plans.SQLHelper
 import org.apache.spark.sql.catalyst.plans.logical.{Filter, Histogram, HistogramBin, Project}
 import org.apache.spark.sql.catalyst.plans.logical.statsEstimation.EstimationUtils
 import org.apache.spark.sql.catalyst.trees.{TreeNodeTag, TreePattern}
+import org.apache.spark.sql.catalyst.types.DataTypeUtils
+import org.apache.spark.sql.catalyst.util.CharVarcharUtils
 import org.apache.spark.sql.catalyst.util.FieldMetadataUtils.FIELD_ID_METADATA_KEY
 import org.apache.spark.sql.catalyst.util.INTERNAL_METADATA_KEYS
 import org.apache.spark.sql.connector.catalog.{Column, MetadataColumn, SupportsMetadataColumns, Table, TableCapability}
@@ -34,7 +36,7 @@ import org.apache.spark.sql.connector.expressions.{FieldReference, NamedReferenc
 import org.apache.spark.sql.connector.read.{Scan, Statistics => V2Statistics, SupportsReportStatistics}
 import org.apache.spark.sql.connector.read.colstats.ColumnStatistics
 import org.apache.spark.sql.internal.SQLConf
-import org.apache.spark.sql.types.{DataType, IntegerType, MetadataBuilder, StringType, StructField, StructType}
+import org.apache.spark.sql.types.{CharType, DataType, IntegerType, MetadataBuilder, StringType, StructField, StructType}
 import org.apache.spark.sql.util.CaseInsensitiveStringMap
 
 class DataSourceV2RelationSuite extends SparkFunSuite with SQLHelper {
@@ -215,6 +217,35 @@ class DataSourceV2RelationSuite extends SparkFunSuite with SQLHelper {
         assert(scan.stats.rowCount.contains(BigInt(expectedRows)))
         assert(scan.stats == expected,
           "the selected estimate must retain its matching size and column statistics")
+      }
+    }
+  }
+
+  test("SPARK-60810: pushed and inferred filters on a read-side padded CHAR column") {
+    withSQLConf(SQLConf.CBO_ENABLED.key -> "true") {
+      val c = DataTypeUtils.toAttribute(CharVarcharUtils.replaceCharVarcharWithStringInSchema(
+        StructType(Seq(StructField("c", CharType(5))))).head)
+      val schema = StructType(Seq(StructField("c", StringType)))
+      val scan = new Scan with SupportsReportStatistics {
+        override def readSchema(): StructType = schema
+        override def estimateStatistics(): V2Statistics = DataSourceV2Relation.v1StatsToV2Stats(
+          CatalogStatistics(sizeInBytes = 16000, rowCount = Some(BigInt(1000)), colStats = Map(
+            "c" -> CatalogColumnStat(distinctCount = Some(10), nullCount = Some(200),
+              avgLen = Some(5), maxLen = Some(5)))),
+          schema)
+        override def reflectsFullyPushedDownFilters(): Boolean = false
+        override def useInferredFilterEstimation(): Boolean = true
+      }
+      // Filters pushed into a scan compare the padding expression, like a Filter pushed below
+      // the padding Project. Of 1000 rows the equality keeps 100 and IS NOT NULL keeps 800, and
+      // the smaller estimate of the two groups wins; STARTSWITH cannot be estimated.
+      val padded = CharVarcharUtils.addPaddingForScan(c)
+      Seq(
+        EqualTo(padded, Literal("3    ")) -> 100,
+        StartsWith(padded, Literal("3")) -> 800).foreach { case (pushed, expectedRows) =>
+        val withFilters = scanRel(Seq(c), scan).copy(
+          pushedFilters = Seq(pushed), inferredFilters = Seq(IsNotNull(padded)))
+        assert(withFilters.stats.rowCount.contains(BigInt(expectedRows)), pushed)
       }
     }
   }

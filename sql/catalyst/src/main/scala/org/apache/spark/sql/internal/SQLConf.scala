@@ -2530,6 +2530,35 @@ object SQLConf {
     .bytesConf(ByteUnit.BYTE)
     .createWithDefault(8L << 30)
 
+  val JOIN_EXTERNAL_LOOKUP_MAX_BATCH_BYTES =
+    buildConf("spark.sql.join.externalLookup.maxBatchBytes")
+      .withBindingPolicy(ConfigBindingPolicy.NOT_APPLICABLE)
+      .doc("Size in bytes of input rows at which an external lookup join stops adding rows to " +
+        "a lookup request. The row that reaches this size stays in the request, so a request " +
+        "can exceed it by one row. A request always takes at least one row, and never more rows " +
+        "than the source allows, or 1000.")
+      .version("4.4.0")
+      .bytesConf(ByteUnit.BYTE)
+      .checkValue(_ > 0, "External lookup join max batch bytes must be positive")
+      .createWithDefaultString("64m")
+
+  val JOIN_EXTERNAL_LOOKUP_STARTUP_CHECK_ENABLED =
+    buildConf("spark.sql.join.externalLookup.startupCheck.enabled")
+      .internal()
+      .withBindingPolicy(ConfigBindingPolicy.NOT_APPLICABLE)
+      .doc("When true, a streaming query plans its external lookup joins once when its " +
+        "execution starts, including the planning calls to their connectors. A planning error " +
+        "of a lookup join or of its connector contract, of the error class " +
+        "EXTERNAL_LOOKUP_JOIN_UNSUPPORTED, DATA_SOURCE_INVALID_EXTERNAL_LOOKUP or " +
+        "DATA_SOURCE_EXTERNAL_LOOKUP_NOT_SUPPORTED, then stops the query before its first " +
+        "micro-batch, also without data. Any other planning error is left to the first " +
+        "micro-batch, such as one that an ordinary join raises too, or an exception that the " +
+        "connector throws while Spark plans the lookup. When false, those lookup join errors " +
+        "fail the first micro-batch that runs.")
+      .version("4.4.0")
+      .booleanConf
+      .createWithDefault(true)
+
   val INTERRUPT_ON_CANCEL = buildConf("spark.sql.execution.interruptOnCancel")
     .doc("When true, all running tasks will be interrupted if one cancels a query.")
     .version("4.0.0")
@@ -2623,7 +2652,7 @@ object SQLConf {
       .doc("When this config is set to true, join is tried to be pushed down" +
         "for DSv2 data sources in V2ScanRelationPushdown optimization rule.")
       .booleanConf
-      .createWithDefault(false)
+      .createWithDefault(Utils.isTesting)
 
   // This is used to set the default data source
   val DEFAULT_DATA_SOURCE_NAME = buildConf("spark.sql.sources.default")
@@ -2894,11 +2923,13 @@ object SQLConf {
   val CAN_CHANGE_CACHED_PLAN_OUTPUT_PARTITIONING =
     buildConf("spark.sql.optimizer.canChangeCachedPlanOutputPartitioning")
       .internal()
-      .doc("Whether to forcibly enable some optimization rules that can change the output " +
-        "partitioning of a cached query when executing it for caching. If it is set to true, " +
+      .doc("Whether to allow optimization rules to change the output partitioning of a cached " +
+        "query when executing it for caching. If it is set to true, " +
         "queries may need an extra shuffle to read the cached data. This configuration is " +
-        "disabled by default. The optimization rule enabled by this configuration " +
-        s"is ${ADAPTIVE_EXECUTION_APPLY_FINAL_STAGE_SHUFFLE_OPTIMIZATIONS.key}.")
+        "disabled by default. When false, " +
+        s"${ADAPTIVE_EXECUTION_APPLY_FINAL_STAGE_SHUFFLE_OPTIMIZATIONS.key} and " +
+        "spark.sql.adaptive.pushDownShuffleThroughUnion.enabled are disabled for cached " +
+        "queries. When true, their configured enablement is retained.")
       .version("3.2.0")
       .booleanConf
       .createWithDefault(false)
@@ -4204,8 +4235,14 @@ object SQLConf {
         "eviction happens at batch end. When k, up to k eligible records are removed per input; " +
         "any still-eligible records left over are removed at batch end. Only applies to modes " +
         "that evict (e.g. Append/Update); has no effect in Complete mode, which never evicts. " +
-        "Read by the streamline aggregation and streaming deduplication (dropDuplicates) " +
-        "operators; dropDuplicatesWithinWatermark always evicts at batch end.")
+        "Read by the streamline aggregation and streaming deduplication operators. Real-Time " +
+        "Mode defaults this setting to 2 when it is not explicitly set. For " +
+        "dropDuplicatesWithinWatermark, incremental cleanup only applies in Real-Time Mode; " +
+        "micro-batch queries always evict at batch end, even with a positive factor. When " +
+        "enabled for this operator, all cleanup uses the late-events watermark, including " +
+        "the batch-end drain and no-data batches. This can retain more state than a value of 0. " +
+        "Cleanup progress may change which records outside the guaranteed watermark-delay " +
+        "interval are emitted.")
       .version("4.3.0")
       .withBindingPolicy(ConfigBindingPolicy.NOT_APPLICABLE)
       .longConf
@@ -4556,6 +4593,15 @@ object SQLConf {
       .booleanConf
       .createWithDefault(true)
 
+  val ENABLE_SORT_MERGE_AS_OF_JOIN_CODEGEN =
+    buildConf("spark.sql.codegen.join.sortMergeAsOfJoin.enabled")
+      .internal()
+      .doc("When true, enable code-gen for backward and forward sort-merge AS-OF join.")
+      .version("4.4.0")
+      .withBindingPolicy(ConfigBindingPolicy.NOT_APPLICABLE)
+      .booleanConf
+      .createWithDefault(true)
+
   val MAX_NESTED_VIEW_DEPTH =
     buildConf("spark.sql.view.maxNestedViewDepth")
       .internal()
@@ -4635,6 +4681,18 @@ object SQLConf {
       .doc("When true, a write parses and analyzes the SQL text of a generation expression of a " +
         "Data Source V2 table under the SQL configs of the current active SparkSession, and " +
         "CREATE TABLE and REPLACE TABLE do not reject a text that the session reads differently.")
+      .version("4.4.0")
+      .withBindingPolicy(ConfigBindingPolicy.SESSION)
+      .booleanConf
+      .createWithDefault(false)
+
+  val FREEZE_CURRENT_VALUES_IN_CHECK_CONSTRAINT =
+    buildConf("spark.sql.legacy.freezeCurrentValuesInCheckConstraint")
+      .internal()
+      .doc("When true, ALTER TABLE ... ADD CONSTRAINT ... CHECK on a Data Source V2 table stores " +
+        "the predicate of a condition that reads the current time, date, catalog, user and the " +
+        "like, if Spark can build one, with their values at the time of the ALTER TABLE, as " +
+        "before, so that a write that can read the predicate back compares with those values.")
       .version("4.4.0")
       .withBindingPolicy(ConfigBindingPolicy.SESSION)
       .booleanConf
@@ -5680,8 +5738,7 @@ object SQLConf {
         "the columnar-based operator implemented by third-party libraries. A batch that " +
         "Arrow cannot slice, e.g. one with a fixed-width column of 2 GiB or more, is sent " +
         "as a whole. " +
-        "applyInPandasWithState, Arrow Python UDTFs and Arrow Python UDFs that take " +
-        "columnar input directly ignore this config.")
+        "applyInPandasWithState and Arrow Python UDTFs ignore this config.")
       .version("4.1.0")
       .internal()
       .intConf
@@ -5699,8 +5756,7 @@ object SQLConf {
         "happen, but if in extreme case that even one record is still larger than this value, " +
         "Spark will create a batch with one record. A batch that Arrow cannot slice, e.g. one " +
         "with a fixed-width column of 2 GiB or more, is sent as a whole. " +
-        "applyInPandasWithState, Arrow Python UDTFs and Arrow Python UDFs that " +
-        "take columnar input directly ignore this config.")
+        "applyInPandasWithState and Arrow Python UDTFs ignore this config.")
       .version("4.1.0")
       .internal()
       .bytesConf(ByteUnit.BYTE)
@@ -5754,15 +5810,12 @@ object SQLConf {
 
   val ARROW_PYSPARK_UDF_COLUMNAR_INPUT_ENABLED =
     buildConf("spark.sql.execution.arrow.pythonUDF.columnarInput.enabled")
-      .doc("When true, Arrow-based Python UDFs (pandas UDFs) can accept " +
-        "columnar input directly from upstream operators that produce " +
-        "Arrow-backed ColumnarBatch (e.g., DataSource V2 connectors), " +
-        "bypassing the ColumnarToRow and ArrowWriter conversion. " +
-        "This optimization reduces data transfer overhead between " +
-        "the JVM and Python worker processes. It keeps the columns that the UDFs pass " +
-        "through until the results of their batch come back from Python, so it requires " +
-        "an upstream operator whose batches stay valid until then, which a columnar " +
-        "reader does not promise.")
+      .doc("When true, Arrow-based Python UDFs (pandas UDFs) accept columnar input " +
+        "from upstream operators that produce ColumnarBatch. If the inputs of the UDFs " +
+        "are plain column references, those of Arrow-backed batches are written to " +
+        "Python directly, bypassing the ColumnarToRow and ArrowWriter conversion. The " +
+        "columns that the UDFs pass through are still converted to rows and back, " +
+        "which can cost more than leaving this disabled.")
       .version("4.2.0")
       .withBindingPolicy(ConfigBindingPolicy.SESSION)
       .booleanConf
@@ -7487,6 +7540,17 @@ object SQLConf {
       .booleanConf
       .createWithDefault(false)
 
+  val LEGACY_MYSQL_TOP_N_OVER_GROUP_BY_EXPR_ENABLED =
+    buildConf("spark.sql.legacy.mysql.topNOverGroupByExpr.enabled")
+      .internal()
+      .doc("When true, push ORDER BY ... LIMIT to MySQL on top of a pushed GROUP BY even when " +
+        "a sort key is built over a GROUP BY expression, such as GROUP BY a + 1 ORDER BY " +
+        "(a + 1) * 2. MySQL rejects such queries under the default ONLY_FULL_GROUP_BY mode.")
+      .version("4.4.0")
+      .withBindingPolicy(ConfigBindingPolicy.NOT_APPLICABLE)
+      .booleanConf
+      .createWithDefault(false)
+
   val LEGACY_ORACLE_TIMESTAMP_MAPPING_ENABLED =
     buildConf("spark.sql.legacy.oracle.timestampMapping.enabled")
       .internal()
@@ -8206,6 +8270,19 @@ object SQLConf {
     .booleanConf
     .createWithDefault(false)
 
+  val LEGACY_NO_CHAR_PADDING_IN_OVERWRITE_CONDITION =
+    buildConf("spark.sql.legacy.noCharPaddingInOverwriteCondition")
+      .internal()
+      .doc("When true, an overwrite by a condition of a Data Source V2 table, such as " +
+        "`INSERT INTO ... REPLACE WHERE`, compares the stored values of the CHAR columns in the " +
+        "condition with the padded literals, as Spark 4.3 does. It then works with data sources " +
+        "that do not support CHAR_READ_SIDE_PADDING, but keeps the rows whose CHAR values are " +
+        "stored without padding.")
+      .version("4.4.0")
+      .withBindingPolicy(ConfigBindingPolicy.SESSION)
+      .booleanConf
+      .createWithDefault(false)
+
   val CLI_PRINT_HEADER =
     buildConf("spark.sql.cli.print.header")
      .doc("When set to true, spark-sql CLI prints the names of the columns in query output.")
@@ -8840,6 +8917,160 @@ object SQLConf {
       .version("4.1.0")
       .booleanConf
       .createWithDefault(true)
+
+  val PUSH_DOWN_SHUFFLE_THROUGH_UNION_ENABLED =
+    buildConf("spark.sql.adaptive.pushDownShuffleThroughUnion.enabled")
+      .internal()
+      .doc("When true, pushes an EnsureRequirements hash shuffle below a union during AQE " +
+        "query stage preparation. Eligible children already reporting the selected layout " +
+        "are retained; other children are retargeted or receive a new exchange. The target " +
+        "partition count must be at least the smaller of the replaced exchange's count and " +
+        "the effective initial shuffle count, including " +
+        s"${COALESCE_PARTITIONS_INITIAL_PARTITION_NUM.key} when set, and at most a bounded " +
+        "multiple of the larger of the two. Requires " +
+        s"${UNION_OUTPUT_PARTITIONING.key} to be enabled. Removing the union's direct shuffle " +
+        "stage can reduce AQE skew handling and join conversion opportunities. Retaining a " +
+        "shuffled join's layout can make skew optimization or local reads violate ancestor " +
+        "requirements; AQE may reject the optimization or add a shuffle when skew optimization " +
+        "is forced. Join inputs and join branches are opt-in. Cost compensation applies only " +
+        "to SimpleCostEvaluator. Custom evaluators should account for one union exchange " +
+        "becoming multiple branch exchanges; otherwise AQE may reject a re-plan and its other " +
+        "runtime optimizations due to the increased exchange count.")
+      .version("4.4.0")
+      .withBindingPolicy(ConfigBindingPolicy.SESSION)
+      .booleanConf
+      .createWithDefault(false)
+
+  val PUSH_DOWN_SHUFFLE_THROUGH_UNION_LOOK_THROUGH_OPERATORS_ENABLED =
+    buildConf("spark.sql.adaptive.pushDownShuffleThroughUnion.lookThroughOperators.enabled")
+      .internal()
+      .doc("When set to true, the shuffle push-down through a union may look through the " +
+        "operators between the shuffle and the union: a project, a local sort, a filter, a " +
+        "partial aggregate and a partial window group limit. A filter, a partial aggregate and " +
+        "a partial window group limit reduce the data on their way, so the child is then " +
+        "shuffled before the reduction, which can send substantially more data than the single " +
+        "shuffle it replaces. The reducing operator remains above the union; target ranking " +
+        "does not estimate the reduction lost by moved branches, so that cost can outweigh " +
+        "the shuffle saving on retained branches. Requires " +
+        s"${PUSH_DOWN_SHUFFLE_THROUGH_UNION_ENABLED.key} to be enabled.")
+      .version("4.4.0")
+      .withBindingPolicy(ConfigBindingPolicy.SESSION)
+      .booleanConf
+      .createWithDefault(false)
+
+  val PUSH_DOWN_SHUFFLE_THROUGH_UNION_MAX_TARGET_PARTITION_NUM_FACTOR =
+    buildConf(
+      "spark.sql.adaptive.pushDownShuffleThroughUnion.maxTargetPartitionNumFactor")
+      .internal()
+      .doc("The maximum target partition count is this factor times the larger of the replaced " +
+        "exchange's partition count and the effective initial shuffle count. One keeps a target " +
+        "within the plan's own scale; a larger factor lets a branch retain a modestly larger " +
+        "layout instead of being shuffled. Requires " +
+        s"${PUSH_DOWN_SHUFFLE_THROUGH_UNION_ENABLED.key} to be enabled.")
+      .version("4.4.0")
+      .withBindingPolicy(ConfigBindingPolicy.SESSION)
+      .doubleConf
+      .checkValue(f => f >= 1.0 && f < Double.PositiveInfinity,
+        "The target partition count factor must be finite and at least one.")
+      .createWithDefault(1.0)
+
+  val PUSH_DOWN_SHUFFLE_THROUGH_UNION_KEEP_NON_COALESCIBLE_BRANCHES_ENABLED =
+    buildConf(
+      "spark.sql.adaptive.pushDownShuffleThroughUnion.keepNonCoalescibleBranches.enabled")
+      .internal()
+      .doc("When set to true, fixed-count shuffles, bucketed or cached scans, and branches " +
+        "containing exploding joins may offer push-down targets. This can prevent coalescing " +
+        "of the consumer's compatible shuffle group or reduce its target partition size. " +
+        "Rebalance shuffles remain ineligible. This only restricts targets when " +
+        s"${COALESCE_PARTITIONS_ENABLED.key} is on and every consumer input path reaches an " +
+        "exchange boundary. A non-exchange input already prevents the compatible group from " +
+        "coalescing, so these targets remain eligible in that case. Targets are still bounded " +
+        s"by ${PUSH_DOWN_SHUFFLE_THROUGH_UNION_MAX_TARGET_PARTITION_NUM_FACTOR.key}. Requires " +
+        s"${PUSH_DOWN_SHUFFLE_THROUGH_UNION_ENABLED.key} to be enabled.")
+      .version("4.4.0")
+      .withBindingPolicy(ConfigBindingPolicy.SESSION)
+      .booleanConf
+      .createWithDefault(false)
+
+  val PUSH_DOWN_SHUFFLE_THROUGH_UNION_MAX_MOVED_BRANCHES =
+    buildConf("spark.sql.adaptive.pushDownShuffleThroughUnion.maxMovedBranches")
+      .internal()
+      .doc("The maximum number of union children to move onto a push-down target. Existing " +
+        "unshared requirement or column-repartition exchanges may be retargeted; other moved " +
+        "children get a new exchange. Child count and order are preserved. Targets requiring " +
+        "more moved children are skipped. Zero only allows targets already offered by every " +
+        "child. Requires " +
+        s"${PUSH_DOWN_SHUFFLE_THROUGH_UNION_ENABLED.key} to be enabled.")
+      .version("4.4.0")
+      .withBindingPolicy(ConfigBindingPolicy.SESSION)
+      .intConf
+      .checkValue(_ >= 0, "The maximum number of moved branches must be non-negative.")
+      .createWithDefault(3)
+
+  val PUSH_DOWN_SHUFFLE_THROUGH_UNION_MAX_UNION_CHILDREN =
+    buildConf("spark.sql.adaptive.pushDownShuffleThroughUnion.maxUnionChildren")
+      .internal()
+      .doc("The maximum total number of union children eligible for shuffle push-down, " +
+        "including kept and moved children. Zero disables push-down. This bounds the number " +
+        "of branch tails executed sequentially within each union output task.")
+      .version("4.4.0")
+      .withBindingPolicy(ConfigBindingPolicy.SESSION)
+      .intConf
+      .checkValue(_ >= 0, "The maximum number of union children must be non-negative.")
+      .createWithDefault(10)
+
+  val PUSH_DOWN_SHUFFLE_THROUGH_UNION_ALLOW_PARTITION_KEYS_SUBSET_OF_CLUSTER_KEYS_ENABLED =
+    buildConf(
+      "spark.sql.adaptive.pushDownShuffleThroughUnion.allowPartitionKeysSubsetOfClusterKeys.enabled"
+    )
+      .internal()
+      .doc("When true, shuffle push-down may use partition keys that are a subset of the " +
+        s"consumer's clustering keys if ${REQUIRE_ALL_CLUSTER_KEYS_FOR_CO_PARTITION.key} " +
+        "is false and the consumer accepts that distribution. Such targets can concentrate " +
+        "rows in fewer partitions. When false, targets must match all clustering keys.")
+      .version("4.4.0")
+      .withBindingPolicy(ConfigBindingPolicy.SESSION)
+      .booleanConf
+      .createWithDefault(false)
+
+  val PUSH_DOWN_SHUFFLE_THROUGH_UNION_ALLOW_WITH_SUBQUERIES_ENABLED =
+    buildConf("spark.sql.adaptive.pushDownShuffleThroughUnion.allowWithSubqueries.enabled")
+      .internal()
+      .doc("When true, allows shuffle push-down in queries containing scalar, IN or dynamic " +
+        "pruning subqueries, including scalar builds injected by runtime Bloom filters even " +
+        "when the SQL has no explicit subquery. Independent adaptive plans can differ, " +
+        "reducing exchange reuse or disabling broadcast-only dynamic partition pruning. Failed " +
+        "broadcast reuse can remove the pruning filter and scan all fact partitions, which " +
+        "can outweigh the build-side shuffle saving. When false, push-down is disabled for " +
+        "the main query and all its subqueries.")
+      .version("4.4.0")
+      .withBindingPolicy(ConfigBindingPolicy.SESSION)
+      .booleanConf
+      .createWithDefault(false)
+
+  val PUSH_DOWN_SHUFFLE_THROUGH_UNION_ALLOW_JOIN_INPUTS_ENABLED =
+    buildConf("spark.sql.adaptive.pushDownShuffleThroughUnion.allowJoinInputs.enabled")
+      .internal()
+      .doc("When true, allows shuffle push-down for inputs of shuffled joins. Removing a " +
+        "direct shuffle stage can prevent adaptive skew join optimization or join conversion.")
+      .version("4.4.0")
+      .withBindingPolicy(ConfigBindingPolicy.SESSION)
+      .booleanConf
+      .createWithDefault(false)
+
+  val PUSH_DOWN_SHUFFLE_THROUGH_UNION_KEEP_JOIN_BRANCHES_ENABLED =
+    buildConf("spark.sql.adaptive.pushDownShuffleThroughUnion.keepJoinBranches.enabled")
+      .internal()
+      .doc("When true, union children may offer layouts produced by shuffled joins above their " +
+        "shuffle boundaries, or by broadcast-hash-join probes backed by requirement shuffles, " +
+        "including their query stages and adaptive reads. Depending on those layouts can " +
+        "prevent skew optimization or local shuffle reads. Forced skew optimization may " +
+        "restore a shuffle above the union after moved branches have already shuffled, " +
+        "shuffling those branches a second time. This opt-in does not prevent that trade-off.")
+      .version("4.4.0")
+      .withBindingPolicy(ConfigBindingPolicy.SESSION)
+      .booleanConf
+      .createWithDefault(false)
 
   val SINGLE_TASK_EXECUTION_ENABLED =
     buildConf("spark.sql.optimizer.singleTaskExecution.enabled")
@@ -9696,6 +9927,9 @@ class SQLConf extends Serializable with Logging with SqlApiConf {
   def costEvaluatorCountLocalSortEnabled: Boolean =
     getConf(ADAPTIVE_COST_EVALUATOR_COUNT_LOCAL_SORT_ENABLED)
 
+  def pushDownShuffleThroughUnionEnabled: Boolean =
+    getConf(PUSH_DOWN_SHUFFLE_THROUGH_UNION_ENABLED)
+
   def coalesceShufflePartitionsEnabled: Boolean = getConf(COALESCE_PARTITIONS_ENABLED)
 
   def collapseWindowWithEmptyOrderSpecInChild: Boolean =
@@ -9891,6 +10125,9 @@ class SQLConf extends Serializable with Logging with SqlApiConf {
 
   def legacyMySqlTimestampNTZMappingEnabled: Boolean =
     getConf(LEGACY_MYSQL_TIMESTAMPNTZ_MAPPING_ENABLED)
+
+  def legacyMySqlTopNOverGroupByExprEnabled: Boolean =
+    getConf(LEGACY_MYSQL_TOP_N_OVER_GROUP_BY_EXPR_ENABLED)
 
   def legacyOracleTimestampMappingEnabled: Boolean =
     getConf(LEGACY_ORACLE_TIMESTAMP_MAPPING_ENABLED)

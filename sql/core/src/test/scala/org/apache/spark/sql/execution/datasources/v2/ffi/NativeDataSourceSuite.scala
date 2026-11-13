@@ -46,7 +46,7 @@ import org.apache.spark.sql.classic.{DataFrame, SparkSession}
 import org.apache.spark.sql.connector.catalog.SupportsRead
 import org.apache.spark.sql.connector.expressions.{Expression => V2Expression, FieldReference, LiteralValue}
 import org.apache.spark.sql.connector.expressions.filter.Predicate
-import org.apache.spark.sql.connector.read.{InputPartition, SupportsArrowStreamRead, SupportsPushDownRequiredColumns}
+import org.apache.spark.sql.connector.read.{InputPartition, PartitionReader, SupportsArrowStreamRead, SupportsPushDownRequiredColumns}
 import org.apache.spark.sql.connector.read.streaming.{MicroBatchStream, Offset, ReadLimit, SupportsAdmissionControl}
 import org.apache.spark.sql.connector.write.PhysicalWriteInfoImpl
 import org.apache.spark.sql.execution.WholeStageCodegenExec
@@ -54,6 +54,7 @@ import org.apache.spark.sql.execution.datasources.DataSource
 import org.apache.spark.sql.execution.datasources.v2.{BatchScanExec, DataSourceV2ScanRelation, MicroBatchScanExec, V2TableWriteExec}
 import org.apache.spark.sql.execution.datasources.v2.columnar.{ColumnarBatchScan, ColumnarBatchWrite, ColumnarMicroBatchStream, ColumnarScan, ColumnarScanBuilder, ColumnarStreamingWrite, ColumnarStreamOffset}
 import org.apache.spark.sql.execution.datasources.v2.python.{PythonDataSourceV2, UserDefinedPythonDataSource}
+import org.apache.spark.sql.execution.python.ArrowEvalPythonExec
 import org.apache.spark.sql.execution.streaming.runtime.StreamingQueryWrapper
 import org.apache.spark.sql.execution.vectorized.ReusedArrowColumnVector
 import org.apache.spark.sql.functions.lit
@@ -124,9 +125,47 @@ class NativeDataSourceSuite extends QueryTest with SharedSparkSession {
 
   // The test libraries record the calls that the order of the calls of the header rules out,
   // which fail the test that made them.
+  // Each test also checks that the buffers of its readers are freed, see checkReadersFreed, also
+  // when it fails, and only those of its own readers: a reader that a failing test leaves behind
+  // is reported with the failure of that test, and does not fail the next one.
   private def nativeTest(name: String)(f: => Unit): Unit = test(name) {
     assume(toolchain.isDefined, "A C++ compiler and Java 22 or later are required.")
-    try checkingOrderOfCalls(f) finally SparkSession.setActiveSession(spark)
+    val earlierReaders = readerAllocators()
+    try {
+      try {
+        checkingOrderOfCalls(f)
+      } catch {
+        case e: Throwable =>
+          try {
+            checkReadersFreed(earlierReaders)
+          } catch {
+            case leak: Throwable => e.addSuppressed(leak)
+          }
+          throw e
+      }
+      checkReadersFreed(earlierReaders)
+    } finally {
+      SparkSession.setActiveSession(spark)
+    }
+  }
+
+  /**
+   * Checks that the buffers of the readers of native data sources are freed. A reader closed while
+   * the batch that it returned may still be read, as when a query stops before the end of a
+   * partition, frees the buffers of the batch once it is unreachable. Each test checks that they
+   * are freed after it, so that a test that leaks a reader fails, and the readers of a test are
+   * freed before the next test, see readerAndAllocator, and before the suites that run next in
+   * this JVM, which may count the memory of Arrow. `earlierReaders` are those that were not freed
+   * before the test, which a failed test may have left behind, and which it does not check.
+   */
+  private def checkReadersFreed(earlierReaders: Set[BufferAllocator]): Unit = {
+    if ((readerAllocators() -- earlierReaders).nonEmpty) {
+      eventually(timeout(1.minute), interval(100.milliseconds)) {
+        System.gc()
+        val readers = readerAllocators() -- earlierReaders
+        assert(readers.isEmpty, readers.map(a => s"${a.getName}: ${a.getAllocatedMemory} bytes"))
+      }
+    }
   }
 
   // Checks the answer without converting the DataFrame to an RDD: a job outside of a SQL
@@ -146,6 +185,31 @@ class NativeDataSourceSuite extends QueryTest with SharedSparkSession {
     }.get
   }
 
+  /** The allocators of the readers of native data sources that are not freed yet. */
+  private def readerAllocators(): Set[BufferAllocator] = {
+    ArrowUtils.rootAllocator.getChildAllocators.asScala
+      .filter(_.getName.startsWith("native data source ")).toSet
+  }
+
+  /**
+   * Creates the reader of a partition of the batch scan of `df`, and returns it with the allocator
+   * of its buffers, which the reader closes once it frees them.
+   */
+  private def readerAndAllocator(
+      df: DataFrame,
+      partition: Int = 0): (PartitionReader[ColumnarBatch], BufferAllocator) = {
+    val batch = scan(df).toBatch
+    val (factory, partitions) = (batch.createReaderFactory(), batch.planInputPartitions())
+    val before = readerAllocators()
+    val reader = factory.createColumnarReader(partitions(partition))
+    val created = readerAllocators() -- before
+    if (created.size != 1) {
+      reader.close()
+      fail(s"The reader has ${created.size} allocators.")
+    }
+    (reader, created.head)
+  }
+
   private def expectedRow(id: Long): Row = Row(
     id,
     (id % 3).toInt,
@@ -154,6 +218,19 @@ class NativeDataSourceSuite extends QueryTest with SharedSparkSession {
     id % 2 == 0,
     Date.valueOf(LocalDate.ofEpochDay(id)),
     Timestamp.from(Instant.ofEpochSecond(id)))
+
+  /** Checks the failure of a next called once the reader of native_range was closed. */
+  private def checkClosed(e: Throwable): Unit = e match {
+    case e: SparkRuntimeException =>
+      checkError(
+        exception = e,
+        condition = "NATIVE_DATA_SOURCE_ERROR",
+        parameters = Map(
+          "action" -> "read",
+          "name" -> "native_range",
+          "msg" -> "The partition reader is closed."))
+    case _ => fail(s"Unexpected failure: $e", e)
+  }
 
   /** Finds the error with the given condition among the causes of a failure. */
   private def findError(e: Throwable, condition: String): SparkThrowable = {
@@ -281,7 +358,11 @@ class NativeDataSourceSuite extends QueryTest with SharedSparkSession {
     NativeStreamWriters.register("query", first)
     NativeStreamWriters.register("other query", other)
     assert(released.isEmpty)
+    // Closed before the query creates its next stream writer.
+    NativeStreamWriters.closePrevious("query")
+    assert(released == Seq(1L))
     NativeStreamWriters.register("query", second)
+    NativeStreamWriters.closePrevious("new query")
     assert(released == Seq(1L))
     second.close()
     other.close()
@@ -625,20 +706,66 @@ class NativeDataSourceSuite extends QueryTest with SharedSparkSession {
     assert(scan(nested).readSchema() == StructType.fromDDL("st STRUCT<a: BIGINT, b: STRING>"))
   }
 
+  nativeTest("read the columns at the addresses of their buffers, and decimals as longs") {
+    val df = range(newSession(defaultPackage), "end" -> "10", "partitions" -> "1",
+      "extra" -> "decimal")
+    assert(df.schema("d").dataType == DecimalType(10, 2))
+    checkRows(df, (0L until 10L).map { id =>
+      Row.fromSeq(expectedRow(id).toSeq :+ java.math.BigDecimal.valueOf(id * 100, 2))
+    })
+    val batch = scan(df).toBatch
+    val reader = batch.createReaderFactory().createColumnarReader(batch.planInputPartitions().head)
+    try {
+      assert(reader.next())
+      val columns = (0 until reader.get().numCols()).map(reader.get().column)
+      // The columns of all these types read their buffers through a subclass of
+      // NativeColumnVector.
+      columns.foreach { column =>
+        assert(column.isInstanceOf[NativeColumnVector] &&
+          column.getClass != classOf[NativeColumnVector], column.getClass.getName)
+      }
+      // The decimals hold their unscaled longs, as those of Spark's own column vectors do.
+      (0 until reader.get().numRows()).foreach { row =>
+        assert(columns.last.getDecimal(row, 10, 2).toDebugString ===
+          s"Decimal(compact, ${row * 100}, 10, 2)")
+      }
+    } finally {
+      reader.close()
+    }
+  }
+
   nativeTest("reject the data that has nulls where the schema to read has none") {
     // The column name is null for the ids that are multiples of 5.
     val session = newSession(defaultPackage)
-    val e = intercept[Exception] {
-      session.read.schema("id BIGINT, name STRING NOT NULL").format("native_range")
-        .option("end", "4").load().collect()
-    }
-    checkError(
+    def checkNullError(e: Throwable): Unit = checkError(
       exception = findError(e, "NATIVE_DATA_SOURCE_ERROR"),
       condition = "NATIVE_DATA_SOURCE_ERROR",
       parameters = Map(
         "action" -> "read",
         "name" -> "native_range",
         "msg" -> "The column name has a null, but the schema to read declares it not nullable."))
+    checkNullError(intercept[Exception] {
+      session.read.schema("id BIGINT, name STRING NOT NULL").format("native_range")
+        .option("end", "4").load().collect()
+    })
+    // A batch that is rejected after others were read: the second partition reads the ids 6-7,
+    // 8-9 and 10-11, and the name of id 10 is null.
+    val df = session.read.schema("id BIGINT, name STRING NOT NULL").format("native_range")
+      .options(Map("end" -> "12", "partitions" -> "2", "batch_size" -> "2")).load()
+    val batch = scan(df).toBatch
+    val reader = batch.createReaderFactory().createColumnarReader(batch.planInputPartitions()(1))
+    try {
+      assert(reader.next() && reader.next())
+      assert(reader.get().numRows() == 2)
+      assert(reader.get().column(1).getUTF8String(1).toString == "n9")
+      checkNullError(intercept[Exception](reader.next()))
+      // The batch has no rows, and its column vectors read the buffers of the rejected batch,
+      // since the import released those of the previous one.
+      assert(reader.get().numRows() == 0)
+      assert(reader.get().column(1).getUTF8String(1).toString == "n11")
+    } finally {
+      reader.close()
+    }
     // The fields that are not nullable have no nulls.
     checkRows(
       session.read.schema("id BIGINT NOT NULL, st STRUCT<a: BIGINT NOT NULL, b: STRING NOT NULL>")
@@ -685,16 +812,26 @@ class NativeDataSourceSuite extends QueryTest with SharedSparkSession {
       name = "native_str", returnType = Some(StringType))
     IntegratedUDFTestUtils.registerTestUDF(udf, session)
     // One batch, two, and many. The test UDF casts its input to string: on the string column
-    // name, the cast is removed, so the batches go to Python as they are.
-    Seq(100, 200, 200000).foreach { end =>
-      val rows = range(session, "end" -> end.toString, "partitions" -> "1", "batch_size" -> "100")
-        .selectExpr("id", "name", "native_str(name) AS udf_name").collect()
-      assert(rows.map(_.getLong(0)).toSeq == (0L until end))
-      rows.foreach { row =>
-        val id = row.getLong(0)
-        val name = if (id % 5 == 0) null else s"n$id"
-        assert(row.getString(1) == name, s"name mismatch for id $id")
-        assert(row.getString(2) == name, s"UDF mismatch for id $id")
+    // name, the cast is removed, so the batches go to Python as they are. With columnar input,
+    // the UDF reads the batches of the reader, whose column vectors are ReusedArrowColumnVectors,
+    // so it copies their pass-through columns rather than keep them past the next batch.
+    Seq(false, true).foreach { columnarInput =>
+      session.conf.set(
+        SQLConf.ARROW_PYSPARK_UDF_COLUMNAR_INPUT_ENABLED.key, columnarInput.toString)
+      Seq(100, 200, 200000).foreach { end =>
+        val df = range(session, "end" -> end.toString, "partitions" -> "1", "batch_size" -> "100")
+          .selectExpr("id", "name", "native_str(name) AS udf_name")
+        val plan = df.queryExecution.executedPlan
+        assert(plan.collectFirst { case e: ArrowEvalPythonExec => e.supportsColumnar }
+          .contains(columnarInput), plan)
+        val rows = df.collect()
+        assert(rows.map(_.getLong(0)).toSeq == (0L until end))
+        rows.foreach { row =>
+          val id = row.getLong(0)
+          val name = if (id % 5 == 0) null else s"n$id"
+          assert(row.getString(1) == name, s"name mismatch for id $id")
+          assert(row.getString(2) == name, s"UDF mismatch for id $id")
+        }
       }
     }
   }
@@ -929,25 +1066,56 @@ class NativeDataSourceSuite extends QueryTest with SharedSparkSession {
       new NativeDataSource(location, resolved, new CaseInsensitiveStringMap(options.toMap.asJava))
     }
     val schema = StructType.fromDDL("id BIGINT")
+    def newBatchWrite(dir: File, options: (String, String)*): ColumnarBatchWrite = {
+      val write = new ColumnarBatchWrite(
+        () => dataSource("native_sink", ("path" -> dir.getPath) +: options: _*)
+          .writer(schema, false),
+        schema)
+      write.createBatchWriterFactory(PhysicalWriteInfoImpl(1))
+      write
+    }
+    def newStreamWrite(dir: File, options: (String, String)*): ColumnarStreamingWrite = {
+      val write = new ColumnarStreamingWrite("native_sink",
+        () => dataSource("native_sink", ("path" -> dir.getPath) +: options: _*)
+          .streamWriter(schema, false, UUID.randomUUID().toString),
+        schema)
+      write.createStreamingWriterFactory(PhysicalWriteInfoImpl(1))
+      write
+    }
     // The test library records each call that the header rules out, which fails the test.
 
-    // A write or a micro-batch that committed is not aborted.
+    // A write or a micro-batch that committed is not aborted, and its writer is closed right away.
     val batchDir = Utils.createTempDir()
-    val batchWrite = new ColumnarBatchWrite(
-      () => dataSource("native_sink", "path" -> batchDir.getPath).writer(schema, false), schema)
-    batchWrite.createBatchWriterFactory(PhysicalWriteInfoImpl(1))
+    val batchWrite = newBatchWrite(batchDir)
     batchWrite.commit(Array.empty)
     batchWrite.abort(Array.empty)
     assert(new File(batchDir, "_SUCCESS").isFile && !new File(batchDir, "_ABORTED").exists())
+    assert(new File(batchDir, "_CLOSED").isFile)
     val streamDir = Utils.createTempDir()
-    val streamWrite = new ColumnarStreamingWrite("native_sink",
-      () => dataSource("native_sink", "path" -> streamDir.getPath)
-        .streamWriter(schema, false, UUID.randomUUID().toString),
-      schema)
-    streamWrite.createStreamingWriterFactory(PhysicalWriteInfoImpl(1))
+    val streamWrite = newStreamWrite(streamDir)
     streamWrite.commit(0, Array.empty)
     streamWrite.abort(0, Array.empty)
     assert(new File(streamDir, "_EPOCH_0").isFile && !new File(streamDir, "_ABORTED_0").exists())
+    assert(new File(streamDir, "_CLOSED_0").isFile)
+
+    // A writer whose abort fails is closed all the same.
+    def checkAbortError(abort: => Unit): Unit = checkError(
+      exception = findError(intercept[Exception](abort), "NATIVE_DATA_SOURCE_ERROR"),
+      condition = "NATIVE_DATA_SOURCE_ERROR",
+      parameters = Map(
+        "action" -> "abort a write to",
+        "name" -> "native_sink",
+        "msg" -> "injected failure in abort"))
+    val failingBatchDir = Utils.createTempDir()
+    val failingBatchWrite = newBatchWrite(failingBatchDir, "fail" -> "abort")
+    checkAbortError(failingBatchWrite.abort(Array.empty))
+    assert(!new File(failingBatchDir, "_ABORTED").exists())
+    assert(new File(failingBatchDir, "_CLOSED").isFile)
+    val failingStreamDir = Utils.createTempDir()
+    val failingStreamWrite = newStreamWrite(failingStreamDir, "fail" -> "abort")
+    checkAbortError(failingStreamWrite.abort(0, Array.empty))
+    assert(!new File(failingStreamDir, "_ABORTED_0").exists())
+    assert(new File(failingStreamDir, "_CLOSED_0").isFile)
 
     // After a write fails, a data writer only aborts and closes the data writer of the library.
     val failingDir = Utils.createTempDir()
@@ -995,29 +1163,34 @@ class NativeDataSourceSuite extends QueryTest with SharedSparkSession {
     builder.build().toBatch.planInputPartitions()
   }
 
-  nativeTest("abort a micro-batch whose write failed") {
-    val session = newSession(defaultPackage)
-    val dir = Utils.createTempDir()
-    val e = intercept[Exception] {
-      val query = session.readStream.format("native_counter").option("max_offset", "4").load()
-        .writeStream
-        .format("native_sink")
-        .option("path", dir.getPath)
-        .option("fail", "write")
-        .option("checkpointLocation", Utils.createTempDir().getPath)
-        .start()
-      try query.processAllAvailable() finally query.stop()
-    }
-    checkError(
-      exception = findError(e, "NATIVE_DATA_SOURCE_ERROR"),
-      condition = "NATIVE_DATA_SOURCE_ERROR",
-      parameters = Map(
-        "action" -> "write to",
-        "name" -> "native_sink",
-        "msg" -> "injected failure in write"))
-    // Spark aborted the first epoch, with a null message for its task, which did not commit.
-    assert(Files.readString(new File(dir, "_ABORTED_0").toPath) == "1,1,0")
-    assert(!new File(dir, "_EPOCH_0").exists())
+  Seq(("write", "write to", "1,1,0"), ("commit", "commit a write to", "0,1,0")).foreach {
+    case (fail, action, aborted) =>
+      nativeTest(s"abort a micro-batch whose $fail failed") {
+        val session = newSession(defaultPackage)
+        val dir = Utils.createTempDir()
+        val e = intercept[Exception] {
+          val query = session.readStream.format("native_counter").option("max_offset", "4").load()
+            .writeStream
+            .format("native_sink")
+            .option("path", dir.getPath)
+            .option("fail", fail)
+            .option("checkpointLocation", Utils.createTempDir().getPath)
+            .start()
+          try query.processAllAvailable() finally query.stop()
+        }
+        checkError(
+          exception = findError(e, "NATIVE_DATA_SOURCE_ERROR"),
+          condition = "NATIVE_DATA_SOURCE_ERROR",
+          parameters = Map(
+            "action" -> action,
+            "name" -> "native_sink",
+            "msg" -> s"injected failure in $fail"))
+        // Spark aborted the first epoch with its writer, which it closed afterwards: with a null
+        // message for a task that did not commit, or the message of one that did.
+        assert(Files.readString(new File(dir, "_ABORTED_0").toPath) == aborted)
+        assert(!new File(dir, "_EPOCH_0").exists())
+        assert(new File(dir, "_CLOSED_0").isFile)
+      }
   }
 
   nativeTest("continuous processing fails with a native data source") {
@@ -1072,14 +1245,14 @@ class NativeDataSourceSuite extends QueryTest with SharedSparkSession {
         query.asInstanceOf[StreamingQueryWrapper].streamingQuery.lastExecution.executedPlan
       assert(plan.collectFirst { case write: V2TableWriteExec => write.query }
         .exists(_.isInstanceOf[MicroBatchScanExec]), plan)
+      // Each micro-batch creates a new stream writer, which is closed once it committed, so the
+      // writer of the last micro-batch is closed too while the query still runs.
+      assert((0 to 2).forall(epoch => new File(dir, s"_CLOSED_$epoch").isFile))
     } finally {
       query.stop()
     }
     // Each micro-batch makes 5 more rows available after its start: [0, 5), [5, 10) and [10, 12).
     assert((0 to 2).forall(epoch => new File(dir, s"_EPOCH_$epoch").isFile))
-    // Each micro-batch creates a new stream writer, which closes the one of the previous
-    // micro-batch. The last one is closed once it is no longer referenced.
-    assert((0 to 1).forall(epoch => new File(dir, s"_CLOSED_$epoch").isFile))
     val written = dir.listFiles().filter(_.getName.startsWith("part-"))
       .flatMap(file => Files.readAllLines(file.toPath).asScala)
     assert(written.sorted.toSeq == (0 until 12).map(_.toString).sorted)
@@ -2531,7 +2704,9 @@ class NativeDataSourceSuite extends QueryTest with SharedSparkSession {
     val session = newSession(defaultPackage)
     val pool = ThreadUtils.newDaemonSingleThreadExecutor("native-reader")
     // Closes a reader while another thread is in get_next. The reader releases the stream once
-    // get_next returns, also when it fails, and then next returns false or throws.
+    // get_next returns, also when it fails, and then next throws: the error of its read, or the
+    // failure of a next once the reader is closed, so that the thread does not take the close for
+    // the end of the data.
     def closeWhileReading(failing: Boolean): Either[Throwable, Boolean] = {
       val marker = new File(Utils.createTempDir(), "released")
       val options = Seq("end" -> "10", "partitions" -> "1", "slow_read" -> marker.getPath) ++
@@ -2557,7 +2732,7 @@ class NativeDataSourceSuite extends QueryTest with SharedSparkSession {
         // it freed is interrupted, and a read outside of a task never is.
         assert(Files.readString(new File(marker.getPath + ".interrupted").toPath) == "false")
         // A reader that was closed reads nothing more, and closing it again does not fail.
-        assert(!reader.next())
+        checkClosed(intercept[SparkRuntimeException](reader.next()))
         reader.close()
         result
       } finally {
@@ -2567,11 +2742,139 @@ class NativeDataSourceSuite extends QueryTest with SharedSparkSession {
       }
     }
     try {
-      assert(closeWhileReading(failing = false) == Right(false))
+      checkClosed(closeWhileReading(failing = false).swap.getOrElse(fail("next did not fail")))
       val error = closeWhileReading(failing = true).swap.getOrElse(fail("next did not fail"))
       assert(error.getMessage.contains("injected failure after a slow get_next"))
     } finally {
       pool.shutdown()
+    }
+  }
+
+  nativeTest("close a reader while another thread reads the batch that it returned") {
+    val session = newSession(defaultPackage)
+    val pool = ThreadUtils.newDaemonSingleThreadExecutor("native-reader")
+    def onPool[T](f: => T): T = pool.submit(new Callable[T] {
+      override def call(): T = f
+    }).get(1, TimeUnit.MINUTES)
+    // The contexts of the tasks of earlier tests are closed first, so that the counts below are
+    // exactly those of this test.
+    eventually(timeout(1.minute))(assert(NativeLibrary.openTaskContexts() == 0))
+    // Closes a reader on this thread once the other thread read a batch. With `nextAgain`, the
+    // other thread then calls next, which tells that it no longer reads the batch. Otherwise
+    // nativeTest checks that a Cleaner frees the buffers once the reader is unreachable.
+    def closeWhileRead(nextAgain: Boolean): Unit = {
+      val marker = new File(Utils.createTempDir(), "released")
+      // get_next does not wait: the file .continue exists.
+      new File(marker.getPath + ".continue").createNewFile()
+      val (reader, allocator) = readerAndAllocator(
+        range(session, "end" -> "10", "partitions" -> "1", "slow_read" -> marker.getPath)
+          .select("id"))
+      try {
+        assert(onPool(reader.next()))
+        assert(NativeLibrary.openTaskContexts() == 1)
+        reader.close()
+        // The stream and the task are released at once, but not the buffers of the batch, which
+        // the other thread may still read.
+        assert(Files.readString(marker.toPath) == "after get_next")
+        assert(NativeLibrary.openTaskContexts() == 0)
+        assert(readerAllocators().contains(allocator) && allocator.getAllocatedMemory > 0)
+        val rows = onPool((0 until reader.get().numRows()).map(reader.get().column(0).getLong))
+        assert(rows === (0L until 10L))
+        // Closing the reader again does nothing.
+        reader.close()
+        assert(readerAllocators().contains(allocator))
+        if (nextAgain) {
+          // A next then fails, and frees the buffers of the batch and the allocator at once: the
+          // test still references the reader, which a Cleaner would wait for.
+          checkClosed(intercept[ExecutionException](onPool(reader.next())).getCause)
+          assert(!readerAllocators().contains(allocator))
+          // The batch then has no rows, so that it is not read at the freed addresses.
+          assert(reader.get().numRows() == 0)
+          // So does a next on any thread after that.
+          checkClosed(intercept[SparkRuntimeException](reader.next()))
+        }
+      } finally {
+        reader.close()
+      }
+    }
+    try {
+      closeWhileRead(nextAgain = false)
+      closeWhileRead(nextAgain = true)
+    } finally {
+      pool.shutdown()
+    }
+  }
+
+  nativeTest("keep the buffers of a closed reader while its batch is held without the reader") {
+    val session = newSession(defaultPackage)
+    // Closes a reader once it returned a batch, and returns the batch and the allocator of the
+    // reader, but not the reader, as `DataSourceRDD` drops it once it closes it.
+    def closedBatch(): (ColumnarBatch, BufferAllocator) = {
+      val (reader, allocator) = readerAndAllocator(
+        range(session, "end" -> "10", "partitions" -> "1").select("id"))
+      try {
+        assert(reader.next())
+      } finally {
+        reader.close()
+      }
+      (reader.get(), allocator)
+    }
+    // Reads the batch after garbage collections.
+    def readAfterGC(): Unit = {
+      val (batch, allocator) = closedBatch()
+      // An object that a Cleaner action marks once a garbage collection found it unreachable,
+      // after which the reader would be freed too if only the reader referred to it.
+      val collected = new CountDownLatch(1)
+      NativeHandle.cleaner.register(new Object, () => collected.countDown())
+      eventually(timeout(1.minute), interval(100.milliseconds)) {
+        System.gc()
+        assert(collected.getCount == 0)
+      }
+      // The column vectors of the batch keep the reader reachable, so that the Cleaner does not
+      // free the buffers that a consumer still reads.
+      assert(readerAllocators().contains(allocator) && allocator.getAllocatedMemory > 0)
+      assert((0 until batch.numRows()).map(batch.column(0).getLong) === (0L until 10L))
+    }
+    // nativeTest checks that the Cleaner frees them once the batch is dropped too.
+    readAfterGC()
+  }
+
+  nativeTest("free the buffers of a reader closed at the end of its stream without a GC") {
+    val session = newSession(defaultPackage)
+    // The ids 0-3, 4-7 and 8-9.
+    val (reader, allocator) = readerAndAllocator(
+      range(session, "end" -> "10", "partitions" -> "1", "batch_size" -> "4").select("id"))
+    try {
+      val ids = ArrayBuffer.empty[Long]
+      while (reader.next()) {
+        ids ++= (0 until reader.get().numRows()).map(reader.get().column(0).getLong)
+      }
+      assert(ids.toSeq === (0L until 10L))
+      // The buffers of the last batch stay allocated until the reader is closed.
+      assert(allocator.getAllocatedMemory > 0)
+      reader.close()
+      // Consumers no longer read a batch once next was called again, here at the end of the
+      // stream, so the close frees its buffers and the allocator at once: the test still
+      // references the reader, which a Cleaner would wait for.
+      assert(!readerAllocators().contains(allocator))
+      // The batch then has no rows, so that it is not read at the freed addresses.
+      assert(reader.get().numRows() == 0)
+    } finally {
+      reader.close()
+    }
+    // So does the close of a reader whose next failed, also after an import: the name of id 10, in
+    // the third batch of the second partition, is null.
+    val (failed, failedAllocator) = readerAndAllocator(
+      session.read.schema("id BIGINT, name STRING NOT NULL").format("native_range")
+        .options(Map("end" -> "12", "partitions" -> "2", "batch_size" -> "2")).load(),
+      partition = 1)
+    try {
+      assert(failed.next() && failed.next())
+      findError(intercept[Exception](failed.next()), "NATIVE_DATA_SOURCE_ERROR")
+      failed.close()
+      assert(!readerAllocators().contains(failedAllocator))
+    } finally {
+      failed.close()
     }
   }
 

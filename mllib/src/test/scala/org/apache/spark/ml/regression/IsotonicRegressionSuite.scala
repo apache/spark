@@ -82,6 +82,9 @@ class IsotonicRegressionSuite extends MLTest with DefaultReadWriteTest {
     val dataset = generateIsotonicInput(Seq(1, 2, 3))
     val ir = new IsotonicRegression
     ParamsSuite.checkParams(ir)
+    assert(ir.getIntermediateStorageLevel === "MEMORY_AND_DISK")
+    ir.setIntermediateStorageLevel("DISK_ONLY")
+    assert(ir.getIntermediateStorageLevel === "DISK_ONLY")
     val model = ir.fit(dataset)
     ParamsSuite.checkParams(model)
   }

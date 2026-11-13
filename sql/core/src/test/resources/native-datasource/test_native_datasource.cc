@@ -22,21 +22,21 @@
 //   native_range    Reads rows [0, end) with columns of several types. Supports column and limit
 //                   pushdown. With the option "extra", the schema has one more column: "map" adds a
 //                   map whose entry fields are named "keys" and "values", as arrow-rs names them,
-//                   "struct" adds a struct, "decimal256" adds a decimal256, "listview" adds a list
-//                   view, "largelist" adds a large list, and "dictionary" adds a dictionary-encoded
-//                   string column, whose data Spark rejects before reading it. With the option
-//                   "slice", the columns of the batches have an offset of 1. With the option
-//                   "short", an array of the batches has one value fewer than its parent refers to,
-//                   although its buffers hold them all: "id" shortens the column id, "entries" the
-//                   entries of the map and their fields, and "values" the values of the entries.
-//                   "children" exports the batches without their columns, with n_children = 0,
-//                   "buffers" exports the map with a NULL pointer to its buffers, and
-//                   "batch_buffers" the batches with one. With the option "null_rows", the struct
-//                   of a batch has a validity buffer that marks its first row as null, and a
-//                   null_count of 1 for "count" or -1 for "unknown"; "unknown_valid" has one
-//                   without nulls and a null_count of -1, and "no_buffer" a null_count of -1
-//                   without a validity buffer. "column" gives the first column, which has no
-//                   validity buffer, a null_count of -1 instead. With the option
+//                   "struct" adds a struct, "decimal" adds a decimal128, "decimal256" adds a
+//                   decimal256, "listview" adds a list view, "largelist" adds a large list, and
+//                   "dictionary" adds a dictionary-encoded string column, whose data Spark rejects
+//                   before reading it. With the option "slice", the columns of the batches have an
+//                   offset of 1. With the option "short", an array of the batches has one value
+//                   fewer than its parent refers to, although its buffers hold them all: "id"
+//                   shortens the column id, "entries" the entries of the map and their fields, and
+//                   "values" the values of the entries. "children" exports the batches without
+//                   their columns, with n_children = 0, "buffers" exports the map with a NULL
+//                   pointer to its buffers, and "batch_buffers" the batches with one. With the
+//                   option "null_rows", the struct of a batch has a validity buffer that marks its
+//                   first row as null, and a null_count of 1 for "count" or -1 for "unknown";
+//                   "unknown_valid" has one without nulls and a null_count of -1, and "no_buffer" a
+//                   null_count of -1 without a validity buffer. "column" gives the first column,
+//                   which has no validity buffer, a null_count of -1 instead. With the option
 //                   "wait_for_interrupt", the stream of a partition creates the file
 //                   <wait_for_interrupt>.waiting, waits until its task is killed, and then creates
 //                   the file <wait_for_interrupt> and fails. With the option "released_path",
@@ -46,10 +46,10 @@
 //                   minute; with the option "fail" set to "slow_read", each get_next then fails.
 //                   After the wait, it creates the file <slow_read>.interrupted with what
 //                   is_interrupted returns for the task context, "true" once the task ended.
-//                   Releasing the stream creates the file <slow_read>, which says
-//                   whether Spark released it "during get_next", which it must not, or "after
-//                   get_next" otherwise. With the option "ignore_read_schema", read returns all
-//                   the columns of the reader, rather than only those of the schema to read.
+//                   Releasing the stream creates the file <slow_read>, which says whether Spark
+//                   released it "during get_next", which it must not, or "after get_next"
+//                   otherwise. With the option "ignore_read_schema", read returns all the columns
+//                   of the reader, rather than only those of the schema to read.
 //                   It uses the domain of id that Spark pushes to skip the blocks of "block"
 //                   rows, 10 by default, whose ids are not in it: it then reads one partition
 //                   for each block that may match, with all its rows. With the option
@@ -197,6 +197,7 @@ const ColumnType kColumns[] = {
 const std::map<std::string, ColumnType> kExtraColumns = {
     {"map", {"m", "+m"}},                   // map<string, bigint>: {"k<id>": id}
     {"struct", {"st", "+s"}},               // struct<a: bigint, b: string>: {id, "s<id>"}
+    {"decimal", {"d", "d:10,2"}},           // decimal(10, 2): id
     {"decimal256", {"dec", "d:10,2,256"}},  // decimal256(10, 2): id
     {"listview", {"lv", "+vl"}},            // list_view<bigint>: [id]
     {"largelist", {"ll", "+L"}},            // large_list<bigint>, without data
@@ -465,13 +466,15 @@ void exportColumn(const std::string& name, int64_t lo, int64_t hi, ArrowArray* o
     initArray(addChild(out), n, 0, {no_validity, toBytes(ids)});
     initArray(addChild(out), n, 0,
               {no_validity, toBytes(offsets), std::vector<uint8_t>(chars.begin(), chars.end())});
-  } else if (name == "dec") {
-    // 256-bit little-endian unscaled values of the scale 2.
+  } else if (name == "d" || name == "dec") {
+    // 128-bit or 256-bit little-endian unscaled values of the scale 2.
     std::vector<int64_t> words;
     for (int64_t id = lo; id < hi; id++) {
       int64_t unscaled = id * 100;
       int64_t sign = unscaled < 0 ? -1 : 0;
-      words.insert(words.end(), {unscaled, sign, sign, sign});
+      words.push_back(unscaled);
+      size_t high_words = name == "d" ? 1 : 3;
+      words.insert(words.end(), high_words, sign);
     }
     initArray(out, n, 0, {no_validity, toBytes(words)});
   } else if (name == "lv") {
@@ -1807,7 +1810,8 @@ int commitWrite(void* handle, const SparkDsFinishWriteInfo* info) {
 // Records the aborted write in _ABORTED for a batch write or a rejected writer, or
 // _ABORTED_<epoch> for a streaming one, as "<NULL messages>,<messages>,<rejected>": the number of
 // tasks that did not commit, the number of messages, and 1 for a writer whose create_writer
-// Spark rejected.
+// Spark rejected. With the option "fail" set to "abort", it fails before it records anything,
+// but its writer still records that it is closed.
 int abortWrite(void* handle, const SparkDsFinishWriteInfo* info) {
   auto* writer = fromHandle<Writer>(handle);
   if (writer->abort_called) orderViolation("abort called twice");
@@ -1817,6 +1821,7 @@ int abortWrite(void* handle, const SparkDsFinishWriteInfo* info) {
     checkSize("SparkDsFinishWriteInfo", info->size, sizeof(SparkDsFinishWriteInfo));
     int64_t epoch_id = info->epoch_id;
     writer->closed_marker = closedMarker(epoch_id);
+    maybeFail(writer->state, "abort");
     bool has_null = false;
     for (const auto& message :
          toByteStrings(info->messages, info->message_lengths, info->num_messages, &has_null)) {

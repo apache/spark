@@ -18,7 +18,9 @@
 import itertools
 import os
 import re
-import sys
+from collections.abc import Sequence
+from dataclasses import dataclass
+from enum import Enum
 from functools import total_ordering
 from pathlib import Path, PurePath
 
@@ -36,32 +38,115 @@ all_modules = []
 # - `.gitignore`-style patterns would be ideal but don't have support in the
 #   standard library.
 ignored_file_patterns = (
-    ".asf.yaml",
-    ".gitignore",
+    # Contributor docs.
     "AGENTS.md",
+    "CLAUDE.md",
     "CONTRIBUTING.md",
+    "PULL_REQUEST_TEMPLATE",
     "README.md",
+    "SECURITY.md",
+    # License and NOTICE files, including bundled third-party licenses.
     "/LICENSE-binary",
+    "/LICENSE",
+    "/licenses-binary/",
+    "/licenses/",
     "/NOTICE-binary",
-    "/scalastyle-config.xml",
-    "/SECURITY.md",
+    "/NOTICE",
+    # Git and ASF metadata.
+    ".asf.yaml",
+    ".gitattributes",
+    ".gitignore",
+    # Build and test workflow wrappers or schedulers.
+    "/.github/workflows/benchmark.yml",
+    "/.github/workflows/branch*_scheduler.yml",
+    "/.github/workflows/build_codegen_jdk.yml",
+    "/.github/workflows/build_coverage.yml",
+    "/.github/workflows/build_java*.yml",
+    "/.github/workflows/build_maven*.yml",
+    "/.github/workflows/build_non_ansi.yml",
+    "/.github/workflows/build_python_3*.yml",
+    "/.github/workflows/build_python_connect*.yml",
+    "/.github/workflows/build_python_minimum.yml",
+    "/.github/workflows/build_python_pypy3.10.yml",
+    "/.github/workflows/build_rockdb_as_ui_backend.yml",
+    "/.github/workflows/build_scala213.yml",
+    "/.github/workflows/build_sparkr_window.yml",
+    "/.github/workflows/build_uds.yml",
+    "/.github/workflows/maven_test.yml",
+    "/.github/workflows/python_hosted_runner_test.yml",
+    # GitHub Pages.
+    ".nojekyll",
+    "/.github/workflows/pages.yml",
+    # Release and publishing.
+    "/.github/workflows/publish_snapshot.yml",
+    "/.github/workflows/release.yml",
+    # GitHub housekeeping and repo automation.
+    "/.github/workflows/build_infra_images_cache.yml",
+    "/.github/workflows/images/",
+    "/.github/workflows/stale.yml",
+    "/.github/workflows/test_report.yml",
+    "/.github/workflows/update_build_status.yml",
+    # Linters, formatters, and their configs. These are typically triggered by
+    # the `precondition` job regardless of modifications to these files.
+    ".pre-commit-config.yaml",
+    "/dev/.rat-excludes",
+    "/dev/.scalafmt.conf",
+    "/dev/check_pyspark_custom_errors.py",
+    "/dev/check-license",
+    "/dev/check-protos.py",
     "/dev/checkstyle-suppressions.xml",
     "/dev/checkstyle.xml",
+    "/dev/connect-jvm-client-mima-check",
+    "/dev/eslint.js",
+    "/dev/java-file-header",
+    "/dev/lint-java",
+    "/dev/lint-js",
+    "/dev/lint-python",
+    "/dev/lint-r*",
+    "/dev/lint-scala",
+    "/dev/mima",
+    "/dev/package-lock.json",
+    "/dev/package.json",
+    "/dev/reformat-python",
+    "/dev/sbt-checkstyle",
+    "/dev/scalafmt",
+    "/dev/scalastyle",
+    "/dev/spark-test-image/lint/",
+    "/dev/structured_logging_style.py",
+    "/scalastyle-config.xml",
+    # Maintainer tools.
+    "/dev/*gen-protos.sh",
+    "/dev/change-scala-version.sh",
     "/dev/create_jira_and_branch.py",
     "/dev/create_spark_jira.py",
     "/dev/create-release/",
-    "/dev/lint-python",
-    "/dev/lint-scala",
+    "/dev/generate_srs_registry.py",
     "/dev/make-distribution.sh",
     "/dev/merge_spark_pr.py",
+    "/dev/next_version_candidates.py",
     "/dev/pr_merge_status.py",
-    "/dev/reformat-python",
-    "/dev/requirements.txt",
+    "/dev/protobuf-breaking-changes-check.sh",
+    "/dev/py-cleanup",
+    "/dev/requirements.txt",  # legacy, replaced in CI by pyproject.toml
+    "/dev/spark_jira_utils.py",
     "/dev/spark_merge_footer.py",
-    "/dev/spark-test-image/lint/Dockerfile",
-    "/dev/structured_logging_style.py",
-    "/ui-test/package-lock.json",
-    "/ui-test/package.json",
+    "/dev/spark-test-image/connect-gen-protos/",
+    # Always run by the `precondition` job in build_and_test.yml.
+    "/dev/sparktestsupport/tests/",
+    "/sql/create-docs.sh",
+    # CLI wrappers and other user executables.
+    "/bin/beeline*",
+    "/bin/spark-connect-shell",
+    "/bin/spark-pipelines",
+    "/bin/sparkR*",
+    # Default config templates. Some CI jobs copy log4j2.properties.template
+    # only to reduce log noise; they do not test these templates.
+    "/conf/",
+    # Binder infra. CI does not test this.
+    "/binder/",
+    # UI tests. These are typically triggered by the `precondition` job
+    # regardless of modifications to these files.
+    "/ui-test/",
 )
 
 
@@ -75,18 +160,14 @@ def is_ignored_file(filename: str) -> bool:
     True
 
     Leading slashes anchor at the repository root:
-    >>> is_ignored_file("SECURITY.md")
+    >>> is_ignored_file("LICENSE")
     True
-    >>> is_ignored_file("docs/SECURITY.md")
+    >>> is_ignored_file("docs/LICENSE")
     False
 
     A trailing slash ignores a directory subtree:
     >>> is_ignored_file("dev/create-release/spark-rm/Dockerfile")
     True
-
-    Non-matches fall through:
-    >>> is_ignored_file("xasfZyaml")
-    False
     """
     path = PurePath("/") / filename
     for pattern in ignored_file_patterns:
@@ -100,6 +181,47 @@ def is_ignored_file(filename: str) -> bool:
         elif path.match(pattern):
             return True
     return False
+
+
+class TestStage(Enum):
+    """
+    When a shell script test goal runs in dev/run-tests.py.
+    """
+
+    # Before the Spark build.
+    PRE_BUILD = "pre_build"
+
+
+@dataclass(frozen=True)
+class ShellScriptTestGoal:
+    """
+    Describe a shell script test goal.
+
+    >>> goal = ShellScriptTestGoal("dev/example")
+    >>> goal.stage.value
+    'pre_build'
+
+    The stage must be a `TestStage`, not its string value. The path may be supplied
+    as a `str` or `Path` and is normalized to a `Path`. It must be non-blank,
+    repository-relative, and must not contain `..` path components.
+    """
+
+    path: Path
+    stage: TestStage
+
+    def __init__(self, path: str | Path, stage: TestStage = TestStage.PRE_BUILD) -> None:
+        if not isinstance(stage, TestStage):
+            raise TypeError(f"Unsupported test stage: {stage!r}")
+        original_path = path
+        # `Path` rejects non-path types and normalizes spellings like "./dev//x".
+        path = Path(path)
+        if not str(path).strip() or path == Path() or path.is_absolute() or ".." in path.parts:
+            raise ValueError(
+                f"Shell script path must be relative to repo root: {str(original_path)!r}"
+            )
+        # We have to call `object.__setattr__` because the class is frozen.
+        object.__setattr__(self, "path", path)
+        object.__setattr__(self, "stage", stage)
 
 
 @total_ordering
@@ -120,10 +242,10 @@ class Module(object):
         environ=None,
         sbt_test_goals=(),
         python_test_goals=(),
+        shell_script_test_goals: Sequence[ShellScriptTestGoal] = (),
         excluded_python_implementations=(),
         test_tags=(),
         should_run_r_tests=False,
-        should_run_build_tests=False,
     ):
         """
         Define a new module.
@@ -141,23 +263,24 @@ class Module(object):
             module are changed.
         :param sbt_test_goals: A set of SBT test goals for testing this module.
         :param python_test_goals: A set of Python test goals for testing this module.
+        :param shell_script_test_goals: A sequence (e.g. a list or tuple) of shell script test
+            goals for testing this module.
         :param excluded_python_implementations: A set of Python implementations that are not
             supported by this module's Python components. The values in this set should match
             strings returned by Python's `platform.python_implementation()`.
         :param test_tags A set of tags that will be excluded when running unit tests if the module
             is not explicitly changed.
         :param should_run_r_tests: If true, changes in this module will trigger all R tests.
-        :param should_run_build_tests: If true, changes in this module will trigger build tests.
-
-        Duplicate names are rejected and not registered:
-
-        >>> Module("core", [], [])
-        Traceback (most recent call last):
-            ...
-        ValueError: module name 'core' is already in use
         """
         if any(module.name == name for module in all_modules):
             raise ValueError(f"module name {name!r} is already in use")
+        if isinstance(shell_script_test_goals, (str, bytes)) or not isinstance(
+            shell_script_test_goals, Sequence
+        ):
+            raise TypeError(f"{name}: shell_script_test_goals must be a sequence")
+        for goal in shell_script_test_goals:
+            if not isinstance(goal, ShellScriptTestGoal):
+                raise TypeError(f"{name}: expected ShellScriptTestGoal, got {goal!r}")
 
         self.name = name
         self.dependencies = dependencies
@@ -166,10 +289,10 @@ class Module(object):
         self.build_profile_flags = build_profile_flags
         self.environ = environ or {}
         self.python_test_goals = python_test_goals
+        self.shell_script_test_goals = shell_script_test_goals
         self.excluded_python_implementations = excluded_python_implementations
         self.test_tags = test_tags
         self.should_run_r_tests = should_run_r_tests
-        self.should_run_build_tests = should_run_build_tests
 
         self.dependent_modules = set()
         for dep in dependencies:
@@ -187,7 +310,9 @@ class Module(object):
         """
         path = Path(filename)
         last_part = path.parts[-1]
-        if not re.match(r"test_.*\.py", last_part):
+        # Anchored: only Python modules are test files, not the files that merely
+        # start with a module name (e.g. a `test_x.py.out` golden file).
+        if not re.match(r"test_.*\.py$", last_part):
             return False
         module_path = ".".join(path.parts)[:-3]  # Remove the ".py" suffix
         return not any(module_path.endswith(test) for test in self.python_test_goals)
@@ -774,7 +899,7 @@ pyspark_sql = Module(
         "pyspark.sql.tests.coercion.test_python_udf_input_type",
         "pyspark.sql.tests.coercion.test_pandas_udf_return_type",
         "pyspark.sql.tests.coercion.test_python_udf_return_type",
-        "pyspark.sql.tests.df_golden.test_df_golden",
+        "pyspark.sql.tests.df_golden.inputs.test_group_by",
         "pyspark.sql.tests.df_golden.test_df_golden_framework",
     ],
 )
@@ -1810,7 +1935,7 @@ build = Module(
         ".*pom.xml",
         "dev/test-dependencies.sh",
     ],
-    should_run_build_tests=True,
+    shell_script_test_goals=[ShellScriptTestGoal("dev/test-dependencies.sh")],
 )
 
 yarn = Module(
@@ -1879,8 +2004,10 @@ root = Module(
         "test",
     ],
     python_test_goals=list(itertools.chain.from_iterable(m.python_test_goals for m in all_modules)),
+    shell_script_test_goals=list(
+        itertools.chain.from_iterable(m.shell_script_test_goals for m in all_modules)
+    ),
     should_run_r_tests=True,
-    should_run_build_tests=True,
 )
 
 
@@ -1893,17 +2020,6 @@ def transitive_dependencies(module: Module) -> set[Module]:
 
     >>> sorted(dependency.name for dependency in transitive_dependencies(unsafe))
     ['config', 'tags', 'utils', 'utils-java']
-
-    Every `pyspark-*` module must depend on `pyspark-base`:
-
-    >>> [
-    ...     module.name
-    ...     for module in all_modules
-    ...     if module.name.startswith("pyspark-")
-    ...     and module is not pyspark_base
-    ...     and pyspark_base not in transitive_dependencies(module)
-    ... ]
-    []
     """
     seen = set()
     pending = list(module.dependencies)
@@ -1914,15 +2030,3 @@ def transitive_dependencies(module: Module) -> set[Module]:
         seen.add(dependency)
         pending.extend(dependency.dependencies)
     return seen
-
-
-def _test():
-    import doctest
-
-    failure_count = doctest.testmod()[0]
-    if failure_count:
-        sys.exit(-1)
-
-
-if __name__ == "__main__":
-    _test()

@@ -74,7 +74,7 @@ name: Release Apache Spark
 
 on:
   schedule:
-    - cron: '0 7 */2 * *'
+    - cron: '17 10 1-28/3 * *'
   workflow_dispatch:
     inputs:
       branch:
@@ -96,6 +96,7 @@ jobs:
   release:
     name: Release Apache Spark
     runs-on: ubuntu-latest
+    timeout-minutes: ${{ github.repository == 'apache/spark' && 180 || 360 }}
     # Allow workflow to run only in the following cases:
     # 1. In the apache/spark repository:
     #    - Only allow dry runs (i.e., both 'branch' and 'release-version' inputs are empty).

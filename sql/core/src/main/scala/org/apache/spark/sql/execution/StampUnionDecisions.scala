@@ -32,8 +32,8 @@ import org.apache.spark.sql.internal.SQLConf
  * plan. Every reader used to derive its own answer, so the answer depended on when it was read: the
  * codegen gate could fuse a union whose copy in the shell then answered the other way, so `metrics`
  * came back empty and `doProduce` failed asking `metricTerm` for `numOutputRows`. This rule asks
- * right after `EnsureRequirements`, so the decision the exchanges around a union were planned
- * against is the one `unionRDDs` and the codegen gate use.
+ * after `EnsureRequirements` and, in AQE preparation, after shuffle push-down, so the decision
+ * the exchanges around a union were planned against is the one execution and the codegen gate use.
  *
  * It is listed again after the injected columnar and query-stage rules, the hooks that can add a
  * `UnionExec` of their own. One created there has no decision yet, and would otherwise take one
@@ -70,7 +70,7 @@ class StampUnionDecisions(snapshot: UnionConfSnapshot) extends Rule[SparkPlan] {
  *
  * Without this, each phase samples the confs separately: `EnsureRequirements` reads what a union
  * reports under the value then, and [[StampUnionDecisions]] freezes the decision under the value
- * one rule later. `conf` is the live session conf, so another thread turning
+ * at the following stamp. `conf` is the live session conf, so another thread turning
  * `UNION_OUTPUT_PARTITIONING` off in that window would let a parent drop an exchange over a
  * concrete partitioning and then have the union concatenate, which puts one group in two
  * partitions.

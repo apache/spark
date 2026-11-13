@@ -244,6 +244,12 @@ object Cast extends QueryErrorsBase {
   val USER_SPECIFIED_CAST = new TreeNodeTag[Unit]("user_specified_cast")
 
   /**
+   * Marks a user CAST that `ApplyDefaultCollation` rebuilt without [[USER_SPECIFIED_CAST]], so it
+   * is still told apart from a cast the analyzer added.
+   */
+  val RECOLORED_USER_CAST = new TreeNodeTag[Unit]("recolored_user_cast")
+
+  /**
    * Returns true iff we can cast `from` type to `to` type.
    */
   def canCast(from: DataType, to: DataType): Boolean = (from, to) match {

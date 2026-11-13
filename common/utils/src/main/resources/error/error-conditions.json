@@ -2059,6 +2059,11 @@
           "Filter expression <filter> of type <type> is not a boolean."
         ]
       },
+      "HASH_FILE_TYPE" : {
+        "message" : [
+          "The function <functionName> does not support elements of the \"FILE\" type."
+        ]
+      },
       "HASH_MAP_TYPE" : {
         "message" : [
           "Input to the function <functionName> cannot contain elements of the \"MAP\" type. In Spark, same maps may have different hashcode, thus hash expressions are prohibited on \"MAP\" elements. To restore previous behavior set \"spark.sql.legacy.allowHashOnMapType\" to \"true\"."
@@ -2387,6 +2392,69 @@
       "<description>: External lookup is not supported."
     ],
     "sqlState" : "0A000"
+  },
+  "DATA_SOURCE_INVALID_EXTERNAL_LOOKUP" : {
+    "message" : [
+      "Data source table <table> violates the external lookup contract:"
+    ],
+    "subClass" : {
+      "DECIMAL_OUT_OF_RANGE" : {
+        "message" : [
+          "The lookup result cursor returned a value in the field <field> that does not fit its type <type>."
+        ]
+      },
+      "DUPLICATE_SCAN_FIELD" : {
+        "message" : [
+          "The lookup scan returned the field <field> more than once."
+        ]
+      },
+      "DUPLICATE_SELECTED_PREDICATE" : {
+        "message" : [
+          "`selectLookupPredicates()` returned the predicate <predicate> more than once."
+        ]
+      },
+      "INVALID_INPUT_ORDINAL" : {
+        "message" : [
+          "The lookup result cursor returned the input ordinal <ordinal>, but the request had <numParameterRows> parameter rows."
+        ]
+      },
+      "LOOKUP_ONLY_TABLE_WITH_V1_READ" : {
+        "message" : [
+          "The table reports EXTERNAL_LOOKUP without BATCH_READ, but its provider <provider> also has a V1 read path. A table that supports both batch reads and lookups must report BATCH_READ and EXTERNAL_LOOKUP. Otherwise, remove the V1 read path from the provider."
+        ]
+      },
+      "MISSING_SCAN_FIELD" : {
+        "message" : [
+          "The lookup scan did not return the table column <field>, which the join requires."
+        ]
+      },
+      "NON_POSITIVE_MAX_PARAMETER_ROWS" : {
+        "message" : [
+          "`maxParameterRowsPerRequest()` returned <value>, but it must be positive."
+        ]
+      },
+      "NULL_IN_NOT_NULL_FIELD" : {
+        "message" : [
+          "The lookup result cursor returned NULL in the field <field>, which the table or the read schema declares NOT NULL."
+        ]
+      },
+      "NULL_RESULT" : {
+        "message" : [
+          "`<method>` returned null."
+        ]
+      },
+      "UNKNOWN_SCAN_FIELD" : {
+        "message" : [
+          "The lookup scan returned the field <field>, which matches no table column by name and data type."
+        ]
+      },
+      "UNOFFERED_SELECTED_PREDICATE" : {
+        "message" : [
+          "`selectLookupPredicates()` returned the predicate <predicate>, which is not one of the candidate instances offered by Spark."
+        ]
+      }
+    },
+    "sqlState" : "KD000"
   },
   "DATA_SOURCE_INVALID_RUNTIME_FILTER_ATTRIBUTE" : {
     "message" : [
@@ -2855,6 +2923,74 @@
     ],
     "sqlState" : "42822"
   },
+  "EXTERNAL_LOOKUP_JOIN_UNSUPPORTED" : {
+    "message" : [
+      "The join cannot be executed as an external lookup join:"
+    ],
+    "subClass" : {
+      "CHAR_VARCHAR_COLUMN" : {
+        "message" : [
+          "The column <column> of the lookup-only table <relation> needs read-side CHAR padding or a VARCHAR length check, which an external lookup join does not support."
+        ]
+      },
+      "CONFLICTING_JOIN_STRATEGY" : {
+        "message" : [
+          "The join strategy hint <strategy> cannot be honored by an external lookup join over <relation>. Remove the <strategy> hint."
+        ]
+      },
+      "JOIN_TYPE" : {
+        "message" : [
+          "The join type <joinType> is not supported by an external lookup join over <relation>. Supported join types are <supportedJoinTypes>."
+        ]
+      },
+      "LOOKUP_PLAN" : {
+        "message" : [
+          "The lookup side must be a DSv2 table, with no other operator between the table and the join."
+        ]
+      },
+      "LOOKUP_TABLE_ON_LEFT" : {
+        "message" : [
+          "The lookup-only table <relation> must be on the right side of the join."
+        ]
+      },
+      "MISSING_JOIN_CONDITION" : {
+        "message" : [
+          "The join has no join condition. Write the lookup condition in the join itself, such as in its `ON` clause or the condition argument of `join()`, rather than in a later `WHERE` clause or filter."
+        ]
+      },
+      "NO_LOOKUP_CANDIDATE" : {
+        "message" : [
+          "The join condition has no lookup predicate that Spark can offer to table <table>. A lookup predicate is an equality `=` between a lookup column, with no cast or other expression applied to it, and an expression over the streaming side. The lookup column must have a type that stores compare as Spark does; the Javadoc of `SupportsExternalLookup.selectLookupPredicates()` lists these types. Instead of casting the lookup column, cast the streaming-side expression to its type, if every streaming-side value is exactly representable in that type."
+        ]
+      },
+      "NO_LOOKUP_PREDICATE" : {
+        "message" : [
+          "The data source of table <table> did not select any of the lookup predicates that Spark offered from the join condition."
+        ]
+      },
+      "SCAN_BUILDER" : {
+        "message" : [
+          "The scan builder of table <table> does not implement `SupportsExternalLookup`."
+        ]
+      },
+      "STATIC_LEFT_SIDE" : {
+        "message" : [
+          "An external lookup join must be a stream-static join, but the left side of the join over <relation> is not a streaming query."
+        ]
+      },
+      "SUBQUERY_IN_JOIN_CONDITION" : {
+        "message" : [
+          "The join condition of an external lookup join over <relation> cannot contain a subquery."
+        ]
+      },
+      "TABLE" : {
+        "message" : [
+          "Table <table> does not support external lookup."
+        ]
+      }
+    },
+    "sqlState" : "0A000"
+  },
   "FAILED_CREATE_CHECKPOINT_DIRECTORY" : {
     "message" : [
       "Failed to create the checkpoint directory <path> as FileSystem.mkdirs returned false."
@@ -3078,6 +3214,53 @@
       "No such struct field <fieldName> in <fields>."
     ],
     "sqlState" : "42704"
+  },
+  "FILE_TYPE_IN_ROUTINE_SIGNATURE_UNSUPPORTED_MAP_KEY" : {
+    "message" : [
+      "The FILE type cannot be a map key in the return type of <routineType> <routineName>. Use FILE only as a map value, array element, or struct field."
+    ],
+    "sqlState" : "42601"
+  },
+  "FILE_TYPE_IN_ROUTINE_SIGNATURE_UNSUPPORTED_QUALIFIER" : {
+    "message" : [
+      "The FILE type in <routineType> <routineName> does not support the EXTERNAL qualifier. Use FILE without a qualifier."
+    ],
+    "sqlState" : "42601"
+  },
+  "FILE_TYPE_MISSING_QUALIFIER" : {
+    "message" : [
+      "FILE type requires the EXTERNAL qualifier in a column definition. Use FILE EXTERNAL."
+    ],
+    "sqlState" : "42601"
+  },
+  "FILE_TYPE_UNKNOWN_WRITE" : {
+    "message" : [
+      "Column(s) <colNames> contain a FILE without the EXTERNAL qualifier, which a table cannot store."
+    ],
+    "sqlState" : "42K01"
+  },
+  "FILE_TYPE_UNSUPPORTED_COLUMN_USAGE" : {
+    "message" : [
+      "The column <colName> of type <dataType> holds a FILE, which is not comparable."
+    ],
+    "subClass" : {
+      "CLUSTERING_COLUMN" : {
+        "message" : [
+          "It cannot be a clustering column."
+        ]
+      },
+      "PARTITION_COLUMN" : {
+        "message" : [
+          "It cannot be a partition column."
+        ]
+      },
+      "WRITE_ORDERING_COLUMN" : {
+        "message" : [
+          "It cannot be a write-ordering column."
+        ]
+      }
+    },
+    "sqlState" : "0A000"
   },
   "FLATMAPGROUPSWITHSTATE_USER_FUNCTION_ERROR" : {
     "message" : [
@@ -8129,6 +8312,13 @@
     ],
     "sqlState" : "42K09"
   },
+  "STORAGE_PARTITION_JOIN_KEY_TYPE_MISMATCH" : {
+    "message" : [
+      "Cannot shuffle a side onto the other side's storage partitioning: its key <key> of type <keyType> does not match the partition transform <transform> over a column of type <columnType>, which declares the input types <inputTypes>.",
+      "Cast the keys on both sides to one type."
+    ],
+    "sqlState" : "42K09"
+  },
   "STREAMING_ASYNC_OPERATION_FAILED" : {
     "message" : [
       "Asynchronous streaming operation failed with exception: <message>"
@@ -8522,6 +8712,24 @@
       "If you want to allow it, please set \"spark.sql.allowMultipleTableArguments.enabled\" to \"true\""
     ],
     "sqlState" : "54023"
+  },
+  "TASK_SERIALIZATION_TOO_LARGE" : {
+    "message" : [
+      "Cannot run stage <stageId> because a serialized task exceeds the 2 GB size limit."
+    ],
+    "subClass" : {
+      "TASK" : {
+        "message" : [
+          "Partition <partitionId> holds too much data created on the driver. Read the data from files or a table, or split it into more partitions."
+        ]
+      },
+      "TASK_BINARY" : {
+        "message" : [
+          "The functions or objects shared by its tasks are too large. Use broadcast variables for large objects instead of capturing them in functions."
+        ]
+      }
+    },
+    "sqlState" : "54000"
   },
   "TASK_WRITE_FAILED" : {
     "message" : [
@@ -9539,6 +9747,11 @@
           "Parameter markers are not allowed in <statement>."
         ]
       },
+      "PARTITION_BY_FILE" : {
+        "message" : [
+          "Cannot use FILE type expressions to partition a DataFrame, but the type of expression <expr> is <dataType>."
+        ]
+      },
       "PARTITION_BY_VARIANT" : {
         "message" : [
           "Cannot use VARIANT producing expressions to partition a DataFrame, but the type of expression <expr> is <dataType>."
@@ -9609,6 +9822,11 @@
       "SET_NAMESPACE_PROPERTY" : {
         "message" : [
           "<property> is a reserved namespace property, <msg>."
+        ]
+      },
+      "SET_OPERATION_ON_FILE_TYPE" : {
+        "message" : [
+          "Cannot have FILE type columns in a DataFrame that calls set operations (INTERSECT, EXCEPT, etc.), but the type of column <colName> is <dataType>."
         ]
       },
       "SET_OPERATION_ON_MAP_TYPE" : {

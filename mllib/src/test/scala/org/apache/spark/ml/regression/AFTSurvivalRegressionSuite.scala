@@ -62,7 +62,11 @@ class AFTSurvivalRegressionSuite extends MLTest with DefaultReadWriteTest {
   }
 
   test("params") {
-    ParamsSuite.checkParams(new AFTSurvivalRegression)
+    val regressor = new AFTSurvivalRegression
+    ParamsSuite.checkParams(regressor)
+    assert(regressor.getIntermediateStorageLevel === "MEMORY_AND_DISK")
+    regressor.setIntermediateStorageLevel("DISK_ONLY")
+    assert(regressor.getIntermediateStorageLevel === "DISK_ONLY")
     val model = new AFTSurvivalRegressionModel("aftSurvReg", Vectors.dense(0.0), 0.0, 0.0)
     ParamsSuite.checkParams(model)
   }
