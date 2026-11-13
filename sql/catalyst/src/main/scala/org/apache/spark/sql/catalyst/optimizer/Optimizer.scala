@@ -301,6 +301,10 @@ abstract class Optimizer(catalogManager: CatalogManager)
       RemoveNoopOperators),
     // This batch must be executed after the `RewriteSubquery` batch, which creates joins.
     Batch("NormalizeFloatingNumbers", Once, NormalizeFloatingNumbers),
+    // Runs this late so that what gets memoized is what survives the simplification rules. The
+    // `With` it creates stays in the branch, which is the shape `RewriteWithExpression` -- long
+    // since run, right after `FinishAnalysis` -- keeps anyway.
+    Batch("Memoize common expressions in branches", Once, MemoizeCommonExpressionsInBranches),
     Batch("ReplaceUpdateFieldsExpression", Once, ReplaceUpdateFieldsExpression)))
 
     // remove any batches with no rules. this may happen when subclasses do not add optional rules.
