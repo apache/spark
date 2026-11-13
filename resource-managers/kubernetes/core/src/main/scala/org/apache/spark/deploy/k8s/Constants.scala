@@ -91,6 +91,10 @@ object Constants {
   val SPARK_CONF_PATH = s"$SPARK_CONF_DIR_INTERNAL/$SPARK_CONF_FILE_NAME"
   val ENV_HADOOP_TOKEN_FILE_LOCATION = "HADOOP_TOKEN_FILE_LOCATION"
 
+  // Pod scheduling gates
+  // Holds the driver pod unschedulable until the resources spark-submit creates for it exist.
+  val DRIVER_RESOURCES_SCHEDULING_GATE = "spark.apache.org/driver-resources"
+
   // BINDINGS
   val ENV_PYSPARK_PYTHON = "PYSPARK_PYTHON"
   val ENV_PYSPARK_DRIVER_PYTHON = "PYSPARK_DRIVER_PYTHON"
