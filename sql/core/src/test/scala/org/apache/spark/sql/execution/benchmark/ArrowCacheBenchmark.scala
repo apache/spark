@@ -475,10 +475,12 @@ object ArrowCacheBenchmark extends SqlBasedBenchmark {
     runBenchmark("Cache a shuffled query") {
       val benchmark = new Benchmark("Cache 5M rows after a shuffle", numRows, output = output)
 
-      def addShuffledCase(name: String, serializer: String): Unit = {
+      def addShuffledCase(name: String, serializer: String)(
+          configure: SparkSession => Unit): Unit = {
         benchmark.addTimerCase(name) { timer =>
           val spark = createFreshSession(serializer)
           try {
+            configure(spark)
             val df = spark.range(numRows).repartition(1).selectExpr(
               "id as int_col",
               "id * 2L as long_col",
@@ -495,9 +497,14 @@ object ArrowCacheBenchmark extends SqlBasedBenchmark {
         }
       }
 
+      val arrow = classOf[ArrowCachedBatchSerializer].getName
       addShuffledCase("Default cache - shuffled input",
-        "org.apache.spark.sql.execution.columnar.DefaultCachedBatchSerializer")
-      addShuffledCase("Arrow cache - shuffled input", classOf[ArrowCachedBatchSerializer].getName)
+        "org.apache.spark.sql.execution.columnar.DefaultCachedBatchSerializer")(_ => ())
+      addShuffledCase("Arrow cache - shuffled input", arrow)(_ => ())
+      // Without AQE the same query reaches the Arrow serializer as rows, without RowToColumnarExec.
+      addShuffledCase("Arrow cache - shuffled input (AQE off)", arrow) { spark =>
+        spark.conf.set(SQLConf.ADAPTIVE_EXECUTION_ENABLED.key, "false")
+      }
       benchmark.run()
     }
   }
