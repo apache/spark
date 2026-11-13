@@ -4458,18 +4458,32 @@ class SQLQuerySuite extends SharedSparkSession with AdaptiveSparkPlanHelper
   }
 
   test("SPARK-60934: seedless TABLESAMPLE CTE is one sample") {
-    // A missing seed stays one draw. Each reference keeps a copy of that
-    // sample under the CTE repartition, so EXCEPT against itself is empty.
-    val df = sql(
-      "WITH src AS (SELECT id FROM range(10000)), " +
-      "s AS (SELECT id FROM src TABLESAMPLE (50 PERCENT)) " +
-      "SELECT * FROM s EXCEPT SELECT * FROM s")
-    val samples = df.queryExecution.optimizedPlan.collect {
-      case RepartitionByExpression(Nil, sample: Sample, None, _) => sample
+    // A missing seed stays one draw. The CTE is not inlined, and each reference
+    // keeps a copy of that sample under the CTE repartition. EXCEPT against
+    // itself is empty because the two shuffles reuse one exchange. With AQE off
+    // that reuse is ReuseExchangeAndSubquery.
+    Seq(true, false).foreach { aqe =>
+      withClue(s"aqe=$aqe") {
+        withSQLConf(SQLConf.ADAPTIVE_EXECUTION_ENABLED.key -> aqe.toString) {
+          val df = sql(
+            "WITH src AS (SELECT id FROM range(10000)), " +
+            "s AS (SELECT id FROM src TABLESAMPLE (50 PERCENT)) " +
+            "SELECT * FROM s EXCEPT SELECT * FROM s")
+          val samples = df.queryExecution.optimizedPlan.collect {
+            case RepartitionByExpression(Nil, sample: Sample, None, _) => sample
+          }
+          assert(samples.length === 2)
+          assert(samples.forall(_.seed.isEmpty))
+          checkAnswer(df, Seq.empty)
+          if (!aqe) {
+            val reused = collect(df.queryExecution.executedPlan) {
+              case r: ReusedExchangeExec => r
+            }
+            assert(reused.length === 1)
+          }
+        }
+      }
     }
-    assert(samples.length === 2)
-    assert(samples.forall(_.seed.isEmpty))
-    checkAnswer(df, Seq.empty)
   }
 
   test("SPARK-27442: Spark support read/write parquet file with invalid char in field name") {

@@ -198,8 +198,9 @@ object RewriteWithExpression extends Rule[LogicalPlan] {
   /**
    * Whether a copy of `e` at every reference always evaluates to the same value. `foldable` is not
    * enough: `current_timestamp()` re-reads the clock, a TIME -> TIMESTAMP cast derives the current
-   * date, and a Hive UDF is foldable on a user-declared determinism flag. A generated-IV
-   * `aes_encrypt` is non-deterministic (see `AesEncrypt`); an explicit IV is a pure `StaticInvoke`.
+   * date, and a Hive UDF is foldable on a user-declared determinism flag. A generated IV, an
+   * empty IV, and a per-row IV are non-deterministic (see `AesEncrypt`). A fixed non-empty IV
+   * is a pure `StaticInvoke`.
    */
   private def isSafeToDuplicate(
       e: Expression,
@@ -216,9 +217,10 @@ object RewriteWithExpression extends Rule[LogicalPlan] {
       // of the blanket NonSQLExpression rejection below, when every argument is a literal tree.
       case _ if ComputeCurrentTime.isMakeTimestampBuilder(e) =>
         e.children.forall(isLiteralTree)
-      // `StaticInvoke.isDeterministic` is the purity flag for that call. A generated-IV
-      // aes_encrypt clears it; a deterministic static call of literal arguments is pure.
-      case s: StaticInvoke if s.isDeterministic =>
+      // A built-in static call is pure when its flag says so and its arguments are
+      // literal trees. A generated-IV aes_encrypt clears the flag. A ScalarFunction
+      // declares its own flag, so that call is rejected with other non-SQL expressions.
+      case s: StaticInvoke if s.isDeterministic && s.scalarFunction.isEmpty =>
         s.arguments.forall(isLiteralTree)
       // UDFs and other non-SQL calls can be foldable without being pure.
       case _: NonSQLExpression | _: UserDefinedExpression => false
