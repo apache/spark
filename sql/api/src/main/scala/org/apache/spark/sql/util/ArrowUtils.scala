@@ -312,7 +312,11 @@ private[sql] object ArrowUtils {
    *   (nanosecond timestamps, CalendarInterval) map to lossless struct representations instead.
    *   Only internal-storage callers with no external Arrow consumer (e.g. the Arrow-based Dataset
    *   cache) should pass true; interchange paths must keep the default. See
-   *   `toTimestampNanosStructField` for the full rationale.
+   *   `toTimestampNanosStructField` for the full rationale. Also, when true, the wkb child of each
+   *   GEOMETRY and GEOGRAPHY field, nested ones included, is tagged (see `geoWkbAsCreatedKey`) and
+   *   holds the WKB that each value was created from, which can be big-endian, instead of
+   *   little-endian WKB; a consumer whose declared field is not tagged converts such a column
+   *   instead of copying it.
    */
   def toArrowField(
       name: String,
@@ -728,7 +732,8 @@ private[sql] object ArrowUtils {
    *
    * @param losslessInternalTypes
    *   see `toArrowField`: opt-in full-domain struct encoding of nanosecond timestamps and
-   *   CalendarInterval for internal storage; interchange paths must keep the default.
+   *   CalendarInterval, and GEOMETRY and GEOGRAPHY WKB kept as created, for internal storage;
+   *   interchange paths must keep the default.
    */
   def toArrowSchema(
       schema: StructType,

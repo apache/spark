@@ -72,6 +72,29 @@ class ArrowWriterSuite extends SparkFunSuite {
           }
         }
     }
+
+    // Rows of one column with different SRIDs, one of them created from big-endian WKB, each
+    // keep their own SRID header and WKB.
+    Seq[(DataType, Seq[BinaryView])](
+      (GeometryType("ANY"), Seq(
+        InternalGeometry.fromWkb(bigEndian, 0).getValue,
+        InternalGeometry.fromWkb(littleEndian, 4326).getValue)),
+      (GeographyType("ANY"), Seq(
+        InternalGeography.fromWkb(bigEndian, 4267).getValue,
+        InternalGeography.fromWkb(littleEndian, 4269).getValue))).foreach { case (dt, values) =>
+      val schema = new StructType().add("value", dt)
+      val root = VectorSchemaRoot.create(
+        ArrowUtils.toArrowSchema(schema, null, true, false, losslessInternalTypes = true),
+        ArrowUtils.rootAllocator)
+      val writer = ArrowWriter.create(root)
+      values.foreach(value => writer.write(InternalRow(value)))
+      writer.finish()
+      val reader = new ArrowColumnVector(root.getFieldVectors().get(0))
+      values.zipWithIndex.foreach { case (value, i) =>
+        assert(reader.getBinaryView(i).getBytes === value.getBytes, dt.toString)
+      }
+      root.close()
+    }
   }
 
   test("simple") {
