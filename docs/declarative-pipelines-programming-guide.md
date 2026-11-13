@@ -39,11 +39,11 @@ The key advantage of SDP is its declarative approach - you define what tables sh
 
 A quick way to install SDP is with pip:
 
-```
-pip install pyspark[pipelines]
+```bash
+pip install "pyspark[pipelines]"
 ```
 
-See the [downloads page](//spark.apache.org/downloads.html) for more installation options.
+See the [downloads page](https://spark.apache.org/downloads.html) for more installation options.
 
 ## Key Concepts
 
@@ -62,7 +62,7 @@ SDP creates the table named `target_table` along with a flow that reads new data
 
 ### Datasets
 
-A dataset is a queryable object that's the output of one of more flows within a pipeline. Flows in the pipeline can also read from datasets produced in the pipeline.
+A dataset is a queryable object that's the output of one or more flows within a pipeline. Flows in the pipeline can also read from datasets produced in the pipeline.
 
 - **Streaming Table** – a definition of a table and one or more streaming flows written into it. Streaming tables support incremental processing of data, allowing you to process only new data as it arrives.
 - **Materialized View** – a view that is precomputed into a table. A materialized view always has exactly one batch flow writing to it.
@@ -76,7 +76,7 @@ A pipeline is the primary unit of development and execution in SDP. A pipeline c
 
 A pipeline project is a set of source files that contain code definitions of the datasets and flows that make up a pipeline. The source files can be `.py` or `.sql` files.
 
-It's conventional to name pipeline spec files `spark-pipeline.yml` or `spark-pipeline.yaml`.
+Name the pipeline spec file `spark-pipeline.yml` or `spark-pipeline.yaml`: `spark-pipelines` looks for these names when `--spec` is not given.
 
 A YAML-formatted pipeline spec file contains the top-level configuration for the pipeline project with the following fields:
 
@@ -194,7 +194,7 @@ def my_view():
 
 Pipeline files that still include `spark = SparkSession.active()` continue to work correctly. However, if you do assign the session explicitly, `SparkSession.active()` is the only supported way to do so. For example, `SparkSession.builder.config(...).getOrCreate()` mutates session config, which is blocked in SDP.
 
-Note that without the explicit assignment, many tools and editors may consider `spark` and undefined name. To address that, you can add `spark: SparkSession` at module scope. SDP will still inject the actual session before the module runs, so this only documents the type for static analysis. 
+Note that without the explicit assignment, many tools and editors may consider `spark` an undefined name. To address that, you can add `spark: SparkSession` at module scope. SDP will still inject the actual session before the module runs, so this only documents the type for static analysis. 
 
 ```python
 from pyspark import pipelines as dp
@@ -206,6 +206,8 @@ spark: SparkSession
 def my_view():
     return spark.range(10)
 ```
+
+Linters based on pyflakes, such as flake8 and ruff (rule F821), still report `spark` as undefined with only the annotation. With those linters, assign the session explicitly with `spark = SparkSession.active()`.
 
 ### Creating a Materialized View in Python
 
@@ -327,14 +329,12 @@ def customers() -> DataFrame:
 def customer_orders() -> DataFrame:
     return (
         spark.table("orders")
-        .join(
-            spark.table("customers"), "customer_id")
-            .select(
-                "customer_id",
-                "order_number",
-                "state",
-                col("order_datetime").cast("date").alias("order_date"),
-            )
+        .join(spark.table("customers"), "customer_id")
+        .select(
+            "customer_id",
+            "order_number",
+            "state",
+            col("order_datetime").cast("date").alias("order_date"),
         )
     )
 
@@ -397,7 +397,7 @@ region_list = spark.table("samples.tpch.region").select(collect_list("r_name")).
 
 # Iterate through region names to create new region-specific materialized views
 for region in region_list:
-    @dp.table(name=f"{region.lower().replace(' ', '_')}_customer_orders")
+    @dp.materialized_view(name=f"{region.lower().replace(' ', '_')}_customer_orders")
     def regional_customer_orders(region_filter=region) -> DataFrame:
         customer_orders = spark.table("customer_orders")
         nation_region = spark.table("nation_region")
@@ -1094,7 +1094,8 @@ You can create a sink that streams data to a Kafka topic:
 
 ```python
 from pyspark import pipelines as dp
-from pyspark.sql.functions import to_json, struct
+from pyspark.sql import DataFrame
+from pyspark.sql.functions import col, struct, to_json
 
 dp.create_sink(
     name="kafka_sink",
@@ -1133,7 +1134,7 @@ When working with sinks, keep the following considerations in mind:
 - Never use methods that save or write to files or tables as part of your SDP dataset code.
 - When using the `for` loop pattern to define datasets in Python, ensure that the list of values passed to the `for` loop is always additive.
 
-Examples of Spark SQL operations that should never be used in SDP code:
+Examples of Spark SQL operations that should never be used inside the functions that define datasets:
 
 - `collect()`
 - `count()`
