@@ -36,7 +36,7 @@ jobs:
     if: github.repository == 'apache/spark' || github.ref != 'refs/heads/master'
     uses: ./.github/workflows/build_and_test.yml
     with:
-      # Sampled upstream pushes run the full job matrix.
+      # "docs": "true",  # Master docs are built daily in pages.yml.
       # Fork pushes keep the reusable workflow's change-based selection.
       jobs: >-
         ${{ github.repository == 'apache/spark' && '{
@@ -51,7 +51,6 @@ jobs:
           "docker-integration-tests": "true",
           "lint": "true",
           "java25": "true",
-          "docs": "true",
           "yarn": "true",
           "k8s-integration-tests": "true",
           "oidc-e2e": "true",
