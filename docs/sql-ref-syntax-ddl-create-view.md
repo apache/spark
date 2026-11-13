@@ -25,6 +25,10 @@ Views are based on the result-set of an `SQL` query. `CREATE VIEW` constructs
 a virtual table that has no physical data therefore other operations like
 `ALTER VIEW` and `DROP VIEW` only change metadata. 
 
+A view can also be defined by a YAML document of dimensions and measures instead of a query, and
+queried with the `MEASURE()` aggregate function. See
+[CREATE METRIC VIEW](sql-ref-syntax-ddl-create-metric-view.html).
+
 ### Syntax
 
 ```sql
@@ -188,6 +192,7 @@ different PATH. See [SET PATH](sql-ref-syntax-aux-conf-mgmt-set-path.html).
 
 ### Related Statements
 
+* [CREATE METRIC VIEW](sql-ref-syntax-ddl-create-metric-view.html)
 * [ALTER VIEW](sql-ref-syntax-ddl-alter-view.html)
 * [DROP VIEW](sql-ref-syntax-ddl-drop-view.html)
 * [SHOW VIEWS](sql-ref-syntax-aux-show-views.html)
