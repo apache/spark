@@ -17,6 +17,8 @@
 
 package org.apache.spark.shuffle
 
+import java.util.Optional
+
 import org.apache.spark.annotation.DeveloperApi
 
 /**
@@ -25,4 +27,14 @@ import org.apache.spark.annotation.DeveloperApi
  * @param shuffleId ID of the shuffle
  */
 @DeveloperApi
-abstract class ShuffleHandle(val shuffleId: Int) extends Serializable {}
+abstract class ShuffleHandle(val shuffleId: Int) extends Serializable {
+  /**
+   * Whether this shuffle's output survives losing the executor or host that wrote it (e.g. on a
+   * remote shuffle service). If so, executor or worker loss keeps its map output registered.
+   *
+   * Overrides `ShuffleDriverComponents.supportsReliableStorage()` for this shuffle. Empty (the
+   * default) falls back to that flag. The driver reads it once, when it registers the shuffle.
+   * A pipelined shuffle must leave it empty.
+   */
+  def reliablyStored: Optional[java.lang.Boolean] = Optional.empty()
+}
