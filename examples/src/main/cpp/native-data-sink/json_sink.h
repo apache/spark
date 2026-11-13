@@ -101,9 +101,9 @@ struct Operation {
   Manifest previous;
   bool truncate = false;
   bool committed = false;
+  // Whether the sealed objects directory is this operation's to remove: it is sealed, and the
+  // manifest rename did not report an error, after which the manifest may reference it.
   bool sealed = false;
-  // Whether the rename of the manifest reported an error, so it may still have taken effect.
-  bool publication_unknown = false;
   std::optional<WriteLock> lock;
 
   Operation() = default;
