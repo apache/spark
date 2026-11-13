@@ -283,7 +283,7 @@ private[spark] object UIUtils extends Logging {
     }
     val helpButton: Seq[Node] = helpText.map(tooltip(_, "top")).getOrElse(Seq.empty)
 
-    <html data-bs-theme="light">
+    <html lang="en" data-bs-theme="light">
       <head>
         {commonHeaderNodes(request)}
         <script nonce={CspNonce.get}>{Unparsed(
@@ -360,7 +360,7 @@ private[spark] object UIUtils extends Logging {
       title: String,
       useDataTables: Boolean = false,
       useTimeline: Boolean = false): Seq[Node] = {
-    <html data-bs-theme="light">
+    <html lang="en" data-bs-theme="light">
       <head>
         {commonHeaderNodes(request)}
         <script nonce={CspNonce.get}>{Unparsed(

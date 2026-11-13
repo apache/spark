@@ -280,6 +280,13 @@ class ChangelogResolutionSuite extends SharedSparkSession {
     id, UTF8String.fromString(s"data-$id"), UTF8String.fromString(Changelog.CHANGE_TYPE_INSERT),
     version, version * 1000000L)
 
+  private def lookupSharedRelationCache(
+      catalog: CatalogPlugin,
+      ident: Identifier): Option[LogicalPlan] = {
+    spark.sharedState.relationCache.lookup(
+      catalog, ident, tableId = None, CaseInsensitiveStringMap.empty())
+  }
+
   test("CDC metadata loads are shared across scan options but isolate contexts and state values") {
     val cat = cdcCatalog
     cat.addChangeRows(ident, Seq(changeRow(1L, 1L), changeRow(2L, 2L)))
@@ -365,6 +372,71 @@ class ChangelogResolutionSuite extends SharedSparkSession {
       val differentRange = sql(
         s"SELECT * FROM $tableName CHANGES FROM VERSION 2")
       assert(cacheManager.lookupCachedData(differentRange).isEmpty)
+    } finally {
+      spark.catalog.clearCache()
+    }
+  }
+
+  test("shared relation cache does not offer a cached CHANGES relation to table reads") {
+    val tableName = s"$cdcCatalogName.test_table"
+    sql(s"INSERT INTO $tableName VALUES (100, 'current')")
+    val cat = cdcCatalog
+    cat.addChangeRows(ident, Seq(changeRow(1L, 1L)))
+    val cacheManager = spark.sharedState.cacheManager
+    try {
+      // cache changelog
+      val changes = spark.read.option("startingVersion", "1").changes(tableName)
+      changes.cache()
+      checkAnswer(changes.select("id"), Seq(Row(1L)))
+      assert(cacheManager.lookupCachedData(changes).isDefined)
+      assert(cacheManager.numCachedEntries == 1)
+
+      // ensure cached changelog doesn't impact shared relation cache
+      assert(lookupSharedRelationCache(cat, ident).isEmpty)
+
+      // ensure cached changelog doesn't impact table state
+      sql(s"INSERT INTO $tableName VALUES (101, 'next')")
+      val df = spark.table(tableName)
+      assert(cacheManager.lookupCachedData(df).isEmpty)
+      checkAnswer(df.select("id"), Seq(Row(100L), Row(101L)))
+    } finally {
+      spark.catalog.clearCache()
+    }
+  }
+
+  test("shared relation cache offers the cached table when its CHANGES are cached too") {
+    val tableName = s"$cdcCatalogName.test_table"
+    sql(s"INSERT INTO $tableName VALUES (100, 'current')")
+    val cat = cdcCatalog
+    cat.addChangeRows(ident, Seq(changeRow(1L, 1L)))
+    val cacheManager = spark.sharedState.cacheManager
+    try {
+      // cache table
+      spark.table(tableName).cache()
+      assert(cacheManager.numCachedEntries == 1)
+
+      // ensure shared relation cache is populated correctly
+      assert(lookupSharedRelationCache(cat, ident).isDefined)
+
+      // cache changelog
+      val changes = spark.read.option("startingVersion", "1").changes(tableName)
+      changes.cache()
+      checkAnswer(changes.select("id"), Seq(Row(1L)))
+      assert(cacheManager.lookupCachedData(changes).isDefined)
+      assert(cacheManager.numCachedEntries == 2)
+
+      // ensure cached changelog doesn't invalidate shared relation cache
+      assert(lookupSharedRelationCache(cat, ident).exists {
+        case r: DataSourceV2Relation => !r.table.isInstanceOf[ChangelogTable]
+        case _ => false
+      })
+      checkAnswer(spark.table(tableName).select("id"), Seq(Row(100L)))
+
+      // ensure cached changelog doesn't impact table state
+      sql(s"INSERT INTO $tableName VALUES (101, 'next')")
+      val df = spark.table(tableName)
+      assert(cacheManager.lookupCachedData(df).isDefined)
+      checkAnswer(df.select("id"), Seq(Row(100L), Row(101L)))
     } finally {
       spark.catalog.clearCache()
     }
