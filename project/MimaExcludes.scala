@@ -57,7 +57,15 @@ object MimaExcludes {
     ProblemFilters.exclude[ReversedMissingMethodProblem](
       "org.apache.spark.sql.TableValuedFunction.variant_explode"),
     ProblemFilters.exclude[ReversedMissingMethodProblem](
-      "org.apache.spark.sql.TableValuedFunction.variant_explode_outer")
+      "org.apache.spark.sql.TableValuedFunction.variant_explode_outer"),
+    // [SPARK-61387][SS] The real-time mode streaming shuffle reader takes its reduce partition.
+    // StreamingShuffleReader is internal: org.apache.spark.shuffle is left out of the API docs.
+    ProblemFilters.exclude[DirectMissingMethodProblem](
+      "org.apache.spark.shuffle.streaming.StreamingShuffleReader.this"),
+    ProblemFilters.exclude[DirectMissingMethodProblem](
+      "org.apache.spark.shuffle.streaming.StreamingShuffleReader.<init>$default$3"),
+    ProblemFilters.exclude[IncompatibleResultTypeProblem](
+      "org.apache.spark.shuffle.streaming.StreamingShuffleReader.<init>$default$4")
   )
 
   // Exclude rules for 4.3.x from 4.2.0 (add 4.3-specific filters below as needed).
