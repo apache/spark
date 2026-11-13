@@ -101,7 +101,7 @@ multiclass labeling.
 ### Regularizers
 
 The purpose of the
-[regularizer](http://en.wikipedia.org/wiki/Regularization_(mathematics)) is to
+[regularizer](https://en.wikipedia.org/wiki/Regularization_(mathematics)) is to
 encourage simple models and avoid overfitting.  We support the following
 regularizers in `spark.mllib`:
 
@@ -130,7 +130,7 @@ of `$\wv$`.
 
 L2-regularized problems are generally easier to solve than L1-regularized due to smoothness.
 However, L1 regularization can help promote sparsity in weights leading to smaller and more interpretable models, the latter of which can be useful for feature selection.
-[Elastic net](http://en.wikipedia.org/wiki/Elastic_net_regularization) is a combination of L1 and L2 regularization. It is not recommended to train models without any regularization,
+[Elastic net](https://en.wikipedia.org/wiki/Elastic_net_regularization) is a combination of L1 and L2 regularization. It is not recommended to train models without any regularization,
 especially when the number of training examples is small.
 
 ### Optimization
@@ -142,13 +142,13 @@ Refer to [this optimization section](mllib-optimization.html#choosing-an-optimiz
 
 ## Classification
 
-[Classification](http://en.wikipedia.org/wiki/Statistical_classification) aims to divide items into
+[Classification](https://en.wikipedia.org/wiki/Statistical_classification) aims to divide items into
 categories.
 The most common classification type is
-[binary classification](http://en.wikipedia.org/wiki/Binary_classification), where there are two
+[binary classification](https://en.wikipedia.org/wiki/Binary_classification), where there are two
 categories, usually named positive and negative.
 If there are more than two categories, it is called
-[multiclass classification](http://en.wikipedia.org/wiki/Multiclass_classification).
+[multiclass classification](https://en.wikipedia.org/wiki/Multiclass_classification).
 `spark.mllib` supports two linear methods for classification: linear Support Vector Machines (SVMs)
 and logistic regression.
 Linear SVMs supports only binary classification, while logistic regression supports both binary and
@@ -159,7 +159,7 @@ where labels are class indices starting from zero: $0, 1, 2, \ldots$.
 
 ### Linear Support Vector Machines (SVMs)
 
-The [linear SVM](http://en.wikipedia.org/wiki/Support_vector_machine#Linear_SVM)
+The [linear SVM](https://en.wikipedia.org/wiki/Support_vector_machine#Linear_SVM)
 is a standard method for large-scale classification tasks. It is a linear method as described above in equation `$\eqref{eq:regPrimal}$`, with the loss function in the formulation given by the hinge loss:
 
 `\[
@@ -167,7 +167,7 @@ L(\wv;\x,y) := \max \{0, 1-y \wv^T \x \}.
 \]`
 By default, linear SVMs are trained with an L2 regularization.
 We also support alternative L1 regularization. In this case,
-the problem becomes a [linear program](http://en.wikipedia.org/wiki/Linear_programming).
+the problem becomes a [linear program](https://en.wikipedia.org/wiki/Linear_programming).
 
 The linear SVMs algorithm outputs an SVM model. Given a new data point,
 denoted by $\x$, the model makes predictions based on the value of $\wv^T \x$.
@@ -260,7 +260,7 @@ a dependency.
 
 ### Logistic regression
 
-[Logistic regression](http://en.wikipedia.org/wiki/Logistic_regression) is widely used to predict a
+[Logistic regression](https://en.wikipedia.org/wiki/Logistic_regression) is widely used to predict a
 binary response. It is a linear method as described above in equation `$\eqref{eq:regPrimal}$`,
 with the loss function in the formulation given by the logistic loss:
 `\[
@@ -280,7 +280,7 @@ model, $\mathrm{f}(z)$, has a probabilistic interpretation (i.e., the probabilit
 that $\x$ is positive).
 
 Binary logistic regression can be generalized into
-[multinomial logistic regression](http://en.wikipedia.org/wiki/Multinomial_logistic_regression) to
+[multinomial logistic regression](https://en.wikipedia.org/wiki/Multinomial_logistic_regression) to
 train and predict multiclass classification problems.
 For example, for $K$ possible outcomes, one of the outcomes can be chosen as a "pivot", and the
 other $K - 1$ outcomes can be separately regressed against the pivot outcome.
@@ -355,12 +355,12 @@ L(\wv;\x,y) :=  \frac{1}{2} (\wv^T \x - y)^2.
 \]`
 
 Various related regression methods are derived by using different types of regularization:
-[*ordinary least squares*](http://en.wikipedia.org/wiki/Ordinary_least_squares) or
-[*linear least squares*](http://en.wikipedia.org/wiki/Linear_least_squares_(mathematics)) uses
- no regularization; [*ridge regression*](http://en.wikipedia.org/wiki/Ridge_regression) uses L2
-regularization; and [*Lasso*](http://en.wikipedia.org/wiki/Lasso_(statistics)) uses L1
+[*ordinary least squares*](https://en.wikipedia.org/wiki/Ordinary_least_squares) or
+[*linear least squares*](https://en.wikipedia.org/wiki/Linear_least_squares_(mathematics)) uses
+ no regularization; [*ridge regression*](https://en.wikipedia.org/wiki/Ridge_regression) uses L2
+regularization; and [*Lasso*](https://en.wikipedia.org/wiki/Lasso_(statistics)) uses L1
 regularization.  For all of these models, the average loss or training error, $\frac{1}{n} \sum_{i=1}^n (\wv^T x_i - y_i)^2$, is
-known as the [mean squared error](http://en.wikipedia.org/wiki/Mean_squared_error).
+known as the [mean squared error](https://en.wikipedia.org/wiki/Mean_squared_error).
 
 ### Streaming linear regression
 

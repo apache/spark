@@ -36,7 +36,7 @@ This section covers algorithms for working with features, roughly divided into t
 
 ## TF-IDF
 
-[Term frequency-inverse document frequency (TF-IDF)](http://en.wikipedia.org/wiki/Tf%E2%80%93idf) 
+[Term frequency-inverse document frequency (TF-IDF)](https://en.wikipedia.org/wiki/Tf%E2%80%93idf) 
 is a feature vectorization method widely used in text mining to reflect the importance of a term 
 to a document in the corpus. Denote a term by `$t$`, a document by `$d$`, and the corpus by `$D$`.
 Term frequency `$TF(t, d)$` is the number of times that term `$t$` appears in document `$d$`, while 
@@ -61,7 +61,7 @@ In MLlib, we separate TF and IDF to make them flexible.
 
 `HashingTF` is a `Transformer` which takes sets of terms and converts those sets into 
 fixed-length feature vectors.  In text processing, a "set of terms" might be a bag of words.
-`HashingTF` utilizes the [hashing trick](http://en.wikipedia.org/wiki/Feature_hashing).
+`HashingTF` utilizes the [hashing trick](https://en.wikipedia.org/wiki/Feature_hashing).
 A raw feature is mapped into an index (term) by applying a hash function. The hash function
 used here is [MurmurHash 3](https://en.wikipedia.org/wiki/MurmurHash). Then term frequencies
 are calculated based on the mapped indices. This approach avoids the need to compute a global 
@@ -321,7 +321,7 @@ for more details on the API.
 
 ## Tokenizer
 
-[Tokenization](http://en.wikipedia.org/wiki/Lexical_analysis#Tokenization) is the process of taking text (such as a sentence) and breaking it into individual terms (usually words).  A simple [Tokenizer](api/scala/org/apache/spark/ml/feature/Tokenizer.html) class provides this functionality.  The example below shows how to split sentences into sequences of words.
+[Tokenization](https://en.wikipedia.org/wiki/Lexical_analysis#Tokenization) is the process of taking text (such as a sentence) and breaking it into individual terms (usually words).  A simple [Tokenizer](api/scala/org/apache/spark/ml/feature/Tokenizer.html) class provides this functionality.  The example below shows how to split sentences into sequences of words.
 
 [RegexTokenizer](api/scala/org/apache/spark/ml/feature/RegexTokenizer.html) allows more
  advanced tokenization based on regular expression (regex) matching.
@@ -507,7 +507,7 @@ for more details on the API.
 
 ## PCA
 
-[PCA](http://en.wikipedia.org/wiki/Principal_component_analysis) is a statistical procedure that uses an orthogonal transformation to convert a set of observations of possibly correlated variables into a set of values of linearly uncorrelated variables called principal components. A [PCA](api/scala/org/apache/spark/ml/feature/PCA.html) class trains a model to project vectors to a low-dimensional space using PCA. The example below shows how to project 5-dimensional feature vectors into 3-dimensional principal components.
+[PCA](https://en.wikipedia.org/wiki/Principal_component_analysis) is a statistical procedure that uses an orthogonal transformation to convert a set of observations of possibly correlated variables into a set of values of linearly uncorrelated variables called principal components. A [PCA](api/scala/org/apache/spark/ml/feature/PCA.html) class trains a model to project vectors to a low-dimensional space using PCA. The example below shows how to project 5-dimensional feature vectors into 3-dimensional principal components.
 
 **Examples**
 
@@ -541,7 +541,7 @@ for more details on the API.
 
 ## PolynomialExpansion
 
-[Polynomial expansion](http://en.wikipedia.org/wiki/Polynomial_expansion) is the process of expanding your features into a polynomial space, which is formulated by an n-degree combination of original dimensions. A [PolynomialExpansion](api/scala/org/apache/spark/ml/feature/PolynomialExpansion.html) class provides this functionality.  The example below shows how to expand your features into a 3-degree polynomial space.
+[Polynomial expansion](https://en.wikipedia.org/wiki/Polynomial_expansion) is the process of expanding your features into a polynomial space, which is formulated by an n-degree combination of original dimensions. A [PolynomialExpansion](api/scala/org/apache/spark/ml/feature/PolynomialExpansion.html) class provides this functionality.  The example below shows how to expand your features into a 3-degree polynomial space.
 
 **Examples**
 
@@ -821,7 +821,7 @@ for more details on the API.
 
 ## OneHotEncoder
 
-[One-hot encoding](http://en.wikipedia.org/wiki/One-hot) maps a categorical feature, represented as a label index, to a binary vector with at most a single one-value indicating the presence of a specific feature value from among the set of all feature values. This encoding allows algorithms which expect continuous features, such as Logistic Regression, to use categorical features. For string type input data, it is common to encode categorical features using [StringIndexer](ml-features.html#stringindexer) first.
+[One-hot encoding](https://en.wikipedia.org/wiki/One-hot) maps a categorical feature, represented as a label index, to a binary vector with at most a single one-value indicating the presence of a specific feature value from among the set of all feature values. This encoding allows algorithms which expect continuous features, such as Logistic Regression, to use categorical features. For string type input data, it is common to encode categorical features using [StringIndexer](ml-features.html#stringindexer) first.
 
 `OneHotEncoder` can transform multiple columns, returning an one-hot-encoded output vector column for each input column. It is common to merge these vectors into a single feature vector using [VectorAssembler](ml-features.html#vectorassembler).
 
@@ -1074,7 +1074,7 @@ for more details on the API.
 
 ## Normalizer
 
-`Normalizer` is a `Transformer` which transforms a dataset of `Vector` rows, normalizing each `Vector` to have unit norm.  It takes parameter `p`, which specifies the [p-norm](http://en.wikipedia.org/wiki/Norm_%28mathematics%29#p-norm) used for normalization.  ($p = 2$ by default.)  This normalization can help standardize your input data and improve the behavior of learning algorithms.
+`Normalizer` is a `Transformer` which transforms a dataset of `Vector` rows, normalizing each `Vector` to have unit norm.  It takes parameter `p`, which specifies the [p-norm](https://en.wikipedia.org/wiki/Norm_%28mathematics%29#p-norm) used for normalization.  ($p = 2$ by default.)  This normalization can help standardize your input data and improve the behavior of learning algorithms.
 
 **Examples**
 
