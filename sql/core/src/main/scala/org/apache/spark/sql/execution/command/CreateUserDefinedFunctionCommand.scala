@@ -22,6 +22,7 @@ import java.util.Locale
 import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.{CapturesConfig, FunctionIdentifier}
 import org.apache.spark.sql.catalyst.catalog.{LanguageSQL, RoutineLanguage, UserDefinedFunctionErrors}
+import org.apache.spark.sql.catalyst.plans.logical.{CreateUserDefinedFunctionLike, LogicalPlan}
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types.StructType
 
@@ -29,7 +30,9 @@ import org.apache.spark.sql.types.StructType
  * The base class for CreateUserDefinedFunctionCommand
  */
 abstract class CreateUserDefinedFunctionCommand
-  extends LeafRunnableCommand with CapturesConfig
+  extends UnaryRunnableCommand with CapturesConfig with CreateUserDefinedFunctionLike {
+  def isTemp: Boolean
+}
 
 
 object CreateUserDefinedFunctionCommand {
@@ -40,7 +43,7 @@ object CreateUserDefinedFunctionCommand {
    */
   // scalastyle:off argcount
   def apply(
-      name: FunctionIdentifier,
+      child: LogicalPlan,
       inputParamText: Option[String],
       returnTypeText: String,
       exprText: Option[String],
@@ -62,7 +65,7 @@ object CreateUserDefinedFunctionCommand {
     language match {
       case LanguageSQL =>
         CreateSQLFunctionCommand(
-          name,
+          child,
           inputParamText,
           returnTypeText,
           exprText,
@@ -80,6 +83,7 @@ object CreateUserDefinedFunctionCommand {
         throw UserDefinedFunctionErrors.unsupportedUserDefinedFunction(other)
     }
   }
+
 
   /**
    * Check whether the function parameters contain duplicated column names.

@@ -291,7 +291,8 @@ CreateNamespace false
 -- !query
 CREATE FUNCTION sql_path_routines.pick() RETURNS INT RETURN 7
 -- !query analysis
-CreateSQLFunctionCommand spark_catalog.sql_path_routines.pick, INT, 7, false, false, false, false
+CreateSQLFunctionCommand INT, 7, false, false, false, false
++- ResolvedIdentifier V2SessionCatalog(spark_catalog), sql_path_routines.pick
 
 
 -- !query
@@ -319,7 +320,8 @@ CREATE FUNCTION sql_path_routines.pick_tvf()
 RETURNS TABLE(val INT)
 RETURN SELECT 7 AS val
 -- !query analysis
-CreateSQLFunctionCommand spark_catalog.sql_path_routines.pick_tvf, val INT, SELECT 7 AS val, true, false, false, false
+CreateSQLFunctionCommand val INT, SELECT 7 AS val, true, false, false, false
++- ResolvedIdentifier V2SessionCatalog(spark_catalog), sql_path_routines.pick_tvf
 
 
 -- !query
@@ -355,7 +357,8 @@ CreateNamespace false
 -- !query
 CREATE FUNCTION sql_path_routines_b.pick() RETURNS INT RETURN 11
 -- !query analysis
-CreateSQLFunctionCommand spark_catalog.sql_path_routines_b.pick, INT, 11, false, false, false, false
+CreateSQLFunctionCommand INT, 11, false, false, false, false
++- ResolvedIdentifier V2SessionCatalog(spark_catalog), sql_path_routines_b.pick
 
 
 -- !query
@@ -785,7 +788,8 @@ CREATE FUNCTION default.frozen_fn()
 RETURNS INT
 RETURN (SELECT MAX(id) FROM frozen_t)
 -- !query analysis
-CreateSQLFunctionCommand spark_catalog.default.frozen_fn, INT, (SELECT MAX(id) FROM frozen_t), false, false, false, false
+CreateSQLFunctionCommand INT, (SELECT MAX(id) FROM frozen_t), false, false, false, false
++- ResolvedIdentifier V2SessionCatalog(spark_catalog), default.frozen_fn
 
 
 -- !query
@@ -825,7 +829,8 @@ CREATE FUNCTION default.frozen_tvf()
 RETURNS TABLE(id INT)
 RETURN SELECT MAX(id) AS id FROM frozen_t
 -- !query analysis
-CreateSQLFunctionCommand spark_catalog.default.frozen_tvf, id INT, SELECT MAX(id) AS id FROM frozen_t, true, false, false, false
+CreateSQLFunctionCommand id INT, SELECT MAX(id) AS id FROM frozen_t, true, false, false, false
++- ResolvedIdentifier V2SessionCatalog(spark_catalog), default.frozen_tvf
 
 
 -- !query
@@ -859,7 +864,8 @@ CREATE FUNCTION sql_path_fn_a.f_ctx()
 RETURNS STRING
 RETURN concat(current_schema(), '::', current_path())
 -- !query analysis
-CreateSQLFunctionCommand spark_catalog.sql_path_fn_a.f_ctx, STRING, concat(current_schema(), '::', current_path()), false, false, false, false
+CreateSQLFunctionCommand STRING, concat(current_schema(), '::', current_path()), false, false, false, false
++- ResolvedIdentifier V2SessionCatalog(spark_catalog), sql_path_fn_a.f_ctx
 
 
 -- !query
