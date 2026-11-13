@@ -43,17 +43,16 @@ import org.apache.spark.unsafe.KVIterator
  * @param groupingKeySchema the schema of the grouping key rows.
  * @param bufferSchema the schema of the aggregation buffer rows.
  * @param initialValues the initial values of the aggregation buffer, one per buffer slot.
- * @param mergeExpressions the expressions that merge two aggregation buffers, used when the
- *                         hash map has spilled and the sorted rows of a key are merged.
- * @param mergeInputAttributes the input of `mergeExpressions`: the aggregation buffer
- *                             attributes followed by the input aggregation buffer attributes.
+ * @param boundMergeExpressions the expressions that merge two aggregation buffers, bound to the
+ *                              aggregation buffer followed by the input aggregation buffer. Used
+ *                              when the hash map has spilled and the sorted rows of a key are
+ *                              merged.
  */
 private[execution] class HashAggregateCodegenHelper(
     groupingKeySchema: StructType,
     bufferSchema: StructType,
     initialValues: Seq[Expression],
-    mergeExpressions: Seq[Expression],
-    mergeInputAttributes: Seq[Attribute]) extends Serializable {
+    boundMergeExpressions: Seq[Expression]) extends Serializable {
 
   /**
    * Creates the regular hash map. Called by the generated code, so it must be public.
@@ -128,7 +127,7 @@ private[execution] class HashAggregateCodegenHelper(
     new KVIterator[UnsafeRow, UnsafeRow] {
 
       // Create a MutableProjection to merge the rows of same key together
-      val mergeProjection = MutableProjection.create(mergeExpressions, mergeInputAttributes)
+      val mergeProjection = MutableProjection.create(boundMergeExpressions)
       val joinedRow = new JoinedRow()
 
       var currentKey: UnsafeRow = null
@@ -172,6 +171,29 @@ private[execution] class HashAggregateCodegenHelper(
       override def close(): Unit = {
         sortedIter.close()
       }
+    }
+  }
+}
+
+private[execution] object HashAggregateCodegenHelper {
+  /**
+   * Spills the in-memory hash map to disk and returns the sorter holding the spilled data. Called
+   * by the generated code of [[HashAggregateExec]] (through the static forwarder) when a buffer
+   * cannot be allocated from the hash map: the first spill destructs the map into a new sorter, and
+   * later spills merge into the existing one. Returning the sorter lets the generated code keep it
+   * in a single mutable field.
+   *
+   * Extracting this type-independent spill machinery into a shared helper keeps it compiled once
+   * per JVM instead of being re-emitted into every HashAggregateExec stage's generated code.
+   */
+  def spillHashMapToSorter(
+      hashMap: UnsafeFixedWidthAggregationMap,
+      sorter: UnsafeKVExternalSorter): UnsafeKVExternalSorter = {
+    if (sorter == null) {
+      hashMap.destructAndCreateExternalSorter()
+    } else {
+      sorter.merge(hashMap.destructAndCreateExternalSorter())
+      sorter
     }
   }
 }

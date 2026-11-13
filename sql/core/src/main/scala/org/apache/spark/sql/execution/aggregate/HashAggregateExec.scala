@@ -289,6 +289,13 @@ case class HashAggregateExec(
   private var adaptivePassThroughBufferTerm: String = _
 
   /**
+   * This is called by generated Java class, should be public.
+   */
+  def createUnsafeJoiner(): UnsafeRowJoiner = {
+    GenerateUnsafeRowJoiner.create(groupingKeySchema, bufferSchema)
+  }
+
+  /**
    * Creates the helper that the generated code calls at runtime. It holds only what those calls
    * need, so the generated code does not reference this plan node and its child subtree.
    */
@@ -297,9 +304,9 @@ case class HashAggregateExec(
       groupingKeySchema,
       bufferSchema,
       initialValues = declFunctions.flatMap(_.initialValues),
-      mergeExpressions = declFunctions.flatMap(_.mergeExpressions),
-      mergeInputAttributes =
-        aggregateBufferAttributes ++ declFunctions.flatMap(_.inputAggBufferAttributes))
+      boundMergeExpressions = bindReferences(
+        declFunctions.flatMap(_.mergeExpressions),
+        aggregateBufferAttributes ++ declFunctions.flatMap(_.inputAggBufferAttributes)))
   }
 
   /**
@@ -930,7 +937,7 @@ case class HashAggregateExec(
 
       val spillMap =
         s"""
-           |$sorterTerm = org.apache.spark.sql.execution.aggregate.HashAggregateExec
+           |$sorterTerm = ${classOf[HashAggregateCodegenHelper].getName}
            |  .spillHashMapToSorter($hashMapTerm, $sorterTerm);
            |$resetCounter
            |// the hash map had been spilled, so it should have enough memory now,
@@ -1315,27 +1322,4 @@ case class HashAggregateExec(
 
   override protected def withNewChildInternal(newChild: SparkPlan): HashAggregateExec =
     copy(child = newChild)
-}
-
-object HashAggregateExec {
-  /**
-   * Spills the in-memory hash map to disk and returns the sorter holding the spilled data. Called
-   * by the generated code of [[HashAggregateExec]] (through the static forwarder) when a buffer
-   * cannot be allocated from the hash map: the first spill destructs the map into a new sorter, and
-   * later spills merge into the existing one. Returning the sorter lets the generated code keep it
-   * in a single mutable field.
-   *
-   * Extracting this type-independent spill machinery into a shared helper keeps it compiled once
-   * per JVM instead of being re-emitted into every HashAggregateExec stage's generated code.
-   */
-  def spillHashMapToSorter(
-      hashMap: UnsafeFixedWidthAggregationMap,
-      sorter: UnsafeKVExternalSorter): UnsafeKVExternalSorter = {
-    if (sorter == null) {
-      hashMap.destructAndCreateExternalSorter()
-    } else {
-      sorter.merge(hashMap.destructAndCreateExternalSorter())
-      sorter
-    }
-  }
 }

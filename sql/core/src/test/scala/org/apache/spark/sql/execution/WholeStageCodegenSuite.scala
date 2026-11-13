@@ -384,32 +384,38 @@ class WholeStageCodegenSuite extends SharedSparkSession
   }
 
   test("SPARK-61661: HashAggregate codegen references do not serialize plan nodes") {
-    // The references of the generated code are serialized into every task binary. A plan node
-    // among them would drag its whole child subtree along (for the final aggregate, the whole
-    // map-side plan through the exchange), so the generated code must not reference one.
+    // What a codegen stage adds to the task binary (its closure, with the references of the
+    // generated code) is serialized into every task. A plan node in it would drag its whole child
+    // subtree along (for the final aggregate, the whole map-side plan through the exchange).
     def serializedPlanNodes(stage: WholeStageCodegenExec): Seq[String] = {
+      // Serialize the RDD that the stage adds on top of its input RDDs, as the task binary does:
+      // its closure or evaluator factory with the generated code references. The input RDDs are
+      // not followed, since they belong to the operators below this stage.
+      val rdd = stage.execute()
       val planNodes = mutable.ArrayBuffer[String]()
       val out = new ObjectOutputStream(new ByteArrayOutputStream()) {
         enableReplaceObject(true)
-        override def replaceObject(obj: AnyRef): AnyRef = {
-          obj match {
-            case p: SparkPlan => planNodes += p.nodeName
-            case _ =>
-          }
-          obj
+        override def replaceObject(obj: AnyRef): AnyRef = obj match {
+          case p: SparkPlan => planNodes += p.nodeName; p
+          case r: RDD[_] if r ne rdd => null
+          case o => o
         }
       }
-      out.writeObject(stage.doCodeGen()._1.references.toArray)
+      out.writeObject(rdd)
       out.close()
       planNodes.toSeq
     }
 
-    Seq(
-      (false, false, false),
-      (true, false, false),
-      (true, true, false),
-      (true, false, true)).foreach { case (twoLevel, vectorized, adaptivePartialAgg) =>
+    for {
+      (twoLevel, vectorized, adaptivePartialAgg) <- Seq(
+        (false, false, false),
+        (true, false, false),
+        (true, true, false),
+        (true, false, true))
+      usePartitionEvaluator <- Seq(false, true)
+    } {
       withSQLConf(
+        SQLConf.USE_PARTITION_EVALUATOR.key -> usePartitionEvaluator.toString,
         SQLConf.ENABLE_TWOLEVEL_AGG_MAP.key -> twoLevel.toString,
         SQLConf.ENABLE_VECTORIZED_HASH_MAP.key -> vectorized.toString,
         SQLConf.ADAPTIVE_PARTIAL_AGGREGATION_ENABLED.key -> adaptivePartialAgg.toString) {
