@@ -378,6 +378,20 @@ org.apache.spark.sql.catalyst.parser.ParseException
 
 
 -- !query
+SELECT * FROM trades ASOF JOIN quotes USING (symbol)
+-- !query analysis
+org.apache.spark.sql.catalyst.parser.ParseException
+{
+  "errorClass" : "PARSE_SYNTAX_ERROR",
+  "sqlState" : "42601",
+  "messageParameters" : {
+    "error" : "'USING'",
+    "hint" : ""
+  }
+}
+
+
+-- !query
 SELECT * FROM trades t ASOF JOIN quotes q
   MATCH_CONDITION (t.trade_time >= q.quote_time AND t.symbol = q.symbol)
   ON t.symbol = q.symbol
