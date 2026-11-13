@@ -28,7 +28,7 @@ import org.apache.spark.sql.catalyst.dsl.expressions._
 import org.apache.spark.sql.catalyst.dsl.plans._
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.plans.{Inner, PlanTest}
-import org.apache.spark.sql.catalyst.plans.logical.{CreateVariable, DefaultValueExpression, DeleteFromTable, ExternalLookupJoin, LocalRelation, LogicalPlan, Project}
+import org.apache.spark.sql.catalyst.plans.logical.{CreateVariable, DefaultValueExpression, DeleteFromTable, ExternalLookupCacheOptions, ExternalLookupJoin, LocalRelation, LogicalPlan, Project}
 import org.apache.spark.sql.catalyst.rules.RuleExecutor
 import org.apache.spark.sql.catalyst.util.DateTimeUtils
 import org.apache.spark.sql.connector.catalog.{DefaultCatalogManager, Identifier}
@@ -1019,9 +1019,10 @@ class RewriteWithExpressionSuite extends PlanTest {
     val lookup = LocalRelation($"id".int, $"department".string)
     val keysEqual = stream.output.head === lookup.output.head
     val department = Upper(lookup.output(1))
+    val noCache = ExternalLookupCacheOptions(enabled = false, maxBytes = 1, ttlMillis = 0)
     val join = ExternalLookupJoin(stream, lookup, Inner,
       Some(keysEqual && With(department) { case Seq(ref) => ref >= "A" && ref <= "Z" }),
-      lookup.output)
+      noCache, lookup.output)
     assert(RewriteWithExpression(join) ===
       join.copy(condition = Some(keysEqual && (department >= "A" && department <= "Z"))))
   }

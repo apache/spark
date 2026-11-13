@@ -4869,6 +4869,14 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase with Compilat
       messageParameters = messageParameters)
   }
 
+  def invalidExternalLookupOptionError(
+      option: String,
+      errorSubClass: String,
+      messageParameters: Map[String, String] = Map.empty): Throwable = {
+    invalidExternalLookupHintError(
+      errorSubClass, Map("option" -> toDSOption(option)) ++ messageParameters)
+  }
+
   def unsupportedExternalLookupJoinError(
       errorSubClass: String,
       messageParameters: Map[String, String] = Map.empty): Throwable = {
