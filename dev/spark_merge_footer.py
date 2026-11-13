@@ -133,11 +133,19 @@ def backport_pr(message):
     True
     >>> backport_pr("Fix\\n\\nBackport-PR: #9") is None
     True
+
+    A trailing `skip-checks` paragraph, added for the post-merge CI sampling, does not hide it:
+
+    >>> backport_pr("Fix\\n\\n%s\\nBackport-PR: #9\\n\\n\\nskip-checks: true\\n" % footer)
+    9
     """
     matches = list(_MERGE_FOOTER_RE.finditer(message))
     if not matches:
         return None
-    found = _BACKPORT_PR_RE.findall(message[matches[-1].start() :].split("\n\n")[-1])
+    paragraphs = [p.strip() for p in message[matches[-1].start() :].split("\n\n")]
+    while paragraphs and (not paragraphs[-1] or paragraphs[-1].lower().startswith("skip-checks:")):
+        paragraphs.pop()
+    found = _BACKPORT_PR_RE.findall(paragraphs[-1]) if paragraphs else []
     return int(found[-1]) if found else None
 
 

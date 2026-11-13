@@ -2096,6 +2096,11 @@ def _land_via_fork(pr_num, pick_ref, pick_branch_name, title):
     >>> _backport_of(creates[0].args[3], "backport-pr7-branch-4.2", "branch-4.2")[::2]
     (7, 'A <a@e.org>')
 
+    The pick's skip-checks trailer is not carried into the PR body:
+
+    >>> land("me", None, body="body\\n\\n\\nskip-checks: true\\n")[2][0].args[3]
+    'Backport-of: #7\\n\\nbody'
+
     The dry-run seam fakes both effects, so a dry run takes the success branch:
 
     >>> with redirect_stdout(StringIO()) as out:
@@ -2109,7 +2114,10 @@ def _land_via_fork(pr_num, pick_ref, pick_branch_name, title):
     # The pick's own message is what GitHub would prefill for a single-commit branch. Its @s
     # were stripped when the merge commit was built, so it fires no mention mails. The marker
     # lets merge_pr keep the original message, footer and author when this PR is merged.
-    pr_body = git.run(["git", "log", "-1", "--format=%b", pick_branch_name]).strip()
+    # merge_pr adds the skip trailer afresh, per the commit count when the PR merges.
+    pr_body = remove_inherited_post_merge_ci_skip(
+        git.run(["git", "log", "-1", "--format=%b", pick_branch_name])
+    ).strip()
     # A run on a merged backport PR picks a commit whose footer names the original PR, and
     # _backport_of only accepts a marker naming that one.
     pr_num = merge_footer_pr(pr_body) or pr_num
