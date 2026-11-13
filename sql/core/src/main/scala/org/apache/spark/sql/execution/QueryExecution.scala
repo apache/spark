@@ -45,7 +45,7 @@ import org.apache.spark.sql.connector.catalog.transactions.Transaction
 import org.apache.spark.sql.execution.SQLExecution.EXECUTION_ROOT_ID_KEY
 import org.apache.spark.sql.execution.adaptive.{AdaptiveExecutionContext, AdaptiveSparkPlanExec, InsertAdaptiveSparkPlan, QueryStageExec}
 import org.apache.spark.sql.execution.bucketing.{CoalesceBucketsInJoin, DisableUnnecessaryBucketedScan}
-import org.apache.spark.sql.execution.datasources.v2.{TransactionalExec, V2TableRefreshUtil}
+import org.apache.spark.sql.execution.datasources.v2.{PackV2ScanPartitions, TransactionalExec, V2TableRefreshUtil}
 import org.apache.spark.sql.execution.dynamicpruning.PlanDynamicPruningFilters
 import org.apache.spark.sql.execution.exchange.{EnablePipelinedShuffle, EnsureRequirements, PipelinedShuffleEligibility, ShuffleExchangeExec}
 import org.apache.spark.sql.execution.reuse.ReuseExchangeAndSubquery
@@ -872,6 +872,10 @@ object QueryExecution {
       // to satisfy and then silently lose that ordering. (This also matches the AQE rule order,
       // see `AdaptiveSparkPlanExec.queryStagePreparationRules`.)
       RemoveRedundantSorts,
+      // Must run after `RemoveRedundantSorts`, which drops a local sort that is a shuffle's direct
+      // child, and before columnar transitions and codegen wrap the shuffles' children. A packed
+      // shuffle's input width is unknown, so `EnablePipelinedShuffle` keeps such a plan regular.
+      PackV2ScanPartitions,
       ApplyColumnarRulesAndInsertTransitions(
         SnapshotUnionPreparationConf.after(unionConf, sparkSession.sessionState.columnarRules),
         outputsColumnar = false),
