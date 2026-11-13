@@ -656,9 +656,11 @@ object DatasetManager extends Logging {
    *                                schema; for auxiliary tables, the derived schema). This is the
    *                                "incoming" side and may differ from `existingTable`'s recorded
    *                                schema due to schema evolution across runs.
-   * @param properties              the declared table properties to (re)set on the table. Note
-   *                                that properties absent here are NOT removed from the table (see
-   *                                the TODO in the body).
+   * @param properties              the declared table properties to (re)set on the table. A
+   *                                property absent here is removed from the table only if the
+   *                                table's [[PipelinesTableProperties.declaredPropertyKeys]]
+   *                                records that a previous materialization declared it; any other
+   *                                existing property (e.g. a catalog-managed one) is left in place.
    * @param mergeWithExistingSchema whether the effective schema is the merge of the existing and
    *                                desired schemas (additive evolution) rather than the desired
    *                                schema as-is.
@@ -694,18 +696,27 @@ object DatasetManager extends Logging {
 
     val existingProperties = existingTable.properties()
 
-    // TODO (SPARK-57670): Property removal is intentionally not handled here: a property dropped
-    // from the table definition between runs is left in place rather than actually removed from the
-    // corresponding catalog table entry. Removing it reliably is hard because we cannot distinguish
-    // a user-declared property the user dropped from a catalog/engine-managed property (e.g. the
-    // non-reserved `clusteringColumns`, or arbitrary catalog-internal keys) that must never be
-    // removed, and there is no record of which keys the pipeline previously set.
+    // Only remove properties that a previous materialization recorded as declared in the table
+    // definition. Every other existing property may be catalog/engine-managed (e.g. the
+    // non-reserved `clusteringColumns`, or arbitrary catalog-internal keys) and must never be
+    // removed. A table without the record (e.g. one materialized before it was introduced) has
+    // nothing removed; the record is written by this alter and used from the next run on.
+    val previouslyDeclaredKeys =
+      Option(existingProperties.get(PipelinesTableProperties.declaredPropertyKeys))
+        .flatMap(PipelinesTableProperties.parsePropertyKeys)
+        .getOrElse(Seq.empty)
+    val propertiesToRemove = previouslyDeclaredKeys.distinct.collect {
+      case k if !properties.contains(k) && existingProperties.containsKey(k) &&
+          !CatalogV2Util.TABLE_RESERVED_PROPERTIES.contains(k) =>
+        TableChange.removeProperty(k)
+    }
+
     val propertiesToSet = properties.collect {
       case (k, v) if !Option(existingProperties.get(k)).contains(v) =>
         TableChange.setProperty(k, v)
     }
 
-    val allTableChanges = columnChanges ++ propertiesToSet
+    val allTableChanges = columnChanges ++ propertiesToRemove ++ propertiesToSet
 
     // If there are no table changes to evolve with, avoid the no-op round-trip alter altogether.
     if (allTableChanges.nonEmpty) {
@@ -716,7 +727,8 @@ object DatasetManager extends Logging {
   /**
    * Some fields on the [[Table]] object are represented as reserved table properties by the catalog
    * APIs. This method creates a table properties map that merges the user-provided table properties
-   * with these reserved properties.
+   * with these reserved properties, plus [[PipelinesTableProperties.declaredPropertyKeys]]
+   * recording the keys of the user-provided table properties.
    */
   private def resolveTableProperties(table: Table, identifier: Identifier): Map[String, String] = {
     val validatedAndCanonicalizedProps =
@@ -742,7 +754,11 @@ object DatasetManager extends Logging {
       }
       .collect { case (key, Some(value)) => key -> value }
 
-    validatedAndCanonicalizedProps ++ specialProps
+    val declaredPropertyKeys = PipelinesTableProperties.declaredPropertyKeys ->
+      PipelinesTableProperties.serializePropertyKeys(
+        validatedAndCanonicalizedProps.keys.toSeq.sorted)
+
+    validatedAndCanonicalizedProps ++ specialProps + declaredPropertyKeys
   }
 
   /**
