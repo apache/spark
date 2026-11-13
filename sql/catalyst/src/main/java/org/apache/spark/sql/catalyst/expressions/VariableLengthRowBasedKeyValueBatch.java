@@ -31,8 +31,8 @@ import org.apache.spark.unsafe.UnsafeAlignedOffset;
  * Thus, record length = 4 + 4 + klen + vlen + 8
  */
 public final class VariableLengthRowBasedKeyValueBatch extends RowBasedKeyValueBatch {
-  // full addresses for key rows and value rows
-  private final long[] keyOffsets;
+  // full addresses for key rows and value rows. Not final: close() drops it.
+  long[] keyOffsets;
 
   /**
    * Append a key value pair.
@@ -179,6 +179,15 @@ public final class VariableLengthRowBasedKeyValueBatch extends RowBasedKeyValueB
         }
       }
     };
+  }
+
+  @Override
+  public void close() {
+    super.close();
+    // The task-completion hook that closes an aggregate's fast hash map keeps this batch reachable
+    // until the task ends, so a task that runs many partitions, each with its own map, would
+    // otherwise hold all of their key offsets at once, as many as the map has buckets.
+    keyOffsets = null;
   }
 
   VariableLengthRowBasedKeyValueBatch(StructType keySchema, StructType valueSchema,
