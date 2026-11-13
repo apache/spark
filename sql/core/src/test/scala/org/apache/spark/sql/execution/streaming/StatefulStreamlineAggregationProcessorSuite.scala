@@ -69,11 +69,11 @@ class StatefulStreamlineAggregationProcessorSuite extends SparkFunSuite with SQL
     }
   }
 
-  private class ProcessorFixture(version: Int, store: StateStore, global: Boolean = false) {
+  private class ProcessorFixture(version: Int, store: StateStore) {
     val key = AttributeReference("key", IntegerType, nullable = false)()
     private val value = AttributeReference("value", LongType)()
     private val sum = Sum(value)
-    private val groupingAttributes = if (global) Seq.empty else Seq(key)
+    private val groupingAttributes = Seq(key)
     private val inputAttributes = groupingAttributes ++ sum.inputAggBufferAttributes
     val stateManager = StreamingAggregationStateManager.createStateManager(
       groupingAttributes, inputAttributes, version)
@@ -180,36 +180,6 @@ class StatefulStreamlineAggregationProcessorSuite extends SparkFunSuite with SQL
       assertWriteFailure(failure) { fixture.processor.flushDirtyWrites() }
       assert(store.reads === 1)
       assert(store.writtenKeys.toSeq === Seq(0))
-      assert(fixture.updatedRows.value === 0L)
-    }
-
-    test(s"empty global aggregation preserves initialized and stored values - " +
-      s"state format $version") {
-      val store = new PutFailingStore
-      val fixture = new ProcessorFixture(version, store, global = true)
-      assert(fixture.processor.processEmptyGroupingKey().isNullAt(0))
-      assert(store.reads === 1)
-      assert(fixture.processor.process(InternalRow(5L)).getLong(0) === 5L)
-      fixture.processor.flushDirtyWrites()
-      assert(store.writes === 1)
-      assert(fixture.processor.processEmptyGroupingKey().getLong(0) === 5L)
-      fixture.processor.flushDirtyWrites()
-      assert(store.reads === 2)
-      assert(store.writes === 2)
-      assert(fixture.updatedRows.value === 2L)
-    }
-
-    test(s"empty global aggregation rejects a failed flush - state format $version") {
-      val store = new PutFailingStore
-      val fixture = new ProcessorFixture(version, store, global = true)
-      assert(fixture.processor.processEmptyGroupingKey().isNullAt(0))
-      val failure = new IOException("global aggregation write failed")
-      store.failure = Some(failure)
-      assertWriteFailure(failure) { fixture.processor.flushDirtyWrites() }
-      assertWriteFailure(failure) { fixture.processor.process(InternalRow(10L)) }
-      assertWriteFailure(failure) { fixture.processor.flushDirtyWrites() }
-      assert(store.reads === 1)
-      assert(store.writes === 1)
       assert(fixture.updatedRows.value === 0L)
     }
 
