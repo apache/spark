@@ -18,7 +18,9 @@ import collections
 import io
 import math
 import pickle
+import subprocess
 import sys
+import textwrap
 import unittest
 from unittest.mock import MagicMock
 
@@ -47,6 +49,21 @@ from pyspark.testing.utils import (
 
 
 class SerializationTestCase(unittest.TestCase):
+    def test_cloudpickle_with_packaged_python_version(self):
+        script = textwrap.dedent(
+            """
+            import sys
+            sys.version = sys.version.replace(" ", " | packaged by example | ", 1)
+
+            from pyspark import cloudpickle
+
+            func = cloudpickle.loads(cloudpickle.dumps(lambda x: x + 1))
+            assert func(1) == 2
+            """
+        )
+        result = subprocess.run([sys.executable, "-c", script], capture_output=True, text=True)
+        self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+
     def test_namedtuple(self):
         from collections import namedtuple
 
