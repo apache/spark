@@ -118,7 +118,7 @@ MERGE_SCRIPT_REPO_PATH = "dev/merge_spark_pr.py"
 # See https://docs.github.com/en/actions/how-tos/manage-workflow-runs/skip-workflow-runs
 POST_MERGE_CI_INTERVALS = {"master": 10, "branch-4.x": 10}
 POST_MERGE_CI_SKIP_TRAILER = "skip-checks: true"
-# A PR carrying this GitHub label always runs post-merge CI, regardless of the interval.
+# A PR carrying this GitHub label is exempt from the interval and never gets the skip trailer.
 POST_MERGE_CI_FORCE_LABEL = "do-not-skip-ci"
 # Covers the trailer plus the cherry-pick attribution and committer sign-off added by -sx.
 POST_MERGE_CI_TRAILER_SEARCH_LENGTH = 256
@@ -890,21 +890,16 @@ def clean_up():
             git.run("git branch -D %s" % branch)
 
 
-def should_skip_post_merge_ci(target_ref, force_post_merge_ci):
+def should_skip_post_merge_ci(target_ref, pr_num):
     """Return whether the next commit on ``target_ref`` should skip post-merge CI.
 
     The branch history count matches the check formerly performed in ``build_main.yml``.
-    ``force_post_merge_ci`` is set when the PR carries ``POST_MERGE_CI_FORCE_LABEL``.
+    A commit that would skip is exempt when PR ``pr_num`` carries ``POST_MERGE_CI_FORCE_LABEL``.
+    The labels are read only then, on every call, so a label added during the run reaches the
+    later picks.
     """
     interval = POST_MERGE_CI_INTERVALS.get(target_ref)
     if interval is None:
-        return False
-
-    if force_post_merge_ci:
-        print(
-            "Post-merge CI will run on %s: the PR has the %r label."
-            % (target_ref, POST_MERGE_CI_FORCE_LABEL)
-        )
         return False
 
     commit_count = int(git.run(["git", "rev-list", "--count", "HEAD"]).strip()) + 1
@@ -912,6 +907,15 @@ def should_skip_post_merge_ci(target_ref, force_post_merge_ci):
         print(
             "Post-merge CI will run on %s: commit count %s is divisible by %s."
             % (target_ref, commit_count, interval)
+        )
+        return False
+
+    labels = get_json("%s/issues/%s/labels?per_page=100" % (GITHUB_API_BASE, pr_num))
+    # GitHub matches label names case-insensitively.
+    if any(label["name"].lower() == POST_MERGE_CI_FORCE_LABEL for label in labels):
+        print(
+            "Post-merge CI is exempt from sampling on %s: the PR has the %r label."
+            % (target_ref, POST_MERGE_CI_FORCE_LABEL)
         )
         return False
 
@@ -987,14 +991,13 @@ def merge_pr(
     pr_repo_desc,
     pr_author,
     co_authors,
-    force_post_merge_ci,
 ):
     pr_branch_name = "%s_MERGE_PR_%s" % (BRANCH_PREFIX, pr_num)
     target_branch_name = "%s_MERGE_PR_%s_%s" % (BRANCH_PREFIX, pr_num, target_ref.upper())
     git.run("git fetch %s pull/%s/head:%s" % (PR_REMOTE_NAME, pr_num, pr_branch_name))
     git.run("git fetch %s %s:%s" % (PUSH_REMOTE_NAME, target_ref, target_branch_name))
     git.run("git checkout %s" % target_branch_name)
-    skip_post_merge_ci = should_skip_post_merge_ci(target_ref, force_post_merge_ci)
+    skip_post_merge_ci = should_skip_post_merge_ci(target_ref, pr_num)
 
     had_conflicts = False
     try:
@@ -1069,7 +1072,7 @@ def merge_pr(
     return merge_hash
 
 
-def _do_cherry_pick(pr_num, merge_hash, pick_ref, force_post_merge_ci):
+def _do_cherry_pick(pr_num, merge_hash, pick_ref):
     """Cherry-pick `merge_hash` onto `pick_ref` and push.
 
     Returns the (pushed ref, pushed commit hash) pair. Raises `SkipCherryPick` if the
@@ -1081,7 +1084,15 @@ def _do_cherry_pick(pr_num, merge_hash, pick_ref, force_post_merge_ci):
     git.run("git fetch %s %s:%s" % (PUSH_REMOTE_NAME, pick_ref, pick_branch_name))
     git.run("git checkout %s" % pick_branch_name)
     pick_head = git.run("git rev-parse HEAD").strip()
-    skip_post_merge_ci = should_skip_post_merge_ci(pick_ref, force_post_merge_ci)
+    skip_post_merge_ci = should_skip_post_merge_ci(pick_ref, pr_num)
+    if skip_post_merge_ci:
+        # The merge is already pushed, so stopping here still reaches the JIRA update in main().
+        # Resolving the ticket then and again on the rerun leaves e.g. both 5.0.0 and 4.4.0,
+        # where a single run records only 4.4.0.
+        print_warning(
+            "If you stop this pick to rerun, answer N to 'Would you like to update an "
+            "associated JIRA?' first. The rerun updates the JIRA."
+        )
 
     try:
         git.run(
@@ -1214,8 +1225,6 @@ def cherry_pick(
     branch_names,
     target_ref,
     already_picked=(),
-    *,
-    force_post_merge_ci,
 ):
     """Prompt for a target branch and cherry-pick `merge_hash` onto it.
 
@@ -1265,14 +1274,14 @@ def cherry_pick(
             # reflect it.
             picked = []
             try:
-                picked.append(_do_cherry_pick(pr_num, merge_hash, sibling_x, force_post_merge_ci))
-                picked.append(_do_cherry_pick(pr_num, merge_hash, pick_ref, force_post_merge_ci))
+                picked.append(_do_cherry_pick(pr_num, merge_hash, sibling_x))
+                picked.append(_do_cherry_pick(pr_num, merge_hash, pick_ref))
             except SkipCherryPick:
                 pass
             return picked
         elif choice == "o":
             try:
-                return [_do_cherry_pick(pr_num, merge_hash, pick_ref, force_post_merge_ci)]
+                return [_do_cherry_pick(pr_num, merge_hash, pick_ref)]
             except SkipCherryPick:
                 return []
         elif choice == "a":
@@ -1281,7 +1290,7 @@ def cherry_pick(
             fail("Unrecognized choice %r; aborting." % choice)
 
     try:
-        return [_do_cherry_pick(pr_num, merge_hash, pick_ref, force_post_merge_ci)]
+        return [_do_cherry_pick(pr_num, merge_hash, pick_ref)]
     except SkipCherryPick:
         return []
 
@@ -3247,7 +3256,6 @@ def main():
 
     url = pr["url"]
     title = pr["title"]
-    force_post_merge_ci = any(label["name"] == POST_MERGE_CI_FORCE_LABEL for label in pr["labels"])
 
     # Fail hard on draft, WIP, or DO-NOT-MERGE PRs to prevent accidental merges.
     if pr.get("draft", False) or "[WIP]" in title or "[DO-NOT-MERGE]" in title:
@@ -3353,7 +3361,6 @@ def main():
                     branch_names,
                     target_ref,
                     already_picked=tuple(picked_refs),
-                    force_post_merge_ci=force_post_merge_ci,
                 )
                 picked_refs = picked_refs + [ref for ref, _ in picked]
                 picked_commits = picked_commits + picked
@@ -3394,7 +3401,6 @@ def main():
         pr_repo_desc,
         pr_author,
         co_authors,
-        force_post_merge_ci=force_post_merge_ci,
     )
 
     # Ordered (branch, commit_hash) pairs for the merge comment: the merge sink first,
@@ -3422,7 +3428,6 @@ def main():
                 branch_names,
                 target_ref,
                 already_picked=tuple(merged_refs),
-                force_post_merge_ci=force_post_merge_ci,
             )
             merged_refs = merged_refs + [ref for ref, _ in picked]
             merged_commits = merged_commits + picked
@@ -4004,7 +4009,7 @@ __test__ = {
     >>> from unittest.mock import Mock, patch
     >>> footer = "\\n\\nBody\\n\\nCloses #1 from x/h.\\n\\nAuthored-by: X <x@x>"
     >>> def run(pr_title, message=None, answer="n"):
-    ...     pr = {"url": "u", "title": pr_title, "draft": False, "body": "b", "labels": [],
+    ...     pr = {"url": "u", "title": pr_title, "draft": False, "body": "b",
     ...           "base": {"ref": "master"}, "user": {"login": "x"}, "head": {"ref": "h"},
     ...           "state": "open" if message is None else "closed", "mergeable": True}
     ...     def get_json(url):
