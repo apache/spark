@@ -348,7 +348,7 @@ class ArrowColumnarPythonUDFSuite extends SharedSparkSession {
     }
   }
 
-  test("SPARK-60306: Arrow Python UDF over many batches releases each input batch") {
+  test("SPARK-60306, SPARK-61657: Arrow Python UDF over many batches releases each input batch") {
     assume(shouldTestPandasUDFs)
     val pandasUDF = TestScalarPandasUDF(
       name = "arrow_release_udf", returnType = Some(StringType))
@@ -394,10 +394,11 @@ class ArrowColumnarPythonUDFSuite extends SharedSparkSession {
         // A limit stops consuming the output batches early, possibly before the input batches
         // that have been read are all released: the source closes them when the task completes,
         // and closing its allocator then fails the task if any of their buffers is referenced.
-        val limited = result.limit(10)
-        assert(collectNodes[ArrowEvalPythonExec](limited.queryExecution.executedPlan).nonEmpty)
-        assert(limited.collect().map(_.getString(4)).toSeq ==
-          (0 until 10).map(id => s"row_$id$suffix"))
+        // A limit in the query would be pushed below the evaluation (LimitPushDown), which would
+        // then read rows through a ColumnarToRowExec, so the rows are taken from this plan as
+        // CollectLimitExec takes them.
+        val limited = SQLExecution.withSQLConfPropagated(spark)(plan.executeTake(10))
+        assert(limited.map(_.getString(4)).toSeq == (0 until 10).map(id => s"row_$id$suffix"))
       }
   }
 
@@ -606,13 +607,18 @@ class ArrowColumnarPythonUDFSuite extends SharedSparkSession {
           assert(ArrowBackedDataSourceV2.maxUnreleasedBatches.get == 1)
         }
 
-        // A filter and a projection above, and a limit.
+        // A filter and a projection above.
         assert(result.where("u like 'row_1%'").selectExpr("concat(u, '!')").collect()
           .map(_.getString(0)).toSet ==
           (0 until numRows).map(id => s"row_$id$suffix").filter(_.startsWith("row_1"))
             .map(_ + "!").toSet)
-        assert(result.limit(10).collect().map(_.getString(0)).toSeq ==
-          (0 until 10).map(id => s"row_$id$suffix"))
+        // A limit in the query would be pushed below the evaluation (LimitPushDown), which would
+        // then read rows through a ColumnarToRowExec, so the rows are taken from this plan as
+        // CollectLimitExec takes them.
+        val limited = SQLExecution.withSQLConfPropagated(spark) {
+          result.queryExecution.executedPlan.executeTake(10)
+        }
+        assert(limited.map(_.getString(0)).toSeq == (0 until 10).map(id => s"row_$id$suffix"))
       }
     }
   }
