@@ -15,6 +15,8 @@
 # limitations under the License.
 #
 
+import datetime
+import os
 import time
 import unittest
 from decimal import Decimal
@@ -26,7 +28,7 @@ from pyspark.errors import AnalysisException, PySparkNotImplementedError, Python
 from pyspark.loose_version import LooseVersion
 from pyspark.serializers import read_int
 from pyspark.sql import Row
-from pyspark.sql.functions import col, udf
+from pyspark.sql.functions import col, udf, unix_micros
 from pyspark.sql.pandas.serializers import ArrowStreamSerializer, SpecialLengths
 from pyspark.sql.tests.test_udf import BaseUDFTestsMixin
 from pyspark.sql.types import (
@@ -38,6 +40,7 @@ from pyspark.sql.types import (
     StringType,
     StructField,
     StructType,
+    TimestampType,
     VarcharType,
 )
 from pyspark.testing.sqlutils import ReusedSQLTestCase
@@ -673,6 +676,42 @@ class ArrowPythonUDFNonLegacyTests(ArrowPythonUDFNonLegacyTestsMixin, ReusedSQLT
             self.assertEqual([row[0] for row in result.collect()], [1, 2])
             self.assertEqual(metrics.apply("pythonNumTimingReports").value(), 1)
             self.assertEqual(metrics.apply("pythonNumTimedBatches").value(), 1)
+
+    @unittest.skipIf(not hasattr(time, "tzset"), "time.tzset is not available")
+    def test_naive_timestamp_at_datetime_range_ends(self):
+        values = [
+            datetime.datetime(9999, 12, 31),
+            datetime.datetime(9999, 12, 31, 23, 59, 59, 999999),
+            datetime.datetime(1, 1, 1),
+            datetime.datetime(9999, 12, 30, 23, 59, 59),
+        ]
+        orig_tz = os.environ.get("TZ")
+        orig_worker_tz = self.sc.environment.get("TZ")
+        try:
+            for tz in ["America/Los_Angeles", "Asia/Tokyo"]:
+                os.environ["TZ"] = tz
+                time.tzset()
+                self.sc.environment["TZ"] = tz
+                arrow_udf = udf(lambda i: values[i], TimestampType(), useArrow=True)
+                pickled_udf = udf(lambda i: values[i], TimestampType(), useArrow=False)
+                with self.subTest(tz=tz), self.sql_conf({"spark.sql.session.timeZone": tz}):
+                    rows = (
+                        self.spark.range(len(values))
+                        .select(unix_micros(arrow_udf("id")), unix_micros(pickled_udf("id")))
+                        .collect()
+                    )
+                    expected = [TimestampType().toInternal(v) for v in values]
+                    self.assertEqual([tuple(row) for row in rows], [(e, e) for e in expected])
+        finally:
+            if orig_tz is None:
+                os.environ.pop("TZ", None)
+            else:
+                os.environ["TZ"] = orig_tz
+            time.tzset()
+            if orig_worker_tz is None:
+                self.sc.environment.pop("TZ", None)
+            else:
+                self.sc.environment["TZ"] = orig_worker_tz
 
 
 @unittest.skipIf(not have_pyarrow, pyarrow_requirement_message)
