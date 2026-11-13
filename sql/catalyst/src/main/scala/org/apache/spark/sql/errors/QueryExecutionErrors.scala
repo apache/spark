@@ -2925,6 +2925,36 @@ private[sql] object QueryExecutionErrors extends QueryErrorsBase with ExecutionE
       summary = "")
   }
 
+  def nextDayOverflowError(days: Int, dayOfWeek: String): SparkArithmeticException = {
+    new SparkArithmeticException(
+      errorClass = "DATETIME_OVERFLOW",
+      messageParameters = Map(
+        "operation" -> (s"find the next $dayOfWeek after " +
+          s"${toSQLValue(DateTimeUtils.daysToLocalDate(days), DateType)}")),
+      context = Array.empty,
+      summary = "")
+  }
+
+  def lastDayOverflowError(days: Int): SparkArithmeticException = {
+    new SparkArithmeticException(
+      errorClass = "DATETIME_OVERFLOW",
+      messageParameters = Map(
+        "operation" -> (s"find the last day of the month of " +
+          s"${toSQLValue(DateTimeUtils.daysToLocalDate(days), DateType)}")),
+      context = Array.empty,
+      summary = "")
+  }
+
+  def truncDateOverflowError(days: Int, unit: String): SparkArithmeticException = {
+    new SparkArithmeticException(
+      errorClass = "DATETIME_OVERFLOW",
+      messageParameters = Map(
+        "operation" -> (s"truncate ${toSQLValue(DateTimeUtils.daysToLocalDate(days), DateType)} " +
+          s"to $unit")),
+      context = Array.empty,
+      summary = "")
+  }
+
   def calendarIntervalArrowNanosOverflowError(
       interval: CalendarInterval): SparkArithmeticException = {
     new SparkArithmeticException(
@@ -3585,6 +3615,22 @@ private[sql] object QueryExecutionErrors extends QueryErrorsBase with ExecutionE
     )
   }
 
+  def storagePartitionJoinKeyTypeMismatchError(
+      transform: String,
+      columnType: DataType,
+      inputTypes: Seq[DataType],
+      key: Expression): Throwable = {
+    new SparkException(
+      errorClass = "STORAGE_PARTITION_JOIN_KEY_TYPE_MISMATCH",
+      messageParameters = Map(
+        "transform" -> transform,
+        "columnType" -> toSQLType(columnType),
+        "inputTypes" -> inputTypes.map(toSQLType).mkString("(", ", ", ")"),
+        "key" -> toSQLExpr(key),
+        "keyType" -> toSQLType(key.dataType)),
+      cause = null)
+  }
+
   def storagePartitionJoinIncompatibleReducedTypesError(
       leftReducers: Option[Seq[Option[KeyReducer]]],
       leftReducedDataTypes: Seq[DataType],
@@ -3825,5 +3871,14 @@ private[sql] object QueryExecutionErrors extends QueryErrorsBase with ExecutionE
     new SparkRuntimeException(
       errorClass = "PARSE_SQL_ANALYZE_UNSUPPORTED_SCRIPT",
       messageParameters = Map("functionName" -> toSQLId("parse_sql")))
+  }
+
+  def invalidDataSourceExternalLookupError(
+      table: String,
+      errorSubClass: String,
+      messageParameters: Map[String, String] = Map.empty): Throwable = {
+    new SparkRuntimeException(
+      errorClass = s"DATA_SOURCE_INVALID_EXTERNAL_LOOKUP.$errorSubClass",
+      messageParameters = Map("table" -> toSQLFreeFormId(table)) ++ messageParameters)
   }
 }

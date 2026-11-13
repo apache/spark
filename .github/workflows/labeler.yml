@@ -47,6 +47,7 @@ jobs:
     name: Label pull requests
     if: github.repository == 'apache/spark' && github.ref == 'refs/heads/master'
     runs-on: ubuntu-latest
+    timeout-minutes: 10
     permissions:
       actions: read
       contents: read

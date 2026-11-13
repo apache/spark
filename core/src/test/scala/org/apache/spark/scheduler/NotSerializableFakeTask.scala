@@ -40,3 +40,21 @@ private[spark] class NotSerializableFakeTask(myId: Int, stageId: Int)
   @throws(classOf[IOException])
   private def readObject(in: ObjectInputStream): Unit = {}
 }
+
+/**
+ * A wrapper class to test how (de)serialization of a task that exceeds Java's maximum array size
+ * is handled. Its serialization fails the way the JVM does when a byte array cannot grow.
+ */
+private[spark] class ArraySizeLimitFakeTask(stageId: Int, partitionId: Int, errorMessage: String)
+  extends Task[Array[Byte]](stageId, 0, partitionId, 1, JobArtifactSet.emptyJobArtifactSet) {
+
+  override def runTask(context: TaskContext): Array[Byte] = Array.empty[Byte]
+  override def preferredLocations: Seq[TaskLocation] = Seq[TaskLocation]()
+
+  @throws(classOf[IOException])
+  private def writeObject(out: ObjectOutputStream): Unit = {
+    // scalastyle:off throwerror
+    throw new OutOfMemoryError(errorMessage)
+    // scalastyle:on throwerror
+  }
+}

@@ -366,7 +366,8 @@ trait JoinSelectionHelper extends Logging {
    * join requires or prefers, however large. A side hinted NO_BROADCAST_AND_REPLICATION is never
    * broadcast by size, and the hint rules out a Cartesian product, so the other side is built. Of
    * two candidate sides, it builds the smaller for an inner or full join, the left for a right
-   * join, and the right for a left join.
+   * join, and the right for a left join. A LeftSingle join, though, always builds its right side,
+   * the only side `BroadcastNestedLoopJoinExec` can build for it, whatever the hints and sizes.
    */
   def getNonEquiJoinBuildSide(join: Join, conf: SQLConf): Option[BuildSide] = {
     val Join(left, right, joinType, _, hint) = join
@@ -380,9 +381,15 @@ trait JoinSelectionHelper extends Logging {
       if (canBuildBroadcastLeft(joinType)) BuildLeft else BuildRight
     }
 
-    // The side to broadcast by hint, or by size, if any.
+    // The side to broadcast by hint, or by size, if any. `BroadcastNestedLoopJoinExec` can't build
+    // the left side of a LeftSingle join, so that side never qualifies.
+    // TODO: teach `BroadcastNestedLoopJoinExec` to build the left side of a LeftSingle join by
+    // detecting more than one match per left row, so a small outer side can be broadcast instead
+    // of a large subquery side.
     def broadcastSide(onlyLookingAtHint: Boolean): Option[BuildSide] = {
-      val buildLeft = if (onlyLookingAtHint) {
+      val buildLeft = if (joinType == LeftSingle) {
+        false
+      } else if (onlyLookingAtHint) {
         hintToBroadcastLeft(hint)
       } else {
         canBroadcastBySize(left, conf) && !hintToNotBroadcastAndReplicateLeft(hint)

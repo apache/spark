@@ -150,7 +150,11 @@ class LinearRegressionSuite extends MLTest with DefaultReadWriteTest with PMMLRe
   }
 
   test("params") {
-    ParamsSuite.checkParams(new LinearRegression)
+    val regressor = new LinearRegression
+    ParamsSuite.checkParams(regressor)
+    assert(regressor.getIntermediateStorageLevel === "MEMORY_AND_DISK")
+    regressor.setIntermediateStorageLevel("DISK_ONLY")
+    assert(regressor.getIntermediateStorageLevel === "DISK_ONLY")
     val model = new LinearRegressionModel("linearReg", Vectors.dense(0.0), 0.0)
     ParamsSuite.checkParams(model)
   }

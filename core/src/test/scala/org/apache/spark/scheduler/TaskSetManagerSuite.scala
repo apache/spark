@@ -885,6 +885,40 @@ class TaskSetManagerSuite
     assert(manager.isZombie)
   }
 
+  test("SPARK-61322: abort the task set if a task exceeds Java's maximum array size") {
+    Seq(
+      "Required array length 2147483639 + 626 is too large",
+      "Requested array size exceeds VM limit"
+    ).foreach { errorMessage =>
+      sc = new SparkContext("local", "test")
+      sched = new FakeTaskScheduler(sc, ("exec1", "host1"))
+
+      val taskSet = new TaskSet(
+        Array(new ArraySizeLimitFakeTask(stageId = 0, partitionId = 3, errorMessage)),
+        0, 0, 0, null, ResourceProfile.DEFAULT_RESOURCE_PROFILE_ID, None)
+      val manager = new TaskSetManager(sched, taskSet, MAX_TASK_FAILURES)
+
+      // The fatal OutOfMemoryError does not escape: the task set is aborted instead.
+      val error = intercept[TaskNotSerializableException] {
+        manager.resourceOffer("exec1", "host1", ANY)
+      }
+      assert(manager.isZombie)
+      assert(sched.taskSetsFailed.contains(taskSet.id))
+
+      val failure = error.getCause.asInstanceOf[JavaArraySizeLimitExceeded]
+      checkError(
+        exception = failure,
+        condition = "TASK_SERIALIZATION_TOO_LARGE.TASK",
+        sqlState = Some("54000"),
+        parameters = Map("stageId" -> "0", "partitionId" -> "3"))
+      assert(failure.jvmMessage === errorMessage)
+      assert(failure.getCause === null)
+
+      sc.stop()
+      sc = null
+    }
+  }
+
   test("abort the job if total size of results is too large") {
     val conf = new SparkConf().set(config.MAX_RESULT_SIZE.key, "2m")
     sc = new SparkContext("local", "test", conf)

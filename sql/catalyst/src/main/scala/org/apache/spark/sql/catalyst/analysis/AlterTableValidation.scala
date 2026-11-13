@@ -18,8 +18,8 @@
 package org.apache.spark.sql.catalyst.analysis
 
 import org.apache.spark.sql.catalyst.expressions.Cast
-import org.apache.spark.sql.catalyst.plans.logical.{AddColumns, AlterColumns, AlterColumnSpec, AlterTableCommand, QualifiedColType, RenameColumn, ReplaceColumns}
-import org.apache.spark.sql.catalyst.util.CharVarcharUtils
+import org.apache.spark.sql.catalyst.plans.logical.{AddColumns, AlterColumns, AlterColumnSpec, AlterTableClusterBy, AlterTableCommand, QualifiedColType, RenameColumn, ReplaceColumns}
+import org.apache.spark.sql.catalyst.util.{CharVarcharUtils, TypeUtils}
 import org.apache.spark.sql.connector.catalog.CatalogV2Implicits.MultipartIdentifierHelper
 import org.apache.spark.sql.errors.QueryErrorsBase
 import org.apache.spark.sql.types._
@@ -142,6 +142,10 @@ private[sql] object AlterTableValidation {
             }
           case _ =>
         }
+
+      // FILE is not comparable, so it cannot be a clustering column.
+      case AlterTableClusterBy(table: ResolvedTable, Some(clusterBySpec)) =>
+        TypeUtils.checkNoFileTypeClusteringColumn(table.schema, clusterBySpec, alter.conf.resolver)
       case _ =>
     }
   }
