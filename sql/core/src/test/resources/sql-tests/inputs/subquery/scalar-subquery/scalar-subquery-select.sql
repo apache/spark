@@ -199,6 +199,15 @@ SELECT t1a,
       schema_of_variant_agg
 FROM (SELECT DISTINCT t1a FROM t1);
 
+-- RewriteDistinctAggregates over empty input
+SELECT count(DISTINCT t2a), count(DISTINCT t2b),
+    hll_sketch_estimate(hll_sketch_agg(t2d)),
+    schema_of_variant_agg(parse_json(CAST(t2d AS STRING)))
+FROM t2 WHERE t2a = 'none';
+
+-- An invalid parameter fails while the query is optimized, regardless of the data
+SELECT t1a, (SELECT hll_sketch_agg(t2d, 30) FROM t2 WHERE t2a = t1a) FROM t1 WHERE false;
+
 -- SPARK-36028: Allow Project to host outer references in scalar subqueries
 SELECT t1c, (SELECT t1c) FROM t1;
 SELECT t1c, (SELECT t1c WHERE t1c = 8) FROM t1;

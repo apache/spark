@@ -345,6 +345,35 @@ val1e	BIGINT
 
 
 -- !query
+SELECT count(DISTINCT t2a), count(DISTINCT t2b),
+    hll_sketch_estimate(hll_sketch_agg(t2d)),
+    schema_of_variant_agg(parse_json(CAST(t2d AS STRING)))
+FROM t2 WHERE t2a = 'none'
+-- !query schema
+struct<count(DISTINCT t2a):bigint,count(DISTINCT t2b):bigint,hll_sketch_estimate(hll_sketch_agg(t2d, 12)):bigint,schema_of_variant_agg(parse_json(CAST(t2d AS STRING))):string>
+-- !query output
+0	0	0	VOID
+
+
+-- !query
+SELECT t1a, (SELECT hll_sketch_agg(t2d, 30) FROM t2 WHERE t2a = t1a) FROM t1 WHERE false
+-- !query schema
+struct<>
+-- !query output
+org.apache.spark.SparkRuntimeException
+{
+  "errorClass" : "HLL_INVALID_LG_K",
+  "sqlState" : "22546",
+  "messageParameters" : {
+    "function" : "`hll_sketch_agg`",
+    "max" : "21",
+    "min" : "4",
+    "value" : "30"
+  }
+}
+
+
+-- !query
 SELECT t1c, (SELECT t1c) FROM t1
 -- !query schema
 struct<t1c:int,scalarsubquery(t1c):int>

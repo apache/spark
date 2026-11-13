@@ -831,6 +831,43 @@ Project [t1a#x, scalar-subquery#x [t1a#x] AS schema_of_variant_agg#x]
 
 
 -- !query
+SELECT count(DISTINCT t2a), count(DISTINCT t2b),
+    hll_sketch_estimate(hll_sketch_agg(t2d)),
+    schema_of_variant_agg(parse_json(CAST(t2d AS STRING)))
+FROM t2 WHERE t2a = 'none'
+-- !query analysis
+Aggregate [count(distinct t2a#x) AS count(DISTINCT t2a)#xL, count(distinct t2b#x) AS count(DISTINCT t2b)#xL, hll_sketch_estimate(hll_sketch_agg(t2d#xL, 12, 0, 0)) AS hll_sketch_estimate(hll_sketch_agg(t2d, 12))#xL, schema_of_variant_agg(parse_json(cast(t2d#xL as string), true), 0, 0) AS schema_of_variant_agg(parse_json(CAST(t2d AS STRING)))#x]
++- Filter (t2a#x = none)
+   +- SubqueryAlias t2
+      +- View (`t2`, [t2a#x, t2b#x, t2c#x, t2d#xL, t2e#x, t2f#x, t2g#x, t2h#x, t2i#x])
+         +- Project [cast(t2a#x as string) AS t2a#x, cast(t2b#x as smallint) AS t2b#x, cast(t2c#x as int) AS t2c#x, cast(t2d#xL as bigint) AS t2d#xL, cast(t2e#x as float) AS t2e#x, cast(t2f#x as double) AS t2f#x, cast(t2g#x as double) AS t2g#x, cast(t2h#x as timestamp) AS t2h#x, cast(t2i#x as date) AS t2i#x]
+            +- Project [t2a#x, t2b#x, t2c#x, t2d#xL, t2e#x, t2f#x, t2g#x, t2h#x, t2i#x]
+               +- SubqueryAlias t2
+                  +- LocalRelation [t2a#x, t2b#x, t2c#x, t2d#xL, t2e#x, t2f#x, t2g#x, t2h#x, t2i#x]
+
+
+-- !query
+SELECT t1a, (SELECT hll_sketch_agg(t2d, 30) FROM t2 WHERE t2a = t1a) FROM t1 WHERE false
+-- !query analysis
+Project [t1a#x, scalar-subquery#x [t1a#x] AS scalarsubquery(t1a)#x]
+:  +- Aggregate [hll_sketch_agg(t2d#xL, 30, 0, 0) AS hll_sketch_agg(t2d, 30)#x]
+:     +- Filter (t2a#x = outer(t1a#x))
+:        +- SubqueryAlias t2
+:           +- View (`t2`, [t2a#x, t2b#x, t2c#x, t2d#xL, t2e#x, t2f#x, t2g#x, t2h#x, t2i#x])
+:              +- Project [cast(t2a#x as string) AS t2a#x, cast(t2b#x as smallint) AS t2b#x, cast(t2c#x as int) AS t2c#x, cast(t2d#xL as bigint) AS t2d#xL, cast(t2e#x as float) AS t2e#x, cast(t2f#x as double) AS t2f#x, cast(t2g#x as double) AS t2g#x, cast(t2h#x as timestamp) AS t2h#x, cast(t2i#x as date) AS t2i#x]
+:                 +- Project [t2a#x, t2b#x, t2c#x, t2d#xL, t2e#x, t2f#x, t2g#x, t2h#x, t2i#x]
+:                    +- SubqueryAlias t2
+:                       +- LocalRelation [t2a#x, t2b#x, t2c#x, t2d#xL, t2e#x, t2f#x, t2g#x, t2h#x, t2i#x]
++- Filter false
+   +- SubqueryAlias t1
+      +- View (`t1`, [t1a#x, t1b#x, t1c#x, t1d#xL, t1e#x, t1f#x, t1g#x, t1h#x, t1i#x])
+         +- Project [cast(t1a#x as string) AS t1a#x, cast(t1b#x as smallint) AS t1b#x, cast(t1c#x as int) AS t1c#x, cast(t1d#xL as bigint) AS t1d#xL, cast(t1e#x as float) AS t1e#x, cast(t1f#x as double) AS t1f#x, cast(t1g#x as double) AS t1g#x, cast(t1h#x as timestamp) AS t1h#x, cast(t1i#x as date) AS t1i#x]
+            +- Project [t1a#x, t1b#x, t1c#x, t1d#xL, t1e#x, t1f#x, t1g#x, t1h#x, t1i#x]
+               +- SubqueryAlias t1
+                  +- LocalRelation [t1a#x, t1b#x, t1c#x, t1d#xL, t1e#x, t1f#x, t1g#x, t1h#x, t1i#x]
+
+
+-- !query
 SELECT t1c, (SELECT t1c) FROM t1
 -- !query analysis
 Project [t1c#x, scalar-subquery#x [t1c#x] AS scalarsubquery(t1c)#x]
