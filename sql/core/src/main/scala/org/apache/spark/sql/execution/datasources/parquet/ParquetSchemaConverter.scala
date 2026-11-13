@@ -135,7 +135,10 @@ class ParquetToSparkSchemaConverter(
     val schemaMapOpt = sparkReadSchema.map { schema =>
       schema.map(f => normalizeFieldName(f.name) -> f).toMap
     }
-    // Use ID mapping only when the name mapping doesn't find a match.
+    // With field-id reads, a Parquet field that carries an id is mapped to the requested field with
+    // that id, as `ParquetReadSupport.clipParquetSchema` selected it. Only when there is no such
+    // field is it mapped by name. Name first would give a field the type of a requested field
+    // that merely reuses its name, which may belong to another field in the file.
     lazy val schemaIdMapOpt = sparkReadSchema match {
       case Some(schema) if useFieldId =>
         Some(schema.fields.flatMap { f =>
@@ -150,14 +153,13 @@ class ParquetToSparkSchemaConverter(
 
     val converted = (0 until groupColumn.getChildrenCount).map { i =>
       val field = groupColumn.getChild(i)
-      val fieldFromReadSchema = schemaMapOpt.flatMap { schemaMap =>
-        schemaMap.get(normalizeFieldName(field.getName))
-      }.orElse {
-        val parquetFieldId = Option(field.getType.getId).map(_.intValue())
-        (parquetFieldId, schemaIdMapOpt) match {
-          case (Some(id), Some(map)) => map.get(id)
-          case _ => None
-        }
+      val parquetFieldId = Option(field.getType.getId).map(_.intValue())
+      val fieldFromReadSchemaById = (parquetFieldId, schemaIdMapOpt) match {
+        case (Some(id), Some(map)) => map.get(id)
+        case _ => None
+      }
+      val fieldFromReadSchema = fieldFromReadSchemaById.orElse {
+        schemaMapOpt.flatMap(_.get(normalizeFieldName(field.getName)))
       }
       var fieldReadType = fieldFromReadSchema.map(_.dataType)
 
