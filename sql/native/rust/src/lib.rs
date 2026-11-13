@@ -775,8 +775,9 @@ pub trait DataWriter: Send {
     /// [`WriterContext::schema`], and at most `spark.sql.execution.arrow.maxRecordsPerBatch`
     /// rows. When Spark writes the batches of a native scan without converting them to rows,
     /// it copies their values as the scan returned them, without the checks of a conversion,
-    /// such as the precision of a decimal. Process batches incrementally and check task
-    /// cancellation.
+    /// such as the precision of a decimal. The SDK validates each batch before this call, and
+    /// fails the write of one that Arrow rejects, such as a Spark string that is not UTF-8.
+    /// Process batches incrementally and check task cancellation.
     fn write(&mut self, batch: RecordBatch) -> Result<()>;
 
     /// Finish staging and return a typed message for the driver. Do not make the

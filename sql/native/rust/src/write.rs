@@ -243,13 +243,24 @@ unsafe fn task_state<'a>(handle: *mut c_void) -> Result<&'a mut TaskState<'a>> {
 pub unsafe fn write_batch(handle: *mut c_void, array: *mut ArrowArray) -> Result<()> {
     let state = unsafe { task_state(handle)? };
     abi::require_output(array)?;
-    let array = unsafe { ArrowArray::from_raw(array) };
-    let data = unsafe { ffi::from_ffi_and_data_type(array, state.data_type.clone())? };
-    let array = StructArray::from(data);
+    let array = unsafe { import(ArrowArray::from_raw(array), &state.data_type)? };
     if array.null_count() != 0 {
         return Err("write input cannot contain null rows".into());
     }
     state.writer().write(RecordBatch::from(array))
+}
+
+/// Imports a batch to write. Arrow does not validate the C data that it imports, which the safe
+/// accessors of the connector rely on, so this validates it fully: a Spark string may hold bytes
+/// that are not UTF-8, such as those of a cast from binary, which a Rust `&str` must not.
+///
+/// # Safety
+/// As for write_batch: the array must be Arrow C data of `data_type`.
+unsafe fn import(array: ArrowArray, data_type: &DataType) -> Result<StructArray> {
+    let data = unsafe { ffi::from_ffi_and_data_type(array, data_type.clone())? };
+    data.validate_full()
+        .map_err(|e| format!("write input is not valid Arrow data: {e}"))?;
+    Ok(StructArray::from(data))
 }
 
 /// Commits a task, and returns its serialized message.
@@ -276,4 +287,87 @@ pub unsafe fn close_task(handle: *mut c_void) -> Result<()> {
     abi::require_output(handle)?;
     drop(unsafe { Box::from_raw(handle.cast::<TaskState<'_>>()) });
     Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use std::sync::Arc;
+
+    use arrow_array::builder::{ListBuilder, StringBuilder};
+    use arrow_array::cast::AsArray;
+    use arrow_array::ffi::FFI_ArrowArray;
+    use arrow_array::types::Int64Type;
+    use arrow_array::{
+        make_array, Array, ArrayRef, BinaryArray, Int64Array, ListArray, StringArray, StructArray,
+    };
+    use arrow_data::ArrayData;
+    use arrow_schema::{DataType, Field, Fields};
+
+    use super::import;
+
+    /// String data whose second value is not UTF-8, which only unchecked construction builds.
+    fn invalid_utf8() -> ArrayData {
+        let bytes = BinaryArray::from_vec(vec![b"ok".as_slice(), [0xFFu8].as_slice()]);
+        unsafe {
+            bytes
+                .to_data()
+                .into_builder()
+                .data_type(DataType::Utf8)
+                .build_unchecked()
+        }
+    }
+
+    /// Exports a batch of an ID column and the given label column, and imports it to write.
+    fn import_batch(labels: ArrayData) -> crate::Result<StructArray> {
+        let ids = Int64Array::from_iter_values(0..labels.len() as i64);
+        let fields = Fields::from(vec![
+            Field::new("id", DataType::Int64, false),
+            Field::new("label", labels.data_type().clone(), true),
+        ]);
+        let columns: Vec<ArrayRef> = vec![Arc::new(ids), make_array(labels)];
+        let batch = StructArray::try_new(fields.clone(), columns, None)?;
+        unsafe {
+            import(
+                FFI_ArrowArray::new(&batch.to_data()),
+                &DataType::Struct(fields),
+            )
+        }
+    }
+
+    #[test]
+    fn import_accepts_valid_strings() {
+        let batch = import_batch(StringArray::from(vec!["ok", "fine"]).to_data()).unwrap();
+        assert_eq!(batch.column(0).as_primitive::<Int64Type>().value(1), 1);
+        assert_eq!(batch.column(1).as_string::<i32>().value(1), "fine");
+    }
+
+    #[test]
+    fn import_rejects_strings_that_are_not_utf8() {
+        let error = import_batch(invalid_utf8()).unwrap_err().to_string();
+        assert!(error.contains("not valid Arrow data"), "{error}");
+        assert!(
+            error.contains("Invalid UTF8 sequence at string index 1"),
+            "{error}"
+        );
+    }
+
+    #[test]
+    fn import_rejects_nested_strings_that_are_not_utf8() {
+        let mut labels = ListBuilder::new(StringBuilder::new());
+        labels.values().append_value("ok");
+        labels.values().append_value("x");
+        labels.append(true);
+        let labels: ListArray = labels.finish();
+        let labels = labels
+            .to_data()
+            .into_builder()
+            .child_data(vec![invalid_utf8()]);
+        let error = import_batch(unsafe { labels.build_unchecked() })
+            .unwrap_err()
+            .to_string();
+        assert!(
+            error.contains("Invalid UTF8 sequence at string index 1"),
+            "{error}"
+        );
+    }
 }
