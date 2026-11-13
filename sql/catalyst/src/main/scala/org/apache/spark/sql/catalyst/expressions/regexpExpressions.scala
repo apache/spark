@@ -34,7 +34,7 @@ import org.apache.spark.sql.catalyst.expressions.Cast._
 import org.apache.spark.sql.catalyst.expressions.codegen._
 import org.apache.spark.sql.catalyst.expressions.codegen.Block._
 import org.apache.spark.sql.catalyst.trees.BinaryLike
-import org.apache.spark.sql.catalyst.trees.TreePattern.{LIKE_FAMLIY, REGEXP_EXTRACT_FAMILY, REGEXP_REPLACE, TreePattern}
+import org.apache.spark.sql.catalyst.trees.TreePattern.{LIKE_FAMLIY, REGEXP_EXTRACT_FAMILY, REGEXP_REPLACE, RLIKE, TreePattern}
 import org.apache.spark.sql.catalyst.util.{CollationSupport, GenericArrayData, StringUtils}
 import org.apache.spark.sql.errors.{QueryCompilationErrors, QueryExecutionErrors}
 import org.apache.spark.sql.internal.SQLConf
@@ -741,6 +741,7 @@ case class RLike(left: Expression, right: Expression) extends StringRegexExpress
   override def matches(regex: Pattern, str: String): Boolean = regex.matcher(str).find(0)
   override protected def isExpensivePattern(str: String): Boolean =
     StringRegexExpression.isExpensiveRegex(str, matchesWhole = false)
+  final override val nodePatterns: Seq[TreePattern] = Seq(RLIKE)
   override def toString: String = s"RLIKE($left, $right)"
   override def sql: String = s"${prettyName.toUpperCase(Locale.ROOT)}(${left.sql}, ${right.sql})"
 

@@ -1150,6 +1150,96 @@ object LikeSimplification extends Rule[LogicalPlan] with PredicateHelper {
 
 
 /**
+ * Rewrites RLIKE's unanchored `find()` search for a literal alternation into `Contains`
+ * predicates, avoiding regular-expression backtracking.
+ *
+ * The rewrite is opt-in through `spark.sql.optimizer.rlikeSimplification.enabled`.
+ * A null literal pattern becomes a null literal. Any other pattern is rewritten only for
+ * UTF8_BINARY inputs. A leading or trailing `.*`, including on one alternative, and a plain
+ * outer group are removed. Anchors, escapes, empty alternatives, an internal `.*`, and all
+ * other regex constructs are left unchanged. Multiple alternatives require a deterministic
+ * input because the replacement reads it once per alternative.
+ */
+object RLikeSimplification extends Rule[LogicalPlan] with PredicateHelper {
+  private def isLiteralChar(c: Char): Boolean =
+    c != '.' && c != '*' && c != '+' && c != '?' && c != '{' && c != '}' &&
+    c != '[' && c != ']' && c != '(' && c != ')' && c != '|' && c != '^' &&
+    c != '$' && c != '\\'
+
+  // find() lets a leading or trailing `.*` match empty, so removing it keeps the match.
+  // An internal `.*` is left in place.
+  private def stripEdgeDotStar(pattern: String): String = {
+    var s = pattern
+    var stripped = true
+    while (stripped && s.nonEmpty) {
+      stripped = false
+      if (s.startsWith(".*")) {
+        s = s.substring(2)
+        stripped = true
+      }
+      if (s.endsWith(".*")) {
+        s = s.substring(0, s.length - 2)
+        stripped = true
+      }
+    }
+    s
+  }
+
+  private def simplifyRLike(input: Expression, pattern: String): Option[Expression] = {
+    // Other collations can give Contains different case-matching semantics from Java regex.
+    if (!input.dataType.asInstanceOf[StringType].isUTF8BinaryCollation) return None
+
+    // Escapes are unsupported; this also avoids interpreting escaped wrapper characters.
+    if (pattern.contains('\\')) return None
+
+    // Remove redundant outer wrappers. A leftover group character fails the literal check.
+    var s = pattern
+    var progressed = true
+    while (progressed && s.nonEmpty) {
+      progressed = false
+      val stripped = stripEdgeDotStar(s)
+      if (stripped != s) {
+        s = stripped
+        progressed = true
+      }
+      val n = s.length
+      if (n >= 2 && s.charAt(0) == '(' && s.charAt(n - 1) == ')') {
+        s = s.substring(1, n - 1)
+        progressed = true
+      }
+    }
+
+    // `foo.*|bar` keeps its `.*` off the edge of the whole pattern, so strip each side.
+    val alternatives = s.split("\\|", -1).toSeq.map(stripEdgeDotStar)
+
+    // Empty alternatives, including a `.*` that strips to nothing, match every string.
+    // Duplicating a nondeterministic input across alternatives could change its value per read.
+    if (alternatives.exists(a => a.isEmpty || !a.forall(isLiteralChar)) ||
+        (alternatives.size > 1 && !input.deterministic)) {
+      None
+    } else {
+      val contains = alternatives.map(a => Contains(input, Literal.create(a, input.dataType)))
+      Some(if (contains.size == 1) contains.head else buildBalancedPredicate(contains, Or))
+    }
+  }
+
+  def apply(plan: LogicalPlan): LogicalPlan = {
+    if (!conf.getConf(SQLConf.RLIKE_SIMPLIFICATION_ENABLED)) return plan
+
+    plan.transformAllExpressionsWithPruning(_.containsPattern(RLIKE), ruleId) {
+      case r @ RLike(input, Literal(pattern, _: StringType)) =>
+        if (pattern == null) {
+          // A null pattern yields null for every collation, so skip the UTF8_BINARY check.
+          Literal(null, BooleanType)
+        } else {
+          simplifyRLike(input, pattern.toString).getOrElse(r)
+        }
+    }
+  }
+}
+
+
+/**
  * Replaces [[Expression Expressions]] that can be statically evaluated with
  * equivalent [[Literal]] values. This rule is more specific with
  * Null value propagation from bottom to top of the expression tree.

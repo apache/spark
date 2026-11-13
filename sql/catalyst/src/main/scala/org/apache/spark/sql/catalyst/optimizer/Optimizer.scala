@@ -140,6 +140,7 @@ abstract class Optimizer(catalogManager: CatalogManager)
         EliminateAggregateFilter,
         ReorderAssociativeOperator,
         LikeSimplification,
+        RLikeSimplification,
         BooleanSimplification,
         SimplifyConditionals,
         PushFoldableIntoBranches,

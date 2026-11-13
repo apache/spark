@@ -188,6 +188,7 @@ object RuleIdCollection {
       "org.apache.spark.sql.catalyst.optimizer.RewriteNearestByJoin" ::
       "org.apache.spark.sql.catalyst.optimizer.RewriteExceptAll" ::
       "org.apache.spark.sql.catalyst.optimizer.RewriteIntersectAll" ::
+      "org.apache.spark.sql.catalyst.optimizer.RLikeSimplification" ::
       "org.apache.spark.sql.catalyst.optimizer.SimplifyBinaryComparison" ::
       "org.apache.spark.sql.catalyst.optimizer.SimplifyCaseConversionExpressions" ::
       "org.apache.spark.sql.catalyst.optimizer.SimplifyCasts" ::
