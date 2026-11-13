@@ -183,16 +183,44 @@ class ProtobufFunctionsSuite extends SharedSparkSession with ProtobufTestBase
     }
   }
 
-  private def protobufDataFrame(functionName: String): DataFrame = {
+  // A lookup in a map whose keys are 0.0 and -0.0, which are one key unless
+  // spark.sql.legacy.disableMapKeyNormalization is true.
+  private def signedZeroKeyLookup(value: String): Expression = ElementAt(
+    CreateMap(Seq(Literal(0.0D), Literal(value), Literal(-0.0D), Literal(value))),
+    Literal(0.0D))
+
+  private def protobufExpressionWithSignedZeroKeys(
+      functionName: String,
+      argumentName: String): (Expression, AttributeReference) = argumentName match {
+    case "options" =>
+      protobufExpression(
+        functionName, CreateMap(Seq(Literal("key1"), signedZeroKeyLookup("value1"))))
+    case "messageName" =>
+      protobufExpression(functionName, Literal(null),
+        messageName = signedZeroKeyLookup("OtherExample"))
+    case "descFilePath" =>
+      protobufExpression(functionName, Literal(null),
+        descFilePath = signedZeroKeyLookup(testFileDescFile))
+  }
+
+  private def protobufDataFrame(
+      functionName: String,
+      options: String = "map('mode', 'PERMISSIVE', 'mode', 'FAILFAST')"): DataFrame = {
     val input = if (functionName == "FROM_PROTOBUF") {
       lit(OtherExample.newBuilder().setOther("value").build().toByteArray)
     } else {
       struct(lit("value").as("other"))
     }
     spark.range(1).select(input.as("data")).selectExpr(
-      s"$functionName(data, 'OtherExample', '$testFileDescFile', " +
-        "map('mode', 'PERMISSIVE', 'mode', 'FAILFAST')) AS value")
+      s"$functionName(data, 'OtherExample', '$testFileDescFile', $options) AS value")
   }
+
+  private def protobufDataFrameResult(functionName: String): Row =
+    if (functionName == "FROM_PROTOBUF") {
+      Row(Row("value"))
+    } else {
+      Row(OtherExample.newBuilder().setOther("value").build().toByteArray)
+    }
 
   test("roundtrip in to_protobuf and from_protobuf - struct") {
     val df = spark
@@ -2643,6 +2671,40 @@ class ProtobufFunctionsSuite extends SharedSparkSession with ProtobufTestBase
           assert(SQLConf.get.getConf(SQLConf.MAP_KEY_DEDUP_POLICY).toString == currentPolicy)
         }
       }
+
+      gridTest(s"SPARK-60945: canonicalizing $functionName uses the analysis-time map key " +
+        s"normalization for $argumentName")(Seq(true, false)) { capturedDisabled =>
+        val policy = SQLConf.MAP_KEY_DEDUP_POLICY.key -> "EXCEPTION"
+        val normalization = SQLConf.DISABLE_MAP_KEY_NORMALIZATION.key
+        val (expression, data) = withSQLConf(policy, normalization -> capturedDisabled.toString) {
+          val result = protobufExpressionWithSignedZeroKeys(functionName, argumentName)
+          if (capturedDisabled) {
+            // Like analysis, evaluate the expression once before the conf changes. With
+            // normalization, 0.0 and -0.0 are one key, so only the disabled run does it.
+            result._1.dataType
+          }
+          result
+        }
+        withSQLConf(policy, normalization -> (!capturedDisabled).toString) {
+          if (capturedDisabled) {
+            val expectedOptions = if (argumentName == "options") {
+              Map("key1" -> "value1")
+            } else {
+              Map.empty[String, String]
+            }
+            assert(canonicalizedOptions(expression, data) == expectedOptions)
+          } else {
+            checkError(
+              exception = intercept[SparkRuntimeException] {
+                canonicalizedOptions(expression, data)
+              },
+              condition = "DUPLICATED_MAP_KEY",
+              parameters = Map(
+                "key" -> "-0.0",
+                "mapKeyDedupPolicy" -> s"\"${SQLConf.MAP_KEY_DEDUP_POLICY.key}\""))
+          }
+        }
+      }
     }
 
     test(s"SPARK-60945: $functionName cached plan retains its map key policy across sessions") {
@@ -2665,12 +2727,19 @@ class ProtobufFunctionsSuite extends SharedSparkSession with ProtobufTestBase
         protobufDataFrame(functionName)
       }
       withSQLConf(SQLConf.MAP_KEY_DEDUP_POLICY.key -> "EXCEPTION") {
-        val expected = if (functionName == "FROM_PROTOBUF") {
-          Row(Row("value"))
-        } else {
-          Row(OtherExample.newBuilder().setOther("value").build().toByteArray)
-        }
-        checkAnswer(df, Seq(expected))
+        checkAnswer(df, Seq(protobufDataFrameResult(functionName)))
+      }
+    }
+
+    test(s"SPARK-60945: $functionName executes after the map key normalization changes") {
+      val policy = SQLConf.MAP_KEY_DEDUP_POLICY.key -> "EXCEPTION"
+      val normalization = SQLConf.DISABLE_MAP_KEY_NORMALIZATION.key
+      val options = "map('mode', element_at(map(0.0D, 'PERMISSIVE', -0.0D, 'PERMISSIVE'), 0.0D))"
+      val df = withSQLConf(policy, normalization -> "true") {
+        protobufDataFrame(functionName, options)
+      }
+      withSQLConf(policy, normalization -> "false") {
+        checkAnswer(df, Seq(protobufDataFrameResult(functionName)))
       }
     }
   }

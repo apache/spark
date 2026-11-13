@@ -81,9 +81,11 @@ case class FromProtobuf(
     messageName: Expression,
     descFilePath: Expression,
     options: Expression,
-    // PERSISTED: spark.sql.mapKeyDedupPolicy at analysis time. A constructor parameter, so that
-    // copies such as canonicalization's keep it and evaluate the arguments the same way.
-    mapKeyDedupPolicy: SQLConf.MapKeyDedupPolicy.Value)
+    // PERSISTED: the map builder settings at analysis time, spark.sql.mapKeyDedupPolicy and
+    // spark.sql.legacy.disableMapKeyNormalization. Constructor parameters, so that copies such as
+    // canonicalization's keep them and evaluate the arguments the same way.
+    mapKeyDedupPolicy: SQLConf.MapKeyDedupPolicy.Value,
+    disableMapKeyNormalization: Boolean)
   extends QuaternaryExpression with RuntimeReplaceable {
 
   def this(
@@ -92,7 +94,12 @@ case class FromProtobuf(
       descFilePath: Expression,
       options: Expression) = {
     this(
-      data, messageName, descFilePath, options, SQLConf.get.getConf(SQLConf.MAP_KEY_DEDUP_POLICY))
+      data,
+      messageName,
+      descFilePath,
+      options,
+      SQLConf.get.getConf(SQLConf.MAP_KEY_DEDUP_POLICY),
+      SQLConf.get.getConf(SQLConf.DISABLE_MAP_KEY_NORMALIZATION))
   }
 
   def this(data: Expression, messageName: Expression, descFilePathOrOptions: Expression) = {
@@ -168,11 +175,13 @@ case class FromProtobuf(
 
   override lazy val replacement: Expression = {
     val conf = SQLConf.get
-    if (conf.getConf(SQLConf.MAP_KEY_DEDUP_POLICY) == mapKeyDedupPolicy) {
+    if (conf.getConf(SQLConf.MAP_KEY_DEDUP_POLICY) == mapKeyDedupPolicy &&
+        conf.getConf(SQLConf.DISABLE_MAP_KEY_NORMALIZATION) == disableMapKeyNormalization) {
       createReplacement()
     } else {
       val evalConf = conf.clone()
       evalConf.setConf(SQLConf.MAP_KEY_DEDUP_POLICY, mapKeyDedupPolicy)
+      evalConf.setConf(SQLConf.DISABLE_MAP_KEY_NORMALIZATION, disableMapKeyNormalization)
       SQLConf.withExistingConf(evalConf) {
         createReplacement()
       }
@@ -218,7 +227,7 @@ case class FromProtobuf(
     expr.asInstanceOf[Expression]
   }
 
-  // The map key policy is not a user argument; keep it out of EXPLAIN output.
+  // The map builder settings are not user arguments; keep them out of EXPLAIN output.
   override protected def stringArgs: Iterator[Any] = super.stringArgs.take(4)
 
   override def prettyName: String =
@@ -270,9 +279,11 @@ case class ToProtobuf(
     messageName: Expression,
     descFilePath: Expression,
     options: Expression,
-    // PERSISTED: spark.sql.mapKeyDedupPolicy at analysis time. A constructor parameter, so that
-    // copies such as canonicalization's keep it and evaluate the arguments the same way.
-    mapKeyDedupPolicy: SQLConf.MapKeyDedupPolicy.Value)
+    // PERSISTED: the map builder settings at analysis time, spark.sql.mapKeyDedupPolicy and
+    // spark.sql.legacy.disableMapKeyNormalization. Constructor parameters, so that copies such as
+    // canonicalization's keep them and evaluate the arguments the same way.
+    mapKeyDedupPolicy: SQLConf.MapKeyDedupPolicy.Value,
+    disableMapKeyNormalization: Boolean)
   extends QuaternaryExpression with RuntimeReplaceable {
 
   def this(
@@ -281,7 +292,12 @@ case class ToProtobuf(
       descFilePath: Expression,
       options: Expression) = {
     this(
-      data, messageName, descFilePath, options, SQLConf.get.getConf(SQLConf.MAP_KEY_DEDUP_POLICY))
+      data,
+      messageName,
+      descFilePath,
+      options,
+      SQLConf.get.getConf(SQLConf.MAP_KEY_DEDUP_POLICY),
+      SQLConf.get.getConf(SQLConf.DISABLE_MAP_KEY_NORMALIZATION))
   }
 
   def this(data: Expression, messageName: Expression, descFilePathOrOptions: Expression) = {
@@ -371,11 +387,13 @@ case class ToProtobuf(
 
   override lazy val replacement: Expression = {
     val conf = SQLConf.get
-    if (conf.getConf(SQLConf.MAP_KEY_DEDUP_POLICY) == mapKeyDedupPolicy) {
+    if (conf.getConf(SQLConf.MAP_KEY_DEDUP_POLICY) == mapKeyDedupPolicy &&
+        conf.getConf(SQLConf.DISABLE_MAP_KEY_NORMALIZATION) == disableMapKeyNormalization) {
       createReplacement()
     } else {
       val evalConf = conf.clone()
       evalConf.setConf(SQLConf.MAP_KEY_DEDUP_POLICY, mapKeyDedupPolicy)
+      evalConf.setConf(SQLConf.DISABLE_MAP_KEY_NORMALIZATION, disableMapKeyNormalization)
       SQLConf.withExistingConf(evalConf) {
         createReplacement()
       }
@@ -419,7 +437,7 @@ case class ToProtobuf(
     expr.asInstanceOf[Expression]
   }
 
-  // The map key policy is not a user argument; keep it out of EXPLAIN output.
+  // The map builder settings are not user arguments; keep them out of EXPLAIN output.
   override protected def stringArgs: Iterator[Any] = super.stringArgs.take(4)
 
   override def prettyName: String =
