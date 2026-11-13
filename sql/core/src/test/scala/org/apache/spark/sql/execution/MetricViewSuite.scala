@@ -17,7 +17,8 @@
 
 package org.apache.spark.sql.execution
 
-import org.apache.spark.sql.{AnalysisException, QueryTest}
+import org.apache.spark.sql.{AnalysisException, QueryTest, Row}
+import org.apache.spark.sql.connector.catalog.CatalogManager.SESSION_CATALOG_NAME
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.metricview.serde.{AssetSource, Column, DimensionExpression, MeasureExpression, MetricView, MetricViewFactory, SQLSource}
 import org.apache.spark.sql.test.SharedSparkSession
@@ -166,6 +167,120 @@ abstract class MetricViewSuite extends QueryTest {
           sql("SELECT sum(count), avg(price) FROM test_table WHERE upper(region) = 'REGION_1'")
         )
       }
+    }
+  }
+
+  test("CREATE OR REPLACE VIEW ... WITH METRICS replaces an existing metric view") {
+    val original = MetricView("0.1", AssetSource(testTableName), None, testMetricViewColumns)
+    withMetricView(testMetricViewName, original) {
+      val replacement = MetricView(
+        "0.1", AssetSource(testTableName),
+        Some("product = 'product_1'"), testMetricViewColumns)
+      sql(s"""
+          |CREATE OR REPLACE VIEW $testMetricViewName
+          |WITH METRICS
+          |LANGUAGE YAML
+          |AS
+          |$$$$
+          |${MetricViewFactory.toYAML(replacement)}
+          |$$$$
+          |""".stripMargin)
+      checkAnswer(
+        sql(s"SELECT measure(count_sum) FROM $testMetricViewName"),
+        sql(s"SELECT sum(count) FROM $testTableName WHERE product = 'product_1'"))
+    }
+  }
+
+  test("CREATE OR REPLACE VIEW ... WITH METRICS does not replace a table") {
+    val metricView = MetricView("0.1", AssetSource(testTableName), None, testMetricViewColumns)
+    checkError(
+      exception = intercept[AnalysisException] {
+        sql(s"""
+            |CREATE OR REPLACE VIEW $testTableName
+            |WITH METRICS
+            |LANGUAGE YAML
+            |AS
+            |$$$$
+            |${MetricViewFactory.toYAML(metricView)}
+            |$$$$
+            |""".stripMargin)
+      },
+      condition = "EXPECT_VIEW_NOT_TABLE.NO_ALTERNATIVE",
+      parameters = Map(
+        "tableName" -> s"`default`.`$testTableName`",
+        "operation" -> "CREATE OR REPLACE VIEW"))
+    checkAnswer(sql(s"SELECT count(*) FROM $testTableName"), Row(testTableData.length))
+  }
+
+  test("CREATE OR REPLACE VIEW ... WITH METRICS keeps the existing metric view if rejected") {
+    val metricView = MetricView("0.1", AssetSource(testTableName), None, testMetricViewColumns)
+    withMetricView(testMetricViewName, metricView) {
+      checkError(
+        exception = intercept[AnalysisException] {
+          sql(s"""
+              |CREATE OR REPLACE VIEW $testMetricViewName (a, a, b, c, d)
+              |WITH METRICS
+              |LANGUAGE YAML
+              |AS
+              |$$$$
+              |${MetricViewFactory.toYAML(metricView)}
+              |$$$$
+              |""".stripMargin)
+        },
+        condition = "COLUMN_ALREADY_EXISTS",
+        parameters = Map("columnName" -> "`a`"))
+      checkAnswer(
+        sql(s"SELECT measure(count_sum) FROM $testMetricViewName"),
+        sql(s"SELECT sum(count) FROM $testTableName"))
+    }
+  }
+
+  test("CREATE OR REPLACE VIEW ... WITH METRICS detects a metric view referencing itself") {
+    def replaceMetricView(name: String, metricView: MetricView): Unit = {
+      sql(s"""
+          |CREATE OR REPLACE VIEW $name
+          |WITH METRICS
+          |LANGUAGE YAML
+          |AS
+          |$$$$
+          |${MetricViewFactory.toYAML(metricView)}
+          |$$$$
+          |""".stripMargin)
+    }
+    val original = MetricView("0.1", AssetSource(testTableName), None, testMetricViewColumns)
+    val onOriginal = MetricView("0.1", AssetSource(testMetricViewName), None,
+      Seq(Column("region", DimensionExpression("region"), 0),
+        Column("row_count", MeasureExpression("count(1)"), 1)))
+    val viewIdent = s"`$SESSION_CATALOG_NAME`.`default`.`$testMetricViewName`"
+    withMetricView(testMetricViewName, original) {
+      // A metric view whose source is a metric view with the same name.
+      checkError(
+        exception = intercept[AnalysisException] {
+          replaceMetricView(testMetricViewName, onOriginal)
+        },
+        condition = "RECURSIVE_VIEW",
+        parameters = Map(
+          "viewIdent" -> viewIdent,
+          "newPath" -> s"$viewIdent -> $viewIdent"))
+
+      // A cycle through another metric view.
+      withMetricView("other_metric_view", onOriginal) {
+        val otherIdent = s"`$SESSION_CATALOG_NAME`.`default`.`other_metric_view`"
+        checkError(
+          exception = intercept[AnalysisException] {
+            replaceMetricView(testMetricViewName,
+              MetricView("0.1", AssetSource("other_metric_view"), None, onOriginal.select))
+          },
+          condition = "RECURSIVE_VIEW",
+          parameters = Map(
+            "viewIdent" -> viewIdent,
+            "newPath" -> s"$viewIdent -> $otherIdent -> $viewIdent"))
+      }
+
+      // The original definition is untouched.
+      checkAnswer(
+        sql(s"SELECT measure(count_sum) FROM $testMetricViewName"),
+        sql(s"SELECT sum(count) FROM $testTableName"))
     }
   }
 
