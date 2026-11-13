@@ -1200,8 +1200,8 @@ object DateTimeUtils extends SparkDateTimeUtils {
    * whole microseconds. The shortest decimal form matters: `2.49E-4 * 1e6` is
    * `248.99999999999997`, and the exact binary value of `1.0E-6` is below one microsecond, so
    * flooring the product or the exact value loses one microsecond. Below
-   * `maxSecondsForPrimitiveConversion` this uses primitive arithmetic, and calls `Math.fma` only
-   * when the product is a whole number, so that it is cheap per row on every JVM.
+   * `maxSecondsForPrimitiveConversion` this uses only primitive arithmetic and comparisons, so
+   * that it is cheap per row.
    */
   private[util] def secondsToFlooredMicros(seconds: Double): Long = {
     if (Math.abs(seconds) >= maxSecondsForPrimitiveConversion) {
@@ -1209,22 +1209,20 @@ object DateTimeUtils extends SparkDateTimeUtils {
     } else {
       val micros = seconds * MICROS_PER_SECOND
       val nearestMicros = Math.round(micros)
-      if (nearestMicros / MICROS_PER_SECOND.toDouble == seconds) {
+      val nearestSeconds = nearestMicros / MICROS_PER_SECOND.toDouble
+      if (nearestSeconds == seconds) {
         // A whole number of microseconds rounds to `seconds`, so it is the shortest decimal form.
         nearestMicros
       } else {
         // No whole number of microseconds rounds to `seconds`, so the shortest decimal form has
         // the same floor as the exact value of `seconds`. Whole numbers are doubles and rounding
         // is monotonic, so `floor(micros)` is above the floor of the exact product only when the
-        // product was rounded up to a whole number. Only then is the exact sign of
-        // `seconds * 1e6 - floor` from `fma` needed. Without the FMA intrinsic, `fma` uses
-        // BigDecimal, so it must not run for every row.
+        // product was rounded up to a whole number. Then `nearestMicros` is `floor`, and
+        // `nearestSeconds`, the double nearest `floor / 1e6`, differs from `seconds`, so by the
+        // same monotonicity `seconds` is below `nearestSeconds` exactly when the exact product
+        // `seconds * 1e6` is below `floor`.
         val floor = Math.floor(micros)
-        if (micros == floor && Math.fma(seconds, MICROS_PER_SECOND.toDouble, -floor) < 0) {
-          floor.toLong - 1
-        } else {
-          floor.toLong
-        }
+        if (micros == floor && seconds < nearestSeconds) floor.toLong - 1 else floor.toLong
       }
     }
   }

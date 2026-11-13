@@ -219,6 +219,52 @@ class MapInArrowTestsMixin:
         row = df.mapInArrow(extract_metadata, "metadata string").first()
         self.assertEqual(row.metadata, """b'{"x":1}'""")
 
+    def test_map_in_arrow_time_precision_of_declared_type(self):
+        # SPARK-61087: the JVM truncates a TIME value to the precision key of its Arrow field. A
+        # result built with the input batch's schema keeps the key of the input field, so it must
+        # be read with the precision of the declared column.
+        import pyarrow.compute as pc
+
+        def add_nanos(nanos):
+            def func(iterator):
+                for batch in iterator:
+                    t = pc.add(batch.column(0).cast(pa.int64()), nanos).cast(pa.time64("ns"))
+                    yield pa.RecordBatch.from_arrays([t], schema=batch.schema)
+
+            return func
+
+        cases = [
+            ("time(3)", "12:00:00.123", 456000, "time(6)", "12:00:00.123456"),
+            ("time(6)", "12:00:00.123456", 789, "time(9)", "12:00:00.123456789"),
+            ("time(9)", "12:00:00.123456789", 0, "time(3)", "12:00:00.123"),
+        ]
+        with self.sql_conf({"spark.sql.timeType.enabled": True}):
+            for input_type, value, nanos, declared, expected in cases:
+                with self.subTest(input_type=input_type, declared=declared):
+                    df = self.spark.sql(f"SELECT CAST('{value}' AS {input_type}) AS t")
+                    result = df.mapInArrow(add_nanos(nanos), f"t {declared}")
+                    self.assertEqual(expected, result.selectExpr("CAST(t AS STRING)").first()[0])
+
+    def test_map_in_arrow_time_without_precision_key(self):
+        # SPARK-61087: a result field without the precision key keeps its value.
+        nanos = 43200123456789  # 12:00:00.123456789
+
+        def func(iterator):
+            for batch in iterator:
+                t = pa.array([nanos] * batch.num_rows, type=pa.time64("ns"))
+                yield pa.RecordBatch.from_arrays([t], names=["t"])
+
+        with self.sql_conf(
+            {
+                "spark.sql.timeType.enabled": True,
+                "spark.sql.execution.arrow.pyspark.validateSchema.enabled": False,
+            }
+        ):
+            result = self.spark.range(1).mapInArrow(func, "t time(9)")
+            self.assertEqual(
+                "12:00:00.123456789", result.selectExpr("CAST(t AS STRING)").first()[0]
+            )
+
     def test_chain_map_in_arrow(self):
         def func(iterator):
             for batch in iterator:

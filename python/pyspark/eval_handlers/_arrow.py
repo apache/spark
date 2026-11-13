@@ -61,7 +61,7 @@ from pyspark.sql.conversion import (
 from pyspark.sql.pandas.serializers import ArrowStreamSerializer
 from pyspark.sql.pandas.types import to_arrow_schema, to_arrow_type
 from pyspark.sql.pandas.utils import require_minimum_pyarrow_version
-from pyspark.sql.types import StructField, StructType
+from pyspark.sql.types import StructField, StructType, TimeType, _has_type
 from pyspark.util import PythonEvalType, fail_on_stopiteration
 from pyspark.worker_metrics import WorkerMetrics
 
@@ -92,12 +92,17 @@ class ArrowCoGroupedMapUDFHandler(CoGroupedEvalTypeHandler["pa.RecordBatch"]):
             timezone="UTC",
             prefers_large_types=runner_conf.use_large_var_types,
         )
+        # The declared return type for reconcile_time_precision, when it has a TIME field.
+        self._time_return_type = (
+            self._udf_desc.return_type if _has_type(self._udf_desc.return_type, TimeType) else None
+        )
 
     def run(self, split_index: int, data: Iterator[CoGroupedBatch]) -> Iterator[pa.RecordBatch]:
         """Apply cogroupBy Arrow UDF."""
         import pyarrow as pa
 
         select_columns = ArrowBatchTransformer.select_columns
+        time_return_type = self._time_return_type
 
         def table_from_batches(batches: list[pa.RecordBatch], cols: list[int]) -> pa.Table:
             return pa.Table.from_batches([select_columns(b, cols) for b in batches])
@@ -125,7 +130,9 @@ class ArrowCoGroupedMapUDFHandler(CoGroupedEvalTypeHandler["pa.RecordBatch"]):
             )
 
             for batch in result.to_batches():
-                yield ArrowBatchTransformer.wrap_struct(batch)
+                yield ArrowBatchTransformer.wrap_struct(
+                    ArrowBatchTransformer.reconcile_time_precision(batch, time_return_type)
+                )
 
 
 class ArrowGroupedMapIterUDFHandler(GroupedEvalTypeHandler["pa.RecordBatch"]):
@@ -152,6 +159,10 @@ class ArrowGroupedMapIterUDFHandler(GroupedEvalTypeHandler["pa.RecordBatch"]):
             timezone="UTC",
             prefers_large_types=runner_conf.use_large_var_types,
         )
+        # The declared return type for reconcile_time_precision, when it has a TIME field.
+        self._time_return_type = (
+            self._udf_desc.return_type if _has_type(self._udf_desc.return_type, TimeType) else None
+        )
 
     def run(self, split_index: int, data: Iterator[GroupedBatch]) -> Iterator[pa.RecordBatch]:
         """Apply groupBy Arrow UDF (iterator variant)."""
@@ -159,6 +170,7 @@ class ArrowGroupedMapIterUDFHandler(GroupedEvalTypeHandler["pa.RecordBatch"]):
 
         key_offsets = self._key_offsets
         value_offsets = self._value_offsets
+        time_return_type = self._time_return_type
         for group in data:
             # Flatten struct column into separate columns
             flattened_iter = map(ArrowBatchTransformer.flatten_struct, group)
@@ -192,7 +204,9 @@ class ArrowGroupedMapIterUDFHandler(GroupedEvalTypeHandler["pa.RecordBatch"]):
                     arrow_cast=False,
                     reorder_by_name=self._runner_conf.assign_cols_by_name,
                 )
-                yield ArrowBatchTransformer.wrap_struct(batch)
+                yield ArrowBatchTransformer.wrap_struct(
+                    ArrowBatchTransformer.reconcile_time_precision(batch, time_return_type)
+                )
 
             # Drain remaining input batches to maintain stream position
             for _ in value_batches:
@@ -220,6 +234,10 @@ class ArrowGroupedMapUDFHandler(GroupedEvalTypeHandler["pa.RecordBatch"]):
             timezone="UTC",
             prefers_large_types=runner_conf.use_large_var_types,
         )
+        # The declared return type for reconcile_time_precision, when it has a TIME field.
+        self._time_return_type = (
+            self._udf_desc.return_type if _has_type(self._udf_desc.return_type, TimeType) else None
+        )
 
     def run(self, split_index: int, data: Iterator[GroupedBatch]) -> Iterator[pa.RecordBatch]:
         """Apply groupBy Arrow UDF (non-iterator variant)."""
@@ -227,6 +245,7 @@ class ArrowGroupedMapUDFHandler(GroupedEvalTypeHandler["pa.RecordBatch"]):
 
         key_offsets = self._key_offsets
         value_offsets = self._value_offsets
+        time_return_type = self._time_return_type
         for group in data:
             # Flatten struct column into separate columns
             flattened = map(ArrowBatchTransformer.flatten_struct, group)
@@ -263,7 +282,9 @@ class ArrowGroupedMapUDFHandler(GroupedEvalTypeHandler["pa.RecordBatch"]):
             )
 
             for batch in result.to_batches():
-                yield ArrowBatchTransformer.wrap_struct(batch)
+                yield ArrowBatchTransformer.wrap_struct(
+                    ArrowBatchTransformer.reconcile_time_precision(batch, time_return_type)
+                )
 
 
 class ArrowGroupedAggUDFHandler(GroupedEvalTypeHandler["pa.RecordBatch"]):
@@ -693,6 +714,13 @@ class ArrowMapUDFHandler(BatchEvalTypeHandler["pa.RecordBatch"]):
     def __init__(self, udf_descs: list[UDF], runner_conf: RunnerConf, eval_conf: EvalConf) -> None:
         require_minimum_pyarrow_version()
         super().__init__(udf_descs, runner_conf, eval_conf)
+        return_type = self._udf_desc.return_type
+        # The declared return type for reconcile_time_precision, when it has a TIME field.
+        self._time_return_type = (
+            return_type
+            if isinstance(return_type, StructType) and _has_type(return_type, TimeType)
+            else None
+        )
 
     def run(self, split_index: int, data: Iterator[pa.RecordBatch]) -> Iterator[pa.RecordBatch]:
         import pyarrow as pa
@@ -719,7 +747,11 @@ class ArrowMapUDFHandler(BatchEvalTypeHandler["pa.RecordBatch"]):
 
         # Post-processing
         verified_iter = verify_return_type(output_batches, Iterator[pa.RecordBatch])
-        yield from map(ArrowBatchTransformer.wrap_struct, verified_iter)
+        time_return_type = self._time_return_type
+        for batch in verified_iter:
+            yield ArrowBatchTransformer.wrap_struct(
+                ArrowBatchTransformer.reconcile_time_precision(batch, time_return_type)
+            )
 
 
 class ArrowScalarIterUDFHandler(BatchEvalTypeHandler["pa.RecordBatch"]):

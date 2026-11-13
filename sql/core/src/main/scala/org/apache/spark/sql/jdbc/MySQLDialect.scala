@@ -198,7 +198,7 @@ private case class MySQLDialect() extends JdbcDialect with SQLConfHelper with No
         // MySQL Connector/J reports a scale of 0 for every TIME column, so the generic mapping,
         // which takes the TIME precision from the reported scale, would type TIME(n) as TIME(0)
         // and the TIME getter would drop its fractional seconds. MySQL TIME holds at most six
-        // fractional digits, so TIME(6) keeps every stored value.
+        // fractional digits, so TIME(6) keeps the fractional seconds of every stored value.
         Some(TimeType(TimeType.MICROS_PRECISION))
       case _ => None
     }

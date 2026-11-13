@@ -2560,11 +2560,16 @@ class DateTimeUtilsSuite extends SparkFunSuite with Matchers with SQLHelper {
       val magnitude = random.nextDouble() * Math.pow(10, -3 - random.nextInt(318))
       if (random.nextBoolean()) magnitude else -magnitude
     }
+    // Running sums drift a few ulps from whole microseconds, so their products round to a whole
+    // number from below as well as from above.
+    val sums = Seq(1e-6, 1e-3, -1e-3, 0.01, 0.1, 0.7).flatMap { step =>
+      Iterator.iterate(0.0)(_ + step).take(20000).toSeq
+    }
     val large = Seq(1e9, -1e9, Math.nextDown(1e9), Math.nextUp(-1e9), 1.0E10, 9.2e12)
     val specific = Seq(0.0, -0.0, Double.MinPositiveValue, -Double.MinPositiveValue, 2.49E-4,
       1.0E-6, 0.7, 0.7f.toDouble, 52200.1234567, -1.0E-7, 0.3 - 0.1 - 0.2)
     val samples = aligned ++ aligned.flatMap(ulpsAround) ++ inRange ++
-      inRange.flatMap(ulpsAround) ++ outOfRange ++ tiny ++ large ++ specific
+      inRange.flatMap(ulpsAround) ++ outOfRange ++ tiny ++ sums ++ large ++ specific
     samples.foreach { seconds =>
       assert(secondsToFlooredMicros(seconds) === shortestDecimalFloorMicros(seconds),
         s"seconds = $seconds")

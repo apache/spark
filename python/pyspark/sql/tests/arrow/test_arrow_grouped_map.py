@@ -416,6 +416,30 @@ class ApplyInArrowTestsMixin:
 
         self.assertEqual(df2.join(df2).count(), 1)
 
+    def test_apply_in_arrow_time_precision_of_declared_type(self):
+        # SPARK-61087: the JVM truncates a TIME value to the precision key of its Arrow field. A
+        # result struct built from the fields of an input struct keeps the key of its nested
+        # input field, so that field must be read with the precision it is declared with.
+        def add_micros(table):
+            s = table.column("s").combine_chunks()
+            t = pc.add(s.field("t").cast(pa.int64()), 456000).cast(pa.time64("ns"))
+            # Nullable like the declared field, so that only the metadata differs from it.
+            fields = [field.with_nullable(True) for field in s.type]
+            shifted = pa.StructArray.from_arrays([t], fields=fields)
+            return pa.Table.from_arrays([table.column("id"), shifted], names=["id", "s"])
+
+        with self.sql_conf({"spark.sql.timeType.enabled": True}):
+            df = self.spark.sql(
+                "SELECT 1 AS id, named_struct('t', CAST('12:00:00.123' AS TIME(3))) AS s"
+            )
+            for func_variation in function_variations(add_micros):
+                result = df.groupBy("id").applyInArrow(
+                    func_variation, "id int, s struct<t: time(6)>"
+                )
+                self.assertEqual(
+                    "12:00:00.123456", result.selectExpr("CAST(s.t AS STRING)").first()[0]
+                )
+
     def test_arrow_batch_slicing(self):
         n = 100000
 
