@@ -22,7 +22,7 @@ import org.apache.spark.sql.catalyst.dsl.plans._
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.aggregate.{CollectList, CollectSet, ListAgg, StddevSamp}
 import org.apache.spark.sql.catalyst.plans.{Inner, LeftOuter, PlanTest}
-import org.apache.spark.sql.catalyst.plans.logical.{Assignment, CTERelationRef, DeleteAction, DeleteFromTable, DomainJoin, InsertAction, LateralJoin, LocalRelation, LogicalPlan, MergeIntoTable, UpdateTable}
+import org.apache.spark.sql.catalyst.plans.logical.{Assignment, CTERelationRef, DeleteAction, DeleteFromTable, DomainJoin, InsertAction, LateralJoin, LocalRelation, LogicalPlan, MergeIntoTable, Sample, Tail, UpdateTable}
 import org.apache.spark.sql.catalyst.rules.RuleExecutor
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types.{IntegerType, MapType, StringType}
@@ -196,8 +196,14 @@ class PullupCorrelatedPredicatesSuite extends PlanTest {
       (Some(true), false))
     assert(countBugHandling(correlated(count($"d")), above = _.where(Rand(0) > 0.5)) ==
       (Some(false), true))
-    // A LIMIT or a window function in the outer input, but not a LIMIT above the subquery.
-    Seq(testRelation.limit(10), testRelation.offset(1),
+    // A LIMIT, a window function or a sample in the outer input, also in a subquery there, and
+    // a LIMIT above a join, which LimitPushDown can push into its inputs, but not a LIMIT above
+    // the subquery otherwise.
+    val limitInSubquery = InSubquery(Seq($"a"), ListQuery(testRelation2.select($"c").limit(1)))
+    Seq(testRelation.limit(10), testRelation.offset(1), Tail(Literal(1), testRelation),
+        Sample(0.0, 0.5, withReplacement = false, 1L, testRelation),
+        testRelation.where(limitInSubquery),
+        testRelation.join(testRelation2, LeftOuter, Some($"a" === $"c")).limit(10),
         testRelation.window(Seq(windowExpr(RowNumber(),
           windowSpec(Nil, Seq($"a".asc), UnspecifiedFrame)).as("rn")), Nil, Seq($"a".asc))
     ).foreach { outer =>
@@ -205,6 +211,9 @@ class PullupCorrelatedPredicatesSuite extends PlanTest {
       assert(countBugHandling(correlated(count($"d")), outer = outer) == (Some(false), true))
     }
     assert(countBugHandling(correlated(max($"d")), above = _.limit(10)) == (Some(false), true))
+    val joinOuter = testRelation.join(testRelation2, LeftOuter, Some($"a" === $"c"))
+    assert(countBugHandling(correlated(max($"d")), outer = joinOuter, above = _.limit(10)) ==
+      (Some(true), false))
     val mapOuter = LocalRelation(AttributeReference("m", MapType(IntegerType, IntegerType))())
     // Use size(m), whose outer reference stays a map also in the full optimizer, where
     // PullOutNestedDataOuterRefExpressions would pull a lookup such as m[0] out.

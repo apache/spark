@@ -3477,22 +3477,26 @@ class SubquerySuite extends SharedSparkSession
           udf((_: Long) => scala.util.Random.nextInt(1000)).asNondeterministic())
         // The filter is pushed below the Project with the subquery, where the domain joins of
         // decorrelation would evaluate it again, and outer rows that pass it only the first time
-        // would get NULL instead of 1.
+        // would get 0 or NULL instead of 1.
         checkAnswer(
           sql("SELECT DISTINCT c FROM (SELECT * FROM (SELECT o.k, (SELECT COUNT(*) FROM " +
             "(SELECT MAX(b.v) FROM b WHERE b.k = o.k)) c FROM o) WHERE spark60501_rk(k) > 500)"),
           Row(1))
       }
       // A LIMIT without a total order can keep other rows when computed again, so the plan is
-      // the one of before, without the domain joins.
-      val query = "SELECT o.k, (SELECT COUNT(*) FROM (SELECT MAX(b.v) FROM b WHERE b.k = o.k)) " +
-        "FROM (SELECT * FROM o LIMIT 100) o"
-      def joins(): Int = sql(query).queryExecution.optimizedPlan.collect { case j: Join => j }.size
-      val legacyJoins = withSQLConf(
-        SQLConf.LEGACY_SCALAR_SUBQUERY_NESTED_AGGREGATE_COUNT_BUG_BEHAVIOR.key -> "true") {
-        joins()
+      // the one of before, without the domain joins: in the outer input, and above a join, into
+      // whose inputs LimitPushDown pushes it.
+      val subquery = "(SELECT COUNT(*) FROM (SELECT MAX(b.v) FROM b WHERE b.k = o.k))"
+      Seq(s"SELECT o.k, $subquery FROM (SELECT * FROM o LIMIT 100) o",
+          s"SELECT o.k, $subquery FROM o LEFT JOIN b ON o.k = b.k LIMIT 100").foreach { query =>
+        def joins(): Int =
+          sql(query).queryExecution.optimizedPlan.collect { case j: Join => j }.size
+        val legacyJoins = withSQLConf(
+          SQLConf.LEGACY_SCALAR_SUBQUERY_NESTED_AGGREGATE_COUNT_BUG_BEHAVIOR.key -> "true") {
+          joins()
+        }
+        assert(joins() == legacyJoins, query)
       }
-      assert(joins() == legacyJoins)
     }
   }
 

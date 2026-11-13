@@ -630,26 +630,29 @@ object PullupCorrelatedPredicates extends Rule[LogicalPlan] with PredicateHelper
 
   /**
    * Whether the domain joins of [[DecorrelateInnerQuery]], which compute the outer query of a
-   * correlated subquery again, can be relied on to see the same outer rows the second time. The
-   * check is conservative. It looks at the whole query `root` for a non-deterministic
-   * expression, a CTE that is not inlined (which may be a non-deterministic one; a
-   * CTERelationRef does not tell) and a streaming source, since later rules can still move
-   * operators into the outer input, e.g. PushDownPredicates can push a non-deterministic filter
-   * below the operator with the subquery. It does not decide whether the domain joins can be
-   * built at all, e.g. for outer references that are not orderable.
+   * correlated subquery again, can be relied on to work and to see the same outer rows the
+   * second time, as far as `root`, the plan this rule runs on, tells: the whole query, or the
+   * plan of a subquery when OptimizeSubqueries optimizes it. The check is conservative and looks
+   * at all of `root`, since later rules can still move operators into the outer input, e.g.
+   * PushDownPredicates can push a non-deterministic filter below the operator with the
+   * subquery, and LimitPushDown a LIMIT into the inputs of a join. It rejects a streaming
+   * source, for which the domain joins fail, a non-deterministic expression, a CTE that is not
+   * inlined (which may be a non-deterministic one; a CTERelationRef does not tell), and a LIMIT
+   * or OFFSET above a join.
    */
   private def outerQueryRepeatable(root: LogicalPlan): Boolean = !root.isStreaming &&
     !root.exists {
       case _: CTERelationRef => true
+      case l @ (_: LocalLimit | _: GlobalLimit | _: Offset) => l.exists(_.isInstanceOf[Join])
       case p => !p.expressions.forall(_.deterministic)
     }
 
   // Whether the outer input `input` of an operator with a correlated subquery can keep other
   // rows when it is computed again although it is deterministic: a LIMIT, OFFSET or tail without
-  // a total order, or a window function over ties.
+  // a total order, a window function over ties, or a sample, also inside a subquery of it.
   private def mayKeepOtherRows(input: LogicalPlan): Boolean = input.exists {
-    case _: LocalLimit | _: GlobalLimit | _: Offset | _: Tail | _: Window => true
-    case _ => false
+    case _: LocalLimit | _: GlobalLimit | _: Offset | _: Tail | _: Window | _: Sample => true
+    case p => p.subqueries.exists(mayKeepOtherRows)
   }
 
   private def rewriteSubQueries(plan: LogicalPlan, repeatable: Boolean): LogicalPlan = {
