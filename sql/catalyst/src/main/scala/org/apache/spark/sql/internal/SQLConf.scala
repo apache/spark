@@ -2535,8 +2535,9 @@ object SQLConf {
       .withBindingPolicy(ConfigBindingPolicy.NOT_APPLICABLE)
       .doc("Size in bytes of input rows at which an external lookup join stops adding rows to " +
         "a lookup request. The row that reaches this size stays in the request, so a request " +
-        "can exceed it by one row. A request always takes at least one row, and never more rows " +
-        "than the source allows, or 1000.")
+        "can exceed it by one row. A request always takes at least one row, and never more than " +
+        "1000. Its rows are also no more than the parameter rows that the source allows, unless " +
+        "they share one parameter row, as with a range lookup.")
       .version("4.4.0")
       .bytesConf(ByteUnit.BYTE)
       .checkValue(_ > 0, "External lookup join max batch bytes must be positive")
