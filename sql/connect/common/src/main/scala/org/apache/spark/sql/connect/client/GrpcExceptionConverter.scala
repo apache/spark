@@ -345,13 +345,23 @@ private[client] object GrpcExceptionConverter {
     }),
     errorConstructor[IllegalArgumentException](params => {
       val updatedParams = getParamsWithLegacyErrorClass(params, "_LEGACY_ERROR_TEMP_3105")
-      new SparkIllegalArgumentException(
-        errorClass = updatedParams.errorClass.get,
-        messageParameters = updatedParams.messageParameters,
-        updatedParams.queryContext,
-        summary = "",
-        cause = updatedParams.cause.orNull,
-        getSqlStateOrFallback(updatedParams))
+      if (params.errorClass.exists(!SparkThrowableHelper.isValidErrorClass(_))) {
+        new SparkIllegalArgumentException(
+          message = updatedParams.message,
+          cause = updatedParams.cause,
+          errorClass = updatedParams.errorClass,
+          messageParameters = updatedParams.messageParameters,
+          context = updatedParams.queryContext,
+          sqlState = getSqlStateOrFallback(updatedParams))
+      } else {
+        new SparkIllegalArgumentException(
+          errorClass = updatedParams.errorClass.get,
+          messageParameters = updatedParams.messageParameters,
+          updatedParams.queryContext,
+          summary = "",
+          cause = updatedParams.cause.orNull,
+          getSqlStateOrFallback(updatedParams))
+      }
     }),
     errorConstructor[ArithmeticException](params => {
       val updatedParams = getParamsWithLegacyErrorClass(params, "_LEGACY_ERROR_TEMP_3106")
