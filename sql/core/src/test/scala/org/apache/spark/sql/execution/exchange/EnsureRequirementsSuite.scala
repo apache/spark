@@ -42,7 +42,7 @@ import org.apache.spark.sql.execution.python.FlatMapCoGroupsInPandasExec
 import org.apache.spark.sql.execution.window.WindowExec
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSparkSession
-import org.apache.spark.sql.types.{DataType, Decimal, DecimalType, IntegerType, LongType, StringType, StructField, StructType}
+import org.apache.spark.sql.types.{DataType, Decimal, DecimalType, IntegerType, LongType, StringType, StructField, StructType, TimestampType, TimeType}
 
 class EnsureRequirementsSuite extends SharedSparkSession {
   private val exprA = AttributeReference("a", IntegerType)()
@@ -1836,6 +1836,42 @@ class EnsureRequirementsSuite extends SharedSparkSession {
     }
   }
 
+  test("SPARK-60813: a cogroup shuffles a datetime key onto a function that reads it as stored") {
+    // The key check compares storage alone, as the hash shuffle does, so a `TIME` key goes onto a
+    // bucket over a `TIMESTAMP` column whose function declares the `BIGINT` both are held as, as
+    // the test catalog's `bucket` does. Each row lands where the keyed side put its `long`.
+    val longBucket = new ScalarFunction[Int] {
+      override def inputTypes(): Array[DataType] = Array(IntegerType, LongType)
+      override def resultType(): DataType = IntegerType
+      override def name(): String = "bucket"
+      override def canonicalName(): String = "bucket"
+      override def produceResult(input: InternalRow): Int =
+        Math.floorMod(input.getLong(1), input.getInt(0).toLong).toInt
+    }
+    val cL = AttributeReference("cL", TimestampType)()
+    val cR = AttributeReference("cR", TimeType())()
+    val left = DummySparkPlan(outputPartitioning = KeyedPartitioning(
+      Seq(TransformExpression(longBucket, Seq(cL), Some(4))), (0 until 4).map(InternalRow(_))))
+    val right = DummySparkPlan(outputPartitioning = UnknownPartitioning(0))
+    val pythonUdf = PythonUDF("pyUDF", null,
+      StructType(Seq(StructField("value", IntegerType))),
+      Seq.empty,
+      PythonEvalType.SQL_COGROUPED_MAP_PANDAS_UDF,
+      true)
+    val cogroup = FlatMapCoGroupsInPandasExec(Seq(cL), Seq(cR), pythonUdf,
+      AttributeReference("value", IntegerType)() :: Nil, left, right)
+    withSQLConf(SQLConf.V2_BUCKETING_SHUFFLE_ENABLED.key -> "true") {
+      val keyed = EnsureRequirements.apply(cogroup).collect {
+        case s: ShuffleExchangeExec => s.outputPartitioning
+      }.collect { case k: KeyedPartitioning => k }
+      assert(keyed.size == 1, "the right side is shuffled onto the bucket layout")
+      val placed = BindReferences.bindReference(keyed.head.expressions.head, Seq(cR))
+      Seq(3600000000000L, 7L, 86399999999999L).foreach { v =>
+        assert(placed.eval(InternalRow(v)) == Math.floorMod(v, 4L).toInt, v)
+      }
+    }
+  }
+
   test("SPARK-60027: a cogroup shuffled from a key Spark cannot place fails while planning") {
     // A cogroup that does not coerce its keys, e.g. a Pandas or Arrow cogroup (SPARK-60782), can
     // have another key of a type the layout's function does not take: a `BIGINT` against a
@@ -1859,12 +1895,19 @@ class EnsureRequirementsSuite extends SharedSparkSession {
       Seq.empty,
       PythonEvalType.SQL_COGROUPED_MAP_PANDAS_UDF,
       true)
+    // (the column's type, the key's, as the error names them, and whether the key is stored
+    //  otherwise than the column, which is refused before the call is resolved, so with nothing
+    //  logged. A key stored alike may log, once per JVM, that the function does not take it.)
     Seq(
-      (IntegerType, LongType, "\"INT\"", "\"BIGINT\""),
-      (StringType, StringType("UTF8_LCASE"), "\"STRING\"", "\"STRING COLLATE UTF8_LCASE\""),
-      (LongType, IntegerType, "\"BIGINT\"", "\"INT\""),
-      (DecimalType(10, 2), DecimalType(20, 2), "\"DECIMAL(10,2)\"", "\"DECIMAL(20,2)\"")
-    ).foreach { case (columnType, keyType, declared, key) =>
+      (IntegerType, LongType, "\"INT\"", "\"BIGINT\"", true),
+      (StringType, StringType("UTF8_LCASE"), "\"STRING\"", "\"STRING COLLATE UTF8_LCASE\"",
+        true),
+      (LongType, IntegerType, "\"BIGINT\"", "\"INT\"", true),
+      (DecimalType(10, 2), DecimalType(20, 2), "\"DECIMAL(10,2)\"", "\"DECIMAL(20,2)\"", true),
+      // SPARK-60813: stored as the column is, but a function declaring `TIMESTAMP` would read the
+      // nanoseconds of the day of a `TIME` as microseconds since the epoch.
+      (TimestampType, TimeType(), "\"TIMESTAMP\"", "\"TIME(6)\"", false)
+    ).foreach { case (columnType, keyType, declared, key, storedOtherwise) =>
       val cL = AttributeReference("cL", columnType)()
       val cR = AttributeReference("cR", keyType)()
       val left = DummySparkPlan(outputPartitioning = KeyedPartitioning(
@@ -1888,8 +1931,10 @@ class EnsureRequirementsSuite extends SharedSparkSession {
               "keyType" -> key))
         }
       }
-      assert(appender.loggingEvents.isEmpty,
-        appender.loggingEvents.map(_.getMessage.getFormattedMessage))
+      if (storedOtherwise) {
+        assert(appender.loggingEvents.isEmpty,
+          appender.loggingEvents.map(_.getMessage.getFormattedMessage))
+      }
     }
   }
 
