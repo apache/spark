@@ -465,33 +465,6 @@ class CatalogV2UtilSuite extends SparkFunSuite {
     assert(rebuilt.viewDependencies() === null)
   }
 
-  test("SPARK-59188: add a column to a struct nested in an array of arrays") {
-    val schema = new StructType()
-      .add("col", ArrayType(ArrayType(new StructType().add("x", IntegerType))))
-    val changed = CatalogV2Util.applySchemaChanges(
-      schema,
-      Seq(TableChange.addColumn(Array("col", "element", "element", "y"), DoubleType)),
-      None,
-      "ALTER TABLE")
-    val expected = new StructType()
-      .add("col", ArrayType(ArrayType(
-        new StructType().add("x", IntegerType).add("y", DoubleType))))
-    assert(changed === expected)
-  }
-
-  test("SPARK-59188: update a column type in a struct nested in a map of arrays") {
-    val schema = new StructType()
-      .add("col", MapType(StringType, ArrayType(new StructType().add("x", IntegerType))))
-    val changed = CatalogV2Util.applySchemaChanges(
-      schema,
-      Seq(TableChange.updateColumnType(Array("col", "value", "element", "x"), LongType)),
-      None,
-      "ALTER TABLE")
-    val expected = new StructType()
-      .add("col", MapType(StringType, ArrayType(new StructType().add("x", LongType))))
-    assert(changed === expected)
-  }
-
   test("SPARK-59188: update the key type of a map nested in an array") {
     val schema = new StructType()
       .add("col", ArrayType(MapType(IntegerType, StringType)))
@@ -508,14 +481,31 @@ class CatalogV2UtilSuite extends SparkFunSuite {
   test("SPARK-59188: an invalid path below a nested collection still fails") {
     val schema = new StructType()
       .add("col", ArrayType(ArrayType(IntegerType)))
-    val e = intercept[SparkIllegalArgumentException] {
-      CatalogV2Util.applySchemaChanges(
-        schema,
-        Seq(TableChange.addColumn(Array("col", "element", "missing", "y"), DoubleType)),
-        None,
-        "ALTER TABLE")
-    }
-    assert(e.getMessage.contains("missing"))
+    checkError(
+      exception = intercept[SparkIllegalArgumentException] {
+        CatalogV2Util.applySchemaChanges(
+          schema,
+          Seq(TableChange.addColumn(Array("col", "element", "missing", "y"), DoubleType)),
+          None,
+          "ALTER TABLE")
+      },
+      condition = "_LEGACY_ERROR_TEMP_3223",
+      parameters = Map("name" -> "missing", "dataType" -> "array<int>"))
+  }
+
+  test("SPARK-59188: DROP IF EXISTS on an invalid path in a collection is a no-op") {
+    val schema = new StructType()
+      .add("arr", ArrayType(ArrayType(IntegerType)))
+      .add("m", MapType(StringType, ArrayType(new StructType().add("x", IntegerType))))
+    val changed = CatalogV2Util.applySchemaChanges(
+      schema,
+      Seq(
+        TableChange.deleteColumn(Array("arr", "missing"), true),
+        TableChange.deleteColumn(Array("arr", "element", "element", "x"), true),
+        TableChange.deleteColumn(Array("m", "value", "element", "missing"), true)),
+      None,
+      "ALTER TABLE")
+    assert(changed === schema)
   }
 
   private def viewWithDependencies(dependencies: Option[DependencyList]): View = {

@@ -421,36 +421,8 @@ private[sql] object CatalogV2Util {
         val updatedType: StructType = replace(struct, names, update, ifExists)
         Some(StructField(field.name, updatedType, field.nullable, field.metadata))
 
-      case (Seq("key"), map @ MapType(keyType, _, _)) =>
-        val updated = update(StructField("key", keyType, nullable = false))
-            .getOrElse(throw new SparkIllegalArgumentException("_LEGACY_ERROR_TEMP_3226"))
-        Some(field.copy(dataType = map.copy(keyType = updated.dataType)))
-
-      case (Seq("key", names @ _*), map: MapType) =>
-        Some(field.copy(dataType = map.copy(keyType =
-          replaceNested(map.keyType, names, update, ifExists))))
-
-      case (Seq("value"), map @ MapType(_, mapValueType, isNullable)) =>
-        val updated = update(StructField("value", mapValueType, nullable = isNullable))
-            .getOrElse(throw new SparkIllegalArgumentException("_LEGACY_ERROR_TEMP_3225"))
-        Some(field.copy(dataType = map.copy(
-          valueType = updated.dataType,
-          valueContainsNull = updated.nullable)))
-
-      case (Seq("value", names @ _*), map: MapType) =>
-        Some(field.copy(dataType = map.copy(valueType =
-          replaceNested(map.valueType, names, update, ifExists))))
-
-      case (Seq("element"), array @ ArrayType(elementType, isNullable)) =>
-        val updated = update(StructField("element", elementType, nullable = isNullable))
-            .getOrElse(throw new SparkIllegalArgumentException("_LEGACY_ERROR_TEMP_3224"))
-        Some(field.copy(dataType = array.copy(
-          elementType = updated.dataType,
-          containsNull = updated.nullable)))
-
-      case (Seq("element", names @ _*), array: ArrayType) =>
-        Some(field.copy(dataType = array.copy(elementType =
-          replaceNested(array.elementType, names, update, ifExists))))
+      case (names, collection @ (_: MapType | _: ArrayType)) =>
+        Some(field.copy(dataType = replaceNested(collection, names, update, ifExists)))
 
       case (names, dataType) =>
         if (!ifExists) {
@@ -472,10 +444,11 @@ private[sql] object CatalogV2Util {
   }
 
   /**
-   * Applies `update` to the nested field addressed by `fieldNames`, where `dataType` is the type
-   * reached after stepping into a map key/value or an array element. Unlike `replace`, which only
-   * descends into structs, this also recurses through nested maps and arrays, matching the paths
-   * emitted for schema changes computed against nested collection types.
+   * Applies `update` to the field addressed by `fieldNames` inside `dataType`. A path steps into
+   * a map through `key` or `value` and into an array through `element`, through any number of
+   * nested maps and arrays, and struct fields are resolved by `replace`. Schema changes computed
+   * against nested collection types use these paths. A segment that does not resolve throws, or
+   * leaves `dataType` unchanged when `ifExists` is set.
    */
   private def replaceNested(
       dataType: DataType,
