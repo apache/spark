@@ -88,7 +88,7 @@ class StreamingQuery:
                     errorClass="VALUE_NOT_POSITIVE",
                     messageParameters={"arg_name": "timeout", "arg_value": type(timeout).__name__},
                 )
-            cmd.await_termination.timeout_ms = int(timeout * 1000)
+            cmd.await_termination.timeout_ms = max(1, int(timeout * 1000))
             terminated = self._execute_streaming_query_cmd(cmd).await_termination.terminated
             return terminated
         else:

@@ -975,6 +975,7 @@ pyspark_structured_streaming = Module(
         "pyspark.sql.tests.streaming.test_streaming_kafka_rtm",
         "pyspark.sql.tests.streaming.test_streaming_listener",
         "pyspark.sql.tests.streaming.test_streaming_offline_state_repartition",
+        "pyspark.sql.tests.streaming.test_streaming_query_validation",
         "pyspark.sql.tests.pandas.test_pandas_grouped_map_with_state",
         "pyspark.sql.tests.pandas.streaming.test_pandas_transform_with_state",
         "pyspark.sql.tests.pandas.streaming.test_pandas_transform_with_state_checkpoint_v2",
