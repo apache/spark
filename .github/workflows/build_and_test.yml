@@ -932,7 +932,10 @@ jobs:
       run: |
         PYTHON_EXECUTABLE=python3.12 ./dev/lint-python
     - name: JS linter
-      run: ./dev/lint-js
+      env:
+        SKIP_SCALA_BUILD: true
+        SKIP_MIMA: true
+      run: ./dev/run-tests --modules lint-js
     - name: Install R linter dependencies and SparkR
       run: ./R/install-dev.sh
     - name: R linter

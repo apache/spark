@@ -97,16 +97,12 @@ ignored_file_patterns = (
     "/dev/checkstyle-suppressions.xml",
     "/dev/checkstyle.xml",
     "/dev/connect-jvm-client-mima-check",
-    "/dev/eslint.js",
     "/dev/java-file-header",
     "/dev/lint-java",
-    "/dev/lint-js",
     "/dev/lint-python",
     "/dev/lint-r*",
     "/dev/lint-scala",
     "/dev/mima",
-    "/dev/package-lock.json",
-    "/dev/package.json",
     "/dev/reformat-python",
     "/dev/sbt-checkstyle",
     "/dev/scalafmt",
@@ -144,9 +140,10 @@ ignored_file_patterns = (
     "/conf/",
     # Binder infra. CI does not test this.
     "/binder/",
-    # UI tests. These are typically triggered by the `precondition` job
-    # regardless of modifications to these files.
-    "/ui-test/",
+    # UI test harness files. UI tests are typically triggered by the
+    # `precondition` job regardless of modifications to these files. Files under
+    # `ui-test/tests/` are not ignored because `lint-js` checks them.
+    "/ui-test/*",
 )
 
 
@@ -1936,6 +1933,24 @@ build = Module(
         "dev/test-dependencies.sh",
     ],
     shell_script_test_goals=[ShellScriptTestGoal("dev/test-dependencies.sh")],
+)
+
+lint_js = Module(
+    name="lint-js",
+    dependencies=[],
+    source_file_regexes=[
+        # Keep in sync with LINT_TARGET_FILES in dev/lint-js. In the future we should expand
+        # dev/lint-js to lint all JavaScript in the repo, at which point these can become one rule
+        # for all `.js`.
+        r"core/src/main/resources/org/apache/spark/ui/static/.*\.js$",
+        r"sql/core/src/main/resources/org/apache/spark/sql/execution/ui/static/.*\.js$",
+        r"docs/js/.*\.js$",
+        r"ui-test/tests/.*\.js$",
+        r"dev/lint-js$",
+        r"dev/eslint\.js$",
+        r"dev/package(-lock)?\.json$",
+    ],
+    shell_script_test_goals=[ShellScriptTestGoal("dev/lint-js")],
 )
 
 yarn = Module(
