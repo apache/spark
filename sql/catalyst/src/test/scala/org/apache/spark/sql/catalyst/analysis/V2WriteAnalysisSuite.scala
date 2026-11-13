@@ -30,7 +30,8 @@ import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.rules.Rule
 import org.apache.spark.sql.catalyst.trees.TreeNodeTag
 import org.apache.spark.sql.catalyst.types.DataTypeUtils
-import org.apache.spark.sql.connector.catalog.{CatalogManager, Column, DefaultCatalogManager, Table, TableCapability}
+import org.apache.spark.sql.connector.catalog.{CatalogManager, Column, DefaultCatalogManager, GenerationExpression, Table, TableCapability}
+import org.apache.spark.sql.connector.expressions.FieldReference
 import org.apache.spark.sql.execution.datasources.v2.DataSourceV2Relation
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.internal.SQLConf.StoreAssignmentPolicy
@@ -40,7 +41,7 @@ import org.apache.spark.sql.util.CaseInsensitiveStringMap
 
 class V2ResolveOutputRelationSuite extends AnalysisTest {
 
-  test("write output resolution reads the legacy SQL-only generation expression getter") {
+  test("SPARK-61495: write resolution reads the legacy SQL-only generation expression getter") {
     val legacyColumn = new ColumnImpl(
         name = "b",
         dataType = IntegerType,
@@ -66,6 +67,28 @@ class V2ResolveOutputRelationSuite extends AnalysisTest {
     val projection = write.query.asInstanceOf[Project]
     val generated = BindReferences.bindReference(projection.projectList(1), projection.child.output)
     assert(generated.eval(InternalRow(1)) == 2)
+  }
+
+  test("SPARK-61495: modeled analysis errors identify a catalogless table") {
+    val table = new Table {
+      override def name(): String = "provider_table"
+      override def columns(): Array[Column] = Array(
+        Column.create("a", IntegerType),
+        Column.builderFor("b", IntegerType)
+          .generationExpression(new GenerationExpression(FieldReference("missing"))).build())
+      override def capabilities(): JSet[TableCapability] =
+        JSet.of(TableCapability.GENERATE_COLUMN_VALUES_ON_WRITE)
+    }
+    val target = DataSourceV2Relation.create(table, None, None)
+    val input = LocalRelation(AttributeReference("a", IntegerType)())
+    val error = intercept[AnalysisException] {
+      getAnalyzer.execute(AppendData.byName(target, input))
+    }
+    assert(error.getCondition == "INVALID_GENERATED_COLUMN_EXPRESSION")
+    assert(error.messageParameters("tableName") == "`provider_table`")
+    assert(error.messageParameters("columnName") == "`b`")
+    assert(error.getCause.asInstanceOf[AnalysisException].getCondition ==
+      "UNRESOLVED_COLUMN.WITH_SUGGESTION")
   }
 
   test("ResolveOutputRelation preserves tags on a rebuilt DSv2 write target") {

@@ -30,7 +30,7 @@ import org.apache.spark.unsafe.types.UTF8String
 
 class V2ExpressionUtilsSuite extends SparkFunSuite {
 
-  test("modeled literals accept external and internal representations") {
+  test("SPARK-61495: modeled literals accept external and internal representations") {
     val string = Literal(UTF8String.fromString("Y"), StringType)
     val decimal = Literal(Decimal(new java.math.BigDecimal("1.25")), DecimalType(3, 2))
     val date = Literal(19724, DateType)
@@ -46,7 +46,7 @@ class V2ExpressionUtilsSuite extends SparkFunSuite {
     }
   }
 
-  test("invalid modeled literal values cannot be converted") {
+  test("SPARK-61495: invalid modeled literal values cannot be converted") {
     val literals: Seq[V2Expression] = Seq(
       LiteralValue("not an integer", IntegerType),
       LiteralValue(UTF8String.fromString("not an integer"), IntegerType),
@@ -56,7 +56,7 @@ class V2ExpressionUtilsSuite extends SparkFunSuite {
     }
   }
 
-  test("modeled expressions with invalid arity cannot be converted") {
+  test("SPARK-61495: modeled expressions with invalid arity cannot be converted") {
     val arities = Seq(
       "WIDTH_BUCKET" -> Seq(0, 1, 2, 3, 5),
       "IN" -> Seq(0),
@@ -74,7 +74,7 @@ class V2ExpressionUtilsSuite extends SparkFunSuite {
     }
   }
 
-  test("valid modeled expressions retain their values after arity checks") {
+  test("SPARK-61495: valid modeled expressions retain their values after arity checks") {
     val one = LiteralValue(1, IntegerType)
     val two = LiteralValue(2, IntegerType)
     val yes = LiteralValue(true, BooleanType)

@@ -364,7 +364,7 @@ class GeneratedColumnWriteSuite extends QueryTest with DatasourceV2SQLBase {
     }
   }
 
-  gridTest("modeled generation expression auto-fill")(
+  gridTest("SPARK-61495: modeled generation expression auto-fill")(
       Seq("insert", "insert overwrite", "append", "overwrite", "overwrite partitions")) { mode =>
     val tblName = "my_tab"
     val genExpr = new GeneralScalarExpression("+", Array[V2Expression](
@@ -552,7 +552,8 @@ class GeneratedColumnWriteSuite extends QueryTest with DatasourceV2SQLBase {
     }
   }
 
-  gridTest("modeled generation expression keeps ANSI semantics")(Seq("false", "true")) { ansi =>
+  gridTest("SPARK-61495: modeled generation expression keeps ANSI semantics")(
+      Seq("false", "true")) { ansi =>
     val tblName = "my_tab"
     val genExpr = new GeneralScalarExpression("+", Array[V2Expression](
       new V2Cast(FieldReference(Seq("a")), StringType, IntegerType), LiteralValue(1, IntegerType)))
@@ -581,7 +582,7 @@ class GeneratedColumnWriteSuite extends QueryTest with DatasourceV2SQLBase {
     }
   }
 
-  gridTest("modeled generation expression takes precedence with SQL fallback")(
+  gridTest("SPARK-61495: modeled generation expression takes precedence with SQL fallback")(
       Seq("+", "NOT_A_FUNCTION")) { function =>
     val tblName = "my_tab"
     val genExpr = new GeneralScalarExpression(function, Array[V2Expression](
@@ -609,7 +610,7 @@ class GeneratedColumnWriteSuite extends QueryTest with DatasourceV2SQLBase {
     }
   }
 
-  gridTest("convertible modeled generation expression does not parse SQL")(
+  gridTest("SPARK-61495: convertible modeled generation expression does not parse SQL")(
       Seq("", "NOT VALID SQL")) { text =>
     val tblName = "my_tab"
     val genExpr = new GeneralScalarExpression("+", Array[V2Expression](
@@ -635,7 +636,7 @@ class GeneratedColumnWriteSuite extends QueryTest with DatasourceV2SQLBase {
     }
   }
 
-  test("modeled generation expression analysis failure does not fall back to SQL") {
+  test("SPARK-61495: modeled generation expression analysis failure does not fall back to SQL") {
     val tblName = "my_tab"
     withTable(s"testcat.$tblName") {
       createCatalogTable(tblName,
@@ -644,14 +645,20 @@ class GeneratedColumnWriteSuite extends QueryTest with DatasourceV2SQLBase {
           Column.builderFor("b", IntegerType).generationExpression(
             new GenerationExpression("a + 1", FieldReference(Seq("missing")))).build()))
       Seq("(a) VALUES (1)", " VALUES (1, 2)").foreach { suffix =>
-        assertWriteFails("UNRESOLVED_COLUMN.WITH_SUGGESTION") {
+        val error = intercept[AnalysisException] {
           sql(s"INSERT INTO testcat.$tblName$suffix")
         }
+        assert(error.getCondition == "INVALID_GENERATED_COLUMN_EXPRESSION")
+        assert(error.messageParameters("tableName") == s"`testcat`.`$tblName`")
+        assert(error.messageParameters("columnName") == "`b`")
+        assert(error.messageParameters("expression") == "missing")
+        assert(error.getCause.asInstanceOf[AnalysisException].getCondition ==
+          "UNRESOLVED_COLUMN.WITH_SUGGESTION")
       }
     }
   }
 
-  gridTest("malformed modeled generation expression falls back to SQL")(
+  gridTest("SPARK-61495: malformed modeled generation expression falls back to SQL")(
       Seq("WIDTH_BUCKET", "IN", "BOOLEAN_EXPRESSION")) { function =>
     val tblName = "my_tab"
     val children = if (function == "WIDTH_BUCKET") {
@@ -677,7 +684,7 @@ class GeneratedColumnWriteSuite extends QueryTest with DatasourceV2SQLBase {
     }
   }
 
-  gridTest("modeled generation expression does not use session type coercion")(
+  gridTest("SPARK-61495: modeled generation expression does not use session type coercion")(
       for {
         ansi <- Seq("false", "true")
         legacy <- Seq("false", "true")
@@ -695,16 +702,21 @@ class GeneratedColumnWriteSuite extends QueryTest with DatasourceV2SQLBase {
             Column.builderFor("b", BooleanType)
               .generationExpression(new GenerationExpression("true", genExpr)).build()))
         Seq("(flag) VALUES (true)", " VALUES (true, true)").foreach { suffix =>
-          assertWriteFails("DATATYPE_MISMATCH.BINARY_OP_DIFF_TYPES") {
+          val error = intercept[AnalysisException] {
             sql(s"INSERT INTO testcat.$tblName$suffix")
           }
+          assert(error.getCondition == "INVALID_GENERATED_COLUMN_EXPRESSION")
+          assert(error.messageParameters("tableName") == s"`testcat`.`$tblName`")
+          assert(error.messageParameters("columnName") == "`b`")
+          assert(error.getCause.asInstanceOf[AnalysisException].getCondition ==
+            "DATATYPE_MISMATCH.BINARY_OP_DIFF_TYPES")
         }
         checkAnswer(spark.table(s"testcat.$tblName"), Nil)
       }
     }
   }
 
-  test("modeled generation expression evaluation failure does not fall back to SQL") {
+  test("SPARK-61495: modeled generation expression evaluation failure does not fall back to SQL") {
     val tblName = "my_tab"
     val genExpr = new V2Cast(FieldReference(Seq("a")), StringType, IntegerType)
     withSQLConf(SQLConf.ANSI_ENABLED.key -> "false") {
@@ -723,7 +735,8 @@ class GeneratedColumnWriteSuite extends QueryTest with DatasourceV2SQLBase {
     }
   }
 
-  gridTest("modeled generation expression respects the write capability")(Seq(true, false)) {
+  gridTest("SPARK-61495: modeled generation expression respects the write capability")(
+      Seq(true, false)) {
       supportsWrite =>
     val tblName = "my_tab"
     val genExpr = new GeneralScalarExpression("+", Array[V2Expression](
@@ -1056,7 +1069,7 @@ class GeneratedColumnWriteSuite extends QueryTest with DatasourceV2SQLBase {
     }
   }
 
-  gridTest("generation expression presence checks do not convert expressions")(
+  gridTest("SPARK-61495: generation expression presence checks do not convert expressions")(
       Seq("sql", "modeled")) { form =>
     val tblName = "my_tab"
     val generation = if (form == "sql") {
@@ -1796,7 +1809,8 @@ class GeneratedColumnWriteSuite extends QueryTest with DatasourceV2SQLBase {
     }
   }
 
-  gridTest("streaming write with generated columns is blocked")(Seq("sql", "modeled")) { form =>
+  gridTest("SPARK-61495: streaming write with generated columns is blocked")(
+      Seq("sql", "modeled")) { form =>
     import testImplicits._
     val tblName = "my_tab"
     withTable(s"testcat.$tblName") {
@@ -2360,7 +2374,7 @@ class GeneratedColumnWriteSuite extends QueryTest with DatasourceV2SQLBase {
     }
   }
 
-  test("modeled generation expression keeps the implicit casts of CREATE TABLE") {
+  test("SPARK-61495: modeled generation expression keeps the implicit casts of CREATE TABLE") {
     val tblName = "my_tab"
     withTable(s"testcat.$tblName") {
       withSQLConf(SQLConf.ANSI_ENABLED.key -> "false") {
@@ -2380,6 +2394,60 @@ class GeneratedColumnWriteSuite extends QueryTest with DatasourceV2SQLBase {
           }
         }
         checkAnswer(spark.table(s"testcat.$tblName"), Seq(Row("007", "007"), Row("008", "008")))
+      }
+    }
+  }
+
+  gridTest("SPARK-61495: modeled generation expressions retain creation-time folded constants")(
+      for {
+        kind <- Seq("cast", "overflow")
+        legacy <- Seq("false", "true")
+      } yield (kind, legacy)) { case (kind, legacy) =>
+    val tblName = "my_tab"
+    val (expression, expected) = if (kind == "cast") {
+      ("coalesce(a, CAST('x' AS INT))", null)
+    } else {
+      ("coalesce(a, 2147483647 + 1)", Int.MinValue)
+    }
+    withTable(s"testcat.$tblName") {
+      withSQLConf(
+          SQLConf.ANSI_ENABLED.key -> "false",
+          "spark.sql.optimizer.datasourceV2ExprFolding" -> "true") {
+        sql(s"""CREATE TABLE testcat.$tblName(
+               |  a INT, b INT GENERATED ALWAYS AS ($expression)
+               |) USING foo""".stripMargin)
+      }
+      withSQLConf(
+          SQLConf.ANSI_ENABLED.key -> "true",
+          SQLConf.USE_CURRENT_SQL_CONFIGS_FOR_GENERATED_COLUMN.key -> legacy) {
+        sql(s"INSERT INTO testcat.$tblName(a) VALUES (NULL)")
+        sql(s"INSERT INTO testcat.$tblName SELECT * FROM testcat.$tblName")
+        assertWriteFails("CHECK_CONSTRAINT_VIOLATION") {
+          sql(s"INSERT INTO testcat.$tblName VALUES (NULL, 0)")
+        }
+        checkAnswer(spark.table(s"testcat.$tblName"), Seq.fill(2)(Row(null, expected)))
+      }
+    }
+  }
+
+  gridTest("SPARK-61495: a legacy config does not change the modeled expression's stored casts")(
+      Seq("false", "true")) { legacy =>
+    val tblName = "my_tab"
+    withTable(s"testcat.$tblName") {
+      withSQLConf(SQLConf.ANSI_ENABLED.key -> "true") {
+        sql(s"""CREATE TABLE testcat.$tblName(
+               |  s STRING, b STRING GENERATED ALWAYS AS (coalesce(s, 1))
+               |) USING foo""".stripMargin)
+      }
+      withSQLConf(
+          SQLConf.ANSI_ENABLED.key -> "false",
+          SQLConf.USE_CURRENT_SQL_CONFIGS_FOR_GENERATED_COLUMN.key -> legacy) {
+        sql(s"INSERT INTO testcat.$tblName(s) VALUES ('007')")
+        sql(s"INSERT INTO testcat.$tblName VALUES ('007', '7')")
+        assertWriteFails("CHECK_CONSTRAINT_VIOLATION") {
+          sql(s"INSERT INTO testcat.$tblName VALUES ('007', '007')")
+        }
+        checkAnswer(spark.table(s"testcat.$tblName"), Seq.fill(2)(Row("007", "7")))
       }
     }
   }

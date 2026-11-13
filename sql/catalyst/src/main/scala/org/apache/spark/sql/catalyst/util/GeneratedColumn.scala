@@ -17,6 +17,7 @@
 
 package org.apache.spark.sql.catalyst.util
 
+import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.expressions.{Attribute, AttributeReference, Expression, V2ExpressionUtils}
 import org.apache.spark.sql.catalyst.plans.logical.{ColumnDefinition, LogicalPlan}
 import org.apache.spark.sql.catalyst.util.TypeUtils.toSQLId
@@ -184,7 +185,24 @@ object GeneratedColumn {
       if (modeledExpression.isEmpty) {
         StoredExpressionText.analyze(expr, inSession, input, analyzer)
       } else {
-        StoredExpressionText.analyzeStrict(expr, input, analyzer)
+        try {
+          StoredExpressionText.analyzeStrict(expr, input, analyzer)
+        } catch {
+          case error: AnalysisException =>
+            val tableName = (relation.catalog, relation.identifier) match {
+              case (Some(catalog), Some(ident)) =>
+                toSQLId(Seq(catalog.name) ++ ident.namespace.toSeq :+ ident.name)
+              case _ => toSQLId(relation.table.name())
+            }
+            throw new AnalysisException(
+              errorClass = "INVALID_GENERATED_COLUMN_EXPRESSION",
+              messageParameters = Map(
+                "tableName" -> tableName,
+                "columnName" -> toSQLId(colName),
+                "expression" -> sql,
+                "reason" -> error.getMessage),
+              cause = Some(error))
+        }
       }
     }
   }
