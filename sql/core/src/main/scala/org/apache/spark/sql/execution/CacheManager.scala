@@ -25,7 +25,8 @@ import org.apache.hadoop.fs.{FileSystem, Path}
 import org.apache.spark.SparkException
 import org.apache.spark.internal.{Logging, MessageWithContext}
 import org.apache.spark.internal.LogKeys._
-import org.apache.spark.sql.catalyst.analysis.{RelationCacheIneligible, Resolver}
+import org.apache.spark.sql.catalyst.analysis.{ExternalLookupJoinEligibility,
+  RelationCacheIneligible, Resolver}
 import org.apache.spark.sql.catalyst.catalog.HiveTableRelation
 import org.apache.spark.sql.catalyst.expressions.{Attribute, SubqueryExpression}
 import org.apache.spark.sql.catalyst.optimizer.EliminateResolvedHint
@@ -512,8 +513,9 @@ class CacheManager extends Logging with AdaptiveSparkPlanHelper {
 
   private def lookupCachedDataInternal(
       plan: LogicalPlan,
-      canUse: CachedData => Boolean = _ => true): Option[CachedData] = {
-    val result = cachedData.find(cd => plan.sameResult(cd.plan) && canUse(cd))
+      canUse: CachedData => Boolean = _ => true,
+      entries: IndexedSeq[CachedData] = cachedData): Option[CachedData] = {
+    val result = entries.find(cd => plan.sameResult(cd.plan) && canUse(cd))
     if (result.isDefined) {
       CacheManager.logCacheOperation(log"Dataframe cache hit for input plan:" +
         log"\n${MDC(QUERY_PLAN, plan)} matched with cache entry:" +
@@ -550,12 +552,27 @@ class CacheManager extends Logging with AdaptiveSparkPlanHelper {
    */
   private[sql] def useCachedData(
       plan: LogicalPlan,
-      canUse: CachedData => Boolean = _ => true): LogicalPlan = {
-    val newPlan = plan transformDown {
+      canUse: CachedData => Boolean = _ => true): LogicalPlan =
+    useCachedEntries(plan, canUse, cachedData)
+
+  // `entries` is one read of the cache list, which another thread may replace meanwhile, so that
+  // an entry that is used is also one that the lookup sides were protected from.
+  private def useCachedEntries(
+      plan: LogicalPlan,
+      canUse: CachedData => Boolean,
+      entries: IndexedSeq[CachedData]): LogicalPlan = {
+    // An external lookup join reads its lookup side by lookups. If cached data replaced that side
+    // or a CTE definition that it reads, the join would silently read the cached data instead, or
+    // fail.
+    // TODO: protect only the lookup side's path, so that the other readers of a CTE definition
+    //   that a lookup side reads keep using cached data. Today the whole definition is skipped.
+    val lookupSidePlans =
+      if (entries.isEmpty) Nil else ExternalLookupJoinEligibility.lookupSidePlans(plan)
+    val newPlan = plan.transformDownWithPruning(node => !lookupSidePlans.exists(_ eq node)) {
       case command: Command => command
 
       case currentFragment =>
-        lookupCachedDataInternal(currentFragment, canUse).map { cached =>
+        lookupCachedDataInternal(currentFragment, canUse, entries).map { cached =>
           // After cache lookup, we should still keep the hints from the input plan.
           val hints = EliminateResolvedHint.extractHintsFromPlan(currentFragment)._2
           val cachedPlan = cached.cachedRepresentation.withOutput(currentFragment.output)
@@ -568,14 +585,14 @@ class CacheManager extends Logging with AdaptiveSparkPlanHelper {
     }
 
     val result = newPlan.transformAllExpressionsWithPruning(_.containsPattern(PLAN_EXPRESSION)) {
-      case s: SubqueryExpression => s.withNewPlan(useCachedData(s.plan, canUse))
+      case s: SubqueryExpression => s.withNewPlan(useCachedEntries(s.plan, canUse, entries))
     }
 
     if (result.fastEquals(plan)) {
       CacheManager.logCacheOperation(
         log"Dataframe cache miss for input plan:\n${MDC(QUERY_PLAN, plan)}")
       CacheManager.logCacheOperation(log"Last 20 Dataframe cache entry logical plans:\n" +
-        log"[${MDC(DATAFRAME_CACHE_ENTRY, cachedData.take(20).map(_.plan).mkString(",\n"))}]")
+        log"[${MDC(DATAFRAME_CACHE_ENTRY, entries.take(20).map(_.plan).mkString(",\n"))}]")
     } else {
       CacheManager.logCacheOperation(log"Dataframe cache hit plan change summary:\n" +
         log"${MDC(

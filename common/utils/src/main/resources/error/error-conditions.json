@@ -2953,6 +2953,16 @@
           "The lookup-only table <relation> must be on the right side of the join."
         ]
       },
+      "MATERIALIZED_CTE" : {
+        "message" : [
+          "The lookup side reads the CTE <cteName>, which Spark evaluates once instead of inlining it, as for a `MATERIALIZED` CTE. An external lookup join must read the lookup table itself. Remove the `MATERIALIZED` option of the CTE."
+        ]
+      },
+      "METADATA_COLUMN" : {
+        "message" : [
+          "An external lookup join over <relation> cannot read a metadata column of the table."
+        ]
+      },
       "MISSING_JOIN_CONDITION" : {
         "message" : [
           "The join has no join condition. Write the lookup condition in the join itself, such as in its `ON` clause or the condition argument of `join()`, rather than in a later `WHERE` clause or filter."
@@ -2976,6 +2986,11 @@
       "STATIC_LEFT_SIDE" : {
         "message" : [
           "An external lookup join must be a stream-static join, but the left side of the join over <relation> is not a streaming query."
+        ]
+      },
+      "STREAMING_LOOKUP_SIDE" : {
+        "message" : [
+          "The lookup side cannot be a streaming relation."
         ]
       },
       "SUBQUERY_IN_JOIN_CONDITION" : {
@@ -4481,6 +4496,29 @@
       "Expression type must be string type but got <exprType>."
     ],
     "sqlState" : "42K09"
+  },
+  "INVALID_EXTERNAL_LOOKUP_HINT" : {
+    "message" : [
+      "The `EXTERNAL_LOOKUP` hint is invalid:"
+    ],
+    "subClass" : {
+      "NOT_ON_LOOKUP_SIDE" : {
+        "message" : [
+          "The hint must be placed on the right lookup side of the join."
+        ]
+      },
+      "RELATION_NOT_FOUND" : {
+        "message" : [
+          "Cannot find the relation(s) <relations> named by the hint."
+        ]
+      },
+      "UNSUPPORTED_PARAMETER" : {
+        "message" : [
+          "The hint accepts only relation names, but got <parameter>."
+        ]
+      }
+    },
+    "sqlState" : "42601"
   },
   "INVALID_EXTERNAL_TYPE" : {
     "message" : [
