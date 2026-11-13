@@ -1524,9 +1524,10 @@ object ColumnPruning extends Rule[LogicalPlan] {
         child = a.copy(aggregateExpressions = a.aggregateExpressions.filter(p.references.contains)))
     case a @ Project(_, e @ Expand(_, _, grandChild)) if !e.outputSet.subsetOf(a.references) =>
       val newOutput = e.output.filter(a.references.contains(_))
+      val newOutputSet = AttributeSet(newOutput)
       val newProjects = e.projections.map { proj =>
         proj.zip(e.output).filter { case (_, a) =>
-          newOutput.contains(a)
+          newOutputSet.contains(a)
         }.map(_._1)
       }
       a.copy(child = Expand(newProjects, newOutput, grandChild))
@@ -1564,9 +1565,33 @@ object ColumnPruning extends Rule[LogicalPlan] {
     // prune unrequired nested fields from `Generate`.
     case GeneratorNestedColumnAliasing(rewrittenPlan) => rewrittenPlan
 
+    // Pass through only the columns of the child of a Python UDF evaluation that the parent uses,
+    // and prune the child to those and the arguments of the UDFs. The child is pruned here, as
+    // the rule does not visit this Project again.
+    case p @ Project(_, e: BaseEvalPython)
+        if !e.requiredChildOutput.forall(p.references.contains) =>
+      val newEval = e.withRequiredChildOutput(e.requiredChildOutput.filter(p.references.contains))
+      p.copy(child = newEval.withNewChildren(Seq(prunedChild(e.child, newEval.references))))
+
     // Eliminate unneeded attributes from right side of a Left Existence Join.
     case j @ Join(_, right, LeftExistence(_), _, _) =>
       j.copy(right = prunedChild(right, j.references))
+
+    // An external lookup join keeps only the lookup columns that its parent reads. Its lookup side
+    // is pruned to them in the next pass, once the join no longer references the others.
+    case p @ Project(_, j: ExternalLookupJoin)
+        if !AttributeSet(j.requiredLookupOutput).subsetOf(p.references) =>
+      val required = p.references ++ j.references
+      p.copy(child = j.copy(
+        left = prunedChild(j.left, required),
+        right = prunedChild(j.right, required),
+        requiredLookupOutput = j.requiredLookupOutput.filter(p.references.contains)))
+
+    // A semi or anti external lookup join outputs no lookup column, like a Left Existence Join.
+    case j @ ExternalLookupJoin(_, right, LeftSemi | LeftAnti, _, _)
+        if j.requiredLookupOutput.nonEmpty || !right.outputSet.subsetOf(j.references) =>
+      val withoutLookupOutput = j.copy(requiredLookupOutput = Seq.empty)
+      withoutLookupOutput.copy(right = prunedChild(right, withoutLookupOutput.references))
 
     // all the columns will be used to compare, so we can't prune them
     case p @ Project(_, _: SetOperation) => p

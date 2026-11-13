@@ -61,6 +61,11 @@ class StreamingQueryListenerBus(sparkSession: SparkSession) extends Logging {
   }
 
   def remove(listener: StreamingQueryListener): Unit = lock.synchronized {
+    // Removing a listener that is not registered does nothing, so it does not stop the
+    // server side listener for the listeners that remain.
+    if (!listeners.contains(listener)) {
+      return
+    }
     if (listeners.size() == 1) {
       val cmdBuilder = Command.newBuilder()
       cmdBuilder.getStreamingQueryListenerBusCommandBuilder

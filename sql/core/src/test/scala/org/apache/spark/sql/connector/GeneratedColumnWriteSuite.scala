@@ -32,6 +32,7 @@ import org.apache.spark.sql.connector.catalog.functions.{ScalarFunction, Unbound
 import org.apache.spark.sql.connector.expressions.{Expression => V2Expression, GeneralScalarExpression, Transform}
 import org.apache.spark.sql.execution.streaming.runtime.MemoryStream
 import org.apache.spark.sql.internal.SQLConf
+import org.apache.spark.sql.internal.connector.ColumnImpl
 import org.apache.spark.sql.types.{DataType, IntegerType, MetadataBuilder, StringType, StructType}
 import org.apache.spark.unsafe.types.UTF8String
 
@@ -61,6 +62,21 @@ class GeneratedColumnWriteSuite extends QueryTest with DatasourceV2SQLBase {
   // GENERATE_COLUMN_VALUES_ON_WRITE capability, so Spark must not auto-fill or enforce
   // generated columns for it.
   private val noWriteCapProp = "generate-column-values-on-write"
+
+  // A generated column of a connector that implements only the legacy SQL getter.
+  private def legacyGeneratedColumn(name: String, dataType: DataType, sql: String): Column = {
+    new ColumnImpl(
+        name = name,
+        dataType = dataType,
+        nullable = true,
+        comment = null,
+        defaultValue = null,
+        columnGenerationExpression = null,
+        identityColumnSpec = null,
+        metadataInJSON = null) {
+      override def generationExpression(): String = sql
+    }
+  }
 
   private def hasCheckInvariant(sqlText: String): Boolean = {
     val parsed = spark.sessionState.sqlParser.parsePlan(sqlText)
@@ -443,6 +459,23 @@ class GeneratedColumnWriteSuite extends QueryTest with DatasourceV2SQLBase {
              |) USING foo""".stripMargin)
       val ex = intercept[SparkRuntimeException] {
         sql(s"INSERT INTO testcat.$tblName(eventDate, eventYear) VALUES (DATE'2024-06-15', 2025)")
+      }
+      assert(ex.getCondition == "CHECK_CONSTRAINT_VIOLATION")
+    }
+  }
+
+  test("SPARK-61550: INSERT validates a provided value of a legacy SQL-only generated column") {
+    val tblName = "my_tab"
+    withTable(s"testcat.$tblName") {
+      catalog("testcat").asTableCatalog.createTable(
+        Identifier.of(Array(), tblName),
+        Array(
+          Column.create("id", IntegerType),
+          legacyGeneratedColumn("doubled", IntegerType, "id * 2")),
+        Array.empty[Transform],
+        Collections.emptyMap[String, String])
+      val ex = intercept[SparkRuntimeException] {
+        sql(s"INSERT INTO testcat.$tblName(id, doubled) VALUES (1, 3)")
       }
       assert(ex.getCondition == "CHECK_CONSTRAINT_VIOLATION")
     }
@@ -1349,6 +1382,30 @@ class GeneratedColumnWriteSuite extends QueryTest with DatasourceV2SQLBase {
     }
   }
 
+  test("SPARK-61550: streaming write with a legacy SQL-only generated column is blocked") {
+    import testImplicits._
+    val tblName = "my_tab"
+    withTable(s"testcat.$tblName") {
+      withTempDir { checkpointDir =>
+        catalog("testcat").asTableCatalog.createTable(
+          Identifier.of(Array(), tblName),
+          Array(
+            Column.create("id", IntegerType),
+            legacyGeneratedColumn("doubled", IntegerType, "id * 2")),
+          Array.empty[Transform],
+          Collections.emptyMap[String, String])
+        val df = MemoryStream[Int].toDF().toDF("id")
+        val ex = intercept[AnalysisException] {
+          df.writeStream
+            .option("checkpointLocation", checkpointDir.getAbsolutePath)
+            .toTable(s"testcat.$tblName")
+        }
+        assert(ex.getCondition == "UNSUPPORTED_FEATURE.TABLE_OPERATION")
+        assert(ex.getMessage.contains("streaming write with generated columns"))
+      }
+    }
+  }
+
   test("INSERT by position validates generated column with type cast on source column") {
     val tblName = "my_tab"
     withTable(s"testcat.$tblName") {
@@ -1472,6 +1529,44 @@ class GeneratedColumnWriteSuite extends QueryTest with DatasourceV2SQLBase {
         }
         assert(ex.getCondition == "UNSUPPORTED_FEATURE.TABLE_OPERATION")
         assert(ex.getMessage.contains("MERGE with generated columns"))
+      }
+    }
+  }
+
+  test("SPARK-61550: UPDATE and MERGE with a legacy SQL-only generated column are blocked") {
+    val legacyCat = "legacycat"
+    // This catalog keeps the given columns, so the legacy getter reaches the analyzer.
+    withSQLConf(s"spark.sql.catalog.$legacyCat" ->
+        classOf[NonTransactionalRowLevelOperationCatalog].getName) {
+      val tblName = "my_tab"
+      withTable(s"$legacyCat.$tblName") {
+        catalog(legacyCat).asTableCatalog.createTable(
+          Identifier.of(Array(), tblName),
+          Array(
+            Column.create("id", IntegerType),
+            Column.create("data", StringType),
+            legacyGeneratedColumn("doubled", IntegerType, "id * 2")),
+          Array.empty[Transform],
+          Collections.emptyMap[String, String])
+        Seq(
+          "UPDATE" -> s"UPDATE $legacyCat.$tblName SET data = 'x' WHERE id = 1",
+          "MERGE" ->
+            s"""MERGE INTO $legacyCat.$tblName AS t
+               |USING source AS s
+               |ON t.id = s.id
+               |WHEN MATCHED THEN UPDATE SET t.data = s.data
+               |""".stripMargin
+        ).foreach { case (command, sqlText) =>
+          val ex = intercept[AnalysisException] {
+            sql(sqlText)
+          }
+          assert(ex.getCondition == "UNSUPPORTED_FEATURE.TABLE_OPERATION")
+          assert(ex.getMessage.contains(s"$command with generated columns"))
+        }
+        // INSERT auto-fills the column from the legacy getter. Write last, because a write to
+        // this in-memory table rebuilds its columns with `columnGenerationExpression()`.
+        sql(s"INSERT INTO $legacyCat.$tblName(id, data) VALUES (1, 'a')")
+        checkAnswer(spark.table(s"$legacyCat.$tblName"), Row(1, "a", 2))
       }
     }
   }

@@ -127,9 +127,18 @@ class StreamingShuffleSuite
       context: TaskContext,
       clientHandler: Option[StreamingShuffleClientHandler] = None,
       errorNotifier: ErrorNotifier = new ErrorNotifier())
-    extends StreamingShuffleReader[K, C](handle, context, clientHandler, errorNotifier)
+    extends StreamingShuffleReader[K, C](
+      handle, context, context.partitionId(), clientHandler, errorNotifier)
 
-  private class ShuffleGroup[T: ClassTag](sc: SparkContext, mappers: Int, reducers: Int) {
+  /**
+   * Writers and readers of one shuffle. Reader `i` reads reduce partition `i` from a task at
+   * partition `i + readerTaskPartitionOffset`.
+   */
+  private class ShuffleGroup[T: ClassTag](
+      sc: SparkContext,
+      mappers: Int,
+      reducers: Int,
+      readerTaskPartitionOffset: Int = 0) {
     assert(SparkEnv.get.pipelinedShuffleManager.isInstanceOf[StreamingShuffleManager])
     assert(SparkEnv.get.streamingShuffleOutputTracker.isDefined)
     SparkEnv.get.streamingShuffleOutputTracker.get
@@ -166,8 +175,8 @@ class StreamingShuffleSuite
       }
     }
     val readers: Array[StreamingShuffleReader[T, T]] = Array.tabulate(reducers) { i =>
-      val taskContext = createTaskContext(sc.conf, i)
-      new StreamingShuffleReader[T, T](handle, taskContext) {
+      val taskContext = createTaskContext(sc.conf, i + readerTaskPartitionOffset)
+      new StreamingShuffleReader[T, T](handle, taskContext, reducePartitionId = i) {
         override def read(): Iterator[Product2[T, T]] = {
 
           val it = super.read()
@@ -277,6 +286,22 @@ class StreamingShuffleSuite
 
       g.writers(1).write(Iterator((3, 3), (4, 4)))
       logInfo("Writer 2 done writing")
+
+      await(g.read(0)._2) should be(Set((2, 2), (4, 4)))
+      await(g.read(1)._2) should be(Set((1, 1), (3, 3)))
+    }
+  }
+
+  test("readers read their reduce partition when it differs from their task partition") {
+    // Models a Union stage whose first child has one partition: its shuffled child's reduce
+    // partitions 0 and 1 run as tasks 1 and 2. Connecting as task 2 would address a reader that the
+    // writers, which have one shard per reduce partition, do not have.
+    withSpark(new SparkContext("local", "StreamingShuffleSuite", sparkConf)) { sc =>
+      val g = new ShuffleGroup[Int](sc, 2, 2, readerTaskPartitionOffset = 1)
+      g.readers.map(_.context.partitionId()).toSeq should be(Seq(1, 2))
+
+      g.writers(0).write(Iterator((1, 1), (2, 2)))
+      g.writers(1).write(Iterator((3, 3), (4, 4)))
 
       await(g.read(0)._2) should be(Set((2, 2), (4, 4)))
       await(g.read(1)._2) should be(Set((1, 1), (3, 3)))

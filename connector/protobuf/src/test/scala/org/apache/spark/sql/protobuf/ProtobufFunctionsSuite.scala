@@ -18,14 +18,22 @@ package org.apache.spark.sql.protobuf
 
 import java.sql.Timestamp
 import java.time.{Duration, LocalTime}
+import java.util.concurrent.{CountDownLatch, TimeUnit}
+import java.util.concurrent.atomic.AtomicBoolean
 
+import scala.concurrent.{ExecutionContext, Future}
+import scala.concurrent.duration._
 import scala.jdk.CollectionConverters._
 
 import com.google.protobuf.{Any => AnyProto, BoolValue, ByteString, BytesValue, DoubleValue, DynamicMessage, FloatValue, Int32Value, Int64Value, StringValue, UInt32Value, UInt64Value}
 import org.json4s.jackson.JsonMethods
 
+import org.apache.spark.SparkRuntimeException
 import org.apache.spark.sql.{AnalysisException, Column, DataFrame, Row}
 import org.apache.spark.sql.catalyst.InternalRow
+import org.apache.spark.sql.catalyst.expressions.{AttributeReference, CreateMap, ElementAt, Expression, ExprId, FromProtobuf, LeafExpression, Literal, ToProtobuf}
+import org.apache.spark.sql.catalyst.expressions.codegen.CodegenFallback
+import org.apache.spark.sql.catalyst.plans.QueryPlan
 import org.apache.spark.sql.functions.{array, lit, map, struct, typedLit}
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.protobuf.protos.Proto2Messages.Proto2AllTypes
@@ -37,6 +45,23 @@ import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.sql.types._
 import org.apache.spark.sql.util.{ProtobufUtils => CommonProtobufUtils}
 import org.apache.spark.unsafe.types.UTF8String
+import org.apache.spark.util.ThreadUtils
+
+/** A test string literal that runs onEval before returning, to pause or fail evaluation. */
+private case class StringLiteralWithEvalHook(
+    value: String,
+    onEval: () => Unit)
+  extends LeafExpression with CodegenFallback {
+
+  override def foldable: Boolean = true
+  override def nullable: Boolean = false
+  override def dataType: DataType = StringType
+
+  override def eval(input: InternalRow): Any = {
+    onEval()
+    UTF8String.fromString(value)
+  }
+}
 
 class ProtobufFunctionsSuite extends SharedSparkSession with ProtobufTestBase
   with Serializable {
@@ -98,6 +123,104 @@ class ProtobufFunctionsSuite extends SharedSparkSession with ProtobufTestBase
       case None => functions.to_protobuf(col, messageName)
     }
   }
+
+  private def protobufExpression(
+      functionName: String,
+      options: Expression,
+      messageName: Expression = Literal("OtherExample"),
+      descFilePath: Expression = Literal(testFileDesc)): (Expression, AttributeReference) = {
+    val dataType = if (functionName == "FROM_PROTOBUF") {
+      BinaryType
+    } else {
+      StructType(Seq(StructField("other", StringType)))
+    }
+    val data = AttributeReference("data", dataType)(exprId = ExprId(1))
+    val expression = if (functionName == "FROM_PROTOBUF") {
+      new FromProtobuf(data, messageName, descFilePath, options)
+    } else {
+      new ToProtobuf(data, messageName, descFilePath, options)
+    }
+    (expression, data)
+  }
+
+  private def canonicalizedOptions(
+      expression: Expression,
+      data: AttributeReference): Map[String, String] = {
+    val (messageName, descriptor, options) =
+      QueryPlan.normalizeExpressions(expression, Seq(data)) match {
+        case from: ProtobufDataToCatalyst =>
+          (from.messageName, from.binaryFileDescriptorSet, from.options)
+        case to: CatalystDataToProtobuf =>
+          (to.messageName, to.binaryFileDescriptorSet, to.options)
+        case other => fail(s"Unexpected canonicalized expression: ${other.getClass.getName}")
+      }
+    assert(messageName == "OtherExample")
+    assert(descriptor.exists(_.sameElements(testFileDesc)))
+    options
+  }
+
+  private def protobufExpressionWithStatefulArgument(
+      functionName: String,
+      argumentName: String,
+      onEval: () => Unit = () => (),
+      duplicateKey: Boolean = false): (Expression, AttributeReference) = {
+    val value = argumentName match {
+      case "options" => "value1"
+      case "messageName" => "OtherExample"
+      case "descFilePath" => testFileDescFile
+    }
+    val secondKey = StringLiteralWithEvalHook(if (duplicateKey) "key1" else "key2", onEval)
+    val secondValue = if (argumentName == "options") "value2" else value
+    val map = CreateMap(Seq(Literal("key1"), Literal(value), secondKey, Literal(secondValue)))
+    argumentName match {
+      case "options" => protobufExpression(functionName, map)
+      case "messageName" =>
+        protobufExpression(functionName, Literal(null),
+          messageName = ElementAt(map, Literal("key1")))
+      case "descFilePath" =>
+        protobufExpression(functionName, Literal(null),
+          descFilePath = ElementAt(map, Literal("key1")))
+    }
+  }
+
+  // A lookup in a map whose keys are 0.0 and -0.0, which are one key unless
+  // spark.sql.legacy.disableMapKeyNormalization is true.
+  private def signedZeroKeyLookup(value: String): Expression = ElementAt(
+    CreateMap(Seq(Literal(0.0D), Literal(value), Literal(-0.0D), Literal(value))),
+    Literal(0.0D))
+
+  private def protobufExpressionWithSignedZeroKeys(
+      functionName: String,
+      argumentName: String): (Expression, AttributeReference) = argumentName match {
+    case "options" =>
+      protobufExpression(
+        functionName, CreateMap(Seq(Literal("key1"), signedZeroKeyLookup("value1"))))
+    case "messageName" =>
+      protobufExpression(functionName, Literal(null),
+        messageName = signedZeroKeyLookup("OtherExample"))
+    case "descFilePath" =>
+      protobufExpression(functionName, Literal(null),
+        descFilePath = signedZeroKeyLookup(testFileDescFile))
+  }
+
+  private def protobufDataFrame(
+      functionName: String,
+      options: String = "map('mode', 'PERMISSIVE', 'mode', 'FAILFAST')"): DataFrame = {
+    val input = if (functionName == "FROM_PROTOBUF") {
+      lit(OtherExample.newBuilder().setOther("value").build().toByteArray)
+    } else {
+      struct(lit("value").as("other"))
+    }
+    spark.range(1).select(input.as("data")).selectExpr(
+      s"$functionName(data, 'OtherExample', '$testFileDescFile', $options) AS value")
+  }
+
+  private def protobufDataFrameResult(functionName: String): Row =
+    if (functionName == "FROM_PROTOBUF") {
+      Row(Row("value"))
+    } else {
+      Row(OtherExample.newBuilder().setOther("value").build().toByteArray)
+    }
 
   test("roundtrip in to_protobuf and from_protobuf - struct") {
     val df = spark
@@ -2440,6 +2563,184 @@ class ProtobufFunctionsSuite extends SharedSparkSession with ProtobufTestBase
           start = 10,
           stop = fragment.length + 9))
       )
+    }
+  }
+
+  Seq("FROM_PROTOBUF", "TO_PROTOBUF").foreach { functionName =>
+    Seq("options", "messageName", "descFilePath").foreach { argumentName =>
+      gridTest(s"SPARK-60945: $functionName $argumentName survive overlapping canonicalization")(
+        Seq("EXCEPTION", "LAST_WIN")) { policy =>
+        withSQLConf(SQLConf.MAP_KEY_DEDUP_POLICY.key -> policy) {
+          val firstEvaluationPaused = new CountDownLatch(1)
+          val resumeFirstEvaluation = new CountDownLatch(1)
+          val pauseOnNextEval = new AtomicBoolean(true)
+          val (expression, data) = protobufExpressionWithStatefulArgument(
+            functionName, argumentName, () => {
+              if (pauseOnNextEval.compareAndSet(true, false)) {
+                firstEvaluationPaused.countDown()
+                assert(resumeFirstEvaluation.await(1, TimeUnit.MINUTES),
+                  "first evaluation was never resumed")
+              }
+            })
+          val expectedOptions = if (argumentName == "options") {
+            Map("key1" -> "value1", "key2" -> "value2")
+          } else {
+            Map.empty[String, String]
+          }
+          val sqlConf = SQLConf.get
+          val executor = ThreadUtils.newDaemonSingleThreadExecutor("protobuf-arguments-race-test")
+          val executionContext = ExecutionContext.fromExecutorService(executor)
+          try {
+            val firstEvaluation = Future {
+              SQLConf.withExistingConf(sqlConf) {
+                canonicalizedOptions(expression, data)
+              }
+            }(executionContext)
+            assert(firstEvaluationPaused.await(1, TimeUnit.MINUTES),
+              "first canonicalization never paused")
+            // The first evaluation has inserted key1 and is paused while evaluating key2.
+            assert(canonicalizedOptions(expression, data) == expectedOptions)
+            resumeFirstEvaluation.countDown()
+            assert(ThreadUtils.awaitResult(firstEvaluation, 1.minute) == expectedOptions)
+          } finally {
+            resumeFirstEvaluation.countDown()
+            executor.shutdownNow()
+            assert(executor.awaitTermination(10, TimeUnit.SECONDS))
+          }
+        }
+      }
+
+      test(s"SPARK-60945: $functionName $argumentName survive a failed evaluation") {
+        withSQLConf(SQLConf.MAP_KEY_DEDUP_POLICY.key -> "EXCEPTION") {
+          val failOnNextEval = new AtomicBoolean(true)
+          val expectedFailure = new RuntimeException("first argument evaluation failed")
+          val (expression, data) = protobufExpressionWithStatefulArgument(
+            functionName, argumentName, () => {
+              if (failOnNextEval.compareAndSet(true, false)) {
+                throw expectedFailure
+              }
+            })
+          val expectedOptions = if (argumentName == "options") {
+            Map("key1" -> "value1", "key2" -> "value2")
+          } else {
+            Map.empty[String, String]
+          }
+          val failure = intercept[RuntimeException] {
+            QueryPlan.normalizeExpressions(expression, Seq(data))
+          }
+          assert(failure eq expectedFailure)
+
+          // Retrying must not reuse the partial map left by the failed evaluation.
+          assert(canonicalizedOptions(expression, data) == expectedOptions)
+        }
+      }
+
+      gridTest(s"SPARK-60945: canonicalizing $functionName uses the analysis-time " +
+        s"map key policy for $argumentName")(
+        Seq("LAST_WIN", "EXCEPTION")) { capturedPolicy =>
+        val (expression, data) = withSQLConf(
+          SQLConf.MAP_KEY_DEDUP_POLICY.key -> capturedPolicy) {
+          val result = protobufExpressionWithStatefulArgument(
+            functionName, argumentName, duplicateKey = true)
+          if (capturedPolicy == "LAST_WIN") {
+            // Like analysis, evaluate the expression once before the conf changes. Under EXCEPTION
+            // this would already fail on the duplicate key, so only the LAST_WIN run does it.
+            result._1.dataType
+          }
+          result
+        }
+        val currentPolicy = if (capturedPolicy == "LAST_WIN") "EXCEPTION" else "LAST_WIN"
+        withSQLConf(SQLConf.MAP_KEY_DEDUP_POLICY.key -> currentPolicy) {
+          if (capturedPolicy == "LAST_WIN") {
+            val expectedOptions = if (argumentName == "options") {
+              Map("key1" -> "value2")
+            } else {
+              Map.empty[String, String]
+            }
+            assert(canonicalizedOptions(expression, data) == expectedOptions)
+          } else {
+            checkError(
+              exception = intercept[SparkRuntimeException] {
+                canonicalizedOptions(expression, data)
+              },
+              condition = "DUPLICATED_MAP_KEY",
+              parameters = Map(
+                "key" -> "key1",
+                "mapKeyDedupPolicy" -> s"\"${SQLConf.MAP_KEY_DEDUP_POLICY.key}\""))
+          }
+          assert(SQLConf.get.getConf(SQLConf.MAP_KEY_DEDUP_POLICY).toString == currentPolicy)
+        }
+      }
+
+      gridTest(s"SPARK-60945: canonicalizing $functionName uses the analysis-time map key " +
+        s"normalization for $argumentName")(Seq(true, false)) { capturedDisabled =>
+        val policy = SQLConf.MAP_KEY_DEDUP_POLICY.key -> "EXCEPTION"
+        val normalization = SQLConf.DISABLE_MAP_KEY_NORMALIZATION.key
+        val (expression, data) = withSQLConf(policy, normalization -> capturedDisabled.toString) {
+          val result = protobufExpressionWithSignedZeroKeys(functionName, argumentName)
+          if (capturedDisabled) {
+            // Like analysis, evaluate the expression once before the conf changes. With
+            // normalization, 0.0 and -0.0 are one key, so only the disabled run does it.
+            result._1.dataType
+          }
+          result
+        }
+        withSQLConf(policy, normalization -> (!capturedDisabled).toString) {
+          if (capturedDisabled) {
+            val expectedOptions = if (argumentName == "options") {
+              Map("key1" -> "value1")
+            } else {
+              Map.empty[String, String]
+            }
+            assert(canonicalizedOptions(expression, data) == expectedOptions)
+          } else {
+            checkError(
+              exception = intercept[SparkRuntimeException] {
+                canonicalizedOptions(expression, data)
+              },
+              condition = "DUPLICATED_MAP_KEY",
+              parameters = Map(
+                "key" -> "-0.0",
+                "mapKeyDedupPolicy" -> s"\"${SQLConf.MAP_KEY_DEDUP_POLICY.key}\""))
+          }
+        }
+      }
+    }
+
+    test(s"SPARK-60945: $functionName cached plan retains its map key policy across sessions") {
+      val cached = withSQLConf(SQLConf.MAP_KEY_DEDUP_POLICY.key -> "LAST_WIN") {
+        protobufDataFrame(functionName).cache()
+      }
+      try {
+        val otherSession = spark.newSession()
+        otherSession.conf.set(SQLConf.MAP_KEY_DEDUP_POLICY.key, "EXCEPTION")
+        checkAnswer(otherSession.range(1).toDF(), Seq(Row(0L)))
+      } finally {
+        withSQLConf(SQLConf.MAP_KEY_DEDUP_POLICY.key -> "LAST_WIN") {
+          cached.unpersist(blocking = true)
+        }
+      }
+    }
+
+    test(s"SPARK-60945: $functionName executes after the map key policy changes") {
+      val df = withSQLConf(SQLConf.MAP_KEY_DEDUP_POLICY.key -> "LAST_WIN") {
+        protobufDataFrame(functionName)
+      }
+      withSQLConf(SQLConf.MAP_KEY_DEDUP_POLICY.key -> "EXCEPTION") {
+        checkAnswer(df, Seq(protobufDataFrameResult(functionName)))
+      }
+    }
+
+    test(s"SPARK-60945: $functionName executes after the map key normalization changes") {
+      val policy = SQLConf.MAP_KEY_DEDUP_POLICY.key -> "EXCEPTION"
+      val normalization = SQLConf.DISABLE_MAP_KEY_NORMALIZATION.key
+      val options = "map('mode', element_at(map(0.0D, 'PERMISSIVE', -0.0D, 'PERMISSIVE'), 0.0D))"
+      val df = withSQLConf(policy, normalization -> "true") {
+        protobufDataFrame(functionName, options)
+      }
+      withSQLConf(policy, normalization -> "false") {
+        checkAnswer(df, Seq(protobufDataFrameResult(functionName)))
+      }
     }
   }
 

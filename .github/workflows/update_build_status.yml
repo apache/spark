@@ -54,6 +54,7 @@ jobs:
     name: Update
     if: github.repository == 'apache/spark'
     runs-on: ubuntu-slim
+    timeout-minutes: 10
     permissions:
       actions: read
       checks: write
