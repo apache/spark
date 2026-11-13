@@ -120,6 +120,30 @@ abstract class SchemaPruningSuite
     briefContacts.map { case BriefContact(id, name, address) =>
       BriefContactWithDataPartitionColumn(id, name, address, 2) }
 
+  testSchemaPruning("SPARK-42504: prune nested fields through adjacent projects") {
+    val query = sql(
+      "SELECT employer.id, employer.id + 1 AS x, x + 1 AS y FROM contacts")
+    checkScan(query, "struct<employer:struct<id:int>>")
+    checkAnswer(query, Seq(Row(0, 1, 2), Row(1, 2, 3),
+      Row(null, null, null), Row(null, null, null)))
+
+    val nestedAliasQuery = sql(
+      """SELECT c.name, x, x + 1 FROM
+        |(SELECT employer.company AS c, employer.id + 1 AS x FROM departments)
+        |""".stripMargin)
+    checkScan(nestedAliasQuery, "struct<employer:struct<id:int,company:struct<name:string>>>")
+    checkAnswer(nestedAliasQuery, Seq(Row("abc", 1, 2), Row(null, 2, 3), Row(null, 3, 4)))
+
+    withSQLConf(SQLConf.ANSI_ENABLED.key -> "true") {
+      val conditionalQuery = sql(
+        """SELECT IF(id < 0, concat(friends[99].first, friends[99].first), 'ok'), x, x + 1 FROM
+          |(SELECT id, friends, pets + 1 AS x FROM contacts)
+          |""".stripMargin)
+      checkAnswer(conditionalQuery, Seq(Row("ok", 2, 3), Row("ok", 4, 5),
+        Row("ok", null, null), Row("ok", null, null)))
+    }
+  }
+
   testSchemaPruning("select only top-level fields") {
     val query = sql("select address from contacts")
     checkScan(query, "struct<address:string>")
