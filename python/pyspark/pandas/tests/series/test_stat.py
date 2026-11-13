@@ -348,6 +348,14 @@ class SeriesStatMixin:
         with self.assertRaisesRegex(ValueError, msg):
             psser.rank(method="nothing")
 
+        # A Series has no columns axis; pandas raises too.
+        for axis in [1, "columns"]:
+            with self.assertRaisesRegex(ValueError, "Series does not support columns axis."):
+                psser.rank(axis=axis)
+        with self.assertRaisesRegex(ValueError, "No axis named 2"):
+            psser.rank(axis=2)
+        self.assert_eq(pser.rank(axis="index"), psser.rank(axis="index").sort_index())
+
         # pct=True
         pser = pd.Series([1, 2, 2, 3], name="x")
         psser = ps.from_pandas(pser)

@@ -4340,7 +4340,9 @@ class Series(Frame, IndexOpsMixin, Generic[T]):
         3    3.0
         Name: A, dtype: float64
         """
-        validate_axis(axis)
+        axis = validate_axis(axis)
+        if axis == 1:
+            raise ValueError("Series does not support columns axis.")
         is_numeric = isinstance(self.spark.data_type, (NumericType, BooleanType))
         if numeric_only and not is_numeric:
             raise TypeError("Series.rank does not allow numeric_only=True with non-numeric dtype.")
