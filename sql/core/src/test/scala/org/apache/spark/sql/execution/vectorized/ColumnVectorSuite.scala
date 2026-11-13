@@ -1061,6 +1061,64 @@ class ColumnVectorSuite extends SparkFunSuite with SQLHelper {
     }
   }
 
+  test("SPARK-61210: The byte data of a string column vector holds no null bits") {
+    Array(new OnHeapColumnVector(32, StringType),
+      new OffHeapColumnVector(32, StringType)).foreach { vector =>
+      try {
+        vector.putByteArray(0, "hello".getBytes)
+        assert(!vector.arrayData().isNullAt(0))
+        // A null marks a whole value on the string vector, not a byte of its data.
+        vector.putNull(0)
+        assert(vector.isNullAt(0))
+        assert(!vector.arrayData().isNullAt(0))
+        // Writing nulls to the byte data itself changes nothing there.
+        vector.arrayData().putNull(1)
+        assert(!vector.arrayData().isNullAt(1))
+      } finally {
+        vector.close()
+      }
+    }
+
+    // An array's elements can be null each on their own, so an element vector keeps its null
+    // bits, unlike the byte data of a string.
+    val arrayVector = new OnHeapColumnVector(32, ArrayType(ByteType, containsNull = true))
+    try {
+      arrayVector.arrayData().putNull(0)
+      assert(arrayVector.arrayData().isNullAt(0))
+    } finally {
+      arrayVector.close()
+    }
+  }
+
+  test("SPARK-61210: Growing the byte data of a string column vector keeps earlier values") {
+    Array(new OnHeapColumnVector(4, StringType),
+      new OffHeapColumnVector(4, StringType)).foreach { vector =>
+      try {
+        val byteData = vector.arrayData()
+        val initialCapacity = byteData.capacity
+
+        // Fits within the byte-data child's initial capacity, so this does not grow it; these
+        // bytes sit in the region a later growth must carry over.
+        val first = (0 until 10).map(_.toByte).toArray
+        vector.putByteArray(0, first)
+        assert(byteData.capacity == initialCapacity)
+
+        // Exceeds the remaining capacity, forcing the byte-data child - which holds no null
+        // bits of its own - to grow. The no-null-tracking oldCapacity computation in
+        // OffHeapColumnVector#reserveInternal must still treat `first`, already written below,
+        // as live data and carry it over, rather than silently dropping it.
+        val second = (10 until 30).map(_.toByte).toArray
+        vector.putByteArray(1, second)
+        assert(byteData.capacity > initialCapacity)
+
+        assert(vector.getBinary(0) === first)
+        assert(vector.getBinary(1) === second)
+      } finally {
+        vector.close()
+      }
+    }
+  }
+
   DataTypeTestUtils.yearMonthIntervalTypes.foreach { dt =>
     val structType = new StructType().add(dt.typeName, dt)
     testVectors("ColumnarRow " + dt.typeName, 10, structType) { v =>
