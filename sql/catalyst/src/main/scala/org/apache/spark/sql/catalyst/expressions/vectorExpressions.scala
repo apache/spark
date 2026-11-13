@@ -17,7 +17,7 @@
 
 package org.apache.spark.sql.catalyst.expressions
 
-import java.lang.{Float => JFloat}
+import java.lang.{Double => JDouble, Float => JFloat}
 
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.analysis.TypeCheckResult
@@ -619,24 +619,28 @@ trait VectorAggregateBase extends ImperativeAggregate
 // scalastyle:off line.size.limit
 @ExpressionDescription(
   usage = """
-    _FUNC_(array) - Returns the element-wise mean of float vectors in a group.
+    _FUNC_(array) - Returns the element-wise mean of float or double vectors in a group.
     All vectors must have the same dimension.
   """,
   arguments = """
     Arguments:
-      * array - An ARRAY of FLOAT values representing a vector. All vectors aggregated in the
-          group must have the same dimension.
+      * array - An ARRAY of FLOAT or DOUBLE values representing a vector. All vectors aggregated
+          in the group must have the same dimension. The result has the same element type as
+          the input.
   """,
   examples = """
     Examples:
       > SELECT _FUNC_(col) FROM VALUES (array(1.0F, 2.0F)), (array(3.0F, 4.0F)) AS tab(col);
+       [2.0,3.0]
+      > SELECT _FUNC_(col) FROM VALUES (array(1.0D, 2.0D)), (array(3.0D, 4.0D)) AS tab(col);
        [2.0,3.0]
   """,
   since = "4.2.0",
   group = "vector_funcs"
 )
 // scalastyle:on line.size.limit
-// Note: This implementation uses single-precision floating-point arithmetic (Float).
+// Note: Each update or merge uses the input element type's precision:
+// single precision for ARRAY<FLOAT> and double precision for ARRAY<DOUBLE>.
 // Precision loss is expected for very large aggregates due to:
 // 1. Accumulated rounding errors in incremental average updates
 // 2. Loss of significance when dividing by large counts
@@ -778,7 +782,55 @@ object VectorAvg {
     }
   }
 
-  private val kernels: Seq[VectorAggregateKernel] = Seq(FloatAvg)
+  private object DoubleAvg extends VectorAggregateKernel.DoubleKernel {
+    override def updateElements(
+        accBytes: Array[Byte],
+        inputArray: ArrayData,
+        dim: Int,
+        newCount: Long): Unit = {
+      // Update running average: new_avg = old_avg + (new_value - old_avg) / new_count
+      val invCount = 1.0 / newCount
+      var i = 0
+      while (i < dim) {
+        val off = Platform.BYTE_ARRAY_OFFSET + i.toLong * 8
+        val oldAvg = Platform.getDouble(accBytes, off)
+        val value = inputArray.getDouble(i)
+        val delta = value - oldAvg
+        val newAvg = if (JDouble.isFinite(delta)) {
+          oldAvg + delta * invCount
+        } else if (JDouble.isFinite(oldAvg) && JDouble.isFinite(value)) {
+          oldAvg + (value * invCount - oldAvg * invCount)
+        } else {
+          oldAvg + value
+        }
+        Platform.putDouble(accBytes, off, newAvg)
+        i += 1
+      }
+    }
+
+    override def mergeElements(
+        accBytes: Array[Byte],
+        inputBytes: Array[Byte],
+        dim: Int,
+        currentCount: Long,
+        inputCount: Long,
+        newCount: Long): Unit = {
+      // Merge running averages:
+      // combined_avg = left_avg * (left_count / total) + right_avg * (right_count / total)
+      val leftWeight = currentCount.toDouble / newCount
+      val rightWeight = inputCount.toDouble / newCount
+      var i = 0
+      while (i < dim) {
+        val off = Platform.BYTE_ARRAY_OFFSET + i.toLong * 8
+        val leftAvg = Platform.getDouble(accBytes, off)
+        val rightAvg = Platform.getDouble(inputBytes, off)
+        Platform.putDouble(accBytes, off, leftAvg * leftWeight + rightAvg * rightWeight)
+        i += 1
+      }
+    }
+  }
+
+  private val kernels: Seq[VectorAggregateKernel] = Seq(FloatAvg, DoubleAvg)
 }
 
 // scalastyle:off line.size.limit
