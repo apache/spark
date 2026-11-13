@@ -22,7 +22,7 @@ import org.apache.spark.sql.catalyst.dsl.plans._
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.aggregate.{CollectList, CollectSet, ListAgg, StddevSamp}
 import org.apache.spark.sql.catalyst.plans.{Inner, LeftOuter, PlanTest}
-import org.apache.spark.sql.catalyst.plans.logical.{Assignment, CTERelationRef, Deduplicate, DeleteAction, DeleteFromTable, Distinct, DomainJoin, InsertAction, LateralJoin, LocalRelation, LogicalPlan, MergeIntoTable, Sample, Tail, UpdateTable}
+import org.apache.spark.sql.catalyst.plans.logical.{Assignment, CTERelationRef, Deduplicate, DeleteAction, DeleteFromTable, Distinct, DomainJoin, InsertAction, LateralJoin, LocalRelation, LogicalPlan, MergeIntoTable, Sample, Tail, Union, UpdateTable}
 import org.apache.spark.sql.catalyst.rules.RuleExecutor
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types.{IntegerType, MapType, StringType}
@@ -240,6 +240,11 @@ class PullupCorrelatedPredicatesSuite extends PlanTest {
       inDecorrelation)
     assert(countBugHandling(correlated(max($"d")), outer = testRelation.groupBy($"a")($"a"),
       above = _.limit(21)) == inDecorrelation)
+    val groupOnly = LocalRelation($"z".long).groupBy($"z")($"z")
+    assert(countBugHandling(correlated(max($"d")), above = p => Union(p, groupOnly).limit(21)) ==
+      inDecorrelation)
+    assert(countBugHandling(correlated(max($"d")), above = p => Union(p, groupOnly).limit(1)) ==
+      inLegacy)
     // A domain join directly in the outer input takes its domain from outside this plan.
     val domainOuter = DomainJoin(Seq(AttributeReference("z", IntegerType)()), testRelation)
     assert(countBugHandling(correlated(max($"d")), outer = domainOuter) == inLegacy)
