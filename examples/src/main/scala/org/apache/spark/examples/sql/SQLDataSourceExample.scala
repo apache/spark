@@ -37,6 +37,7 @@ object SQLDataSourceExample {
     runParquetSchemaMergingExample(spark)
     runJsonDatasetExample(spark)
     runCsvDatasetExample(spark)
+    runFwfDatasetExample(spark)
     runTextDatasetExample(spark)
     runJdbcDatasetExample(spark)
     runXmlDatasetExample(spark)
@@ -337,6 +338,33 @@ object SQLDataSourceExample {
     // +-----------+
 
     // $example off:csv_dataset$
+  }
+
+  private def runFwfDatasetExample(spark: SparkSession): Unit = {
+    // $example on:fwf_dataset$
+    // A fixed-width dataset is pointed to by path.
+    // The path can be either a single file or a directory of files
+    val path = "examples/src/main/resources/people-fwf.txt"
+
+    val df = spark.read.option("header", "true").fwf(path)
+    df.show()
+    // +-------+---+
+    // |   name|age|
+    // +-------+---+
+    // |Michael| 29|
+    // |   Andy| 30|
+    // | Justin| 19|
+    // +-------+---+
+
+    // Read with explicit field widths
+    val df2 = spark.read.option("header", "true").option("widths", "10,4").fwf(path)
+
+    // Read with explicit from-to character intervals
+    val df3 = spark.read.option("header", "true").option("colspecs", "0-10,10-14").fwf(path)
+
+    // "output" is a folder which contains multiple fixed-width files and a _SUCCESS file.
+    df3.write.option("widths", "10,4").fwf("output")
+    // $example off:fwf_dataset$
   }
 
   private def runTextDatasetExample(spark: SparkSession): Unit = {
