@@ -514,7 +514,9 @@ class JsonArraySuite extends QueryTest with SharedSparkSession {
     val collated = JsonArray(
       Seq(Literal(1)), Seq(false), Seq(false),
       JsonConstructorNullBehavior.Absent, StringType("UTF8_LCASE"))
-    assert(collated.sql.contains("RETURNING STRING COLLATE UTF8_LCASE"))
+    // The ON NULL clause renders before RETURNING, the order the grammar requires on reparse.
+    assert(collated.sql == "JSON_ARRAY(1 ABSENT ON NULL RETURNING STRING COLLATE UTF8_LCASE)")
+    checkAnswer(sql(s"SELECT ${collated.sql}"), Row("[1]"))
     // The omitted default is the companion StringType (by reference) and renders no RETURNING.
     val default = JsonArray(
       Seq(Literal(1)), Seq(false), Seq(false), JsonConstructorNullBehavior.Absent, StringType)
