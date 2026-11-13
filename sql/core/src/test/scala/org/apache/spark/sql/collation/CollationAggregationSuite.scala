@@ -340,6 +340,20 @@ class CollationAggregationSuite
     }
   }
 
+  test("SPARK-60095: interpreted MAX/MIN over collated strings copy the buffer values") {
+    withSQLConf(
+      SQLConf.CODEGEN_FACTORY_MODE.key -> CodegenObjectFactoryMode.NO_CODEGEN.toString) {
+      // Repartition so the cast runs in a ProjectExec, whose output row is reused, instead of
+      // being folded into the local relation.
+      val result = Seq("zzz", "a", "mm").toDF("key")
+        .repartition(1)
+        .selectExpr("CAST(key AS STRING COLLATE UTF8_LCASE) AS key")
+        .agg(max("key"), min("key"))
+      assertUsesSortAggregate(result)
+      checkAnswer(result, Row("zzz", "a"))
+    }
+  }
+
   // collect_set is non-deterministic in which representative of a collation-equal group it keeps,
   // so tests assert on a collation-collapsed form (lower(...)) rather than a fixed case.
 
