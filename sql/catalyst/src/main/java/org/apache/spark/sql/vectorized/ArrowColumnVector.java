@@ -674,7 +674,7 @@ public class ArrowColumnVector extends ColumnVector {
   // TIME(6), but its values are kept as they are: the reader cannot know which digits are extra.
   // TODO: TIME values in fields without the precision key, such as mapInArrow, Arrow UDF and Python
   // data source results and data from older Spark Connect clients, still keep more digits than a
-  // TIME(0) to TIME(6) column holds, until each consumer applies its declared precision.
+  // TIME(0) to TIME(8) column holds, until each consumer applies its declared precision.
   private static int declaredTimePrecision(ValueVector vector) {
     scala.Option<Object> precision = ArrowUtils.declaredTimePrecision(vector.getField());
     return precision.isDefined() ? (Integer) precision.get() : TimeType.MAX_PRECISION();

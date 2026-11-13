@@ -846,11 +846,11 @@ class JDBCSuite extends SharedSparkSession {
   }
 
   test("SPARK-61087: JDBC TIME values are truncated to the column precision") {
-    val query = "SELECT CAST('12:00:00.123456' AS TIME(6)) AS T"
+    val query = "SELECT CAST('12:00:00.123456789' AS TIME(9)) AS T"
     Seq(
       "T TIME(3)" -> java.time.LocalTime.of(12, 0, 0, 123000000),
       "T TIME(6)" -> java.time.LocalTime.of(12, 0, 0, 123456000),
-      "T TIME(9)" -> java.time.LocalTime.of(12, 0, 0, 123456000)
+      "T TIME(9)" -> java.time.LocalTime.of(12, 0, 0, 123456789)
     ).foreach { case (customSchema, expected) =>
       val df = spark.read.format("jdbc")
         .option("url", urlWithUserAndPass)
@@ -1650,6 +1650,21 @@ class JDBCSuite extends SharedSparkSession {
       })
       mySqlDialect.getJDBCType(TimestampNTZType).foreach { jdbcType =>
         assert(jdbcType.databaseTypeDefinition === "DATETIME")
+      }
+    }
+    // Connector/J reports a scale of 0 for every TIME column, so the dialect maps TIME to TIME(6),
+    // the largest MySQL TIME precision, instead of taking the precision from the scale.
+    withSQLConf(
+        SQLConf.TIME_TYPE_ENABLED.key -> "true",
+        SQLConf.LEGACY_JDBC_TIME_MAPPING_ENABLED.key -> "false") {
+      assert(mySqlDialect.getCatalystType(java.sql.Types.TIME, "TIME", 8, metadata) ===
+        Some(TimeType(6)))
+    }
+    Seq(
+      SQLConf.TIME_TYPE_ENABLED.key -> "false",
+      SQLConf.LEGACY_JDBC_TIME_MAPPING_ENABLED.key -> "true").foreach { conf =>
+      withSQLConf(conf) {
+        assert(mySqlDialect.getCatalystType(java.sql.Types.TIME, "TIME", 8, metadata) === None)
       }
     }
   }

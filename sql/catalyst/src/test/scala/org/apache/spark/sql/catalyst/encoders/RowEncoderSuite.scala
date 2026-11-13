@@ -508,6 +508,17 @@ class RowEncoderSuite extends CodegenInterpretedPlanTest {
     }
   }
 
+  test("SPARK-61087: encoding java.time.LocalTime truncates it to the TimeType(p) precision") {
+    val localTime = java.time.LocalTime.parse("20:38:45.123456789")
+    val nanos = DateTimeUtils.localTimeToNanos(localTime)
+    (TimeType.MIN_PRECISION to TimeType.MAX_PRECISION).foreach { p =>
+      val schema = new StructType().add("t", TimeType(p))
+      val encoder = ExpressionEncoder(schema).resolveAndBind(toAttributes(schema))
+      val row = toRow(encoder, Row(localTime))
+      assert(row.getLong(0) === DateTimeUtils.truncateTimeToPrecision(nanos, p), s"TIME($p)")
+    }
+  }
+
   test("SPARK-34605: encoding/decoding DayTimeIntervalType to/from java.time.Duration") {
     dayTimeIntervalTypes.foreach { dayTimeIntervalType =>
       val schema = new StructType().add("d", dayTimeIntervalType)

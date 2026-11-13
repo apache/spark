@@ -31,7 +31,7 @@ import org.apache.arrow.vector.types.pojo.{ArrowType, Field, FieldType}
 import org.apache.spark.{SparkConf, SparkException, SparkUnsupportedOperationException, TaskContext}
 import org.apache.spark.sql.{QueryTest, Row}
 import org.apache.spark.sql.catalyst.InternalRow
-import org.apache.spark.sql.catalyst.expressions.{AttributeReference, GenericInternalRow}
+import org.apache.spark.sql.catalyst.expressions.{AttributeReference, EqualTo, GenericInternalRow, Literal}
 import org.apache.spark.sql.columnar.CachedBatch
 import org.apache.spark.sql.execution.arrow.ArrowWriter
 import org.apache.spark.sql.internal.{SQLConf, StaticSQLConf}
@@ -886,6 +886,59 @@ class ArrowCachedBatchSerializerSuite extends QueryTest with SharedSparkSession 
     assert(roundTripped === Array((123, 7)))
   }
 
+  test("SPARK-61087: cached TIME values with extra digits are read and pruned as truncated") {
+    // The cache keeps the TIME values it is given, which can have more fractional digits than
+    // their type, e.g. values from ORC files written before SPARK-61087 or from an Arrow vector
+    // without a precision tag. Both scans and the batch bounds must see them truncated, whether
+    // the batch was built from rows or from Arrow vectors.
+    val serializer = new ArrowCachedBatchSerializer
+    val attr = AttributeReference("t", TimeType(3))()
+    val attrs = Seq(attr)
+    val conf = spark.sessionState.conf
+    val raw = 43200123456789L // 12:00:00.123456789
+    val truncated = 43200123000000L // 12:00:00.123
+
+    val fromRows = serializer.convertInternalRowToCachedBatch(
+      spark.sparkContext.parallelize(Seq[InternalRow](InternalRow(raw)), 1),
+      attrs, StorageLevel.MEMORY_ONLY, conf)
+    val fromVectors = serializer.convertColumnarBatchToCachedBatch(
+      spark.sparkContext.parallelize(Seq(0), 1).mapPartitions { _ =>
+        val allocator = ArrowUtils.rootAllocator.newChildAllocator(
+          "untagged-time-input", 0, Long.MaxValue)
+        val vector = new TimeNanoVector("t", allocator)
+        Option(TaskContext.get()).foreach(_.addTaskCompletionListener[Unit] { _ =>
+          vector.close()
+          allocator.close()
+        })
+        vector.setSafe(0, raw)
+        vector.setValueCount(1)
+        Iterator(new ColumnarBatch(Array[ColumnVector](new ArrowColumnVector(vector)), 1))
+      },
+      attrs, StorageLevel.MEMORY_ONLY, conf)
+
+    Seq("rows" -> fromRows, "vectors" -> fromVectors).foreach { case (input, cached) =>
+      val bounds = cached.map { batch =>
+        val stats = batch.asInstanceOf[ArrowCachedBatch].stats
+        (stats.getLong(0), stats.getLong(1))
+      }.collect()
+      assert(bounds === Array((truncated, truncated)), input)
+
+      val rowValues = serializer.convertCachedBatchToInternalRow(cached, attrs, attrs, conf)
+        .map(_.getLong(0)).collect()
+      assert(rowValues === Array(truncated), input)
+
+      val columnValues = serializer.convertCachedBatchToColumnarBatch(cached, attrs, attrs, conf)
+        .mapPartitions(_.flatMap(b => (0 until b.numRows()).map(b.column(0).getLong)))
+        .collect()
+      assert(columnValues === Array(truncated), input)
+
+      val predicate = EqualTo(attr, Literal(truncated, TimeType(3)))
+      val filter = serializer.buildFilter(Seq(predicate), attrs)
+      val kept = cached.mapPartitionsWithIndex(filter).count()
+      assert(kept === 1, input)
+    }
+  }
+
   test("columnar input with empty arrays and maps from parquet") {
     withTempPath { dir =>
       val path = dir.getAbsolutePath
@@ -1395,8 +1448,8 @@ class ArrowCachedBatchSerializerSuite extends QueryTest with SharedSparkSession 
     // DayTimeIntervalType stored as Long (microseconds) -> LongColumnStats
     assert(ArrowCachedBatchSerializer.createColumnStats(
       DayTimeIntervalType()).isInstanceOf[LongColumnStats])
-    // TimeType stored as Long (nanoseconds) -> LongColumnStats
-    assert(ArrowCachedBatchSerializer.createColumnStats(TimeType(6)).isInstanceOf[LongColumnStats])
+    // TimeType stored as Long (nanoseconds) -> TimeColumnStats, which truncates its bounds
+    assert(ArrowCachedBatchSerializer.createColumnStats(TimeType(6)).isInstanceOf[TimeColumnStats])
     // Nanosecond timestamps use the TimestampNanosVal-aware collector (min/max bounds).
     assert(ArrowCachedBatchSerializer.createColumnStats(TimestampNTZNanosType(9))
       .isInstanceOf[TimestampNanosColumnStats])

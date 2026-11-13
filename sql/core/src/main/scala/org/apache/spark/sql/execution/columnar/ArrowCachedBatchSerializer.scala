@@ -37,6 +37,7 @@ import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.Attribute
 import org.apache.spark.sql.catalyst.expressions.codegen.UnsafeRowWriter
 import org.apache.spark.sql.catalyst.types.DataTypeUtils
+import org.apache.spark.sql.catalyst.util.DateTimeUtils
 import org.apache.spark.sql.columnar.{CachedBatch, SimpleMetricsCachedBatchSerializer}
 import org.apache.spark.sql.errors.ExecutionErrors
 import org.apache.spark.sql.execution.arrow.{ArrowCompressionUtils, ArrowWriter}
@@ -493,7 +494,8 @@ private object ArrowCachedBatchSerializer {
       case CalendarIntervalType => new IntervalColumnStats
       case _: YearMonthIntervalType => new IntColumnStats   // stored as Int
       case _: DayTimeIntervalType => new LongColumnStats  // stored as Long
-      case _: TimeType => new LongColumnStats  // Time is stored as Long (nanoseconds)
+      // Time is stored as Long (nanoseconds); the bounds are truncated like the scans' values.
+      case t: TimeType => new TimeColumnStats(t.precision)
       case VariantType => new VariantColumnStats
       // Geometry/Geography collect size/count without min/max bounds. Their physical value is a
       // BinaryView (not Array[Byte]), so GeoColumnStats reads it via getBinaryView rather than
@@ -555,7 +557,7 @@ private object ArrowCachedBatchSerializer {
         case _: DecimalType => calculateMinMaxDecimal(vector, rowCount, attr.dataType)
         case _: YearMonthIntervalType => calculateMinMaxYearMonthInterval(vector, rowCount)
         case _: DayTimeIntervalType => calculateMinMaxDayTimeInterval(vector, rowCount)
-        case _: TimeType => calculateMinMaxTime(vector, rowCount)
+        case t: TimeType => calculateMinMaxTime(vector, rowCount, t.precision)
         case _ => (null, null) // Skip for binary, complex, and other unsupported types
       }
 
@@ -947,9 +949,12 @@ private object ArrowCachedBatchSerializer {
     if (hasValue) (min, max) else (null, null)
   }
 
+  // The bounds are truncated to the column precision, as the cache's scans truncate the values;
+  // see TimeColumnStats.
   def calculateMinMaxTime(
       vector: org.apache.arrow.vector.FieldVector,
-      rowCount: Int): (Any, Any) = {
+      rowCount: Int,
+      precision: Int): (Any, Any) = {
     var min = Long.MaxValue
     var max = Long.MinValue
     var hasValue = false
@@ -968,7 +973,12 @@ private object ArrowCachedBatchSerializer {
       }
     }
 
-    if (hasValue) (min, max) else (null, null)
+    if (hasValue) {
+      (DateTimeUtils.truncateTimeToPrecision(min, precision),
+        DateTimeUtils.truncateTimeToPrecision(max, precision))
+    } else {
+      (null, null)
+    }
   }
 }
 
@@ -1442,7 +1452,17 @@ private object ArrowColumnReader {
       def read(rowIndex: Int, ordinal: Int, writer: UnsafeRowWriter): Unit =
         writer.write(ordinal, _accessor(rowIndex))
     }
-    case LongType | TimestampType | TimestampNTZType | _: DayTimeIntervalType | _: TimeType =>
+    case t: TimeType => new ArrowColumnReader {
+      // Truncates like ArrowColumnVector, which the columnar scan of the same cached batch uses.
+      private val precision = t.precision
+      private var _vector: TimeNanoVector = _
+      def vector: FieldVector = _vector
+      def setVector(v: FieldVector): Unit = _vector = v.asInstanceOf[TimeNanoVector]
+      def read(rowIndex: Int, ordinal: Int, writer: UnsafeRowWriter): Unit =
+        writer.write(ordinal,
+          DateTimeUtils.truncateTimeToPrecision(_vector.get(rowIndex), precision))
+    }
+    case LongType | TimestampType | TimestampNTZType | _: DayTimeIntervalType =>
       new ArrowColumnReader {
       private var _vector: FieldVector = _
       private var _accessor: Int => Long = _
@@ -1455,7 +1475,6 @@ private object ArrowColumnReader {
           case tv: TimeStampMicroVector => tv.get(_)
           case dv: org.apache.arrow.vector.DurationVector =>
             i => org.apache.arrow.vector.DurationVector.get(dv.getDataBuffer, i)
-          case tv: org.apache.arrow.vector.TimeNanoVector => tv.get(_)
         }
       }
       def read(rowIndex: Int, ordinal: Int, writer: UnsafeRowWriter): Unit =

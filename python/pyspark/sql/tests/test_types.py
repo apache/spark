@@ -2991,20 +2991,26 @@ class TypesTestsMixin:
 
     def test_time_type_python_objects_truncate_to_precision(self):
         # SPARK-61087: a datetime.time carries microseconds, which TIME(0) to TIME(5) do not hold.
+        # A time in the first two seconds of the day reaches the JVM as an int, a later one as a
+        # long.
         from pyspark.sql.functions import udf
 
-        value = datetime.time(12, 0, 0, 123456)
+        cases = [
+            (datetime.time(12, 0, 0, 123456), "12:00:00.123"),
+            (datetime.time(0, 0, 1, 123456), "00:00:01.123"),
+        ]
         with self.sql_conf(
             {
                 "spark.sql.timeType.enabled": True,
                 "spark.sql.execution.arrow.pyspark.enabled": False,
             }
         ):
-            df = self.spark.createDataFrame([(value,)], "t time(3)")
-            self.assertEqual("12:00:00.123", df.select(F.col("t").cast("string")).first()[0])
-            to_time3 = udf(lambda: value, returnType=TimeType(3), useArrow=False)
-            row = self.spark.range(1).select(to_time3().cast("string").alias("t")).first()
-            self.assertEqual("12:00:00.123", row.t)
+            for value, expected in cases:
+                df = self.spark.createDataFrame([(value,)], "t time(3)")
+                self.assertEqual(expected, df.select(F.col("t").cast("string")).first()[0])
+                to_time3 = udf(lambda v=value: v, returnType=TimeType(3), useArrow=False)
+                row = self.spark.range(1).select(to_time3().cast("string").alias("t")).first()
+                self.assertEqual(expected, row.t)
 
     def test_timestamp_nanos_type_arrow_udf(self):
         # SPARK-57462 follow-up: with the eager Arrow-conversion reject removed, an Arrow-optimized

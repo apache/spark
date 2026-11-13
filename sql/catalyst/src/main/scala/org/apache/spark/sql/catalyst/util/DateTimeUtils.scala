@@ -1214,10 +1214,11 @@ object DateTimeUtils extends SparkDateTimeUtils {
         nearestMicros
       } else {
         // No whole number of microseconds rounds to `seconds`, so the shortest decimal form has
-        // the same floor as the exact value of `seconds`. Rounding is monotonic, so `micros` can
-        // be above the exact product only when it was rounded up to a whole number. Only then
-        // the exact sign of `seconds * 1e6 - floor` from `fma` is needed. Without the FMA
-        // intrinsic, `fma` uses BigDecimal, so it must not run for every row.
+        // the same floor as the exact value of `seconds`. Whole numbers are doubles and rounding
+        // is monotonic, so `floor(micros)` is above the floor of the exact product only when the
+        // product was rounded up to a whole number. Only then is the exact sign of
+        // `seconds * 1e6 - floor` from `fma` needed. Without the FMA intrinsic, `fma` uses
+        // BigDecimal, so it must not run for every row.
         val floor = Math.floor(micros)
         if (micros == floor && Math.fma(seconds, MICROS_PER_SECOND.toDouble, -floor) < 0) {
           floor.toLong - 1

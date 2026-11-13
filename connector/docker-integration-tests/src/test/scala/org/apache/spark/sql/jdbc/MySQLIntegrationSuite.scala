@@ -19,7 +19,7 @@ package org.apache.spark.sql.jdbc
 
 import java.math.BigDecimal
 import java.sql.{Connection, Date, Timestamp}
-import java.time.LocalDateTime
+import java.time.{LocalDateTime, LocalTime}
 import java.util.Properties
 
 import scala.util.Using
@@ -27,7 +27,7 @@ import scala.util.Using
 import org.apache.spark.sql.Row
 import org.apache.spark.sql.catalyst.util.DateTimeTestUtils._
 import org.apache.spark.sql.internal.SQLConf
-import org.apache.spark.sql.types.ShortType
+import org.apache.spark.sql.types.{ShortType, TimeType}
 import org.apache.spark.tags.DockerTest
 
 /**
@@ -215,6 +215,28 @@ class MySQLIntegrationSuite extends SharedJDBCIntegrationSuite {
           Timestamp.valueOf("2009-02-13 23:31:30"),
           Date.valueOf("2001-01-01"),
           LocalDateTime.of(1970, 1, 1, 13, 31, 24, 123000000)))
+      }
+    }
+  }
+
+  test("SPARK-61087: MySQL TIME columns keep their fractional seconds with the TIME type") {
+    withSQLConf(
+        SQLConf.TIME_TYPE_ENABLED.key -> "true",
+        SQLConf.LEGACY_JDBC_TIME_MAPPING_ENABLED.key -> "false") {
+      // MySQL Connector/J reports a scale of 0 for every TIME column, so MySQLDialect maps TIME
+      // to TIME(6), the largest fractional-seconds precision MySQL TIME supports.
+      val df = spark.read.jdbc(jdbcUrl, "dates", new Properties).select("t", "t1")
+      assert(df.schema("t").dataType === TimeType(TimeType.MICROS_PRECISION))
+      assert(df.schema("t1").dataType === TimeType(TimeType.MICROS_PRECISION))
+      checkAnswer(df, Row(LocalTime.of(13, 31, 24), LocalTime.of(13, 31, 24, 123000000)))
+      // A customSchema still truncates to the precision it names.
+      Seq(
+        "t1 TIME(3)" -> LocalTime.of(13, 31, 24, 123000000),
+        "t1 TIME(0)" -> LocalTime.of(13, 31, 24)
+      ).foreach { case (customSchema, expected) =>
+        val custom = spark.read.option("customSchema", customSchema)
+          .jdbc(jdbcUrl, "dates", new Properties).select("t1")
+        checkAnswer(custom, Row(expected))
       }
     }
   }
