@@ -734,9 +734,11 @@ object RewriteCorrelatedScalarSubquery extends Rule[LogicalPlan] with AliasHelpe
         // evaluation fails, e.g. with DIVIDE_BY_ZERO in ANSI mode, keep it, so that it is
         // evaluated later and the query fails only if the result on zero tuples is used.
         // Like ConstantFolding in conditional branches (SPARK-39106), tag it so that
-        // ConstantFolding does not evaluate it again.
+        // ConstantFolding does not evaluate it again. Tag a copy: without attributes or
+        // aggregates, the expression can be the node in the plan itself, e.g. `10 / 0` in the
+        // output of an Aggregate, where ConstantFolding must still evaluate it.
         case NonFatal(_) =>
-          val trimmed = trimAliases(expr)
+          val trimmed = trimAliases(expr).clone()
           trimmed.setTagValue(ConstantFolding.FAILED_TO_EVALUATE, ())
           trimmed
       }

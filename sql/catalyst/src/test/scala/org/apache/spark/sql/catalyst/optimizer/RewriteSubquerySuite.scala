@@ -164,24 +164,31 @@ class RewriteSubquerySuite extends PlanTest {
   }
 
   test("SPARK-61444: keep the result on zero rows of an Aggregate that fails to evaluate") {
-    def resultOnZeroRows(): Expression = {
+    def resultOnZeroRows(divisor: Expression): (Aggregate, Expression) = {
       val agg = LocalRelation($"v".int)
-        .groupBy()((Literal(10) / Coalesce(Seq(max($"v"), Literal(0)))).as("d"))
+        .groupBy()((Literal(10) / divisor).as("d"))
         .analyze.asInstanceOf[Aggregate]
-      RewriteCorrelatedScalarSubquery.evalAggregateOnZeroTups(agg)(
-        agg.aggregateExpressions.head.exprId)
+      (agg, RewriteCorrelatedScalarSubquery.evalAggregateOnZeroTups(agg)(
+        agg.aggregateExpressions.head.exprId))
     }
     // 10 / 0 fails with DIVIDE_BY_ZERO in ANSI mode. The expression is kept without its Alias,
-    // and tagged so that ConstantFolding does not evaluate it again.
+    // and tagged so that ConstantFolding does not evaluate it again. Only the result is tagged,
+    // not the expression in the Aggregate, also when the result is a constant expression that
+    // the rewrite does not copy.
     withSQLConf(SQLConf.ANSI_ENABLED.key -> "true") {
-      val result = resultOnZeroRows()
-      assert(!result.isInstanceOf[Literal], result)
-      assert(result.find(_.isInstanceOf[Alias]).isEmpty, result)
-      assert(result.containsTag(ConstantFolding.FAILED_TO_EVALUATE), result)
+      Seq(Coalesce(Seq(max($"v"), Literal(0))), Literal(0)).foreach { divisor =>
+        val (agg, result) = resultOnZeroRows(divisor)
+        assert(!result.isInstanceOf[Literal], result)
+        assert(result.find(_.isInstanceOf[Alias]).isEmpty, result)
+        assert(result.containsTag(ConstantFolding.FAILED_TO_EVALUATE), result)
+        assert(agg.aggregateExpressions.head.collectFirst {
+          case e if e.containsTag(ConstantFolding.FAILED_TO_EVALUATE) => e
+        }.isEmpty, agg)
+      }
     }
     // Without ANSI mode, it evaluates to null.
     withSQLConf(SQLConf.ANSI_ENABLED.key -> "false") {
-      val result = resultOnZeroRows()
+      val (_, result) = resultOnZeroRows(Coalesce(Seq(max($"v"), Literal(0))))
       assert(result.isInstanceOf[Literal] && result.asInstanceOf[Literal].value == null, result)
     }
   }

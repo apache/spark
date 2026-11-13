@@ -3404,9 +3404,10 @@ class SubquerySuite extends SharedSparkSession
   }
 
   test("SPARK-61444: COUNT bug with a result on zero rows that fails to evaluate") {
-    withTempView("o", "o2", "i") {
+    withTempView("o", "o2", "e", "i") {
       Seq(1, 2).toDF("k").createOrReplaceTempView("o")
       Seq(1, 2, 3).toDF("k").createOrReplaceTempView("o2")
+      Seq.empty[Int].toDF("k").createOrReplaceTempView("e")
       Seq((1, 100), (1, 200), (2, 300)).toDF("k", "v").createOrReplaceTempView("i")
       // The outer row k = 3 of o2 has no matching rows and uses the result on zero rows. The query
       // is still optimized and planned, and fails when it runs.
@@ -3416,6 +3417,12 @@ class SubquerySuite extends SharedSparkSession
         val df = sql(query)
         df.queryExecution.executedPlan
         val e = intercept[T](df.collect())
+        assert(e.getCondition === condition)
+      }
+      def checkFailsWhileOptimized[T <: SparkThrowable : ClassTag](
+          query: String,
+          condition: String): Unit = withClue(query) {
+        val e = intercept[T](sql(query).queryExecution.executedPlan)
         assert(e.getCondition === condition)
       }
 
@@ -3497,6 +3504,16 @@ class SubquerySuite extends SharedSparkSession
           checkFailsAtRuntime[SparkArithmeticException](
             "SELECT k, (SELECT count(*) FROM i WHERE i.k = o2.k HAVING 10 / count(*) > 0) " +
               "FROM o2",
+            "DIVIDE_BY_ZERO")
+        }
+
+        // A failing expression without attributes or aggregates is also a column of the
+        // subquery, outside the conditional branch, so the query still fails while it is
+        // optimized, even when the outer table is empty.
+        Seq("o2", "e").foreach { outer =>
+          checkFailsWhileOptimized[SparkArithmeticException](
+            s"SELECT $outer.k, t.c, t.d FROM $outer, " +
+              s"LATERAL (SELECT count(*) c, 10 / 0 d FROM i WHERE i.k = $outer.k) t",
             "DIVIDE_BY_ZERO")
         }
       }
