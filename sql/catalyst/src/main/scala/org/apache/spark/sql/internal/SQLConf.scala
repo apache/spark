@@ -4076,9 +4076,12 @@ object SQLConf {
   val ENABLE_STREAMING_SOURCE_EVOLUTION =
     buildConf("spark.sql.streaming.queryEvolution.enableSourceEvolution")
       .internal()
-      .doc("When true, enforces that all streaming sources must be explicitly named via " +
-        "the .name() API. This enables streaming source evolution, allowing sources to be " +
-        "added, removed, or reordered without losing state.")
+      .doc("When true, requests source evolution for new micro-batch checkpoints, requiring " +
+        "all sources to be named with name() or IDENTIFIED BY. Naming a source also opts its " +
+        "query in without this config. Existing checkpoints retain their recorded tracking " +
+        "mode; this config cannot convert them or disable named tracking. Source evolution " +
+        "allows sources to be added, removed, or reordered across restarts. Legacy positional " +
+        "checkpoints with metadata under the same source names remain positional.")
       .version("4.1.0")
       .booleanConf
       .createWithDefault(false)
