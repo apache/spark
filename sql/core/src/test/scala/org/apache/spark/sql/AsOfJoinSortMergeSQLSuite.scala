@@ -186,6 +186,27 @@ class AsOfJoinSortMergeSQLSuite extends QueryTest
     (joinsBelow(asOfJoins.head.left), joinsBelow(asOfJoins.head.right))
   }
 
+  /**
+   * Checks the rows of `query` with InferFiltersFromConstraints excluded and with it on. With it
+   * on, asserts one join below the as-of input with the subquery and none below the other input.
+   * Returns the query with the rule on.
+   */
+  private def checkOneSubqueryJoin(
+      query: String, onLeftInput: Boolean, expected: Seq[Row]): DataFrame = {
+    withSQLConf(SQLConf.OPTIMIZER_EXCLUDED_RULES.key -> InferFiltersFromConstraints.ruleName) {
+      checkSortMergeAsOf(sql(query), expected)
+    }
+    val df = sql(query)
+    checkSortMergeAsOf(df, expected)
+    val (leftJoins, rightJoins) = joinsBelowAsOfInputs(df)
+    val (subqueryJoins, otherJoins) =
+      if (onLeftInput) (leftJoins, rightJoins) else (rightJoins, leftJoins)
+    assert(subqueryJoins.size == 1 && otherJoins.isEmpty,
+      s"Expected one join below only the input with the subquery in plan:\n" +
+        df.queryExecution.executedPlan)
+    df
+  }
+
   /** Whether the scan of `table` keeps only the rows where string `column` equals `value`. */
   private def scanFiltersOnEquality(
       df: DataFrame, table: String, column: String, value: String): Boolean =
@@ -1402,7 +1423,7 @@ class AsOfJoinSortMergeSQLSuite extends QueryTest
     }
   }
 
-  test("a right filter inferred from the ON condition is not added if it can fail") {
+  test("a filter inferred from the ON condition is not added if it can fail") {
     withTable("guarded_t") {
       sql(
         """
@@ -1412,17 +1433,28 @@ class AsOfJoinSortMergeSQLSuite extends QueryTest
           |""".stripMargin)
       withGuardedConditionConfs {
         // WHERE t.lo = 0 and ON CAST(r.v AS INT) >= t.lo give CAST(r.v AS INT) >= 0. As a right
-        // filter it would cast 'abc', which only the 'text' row could match, and fail.
-        checkSortMergeAsOf(
-          sql(
-            """
-              |SELECT t.id, r.v
-              |FROM guarded_t t LEFT ASOF JOIN VALUES (5, '42'), (8, 'abc') AS r(k, v)
-              |  MATCH_CONDITION (t.k >= r.k)
-              |  ON t.kind <> 'text' AND CAST(r.v AS INT) >= t.lo AND CAST(r.v AS INT) <= t.hi
-              |WHERE t.lo = 0
-              |""".stripMargin),
-          Seq(Row(1, "42"), Row(2, null)))
+        // filter it would cast 'abc', which only the 'text' row could match, and fail. The legacy
+        // flag must not add it either, as as-of joins had no inferred filters before.
+        val results = Seq(
+          "LEFT ASOF JOIN" -> Seq(Row(1, "42"), Row(2, null)),
+          "ASOF JOIN" -> Seq(Row(1, "42")))
+        for ((join, expected) <- results; legacy <- Seq("false", "true")) {
+          withClue(s"$join, legacy inference $legacy: ") {
+            withSQLConf(SQLConf.LEGACY_INFER_FAILABLE_FILTERS_FROM_CONSTRAINTS.key -> legacy) {
+              checkSortMergeAsOf(
+                sql(
+                  s"""
+                     |SELECT t.id, r.v
+                     |FROM guarded_t t $join VALUES (5, '42'), (8, 'abc') AS r(k, v)
+                     |  MATCH_CONDITION (t.k >= r.k)
+                     |  ON t.kind <> 'text' AND CAST(r.v AS INT) >= t.lo
+                     |    AND CAST(r.v AS INT) <= t.hi
+                     |WHERE t.lo = 0
+                     |""".stripMargin),
+                expected)
+            }
+          }
+        }
       }
     }
   }
@@ -1471,19 +1503,80 @@ class AsOfJoinSortMergeSQLSuite extends QueryTest
         withSQLConf(SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key -> "-1") {
           for ((query, onLeftInput, expected) <- cases) {
             withClue(query) {
-              withSQLConf(
-                  SQLConf.OPTIMIZER_EXCLUDED_RULES.key -> InferFiltersFromConstraints.ruleName) {
-                checkSortMergeAsOf(sql(query), expected)
-              }
-              val df = sql(query)
-              checkSortMergeAsOf(df, expected)
-              val (leftJoins, rightJoins) = joinsBelowAsOfInputs(df)
-              val (subqueryJoins, otherJoins) =
-                if (onLeftInput) (leftJoins, rightJoins) else (rightJoins, leftJoins)
-              assert(subqueryJoins.nonEmpty && otherJoins.isEmpty,
-                s"Expected a join below only the input with the subquery in plan:\n" +
-                  df.queryExecution.executedPlan)
+              checkOneSubqueryJoin(query, onLeftInput, expected)
             }
+          }
+        }
+      }
+    }
+  }
+
+  test("an input subquery filter next to an inferred ON key filter runs once") {
+    // The inferred equality or literal must not rewrite the input's own subquery into a second
+    // semi or anti join on that input.
+    withTable("asof_l", "asof_r", "asof_s", "asof_listed") {
+      sql(
+        """
+          |CREATE TABLE asof_l USING parquet AS
+          |SELECT * FROM VALUES (1, 10, 1), (2, 10, 2), (3, 10, 3) AS l(k, ts, a)
+          |""".stripMargin)
+      sql(
+        """
+          |CREATE TABLE asof_r USING parquet AS
+          |SELECT * FROM VALUES (1, 5, 1, 'X'), (2, 5, 2, 'X'), (3, 5, 3, 'Y') AS r(k, ts, a, venue)
+          |""".stripMargin)
+      sql("CREATE TABLE asof_s USING parquet AS SELECT * FROM VALUES (2) AS s(x)")
+      sql(
+        """
+          |CREATE TABLE asof_listed USING parquet AS
+          |SELECT * FROM VALUES (1, 'X'), (3, 'X') AS s(k, venue)
+          |""".stripMargin)
+      val keyEqualsA: Expression => Boolean = {
+        case EqualTo(x: Attribute, y: Attribute) => Set(x.name, y.name) == Set("k", "a")
+        case _ => false
+      }
+      val keyIsOne: Expression => Boolean = {
+        case EqualTo(x: Attribute, Literal(1, _)) => x.name == "k"
+        case EqualTo(Literal(1, _), x: Attribute) => x.name == "k"
+        case _ => false
+      }
+      // The query, whether its subquery is on the left input, the expected rows, and the table
+      // and filter that the rule adds to the scan of that input.
+      val cases = Seq(
+        // ON l.k = r.k AND l.k = r.a adds r.k = r.a next to r.a NOT IN.
+        ("""
+           |SELECT l.k, r.ts
+           |FROM asof_l l LEFT ASOF JOIN
+           |  (SELECT * FROM asof_r WHERE a NOT IN (SELECT x FROM asof_s)) r
+           |  MATCH_CONDITION (l.ts >= r.ts)
+           |  ON l.k = r.k AND l.k = r.a
+           |""".stripMargin, false, Seq(Row(1, 5), Row(2, null), Row(3, 5)), "asof_r",
+          keyEqualsA),
+        // WHERE l.k = 1 adds r.k = 1 next to (r.k, r.venue) IN.
+        ("""
+           |SELECT l.k, r.venue
+           |FROM asof_l l LEFT ASOF JOIN
+           |  (SELECT * FROM asof_r WHERE (k, venue) IN (SELECT k, venue FROM asof_listed)) r
+           |  MATCH_CONDITION (l.ts >= r.ts)
+           |  ON l.k = r.k
+           |WHERE l.k = 1
+           |""".stripMargin, false, Seq(Row(1, "X")), "asof_r", keyIsOne),
+        // For an inner join, ON l.k = r.k AND r.k = l.a adds l.k = l.a next to l.a NOT IN.
+        ("""
+           |SELECT l.k, r.ts
+           |FROM (SELECT * FROM asof_l WHERE a NOT IN (SELECT x FROM asof_s)) l
+           |ASOF JOIN asof_r r
+           |  MATCH_CONDITION (l.ts >= r.ts)
+           |  ON l.k = r.k AND r.k = l.a
+           |""".stripMargin, true, Seq(Row(1, 5), Row(3, 5)), "asof_l", keyEqualsA))
+      // No broadcast, so the IN subquery runs as a sort-merge semi join.
+      withSQLConf(SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key -> "-1") {
+        for ((query, onLeftInput, expected, table, isAddedFilter) <- cases) {
+          withClue(query) {
+            val df = checkOneSubqueryJoin(query, onLeftInput, expected)
+            assert(scanDataFilters(df, table).exists(isAddedFilter),
+              s"Expected the added key filter on the scan of $table in plan:\n" +
+                df.queryExecution.executedPlan)
           }
         }
       }
