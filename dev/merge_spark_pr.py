@@ -1730,12 +1730,15 @@ def merge_pr(pr_num, target_ref, title, body, pr_repo_desc, pr_author, co_author
     >>> footer = "Closes #7 from a/b.\\n\\nAuthored-by: A <a@e.org>\\nCo-authored-by: B <b@e.org>"
     >>> body = "Backport-of: #7\\n\\nFix.\\n\\n" + footer + "\\n(cherry picked from commit abc)"
     >>> config = {"git config --get user.name": "M", "git config --get user.email": "m@e.org"}
+    >>> ask = Mock()
     >>> def git_run(cmd):
+    ...     if cmd[:2] == ["git", "log"]:  # the pick is a commit on the PR branch
+    ...         return "Fix.\\n\\n" + footer + "\\n(cherry picked from commit abc)\\0"
     ...     return config.get(str(cmd), "abc") + "\\n"
     >>> with (
     ...     patch.object(git, "run", side_effect=git_run) as run,
     ...     patch.object(git, "push"),
-    ...     patch.multiple(sys.modules[__name__], continue_maybe=Mock(), clean_up=Mock()),
+    ...     patch.multiple(sys.modules[__name__], continue_maybe=ask, clean_up=Mock()),
     ...     patch("builtins.input", side_effect=AssertionError("no author prompt")),
     ...     redirect_stdout(StringIO()),
     ... ):
@@ -1743,6 +1746,8 @@ def merge_pr(pr_num, target_ref, title, body, pr_repo_desc, pr_author, co_author
     ...         "me/backport-pr7-branch-4.2", "Opener <o@e.org>", ["F <f@e.org>", "B <b@e.org>"])
     >>> merge_hash
     'abc'
+    >>> [c.args[0] for c in ask.call_args_list if "Backport-of" in c.args[0]]
+    []
     >>> commit = [c.args[0] for c in run.call_args_list if c.args[0][:2] == ["git", "commit"]][0]
     >>> commit[3]
     '--author="A <a@e.org>"'
@@ -1778,6 +1783,14 @@ def merge_pr(pr_num, target_ref, title, body, pr_repo_desc, pr_author, co_author
     if backport:
         # The footer already names the author; a different --author would contradict it.
         print("Backport of #%s: keeping its commit message and author." % backport[0])
+        # Soft check: the marker and footer are plain PR text, so confirm they are some
+        # commit's message on the branch, as _land_via_fork leaves them.
+        commits = git.run(["git", "log", "--format=%b%x00", "HEAD..%s" % pr_branch_name])
+        if backport[1] not in [_pick_message(c) for c in commits.split("\0")]:
+            continue_maybe(
+                "The Backport-of message in the PR body matches none of its commits, so the "
+                "author and footer below are only as good as that text. Merge it anyway?"
+            )
         primary_author = backport[2]
     else:
         # Use PR author as the primary author for proper GitHub attribution
@@ -1857,6 +1870,17 @@ def merge_pr(pr_num, target_ref, title, body, pr_repo_desc, pr_author, co_author
     print("Pull request #%s merged!" % pr_num)
     print("Merge hash: %s" % merge_hash)
     return merge_hash
+
+
+def _pick_message(commit_body):
+    """A commit body as _backport_of reads it from the PR body: no skip-checks, mentions, or
+    edge whitespace.
+
+    >>> _pick_message("Fix @bob\\n\\n\\nskip-checks: true\\n")
+    'Fix bob'
+    """
+    body = remove_inherited_post_merge_ci_skip(commit_body.replace("\r\n", "\n").strip() + "\n")
+    return re.sub(r"(?<![\w.+-])@", "", body).strip()
 
 
 def _backport_pr_branch(pr_num, pick_ref):
