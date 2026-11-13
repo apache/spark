@@ -176,7 +176,7 @@ case class ToVariantObject(child: Expression)
     copy(child = newChild)
 
   protected override def nullSafeEval(input: Any): Any =
-    VariantExpressionEvalUtils.castToVariant(input, child.dataType)
+    VariantExpressionEvalUtils.castToVariant(input, child.dataType, prettyName)
 
   override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
     val childCode = child.genCode(ctx)
@@ -189,7 +189,7 @@ case class ToVariantObject(child: Expression)
         boolean ${ev.isNull} = ${childCode.isNull};
         $javaType ${ev.value} = ${CodeGenerator.defaultValue(VariantType)};
         if (!${childCode.isNull}) {
-          ${ev.value} = $cls.castToVariant(${childCode.value}, $fromArg);
+          ${ev.value} = $cls.castToVariant(${childCode.value}, $fromArg, "$prettyName");
         }
       """
     ev.copy(code = code)
@@ -255,13 +255,14 @@ case class VariantFromArrays(left: Expression, right: Expression)
 
   override protected def nullSafeEval(keyArray: Any, valueArray: Any): Any =
     VariantExpressionEvalUtils.variantFromArrays(
-      keyArray.asInstanceOf[ArrayData], valueArray.asInstanceOf[ArrayData], valueType)
+      keyArray.asInstanceOf[ArrayData], valueArray.asInstanceOf[ArrayData], valueType, prettyName)
 
   override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
     nullSafeCodeGen(ctx, ev, (keyArray, valueArray) => {
       val cls = variant.VariantExpressionEvalUtils.getClass.getName.stripSuffix("$")
       val valueTypeArg = ctx.addReferenceObj("valueType", valueType)
-      s"${ev.value} = $cls.variantFromArrays($keyArray, $valueArray, $valueTypeArg);"
+      s"""${ev.value} = $cls.variantFromArrays(
+         |  $keyArray, $valueArray, $valueTypeArg, "$prettyName");""".stripMargin
     })
   }
 }
@@ -329,7 +330,7 @@ case class VariantFromEntries(child: Expression)
 
   override protected def nullSafeEval(input: Any): Any = {
     val entries = input.asInstanceOf[ArrayData]
-    VariantExpressionEvalUtils.variantFromEntries(entries, valueType)
+    VariantExpressionEvalUtils.variantFromEntries(entries, valueType, prettyName)
   }
 
   override protected def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
@@ -342,7 +343,7 @@ case class VariantFromEntries(child: Expression)
       // undeclared variable.
       val markNull = if (nullable) s"${ev.isNull} = ${ev.value} == null;" else ""
       s"""
-         |${ev.value} = $cls.variantFromEntries($c, $valueTypeArg);
+         |${ev.value} = $cls.variantFromEntries($c, $valueTypeArg, "$prettyName");
          |$markNull
        """.stripMargin
     })

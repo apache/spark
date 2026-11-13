@@ -245,7 +245,7 @@ object Literal {
         struct.fields.map(f => default(f.dataType).value)), struct)
     case udt: UserDefinedType[_] => Literal(default(udt.sqlType).value, udt)
     case VariantType =>
-      create(VariantExpressionEvalUtils.castToVariant(0, IntegerType), VariantType)
+      create(VariantExpressionEvalUtils.castToVariant(0, IntegerType, "cast"), VariantType)
     case other =>
       throw QueryExecutionErrors.noDefaultForDataTypeError(dataType)
   }

@@ -1588,7 +1588,8 @@ case class Cast(
     } else {
       to match {
         case dt if dt == from => identity[Any]
-        case VariantType => input => variant.VariantExpressionEvalUtils.castToVariant(input, from)
+        case VariantType =>
+          input => variant.VariantExpressionEvalUtils.castToVariant(input, from, "cast")
         case s: StringType => castToString(from, s.constraint)
         case BinaryType => castToBinary(from)
         case DateType => castToDate(from)
@@ -1703,7 +1704,7 @@ case class Cast(
     case VariantType =>
       val cls = variant.VariantExpressionEvalUtils.getClass.getName.stripSuffix("$")
       val fromArg = ctx.addReferenceObj("from", from)
-      (c, evPrim, evNull) => code"$evPrim = $cls.castToVariant($c, $fromArg);"
+      (c, evPrim, evNull) => code"""$evPrim = $cls.castToVariant($c, $fromArg, "cast");"""
     case s: StringType =>
       (c, evPrim, _) => castToStringCode(from, ctx, s.constraint).apply(c, evPrim)
     case BinaryType => castToBinaryCode(from)
