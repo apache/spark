@@ -18,9 +18,9 @@
 package org.apache.spark.sql.catalyst.expressions.ml
 
 import org.apache.spark.sql.catalyst.InternalRow
-import org.apache.spark.sql.catalyst.expressions.{BinaryExpression, ExpectsInputTypes, Expression}
+import org.apache.spark.sql.catalyst.expressions.{BinaryExpression, EmptyRow, ExpectsInputTypes, Expression}
 import org.apache.spark.sql.catalyst.expressions.codegen.{CodegenContext, ExprCode}
-import org.apache.spark.sql.catalyst.util.ArrayData
+import org.apache.spark.sql.catalyst.expressions.codegen.Block._
 import org.apache.spark.sql.types._
 
 /**
@@ -42,105 +42,61 @@ case class VectorDotProduct(left: Expression, right: Expression)
   override def nullable: Boolean = left.nullable || right.nullable
 
   override protected def nullSafeEval(leftInput: Any, rightInput: Any): Any = {
-    VectorDotProduct.dot(
+    MLExpressionUtils.dotProduct(
       leftInput.asInstanceOf[InternalRow],
       rightInput.asInstanceOf[InternalRow])
   }
 
   override protected def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
-    nullSafeCodeGen(ctx, ev, (leftInput, rightInput) => {
-      val leftType = ctx.freshName("leftType")
-      val leftValues = ctx.freshName("leftValues")
-      val leftSize = ctx.freshName("leftSize")
-      val rightType = ctx.freshName("rightType")
-      val rightValues = ctx.freshName("rightValues")
-      val rightSize = ctx.freshName("rightSize")
-      val index = ctx.freshName("index")
-      val size = ctx.freshName("size")
-      val sparseIndices = ctx.freshName("sparseIndices")
-      val leftIndices = ctx.freshName("leftIndices")
-      val rightIndices = ctx.freshName("rightIndices")
-      val leftIndex = ctx.freshName("leftIndex")
-      val rightIndex = ctx.freshName("rightIndex")
-      val leftNumActives = ctx.freshName("leftNumActives")
-      val rightNumActives = ctx.freshName("rightNumActives")
-      val activeIndex = ctx.freshName("activeIndex")
+    foldableVector(right)
+      .map(cached => doGenCodeWithCachedVector(ctx, ev, left, cached))
+      .orElse(foldableVector(left)
+        .map(cached => doGenCodeWithCachedVector(ctx, ev, right, cached)))
+      .getOrElse {
+        val utils = classOf[MLExpressionUtils].getName
+        nullSafeCodeGen(ctx, ev, (leftInput, rightInput) => {
+          s"${ev.value} = $utils.dotProduct($leftInput, $rightInput);"
+        })
+      }
+  }
 
-      s"""
-         |final byte $leftType = $leftInput.getByte(0);
-         |final ArrayData $leftValues = $leftInput.getArray(3);
-         |int $leftSize = -1;
-         |if ($leftType == ${VectorDotProduct.SparseVectorType}) {
-         |  $leftSize = $leftInput.getInt(1);
-         |} else if ($leftType == ${VectorDotProduct.DenseVectorType}) {
-         |  $leftSize = $leftValues.numElements();
-         |} else {
-         |  throw new IllegalArgumentException("Unknown vector type " + $leftType + ".");
-         |}
-         |
-         |final byte $rightType = $rightInput.getByte(0);
-         |final ArrayData $rightValues = $rightInput.getArray(3);
-         |int $rightSize = -1;
-         |if ($rightType == ${VectorDotProduct.SparseVectorType}) {
-         |  $rightSize = $rightInput.getInt(1);
-         |} else if ($rightType == ${VectorDotProduct.DenseVectorType}) {
-         |  $rightSize = $rightValues.numElements();
-         |} else {
-         |  throw new IllegalArgumentException("Unknown vector type " + $rightType + ".");
-         |}
-         |
-         |if ($leftSize != $rightSize) {
-         |  throw new IllegalArgumentException(
-         |    "requirement failed: VectorDotProduct was given vectors with non-matching sizes:" +
-         |    " left.size = " + $leftSize + ", right.size = " + $rightSize);
-         |}
-         |
-         |${ev.value} = 0.0D;
-         |if ($leftType == ${VectorDotProduct.DenseVectorType} &&
-         |    $rightType == ${VectorDotProduct.DenseVectorType}) {
-         |  for (int $index = 0; $index < $leftSize; $index++) {
-         |    ${ev.value} += $leftValues.getDouble($index) * $rightValues.getDouble($index);
-         |  }
-         |} else if ($leftType == ${VectorDotProduct.SparseVectorType} &&
-         |    $rightType == ${VectorDotProduct.DenseVectorType}) {
-         |  final ArrayData $sparseIndices = $leftInput.getArray(2);
-         |  final int $size = $sparseIndices.numElements();
-         |  for (int $index = 0; $index < $size; $index++) {
-         |    ${ev.value} += $leftValues.getDouble($index) *
-         |      $rightValues.getDouble($sparseIndices.getInt($index));
-         |  }
-         |} else if ($leftType == ${VectorDotProduct.DenseVectorType} &&
-         |    $rightType == ${VectorDotProduct.SparseVectorType}) {
-         |  final ArrayData $sparseIndices = $rightInput.getArray(2);
-         |  final int $size = $sparseIndices.numElements();
-         |  for (int $index = 0; $index < $size; $index++) {
-         |    ${ev.value} += $rightValues.getDouble($index) *
-         |      $leftValues.getDouble($sparseIndices.getInt($index));
-         |  }
-         |} else {
-         |  final ArrayData $leftIndices = $leftInput.getArray(2);
-         |  final ArrayData $rightIndices = $rightInput.getArray(2);
-         |  final int $leftNumActives = $leftIndices.numElements();
-         |  final int $rightNumActives = $rightIndices.numElements();
-         |  int $leftIndex = 0;
-         |  int $rightIndex = 0;
-         |  while ($leftIndex < $leftNumActives && $rightIndex < $rightNumActives) {
-         |    final int $activeIndex = $leftIndices.getInt($leftIndex);
-         |    while ($rightIndex < $rightNumActives &&
-         |        $rightIndices.getInt($rightIndex) < $activeIndex) {
-         |      $rightIndex++;
-         |    }
-         |    if ($rightIndex < $rightNumActives &&
-         |        $rightIndices.getInt($rightIndex) == $activeIndex) {
-         |      ${ev.value} += $leftValues.getDouble($leftIndex) *
-         |        $rightValues.getDouble($rightIndex);
-         |      $rightIndex++;
-         |    }
-         |    $leftIndex++;
-         |  }
-         |}
-         |""".stripMargin
-    })
+  private def foldableVector(expression: Expression): Option[InternalRow] = {
+    if (expression.foldable) {
+      Option(expression.eval(EmptyRow).asInstanceOf[InternalRow])
+    } else {
+      None
+    }
+  }
+
+  private def doGenCodeWithCachedVector(
+      ctx: CodegenContext,
+      ev: ExprCode,
+      vector: Expression,
+      cachedVector: InternalRow): ExprCode = {
+    val values = cachedVector.getArray(3)
+    val cachedVectorValues = ctx.addReferenceObj(
+      "cachedVectorValues", values.toDoubleArray(), "double[]")
+    val (cachedVectorSize, cachedVectorIndices) = cachedVector.getByte(0) match {
+      case VectorDotProduct.SparseVectorType =>
+        (cachedVector.getInt(1), ctx.addReferenceObj(
+          "cachedVectorIndices", cachedVector.getArray(2).toIntArray(), "int[]"))
+      case VectorDotProduct.DenseVectorType =>
+        (values.numElements(), "null")
+      case vectorType =>
+        throw new IllegalArgumentException(s"Unknown vector type $vectorType.")
+    }
+    val vectorGen = vector.genCode(ctx)
+    val utils = classOf[MLExpressionUtils].getName
+
+    ev.copy(code = code"""
+      ${vectorGen.code}
+      boolean ${ev.isNull} = ${vectorGen.isNull};
+      double ${ev.value} = 0.0D;
+      if (!${ev.isNull}) {
+        ${ev.value} = $utils.dotProduct(
+          ${vectorGen.value}, $cachedVectorSize, $cachedVectorIndices, $cachedVectorValues);
+      }
+    """)
   }
 
   override protected def withNewChildrenInternal(
@@ -157,83 +113,4 @@ object VectorDotProduct {
     StructField("size", IntegerType, nullable = true),
     StructField("indices", ArrayType(IntegerType, containsNull = false), nullable = true),
     StructField("values", ArrayType(DoubleType, containsNull = false), nullable = true)))
-
-  private def vectorSize(vector: InternalRow, vectorType: Byte, values: ArrayData): Int = {
-    vectorType match {
-      case SparseVectorType => vector.getInt(1)
-      case DenseVectorType => values.numElements()
-      case _ => throw new IllegalArgumentException(s"Unknown vector type $vectorType.")
-    }
-  }
-
-  private def dot(left: InternalRow, right: InternalRow): Double = {
-    val leftType = left.getByte(0)
-    val leftValues = left.getArray(3)
-    val leftSize = vectorSize(left, leftType, leftValues)
-    val rightType = right.getByte(0)
-    val rightValues = right.getArray(3)
-    val rightSize = vectorSize(right, rightType, rightValues)
-    require(leftSize == rightSize,
-      "VectorDotProduct was given vectors with non-matching sizes:" +
-        s" left.size = $leftSize, right.size = $rightSize")
-    (leftType, rightType) match {
-      case (DenseVectorType, DenseVectorType) =>
-        dotDenseDense(leftValues, rightValues)
-      case (SparseVectorType, DenseVectorType) =>
-        dotSparseDense(left.getArray(2), leftValues, rightValues)
-      case (DenseVectorType, SparseVectorType) =>
-        dotSparseDense(right.getArray(2), rightValues, leftValues)
-      case (SparseVectorType, SparseVectorType) =>
-        dotSparseSparse(left.getArray(2), leftValues, right.getArray(2), rightValues)
-    }
-  }
-
-  private def dotDenseDense(left: ArrayData, right: ArrayData): Double = {
-    var sum = 0.0
-    var index = 0
-    val size = left.numElements()
-    while (index < size) {
-      sum += left.getDouble(index) * right.getDouble(index)
-      index += 1
-    }
-    sum
-  }
-
-  private def dotSparseDense(
-      sparseIndices: ArrayData,
-      sparseValues: ArrayData,
-      denseValues: ArrayData): Double = {
-    var sum = 0.0
-    var index = 0
-    val size = sparseIndices.numElements()
-    while (index < size) {
-      sum += sparseValues.getDouble(index) * denseValues.getDouble(sparseIndices.getInt(index))
-      index += 1
-    }
-    sum
-  }
-
-  private def dotSparseSparse(
-      leftIndices: ArrayData,
-      leftValues: ArrayData,
-      rightIndices: ArrayData,
-      rightValues: ArrayData): Double = {
-    var sum = 0.0
-    var leftIndex = 0
-    var rightIndex = 0
-    val leftSize = leftIndices.numElements()
-    val rightSize = rightIndices.numElements()
-    while (leftIndex < leftSize && rightIndex < rightSize) {
-      val index = leftIndices.getInt(leftIndex)
-      while (rightIndex < rightSize && rightIndices.getInt(rightIndex) < index) {
-        rightIndex += 1
-      }
-      if (rightIndex < rightSize && rightIndices.getInt(rightIndex) == index) {
-        sum += leftValues.getDouble(leftIndex) * rightValues.getDouble(rightIndex)
-        rightIndex += 1
-      }
-      leftIndex += 1
-    }
-    sum
-  }
 }

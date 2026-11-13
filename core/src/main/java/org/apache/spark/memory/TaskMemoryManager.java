@@ -29,6 +29,7 @@ import org.apache.spark.internal.SparkLogger;
 import org.apache.spark.internal.SparkLoggerFactory;
 import org.apache.spark.internal.LogKeys;
 import org.apache.spark.internal.MDC;
+import org.apache.spark.unsafe.Platform;
 import org.apache.spark.unsafe.memory.MemoryAllocator;
 import org.apache.spark.unsafe.memory.MemoryBlock;
 import org.apache.spark.util.Utils;
@@ -113,10 +114,12 @@ public class TaskMemoryManager {
   final MemoryMode tungstenMemoryMode;
 
   /**
-   * Tracks spillable memory consumers.
+   * Tracks spillable memory consumers. Consumers are tracked by identity rather than by
+   * {@code equals}, so that distinct consumers are all offered for spilling and reported in the
+   * memory usage breakdown even if a subclass overrides {@code equals}.
    */
   @GuardedBy("this")
-  private final HashSet<MemoryConsumer> consumers;
+  private final Set<MemoryConsumer> consumers;
 
   /**
    * The amount of memory that is acquired but not used.
@@ -181,7 +184,9 @@ public class TaskMemoryManager {
     this.memoryManager = memoryManager;
     this.tungstenMemoryAllocator = tungstenMemoryAllocator;
     this.taskAttemptId = taskAttemptId;
-    this.consumers = new HashSet<>();
+    // A task rarely has more than a few consumers; the default expected size of IdentityHashMap
+    // would eagerly allocate a much larger table for every task.
+    this.consumers = Collections.newSetFromMap(new IdentityHashMap<>(4));
   }
 
   /**
@@ -612,6 +617,25 @@ public class TaskMemoryManager {
    */
   public long pageSizeBytes() {
     return memoryManager.pageSizeBytes();
+  }
+
+  /**
+   * Returns the bytes that pages growing up to {@code pageSizeBytes} leave for the header of the
+   * {@code long[]} that backs an on-heap page: {@link Platform#LONG_ARRAY_OFFSET} if
+   * {@code pageSizeBytes} is that much less than a power of two, and 0 otherwise.
+   * <p>
+   * Under G1, ZGC and Shenandoah, the default on-heap page size leaves room for this header, so
+   * that a page fills whole heap regions (SPARK-37593). A page of a power of two bytes takes one
+   * more region instead, or a whole region if it is half a region. Growing pages that leave the
+   * same room fill whole regions as well. Any other page size gives 0, so the growing pages stay
+   * powers of two like the full pages of that size, e.g. a power of two set by
+   * {@code spark.buffer.pageSize} or the default page size in off-heap mode. The latter gives 0
+   * even for a map that allocates its pages on heap with it, e.g. a broadcast hash join relation,
+   * whose full pages lack the room as well.
+   */
+  public static long growingPageHeaderBytes(long pageSizeBytes) {
+    final long heapBytes = pageSizeBytes + Platform.LONG_ARRAY_OFFSET;
+    return (heapBytes & (heapBytes - 1)) == 0 ? Platform.LONG_ARRAY_OFFSET : 0;
   }
 
   /**

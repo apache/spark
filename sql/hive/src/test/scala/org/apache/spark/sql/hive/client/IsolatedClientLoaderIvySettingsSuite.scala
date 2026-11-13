@@ -23,10 +23,36 @@ import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.util.VersionInfo
 
 import org.apache.spark.{SparkConf, SparkFunSuite}
+import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.util.{MavenUtils, Utils}
 
 class IsolatedClientLoaderIvySettingsSuite extends SparkFunSuite {
   override protected val enableAutoThreadAudit = false
+
+  test("only add remote repositories explicitly configured with custom Ivy settings") {
+    val sparkConf = new SparkConf()
+    val ivySettingsPath = Some("ivysettings.xml")
+
+    assert(IsolatedClientLoader.getRemoteRepos(sparkConf, ivySettingsPath).isEmpty)
+    assert(IsolatedClientLoader.getRemoteRepos(sparkConf, None).contains(
+      sparkConf.get(SQLConf.ADDITIONAL_REMOTE_REPOSITORIES)))
+
+    val remoteRepos = "https://repository.example.com/maven2/"
+    sparkConf.set(SQLConf.ADDITIONAL_REMOTE_REPOSITORIES.key, remoteRepos)
+    assert(IsolatedClientLoader.getRemoteRepos(sparkConf, ivySettingsPath).contains(remoteRepos))
+    assert(IsolatedClientLoader.getRemoteRepos(sparkConf, None).contains(remoteRepos))
+  }
+
+  test("substitute variables in remote repositories with custom Ivy settings") {
+    val sparkConf = new SparkConf()
+    val remoteRepos = "https://repository.example.com/maven2/"
+    sparkConf.set("spark.test.remoteRepository", remoteRepos)
+    sparkConf.set(
+      SQLConf.ADDITIONAL_REMOTE_REPOSITORIES.key, "${spark.test.remoteRepository}")
+
+    assert(IsolatedClientLoader.getRemoteRepos(sparkConf, Some("ivysettings.xml"))
+      .contains(remoteRepos))
+  }
 
   test("SPARK-56867: respect spark.jars.ivySettings when downloading Hive metastore jars") {
     val ivyPath = Utils.createTempDir(namePrefix = "ivy-settings-test")

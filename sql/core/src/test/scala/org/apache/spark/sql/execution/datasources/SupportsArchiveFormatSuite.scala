@@ -31,8 +31,10 @@ import org.apache.commons.compress.archivers.tar.{TarArchiveEntry, TarArchiveOut
 import org.apache.commons.compress.archivers.zip.{ZipArchiveEntry, ZipArchiveOutputStream}
 import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.fs.{GlobPattern, Path}
+import org.apache.hadoop.io.compress.GzipCodec
 
-import org.apache.spark.{SparkFunSuite, SparkRuntimeException, TaskContext, TaskContextImpl}
+import org.apache.spark.{SparkFunSuite, SparkRuntimeException, SparkUnsupportedOperationException, TaskContext, TaskContextImpl}
+import org.apache.spark.io.HadoopCodecStreams
 import org.apache.spark.sql.catalyst.FileSourceOptions
 
 /**
@@ -678,5 +680,34 @@ class SupportsArchiveFormatSuite extends SparkFunSuite {
       Map(FileSourceOptions.ARCHIVE_PATH_FILTER -> ""))
     assert(options.archivePathFilter.isEmpty)
     assert(options.archivePathFilterPattern.isEmpty)
+  }
+
+  // ----- decompression -------------------------------------------------------
+
+  test("readArchiveEntries: a forced decompression codec is rejected when the archive is opened") {
+    // The driver-side checks normally reject the `decompression` option first; this backstop in
+    // the archive reader covers any path that reaches it with the internal codec key still set,
+    // both for a codec class and for `none` (encoded as an empty value).
+    withTempDir { dir =>
+      val entries = Seq(textEntry("a.csv", "1\n"))
+      val archives = Seq(
+        new File(dir, "data.tar") -> writeTar _,
+        new File(dir, "data.tar.gz") -> writeTarGz _,
+        new File(dir, "data.zip") -> writeZip _,
+        new File(dir, "data.7z") -> writeSevenZ _)
+      archives.foreach { case (file, write) => write(file, entries) }
+      for ((file, _) <- archives; codec <- Seq(classOf[GzipCodec].getName, "")) {
+        val conf = new Configuration()
+        conf.set(HadoopCodecStreams.DECOMPRESSION_CODEC_CONF, codec)
+        val e = intercept[SparkUnsupportedOperationException] {
+          SupportsArchiveFormat.readArchiveEntries(
+              new Path(file.toURI), conf, archivePathFilter = None) { (entry, _) =>
+            Iterator.single(entry.getName)
+          }.toList
+        }
+        assert(e.getCondition == "UNSUPPORTED_FEATURE.DECOMPRESSION_CODEC_FOR_ARCHIVE",
+          s"${file.getName} with codec '$codec'")
+      }
+    }
   }
 }

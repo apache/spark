@@ -27,6 +27,7 @@ import test.org.apache.spark.sql.connector.catalog.functions.JavaStrLen._
 import org.apache.spark.SparkUnsupportedOperationException
 import org.apache.spark.sql.{AnalysisException, DataFrame, Row}
 import org.apache.spark.sql.catalyst.InternalRow
+import org.apache.spark.sql.catalyst.expressions.{BoundReference, TransformExpression}
 import org.apache.spark.sql.catalyst.expressions.CodegenObjectFactoryMode.{FALLBACK, NO_CODEGEN}
 import org.apache.spark.sql.connector.catalog.{BasicInMemoryTableCatalog, Identifier, InMemoryCatalog, SupportsNamespaces}
 import org.apache.spark.sql.connector.catalog.functions.{AggregateFunction, _}
@@ -131,6 +132,25 @@ case class StrLen(impl: BoundFunction) extends UnboundFunction {
 
   override def description(): String =
     "strlen: returns the length of the input string  strlen(string) -> int"
+}
+
+// Binds any arguments and returns `result`, so that a test can shadow a built-in of any arity.
+case class ConstantStringOfAnyArity(result: String) extends UnboundFunction {
+  override def name(): String = "constant_string_of_any_arity"
+
+  override def bind(inputType: StructType): BoundFunction =
+    BoundConstantString(inputType.fields.map(_.dataType).toSeq, result)
+
+  override def description(): String = s"$name: returns '$result' for any arguments"
+}
+
+// A case class, so that both analyzers of a dual run bind equal functions.
+case class BoundConstantString(argTypes: Seq[DataType], result: String)
+  extends ScalarFunction[UTF8String] {
+  override def inputTypes(): Array[DataType] = argTypes.toArray
+  override def resultType(): DataType = StringType
+  override def name(): String = "constant_string"
+  override def produceResult(input: InternalRow): UTF8String = UTF8String.fromString(result)
 }
 
 class DataSourceV2FunctionSuite extends DatasourceV2SQLBase {
@@ -487,6 +507,30 @@ class DataSourceV2FunctionSuite extends DatasourceV2SQLBase {
       condition = "SCALAR_FUNCTION_NOT_COMPATIBLE",
       parameters = Map("scalarFunc" -> "`CHAR_LENGTH`")
     )
+  }
+
+  test("SPARK-60027: a partition transform over a UDT is refused where a static invoke cannot " +
+      "take it") {
+    // A user-defined type goes as its `sqlType`, and `resolveScalarFunction` finds the static
+    // magic `invoke(long, long)` from the declared types. `StaticInvoke` looks it up again from the
+    // arguments' classes, a user-defined type's being `Object`, so the transform is refused. With
+    // `BIGINT` arguments, or a function that reads the row with `produceResult`, it is taken.
+    class LongUDT extends UserDefinedType[java.lang.Long] {
+      override def sqlType: DataType = LongType
+      override def serialize(obj: java.lang.Long): Any = obj
+      override def deserialize(datum: Any): java.lang.Long = datum.asInstanceOf[java.lang.Long]
+      override def userClass: Class[java.lang.Long] = classOf[java.lang.Long]
+    }
+    def transform(fn: BoundFunction, argumentType: DataType): TransformExpression =
+      TransformExpression(fn, Seq(BoundReference(0, argumentType, nullable = true),
+        BoundReference(1, argumentType, nullable = true)))
+    val staticMagic = new JavaLongAddStaticMagic(false)
+    assert(transform(staticMagic, new LongUDT).evaluableFunction.isEmpty, "UDT, static invoke")
+    Seq(transform(staticMagic, LongType), transform(new JavaLongAddDefault(false), new LongUDT))
+      .foreach { t =>
+        assert(t.evaluableFunction.isDefined, t)
+        assert(t.eval(InternalRow(42L, 58L)) == 100L, t)
+      }
   }
 
   test("SPARK-35390: scalar function w/ type coercion") {

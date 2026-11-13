@@ -26,8 +26,9 @@ import org.apache.hadoop.fs.Path
 import org.apache.parquet.column.{Encoding, ParquetProperties}
 import org.apache.parquet.column.ParquetProperties.WriterVersion.PARQUET_1_0
 import org.apache.parquet.example.data.simple.SimpleGroup
-import org.apache.parquet.hadoop.ParquetOutputFormat
+import org.apache.parquet.hadoop.{ParquetFileReader, ParquetOutputFormat}
 import org.apache.parquet.hadoop.example.ExampleParquetWriter
+import org.apache.parquet.hadoop.util.HadoopInputFile
 import org.apache.parquet.io.api.Binary
 import org.apache.parquet.schema.MessageTypeParser
 import org.apache.parquet.schema.PrimitiveType.PrimitiveTypeName
@@ -38,6 +39,7 @@ import org.apache.spark.sql.Row
 import org.apache.spark.sql.catalyst.util.DateTimeUtils
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSparkSession
+import org.apache.spark.util.Utils
 
 // TODO: this needs a lot more testing but it's currently not easy to test with the parquet
 // writer abstractions. Revisit.
@@ -448,6 +450,103 @@ class ParquetEncodingSuite extends ParquetCompatibilityTest with SharedSparkSess
             } else {
               assert(row.getFloat(6) === i * 0.5f, s"float_nullable mismatch at i=$i")
             }
+          }
+        }
+      }
+    }
+  }
+
+  test("SPARK-59831: BYTE_STREAM_SPLIT round-trip with v1 and v2 pages, nulls and arrays") {
+    // Required columns (max definition level 0) exercise the exact page value count check,
+    // and optional and repeated columns the upper bound check, on many pages of both page
+    // versions.
+    val schema = MessageTypeParser.parseMessageType(
+      """message root {
+        |  required int32 int_col;
+        |  required int64 long_col;
+        |  required float float_col;
+        |  required double double_col;
+        |  required fixed_len_byte_array(5) flba_col;
+        |  optional int32 int_nullable;
+        |  optional double double_nullable;
+        |  optional group arr (LIST) {
+        |    repeated group list {
+        |      optional float element;
+        |    }
+        |  }
+        |}
+      """.stripMargin)
+    val size = 5000
+    def flba(i: Int): Array[Byte] = {
+      val v = i * 7919L
+      Array.tabulate[Byte](5)(b => (v >> (8 * b)).toByte)
+    }
+    def arr(i: Int): Seq[java.lang.Float] = i % 7 match {
+      case 0 => null
+      case 1 => Seq.empty
+      case _ => Seq(i * 0.25f, if (i % 2 == 0) null else -i * 0.25f)
+    }
+    val expected = (0 until size).map { i =>
+      Row(i * 7919, i * 1000003L * (if (i % 2 == 0) 1 else -1), i * 0.1f, i * -0.001, flba(i),
+        if (i % 3 == 0) null else i * 7, if (i % 5 == 0) null else i * 0.5, arr(i))
+    }
+
+    Seq(ParquetProperties.WriterVersion.PARQUET_1_0,
+        ParquetProperties.WriterVersion.PARQUET_2_0).foreach { version =>
+      withTempDir { dir =>
+        val path = new Path(dir.toURI.toString, "bss.parquet")
+        val hadoopConf = spark.sessionState.newHadoopConf()
+        val builder = ExampleParquetWriter.builder(path)
+          .withType(schema)
+          .withDictionaryEncoding(false)
+          .withPageRowCountLimit(300)
+          .withWriterVersion(version)
+          .withConf(hadoopConf)
+        schema.getColumns.asScala.foreach { column =>
+          builder.withByteStreamSplitEncoding(column.getPath.mkString("."), true)
+        }
+        val writer = builder.build()
+        try {
+          expected.foreach { row =>
+            val record = new SimpleGroup(schema)
+            record.add("int_col", row.getInt(0))
+            record.add("long_col", row.getLong(1))
+            record.add("float_col", row.getFloat(2))
+            record.add("double_col", row.getDouble(3))
+            record.add("flba_col", Binary.fromConstantByteArray(row.getAs[Array[Byte]](4)))
+            if (!row.isNullAt(5)) record.add("int_nullable", row.getInt(5))
+            if (!row.isNullAt(6)) record.add("double_nullable", row.getDouble(6))
+            if (!row.isNullAt(7)) {
+              val list = record.addGroup("arr")
+              row.getSeq[java.lang.Float](7).foreach { v =>
+                val element = list.addGroup("list")
+                if (v != null) element.add("element", v.floatValue())
+              }
+            }
+            writer.write(record)
+          }
+        } finally {
+          writer.close()
+        }
+
+        val in = HadoopInputFile.fromPath(path, hadoopConf)
+        Utils.tryWithResource(ParquetFileReader.open(in)) { reader =>
+          val columnChunks = reader.getFooter.getBlocks.asScala.head.getColumns.asScala
+          assert(columnChunks.length === 8)
+          columnChunks.foreach { chunk =>
+            assert(chunk.getEncodings.contains(Encoding.BYTE_STREAM_SPLIT),
+              s"Column ${chunk.getPath} should use BYTE_STREAM_SPLIT encoding")
+            assert(reader.readOffsetIndex(chunk).getPageCount > 1,
+              s"Column ${chunk.getPath} should have multiple pages")
+          }
+        }
+
+        withMemoryModes { offHeapMode =>
+          withSQLConf(
+            SQLConf.COLUMN_VECTOR_OFFHEAP_ENABLED.key -> offHeapMode,
+            SQLConf.PARQUET_VECTORIZED_READER_ENABLED.key -> "true",
+            SQLConf.PARQUET_VECTORIZED_READER_NESTED_COLUMN_ENABLED.key -> "true") {
+            checkAnswer(spark.read.parquet(path.toString), expected)
           }
         }
       }

@@ -328,6 +328,8 @@ class ExpressionResolver(
             resolveNamedExpression(unresolvedNamedExpression)
           case unresolvedFunction: UnresolvedFunction =>
             functionResolver.resolve(unresolvedFunction)
+          case unresolvedJsonConstructor: UnresolvedJsonConstructor =>
+            resolveUnresolvedJsonConstructor(unresolvedJsonConstructor)
           case unresolvedLiteral: Literal =>
             resolveLiteral(unresolvedLiteral)
           case unresolvedOrdinal: UnresolvedOrdinal =>
@@ -798,7 +800,9 @@ class ExpressionResolver(
    * but it is not allowed to have them.
    */
   private def validateStarsInsideExpression(expression: Expression): Unit = expression match {
-    case _: UnresolvedFunction | _: In =>
+    // A JSON constructor handles its own direct stars: a routine owner expands them, the built-in
+    // rejects them.
+    case _: UnresolvedFunction | _: UnresolvedJsonConstructor | _: In =>
     case createNamedStruct: CreateNamedStruct if allowStarInCreateNamedStruct(createNamedStruct) =>
     case _ if containsStar(expression.children) =>
       throw QueryCompilationErrors.invalidStarUsageError(
@@ -1163,6 +1167,26 @@ class ExpressionResolver(
     CreateNamedStruct(resolvedChildren)
   }
 
+  private def resolveUnresolvedJsonConstructor(
+      unresolvedJsonConstructor: UnresolvedJsonConstructor): Expression = {
+    val name = unresolvedJsonConstructor.prettyName
+    if (functionResolution.routesJsonConstructorToFunction(unresolvedJsonConstructor)) {
+      functionResolver.resolve(unresolvedJsonConstructor.toUnresolvedFunction)
+    } else {
+      val directStars = unresolvedJsonConstructor.arguments.collect { case s: Star => s }
+      if (directStars.nonEmpty) {
+        throw QueryCompilationErrors.invalidStarUsageError(s"expression `$name`", directStars)
+      }
+      val resolvedJsonConstructor = withResolvedChildren(unresolvedJsonConstructor, resolve _)
+        .asInstanceOf[UnresolvedJsonConstructor]
+      coerceExpressionTypes(
+        expression = TimezoneAwareExpressionResolver.resolveTimezone(
+          resolvedJsonConstructor.toBuiltin,
+          traversals.current.sessionLocalTimeZone),
+        expressionTreeTraversal = traversals.current)
+    }
+  }
+
   /**
    * The [[GetViewColumnByNameAndOrdinal]] is a special internal expression that is placed by the
    * [[SessionCatalog]] in the top [[Project]] operator of the freshly reconstructed unresolved
@@ -1284,9 +1308,8 @@ class ExpressionResolver(
   }
 
   /**
-   * Returns true if LateralColumnAlias resolution is enabled, current operator is not created
-   * because of a generated column and current expression is a grouping one (grouping expressions)
-   * can't reference an LCA.
+   * Returns true if LateralColumnAlias resolution is enabled and current expression is not a
+   * grouping one (grouping expressions can't reference an LCA).
    */
   private def canLaterallyReferenceColumn: Boolean = {
     traversals.current.lcaEnabled &&

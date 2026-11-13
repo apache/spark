@@ -1218,6 +1218,70 @@ kitten	sitTing
 
 
 -- !query
+select trim(s), length(trim(s)), octet_length(trim(s))
+  from (select concat(chr(160), 'abc', chr(160)) collate unicode_ci as s)
+-- !query schema
+struct<trim(s):string collate UNICODE_CI,length(trim(s)):int,octet_length(trim(s)):int>
+-- !query output
+abc	3	3
+
+
+-- !query
+select trim(' ' collate unicode_ci, s), length(trim(' ' collate unicode_ci, s)),
+       octet_length(trim(' ' collate unicode_ci, s))
+  from (select concat(chr(160), 'abc', chr(160)) collate unicode_ci as s)
+-- !query schema
+struct<TRIM(BOTH collate( , unicode_ci) FROM s):string collate UNICODE_CI,length(TRIM(BOTH collate( , unicode_ci) FROM s)):int,octet_length(TRIM(BOTH collate( , unicode_ci) FROM s)):int>
+-- !query output
+abc	3	3
+
+
+-- !query
+select ltrim(s), length(ltrim(s)), octet_length(ltrim(s))
+  from (select concat(chr(160), 'abc', chr(160)) collate unicode_ci as s)
+-- !query schema
+struct<ltrim(s):string collate UNICODE_CI,length(ltrim(s)):int,octet_length(ltrim(s)):int>
+-- !query output
+abc 	4	5
+
+
+-- !query
+select rtrim(s), length(rtrim(s)), octet_length(rtrim(s))
+  from (select concat(chr(160), 'abc', chr(160)) collate unicode_ci as s)
+-- !query schema
+struct<rtrim(s):string collate UNICODE_CI,length(rtrim(s)):int,octet_length(rtrim(s)):int>
+-- !query output
+ abc	4	5
+
+
+-- !query
+select trim(s), length(trim(s)), octet_length(trim(s))
+  from (select concat(chr(160), 'abc', chr(160)) collate unicode as s)
+-- !query schema
+struct<trim(s):string collate UNICODE,length(trim(s)):int,octet_length(trim(s)):int>
+-- !query output
+ abc 	5	7
+
+
+-- !query
+select ltrim(s), length(ltrim(s)), octet_length(ltrim(s))
+  from (select concat(chr(160), 'abc', chr(160)) collate unicode as s)
+-- !query schema
+struct<ltrim(s):string collate UNICODE,length(ltrim(s)):int,octet_length(ltrim(s)):int>
+-- !query output
+ abc 	5	7
+
+
+-- !query
+select rtrim(s), length(rtrim(s)), octet_length(rtrim(s))
+  from (select concat(chr(160), 'abc', chr(160)) collate unicode as s)
+-- !query schema
+struct<rtrim(s):string collate UNICODE,length(rtrim(s)):int,octet_length(rtrim(s)):int>
+-- !query output
+ abc 	5	7
+
+
+-- !query
 drop table t1
 -- !query schema
 struct<>

@@ -2,6 +2,11 @@
 
 --SET spark.sql.join.asofJoin.enabled=true
 
+-- Run with codegen on and off.
+--CONFIG_DIM1 spark.sql.codegen.wholeStage=true
+--CONFIG_DIM1 spark.sql.codegen.wholeStage=false,spark.sql.codegen.factoryMode=CODEGEN_ONLY
+--CONFIG_DIM1 spark.sql.codegen.wholeStage=false,spark.sql.codegen.factoryMode=NO_CODEGEN
+
 CREATE OR REPLACE TEMP VIEW trades(trade_time, symbol, quantity) AS
   VALUES (TIMESTAMP '2026-06-29 10:00:05', 'AAPL', 100),
          (TIMESTAMP '2026-06-29 10:00:11', 'AAPL', 200),
@@ -68,23 +73,7 @@ SELECT * FROM trades t ASOF JOIN quotes q
   MATCH_CONDITION (jitter_ts(t.trade_time) >= q.quote_time)
   ON t.symbol = q.symbol;
 
--- FVT-ASOF-8-008: CURRENT_TIMESTAMP in MATCH_CONDITION operand (query-foldable constant)
-SELECT count(*) AS cnt
-FROM trades t ASOF JOIN quotes q
-  MATCH_CONDITION (current_timestamp() >= q.quote_time)
-  ON t.symbol = q.symbol;
-
--- FVT-ASOF-8-008a: literal constant in MATCH_CONDITION operand (right)
-SELECT count(*) AS cnt
-FROM trades t ASOF JOIN quotes q
-  MATCH_CONDITION (t.trade_time >= TIMESTAMP '2026-06-29 10:00:00')
-  ON t.symbol = q.symbol;
-
--- FVT-ASOF-8-008b: literal constant in MATCH_CONDITION operand (left)
-SELECT count(*) AS cnt
-FROM trades t ASOF JOIN quotes q
-  MATCH_CONDITION (TIMESTAMP '2026-06-29 10:00:00' >= q.quote_time)
-  ON t.symbol = q.symbol;
+-- FVT-ASOF-8-008: constant MATCH_CONDITION operand, covered by FVT-ASOF-3-024..027 in join-asof-errors.sql
 
 -- FVT-ASOF-8-009: QUALIFY on ASOF — covered by FVT-ASOF-6-007
 

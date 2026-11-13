@@ -1010,8 +1010,8 @@ abstract class CTEInlineSuiteBase
   test("SPARK-51625: command in CTE relations should trigger inline") {
     val plan = UnresolvedWith(
       child = UnresolvedRelation(Seq("t")),
-      cteRelations = Seq(("t", SubqueryAlias("t", ShowTables(CurrentNamespace, pattern = None)),
-        None))
+      cteRelations = Seq(UnresolvedCTERelation(
+        "t", SubqueryAlias("t", ShowTables(CurrentNamespace, pattern = None))))
     )
     assert(!spark.sessionState.analyzer.execute(plan).exists {
       case _: WithCTE => true
@@ -1043,6 +1043,347 @@ abstract class CTEInlineSuiteBase
           |LEFT JOIN agg1 a1 ON b.c1 = a1.c1
           |LEFT JOIN agg2 a2 ON b.c2 = a2.c2
           |""".stripMargin).show()
+    }
+  }
+
+  test("MATERIALIZED CTE referenced multiple times is evaluated once") {
+    withTempView("t") {
+      Seq((0, 1), (1, 2), (2, 3)).toDF("c1", "c2").createOrReplaceTempView("t")
+      val df = sql(
+        s"""with
+           |v as materialized (
+           |  select c1, c2 from t
+           |)
+           |select * from v where c1 = 0 union all select * from v where c2 > 2
+         """.stripMargin)
+      checkAnswer(df, Row(0, 1) :: Row(2, 3) :: Nil)
+      assert(
+        df.queryExecution.optimizedPlan.collect {
+          case r: RepartitionOperation => r
+        }.length == 2,
+        "MATERIALIZED CTE should not be inlined.")
+      assert(
+        collectWithSubqueries(df.queryExecution.executedPlan) {
+          case r: ReusedExchangeExec => r
+        }.length == 1,
+        "MATERIALIZED CTE should be evaluated once and reused.")
+    }
+  }
+
+  test("MATERIALIZED CTE referenced once is not inlined") {
+    withTempView("t") {
+      Seq((0, 1), (1, 2)).toDF("c1", "c2").createOrReplaceTempView("t")
+      val df = sql(
+        s"""with
+           |v as materialized (
+           |  select c1, c2 from t
+           |)
+           |select c1 from v where c2 > 1
+         """.stripMargin)
+      checkAnswer(df, Row(1) :: Nil)
+      assert(
+        df.queryExecution.optimizedPlan.exists(_.isInstanceOf[RepartitionOperation]),
+        "MATERIALIZED CTE should not be inlined even if it is referenced once.")
+    }
+  }
+
+  test("MATERIALIZED CTE in subquery expression") {
+    withTempView("t") {
+      Seq((0, 1), (1, 2)).toDF("c1", "c2").createOrReplaceTempView("t")
+      val df = sql(
+        s"""select c1 from t where c2 in (
+           |  with v as materialized (select c2 from t) select c2 from v where c2 > 1
+           |)
+         """.stripMargin)
+      checkAnswer(df, Row(1) :: Nil)
+      assert(
+        df.queryExecution.optimizedPlan.collectWithSubqueries {
+          case r: RepartitionOperation => r
+        }.nonEmpty,
+        "MATERIALIZED CTE in subquery should not be inlined.")
+    }
+  }
+
+  test("NOT MATERIALIZED non-deterministic CTE referenced multiple times is inlined") {
+    withTempView("t") {
+      Seq((0, 1), (1, 2)).toDF("c1", "c2").createOrReplaceTempView("t")
+      val df = sql(
+        s"""with
+           |v as not materialized (
+           |  select c1, c2, rand() c3 from t
+           |)
+           |select count(*) from (select c1 from v union all select c1 from v)
+         """.stripMargin)
+      checkAnswer(df, Row(4) :: Nil)
+      assert(
+        !df.queryExecution.optimizedPlan.exists(_.isInstanceOf[RepartitionOperation]),
+        "NOT MATERIALIZED CTE should be inlined even if it is non-deterministic and " +
+          "referenced multiple times.")
+    }
+  }
+
+  test("MATERIALIZED CTE cannot reference the outer query") {
+    withTempView("t") {
+      Seq((0, 1), (1, 2)).toDF("c1", "c2").createOrReplaceTempView("t")
+      def assertMaterializedCTEError(query: String): Unit = {
+        checkError(
+          exception = intercept[AnalysisException](sql(query)),
+          condition = "UNSUPPORTED_FEATURE.MATERIALIZED_CTE_WITH_OUTER_REFERENCE",
+          parameters = Map("colName" -> "`c1`"),
+          context = ExpectedContext(
+            fragment = "t.c1",
+            start = query.lastIndexOf("t.c1"),
+            stop = query.lastIndexOf("t.c1") + 3))
+      }
+      def query(option: String): String = {
+        s"""select * from t where exists (
+           |  with v as $option (select 1 from t t2 where t2.c1 = t.c1) select * from v
+           |)""".stripMargin
+      }
+      // A correlated CTE is fine when it is inlined.
+      checkAnswer(sql(query("")), Row(0, 1) :: Row(1, 2) :: Nil)
+      checkAnswer(sql(query("not materialized")), Row(0, 1) :: Row(1, 2) :: Nil)
+      assertMaterializedCTEError(query("materialized"))
+      // The outer reference can also come from another CTE that the MATERIALIZED CTE references,
+      // defined in the same WITH clause or in an enclosing query.
+      assertMaterializedCTEError(
+        """select * from t where exists (
+          |  with v1 as (select 1 from t t2 where t2.c1 = t.c1),
+          |       v2 as materialized (select * from v1)
+          |  select * from v2
+          |)""".stripMargin)
+      assertMaterializedCTEError(
+        """select * from t where exists (
+          |  with v1 as (select 1 from t t2 where t2.c1 = t.c1)
+          |  select * from v1 where exists (
+          |    with v2 as materialized (select * from v1) select * from v2
+          |  )
+          |)""".stripMargin)
+    }
+  }
+
+  test("MATERIALIZED CTE with an inner CTE correlated to its own relations") {
+    withTempView("t", "t2") {
+      Seq((0, 1), (1, 2), (2, 3)).toDF("c1", "c2").createOrReplaceTempView("t")
+      Seq((0, 10), (1, 20), (1, 30)).toDF("c1", "c2").createOrReplaceTempView("t2")
+      // The inner CTE references `a`, a relation of the MATERIALIZED CTE definition itself, so the
+      // outer reference does not cross the materialized boundary.
+      Seq(
+        """with v as materialized (
+          |  select a.c1, (with u as (select max(c2) m from t2 where t2.c1 = a.c1)
+          |                select m from u) as m
+          |  from t a)
+          |select * from v""".stripMargin,
+        """with v as materialized (
+          |  select a.c1, l.m
+          |  from t a, lateral (with u as (select max(c2) m from t2 where t2.c1 = a.c1)
+          |                     select m from u) l)
+          |select * from v""".stripMargin).foreach { query =>
+        val df = sql(query)
+        checkAnswer(df, Row(0, 10) :: Row(1, 30) :: Row(2, null) :: Nil)
+        assert(
+          df.queryExecution.optimizedPlan.exists(_.isInstanceOf[RepartitionOperation]),
+          "MATERIALIZED CTE should not be inlined.")
+      }
+    }
+  }
+
+  test("MATERIALIZED CTE referencing a CTE with an inner correlated CTE") {
+    withTempView("t", "t2") {
+      Seq((0, 1), (1, 2), (2, 3)).toDF("c1", "c2").createOrReplaceTempView("t")
+      Seq((0, 10), (1, 20), (1, 30)).toDF("c1", "c2").createOrReplaceTempView("t2")
+      // `v1` is inlined into the MATERIALIZED `v2`, and its inner CTE `u` is correlated to `v1`'s
+      // own relation `a`, which is within the materialized boundary.
+      val df = sql(
+        """with v1 as (
+          |  select a.c1, (with u as (select max(c2) m from t2 where t2.c1 = a.c1)
+          |                select m from u) as m
+          |  from t a),
+          |v2 as materialized (select * from v1)
+          |select * from v2""".stripMargin)
+      checkAnswer(df, Row(0, 10) :: Row(1, 30) :: Row(2, null) :: Nil)
+      assert(
+        df.queryExecution.optimizedPlan.exists(_.isInstanceOf[RepartitionOperation]),
+        "MATERIALIZED CTE should not be inlined.")
+    }
+  }
+
+  test("MATERIALIZED CTE correlated through a CTE shared with the enclosing query") {
+    withTempView("t") {
+      Seq((0, 1), (1, 2)).toDF("c1", "c2").createOrReplaceTempView("t")
+      // The enclosing query and the MATERIALIZED CTE both read `s`, so the outer reference and
+      // the definition may share attribute ids. The correlation still crosses the boundary.
+      val query =
+        """with s as (select c1, c2 from t)
+          |select * from s o where exists (
+          |  with v as materialized (select i.c1 from s i where i.c1 = o.c1)
+          |  select * from v
+          |)""".stripMargin
+      checkError(
+        exception = intercept[AnalysisException](sql(query)),
+        condition = "UNSUPPORTED_FEATURE.MATERIALIZED_CTE_WITH_OUTER_REFERENCE",
+        parameters = Map("colName" -> "`c1`"),
+        context = ExpectedContext(
+          fragment = "o.c1",
+          start = query.lastIndexOf("o.c1"),
+          stop = query.lastIndexOf("o.c1") + 3))
+    }
+  }
+
+  test("MATERIALIZED CTE referencing a correlated CTE through a subquery") {
+    withTempView("t") {
+      Seq((0, 1), (1, 2)).toDF("c1", "c2").createOrReplaceTempView("t")
+      // `s` is correlated to the enclosing query and inlined into the MATERIALIZED `v`, which
+      // references it only inside a subquery.
+      Seq(
+        "select a.c1, (select count(*) from s) as n from t a",
+        "select a.c1, l.n from t a, lateral (select count(*) n from s) l",
+        "select a.c1 from t a where a.c1 in (select c1 from s)").foreach { body =>
+        val query =
+          s"""select * from t o where exists (
+             |  with s as (select i.c1 from t i where i.c1 = o.c1),
+             |       v as materialized ($body)
+             |  select * from v
+             |)""".stripMargin
+        checkError(
+          exception = intercept[AnalysisException](sql(query)),
+          condition = "UNSUPPORTED_FEATURE.MATERIALIZED_CTE_WITH_OUTER_REFERENCE",
+          parameters = Map("colName" -> "`c1`"),
+          context = ExpectedContext(
+            fragment = "o.c1",
+            start = query.indexOf("o.c1"),
+            stop = query.indexOf("o.c1") + 3))
+      }
+    }
+  }
+
+  test("MATERIALIZED CTE check does not preempt resolution errors") {
+    withTempView("t", "t2") {
+      Seq((0, 1), (1, 2)).toDF("c1", "c2").createOrReplaceTempView("t")
+      Seq((0, 10), (1, 20)).toDF("c1", "c2").createOrReplaceTempView("t2")
+      // An unresolved column inside the definition, and one elsewhere in the query.
+      Seq(
+        """select * from t o where exists (
+          |  with v as materialized (select no_such_col from t2 i where i.c1 = o.c1)
+          |  select * from v
+          |)""".stripMargin,
+        """select * from t o where exists (
+          |  with v as materialized (select 1 from t2 i where i.c1 = o.c1)
+          |  select * from v
+          |) and no_such_col = 1""".stripMargin).foreach { query =>
+        val e = intercept[AnalysisException](sql(query))
+        assert(e.getCondition == "UNRESOLVED_COLUMN.WITH_SUGGESTION")
+      }
+    }
+  }
+
+  test("MATERIALIZED CTE in a correlated subquery") {
+    withTempView("t", "t2") {
+      Seq((0, 1), (1, 2), (2, 3)).toDF("c1", "c2").createOrReplaceTempView("t")
+      Seq((0, 10), (1, 20), (1, 30)).toDF("c1", "c2").createOrReplaceTempView("t2")
+      def assertCorrelatedSubqueryError(query: String): Unit = {
+        val definition = "v as materialized (select c1 from t2)"
+        checkError(
+          exception = intercept[AnalysisException](sql(query)),
+          condition = "UNSUPPORTED_FEATURE.MATERIALIZED_CTE_IN_CORRELATED_SUBQUERY",
+          parameters = Map("cteName" -> "`v`"),
+          context = ExpectedContext(
+            fragment = definition,
+            start = query.indexOf(definition),
+            stop = query.indexOf(definition) + definition.length - 1))
+      }
+      // The query of the WITH clause references the outer query, so the `WithCTE` sits on the
+      // correlated path that decorrelation cannot pass through.
+      assertCorrelatedSubqueryError(
+        """select * from t o where exists (
+          |  with v as materialized (select c1 from t2) select * from v where v.c1 = o.c1
+          |)""".stripMargin)
+      assertCorrelatedSubqueryError(
+        """select o.c1, (
+          |  with v as materialized (select c1 from t2) select count(*) from v where v.c1 = o.c1
+          |) from t o""".stripMargin)
+      assertCorrelatedSubqueryError(
+        """select * from t o, lateral (
+          |  with v as materialized (select c1 from t2) select count(*) n from v where v.c1 = o.c1
+          |) l""".stripMargin)
+      // A correlation above a derived table holding the WITH clause, or no correlation at all.
+      checkAnswer(
+        sql("""select * from t o where exists (
+              |  select * from (with v as materialized (select c1 from t2) select * from v) x
+              |  where x.c1 = o.c1
+              |)""".stripMargin),
+        Row(0, 1) :: Row(1, 2) :: Nil)
+      checkAnswer(
+        sql("""select * from t o where o.c1 in (
+              |  with v as materialized (select c1 from t2) select c1 from v
+              |)""".stripMargin),
+        Row(0, 1) :: Row(1, 2) :: Nil)
+    }
+  }
+
+  test("RECURSIVE CTE with MATERIALIZED and NOT MATERIALIZED") {
+    def query(option: String): String = {
+      s"""with recursive r(n) as $option (select 1 union all select n + 1 from r where n < 5)
+         |select * from r a join r b on a.n = b.n""".stripMargin
+    }
+    val expected = (1 to 5).map(n => Row(n, n))
+    val materialized = sql(query("materialized"))
+    checkAnswer(materialized, expected)
+    assert(
+      collectWithSubqueries(materialized.queryExecution.executedPlan) {
+        case r: ReusedExchangeExec => r
+      }.length == 1,
+      "MATERIALIZED recursive CTE should be evaluated once and reused.")
+    val inlined = sql(query("not materialized"))
+    checkAnswer(inlined, expected)
+    assert(
+      !inlined.queryExecution.optimizedPlan.exists(_.isInstanceOf[RepartitionOperation]),
+      "NOT MATERIALIZED recursive CTE should be inlined.")
+  }
+
+  test("MATERIALIZED CTE with an outer reference is rejected when creating a view") {
+    withTempView("t", "mv") {
+      Seq((0, 1), (1, 2)).toDF("c1", "c2").createOrReplaceTempView("t")
+      val e = intercept[AnalysisException](sql(
+        """create temporary view mv as
+          |select * from t o where exists (
+          |  with v as materialized (select 1 from t i where i.c1 = o.c1) select * from v
+          |)""".stripMargin))
+      assert(e.getCondition == "UNSUPPORTED_FEATURE.MATERIALIZED_CTE_WITH_OUTER_REFERENCE")
+    }
+  }
+
+  test("MATERIALIZED CTE is rejected where CTEs are inlined during analysis") {
+    withTempView("t") {
+      Seq((0, 1), (1, 2)).toDF("c1", "c2").createOrReplaceTempView("t")
+      def assertAlwaysInlinedError(query: String): Unit = {
+        val definition = "v as materialized (select c1 from t)"
+        checkError(
+          exception = intercept[AnalysisException](sql(query)),
+          condition = "UNSUPPORTED_FEATURE.MATERIALIZED_CTE_ALWAYS_INLINED",
+          parameters = Map("cteName" -> "`v`"),
+          context = ExpectedContext(
+            fragment = definition,
+            start = query.indexOf(definition),
+            stop = query.indexOf(definition) + definition.length - 1))
+      }
+      withTable("a", "b") {
+        sql("create table a(c1 int) using parquet")
+        sql("create table b(c1 int) using parquet")
+        // A multi-insert statement runs each insert as its own command.
+        assertAlwaysInlinedError(
+          """with v as materialized (select c1 from t)
+            |from v
+            |insert into a select c1
+            |insert into b select c1""".stripMargin)
+        withSQLConf(SQLConf.LEGACY_INLINE_CTE_IN_COMMANDS.key -> "true") {
+          assertAlwaysInlinedError(
+            "insert into a with v as materialized (select c1 from t) select c1 from v")
+        }
+      }
+      withSQLConf(SQLConf.LEGACY_CTE_PRECEDENCE_POLICY.key -> "LEGACY") {
+        assertAlwaysInlinedError("with v as materialized (select c1 from t) select * from v")
+      }
     }
   }
 }

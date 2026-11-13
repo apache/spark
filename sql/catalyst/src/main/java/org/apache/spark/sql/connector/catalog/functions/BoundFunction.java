@@ -118,7 +118,7 @@ public interface BoundFunction extends Function {
    * <ul>
    *   <li>accepting a valid query that selects and groups by the same scalar function call</li>
    *   <li>keeping a union's keyed partitioning</li>
-   *   <li>retaining a reported ordering that matches the partitioning</li>
+   *   <li>merging scans that report a partitioning or an ordering over the same transform</li>
    *   <li>reusing identical bucketed scans</li>
    *   <li>recognizing two identical subplans</li>
    * </ul>

@@ -58,22 +58,21 @@ class AggregateResolver(
   /**
    * Resolve [[Aggregate]] operator.
    *
-   * 1. Push [[WindowResolutionContext]] for potential window resolution.
-   * 2. Resolve the child (inline table).
-   * 3. Clear [[NameScope.availableAliases]]. Those are only relevant for the immediate aggregate
+   * 1. Resolve the child (inline table).
+   * 2. Clear [[NameScope.availableAliases]]. Those are only relevant for the immediate aggregate
    *    expressions for output prioritization to work correctly in
    *    [[NameScope.tryResolveMultipartNameByOutput]].
-   * 4. Resolve aggregate expressions using [[ExpressionResolver.resolveAggregateExpressions]] and
+   * 3. Resolve aggregate expressions using [[ExpressionResolver.resolveAggregateExpressions]] and
    *    set [[OperatorResolutionContextStack.ordinalReplacementExpressions]] for grouping
    *    expressions resolution.
-   * 5. If there's just one [[UnresolvedAttribute]] with a single-part name "ALL", expand it using
+   * 4. If there's just one [[UnresolvedAttribute]] with a single-part name "ALL", expand it using
    *    aggregate expressions which don't contain aggregate functions. There should not exist a
    *    column with that name in the lower operator's output, otherwise it takes precedence.
-   * 6. Resolve grouping expressions using [[ExpressionResolver.resolveGroupingExpressions]]. This
+   * 5. Resolve grouping expressions using [[ExpressionResolver.resolveGroupingExpressions]]. This
    *    includes alias references to aggregate expressions, which is done in
    *    [[NameScope.resolveMultipartName]] and replacing [[UnresolvedOrdinals]] with corresponding
    *    expressions from aggregate list, done in [[OrdinalResolver]].
-   * 7. Remove all the unnecessary [[Alias]]es from the grouping (all the aliases) and aggregate
+   * 6. Remove all the unnecessary [[Alias]]es from the grouping (all the aliases) and aggregate
    *    (keep the outermost one) expressions. This is needed to stay compatible with the
    *    fixed-point implementation. For example:
    *

@@ -535,8 +535,10 @@ class ExecutorPodsAllocator(
         newExecutorId.toString,
         applicationId,
         driverPod,
-        resourceProfileId)
-      val resolvedExecutorSpec = executorBuilder.buildFromFeatures(executorConf, secMgr,
+        resourceProfileId,
+        Option(secMgr.getSecretKey()),
+        secMgr.getEnvironmentForSslRpcPasswordsFromSparkConf)
+      val resolvedExecutorSpec = executorBuilder.buildFromFeatures(executorConf,
         kubernetesClient, rpIdToResourceProfile(resourceProfileId))
       val executorPod = resolvedExecutorSpec.pod
       val podWithAttachedContainer = new PodBuilder(executorPod.pod)

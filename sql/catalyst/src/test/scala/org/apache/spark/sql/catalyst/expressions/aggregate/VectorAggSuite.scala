@@ -17,11 +17,15 @@
 
 package org.apache.spark.sql.catalyst.expressions.aggregate
 
-import org.apache.spark.SparkFunSuite
+import java.lang.{Double => JDouble, Float => JFloat}
+
+import org.apache.spark.{SparkFunSuite, SparkRuntimeException}
 import org.apache.spark.sql.catalyst.InternalRow
-import org.apache.spark.sql.catalyst.expressions.{BoundReference, SpecificInternalRow, VectorAvg, VectorSum}
+import org.apache.spark.sql.catalyst.analysis.TypeCheckResult
+import org.apache.spark.sql.catalyst.analysis.TypeCheckResult.DataTypeMismatch
+import org.apache.spark.sql.catalyst.expressions.{BoundReference, Expression, Literal, SpecificInternalRow, VectorAvg, VectorCosineSimilarity, VectorInnerProduct, VectorL2Distance, VectorNorm, VectorNormalize, VectorSum}
 import org.apache.spark.sql.catalyst.util.{ArrayData, GenericArrayData}
-import org.apache.spark.sql.types.{ArrayType, FloatType}
+import org.apache.spark.sql.types.{ArrayType, DoubleType, FloatType, IntegerType}
 
 class VectorAggSuite extends SparkFunSuite {
 
@@ -44,8 +48,15 @@ class VectorAggSuite extends SparkFunSuite {
   }
 
   // Helper to create input row with float array
-  def createInputRow(values: Array[Float]): InternalRow = {
-    InternalRow(ArrayData.toArrayData(values))
+  def createInputRow(
+      values: Array[Float],
+      useGenericArray: Boolean = false): InternalRow = {
+    val array = if (useGenericArray) {
+      new GenericArrayData(values)
+    } else {
+      ArrayData.toArrayData(values)
+    }
+    InternalRow(array)
   }
 
   // Helper to create input row with null
@@ -56,7 +67,7 @@ class VectorAggSuite extends SparkFunSuite {
   }
 
   // Helper to create input row with array containing null elements
-  def createInputRowWithNullElement(values: Array[java.lang.Float]): InternalRow = {
+  def createInputRowWithNullElement(values: Array[JFloat]): InternalRow = {
     val arrayData = new GenericArrayData(values.map {
       case null => null
       case v => v.floatValue().asInstanceOf[AnyRef]
@@ -82,7 +93,7 @@ class VectorAggSuite extends SparkFunSuite {
   // Asserts that two floats are approximately equal within a tolerance.
   def assertFloatEquals(actual: Float, expected: Float, tolerance: Float = 1e-5f): Unit = {
     assert(
-      java.lang.Float.isNaN(expected) && java.lang.Float.isNaN(actual) ||
+      actual == expected || JFloat.isNaN(expected) && JFloat.isNaN(actual) ||
         math.abs(actual - expected) <= tolerance,
       s"Expected $expected but got $actual (tolerance: $tolerance)"
     )
@@ -100,6 +111,40 @@ class VectorAggSuite extends SparkFunSuite {
     }
   }
 
+  def createDoubleVectorSum(): (VectorSum, InternalRow) = {
+    val input = new BoundReference(0, ArrayType(DoubleType), nullable = true)
+    val agg = new VectorSum(input)
+    val buffer = new SpecificInternalRow(agg.aggBufferAttributes.map(_.dataType))
+    agg.initialize(buffer)
+    (agg, buffer)
+  }
+
+  def createDoubleInputRow(values: Array[Double]): InternalRow = {
+    InternalRow(ArrayData.toArrayData(values))
+  }
+
+  def createDoubleInputRowWithNullElement(values: Array[JDouble]): InternalRow = {
+    InternalRow(new GenericArrayData(values.map {
+      case null => null
+      case v => v.doubleValue().asInstanceOf[AnyRef]
+    }))
+  }
+
+  def evalAsDoubleArray(agg: VectorSum, buffer: InternalRow): Array[Double] = {
+    val result = agg.eval(buffer)
+    if (result == null) return null
+    val arrayData = result.asInstanceOf[ArrayData]
+    (0 until arrayData.numElements()).map(i => arrayData.getDouble(i)).toArray
+  }
+
+  private val floatOnlyVectorFunctions: Map[String, Expression => Expression] = Map(
+    "vector_avg" -> ((v: Expression) => new VectorAvg(v)),
+    "vector_cosine_similarity" -> ((v: Expression) => VectorCosineSimilarity(v, v)),
+    "vector_inner_product" -> ((v: Expression) => VectorInnerProduct(v, v)),
+    "vector_l2_distance" -> ((v: Expression) => VectorL2Distance(v, v)),
+    "vector_norm" -> ((v: Expression) => VectorNorm(v, Literal(2.0f))),
+    "vector_normalize" -> ((v: Expression) => VectorNormalize(v, Literal(2.0f))))
+
   test("VectorSum - empty buffer returns null") {
     val (agg, buffer, _) = createVectorSum()
     assert(agg.eval(buffer) === null)
@@ -110,6 +155,16 @@ class VectorAggSuite extends SparkFunSuite {
     agg.update(buffer, createInputRow(Array(1.0f, 2.0f, 3.0f)))
     val result = evalAsFloatArray(agg, buffer)
     assert(result === Array(1.0f, 2.0f, 3.0f))
+  }
+
+  test("VectorSum - result is independent of later buffer updates") {
+    val (agg, buffer, _) = createVectorSum()
+    agg.update(buffer, createInputRow(Array(1.0f, 2.0f, 3.0f)))
+    val result = agg.eval(buffer).asInstanceOf[ArrayData]
+
+    agg.update(buffer, createInputRow(Array(4.0f, 5.0f, 6.0f)))
+    assertResult(Array(5.0f, 7.0f, 9.0f))(evalAsFloatArray(agg, buffer))
+    assertResult(Array(1.0f, 2.0f, 3.0f))(result.toFloatArray())
   }
 
   test("VectorSum - multiple vectors") {
@@ -357,6 +412,145 @@ class VectorAggSuite extends SparkFunSuite {
     assert(result(1) === 3.0f)
   }
 
+  test("VectorAvg - opposite extreme values do not overflow") {
+    val (agg, buffer, _) = createVectorAvg()
+    val expected = Array(0.0f, 0.0f).map(JFloat.floatToIntBits)
+    agg.update(buffer, createInputRow(Array(Float.MaxValue, -Float.MaxValue)))
+    agg.update(buffer, createInputRow(Array(-Float.MaxValue, Float.MaxValue)))
+    assertResult(expected)(evalAsFloatArray(agg, buffer).map(JFloat.floatToIntBits))
+
+    val (_, buffer1, _) = createVectorAvg()
+    val (_, buffer2, _) = createVectorAvg()
+    agg.update(buffer1, createInputRow(Array(Float.MaxValue, -Float.MaxValue)))
+    agg.update(buffer2, createInputRow(Array(-Float.MaxValue, Float.MaxValue)))
+    agg.merge(buffer1, buffer2)
+    assertResult(expected)(evalAsFloatArray(agg, buffer1).map(JFloat.floatToIntBits))
+  }
+
+  test("VectorAvg - finite overflow preserves cumulative weights") {
+    for {
+      dim <- Seq(2, 4, 5, 8)
+      useGenericArray <- Seq(false, true)
+    } {
+      val (agg, buffer, _) = createVectorAvg()
+      val first = Array.tabulate(dim)(i => if (i % 2 == 0) Float.MaxValue else -Float.MaxValue)
+      agg.update(buffer, createInputRow(first, useGenericArray))
+      agg.update(buffer, createInputRow(first, useGenericArray))
+      // The third update overflows the delta. An unweighted midpoint would incorrectly return zero.
+      agg.update(buffer, createInputRow(first.map(-_), useGenericArray))
+      val expected = (Float.MaxValue.toDouble / 3).toFloat
+      assertFloatArrayEquals(
+        evalAsFloatArray(agg, buffer),
+        Array.tabulate(dim)(i => if (i % 2 == 0) expected else -expected),
+        tolerance = math.ulp(expected) * 2)
+    }
+  }
+
+  test("VectorAvg - non-finite results do not depend on input order") {
+    val first =
+      Array(Float.PositiveInfinity, 1.0f, Float.NegativeInfinity, Float.PositiveInfinity)
+    val second = Array(1.0f, Float.PositiveInfinity, 1.0f, Float.NegativeInfinity)
+    def checkResult(result: Array[Float]): Unit = {
+      assertFloatArrayEquals(result,
+        Array(Float.PositiveInfinity, Float.PositiveInfinity, Float.NegativeInfinity, Float.NaN))
+    }
+
+    Seq(Seq(first, second), Seq(second, first)).foreach { vectors =>
+      val (agg, buffer, _) = createVectorAvg()
+      vectors.foreach(v => agg.update(buffer, createInputRow(v)))
+      checkResult(evalAsFloatArray(agg, buffer))
+      agg.update(buffer, createInputRow(Array(2.0f, 2.0f, 2.0f, 2.0f)))
+      checkResult(evalAsFloatArray(agg, buffer))
+
+      val (_, buffer1, _) = createVectorAvg()
+      val (_, buffer2, _) = createVectorAvg()
+      agg.update(buffer1, createInputRow(vectors.head))
+      agg.update(buffer2, createInputRow(vectors(1)))
+      agg.merge(buffer1, buffer2)
+      checkResult(evalAsFloatArray(agg, buffer1))
+    }
+  }
+
+  test("VectorAvg - finite elements around non-finite deltas") {
+    val first = Array(1.0f, Float.MaxValue, 3.0f, Float.PositiveInfinity, 5.0f,
+      Float.NegativeInfinity, 7.0f, Float.PositiveInfinity, 9.0f, Float.NaN, 11.0f)
+    val second = Array(3.0f, -Float.MaxValue, 5.0f, 1.0f, 7.0f, 1.0f, 9.0f,
+      Float.NegativeInfinity, 11.0f, 2.0f, 13.0f)
+    val expected = Array(2.0f, 0.0f, 4.0f, Float.PositiveInfinity, 6.0f,
+      Float.NegativeInfinity, 8.0f, Float.NaN, 10.0f, Float.NaN, 12.0f)
+
+    Seq(false, true).foreach { useGenericArray =>
+      val (agg, buffer, _) = createVectorAvg()
+      Seq(first, second).foreach { values =>
+        agg.update(buffer, createInputRow(values, useGenericArray))
+      }
+      assertResult(expected.map(JFloat.floatToIntBits))(
+        evalAsFloatArray(agg, buffer).map(JFloat.floatToIntBits))
+    }
+  }
+
+  test("VectorAvg - running-average rounding with and without infinity") {
+    Seq(false, true).foreach { includeInfinity =>
+      val (agg, buffer, _) = createVectorAvg()
+      val first = Array.tabulate(17)(i => if (i % 2 == 0) 1.0f else -1.0f)
+      val last = first.map(_ * 6)
+      val expected = Array.tabulate(17)(i => if (i % 2 == 0) 0x402aaaab else 0xc02aaaab)
+      if (includeInfinity) {
+        first(8) = Float.PositiveInfinity
+        last(8) = 1.0f
+        expected(8) = 0x7f800000
+      }
+      agg.update(buffer, createInputRow(first))
+      agg.update(buffer, createInputRow(first))
+      agg.update(buffer, createInputRow(last))
+      assertResult(expected)(
+        evalAsFloatArray(agg, buffer).map(JFloat.floatToIntBits))
+    }
+  }
+
+  test("VectorAvg - non-finite deltas at different positions") {
+    val cases = Seq(
+      (Float.MaxValue, -Float.MaxValue, 0.0f),
+      (Float.PositiveInfinity, 1.0f, Float.PositiveInfinity),
+      (Float.NegativeInfinity, 1.0f, Float.NegativeInfinity),
+      (Float.PositiveInfinity, Float.PositiveInfinity, Float.PositiveInfinity),
+      (Float.NegativeInfinity, Float.NegativeInfinity, Float.NegativeInfinity),
+      (Float.PositiveInfinity, Float.NegativeInfinity, Float.NaN),
+      (Float.NaN, Float.NaN, Float.NaN),
+      (Float.NaN, Float.PositiveInfinity, Float.NaN),
+      (Float.NaN, Float.NegativeInfinity, Float.NaN),
+      (Float.NaN, 1.0f, Float.NaN))
+    for {
+      dim <- Seq(1, 3, 4, 5, 7, 8, 9, 17)
+      index <- 0 until dim
+      (left, right, expectedValue) <- cases
+      (oldAvg, value) <- Seq((left, right), (right, left))
+      useGenericArray <- Seq(false, true)
+    } {
+      val (agg, buffer, _) = createVectorAvg()
+      val first = Array.fill(dim)(1.0f)
+      val second = Array.fill(dim)(3.0f)
+      val expected = Array.fill(dim)(2.0f)
+      first(index) = oldAvg
+      second(index) = value
+      expected(index) = expectedValue
+      val rows = Seq(first, second).map { values =>
+        createInputRow(values, useGenericArray)
+      }
+      rows.foreach(row => agg.update(buffer, row))
+      assertResult(expected.map(JFloat.floatToIntBits))(
+        evalAsFloatArray(agg, buffer).map(JFloat.floatToIntBits))
+
+      val (_, buffer1, _) = createVectorAvg()
+      val (_, buffer2, _) = createVectorAvg()
+      agg.update(buffer1, rows.head)
+      agg.update(buffer2, rows(1))
+      agg.merge(buffer1, buffer2)
+      assertResult(expected.map(JFloat.floatToIntBits))(
+        evalAsFloatArray(agg, buffer1).map(JFloat.floatToIntBits))
+    }
+  }
+
   test("VectorAvg - numerical stability with running average") {
     val (agg, buffer, _) = createVectorAvg()
     // Add many vectors to test numerical stability of running average
@@ -468,7 +662,7 @@ class VectorAggSuite extends SparkFunSuite {
 
   test("VectorSum - large vector with null element is skipped") {
     val (agg, buffer, _) = createVectorSum()
-    val vec1 = Array[java.lang.Float](1.0f, 2.0f, 3.0f, 4.0f, 5.0f, null, 7.0f, 8.0f,
+    val vec1 = Array[JFloat](1.0f, 2.0f, 3.0f, 4.0f, 5.0f, null, 7.0f, 8.0f,
                      9.0f, 10.0f, 11.0f, 12.0f, 13.0f, 14.0f, 15.0f, 16.0f)
     val vec2 = Array(16.0f, 15.0f, 14.0f, 13.0f, 12.0f, 11.0f, 10.0f, 9.0f,
                      8.0f, 7.0f, 6.0f, 5.0f, 4.0f, 3.0f, 2.0f, 1.0f)
@@ -493,5 +687,138 @@ class VectorAggSuite extends SparkFunSuite {
     agg.update(buffer, createInputRow(Array(3.0f)))
     val result = evalAsFloatArray(agg, buffer)
     assert(result === Array(4.0f))
+  }
+
+  test("VectorSum - result type follows input element type") {
+    val (doubleAgg, _) = createDoubleVectorSum()
+    assertResult(TypeCheckResult.TypeCheckSuccess)(doubleAgg.checkInputDataTypes())
+    assertResult(ArrayType(DoubleType, containsNull = false))(doubleAgg.dataType)
+
+    val (floatAgg, _, _) = createVectorSum()
+    assertResult(TypeCheckResult.TypeCheckSuccess)(floatAgg.checkInputDataTypes())
+    assertResult(ArrayType(FloatType, containsNull = false))(floatAgg.dataType)
+  }
+
+  test("VectorSum - rejects unsupported element type") {
+    val input = new BoundReference(0, ArrayType(IntegerType), nullable = true)
+    new VectorSum(input).checkInputDataTypes() match {
+      case DataTypeMismatch(errorSubClass, params) =>
+        assertResult("UNEXPECTED_INPUT_TYPE")(errorSubClass)
+        assertResult("\"ARRAY<FLOAT>\" or \"ARRAY<DOUBLE>\"")(params("requiredType"))
+        assertResult("\"ARRAY<INT>\"")(params("inputType"))
+      case other => fail(s"Expected DataTypeMismatch but got $other")
+    }
+  }
+
+  gridTest("Vector functions other than vector_sum reject double vectors")(
+      floatOnlyVectorFunctions.keys.toSeq.sorted) { name =>
+    val input = new BoundReference(0, ArrayType(DoubleType), nullable = true)
+    floatOnlyVectorFunctions(name)(input).checkInputDataTypes() match {
+      case DataTypeMismatch(errorSubClass, params) =>
+        assertResult("UNEXPECTED_INPUT_TYPE")(errorSubClass)
+        assertResult("\"ARRAY<FLOAT>\"")(params("requiredType"))
+        assertResult("\"ARRAY<DOUBLE>\"")(params("inputType"))
+      case other => fail(s"Expected DataTypeMismatch but got $other")
+    }
+  }
+
+  test("VectorSum - double: empty buffer returns null") {
+    val (agg, buffer) = createDoubleVectorSum()
+    assertResult(null)(agg.eval(buffer))
+  }
+
+  test("VectorSum - double: multiple vectors") {
+    val (agg, buffer) = createDoubleVectorSum()
+    agg.update(buffer, createDoubleInputRow(Array(1.0, 2.0)))
+    agg.update(buffer, createDoubleInputRow(Array(3.0, 4.0)))
+    agg.update(buffer, createDoubleInputRow(Array(5.0, 6.0)))
+    assertResult(Array(9.0, 12.0))(evalAsDoubleArray(agg, buffer))
+  }
+
+  test("VectorSum - double: result is independent of later buffer updates") {
+    val (agg, buffer) = createDoubleVectorSum()
+    agg.update(buffer, createDoubleInputRow(Array(1.0, 2.0, 3.0)))
+    val result = agg.eval(buffer).asInstanceOf[ArrayData]
+
+    agg.update(buffer, createDoubleInputRow(Array(4.0, 5.0, 6.0)))
+    assertResult(Array(5.0, 7.0, 9.0))(evalAsDoubleArray(agg, buffer))
+    assertResult(Array(1.0, 2.0, 3.0))(result.toDoubleArray())
+  }
+
+  test("VectorSum - double: keeps precision lost by float") {
+    val (agg, buffer) = createDoubleVectorSum()
+    agg.update(buffer, createDoubleInputRow(Array(16777216.0, 0.1, 1.0e300)))
+    agg.update(buffer, createDoubleInputRow(Array(1.0, 0.2, 1.0e300)))
+    assertResult(Array(16777217.0, 0.1 + 0.2, 2.0e300))(evalAsDoubleArray(agg, buffer))
+  }
+
+  test("VectorSum - double: merge two buffers") {
+    val (agg, buffer1) = createDoubleVectorSum()
+    val (_, buffer2) = createDoubleVectorSum()
+    agg.update(buffer1, createDoubleInputRow(Array(1.0e-10, 2.0)))
+    agg.update(buffer1, createDoubleInputRow(Array(3.0, 4.0)))
+    agg.update(buffer2, createDoubleInputRow(Array(1.0e10, 6.0)))
+    agg.update(buffer2, createDoubleInputRow(Array(7.0, 8.0)))
+    agg.merge(buffer1, buffer2)
+    assertResult(Array((1.0e-10 + 3.0) + (1.0e10 + 7.0), 20.0)) {
+      evalAsDoubleArray(agg, buffer1)
+    }
+  }
+
+  test("VectorSum - double: merge with empty buffers") {
+    val (agg, buffer1) = createDoubleVectorSum()
+    val (_, buffer2) = createDoubleVectorSum()
+    agg.merge(buffer1, buffer2)
+    assertResult(null)(agg.eval(buffer1))
+
+    agg.update(buffer2, createDoubleInputRow(Array(1.5, 2.5)))
+    agg.merge(buffer1, buffer2)
+    assertResult(Array(1.5, 2.5))(evalAsDoubleArray(agg, buffer1))
+  }
+
+  test("VectorSum - double: null vectors and vectors with null elements are skipped") {
+    val (agg, buffer) = createDoubleVectorSum()
+    agg.update(buffer, createDoubleInputRow(Array(1.0, 2.0)))
+    agg.update(buffer, createNullInputRow())
+    agg.update(buffer, createDoubleInputRowWithNullElement(Array(null, 10.0)))
+    agg.update(buffer, createDoubleInputRow(Array(3.0, 4.0)))
+    assertResult(Array(4.0, 6.0))(evalAsDoubleArray(agg, buffer))
+  }
+
+  test("VectorSum - double: empty vectors") {
+    val (agg, buffer) = createDoubleVectorSum()
+    agg.update(buffer, createDoubleInputRow(Array.empty[Double]))
+    agg.update(buffer, createDoubleInputRow(Array.empty[Double]))
+    assertResult(Array.empty[Double])(evalAsDoubleArray(agg, buffer))
+  }
+
+  test("VectorSum - double: special values") {
+    val (agg, buffer) = createDoubleVectorSum()
+    agg.update(buffer, createDoubleInputRow(Array(1.0, 2.0, Double.MaxValue)))
+    agg.update(buffer, createDoubleInputRow(Array(Double.NaN, Double.NegativeInfinity, 1.0)))
+    val result = evalAsDoubleArray(agg, buffer)
+    assert(result(0).isNaN)
+    assertResult(Double.NegativeInfinity)(result(1))
+    assertResult(Double.MaxValue)(result(2))
+  }
+
+  test("VectorSum - double: dimension mismatch") {
+    val (agg, buffer1) = createDoubleVectorSum()
+    val (_, buffer2) = createDoubleVectorSum()
+    agg.update(buffer1, createDoubleInputRow(Array(1.0, 2.0)))
+    checkError(
+      exception = intercept[SparkRuntimeException] {
+        agg.update(buffer1, createDoubleInputRow(Array(1.0, 2.0, 3.0)))
+      },
+      condition = "VECTOR_DIMENSION_MISMATCH",
+      parameters = Map("functionName" -> "`vector_sum`", "leftDim" -> "2", "rightDim" -> "3"))
+
+    agg.update(buffer2, createDoubleInputRow(Array(1.0, 2.0, 3.0)))
+    checkError(
+      exception = intercept[SparkRuntimeException] {
+        agg.merge(buffer1, buffer2)
+      },
+      condition = "VECTOR_DIMENSION_MISMATCH",
+      parameters = Map("functionName" -> "`vector_sum`", "leftDim" -> "2", "rightDim" -> "3"))
   }
 }

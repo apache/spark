@@ -18,10 +18,11 @@
 package org.apache.spark.sql.catalyst.optimizer
 
 import org.apache.spark.SparkException
-import org.apache.spark.sql.catalyst.expressions.{Alias, And, ArrayDistinct, ArrayExcept, ArrayIntersect, ArraysOverlap, ArrayTransform, ArrayUnion, CaseWhen, Coalesce, CreateArray, CreateMap, CreateNamedStruct, EqualTo, ExpectsInputTypes, Expression, GetStructField, If, IsNull, KnownFloatingPointNormalized, LambdaFunction, Literal, NamedLambdaVariable, TransformValues, UnaryExpression}
+import org.apache.spark.sql.catalyst.expressions.{Alias, And, ArrayTransform, CaseWhen, Coalesce, CreateArray, CreateMap, CreateNamedStruct, EqualTo, ExpectsInputTypes, Expression, GetStructField, If, IsNull, KnownFloatingPointNormalized, LambdaFunction, Literal, NamedExpression, NamedLambdaVariable, Or, PythonUDAF, TransformValues, UnaryExpression}
+import org.apache.spark.sql.catalyst.expressions.aggregate.AggregateExpression
 import org.apache.spark.sql.catalyst.expressions.codegen.{CodegenContext, ExprCode}
-import org.apache.spark.sql.catalyst.planning.ExtractEquiJoinKeys
-import org.apache.spark.sql.catalyst.plans.logical.{LogicalPlan, Window}
+import org.apache.spark.sql.catalyst.planning.{ExtractEquiJoinKeys, ExtractSingleColumnNullAwareAntiJoin}
+import org.apache.spark.sql.catalyst.plans.logical.{Aggregate, LogicalPlan, Window}
 import org.apache.spark.sql.catalyst.rules.Rule
 import org.apache.spark.sql.catalyst.trees.TreePattern._
 import org.apache.spark.sql.types._
@@ -53,65 +54,115 @@ import org.apache.spark.util.ArrayImplicits._
  *  `genEqual` method of [[org.apache.spark.sql.catalyst.expressions.codegen.CodegenContext]].
  * Case 2 is handled during planning in the `Aggregation` and `StatefulAggregationStrategy` objects
  *  of [[org.apache.spark.sql.execution.SparkStrategies]].
- * Cases 3-5 are handled by this optimizer rule.
+ * Cases 3 and 4 are handled by this optimizer rule. Array set operations handle case 5 in their
+ * expression evaluation.
  *
- * This rule runs in two places:
- *   1. Early in `FinishAnalysis` (right after `ReplaceExpressions` and before `EvalInlineTables`)
- *      so that array set-like operations are wrapped before optimizer rules that pre-evaluate
- *      expressions (e.g. `ConstantFolding`, `ConvertToLocalRelation`, `EvalInlineTables`).
- *   2. As a late batch at the end of the optimizer, because rules like subquery rewrite and
- *      join reorder can create new joins or join conditions after `FinishAnalysis` that still
- *      need their keys to be normalized.
+ * Ideally we should do the normalization in the physical operators that compare the binary
+ * `UnsafeRow` directly. We don't need this normalization if the Spark SQL execution engine is not
+ * optimized to run on binary data. Array set operations normalize values during expression
+ * evaluation instead, where values enter hash-based comparisons or result arrays.
  *
- * Ideally we should do the normalization in the physical operators that compare the
- * binary `UnsafeRow` directly. We don't need this normalization if the Spark SQL execution engine
- * is not optimized to run on binary data. This rule is created to simplify the implementation, so
- * that we have a single place to do normalization, which is more maintainable.
- *
+ * Note that, this rule must be executed at the end of optimizer, because the optimizer may create
+ * new joins(the subquery rewrite) and new join conditions(the join reorder).
  */
 object NormalizeFloatingNumbers extends Rule[LogicalPlan] {
 
-  def apply(plan: LogicalPlan): LogicalPlan = {
-    plan
-      .transformWithPruning( _.containsAnyPattern(WINDOW, JOIN)) {
-        case w: Window if w.partitionSpec.exists(p => needNormalize(p)) =>
-          // Although the `windowExpressions` may refer to `partitionSpec` expressions,
-          // we don't need to normalize the `windowExpressions`, as they are executed
-          // per input row and should take the input row as it is.
-          w.copy(partitionSpec = w.partitionSpec.map(normalize))
+  def apply(plan: LogicalPlan): LogicalPlan =
+    plan.transformWithPruning(_.containsAnyPattern(WINDOW, JOIN)) {
+      case w: Window if w.partitionSpec.exists(p => needNormalize(p)) =>
+        // Although the `windowExpressions` may refer to `partitionSpec` expressions, we don't need
+        // to normalize the `windowExpressions`, as they are executed per input row and should take
+        // the input row as it is.
+        w.copy(partitionSpec = w.partitionSpec.map(normalize))
 
-        // Only hash join and sort merge join need the normalization. Here we catch all Joins with
-        // join keys, assuming Joins with join keys are always planned as hash join or sort merge
-        // join. It's very unlikely that we will break this assumption in the near future.
-        case j @ ExtractEquiJoinKeys(_, leftKeys, rightKeys, condition, _, _, _, _)
-            // The analyzer guarantees left and right joins keys are of the same data type. Here we
-            // only need to check join keys of one side.
-            if leftKeys.exists(k => needNormalize(k)) =>
-          val newLeftJoinKeys = leftKeys.map(normalize)
-          val newRightJoinKeys = rightKeys.map(normalize)
-          val newConditions = newLeftJoinKeys.zip(newRightJoinKeys).map {
-            case (l, r) => EqualTo(l, r)
-          } ++ condition
-          j.copy(condition = Some(newConditions.reduce(And)))
+      // Only hash join and sort merge join need the normalization. Here we catch all Joins with
+      // join keys, assuming Joins with join keys are always planned as hash join or sort merge
+      // join. It's very unlikely that we will break this assumption in the near future.
+      case j @ ExtractEquiJoinKeys(_, leftKeys, rightKeys, condition, _, _, _, _)
+          // The analyzer guarantees left and right join keys are of the same data type, but a key
+          // can already be normalized on one side only (e.g. a filter pushed below an Aggregate
+          // reads the normalized grouping key, and a subquery rewrite turns it into a join key),
+          // so check both sides.
+          if leftKeys.exists(needNormalize) || rightKeys.exists(needNormalize) =>
+        val newLeftJoinKeys = leftKeys.map(normalize)
+        val newRightJoinKeys = rightKeys.map(normalize)
+        val newConditions = newLeftJoinKeys.zip(newRightJoinKeys).map {
+          case (l, r) => EqualTo(l, r)
+        } ++ condition
+        j.copy(condition = Some(newConditions.reduce(And)))
 
-        // TODO: ideally Aggregate should also be handled here, but its grouping expressions are
-        // mixed in its aggregate expressions. It's unreliable to change the grouping expressions
-        // here. For now we normalize grouping expressions during planning. See Case 2 in the
-        // Scaladoc just above.
-      }
-      .transformAllExpressionsWithPruning(_.containsAnyPattern(
-        ARRAY_DISTINCT, ARRAY_UNION, ARRAY_INTERSECT, ARRAY_EXCEPT, ARRAYS_OVERLAP)) {
-        case e: ArrayDistinct if needNormalize(e.child) =>
-          e.copy(child = normalize(e.child))
-        case e: ArrayUnion if needNormalize(e.left) =>
-          e.copy(left = normalize(e.left), right = normalize(e.right))
-        case e: ArrayIntersect if needNormalize(e.left) =>
-          e.copy(left = normalize(e.left), right = normalize(e.right))
-        case e: ArrayExcept if needNormalize(e.left) =>
-          e.copy(left = normalize(e.left), right = normalize(e.right))
-        case e: ArraysOverlap if needNormalize(e.left) =>
-          e.copy(left = normalize(e.left), right = normalize(e.right))
-      }
+      // The specialized NAAJ is a hash join, but its OR condition is not an equi-join shape.
+      case j @ ExtractSingleColumnNullAwareAntiJoin(leftKeys, rightKeys)
+          if leftKeys.exists(needNormalize) || rightKeys.exists(needNormalize) =>
+        val equality = EqualTo(normalize(leftKeys.head), normalize(rightKeys.head))
+        j.copy(condition = Some(Or(equality, IsNull(equality))))
+
+      // TODO: ideally Aggregate should also be handled here, but its grouping expressions are
+      // mixed in its aggregate expressions. It's unreliable to change the grouping expressions
+      // here. For now we normalize grouping expressions during planning. See Case 2 in the
+      // Scaladoc just above.
+    }
+
+  /**
+   * Whether `aggregate` outputs its float/double grouping keys normalized. The planner normalizes
+   * the grouping keys of every Aggregate (see `SparkStrategies.Aggregation`), except one whose
+   * aggregate functions are all grouped-agg pandas UDFs, planned as `ArrowAggregatePythonExec` on
+   * the raw keys. Rules that replace an Aggregate with a Project check [[readsNormalizedKeys]].
+   * The answer can still change during optimization, see [[mayChangeKeyForm]].
+   */
+  private[sql] def outputsNormalizedKeys(aggregate: Aggregate): Boolean = {
+    val aggregateFunctions = aggregate.aggregateExpressions.flatMap(_.collect {
+      case ae: AggregateExpression => ae.aggregateFunction
+    })
+    aggregateFunctions.isEmpty || !aggregateFunctions.forall(_.isInstanceOf[PythonUDAF])
+  }
+
+  /**
+   * Whether the form of the keys `aggregate` outputs may still change during optimization, so that
+   * a filter pushed below it must not depend on it. This is the case for an Aggregate with a
+   * grouped-agg pandas UDF: `ColumnPruning` can remove its other aggregate functions, so that it
+   * outputs the raw keys, or all of them, so that it becomes group-only and outputs normalized
+   * keys.
+   */
+  private[sql] def mayChangeKeyForm(aggregate: Aggregate): Boolean = {
+    aggregate.aggregateExpressions.exists(_.exists {
+      case ae: AggregateExpression => ae.aggregateFunction.isInstanceOf[PythonUDAF]
+      case _ => false
+    })
+  }
+
+  /**
+   * The float/double grouping expressions that `aggregate` outputs normalized, without aliases.
+   */
+  private[sql] def normalizedKeys(aggregate: Aggregate): Seq[Expression] = {
+    if (outputsNormalizedKeys(aggregate)) {
+      aggregate.groupingExpressions
+        .map {
+          case a: Alias => a.child
+          case e => e
+        }
+        .filter(e => needNormalize(e.dataType))
+    } else {
+      Nil
+    }
+  }
+
+  /**
+   * Whether a rule must not replace `aggregate` with a Project of `outputs` (a subset of
+   * `aggregate.aggregateExpressions`) over its child, because one of them reads a float/double
+   * grouping key that `aggregate` outputs normalized: the Project would output the raw key,
+   * unlike the Aggregate and unlike what a filter pushed below the Aggregate has read. Streaming
+   * Aggregates are exempt and keep the previous behavior: keeping one that such a rule used to
+   * remove would add a stateful operator, which a query restarted from an existing checkpoint
+   * rejects. Filters are not normalized below streaming Aggregates either (see
+   * `PushPredicateThroughNonJoin.pushBelowAggregate`).
+   */
+  private[sql] def readsNormalizedKeys(
+      aggregate: Aggregate,
+      outputs: Seq[NamedExpression]): Boolean = {
+    val keys = normalizedKeys(aggregate)
+    !aggregate.isStreaming && keys.nonEmpty &&
+      outputs.exists(_.exists(e => keys.exists(_.semanticEquals(e))))
   }
 
   /**

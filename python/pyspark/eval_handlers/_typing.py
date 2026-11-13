@@ -1,0 +1,83 @@
+#
+# Licensed to the Apache Software Foundation (ASF) under one or more
+# contributor license agreements.  See the NOTICE file distributed with
+# this work for additional information regarding copyright ownership.
+# The ASF licenses this file to You under the Apache License, Version 2.0
+# (the "License"); you may not use this file except in compliance with
+# the License.  You may obtain a copy of the License at
+#
+#    http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+#
+
+"""Type aliases and variables for the eval type handlers.
+
+The Arrow element types are forward refs so pyarrow stays a type-checking-only
+import at runtime, as elsewhere in the worker.
+"""
+
+from collections.abc import Iterator
+from dataclasses import dataclass
+from typing import TYPE_CHECKING, Any, Optional, Protocol, TypeVar
+
+if TYPE_CHECKING:
+    import pyarrow as pa
+
+    from pyspark.sql.types import StructType
+    from pyspark.sql.udtf import AnalyzeResult
+
+# Grouped-category input element, matching what the serializer yields: a group
+# serializer yields a lazy iterator; a co-group serializer materializes each side.
+GroupedBatch = Iterator["pa.RecordBatch"]
+CoGroupedBatch = tuple[list["pa.RecordBatch"], list["pa.RecordBatch"]]
+
+# Handler input and output stream element types.
+InputBatch = TypeVar("InputBatch")
+OutputBatch = TypeVar("OutputBatch")
+
+
+@dataclass(frozen=True)
+class UDF:
+    """One UDF as the worker reads it; each handler takes the fields it needs."""
+
+    # The functions applied in turn to the UDF's arguments, as unpickled. EvalTypeHandler.__init__
+    # chains them into one as the handler's _raw_funcs, and keeps that wrapped for profiling and,
+    # for most eval types, in fail_on_stopiteration, as the handler's _funcs.
+    funcs: list[Any]
+    args_offsets: list[int]
+    kwargs_offsets: dict[str, int]
+    # The DataType of the last function in the chain; a StructType for the eval types that
+    # return rows.
+    return_type: Any
+    # The id the profiler reports the UDF's results under.
+    result_id: int
+
+
+class UDTFInstance(Protocol):
+    """An instance of the user's UDTF class, or the PartitionedUDTF wrapping one: an object whose
+    methods are called, not a function. ``terminate`` and ``cleanup`` are optional."""
+
+    def eval(self, *args: Any, **kwargs: Any) -> Any: ...
+
+
+@dataclass(frozen=True)
+class UDTF:
+    """The UDTF as the worker reads it; ``UDTFHandlerBase.__init__`` instantiates it as the
+    handler's ``_udtf``."""
+
+    # The user's UDTF class, as unpickled.
+    udtf_cls: type
+    args_offsets: list[int]
+    kwargs_offsets: dict[str, int]
+    return_type: "StructType"
+    # The child indexes of the TABLE argument's PARTITION BY expressions, if any.
+    partition_child_indexes: list[int]
+    # Passed to the UDTF's __init__ when it takes one argument.
+    analyze_result: Optional["AnalyzeResult"]
+    # The UDTF's name in error messages.
+    name: str

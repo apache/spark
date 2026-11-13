@@ -109,6 +109,31 @@ Project [selected content AS tenth#x]
 
 
 -- !query
+SELECT /* outer /*+ inner */ outer tail */ 1 AS nested_hint
+-- !query analysis
+Project [1 AS nested_hint#x]
++- OneRowRelation
+
+
+-- !query
+/* SELECT /*+ HINT() */ 4; */
+SELECT 'after-comment' AS nested_hint_semicolon
+-- !query analysis
+Project [after-comment AS nested_hint_semicolon#x]
++- OneRowRelation
+
+
+-- !query
+/* SELECT /*+ HINT() 4; */ SELECT 1
+-- !query analysis
+org.apache.spark.sql.catalyst.parser.ParseException
+{
+  "errorClass" : "UNCLOSED_BRACKETED_COMMENT",
+  "sqlState" : "42601"
+}
+
+
+-- !query
 /*abc*/
 select 1 as a
 /*

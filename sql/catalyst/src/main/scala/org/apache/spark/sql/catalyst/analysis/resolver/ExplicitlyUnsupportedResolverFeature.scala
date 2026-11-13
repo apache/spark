@@ -20,15 +20,11 @@ package org.apache.spark.sql.catalyst.analysis.resolver
 /**
  * This is an addon to [[ResolverGuard]] functionality for features that cannot be determined by
  * only looking at the unresolved plan. [[Resolver]] will throw this control-flow exception
- * when it encounters some explicitly unsupported feature. Later behavior depends on the value of
- * [[ANALYZER_SINGLE_PASS_RESOLVER_EXPOSE_EXPLICITLY_UNSUPPORTED_FEATURE_IN_DUAL_RUNS]] flag:
- *  - If it is true: It will later be caught by [[HybridAnalyzer]] to abort single-pass
- *    analysis without comparing single-pass and fixed-point results. The motivation for this
- *    feature is the same as for the [[ResolverGuard]] - we want to have an explicit allowlist of
- *    unimplemented features that we are aware of, and `UNSUPPORTED_SINGLE_PASS_ANALYZER_FEATURE`
- *    will signal us the rest of the gaps.
- *  - If it is false: It will be thrown by the [[HybridAnalyzer]] in order to get better sense
- *    of coverage.
+ * when it encounters some explicitly unsupported feature. It will later be caught by
+ * [[HybridAnalyzer]] to abort single-pass analysis without comparing single-pass and fixed-point
+ * results. The motivation for this feature is the same as for the [[ResolverGuard]] - we want to
+ * have an explicit allowlist of unimplemented features that we are aware of, and
+ * `UNSUPPORTED_SINGLE_PASS_ANALYZER_FEATURE` will signal us the rest of the gaps.
  *
  * For example, [[UnresolvedRelation]] can be intermediately resolved by [[ResolveRelations]] as
  * [[UnresolvedCatalogRelation]] or a [[View]] (among all others). Say that for now the views

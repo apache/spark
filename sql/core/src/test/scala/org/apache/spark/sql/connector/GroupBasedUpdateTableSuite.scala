@@ -84,6 +84,34 @@ class GroupBasedUpdateTableSuite extends UpdateTableSuiteBase {
     }
   }
 
+  test("SPARK-60667: update with type coercion handles metadata columns correctly") {
+    createAndInitTable("pk INT NOT NULL, id INT, dep STRING",
+      """{ "pk": 1, "id": 1, "dep": "hr" }
+        |{ "pk": 2, "id": 2, "dep": "software" }
+        |{ "pk": 3, "id": 3, "dep": "hr" }
+        |""".stripMargin)
+
+    // the condition references a metadata column and needs type coercion (`id > 0.5`),
+    // so the UPDATE is resolved only in a later iteration of the analyzer
+    sql(
+      s"""UPDATE $tableNameAsString
+         |SET id = -1
+         |WHERE id IN (1, 100) AND _partition = 'hr' AND id > 0.5
+         |""".stripMargin)
+
+    checkAnswer(
+      sql(s"SELECT * FROM $tableNameAsString"),
+      Row(1, -1, "hr") :: Row(2, 2, "software") :: Row(3, 3, "hr") :: Nil)
+
+    checkLastWriteInfo(
+      expectedRowSchema = table.schema,
+      expectedMetadataSchema = Some(StructType(Array(PARTITION_FIELD, INDEX_FIELD_NULLABLE))))
+
+    checkLastWriteLog(
+      writeWithMetadataLogEntry(metadata = Row("hr", null), data = Row(1, -1, "hr")),
+      writeWithMetadataLogEntry(metadata = Row("hr", 1), data = Row(3, 3, "hr")))
+  }
+
   test("update runtime group filtering") {
     Seq(true, false).foreach { ddpEnabled =>
       Seq(true, false).foreach { aqeEnabled =>
@@ -165,6 +193,77 @@ class GroupBasedUpdateTableSuite extends UpdateTableSuiteBase {
 
         checkReplacedPartitions(Seq("hr"))
       }
+    }
+  }
+
+  test("SPARK-60664: update runtime group filtering with metadata column and subquery") {
+    withTempView("updated_pk") {
+      createAndInitTable("pk INT NOT NULL, salary INT, dep STRING",
+        """{ "pk": 1, "salary": 300, "dep": "hr" }
+          |{ "pk": 2, "salary": 150, "dep": "software" }
+          |{ "pk": 3, "salary": 120, "dep": "hr" }
+          |""".stripMargin)
+
+      Seq(1, 2).toDF("pk").createOrReplaceTempView("updated_pk")
+
+      // the subquery makes the UPDATE read the table twice (UNION), so the group filter
+      // of each read must refer to the metadata attributes of that read
+      sql(
+        s"""UPDATE $tableNameAsString
+           |SET salary = -1
+           |WHERE _partition = 'hr' AND pk IN (SELECT pk FROM updated_pk)
+           |""".stripMargin)
+
+      checkAnswer(
+        sql(s"SELECT * FROM $tableNameAsString"),
+        Row(1, -1, "hr") :: Row(2, 150, "software") :: Row(3, 120, "hr") :: Nil)
+
+      checkReplacedPartitions(Seq("hr"))
+    }
+  }
+
+  test("SPARK-60878: update with a subquery on the group key and the group filter disabled") {
+    withSQLConf(SQLConf.RUNTIME_ROW_LEVEL_OPERATION_GROUP_FILTER_ENABLED.key -> "false") {
+      withTempView("updated_dep") {
+        createAndInitTable("id INT, salary INT, dep STRING",
+          """{ "id": 1, "salary": 300, "dep": 'hr' }
+            |{ "id": 2, "salary": 150, "dep": 'software' }
+            |{ "id": 3, "salary": 120, "dep": 'hr' }
+            |""".stripMargin)
+
+        Seq("hr").toDF().createOrReplaceTempView("updated_dep")
+
+        // dynamic partition pruning applies to the read of the updated rows only, so it must not
+        // prune the scan that the read of the copied rows shares
+        sql(s"UPDATE $tableNameAsString SET salary = -1 WHERE dep IN (SELECT * FROM updated_dep)")
+
+        checkAnswer(
+          sql(s"SELECT * FROM $tableNameAsString"),
+          Row(1, -1, "hr") :: Row(2, 150, "software") :: Row(3, -1, "hr") :: Nil)
+
+        checkReplacedPartitions(Seq("hr", "software"))
+      }
+    }
+  }
+
+  test("SPARK-60878: update with a NOT EXISTS subquery on the group key") {
+    withTempView("kept_dep") {
+      createAndInitTable("id INT, salary INT, dep STRING",
+        """{ "id": 1, "salary": 300, "dep": 'hr' }
+          |{ "id": 2, "salary": 150, "dep": 'software' }
+          |{ "id": 3, "salary": 120, "dep": 'hr' }
+          |""".stripMargin)
+
+      Seq("hr").toDF("d").createOrReplaceTempView("kept_dep")
+
+      sql(s"UPDATE $tableNameAsString t SET salary = -1 " +
+        "WHERE NOT EXISTS (SELECT 1 FROM kept_dep WHERE d = t.dep)")
+
+      checkAnswer(
+        sql(s"SELECT * FROM $tableNameAsString"),
+        Row(1, 300, "hr") :: Row(2, -1, "software") :: Row(3, 120, "hr") :: Nil)
+
+      checkReplacedPartitions(Seq("software"))
     }
   }
 

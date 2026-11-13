@@ -278,6 +278,13 @@ ALTER TABLE table_identifier SET TBLPROPERTIES ( key1 = val1, key2 = val2, ... )
 
 `ALTER TABLE UNSET` command is used to drop the table property.
 
+For tables in [Data Source V2](sql-v2-data-sources.html) catalogs, catalogs may supply display-only
+properties in metadata commands such as `SHOW TBLPROPERTIES`. Spark itself does not remove these
+entries on `ALTER TABLE ... UNSET TBLPROPERTIES`; whether they remain depends on the catalog.
+After unsetting a stored property other than `comment`, Spark displays the display-only value
+with that key if the catalog still supplies it. Display-only `comment` entries are ignored,
+even after unsetting the stored `comment`.
+
 **Note:** If the specified property key does not exist, whether specify `IF EXISTS` or not, the command will ignore it and finally succeed.
 
 ##### Syntax
