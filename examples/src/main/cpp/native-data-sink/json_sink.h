@@ -118,8 +118,9 @@ struct Operation {
                         std::optional<std::pair<std::string, int64_t>> epoch);
 
   /// Publishes nothing, for an epoch whose output is already published: removes what this write
-  /// staged, and releases the lock.
-  arrow::Status Skip();
+  /// staged, and releases the lock. Cleanup is best effort: staged files are invisible to readers,
+  /// and committing an already committed epoch must have no effect.
+  void Skip();
 
   /// Removes what this operation staged or sealed, but never published data. Sealed files are
   /// kept if the manifest rename failed, since the manifest may still reference them.

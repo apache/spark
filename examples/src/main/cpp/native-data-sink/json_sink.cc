@@ -375,12 +375,11 @@ arrow::Status Operation::Publish(const std::vector<CommitMessage>& messages,
   return arrow::Status::OK();
 }
 
-arrow::Status Operation::Skip() {
-  arrow::Status status = Cleanup();
+void Operation::Skip() {
+  (void)Cleanup();
   // Nothing is left for the destructor to clean.
   committed = true;
   lock.reset();
-  return status;
 }
 
 arrow::Status Operation::Cleanup() const {
@@ -470,7 +469,8 @@ arrow::Status JsonStreamingWrite::Commit(int64_t epoch_id, std::vector<CommitMes
   // The write holds the lock, so the manifest that it read is still the latest one.
   auto committed = operation.previous.epochs.find(query_id_);
   if (committed != operation.previous.epochs.end() && committed->second >= epoch_id) {
-    return operation.Skip();
+    operation.Skip();
+    return arrow::Status::OK();
   }
   return operation.Publish(messages, std::make_pair(query_id_, epoch_id));
 }
