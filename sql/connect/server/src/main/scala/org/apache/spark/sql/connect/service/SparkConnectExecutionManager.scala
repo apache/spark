@@ -33,7 +33,7 @@ import org.apache.spark.connect.proto
 import org.apache.spark.internal.{Logging, LogKeys}
 import org.apache.spark.sql.catalyst.util.DateTimeConstants.NANOS_PER_MILLIS
 import org.apache.spark.sql.connect.IllegalStateErrors
-import org.apache.spark.sql.connect.config.Connect.{CONNECT_EXECUTE_MANAGER_ABANDONED_TOMBSTONES_SIZE, CONNECT_EXECUTE_MANAGER_DETACHED_TIMEOUT, CONNECT_EXECUTE_MANAGER_MAINTENANCE_INTERVAL}
+import org.apache.spark.sql.connect.config.Connect.{CONNECT_EXECUTE_MANAGER_ABANDONED_TOMBSTONES_SIZE, CONNECT_EXECUTE_MANAGER_DETACHED_TIMEOUT, CONNECT_EXECUTE_MANAGER_MAINTENANCE_INTERVAL, CONNECT_EXECUTE_MAX_CONCURRENT_QUERIES, CONNECT_EXECUTE_MAX_CONCURRENT_QUERIES_TIMEOUT}
 import org.apache.spark.sql.connect.execution.ExecuteGrpcResponseSender
 import org.apache.spark.sql.connect.planner.InvalidInputErrors
 import org.apache.spark.util.ThreadUtils
@@ -83,6 +83,38 @@ private[connect] class SparkConnectExecutionManager() extends Logging {
   /** Executor for the periodic maintenance */
   private val scheduledExecutor: AtomicReference[ScheduledExecutorService] =
     new AtomicReference[ScheduledExecutorService]()
+
+  /**
+   * Execution slots limiting the number of concurrent executions: Some(None) if the limit is
+   * disabled, None if not initialized yet. Initialized from
+   * spark.connect.execute.maxConcurrentQueries on first use, and reset by shutdown().
+   */
+  @volatile private var executionSlotsState: Option[Option[ExecutionSlots]] = None
+
+  /**
+   * Execution slots limiting the number of concurrent executions, or None if
+   * spark.connect.execute.maxConcurrentQueries is not set (unlimited concurrency).
+   */
+  private[connect] def executionSlots: Option[ExecutionSlots] = {
+    executionSlotsState match {
+      case Some(slots) => slots
+      case None =>
+        synchronized {
+          if (executionSlotsState.isEmpty) {
+            val limit = SparkEnv.get.conf.get(CONNECT_EXECUTE_MAX_CONCURRENT_QUERIES)
+            executionSlotsState = Some(if (limit > 0) {
+              logInfo(
+                log"Spark Connect executions are limited to " +
+                  log"${MDC(LogKeys.MAX_SLOTS, limit)} concurrent queries")
+              Some(new ExecutionSlots(limit))
+            } else {
+              None
+            })
+          }
+          executionSlotsState.get
+        }
+    }
+  }
 
   /**
    * Create a new ExecuteHolder and register it with this global manager and with its session.
@@ -171,6 +203,10 @@ private[connect] class SparkConnectExecutionManager() extends Logging {
     logInfo(log"ExecuteHolder ${MDC(LogKeys.EXECUTE_KEY, key)} is removed.")
 
     executeHolder.close()
+    // The execution slot is normally released when the execution completes (see
+    // ExecuteResponseObserver). Make sure that it is not leaked, and that the execution leaves the
+    // queue, if it never got to complete.
+    executeHolder.releaseExecutionPermit()
     if (abandoned) {
       // Update in abandonedTombstones: above it wasn't yet updated with closedTime etc.
       abandonedTombstones.put(key, executeHolder.getExecuteInfo)
@@ -202,7 +238,16 @@ private[connect] class SparkConnectExecutionManager() extends Logging {
         case other =>
           throw InvalidInputErrors.invalidOneOfField(other, request.getPlan.getDescriptorForType)
       }
-      executeHolder.start()
+      executionSlots match {
+        case Some(slots) if SparkConnectExecutionManager.requiresExecutionSlot(request) =>
+          // Queue the execution until it gets an execution slot. This does not block: the
+          // execution is registered and the client can attach to it while it is queued.
+          executeHolder.startWithSlot(
+            slots,
+            SparkEnv.get.conf.get(CONNECT_EXECUTE_MAX_CONCURRENT_QUERIES_TIMEOUT))
+        case _ =>
+          executeHolder.start()
+      }
     } catch {
       // Errors raised before the execution holder has finished spawning a thread are considered
       // plan execution failure, and the client should not try reattaching it afterwards.
@@ -295,6 +340,10 @@ private[connect] class SparkConnectExecutionManager() extends Logging {
 
     // note: this does not cleanly shut down the executions, but the server is shutting down.
     executions.clear()
+    synchronized {
+      executionSlotsState.foreach(_.foreach(_.stop()))
+      executionSlotsState = None
+    }
     abandonedTombstones.invalidateAll()
 
     updateLastExecutionTime()
@@ -373,5 +422,31 @@ private[connect] class SparkConnectExecutionManager() extends Logging {
 
   private[connect] def listExecuteHolders: Seq[ExecuteHolder] = {
     executions.values().asScala.toSeq
+  }
+}
+
+private[connect] object SparkConnectExecutionManager {
+
+  /**
+   * Whether `request` counts towards spark.connect.execute.maxConcurrentQueries.
+   *
+   * Streaming query commands are exempt: they do not run queries themselves, but some of them
+   * (e.g. awaitTermination, processAllAvailable, stop, or a listener bus listener) can wait for
+   * an arbitrarily long time for streaming queries to make progress. A streaming query using
+   * foreachBatch in Python runs every micro-batch through ExecutePlan on this server, which needs
+   * an execution slot. Holding a slot while waiting for such queries could thus deadlock the
+   * server once all slots are held by waiters.
+   */
+  private[connect] def requiresExecutionSlot(request: proto.ExecutePlanRequest): Boolean = {
+    if (request.getPlan.getOpTypeCase != proto.Plan.OpTypeCase.COMMAND) {
+      return true
+    }
+    request.getPlan.getCommand.getCommandTypeCase match {
+      case proto.Command.CommandTypeCase.STREAMING_QUERY_COMMAND |
+          proto.Command.CommandTypeCase.STREAMING_QUERY_MANAGER_COMMAND |
+          proto.Command.CommandTypeCase.STREAMING_QUERY_LISTENER_BUS_COMMAND =>
+        false
+      case _ => true
+    }
   }
 }
