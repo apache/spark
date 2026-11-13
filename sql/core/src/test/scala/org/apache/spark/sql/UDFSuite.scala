@@ -34,7 +34,7 @@ import org.apache.spark.sql.catalyst.expressions.{Literal, ScalaUDF}
 import org.apache.spark.sql.catalyst.expressions.Cast._
 import org.apache.spark.sql.catalyst.plans.logical.Project
 import org.apache.spark.sql.catalyst.util.DateTimeUtils
-import org.apache.spark.sql.execution.{QueryExecution, SimpleMode}
+import org.apache.spark.sql.execution.{QueryExecution, SimpleMode, WholeStageCodegenExec}
 import org.apache.spark.sql.execution.aggregate.{ScalaAggregator, ScalaUDAF}
 import org.apache.spark.sql.execution.columnar.InMemoryRelation
 import org.apache.spark.sql.execution.command.{CreateDataSourceTableAsSelectCommand, ExplainCommand}
@@ -1281,5 +1281,15 @@ class UDFSuite extends SharedSparkSession {
     val input = Seq(1L, 2L, 3L).toDF("value")
     val result = input.select(kryoBufUDAF($"value").as("sum"))
     checkAnswer(result, Row(6L) :: Nil)
+  }
+
+  test("SPARK-60762: The types of a UDF are not in the generated code") {
+    spark.udf.register("rowSize", (r: Row) => r.size)
+    val df = sql("""SELECT rowSize(named_struct('fieldName"b', id)) AS r FROM range(2)""")
+    val code = df.queryExecution.executedPlan.collect {
+      case w: WholeStageCodegenExec => w.doCodeGen()._2.body
+    }
+    assert(code.nonEmpty && code.forall(!_.contains("fieldName")))
+    checkAnswer(df, Row(1) :: Row(1) :: Nil)
   }
 }

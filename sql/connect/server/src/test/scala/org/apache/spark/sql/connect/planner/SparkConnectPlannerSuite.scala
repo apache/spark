@@ -26,10 +26,11 @@ import org.apache.spark.connect.proto
 import org.apache.spark.connect.proto.Expression.{Alias, ExpressionString, UnresolvedStar}
 import org.apache.spark.sql.{AnalysisException, Row}
 import org.apache.spark.sql.catalyst.InternalRow
-import org.apache.spark.sql.catalyst.analysis.{RelationTimeTravel, UnresolvedAlias, UnresolvedFunction, UnresolvedRelation}
+import org.apache.spark.sql.catalyst.analysis.{NamedStreamingRelation, NameStreamingSources, RelationTimeTravel, UnresolvedAlias, UnresolvedFunction, UnresolvedRelation}
 import org.apache.spark.sql.catalyst.expressions.{AttributeReference, UnsafeProjection}
 import org.apache.spark.sql.catalyst.plans.logical
 import org.apache.spark.sql.catalyst.plans.logical.{Aggregate, LogicalPlan}
+import org.apache.spark.sql.catalyst.streaming.{Unassigned, UserProvided}
 import org.apache.spark.sql.catalyst.trees.{CurrentOrigin, TreePattern}
 import org.apache.spark.sql.catalyst.types.DataTypeUtils
 import org.apache.spark.sql.classic.Dataset
@@ -37,6 +38,7 @@ import org.apache.spark.sql.connect.SparkConnectTestUtils
 import org.apache.spark.sql.connect.common.InvalidPlanInput
 import org.apache.spark.sql.connect.common.LiteralValueProtoConverter.toLiteralProto
 import org.apache.spark.sql.execution.arrow.ArrowConverters
+import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.sql.types._
 import org.apache.spark.unsafe.types.UTF8String
@@ -157,6 +159,71 @@ class SparkConnectPlannerSuite extends SparkFunSuite with SparkConnectPlanTest {
     val res = transform(proto.Relation.newBuilder.setRead(readWithTable).build())
     assert(res !== null)
     assert(res.nodeName == "UnresolvedRelation")
+  }
+
+  test("streaming table source name") {
+    for {
+      isStreaming <- Seq(false, true)
+      sourceName <- Seq(None, Some("orders_source"))
+    } {
+      val table = proto.Read.NamedTable
+        .newBuilder()
+        .setUnparsedIdentifier("db.orders")
+        .putOptions("maxFilesPerTrigger", "1")
+      sourceName.foreach(table.setSourceName)
+      val read = proto.Read.newBuilder().setNamedTable(table).setIsStreaming(isStreaming)
+      val plan = transform(proto.Relation.newBuilder().setRead(read).build())
+      val relation = plan match {
+        case NamedStreamingRelation(child: UnresolvedRelation, UserProvided(name)) =>
+          assert(isStreaming && sourceName.contains(name))
+          child
+        case NamedStreamingRelation(child: UnresolvedRelation, Unassigned) =>
+          assert(isStreaming && sourceName.isEmpty)
+          child
+        case child: UnresolvedRelation =>
+          assert(!isStreaming)
+          child
+        case other => fail(s"Unexpected table read: $other")
+      }
+      assert(relation.multipartIdentifier == Seq("db", "orders"))
+      assert(relation.options.get("maxFilesPerTrigger") == "1")
+      assert(relation.isStreaming == isStreaming)
+    }
+  }
+
+  test("unnamed streaming table sources obey source naming enforcement") {
+    val read = proto.Read
+      .newBuilder()
+      .setNamedTable(proto.Read.NamedTable.newBuilder().setUnparsedIdentifier("db.orders"))
+      .setIsStreaming(true)
+    val plan = transform(proto.Relation.newBuilder().setRead(read).build())
+    withSQLConf(SQLConf.ENABLE_STREAMING_SOURCE_EVOLUTION.key -> "true") {
+      checkError(
+        exception = intercept[AnalysisException] {
+          NameStreamingSources(plan)
+        },
+        condition = "STREAMING_QUERY_EVOLUTION_ERROR.UNNAMED_STREAMING_SOURCES_WITH_ENFORCEMENT",
+        parameters = Map("sourceInfo" -> "Leaf position 0 - UnresolvedRelation"))
+    }
+  }
+
+  test("streaming table source names are validated") {
+    val table = proto.Read.NamedTable
+      .newBuilder()
+      .setUnparsedIdentifier("db.orders")
+      .setSourceName("orders-source")
+    val read = proto.Read.newBuilder().setNamedTable(table).setIsStreaming(true)
+    checkError(
+      exception = intercept[AnalysisException] {
+        transform(proto.Relation.newBuilder().setRead(read).build())
+      },
+      condition = "STREAMING_QUERY_EVOLUTION_ERROR.INVALID_SOURCE_NAME",
+      parameters = Map("sourceName" -> "orders-source"))
+
+    read.setNamedTable(table.setSourceName(""))
+    intercept[IllegalArgumentException] {
+      transform(proto.Relation.newBuilder().setRead(read).build())
+    }
   }
 
   test("Read with at syntax time travel") {

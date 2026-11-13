@@ -1,0 +1,1525 @@
+/*
+ * Licensed to the Apache Software Foundation (ASF) under one or more
+ * contributor license agreements.  See the NOTICE file distributed with
+ * this work for additional information regarding copyright ownership.
+ * The ASF licenses this file to You under the Apache License, Version 2.0
+ * (the "License"); you may not use this file except in compliance with
+ * the License.  You may obtain a copy of the License at
+ *
+ *    http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+package org.apache.spark.sql.execution.datasources.v2.columnar
+
+import java.nio.charset.StandardCharsets.UTF_8
+import java.util
+import java.util.Locale
+import java.util.concurrent.{ConcurrentHashMap, ConcurrentLinkedQueue}
+import java.util.concurrent.atomic.{AtomicInteger, AtomicLong}
+
+import scala.collection.mutable.ArrayBuffer
+import scala.jdk.CollectionConverters._
+import scala.util.Try
+
+import org.apache.arrow.c.{ArrowArray, ArrowSchema, Data}
+import org.apache.arrow.vector.{BigIntVector, DecimalVector, FieldVector, FixedSizeBinaryVector, LargeVarCharVector, ValueVector, VectorSchemaRoot}
+import org.apache.arrow.vector.complex.ListVector
+import org.apache.arrow.vector.types.pojo.{ArrowType, Field, FieldType, Schema}
+
+import org.apache.spark.{SparkArithmeticException, SparkException, TaskContextImpl}
+import org.apache.spark.sql.{AnalysisException, QueryTest, Row}
+import org.apache.spark.sql.catalyst.InternalRow
+import org.apache.spark.sql.catalyst.expressions.{Contains, PredicateHelper, Rand, UnsafeProjection}
+import org.apache.spark.sql.catalyst.plans.logical.Filter
+import org.apache.spark.sql.connector.catalog.{Table, TableCapability, TableProvider}
+import org.apache.spark.sql.connector.expressions.{Expression => V2Expression, FieldReference, LiteralValue, Transform}
+import org.apache.spark.sql.connector.expressions.filter.Predicate
+import org.apache.spark.sql.connector.read.{InputPartition, PartitionReader, PartitionReaderFactory}
+import org.apache.spark.sql.connector.read.streaming.{ReadLimit, SupportsAdmissionControl}
+import org.apache.spark.sql.connector.write.{DataWriter, PhysicalWriteInfoImpl, WriterCommitMessage}
+import org.apache.spark.sql.execution.{ApplyColumnarRulesAndInsertTransitions, ColumnarRule, ColumnarToRowExec, RowToColumnConverter, SparkPlan}
+import org.apache.spark.sql.execution.adaptive.{AdaptiveSparkPlanExec, AdaptiveSparkPlanHelper}
+import org.apache.spark.sql.execution.arrow.ArrowWriter
+import org.apache.spark.sql.execution.columnar.InMemoryTableScanExec
+import org.apache.spark.sql.execution.datasources.v2.{BatchScanExec, DataSourceV2ScanRelation, DataWritingSparkTask, MicroBatchScanExec, V2TableWriteExec}
+import org.apache.spark.sql.execution.streaming.runtime.{MemoryStream, StreamingQueryWrapper}
+import org.apache.spark.sql.execution.vectorized.{OnHeapColumnVector, ReusedArrowColumnVector, WritableColumnVector}
+import org.apache.spark.sql.internal.SQLConf
+import org.apache.spark.sql.sources.DataSourceRegister
+import org.apache.spark.sql.test.SharedSparkSession
+import org.apache.spark.sql.types.{LongType, StructType}
+import org.apache.spark.sql.util.{ArrowUtils, CaseInsensitiveStringMap}
+import org.apache.spark.sql.vectorized.{ArrowColumnVector, ColumnarBatch, ColumnVector}
+import org.apache.spark.unsafe.types.UTF8String
+import org.apache.spark.util.Utils
+
+/**
+ * Tests the Data Source V2 adapter of [[ColumnarDataSource]] with a data source implemented on the
+ * JVM. `NativeDataSourceSuite` tests the native data sources, which implement it.
+ */
+class ColumnarDataSourceSuite extends QueryTest with SharedSparkSession
+  with AdaptiveSparkPlanHelper with PredicateHelper {
+  import testImplicits._
+
+  private val format = "test_columnar_range"
+
+  private def scan(df: org.apache.spark.sql.classic.DataFrame): ColumnarScan = {
+    df.queryExecution.optimizedPlan.collectFirst {
+      case relation: DataSourceV2ScanRelation => relation.scan.asInstanceOf[ColumnarScan]
+    }.get
+  }
+
+  private def options(pairs: (String, String)*): CaseInsensitiveStringMap = {
+    new CaseInsensitiveStringMap(pairs.toMap.asJava)
+  }
+
+  test("batch read") {
+    val df = spark.read.format(format).option("end", "10").load()
+    assert(df.schema == StructType.fromDDL("id BIGINT, name STRING"))
+    checkAnswer(df, (0L until 10L).map(id => Row(id, s"name$id")))
+    // A data source can also be used by the class name of its provider.
+    checkAnswer(
+      spark.read.format(classOf[TestRangeProvider].getName).load(),
+      (0L until 10L).map(id => Row(id, s"name$id")))
+    checkAnswer(
+      spark.read.schema("id BIGINT").format(format).option("end", "3").load(),
+      Seq(Row(0L), Row(1L), Row(2L)))
+  }
+
+  test("push down a limit and the required columns") {
+    val pruned = spark.read.format(format).option("end", "4").load().select("name")
+    checkAnswer(pruned, (0L until 4L).map(id => Row(s"name$id")))
+    assert(scan(pruned).readSchema() == StructType.fromDDL("name STRING"))
+
+    // The planner that a limit is pushed down to also prunes the columns.
+    val both = spark.read.format(format).option("end", "10").load().select("name").limit(2)
+    checkAnswer(both, Seq(Row("name0"), Row("name1")))
+    assert(scan(both).readSchema() == StructType.fromDDL("name STRING"))
+    assert(scan(both).getMetaData()("PushedLimit") == "LIMIT 2")
+
+    val limited = spark.read.format(format).option("end", "10").load().limit(2)
+    assert(limited.collect().length == 2)
+    assert(scan(limited).getMetaData()("PushedLimit") == "LIMIT 2")
+  }
+
+  test("keep the order of the filters that Spark evaluates after a scan") {
+    // A data source only skips data with the domains, so Spark evaluates all the filters after the
+    // scan, in the order of the query, as without the pushdown: here a nondeterministic and
+    // selective one first, before an expensive one that the scan gets.
+    Seq("true", "false").foreach { enabled =>
+      withSQLConf(SQLConf.NATIVE_DATA_SOURCE_FILTER_PUSHDOWN_ENABLED.key -> enabled) {
+        val df = spark.read.format(format).option("end", "10").load()
+          .where("rand(0) < 0.5 AND lower(name) LIKE '%e1%'")
+        val conjuncts = df.queryExecution.optimizedPlan.collectFirst {
+          case Filter(condition, _: DataSourceV2ScanRelation) =>
+            splitConjunctivePredicates(condition)
+        }.get
+        // The optimizer adds the filters that it infers, such as isnotnull(name), before them.
+        val random = conjuncts.indexWhere(_.exists(_.isInstanceOf[Rand]))
+        val contains = conjuncts.indexWhere(_.isInstanceOf[Contains])
+        assert(random >= 0 && contains > random, conjuncts)
+      }
+    }
+  }
+
+  test("push down the domains of filtered columns") {
+    val df = spark.read.format(format).option("end", "100").load()
+      .filter("id >= 40 AND id < 50 AND name <> 'x'")
+    checkAnswer(df, (40L until 50L).map(id => Row(id, s"name$id")))
+    // The data source only uses the domain of id, to read the ids in it.
+    val metadata = scan(df).getMetaData()
+    assert(metadata("PushedDomains") == "[id: [40L, 50L)]")
+    val pushed = metadata("PushedFilters")
+    assert(pushed.contains("id >= 40") && pushed.contains("id < 50"), pushed)
+    assert(!pushed.contains("name"), pushed)
+    assert(scan(df).toBatch.planInputPartitions().toSeq ==
+      Seq(TestRangePartition(40, 45), TestRangePartition(45, 50)))
+
+    // Spark evaluates all the filters after reading: the data source only keeps the hull of the
+    // ranges of id, so it reads the ids from 0 to 7, and Spark drops 3 with the pushed id <> 3.
+    val hull = spark.read.format(format).option("end", "10").load().filter("id <> 3 AND id < 8")
+    checkAnswer(hull, Seq(0L, 1L, 2L, 4L, 5L, 6L, 7L).map(id => Row(id, s"name$id")))
+    assert(scan(hull).getMetaData()("PushedDomains") == "[id: (-inf, 3L), (3L, 8L)]")
+    assert(scan(hull).toBatch.planInputPartitions().toSeq ==
+      Seq(TestRangePartition(0, 4), TestRangePartition(4, 8)))
+
+    // A filter that is not a domain is not pushed: the data source reads all the ids, and Spark
+    // evaluates both filters.
+    val other = spark.read.format(format).option("end", "10").load()
+      .filter("id <> 3 AND id % 2 = 0")
+    checkAnswer(other, Seq(0L, 2L, 4L, 6L, 8L).map(id => Row(id, s"name$id")))
+    assert(scan(other).getMetaData()("PushedDomains") == "[id: (-inf, 3L), (3L, +inf)]")
+    val otherPushed = scan(other).getMetaData()("PushedFilters")
+    assert(otherPushed.contains("NOT (id = 3)") && !otherPushed.contains("%"), otherPushed)
+
+    withSQLConf(SQLConf.NATIVE_DATA_SOURCE_FILTER_PUSHDOWN_ENABLED.key -> "false") {
+      val all = spark.read.format(format).option("end", "100").load().filter("id >= 95")
+      checkAnswer(all, (95L until 100L).map(id => Row(id, s"name$id")))
+      assert(scan(all).getMetaData()("PushedFilters") == "[]")
+      assert(!scan(all).getMetaData().contains("PushedDomains"))
+    }
+  }
+
+  test("tables in a catalog") {
+    withTable("columnar_range") {
+      sql(s"CREATE TABLE columnar_range USING $format OPTIONS (end 3, table 'catalog_write')")
+      // The options of the table are used by the scans of the table, unless a scan sets them.
+      checkAnswer(spark.table("columnar_range"), (0L until 3L).map(id => Row(id, s"name$id")))
+      checkAnswer(
+        spark.read.option("END", "2").table("columnar_range"),
+        (0L until 2L).map(id => Row(id, s"name$id")))
+
+      sql("INSERT INTO columnar_range VALUES (1, 'a')")
+      assert(TestColumnarSink.rows("catalog_write") == Seq((1L, "a")))
+    }
+  }
+
+  test("batch write") {
+    withSQLConf(SQLConf.ARROW_EXECUTION_MAX_RECORDS_PER_BATCH.key -> "3") {
+      val table = "batch_write"
+      (0L until 7L).map(id => (id, s"v$id")).toDF("id", "name").coalesce(1)
+        .write.format(format).option("table", table).mode("append").save()
+      assert(TestColumnarSink.rows(table) == (0L until 7L).map(id => (id, s"v$id")))
+      // The rows are written in Arrow-backed batches of at most 3 rows.
+      assert(TestColumnarSink.batchSizes(table) == Seq(3, 3, 1))
+
+      Seq((10L, "a")).toDF("id", "name")
+        .write.format(format).option("table", table).mode("append").save()
+      assert(TestColumnarSink.rows(table).length == 8)
+      Seq((20L, "b")).toDF("id", "name")
+        .write.format(format).option("table", table).mode("overwrite").save()
+      assert(TestColumnarSink.rows(table) == Seq((20L, "b")))
+    }
+  }
+
+  test("batch write in batches of a limited size") {
+    withSQLConf(SQLConf.ARROW_EXECUTION_MAX_BYTES_PER_BATCH.key -> "4096") {
+      val table = "batch_write_bytes"
+      val rows = (0L until 10L).map(id => (id, "x" * 1000 + id))
+      rows.toDF("id", "name").coalesce(1)
+        .write.format(format).option("table", table).mode("append").save()
+      assert(TestColumnarSink.rows(table) == rows)
+      // A batch ends once it holds at least 4096 bytes, long before it has 10,000 rows: each row
+      // takes about 1 KB, so a batch has 5 rows.
+      assert(TestColumnarSink.batchSizes(table) == Seq(5, 5))
+    }
+  }
+
+  test("write the columnar batches of a query") {
+    // Runs a write, and returns the plan of the query that it writes.
+    def writtenPlan(write: => Unit): SparkPlan = {
+      QueryTest.withQueryExecutionsCaptured(spark)(write).flatMap { qe =>
+        qe.executedPlan.collectFirst { case writeExec: V2TableWriteExec => writeExec.query }
+      }.head
+    }
+    // Writes the ids [0, 10) and their names, read in Arrow batches of `arrowBatchSize` rows, or in
+    // a batch of on-heap vectors for each of the two partitions of the scan.
+    def copy(table: String, arrowBatchSize: Int = 0, keep: Boolean = false): SparkPlan = {
+      writtenPlan {
+        spark.read.format(format).option("end", "10").option("arrowBatchSize", arrowBatchSize)
+          .load()
+          .write.format(format).option("table", table).option("keep", keep).mode("append").save()
+      }
+    }
+    val expected = (0L until 10L).map(id => (id, s"name$id"))
+
+    withSQLConf(
+        SQLConf.ARROW_EXECUTION_MAX_RECORDS_PER_BATCH.key -> "3",
+        SQLConf.ADAPTIVE_EXECUTION_ENABLED.key -> "true",
+        SQLConf.ADAPTIVE_EXECUTION_FORCE_APPLY.key -> "false") {
+      // The data writers get the batches of the scan, without a transition to rows. On-heap
+      // vectors are converted to Arrow value by value, into batches that end as those of rows do.
+      assert(copy("columnar_write").isInstanceOf[BatchScanExec])
+      assert(TestColumnarSink.rows("columnar_write") == expected)
+      assert(TestColumnarSink.batchSizes("columnar_write") == Seq(3, 2, 3, 2))
+
+      // Arrow batches are copied buffer by buffer, each in batches of at most 3 rows.
+      assert(copy("arrow_write", arrowBatchSize = 2).isInstanceOf[BatchScanExec])
+      assert(TestColumnarSink.rows("arrow_write") == expected)
+      assert(TestColumnarSink.batchSizes("arrow_write") == Seq(2, 2, 1, 2, 2, 1))
+      copy("large_arrow_write", arrowBatchSize = 5)
+      assert(TestColumnarSink.rows("large_arrow_write") == expected)
+      assert(TestColumnarSink.batchSizes("large_arrow_write") == Seq(3, 2, 3, 2))
+
+      // A data writer may keep the data of the batches that it gets, though the scan overwrites
+      // its Arrow vectors with each batch.
+      copy("kept_arrow_write", arrowBatchSize = 2, keep = true)
+      assert(TestColumnarSink.rows("kept_arrow_write") == expected)
+
+      // A query that does not produce columnar batches is written as rows.
+      val plan = writtenPlan {
+        spark.read.format(format).option("end", "10").load()
+          .selectExpr("id", "upper(name) AS name")
+          .write.format(format).option("table", "row_write").mode("append").save()
+      }
+      assert(plan.exists(_.isInstanceOf[ColumnarToRowExec]), plan)
+
+      // With adaptive query execution, a query with a shuffle is an adaptive plan, which is not
+      // columnar, so its batches are converted to rows.
+      val shuffled = writtenPlan {
+        spark.read.format(format).option("end", "10").option("arrowBatchSize", 2).load()
+          .repartition(2)
+          .write.format(format).option("table", "shuffled_write").mode("append").save()
+      }
+      assert(shuffled.isInstanceOf[AdaptiveSparkPlanExec], shuffled)
+      assert(find(shuffled)(_.isInstanceOf[ColumnarToRowExec]).isDefined, shuffled)
+      assert(TestColumnarSink.rows("shuffled_write").sorted == expected)
+
+      // A query that supports rows too, such as the scan of a cached DataFrame, is written as rows.
+      val cached = spark.read.format(format).option("end", "10").load().select("id").cache()
+      try {
+        cached.count()
+        val writes = QueryTest.withQueryExecutionsCaptured(spark) {
+          cached.write.format(format).option("table", "cached_write").mode("append").save()
+        }.flatMap(_.executedPlan.collectFirst { case writeExec: V2TableWriteExec => writeExec })
+        val write = writes.head
+        assert(write.supportsColumnarInput, write)
+        assert(write.query.isInstanceOf[InMemoryTableScanExec], write.query)
+        assert(write.query.supportsColumnar && write.query.supportsRowBased, write.query)
+        assert(!write.writesColumnar, write)
+        assert(TestColumnarSink.rows("cached_write").sorted == expected.map { case (id, _) =>
+          (id, "")
+        })
+      } finally {
+        cached.unpersist()
+      }
+      assert(TestColumnarSink.rows("row_write") == expected.map { case (id, name) =>
+        (id, name.toUpperCase(Locale.ROOT))
+      })
+    }
+  }
+
+  test("count the rows and release each batch of a columnar write") {
+    // The write node counts the rows of the batches that its data writers wrote.
+    val writes = QueryTest.withQueryExecutionsCaptured(spark) {
+      spark.read.format(format).option("end", "10").option("arrowBatchSize", "3").load()
+        .write.format(format).option("table", "counted_write").mode("append").save()
+    }.flatMap(_.executedPlan.collectFirst { case writeExec: V2TableWriteExec => writeExec })
+    assert(writes.head.writesColumnar, writes.head)
+    assert(writes.head.metrics("numOutputRows").value == 10)
+
+    // A scan whose batches have new Arrow vectors leaves them to the consumer, which releases each
+    // batch once its data writer took its data, also when the data writer fails on it.
+    Seq(false, true).foreach { fail =>
+      TestOwnedBatches.reset()
+      val table = s"owned_batches_write_$fail"
+      val write = Try {
+        spark.read.format(format).option("end", "10").option("arrowBatchSize", "3")
+          .option("ownedBatches", "true").load()
+          .write.format(format).option("table", table).option("fail", fail).mode("append").save()
+      }
+      assert(write.isFailure == fail, write)
+      if (!fail) {
+        assert(TestColumnarSink.rows(table) == (0L until 10L).map(id => (id, s"name$id")))
+      }
+      assert(!TestOwnedBatches.releases.isEmpty)
+      assert(TestOwnedBatches.releases.asScala.map(_.get()).toSet == Set(1))
+      assert(TestOwnedBatches.leakedBytes.get() == 0)
+    }
+  }
+
+  test("write rows when an extension has columnar rules") {
+    // The physical plan of a copy, before the transitions between rows and columns.
+    val qe = QueryTest.withQueryExecutionsCaptured(spark) {
+      spark.read.format(format).option("end", "10").load()
+        .write.format(format).option("table", "extension_write").mode("append").save()
+    }.find(_.executedPlan.exists(_.isInstanceOf[V2TableWriteExec])).get
+    def write(columnarRules: Seq[ColumnarRule]): V2TableWriteExec = {
+      ApplyColumnarRulesAndInsertTransitions(columnarRules, outputsColumnar = false)
+        .apply(qe.sparkPlan)
+        .collectFirst { case write: V2TableWriteExec => write }.get
+    }
+    // Without columnar rules, the write takes the batches of the scan.
+    assert(write(Nil).writesColumnar && write(Nil).query.isInstanceOf[BatchScanExec])
+    // The columnar rules of an extension, such as of an engine that runs queries in native code,
+    // may replace the transitions to rows with their own, which may be the only way to read its
+    // batches, so the write then takes rows through a transition.
+    val withRules = write(Seq(new ColumnarRule))
+    assert(!withRules.writesColumnar, withRules)
+    assert(withRules.query.isInstanceOf[ColumnarToRowExec], withRules.query)
+  }
+
+  test("copy the Arrow columns of every type, or convert the columns of a batch") {
+    val nullable = Seq(
+      "id % 2 = 0", "CAST(id AS TINYINT)", "CAST(id AS SMALLINT)", "CAST(id AS INT)", "id",
+      "CAST(id AS FLOAT)", "CAST(id AS DOUBLE)", "CAST(id AS DECIMAL(10, 2))",
+      "CAST(id AS DECIMAL(38, 10))", "CAST(id AS STRING)", "CAST(CAST(id AS STRING) AS BINARY)",
+      "DATE_ADD(DATE'2020-01-01', CAST(id AS INT))", "TIMESTAMP_SECONDS(id)",
+      "CAST(TIMESTAMP_SECONDS(id) AS TIMESTAMP_NTZ)", "MAKE_YM_INTERVAL(CAST(id AS INT), 1)",
+      "MAKE_DT_INTERVAL(CAST(id AS INT))", "MAKE_INTERVAL(0, 1, 0, CAST(id AS INT))",
+      "PARSE_JSON(CAST(id AS STRING))", "ARRAY(id, NULL)", "ARRAY(CAST(id AS STRING))",
+      "MAP(CAST(id AS STRING), id)", "MAP(id, ARRAY(CAST(id AS STRING)))",
+      "NAMED_STRUCT('a', id, 'b', CAST(id AS STRING))", "ARRAY(NAMED_STRUCT('x', id))")
+    // c0 is not nullable, c1 has the null type, and the other columns have nulls.
+    val df = spark.range(7).selectExpr(
+      Seq("id AS c0", "NULL AS c1") ++ nullable.zipWithIndex.map { case (expr, i) =>
+        s"IF(id % 3 = 1, NULL, $expr) AS c${i + 2}"
+      }: _*)
+    val schema = df.schema
+    val rows = df.queryExecution.toRdd.map(_.copy()).collect().toSeq
+    val allocator = ArrowUtils.rootAllocator.newChildAllocator("test", 0, Long.MaxValue)
+    try {
+      // Writes a batch with the session time zone America/Los_Angeles, and returns the sizes of
+      // the batches that the data writer got, the time zone of their timestamp column c14, which
+      // a copy keeps, the Arrow types of their string column c11, and their rows. The data writer
+      // keeps the data of the batches, and reads it once `overwrite` overwrote the batch.
+      def writeAndRead(
+          batch: ColumnarBatch,
+          overwrite: () => Unit,
+          schema: StructType = schema,
+          maxRecordsPerBatch: Int = 10,
+          maxBytesPerBatch: Long = Int.MaxValue)
+          : (Seq[Int], Seq[String], Seq[ArrowType], Seq[InternalRow]) = {
+        val sizes = ArrayBuffer.empty[Int]
+        val timeZones = ArrayBuffer.empty[String]
+        val stringTypes = ArrayBuffer.empty[ArrowType]
+        val kept = ArrayBuffer.empty[TestArrowExport]
+        def field(batch: ColumnarBatch, name: String) = batch.column(schema.fieldIndex(name))
+          .asInstanceOf[ArrowColumnVector].getValueVector.getField
+        val dataWriter = new DataWriter[ColumnarBatch] {
+          override def write(batch: ColumnarBatch): Unit = {
+            sizes += batch.numRows()
+            timeZones += field(batch, "c14").getType.asInstanceOf[ArrowType.Timestamp].getTimezone
+            stringTypes += field(batch, "c11").getType
+            kept += TestArrowExport(batch)
+          }
+          override def commit(): WriterCommitMessage = null
+          override def abort(): Unit = {}
+          override def close(): Unit = kept.foreach(_.close())
+        }
+        val writer = new ArrowBatchingDataWriter(dataWriter, ArrowBatchingOptions(
+          schema, "America/Los_Angeles", maxRecordsPerBatch, maxBytesPerBatch))
+        val result = try {
+          writer.writeBatch(batch)
+          writer.commit()
+          overwrite()
+          val toUnsafe = UnsafeProjection.create(schema)
+          val written = kept.toSeq.flatMap { exported =>
+            exported.read(_.rowIterator().asScala.map(toUnsafe(_).copy()).toSeq)
+          }
+          kept.clear()
+          (sizes.toSeq, timeZones.toSeq, stringTypes.toSeq, written)
+        } finally {
+          writer.close()
+        }
+        // Once closed, the writer holds nothing, which a leak would still hold.
+        assert(writer.allocator.getAllocatedMemory == 0)
+        result
+      }
+
+      // Runs `f` with a batch of Arrow vectors with the time zone UTC, and a function that
+      // overwrites the vectors with the rows in reverse order.
+      def withArrowBatch(largeVarTypes: Boolean)(f: (ColumnarBatch, () => Unit) => Unit): Unit = {
+        val root = VectorSchemaRoot.create(
+          ArrowUtils.toArrowSchema(
+            schema, "UTC", errorOnDuplicatedFieldNames = true, largeVarTypes = largeVarTypes),
+          allocator)
+        try {
+          val arrowWriter = ArrowWriter.create(root)
+          rows.foreach(arrowWriter.write)
+          arrowWriter.finish()
+          val batch = new ColumnarBatch(
+            root.getFieldVectors.asScala.map(new ArrowColumnVector(_): ColumnVector).toArray,
+            rows.length)
+          f(batch, () => {
+            arrowWriter.reset()
+            rows.reverse.foreach(arrowWriter.write)
+            arrowWriter.finish()
+          })
+        } finally {
+          root.close()
+        }
+      }
+
+      val expected = rows.map(UnsafeProjection.create(schema)(_).copy())
+      val utf8 = ArrowType.Utf8.INSTANCE
+      Seq(false, true).foreach { largeVarTypes =>
+        withArrowBatch(largeVarTypes) { (batch, _) =>
+          // The size of a range of rows, which the batches of a copy end at, is the size of a slice
+          // of these rows.
+          (0 until batch.numCols()).foreach { i =>
+            val vector = batch.column(i).asInstanceOf[ArrowColumnVector].getValueVector
+            Seq((0, 7), (1, 4), (3, 7), (6, 7), (2, 2)).foreach { case (start, end) =>
+              val pair = vector.getTransferPair(vector.getAllocator)
+              pair.splitAndTransfer(start, end - start)
+              val sliceSize =
+                try pair.getTo.getBufferSizeFor(end - start) finally pair.getTo.close()
+              assert(ArrowBatchingDataWriter.rangeSize(vector, start, end) == sliceSize,
+                s"${vector.getField} [$start, $end)")
+            }
+          }
+        }
+      }
+      withArrowBatch(largeVarTypes = false) { (batch, overwrite) =>
+        // The columns are Arrow vectors with the types of the schema, so they are copied.
+        assert(writeAndRead(batch, overwrite) == ((Seq(7), Seq("UTC"), Seq(utf8), expected)))
+      }
+      withArrowBatch(largeVarTypes = false) { (batch, overwrite) =>
+        // In slices of at most 3 rows, which start in the middle of the bytes of validity.
+        assert(writeAndRead(batch, overwrite, maxRecordsPerBatch = 3) ==
+          ((Seq(3, 3, 1), Seq.fill(3)("UTC"), Seq.fill(3)(utf8), expected)))
+      }
+      withArrowBatch(largeVarTypes = false) { (batch, overwrite) =>
+        // A copied batch also ends after the first row with which it holds the maximum size.
+        assert(writeAndRead(batch, overwrite, maxBytesPerBatch = 1) ==
+          ((Seq.fill(7)(1), Seq.fill(7)("UTC"), Seq.fill(7)(utf8), expected)))
+      }
+      withArrowBatch(largeVarTypes = true) { (batch, overwrite) =>
+        // Each column of another Arrow type than that of the schema, here a string or a binary, is
+        // converted on its own, and the other columns are copied.
+        assert(writeAndRead(batch, overwrite, maxRecordsPerBatch = 3) ==
+          ((Seq(3, 3, 1), Seq.fill(3)("UTC"), Seq.fill(3)(utf8), expected)))
+      }
+      withArrowBatch(largeVarTypes = true) { (batch, overwrite) =>
+        // The size of the converted columns counts too.
+        assert(writeAndRead(batch, overwrite, maxBytesPerBatch = 1) ==
+          ((Seq.fill(7)(1), Seq.fill(7)("UTC"), Seq.fill(7)(utf8), expected)))
+      }
+
+      // The columns of a batch imported with the C data interface, as a native read imports them,
+      // are copied the same way, from any row, though their buffers are those of their producer:
+      // the batch is still readable afterwards, until its producer releases it.
+      Seq(3 -> Int.MaxValue.toLong, 10 -> 1L).foreach { case (maxRecordsPerBatch, maxBytes) =>
+        withArrowBatch(largeVarTypes = false) { (exported, _) =>
+          val vectors = (0 until exported.numCols()).map { i =>
+            exported.column(i).asInstanceOf[ArrowColumnVector].getValueVector
+              .asInstanceOf[FieldVector]
+          }
+          val importer = ArrowUtils.rootAllocator.newChildAllocator("importer", 0, Long.MaxValue)
+          try {
+            val array = ArrowArray.allocateNew(importer)
+            val arrowSchema = ArrowSchema.allocateNew(importer)
+            val imported = try {
+              Data.exportVectorSchemaRoot(allocator,
+                new VectorSchemaRoot(vectors.map(_.getField).asJava, vectors.asJava, rows.length),
+                null, array, arrowSchema)
+              Data.importVectorSchemaRoot(importer, array, arrowSchema, null)
+            } finally {
+              array.close()
+              arrowSchema.close()
+            }
+            try {
+              val batch = new ColumnarBatch(imported.getFieldVectors.asScala
+                .map(new ArrowColumnVector(_): ColumnVector).toArray, imported.getRowCount)
+              val sizes = if (maxBytes == 1L) Seq.fill(7)(1) else Seq(3, 3, 1)
+              assert(writeAndRead(batch, () => (), maxRecordsPerBatch = maxRecordsPerBatch,
+                maxBytesPerBatch = maxBytes) ==
+                ((sizes, Seq.fill(sizes.length)("UTC"), Seq.fill(sizes.length)(utf8), expected)))
+              val toUnsafe = UnsafeProjection.create(schema)
+              assert(batch.rowIterator().asScala.map(toUnsafe(_).copy()).toSeq == expected)
+            } finally {
+              imported.close()
+            }
+          } finally {
+            // Fails if the copy left any memory of the imported batch allocated.
+            importer.close()
+          }
+        }
+      }
+
+      // On-heap vectors are converted too. They do not support the null type.
+      val onHeapSchema = StructType(schema.filterNot(_.name == "c1"))
+      val onHeapRows = rows.map(row => InternalRow.fromSeq(row.toSeq(schema).patch(1, Nil, 1)))
+      val vectors: Seq[WritableColumnVector] =
+        OnHeapColumnVector.allocateColumns(onHeapRows.length, onHeapSchema).toSeq
+      try {
+        val converter = new RowToColumnConverter(onHeapSchema)
+        onHeapRows.foreach(converter.convert(_, vectors.toArray))
+        val batch = new ColumnarBatch(vectors.map(v => v: ColumnVector).toArray, onHeapRows.length)
+        assert(writeAndRead(batch, () => (), onHeapSchema, maxRecordsPerBatch = 3) ==
+          ((Seq(3, 3, 1), Seq.fill(3)("America/Los_Angeles"), Seq.fill(3)(utf8),
+            onHeapRows.map(UnsafeProjection.create(onHeapSchema)(_).copy()))))
+      } finally {
+        vectors.foreach(_.close())
+      }
+    } finally {
+      allocator.close()
+    }
+  }
+
+  test("write the pending rows of converted batches before a copied batch") {
+    val schema = StructType.fromDDL("id BIGINT, name STRING")
+    val writer = new ArrowBatchingDataWriter(
+      new TestDataWriter(fail = false), ArrowBatchingOptions(schema, "UTC", 10, Int.MaxValue))
+    val onHeap = new TestBatchReader(0, 3, schema)
+    val arrow = new TestArrowBatchReader(3, 7, schema, 4)
+    try {
+      // The rows of the on-heap batch stay in the batch of rows until the Arrow batch is copied.
+      assert(onHeap.next())
+      writer.writeBatch(onHeap.get())
+      assert(arrow.next())
+      writer.writeBatch(arrow.get())
+      val message = writer.commit().asInstanceOf[TestCommitMessage]
+      assert(message.rows == (0L until 7L).map(id => (id, s"name$id")))
+      assert(message.batchSizes == Seq(3, 4))
+    } finally {
+      writer.close()
+      onHeap.close()
+      arrow.close()
+    }
+    assert(writer.allocator.getAllocatedMemory == 0)
+  }
+
+  test("a copied batch ends at the byte limit as a batch of rows does") {
+    val schema = StructType.fromDDL("id BIGINT, name STRING")
+    def write(batch: ColumnarBatch, maxBytesPerBatch: Long): TestCommitMessage = {
+      val writer = new ArrowBatchingDataWriter(new TestDataWriter(fail = false),
+        ArrowBatchingOptions(schema, "UTC", 5, maxBytesPerBatch))
+      val message = try {
+        writer.writeBatch(batch)
+        writer.commit().asInstanceOf[TestCommitMessage]
+      } finally {
+        writer.close()
+      }
+      assert(writer.allocator.getAllocatedMemory == 0)
+      message
+    }
+    val onHeap = new TestBatchReader(0, 20, schema)
+    val arrow = new TestArrowBatchReader(0, 20, schema, 20)
+    // The names are large strings, which are converted, while the ids are copied.
+    val largeNames = new TestArrowBatchReader(0, 20, schema, 20, largeVarTypes = true)
+    try {
+      assert(onHeap.next() && arrow.next() && largeNames.next())
+      val vectors = (0 until 2).map {
+        arrow.get().column(_).asInstanceOf[ArrowColumnVector].getValueVector
+      }
+      // The size of the first 2 rows. The names of the ids from 10 are 1 byte longer.
+      val twoRows = vectors.map(ArrowBatchingDataWriter.rangeSize(_, 0, 2)).sum
+      Seq(twoRows - 1, twoRows, twoRows + 1, 3 * twoRows).foreach { limit =>
+        val rows = write(onHeap.get(), limit)
+        assert(rows.batchSizes.sum == 20)
+        // The batches end at the same rows when the names are copied, or converted row by row.
+        Seq(arrow, largeNames).foreach { reader =>
+          assert(write(reader.get(), limit) == rows, s"limit $limit")
+        }
+      }
+      // The limit ends the batches every 2 rows, also when 5 rows do not divide by them.
+      assert(write(arrow.get(), twoRows).batchSizes == Seq.fill(10)(2))
+    } finally {
+      onHeap.close()
+      arrow.close()
+      largeNames.close()
+    }
+  }
+
+  test("convert the columns of a batch that are not copied up to the end of each batch") {
+    val schema = StructType.fromDDL("id BIGINT, name STRING")
+    val size = 1 << 20
+    val allocator = ArrowUtils.rootAllocator.newChildAllocator("test", 0, Long.MaxValue)
+    // The ids are copied, and the names, large strings of 1 MiB, are converted.
+    val root = VectorSchemaRoot.create(
+      ArrowUtils.toArrowSchema(
+        schema, "UTC", errorOnDuplicatedFieldNames = true, largeVarTypes = true),
+      allocator)
+    try {
+      root.allocateNew()
+      val ids = root.getVector("id").asInstanceOf[BigIntVector]
+      val names = root.getVector("name").asInstanceOf[LargeVarCharVector]
+      (0 until 20).foreach { i =>
+        ids.setSafe(i, i)
+        names.setSafe(i, Array.fill(size)(('a' + i).toByte))
+      }
+      root.setRowCount(20)
+      var conversions = 0
+      val batch = new ColumnarBatch(Array[ColumnVector](
+        new ArrowColumnVector(ids),
+        new ArrowColumnVector(names) {
+          override def getUTF8String(rowId: Int): UTF8String = {
+            conversions += 1
+            super.getUTF8String(rowId)
+          }
+        }), 20)
+      // The batches hold 2 MiB from their second row, before their maximum of 10 rows.
+      val writer = new ArrowBatchingDataWriter(new TestDataWriter(fail = false),
+        ArrowBatchingOptions(schema, "UTC", 10, 2L * size))
+      val message = try {
+        writer.writeBatch(batch)
+        writer.commit().asInstanceOf[TestCommitMessage]
+      } finally {
+        writer.close()
+      }
+      assert(writer.allocator.getAllocatedMemory == 0)
+      assert(message.batchSizes == Seq.fill(10)(2))
+      assert(message.rows.map { case (id, name) => (id, name.length, name.distinct) } ==
+        (0 until 20).map(i => (i.toLong, size, ('a' + i).toChar.toString)))
+      // Each row is converted once, and only up to the row at which its batch ends, so the
+      // converted names never hold more than those of a batch, rather than those of 10 rows.
+      assert(conversions == 20)
+      assert(writer.allocator.getPeakMemoryAllocation < 5L * size)
+    } finally {
+      root.close()
+      allocator.close()
+    }
+  }
+
+  test("copy only the Arrow columns that Arrow can slice") {
+    val allocator = ArrowUtils.rootAllocator.newChildAllocator("test", 0, Long.MaxValue)
+    val idField = ArrowUtils.toArrowSchema(StructType.fromDDL("id BIGINT"), "UTC",
+      errorOnDuplicatedFieldNames = true, largeVarTypes = false).getFields.get(0)
+    val ids = new BigIntVector(idField, allocator)
+    // A vector that reports more values than it holds, which Arrow cannot slice, since it computes
+    // the byte positions of a slice of a fixed-width vector of 2 GiB or more in int (see
+    // `BaseSliceArrowOutputProcessor.canSlice`), and a list vector with such a child.
+    def binaries(): FixedSizeBinaryVector = new FixedSizeBinaryVector("binaries", allocator, 8) {
+      override def getValueCount: Int = Int.MaxValue / 8 + 1
+    }
+    val unsliceable = Seq(
+      binaries(),
+      new ListVector("lists", allocator, FieldType.nullable(ArrowType.List.INSTANCE), null) {
+        replaceDataVector(binaries())
+      })
+    try {
+      ids.allocateNew(3)
+      ids.setValueCount(3)
+      assert(ArrowBatchingDataWriter.canCopy(ids, idField, 3))
+      // A vector without a value for each row of its batch is converted too.
+      assert(!ArrowBatchingDataWriter.canCopy(ids, idField, 2))
+      unsliceable.foreach { vector =>
+        assert(!ArrowBatchingDataWriter.canCopy(vector, vector.getField, vector.getValueCount),
+          vector.getField)
+      }
+    } finally {
+      (ids +: unsliceable).foreach(_.close())
+      allocator.close()
+    }
+  }
+
+  test("an empty columnar batch does not end the pending batch of rows") {
+    val schema = StructType.fromDDL("id BIGINT, name STRING")
+    val writer = new ArrowBatchingDataWriter(
+      new TestDataWriter(fail = false), ArrowBatchingOptions(schema, "UTC", 10, Int.MaxValue))
+    val first = new TestBatchReader(0, 2, schema)
+    val empty = new TestArrowBatchReader(0, 0, schema, 1)
+    val second = new TestBatchReader(2, 4, schema)
+    try {
+      assert(first.next() && second.next())
+      writer.writeBatch(first.get())
+      writer.writeBatch(empty.get())
+      writer.writeBatch(second.get())
+      assert(writer.commit().asInstanceOf[TestCommitMessage].batchSizes == Seq(4))
+    } finally {
+      writer.close()
+      first.close()
+      empty.close()
+      second.close()
+    }
+    assert(writer.allocator.getAllocatedMemory == 0)
+  }
+
+  test("release the converted columns when a later column fails to convert") {
+    val schema = StructType.fromDDL("id BIGINT, a DECIMAL(10, 2), b DECIMAL(10, 2)")
+    val allocator = ArrowUtils.rootAllocator.newChildAllocator("test", 0, Long.MaxValue)
+    val root = VectorSchemaRoot.create(new Schema(Seq(
+      Field.notNullable("id", new ArrowType.Int(64, true)),
+      Field.nullable("a", new ArrowType.Decimal(38, 2, 128)),
+      Field.nullable("b", new ArrowType.Decimal(38, 2, 128))).asJava), allocator)
+    try {
+      root.allocateNew()
+      root.getVector("id").asInstanceOf[BigIntVector].setSafe(0, 0)
+      // A decimal of another precision than that of the schema is converted, and the value of b
+      // does not fit the precision of the schema.
+      root.getVector("a").asInstanceOf[DecimalVector].setSafe(0, new java.math.BigDecimal("1.00"))
+      root.getVector("b").asInstanceOf[DecimalVector]
+        .setSafe(0, new java.math.BigDecimal("1000000000000.00"))
+      root.setRowCount(1)
+      val batch = new ColumnarBatch(
+        root.getFieldVectors.asScala.map(new ArrowColumnVector(_): ColumnVector).toArray, 1)
+      val writer = new ArrowBatchingDataWriter(
+        new TestDataWriter(fail = false), ArrowBatchingOptions(schema, "UTC", 10, Int.MaxValue))
+      try {
+        val e = intercept[SparkArithmeticException](writer.writeBatch(batch))
+        assert(e.getCondition == "NUMERIC_VALUE_OUT_OF_RANGE.WITHOUT_SUGGESTION")
+        // The vector of a, which was converted, is released with the failure.
+        assert(writer.allocator.getAllocatedMemory == 0)
+      } finally {
+        writer.close()
+      }
+    } finally {
+      root.close()
+      allocator.close()
+    }
+  }
+
+  test("create the writer once the data to write is computed") {
+    val table = "failed_upstream"
+    // The error happens in a shuffle stage, which adaptive query execution runs before the write,
+    // so no writer is created. Spark would not abort it.
+    val e = intercept[Exception] {
+      spark.range(10).selectExpr("id", "if(id >= 0, raise_error('boom'), 'x') AS name")
+        .repartition(2)
+        .write.format(format).option("table", table).mode("append").save()
+    }
+    assert(e.getMessage.contains("boom"))
+    assert(!TestColumnarSink.writers.contains(table))
+    assert(!TestColumnarSink.aborted.contains(table))
+  }
+
+  test("the table reports the capabilities of the data source") {
+    val table = "unsupported_write"
+    // Computing the data would fail, in a shuffle stage that adaptive query execution runs before
+    // the write: Data Source V2 rejects the write while it analyzes the query, before that.
+    val df = spark.range(10).selectExpr("id", "if(id >= 0, raise_error('boom'), 'x') AS name")
+      .repartition(2)
+    checkError(
+      exception = intercept[AnalysisException] {
+        df.write.format(format).option("table", table).option("capabilities", "BATCH_READ")
+          .mode("append").save()
+      },
+      condition = "UNSUPPORTED_FEATURE.TABLE_OPERATION",
+      parameters = Map("tableName" -> s"`$format`", "operation" -> "batch write"))
+    checkError(
+      exception = intercept[AnalysisException] {
+        df.write.format(format).option("table", table)
+          .option("capabilities", "BATCH_READ, BATCH_WRITE").mode("overwrite").save()
+      },
+      condition = "UNSUPPORTED_FEATURE.TABLE_OPERATION",
+      parameters = Map("tableName" -> s"`$format`", "operation" -> "truncate in batch mode"))
+    assert(!TestColumnarSink.writers.contains(table))
+  }
+
+  test("build and plan a batch scan once") {
+    val dataSource = new TestRangeDataSource(options("end" -> "4"))
+    val builder = new ColumnarScanBuilder(format, dataSource.schema(), () => dataSource)
+    val scan = builder.build()
+    assert(builder.build() eq scan)
+    val batch = scan.toBatch
+    assert(scan.toBatch eq batch)
+    val partitions = batch.planInputPartitions()
+    assert(partitions.length == 2)
+    assert(batch.planInputPartitions() eq partitions)
+    assert(batch.createReaderFactory() eq batch.createReaderFactory())
+    assert(dataSource.plans.get() == 1)
+
+    // A failure is planned once too, and Spark gets the same error each time it asks.
+    val failing = new TestRangeDataSource(options("failPlanning" -> "true"))
+    val failingBatch =
+      new ColumnarScanBuilder(format, failing.schema(), () => failing).build().toBatch
+    val e = intercept[IllegalStateException](failingBatch.planInputPartitions())
+    assert(e.getMessage == "injected planning failure")
+    assert(intercept[IllegalStateException](failingBatch.createReaderFactory()) eq e)
+    assert(failing.plans.get() == 1)
+
+    // So is a failure to prune the columns: the planner is asked to prune them once.
+    val failingPruning = new TestRangeDataSource(options("end" -> "4", "failPruning" -> "true"))
+    val prunedBuilder =
+      new ColumnarScanBuilder(format, failingPruning.schema(), () => failingPruning)
+    prunedBuilder.pruneColumns(StructType.fromDDL("id BIGINT"))
+    val prunedScan = prunedBuilder.build()
+    val pruningError = intercept[IllegalStateException](prunedScan.toBatch)
+    assert(pruningError.getMessage == "injected pruning failure")
+    assert(intercept[IllegalStateException](prunedScan.toBatch) eq pruningError)
+    assert(failingPruning.prunes.get() == 1 && failingPruning.batchPlanners.get() == 1)
+  }
+
+  test("prune the columns of a scan once") {
+    val dataSource = new TestRangeDataSource(options("end" -> "4"))
+    val builder = new ColumnarScanBuilder(format, dataSource.schema(), () => dataSource)
+    builder.pruneColumns(StructType.fromDDL("id BIGINT"))
+    // Pruning again with the same columns, or fewer, keeps the first ones.
+    builder.pruneColumns(StructType.fromDDL("id BIGINT"))
+    builder.pruneColumns(new StructType())
+    val scan = builder.build()
+    scan.toBatch.planInputPartitions()
+    assert(scan.readSchema() == StructType.fromDDL("id BIGINT"))
+    assert(dataSource.prunes.get() == 1)
+    // Columns that the scan does not read cannot be added afterwards.
+    val e = intercept[SparkException](builder.pruneColumns(StructType.fromDDL("name STRING")))
+    assert(e.getMessage.contains("pruned again"))
+    assert(dataSource.prunes.get() == 1)
+
+    // A failure is kept too, so the planner is not asked again, and Spark gets the same error.
+    val failing = new TestRangeDataSource(options("end" -> "4", "failPruning" -> "true"))
+    val failingBuilder = new ColumnarScanBuilder(format, failing.schema(), () => failing)
+    failingBuilder.pruneColumns(StructType.fromDDL("id BIGINT"))
+    val failingScan = failingBuilder.build()
+    // The read schema does not need the planner.
+    assert(failingScan.readSchema() == StructType.fromDDL("id BIGINT"))
+    val failure = intercept[IllegalStateException](failingScan.toBatch)
+    assert(failure.getMessage == "injected pruning failure")
+    assert(intercept[IllegalStateException](failingScan.toBatch) eq failure)
+    assert(failing.prunes.get() == 1)
+  }
+
+  test("push the predicates of a scan once, to a data source that takes domains") {
+    val predicate =
+      new Predicate(">", Array[V2Expression](FieldReference("id"), LiteralValue(1L, LongType)))
+    val dataSource = new TestRangeDataSource(options("end" -> "4"))
+    val builder = new ColumnarScanBuilder(format, dataSource.schema(), () => dataSource)
+    // Spark evaluates all the predicates after the scan.
+    assert(builder.pushPredicates(Array(predicate)).toSeq == Seq(predicate))
+    assert(builder.pushedPredicates().toSeq == Seq(predicate))
+    assert(dataSource.batchPlanners.get() == 1)
+    // The header promises that push_domains is called at most once for a reader.
+    val e = intercept[SparkException](builder.pushPredicates(Array(predicate)))
+    assert(e.getMessage.contains("pushed again"))
+    assert(builder.pushedPredicates().toSeq == Seq(predicate))
+
+    // A data source that takes no domain gets no planner for them.
+    val noDomains = new TestRangeDataSource(options("end" -> "4", "domains" -> "false"))
+    val noDomainsBuilder = new ColumnarScanBuilder(format, noDomains.schema(), () => noDomains)
+    assert(noDomainsBuilder.pushPredicates(Array(predicate)).toSeq == Seq(predicate))
+    assert(noDomainsBuilder.pushedPredicates().isEmpty)
+    assert(noDomains.batchPlanners.get() == 0)
+    assert(noDomainsBuilder.build().toBatch.planInputPartitions().length == 2)
+    assert(noDomains.batchPlanners.get() == 1)
+  }
+
+  test("do not abort a write whose commit succeeded") {
+    val dataSource = new TestRangeDataSource(options("table" -> "abort_after_commit"))
+    val schema = dataSource.schema()
+    val batchWrite = new ColumnarBatchWrite(() => dataSource.writer(schema, false), schema)
+    batchWrite.createBatchWriterFactory(PhysicalWriteInfoImpl(1))
+    batchWrite.commit(Array.empty)
+    batchWrite.abort(Array.empty)
+    assert(TestColumnarSink.committed.containsKey("abort_after_commit"))
+    assert(!TestColumnarSink.aborted.contains("abort_after_commit"))
+
+    val streamingWrite = new ColumnarStreamingWrite(
+      format, () => dataSource.streamWriter(schema, false, "query"), schema)
+    streamingWrite.createStreamingWriterFactory(PhysicalWriteInfoImpl(1))
+    streamingWrite.commit(0, Array.empty)
+    streamingWrite.abort(0, Array.empty)
+    assert(TestColumnarSink.epochs.get("abort_after_commit") == Seq(0L))
+    assert(!TestColumnarSink.aborted.contains("abort_after_commit"))
+
+    // Without a commit, both writes are aborted.
+    val failedWrite = new ColumnarBatchWrite(() => dataSource.writer(schema, false), schema)
+    failedWrite.createBatchWriterFactory(PhysicalWriteInfoImpl(1))
+    failedWrite.abort(Array.empty)
+    assert(TestColumnarSink.aborted.remove("abort_after_commit"))
+    val failedStreamingWrite = new ColumnarStreamingWrite(
+      format, () => dataSource.streamWriter(schema, false, "query"), schema)
+    failedStreamingWrite.createStreamingWriterFactory(PhysicalWriteInfoImpl(1))
+    failedStreamingWrite.abort(1, Array.empty)
+    assert(TestColumnarSink.aborted.contains("abort_after_commit"))
+  }
+
+  test("abort a data writer whose commit the coordinator denies, without committing it") {
+    val calls = ArrayBuffer.empty[String]
+    val writer = new ColumnarWriter {
+      override def createWriter(partitionId: Int, taskId: Long): DataWriter[ColumnarBatch] =
+        new DataWriter[ColumnarBatch] {
+          override def write(batch: ColumnarBatch): Unit = calls += "write"
+          override def commit(): WriterCommitMessage = {
+            calls += "commit"
+            null
+          }
+          override def abort(): Unit = calls += "abort"
+          override def close(): Unit = calls += "close"
+        }
+      override def commit(messages: Array[WriterCommitMessage]): Unit = {}
+      override def abort(messages: Array[WriterCommitMessage]): Unit = {}
+    }
+    val batchWrite = new ColumnarBatchWrite(() => writer, StructType.fromDDL("id BIGINT"))
+    val factory = batchWrite.createBatchWriterFactory(PhysicalWriteInfoImpl(1))
+    // The coordinator denies the commits of a stage that it does not know, as it denies those of
+    // the other attempts of a partition whose commit it authorized.
+    val context = new TaskContextImpl(Int.MaxValue, 0, 0, 0L, 0, 1, null, new util.Properties, null)
+    val e = intercept[SparkException] {
+      DataWritingSparkTask.run(factory, context, Iterator(InternalRow(1L)),
+        batchWrite.useCommitCoordinator(), Map.empty)
+    }
+    assert(e.getCondition == "_LEGACY_ERROR_TEMP_2071")
+    assert(calls == Seq("abort", "close"))
+  }
+
+  test("a streaming scan reads only the columns that the query needs") {
+    val dataSource = new TestRangeDataSource(options("end" -> "3"))
+    val builder = new ColumnarScanBuilder(format, dataSource.schema(), () => dataSource)
+    builder.pruneColumns(StructType.fromDDL("name STRING"))
+    val scan = builder.build()
+    // Spark may ask for the read schema of the scan before it creates the stream.
+    assert(scan.readSchema() == StructType.fromDDL("name STRING"))
+    assert(scan.asInstanceOf[ColumnarScan].getMetaData()("ReadSchema") == "struct<name:string>")
+    val stream = scan.toMicroBatchStream(Utils.createTempDir().getPath)
+    assert(scan.readSchema() == StructType.fromDDL("name STRING"))
+    // The stream reader gets the pruned schema, and its batches only have these columns.
+    val start = stream.initialOffset()
+    val end = stream.asInstanceOf[SupportsAdmissionControl]
+      .latestOffset(start, ReadLimit.allAvailable())
+    val factory = stream.createReaderFactory()
+    val names = stream.planInputPartitions(start, end).toSeq.flatMap { partition =>
+      val reader = factory.createColumnarReader(partition)
+      try {
+        assert(reader.next())
+        val batch = reader.get()
+        assert(batch.numCols() == 1)
+        (0 until batch.numRows()).map(batch.column(0).getUTF8String(_).toString)
+      } finally {
+        reader.close()
+      }
+    }
+    assert(names == Seq("name0", "name1", "name2"))
+    // A streaming scan has no batch planner, which a data source may not support.
+    assert(dataSource.batchPlanners.get() == 0)
+  }
+
+  test("abort a failed write") {
+    val table = "failed_write"
+    val e = intercept[SparkException] {
+      Seq((1L, "a")).toDF("id", "name").write.format(format).option("table", table)
+        .option("fail", "true").mode("append").save()
+    }
+    assert(Utils.exceptionString(e).contains("injected failure"))
+    assert(TestColumnarSink.aborted.contains(table))
+    assert(!TestColumnarSink.committed.containsKey(table))
+  }
+
+  test("streaming read and write") {
+    val table = "streaming_write"
+    val query = spark.readStream.format(format).option("end", "5").load()
+      .writeStream
+      .format(format)
+      .option("table", table)
+      .option("checkpointLocation", Utils.createTempDir().getPath)
+      .start()
+    try {
+      query.processAllAvailable()
+      // A micro-batch writes the batches of the scan, without a transition to rows.
+      val plan =
+        query.asInstanceOf[StreamingQueryWrapper].streamingQuery.lastExecution.executedPlan
+      assert(plan.collectFirst { case write: V2TableWriteExec => write.query }
+        .exists(_.isInstanceOf[MicroBatchScanExec]), plan)
+      // The progress of the micro-batch counts the rows of the batches that it wrote.
+      assert(query.recentProgress.map(_.sink.numOutputRows).sum == 5)
+    } finally {
+      query.stop()
+    }
+    assert(TestColumnarSink.rows(table).sorted == (0L until 5L).map(id => (id, s"name$id")))
+    assert(TestColumnarSink.epochs.get(table) == Seq(0L))
+  }
+
+  test("the stream reader gets its checkpoint location and the start of each micro-batch") {
+    val table = "stream_reader_calls"
+    // The calls of an earlier run of the test in the same JVM.
+    TestRangeStreamReader.checkpointLocations.remove(table)
+    TestRangeStreamReader.starts.remove(table)
+    TestColumnarSink.committed.remove(s"${table}_sink")
+    val checkpoint = Utils.createTempDir()
+    val query = spark.readStream.format(format).option("end", "5").option("table", table).load()
+      .writeStream
+      .format(format)
+      .option("table", s"${table}_sink")
+      .option("checkpointLocation", checkpoint.getPath)
+      .start()
+    try {
+      query.processAllAvailable()
+      // The progress of the query reports the latest offset that the reader returned.
+      assert(query.lastProgress.sources.head.latestOffset == """{"offset":5}""")
+    } finally {
+      query.stop()
+    }
+    assert(TestColumnarSink.rows(s"${table}_sink").length == 5)
+    val checkpointLocation = TestRangeStreamReader.checkpointLocations.get(table)
+    assert(checkpointLocation.endsWith(s"${checkpoint.getCanonicalPath}/sources/0"),
+      checkpointLocation)
+    // The first micro-batch starts after the initial offset, and the next ones after the end of
+    // the previous one.
+    val starts = TestRangeStreamReader.starts.get(table)
+    assert(starts.head == """{"offset":0}""")
+    assert(starts.tail.nonEmpty && starts.tail.forall(_ == """{"offset":5}"""), starts)
+  }
+
+  test("streaming read of some of the columns") {
+    // The pruning of the scans of streaming queries is disabled by default.
+    withSQLConf(SQLConf.STREAMING_V2_COLUMN_PRUNING_ENABLED.key -> "true") {
+      withTempView("pruned_stream") {
+        val query = spark.readStream.format(format).option("end", "5").load().select("name")
+          .writeStream
+          .format("memory")
+          .queryName("pruned_stream")
+          .start()
+        try {
+          query.processAllAvailable()
+          // The stream reader gets only the columns that the query reads, which its batches
+          // have, and so does the scan node of the stream.
+          val scans = query.asInstanceOf[StreamingQueryWrapper].streamingQuery.lastExecution
+            .executedPlan.collect { case scan: MicroBatchScanExec => scan }
+          assert(scans.map(_.output.map(_.name)) == Seq(Seq("name")))
+          assert(scans.head.scan.readSchema() == StructType.fromDDL("name STRING"))
+        } finally {
+          query.stop()
+        }
+        checkAnswer(spark.table("pruned_stream"), (0L until 5L).map(id => Row(s"name$id")))
+      }
+    }
+  }
+
+  test("create a stream writer for each micro-batch") {
+    val table = "micro_batch_write"
+    val input = MemoryStream[(Long, String)]
+    val query = input.toDF().toDF("id", "name")
+      .writeStream
+      .format(format)
+      .option("table", table)
+      .option("checkpointLocation", Utils.createTempDir().getPath)
+      .start()
+    try {
+      (0L until 3L).foreach { id =>
+        input.addData((id, s"name$id"))
+        query.processAllAvailable()
+      }
+    } finally {
+      query.stop()
+    }
+    assert(TestColumnarSink.rows(table).sorted == (0L until 3L).map(id => (id, s"name$id")))
+    assert(TestColumnarSink.epochs.get(table) == Seq(0L, 1L, 2L))
+    // Each micro-batch creates its stream writer with the ID of the query, so that the native
+    // data sources close the stream writer of the previous micro-batch of the query.
+    assert(TestColumnarSink.streamWriterQueryIds.get(table) == Seq.fill(3)(query.id.toString))
+  }
+}
+
+/** Reads the ids [0, end) and their names, and writes to [[TestColumnarSink]]. */
+class TestRangeProvider extends TableProvider with DataSourceRegister {
+  override def shortName(): String = "test_columnar_range"
+
+  override def inferSchema(options: CaseInsensitiveStringMap): StructType = {
+    new TestRangeDataSource(options).schema()
+  }
+
+  override def getTable(
+      schema: StructType,
+      partitioning: Array[Transform],
+      properties: util.Map[String, String]): Table = {
+    new ColumnarTable(shortName(), schema, properties, new TestRangeDataSource(_))
+  }
+
+  override def supportsExternalMetadata(): Boolean = true
+}
+
+class TestRangeDataSource(options: CaseInsensitiveStringMap) extends ColumnarDataSource {
+  private val end = options.getLong("end", 10)
+  private val table = options.getOrDefault("table", "default")
+  // The number of batch planners that this data source created, of the batch scans that they
+  // planned, and of the times that their columns were pruned.
+  val batchPlanners = new AtomicInteger()
+  val plans = new AtomicInteger()
+  val prunes = new AtomicInteger()
+
+  override def schema(): StructType = StructType.fromDDL("id BIGINT, name STRING")
+
+  // The planners take the domain of id, unless the option "domains" is false.
+  override def supportsDomainPushdown(): Boolean = options.getBoolean("domains", true)
+
+  // The names of the capabilities, such as "BATCH_READ, BATCH_WRITE", or all of them by default.
+  override def capabilities(): util.Set[TableCapability] = {
+    Option(options.get("capabilities")).map { names =>
+      val capabilities = util.EnumSet.noneOf(classOf[TableCapability])
+      names.split(",").map(_.trim).foreach(name => capabilities.add(TableCapability.valueOf(name)))
+      capabilities
+    }.getOrElse(super.capabilities())
+  }
+
+  // With the option "arrowBatchSize", the batch scans return Arrow batches of that size, with new
+  // vectors for each batch with the option "ownedBatches".
+  override def batchPlanner(schema: StructType): ColumnarBatchPlanner = {
+    batchPlanners.incrementAndGet()
+    new TestRangePlanner(end, schema, options.getBoolean("failPlanning", false), plans, prunes,
+      options.getBoolean("failPruning", false), options.getInt("arrowBatchSize", 0),
+      options.getBoolean("ownedBatches", false))
+  }
+
+  override def streamReader(
+      schema: StructType,
+      checkpointLocation: String): ColumnarStreamReader = {
+    TestRangeStreamReader.checkpointLocations.put(table, checkpointLocation)
+    new TestRangeStreamReader(end, schema, table)
+  }
+
+  // With the option "keep", the data writers keep the data of the batches until they commit.
+  override def writer(schema: StructType, overwrite: Boolean): ColumnarWriter = {
+    TestColumnarSink.writers.add(table)
+    new TestSinkWriter(
+      table, overwrite, options.getBoolean("fail", false), options.getBoolean("keep", false))
+  }
+
+  override def streamWriter(
+      schema: StructType,
+      overwrite: Boolean,
+      queryId: String): ColumnarStreamWriter = {
+    TestColumnarSink.streamWriterQueryIds.compute(
+      table, (_, old) => Option(old).getOrElse(Nil) :+ queryId)
+    new TestSinkStreamWriter(table)
+  }
+}
+
+case class TestRangePartition(lo: Long, hi: Long) extends InputPartition
+
+class TestRangePlanner(
+    end: Long,
+    schema: StructType,
+    fail: Boolean,
+    plans: AtomicInteger,
+    prunes: AtomicInteger,
+    failPruning: Boolean,
+    arrowBatchSize: Int,
+    ownedBatches: Boolean)
+  extends ColumnarBatchPlanner {
+  private var limit = Long.MaxValue
+  private var readSchema = schema
+  // The ids [lo, hi) that contain the domain of id.
+  private var ids = (0L, Long.MaxValue)
+
+  override def pushDomains(domains: Seq[ColumnDomain]): Seq[Boolean] = domains.map { domain =>
+    domain.ranges match {
+      case Some(ranges) if domain.path == Seq(0) && ranges.nonEmpty =>
+        val lo = ranges.head.low.map { case low: Long =>
+          if (ranges.head.lowInclusive) low else low + 1
+        }.getOrElse(0L)
+        val hi = ranges.last.high.map { case high: Long =>
+          if (ranges.last.highInclusive) high + 1 else high
+        }.getOrElse(Long.MaxValue)
+        ids = (math.max(0L, lo), hi)
+        true
+      case _ => false
+    }
+  }
+
+  override def pushLimit(limit: Int): Boolean = {
+    this.limit = limit
+    true
+  }
+
+  override def pruneColumns(requiredSchema: StructType): Unit = {
+    prunes.incrementAndGet()
+    if (failPruning) {
+      throw new IllegalStateException("injected pruning failure")
+    }
+    readSchema = requiredSchema
+  }
+
+  override def plan(): ColumnarPlannedBatch = {
+    plans.incrementAndGet()
+    if (fail) {
+      throw new IllegalStateException("injected planning failure")
+    }
+    val (lo, hi) = (ids._1, math.min(math.min(end, limit), ids._2))
+    val mid = lo + (hi - lo) / 2
+    ColumnarPlannedBatch(
+      Array(TestRangePartition(lo, mid), TestRangePartition(mid, hi)),
+      new TestRangeReaderFactory(readSchema, arrowBatchSize, ownedBatches))
+  }
+}
+
+/**
+ * @param arrowBatchSize the size of the Arrow batches to return, or 0 for on-heap batches
+ * @param ownedBatches whether each Arrow batch has new vectors, see [[TestArrowBatchReader]]
+ */
+class TestRangeReaderFactory(readSchema: StructType, arrowBatchSize: Int, ownedBatches: Boolean)
+  extends ColumnarOnlyPartitionReaderFactory {
+  override def createColumnarReader(partition: InputPartition): PartitionReader[ColumnarBatch] = {
+    val range = partition.asInstanceOf[TestRangePartition]
+    if (arrowBatchSize > 0) {
+      new TestArrowBatchReader(range.lo, range.hi, readSchema, arrowBatchSize, owned = ownedBatches)
+    } else {
+      new TestBatchReader(range.lo, range.hi, readSchema)
+    }
+  }
+}
+
+/** @param table the option "table" of the read, under which it records its calls */
+class TestRangeStreamReader(end: Long, schema: StructType, table: String)
+  extends ColumnarStreamReader {
+  private def offset(json: String): Long = json.stripPrefix("{\"offset\":").stripSuffix("}").toLong
+
+  override def initialOffset(): String = "{\"offset\":0}"
+
+  override def latestOffset(start: String, limit: ReadLimit, runEnd: Option[String]): String = {
+    TestRangeStreamReader.starts.compute(table, (_, old) => Option(old).getOrElse(Nil) :+ start)
+    s"""{"offset":$end}"""
+  }
+
+  override def partitions(start: String, end: String): Array[InputPartition] = {
+    Array(TestRangePartition(offset(start), offset(end)))
+  }
+
+  override def readerFactory(): PartitionReaderFactory =
+    new TestRangeReaderFactory(schema, arrowBatchSize = 0, ownedBatches = false)
+}
+
+object TestRangeStreamReader {
+  // By the option "table" of the read: the checkpoint location of its stream reader, and the
+  // start offsets that the stream reader got for the latest offset.
+  val checkpointLocations = new ConcurrentHashMap[String, String]()
+  val starts = new ConcurrentHashMap[String, Seq[String]]()
+}
+
+/** Returns the ids [lo, hi) and their names in a single batch. */
+class TestBatchReader(lo: Long, hi: Long, schema: StructType)
+  extends PartitionReader[ColumnarBatch] {
+  private var consumed = false
+  private lazy val batch = {
+    val numRows = (hi - lo).toInt
+    val vectors = OnHeapColumnVector.allocateColumns(math.max(numRows, 1), schema)
+    for (i <- 0 until numRows; (name, column) <- schema.fieldNames.zipWithIndex) {
+      name match {
+        case "id" => vectors(column).putLong(i, lo + i)
+        case "name" => vectors(column).putByteArray(i, s"name${lo + i}".getBytes(UTF_8))
+      }
+    }
+    new ColumnarBatch(vectors.map(v => v: ColumnVector), numRows)
+  }
+
+  override def next(): Boolean = {
+    val hasNext = !consumed
+    consumed = true
+    hasNext
+  }
+
+  override def get(): ColumnarBatch = batch
+
+  override def close(): Unit = if (consumed) batch.close()
+}
+
+/**
+ * Returns the ids [lo, hi) and their names in Arrow batches of at most `batchSize` rows. It writes
+ * each batch to the same Arrow vectors, over the previous one, unless `owned`.
+ *
+ * @param largeVarTypes whether the strings are `large_utf8`, which the writers convert
+ * @param owned whether each batch has new Arrow vectors, which the consumer releases with the
+ *              batch, see [[TestOwnedBatches]]
+ */
+class TestArrowBatchReader(
+    lo: Long,
+    hi: Long,
+    schema: StructType,
+    batchSize: Int,
+    largeVarTypes: Boolean = false,
+    owned: Boolean = false)
+  extends PartitionReader[ColumnarBatch] {
+  private val allocator =
+    ArrowUtils.rootAllocator.newChildAllocator("test arrow batch reader", 0, Long.MaxValue)
+  private val arrowSchema = ArrowUtils.toArrowSchema(
+    schema, "UTC", errorOnDuplicatedFieldNames = true, largeVarTypes = largeVarTypes)
+  // The vectors of the batches, which are reused for each batch, so a consumer does not release
+  // them, unless the batches are owned: each one then has new vectors, which its consumer releases.
+  private val reusedRoot = VectorSchemaRoot.create(arrowSchema, allocator)
+  private var arrowWriter = ArrowWriter.create(reusedRoot)
+  private var batch = new ColumnarBatch(
+    reusedRoot.getFieldVectors.asScala.map(new ReusedArrowColumnVector(_): ColumnVector).toArray)
+  private val ownedRoots = ArrayBuffer.empty[VectorSchemaRoot]
+  private var start = lo
+
+  override def next(): Boolean = {
+    if (start >= hi) {
+      false
+    } else {
+      val end = math.min(hi, start + batchSize)
+      if (owned) {
+        val root = VectorSchemaRoot.create(arrowSchema, allocator)
+        ownedRoots += root
+        arrowWriter = ArrowWriter.create(root)
+        batch = new ColumnarBatch(
+          root.getFieldVectors.asScala.map(TestOwnedBatches.vector(_): ColumnVector).toArray)
+      } else {
+        arrowWriter.reset()
+      }
+      (start until end).foreach { id =>
+        arrowWriter.write(InternalRow.fromSeq(schema.fieldNames.toSeq.map {
+          case "id" => id
+          case "name" => UTF8String.fromString(s"name$id")
+        }))
+      }
+      arrowWriter.finish()
+      batch.setNumRows((end - start).toInt)
+      start = end
+      true
+    }
+  }
+
+  override def get(): ColumnarBatch = batch
+
+  override def close(): Unit = {
+    // What the consumer did not release of the owned batches leaks: it is recorded, and freed.
+    TestOwnedBatches.leakedBytes.addAndGet(
+      ownedRoots.flatMap(_.getFieldVectors.asScala).map(_.getBufferSize.toLong).sum)
+    ownedRoots.foreach(_.close())
+    reusedRoot.close()
+    allocator.close()
+  }
+}
+
+/** The Arrow vectors of the owned batches of [[TestArrowBatchReader]], and their releases. */
+object TestOwnedBatches {
+  // The number of times that each vector was released.
+  val releases = new ConcurrentLinkedQueue[AtomicInteger]()
+  // The bytes of the owned batches that the consumers did not release.
+  val leakedBytes = new AtomicLong()
+
+  def reset(): Unit = {
+    releases.clear()
+    leakedBytes.set(0)
+  }
+
+  /** Returns a column vector of `vector`, which counts its releases. */
+  def vector(vector: ValueVector): ArrowColumnVector = {
+    val released = new AtomicInteger()
+    releases.add(released)
+    new ArrowColumnVector(vector) {
+      override def close(): Unit = {
+        released.incrementAndGet()
+        super.close()
+      }
+    }
+  }
+}
+
+/** The data written by the test writers, by table. */
+object TestColumnarSink {
+  val committed = new ConcurrentHashMap[String, Seq[TestCommitMessage]]()
+  val aborted = ConcurrentHashMap.newKeySet[String]()
+  // The tables for which a writer was created.
+  val writers = ConcurrentHashMap.newKeySet[String]()
+  val epochs = new ConcurrentHashMap[String, Seq[Long]]()
+  val streamWriterQueryIds = new ConcurrentHashMap[String, Seq[String]]()
+
+  def rows(table: String): Seq[(Long, String)] = committed.get(table).flatMap(_.rows)
+
+  def batchSizes(table: String): Seq[Int] = committed.get(table).flatMap(_.batchSizes)
+
+  def commit(table: String, messages: Array[WriterCommitMessage], overwrite: Boolean): Unit = {
+    val newMessages = messages.map(_.asInstanceOf[TestCommitMessage]).toSeq
+    committed.compute(table, (_, old) => {
+      if (old == null || overwrite) newMessages else old ++ newMessages
+    })
+  }
+}
+
+case class TestCommitMessage(rows: Seq[(Long, String)], batchSizes: Seq[Int])
+  extends WriterCommitMessage
+
+/**
+ * @param keep whether to keep the data of each batch until the commit, as a native data writer
+ *             can, by taking ownership of the Arrow buffers of the batch
+ */
+class TestDataWriter(fail: Boolean, keep: Boolean = false) extends DataWriter[ColumnarBatch] {
+  private val rows = ArrayBuffer.empty[(Long, String)]
+  private val batchSizes = ArrayBuffer.empty[Int]
+  private val kept = ArrayBuffer.empty[TestArrowExport]
+
+  override def write(batch: ColumnarBatch): Unit = {
+    if (fail) {
+      throw new IllegalStateException("injected failure")
+    }
+    assert((0 until batch.numCols()).forall(batch.column(_).isInstanceOf[ArrowColumnVector]))
+    batchSizes += batch.numRows()
+    if (keep) {
+      kept += TestArrowExport(batch)
+    } else {
+      read(batch)
+    }
+  }
+
+  private def read(batch: ColumnarBatch): Unit = {
+    (0 until batch.numRows()).foreach { i =>
+      // A batch without the column of the names, such as that of a cached DataFrame of the ids,
+      // gets empty names.
+      val name = if (batch.numCols() > 1) batch.column(1).getUTF8String(i).toString else ""
+      rows += ((batch.column(0).getLong(i), name))
+    }
+  }
+
+  override def commit(): WriterCommitMessage = {
+    kept.foreach(_.read(read))
+    kept.clear()
+    TestCommitMessage(rows.toSeq, batchSizes.toSeq)
+  }
+
+  override def abort(): Unit = {}
+
+  override def close(): Unit = {
+    kept.foreach(_.close())
+    kept.clear()
+  }
+}
+
+/** A batch exported to the Arrow C data interface, which keeps its data until it is read. */
+class TestArrowExport(array: ArrowArray, schema: ArrowSchema) {
+  private var arrayClosed = false
+  private var schemaClosed = false
+
+  /**
+   * Imports the batch, and passes it to `f`. Each import closes the struct that it gets, also when
+   * it fails, so `close` then only releases the struct that is still open.
+   */
+  def read[T](f: ColumnarBatch => T): T = {
+    val arrowSchema = try Data.importSchema(ArrowUtils.rootAllocator, schema, null) finally {
+      schemaClosed = true
+    }
+    val root = VectorSchemaRoot.create(arrowSchema, ArrowUtils.rootAllocator)
+    try {
+      try Data.importIntoVectorSchemaRoot(ArrowUtils.rootAllocator, array, root, null) finally {
+        arrayClosed = true
+      }
+      f(new ColumnarBatch(
+        root.getFieldVectors.asScala.map(new ArrowColumnVector(_): ColumnVector).toArray,
+        root.getRowCount))
+    } finally {
+      root.close()
+    }
+  }
+
+  def close(): Unit = {
+    if (!arrayClosed) {
+      arrayClosed = true
+      array.release()
+      array.close()
+    }
+    if (!schemaClosed) {
+      schemaClosed = true
+      schema.release()
+      schema.close()
+    }
+  }
+}
+
+object TestArrowExport {
+  def apply(batch: ColumnarBatch): TestArrowExport = {
+    val vectors = (0 until batch.numCols()).map { i =>
+      batch.column(i).asInstanceOf[ArrowColumnVector].getValueVector.asInstanceOf[FieldVector]
+    }
+    val root =
+      new VectorSchemaRoot(vectors.map(_.getField).asJava, vectors.asJava, batch.numRows())
+    val array = ArrowArray.allocateNew(ArrowUtils.rootAllocator)
+    val schema = ArrowSchema.allocateNew(ArrowUtils.rootAllocator)
+    Data.exportVectorSchemaRoot(ArrowUtils.rootAllocator, root, null, array, schema)
+    new TestArrowExport(array, schema)
+  }
+}
+
+class TestSinkWriter(table: String, overwrite: Boolean, fail: Boolean, keep: Boolean)
+  extends ColumnarWriter {
+  override def createWriter(partitionId: Int, taskId: Long): DataWriter[ColumnarBatch] = {
+    new TestDataWriter(fail, keep)
+  }
+
+  override def commit(messages: Array[WriterCommitMessage]): Unit = {
+    TestColumnarSink.commit(table, messages, overwrite)
+  }
+
+  override def abort(messages: Array[WriterCommitMessage]): Unit = {
+    TestColumnarSink.aborted.add(table)
+  }
+}
+
+class TestSinkStreamWriter(table: String) extends ColumnarStreamWriter {
+  override def createWriter(
+      partitionId: Int,
+      taskId: Long,
+      epochId: Long): DataWriter[ColumnarBatch] = new TestDataWriter(fail = false)
+
+  override def commit(epochId: Long, messages: Array[WriterCommitMessage]): Unit = {
+    TestColumnarSink.commit(table, messages, overwrite = false)
+    TestColumnarSink.epochs.compute(table, (_, old) => Option(old).getOrElse(Nil) :+ epochId)
+  }
+
+  override def abort(epochId: Long, messages: Array[WriterCommitMessage]): Unit = {
+    TestColumnarSink.aborted.add(table)
+  }
+}

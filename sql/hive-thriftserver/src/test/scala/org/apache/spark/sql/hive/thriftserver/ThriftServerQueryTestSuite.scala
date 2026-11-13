@@ -275,12 +275,7 @@ class ThriftServerQueryTestSuite extends SQLQueryTestSuite with SharedThriftServ
 
   override lazy val listTestCases: Seq[TestCase] = {
     listFilesRecursively(new File(inputFilePath)).flatMap { file =>
-      var resultFile = resultFileForInputFile(file)
-      // JDK-4511638 changes 'toString' result of Float/Double
-      // JDK-8282081 changes DataTimeFormatter 'F' symbol
-      if (Utils.isJavaVersionAtLeast21 && (new File(resultFile + ".java21")).exists()) {
-        resultFile += ".java21"
-      }
+      val resultFile = resultFileForInputFile(file)
       val absPath = file.getAbsolutePath
       val testCaseName = absPath.stripPrefix(inputFilePath).stripPrefix(File.separator)
 
@@ -345,6 +340,9 @@ class ThriftServerQueryTestSuite extends SQLQueryTestSuite with SharedThriftServ
     upperCase.startsWith("SELECT ") || upperCase.startsWith("SELECT\n") ||
       upperCase.startsWith("WITH ") || upperCase.startsWith("WITH\n") ||
       upperCase.startsWith("VALUES ") || upperCase.startsWith("VALUES\n") ||
+      // A query may start with its FROM clause (e.g. `FROM t1 JOIN t2 ...` in using-join.sql);
+      // its row order is as unspecified as a SELECT's.
+      upperCase.startsWith("FROM ") || upperCase.startsWith("FROM\n") ||
       // postgreSQL/union.sql
       upperCase.startsWith("(")
   }

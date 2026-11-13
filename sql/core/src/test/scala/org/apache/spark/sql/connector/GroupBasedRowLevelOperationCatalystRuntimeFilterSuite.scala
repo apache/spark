@@ -26,6 +26,8 @@ import org.apache.spark.sql.connector.write.DeleteSummary
 class GroupBasedRowLevelOperationCatalystRuntimeFilterSuite
   extends RowLevelOperationCatalystRuntimeFilterSuiteBase {
 
+  import testImplicits._
+
   test("delete runtime group filtering with SupportsRuntimeCatalystFiltering") {
     // the table is partitioned by dep, so hr and software are the two groups
     createAndInitTable("pk INT NOT NULL, id INT, salary INT, dep STRING",
@@ -77,6 +79,57 @@ class GroupBasedRowLevelOperationCatalystRuntimeFilterSuite
 
     checkReplacedPartitions(Seq("hr"))
     checkDeleteMetrics(numDeletedRows = 1, numCopiedRows = 1)
+  }
+
+  test("SPARK-60863: delete with a scalar subquery condition on the group key") {
+    withTempView("src") {
+      createAndInitTable("pk INT NOT NULL, id INT, salary INT, dep STRING",
+        """{ "pk": 1, "id": 1, "salary": 300, "dep": "hr" }
+          |{ "pk": 2, "id": 2, "salary": 150, "dep": "software" }
+          |{ "pk": 3, "id": 3, "salary": 120, "dep": "hr" }
+          |""".stripMargin)
+      Seq("hr").toDF("d").createOrReplaceTempView("src")
+
+      // every hr row matches, so the negated condition that selects the rows to copy over drops
+      // hr, and pruning the scan with it would leave hr out of the groups to replace
+      val executedPlan = executeAndKeepPlan {
+        sql(s"DELETE FROM $tableNameAsString WHERE dep = (SELECT max(d) FROM src)")
+      }
+      assertCatalystGroupFilter(
+        executedPlan,
+        expectedFilterPaths = Seq(Seq("dep")),
+        expectedFilter = GroupFilter(scanSchema = "dep STRING", groups = Seq("hr")))
+
+      checkAnswer(
+        sql(s"SELECT * FROM $tableNameAsString"),
+        Row(2, 2, 150, "software") :: Nil)
+    }
+  }
+
+  test("SPARK-60863: update with a scalar subquery condition on the group key") {
+    withTempView("src") {
+      createAndInitTable("pk INT NOT NULL, id INT, salary INT, dep STRING",
+        """{ "pk": 1, "id": 1, "salary": 300, "dep": "hr" }
+          |{ "pk": 2, "id": 2, "salary": 150, "dep": "software" }
+          |{ "pk": 3, "id": 3, "salary": 120, "dep": "hr" }
+          |""".stripMargin)
+      Seq("hr").toDF("d").createOrReplaceTempView("src")
+
+      // the subquery makes the update read the table twice, for the updated rows and for the
+      // copied ones, and both reads share one scan, so the filter of either read would prune it
+      // for both
+      val executedPlan = executeAndKeepPlan {
+        sql(s"UPDATE $tableNameAsString SET salary = -1 WHERE dep = (SELECT max(d) FROM src)")
+      }
+      assertCatalystGroupFilter(
+        executedPlan,
+        expectedFilterPaths = Seq(Seq("dep")),
+        expectedFilter = GroupFilter(scanSchema = "dep STRING", groups = Seq("hr")))
+
+      checkAnswer(
+        sql(s"SELECT * FROM $tableNameAsString"),
+        Row(1, 1, -1, "hr") :: Row(2, 2, 150, "software") :: Row(3, 3, -1, "hr") :: Nil)
+    }
   }
 
   private def checkDeleteMetrics(numDeletedRows: Long, numCopiedRows: Long): Unit = {

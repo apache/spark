@@ -617,7 +617,8 @@ class TimestampNTZNanosType(AnyTimestampNanoType):
     :meth:`SparkSession.createDataFrame` from a pandas ``DataFrame`` with Arrow enabled
     (``spark.sql.execution.arrow.pyspark.enabled``), including the Spark Connect data path --
     carries the value as an Arrow ``timestamp[ns]`` and preserves full nanosecond precision
-    (pandas ``datetime64[ns]``). Because that Arrow encoding counts nanoseconds since the epoch in
+    (pandas ``datetime64[ns]``); input with more digits than the declared precision is floored to
+    it. Because that Arrow encoding counts nanoseconds since the epoch in
     a 64-bit integer, values outside the ``datetime64[ns]`` range (roughly the years 1677 to 2262)
     cannot be carried on this path. With Arrow disabled, :meth:`DataFrame.toPandas` falls back to
     :meth:`DataFrame.collect` and, like it, truncates to microseconds.

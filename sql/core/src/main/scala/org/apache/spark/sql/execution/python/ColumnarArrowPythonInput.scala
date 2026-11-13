@@ -27,7 +27,7 @@ import org.apache.arrow.vector.ipc.WriteChannel
 import org.apache.arrow.vector.ipc.message.MessageSerializer
 
 import org.apache.spark.api.python.BasePythonRunner
-import org.apache.spark.sql.execution.arrow.ArrowWriter
+import org.apache.spark.sql.execution.arrow.{ArrowCompressionUtils, ArrowWriter}
 import org.apache.spark.sql.util.ArrowUtils
 import org.apache.spark.sql.vectorized.{ArrowColumnVector, ColumnarBatch}
 
@@ -55,7 +55,8 @@ private[python] trait ColumnarArrowPythonInput
   // Lazy-initialized ArrowWriter for the fallback (non-Arrow) path.
   // Uses the pre-allocated `root` from PythonArrowInput.
   private lazy val arrowWriter: ArrowWriter = ArrowWriter.create(root)
-  private lazy val unloader: VectorUnloader = new VectorUnloader(root, true, codec, true)
+  private lazy val unloader: VectorUnloader =
+    ArrowCompressionUtils.createVectorUnloader(root, codec)
 
   protected def writeNextBatchToArrowStream(
       root: VectorSchemaRoot,
@@ -119,7 +120,7 @@ private[python] trait ColumnarArrowPythonInput
     val batchRoot = VectorSchemaRoot.of(selectedVectors: _*)
     batchRoot.setRowCount(batch.numRows())
 
-    val batchUnloader = new VectorUnloader(batchRoot, true, codec, true)
+    val batchUnloader = ArrowCompressionUtils.createVectorUnloader(batchRoot, codec)
     val recordBatch = batchUnloader.getRecordBatch()
     try {
       val writeChannel = new WriteChannel(Channels.newChannel(dataOut))

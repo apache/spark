@@ -677,7 +677,10 @@ object Multiply {
 // Common base trait for Divide and Remainder, since these two classes are almost identical
 trait DivModLike extends BinaryArithmetic {
 
-  protected def decimalToDataTypeCodeGen(decimalResult: String): String = decimalResult
+  /** Java code assigning the checked decimal result to `value`. */
+  protected def decimalToDataTypeCodeGen(
+      decimalResult: String, value: String, errorContextCode: String): String =
+    s"$value = $decimalResult;"
 
   // Whether we should check overflow or not in ANSI mode.
   protected def checkDivideOverflow: Boolean = false
@@ -766,14 +769,14 @@ trait DivModLike extends BinaryArithmetic {
              |Decimal $decimalValue = $castUtils.changePrecisionExact(
              |  ${decimalOperation(eval1.value, eval2.value, scale)}, $precision, $scale,
              |  $errorContextCode);
-             |${ev.value} = ${decimalToDataTypeCodeGen(s"$decimalValue")};
+             |${decimalToDataTypeCodeGen(decimalValue, ev.value, errorContextCode)}
              |""".stripMargin
         } else {
           s"""
              |Decimal $decimalValue = $castUtils.changePrecisionOrNull(
              |  ${decimalOperation(eval1.value, eval2.value, scale)}, $precision, $scale);
              |if ($decimalValue != null) {
-             |  ${ev.value} = ${decimalToDataTypeCodeGen(s"$decimalValue")};
+             |  ${decimalToDataTypeCodeGen(decimalValue, ev.value, errorContextCode)}
              |} else {
              |  ${ev.isNull} = true;
              |}
@@ -974,7 +977,26 @@ case class IntegralDivide(
 
   override def symbol: String = "/"
   override def decimalMethod: String = "quot"
-  override def decimalToDataTypeCodeGen(decimalResult: String): String = s"$decimalResult.toLong()"
+
+  // A decimal quotient that fits the decimal result type can still overflow a long when the
+  // type has more digits than a long can always hold.
+  private lazy val checkDecimalToLongOverflow: Boolean = failOnError && (super.dataType match {
+    case DecimalType.Fixed(precision, _) => precision > Decimal.MAX_LONG_DIGITS
+    case _ => false
+  })
+
+  override def decimalToDataTypeCodeGen(
+      decimalResult: String, value: String, errorContextCode: String): String = {
+    val checkLongOverflow = if (checkDecimalToLongOverflow) {
+      s"""
+         |if ($decimalResult.toJavaBigInteger().bitLength() > 63) {
+         |  throw QueryExecutionErrors.overflowInIntegralDivideError($errorContextCode);
+         |}""".stripMargin
+    } else {
+      ""
+    }
+    s"$checkLongOverflow\n$value = $decimalResult.toLong();"
+  }
 
   override def resultDecimalType(p1: Int, s1: Int, p2: Int, s2: Int): DecimalType = {
     // This follows division rule
@@ -1007,6 +1029,10 @@ case class IntegralDivide(
       if (res == null) {
         null
       } else {
+        if (checkDecimalToLongOverflow &&
+            res.asInstanceOf[Decimal].toJavaBigInteger.bitLength > 63) {
+          throw QueryExecutionErrors.overflowInIntegralDivideError(getContextOrNull())
+        }
         integral.toLong(res)
       }
     }
@@ -1312,6 +1338,116 @@ case class Pmod(
 object Pmod {
   def apply(left: Expression, right: Expression, evalMode: EvalMode.Value): Pmod =
     new Pmod(left, right, NumericEvalContext(evalMode))
+}
+
+/**
+ * Python-style modulo for pandas API on Spark, registered as the internal function `pandas_mod`.
+ * The result takes the sign of the divisor, as Python's and NumPy's `%` do, and a zero or null
+ * divisor gives null in every evaluation mode. Each operand is evaluated once per row.
+ *
+ * A decimal result has the type that `((left % right) + right) % right` has, and is computed
+ * exactly before it is rounded half-up to that type once. Other results have the type of `%`.
+ */
+case class PandasMod(
+    left: Expression,
+    right: Expression,
+    evalContext: NumericEvalContext = NumericEvalContext.fromSQLConf(SQLConf.get))
+  extends BinaryArithmetic {
+
+  def this(left: Expression, right: Expression) =
+    this(left, right, NumericEvalContext.fromSQLConf(SQLConf.get))
+
+  override def inputType: AbstractDataType = NumericType
+
+  override def symbol: String = "pandas_mod"
+
+  override def prettyName: String = "pandas_mod"
+
+  override def nullable: Boolean = true
+
+  // A zero divisor gives null in every mode, so only a decimal overflow can fail, under ANSI.
+  protected override def failOnError: Boolean = evalMode == EvalMode.ANSI
+
+  override def resultDecimalType(p1: Int, s1: Int, p2: Int, s2: Int): DecimalType = {
+    val l = Literal(null, DecimalType(p1, s1))
+    val r = Literal(null, DecimalType(p2, s2))
+    Remainder(Add(Remainder(l, r, evalContext), r, evalContext), r, evalContext)
+      .dataType.asInstanceOf[DecimalType]
+  }
+
+  private lazy val isZero: Any => Boolean = right.dataType match {
+    case _: DecimalType => x => x.asInstanceOf[Decimal].isZero
+    case _ => x => x == 0
+  }
+
+  private lazy val modFunc: (Any, Any) => Any = dataType match {
+    case IntegerType => (l, r) => MathUtils.pythonMod(l.asInstanceOf[Int], r.asInstanceOf[Int])
+    case LongType => (l, r) => MathUtils.pythonMod(l.asInstanceOf[Long], r.asInstanceOf[Long])
+    case ShortType => (l, r) => MathUtils.pythonMod(l.asInstanceOf[Short], r.asInstanceOf[Short])
+    case ByteType => (l, r) => MathUtils.pythonMod(l.asInstanceOf[Byte], r.asInstanceOf[Byte])
+    case FloatType => (l, r) => MathUtils.pythonMod(l.asInstanceOf[Float], r.asInstanceOf[Float])
+    case DoubleType =>
+      (l, r) => MathUtils.pythonMod(l.asInstanceOf[Double], r.asInstanceOf[Double])
+    case DecimalType.Fixed(precision, scale) => (l, r) => checkDecimalOverflow(
+      MathUtils.pythonMod(l.asInstanceOf[Decimal], r.asInstanceOf[Decimal]), precision, scale)
+  }
+
+  final override def eval(input: InternalRow): Any = {
+    // Evaluate the divisor first, to skip the dividend for a zero or null divisor.
+    val input2 = right.eval(input)
+    if (input2 == null || isZero(input2)) {
+      null
+    } else {
+      val input1 = left.eval(input)
+      if (input1 == null) null else modFunc(input1, input2)
+    }
+  }
+
+  override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
+    val eval1 = left.genCode(ctx)
+    val eval2 = right.genCode(ctx)
+    val isZero = if (right.dataType.isInstanceOf[DecimalType]) {
+      s"${eval2.value}.isZero()"
+    } else {
+      s"${eval2.value} == 0"
+    }
+    val javaType = CodeGenerator.javaType(dataType)
+    val mathUtils = MathUtils.getClass.getCanonicalName.stripSuffix("$")
+    val result = dataType match {
+      case DecimalType.Fixed(precision, scale) =>
+        val errorContext = getContextOrNullCode(ctx, failOnError)
+        s"""
+           |${ev.value} = $mathUtils.pythonMod(${eval1.value}, ${eval2.value}).toPrecision(
+           |  $precision, $scale, Decimal.ROUND_HALF_UP(), ${!failOnError}, $errorContext);
+           |${ev.isNull} = ${ev.value} == null;
+           |""".stripMargin
+      case _ =>
+        s"${ev.value} = $mathUtils.pythonMod(${eval1.value}, ${eval2.value});"
+    }
+    // Evaluate the divisor first, to skip the dividend for a zero or null divisor.
+    ev.copy(code = code"""
+      ${eval2.code}
+      boolean ${ev.isNull} = false;
+      $javaType ${ev.value} = ${CodeGenerator.defaultValue(dataType)};
+      if (${eval2.isNull} || $isZero) {
+        ${ev.isNull} = true;
+      } else {
+        ${eval1.code}
+        if (${eval1.isNull}) {
+          ${ev.isNull} = true;
+        } else {
+          $result
+        }
+      }""")
+  }
+
+  override def toString: String = s"$prettyName($left, $right)"
+
+  override def sql: String = s"$prettyName(${left.sql}, ${right.sql})"
+
+  override protected def withNewChildrenInternal(
+      newLeft: Expression, newRight: Expression): PandasMod =
+    copy(left = newLeft, right = newRight)
 }
 
 /**

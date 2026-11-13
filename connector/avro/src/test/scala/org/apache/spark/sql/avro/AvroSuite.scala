@@ -45,7 +45,7 @@ import org.apache.spark.sql.catalyst.util.DateTimeTestUtils.{withDefaultTimeZone
 import org.apache.spark.sql.connector.catalog.TableCapability
 import org.apache.spark.sql.execution.{FileSourceScanExec, FormattedMode, SparkPlan}
 import org.apache.spark.sql.execution.datasources.{CommonFileDataSourceSuite, DataSource, FilePartition}
-import org.apache.spark.sql.execution.datasources.v2.{BatchScanExec, DataSourceV2ScanRelation, FileDataSourceV2, FileTable}
+import org.apache.spark.sql.execution.datasources.v2.{BatchScanExec, DataSourceV2ScanRelation, FileDataSourceV2, FileTable, PlannedScan}
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.internal.LegacyBehaviorPolicy
 import org.apache.spark.sql.internal.LegacyBehaviorPolicy._
@@ -4185,6 +4185,40 @@ class AvroV2Suite extends AvroSuite with ExplainSuiteHelper {
     }
   }
 
+  test("SPARK-30628: Avro source v2: runtime filters prune partitions") {
+    withSQLConf(
+        SQLConf.ADAPTIVE_EXECUTION_ENABLED.key -> "false",
+        SQLConf.DYNAMIC_PARTITION_PRUNING_REUSE_BROADCAST_ONLY.key -> "false",
+        SQLConf.DYNAMIC_PARTITION_PRUNING_FALLBACK_FILTER_RATIO.key -> "2") {
+      withTempPath { dir =>
+        val factPath = new File(dir, "fact").getCanonicalPath
+        val dimPath = new File(dir, "dim").getCanonicalPath
+        spark.range(100).selectExpr("id", "CAST(id % 10 AS INT) AS part")
+          .write.format("avro").partitionBy("part").save(factPath)
+        spark.range(10).selectExpr("CAST(id AS INT) AS dim_id", "id AS dim_val")
+          .write.format("avro").save(dimPath)
+        withTempView("fact", "dim") {
+          spark.read.format("avro").load(factPath).createOrReplaceTempView("fact")
+          spark.read.format("avro").load(dimPath).createOrReplaceTempView("dim")
+          Seq(
+            "SELECT f.id FROM fact f JOIN dim d ON f.part = d.dim_id WHERE d.dim_val = 7",
+            "SELECT id FROM fact WHERE part = (SELECT max(dim_id) FROM dim WHERE dim_val = 7)"
+          ).foreach { query =>
+            val df = sql(query)
+            checkAnswer(df, (0 until 10).map(i => Row(i * 10L + 7)))
+            val factScan = df.queryExecution.executedPlan.collectFirst {
+              case b: BatchScanExec if b.scan.isInstanceOf[AvroScan] && b.runtimeFilters.nonEmpty =>
+                b
+            }.getOrElse(fail(s"no Avro scan with runtime filters:\n${df.queryExecution}"))
+            val readParts = factScan.filteredPartitions.flatten
+              .flatMap(_.asInstanceOf[FilePartition].files.map(_.partitionValues.getInt(0)))
+            assert(readParts.distinct === Seq(7), query)
+          }
+        }
+      }
+    }
+  }
+
   test("Avro source v2: support partition pruning") {
     withTempPath { dir =>
       Seq(("a", 1, 2), ("b", 1, 2), ("c", 2, 1))
@@ -4210,7 +4244,7 @@ class AvroV2Suite extends AvroSuite with ExplainSuiteHelper {
       })
 
       val fileScan = df.queryExecution.executedPlan collectFirst {
-        case BatchScanExec(_, f: AvroScan, _, _, _, _) => f
+        case BatchScanExec(_, PlannedScan(f: AvroScan), _, _, _, _, _, _) => f
       }
       assert(fileScan.nonEmpty)
       assert(fileScan.get.partitionFilters.nonEmpty)
@@ -4244,7 +4278,7 @@ class AvroV2Suite extends AvroSuite with ExplainSuiteHelper {
       assert(filterCondition.isDefined)
 
       val fileScan = df.queryExecution.executedPlan collectFirst {
-        case BatchScanExec(_, f: AvroScan, _, _, _, _) => f
+        case BatchScanExec(_, PlannedScan(f: AvroScan), _, _, _, _, _, _) => f
       }
       assert(fileScan.nonEmpty)
       assert(fileScan.get.partitionFilters.isEmpty)
@@ -4325,7 +4359,7 @@ class AvroV2Suite extends AvroSuite with ExplainSuiteHelper {
             .where("value = 'a'")
 
           val fileScan = df.queryExecution.executedPlan collectFirst {
-            case BatchScanExec(_, f: AvroScan, _, _, _, _) => f
+            case BatchScanExec(_, PlannedScan(f: AvroScan), _, _, _, _, _, _) => f
           }
           assert(fileScan.nonEmpty)
           if (filtersPushdown) {

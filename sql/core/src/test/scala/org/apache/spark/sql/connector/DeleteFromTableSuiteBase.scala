@@ -303,6 +303,23 @@ abstract class DeleteFromTableSuiteBase extends RowLevelOperationSuiteBase {
     checkDeleteMetrics(numDeletedRows = 2, numCopiedRows = 0)
   }
 
+  test("SPARK-60978: delete keeps columns whose names differ only by case") {
+    // such a table can only be created and read in a case-sensitive session
+    withSQLConf(SQLConf.CASE_SENSITIVE.key -> "true") {
+      createAndInitTable("pk INT NOT NULL, salary INT, SALARY INT, dep STRING",
+        """{ "pk": 1, "salary": 100, "SALARY": 200, "dep": "hr" }
+          |{ "pk": 2, "salary": 300, "SALARY": 400, "dep": "hr" }
+          |""".stripMargin)
+    }
+
+    // the statement does not name the colliding columns so it is not ambiguous
+    sql(s"DELETE FROM $tableNameAsString WHERE pk <= 1")
+
+    withSQLConf(SQLConf.CASE_SENSITIVE.key -> "true") {
+      checkAnswer(sql(s"SELECT * FROM $tableNameAsString"), Row(2, 300, 400, "hr") :: Nil)
+    }
+  }
+
   test("delete with IN predicates") {
     createAndInitTable("pk INT NOT NULL, id INT, dep STRING",
       """{ "pk": 1, "id": 1, "dep": "hr" }
@@ -357,6 +374,83 @@ abstract class DeleteFromTableSuiteBase extends RowLevelOperationSuiteBase {
     sql(s"DELETE FROM $tableNameAsString t WHERE t.complex.c1 = id")
 
     checkAnswer(sql(s"SELECT * FROM $tableNameAsString"), Nil)
+    checkDeleteMetrics(numDeletedRows = 1, numCopiedRows = 0)
+  }
+
+  test("SPARK-61462: delete with a condition on a CHAR column stored with and without padding") {
+    createTable("pk INT NOT NULL, id INT, dep CHAR(8)")
+    withSQLConf(SQLConf.LEGACY_CHAR_VARCHAR_AS_STRING.key -> "true") {
+      append("pk INT NOT NULL, id INT, dep STRING",
+        """{ "pk": 1, "id": 1, "dep": "hr" }
+          |{ "pk": 2, "id": 2, "dep": "software" }
+          |""".stripMargin)
+    }
+    append("pk INT NOT NULL, id INT, dep STRING", """{ "pk": 3, "id": 3, "dep": "hr" }""")
+
+    // the data source cannot delete these rows with filters that compare the padded literal with
+    // the stored values, so this delete must be executed as a row-level operation
+    sql(s"DELETE FROM $tableNameAsString WHERE dep = 'hr'")
+
+    checkAnswer(sql(s"SELECT * FROM $tableNameAsString"), Row(2, 2, "software") :: Nil)
+    checkDeleteMetrics(numDeletedRows = 2, numCopiedRows = 0)
+  }
+
+  test("SPARK-61462: delete with a CHAR condition in an OR with a partition condition") {
+    createTable("pk INT NOT NULL, c CHAR(3), dep STRING")
+    append("pk INT NOT NULL, c STRING, dep STRING",
+      """{ "pk": 1, "c": "a", "dep": "hr" }
+        |{ "pk": 2, "c": "b", "dep": "software" }
+        |{ "pk": 3, "c": "x", "dep": "hr" }
+        |{ "pk": 4, "c": "a", "dep": "finance" }
+        |{ "pk": 5, "c": "y", "dep": "finance" }
+        |""".stripMargin)
+
+    // the padded comparison has no V1 filter, so it must not be dropped from the OR
+    sql(s"DELETE FROM $tableNameAsString WHERE c = 'a' OR dep = 'software'")
+
+    checkAnswer(
+      sql(s"SELECT pk FROM $tableNameAsString"),
+      Row(3) :: Row(5) :: Nil)
+  }
+
+  test("SPARK-61462: delete with a correlated subquery on a CHAR column") {
+    withTempView("deleted") {
+      createTable("pk INT NOT NULL, c CHAR(3), dep STRING")
+      append("pk INT NOT NULL, c STRING, dep STRING",
+        """{ "pk": 1, "c": "a", "dep": "hr" }
+          |{ "pk": 2, "c": "b", "dep": "software" }
+          |{ "pk": 3, "c": "x", "dep": "hr" }
+          |""".stripMargin)
+
+      Seq("a  ", "z  ").toDF("v").createOrReplaceTempView("deleted")
+
+      sql(s"DELETE FROM $tableNameAsString t WHERE EXISTS (SELECT 1 FROM deleted WHERE v = t.c)")
+
+      checkAnswer(
+        sql(s"SELECT * FROM $tableNameAsString"),
+        Row(2, "b  ", "software") :: Row(3, "x  ", "hr") :: Nil)
+      checkDeleteMetrics(numDeletedRows = 1, numCopiedRows = 1)
+    }
+  }
+
+  test("SPARK-60673: delete with metadata columns in the condition") {
+    // the metadata columns must be read even if the operation does not require them
+    createAndInitTable("pk INT NOT NULL, id INT, dep STRING",
+      """{ "pk": 1, "id": 1, "dep": "hr" }
+        |{ "pk": 2, "id": 2, "dep": "hr" }
+        |{ "pk": 3, "id": 1, "dep": "software" }
+        |""".stripMargin)
+
+    sql(s"DELETE FROM $tableNameAsString WHERE _partition = 'hr' AND id < 2")
+
+    checkAnswer(
+      sql(s"SELECT * FROM $tableNameAsString"),
+      Row(2, 2, "hr") :: Row(3, 1, "software") :: Nil)
+    checkDeleteMetrics(numDeletedRows = 1, numCopiedRows = 1)
+
+    sql(s"DELETE FROM $tableNameAsString t WHERE t.index = 0 AND t.id > 1")
+
+    checkAnswer(sql(s"SELECT * FROM $tableNameAsString"), Row(3, 1, "software") :: Nil)
     checkDeleteMetrics(numDeletedRows = 1, numCopiedRows = 0)
   }
 

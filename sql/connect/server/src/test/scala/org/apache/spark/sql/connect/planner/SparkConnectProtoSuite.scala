@@ -31,8 +31,9 @@ import org.apache.spark.scheduler.{SparkListener, SparkListenerEvent}
 import org.apache.spark.sql.{AnalysisException, Column, Observation, Row, SaveMode}
 import org.apache.spark.sql.catalyst.analysis
 import org.apache.spark.sql.catalyst.expressions.{AttributeReference, GenericInternalRow, UnresolvedInSubqueryPlanId, UnsafeProjection}
+import org.apache.spark.sql.catalyst.optimizer.RewriteAsOfJoin
 import org.apache.spark.sql.catalyst.plans.{FullOuter, Inner, LeftAnti, LeftOuter, LeftSemi, PlanTest, RightOuter}
-import org.apache.spark.sql.catalyst.plans.logical.{CollectMetrics, Deduplicate, DeduplicateWithinWatermark, Distinct, LocalRelation, LogicalPlan}
+import org.apache.spark.sql.catalyst.plans.logical.{AsOfJoin, CollectMetrics, Deduplicate, DeduplicateWithinWatermark, Distinct, LocalRelation, LogicalPlan}
 import org.apache.spark.sql.catalyst.types.DataTypeUtils
 import org.apache.spark.sql.classic.ClassicConversions._
 import org.apache.spark.sql.classic.DataFrame
@@ -47,6 +48,7 @@ import org.apache.spark.sql.connector.catalog.CatalogV2Implicits.CatalogHelper
 import org.apache.spark.sql.execution.arrow.ArrowConverters
 import org.apache.spark.sql.execution.ui.SparkListenerSQLExecutionStart
 import org.apache.spark.sql.functions._
+import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
 import org.apache.spark.unsafe.types.UTF8String
 import org.apache.spark.util.Utils
@@ -1105,6 +1107,52 @@ class SparkConnectProtoSuite extends PlanTest with SparkConnectPlanTest {
     }
   }
 
+  gridTest("joinAsOf resolves Connect keys with both analyzers")(Seq(false, true)) { singlePass =>
+    withSQLConf(
+      SQLConf.SORT_MERGE_AS_OF_JOIN_ENABLED.key -> "true",
+      SQLConf.SESSION_LOCAL_TIMEZONE.key -> "America/Los_Angeles",
+      SQLConf.ANALYZER_SINGLE_PASS_RESOLVER_ENABLED.key -> singlePass.toString,
+      SQLConf.ANALYZER_SINGLE_PASS_RESOLVER_ENABLED_TENTATIVELY.key -> "false",
+      SQLConf.ANALYZER_DUAL_RUN_LEGACY_AND_SINGLE_PASS_RESOLVER.key -> "false",
+      SQLConf.ANALYZER_SINGLE_PASS_RESOLVER_ENABLE_ASOF_JOIN_RESOLUTION.key -> "true") {
+      for ((leftType, rightType, comparisonType) <- Seq(
+          (IntegerType, LongType, LongType),
+          (TimestampNTZType, TimestampType, TimestampType),
+          (TimestampType, TimestampNTZType, TimestampType),
+          (StringType, StringType, StringType))) {
+        val left = createLocalRelationProto(
+          attrs = Seq(AttributeReference("lk", leftType)()),
+          data = Seq.empty)
+        val right = createLocalRelationProto(
+          attrs = Seq(AttributeReference("rk", rightType)()),
+          data = Seq.empty)
+        val relation = proto.Relation
+          .newBuilder()
+          .setAsOfJoin(
+            proto.AsOfJoin
+              .newBuilder()
+              .setLeft(left)
+              .setRight(right)
+              .setLeftAsOf("lk".protoAttr)
+              .setRightAsOf("rk".protoAttr)
+              .setJoinType("inner")
+              .setAllowExactMatches(true)
+              .setDirection("backward"))
+          .build()
+        val analyzed = spark.sessionState.executePlan(transform(relation)).analyzed
+        val join = analyzed.collectFirst { case j: AsOfJoin => j }.get
+        assert(join.leftSortExprs.head.dataType == leftType)
+        val rightSortType = if (comparisonType == TimestampType) TimestampType else rightType
+        assert(join.rightSortExprs.head.dataType == rightSortType)
+        assert(join.asOfCondition.children.map(_.dataType) == Seq(comparisonType, comparisonType))
+
+        withSQLConf(SQLConf.SORT_MERGE_AS_OF_JOIN_ENABLED.key -> "false") {
+          comparePlans(RewriteAsOfJoin(analyzed), analyzed)
+        }
+      }
+    }
+  }
+
   test("SPARK-60096: joinAsOf with an attached IN-subquery is an internal error") {
     // joinAsOf(right, id, rid, joinExprs = id IN <plan id>) analyzes the join condition eagerly.
     val right = createLocalRelationProto(Seq(AttributeReference("rid", IntegerType)()), Seq.empty)
@@ -1233,6 +1281,59 @@ class SparkConnectProtoSuite extends PlanTest with SparkConnectPlanTest {
 
   test("Test Hint") {
     comparePlans(connectTestRelation.hint("COALESCE", 3), sparkTestRelation.hint("COALESCE", 3))
+  }
+
+  test("Test BIN BY") {
+    withSQLConf(SQLConf.BIN_BY_ENABLED.key -> "true") {
+      val schema = new StructType()
+        .add("start", TimestampNTZType)
+        .add("end", TimestampNTZType)
+        .add("value", DoubleType)
+        .add("value2", FloatType)
+      val input = createLocalRelationProto(DataTypeUtils.toAttributes(schema), Seq.empty)
+      val classic = spark.createDataFrame(new java.util.ArrayList[Row](), schema)
+      val binBy = proto.BinBy
+        .newBuilder()
+        .setInput(input)
+        .setRangeStart("start".protoAttr)
+        .setRangeEnd("end".protoAttr)
+        .setBinWidth(
+          proto.Expression
+            .newBuilder()
+            .setExpressionString(
+              proto.Expression.ExpressionString.newBuilder().setExpression("INTERVAL 5 MINUTES")))
+        .addDistributeUniform("value".protoAttr)
+        .addDistributeUniform("value2".protoAttr)
+      comparePlans(
+        proto.Relation.newBuilder().setBinBy(binBy).build(),
+        classic.binBy(
+          rangeStart = col("start"),
+          rangeEnd = col("end"),
+          binWidth = expr("INTERVAL 5 MINUTES"),
+          distributeUniform = Array(col("value"), col("value2"))))
+
+      val origin = "TIMESTAMP_NTZ '2024-01-01 00:02:00'"
+      binBy
+        .setAlignTo(
+          proto.Expression
+            .newBuilder()
+            .setExpressionString(
+              proto.Expression.ExpressionString.newBuilder().setExpression(origin)))
+        .setBinStartName("bin.start")
+        .setBinEndName("bin`end")
+        .setBinDistributeRatioName("")
+      comparePlans(
+        proto.Relation.newBuilder().setBinBy(binBy).build(),
+        classic.binBy(
+          rangeStart = col("start"),
+          rangeEnd = col("end"),
+          binWidth = expr("INTERVAL 5 MINUTES"),
+          distributeUniform = Array(col("value"), col("value2")),
+          alignTo = expr(origin),
+          binStartName = "bin.start",
+          binEndName = "bin`end",
+          binDistributeRatioName = ""))
+    }
   }
 
   test("Test Unpivot") {

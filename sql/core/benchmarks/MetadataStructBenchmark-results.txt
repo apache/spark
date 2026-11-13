@@ -2,45 +2,45 @@
 Metadata Struct Benchmark
 ================================================================================================
 
-OpenJDK 64-Bit Server VM 17.0.20+8-LTS on Linux 6.17.0-1020-azure
+OpenJDK 64-Bit Server VM 21.0.12+8-LTS on Linux 6.17.0-1020-azure
 AMD EPYC 7763 64-Core Processor
 Vectorized Parquet:                       Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
 ------------------------------------------------------------------------------------------------------------------------
-no metadata columns                                 636            664          23          7.9         127.2       1.0X
-_metadata.file_path                                 773            783          11          6.5         154.6       0.8X
-_metadata.file_name                                 762            774          12          6.6         152.4       0.8X
-_metadata.file_size                                 702            709           7          7.1         140.5       0.9X
-_metadata.file_block_start                          698            705           6          7.2         139.5       0.9X
-_metadata.file_block_length                         701            711          26          7.1         140.2       0.9X
-_metadata.file_modification_time                    698            706           7          7.2         139.6       0.9X
-_metadata.row_index                                 758            766           7          6.6         151.7       0.8X
-_metadata                                          1058           1066           7          4.7         211.6       0.6X
+no metadata columns                                 678            701          21          7.4         135.6       1.0X
+_metadata.file_path                                 743            770          19          6.7         148.6       0.9X
+_metadata.file_name                                 735            752          14          6.8         147.0       0.9X
+_metadata.file_size                                 669            690          12          7.5         133.8       1.0X
+_metadata.file_block_start                          677            688           6          7.4         135.5       1.0X
+_metadata.file_block_length                         657            673          18          7.6         131.4       1.0X
+_metadata.file_modification_time                    657            668          11          7.6         131.5       1.0X
+_metadata.row_index                                 723            738          13          6.9         144.7       0.9X
+_metadata                                           994           1009          18          5.0         198.7       0.7X
 
-OpenJDK 64-Bit Server VM 17.0.20+8-LTS on Linux 6.17.0-1020-azure
+OpenJDK 64-Bit Server VM 21.0.12+8-LTS on Linux 6.17.0-1020-azure
 AMD EPYC 7763 64-Core Processor
 Parquet-mr:                               Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
 ------------------------------------------------------------------------------------------------------------------------
-no metadata columns                                2491           2516          28          2.0         498.1       1.0X
-_metadata.file_path                                3236           3257          23          1.5         647.1       0.8X
-_metadata.file_name                                3221           3244          22          1.6         644.1       0.8X
-_metadata.file_size                                3058           3091          30          1.6         611.5       0.8X
-_metadata.file_block_start                         3061           3078          19          1.6         612.1       0.8X
-_metadata.file_block_length                        3060           3090          38          1.6         612.1       0.8X
-_metadata.file_modification_time                   3081           3162          36          1.6         616.2       0.8X
-_metadata.row_index                                3603           3624          21          1.4         720.6       0.7X
-_metadata                                          4796           4830          28          1.0         959.2       0.5X
+no metadata columns                                2561           2593          29          2.0         512.2       1.0X
+_metadata.file_path                                3306           3326          19          1.5         661.2       0.8X
+_metadata.file_name                                3326           3366          22          1.5         665.3       0.8X
+_metadata.file_size                                3145           3169          16          1.6         629.1       0.8X
+_metadata.file_block_start                         3180           3206          24          1.6         636.1       0.8X
+_metadata.file_block_length                        3093           3126          28          1.6         618.5       0.8X
+_metadata.file_modification_time                   3159           3180          17          1.6         631.7       0.8X
+_metadata.row_index                                3539           3590          37          1.4         707.8       0.7X
+_metadata                                          4909           4997          34          1.0         981.8       0.5X
 
-OpenJDK 64-Bit Server VM 17.0.20+8-LTS on Linux 6.17.0-1020-azure
+OpenJDK 64-Bit Server VM 21.0.12+8-LTS on Linux 6.17.0-1020-azure
 AMD EPYC 7763 64-Core Processor
 JSON:                                     Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
 ------------------------------------------------------------------------------------------------------------------------
-no metadata columns                                7181           7239          29          0.7        1436.1       1.0X
-_metadata.file_path                                8098           8124          18          0.6        1619.6       0.9X
-_metadata.file_name                                8118           8143          22          0.6        1623.6       0.9X
-_metadata.file_size                                7898           7923          12          0.6        1579.6       0.9X
-_metadata.file_block_start                         7931           7979          15          0.6        1586.1       0.9X
-_metadata.file_block_length                        7895           7939          35          0.6        1579.1       0.9X
-_metadata.file_modification_time                   7890           7912          12          0.6        1578.0       0.9X
-_metadata                                          8800           8824          13          0.6        1759.9       0.8X
+no metadata columns                                7281           7325          26          0.7        1456.1       1.0X
+_metadata.file_path                                7994           8073          50          0.6        1598.8       0.9X
+_metadata.file_name                                7927           7961          23          0.6        1585.4       0.9X
+_metadata.file_size                                7749           7774          20          0.6        1549.8       0.9X
+_metadata.file_block_start                         7755           7777          13          0.6        1550.9       0.9X
+_metadata.file_block_length                        7740           7762          11          0.6        1548.0       0.9X
+_metadata.file_modification_time                   7746           7763          18          0.6        1549.2       0.9X
+_metadata                                          8536           8566          21          0.6        1707.2       0.9X
 
 

@@ -19,8 +19,8 @@ package org.apache.spark.sql.catalyst.optimizer
 
 import org.apache.spark.sql.catalyst.dsl.expressions._
 import org.apache.spark.sql.catalyst.expressions.{Attribute, AttributeMap, EqualTo, IsNull, Or}
-import org.apache.spark.sql.catalyst.plans.{Inner, LeftAnti, PlanTest}
-import org.apache.spark.sql.catalyst.plans.logical.{BROADCAST, HintInfo, Join, JoinHint, LeafNode, LogicalPlan, NO_BROADCAST_HASH, SHUFFLE_HASH, Statistics}
+import org.apache.spark.sql.catalyst.plans.{Inner, LeftAnti, LeftOuter, PlanTest, RightOuter}
+import org.apache.spark.sql.catalyst.plans.logical.{BROADCAST, HintInfo, Join, JoinHint, LeafNode, LogicalPlan, NO_BROADCAST_AND_REPLICATION, NO_BROADCAST_HASH, SHUFFLE_HASH, SHUFFLE_REPLICATE_NL, Statistics}
 import org.apache.spark.sql.catalyst.statsEstimation.StatsTestPlan
 import org.apache.spark.sql.internal.SQLConf
 
@@ -197,6 +197,60 @@ class JoinSelectionHelperSuite extends PlanTest with JoinSelectionHelper {
   test("getBroadcastHashJoinBuildSide returns None without equi-join keys") {
     withSQLConf(SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key -> "10MB") {
       assert(getBroadcastHashJoinBuildSide(join, SQLConf.get).isEmpty)
+    }
+  }
+
+  test("getNonEquiJoinBuildSide builds a side small enough to broadcast") {
+    withSQLConf(SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key -> "10MB") {
+      assert(getNonEquiJoinBuildSide(join, SQLConf.get) === Some(BuildRight))
+      // A left join builds its left side when only that side is small enough.
+      val smallLeft = Join(right, left, LeftOuter, None, JoinHint.NONE)
+      assert(getNonEquiJoinBuildSide(smallLeft, SQLConf.get) === Some(BuildLeft))
+    }
+  }
+
+  test("getNonEquiJoinBuildSide plans a Cartesian product when an inner join can't broadcast") {
+    withSQLConf(SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key -> "-1") {
+      assert(getNonEquiJoinBuildSide(join, SQLConf.get).isEmpty)
+    }
+  }
+
+  test("getNonEquiJoinBuildSide builds the side an outer join prefers, however large") {
+    withSQLConf(SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key -> "-1") {
+      assert(getNonEquiJoinBuildSide(join.copy(joinType = LeftOuter), SQLConf.get) ===
+        Some(BuildRight))
+      assert(getNonEquiJoinBuildSide(join.copy(joinType = RightOuter), SQLConf.get) ===
+        Some(BuildLeft))
+    }
+  }
+
+  test("getNonEquiJoinBuildSide builds a hinted side, even an outer join's preserved one") {
+    withSQLConf(SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key -> "10MB") {
+      val hinted = join.copy(joinType = LeftOuter, hint = JoinHint(hintBroadcast, None))
+      assert(getNonEquiJoinBuildSide(hinted, SQLConf.get) === Some(BuildLeft))
+      // Both sides hinted: an inner join builds the smaller one.
+      val bothHinted = join.copy(hint = JoinHint(hintBroadcast, hintBroadcast))
+      assert(getNonEquiJoinBuildSide(bothHinted, SQLConf.get) === Some(BuildRight))
+    }
+  }
+
+  test("getNonEquiJoinBuildSide plans a Cartesian product under a shuffle-replicate hint") {
+    val hintShuffleReplicateNL = Some(HintInfo(Some(SHUFFLE_REPLICATE_NL)))
+    withSQLConf(SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key -> "10MB") {
+      val inner = join.copy(hint = JoinHint(hintShuffleReplicateNL, None))
+      assert(getNonEquiJoinBuildSide(inner, SQLConf.get).isEmpty)
+      // A left join can't be a Cartesian product, so the hint doesn't apply.
+      val leftOuter = inner.copy(joinType = LeftOuter)
+      assert(getNonEquiJoinBuildSide(leftOuter, SQLConf.get) === Some(BuildRight))
+    }
+  }
+
+  test("getNonEquiJoinBuildSide builds the side NO_BROADCAST_AND_REPLICATION leaves") {
+    val hintNoBroadcastAndReplication = Some(HintInfo(Some(NO_BROADCAST_AND_REPLICATION)))
+    withSQLConf(SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key -> "10MB") {
+      // The hint rules out both broadcasting the right side and a Cartesian product.
+      val hinted = join.copy(hint = JoinHint(None, hintNoBroadcastAndReplication))
+      assert(getNonEquiJoinBuildSide(hinted, SQLConf.get) === Some(BuildLeft))
     }
   }
 

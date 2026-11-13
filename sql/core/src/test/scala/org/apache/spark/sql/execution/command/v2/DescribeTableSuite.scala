@@ -18,7 +18,7 @@
 package org.apache.spark.sql.execution.command.v2
 
 import org.apache.spark.sql.{AnalysisException, QueryTest, Row}
-import org.apache.spark.sql.connector.catalog.TableCatalog
+import org.apache.spark.sql.connector.catalog.{CatalogV2Util, TableCatalog}
 import org.apache.spark.sql.execution.command
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types.StringType
@@ -218,6 +218,31 @@ class DescribeTableSuite extends command.DescribeTableSuiteBase
           Row("Table Properties", "[bar=baz]", ""),
           Row("Statistics", "0 bytes, 0 rows", null)))
     }
+  }
+
+  gridTest("display properties preserve table type and reserved metadata")(
+      Seq((false, false), (true, true))) {
+    case (external, withLocation) =>
+      withNamespaceAndTable("ns", "table") { tbl =>
+        createTableWithDisplayProperties("ns", "table", external, withLocation)
+
+        val reservedRows = CatalogV2Util.TABLE_RESERVED_PROPERTIES.map(_.capitalize)
+        checkAnswer(
+          sql(s"DESCRIBE TABLE EXTENDED $tbl").where(
+            $"col_name".isin((reservedRows ++ Seq("Type", "Table Properties")): _*)),
+          Seq(
+            Row("Type", if (external) "EXTERNAL" else "MANAGED", ""),
+            Row("Comment", "table comment", ""),
+            Row("Provider", "_", ""),
+            Row("Owner", Utils.getCurrentUserName(), ""),
+            Row("Table Properties",
+              "[catalog-label=catalog-value,password=*********(redacted),persisted=stored]", "")) ++
+            (if (withLocation) {
+              Seq(Row("Location", "file:/tmp/display-properties", ""))
+            } else {
+              Nil
+            }))
+      }
   }
 
   test("DESCRIBE TABLE EXTENDED emits structured Catalog/Namespace/Table rows") {

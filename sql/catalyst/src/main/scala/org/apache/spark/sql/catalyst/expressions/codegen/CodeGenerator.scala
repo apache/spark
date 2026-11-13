@@ -17,6 +17,8 @@
 
 package org.apache.spark.sql.catalyst.expressions.codegen
 
+import javax.lang.model.SourceVersion
+
 import scala.annotation.tailrec
 import scala.collection.mutable
 import scala.collection.mutable.ArrayBuffer
@@ -122,9 +124,15 @@ case class SubExprCodes(
  *                       `genCode` is refused.
  * @param followCommonExprs follow a `With` and a `CommonExpressionRef` into the definitions the
  *                          code computes, rather than walk them like any other node.
- * @param onlyNames refuse a value no parameter can name, rather than pass over it.
- * @param fieldsNeedNoArgument leave a field out of the arguments, the method reading it as it
- *                             stands, rather than pass it.
+ * @param onlyNames refuse a value no parameter can name, rather than pass over an expression and
+ *                  pass a variable. A variable that is not a name fails testing either way, if
+ *                  the walk reaches it before its first refusal: here under this policy, and
+ *                  otherwise where an operator builds a method taking it
+ *                  (`CodegenContext.assertMethodParameters`). The row a whole stage split appends
+ *                  is not checked (SPARK-60510).
+ * @param fieldsNeedNoArgument leave a variable naming a field `addMutableState` registered out of
+ *                             the arguments, the method reading it as it stands, rather than pass
+ *                             it.
  * @param checkParamLength refuse a method whose parameters would pass the JVM's limit.
  */
 private[sql] case class InputPolicy(
@@ -272,6 +280,9 @@ class CodegenContext extends Logging {
    *
    * This does not to store the object into field but refer it from the references field at the
    * time of use because number of fields in class is limited so we should reduce it.
+   *
+   * `objName` labels the reference in a comment of the generated source, so it must be a
+   * constant, never text that comes from a query.
    */
   def addReferenceObj(objName: String, obj: Any, className: String = null): String = {
     val idx = references.length
@@ -652,7 +663,9 @@ class CodegenContext extends Logging {
    *                     class, the name is not changed
    * @return the name of the mutable state variable, which is the original name or fresh name if
    *         the variable is inlined to the outer class, or an array access if the variable is to
-   *         be stored in an array of variables of the same type.
+   *         be stored in an array of variables of the same type. To hand it out as an
+   *         `ExprValue`, use `JavaCode.global` or `isNullGlobal`, not `JavaCode.variable`: an
+   *         array access cannot name a method parameter (`CodegenContext.collectInputs`).
    *         A variable will be inlined into the outer class when one of the following conditions
    *         are satisfied:
    *         1. forceInline is true
@@ -1322,23 +1335,26 @@ class CodegenContext extends Logging {
     val args = mutable.LinkedHashMap.empty[String, VariableValue]
     val inputsToEvaluate = mutable.ArrayBuffer.empty[ExprCode]
     // Whether the code can read `v` from the method: false for a value no parameter can carry
-    // where the policy asks for names. `ExpandExec` hands out a `VariableValue` naming a slot of a
-    // compacted mutable state array, and a `SimpleExprValue` is an expression rather than a name
+    // where the policy asks for names. A `SimpleExprValue` is an expression rather than a name
     // -- `posexplode_outer` gives its position the nullness `index == -1`, and a `Byte` or `Short`
     // literal's value is `(byte)1`. A field or a literal needs no parameter and is read as it
-    // stands; so is a field handed out as a `VariableValue` where the policy says so, passing one
-    // being refused by the split methods' own check, a slot of a compacted array included.
+    // stands; so is a `VariableValue` naming a field `addMutableState` registered, where the
+    // policy says so, passing one being refused by the whole stage split's own check (`splitCall`)
+    // in tests. A slot of a compacted array is not a name at all, so it has to be handed out as a
+    // `GlobalValue`, and `INPUT_ROW` cannot be one. Testing checks for one handed out as a
+    // variable: here, where the policy asks for names, for what the walk reaches before its first
+    // refusal; elsewhere, in the method taking it (`assertMethodParameters`). The row a whole stage
+    // split appends is not checked (SPARK-60510).
     def take(v: ExprValue): Boolean = v match {
       case local: VariableValue =>
         val name = local.variableName
-        val isName = name.nonEmpty && Character.isJavaIdentifierStart(name.head) &&
-          name.forall(Character.isJavaIdentifierPart)
-        // A slot of a compacted array is a field under every policy, since no parameter can be
-        // named `array[i]`, where the whole stage split is on; with it off, every policy answers
-        // as it did before that split existed. Another field is passed where the policy says so.
-        val isField = (isCompactedSlot(name) && wholeStageSplit != WholeStageSplit.Off) ||
-          (policy.fieldsNeedNoArgument && mutableStateNames.contains(name))
-        val taken = isName || isField || !policy.onlyNames
+        val isName = isJavaName(name)
+        if (checkParameterNames && policy.onlyNames) {
+          assert(isName, s"$name cannot name a parameter of a method this code moves into; " +
+            nameFix(name))
+        }
+        val isField = policy.fieldsNeedNoArgument && mutableStateNames.contains(name)
+        val taken = isName || !policy.onlyNames
         if (taken && !isField) {
           args.getOrElseUpdate(name, local)
         }
@@ -1412,12 +1428,19 @@ class CodegenContext extends Logging {
   }
 
   /**
-   * Whether `name` is a slot of a compacted mutable state array, such as `mutableStateArray_0[3]`,
-   * which `addMutableState` hands out for a state it does not inline: a field of the class.
+   * Whether `name` can name a parameter: a slot of a compacted array, `array[i]`, cannot, nor can
+   * a keyword or a literal such as `false`.
    */
-  private def isCompactedSlot(name: String): Boolean = name match {
-    case CodeGenerator.CompactedSlot(array) => mutableStateNames.contains(array)
-    case _ => false
+  private def isJavaName(name: String): Boolean =
+    SourceVersion.isIdentifier(name) && !SourceVersion.isKeyword(name)
+
+  /** How the producer of `name`, a value that cannot name a parameter, can hand it out instead. */
+  private def nameFix(name: String): String = if (name == INPUT_ROW) {
+    "set INPUT_ROW to a local or a field added with forceInline = true"
+  } else if (SourceVersion.isKeyword(name)) {
+    "hand out a literal as a LiteralValue, or give the variable another name"
+  } else {
+    "hand out a field with JavaCode.global or isNullGlobal"
   }
 
   /**
@@ -1927,6 +1950,39 @@ class CodegenContext extends Logging {
   }
 
   /**
+   * Whether to assert that each variable a method takes is a Java name, in `collectInputs` and
+   * `assertParametersAreNames`. On under testing; a test turns it off to check what production
+   * does with such a variable.
+   */
+  private[sql] var checkParameterNames: Boolean = Utils.isTesting
+
+  /**
+   * Under testing, asserts what the method `method` an operator moves its code `body` into needs
+   * of its `parameters`: each is a Java name (`assertParametersAreNames`), and each call to a split
+   * function in `body` passes only those parameters (`assertSplitCallsWithin`).
+   */
+  private[sql] def assertMethodParameters(
+      body: => String,
+      parameters: Seq[String],
+      method: String): Unit = {
+    assertParametersAreNames(parameters, method)
+    assertSplitCallsWithin(body, parameters, method)
+  }
+
+  /**
+   * Where `checkParameterNames`, asserts that each of `parameters`, the parameters of the method
+   * `method` an operator moves its code into, is a Java name. The parameters are the variables
+   * `InputPolicy.operatorMethod` collects, which passes a `VariableValue` whatever its name.
+   */
+  private[sql] def assertParametersAreNames(parameters: Seq[String], method: String): Unit = {
+    if (checkParameterNames) {
+      parameters.foreach { p =>
+        assert(isJavaName(p), s"$method takes $p, which cannot name a parameter; ${nameFix(p)}")
+      }
+    }
+  }
+
+  /**
    * Splits the generated code of expressions into multiple sequences of String
    * based on a threshold of length of a String
    *
@@ -2147,9 +2203,8 @@ class CodegenContext extends Logging {
     // The code of the non-split pass is discarded when the split pass below is taken, and with it
     // the calls to every function added while generating it, such as the split methods of a CASE
     // WHEN or a `With` definition's method. A generation that splits the stage's expressions
-    // (`WholeStageSplit.Split`) removes those functions then; any other keeps them, as the class
-    // did before that split existed, so that a stage kept in one piece, and the split turned off,
-    // give back the code generated before it.
+    // (`WholeStageSplit.Split`) removes those functions then; any other, a stage kept in one
+    // piece or the split turned off, keeps them, as the class did before that split existed.
     val functionsBeforeNonSplit = functionsMark()
     val occurrencesBeforeNonSplit = wholeStageSplitOccurrences.clone()
     val blocksSplitBeforeNonSplit = wholeStageBlocksSplit
@@ -2221,7 +2276,7 @@ class CodegenContext extends Logging {
           // Generate the code for this expression tree and wrap it in a function.
           val fnName = freshName("subExpr")
           val inputVars = inputVarsForAllFuncs(i)
-          assertSplitCallsWithin(eval.code.toString, inputVars.map(_.variableName), fnName)
+          assertMethodParameters(eval.code.toString, inputVars.map(_.variableName), fnName)
           val argList =
             inputVars.map(v => s"${CodeGenerator.typeName(v.javaType)} ${v.variableName}")
           val fn =
@@ -2270,53 +2325,65 @@ class CodegenContext extends Logging {
   /**
    * Checks and sets up the state and codegen for subexpression elimination. This finds the
    * common subexpressions, generates the functions that evaluate those expressions and populates
-   * the mapping of common subexpressions to the generated functions.
+   * the mapping of common subexpressions to the generated functions. Returns the calls of the
+   * functions, in an order that evaluates a subexpression before the subexpressions that
+   * reference it.
    */
-  private def subexpressionElimination(expressions: Seq[Expression]): Unit = {
+  private def subexpressionElimination(expressions: Seq[Expression]): Seq[String] = {
     // Add each expression tree and compute the common subexpressions.
     expressions.foreach(equivalentExpressions.addExprTree(_))
 
     // Get all the expressions that appear at least twice and set up the state for subexpression
     // elimination.
     val commonExprs = equivalentExpressions.getCommonSubexpressions
-    commonExprs.foreach { expr =>
-      val fnName = freshName("subExpr")
-      val isNull = addMutableState(JAVA_BOOLEAN, "subExprIsNull")
-      val value = addMutableState(javaType(expr.dataType), "subExprValue")
+    commonExprs.map(generateSubexprFunction)
+  }
 
-      // Generate the code for this expression tree and wrap it in a function.
-      val eval = expr.genCode(this)
-      val fn =
-        s"""
-           |private void $fnName(InternalRow $INPUT_ROW) {
-           |  ${eval.code}
-           |  $isNull = ${eval.isNull};
-           |  $value = ${eval.value};
-           |}
-           """.stripMargin
+  /**
+   * Generates the function that evaluates the common subexpression `expr` into a state, registers
+   * the state so that the code generated for an expression equal to `expr` reads it, and returns
+   * the call of the function. The subexpressions must be generated in an order that evaluates a
+   * subexpression before the subexpressions that contain it, so that the function of the latter
+   * reads the state of the former.
+   */
+  private def generateSubexprFunction(expr: Expression): String = {
+    val fnName = freshName("subExpr")
+    val isNull = addMutableState(JAVA_BOOLEAN, "subExprIsNull")
+    val value = addMutableState(javaType(expr.dataType), "subExprValue")
 
-      // Add a state and a mapping of the common subexpressions that are associate with this
-      // state. Adding this expression to subExprEliminationExprMap means it will call `fn`
-      // when it is code generated. This decision should be a cost based one.
-      //
-      // The cost of doing subexpression elimination is:
-      //   1. Extra function call, although this is probably *good* as the JIT can decide to
-      //      inline or not.
-      // The benefit doing subexpression elimination is:
-      //   1. Running the expression logic. Even for a simple expression, it is likely more than 3
-      //      above.
-      //   2. Less code.
-      // Currently, we will do this for all non-leaf only expression trees (i.e. expr trees with
-      // at least two nodes) as the cost of doing it is expected to be low.
+    // Generate the code for this expression tree and wrap it in a function.
+    val eval = expr.genCode(this)
+    val fn =
+      s"""
+         |private void $fnName(InternalRow $INPUT_ROW) {
+         |  ${eval.code}
+         |  $isNull = ${eval.isNull};
+         |  $value = ${eval.value};
+         |}
+         """.stripMargin
 
-      val subExprCode = s"${addNewFunction(fnName, fn)}($INPUT_ROW);"
-      subexprFunctions += subExprCode
-      val state = SubExprEliminationState(
-        ExprCode(code"$subExprCode",
-          JavaCode.isNullGlobal(isNull),
-          JavaCode.global(value, expr.dataType)))
-      subExprEliminationExprs += ExpressionEquals(expr) -> state
-    }
+    // Add a state and a mapping of the common subexpressions that are associate with this
+    // state. Registering the state in `subExprEliminationExprs` makes the code generated for an
+    // expression equal to this one read the state instead of evaluating it; the caller places the
+    // returned call of `fn` before that code. This decision should be a cost based one.
+    //
+    // The cost of doing subexpression elimination is:
+    //   1. Extra function call, although this is probably *good* as the JIT can decide to
+    //      inline or not.
+    // The benefit doing subexpression elimination is:
+    //   1. Running the expression logic. Even for a simple expression, it is likely more than 3
+    //      above.
+    //   2. Less code.
+    // Currently, we will do this for all non-leaf only expression trees (i.e. expr trees with
+    // at least two nodes) as the cost of doing it is expected to be low.
+
+    val subExprCode = s"${addNewFunction(fnName, fn)}($INPUT_ROW);"
+    val state = SubExprEliminationState(
+      ExprCode(code"$subExprCode",
+        JavaCode.isNullGlobal(isNull),
+        JavaCode.global(value, expr.dataType)))
+    subExprEliminationExprs += ExpressionEquals(expr) -> state
+    subExprCode
   }
 
   /**
@@ -2330,8 +2397,97 @@ class CodegenContext extends Logging {
     // We need to make sure that we do not reuse stateful expressions. This is needed for codegen
     // as well because some expressions may implement `CodegenFallback`.
     val cleanedExpressions = expressions.map(_.freshCopyIfContainsStatefulExpression())
-    if (doSubexpressionElimination) subexpressionElimination(cleanedExpressions)
+    if (doSubexpressionElimination) {
+      subexprFunctions ++= subexpressionElimination(cleanedExpressions)
+    }
     cleanedExpressions.map(e => e.genCode(this))
+  }
+
+  /**
+   * Returns the index of the first of `expressions` that references the common subexpression
+   * `subexpr`, or -1. When the expressions are evaluated in order and one of them can stop the
+   * evaluation, such as a FALSE conjunct of a predicate, the subexpression is evaluated right
+   * before that expression instead of before all of them (SPARK-56032, SPARK-60332). An
+   * occurrence in a conditionally evaluated part of an expression, such as a branch of CASE WHEN,
+   * counts as a reference, so the subexpression is still evaluated before such an expression.
+   */
+  def firstReferencingExpression(expressions: Seq[Expression], subexpr: ExpressionEquals): Int = {
+    expressions.indexWhere(_.exists(e => ExpressionEquals(e) == subexpr))
+  }
+
+  /**
+   * Generates the code of the top-level conjuncts of `predicate` with subexpression elimination,
+   * for a predicate whose conjuncts are evaluated in order and whose evaluation stops at a FALSE
+   * conjunct, as `And.eval` does.
+   *
+   * The common subexpressions are found in the whole predicate, as `generateExpressions` finds
+   * them, so that the same subexpressions are eliminated: none inside a task for a predicate that
+   * holds a plan expression, and only those of the first conjunct with
+   * `spark.sql.subexpressionElimination.skipForShortcutExpr`. The predicate is then split into
+   * its conjuncts, keeping an AND of the top-level chain that is itself a common subexpression as
+   * one conjunct, which reads the state of the subexpression. The common subexpressions that a
+   * conjunct contains are evaluated by functions called just before the first conjunct that
+   * references them, instead of before the whole predicate (SPARK-60332). The other ANDs of the
+   * chain are not generated themselves; only the conjuncts they join are, one by one. Returns,
+   * per conjunct, the code of the calls to put before it and the code of the conjunct, or None,
+   * generating nothing, when no subexpression is eliminated: the caller then generates the
+   * predicate as a whole.
+   *
+   * The function of a subexpression that contains an eliminated subexpression reads the state
+   * of the latter, so the calls are ordered by their dependencies: a contained subexpression is
+   * called before the conjunct that first references the containing one, even when its own first
+   * reference is later. A conjunct can contain a copy of the containing subexpression that lacks
+   * the contained one, e.g. `(a + c) + b` for `(a + b) + c` under the canonicalization of a
+   * commutative operator.
+   *
+   * This must be the only subexpression elimination on this context.
+   */
+  def generateConjunctsWithSubexprCodes(predicate: Expression): Option[Seq[(String, ExprCode)]] = {
+    val cleanedPredicate = predicate.freshCopyIfContainsStatefulExpression()
+    equivalentExpressions.addExprTree(cleanedPredicate)
+    val allCommonExprs = equivalentExpressions.getCommonSubexpressions
+    val commonEqs = allCommonExprs.map(ExpressionEquals(_)).toSet
+    def split(e: Expression): Seq[Expression] = e match {
+      case And(left, right) if !commonEqs.contains(ExpressionEquals(e)) =>
+        split(left) ++ split(right)
+      case _ => Seq(e)
+    }
+    if (allCommonExprs.isEmpty) {
+      None
+    } else {
+      // Every common subexpression is a conjunct or lies inside one, since only the ANDs that are
+      // not common are split. A contained one comes before the ones that contain it.
+      val conjuncts = split(cleanedPredicate)
+      val calls =
+        allCommonExprs.map(expr => ExpressionEquals(expr) -> generateSubexprFunction(expr))
+      val codes = conjuncts.map(e => e.genCode(this))
+      val callOf = calls.toMap
+      val eliminated = calls.map(_._1)
+      // The eliminated subexpressions that `expr` contains, other than itself.
+      def dependencies(expr: Expression): Seq[ExpressionEquals] = eliminated.filter { dep =>
+        expr.children.exists(_.exists(e => ExpressionEquals(e) == dep))
+      }
+      // The eliminated subexpressions by the conjunct that first references them, found once.
+      val byFirstReference = eliminated.groupBy(e => firstReferencingExpression(conjuncts, e))
+      val emitted = mutable.HashSet.empty[ExpressionEquals]
+      Some(codes.zipWithIndex.map { case (code, k) =>
+        val callsBefore = mutable.ArrayBuffer.empty[String]
+        def emit(subexpr: ExpressionEquals): Unit = {
+          if (!emitted.contains(subexpr)) {
+            dependencies(subexpr.e).foreach(emit)
+            emitted += subexpr
+            callsBefore += callOf(subexpr)
+          }
+        }
+        byFirstReference.getOrElse(k, Nil).foreach(emit)
+        val subexprs = if (callsBefore.isEmpty) {
+          ""
+        } else {
+          splitExpressions(callsBefore.toSeq, "subexprFunc_split", Seq("InternalRow" -> INPUT_ROW))
+        }
+        (subexprs, code)
+      })
+    }
   }
 
   /**
@@ -3056,9 +3212,6 @@ object CodeGenerator extends Logging {
   // ---------------------------------------------------------------------------------------------
   // The whole stage split of expressions (`CodegenContext.splitExpressionsWithSources`)
   // ---------------------------------------------------------------------------------------------
-
-  /** A slot of a compacted mutable state array, such as `mutableStateArray_0[3]`. */
-  private[codegen] val CompactedSlot = "([A-Za-z_$][\\w$]*)\\[\\d+\\]".r
 
   /** A name and an opening parenthesis: a call, or a keyword such as `if`. */
   private[codegen] val CallSite = "(?<![\\w$])([A-Za-z_$][\\w$]*)\\s*\\(".r

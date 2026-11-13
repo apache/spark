@@ -25,10 +25,11 @@ import org.apache.hadoop.mapreduce.Job
 import org.apache.spark.SparkContext
 import org.apache.spark.paths.SparkPath
 import org.apache.spark.sql.SparkSession
-import org.apache.spark.sql.catalyst.InternalRow
+import org.apache.spark.sql.catalyst.{FileSourceOptions, InternalRow}
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.codegen.GenerateUnsafeProjection
 import org.apache.spark.sql.catalyst.types.DataTypeUtils.toAttributes
+import org.apache.spark.sql.catalyst.util.CompressionCodecs
 import org.apache.spark.sql.errors.QueryExecutionErrors
 import org.apache.spark.sql.execution.metric.SQLMetric
 import org.apache.spark.sql.internal.{SessionStateHelper, SQLConf}
@@ -332,9 +333,11 @@ object FileFormat {
 
   /**
    * The column a reader that applies storage filters marks the rows it has checked in. See
-   * [[FileFormat.buildReaderWithStorageFilters]]. The name is reserved, as the row-index metadata
-   * column's is. A relation with a column of that name is offered no storage filters, and a file
-   * holding one outside the relation's schema is not supported.
+   * [[FileFormat.buildReaderWithStorageFilters]]. The file-source reader finds the column by this
+   * name, so there the name is reserved, as the row-index metadata column's is. A relation with a
+   * column of that name is offered no storage filters, and a file holding one outside the
+   * relation's schema is not supported. A data source v2 scan's checked column has the same name,
+   * but Spark finds it by position, so a v2 table may have a column of that name.
    */
   val STORAGE_FILTER_CHECKED_COLUMN_NAME = "_tmp_storage_filter_checked"
 
@@ -454,14 +457,41 @@ object FileFormat {
 abstract class TextBasedFileFormat extends FileFormat with SessionStateHelper {
   private var codecFactory: CompressionCodecFactory = _
 
+  /**
+   * Forces the `decompression` read option, when set, onto `hadoopConf` before the format's
+   * [[buildReader]] broadcasts it, so the readers decompress every file with that codec instead of
+   * inferring it from the file name extension
+   * (see [[CompressionCodecs.setReadCodecConfiguration]]).
+   */
+  override def buildReaderWithPartitionValues(
+      sparkSession: SparkSession,
+      dataSchema: StructType,
+      partitionSchema: StructType,
+      requiredSchema: StructType,
+      filters: Seq[Filter],
+      options: Map[String, String],
+      hadoopConf: Configuration): PartitionedFile => Iterator[InternalRow] = {
+    CompressionCodecs.setReadCodecConfiguration(
+      hadoopConf, new FileSourceOptions(options).decompressionCodec)
+    super.buildReaderWithPartitionValues(
+      sparkSession, dataSchema, partitionSchema, requiredSchema, filters, options, hadoopConf)
+  }
+
+  /**
+   * Whether the file at `path` can be split by its compression codec. When the `decompression`
+   * read option is set, the splittability of that codec wins over the file name extension, so
+   * the split decision always agrees with how [[buildReaderWithPartitionValues]] decompresses.
+   */
   override def isSplitable(
       sparkSession: SparkSession,
       options: Map[String, String],
       path: Path): Boolean = {
-    if (codecFactory == null) {
-      codecFactory = new CompressionCodecFactory(getHadoopConf(sparkSession, options))
+    new FileSourceOptions(options).decompressionCodecSplittable.getOrElse {
+      if (codecFactory == null) {
+        codecFactory = new CompressionCodecFactory(getHadoopConf(sparkSession, options))
+      }
+      val codec = codecFactory.getCodec(path)
+      codec == null || codec.isInstanceOf[SplittableCompressionCodec]
     }
-    val codec = codecFactory.getCodec(path)
-    codec == null || codec.isInstanceOf[SplittableCompressionCodec]
   }
 }

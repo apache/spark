@@ -1212,6 +1212,21 @@ abstract class ParquetPartitionDiscoverySuite
     }
   }
 
+  test("SPARK-60797: read decimal partition values with the user-specified scale") {
+    withTempDir { dir =>
+      Seq("1.5", "2", "1.555").foreach { value =>
+        spark.range(1).write.parquet(new File(dir, s"d=$value").getCanonicalPath)
+      }
+      val res = spark.read
+        .schema("id LONG, d DECIMAL(10, 2)")
+        .parquet(dir.getCanonicalPath)
+      checkAnswer(res, Seq(
+        Row(0L, BigDecimal("1.50")),
+        Row(0L, BigDecimal("2.00")),
+        Row(0L, BigDecimal("1.56"))))
+    }
+  }
+
   test("SPARK-49163: Attempt to create table based on broken parquet partition data") {
     withTempDir { dir =>
       val data = Seq[(String, String, String)](("a", "b", "c"))

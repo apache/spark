@@ -17,7 +17,7 @@
 package org.apache.spark.sql.execution.datasources.v2.jdbc
 
 import java.sql.{Connection, DriverManager}
-import java.util.Properties
+import java.util.{Locale, Properties}
 
 import scala.jdk.CollectionConverters._
 
@@ -29,8 +29,10 @@ import org.apache.spark.sql.catalyst.analysis.{NoSuchNamespaceException, NoSuchT
 import org.apache.spark.sql.catalyst.parser.ParseException
 import org.apache.spark.sql.catalyst.util.CharVarcharUtils
 import org.apache.spark.sql.connector.catalog.{Identifier, TableChange, TableSummary}
+import org.apache.spark.sql.connector.write.LogicalWriteInfoImpl
 import org.apache.spark.sql.errors.DataTypeErrors.{toSQLConf, toSQLStmt}
 import org.apache.spark.sql.execution.columnar.InMemoryTableScanExec
+import org.apache.spark.sql.execution.datasources.jdbc.JDBCOptions
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.sql.types._
@@ -104,6 +106,80 @@ class JDBCTableCatalogSuite extends SharedSparkSession {
     checkAnswer(sql("SHOW TABLES IN h2.test"), Seq(Row("test", "people", false)))
     // Check not existing namespace
     checkAnswer(sql("SHOW TABLES IN h2.bad_test"), Seq())
+  }
+
+  test("SPARK-60420: JDBC builders preserve timestamp defaults and honor conversion overrides") {
+    val wallClockKey = JDBCOptions.JDBC_TIMESTAMP_NTZ_WALL_CLOCK
+    val zonelessKey = JDBCOptions.JDBC_ZONELESS_TIMESTAMP_AS_NTZ
+    val legacyKey = SQLConf.LEGACY_ORACLE_TIMESTAMP_NTZ_MAPPING_ENABLED.key
+    val schema = new StructType().add("t", TimestampNTZType)
+
+    def timestampOptions(
+        wallClock: Option[Boolean],
+        zoneless: Option[Boolean],
+        upperCase: Boolean): Map[String, String] = {
+      (wallClock.toSeq.map(wallClockKey -> _.toString) ++
+        zoneless.toSeq.map(zonelessKey -> _.toString)).map { case (key, value) =>
+        (if (upperCase) key.toUpperCase(Locale.ROOT) else key) -> value
+      }.toMap
+    }
+
+    for {
+      legacy <- Seq(false, true)
+      catalogWallClock <- Seq(None, Some(false), Some(true))
+      catalogZoneless <- Seq(None, Some(false), Some(true))
+      catalogUpperCase <- Seq(false, true)
+    } {
+      val table = withSQLConf(legacyKey -> legacy.toString) {
+        val parameters = Map(
+          "url" -> "jdbc:oracle:thin:@//host:1521/db",
+          "dbtable" -> "t",
+          "driver" -> "org.h2.Driver") ++
+          timestampOptions(catalogWallClock, catalogZoneless, catalogUpperCase)
+        JDBCTable(Identifier.of(Array.empty, "t"), schema, new JDBCOptions(parameters))
+      }
+      withSQLConf(legacyKey -> (!legacy).toString) {
+        for {
+          queryWallClock <- Seq(None, Some(false), Some(true))
+          queryZoneless <- Seq(None, Some(false), Some(true))
+          queryUpperCase <- Seq(false, true)
+        } {
+          val parameters = timestampOptions(queryWallClock, queryZoneless, queryUpperCase)
+          val queryOptions = new CaseInsensitiveStringMap(parameters.asJava)
+          val readOptions = table.newScanBuilder(queryOptions).jdbcOptions
+          val writeInfo = LogicalWriteInfoImpl("query-id", schema, queryOptions)
+          val writeOptions = table.newWriteBuilder(writeInfo).asInstanceOf[JDBCWriteBuilder].options
+          val clue = s"legacy=$legacy catalogWallClock=$catalogWallClock " +
+            s"catalogZoneless=$catalogZoneless catalogUpperCase=$catalogUpperCase " +
+            s"queryWallClock=$queryWallClock queryZoneless=$queryZoneless " +
+            s"queryUpperCase=$queryUpperCase"
+          withClue(clue) {
+            Seq(readOptions, writeOptions).foreach { options =>
+              assert(options.timestampNTZAsWallClock ===
+                queryWallClock.orElse(catalogWallClock).getOrElse(!legacy))
+              assert(options.zonelessTimestampAsNTZ === catalogZoneless.getOrElse(!legacy))
+            }
+          }
+        }
+      }
+    }
+  }
+
+  test("SPARK-60420: JDBC builders preserve case-sensitive driver properties") {
+    val schema = new StructType().add("id", IntegerType)
+    val properties = Map("customKey" -> "catalog-value", "untouchedKey" -> "keep-value")
+    val parameters = Map("url" -> url, "dbtable" -> "t") ++ properties
+    val table = JDBCTable(Identifier.of(Array.empty, "t"), schema, new JDBCOptions(parameters))
+    Seq("customKey", "CUSTOMKEY").foreach { key =>
+      val overrides = Map(key -> "query-value")
+      val queryOptions = new CaseInsensitiveStringMap(overrides.asJava)
+      val readOptions = table.newScanBuilder(queryOptions).jdbcOptions
+      val writeInfo = LogicalWriteInfoImpl("query-id", schema, queryOptions)
+      val writeOptions = table.newWriteBuilder(writeInfo).asInstanceOf[JDBCWriteBuilder].options
+      Seq(readOptions, writeOptions).foreach { options =>
+        assert(options.asConnectionProperties.asScala.toMap === properties ++ overrides)
+      }
+    }
   }
 
   test("drop a table and test whether the table exists") {

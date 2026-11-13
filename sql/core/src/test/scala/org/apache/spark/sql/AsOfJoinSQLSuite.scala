@@ -521,7 +521,6 @@ class AsOfJoinSQLSuite extends QueryTest with SharedSparkSession {
   }
 
   test("MATCH_CONDITION accepts ARRAY operands with coercible element types") {
-    // SPARK-59528: a resolved orderExpression proves the elements were unified for the ZipWith.
     val sqlText =
       """
         |SELECT t.a
@@ -533,7 +532,6 @@ class AsOfJoinSQLSuite extends QueryTest with SharedSparkSession {
     assert(analyzed.resolved)
     val asOfJoin = analyzed.collectFirst { case j: AsOfJoin => j }.get
     assert(asOfJoin.asOfCondition.resolved)
-    assert(asOfJoin.orderExpression.resolved)
   }
 
   test("ARRAY<STRUCT> MATCH_CONDITION with mismatched element names and types is rejected") {

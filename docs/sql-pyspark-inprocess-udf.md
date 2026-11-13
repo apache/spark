@@ -213,11 +213,10 @@ of sliced results still copy data.
 pip install "jep>=4.3.2,<4.4" pyarrow cloudpickle
 ```
 
-JEP and `org.apache.arrow:arrow-c-data` are provided dependencies and are not
-bundled with Spark. Supply their JARs on the driver/executor classpaths before
-starting Spark, and make the JEP native library available. Use an `arrow-c-data`
-version matching Spark's Arrow Java version. Installing the Python packages alone
-does not supply the Arrow Java CDI JAR.
+JEP is a provided dependency and is not bundled with Spark. Supply its JAR on the
+driver/executor classpaths before starting Spark, and make the JEP native library
+available. Spark bundles `org.apache.arrow:arrow-c-data`, the Arrow Java CDI JAR,
+in its `jars` directory.
 
 Building JEP from source requires a JDK, a C compiler, and development headers for
 the Python version being embedded (for example, `python3.12-dev` on Ubuntu with
@@ -340,7 +339,7 @@ def add_noise(x):
 |---|---|
 | Python | 3.11+; driver and embedded major.minor versions must match |
 | jep | 4.3.x, 4.3.2 or later (`pip install "jep>=4.3.2,<4.4"`); Spark is built and tested against 4.3.2, and the plugin uses JEP internals that later minor versions may change |
-| `arrow-c-data` JAR | Provided separately; match Spark's Arrow Java version |
+| `arrow-c-data` JAR | Bundled with Spark |
 | PyArrow | 18.0.0+ |
 | cloudpickle | Bundled with PySpark |
 | Python concurrency | One invocation at a time per executor (see below) |
@@ -374,15 +373,13 @@ python3 -m venv .venv
 source .venv/bin/activate
 ```
 
-JEP and Arrow CDI must be on the JVM **system classpath** before the JVM starts.
-`--jars` alone only configures Spark's user classloader and is insufficient. The CDI
-JAR must match the Arrow Java version in the Spark build. For example:
+JEP must be on the JVM **system classpath** before the JVM starts.
+`--jars` alone only configures Spark's user classloader and is insufficient. For example:
 
 ```bash
 JEP_DIR="$(python3 -c 'import importlib.util, pathlib; print(pathlib.Path(importlib.util.find_spec("jep").origin).parent)')"
-ARROW_C_DATA_JAR=/absolute/path/to/arrow-c-data.jar
 spark-submit --master 'local[1]' \
-  --driver-class-path "$JEP_DIR/*:$ARROW_C_DATA_JAR" \
+  --driver-class-path "$JEP_DIR/*" \
   --conf "spark.driver.extraLibraryPath=$JEP_DIR" \
   --conf "spark.python.inProcess.sitePackages=$(dirname "$JEP_DIR")" \
   --conf spark.plugins=org.apache.spark.sql.execution.python.InProcessPythonPlugin \
@@ -416,8 +413,7 @@ spark-submit \
   --master yarn \
   --deploy-mode cluster \
   --archives myvenv.zip#myvenv \
-  --files /absolute/path/to/arrow-c-data.jar#arrow-c-data.jar \
-  --conf 'spark.executor.extraClassPath=./myvenv/lib/python3.11/site-packages/jep/*:./arrow-c-data.jar' \
+  --conf 'spark.executor.extraClassPath=./myvenv/lib/python3.11/site-packages/jep/*' \
   --conf spark.plugins=org.apache.spark.sql.execution.python.InProcessPythonPlugin \
   --conf spark.executor.cores=1 \
   --conf spark.task.cpus=1 \
@@ -446,7 +442,7 @@ building the image. Building JEP from its source distribution additionally requi
 a C compiler, the matching Python development headers, and a JDK (`JAVA_HOME` set).
 Then prepare the image with:
 
-- the JEP JAR and matching Arrow CDI JAR in `/opt/spark/jars`;
+- the JEP JAR in `/opt/spark/jars`;
 - JEP's native library directory on the JVM library path before startup;
 - `spark.python.inProcess.sitePackages` pointing to `/opt/venv`'s site-packages;
 - Spark's matching `python/lib/pyspark.zip` and Py4J zip in the Spark distribution.
@@ -480,7 +476,7 @@ library directories, separated by `:` on Linux.
 
 If you cannot build a custom image, Spark on Kubernetes can distribute archives via a remote
 staging area (e.g. S3 or GCS). Set `spark.kubernetes.file.upload.path` to an object storage
-path that both the driver and executors can access. Provision JEP and Arrow CDI JARs
+path that both the driver and executors can access. Provision the JEP JAR
 in `/opt/inprocess/jars` on every executor using an image layer or a mounted volume
 before the JVM starts. The image must also have Python 3.11+ and the shared
 library matching the archived JEP build. Use the same JEP version as the archived

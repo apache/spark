@@ -19,6 +19,8 @@ package org.apache.spark.sql.catalyst.analysis
 
 import java.util.{Locale, Set => JSet}
 
+import org.apache.spark.sql.AnalysisException
+import org.apache.spark.sql.catalyst.catalog.{InMemoryCatalog, SessionCatalog}
 import org.apache.spark.sql.catalyst.dsl.expressions._
 import org.apache.spark.sql.catalyst.dsl.plans._
 import org.apache.spark.sql.catalyst.expressions.{Alias, ArrayTransform, AttributeReference, Cast, CreateNamedStruct, GetStructField, If, IsNull, LessThanOrEqual, Literal}
@@ -27,7 +29,7 @@ import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.rules.Rule
 import org.apache.spark.sql.catalyst.trees.TreeNodeTag
 import org.apache.spark.sql.catalyst.types.DataTypeUtils
-import org.apache.spark.sql.connector.catalog.{Column, Table, TableCapability}
+import org.apache.spark.sql.connector.catalog.{CatalogManager, Column, DefaultCatalogManager, Table, TableCapability}
 import org.apache.spark.sql.execution.datasources.v2.DataSourceV2Relation
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.internal.SQLConf.StoreAssignmentPolicy
@@ -56,6 +58,102 @@ class V2ResolveOutputRelationSuite extends AnalysisTest {
     assert(resolvedTarget ne target)
     assert(resolvedTarget.getTagValue(tag).contains(()))
   }
+
+  test("write output validation preserves the owning analyzer's store-assignment policy") {
+    val owner = new SQLConf
+    owner.setConfString(SQLConf.STORE_ASSIGNMENT_POLICY.key, "LEGACY")
+    val analyzer = new Analyzer(SimpleAnalyzer.catalogManager) {
+      override def conf: SQLConf = owner
+    }
+    val target = TestRelation(Seq(AttributeReference("target", IntegerType)()))
+    val query = LocalRelation(AttributeReference("input", IntegerType)())
+    withSQLConf(SQLConf.STORE_ASSIGNMENT_POLICY.key -> "ANSI") {
+      checkError(
+        exception = intercept[AnalysisException] {
+          analyzer.ResolveOutputRelation(AppendData.byPosition(target, query))
+        },
+        condition = "_LEGACY_ERROR_TEMP_1000",
+        parameters = Map("configKey" -> SQLConf.STORE_ASSIGNMENT_POLICY.key))
+    }
+  }
+
+  test("write output alignment preserves the rule's store-assignment policy") {
+    val owner = new SQLConf
+    owner.setConfString(SQLConf.STORE_ASSIGNMENT_POLICY.key, "STRICT")
+    val analyzer = new Analyzer(SimpleAnalyzer.catalogManager) {
+      override def conf: SQLConf = owner
+    }
+    val target = TestRelation(Seq(AttributeReference("target", IntegerType)()))
+    val query = LocalRelation(AttributeReference("input", LongType)())
+    withSQLConf(SQLConf.STORE_ASSIGNMENT_POLICY.key -> "ANSI") {
+      val resolved = analyzer.ResolveOutputRelation(
+        AppendData.byPosition(target, query)).asInstanceOf[AppendData]
+      assert(resolved.query.output.map(_.name) == Seq("target"))
+      assert(resolved.query.output.map(_.dataType) == Seq(IntegerType))
+      val casts = resolved.query.expressions.flatMap(_.collect { case cast: Cast => cast })
+      assert(casts.size == 1)
+      assert(casts.head.child == query.output.head)
+      assert(casts.head.dataType == IntegerType)
+      assert(casts.head.ansiEnabled)
+    }
+  }
+
+  test("write output alignment uses the supplied store-assignment policy") {
+    val supplied = new SQLConf
+    supplied.setConfString(SQLConf.STORE_ASSIGNMENT_POLICY.key, "STRICT")
+    val target = TestRelation(Seq(AttributeReference("target", IntegerType)()))
+    val query = LocalRelation(AttributeReference("input", LongType)())
+    withSQLConf(SQLConf.STORE_ASSIGNMENT_POLICY.key -> "ANSI") {
+      checkError(
+        exception = intercept[AnalysisException] {
+          WriteOutputResolution.resolveOutputRelation(
+            AppendData.byPosition(target, query), plan => plan, supplied)
+        },
+        condition = "INCOMPATIBLE_DATA_FOR_TABLE.CANNOT_SAFELY_CAST",
+        parameters = Map(
+          "tableName" -> "`table-name`",
+          "colName" -> "`target`",
+          "srcType" -> "\"BIGINT\"",
+          "targetType" -> "\"INT\""))
+    }
+  }
+
+  test("constraint resolution preserves overridden catalog and configuration receivers") {
+    val owner = new SQLConf
+    owner.setConfString(SQLConf.SESSION_LOCAL_TIMEZONE.key, "America/Los_Angeles")
+    var catalogConfReads = 0
+    val sessionCatalog = new SessionCatalog(new InMemoryCatalog, FunctionRegistry.builtin) {
+      override def conf: SQLConf = {
+        catalogConfReads += 1
+        SQLConf.get
+      }
+    }
+    val otherCatalog = new DefaultCatalogManager(FakeV2SessionCatalog, sessionCatalog)
+    val rule = new ResolveTableConstraints(SimpleAnalyzer.catalogManager, plan => plan) {
+      override val ruleName: String = classOf[ResolveTableConstraints].getName
+      override val catalogManager: CatalogManager = otherCatalog
+      override def conf: SQLConf = owner
+    }
+    val table = new Table {
+      override def name(): String = "generated"
+      override def columns(): Array[Column] = Array(Column.builderFor("g", TimestampType)
+        .generationExpression("'2024-01-01 00:00:00'").build())
+      override def capabilities(): JSet[TableCapability] =
+        JSet.of(TableCapability.GENERATE_COLUMN_VALUES_ON_WRITE)
+    }
+    val target = DataSourceV2Relation.create(table, None, None)
+    val write = AppendData.byPosition(target, LocalRelation(target.output))
+    catalogConfReads = 0
+    withSQLConf(SQLConf.SESSION_LOCAL_TIMEZONE.key -> "UTC") {
+      val resolved = rule(write).asInstanceOf[V2WriteCommand]
+      val timezones = resolved.query.expressions.flatMap(_.collect {
+        case cast: Cast => cast.timeZoneId
+      }).distinct
+      assert(timezones == Seq(Some("America/Los_Angeles")))
+      assert(catalogConfReads == 1)
+    }
+  }
+
 }
 
 class V2AppendDataANSIAnalysisSuite extends V2ANSIWriteAnalysisSuiteBase {

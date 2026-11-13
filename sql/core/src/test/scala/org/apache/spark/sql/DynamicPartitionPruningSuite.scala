@@ -38,10 +38,12 @@ import org.apache.spark.sql.execution._
 import org.apache.spark.sql.execution.adaptive._
 import org.apache.spark.sql.execution.datasources.v2.BatchScanExec
 import org.apache.spark.sql.execution.dynamicpruning.PlanDynamicPruningFilters
-import org.apache.spark.sql.execution.exchange.{BroadcastExchangeLike, ReusedExchangeExec}
+import org.apache.spark.sql.execution.exchange.{BroadcastExchangeLike, ReusedExchangeExec,
+  ShuffleExchangeLike}
 import org.apache.spark.sql.execution.joins.BroadcastHashJoinExec
 import org.apache.spark.sql.execution.metric.SQLLastAttemptMetrics
 import org.apache.spark.sql.execution.streaming.runtime.{MemoryStream, StreamingQueryWrapper}
+import org.apache.spark.sql.execution.window.WindowExec
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSparkSession
@@ -2051,6 +2053,36 @@ abstract class DynamicPartitionPruningV1Suite extends DynamicPartitionPruningDat
 
   import testImplicits._
 
+  test("SPARK-60741: the DPP subquery keeps a bucketed build side's partitioning") {
+    withSQLConf(SQLConf.DYNAMIC_PARTITION_PRUNING_ENABLED.key -> "true",
+        SQLConf.DYNAMIC_PARTITION_PRUNING_REUSE_BROADCAST_ONLY.key -> "false",
+        SQLConf.DYNAMIC_PARTITION_PRUNING_FALLBACK_FILTER_RATIO.key -> "10",
+        SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key -> "-1") {
+      withTable("bucketed_dim", "partitioned_fact") {
+        spark.range(100).selectExpr("id", "id % 10 AS k")
+          .write.bucketBy(4, "k").format(tableFormat).saveAsTable("bucketed_dim")
+        spark.range(100).selectExpr("id AS v", "id % 10 AS p")
+          .write.partitionBy("p").format(tableFormat).saveAsTable("partitioned_fact")
+        val df = sql("SELECT sum(f.v) FROM partitioned_fact f JOIN bucketed_dim d " +
+          "ON f.p = d.k WHERE d.id < 5")
+        checkAnswer(df, Row(2350))
+
+        // The subquery groups on the bucket column, so the bucketed scan is kept, and no shuffle
+        // is needed.
+        val subqueries = collectDynamicPruningExpressions(df.queryExecution.executedPlan)
+          .collect { case i: InSubqueryExec => i.plan }
+        assert(subqueries.nonEmpty)
+        subqueries.foreach {
+          case s: SubqueryExec =>
+            assert(collect(s.child) { case e: ShuffleExchangeLike => e }.isEmpty, s.child)
+            assert(collect(s.child) { case f: FileSourceScanExec => f.bucketedScan } === Seq(true),
+              s.child)
+          case other => fail(s"expected a SubqueryExec, got $other")
+        }
+      }
+    }
+  }
+
   test("DPP with a checkpointed filtering side and an expression partition key") {
     withSQLConf(SQLConf.DYNAMIC_PARTITION_PRUNING_ENABLED.key -> "true",
         SQLConf.DYNAMIC_PARTITION_PRUNING_REUSE_BROADCAST_ONLY.key -> "true") {
@@ -2589,6 +2621,48 @@ class DynamicPartitionPruningV1SuiteAEOff extends DynamicPartitionPruningV1Suite
 
 class DynamicPartitionPruningV1SuiteAEOn extends DynamicPartitionPruningV1Suite
   with EnableAdaptiveExecutionSuite {
+
+  test("SPARK-60379: repeated union builds retain broadcast-only dynamic pruning") {
+    withSQLConf(
+        SQLConf.PUSH_DOWN_SHUFFLE_THROUGH_UNION_ENABLED.key -> "true",
+        SQLConf.PUSH_DOWN_SHUFFLE_THROUGH_UNION_ALLOW_WITH_SUBQUERIES_ENABLED.key -> "false",
+        SQLConf.DYNAMIC_PARTITION_PRUNING_REUSE_BROADCAST_ONLY.key -> "true") {
+      val query = """WITH d AS (
+        | SELECT store_id, country, row_number() OVER
+        | (PARTITION BY store_id ORDER BY country) rn FROM (
+        |   SELECT store_id, country FROM (
+        |     SELECT store_id, country FROM dim_stats DISTRIBUTE BY store_id)
+        |   UNION ALL SELECT store_id, country FROM dim_stats))
+        | SELECT /*+ BROADCAST(d1, d2) */ f.date_id, d1.country, d2.country, d1.rn, d2.rn
+        | FROM fact_stats f
+        | JOIN d d1 ON f.store_id = d1.store_id AND d1.country = 'DE'
+        | JOIN d d2 ON f.store_id = d2.store_id""".stripMargin
+      def factPartitions(df: DataFrame): Long = {
+        val scans = collect(df.queryExecution.executedPlan) {
+          case scan: FileSourceScanExec if scan.output.exists(_.name == "date_id") => scan
+        }
+        assert(scans.size === 1)
+        scans.head.metrics("numPartitions").value
+      }
+      val (expected, expectedPartitions) = withSQLConf(
+          SQLConf.PUSH_DOWN_SHUFFLE_THROUGH_UNION_ENABLED.key -> "false") {
+        val baseline = sql(query)
+        checkPartitionPruningPredicate(baseline, withSubquery = false, withBroadcast = true)
+        (baseline.collect().toSeq, factPartitions(baseline))
+      }
+      val df = sql(query)
+      checkPartitionPruningPredicate(df, withSubquery = false, withBroadcast = true)
+      checkAnswer(df, expected)
+      assert(factPartitions(df) === expectedPartitions)
+      withSQLConf(SQLConf.DYNAMIC_PARTITION_PRUNING_ENABLED.key -> "false") {
+        val unpruned = sql(query)
+        checkAnswer(unpruned, expected)
+        assert(factPartitions(unpruned) > expectedPartitions,
+          "the broadcast pruning predicate must reduce scanned fact partitions")
+      }
+      assert(collect(df.queryExecution.executedPlan) { case window: WindowExec => window }.nonEmpty)
+    }
+  }
 
   test("adaptive broadcast value projection survives Catalyst copies") {
     val source = spark.table("product").queryExecution.optimizedPlan

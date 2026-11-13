@@ -19,6 +19,8 @@ package org.apache.spark.sql.jdbc.v2
 
 import java.sql.Connection
 
+import scala.util.Using
+
 import org.apache.spark.{SparkConf, SparkSQLException}
 import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.analysis.TableAlreadyExistsException
@@ -415,5 +417,49 @@ class PostgresIntegrationSuite extends DockerJDBCIntegrationV2Suite with V2JDBCT
     val rows = df.collect()
     assert(rows.length === 1)
     assert(rows(0).getString(0) === "amy")
+  }
+
+  test("SPARK-60479: CHAR read-side padding with NULL") {
+    val table = s"$catalogName.char_pad"
+    withTable(table) {
+      sql(s"CREATE TABLE $table (id INT, flag CHAR(5))")
+      sql(s"INSERT INTO $table VALUES (1, 'Y'), (2, NULL), (3, 'YES')")
+      val eq = sql(s"SELECT id FROM $table WHERE flag = 'Y'")
+      checkFilterPushed(eq)
+      val eqRows = eq.collect()
+      assert(eqRows.length === 1)
+      assert(eqRows(0).getInt(0) === 1)
+      val isNull = sql(s"SELECT id FROM $table WHERE flag IS NULL")
+      checkFilterPushed(isNull)
+      val nullRows = isNull.collect()
+      assert(nullRows.length === 1)
+      assert(nullRows(0).getInt(0) === 2)
+      val notIn = sql(s"SELECT id FROM $table WHERE flag NOT IN ('Y', 'N')")
+      checkFilterPushed(notIn)
+      val notInRows = notIn.collect().map(_.getInt(0)).toSet
+      assert(notInRows === Set(3))
+      val cnt = sql(s"SELECT COUNT(flag) FROM $table")
+      assert(cnt.collect()(0).getLong(0) === 2)
+    }
+  }
+
+  test("SPARK-60479: Postgres internal char maps to STRING") {
+    val tableName = "char_internal"
+    val table = s"$catalogName.$tableName"
+    withTable(table) {
+      Using.resource(getConnection()) { conn =>
+        conn.prepareStatement(
+          s"""CREATE TABLE $tableName (id INT, c "char")""").executeUpdate()
+        conn.prepareStatement(
+          s"INSERT INTO $tableName VALUES (1, ''), (2, 'a'), (3, ' ')").executeUpdate()
+      }
+      assert(spark.table(table).schema("c").dataType === StringType)
+      val eqSpace = sql(s"SELECT id FROM $table WHERE c = ' '")
+      assert(eqSpace.collect().map(_.getInt(0)).toSet === Set(3))
+      val eqEmpty = sql(s"SELECT id FROM $table WHERE c = ''")
+      assert(eqEmpty.collect().map(_.getInt(0)).toSet === Set(1))
+      val neqSpace = sql(s"SELECT id FROM $table WHERE c <> ' '")
+      assert(neqSpace.collect().map(_.getInt(0)).toSet === Set(1, 2))
+    }
   }
 }

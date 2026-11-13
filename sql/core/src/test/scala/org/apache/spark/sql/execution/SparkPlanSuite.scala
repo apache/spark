@@ -33,11 +33,12 @@ import org.apache.spark.sql.catalyst.expressions.{
 import org.apache.spark.sql.catalyst.expressions.codegen.{CodegenContext, ExprCode}
 import org.apache.spark.sql.catalyst.plans.logical.Deduplicate
 import org.apache.spark.sql.catalyst.trees.LeafLike
-import org.apache.spark.sql.execution.datasources.v2.BatchScanExec
+import org.apache.spark.sql.connector.read.{Batch, InputPartition, PartitionReaderFactory, Scan}
+import org.apache.spark.sql.execution.datasources.v2.{BatchScanExec, PlannedScan}
 import org.apache.spark.sql.execution.exchange.ShuffleExchangeExec
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSparkSession
-import org.apache.spark.sql.types.{DataType, IntegerType, StringType}
+import org.apache.spark.sql.types.{DataType, IntegerType, StringType, StructType}
 import org.apache.spark.sql.vectorized.ColumnarBatch
 import org.apache.spark.util.ThreadUtils
 
@@ -208,14 +209,14 @@ class SparkPlanSuite extends SharedSparkSession {
     // violating the contract that equal objects must have equal hash codes.
     val exec1 = BatchScanExec(
       output = Seq.empty,
-      scan = null,
+      plannedScan = null,
       runtimeFilters = Seq.empty,
       table = null,
       keyGroupedPartitioning = Some(Seq(Literal(1)))
     )
     val exec2 = BatchScanExec(
       output = Seq.empty,
-      scan = null,
+      plannedScan = null,
       runtimeFilters = Seq.empty,
       table = null,
       keyGroupedPartitioning = Some(Seq(Literal(2)))
@@ -275,7 +276,7 @@ class SparkPlanSuite extends SharedSparkSession {
         if (!threadB.isAlive || System.currentTimeMillis() > deadline) {
           waiting = false
         } else {
-          val state = Option(bean.getThreadInfo(threadB.getId)).map(_.getThreadState).orNull
+          val state = Option(bean.getThreadInfo(threadB.threadId)).map(_.getThreadState).orNull
           if (state == Thread.State.BLOCKED) {
             threadBBlocked = true
             waiting = false
@@ -306,7 +307,7 @@ class SparkPlanSuite extends SharedSparkSession {
     val data = AttributeReference("data", StringType)(ExprId(1))
     val scan = BatchScanExec(
       output = Seq(id, data),
-      scan = null,
+      plannedScan = null,
       runtimeFilters = Seq.empty,
       table = null,
       keyGroupedPartitioning = Some(Seq(id, data)))
@@ -320,6 +321,29 @@ class SparkPlanSuite extends SharedSparkSession {
         s"original types=$originalTypes, canonicalized types=$canonicalizedTypes")
     assert(canonicalizedTypes == Seq(IntegerType, StringType),
       s"Expected [IntegerType, StringType] but got $canonicalizedTypes")
+  }
+
+  test("SPARK-60752: copies of a BatchScanExec share its Batch and the partitions it planned") {
+    // A `Scan` that returns a new `Batch` from each `toBatch`, which a connector may do.
+    class NewBatchScan extends Scan {
+      override def readSchema(): StructType = new StructType()
+      override def toBatch: Batch = new Batch {
+        override def planInputPartitions(): Array[InputPartition] = Array(new InputPartition {})
+        override def createReaderFactory(): PartitionReaderFactory =
+          throw new UnsupportedOperationException()
+      }
+    }
+    val scan = BatchScanExec(Seq.empty, new PlannedScan(new NewBatchScan), Seq.empty, table = null)
+    def sharesPlanning(copy: SparkPlan): Boolean = copy match {
+      case c: BatchScanExec =>
+        (c.batch eq scan.batch) && (c.inputPartitions eq scan.inputPartitions)
+      case _ => false
+    }
+
+    // Copies through `makeCopy`, `clone` or `copy` share what the node planned.
+    assert(sharesPlanning(scan.makeCopy(scan.productIterator.map(_.asInstanceOf[AnyRef]).toArray)))
+    assert(sharesPlanning(scan.clone()))
+    assert(sharesPlanning(scan.copy(runtimeFilters = Nil)))
   }
 }
 

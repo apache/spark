@@ -207,6 +207,9 @@ class ResolverGuard(
         checkCreateNamedStruct(createNamedStruct)
       case unresolvedFunction: UnresolvedFunction =>
         checkUnresolvedFunction(unresolvedFunction)
+      // A routine may own a routed constructor, so check it like the flat call.
+      case routedJsonConstructor: RoutedJsonConstructor =>
+        checkUnresolvedFunction(routedJsonConstructor.toUnresolvedFunction)
       case getViewColumnByNameAndOrdinal: GetViewColumnByNameAndOrdinal =>
         checkGetViewColumnByNameAndOrdinal(getViewColumnByNameAndOrdinal)
       case semiStructuredExtract: SemiStructuredExtract =>
@@ -311,10 +314,10 @@ class ResolverGuard(
         checkExpression(asOfJoin.asOfCondition)
       }
       .orElse {
-        checkExpression(asOfJoin.orderExpression)
+        asOfJoin.orderExpression.flatMap(checkExpression)
       }
       .orElse {
-        asOfJoin.toleranceAssertion match {
+        asOfJoin.tolerance match {
           case Some(expression) => checkExpression(expression)
           case None => None
         }
@@ -629,7 +632,8 @@ class ResolverGuard(
       // JSON
       case _: GetJsonObject | _: JsonTuple | _: JsonToStructs | _: StructsToJson |
           _: SchemaOfJson | _: JsonObjectKeys | _: LengthOfJsonArray | _: JsonArray |
-          _: JsonExists | _: JsonQuery | _: JsonValue | _: JsonObjectExpr =>
+          _: JsonExists | _: JsonQuery | _: JsonValue | _: JsonObjectExpr |
+          _: StockJsonConstructor =>
         true
       // CSV
       case _: SchemaOfCsv | _: StructsToCsv | _: CsvToStructs =>

@@ -324,6 +324,60 @@ class ConstantFoldingSuite extends PlanTest {
     comparePlans(optimized, correctAnswer)
   }
 
+  test("SPARK-60820: Do not fold the size of CreateArray over an ANSI cast in a non-ANSI session") {
+    val t = LocalRelation($"s".string)
+    Seq(false, true).foreach { ansiEnabled =>
+      withSQLConf(SQLConf.ANSI_ENABLED.key -> ansiEnabled.toString) {
+        EvalMode.values.foreach { evalMode =>
+          val cast = Cast($"s", IntegerType, evalMode = evalMode)
+          val query = t.select(Size(CreateArray(Seq(cast))).as("d")).analyze
+          val expected = if (!ansiEnabled && evalMode != EvalMode.ANSI) {
+            t.select(Literal(1).as("d")).analyze
+          } else {
+            query
+          }
+          comparePlans(Optimize.execute(query), expected)
+        }
+      }
+    }
+  }
+
+  test("SPARK-60868: Do not fold the size of CreateArray over a LEGACY cast that can fail") {
+    val t = LocalRelation($"i".int, $"d".dayTimeInterval())
+    withSQLConf(SQLConf.ANSI_ENABLED.key -> "false") {
+      Seq(
+        // These cannot fail: a LEGACY cast as in SPARK-37392, and a TRY cast that returns null.
+        Cast($"i", StringType) -> true,
+        Cast($"d", ByteType, evalMode = EvalMode.TRY) -> true,
+        // These fail with CAST_OVERFLOW, EXCEED_LIMIT_LENGTH, and CAST_OVERFLOW in the child.
+        Cast($"d", ByteType) -> false,
+        Cast($"i", VarcharType(2)) -> false,
+        Cast(Cast($"d", ByteType), StringType) -> false).foreach { case (cast, foldable) =>
+        assert(cast.evalMode != EvalMode.ANSI)
+        val query = t.select(Size(CreateArray(Seq(cast))).as("s")).analyze
+        val expected = if (foldable) t.select(Literal(1).as("s")).analyze else query
+        comparePlans(Optimize.execute(query), expected)
+      }
+    }
+  }
+
+  test("SPARK-60849: Constant folding test CreateMap") {
+    // Building a map deduplicates its keys, so its size can be less than the number of pairs.
+    withSQLConf(SQLConf.MAP_KEY_DEDUP_POLICY.key -> SQLConf.MapKeyDedupPolicy.LAST_WIN.toString) {
+      val originalQuery = testRelation
+        .select(Size(CreateMap(Seq(Literal(1), Literal(1), Literal(1), Literal(2)))).as("s"))
+      comparePlans(
+        Optimize.execute(originalQuery.analyze),
+        testRelation.select(Literal(1).as("s")).analyze)
+    }
+
+    // Building a map can throw, for example on a NULL key.
+    val originalQuery = testRelation
+      .select(Size(CreateArray(Seq(CreateMap(Seq($"a", Literal(1)))))).as("s"))
+      .analyze
+    comparePlans(Optimize.execute(originalQuery), originalQuery)
+  }
+
   test("SPARK-37907: InvokeLike support ConstantFolding") {
     val originalQuery =
       testRelation

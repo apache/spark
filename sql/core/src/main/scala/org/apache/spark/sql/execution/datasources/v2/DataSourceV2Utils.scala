@@ -31,13 +31,14 @@ import org.apache.spark.sql.catalyst.expressions.Literal
 import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
 import org.apache.spark.sql.catalyst.util.CaseInsensitiveMap
 import org.apache.spark.sql.connector.catalog.{CatalogV2Util, SessionConfigSupport, StagedTable, StagingTableCatalog, SupportsCatalogOptions, SupportsRead, Table, TableProvider}
-import org.apache.spark.sql.connector.catalog.TableCapability.BATCH_READ
-import org.apache.spark.sql.errors.QueryExecutionErrors
+import org.apache.spark.sql.connector.catalog.TableCapability.{BATCH_READ, EXTERNAL_LOOKUP}
+import org.apache.spark.sql.errors.{QueryCompilationErrors, QueryExecutionErrors}
 import org.apache.spark.sql.execution.SQLExecution
 import org.apache.spark.sql.execution.command.DDLUtils
-import org.apache.spark.sql.execution.datasources.DataSource
+import org.apache.spark.sql.execution.datasources.{DataSource, FileFormat}
 import org.apache.spark.sql.execution.metric.{SQLMetric, SQLMetrics}
 import org.apache.spark.sql.internal.SQLConf
+import org.apache.spark.sql.sources.{RelationProvider, SchemaRelationProvider}
 import org.apache.spark.sql.types.{LongType, StructType}
 import org.apache.spark.sql.util.CaseInsensitiveStringMap
 
@@ -152,6 +153,20 @@ private[sql] object DataSourceV2Utils extends Logging {
     table match {
       case _: SupportsRead if table.supports(BATCH_READ) =>
         Option(DataSourceV2Relation.create(table, catalog, ident, dsOptions, timeTravelSpec))
+      case _: SupportsRead if table.supports(EXTERNAL_LOOKUP) =>
+        // The V1 fallback would serve batch reads of a lookup-only table, which the table does
+        // not declare, so the provider must not offer one.
+        provider match {
+          case _: RelationProvider | _: SchemaRelationProvider | _: FileFormat |
+              _: FileDataSourceV2 =>
+            throw QueryCompilationErrors.invalidDataSourceExternalLookupError(
+              table.name(),
+              "LOOKUP_ONLY_TABLE_WITH_V1_READ",
+              Map("provider" -> provider.getClass.getName))
+          case _ =>
+        }
+        Option(ExternalLookupRelation(
+          DataSourceV2Relation.create(table, catalog, ident, dsOptions, timeTravelSpec)))
       case _ => None
     }
   }
@@ -167,6 +182,38 @@ private[sql] object DataSourceV2Utils extends Logging {
       // TODO(SPARK-28396): Currently file source v2 can't work with tables.
       case Some(p) if !p.isInstanceOf[FileDataSourceV2] => Some(p)
       case _ => None
+    }
+  }
+
+  /** True when `provider` names a v2 source that a session catalog table can be created with. */
+  def isV2Provider(provider: String, conf: SQLConf): Boolean = {
+    getTableProvider(provider, conf).isDefined
+  }
+
+  /**
+   * True when a CREATE TABLE in the session catalog with neither USING nor STORED AS/ROW FORMAT
+   * creates a Hive serde table: `spark.sql.legacy.createHiveTableByDefault` is set, unless the
+   * statement is a CTAS that `spark.sql.hive.convertCTAS` converts.
+   */
+  def createsHiveTableByDefault(ctas: Boolean, conf: SQLConf): Boolean = {
+    conf.getConf(SQLConf.LEGACY_CREATE_HIVE_TABLE_BY_DEFAULT) && !(ctas && conf.convertCTAS)
+  }
+
+  /**
+   * The provider a CREATE TABLE in the session catalog creates the table with: the one in
+   * USING, Hive for STORED AS or ROW FORMAT, and otherwise as [[createsHiveTableByDefault]] says.
+   */
+  def createTableProvider(
+      provider: Option[String],
+      hasSerde: Boolean,
+      ctas: Boolean,
+      conf: SQLConf): String = {
+    provider.getOrElse {
+      if (hasSerde || createsHiveTableByDefault(ctas, conf)) {
+        DDLUtils.HIVE_PROVIDER
+      } else {
+        conf.defaultDataSourceName
+      }
     }
   }
 

@@ -44,7 +44,7 @@ import org.apache.spark.internal.LogKeys.{DATAFRAME_ID, SESSION_ID}
 import org.apache.spark.resource.{ExecutorResourceRequest, ResourceProfile, TaskResourceProfile, TaskResourceRequest}
 import org.apache.spark.sql.{AnalysisException, Column, Encoders, ForeachWriter, Row}
 import org.apache.spark.sql.catalyst.{expressions, AliasIdentifier, FunctionIdentifier, InternalRow, QueryPlanningTracker}
-import org.apache.spark.sql.catalyst.analysis.{ChangelogContextUtils, FunctionRegistry, GlobalTempView, LocalTempView, MultiAlias, RelationChanges, UnresolvedAlias, UnresolvedAttribute, UnresolvedDataFrameStar, UnresolvedDeduplicate, UnresolvedDeserializer, UnresolvedExtractValue, UnresolvedFunction, UnresolvedOrdinal, UnresolvedPlanId, UnresolvedRegex, UnresolvedRelation, UnresolvedStar, UnresolvedStarWithColumns, UnresolvedStarWithColumnsRenames, UnresolvedSubqueryColumnAliases, UnresolvedTableValuedFunction, UnresolvedTranspose}
+import org.apache.spark.sql.catalyst.analysis.{ChangelogContextUtils, FunctionRegistry, GlobalTempView, LocalTempView, MultiAlias, NamedStreamingRelation, RelationChanges, UnresolvedAlias, UnresolvedAttribute, UnresolvedDataFrameStar, UnresolvedDeduplicate, UnresolvedDeserializer, UnresolvedExtractValue, UnresolvedFunction, UnresolvedOrdinal, UnresolvedPlanId, UnresolvedRegex, UnresolvedRelation, UnresolvedStar, UnresolvedStarWithColumns, UnresolvedStarWithColumnsRenames, UnresolvedSubqueryColumnAliases, UnresolvedTableValuedFunction, UnresolvedTranspose}
 import org.apache.spark.sql.catalyst.encoders.{encoderFor, AgnosticEncoder, ExpressionEncoder, RowEncoder}
 import org.apache.spark.sql.catalyst.encoders.AgnosticEncoders.{ProductEncoder, RowEncoder => AgnosticRowEncoder, StringEncoder, UnboundRowEncoder}
 import org.apache.spark.sql.catalyst.expressions._
@@ -52,7 +52,7 @@ import org.apache.spark.sql.catalyst.expressions.aggregate.AggregateExpression
 import org.apache.spark.sql.catalyst.parser.{NamedParameterContext, ParameterContext, ParseException, ParserUtils, PositionalParameterContext}
 import org.apache.spark.sql.catalyst.plans.{Cross, FullOuter, Inner, JoinType, LeftAnti, LeftOuter, LeftSemi, RightOuter, UsingJoin}
 import org.apache.spark.sql.catalyst.plans.logical
-import org.apache.spark.sql.catalyst.plans.logical.{AppendColumns, Assignment, CoGroup, CollectMetrics, CommandResult, DeduplicateAllColumnsAsKey, DeduplicateKeyColumns, DeleteAction, DeserializeToObject, Except, FlatMapGroupsWithState, InsertAction, InsertStarAction, Intersect, JoinWith, LocalRelation, LogicalGroupState, LogicalPlan, MapGroups, MapPartitions, MergeAction, Project, Sample, SerializeFromObject, Sort, SubqueryAlias, TimeModes, TransformWithState, TypedFilter, Union, Unpivot, UnresolvedHint, UpdateAction, UpdateEventTimeWatermarkColumn, UpdateStarAction}
+import org.apache.spark.sql.catalyst.plans.logical.{AppendColumns, Assignment, BinByOutputAliases, CoGroup, CollectMetrics, CommandResult, DeduplicateAllColumnsAsKey, DeduplicateKeyColumns, DeleteAction, DeserializeToObject, Except, FlatMapGroupsWithState, InsertAction, InsertStarAction, Intersect, JoinWith, LocalRelation, LogicalGroupState, LogicalPlan, MapGroups, MapPartitions, MergeAction, Project, Sample, SerializeFromObject, Sort, SubqueryAlias, TimeModes, TransformWithState, TypedFilter, Union, Unpivot, UnresolvedBinBy, UnresolvedCTERelation, UnresolvedHint, UnresolvedWith, UpdateAction, UpdateEventTimeWatermarkColumn, UpdateStarAction}
 import org.apache.spark.sql.catalyst.streaming.InternalOutputModes
 import org.apache.spark.sql.catalyst.trees.{CurrentOrigin, Origin, TreePattern}
 import org.apache.spark.sql.catalyst.types.DataTypeUtils
@@ -60,7 +60,7 @@ import org.apache.spark.sql.catalyst.util.{CaseInsensitiveMap, CharVarcharUtils}
 import org.apache.spark.sql.classic.{Catalog, DataFrameWriter, Dataset, MergeIntoWriter, RelationalGroupedDataset, SparkSession, TypedAggUtils, UserDefinedFunctionUtils}
 import org.apache.spark.sql.classic.ClassicConversions._
 import org.apache.spark.sql.connect.client.arrow.ArrowSerializer
-import org.apache.spark.sql.connect.common.{DataTypeProtoConverter, ForeachWriterPacket, LiteralValueProtoConverter, StorageLevelProtoConverter, StreamingListenerPacket, UdfPacket, UdfSerialization}
+import org.apache.spark.sql.connect.common.{DataTypeProtoConverter, ForeachWriterPacket, InvalidPlanInput, LiteralValueProtoConverter, StorageLevelProtoConverter, StreamingListenerPacket, UdfPacket, UdfSerialization}
 import org.apache.spark.sql.connect.config.Connect.CONNECT_GRPC_ARROW_MAX_BATCH_SIZE
 import org.apache.spark.sql.connect.ml.MLHandler
 import org.apache.spark.sql.connect.pipelines.PipelinesHandler
@@ -206,6 +206,7 @@ class SparkConnectPlanner(
           transformChunkedCachedLocalRelation(rel.getChunkedCachedLocalRelation)
         case proto.Relation.RelTypeCase.HINT => transformHint(rel.getHint)
         case proto.Relation.RelTypeCase.UNPIVOT => transformUnpivot(rel.getUnpivot)
+        case proto.Relation.RelTypeCase.BIN_BY => transformBinBy(rel.getBinBy)
         case proto.Relation.RelTypeCase.TRANSPOSE => transformTranspose(rel.getTranspose)
         case proto.Relation.RelTypeCase.UNRESOLVED_TABLE_VALUED_FUNCTION =>
           transformUnresolvedTableValuedFunction(rel.getUnresolvedTableValuedFunction)
@@ -261,6 +262,28 @@ class SparkConnectPlanner(
       }
     }
     plan
+  }
+
+  /**
+   * Whether [[transformSqlWithRefs]] builds an unresolved plan instead of executing the SQL. Set
+   * only by [[transformPipelineFlowRelation]].
+   */
+  private var deferSqlWithRefs = false
+
+  /**
+   * Transforms the relation that a pipeline flow returns. Unlike [[transformRelation]],
+   * [[transformSqlWithRefs]] does not execute a valid SQL-with-references [[proto.WithRelations]]
+   * during this transformation: it parses the root SQL and binds each reference to its alias as a
+   * CTE relation. The flow analysis then resolves the pipeline datasets that the references read,
+   * and records them as inputs of the flow, as it does for a CTE in the SQL text.
+   */
+  private def transformPipelineFlowRelation(rel: proto.Relation): LogicalPlan = {
+    deferSqlWithRefs = true
+    try {
+      transformRelation(rel)
+    } finally {
+      deferSqlWithRefs = false
+    }
   }
 
   private def transformRelationPlugin(extension: ProtoAny): LogicalPlan = {
@@ -413,7 +436,17 @@ class SparkConnectPlanner(
     if (!isValidSQLWithRefs(query)) {
       throw InvalidInputErrors.invalidSQLWithReferences(query)
     }
-    executeSQLWithRefs(query).logicalPlan
+    if (deferSqlWithRefs) {
+      val cteRelations = query.getReferencesList.asScala.map { ref =>
+        val alias = ref.getSubqueryAlias.getAlias
+        UnresolvedCTERelation(
+          alias,
+          SubqueryAlias(alias, transformRelation(ref.getSubqueryAlias.getInput)))
+      }
+      UnresolvedWith(transformSql(query.getRoot.getSql), cteRelations.toSeq)
+    } else {
+      executeSQLWithRefs(query).logicalPlan
+    }
   }
 
   private def transformSubqueryAlias(alias: proto.SubqueryAlias): LogicalPlan = {
@@ -1432,6 +1465,21 @@ class SparkConnectPlanner(
       rel.getArgumentsList.asScala.map(transformExpression).toSeq)
   }
 
+  private def transformBinBy(rel: proto.BinBy): LogicalPlan = {
+    UnresolvedBinBy(
+      binWidthExpr = transformExpression(rel.getBinWidth),
+      rangeStartCol = transformExpression(rel.getRangeStart),
+      rangeEndCol = transformExpression(rel.getRangeEnd),
+      originExpr = if (rel.hasAlignTo) Some(transformExpression(rel.getAlignTo)) else None,
+      distributeColumns = rel.getDistributeUniformList.asScala.map(transformExpression).toSeq,
+      outputAliases = BinByOutputAliases(
+        binStart = if (rel.hasBinStartName) Some(rel.getBinStartName) else None,
+        binEnd = if (rel.hasBinEndName) Some(rel.getBinEndName) else None,
+        binRatio =
+          if (rel.hasBinDistributeRatioName) Some(rel.getBinDistributeRatioName) else None),
+      child = transformRelation(rel.getInput))
+  }
+
   private def transformUnpivot(rel: proto.Unpivot): LogicalPlan = {
     val ids = rel.getIdsList.asScala.toArray.map { expr =>
       Column(transformExpression(expr))
@@ -1753,7 +1801,18 @@ class SparkConnectPlanner(
           temporalIdent.nameParts,
           new CaseInsensitiveStringMap(rel.getNamedTable.getOptionsMap),
           isStreaming = rel.getIsStreaming)
-        temporalIdent.wrapTimeTravel(relation)
+        if (rel.getIsStreaming) {
+          val sourceName = if (rel.getNamedTable.hasSourceName) {
+            val name = rel.getNamedTable.getSourceName
+            session.readStream.validateSourceName(name)
+            Some(name)
+          } else {
+            None
+          }
+          NamedStreamingRelation.withUserProvidedName(relation, sourceName)
+        } else {
+          temporalIdent.wrapTimeTravel(relation)
+        }
 
       case proto.Read.ReadTypeCase.DATA_SOURCE if !rel.getIsStreaming =>
         val reader = session.read
@@ -3084,7 +3143,7 @@ class SparkConnectPlanner(
       sessionHolder,
       command,
       responseObserver,
-      transformRelation,
+      transformPipelineFlowRelation,
       transformExpression)
     executeHolder.eventsManager.postFinished()
     responseObserver.onNext(
@@ -3159,8 +3218,13 @@ class SparkConnectPlanner(
     }
 
     // Block unsupported SQL commands if the request comes from Spark Declarative Pipelines.
+    // For a valid SQL-with-references WITH_RELATIONS, transformRelation would route
+    // through executeSQLWithRefs and eagerly run the root SQL as a side effect, producing
+    // a CommandResult that bypasses the blocklist. blockUnsupportedSqlCommandIn checks such
+    // a relation at the top level or as a direct reference input without executing it. See
+    // its scaladoc for a known limitation.
     if (PipelineAnalysisContextUtils.hasPipelineAnalysisContext(userContext)) {
-      PipelinesHandler.blockUnsupportedSqlCommand(queryPlan = transformRelation(relation))
+      blockUnsupportedSqlCommandIn(relation)
     }
 
     // If the spark.sql() is called inside a pipeline flow function, we don't need to execute
@@ -3221,10 +3285,15 @@ class SparkConnectPlanner(
           timeZoneId = timeZoneId,
           errorOnDuplicatedFieldNames = false,
           largeVarTypes = largeVarTypes)
-        assert(batches.hasNext)
-        val bytes = batches.next()
-        assert(!batches.hasNext, s"remaining batches: ${batches.size}")
-        bytes
+        // On the driver, nothing else closes the converter if the conversion fails.
+        Utils.tryWithSafeFinally {
+          assert(batches.hasNext)
+          val bytes = batches.next()
+          assert(!batches.hasNext, s"remaining batches: ${batches.size}")
+          bytes
+        } {
+          batches.close()
+        }
       }
 
       result.setRelation(
@@ -3260,6 +3329,30 @@ class SparkConnectPlanner(
           .setServerSideSessionId(sessionHolder.serverSessionId)
           .setMetrics(metrics.build)
           .build)
+    }
+  }
+
+  /**
+   * Applies [[PipelinesHandler.blockUnsupportedSqlCommand]] to a relation without executing a
+   * valid SQL-with-references [[proto.WithRelations]] at the top level or as a direct reference
+   * input. For such a relation, the root SQL is parsed (not executed) and each reference input is
+   * checked with this method again. Any other relation is passed to [[transformRelation]].
+   *
+   * Known limitation: [[transformRelation]] still executes a SQL-with-references
+   * [[proto.WithRelations]] that is nested under another relation (for example a `Limit`) or
+   * wrapped in a Dataset-building relation such as `SHOW_STRING`, as it did before this check.
+   */
+  private def blockUnsupportedSqlCommandIn(rel: proto.Relation): Unit = {
+    rel.getRelTypeCase match {
+      case proto.Relation.RelTypeCase.WITH_RELATIONS
+          if isValidSQLWithRefs(rel.getWithRelations) =>
+        val withRel = rel.getWithRelations
+        PipelinesHandler.blockUnsupportedSqlCommand(transformSql(withRel.getRoot.getSql))
+        withRel.getReferencesList.asScala.foreach { ref =>
+          blockUnsupportedSqlCommandIn(ref.getSubqueryAlias.getInput)
+        }
+      case _ =>
+        PipelinesHandler.blockUnsupportedSqlCommand(transformRelation(rel))
     }
   }
 
@@ -4110,6 +4203,14 @@ class SparkConnectPlanner(
   private def handleCheckpointCommand(
       checkpointCommand: CheckpointCommand,
       responseObserver: StreamObserver[proto.ExecutePlanResponse]): Unit = {
+    val dfId = if (checkpointCommand.hasRelationId) {
+      if (checkpointCommand.getRelationId.isEmpty) {
+        throw InvalidPlanInput("CONNECT_INVALID_PLAN.CHECKPOINT_RELATION_ID_EMPTY", Map.empty)
+      }
+      checkpointCommand.getRelationId
+    } else {
+      UUID.randomUUID().toString
+    }
     val target = Dataset
       .ofRows(session, transformRelation(checkpointCommand.getRelation))
     val checkpointed = if (checkpointCommand.getLocal) {
@@ -4125,9 +4226,12 @@ class SparkConnectPlanner(
       target.checkpoint(eager = checkpointCommand.getEager)
     }
 
-    val dfId = UUID.randomUUID().toString
     logInfo(log"Caching DataFrame with id ${MDC(DATAFRAME_ID, dfId)}")
-    sessionHolder.cacheDataFrameById(dfId, checkpointed)
+    if (sessionHolder.dataFrameCache.putIfAbsent(dfId, checkpointed) != null) {
+      throw InvalidPlanInput(
+        "CONNECT_INVALID_PLAN.DATAFRAME_ALREADY_EXISTS",
+        Map("dfId" -> dfId, "sessionId" -> sessionId))
+    }
 
     executeHolder.eventsManager.postFinished()
     responseObserver.onNext(

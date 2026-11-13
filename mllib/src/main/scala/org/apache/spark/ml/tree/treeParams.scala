@@ -39,7 +39,7 @@ import org.apache.spark.sql.types.{DataType, DoubleType, StructType}
  * Note: Marked as private since this may be made public in the future.
  */
 private[ml] trait DecisionTreeParams extends PredictorParams
-  with HasCheckpointInterval with HasSeed with HasWeightCol {
+  with HasCheckpointInterval with HasSeed with HasWeightCol with HasIntermediateStorageLevel {
 
   /**
    * Leaf indices column name.

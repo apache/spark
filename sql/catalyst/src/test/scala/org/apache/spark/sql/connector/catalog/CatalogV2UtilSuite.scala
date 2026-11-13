@@ -35,6 +35,46 @@ import org.apache.spark.sql.util.CaseInsensitiveStringMap
 
 class CatalogV2UtilSuite extends SparkFunSuite {
 
+  test("tablePropertiesForDisplay preserves stored properties with no display properties") {
+    val properties = java.util.Map.of(
+      "persisted", "stored", TableCatalog.PROP_EXTERNAL, "true")
+
+    assert(CatalogV2Util.tablePropertiesForDisplay(
+      properties, java.util.Map.of[String, String](), new SQLConf) ===
+      Map("persisted" -> "stored"))
+  }
+
+  test("tablePropertiesForDisplay ignores reserved display keys and preserves stored values") {
+    val displayProperties = new java.util.HashMap[String, String]()
+    CatalogV2Util.TABLE_RESERVED_PROPERTIES.foreach(displayProperties.put(_, "display-value"))
+    displayProperties.put("persisted", "display-value")
+    displayProperties.put("catalog-label", "catalog-value")
+    val properties = java.util.Map.of("persisted", "stored")
+
+    assert(CatalogV2Util.tablePropertiesForDisplay(
+      properties, displayProperties, new SQLConf) ===
+      Map("persisted" -> "stored", "catalog-label" -> "catalog-value"))
+  }
+
+  test("tablePropertiesForDisplay redacts stored and display-only values") {
+    val conf = new SQLConf
+    conf.setConf(SQLConf.SQL_OPTIONS_REDACTION_PATTERN, "(?i)catalog-label".r)
+    val properties = new java.util.HashMap[String, String](
+      java.util.Map.of("password", "stored-password", "persisted", "stored"))
+    val displayProperties = new java.util.HashMap[String, String](java.util.Map.of(
+      "catalog-label", "catalog-value", "secret", "display-secret", "persisted", "display-value"))
+
+    assert(CatalogV2Util.tablePropertiesForDisplay(properties, displayProperties, conf) === Map(
+      "password" -> "*********(redacted)",
+      "catalog-label" -> "*********(redacted)",
+      "secret" -> "*********(redacted)",
+      "persisted" -> "stored"))
+    assert(properties === java.util.Map.of(
+      "password", "stored-password", "persisted", "stored"))
+    assert(displayProperties === java.util.Map.of(
+      "catalog-label", "catalog-value", "secret", "display-secret", "persisted", "display-value"))
+  }
+
   private def catalogWithStateOptions(keys: java.util.Set[String]): TableCatalog = {
     val catalog = mock(classOf[TableCatalog])
     when(catalog.tableStateOptionKeys()).thenReturn(keys)

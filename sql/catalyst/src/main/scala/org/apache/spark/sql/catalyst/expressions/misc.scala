@@ -318,6 +318,11 @@ case class Uuid(randomSeed: Option[Long] = None) extends LeafExpression with Non
 
   override def stateful: Boolean = true
 
+  // Stateful fresh copies use this hook even for leaves. The default leaf hook returns this,
+  // which would share randomGenerator across evaluators; copy preserves the seed without
+  // sharing the initialized generator.
+  override def withNewChildrenInternal(newChildren: IndexedSeq[Expression]): Expression = copy()
+
   @transient private[this] var randomGenerator: RandomUUIDGenerator = _
 
   override protected def initializeInternal(partitionIndex: Int): Unit =

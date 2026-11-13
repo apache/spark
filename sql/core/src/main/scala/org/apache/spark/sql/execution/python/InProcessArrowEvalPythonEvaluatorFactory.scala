@@ -59,7 +59,8 @@ import org.apache.spark.util.Utils
 class InProcessArrowEvalPythonEvaluatorFactory(
     childOutput: Seq[Attribute],
     udfs: Seq[PythonUDF],
-    output: Seq[Attribute],
+    passThroughOutput: Seq[Attribute],
+    resultOutput: Seq[Attribute],
     batchSize: Int,
     maxBytes: Long,
     timeZoneId: String,
@@ -69,7 +70,7 @@ class InProcessArrowEvalPythonEvaluatorFactory(
     tracebackWithLocals: Boolean,
     fullValidation: Boolean,
     metrics: Map[String, SQLMetric])
-  extends EvalPythonEvaluatorFactory(childOutput, udfs, output) {
+  extends EvalPythonEvaluatorFactory(childOutput, udfs, passThroughOutput, resultOutput) {
 
   private[python] def runtimeSession: InProcessPythonRuntime.InterpreterSession =
     InProcessPythonRuntime.currentSession

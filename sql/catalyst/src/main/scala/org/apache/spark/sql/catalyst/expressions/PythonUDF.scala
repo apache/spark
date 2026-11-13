@@ -71,6 +71,23 @@ object PythonUDF {
   }
 
   /**
+   * The key that decides whether two Python UDF calls are the same call, evaluated once. A
+   * deterministic call is keyed by its canonical form, so identical calls share one evaluation. A
+   * nondeterministic call is keyed by itself: in `f(x) + f(x)` each call may return a different
+   * value, and only the calls' `resultId`s, which `canonicalized` drops, keep them apart.
+   *
+   * A call is deterministic only if its arguments are too (`deterministic`, not
+   * `udfDeterministic`). In `f(r(x)) = f(r(x))` with a nondeterministic `r`, each `f` call wraps
+   * its own draw of `r`; canonicalizing the `f` calls would drop the inner calls' `resultId`s as
+   * well and merge both sides into one call, compared with itself.
+   *
+   * Shared by `ExtractPythonUDFs` and `ExtractPythonUDFFromLambda`, so that calls the latter keeps
+   * apart when lifting them out of a lambda are not merged by the former afterwards.
+   */
+  def canonicalizeDeterministic(udf: PythonUDF): PythonUDF =
+    if (udf.deterministic) udf.canonicalized.asInstanceOf[PythonUDF] else udf
+
+  /**
    * Whether `e` is a Python UDF that can be lifted out of a higher-order function's lambda by
    * `ExtractPythonUDFFromLambda`, which applies it to the whole array outside the lambda.
    *
@@ -181,8 +198,8 @@ object PythonUDF {
    *     each lifted UDF's argument, the `map_keys`/`map_values` desugar, the pairwise `array_sort`
    *     path), and nondeterministic expressions are not subexpression-eliminated, so the copies
    *     would evaluate independently and disagree - keeping the results misaligned. (This is
-   *     distinct from a nondeterministic UDF *call*, which `ExtractPythonUDFFromLambda.liftKey`
-   *     keeps distinct but well-defined.)
+   *     distinct from a nondeterministic UDF *call*, which [[canonicalizeDeterministic]] keeps
+   *     distinct but well-defined.)
    *   - a HOF (at any level) whose shape the rewrite does not model (see [[isRewritableShape]]).
    */
   def canRewritePythonUDFInLambda(hof: HigherOrderFunction): Boolean = {

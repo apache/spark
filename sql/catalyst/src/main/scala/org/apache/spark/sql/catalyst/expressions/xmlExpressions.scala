@@ -55,6 +55,18 @@ import org.apache.spark.unsafe.types.UTF8String
       > SELECT _FUNC_('<p><teacher>Alice</teacher><student><name>Bob</name><rank>1</rank></student><student><name>Charlie</name><rank>2</rank></student></p>', 'STRUCT<teacher: STRING, student: ARRAY<STRUCT<name: STRING, rank: INT>>>');
        {"teacher":"Alice","student":[{"name":"Bob","rank":1},{"name":"Charlie","rank":2}]}
   """,
+  note = """
+    A CHAR `xmlStr` is not rtrimmed; padding is trailing whitespace that XML ignores.
+    CHAR/VARCHAR in `schema` is accepted when CHAR/VARCHAR are first-class
+    (spark.sql.charVarchar.standardSemantics.enabled or
+    spark.sql.preserveCharVarcharTypeInfo): fields are assigned (CHAR padded; overflow is
+    a bad record). spark.sql.legacy.charVarcharAsString reads them as STRING. Otherwise
+    the schema raises UNSUPPORTED_CHAR_OR_VARCHAR_AS_STRING. With
+    spark.sql.charVarchar.standardSemantics.enabled, CHAR/VARCHAR map keys are
+    length-checked without padding or trimming; with only
+    spark.sql.preserveCharVarcharTypeInfo, short CHAR keys are padded and over-length keys
+    raise EXCEED_LIMIT_LENGTH.
+  """,
   group = "xml_funcs",
   since = "4.0.0")
 // scalastyle:on line.size.limit
@@ -167,6 +179,10 @@ case class XmlToStructs(
        STRUCT<a: BIGINT>
       > SELECT _FUNC_('<p><a attr="2">1</a><a>3</a></p>', map('excludeAttribute', 'true'));
        STRUCT<a: ARRAY<BIGINT>>
+  """,
+  note = """
+    A CHAR `xml` argument is not rtrimmed. Padding is trailing whitespace in the sample
+    document; XML inference ignores it.
   """,
   since = "4.0.0",
   group = "xml_funcs")

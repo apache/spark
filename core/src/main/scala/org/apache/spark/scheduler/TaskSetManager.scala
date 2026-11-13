@@ -561,6 +561,15 @@ private[spark] class TaskSetManager(
     } catch {
       // If the task cannot be serialized, then there's no point to re-attempt the task,
       // as it will always fail. So just abort the whole task-set.
+      case e: OutOfMemoryError if Utils.isJavaArraySizeLimitExceeded(e) =>
+        // The task is larger than a Java array can hold. This is not heap exhaustion, so it is
+        // reported with a user-facing error that does not keep the OutOfMemoryError as cause.
+        val failure = JavaArraySizeLimitExceeded.forTask(e, task.stageId, task.partitionId)
+        logError(log"Failed to serialize task ${MDC(TASK_ID, taskId)} (stage " +
+          log"${MDC(STAGE_ID, task.stageId)}, partition ${MDC(PARTITION_ID, task.partitionId)}) " +
+          log"because it exceeded Java's maximum array size: ${MDC(ERROR, failure.jvmMessage)}")
+        abort(failure.getMessage, Some(failure))
+        throw SparkCoreErrors.failToSerializeTaskError(failure)
       case NonFatal(e) =>
         val msg = log"Failed to serialize task ${MDC(TASK_ID, taskId)}, not attempting to retry it."
         logError(msg, e)

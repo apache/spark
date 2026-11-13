@@ -259,6 +259,19 @@ class DecimalSuite extends SparkFunSuite with PrivateMethodTester with SQLHelper
     assert(Decimal(100).quot(Decimal(-33)) === Decimal(BigDecimal("-3")))
   }
 
+  test("SPARK-61050: % and quot with negative scales") {
+    withSQLConf(SQLConf.LEGACY_ALLOW_NEGATIVE_SCALE_OF_DECIMAL_ENABLED.key -> "true") {
+      // `MATH_CONTEXT` holds this exact quotient, so no context of 10^9 digits is used.
+      val big = Decimal(BigDecimal("1E+999999999"))
+      assert(big % Decimal(1) === Decimal(0))
+      assert(big.quot(Decimal(1)) === big)
+      // The integral part of the quotient would need more digits than an Int can count.
+      intercept[ArithmeticException] {
+        Decimal(BigDecimal("1E+2147483636")) % Decimal(BigDecimal("3E-38"))
+      }
+    }
+  }
+
   test("SPARK-57937: div with target scale") {
     // `div(that, scale)` must return the same result as `/` (which divides at
     // `DecimalType.MAX_SCALE + 1` with ROUND_DOWN) followed by rounding to the same scale.
@@ -291,6 +304,25 @@ class DecimalSuite extends SparkFunSuite with PrivateMethodTester with SQLHelper
     assert(-Decimal(-100) === Decimal(BigDecimal("100")))
     assert(Decimal(100).abs === Decimal(BigDecimal("100")))
     assert(Decimal(-100).abs === Decimal(BigDecimal("100")))
+  }
+
+  test("SPARK-45438: negate and abs keep every digit of a 38-digit value") {
+    Seq(
+      "12345678901234567890123456789012345.67",
+      "-12345678901234567890123456789012345.67",
+      "99999999999999999999999999999999999999",
+      "-99999999999999999999999999999999999999",
+      "-89999999999999999999999999999999999999",
+      "1234567890123456789012345678901234567.8").foreach { s =>
+      // A java.math.BigDecimal, not Decimal(String): the latter carries a 38-digit context,
+      // which would hide the rounding of the default 34-digit one.
+      val value = new java.math.BigDecimal(s)
+      val d = Decimal(value, 38, value.scale)
+      val negated = -d
+      assert(negated.toJavaBigDecimal === value.negate(), s)
+      assert(d.abs.toJavaBigDecimal === value.abs(), s)
+      assert(negated.precision === 38 && negated.scale === value.scale, s)
+    }
   }
 
   test("floor & ceil") {

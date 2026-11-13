@@ -903,7 +903,10 @@ class PlanMerger(
     // here: SPARK-58207 keeps non-deterministic filters from being pushed to a V2 source, so an
     // offered one is simply not pushed (and dropped when the scan is extracted).
     val conds = strictFilters ++ bestEffortFilter.filter(_.references.subsetOf(relationOut))
-    V2ScanRelationPushDown.rebuildScan(relation, unionAttrs, conds).filter { scan =>
+    // Spark reads the merged result through scalar subqueries, even when the original
+    // scans came from the main query. Rebuild the scan with the destination's context.
+    V2ScanRelationPushDown.rebuildScan(
+      relation, unionAttrs, conds, isSubquery = true).filter { scan =>
       // The rebuilt scan must itself be mergeable. rebuildScan re-runs the full pushdown, so any
       // non-reproducible pushdown it introduces would make the merged scan unsound. Today's
       // Project-over-Filter input only triggers the plain path (always mergeable), so this is

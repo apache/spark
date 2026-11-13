@@ -17,15 +17,19 @@
 
 package org.apache.spark.sql
 
-import java.sql.{Date, Timestamp}
+import java.lang.management.ManagementFactory
+import java.sql.Timestamp
 import java.time.{Duration, Instant, LocalDateTime}
 
 import scala.jdk.CollectionConverters._
 
+import com.sun.management.UnixOperatingSystemMXBean
+
 import org.apache.spark.sql.catalyst.expressions.{BinaryComparison, Expression, GreaterThan, GreaterThanOrEqual, LessThan, LessThanOrEqual}
-import org.apache.spark.sql.catalyst.plans.{Backward, Forward}
+import org.apache.spark.sql.catalyst.plans.{AsOfJoinDirection, Backward, Forward, Nearest}
 import org.apache.spark.sql.catalyst.plans.logical.{AsOfJoin, LogicalPlan}
 import org.apache.spark.sql.catalyst.rules.Rule
+import org.apache.spark.sql.execution.{InputAdapter, SparkPlan, WholeStageCodegenExec}
 import org.apache.spark.sql.execution.adaptive.AdaptiveSparkPlanHelper
 import org.apache.spark.sql.execution.joins.SortMergeAsOfJoinExec
 import org.apache.spark.sql.internal.SQLConf
@@ -67,17 +71,96 @@ class SortMergeAsOfJoinSuite extends QueryTest
     (df1, df2)
   }
 
-  // Like checkAnswer, but also asserts the right-side buffer spilled (spillSize > 0).
-  private def checkAnswerAndSpill(df: classic.DataFrame, expectedAnswer: Seq[Row]): Unit = {
-    checkAnswer(df, expectedAnswer)
-    val op = collectFirst(df.queryExecution.executedPlan) {
-      case s: SortMergeAsOfJoinExec => s
+  // Like checkAnswer, but also asserts the right-side buffer spilled (spillSize > 0). Runs with
+  // the ASOF join codegen off and on, so both paths must handle the spilled buffer, except for a
+  // nearest join, which runs the interpreted scan both times.
+  private def checkAnswerAndSpill(df: => classic.DataFrame, expectedAnswer: Seq[Row]): Unit = {
+    withAsOfJoinCodegenOffAndOn { codegen =>
+      val query = df
+      checkAnswer(query, expectedAnswer)
+      val op = assertAsOfJoinCodegen(query, codegen)
+      assert(op.metrics("spillSize").value > 0,
+        s"Expected the right-side buffer to spill (spillSize > 0), " +
+          s"got ${op.metrics("spillSize").value}")
+      assert(op.metrics("numAsOfCursorTasks").value == 0,
+        "Expected the buffered scan, but a task used the cursor scan")
     }
-    assert(op.isDefined,
-      s"Expected SortMergeAsOfJoinExec in plan:\n${df.queryExecution.executedPlan}")
-    assert(op.get.metrics("spillSize").value > 0,
-      s"Expected the right-side buffer to spill (spillSize > 0), " +
-        s"got ${op.get.metrics("spillSize").value}")
+  }
+
+  // Whether `join` runs in a codegen stage, and not only in a stage below it.
+  private def isGenerated(plan: SparkPlan, join: SortMergeAsOfJoinExec): Boolean = {
+    def inStage(node: SparkPlan): Boolean = node match {
+      case j: SortMergeAsOfJoinExec => j eq join
+      case _: InputAdapter => false
+      case other => other.children.exists(inStage)
+    }
+    collect(plan) { case stage: WholeStageCodegenExec if inStage(stage.child) => stage }.nonEmpty
+  }
+
+  /**
+   * Like checkAnswer, but also asserts that the join used the cursor scan, with the ASOF join
+   * codegen off and on. A right group spills from its second row, so a cursor scan that
+   * buffered rows would show a spill.
+   */
+  private def checkCursorScan(df: => classic.DataFrame, expectedAnswer: Seq[Row]): Unit = {
+    withAsOfJoinCodegenOffAndOn { codegen =>
+      withSQLConf(
+          SQLConf.SORT_MERGE_JOIN_EXEC_BUFFER_IN_MEMORY_THRESHOLD.key -> "1",
+          SQLConf.SORT_MERGE_JOIN_EXEC_BUFFER_SPILL_THRESHOLD.key -> "1") {
+        val query = df
+        checkAnswer(query, expectedAnswer)
+        val op = assertAsOfJoinCodegen(query, codegen)
+        assert(op.metrics("numAsOfCursorTasks").value > 0, "Expected the cursor scan")
+        assert(op.metrics("spillSize").value == 0, "The cursor scan buffered right rows")
+      }
+    }
+  }
+
+  /**
+   * Runs `f` with the ASOF join codegen off, then on, and passes it the setting. Build each
+   * DataFrame inside `f`, since a DataFrame keeps the plan it got first.
+   */
+  private def withAsOfJoinCodegenOffAndOn(f: Boolean => Unit): Unit = {
+    Seq(false, true).foreach { codegen =>
+      withClue(s"ASOF join codegen $codegen: ") {
+        withSQLConf(SQLConf.ENABLE_SORT_MERGE_AS_OF_JOIN_CODEGEN.key -> codegen.toString) {
+          f(codegen)
+        }
+      }
+    }
+  }
+
+  /**
+   * Asserts that `df`, after it ran, has a sort-merge ASOF join, and that the join ran generated
+   * exactly when the codegen is on and the join is not nearest. Returns the join.
+   */
+  private def assertAsOfJoinCodegen(df: DataFrame, codegen: Boolean): SortMergeAsOfJoinExec = {
+    val plan = df.queryExecution.executedPlan
+    val op = collectFirst(plan) { case s: SortMergeAsOfJoinExec => s }
+    assert(op.isDefined, s"Expected SortMergeAsOfJoinExec in plan:\n$plan")
+    assert(isGenerated(plan, op.get) == (codegen && op.get.direction != Nearest),
+      s"Unexpected ASOF join codegen in:\n$plan")
+    op.get
+  }
+
+  /**
+   * Like checkAnswer, with the ASOF join codegen off and on. Also asserts that the plan has the
+   * join, and that it ran generated exactly when the codegen is on and the join is not nearest.
+   * Single-pass analysis needs `checkToRDD = false`.
+   */
+  private def checkAnswerCodegenOffAndOn(
+      df: => DataFrame,
+      expectedAnswer: Seq[Row],
+      checkToRDD: Boolean = true): Unit = {
+    withAsOfJoinCodegenOffAndOn { codegen =>
+      val query = df
+      if (checkToRDD) {
+        checkAnswer(query, expectedAnswer)
+      } else {
+        QueryTest.checkAnswer(df = query, expectedAnswer = expectedAnswer, checkToRDD = false)
+      }
+      assertAsOfJoinCodegen(query, codegen)
+    }
   }
 
   /**
@@ -150,7 +233,7 @@ class SortMergeAsOfJoinSuite extends QueryTest
 
   test("backward join - simple") {
     val (df1, df2) = prepareForAsOfJoin()
-    checkAnswer(
+    checkCursorScan(
       df1.joinAsOf(
         df2, df1.col("a"), df2.col("a"), usingColumns = Seq.empty,
         joinType = "inner", tolerance = null,
@@ -165,7 +248,7 @@ class SortMergeAsOfJoinSuite extends QueryTest
 
   test("backward join - usingColumns") {
     val (df1, df2) = prepareForAsOfJoin()
-    checkAnswer(
+    checkAnswerCodegenOffAndOn(
       df1.joinAsOf(
         df2, df1.col("a"), df2.col("a"), usingColumns = Seq("b"),
         joinType = "inner", tolerance = null,
@@ -178,7 +261,7 @@ class SortMergeAsOfJoinSuite extends QueryTest
 
   test("backward join - left outer") {
     val (df1, df2) = prepareForAsOfJoin()
-    checkAnswer(
+    checkAnswerCodegenOffAndOn(
       df1.joinAsOf(
         df2, df1.col("a"), df2.col("a"), usingColumns = Seq("b"),
         joinType = "leftouter", tolerance = null,
@@ -193,7 +276,7 @@ class SortMergeAsOfJoinSuite extends QueryTest
 
   test("forward join") {
     val (df1, df2) = prepareForAsOfJoin()
-    checkAnswer(
+    checkCursorScan(
       df1.joinAsOf(
         df2, df1.col("a"), df2.col("a"), usingColumns = Seq.empty,
         joinType = "inner", tolerance = null,
@@ -237,20 +320,22 @@ class SortMergeAsOfJoinSuite extends QueryTest
         ("backward", Backward, Row(10, "a", 5, "r2")),
         ("forward", Forward, Row(10, "a", 15, "r3"))
       ).foreach { case (directionName, direction, expected) =>
-        val joined = left.joinAsOf(
-          right, left.col("ts"), right.col("ts"), usingColumns = Seq.empty,
-          joinType = "inner", tolerance = null,
-          allowExactMatches = true, direction = directionName)
-        checkAnswer(joined, expected :: Nil)
-        val op = collectFirst(joined.queryExecution.executedPlan) {
-          case s: SortMergeAsOfJoinExec => s
-        }.get
-        val rightSideFirst = op.asOfCondition match {
-          case c: BinaryComparison => c.left.references.subsetOf(op.right.outputSet)
-          case _ => false
+        withClue(s"$directionName: ") {
+          withAsOfJoinCodegenOffAndOn { codegen =>
+            val joined = left.joinAsOf(
+              right, left.col("ts"), right.col("ts"), usingColumns = Seq.empty,
+              joinType = "inner", tolerance = null,
+              allowExactMatches = true, direction = directionName)
+            checkAnswer(joined, expected :: Nil)
+            val op = assertAsOfJoinCodegen(joined, codegen)
+            val rightSideFirst = op.asOfCondition match {
+              case c: BinaryComparison => c.left.references.subsetOf(op.right.outputSet)
+              case _ => false
+            }
+            assert(rightSideFirst, s"Expected the right side first in ${op.asOfCondition}")
+            assert(op.direction === direction)
+          }
         }
-        assert(rightSideFirst, s"Expected the right side first in ${op.asOfCondition}")
-        assert(op.direction === direction)
       }
     }
   }
@@ -359,45 +444,153 @@ class SortMergeAsOfJoinSuite extends QueryTest
     }
   }
 
-  Seq("backward", "forward", "nearest").foreach { direction =>
-    test(s"$direction join rejects LTZ left and NTZ right keys") {
-      val left = spark.createDataFrame(
-        List(Row(Timestamp.from(Instant.parse("2024-03-10T10:05:00Z")))).asJava,
-        new StructType().add("ts", TimestampType)
-      )
-      val right = spark.createDataFrame(
-        List(Row(LocalDateTime.parse("2024-03-10T03:00:00"), "near")).asJava,
-        new StructType().add("ts", TimestampNTZType).add("value", StringType)
-      )
+  gridTest("mixed timestamp keys use LTZ for sort-merge")(Seq(false, true)) {
+      singlePass =>
+    withAsOfJoinAnalyzer(singlePass) {
+      withSQLConf(
+          SQLConf.SORT_MERGE_AS_OF_JOIN_ENABLED.key -> "true",
+          SQLConf.SESSION_LOCAL_TIMEZONE.key -> "America/Los_Angeles",
+          SQLConf.LEGACY_INTERVAL_ENABLED.key -> "false") {
+        for {
+          ansi <- Seq(false, true)
+          spring <- Seq(false, true)
+          ltzOnLeft <- Seq(false, true)
+        } {
+          withSQLConf(SQLConf.ANSI_ENABLED.key -> ansi.toString) {
+            val (leftLtz, leftNtz, beforeLtz, beforeNtz, afterLtz, afterNtz) = if (spring) {
+              ("2024-03-10T10:05:00Z", "2024-03-10T03:05:00",
+                "2024-03-10T10:00:00Z", "2024-03-10T03:00:00",
+                "2024-03-10T10:15:00Z", "2024-03-10T03:15:00")
+            } else {
+              ("2024-11-03T08:30:00Z", "2024-11-03T01:30:00",
+                "2024-11-03T08:25:00Z", "2024-11-03T01:25:00",
+                "2024-11-03T08:35:00Z", "2024-11-03T01:35:00")
+            }
+            val left = spark.createDataFrame(
+              List(Row(Timestamp.from(Instant.parse(leftLtz)),
+                LocalDateTime.parse(leftNtz))).asJava,
+              new StructType().add("ltz", TimestampType).add("ntz", TimestampNTZType))
+            val right = spark.createDataFrame(
+              List(
+                Row(Timestamp.from(Instant.parse(afterLtz)),
+                  LocalDateTime.parse(afterNtz), "after"),
+                Row(Timestamp.from(Instant.parse(beforeLtz)),
+                  LocalDateTime.parse(beforeNtz), "before"),
+                Row(Timestamp.from(Instant.parse(
+                  if (spring) "2024-03-10T10:50:00Z" else "2024-11-03T09:20:00Z")),
+                  LocalDateTime.parse(
+                    if (spring) "2024-03-10T02:50:00" else "2024-11-03T02:20:00"),
+                  "far after")).asJava,
+              new StructType().add("ltz", TimestampType).add("ntz", TimestampNTZType)
+                .add("tag", StringType))
+            val leftKey = left.col(if (ltzOnLeft) "ltz" else "ntz")
+            val rightKey = right.col(if (ltzOnLeft) "ntz" else "ltz")
 
-      val e = intercept[AnalysisException] {
-        left.joinAsOf(
-          other = right, leftAsOf = left.col("ts"), rightAsOf = right.col("ts"),
-          usingColumns = Seq.empty, joinType = "inner", tolerance = null,
-          allowExactMatches = true, direction = direction
-        ).collect()
+            for (direction <- Seq("backward", "forward", "nearest")) {
+              withAsOfJoinCodegenOffAndOn { codegen =>
+                val joined = left.joinAsOf(
+                  other = right, leftAsOf = leftKey, rightAsOf = rightKey,
+                  usingColumns = Seq.empty, joinType = "inner", tolerance = null,
+                  allowExactMatches = true, direction = direction
+                ).select("tag")
+                val join =
+                  joined.queryExecution.analyzed.collectFirst { case j: AsOfJoin => j }.get
+                assert(join.leftSortExprs.head.dataType ==
+                  (if (ltzOnLeft || direction == "nearest") TimestampType else TimestampNTZType))
+                assert(join.rightSortExprs.head.dataType == TimestampType)
+                val expected = if (direction == "forward") "after" else "before"
+                QueryTest.checkAnswer(
+                  df = joined, expectedAnswer = Seq(Row(expected)), checkToRDD = false)
+                val physicalJoin = assertAsOfJoinCodegen(joined, codegen)
+                assert(
+                  physicalJoin.leftSortExprs.head.dataType == join.leftSortExprs.head.dataType)
+                assert(physicalJoin.rightSortExprs.head.dataType == TimestampType)
+              }
+            }
+          }
+        }
       }
-      checkErrorMatchPVals(
-        exception = e,
-        condition = "DATATYPE_MISMATCH.TYPE_CHECK_FAILURE_WITH_HINT",
-        parameters = Map(
-          "sqlExpr" -> ".+",
-          "msg" -> ("Sort-merge as-of joins do not support mixing " +
-            "TIMESTAMP_LTZ and TIMESTAMP_NTZ keys"),
-          "hint" -> "")
-      )
+    }
+  }
+
+  gridTest("mixed timestamp composite keys use comparison ordering")(Seq(false, true)) {
+      singlePass =>
+    withAsOfJoinAnalyzer(singlePass) {
+      withSQLConf(
+          SQLConf.SORT_MERGE_AS_OF_JOIN_ENABLED.key -> "true",
+          SQLConf.SESSION_LOCAL_TIMEZONE.key -> "America/Los_Angeles") {
+        val left = spark.sql(
+          "SELECT TIMESTAMP_LTZ '2024-03-10 10:05:00Z' AS ts, 1 AS n")
+          .selectExpr("ts", "n", "named_struct('ts', ts, 'n', n) AS k")
+        val right = spark.sql(
+          """SELECT ts, CAST(n AS BIGINT) AS n, tag FROM VALUES
+            |  (TIMESTAMP_NTZ '2024-03-10 02:50:00', 1, 'far'),
+            |  (TIMESTAMP_NTZ '2024-03-10 03:00:00', 1, 'before'),
+            |  (TIMESTAMP_NTZ '2024-03-10 03:15:00', 1, 'after') AS t(ts, n, tag)
+            |""".stripMargin)
+          .selectExpr("ts", "n", "tag", "named_struct('ts', ts, 'n', n) AS k")
+        for {
+          shape <- Seq("tuple", "struct", "array", "nested")
+          direction <- Seq("backward", "forward")
+        } {
+          def key(df: DataFrame): Column = shape match {
+            case "tuple" => functions.struct(df.col("ts"), df.col("n"))
+            case "struct" => df.col("k")
+            case "array" => functions.array(df.col("ts"))
+            case "nested" => functions.struct(functions.array(df.col("k")))
+          }
+          def joined: DataFrame = left.joinAsOf(
+            other = right, leftAsOf = key(left), rightAsOf = key(right),
+            usingColumns = Seq.empty, joinType = "inner", tolerance = null,
+            allowExactMatches = true, direction = direction
+          ).select("tag")
+          val expected = if (direction == "backward") "before" else "after"
+          checkAnswerCodegenOffAndOn(joined, Seq(Row(expected)), checkToRDD = false)
+        }
+      }
+    }
+  }
+
+  gridTest("mixed timestamp sort keys preserve the analysis time zone")(Seq(false, true)) {
+      singlePass =>
+    withAsOfJoinAnalyzer(singlePass) {
+      withSQLConf(
+          SQLConf.SORT_MERGE_AS_OF_JOIN_ENABLED.key -> "true",
+          SQLConf.SESSION_LOCAL_TIMEZONE.key -> "America/Los_Angeles") {
+        val left = spark.sql("SELECT TIMESTAMP '2024-03-10 10:55:00Z' AS lk")
+        val right = spark.sql(
+          """SELECT * FROM VALUES
+            |  (TIMESTAMP_NTZ '2024-03-10 02:50:00', 'near'),
+            |  (TIMESTAMP_NTZ '2024-03-10 03:00:00', 'far') AS t(rk, tag)
+            |""".stripMargin)
+        withAsOfJoinCodegenOffAndOn { codegen =>
+          val joined = left.joinAsOf(
+            other = right, leftAsOf = left.col("lk"), rightAsOf = right.col("rk"),
+            usingColumns = Seq.empty, joinType = "inner", tolerance = null,
+            allowExactMatches = true, direction = "backward"
+          ).select("tag")
+          assert(joined.queryExecution.analyzed.resolved)
+
+          withSQLConf(SQLConf.SESSION_LOCAL_TIMEZONE.key -> "UTC") {
+            QueryTest.checkAnswer(
+              df = joined, expectedAnswer = Seq(Row("near")), checkToRDD = false)
+            assertAsOfJoinCodegen(joined, codegen)
+          }
+        }
+      }
     }
   }
 
   gridTest("timestamp keys respect explicit user casts")(Seq(false, true)) { singlePass =>
     withAsOfJoinAnalyzer(singlePass) {
       withSQLConf(
+          SQLConf.SORT_MERGE_AS_OF_JOIN_ENABLED.key -> "true",
           SQLConf.SESSION_LOCAL_TIMEZONE.key -> "America/Los_Angeles",
           SQLConf.LEGACY_INTERVAL_ENABLED.key -> "false") {
         val schema = new StructType().add("ltz", TimestampType).add("ntz", TimestampNTZType)
         val left = spark.createDataFrame(
           List(Row(
-            Timestamp.from(Instant.parse("2024-11-03T08:30:00Z")),
+            Timestamp.from(Instant.parse("2024-11-03T09:30:00Z")),
             LocalDateTime.parse("2024-11-03T01:30:00"))).asJava,
           schema)
         val right = spark.createDataFrame(
@@ -406,238 +599,275 @@ class SortMergeAsOfJoinSuite extends QueryTest
               LocalDateTime.parse("2024-11-03T01:28:00"), "before"),
             Row(Timestamp.from(Instant.parse("2024-11-03T08:35:00Z")),
               LocalDateTime.parse("2024-11-03T01:35:00"), "after")).asJava,
-          schema.add("value", StringType))
+          schema.add("tag", StringType))
 
         for {
           direction <- Seq("backward", "forward", "nearest")
           (source, target, targetType) <- Seq(
             ("ltz", "ntz", TimestampNTZType), ("ntz", "ltz", TimestampType))
         } {
-          def join(): classic.DataFrame = left.joinAsOf(
+          def joined: DataFrame = left.joinAsOf(
             other = right, leftAsOf = left.col(source).cast(targetType),
             rightAsOf = right.col(target), usingColumns = Seq.empty, joinType = "inner",
             tolerance = null, allowExactMatches = true, direction = direction
-          ).select("value")
-
-          val fallback = withSQLConf(SQLConf.SORT_MERGE_AS_OF_JOIN_ENABLED.key -> "false") {
-            join().collect().toSeq
-          }
-          val joined = join()
-          QueryTest.checkAnswer(df = joined, expectedAnswer = fallback, checkToRDD = false)
-          assert(collectFirst(joined.queryExecution.executedPlan) {
-            case s: SortMergeAsOfJoinExec => s
-          }.isDefined)
-
-          checkErrorMatchPVals(
-            exception = intercept[AnalysisException] {
-              left.joinAsOf(
-                other = right, leftAsOf = left.col(source).cast(targetType),
-                rightAsOf = right.col(source), usingColumns = Seq.empty, joinType = "inner",
-                tolerance = null, allowExactMatches = true, direction = direction
-              ).queryExecution.analyzed
-            },
-            condition = "DATATYPE_MISMATCH.TYPE_CHECK_FAILURE_WITH_HINT",
-            parameters = Map(
-              "sqlExpr" -> ".+",
-              "msg" -> ("Sort-merge as-of joins do not support mixing " +
-                "TIMESTAMP_LTZ and TIMESTAMP_NTZ keys"),
-              "hint" -> "")
-          )
+          ).select("tag")
+          val join = joined.queryExecution.analyzed.collectFirst { case j: AsOfJoin => j }.get
+          assert((join.leftSortExprs ++ join.rightSortExprs).forall(_.dataType == targetType))
+          val expected = if (direction == "forward") "after" else "before"
+          checkAnswerCodegenOffAndOn(joined, Seq(Row(expected)), checkToRDD = false)
         }
       }
     }
   }
 
-  gridTest("mixed timestamp joins use fallback after enabling sort-merge")(Seq(false, true)) {
+  gridTest("sort-merge selection survives disabling the config after analysis")(Seq(false, true)) {
       singlePass =>
     withAsOfJoinAnalyzer(singlePass) {
       withSQLConf(
+          SQLConf.SORT_MERGE_AS_OF_JOIN_ENABLED.key -> "true",
           SQLConf.SESSION_LOCAL_TIMEZONE.key -> "America/Los_Angeles",
           SQLConf.LEGACY_INTERVAL_ENABLED.key -> "false") {
-        val leftTime = LocalDateTime.parse("2024-11-03T01:30:00")
-        val left = spark.createDataFrame(
-          List(Row(leftTime, Timestamp.from(Instant.parse("2024-11-03T08:30:00Z")))).asJava,
-          new StructType().add("ntz", TimestampNTZType).add("ltz", TimestampType))
-        val right = spark.createDataFrame(
-          List(
-            Row(Timestamp.from(Instant.parse("2024-11-03T08:10:00Z")), "far"),
-            Row(Timestamp.from(Instant.parse("2024-11-03T09:20:00Z")), "ineligible"),
-            Row(Timestamp.from(Instant.parse("2024-11-03T08:25:00Z")), "near")).asJava,
-          new StructType().add("ts", TimestampType).add("value", StringType))
-
-        withTempView("asof_before_config_change") {
-          for {
-            (leftKey, rightKey) <- Seq(
-              (left.col("ntz"), right.col("ts")),
-              (left.col("ltz").cast(TimestampNTZType), right.col("ts")),
-              (functions.lit(leftTime), right.col("ts")),
-              (functions.lit(Timestamp.from(Instant.parse("2024-11-03T08:30:00Z"))),
-                right.col("ts").cast(TimestampNTZType)))
-            throughView <- Seq(false, true)
-          } {
-            def join(): classic.DataFrame = left.joinAsOf(
-              other = right, leftAsOf = leftKey, rightAsOf = rightKey,
+        val left = spark.sql(
+          "SELECT 10 AS id, TIMESTAMP_NTZ '2024-11-03 01:30:00' AS ts")
+        val right = spark.sql(
+          """SELECT * FROM VALUES
+            |  (9, TIMESTAMP '2024-11-03 08:25:00Z', 'before'),
+            |  (12, TIMESTAMP '2024-11-03 08:37:00Z', 'after'),
+            |  (30, TIMESTAMP '2024-11-03 09:20:00Z', 'far after') AS t(id, ts, tag)
+            |""".stripMargin)
+        for {
+          key <- Seq("id", "ts")
+          direction <- Seq("backward", "forward", "nearest")
+        } {
+          withAsOfJoinCodegenOffAndOn { codegen =>
+            val joined = left.joinAsOf(
+              other = right, leftAsOf = left.col(key), rightAsOf = right.col(key),
               usingColumns = Seq.empty, joinType = "inner", tolerance = null,
-              allowExactMatches = true, direction = "backward"
-            ).select("value")
-
-            val (analyzed, expected) =
-              withSQLConf(SQLConf.SORT_MERGE_AS_OF_JOIN_ENABLED.key -> "false") {
-                val expected = join().collect().toSeq
-                assert(expected == Seq(Row("near")))
-                val joined = join()
-                val analyzed = if (throughView) {
-                  // Single-pass analysis does not support the view registration command.
-                  withAsOfJoinAnalyzer(singlePass = false) {
-                    joined.createOrReplaceTempView("asof_before_config_change")
-                  }
-                  spark.table("asof_before_config_change")
-                } else {
-                  joined
-                }
-                assert(analyzed.queryExecution.analyzed.resolved)
-                (analyzed, expected)
-              }
-
-            QueryTest.checkAnswer(df = analyzed, expectedAnswer = expected, checkToRDD = false)
-            assert(collectFirst(analyzed.queryExecution.executedPlan) {
-              case s: SortMergeAsOfJoinExec => s
-            }.isEmpty)
+              allowExactMatches = true, direction = direction
+            ).select("tag")
+            val join = joined.queryExecution.analyzed.collectFirst { case j: AsOfJoin => j }.get
+            assert(join.requiresSortMergeAsOfJoin)
+            val expected = if (direction == "forward") "after" else "before"
+            withSQLConf(SQLConf.SORT_MERGE_AS_OF_JOIN_ENABLED.key -> "false") {
+              QueryTest.checkAnswer(
+                df = joined, expectedAnswer = Seq(Row(expected)), checkToRDD = false)
+              assertAsOfJoinCodegen(joined, codegen)
+            }
           }
         }
       }
     }
   }
 
-  gridTest("supported keys use sort-merge after enabling the config")(Seq(false, true)) {
+  gridTest("fallback selection survives enabling sort-merge after analysis")(Seq(false, true)) {
       singlePass =>
     withAsOfJoinAnalyzer(singlePass) {
-      val schema = new StructType().add("id", IntegerType)
-        .add("ltz", TimestampType).add("ntz", TimestampNTZType)
-      val left = spark.createDataFrame(
-        List(Row(10, Timestamp.from(Instant.parse("2024-01-01T10:00:00Z")),
-          LocalDateTime.parse("2024-01-01T10:00:00"))).asJava,
-        schema)
-      val right = spark.createDataFrame(
-        List(Row(9, Timestamp.from(Instant.parse("2024-01-01T09:00:00Z")),
-          LocalDateTime.parse("2024-01-01T09:00:00"), "match")).asJava,
-        schema.add("value", StringType))
+      withSQLConf(
+          SQLConf.SORT_MERGE_AS_OF_JOIN_ENABLED.key -> "false",
+          SQLConf.ANSI_ENABLED.key -> "true") {
+        val left = spark.sql("SELECT 10 AS k")
+        val right = spark.sql("SELECT * FROM VALUES (9, 'before'), (12, 'after') AS t(k, tag)")
+        for (direction <- Seq("backward", "forward", "nearest")) {
+          withTempView("asof_fallback_view") {
+            val joined = left.joinAsOf(
+              other = right, leftAsOf = left.col("k"), rightAsOf = right.col("k"),
+              usingColumns = Seq.empty, joinType = "inner", tolerance = null,
+              allowExactMatches = true, direction = direction
+            ).select("tag")
+            val join = joined.queryExecution.analyzed.collectFirst { case j: AsOfJoin => j }.get
+            assert(!join.requiresSortMergeAsOfJoin)
+            // The single-pass analyzer does not resolve CREATE VIEW commands.
+            withAsOfJoinAnalyzer(singlePass = false) {
+              joined.createOrReplaceTempView("asof_fallback_view")
+            }
+            withSQLConf(SQLConf.SORT_MERGE_AS_OF_JOIN_ENABLED.key -> "true") {
+              for (df <- Seq(joined, spark.table("asof_fallback_view"))) {
+                val expected = if (direction == "forward") "after" else "before"
+                QueryTest.checkAnswer(
+                  df = df, expectedAnswer = Seq(Row(expected)), checkToRDD = false)
+                assert(!df.queryExecution.optimizedPlan.exists(_.isInstanceOf[AsOfJoin]))
+                assert(collectFirst(df.queryExecution.executedPlan) {
+                  case s: SortMergeAsOfJoinExec => s
+                }.isEmpty)
+              }
+            }
+          }
+        }
+      }
+    }
+  }
 
-      Seq("id", "ltz", "ntz").foreach { key =>
-        val joined = withSQLConf(SQLConf.SORT_MERGE_AS_OF_JOIN_ENABLED.key -> "false") {
-          left.joinAsOf(
-            other = right, leftAsOf = left.col(key), rightAsOf = right.col(key),
+  gridTest("sort-merge keys preserve analysis case sensitivity")(Seq(false, true)) {
+      singlePass =>
+    withAsOfJoinAnalyzer(singlePass) {
+      withSQLConf(
+          SQLConf.SORT_MERGE_AS_OF_JOIN_ENABLED.key -> "true",
+          SQLConf.CASE_SENSITIVE.key -> "false") {
+        val left = spark.sql("SELECT named_struct('A', CAST(10 AS INT)) AS lk")
+        val right = spark.sql(
+          "SELECT named_struct('a', CAST(9 AS BIGINT)) AS rk, 'before' AS tag")
+        withAsOfJoinCodegenOffAndOn { codegen =>
+          val joined = left.joinAsOf(
+            other = right, leftAsOf = left.col("lk"), rightAsOf = right.col("rk"),
             usingColumns = Seq.empty, joinType = "inner", tolerance = null,
-            allowExactMatches = true, direction = "nearest"
-          ).select("value")
+            allowExactMatches = true, direction = "backward"
+          ).select("tag")
+          assert(joined.queryExecution.analyzed.resolved)
+
+          withSQLConf(SQLConf.CASE_SENSITIVE.key -> "true") {
+            QueryTest.checkAnswer(
+              df = joined, expectedAnswer = Seq(Row("before")), checkToRDD = false)
+            assertAsOfJoinCodegen(joined, codegen)
+          }
         }
-        QueryTest.checkAnswer(df = joined, expectedAnswer = Seq(Row("match")), checkToRDD = false)
-        assert(collectFirst(joined.queryExecution.executedPlan) {
-          case s: SortMergeAsOfJoinExec => s
-        }.isDefined)
       }
     }
   }
 
-  gridTest("rejects mixed timestamp literal keys before constant folding")(Seq(false, true)) {
-      singlePass =>
-    withSQLConf(
-        SQLConf.SESSION_LOCAL_TIMEZONE.key -> "America/Los_Angeles",
-        SQLConf.LEGACY_INTERVAL_ENABLED.key -> "false",
-        SQLConf.ANALYZER_SINGLE_PASS_RESOLVER_ENABLED.key -> singlePass.toString,
-        SQLConf.ANALYZER_SINGLE_PASS_RESOLVER_ENABLED_TENTATIVELY.key -> "false",
-        SQLConf.ANALYZER_DUAL_RUN_LEGACY_AND_SINGLE_PASS_RESOLVER.key -> "false",
-        SQLConf.ANALYZER_SINGLE_PASS_RESOLVER_ENABLE_ASOF_JOIN_RESOLUTION.key -> "true") {
-      val literalInput = spark.range(1).toDF()
-      val literalKey = functions.lit(Timestamp.from(Instant.parse("2024-11-03T09:10:00Z")))
-      val columnInput = spark.createDataFrame(
-        List(
-          Row(LocalDateTime.parse("2024-11-03T01:05:00")),
-          Row(LocalDateTime.parse("2024-11-03T01:20:00"))).asJava,
-        new StructType().add("ts", TimestampNTZType)
-      )
-
+  gridTest("numeric keys use comparison ordering")(Seq(false, true)) { singlePass =>
+    withAsOfJoinAnalyzer(singlePass) {
       for {
-        direction <- Seq("nearest", "backward", "forward")
-        literalOnLeft <- Seq(true, false)
-        tolerance <- Seq(null, functions.lit(Duration.ofHours(2)))
+        ansi <- Seq(false, true)
+        (leftType, rightType) <- Seq(
+          ("BIGINT", "FLOAT"), ("DECIMAL(12, 2)", "DECIMAL(8, 4)"),
+          ("INT", "DECIMAL(12, 2)"), ("STRING", "INT"))
       } {
-        val (left, right, leftKey, rightKey) = if (literalOnLeft) {
-          (literalInput, columnInput, literalKey, columnInput.col("ts"))
-        } else {
-          (columnInput, literalInput, columnInput.col("ts"), literalKey)
-        }
-        withClue(s"direction=$direction, literalOnLeft=$literalOnLeft, tolerance=$tolerance: ") {
-          checkErrorMatchPVals(
-            exception = intercept[AnalysisException] {
-              left.joinAsOf(
-                other = right, leftAsOf = leftKey, rightAsOf = rightKey,
-                usingColumns = Seq.empty, joinType = "inner", tolerance = tolerance,
-                allowExactMatches = true, direction = direction
-              ).queryExecution.analyzed
-            },
-            condition = "DATATYPE_MISMATCH.TYPE_CHECK_FAILURE_WITH_HINT",
-            parameters = Map(
-              "sqlExpr" -> ".+",
-              "msg" -> ("Sort-merge as-of joins do not support mixing " +
-                "TIMESTAMP_LTZ and TIMESTAMP_NTZ keys"),
-              "hint" -> "")
-          )
+        withSQLConf(
+            SQLConf.SORT_MERGE_AS_OF_JOIN_ENABLED.key -> "true",
+            SQLConf.ANSI_ENABLED.key -> ansi.toString) {
+          val left = spark.sql(s"SELECT CAST(50 AS $leftType) AS k")
+          val right = spark.sql(
+            s"""SELECT CAST(k AS $rightType) AS k, tag
+               |FROM VALUES (100, 'far after'), (9, 'far before'),
+               |  (49, 'before'), (52, 'after') AS t(k, tag)
+               |""".stripMargin)
+          for (direction <- Seq("backward", "forward", "nearest")) {
+            def joined: DataFrame = left.joinAsOf(
+              other = right, leftAsOf = left.col("k"), rightAsOf = right.col("k"),
+              usingColumns = Seq.empty, joinType = "inner", tolerance = null,
+              allowExactMatches = true, direction = direction
+            ).select("tag")
+            val expected = if (direction == "forward") "after" else "before"
+            checkAnswerCodegenOffAndOn(joined, Seq(Row(expected)), checkToRDD = false)
+          }
         }
       }
+    }
+  }
 
-      withSQLConf(SQLConf.SORT_MERGE_AS_OF_JOIN_ENABLED.key -> "false") {
-        val fallback = literalInput.joinAsOf(
-          other = columnInput, leftAsOf = literalKey, rightAsOf = columnInput.col("ts"),
-          usingColumns = Seq.empty, joinType = "inner", tolerance = null,
-          allowExactMatches = true, direction = "nearest"
+  gridTest("numeric keys preserve ANSI comparison precision")(Seq(false, true)) { singlePass =>
+    withAsOfJoinAnalyzer(singlePass) {
+      withSQLConf(
+          SQLConf.SORT_MERGE_AS_OF_JOIN_ENABLED.key -> "true",
+          SQLConf.ANSI_ENABLED.key -> "true") {
+        val left = spark.sql("SELECT 16777219L AS k")
+        val right = spark.sql(
+          """SELECT CAST(k AS FLOAT) AS k, tag
+            |FROM VALUES (16777218, 'before'), (16777220, 'after') AS t(k, tag)
+            |""".stripMargin)
+        for (direction <- Seq("backward", "forward", "nearest")) {
+          def joined: DataFrame = left.joinAsOf(
+            other = right, leftAsOf = left.col("k"), rightAsOf = right.col("k"),
+            usingColumns = Seq.empty, joinType = "inner", tolerance = null,
+            allowExactMatches = true, direction = direction
+          ).select("tag")
+          val join = joined.queryExecution.analyzed.collectFirst { case j: AsOfJoin => j }.get
+          if (direction == "nearest") {
+            assert(join.leftSortExprs.head.dataType == DoubleType)
+            assert(join.rightSortExprs.head.dataType == DoubleType)
+          } else {
+            assert(join.leftSortExprs.head.dataType == LongType)
+            assert(join.rightSortExprs.head.dataType == FloatType)
+          }
+          val expected = if (direction == "forward") "after" else "before"
+          checkAnswerCodegenOffAndOn(joined, Seq(Row(expected)), checkToRDD = false)
+        }
+      }
+    }
+  }
+
+  gridTest("tolerance types are checked before evaluation")(Seq(false, true)) { singlePass =>
+    withAsOfJoinAnalyzer(singlePass) {
+      withSQLConf(
+          SQLConf.SORT_MERGE_AS_OF_JOIN_ENABLED.key -> "true",
+          SQLConf.LEGACY_INTERVAL_ENABLED.key -> "true") {
+        val left = spark.sql("SELECT TIMESTAMP '2024-01-02 00:00:00' AS k")
+        val right = spark.sql("SELECT TIMESTAMP '2024-01-01 00:00:00' AS k")
+        checkErrorMatchPVals(
+          exception = intercept[AnalysisException] {
+            left.joinAsOf(
+              other = right, leftAsOf = left.col("k"), rightAsOf = right.col("k"),
+              usingColumns = Seq.empty, joinType = "inner",
+              tolerance = functions.expr("INTERVAL 2 DAYS"),
+              allowExactMatches = true, direction = "backward"
+            )
+          },
+          condition = "DATATYPE_MISMATCH.INVALID_ORDERING_TYPE",
+          parameters = Map(
+            "functionName" -> "`>=`", "dataType" -> "\"INTERVAL\"", "sqlExpr" -> ".+"
+          )
         )
-        assert(fallback.queryExecution.analyzed.resolved)
       }
     }
   }
 
-  gridTest("rejects mixed timestamp keys with STRING and DATE casts")(Seq(false, true)) {
-      singlePass =>
-    withSQLConf(
-        SQLConf.SESSION_LOCAL_TIMEZONE.key -> "America/Los_Angeles",
-        SQLConf.LEGACY_INTERVAL_ENABLED.key -> "false",
-        SQLConf.ANALYZER_SINGLE_PASS_RESOLVER_ENABLED.key -> singlePass.toString,
-        SQLConf.ANALYZER_SINGLE_PASS_RESOLVER_ENABLED_TENTATIVELY.key -> "false",
-        SQLConf.ANALYZER_DUAL_RUN_LEGACY_AND_SINGLE_PASS_RESOLVER.key -> "false",
-        SQLConf.ANALYZER_SINGLE_PASS_RESOLVER_ENABLE_ASOF_JOIN_RESOLUTION.key -> "true") {
-      val left = spark.createDataFrame(
-        List(Row("2024-11-03 01:15:00", Date.valueOf("2024-11-03"))).asJava,
-        new StructType().add("stringKey", StringType).add("dateKey", DateType)
-      )
-      val right = spark.createDataFrame(
-        List(
-          Row(Timestamp.from(Instant.parse("2024-11-03T08:05:00Z")), "far"),
-          Row(Timestamp.from(Instant.parse("2024-11-03T09:10:00Z")), "ineligible"),
-          Row(Timestamp.from(Instant.parse("2024-11-03T08:12:00Z")), "near")).asJava,
-        new StructType().add("ts", TimestampType).add("value", StringType)
-      )
+  gridTest("tolerance and key errors have the same precedence")(Seq(false, true)) { singlePass =>
+    withAsOfJoinAnalyzer(singlePass) {
+      withSQLConf(SQLConf.SORT_MERGE_AS_OF_JOIN_ENABLED.key -> "true") {
+        val left = spark.sql("SELECT '5' AS lk")
+        val right = spark.sql("SELECT '4' AS rk")
 
-      for {
-        key <- Seq("stringKey", "dateKey")
-        direction <- Seq("backward", "forward", "nearest")
-      } {
-        withClue(s"key=$key, direction=$direction: ") {
-          checkErrorMatchPVals(
-            exception = intercept[AnalysisException] {
-              left.joinAsOf(
-                other = right, leftAsOf = left.col(key).cast(TimestampNTZType),
-                rightAsOf = right.col("ts"), usingColumns = Seq.empty, joinType = "inner",
-                tolerance = null, allowExactMatches = true, direction = direction
-              ).queryExecution.analyzed
-            },
-            condition = "DATATYPE_MISMATCH.TYPE_CHECK_FAILURE_WITH_HINT",
-            parameters = Map(
-              "sqlExpr" -> ".+",
-              "msg" -> ("Sort-merge as-of joins do not support mixing " +
-                "TIMESTAMP_LTZ and TIMESTAMP_NTZ keys"),
-              "hint" -> "")
+        def join(leftKey: Column, direction: String): DataFrame = {
+          left.joinAsOf(
+            other = right, leftAsOf = leftKey, rightAsOf = right.col("rk"),
+            usingColumns = Seq.empty, joinType = "inner", tolerance = functions.lit(-1),
+            allowExactMatches = true, direction = direction
           )
+        }
+
+        for ((leftKey, direction) <- Seq(
+            (functions.lit(5), "backward"), (left.col("lk"), "backward"),
+            (left.col("lk"), "nearest"))) {
+          checkError(
+            exception = intercept[AnalysisException] {
+              join(leftKey, direction).queryExecution.analyzed
+            },
+            condition = "AS_OF_JOIN.TOLERANCE_IS_NON_NEGATIVE",
+            parameters = Map.empty
+          )
+        }
+
+        val unresolvedKeyError = intercept[AnalysisException] {
+          join(functions.col("missing"), "backward").queryExecution.analyzed
+        }
+        assert(unresolvedKeyError.getCondition == "UNRESOLVED_COLUMN.WITH_SUGGESTION")
+      }
+    }
+  }
+
+  gridTest("backward and forward joins support TIME keys")(Seq(false, true)) { singlePass =>
+    withAsOfJoinAnalyzer(singlePass) {
+      withSQLConf(
+          SQLConf.SORT_MERGE_AS_OF_JOIN_ENABLED.key -> "true",
+          SQLConf.TIME_TYPE_ENABLED.key -> "true") {
+        val left = spark.sql("SELECT TIME '10:00:00' AS k")
+        val right = spark.sql(
+          """SELECT * FROM VALUES
+            |  (TIME '10:02:00', 'after'), (TIME '09:59:00', 'before'),
+            |  (TIME '10:00:00', 'exact') AS t(k, tag)
+            |""".stripMargin)
+        for {
+          direction <- Seq("backward", "forward")
+          exact <- Seq(false, true)
+        } {
+          def joined: DataFrame = left.joinAsOf(
+            other = right, leftAsOf = left.col("k"), rightAsOf = right.col("k"),
+            usingColumns = Seq.empty, joinType = "inner",
+            tolerance = functions.lit(Duration.ofMinutes(3)),
+            allowExactMatches = exact, direction = direction
+          ).select("tag")
+          val expected = if (exact) "exact" else if (direction == "forward") "after" else "before"
+          checkAnswerCodegenOffAndOn(joined, Seq(Row(expected)), checkToRDD = false)
         }
       }
     }
@@ -662,7 +892,7 @@ class SortMergeAsOfJoinSuite extends QueryTest
           Row(leftTime, afterTime, "after")
         }
 
-        checkAnswer(
+        checkAnswerCodegenOffAndOn(
           left.joinAsOf(
             other = right, leftAsOf = left.col("ts"), rightAsOf = right.col("ts"),
             usingColumns = Seq.empty, joinType = "inner", tolerance = null,
@@ -693,7 +923,7 @@ class SortMergeAsOfJoinSuite extends QueryTest
           Row(leftTime, afterTime, "after")
         }
 
-        checkAnswer(
+        checkAnswerCodegenOffAndOn(
           left.joinAsOf(
             other = right, leftAsOf = left.col("ts"), rightAsOf = right.col("ts"),
             usingColumns = Seq.empty, joinType = "inner", tolerance = null,
@@ -773,7 +1003,7 @@ class SortMergeAsOfJoinSuite extends QueryTest
 
   test("backward join - tolerance = 1") {
     val (df1, df2) = prepareForAsOfJoin()
-    checkAnswer(
+    checkAnswerCodegenOffAndOn(
       df1.joinAsOf(
         df2, df1.col("a"), df2.col("a"), usingColumns = Seq.empty,
         joinType = "inner",
@@ -788,7 +1018,7 @@ class SortMergeAsOfJoinSuite extends QueryTest
 
   test("backward join - allowExactMatches = false") {
     val (df1, df2) = prepareForAsOfJoin()
-    checkAnswer(
+    checkAnswerCodegenOffAndOn(
       df1.joinAsOf(
         df2, df1.col("a"), df2.col("a"), usingColumns = Seq.empty,
         joinType = "inner", tolerance = null,
@@ -811,7 +1041,7 @@ class SortMergeAsOfJoinSuite extends QueryTest
         StructField("a", IntegerType, false) ::
           StructField("b", StringType, false) ::
           StructField("left_val", StringType, false) :: Nil))
-    checkAnswer(
+    checkAnswerCodegenOffAndOn(
       emptyDf.joinAsOf(
         df2, emptyDf.col("a"), df2.col("a"), usingColumns = Seq.empty,
         joinType = "inner", tolerance = null,
@@ -829,7 +1059,7 @@ class SortMergeAsOfJoinSuite extends QueryTest
           StructField("b", StringType) ::
           StructField("right_val", IntegerType) :: Nil))
     // Inner join: no matches possible
-    checkAnswer(
+    checkAnswerCodegenOffAndOn(
       df1.joinAsOf(
         emptyDf, df1.col("a"), emptyDf.col("a"), usingColumns = Seq.empty,
         joinType = "inner", tolerance = null,
@@ -837,7 +1067,7 @@ class SortMergeAsOfJoinSuite extends QueryTest
       Seq.empty
     )
     // Left outer: all left rows with null right
-    checkAnswer(
+    checkAnswerCodegenOffAndOn(
       df1.joinAsOf(
         emptyDf, df1.col("a"), emptyDf.col("a"), usingColumns = Seq.empty,
         joinType = "leftouter", tolerance = null,
@@ -863,7 +1093,7 @@ class SortMergeAsOfJoinSuite extends QueryTest
       List(Row(1, "a"), Row(null, "b"), Row(5, "c")).asJava, schema2)
     // Null as-of keys should not match anything (as-of condition
     // evaluates to null for null inputs)
-    checkAnswer(
+    checkAnswerCodegenOffAndOn(
       df1.joinAsOf(
         df2, df1.col("a"), df2.col("a"), usingColumns = Seq.empty,
         joinType = "leftouter", tolerance = null,
@@ -894,7 +1124,7 @@ class SortMergeAsOfJoinSuite extends QueryTest
         Row("A", 2, "a1"), Row("A", 7, "a2"), Row("A", 12, "a3"),
         Row("B", 1, "b1"), Row("B", 6, "b2"), Row("B", 10, "b3")
       ).asJava, schema2)
-    checkAnswer(
+    checkAnswerCodegenOffAndOn(
       df1.joinAsOf(
         df2, df1.col("ts"), df2.col("ts"), usingColumns = Seq("grp"),
         joinType = "inner", tolerance = null,
@@ -920,7 +1150,7 @@ class SortMergeAsOfJoinSuite extends QueryTest
       List(Row(100L, "a"), Row(200L, "b"), Row(300L, "c")).asJava, schema1)
     val df2 = spark.createDataFrame(
       List(Row(50L, "x"), Row(150L, "y"), Row(250L, "z")).asJava, schema2)
-    checkAnswer(
+    checkAnswerCodegenOffAndOn(
       df1.joinAsOf(
         df2, df1.col("ts"), df2.col("ts"), usingColumns = Seq.empty,
         joinType = "inner", tolerance = null,
@@ -944,7 +1174,7 @@ class SortMergeAsOfJoinSuite extends QueryTest
       List(Row(1.5, "a"), Row(3.0, "b"), Row(5.5, "c")).asJava, schema1)
     val df2 = spark.createDataFrame(
       List(Row(1.0, "x"), Row(2.5, "y"), Row(4.0, "z")).asJava, schema2)
-    checkAnswer(
+    checkAnswerCodegenOffAndOn(
       df1.joinAsOf(
         df2, df1.col("ts"), df2.col("ts"), usingColumns = Seq.empty,
         joinType = "inner", tolerance = null,
@@ -978,17 +1208,13 @@ class SortMergeAsOfJoinSuite extends QueryTest
               s"SELECT CAST('$key' AS $rightType) AS k, '$tag' AS tag"
             }.mkString(" UNION ALL ")
           )
-          val result = left.joinAsOf(
+          def result: DataFrame = left.joinAsOf(
             other = right, leftAsOf = left.col("k"), rightAsOf = right.col("k"),
             usingColumns = Seq.empty, joinType = "inner", tolerance = null,
             allowExactMatches = true, direction = direction
           ).select(right.col("tag"))
 
-          checkAnswer(result, Seq(Row(expected)))
-          assert(collectFirst(result.queryExecution.executedPlan) {
-            case s: SortMergeAsOfJoinExec => s
-          }.isDefined, s"Expected SortMergeAsOfJoinExec in plan:\n" +
-            result.queryExecution.executedPlan)
+          checkAnswerCodegenOffAndOn(result, Seq(Row(expected)))
         }
       }
     }
@@ -1026,7 +1252,7 @@ class SortMergeAsOfJoinSuite extends QueryTest
                |AS t(case_id, k, tag)
                |""".stripMargin
           )
-          val result = left.joinAsOf(
+          def result: DataFrame = left.joinAsOf(
             other = right, leftAsOf = left.col("k"), rightAsOf = right.col("k"),
             usingColumns = Seq("case_id"), joinType = "leftouter",
             tolerance = functions.lit(Duration.ofDays(2)),
@@ -1035,7 +1261,7 @@ class SortMergeAsOfJoinSuite extends QueryTest
           val closest = if (direction == "forward") "after" else "before"
 
           withClue(s"legacyInterval=$legacyInterval, allowExactMatches=$allowExactMatches: ") {
-            checkAnswer(
+            checkAnswerCodegenOffAndOn(
               result,
               Seq(
                 Row("inside", closest),
@@ -1076,7 +1302,7 @@ class SortMergeAsOfJoinSuite extends QueryTest
         StructField("val", StringType) :: Nil)
     val df = spark.createDataFrame(
       List(Row(1, "a"), Row(3, "b"), Row(5, "c")).asJava, schema)
-    checkAnswer(
+    checkAnswerCodegenOffAndOn(
       df.joinAsOf(
         df, df.col("ts"), df.col("ts"), usingColumns = Seq.empty,
         joinType = "inner", tolerance = null,
@@ -1100,7 +1326,7 @@ class SortMergeAsOfJoinSuite extends QueryTest
       List(Row(2, "a"), Row(5, "b"), Row(9, "c")).asJava, schema1)
     val df2 = spark.createDataFrame(
       List(Row(1, "x"), Row(4, "y"), Row(7, "z")).asJava, schema2)
-    checkAnswer(
+    checkAnswerCodegenOffAndOn(
       df1.joinAsOf(
         df2, df1.col("ts"), df2.col("ts"), usingColumns = Seq.empty,
         joinType = "inner", tolerance = null,
@@ -1124,7 +1350,7 @@ class SortMergeAsOfJoinSuite extends QueryTest
       List(Row(1, "a"), Row(5, "b"), Row(10, "c")).asJava, schema1)
     val df2 = spark.createDataFrame(
       List(Row(3, "x"), Row(7, "y")).asJava, schema2)
-    checkAnswer(
+    checkAnswerCodegenOffAndOn(
       df1.joinAsOf(
         df2, df1.col("ts"), df2.col("ts"), usingColumns = Seq.empty,
         joinType = "leftouter", tolerance = null,
@@ -1149,7 +1375,7 @@ class SortMergeAsOfJoinSuite extends QueryTest
     val df2 = spark.createDataFrame(
       List(Row(2, "x"), Row(7, "y"), Row(15, "z")).asJava, schema2)
     // tolerance = 3: only match if right.ts <= left.ts + 3
-    checkAnswer(
+    checkAnswerCodegenOffAndOn(
       df1.joinAsOf(
         df2, df1.col("ts"), df2.col("ts"), usingColumns = Seq.empty,
         joinType = "inner",
@@ -1244,52 +1470,390 @@ class SortMergeAsOfJoinSuite extends QueryTest
   }
 
   gridTest("nearest join rejects STRING keys during analysis")(Seq(false, true)) { singlePass =>
-    // With ANSI on, analysis already rejects the subtraction of two strings.
     withAsOfJoinAnalyzer(singlePass) {
-      withSQLConf(SQLConf.ANSI_ENABLED.key -> "false") {
-        val left = spark.sql("SELECT '50' AS k")
-        val right = spark.sql("SELECT '10' AS k, 'ten' AS tag")
-
-        def join(): classic.DataFrame = left.joinAsOf(
-          other = right, leftAsOf = left.col("k"), rightAsOf = right.col("k"),
-          usingColumns = Seq.empty, joinType = "inner", tolerance = null,
-          allowExactMatches = true, direction = "nearest"
-        )
-
-        checkError(
-          exception = intercept[AnalysisException] {
-            join().queryExecution.analyzed
-          },
-          condition = "AS_OF_JOIN.UNSUPPORTED_NEAREST_KEY_TYPE",
-          parameters = Map("dataType" -> "\"STRING\"")
-        )
-
-        val analyzed = withSQLConf(SQLConf.SORT_MERGE_AS_OF_JOIN_ENABLED.key -> "false") {
-          QueryTest.checkAnswer(
-            df = join(), expectedAnswer = Seq(Row("50", "10", "ten")), checkToRDD = false)
-          join()
+      for {
+        ansi <- Seq(false, true)
+        sortMerge <- Seq(false, true)
+      } {
+        withSQLConf(
+            SQLConf.SORT_MERGE_AS_OF_JOIN_ENABLED.key -> sortMerge.toString,
+            SQLConf.ANSI_ENABLED.key -> ansi.toString) {
+          val left = spark.sql("SELECT '50' AS k")
+          val right = spark.sql(
+            "SELECT * FROM VALUES ('9', 'nine'), ('10', 'ten'), ('100', 'hundred') AS t(k, tag)")
+          val error = intercept[AnalysisException] {
+            left.joinAsOf(
+              other = right, leftAsOf = left.col("k"), rightAsOf = right.col("k"),
+              usingColumns = Seq.empty, joinType = "inner", tolerance = null,
+              allowExactMatches = true, direction = "nearest"
+            ).queryExecution.analyzed
+          }
+          checkError(
+            exception = error,
+            condition = "AS_OF_JOIN.UNSUPPORTED_NEAREST_KEY_TYPE",
+            parameters = Map("dataType" -> "\"STRING\"")
+          )
+          assert(!error.getMessage.contains("sort-merge"))
+          val castKeys = left.joinAsOf(
+            other = right, leftAsOf = left.col("k").cast("double"),
+            rightAsOf = right.col("k").cast("double"), usingColumns = Seq.empty,
+            joinType = "inner", tolerance = null, allowExactMatches = true, direction = "nearest"
+          ).select("tag")
+          QueryTest.checkAnswer(df = castKeys, expectedAnswer = Seq(Row("ten")), checkToRDD = false)
         }
-        QueryTest.checkAnswer(
-          df = analyzed, expectedAnswer = Seq(Row("50", "10", "ten")), checkToRDD = false)
-        assert(collectFirst(analyzed.queryExecution.executedPlan) {
-          case s: SortMergeAsOfJoinExec => s
-        }.isEmpty)
       }
     }
   }
 
-  test("nearest join accepts STRING keys cast to numbers") {
-    val left = spark.sql("SELECT '50' AS k")
-    val right = spark.sql(
-      "SELECT '9' AS k, 'nine' AS tag UNION ALL SELECT '10' AS k, 'ten' AS tag " +
-        "UNION ALL SELECT '100' AS k, 'hundred' AS tag")
+  gridTest("nearest join rejects unsupported sort-merge key types")(Seq(false, true)) {
+      singlePass =>
+    withAsOfJoinAnalyzer(singlePass) {
+      for {
+        key <- Seq("true", "X'01'", "array(1)", "named_struct('a', 1)", "TIME '10:00:00'")
+      } {
+        withSQLConf(
+            SQLConf.SORT_MERGE_AS_OF_JOIN_ENABLED.key -> "true",
+            SQLConf.TIME_TYPE_ENABLED.key -> "true") {
+          val left = spark.sql(s"SELECT $key AS k")
+          val right = spark.sql(s"SELECT $key AS k")
+          checkError(
+            exception = intercept[AnalysisException] {
+              left.joinAsOf(
+                other = right, leftAsOf = left.col("k"), rightAsOf = right.col("k"),
+                usingColumns = Seq.empty, joinType = "inner", tolerance = null,
+                allowExactMatches = true, direction = "nearest"
+              ).queryExecution.analyzed
+            },
+            condition = "AS_OF_JOIN.UNSUPPORTED_NEAREST_KEY_TYPE",
+            parameters = Map("dataType" -> s"\"${left.schema("k").dataType.sql}\"")
+          )
+        }
+      }
+    }
+  }
 
-    checkAnswer(
-      left.joinAsOf(
-        right, left.col("k").cast("double"), right.col("k").cast("double"),
-        usingColumns = Seq.empty, joinType = "inner", tolerance = null,
-        allowExactMatches = true, direction = "nearest").select(right.col("tag")),
-      Seq(Row("ten")))
+  gridTest("nearest join with untyped null keys")(Seq(false, true)) { singlePass =>
+    withAsOfJoinAnalyzer(singlePass) {
+      withSQLConf(SQLConf.SORT_MERGE_AS_OF_JOIN_ENABLED.key -> "true") {
+        val left = spark.sql("SELECT NULL AS k, 1 AS id")
+        val right = spark.sql("SELECT NULL AS k, 'right' AS tag")
+        val joined = left.joinAsOf(
+          other = right, leftAsOf = left.col("k"), rightAsOf = right.col("k"),
+          usingColumns = Seq.empty, joinType = "leftouter", tolerance = null,
+          allowExactMatches = true, direction = "nearest"
+        ).select("id", "tag")
+        QueryTest.checkAnswer(
+          df = joined, expectedAnswer = Seq(Row(1, null)), checkToRDD = false)
+      }
+    }
+  }
+
+  gridTest("backward and forward joins sort STRING keys as text")(Seq(false, true)) { singlePass =>
+    withAsOfJoinAnalyzer(singlePass) {
+      for (ansi <- Seq(false, true)) {
+        withSQLConf(
+            SQLConf.SORT_MERGE_AS_OF_JOIN_ENABLED.key -> "true",
+            SQLConf.ANSI_ENABLED.key -> ansi.toString) {
+          val left = spark.sql("SELECT * FROM VALUES ('50'), ('k'), ('u') AS t(k)")
+          val right = spark.sql(
+            "SELECT * FROM VALUES ('p'), ('100'), ('h'), ('10'), ('9') AS t(k)")
+          for (direction <- Seq("backward", "forward")) {
+            def joined: DataFrame = left.joinAsOf(
+              other = right, leftAsOf = left.col("k"), rightAsOf = right.col("k"),
+              usingColumns = Seq.empty, joinType = "leftouter", tolerance = null,
+              allowExactMatches = true, direction = direction
+            )
+            val expected = if (direction == "backward") {
+              Seq(Row("50", "100"), Row("k", "h"), Row("u", "p"))
+            } else {
+              Seq(Row("50", "9"), Row("k", "p"), Row("u", null))
+            }
+            checkAnswerCodegenOffAndOn(joined, expected, checkToRDD = false)
+          }
+        }
+      }
+    }
+  }
+
+  gridTest("sort-merge joins reject a tolerance on STRING keys")(Seq(false, true)) { singlePass =>
+    withAsOfJoinAnalyzer(singlePass) {
+      for {
+        ansi <- Seq(false, true)
+        collation <- Seq("", " COLLATE UTF8_LCASE")
+      } {
+        withSQLConf(
+            SQLConf.SORT_MERGE_AS_OF_JOIN_ENABLED.key -> "true",
+            SQLConf.ANSI_ENABLED.key -> ansi.toString) {
+          val left = spark.sql(s"SELECT '50'$collation AS lk")
+          val right = spark.sql(
+            s"SELECT k$collation AS rk FROM VALUES ('41'), ('5'), ('50') AS t(k)")
+          for (direction <- Seq("backward", "forward")) {
+            checkError(
+              exception = intercept[AnalysisException] {
+                left.joinAsOf(
+                  other = right, leftAsOf = left.col("lk"), rightAsOf = right.col("rk"),
+                  usingColumns = Seq.empty, joinType = "inner", tolerance = functions.lit(10),
+                  allowExactMatches = true, direction = direction
+                ).queryExecution.analyzed
+              },
+              condition = "AS_OF_JOIN.UNSUPPORTED_TOLERANCE_KEY_TYPE",
+              parameters = Map("dataType" -> s""""STRING$collation"""")
+            )
+            def castKeys: DataFrame = left.joinAsOf(
+              other = right, leftAsOf = left.col("lk").cast("int"),
+              rightAsOf = right.col("rk").cast("int"), usingColumns = Seq.empty,
+              joinType = "inner", tolerance = functions.lit(10),
+              allowExactMatches = true, direction = direction
+            ).select("rk")
+            checkAnswerCodegenOffAndOn(castKeys, Seq(Row("50")), checkToRDD = false)
+          }
+        }
+      }
+    }
+  }
+
+  gridTest("join rejects mixed STRING collations")(Seq(false, true)) { singlePass =>
+    withAsOfJoinAnalyzer(singlePass) {
+      for (ansi <- Seq(false, true)) {
+        withSQLConf(
+            SQLConf.SORT_MERGE_AS_OF_JOIN_ENABLED.key -> "true",
+            SQLConf.ANSI_ENABLED.key -> ansi.toString) {
+          val left = spark.sql("SELECT 'z' AS lk")
+          val right = spark.sql("SELECT * FROM VALUES ('Z'), ('a') AS t(rk)")
+          for (direction <- Seq("backward", "forward", "nearest")) {
+            checkError(
+              exception = intercept[AnalysisException] {
+                left.joinAsOf(
+                  other = right, leftAsOf = functions.collate(left.col("lk"), "UTF8_LCASE"),
+                  rightAsOf = right.col("rk"),
+                  usingColumns = Seq.empty, joinType = "inner", tolerance = null,
+                  allowExactMatches = true, direction = direction
+                ).queryExecution.analyzed
+              },
+              condition = "AS_OF_JOIN.UNSUPPORTED_KEY_TYPE",
+              parameters = Map("type1" -> "\"STRING COLLATE UTF8_LCASE\"", "type2" -> "\"STRING\"")
+            )
+          }
+        }
+      }
+    }
+  }
+
+  gridTest("backward and forward joins use the STRING keys' collation")(Seq(false, true)) {
+      singlePass =>
+    withAsOfJoinAnalyzer(singlePass) {
+      for (ansi <- Seq(false, true)) {
+        withSQLConf(
+            SQLConf.SORT_MERGE_AS_OF_JOIN_ENABLED.key -> "true",
+            SQLConf.ANSI_ENABLED.key -> ansi.toString) {
+          val left = spark.sql("SELECT 'z' COLLATE UTF8_LCASE AS lk")
+          val right = spark.sql(
+            "SELECT rk COLLATE UTF8_LCASE AS rk FROM VALUES ('Z'), ('a') AS t(rk)")
+          for {
+            direction <- Seq("backward", "forward")
+            allowExactMatches <- Seq(false, true)
+          } {
+            def joined: DataFrame = left.joinAsOf(
+              other = right, leftAsOf = left.col("lk"), rightAsOf = right.col("rk"),
+              usingColumns = Seq.empty, joinType = "leftouter", tolerance = null,
+              allowExactMatches = allowExactMatches, direction = direction
+            ).select("rk")
+            val expected = if (allowExactMatches) {
+              "Z"
+            } else if (direction == "backward") {
+              "a"
+            } else {
+              null
+            }
+            checkAnswerCodegenOffAndOn(joined, Seq(Row(expected)), checkToRDD = false)
+          }
+        }
+      }
+    }
+  }
+
+  gridTest("join keys can be reversed")(Seq(false, true)) { singlePass =>
+    withAsOfJoinAnalyzer(singlePass) {
+      withSQLConf(SQLConf.SORT_MERGE_AS_OF_JOIN_ENABLED.key -> "true") {
+        val left = spark.sql("SELECT 10 AS lk")
+        val right = spark.sql(
+          "SELECT * FROM VALUES (7, 'far'), (9, 'before'), (12, 'after') AS t(rk, tag)")
+        for ((direction, expected) <- Seq(
+            "backward" -> "after", "forward" -> "before", "nearest" -> "before")) {
+          def reversed: DataFrame = left.joinAsOf(
+            other = right, leftAsOf = right.col("rk"), rightAsOf = left.col("lk"),
+            usingColumns = Seq.empty, joinType = "inner", tolerance = null,
+            allowExactMatches = true, direction = direction
+          ).select("tag")
+          checkAnswerCodegenOffAndOn(reversed, Seq(Row(expected)), checkToRDD = false)
+        }
+      }
+    }
+  }
+
+  gridTest("reversed join keys respect the tolerance")(Seq(false, true)) { singlePass =>
+    withAsOfJoinAnalyzer(singlePass) {
+      withSQLConf(SQLConf.SORT_MERGE_AS_OF_JOIN_ENABLED.key -> "true") {
+        val left = spark.sql("SELECT * FROM VALUES (10), (20) AS t(lk)")
+        val right = spark.sql(
+          """SELECT * FROM VALUES
+            |(7, 'far before'), (9, 'before'), (11, 'after'), (13, 'far after'),
+            |(18, 'outside before'), (22, 'outside after') AS t(rk, tag)
+            |""".stripMargin)
+        for ((direction, expected) <- Seq("backward" -> "after", "forward" -> "before")) {
+          def reversed: DataFrame = left.joinAsOf(
+            other = right, leftAsOf = right.col("rk"), rightAsOf = left.col("lk"),
+            usingColumns = Seq.empty, joinType = "leftouter", tolerance = functions.lit(1),
+            allowExactMatches = true, direction = direction
+          ).select("lk", "tag")
+          checkAnswerCodegenOffAndOn(
+            reversed, Seq(Row(10, expected), Row(20, null)), checkToRDD = false)
+        }
+      }
+    }
+  }
+
+  test("reversed join keys keep the buffered scan, which skips a failing left key") {
+    // The reversed condition reads the right key first and stops at its NULL, so v * 1000 never
+    // overflows. The cursor reads the left key first, so it would fail the query under ANSI.
+    withSQLConf(
+        SQLConf.SORT_MERGE_AS_OF_JOIN_ENABLED.key -> "true",
+        SQLConf.ANSI_ENABLED.key -> "true") {
+      val left = spark.sql("SELECT * FROM VALUES ('B', 9223372036854775807L) AS t(k, v)")
+      val right = spark.sql("SELECT * FROM VALUES ('B', CAST(NULL AS BIGINT)) AS t(k, v)")
+      for (direction <- Seq("backward", "forward")) {
+        withClue(s"$direction: ") {
+          withAsOfJoinCodegenOffAndOn { codegen =>
+            val reversed = left.joinAsOf(
+              other = right, leftAsOf = right.col("v"), rightAsOf = left.col("v") * 1000,
+              usingColumns = Seq("k"), joinType = "left", tolerance = null,
+              allowExactMatches = true, direction = direction)
+            checkAnswer(reversed, Row("B", Long.MaxValue, null, null) :: Nil)
+            val op = assertAsOfJoinCodegen(reversed, codegen)
+            assert(op.metrics("numAsOfCursorTasks").value == 0,
+              s"Expected the buffered scan:\n${reversed.queryExecution.executedPlan}")
+          }
+        }
+      }
+    }
+  }
+
+  gridTest("join keys can reference hidden USING columns")(Seq(false, true)) { singlePass =>
+    withAsOfJoinAnalyzer(singlePass) {
+      withSQLConf(
+          SQLConf.SORT_MERGE_AS_OF_JOIN_ENABLED.key -> "true",
+          SQLConf.SQL_ASOF_JOIN_ENABLED.key -> "true") {
+        val parsed = spark.sessionState.sqlParser.parsePlan(
+          """SELECT l.id, r.tag
+            |FROM ((VALUES (1, 10), (2, 20)) AS l(id, k)
+            |  LEFT JOIN (VALUES (10)) AS lk(k) USING (k))
+            |LEFT ASOF JOIN (
+            |  (VALUES (9, 'before'), (12, 'after'), (30, 'hidden')) AS r(k, tag)
+            |  LEFT JOIN (VALUES (9), (12)) AS rk(k) USING (k))
+            |  MATCH_CONDITION (lk.k >= rk.k)
+            |""".stripMargin)
+        for (direction <- Seq("backward", "forward", "nearest")) {
+          // Keep the USING inputs unresolved when constructing the DataFrame ASOF node.
+          val plan = parsed.transform {
+            case join: AsOfJoin =>
+              AsOfJoin(
+                left = join.left, right = join.right,
+                leftAsOf = join.matchLeftOperand.get, rightAsOf = join.matchRightOperand.get,
+                condition = None, joinType = join.joinType, tolerance = None,
+                allowExactMatches = true, direction = AsOfJoinDirection(direction)
+              )
+          }
+          def joined: DataFrame = classic.Dataset.ofRows(spark, plan)
+          val expected = if (direction == "forward") "after" else "before"
+          checkAnswerCodegenOffAndOn(
+            joined, Seq(Row(1, expected), Row(2, null)), checkToRDD = false)
+        }
+      }
+    }
+  }
+
+  gridTest("join rejects constant keys before numeric coercion")(Seq(false, true)) { singlePass =>
+    withAsOfJoinAnalyzer(singlePass) {
+      for (ansi <- Seq(false, true)) {
+        withSQLConf(
+            SQLConf.SORT_MERGE_AS_OF_JOIN_ENABLED.key -> "true",
+            SQLConf.ANSI_ENABLED.key -> ansi.toString,
+            SQLConf.LITERAL_PICK_MINIMUM_PRECISION.key -> "true",
+            SQLConf.LEGACY_RETAIN_FRACTION_DIGITS_FIRST.key -> "false") {
+          val left = spark.sql("SELECT CAST(1E-30 AS DECIMAL(38, 30)) AS lk")
+          val right = spark.sql("SELECT CAST(1E-30 AS DECIMAL(38, 30)) AS rk")
+          for {
+            direction <- Seq("backward", "forward", "nearest")
+            (leftKey, rightKey, refs1, refs2) <- Seq(
+              (left.col("lk"), functions.lit(0), "\"lk\"", "\"0\""),
+              (functions.lit(0), right.col("rk"), "\"0\"", "\"rk\""),
+              (left.col("lk"), functions.lit(0) + functions.lit(1),
+                "\"lk\"", "\"(0 + 1)\""))
+          } {
+            checkError(
+              exception = intercept[AnalysisException] {
+                left.joinAsOf(
+                  other = right, leftAsOf = leftKey, rightAsOf = rightKey,
+                  usingColumns = Seq.empty, joinType = "inner", tolerance = null,
+                  allowExactMatches = false, direction = direction
+                ).queryExecution.analyzed
+              },
+              condition = "AS_OF_JOIN.KEY_REFERENCE",
+              parameters = Map("refs1" -> refs1, "refs2" -> refs2)
+            )
+          }
+        }
+      }
+    }
+  }
+
+  gridTest("join key errors describe DataFrame keys")(Seq(false, true)) { singlePass =>
+    withAsOfJoinAnalyzer(singlePass) {
+      withSQLConf(
+          SQLConf.SORT_MERGE_AS_OF_JOIN_ENABLED.key -> "true",
+          SQLConf.ANSI_ENABLED.key -> "true") {
+        val left = spark.sql("SELECT 10 AS lk")
+        val right = spark.sql("SELECT 9 AS rk")
+        for (direction <- Seq("backward", "forward", "nearest")) {
+          for ((leftKey, rightKey, refs1, refs2) <- Seq(
+              (left.col("lk") + right.col("rk"), right.col("rk"),
+                "\"(lk + rk)\"", "\"rk\""),
+              (left.col("lk"), left.col("lk"), "\"lk\"", "\"lk\""))) {
+            val error = intercept[AnalysisException] {
+              left.joinAsOf(
+                other = right, leftAsOf = leftKey, rightAsOf = rightKey,
+                usingColumns = Seq.empty, joinType = "inner", tolerance = null,
+                allowExactMatches = true, direction = direction
+              ).queryExecution.analyzed
+            }
+            checkError(
+              exception = error,
+              condition = "AS_OF_JOIN.KEY_REFERENCE",
+              parameters = Map("refs1" -> refs1, "refs2" -> refs2)
+            )
+            assert(!error.getMessage.contains("MATCH_CONDITION"))
+          }
+
+          for ((leftKey, invalidExpression) <- Seq(
+              (left.col("lk") + functions.rand(), ".*rand.*"),
+              (left.col("lk") + functions.expr("(SELECT 1)"), ".*scalarsubquery.*"))) {
+            val error = intercept[AnalysisException] {
+              left.joinAsOf(
+                other = right, leftAsOf = leftKey, rightAsOf = right.col("rk"),
+                usingColumns = Seq.empty, joinType = "inner", tolerance = null,
+                allowExactMatches = true, direction = direction
+              ).queryExecution.analyzed
+            }
+            checkErrorMatchPVals(
+              exception = error,
+              condition = "AS_OF_JOIN.INVALID_KEY_EXPRESSION",
+              parameters = Map("expr" -> invalidExpression)
+            )
+            assert(!error.getMessage.contains("MATCH_CONDITION"))
+          }
+        }
+      }
+    }
   }
 
   test("nearest join with swapped as-of columns") {
@@ -1305,31 +1869,66 @@ class SortMergeAsOfJoinSuite extends QueryTest
       Seq(Row("near")))
   }
 
-  test("nearest join with a LONG constant key against an INT column") {
-    // The optimizer rewrites 2147483647L > CAST(k AS BIGINT) to NOT (k = 2147483647).
+  gridTest("nearest join rejects numeric constant keys against an INT column")(Seq(
+      (2147483647L, "\"2147483647\""),
+      (new java.math.BigDecimal("5.4"), "\"5.4\""))) { case (key, expectedRef) =>
     val left = spark.sql("SELECT 1 AS id")
-    val right = spark.sql(
-      "SELECT 2147483644 AS k, 'far' AS tag UNION ALL SELECT 2147483646 AS k, 'near' AS tag")
+    val right = spark.sql("SELECT 1 AS k")
 
-    checkAnswer(
-      left.joinAsOf(
-        right, functions.lit(Int.MaxValue.toLong), right.col("k"), usingColumns = Seq.empty,
-        joinType = "inner", tolerance = null,
-        allowExactMatches = true, direction = "nearest").select(right.col("tag")),
-      Seq(Row("near")))
+    checkError(
+      exception = intercept[AnalysisException] {
+        left.joinAsOf(
+          other = right, leftAsOf = functions.lit(key),
+          rightAsOf = right.col("k"), usingColumns = Seq.empty, joinType = "inner",
+          tolerance = null, allowExactMatches = true, direction = "nearest"
+        ).queryExecution.analyzed
+      },
+      condition = "AS_OF_JOIN.KEY_REFERENCE",
+      parameters = Map("refs1" -> expectedRef, "refs2" -> "\"k\"")
+    )
   }
 
-  test("nearest join with a DECIMAL constant key against an INT column") {
-    // The analyzer rewrites 5.4BD > k to 6 > k, which has the same result for an INT k.
-    val left = spark.sql("SELECT 1 AS id")
-    val right = spark.sql("SELECT 5 AS k, 'near' AS tag UNION ALL SELECT 6 AS k, 'far' AS tag")
+  gridTest("nearest join preserves decimal key values and explicit casts")(Seq(false, true)) {
+      singlePass =>
+    withAsOfJoinAnalyzer(singlePass) {
+      for {
+        ansi <- Seq(false, true)
+        integralRight <- Seq(false, true)
+      } {
+        withSQLConf(
+            SQLConf.SORT_MERGE_AS_OF_JOIN_ENABLED.key -> "true",
+            SQLConf.ANSI_ENABLED.key -> ansi.toString,
+            SQLConf.DECIMAL_OPERATIONS_ALLOW_PREC_LOSS.key -> "true",
+            SQLConf.LEGACY_RETAIN_FRACTION_DIGITS_FIRST.key -> "false") {
+          val left = spark.createDataFrame(
+            List(Row(new java.math.BigDecimal("1.4"))).asJava,
+            new StructType().add("k", DecimalType(38, 30)))
+          val right = spark.createDataFrame(
+            (if (integralRight) {
+              List(Row(0, "before"), Row(2, "after"))
+            } else {
+              List(Row(new java.math.BigDecimal("0"), "before"),
+                Row(new java.math.BigDecimal("2"), "after"))
+            }).asJava,
+            new StructType().add("k", if (integralRight) IntegerType else DecimalType(38, 0))
+              .add("tag", StringType))
+          val joined = left.joinAsOf(
+            other = right, leftAsOf = left.col("k"), rightAsOf = right.col("k"),
+            usingColumns = Seq.empty, joinType = "inner", tolerance = null,
+            allowExactMatches = true, direction = "nearest"
+          ).select("tag")
+          QueryTest.checkAnswer(df = joined, expectedAnswer = Seq(Row("after")), checkToRDD = false)
 
-    checkAnswer(
-      left.joinAsOf(
-        right, functions.lit(new java.math.BigDecimal("5.4")), right.col("k"),
-        usingColumns = Seq.empty, joinType = "inner", tolerance = null,
-        allowExactMatches = true, direction = "nearest").select(right.col("tag")),
-      Seq(Row("near")))
+          val castKeys = left.joinAsOf(
+            other = right, leftAsOf = left.col("k").cast(DecimalType(38, 0)),
+            rightAsOf = right.col("k"), usingColumns = Seq.empty, joinType = "inner",
+            tolerance = null, allowExactMatches = true, direction = "nearest"
+          ).select("tag")
+          QueryTest.checkAnswer(
+            df = castKeys, expectedAnswer = Seq(Row("before")), checkToRDD = false)
+        }
+      }
+    }
   }
 
   test("nearest join with DECIMAL keys of different scales") {
@@ -1384,7 +1983,7 @@ class SortMergeAsOfJoinSuite extends QueryTest
 
   test("forward join - allowExactMatches = false") {
     val (df1, df2) = prepareForAsOfJoin()
-    checkAnswer(
+    checkAnswerCodegenOffAndOn(
       df1.joinAsOf(
         df2, df1.col("a"), df2.col("a"), usingColumns = Seq.empty,
         joinType = "inner", tolerance = null,
@@ -1480,7 +2079,7 @@ class SortMergeAsOfJoinSuite extends QueryTest
     val df2 = spark.createDataFrame(
       List(Row(null, 3, "x"), Row(1, 4, "y"), Row(null, 8, "z")).asJava, schema2)
     // Inner join: null equi-keys should produce no match
-    checkAnswer(
+    checkAnswerCodegenOffAndOn(
       df1.joinAsOf(
         df2, df1.col("ts"), df2.col("ts"), usingColumns = Seq("grp"),
         joinType = "inner", tolerance = null,
@@ -1492,7 +2091,7 @@ class SortMergeAsOfJoinSuite extends QueryTest
       )
     )
     // Left outer: null equi-keys should emit null right
-    checkAnswer(
+    checkAnswerCodegenOffAndOn(
       df1.joinAsOf(
         df2, df1.col("ts"), df2.col("ts"), usingColumns = Seq("grp"),
         joinType = "leftouter", tolerance = null,
@@ -1503,6 +2102,33 @@ class SortMergeAsOfJoinSuite extends QueryTest
         Row(null, 10, "c", null, null, null)
       )
     )
+  }
+
+  test("nearest join never matches a NULL right equi-key against a NOT NULL left key") {
+    // The left key is NOT NULL and the right key nullable. The NULL right key sorts first, so a
+    // key compare that read it as 0 would match left key 0 and stop before the rows of key -1.
+    val left = spark.createDataFrame(
+      List(Row(-1, 10), Row(0, 10)).asJava,
+      StructType(
+        StructField("k", IntegerType, nullable = false) ::
+          StructField("ts", IntegerType, nullable = false) :: Nil))
+    val right = spark.createDataFrame(
+      List(Row(null, 1, "null key"), Row(-1, 2, "minus one")).asJava,
+      StructType(
+        StructField("k", IntegerType) ::
+          StructField("ts", IntegerType) ::
+          StructField("tag", StringType) :: Nil))
+    // One partition: with several, the NULL right row could land apart from the left rows and
+    // never be compared.
+    withSQLConf(SQLConf.SHUFFLE_PARTITIONS.key -> "1") {
+      checkAnswerCodegenOffAndOn(
+        left.joinAsOf(
+          right, left.col("ts"), right.col("ts"), usingColumns = Seq("k"),
+          joinType = "leftouter", tolerance = null,
+          allowExactMatches = true, direction = "nearest")
+          .select(left.col("k"), right.col("tag")),
+        Row(-1, "minus one") :: Row(0, null) :: Nil)
+    }
   }
 
   test("null-safe equi-key (<=>) in ON matches null keys, unlike EqualTo") {
@@ -1519,24 +2145,27 @@ class SortMergeAsOfJoinSuite extends QueryTest
       List(Row(null, 5, "a"), Row(1, 5, "b"), Row(null, 10, "c")).asJava, schema1)
     val df2 = spark.createDataFrame(
       List(Row(null, 3, "x"), Row(1, 4, "y"), Row(null, 8, "z")).asJava, schema2)
-    val joined = df1.joinAsOf(
-      df2, df1.col("ts"), df2.col("ts"),
-      joinExprs = df1.col("grp") <=> df2.col("grp"),
-      joinType = "inner", tolerance = null,
-      allowExactMatches = true, direction = "backward")
-    checkAnswer(
-      joined,
-      Seq(
-        Row(null, 5, "a", null, 3, "x"),
-        Row(1, 5, "b", 1, 4, "y"),
-        Row(null, 10, "c", null, 8, "z")
+    withAsOfJoinCodegenOffAndOn { codegen =>
+      val joined = df1.joinAsOf(
+        df2, df1.col("ts"), df2.col("ts"),
+        joinExprs = df1.col("grp") <=> df2.col("grp"),
+        joinType = "inner", tolerance = null,
+        allowExactMatches = true, direction = "backward")
+      checkAnswer(
+        joined,
+        Seq(
+          Row(null, 5, "a", null, 3, "x"),
+          Row(1, 5, "b", 1, 4, "y"),
+          Row(null, 10, "c", null, 8, "z")
+        )
       )
-    )
-    val plan = joined.queryExecution.executedPlan
-    val asOfExecs = collectWithSubqueries(plan) { case j: SortMergeAsOfJoinExec => j }
-    assert(asOfExecs.length == 1, s"expected one SortMergeAsOfJoinExec in:\n$plan")
-    assert(asOfExecs.head.leftKeys.isEmpty && asOfExecs.head.rightKeys.isEmpty,
-      s"<=> must be a residual, so equi-keys must be empty, got ${asOfExecs.head}")
+      assertAsOfJoinCodegen(joined, codegen)
+      val plan = joined.queryExecution.executedPlan
+      val asOfExecs = collectWithSubqueries(plan) { case j: SortMergeAsOfJoinExec => j }
+      assert(asOfExecs.length == 1, s"expected one SortMergeAsOfJoinExec in:\n$plan")
+      assert(asOfExecs.head.leftKeys.isEmpty && asOfExecs.head.rightKeys.isEmpty,
+        s"<=> must be a residual, so equi-keys must be empty, got ${asOfExecs.head}")
+    }
   }
 
   test("residual condition via joinExprs") {
@@ -1561,7 +2190,7 @@ class SortMergeAsOfJoinSuite extends QueryTest
     // Backward join with residual amount > threshold:
     //   left(A,10,50): scan right ts<=10: (8,60) 50>60? No; (5,40) 50>40? Yes -> match (5,40)
     //   left(A,20,30): scan right ts<=20: (15,25) 30>25? Yes -> match (15,25)
-    checkAnswer(
+    checkAnswerCodegenOffAndOn(
       df1.joinAsOf(
         df2, df1.col("ts"), df2.col("ts"),
         joinExprs = (df1.col("grp") === df2.col("grp")) &&
@@ -1586,7 +2215,7 @@ class SortMergeAsOfJoinSuite extends QueryTest
         StructField("threshold", IntegerType) :: Nil)
     val df1 = spark.createDataFrame(List(Row(4, 30), Row(5, 10)).asJava, schema1)
     val df2 = spark.createDataFrame(List(Row(6, 20), Row(9, 1)).asJava, schema2)
-    checkAnswer(
+    checkAnswerCodegenOffAndOn(
       df1.joinAsOf(
         df2, df1.col("ts"), df2.col("ts"),
         joinExprs = df1.col("amount") > df2.col("threshold"),
@@ -1607,7 +2236,7 @@ class SortMergeAsOfJoinSuite extends QueryTest
     Seq(true, false).foreach { ansiEnabled =>
       withSQLConf(SQLConf.ANSI_ENABLED.key -> ansiEnabled.toString) {
         Seq(true, false).foreach { allowExactMatches =>
-          checkAnswer(
+          checkAnswerCodegenOffAndOn(
             df1.joinAsOf(
               df2, df1.col("ts"), df2.col("ts"), usingColumns = Seq.empty,
               joinType = "inner", tolerance = null,
@@ -1654,7 +2283,9 @@ class SortMergeAsOfJoinSuite extends QueryTest
     // produces the same results as the in-memory path.
     withSQLConf(
       SQLConf.SORT_MERGE_JOIN_EXEC_BUFFER_IN_MEMORY_THRESHOLD.key -> "1",
-      SQLConf.SORT_MERGE_JOIN_EXEC_BUFFER_SPILL_THRESHOLD.key -> "1") {
+      SQLConf.SORT_MERGE_JOIN_EXEC_BUFFER_SPILL_THRESHOLD.key -> "1",
+      // The cursor scan never buffers, so turn it off to test the spill.
+      SQLConf.SORT_MERGE_AS_OF_JOIN_CURSOR_SCAN_ENABLED.key -> "false") {
       val (df1, df2) = prepareForAsOfJoin()
       // No equi-key (bufferAllRight path)
       checkAnswerAndSpill(
@@ -1669,7 +2300,7 @@ class SortMergeAsOfJoinSuite extends QueryTest
         )
       )
       // Equi-key (bufferRightGroup): at most one right row per group, so it does not spill.
-      checkAnswer(
+      checkAnswerCodegenOffAndOn(
         df1.joinAsOf(
           df2, df1.col("a"), df2.col("a"), usingColumns = Seq("b"),
           joinType = "inner", tolerance = null,
@@ -1684,7 +2315,9 @@ class SortMergeAsOfJoinSuite extends QueryTest
   test("forward join - spill to disk") {
     withSQLConf(
       SQLConf.SORT_MERGE_JOIN_EXEC_BUFFER_IN_MEMORY_THRESHOLD.key -> "1",
-      SQLConf.SORT_MERGE_JOIN_EXEC_BUFFER_SPILL_THRESHOLD.key -> "1") {
+      SQLConf.SORT_MERGE_JOIN_EXEC_BUFFER_SPILL_THRESHOLD.key -> "1",
+      // The cursor scan never buffers, so turn it off to test the spill.
+      SQLConf.SORT_MERGE_AS_OF_JOIN_CURSOR_SCAN_ENABLED.key -> "false") {
       val (df1, df2) = prepareForAsOfJoin()
       // No equi-key (bufferAllRight path)
       checkAnswerAndSpill(
@@ -1768,7 +2401,9 @@ class SortMergeAsOfJoinSuite extends QueryTest
   test("left outer join - spill to disk") {
     withSQLConf(
       SQLConf.SORT_MERGE_JOIN_EXEC_BUFFER_IN_MEMORY_THRESHOLD.key -> "1",
-      SQLConf.SORT_MERGE_JOIN_EXEC_BUFFER_SPILL_THRESHOLD.key -> "1") {
+      SQLConf.SORT_MERGE_JOIN_EXEC_BUFFER_SPILL_THRESHOLD.key -> "1",
+      // The cursor scan never buffers, so turn it off to test the spill.
+      SQLConf.SORT_MERGE_AS_OF_JOIN_CURSOR_SCAN_ENABLED.key -> "false") {
       val (df1, df2) = prepareForAsOfJoin()
       checkAnswerAndSpill(
         df1.joinAsOf(
@@ -1793,7 +2428,9 @@ class SortMergeAsOfJoinSuite extends QueryTest
     // match that was not copied out would be clobbered before it is emitted.
     withSQLConf(
       SQLConf.SORT_MERGE_JOIN_EXEC_BUFFER_IN_MEMORY_THRESHOLD.key -> "1",
-      SQLConf.SORT_MERGE_JOIN_EXEC_BUFFER_SPILL_THRESHOLD.key -> "1") {
+      SQLConf.SORT_MERGE_JOIN_EXEC_BUFFER_SPILL_THRESHOLD.key -> "1",
+      // The cursor scan never buffers, so turn it off to test the spill.
+      SQLConf.SORT_MERGE_AS_OF_JOIN_CURSOR_SCAN_ENABLED.key -> "false") {
       val leftSchema = StructType(
         StructField("grp", StringType) ::
           StructField("ts", IntegerType) :: Nil)
@@ -1818,6 +2455,44 @@ class SortMergeAsOfJoinSuite extends QueryTest
           Row("B", 8, "B", 5, bestVal)
         )
       )
+    }
+  }
+
+  Seq("backward", "forward").foreach { direction =>
+    test(s"generated $direction scan closes the spill readers of a group it leaves early") {
+      assume(ManagementFactory.getOperatingSystemMXBean.isInstanceOf[UnixOperatingSystemMXBean],
+        "needs a JVM that counts its open files")
+      withSQLConf(
+          SQLConf.ENABLE_SORT_MERGE_AS_OF_JOIN_CODEGEN.key -> "true",
+          SQLConf.SORT_MERGE_JOIN_EXEC_BUFFER_IN_MEMORY_THRESHOLD.key -> "1",
+          SQLConf.SORT_MERGE_JOIN_EXEC_BUFFER_SPILL_THRESHOLD.key -> "10",
+          // The cursor scan never buffers, so turn it off to test the spill.
+          SQLConf.SORT_MERGE_AS_OF_JOIN_CURSOR_SCAN_ENABLED.key -> "false") {
+        // One right group of 50 rows that spills every 10 rows. Each left key k matches the right
+        // key k, so every scan stops with the later spill files of the group still unread.
+        val left = spark.range(1, 17).selectExpr("CAST(id AS INT) AS ts")
+        val right = spark.range(50).selectExpr("CAST(id AS INT) AS ts")
+        val df = left.joinAsOf(
+          right, left.col("ts"), right.col("ts"), usingColumns = Seq.empty,
+          joinType = "inner", tolerance = null,
+          allowExactMatches = true, direction = direction)
+        // Counts inside the task, since the task closes every spill reader when it ends.
+        val results = df.queryExecution.toRdd.mapPartitions { rows =>
+          val bean = ManagementFactory.getOperatingSystemMXBean
+            .asInstanceOf[UnixOperatingSystemMXBean]
+          val before = bean.getOpenFileDescriptorCount
+          val matches = rows.map(row => (row.getInt(0), row.getInt(1))).toList
+          Iterator.single((matches, bean.getOpenFileDescriptorCount - before))
+        }.collect()
+        val plan = df.queryExecution.executedPlan
+        val join = collectFirst(plan) { case j: SortMergeAsOfJoinExec => j }
+        assert(join.exists(isGenerated(plan, _)), s"Expected the generated scan in:\n$plan")
+        assert(join.get.metrics("spillSize").value > 0, "Expected the right group to spill")
+        assert(results.length == 1, "Expected one task, since there is no ON key")
+        val (matches, openedFiles) = results.head
+        assert(matches == (1 to 16).map(k => (k, k)).toList)
+        assert(openedFiles < 8, s"the scan left $openedFiles more files open")
+      }
     }
   }
 }

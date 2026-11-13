@@ -55,6 +55,7 @@ if should_test_connect:
         WriteOperation,
     )
     from pyspark.sql.connect.readwriter import DataFrameReader
+    from pyspark.sql.connect.streaming.readwriter import DataStreamReader
     from pyspark.sql.connect.types import (
         proto_schema_to_pyspark_data_type,
         pyspark_types_to_proto_types,
@@ -134,6 +135,48 @@ class SparkConnectPlanTests(PlanOnlyTestFixture):
     def test_sql_project(self):
         plan = self.connect.sql("SELECT 1")._plan.to_proto(self.connect)
         self.assertEqual(plan.root.sql.query, "SELECT 1")
+
+    def test_bin_by(self):
+        df = self.connect.readTable(table_name=self.tbl_name)
+        result = df.binBy("start", "end", lit(datetime.timedelta(minutes=5)), ["value"])
+        plan = result._plan.to_proto(self.connect)
+        node = plan.root.bin_by
+        self.assertEqual(node.input.read.named_table.unparsed_identifier, self.tbl_name)
+        self.assertEqual(node.range_start.unresolved_attribute.unparsed_identifier, "start")
+        self.assertEqual(node.range_end.unresolved_attribute.unparsed_identifier, "end")
+        self.assertEqual(node.bin_width.literal.day_time_interval, 300000000)
+        self.assertEqual(len(node.distribute_uniform), 1)
+        self.assertEqual(
+            node.distribute_uniform[0].unresolved_attribute.unparsed_identifier, "value"
+        )
+        self.assertFalse(node.HasField("align_to"))
+        self.assertFalse(node.HasField("bin_start_name"))
+        self.assertFalse(node.HasField("bin_end_name"))
+        self.assertFalse(node.HasField("bin_distribute_ratio_name"))
+
+    def test_bin_by_optional_fields_and_bound_columns(self):
+        df = self.connect.readTable(table_name=self.tbl_name)
+        result = df.binBy(
+            df["start"],
+            df["end"],
+            lit(datetime.timedelta(minutes=5)),
+            (df["value"], df["value2"]),
+            alignTo=lit(None).cast("timestamp"),
+            binStartName="bin.start",
+            binEndName="bin`end",
+            binDistributeRatioName="",
+        )
+        plan = result._plan.to_proto(self.connect)
+        node = plan.root.bin_by
+        for expression in [node.range_start, node.range_end, *node.distribute_uniform]:
+            self.assertEqual(expression.unresolved_attribute.plan_id, df._plan._plan_id)
+        self.assertEqual(len(node.distribute_uniform), 2)
+        self.assertTrue(node.HasField("align_to"))
+        self.assertTrue(node.align_to.cast.expr.literal.HasField("null"))
+        self.assertEqual(node.bin_start_name, "bin.start")
+        self.assertEqual(node.bin_end_name, "bin`end")
+        self.assertTrue(node.HasField("bin_distribute_ratio_name"))
+        self.assertEqual(node.bin_distribute_ratio_name, "")
 
     def test_simple_project(self):
         plan = self.connect.readTable(table_name=self.tbl_name)._plan.to_proto(self.connect)
@@ -826,6 +869,26 @@ class SparkConnectPlanTests(PlanOnlyTestFixture):
         self.assertEqual(data_source.options.get("op2"), "opv2")
         self.assertEqual(len(data_source.paths), 1)
         self.assertEqual(data_source.paths[0], "test_path")
+
+    def test_streaming_table_source_name(self):
+        for source_name in (None, "orders_source"):
+            with self.subTest(source_name=source_name):
+                reader = DataStreamReader(self.connect).option("maxFilesPerTrigger", "1")
+                if source_name is not None:
+                    reader.name(source_name)
+                plan = reader.table("db.orders")._plan.to_proto(self.connect)
+                self.assertTrue(plan.root.read.is_streaming)
+                named_table = plan.root.read.named_table
+                self.assertEqual(named_table.unparsed_identifier, "db.orders")
+                self.assertEqual(dict(named_table.options), {"maxFilesPerTrigger": "1"})
+                self.assertEqual(named_table.HasField("source_name"), source_name is not None)
+                if source_name is not None:
+                    self.assertEqual(named_table.source_name, source_name)
+                self.assertEqual(proto.Plan.FromString(plan.SerializeToString()), plan)
+
+        batch_plan = DataFrameReader(self.connect).table("db.orders")._plan.to_proto(self.connect)
+        self.assertFalse(batch_plan.root.read.is_streaming)
+        self.assertFalse(batch_plan.root.read.named_table.HasField("source_name"))
 
     def test_reader_options_case_insensitive(self):
         reader = DataFrameReader(self.connect)

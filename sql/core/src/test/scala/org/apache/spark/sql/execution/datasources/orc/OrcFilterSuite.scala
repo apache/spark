@@ -17,6 +17,7 @@
 
 package org.apache.spark.sql.execution.datasources.orc
 
+import java.io.File
 import java.math.MathContext
 import java.nio.charset.StandardCharsets
 import java.sql.{Date, Timestamp}
@@ -24,8 +25,11 @@ import java.time.{Duration, Instant, LocalDateTime, LocalTime, Period, ZoneOffse
 
 import scala.jdk.CollectionConverters._
 
+import org.apache.hadoop.fs.Path
+import org.apache.hadoop.hive.ql.exec.vector.TimestampColumnVector
 import org.apache.hadoop.hive.ql.io.sarg.{PredicateLeaf, SearchArgument, SearchArgumentImpl}
 import org.apache.hadoop.hive.ql.io.sarg.SearchArgumentFactory.newBuilder
+import org.apache.orc.{OrcFile, TypeDescription}
 
 import org.apache.spark.{SparkConf, SparkException, SparkRuntimeException}
 import org.apache.spark.sql.{AnalysisException, Column, DataFrame, Row}
@@ -41,6 +45,7 @@ import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.sql.types._
 import org.apache.spark.tags.ExtendedSQLTest
 import org.apache.spark.util.ArrayImplicits._
+import org.apache.spark.util.Utils
 
 /**
  * A test suite that tests Apache ORC filter API based filter pushdown optimization.
@@ -308,17 +313,17 @@ class OrcFilterSuite extends OrcTest with SharedSparkSession {
             val timestamps = input.map(Literal(_))
             checkFilterPredicate($"_1".isNull, PredicateLeaf.Operator.IS_NULL)
 
-            checkFilterPredicate($"_1" === timestamps(0), PredicateLeaf.Operator.EQUALS)
-            checkFilterPredicate($"_1" <=> timestamps(0), PredicateLeaf.Operator.NULL_SAFE_EQUALS)
+            checkFilterPredicate($"_1" === timestamps(0), PredicateLeaf.Operator.BETWEEN)
+            checkFilterPredicate($"_1" <=> timestamps(0), PredicateLeaf.Operator.BETWEEN)
 
             checkFilterPredicate($"_1" < timestamps(1), PredicateLeaf.Operator.LESS_THAN)
             checkFilterPredicate($"_1" > timestamps(2), PredicateLeaf.Operator.LESS_THAN_EQUALS)
             checkFilterPredicate($"_1" <= timestamps(0), PredicateLeaf.Operator.LESS_THAN_EQUALS)
             checkFilterPredicate($"_1" >= timestamps(3), PredicateLeaf.Operator.LESS_THAN)
 
-            checkFilterPredicate(Literal(timestamps(0)) === $"_1", PredicateLeaf.Operator.EQUALS)
+            checkFilterPredicate(Literal(timestamps(0)) === $"_1", PredicateLeaf.Operator.BETWEEN)
             checkFilterPredicate(
-              Literal(timestamps(0)) <=> $"_1", PredicateLeaf.Operator.NULL_SAFE_EQUALS)
+              Literal(timestamps(0)) <=> $"_1", PredicateLeaf.Operator.BETWEEN)
             checkFilterPredicate(Literal(timestamps(1)) > $"_1", PredicateLeaf.Operator.LESS_THAN)
             checkFilterPredicate(
               Literal(timestamps(2)) < $"_1",
@@ -327,6 +332,77 @@ class OrcFilterSuite extends OrcTest with SharedSparkSession {
               Literal(timestamps(0)) >= $"_1",
               PredicateLeaf.Operator.LESS_THAN_EQUALS)
             checkFilterPredicate(Literal(timestamps(3)) <= $"_1", PredicateLeaf.Operator.LESS_THAN)
+          }
+        }
+      }
+    }
+  }
+
+  test("SPARK-60449: filter pushdown - timestamp with sub-microsecond digits") {
+    // Another engine (e.g. Hive) can write sub-microsecond digits to an ORC timestamp column, and
+    // Spark reads the column as TimestampType by truncating every value to microseconds. So the
+    // pushed down predicates must not skip the stripes whose truncated values satisfy them.
+    withTempPath { dir =>
+      val schema = TypeDescription.fromString("struct<ts:timestamp>")
+      Seq(
+        "part-0.orc" -> Seq("2020-05-25 10:11:12.123456789", null),
+        // The last stored value that is read as `a` and the first one after it, each alone in its
+        // file, so a pushed down range that misses either edge skips a matching file.
+        "part-1.orc" -> Seq("2020-05-25 10:11:12.123456999"),
+        "part-2.orc" -> Seq("2020-05-25 10:11:12.123457"),
+        "part-3.orc" -> Seq("2020-05-25 10:11:13.000000789")
+      ).foreach { case (name, values) =>
+        val file = new Path(new File(dir, name).getCanonicalPath)
+        val writerOptions =
+          OrcFile.writerOptions(spark.sessionState.newHadoopConf()).setSchema(schema)
+        Utils.tryWithResource(OrcFile.createWriter(file, writerOptions)) { writer =>
+          val batch = schema.createRowBatch()
+          val tsCol = batch.cols(0).asInstanceOf[TimestampColumnVector]
+          values.zipWithIndex.foreach { case (v, i) =>
+            tsCol.set(i, Option(v).map(Timestamp.valueOf(_)).orNull)
+          }
+          batch.size = values.length
+          writer.addRowBatch(batch)
+        }
+      }
+      val path = dir.getCanonicalPath
+      // The stored values are read as `a`, null, `a`, `next`, and `b`.
+      val a = "TIMESTAMP'2020-05-25 10:11:12.123456'"
+      val b = "TIMESTAMP'2020-05-25 10:11:13'"
+      val next = "TIMESTAMP'2020-05-25 10:11:12.123457'"
+      checkAnswer(
+        spark.read.orc(path),
+        sql(s"SELECT $a UNION ALL SELECT null UNION ALL SELECT $a UNION ALL SELECT $next " +
+          s"UNION ALL SELECT $b"))
+
+      Seq(false, true).foreach { java8Api =>
+        withSQLConf(SQLConf.DATETIME_JAVA8API_ENABLED.key -> java8Api.toString) {
+          withAllNativeOrcReaders {
+            val df = spark.read.orc(path)
+            Seq(
+              s"ts = $b" -> 1,
+              s"ts = $a" -> 2,
+              s"ts = $next" -> 1,
+              s"ts <=> $a" -> 2,
+              s"ts <= $a" -> 2,
+              s"ts <= $b" -> 4,
+              s"ts IN ($a, $next)" -> 3,
+              s"ts IN ($a, $b)" -> 3,
+              s"ts < $next" -> 2,
+              s"ts >= $a" -> 4,
+              s"ts > $a" -> 2,
+              s"ts > $b" -> 0,
+              s"ts < $a" -> 0,
+              s"ts != $a" -> 2,
+              s"NOT (ts <=> $a)" -> 3,
+              s"ts NOT IN ($a, $next)" -> 1
+            ).foreach { case (condition, expected) =>
+              assert(df.where(condition).count() === expected, condition)
+            }
+            // The pushed down predicates still skip the files without the matching values.
+            assert(stripSparkFilter(df.where(s"ts = $a")).count() === 3)
+            assert(stripSparkFilter(df.where(s"ts > $a")).count() === 2)
+            assert(stripSparkFilter(df.where(s"ts = $b")).count() === 1)
           }
         }
       }

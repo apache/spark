@@ -650,7 +650,7 @@ object FunctionRegistry {
     expressionBuilder("now", NowExpressionBuilder),
     expression[Quarter]("quarter"),
     expressionBuilder("second", SecondExpressionBuilder),
-    expression[ParseToTimestamp]("to_timestamp"),
+    expressionBuilder("to_timestamp", ParseToTimestampExpressionBuilder),
     expression[ParseToDate]("to_date"),
     expression[TimeDiff]("time_diff"),
     expression[ToTime]("to_time"),
@@ -941,11 +941,10 @@ object FunctionRegistry {
     expression[StructsToCsv]("to_csv")
   )
 
-  // Built-in forms of the SQL:2016 JSON constructor and path functions. `AstBuilder` routes the
-  // eligible flat clause-free calls here so a same-named routine can shadow them. Clause-bearing
-  // forms, and the nested/implicit-JSON clause-free forms (routing deferred to SPARK-59243), are
-  // still built directly by the grammar -- except the `json_object` comma form, whose nested
-  // producer value also routes here (carrying a `JsonImplicitFormatCarrier`).
+  // Built-in forms of the SQL:2016 JSON constructor and path functions. `AstBuilder` routes
+  // clause-free calls here so a same-named routine can shadow them; a call with a nested JSON
+  // producer argument routes as a `RoutedJsonConstructor`. Calls with a clause or explicit
+  // FORMAT JSON always mean the built-in.
   private val routedSqlJsonFunctionEntries: Seq[FunctionRegistryEntry] = Seq(
     expressionBuilder("json_value", JsonValueExpressionBuilder),
     expressionBuilder("json_query", JsonQueryExpressionBuilder),
@@ -1244,6 +1243,7 @@ object FunctionRegistry {
     registerInternalExpression[MonotonicallyIncreasingID]("distributed_id", setAlias = true)
     registerInternalExpression[DistributedSequenceID]("distributed_sequence_id")
     registerInternalExpression[PandasProduct]("pandas_product")
+    registerInternalExpression[PandasMod]("pandas_mod")
     registerInternalExpression[PandasStddev]("pandas_stddev")
     registerInternalExpression[PandasVariance]("pandas_var")
     registerInternalExpression[PandasSkewness]("pandas_skew")
