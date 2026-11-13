@@ -238,6 +238,11 @@ class PullupCorrelatedPredicatesSuite extends PlanTest {
       inDecorrelation)
     assert(countBugHandling(correlated(max($"d")), outer = groupedOuter, above = _.limit(1)) ==
       inDecorrelation)
+    assert(countBugHandling(correlated(max($"d")), outer = testRelation.groupBy($"a")($"a"),
+      above = _.limit(21)) == inDecorrelation)
+    // A domain join directly in the outer input takes its domain from outside this plan.
+    val domainOuter = DomainJoin(Seq(AttributeReference("z", IntegerType)()), testRelation)
+    assert(countBugHandling(correlated(max($"d")), outer = domainOuter) == inLegacy)
     val innerOuter = testRelation.join(testRelation2, Inner, Some($"a" === $"c"))
     assert(countBugHandling(correlated(max($"d")), outer = innerOuter, above = _.limit(21)) ==
       inDecorrelation)

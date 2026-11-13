@@ -3513,6 +3513,8 @@ class SubquerySuite extends SharedSparkSession
           s"SELECT o.k, $subquery FROM o WHERE EXISTS (SELECT 1 FROM b)",
           s"SELECT o.k, $subquery FROM (SELECT o.*, (SELECT MAX(b.v) FROM b WHERE b.k > o.k) mx " +
             "FROM o) o",
+          s"SELECT o.k, $subquery FROM o WHERE (SELECT MAX(b.v) FROM b WHERE b.k > o.k) IS NULL " +
+            "OR o.k < 4",
           s"SELECT o.k, $subquery FROM (SELECT o.k, l.m FROM o, LATERAL (SELECT MAX(b.v) m " +
             "FROM b WHERE b.k = o.k) l) o").foreach { query =>
         checkAnswer(sql(query), (0 until 4).map(k => Row(k, 1)))
