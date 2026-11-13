@@ -21,14 +21,16 @@ import java.util
 
 import org.scalatest.Assertions.assert
 
+import org.apache.spark.sql.catalyst.util.{CharVarcharCodegenUtils, CharVarcharUtils}
 import org.apache.spark.sql.connector.catalog.constraints.Constraint
 import org.apache.spark.sql.connector.distributions.{Distribution, Distributions}
-import org.apache.spark.sql.connector.expressions.{FieldReference, LiteralValue, NamedReference, SortOrder, Transform}
+import org.apache.spark.sql.connector.expressions.{Expression => V2Expression, FieldReference, GeneralScalarExpression, LiteralValue, NamedReference, SortOrder, Transform}
 import org.apache.spark.sql.connector.expressions.filter.{AlwaysFalse, And, Predicate}
 import org.apache.spark.sql.connector.read.{InputPartition, Scan, ScanBuilder, SupportsRuntimeV2Filtering}
 import org.apache.spark.sql.connector.write.{LogicalWriteInfo, SupportsOverwriteV2, WriteBuilder, WriterCommitMessage}
 import org.apache.spark.sql.types.StructType
 import org.apache.spark.sql.util.CaseInsensitiveStringMap
+import org.apache.spark.unsafe.types.UTF8String
 import org.apache.spark.util.ArrayImplicits._
 
 class InMemoryTableWithV2Filter(
@@ -147,7 +149,9 @@ class InMemoryTableWithV2Filter(
     }
 
     override def canOverwrite(predicates: Array[Predicate]): Boolean = {
-      InMemoryTableWithV2Filter.supportsPredicates(predicates)
+      val acceptCharReadSidePadding = properties.getOrDefault(
+        InMemoryTableWithV2Filter.AcceptCharReadSidePaddingKey, "false").toBoolean
+      InMemoryTableWithV2Filter.supportsPredicates(predicates, acceptCharReadSidePadding)
     }
   }
 
@@ -184,12 +188,19 @@ object InMemoryTableWithV2Filter {
       pred: Predicate,
       resolveValue: String => Any): Boolean = {
     lazy val attr = pred.children()(0).toString
+    lazy val value = pred.children()(0) match {
+      case CharReadSidePadding(ref, length) =>
+        Option(resolveValue(ref.toString)).map { v =>
+          CharVarcharCodegenUtils.readSidePadding(v.asInstanceOf[UTF8String], length)
+        }.orNull
+      case _ => resolveValue(attr)
+    }
     pred.name() match {
       case "=" =>
-        resolveValue(attr) ==
+        value ==
           pred.children()(1).asInstanceOf[LiteralValue[_]].value
       case "<=>" =>
-        val attrVal = resolveValue(attr)
+        val attrVal = value
         val litVal =
           pred.children()(1).asInstanceOf[LiteralValue[_]].value
         (attrVal == null && litVal == null) ||
@@ -204,14 +215,38 @@ object InMemoryTableWithV2Filter {
   }
 
   /**
-   * Whether every predicate has a shape [[evalPredicate]] can evaluate: a plain column, or a
-   * column and a literal. A predicate over an expression, e.g. a cast, is not supported and
-   * returned to Spark, as a real connector without expression support would do.
+   * Table property that lets an overwrite compare `CHAR_READ_SIDE_PADDING` of a column with a
+   * literal, as a connector that pads the CHAR values stored without padding would do.
    */
-  def supportsPredicates(predicates: Array[Predicate]): Boolean = {
+  val AcceptCharReadSidePaddingKey = "accept-char-read-side-padding"
+
+  private object CharReadSidePadding {
+    def unapply(expr: V2Expression): Option[(NamedReference, Int)] = expr match {
+      case e: GeneralScalarExpression if e.name() == CharVarcharUtils.V2_CHAR_READ_SIDE_PADDING =>
+        e.children().toSeq match {
+          case Seq(ref: NamedReference, LiteralValue(length: Int, _), _) => Some((ref, length))
+          case _ => None
+        }
+      case _ => None
+    }
+  }
+
+  /**
+   * Whether every predicate has a shape [[evalPredicate]] can evaluate: a plain column, or a
+   * column and a literal. `CHAR_READ_SIDE_PADDING` of a column compared with a literal is
+   * supported only if `acceptCharReadSidePadding` is true, which `canOverwrite` takes from the
+   * [[AcceptCharReadSidePaddingKey]] table property. Any other predicate over an expression,
+   * e.g. a cast, is not supported and returned to Spark, as a real connector without expression
+   * support would do.
+   */
+  def supportsPredicates(
+      predicates: Array[Predicate],
+      acceptCharReadSidePadding: Boolean = false): Boolean = {
     predicates.flatMap(splitAnd).forall { p =>
       (p.name(), p.children().toSeq) match {
         case ("=" | "<=>", Seq(_: NamedReference, _: LiteralValue[_])) => true
+        case ("=" | "<=>", Seq(CharReadSidePadding(_, _), _: LiteralValue[_])) =>
+          acceptCharReadSidePadding
         case ("IS_NULL" | "IS_NOT_NULL", Seq(_: NamedReference)) => true
         case ("ALWAYS_TRUE", _) => true
         case _ => false

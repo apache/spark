@@ -8268,6 +8268,19 @@ object SQLConf {
     .booleanConf
     .createWithDefault(false)
 
+  val LEGACY_NO_CHAR_PADDING_IN_OVERWRITE_CONDITION =
+    buildConf("spark.sql.legacy.noCharPaddingInOverwriteCondition")
+      .internal()
+      .doc("When true, an overwrite by a condition of a Data Source V2 table, such as " +
+        "`INSERT INTO ... REPLACE WHERE`, compares the stored values of the CHAR columns in the " +
+        "condition with the padded literals, as Spark 4.3 does. It then works with data sources " +
+        "that do not support CHAR_READ_SIDE_PADDING, but keeps the rows whose CHAR values are " +
+        "stored without padding.")
+      .version("4.4.0")
+      .withBindingPolicy(ConfigBindingPolicy.SESSION)
+      .booleanConf
+      .createWithDefault(false)
+
   val CLI_PRINT_HEADER =
     buildConf("spark.sql.cli.print.header")
      .doc("When set to true, spark-sql CLI prints the names of the columns in query output.")
