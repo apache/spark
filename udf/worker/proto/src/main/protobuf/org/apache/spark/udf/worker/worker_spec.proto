@@ -262,6 +262,15 @@ message ProcessCallable {
     // This executable should be blocking, until the task is finished.
     // Termination is requested via a SIGTERM signal.
     //
+    // The executable may be a launcher that runs the worker somewhere else,
+    // such as in a container, a sandbox, or a VM. The engine only talks to
+    // the endpoint passed in --connection on the engine host. A launcher
+    // must therefore make that endpoint reachable on the engine host, for
+    // example by binding it and forwarding bytes to the worker. On SIGTERM
+    // it must stop the worker and exit. It must not leave the worker running
+    // after it exits for any reason, because the engine sends SIGKILL to the
+    // launcher only.
+    //
     // Success/Failure can be indicated via exit codes:
     // Exit code 0    -> Success
     // Exit code != 0 -> Failure
