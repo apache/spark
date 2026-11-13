@@ -31,6 +31,7 @@ import com.esotericsoftware.kryo.io.Output;
 import org.apache.spark.SparkIllegalArgumentException;
 import org.apache.spark.SparkUnsupportedOperationException;
 import org.apache.spark.sql.catalyst.InternalRow;
+import org.apache.spark.sql.catalyst.expressions.codegen.UnsafeRowWriter;
 import org.apache.spark.sql.catalyst.types.*;
 import org.apache.spark.sql.types.*;
 import org.apache.spark.unsafe.Platform;
@@ -63,6 +64,9 @@ import static org.apache.spark.unsafe.Platform.BYTE_ARRAY_OFFSET;
 public final class UnsafeRow extends InternalRow implements Externalizable, KryoSerializable {
 
   public static final int WORD_SIZE = 8;
+
+  /** Unscaled values of a compact (Long-backed) Decimal are strictly within +-10^18. */
+  private static final long COMPACT_UNSCALED_LIMIT = Decimal.POW_10()[Decimal.MAX_LONG_DIGITS()];
 
   //////////////////////////////////////////////////////////////////////////////
   // Static methods
@@ -289,6 +293,12 @@ public final class UnsafeRow extends InternalRow implements Externalizable, Kryo
         setNullAt(ordinal);
         // keep the offset for future update
         Platform.putLong(baseObject, getFieldOffset(ordinal), cursor << 32);
+      } else if (value.isCompact()) {
+        // Write the unscaled Long directly, in the same bytes BigInteger.toByteArray() returns.
+        final int numBytes =
+          UnsafeRowWriter.writeCompactUnscaledBytes(
+            baseObject, baseOffset + cursor, value.toUnscaledLong());
+        setLong(ordinal, (cursor << 32) | ((long) numBytes));
       } else {
 
         final BigInteger integer = value.toJavaBigDecimal().unscaledValue();
@@ -427,6 +437,25 @@ public final class UnsafeRow extends InternalRow implements Externalizable, Kryo
     if (precision <= Decimal.MAX_LONG_DIGITS()) {
       return Decimal.createUnsafe(getLong(ordinal), precision, scale);
     } else {
+      final long offsetAndSize = getLong(ordinal);
+      final int size = (int) offsetAndSize;
+      if (size > 0 && size <= 8) {
+        // The unscaled value fits a Long: decode it without allocating a byte[] and BigInteger.
+        final long address = baseOffset + (int) (offsetAndSize >> 32);
+        long unscaled = Platform.getByte(baseObject, address); // sign-extends the first byte
+        for (int i = 1; i < size; i++) {
+          unscaled = (unscaled << 8) | (Platform.getByte(baseObject, address + i) & 0xFFL);
+        }
+        // A compact Decimal's scale indexes Decimal.POW_10, so it must be in
+        // [0, MAX_LONG_DIGITS] even when the unscaled value is small. A negative scale is
+        // only possible with spark.sql.legacy.allowNegativeScaleOfDecimal.
+        if (unscaled > -COMPACT_UNSCALED_LIMIT && unscaled < COMPACT_UNSCALED_LIMIT &&
+            scale >= 0 && scale <= Decimal.MAX_LONG_DIGITS()) {
+          return Decimal.createUnsafe(unscaled, precision, scale);
+        }
+        // Not compact: the same BigDecimal-backed Decimal as the path below.
+        return Decimal.apply(BigDecimal.valueOf(unscaled, scale), precision, scale);
+      }
       byte[] bytes = getBinary(ordinal);
       BigInteger bigInteger = new BigInteger(bytes);
       BigDecimal javaDecimal = new BigDecimal(bigInteger, scale);

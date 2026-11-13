@@ -208,6 +208,11 @@ public final class UnsafeRowWriter extends UnsafeWriter {
         BitSetMethods.set(getBuffer(), startingOffset, ordinal);
         // keep the offset for future update
         setOffsetAndSize(ordinal, 0);
+      } else if (input.isCompact()) {
+        // Write the unscaled Long directly, in the same bytes BigInteger.toByteArray() returns.
+        final int numBytes =
+          writeCompactUnscaledBytes(getBuffer(), cursor(), input.toUnscaledLong());
+        setOffsetAndSize(ordinal, numBytes);
       } else {
         final byte[] bytes = input.toJavaBigDecimal().unscaledValue().toByteArray();
         final int numBytes = bytes.length;
@@ -222,6 +227,23 @@ public final class UnsafeRowWriter extends UnsafeWriter {
       // move the cursor forward.
       increaseCursor(16);
     }
+  }
+
+  /**
+   * Writes `unscaled` as the minimal big-endian two's-complement bytes that
+   * `BigInteger.valueOf(unscaled).toByteArray()` would return, which is how decimals with
+   * precision > 18 are encoded, and returns the number of bytes written (1 to 8).
+   */
+  public static int writeCompactUnscaledBytes(Object baseObject, long address, long unscaled) {
+    // BigInteger's bitLength() of `unscaled`, plus one sign bit, rounded up to whole bytes.
+    final int bitLength = 64 - Long.numberOfLeadingZeros(unscaled < 0 ? ~unscaled : unscaled);
+    final int numBytes = (bitLength >> 3) + 1;
+    long remaining = unscaled;
+    for (int i = numBytes - 1; i >= 0; i--) {
+      Platform.putByte(baseObject, address + i, (byte) remaining);
+      remaining >>= 8;
+    }
+    return numBytes;
   }
 
   // The `writeNullable` family collapses the common codegen pattern
