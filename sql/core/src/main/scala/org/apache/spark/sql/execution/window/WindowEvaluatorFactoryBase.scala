@@ -22,12 +22,12 @@ import scala.collection.mutable.ArrayBuffer
 
 import org.apache.spark.{SparkException, TaskContext}
 import org.apache.spark.sql.catalyst.InternalRow
-import org.apache.spark.sql.catalyst.expressions.{Add, AggregateWindowFunction, Ascending, Attribute, BoundReference, CurrentRow, DateAdd, DateAddYMInterval, DecimalAddNoOverflowCheck, Descending, Expression, ExtractANSIIntervalDays, FrameLessOffsetWindowFunction, FrameType, IdentityProjection, IntegerLiteral, MutableProjection, NamedExpression, OffsetWindowFunction, PythonFuncExpression, RangeFrame, RowFrame, RowOrdering, SortOrder, SpecifiedWindowFrame, TimestampAddInterval, TimestampAddYMInterval, UnaryMinus, UnboundedFollowing, UnboundedPreceding, UnsafeProjection, WindowExpression}
+import org.apache.spark.sql.catalyst.expressions.{Add, AggregateWindowFunction, Ascending, Attribute, BoundReference, Cast, CurrentRow, DateAdd, DateAddYMInterval, DecimalAddNoOverflowCheck, Descending, Expression, ExtractANSIIntervalDays, FrameLessOffsetWindowFunction, FrameType, IdentityProjection, IntegerLiteral, Literal, MutableProjection, NamedExpression, NullsFirst, OffsetWindowFunction, PythonFuncExpression, RangeFrame, RowFrame, RowOrdering, SortOrder, SpecifiedWindowFrame, TimestampAddInterval, TimestampAddYMInterval, UnaryMinus, UnboundedFollowing, UnboundedPreceding, UnsafeProjection, WindowExpression}
 import org.apache.spark.sql.catalyst.expressions.aggregate.{AggregateExpression, DeclarativeAggregate, Max, Min}
 import org.apache.spark.sql.errors.QueryExecutionErrors
 import org.apache.spark.sql.execution.metric.SQLMetric
 import org.apache.spark.sql.internal.SQLConf
-import org.apache.spark.sql.types.{CalendarIntervalType, DateType, DayTimeIntervalType, DecimalType, IntegerType, TimestampNTZType, TimestampType, YearMonthIntervalType}
+import org.apache.spark.sql.types.{CalendarIntervalType, DateType, DayTimeIntervalType, DecimalType, IntegerType, IntegralType, LongType, TimestampNTZType, TimestampType, YearMonthIntervalType}
 import org.apache.spark.sql.types.DayTimeIntervalType.DAY
 import org.apache.spark.util.collection.Utils
 
@@ -116,6 +116,19 @@ trait WindowEvaluatorFactoryBase {
         val ordering = RowOrdering.create(orderSpec, childOutput)
         RangeBoundOrdering(ordering, IdentityProjection, IdentityProjection)
 
+      case (RangeFrame, offset: Expression) if orderSpec.size == 1 &&
+          orderSpec.head.dataType.isInstanceOf[IntegralType] &&
+          offset.dataType.isInstanceOf[IntegralType] && offset.eval() != null =>
+        // Compare the values with their bounds exactly, instead of computing the bounds in the
+        // type of the order expression, where they could overflow.
+        val sortExpr = orderSpec.head
+        val current = MutableProjection.create(Cast(sortExpr.child, LongType) :: Nil, childOutput)
+        IntegralRangeBoundOrdering(
+          current,
+          offset.eval().asInstanceOf[Number].longValue(),
+          ascending = sortExpr.direction == Ascending,
+          nullsFirst = sortExpr.nullOrdering == NullsFirst)
+
       case (RangeFrame, offset: Expression) if orderSpec.size == 1 =>
         // Use only the first order expression when the offset is non-null.
         val sortExpr = orderSpec.head
@@ -144,6 +157,9 @@ trait WindowEvaluatorFactoryBase {
             TimestampAddInterval(expr, boundOffset, Some(timeZone))
           case (d: DecimalType, _: DecimalType) => DecimalAddNoOverflowCheck(expr, boundOffset, d)
           case (a, b) if a == b => Add(expr, boundOffset)
+          // A NULL integral offset can be of a wider type than the order expression. Like any
+          // NULL offset, it makes the bound NULL.
+          case (a: IntegralType, _: IntegralType) => Add(expr, Cast(boundOffset, a))
         }
         val bound = MutableProjection.create(boundExpr :: Nil, childOutput)
 
@@ -169,8 +185,26 @@ trait WindowEvaluatorFactoryBase {
     type ExpressionBuffer = mutable.Buffer[Expression]
     val framedFunctions = mutable.Map.empty[FrameKey, (ExpressionBuffer, ExpressionBuffer)]
 
+    // The integral offsets of a range frame ordered by an integral expression are not cast to the
+    // type of the order expression, and are only used by their values (see
+    // `createBoundOrdering`). Key the frames by these values, so that equal frames share a frame
+    // when their offsets have different integral types.
+    def boundaryKey(frameType: FrameType, boundary: Expression): Expression = boundary match {
+      case b if frameType == RangeFrame && orderSpec.size == 1 &&
+          orderSpec.head.dataType.isInstanceOf[IntegralType] &&
+          b.dataType.isInstanceOf[IntegralType] && b.foldable =>
+        Literal.create(b.eval() match {
+          case n: Number => n.longValue()
+          case null => null
+        }, LongType)
+      case b => b
+    }
+
     // Add a function and its function to the map for a given frame.
-    def collect(tpe: String, fr: SpecifiedWindowFrame, e: Expression, fn: Expression): Unit = {
+    def collect(tpe: String, frame: SpecifiedWindowFrame, e: Expression, fn: Expression): Unit = {
+      val fr = frame.copy(
+        lower = boundaryKey(frame.frameType, frame.lower),
+        upper = boundaryKey(frame.frameType, frame.upper))
       val key = fn match {
         // This branch is used for Lead/Lag to support ignoring null and optimize the performance
         // for NthValue ignoring null.

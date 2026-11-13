@@ -2101,6 +2101,53 @@ class TypeCoercionSuite extends TypeCoercionSuiteBase {
     )
   }
 
+  test("SPARK-61009: do not narrow integral range frame boundaries to an integral order type") {
+    // An integral boundary that is wider than the integral order type keeps its type.
+    ruleTest(WindowFrameCoercion,
+      windowSpec(
+        Seq(UnresolvedAttribute("a")),
+        Seq(SortOrder(Literal(1.toByte), Ascending)),
+        SpecifiedWindowFrame(RangeFrame, Literal(-200), Literal(1))),
+      windowSpec(
+        Seq(UnresolvedAttribute("a")),
+        Seq(SortOrder(Literal(1.toByte), Ascending)),
+        SpecifiedWindowFrame(RangeFrame, Literal(-200), Literal(1)))
+    )
+    // Both boundaries take the widest of the integral types.
+    ruleTest(WindowFrameCoercion,
+      windowSpec(
+        Seq(UnresolvedAttribute("a")),
+        Seq(SortOrder(Literal(1), Ascending)),
+        SpecifiedWindowFrame(RangeFrame, Literal(-3000000000L), Literal(1.toShort))),
+      windowSpec(
+        Seq(UnresolvedAttribute("a")),
+        Seq(SortOrder(Literal(1), Ascending)),
+        SpecifiedWindowFrame(
+          RangeFrame,
+          Literal(-3000000000L),
+          Cast(Literal(1.toShort), LongType).withTimeZone(conf.sessionLocalTimeZone)
+        )
+      )
+    )
+    // A frame with a boundary that is not integral is coerced as before: both boundaries are
+    // cast to the order type.
+    ruleTest(WindowFrameCoercion,
+      windowSpec(
+        Seq(UnresolvedAttribute("a")),
+        Seq(SortOrder(Literal(1.toByte), Ascending)),
+        SpecifiedWindowFrame(RangeFrame, Literal(BigDecimal("1.5")), Literal(1))),
+      windowSpec(
+        Seq(UnresolvedAttribute("a")),
+        Seq(SortOrder(Literal(1.toByte), Ascending)),
+        SpecifiedWindowFrame(
+          RangeFrame,
+          Cast(Literal(BigDecimal("1.5")), ByteType).withTimeZone(conf.sessionLocalTimeZone),
+          Cast(Literal(1), ByteType).withTimeZone(conf.sessionLocalTimeZone)
+        )
+      )
+    )
+  }
+
   test("SPARK-29000: skip to handle decimals in ImplicitTypeCasts") {
     ruleTest(TypeCoercion.ImplicitTypeCasts,
       Multiply(CaseWhen(Seq((EqualTo(1, 2), Cast(1, DecimalType(34, 24)))),
