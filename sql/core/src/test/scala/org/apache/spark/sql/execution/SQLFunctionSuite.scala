@@ -579,10 +579,13 @@ class SQLFunctionSuite extends SharedSparkSession {
   }
 
   test("SPARK-60806: a temp function is not a reference when a persistent one owns the call") {
-    withUserDefinedFunction("caller" -> false, "caller2" -> false) {
-      withView("v", "v2") {
+    withUserDefinedFunction("caller" -> false, "caller2" -> false, "caller_tbl" -> false,
+        "caller2_tbl" -> false) {
+      withView("v", "v2", "v_tbl", "v2_tbl") {
         sql("CREATE FUNCTION pf() RETURNS INT RETURN 7")
         sql("CREATE TEMPORARY FUNCTION pf() RETURNS INT RETURN 42")
+        sql("CREATE FUNCTION pf_tvf() RETURNS TABLE (a INT) RETURN SELECT 7")
+        sql("CREATE TEMPORARY FUNCTION pf_tvf() RETURNS TABLE (a INT) RETURN SELECT 42")
         try {
           def check(caller: String, view: String): Unit = {
             checkAnswer(sql("SELECT pf()"), Row(7))
@@ -590,6 +593,12 @@ class SQLFunctionSuite extends SharedSparkSession {
             checkAnswer(sql(s"SELECT $caller()"), Row(7))
             sql(s"CREATE VIEW $view AS SELECT pf() AS a")
             checkAnswer(sql(s"SELECT * FROM $view"), Row(7))
+            checkAnswer(sql("SELECT * FROM pf_tvf()"), Row(7))
+            sql(s"CREATE FUNCTION ${caller}_tbl() RETURNS TABLE (a INT) " +
+              "RETURN SELECT * FROM pf_tvf()")
+            checkAnswer(sql(s"SELECT * FROM ${caller}_tbl()"), Row(7))
+            sql(s"CREATE VIEW ${view}_tbl AS SELECT * FROM pf_tvf()")
+            checkAnswer(sql(s"SELECT * FROM ${view}_tbl"), Row(7))
           }
           withSQLConf(SQLConf.SESSION_FUNCTION_RESOLUTION_ORDER.key -> "last") {
             check("caller", "v")
@@ -605,6 +614,8 @@ class SQLFunctionSuite extends SharedSparkSession {
         } finally {
           sql("DROP TEMPORARY FUNCTION IF EXISTS pf")
           sql("DROP FUNCTION IF EXISTS pf")
+          sql("DROP TEMPORARY FUNCTION IF EXISTS pf_tvf")
+          sql("DROP FUNCTION IF EXISTS pf_tvf")
         }
       }
     }
@@ -761,6 +772,127 @@ class SQLFunctionSuite extends SharedSparkSession {
     }
   }
 
+  test("SPARK-60806: the cycle check follows an owner outside the current schema") {
+    withDatabase("other_db") {
+      sql("CREATE DATABASE other_db")
+      withSQLConf(SQLConf.PATH_ENABLED.key -> "true") {
+        try {
+          sql("SET PATH = spark_catalog.other_db, system.session, system.builtin")
+          sql("CREATE FUNCTION other_db.a() RETURNS INT RETURN 1")
+          sql("CREATE FUNCTION other_db.pf() RETURNS INT RETURN a()")
+          sql("CREATE FUNCTION other_db.a_tvf() RETURNS TABLE (x INT) RETURN SELECT 1")
+          sql("CREATE FUNCTION other_db.pf_tvf() RETURNS TABLE (x INT) " +
+            "RETURN SELECT * FROM a_tvf()")
+          sql("CREATE TEMPORARY FUNCTION pf() RETURNS INT RETURN 42")
+          sql("CREATE TEMPORARY FUNCTION pf_tvf() RETURNS TABLE (x INT) RETURN SELECT 42")
+          Seq(
+            "a() RETURNS INT RETURN pf()" -> Seq("a", "pf", "a"),
+            "a_tvf() RETURNS TABLE (x INT) RETURN SELECT * FROM pf_tvf()" ->
+              Seq("a_tvf", "pf_tvf", "a_tvf")
+          ).foreach { case (signatureAndBody, path) =>
+            checkError(
+              exception = intercept[AnalysisException] {
+                sql(s"CREATE OR REPLACE FUNCTION other_db.$signatureAndBody")
+              },
+              condition = "CYCLIC_FUNCTION_REFERENCE",
+              parameters = Map("path" -> path.map("spark_catalog.other_db." + _).mkString(" -> ")))
+          }
+          checkAnswer(sql("SELECT other_db.a()"), Row(1))
+          checkAnswer(sql("SELECT * FROM other_db.a_tvf()"), Row(1))
+        } finally {
+          sql("SET PATH = DEFAULT_PATH")
+          sql("DROP TEMPORARY FUNCTION IF EXISTS pf")
+          sql("DROP TEMPORARY FUNCTION IF EXISTS pf_tvf")
+        }
+      }
+    }
+  }
+
+  test("SPARK-60806: the cycle check resolves a nested body under its own SQL path") {
+    def cycle(names: String*): String = names.mkString(" -> ")
+    withDatabase("db1") {
+      withUserDefinedFunction("a" -> false, "g" -> false, "h" -> false) {
+        withSQLConf(SQLConf.PATH_ENABLED.key -> "true") {
+          try {
+            sql("CREATE DATABASE db1")
+            sql("CREATE FUNCTION a() RETURNS INT RETURN 1")
+            // `g` is created under the default path, so its body binds `default.h`.
+            sql("CREATE FUNCTION h() RETURNS INT RETURN 1")
+            sql("CREATE FUNCTION g() RETURNS INT RETURN h()")
+            sql("CREATE FUNCTION db1.h() RETURNS INT RETURN a()")
+            sql("SET PATH = spark_catalog.db1, spark_catalog.default, system.builtin, " +
+              "system.session")
+            // Only `db1.h`, which the session path lists first, calls back `a`: no cycle.
+            sql("CREATE OR REPLACE FUNCTION a() RETURNS INT RETURN g() + 1")
+            checkAnswer(sql("SELECT a()"), Row(2))
+            // The mirrored setup: only the `h` that `g` binds calls back `a`.
+            sql("SET PATH = DEFAULT_PATH")
+            sql("CREATE OR REPLACE FUNCTION a() RETURNS INT RETURN 1")
+            sql("CREATE OR REPLACE FUNCTION h() RETURNS INT RETURN a()")
+            sql("CREATE OR REPLACE FUNCTION db1.h() RETURNS INT RETURN 1")
+            sql("SET PATH = spark_catalog.db1, spark_catalog.default, system.builtin, " +
+              "system.session")
+            checkError(
+              exception = intercept[AnalysisException] {
+                sql("CREATE OR REPLACE FUNCTION default.a() RETURNS INT RETURN g()")
+              },
+              condition = "CYCLIC_FUNCTION_REFERENCE",
+              parameters = Map("path" -> cycle("spark_catalog.default.a",
+                "spark_catalog.default.g", "spark_catalog.default.h", "spark_catalog.default.a")))
+            checkAnswer(sql("SELECT default.a()"), Row(1))
+          } finally {
+            sql("SET PATH = DEFAULT_PATH")
+          }
+        }
+      }
+    }
+  }
+
+  test("SPARK-60806: the cycle check binds a nested body's built-in under its own SQL path") {
+    withUserDefinedFunction("a" -> false, "g" -> false) {
+      withSQLConf(SQLConf.PATH_ENABLED.key -> "true") {
+        try {
+          sql("CREATE FUNCTION a() RETURNS INT RETURN 1")
+          sql("SET PATH = system.builtin, system.session, spark_catalog.default")
+          sql("CREATE FUNCTION g() RETURNS INT RETURN abs(-1)")
+          sql("CREATE TEMPORARY FUNCTION abs(x INT) RETURNS INT RETURN a()")
+          sql("SET PATH = system.session, system.builtin, spark_catalog.default")
+          // The temp `abs` calls back `a`, but `g`'s stored path binds the built-in.
+          sql("CREATE OR REPLACE FUNCTION a() RETURNS INT RETURN g() + 1")
+          checkAnswer(sql("SELECT spark_catalog.default.a()"), Row(2))
+        } finally {
+          sql("SET PATH = DEFAULT_PATH")
+          sql("DROP TEMPORARY FUNCTION IF EXISTS abs")
+        }
+      }
+    }
+  }
+
+  test("SPARK-60806: the cycle check resolves a nested body under its own configs") {
+    withUserDefinedFunction("a" -> false, "g" -> false, "h" -> false) {
+      sql("CREATE FUNCTION a() RETURNS INT RETURN 1")
+      sql("CREATE FUNCTION h() RETURNS INT RETURN 2")
+      sql("CREATE FUNCTION g() RETURNS INT RETURN h()")
+      try {
+        sql("CREATE TEMPORARY FUNCTION h() RETURNS INT RETURN a()")
+        withSQLConf(SQLConf.SESSION_FUNCTION_RESOLUTION_ORDER.key -> "last") {
+          // `g`'s body keeps the default order, so it binds the temp `h`, which calls back `a`.
+          checkAnswer(sql("SELECT g()"), Row(1))
+          checkError(
+            exception = intercept[AnalysisException] {
+              sql("CREATE OR REPLACE FUNCTION a() RETURNS INT RETURN g()")
+            },
+            condition = "CYCLIC_FUNCTION_REFERENCE",
+            parameters = Map("path" ->
+              "spark_catalog.default.a -> spark_catalog.default.g -> h -> spark_catalog.default.a"))
+          checkAnswer(sql("SELECT a()"), Row(1))
+        }
+      } finally {
+        sql("DROP TEMPORARY FUNCTION IF EXISTS h")
+      }
+    }
+  }
+
   test("SPARK-60806: temp functions bound only during analysis are rejected") {
     withUserDefinedFunction("temp_fn" -> true, "temp_tvf" -> true, "temp_scala" -> true) {
       sql("CREATE TEMPORARY FUNCTION temp_fn() RETURNS INT RETURN 1")
@@ -816,6 +948,19 @@ class SQLFunctionSuite extends SharedSparkSession {
         sql("CREATE TEMPORARY FUNCTION callee() RETURNS INT RETURN 2")
         sql("CREATE FUNCTION caller() RETURNS INT RETURN inner_fn()")
         sql("CREATE FUNCTION caller_tbl() RETURNS TABLE (a INT) RETURN SELECT * FROM callee_tbl()")
+        // A view owns the dependencies of the functions it expands.
+        withView("v", "tv") {
+          checkError(
+            exception = intercept[AnalysisException] {
+              sql("CREATE VIEW v AS SELECT inner_fn() AS a")
+            },
+            condition = "INVALID_TEMP_OBJ_REFERENCE",
+            parameters = Map("obj" -> "VIEW", "objName" -> "`spark_catalog`.`default`.`v`",
+              "tempObj" -> "FUNCTION", "tempObjName" -> "`callee`"))
+          sql("CREATE TEMPORARY VIEW tv AS SELECT inner_fn() AS a")
+          assert(spark.sessionState.catalog.getTempViewOrPermanentTableMetadata(
+            TableIdentifier("tv")).viewReferredTempFunctionNames === Seq("callee"))
+        }
         sql("DROP TEMPORARY FUNCTION callee")
         checkAnswer(sql("SELECT caller()"), Row(1))
         checkAnswer(sql("SELECT * FROM caller_tbl()"), Row(1))

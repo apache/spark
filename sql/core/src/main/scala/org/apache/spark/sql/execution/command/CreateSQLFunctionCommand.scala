@@ -17,13 +17,15 @@
 
 package org.apache.spark.sql.execution.command
 
+import scala.collection.mutable
+
 import org.apache.spark.SparkException
 import org.apache.spark.sql.{AnalysisException, Row, SparkSession}
 import org.apache.spark.sql.catalyst.FunctionIdentifier
 import org.apache.spark.sql.catalyst.analysis.{withPosition, AnalysisContext, Analyzer, SQLFunctionExpression, SQLFunctionNode, SQLScalarFunction, SQLTableFunction, UnresolvedAlias, UnresolvedAttribute, UnresolvedFunction, UnresolvedRelation, UnresolvedTableValuedFunction}
 import org.apache.spark.sql.catalyst.catalog.{SessionCatalog, SQLFunction, UserDefinedFunction, UserDefinedFunctionErrors}
 import org.apache.spark.sql.catalyst.catalog.UserDefinedFunction._
-import org.apache.spark.sql.catalyst.expressions.{Alias, Cast, Expression, Generator, LateralSubquery, Literal, ScalarSubquery, SubqueryExpression, UnresolvedJsonConstructor, WindowExpression}
+import org.apache.spark.sql.catalyst.expressions.{Alias, Cast, Expression, ExpressionInfo, Generator, LateralSubquery, Literal, ScalarSubquery, SubqueryExpression, UnresolvedJsonConstructor, WindowExpression}
 import org.apache.spark.sql.catalyst.expressions.aggregate.AggregateExpression
 import org.apache.spark.sql.catalyst.plans.Inner
 import org.apache.spark.sql.catalyst.plans.logical.{LateralJoin, LocalRelation, LogicalPlan, OneRowRelation, Project, Range, UnresolvedWith, View}
@@ -405,63 +407,100 @@ case class CreateSQLFunctionCommand(
       identifier: FunctionIdentifier,
       plan: LogicalPlan): Unit = {
 
-    // Look up an unqualified call that a persistent function owns by its qualified name, since
-    // the unqualified lookup tries built-in and temp functions first. A fresh context reads the
-    // current SQL path: a CREATE FUNCTION that a procedure issues runs inside the CALL's analysis
-    // pass, whose cached path may predate a SET PATH.
-    def lookupIdentifier(nameParts: Seq[String]): FunctionIdentifier = {
+    // The owners of unqualified calls, keyed by the walked body (None for the body under
+    // creation) and the name: each body resolves under its own stored path and configs.
+    val owners = mutable.HashMap.empty[(Option[FunctionIdentifier], String), Option[Seq[String]]]
+
+    // The identifier an unqualified call binds, and whether it is a built-in or temp one. Look
+    // it up by the owner the analysis context in effect gives, since the bare-name lookup orders
+    // built-in and temp functions by the session's path.
+    def bindIdentifier(
+        nameParts: Seq[String],
+        body: Option[FunctionIdentifier],
+        tableFunction: Boolean): (FunctionIdentifier, Boolean) = {
       val owner = if (nameParts.length == 1) {
-        AnalysisContext.withNewAnalysisContext(analyzer.unqualifiedFunctionOwner(nameParts.head))
+        owners.getOrElseUpdate(
+          (body, nameParts.head), analyzer.unqualifiedFunctionOwner(nameParts.head))
       } else {
         None
       }
       owner match {
         case Some(Seq(catalogName, db, funcName))
             if catalogName.equalsIgnoreCase(CatalogManager.SESSION_CATALOG_NAME) =>
-          FunctionIdentifier(funcName, Some(db), Some(CatalogManager.SESSION_CATALOG_NAME))
-        case _ => nameParts.asFunctionIdentifier
+          (FunctionIdentifier(funcName, Some(db), Some(CatalogManager.SESSION_CATALOG_NAME)),
+            false)
+        case Some(candidate) => catalog.identifierFromSystemNameParts(candidate)
+          .filter(catalog.functionExistsByIdentifier(_, tableFunction))
+          .map(_ -> true)
+          .getOrElse(nameParts.asFunctionIdentifier -> false)
+        case None => (nameParts.asFunctionIdentifier, false)
       }
     }
 
-    def checkPlan(plan: LogicalPlan, path: Seq[FunctionIdentifier]): Unit = {
+    def lookupInfo(
+        funcId: FunctionIdentifier, system: Boolean, tableFunction: Boolean): ExpressionInfo =
+      if (system) catalog.lookupFunctionInfoByIdentifier(funcId, tableFunction).get
+      else catalog.lookupFunctionInfo(funcId)
+
+    // Walk an existing function's body under the configs and context analysis uses for it.
+    def withFunctionContext[A](function: SQLFunction)(f: => A): A = {
+      val conf = Analyzer.buildSQLFunctionConf(
+        function, applySessionOverrides = true, alwaysSetAnsiValue = false)
+      SQLConf.withExistingConf(conf)(AnalysisContext.withAnalysisContext(function)(f))
+    }
+
+    def checkPlan(
+        plan: LogicalPlan,
+        path: Seq[FunctionIdentifier],
+        body: Option[FunctionIdentifier]): Unit = {
       plan.foreach {
         case u @ UnresolvedTableValuedFunction(nameParts, arguments, _) =>
-          val funcId = lookupIdentifier(nameParts)
-          val info = catalog.lookupFunctionInfo(funcId)
+          val (funcId, system) = bindIdentifier(nameParts, body, tableFunction = true)
+          val info = lookupInfo(funcId, system, tableFunction = true)
           if (isSQLFunction(info.getClassName)) {
             val f = withPosition(u) {
-              catalog.lookupTableFunction(funcId, arguments).asInstanceOf[SQLTableFunction]
+              (if (system) catalog.resolveTableFunctionByIdentifier(funcId, arguments).get
+               else catalog.lookupTableFunction(funcId, arguments)).asInstanceOf[SQLTableFunction]
             }
             // Check cyclic reference using qualified function names.
             val newPath = path :+ f.function.name
             if (f.function.name == name) {
               throw UserDefinedFunctionErrors.cyclicFunctionReference(newPath.mkString(" -> "))
             }
-            val plan = catalog.makeSQLTableFunctionPlan(f.name, f.function, f.inputs, f.output)
-            checkPlan(plan, newPath)
+            withFunctionContext(f.function) {
+              val plan = catalog.makeSQLTableFunctionPlan(f.name, f.function, f.inputs, f.output)
+              checkPlan(plan, newPath, Some(f.function.name))
+            }
         }
         case p: LogicalPlan =>
-          p.expressions.foreach(checkExpression(_, path))
+          p.expressions.foreach(checkExpression(_, path, body))
       }
     }
 
-    def checkExpression(expression: Expression, path: Seq[FunctionIdentifier]): Unit = {
+    def checkExpression(
+        expression: Expression,
+        path: Seq[FunctionIdentifier],
+        body: Option[FunctionIdentifier]): Unit = {
       expression.foreach {
-        case s: SubqueryExpression => checkPlan(s.plan, path)
-        case u: UnresolvedFunction => checkFunction(u, path)
+        case s: SubqueryExpression => checkPlan(s.plan, path, body)
+        case u: UnresolvedFunction => checkFunction(u, path, body)
         // A routed JSON constructor is a call a SQL function may own.
         case j: UnresolvedJsonConstructor if j.routeThroughResolution =>
-          checkFunction(j.toUnresolvedFunction, path)
+          checkFunction(j.toUnresolvedFunction, path, body)
         case _ =>
       }
     }
 
-    def checkFunction(u: UnresolvedFunction, path: Seq[FunctionIdentifier]): Unit = {
-      val funcId = lookupIdentifier(u.nameParts)
-      val info = catalog.lookupFunctionInfo(funcId)
+    def checkFunction(
+        u: UnresolvedFunction,
+        path: Seq[FunctionIdentifier],
+        body: Option[FunctionIdentifier]): Unit = {
+      val (funcId, system) = bindIdentifier(u.nameParts, body, tableFunction = false)
+      val info = lookupInfo(funcId, system, tableFunction = false)
       if (isSQLFunction(info.getClassName)) {
         val f = withPosition(u) {
-          catalog.lookupFunction(funcId, u.arguments).asInstanceOf[SQLFunctionExpression]
+          (if (system) catalog.resolveScalarFunctionByIdentifier(funcId, u.arguments).get
+           else catalog.lookupFunction(funcId, u.arguments)).asInstanceOf[SQLFunctionExpression]
         }
         // Check cyclic reference using qualified function names.
         val newPath = path :+ f.function.name
@@ -469,11 +508,13 @@ case class CreateSQLFunctionCommand(
           throw UserDefinedFunctionErrors.cyclicFunctionReference(newPath.mkString(" -> "))
         }
         val plan = catalog.makeSQLFunctionPlan(f.name, f.function, f.inputs)
-        checkPlan(plan, newPath)
+        withFunctionContext(f.function)(checkPlan(plan, newPath, Some(f.function.name)))
       }
     }
 
-    checkPlan(plan, Seq(identifier))
+    // A fresh context reads the current SQL path: a CREATE FUNCTION that a procedure issues runs
+    // inside the CALL's analysis pass, whose cached path may predate a SET PATH.
+    AnalysisContext.withNewAnalysisContext(checkPlan(plan, Seq(identifier), None))
   }
 
   /**

@@ -355,9 +355,10 @@ object AnalysisContext {
 
   /**
    * Wraps `rule` so that a parameter default inserted by named-argument filling
-   * ([[SQLFunction.INSERTED_PARAMETER_DEFAULT]]) records temp references as the called function's
-   * body does: in fresh sets unless `shareTempReferencesWithNestedSQLFunctions` is set. Unlike a
-   * default that a positional call omits, which the body pads, it resolves in the caller's plan.
+   * ([[SQLFunction.INSERTED_PARAMETER_DEFAULT]]) records the temporary functions it binds as the
+   * called function's body does: in a fresh set unless `shareTempReferencesWithNestedSQLFunctions`
+   * is set. Unlike a default that a positional call omits, which the body pads, it resolves in the
+   * caller's plan. A parameter default cannot read a session variable.
    */
   def withTempReferencesOfInsertedDefault(
       rule: PartialFunction[Expression, Expression]): PartialFunction[Expression, Expression] =
@@ -370,9 +371,7 @@ object AnalysisContext {
             originContext.shareTempReferencesWithNestedSQLFunctions) {
           rule.applyOrElse(e, default)
         } else {
-          val context = originContext.copy(
-            referredTempFunctionNames = mutable.Set.empty,
-            referredTempVariableNamesUnderIdentifier = mutable.LinkedHashSet.empty)
+          val context = originContext.copy(referredTempFunctionNames = mutable.Set.empty)
           context.setSinglePassResolverBridgeState(originContext.getSinglePassResolverBridgeState)
           set(context)
           try rule.applyOrElse(e, default) finally { set(originContext) }
