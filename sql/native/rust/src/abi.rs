@@ -887,7 +887,8 @@ mod tests {
             added,
         };
         // As from Spark 4.4.0, from the release that appended the field, and from a later one.
-        assert_eq!(read(&[16, 5]).unwrap(), grown(16, 0));
+        // The -1 after the structure from Spark 4.4.0 stands for the memory that follows it.
+        assert_eq!(read(&[16, 5, -1]).unwrap(), grown(16, 0));
         assert_eq!(read(&[24, 5, 7]).unwrap(), grown(24, 7));
         assert_eq!(read(&[32, 5, 7, 9]).unwrap(), grown(32, 7));
         assert_eq!(
@@ -895,13 +896,17 @@ mod tests {
             "Grown has 8 bytes, fewer than in version 1 of the native ABI"
         );
 
-        // The last value stands for the memory after a structure from Spark 4.4.0.
+        // The -1 stands for the memory after the structure from Spark 4.4.0 and for the field
+        // of a later release that the binding does not know.
         let mut structure = [16_i64, 0, -1];
         unsafe { fill(structure.as_mut_ptr().cast::<Grown>(), &grown(16, 7)) }.unwrap();
         assert_eq!(structure, [16, 5, -1]);
         let mut structure = [24_i64, 0, 0];
         unsafe { fill(structure.as_mut_ptr().cast::<Grown>(), &grown(24, 7)) }.unwrap();
         assert_eq!(structure, [24, 5, 7]);
+        let mut structure = [32_i64, 0, 0, -1];
+        unsafe { fill(structure.as_mut_ptr().cast::<Grown>(), &grown(32, 7)) }.unwrap();
+        assert_eq!(structure, [32, 5, 7, -1]);
     }
 
     #[test]
