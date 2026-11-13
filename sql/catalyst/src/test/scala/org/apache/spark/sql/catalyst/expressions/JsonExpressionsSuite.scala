@@ -57,6 +57,19 @@ class JsonExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
     GenerateUnsafeProjection.generate(GetJsonObject(Literal("\"quote"), Literal("\"quote")) :: Nil)
   }
 
+  test("SPARK-60785: indexed JSON null returns SQL null") {
+    checkEvaluation(GetJsonObject(Literal("[null,1]"), Literal("$[0]")), null)
+    checkEvaluation(
+      GetJsonObject(Literal("""{"a":[null]}"""), Literal("$.a[0]")),
+      null)
+    checkEvaluation(GetJsonObject(Literal("""["null"]"""), Literal("$[0]")), "null")
+    checkEvaluation(GetJsonObject(Literal("[null,1]"), Literal("$[1]")), "1")
+
+    checkEvaluation(
+      MultiGetJsonObject(Literal("""[null,"null"]"""), Seq("$[0]", "$[1]")),
+      InternalRow(null, UTF8String.fromString("null")))
+  }
+
   test("$.store.bicycle") {
     checkEvaluation(
       GetJsonObject(Literal(json), Literal("$.store.bicycle")),
