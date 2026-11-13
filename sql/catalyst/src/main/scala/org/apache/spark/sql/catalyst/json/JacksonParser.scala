@@ -58,7 +58,10 @@ class JacksonParser(
     // when queried from a session with the flag off. `None` falls back to the live conf: JSON
     // file scans build the parser with `None`, so the key check follows the executing session's
     // flag like other scan-time options (a scan under a persisted view resolves it the same way).
-    charVarcharStandardSemanticsOverride: Option[Boolean] = None) extends Logging {
+    charVarcharStandardSemanticsOverride: Option[Boolean] = None,
+    // from_json passes its captured default, including None. File scans use the current SQLConf.
+    defaultEnableDateTimeParsingFallback: Option[Boolean] =
+      SQLConf.get.jsonEnableDateTimeParsingFallback) extends Logging {
 
   import JacksonUtils._
   import com.fasterxml.jackson.core.JsonToken._
@@ -106,14 +109,14 @@ class JacksonParser(
   // For more information, see comments for "enableDateTimeParsingFallback" option in JSONOptions.
   private val enableParsingFallbackForTimestampType =
     options.enableDateTimeParsingFallback
-      .orElse(SQLConf.get.jsonEnableDateTimeParsingFallback)
+      .orElse(defaultEnableDateTimeParsingFallback)
       .getOrElse {
         SQLConf.get.legacyTimeParserPolicy == LegacyBehaviorPolicy.LEGACY ||
           options.timestampFormatInRead.isEmpty
       }
   private val enableParsingFallbackForDateType =
     options.enableDateTimeParsingFallback
-      .orElse(SQLConf.get.jsonEnableDateTimeParsingFallback)
+      .orElse(defaultEnableDateTimeParsingFallback)
       .getOrElse {
         SQLConf.get.legacyTimeParserPolicy == LegacyBehaviorPolicy.LEGACY ||
           options.dateFormatInRead.isEmpty

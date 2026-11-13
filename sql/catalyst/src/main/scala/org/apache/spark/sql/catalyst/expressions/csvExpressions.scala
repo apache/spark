@@ -253,7 +253,9 @@ case class SchemaOfCsv(
 case class StructsToCsv(
      options: Map[String, String],
      child: Expression,
-     timeZoneId: Option[String] = None)
+     timeZoneId: Option[String] = None,
+     nullValueWrittenAsQuotedEmptyString: Boolean =
+       SQLConf.get.getConf(SQLConf.LEGACY_NULL_VALUE_WRITTEN_AS_QUOTED_EMPTY_STRING_CSV))
   extends UnaryExpression
   with TimeZoneAwareExpression
   with DefaultStringProducingExpression
@@ -303,7 +305,8 @@ case class StructsToCsv(
 
   @transient
   lazy val gen = new UnivocityGenerator(
-    inputSchema, writer, new CSVOptions(options, columnPruning = true, timeZoneId.get))
+    inputSchema, writer, new CSVOptions(options, columnPruning = true, timeZoneId.get),
+    defaultNullAsEmptyString = nullValueWrittenAsQuotedEmptyString)
 
   // This converts rows to the CSV output according to the given schema.
   @transient
@@ -320,6 +323,8 @@ case class StructsToCsv(
   override def inputTypes: Seq[AbstractDataType] = StructType :: Nil
 
   override def prettyName: String = "to_csv"
+
+  override protected def stringArgs: Iterator[Any] = super.stringArgs.take(3)
 
   override protected def withNewChildInternal(newChild: Expression): StructsToCsv =
     copy(child = newChild)

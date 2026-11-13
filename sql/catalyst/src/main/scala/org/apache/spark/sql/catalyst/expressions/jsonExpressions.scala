@@ -2152,7 +2152,9 @@ case class JsonToStructs(
     // a view's CHAR/VARCHAR map-key semantics tied to its creation-time flag rather than the
     // caller's session setting. (`variantAllowDuplicateKeys` is only captured, not threaded: the
     // parser still reads that one live from `SQLConf.get`.)
-    charVarcharStandardSemantics: Boolean = SQLConf.get.charVarcharStandardSemantics)
+    charVarcharStandardSemantics: Boolean = SQLConf.get.charVarcharStandardSemantics,
+    // Capture the optional default while the view or SQL function's saved SQLConf is active.
+    enableDateTimeParsingFallback: Option[Boolean] = SQLConf.get.jsonEnableDateTimeParsingFallback)
   extends UnaryExpression
   with TimeZoneAwareExpression
   with CodegenFallback
@@ -2215,7 +2217,7 @@ case class JsonToStructs(
   @transient
   private lazy val evaluator = new JsonToStructsEvaluator(
     options, nullableSchema, nameOfCorruptRecord, timeZoneId, variantAllowDuplicateKeys,
-    charVarcharStandardSemantics)
+    charVarcharStandardSemantics, enableDateTimeParsingFallback)
   override def stateful: Boolean = true
 
   override def nullSafeEval(json: Any): Any = {
@@ -2231,6 +2233,8 @@ case class JsonToStructs(
   }
 
   override def prettyName: String = "from_json"
+
+  override protected def stringArgs: Iterator[Any] = super.stringArgs.take(6)
 
   override protected def withNewChildInternal(newChild: Expression): JsonToStructs =
     copy(child = newChild)
@@ -2280,7 +2284,8 @@ object JsonToStructs {
 case class StructsToJson(
     options: Map[String, String],
     child: Expression,
-    timeZoneId: Option[String] = None)
+    timeZoneId: Option[String] = None,
+    ignoreNullFields: Boolean = SQLConf.get.jsonGeneratorIgnoreNullFields)
   extends UnaryExpression
   with RuntimeReplaceable
   with ExpectsInputTypes
@@ -2321,11 +2326,15 @@ case class StructsToJson(
 
   override def prettyName: String = "to_json"
 
+  override protected def stringArgs: Iterator[Any] = super.stringArgs.take(3)
+
   override protected def withNewChildInternal(newChild: Expression): StructsToJson =
     copy(child = newChild)
 
   @transient
-  private lazy val evaluator = StructsToJsonEvaluator(options, inputSchema, timeZoneId)
+  private lazy val evaluator = StructsToJsonEvaluator(
+    CaseInsensitiveMap(Map(JSONOptions.IGNORE_NULL_FIELDS -> ignoreNullFields.toString)) ++ options,
+    inputSchema, timeZoneId)
 
   override def replacement: Expression = Invoke(
     Literal.create(evaluator, ObjectType(classOf[StructsToJsonEvaluator])),
@@ -2334,6 +2343,11 @@ case class StructsToJson(
     Seq(child),
     Seq(child.dataType)
   )
+}
+
+object StructsToJson {
+  def unapply(j: StructsToJson): Option[(Map[String, String], Expression, Option[String])] =
+    Some((j.options, j.child, j.timeZoneId))
 }
 
 /**
