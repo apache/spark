@@ -17,16 +17,17 @@
 
 package org.apache.spark.sql.catalyst.util
 
+import org.apache.spark.SparkException
 import org.apache.spark.sql.AnalysisException
-import org.apache.spark.sql.catalyst.analysis.{Analyzer, ExpressionWithUnresolvedIdentifier, StoredExpressionFunctions}
+import org.apache.spark.sql.catalyst.analysis.{Analyzer, ExpressionWithUnresolvedIdentifier, SimpleAnalyzer, StoredExpressionFunctions}
 import org.apache.spark.sql.catalyst.expressions.{Alias, Attribute, Expression, ExprId, NamedExpression}
 import org.apache.spark.sql.catalyst.parser.{CatalystSqlParser, ParseException}
 import org.apache.spark.sql.catalyst.plans.logical.{LocalRelation, LogicalPlan, Project}
 import org.apache.spark.sql.internal.SQLConf
 
 /**
- * Reads the SQL text of a generation expression stored with a table, independently of the
- * settings of the session that reads it.
+ * Reads and analyzes generation expressions stored with a table independently of the writing
+ * session, with a session fallback for SQL text that the fixed settings cannot resolve.
  */
 object StoredExpressionText {
 
@@ -38,24 +39,26 @@ object StoredExpressionText {
    * also one that a function reads while it is built, such as
    * `spark.sql.legacy.negativeIndexInArrayInsert`. With
    * `spark.sql.legacy.useCurrentConfigsForGeneratedColumn`, these are the settings of the session.
-   * Set `useCurrentConfigs` to false for modeled expressions, which always use the fixed settings.
    */
-  def conf(session: SQLConf): SQLConf = conf(session, useCurrentConfigs = true)
-
-  private[sql] def conf(session: SQLConf, useCurrentConfigs: Boolean): SQLConf = {
-    if (useCurrentConfigs && session.useCurrentSQLConfigsForGeneratedColumn) {
+  def conf(session: SQLConf): SQLConf = {
+    if (session.useCurrentSQLConfigsForGeneratedColumn) {
       session.clone()
     } else {
-      val c = new SQLConf
-      Analyzer.retainResolutionConfigsForAnalysis(newConf = c, existingConf = session)
-      c.setConfString(SQLConf.ANSI_ENABLED.key, "true")
-      c.setConfString(SQLConf.SESSION_LOCAL_TIMEZONE.key, session.sessionLocalTimeZone)
-      c.setConfString(SQLConf.CASE_SENSITIVE.key, session.caseSensitiveAnalysis.toString)
-      c.setConf(SQLConf.TIMESTAMP_TYPE, session.getConf(SQLConf.TIMESTAMP_TYPE))
-      c.setConf(
-        SQLConf.DECIMAL_OPERATIONS_ALLOW_PREC_LOSS, session.decimalOperationsAllowPrecisionLoss)
-      c
+      fixedConf(session)
     }
+  }
+
+  /** The fixed ANSI settings, also for modeled expressions when the legacy flag is enabled. */
+  private[sql] def fixedConf(session: SQLConf): SQLConf = {
+    val c = new SQLConf
+    Analyzer.retainResolutionConfigsForAnalysis(newConf = c, existingConf = session)
+    c.setConfString(SQLConf.ANSI_ENABLED.key, "true")
+    c.setConfString(SQLConf.SESSION_LOCAL_TIMEZONE.key, session.sessionLocalTimeZone)
+    c.setConfString(SQLConf.CASE_SENSITIVE.key, session.caseSensitiveAnalysis.toString)
+    c.setConf(SQLConf.TIMESTAMP_TYPE, session.getConf(SQLConf.TIMESTAMP_TYPE))
+    c.setConf(
+      SQLConf.DECIMAL_OPERATIONS_ALLOW_PREC_LOSS, session.decimalOperationsAllowPrecisionLoss)
+    c
   }
 
   /**
@@ -100,24 +103,53 @@ object StoredExpressionText {
       inSession: => E,
       input: Seq[Attribute],
       analyzer: LogicalPlan => LogicalPlan): E = {
+    val analyzed = try {
+      expressionFromPlan(expr, analyzePlan(expr, input, analyzer, conf(SQLConf.get)))
+    } catch {
+      case _: AnalysisException => None
+    }
+    analyzed.getOrElse(inSession)
+  }
+
+  /**
+   * Analyzes a modeled expression under fixed ANSI settings and reports errors without fallback.
+   */
+  def analyzeStrict[E <: Expression](
+      expr: E,
+      input: Seq[Attribute],
+      analyzer: LogicalPlan => LogicalPlan): E = {
+    val plan = analyzePlan(expr, input, analyzer, fixedConf(SQLConf.get))
+    // Check under the session's representation settings, including first-class CHAR/VARCHAR.
+    SimpleAnalyzer.checkAnalysis(plan)
+    expressionFromPlan(expr, plan).getOrElse {
+      throw SparkException.internalError(s"Expected a scalar stored expression, but got $plan")
+    }
+  }
+
+  private def analyzePlan(
+      expr: Expression,
+      input: Seq[Attribute],
+      analyzer: LogicalPlan => LogicalPlan,
+      settings: SQLConf): LogicalPlan = {
     val named = expr match {
       case n: NamedExpression => n
       case e => Alias(e, "value")()
     }
-    val analyzed = try {
-      SQLConf.withExistingConf(conf(SQLConf.get)) {
-        analyzer(Project(Seq(named), LocalRelation(input)))
-      } match {
-        case Project(Seq(a), _: LocalRelation) if a.resolved => Some(a)
-        case _ => None
-      }
-    } catch {
-      case _: AnalysisException => None
+    SQLConf.withExistingConf(settings) {
+      analyzer(Project(Seq(named), LocalRelation(input)))
     }
-    analyzed.map {
-      case Alias(child, _) if !expr.isInstanceOf[NamedExpression] => child
-      case a => a
-    }.getOrElse(inSession).asInstanceOf[E]
+  }
+
+  private def expressionFromPlan[E <: Expression](expr: E, plan: LogicalPlan): Option[E] = {
+    plan match {
+      case Project(Seq(a), _: LocalRelation) if a.resolved =>
+        val expression = a match {
+          case Alias(child, _) if !expr.isInstanceOf[NamedExpression] => child
+          case other => other
+        }
+        Some(expression.asInstanceOf[E])
+      case _ => None
+    }
   }
 
   /**

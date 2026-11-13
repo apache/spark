@@ -19,6 +19,8 @@ package org.apache.spark.sql.catalyst.expressions
 
 import java.lang.reflect.{Method, Modifier}
 
+import scala.util.Try
+
 import org.apache.spark.internal.Logging
 import org.apache.spark.internal.LogKeys.{FUNCTION_NAME, FUNCTION_PARAM}
 import org.apache.spark.sql.AnalysisException
@@ -311,7 +313,7 @@ object V2ExpressionUtils extends SQLConfHelper with Logging {
   def toCatalyst(expr: V2Expression): Option[Expression] = expr match {
     case _: AlwaysTrue => Some(Literal.TrueLiteral)
     case _: AlwaysFalse => Some(Literal.FalseLiteral)
-    case l: V2Literal[_] => Some(Literal(l.value, l.dataType))
+    case l: V2Literal[_] => Try(Literal.create(l.value, l.dataType)).toOption
     case r: NamedReference => Some(UnresolvedAttribute(r.fieldNames.toImmutableArraySeq))
     case c: V2Cast => toCatalyst(c.expression).map(Cast(_, c.dataType, ansiEnabled = true))
     case p: PartitionPredicateImpl => Some(p.expression)
@@ -407,14 +409,10 @@ object V2ExpressionUtils extends SQLConfHelper with Logging {
       case "DEGREES" => convertUnaryExpr(expr, ToDegrees)
       case "RADIANS" => convertUnaryExpr(expr, ToRadians)
       case "SIGN" => convertUnaryExpr(expr, Signum)
-      case "WIDTH_BUCKET" =>
-        if (expr.children.length == 4) {
-          convertExpr(
-            expr,
-            children => WidthBucket(children(0), children(1), children(2), children(3)))
-        } else {
-          None
-        }
+      case "WIDTH_BUCKET" if expr.children.length == 4 =>
+        convertExpr(
+          expr,
+          children => WidthBucket(children(0), children(1), children(2), children(3)))
       case _ => None
     }
   }

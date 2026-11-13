@@ -17,9 +17,8 @@
 
 package org.apache.spark.sql.catalyst.util
 
-import org.apache.spark.sql.catalyst.analysis.SimpleAnalyzer
-import org.apache.spark.sql.catalyst.expressions.{Alias, Attribute, AttributeReference, Expression, NamedExpression, V2ExpressionUtils}
-import org.apache.spark.sql.catalyst.plans.logical.{ColumnDefinition, LocalRelation, LogicalPlan, Project}
+import org.apache.spark.sql.catalyst.expressions.{Attribute, AttributeReference, Expression, V2ExpressionUtils}
+import org.apache.spark.sql.catalyst.plans.logical.{ColumnDefinition, LogicalPlan}
 import org.apache.spark.sql.catalyst.util.TypeUtils.toSQLId
 import org.apache.spark.sql.connector.catalog.{Column, GenerationExpression, Identifier, Table,
   TableCapability, TableCatalog, TableCatalogCapability}
@@ -115,10 +114,20 @@ object GeneratedColumn {
   /**
    * Returns the generation expression of the V2 column `col`, if it is a generated column. A
    * connector can implement only the legacy SQL getter [[Column.generationExpression]], which
-   * auto-fill reads as well, so fall back to it.
+   * auto-fill reads as well, so fall back to it. Also retain that SQL when the new getter provides
+   * only a modeled expression.
    */
   def columnGenerationExpression(col: Column): Option[GenerationExpression] = {
     Option(col.columnGenerationExpression())
+      .map { expression =>
+        if (expression.getSql != null) {
+          expression
+        } else {
+          Option(col.generationExpression())
+            .map(sql => new GenerationExpression(sql, expression.getExpression))
+            .getOrElse(expression)
+        }
+      }
       .orElse(Option(col.generationExpression()).map(new GenerationExpression(_)))
   }
 
@@ -143,8 +152,11 @@ object GeneratedColumn {
       relation: DataSourceV2Relation,
       colName: String,
       genExpr: GenerationExpression) {
-    private lazy val modeledExpression = Option(genExpr.getExpression)
-      .flatMap(V2ExpressionUtils.toCatalyst)
+    private lazy val modeledExpression = Option(genExpr.getExpression).flatMap { expression =>
+      SQLConf.withExistingConf(StoredExpressionText.fixedConf(SQLConf.get)) {
+        V2ExpressionUtils.toCatalyst(expression)
+      }
+    }
 
     def toCatalyst(readSql: String => Expression = StoredExpressionText.parse): Expression = {
       modeledExpression.orElse(Option(genExpr.getSql).map(readSql))
@@ -172,21 +184,7 @@ object GeneratedColumn {
       if (modeledExpression.isEmpty) {
         StoredExpressionText.analyze(expr, inSession, input, analyzer)
       } else {
-        val conf = StoredExpressionText.conf(SQLConf.get, useCurrentConfigs = false)
-        SQLConf.withExistingConf(conf) {
-          val named = expr match {
-            case n: NamedExpression => n
-            case e => Alias(e, "value")()
-          }
-          val plan = analyzer(Project(Seq(named), LocalRelation(input)))
-          // Report unresolved references and type errors before the writer can re-analyze them.
-          SimpleAnalyzer.checkAnalysis(plan)
-          val analyzed = plan.asInstanceOf[Project].projectList.head
-          (analyzed match {
-            case Alias(child, _) if !expr.isInstanceOf[NamedExpression] => child
-            case a => a
-          }).asInstanceOf[E]
-        }
+        StoredExpressionText.analyzeStrict(expr, input, analyzer)
       }
     }
   }

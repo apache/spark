@@ -17,16 +17,44 @@
 
 package org.apache.spark.sql.catalyst.expressions
 
+import java.time.LocalDate
+
 import org.apache.spark.{SparkFunSuite, SparkIllegalArgumentException}
 import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.plans.logical.LocalRelation
-import org.apache.spark.sql.connector.expressions.{Expression => V2Expression, _}
+import org.apache.spark.sql.connector.expressions.{Expression => V2Expression, Literal => _, _}
 import org.apache.spark.sql.connector.expressions.filter.{Predicate => V2Predicate}
 import org.apache.spark.sql.connector.util.V2ExpressionSQLBuilder
-import org.apache.spark.sql.types.{BooleanType, IntegerType, LongType, StringType, StructType}
+import org.apache.spark.sql.types.{BooleanType, DateType, Decimal, DecimalType, IntegerType, LongType, StringType, StructType}
 import org.apache.spark.unsafe.types.UTF8String
 
 class V2ExpressionUtilsSuite extends SparkFunSuite {
+
+  test("modeled literals accept external and internal representations") {
+    val string = Literal(UTF8String.fromString("Y"), StringType)
+    val decimal = Literal(Decimal(new java.math.BigDecimal("1.25")), DecimalType(3, 2))
+    val date = Literal(19724, DateType)
+    val cases: Seq[(V2Expression, Literal)] = Seq(
+      Expressions.literal("Y") -> string,
+      Expressions.literal(new java.math.BigDecimal("1.25")) -> decimal,
+      Expressions.literal(LocalDate.of(2024, 1, 2)) -> date,
+      LiteralValue(string.value, string.dataType) -> string,
+      LiteralValue(decimal.value, decimal.dataType) -> decimal,
+      LiteralValue(date.value, date.dataType) -> date)
+    cases.foreach { case (expression, expected) =>
+      assert(V2ExpressionUtils.toCatalyst(expression).contains(expected))
+    }
+  }
+
+  test("invalid modeled literal values cannot be converted") {
+    val literals: Seq[V2Expression] = Seq(
+      LiteralValue("not an integer", IntegerType),
+      LiteralValue(UTF8String.fromString("not an integer"), IntegerType),
+      LiteralValue(1, StringType))
+    literals.foreach { literal =>
+      assert(V2ExpressionUtils.toCatalyst(literal).isEmpty)
+    }
+  }
 
   test("modeled expressions with invalid arity cannot be converted") {
     val arities = Seq(
