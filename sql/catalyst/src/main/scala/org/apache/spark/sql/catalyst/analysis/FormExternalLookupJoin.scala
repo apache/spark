@@ -22,10 +22,11 @@ import scala.collection.mutable
 
 import org.apache.spark.sql.catalyst.expressions.SubqueryExpression
 import org.apache.spark.sql.catalyst.optimizer.{EliminateResolvedHint, InlineCTE}
-import org.apache.spark.sql.catalyst.plans.{Inner, LeftOuter}
+import org.apache.spark.sql.catalyst.plans.{Inner, LeftAnti, LeftOuter, LeftSemi}
 import org.apache.spark.sql.catalyst.plans.logical.{AsOfJoin, CTERelationDef, CTERelationRef,
-  ExternalLookupHint, ExternalLookupJoin, Join, JoinStrategyHint, LateralJoin, LogicalPlan,
-  NearestByJoin, ResolvedHint, SetOperation, SubqueryAlias, UnaryNode, Union, View, WithCTE}
+  ExternalLookupHint, ExternalLookupJoin, ExternalLookupJoinShapes, Filter, Join, JoinStrategyHint,
+  LateralJoin, LogicalPlan, NearestByJoin, Project, ResolvedHint, SetOperation, SubqueryAlias,
+  UnaryNode, Union, View, WithCTE}
 import org.apache.spark.sql.catalyst.rules.Rule
 import org.apache.spark.sql.catalyst.streaming.WriteToStream
 import org.apache.spark.sql.catalyst.trees.TreePattern.{AS_OF_JOIN, CTE, EXTERNAL_LOOKUP_HINT, JOIN,
@@ -45,8 +46,9 @@ import org.apache.spark.sql.execution.datasources.v2.ExternalLookupRelations
  * that supports both keeps the ordinary join strategies unless the hint opts in. It must be a
  * stream-static join: the left side is a streaming query, whose micro-batches tolerate lookup
  * results that change between requests, and the lookup table is on the right side. The join reads
- * the table directly, or through hints, aliases and views only, so a join that must be a lookup
- * join either runs as one or fails here, whatever the optimizer later does to its lookup side.
+ * the table directly, or through hints, aliases, views, and projections and filters that it can
+ * evaluate on the lookup results, so a join that must be a lookup join either runs as one or fails
+ * here, whatever the optimizer later does to its lookup side.
  */
 object ExternalLookupJoinEligibility extends QueryErrorsBase {
   sealed trait Eligibility
@@ -66,7 +68,7 @@ object ExternalLookupJoinEligibility extends QueryErrorsBase {
   /** The join must run as an external lookup join but cannot. */
   case class Ineligible(error: Throwable) extends Eligibility
 
-  private val SUPPORTED_JOIN_TYPES = Seq(Inner, LeftOuter)
+  private val SUPPORTED_JOIN_TYPES = Seq(Inner, LeftOuter, LeftSemi, LeftAnti)
 
   /**
    * An operator that the `EXTERNAL_LOOKUP` hint treats as a join: a [[Join]], an ASOF or NEAREST BY
@@ -306,8 +308,8 @@ object ExternalLookupJoinEligibility extends QueryErrorsBase {
 
   /**
    * The lookup side of an eligible join, without its `EXTERNAL_LOOKUP` hint. The lookup side of an
-   * eligible join is a chain of hints, aliases and views over the table, so every marker in it is
-   * the join's own.
+   * eligible join is a chain of hints, aliases, views, projections and filters over the table, so
+   * every marker in it is the join's own.
    */
   def lookupSide(join: Join): LogicalPlan =
     join.right.transformUpWithPruning(_.containsPattern(EXTERNAL_LOOKUP_HINT)) {
@@ -329,26 +331,32 @@ object ExternalLookupJoinEligibility extends QueryErrorsBase {
   }
 
   /**
-   * The DSv2 table that a lookup side reads through hints, aliases and views only, with its
-   * relation, or the rejection of a side that reads none: another operator stands in between, or
+   * The DSv2 table that a lookup side reads through hints, aliases, views, and projections and
+   * filters that the lookup join can evaluate, with its relation, or the rejection of a side that
+   * reads none: another operator, or a stage that the join cannot evaluate, stands in between, or
    * the side reads no DSv2 table.
    */
   private def lookupTable(lookupSide: LogicalPlan): Either[Ineligible, (LogicalPlan, Table)] = {
     val tableRelation = lookupRelation(lookupSide)
     ExternalLookupRelations.table(tableRelation) match {
       case Some(table) => Right(tableRelation -> table)
-      // TODO: look through projections and filters on the lookup side, such as those that a
-      // SQL-defined view, read-side CHAR padding, a second reference to a WITH clause or the
-      // refresh of a versioned table puts above the table.
       case None =>
         Left(Ineligible(QueryCompilationErrors.unsupportedExternalLookupJoinError("LOOKUP_PLAN")))
     }
   }
 
-  /** The first operator below a join input that is not a hint, an alias or a view. */
+  /**
+   * The first operator below a join input that is not a hint, an alias, a view, or a projection or
+   * filter that the lookup join can evaluate on the lookup results. A Python or external UDF or a
+   * subquery in one cannot be evaluated there, and the optimizer would rewrite some of them into
+   * other operators.
+   */
   @tailrec
   private def lookupRelation(plan: LogicalPlan): LogicalPlan = plan match {
     case node @ (_: ExternalLookupHint | _: ResolvedHint | _: SubqueryAlias | _: View) =>
+      lookupRelation(node.children.head)
+    case node @ (_: Project | _: Filter)
+        if node.expressions.forall(ExternalLookupJoinShapes.canEvaluateInLookupStage) =>
       lookupRelation(node.children.head)
     case other => other
   }

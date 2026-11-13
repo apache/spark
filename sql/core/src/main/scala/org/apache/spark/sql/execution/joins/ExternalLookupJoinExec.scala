@@ -20,8 +20,10 @@ package org.apache.spark.sql.execution.joins
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.{And, Attribute, AttributeMap, AttributeSeq,
-  AttributeSet, BoundReference, EqualNullSafe, EqualTo, Expression, ExprUtils, PredicateHelper}
-import org.apache.spark.sql.catalyst.plans.{JoinType, LeftOuter, QueryPlan}
+  AttributeSet, BoundReference, Expression, ExprUtils, PredicateHelper}
+import org.apache.spark.sql.catalyst.plans.{JoinType, LeftAnti, LeftOuter, LeftSemi, QueryPlan}
+import org.apache.spark.sql.catalyst.plans.logical.{ExternalLookupFilter, ExternalLookupJoinShapes,
+  ExternalLookupProject, ExternalLookupTransform, LookupKeyComparison}
 import org.apache.spark.sql.catalyst.plans.physical.Partitioning
 import org.apache.spark.sql.catalyst.util.truncatedString
 import org.apache.spark.sql.connector.metric.CustomTaskMetric
@@ -41,8 +43,9 @@ case class ExternalLookupJoinExec(
     lookupParameters: Seq[Expression],
     lookupInput: Seq[Attribute],
     lookupOutput: Seq[Attribute],
-    nullSafeParameters: Seq[Boolean],
+    lookupTransforms: Seq[ExternalLookupTransform],
     lookupKeys: Seq[Attribute],
+    lookupKeyComparisons: Seq[LookupKeyComparison],
     joinType: JoinType,
     residualCondition: Option[Expression],
     @transient scan: Scan,
@@ -50,31 +53,38 @@ case class ExternalLookupJoinExec(
     maxParameterRowsPerRequest: Int,
     child: SparkPlan) extends UnaryExecNode with SupportsCustomDriverMetrics with PredicateHelper {
 
-  // The connector's value rows follow the read schema, which `lookupInput` describes. The lookup
-  // columns keep their analyzed order and take the read schema's types. Their nullability, at
-  // every nested level, combines the table's and the read schema's: a field is NOT NULL when
-  // either says so.
-  private lazy val inputByLookupOutput = AttributeMap(lookupInput.map(attr => attr -> attr))
+  // The connector's value rows follow the read schema, which `lookupInput` describes, and the
+  // lookup-side stages turn them into rows of `transformedLookup`. The lookup columns keep their
+  // analyzed order, and take the types and nullability of those rows. In `lookupInput`, the
+  // nullability at every nested level combines the table's and the read schema's: a field is NOT
+  // NULL when either says so.
+  private lazy val transformedLookup = lookupTransforms.lastOption.map(_.output)
+    .getOrElse(lookupInput)
+  private lazy val inputByLookupOutput =
+    AttributeMap(transformedLookup.map(attr => attr -> attr))
   private lazy val lookupColumns = lookupOutput.map(inputByLookupOutput)
 
   override def output: Seq[Attribute] = joinType match {
     case LeftOuter => child.output ++ lookupColumns.map(_.withNullability(true))
+    case LeftSemi | LeftAnti => child.output
     case _ => child.output ++ lookupColumns
   }
 
   // The lookup-side attributes are not in the child's output, so the default canonicalization
   // gives each top-level one the next id, whichever column it is: `output` could then not find a
   // lookup column in the read schema, and nodes that keep different lookup columns of one type
-  // would canonicalize alike. Each is normalized by its place in the child's output and the read
-  // schema instead.
+  // would canonicalize alike. Each is normalized by its place in the child's output, the read
+  // schema and the outputs of the lookup-side stages instead.
   override protected def doCanonicalize(): SparkPlan = {
-    val attributes: AttributeSeq = child.output ++ lookupInput
+    val attributes: AttributeSeq =
+      child.output ++ ExternalLookupTransform.attributes(lookupInput, lookupTransforms)
     def normalize[T <: Expression](expression: T): T =
       QueryPlan.normalizeExpressions(expression, attributes)
     copy(
       lookupParameters = lookupParameters.map(normalize),
       lookupInput = lookupInput.map(normalize),
       lookupOutput = lookupOutput.map(normalize),
+      lookupTransforms = lookupTransforms.map(ExternalLookupTransform.canonicalized(_, attributes)),
       lookupKeys = lookupKeys.map(normalize),
       residualCondition = residualCondition.map(normalize),
       child = child.canonicalized)
@@ -102,18 +112,15 @@ case class ExternalLookupJoinExec(
 
   // Spark does not trust the connector to evaluate the selected lookup predicates as Spark does,
   // so it checks them itself on each row that the connector returns. The check reads that row
-  // after the parameter row of its request, and compares lookup key i with parameter i.
+  // after the parameter row of its request, and compares lookup key i with parameter i as its
+  // selected predicate does.
   private def lookupKeyCheck: Option[Expression] = lookupParameters.indices.map { index =>
     val parameter = lookupParameters(index)
     val parameterValue = BoundReference(index, parameter.dataType, parameter.nullable)
     val keyOrdinal = lookupInput.indexWhere(_.exprId == lookupKeys(index).exprId)
     val key = lookupInput(keyOrdinal)
     val keyValue = BoundReference(lookupParameters.length + keyOrdinal, key.dataType, key.nullable)
-    if (nullSafeParameters(index)) {
-      EqualNullSafe(keyValue, parameterValue)
-    } else {
-      EqualTo(keyValue, parameterValue)
-    }
+    lookupKeyComparisons(index)(keyValue, parameterValue)
   }.reduceOption(And)
 
   override def references: AttributeSet =
@@ -149,10 +156,12 @@ case class ExternalLookupJoinExec(
     val evaluatorFactory = new ExternalLookupJoinEvaluatorFactory(
       tableName,
       lookupParameters,
-      nullSafeParameters,
+      lookupKeyComparisons.map(_.nullSafe),
       lookupKeyCheck,
       child.output,
       lookupInput,
+      lookupTransforms,
+      transformedLookup,
       output,
       joinType,
       streamCondition,
@@ -161,6 +170,7 @@ case class ExternalLookupJoinExec(
       }),
       readerFactory,
       math.min(ExternalLookupJoinExec.MAX_PARAMETER_ROWS_PER_REQUEST, maxParameterRowsPerRequest),
+      ExternalLookupJoinShapes.oneParameterRowPerRequest(lookupParameters, lookupKeyComparisons),
       conf.getConf(SQLConf.JOIN_EXTERNAL_LOOKUP_MAX_BATCH_BYTES),
       ExternalLookupJoinMetrics(
         outputRows = longMetric("numOutputRows"),
@@ -182,13 +192,25 @@ case class ExternalLookupJoinExec(
   override protected def withNewChildInternal(newChild: SparkPlan): ExternalLookupJoinExec =
     copy(child = newChild)
 
-  // As for other joins, the join type, the lookup parameters and the residual condition, then the
+  // As for other joins, the join type, the selected lookup predicates, each a lookup column
+  // compared with its parameter, the lookup-side stages and the residual condition, then the
   // connector's description, which may hold a secret and is redacted.
   override def simpleString(maxFields: Int): String = {
-    val parameters = truncatedString(lookupParameters, "[", ", ", "]", maxFields)
+    val selectedPredicates = lookupParameters.indices.map { index =>
+      lookupKeyComparisons(index)(lookupKeys(index), lookupParameters(index))
+    }
+    val predicates = truncatedString(selectedPredicates, "[", ", ", "]", maxFields)
+    val stages = if (lookupTransforms.isEmpty) "" else {
+      val described = lookupTransforms.map {
+        case ExternalLookupProject(projectList, _) =>
+          s"Project ${truncatedString(projectList, "[", ", ", "]", maxFields)}"
+        case ExternalLookupFilter(condition, _) => s"Filter $condition"
+      }
+      s", ${truncatedString(described, "[", ", ", "]", maxFields)}"
+    }
     val residual = residualCondition.map(condition => s", $condition").getOrElse("")
     Utils.redact(conf.stringRedactionPattern,
-      s"$nodeName $joinType, $parameters$residual, ${scan.description()}")
+      s"$nodeName $joinType, $predicates$stages$residual, ${scan.description()}")
   }
 
   override protected def stringArgs: Iterator[Any] =
@@ -197,8 +219,9 @@ case class ExternalLookupJoinExec(
 
 object ExternalLookupJoinExec {
   /**
-   * Spark's cap on the parameter rows of one request, whatever the connector allows: it bounds
-   * the stream rows that a task buffers while one request is in flight.
+   * Spark's cap on the stream rows of one request, whatever the connector allows, and so on its
+   * parameter rows. It bounds the stream rows that a task buffers while one request is in flight,
+   * also when they share one parameter row, as the rows of a range request do.
    */
   val MAX_PARAMETER_ROWS_PER_REQUEST = 1000
 
