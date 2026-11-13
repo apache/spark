@@ -530,16 +530,19 @@ class ArrowColumnarPythonUDFSuite extends SharedSparkSession {
         assert(ArrowBackedDataSourceV2.releasedBatches.get == numBatches)
         assert(ArrowBackedDataSourceV2.maxUnreleasedBatches.get == 1)
 
-        // A filter and a limit above, which stop reading the row output early. A limit alone
-        // would be pushed below the evaluation. The filter is pushed below the projection, so
-        // the evaluation under it passes the arguments of the UDF through to the projection,
-        // which evaluates it again over the rows that the limit lets through.
+        // A filter and a limit above, which stop reading the output early. A limit alone would
+        // be pushed below the evaluation. The filter stays above the evaluations, so they are
+        // the same as without it: the filter reads the joined rows directly with pass-through
+        // columns, and the result batches through a ColumnarToRowExec without them.
         val limited = result.where("u like 'row_1%'").limit(10)
         val limitedPlan = limited.queryExecution.executedPlan
-        assert(collectNodes[ArrowEvalPythonExec](limitedPlan).exists { e =>
-          e.supportsColumnar && e.supportsRowBased && e.requiredChildOutput.nonEmpty
-        }, s"Unexpected plan:\n$limitedPlan")
-        assert(!hasColumnarToRowAbove(limitedPlan), s"Unexpected plan:\n$limitedPlan")
+        val limitedExecs = collectNodes[ArrowEvalPythonExec](limitedPlan)
+        assert(limitedExecs.length == numEvals, s"Unexpected evaluations:\n$limitedPlan")
+        assert(limitedExecs.forall(e =>
+          e.supportsColumnar && e.requiredChildOutput.nonEmpty == passThrough))
+        assert(limitedExecs.head.supportsRowBased == passThrough)
+        assert(hasColumnarToRowAbove(limitedPlan) == !passThrough,
+          s"Unexpected plan:\n$limitedPlan")
         checkRows(passThrough, limited.collect(), expected.filter(_.startsWith("row_1")).take(10))
       }
     }
