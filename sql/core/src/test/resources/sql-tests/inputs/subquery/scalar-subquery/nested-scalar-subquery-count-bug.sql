@@ -149,8 +149,8 @@ select a1, ( select struct(sum(m) filter (where m > 2), sum(m) filter (where m >
   from (select max(b2) m from t2 where t1.a1 = t2.b1) ) a
 from t1 order by a1;
 
--- a FILTER condition that fails on the NULL row is not evaluated for it, since the count bug
--- handling replaces the top aggregate function with its result over no rows
+-- a FILTER condition that fails on the NULL row fails for it, as in the LATERAL and uncorrelated
+-- forms of the query
 select a1, ( select sum(m) filter (where 10 / coalesce(m, 0) > 1) from (select max(b2) m from t2
   where t1.a1 = t2.b1) ) a
 from t1 order by a1;

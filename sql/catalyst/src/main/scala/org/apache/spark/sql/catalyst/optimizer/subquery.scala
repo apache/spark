@@ -31,7 +31,7 @@ import org.apache.spark.sql.catalyst.planning.PhysicalAggregation
 import org.apache.spark.sql.catalyst.plans._
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.rules._
-import org.apache.spark.sql.catalyst.trees.TreePattern.{CTE, EXISTS_SUBQUERY, IN_SUBQUERY, LATERAL_JOIN, LIST_SUBQUERY, PLAN_EXPRESSION, SCALAR_SUBQUERY}
+import org.apache.spark.sql.catalyst.trees.TreePattern.{EXISTS_SUBQUERY, IN_SUBQUERY, LATERAL_JOIN, LIST_SUBQUERY, PLAN_EXPRESSION, SCALAR_SUBQUERY}
 import org.apache.spark.sql.errors.{QueryCompilationErrors, QueryExecutionErrors}
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.internal.SQLConf.{DECORRELATE_PREDICATE_SUBQUERIES_IN_JOIN_CONDITION, OPTIMIZE_UNCORRELATED_IN_SUBQUERIES_IN_JOIN_CONDITION,
@@ -618,10 +618,9 @@ object PullupCorrelatedPredicates extends Rule[LogicalPlan] with PredicateHelper
             case c: CollectSet => c.ignoreNulls
             case _ => false
           }
-          // constructLeftJoins does not decorrelate a correlated subquery in a FILTER of `agg`,
-          // and the query fails there; DecorrelateInnerQuery handles it.
-          val filterOk = ae.filter.forall(f => !SubqueryExpression.hasCorrelatedSubquery(f))
-          filterOk && sameResultOverNulls && ae.aggregateFunction.children.forall {
+          // A FILTER condition can fail on the row of NULLs, which constructLeftJoins does not
+          // evaluate it on, so it is left to DecorrelateInnerQuery.
+          ae.filter.isEmpty && sameResultOverNulls && ae.aggregateFunction.children.forall {
             case a: Attribute => attrs.contains(a)
             case _ => false
           }
@@ -629,7 +628,31 @@ object PullupCorrelatedPredicates extends Rule[LogicalPlan] with PredicateHelper
       }
   }
 
-  private def rewriteSubQueries(plan: LogicalPlan): LogicalPlan = {
+  /**
+   * Whether the domain joins of [[DecorrelateInnerQuery]], which compute the outer query of a
+   * correlated subquery again, can be relied on to see the same outer rows the second time. The
+   * check is conservative. It looks at the whole query `root` for a non-deterministic
+   * expression, a CTE that is not inlined (which may be a non-deterministic one; a
+   * CTERelationRef does not tell) and a streaming source, since later rules can still move
+   * operators into the outer input, e.g. PushDownPredicates can push a non-deterministic filter
+   * below the operator with the subquery. It does not decide whether the domain joins can be
+   * built at all, e.g. for outer references that are not orderable.
+   */
+  private def outerQueryRepeatable(root: LogicalPlan): Boolean = !root.isStreaming &&
+    !root.exists {
+      case _: CTERelationRef => true
+      case p => !p.expressions.forall(_.deterministic)
+    }
+
+  // Whether the outer input `input` of an operator with a correlated subquery can keep other
+  // rows when it is computed again although it is deterministic: a LIMIT, OFFSET or tail without
+  // a total order, or a window function over ties.
+  private def mayKeepOtherRows(input: LogicalPlan): Boolean = input.exists {
+    case _: LocalLimit | _: GlobalLimit | _: Offset | _: Tail | _: Window => true
+    case _ => false
+  }
+
+  private def rewriteSubQueries(plan: LogicalPlan, repeatable: Boolean): LogicalPlan = {
     /**
      * This function is used as a aid to enforce idempotency of pullUpCorrelatedPredicate rule.
      * In the first call to rewriteSubqueries, all the outer references from the subplan are
@@ -654,9 +677,9 @@ object PullupCorrelatedPredicates extends Rule[LogicalPlan] with PredicateHelper
     }
 
     plan.transformExpressionsWithPruning(_.containsPattern(PLAN_EXPRESSION)) {
-      case ScalarSubquery(sub, children, exprId, conditions, hint,
+      case ScalarSubquery(sub, outerAttrs, exprId, conditions, hint,
       mayHaveCountBugOld, needSingleJoinOld)
-        if children.nonEmpty =>
+        if outerAttrs.nonEmpty =>
 
         // An Aggregate without grouping expressions returns one row even on empty input,
         // whatever its aggregate functions are, and an Aggregate above it sees that row. If the
@@ -665,23 +688,20 @@ object PullupCorrelatedPredicates extends Rule[LogicalPlan] with PredicateHelper
         // unchanged or inner joins it with the domain, and mayHaveCountBugAgg uses the same check
         // (SubExprUtils.hasOuterReferences).
         // An Aggregate with an aggregate function with a default result, such as COUNT, also
-        // qualifies, correlated or not, as before SPARK-60501; with
-        // LEGACY_SCALAR_SUBQUERY_NESTED_AGGREGATE_COUNT_BUG_BEHAVIOR, only such an Aggregate
-        // does. So does it where the domain joins of DecorrelateInnerQuery, which compute the
-        // outer query again, are known not to work, so as not to make such queries worse than
-        // before. The check is conservative: e.g. the domain joins fail for a streaming query
-        // and for outer references that are not orderable, and can find other rows the second
-        // time for a non-deterministic input, or for a CTE that is not inlined, which may be a
-        // non-deterministic one (a CTERelationRef does not tell).
-        val domainJoinsWork = !plan.isStreaming &&
-          plan.children.forall(c => c.deterministic && !c.containsPattern(CTE)) &&
-          children.forall(e => RowOrdering.isOrderable(e.dataType))
-        val legacyNestedAggregateCountBug =
+        // qualifies, correlated or not, as before SPARK-60501. Only such an Aggregate does with
+        // LEGACY_SCALAR_SUBQUERY_NESTED_AGGREGATE_COUNT_BUG_BEHAVIOR, and where the domain joins
+        // of DecorrelateInnerQuery are known not to work, so as not to make such queries worse
+        // than before: where the outer query may give other rows when computed again (see
+        // outerQueryRepeatable and mayKeepOtherRows), and for outer references that are not
+        // orderable, for which the domain joins fail.
+        lazy val domainJoinsWork = repeatable && !plan.children.exists(mayKeepOtherRows) &&
+          outerAttrs.forall(e => RowOrdering.isOrderable(e.dataType))
+        lazy val onlyDefaultResultSelectsDecorrelation =
           conf.getConf(SQLConf.LEGACY_SCALAR_SUBQUERY_NESTED_AGGREGATE_COUNT_BUG_BEHAVIOR) ||
             !domainJoinsWork
         def mayHaveCountBugAgg(a: Aggregate): Boolean = {
           a.groupingExpressions.isEmpty && (hasDefaultResult(a) ||
-            (!legacyNestedAggregateCountBug && SubExprUtils.hasOuterReferences(a)))
+            (!onlyDefaultResultSelectsDecorrelation && SubExprUtils.hasOuterReferences(a)))
         }
 
         // The below logic controls handling count bug for scalar subqueries in
@@ -729,7 +749,7 @@ object PullupCorrelatedPredicates extends Rule[LogicalPlan] with PredicateHelper
         } else {
           conf.getConf(SQLConf.SCALAR_SUBQUERY_USE_SINGLE_JOIN) && !guaranteedToReturnOneRow(sub)
         }
-        ScalarSubquery(newPlan, children, exprId, getJoinCondition(newCond, conditions),
+        ScalarSubquery(newPlan, outerAttrs, exprId, getJoinCondition(newCond, conditions),
           hint, Some(mayHaveCountBug), Some(needSingleJoin))
       case Exists(sub, children, exprId, conditions, hint) if children.nonEmpty =>
         val (newPlan, newCond) = if (SQLConf.get.decorrelateInnerQueryEnabledForExistsIn) {
@@ -755,25 +775,27 @@ object PullupCorrelatedPredicates extends Rule[LogicalPlan] with PredicateHelper
   /**
    * Pull up the correlated predicates and rewrite all subqueries in an operator tree..
    */
-  def apply(plan: LogicalPlan): LogicalPlan = plan.transformUpWithPruning(
-    _.containsPattern(PLAN_EXPRESSION)) {
-    case j: LateralJoin =>
-      val newPlan = rewriteSubQueries(j)
-      // Since a lateral join's output depends on its left child output and its lateral subquery's
-      // plan output, we need to trim the domain attributes added to the subquery's plan output
-      // to preserve the original output of the join.
-      if (!j.sameOutput(newPlan)) {
-        Project(j.output, newPlan)
-      } else {
-        newPlan
-      }
-    case j: Join if conf.getConf(DECORRELATE_PREDICATE_SUBQUERIES_IN_JOIN_CONDITION) =>
-      rewriteSubQueries(j)
-    // Only a few unary nodes (Project/Filter/Aggregate) can contain subqueries.
-    case q: UnaryNode =>
-      rewriteSubQueries(q)
-    case s: SupportsSubquery =>
-      rewriteSubQueries(s)
+  def apply(plan: LogicalPlan): LogicalPlan = {
+    lazy val repeatable = outerQueryRepeatable(plan)
+    plan.transformUpWithPruning(_.containsPattern(PLAN_EXPRESSION)) {
+      case j: LateralJoin =>
+        val newPlan = rewriteSubQueries(j, repeatable)
+        // Since a lateral join's output depends on its left child output and its lateral
+        // subquery's plan output, we need to trim the domain attributes added to the subquery's
+        // plan output to preserve the original output of the join.
+        if (!j.sameOutput(newPlan)) {
+          Project(j.output, newPlan)
+        } else {
+          newPlan
+        }
+      case j: Join if conf.getConf(DECORRELATE_PREDICATE_SUBQUERIES_IN_JOIN_CONDITION) =>
+        rewriteSubQueries(j, repeatable)
+      // Only a few unary nodes (Project/Filter/Aggregate) can contain subqueries.
+      case q: UnaryNode =>
+        rewriteSubQueries(q, repeatable)
+      case s: SupportsSubquery =>
+        rewriteSubQueries(s, repeatable)
+    }
   }
 }
 

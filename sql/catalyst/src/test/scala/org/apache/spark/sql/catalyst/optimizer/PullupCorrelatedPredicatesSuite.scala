@@ -117,19 +117,20 @@ class PullupCorrelatedPredicatesSuite extends PlanTest {
   // Returns ScalarSubquery.mayHaveCountBug, and whether DecorrelateInnerQuery handled the count
   // bug, which it does with a left outer domain join, for the aggregates `top` over `lower` (in
   // a struct if there are several, since a scalar subquery returns one column), in a Project
-  // over `outer` that also has the columns `others`.
+  // over `outer` that also has the columns `others`, under the operators that `above` adds.
   private def countBugHandling(
       lower: LogicalPlan,
       top: Seq[Expression] = Seq(count(Literal(1))),
       grouping: Seq[Expression] = Nil,
       outer: LogicalPlan = testRelation,
-      others: Seq[NamedExpression] = Nil): (Option[Boolean], Boolean) = {
+      others: Seq[NamedExpression] = Nil,
+      above: LogicalPlan => LogicalPlan = identity): (Option[Boolean], Boolean) = {
     val result = if (top.size == 1) top.head else CreateStruct(top)
     val subPlan = lower.groupBy(grouping: _*)(result.as("r"))
-    val plan = outer.select(others :+ ScalarSubquery(subPlan).as("sq"): _*).analyze
+    val plan = above(outer.select(others :+ ScalarSubquery(subPlan).as("sq"): _*)).analyze
     val optimized = Optimize.execute(plan)
     comparePlans(Optimize.execute(optimized), optimized, false)
-    val subqueries = optimized.expressions.flatMap(_.collect {
+    val subqueries = optimized.flatMap(_.expressions).flatMap(_.collect {
       case s: ScalarSubquery => s
     })
     assert(subqueries.size == 1)
@@ -175,23 +176,35 @@ class PullupCorrelatedPredicatesSuite extends PlanTest {
     assert(countBugHandling(correlated(max($"d")), outer = streamingOuter) == (Some(true), false))
     assert(countBugHandling(correlated(count($"d")), outer = streamingOuter) ==
       (Some(false), true))
-    // So do a non-deterministic expression in the input of the operator with the subquery and
-    // outer references that are not orderable; a lower COUNT is still handled in decorrelation
-    // there.
+    // So do a non-deterministic expression anywhere in the query, a CTE that is not inlined,
+    // an outer input that may keep other rows when computed again, and outer references that
+    // are not orderable; a lower COUNT is still handled in decorrelation there.
     val nonDeterministicOuter = testRelation.where(Rand(0) > 0.5)
     assert(countBugHandling(correlated(max($"d")), outer = nonDeterministicOuter) ==
       (Some(true), false))
     assert(countBugHandling(correlated(count($"d")), outer = nonDeterministicOuter) ==
       (Some(false), true))
-    // So does a reference to a CTE that is not inlined, which may be a non-deterministic CTE
-    // referenced twice, computed again with other rows.
+    // A CTE that is not inlined may be a non-deterministic one referenced twice.
     val cteOuter = CTERelationRef(0, _resolved = true, testRelation.output, isStreaming = false)
     assert(countBugHandling(correlated(max($"d")), outer = cteOuter) == (Some(true), false))
     assert(countBugHandling(correlated(count($"d")), outer = cteOuter) == (Some(false), true))
-    // A non-deterministic expression next to the subquery, not in the input of its operator,
-    // does not change the outer query that the domain joins compute again.
+    // A non-deterministic expression next to the subquery, or in a filter above it, which a
+    // later rule can push below it.
     assert(countBugHandling(correlated(max($"d")), others = Seq(Rand(0).as("r"))) ==
+      (Some(true), false))
+    assert(countBugHandling(correlated(max($"d")), above = _.where(Rand(0) > 0.5)) ==
+      (Some(true), false))
+    assert(countBugHandling(correlated(count($"d")), above = _.where(Rand(0) > 0.5)) ==
       (Some(false), true))
+    // A LIMIT or a window function in the outer input, but not a LIMIT above the subquery.
+    Seq(testRelation.limit(10), testRelation.offset(1),
+        testRelation.window(Seq(windowExpr(RowNumber(),
+          windowSpec(Nil, Seq($"a".asc), UnspecifiedFrame)).as("rn")), Nil, Seq($"a".asc))
+    ).foreach { outer =>
+      assert(countBugHandling(correlated(max($"d")), outer = outer) == (Some(true), false), outer)
+      assert(countBugHandling(correlated(count($"d")), outer = outer) == (Some(false), true))
+    }
+    assert(countBugHandling(correlated(max($"d")), above = _.limit(10)) == (Some(false), true))
     val mapOuter = LocalRelation(AttributeReference("m", MapType(IntegerType, IntegerType))())
     // Use size(m), whose outer reference stays a map also in the full optimizer, where
     // PullOutNestedDataOuterRefExpressions would pull a lookup such as m[0] out.
@@ -220,16 +233,14 @@ class PullupCorrelatedPredicatesSuite extends PlanTest {
       assert(countBugHandling(lowerMax, Seq(top)) == inConstructLeftJoins, top)
     }
     assert(countBugHandling(lowerMax, Seq(sum($"s"), collectList($"s"))) == inConstructLeftJoins)
-    // A FILTER could only keep or drop the NULL row, and its condition is not evaluated on it.
-    assert(countBugHandling(lowerMax, Seq(sum($"s", Some($"s" > 1)))) == inConstructLeftJoins)
-    assert(countBugHandling(lowerMax, Seq(count($"s", Some($"s".isNull)))) ==
-      inConstructLeftJoins)
-    // An uncorrelated subquery in a FILTER too, but not a correlated one, on which
-    // constructLeftJoins fails.
+    // A FILTER condition can fail on the NULL row, which constructLeftJoins does not evaluate it
+    // on, so a FILTER goes to decorrelation, also one with a subquery.
+    assert(countBugHandling(lowerMax, Seq(sum($"s", Some($"s" > 1)))) == inDecorrelation)
+    assert(countBugHandling(lowerMax, Seq(count($"s", Some($"s".isNull)))) == inDecorrelation)
     val subqueryRelation = LocalRelation($"e".double)
     val uncorrelatedFilter = ScalarSubquery(subqueryRelation.groupBy()(max($"e").as("x"))) > 0
     assert(countBugHandling(lowerMax, Seq(sum($"s", Some(uncorrelatedFilter)))) ==
-      inConstructLeftJoins)
+      inDecorrelation)
     val correlatedFilter = ScalarSubquery(
       subqueryRelation.where($"e" === $"s").groupBy()(max($"e").as("x"))).isNotNull
     assert(countBugHandling(lowerMax, Seq(sum($"s", Some(correlatedFilter)))) == inDecorrelation)
@@ -237,12 +248,9 @@ class PullupCorrelatedPredicatesSuite extends PlanTest {
     assert(countBugHandling(lowerMax.select($"s".as("t")), Seq(sum($"t"))) ==
       inConstructLeftJoins)
     assert(countBugHandling(lowerMax.select($"s"), Seq(sum($"s"))) == inConstructLeftJoins)
-    // A computed column next to them does not matter unless the top aggregate uses it as an
-    // argument; a FILTER over it could only keep or drop the NULL row.
+    // A computed column next to them does not matter unless the top aggregate uses it.
     val passAndComputed = lowerMax.select($"s", ($"s" + 1).as("t"))
     assert(countBugHandling(passAndComputed, Seq(sum($"s"))) == inConstructLeftJoins)
-    assert(countBugHandling(passAndComputed, Seq(sum($"s", Some($"t" > 1)))) ==
-      inConstructLeftJoins)
     assert(countBugHandling(passAndComputed, Seq(sum($"t"))) == inDecorrelation)
     // A lower aggregate with two functions without a default result, and a top aggregate
     // without functions.

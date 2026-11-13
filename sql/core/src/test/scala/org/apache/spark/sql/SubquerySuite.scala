@@ -3467,6 +3467,35 @@ class SubquerySuite extends SharedSparkSession
     }
   }
 
+  test("SPARK-60501: a non-deterministic filter above the subquery and a LIMIT in the outer " +
+      "input keep the count bug handling of before") {
+    withTempView("b", "o") {
+      spark.range(1000).selectExpr("id k", "id v").createOrReplaceTempView("b")
+      spark.range(1000).selectExpr("id k").createOrReplaceTempView("o")
+      withUserDefinedFunction("spark60501_rk" -> true) {
+        spark.udf.register("spark60501_rk",
+          udf((_: Long) => scala.util.Random.nextInt(1000)).asNondeterministic())
+        // The filter is pushed below the Project with the subquery, where the domain joins of
+        // decorrelation would evaluate it again, and outer rows that pass it only the first time
+        // would get NULL instead of 1.
+        checkAnswer(
+          sql("SELECT DISTINCT c FROM (SELECT * FROM (SELECT o.k, (SELECT COUNT(*) FROM " +
+            "(SELECT MAX(b.v) FROM b WHERE b.k = o.k)) c FROM o) WHERE spark60501_rk(k) > 500)"),
+          Row(1))
+      }
+      // A LIMIT without a total order can keep other rows when computed again, so the plan is
+      // the one of before, without the domain joins.
+      val query = "SELECT o.k, (SELECT COUNT(*) FROM (SELECT MAX(b.v) FROM b WHERE b.k = o.k)) " +
+        "FROM (SELECT * FROM o LIMIT 100) o"
+      def joins(): Int = sql(query).queryExecution.optimizedPlan.collect { case j: Join => j }.size
+      val legacyJoins = withSQLConf(
+        SQLConf.LEGACY_SCALAR_SUBQUERY_NESTED_AGGREGATE_COUNT_BUG_BEHAVIOR.key -> "true") {
+        joins()
+      }
+      assert(joins() == legacyJoins)
+    }
+  }
+
   test("SPARK-60501: outer references that are not orderable keep the count bug handling of " +
       "before, and a map lookup that is pulled out gets the fix") {
     withTempView("b") {

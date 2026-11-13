@@ -407,10 +407,23 @@ select a1, ( select sum(m) filter (where 10 / coalesce(m, 0) > 1) from (select m
   where t1.a1 = t2.b1) ) a
 from t1 order by a1
 -- !query schema
-struct<a1:int,a:bigint>
+struct<>
 -- !query output
-0	3
-1	NULL
+org.apache.spark.SparkArithmeticException
+{
+  "errorClass" : "DIVIDE_BY_ZERO",
+  "sqlState" : "22012",
+  "messageParameters" : {
+    "config" : "\"spark.sql.ansi.enabled\""
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 42,
+    "stopIndex" : 60,
+    "fragment" : "10 / coalesce(m, 0)"
+  } ]
+}
 
 
 -- !query
