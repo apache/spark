@@ -86,7 +86,8 @@ case class ArrowEvalPythonExec(
     requiredChildOutput: Seq[Attribute],
     resultAttrs: Seq[Attribute],
     child: SparkPlan,
-    evalType: Int) extends EvalPythonExec with PythonSQLMetrics {
+    evalType: Int)(
+    val columnarInputEnabled: Boolean) extends EvalPythonExec with PythonSQLMetrics {
   if (!supportedPythonEvalTypes.contains(evalType)) {
     throw SparkException.internalError(s"Unexpected eval type $evalType")
   }
@@ -119,16 +120,38 @@ case class ArrowEvalPythonExec(
   // batch whose columns are ArrowColumnVectors are serialized to IPC directly,
   // bypassing the ColumnarToRow -> ArrowWriter round-trip. Each input batch is
   // released once it has been written to Python. Without pass-through columns,
-  // the result batches from Python are returned as they are; otherwise the
-  // pass-through columns are copied as rows and joined with the results, which
-  // are converted back to columnar batches. This node then outputs only
-  // columnar batches, so the planner inserts a ColumnarToRowExec above it for
-  // a row-based parent.
+  // the result batches from Python are the output batches, which a row-based
+  // parent reads through a ColumnarToRowExec, fused into its whole-stage codegen
+  // stage. Otherwise the pass-through columns are copied as rows and joined with
+  // the results, and this node also supports row-based output: a row-based parent
+  // gets the joined rows as they are, with no ColumnarToRowExec in between, and a
+  // columnar parent, i.e. a stacked evaluation, gets them converted back to
+  // columnar batches.
   // Otherwise it reads rows from its child, even from one that also supports
-  // columnar, such as the scan of the Arrow cache. Either way, the choice is
-  // fixed when the plan is built.
-  override def supportsColumnar: Boolean =
-    child.supportsColumnar && conf.arrowPySparkUDFColumnarInputEnabled
+  // columnar, such as the scan of the Arrow cache.
+  // Whether columnar input is enabled is fixed when the node is planned, and
+  // carried over to its copies, so that any copy, including one that a rule makes
+  // after the transitions are inserted, reads its child in the format the planner
+  // prepared it for, even if the configuration changes before the plan is executed.
+  override def supportsColumnar: Boolean = columnarInputEnabled && child.supportsColumnar
+
+  override def supportsRowBased: Boolean = !supportsColumnar || requiredChildOutput.nonEmpty
+
+  override protected def doExecute(): RDD[InternalRow] = {
+    if (supportsColumnar) {
+      val inputRDD = child.executeColumnar()
+      val rowEvaluatorFactory = columnarEvaluatorFactory.rowOutput
+      if (conf.usePartitionEvaluator) {
+        inputRDD.mapPartitionsWithEvaluator(rowEvaluatorFactory)
+      } else {
+        inputRDD.mapPartitionsWithIndexInternal { (index, iter) =>
+          rowEvaluatorFactory.createEvaluator().eval(index, iter)
+        }
+      }
+    } else {
+      super.doExecute()
+    }
+  }
 
   override protected def doExecuteColumnar(): RDD[ColumnarBatch] = {
     val inputRDD = child.executeColumnar()
@@ -175,10 +198,13 @@ case class ArrowEvalPythonExec(
 
   override def withRequiredChildOutput(
       requiredChildOutput: Seq[Attribute]): ArrowEvalPythonExec =
-    copy(requiredChildOutput = requiredChildOutput)
+    copy(requiredChildOutput = requiredChildOutput)(columnarInputEnabled)
 
   override protected def withNewChildInternal(newChild: SparkPlan): SparkPlan =
-    copy(child = newChild)
+    copy(child = newChild)(columnarInputEnabled)
+
+  override protected def otherCopyArgs: Seq[AnyRef] =
+    Seq(columnarInputEnabled.asInstanceOf[java.lang.Boolean])
 
   private def supportedPythonEvalTypes: Array[Int] =
     Array(

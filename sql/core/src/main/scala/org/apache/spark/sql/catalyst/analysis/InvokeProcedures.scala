@@ -28,6 +28,7 @@ import org.apache.spark.sql.catalyst.rules.Rule
 import org.apache.spark.sql.catalyst.types.DataTypeUtils
 import org.apache.spark.sql.connector.catalog.procedures.BoundProcedure
 import org.apache.spark.sql.connector.read.{LocalScan, Scan}
+import org.apache.spark.sql.errors.QueryCompilationErrors
 import org.apache.spark.sql.execution.LocalTableScanExec
 import org.apache.spark.util.ArrayImplicits._
 
@@ -48,7 +49,7 @@ class InvokeProcedures(session: SparkSession) extends Rule[LogicalPlan] {
   }
 
   private def invoke(procedure: BoundProcedure, args: Seq[Expression], call: Call): LogicalPlan = {
-    val input = toInternalRow(args)
+    val input = toInternalRow(procedure, args)
     val scanIterator = procedure.call(input)
     val relations = scanIterator.asScala.map(toRelation).toSeq
     // Wrap the result in a CommandResult so SparkConnect
@@ -81,8 +82,15 @@ class InvokeProcedures(session: SparkSession) extends Rule[LogicalPlan] {
         s"Only local scans are temporarily supported as procedure output: ${scan.getClass.getName}")
   }
 
-  private def toInternalRow(args: Seq[Expression]): InternalRow = {
-    require(args.forall(_.foldable), "args must be foldable")
+  private def toInternalRow(procedure: BoundProcedure, args: Seq[Expression]): InternalRow = {
+    // An argument that does not fold even after optimization, such as a nondeterministic
+    // expression or a scalar subquery the optimizer cannot inline, cannot be evaluated here.
+    args.zip(procedure.parameters).foreach { case (arg, param) =>
+      if (!arg.foldable) {
+        throw QueryCompilationErrors.nonFoldableArgumentError(
+          procedure.name, param.name, param.dataType)
+      }
+    }
     val values = args.map(_.eval()).toArray
     new GenericInternalRow(values)
   }

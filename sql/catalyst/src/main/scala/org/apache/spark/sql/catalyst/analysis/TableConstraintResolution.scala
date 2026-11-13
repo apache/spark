@@ -94,7 +94,7 @@ private[sql] class TableConstraintResolution(
 
     // Use V2 columns from the table to access both V2 expressions and SQL strings.
     r.table.columns().flatMap { col =>
-      Option(col.columnGenerationExpression())
+      GeneratedColumn.columnGenerationExpression(col)
         .filter(_ => !autoFilledGenCols.exists(n => resolver(n, col.name)))
         .map { genExpr =>
           val catalystExpr = buildGenerationCatalystExpression(r, col.name, genExpr)

@@ -27,6 +27,7 @@ jobs:
   stale:
     if: github.repository == 'apache/spark'
     runs-on: ubuntu-latest
+    timeout-minutes: 10
     steps:
     - uses: actions/stale@v11
       with:
