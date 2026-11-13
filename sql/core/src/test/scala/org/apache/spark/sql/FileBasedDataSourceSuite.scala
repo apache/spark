@@ -26,6 +26,7 @@ import scala.collection.mutable
 
 import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.fs.{LocalFileSystem, Path}
+import org.apache.parquet.io.ParquetDecodingException
 
 import org.apache.spark.{SparkException, SparkRuntimeException, SparkUnsupportedOperationException}
 import org.apache.spark.scheduler.{SparkListener, SparkListenerTaskEnd}
@@ -37,7 +38,7 @@ import org.apache.spark.sql.catalyst.types.DataTypeUtils
 import org.apache.spark.sql.catalyst.util.TimestampNanosTestUtils.foreachNanosPrecision
 import org.apache.spark.sql.execution.{FileSourceScanLike, SimpleMode}
 import org.apache.spark.sql.execution.adaptive.AdaptiveSparkPlanHelper
-import org.apache.spark.sql.execution.datasources.FilePartition
+import org.apache.spark.sql.execution.datasources.{DataSourceUtils, FilePartition}
 import org.apache.spark.sql.execution.datasources.v2.{BatchScanExec, FileScan, PlannedScan}
 import org.apache.spark.sql.execution.datasources.v2.orc.OrcScan
 import org.apache.spark.sql.execution.datasources.v2.parquet.ParquetScan
@@ -1848,6 +1849,23 @@ class FileBasedDataSourceSuite extends SharedSparkSession
           condition = "UNSUPPORTED_FEATURE.TIMESTAMP_NANOS_WITH_LEGACY_TIME_PARSER",
           parameters = expectedParameters)
       }
+    }
+  }
+
+  test("SPARK-61585: ignoreCorruptFiles does not treat SparkUpgradeException as file corruption") {
+    val upgrade = DataSourceUtils.newRebaseExceptionInRead("Parquet")
+    val wrapped = new ParquetDecodingException("wrapped", upgrade)
+    // By default an upgrade error (and a Parquet decoding error wrapping one) is not file
+    // corruption, so ignoreCorruptFiles must not skip the rest of the file for it.
+    assert(!DataSourceUtils.shouldIgnoreCorruptFileException(upgrade))
+    assert(!DataSourceUtils.shouldIgnoreCorruptFileException(wrapped))
+    // A plain Parquet decoding error or other runtime error still counts as corruption.
+    assert(DataSourceUtils.shouldIgnoreCorruptFileException(new ParquetDecodingException("bad")))
+    assert(DataSourceUtils.shouldIgnoreCorruptFileException(new RuntimeException("x")))
+    // The legacy flag restores the old behavior of skipping the upgrade error.
+    withSQLConf(SQLConf.LEGACY_IGNORE_CORRUPT_FILES_SKIPS_UPGRADE_ERRORS.key -> "true") {
+      assert(DataSourceUtils.shouldIgnoreCorruptFileException(upgrade))
+      assert(DataSourceUtils.shouldIgnoreCorruptFileException(wrapped))
     }
   }
 }
