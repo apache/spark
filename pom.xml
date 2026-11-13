@@ -115,6 +115,7 @@
     <module>udf/worker/proto</module>
     <module>udf/worker/core</module>
     <module>udf/worker/grpc</module>
+    <module>udf/worker/runtime</module>
     <!-- See additional modules enabled by profiles below -->
   </modules>
 

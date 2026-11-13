@@ -139,7 +139,9 @@ class GrpcWorkerSession(
   //
   // TODO [SPARK-55278]: add application-level gRPC flow control in a follow-up,
   // using ClientCallStreamObserver readiness for requests and manual inbound
-  // demand for responses, before wiring this transport into a production path.
+  // demand for responses. This transport ships behind
+  // spark.sql.execution.udf.unified.execution.enabled, which defaults to false.
+  // Flow control is still required before that flag leaves experimental status.
   // TODO [SPARK-57324]: expose queue depth as a metric (early warning for a
   // stalled consumer).
   private val outputQueue = new LinkedBlockingQueue[QueueItem]()

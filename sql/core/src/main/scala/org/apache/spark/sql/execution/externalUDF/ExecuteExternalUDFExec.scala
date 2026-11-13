@@ -23,7 +23,6 @@ import java.nio.channels.Channels
 import scala.jdk.CollectionConverters._
 import scala.util.control.NonFatal
 
-import com.google.protobuf.UnsafeByteOperations
 import org.apache.arrow.memory.BufferAllocator
 import org.apache.arrow.vector.{VectorLoader, VectorSchemaRoot}
 import org.apache.arrow.vector.ipc.WriteChannel
@@ -44,7 +43,8 @@ import org.apache.spark.sql.execution.python.HybridRowQueue
 import org.apache.spark.sql.types.{StructField, StructType}
 import org.apache.spark.sql.util.ArrowUtils
 import org.apache.spark.sql.vectorized.{ArrowColumnVector, ColumnarBatch, ColumnVector}
-import org.apache.spark.udf.worker.{DataRequest, DataResponse, UDFWorkerSpecification}
+import org.apache.spark.udf.worker.{DataResponse, UDFWorkerSpecification}
+import org.apache.spark.udf.worker.core.WorkerMessages
 
 /**
  * :: Experimental ::
@@ -59,10 +59,12 @@ import org.apache.spark.udf.worker.{DataRequest, DataResponse, UDFWorkerSpecific
  * cannot distinguish logical types with identical Arrow layouts. Arrow record-batch compression
  * is self-describing, so responses may use any codec available from Arrow's compression factory.
  *
- * The dispatcher is intentionally not configured until a worker implementation is added, so
- * worker creation currently fails before any process is started. Before enabling a production
- * dispatcher, its transport must also add application-level flow control so a slow worker cannot
- * buffer an entire partition in the request stream and [[HybridRowQueue]].
+ * [[org.apache.spark.SparkEnv]] loads the direct dispatcher from the
+ * spark-udf-worker-runtime jar. The dispatcher starts a worker from the command in that
+ * UDF's specification, and an empty command fails before a process starts. The transport
+ * ships behind spark.sql.execution.udf.unified.execution.enabled, which defaults to false.
+ * Flow control is still required before that flag leaves experimental status, so a slow
+ * worker cannot buffer an entire partition in the request stream and [[HybridRowQueue]].
  *
  * @param udf UDF expression evaluated by the worker session.
  * @param resultAttr Output attribute for the UDF expression.
@@ -123,11 +125,7 @@ case class ExecuteExternalUDFExec(
           true,
           largeVarTypes,
           context)
-        val requests = batches.map { batch =>
-          DataRequest.newBuilder()
-            .setData(UnsafeByteOperations.unsafeWrap(batch))
-            .build()
-        }
+        val requests = batches.map(WorkerMessages.dataRequest)
         val udfResults = new ArrowResponseRowIterator(
           session.process(requests),
           outputSchema,
@@ -252,7 +250,7 @@ object ExecuteExternalUDFExec {
         while (!rows.hasNext && !exhausted) {
           if (responses.hasNext) {
             val batch = ArrowConverters.loadBatch(
-              responses.next().getData.newInput(),
+              WorkerMessages.data(responses.next()),
               activeAllocator)
             try {
               new VectorLoader(activeRoot).load(batch)

@@ -43,7 +43,8 @@ trait SparkSubmitTestUtils extends SparkFunSuite with TimeLimits {
       sparkHomeOpt: Option[String] = None,
       timeout: Span = defaultSparkSubmitTimeout,
       isSparkTesting: Boolean = true,
-      expectFailure: Boolean = false): Int = {
+      expectFailure: Boolean = false,
+      environmentOverrides: Map[String, Option[String]] = Map.empty): Int = {
     val sparkHome = sparkHomeOpt.getOrElse(
       sys.props.getOrElse("spark.test.home", fail("spark.test.home is not set!")))
     val history = ArrayBuffer.empty[String]
@@ -66,6 +67,10 @@ trait SparkSubmitTestUtils extends SparkFunSuite with TimeLimits {
       env.remove("SPARK_DIST_CLASSPATH")
     }
     env.put("SPARK_HOME", sparkHome)
+    environmentOverrides.foreach {
+      case (key, Some(value)) => env.put(key, value)
+      case (key, None) => env.remove(key)
+    }
 
     def captureOutput(source: String)(line: String): Unit = {
       logInfo(s"$source> $line")
