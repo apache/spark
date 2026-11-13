@@ -57,7 +57,12 @@ class SparkConnectConnection(val url: String, val info: Properties) extends Conn
     }
   }
 
-  override def isValid(timeout: Int): Boolean = !closed && client.isSessionValid
+  override def isValid(timeout: Int): Boolean = {
+    if (timeout < 0) {
+      throw new SQLException("Validation timeout must not be negative.")
+    }
+    !closed && client.validateSession(timeout)
+  }
 
   override def setCatalog(catalog: String): Unit = {
     checkOpen()

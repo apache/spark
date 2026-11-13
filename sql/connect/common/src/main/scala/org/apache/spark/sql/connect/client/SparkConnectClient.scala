@@ -181,14 +181,47 @@ private[sql] class SparkConnectClient(
   }
 
   /**
-   * Returns true if the session is valid on both the client and the server. A session becomes
-   * invalid if the server side information about the client, e.g., session ID, does not
-   * correspond to the actual client state.
+   * Returns the locally tracked session validity without contacting the server. Response
+   * validation marks this state invalid when it detects a session mismatch. A true result does
+   * not guarantee that the server-side session is still available; use [[validateSession]] to
+   * actively validate the session.
    */
   private[sql] def isSessionValid: Boolean = {
-    // The last known state of the session is store in `responseValidator`, because it is where the
-    // client gets responses from the server.
     stubState.responseValidator.isSessionValid
+  }
+
+  /**
+   * Validates the session with a server request, unless the local state already marks it invalid.
+   * Initializes an unobserved session with Config; otherwise, GetStatus only looks up the
+   * session. Returns false if the session is locally invalid or server validation fails.
+   *
+   * @param timeout
+   *   Validation timeout in seconds. Zero uses the configured deadline for the validation RPC.
+   * @throws IllegalArgumentException
+   *   If the timeout is negative.
+   */
+  private[sql] def validateSession(timeout: Int): Boolean = {
+    require(timeout >= 0, "Validation timeout must not be negative.")
+
+    if (!isSessionValid) {
+      return false
+    }
+    try {
+      if (serverSideSessionId.isEmpty) {
+        val operation = proto.ConfigRequest.Operation
+          .newBuilder()
+          .setGet(proto.ConfigRequest.Get.getDefaultInstance)
+          .build()
+        bstub.validateSession(buildConfigRequest(operation), timeout)
+      } else {
+        bstub.validateSession(getStatusRequestBuilder().build(), timeout)
+      }
+      true
+    } catch {
+      case NonFatal(e) =>
+        logDebug("Failed to validate the server-side session.", e)
+        false
+    }
   }
 
   private[sql] val artifactManager: ArtifactManager = {
@@ -371,6 +404,11 @@ private[sql] class SparkConnectClient(
    *   A [[proto.ConfigResponse]] from the Spark Connect server.
    */
   def config(operation: proto.ConfigRequest.Operation): proto.ConfigResponse = {
+    bstub.config(buildConfigRequest(operation))
+  }
+
+  private def buildConfigRequest(
+      operation: proto.ConfigRequest.Operation): proto.ConfigRequest = {
     val request = proto.ConfigRequest
       .newBuilder()
       .setOperation(operation)
@@ -378,7 +416,7 @@ private[sql] class SparkConnectClient(
       .setClientType(userAgent)
       .setUserContext(userContext)
     serverSideSessionId.foreach(session => request.setClientObservedServerSideSessionId(session))
-    bstub.config(request.build())
+    request.build()
   }
 
   /**
@@ -547,15 +585,7 @@ private[sql] class SparkConnectClient(
       operationIds: Seq[String] = Seq.empty,
       operationExtensions: Seq[protobuf.Any] = Seq.empty,
       requestExtensions: Seq[protobuf.Any] = Seq.empty): proto.GetStatusResponse = {
-    val requestBuilder = proto.GetStatusRequest
-      .newBuilder()
-      .setUserContext(userContext)
-      .setSessionId(sessionId)
-      .setClientType(userAgent)
-
-    serverSideSessionId.foreach(session =>
-      requestBuilder.setClientObservedServerSideSessionId(session))
-
+    val requestBuilder = getStatusRequestBuilder()
     val opStatusRequest = proto.GetStatusRequest.OperationStatusRequest.newBuilder()
     operationIds.foreach(opStatusRequest.addOperationIds)
     operationExtensions.foreach(opStatusRequest.addExtensions)
@@ -564,6 +594,16 @@ private[sql] class SparkConnectClient(
     requestExtensions.foreach(requestBuilder.addExtensions)
 
     bstub.getStatus(requestBuilder.build())
+  }
+
+  private def getStatusRequestBuilder(): proto.GetStatusRequest.Builder = {
+    val builder = proto.GetStatusRequest
+      .newBuilder()
+      .setUserContext(userContext)
+      .setSessionId(sessionId)
+      .setClientType(userAgent)
+    serverSideSessionId.foreach(builder.setClientObservedServerSideSessionId)
+    builder
   }
 
   private[this] val tags = new InheritableThreadLocal[mutable.Set[String]] {
