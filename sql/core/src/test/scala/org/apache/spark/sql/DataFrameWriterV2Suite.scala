@@ -27,7 +27,7 @@ import org.apache.spark.sql.catalyst.TableIdentifier
 import org.apache.spark.sql.catalyst.analysis.{CannotReplaceMissingTableException, TableAlreadyExistsException}
 import org.apache.spark.sql.catalyst.plans.logical.{AppendData, LogicalPlan, OverwriteByExpression, OverwritePartitionsDynamic}
 import org.apache.spark.sql.connector.InMemoryV1Provider
-import org.apache.spark.sql.connector.catalog.{Column => ColumnV2, Identifier, InMemoryTable, InMemoryTableCatalog, TableCatalog}
+import org.apache.spark.sql.connector.catalog.{Column => ColumnV2, Identifier, InMemoryTable, InMemoryTableCatalog, InMemoryTableWithV2Filter, InMemoryTableWithV2FilterCatalog, TableCatalog}
 import org.apache.spark.sql.connector.catalog.CatalogManager.SESSION_CATALOG_NAME
 import org.apache.spark.sql.connector.expressions.{BucketTransform, ClusterByTransform, DaysTransform, FieldReference, HoursTransform, IdentityTransform, LiteralValue, MonthsTransform, YearsTransform}
 import org.apache.spark.sql.execution.QueryExecution
@@ -277,6 +277,24 @@ class DataFrameWriterV2Suite extends SharedSparkSession with BeforeAndAfter {
     checkAnswer(
       spark.table("testcat.table_name"),
       Seq(Row(1L, "a"), Row(2L, "b"), Row(4L, "d"), Row(5L, "e"), Row(6L, "f")))
+  }
+
+  test("SPARK-61504: Overwrite: overwrite by expression on a CHAR column") {
+    spark.conf.set(
+      "spark.sql.catalog.testv2filter", classOf[InMemoryTableWithV2FilterCatalog].getName)
+    val t = "testv2filter.table_name"
+    // the table pads the stored values for the overwrite condition, as a read does
+    spark.sql(s"CREATE TABLE $t (id bigint, dep char(8)) USING foo PARTITIONED BY (dep) " +
+      s"TBLPROPERTIES ('${InMemoryTableWithV2Filter.AcceptCharReadSidePaddingKey}' = 'true')")
+    withSQLConf(SQLConf.LEGACY_CHAR_VARCHAR_AS_STRING.key -> "true") {
+      spark.sql(s"INSERT INTO $t VALUES (1L, 'hr')")
+    }
+    spark.sql(s"INSERT INTO $t VALUES (2L, 'hr'), (3L, 'software')")
+
+    // the query is not resolved when the command is created, unlike the query of a SQL INSERT
+    Seq((4L, "hr")).toDF("id", "dep").writeTo(t).overwrite($"dep" === "hr")
+
+    checkAnswer(spark.table(t), Seq(Row(3L, "software"), Row(4L, "hr      ")))
   }
 
   test("Overwrite: write to a temp view of v2 relation") {

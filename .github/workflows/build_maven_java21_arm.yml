@@ -35,3 +35,4 @@ jobs:
       java: 21
       os: ubuntu-24.04-arm
       arch: arm64
+      build_timeout_minutes: 180

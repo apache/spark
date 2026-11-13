@@ -22,12 +22,15 @@ import java.util.concurrent.atomic.AtomicBoolean
 import org.apache.spark.internal.LogKeys
 import org.apache.spark.sql.catalyst.analysis.ApplyCharTypePaddingHelper
 import org.apache.spark.sql.catalyst.catalog.HiveTableRelation
-import org.apache.spark.sql.catalyst.expressions.AttributeReference
-import org.apache.spark.sql.catalyst.plans.logical.{DeleteFromTable, LogicalPlan}
+import org.apache.spark.sql.catalyst.expressions.{Alias, AttributeMap, AttributeReference, Expression, NamedExpression, OuterReference, SubExprUtils, SubqueryExpression}
+import org.apache.spark.sql.catalyst.plans.logical.{DeleteFromTable, LogicalPlan, OverwriteByExpression, Project, ReplaceData, WriteDelta}
 import org.apache.spark.sql.catalyst.rules.Rule
-import org.apache.spark.sql.catalyst.trees.TreePattern.DELETE_FROM_TABLE
+import org.apache.spark.sql.catalyst.trees.TreePattern.{COMMAND, REPLACE_DATA, WRITE_DELTA}
 import org.apache.spark.sql.catalyst.util.CharVarcharUtils
-import org.apache.spark.sql.execution.datasources.v2.DataSourceV2Relation
+import org.apache.spark.sql.connector.write.RowLevelOperationTable
+import org.apache.spark.sql.errors.QueryCompilationErrors
+import org.apache.spark.sql.execution.datasources.v2.{DataSourceV2Relation, ExternalLookupRelation,
+  ExtractV2Table}
 import org.apache.spark.sql.internal.SQLConf
 
 /**
@@ -72,6 +75,17 @@ object ApplyCharTypePadding extends Rule[LogicalPlan] {
         case r: DataSourceV2Relation =>
           ApplyCharTypePaddingHelper.readSidePadding(r, () =>
             r.copy(output = r.output.map(CharVarcharUtils.cleanAttrMetadata)))
+        // A lookup-only table is read only through an external lookup join, which cannot apply
+        // the read-side CHAR padding or VARCHAR check. It is rejected rather than read without it.
+        case r: ExternalLookupRelation =>
+          r.output.find(attr => CharVarcharUtils.addPaddingForScan(attr) != attr).foreach { attr =>
+            throw QueryCompilationErrors.unsupportedExternalLookupJoinError(
+              "CHAR_VARCHAR_COLUMN",
+              Map(
+                "relation" -> QueryCompilationErrors.toSQLFreeFormId(r.table.name()),
+                "column" -> QueryCompilationErrors.toSQLId(attr.name)))
+          }
+          r -> Nil
         case r: HiveTableRelation =>
           ApplyCharTypePaddingHelper.readSidePadding(r, () => {
             val cleanedDataCols = r.dataCols.map(CharVarcharUtils.cleanAttrMetadata)
@@ -79,8 +93,8 @@ object ApplyCharTypePadding extends Rule[LogicalPlan] {
             r.copy(dataCols = cleanedDataCols, partitionCols = cleanedPartCols)
           })
       }, skipCond = p => p.analyzed || p.isInstanceOf[DeleteFromTable], canGetOutput = _.resolved)
-      padDeleteConditions(
-        ApplyCharTypePaddingHelper.paddingForStringComparison(newPlan, padCharCol = false))
+      padRowLevelConditions(padDeleteConditions(
+        ApplyCharTypePaddingHelper.paddingForStringComparison(newPlan, padCharCol = false)))
     } else {
       ApplyCharTypePaddingHelper.paddingForStringComparison(
         plan, padCharCol = !conf.getConf(SQLConf.LEGACY_NO_CHAR_PADDING_IN_PREDICATE))
@@ -88,22 +102,100 @@ object ApplyCharTypePadding extends Rule[LogicalPlan] {
   }
 
   /**
-   * A DELETE that is not rewritten as a row-level operation deletes with filters translated from
-   * its condition, which the data source compares with the stored values. To match what a read of
-   * the table returns, the condition evaluates the read-side padding of the columns itself, after
-   * its comparisons are padded. The data source can only delete with such a filter if it supports
-   * the padding, e.g. `CHAR_READ_SIDE_PADDING`.
+   * A DELETE that is not rewritten as a row-level operation, and an overwrite by expression such
+   * as `INSERT INTO ... REPLACE WHERE`, delete with filters translated from their condition, which
+   * the data source compares with the stored values. To match what a read of the table returns,
+   * the condition evaluates the read-side padding of the columns itself, after its comparisons are
+   * padded. The data source can only delete with such a filter if it supports the padding, e.g.
+   * `CHAR_READ_SIDE_PADDING`.
    */
   private def padDeleteConditions(plan: LogicalPlan): LogicalPlan = {
-    plan.resolveOperatorsWithPruning(_.containsPattern(DELETE_FROM_TABLE)) {
-      case d: DeleteFromTable =>
-        d.copy(condition = d.condition.transform {
-          // the padded value refers to the attribute without the raw type and is not padded again
-          case attr: AttributeReference if CharVarcharUtils.getRawType(attr.metadata).isDefined =>
-            CharVarcharUtils.addPaddingForScan(attr).transform {
-              case a: AttributeReference => CharVarcharUtils.cleanAttrMetadata(a)
-            }
-        })
+    plan.resolveOperatorsWithPruning(_.containsPattern(COMMAND)) {
+      case d: DeleteFromTable => d.copy(condition = padRawTypedColumns(d.condition))
+      // Under standard semantics, the read-side check of the columns cannot be translated to a
+      // filter, so the overwrite keeps comparing the stored values.
+      case o: OverwriteByExpression if !conf.charVarcharStandardSemantics &&
+          !conf.getConf(SQLConf.LEGACY_NO_CHAR_PADDING_IN_OVERWRITE_CONDITION) =>
+        o.copy(deleteExpr = padRawTypedColumns(o.deleteExpr))
     }
+  }
+
+  private def padRawTypedColumns(condition: Expression): Expression = condition.transform {
+    // the padded value refers to the attribute without the raw type and is not padded again
+    case attr: AttributeReference if CharVarcharUtils.getRawType(attr.metadata).isDefined =>
+      CharVarcharUtils.addPaddingForScan(attr).transform {
+        case a: AttributeReference => CharVarcharUtils.cleanAttrMetadata(a)
+      }
+  }
+
+  /**
+   * The conditions of a row-level write are not evaluated on top of the padded read in its query:
+   * they are pushed down to the scan and to metadata-only deletes, and they select the groups to
+   * read at runtime. To compare padded values with the padded literals and columns, as the read
+   * does, they must apply the padding of the target columns themselves.
+   */
+  private def padRowLevelConditions(plan: LogicalPlan): LogicalPlan = {
+    plan.resolveOperatorsWithPruning(_.containsAnyPattern(REPLACE_DATA, WRITE_DELTA)) {
+      case rd: ReplaceData =>
+        val paddings = targetColumnPaddings(rd.query)
+        rd.copy(
+          condition = padColumns(rd.condition, paddings),
+          groupFilterCondition = rd.groupFilterCondition.map(padColumns(_, paddings)))
+      case wd: WriteDelta =>
+        val paddings = targetColumnPaddings(wd.query)
+        wd.copy(
+          condition = padColumns(wd.condition, paddings),
+          groupFilterCondition = wd.groupFilterCondition.map(padColumns(_, paddings)))
+    }
+  }
+
+  // Maps the stored and the padded attribute of each padded target column to the padded value.
+  // A condition can refer to either one. The read-side padding rewrites the attributes a node
+  // references, and `ReplaceData.references` is `query.outputSet`, so a group-based DELETE refers
+  // to the padded alias. A delta-based DELETE does not output the column and keeps the stored one.
+  // The aliases of the padding keep the raw type, unlike the new values that an UPDATE also
+  // projects directly on top of the read relation.
+  private def targetColumnPaddings(query: LogicalPlan): AttributeMap[Expression] = {
+    AttributeMap(query.collect {
+      case Project(projectList, ExtractV2Table(_: RowLevelOperationTable)) =>
+        projectList.collect {
+          case alias: Alias if hasRawType(alias) =>
+            val padded = alias.child.transform {
+              case attr: AttributeReference => CharVarcharUtils.cleanAttrMetadata(attr)
+            }
+            (alias.toAttribute +: alias.child.references.toSeq).map(_ -> padded)
+        }.flatten
+    }.flatten)
+  }
+
+  private def hasRawType(expr: NamedExpression): Boolean = {
+    CharVarcharUtils.getRawType(expr.metadata).isDefined
+  }
+
+  private def padColumns(cond: Expression, paddings: AttributeMap[Expression]): Expression = {
+    // The padded value refers to the attribute without the raw type, which is not padded again.
+    def isPadded(attr: AttributeReference): Boolean = paddings.contains(attr) && hasRawType(attr)
+
+    def pad(expr: Expression): Expression = expr match {
+      case attr: AttributeReference if isPadded(attr) =>
+        paddings(attr)
+
+      // The analyzer pads the subqueries it resolves, but the group filter subquery of a MERGE is
+      // built from a resolved source, which only gets its read-side padding here. `apply` leaves
+      // a subquery that is already padded unchanged: its relations no longer have the raw type,
+      // and its padded comparisons are not padded again. The outer attributes are collected from
+      // the new plan, as the analyzer does, because they may refer to the padded alias.
+      case subquery: SubqueryExpression =>
+        val newPlan = apply(subquery.plan).transformAllExpressionsWithSubqueries {
+          case OuterReference(attr: AttributeReference) if isPadded(attr) =>
+            paddings(attr).transform { case a: AttributeReference => OuterReference(a) }
+        }
+        subquery.withNewPlan(newPlan).withNewOuterAttrs(SubExprUtils.getOuterReferences(newPlan))
+
+      case other =>
+        other.mapChildren(pad)
+    }
+
+    pad(cond)
   }
 }

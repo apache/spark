@@ -19,38 +19,66 @@ package org.apache.spark.sql.execution.datasources.v2
 
 import java.util.{Collections, IdentityHashMap}
 
-import org.apache.spark.sql.catalyst.expressions.{And, Attribute, AttributeMap, Coalesce,
-  EqualNullSafe, EqualTo, Expression, ExprUtils, Literal, PredicateHelper}
+import org.apache.spark.sql.catalyst.expressions.{Alias, And, Attribute, AttributeMap, Coalesce,
+  EqualNullSafe, EqualTo, Expression, ExprUtils, ExternalUserDefinedFunction, Literal,
+  PredicateHelper, PythonUDF}
+import org.apache.spark.sql.catalyst.plans.LeftOuter
 import org.apache.spark.sql.catalyst.plans.logical.{ExternalLookupJoin, ExternalLookupKeyTypes,
-  LogicalPlan, PreparedExternalLookupJoin}
+  Filter, LogicalPlan, PreparedExternalLookupJoin, Project}
 import org.apache.spark.sql.catalyst.rules.Rule
-import org.apache.spark.sql.catalyst.trees.TreePattern.EXTERNAL_LOOKUP_JOIN
+import org.apache.spark.sql.catalyst.trees.TreePattern.{EXTERNAL_LOOKUP_JOIN, LOOKUP_ONLY_RELATION}
 import org.apache.spark.sql.catalyst.util.CharVarcharUtils
 import org.apache.spark.sql.connector.catalog.{SupportsRead, TableCapability}
 import org.apache.spark.sql.connector.expressions.{Expression => V2Expression, FieldReference}
 import org.apache.spark.sql.connector.expressions.filter.{Predicate => V2Predicate}
 import org.apache.spark.sql.connector.read.{LookupParameter, SupportsExternalLookup}
 import org.apache.spark.sql.errors.{QueryCompilationErrors, QueryErrorsBase}
-import org.apache.spark.sql.types.DataType
+import org.apache.spark.sql.types.{ArrayType, BooleanType, DataType, MapType, StructType}
 
 /** Finalizes an optimized external lookup side immediately before ordinary V2 scan preparation. */
 object PrepareExternalLookupJoin extends Rule[LogicalPlan] with PredicateHelper
   with QueryErrorsBase {
   override def apply(plan: LogicalPlan): LogicalPlan = {
     val prepared = plan.transformUpWithPruning(_.containsPattern(EXTERNAL_LOOKUP_JOIN)) {
+      case join: ExternalLookupJoin if provablyEmpty(join) => emptyJoinResult(join)
       case join: ExternalLookupJoin => prepare(join)
     }
     // Prepared lookup joins no longer contain their lookup relation, so a lookup-only table that
-    // is still read here cannot run.
-    prepared.foreach { node =>
-      ExternalLookupRelations.lookupOnlyTable(node).foreach { table =>
-        throw QueryCompilationErrors.unsupportedBatchReadError(table)
+    // is still read here cannot run. Its relation carries LOOKUP_ONLY_RELATION, so a plan without
+    // one needs no walk.
+    if (prepared.containsPattern(LOOKUP_ONLY_RELATION)) {
+      prepared.foreach { node =>
+        ExternalLookupRelations.lookupOnlyTable(node).foreach { table =>
+          throw QueryCompilationErrors.unsupportedBatchReadError(table)
+        }
       }
     }
     prepared
   }
 
-  private def prepare(join: ExternalLookupJoin): PreparedExternalLookupJoin = {
+  // The optimizer folds `WHERE false` on the lookup side into an empty relation, and a condition
+  // such as `s.id = r.id AND false` into `false`. Such a join needs no connector call.
+  private def provablyEmpty(join: ExternalLookupJoin): Boolean =
+    join.right.maxRows.contains(0L) || (join.condition match {
+      case Some(Literal(value, BooleanType)) => value == null || value == false
+      case _ => false
+    })
+
+  private def emptyJoinResult(join: ExternalLookupJoin): LogicalPlan = {
+    val nullLookupColumns = join.right.output.map { attr =>
+      Alias(Literal(null, attr.dataType), attr.name)(attr.exprId)
+    }
+    val unmatched = Project(join.left.output ++ nullLookupColumns, join.left)
+    join.joinType match {
+      case LeftOuter => unmatched
+      // The stream side is kept under a false filter rather than replaced by an empty relation,
+      // so that its sources, watermarks and stateful operators still run in every micro-batch.
+      // PruneFilters decides whether a streaming subplan may be pruned.
+      case _ => Filter(Literal.FalseLiteral, unmatched)
+    }
+  }
+
+  private def prepare(join: ExternalLookupJoin): LogicalPlan = {
     val relation = extractLookupPlan(join.right).getOrElse {
       throw QueryCompilationErrors.unsupportedExternalLookupJoinError("LOOKUP_PLAN")
     }
@@ -60,9 +88,20 @@ object PrepareExternalLookupJoin extends Rule[LogicalPlan] with PredicateHelper
           if table.capabilities().contains(TableCapability.EXTERNAL_LOOKUP) => table
       case _ =>
         throw QueryCompilationErrors.unsupportedExternalLookupJoinError(
-          "TABLE", Map("table" -> toSQLId(tableName)))
+          "TABLE", Map("table" -> toSQLFreeFormId(tableName)))
     }
     val conjuncts = join.condition.toSeq.flatMap(splitConjunctivePredicates)
+    // A Python or external UDF over lookup columns cannot run in the residual. The rules that move
+    // one out of a join condition match only Join and run later, so this rule does it: an inner
+    // join evaluates the conjunct in a filter above the join, and an outer join is rejected.
+    if (join.joinType == LeftOuter) {
+      conjuncts.flatMap(lookupSideUDF(join, _)).headOption.foreach {
+        case _: ExternalUserDefinedFunction =>
+          throw QueryCompilationErrors.useExternalUDFInJoinConditionUnsupportedError(join.joinType)
+        case _ =>
+          throw QueryCompilationErrors.usePythonUDFInJoinConditionUnsupportedError(join.joinType)
+      }
+    }
     val offeredCandidates = conjuncts.zipWithIndex.collect {
       case (EqualTo(leftExpr, rightAttr: Attribute), index)
           if isLookupEquality(join, leftExpr, rightAttr) =>
@@ -73,7 +112,7 @@ object PrepareExternalLookupJoin extends Rule[LogicalPlan] with PredicateHelper
     }
     if (offeredCandidates.isEmpty) {
       throw QueryCompilationErrors.unsupportedExternalLookupJoinError(
-        "NO_LOOKUP_CANDIDATE", Map("table" -> toSQLId(tableName)))
+        "NO_LOOKUP_CANDIDATE", Map("table" -> toSQLFreeFormId(tableName)))
     }
 
     val scanBuilder = supportsRead.newScanBuilder(relation.options)
@@ -81,7 +120,7 @@ object PrepareExternalLookupJoin extends Rule[LogicalPlan] with PredicateHelper
       case builder: SupportsExternalLookup => builder
       case _ =>
         throw QueryCompilationErrors.unsupportedExternalLookupJoinError(
-          "SCAN_BUILDER", Map("table" -> toSQLId(tableName)))
+          "SCAN_BUILDER", Map("table" -> toSQLFreeFormId(tableName)))
     }
     // A column is offered under the table's name for it. Under case-insensitive analysis, the
     // condition may spell it in another case, as `ID` for `id`, with the same exprId; filter
@@ -92,17 +131,17 @@ object PrepareExternalLookupJoin extends Rule[LogicalPlan] with PredicateHelper
         FieldReference.column(columnNames(candidate.projectedField)),
         new LookupParameter(candidate.parameter.dataType)))
     }.toArray
-    // A copy, so a connector that reorders the array in place cannot break the identity mapping.
     val selectedPredicates = selectedCandidates(tableName, offeredPredicates, offeredCandidates,
-      lookupBuilder.selectLookupPredicates(offeredPredicates.clone()))
+      lookupBuilder.selectLookupPredicates(offeredPredicates))
     val selectedConjuncts = selectedPredicates.map(_.conjunctIndex).toSet
     // As a hash join matches its keys before it evaluates its other conditions, the residual
     // evaluates the equalities between the two sides first, together with the conjuncts that
     // cannot fail. A conjunct that can fail then runs only for rows that pass them. Each group
     // keeps the written order.
-    val (residualFirst, residualRest) = conjuncts.zipWithIndex.collect {
+    val (residualConjuncts, joinFilter) = conjuncts.zipWithIndex.collect {
       case (conjunct, index) if !selectedConjuncts.contains(index) => conjunct
-    }.partition { conjunct =>
+    }.partition(lookupSideUDF(join, _).isEmpty)
+    val (residualFirst, residualRest) = residualConjuncts.partition { conjunct =>
       isJoinKeyEquality(join, conjunct) || ExprUtils.canEvaluateUnconditionally(conjunct)
     }
     // A conjunction evaluates its next conjunct after a NULL, so a NULL in the first group reads
@@ -121,15 +160,20 @@ object PrepareExternalLookupJoin extends Rule[LogicalPlan] with PredicateHelper
     val scan = nonNull(scanBuilder.build(), "ScanBuilder.build()")
     // Fields bind to table columns by exact name, as in `PushDownUtils.toOutputAttrs`. CHAR and
     // VARCHAR are read as STRING, and nullability, including nested nullability, does not count
-    // for the match. The value-row attributes take the read schema's type and nullability, so they
-    // describe every value the connector may return.
+    // for the match. The value-row attributes take the read schema's type, where a column, nested
+    // field, array element or map value is nullable only when both the table and the read schema
+    // allow nulls: the join fails the task on a null that either rules out, because Spark relied
+    // on the table's nullability while it optimized the query.
     val readSchema = CharVarcharUtils.replaceCharVarcharWithStringInSchema(
       nonNull(scan.readSchema(), "Scan.readSchema()"))
     val columnsByName = relation.output.groupBy(_.name)
     val lookupInput = readSchema.fields.map { field =>
       columnsByName.getOrElse(field.name, Nil).find { attr =>
         DataType.equalsIgnoreNullability(attr.dataType, field.dataType)
-      }.map(_.withDataType(field.dataType).withNullability(field.nullable)).getOrElse {
+      }.map { attr =>
+        attr.withDataType(withStricterNullability(attr.dataType, field.dataType))
+          .withNullability(attr.nullable && field.nullable)
+      }.getOrElse {
         throw QueryCompilationErrors.invalidDataSourceExternalLookupError(
           tableName, "UNKNOWN_SCAN_FIELD", Map("field" -> toSQLId(Seq(field.name))))
       }
@@ -160,8 +204,9 @@ object PrepareExternalLookupJoin extends Rule[LogicalPlan] with PredicateHelper
     val readerFactory =
       nonNull(externalLookup.createReaderFactory(), "ExternalLookup.createReaderFactory()")
 
-    PreparedExternalLookupJoin(
+    val prepared = PreparedExternalLookupJoin(
       join.left,
+      tableName,
       scan,
       readerFactory,
       maxParameterRowsPerRequest,
@@ -169,9 +214,43 @@ object PrepareExternalLookupJoin extends Rule[LogicalPlan] with PredicateHelper
       lookupOutput,
       selectedPredicates.map(_.parameter),
       selectedPredicates.map(_.nullSafe),
+      selectedPredicates.map(_.projectedField),
       join.joinType,
       residual.reduceOption(And))
+    joinFilter.reduceOption(And).map(Filter(_, prepared)).getOrElse(prepared)
   }
+
+  /**
+   * The read schema's type of a column, where a nested field, array element or map value is
+   * nullable only when the table's type allows nulls there too. The two types differ only in
+   * nullability.
+   */
+  private def withStricterNullability(tableType: DataType, readType: DataType): DataType =
+    (tableType, readType) match {
+      case (table: StructType, read: StructType) =>
+        StructType(table.fields.zip(read.fields).map { case (tableField, readField) =>
+          readField.copy(
+            dataType = withStricterNullability(tableField.dataType, readField.dataType),
+            nullable = tableField.nullable && readField.nullable)
+        })
+      case (table: ArrayType, read: ArrayType) =>
+        ArrayType(
+          withStricterNullability(table.elementType, read.elementType),
+          table.containsNull && read.containsNull)
+      case (table: MapType, read: MapType) =>
+        MapType(
+          withStricterNullability(table.keyType, read.keyType),
+          withStricterNullability(table.valueType, read.valueType),
+          table.valueContainsNull && read.valueContainsNull)
+      case _ => readType
+    }
+
+  /** A Python or external UDF in the conjunct that reads lookup columns. */
+  private def lookupSideUDF(join: ExternalLookupJoin, conjunct: Expression): Option[Expression] =
+    conjunct.find { e =>
+      (PythonUDF.isScalarPythonUDF(e) || e.isInstanceOf[ExternalUserDefinedFunction]) &&
+        !e.references.subsetOf(join.left.outputSet)
+    }
 
   /**
    * An equality between a bare lookup column and an expression over the stream side, on a type
@@ -218,7 +297,7 @@ object PrepareExternalLookupJoin extends Rule[LogicalPlan] with PredicateHelper
     }
     if (selected.isEmpty) {
       throw QueryCompilationErrors.unsupportedExternalLookupJoinError(
-        "NO_LOOKUP_PREDICATE", Map("table" -> toSQLId(tableName)))
+        "NO_LOOKUP_PREDICATE", Map("table" -> toSQLFreeFormId(tableName)))
     }
     val candidateByPredicate = new IdentityHashMap[V2Predicate, OfferedLookupPredicate]()
     offered.zip(candidates).foreach { case (predicate, candidate) =>

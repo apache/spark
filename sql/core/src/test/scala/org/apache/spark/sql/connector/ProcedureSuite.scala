@@ -98,6 +98,19 @@ class ProcedureSuite extends SharedSparkSession with BeforeAndAfter {
     checkAnswer(sql("CALL cat.ns.sum((1 + 1) * 2, in2 => (2 + 1) / 3)"), Row(5) :: Nil)
   }
 
+  test("SPARK-61557: non-foldable arguments") {
+    catalog.createProcedure(Identifier.of(Array("ns"), "sum"), UnboundSum)
+    checkError(
+      exception = intercept[AnalysisException] {
+        sql("CALL cat.ns.sum(1, CAST(rand() * 10 AS INT))")
+      },
+      condition = "NON_FOLDABLE_ARGUMENT",
+      parameters = Map(
+        "funcName" -> toSQLId("sum"),
+        "paramName" -> toSQLId("in2"),
+        "paramType" -> toSQLType("INT")))
+  }
+
   test("SPARK-59962: an argument reading a value twice") {
     // NULLIF reads the scalar subquery twice. Pre-evaluating it in a `Project` over the
     // `ResolvedProcedure` would leave a plan `InvokeProcedures` does not expect.
@@ -368,6 +381,12 @@ class ProcedureSuite extends SharedSparkSession with BeforeAndAfter {
     assert(explain1.toString.contains("cat.ns.sum(5, 5)"))
     val explain2 = sql("EXPLAIN EXTENDED CALL cat.ns.sum(10, 10)").head().get(0)
     assert(explain2.toString.contains("cat.ns.sum(10, 10)"))
+  }
+
+  test("SPARK-61554: EXPLAIN does not run a CALL inside EXECUTE IMMEDIATE") {
+    catalog.createProcedure(Identifier.of(Array("ns"), "sum"), UnboundNonExecutableSum)
+    val explain = sql("EXPLAIN EXECUTE IMMEDIATE 'CALL cat.ns.sum(5, 5)'").head().getString(0)
+    assert(explain.contains("Call cat.ns.sum(5, 5)"), explain)
   }
 
   test("void procedure") {

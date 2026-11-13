@@ -18,16 +18,42 @@
 package org.apache.spark.sql.catalyst.plans.logical
 
 import org.apache.spark.SparkException
-import org.apache.spark.sql.catalyst.expressions.{Attribute, AttributeSeq, AttributeSet,
-  Expression}
+import org.apache.spark.sql.catalyst.expressions.{Attribute, AttributeSeq, AttributeSet, Expression}
 import org.apache.spark.sql.catalyst.plans.{Inner, JoinType, LeftOuter, QueryPlan}
-import org.apache.spark.sql.catalyst.trees.TreePattern.{EXTERNAL_LOOKUP_JOIN, TreePattern}
+import org.apache.spark.sql.catalyst.trees.TreePattern.{EXTERNAL_LOOKUP_HINT, EXTERNAL_LOOKUP_JOIN,
+  TreePattern}
 import org.apache.spark.sql.catalyst.util.CharVarcharUtils
 import org.apache.spark.sql.connector.read.{ExternalLookupReaderFactory, Scan}
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types.{BinaryType, BooleanType, ByteType, CharType, DataType,
   DateType, DecimalType, IntegerType, LongType, ShortType, StringType, TimestampNTZType,
   TimestampType, VarcharType}
+
+/**
+ * Marks the plan below it as the lookup side that the `EXTERNAL_LOOKUP` hint asks an external
+ * lookup join to read. The external lookup join rules consume it when they form the join.
+ *
+ * Join strategy hints are [[ResolvedHint]] nodes with a [[JoinStrategyHint]]. This hint is not,
+ * because that representation cannot keep two of its guarantees:
+ *  - A strategy hint that conflicts with it must fail the query. [[HintInfo]] holds one strategy,
+ *    and `ResolveJoinStrategyHints` merges a strategy hint on an already hinted relation into the
+ *    existing [[ResolvedHint]] with `HintInfo.merge`, which keeps one strategy and only warns.
+ *  - It selects how the lookup side is read, not a physical join. `EliminateResolvedHint` moves
+ *    every [[ResolvedHint]] it can attach into `Join.hint`, for physical join selection.
+ */
+case class ExternalLookupHint(child: LogicalPlan) extends UnaryNode {
+  override def output: Seq[Attribute] = child.output
+
+  final override val nodePatterns: Seq[TreePattern] = Seq(EXTERNAL_LOOKUP_HINT)
+
+  // As for a ResolvedHint, so that a hint that attaches to no join leaves the cached data that a
+  // plan finds as it is without the hint. Cache substitution protects the lookup side of a lookup
+  // join by identity, not by its canonical form.
+  override def doCanonicalize(): LogicalPlan = child.canonicalized
+
+  override protected def withNewChildInternal(newChild: LogicalPlan): ExternalLookupHint =
+    copy(child = newChild)
+}
 
 /**
  * A lookup join retained through ordinary expression and operator optimization.
@@ -56,9 +82,16 @@ case class ExternalLookupJoin(
       newRight: LogicalPlan): ExternalLookupJoin = copy(left = newLeft, right = newRight)
 }
 
-/** A lookup join after its optimized lookup side has been converted to an external operation. */
+/**
+ * A lookup join after its optimized lookup side has been converted to an external operation.
+ *
+ * @param lookupKeys The table column that each selected lookup predicate compares with the
+ *   parameter at the same position. Spark checks each row that the connector returns against
+ *   them, so the read schema must hold these columns.
+ */
 case class PreparedExternalLookupJoin(
     child: LogicalPlan,
+    tableName: String,
     @transient scan: Scan,
     readerFactory: ExternalLookupReaderFactory,
     maxParameterRowsPerRequest: Int,
@@ -66,6 +99,7 @@ case class PreparedExternalLookupJoin(
     lookupOutput: Seq[Attribute],
     lookupParameters: Seq[Expression],
     nullSafeParameters: Seq[Boolean],
+    lookupKeys: Seq[Attribute],
     joinType: JoinType,
     residualCondition: Option[Expression]) extends UnaryNode {
 
@@ -96,6 +130,7 @@ case class PreparedExternalLookupJoin(
       lookupInput = lookupInput.map(normalize),
       lookupOutput = lookupOutput.map(normalize),
       lookupParameters = lookupParameters.map(normalize),
+      lookupKeys = lookupKeys.map(normalize),
       residualCondition = residualCondition.map(normalize))
   }
 
@@ -104,10 +139,10 @@ case class PreparedExternalLookupJoin(
   override protected def stringArgs: Iterator[Any] =
     Iterator(joinType, lookupParameters, residualCondition, child)
 
-  // The join keeps the size estimate it had before preparation, as an ordinary join's: the product
-  // of the stream side's size and the lookup side's, Spark's default size for a table it cannot
-  // scan. The stream side's size alone would ignore the lookup columns and the rows that a stream
-  // row can match.
+  // The product of the stream side's size and spark.sql.defaultSizeInBytes, as the lookup side is
+  // read by lookups rather than scanned. It can differ from the estimate before preparation, when
+  // the scan of the lookup side reports statistics. The stream side's size alone would ignore the
+  // lookup columns and the rows that a stream row can match.
   override def stats: Statistics = statsCache.getOrElse {
     statsCache = Some(Statistics(sizeInBytes =
       Seq(child.stats.sizeInBytes, BigInt(conf.defaultSizeInBytes)).filter(_ > 0L).product))
