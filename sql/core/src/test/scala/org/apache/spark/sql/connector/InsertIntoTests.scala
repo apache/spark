@@ -740,7 +740,7 @@ trait InsertIntoSchemaEvolutionTests { this: InsertIntoTests =>
     true -> Row(1, 2, 3),
     false -> Row(2, 1, 3)
   ).foreach { case (resolveDifferentArityByPosition, expected) =>
-    test("Insert schema evolution: column list resolves nested fields by position - " +
+    test("Insert schema evolution: column list resolves different-arity nested fields - " +
       s"differentArityByPosition=$resolveDifferentArityByPosition") {
       withSQLConf(
           SQLConf.INSERT_COLUMN_LIST_DIFFERENT_ARITY_STRUCTS_RESOLVE_BY_POSITION.key ->
@@ -777,7 +777,7 @@ trait InsertIntoSchemaEvolutionTests { this: InsertIntoTests =>
     false -> Row(null, 1)
   ).foreach { case (resolveDifferentArityByPosition, expected) =>
     test(
-      "Insert schema evolution: column list resolves narrower nested struct by position - " +
+      "Insert schema evolution: column list resolves narrower nested struct - " +
         s"differentArityByPosition=$resolveDifferentArityByPosition") {
       withSQLConf(
           SQLConf.INSERT_COLUMN_LIST_DIFFERENT_ARITY_STRUCTS_RESOLVE_BY_POSITION.key ->
@@ -885,6 +885,27 @@ trait InsertIntoSchemaEvolutionTests { this: InsertIntoTests =>
     }
   }
 
+  test("Insert column list reports a rename-created duplicate in a nested struct") {
+    withSQLConf(
+        SQLConf.INSERT_COLUMN_LIST_DIFFERENT_ARITY_STRUCTS_RESOLVE_BY_POSITION.key -> "true") {
+      val t1 = s"${catalogAndNamespace}tbl"
+      withTable(t1) {
+        sql(s"CREATE TABLE $t1 (s struct<inner: struct<x: int>>) USING $v2Format")
+        checkError(
+          exception = intercept[AnalysisException] {
+            sql(
+              s"""INSERT INTO $t1 (s)
+                 |SELECT named_struct('other', named_struct('y', 2, 'x', 3))
+                 |""".stripMargin)
+          },
+          condition = "INCOMPATIBLE_DATA_FOR_TABLE.AMBIGUOUS_COLUMN_NAME",
+          parameters = Map(
+            "tableName" -> t1.split("\\.").map(quoteIdentifier).mkString("."),
+            "colName" -> "`s`.`inner`.`x`"))
+      }
+    }
+  }
+
   test("Insert column list reports a rename-created duplicate in a map value") {
     withSQLConf(
         SQLConf.INSERT_COLUMN_LIST_DIFFERENT_ARITY_STRUCTS_RESOLVE_BY_POSITION.key -> "true") {
@@ -927,25 +948,32 @@ trait InsertIntoSchemaEvolutionTests { this: InsertIntoTests =>
   test("Insert column list detects rename-created duplicates using the session resolver") {
     withSQLConf(
         SQLConf.INSERT_COLUMN_LIST_DIFFERENT_ARITY_STRUCTS_RESOLVE_BY_POSITION.key -> "true") {
-      val t1 = s"${catalogAndNamespace}tbl"
-      withTable(t1) {
-        sql(s"CREATE TABLE $t1 (s struct<x: int>) USING $v2Format")
+      val caseInsensitiveTable = s"${catalogAndNamespace}caseInsensitiveTable"
+      val caseSensitiveTable = s"${catalogAndNamespace}caseSensitiveTable"
+      withTable(caseInsensitiveTable, caseSensitiveTable) {
+        sql(s"""CREATE TABLE $caseInsensitiveTable (s struct<x: int>) USING $v2Format
+             |TBLPROPERTIES ('accept-any-schema' = 'true')""".stripMargin)
         withSQLConf(SQLConf.CASE_SENSITIVE.key -> "false") {
           checkError(
             exception = intercept[AnalysisException] {
-              sql(s"INSERT INTO $t1 (s) SELECT named_struct('y', 2, 'X', 3)")
+              sql(
+                s"""INSERT INTO $caseInsensitiveTable (s)
+                   |SELECT named_struct('y', 2, 'X', 3)
+                   |""".stripMargin)
             },
             condition = "INCOMPATIBLE_DATA_FOR_TABLE.AMBIGUOUS_COLUMN_NAME",
             parameters = Map(
-              "tableName" -> t1.split("\\.").map(quoteIdentifier).mkString("."),
+              "tableName" ->
+                caseInsensitiveTable.split("\\.").map(quoteIdentifier).mkString("."),
               "colName" -> "`s`.`x`"))
         }
+        sql(s"CREATE TABLE $caseSensitiveTable (s struct<x: int>) USING $v2Format")
         withSQLConf(SQLConf.CASE_SENSITIVE.key -> "true") {
           sql(
-            s"""INSERT WITH SCHEMA EVOLUTION INTO $t1 (s)
+            s"""INSERT WITH SCHEMA EVOLUTION INTO $caseSensitiveTable (s)
                |SELECT named_struct('y', 2, 'X', 3)
                |""".stripMargin)
-          checkAnswer(sql(s"SELECT s.x, s.X FROM $t1"), Row(2, 3))
+          checkAnswer(sql(s"SELECT s.x, s.X FROM $caseSensitiveTable"), Row(2, 3))
         }
       }
     }
