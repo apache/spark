@@ -19,7 +19,7 @@ package org.apache.spark.sql.catalyst.plans.logical
 
 import org.apache.spark.{SparkException, SparkIllegalArgumentException, SparkUnsupportedOperationException}
 import org.apache.spark.sql.AnalysisException
-import org.apache.spark.sql.catalyst.analysis.{AnalysisContext, AssignmentUtils, EliminateSubqueryAliases, FieldName, NamedRelation, PartitionSpec, ResolvedBoundProcedure, ResolvedIdentifier, ResolvedProcedure, ResolveSchemaEvolution, TypeCheckResult, UnresolvedAttribute, UnresolvedException, UnresolvedProcedure, ViewSchemaMode}
+import org.apache.spark.sql.catalyst.analysis.{AnalysisContext, AssignmentUtils, EliminateSubqueryAliases, FieldName, NamedRelation, PartitionSpec, ProcedureReference, ResolvedBoundProcedure, ResolvedIdentifier, ResolveSchemaEvolution, TypeCheckResult, UnresolvedAttribute, UnresolvedException, UnresolvedProcedure, ViewSchemaMode}
 import org.apache.spark.sql.catalyst.analysis.TypeCheckResult.{DataTypeMismatch, TypeCheckSuccess}
 import org.apache.spark.sql.catalyst.catalog.{FunctionResource, RoutineLanguage}
 import org.apache.spark.sql.catalyst.catalog.CatalogTypes.TablePartitionSpec
@@ -2411,10 +2411,8 @@ case class Call(
 
   override def simpleString(maxFields: Int): String = {
     procedure match {
-      case ResolvedProcedure(catalog, ident, _) =>
-        simpleString(V2TableUtil.toQualifiedName(catalog, ident), maxFields)
-      case ResolvedBoundProcedure(catalog, ident, _) =>
-        simpleString(V2TableUtil.toQualifiedName(catalog, ident), maxFields)
+      case p: ProcedureReference =>
+        simpleString(V2TableUtil.toQualifiedName(p.catalog, p.ident), maxFields)
       case UnresolvedProcedure(nameParts) =>
         val name = nameParts.quoted
         simpleString(name, maxFields)

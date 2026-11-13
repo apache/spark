@@ -219,12 +219,19 @@ case class ResolvedFieldName(path: Seq[String], field: StructField) extends Fiel
 
 case class ResolvedFieldPosition(position: ColumnPosition) extends FieldPosition
 
+/**
+ * A resolved procedure that a CALL refers to, before or after `BindProcedures` binds it.
+ */
+sealed trait ProcedureReference extends LeafNodeWithoutStats {
+  def catalog: ProcedureCatalog
+  def ident: Identifier
+  override def output: Seq[Attribute] = Nil
+}
+
 case class ResolvedProcedure(
     catalog: ProcedureCatalog,
     ident: Identifier,
-    procedure: Procedure) extends LeafNodeWithoutStats {
-  override def output: Seq[Attribute] = Nil
-}
+    procedure: Procedure) extends ProcedureReference
 
 /**
  * A procedure that `BindProcedures` has bound to the arguments of a CALL, or accepted as already
@@ -235,9 +242,7 @@ case class ResolvedProcedure(
 case class ResolvedBoundProcedure(
     catalog: ProcedureCatalog,
     ident: Identifier,
-    procedure: BoundProcedure) extends LeafNodeWithoutStats {
-  override def output: Seq[Attribute] = Nil
-}
+    procedure: BoundProcedure) extends ProcedureReference
 
 /**
  * A plan containing a resolved persistent view.

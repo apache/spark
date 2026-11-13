@@ -999,17 +999,18 @@ trait CheckAnalysis extends LookupCatalog with QueryErrorsBase with PlanToString
               varName,
               c.defaultExpr.originalSQL)
 
-          case c: Call if c.resolved && c.bound && c.checkArgTypes().isFailure =>
+          case c: Call if c.resolved =>
+            if (!c.bound) {
+              throw SparkException.internalError(
+                s"CALL is resolved but not bound: ${c.procedure.nodeName}")
+            }
             c.checkArgTypes() match {
+              case TypeCheckResult.TypeCheckSuccess =>
               case mismatch: TypeCheckResult.DataTypeMismatch =>
                 c.dataTypeMismatch("CALL", mismatch)
               case _ =>
                 throw SparkException.internalError("Invalid input for procedure")
             }
-
-          case c: Call if c.resolved && !c.bound =>
-            throw SparkException.internalError(
-              s"CALL is resolved but not bound: ${c.procedure.nodeName}")
 
           case _ => // Falls back to the following checks
         }

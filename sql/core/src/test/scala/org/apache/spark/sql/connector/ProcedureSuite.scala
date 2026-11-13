@@ -612,6 +612,12 @@ class ProcedureSuite extends SharedSparkSession with BeforeAndAfter {
     val tsCall = Call(ResolvedProcedure(catalog, ident, procedure), Seq(Literal(ts)))
     checkAnswer(Dataset.ofRows(spark, tsCall), Row(ts, "none") :: Nil)
 
+    val inoutCall = Call(ResolvedProcedure(catalog, ident, InoutProcedure), Seq(Literal(1)))
+    checkError(
+      exception = intercept[SparkException](Dataset.ofRows(spark, inoutCall)),
+      condition = "INTERNAL_ERROR",
+      parameters = Map("message" -> "Unsupported parameter mode: INOUT"))
+
     val neither = new Procedure { override def name: String = "proc" }
     val neitherCall = Call(ResolvedProcedure(catalog, ident, neither), Seq(Literal(1)))
     checkError(

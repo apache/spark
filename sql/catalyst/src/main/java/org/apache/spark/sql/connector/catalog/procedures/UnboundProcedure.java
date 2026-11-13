@@ -42,7 +42,7 @@ public interface UnboundProcedure extends Procedure {
    * parameter. If the argument is not named, {@link ProcedureParameter#BY_NAME_METADATA_KEY} will
    * not be set and the name will be assigned randomly.
    * <p>
-   * When analyzing a CALL statement, Spark calls this method once, after all arguments are
+   * Spark calls this method once per analysis of a CALL statement, after all arguments are
    * resolved. From then on, Spark uses only the returned procedure: it reads the returned
    * procedure's {@link BoundProcedure#parameters() parameters} and invokes it, even if this
    * procedure also implements {@link BoundProcedure}.
