@@ -35,7 +35,7 @@ import org.apache.spark.sql.catalyst.TableIdentifier
 import org.apache.spark.sql.catalyst.analysis.AsOfVersion
 import org.apache.spark.sql.catalyst.analysis.TempTableAlreadyExistsException
 import org.apache.spark.sql.catalyst.expressions.{Attribute, SubqueryExpression}
-import org.apache.spark.sql.catalyst.plans.logical.{BROADCAST, Join, JoinStrategyHint, LogicalPlan, SHUFFLE_HASH, SubqueryAlias, UnaryNode}
+import org.apache.spark.sql.catalyst.plans.logical.{BROADCAST, Filter, Join, JoinStrategyHint, LogicalPlan, SHUFFLE_HASH, SubqueryAlias, UnaryNode}
 import org.apache.spark.sql.catalyst.util.DateTimeConstants
 import org.apache.spark.sql.connector.catalog.BasicInMemoryTableCatalog
 import org.apache.spark.sql.connector.catalog.CatalogPlugin
@@ -104,6 +104,110 @@ class CachedTableSuite extends SharedSparkSession
       spark.catalog.clearCache()
     } finally {
       super.afterEach()
+    }
+  }
+
+  test("SPARK-50569: clearCache can be scoped to the current session") {
+    val otherSession = spark.newSession()
+    val firstDataFrame = spark.range(1)
+    val secondDataFrame = otherSession.range(1, 2)
+
+    firstDataFrame.cache()
+    secondDataFrame.cache()
+    spark.catalog.clearCache(allSessions = false)
+
+    assert(spark.sharedState.cacheManager.lookupCachedData(firstDataFrame).isEmpty)
+    assert(otherSession.sharedState.cacheManager.lookupCachedData(secondDataFrame).isDefined)
+
+    otherSession.catalog.clearCache(allSessions = false)
+    assert(spark.sharedState.cacheManager.isEmpty)
+  }
+
+  test("SPARK-50569: session-scoped clearing does not resurrect dependent cache buffers") {
+    for (adaptive <- Seq(false, true); materialized <- Seq(false, true)) {
+      withSQLConf(SQLConf.ADAPTIVE_EXECUTION_ENABLED.key -> adaptive.toString) {
+        withClue(s"adaptive=$adaptive, materialized=$materialized") {
+          val otherSession = spark.newSession()
+          otherSession.conf.set(SQLConf.ADAPTIVE_EXECUTION_ENABLED.key, adaptive.toString)
+          val cacheManager = spark.sharedState.cacheManager
+          val initialRDDs = spark.sparkContext.getPersistentRDDs.keySet.toSet
+          val firstDataFrame = spark.range(10).cache()
+          val firstCache = cacheManager.lookupCachedData(firstDataFrame).get
+          val secondDataFrame = otherSession.range(10).filter("id > 0").cache()
+          val expected = 1L until 10L
+          if (materialized) {
+            assert(secondDataFrame.collect().toSeq == expected)
+          }
+
+          spark.catalog.clearCache(allSessions = false)
+          assert(cacheManager.lookupCachedData(firstDataFrame).isEmpty)
+          assert(cacheManager.lookupCachedData(secondDataFrame).isDefined)
+          assert(cacheManager.numCacheOwners == 1)
+          assert(secondDataFrame.collect().toSeq == expected)
+          assert(!firstCache.cachedRepresentation.cacheBuilder.isCachedColumnBuffersLoaded)
+          val secondCache = cacheManager.lookupCachedData(secondDataFrame).get
+          val secondRDD = secondCache.cachedRepresentation.cacheBuilder.cachedColumnBuffers.id
+          assert(spark.sparkContext.getPersistentRDDs.keySet == initialRDDs + secondRDD)
+
+          otherSession.catalog.clearCache(allSessions = false)
+          assert(cacheManager.isEmpty)
+          assert(cacheManager.numCacheOwners == 0)
+          assert(spark.sparkContext.getPersistentRDDs.keySet == initialRDDs)
+        }
+      }
+    }
+  }
+
+  test("SPARK-50569: failed recaching releases ownership and buffers for the remaining batch") {
+    withSQLConf(SQLConf.ADAPTIVE_EXECUTION_ENABLED.key -> "false") {
+      for (failureOn <- 1 to 3) {
+        withClue(s"failureOn=$failureOn") {
+          val initialRDDs = spark.sparkContext.getPersistentRDDs.keySet.toSet
+          val dataFrames = (1 to 3).map { threshold =>
+            spark.range(10).filter(s"id > $threshold").cache()
+          }
+          dataFrames.foreach(_.collect())
+          val oldEntries = dataFrames.map(cacheManager.lookupCachedData(_).get)
+          val unrelated = spark.range(20).cache()
+          unrelated.collect()
+          val unrelatedRDD = cacheManager.lookupCachedData(unrelated).get
+            .cachedRepresentation.cacheBuilder.cachedColumnBuffers.id
+          assert(cacheManager.numCacheOwners == 4)
+
+          val originalStrategies = spark.experimental.extraStrategies
+          val attempts = new AtomicInteger(0)
+          val failure = new IllegalStateException("Injected cache rebuild failure")
+          val failingStrategy = new SparkStrategy {
+            override def apply(plan: LogicalPlan): Seq[SparkPlan] = {
+              if (plan.isInstanceOf[Filter] && attempts.incrementAndGet() == failureOn) {
+                throw failure
+              }
+              Nil
+            }
+          }
+          try {
+            spark.experimental.extraStrategies = failingStrategy +: originalStrategies
+            val error = intercept[IllegalStateException] {
+              cacheManager.recacheByPlan(spark, spark.range(10).queryExecution.analyzed)
+            }
+            assert(error eq failure)
+            // Entries rebuilt before the failure survive; failed and unprocessed entries do not.
+            assert(cacheManager.numCachedEntries == failureOn)
+            assert(cacheManager.numCacheOwners == failureOn)
+            assert(cacheManager.lookupCachedData(unrelated).isDefined)
+            assert(oldEntries.forall { cd =>
+              !cd.cachedRepresentation.cacheBuilder.isCachedColumnBuffersLoaded
+            })
+            assert(spark.sparkContext.getPersistentRDDs.keySet == initialRDDs + unrelatedRDD)
+          } finally {
+            spark.experimental.extraStrategies = originalStrategies
+            spark.catalog.clearCache(allSessions = false)
+          }
+          assert(cacheManager.isEmpty)
+          assert(cacheManager.numCacheOwners == 0)
+          assert(spark.sparkContext.getPersistentRDDs.keySet == initialRDDs)
+        }
+      }
     }
   }
 
