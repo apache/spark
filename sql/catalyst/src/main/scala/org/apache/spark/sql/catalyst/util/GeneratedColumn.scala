@@ -19,8 +19,8 @@ package org.apache.spark.sql.catalyst.util
 
 import org.apache.spark.sql.catalyst.expressions.{Attribute, AttributeReference}
 import org.apache.spark.sql.catalyst.plans.logical.ColumnDefinition
-import org.apache.spark.sql.connector.catalog.{Column, Identifier, Table, TableCapability,
-  TableCatalog, TableCatalogCapability}
+import org.apache.spark.sql.connector.catalog.{Column, GenerationExpression, Identifier, Table,
+  TableCapability, TableCatalog, TableCatalogCapability}
 import org.apache.spark.sql.errors.QueryCompilationErrors
 import org.apache.spark.sql.execution.datasources.v2.DataSourceV2Relation
 import org.apache.spark.sql.types.{Metadata, MetadataBuilder, StructField, StructType}
@@ -110,6 +110,16 @@ object GeneratedColumn {
   }
 
   /**
+   * Returns the generation expression of the V2 column `col`, if it is a generated column. A
+   * connector can implement only the legacy SQL getter [[Column.generationExpression]], which
+   * auto-fill reads as well, so fall back to it.
+   */
+  def columnGenerationExpression(col: Column): Option[GenerationExpression] = {
+    Option(col.columnGenerationExpression())
+      .orElse(Option(col.generationExpression()).map(new GenerationExpression(_)))
+  }
+
+  /**
    * Whether the table supports generated columns on write (see
    * [[supportsGeneratedColumnsOnWrite]]) and the given columns include at least one generated
    * column.
@@ -118,7 +128,7 @@ object GeneratedColumn {
       table: Table,
       columns: Array[Column]): Boolean = {
     supportsGeneratedColumnsOnWrite(table) &&
-      columns.exists(_.columnGenerationExpression() != null)
+      columns.exists(columnGenerationExpression(_).isDefined)
   }
 
   /**
