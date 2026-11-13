@@ -969,6 +969,7 @@ pyspark_structured_streaming = Module(
         "pyspark.sql.streaming.listener",
         # unittests
         "pyspark.sql.tests.test_python_streaming_datasource",
+        "pyspark.sql.tests.streaming.test_group_state",
         "pyspark.sql.tests.streaming.test_streaming",
         "pyspark.sql.tests.streaming.test_streaming_foreach",
         "pyspark.sql.tests.streaming.test_streaming_foreach_batch",
