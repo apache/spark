@@ -21,6 +21,7 @@ import java.util.Locale
 
 import org.apache.spark.sql.catalyst.SQLConfHelper
 import org.apache.spark.sql.catalyst.analysis.{
+  AnalysisErrorAt,
   CoalesceHintUtils,
   UnresolvedAttribute,
   UnresolvedRelation
@@ -38,6 +39,7 @@ import org.apache.spark.sql.catalyst.plans.logical.{
 }
 import org.apache.spark.sql.errors.QueryCompilationErrors
 import org.apache.spark.sql.internal.SQLConf
+import org.apache.spark.sql.types.FileType
 
 /**
  * Resolves [[UnresolvedHint]] operators by dispatching to hint-specific resolution logic.
@@ -182,11 +184,34 @@ class HintResolver(resolver: Resolver, expressionResolver: ExpressionResolver)
       )
     }
 
-    RebalancePartitions(
+    val resolvedRebalancePartitions = RebalancePartitions(
       partitionExpressions = resolvedExpressions,
       child = resolvedChild,
       optNumPartitions = optNumPartitions,
       optAdvisoryPartitionSize = optAdvisoryPartitionSize)
+
+    validateRebalanceByFile(resolvedRebalancePartitions, hint)
+
+    resolvedRebalancePartitions
+  }
+
+  /**
+   * FILE is not comparable, so it cannot be a REBALANCE key. This is the check [[CheckAnalysis]]
+   * does for every [[HasPartitionExpressions]] operator, reported at the hint like in the
+   * fixed-point Analyzer.
+   */
+  private def validateRebalanceByFile(
+      rebalancePartitions: RebalancePartitions,
+      hint: UnresolvedHint): Unit = {
+    rebalancePartitions.partitionExpressions
+      .find(_.dataType.existsRecursively(_.isInstanceOf[FileType]))
+      .foreach { fileExpr =>
+        hint.failAnalysis(
+          errorClass = "UNSUPPORTED_FEATURE.PARTITION_BY_FILE",
+          messageParameters =
+            Map("expr" -> toSQLExpr(fileExpr), "dataType" -> toSQLType(fileExpr.dataType))
+        )
+      }
   }
 
   /**
