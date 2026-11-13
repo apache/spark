@@ -978,6 +978,10 @@ class SparkConnectClient(object):
         self._plan_compression_algorithm: Optional[str] = None  # Will be fetched lazily
 
         self._release_futures: weakref.WeakSet[concurrent.futures.Future] = weakref.WeakSet()
+        self._session_released = False
+        # Set when an ML command was sent, since it can cache a model on the server even if
+        # its response never reaches this client.
+        self._ml_command_sent = False
 
         self._release_session_on_exit = os.getenv(
             "SPARK_CONNECT_RELEASE_SESSION_ON_EXIT", "false"
@@ -1443,6 +1447,8 @@ class SparkConnectClient(object):
             # inside an if statement to not incur a performance cost converting proto to string
             # when not at debug log level.
             logger.debug(f"Execute command for command {self._proto_to_string(command, True)}")
+        if command.HasField("ml_command"):
+            self._ml_command_sent = True
         req = self._execute_plan_request_with_metadata()
         self._set_command_in_plan(req.plan, command)
         data, _, metrics, observed_metrics, properties = self._execute_and_fetch(
@@ -1469,6 +1475,8 @@ class SparkConnectClient(object):
             logger.debug(
                 f"Execute command as iterator for command {self._proto_to_string(command, True)}"
             )
+        if command.HasField("ml_command"):
+            self._ml_command_sent = True
         req = self._execute_plan_request_with_metadata()
         self._set_command_in_plan(req.plan, command)
         yield from self._execute_and_fetch_as_iterator(req, observations or {})
@@ -1497,6 +1505,7 @@ class SparkConnectClient(object):
         ExecutePlanResponseReattachableIterator.shutdown_threadpool_if_idle()
         self._channel.close()
         self._closed = True
+        atexit.unregister(self._on_exit)
 
     @property
     def is_closed(self) -> bool:
@@ -2194,6 +2203,9 @@ class SparkConnectClient(object):
                         timeout=self._rpc_deadlines.release_session,
                     )
                     self._verify_response_integrity(resp)
+                    # The server returns no server-side session ID if it had no session to close.
+                    if resp.server_side_session_id:
+                        self._session_released = True
                     return
             raise SparkConnectException("Invalid state during retry exception handling.")
         except Exception as error:
@@ -2596,14 +2608,14 @@ class SparkConnectClient(object):
             return []
 
     def _on_exit(self) -> None:
-        # If the client has already been explicitly closed, skip all cleanup RPCs.
-        # The server-side resources were released by close(); reissuing them here
-        # is wasted work and, if the server has since become unreachable, can
-        # block process exit on the gRPC call.
-        if self._closed:
+        # Skip all exit cleanup if the client is closed or its session was released: the RPCs
+        # would be wasted work and can block process exit if the server is unreachable.
+        if self._closed or self._session_released:
             return
 
-        self._cleanup_ml_cache()
+        # The session may hold ML cache entries (see _ml_command_sent).
+        if self._server_session_id or self._ml_command_sent:
+            self._cleanup_ml_cache()
         if self._release_session_on_exit:
             try:
                 self.release_session()

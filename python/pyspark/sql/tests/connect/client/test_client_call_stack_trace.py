@@ -20,7 +20,11 @@ import unittest
 from unittest.mock import patch
 
 import pyspark
-from pyspark.testing.connectutils import connect_requirement_message, should_test_connect
+from pyspark.testing.connectutils import (
+    connect_requirement_message,
+    disable_ml_cache_cleanup,
+    should_test_connect,
+)
 
 if should_test_connect:
     import pyspark.sql.connect.proto as pb2
@@ -30,7 +34,7 @@ if should_test_connect:
     # The _cleanup_ml_cache invocation will hang in this test (no valid spark cluster)
     # and it blocks the test process exiting because it is registered as the atexit handler
     # in `SparkConnectClient` constructor. To bypass the issue, patch the method in the test.
-    SparkConnectClient._cleanup_ml_cache = lambda _: None
+    disable_ml_cache_cleanup()
 
 # SPARK-54314: Improve Server-Side debuggability in Spark Connect by capturing client application's
 # file name and line numbers in PySpark
