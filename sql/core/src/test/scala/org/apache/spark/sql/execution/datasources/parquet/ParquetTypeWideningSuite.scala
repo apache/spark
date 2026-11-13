@@ -323,7 +323,8 @@ class ParquetTypeWideningSuite
       (Seq("1", "10"), LongType, DateType),
       (Seq("1", "10"), IntegerType, TimestampType),
       (Seq("1", "10"), IntegerType, TimestampNTZType),
-      (Seq("2020-01-01", "2020-01-02", "1312-02-27"), DateType, TimestampType)
+      (Seq("2020-01-01", "2020-01-02", "1312-02-27"), DateType, TimestampType),
+      (Seq("2020-01-01", "2020-01-02", "1312-02-27"), DateType, DecimalType(10, 0))
     )
   }
   test(s"unsupported parquet conversion $fromType -> $toType") {
