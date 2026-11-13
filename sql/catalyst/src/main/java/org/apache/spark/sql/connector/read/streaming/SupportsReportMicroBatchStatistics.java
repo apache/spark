@@ -29,7 +29,8 @@ import org.apache.spark.sql.connector.read.SupportsReportStatistics;
  * the query starts, so {@link SupportsReportStatistics#estimateStatistics()} can only describe the
  * whole source. When the stream implements this interface, Spark plans each micro-batch with the
  * statistics of its own offset range instead, for example to decide whether to broadcast it in a
- * join.
+ * join. Real-time and continuous queries do not call this interface and use the statistics of the
+ * scan.
  *
  * @since 4.4.0
  */
@@ -37,9 +38,17 @@ import org.apache.spark.sql.connector.read.SupportsReportStatistics;
 public interface SupportsReportMicroBatchStatistics extends MicroBatchStream {
 
   /**
-   * Returns the estimated statistics of the data from {@code start} (exclusive) to {@code end}
-   * (inclusive), the offset range of one micro-batch. Spark can call this method more than once
-   * for the same range, before or after {@link #planInputPartitions(Offset, Offset)}.
+   * Returns the estimated statistics of the data that
+   * {@link #planInputPartitions(Offset, Offset)} reads for the same {@code start} and {@code end},
+   * the offset range of one micro-batch.
+   * <p>
+   * Spark calls this method on the driver when it plans the micro-batch, and can call it more than
+   * once for the same range, before or after {@link #planInputPartitions(Offset, Offset)}. An
+   * implementation that does expensive work for it, for example to list files, should cache it.
+   * <p>
+   * When the statistics of the range are unknown, return {@code null} or statistics with no
+   * values. Spark then uses the statistics of the scan, as if the stream did not implement this
+   * interface.
    */
   Statistics estimateStatistics(Offset start, Offset end);
 }

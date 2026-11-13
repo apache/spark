@@ -609,19 +609,18 @@ case class StreamingDataSourceV2ScanRelation(
       }))
   }
 
-  override def computeStats(): Statistics = (stream, startOffset, endOffset) match {
+  override def computeStats(): Statistics = {
     // A micro-batch reads only its own offset range, which the scan, built once when the query
-    // starts, cannot describe.
-    case (microBatch: SupportsReportMicroBatchStatistics, Some(start), Some(end)) =>
-      DataSourceV2Relation.transformV2Stats(
-        microBatch.estimateStatistics(start, end), conf.defaultSizeInBytes, output)
-    case _ => scan match {
-      case r: SupportsReportStatistics =>
-        val statistics = r.estimateStatistics()
-        DataSourceV2Relation.transformV2Stats(statistics, conf.defaultSizeInBytes, output)
-      case _ =>
-        Statistics(sizeInBytes = conf.defaultSizeInBytes)
+    // starts, cannot describe. When the stream does not know the statistics of the range, use the
+    // statistics of the scan.
+    val microBatchStats = (stream, startOffset, endOffset) match {
+      case (microBatch: SupportsReportMicroBatchStatistics, Some(start), Some(end)) =>
+        Some(microBatch.estimateStatistics(start, end)).filter(V2StatisticsUtils.isNotEmpty)
+      case _ => None
     }
+    microBatchStats.orElse(V2StatisticsUtils.computeStats(scan))
+      .map(DataSourceV2Relation.transformV2Stats(_, conf.defaultSizeInBytes, output))
+      .getOrElse(Statistics(sizeInBytes = conf.defaultSizeInBytes))
   }
 
   private val stringArgsVal: Seq[Any] = {
