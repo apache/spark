@@ -648,18 +648,6 @@ createPipelineDatasetHeader
       identifierReference
     ;
 
-streamRelationPrimary
-    : STREAM multipartIdentifier streamChangesClause?
-      optionsClause? identifiedByClause?
-      watermarkClause? tableAlias                                      #streamTableName
-    | STREAM LEFT_PAREN multipartIdentifier RIGHT_PAREN
-      optionsClause? identifiedByClause?
-      watermarkClause? tableAlias                                      #streamTableName
-    | STREAM tableFunctionCallWithTrailingClauses                      #streamTableValuedFunction
-    | STREAM LEFT_PAREN tableFunctionCall RIGHT_PAREN
-      identifiedByClause? watermarkClause? tableAlias                  #streamTableValuedFunction
-    ;
-
 setResetStatement
     : SET ROLE .*?                                                     #failSetRole
     | SET TIME ZONE interval                                           #setTimeZone
@@ -1412,7 +1400,11 @@ identifierComment
     ;
 
 relationPrimary
-    : streamRelationPrimary                                 #streamRelation
+    : STREAM (multipartIdentifier | LEFT_PAREN multipartIdentifier RIGHT_PAREN)
+      streamChangesClause? optionsClause?
+      identifiedByClause? watermarkClause? tableAlias       #streamRelation
+    | STREAM (tableFunctionCall | LEFT_PAREN tableFunctionCall RIGHT_PAREN)
+      identifiedByClause? watermarkClause? tableAlias       #streamRelation
     | identifierReference changesClause
       optionsClause? tableAlias                             #changelogTableName
     | temporalTableIdentifierReference temporalClause?
@@ -1510,10 +1502,9 @@ tableFunctionCall
       RIGHT_PAREN
     ;
 
-// A table function call with optional trailing clauses for streaming and aliasing.
-// The identifiedByClause is optional and only valid for streaming TVFs. For non-streaming TVFs,
-// the AST builder will reject it with an error. The clause must come before watermarkClause
-// and tableAlias to avoid ambiguity (since IDENTIFIED is a nonReserved keyword).
+// A table function call with optional trailing clauses. The identifiedByClause is parsed here so
+// that the AST builder can reject it with a tailored error for non-streaming TVFs. It must come
+// before watermarkClause and tableAlias to avoid ambiguity (since IDENTIFIED is non-reserved).
 tableFunctionCallWithTrailingClauses
     : tableFunctionCall identifiedByClause? watermarkClause? tableAlias
     ;
