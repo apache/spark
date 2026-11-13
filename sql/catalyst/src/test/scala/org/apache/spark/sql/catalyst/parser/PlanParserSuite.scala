@@ -3790,8 +3790,7 @@ class PlanParserSuite extends AnalysisTest {
   }
 
   test("GAP FILL: invalid interval literals keep their error in both keyword modes") {
-    // An interval literal with a second from-to part is rejected by AstBuilder. The GAP FILL
-    // range must not turn that error into a syntax error at TO.
+    // AstBuilder rejects a from-to part mixed with other units. GAP FILL must keep that error.
     Seq("true", "false").foreach { enforceReserved =>
       withSQLConf(
           SQLConf.ANSI_ENABLED.key -> "true",
