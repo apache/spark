@@ -28,7 +28,7 @@ import org.apache.spark.sql.execution.{ColumnarToRowTransition, InputAdapter, Sp
 import org.apache.spark.sql.execution.adaptive.AdaptiveSparkPlanExec
 import org.apache.spark.sql.execution.columnar.{ColumnStatisticsSchema, PartitionStatistics}
 import org.apache.spark.sql.internal.SQLConf
-import org.apache.spark.sql.types.{AtomicType, BinaryType, StructType}
+import org.apache.spark.sql.types.{AtomicType, BinaryType, StringType, StructType}
 import org.apache.spark.sql.vectorized.ColumnarBatch
 import org.apache.spark.storage.StorageLevel
 
@@ -327,7 +327,14 @@ abstract class SimpleMetricsCachedBatchSerializer extends CachedBatchSerializer 
       // |______________|___________________________________|___________________________________|
       //
       // We can see that we only need to read p1 and p3.
-      case StartsWith(a: AttributeReference, ExtractableLiteral(l)) =>
+      //
+      // This is correct only if a string starts with the literal exactly when its leading
+      // characters are the literal, and strings are ordered by their characters, that is, for a
+      // collation that supports binary ordering. For any other collation, a batch with a match
+      // could be skipped. For example, 'oeuvre' written with the ligature U+0153 starts with
+      // 'oe' in UNICODE_CI_AI, but its first two characters are greater than 'oe'.
+      case StartsWith(a @ AttributeReference(_, st: StringType, _, _), ExtractableLiteral(l))
+          if st.supportsBinaryOrdering =>
         statsFor(a).lowerBound.substr(0, Length(l)) <= l &&
             l <= statsFor(a).upperBound.substr(0, Length(l))
     }
