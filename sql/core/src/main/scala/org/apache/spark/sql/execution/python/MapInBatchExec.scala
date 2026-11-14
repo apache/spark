@@ -33,7 +33,7 @@ import org.apache.spark.sql.execution.UnaryExecNode
  * This is somewhat similar with [[FlatMapGroupsInPandasExec]] and
  * `org.apache.spark.sql.catalyst.plans.logical.MapPartitionsInRWithArrow`
  */
-trait MapInBatchExec extends UnaryExecNode with PythonSQLMetrics {
+trait MapInBatchExec extends UnaryExecNode with PythonPhaseMetrics {
   protected val func: Expression
   protected val pythonEvalType: Int
 

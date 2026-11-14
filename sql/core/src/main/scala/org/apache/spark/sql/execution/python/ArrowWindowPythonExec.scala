@@ -84,7 +84,7 @@ case class ArrowWindowPythonExec(
     partitionSpec: Seq[Expression],
     orderSpec: Seq[SortOrder],
     child: SparkPlan,
-    evalType: Int) extends WindowExecBase with PythonSQLMetrics {
+    evalType: Int) extends WindowExecBase with PythonPhaseMetrics {
   if (!supportedPythonEvalTypes.contains(evalType)) {
     throw SparkException.internalError(s"Unexpected eval type $evalType")
   }

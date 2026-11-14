@@ -28,7 +28,7 @@ import org.apache.spark.sql.internal.SQLConf
 case class InProcessArrowEvalPythonExec(
     udfs: Seq[PythonUDF],
     resultAttrs: Seq[Attribute],
-    child: SparkPlan) extends EvalPythonExec with PythonSQLMetrics {
+    child: SparkPlan) extends EvalPythonExec with PythonPhaseMetrics {
 
   // The in-process evaluator joins the results with the whole input row, or reads the input
   // back from Arrow, so it passes through the whole child; the planner drops what is unused.

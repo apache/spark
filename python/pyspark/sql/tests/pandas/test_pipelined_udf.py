@@ -78,6 +78,33 @@ class PipelinedUDFTests(ReusedSQLTestCase):
             plan = plan.children().apply(0)
         self.assertEqual(plan.metrics().apply("pythonNumPipelinedTasks").value(), 1)
 
+    def test_detailed_timing_is_disabled(self):
+        with self.sql_conf(
+            {
+                "spark.sql.execution.pythonUDF.detailedTiming.enabled": "true",
+                "spark.sql.legacy.execution.pythonUDF.pandas.conversion.enabled": "false",
+                "spark.sql.adaptive.enabled": "false",
+            }
+        ):
+            data = self.spark.range(2, numPartitions=1)
+            for name, build in (
+                (
+                    "arrow batched",
+                    lambda: data.select(udf(lambda value: value, "long", useArrow=True)("id")),
+                ),
+                ("map pandas", lambda: data.mapInPandas(lambda dfs: dfs, "id long")),
+            ):
+                with self.subTest(handler=name):
+                    result = build()
+                    self.assertEqual([row[0] for row in result.collect()], [0, 1])
+                    plan = result._jdf.queryExecution().executedPlan()
+                    while not plan.metrics().contains("pythonProcessingTime"):
+                        self.assertEqual(plan.children().size(), 1)
+                        plan = plan.children().apply(0)
+                    metrics = plan.metrics()
+                    self.assertEqual(metrics.apply("pythonNumPipelinedTasks").value(), 1)
+                    self.assertEqual(metrics.apply("pythonNumTimingReports").value(), 0)
+
     def test_scalar_arrow_udf(self):
         """Basic scalar Arrow UDF with pipelined mode."""
 
