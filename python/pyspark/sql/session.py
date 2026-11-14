@@ -2349,11 +2349,15 @@ class SparkSession(SparkConversionMixin):
         """
         Returns the paths of the files added to resources, as :attr:`SparkContext.listFiles`.
 
-        These are the files that the jobs of this session make available to their tasks, such
-        as those added with :meth:`SparkSession.addArtifacts` with ``file`` or ``pyfile`` set, or
-        with the ``ADD FILE`` SQL statement. Without Spark Connect, these are all the files added
-        to the :class:`SparkContext`, also by other sessions. With Spark Connect, these are only
-        the files added to this session, as the URIs of their copies on the server.
+        These are the files added with :meth:`SparkSession.addArtifacts` with ``file`` or
+        ``pyfile`` set, or with the ``ADD FILE`` SQL statement, and those added to the
+        :class:`SparkContext`, such as with ``--files``. Without Spark Connect, these are all the
+        files added to the :class:`SparkContext`, also by other sessions. With Spark Connect, these
+        are the files added to this session and those added to the server outside of any session,
+        but not those of the other sessions, which servers before Spark 4.4 also list. A file
+        uploaded with :meth:`SparkSession.addArtifacts` is listed as the URI of its copy on the
+        server, and one added with ``ADD FILE`` as :meth:`SparkContext.addFile` lists it, such as
+        by the path it was added with when the server runs in local mode.
 
         .. versionadded:: 4.4.0
 
@@ -2380,12 +2384,16 @@ class SparkSession(SparkConversionMixin):
         Returns the paths of the archives added to resources, as
         :attr:`SparkContext.listArchives`.
 
-        These are the archives that the jobs of this session unpack for their tasks, such as
-        those added with :meth:`SparkSession.addArtifacts` with ``archive`` set, or with the
-        ``ADD ARCHIVE`` SQL statement. A path keeps the fragment, such as ``#name``, that it was
+        These are the archives added with :meth:`SparkSession.addArtifacts` with ``archive`` set,
+        or with the ``ADD ARCHIVE`` SQL statement, and those added to the :class:`SparkContext`,
+        such as with ``--archives``. A path keeps the fragment, such as ``#name``, that it was
         added with. Without Spark Connect, these are all the archives added to the
-        :class:`SparkContext`, also by other sessions. With Spark Connect, these are only the
-        archives added to this session, as the URIs of their copies on the server.
+        :class:`SparkContext`, also by other sessions. With Spark Connect, these are the archives
+        added to this session and those added to the server outside of any session, but not those
+        of the other sessions, which servers before Spark 4.4 also list. An archive uploaded with
+        :meth:`SparkSession.addArtifacts` is listed as the URI of its copy on the server, and one
+        added with ``ADD ARCHIVE`` as :meth:`SparkContext.addArchive` lists it, such as by the
+        path it was added with when the server runs in local mode.
 
         .. versionadded:: 4.4.0
 

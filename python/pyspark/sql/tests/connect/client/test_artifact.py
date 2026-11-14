@@ -242,10 +242,12 @@ class ArtifactTestsMixin:
             spark_session.sql(f"ADD ARCHIVE '{archive_path}'")
 
             self.assertEqual(
-                [os.path.basename(p) for p in spark_session.listFiles()], ["my_sql_file.txt"]
+                [os.path.basename(p) for p in spark_session.listFiles() if "my_sql_" in p],
+                ["my_sql_file.txt"],
             )
             self.assertEqual(
-                [os.path.basename(p) for p in spark_session.listArchives()], ["my_sql_archive.zip"]
+                [os.path.basename(p) for p in spark_session.listArchives() if "my_sql_" in p],
+                ["my_sql_archive.zip"],
             )
             self.assertFalse(any("my_sql_" in p for p in self.spark.listFiles()))
             self.assertFalse(any("my_sql_" in p for p in self.spark.listArchives()))

@@ -1172,7 +1172,8 @@ class SparkSession:
     addArtifact = addArtifacts
 
     def listFiles(self) -> List[str]:
-        # The server lists the files of this session only, as the URIs of their copies.
+        # LIST FILES and LIST ARCHIVES do not list the artifacts of the other sessions of the
+        # server since Spark 4.4.
         return [row[0] for row in self.sql("LIST FILES").collect()]
 
     listFiles.__doc__ = PySparkSession.listFiles.__doc__
