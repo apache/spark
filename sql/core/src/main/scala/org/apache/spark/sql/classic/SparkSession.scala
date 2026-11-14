@@ -32,7 +32,7 @@ import org.apache.spark.{SPARK_VERSION, SparkConf, SparkContext, SparkException,
 import org.apache.spark.annotation.{DeveloperApi, Experimental, Stable, Unstable}
 import org.apache.spark.api.java.JavaRDD
 import org.apache.spark.internal.Logging
-import org.apache.spark.internal.LogKeys.{CALL_SITE_LONG_FORM, CLASS_NAME, CONFIG}
+import org.apache.spark.internal.LogKeys.{CALL_SITE_LONG_FORM, CLASS_NAME, CONFIG, CONFIG2}
 import org.apache.spark.internal.config.{ConfigEntry, EXECUTOR_ALLOW_SPARK_CONTEXT}
 import org.apache.spark.rdd.RDD
 import org.apache.spark.scheduler.{SparkListener, SparkListenerApplicationEnd}
@@ -1267,8 +1267,23 @@ object SparkSession extends SparkSessionCompanion with Logging {
   private def applyExtensions(
       sparkContext: SparkContext,
       extensions: SparkSessionExtensions): SparkSessionExtensions = {
-    val extensionConfClassNames = sparkContext.conf.get(StaticSQLConf.SPARK_SESSION_EXTENSIONS)
-      .getOrElse(Seq.empty)
+    val extensionConfClassNames = {
+      val defaultKey = StaticSQLConf.SPARK_SESSION_EXTENSIONS_DEFAULT_LIST.key
+      val userKey = StaticSQLConf.SPARK_SESSION_EXTENSIONS.key
+      val defaultClassNames =
+        sparkContext.conf.get(StaticSQLConf.SPARK_SESSION_EXTENSIONS_DEFAULT_LIST)
+          .getOrElse(Seq.empty)
+      val userClassNames = sparkContext.conf.get(StaticSQLConf.SPARK_SESSION_EXTENSIONS)
+        .getOrElse(Seq.empty)
+      // Last-win: drop operator defaults also listed by the user, then apply defaults first.
+      defaultClassNames.distinct.filter(userClassNames.contains(_)).foreach { className =>
+        logWarning(log"Extension ${MDC(CLASS_NAME, className)} is listed in both " +
+          log"${MDC(CONFIG, defaultKey)} and ${MDC(CONFIG2, userKey)}; dropping every " +
+          log"occurrence of it from ${MDC(CONFIG, defaultKey)}; it is applied where it " +
+          log"appears in ${MDC(CONFIG2, userKey)}.")
+      }
+      defaultClassNames.filterNot(userClassNames.contains(_)) ++ userClassNames
+    }
     extensionConfClassNames.foreach { extensionConfClassName =>
       try {
         val extensionConfClass = Utils.classForName(extensionConfClassName)
