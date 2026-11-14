@@ -205,6 +205,40 @@ class GroupbyApplyFuncMixin:
         with option_context("compute.shortcut_limit", 0):
             self.test_apply_with_multi_index_columns()
 
+    def test_apply_group_name(self):
+        # SPARK-60649: the function sees the group key as the group's `name` attribute,
+        # also when a column is called "name".
+        pdf = pd.DataFrame({"a": [1, 2, 3, 4, 5, 6], "b": [1, 1, 2, 3, 5, 8]})
+        psdf = ps.from_pandas(pdf)
+        self.assert_eq(
+            psdf.groupby("b")
+            .apply(lambda x: pd.Series({"key": x.name}), include_groups=False)
+            .sort_index(),
+            pdf.groupby("b")
+            .apply(lambda x: pd.Series({"key": x.name}), include_groups=False)
+            .sort_index(),
+        )
+
+        pdf["name"] = [1, 4, 9, 16, 25, 36]
+        psdf = ps.from_pandas(pdf)
+
+        def single_key(x):
+            return pd.Series({"key": x.name, "total": x["name"].sum()})
+
+        def multiple_keys(x):
+            return pd.Series({"key_a": x.name[0], "key_b": x.name[1], "total": x["name"].sum()})
+
+        for by, func in [("b", single_key), (["b"], single_key), (["a", "b"], multiple_keys)]:
+            with self.subTest(by=by):
+                self.assert_eq(
+                    psdf.groupby(by).apply(func, include_groups=False).sort_index(),
+                    pdf.groupby(by).apply(func, include_groups=False).sort_index(),
+                )
+
+    def test_apply_group_name_without_shortcut(self):
+        with option_context("compute.shortcut_limit", 0):
+            self.test_apply_group_name()
+
     def test_apply_with_type_hint(self):
         pdf = pd.DataFrame(
             {"a": [1, 2, 3, 4, 5, 6], "b": [1, 1, 2, 3, 5, 8], "c": [1, 4, 9, 16, 25, 36]},
@@ -705,6 +739,22 @@ class GroupbyApplyFuncMixin:
             pdf.groupby([("x", "a"), ("x", "b")])
             .filter(lambda x: any(x[("x", "a")] == 2))
             .sort_index(),
+        )
+
+    def test_filter_group_name(self):
+        # SPARK-60649: the function sees the group key as the group's `name` attribute.
+        pdf = pd.DataFrame(
+            {"a": [1, 2, 3, 4, 5, 6], "b": [1, 1, 2, 3, 5, 8], "name": [1, 4, 9, 16, 25, 36]}
+        )
+        psdf = ps.from_pandas(pdf)
+
+        self.assert_eq(
+            psdf.groupby("b").filter(lambda x: x.name > 2).sort_index(),
+            pdf.groupby("b").filter(lambda x: x.name > 2).sort_index(),
+        )
+        self.assert_eq(
+            psdf.groupby(["a", "b"]).filter(lambda x: x.name[0] == x.name[1]).sort_index(),
+            pdf.groupby(["a", "b"]).filter(lambda x: x.name[0] == x.name[1]).sort_index(),
         )
 
 
