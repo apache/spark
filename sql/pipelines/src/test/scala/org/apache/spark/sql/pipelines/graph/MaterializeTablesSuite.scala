@@ -1215,6 +1215,33 @@ abstract class MaterializeTablesSuite extends BaseCoreExecutionTest {
     }
   }
 
+  test("SPARK-59268: re-materializing a streaming table applies column comment changes") {
+    withRecordingCatalog {
+      def schema(xComment: String, yComment: String, nestedComment: String): StructType =
+        new StructType()
+          .add("x", IntegerType, nullable = true, xComment)
+          .add("y", IntegerType, nullable = true, yComment)
+          .add("s", new StructType().add("a", IntegerType, nullable = true, nestedComment))
+
+      materializeStreamingTable("t", schema("x1", "y1", "a1"), Map.empty)
+      assert(recordingCatalog.recordedAlters.isEmpty)
+
+      // Change one comment, remove another, and change a nested one.
+      materializeStreamingTable("t", schema("x2", null, "a2"), Map.empty)
+      assert(recordingCatalog.recordedAlters.size == 1)
+      val comments = recordingCatalog.recordedAlters.flatten.collect {
+        case c: TableChange.UpdateColumnComment =>
+          c.fieldNames().mkString(".") -> Option(c.newComment())
+      }.toMap
+      assert(comments == Map("x" -> Some("x2"), "y" -> None, "s.a" -> Some("a2")))
+
+      assert(
+        loadTableFromRecordingCatalog("t").columns() sameElements
+          CatalogV2Util.structTypeToV2Columns(schema("x2", null, "a2"))
+      )
+    }
+  }
+
   test("SPARK-58517: re-materializing with a case-only column difference is a no-op under " +
     "case-insensitive resolution") {
     withRecordingCatalog {

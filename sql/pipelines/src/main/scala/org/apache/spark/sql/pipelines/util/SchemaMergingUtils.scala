@@ -17,7 +17,9 @@
 
 package org.apache.spark.sql.pipelines.util
 
-import org.apache.spark.sql.types.StructType
+import java.util.Locale
+
+import org.apache.spark.sql.types.{ArrayType, DataType, MapType, StructType}
 
 object SchemaMergingUtils {
 
@@ -40,8 +42,57 @@ object SchemaMergingUtils {
       tableSchema: StructType,
       dataSchema: StructType,
       caseSensitive: Boolean): StructType = {
-    // TODO (SPARK-59268): don't drop changes to comments and field metadata `desiredSchema`, or
-    // loudly reject changes to such fields.
     StructType.merge(tableSchema, dataSchema, caseSensitive).asInstanceOf[StructType]
+  }
+
+  /**
+   * Like [[mergeSchemas]], but on a field present in both schemas (at any nesting level), the
+   * field's metadata (comment, default value, etc.) is taken from `dataSchema` rather than from
+   * `tableSchema`. Fields present only in `tableSchema` keep their metadata.
+   *
+   * Used for additive schema evolution of an existing table, where `tableSchema` is the table's
+   * current schema and `dataSchema` is the desired one: column metadata changes in the desired
+   * schema (including a removed comment) must survive the merge so that they can be applied to
+   * the table, the same way they are when the desired schema is used as-is.
+   */
+  def mergeSchemasWithDataMetadata(
+      tableSchema: StructType,
+      dataSchema: StructType,
+      caseSensitive: Boolean): StructType = {
+    val merged = mergeSchemas(tableSchema, dataSchema, caseSensitive)
+    overlayFieldMetadata(merged, dataSchema, caseSensitive).asInstanceOf[StructType]
+  }
+
+  /**
+   * Returns `target` with the metadata of every struct field that also exists (by name, honoring
+   * `caseSensitive`) in `source` replaced by the metadata of the `source` field, recursing into
+   * nested structs, arrays, and maps. Names, types, and nullability are taken from `target`.
+   */
+  private def overlayFieldMetadata(
+      target: DataType,
+      source: DataType,
+      caseSensitive: Boolean): DataType = (target, source) match {
+    case (targetStruct: StructType, sourceStruct: StructType) =>
+      def normalize(name: String): String =
+        if (caseSensitive) name else name.toLowerCase(Locale.ROOT)
+      val sourceFields = sourceStruct.fields.map(f => normalize(f.name) -> f).toMap
+      StructType(targetStruct.fields.map { targetField =>
+        sourceFields.get(normalize(targetField.name)) match {
+          case Some(sourceField) =>
+            targetField.copy(
+              dataType = overlayFieldMetadata(
+                targetField.dataType, sourceField.dataType, caseSensitive),
+              metadata = sourceField.metadata)
+          case None => targetField
+        }
+      })
+    case (targetArray: ArrayType, sourceArray: ArrayType) =>
+      targetArray.copy(elementType = overlayFieldMetadata(
+        targetArray.elementType, sourceArray.elementType, caseSensitive))
+    case (targetMap: MapType, sourceMap: MapType) =>
+      targetMap.copy(
+        keyType = overlayFieldMetadata(targetMap.keyType, sourceMap.keyType, caseSensitive),
+        valueType = overlayFieldMetadata(targetMap.valueType, sourceMap.valueType, caseSensitive))
+    case _ => target
   }
 }
