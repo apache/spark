@@ -17,10 +17,12 @@
 
 package org.apache.spark.sql.execution
 
+import java.io.{ObjectOutputStream, OutputStream}
 import java.math.{BigDecimal => JBigDecimal}
 import java.time.Duration
 import java.util.concurrent.{ConcurrentLinkedQueue, CountDownLatch, TimeUnit}
 
+import scala.collection.mutable
 import scala.util.{Failure, Success, Try}
 
 import org.apache.logging.log4j.Level
@@ -33,6 +35,8 @@ import org.apache.spark.sql.{DataFrame, Dataset, Row, SaveMode}
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.{And, Attribute, Cast, CodegenObjectFactoryMode, Expression, IsNotNull, Literal, With}
 import org.apache.spark.sql.catalyst.expressions.codegen.{ByteCodeStats, CodeAndComment, CodegenContext, CodeGenerator, ExprCode, ExprValue, GlobalValue, JavaCode, WholeStageSplit, WholeStageSplitKey}
+import org.apache.spark.sql.catalyst.optimizer.{BuildLeft, BuildRight}
+import org.apache.spark.sql.catalyst.plans.{ExistenceJoin, LeftSingle}
 import org.apache.spark.sql.catalyst.plans.logical.MergeRows
 import org.apache.spark.sql.catalyst.plans.logical.MergeRows.{Keep, Update}
 import org.apache.spark.sql.classic
@@ -559,6 +563,122 @@ class WholeStageCodegenSuite extends SharedSparkSession
         }.size === 2)
         checkAnswer(twoLeftJoinsDf,
           Seq(Row(0, null, null), Row(1, 1, null), Row(2, 2, 2), Row(3, 3, 3), Row(4, 4, 4)))
+      }
+    }
+  }
+
+  test("SPARK-61668: ShuffledHashJoin codegen references do not serialize plan nodes") {
+    // The RDD a codegen stage adds on top of its input RDDs, with the references of its generated
+    // code, is serialized into every task binary. A plan node written with it would drag its whole
+    // child subtrees along, through the exchanges below the join.
+    def serializedPlanNodes(stage: WholeStageCodegenExec): Seq[String] = {
+      val rdd = stage.execute()
+      // The input RDDs are cached by the plans below, so these are the ones `rdd` reads.
+      val inputs = stage.child.asInstanceOf[CodegenSupport].inputRDDs()
+      val planNodes = mutable.ArrayBuffer[String]()
+      val out = new ObjectOutputStream(OutputStream.nullOutputStream()) {
+        enableReplaceObject(true)
+        override def replaceObject(obj: AnyRef): AnyRef = obj match {
+          // Cut the lineage below the stage: the input RDDs belong to other stages.
+          case r: RDD[_] if inputs.exists(_ eq r) => "input RDD"
+          case p: SparkPlan =>
+            planNodes += p.nodeName
+            p
+          case _ => obj
+        }
+      }
+      try out.writeObject(rdd) finally out.close()
+      planNodes.toSeq
+    }
+
+    withTempView("l", "r") {
+      spark.range(0, 20, 1, 2).select(($"id" % 7).as("k1"), $"id".as("v1"))
+        .createOrReplaceTempView("l")
+      spark.range(0, 15, 1, 2).select(($"id" % 5).as("k2"), $"id".as("v2"))
+        .createOrReplaceTempView("r")
+      val forceShj = Map(
+        "spark.sql.join.forceApplyShuffledHashJoin" -> "true",
+        SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key -> "-1")
+      def dfJoin(joinType: String, buildLeft: Boolean, cond: String)(
+          strategy: String): DataFrame = {
+        val (l, r) = (spark.table("l"), spark.table("r"))
+        if (buildLeft) l.hint(strategy).join(r, expr(cond), joinType)
+        else l.join(r.hint(strategy), expr(cond), joinType)
+      }
+      val keyAndBuildCond = "k1 = k2 AND v1 <> v2"
+      // (name, configs that plan the shuffled hash join, the query given the join strategy hint,
+      // a check of the shuffled hash join). The expected rows come from the same query without
+      // the shuffled hash join, so they do not depend on its relation builder.
+      val cases: Seq[(String, Map[String, String], String => DataFrame,
+          ShuffledHashJoinExec => Boolean)] = Seq(
+        ("inner, build right", Map.empty, dfJoin("inner", false, keyAndBuildCond),
+          _.buildSide == BuildRight),
+        ("inner, build left", Map.empty, dfJoin("inner", true, keyAndBuildCond),
+          _.buildSide == BuildLeft),
+        // Stream-side outer joins.
+        ("left outer, build right", Map.empty, dfJoin("left_outer", false, keyAndBuildCond),
+          _.buildSide == BuildRight),
+        ("right outer, build left", Map.empty, dfJoin("right_outer", true, keyAndBuildCond),
+          _.buildSide == BuildLeft),
+        // Build-side outer joins.
+        ("left outer, build left", Map.empty, dfJoin("left_outer", true, keyAndBuildCond),
+          _.buildSide == BuildLeft),
+        ("right outer, build right", Map.empty, dfJoin("right_outer", false, keyAndBuildCond),
+          _.buildSide == BuildRight),
+        ("full outer, build right", Map.empty, dfJoin("full_outer", false, keyAndBuildCond),
+          _.buildSide == BuildRight),
+        ("full outer, build left", Map.empty, dfJoin("full_outer", true, keyAndBuildCond),
+          _.buildSide == BuildLeft),
+        ("left semi", Map.empty, dfJoin("left_semi", false, keyAndBuildCond),
+          !_.ignoreDuplicatedKey),
+        ("left anti", Map.empty, dfJoin("left_anti", false, keyAndBuildCond),
+          !_.ignoreDuplicatedKey),
+        ("left semi, duplicated keys ignored", Map.empty, dfJoin("left_semi", false, "k1 = k2"),
+          _.ignoreDuplicatedKey),
+        ("left anti, duplicated keys ignored", Map.empty, dfJoin("left_anti", false, "k1 = k2"),
+          _.ignoreDuplicatedKey),
+        ("existence join", forceShj, _ => sql(
+          "SELECT * FROM l WHERE EXISTS (SELECT 1 FROM r WHERE k2 = k1 AND v2 <> v1) OR v1 > 15"),
+          _.joinType.isInstanceOf[ExistenceJoin]),
+        ("left single join", forceShj, _ => sql(
+          "SELECT k1, (SELECT v2 FROM r WHERE v2 = v1) FROM l"),
+          _.joinType == LeftSingle),
+        // The build-side key holds a scalar subquery, whose physical expression holds its plan.
+        ("scalar subquery in the build keys", Map.empty, strategy => sql(
+          s"SELECT /*+ $strategy(r) */ * FROM l JOIN r " +
+            "ON k1 = k2 + (SELECT max(id) - 8 FROM range(10)) AND v1 <> v2"),
+          _.rightKeys.exists(_.exists(_.isInstanceOf[ScalarSubquery]))))
+
+      cases.foreach { case (name, shjConfs, query, check) =>
+        val expected = query("SHUFFLE_MERGE")
+        assert(!expected.queryExecution.executedPlan.exists(_.isInstanceOf[ShuffledHashJoinExec]),
+          s"$name: ${expected.queryExecution.executedPlan}")
+        val expectedRows = expected.collect().toSeq
+        Seq(false, true).foreach { usePartitionEvaluator =>
+          withSQLConf(shjConfs.toSeq :+
+              (SQLConf.USE_PARTITION_EVALUATOR.key -> usePartitionEvaluator.toString): _*) {
+            val clue = s"$name, usePartitionEvaluator=$usePartitionEvaluator"
+            val df = query("SHUFFLE_HASH")
+            // The plan nodes run by a codegen stage itself.
+            def inStage(plan: SparkPlan): Seq[SparkPlan] = plan match {
+              case _: InputAdapter => Nil
+              case other => other +: other.children.flatMap(inStage)
+            }
+            val stages = df.queryExecution.executedPlan.collect {
+              case s: WholeStageCodegenExec
+                  if inStage(s.child).exists(_.isInstanceOf[ShuffledHashJoinExec]) =>
+                inStage(s.child).foreach {
+                  case j: ShuffledHashJoinExec => assert(check(j), s"$clue: ${s.treeString}")
+                  case _ =>
+                }
+                s
+            }
+            assert(stages.length == 1, s"$clue: ${df.queryExecution.executedPlan}")
+            val planNodes = serializedPlanNodes(stages.head)
+            assert(planNodes.isEmpty, s"$clue: $planNodes referenced by\n${stages.head.treeString}")
+            checkAnswer(df, expectedRows)
+          }
+        }
       }
     }
   }
