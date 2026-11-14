@@ -20,7 +20,7 @@ package org.apache.spark.sql.connector
 import java.sql.Timestamp
 import java.util
 
-import org.apache.spark.sql.{AnalysisException, Row}
+import org.apache.spark.sql.{AnalysisException, DataFrame, Row}
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.analysis.NamedStreamingRelation
 import org.apache.spark.sql.catalyst.streaming.{StreamingRelationV2, UserProvided}
@@ -28,8 +28,9 @@ import org.apache.spark.sql.connector.catalog._
 import org.apache.spark.sql.connector.catalog.Changelog.{
   CHANGE_TYPE_DELETE, CHANGE_TYPE_INSERT, CHANGE_TYPE_UPDATE_POSTIMAGE, CHANGE_TYPE_UPDATE_PREIMAGE}
 import org.apache.spark.sql.internal.SQLConf
+import org.apache.spark.sql.streaming.StreamingQuery
 import org.apache.spark.sql.test.SharedSparkSession
-import org.apache.spark.sql.types.{LongType, StringType}
+import org.apache.spark.sql.types.{DataType, LongType, StringType, StructType}
 import org.apache.spark.unsafe.types.UTF8String
 
 /**
@@ -1201,6 +1202,200 @@ class ChangelogEndToEndSuite extends SharedSparkSession {
             Row(3L, "Carol", CHANGE_TYPE_INSERT)))
       } finally {
         q.stop()
+      }
+    }
+  }
+
+  for {
+    streaming <- Seq(false, true)
+    computeUpdates <- Seq(false, true)
+    hiddenRowVersion <- Seq(false, true)
+  } {
+    val mode = if (streaming) "streaming" else "batch"
+    test(s"$mode netChanges uses hidden metadata identity, computeUpdates=$computeUpdates, " +
+        s"hiddenRowVersion=$hiddenRowVersion") {
+      val id = if (hiddenRowVersion) ident else recreateWithRowVersion()
+      val metadataColumn = new MetadataColumn {
+        override def name(): String = "_metadata"
+        override def dataType(): StructType = new StructType()
+          .add("row_id", LongType, nullable = false)
+        override def isNullable(): Boolean = false
+      }
+      val versionColumn = new MetadataColumn {
+        override def name(): String = "_row_version"
+        override def dataType(): DataType = LongType
+        override def isNullable(): Boolean = false
+      }
+      catalog.setChangelogProperties(id, ChangelogProperties(
+        containsCarryoverRows = true,
+        containsIntermediateChanges = true,
+        representsUpdateAsDeleteAndInsert = true,
+        rowIdPaths = Seq(Seq("_metadata", "row_id"), Seq("id")),
+        rowVersionName = Some(if (hiddenRowVersion) "_row_version" else "row_commit_version"),
+        metadataColumns = Seq(metadataColumn) ++ Option.when(hiddenRowVersion)(versionColumn)))
+
+      def change(
+          hiddenId: Long,
+          visibleId: Long,
+          data: String,
+          rowVersion: Long,
+          changeType: String,
+          commitVersion: Long): InternalRow = {
+        val values = Seq(visibleId, UTF8String.fromString(data)) ++
+          Option.when(!hiddenRowVersion)(rowVersion) ++ Seq(
+            UTF8String.fromString(changeType), commitVersion, commitVersion * 1000000L,
+            InternalRow(hiddenId)) ++ Option.when(hiddenRowVersion)(rowVersion)
+        InternalRow.fromSeq(values)
+      }
+
+      // Both identities have id=1. Only their hidden row IDs distinguish them.
+      catalog.addChangeRows(id, Seq(
+        change(10L, 1L, "Alice", 1L, CHANGE_TYPE_DELETE, 1L),
+        change(10L, 1L, "Alicia", 2L, CHANGE_TYPE_INSERT, 1L),
+        change(20L, 1L, "Bob", 1L, CHANGE_TYPE_INSERT, 1L),
+        change(20L, 1L, "Bob", 1L, CHANGE_TYPE_DELETE, 2L),
+        change(20L, 1L, "Bob", 1L, CHANGE_TYPE_INSERT, 2L),
+        // Reuse hidden ID 20 with a different visible ID and advance the watermark.
+        change(20L, 2L, "Carol", 3L, CHANGE_TYPE_INSERT, 3L)))
+
+      val preLabel = if (computeUpdates) CHANGE_TYPE_UPDATE_PREIMAGE else CHANGE_TYPE_DELETE
+      val postLabel = if (computeUpdates) CHANGE_TYPE_UPDATE_POSTIMAGE else CHANGE_TYPE_INSERT
+      val expected = Seq(
+        Row(1L, "Alice", 1L, preLabel, 1L, new Timestamp(1000L)),
+        Row(1L, "Alicia", 2L, postLabel, 1L, new Timestamp(1000L)),
+        Row(1L, "Bob", 1L, CHANGE_TYPE_INSERT, 1L, new Timestamp(1000L)),
+        Row(2L, "Carol", 3L, CHANGE_TYPE_INSERT, 3L, new Timestamp(3000L))).map { row =>
+        if (hiddenRowVersion) Row.fromSeq(row.toSeq.patch(2, Nil, 1)) else row
+      }
+      val changes = if (streaming) {
+        spark.readStream
+          .option("startingVersion", "1")
+          .option("deduplicationMode", "netChanges")
+          .option("computeUpdates", computeUpdates.toString)
+          .changes(fullTableName)
+      } else {
+        spark.read
+          .option("startingVersion", "1")
+          .option("endingVersion", "3")
+          .option("deduplicationMode", "netChanges")
+          .option("computeUpdates", computeUpdates.toString)
+          .changes(fullTableName)
+      }
+      val expectedColumns = Seq("id", "data") ++
+        Option.when(!hiddenRowVersion)("row_commit_version") ++
+        Seq("_change_type", "_commit_version", "_commit_timestamp")
+      assert(changes.schema.fieldNames.toSeq == expectedColumns)
+
+      if (streaming) {
+        withSQLConf(rocksDbProviderConf) {
+          val queryName = s"cdc_hidden_identity_$computeUpdates"
+          val query = changes.writeStream
+            .format("memory")
+            .queryName(queryName)
+            .outputMode("append")
+            .start()
+          try {
+            query.processAllAvailable()
+            val result = spark.table(queryName)
+            assert(result.schema.fieldNames.toSeq == expectedColumns)
+            checkAnswer(result, expected)
+          } finally {
+            query.stop()
+          }
+        }
+      } else {
+        checkAnswer(changes, expected)
+      }
+    }
+  }
+
+  test("streaming hidden identities survive multiple batches and a checkpoint restart") {
+    val metadataColumn = new MetadataColumn {
+      override def name(): String = "_metadata"
+      override def dataType(): StructType = new StructType()
+        .add("row_id", LongType, nullable = false)
+      override def isNullable(): Boolean = false
+    }
+    catalog.setChangelogProperties(ident, ChangelogProperties(
+      containsIntermediateChanges = true,
+      rowIdPaths = Seq(Seq("_metadata", "row_id")),
+      metadataColumns = Seq(metadataColumn)))
+
+    def change(
+        hiddenId: Long,
+        visibleId: Long,
+        data: String,
+        changeType: String,
+        version: Long): InternalRow = {
+      InternalRow(visibleId, UTF8String.fromString(data), UTF8String.fromString(changeType),
+        version, version * 1000000L, InternalRow(hiddenId))
+    }
+
+    withTempDir { dir =>
+      withSQLConf(
+          rocksDbProviderConf,
+          // Keep timers pending until the next input batch advances the watermark.
+          SQLConf.STREAMING_NO_DATA_MICRO_BATCHES_ENABLED.key -> "false") {
+        val output = new java.io.File(dir, "output").getCanonicalPath
+        val checkpoint = new java.io.File(dir, "checkpoint").getCanonicalPath
+        def changes: DataFrame = spark.readStream
+          .option("startingVersion", "1")
+          .option("deduplicationMode", "netChanges")
+          .option("computeUpdates", "true")
+          .changes(fullTableName)
+        val expectedColumns = Seq(
+          "id", "data", "_change_type", "_commit_version", "_commit_timestamp")
+        assert(changes.schema.fieldNames.toSeq == expectedColumns)
+        def result: DataFrame = spark.read.schema(changes.schema).parquet(output)
+        def startQuery(): StreamingQuery = changes.writeStream
+          .format("parquet")
+          .option("checkpointLocation", checkpoint)
+          .outputMode("append")
+          .start(output)
+
+        // The visible IDs collide. Across batches, Alice changes while Bob disappears.
+        catalog.addChangeRows(ident, Seq(
+          change(10L, 1L, "Alice", CHANGE_TYPE_DELETE, 1L),
+          change(20L, 1L, "Bob", CHANGE_TYPE_INSERT, 1L)))
+        val firstQuery = startQuery()
+        try {
+          firstQuery.processAllAvailable()
+          checkAnswer(result, Seq.empty)
+          catalog.addChangeRows(ident, Seq(
+            change(10L, 1L, "Alicia", CHANGE_TYPE_INSERT, 2L),
+            change(20L, 1L, "Bob", CHANGE_TYPE_DELETE, 2L)))
+          firstQuery.processAllAvailable()
+          checkAnswer(result, Seq.empty)
+          assert(firstQuery.recentProgress.count(_.numInputRows > 0) == 2)
+          assert(firstQuery.lastProgress.stateOperators.exists(_.numRowsTotal > 0))
+        } finally {
+          firstQuery.stop()
+        }
+
+        // Use a recoverable file sink and the same checkpoint. The first event and timer
+        // must be restored, and already consumed source offsets must not be replayed.
+        val restarted = startQuery()
+        try {
+          restarted.processAllAvailable()
+          checkAnswer(result, Seq.empty)
+          catalog.addChangeRows(ident, Seq(
+            change(30L, 2L, "advance", CHANGE_TYPE_INSERT, 3L)))
+          restarted.processAllAvailable()
+          val expected = Seq(
+            Row(1L, "Alice", CHANGE_TYPE_UPDATE_PREIMAGE, 1L, new Timestamp(1000L)),
+            Row(1L, "Alicia", CHANGE_TYPE_UPDATE_POSTIMAGE, 2L, new Timestamp(2000L)))
+          checkAnswer(result, expected)
+
+          // A further input batch emits the watermark-advancing row exactly once.
+          catalog.addChangeRows(ident, Seq(
+            change(40L, 3L, "advance again", CHANGE_TYPE_INSERT, 4L)))
+          restarted.processAllAvailable()
+          assert(result.schema.fieldNames.toSeq == expectedColumns)
+          checkAnswer(result, expected :+
+            Row(2L, "advance", CHANGE_TYPE_INSERT, 3L, new Timestamp(3000L)))
+        } finally {
+          restarted.stop()
+        }
       }
     }
   }

@@ -20,7 +20,7 @@ package org.apache.spark.sql.execution.datasources.v2
 import java.util.{EnumSet => JEnumSet, Set => JSet}
 
 import org.apache.spark.sql.catalyst.analysis.RelationCacheIneligible
-import org.apache.spark.sql.connector.catalog.{Changelog, ChangelogContext, Column, Identifier, SupportsRead, Table, TableCapability, TableCatalog}
+import org.apache.spark.sql.connector.catalog.{Changelog, ChangelogContext, Column, Identifier, MetadataColumn, SupportsMetadataColumns, SupportsRead, Table, TableCapability, TableCatalog}
 import org.apache.spark.sql.connector.catalog.ChangelogRange.{TimestampRange, UnboundedRange, VersionRange}
 import org.apache.spark.sql.connector.catalog.TableCapability.{BATCH_READ, MICRO_BATCH_READ}
 import org.apache.spark.sql.connector.read.ScanBuilder
@@ -38,7 +38,8 @@ import org.apache.spark.sql.util.CaseInsensitiveStringMap
 case class ChangelogTable(
     changelog: Changelog,
     changelogContext: ChangelogContext,
-    resolved: Boolean = false) extends Table with SupportsRead with RelationCacheIneligible {
+    resolved: Boolean = false)
+  extends Table with SupportsRead with SupportsMetadataColumns with RelationCacheIneligible {
 
   // Capture the metadata used to build the analyzer's CDC post-processing operators.
   private val containsCarryoverRows = changelog.containsCarryoverRows()
@@ -75,6 +76,8 @@ case class ChangelogTable(
   override def name: String = changelog.name
 
   override def columns: Array[Column] = changelog.columns
+
+  override def metadataColumns(): Array[MetadataColumn] = changelog.metadataColumns
 
   override def newScanBuilder(options: CaseInsensitiveStringMap): ScanBuilder = {
     changelog.newScanBuilder(options)

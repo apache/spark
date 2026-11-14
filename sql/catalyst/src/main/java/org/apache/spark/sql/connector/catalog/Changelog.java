@@ -218,4 +218,20 @@ public interface Changelog {
   default NamedReference rowVersion() {
     throw new UnsupportedOperationException("rowVersion is not supported.");
   }
+
+  /**
+   * Returns metadata columns required by Spark's changelog post-processing, separate from the
+   * user-visible data columns in {@link #columns()}.
+   * <p>
+   * Row identity and row version may be backed by connector metadata rather than user-visible
+   * columns. Spark makes these columns available to internal plan rules without including them in
+   * the changelog schema or {@code SELECT *}. Users cannot query these columns directly.
+   * <p>
+   * The default implementation returns an empty array.
+   *
+   * @since 4.4.0
+   */
+  default MetadataColumn[] metadataColumns() {
+    return new MetadataColumn[0];
+  }
 }
