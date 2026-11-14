@@ -1600,11 +1600,14 @@ class BasePythonDataSourceTestsMixin:
     def test_write_no_requirements_by_default(self):
         with tempfile.TemporaryDirectory(prefix="write_req_default") as d:
             self._register_write_requirements_source("write_req_default", d)
+            df = self._write_df()
             with self.sql_conf(self._write_conf()):
-                self._write_df().write.format("write_req_default").mode("append").save()
+                df.write.format("write_req_default").mode("append").save()
+                expected = [
+                    [[r.key, r.value] for r in rows] for rows in df.rdd.glom().collect() if rows
+                ]
             # A writer that asks for nothing gets the input partitioning untouched.
-            tasks = self._read_tasks(d)
-            self.assertEqual(sum(len(rows) for rows in tasks), 6)
+            self.assertEqual(self._read_tasks(d), expected)
 
     def test_write_clustered_distribution(self):
         with tempfile.TemporaryDirectory(prefix="write_req_clustered") as d:
@@ -1676,17 +1679,30 @@ class BasePythonDataSourceTestsMixin:
             self.assertEqual(sum(len(rows) for rows in tasks), 6)
 
     def test_write_non_strict_distribution(self):
-        with tempfile.TemporaryDirectory(prefix="write_req_non_strict") as d:
-            self._register_write_requirements_source(
-                "write_req_non_strict",
-                d,
-                distribution=ClusteredDistribution((("key",),)),
-                strictly_required=False,
-            )
-            with self.sql_conf(self._write_conf()):
-                self._write_df().write.format("write_req_non_strict").mode("append").save()
-            # A best-effort distribution may split a key across tasks, but loses no rows.
-            self.assertEqual(sum(len(rows) for rows in self._read_tasks(d)), 6)
+        # A single key spread over several input partitions, with a tiny advisory size, so that
+        # adaptive execution splits its skewed shuffle partition whenever it is allowed to.
+        df = self.spark.createDataFrame(
+            [("a", v) for v in range(40)], "key string, value int"
+        ).repartition(4)
+        for strict in [True, False]:
+            name = f"write_req_strict_{str(strict).lower()}"
+            with self.subTest(strict=strict), tempfile.TemporaryDirectory(prefix=name) as d:
+                self._register_write_requirements_source(
+                    name,
+                    d,
+                    distribution=ClusteredDistribution((("key",),)),
+                    strictly_required=strict,
+                    advisory_size=1,
+                )
+                with self.sql_conf(self._write_conf()):
+                    df.write.format(name).mode("append").save()
+                tasks = self._read_tasks(d)
+                self.assertEqual(sum(len(rows) for rows in tasks), 40)
+                # Only a best-effort distribution may split the key across tasks.
+                if strict:
+                    self.assertEqual(len(tasks), 1)
+                else:
+                    self.assertGreater(len(tasks), 1)
 
     def test_write_invalid_strictly_required(self):
         with tempfile.TemporaryDirectory(prefix="write_req_bad_strict") as d:
@@ -1707,13 +1723,18 @@ class BasePythonDataSourceTestsMixin:
                 "write_req_num_parts",
                 d,
                 distribution=ClusteredDistribution((("value",),)),
-                num_partitions=3,
+                num_partitions=2,
             )
+            # More distinct values than requested partitions, which the 4 shuffle partitions of
+            # `_write_conf` would otherwise spread over more than 2 tasks.
+            df = self.spark.createDataFrame(
+                [("a", v) for v in range(16)], "key string, value int"
+            ).repartition(4)
             with self.sql_conf(self._write_conf()):
-                self._write_df().write.format("write_req_num_parts").mode("append").save()
-            # 3 partitions were requested, so at most 3 tasks receive rows.
-            self.assertLessEqual(len(self._read_tasks(d)), 3)
-            self.assertEqual(sum(len(rows) for rows in self._read_tasks(d)), 6)
+                df.write.format("write_req_num_parts").mode("append").save()
+            tasks = self._read_tasks(d)
+            self.assertEqual(len(tasks), 2)
+            self.assertEqual(sum(len(rows) for rows in tasks), 16)
 
     def test_write_ordered_distribution(self):
         with tempfile.TemporaryDirectory(prefix="write_req_ordered_dist") as d:
@@ -1738,11 +1759,16 @@ class BasePythonDataSourceTestsMixin:
                 distribution=UnspecifiedDistribution(),
                 ordering=[SortOrder(("value",))],
             )
+            # One partition holding the values in descending order, so the sort must reorder it.
+            df = self.spark.createDataFrame(
+                [("a", v) for v in reversed(range(6))], "key string, value int"
+            ).coalesce(1)
             with self.sql_conf(self._write_conf()):
-                self._write_df().write.format("write_req_unspec").mode("append").save()
+                df.write.format("write_req_unspec").mode("append").save()
             # Ordering alone is a local sort, so rows stay in their partition but arrive sorted.
-            for rows in self._read_tasks(d):
-                self.assertEqual([v for _, v in rows], sorted(v for _, v in rows))
+            self.assertEqual(
+                [[v for _, v in rows] for rows in self._read_tasks(d)], [list(range(6))]
+            )
 
     def test_write_requirements_disabled(self):
         with tempfile.TemporaryDirectory(prefix="write_req_disabled") as d:
@@ -1811,6 +1837,79 @@ class BasePythonDataSourceTestsMixin:
                 with open(os.path.join(out, entry)) as f:
                     written.extend(json.load(f))
             self.assertEqual(sorted(written), list(range(6)))
+
+    def test_write_requirements_skipped_for_continuous(self):
+        # A continuous query builds its write on the thread that starts it, which must not ask
+        # the batch writer for requirements either: this sink's batch writer requires a
+        # distribution that continuous execution rejects.
+        class NoopStreamWriter(DataSourceStreamWriter):
+            def write(self, iterator):
+                for _ in iterator:
+                    pass
+                return WriterCommitMessage()
+
+            def commit(self, messages, batchId):
+                pass
+
+            def abort(self, messages, batchId):
+                pass
+
+        class ClusteredWriter(DataSourceWriter):
+            def write(self, iterator):
+                return WriterCommitMessage()
+
+            def requiredDistribution(self):
+                return ClusteredDistribution((("value",),))
+
+        class ContinuousSink(DataSource):
+            @classmethod
+            def name(cls):
+                return "write_req_continuous"
+
+            def writer(self, schema, overwrite):
+                return ClusteredWriter()
+
+            def streamWriter(self, schema, overwrite):
+                return NoopStreamWriter()
+
+        self.spark.dataSource.register(ContinuousSink)
+        with tempfile.TemporaryDirectory(prefix="write_req_continuous") as ckpt:
+            with self.sql_conf(self._write_conf()):
+                q = (
+                    self.spark.readStream.format("rate")
+                    .load()
+                    .writeStream.format("write_req_continuous")
+                    .option("checkpointLocation", ckpt)
+                    .trigger(continuous="1 second")
+                    .start()
+                )
+            try:
+                self.assertTrue(q.isActive)
+                self.assertIsNone(q.exception())
+            finally:
+                q.stop()
+
+    def test_write_invalid_requirement_values(self):
+        cases = [
+            ("write_req_bad_num_parts_bool", dict(num_partitions=True)),
+            ("write_req_bad_num_parts_big", dict(num_partitions=2**31)),
+            ("write_req_bad_advisory_big", dict(advisory_size=2**63)),
+            ("write_req_bad_ordering_type", dict(ordering="value")),
+            ("write_req_bad_direction", dict(ordering=[SortOrder(("value",), "asc")])),
+            (
+                "write_req_bad_null_ordering",
+                dict(ordering=[SortOrder(("value",), SortDirection.ASCENDING, "first")]),
+            ),
+        ]
+        for name, requirements in cases:
+            with self.subTest(name=name), tempfile.TemporaryDirectory(prefix=name) as d:
+                self._register_write_requirements_source(
+                    name, d, distribution=ClusteredDistribution((("key",),)), **requirements
+                )
+                with self.sql_conf(self._write_conf()):
+                    with self.assertRaises(AnalysisException) as cm:
+                        self._write_df().write.format(name).mode("append").save()
+                self.assertIn("DATA_SOURCE_TYPE_MISMATCH", str(cm.exception))
 
     def test_write_num_partitions_without_distribution(self):
         with tempfile.TemporaryDirectory(prefix="write_req_bad_num_parts") as d:
@@ -1881,8 +1980,13 @@ class BasePythonDataSourceTestsMixin:
                 "write_req_unknown_column", d, distribution=ClusteredDistribution((("nosuch",),))
             )
             with self.sql_conf(self._write_conf()):
-                with self.assertRaises(AnalysisException):
+                with self.assertRaises(AnalysisException) as cm:
                     self._write_df().write.format("write_req_unknown_column").mode("append").save()
+            self.check_error(
+                exception=cm.exception,
+                errorClass="_LEGACY_ERROR_TEMP_1137",
+                messageParameters={"name": "nosuch", "outputStr": "key,value"},
+            )
 
     def test_data_source_type_mismatch(self):
         class TestDataSource(DataSource):

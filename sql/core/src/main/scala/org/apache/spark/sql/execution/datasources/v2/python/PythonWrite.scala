@@ -23,7 +23,6 @@ import org.apache.spark.sql.connector.expressions.SortOrder
 import org.apache.spark.sql.connector.metric.CustomMetric
 import org.apache.spark.sql.connector.write.{BatchWrite, _}
 import org.apache.spark.sql.connector.write.streaming.StreamingWrite
-import org.apache.spark.sql.execution.streaming.runtime.StreamExecution
 import org.apache.spark.sql.internal.SQLConf
 
 
@@ -63,14 +62,14 @@ class PythonWrite(
   }
 
   /**
-   * Whether this write belongs to a streaming query. The requirements come from the batch
-   * `DataSourceWriter`, which a streaming sink need not implement. A streaming query builds its
-   * write with its own id, which the stream execution thread also sets as a local property; a
-   * batch write, even one inside `foreachBatch`, gets a fresh id.
+   * Whether a streaming query builds this write. The requirements come from the batch
+   * `DataSourceWriter`, which a streaming sink need not implement. A batch write, even one inside
+   * `foreachBatch`, is not marked.
    */
-  private def isStreamingWrite: Boolean =
-    Option(SparkSession.active.sparkContext.getLocalProperty(StreamExecution.QUERY_ID_KEY))
-      .contains(info.queryId())
+  private def isStreamingWrite: Boolean = info match {
+    case i: LogicalWriteInfoImpl => i.isStreaming
+    case _ => false
+  }
 
   override def requiredDistribution(): Distribution = requirements.distribution
 
