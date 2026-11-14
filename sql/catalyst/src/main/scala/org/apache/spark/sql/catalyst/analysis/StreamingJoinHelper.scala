@@ -24,10 +24,29 @@ import scala.util.control.NonFatal
 import org.apache.spark.internal.Logging
 import org.apache.spark.internal.LogKeys._
 import org.apache.spark.sql.catalyst.expressions._
+import org.apache.spark.sql.catalyst.plans.logical.{EventTimeWatermark, Expand, Filter, Join, LogicalPlan, Project, SubqueryAlias, Union}
 import org.apache.spark.sql.catalyst.plans.logical.EventTimeWatermark._
 import org.apache.spark.sql.catalyst.util.DateTimeConstants.{MICROS_PER_DAY, MICROS_PER_HOUR, MICROS_PER_MILLIS, MICROS_PER_MINUTE, MICROS_PER_SECOND}
 import org.apache.spark.sql.types._
 import org.apache.spark.unsafe.types.CalendarInterval
+
+/**
+ * Pairs of attributes `(key, eventTime)` where `key` is a copy of `eventTime`, or a tumbling or
+ * sliding time window over it, in every row of every stream-stream join input that outputs both.
+ * See [[StreamingJoinHelper.findEventTimeCopies]].
+ */
+case class EventTimeCopies(pairs: Set[(ExprId, ExprId)]) {
+  def isCopyOf(key: Expression, eventTime: Attribute): Boolean = key match {
+    case a: Attribute => pairs.contains((a.exprId, eventTime.exprId))
+    case _ => false
+  }
+
+  def keys: Set[ExprId] = pairs.map(_._1)
+}
+
+object EventTimeCopies {
+  val empty: EventTimeCopies = EventTimeCopies(Set.empty)
+}
 
 /**
  * Helper object for stream joins. See [[StreamingSymmetricHashJoinExec]] in SQL for more details.
@@ -47,22 +66,117 @@ object StreamingJoinHelper extends PredicateHelper with Logging {
    */
   def getStateKeyWatermarkOrdinal(
       keys: Seq[Expression],
-      inputAttributes: Seq[Attribute]): Option[Int] = {
-    getEventTimeKeyOrdinal(keys, inputAttributes).orElse {
+      inputAttributes: Seq[Attribute],
+      eventTimeCopies: EventTimeCopies = EventTimeCopies.empty): Option[Int] = {
+    getEventTimeKeyOrdinal(keys, inputAttributes, eventTimeCopies).orElse {
       keys.indices.find(getStateKeyWatermark(keys, inputAttributes, _, Some(0L)).isDefined)
     }
   }
 
-  /** Find the equality key that is this input's event-time column itself. */
+  /**
+   * Find the equality key that is this input's event-time column itself, or else one that
+   * `eventTimeCopies` names as a copy of that column or a time window over it. Such a key is
+   * above the watermark in every row that passes late filtering, as the column is: a window
+   * ends after every time it contains.
+   */
   def getEventTimeKeyOrdinal(
       keys: Seq[Expression],
-      inputAttributes: Seq[Attribute]): Option[Int] = {
+      inputAttributes: Seq[Attribute],
+      eventTimeCopies: EventTimeCopies = EventTimeCopies.empty): Option[Int] = {
     // When multiple stateful operators are disabled, late filtering uses the first event-time
     // column. Otherwise, execution rejects multiple distinct event-time columns.
     inputAttributes.find(_.metadata.contains(delayKey)).flatMap { eventTime =>
-      keys.indexWhere(_.semanticEquals(eventTime)) match {
-        case ordinal if ordinal >= 0 => Some(ordinal)
-        case _ => None
+      Seq(keys.indexWhere(_.semanticEquals(eventTime)),
+        keys.indexWhere(eventTimeCopies.isCopyOf(_, eventTime))).find(_ >= 0)
+    }
+  }
+
+  /**
+   * In legacy mode (spark.sql.streaming.statefulOperator.allowMultiple=false), an input can keep
+   * its event time and a copy of it or a time window over it, all watermarked, and it filters
+   * late rows by the first of them. Find, for each stream-stream join input in `plan`, which of
+   * its watermarked columns are a copy of, or a tumbling or sliding time window over, another of
+   * them. A pair counts only if every join input that outputs both columns builds it that way,
+   * so the result does not depend on how a physical join is matched to its logical one: the
+   * physical inputs output the same values under the same expression IDs, or fewer columns.
+   */
+  def findEventTimeCopies(plan: LogicalPlan): EventTimeCopies = {
+    val verdicts = plan.collect {
+      case j: Join if j.left.isStreaming && j.right.isStreaming => Seq(j.left, j.right)
+    }.flatten.flatMap { input =>
+      val watermarked = input.output.filter(_.metadata.contains(delayKey)).map(_.exprId).distinct
+      for (key <- watermarked; eventTime <- watermarked if key != eventTime) yield {
+        (key, eventTime) -> isCopyOrWindowOf(input, key, eventTime, allowWindow = true)
+      }
+    }
+    val rejected = verdicts.collect { case (pair, false) => pair }.toSet
+    EventTimeCopies(verdicts.collect { case (pair, true) if !rejected(pair) => pair }.toSet)
+  }
+
+  /**
+   * Whether `key` is `eventTime`, or a tumbling or sliding time window over it when
+   * `allowWindow`, in every row of `plan`. The walk follows both columns down by expression ID
+   * through nodes that pass values on unchanged, to the same positions in every input of a union,
+   * and to the node that [[TimeWindowResolution.TIME_WINDOW_SOURCE_TAG]] marks as building the
+   * window from an attribute, which must then be a copy of `eventTime`. Any other node, or any
+   * other expression, such as a shifted time, a session window or a window over another column,
+   * gives false.
+   */
+  private def isCopyOrWindowOf(
+      plan: LogicalPlan,
+      key: ExprId,
+      eventTime: ExprId,
+      allowWindow: Boolean): Boolean = {
+    def passedOn(e: Expression): Option[ExprId] = e match {
+      case a: Attribute => Some(a.exprId)
+      case Alias(a: Attribute, _) => Some(a.exprId)
+      case _ => None
+    }
+    // The time column that the node tagged by the window rewrite builds `window` from.
+    def timeColumnOf(node: LogicalPlan, window: ExprId): Option[ExprId] =
+      node.getTagValue(TimeWindowResolution.TIME_WINDOW_SOURCE_TAG).collect {
+        case (id, timeColumn) if allowWindow && id == window => timeColumn
+      }
+    if (key == eventTime) {
+      true
+    } else {
+      plan match {
+        case p: Project =>
+          val keyEntry = p.projectList.find(_.exprId == key)
+          val eventTimeEntry = p.projectList.find(_.exprId == eventTime)
+          (keyEntry, eventTimeEntry.flatMap(passedOn)) match {
+            case (Some(entry), Some(childEventTime)) => passedOn(entry) match {
+              case Some(childKey) =>
+                isCopyOrWindowOf(p.child, childKey, childEventTime, allowWindow)
+              case None => timeColumnOf(p, key).exists { timeColumn =>
+                entry.references.map(_.exprId).toSet == Set(timeColumn) &&
+                  isCopyOrWindowOf(p.child, timeColumn, childEventTime, allowWindow = false)
+              }
+            }
+            case _ => false
+          }
+        case e: Expand =>
+          // The rewrite of a sliding window puts one window per projection beside the child's
+          // columns, which every projection passes on.
+          val keyIndex = e.output.indexWhere(_.exprId == key)
+          val eventTimeIndex = e.output.indexWhere(_.exprId == eventTime)
+          lazy val childEventTimes = e.projections.map(p => passedOn(p(eventTimeIndex))).distinct
+          keyIndex >= 0 && eventTimeIndex >= 0 && childEventTimes.size == 1 &&
+            childEventTimes.head.isDefined && timeColumnOf(e, key).exists { timeColumn =>
+              e.projections.forall(_(keyIndex).references.map(_.exprId).toSet == Set(timeColumn)) &&
+                isCopyOrWindowOf(e.child, timeColumn, childEventTimes.head.get,
+                  allowWindow = false)
+            }
+        case u: Union =>
+          val keyIndex = u.output.indexWhere(_.exprId == key)
+          val eventTimeIndex = u.output.indexWhere(_.exprId == eventTime)
+          keyIndex >= 0 && eventTimeIndex >= 0 && u.children.forall { child =>
+            isCopyOrWindowOf(child, child.output(keyIndex).exprId,
+              child.output(eventTimeIndex).exprId, allowWindow)
+          }
+        case _: Filter | _: SubqueryAlias | _: EventTimeWatermark =>
+          isCopyOrWindowOf(plan.children.head, key, eventTime, allowWindow)
+        case _ => false
       }
     }
   }
@@ -82,8 +196,9 @@ object StreamingJoinHelper extends PredicateHelper with Logging {
       keys: Seq[Expression],
       inputAttributes: Seq[Attribute],
       ordinal: Int,
-      eventWatermark: Option[Long]): Option[Long] = {
-    if (getEventTimeKeyOrdinal(keys, inputAttributes).contains(ordinal)) {
+      eventWatermark: Option[Long],
+      eventTimeCopies: EventTimeCopies = EventTimeCopies.empty): Option[Long] = {
+    if (getEventTimeKeyOrdinal(keys, inputAttributes, eventTimeCopies).contains(ordinal)) {
       eventWatermark
     } else {
       shiftOfKey(keys(ordinal), inputAttributes).flatMap {
