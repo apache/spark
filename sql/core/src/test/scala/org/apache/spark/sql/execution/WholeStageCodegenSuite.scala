@@ -1405,11 +1405,9 @@ class WholeStageCodegenSuite extends SharedSparkSession
   }
 
   test("SPARK-56032: FilterExec skips CSE codegen when there is no common subexpression") {
-    // When otherPreds share no common subexpression, the CSE codegen path provides no benefit
-    // but would still eagerly evaluate every referenced input column at the top of the row loop
-    // (the inputVarsEvalCode prologue), defeating the lazy, short-circuiting column loads of the
-    // non-CSE path. Verify that with CSE enabled we fall back to the exact same generated code as
-    // with CSE disabled, so no column is decoded for rows an earlier predicate would reject.
+    // When otherPreds share no common subexpression, the CSE codegen path provides no benefit.
+    // Verify that with CSE enabled we fall back to the exact same generated code as with CSE
+    // disabled.
     val schema = StructType(Seq(
       StructField("a", IntegerType, nullable = true),
       StructField("b", IntegerType, nullable = true)))
@@ -1439,7 +1437,7 @@ class WholeStageCodegenSuite extends SharedSparkSession
     def normalize(code: String): String = code.replaceAll("#\\d+", "#")
     assert(normalize(filterCode(cseEnabled = true)) == normalize(filterCode(cseEnabled = false)),
       "With no common subexpression, CSE-enabled FilterExec codegen should be identical to " +
-        "CSE-disabled codegen (i.e. fall back to the lazy, short-circuiting non-CSE path)")
+        "CSE-disabled codegen (i.e. fall back to the non-CSE path)")
   }
 
   test("SPARK-56032: FilterExec skips CSE codegen when the common subexpression is cheap") {
@@ -1447,9 +1445,7 @@ class WholeStageCodegenSuite extends SharedSparkSession
     // `LeafExpression`, which `EquivalentExpressions` skips, and `splitConjunctivePredicates` feeds
     // each conjunct to a separate `addExprTree` call. The realistic cheap-but-recorded case is a
     // shared *non-leaf* slot read such as a struct field access: `s.x > 5 AND s.x < 100` shares
-    // `GetStructField(s, x)`. Caching that gains nothing over the non-CSE path's lazy load, so the
-    // gate must fall back. (Pre-`isCheap`-gate this took the CSE path, emitting the eager
-    // prologue.)
+    // `GetStructField(s, x)`. Caching a slot read gains nothing, so the gate must fall back.
     val schema = StructType(Seq(
       StructField("s", StructType(Seq(StructField("x", IntegerType, nullable = true))),
         nullable = true)))
@@ -1476,8 +1472,7 @@ class WholeStageCodegenSuite extends SharedSparkSession
     def normalize(code: String): String = code.replaceAll("#\\d+", "#")
     assert(normalize(filterCode(cseEnabled = true)) == normalize(filterCode(cseEnabled = false)),
       "With only a cheap common subexpression, CSE-enabled FilterExec codegen should be " +
-        "identical to CSE-disabled codegen (i.e. fall back to the lazy, short-circuiting " +
-        "non-CSE path)")
+        "identical to CSE-disabled codegen (i.e. fall back to the non-CSE path)")
   }
 
   test("SPARK-56032: FilterExec takes CSE codegen when the common subexpression is non-cheap") {
@@ -1518,7 +1513,7 @@ class WholeStageCodegenSuite extends SharedSparkSession
     "independently of subexpression elimination") {
     // The conf disables CSE specifically for FilterExec while leaving subexpression elimination
     // enabled elsewhere. With a genuine common subexpression in the predicates, turning the conf
-    // off should make FilterExec fall back to the lazy non-CSE path (re-evaluating the shared
+    // off should make FilterExec fall back to the non-CSE path (re-evaluating the shared
     // subexpression per use), matching the code generated when CSE is globally disabled.
     val schema = StructType(Seq(
       StructField("a", DayTimeIntervalType(), nullable = true),
@@ -1530,7 +1525,7 @@ class WholeStageCodegenSuite extends SharedSparkSession
     val expected = data.collect().toSeq
 
     // `a + b` appears three times in the predicate, so it is a CSE candidate. We count `addExact`
-    // occurrences in the generated code: the CSE path evaluates it once, the lazy path per use.
+    // occurrences in the generated code: the CSE path evaluates it once, the non-CSE path per use.
     def filterCode(filterExecCseEnabled: Boolean): String = {
       withSQLConf(
         // Subexpression elimination stays globally on; only the FilterExec gate flips.
@@ -1555,10 +1550,100 @@ class WholeStageCodegenSuite extends SharedSparkSession
     val enabledCount = addExactPattern.findAllIn(filterCode(filterExecCseEnabled = true)).length
     val disabledCount = addExactPattern.findAllIn(filterCode(filterExecCseEnabled = false)).length
     // With the gate on, CSE collapses the repeated `a + b` evaluations; with the gate off,
-    // FilterExec falls back to the lazy path that re-evaluates per use.
+    // FilterExec falls back to the non-CSE path that re-evaluates per use.
     assert(enabledCount < disabledCount,
       s"subexpressionElimination.filterExec.enabled should reduce repeated evaluation: " +
         s"addExact appears $enabledCount times when enabled vs $disabledCount times when disabled")
+  }
+
+  test("SPARK-61377: FilterExec CSE computes an input column just before the first conjunct " +
+    "that reads it") {
+    // Each input column of the filter is a UDF alias the child `ProjectExec` computes in the same
+    // codegen stage; `r`, `rb`, `rc` and `u` all throw for the rows that an earlier check or
+    // condition drops. The common `f + 1` (or `r + 1`) makes the filter take the CSE path, which
+    // must still compute a column just before the first check or condition that reads it, not up
+    // front.
+    val f = udf((x: Long) => x)
+    // Returns a primitive, so `r` is non-nullable and gets no inferred IsNotNull: it is first
+    // read by a plain condition (`r > 0` or the common `r + 1`).
+    val r = udf((x: Long) => { if (x <= 5) throw new IllegalStateException(s"r($x)"); x })
+    // Returns a boxed Long, so `rb` is nullable and is first read by its own IsNotNull check.
+    val rb = udf { (x: Long) =>
+      if (x <= 5) throw new IllegalStateException(s"rb($x)"); java.lang.Long.valueOf(x) }
+    // Read only by an IsNotNull check that lands after all conditions (leftover notNullPreds).
+    val rc = udf { (x: Long) =>
+      if (x <= 5) throw new IllegalStateException(s"rc($x)"); java.lang.Long.valueOf(x) }
+    // Not read by the filter at all, so the parent's `consume` loads it.
+    val u = udf((x: Long) => { if (x <= 5) throw new IllegalStateException(s"u($x)"); x })
+    // NULL for the rows `r` throws on, so the inferred IsNotNull(n) drops them in the same
+    // conjunct that first reads `r`, which must be loaded after that check.
+    val n = udf { (x: Long) => if (x <= 5) null else java.lang.Long.valueOf(x) }
+
+    def firstFilterOverProject(df: DataFrame): FilterExec = {
+      val plan = df.queryExecution.executedPlan
+      val fe = plan.collectFirst { case w: WholeStageCodegenExec =>
+        w.child.collectFirst { case fe @ FilterExec(_, _: ProjectExec) => fe }
+      }.flatten
+      assert(fe.isDefined, s"Filter over Project should be in one codegen stage:\n$plan")
+      fe.get
+    }
+    // Each `select` mints fresh exprIds that appear in the codegen dump's plan header but not in
+    // the generated Java; normalize them away to compare the generated code.
+    def normalize(code: String): String = code.replaceAll("#\\d+", "#")
+
+    // `methodSplitThreshold` 1 exercises the path that splits each common subexpression into its
+    // own function, whose parameters are the input columns' variables; Int.MaxValue keeps the
+    // common subexpressions inline (no split).
+    Seq(Int.MaxValue.toString, "1").foreach { threshold =>
+      withSQLConf(
+        SQLConf.SUBEXPRESSION_ELIMINATION_ENABLED.key -> "true",
+        SQLConf.SUBEXPRESSION_ELIMINATION_FILTER_EXEC_ENABLED.key -> "true",
+        SQLConf.WHOLESTAGE_CODEGEN_ENABLED.key -> "true",
+        SQLConf.ADAPTIVE_EXECUTION_ENABLED.key -> "false",
+        SQLConf.CODEGEN_METHOD_SPLIT_THRESHOLD.key -> threshold) {
+        val df = spark.range(10).select(
+          f($"id").as("f"), r($"id").as("r"), rb($"id").as("rb"),
+          rc($"id").as("rc"), u($"id").as("u"), n($"id").as("n"))
+        Seq(
+          // `r` (non-nullable, no IsNotNull) first read by `r > 0`, after the dropping `f + 1 > 6`.
+          "f >= 0 AND f + 1 > 6 AND f + 1 < 100 AND r > 0",
+          // `rb` (nullable) first read by its IsNotNull check, just before `rb > 0`.
+          "f + 1 > 6 AND f + 1 < 100 AND rb IS NOT NULL AND rb > 0",
+          // `r` first read by the common subexpression `r + 1`, referenced after `f + 1 > 6`.
+          "f + 1 > 6 AND r + 1 > 0 AND r + 1 < 100 AND f + 1 < 100",
+          // `rc` read only by a leftover IsNotNull; `rb`, `u` and `n` are not read by the filter.
+          "f + 1 > 6 AND f + 1 < 100 AND r > 0 AND rc IS NOT NULL",
+          // `r` first read by the first conjunct, after the inferred IsNotNull(n) of that conjunct.
+          "n + r > 0 AND f + 1 > 0 AND f + 1 < 100"
+        ).foreach { predicate =>
+          val filtered = df.where(predicate)
+          firstFilterOverProject(filtered)
+          checkAnswer(filtered,
+            (6L to 9L).map(i => Row(i, i, i, i, i, i)))
+          // With the config off the same query returns the same rows (non-CSE path), and the
+          // generated code differs, so the shape above does take the CSE path.
+          val cseOn = codegenString(filtered.queryExecution.executedPlan)
+          val cseOff = withSQLConf(
+              SQLConf.SUBEXPRESSION_ELIMINATION_FILTER_EXEC_ENABLED.key -> "false") {
+            val off = df.where(predicate)
+            checkAnswer(off, (6L to 9L).map(i => Row(i, i, i, i, i, i)))
+            codegenString(off.queryExecution.executedPlan)
+          }
+          assert(normalize(cseOn) != normalize(cseOff),
+            s"each shape should take the CSE path (codegen differs on/off): $predicate")
+        }
+
+        // `subExpr` names appear only when the states are split into functions, so they confirm
+        // the split threshold is exercised: present at threshold 1, absent when kept inline.
+        val cseCode = codegenString(
+          df.where("f + 1 > 6 AND f + 1 < 100 AND r > 0").queryExecution.executedPlan)
+        if (threshold == "1") {
+          assert(cseCode.contains("subExpr"), "states should be split into functions at 1")
+        } else {
+          assert(!cseCode.contains("subExpr"), "states should be kept inline at Int.MaxValue")
+        }
+      }
+    }
   }
 
   test("SPARK-59589: a subexpression method reads an Expand's varying output as a field") {
