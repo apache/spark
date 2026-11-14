@@ -26,6 +26,7 @@ import org.apache.spark.sql.catalyst.analysis.TypeCheckResult
 import org.apache.spark.sql.catalyst.analysis.TypeCheckResult.DataTypeMismatch
 import org.apache.spark.sql.catalyst.expressions.{ExpectsInputTypes, Expression, ExpressionDescription}
 import org.apache.spark.sql.errors.QueryExecutionErrors
+import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types.{AbstractDataType, BinaryType, ByteType, DataType, DoubleType, FloatType, IntegerType, LongType, ShortType, TypeCollection}
 
 /**
@@ -77,12 +78,13 @@ case class KllSketchAggBigint(
     kExpr: Option[Expression] = None,
     override val mutableAggBufferOffset: Int = 0,
     override val inputAggBufferOffset: Int = 0,
-    private[sql] val legacyDeterministic: Boolean = false)
+    private[sql] val legacyDeterministic: Boolean =
+      SQLConf.get.getConf(SQLConf.LEGACY_KLL_AGGREGATE_DETERMINISTIC))
     extends TypedImperativeAggregate[KllLongsSketch]
     with KllSketchAggBase
     with ExpectsInputTypes {
-  def this(child: Expression) = this(child, None, 0, 0, false)
-  def this(child: Expression, kExpr: Expression) = this(child, Some(kExpr), 0, 0, false)
+  def this(child: Expression) = this(child, None)
+  def this(child: Expression, kExpr: Expression) = this(child, Some(kExpr))
 
   override def children: Seq[Expression] = child +: kExpr.toSeq
 
@@ -237,12 +239,13 @@ case class KllSketchAggFloat(
     kExpr: Option[Expression] = None,
     override val mutableAggBufferOffset: Int = 0,
     override val inputAggBufferOffset: Int = 0,
-    private[sql] val legacyDeterministic: Boolean = false)
+    private[sql] val legacyDeterministic: Boolean =
+      SQLConf.get.getConf(SQLConf.LEGACY_KLL_AGGREGATE_DETERMINISTIC))
     extends TypedImperativeAggregate[KllFloatsSketch]
         with KllSketchAggBase
         with ExpectsInputTypes {
-  def this(child: Expression) = this(child, None, 0, 0, false)
-  def this(child: Expression, kExpr: Expression) = this(child, Some(kExpr), 0, 0, false)
+  def this(child: Expression) = this(child, None)
+  def this(child: Expression, kExpr: Expression) = this(child, Some(kExpr))
 
   override def children: Seq[Expression] = child +: kExpr.toSeq
 
@@ -386,12 +389,13 @@ case class KllSketchAggDouble(
     kExpr: Option[Expression] = None,
     override val mutableAggBufferOffset: Int = 0,
     override val inputAggBufferOffset: Int = 0,
-    private[sql] val legacyDeterministic: Boolean = false)
+    private[sql] val legacyDeterministic: Boolean =
+      SQLConf.get.getConf(SQLConf.LEGACY_KLL_AGGREGATE_DETERMINISTIC))
     extends TypedImperativeAggregate[KllDoublesSketch]
         with KllSketchAggBase
         with ExpectsInputTypes {
-  def this(child: Expression) = this(child, None, 0, 0, false)
-  def this(child: Expression, kExpr: Expression) = this(child, Some(kExpr), 0, 0, false)
+  def this(child: Expression) = this(child, None)
+  def this(child: Expression, kExpr: Expression) = this(child, Some(kExpr))
 
   override def children: Seq[Expression] = child +: kExpr.toSeq
 
@@ -539,10 +543,11 @@ case class KllMergeAggBigint(
     kExpr: Option[Expression] = None,
     override val mutableAggBufferOffset: Int = 0,
     override val inputAggBufferOffset: Int = 0,
-    private[sql] val legacyDeterministic: Boolean = false)
+    private[sql] val legacyDeterministic: Boolean =
+      SQLConf.get.getConf(SQLConf.LEGACY_KLL_AGGREGATE_DETERMINISTIC))
     extends KllMergeAggBase[KllLongsSketch] {
-  def this(child: Expression) = this(child, None, 0, 0, false)
-  def this(child: Expression, kExpr: Expression) = this(child, Some(kExpr), 0, 0, false)
+  def this(child: Expression) = this(child, None)
+  def this(child: Expression, kExpr: Expression) = this(child, Some(kExpr))
 
   override def withNewMutableAggBufferOffset(
       newMutableAggBufferOffset: Int): KllMergeAggBigint =
@@ -621,10 +626,11 @@ case class KllMergeAggFloat(
     kExpr: Option[Expression] = None,
     override val mutableAggBufferOffset: Int = 0,
     override val inputAggBufferOffset: Int = 0,
-    private[sql] val legacyDeterministic: Boolean = false)
+    private[sql] val legacyDeterministic: Boolean =
+      SQLConf.get.getConf(SQLConf.LEGACY_KLL_AGGREGATE_DETERMINISTIC))
     extends KllMergeAggBase[KllFloatsSketch] {
-  def this(child: Expression) = this(child, None, 0, 0, false)
-  def this(child: Expression, kExpr: Expression) = this(child, Some(kExpr), 0, 0, false)
+  def this(child: Expression) = this(child, None)
+  def this(child: Expression, kExpr: Expression) = this(child, Some(kExpr))
 
   override def withNewMutableAggBufferOffset(
       newMutableAggBufferOffset: Int): KllMergeAggFloat =
@@ -703,10 +709,11 @@ case class KllMergeAggDouble(
     kExpr: Option[Expression] = None,
     override val mutableAggBufferOffset: Int = 0,
     override val inputAggBufferOffset: Int = 0,
-    private[sql] val legacyDeterministic: Boolean = false)
+    private[sql] val legacyDeterministic: Boolean =
+      SQLConf.get.getConf(SQLConf.LEGACY_KLL_AGGREGATE_DETERMINISTIC))
     extends KllMergeAggBase[KllDoublesSketch] {
-  def this(child: Expression) = this(child, None, 0, 0, false)
-  def this(child: Expression, kExpr: Expression) = this(child, Some(kExpr), 0, 0, false)
+  def this(child: Expression) = this(child, None)
+  def this(child: Expression, kExpr: Expression) = this(child, Some(kExpr))
 
   override def withNewMutableAggBufferOffset(
       newMutableAggBufferOffset: Int): KllMergeAggDouble =
@@ -867,7 +874,7 @@ abstract class KllMergeAggBase[T <: KllSketch]
  * Common trait for KLL sketch aggregate functions that support an optional k parameter.
  */
 trait KllSketchAggBase {
-  // Only compatibility and validation copies use this mode; fresh execution defaults to false.
+  // Captured at construction for rollback; streaming planning applies its checkpoint policy.
   private[sql] def legacyDeterministic: Boolean
 
   def kExpr: Option[Expression]

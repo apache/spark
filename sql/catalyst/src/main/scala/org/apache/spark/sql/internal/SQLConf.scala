@@ -4080,6 +4080,16 @@ object SQLConf {
       .booleanConf
       .createWithDefault(false)
 
+  val LEGACY_KLL_AGGREGATE_DETERMINISTIC =
+    buildConf("spark.sql.legacy.kllAggregateDeterministic.enabled")
+      .doc("When true, restore the historical deterministic classification of KLL sketch and " +
+        "merge aggregates during analysis and batch optimization. This can duplicate randomized " +
+        "CTE evaluations or share independent aggregates. Streaming optimization instead uses " +
+        "the sharing mode recorded in its checkpoint.")
+      .version("4.4.0")
+      .booleanConf
+      .createWithDefault(false)
+
   val STREAMING_AGGREGATION_LEGACY_KLL_SHARING =
     buildConf("spark.sql.streaming.aggregation.legacyKllSharing.enabled")
       .internal()

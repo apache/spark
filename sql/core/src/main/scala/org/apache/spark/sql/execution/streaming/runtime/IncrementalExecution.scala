@@ -27,7 +27,7 @@ import org.apache.hadoop.fs.Path
 import org.apache.spark.internal.Logging
 import org.apache.spark.internal.LogKeys.{BATCH_TIMESTAMP, ERROR}
 import org.apache.spark.sql.catalyst.QueryPlanningTracker
-import org.apache.spark.sql.catalyst.analysis.{NondeterministicExpressionCollection, WidenStatefulOperatorAttributeNullability}
+import org.apache.spark.sql.catalyst.analysis.{NondeterministicExpressionCollection, PullOutNondeterministic, WidenStatefulOperatorAttributeNullability}
 import org.apache.spark.sql.catalyst.expressions.{Alias, Attribute, CurrentBatchTimestamp, Expression, ExpressionWithRandomSeed, ExprId}
 import org.apache.spark.sql.catalyst.expressions.aggregate.{KllMergeAggBigint, KllMergeAggDouble, KllMergeAggFloat, KllSketchAggBigint, KllSketchAggDouble, KllSketchAggFloat}
 import org.apache.spark.sql.catalyst.plans.logical._
@@ -147,22 +147,35 @@ class IncrementalExecution(
       // of sink information.
       case w: WriteToMicroBatchDataSourceV1 => w.child
     }
-    // Released checkpoints encode the aggregate buffers by ordinal. Restore their original
-    // determinism before logical optimization can collapse/reorder aggregate projections.
-    // Copying leaves the analyzed plan and default fresh queries nondeterministic.
-    val optimizerInput = if (sparkSession.sessionState.conf.getConf(
-        SQLConf.STREAMING_AGGREGATION_LEGACY_KLL_SHARING)) {
-      val legacy = preOptimized.transformAllExpressionsWithSubqueries {
-        case k: KllSketchAggBigint => k.copy(legacyDeterministic = true)
-        case k: KllSketchAggFloat => k.copy(legacyDeterministic = true)
-        case k: KllSketchAggDouble => k.copy(legacyDeterministic = true)
-        case k: KllMergeAggBigint => k.copy(legacyDeterministic = true)
-        case k: KllMergeAggFloat => k.copy(legacyDeterministic = true)
-        case k: KllMergeAggDouble => k.copy(legacyDeterministic = true)
-      }
+    // Checkpoints encode aggregate buffers by ordinal. Their recorded sharing mode takes
+    // precedence over the analysis/batch rollback setting captured on KLL expressions.
+    val legacySharing = sparkSession.sessionState.conf.getConf(
+      SQLConf.STREAMING_AGGREGATION_LEGACY_KLL_SHARING)
+    var needsExtraction = false
+    val adjusted = preOptimized.transformAllExpressionsWithSubqueries {
+      case k: KllSketchAggBigint if k.legacyDeterministic != legacySharing =>
+        needsExtraction = !legacySharing
+        k.copy(legacyDeterministic = legacySharing)
+      case k: KllSketchAggFloat if k.legacyDeterministic != legacySharing =>
+        needsExtraction = !legacySharing
+        k.copy(legacyDeterministic = legacySharing)
+      case k: KllSketchAggDouble if k.legacyDeterministic != legacySharing =>
+        needsExtraction = !legacySharing
+        k.copy(legacyDeterministic = legacySharing)
+      case k: KllMergeAggBigint if k.legacyDeterministic != legacySharing =>
+        needsExtraction = !legacySharing
+        k.copy(legacyDeterministic = legacySharing)
+      case k: KllMergeAggFloat if k.legacyDeterministic != legacySharing =>
+        needsExtraction = !legacySharing
+        k.copy(legacyDeterministic = legacySharing)
+      case k: KllMergeAggDouble if k.legacyDeterministic != legacySharing =>
+        needsExtraction = !legacySharing
+        k.copy(legacyDeterministic = legacySharing)
+    }
+    val optimizerInput = if (legacySharing) {
       // Analysis may already have separated identical scalar inputs into generated aliases.
       // Restore only those bindings; user-authored aliases retain their historical identities.
-      legacy.transformUp {
+      adjusted.transformUp {
         case aggregate: Aggregate if aggregate.child.isInstanceOf[Project] =>
           val seen = MutableMap.empty[Expression, Attribute]
           val replacements = MutableMap.empty[ExprId, Attribute]
@@ -180,8 +193,12 @@ class IncrementalExecution(
             case a: Attribute if replacements.contains(a.exprId) => replacements(a.exprId)
           }
       }
+    } else if (needsExtraction) {
+      // Analysis in rollback mode did not stage newly nondeterministic subqueries. Apply the
+      // same extraction before optimizing, including within scalar subquery plans.
+      adjusted.transformUpWithSubqueries(PullOutNondeterministic.applyLocally)
     } else {
-      preOptimized
+      adjusted
     }
     val optimized = sparkSession.sessionState.optimizer.executeAndTrack(optimizerInput,
       tracker).transformAllExpressionsWithPruning(

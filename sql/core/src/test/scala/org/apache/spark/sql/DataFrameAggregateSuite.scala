@@ -4330,6 +4330,46 @@ class DataFrameAggregateSuite extends SharedSparkSession
     }
   }
 
+  test("kll legacy rollback restores batch analysis and CTE inlining") {
+    val rollback = "spark.sql.legacy.kllAggregateDeterministic.enabled"
+    for (singlePass <- Seq(false, true); dataType <- Seq("bigint", "float", "double");
+        merge <- Seq(false, true); legacy <- Seq(false, true, false)) {
+      withSQLConf(
+          rollback -> legacy.toString,
+          SQLConf.ANALYZER_SINGLE_PASS_RESOLVER_ENABLED.key -> singlePass.toString,
+          SQLConf.ANALYZER_SINGLE_PASS_RESOLVER_ENABLED_TENTATIVELY.key -> "false",
+          SQLConf.ANALYZER_DUAL_RUN_LEGACY_AND_SINGLE_PASS_RESOLVER.key -> "false") {
+        val sketch = s"kll_sketch_agg_$dataType(CAST(id AS $dataType), 8)"
+        val aggregate = if (merge) s"kll_merge_agg_$dataType(s, 8)" else sketch
+        val source = if (merge) {
+          s"(SELECT $sketch AS s FROM VALUES (0), (1) AS i(id) GROUP BY id)"
+        } else "VALUES (0), (1) AS i(id)"
+        val relation = s"SELECT kll_sketch_get_n_$dataType($aggregate) AS n FROM $source"
+        val reused = sql(s"WITH c AS ($relation) SELECT a.n, b.n FROM c a CROSS JOIN c b")
+        val inlined = !InlineCTE().apply(reused.queryExecution.analyzed).isInstanceOf[WithCTE]
+        assert(inlined == legacy)
+
+        val scalar = s"(SELECT kll_sketch_get_n_$dataType($aggregate) FROM $source)"
+        val grouping = s"""SELECT $scalar AS a, $scalar AS b
+            |FROM VALUES (0), (1) AS o(id) GROUP BY 1""".stripMargin
+        val analyzed = sql(grouping)
+        analyzed.queryExecution.assertAnalyzed()
+        assert(analyzed.queryExecution.analyzed.deterministic == legacy)
+
+        val correlated = s"""(SELECT kll_sketch_get_n_$dataType($aggregate)
+            |FROM $source WHERE o.id >= 0)""".stripMargin
+        val correlatedGrouping = s"""SELECT $correlated AS a, $correlated AS b
+            |FROM VALUES (0), (1) AS o(id) GROUP BY 1""".stripMargin
+        if (legacy) {
+          sql(correlatedGrouping).queryExecution.assertAnalyzed()
+        } else {
+          val error = intercept[AnalysisException] { sql(correlatedGrouping) }
+          assert(error.getCondition == "SCALAR_SUBQUERY_IS_IN_GROUP_BY_OR_AGGREGATE_FUNCTION")
+        }
+      }
+    }
+  }
+
   test("kll uncorrelated lateral queries retain their rows") {
     for (dataType <- Seq("bigint", "float", "double"); merge <- Seq(false, true)) {
       val sketch = s"kll_sketch_agg_$dataType(CAST(id AS $dataType), 8)"

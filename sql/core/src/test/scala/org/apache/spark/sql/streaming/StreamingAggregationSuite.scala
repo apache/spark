@@ -204,6 +204,48 @@ class StreamingAggregationSuite extends StateStoreMetricsTest with Assertions {
     }
   }
 
+  testWithAllStateVersions("KLL checkpoint layouts override batch rollback") {
+    val rollback = "spark.sql.legacy.kllAggregateDeterministic.enabled"
+    val sharing = "spark.sql.streaming.aggregation.legacyKllSharing.enabled"
+    for (legacy <- Seq(false, true)) {
+      withTempDir { checkpoint =>
+        val input = MemoryStream[Int]
+        val scalar = """(SELECT kll_sketch_get_n_bigint(kll_sketch_agg_bigint(id))
+            |FROM VALUES (0), (1), (2) AS i(id))""".stripMargin
+        val result = withSQLConf(rollback -> "true") {
+          input.toDF().agg(
+            expr("kll_sketch_agg_bigint(value, 8)").as("a"),
+            expr("kll_sketch_agg_bigint(value, 8)").as("b"),
+            sum(expr(scalar)).as("x"), sum(expr(scalar)).as("y"), count("*").as("n"))
+            .selectExpr("kll_sketch_get_n_bigint(a)", "kll_sketch_get_n_bigint(b)",
+              "x", "y", "n")
+        }
+        assert(result.queryExecution.analyzed.deterministic)
+        def checkBuffers: AssertOnQuery = AssertOnQuery { query =>
+          val aggregates = query.lastExecution.executedPlan.collect {
+            case a: BaseAggregateExec if a.aggregateExpressions.exists(
+                _.aggregateFunction.isInstanceOf[KllSketchAggBigint]) => a
+          }
+          aggregates.nonEmpty && aggregates.forall { a =>
+            val expected = if (legacy) 1 else 2
+            a.aggregateExpressions.count(
+              _.aggregateFunction.isInstanceOf[KllSketchAggBigint]) == expected &&
+              a.aggregateExpressions.count(_.aggregateFunction.prettyName == "sum") == expected
+          }
+        }
+        testStream(result, Complete)(
+          StartStream(checkpointLocation = checkpoint.getAbsolutePath,
+            additionalConfs = Map(sharing -> legacy.toString, rollback -> "false")),
+          AddData(input, 1, 2), CheckLastBatch(Row(2L, 2L, 6L, 6L, 2L)),
+          checkBuffers, StopStream,
+          StartStream(checkpointLocation = checkpoint.getAbsolutePath,
+            additionalConfs = Map(sharing -> (!legacy).toString, rollback -> "true")),
+          AddData(input, 3), CheckLastBatch(Row(3L, 3L, 9L, 9L, 3L)),
+          checkBuffers, StopStream)
+      }
+    }
+  }
+
   testWithAllStateVersions("KLL legacy checkpoints preserve reordered buffer histories") {
     for {
       dataType <- Seq("bigint", "float", "double")
