@@ -19,8 +19,6 @@ package org.apache.spark.sql.execution
 
 import java.util.concurrent.TimeUnit._
 
-import scala.collection.mutable
-
 import org.apache.spark.{SparkEnv, TaskContext}
 import org.apache.spark.executor.TaskMetrics
 import org.apache.spark.rdd.RDD
@@ -29,7 +27,6 @@ import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.codegen.{CodegenContext, CodeGenerator, ExprCode}
 import org.apache.spark.sql.catalyst.plans.physical._
 import org.apache.spark.sql.catalyst.types.DataTypeUtils
-import org.apache.spark.sql.execution.exchange.Exchange
 import org.apache.spark.sql.execution.metric.{SQLMetric, SQLMetrics}
 
 /**
@@ -66,30 +63,37 @@ case class SortExec(
     "spillSize" -> SQLMetrics.createSizeMetric(sparkContext, "spill size"))
 
   /**
-   * Creates the sorter of this node and keeps it for [[cleanupResources]]. The generated code
-   * references this holder instead of the node, so that the node and its child subtree are not
-   * serialized into every task. The node keeps the same holder through serialization, so the
-   * sorter the generated code creates is the one that [[cleanupResources]] of this node (e.g.
-   * reached through the interpreted `SortMergeJoinExec`) closes, as long as both are
-   * deserialized from the same task binary.
+   * Creates the sorter of this node in a task and keeps it until it is released. Everything that
+   * runs in a task captures this holder rather than the node: the generated code, the closure of
+   * [[doExecute]], operators above that release the sorter early (through
+   * [[taskResourceCleaner]]) and the concurrent output writers of `FileFormatWriter`. So the node
+   * and its child subtree are not serialized into every task for the sorter, and in a task they
+   * all share the copy of the holder deserialized from the task binary.
+   *
+   * It is transient, so that a node that is still serialized into a task by another operator
+   * does not carry it. A deserialized node therefore has a fresh holder that nothing else uses:
+   * code that runs in a task must not create or release the sorter through the node.
    */
-  private[sql] lazy val sorterHolder =
+  @transient private[sql] lazy val sorterHolder =
     new SortExecSorterHolder(sortOrder, output, enableRadixSort, testSpillFrequency)
 
   /**
-   * This method gets invoked only once for each SortExec instance to initialize an
-   * UnsafeExternalRowSorter. The generated code calls [[SortExecSorterHolder.createSorter]]
-   * directly.
+   * Creates a sorter for this node on the driver side, e.g. for a test. Code that runs in a task
+   * must use [[sorterHolder]] captured on the driver instead, see there.
    */
   def createSorter(): UnsafeExternalRowSorter = sorterHolder.createSorter()
+
+  override protected[sql] def taskResourceCleaner: Option[TaskResourceCleaner] =
+    Some(sorterHolder)
 
   protected override def doExecute(): RDD[InternalRow] = {
     val peakMemory = longMetric("peakMemory")
     val spillSize = longMetric("spillSize")
     val sortTime = longMetric("sortTime")
 
+    val holder = sorterHolder
     child.execute().mapPartitionsInternal { iter =>
-      val sorter = createSorter()
+      val sorter = holder.createSorter()
 
       val metrics = TaskContext.get().taskMetrics()
       // Remember spill data size of this task before execute this operator so that we can
@@ -168,10 +172,8 @@ case class SortExec(
   }
 
   /**
-   * In SortExec, we overwrite cleanupResources to close UnsafeExternalRowSorter.
-   * There's possible for the sorter to be null here, for example, in the scenario of empty
-   * iterator in the current task, the downstream physical node (like SortMergeJoinExec) will
-   * trigger cleanupResources before the sorter is initialized in createSorter.
+   * In SortExec, we overwrite cleanupResources to close UnsafeExternalRowSorter. In a task, the
+   * operators above (like SortMergeJoinExec) close it through [[taskResourceCleaner]] instead.
    */
   override protected[sql] def cleanupResources(): Unit = {
     sorterHolder.cleanupResources()
@@ -204,49 +206,11 @@ object SortExec {
     spillSize += metrics.memoryBytesSpilled - spillSizeBefore
     metrics.incPeakExecutionMemory(sorter.getPeakMemoryUsage)
   }
-
-  /**
-   * The sorter holders of the [[SortExec]]s that run in the same task as `plan`: those in its
-   * subtree, but not beyond an [[Exchange]]. A join that releases its children's resources early
-   * from its generated code (see [[genCleanupSorters]]) references these instead of its child
-   * plans, so that the plans are not serialized into every task.
-   */
-  private[sql] def sorterHoldersInStage(plan: SparkPlan): Array[SortExecSorterHolder] = {
-    val holders = mutable.ArrayBuffer[SortExecSorterHolder]()
-    def visit(p: SparkPlan): Unit = p match {
-      case _: Exchange =>
-      case s: SortExec =>
-        holders += s.sorterHolder
-        visit(s.child)
-      case other => other.children.foreach(visit)
-    }
-    visit(plan)
-    holders.toArray
-  }
-
-  /**
-   * Generates the code that closes the sorters of the [[SortExec]]s below `join`, for a join that
-   * releases its children's resources early. This does in generated code what
-   * `join.cleanupResources()` does, without referencing the plan: only the sorter holders from
-   * [[sorterHoldersInStage]]. The other plan nodes that override [[SparkPlan.cleanupResources]]
-   * hold nothing to release in a task.
-   */
-  private[sql] def genCleanupSorters(ctx: CodegenContext, join: SparkPlan): String = {
-    val holders = ctx.addReferenceObj("sorterHolders", sorterHoldersInStage(join),
-      s"${classOf[SortExecSorterHolder].getName}[]")
-    s"${classOf[SortExec].getName}.cleanupSorters($holders);"
-  }
-
-  /** Closes the sorters of `holders`. Called from the code of [[genCleanupSorters]]. */
-  def cleanupSorters(holders: Array[SortExecSorterHolder]): Unit = {
-    holders.foreach(_.cleanupResources())
-  }
 }
 
 /**
- * Creates the sorter of a [[SortExec]] and holds it until [[cleanupResources]]. It holds only what
- * the sorter needs, not the plan, and is referenced by the generated code of the [[SortExec]] and
- * of joins that release the sorter early (see [[SortExec.sorterHoldersInStage]]).
+ * Creates the sorter of a [[SortExec]] in a task and holds it until [[cleanupResources]]. It
+ * holds only what the sorter needs, not the plan. See [[SortExec.sorterHolder]].
  *
  * WARNING: the sorter is per-task mutable state. Each task deserializes its own copy of the
  * holder from the task binary, so it must not be shared across tasks or accessed from multiple
@@ -256,9 +220,11 @@ private[sql] class SortExecSorterHolder(
     sortOrder: Seq[SortOrder],
     output: Seq[Attribute],
     enableRadixSort: Boolean,
-    testSpillFrequency: Int) extends Serializable {
+    testSpillFrequency: Int) extends TaskResourceCleaner {
 
   @transient private var rowSorter: UnsafeExternalRowSorter = _
+
+  @transient private lazy val schema = DataTypeUtils.fromAttributes(output)
 
   def createSorter(): UnsafeExternalRowSorter = {
     val ordering = RowOrdering.create(sortOrder, output)
@@ -285,8 +251,8 @@ private[sql] class SortExecSorterHolder(
     }
 
     val pageSize = SparkEnv.get.memoryManager.pageSizeBytes
-    rowSorter = UnsafeExternalRowSorter.create(DataTypeUtils.fromAttributes(output), ordering,
-      prefixComparator, prefixComputer, pageSize, canUseRadixSort)
+    rowSorter = UnsafeExternalRowSorter.create(
+      schema, ordering, prefixComparator, prefixComputer, pageSize, canUseRadixSort)
 
     if (testSpillFrequency > 0) {
       rowSorter.setTestSpillFrequency(testSpillFrequency)
@@ -298,7 +264,7 @@ private[sql] class SortExecSorterHolder(
    * Closes the sorter, if any. It can be null, e.g. when a join above releases the resources of
    * its children before this sorter is created.
    */
-  def cleanupResources(): Unit = {
+  override def cleanupResources(): Unit = {
     if (rowSorter != null) {
       rowSorter.cleanupResources()
     }

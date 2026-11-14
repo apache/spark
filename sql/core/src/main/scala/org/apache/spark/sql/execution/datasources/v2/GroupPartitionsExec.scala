@@ -230,16 +230,16 @@ case class GroupPartitionsExec(
   //
   // --- Concrete example of an unsafe operator: SortExec + SortMergeJoinExec ---
   //
-  // SortExec stores its active sorter in a plain var field (`rowSorter`) of its per-node
-  // `SortExecSorterHolder`, which the generated code shares with the node. When the k-way merge
+  // SortExec stores its active sorter in a plain var field (`rowSorter`) of its
+  // `SortExecSorterHolder`, one per SortExec instance in a task. When the k-way merge
   // initialises its N partition iterators, each one drives the same SortExec instance and calls
-  // createSorter(), which assigns rowSorter = newSorter -- overwriting the field each time. After
-  // all N iterators are initialised, rowSorter holds only the sorter created for the *last*
-  // partition.
+  // createSorter() on its holder, which assigns rowSorter = newSorter -- overwriting the field
+  // each time. After all N iterators are initialised, rowSorter holds only the sorter created for
+  // the *last* partition.
   //
   // SortMergeJoinExec performs eager resource cleanup: when a join partition is exhausted it
-  // closes the sorters of the SortExecs below it (cleanupResources() on its children, or the same
-  // through their holders in generated code). That calls rowSorter.cleanupResources() -- but
+  // closes the sorters of the SortExecs below it, through their holders (`taskResourceCleaner`).
+  // That calls rowSorter.cleanupResources() -- but
   // rowSorter now holds the last-created sorter, not the one belonging to the just-exhausted
   // partition. If that last sorter is still being actively read by another partition in the
   // k-way merge, freeing it causes a use-after-free.

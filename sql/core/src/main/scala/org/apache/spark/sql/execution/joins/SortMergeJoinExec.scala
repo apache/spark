@@ -142,8 +142,9 @@ case class SortMergeJoinExec(
       rightKeys,
       joinType,
       condition,
-      left,
-      right,
+      left.output,
+      right.output,
+      TaskResourceCleaner.inStage(this),
       output,
       inMemoryThreshold,
       spillThreshold,
@@ -599,7 +600,7 @@ case class SortMergeJoinExec(
       case _ => outputRow
     }
     val findNextJoinRows = s"$findNextJoinRowsFuncName($streamedInput, $bufferedInput)"
-    val eagerCleanup = SortExec.genCleanupSorters(ctx, this)
+    val eagerCleanup = TaskResourceCleaner.genCleanupInStage(ctx, this)
 
     // For join types with a streamed-only guard, prepend the guard to beforeLoop
     // so the row is emitted before the inner loop.

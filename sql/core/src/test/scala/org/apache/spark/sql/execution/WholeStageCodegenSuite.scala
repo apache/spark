@@ -39,7 +39,7 @@ import org.apache.spark.sql.catalyst.plans.logical.MergeRows
 import org.apache.spark.sql.catalyst.plans.logical.MergeRows.{Keep, Update}
 import org.apache.spark.sql.classic
 import org.apache.spark.sql.errors.DataTypeErrors.{toSQLConf, toSQLId}
-import org.apache.spark.sql.execution.adaptive.DisableAdaptiveExecutionSuite
+import org.apache.spark.sql.execution.adaptive.{AdaptiveSparkPlanExec, DisableAdaptiveExecutionSuite, QueryStageExec}
 import org.apache.spark.sql.execution.aggregate.{HashAggregateExec, SortAggregateExec}
 import org.apache.spark.sql.execution.columnar.InMemoryTableScanExec
 import org.apache.spark.sql.execution.debug.{codegenString, codegenStringSeq}
@@ -641,19 +641,16 @@ class WholeStageCodegenSuite extends SharedSparkSession
     checkAnswer(twoJoinsDF, Seq(Row(6), Row(7), Row(8), Row(9)))
   }
 
-  test("SPARK-61666: Sort and sort merge join codegen do not serialize plan nodes") {
-    // The RDD a codegen stage adds on top of its input RDDs, with the references of its
-    // generated code, is serialized into every task binary. A plan node written with it would drag
-    // its whole child subtree along, so the stage must not reference one.
-    def serializedPlanNodes(stage: WholeStageCodegenExec): Seq[String] = {
-      val rdd = stage.execute()
-      // The input RDDs are cached by the plans below, so these are the ones `rdd` reads.
-      val inputs = stage.child.asInstanceOf[CodegenSupport].inputRDDs()
+  test("SPARK-61666: Sort and sort merge joins do not serialize plan nodes into tasks") {
+    // The RDD that a codegen stage, or an operator outside codegen, adds on top of its input RDDs
+    // is serialized into every task binary, with the references of the generated code. A plan
+    // node written with it would drag its whole child subtree along, so it must not reference one.
+    def serializedPlanNodes(rdd: RDD[_], inputs: Seq[RDD[_]]): Seq[String] = {
       val planNodes = mutable.ArrayBuffer[String]()
       val out = new ObjectOutputStream(new ByteArrayOutputStream()) {
         enableReplaceObject(true)
         override def replaceObject(obj: AnyRef): AnyRef = obj match {
-          // Cut the lineage below the stage: the input RDDs belong to other stages.
+          // Cut the lineage below: the input RDDs belong to other operators or stages.
           case r: RDD[_] if inputs.exists(_ eq r) => "input RDD"
           case p: SparkPlan =>
             planNodes += p.nodeName
@@ -665,41 +662,76 @@ class WholeStageCodegenSuite extends SharedSparkSession
       out.close()
       planNodes.toSeq
     }
-    // The codegen stages that run a sort or a sort merge join themselves.
-    def checkStages(df: => DataFrame, expectedNodes: Set[String]): Unit = {
-      def inStage(plan: SparkPlan): Seq[SparkPlan] = plan match {
-        case _: InputAdapter => Nil
-        case other => other +: other.children.flatMap(inStage)
-      }
+    def inStage(plan: SparkPlan): Seq[SparkPlan] = plan match {
+      case _: InputAdapter => Nil
+      case other => other +: other.children.flatMap(inStage)
+    }
+    // Checks the codegen stages and the operators outside codegen that run a sort or a sort merge
+    // join. `expectedNodes` are the node names that must run, in codegen or not.
+    def checkPlans(df: => DataFrame, expectedNodes: Set[String]): Unit = {
       val expected = withSQLConf(SQLConf.WHOLESTAGE_CODEGEN_ENABLED.key -> "false") {
         df.collect().toSeq
       }
       Seq(false, true).foreach { usePartitionEvaluator =>
         withSQLConf(SQLConf.USE_PARTITION_EVALUATOR.key -> usePartitionEvaluator.toString) {
           val result = df
-          val stages = result.queryExecution.executedPlan.collect {
-            case stage: WholeStageCodegenExec
-                if inStage(stage.child).exists(p => expectedNodes.contains(p.nodeName)) =>
-              stage -> inStage(stage.child).map(_.nodeName).filter(expectedNodes.contains)
-          }
-          assert(stages.flatMap(_._2).toSet == expectedNodes)
-          stages.foreach { case (stage, _) =>
-            val planNodes = serializedPlanNodes(stage)
-            assert(planNodes.isEmpty, s"$planNodes referenced by\n${stage.treeString}")
-          }
           checkAnswer(result, expected)
+          // The RDDs are cached by the plans, so these are the ones the query ran.
+          val plan = result.queryExecution.executedPlan
+          // All the nodes of the plan, including those in adaptive query stages.
+          def allNodes(p: SparkPlan): Seq[SparkPlan] = p +: (p match {
+            case a: AdaptiveSparkPlanExec => allNodes(a.executedPlan)
+            case q: QueryStageExec => allNodes(q.plan)
+            case other => other.children.flatMap(allNodes)
+          })
+          val nodes = allNodes(plan)
+          val stages = nodes.collect { case s: WholeStageCodegenExec => s }
+          val generated = stages.flatMap(s => inStage(s.child))
+          val targets = stages.filter(s => inStage(s.child).exists(
+              p => expectedNodes.contains(p.nodeName))).map { s =>
+            (s.treeString, s.execute(), s.child.asInstanceOf[CodegenSupport].inputRDDs())
+          } ++ nodes.collect {
+            case p if expectedNodes.contains(p.nodeName) && !generated.exists(_ eq p) =>
+              (p.treeString, p.execute(), p.children.map(_.execute()))
+          }
+          assert(nodes.map(_.nodeName).toSet.intersect(expectedNodes) == expectedNodes,
+            plan.treeString)
+          targets.foreach { case (treeString, rdd, inputs) =>
+            val planNodes = serializedPlanNodes(rdd, inputs)
+            assert(planNodes.isEmpty, s"$planNodes referenced by\n$treeString")
+          }
         }
       }
     }
 
-    withSQLConf(SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key -> "-1") {
-      val df1 = spark.range(0, 100, 1, 2).select(($"id" % 10).as("k1"), $"id".as("v1"))
-      val df2 = spark.range(0, 30, 1, 2).select(($"id" % 7).as("k2"), $"id".as("v2"))
-      checkStages(df1.orderBy($"v1".desc), Set("Sort"))
-      Seq("inner", "left_outer", "right_outer", "left_semi", "left_anti").foreach { joinType =>
-        checkStages(
-          df1.join(df2.hint("SHUFFLE_MERGE"), $"k1" === $"k2", joinType),
-          Set("Sort", "SortMergeJoin"))
+    val df1 = spark.range(0, 100, 1, 2).select(($"id" % 10).as("k1"), $"id".as("v1"))
+    val df2 = spark.range(0, 30, 1, 2).select(($"id" % 7).as("k2"), $"id".as("v2"))
+    withTempView("t1", "t2") {
+      df1.createOrReplaceTempView("t1")
+      df2.createOrReplaceTempView("t2")
+      // Fully generated; generated sorts under an interpreted join (the join output has more fields
+      // than `maxFields`); and no codegen at all.
+      Seq(
+        Seq.empty[(String, String)],
+        Seq(SQLConf.WHOLESTAGE_MAX_NUM_FIELDS.key -> "3"),
+        Seq(SQLConf.WHOLESTAGE_CODEGEN_ENABLED.key -> "false")).foreach { codegenConfs =>
+        Seq(false, true).foreach { aqe =>
+          withSQLConf(codegenConfs ++ Seq(
+              SQLConf.ADAPTIVE_EXECUTION_ENABLED.key -> aqe.toString,
+              SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key -> "-1"): _*) {
+            checkPlans(df1.orderBy($"v1".desc), Set("Sort"))
+            val joinTypes = Seq("inner", "left_outer", "right_outer", "left_semi", "left_anti")
+            joinTypes.foreach { joinType =>
+              checkPlans(
+                df1.join(df2.hint("SHUFFLE_MERGE"), $"k1" === $"k2", joinType),
+                Set("Sort", "SortMergeJoin"))
+            }
+            // An existence join.
+            checkPlans(
+              spark.sql("SELECT * FROM t1 WHERE EXISTS (SELECT 1 FROM t2 WHERE k2 = k1) OR v1 < 3"),
+              Set("Sort", "SortMergeJoin"))
+          }
+        }
       }
     }
 
@@ -707,7 +739,7 @@ class WholeStageCodegenSuite extends SharedSparkSession
       val trades = Seq((5, 1), (11, 1), (12, 2), (3, 3)).toDF("ts", "k")
       val quotes = Seq((0, 1, "a"), (7, 1, "b"), (10, 1, "c"), (8, 2, "d"), (9, 3, "e"))
         .toDF("ts", "k", "v")
-      checkStages(
+      checkPlans(
         trades.joinAsOf(
           quotes, trades("ts"), quotes("ts"), usingColumns = Seq("k"), joinType = "inner",
           tolerance = null, allowExactMatches = true, direction = "backward"),
