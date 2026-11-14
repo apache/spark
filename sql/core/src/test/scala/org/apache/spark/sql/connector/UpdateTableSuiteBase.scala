@@ -622,6 +622,30 @@ abstract class UpdateTableSuiteBase extends RowLevelOperationSuiteBase {
       Row(1, -1, "hr") :: Row(2, 2, "software") :: Nil)
   }
 
+  test("SPARK-61683: update of a table accepting any schema rejects metadata column assignments") {
+    createAndInitTable("pk INT NOT NULL, id INT, dep STRING",
+      """{ "pk": 1, "id": 1, "dep": "hr" }
+        |{ "pk": 2, "id": 2, "dep": "software" }
+        |""".stripMargin)
+    sql(s"ALTER TABLE $tableNameAsString SET TBLPROPERTIES ('accept-any-schema' = 'true')")
+
+    // Spark does not align the assignments for such a table, so this SET clause lists every column
+    // of the target table, including the metadata columns that AddMetadataColumns adds to it
+    val updateStmt = s"UPDATE $tableNameAsString " +
+      "SET pk = pk, id = -1, dep = dep, index = 5, _partition = _partition WHERE pk = 1"
+    val e = intercept[AnalysisException](sql(updateStmt))
+    assert(e.getCondition == "DATATYPE_MISMATCH.INVALID_ROW_LEVEL_OPERATION_ASSIGNMENTS")
+    assert(e.getMessage.contains("Cannot assign to metadata column 'index'"))
+
+    withSQLConf(SQLConf.LEGACY_IGNORE_METADATA_COLUMN_ASSIGNMENTS.key -> "true") {
+      sql(updateStmt)
+    }
+
+    checkAnswer(
+      sql(s"SELECT * FROM $tableNameAsString"),
+      Row(1, -1, "hr") :: Row(2, 2, "software") :: Nil)
+  }
+
   test("update with IN subqueries") {
     withTempView("updated_id", "updated_dep") {
       createAndInitTable("pk INT NOT NULL, id INT, dep STRING",
