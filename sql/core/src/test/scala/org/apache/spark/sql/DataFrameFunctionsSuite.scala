@@ -1434,6 +1434,94 @@ class DataFrameFunctionsSuite extends SharedSparkSession {
     checkAnswer(res, Row(Seq(Row(1, 3), Row(2, 4))))
   }
 
+  testWithWholeStageCodegenOnAndOff("arrays_zip with map key expressions") { codegen =>
+    val factoryMode = if (codegen.toBoolean) "CODEGEN_ONLY" else "NO_CODEGEN"
+    withSQLConf(SQLConf.CODEGEN_FACTORY_MODE.key -> factoryMode) {
+      def checkZip(result: DataFrame, names: Seq[String], expected: Seq[Row]): Unit = {
+        val fields = names.map(StructField(_, IntegerType, nullable = true))
+        val expectedSchema = StructType(Seq(StructField(
+          "zipped", ArrayType(StructType(fields), containsNull = false), nullable = true)))
+        assert(result.schema === expectedSchema)
+        checkAnswer(result, expected)
+      }
+
+      // Range keeps the map values and key selection from becoming a local relation.
+      val df = spark.range(2).selectExpr(
+        "map('temp', array(cast(id as int) + 1, cast(id as int) + 2), " +
+          "'hum', array(3, 4)) as readings",
+        "if(id = 0, 'temp', 'hum') as metric")
+      val dynamicRows = Seq(
+        Row(Seq(Row(1, 3), Row(2, 4))),
+        Row(Seq(Row(3, 3), Row(4, 4))))
+      val tempRows = Seq(
+        Row(Seq(Row(1, 3), Row(2, 4))),
+        Row(Seq(Row(2, 3), Row(3, 4))))
+
+      checkZip(
+        df.selectExpr("arrays_zip(readings[metric], readings['hum']) as zipped"),
+        Seq("0", "hum"), dynamicRows)
+      checkZip(
+        df.selectExpr("arrays_zip(readings[concat('te', 'mp')], readings['hum']) as zipped"),
+        Seq("0", "hum"), tempRows)
+      checkZip(
+        df.selectExpr("arrays_zip(readings[cast(null as string)], readings['hum']) as zipped"),
+        Seq("0", "hum"), Seq(Row(null), Row(null)))
+      checkZip(
+        df.selectExpr("arrays_zip(readings['temp'], readings.hum) as zipped"),
+        Seq("temp", "hum"), tempRows)
+      checkZip(
+        df.select(arrays_zip(expr("readings[metric]").as("selected"),
+          expr("readings['hum']")).as("zipped")),
+        Seq("selected", "hum"), dynamicRows)
+
+      val typedKeyRows = Seq(
+        Row(Seq(Row(1), Row(2))),
+        Row(Seq(Row(2), Row(3))))
+      Seq("1", "DATE '2020-01-02'", "TIMESTAMP '2020-01-02 03:04:05'", "X'CAFE'")
+        .foreach { key =>
+          withClue(s"map key: $key") {
+            val typedMap = spark.range(2).selectExpr(
+              s"map($key, array(cast(id as int) + 1, cast(id as int) + 2)) as readings")
+            checkZip(typedMap.selectExpr(s"arrays_zip(readings[$key]) as zipped"),
+              Seq("0"), typedKeyRows)
+          }
+        }
+    }
+  }
+
+  test("arrays_zip with implicitly collated map keys in views") {
+    withSQLConf(
+      SQLConf.ANALYZER_DUAL_RUN_LEGACY_AND_SINGLE_PASS_RESOLVER.key -> "false",
+      SQLConf.ANALYZER_SINGLE_PASS_RESOLVER_ENABLED.key -> "false",
+      SQLConf.ANALYZER_SINGLE_PASS_RESOLVER_ENABLED_TENTATIVELY.key -> "false") {
+      withTable("arrays_zip_names_table") {
+        sql("CREATE TABLE arrays_zip_names_table " +
+          "(m MAP<STRING COLLATE UTF8_BINARY, ARRAY<INT>>) USING parquet")
+        sql("INSERT INTO arrays_zip_names_table VALUES (map('a', array(1)))")
+        // The view's default collation adds a cast even to the direct literal key.
+        withView("arrays_zip_names_view") {
+          sql("CREATE VIEW arrays_zip_names_view DEFAULT COLLATION UTF8_LCASE AS " +
+            "SELECT to_json(arrays_zip(m['a'])) AS x FROM arrays_zip_names_table")
+          Seq((false, false), (false, true), (true, false)).foreach {
+            case (singlePass, tentative) =>
+              withSQLConf(
+                SQLConf.ANALYZER_SINGLE_PASS_RESOLVER_ENABLED.key -> singlePass.toString,
+                SQLConf.ANALYZER_SINGLE_PASS_RESOLVER_ENABLED_TENTATIVELY.key ->
+                  tentative.toString) {
+                withClue(s"singlePass=$singlePass, tentative=$tentative") {
+                  // Forced single-pass analysis does not support RDD deserialization.
+                  QueryTest.checkAnswer(
+                    sql("SELECT x FROM arrays_zip_names_view"),
+                    Row("""[{"0":1}]""") :: Nil,
+                    checkToRDD = false)
+                }
+              }
+          }
+        }
+      }
+    }
+  }
+
   def testSizeOfMap(sizeOfNull: Any): Unit = {
     val df = Seq(
       (Map[Int, Int](1 -> 1, 2 -> 2), "x"),
