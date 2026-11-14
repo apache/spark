@@ -992,6 +992,7 @@ object View {
       existingConf = activeConf,
       createSparkVersion = createSparkVersion
     )
+    Analyzer.retainJsonCsvExpressionDefaultBinding(newConf = sqlConf, existingConf = activeConf)
 
     sqlConf
   }

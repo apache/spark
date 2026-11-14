@@ -30,6 +30,7 @@ import org.apache.spark.sql.catalyst.expressions.{ExprUtils, GenericInternalRow,
 import org.apache.spark.sql.catalyst.json.{CreateJacksonParser, JacksonGenerator, JacksonParser, JsonInferSchema, JSONOptions}
 import org.apache.spark.sql.catalyst.util.{ArrayData, FailFastMode, FailureSafeParser, MapData, PermissiveMode}
 import org.apache.spark.sql.errors.{QueryCompilationErrors, QueryExecutionErrors}
+import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types.{ArrayType, DataType, MapType, StringType, StructField, StructType, VariantType}
 import org.apache.spark.unsafe.types.{UTF8String, VariantVal}
 import org.apache.spark.util.Utils
@@ -120,7 +121,9 @@ case class JsonToStructsEvaluator(
     nameOfCorruptRecord: String,
     timeZoneId: Option[String],
     variantAllowDuplicateKeys: Boolean,
-    charVarcharStandardSemantics: Boolean) {
+    charVarcharStandardSemantics: Boolean,
+    enableDateTimeParsingFallback: Option[Boolean],
+    useCapturedOptionDefaults: Boolean) {
 
   // This converts parsed rows to the desired output by the given schema.
   @transient
@@ -151,7 +154,12 @@ case class JsonToStructsEvaluator(
     }
 
     val rawParser = new JacksonParser(actualSchema, parsedOptions, allowArrayAsStructs = false,
-      charVarcharStandardSemanticsOverride = Some(charVarcharStandardSemantics))
+      charVarcharStandardSemanticsOverride = Some(charVarcharStandardSemantics),
+      defaultEnableDateTimeParsingFallback = if (useCapturedOptionDefaults) {
+        enableDateTimeParsingFallback
+      } else {
+        SQLConf.get.jsonEnableDateTimeParsingFallback
+      })
     val createParser = CreateJacksonParser.utf8String _
 
     new FailureSafeParser[UTF8String](

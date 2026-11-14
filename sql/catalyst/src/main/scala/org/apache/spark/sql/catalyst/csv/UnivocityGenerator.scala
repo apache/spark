@@ -32,7 +32,9 @@ import org.apache.spark.util.ArrayImplicits._
 class UnivocityGenerator(
     schema: StructType,
     writer: Writer,
-    options: CSVOptions) {
+    options: CSVOptions,
+    defaultNullAsEmptyString: Boolean =
+      SQLConf.get.getConf(SQLConf.LEGACY_NULL_VALUE_WRITTEN_AS_QUOTED_EMPTY_STRING_CSV)) {
   private val writerSettings = options.asWriterSettings
   writerSettings.setHeaders(schema.fieldNames: _*)
   private val gen = new CsvWriter(writer, writerSettings)
@@ -71,8 +73,8 @@ class UnivocityGenerator(
   // choose whether a null is written as an empty string (a quoted empty string `""` with the
   // default `emptyValue`) or as a bare, unquoted empty token, without changing the session
   // default.
-  private val nullAsQuotedEmptyString = options.treatNullAsEmptyString.getOrElse(
-    SQLConf.get.getConf(SQLConf.LEGACY_NULL_VALUE_WRITTEN_AS_QUOTED_EMPTY_STRING_CSV))
+  private val nullAsQuotedEmptyString =
+    options.treatNullAsEmptyString.getOrElse(defaultNullAsEmptyString)
 
   private val binaryFormatter = ToStringBase.getBinaryFormatter
 

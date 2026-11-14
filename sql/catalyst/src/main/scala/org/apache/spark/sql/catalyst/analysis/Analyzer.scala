@@ -378,6 +378,13 @@ object Analyzer {
     key.startsWith("spark.sql.catalog.") || SQLConf.isSessionBindingPolicy(key)
   }
 
+  /** This rollback policy follows the caller even when ordinary body overrides are disabled. */
+  def retainJsonCsvExpressionDefaultBinding(newConf: SQLConf, existingConf: SQLConf): Unit = {
+    val entry = SQLConf.JSON_CSV_EXPRESSION_USE_CAPTURED_OPTION_DEFAULTS
+    // Copy the effective default too: an unset caller must not inherit a saved rollback value.
+    newConf.setConf(entry, existingConf.getConf(entry))
+  }
+
   /**
    * In case ANSI value wasn't persisted for a view or a UDF, we set it to `true` in case Spark
    * version used to create the view is 4.0.0 or higher (ANSI SQL mode became the default in
@@ -418,6 +425,7 @@ object Analyzer {
         conf.getConf(SQLConf.APPLY_SESSION_CONF_OVERRIDES_TO_FUNCTION_RESOLUTION)) {
       retainResolutionConfigsForAnalysis(newConf = functionConf, existingConf = conf)
     }
+    retainJsonCsvExpressionDefaultBinding(newConf = functionConf, existingConf = conf)
     functionConf
   }
 }
