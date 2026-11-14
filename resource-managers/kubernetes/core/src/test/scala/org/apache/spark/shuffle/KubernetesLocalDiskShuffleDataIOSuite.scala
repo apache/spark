@@ -270,6 +270,17 @@ class KubernetesLocalDiskShuffleDataIOSuite extends SparkFunSuite with LocalRoot
     Files.write(new File(dir, "shuffle_0_0_0.index").toPath(), Array[Byte](0, 0, 0, 0))
   }
 
+  test("SPARK-59332: recover an app-scoped executor local dir") {
+    val deepDir = conf.get("spark.local.dir") + "/spark-x/executor-y/app-1"
+    createRecoverableShuffleFile(deepDir)
+
+    val m = intercept[IllegalStateException] {
+      KubernetesLocalDiskShuffleExecutorComponents
+        .recoverDiskStore(conf.clone.set("spark.local.dir", deepDir), sentinelBlockManager())
+    }.getMessage
+    assert(m.contains(sentinelMessage))
+  }
+
   test("SPARK-58693: a local dir with fewer than three path components is skipped") {
     val deepDir = conf.get("spark.local.dir") + "/spark-x/executor-y"
     createRecoverableShuffleFile(deepDir)

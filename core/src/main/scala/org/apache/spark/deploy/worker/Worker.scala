@@ -18,6 +18,8 @@
 package org.apache.spark.deploy.worker
 
 import java.io.{File, IOException}
+import java.net.URLEncoder
+import java.nio.charset.StandardCharsets
 import java.time.{Instant, ZoneId}
 import java.time.format.DateTimeFormatter
 import java.util.{Locale, UUID}
@@ -618,25 +620,7 @@ private[deploy] class Worker(
           // Create local dirs for the executor. These are passed to the executor via the
           // SPARK_EXECUTOR_DIRS environment variable, and deleted by the Worker when the
           // application finishes.
-          val appLocalDirs = appDirectories.getOrElse(appId, {
-            val localRootDirs = Utils.getOrCreateLocalRootDirs(conf)
-            val dirs = localRootDirs.flatMap { dir =>
-              try {
-                val appDir = Utils.createDirectory(dir, namePrefix = "executor")
-                Utils.chmod700(appDir)
-                Some(appDir.getAbsolutePath())
-              } catch {
-                case e: IOException =>
-                  logWarning(log"${MDC(ERROR, e.getMessage)}. Ignoring this directory.")
-                  None
-              }
-            }.toImmutableArraySeq
-            if (dirs.isEmpty) {
-              throw new IOException("No subfolder can be created in " +
-                s"${localRootDirs.mkString(",")}.")
-            }
-            dirs
-          })
+          val appLocalDirs = appDirectories.getOrElse(appId, createExecutorLocalDirs(appId))
           appDirectories(appId) = appLocalDirs
           val manager = new ExecutorRunner(
             appId,
@@ -767,6 +751,38 @@ private[deploy] class Worker(
     registerWithMaster()
   }
 
+  private[deploy] def createExecutorLocalDirs(appId: String): Seq[String] = {
+    val localRootDirs = Utils.getOrCreateLocalRootDirs(conf)
+    val dirs = localRootDirs.flatMap { dir =>
+      try {
+        // Keep the random root and executor directories (and their shutdown-hook cleanup),
+        // adding a URL-encoded app id leaf for the shuffle service's app-scope check.
+        val executorDir = Utils.createDirectory(dir, namePrefix = "executor")
+        try {
+          val appDir = new File(executorDir, URLEncoder.encode(appId, StandardCharsets.UTF_8))
+          if (!Utils.createDirectory(appDir)) {
+            throw new IOException(s"Failed to create directory $appDir")
+          }
+          Utils.chmod700(appDir)
+          Some(appDir.getAbsolutePath())
+        } catch {
+          case e: IOException =>
+            Utils.deleteRecursively(executorDir)
+            throw e
+        }
+      } catch {
+        case e: IOException =>
+          logWarning(log"${MDC(ERROR, e.getMessage)}. Ignoring this directory.")
+          None
+      }
+    }.toImmutableArraySeq
+    if (dirs.isEmpty) {
+      throw new IOException("No subfolder can be created in " +
+        s"${localRootDirs.mkString(",")}.")
+    }
+    dirs
+  }
+
   private def maybeCleanupApplication(id: String): Unit = {
     val shouldCleanup = finishedApps.contains(id) && !executors.values.exists(_.appId == id)
     if (shouldCleanup) {
@@ -776,7 +792,11 @@ private[deploy] class Worker(
           concurrent.Future {
             logInfo(log"Cleaning up local directories for application ${MDC(APP_ID, id)}")
             dirList.foreach { dir =>
-              Utils.deleteRecursively(new File(dir))
+              val appDir = new File(dir)
+              Utils.deleteRecursively(appDir)
+              // Remove the executor directory only when it is empty; unrelated content
+              // keeps it (and File.delete() returns false) untouched.
+              appDir.getParentFile.delete()
             }
           }(cleanupThreadExecutor).failed.foreach(e =>
             logError(log"Clean up app dir ${MDC(PATHS, dirList)} failed", e)

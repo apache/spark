@@ -83,8 +83,16 @@ class ExternalShuffleService(sparkConf: SparkConf, securityManager: SecurityMana
 
   /** Create a new shuffle block handler. Factored out for subclasses to override. */
   protected def newShuffleBlockHandler(conf: TransportConf): ExternalBlockHandler = {
-    // Constrain registered localDirs to the configured local directories.
+    // Constrain registered localDirs to the configured local directories and, when
+    // spark.shuffle.service.requireAppScopedLocalDirs is enabled, to the registering
+    // application's own per-app directory (spark-*/executor-*/<url-encoded-appId>, with an
+    // optional blockmgr-* child).
+    // The check is opt-in: executors launched by Workers that predate the per-app layout
+    // register unscoped paths and would be rejected, so enable it only after every Worker
+    // in the cluster is upgraded.
     val localDirs = Utils.getConfiguredLocalDirs(sparkConf)
+    val requireAppScopedLocalDirs =
+      sparkConf.get(config.SHUFFLE_SERVICE_REQUIRE_APP_SCOPED_LOCAL_DIRS)
     if (sparkConf.get(config.SHUFFLE_SERVICE_DB_ENABLED) && enabled) {
       val shuffleDBName = sparkConf.get(config.SHUFFLE_SERVICE_DB_BACKEND)
       logInfo(
@@ -92,9 +100,9 @@ class ExternalShuffleService(sparkConf: SparkConf, securityManager: SecurityMana
         log"${MDC(SHUFFLE_DB_BACKEND_KEY, config.SHUFFLE_SERVICE_DB_BACKEND.key)}")
       new ExternalBlockHandler(conf,
         findRegisteredExecutorsDBFile(shuffleDBName.fileName(registeredExecutorsDB)),
-        localDirs, false)
+        localDirs, requireAppScopedLocalDirs)
     } else {
-      new ExternalBlockHandler(conf, null, localDirs, false)
+      new ExternalBlockHandler(conf, null, localDirs, requireAppScopedLocalDirs)
     }
   }
 
@@ -127,6 +135,8 @@ class ExternalShuffleService(sparkConf: SparkConf, securityManager: SecurityMana
     masterMetricsSystem.registerSource(shuffleServiceSource)
     masterMetricsSystem.start()
   }
+
+  private[deploy] def boundPort: Int = server.getPort
 
   /** Clean up all shuffle files associated with an application that has exited. */
   def applicationRemoved(appId: String): Unit = {

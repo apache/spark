@@ -19,6 +19,8 @@ package org.apache.spark.network.shuffle;
 
 import java.io.File;
 import java.io.IOException;
+import java.net.URLEncoder;
+import java.nio.charset.StandardCharsets;
 import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.List;
@@ -36,10 +38,13 @@ import org.apache.spark.internal.MDC;
  * operates on validated paths.
  *
  * Each entry must canonicalize to a path contained under one of the configured roots (YARN passes
- * {@code yarn.nodemanager.local-dirs}; standalone passes the configured local directories) and,
- * when app scoping is required, within the registering application's own directory (the
- * {@code appId} must appear as a path segment). When no roots are configured there is nothing to
- * contain the entries against and they are accepted. An empty array is always allowed.
+ * {@code yarn.nodemanager.local-dirs}; standalone passes the configured local directories). When
+ * app scoping is required, entries must either be below {@code appcache/<appId>} (the YARN
+ * layout) or have the standalone form
+ * <code>spark-&#42;/executor-&#42;/&lt;url-encoded-appId&gt;[/blockmgr-&#42;]</code>
+ * below the root. Both layouts are accepted by either service.
+ * When no roots are configured there is nothing to contain the entries against and they are
+ * accepted. An empty array is always allowed.
  */
 class LocalDirValidator {
   private static final SparkLogger logger = SparkLoggerFactory.getLogger(LocalDirValidator.class);
@@ -80,15 +85,29 @@ class LocalDirValidator {
         "localDirs entry is not under any of the service's local directories: " + localDir);
     }
     if (requireAppScopedLocalDirs &&
-        (appId == null || appId.isEmpty() || !pathContainsSegment(canonical, appId))) {
+        (appId == null || appId.isEmpty() || allowedLocalDirRoots.stream().noneMatch(
+          root -> canonical.startsWith(root) && (isStandaloneAppDir(root, canonical, appId) ||
+            isYarnAppDir(root, canonical, appId))))) {
       throw new IllegalArgumentException(
         "localDirs entry is not within application " + appId + "'s directory: " + localDir);
     }
   }
 
-  private static boolean pathContainsSegment(Path path, String segment) {
-    for (Path part : path) {
-      if (part.toString().equals(segment)) {
+  private static boolean isStandaloneAppDir(Path root, Path path, String appId) {
+    Path relative = root.relativize(path);
+    int count = relative.getNameCount();
+    return (count == 3 || count == 4) &&
+      relative.getName(0).toString().startsWith("spark-") &&
+      relative.getName(1).toString().startsWith("executor-") &&
+      relative.getName(2).toString().equals(URLEncoder.encode(appId, StandardCharsets.UTF_8)) &&
+      (count == 3 || relative.getName(3).toString().startsWith("blockmgr-"));
+  }
+
+  private static boolean isYarnAppDir(Path root, Path path, String appId) {
+    Path relative = root.relativize(path);
+    for (int i = 0; i + 1 < relative.getNameCount(); i++) {
+      if (relative.getName(i).toString().equals("appcache") &&
+          relative.getName(i + 1).toString().equals(appId)) {
         return true;
       }
     }

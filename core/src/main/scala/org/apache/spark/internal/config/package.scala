@@ -908,6 +908,29 @@ package object config {
       .stringConf
       .createWithDefault("spark_shuffle")
 
+  private[spark] val SHUFFLE_SERVICE_REQUIRE_APP_SCOPED_LOCAL_DIRS =
+    ConfigBuilder("spark.shuffle.service.requireAppScopedLocalDirs")
+      .doc("Whether the external shuffle service requires every local directory an executor " +
+        "reports at registration to use the registering application's own directory: the " +
+        "path must be spark-*/executor-*/<url-encoded-appId>, optionally followed by " +
+        "blockmgr-*, or below appcache/<appId> (the YARN layout), under one of the " +
+        "service's configured local directory roots. Both layouts are accepted. This " +
+        "guards against mis-registration (e.g. a bug " +
+        "or race mixing up application directories); it is not an isolation boundary against " +
+        "malicious applications, because the application id is supplied by the client and " +
+        "standalone authentication does not bind a registration to a particular application " +
+        "id. Only affects standalone mode. Enable it only after every Worker in the cluster " +
+        "creates per-application executor local directories (Workers on this version do); " +
+        "executors launched by older Workers report unscoped paths and their registrations " +
+        "are rejected while this is enabled. The check happens only at registration: with " +
+        "spark.shuffle.service.db.enabled, registrations restored from the local database " +
+        "when the service restarts are not re-validated, so registrations made before the " +
+        "upgrade keep being served across restarts.")
+      .version("4.4.0")
+      .withBindingPolicy(ConfigBindingPolicy.NOT_APPLICABLE)
+      .booleanConf
+      .createWithDefault(false)
+
   private[spark] val KEYTAB = ConfigBuilder("spark.kerberos.keytab")
     .doc("Location of user's keytab.")
     .version("3.0.0")
