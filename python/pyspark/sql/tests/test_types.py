@@ -3908,6 +3908,15 @@ class DataTypeTests(unittest.TestCase, PySparkErrorTestUtils):
             self.assertIsNone(t.toInternal(None))
             self.assertIsNone(t.fromInternal(None))
 
+    # regression test for SPARK-60547
+    def test_time_type_truncates_to_precision(self):
+        t = datetime.time(12, 0, 0, 567891)
+        self.assertEqual(TimeType(0).toInternal(t), TimeType(0).toInternal(datetime.time(12)))
+        self.assertEqual(
+            TimeType(3).fromInternal(TimeType(3).toInternal(t)), datetime.time(12, 0, 0, 567000)
+        )
+        self.assertEqual(TimeType(6).fromInternal(TimeType(6).toInternal(t)), t)
+
     # regression test for SPARK-10392
     def test_datetype_equal_zero(self):
         dt = DateType()
