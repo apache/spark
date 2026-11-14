@@ -926,6 +926,23 @@ object RemoveNoopUnion extends Rule[LogicalPlan] {
 }
 
 /**
+ * Helpers for the values of [[LocalLimit]], [[GlobalLimit]] and [[Offset]] operators.
+ */
+private[optimizer] object LimitAndOffsetValues {
+  /**
+   * Returns the sum of two limit or offset values. If both are integer literals and the sum fits
+   * in an Int, the sum is folded into a literal, so that the operator can be planned without a
+   * later ConstantFolding run: the planner only plans these operators with an IntegerLiteral.
+   * Otherwise an unevaluated `Add` is returned, as before, so a sum that overflows is only
+   * evaluated if the operator that holds it is not removed by later rules.
+   */
+  def add(left: Expression, right: Expression): Expression = (left, right) match {
+    case (IntegerLiteral(l), IntegerLiteral(r)) if (l.toLong + r).isValidInt => Literal(l + r)
+    case _ => Add(left, right)
+  }
+}
+
+/**
  * Pushes down [[LocalLimit]] beneath UNION ALL, OFFSET and joins.
  */
 object LimitPushDown extends Rule[LogicalPlan] {
@@ -1029,7 +1046,7 @@ object LimitPushDown extends Rule[LogicalPlan] {
       Limit(le, p.copy(child = pushLimitOneThroughGroupOnlyAggregate(le, a)))
     // Merge offset value and limit value into LocalLimit and pushes down LocalLimit through Offset.
     case LocalLimit(le, Offset(oe, grandChild)) =>
-      Offset(oe, LocalLimit(Add(le, oe), grandChild))
+      Offset(oe, LocalLimit(LimitAndOffsetValues.add(le, oe), grandChild))
     // Push down local limit 1 if join type is LeftSemiOrAnti and join condition is empty.
     case j @ Join(_, right, LeftSemiOrAnti(_), None, _) if !right.maxRows.exists(_ <= 1) =>
       j.copy(right = maybePushLocalLimit(Literal(1, IntegerType), right))
@@ -3403,7 +3420,7 @@ object EliminateOffsets extends Rule[LogicalPlan] {
       if oe.foldable && child.maxRows.exists(_ <= oe.eval().asInstanceOf[Int]) =>
       LocalRelation(child.output, data = Seq.empty, isStreaming = child.isStreaming)
     case Offset(oe1, Offset(oe2, child)) =>
-      Offset(Add(oe1, oe2), child)
+      Offset(LimitAndOffsetValues.add(oe1, oe2), child)
   }
 }
 
