@@ -257,7 +257,8 @@ abstract class DataSourceV2SQLSuite
     withTable(t) {
       sql(s"CREATE TABLE $t (id bigint, dep char(8)) USING foo PARTITIONED BY (dep)")
       sql(s"INSERT INTO $t VALUES (1L, 'hr')")
-      // the source does not support the padding, even if the values are stored with padding
+      // the source accepts neither the padding nor, with V1 filters, the IN that replaces it,
+      // even if the values are stored with padding
       checkError(
         exception = intercept[SparkException] {
           sql(s"INSERT INTO $t REPLACE WHERE dep = 'hr' VALUES (2L, 'hr')")
@@ -2762,6 +2763,21 @@ class DataSourceV2SQLSuiteV1Filter
     }
   }
 
+  test("SPARK-61684: DeleteFrom: a condition on a CHAR column reaches the source as an IN") {
+    val t = "testcat.ns1.ns2.tbl"
+    withTable(t) {
+      sql(s"CREATE TABLE $t (id bigint, p char(3)) USING foo PARTITIONED BY (id, p) " +
+        s"TBLPROPERTIES ('${InMemoryTable.ACCEPT_IN_FILTER}' = 'true')")
+      withSQLConf(SQLConf.LEGACY_CHAR_VARCHAR_AS_STRING.key -> "true") {
+        sql(s"INSERT INTO $t VALUES (1L, 'a'), (2L, 'b')")
+      }
+      sql(s"INSERT INTO $t VALUES (3L, 'a')")
+      // deletes 'a' stored with and without padding, as a read pads both to 'a  '
+      sql(s"DELETE FROM $t WHERE p = 'a'")
+      checkAnswer(spark.table(t), Row(2, "b  "))
+    }
+  }
+
   test("UPDATE TABLE") {
     val t = "testcat.ns1.ns2.tbl"
     withTable(t) {
@@ -4705,7 +4721,7 @@ class DataSourceV2SQLSuiteV1Filter
     withTable(t) {
       sql(s"CREATE TABLE $t (id bigint, dep char(8)) USING foo PARTITIONED BY (id, dep)")
       sql(s"INSERT INTO $t VALUES (1L, 'hr'), (2L, 'it')")
-      // the padded comparison has no V1 filter, so it must not be dropped from the OR
+      // the source does not accept an OR of V1 filters, so nothing is replaced
       checkError(
         exception = intercept[SparkException] {
           sql(s"INSERT INTO $t REPLACE WHERE dep = 'hr' OR id = 2 VALUES (3L, 'hr')")

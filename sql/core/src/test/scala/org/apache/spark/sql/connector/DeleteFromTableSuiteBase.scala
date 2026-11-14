@@ -405,7 +405,7 @@ abstract class DeleteFromTableSuiteBase extends RowLevelOperationSuiteBase {
         |{ "pk": 5, "c": "y", "dep": "finance" }
         |""".stripMargin)
 
-    // the padded comparison has no V1 filter, so it must not be dropped from the OR
+    // the source does not accept an OR of V1 filters, so this runs as a row-level delete
     sql(s"DELETE FROM $tableNameAsString WHERE c = 'a' OR dep = 'software'")
 
     checkAnswer(

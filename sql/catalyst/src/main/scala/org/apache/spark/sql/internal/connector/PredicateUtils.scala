@@ -19,12 +19,19 @@ package org.apache.spark.sql.internal.connector
 
 import org.apache.spark.sql.catalyst.CatalystTypeConverters
 import org.apache.spark.sql.catalyst.types.DataTypeUtils
-import org.apache.spark.sql.connector.expressions.{LiteralValue, NamedReference}
+import org.apache.spark.sql.catalyst.util.CharVarcharUtils
+import org.apache.spark.sql.connector.expressions.{Expression, GeneralScalarExpression, LiteralValue, NamedReference}
 import org.apache.spark.sql.connector.expressions.filter.{And => V2And, Not => V2Not, Or => V2Or, Predicate}
 import org.apache.spark.sql.sources.{AlwaysFalse, AlwaysTrue, And, EqualNullSafe, EqualTo, Filter, GreaterThan, GreaterThanOrEqual, In, IsNotNull, IsNull, LessThan, LessThanOrEqual, Not, Or, StringContains, StringEndsWith, StringStartsWith}
 import org.apache.spark.sql.types.StringType
+import org.apache.spark.unsafe.types.UTF8String
 
 private[sql] object PredicateUtils {
+
+  // The largest IN that a comparison of a CHAR column is converted into. It covers any single
+  // value of a CHAR(255) column, the longest CHAR in Hive and MySQL, so that a wide CHAR column
+  // cannot turn a comparison into a huge filter.
+  private val MAX_CHAR_PADDING_IN_VALUES = 256
 
   def toV1(predicate: Predicate): Option[Filter] = {
 
@@ -69,6 +76,8 @@ private[sql] object PredicateUtils {
           case "<=" => LessThanOrEqual(attribute, v1Value)
         }
         Some(v1Filter)
+
+      case "=" | "<=>" | "<>" | "IN" => charReadSidePaddingToV1(predicate)
 
       case "IS_NULL" | "IS_NOT_NULL" if predicate.children().length == 1 &&
           predicate.children()(0).isInstanceOf[NamedReference] =>
@@ -136,5 +145,49 @@ private[sql] object PredicateUtils {
 
   def toV1(predicates: Array[Predicate]): Array[Filter] = {
     predicates.flatMap(toV1(_))
+  }
+
+  // CHAR_READ_SIDE_PADDING(col, n, ' '), see V2ExpressionBuilder.
+  private object CharReadSidePadding {
+    def unapply(e: Expression): Option[(NamedReference, Int)] = e match {
+      case f: GeneralScalarExpression if f.name() == CharVarcharUtils.V2_CHAR_READ_SIDE_PADDING =>
+        f.children().toSeq match {
+          case Seq(col: NamedReference, LiteralValue(n: Int, _), _) => Some((col, n))
+          case _ => None
+        }
+      case _ => None
+    }
+  }
+
+  /**
+   * Converts a comparison of CHAR_READ_SIDE_PADDING(col, n, ' ') with string literals of n
+   * characters, which is how Spark sends a comparison of a CHAR(n) column, into an IN on the
+   * stored values of the column. The read-side padding of a value equals such a literal iff the
+   * value is the literal without its trailing spaces, followed by none up to all of those spaces.
+   * A value longer than n is not padded, so it does not match either way.
+   */
+  private def charReadSidePaddingToV1(predicate: Predicate): Option[Filter] = {
+    predicate.children().toSeq match {
+      case CharReadSidePadding(col, n) +: literals =>
+        // UTF8_BINARY only: other collations do not compare the stored values byte by byte.
+        val prefixes = literals.collect {
+          case LiteralValue(s: UTF8String, t: StringType)
+              if t.isUTF8BinaryCollation && s.numChars() == n => s.trimRight()
+        }
+        if (prefixes.length < literals.length ||
+            prefixes.map(n - _.numChars() + 1L).sum > MAX_CHAR_PADDING_IN_VALUES) {
+          return None
+        }
+        val in = In(col.toString, prefixes.flatMap { p =>
+          (0 to n - p.numChars()).map(p.toString + " " * _)
+        }.toArray[Any])
+        predicate.name() match {
+          // NULL <=> literal is false, not NULL, which differs under a NOT
+          case "<=>" => Some(And(IsNotNull(col.toString), in))
+          case "<>" => Some(Not(in))
+          case _ => Some(in)
+        }
+      case _ => None
+    }
   }
 }
