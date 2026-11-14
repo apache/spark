@@ -27,7 +27,6 @@ import org.apache.spark.sql.connector.catalog.transactions.Transaction
 import org.apache.spark.sql.connector.read.Scan
 import org.apache.spark.sql.connector.write.{LogicalWriteInfo, RowLevelOperationBuilder, RowLevelOperationInfo, WriteBuilder}
 import org.apache.spark.sql.sources.Filter
-import org.apache.spark.sql.types.StructType
 import org.apache.spark.sql.util.CaseInsensitiveStringMap
 
 sealed trait TransactionState
@@ -103,14 +102,15 @@ class Txn(override val catalog: TxnTableCatalog) extends Transaction {
 // implement isolation semantics and make sure they are enforced.
 class TxnTable(
     val delegate: InMemoryRowLevelOperationTable,
-    schema: StructType,
+    txnColumns: Array[Column],
     catalog: TxnTableCatalog)
   extends InMemoryRowLevelOperationTable(
     delegate.name,
-    schema,
+    txnColumns,
     delegate.partitioning,
     delegate.properties,
     delegate.constraints,
+    tableId = delegate.id,
     schemaAlignmentConfig = delegate.schemaAlignmentConfig) {
 
   // Expose the same id as the delegate so that identity checks during transaction re-resolution
@@ -120,12 +120,10 @@ class TxnTable(
   // The starting version should be the delegate version.
   setVersion(delegate.version())
 
-  // Column IDs for existing columns are preserved through the StructType round-trip via
-  // metadata encoding. assignMissingIds assigns fresh IDs to any new columns added by
-  // schema evolution.
-  updateColumns(InMemoryBaseTable.assignMissingIds(columns()))
+  // The schema at construction. `commit()` re-keys the data with it.
+  private val initialSchema = schema()
 
-  alterTableWithData(delegate.data, schema)
+  alterTableWithData(delegate.data, initialSchema)
 
   // A tracker of filters used in each scan.
   val scanEvents = new ArrayBuffer[Array[Filter]]()
@@ -156,7 +154,7 @@ class TxnTable(
   def commit(): Unit = {
     delegate.dataMap.clear()
     delegate.updateColumns(columns()) // Evolve schema if needed.
-    delegate.alterTableWithData(data, schema)
+    delegate.alterTableWithData(data, initialSchema)
     delegate.replacedPartitions = replacedPartitions
     delegate.lastWriteInfo = lastWriteInfo
     delegate.lastWriteLog = lastWriteLog
@@ -197,7 +195,7 @@ class TxnTableCatalog(delegate: InMemoryRowLevelOperationTableCatalog) extends T
       // Wrap the live underlying instance (not a snapshot copy from loadTable) so commits
       // propagate back to the catalog's authoritative state.
       val table = delegate.liveTable(ident).asInstanceOf[InMemoryRowLevelOperationTable]
-      new TxnTable(table, table.schema(), this)
+      new TxnTable(table, table.columns(), this)
     })
   }
 
@@ -232,7 +230,10 @@ class TxnTableCatalog(delegate: InMemoryRowLevelOperationTableCatalog) extends T
       throw new IllegalArgumentException(s"Cannot drop all fields")
     }
 
-    val newTxnTable = new TxnTable(txnTable.delegate, schema, this)
+    val newTxnTable = new TxnTable(
+      txnTable.delegate,
+      InMemoryTableCatalog.alteredColumns(txnTable.columns(), schema, changes),
+      this)
     newTxnTable.scanEvents ++= txnTable.scanEvents
     tables.put(ident, newTxnTable)
     newTxnTable
