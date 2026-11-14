@@ -577,7 +577,7 @@ class FilterPushdownSuite extends PlanTest {
     comparePlans(optimized, correctAnswer)
   }
 
-  test("SPARK-55014: the least demanding condition goes lowest") {
+  test("SPARK-60731: the split follows the written order, not the cost") {
     val originalQuery = testStringRelation
       .select($"a", expensiveRLike("magic") as "f", expensiveRLike("other") as "g",
         expensiveRLike("third") as "j")
@@ -586,16 +586,455 @@ class FilterPushdownSuite extends PlanTest {
 
     val optimized = Optimize.execute(originalQuery)
 
-    // j needs one alias and (f || g) needs two, so j goes first even though it is projected
-    // last -- leaving two expensive elements to run on its survivors.
+    // j needs one alias and (f || g) needs two, but (f || g) is written first, so f and g are
+    // computed first and j only runs on the rows (f || g) keeps, as written.
     val correctAnswer = testStringRelation
-      .select($"a", $"b", $"e", expensiveRLike("third") as "j")
-      .where($"j")
-      .select($"a", expensiveRLike("magic") as "f", expensiveRLike("other") as "g", $"j")
+      .select($"a", $"b", $"e", expensiveRLike("magic") as "f", expensiveRLike("other") as "g")
       .where($"f" || $"g")
+      .select($"a", $"f", $"g", expensiveRLike("third") as "j")
+      .where($"j")
       .analyze
 
     comparePlans(optimized, correctAnswer)
+  }
+
+  test("SPARK-60731: a throwable condition over computed aliases joins the filter of the " +
+    "condition written right before it, not an earlier filter over the same aliases") {
+    val raiseError = IsNull(RaiseError(Literal("boom")))
+    val expensiveInt = If(expensiveRLike("magic"), $"a", $"b")
+    val originalQuery = testStringRelation
+      .select($"a", expensiveInt as "n", expensiveRLike("other") as "g",
+        expensiveRLike("third") as "j")
+      .where($"n" > 1 && $"g" && ($"n" < 10 || raiseError) && $"n" =!= 5 && $"j")
+      .analyze
+
+    val optimized = Optimize.execute(originalQuery)
+
+    // The throwable condition only needs n, but is written after g, so it is evaluated with g,
+    // not with n > 1. A condition that is not throwable, such as n != 5, joins the filter of g
+    // too, but a later pass pushes it below g, as a cheap condition over the n computed below.
+    val correctAnswer = testStringRelation
+      .select($"a", $"b", $"e", expensiveInt as "n")
+      .where($"n" > 1 && $"n" =!= 5)
+      .select($"a", $"b", $"e", expensiveRLike("other") as "g", $"n")
+      .where($"g" && ($"n" < 10 || raiseError))
+      .select($"a", $"n", $"g", expensiveRLike("third") as "j")
+      .where($"j")
+      .analyze
+
+    comparePlans(optimized, correctAnswer)
+    assert(filterConjuncts(optimized) === filterConjuncts(correctAnswer))
+  }
+
+  test("SPARK-60731: a non-deterministic condition shares no filter with the conditions before " +
+    "or after it") {
+    val originalQuery = testStringRelation
+      .select($"a", expensiveRLike("magic") as "f", expensiveRLike("other") as "g",
+        expensiveRLike("third") as "j")
+      .where($"f" && $"g" && (Rand(10) > 0.5 || $"f") && $"j")
+      .analyze
+
+    val optimized = Optimize.execute(originalQuery)
+
+    // The non-deterministic condition only needs f, but in the filter of g it would be pushed
+    // below g in a later pass. It filters on its own after g instead.
+    val correctAnswer = testStringRelation
+      .select($"a", $"b", $"e", expensiveRLike("magic") as "f")
+      .where($"f")
+      .select($"a", $"b", $"e", $"f", expensiveRLike("other") as "g")
+      .where($"g")
+      .where(Rand(10) > 0.5 || $"f")
+      .select($"a", $"f", $"g", expensiveRLike("third") as "j")
+      .where($"j")
+      .analyze
+
+    comparePlans(optimized, correctAnswer)
+    assert(filterConjuncts(optimized) === filterConjuncts(correctAnswer))
+
+    // Nor does the condition after it join its filter, where a later pass would move it ahead.
+    val afterQuery = testStringRelation
+      .select($"a", expensiveRLike("magic") as "f", expensiveRLike("other") as "g",
+        expensiveRLike("third") as "j")
+      .where($"f" && $"g" && (Rand(10) > 0.5 || $"f") && ($"f" || $"g") && $"j")
+      .analyze
+    val afterOptimized = Optimize.execute(afterQuery)
+    val afterAnswer = testStringRelation
+      .select($"a", $"b", $"e", expensiveRLike("magic") as "f")
+      .where($"f")
+      .select($"a", $"b", $"e", $"f", expensiveRLike("other") as "g")
+      .where($"g")
+      .where(Rand(10) > 0.5 || $"f")
+      .where($"f" || $"g")
+      .select($"a", $"f", $"g", expensiveRLike("third") as "j")
+      .where($"j")
+      .analyze
+    comparePlans(afterOptimized, afterAnswer)
+    assert(filterConjuncts(afterOptimized) === filterConjuncts(afterAnswer))
+  }
+
+  test("SPARK-60731: a later pass does not push a condition past a non-deterministic filter " +
+    "the split placed") {
+    val originalQuery = testStringRelation
+      .select($"a", expensiveRLike("magic") as "f", expensiveRLike("other") as "g",
+        expensiveRLike("other2") as "h", expensiveRLike("third") as "j")
+      .where($"f" && (Rand(10) > 0.5 || $"g") && $"h" && ($"f" || $"g") && $"j")
+      .analyze
+
+    val optimized = Optimize.execute(originalQuery)
+
+    // (f || g) joins the filter of h, and a later pass pushes it below h, as a cheap condition
+    // over the f and g computed below, but it stays after the non-deterministic condition.
+    val correctAnswer = testStringRelation
+      .select($"a", $"b", $"e", expensiveRLike("magic") as "f")
+      .where($"f")
+      .select($"a", $"b", $"e", $"f", expensiveRLike("other") as "g")
+      .where(Rand(10) > 0.5 || $"g")
+      .where($"f" || $"g")
+      .select($"a", $"b", $"e", $"f", $"g", expensiveRLike("other2") as "h")
+      .where($"h")
+      .select($"a", $"f", $"g", $"h", expensiveRLike("third") as "j")
+      .where($"j")
+      .analyze
+
+    comparePlans(optimized, correctAnswer)
+    assert(filterConjuncts(optimized) === filterConjuncts(correctAnswer))
+
+    // Also when it does not read the alias computed with the non-deterministic condition: it
+    // would otherwise go down to the filter of f.
+    val overF = testStringRelation
+      .select($"a", expensiveRLike("magic") as "f", expensiveRLike("other") as "g",
+        expensiveRLike("other2") as "h", expensiveRLike("third") as "j")
+      .where($"f" && (Rand(10) > 0.5 || $"g") && $"h" && ($"f" || $"a" > 1) && $"j")
+      .analyze
+    val overFOptimized = Optimize.execute(overF)
+    val overFAnswer = testStringRelation
+      .select($"a", $"b", $"e", expensiveRLike("magic") as "f")
+      .where($"f")
+      .select($"a", $"b", $"e", $"f", expensiveRLike("other") as "g")
+      .where(Rand(10) > 0.5 || $"g")
+      .where($"f" || $"a" > 1)
+      .select($"a", $"b", $"e", $"f", $"g", expensiveRLike("other2") as "h")
+      .where($"h")
+      .select($"a", $"f", $"g", $"h", expensiveRLike("third") as "j")
+      .where($"j")
+      .analyze
+    comparePlans(overFOptimized, overFAnswer)
+    assert(filterConjuncts(overFOptimized) === filterConjuncts(overFAnswer))
+  }
+
+  test("SPARK-60731: a non-deterministic condition left above the split filters on its own") {
+    // (g != j) needs every expensive alias not computed yet, so it ends the split. In one top
+    // filter, a later pass would push the non-deterministic condition below the projection, as a
+    // cheap condition over the f computed below, ahead of (g != j).
+    val originalQuery = testStringRelation
+      .select($"a", expensiveRLike("magic") as "f", expensiveRLike("other") as "g",
+        expensiveRLike("third") as "j")
+      .where($"f" && Not($"g" === $"j") && (Rand(10) > 0.5 || $"f"))
+      .analyze
+    val optimized = Optimize.execute(originalQuery)
+    val correctAnswer = testStringRelation
+      .select($"a", $"b", $"e", expensiveRLike("magic") as "f")
+      .where($"f")
+      .select($"a", $"f", expensiveRLike("other") as "g", expensiveRLike("third") as "j")
+      .where(Not($"g" === $"j"))
+      .where(Rand(10) > 0.5 || $"f")
+      .analyze
+    comparePlans(optimized, correctAnswer)
+    assert(filterConjuncts(optimized) === filterConjuncts(correctAnswer))
+
+    // Here the non-deterministic condition itself ends the split, and the condition after it
+    // does not move ahead of it, into the filter of n > 1.
+    val expensiveInt = If(expensiveRLike("magic"), $"a", $"b")
+    val afterQuery = testStringRelation
+      .select($"a", expensiveInt as "n", expensiveRLike("other") as "g",
+        expensiveRLike("third") as "j")
+      .where($"n" > 1 && (Rand(10) > 0.5 || Not($"g" === $"j")) && $"n" < 10)
+      .analyze
+    val afterOptimized = Optimize.execute(afterQuery)
+    val afterAnswer = testStringRelation
+      .select($"a", $"b", $"e", expensiveInt as "n")
+      .where($"n" > 1)
+      .select($"a", $"n", expensiveRLike("other") as "g", expensiveRLike("third") as "j")
+      .where(Rand(10) > 0.5 || Not($"g" === $"j"))
+      .where($"n" < 10)
+      .analyze
+    comparePlans(afterOptimized, afterAnswer)
+    assert(filterConjuncts(afterOptimized) === filterConjuncts(afterAnswer))
+
+    // Nor do two non-deterministic conditions share a filter: the second, which only reads the f
+    // computed below, would be pushed below the first.
+    val twoQuery = testStringRelation
+      .select($"a", expensiveRLike("magic") as "f", expensiveRLike("other") as "g",
+        expensiveRLike("third") as "j")
+      .where($"f" && (Rand(1) > 0.5 || Not($"g" === $"j")) && (Rand(2) > 0.5 || $"f"))
+      .analyze
+    val twoOptimized = Optimize.execute(twoQuery)
+    val twoAnswer = testStringRelation
+      .select($"a", $"b", $"e", expensiveRLike("magic") as "f")
+      .where($"f")
+      .select($"a", $"f", expensiveRLike("other") as "g", expensiveRLike("third") as "j")
+      .where(Rand(1) > 0.5 || Not($"g" === $"j"))
+      .where(Rand(2) > 0.5 || $"f")
+      .analyze
+    comparePlans(twoOptimized, twoAnswer)
+    assert(filterConjuncts(twoOptimized) === filterConjuncts(twoAnswer))
+  }
+
+  test("SPARK-60731: a condition needing every expensive alias not computed yet ends the " +
+    "split") {
+    val raiseError = IsNull(RaiseError(Literal("boom")))
+    // (g != j) needs g and j, so the split ends there. In the first two cases, j is not split off
+    // below it, although it only needs j. The conditions left above share one filter, as they
+    // are deterministic, also when one is throwable; a later pass does not push the throwable one
+    // below (g != j), even in the last case, where it only reads the f computed below.
+    Seq[Expression]($"j", $"j" && ($"j" || raiseError), $"f" || raiseError).foreach { after =>
+      val originalQuery = testStringRelation
+        .select($"a", expensiveRLike("magic") as "f", expensiveRLike("other") as "g",
+          expensiveRLike("third") as "j")
+        .where($"f" && Not($"g" === $"j") && after)
+        .analyze
+      val optimized = Optimize.execute(originalQuery)
+      val correctAnswer = testStringRelation
+        .select($"a", $"b", $"e", expensiveRLike("magic") as "f")
+        .where($"f")
+        .select($"a", $"f", expensiveRLike("other") as "g", expensiveRLike("third") as "j")
+        .where(Not($"g" === $"j") && after)
+        .analyze
+      comparePlans(optimized, correctAnswer)
+      assert(filterConjuncts(optimized) === filterConjuncts(correctAnswer))
+    }
+  }
+
+  test("SPARK-60731: a layer that needs no new alias is a filter alone") {
+    val originalQuery = testStringRelation
+      .select($"a", expensiveRLike("magic") as "f", expensiveRLike("other") as "g",
+        expensiveRLike("third") as "j")
+      .where($"f" && (Rand(10) > 0.5 || $"f") && ($"f" || $"a" > 1) && $"g")
+      .analyze
+    // One application of the rule, as the later passes would remove a projection that only
+    // passes its input through. Neither the non-deterministic condition nor the one after it,
+    // which does not join its filter, needs a new alias.
+    val split = PushPredicateThroughNonJoin(originalQuery)
+    val correctAnswer = testStringRelation
+      .select($"a", $"b", $"e", expensiveRLike("magic") as "f")
+      .where($"f")
+      .where(Rand(10) > 0.5 || $"f")
+      .where($"f" || $"a" > 1)
+      .select($"a", $"b", $"e", $"f", expensiveRLike("other") as "g")
+      .where($"g")
+      .select($"a", $"f", $"g", expensiveRLike("third") as "j")
+      .analyze
+    comparePlans(split, correctAnswer)
+  }
+
+  test("SPARK-60731: a non-deterministic or throwable condition written first does not keep the " +
+    "later conditions from being split off") {
+    val raiseError = IsNull(RaiseError(Literal("boom")))
+    Seq[Expression](Rand(10) > 0.5 || $"g", $"g" || raiseError).foreach { first =>
+      val originalQuery = testStringRelation
+        .select($"a", expensiveRLike("magic") as "f", expensiveRLike("other") as "g",
+          expensiveRLike("third") as "j")
+        .where(first && $"f" && $"j")
+        .analyze
+
+      val correctAnswer = testStringRelation
+        .select($"a", $"b", $"e", expensiveRLike("other") as "g")
+        .where(first)
+        .select($"a", $"b", $"e", expensiveRLike("magic") as "f", $"g")
+        .where($"f")
+        .select($"a", $"f", $"g", expensiveRLike("third") as "j")
+        .where($"j")
+        .analyze
+
+      comparePlans(Optimize.execute(originalQuery), correctAnswer)
+    }
+  }
+
+  test("SPARK-60731: a throwable alias is not pulled into the layer of an earlier condition by " +
+    "an alias sharing its expensive work") {
+    // g raises on the rows f drops, so it must not be computed together with f.
+    val throwing = If(expensiveRLike("magic"), Literal(true), IsNull(RaiseError(Literal("boom"))))
+    val originalQuery = testStringRelation
+      .select($"a", expensiveRLike("magic") as "f", throwing as "g",
+        expensiveRLike("third") as "j")
+      .where($"f" && $"g" && $"j")
+      .analyze
+
+    val correctAnswer = testStringRelation
+      .select($"a", $"b", $"e", expensiveRLike("magic") as "f")
+      .where($"f")
+      .select($"a", $"b", $"e", $"f", throwing as "g")
+      .where($"g")
+      .select($"a", $"f", $"g", expensiveRLike("third") as "j")
+      .where($"j")
+      .analyze
+
+    comparePlans(Optimize.execute(originalQuery), correctAnswer)
+
+    // When g is read before f, f, which is not throwable, is computed together with it, so their
+    // shared work runs once.
+    val gFirstQuery = testStringRelation
+      .select($"a", expensiveRLike("magic") as "f", throwing as "g",
+        expensiveRLike("third") as "j")
+      .where($"g" && $"f" && $"j")
+      .analyze
+    val gFirstAnswer = testStringRelation
+      .select($"a", $"b", $"e", expensiveRLike("magic") as "f", throwing as "g")
+      .where($"g" && $"f")
+      .select($"a", $"f", $"g", expensiveRLike("third") as "j")
+      .where($"j")
+      .analyze
+    val gFirstOptimized = Optimize.execute(gFirstQuery)
+    comparePlans(gFirstOptimized, gFirstAnswer)
+    assert(filterConjuncts(gFirstOptimized) === filterConjuncts(gFirstAnswer))
+
+    // Nor does a throwable alias read before another throwable alias sharing its work pull it in.
+    val otherThrowing =
+      If(expensiveRLike("magic"), Literal(false), IsNull(RaiseError(Literal("bang"))))
+    val twoThrowing = testStringRelation
+      .select($"a", throwing as "g", otherThrowing as "v", expensiveRLike("third") as "j")
+      .where($"g" && $"j" && $"v")
+      .analyze
+    val twoThrowingAnswer = testStringRelation
+      .select($"a", $"b", $"e", throwing as "g")
+      .where($"g")
+      .select($"a", $"b", $"e", $"g", expensiveRLike("third") as "j")
+      .where($"j")
+      .select($"a", $"g", otherThrowing as "v", $"j")
+      .where($"v")
+      .analyze
+    comparePlans(Optimize.execute(twoThrowing), twoThrowingAnswer)
+
+    // Nor is a throwable alias pulled in through an alias that is not throwable: h shares work
+    // with f and with the throwable u, and only h is pulled into the layer of f.
+    val throwingOther =
+      If(expensiveRLike("other"), Literal(true), IsNull(RaiseError(Literal("boom"))))
+    val chain = testStringRelation
+      .select($"a", expensiveRLike("magic") as "f",
+        (expensiveRLike("magic") && expensiveRLike("other")) as "h", throwingOther as "u",
+        expensiveRLike("third") as "j")
+      .where($"f" && $"u" && $"j")
+      .analyze
+    val chainAnswer = testStringRelation
+      .select($"a", $"b", $"e", expensiveRLike("magic") as "f",
+        (expensiveRLike("magic") && expensiveRLike("other")) as "h")
+      .where($"f")
+      .select($"a", $"b", $"e", $"f", $"h", throwingOther as "u")
+      .where($"u")
+      .select($"a", $"f", $"h", $"u", expensiveRLike("third") as "j")
+      .where($"j")
+      .analyze
+    comparePlans(Optimize.execute(chain), chainAnswer)
+
+    // Nor through an alias that a throwable alias read first pulls in: g pulls in h, which shares
+    // work with the throwable u, and u stays out of the layer of g.
+    val throwingFirstChain = testStringRelation
+      .select($"a", throwing as "g",
+        (expensiveRLike("magic") && expensiveRLike("other")) as "h", throwingOther as "u",
+        expensiveRLike("third") as "j")
+      .where($"g" && $"u" && $"j")
+      .analyze
+    val throwingFirstChainAnswer = testStringRelation
+      .select($"a", $"b", $"e", throwing as "g",
+        (expensiveRLike("magic") && expensiveRLike("other")) as "h")
+      .where($"g")
+      .select($"a", $"b", $"e", $"g", $"h", throwingOther as "u")
+      .where($"u")
+      .select($"a", $"g", $"h", $"u", expensiveRLike("third") as "j")
+      .where($"j")
+      .analyze
+    comparePlans(Optimize.execute(throwingFirstChain), throwingFirstChainAnswer)
+  }
+
+  test("SPARK-60731: a Python UDF shared with a throwable alias read later runs in both layers") {
+    val pythonUDF = PythonUDF(
+      "pythonUDF", null, IntegerType, Seq($"a"), PythonEvalType.SQL_BATCHED_UDF,
+      udfDeterministic = true)
+    val throwing = If(pythonUDF > 0, Literal(true), IsNull(RaiseError(Literal("boom"))))
+    val originalQuery = testStringRelation
+      .select($"a", (pythonUDF > 0) as "f", throwing as "t", expensiveRLike("third") as "j")
+      .where($"f" && $"t" && $"j")
+      .analyze
+
+    // t is not computed with f, so the UDF the two share runs in the layer of f and again in the
+    // layer of t. Running it only once is the subject of SPARK-61515.
+    val udfProjects = Optimize.execute(originalQuery).collect {
+      case p: Project if p.projectList.exists(_.exists(_.isInstanceOf[PythonUDF])) => p
+    }
+    assert(udfProjects.size === 2)
+  }
+
+  test("SPARK-60731: a throwable alias sharing work with the aliases a condition reads does not " +
+    "make that condition end the split") {
+    val throwing = If(expensiveRLike("magic"), Literal(true), IsNull(RaiseError(Literal("boom"))))
+    // t is not among the aliases the condition on f needs, although it is among those not
+    // computed yet, so the condition on f does not end the split: f is computed and filtered on
+    // first even though t is the only other expensive alias, whether a condition reads t or not.
+    Seq(true, false).foreach { readsT =>
+      val onlyFAndT = testStringRelation
+        .select($"a", expensiveRLike("magic") as "f", throwing as "t")
+        .where(if (readsT) $"f" && $"t" else $"f")
+        .analyze
+      val splitPlan = testStringRelation
+        .select($"a", $"b", $"e", expensiveRLike("magic") as "f")
+        .where($"f")
+        .select($"a", $"f", throwing as "t")
+      val onlyFAndTAnswer = (if (readsT) splitPlan.where($"t") else splitPlan).analyze
+      comparePlans(Optimize.execute(onlyFAndT), onlyFAndTAnswer)
+    }
+  }
+
+  test("SPARK-60731: a throwable condition over no alias joins the filter of the condition " +
+    "before it") {
+    val raiseError = IsNull(RaiseError(Literal("boom")))
+    val originalQuery = testStringRelation
+      .select($"a", expensiveRLike("magic") as "f", expensiveRLike("other") as "g",
+        expensiveRLike("third") as "j")
+      .where($"f" && ($"a" > 5 || raiseError) && $"g" && $"j")
+      .analyze
+
+    val optimized = Optimize.execute(originalQuery)
+
+    // Written after f, the throwable condition is not pushed below the projection. It needs no
+    // alias, so it joins the filter of f, ahead of g, as written.
+    val correctAnswer = testStringRelation
+      .select($"a", $"b", $"e", expensiveRLike("magic") as "f")
+      .where($"f" && ($"a" > 5 || raiseError))
+      .select($"a", $"b", $"e", $"f", expensiveRLike("other") as "g")
+      .where($"g")
+      .select($"a", $"f", $"g", expensiveRLike("third") as "j")
+      .where($"j")
+      .analyze
+
+    comparePlans(optimized, correctAnswer)
+    assert(filterConjuncts(optimized) === filterConjuncts(correctAnswer))
+  }
+
+  test("SPARK-60731: a throwable condition over a cheap alias is split off in its written " +
+    "position") {
+    val raiseError = IsNull(RaiseError(Literal("boom")))
+    val originalQuery = testStringRelation
+      .select($"a", expensiveRLike("magic") as "f", ($"a" + 1) as "c",
+        expensiveRLike("other") as "g", expensiveRLike("third") as "j")
+      .where($"f" && ($"c" > 5 || raiseError) && $"g" && $"j")
+      .analyze
+
+    val optimized = Optimize.execute(originalQuery)
+
+    // The throwable condition gets a layer computing only c. A later pass pushes it below that
+    // projection, as a cheap condition, but it stays in a filter of its own after f.
+    val correctAnswer = testStringRelation
+      .select($"a", $"b", $"e", expensiveRLike("magic") as "f")
+      .where($"f")
+      .where($"a" + 1 > 5 || raiseError)
+      .select($"a", $"b", $"e", $"f", ($"a" + 1) as "c", expensiveRLike("other") as "g")
+      .where($"g")
+      .select($"a", $"f", $"c", $"g", expensiveRLike("third") as "j")
+      .where($"j")
+      .analyze
+
+    comparePlans(optimized, correctAnswer)
+    assert(filterConjuncts(optimized) === filterConjuncts(correctAnswer))
   }
 
   test("SPARK-55014: split the projection while also pushing the cheap conditions") {
@@ -651,7 +1090,8 @@ class FilterPushdownSuite extends PlanTest {
     assert(optimized.schema === originalQuery.schema)
   }
 
-  test("SPARK-55014: all the conditions over the same elements are applied together") {
+  test("SPARK-60731: all the conditions over the same aliases written one after the other are " +
+    "applied together") {
     val joined = ArrayJoin($"s_arr", Literal(","), None)
     val otherJoined = ArrayJoin($"s_arr", Literal("-"), None)
     val originalQuery = testArrayStringRelation
@@ -661,8 +1101,8 @@ class FilterPushdownSuite extends PlanTest {
 
     val optimized = Optimize.execute(originalQuery)
 
-    // Conditions over the same aliases run at the same point of the stack, so both on j land in
-    // one filter and k is deferred past them.
+    // Both conditions on j need only j and are written one after the other, so the layer
+    // computing j filters on both, and k is deferred past them.
     val correctAnswer = testArrayStringRelation
       .select($"a", $"s_arr", joined as "j")
       .where($"j" > "a" && $"j" < "z")
@@ -697,19 +1137,18 @@ class FilterPushdownSuite extends PlanTest {
 
     val optimized = Optimize.execute(originalQuery)
 
-    // j is its own work needing one alias; f drags g along, so j splits off first and f and g
-    // stay together on top.
+    // f drags g along, so f and g are computed together, and j only runs on the rows f keeps.
     val correctAnswer = testStringRelation
-      .select($"a", $"b", $"e", expensiveRLike("other") as "j")
-      .where($"j")
-      .select($"a", expensiveRLike("magic") as "f", Not(expensiveRLike("magic")) as "g", $"j")
+      .select($"a", $"b", $"e", expensiveRLike("magic") as "f", Not(expensiveRLike("magic")) as "g")
       .where($"f")
+      .select($"a", $"f", $"g", expensiveRLike("other") as "j")
+      .where($"j")
       .analyze
 
     comparePlans(optimized, correctAnswer)
   }
 
-  test("SPARK-55014: a non-deterministic condition is not split off into a lower layer") {
+  test("SPARK-60731: a non-deterministic condition is split off in its written position") {
     val originalQuery = testStringRelation
       .select($"a", expensiveRLike("magic") as "f", expensiveRLike("other") as "g",
         expensiveRLike("third") as "j")
@@ -718,20 +1157,70 @@ class FilterPushdownSuite extends PlanTest {
 
     val optimized = Optimize.execute(originalQuery)
 
-    // The non-deterministic condition needs one alias and (f || g) needs two, so on cost alone
-    // it would go lowest and see every row. It stays in the top filter instead, and (f || g)
-    // takes the layer it would have had.
+    // The non-deterministic condition is written first, so it sees every row, as written, and
+    // (f || g) after it only sees the rows it keeps.
     val correctAnswer = testStringRelation
-      .select($"a", $"b", $"e", expensiveRLike("magic") as "f", expensiveRLike("other") as "g")
-      .where($"f" || $"g")
-      .select($"a", $"f", $"g", expensiveRLike("third") as "j")
+      .select($"a", $"b", $"e", expensiveRLike("third") as "j")
       .where(Rand(10) > 0.5 || $"j")
+      .select($"a", expensiveRLike("magic") as "f", expensiveRLike("other") as "g", $"j")
+      .where($"f" || $"g")
       .analyze
 
     comparePlans(optimized, correctAnswer)
+
+    // When it computes an alias, the condition after it that only reads an alias computed
+    // below still gets a filter of its own: in the filter of the non-deterministic condition, a
+    // later pass would push it below that condition, as a cheap condition over n.
+    val expensiveInt = If(expensiveRLike("magic"), $"a", $"b")
+    val withNext = testStringRelation
+      .select($"a", expensiveInt as "n", expensiveRLike("other") as "f",
+        expensiveRLike("other2") as "g", expensiveRLike("third") as "j")
+      .where($"n" > 1 && (Rand(10) > 0.5 || $"j") && $"n" < 10 && ($"f" || $"g"))
+      .analyze
+    val withNextOptimized = Optimize.execute(withNext)
+    val withNextAnswer = testStringRelation
+      .select($"a", $"b", $"e", expensiveInt as "n")
+      .where($"n" > 1)
+      .select($"a", $"b", $"e", $"n", expensiveRLike("third") as "j")
+      .where(Rand(10) > 0.5 || $"j")
+      .where($"n" < 10)
+      .select($"a", $"n", expensiveRLike("other") as "f", expensiveRLike("other2") as "g", $"j")
+      .where($"f" || $"g")
+      .analyze
+    comparePlans(withNextOptimized, withNextAnswer)
+    assert(filterConjuncts(withNextOptimized) === filterConjuncts(withNextAnswer))
   }
 
-  test("SPARK-55014: no split when the expensive conditions are non-deterministic") {
+  test("SPARK-60731: a non-deterministic condition whose layer only computes a cheap alias " +
+    "is split off in its written position") {
+    val expensiveInt = If(expensiveRLike("magic"), $"a", $"b")
+    val originalQuery = testStringRelation
+      .select($"a", expensiveInt as "n", ($"a" + 1) as "c", expensiveRLike("other") as "g",
+        expensiveRLike("third") as "j")
+      .where($"n" > 1 && $"g" && (Rand(10) > 0.5 || ($"c" > 5 && $"n" < 10)) && $"j")
+      .analyze
+
+    val optimized = Optimize.execute(originalQuery)
+
+    // Its layer only computes the cheap c, so a later pass pushes it below that projection, but
+    // it stays in a filter of its own after g. It also reads the expensive n: over cheap aliases
+    // only, it would be cheap in the first pass of this rule and be pushed below n > 1 and g, as
+    // without the split.
+    val correctAnswer = testStringRelation
+      .select($"a", $"b", $"e", expensiveInt as "n")
+      .where($"n" > 1)
+      .select($"a", $"b", $"e", $"n", expensiveRLike("other") as "g")
+      .where($"g")
+      .where(Rand(10) > 0.5 || ($"a" + 1 > 5 && $"n" < 10))
+      .select($"a", $"n", ($"a" + 1) as "c", $"g", expensiveRLike("third") as "j")
+      .where($"j")
+      .analyze
+
+    comparePlans(optimized, correctAnswer)
+    assert(filterConjuncts(optimized) === filterConjuncts(correctAnswer))
+  }
+
+  test("SPARK-60731: a single non-deterministic condition is split off too") {
     val originalQuery = testStringRelation
       .select($"a", expensiveRLike("magic") as "f", expensiveRLike("other") as "g", $"b")
       .where(Rand(10) > 0.5 || $"f")
@@ -739,9 +1228,12 @@ class FilterPushdownSuite extends PlanTest {
 
     val optimized = Optimize.execute(originalQuery)
 
-    // Nothing deterministic to split around, and the non-deterministic condition must not
-    // move, so the plan is unchanged.
-    val correctAnswer = originalQuery
+    // It is the only condition, so it sees every row either way, and g is deferred past it.
+    val correctAnswer = testStringRelation
+      .select($"a", $"b", $"e", expensiveRLike("magic") as "f")
+      .where(Rand(10) > 0.5 || $"f")
+      .select($"a", $"f", expensiveRLike("other") as "g", $"b")
+      .analyze
 
     comparePlans(optimized, correctAnswer)
   }
@@ -755,12 +1247,14 @@ class FilterPushdownSuite extends PlanTest {
 
     val optimized = Optimize.execute(originalQuery)
 
-    // On cost alone (g || raiseError) would go lowest, raising on rows (f != g) filters out.
-    // It stays in the top filter instead, which leaves nothing worth splitting.
+    // (f != g) is written first and needs every expensive alias, so nothing is split off, and
+    // (g || raiseError) stays after it in the top filter.
     comparePlans(optimized, originalQuery)
+    assertTopFilterConjuncts(optimized,
+      splitConjunctivePredicates(originalQuery.asInstanceOf[Filter].condition))
   }
 
-  test("SPARK-60602: a throwable condition does not keep later conditions from being split off") {
+  test("SPARK-60731: a throwable condition is split off in its written position") {
     val raiseError = IsNull(RaiseError(Literal("boom")))
     val originalQuery = testStringRelation
       .select($"a", expensiveRLike("magic") as "f", expensiveRLike("other") as "g", $"b")
@@ -769,12 +1263,13 @@ class FilterPushdownSuite extends PlanTest {
 
     val optimized = Optimize.execute(originalQuery)
 
-    // Filtering on f first only leaves the throwable condition fewer rows to raise on.
+    // The throwable condition is written first, so it sees every row as written, and f is
+    // deferred past it.
     val correctAnswer = testStringRelation
-      .select($"a", $"b", $"e", expensiveRLike("magic") as "f")
-      .where($"f")
-      .select($"a", $"f", expensiveRLike("other") as "g", $"b")
+      .select($"a", $"b", $"e", expensiveRLike("other") as "g")
       .where($"g" || raiseError)
+      .select($"a", expensiveRLike("magic") as "f", $"g", $"b")
+      .where($"f")
       .analyze
 
     comparePlans(optimized, correctAnswer)
@@ -851,8 +1346,8 @@ class FilterPushdownSuite extends PlanTest {
 
     val optimized = Optimize.execute(originalQuery)
 
-    // On cost alone the condition on g would go lowest, computing g on every row. Splitting
-    // f and h off instead only leaves g fewer rows to raise on.
+    // (f != h) is written first, so f and h are computed and filtered on first, and g is only
+    // computed on the rows it keeps.
     val correctAnswer = testStringRelation
       .select($"a", $"b", $"e", expensiveRLike("magic") as "f", expensiveRLike("third") as "h")
       .where($"f" =!= $"h")
@@ -862,6 +1357,17 @@ class FilterPushdownSuite extends PlanTest {
 
     comparePlans(optimized, correctAnswer)
   }
+
+  // The conjuncts of every filter of `plan`, from the top, in their order, which `comparePlans`
+  // does not check. Unlike `assertTopFilterConjuncts`, it covers every filter, and normalizes the
+  // expression IDs, so it can compare two plans built separately. It compares the conjuncts as
+  // written, operands included. It does not canonicalize them: with every expression ID
+  // normalized, canonicalized attributes of the same type are equal, so `a > 1` would match
+  // `b > 1`.
+  private def filterConjuncts(plan: LogicalPlan): Seq[Seq[Expression]] =
+    normalizeExprIds(plan).collect {
+      case Filter(condition, _) => splitConjunctivePredicates(condition)
+    }
 
   // `comparePlans` sorts the conjuncts of each filter, so check the top filter's order directly.
   private def assertTopFilterConjuncts(plan: LogicalPlan, expected: Seq[Expression]): Unit = {
@@ -880,8 +1386,8 @@ class FilterPushdownSuite extends PlanTest {
     val Seq(unplaced, throwable, _) = splitConjunctivePredicates(
       originalQuery.asInstanceOf[Filter].condition)
 
-    // a > 1 is pushed, (f != g) needs every expensive element and is left un-placed, and the
-    // throwable condition is not split. It must still come after (f != g).
+    // a > 1 is pushed, (f != g) needs every expensive alias and is left un-placed, and the
+    // throwable condition after it is left un-placed too. It must still come after (f != g).
     assertTopFilterConjuncts(Optimize.execute(originalQuery), Seq(unplaced, throwable))
   }
 
@@ -889,12 +1395,14 @@ class FilterPushdownSuite extends PlanTest {
     "written order") {
     val originalQuery = testStringRelation
       .select($"a", expensiveRLike("magic") as "f", expensiveRLike("other") as "g", $"b")
-      .where((Rand(10) > 0.5 || $"g") && $"f" =!= $"g" && $"a" > 1)
+      .where($"f" =!= $"g" && (Rand(10) > 0.5 || $"g") && $"a" > 1)
       .analyze
-    val Seq(nonDeterministic, unplaced, _) = splitConjunctivePredicates(
+    val Seq(unplaced, nonDeterministic, _) = splitConjunctivePredicates(
       originalQuery.asInstanceOf[Filter].condition)
 
-    assertTopFilterConjuncts(Optimize.execute(originalQuery), Seq(nonDeterministic, unplaced))
+    // a > 1 is pushed, (f != g) needs every expensive alias and is left un-placed, and the
+    // non-deterministic condition after it stays after it.
+    assertTopFilterConjuncts(Optimize.execute(originalQuery), Seq(unplaced, nonDeterministic))
   }
 
   // Raises for the rows with a <= 5, so it must only see the rows the conditions before it kept.
