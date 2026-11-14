@@ -28,6 +28,7 @@ import org.apache.spark.sql.execution.{ExplainUtils, ProjectedBroadcastValueSubq
 import org.apache.spark.sql.execution.datasources.v2.BatchScanExec
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSparkSession
+import org.apache.spark.tags.DataSourceV2Test
 
 /**
  * Tests that [[PartitionPredicate]] instances are pushed via iterative runtime filtering
@@ -53,6 +54,7 @@ import org.apache.spark.sql.test.SharedSparkSession
  * 11. supportsIterativePushdown is false -> no PartitionPredicate
  * 12. Partition col not in filterAttributes -> no PartitionPredicate
  */
+@DataSourceV2Test
 class DataSourceV2EnhancedRuntimePartitionFilterSuite
   extends SharedSparkSession with BeforeAndAfter {
 

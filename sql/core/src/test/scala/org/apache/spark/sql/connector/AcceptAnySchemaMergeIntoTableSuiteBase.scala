@@ -31,6 +31,7 @@ import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.internal.StaticSQLConf.SPARK_SESSION_EXTENSIONS
 import org.apache.spark.sql.internal.connector.SchemaAlignmentConfig
 import org.apache.spark.sql.types.StructType
+import org.apache.spark.tags.DataSourceV2Test
 
 /**
  * Tests MERGE on tables that accept any schema. Spark leaves resolving such a MERGE to the rules
@@ -187,6 +188,7 @@ abstract class AcceptAnySchemaMergeIntoTableSuiteBase extends RowLevelOperationS
   }
 }
 
+@DataSourceV2Test
 class GroupBasedAcceptAnySchemaMergeIntoTableSuite extends AcceptAnySchemaMergeIntoTableSuiteBase {
 
   override protected def operationTableProps: Map[String, String] = Map.empty
@@ -202,6 +204,7 @@ class GroupBasedAcceptAnySchemaMergeIntoTableSuite extends AcceptAnySchemaMergeI
     writeLogEntry(data = Row(6, 0, "new")))
 }
 
+@DataSourceV2Test
 class DeltaBasedAcceptAnySchemaMergeIntoTableSuite extends AcceptAnySchemaMergeIntoTableSuiteBase {
 
   override protected def operationTableProps: Map[String, String] =
@@ -217,6 +220,7 @@ class DeltaBasedAcceptAnySchemaMergeIntoTableSuite extends AcceptAnySchemaMergeI
     insertWriteLogEntry(data = Row(6, 0, "new")))
 }
 
+@DataSourceV2Test
 class DeltaBasedAcceptAnySchemaMergeIntoTableUpdateAsDeleteAndInsertSuite
   extends AcceptAnySchemaMergeIntoTableSuiteBase {
 

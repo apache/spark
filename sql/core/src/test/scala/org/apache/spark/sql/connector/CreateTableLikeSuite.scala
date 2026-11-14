@@ -24,7 +24,9 @@ import org.apache.spark.sql.connector.catalog.{CatalogV2Util, Column, Generation
 import org.apache.spark.sql.connector.expressions.{Expression => V2Expression, FieldReference, GeneralScalarExpression, LiteralValue, Transform}
 import org.apache.spark.sql.internal.connector.ColumnImpl
 import org.apache.spark.sql.types.{CharType, IntegerType, LongType, StringType, VarcharType}
+import org.apache.spark.tags.DataSourceV2Test
 
+@DataSourceV2Test
 class CreateTableLikeSuite extends DatasourceV2SQLBase {
 
   private def testCatalog: InMemoryCatalog =
