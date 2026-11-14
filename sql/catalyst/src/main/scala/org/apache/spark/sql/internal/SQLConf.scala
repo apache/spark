@@ -5350,6 +5350,30 @@ object SQLConf {
       .booleanConf
       .createWithDefault(false)
 
+  val WINDOW_REORDER_ENABLED =
+    buildConf("spark.sql.optimizer.windowReorder.enabled")
+      .withBindingPolicy(ConfigBindingPolicy.NOT_APPLICABLE)
+      .doc("When true, the optimizer reorders and groups window functions to reduce shuffles and " +
+        "reuse sorts when their partitioning and ordering requirements are compatible. Among the " +
+        "orders it considers, it never inserts more shuffles than leaving the windows in source " +
+        "order. However, existing input partitioning is not considered, so this can still add a " +
+        "shuffle relative to the original plan. Shared shuffles may use fewer partition keys, " +
+        "which can hurt performance for low-cardinality or skewed keys. The per-partition top-k " +
+        "optimization is retained only when preserving it does not require an extra shuffle. " +
+        "Array, map, and binary window outputs are treated as wide and kept above later window " +
+        "shuffles when possible, even when this means giving up top-k. When a reorder that " +
+        "does not pin a rank window saves no window shuffle, the original order is retained " +
+        "if a join, aggregate, or window above can reuse its final partitioning but not the " +
+        "reordered partitioning. Reordering can also combine the rank calculation with an " +
+        "expression that does not " +
+        "support early stopping, such as an aggregate with a non-expanding frame, disabling " +
+        "top-k even without an extra shuffle. When false, a window is moved before an " +
+        "adjacent window only when its PARTITION BY columns are a strict subset of " +
+        "the other's.")
+      .version("4.4.0")
+      .booleanConf
+      .createWithDefault(false)
+
   val WINDOW_SEGMENT_TREE_ENABLED =
     buildConf("spark.sql.window.segmentTree.enabled")
       .withBindingPolicy(ConfigBindingPolicy.NOT_APPLICABLE)
