@@ -18,13 +18,15 @@
 package org.apache.spark.sql.catalyst.optimizer
 
 import org.apache.spark.sql.catalyst.expressions.{Alias, Attribute, CurrentRow, DenseRank, EqualTo, Expression, GreaterThan, GreaterThanOrEqual, IntegerLiteral, LessThan, LessThanOrEqual, Literal, NamedExpression, PredicateHelper, Rank, RowFrame, RowNumber, SizeBasedWindowFunction, SpecifiedWindowFrame, UnboundedPreceding, WindowExpression, WindowSpecDefinition}
-import org.apache.spark.sql.catalyst.plans.logical.{Filter, Limit, LocalRelation, LogicalPlan, Window, WindowGroupLimit}
+import org.apache.spark.sql.catalyst.plans.logical.{Filter, Limit, LocalRelation, LogicalPlan, Project, Window, WindowGroupLimit}
 import org.apache.spark.sql.catalyst.rules.Rule
 import org.apache.spark.sql.catalyst.trees.TreePattern.{FILTER, WINDOW}
 
 /**
  * Inserts a `WindowGroupLimit` below `Window` if the `Window` has rank-like functions
- * and the function results are further filtered by limit-like predicates. Example query:
+ * and the function results are further filtered by limit-like predicates, and further
+ * eliminates the `Window`/`Filter` entirely when they become provably redundant after that
+ * insertion (see the top-1 special case below). Example query:
  * {{{
  *   SELECT * FROM (
  *      SELECT *, ROW_NUMBER() OVER(PARTITION BY k ORDER BY a) AS rn FROM Tab1
@@ -50,24 +52,62 @@ import org.apache.spark.sql.catalyst.trees.TreePattern.{FILTER, WINDOW}
  *      SELECT *, ROW_NUMBER() OVER(PARTITION BY k ORDER BY a) AS rn FROM Tab1
  *   ) WHERE 5 >= rn;
  * }}}
+ *
+ * As a special case, once the `WindowGroupLimit` has truncated every partition group to at
+ * most one row (`limit = 1`), a `row_number()` recomputed over that same partition/order spec
+ * can only ever produce the literal `1` for the surviving row, making the `Window` and its
+ * top-1 `Filter` provably dead computation. When the `Window` computes nothing else and carries
+ * no hint, this rule replaces both with a `Project` that aliases the literal `1` onto the
+ * original `rn` output, instead of inserting the `WindowGroupLimit` below an otherwise-unchanged
+ * `Window`/`Filter`:
+ * {{{
+ *   Filter(rn = 1 / rn <= 1 / rn < 2)
+ *     Window(row_number() AS rn, partitionSpec, orderSpec)
+ *       Tab1
+ * }}}
+ * becomes
+ * {{{
+ *   Project(..., 1 AS rn)
+ *     WindowGroupLimit(partitionSpec, orderSpec, row_number(), limit = 1)
+ *       Tab1
+ * }}}
+ * This special case never applies when `partitionSpec` is empty and `limit` is below
+ * `spark.sql.execution.topKSortFallbackThreshold` (the default), since that case is instead
+ * rewritten straight to a `Limit` on top of the `Window`, with no `WindowGroupLimit` involved.
  */
 object InferWindowGroupLimit extends Rule[LogicalPlan] with PredicateHelper {
 
   /**
+   * Extract the limit value from a single predicate of the form `attr <op> literal` or
+   * `literal <op> attr`, e.g. `attr = 5`, `5 = attr`, `attr < 5`, `5 > attr`, `attr <= 5` or
+   * `5 >= attr`. Returns `None` if `condition` is not one of these shapes (e.g. a conjunction).
+   */
+  private def extractLimit(condition: Expression, attr: Attribute): Option[Int] = condition match {
+    case EqualTo(IntegerLiteral(limit), e) if e.semanticEquals(attr) => Some(limit)
+    case EqualTo(e, IntegerLiteral(limit)) if e.semanticEquals(attr) => Some(limit)
+    case LessThan(e, IntegerLiteral(limit)) if e.semanticEquals(attr) => Some(limit - 1)
+    case GreaterThan(IntegerLiteral(limit), e) if e.semanticEquals(attr) => Some(limit - 1)
+    case LessThanOrEqual(e, IntegerLiteral(limit)) if e.semanticEquals(attr) => Some(limit)
+    case GreaterThanOrEqual(IntegerLiteral(limit), e) if e.semanticEquals(attr) => Some(limit)
+    case _ => None
+  }
+
+  /**
    * Extract all the limit values from predicates.
    */
-  def extractLimits(condition: Expression, attr: Attribute): Option[Int] = {
-    val limits = splitConjunctivePredicates(condition).collect {
-      case EqualTo(IntegerLiteral(limit), e) if e.semanticEquals(attr) => limit
-      case EqualTo(e, IntegerLiteral(limit)) if e.semanticEquals(attr) => limit
-      case LessThan(e, IntegerLiteral(limit)) if e.semanticEquals(attr) => limit - 1
-      case GreaterThan(IntegerLiteral(limit), e) if e.semanticEquals(attr) => limit - 1
-      case LessThanOrEqual(e, IntegerLiteral(limit)) if e.semanticEquals(attr) => limit
-      case GreaterThanOrEqual(IntegerLiteral(limit), e) if e.semanticEquals(attr) => limit
-    }
-
+  private def extractLimits(condition: Expression, attr: Attribute): Option[Int] = {
+    val limits = splitConjunctivePredicates(condition).flatMap(extractLimit(_, attr))
     if (limits.nonEmpty) Some(limits.min) else None
   }
+
+  /**
+   * Recognizes a `Filter` condition that keeps only the first-ranked row produced by a
+   * `row_number()` `Window`, i.e. `rn = 1`, `1 = rn`, `rn <= 1`, `1 >= rn`, `rn < 2` or `2 > rn`,
+   * and nothing else (a conjunction with another predicate does not count, since dropping the
+   * `Window`/`Filter` would also silently drop that other predicate).
+   */
+  private def isTop1(condition: Expression, attr: Attribute): Boolean =
+    extractLimit(condition, attr).contains(1)
 
   /**
    * All window expressions should use the same expanding window and do not contains
@@ -97,7 +137,7 @@ object InferWindowGroupLimit extends Rule[LogicalPlan] with PredicateHelper {
         val limits = windowExpressions.collect {
           case alias @ Alias(WindowExpression(rankLikeFunction, _), _)
             if support(rankLikeFunction) =>
-            extractLimits(condition, alias.toAttribute).map((_, rankLikeFunction))
+            extractLimits(condition, alias.toAttribute).map((_, rankLikeFunction, alias))
         }.flatten
 
         if (limits.isEmpty) {
@@ -112,20 +152,33 @@ object InferWindowGroupLimit extends Rule[LogicalPlan] with PredicateHelper {
           }
           // Pick a rank-like function with the smallest limit
           selectedLimits.minBy(_._1) match {
-            case (limit, rankLikeFunction) if limit <= conf.windowGroupLimitThreshold &&
+            case (limit, rankLikeFunction, alias) if limit <= conf.windowGroupLimitThreshold &&
               child.maxRows.forall(_ > limit) =>
               if (limit > 0) {
-                val newFilterChild = if (rankLikeFunction.isInstanceOf[RowNumber] &&
+                if (rankLikeFunction.isInstanceOf[RowNumber] &&
                   partitionSpec.isEmpty && limit < conf.topKSortFallbackThreshold) {
                   // Top n (Limit + Sort) have better performance than WindowGroupLimit if the
                   // window function is RowNumber and Window partitionSpec is empty.
-                  Limit(Literal(limit), window)
+                  filter.withNewChildren(Seq(Limit(Literal(limit), window)))
                 } else {
                   val windowGroupLimit =
                     WindowGroupLimit(partitionSpec, orderSpec, rankLikeFunction, limit, child)
-                  window.withNewChildren(Seq(windowGroupLimit))
+                  if (limit == 1 && windowExpressions.length == 1 && window.hint.isEmpty &&
+                    rankLikeFunction.isInstanceOf[RowNumber] &&
+                    isTop1(condition, alias.toAttribute)) {
+                    // The surviving row's row_number() can only be 1, and the top-1 filter is
+                    // then always true, so the Window/Filter above are dead computation. Keep
+                    // the alias's qualifier/metadata so the output schema is unaffected by
+                    // taking this path instead of the regular WindowGroupLimit-insertion one.
+                    val newAlias = Alias(Literal(1), alias.name)(
+                      exprId = alias.exprId,
+                      qualifier = alias.qualifier,
+                      explicitMetadata = Some(alias.metadata))
+                    Project(child.output :+ newAlias, windowGroupLimit)
+                  } else {
+                    filter.withNewChildren(Seq(window.withNewChildren(Seq(windowGroupLimit))))
+                  }
                 }
-                filter.withNewChildren(Seq(newFilterChild))
               } else {
                 LocalRelation(filter.output, data = Seq.empty, isStreaming = filter.isStreaming)
               }
