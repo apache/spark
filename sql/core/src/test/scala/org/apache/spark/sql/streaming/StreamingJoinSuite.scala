@@ -36,7 +36,7 @@ import org.apache.spark.sql.catalyst.plans.{LeftOuter, RightOuter}
 import org.apache.spark.sql.catalyst.plans.physical.HashPartitioning
 import org.apache.spark.sql.execution.datasources.v2.state.StateSourceOptions
 import org.apache.spark.sql.execution.exchange.ShuffleExchangeExec
-import org.apache.spark.sql.execution.streaming.checkpointing.CheckpointFileManager
+import org.apache.spark.sql.execution.streaming.checkpointing.{CheckpointFileManager, OffsetMap, OffsetSeq, OffsetSeqLog}
 import org.apache.spark.sql.execution.streaming.operators.stateful.StatefulOperatorStateInfo
 import org.apache.spark.sql.execution.streaming.operators.stateful.join.{StreamingSymmetricHashJoinExec, StreamingSymmetricHashJoinHelper}
 import org.apache.spark.sql.execution.streaming.runtime.{MemoryStream, StreamExecution}
@@ -331,6 +331,90 @@ abstract class StreamingJoinSuite
 abstract class StreamingInnerJoinBase extends StreamingJoinSuite {
 
   import testImplicits._
+
+  Seq((false, false), (false, true), (true, false)).foreach { case (enabled, missing) =>
+    test(s"SPARK-60850: pinned join event time (enabled=$enabled, missing=$missing)") {
+      withTempDir { checkpoint =>
+        val entry = SQLConf.STREAMING_JOIN_PRESERVE_EVENT_TIME_COLUMNS
+        val leftInput = MemoryStream[(Int, Int)]
+        val rightInput = MemoryStream[(Int, Int)]
+        val left = leftInput.toDF().toDF("key", "seconds")
+          .select($"key", timestamp_seconds($"seconds").as("leftTime"),
+            $"seconds".as("unusedLeft"))
+          .withWatermark("leftTime", "5 seconds")
+        val right = rightInput.toDF().toDF("key", "seconds")
+          .select($"key", timestamp_seconds($"seconds").as("rightTime"),
+            $"seconds".as("unusedRight"))
+          .withWatermark("rightTime", "5 seconds")
+        val joined = left.join(right, "key").select("key")
+
+        def checkRetention(query: StreamExecution): Unit = {
+          val join = query.lastExecution.executedPlan.collectFirst {
+            case join: StreamingSymmetricHashJoinExec => join
+          }.get
+          assert(join.left.output.map(_.name) ==
+            (if (enabled) Seq("key", "leftTime") else Seq("key")))
+          assert(join.right.output.map(_.name) ==
+            (if (enabled) Seq("key", "rightTime") else Seq("key")))
+          assert(query.sparkSessionForStream.conf.get(entry.key) == enabled.toString)
+          assert(query.offsetLog.getLatest().get._2.metadataOpt.get
+            .conf.get(entry.key).contains(enabled.toString))
+        }
+
+        testStream(joined)(
+          StartStream(
+            additionalConfs = Map(entry.key -> enabled.toString),
+            checkpointLocation = checkpoint.getCanonicalPath),
+          AddData(leftInput, (1, 20), (2, 20)),
+          CheckAnswer(),
+          AddData(rightInput, (9, 20)),
+          CheckAnswer(),
+          AddData(leftInput, (8, 100)),
+          CheckAnswer(),
+          AddData(rightInput, (7, 100)),
+          CheckAnswer(),
+          Execute(checkRetention),
+          StopStream)
+
+        if (missing) {
+          val offsetsPath = checkpoint.getCanonicalPath + "/offsets"
+          val offsetLog = new OffsetSeqLog(spark, offsetsPath)
+          val latestBatch = offsetLog.getLatest().get._1
+          (0L to latestBatch).foreach { batchId =>
+            val updated = offsetLog.get(batchId).get match {
+              case offsets: OffsetSeq =>
+                offsets.copy(metadataOpt = offsets.metadataOpt.map { metadata =>
+                  metadata.copy(conf = metadata.conf - entry.key)
+                })
+              case offsets: OffsetMap =>
+                offsets.copy(metadata = offsets.metadata.copy(
+                  conf = offsets.metadata.conf - entry.key))
+            }
+            val batchFile = new Path(offsetsPath, batchId.toString)
+            val fs = batchFile.getFileSystem(spark.sessionState.newHadoopConf())
+            assert(fs.delete(batchFile, false))
+            assert(offsetLog.add(batchId, updated))
+          }
+        }
+
+        val lateLeft = if (enabled) Seq.empty[Row] else Seq(Row(9))
+        val lateRight = if (enabled) Seq.empty[Row] else Seq(Row(2))
+        testStream(joined)(
+          StartStream(
+            additionalConfs = Map(entry.key -> (!enabled).toString),
+            checkpointLocation = checkpoint.getCanonicalPath),
+          AddData(rightInput, (1, 100)),
+          CheckNewAnswer(1),
+          Execute(checkRetention),
+          AddData(leftInput, (9, 0)),
+          CheckNewAnswer(lateLeft: _*),
+          AddData(rightInput, (2, 0)),
+          CheckNewAnswer(lateRight: _*),
+          StopStream)
+      }
+    }
+  }
+
   testWithAppendAndUpdate("stream stream inner join on non-time column") { outputMode =>
     val input1 = MemoryStream[Int]
     val input2 = MemoryStream[Int]

@@ -38,6 +38,47 @@ import org.apache.spark.util.{SerializableConfiguration, Utils}
 class OffsetSeqLogSuite extends SharedSparkSession {
   import testImplicits._
 
+  test("SPARK-60850: old checkpoints disable join event-time retention") {
+    val entry = SQLConf.STREAMING_JOIN_PRESERVE_EVENT_TIME_COLUMNS
+    val (_, offsets) = readFromResource("offset-log-version-2.1.0")
+    val metadata = offsets.metadataOpt.get
+    assert(!metadata.conf.contains(entry.key))
+    val restored = new SQLConf
+    val startup = new SQLConf
+    Seq(restored, startup).foreach(_.setConf(entry, true))
+
+    OffsetSeqMetadata.setSessionConf(metadata, restored)
+    OffsetSeqMetadata.setConfWithoutLogging(metadata, startup)
+
+    assert(!restored.getConf(entry))
+    assert(!startup.getConf(entry))
+  }
+
+  test("SPARK-60850: new checkpoints pin join event-time retention across restarts") {
+    val entry = SQLConf.STREAMING_JOIN_PRESERVE_EVENT_TIME_COLUMNS
+    Seq(false, true).foreach { enabled =>
+      withSQLConf(
+          entry.key -> enabled.toString,
+          SQLConf.STATEFUL_SHUFFLE_PARTITIONS_INTERNAL.key -> "3") {
+        val metadatas = Seq(
+          OffsetSeqMetadata(0, 0, spark.conf),
+          OffsetSeqMetadataV2(0, 0, spark.conf))
+        metadatas.foreach { metadata =>
+          assert(metadata.conf.get(entry.key).contains(enabled.toString))
+          val restored = new SQLConf
+          val startup = new SQLConf
+          Seq(restored, startup).foreach(_.setConf(entry, !enabled))
+
+          OffsetSeqMetadata.setSessionConf(metadata, restored)
+          OffsetSeqMetadata.setConfWithoutLogging(metadata, startup)
+
+          assert(restored.getConf(entry) == enabled)
+          assert(startup.getConf(entry) == enabled)
+        }
+      }
+    }
+  }
+
   test("streaming EXCEPT compatibility defaults to legacy behavior for old checkpoints") {
     val (_, offsetSeq) = readFromResource("offset-log-version-2.1.0")
     val metadata = offsetSeq.metadataOpt.get

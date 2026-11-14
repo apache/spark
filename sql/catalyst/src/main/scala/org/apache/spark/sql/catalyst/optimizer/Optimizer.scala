@@ -1575,7 +1575,7 @@ object ColumnPruning extends Rule[LogicalPlan] {
 
     // Eliminate unneeded attributes from right side of a Left Existence Join.
     case j @ Join(_, right, LeftExistence(_), _, _) =>
-      j.copy(right = prunedChild(right, j.references))
+      j.copy(right = prunedChild(right, requiredInputReferences(j)))
 
     // An external lookup join keeps only the lookup columns that its parent reads. Its lookup side
     // is pruned to them in the next pass, once the join no longer references the others.
@@ -1644,7 +1644,7 @@ object ColumnPruning extends Rule[LogicalPlan] {
     // for all other logical plans that inherits the output from it's children
     // Project over project is handled by the first case, skip it here.
     case p @ Project(_, child) if !child.isInstanceOf[Project] =>
-      val required = child.references ++ p.references
+      val required = requiredInputReferences(child) ++ p.references
       if (!child.inputSet.subsetOf(required)) {
         val newChildren = child.children.map(c => prunedChild(c, required))
         p.copy(child = child.withNewChildren(newChildren))
@@ -1652,6 +1652,25 @@ object ColumnPruning extends Rule[LogicalPlan] {
         p
       }
   })
+
+  private def requiredInputReferences(plan: LogicalPlan): AttributeSet = {
+    val eventTimeAttributes = plan match {
+      case join: Join if join.left.isStreaming && join.right.isStreaming &&
+          conf.getConf(SQLConf.STREAMING_JOIN_PRESERVE_EVENT_TIME_COLUMNS) =>
+        join.children.flatMap { child =>
+          val eventTimeColumns = child.output.filter(
+            _.metadata.contains(EventTimeWatermark.delayKey))
+          if (eventTimeColumns.map(_.exprId).distinct.size == 1 &&
+              eventTimeColumns.head.dataType == TimestampType) {
+            eventTimeColumns
+          } else {
+            Nil
+          }
+        }
+      case _ => Nil
+    }
+    plan.references ++ AttributeSet(eventTimeAttributes)
+  }
 
   /** Applies a projection only when the child is producing unnecessary attributes */
   private def prunedChild(c: LogicalPlan, allReferences: AttributeSet) =
