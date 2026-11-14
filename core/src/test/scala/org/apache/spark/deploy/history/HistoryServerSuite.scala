@@ -775,6 +775,18 @@ abstract class HistoryServerSuite extends SparkFunSuite with BeforeAndAfter with
     assert(conn.getResponseCode === 302)
     assert(conn.getHeaderField("Location") === "/")
   }
+
+  test("/static/sql resources are served on startup without loading any app") {
+    val port = server.boundPort
+    Seq(
+      "spark-sql-viz.css",
+      "spark-sql-viz.js").foreach { name =>
+      val url = new URI(s"http://$localhost:$port/static/sql/$name").toURL
+      val (code, content, error) = HistoryServerSuite.getContentAndCode(url)
+      assert(code === 200, s"got code $code when getting $url w/ error: $error")
+      assert(content.exists(_.nonEmpty), s"$url returned an empty body")
+    }
+  }
 }
 
 object HistoryServerSuite {

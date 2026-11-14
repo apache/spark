@@ -32,11 +32,5 @@ private[sql] class StreamingQueryTab(
   attachPage(new StreamingQueryStatisticsPage(this))
   parent.attachTab(this)
 
-  parent.addStaticHandler(StreamingQueryTab.STATIC_RESOURCE_DIR, "/static/sql")
-
   override def displayOrder: Int = 2
-}
-
-private[sql] object StreamingQueryTab {
-  private val STATIC_RESOURCE_DIR = "org/apache/spark/sql/execution/ui/static"
 }
