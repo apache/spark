@@ -920,11 +920,20 @@ class UDFTranspileUnitTests(ReusedSQLTestCase):
                         [r[0] for r in df.select(pudf(*df.columns)).collect()],
                         f"{func.__name__}: interpreted result diverged",
                     )
-            # Declared BooleanType, the same bodies transpile and are correct.
-            df = self.spark.createDataFrame([(1, 1, 9)], "c long, x long, y long")
-            pudf = UserDefinedFunction(ternary_compare, BooleanType())
-            self.assertTrue(pudf.transpiled, "ternary_compare should transpile for BooleanType")
-            self.assertEqual([True], [r[0] for r in df.select(pudf("c", "x", "y")).collect()])
+            # Declared BooleanType, all three bodies run natively and retain NULL guards.
+            for func, schema, rows in cases:
+                with self.subTest(func=func.__name__, return_type="boolean"):
+                    self.assertEqual(
+                        self._vals(func, BooleanType(), schema, rows),
+                        [func(*row) for row in rows],
+                    )
+                    null_row = (None, *rows[0][1:])
+                    df = self.spark.createDataFrame([null_row], schema)
+                    pudf = self._transpiled_udf(func, BooleanType())
+                    projected = df.select(pudf(*df.columns))
+                    self.assertEqual(0, self._eval_python_count(projected), func.__name__)
+                    with self.assertRaisesRegex(Exception, "cannot compare NULL"):
+                        projected.collect()
 
     def test_udf_transpile_lowering_caps(self):
         # Every bound on comparison lowering. Exercised through

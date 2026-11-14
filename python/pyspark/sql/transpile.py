@@ -1046,12 +1046,12 @@ class CatalystTranspiler(AbstractTranspiler):
             case ast.BoolOp(op=op, values=values):
                 # Python `and` / `or` short-circuit and return one of the
                 # operands rather than a strict boolean. For the booleans
-                # produced by Compare / UnaryOp(Not) / nested BoolOps that maps
+                # produced by Compare / UnaryOp(Not) / nested BoolOps, this maps
                 # cleanly onto `&` / `|`. For non-boolean operands (including
                 # bare parameter names whose runtime type is unknown) the right
                 # semantics would need Python's truthiness rules (0 / "" / None /
                 # [] all falsy), which we can't reproduce without the input
-                # column types -- Spark's `&` / `|` would do bitwise instead.
+                # column types -- Spark's `&` / `|` require boolean operands.
                 #
                 # The gate is `_is_never_null_boolean` rather than
                 # `_is_definitely_boolean` because Spark's `NULL AND false` is
@@ -1061,7 +1061,7 @@ class CatalystTranspiler(AbstractTranspiler):
                         "`and` / `or` operand is not statically known to be a "
                         "non-NULL boolean; Python's short-circuit returns the "
                         "operand itself (so `None and x` is None) while Spark's "
-                        "`&` / `|` are bitwise over three-valued logic, so the "
+                        "`&` / `|` build logical And / Or over three-valued logic, so the "
                         "transpiler refuses to lower this and the UDF falls back "
                         "to interpreted Python"
                     )
