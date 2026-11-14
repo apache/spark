@@ -197,9 +197,8 @@ class PullupCorrelatedPredicatesSuite extends PlanTest {
       (Some(true), false))
     assert(countBugHandling(correlated(count($"d")), above = _.where(Rand(0) > 0.5)) ==
       (Some(false), true))
-    // A LIMIT, a window function or a sample in the outer input, also in a subquery there, and
-    // a LIMIT above a join, which LimitPushDown can push into its inputs, but not a LIMIT above
-    // the subquery otherwise.
+    // A LIMIT, a window function or a sample in the outer input, also in a subquery there, but
+    // not a LIMIT above the subquery.
     val limitInSubquery = InSubquery(Seq($"a"), ListQuery(testRelation2.select($"c").limit(1)))
     Seq(testRelation.limit(10), testRelation.offset(1), Tail(Literal(1), testRelation),
         Sample(0.0, 0.5, withReplacement = false, 1L, testRelation),
@@ -228,6 +227,18 @@ class PullupCorrelatedPredicatesSuite extends PlanTest {
     }
     val groupedOuter = testRelation.groupBy($"a")($"a", sum($"a").as("s"))
     assert(countBugHandling(correlated(max($"d")), outer = groupedOuter) == inDecorrelation)
+    // A SUM or AVG of decimals becomes NULL on an overflow that depends on the order, unless in
+    // ANSI mode.
+    val decimals = LocalRelation($"a".int, $"x".decimal(10, 2))
+    Seq(true, false).foreach { ansi =>
+      withSQLConf(SQLConf.ANSI_ENABLED.key -> ansi.toString) {
+        Seq(sum($"x"), avg($"x")).foreach { agg =>
+          val outer = decimals.groupBy($"a")($"a", agg.as("s"))
+          assert(countBugHandling(correlated(max($"d")), outer = outer) ==
+            (if (ansi) inDecorrelation else inLegacy), (ansi, agg))
+        }
+      }
+    }
     val uncorrelatedExists =
       IsNotNull(ScalarSubquery(testRelation2.select(Literal(1).as("col")).limit(1)))
     assert(countBugHandling(correlated(max($"d")), outer = testRelation.where(uncorrelatedExists))
@@ -244,25 +255,28 @@ class PullupCorrelatedPredicatesSuite extends PlanTest {
     assert(countBugHandling(correlated(max($"d")), above = p => Union(p, groupOnly).limit(21)) ==
       inDecorrelation)
     assert(countBugHandling(correlated(max($"d")), above = p => Union(p, groupOnly).limit(1)) ==
-      inLegacy)
+      inDecorrelation)
     // A domain join directly in the outer input takes its domain from outside this plan.
     val domainOuter = DomainJoin(Seq(AttributeReference("z", IntegerType)()), testRelation)
     assert(countBugHandling(correlated(max($"d")), outer = domainOuter) == inLegacy)
     val innerOuter = testRelation.join(testRelation2, Inner, Some($"a" === $"c"))
     assert(countBugHandling(correlated(max($"d")), outer = innerOuter, above = _.limit(21)) ==
       inDecorrelation)
-    // Above the subquery: a LIMIT 1 above a DISTINCT, which LimitPushDown can push below it, and
-    // a filter with a subquery that may give other rows, which PushDownPredicates can push, but
-    // not a deterministic filter.
+    // Above the subquery: a LIMIT, which LimitPushDown keeps above an operator with a correlated
+    // scalar subquery, does not matter, but a filter with a subquery that may give other rows,
+    // which PushDownPredicates can push, does, unlike a deterministic filter.
     assert(countBugHandling(correlated(max($"d")), outer = Distinct(testRelation.select($"a")),
-      above = _.limit(1)) == inLegacy)
+      above = _.limit(1)) == inDecorrelation)
     assert(countBugHandling(correlated(max($"d")), others = Seq($"a"),
       above = _.where(limitInSubquery)) == inLegacy)
     assert(countBugHandling(correlated(max($"d")), others = Seq($"a"),
       above = _.where($"a" > 1)) == inDecorrelation)
+    // Another subquery of the operator, which a filter above can inline through its alias.
+    val limitedScalar = ScalarSubquery(testRelation2.select($"c").limit(1)).as("x")
+    assert(countBugHandling(correlated(max($"d")), others = Seq(limitedScalar)) == inLegacy)
     val joinOuter = testRelation.join(testRelation2, LeftOuter, Some($"a" === $"c"))
     assert(countBugHandling(correlated(max($"d")), outer = joinOuter, above = _.limit(10)) ==
-      (Some(true), false))
+      (Some(false), true))
     val mapOuter = LocalRelation(AttributeReference("m", MapType(IntegerType, IntegerType))())
     // Use size(m), whose outer reference stays a map also in the full optimizer, where
     // PullOutNestedDataOuterRefExpressions would pull a lookup such as m[0] out.

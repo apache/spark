@@ -27,7 +27,7 @@ import org.apache.spark.sql.catalyst.expressions.{CreateNamedStruct, EqualTo, Ex
   PlanExpression, Rand, SubqueryExpression}
 import org.apache.spark.sql.catalyst.expressions.codegen.{CodegenContext, GeneratePredicate}
 import org.apache.spark.sql.catalyst.plans.{LeftAnti, LeftSemi}
-import org.apache.spark.sql.catalyst.plans.logical.{Aggregate, Filter, Join, LogicalPlan, Project, Sort, Union}
+import org.apache.spark.sql.catalyst.plans.logical.{Aggregate, Filter, Join, LocalLimit, LogicalPlan, Project, Sort, Union}
 import org.apache.spark.sql.execution._
 import org.apache.spark.sql.execution.adaptive.{AdaptiveSparkPlanHelper, DisableAdaptiveExecution}
 import org.apache.spark.sql.execution.datasources.FileScanRDD
@@ -3483,19 +3483,26 @@ class SubquerySuite extends SharedSparkSession
             "(SELECT MAX(b.v) FROM b WHERE b.k = o.k)) c FROM o) WHERE spark60501_rk(k) > 500)"),
           Row(1))
       }
-      // A LIMIT without a total order can keep other rows when computed again, so the plan is
-      // the one of before, without the domain joins: in the outer input, and above a join, into
-      // whose inputs LimitPushDown pushes it.
+      // A LIMIT without a total order can keep other rows when computed again, so with one in
+      // the outer input, the plan is the one of before, without the domain joins.
       val subquery = "(SELECT COUNT(*) FROM (SELECT MAX(b.v) FROM b WHERE b.k = o.k))"
-      Seq(s"SELECT o.k, $subquery FROM (SELECT * FROM o LIMIT 100) o",
-          s"SELECT o.k, $subquery FROM o LEFT JOIN b ON o.k = b.k LIMIT 100").foreach { query =>
-        def joins(): Int =
-          sql(query).queryExecution.optimizedPlan.collect { case j: Join => j }.size
-        val legacyJoins = withSQLConf(
-          SQLConf.LEGACY_SCALAR_SUBQUERY_NESTED_AGGREGATE_COUNT_BUG_BEHAVIOR.key -> "true") {
-          joins()
-        }
-        assert(joins() == legacyJoins, query)
+      val legacyKey = SQLConf.LEGACY_SCALAR_SUBQUERY_NESTED_AGGREGATE_COUNT_BUG_BEHAVIOR.key
+      def counts(query: String, legacy: Boolean): (Int, Int) =
+          withSQLConf(legacyKey -> legacy.toString) {
+        val plan = sql(query).queryExecution.optimizedPlan
+        (plan.collect { case j: Join => j }.size, plan.collect { case l: LocalLimit => l }.size)
+      }
+      val inInput = s"SELECT o.k, $subquery FROM (SELECT * FROM o LIMIT 100) o"
+      assert(counts(inInput, legacy = false) == counts(inInput, legacy = true))
+      // A LIMIT above, which LimitPushDown keeps above the Project with the subquery until the
+      // domain joins are built, also when other rules move a filter or a join condition first:
+      // the subquery gets the domain joins, but no more LocalLimits than with the legacy conf.
+      Seq(s"SELECT o.k, $subquery FROM o LEFT JOIN b ON o.k = b.k LIMIT 100",
+          s"SELECT o.k, $subquery FROM o LEFT JOIN b ON o.k = b.k WHERE o.k > 0 LIMIT 100",
+          s"SELECT o.k, $subquery FROM o JOIN b ON b.v = 1 LIMIT 100").foreach { query =>
+        val (joins, limits) = counts(query, legacy = false)
+        val (legacyJoins, legacyLimits) = counts(query, legacy = true)
+        assert(joins > legacyJoins && limits == legacyLimits, query)
       }
     }
   }

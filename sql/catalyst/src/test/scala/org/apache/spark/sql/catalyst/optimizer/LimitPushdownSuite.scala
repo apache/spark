@@ -21,7 +21,7 @@ import org.apache.spark.sql.Row
 import org.apache.spark.sql.catalyst.analysis.EliminateSubqueryAliases
 import org.apache.spark.sql.catalyst.dsl.expressions._
 import org.apache.spark.sql.catalyst.dsl.plans._
-import org.apache.spark.sql.catalyst.expressions.{Add, GenericInternalRow}
+import org.apache.spark.sql.catalyst.expressions.{Add, GenericInternalRow, ScalarSubquery}
 import org.apache.spark.sql.catalyst.plans._
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.rules._
@@ -351,6 +351,28 @@ class LimitPushdownSuite extends PlanTest {
     comparePlans(
       Optimize.execute(testRelation.offset(2).limit(1).analyze),
       GlobalLimit(1, Offset(2, LocalLimit(3, testRelation))).analyze)
+  }
+
+  test("SPARK-60501: keep a limit above a Project with a correlated scalar subquery") {
+    val Seq(a, _, _) = testRelation.output
+    val Seq(d, e, _) = testRelation2.output
+    val agg = testRelation2.groupBy()(max(e).as("m")).analyze
+    // The domain joins that RewriteCorrelatedScalarSubquery builds for a correlated subquery
+    // compute the input of the Project again, so a limit there could keep other rows.
+    val correlated = ScalarSubquery(agg, outerAttrs = Seq(a)).as("s")
+    val uncorrelated = ScalarSubquery(agg).as("s")
+    val join = testRelation.join(testRelation2, LeftOuter, Some(a === d))
+    // Not analyzed, since the analyzer would recompute the outer references from the plan.
+    val keptAbove = Project(Seq(a, correlated), join).limit(2)
+    comparePlans(Optimize.execute(keptAbove), keptAbove)
+    comparePlans(
+      Optimize.execute(Project(Seq(a, uncorrelated), join).limit(2).analyze),
+      Project(Seq(a, uncorrelated),
+        LocalLimit(2, testRelation).join(testRelation2, LeftOuter, Some(a === d))).limit(2)
+        .analyze)
+    val groupOnly = testRelation.groupBy(a)(a)
+    val limitOneKeptAbove = Project(Seq(a, correlated), groupOnly).limit(1)
+    comparePlans(Optimize.execute(limitOneKeptAbove), limitOneKeptAbove)
   }
 
   test("SPARK-39511: Push limit 1 to right side if join type is LeftSemiOrAnti") {

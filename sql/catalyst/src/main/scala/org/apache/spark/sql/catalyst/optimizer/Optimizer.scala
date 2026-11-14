@@ -971,6 +971,9 @@ object LimitPushDown extends Rule[LogicalPlan] {
     }
   }
 
+  private def hasCorrelatedScalarSubquery(project: Project): Boolean =
+    project.projectList.exists(ScalarSubquery.hasCorrelatedScalarSubquery)
+
   private def pushLocalLimitThroughJoin(limitExpr: Expression, join: Join): Join = {
     join.joinType match {
       case RightOuter if join.condition.nonEmpty =>
@@ -1020,12 +1023,17 @@ object LimitPushDown extends Rule[LogicalPlan] {
     case LocalLimit(exp, join: Join) =>
       LocalLimit(exp, pushLocalLimitThroughJoin(exp, join))
     // There is a Project between LocalLimit and Join if they do not have the same output.
-    case LocalLimit(exp, project @ Project(_, join: Join)) =>
+    // A limit is kept above a Project with a correlated scalar subquery: the domain joins that
+    // RewriteCorrelatedScalarSubquery builds for it compute the input of the Project again, and a
+    // limit in it could keep other rows there.
+    case LocalLimit(exp, project @ Project(_, join: Join))
+        if !hasCorrelatedScalarSubquery(project) =>
       LocalLimit(exp, project.copy(child = pushLocalLimitThroughJoin(exp, join)))
     // Push down limit 1 through Aggregate and turn Aggregate into Project if it is group only.
     case Limit(le @ IntegerLiteral(1), a: Aggregate) if a.groupOnly =>
       Limit(le, pushLimitOneThroughGroupOnlyAggregate(le, a))
-    case Limit(le @ IntegerLiteral(1), p @ Project(_, a: Aggregate)) if a.groupOnly =>
+    case Limit(le @ IntegerLiteral(1), p @ Project(_, a: Aggregate))
+        if a.groupOnly && !hasCorrelatedScalarSubquery(p) =>
       Limit(le, p.copy(child = pushLimitOneThroughGroupOnlyAggregate(le, a)))
     // Merge offset value and limit value into LocalLimit and pushes down LocalLimit through Offset.
     case LocalLimit(le, Offset(oe, grandChild)) =>

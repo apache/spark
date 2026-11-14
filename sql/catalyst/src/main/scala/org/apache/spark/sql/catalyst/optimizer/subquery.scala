@@ -635,7 +635,9 @@ object PullupCorrelatedPredicates extends Rule[LogicalPlan] with PredicateHelper
    * expressions, aggregate functions whose result does not depend on the order of the rows, and
    * leaves other than a CTE that is not inlined (which may be a non-deterministic one; a
    * CTERelationRef does not tell) and a streaming source, for which the domain joins fail. It
-   * also checks the plans of the subqueries in `input`. Anything else, e.g. a LIMIT (other than
+   * also checks the plans of the subqueries in `input`. A relation is taken to give the same
+   * rows again, as elsewhere in Spark, e.g. in a self-join; a LogicalRDD over an RDD that does
+   * not is not detected. Anything else, e.g. a LIMIT (other than
    * over rows of constants), a window function, a sample or a FIRST, keeps the previous
    * handling.
    */
@@ -665,10 +667,7 @@ object PullupCorrelatedPredicates extends Rule[LogicalPlan] with PredicateHelper
   // Whether every row of `plan` is the same row of constants, so that a LIMIT over it gives the
   // same rows whichever rows it keeps.
   private def constantOutput(plan: LogicalPlan): Boolean = plan match {
-    case Project(projectList, _) => projectList.forall {
-      case Alias(child, _) => child.foldable
-      case e => e.foldable
-    }
+    case Project(projectList, _) => projectList.forall(trimAliases(_).foldable)
     case l @ (_: LocalLimit | _: GlobalLimit) => constantOutput(l.children.head)
     case _ => false
   }
@@ -677,12 +676,21 @@ object PullupCorrelatedPredicates extends Rule[LogicalPlan] with PredicateHelper
   // This is stricter than EliminateSorts.isOrderIrrelevantAggFunction, which only needs the
   // result not to depend on a Sort below the aggregate: floating-point addition is not
   // associative, so neither a SUM of floating-point values nor an AVG of anything but decimals
-  // and ANSI intervals, which AVG adds up as DOUBLE, nor a CentralMomentAgg qualifies.
+  // and ANSI intervals, which AVG adds up as DOUBLE, nor a CentralMomentAgg qualifies; and a SUM
+  // or AVG of decimals becomes NULL on an overflow that depends on the order unless in ANSI
+  // mode, where the overflow fails the query.
   private def orderIrrelevant(f: AggregateFunction): Boolean = f match {
     case _: Min | _: Max | _: Count | _: BitAndAgg | _: BitOrAgg | _: BitXorAgg => true
-    case _: Sum => !f.children.exists(c => c.dataType == FloatType || c.dataType == DoubleType)
-    case _: Average => f.children.forall(c =>
-      c.dataType.isInstanceOf[DecimalType] || c.dataType.isInstanceOf[AnsiIntervalType])
+    case s: Sum => s.child.dataType match {
+      case FloatType | DoubleType => false
+      case _: DecimalType => s.evalContext.evalMode == EvalMode.ANSI
+      case _ => true
+    }
+    case a: Average => a.child.dataType match {
+      case _: DecimalType => a.evalMode == EvalMode.ANSI
+      case _: AnsiIntervalType => true
+      case _ => false
+    }
     case _ => false
   }
 
@@ -691,9 +699,9 @@ object PullupCorrelatedPredicates extends Rule[LogicalPlan] with PredicateHelper
    * the plan this rule runs on (the whole query, or the plan of a subquery when
    * OptimizeSubqueries optimizes it), may put something into its outer input that gives other
    * rows when computed again, through the rules that run before RewriteCorrelatedScalarSubquery
-   * builds the domain joins: PushDownPredicates can push a filter or join condition there, and
-   * LimitPushDown a LIMIT, into the inputs of some joins or, for a LIMIT 1, below a group-only
-   * aggregate (see limitMayBePushedIn). The check is conservative and looks at all of `root`.
+   * builds the domain joins: PushDownPredicates can push a filter or join condition there. The
+   * check is conservative and looks at all of `root`. LimitPushDown keeps a LIMIT above an
+   * operator with a correlated scalar subquery, so it does not push one there.
    */
   private def mayMoveIntoOuterInput(root: LogicalPlan, exprId: ExprId): Boolean =
     root.exists {
@@ -703,30 +711,8 @@ object PullupCorrelatedPredicates extends Rule[LogicalPlan] with PredicateHelper
             s.exprId != exprId && !repeatableInput(s.plan, inSubquery = true)
           case _ => false
         })
-      case l @ LocalLimit(limitExpr, child) =>
-        limitMayBePushedIn(child, limitExpr == Literal(1))
       case _ => false
     }
-
-  // Whether LimitPushDown can push a LIMIT above `plan` (a LIMIT 1 if `one`) into the input of a
-  // join or below a group-only aggregate in it, following its cases: through a UNION ALL, an
-  // OFFSET and a Project over a join, into the sides of an outer join with a condition that it
-  // keeps the rows of, and into a join without a condition, and, for a LIMIT 1, below a
-  // group-only aggregate, which a DISTINCT, INTERSECT, EXCEPT or Deduplicate becomes.
-  private def limitMayBePushedIn(plan: LogicalPlan, one: Boolean): Boolean = plan match {
-    case u: Union => u.children.exists(limitMayBePushedIn(_, one))
-    case o: Offset => limitMayBePushedIn(o.child, one = false)
-    case Project(_, j: Join) => limitMayBePushedIn(j, one)
-    case j: Join => (j.joinType, j.condition) match {
-      case (LeftOuter | RightOuter, Some(_)) => true
-      case (_: InnerLike | LeftOuter | RightOuter | FullOuter | LeftSemi | LeftAnti, None) => true
-      case _ => false
-    }
-    case Project(_, child) if one => limitMayBePushedIn(child, one)
-    case a: Aggregate => one && a.groupOnly
-    case _: Distinct | _: Intersect | _: Except | _: Deduplicate => one
-    case _ => false
-  }
 
   private def rewriteSubQueries(plan: LogicalPlan, root: LogicalPlan): LogicalPlan = {
     /**
@@ -752,6 +738,9 @@ object PullupCorrelatedPredicates extends Rule[LogicalPlan] with PredicateHelper
       }
     }
 
+    // Whether the outer input of `plan` gives the same rows when computed again (see below).
+    lazy val inputRepeatable = plan.children.forall(repeatableInput(_))
+
     plan.transformExpressionsWithPruning(_.containsPattern(PLAN_EXPRESSION)) {
       case ScalarSubquery(sub, outerAttrs, exprId, conditions, hint,
       mayHaveCountBugOld, needSingleJoinOld)
@@ -770,7 +759,12 @@ object PullupCorrelatedPredicates extends Rule[LogicalPlan] with PredicateHelper
         // than before: where the outer input may give other rows when computed again (see
         // repeatableInput and mayMoveIntoOuterInput), and for outer references that are not
         // orderable, for which the domain joins fail.
-        lazy val domainJoinsWork = plan.children.forall(repeatableInput(_)) &&
+        // A filter above can also inline another subquery of `plan` through its alias, so those
+        // are checked as well.
+        lazy val domainJoinsWork = inputRepeatable &&
+          plan.expressions.forall(_.collect {
+            case s: SubqueryExpression if s.exprId != exprId => s
+          }.forall(s => repeatableInput(s.plan, inSubquery = true))) &&
           !mayMoveIntoOuterInput(root, exprId) &&
           outerAttrs.forall(e => RowOrdering.isOrderable(e.dataType))
         lazy val onlyDefaultResultSelectsDecorrelation =
@@ -778,7 +772,7 @@ object PullupCorrelatedPredicates extends Rule[LogicalPlan] with PredicateHelper
             !domainJoinsWork
         def mayHaveCountBugAgg(a: Aggregate): Boolean = {
           a.groupingExpressions.isEmpty && (hasDefaultResult(a) ||
-            (!onlyDefaultResultSelectsDecorrelation && SubExprUtils.hasOuterReferences(a)))
+            (SubExprUtils.hasOuterReferences(a) && !onlyDefaultResultSelectsDecorrelation))
         }
 
         // The below logic controls handling count bug for scalar subqueries in
@@ -852,26 +846,25 @@ object PullupCorrelatedPredicates extends Rule[LogicalPlan] with PredicateHelper
   /**
    * Pull up the correlated predicates and rewrite all subqueries in an operator tree..
    */
-  def apply(plan: LogicalPlan): LogicalPlan = {
-    plan.transformUpWithPruning(_.containsPattern(PLAN_EXPRESSION)) {
-      case j: LateralJoin =>
-        val newPlan = rewriteSubQueries(j, plan)
-        // Since a lateral join's output depends on its left child output and its lateral
-        // subquery's plan output, we need to trim the domain attributes added to the subquery's
-        // plan output to preserve the original output of the join.
-        if (!j.sameOutput(newPlan)) {
-          Project(j.output, newPlan)
-        } else {
-          newPlan
-        }
-      case j: Join if conf.getConf(DECORRELATE_PREDICATE_SUBQUERIES_IN_JOIN_CONDITION) =>
-        rewriteSubQueries(j, plan)
-      // Only a few unary nodes (Project/Filter/Aggregate) can contain subqueries.
-      case q: UnaryNode =>
-        rewriteSubQueries(q, plan)
-      case s: SupportsSubquery =>
-        rewriteSubQueries(s, plan)
-    }
+  def apply(plan: LogicalPlan): LogicalPlan = plan.transformUpWithPruning(
+    _.containsPattern(PLAN_EXPRESSION)) {
+    case j: LateralJoin =>
+      val newPlan = rewriteSubQueries(j, plan)
+      // Since a lateral join's output depends on its left child output and its lateral subquery's
+      // plan output, we need to trim the domain attributes added to the subquery's plan output
+      // to preserve the original output of the join.
+      if (!j.sameOutput(newPlan)) {
+        Project(j.output, newPlan)
+      } else {
+        newPlan
+      }
+    case j: Join if conf.getConf(DECORRELATE_PREDICATE_SUBQUERIES_IN_JOIN_CONDITION) =>
+      rewriteSubQueries(j, plan)
+    // Only a few unary nodes (Project/Filter/Aggregate) can contain subqueries.
+    case q: UnaryNode =>
+      rewriteSubQueries(q, plan)
+    case s: SupportsSubquery =>
+      rewriteSubQueries(s, plan)
   }
 }
 
