@@ -3452,7 +3452,7 @@ abstract class CSVSuite
   }
 
   test("validate CSV Options") {
-    assert(CSVOptions.getAllOptions.size == 45)
+    assert(CSVOptions.getAllOptions.size == 46)
     // Please add validation on any new CSV options here
     assert(CSVOptions.isValidOption("header"))
     assert(CSVOptions.isValidOption("inferSchema"))
@@ -3499,6 +3499,7 @@ abstract class CSVSuite
     assert(CSVOptions.isValidOption("singleVariantColumn"))
     assert(CSVOptions.isValidOption("columnPruning"))
     assert(CSVOptions.isValidOption("variantRespectInferSchema"))
+    assert(CSVOptions.isValidOption("variantPrimitivesAsString"))
     // Please add validation on any new CSV options with alternative here
     assert(CSVOptions.getAlternativeOption("sep").contains("delimiter"))
     assert(CSVOptions.getAlternativeOption("delimiter").contains("sep"))
@@ -4127,6 +4128,116 @@ abstract class CSVSuite
       // inferred as BIGINT by default.
       val inferred = spark.read.schema(schema).csv(path.getCanonicalPath)
       checkAnswer(inferred.selectExpr(exprs: _*), Row("BIGINT", "BIGINT", "STRING"))
+    }
+  }
+
+  test("csv variant keeps primitives as strings with variantPrimitivesAsString") {
+    withTempPath { path =>
+      val data =
+        """0001,+5,1e9,True
+          |2000-01-01,2000-01-01 01:02:03,n/a,
+          |""".stripMargin
+      Files.write(path.toPath, data.getBytes(StandardCharsets.UTF_8))
+
+      def checkSingleVariant(options: Map[String, String], expected: String*): Unit = {
+        val allOptions = options ++ Map("singleVariantColumn" -> "v", "nullValue" -> "n/a")
+        checkAnswer(
+          spark.read.options(allOptions).csv(path.getCanonicalPath).selectExpr("cast(v as string)"),
+          expected.map(Row(_)))
+      }
+
+      val asStrings = Seq(
+        """{"_c0":"0001","_c1":"+5","_c2":"1e9","_c3":"True"}""",
+        """{"_c0":"2000-01-01","_c1":"2000-01-01 01:02:03","_c2":null,"_c3":null}""")
+      val inferred = Seq(
+        """{"_c0":1,"_c1":5,"_c2":1000000000,"_c3":true}""",
+        """{"_c0":"2000-01-01","_c1":"2000-01-01 01:02:03+00:00","_c2":null,"_c3":null}""")
+
+      // A small partition size ensures each value is parsed independently and would otherwise get
+      // its type inferred.
+      withSQLConf(SQLConf.FILES_MAX_PARTITION_BYTES.key -> "10",
+        SQLConf.SESSION_LOCAL_TIMEZONE.key -> "UTC") {
+        // The option keeps every non-null value as a string regardless of inferSchema. Null and
+        // nullValue tokens remain variant nulls.
+        for (inferSchema <- Seq(None, Some("true"), Some("false"))) {
+          checkSingleVariant(
+            Map("variantPrimitivesAsString" -> "true") ++ inferSchema.map("inferSchema" -> _),
+            asStrings: _*)
+        }
+
+        // The option takes precedence over the deprecated variantRespectInferSchema option in
+        // both directions.
+        checkSingleVariant(
+          Map("variantPrimitivesAsString" -> "true", "variantRespectInferSchema" -> "false"),
+          asStrings: _*)
+        checkSingleVariant(
+          Map("variantPrimitivesAsString" -> "false", "variantRespectInferSchema" -> "true",
+            "inferSchema" -> "false"),
+          inferred: _*)
+
+        // Without the option, values are inferred by default.
+        checkSingleVariant(Map.empty, inferred: _*)
+      }
+
+      // Field names from the header are not affected; values stay strings.
+      Files.write(path.toPath, "id,flag\n0001,true\n".getBytes(StandardCharsets.UTF_8))
+      checkSingleVariant(Map("header" -> "true", "variantPrimitivesAsString" -> "true"),
+        """{"flag":"true","id":"0001"}""")
+    }
+  }
+
+  test("csv variant columns keep primitives as strings with variantPrimitivesAsString") {
+    // Explicit schemas with VariantType columns share a converter with singleVariantColumn, so
+    // the option applies there too. Check the type using schema_of_variant.
+    withTempPath { path =>
+      Files.write(path.toPath, "1000,0001,true,\n".getBytes(StandardCharsets.UTF_8))
+      val schema = "c1 variant, c2 variant, c3 variant, c4 variant"
+      val exprs = Seq("schema_of_variant(c1)", "schema_of_variant(c2)", "schema_of_variant(c3)",
+        "schema_of_variant(c4)")
+
+      val retained = spark.read.schema(schema)
+        .option("variantPrimitivesAsString", "true")
+        .csv(path.getCanonicalPath)
+      checkAnswer(retained.selectExpr(exprs: _*), Row("STRING", "STRING", "STRING", "VOID"))
+
+      val inferred = spark.read.schema(schema)
+        .option("variantPrimitivesAsString", "false")
+        .csv(path.getCanonicalPath)
+      checkAnswer(inferred.selectExpr(exprs: _*), Row("BIGINT", "BIGINT", "BOOLEAN", "VOID"))
+    }
+  }
+
+  test("csv variantPrimitivesAsString records whether the user set it") {
+    def options(params: (String, String)*): CSVOptions =
+      new CSVOptions(params.toMap, columnPruning = false, "UTC")
+
+    // Not set: no user value, and the effective value comes from the deprecated option.
+    assert(options().variantPrimitivesAsStringOpt.isEmpty)
+    assert(!options().variantPrimitivesAsString)
+    val legacy = options("variantRespectInferSchema" -> "true")
+    assert(legacy.variantPrimitivesAsStringOpt.isEmpty)
+    assert(legacy.variantPrimitivesAsString)
+
+    // Set: the user value is kept, including an explicit false.
+    for (value <- Seq(true, false)) {
+      val opts = options("variantPrimitivesAsString" -> value.toString)
+      assert(opts.variantPrimitivesAsStringOpt.contains(value))
+      assert(opts.variantPrimitivesAsString == value)
+    }
+
+    // When set, the deprecated option is not consulted, so even an invalid value is ignored.
+    assert(options("variantPrimitivesAsString" -> "true",
+      "variantRespectInferSchema" -> "yes").variantPrimitivesAsString)
+  }
+
+  test("csv variantPrimitivesAsString must be a boolean") {
+    withTempPath { path =>
+      Files.write(path.toPath, "1\n".getBytes(StandardCharsets.UTF_8))
+      val e = intercept[Exception] {
+        spark.read.options(Map("singleVariantColumn" -> "v", "variantPrimitivesAsString" -> "yes"))
+          .csv(path.getCanonicalPath).collect()
+      }
+      assert(e.getMessage.contains("variantPrimitivesAsString"))
     }
   }
 

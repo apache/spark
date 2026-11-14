@@ -16,7 +16,9 @@
  */
 package org.apache.spark.sql.execution.datasources.xml
 
-import java.io.CharArrayWriter
+import java.io.{CharArrayWriter, File}
+import java.nio.charset.StandardCharsets
+import java.nio.file.Files
 import java.time.ZoneOffset
 
 import org.apache.spark.{SparkConf, SparkException}
@@ -173,6 +175,68 @@ class XmlVariantSuite extends SharedSparkSession with TestXmlData {
       testParser("<ROW><id>007</id></ROW>", """{"id":7}""", noInfer)
       testParser("<ROW><price>37,77</price></ROW>", """{"price":3777}""", noInfer)
       testParser("<ROW><isActive>true</isActive></ROW>", """{"isActive":true}""", noInfer)
+    }
+  }
+
+  test("Parser: variantPrimitivesAsString keeps primitive values as strings") {
+    val asString = Map("variantPrimitivesAsString" -> "true")
+    // inferSchema defaults to true for XML; the option does not depend on it.
+    for (extra <- Seq(Map.empty[String, String], Map("inferSchema" -> "true"))) {
+      val opts = asString ++ extra
+      testParser("<ROW><isActive>true</isActive></ROW>", """{"isActive":"true"}""", opts)
+      testParser("<ROW><id>007</id></ROW>", """{"id":"007"}""", opts)
+      testParser("<ROW><amount>5.0</amount></ROW>", """{"amount":"5.0"}""", opts)
+      testParser("<ROW><price>37,77</price></ROW>", """{"price":"37,77"}""", opts)
+      // Attribute values and value tags are kept as strings too.
+      testParser(
+        "<ROW id=\"2\">93<amount>7</amount></ROW>",
+        """{"_VALUE":"93","_id":"2","amount":"7"}""",
+        opts)
+      // Arrays of repeated elements keep their structure.
+      testParser(
+        "<ROW><n>1</n><n>2</n></ROW>",
+        """{"n":["1","2"]}""",
+        opts)
+      // Surrounding spaces are still trimmed, and null / nullValue handling is unchanged.
+      testParser("<ROW><id> 2 </id></ROW>", """{"id":"2"}""", opts)
+      testParser(
+        "<ROW><name></name><amount>n/a</amount></ROW>",
+        """{"amount":null,"name":null}""",
+        opts ++ Map("nullValue" -> "n/a"))
+    }
+  }
+
+  test("variantPrimitivesAsString records whether the user set it") {
+    val noInfer = baseOptions ++ Map("inferSchema" -> "false")
+    withSQLConf(SQLConf.XML_VARIANT_RESPECT_INFER_SCHEMA.key -> "true") {
+      // Not set: no user value, and the effective value comes from the deprecated conf.
+      val unset = XmlOptions(noInfer)
+      assert(unset.variantPrimitivesAsStringOpt.isEmpty)
+      assert(unset.variantPrimitivesAsString)
+      // Set: the user value is kept, including an explicit false.
+      for (value <- Seq(true, false)) {
+        val opts = XmlOptions(noInfer ++ Map("variantPrimitivesAsString" -> value.toString))
+        assert(opts.variantPrimitivesAsStringOpt.contains(value))
+        assert(opts.variantPrimitivesAsString == value)
+      }
+    }
+  }
+
+  test("Parser: variantPrimitivesAsString takes precedence over respectInferSchema") {
+    val noInfer = Map("inferSchema" -> "false")
+    for (respectInferSchema <- Seq("true", "false")) {
+      withSQLConf(SQLConf.XML_VARIANT_RESPECT_INFER_SCHEMA.key -> respectInferSchema) {
+        // An explicit true keeps strings even when the conf would infer types ...
+        testParser(
+          "<ROW><id>007</id></ROW>",
+          """{"id":"007"}""",
+          noInfer ++ Map("variantPrimitivesAsString" -> "true"))
+        // ... and an explicit false infers types even when the conf would keep strings.
+        testParser(
+          "<ROW><id>007</id></ROW>",
+          """{"id":7}""",
+          noInfer ++ Map("variantPrimitivesAsString" -> "false"))
+      }
     }
   }
 
@@ -643,6 +707,42 @@ class XmlVariantSuite extends SharedSparkSession with TestXmlData {
         .select(variant_get(col("var"), "$.year", "int")),
       Seq(Row(2012))
     )
+  }
+
+  test("variantPrimitivesAsString applies to file reads and from_xml") {
+    val xml = """<ROW id="1"><code>007</code><flag>true</flag></ROW>"""
+    val expected = """{"_id":"1","code":"007","flag":"true"}"""
+    withTempDir { dir =>
+      val path = new File(dir, "file.xml")
+      Files.write(path.toPath, xml.getBytes(StandardCharsets.UTF_8))
+
+      // singleVariantColumn file read.
+      checkAnswer(
+        spark.read.options(baseOptions)
+          .option("singleVariantColumn", "var")
+          .option("variantPrimitivesAsString", "true")
+          .xml(path.getCanonicalPath)
+          .selectExpr("to_json(var)"),
+        Row(expected))
+
+      // Explicit VariantType columns in a user-specified schema.
+      checkAnswer(
+        spark.read.options(baseOptions)
+          .schema("code variant, flag variant")
+          .option("variantPrimitivesAsString", "true")
+          .xml(path.getCanonicalPath)
+          .selectExpr("schema_of_variant(code)", "schema_of_variant(flag)"),
+        Row("STRING", "STRING"))
+    }
+
+    // from_xml with a variant schema.
+    checkAnswer(
+      spark.sql(s"SELECT to_json(from_xml('$xml', 'variant', " +
+        "map('variantPrimitivesAsString', 'true')))"),
+      Row(expected))
+    checkAnswer(
+      spark.sql(s"SELECT schema_of_variant(from_xml('$xml', 'variant'):code)"),
+      Row("BIGINT"))
   }
 
   test("SQL: read partial XML record as variant using from_xml with a defined schema") {

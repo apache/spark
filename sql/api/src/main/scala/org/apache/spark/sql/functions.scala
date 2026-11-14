@@ -16300,7 +16300,6 @@ object functions {
    *   Affected by these public SQL configurations:
    *   - `spark.sql.columnNameOfCorruptRecord`
    *   - `spark.sql.session.timeZone`
-   *   - `spark.sql.xml.variant.respectInferSchema`
    */
   // scalastyle:on line.size.limit
   def from_xml(e: Column, schema: StructType, options: java.util.Map[String, String]): Column =
@@ -16330,7 +16329,6 @@ object functions {
    *   - `spark.sql.columnNameOfCorruptRecord`
    *   - `spark.sql.session.timeZone`
    *   - `spark.sql.timestampType`
-   *   - `spark.sql.xml.variant.respectInferSchema`
    */
   // scalastyle:on line.size.limit
   def from_xml(e: Column, schema: String, options: java.util.Map[String, String]): Column = {
@@ -16356,7 +16354,6 @@ object functions {
    *   - `spark.sql.columnNameOfCorruptRecord`
    *   - `spark.sql.session.timeZone`
    *   - `spark.sql.timestampType`
-   *   - `spark.sql.xml.variant.respectInferSchema`
    */
   // scalastyle:on line.size.limit
   def from_xml(e: Column, schema: Column): Column = {
@@ -16387,7 +16384,6 @@ object functions {
    *   - `spark.sql.columnNameOfCorruptRecord`
    *   - `spark.sql.session.timeZone`
    *   - `spark.sql.timestampType`
-   *   - `spark.sql.xml.variant.respectInferSchema`
    */
   // scalastyle:on line.size.limit
   def from_xml(e: Column, schema: Column, options: java.util.Map[String, String]): Column =
@@ -16412,7 +16408,6 @@ object functions {
    *   Affected by these public SQL configurations:
    *   - `spark.sql.columnNameOfCorruptRecord`
    *   - `spark.sql.session.timeZone`
-   *   - `spark.sql.xml.variant.respectInferSchema`
    */
   def from_xml(e: Column, schema: StructType): Column =
     from_xml(e, schema, Map.empty[String, String].asJava)

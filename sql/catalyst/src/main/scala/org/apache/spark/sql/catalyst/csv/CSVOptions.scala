@@ -356,8 +356,17 @@ class CSVOptions(
   // E.g. spark.read.format("csv").option("singleVariantColumn", "colName")
   val singleVariantColumn: Option[String] = parameters.get(SINGLE_VARIANT_COLUMN)
 
-  // When true, reading CSV values into a VARIANT honors `inferSchema` (default: false).
-  val variantRespectInferSchema = getBool(VARIANT_RESPECT_INFER_SCHEMA, default = false)
+  // The value of the `variantPrimitivesAsString` option, or None if the user did not set it.
+  val variantPrimitivesAsStringOpt: Option[Boolean] =
+    parameters.get(VARIANT_PRIMITIVES_AS_STRING).flatMap(Option(_))
+      .map(_ => getBool(VARIANT_PRIMITIVES_AS_STRING))
+
+  // When true, CSV values read into a VARIANT are stored as strings instead of a type inferred
+  // from their text. See `DataSourceOptions.VARIANT_PRIMITIVES_AS_STRING`. When the option is not
+  // set, it falls back to the deprecated `variantRespectInferSchema` option, which keeps values as
+  // strings only together with `inferSchema=false`.
+  val variantPrimitivesAsString: Boolean = variantPrimitivesAsStringOpt.getOrElse(
+    getBool(VARIANT_RESPECT_INFER_SCHEMA) && !inferSchemaFlag)
 
   def needHeaderForSingleVariantColumn: Boolean =
     singleVariantColumn.isDefined && headerFlag
@@ -467,6 +476,9 @@ object CSVOptions extends DataSourceOptions {
   newOption(SEP, DELIMITER)
   val COLUMN_PRUNING = newOption("columnPruning")
   val SINGLE_VARIANT_COLUMN = newOption(DataSourceOptions.SINGLE_VARIANT_COLUMN)
+  val VARIANT_PRIMITIVES_AS_STRING = newOption(DataSourceOptions.VARIANT_PRIMITIVES_AS_STRING)
+  // Deprecated: use `variantPrimitivesAsString` instead. Still honored when that option is not
+  // set; see `CSVOptions.variantPrimitivesAsString`.
   val VARIANT_RESPECT_INFER_SCHEMA = newOption("variantRespectInferSchema")
 
   // Max error content length in CSV parser/writer exception messages, and the bound on the bad
