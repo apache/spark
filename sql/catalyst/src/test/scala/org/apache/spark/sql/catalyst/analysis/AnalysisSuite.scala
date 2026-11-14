@@ -36,7 +36,7 @@ import org.apache.spark.sql.catalyst.dsl.expressions._
 import org.apache.spark.sql.catalyst.dsl.plans._
 import org.apache.spark.sql.catalyst.encoders.ExpressionEncoder
 import org.apache.spark.sql.catalyst.expressions._
-import org.apache.spark.sql.catalyst.expressions.aggregate.{AggregateExpression, Count, Sum}
+import org.apache.spark.sql.catalyst.expressions.aggregate.{AggregateExpression, Count, KllSketchAggBigint, Sum}
 import org.apache.spark.sql.catalyst.parser.CatalystSqlParser.parsePlan
 import org.apache.spark.sql.catalyst.plans.{Cross, FullOuter, Inner, UsingJoin}
 import org.apache.spark.sql.catalyst.plans.logical._
@@ -1265,6 +1265,43 @@ class AnalysisSuite extends AnalysisTest with Matchers {
             | BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW) AS rn"
             |""".stripMargin.replace("\n", ""))
     )
+  }
+
+  test("check CollectMetrics scalar wrappers around nondeterministic aggregates") {
+    val a = testRelation.output.head
+    val aggregate = KllSketchAggBigint(a).toAggregateExpression()
+    val count = KllSketchGetNBigint(aggregate)
+    val scalarUdf = ScalaUDF((n: Long) => n, LongType, Seq(count))
+    assertAnalysisSuccess(CollectMetrics(
+      "event", Seq(Cast(count, IntegerType).as("n"), scalarUdf.as("udf_n")), testRelation, 0))
+
+    val window = WindowExpression(aggregate, WindowSpecDefinition(
+      Nil, Seq(a.asc), SpecifiedWindowFrame(RowFrame, UnboundedPreceding, CurrentRow)))
+    val invalid = Seq(
+      Add(count, Rand(1L)) -> "NON_AGGREGATE_FUNC_ARG_IS_NON_DETERMINISTIC",
+      scalarUdf.copy(udfDeterministic = false) ->
+        "NON_AGGREGATE_FUNC_ARG_IS_NON_DETERMINISTIC",
+      PythonUDF("random_udf", null, LongType, Seq(count),
+        PythonEvalType.SQL_BATCHED_UDF, udfDeterministic = false) ->
+        "NON_AGGREGATE_FUNC_ARG_IS_NON_DETERMINISTIC",
+      Add(count, a) -> "NON_AGGREGATE_FUNC_ARG_IS_ATTRIBUTE",
+      KllSketchGetNBigint(aggregate.copy(isDistinct = true)) ->
+        "AGGREGATE_EXPRESSION_WITH_DISTINCT_UNSUPPORTED",
+      KllSketchGetNBigint(aggregate.copy(filter = Some(Literal(true)))) ->
+        "AGGREGATE_EXPRESSION_WITH_FILTER_UNSUPPORTED",
+      KllSketchGetNBigint(KllSketchAggBigint(count).toAggregateExpression()) ->
+        "NESTED_AGGREGATES_UNSUPPORTED",
+      KllSketchGetNBigint(window) -> "WINDOW_EXPRESSIONS_UNSUPPORTED")
+
+    invalid.foreach { case (expression, error) =>
+      val analyzer = getAnalyzer
+      val exception = intercept[AnalysisException] {
+        analyzer.executeAndCheck(
+          CollectMetrics("event", Seq(expression.as("metric")), testRelation, 0),
+          new QueryPlanningTracker)
+      }
+      assert(exception.getCondition == s"INVALID_OBSERVED_METRICS.$error")
+    }
   }
 
   test("check CollectMetrics duplicates") {

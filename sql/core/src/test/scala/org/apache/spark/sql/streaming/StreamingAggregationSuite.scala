@@ -22,19 +22,24 @@ import java.util.{Locale, TimeZone}
 
 import scala.annotation.tailrec
 
+import org.apache.datasketches.kll.{KllDoublesSketch, KllFloatsSketch, KllLongsSketch}
+import org.apache.hadoop.fs.Path
 import org.scalatest.Assertions
 
 import org.apache.spark.{SparkEnv, SparkException, SparkUnsupportedOperationException}
 import org.apache.spark.rdd.BlockRDD
 import org.apache.spark.sql.{AnalysisException, Row}
 import org.apache.spark.sql.catalyst.InternalRow
+import org.apache.spark.sql.catalyst.expressions.aggregate.KllSketchAggBigint
 import org.apache.spark.sql.catalyst.plans.logical.Aggregate
 import org.apache.spark.sql.catalyst.plans.physical.{HashPartitioning, SinglePartition}
 import org.apache.spark.sql.catalyst.util.DateTimeConstants._
 import org.apache.spark.sql.classic.{DataFrame, Dataset, SparkSession}
 import org.apache.spark.sql.execution.{SparkPlan, UnaryExecNode}
+import org.apache.spark.sql.execution.aggregate.BaseAggregateExec
 import org.apache.spark.sql.execution.exchange.Exchange
 import org.apache.spark.sql.execution.streaming._
+import org.apache.spark.sql.execution.streaming.checkpointing.{OffsetMap, OffsetSeq, OffsetSeqLog}
 import org.apache.spark.sql.execution.streaming.operators.stateful.{StateStoreRestoreExec, StateStoreSaveExec, StreamingAggregationStateManager}
 import org.apache.spark.sql.execution.streaming.runtime.{LongOffset, MemoryStream, StreamExecution}
 import org.apache.spark.sql.execution.streaming.sources.MemorySink
@@ -139,6 +144,194 @@ class StreamingAggregationSuite extends StateStoreMetricsTest with Assertions {
         AddData(inputData, (0, 4)),
         CheckLastBatch((0, 2, 4)),
         StopStream)
+    }
+  }
+
+  testWithAllStateVersions("KLL aggregates preserve checkpoint-pinned buffer sharing") {
+    val key = "spark.sql.streaming.aggregation.legacyKllSharing.enabled"
+    Seq(true, false).foreach { legacy =>
+      withTempDir { checkpoint =>
+        val input = MemoryStream[Int]
+        val sketches = input.toDF().agg(
+          expr("kll_sketch_agg_bigint(value, 8)").as("a"),
+          expr("kll_sketch_agg_bigint(value, 8)").as("b"),
+          count("*").as("n"))
+        val result = sketches.selectExpr(
+          "kll_sketch_get_n_bigint(a)", "kll_sketch_get_n_bigint(b)", "n")
+
+        def hasExpectedSketchBuffers: AssertOnQuery = AssertOnQuery { query =>
+          val aggregates = query.lastExecution.executedPlan.collect {
+            case a: BaseAggregateExec if a.aggregateExpressions.exists(
+                _.aggregateFunction.isInstanceOf[KllSketchAggBigint]) => a
+          }
+          aggregates.nonEmpty && aggregates.forall { a =>
+            a.aggregateExpressions.count(
+              _.aggregateFunction.isInstanceOf[KllSketchAggBigint]) == (if (legacy) 1 else 2)
+          }
+        }
+
+        testStream(result, Complete)(
+          StartStream(checkpointLocation = checkpoint.getAbsolutePath,
+            additionalConfs = Map(key -> legacy.toString)),
+          AddData(input, 1, 2, 3),
+          CheckLastBatch(Row(3L, 3L, 3L)),
+          hasExpectedSketchBuffers,
+          StopStream)
+
+        val logPath = new File(checkpoint, "offsets").getAbsolutePath
+        if (legacy) {
+          // Simulate a released checkpoint: retain its shared state and remove only the new key.
+          val (batchId, offsets) = new OffsetSeqLog(spark, logPath).getLatest().get
+          val historical = offsets match {
+            case o: OffsetSeq =>
+              o.copy(metadataOpt = o.metadataOpt.map(m => m.copy(conf = m.conf - key)))
+            case o: OffsetMap => o.copy(metadata = o.metadata.copy(conf = o.metadata.conf - key))
+          }
+          val path = new Path(logPath, batchId.toString)
+          assert(path.getFileSystem(spark.sessionState.newHadoopConf()).delete(path, false))
+          assert(new OffsetSeqLog(spark, logPath).add(batchId, historical))
+        }
+        testStream(result, Complete)(
+          StartStream(checkpointLocation = checkpoint.getAbsolutePath,
+            additionalConfs = Map(key -> (!legacy).toString)),
+          AddData(input, 4),
+          CheckLastBatch(Row(4L, 4L, 4L)),
+          hasExpectedSketchBuffers,
+          StopStream)
+        val recovered = new OffsetSeqLog(spark, logPath).getLatest().get._2
+        assert(recovered.metadataOpt.get.conf(key) == legacy.toString)
+      }
+    }
+  }
+
+  testWithAllStateVersions("KLL legacy checkpoints preserve reordered buffer histories") {
+    for {
+      dataType <- Seq("bigint", "float", "double")
+      merge <- Seq(false, true)
+      nestedScalar <- if (dataType == "bigint" && !merge) Seq(false, true) else Seq(false)
+    } {
+      withTempDir { checkpoint =>
+        val key = "spark.sql.streaming.aggregation.legacyKllSharing.enabled"
+        def singleton(value: Long): Array[Byte] = dataType match {
+          case "bigint" =>
+            val sketch = KllLongsSketch.newHeapInstance(8)
+            sketch.update(value)
+            sketch.toByteArray
+          case "float" =>
+            val sketch = KllFloatsSketch.newHeapInstance(8)
+            sketch.update(value.toFloat)
+            sketch.toByteArray
+          case "double" =>
+            val sketch = KllDoublesSketch.newHeapInstance(8)
+            sketch.update(value.toDouble)
+            sketch.toByteArray
+        }
+        def record(x: Long, y: Long): (Int, Long, Long, Array[Byte], Array[Byte]) =
+          (0, x, y, singleton(x), singleton(y))
+        val input = MemoryStream[(Int, Long, Long, Array[Byte], Array[Byte])]
+        val data = input.toDF()
+        val function = if (merge) s"kll_merge_agg_$dataType" else s"kll_sketch_agg_$dataType"
+        val x = if (merge) "_4" else s"CAST(_2 AS $dataType)"
+        val y = if (merge) "_5" else s"CAST(_3 AS $dataType)"
+        def query(historicalLayout: Boolean): DataFrame = {
+          val a = expr(s"$function($x, 8)").as("a")
+          val b = expr(s"$function($y, 8)").as("b")
+          // Seed the released optimizer's exact buffer order independently of the new optimizer:
+          // [y, x] for select(b, a), [x, y] when the final projection consumes a before b.
+          val sketches = if (historicalLayout && !nestedScalar) data.groupBy($"_1").agg(b, a)
+            else data.groupBy($"_1").agg(a, b)
+          val inputPlan = if (historicalLayout) sketches.repartition(1) else sketches
+          if (nestedScalar) {
+            inputPlan.selectExpr("_1", """(SELECT
+                |kll_sketch_get_n_bigint(kll_sketch_agg_bigint(id))
+                |FROM VALUES (0), (1), (2) AS t(id)) AS n""".stripMargin, "b", "a")
+              .selectExpr("_1", "n", s"CAST(kll_sketch_get_quantile_$dataType(a, 1.0D) AS BIGINT)",
+                s"CAST(kll_sketch_get_quantile_$dataType(b, 0.0D) AS BIGINT)")
+          } else {
+            inputPlan.select($"_1", $"b", $"a").selectExpr(
+              "_1", s"CAST(kll_sketch_get_quantile_$dataType(b, 0.0D) AS BIGINT)",
+              s"CAST(kll_sketch_get_quantile_$dataType(a, 1.0D) AS BIGINT)")
+          }
+        }
+
+        testStream(query(historicalLayout = true), Complete)(
+          StartStream(checkpointLocation = checkpoint.getAbsolutePath,
+            additionalConfs = Map(key -> "true")),
+          AddData(input, record(1L, 101L), record(2L, 102L)),
+          CheckLastBatch(if (nestedScalar) Row(0, 3L, 2L, 101L) else Row(0, 101L, 2L)),
+          StopStream)
+
+        val logPath = new File(checkpoint, "offsets").getAbsolutePath
+        val (batchId, offsets) = new OffsetSeqLog(spark, logPath).getLatest().get
+        val historical = offsets match {
+          case o: OffsetSeq =>
+            o.copy(metadataOpt = o.metadataOpt.map(m => m.copy(conf = m.conf - key)))
+          case o: OffsetMap => o.copy(metadata = o.metadata.copy(conf = o.metadata.conf - key))
+        }
+        val path = new Path(logPath, batchId.toString)
+        assert(path.getFileSystem(spark.sessionState.newHadoopConf()).delete(path, false))
+        assert(new OffsetSeqLog(spark, logPath).add(batchId, historical))
+
+        testStream(query(historicalLayout = false), Complete)(
+          StartStream(checkpointLocation = checkpoint.getAbsolutePath,
+            additionalConfs = Map(key -> "false")),
+          AddData(input, record(3L, 103L)),
+          CheckLastBatch(if (nestedScalar) Row(0, 3L, 3L, 101L) else Row(0, 101L, 3L)),
+          StopStream)
+      }
+    }
+  }
+
+  testWithAllStateVersions("KLL legacy checkpoints preserve parent scalar-input buffers") {
+    for (recorded <- Seq(None, Some(true), Some(false)); userAliases <- Seq(false, true)) {
+      withTempDir { checkpoint =>
+        val key = "spark.sql.streaming.aggregation.legacyKllSharing.enabled"
+        val legacy = recorded.getOrElse(true)
+        val input = MemoryStream[Int]
+        val scalar = """(SELECT kll_sketch_get_n_bigint(kll_sketch_agg_bigint(id))
+            |FROM VALUES (0), (1), (2) AS i(id))""".stripMargin
+        val shared = input.toDF().selectExpr("value", s"$scalar AS s")
+          .agg(sum("s").as("a"), count("*").as("n"), sum("s").as("b"))
+        val current = if (userAliases) {
+          input.toDF().selectExpr("value", s"$scalar AS x", s"$scalar AS y")
+            .agg(sum("x").as("a"), count("*").as("n"), sum("y").as("b"))
+        } else {
+          input.toDF().agg(
+            sum(expr(scalar)).as("a"), count("*").as("n"), sum(expr(scalar)).as("b"))
+        }
+        current.queryExecution.assertAnalyzed()
+        val expectedBuffers = if (legacy && !userAliases) 1 else 2
+        def checkBuffers: AssertOnQuery = AssertOnQuery { query =>
+          val aggregates = query.lastExecution.executedPlan.collect {
+            case a: BaseAggregateExec if a.aggregateExpressions.exists(
+                _.aggregateFunction.prettyName == "sum") => a
+          }
+          aggregates.nonEmpty && aggregates.forall(_.aggregateExpressions.count(
+            _.aggregateFunction.prettyName == "sum") == expectedBuffers)
+        }
+        testStream(if (legacy && !userAliases) shared else current, Complete)(
+          StartStream(checkpointLocation = checkpoint.getAbsolutePath,
+            additionalConfs = Map(key -> legacy.toString)),
+          AddData(input, 1, 2), CheckLastBatch(Row(6L, 2L, 6L)), checkBuffers, StopStream)
+        val logPath = new File(checkpoint, "offsets").getAbsolutePath
+        if (recorded.isEmpty) {
+          val (batchId, offsets) = new OffsetSeqLog(spark, logPath).getLatest().get
+          val old = offsets match {
+            case o: OffsetSeq =>
+              o.copy(metadataOpt = o.metadataOpt.map(m => m.copy(conf = m.conf - key)))
+            case o: OffsetMap => o.copy(metadata = o.metadata.copy(conf = o.metadata.conf - key))
+          }
+          val path = new Path(logPath, batchId.toString)
+          assert(path.getFileSystem(spark.sessionState.newHadoopConf()).delete(path, false))
+          assert(new OffsetSeqLog(spark, logPath).add(batchId, old))
+        }
+        testStream(current, Complete)(
+          StartStream(checkpointLocation = checkpoint.getAbsolutePath,
+            additionalConfs = Map(key -> (!legacy).toString)),
+          AddData(input, 3), CheckLastBatch(Row(9L, 3L, 9L)), checkBuffers, StopStream)
+        assert(new OffsetSeqLog(spark, logPath).getLatest().get._2
+          .metadataOpt.get.conf(key) == legacy.toString)
+      }
     }
   }
 

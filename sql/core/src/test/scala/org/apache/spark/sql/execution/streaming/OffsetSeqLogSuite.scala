@@ -38,6 +38,25 @@ import org.apache.spark.util.{SerializableConfiguration, Utils}
 class OffsetSeqLogSuite extends SharedSparkSession {
   import testImplicits._
 
+  test("KLL aggregate sharing is pinned to the streaming checkpoint") {
+    val key = "spark.sql.streaming.aggregation.legacyKllSharing.enabled"
+    val old = OffsetSeqMetadata()
+    val conf = new SQLConf
+    conf.setConfString(key, "false")
+    OffsetSeqMetadata.setSessionConf(old, conf)
+    assert(conf.getConfString(key) == "true")
+
+    Seq("true", "false").foreach { value =>
+      val recorded = old.copy(conf = Map(key -> value))
+      conf.setConfString(key, (!value.toBoolean).toString)
+      OffsetSeqMetadata.setSessionConf(recorded, conf)
+      assert(conf.getConfString(key) == value)
+    }
+
+    val fresh = OffsetSeqMetadata(0, 0, spark.conf)
+    assert(fresh.conf.get(key).contains("false"))
+  }
+
   test("streaming EXCEPT compatibility defaults to legacy behavior for old checkpoints") {
     val (_, offsetSeq) = readFromResource("offset-log-version-2.1.0")
     val metadata = offsetSeq.metadataOpt.get

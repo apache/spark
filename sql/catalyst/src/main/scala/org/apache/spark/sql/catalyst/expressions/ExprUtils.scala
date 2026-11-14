@@ -192,11 +192,33 @@ object ExprUtils extends EvalHelper with QueryErrorsBase {
     }
   }
 
+  private[sql] def isDeterministicAfterSubqueryExtraction(
+      expression: Expression): Boolean = {
+    // Function resolution and the single-pass analyzer validate before the post hoc extraction.
+    // Use placeholders only to check what remains; the original expression is retained.
+    expression.deterministic || expression.transformDown {
+      case scalar: ScalarSubquery if !scalar.deterministic =>
+        Literal.create(null, scalar.dataType)
+      case exists: Exists if !exists.deterministic => Literal.TrueLiteral
+      case in: InSubquery if !in.query.deterministic &&
+          in.values.forall(isDeterministicAfterSubqueryExtraction) =>
+        Literal.TrueLiteral
+    }.deterministic
+  }
+
+  private[sql] def isDeterministicAfterPredicateSubqueryRewrite(expression: Expression): Boolean = {
+    expression.deterministic || expression.transformDown {
+      case _: Exists => Literal.TrueLiteral
+      case in: InSubquery if in.values.forall(_.deterministic) => Literal.TrueLiteral
+    }.deterministic
+  }
+
   def assertValidAggregation(
       a: Aggregate,
       semanticEquality: (Expression, Expression) => Boolean =
         (groupingExpression, checkedExpression) =>
-          groupingExpression.semanticEquals(checkedExpression)): Unit = {
+          groupingExpression.semanticEquals(checkedExpression),
+      aggregateArgumentIsDeterministic: Expression => Boolean = _.deterministic): Unit = {
     def checkValidAggregateExpression(expr: Expression): Unit = expr match {
       case expr: AggregateExpression =>
         val aggFunction = expr.aggregateFunction
@@ -209,7 +231,7 @@ object ExprUtils extends EvalHelper with QueryErrorsBase {
             case other => // OK
           }
 
-          if (!child.deterministic) {
+          if (!aggregateArgumentIsDeterministic(child)) {
             child.failAnalysis(
               errorClass = "AGGREGATE_FUNCTION_WITH_NONDETERMINISTIC_EXPRESSION",
               messageParameters = Map("sqlExpr" -> toSQLExpr(expr)))

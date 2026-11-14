@@ -729,7 +729,7 @@ class FunctionResolution(
         }
 
         unresolvedFunc.filter match {
-          case Some(filter) if !filter.deterministic =>
+          case Some(filter) if !ExprUtils.isDeterministicAfterSubqueryExtraction(filter) =>
             throw QueryCompilationErrors.nonDeterministicFilterInAggregateError(filterExpr = filter)
           case Some(filter) if filter.dataType != BooleanType =>
             throw QueryCompilationErrors.nonBooleanFilterInAggregateError(filterExpr = filter)

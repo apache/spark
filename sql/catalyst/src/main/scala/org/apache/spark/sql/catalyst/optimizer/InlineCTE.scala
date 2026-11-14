@@ -21,7 +21,7 @@ import scala.collection.mutable
 
 import org.apache.spark.SparkException
 import org.apache.spark.sql.catalyst.analysis.DeduplicateRelations
-import org.apache.spark.sql.catalyst.expressions.{Alias, OuterReference, OuterScopeReference, SubqueryExpression}
+import org.apache.spark.sql.catalyst.expressions.{Alias, OuterReference, OuterScopeReference, SubExprUtils, SubqueryExpression}
 import org.apache.spark.sql.catalyst.plans.logical.{CTERelationDef, CTERelationRef, LogicalPlan, Project, Subquery, UnionLoop, WithCTE}
 import org.apache.spark.sql.catalyst.rules.Rule
 import org.apache.spark.sql.catalyst.trees.TreePattern.{CTE, PLAN_EXPRESSION}
@@ -94,7 +94,7 @@ case class InlineCTE(
         // 2) Any `CTERelationRef` that contains `OuterReference` would have been inlined first.
         refCount == 1 ||
           cteDef.deterministic ||
-          cteDef.child.exists(_.expressions.exists(_.isInstanceOf[OuterReference]))
+          SubExprUtils.hasOuterReferences(cteDef.child)
     }))
   }
 

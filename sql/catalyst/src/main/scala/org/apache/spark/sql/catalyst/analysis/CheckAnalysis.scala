@@ -865,7 +865,21 @@ trait CheckAnalysis extends LookupCatalog with QueryErrorsBase with PlanToString
             // - Is not a distinct aggregate function;
             // - Has only non-deterministic functions that are nested inside an aggregate function;
             // - Has only attributes that are nested inside an aggregate function.
-            def checkMetric(s: Expression, e: Expression, seenAggregate: Boolean = false): Unit = {
+            def deterministicOutsideAggregates(e: Expression): Boolean = {
+              // Scalar wrappers inherit aggregate nondeterminism. Check their own behavior with
+              // aggregate results replaced by deterministic values, then validate the original
+              // aggregate expressions and their inputs in checkMetric below.
+              e.transformDown {
+                case a: AggregateExpression => Literal.default(a.dataType)
+                case a: AggregateFunction => Literal.default(a.dataType)
+              }.deterministic
+            }
+
+            def checkMetric(
+                s: Expression,
+                e: Expression,
+                validWrapper: Boolean,
+                seenAggregate: Boolean = false): Unit = {
               e match {
                 case _: WindowExpression =>
                   e.failAnalysis(
@@ -884,22 +898,23 @@ trait CheckAnalysis extends LookupCatalog with QueryErrorsBase with PlanToString
                     "INVALID_OBSERVED_METRICS.AGGREGATE_EXPRESSION_WITH_FILTER_UNSUPPORTED",
                     Map("expr" -> toSQLExpr(s)))
                 case _: AggregateExpression | _: AggregateFunction =>
-                  e.children.foreach(checkMetric (s, _, seenAggregate = true))
+                  e.children.foreach(checkMetric(s, _, validWrapper, seenAggregate = true))
                 case _: Attribute if !seenAggregate =>
                   e.failAnalysis(
                     "INVALID_OBSERVED_METRICS.NON_AGGREGATE_FUNC_ARG_IS_ATTRIBUTE",
                     Map("expr" -> toSQLExpr(s)))
                 case a: Alias =>
-                  checkMetric(s, a.child, seenAggregate)
-                case a if !e.deterministic && !seenAggregate =>
+                  checkMetric(s, a.child, validWrapper, seenAggregate)
+                case a if !e.deterministic && !seenAggregate &&
+                    !validWrapper =>
                   e.failAnalysis(
                     "INVALID_OBSERVED_METRICS.NON_AGGREGATE_FUNC_ARG_IS_NON_DETERMINISTIC",
                     Map("expr" -> toSQLExpr(s)))
                 case _ =>
-                  e.children.foreach(checkMetric (s, _, seenAggregate))
+                  e.children.foreach(checkMetric(s, _, validWrapper, seenAggregate))
               }
             }
-            metrics.foreach(m => checkMetric(m, m))
+            metrics.foreach(m => checkMetric(m, m, deterministicOutsideAggregates(m)))
 
           // see Analyzer.ResolveUnpivot
           // given ids must be AttributeReference when no values given
@@ -1169,6 +1184,8 @@ trait CheckAnalysis extends LookupCatalog with QueryErrorsBase with PlanToString
                 "dataType" -> toSQLType(fileExpr.dataType)))
 
           case o if o.expressions.exists(!_.deterministic) &&
+            !(o.isInstanceOf[Join] && o.expressions.forall(
+              ExprUtils.isDeterministicAfterPredicateSubqueryRewrite)) &&
             !operatorAllowsNonDeterministicExpressions(o) &&
             !o.isInstanceOf[Project] &&
             // non-deterministic expressions inside CollectMetrics have been

@@ -20,7 +20,7 @@ package org.apache.spark.sql.catalyst.analysis
 import org.apache.spark.internal.{Logging, LogKeys}
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.SubExprUtils._
-import org.apache.spark.sql.catalyst.expressions.aggregate.AggregateExpression
+import org.apache.spark.sql.catalyst.expressions.aggregate.{AggregateExpression, KllMergeAggBigint, KllMergeAggDouble, KllMergeAggFloat, KllSketchAggBigint, KllSketchAggDouble, KllSketchAggFloat}
 import org.apache.spark.sql.catalyst.optimizer.{BooleanSimplification, DecorrelateInnerQuery}
 import org.apache.spark.sql.catalyst.plans._
 import org.apache.spark.sql.catalyst.plans.logical._
@@ -108,7 +108,11 @@ object ValidateSubqueryExpression
 
     // Check whether the given expressions contains the subquery expression.
     def containsExpr(expressions: Seq[Expression]): Boolean = {
-      expressions.exists(_.exists(_.semanticEquals(expr)))
+      expressions.exists(_.exists {
+        // A shared nondeterministic scalar is not semantically equal even to itself.
+        case scalar: ScalarSubquery if scalar.exprId == expr.exprId => true
+        case other => other.semanticEquals(expr)
+      })
     }
 
     /**
@@ -196,7 +200,8 @@ object ValidateSubqueryExpression
         val join = plan.asInstanceOf[LateralJoin]
         // A lateral join with a multi-row outer query and a non-deterministic lateral subquery
         // cannot be decorrelated. Otherwise it may produce incorrect results.
-        if (!expr.deterministic && !join.left.maxRows.exists(_ <= 1)) {
+        if (!expr.deterministic && !join.left.maxRows.exists(_ <= 1) &&
+            (expr.isCorrelated || !deterministicWithoutKllRandomness(expr.plan))) {
           cleanQueryInScalarSubquery(join.right.plan) match {
             // Python UDTFs are by default non-deterministic. They are constructed as a
             // OneRowRelation subquery and can be rewritten by the optimizer without
@@ -237,6 +242,21 @@ object ValidateSubqueryExpression
         // Validate to make sure the correlations appearing in the query are valid and
         // allowed by spark.
         checkCorrelationsInSubquery(expr.plan)
+    }
+  }
+
+  // An independent KLL relation was accepted before its implicit randomness was exposed.
+  // Inspect copies only; direct row randomness and crossing lateral references retain the guard.
+  private def deterministicWithoutKllRandomness(plan: LogicalPlan): Boolean = {
+    AnalysisHelper.allowInvokingTransformsInAnalyzer {
+      plan.transformAllExpressionsWithSubqueries {
+        case k: KllSketchAggBigint => k.copy(legacyDeterministic = true)
+        case k: KllSketchAggFloat => k.copy(legacyDeterministic = true)
+        case k: KllSketchAggDouble => k.copy(legacyDeterministic = true)
+        case k: KllMergeAggBigint => k.copy(legacyDeterministic = true)
+        case k: KllMergeAggFloat => k.copy(legacyDeterministic = true)
+        case k: KllMergeAggDouble => k.copy(legacyDeterministic = true)
+      }.deterministic
     }
   }
 

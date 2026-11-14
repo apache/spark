@@ -21,6 +21,7 @@ import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.analysis.TypeCoercionValidation
 import org.apache.spark.sql.catalyst.expressions.{
   Expression,
+  ExprUtils,
   OuterReference,
   SubExprUtils
 }
@@ -207,7 +208,7 @@ class AggregateExpressionResolver(
         }
 
         aggregateExpression.aggregateFunction.children.foreach { child =>
-          if (!child.deterministic) {
+          if (!ExprUtils.isDeterministicAfterSubqueryExtraction(child)) {
             throwAggregateFunctionWithNondeterministicExpression(
               aggregateExpression,
               child
