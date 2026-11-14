@@ -22,6 +22,7 @@ import java.nio.file.Files
 
 import scala.jdk.CollectionConverters._
 import scala.util.Using
+import scala.util.matching.Regex
 
 import org.apache.hadoop.fs.Path
 
@@ -71,6 +72,37 @@ class StreamingJoinCheckpointCompatibilitySuite extends StreamTest {
       paths.iterator().asScala.filter(Files.isRegularFile(_)).map { path =>
         directory.toPath.relativize(path).toString -> Files.readAllBytes(path).toSeq
       }.toMap
+    }
+  }
+
+  // Copies a bundled checkpoint and points the copied operator metadata at the state schema files
+  // of the copy. The bundled metadata names them under a placeholder directory, and a restart that
+  // follows that name would find no schema file, treat the restart as a first run and compare
+  // nothing. The checksum file of a rewritten metadata file no longer matches, so it goes.
+  private def copyCheckpointFixture(name: String, checkpointDir: File): Unit = {
+    val resource = getClass.getResource(s"/structured-streaming/$name/").toURI
+    val checkpoint = checkpointDir.getCanonicalFile
+    Utils.copyDirectory(new File(resource), checkpoint)
+    val schemaFile = "\"[^\"]*/state/(\\d+)/_stateSchema/([^/\"]+)/([^/\"]+)\"".r
+    val metadataFiles = Files.walk(new File(checkpoint, "state").toPath)
+    val rewritten = Using.resource(metadataFiles) { paths =>
+      paths.iterator().asScala.filter { path =>
+        Files.isRegularFile(path) && path.getParent.endsWith("_metadata/v2") &&
+          !path.getFileName.toString.startsWith(".")
+      }.toList
+    }
+    assert(rewritten.nonEmpty, s"No operator metadata in the fixture $name")
+    rewritten.foreach { path =>
+      val metadata = new String(Files.readAllBytes(path), "UTF-8")
+      val updated = schemaFile.replaceAllIn(metadata, m => {
+        val copy = new File(checkpoint,
+          s"state/${m.group(1)}/_stateSchema/${m.group(2)}/${m.group(3)}")
+        assert(copy.isFile, s"The fixture $name has no state schema file $copy")
+        Regex.quoteReplacement("\"" + new Path(copy.toURI).toString + "\"")
+      })
+      assert(updated != metadata, s"No state schema file is named in $path")
+      Files.write(path, updated.getBytes("UTF-8"))
+      Files.deleteIfExists(path.resolveSibling("." + path.getFileName + ".crc"))
     }
   }
 
@@ -652,9 +684,8 @@ class StreamingJoinCheckpointCompatibilitySuite extends StreamTest {
       val joined = left.join(right, expr(intervalCondition), "left_outer")
         .select($"leftKey", $"rightKey", $"leftTime".cast("long"), $"rightTime".cast("long"))
       withTempDir { checkpointDir =>
-        val resource = getClass.getResource(
-          "/structured-streaming/checkpoint-version-4.3.0-streaming-join-null-event-time/").toURI
-        Utils.copyDirectory(new File(resource), checkpointDir)
+        copyCheckpointFixture("checkpoint-version-4.3.0-streaming-join-null-event-time",
+          checkpointDir)
         // One call per batch of the fixture, because a memory stream's offset counts the calls.
         Seq(Seq((1, 100)), Seq((3, 150)), Seq((2, -1), (4, 300)))
           .foreach(leftInput.addData(_: _*))
