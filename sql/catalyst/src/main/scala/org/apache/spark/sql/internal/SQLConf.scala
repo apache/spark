@@ -1083,6 +1083,28 @@ object SQLConf {
       .booleanConf
       .createWithDefault(false)
 
+  val CONVERT_VIEW_TO_MATERIALIZED_CTE =
+    buildConf("spark.sql.optimizer.convertViewToMaterializedCTE.enabled")
+      .doc("When true, multiple references to the same view are rewritten into one " +
+        "materialized CTE, so the view's plan runs once (through exchange reuse) " +
+        "instead of once per reference. Enable it for queries that repeatedly read an " +
+        "expensive view. Each reference gains a shuffle of the view's output, and " +
+        "per-reference pushdown, dynamic partition pruning, and scalar-subquery " +
+        "merging no longer reach the view body, so it can also make queries slower; " +
+        "that trade is the user's to make. It does nothing when exchange reuse is " +
+        "disabled. A view is not converted when conversion could change results: " +
+        "non-deterministic or streaming bodies, seedless TABLESAMPLE, an ORDER BY " +
+        "outside subquery expressions, or occurrences of the name whose bodies, " +
+        "hints, or effective SQL configs differ. A view whose body contains a " +
+        "recursive CTE is never converted, because re-analysis re-mints the " +
+        "loop's ids, so its occurrences never share one canonical body. The " +
+        "query is left unchanged when it evaluates input file functions, whose " +
+        "file context does not survive the shuffle.")
+      .version("4.4.0")
+      .withBindingPolicy(ConfigBindingPolicy.NOT_APPLICABLE)
+      .booleanConf
+      .createWithDefault(false)
+
   val COMBINE_APPROXIMATE_PERCENTILES_ENABLED =
     buildConf("spark.sql.optimizer.combineApproximatePercentiles.enabled")
       .doc("When true, combines compatible scalar approximate percentile aggregates into a " +
