@@ -203,6 +203,61 @@ class StreamingAggregationSuite extends StateStoreMetricsTest with Assertions {
     }
   }
 
+  testWithAllStateVersions("KLL legacy checkpoints preserve reordered buffer histories") {
+    Seq(false, true).foreach { nestedScalar =>
+      withTempDir { checkpoint =>
+        val key = "spark.sql.streaming.aggregation.legacyKllSharing.enabled"
+        val input = MemoryStream[(Int, Long, Long)]
+        val data = input.toDF()
+        def query(historicalLayout: Boolean): DataFrame = {
+          val a = expr("kll_sketch_agg_bigint(_2, 8)").as("a")
+          val b = expr("kll_sketch_agg_bigint(_3, 8)").as("b")
+          // Seed the released optimizer's exact buffer order independently of the new optimizer:
+          // [y, x] for select(b, a), [x, y] when the final projection consumes a before b.
+          val sketches = if (historicalLayout && !nestedScalar) data.groupBy($"_1").agg(b, a)
+            else data.groupBy($"_1").agg(a, b)
+          val inputPlan = if (historicalLayout) sketches.repartition(1) else sketches
+          if (nestedScalar) {
+            inputPlan.selectExpr("_1", """(SELECT
+                |kll_sketch_get_n_bigint(kll_sketch_agg_bigint(id))
+                |FROM VALUES (0), (1), (2) AS t(id)) AS n""".stripMargin, "b", "a")
+              .selectExpr("_1", "n", "kll_sketch_get_quantile_bigint(a, 1.0D)",
+                "kll_sketch_get_quantile_bigint(b, 0.0D)")
+          } else {
+            inputPlan.select($"_1", $"b", $"a").selectExpr(
+              "_1", "kll_sketch_get_quantile_bigint(b, 0.0D)",
+              "kll_sketch_get_quantile_bigint(a, 1.0D)")
+          }
+        }
+
+        testStream(query(historicalLayout = true), Complete)(
+          StartStream(checkpointLocation = checkpoint.getAbsolutePath,
+            additionalConfs = Map(key -> "true")),
+          AddData(input, (0, 1L, 101L), (0, 2L, 102L)),
+          CheckLastBatch(if (nestedScalar) Row(0, 3L, 2L, 101L) else Row(0, 101L, 2L)),
+          StopStream)
+
+        val logPath = new File(checkpoint, "offsets").getAbsolutePath
+        val (batchId, offsets) = new OffsetSeqLog(spark, logPath).getLatest().get
+        val historical = offsets match {
+          case o: OffsetSeq =>
+            o.copy(metadataOpt = o.metadataOpt.map(m => m.copy(conf = m.conf - key)))
+          case o: OffsetMap => o.copy(metadata = o.metadata.copy(conf = o.metadata.conf - key))
+        }
+        val path = new Path(logPath, batchId.toString)
+        assert(path.getFileSystem(spark.sessionState.newHadoopConf()).delete(path, false))
+        assert(new OffsetSeqLog(spark, logPath).add(batchId, historical))
+
+        testStream(query(historicalLayout = false), Complete)(
+          StartStream(checkpointLocation = checkpoint.getAbsolutePath,
+            additionalConfs = Map(key -> "false")),
+          AddData(input, (0, 3L, 103L)),
+          CheckLastBatch(if (nestedScalar) Row(0, 3L, 3L, 101L) else Row(0, 101L, 3L)),
+          StopStream)
+      }
+    }
+  }
+
   testWithAllStateVersions("count distinct") {
     val inputData = MemoryStream[(Int, Seq[Int])]
 

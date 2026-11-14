@@ -4083,7 +4083,8 @@ object SQLConf {
   val STREAMING_AGGREGATION_LEGACY_KLL_SHARING =
     buildConf("spark.sql.streaming.aggregation.legacyKllSharing.enabled")
       .internal()
-      .doc("Preserve shared KLL aggregation buffers in existing streaming checkpoints. " +
+      .doc("Preserve the historical KLL optimizer behavior and ordered aggregation buffers " +
+        "in existing streaming checkpoints. " +
         "New checkpoints keep separate evaluations of nondeterministic KLL aggregates. " +
         "The checkpoint restores this setting; changing it requires a new checkpoint.")
       .version("4.4.0")

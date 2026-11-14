@@ -194,7 +194,7 @@ object ExprUtils extends EvalHelper with QueryErrorsBase {
 
   private[sql] def isDeterministicAfterScalarSubqueryExtraction(
       expression: Expression): Boolean = {
-    // The single-pass analyzer validates aggregate arguments before the post hoc extraction.
+    // Function resolution and the single-pass analyzer validate before the post hoc extraction.
     // Use placeholders only to check what remains; the original expression is retained.
     expression.deterministic || expression.transformDown {
       case scalar: ScalarSubquery if !scalar.deterministic =>

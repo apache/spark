@@ -76,12 +76,13 @@ case class KllSketchAggBigint(
     child: Expression,
     kExpr: Option[Expression] = None,
     override val mutableAggBufferOffset: Int = 0,
-    override val inputAggBufferOffset: Int = 0)
+    override val inputAggBufferOffset: Int = 0,
+    private[sql] val legacyDeterministic: Boolean = false)
     extends TypedImperativeAggregate[KllLongsSketch]
     with KllSketchAggBase
     with ExpectsInputTypes {
-  def this(child: Expression) = this(child, None, 0, 0)
-  def this(child: Expression, kExpr: Expression) = this(child, Some(kExpr), 0, 0)
+  def this(child: Expression) = this(child, None, 0, 0, false)
+  def this(child: Expression, kExpr: Expression) = this(child, Some(kExpr), 0, 0, false)
 
   override def children: Seq[Expression] = child +: kExpr.toSeq
 
@@ -114,7 +115,8 @@ case class KllSketchAggBigint(
   override def prettyName: String = "kll_sketch_agg_bigint"
 
   // KLL compaction randomly chooses which values to retain.
-  override lazy val deterministic: Boolean = false
+  override lazy val deterministic: Boolean =
+    legacyDeterministic && children.forall(_.deterministic)
 
   override def checkInputDataTypes(): TypeCheckResult = {
     val defaultCheck = super.checkInputDataTypes()
@@ -234,12 +236,13 @@ case class KllSketchAggFloat(
     child: Expression,
     kExpr: Option[Expression] = None,
     override val mutableAggBufferOffset: Int = 0,
-    override val inputAggBufferOffset: Int = 0)
+    override val inputAggBufferOffset: Int = 0,
+    private[sql] val legacyDeterministic: Boolean = false)
     extends TypedImperativeAggregate[KllFloatsSketch]
         with KllSketchAggBase
         with ExpectsInputTypes {
-  def this(child: Expression) = this(child, None, 0, 0)
-  def this(child: Expression, kExpr: Expression) = this(child, Some(kExpr), 0, 0)
+  def this(child: Expression) = this(child, None, 0, 0, false)
+  def this(child: Expression, kExpr: Expression) = this(child, Some(kExpr), 0, 0, false)
 
   override def children: Seq[Expression] = child +: kExpr.toSeq
 
@@ -267,7 +270,8 @@ case class KllSketchAggFloat(
   override def prettyName: String = "kll_sketch_agg_float"
 
   // KLL compaction randomly chooses which values to retain.
-  override lazy val deterministic: Boolean = false
+  override lazy val deterministic: Boolean =
+    legacyDeterministic && children.forall(_.deterministic)
 
   override def checkInputDataTypes(): TypeCheckResult = {
     val defaultCheck = super.checkInputDataTypes()
@@ -381,12 +385,13 @@ case class KllSketchAggDouble(
     child: Expression,
     kExpr: Option[Expression] = None,
     override val mutableAggBufferOffset: Int = 0,
-    override val inputAggBufferOffset: Int = 0)
+    override val inputAggBufferOffset: Int = 0,
+    private[sql] val legacyDeterministic: Boolean = false)
     extends TypedImperativeAggregate[KllDoublesSketch]
         with KllSketchAggBase
         with ExpectsInputTypes {
-  def this(child: Expression) = this(child, None, 0, 0)
-  def this(child: Expression, kExpr: Expression) = this(child, Some(kExpr), 0, 0)
+  def this(child: Expression) = this(child, None, 0, 0, false)
+  def this(child: Expression, kExpr: Expression) = this(child, Some(kExpr), 0, 0, false)
 
   override def children: Seq[Expression] = child +: kExpr.toSeq
 
@@ -414,7 +419,8 @@ case class KllSketchAggDouble(
   override def prettyName: String = "kll_sketch_agg_double"
 
   // KLL compaction randomly chooses which values to retain.
-  override lazy val deterministic: Boolean = false
+  override lazy val deterministic: Boolean =
+    legacyDeterministic && children.forall(_.deterministic)
 
   override def checkInputDataTypes(): TypeCheckResult = {
     val defaultCheck = super.checkInputDataTypes()
@@ -532,10 +538,11 @@ case class KllMergeAggBigint(
     child: Expression,
     kExpr: Option[Expression] = None,
     override val mutableAggBufferOffset: Int = 0,
-    override val inputAggBufferOffset: Int = 0)
+    override val inputAggBufferOffset: Int = 0,
+    private[sql] val legacyDeterministic: Boolean = false)
     extends KllMergeAggBase[KllLongsSketch] {
-  def this(child: Expression) = this(child, None, 0, 0)
-  def this(child: Expression, kExpr: Expression) = this(child, Some(kExpr), 0, 0)
+  def this(child: Expression) = this(child, None, 0, 0, false)
+  def this(child: Expression, kExpr: Expression) = this(child, Some(kExpr), 0, 0, false)
 
   override def withNewMutableAggBufferOffset(
       newMutableAggBufferOffset: Int): KllMergeAggBigint =
@@ -613,10 +620,11 @@ case class KllMergeAggFloat(
     child: Expression,
     kExpr: Option[Expression] = None,
     override val mutableAggBufferOffset: Int = 0,
-    override val inputAggBufferOffset: Int = 0)
+    override val inputAggBufferOffset: Int = 0,
+    private[sql] val legacyDeterministic: Boolean = false)
     extends KllMergeAggBase[KllFloatsSketch] {
-  def this(child: Expression) = this(child, None, 0, 0)
-  def this(child: Expression, kExpr: Expression) = this(child, Some(kExpr), 0, 0)
+  def this(child: Expression) = this(child, None, 0, 0, false)
+  def this(child: Expression, kExpr: Expression) = this(child, Some(kExpr), 0, 0, false)
 
   override def withNewMutableAggBufferOffset(
       newMutableAggBufferOffset: Int): KllMergeAggFloat =
@@ -694,10 +702,11 @@ case class KllMergeAggDouble(
     child: Expression,
     kExpr: Option[Expression] = None,
     override val mutableAggBufferOffset: Int = 0,
-    override val inputAggBufferOffset: Int = 0)
+    override val inputAggBufferOffset: Int = 0,
+    private[sql] val legacyDeterministic: Boolean = false)
     extends KllMergeAggBase[KllDoublesSketch] {
-  def this(child: Expression) = this(child, None, 0, 0)
-  def this(child: Expression, kExpr: Expression) = this(child, Some(kExpr), 0, 0)
+  def this(child: Expression) = this(child, None, 0, 0, false)
+  def this(child: Expression, kExpr: Expression) = this(child, Some(kExpr), 0, 0, false)
 
   override def withNewMutableAggBufferOffset(
       newMutableAggBufferOffset: Int): KllMergeAggDouble =
@@ -757,7 +766,8 @@ abstract class KllMergeAggBase[T <: KllSketch]
   override def nullable: Boolean = false
 
   // Merging KLL sketches can trigger randomized compaction.
-  override lazy val deterministic: Boolean = false
+  override lazy val deterministic: Boolean =
+    legacyDeterministic && children.forall(_.deterministic)
 
   override def checkInputDataTypes(): TypeCheckResult = {
     val defaultCheck = super.checkInputDataTypes()
@@ -857,6 +867,9 @@ abstract class KllMergeAggBase[T <: KllSketch]
  * Common trait for KLL sketch aggregate functions that support an optional k parameter.
  */
 trait KllSketchAggBase {
+  // Only the optimizer copies of checkpoint-pinned legacy streaming queries use this mode.
+  private[sql] def legacyDeterministic: Boolean
+
   def kExpr: Option[Expression]
   def prettyName: String
 

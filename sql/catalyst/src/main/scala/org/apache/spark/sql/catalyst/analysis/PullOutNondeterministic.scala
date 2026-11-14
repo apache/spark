@@ -39,9 +39,9 @@ object PullOutNondeterministic extends Rule[LogicalPlan] {
     case f: Filter => f
 
     case a: Aggregate if a.groupingExpressions.exists(!_.deterministic) ||
-        nondeterministicScalarSubqueriesInAggregateArguments(a).nonEmpty =>
+        nondeterministicScalarSubqueriesInAggregateInputs(a).nonEmpty =>
       val expressionsToExtract = a.groupingExpressions ++
-        nondeterministicScalarSubqueriesInAggregateArguments(a)
+        nondeterministicScalarSubqueriesInAggregateInputs(a)
       validateNondeterministicScalarSubqueries(a, expressionsToExtract)
       val nondeterToAttr =
         NondeterministicExpressionCollection.getNondeterministicToAttributes(expressionsToExtract)
@@ -60,6 +60,26 @@ object PullOutNondeterministic extends Rule[LogicalPlan] {
       })
 
       deterministicAggregate
+
+    case join: Join if join.condition.exists(_.exists {
+        case scalar: ScalarSubquery => !scalar.deterministic && !scalar.isCorrelated
+        case _ => false
+      }) =>
+      validateNondeterministicScalarSubqueries(join, join.condition.toSeq)
+      val scalars = join.condition.toSeq.flatMap(_.collect {
+        case scalar: ScalarSubquery if !scalar.deterministic && !scalar.isCorrelated => scalar
+      })
+      val nondeterToAttr =
+        NondeterministicExpressionCollection.getNondeterministicToAttributes(scalars)
+      val condition = join.condition.map(_.transform {
+        case scalar: ScalarSubquery =>
+          Option(nondeterToAttr.get(NondeterministicExpressionCollection.getExpressionKey(scalar)))
+            .map(_.toAttribute).getOrElse(scalar)
+      })
+      // An uncorrelated scalar does not depend on either input. Preserve the join's original
+      // output, including outer-join nullability and semi/anti-join column visibility.
+      val left = Project(join.left.output ++ nondeterToAttr.values.asScala.toSeq, join.left)
+      Project(join.output, join.copy(left = left, condition = condition))
 
     // Don't touch collect metrics. Top-level metrics are not supported (check analysis will fail)
     // and we want to retain them inside the aggregate functions.
@@ -83,13 +103,13 @@ object PullOutNondeterministic extends Rule[LogicalPlan] {
       Project(p.output, newPlan.withNewChildren(newChild :: Nil))
   }
 
-  private def nondeterministicScalarSubqueriesInAggregateArguments(
+  private def nondeterministicScalarSubqueriesInAggregateInputs(
       aggregate: Aggregate): Seq[ScalarSubquery] = {
     // Only scalar subqueries may be extracted from aggregate arguments. Direct nondeterministic
     // inputs, such as rand() and nondeterministic UDFs, must retain their validation errors.
     aggregate.aggregateExpressions
       .flatMap(_.collect { case expression: AggregateExpression => expression })
-      .flatMap(_.aggregateFunction.children)
+      .flatMap(expression => expression.aggregateFunction.children ++ expression.filter.toSeq)
       .flatMap(_.collect { case scalar: ScalarSubquery if !scalar.deterministic => scalar })
   }
 

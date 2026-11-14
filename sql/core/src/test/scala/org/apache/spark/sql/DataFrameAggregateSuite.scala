@@ -4290,6 +4290,69 @@ class DataFrameAggregateSuite extends SharedSparkSession
     }
   }
 
+  for (host <- Seq("JOIN conditions", "aggregate FILTER predicates")) {
+    test(s"kll scalar subqueries in $host") {
+      for (singlePass <- Seq(false, true); ansi <- Seq(false, true);
+          dataType <- Seq("bigint", "float", "double"); merge <- Seq(false, true)) {
+        val sketch = s"kll_sketch_agg_$dataType(CAST(id AS $dataType), 8)"
+        val source = "VALUES (0), (1), (2) AS i(id)"
+        val scalar = if (merge) {
+          s"""(SELECT kll_sketch_get_n_$dataType(kll_merge_agg_$dataType(s, 8))
+             | FROM (SELECT $sketch AS s FROM $source GROUP BY id))""".stripMargin
+        } else {
+          s"(SELECT kll_sketch_get_n_$dataType($sketch) FROM $source)"
+        }
+        val query = if (host == "JOIN conditions") {
+          s"""SELECT l.id FROM VALUES (0), (1) AS l(id)
+             |JOIN VALUES (0), (1) AS r(id) ON l.id = r.id AND l.id < $scalar
+             |""".stripMargin
+        } else {
+          s"""SELECT count(*) FILTER (WHERE $scalar > 0)
+             |FROM VALUES (0), (1) AS o(id)""".stripMargin
+        }
+        val result = withSQLConf(
+            SQLConf.ANSI_ENABLED.key -> ansi.toString,
+            SQLConf.ANALYZER_SINGLE_PASS_RESOLVER_ENABLED.key -> singlePass.toString,
+            SQLConf.ANALYZER_SINGLE_PASS_RESOLVER_ENABLED_TENTATIVELY.key -> "false",
+            SQLConf.ANALYZER_DUAL_RUN_LEGACY_AND_SINGLE_PASS_RESOLVER.key -> "false") {
+          val df = sql(query)
+          df.queryExecution.assertAnalyzed()
+          df
+        }
+        withClue(s"singlePass=$singlePass ansi=$ansi type=$dataType merge=$merge: ") {
+          if (host == "JOIN conditions") {
+            checkAnswer(result, Seq(Row(0), Row(1)))
+          } else {
+            checkAnswer(result, Row(2L))
+          }
+        }
+      }
+    }
+  }
+
+  test("kll scalar extraction retains direct randomness restrictions") {
+    val scalar = """(SELECT kll_sketch_get_n_bigint(kll_sketch_agg_bigint(id))
+                   | FROM VALUES (0), (1), (2) AS i(id))""".stripMargin
+    for (singlePass <- Seq(false, true); join <- Seq(false, true)) {
+      val query = if (join) {
+        s"""SELECT l.id FROM VALUES (0), (1) AS l(id)
+           |JOIN VALUES (0), (1) AS r(id)
+           |ON l.id = r.id AND rand() + $scalar > 0""".stripMargin
+      } else {
+        s"""SELECT count(*) FILTER (WHERE rand() + $scalar > 0)
+           |FROM VALUES (0), (1) AS o(id)""".stripMargin
+      }
+      val error = withSQLConf(
+          SQLConf.ANALYZER_SINGLE_PASS_RESOLVER_ENABLED.key -> singlePass.toString,
+          SQLConf.ANALYZER_SINGLE_PASS_RESOLVER_ENABLED_TENTATIVELY.key -> "false",
+          SQLConf.ANALYZER_DUAL_RUN_LEGACY_AND_SINGLE_PASS_RESOLVER.key -> "false") {
+        intercept[AnalysisException] { sql(query) }
+      }
+      assert(error.getCondition == (if (join) "INVALID_NON_DETERMINISTIC_EXPRESSIONS"
+        else "INVALID_AGGREGATE_FILTER.NON_DETERMINISTIC"))
+    }
+  }
+
   test("kll scalar subqueries as aggregate arguments") {
     checkAnswer(
       sql("""
