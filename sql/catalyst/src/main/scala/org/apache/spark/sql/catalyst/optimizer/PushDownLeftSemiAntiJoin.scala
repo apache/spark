@@ -32,83 +32,7 @@ import org.apache.spark.sql.catalyst.trees.TreePattern.LEFT_SEMI_OR_ANTI_JOIN
  *  4) Aggregate
  *  5) Other permissible unary operators. please see [[PushPredicateThroughNonJoin.canPushThrough]].
  */
-object PushDownLeftSemiAntiJoin extends Rule[LogicalPlan]
-  with PredicateHelper
-  with JoinSelectionHelper {
-  def apply(plan: LogicalPlan): LogicalPlan = plan.transformWithPruning(
-    _.containsPattern(LEFT_SEMI_OR_ANTI_JOIN), ruleId) {
-    // LeftSemi/LeftAnti over Project
-    case j @ Join(p @ Project(pList, gChild), rightOp, LeftSemiOrAnti(joinType), joinCond, hint)
-        if pList.forall(_.deterministic) &&
-        !pList.exists(ScalarSubquery.hasCorrelatedScalarSubquery) &&
-        canPushThroughCondition(Seq(gChild), joinCond, rightOp) =>
-      if (joinCond.isEmpty) {
-        // No join condition, just push down the Join below Project
-        p.copy(child = Join(gChild, rightOp, joinType, joinCond, hint))
-      } else {
-        val aliasMap = getAliasMap(p)
-        // Do not push complex join condition
-        if (aliasMap.forall(_._2.child.children.isEmpty)) {
-          val newJoinCond = if (aliasMap.nonEmpty) {
-            Option(replaceAlias(joinCond.get, aliasMap))
-          } else {
-            joinCond
-          }
-          p.copy(child = Join(gChild, rightOp, joinType, newJoinCond, hint))
-        } else {
-          j
-        }
-      }
-
-    // LeftSemi/LeftAnti over Aggregate, only push down if join can be planned as broadcast join.
-    case join @ Join(agg: Aggregate, rightOp, LeftSemiOrAnti(_), joinCond, _)
-        if agg.aggregateExpressions.forall(_.deterministic) && agg.groupingExpressions.nonEmpty &&
-          !agg.aggregateExpressions.exists(ScalarSubquery.hasCorrelatedScalarSubquery) &&
-          canPushThroughCondition(agg.children, joinCond, rightOp) &&
-          canPlanAsBroadcastHashJoin(join, conf) =>
-      val aliasMap = getAliasMap(agg)
-      val canPushDownPredicate = (predicate: Expression) => {
-        val replaced = replaceAlias(predicate, aliasMap)
-        predicate.references.nonEmpty &&
-          replaced.references.subsetOf(agg.child.outputSet ++ rightOp.outputSet)
-      }
-      val makeJoinCondition = (predicates: Seq[Expression]) => {
-        replaceAlias(predicates.reduce(And), aliasMap)
-      }
-      pushDownJoin(join, canPushDownPredicate, makeJoinCondition)
-
-    // LeftSemi/LeftAnti over Window
-    case join @ Join(w: Window, rightOp, LeftSemiOrAnti(_), _, _)
-        if w.partitionSpec.forall(_.isInstanceOf[AttributeReference]) =>
-      val partitionAttrs = AttributeSet(w.partitionSpec.flatMap(_.references)) ++ rightOp.outputSet
-      pushDownJoin(join, _.references.subsetOf(partitionAttrs), _.reduce(And))
-
-    // LeftSemi/LeftAnti over Union
-    case Join(union: Union, rightOp, LeftSemiOrAnti(joinType), joinCond, hint)
-        if canPushThroughCondition(union.children, joinCond, rightOp) =>
-      if (joinCond.isEmpty) {
-        // Push down the Join below Union
-        val newGrandChildren = union.children.map { Join(_, rightOp, joinType, joinCond, hint) }
-        union.withNewChildren(newGrandChildren)
-      } else {
-        val output = union.output
-        val newGrandChildren = union.children.map { grandchild =>
-          val newCond = joinCond.get transform {
-            case e if output.exists(_.semanticEquals(e)) =>
-              grandchild.output(output.indexWhere(_.semanticEquals(e)))
-          }
-          assert(newCond.references.subsetOf(grandchild.outputSet ++ rightOp.outputSet))
-          Join(grandchild, rightOp, joinType, Option(newCond), hint)
-        }
-        union.withNewChildren(newGrandChildren)
-      }
-
-    // LeftSemi/LeftAnti over UnaryNode
-    case join @ Join(u: UnaryNode, rightOp, LeftSemiOrAnti(_), _, _)
-        if PushPredicateThroughNonJoin.canPushThrough(u) && u.expressions.forall(_.deterministic) =>
-      val validAttrs = u.child.outputSet ++ rightOp.outputSet
-      pushDownJoin(join, _.references.subsetOf(validAttrs), _.reduce(And))
-  }
+trait PushDownLeftSemiAntiJoinHelper extends PredicateHelper with JoinSelectionHelper {
 
   /**
    * Check if we can safely push a join through a project, aggregate, or union by making sure that
@@ -117,7 +41,7 @@ object PushDownLeftSemiAntiJoin extends Rule[LogicalPlan]
    * This function makes sure that the join condition refers to attributes that are not ambiguous
    * (i.e present in both the legs of the join) or else the resultant plan will be invalid.
    */
-  private def canPushThroughCondition(
+  protected def canPushThroughCondition(
       plans: Seq[LogicalPlan],
       condition: Option[Expression],
       rightOp: LogicalPlan): Boolean = {
@@ -130,7 +54,7 @@ object PushDownLeftSemiAntiJoin extends Rule[LogicalPlan]
     }
   }
 
-  private def pushDownJoin(
+  protected def pushDownJoin(
       join: Join,
       canPushDownPredicate: Expression => Boolean,
       makeJoinCondition: Seq[Expression] => Expression): LogicalPlan = {
@@ -168,6 +92,95 @@ object PushDownLeftSemiAntiJoin extends Rule[LogicalPlan]
         }
       }
     }
+  }
+}
+
+object PushDownLeftSemiAntiJoin extends Rule[LogicalPlan]
+  with PushDownLeftSemiAntiJoinHelper {
+  def apply(plan: LogicalPlan): LogicalPlan = plan.transformWithPruning(
+    _.containsPattern(LEFT_SEMI_OR_ANTI_JOIN), ruleId) {
+    // LeftSemi/LeftAnti over Project
+    case j @ Join(p @ Project(pList, gChild), rightOp, LeftSemiOrAnti(joinType), joinCond, hint)
+        if pList.forall(_.deterministic) &&
+        !pList.exists(ScalarSubquery.hasCorrelatedScalarSubquery) &&
+        canPushThroughCondition(Seq(gChild), joinCond, rightOp) =>
+      if (joinCond.isEmpty) {
+        // No join condition, just push down the Join below Project
+        p.copy(child = Join(gChild, rightOp, joinType, joinCond, hint))
+      } else {
+        val aliasMap = getAliasMap(p)
+        // Do not push complex join condition
+        if (aliasMap.forall(_._2.child.children.isEmpty)) {
+          val newJoinCond = if (aliasMap.nonEmpty) {
+            Option(replaceAlias(joinCond.get, aliasMap))
+          } else {
+            joinCond
+          }
+          p.copy(child = Join(gChild, rightOp, joinType, newJoinCond, hint))
+        } else {
+          j
+        }
+      }
+
+    // LeftSemi/LeftAnti over Window
+    case join @ Join(w: Window, rightOp, LeftSemiOrAnti(_), _, _)
+        if w.partitionSpec.forall(_.isInstanceOf[AttributeReference]) =>
+      val partitionAttrs = AttributeSet(w.partitionSpec.flatMap(_.references)) ++ rightOp.outputSet
+      pushDownJoin(join, _.references.subsetOf(partitionAttrs), _.reduce(And))
+
+    // LeftSemi/LeftAnti over Union
+    case Join(union: Union, rightOp, LeftSemiOrAnti(joinType), joinCond, hint)
+        if canPushThroughCondition(union.children, joinCond, rightOp) =>
+      if (joinCond.isEmpty) {
+        // Push down the Join below Union
+        val newGrandChildren = union.children.map { Join(_, rightOp, joinType, joinCond, hint) }
+        union.withNewChildren(newGrandChildren)
+      } else {
+        val output = union.output
+        val newGrandChildren = union.children.map { grandchild =>
+          val newCond = joinCond.get transform {
+            case e if output.exists(_.semanticEquals(e)) =>
+              grandchild.output(output.indexWhere(_.semanticEquals(e)))
+          }
+          assert(newCond.references.subsetOf(grandchild.outputSet ++ rightOp.outputSet))
+          Join(grandchild, rightOp, joinType, Option(newCond), hint)
+        }
+        union.withNewChildren(newGrandChildren)
+      }
+
+    // LeftSemi/LeftAnti over UnaryNode
+    case join @ Join(u: UnaryNode, rightOp, LeftSemiOrAnti(_), _, _)
+        if PushPredicateThroughNonJoin.canPushThrough(u) && u.expressions.forall(_.deterministic) =>
+      val validAttrs = u.child.outputSet ++ rightOp.outputSet
+      pushDownJoin(join, _.references.subsetOf(validAttrs), _.reduce(And))
+  }
+}
+
+/**
+ * Pushes a Left Semi / Left Anti join below an [[Aggregate]], only when it can be planned as a
+ * broadcast hash join (SPARK-34081). That decision needs stats, so this branch is split out of
+ * [[PushDownLeftSemiAntiJoin]] to run after scan pushdown, once accurate stats are available.
+ */
+object PushDownLeftSemiAntiJoinThroughAggregate extends Rule[LogicalPlan]
+  with PushDownLeftSemiAntiJoinHelper {
+  def apply(plan: LogicalPlan): LogicalPlan = plan.transformWithPruning(
+    _.containsPattern(LEFT_SEMI_OR_ANTI_JOIN), ruleId) {
+    // LeftSemi/LeftAnti over Aggregate, only push down if join can be planned as broadcast join.
+    case join @ Join(agg: Aggregate, rightOp, LeftSemiOrAnti(_), joinCond, _)
+        if agg.aggregateExpressions.forall(_.deterministic) && agg.groupingExpressions.nonEmpty &&
+          !agg.aggregateExpressions.exists(ScalarSubquery.hasCorrelatedScalarSubquery) &&
+          canPushThroughCondition(agg.children, joinCond, rightOp) &&
+          canPlanAsBroadcastHashJoin(join, conf) =>
+      val aliasMap = getAliasMap(agg)
+      val canPushDownPredicate = (predicate: Expression) => {
+        val replaced = replaceAlias(predicate, aliasMap)
+        predicate.references.nonEmpty &&
+          replaced.references.subsetOf(agg.child.outputSet ++ rightOp.outputSet)
+      }
+      val makeJoinCondition = (predicates: Seq[Expression]) => {
+        replaceAlias(predicates.reduce(And), aliasMap)
+      }
+      pushDownJoin(join, canPushDownPredicate, makeJoinCondition)
   }
 }
 
