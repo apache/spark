@@ -133,16 +133,16 @@ Two pandas-specific value rules are then reproduced explicitly:
   where the result Series is numpy-backed and the return path masks it with
   ``series.isnull()``. A pandas masked extension array (which is what
   ``spark.sql.execution.pythonUDF.pandas.preferIntExtensionDtype=true`` produces,
-  including for any float arithmetic promoted off an ``Int64`` column) is handed
+  for integral inputs and float arithmetic derived from them) is handed
   to Arrow with ``mask=None`` instead, and its ``isnull()`` is False for NaN in
   any case, so there the same NaN arrives as NaN. Catalyst keeps NaN, so a numeric
-  body is wrapped in an ``isnan -> NULL`` normalization that reproduces the
+  body with a fractional category is wrapped in an ``isnan -> NULL`` normalization for the
   default regime -- and transpilation is refused outright when that conf is on,
-  since no single expression covers both.
+  since no single expression covers both. Modulo by zero returns NULL in this regime.
 * ``Series.isnull()`` is True for NaN on a numpy-backed Series -- by the time the
   UDF runs, the Arrow-to-pandas conversion has already collapsed a NULL in a
   fractional column into NaN and pandas cannot tell them apart -- so it lowers to
-  ``isnull(a) OR isnan(a)`` rather than to ``isnull(a)`` alone. (On a masked
+  ``isnull(a) OR isnan(a)`` for fractional variants, and ``isnull(a)`` otherwise. (On a masked
   extension array ``isnull()`` is the mask alone, but that regime is refused per
   the previous point.)
 
@@ -155,11 +155,6 @@ interpreted one is lossy, silent, or inconsistent:
   also covers the ``%`` boundaries the ``Mod`` lowering notes below
   (``Long.MinValue % -1``), and a literal too wide for the column's dtype, where
   numpy raises ``OverflowError`` and Catalyst widens exactly.
-* ``a % 0`` has no single interpreted answer to reproduce: pandas promotes to
-  ``float64`` and yields NaN (so, NULL), unless
-  ``spark.sql.execution.pythonUDF.pandas.preferIntExtensionDtype`` is on, in which
-  case it yields ``0``. ANSI raises REMAINDER_BY_ZERO, and that is what the
-  transpiled expression does.
 * a ``float32`` column keeps ``float32`` through a ``float`` literal (NEP 50)
   where Catalyst promotes to double.
 * an integral column is converted to ``float64`` as soon as the batch contains a
@@ -501,6 +496,18 @@ def _describe_unsupported_series_node(node: ast.AST) -> str:
             return f"an unsupported `{type(node).__name__}` node"
 
 
+def _fold_early_return(function_body: List[ast.stmt]) -> List[ast.stmt]:
+    match function_body:
+        case [
+            ast.If(test=test, body=[ast.Return() as early_ret], orelse=[]) as if_node,
+            ast.Return() as main_ret,
+        ]:
+            synthesized = ast.If(test=test, body=[early_ret], orelse=[main_ret])
+            ast.fix_missing_locations(ast.copy_location(synthesized, if_node))
+            return [synthesized]
+    return function_body
+
+
 def _check_series_semantics(function_ast: ast.FunctionDef, params: List[str]) -> None:
     """Raise unless the body is element-wise-equivalent for a scalar pandas UDF.
 
@@ -513,12 +520,8 @@ def _check_series_semantics(function_ast: ast.FunctionDef, params: List[str]) ->
       and returning a scalar makes the interpreted UDF fail with ``UDF_RETURN_TYPE``, so a
       rewrite that returned a value per row would not be a faithful reproduction.
     """
-    # Match the statement-count guard in ``_transpile_from_ast`` first, and with the same
-    # message (shared constant): this walk only visits ``body[0]``, so without this a
-    # multi-statement body would be rejected as "an unsupported `Assign` node" (its first
-    # statement) rather than for the real reason, and the warning is the only place the user
-    # learns why.
-    if len(function_ast.body) != 1:
+    function_body = _fold_early_return(function_ast.body)
+    if len(function_body) != 1:
         raise UnsupportedOperationException(_MULTI_STATEMENT_ERROR)
     references_param = False
 
@@ -558,7 +561,7 @@ def _check_series_semantics(function_ast: ast.FunctionDef, params: List[str]) ->
                     "`+`/`-`, and `<param>.isnull()` / `.isna()` / `.notnull()` / `.notna()`"
                 )
 
-    visit(function_ast.body[0] if function_ast.body else None)
+    visit(function_body[0])
     if not references_param:
         raise UnsupportedOperationException(
             "the body of this scalar pandas UDF never references a parameter, so it "
@@ -906,17 +909,14 @@ class CatalystTranspiler(AbstractTranspiler):
         is not missing -- but ``preferIntExtensionDtype`` is refused before we get here, see
         the module docstring.)
 
-        That arm is emitted for every numeric category rather than only for float/double
-        because the bound column's width is not known here -- options are pruned against the
-        argument types later, on the JVM. ``isnan(cast(<integral> as double))`` is
-        constant-false, so on an integral column this is one extra node and no change in
-        result. A string column needs no arm: its missing values are exactly the NULLs.
+        Only fractional variants need the NaN arm. Integral and string variants represent
+        every missing input with NULL, so their arguments need only one reference.
 
         Neither ``isnull`` nor ``isnan`` ever returns NULL, so the ``notnull`` negation is
         total two-valued logic and matches pandas without a ``coalesce``.
         """
         subject = self._convert_chunk(params, receiver)
-        if _is_numeric_cat(self._category(params, receiver)):
+        if self._category(params, receiver) in ("float", "numeric"):
             missing = subject.isNull() | isnan(subject.cast("double"))
         else:
             missing = subject.isNull()
@@ -970,6 +970,11 @@ class CatalystTranspiler(AbstractTranspiler):
                 # ``params`` is the caller-facing list, so its indexes are already
                 # the ``_udf_param_N`` / category indexes -- see ``_transpile_func``.
                 return self._param_categories.get(params.index(name), "numeric")
+            case ast.UnaryOp(op=(ast.UAdd() | ast.USub()), operand=operand):
+                category = self._category(params, operand)
+                if _is_numeric_cat(category):
+                    return category
+                raise UnsupportedOperationException("unary arithmetic requires a numeric operand")
             case ast.BinOp(left=left, op=op, right=right):
                 lc = self._category(params, left)
                 rc = self._category(params, right)
@@ -1307,7 +1312,10 @@ class CatalystTranspiler(AbstractTranspiler):
                                 .when(right_col < 0, lit(-1))
                                 .otherwise(lit(0))
                             )
-                            return sb * pmod(sb * left_col, _abs(right_col))
+                            result = sb * pmod(sb * left_col, _abs(right_col))
+                            if self._series_semantics:
+                                return when(right_col == 0, lit(None)).otherwise(result)
+                            return result
                     case _:
                         raise UnsupportedOperationException(
                             f"binary operator {type(op).__name__} is not "
@@ -1432,17 +1440,7 @@ class CatalystTranspiler(AbstractTranspiler):
         # rather than defaulted, so that the unsafe value can never be the quiet one; see
         # ``AbstractTranspiler._transpile_from_ast``.
         self._series_semantics = series_semantics
-        function_body = function_ast.body
-        # Normalize `if <test>: return y\nreturn body` (2-stmt early-return)
-        # into a single if/else so null narrowing can apply to the main body.
-        match function_body:
-            case [
-                ast.If(test=test, body=[ast.Return() as early_ret], orelse=[]) as if_node,
-                ast.Return() as main_ret,
-            ]:
-                synthesized = ast.If(test=test, body=[early_ret], orelse=[main_ret])
-                ast.fix_missing_locations(ast.copy_location(synthesized, if_node))
-                function_body = [synthesized]
+        function_body = _fold_early_return(function_ast.body)
         if len(function_body) != 1:
             raise UnsupportedOperationException(_MULTI_STATEMENT_ERROR)
         body_cat = self._safe_category(params, function_body[0])
@@ -1501,20 +1499,9 @@ class CatalystTranspiler(AbstractTranspiler):
                 UserWarning,
                 stacklevel=2,
             )
-        if series_semantics and body_cat is not None and _is_numeric_cat(body_cat):
-            # A scalar pandas UDF's numpy-backed result Series is masked with
-            # ``series.isnull()`` on the way to Arrow, and ``isnull`` is True for NaN, so
-            # every NaN the body produces reaches Spark as NULL. Catalyst keeps NaN, so
-            # normalize to match. Emitted for every numeric body (not just fractional)
-            # because the bound column's width is unknown until the JVM prunes options;
-            # ``isnan(cast(<integral> as double))`` is constant-false, so on an integral
-            # column this is one extra node and no change in result. The default dtype
-            # regime only -- the masked-extension regime is refused in udf.py /
-            # ConvertToCatalyst, where a NaN stays NaN. The clean single-reference form
-            # ``NaNvl(body, null)`` is type-valid only for float/double and the body's
-            # resolved type is not known here, so the body is referenced twice (once in
-            # the isnan test, once as the value) -- a plan-size cost only, correctness
-            # preserved (the duplication survives analysis and optimization).
+        if series_semantics and body_cat in ("float", "numeric"):
+            # The default pandas return conversion masks NaN as NULL. Integral variants
+            # cannot produce NaN and must avoid duplicating their argument references.
             converted = when(isnan(converted.cast("double")), lit(None)).otherwise(converted)
         # Cast to the declared return type so the rewritten plan reports a
         # known data type to the optimizer's plan validator (otherwise it

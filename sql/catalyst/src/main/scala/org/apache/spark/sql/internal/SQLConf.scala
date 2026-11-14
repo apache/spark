@@ -714,11 +714,12 @@ object SQLConf {
         "a `*` repeating a string Series requires a literal repeat count. Anything else, " +
         "including comparisons and any use of `if`, `and`, `or`, `not` or `is None`, falls " +
         "back to interpreted Python, because those do not mean the same thing on a Series. " +
+        "Setting spark.sql.execution.pythonUDF.pandas.preferIntExtensionDtype=true disables " +
+        "all scalar pandas UDF transpilation. " +
         "Where a transpiled pandas UDF does differ, it is because numpy " +
         "arithmetic is fixed-width: it wraps on integer overflow, keeps float32 through a " +
         "float literal, loses precision above 2^53 for an integral column carrying " +
-        "NULLs (see spark.sql.execution.pythonUDF.pandas.preferIntExtensionDtype), and " +
-        "gives a missing value (or 0) for `a % 0` where ANSI raises REMAINDER_BY_ZERO -- in " +
+        "NULLs -- in " +
         "each of those cases the transpiled expression is the exact or ANSI-correct one. " +
         "The other direction also happens: a fractional body declared with an integral " +
         "return type raises interpreted but truncates transpiled, same as the return-type " +

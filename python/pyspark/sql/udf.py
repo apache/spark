@@ -285,11 +285,10 @@ class UserDefinedFunction:
         # the literal "True", which would otherwise silently disable
         # transpilation (or mis-trigger the ANSI warning below).
         #
-        # Each conf read is a JVM roundtrip, so keep the default construction
-        # path cheap: the experimental gate is only read for a deterministic UDF of a
-        # transpilable eval type, and the ANSI conf is only read once that gate is known to
-        # be on. The two regime confs below are read only for the one eval type each
-        # governs. When ``default`` is given it is
+        # Defining a deterministic UDF of a transpilable eval type, including the default
+        # Arrow-optimized type, reads the transpile flag once even when it is off. This
+        # construction-time read decides whether to attach options. ANSI and regime confs
+        # are read only once that flag is on. When ``default`` is given it is
         # passed through to ``RuntimeConfig.get`` so construction never depends
         # on the JVM having the (experimental) conf registered -- e.g. a newer
         # Python client against an older driver. No default is passed for
@@ -323,16 +322,10 @@ class UserDefinedFunction:
                         "false",
                     )
                 )
-                # A scalar pandas UDF's NaN handling depends on this conf, and not in a way
-                # any single expression can cover. The return path masks with
-                # ``series.isnull()`` only for a numpy-backed Series; a pandas masked
-                # extension array is handed to Arrow with ``mask=None`` instead (see
-                # ``PandasToArrowConversion.convert``), and its ``isnull()`` is False for NaN
-                # anyway. So with this conf off a NaN result arrives as NULL, and with it on
-                # the same NaN arrives as NaN. The transpiler reproduces the off case (the
-                # default) with an isnan-to-NULL normalization, which would be exactly wrong
-                # here, so refuse instead. Also re-checked in ConvertToCatalyst, since the
-                # conf can be flipped after construction.
+                # This conf makes integral inputs pandas masked extension arrays. Results
+                # derived from them can retain NaN, while the default numpy-backed return
+                # conversion masks NaN to NULL (PandasToArrowConversion._convert_column_legacy).
+                # Refuse this regime, and re-check in ConvertToCatalyst if it changes later.
                 and not (
                     evalType == PythonEvalType.SQL_SCALAR_PANDAS_UDF
                     and _conf_is_true(
