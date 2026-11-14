@@ -31,6 +31,7 @@ import org.apache.spark.sql.functions.min
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.sql.types.{BinaryType, BooleanType, ByteType, DateType, Decimal, DecimalType, DoubleType, FloatType, IntegerType, LongType, ShortType, StringType, StructField, StructType, TimestampType, TimeType}
+import org.apache.spark.tags.DataSourceV2Test
 import org.apache.spark.tags.SlowSQLTest
 
 /**
@@ -739,7 +740,7 @@ class ParquetV1AggregatePushDownSuite extends ParquetAggregatePushDownSuite {
     super.sparkConf.set(SQLConf.USE_V1_SOURCE_LIST, "parquet")
 }
 
-@SlowSQLTest
+@DataSourceV2Test
 class ParquetV2AggregatePushDownSuite extends ParquetAggregatePushDownSuite {
 
   override protected def sparkConf: SparkConf =
@@ -801,7 +802,7 @@ class OrcV1AggregatePushDownSuite extends OrcAggregatePushDownSuite {
     super.sparkConf.set(SQLConf.USE_V1_SOURCE_LIST, "orc")
 }
 
-@SlowSQLTest
+@DataSourceV2Test
 class OrcV2AggregatePushDownSuite extends OrcAggregatePushDownSuite {
 
   override protected def sparkConf: SparkConf =

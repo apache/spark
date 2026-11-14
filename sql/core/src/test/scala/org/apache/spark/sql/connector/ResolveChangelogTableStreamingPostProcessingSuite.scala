@@ -28,6 +28,7 @@ import org.apache.spark.sql.connector.catalog.{
 import org.apache.spark.sql.connector.expressions.Transform
 import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.sql.types.LongType
+import org.apache.spark.tags.DataSourceV2Test
 
 /**
  * Plan-shape tests for the streaming arm of
@@ -44,6 +45,7 @@ import org.apache.spark.sql.types.LongType
  *     -> [Project (update relabel)]
  *     -> Project (drop helper columns)
  */
+@DataSourceV2Test
 class ResolveChangelogTableStreamingPostProcessingSuite extends SharedSparkSession {
 
   private val catalogName = "cdc_streaming_pp"

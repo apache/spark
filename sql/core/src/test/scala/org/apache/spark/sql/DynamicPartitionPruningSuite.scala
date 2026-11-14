@@ -47,6 +47,7 @@ import org.apache.spark.sql.execution.window.WindowExec
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSparkSession
+import org.apache.spark.tags.DataSourceV2Test
 
 /**
  * Test suite for the filtering ratio policy used to trigger dynamic partition pruning (DPP).
@@ -2852,9 +2853,11 @@ abstract class DynamicPartitionPruningV2Suite extends DynamicPartitionPruningDat
   }
 }
 
+@DataSourceV2Test
 class DynamicPartitionPruningV2SuiteAEOff extends DynamicPartitionPruningV2Suite
   with DisableAdaptiveExecutionSuite
 
+@DataSourceV2Test
 class DynamicPartitionPruningV2SuiteAEOn extends DynamicPartitionPruningV2Suite
   with EnableAdaptiveExecutionSuite
 
@@ -2867,10 +2870,12 @@ abstract class DynamicPartitionPruningV2FilterSuite
   }
 }
 
+@DataSourceV2Test
 class DynamicPartitionPruningV2FilterSuiteAEOff
     extends DynamicPartitionPruningV2FilterSuite
   with DisableAdaptiveExecutionSuite
 
+@DataSourceV2Test
 class DynamicPartitionPruningV2FilterSuiteAEOn
     extends DynamicPartitionPruningV2FilterSuite
   with EnableAdaptiveExecutionSuite
@@ -2893,10 +2898,12 @@ abstract class DynamicPartitionPruningV2CatalystFilterSuite
   }
 }
 
+@DataSourceV2Test
 class DynamicPartitionPruningV2CatalystFilterSuiteAEOff
     extends DynamicPartitionPruningV2CatalystFilterSuite
   with DisableAdaptiveExecutionSuite
 
+@DataSourceV2Test
 class DynamicPartitionPruningV2CatalystFilterSuiteAEOn
     extends DynamicPartitionPruningV2CatalystFilterSuite
   with EnableAdaptiveExecutionSuite

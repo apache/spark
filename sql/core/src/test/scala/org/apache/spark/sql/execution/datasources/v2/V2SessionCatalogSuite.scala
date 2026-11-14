@@ -36,6 +36,7 @@ import org.apache.spark.sql.connector.expressions.Transform
 import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.sql.types.{DoubleType, IntegerType, LongType, StringType, StructType, TimestampType}
 import org.apache.spark.sql.util.CaseInsensitiveStringMap
+import org.apache.spark.tags.DataSourceV2Test
 
 abstract class V2SessionCatalogBaseSuite extends SharedSparkSession with BeforeAndAfter {
 
@@ -59,6 +60,7 @@ abstract class V2SessionCatalogBaseSuite extends SharedSparkSession with BeforeA
   }
 }
 
+@DataSourceV2Test
 class V2SessionCatalogTableSuite extends V2SessionCatalogBaseSuite {
 
   import org.apache.spark.sql.connector.catalog.CatalogV2Implicits._
@@ -851,6 +853,7 @@ class V2SessionCatalogTableSuite extends V2SessionCatalogBaseSuite {
   }
 }
 
+@DataSourceV2Test
 class V2SessionCatalogNamespaceSuite extends V2SessionCatalogBaseSuite {
 
   import org.apache.spark.sql.connector.catalog.CatalogV2Implicits._

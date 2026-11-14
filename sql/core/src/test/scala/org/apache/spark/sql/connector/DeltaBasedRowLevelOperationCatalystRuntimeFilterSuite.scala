@@ -20,7 +20,9 @@ package org.apache.spark.sql.connector
 import org.apache.spark.sql.Row
 import org.apache.spark.sql.catalyst.expressions.DynamicPruning
 import org.apache.spark.sql.execution.datasources.v2.BatchScanExec
+import org.apache.spark.tags.DataSourceV2Test
 
+@DataSourceV2Test
 class DeltaBasedRowLevelOperationCatalystRuntimeFilterSuite
   extends RowLevelOperationCatalystRuntimeFilterSuiteBase {
 

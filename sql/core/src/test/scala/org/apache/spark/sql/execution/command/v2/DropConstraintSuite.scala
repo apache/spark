@@ -19,7 +19,9 @@ package org.apache.spark.sql.execution.command.v2
 import org.apache.spark.sql.{AnalysisException, QueryTest}
 import org.apache.spark.sql.connector.catalog.constraints.Check
 import org.apache.spark.sql.execution.command.DDLCommandTestUtils
+import org.apache.spark.tags.DataSourceV2Test
 
+@DataSourceV2Test
 class DropConstraintSuite extends QueryTest with CommandSuiteBase with DDLCommandTestUtils {
   override protected def command: String = "ALTER TABLE .. DROP CONSTRAINT"
 

@@ -85,8 +85,10 @@ import org.apache.spark.sql.types.{ArrayType, DataType, Decimal, DecimalType, Do
   IntegerType, MapType, StringType, StructType, UserDefinedType}
 import org.apache.spark.sql.util.CaseInsensitiveStringMap
 import org.apache.spark.sql.vectorized.ColumnarBatch
+import org.apache.spark.tags.DataSourceV2Test
 import org.apache.spark.unsafe.types.UTF8String
 
+@DataSourceV2Test
 class ExternalLookupJoinSuite extends QueryTest with SharedSparkSession {
 
   import testImplicits._
@@ -4190,6 +4192,7 @@ class ExternalLookupTestCatalog extends TableCatalog {
  * 1970-01-03, after the query starts on 1970-01-01. The only stored rate is valid from 1970-01-03,
  * so it is valid in the second micro-batch, by time and by date, and in neither at the start.
  */
+@DataSourceV2Test
 class ExternalLookupJoinBatchTimeSuite extends StreamTest {
   import testImplicits._
 
@@ -4288,6 +4291,7 @@ class ExternalLookupJoinBatchTimeSuite extends StreamTest {
   }
 }
 
+@DataSourceV2Test
 class ExternalLookupJoinRealTimeModeSuite extends StreamRealTimeModeE2ESuiteBase {
   import testImplicits._
 

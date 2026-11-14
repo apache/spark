@@ -52,6 +52,7 @@ import org.apache.spark.sql.internal.{SQLConf, StaticSQLConf}
 import org.apache.spark.sql.internal.SQLConf.{PARTITION_OVERWRITE_MODE, PartitionOverwriteMode, V2_SESSION_CATALOG_IMPLEMENTATION}
 import org.apache.spark.sql.sources.SimpleScanSource
 import org.apache.spark.sql.types.{ArrayType, CharType, IntegerType, LongType, StringType, StructField, StructType, VarcharType}
+import org.apache.spark.tags.DataSourceV2Test
 import org.apache.spark.unsafe.types.UTF8String
 
 abstract class DataSourceV2SQLSuite
@@ -293,6 +294,7 @@ abstract class DataSourceV2SQLSuite
   }
 }
 
+@DataSourceV2Test
 class DataSourceV2SQLSuiteV1Filter
   extends DataSourceV2SQLSuite
   with AlterTableTests
@@ -5636,6 +5638,7 @@ class DataSourceV2SQLSuiteV1Filter
   }
 }
 
+@DataSourceV2Test
 class DataSourceV2SQLSuiteV2Filter extends DataSourceV2SQLSuite {
   override protected val catalogAndNamespace = "testv2filter.ns1.ns2."
 

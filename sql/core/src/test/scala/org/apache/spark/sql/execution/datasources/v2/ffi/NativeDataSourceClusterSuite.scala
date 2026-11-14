@@ -25,7 +25,7 @@ import scala.jdk.CollectionConverters._
 import org.apache.spark.sql.{QueryTest, Row}
 import org.apache.spark.sql.classic.{DataFrame, SparkSession}
 import org.apache.spark.sql.internal.SQLConf
-import org.apache.spark.tags.ExtendedSQLTest
+import org.apache.spark.tags.DataSourceV2Test
 import org.apache.spark.util.Utils
 
 /**
@@ -34,7 +34,7 @@ import org.apache.spark.util.Utils
  * themselves. [[NativeDataSourceSuite]] tests the rest in local mode, where the executors use the
  * packages of the driver.
  */
-@ExtendedSQLTest
+@DataSourceV2Test
 class NativeDataSourceClusterSuite extends QueryTest {
   import NativeDataSourceTestUtils._
 

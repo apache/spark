@@ -37,7 +37,9 @@ import org.apache.spark.sql.sources.StreamSourceProvider
 import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.sql.types.{IntegerType, LongType, StringType, StructType}
 import org.apache.spark.sql.util.CaseInsensitiveStringMap
+import org.apache.spark.tags.DataSourceV2Test
 
+@DataSourceV2Test
 class TableCapabilityCheckSuite extends AnalysisTest with SharedSparkSession {
 
   private val emptyMap = CaseInsensitiveStringMap.empty

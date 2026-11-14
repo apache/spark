@@ -30,6 +30,7 @@ import org.apache.spark.sql.internal.connector.SchemaAlignmentConfig
 import org.apache.spark.sql.internal.connector.SchemaAlignmentConfig.AnsiStoreAssignmentCastCheck
 import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.sql.types.{IntegerType, StructType}
+import org.apache.spark.tags.DataSourceV2Test
 
 /**
  * A catalog that creates [[InMemoryRowLevelOperationTable]]s carrying the fixed
@@ -74,6 +75,7 @@ class StrictSchemaAlignmentCatalog extends SchemaAlignmentTestCatalog {
  * ([[org.apache.spark.sql.catalyst.analysis.Analyzer.ResolveOutputRelation]]) and the row-level
  * path ([[org.apache.spark.sql.catalyst.analysis.ResolveRowLevelCommandAssignments]]).
  */
+@DataSourceV2Test
 class SchemaAlignmentConfigSuite extends QueryTest with SharedSparkSession {
 
   private val relaxed = "relaxed"

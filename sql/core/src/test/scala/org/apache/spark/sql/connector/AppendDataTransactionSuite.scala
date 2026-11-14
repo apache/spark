@@ -32,7 +32,9 @@ import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.internal.SQLConf.PartitionOverwriteMode
 import org.apache.spark.sql.sources
 import org.apache.spark.sql.util.CaseInsensitiveStringMap
+import org.apache.spark.tags.DataSourceV2Test
 
+@DataSourceV2Test
 class AppendDataTransactionSuite extends RowLevelOperationSuiteBase {
 
   private val targetLoadOption = "targetLoadOption"

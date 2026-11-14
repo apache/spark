@@ -44,8 +44,10 @@ import org.apache.spark.sql.sources._
 import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.sql.types.StructType
 import org.apache.spark.sql.util.CaseInsensitiveStringMap
+import org.apache.spark.tags.DataSourceV2Test
 import org.apache.spark.util.ArrayImplicits._
 
+@DataSourceV2Test
 class V1WriteFallbackSuite extends SharedSparkSession with BeforeAndAfter {
 
   import testImplicits._
@@ -251,6 +253,7 @@ class V1WriteFallbackSuite extends SharedSparkSession with BeforeAndAfter {
   }
 }
 
+@DataSourceV2Test
 class V1WriteFallbackSessionCatalogSuite
   extends InsertIntoTests(supportsDynamicOverwrite = false, includeSQLOnlyTests = true)
   with SessionCatalogTest[InMemoryTableWithV1Fallback, V1FallbackTableCatalog] {

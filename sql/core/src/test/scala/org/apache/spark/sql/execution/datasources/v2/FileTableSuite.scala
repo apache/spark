@@ -37,6 +37,7 @@ import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.sql.types._
 import org.apache.spark.sql.util.CaseInsensitiveStringMap
+import org.apache.spark.tags.DataSourceV2Test
 
 class DummyFileTable(
     sparkSession: SparkSession,
@@ -60,6 +61,7 @@ class DummyFileTable(
   override def fallbackFileFormat: Class[_ <: FileFormat] = classOf[TextFileFormat]
 }
 
+@DataSourceV2Test
 class FileTableSuite extends SharedSparkSession {
 
   private val allFileBasedDataSources = Seq("orc", "parquet", "csv", "json", "text")

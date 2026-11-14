@@ -21,7 +21,9 @@ import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.Row
 import org.apache.spark.sql.connector.catalog.{Aborted, Committed, Identifier, InMemoryRowLevelOperationTable}
 import org.apache.spark.sql.sources
+import org.apache.spark.tags.DataSourceV2Test
 
+@DataSourceV2Test
 class CTASRTASTransactionSuite extends RowLevelOperationSuiteBase {
 
   private val newTableNameAsString = "cat.ns1.new_table"

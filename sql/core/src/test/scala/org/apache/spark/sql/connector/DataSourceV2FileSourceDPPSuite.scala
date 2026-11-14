@@ -44,6 +44,7 @@ import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.sql.types.{IntegerType, LongType, StringType}
 import org.apache.spark.sql.util.CaseInsensitiveStringMap
+import org.apache.spark.tags.DataSourceV2Test
 
 /**
  * Tests for SPARK-30628: subquery partition pruning and DPP for V2 file sources.
@@ -1026,8 +1027,10 @@ private class DeleteOnlyDeltaOperation extends SupportsDelta {
   override def rowId(): Array[NamedReference] = Array(FieldReference.column("id"))
 }
 
+@DataSourceV2Test
 class DataSourceV2FileSourceDPPSuiteAEOff extends DataSourceV2FileSourceDPPSuiteBase
   with DisableAdaptiveExecutionSuite
 
+@DataSourceV2Test
 class DataSourceV2FileSourceDPPSuiteAEOn extends DataSourceV2FileSourceDPPSuiteBase
   with EnableAdaptiveExecutionSuite

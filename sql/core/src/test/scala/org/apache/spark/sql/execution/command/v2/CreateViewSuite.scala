@@ -20,7 +20,9 @@ package org.apache.spark.sql.execution.command.v2
 import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.connector.catalog.{BasicInMemoryTableCatalog, TableCatalog, View}
 import org.apache.spark.sql.execution.command
+import org.apache.spark.tags.DataSourceV2Test
 
+@DataSourceV2Test
 class CreateViewSuite extends command.CreateViewSuiteBase with ViewCommandSuiteBase {
   import testImplicits._
 

@@ -34,7 +34,9 @@ import org.apache.spark.sql.sources
 import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.sql.types.{IntegerType, StructType}
 import org.apache.spark.sql.util.CaseInsensitiveStringMap
+import org.apache.spark.tags.DataSourceV2Test
 
+@DataSourceV2Test
 class V2ScanRelationPushDownSubquerySuite extends QueryTest with SharedSparkSession {
   import SubqueryScanTestCatalog.calls
 

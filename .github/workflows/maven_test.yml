@@ -188,7 +188,13 @@ jobs:
             java: ${{ inputs.java }}
             hadoop: ${{ inputs.hadoop }}
             hive: hive2.3
-            excluded-tags: org.apache.spark.tags.ExtendedSQLTest,org.apache.spark.tags.SlowSQLTest
+            included-tags: org.apache.spark.tags.DataSourceV2Test
+            comment: "- DSv2 tests"
+          - modules: sql#core
+            java: ${{ inputs.java }}
+            hadoop: ${{ inputs.hadoop }}
+            hive: hive2.3
+            excluded-tags: org.apache.spark.tags.ExtendedSQLTest,org.apache.spark.tags.SlowSQLTest,org.apache.spark.tags.DataSourceV2Test
             comment: "- other tests"
     env:
       MODULES_TO_TEST: ${{ matrix.modules }}

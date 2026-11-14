@@ -25,6 +25,7 @@ import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.sql.types.StructType
 import org.apache.spark.sql.util.CaseInsensitiveStringMap
+import org.apache.spark.tags.DataSourceV2Test
 
 /**
  * Tests for the view side of [[DelegatingTable]]: view-text expansion on read, and
@@ -39,6 +40,7 @@ import org.apache.spark.sql.util.CaseInsensitiveStringMap
  * [[org.apache.spark.sql.execution.PersistedViewTestSuite]] body against the v2 path for full
  * parity with the v1 persisted-view coverage.
  */
+@DataSourceV2Test
 class DataSourceV2MetadataViewSuite extends SharedSparkSession {
   import testImplicits._
 

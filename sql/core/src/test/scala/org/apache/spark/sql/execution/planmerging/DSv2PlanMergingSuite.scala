@@ -26,6 +26,7 @@ import org.apache.spark.sql.connector.catalog.{InMemoryScanMergingPartitionFilte
 import org.apache.spark.sql.execution.datasources.v2.{BatchScanExec, DataSourceV2Relation}
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSparkSession
+import org.apache.spark.tags.DataSourceV2Test
 
 /**
  * End-to-end test for the DSv2 scan-merge gap this change closes: a source whose (equal) filter is
@@ -36,6 +37,7 @@ import org.apache.spark.sql.test.SharedSparkSession
  * push-predicates call would only run the first pass, see the filter come back post-scan,
  * mis-classify it as non-strict and decline the merge (leaving two scans).
  */
+@DataSourceV2Test
 class DSv2PlanMergingSuite extends QueryTest with SharedSparkSession
   with BeforeAndAfter with V2ScanMergingTestHelper {
 

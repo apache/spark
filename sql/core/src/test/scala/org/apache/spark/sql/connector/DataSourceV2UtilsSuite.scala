@@ -21,7 +21,9 @@ import org.apache.spark.SparkFunSuite
 import org.apache.spark.sql.connector.catalog.SessionConfigSupport
 import org.apache.spark.sql.execution.datasources.v2.DataSourceV2Utils
 import org.apache.spark.sql.internal.SQLConf
+import org.apache.spark.tags.DataSourceV2Test
 
+@DataSourceV2Test
 class DataSourceV2UtilsSuite extends SparkFunSuite {
 
   private val keyPrefix = new DataSourceV2WithSessionConfig().keyPrefix

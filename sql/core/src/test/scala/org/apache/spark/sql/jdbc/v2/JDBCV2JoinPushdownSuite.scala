@@ -24,8 +24,10 @@ import org.apache.spark.sql.ExplainSuiteHelper
 import org.apache.spark.sql.connector.DataSourcePushdownTestUtils
 import org.apache.spark.sql.jdbc.{H2Dialect, JdbcDialect, JdbcDialects}
 import org.apache.spark.sql.test.SharedSparkSession
+import org.apache.spark.tags.DataSourceV2Test
 import org.apache.spark.util.Utils
 
+@DataSourceV2Test
 class JDBCV2JoinPushdownSuite
   extends SharedSparkSession
   with ExplainSuiteHelper

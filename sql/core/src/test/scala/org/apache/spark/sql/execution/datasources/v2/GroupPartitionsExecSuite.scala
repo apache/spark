@@ -31,7 +31,9 @@ import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.sql.types.{DataType, IntegerType, LongType, TimestampType}
 import org.apache.spark.sql.vectorized.ColumnarBatch
+import org.apache.spark.tags.DataSourceV2Test
 
+@DataSourceV2Test
 class GroupPartitionsExecSuite extends SharedSparkSession {
 
   private val exprA = AttributeReference("a", IntegerType)()
