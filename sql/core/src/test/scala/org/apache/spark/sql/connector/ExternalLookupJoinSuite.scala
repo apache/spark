@@ -19,12 +19,14 @@ package org.apache.spark.sql.connector
 
 import java.nio.charset.StandardCharsets
 import java.util.concurrent.{ConcurrentLinkedQueue, CountDownLatch, TimeUnit}
-import java.util.concurrent.atomic.{AtomicBoolean, AtomicInteger, AtomicReference}
+import java.util.concurrent.atomic.{AtomicBoolean, AtomicInteger, AtomicLong, AtomicReference}
 
 import scala.collection.mutable
 import scala.concurrent.duration._
 import scala.jdk.CollectionConverters._
 import scala.reflect.{classTag, ClassTag}
+
+import com.google.common.base.Ticker
 
 import org.apache.spark.{SparkException, SparkIllegalArgumentException, SparkRuntimeException,
   SparkThrowable, SparkUnsupportedOperationException, TaskContext}
@@ -40,9 +42,10 @@ import org.apache.spark.sql.catalyst.expressions.{Add, Alias, Attribute, Attribu
   AttributeReference, Cast, EqualTo, Expression, GenericInternalRow, LessThan, Literal,
   NamedExpression, Rand, UnsafeProjection, Upper}
 import org.apache.spark.sql.catalyst.plans.{Inner, QueryPlan}
-import org.apache.spark.sql.catalyst.plans.logical.{Deduplicate, ExternalLookupFilter,
-  ExternalLookupJoin, ExternalLookupProject, ExternalLookupTransform, Join, JoinHint, LeafNode,
-  LogicalPlan, PreparedExternalLookupJoin, RepartitionByExpression}
+import org.apache.spark.sql.catalyst.plans.logical.{Deduplicate, ExternalLookupCacheOptions,
+  ExternalLookupFilter, ExternalLookupHint, ExternalLookupHintCacheOptions, ExternalLookupJoin,
+  ExternalLookupProject, ExternalLookupTransform, Join, JoinHint, LeafNode, LogicalPlan,
+  PreparedExternalLookupJoin, RepartitionByExpression}
 import org.apache.spark.sql.catalyst.trees.TreePattern.LOOKUP_ONLY_RELATION
 import org.apache.spark.sql.catalyst.util.{ArrayBasedMapData, GenericArrayData}
 import org.apache.spark.sql.classic.Dataset
@@ -135,6 +138,19 @@ class ExternalLookupJoinSuite extends QueryTest with SharedSparkSession {
       query.stop()
       spark.catalog.dropTempView(queryName)
     }
+  }
+
+  /**
+   * Runs the lookup join of the streaming `joined` again, over stream rows with the given ids, in
+   * one task, with [[ExternalLookupTestTicker]] as the clock of its cache.
+   */
+  private def runWithTestTicker(joined: DataFrame, ids: Seq[Int]): Seq[InternalRow] = {
+    val lookupJoin = runStream(joined).lookupJoin
+    SimpleExternalLookupDataSource.resetCounters()
+    val streamRows =
+      CoalesceExec(1, LocalTableScanExec(lookupJoin.child.output, ids.map(InternalRow(_)), None))
+    lookupJoin.copy(child = streamRows, cacheTicker = ExternalLookupTestTicker)
+      .executeCollect().toSeq
   }
 
   private def checkStream(df: DataFrame, expected: Seq[Row]): Unit =
@@ -401,7 +417,7 @@ class ExternalLookupJoinSuite extends QueryTest with SharedSparkSession {
     val expected = Seq(Row(1, "engineering"), Row(1, "research"), Row(2, "sales"))
 
     checkAnswer(dual.hint("external_lookup"), expected)
-    assert(dual.hint("external_lookup").count() === 3)
+    assert(dual.hint("external_lookup", "cache_enabled=false").count() === 3)
     withTempView("external_lookup_right") {
       dual.createOrReplaceTempView("external_lookup_right")
       checkAnswer(sql("SELECT /*+ EXTERNAL_LOOKUP */ * FROM external_lookup_right"), expected)
@@ -660,7 +676,7 @@ class ExternalLookupJoinSuite extends QueryTest with SharedSparkSession {
     checkError(
       exception = intercept[AnalysisException] {
         left.join(
-          lookup.hint("external_lookup"),
+          lookup.hint("external_lookup", "cache_enabled=false"),
           left("id") === lookup("id"),
           "right_outer").queryExecution.analyzed
       },
@@ -683,7 +699,7 @@ class ExternalLookupJoinSuite extends QueryTest with SharedSparkSession {
     checkError(
       exception = intercept[AnalysisException] {
         left.join(
-          lookup.hint("external_lookup").hint("merge"),
+          lookup.hint("external_lookup", "cache_enabled=false").hint("merge"),
           left("id") === lookup("id"),
           "right_outer").queryExecution.analyzed
       },
@@ -924,6 +940,252 @@ class ExternalLookupJoinSuite extends QueryTest with SharedSparkSession {
     assert(SimpleExternalLookupDataSource.readerCount.get() === 0)
   }
 
+  test("external lookup hint rejects duplicate and malformed options") {
+    val lookup = spark.read.format(classOf[SimpleExternalLookupDataSource].getName).load()
+    val positiveSize = Map("expected" -> "a positive size, such as 64k, 16m, or 1g")
+    val duration = Map("expected" -> ("a non-negative duration, such as 500ms, 5s, or 10m; " +
+      "a number without a unit is in milliseconds"))
+    val supportedOptions = Map("supportedOptions" ->
+      "\"cache_enabled\", \"cache_max_bytes\", \"cache_ttl\"")
+    Seq(
+      (Seq("cache_enabled=true", "cache_enabled=false"), "cache_enabled", "DUPLICATE_OPTION",
+        Map()),
+      (Seq("cache_enabled=unknown"), "cache_enabled", "INVALID_OPTION_VALUE",
+        Map("expected" -> "true or false")),
+      (Seq("cache_enabled="), "cache_enabled=", "INVALID_OPTION_FORMAT", Map()),
+      (Seq("=true"), "=true", "INVALID_OPTION_FORMAT", Map()),
+      (Seq("cache_mode=enabled"), "cache_mode", "UNSUPPORTED_OPTION", supportedOptions),
+      (Seq("cache_max_bytes=0"), "cache_max_bytes", "INVALID_OPTION_VALUE", positiveSize),
+      (Seq("cache_max_bytes=abc"), "cache_max_bytes", "INVALID_OPTION_VALUE", positiveSize),
+      (Seq("cache_ttl=-1ms"), "cache_ttl", "INVALID_OPTION_VALUE", duration),
+      (Seq("cache_ttl=abc"), "cache_ttl", "INVALID_OPTION_VALUE", duration),
+      (Seq("cache_max_entries=100"), "cache_max_entries", "UNSUPPORTED_OPTION",
+        supportedOptions),
+      (Seq("unknown_option=1"), "unknown_option", "UNSUPPORTED_OPTION", supportedOptions)).foreach {
+      case (options, option, subClass, parameters) =>
+        checkError(
+          exception = intercept[AnalysisException] {
+            lookup.hint("external_lookup", options: _*).queryExecution.analyzed
+          },
+          condition = s"INVALID_EXTERNAL_LOOKUP_HINT.$subClass",
+          parameters = Map("option" -> ("\"" + option + "\"")) ++ parameters)
+    }
+    checkError(
+      exception = intercept[AnalysisException] {
+        lookup.hint("external_lookup", 1).queryExecution.analyzed
+      },
+      condition = "INVALID_EXTERNAL_LOOKUP_HINT.UNSUPPORTED_PARAMETER",
+      parameters = Map("parameter" -> "\"1\""))
+    // A string without `=` is a relation name. When it names no relation, as an option without a
+    // value does, the error says how to write an option.
+    val noValue = intercept[AnalysisException] {
+      lookup.hint("external_lookup", "cache_enabled").queryExecution.analyzed
+    }
+    checkError(
+      exception = noValue,
+      condition = "INVALID_EXTERNAL_LOOKUP_HINT.RELATION_NOT_FOUND",
+      parameters = Map("relations" -> "`cache_enabled`"))
+    assert(noValue.getMessage.contains("Cannot find the relation(s) `cache_enabled` named by the " +
+      "hint. A string parameter that does not contain `=` is a relation name. Write a cache " +
+      "option as key=value, such as 'cache_enabled=false'."))
+  }
+
+  test("external lookup hint options ignore the case of a name and blanks around it and a value") {
+    val lookup = spark.read.format(classOf[SimpleExternalLookupDataSource].getName).load()
+    def hintOptions(options: String*): ExternalLookupHintCacheOptions =
+      lookup.hint("external_lookup", options: _*).queryExecution.analyzed.collectFirst {
+        case marker: ExternalLookupHint => marker.cacheOptions
+      }.get
+    assert(hintOptions("CACHE_TTL = 5s").ttlMillis === Some(5000L))
+    assert(hintOptions("Cache_Max_Bytes=8k").maxBytes === Some(8192L))
+    // The size and duration parsers trim their input themselves, so only a boolean shows that the
+    // value is trimmed.
+    assert(hintOptions("cache_enabled = TRUE").enabled === Some(true))
+    assert(hintOptions("cache_enabled=False").enabled === Some(false))
+    // An option that differs from another only in case is the same option.
+    checkError(
+      exception = intercept[AnalysisException] {
+        lookup.hint("external_lookup", "cache_ttl=1s", "CACHE_TTL=2s").queryExecution.analyzed
+      },
+      condition = "INVALID_EXTERNAL_LOOKUP_HINT.DUPLICATE_OPTION",
+      parameters = Map("option" -> "\"cache_ttl\""))
+  }
+
+  test("a hint can mix relation names and cache options given as strings") {
+    withSQLConf(
+        s"spark.sql.catalog.$EXTERNAL_LOOKUP_CATALOG_NAME" ->
+          classOf[ExternalLookupTestCatalog].getName) {
+      val catalogTable = s"$EXTERNAL_LOOKUP_CATALOG_NAME.ns.dual"
+      val swipes = streamOf(Seq((1, "lobby"), (3, "garage")).toDF("employee", "door"))
+      val expected = Seq(Row(1, "lobby", "engineering"), Row(1, "lobby", "research"))
+      def checkCacheOptions(df: DataFrame, check: ExternalLookupCacheOptions => Boolean): Unit = {
+        val run = runStream(df)
+        QueryTest.sameRows(expected, run.rows).foreach(fail(_))
+        val prepared = run.plan.collectFirst { case join: PreparedExternalLookupJoin => join }
+        assert(prepared.exists(join => check(join.cacheOptions)), prepared)
+      }
+
+      val directory = spark.table(catalogTable).as("r")
+      checkCacheOptions(
+        swipes.join(directory, swipes("employee") === $"r.id")
+          .hint("external_lookup", "r", "cache_enabled=false")
+          .select("employee", "door", "department"),
+        _.enabled === false)
+      withTempView("badge_swipes") {
+        swipes.createOrReplaceTempView("badge_swipes")
+        checkCacheOptions(
+          sql(
+            s"""
+              |SELECT /*+ EXTERNAL_LOOKUP('cache_ttl=2s', 'r') */ s.employee, s.door, r.department
+              |FROM badge_swipes s JOIN $catalogTable r ON s.employee = r.id
+              |""".stripMargin),
+          _.ttlMillis === 2000L)
+      }
+    }
+  }
+
+  test("the cache options of a hint in a WITH clause apply to its lookup join") {
+    withSQLConf(
+        s"spark.sql.catalog.$EXTERNAL_LOOKUP_CATALOG_NAME" ->
+          classOf[ExternalLookupTestCatalog].getName) {
+      withTempView("badge_swipes") {
+        streamOf(Seq((1, "lobby"), (3, "garage")).toDF("employee", "door"))
+          .createOrReplaceTempView("badge_swipes")
+        val run = runStream(sql(
+          s"""
+            |WITH lk AS (
+            |  SELECT /*+ EXTERNAL_LOOKUP('cache_enabled=false') */ *
+            |  FROM $EXTERNAL_LOOKUP_CATALOG_NAME.ns.dual)
+            |SELECT s.door, lk.department FROM badge_swipes s JOIN lk ON s.employee = lk.id
+            |""".stripMargin))
+        QueryTest.sameRows(
+          Seq(Row("lobby", "engineering"), Row("lobby", "research")), run.rows).foreach(fail(_))
+        val prepared = run.plan.collectFirst { case join: PreparedExternalLookupJoin => join }
+        assert(prepared.map(_.cacheOptions.enabled) === Some(false))
+      }
+    }
+  }
+
+  test("a hint with cache options over a join fails") {
+    val dual = spark.read.format(classOf[DualCapabilityExternalLookupDataSource].getName).load()
+    val swipes = streamOf(Seq((1, "lobby")).toDF("employee", "door"))
+    // The options would apply to no join, so the hint fails rather than leave the cache on.
+    withTempView("badge_swipes", "employee_directory") {
+      swipes.createOrReplaceTempView("badge_swipes")
+      dual.createOrReplaceTempView("employee_directory")
+      checkError(
+        exception = intercept[AnalysisException] {
+          sql(
+            """
+              |SELECT /*+ EXTERNAL_LOOKUP('cache_enabled=false') */ s.door, d.department
+              |FROM badge_swipes s JOIN employee_directory d ON s.employee = d.id
+              |""".stripMargin)
+        },
+        condition = "INVALID_EXTERNAL_LOOKUP_HINT.NOT_ON_LOOKUP_SIDE",
+        parameters = Map.empty)
+    }
+    checkError(
+      exception = intercept[AnalysisException] {
+        swipes.join(dual, swipes("employee") === dual("id"))
+          .hint("external_lookup", "cache_enabled=false").queryExecution.analyzed
+      },
+      condition = "INVALID_EXTERNAL_LOOKUP_HINT.NOT_ON_LOOKUP_SIDE",
+      parameters = Map.empty)
+    // Nor do the joins below a set operation read the options of a hint over it.
+    val visits = streamOf(Seq((2, "garage")).toDF("employee", "door"))
+    checkError(
+      exception = intercept[AnalysisException] {
+        swipes.join(dual, swipes("employee") === dual("id"))
+          .union(visits.join(dual, visits("employee") === dual("id")))
+          .hint("external_lookup", "cache_enabled=false").queryExecution.analyzed
+      },
+      condition = "INVALID_EXTERNAL_LOOKUP_HINT.NOT_ON_LOOKUP_SIDE",
+      parameters = Map.empty)
+    withTempView("badge_swipes", "garage_visits", "employee_directory") {
+      swipes.createOrReplaceTempView("badge_swipes")
+      visits.createOrReplaceTempView("garage_visits")
+      dual.createOrReplaceTempView("employee_directory")
+      checkError(
+        exception = intercept[AnalysisException] {
+          sql(
+            """
+              |SELECT /*+ EXTERNAL_LOOKUP('cache_ttl=5s') */ door FROM (
+              |  SELECT s.door FROM badge_swipes s JOIN employee_directory d ON s.employee = d.id
+              |  UNION ALL
+              |  SELECT v.door FROM garage_visits v JOIN employee_directory d ON v.employee = d.id)
+              |""".stripMargin)
+        },
+        condition = "INVALID_EXTERNAL_LOOKUP_HINT.NOT_ON_LOOKUP_SIDE",
+        parameters = Map.empty)
+    }
+  }
+
+  test("a cache option that a hint does not set follows its configuration when the query runs") {
+    val lookup = spark.read.format(classOf[SimpleExternalLookupDataSource].getName)
+      .option("maxBatchSize", "1").load()
+    // The hint is written before the configuration is set, and sets only the byte bound,
+    // cache_max_bytes.
+    val hinted = lookup.hint("external_lookup", "cache_max_bytes=5k")
+    val swipes = streamOf(Seq((1, "lobby"), (2, "garage"), (1, "lobby")).toDF("employee", "door"))
+    val joined = swipes.join(hinted, swipes("employee") === hinted("id"))
+    withSQLConf(SQLConf.JOIN_EXTERNAL_LOOKUP_CACHE_ENABLED.key -> "false") {
+      SimpleExternalLookupDataSource.resetCounters()
+      val run = runStream(joined)
+      val prepared = run.plan.collectFirst { case join: PreparedExternalLookupJoin => join }.get
+      assert(prepared.cacheOptions.enabled === false)
+      assert(prepared.cacheOptions.maxBytes === 5 * 1024)
+      assert(SimpleExternalLookupDataSource.requestCount.get() === 3)
+    }
+  }
+
+  test("of several hints on one lookup side, an outer hint's cache option wins") {
+    val dual = spark.read.format(classOf[DualCapabilityExternalLookupDataSource].getName).load()
+    withTempView("badge_swipes", "uncached_directory") {
+      streamOf(Seq((1, "lobby")).toDF("employee", "door")).createOrReplaceTempView("badge_swipes")
+      dual.hint("external_lookup", "cache_enabled=false", "cache_max_bytes=7k")
+        .createOrReplaceTempView("uncached_directory")
+      def cacheOptions(hint: String): ExternalLookupCacheOptions = runStream(sql(
+        s"""
+          |SELECT /*+ $hint */ s.door, d.department
+          |FROM badge_swipes s JOIN uncached_directory d ON s.employee = d.id
+          |""".stripMargin)).plan.collectFirst {
+        case join: PreparedExternalLookupJoin => join.cacheOptions
+      }.get
+      // The query's hint names the view, whose own hint sets two options.
+      val inner = cacheOptions("EXTERNAL_LOOKUP(d)")
+      assert(inner.enabled === false)
+      assert(inner.maxBytes === 7 * 1024)
+      val overridden = cacheOptions("EXTERNAL_LOOKUP(d, 'cache_enabled=true')")
+      assert(overridden.enabled === true)
+      assert(overridden.maxBytes === 7 * 1024)
+    }
+    // Two hints that name one relation: the outer one wins, which is the first in a comment and
+    // the later of two Dataset calls.
+    val swipes = streamOf(Seq((1, "lobby")).toDF("employee", "door"))
+    def ttlMillis(df: DataFrame): Long = runStream(df).plan.collectFirst {
+      case join: PreparedExternalLookupJoin => join.cacheOptions.ttlMillis
+    }.get
+    withTempView("badge_swipes", "employee_directory") {
+      swipes.createOrReplaceTempView("badge_swipes")
+      dual.createOrReplaceTempView("employee_directory")
+      assert(ttlMillis(sql(
+        """
+          |SELECT /*+ EXTERNAL_LOOKUP(r, 'cache_ttl=5s'), EXTERNAL_LOOKUP(r, 'cache_ttl=10s') */
+          |  s.door, r.department
+          |FROM badge_swipes s JOIN employee_directory r ON s.employee = r.id
+          |""".stripMargin)) === 5000)
+    }
+    val directory = dual.as("r")
+    val joined = swipes.join(directory, swipes("employee") === $"r.id")
+    assert(ttlMillis(joined.hint("external_lookup", "r", "cache_ttl=5s")
+      .hint("external_lookup", "r", "cache_ttl=10s")) === 10000)
+    // The same when the inner hint marks a projection of the relation that the outer one names.
+    val projected = directory.select($"r.id", $"r.department")
+      .hint("external_lookup", "cache_ttl=5s")
+    assert(ttlMillis(swipes.join(projected, swipes("employee") === projected("id"))
+      .hint("external_lookup", "r", "cache_ttl=10s")) === 10000)
+  }
+
   test("external lookup hint rejects invalid placement and relation targets") {
     val lookup = spark.read.format(classOf[SimpleExternalLookupDataSource].getName).load()
     val left = streamOf(Seq(1).toDF("id"))
@@ -1034,6 +1296,7 @@ class ExternalLookupJoinSuite extends QueryTest with SharedSparkSession {
       .format(classOf[SimpleExternalLookupDataSource].getName)
       .option("selectionMode", "last")
       .load()
+      .hint("external_lookup", "cache_enabled=false")
     val left = streamOf(Seq((1, 2), (2, 2), (2, 1)).toDF("a", "b"))
 
     // Both candidates have the shape `id = ?`; only the second one, bound to `b`, is selected.
@@ -2370,6 +2633,40 @@ class ExternalLookupJoinSuite extends QueryTest with SharedSparkSession {
     }
   }
 
+  test("SQL external lookup hint accepts cache options") {
+    SimpleExternalLookupDataSource.resetCounters()
+    val lookup = spark.read
+      .format(classOf[SimpleExternalLookupDataSource].getName)
+      .option("maxBatchSize", "1")
+      .load()
+    val left = streamOf(Seq(1, 2).toDF("id"))
+
+    withTempView("external_lookup_left", "external_lookup_right") {
+      left.createOrReplaceTempView("external_lookup_left")
+      lookup.createOrReplaceTempView("external_lookup_right")
+      val query = sql("""
+          |SELECT /*+ EXTERNAL_LOOKUP(
+          |  r,
+          |  'cache_enabled=false',
+          |  'cache_max_bytes=123k',
+          |  'cache_ttl=2s'
+          |) */ l.id, r.department
+          |FROM external_lookup_left l JOIN external_lookup_right r ON l.id = r.id
+          |""".stripMargin)
+      val run = runStream(query)
+      assert(QueryTest.sameRows(
+        Seq(Row(1, "engineering"), Row(1, "research"), Row(2, "sales")), run.rows).isEmpty)
+      val prepared = run.plan.collectFirst {
+        case externalLookup: PreparedExternalLookupJoin => externalLookup
+      }.get
+      assert(prepared.cacheOptions === ExternalLookupCacheOptions(
+        enabled = false,
+        maxBytes = 123 * 1024,
+        ttlMillis = 2000))
+    }
+    assert(SimpleExternalLookupDataSource.requestCount.get() > 0)
+  }
+
   test("external lookup pushes accepted filters and required columns to the source") {
     SimpleExternalLookupDataSource.resetCounters()
     val rawLookup = spark.read.format(classOf[SimpleExternalLookupDataSource].getName).load()
@@ -2560,6 +2857,7 @@ class ExternalLookupJoinSuite extends QueryTest with SharedSparkSession {
       .format(classOf[SimpleExternalLookupDataSource].getName)
       .option("maxBatchSize", "3")
       .load()
+      .hint("external_lookup", "cache_enabled=false")
     val left = streamOf(Seq[java.lang.Integer](1, 1, null, 3, 2).toDF("id"))
 
     val run = runStream(left.join(lookup, left("id") === lookup("id"), "left_outer"))
@@ -2998,6 +3296,262 @@ class ExternalLookupJoinSuite extends QueryTest with SharedSparkSession {
     assert(SimpleExternalLookupDataSource.requiredColumns.get() === Seq("id", "department"))
   }
 
+  test("a hint option turns the cache off for a key repeated in a later batch") {
+    def run(cacheHint: Seq[Any]): Int = {
+      SimpleExternalLookupDataSource.requestCount.set(0)
+      val lookup = spark.read
+        .format(classOf[SimpleExternalLookupDataSource].getName)
+        .option("maxBatchSize", "1")
+        .load()
+      val hinted = lookup.hint("external_lookup", cacheHint: _*)
+      val left = streamOf(Seq(1, 2, 1).toDF("id"))
+      checkStream(
+        left.join(hinted, left("id") === hinted("id"), "inner"),
+        Seq(Row(1, 1, "engineering"), Row(1, 1, "research"), Row(2, 2, "sales"),
+          Row(1, 1, "engineering"), Row(1, 1, "research")))
+      SimpleExternalLookupDataSource.requestCount.get()
+    }
+
+    // Each request holds one parameter row, so the third stream row is a batch of its own.
+    assert(run(Nil) === 2)
+    assert(run(Seq("cache_enabled=false")) === 3)
+  }
+
+  test("a batch with cached and uncached keys requests only the uncached ones") {
+    val lookup = spark.read.format(classOf[SimpleExternalLookupDataSource].getName)
+      .option("maxBatchSize", "2").load()
+    // Two batches of two swipes. Employee 1 is cached by the first batch when the second reads
+    // it, and employee 3 is not.
+    val swipes = streamOf(
+      Seq(("door-a", 1), ("door-b", 2), ("door-c", 1), ("door-d", 3)).toDF("door", "employee"))
+    val matched = Seq(
+      Row("door-a", 1, 1, "engineering"), Row("door-a", 1, 1, "research"),
+      Row("door-b", 2, 2, "sales"),
+      Row("door-c", 1, 1, "engineering"), Row("door-c", 1, 1, "research"))
+    Seq(
+      "inner" -> matched,
+      "left_outer" -> (matched :+ Row("door-d", 3, null, null)),
+      "left_semi" -> Seq(Row("door-a", 1), Row("door-b", 2), Row("door-c", 1)),
+      "left_anti" -> Seq(Row("door-d", 3))).foreach { case (joinType, expected) =>
+      SimpleExternalLookupDataSource.resetCounters()
+      val run = runStream(swipes.join(lookup, swipes("employee") === lookup("id"), joinType))
+      QueryTest.sameRows(expected, run.rows).foreach(fail(_))
+      assert(SimpleExternalLookupDataSource.requestSizes.asScala.toSeq === Seq(2, 1), joinType)
+      assert(SimpleExternalLookupDataSource.requestedKeys.asScala.toSeq === Seq(1, 2, 3), joinType)
+      assert(run.lookupJoin.metrics("numCacheHits").value === 1, joinType)
+    }
+  }
+
+  test("the cache keeps every row of a key whose rows come between another key's rows") {
+    // The connector returns the rows of employees 1 and 2 in turn. The first batch of two swipes
+    // caches each employee's rows once its cursor has ended, so the second batch serves both
+    // employees from the cache with every row.
+    val lookup = spark.read.format(classOf[SimpleExternalLookupDataSource].getName)
+      .option("maxBatchSize", "2").load()
+    val departments = Map(1 -> Seq("engineering", "research"), 2 -> Seq("sales", "legal"))
+    val doors = Seq("door-a" -> 1, "door-b" -> 2, "door-c" -> 1, "door-d" -> 2)
+    val swipes = streamOf(doors.toDF("door", "employee"))
+    val sameEmployee = swipes("employee") === lookup("id")
+    // Only each employee's second row, which comes after the other employee's first, passes this.
+    val secondRow = lookup("department") ===
+      when(swipes("employee") === 1, "research").otherwise("legal")
+    val matched = doors.flatMap { case (door, id) => departments(id).map(Row(door, id, id, _)) }
+    Seq(
+      ("inner", sameEmployee, matched),
+      ("left_outer", sameEmployee, matched),
+      ("left_semi", sameEmployee && secondRow, doors.map { case (door, id) => Row(door, id) }),
+      ("left_anti", sameEmployee && secondRow, Nil)).foreach {
+      case (joinType, condition, expected) =>
+        SimpleExternalLookupDataSource.resetCounters()
+        SimpleExternalLookupDataSource.departmentsById.set(departments)
+        SimpleExternalLookupDataSource.interleaveResults.set(true)
+        val run = runStream(swipes.join(lookup, condition, joinType))
+        QueryTest.sameRows(expected, run.rows).foreach(error => fail(s"$joinType: $error"))
+        assert(SimpleExternalLookupDataSource.requestedKeys.asScala.toSeq === Seq(1, 2), joinType)
+        assert(run.lookupJoin.metrics("numCacheHits").value === 2, joinType)
+    }
+  }
+
+  test("cache options of a hint apply through the operators between the hint and the join") {
+    val lookup = spark.read
+      .format(classOf[SimpleExternalLookupDataSource].getName)
+      .option("maxBatchSize", "1")
+      .load()
+      .hint("external_lookup", "cache_enabled=false")
+      .select($"id", upper($"department").as("department"))
+    val left = streamOf(Seq(1, 1).toDF("id"))
+
+    val run = runStream(left.join(lookup, left("id") === lookup("id")))
+    assert(run.rows.size === 4)
+    val prepared = run.plan.collectFirst { case join: PreparedExternalLookupJoin => join }.get
+    assert(prepared.cacheOptions.enabled === false)
+    assert(SimpleExternalLookupDataSource.requestCount.get() === 2)
+  }
+
+  test("external lookup cache uses SQLConf defaults and hint overrides") {
+    def run(hintParameters: Seq[Any]): Int = {
+      SimpleExternalLookupDataSource.resetCounters()
+      val lookup = spark.read
+        .format(classOf[SimpleExternalLookupDataSource].getName)
+        .option("maxBatchSize", "1")
+        .load()
+      val hinted = if (hintParameters.isEmpty) lookup else {
+        lookup.hint("external_lookup", hintParameters: _*)
+      }
+      val left = streamOf(Seq(1, 1).toDF("id"))
+      runStream(left.join(hinted, left("id") === hinted("id"), "inner"))
+      SimpleExternalLookupDataSource.requestCount.get()
+    }
+
+    withSQLConf(SQLConf.JOIN_EXTERNAL_LOOKUP_CACHE_ENABLED.key -> "false") {
+      assert(run(Nil) === 2)
+      assert(run(Seq("cache_enabled=true")) === 1)
+    }
+  }
+
+  test("external lookup cache controls freshness and caches misses") {
+    def run(keys: Seq[Int], cacheDisabled: Boolean, mutate: Boolean): (Seq[Row], Int) = {
+      SimpleExternalLookupDataSource.resetCounters()
+      val unhintedLookup = spark.read
+        .format(classOf[SimpleExternalLookupDataSource].getName)
+        .option("maxBatchSize", "1")
+        .option("mutateAfterRequest", mutate.toString)
+        .load()
+      val hintParameters: Seq[Any] = if (cacheDisabled) Seq("cache_enabled=false") else Nil
+      val lookup = unhintedLookup.hint("external_lookup", hintParameters: _*)
+      val left = streamOf(keys.toDF("id"))
+      val rows = runStream(left.join(lookup, left("id") === lookup("id"), "left_outer")).rows
+      rows -> SimpleExternalLookupDataSource.requestCount.get()
+    }
+
+    val (cachedRows, cachedRequests) = run(Seq(2, 2), cacheDisabled = false, mutate = true)
+    assert(cachedRows === Seq(Row(2, 2, "sales"), Row(2, 2, "sales")))
+    assert(cachedRequests === 1)
+
+    val (freshRows, freshRequests) = run(Seq(2, 2), cacheDisabled = true, mutate = true)
+    assert(freshRows === Seq(Row(2, 2, "sales"), Row(2, 2, "sales-v2")))
+    assert(freshRequests === 2)
+
+    val (missingRows, missingRequests) = run(Seq(3, 3), cacheDisabled = false, mutate = false)
+    assert(missingRows === Seq(Row(3, null, null), Row(3, null, null)))
+    assert(missingRequests === 1)
+  }
+
+  test("external lookup cache TTL expires entries") {
+    // Each reading of the clock but the first moves it past the TTL, so an entry has expired when
+    // it is probed. The cache reads time only from this clock, so the 1ms TTL is exact.
+    ExternalLookupTestTicker.reset(reading => if (reading > 1) 2000000L else 0L)
+    val lookup = spark.read
+      .format(classOf[SimpleExternalLookupDataSource].getName)
+      .option("maxBatchSize", "1")
+      .load()
+    val left = streamOf(Seq(2).toDF("id"))
+    withSQLConf(SQLConf.JOIN_EXTERNAL_LOOKUP_CACHE_TTL.key -> "1ms") {
+      val joined = left.join(lookup, left("id") === lookup("id"), "left_outer")
+      assert(runStream(joined).lookupJoin.cacheOptions.ttlMillis === 1)
+      assert(runWithTestTicker(joined, Seq(2, 2)).size === 2)
+    }
+    assert(SimpleExternalLookupDataSource.requestedKeys.asScala.toSeq === Seq(2, 2))
+  }
+
+  test("a cache entry expiring between duplicate keys in one batch is looked up once") {
+    // The clock passes the 1ms TTL at its fourth reading. Guava reads it once when it writes an
+    // entry and once when it probes a non-empty cache.
+    ExternalLookupTestTicker.reset(reading => if (reading == 4) 2000000L else 0L)
+    val lookup = spark.read
+      .format(classOf[SimpleExternalLookupDataSource].getName)
+      .option("maxBatchSize", "2")
+      .load()
+      .hint("external_lookup", "cache_ttl=1ms")
+    val left = streamOf(Seq(2).toDF("id"))
+    // Batches [2, 1], [2, 2] and [2]. The first caches its two keys, at readings 1 and 2. The
+    // second probes key 2 at reading 3, before the expiry, and serves both of its rows from that
+    // one probe: the duplicate row is never probed. The last probes key 2 at reading 4, after it.
+    val rows = runWithTestTicker(
+      left.join(lookup, left("id") === lookup("id"), "inner"), Seq(2, 1, 2, 2, 2))
+    assert(rows.size === 6)
+    assert(ExternalLookupTestTicker.readings.get() === 4)
+    // The second batch requests nothing although its entry for key 2 expires before its duplicate
+    // row would be probed; the last batch requests key 2 again.
+    assert(SimpleExternalLookupDataSource.requestedKeys.asScala.toSeq === Seq(2, 1, 2))
+  }
+
+  test("the cache TTL counts from an entry's write, not from its last hit") {
+    // Each batch is one stream row of employee 2. The clock reads 0 when the first batch caches
+    // the employee, 0.6ms when the second hits the entry, and 1.2ms when the third probes it:
+    // past the 1ms TTL since the write, but not since the hit.
+    ExternalLookupTestTicker.reset(reading => if (reading == 1) 0L else 600000L)
+    val lookup = spark.read
+      .format(classOf[SimpleExternalLookupDataSource].getName)
+      .option("maxBatchSize", "1")
+      .load()
+      .hint("external_lookup", "cache_ttl=1ms")
+    val left = streamOf(Seq(2).toDF("id"))
+    val rows = runWithTestTicker(
+      left.join(lookup, left("id") === lookup("id"), "inner"), Seq(2, 2, 2))
+    assert(rows.size === 3)
+    assert(ExternalLookupTestTicker.readings.get() === 3)
+    assert(SimpleExternalLookupDataSource.requestedKeys.asScala.toSeq === Seq(2, 2))
+  }
+
+  test("a hint's cache_ttl=0 turns expiration off for its join") {
+    // The configured TTL is 1ms, and each reading of the clock but the first moves it past that.
+    // The hint turns expiration off for its join, so the second batch is served from the cache.
+    ExternalLookupTestTicker.reset(reading => if (reading > 1) 2000000L else 0L)
+    val lookup = spark.read
+      .format(classOf[SimpleExternalLookupDataSource].getName)
+      .option("maxBatchSize", "1")
+      .load()
+      .hint("external_lookup", "cache_ttl=0")
+    val left = streamOf(Seq(2).toDF("id"))
+    withSQLConf(SQLConf.JOIN_EXTERNAL_LOOKUP_CACHE_TTL.key -> "1ms") {
+      val joined = left.join(lookup, left("id") === lookup("id"), "left_outer")
+      assert(runStream(joined).lookupJoin.cacheOptions.ttlMillis === 0)
+      assert(runWithTestTicker(joined, Seq(2, 2)).size === 2)
+    }
+    assert(SimpleExternalLookupDataSource.requestedKeys.asScala.toSeq === Seq(2))
+  }
+
+  test("external lookup reports cache metrics") {
+    SimpleExternalLookupDataSource.resetCounters()
+    val lookup = spark.read
+      .format(classOf[SimpleExternalLookupDataSource].getName)
+      .option("maxBatchSize", "1")
+      .load()
+      .hint("external_lookup")
+    val left = streamOf(Seq(1, 1).toDF("id"))
+    val query = left.join(lookup, left("id") === lookup("id"), "inner")
+
+    val operator = runStream(query).execution.executedPlan.collectFirst {
+      case externalLookup: ExternalLookupJoinExec => externalLookup
+    }.get
+    assert(operator.metrics("numInputRows").value === 2)
+    assert(operator.metrics("numInputBatches").value === 2)
+    assert(operator.metrics("numLookupRequests").value === 1)
+    assert(operator.metrics("numCacheHits").value === 1)
+    assert(operator.metrics("lookupTime").value >= 0)
+  }
+
+  test("external lookup cache evicts least recently used entries at the configured bound") {
+    val lookup = spark.read
+      .format(classOf[SimpleExternalLookupDataSource].getName)
+      .option("maxBatchSize", "1")
+      .load()
+    // Employees 10, 11 and 12 are not stored. An entry for a key without a result takes the key's
+    // 16 bytes and the 168 bytes of the objects that hold an entry, so the cache has room for two
+    // of them.
+    val left = streamOf(Seq(10, 11, 10, 12, 10, 11).toDF("id"))
+    withSQLConf(SQLConf.JOIN_EXTERNAL_LOOKUP_CACHE_MAX_BYTES.key -> "400") {
+      SimpleExternalLookupDataSource.resetCounters()
+      val run = runStream(left.join(lookup, left("id") === lookup("id"), "left_outer"))
+      assert(run.lookupJoin.cacheOptions.maxBytes === 400)
+      assert(run.rows.size === 6)
+    }
+    // The third key evicts the least recently used key 11, not key 10, which was used more
+    // recently.
+    assert(SimpleExternalLookupDataSource.requestedKeys.asScala.toSeq === Seq(10, 11, 12, 11))
+  }
+
   test("an upstream limit stops one-to-many cursor consumption") {
     SimpleExternalLookupDataSource.departmentsById.set(Map(1 -> (1 to 2000).map(_.toString)))
     val lookup = spark.read.format(classOf[SimpleExternalLookupDataSource].getName).load()
@@ -3010,6 +3564,169 @@ class ExternalLookupJoinSuite extends QueryTest with SharedSparkSession {
     assert(SimpleExternalLookupDataSource.closeEvents.asScala.toSeq === Seq("cursor", "reader"))
   }
 
+  test("a key whose rows take more than a sixteenth of the cache is joined but not cached") {
+    // Each row of an employee and a two-letter department takes 32 bytes, and 60 more for the
+    // objects that hold it, so with a cache of 1472 * n bytes, the rows of one key may take 92 * n
+    // bytes. Employee 1 has n rows, employee 2 has n + 1, and employee 3 has n rows that pass the
+    // lookup-side filter and one that does not.
+    Seq(1, 3).foreach { n =>
+      SimpleExternalLookupDataSource.resetCounters()
+      def departments(count: Int): Seq[String] = (1 to count).map(i => s"a$i")
+      SimpleExternalLookupDataSource.departmentsById.set(Map(
+        1 -> departments(n), 2 -> departments(n + 1), 3 -> (departments(n) :+ "zz")))
+      val directory = spark.read
+        .format(classOf[SimpleExternalLookupDataSource].getName)
+        .option("maxBatchSize", "3")
+        .load()
+        .where($"department" =!= "zz")
+      // Two batches of the three employees. The second serves employees 1 and 3 from the cache,
+      // and requests employee 2 again. The bound comes from the hint for n = 1, and from the
+      // configuration otherwise.
+      val left = streamOf(Seq(1, 2, 3, 1, 2, 3).toDF("id"))
+      val (hinted, conf) = if (n == 1) {
+        (directory.hint("external_lookup", "cache_max_bytes=1472"), Nil)
+      } else {
+        (directory, Seq(SQLConf.JOIN_EXTERNAL_LOOKUP_CACHE_MAX_BYTES.key -> s"${1472 * n}"))
+      }
+      val run = withSQLConf(conf: _*) {
+        runStream(left.join(hinted, left("id") === hinted("id")))
+      }
+      assert(run.lookupJoin.cacheOptions.maxBytes === 1472 * n)
+      assert(run.rows.size === 2 * (3 * n + 1), n)
+      assert(SimpleExternalLookupDataSource.requestSizes.asScala.toSeq === Seq(3, 1), n)
+      assert(SimpleExternalLookupDataSource.requestedKeys.asScala.toSeq === Seq(1, 2, 3, 2), n)
+      assert(run.lookupJoin.metrics("numCacheHits").value === 2, n)
+    }
+  }
+
+  test("a request caches rows up to the cache's bound, and the key that would pass it is not") {
+    // Seventeen employees with one row each, of 32 bytes and 60 more for the objects that hold it.
+    // With a cache of 1472 bytes, each key's rows may take 92 bytes, and one request may buffer
+    // 1472 bytes of rows for the cache: the rows of the first sixteen employees, not the
+    // seventeenth's. A cache entry also takes the key and 168 bytes for the objects that hold it,
+    // so the cache keeps the last five that are written, employees 12 to 16.
+    SimpleExternalLookupDataSource.resetCounters()
+    SimpleExternalLookupDataSource.departmentsById.set((1 to 17).map(_ -> Seq("a1")).toMap)
+    val directory = spark.read
+      .format(classOf[SimpleExternalLookupDataSource].getName)
+      .option("maxBatchSize", "17")
+      .load()
+    // A batch of the seventeen employees, then one of employees 17 and 16.
+    val left = streamOf(((1 to 17) ++ Seq(17, 16)).toDF("id"))
+    val run = withSQLConf(SQLConf.JOIN_EXTERNAL_LOOKUP_CACHE_MAX_BYTES.key -> "1472") {
+      runStream(left.join(directory, left("id") === directory("id")))
+    }
+    assert(run.rows.size === 19)
+    // The second batch serves employee 16 from the cache, and requests employee 17 again.
+    assert(SimpleExternalLookupDataSource.requestSizes.asScala.toSeq === Seq(17, 1))
+    assert(SimpleExternalLookupDataSource.requestedKeys.asScala.toSeq === (1 to 17) :+ 17)
+    assert(run.lookupJoin.metrics("numCacheHits").value === 1)
+  }
+
+  test("cache hits are joined as the output is read") {
+    // Each badge swipe is a batch of its own. The first swipe of employee 1 matches neither of the
+    // employee's rows, and caches both. The second is served from the cache, and matches the first
+    // cached row, engineering; the residual would fail on the second, research. A limit of one row
+    // reads no further, so the second cached row is never joined with it.
+    val lookup = spark.read
+      .format(classOf[SimpleExternalLookupDataSource].getName)
+      .option("maxBatchSize", "1")
+      .load()
+    val swipes = streamOf(Seq((1, 1), (1, 2)).toDF("employee", "attempt"))
+    val residual = when(swipes("attempt") === 2 && lookup("department") === "research",
+      raise_error(lit("evaluated"))).otherwise(swipes("attempt") === 2)
+    SimpleExternalLookupDataSource.resetCounters()
+    val run = runStream(
+      swipes.join(lookup, swipes("employee") === lookup("id") && residual).limit(1))
+    QueryTest.sameRows(Seq(Row(1, 2, 1, "engineering")), run.rows).foreach(fail(_))
+    assert(SimpleExternalLookupDataSource.requestCount.get() === 1)
+    assert(SimpleExternalLookupDataSource.resultRowsRead.get() === 2)
+    assert(run.lookupJoin.metrics("numCacheHits").value === 1)
+  }
+
+  test("a semi or anti join caches one row of a key when its residual reads no lookup column") {
+    // Each badge swipe of employee 1 is a batch of its own. Any row of the employee gives the
+    // answer of a join whose residual reads no lookup column, so the first batch closes its cursor
+    // at the employee's first row and caches that row for the second swipe. A residual that reads
+    // the department needs every row, so the first batch reads the second row too, to cache the
+    // employee's whole result.
+    val lookup = spark.read
+      .format(classOf[SimpleExternalLookupDataSource].getName)
+      .option("maxBatchSize", "1")
+      .load()
+    val swipes = streamOf(Seq((1, "lobby"), (1, "garage")).toDF("employee", "door"))
+    val sameEmployee = swipes("employee") === lookup("id")
+    for {
+      (condition, rowsRead) <- Seq(
+        sameEmployee -> 1, (sameEmployee && lookup("department") =!= swipes("door")) -> 2)
+      (joinType, expected) <-
+        Seq("left_semi" -> Seq(Row(1, "lobby"), Row(1, "garage")), "left_anti" -> Nil)
+    } {
+      SimpleExternalLookupDataSource.resetCounters()
+      val run = runStream(swipes.join(lookup, condition, joinType))
+      QueryTest.sameRows(expected, run.rows).foreach(error => fail(s"$joinType: $error"))
+      assert(SimpleExternalLookupDataSource.requestCount.get() === 1, joinType)
+      assert(SimpleExternalLookupDataSource.resultRowsRead.get() === rowsRead, joinType)
+      assert(run.lookupJoin.metrics("numCacheHits").value === 1, joinType)
+    }
+  }
+
+  test("a semi or anti batch stops reading once its rows have matched and no key can be cached") {
+    // Each row of employee 1 and a two-letter department takes 92 bytes in the cache, a sixteenth
+    // of 1472, and the employee has five. The residual reads the department, so the cache would
+    // keep every row of the employee, and the second row takes the employee past its share. The
+    // first batch then reads no further, as when it caches nothing, and the second requests the
+    // employee again. Each badge swipe is a batch of its own.
+    val lookup = spark.read
+      .format(classOf[SimpleExternalLookupDataSource].getName)
+      .option("maxBatchSize", "1")
+      .load()
+      .hint("external_lookup", "cache_max_bytes=1472")
+    val swipes = streamOf(Seq((1, "lobby"), (1, "garage")).toDF("employee", "door"))
+    val condition =
+      swipes("employee") === lookup("id") && lookup("department") =!= swipes("door")
+    Seq("left_semi" -> Seq(Row(1, "lobby"), Row(1, "garage")), "left_anti" -> Nil).foreach {
+      case (joinType, expected) =>
+        SimpleExternalLookupDataSource.resetCounters()
+        SimpleExternalLookupDataSource.departmentsById.set(Map(1 -> (1 to 5).map(i => s"a$i")))
+        val cursorEnds = new AtomicInteger(0)
+        SimpleExternalLookupDataSource.beforeCursorEnds.set { () =>
+          cursorEnds.incrementAndGet()
+          ()
+        }
+        val run = runStream(swipes.join(lookup, condition, joinType))
+        QueryTest.sameRows(expected, run.rows).foreach(error => fail(s"$joinType: $error"))
+        // The first batch reads two rows, and the last, which caches nothing, one.
+        assert(SimpleExternalLookupDataSource.resultRowsRead.get() === 3, joinType)
+        assert(SimpleExternalLookupDataSource.requestCount.get() === 2, joinType)
+        assert(cursorEnds.get() === 0, joinType)
+        assert(SimpleExternalLookupDataSource.closeEvents.asScala.toSeq ===
+          Seq("cursor", "cursor", "reader"), joinType)
+        assert(run.lookupJoin.metrics("numCacheHits").value === 0, joinType)
+    }
+  }
+
+  test("a partition whose stream rows fit in one request gives the same result with the cache") {
+    // Only a later batch would read the cache, so the cache changes neither the rows nor the
+    // request of a partition with one batch.
+    val lookup = spark.read.format(classOf[SimpleExternalLookupDataSource].getName).load()
+    val swipes = streamOf(
+      Seq(("lobby", 1), ("garage", 2), ("lobby", 1), ("dock", 3)).toDF("door", "employee"))
+    Seq("inner", "left_outer", "left_semi", "left_anti").foreach { joinType =>
+      val results = Seq("true", "false").map { enabled =>
+        withSQLConf(SQLConf.JOIN_EXTERNAL_LOOKUP_CACHE_ENABLED.key -> enabled) {
+          SimpleExternalLookupDataSource.resetCounters()
+          val rows = runStream(swipes.join(lookup, swipes("employee") === lookup("id"), joinType))
+            .rows.map(_.toString).sorted
+          (rows, SimpleExternalLookupDataSource.requestSizes.asScala.toSeq,
+            SimpleExternalLookupDataSource.requestedKeys.asScala.toSeq)
+        }
+      }
+      assert(results.head === results.last, joinType)
+      assert(results.head._2 === Seq(3), joinType)
+    }
+  }
+
   test("external lookup samples connector metrics while consuming a large response") {
     SimpleExternalLookupDataSource.departmentsById.set(Map(1 -> (1 to 250).map(_.toString)))
     val lookup = spark.read.format(classOf[SimpleExternalLookupDataSource].getName).load()
@@ -3019,6 +3736,24 @@ class ExternalLookupJoinSuite extends QueryTest with SharedSparkSession {
       lookup, left("id") === lookup("id"), "inner")).rows.size === 250)
     // Two periodic samples, followed by request-completion and reader-close samples.
     assert(SimpleExternalLookupDataSource.metricSamples.get() >= 4)
+  }
+
+  test("external lookup caches only the returned rows that satisfy the selected predicates") {
+    // Requests hold one row, so the second order for `AB-1` reads its product from the cache. The
+    // cache holds only the row that passed Spark's check of `sku = ?`.
+    val products = spark.read
+      .format(classOf[CaseInsensitiveExternalLookupDataSource].getName)
+      .option("maxBatchSize", "1")
+      .load()
+    val orders = streamOf(Seq((1, "AB-1"), (2, "AB-1")).toDF("order", "sku"))
+    CaseInsensitiveExternalLookupTable.returnedRows.set(0)
+    val run = runStream(orders.join(products, orders("sku") === products("sku")))
+    QueryTest.sameRows(
+      Seq(Row(1, "AB-1", "AB-1", "adapter"), Row(2, "AB-1", "AB-1", "adapter")),
+      run.rows).foreach(fail(_))
+    assert(run.lookupJoin.metrics("numCacheHits").value === 1)
+    // The one request returned both case variants.
+    assert(CaseInsensitiveExternalLookupTable.returnedRows.get() === 2)
   }
 
   test("external lookup offers no lookup key on a double or a string with a non-binary collation") {
@@ -3233,20 +3968,24 @@ class ExternalLookupJoinSuite extends QueryTest with SharedSparkSession {
     checkStream(
       left.join(varchar, left("id") === varchar("id")),
       Seq(Row(1, 1, "ab"), Row(2, 2, "ab")))
+    // Requests hold one row, so the repeated keys are served from the cache, in the same shape.
+    val twice = streamOf(Seq(1, 2, 1, 2).toDF("id"))
     // The read schema lists the table columns in another order.
     val reordered = readSchemaLookup("reordered")
-    checkStream(
-      left.join(reordered, left("id") === reordered("id")),
-      Seq(Row(1, 1, "ab"), Row(2, 2, "ab")))
+    val reorderedRun = runStream(twice.join(reordered, twice("id") === reordered("id")))
+    QueryTest.sameRows(
+      Seq(Row(1, 1, "ab"), Row(2, 2, "ab"), Row(1, 1, "ab"), Row(2, 2, "ab")),
+      reorderedRun.rows).foreach(fail(_))
+    assert(reorderedRun.lookupJoin.metrics("numCacheHits").value === 2)
     // The table declares `s.a` NOT NULL and the read schema does not, which the binding accepts.
     // Returned values must satisfy both, so the null that the connector returns for id 2 fails
     // the task.
     val nested = readSchemaLookup("nested")
-    val firstId = streamOf(Seq(1).toDF("id"))
+    val firstIdTwice = streamOf(Seq(1, 1).toDF("id"))
     checkStream(
-      firstId.join(nested, firstId("id") === nested("id"))
-        .select(firstId("id"), to_json(nested("s"))),
-      Seq(Row(1, "{\"a\":10}")))
+      firstIdTwice.join(nested, firstIdTwice("id") === nested("id"))
+        .select(firstIdTwice("id"), to_json(nested("s"))),
+      Seq(Row(1, "{\"a\":10}"), Row(1, "{\"a\":10}")))
     Seq("inner", "left_outer").foreach { joinType =>
       checkError(
         exception = streamFailure[SparkRuntimeException](
@@ -3500,6 +4239,26 @@ class ExternalLookupJoinSuite extends QueryTest with SharedSparkSession {
         assert(failure.getMessage.contains(s"injected external lookup $failAt failure"))
         assert(SimpleExternalLookupDataSource.readerCount.get() === 1)
         assert(SimpleExternalLookupDataSource.closeEvents.asScala.toSeq === closeEvents)
+    }
+  }
+
+  test("cached lookup results have passed the lookup-side stages and serve every join type") {
+    val lookup = spark.read
+      .format(classOf[SimpleExternalLookupDataSource].getName)
+      .option("maxBatchSize", "1")
+      .load()
+      .select($"id", upper($"department").as("department"))
+      .filter($"department" =!= "RESEARCH")
+    val left = streamOf(Seq(1, 1).toDF("id"))
+    Seq(
+      "inner" -> Seq(Row(1, 1, "ENGINEERING"), Row(1, 1, "ENGINEERING")),
+      "left_semi" -> Seq(Row(1), Row(1)),
+      "left_anti" -> Seq.empty[Row]).foreach { case (joinType, expected) =>
+      SimpleExternalLookupDataSource.resetCounters()
+      val run = runStream(left.join(lookup, left("id") === lookup("id"), joinType))
+      QueryTest.sameRows(expected, run.rows).foreach(fail(_))
+      assert(SimpleExternalLookupDataSource.requestCount.get() === 1)
+      assert(run.lookupJoin.metrics("numCacheHits").value === 1)
     }
   }
 
@@ -3864,10 +4623,74 @@ class ExternalLookupJoinSuite extends QueryTest with SharedSparkSession {
       .format(classOf[SimpleExternalLookupDataSource].getName)
       .option("maxBatchSize", "5000")
       .load()
+      .hint("external_lookup", "cache_enabled=false")
     val left = streamOf((1 to 1500).toDF("id"))
 
     assert(runStream(left.join(lookup, left("id") === lookup("id"), "left_semi")).rows.size === 2)
     assert(SimpleExternalLookupDataSource.requestSizes.asScala.toSeq === Seq(1000, 500))
+  }
+
+  test("external lookup cache is scoped to a task") {
+    SimpleExternalLookupDataSource.resetCounters()
+    // One row per batch, so a task can avoid its second request only through its cache.
+    val lookup = spark.read
+      .format(classOf[SimpleExternalLookupDataSource].getName)
+      .option("maxBatchSize", "1")
+      .load()
+    val left = streamOf(Seq(2, 2, 2, 2).toDF("id"), 2)
+
+    assert(runStream(left.join(lookup, left("id") === lookup("id"))).rows.size === 4)
+    assert(SimpleExternalLookupDataSource.readerCount.get() === 2)
+    assert(SimpleExternalLookupDataSource.requestedKeys.asScala.toSeq === Seq(2, 2))
+  }
+
+  test("external lookup does not cache the results of a range lookup") {
+    // The lookup takes one parameter row per request, so each shift below is a batch of its own:
+    // an equality batch takes one stream row, and a range batch ends at another key. The third
+    // shift can then avoid its request only through the cache.
+    val lookup = spark.read
+      .format(classOf[SimpleExternalLookupDataSource].getName)
+      .option("maxBatchSize", "1")
+      .load()
+      .hint("external_lookup", "cache_enabled=true")
+    // Two shifts that start at employee id 2, with another in between.
+    val shifts = streamOf(Seq(("early", 2), ("late", 3), ("night", 2)).toDF("shift", "firstId"))
+
+    Seq(
+      ("range", lookup("id") >= shifts("firstId"), 3, 0),
+      ("equality", lookup("id") === shifts("firstId"), 2, 1)).foreach {
+      case (kind, condition, requests, cacheHits) =>
+        SimpleExternalLookupDataSource.resetCounters()
+        val run = runStream(shifts.join(lookup, condition, "inner"))
+        QueryTest.sameRows(
+          Seq(Row("early", 2, 2, "sales"), Row("night", 2, 2, "sales")),
+          run.rows).foreach(fail(_))
+        assert(run.lookupJoin.cacheOptions.enabled === (kind == "equality"), kind)
+        assert(SimpleExternalLookupDataSource.requestCount.get() === requests, kind)
+        assert(run.lookupJoin.metrics("numCacheHits").value === cacheHits, kind)
+    }
+    // Equal range keys in a row share one batch, and so one request, whatever the source's limit,
+    // as the rows of the batch share its request's one parameter row. Nothing is cached.
+    SimpleExternalLookupDataSource.resetCounters()
+    val sameStart = streamOf(Seq(("early", 2), ("night", 2)).toDF("shift", "firstId"))
+    val run = runStream(sameStart.join(lookup, lookup("id") >= sameStart("firstId"), "inner"))
+    QueryTest.sameRows(Seq(Row("early", 2, 2, "sales"), Row("night", 2, 2, "sales")), run.rows)
+      .foreach(fail(_))
+    assert(SimpleExternalLookupDataSource.requestCount.get() === 1)
+    assert(run.lookupJoin.metrics("numCacheHits").value === 0)
+  }
+
+  test("a connector that reuses its byte buffer cannot change cached rows") {
+    // The connector writes each BINARY value into one array. The cache keeps the row of id 1
+    // while the row of id 2 overwrites the array, then serves it to the second visit of id 1.
+    val badges = readSchemaLookup("reusedBuffer")
+    val visits = streamOf(Seq(1, 2, 1).toDF("id"))
+
+    val run = runStream(visits.join(badges, visits("id") === badges("id")))
+    QueryTest.sameRows(
+      Seq(Row(1, 1, Array[Byte](1)), Row(2, 2, Array[Byte](2)), Row(1, 1, Array[Byte](1))),
+      run.rows).foreach(fail(_))
+    assert(run.lookupJoin.metrics("numCacheHits").value === 1)
   }
 
   test("external lookup caps each inner-join request at the engine batch size") {
@@ -3887,19 +4710,20 @@ class ExternalLookupJoinSuite extends QueryTest with SharedSparkSession {
       .option("maxBatchSize", "5000")
       .load()
     // One badge swipe in 100 carries an employee id. An inner or left semi join emits nothing for
-    // the others, so its batches leave them out, and one request serves the 30 swipes with an id.
-    // A left outer or left anti join emits them, so its batches of 1000 rows keep them, and each
-    // sends a request.
+    // the others, so its batches leave them out, and one batch holds the 30 swipes with an id. A
+    // left outer or left anti join emits them, so it keeps them in batches of 1000 rows, and the
+    // cache serves the employees of its later batches.
     val swipes = streamOf((1 to 3000).map { swipe =>
       (swipe, if (swipe % 100 == 0) Some(swipe / 100 % 2 + 1) else None)
     }.toDF("swipe", "employee"))
     Seq("inner" -> (45, 1), "left_semi" -> (30, 1), "left_outer" -> (3015, 3),
         "left_anti" -> (2970, 3)).foreach {
-      case (joinType, (outputRows, requests)) =>
+      case (joinType, (outputRows, batches)) =>
         SimpleExternalLookupDataSource.resetCounters()
         val run = runStream(swipes.join(lookup, swipes("employee") === lookup("id"), joinType))
         assert(run.rows.size === outputRows, joinType)
-        assert(SimpleExternalLookupDataSource.requestCount.get() === requests, joinType)
+        assert(run.lookupJoin.metrics("numInputBatches").value === batches, joinType)
+        assert(SimpleExternalLookupDataSource.requestCount.get() === 1, joinType)
         assert(run.lookupJoin.metrics("numInputRows").value === 3000, joinType)
     }
   }
@@ -4494,6 +5318,9 @@ object SimpleExternalLookupDataSource {
   val beforeGetReturns = new AtomicReference[() => Unit](() => ())
   // The get() and inputOrdinal() calls on a closed cursor.
   val rowReadsAfterClose = new AtomicInteger(0)
+  // Whether a request returns each parameter row's next result row in turn, rather than all the
+  // rows of one parameter row before those of the next.
+  val interleaveResults = new AtomicBoolean(false)
   // Called when Spark reads the reader's metrics, before they are returned.
   val beforeMetricsReturn = new AtomicReference[() => Unit](() => ())
   val lookupCandidates =
@@ -4530,6 +5357,7 @@ object SimpleExternalLookupDataSource {
     beforeNextReturns.set(() => ())
     beforeGetReturns.set(() => ())
     rowReadsAfterClose.set(0)
+    interleaveResults.set(false)
     beforeMetricsReturn.set(() => ())
     lookupCandidates.set(Seq.empty)
     lookupCandidateDescriptions.set(Seq.empty)
@@ -4749,7 +5577,12 @@ case class SimpleExternalLookupReaderFactory(
               case "department" => UTF8String.fromString(department)
             }.toArray[Any])
         }
-      }.toArray.iterator
+      }.toArray
+      val ordered = if (!SimpleExternalLookupDataSource.interleaveResults.get()) results else {
+        val byOrdinal = results.groupBy(_._1).toSeq.sortBy(_._1).map(_._2.iterator)
+        Iterator.continually(byOrdinal.filter(_.hasNext)).takeWhile(_.nonEmpty)
+          .flatMap(_.map(_.next())).toArray
+      }
       if (mutateAfterRequest) {
         SimpleExternalLookupDataSource.departmentsById.updateAndGet { current =>
           current.updated(2, Seq("sales-v2"))
@@ -4762,7 +5595,7 @@ case class SimpleExternalLookupReaderFactory(
           Iterator.continually(
             throw new IllegalStateException("injected external lookup cursor failure"))
         } else {
-          results
+          ordered.iterator
         },
         onNext = () => {
           SimpleExternalLookupDataSource.resultRowsRead.incrementAndGet()
@@ -5176,6 +6009,7 @@ case class ReadSchemaExternalLookupTable(kind: String) extends Table with Suppor
     case "nullStructInArray" => new StructType()
       .add("id", IntegerType)
       .add("items", ArrayType(new StructType().add("a", IntegerType, nullable = false)))
+    case "reusedBuffer" => StructType.fromDDL("id INT, badge BINARY")
   }
   override def capabilities(): java.util.Set[TableCapability] =
     java.util.EnumSet.of(EXTERNAL_LOOKUP)
@@ -5210,13 +6044,16 @@ case class ReadSchemaExternalLookupTable(kind: String) extends Table with Suppor
 case class ReadSchemaExternalLookupScan(schema: StructType, kind: String) extends Scan {
   override def readSchema(): StructType = schema
   override def toExternalLookup(): ExternalLookup =
-    TestExternalLookup(100, ReadSchemaExternalLookupReaderFactory(kind))
+    TestExternalLookup(1, ReadSchemaExternalLookupReaderFactory(kind))
 }
 
 /** Returns value rows in the read schema of the given kind of table. */
 case class ReadSchemaExternalLookupReaderFactory(kind: String)
   extends ExternalLookupReaderFactory {
   override def createReader(): ExternalLookupReader = new ExternalLookupReader {
+    // The one array that a "reusedBuffer" reader writes every BINARY value into.
+    private val badgeBuffer = new Array[Byte](1)
+
     override def lookupBatch(keys: Array[InternalRow]): ExternalLookupResultCursor = {
       val results = keys.iterator.zipWithIndex.map { case (key, ordinal) =>
         val id = key.getInt(0)
@@ -5232,6 +6069,9 @@ case class ReadSchemaExternalLookupReaderFactory(kind: String)
             new GenericArrayData(Array[Any](null))))
           case "nullStructInArray" =>
             InternalRow(id, new GenericArrayData(Array[Any](InternalRow(null))))
+          case "reusedBuffer" =>
+            badgeBuffer(0) = id.toByte
+            InternalRow(id, badgeBuffer)
           case _ => InternalRow(id, name)
         })
       }
@@ -5607,6 +6447,25 @@ case class UserTypeExternalLookupReaderFactory(container: String, value: String)
 
     override def close(): Unit = {}
   }
+}
+
+/**
+ * The clock of the lookup cache in the tests that pass it to a lookup join. It is an object, so a
+ * task that a test runs reads the test's own clock.
+ */
+object ExternalLookupTestTicker extends Ticker with Serializable {
+  @transient lazy val readings = new AtomicInteger(0)
+  @transient private lazy val nanos = new AtomicLong(0L)
+  // The nanoseconds that the clock moves before each reading, by the reading's number.
+  @transient @volatile private var advanceBeforeReading: Int => Long = _ => 0L
+
+  def reset(advance: Int => Long): Unit = {
+    readings.set(0)
+    nanos.set(0L)
+    advanceBeforeReading = advance
+  }
+
+  override def read(): Long = nanos.addAndGet(advanceBeforeReading(readings.incrementAndGet()))
 }
 
 /** A relation that counts how often a plan walk asks it for its inner children. */
