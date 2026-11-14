@@ -1505,8 +1505,16 @@ class BasePythonDataSourceTestsMixin:
     # into a single task, which hides how the required distribution split them up.
     NO_COALESCE_CONF = "spark.sql.adaptive.coalescePartitions.enabled"
 
+    # Without coalescing, every one of the default 200 shuffle partitions would start a Python
+    # write task. Keys "a" and "b" still land in different partitions out of 4.
+    SHUFFLE_PARTITIONS_CONF = "spark.sql.shuffle.partitions"
+
     def _write_conf(self, enabled=True):
-        return {self.WRITE_DIST_CONF: enabled, self.NO_COALESCE_CONF: False}
+        return {
+            self.WRITE_DIST_CONF: enabled,
+            self.NO_COALESCE_CONF: False,
+            self.SHUFFLE_PARTITIONS_CONF: 4,
+        }
 
     def _register_write_requirements_source(
         self,
