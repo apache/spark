@@ -1867,6 +1867,15 @@ object SQLConf {
       .booleanConf
       .createWithDefault(false)
 
+  val SUBEXPRESSION_ELIMINATION_CONDITIONALS_ENABLED =
+    buildConf("spark.sql.subexpressionElimination.conditionals.enabled")
+      .internal()
+      .doc("When true, common conditional subexpressions will be eliminated.")
+      .version("5.0.0")
+      .withBindingPolicy(ConfigBindingPolicy.SESSION)
+      .booleanConf
+      .createWithDefault(false)
+
   val CASE_SENSITIVE = buildConf(SqlApiConfHelper.CASE_SENSITIVE_KEY)
     .internal()
     .doc("Whether the query analyzer should be case sensitive or not. " +
@@ -10240,6 +10249,9 @@ class SQLConf extends Serializable with Logging with SqlApiConf {
 
   def legacyFilterShortCircuitOnNullConjunct: Boolean =
     getConf(LEGACY_FILTER_SHORT_CIRCUIT_ON_NULL_CONJUNCT)
+
+  def subexpressionEliminationConditionalsEnabled: Boolean =
+    getConf(SUBEXPRESSION_ELIMINATION_CONDITIONALS_ENABLED)
 
   def autoBroadcastJoinThreshold: Long = getConf(AUTO_BROADCASTJOIN_THRESHOLD)
 

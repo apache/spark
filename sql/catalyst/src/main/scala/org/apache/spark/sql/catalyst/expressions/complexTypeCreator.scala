@@ -793,6 +793,9 @@ private case class UpdateFieldsExpression(
 
   override def branchGroups: Seq[Seq[Expression]] = Nil
 
+  override def conditionallyEvaluatedInputs: Seq[Expression] =
+    if (nullable) updatedValues else Nil
+
   override def withNewAlwaysEvaluatedInputs(
       inputs: Seq[Expression]): ConditionalExpression =
     copy(
