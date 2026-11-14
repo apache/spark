@@ -2193,8 +2193,11 @@ object SQLConf {
   val PARQUET_AGGREGATE_PUSHDOWN_ENABLED = buildConf("spark.sql.parquet.aggregatePushdown")
     .doc("If true, aggregates will be pushed down to Parquet for optimization. Support MIN, MAX " +
       "and COUNT as aggregate expression. For MIN/MAX, support boolean, integer, float and date " +
-      "type. For COUNT, support all data types. If statistics is missing from any Parquet file " +
-      "footer, exception would be thrown.")
+      "type. For COUNT, support all data types except struct, array, map and variant. " +
+      "Aggregates are not pushed down when spark.sql.parquet.fieldId.read.enabled is true and " +
+      "the read schema has field IDs, or when an aggregated column has a default value for " +
+      "files without it, e.g. after ALTER TABLE ... ADD COLUMN ... DEFAULT. If statistics is " +
+      "missing from any Parquet file footer, exception would be thrown.")
     .version("3.3.0")
     .booleanConf
     .createWithDefault(false)
