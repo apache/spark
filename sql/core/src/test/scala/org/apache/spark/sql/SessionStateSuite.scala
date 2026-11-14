@@ -21,10 +21,12 @@ import scala.collection.mutable.ArrayBuffer
 
 import org.apache.spark.SparkFunSuite
 import org.apache.spark.sql.catalyst.FunctionIdentifier
+import org.apache.spark.sql.catalyst.analysis.Analyzer
 import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
 import org.apache.spark.sql.catalyst.rules.Rule
 import org.apache.spark.sql.connector.catalog.CatalogManager
 import org.apache.spark.sql.execution.QueryExecution
+import org.apache.spark.sql.internal.SessionStateBuilder
 import org.apache.spark.sql.util.QueryExecutionListener
 
 class SessionStateSuite extends SparkFunSuite {
@@ -250,5 +252,22 @@ class SessionStateSuite extends SparkFunSuite {
     } finally {
       activeSession.conf.unset(key)
     }
+  }
+
+  test("closing a session state does not build its analyzer") {
+    var analyzerBuilt = false
+    val state = new SessionStateBuilder(activeSession.newSession(), None) {
+      override protected def analyzer: Analyzer = {
+        analyzerBuilt = true
+        super.analyzer
+      }
+    }.build()
+
+    state.close()
+    assert(!analyzerBuilt)
+
+    // An analyzer first built after closing gets a closed catalog manager.
+    intercept[IllegalStateException](state.catalogManager.catalog("any_catalog"))
+    assert(analyzerBuilt)
   }
 }
