@@ -25,7 +25,7 @@ import org.apache.spark.sql.catalyst.plans.{Inner, LeftOuter, PlanTest}
 import org.apache.spark.sql.catalyst.plans.logical.{Assignment, CTERelationRef, Deduplicate, DeleteAction, DeleteFromTable, Distinct, DomainJoin, InsertAction, LateralJoin, LocalRelation, LogicalPlan, MergeIntoTable, Sample, Tail, Union, UpdateTable}
 import org.apache.spark.sql.catalyst.rules.RuleExecutor
 import org.apache.spark.sql.internal.SQLConf
-import org.apache.spark.sql.types.{IntegerType, MapType, StringType}
+import org.apache.spark.sql.types.{DayTimeIntervalType, IntegerType, MapType, StringType}
 
 class PullupCorrelatedPredicatesSuite extends PlanTest {
 
@@ -229,6 +229,9 @@ class PullupCorrelatedPredicatesSuite extends PlanTest {
     assert(countBugHandling(correlated(max($"d")), outer = groupedOuter) == inDecorrelation)
     // A SUM or AVG of decimals becomes NULL on an overflow that depends on the order, unless in
     // ANSI mode.
+    val intervals = LocalRelation($"a".int, AttributeReference("i", DayTimeIntervalType())())
+    assert(countBugHandling(correlated(max($"d")),
+      outer = intervals.groupBy($"a")($"a", avg($"i").as("m"))) == inDecorrelation)
     val decimals = LocalRelation($"a".int, $"x".decimal(10, 2))
     Seq(true, false).foreach { ansi =>
       withSQLConf(SQLConf.ANSI_ENABLED.key -> ansi.toString) {
