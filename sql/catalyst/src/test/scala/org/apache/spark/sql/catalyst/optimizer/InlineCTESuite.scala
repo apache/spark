@@ -21,9 +21,11 @@ import org.apache.spark.SparkException
 import org.apache.spark.sql.catalyst.analysis.TestRelation
 import org.apache.spark.sql.catalyst.dsl.expressions._
 import org.apache.spark.sql.catalyst.dsl.plans._
-import org.apache.spark.sql.catalyst.expressions.{OuterReference, OuterScopeReference, ScalarSubquery}
+import org.apache.spark.sql.catalyst.expressions.{AesEncrypt, Literal, OuterReference, OuterScopeReference, ScalarSubquery}
+import org.apache.spark.sql.catalyst.expressions.ToBinary
+import org.apache.spark.sql.catalyst.expressions.objects.StaticInvoke
 import org.apache.spark.sql.catalyst.plans.PlanTest
-import org.apache.spark.sql.catalyst.plans.logical.{AppendData, CTERelationDef, CTERelationRef, LogicalPlan, OneRowRelation, WithCTE}
+import org.apache.spark.sql.catalyst.plans.logical.{AppendData, CTERelationDef, CTERelationRef, LogicalPlan, OneRowRelation, Sample, WithCTE}
 import org.apache.spark.sql.catalyst.rules.RuleExecutor
 
 class InlineCTESuite extends PlanTest {
@@ -162,5 +164,74 @@ class InlineCTESuite extends PlanTest {
     assert(e.getCondition == "INTERNAL_ERROR")
     // The analysis path tolerates the out-of-scope reference (no throw).
     InlineCTE(isAnalysis = true).apply(plan)
+  }
+
+  test("SPARK-60934: multi-reference CTE with seedless TABLESAMPLE is not inlined") {
+    // Inlining would plan two samples. rand() stays materialized for the same reason.
+    val sampled = Sample(0.0, 0.5, withReplacement = false, None,
+      TestRelation(Seq($"id".long)))
+    val cteDef = CTERelationDef(sampled)
+    val cteRef = CTERelationRef(cteDef.id, cteDef.resolved, cteDef.output, cteDef.isStreaming)
+    val plan = WithCTE(cteRef.union(cteRef), Seq(cteDef)).analyze
+    assert(Optimize.execute(plan).exists(_.isInstanceOf[WithCTE]),
+      "seedless TABLESAMPLE must be evaluated once")
+  }
+
+  test("SPARK-60934: multi-reference CTE with REPEATABLE TABLESAMPLE is inlined") {
+    val sampled = Sample(0.0, 0.5, withReplacement = false, 7L,
+      TestRelation(Seq($"id".long)))
+    val cteDef = CTERelationDef(sampled)
+    val cteRef = CTERelationRef(cteDef.id, cteDef.resolved, cteDef.output, cteDef.isStreaming)
+    val plan = WithCTE(cteRef.union(cteRef), Seq(cteDef)).analyze
+    assert(!Optimize.execute(plan).exists(_.isInstanceOf[WithCTE]),
+      "a fixed seed is deterministic, so the CTE is inlined")
+  }
+
+  test("SPARK-60934: multi-reference CTE with generated-IV aes_encrypt is not inlined") {
+    // ReplaceExpressions runs before InlineCTE, so the flag has to survive on StaticInvoke.
+    val aes = new AesEncrypt(
+      Literal("abc".getBytes), Literal("1234567890123456".getBytes))
+    val cteDef = CTERelationDef(OneRowRelation().select(aes.as("c")))
+    val cteRef = CTERelationRef(cteDef.id, cteDef.resolved, cteDef.output, cteDef.isStreaming)
+    val plan = WithCTE(cteRef.union(cteRef), Seq(cteDef)).analyze
+    val optimized = InlineCTE().apply(ReplaceExpressions.apply(plan))
+    assert(optimized.exists(_.isInstanceOf[WithCTE]),
+      "generated-IV aes_encrypt must be evaluated once")
+    assert(optimized.exists(_.expressions.exists(_.exists {
+      case invoke: StaticInvoke => !invoke.isDeterministic
+      case _ => false
+    })))
+  }
+
+  test("SPARK-60934: multi-reference CTE with an explicit IV is inlined") {
+    val aes = new AesEncrypt(
+      Literal("abc".getBytes),
+      Literal("1234567890123456".getBytes),
+      Literal("GCM"),
+      Literal("NONE"),
+      Literal(Array.fill(12)(0.toByte)))
+    val cteDef = CTERelationDef(OneRowRelation().select(aes.as("c")))
+    val cteRef = CTERelationRef(cteDef.id, cteDef.resolved, cteDef.output, cteDef.isStreaming)
+    val plan = WithCTE(cteRef.union(cteRef), Seq(cteDef)).analyze
+    val optimized = InlineCTE().apply(ReplaceExpressions.apply(plan))
+    assert(!optimized.exists(_.isInstanceOf[WithCTE]),
+      "an explicit IV is deterministic, so the CTE is inlined")
+  }
+
+  test("SPARK-60934: multi-reference CTE with a to_binary IV is inlined") {
+    // to_binary is unfoldable until ReplaceExpressions. A fixed non-empty IV
+    // does not draw, so the CTE is inlined the same way as a literal IV.
+    val aes = new AesEncrypt(
+      Literal("abc".getBytes),
+      Literal("1234567890123456".getBytes),
+      Literal("GCM"),
+      Literal("NONE"),
+      new ToBinary(Literal("000000000000000000000000"), Literal("hex")))
+    val cteDef = CTERelationDef(OneRowRelation().select(aes.as("c")))
+    val cteRef = CTERelationRef(cteDef.id, cteDef.resolved, cteDef.output, cteDef.isStreaming)
+    val plan = WithCTE(cteRef.union(cteRef), Seq(cteDef)).analyze
+    val optimized = InlineCTE().apply(ReplaceExpressions.apply(plan))
+    assert(!optimized.exists(_.isInstanceOf[WithCTE]),
+      "a fixed to_binary IV is deterministic, so the CTE is inlined")
   }
 }

@@ -17,12 +17,15 @@
 
 package org.apache.spark.sql.catalyst.expressions
 
+import scala.annotation.tailrec
+import scala.util.control.NonFatal
+
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.analysis.{ExpressionBuilder, FunctionRegistry, UnresolvedSeed}
 import org.apache.spark.sql.catalyst.expressions.codegen._
 import org.apache.spark.sql.catalyst.expressions.codegen.Block._
 import org.apache.spark.sql.catalyst.expressions.objects.StaticInvoke
-import org.apache.spark.sql.catalyst.trees.TreePattern.{CURRENT_LIKE, TreePattern}
+import org.apache.spark.sql.catalyst.trees.TreePattern.{CURRENT_LIKE, RUNTIME_REPLACEABLE, TreePattern}
 import org.apache.spark.sql.catalyst.util.{toPrettySQL, MapData, RandomUUIDGenerator}
 import org.apache.spark.sql.errors.QueryCompilationErrors
 import org.apache.spark.sql.errors.QueryExecutionErrors.raiseError
@@ -481,7 +484,83 @@ case class AesEncrypt(
     BinaryType,
     "aesEncrypt",
     Seq(input, key, mode, padding, iv, aad),
-    inputTypes)
+    inputTypes,
+    isDeterministic = !drawsRandomIv)
+
+  // Empty CBC and GCM IVs draw inside aesEncrypt. A null IV does not:
+  // StaticInvoke propagateNull returns null first. The flag has to live on
+  // the StaticInvoke too: ReplaceExpressions substitutes it before later rules.
+  override lazy val deterministic: Boolean =
+    !drawsRandomIv && children.forall(_.deterministic)
+
+  private lazy val drawsRandomIv: Boolean = modeMayDrawIv(mode) && ivMayBeMissing(iv)
+
+  // A non-literal mode might be CBC or GCM. ECB and any other literal do not draw.
+  private def modeMayDrawIv(expr: Expression): Boolean = underlyingLiteral(expr) match {
+    case Some(lit) => lit.value match {
+      case s: UTF8String =>
+        val modeName = s.toString
+        modeName.equalsIgnoreCase("CBC") || modeName.equalsIgnoreCase("GCM")
+      case _ => false
+    }
+    case None => true
+  }
+
+  // A null IV never reaches aesEncrypt. A non-literal IV may be empty on some
+  // rows. Only a non-empty string or binary literal is present.
+  private def ivMayBeMissing(expr: Expression): Boolean = underlyingLiteral(expr) match {
+    case Some(lit) => lit.value match {
+      case null => false
+      case s: UTF8String => s.numBytes() == 0
+      case bytes: Array[Byte] => bytes.length == 0
+      case _ => true
+    }
+    case None => true
+  }
+
+  // CheckAnalysis reads this flag before ConstantFolding and ReplaceExpressions.
+  // Fold the child so the cipher sees its value: CAST(X'47434D' AS STRING) is
+  // GCM. to_binary and encode stay unfoldable until they are replaced, so reduce
+  // those builders here. A child that throws stays unknown, as constant folding
+  // does for a branch no row takes.
+  private def underlyingLiteral(expr: Expression): Option[Literal] = {
+    val prepared = if (expr.containsPattern(RUNTIME_REPLACEABLE)) {
+      unwrapRuntimeReplaceable(expr)
+    } else {
+      expr
+    }
+
+    if (!prepared.foldable || !prepared.deterministic) {
+      None
+    } else {
+      try {
+        Some(Literal.create(prepared.eval(EmptyRow), prepared.dataType))
+      } catch {
+        case NonFatal(_) => None
+      }
+    }
+  }
+
+  // Replacing a runtime-replaceable node does not walk that replacement, so
+  // to_binary utf-8 becomes encode and needs another pass. Expand a builder
+  // only when its children are already foldable, so a column argument stays.
+  @tailrec
+  private def unwrapRuntimeReplaceable(expr: Expression): Expression = {
+    val prepared = expr.transformUpWithPruning(_.containsAnyPattern(RUNTIME_REPLACEABLE)) {
+      case r: RuntimeReplaceable
+          if r.children.forall(c => c.foldable && c.deterministic) =>
+        try {
+          r.replacement
+        } catch {
+          case NonFatal(_) => r
+        }
+    }
+    if ((prepared ne expr) && prepared.containsPattern(RUNTIME_REPLACEABLE)) {
+      unwrapRuntimeReplaceable(prepared)
+    } else {
+      prepared
+    }
+  }
 
   def this(input: Expression, key: Expression, mode: Expression, padding: Expression, iv: Expression) =
     this(input, key, mode, padding, iv, Literal(""))

@@ -18,8 +18,10 @@
 package org.apache.spark.sql
 
 import org.apache.spark.{SPARK_REVISION, SPARK_VERSION_SHORT}
-import org.apache.spark.sql.catalyst.expressions.Hex
+import org.apache.spark.sql.catalyst.ExtendedAnalysisException
+import org.apache.spark.sql.catalyst.expressions.{AesEncrypt, Alias, ArrayTransform, Hex}
 import org.apache.spark.sql.catalyst.parser.ParseException
+import org.apache.spark.sql.catalyst.plans.logical.Project
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSparkSession
@@ -134,6 +136,182 @@ class MiscFunctionsSuite extends SharedSparkSession {
       df3.select(aes_decrypt(unbase64(base64(
         aes_encrypt(col("input"), col("key")))), col("key")).cast(StringType)),
       Seq(Row("Spark")))
+  }
+
+  test("SPARK-60934: null and foldable aes_encrypt stay one value") {
+    // A null IV never reaches the cipher. A foldable non-empty IV, or a foldable
+    // mode that does not draw, is one ciphertext. A foldable empty IV still draws,
+    // and so does CBC or GCM with the default empty IV, so a join must reject it.
+    checkAnswer(
+      sql("SELECT hex(aes_encrypt('abc', '1234567890123456', 'GCM', 'NONE', " +
+        "CAST(NULL AS BINARY)))"),
+      Row(null))
+    checkAnswer(
+      sql("SELECT count(*) FROM VALUES (1) AS t(id) JOIN VALUES (1) AS u(id) " +
+        "ON aes_encrypt('abc', '1234567890123456', 'GCM', 'NONE', " +
+        "CAST(NULL AS BINARY)) = CAST(NULL AS BINARY)"),
+      Row(0))
+    checkAnswer(
+      sql("WITH c AS (SELECT aes_encrypt('abc', '1234567890123456') AS enc) " +
+        "SELECT a.enc = b.enc FROM c a JOIN c b"),
+      Row(true))
+    checkAnswer(
+      sql("SELECT aes_encrypt('abc', '1234567890123456') = " +
+        "aes_encrypt('abc', '1234567890123456')"),
+      Row(false))
+    checkAnswer(
+      sql("SELECT count(*) FROM VALUES (1) AS t(id) JOIN VALUES (1) AS u(id) " +
+        "ON aes_encrypt('abc', '1234567890123456', 'GCM', 'NONE', " +
+        "unhex('000000000000000000000000')) = CAST(NULL AS BINARY)"),
+      Row(0))
+    checkAnswer(
+      sql("SELECT count(*) FROM VALUES (1) AS t(id) JOIN VALUES (1) AS u(id) " +
+        "ON aes_encrypt('abc', '1234567890123456', upper('ecb')) = " +
+        "CAST(NULL AS BINARY)"),
+      Row(0))
+    val emptyIv = intercept[ExtendedAnalysisException] {
+      sql("SELECT count(*) FROM VALUES (1) AS t(id) JOIN VALUES (1) AS u(id) " +
+        "ON aes_encrypt('abc', '1234567890123456', 'GCM', 'NONE', X'') = X'00'").collect()
+    }
+    assert(emptyIv.getCondition === "INVALID_NON_DETERMINISTIC_EXPRESSIONS")
+  }
+
+  test("SPARK-60934: cast of a binary mode literal stays one ciphertext") {
+    // CAST(X'47434D' AS STRING) is GCM, so the CTE must compare one value.
+    // CAST(X'454342' AS STRING) is ECB and stays deterministic.
+    checkAnswer(
+      sql("WITH c AS (SELECT aes_encrypt('abc', '1234567890123456', " +
+        "CAST(X'47434D' AS STRING)) AS enc) " +
+        "SELECT a.enc = b.enc FROM c a JOIN c b"),
+      Row(true))
+    checkAnswer(
+      sql("WITH c AS (SELECT aes_encrypt('abc', '1234567890123456', " +
+        "CAST(X'454342' AS STRING)) AS enc) " +
+        "SELECT a.enc = b.enc FROM c a JOIN c b"),
+      Row(true))
+  }
+
+  test("SPARK-60934: to_binary and encode IVs are accepted in a join") {
+    // These builders are unfoldable until ReplaceExpressions. A non-empty
+    // constant IV is still one ciphertext, so the join condition is legal.
+    checkAnswer(
+      sql("SELECT count(*) FROM VALUES (1) AS t(id) JOIN VALUES (1) AS u(id) " +
+        "ON aes_encrypt('abc', '1234567890123456', 'GCM', 'NONE', " +
+        "to_binary('000000000000000000000000', 'hex')) = X'00'"),
+      Row(0))
+    checkAnswer(
+      sql("SELECT count(*) FROM VALUES (1) AS t(id) JOIN VALUES (1) AS u(id) " +
+        "ON aes_encrypt('abc', '1234567890123456', 'CBC', 'DEFAULT', " +
+        "encode('0123456789abcdef', 'utf-8')) = X'00'"),
+      Row(0))
+    checkAnswer(
+      sql("SELECT count(*) FROM VALUES (1) AS t(id) JOIN VALUES (1) AS u(id) " +
+        "ON aes_encrypt('abc', '1234567890123456', 'GCM', 'NONE', " +
+        "to_binary('0123456789ab', 'utf-8')) = X'00'"),
+      Row(0))
+  }
+
+  test("SPARK-60934: generated-IV aes_encrypt can group and sort") {
+    // The call draws an IV without extending Nondeterministic. GROUP BY has to
+    // evaluate it once per row, and ORDER BY has to keep every input row.
+    val grouped = sql(
+      "SELECT aes_encrypt(cast(id AS string), '1234567890123456') = " +
+      "aes_encrypt(cast(id AS string), '1234567890123456'), count(*) " +
+      "FROM VALUES (1), (1) AS t(id) " +
+      "GROUP BY aes_encrypt(cast(id AS string), '1234567890123456')")
+    assert(grouped.queryExecution.analyzed.toString.contains("_nondeterministic"))
+    checkAnswer(grouped, Seq(Row(true, 1), Row(true, 1)))
+
+    val ordered = sql(
+      "SELECT id FROM VALUES (1), (2) AS t(id) " +
+      "ORDER BY aes_encrypt(cast(id AS string), '1234567890123456')")
+    assert(ordered.queryExecution.analyzed.toString.contains("_nondeterministic"))
+    assert(ordered.collect().map(_.getInt(0)).toSet === Set(1, 2))
+
+    val ecb = sql(
+      "SELECT count(*) FROM VALUES (1), (1) AS t(id) " +
+      "GROUP BY aes_encrypt(cast(id AS string), '1234567890123456', 'ECB')")
+    assert(!ecb.queryExecution.analyzed.toString.contains("_nondeterministic"))
+    checkAnswer(ecb, Row(2))
+
+    val explicitIv = sql(
+      "SELECT count(*) FROM VALUES (1), (1) AS t(id) " +
+      "GROUP BY aes_encrypt(cast(id AS string), '1234567890123456', 'GCM', 'NONE', " +
+      "unhex('000000000000000000000000'))")
+    assert(!explicitIv.queryExecution.analyzed.toString.contains("_nondeterministic"))
+    checkAnswer(explicitIv, Row(2))
+
+    val join = intercept[ExtendedAnalysisException] {
+      sql("SELECT count(*) FROM VALUES (1) AS t(id) JOIN VALUES (1) AS u(id) " +
+        "ON aes_encrypt('abc', '1234567890123456') = X'00'").collect()
+    }
+    assert(join.getCondition === "INVALID_NON_DETERMINISTIC_EXPRESSIONS")
+  }
+
+  test("SPARK-60934: aes_encrypt that reads a lambda variable stays bound") {
+    // x is bound only inside the lambda. The whole transform is one value per
+    // input row. A call that ignores the lambda variable is still pulled out.
+    def nondeterministicAliases(df: DataFrame): Seq[Alias] = {
+      df.queryExecution.analyzed.collect {
+        case p: Project => p.projectList.collect {
+          case a: Alias if a.name.contains("_nondeterministic") => a
+        }
+      }.flatten.toSeq
+    }
+
+    val grouped = sql(
+      "SELECT count(*) FROM VALUES (array('a', 'b')), (array('c')) AS t(arr) " +
+      "GROUP BY transform(arr, x -> aes_encrypt(x, '0000111122223333'))")
+    assert(nondeterministicAliases(grouped).exists(_.child.isInstanceOf[ArrayTransform]))
+    checkAnswer(grouped, Seq(Row(1), Row(1)))
+
+    val ordered = sql(
+      "SELECT arr FROM VALUES (array('a', 'b')), (array('c')) AS t(arr) " +
+      "ORDER BY transform(arr, x -> aes_encrypt(x, '0000111122223333'))")
+    assert(nondeterministicAliases(ordered).exists(_.child.isInstanceOf[ArrayTransform]))
+    assert(ordered.collect().map(_.getSeq[String](0).toSeq).toSet ===
+      Set(Seq("a", "b"), Seq("c")))
+
+    val distributed = sql(
+      "SELECT arr FROM VALUES (array('a', 'b')), (array('c')) AS t(arr) " +
+      "DISTRIBUTE BY transform(arr, x -> aes_encrypt(x, '0000111122223333'))")
+    assert(nondeterministicAliases(distributed).exists(_.child.isInstanceOf[ArrayTransform]))
+    assert(distributed.collect().map(_.getSeq[String](0).toSeq).toSet ===
+      Set(Seq("a", "b"), Seq("c")))
+
+    val ignoresLambda = sql(
+      "SELECT count(*) FROM VALUES (array('a', 'b')), (array('c')) AS t(arr) " +
+      "GROUP BY transform(arr, x -> aes_encrypt('a', '0000111122223333'))")
+    val pulled = nondeterministicAliases(ignoresLambda)
+    assert(pulled.nonEmpty && pulled.forall(_.child.isInstanceOf[AesEncrypt]))
+    checkAnswer(ignoresLambda, Seq(Row(1), Row(1)))
+  }
+
+  test("SPARK-60934: a throwing mode or IV does not fail analysis") {
+    // CheckAnalysis reads the flag before constant folding. A foldable child
+    // that throws in a branch no row takes stays unknown, including a view.
+    withSQLConf(SQLConf.ANSI_ENABLED.key -> "true") {
+      checkAnswer(
+        sql("SELECT CASE WHEN id < 0 THEN aes_encrypt('a', '1234567890123456', " +
+          "CAST(1/0 AS STRING)) END FROM range(3)"),
+        Seq(Row(null), Row(null), Row(null)))
+      checkAnswer(
+        sql("SELECT CASE WHEN id < 0 THEN aes_encrypt('a', '1234567890123456', " +
+          "'GCM', 'NONE', unhex(CAST(1/0 AS STRING))) END FROM range(3)"),
+        Seq(Row(null), Row(null), Row(null)))
+      withTempView("throwing_aes_mode") {
+        sql("CREATE TEMP VIEW throwing_aes_mode AS SELECT CASE WHEN id < 0 THEN " +
+          "aes_encrypt('a', '1234567890123456', CAST(1/0 AS STRING)) END AS enc " +
+          "FROM range(3)")
+        checkAnswer(sql("SELECT enc FROM throwing_aes_mode"),
+          Seq(Row(null), Row(null), Row(null)))
+      }
+      checkAnswer(
+        sql("SELECT count(*) FROM VALUES (1) AS t(id) JOIN VALUES (1) AS u(id) " +
+          "ON aes_encrypt('abc', '1234567890123456', 'ECB') = " +
+          "aes_encrypt('abc', '1234567890123456', 'ECB')"),
+        Row(1))
+    }
   }
 
   test("aes_decrypt") {
