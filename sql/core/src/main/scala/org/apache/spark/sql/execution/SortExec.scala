@@ -77,12 +77,6 @@ case class SortExec(
   @transient private[sql] lazy val sorterHolder =
     new SortExecSorterHolder(sortOrder, output, enableRadixSort, testSpillFrequency)
 
-  /**
-   * Creates a sorter for this node on the driver side, e.g. for a test. Code that runs in a task
-   * must use [[sorterHolder]] captured on the driver instead, see there.
-   */
-  def createSorter(): UnsafeExternalRowSorter = sorterHolder.createSorter()
-
   override protected[sql] def taskResourceCleaner: Option[TaskResourceCleaner] =
     Some(sorterHolder)
 
@@ -169,15 +163,6 @@ case class SortExec(
        |${row.code}
        |$sorterVariable.insertRow((UnsafeRow)${row.value});
      """.stripMargin
-  }
-
-  /**
-   * In SortExec, we overwrite cleanupResources to close UnsafeExternalRowSorter. In a task, the
-   * operators above (like SortMergeJoinExec) close it through [[taskResourceCleaner]] instead.
-   */
-  override protected[sql] def cleanupResources(): Unit = {
-    sorterHolder.cleanupResources()
-    super.cleanupResources()
   }
 
   override protected def withNewChildInternal(newChild: SparkPlan): SortExec =

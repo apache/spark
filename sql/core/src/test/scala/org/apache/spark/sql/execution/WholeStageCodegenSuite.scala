@@ -710,7 +710,8 @@ class WholeStageCodegenSuite extends SharedSparkSession
       df1.createOrReplaceTempView("t1")
       df2.createOrReplaceTempView("t2")
       // Fully generated; generated sorts under an interpreted join (the join output has more fields
-      // than `maxFields`); and no codegen at all.
+      // than `maxFields`; this leaves the semi and anti joins, whose output is their left side's,
+      // generated); and no codegen at all.
       Seq(
         Seq.empty[(String, String)],
         Seq(SQLConf.WHOLESTAGE_MAX_NUM_FIELDS.key -> "3"),
@@ -720,7 +721,8 @@ class WholeStageCodegenSuite extends SharedSparkSession
               SQLConf.ADAPTIVE_EXECUTION_ENABLED.key -> aqe.toString,
               SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key -> "-1"): _*) {
             checkPlans(df1.orderBy($"v1".desc), Set("Sort"))
-            val joinTypes = Seq("inner", "left_outer", "right_outer", "left_semi", "left_anti")
+            val joinTypes =
+              Seq("inner", "left_outer", "right_outer", "full_outer", "left_semi", "left_anti")
             joinTypes.foreach { joinType =>
               checkPlans(
                 df1.join(df2.hint("SHUFFLE_MERGE"), $"k1" === $"k2", joinType),
@@ -735,15 +737,21 @@ class WholeStageCodegenSuite extends SharedSparkSession
       }
     }
 
-    withSQLConf(SQLConf.SORT_MERGE_AS_OF_JOIN_ENABLED.key -> "true") {
-      val trades = Seq((5, 1), (11, 1), (12, 2), (3, 3)).toDF("ts", "k")
-      val quotes = Seq((0, 1, "a"), (7, 1, "b"), (10, 1, "c"), (8, 2, "d"), (9, 3, "e"))
-        .toDF("ts", "k", "v")
-      checkPlans(
-        trades.joinAsOf(
-          quotes, trades("ts"), quotes("ts"), usingColumns = Seq("k"), joinType = "inner",
-          tolerance = null, allowExactMatches = true, direction = "backward"),
-        Set("Sort", "SortMergeAsOfJoin"))
+    // Only the generated as-of join: the interpreted one still captures the join node in its
+    // closure, to build its scanner.
+    Seq(false, true).foreach { aqe =>
+      withSQLConf(
+          SQLConf.SORT_MERGE_AS_OF_JOIN_ENABLED.key -> "true",
+          SQLConf.ADAPTIVE_EXECUTION_ENABLED.key -> aqe.toString) {
+        val trades = Seq((5, 1), (11, 1), (12, 2), (3, 3)).toDF("ts", "k")
+        val quotes = Seq((0, 1, "a"), (7, 1, "b"), (10, 1, "c"), (8, 2, "d"), (9, 3, "e"))
+          .toDF("ts", "k", "v")
+        checkPlans(
+          trades.joinAsOf(
+            quotes, trades("ts"), quotes("ts"), usingColumns = Seq("k"), joinType = "inner",
+            tolerance = null, allowExactMatches = true, direction = "backward"),
+          Set("Sort", "SortMergeAsOfJoin"))
+      }
     }
   }
 

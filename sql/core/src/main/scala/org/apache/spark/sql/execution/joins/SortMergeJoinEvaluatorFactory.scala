@@ -48,7 +48,7 @@ class SortMergeJoinEvaluatorFactory(
   private class SortMergeJoinEvaluator extends PartitionEvaluator[InternalRow, InternalRow] {
 
     private def cleanupResources(): Unit = {
-      TaskResourceCleaner.cleanupAll(taskResourceCleaners)
+      taskResourceCleaners.foreach(_.cleanupResources())
     }
     private def createLeftKeyGenerator(): Projection =
       UnsafeProjection.create(leftKeys, leftOutput)

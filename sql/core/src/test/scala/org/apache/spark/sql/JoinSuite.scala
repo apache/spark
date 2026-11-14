@@ -1213,7 +1213,9 @@ class JoinSuite extends SharedSparkSession with AdaptiveSparkPlanHelper
       small.createOrReplaceTempView("small")
       big.createOrReplaceTempView("big")
       // Fully generated; generated sorts under an interpreted join (the join output has more
-      // fields than `maxFields`); and no codegen at all.
+      // fields than `maxFields`); and no codegen at all. With `maxFields`, only the inner, outer
+      // and existence joins run interpreted: the output of a semi or anti join is the output of
+      // its left side, which the generated sort below it has as well.
       Seq(
         (Seq.empty[(String, String)], true, true),
         (Seq(SQLConf.WHOLESTAGE_MAX_NUM_FIELDS.key -> "1"), true, false),

@@ -29,7 +29,10 @@ import org.apache.spark.sql.execution.exchange.Exchange
  * The cleaner is per-task mutable state: it is created on the driver, before the task binary is
  * serialized, and every task deserializes its own copy. Everything in a task that creates or
  * releases the resources must reach them through that same copy, so it must capture the cleaner
- * itself rather than the operator: a deserialized operator does not carry its cleaner.
+ * itself rather than the operator, which need not carry its cleaner when deserialized.
+ *
+ * A cleaner can be released in a task that never used it (see [[TaskResourceCleaner.inStage]]),
+ * so [[cleanupResources]] must then do nothing.
  */
 private[sql] trait TaskResourceCleaner extends Serializable {
   def cleanupResources(): Unit
@@ -38,9 +41,13 @@ private[sql] trait TaskResourceCleaner extends Serializable {
 private[sql] object TaskResourceCleaner {
 
   /**
-   * The cleaners of the operators that run in the same task as `plan`: those in its subtree, but
-   * not beyond an [[Exchange]] (or a leaf, such as a query stage). An operator that releases the
+   * The cleaners of the operators below `plan` up to an [[Exchange]] or a leaf (such as a query
+   * stage), i.e. those that run in the same task as `plan`. An operator that releases the
    * resources of its children early in a task, such as a sort merge join, releases these.
+   *
+   * The set can also include operators of other stages, below an operator that starts a new stage
+   * in its own `doExecute` (e.g. `TakeOrderedAndProjectExec`, which shuffles its child). Their
+   * cleaners are then released in a task that did not use them, where they do nothing.
    */
   def inStage(plan: SparkPlan): Array[TaskResourceCleaner] = {
     val cleaners = mutable.ArrayBuffer[TaskResourceCleaner]()
@@ -52,11 +59,6 @@ private[sql] object TaskResourceCleaner {
     }
     plan.children.foreach(visit)
     cleaners.toArray
-  }
-
-  /** Releases the resources of `cleaners`. */
-  def cleanupAll(cleaners: Array[TaskResourceCleaner]): Unit = {
-    cleaners.foreach(_.cleanupResources())
   }
 
   /**
