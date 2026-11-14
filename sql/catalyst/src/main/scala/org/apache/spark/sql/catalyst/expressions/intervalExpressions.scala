@@ -547,7 +547,7 @@ case class MakeDTInterval(
       hour.asInstanceOf[Int],
       min.asInstanceOf[Int],
       sec.asInstanceOf[Decimal],
-      origin.context)
+      getContextOrNull())
   }
 
   override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
@@ -606,7 +606,7 @@ case class MakeYMInterval(years: Expression, months: Expression)
   override def dataType: DataType = YearMonthIntervalType()
 
   override def nullSafeEval(year: Any, month: Any): Any = {
-    makeYearMonthInterval(year.asInstanceOf[Int], month.asInstanceOf[Int], origin.context)
+    makeYearMonthInterval(year.asInstanceOf[Int], month.asInstanceOf[Int], getContextOrNull())
   }
 
   override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
@@ -733,10 +733,18 @@ case class MultiplyDTInterval(
  * The division of an interval by a number. The interpreted path and the generated code both call
  * the `IntervalMathUtils.divide` overload for the interval type and the kind of the divisor, which
  * holds the checks and the error, so that the two paths cannot drift apart.
+ *
+ * The division raises on overflow and on a zero divisor in every mode, so it has a query context
+ * in every mode, unlike `Divide`, whose context is set only under ANSI. It keeps it as a
+ * `SupportQueryContext` field rather than reading `origin` when it evaluates: `origin` is not
+ * serialized, so a copy of the expression deserialized on an executor, where an interpreted or a
+ * non-whole-stage projection is built, has an empty one.
  */
-trait IntervalDivide extends BinaryExpression {
+trait IntervalDivide extends BinaryExpression with SupportQueryContext {
+  override def initQueryContext(): Option[QueryContext] = Some(origin.context)
+
   override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
-    val errorContext = ctx.addReferenceObj("errCtx", origin.context)
+    val errorContext = getContextOrNullCode(ctx)
     val mathUtils = IntervalMathUtils.getClass.getCanonicalName.stripSuffix("$")
     // The divisor is widened to the type of the overload, as the interpreted path does.
     val divisor = right.dataType match {
@@ -752,7 +760,7 @@ trait IntervalDivide extends BinaryExpression {
 case class DivideYMInterval(
     interval: Expression,
     num: Expression)
-  extends IntervalDivide with ImplicitCastInputTypes with Serializable {
+  extends IntervalDivide with ImplicitCastInputTypes {
   override def nullIntolerant: Boolean = true
   override def left: Expression = interval
   override def right: Expression = num
@@ -763,11 +771,11 @@ case class DivideYMInterval(
   @transient
   private lazy val evalFunc: (Int, Any) => Any = right.dataType match {
     case _: IntegralType => (months: Int, num) =>
-      IntervalMathUtils.divide(months, num.asInstanceOf[Number].longValue(), origin.context)
+      IntervalMathUtils.divide(months, num.asInstanceOf[Number].longValue(), getContextOrNull())
     case _: DecimalType => (months: Int, num) =>
-      IntervalMathUtils.divide(months, num.asInstanceOf[Decimal], origin.context)
+      IntervalMathUtils.divide(months, num.asInstanceOf[Decimal], getContextOrNull())
     case _: FractionalType => (months: Int, num) =>
-      IntervalMathUtils.divide(months, num.asInstanceOf[Number].doubleValue(), origin.context)
+      IntervalMathUtils.divide(months, num.asInstanceOf[Number].doubleValue(), getContextOrNull())
   }
 
   override def nullSafeEval(interval: Any, num: Any): Any = {
@@ -786,7 +794,7 @@ case class DivideYMInterval(
 case class DivideDTInterval(
     interval: Expression,
     num: Expression)
-  extends IntervalDivide with ImplicitCastInputTypes with Serializable {
+  extends IntervalDivide with ImplicitCastInputTypes {
   override def nullIntolerant: Boolean = true
 
   override def left: Expression = interval
@@ -798,11 +806,11 @@ case class DivideDTInterval(
   @transient
   private lazy val evalFunc: (Long, Any) => Any = right.dataType match {
     case _: IntegralType => (micros: Long, num) =>
-      IntervalMathUtils.divide(micros, num.asInstanceOf[Number].longValue(), origin.context)
+      IntervalMathUtils.divide(micros, num.asInstanceOf[Number].longValue(), getContextOrNull())
     case _: DecimalType => (micros: Long, num) =>
-      IntervalMathUtils.divide(micros, num.asInstanceOf[Decimal], origin.context)
+      IntervalMathUtils.divide(micros, num.asInstanceOf[Decimal], getContextOrNull())
     case _: FractionalType => (micros: Long, num) =>
-      IntervalMathUtils.divide(micros, num.asInstanceOf[Number].doubleValue(), origin.context)
+      IntervalMathUtils.divide(micros, num.asInstanceOf[Number].doubleValue(), getContextOrNull())
   }
 
   override def nullSafeEval(interval: Any, num: Any): Any = {

@@ -28,7 +28,8 @@ import org.apache.spark.sql.test.{SharedSparkSession, TestSparkSession}
 import org.apache.spark.sql.types.ByteType
 
 // Test suite for all the execution errors that requires enable ANSI SQL mode.
-class QueryExecutionAnsiErrorsSuite extends SharedSparkSession {
+class QueryExecutionAnsiErrorsSuite extends SharedSparkSession
+  with IntervalErrorContextTestUtils {
   import testImplicits._
 
   override def sparkConf: SparkConf = super.sparkConf.set(SQLConf.ANSI_ENABLED.key, "true")
@@ -113,6 +114,47 @@ class QueryExecutionAnsiErrorsSuite extends SharedSparkSession {
       sqlState = "22012",
       parameters = Map.empty[String, String],
       context = ExpectedContext(fragment = "interval 1 day / 0", start = 7, stop = 24))
+  }
+
+  test("SPARK-61352: an interval division error keeps its query context") {
+    // Without whole-stage codegen the projection is built on the executor from a deserialized
+    // copy of the expression. `SimplifyCasts` replaces a cast to the type of the division with
+    // the division, which takes the context of the cast, as the other ANSI expressions do.
+    Seq("true", "false").foreach { wholeStage =>
+      withSQLConf(SQLConf.WHOLESTAGE_CODEGEN_ENABLED.key -> wholeStage) {
+        Seq(ymDivide, s"CAST($ymDivide AS INTERVAL YEAR TO MONTH)").foreach { query =>
+          checkError(
+            exception = intercept[SparkArithmeticException] {
+              sql(s"SELECT $query FROM range(1)").collect()
+            },
+            condition = "INTERVAL_ARITHMETIC_OVERFLOW.WITH_SUGGESTION",
+            sqlState = "22015",
+            parameters = Map("functionName" -> "`try_divide`"),
+            context = expectedContext(query, query))
+        }
+        Seq(dtDivide, s"CAST($dtDivide AS INTERVAL DAY TO SECOND)").foreach { query =>
+          checkError(
+            exception = intercept[SparkArithmeticException] {
+              sql(s"SELECT $query FROM range(1)").collect()
+            },
+            condition = "INTERVAL_DIVIDED_BY_ZERO",
+            sqlState = "22012",
+            parameters = Map.empty[String, String],
+            context = expectedContext(query, query))
+        }
+        // The Column API gives the division a `DataFrameQueryContext`.
+        checkError(
+          exception = intercept[SparkArithmeticException] {
+            spark.range(1).select(expr("CAST(id + 1 AS INTERVAL DAY)") / $"id".cast("int"))
+              .collect()
+          },
+          condition = "INTERVAL_DIVIDED_BY_ZERO",
+          sqlState = "22012",
+          parameters = Map.empty[String, String],
+          context = ExpectedContext(
+            fragment = "div", callSitePattern = getCurrentClassCallSitePattern))
+      }
+    }
   }
 
   test("INVALID_FRACTION_OF_SECOND: in the function make_timestamp") {

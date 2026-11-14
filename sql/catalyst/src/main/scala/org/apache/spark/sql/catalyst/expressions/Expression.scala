@@ -699,9 +699,12 @@ trait SupportQueryContext extends Expression with Serializable {
   //       empty "Origin" during rule transforms since "Origin"s are not serialized to executors
   //       for better performance. Thus, we need to copy the original query context during
   //       transforms. The query context string is considered as a "tag" on the expression here.
+  //       It is copied only when the replaced node has one: a node without a context, such as
+  //       a non-ANSI `Divide` that the analyzer turns into an interval division, would otherwise
+  //       leave the expression that replaces it, which raises in every mode, with none.
   override def copyTagsFrom(other: Expression): Unit = {
     other match {
-      case s: SupportQueryContext =>
+      case s: SupportQueryContext if s.queryContext.isDefined =>
         queryContext = s.queryContext
       case _ =>
     }
