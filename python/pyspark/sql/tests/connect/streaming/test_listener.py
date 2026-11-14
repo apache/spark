@@ -112,6 +112,8 @@ class StreamingQueryListenerBusCloseTests(unittest.TestCase):
         listener_bus = StreamingQueryListenerBus(manager)
         for listener in [object(), object()]:
             listener_bus.append(listener)
+        # SparkSession.__del__ runs only after the handler thread has ended.
+        listener_bus._execution_thread.join(timeout=10)
         manager._session.client.is_closed = True
 
         with warnings.catch_warnings(record=True) as caught:

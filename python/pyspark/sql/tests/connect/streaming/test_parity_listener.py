@@ -282,6 +282,33 @@ class StreamingListenerParityTests(StreamingListenerTestsMixin, ReusedConnectTes
             # Remove again to verify this won't throw any error
             self.spark.streams.removeListener(test_listener)
 
+    def test_stopped_session_with_listeners_is_collected_without_a_warning(self):
+        # stop() releases the session, which removes its server side listener, ends the event
+        # stream and the handler thread, and closes the client. SparkSession.__del__ then closes
+        # the listener bus, which must send no removal on the closed client, and so warn
+        # nothing, with two listeners as with one.
+        import gc
+        import warnings
+        import weakref
+
+        session = self.spark.newSession()
+        session.streams.addListener(TestListenerLocalV1())
+        session.streams.addListener(TestListenerLocalV2())
+        thread = session.streams._sqlb._execution_thread
+        collected = weakref.ref(session)
+        with warnings.catch_warnings(record=True) as caught:
+            warnings.simplefilter("always")
+            session.stop()
+            thread.join(timeout=60)
+            self.assertFalse(thread.is_alive())
+            del session
+            gc.collect()
+            self.assertIsNone(collected())
+        self.assertEqual(
+            [str(w.message) for w in caught if "Failed to remove the listener" in str(w.message)],
+            [],
+        )
+
     def test_server_listener_uninterruptible(self):
         listener = TestListenerLocalV1()
 
