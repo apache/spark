@@ -18,8 +18,9 @@
 package org.apache.spark.sql
 
 import scala.collection.mutable.ArrayBuffer
+import scala.reflect.ClassTag
 
-import org.apache.spark.{SparkArithmeticException, SparkConf, SparkRuntimeException}
+import org.apache.spark.{SparkArithmeticException, SparkConf, SparkNumberFormatException, SparkRuntimeException, SparkThrowable}
 import org.apache.spark.serializer.JavaSerializer
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.{CreateNamedStruct, EqualTo, Expression,
@@ -3399,6 +3400,173 @@ class SubquerySuite extends SharedSparkSession
         sql("SELECT * FROM t1 WHERE t1.a = 1 AND " +
           "t1.b = (SELECT max(t2.b) FROM t2 WHERE t2.a = t1.a)"),
         Row(1, 2))
+    }
+  }
+
+  test("SPARK-61444: COUNT bug with a result on zero rows that fails to evaluate") {
+    withTempView("o", "o2", "i") {
+      Seq(1, 2).toDF("k").createOrReplaceTempView("o")
+      Seq(1, 2, 3).toDF("k").createOrReplaceTempView("o2")
+      Seq((1, 100), (1, 200), (2, 300)).toDF("k", "v").createOrReplaceTempView("i")
+      // The outer row k = 3 of o2 has no matching rows and uses the result on zero rows. The query
+      // is still optimized and planned, and fails when it runs.
+      def checkFailsAtRuntime[T <: SparkThrowable : ClassTag](
+          query: String,
+          condition: String): Unit = withClue(query) {
+        val df = sql(query)
+        df.queryExecution.executedPlan
+        val e = intercept[T](df.collect())
+        assert(e.getCondition === condition)
+      }
+
+      withSQLConf(SQLConf.ANSI_ENABLED.key -> "true") {
+        // Every outer row has matching rows, so the result on zero rows is not used, and the
+        // queries must not fail while the subquery is rewritten.
+        // The top Aggregate, handled in RewriteCorrelatedScalarSubquery.constructLeftJoins.
+        checkAnswer(
+          sql("SELECT k, (SELECT 10 / coalesce(max(v), 0) FROM i WHERE i.k = o.k) FROM o"),
+          Row(1, 0.05) :: Row(2, 10.0 / 300) :: Nil)
+        checkAnswer(
+          sql("SELECT k, (SELECT CAST(coalesce(max(CAST(v AS STRING)), 'x') AS INT) " +
+            "FROM i WHERE i.k = o.k) FROM o"),
+          Row(1, 200) :: Row(2, 300) :: Nil)
+        checkAnswer(
+          sql("SELECT k FROM o WHERE (SELECT 10 / coalesce(max(v), 0) FROM i WHERE i.k = o.k) " +
+            "> 0.04"),
+          Row(1) :: Nil)
+        // A HAVING clause whose condition fails to evaluate on zero rows, handled in
+        // DecorrelateInnerQuery with the default confs.
+        checkAnswer(
+          sql("SELECT k, (SELECT count(*) FROM i WHERE i.k = o.k HAVING 10 / count(*) > 0) " +
+            "FROM o"),
+          Row(1, 2) :: Row(2, 1) :: Nil)
+        // A lower Aggregate, handled in DecorrelateInnerQuery.
+        checkAnswer(
+          sql("SELECT k, (SELECT max(c) FROM (SELECT 10 / count(*) c FROM i WHERE i.k = o.k)) " +
+            "FROM o"),
+          Row(1, 5.0) :: Row(2, 10.0) :: Nil)
+        // LATERAL, EXISTS and IN subqueries, also handled in DecorrelateInnerQuery.
+        checkAnswer(
+          sql("SELECT o.k, t.d FROM o, " +
+            "LATERAL (SELECT 10 / coalesce(max(i.v), 0) d FROM i WHERE i.k = o.k) t"),
+          Row(1, 0.05) :: Row(2, 10.0 / 300) :: Nil)
+        checkAnswer(
+          sql("SELECT k FROM o WHERE " +
+            "EXISTS (SELECT 10 / coalesce(max(v), 0) FROM i WHERE i.k = o.k)"),
+          Row(1) :: Row(2) :: Nil)
+        checkAnswer(
+          sql("SELECT k FROM o WHERE " +
+            "5 IN (SELECT 1000 / coalesce(max(v), 0) FROM i WHERE i.k = o.k)"),
+          Row(1) :: Nil)
+
+        // A grouped subquery and EXISTS don't use the result on zero rows, so they don't fail
+        // for the outer row k = 3 of o2 either.
+        checkAnswer(
+          sql("SELECT k, (SELECT 10 / coalesce(max(v), 0) FROM i WHERE i.k = o2.k GROUP BY i.k) " +
+            "FROM o2"),
+          Row(1, 0.05) :: Row(2, 10.0 / 300) :: Row(3, null) :: Nil)
+        checkAnswer(
+          sql("SELECT k FROM o2 WHERE " +
+            "EXISTS (SELECT 10 / coalesce(max(v), 0) FROM i WHERE i.k = o2.k)"),
+          Row(1) :: Row(2) :: Row(3) :: Nil)
+
+        Seq(
+          "SELECT k, (SELECT 10 / coalesce(max(v), 0) FROM i WHERE i.k = o2.k) FROM o2",
+          "SELECT k FROM o2 WHERE (SELECT 10 / coalesce(max(v), 0) FROM i WHERE i.k = o2.k) " +
+            "> 0.04",
+          "SELECT k, (SELECT count(*) FROM i WHERE i.k = o2.k HAVING 10 / count(*) > 0) FROM o2",
+          "SELECT k, (SELECT max(c) FROM (SELECT 10 / count(*) c FROM i WHERE i.k = o2.k)) " +
+            "FROM o2",
+          "SELECT o2.k, t.d FROM o2, " +
+            "LATERAL (SELECT 10 / coalesce(max(i.v), 0) d FROM i WHERE i.k = o2.k) t",
+          "SELECT k FROM o2 WHERE " +
+            "5 IN (SELECT 1000 / coalesce(max(v), 0) FROM i WHERE i.k = o2.k)"
+        ).foreach(checkFailsAtRuntime[SparkArithmeticException](_, "DIVIDE_BY_ZERO"))
+        checkFailsAtRuntime[SparkNumberFormatException](
+          "SELECT k, (SELECT CAST(coalesce(max(CAST(v AS STRING)), 'x') AS INT) " +
+            "FROM i WHERE i.k = o2.k) FROM o2",
+          "CAST_INVALID_INPUT")
+
+        // Without DecorrelateInnerQuery, the HAVING clause is handled in CASE 3 of
+        // RewriteCorrelatedScalarSubquery.constructLeftJoins.
+        withSQLConf(SQLConf.DECORRELATE_INNER_QUERY_ENABLED.key -> "false") {
+          checkAnswer(
+            sql("SELECT k, (SELECT count(*) FROM i WHERE i.k = o.k HAVING 10 / count(*) > 0) " +
+              "FROM o"),
+            Row(1, 2) :: Row(2, 1) :: Nil)
+          checkFailsAtRuntime[SparkArithmeticException](
+            "SELECT k, (SELECT count(*) FROM i WHERE i.k = o2.k HAVING 10 / count(*) > 0) " +
+              "FROM o2",
+            "DIVIDE_BY_ZERO")
+        }
+      }
+
+      // An expression can also fail to evaluate with ANSI mode off.
+      withSQLConf(SQLConf.ANSI_ENABLED.key -> "false") {
+        checkAnswer(
+          sql("SELECT k, (SELECT element_at(array(1, 2), CAST(count(v) AS INT)) FROM i " +
+            "WHERE i.k = o.k) FROM o"),
+          Row(1, 2) :: Row(2, 1) :: Nil)
+        checkFailsAtRuntime[SparkRuntimeException](
+          "SELECT k, (SELECT element_at(array(1, 2), CAST(count(v) AS INT)) FROM i " +
+            "WHERE i.k = o2.k) FROM o2",
+          "INVALID_INDEX_OF_ZERO")
+      }
+    }
+  }
+
+  test("SPARK-61482: COUNT bug of a lower aggregate with a PythonUDF over aggregate functions") {
+    import IntegratedUDFTestUtils._
+
+    assume(shouldTestPythonUDFs)
+
+    val pythonTestUDF = TestPythonUDF(name = "udf")
+    registerTestUDF(pythonTestUDF, spark)
+
+    // `ml` keeps only the rows of `l` with matching rows in `r`. The Python UDF is evaluated
+    // once per row on the value of that row, and not also on the result over zero tuples,
+    // `udf(10 / 0)`. Without this change the UDF is lifted out of the conditional branch by
+    // `ExtractPythonUDFs` and evaluated on `10 / 0` for every row, failing in ANSI mode.
+    withTempView("ml") {
+      sql("CREATE TEMPORARY VIEW ml AS SELECT * FROM l WHERE a > 1")
+      withSQLConf(SQLConf.ANSI_ENABLED.key -> "true") {
+        checkAnswer(
+          sql("SELECT l.a, (SELECT SUM(d) FROM (SELECT udf(10 / COUNT(*)) d FROM r " +
+            "WHERE l.a = r.c)) FROM ml l"),
+          Row(2, 5.0) :: Row(2, 5.0) :: Row(3, 10.0) :: Row(6, 10.0) :: Nil)
+        checkAnswer(
+          sql("SELECT l.a, t.d FROM ml l, LATERAL (SELECT udf(10 / COUNT(*)) d FROM r " +
+            "WHERE l.a = r.c) t"),
+          Row(2, 5.0) :: Row(2, 5.0) :: Row(3, 10.0) :: Row(6, 10.0) :: Nil)
+      }
+    }
+    checkAnswer(
+      sql("SELECT l.a, (SELECT SUM(d) FROM (SELECT udf(COUNT(*)) + 1 d FROM r " +
+        "WHERE l.a = r.c)) FROM l"),
+      Row(1, 1L) :: Row(1, 1L) :: Row(2, 3L) :: Row(2, 3L) :: Row(3, 2L) ::
+        Row(null, 1L) :: Row(null, 1L) :: Row(6, 2L) :: Nil)
+  }
+
+  test("SPARK-61482: a Python UDF guarded by an aggregate value has its argument evaluated " +
+    "on the zero-row values for an outer row without matching rows") {
+    import IntegratedUDFTestUtils._
+
+    assume(shouldTestPythonUDFs)
+
+    registerTestUDF(TestPythonUDF(name = "udf"), spark)
+
+    // Behavior change: the UDF column is rebuilt above the domain join, so `ExtractPythonUDFs`
+    // lifts the UDF argument out of the `CASE` branch and evaluates it for every outer row,
+    // including rows without matching rows, where the aggregate's value over zero rows is used.
+    // This matches the uncorrelated form, which already evaluates the argument eagerly, but it
+    // turns a query that worked before into a failing one. In ANSI mode the lifted argument
+    // `10 / 0` fails at runtime for such a row.
+    withSQLConf(SQLConf.ANSI_ENABLED.key -> "true") {
+      val df = sql("SELECT l.a, t.d FROM l, LATERAL (SELECT " +
+        "CASE WHEN COUNT(*) = 0 THEN 0 ELSE udf(10 / COUNT(*)) END d FROM r WHERE l.a = r.c) t")
+      df.queryExecution.optimizedPlan
+      val e = intercept[SparkArithmeticException](df.collect())
+      assert(e.getCondition == "DIVIDE_BY_ZERO")
     }
   }
 }

@@ -22,6 +22,7 @@ import scala.collection.mutable.ArrayBuffer
 import org.apache.spark.SparkException
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.SubExprUtils._
+import org.apache.spark.sql.catalyst.expressions.aggregate.AggregateExpression
 import org.apache.spark.sql.catalyst.plans._
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.trees.TreePattern.OUTER_REFERENCE
@@ -856,7 +857,8 @@ object DecorrelateInnerQuery extends PredicateHelper {
             // 1) add a column `true AS alwaysTrue` to the result of the aggregate
             // 2) insert a left outer domain join between the outer query and this aggregate
             // 3) rewrite the original aggregate's output column using the default value of the
-            //    aggregate function and the alwaysTrue column.
+            //    aggregate function and the alwaysTrue column. A column that applies a scalar
+            //    Python UDF to an aggregate function is rebuilt above the join instead, see below.
             //
             // For example, T1 left outer join T2' with `alwaysTrue` marker:
             // +---+------+------------+--------------------------------+
@@ -871,8 +873,45 @@ object DecorrelateInnerQuery extends PredicateHelper {
               val alwaysTrue = Alias(Literal.TrueLiteral, "alwaysTrue")()
               val alwaysTrueRef = alwaysTrue.toAttribute.withNullability(true)
               val expressions = ArrayBuffer.empty[NamedExpression]
+              // Pull an aggregate function out as its own column of the aggregate, corrected for
+              // the count bug: `if(isnull(alwaysTrue), <default>, <ref>)`, or just `<ref>` when
+              // its result on zero rows is NULL. Used to rebuild a column over aggregate
+              // functions above the join, see the Python UDF case below.
+              def pullOutAggregate(ae: AggregateExpression): Expression = {
+                val alias = Alias(ae, ae.aggregateFunction.prettyName)()
+                expressions += alias
+                // The attribute is nullable since it is from the right-hand side of a left
+                // outer join.
+                val ref = alias.toAttribute.withNullability(true)
+                RewriteCorrelatedScalarSubquery.aggregateDefaultResult(ae.aggregateFunction) match {
+                  case Literal(null, _) => ref
+                  case default => If(IsNull(alwaysTrueRef), default, ref)
+                }
+              }
+              // Replace every aggregate function in an expression with its count-bug-corrected
+              // column, leaving the rest of the expression in place, so that it can be computed
+              // above the left outer join. Does not descend into an aggregate function (handled
+              // as a whole) and leaves a nested subquery untouched.
+              def pullOutAggregates(e: Expression): Expression = e match {
+                case ae: AggregateExpression => pullOutAggregate(ae)
+                case other => other.mapChildren(pullOutAggregates)
+              }
+              // Whether a column applies a scalar Python UDF to an aggregate function's result,
+              // e.g. `inv(count(*))` or `CASE WHEN count(*) = 0 THEN 0 ELSE inv(count(*)) END`.
+              // Such a UDF is evaluated on the values over zero rows (see the case below). Unlike
+              // `ExtractPythonUDFFromAggregate.hasPythonUdfOverAggregate`, this stops at an
+              // aggregate function, so a Python UDF inside an aggregate function's argument, e.g.
+              // `count(udf(v))`, does not count: it is replaced along with the function by its
+              // result over zero rows and is never lifted out of a branch.
+              def hasScalarPythonUDFOverAggregate(e: Expression): Boolean = e match {
+                case _: AggregateExpression => false
+                case _ if PythonUDF.isScalarPythonUDF(e) => true
+                case _ => e.children.exists(hasScalarPythonUDFOverAggregate)
+              }
               // Create new aliases for aggregate expressions that have non-null default
-              // values and reconstruct the output with the `alwaysTrue` marker.
+              // values, or default values that can't be evaluated statically (see
+              // `RewriteCorrelatedScalarSubquery.tryEvalExpr`), and reconstruct the output with
+              // the `alwaysTrue` marker.
               val projectList = newAggregate.aggregateExpressions.map { a =>
                 resultMap.get(a.exprId) match {
                   // Aggregate expression is not subject to the count bug.
@@ -882,12 +921,29 @@ object DecorrelateInnerQuery extends PredicateHelper {
                     // left outer join.
                     a.toAttribute.withNullability(true)
                   case Some(default) =>
-                    assert(a.isInstanceOf[Alias], s"Cannot have non-aliased expression $a in " +
-                      s"aggregate that evaluates to non-null value with zero tuples.")
-                    val newAttr = a.newInstance()
-                    val ref = newAttr.toAttribute.withNullability(true)
-                    expressions += newAttr
-                    Alias(If(IsNull(alwaysTrueRef), default, ref), a.name)(a.exprId)
+                    val alias = a match {
+                      case alias: Alias => alias
+                      case _ =>
+                        throw SparkException.internalError(s"Cannot have non-aliased expression " +
+                          s"$a in aggregate that may not evaluate to null with zero tuples.")
+                    }
+                    if (hasScalarPythonUDFOverAggregate(alias.child)) {
+                      // A scalar Python UDF applied to an aggregate function, e.g. `inv(count(*))`.
+                      // Building `if(isnull(alwaysTrue), <default>, <ref>)` as in the else branch
+                      // would put the zero-row result `<default>`, e.g. `inv(0)`, in a conditional
+                      // branch, and `ExtractPythonUDFs` lifts a Python UDF out of a branch and
+                      // evaluates it for every row, so it would run on the zero-row values even for
+                      // an outer row with matching rows and could fail there (e.g. division by
+                      // zero). Instead pull every aggregate function out as its own corrected
+                      // column and compute the expression, including the UDF, above the join on
+                      // those corrected values.
+                      alias.withNewChild(pullOutAggregates(alias.child))
+                    } else {
+                      val newAttr = a.newInstance()
+                      val ref = newAttr.toAttribute.withNullability(true)
+                      expressions += newAttr
+                      Alias(If(IsNull(alwaysTrueRef), default, ref), a.name)(a.exprId)
+                    }
                 }
               }
               // Insert a placeholder left outer domain join between the outer query and
