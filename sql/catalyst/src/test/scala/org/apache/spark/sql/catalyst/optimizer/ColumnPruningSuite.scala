@@ -451,9 +451,10 @@ class ColumnPruningSuite extends PlanTest {
       Some(left.output.head === right.output.head), JoinHint.NONE)
     val query = Project(Seq(left.output.head), join)
 
-    Seq(false, true).foreach { enabled =>
-      withSQLConf(SQLConf.STREAMING_JOIN_PRESERVE_EVENT_TIME_COLUMNS.key -> enabled.toString) {
-        val kept = if (enabled) 2 else 1
+    Seq(0, 1).foreach { version =>
+      withSQLConf(
+          SQLConf.STREAMING_JOIN_EVENT_TIME_COLUMN_RETENTION_VERSION.key -> version.toString) {
+        val kept = if (version == 1) 2 else 1
         val expected = Project(Seq(left.output.head), join.copy(
           left = Project(left.output.take(kept), left),
           right = Project(right.output.take(kept), right)))
@@ -467,18 +468,44 @@ class ColumnPruningSuite extends PlanTest {
     val (left, right) = watermarkedJoinInputs()
     val join = Join(left, right, LeftSemi,
       Some(left.output.head === right.output.head), JoinHint.NONE)
-    Seq(false, true).foreach { enabled =>
-      withSQLConf(SQLConf.STREAMING_JOIN_PRESERVE_EVENT_TIME_COLUMNS.key -> enabled.toString) {
-        val kept = if (enabled) 2 else 1
+    Seq(0, 1).foreach { version =>
+      withSQLConf(
+          SQLConf.STREAMING_JOIN_EVENT_TIME_COLUMN_RETENTION_VERSION.key -> version.toString) {
+        val kept = if (version == 1) 2 else 1
         comparePlans(Optimize.execute(join),
           join.copy(right = Project(right.output.take(kept), right)))
       }
     }
   }
 
+  test("SPARK-60850: project over left-semi join retains both event-time inputs") {
+    val (left, right) = watermarkedJoinInputs()
+    val join = Join(left, right, LeftSemi,
+      Some(left.output.head === right.output.head), JoinHint.NONE)
+    withSQLConf(SQLConf.STREAMING_JOIN_EVENT_TIME_COLUMN_RETENTION_VERSION.key -> "1") {
+      val optimized = Optimize.execute(Project(Seq(left.output.head), join))
+      val optimizedJoin = optimized.collectFirst { case join: Join => join }.get
+      assert(optimizedJoin.left.output == left.output.take(2))
+      assert(optimizedJoin.right.output == right.output.take(2))
+    }
+  }
+
+  test("SPARK-60850: project and filter over join retain both event-time inputs") {
+    val (left, right) = watermarkedJoinInputs()
+    val join = Join(left, right, Inner,
+      Some(left.output.head === right.output.head), JoinHint.NONE)
+    val query = Project(Seq(left.output.head),
+      Filter(Rand(1L) < Literal(0.5), join))
+    withSQLConf(SQLConf.STREAMING_JOIN_EVENT_TIME_COLUMN_RETENTION_VERSION.key -> "1") {
+      val optimizedJoin = Optimize.execute(query).collectFirst { case join: Join => join }.get
+      assert(optimizedJoin.left.output == left.output.take(2))
+      assert(optimizedJoin.right.output == right.output.take(2))
+    }
+  }
+
   test("SPARK-60850: batch and stream-static joins keep their original pruning") {
     val (left, right) = watermarkedJoinInputs()
-    withSQLConf(SQLConf.STREAMING_JOIN_PRESERVE_EVENT_TIME_COLUMNS.key -> "true") {
+    withSQLConf(SQLConf.STREAMING_JOIN_EVENT_TIME_COLUMN_RETENTION_VERSION.key -> "1") {
       Seq((false, false), (true, false), (false, true)).foreach {
         case (leftStreaming, rightStreaming) =>
           val leftInput = left.copy(isStreaming = leftStreaming)
@@ -498,8 +525,9 @@ class ColumnPruningSuite extends PlanTest {
     val (left, right) = watermarkedJoinInputs()
     val equality = left.output.head === right.output.head
     val condition = equality && (left.output(1) > right.output(1))
-    Seq(false, true).foreach { enabled =>
-      withSQLConf(SQLConf.STREAMING_JOIN_PRESERVE_EVENT_TIME_COLUMNS.key -> enabled.toString) {
+    Seq(0, 1).foreach { version =>
+      withSQLConf(
+          SQLConf.STREAMING_JOIN_EVENT_TIME_COLUMN_RETENTION_VERSION.key -> version.toString) {
         Seq(
           (Some(condition), Seq(left.output.head)),
           (Some(equality), Seq(left.output(1), right.output(1)))).foreach {
@@ -520,7 +548,7 @@ class ColumnPruningSuite extends PlanTest {
       left.output(2)), left)
     val join = Join(aliased, right, Inner,
       Some(left.output.head === right.output.head), JoinHint.NONE)
-    withSQLConf(SQLConf.STREAMING_JOIN_PRESERVE_EVENT_TIME_COLUMNS.key -> "true") {
+    withSQLConf(SQLConf.STREAMING_JOIN_EVENT_TIME_COLUMN_RETENTION_VERSION.key -> "1") {
       val optimized = Optimize.execute(Project(Seq(left.output.head), join))
       val optimizedJoin = optimized.collectFirst { case join: Join => join }.get
       assert(optimizedJoin.left.output.map(_.name) == Seq("leftKey", "aliasedTime"))
@@ -534,7 +562,7 @@ class ColumnPruningSuite extends PlanTest {
     val projected = Project(Seq(left.output.head, left.output(2)), left)
     val join = Join(projected, right, Inner,
       Some(left.output.head === right.output.head), JoinHint.NONE)
-    withSQLConf(SQLConf.STREAMING_JOIN_PRESERVE_EVENT_TIME_COLUMNS.key -> "true") {
+    withSQLConf(SQLConf.STREAMING_JOIN_EVENT_TIME_COLUMN_RETENTION_VERSION.key -> "1") {
       val optimized = Optimize.execute(Project(Seq(left.output.head), join))
       val optimizedJoin = optimized.collectFirst { case join: Join => join }.get
       assert(optimizedJoin.left.output == left.output.take(1))
@@ -542,7 +570,7 @@ class ColumnPruningSuite extends PlanTest {
     }
   }
 
-  test("SPARK-60850: chained joins retain their own input event time") {
+  test("SPARK-60850: chained joins keep legacy event-time pruning") {
     val (left, right) = watermarkedJoinInputs()
     val third = right.newInstance()
     val first = Join(left, right, Inner,
@@ -550,12 +578,12 @@ class ColumnPruningSuite extends PlanTest {
     val projected = Project(left.output.take(2), first)
     val second = Join(projected, third, Inner,
       Some(left.output.head === third.output.head), JoinHint.NONE)
-    withSQLConf(SQLConf.STREAMING_JOIN_PRESERVE_EVENT_TIME_COLUMNS.key -> "true") {
+    withSQLConf(SQLConf.STREAMING_JOIN_EVENT_TIME_COLUMN_RETENTION_VERSION.key -> "1") {
       val optimized = Optimize.execute(Project(Seq(left.output.head), second))
       val joins = optimized.collect { case join: Join => join }
       assert(joins.size == 2)
       joins.flatMap(_.children).foreach { input =>
-        assert(input.output.count(_.metadata.contains(EventTimeWatermark.delayKey)) == 1)
+        assert(!input.output.exists(_.metadata.contains(EventTimeWatermark.delayKey)))
         assert(!input.output.exists(_.name.endsWith("Extra")))
       }
       comparePlans(Optimize.execute(optimized), optimized)
@@ -569,7 +597,7 @@ class ColumnPruningSuite extends PlanTest {
     val ambiguous = left.copy(output = left.output :+ otherTime)
     val join = Join(ambiguous, right, Inner,
       Some(left.output.head === right.output.head), JoinHint.NONE)
-    withSQLConf(SQLConf.STREAMING_JOIN_PRESERVE_EVENT_TIME_COLUMNS.key -> "true") {
+    withSQLConf(SQLConf.STREAMING_JOIN_EVENT_TIME_COLUMN_RETENTION_VERSION.key -> "1") {
       val optimized = Optimize.execute(Project(Seq(left.output.head), join))
       val optimizedJoin = optimized.collectFirst { case join: Join => join }.get
       assert(optimizedJoin.left.output == left.output.take(1))
@@ -584,7 +612,7 @@ class ColumnPruningSuite extends PlanTest {
     val windowed = left.copy(output = Seq(left.output.head, window, left.output(2)))
     val join = Join(windowed, right, Inner,
       Some(left.output.head === right.output.head), JoinHint.NONE)
-    withSQLConf(SQLConf.STREAMING_JOIN_PRESERVE_EVENT_TIME_COLUMNS.key -> "true") {
+    withSQLConf(SQLConf.STREAMING_JOIN_EVENT_TIME_COLUMN_RETENTION_VERSION.key -> "1") {
       val optimized = Optimize.execute(Project(Seq(left.output.head), join))
       val optimizedJoin = optimized.collectFirst { case join: Join => join }.get
       assert(optimizedJoin.left.output == left.output.take(1))

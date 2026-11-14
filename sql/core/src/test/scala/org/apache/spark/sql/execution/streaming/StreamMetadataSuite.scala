@@ -22,21 +22,28 @@ import java.util.UUID
 
 import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.fs.Path
+import org.json4s.jackson.Serialization
 
 import org.apache.spark.sql.execution.streaming.runtime.StreamMetadata
 import org.apache.spark.sql.streaming.StreamTest
 
+private object StreamMetadataSuite {
+  case class LegacyStreamMetadata(id: String)
+}
+
 class StreamMetadataSuite extends StreamTest {
+  import StreamMetadataSuite._
 
   test("writing and reading") {
     withTempDir { dir =>
       val id = UUID.randomUUID.toString
-      val metadata = StreamMetadata(id)
+      val metadata = StreamMetadata(id, Some(1))
       val file = new Path(new File(dir, "test").toString)
       StreamMetadata.write(metadata, file, hadoopConf)
       val readMetadata = StreamMetadata.read(file, hadoopConf)
       assert(readMetadata.nonEmpty)
       assert(readMetadata.get.id === id)
+      assert(readMetadata.get.joinEventTimeColumnRetentionVersion.contains(1))
     }
   }
 
@@ -45,6 +52,13 @@ class StreamMetadataSuite extends StreamTest {
     assert(
       readForResource("query-metadata-logs-version-2.1.0.txt") ===
       StreamMetadata("d366a8bf-db79-42ca-b5a4-d9ca0a11d63e"))
+  }
+
+  test("new metadata is readable by the legacy schema") {
+    val id = UUID.randomUUID.toString
+    val json = StreamMetadata(id, Some(1)).json
+    assert(Serialization.read[LegacyStreamMetadata](json)(StreamMetadata.format, manifest) ===
+      LegacyStreamMetadata(id))
   }
 
   private def readForResource(fileName: String): StreamMetadata = {

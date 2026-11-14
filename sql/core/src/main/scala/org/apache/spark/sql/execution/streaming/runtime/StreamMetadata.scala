@@ -38,10 +38,15 @@ import org.apache.spark.util.Utils
  * This information is written in the checkpoint location the first time a query is started
  * and recovered every time the query is restarted.
  *
- * @param id  unique id of the [[org.apache.spark.sql.streaming.StreamingQuery]]
- *            that needs to be persisted across restarts
+ * @param id unique id of the [[org.apache.spark.sql.streaming.StreamingQuery]]
+ *           that needs to be persisted across restarts
+ * @param joinEventTimeColumnRetentionVersion stable version of stream-stream join event-time
+ *           retention. This query-level value is used when the latest offset does not contain the
+ *           setting, including before the first offset is written.
  */
-case class StreamMetadata(id: String) {
+case class StreamMetadata(
+    id: String,
+    joinEventTimeColumnRetentionVersion: Option[Int] = None) {
   def json: String = Serialization.write(this)(StreamMetadata.format)
 }
 

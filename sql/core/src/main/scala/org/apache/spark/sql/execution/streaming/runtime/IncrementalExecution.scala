@@ -615,7 +615,8 @@ class IncrementalExecution(
           stateWatermarkPredicates =
             StreamingSymmetricHashJoinHelper.getStateWatermarkPredicates(
               j.left.output, j.right.output, j.leftKeys, j.rightKeys, j.condition.full,
-              iwEviction, prevBatchLateEventsWm, !allowMultipleStatefulOperators)
+              iwEviction, prevBatchLateEventsWm, !allowMultipleStatefulOperators,
+              j.useRetainedEventTimeColumn)
         )
     }
   }
@@ -721,7 +722,15 @@ class IncrementalExecution(
     }
 
     override def apply(plan: SparkPlan): SparkPlan = {
-      val planWithStateOpId = plan transform composedRule
+      val useRetainedEventTimeColumn =
+        sparkSession.sessionState.conf.getConf(
+          SQLConf.STREAMING_JOIN_EVENT_TIME_COLUMN_RETENTION_VERSION) == 1 &&
+          plan.collect { case _: StreamingSymmetricHashJoinExec => true }.size == 1
+      val planWithRetentionMode = plan.transform {
+        case join: StreamingSymmetricHashJoinExec =>
+          join.copy(useRetainedEventTimeColumn = useRetainedEventTimeColumn)
+      }
+      val planWithStateOpId = planWithRetentionMode transform composedRule
       // Need to check before write to metadata because we need to detect add operator
       // Only check when streaming is restarting and is first batch
       if (isFirstBatch && currentBatchId != 0) {

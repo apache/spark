@@ -1878,16 +1878,16 @@ class StreamingV2ScanPushDownSuite extends StreamTest with BeforeAndAfter {
     withTable(tbl) {
       createTable(tbl, "id bigint, data string")
       val plan = spark.readStream.table(tbl).queryExecution.analyzed
-      val entry = SQLConf.STREAMING_JOIN_PRESERVE_EVENT_TIME_COLUMNS
+      val entry = SQLConf.STREAMING_JOIN_EVENT_TIME_COLUMN_RETENTION_VERSION
       val metadata = OffsetSeqMetadata(0, 0, spark.conf)
-      Seq(None, Some(false), Some(true)).foreach { recorded =>
-        val expected = recorded.getOrElse(false)
+      Seq(None, Some(0), Some(1)).foreach { recorded =>
+        val expected = recorded.getOrElse(0)
         val checkpoint = metadata.copy(conf = recorded
           .map(value => Map(entry.key -> value.toString)).getOrElse(Map.empty))
-        withSQLConf(entry.key -> (!expected).toString) {
+        withSQLConf(entry.key -> (1 - expected).toString) {
           val startup = StreamingV2ScanPushDown.startupConf(spark, plan, Some(checkpoint)).get
           assert(startup.getConf(entry) == expected)
-          assert(spark.sessionState.conf.getConf(entry) == !expected)
+          assert(spark.sessionState.conf.getConf(entry) == 1 - expected)
         }
       }
     }

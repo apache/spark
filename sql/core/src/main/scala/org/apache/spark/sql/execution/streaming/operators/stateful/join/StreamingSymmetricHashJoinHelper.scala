@@ -165,15 +165,16 @@ object StreamingSymmetricHashJoinHelper extends Logging {
       rightKeys: Seq[Expression],
       condition: Option[Expression],
       eventTimeWatermarkForEviction: Option[Long],
-      allowMultipleEventTimeColumns: Boolean): (Option[Long], Option[Long]) = {
+      allowMultipleEventTimeColumns: Boolean,
+      useRetainedEventTimeColumn: Boolean): (Option[Long], Option[Long]) = {
 
     // Perform assertions against multiple event time columns in the same DataFrame. This method
     // assumes there is only one event time column per each side (left / right) and it is not very
     // clear to reason about the correctness if there are multiple event time columns. Disallow to
     // be conservative.
-    WatermarkSupport.findEventTimeColumn(leftAttributes,
+    val leftEventTime = WatermarkSupport.findEventTimeColumn(leftAttributes,
       allowMultipleEventTimeColumns = allowMultipleEventTimeColumns)
-    WatermarkSupport.findEventTimeColumn(rightAttributes,
+    val rightEventTime = WatermarkSupport.findEventTimeColumn(rightAttributes,
       allowMultipleEventTimeColumns = allowMultipleEventTimeColumns)
 
     val joinKeyOrdinalForWatermark: Option[Int] = findJoinKeyOrdinalForWatermark(
@@ -181,6 +182,7 @@ object StreamingSymmetricHashJoinHelper extends Logging {
 
     def getOneSideStateWatermark(
         oneSideInputAttributes: Seq[Attribute],
+        oneSideEventTime: Option[Attribute],
         otherSideInputAttributes: Seq[Attribute]): Option[Long] = {
       val isWatermarkDefinedOnInput = oneSideInputAttributes.exists(_.metadata.contains(delayKey))
       val isWatermarkDefinedOnJoinKey = joinKeyOrdinalForWatermark.isDefined
@@ -188,8 +190,13 @@ object StreamingSymmetricHashJoinHelper extends Logging {
       if (isWatermarkDefinedOnJoinKey) { // case 1 and 3 in the StreamingSymmetricHashJoinExec docs
         eventTimeWatermarkForEviction
       } else if (isWatermarkDefinedOnInput) { // case 2 in the StreamingSymmetricHashJoinExec docs
+        val attributesToFindStateWatermarkFor = if (useRetainedEventTimeColumn) {
+          AttributeSet(oneSideEventTime.toSeq)
+        } else {
+          AttributeSet(oneSideInputAttributes)
+        }
         StreamingJoinHelper.getStateValueWatermark(
-          attributesToFindStateWatermarkFor = AttributeSet(oneSideInputAttributes),
+          attributesToFindStateWatermarkFor,
           attributesWithEventWatermark = AttributeSet(otherSideInputAttributes),
           condition,
           eventTimeWatermarkForEviction)
@@ -198,8 +205,10 @@ object StreamingSymmetricHashJoinHelper extends Logging {
       }
     }
 
-    val leftStateWatermark = getOneSideStateWatermark(leftAttributes, rightAttributes)
-    val rightStateWatermark = getOneSideStateWatermark(rightAttributes, leftAttributes)
+    val leftStateWatermark =
+      getOneSideStateWatermark(leftAttributes, leftEventTime, rightAttributes)
+    val rightStateWatermark =
+      getOneSideStateWatermark(rightAttributes, rightEventTime, leftAttributes)
 
     (leftStateWatermark, rightStateWatermark)
   }
@@ -213,15 +222,16 @@ object StreamingSymmetricHashJoinHelper extends Logging {
       condition: Option[Expression],
       eventTimeWatermarkForEviction: Option[Long],
       eventTimeWatermarkForLateEvents: Option[Long],
-      useFirstEventTimeColumn: Boolean): JoinStateWatermarkPredicates = {
+      useFirstEventTimeColumn: Boolean,
+      useRetainedEventTimeColumn: Boolean): JoinStateWatermarkPredicates = {
 
     // Perform assertions against multiple event time columns in the same DataFrame. This method
     // assumes there is only one event time column per each side (left / right) and it is not very
     // clear to reason about the correctness if there are multiple event time columns. Disallow to
     // be conservative.
-    WatermarkSupport.findEventTimeColumn(leftAttributes,
+    val leftEventTime = WatermarkSupport.findEventTimeColumn(leftAttributes,
       allowMultipleEventTimeColumns = useFirstEventTimeColumn)
-    WatermarkSupport.findEventTimeColumn(rightAttributes,
+    val rightEventTime = WatermarkSupport.findEventTimeColumn(rightAttributes,
       allowMultipleEventTimeColumns = useFirstEventTimeColumn)
 
     val joinKeyOrdinalForWatermark: Option[Int] = findJoinKeyOrdinalForWatermark(
@@ -229,6 +239,7 @@ object StreamingSymmetricHashJoinHelper extends Logging {
 
     def getOneSideStateWatermarkPredicate(
         oneSideInputAttributes: Seq[Attribute],
+        oneSideEventTime: Option[Attribute],
         oneSideJoinKeys: Seq[Expression],
         otherSideInputAttributes: Seq[Attribute]): Option[JoinStateWatermarkPredicate] = {
       val isWatermarkDefinedOnInput = oneSideInputAttributes.exists(_.metadata.contains(delayKey))
@@ -262,8 +273,13 @@ object StreamingSymmetricHashJoinHelper extends Logging {
             prevStateKeyWatermark)
         }
       } else if (isWatermarkDefinedOnInput) { // case 2 in the StreamingSymmetricHashJoinExec docs
+        val attributesToFindStateWatermarkFor = if (useRetainedEventTimeColumn) {
+          AttributeSet(oneSideEventTime.toSeq)
+        } else {
+          AttributeSet(oneSideInputAttributes)
+        }
         val stateValueWatermark = StreamingJoinHelper.getStateValueWatermark(
-          attributesToFindStateWatermarkFor = AttributeSet(oneSideInputAttributes),
+          attributesToFindStateWatermarkFor,
           attributesWithEventWatermark = AttributeSet(otherSideInputAttributes),
           condition,
           eventTimeWatermarkForEviction)
@@ -272,13 +288,17 @@ object StreamingSymmetricHashJoinHelper extends Logging {
         // row can fall at or below that cutoff. V4 must scan from the beginning to find such rows.
         val prevStateValueWatermark = eventTimeWatermarkForLateEvents.flatMap { lateWatermark =>
           StreamingJoinHelper.getStateValueWatermark(
-            attributesToFindStateWatermarkFor = AttributeSet(oneSideInputAttributes),
+            attributesToFindStateWatermarkFor,
             attributesWithEventWatermark = AttributeSet(otherSideInputAttributes),
             condition,
             eventTimeWatermarkForLateEvents).filter(_ <= lateWatermark)
         }
-        val inputAttributeWithWatermark = oneSideInputAttributes.find(_.metadata.contains(delayKey))
-        val expr = watermarkExpression(inputAttributeWithWatermark, stateValueWatermark)
+        val eventTimeColumn = if (useRetainedEventTimeColumn) {
+          oneSideEventTime
+        } else {
+          oneSideInputAttributes.find(_.metadata.contains(delayKey))
+        }
+        val expr = watermarkExpression(eventTimeColumn, stateValueWatermark)
         expr.map { e =>
           // watermarkExpression only provides the expression when eventTimeWatermarkForEviction
           // is defined
@@ -290,9 +310,11 @@ object StreamingSymmetricHashJoinHelper extends Logging {
     }
 
     val leftStateWatermarkPredicate =
-      getOneSideStateWatermarkPredicate(leftAttributes, leftKeys, rightAttributes)
+      getOneSideStateWatermarkPredicate(
+        leftAttributes, leftEventTime, leftKeys, rightAttributes)
     val rightStateWatermarkPredicate =
-      getOneSideStateWatermarkPredicate(rightAttributes, rightKeys, leftAttributes)
+      getOneSideStateWatermarkPredicate(
+        rightAttributes, rightEventTime, rightKeys, leftAttributes)
     JoinStateWatermarkPredicates(leftStateWatermarkPredicate, rightStateWatermarkPredicate)
   }
 

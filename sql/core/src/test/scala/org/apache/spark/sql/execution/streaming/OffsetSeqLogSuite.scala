@@ -39,41 +39,41 @@ class OffsetSeqLogSuite extends SharedSparkSession {
   import testImplicits._
 
   test("SPARK-60850: old checkpoints disable join event-time retention") {
-    val entry = SQLConf.STREAMING_JOIN_PRESERVE_EVENT_TIME_COLUMNS
+    val entry = SQLConf.STREAMING_JOIN_EVENT_TIME_COLUMN_RETENTION_VERSION
     val (_, offsets) = readFromResource("offset-log-version-2.1.0")
     val metadata = offsets.metadataOpt.get
     assert(!metadata.conf.contains(entry.key))
     val restored = new SQLConf
     val startup = new SQLConf
-    Seq(restored, startup).foreach(_.setConf(entry, true))
+    Seq(restored, startup).foreach(_.setConf(entry, 1))
 
     OffsetSeqMetadata.setSessionConf(metadata, restored)
     OffsetSeqMetadata.setConfWithoutLogging(metadata, startup)
 
-    assert(!restored.getConf(entry))
-    assert(!startup.getConf(entry))
+    assert(restored.getConf(entry) == 0)
+    assert(startup.getConf(entry) == 0)
   }
 
   test("SPARK-60850: new checkpoints pin join event-time retention across restarts") {
-    val entry = SQLConf.STREAMING_JOIN_PRESERVE_EVENT_TIME_COLUMNS
-    Seq(false, true).foreach { enabled =>
+    val entry = SQLConf.STREAMING_JOIN_EVENT_TIME_COLUMN_RETENTION_VERSION
+    Seq(0, 1).foreach { version =>
       withSQLConf(
-          entry.key -> enabled.toString,
+          entry.key -> version.toString,
           SQLConf.STATEFUL_SHUFFLE_PARTITIONS_INTERNAL.key -> "3") {
         val metadatas = Seq(
           OffsetSeqMetadata(0, 0, spark.conf),
           OffsetSeqMetadataV2(0, 0, spark.conf))
         metadatas.foreach { metadata =>
-          assert(metadata.conf.get(entry.key).contains(enabled.toString))
+          assert(metadata.conf.get(entry.key).contains(version.toString))
           val restored = new SQLConf
           val startup = new SQLConf
-          Seq(restored, startup).foreach(_.setConf(entry, !enabled))
+          Seq(restored, startup).foreach(_.setConf(entry, 1 - version))
 
           OffsetSeqMetadata.setSessionConf(metadata, restored)
           OffsetSeqMetadata.setConfWithoutLogging(metadata, startup)
 
-          assert(restored.getConf(entry) == enabled)
-          assert(startup.getConf(entry) == enabled)
+          assert(restored.getConf(entry) == version)
+          assert(startup.getConf(entry) == version)
         }
       }
     }
