@@ -33,7 +33,7 @@ import org.scalatestplus.scalacheck.ScalaCheckDrivenPropertyChecks
 
 import org.apache.spark.{SparkArithmeticException, SparkRuntimeException}
 import org.apache.spark.sql.catalyst.expressions.aggregate.{Complete, Final, Partial}
-import org.apache.spark.sql.catalyst.plans.logical.Expand
+import org.apache.spark.sql.catalyst.plans.logical.{Aggregate, Expand}
 import org.apache.spark.sql.catalyst.util.AUTO_GENERATED_ALIAS
 import org.apache.spark.sql.errors.DataTypeErrors.toSQLId
 import org.apache.spark.sql.execution.{FileSourceScanExec, WholeStageCodegenExec}
