@@ -29,26 +29,28 @@ import org.apache.spark.sql.connector.catalog.Table
 import org.apache.spark.sql.connector.read._
 import org.apache.spark.sql.connector.write.RowLevelOperation.Command.DELETE
 import org.apache.spark.sql.connector.write.RowLevelOperationTable
-import org.apache.spark.sql.execution.EmptyRDDWithPartitions
+import org.apache.spark.sql.execution.{EmptyRDDWithPartitions, SparkPlan}
 import org.apache.spark.sql.execution.metric.{SQLLastAttemptMetrics, SQLMetric, SQLMetrics}
 import org.apache.spark.util.ArrayImplicits._
 
 /**
  * Physical plan node for scanning a batch of data from a data source v2.
  *
- * @param plannedScan The `Scan` to read, with the `Batch` and the input partitions planned from it,
- *                    see [[PlannedScan]].
  */
 case class BatchScanExec(
     output: Seq[AttributeReference],
-    @transient plannedScan: PlannedScan,
+    @transient scan: Scan,
     runtimeFilters: Seq[Expression],
     ordering: Option[Seq[SortOrder]] = None,
     @transient table: Table,
     keyGroupedPartitioning: Option[Seq[Expression]] = None
   ) extends DataSourceV2ScanExecBase {
 
-  override def scan: Scan = if (plannedScan == null) null else plannedScan.scan
+  // What this node plans from `scan`, see [[PlannedScan]]. `makeCopy` and `clone` hand it over to a
+  // copy over the same `Scan`. Any other new node plans its own, including one the case-class
+  // `copy` makes.
+  @transient private var plannedScan: PlannedScan =
+    if (scan == null) null else new PlannedScan(scan)
 
   def batch: Batch = if (scan == null) null else plannedScan.batch
 
@@ -114,6 +116,19 @@ case class BatchScanExec(
     rdd
   }
 
+  override def makeCopy(newArgs: Array[AnyRef]): SparkPlan = sharePlanning(super.makeCopy(newArgs))
+
+  // `TreeNode.clone` does not go through `makeCopy`.
+  override def clone(): SparkPlan = sharePlanning(super.clone())
+
+  private def sharePlanning(node: SparkPlan): SparkPlan = {
+    node match {
+      case c: BatchScanExec if c.scan eq scan => c.plannedScan = plannedScan
+      case _ =>
+    }
+    node
+  }
+
   override def doCanonicalize(): BatchScanExec = {
     this.copy(
       output = output.map(QueryPlan.normalizeExpressions(_, output)),
@@ -148,22 +163,18 @@ case class BatchScanExec(
 
 /**
  * A `Scan`, with the `Batch` and the input partitions a [[BatchScanExec]] plans from it once, when
- * a node first asks for them. The copies later rules make of the node share it, so they read the
- * partitions the first node planned, with a reader factory from the `Batch` that planned them.
- * The partitions have to be the planned ones, because the `Scan` can be shared with another node
- * whose runtime filter prunes it first, e.g. the build side of a DPP subquery (SPARK-60752). A
- * runtime filter replans them, through `planInputPartitionsWithRuntimeFilters` or from a new
- * `Batch` after a pushed `filter`, but keeps the planned `Batch`'s reader factory.
+ * a node first asks for them. The node hands it over to the copies `makeCopy` and `clone` make of
+ * it, so they read the partitions the first node planned, with a reader factory from the `Batch`
+ * that planned them. The partitions have to be the planned ones, because the `Scan` can be shared
+ * with another node whose runtime filter prunes it first, e.g. the build side of a DPP subquery
+ * (SPARK-60752). A runtime filter replans them, through `planInputPartitionsWithRuntimeFilters` or
+ * from a new `Batch` after a pushed `filter`, but keeps the planned `Batch`'s reader factory.
  *
- * A rule that rebuilds a node over the same `Scan` passes on its `plannedScan`, or uses `copy`. A
- * new `PlannedScan` is for a node that is planned again, or one over another `Scan`.
+ * A rule that rebuilds a node over the same `Scan` keeps the planned partitions through
+ * `makeCopy`, e.g. with `transformExpressions`. The case-class `copy` plans them again.
  */
-final class PlannedScan(val scan: Scan) {
+private[v2] final class PlannedScan(val scan: Scan) {
   lazy val batch: Batch = scan.toBatch
   lazy val inputPartitions: Seq[InputPartition] = batch.planInputPartitions().toImmutableArraySeq
   lazy val readerFactory: PartitionReaderFactory = batch.createReaderFactory()
-}
-
-object PlannedScan {
-  def unapply(plannedScan: PlannedScan): Some[Scan] = Some(plannedScan.scan)
 }
