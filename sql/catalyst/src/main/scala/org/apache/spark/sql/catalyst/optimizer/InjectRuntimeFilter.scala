@@ -261,15 +261,21 @@ object InjectRuntimeFilter extends Rule[LogicalPlan] with PredicateHelper with J
       REGEXP_EXTRACT_FAMILY, REGEXP_REPLACE)
   }
 
-  private def isProbablyShuffleJoin(left: LogicalPlan,
-      right: LogicalPlan, hint: JoinHint): Boolean = {
-    !hintToBroadcastLeft(hint) && !hintToBroadcastRight(hint) &&
-      !canBroadcastBySize(left, conf) && !canBroadcastBySize(right, conf)
+  // A broadcast hash join can build only a side that its join type allows, and a hint can rule it
+  // out. A join without equi-join keys is not a hash join, so its join type does not matter here.
+  private def isProbablyShuffleJoin(join: Join): Boolean = join match {
+    case ExtractEquiJoinKeys(_, _, _, _, _, _, _, _) =>
+      // A hinted broadcast outranks a merge hint, which outranks a size-based broadcast.
+      getBroadcastBuildSide(join, hintOnly = true, conf).isEmpty &&
+        (hintToSortMergeJoin(join.hint) || !canPlanAsBroadcastHashJoin(join, conf))
+    case Join(left, right, _, _, hint) =>
+      !hintToBroadcastLeft(hint) && !hintToBroadcastRight(hint) &&
+        !canBroadcastBySize(left, conf) && !canBroadcastBySize(right, conf)
   }
 
   private def probablyHasShuffle(plan: LogicalPlan): Boolean = {
     plan.exists {
-      case Join(left, right, _, _, hint) => isProbablyShuffleJoin(left, right, hint)
+      case join: Join => isProbablyShuffleJoin(join)
       case _: Aggregate => true
       case _: Window => true
       case _ => false
@@ -412,7 +418,7 @@ object InjectRuntimeFilter extends Rule[LogicalPlan] with PredicateHelper with J
     var filterCounter = 0
     val numFilterThreshold = conf.getConf(SQLConf.RUNTIME_FILTER_NUMBER_THRESHOLD)
     plan transformUp {
-      case join @ ExtractEquiJoinKeys(joinType, leftKeys, rightKeys, _, _, left, right, hint) =>
+      case join @ ExtractEquiJoinKeys(joinType, leftKeys, rightKeys, _, _, left, right, _) =>
         var newLeft = left
         var newRight = right
         leftKeys.lazyZip(rightKeys).foreach((l, r) => {
@@ -429,7 +435,7 @@ object InjectRuntimeFilter extends Rule[LogicalPlan] with PredicateHelper with J
             // 2. The current join is a shuffle join or a broadcast join that
             //    has a shuffle below it
             // 3. There is no bloom filter on the left key yet
-            val hasShuffle = isProbablyShuffleJoin(left, right, hint)
+            val hasShuffle = isProbablyShuffleJoin(join)
             if (canPruneLeft(joinType) && (hasShuffle || probablyHasShuffle(left)) &&
               !hasBloomFilter(newLeft, l)) {
               extractBeneficialFilterCreatePlan(left, right, l, r).foreach { creationSide =>

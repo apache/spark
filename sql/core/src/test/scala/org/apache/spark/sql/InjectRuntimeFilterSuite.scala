@@ -1042,6 +1042,29 @@ class InjectRuntimeFilterSuite extends SharedSparkSession
     }
   }
 
+  test("SPARK-61652: add bloom filter if the join type or a hint rules out broadcasting the " +
+    "small side") {
+    withSQLConf(SQLConf.RUNTIME_BLOOM_FILTER_APPLICATION_SIDE_SCAN_SIZE_THRESHOLD.key -> "3000",
+      SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key -> "2000") {
+      // The left side is small enough to broadcast, but a left outer join cannot broadcast it, so
+      // the join shuffles `bf2`.
+      val query = "select * from (select c1 from bf1 where a1 = 5) a left join bf2 on a.c1 = bf2.c2"
+      assertRewroteWithBloomFilter(query)
+      assert(bloomFilterKeyNames(query) == Seq("c2"))
+      // A shuffle hash or merge hint rules out broadcasting the small side of an inner join too.
+      def hinted(hint: String): String = s"select /*+ $hint(a) */ * from bf2 join " +
+        "(select c1 from bf1 where a1 = 5) a on a.c1 = bf2.c2"
+      assertRewroteWithBloomFilter(hinted("shuffle_hash"))
+      assertRewroteWithBloomFilter(hinted("merge"))
+      // Below a broadcast hash join, the same join shuffles `bf1`. A broadcast nested loop join
+      // broadcasts the small side instead.
+      def belowBroadcastJoin(condition: String): String = "select * from (select c1 from bf1) a " +
+        s"left join bf2 on $condition join (select c3 from bf3 where a3 = 5) b on a.c1 = b.c3"
+      assertRewroteWithBloomFilter(belowBroadcastJoin("a.c1 = bf2.c2"))
+      assertDidNotRewriteWithBloomFilter(belowBroadcastJoin("a.c1 < bf2.c2"))
+    }
+  }
+
   test("Runtime bloom filter join: two filters single join") {
     withSQLConf(SQLConf.RUNTIME_BLOOM_FILTER_APPLICATION_SIDE_SCAN_SIZE_THRESHOLD.key -> "3000",
       SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key -> "2000") {
