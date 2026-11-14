@@ -222,6 +222,8 @@ abstract class TupleUnionAggBase[S <: Summary]
   // Type and input validation overrides
   override def dataType: DataType = BinaryType
   override def nullable: Boolean = false
+  override def defaultResult: Option[Literal] =
+    Option(Literal.create(eval(createAggregationBuffer()), dataType))
 
   override def inputTypes: Seq[AbstractDataType] =
     Seq(BinaryType, IntegerType, StringTypeWithCollation(supportsTrimCollation = true))

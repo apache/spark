@@ -24,7 +24,7 @@ import org.apache.spark.SparkUnsupportedOperationException
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.analysis.TypeCheckResult
 import org.apache.spark.sql.catalyst.analysis.TypeCheckResult.DataTypeMismatch
-import org.apache.spark.sql.catalyst.expressions.{ExpectsInputTypes, Expression, ExpressionDescription}
+import org.apache.spark.sql.catalyst.expressions.{ExpectsInputTypes, Expression, ExpressionDescription, Literal}
 import org.apache.spark.sql.errors.QueryExecutionErrors
 import org.apache.spark.sql.types.{AbstractDataType, BinaryType, ByteType, DataType, DoubleType, FloatType, IntegerType, LongType, ShortType, TypeCollection}
 
@@ -103,6 +103,8 @@ case class KllSketchAggBigint(
     if (kExpr.isDefined) baseTypes :+ IntegerType else baseTypes
   }
   override def nullable: Boolean = false
+  override def defaultResult: Option[Literal] =
+    Option(Literal.create(eval(createAggregationBuffer()), dataType))
   override def prettyName: String = "kll_sketch_agg_bigint"
 
   override def checkInputDataTypes(): TypeCheckResult = {
@@ -245,6 +247,8 @@ case class KllSketchAggFloat(
     if (kExpr.isDefined) baseTypes :+ IntegerType else baseTypes
   }
   override def nullable: Boolean = false
+  override def defaultResult: Option[Literal] =
+    Option(Literal.create(eval(createAggregationBuffer()), dataType))
   override def prettyName: String = "kll_sketch_agg_float"
 
   override def checkInputDataTypes(): TypeCheckResult = {
@@ -381,6 +385,8 @@ case class KllSketchAggDouble(
     if (kExpr.isDefined) baseTypes :+ IntegerType else baseTypes
   }
   override def nullable: Boolean = false
+  override def defaultResult: Option[Literal] =
+    Option(Literal.create(eval(createAggregationBuffer()), dataType))
   override def prettyName: String = "kll_sketch_agg_double"
 
   override def checkInputDataTypes(): TypeCheckResult = {
@@ -698,6 +704,9 @@ abstract class KllMergeAggBase[T <: KllSketch]
   }
 
   override def nullable: Boolean = false
+
+  override def defaultResult: Option[Literal] =
+    Option(Literal.create(eval(createAggregationBuffer()), dataType))
 
   override def checkInputDataTypes(): TypeCheckResult = {
     val defaultCheck = super.checkInputDataTypes()

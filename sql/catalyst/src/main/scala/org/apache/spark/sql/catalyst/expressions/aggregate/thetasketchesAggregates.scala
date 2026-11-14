@@ -164,6 +164,9 @@ case class ThetaSketchAgg(
 
   override def nullable: Boolean = false
 
+  override def defaultResult: Option[Literal] =
+    Option(Literal.create(eval(createAggregationBuffer()), dataType))
+
   /**
    * Instantiate an UpdateSketch instance using the lgNomEntries param.
    *
@@ -394,6 +397,9 @@ case class ThetaUnionAgg(
 
   override def nullable: Boolean = false
 
+  override def defaultResult: Option[Literal] =
+    Option(Literal.create(eval(createAggregationBuffer()), dataType))
+
   /**
    * Instantiate a Union instance using the lgNomEntries param.
    *
@@ -563,6 +569,9 @@ case class ThetaIntersectionAgg(
   override def dataType: DataType = BinaryType
 
   override def nullable: Boolean = false
+
+  override def defaultResult: Option[Literal] =
+    Option(Literal.create(eval(createAggregationBuffer()), dataType))
 
   /**
    * Instantiate an Intersection instance using the lgNomEntries param.
