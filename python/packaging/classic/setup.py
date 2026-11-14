@@ -396,6 +396,16 @@ try:
                 "zstandard>=%s" % _minimum_zstandard_version,
                 "pyyaml>=%s" % _minimum_pyyaml_version,
             ],
+            # Dependencies for pyspark.sql.ai and its Pandas UDF execution.
+            "ai": [
+                "pandas>=%s" % _minimum_pandas_version,
+                "pyarrow>=%s" % _minimum_pyarrow_version,
+                "numpy>=%s" % _minimum_numpy_version,
+                "requests>=2.32.5",
+                "urllib3>=2.8.0",
+                "boto3>=1.34.131",
+                "databricks-sdk>=0.57.0",
+            ],
         },
         python_requires=">=3.11",
         classifiers=[

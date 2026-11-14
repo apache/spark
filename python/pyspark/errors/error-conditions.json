@@ -1,4 +1,86 @@
 {
+  "AI_QUERY_ENDPOINT_NOT_REGISTERED": {
+    "message": [
+      "Register endpoint `<endpoint>` before calling ai_query."
+    ],
+    "sqlState": "22023"
+  },
+  "AI_QUERY_INVALID_TIMEOUT": {
+    "message": [
+      "Argument `timeout` must be finite and greater than zero."
+    ],
+    "sqlState": "22023"
+  },
+  "AI_QUERY_INVOCATION_FAILED": {
+    "message": [
+      "Invocation of <target> failed."
+    ],
+    "sub_class": {
+      "CONNECTION_ERROR": {
+        "message": [
+          "Connection retries were exhausted."
+        ]
+      },
+      "EMPTY_RESPONSE": {
+        "message": [
+          "The response contained no text."
+        ]
+      },
+      "HTTP_ERROR": {
+        "message": [
+          "The server returned HTTP status <status>."
+        ]
+      },
+      "HTTP_RETRIES_EXHAUSTED": {
+        "message": [
+          "Retries were exhausted after HTTP status <status>."
+        ]
+      },
+      "INVALID_RESPONSE": {
+        "message": [
+          "The server returned an invalid response."
+        ]
+      },
+      "INVALID_URL": {
+        "message": [
+          "The endpoint must be a valid HTTPS URL without embedded credentials, a query, or a fragment."
+        ]
+      },
+      "PERMISSION_DENIED": {
+        "message": [
+          "Authentication or authorization failed with code <code>. Check the identity's access to <target>."
+        ]
+      },
+      "RETRY_AFTER_EXCEEDS_TIMEOUT": {
+        "message": [
+          "The server returned HTTP <status> with Retry-After <retry_after> seconds, exceeding the remaining invocation time budget."
+        ]
+      },
+      "SDK_ERROR": {
+        "message": [
+          "The provider SDK reported error <code>."
+        ]
+      },
+      "TIMEOUT": {
+        "message": [
+          "The invocation exceeded its time budget."
+        ]
+      }
+    },
+    "sqlState": "58000"
+  },
+  "AI_QUERY_UNSUPPORTED_OPTION": {
+    "message": [
+      "Argument `<arg_name>` is not supported for <target>."
+    ],
+    "sqlState": "22023"
+  },
+  "AI_QUERY_WRONG_NUM_ARGUMENTS": {
+    "message": [
+      "SQL function `<function_name>` requires 2 arguments (endpoint, request), but received <num_args>."
+    ],
+    "sqlState": "42605"
+  },
   "APPLICATION_NAME_NOT_SET": {
     "message": [
       "An application name must be set in your configuration."
