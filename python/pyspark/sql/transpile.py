@@ -387,6 +387,8 @@ def _null_narrowed(params: List[str], test_node: ast.AST) -> Tuple[frozenset, fr
                 body_nonnull |= bn
             return body_nonnull, frozenset()
     return frozenset(), frozenset()
+
+
 # ----------------------------------------------------------------------------
 # Scalar pandas UDF (Series in / Series out) support. See the module docstring
 # for why the subset below is an allowlist rather than a set of exclusions.
@@ -841,7 +843,7 @@ class CatalystTranspiler(AbstractTranspiler):
         CAST_OVERFLOW for a NaN. An integer literal count avoids all of this -- it cannot be
         NaN or NULL -- so `s * 2` is kept and everything else falls back to interpreted
         Python. A no-op for the scalar eval types (``series_semantics`` is False), which keep
-        the broader behavior, including the documented `s * 1.5` -> truncated-repeat wart.
+        the broader behavior for integer-valued counts.
         """
         if self._series_semantics and not _is_int_literal(count_node):
             raise UnsupportedOperationException(
@@ -874,7 +876,7 @@ class CatalystTranspiler(AbstractTranspiler):
         total two-valued logic and matches pandas without a ``coalesce``.
         """
         subject = self._convert_chunk(params, receiver)
-        if self._category(params, receiver) == "numeric":
+        if _is_numeric_cat(self._category(params, receiver)):
             missing = subject.isNull() | isnan(subject.cast("double"))
         else:
             missing = subject.isNull()
@@ -1427,7 +1429,7 @@ class CatalystTranspiler(AbstractTranspiler):
                 UserWarning,
                 stacklevel=2,
             )
-        if series_semantics and _is_numeric_cat(body_cat):
+        if series_semantics and body_cat is not None and _is_numeric_cat(body_cat):
             # A scalar pandas UDF's numpy-backed result Series is masked with
             # ``series.isnull()`` on the way to Arrow, and ``isnull`` is True for NaN, so
             # every NaN the body produces reaches Spark as NULL. Catalyst keeps NaN, so
