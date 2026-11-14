@@ -57,6 +57,70 @@ from pyspark.testing.utils import (
 
 
 class UtilsTestsMixin:
+    def test_assert_dataframe_equal_float_exact_match_reassignment(self):
+        # An exact match must be reassignable to obtain a complete matching.
+        actual = [
+            Row(value=0.0),
+            Row(value=0.1),
+        ]
+        expected = [
+            Row(value=0.1),
+            Row(value=0.2),
+        ]
+
+        assertDataFrameEqual(
+            actual,
+            expected,
+            rtol=0,
+            atol=0.11,
+            checkRowOrder=False,
+        )
+
+    def test_assert_dataframe_equal_overlapping_float_tolerance(self):
+        # A valid matching exists, but greedy matching can miss it.
+        actual = [
+            Row(value=-0.2),
+            Row(value=-0.1),
+        ]
+        expected = [
+            Row(value=-0.2),
+            Row(value=0.0),
+        ]
+
+        assertDataFrameEqual(
+            actual,
+            expected,
+            rtol=0,
+            atol=0.11,
+            checkRowOrder=False,
+        )
+
+    def test_assert_dataframe_equal_float_row_order_tolerance(self):
+        actual = [
+            Row(id=0.1 + 0.1 + 0.1, value="a"),
+            Row(id=0.3, value="b"),
+        ]
+        expected = [
+            Row(id=0.3, value="a"),
+            Row(id=0.3, value="b"),
+        ]
+
+        # Approximately equal rows must match regardless of order.
+        assertDataFrameEqual(actual, expected, rtol=1e-5, atol=1e-8, checkRowOrder=False)
+
+        # Enforcing row order must detect a different sequence.
+        reversed_expected = list(reversed(expected))
+        with self.assertRaises(PySparkAssertionError):
+            assertDataFrameEqual(actual, reversed_expected, checkRowOrder=True)
+
+        # Genuinely unequal rows must still fail.
+        unequal = [
+            Row(id=0.3, value="a"),
+            Row(id=0.3, value="different"),
+        ]
+        with self.assertRaises(PySparkAssertionError):
+            assertDataFrameEqual(actual, unequal, checkRowOrder=False)
+
     def test_assert_equal_inttype(self):
         df1 = self.spark.createDataFrame(
             data=[
