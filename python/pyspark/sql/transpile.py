@@ -1001,17 +1001,25 @@ class CatalystTranspiler(AbstractTranspiler):
 CatalystTranspiler.register()
 
 
-def _get_transpilers(session: "SparkSession") -> List[AbstractTranspiler]:
-    """Get the transpilers we should try."""
+def _get_transpilers(
+    session: "SparkSession",
+) -> Tuple[List[AbstractTranspiler], List[str]]:
+    """Get the transpilers we should try and any configured names not registered."""
     configured_transpilers = session.conf.get("spark.sql.experimental.optimizer.pyTranspilers")
     if not configured_transpilers:
-        return []
+        return [], []
     transpiler_names = configured_transpilers.split(",")
-    return [
+    unknown_names = [
+        name
+        for name in transpiler_names
+        if name.strip() and name not in AbstractTranspiler.varieties
+    ]
+    transpilers = [
         AbstractTranspiler.varieties[name]()
         for name in transpiler_names
         if name in AbstractTranspiler.varieties
     ]
+    return transpilers, unknown_names
 
 
 def _annotation_category(annotation: Optional[ast.AST]) -> Optional[str]:
@@ -1292,7 +1300,7 @@ def _transpile_func(
     session: "SparkSession",
     func: Callable[..., Any],
     returnType: "DataTypeOrString",
-) -> Tuple[List[Column], List[str], List[str], List[List[str]], List[str]]:
+) -> Tuple[List[Column], List[str], List[str], List[List[str]], List[str], List[str]]:
     """
     An experimental internal function that attempts to transpile a callable function.
 
@@ -1310,6 +1318,7 @@ def _transpile_func(
     list of the public parameter names Python forbids calling by keyword
     (positional-only) -- the caller must NOT resolve a kwarg matching one of these
     to a position, since Python itself rejects that call.
+    list of configured transpiler names that are not registered.
     """
     try:
         # The transpiler lowers to atomic (numeric/string/boolean/binary)
@@ -1338,6 +1347,7 @@ def _transpile_func(
                 [],
                 [],
                 [],
+                [],
             )
         # A functools.wraps-style decorator makes ``inspect.getsource`` return
         # the WRAPPED function's source (getsource follows ``__wrapped__``),
@@ -1360,15 +1370,16 @@ def _transpile_func(
                 [],
                 [],
                 [],
+                [],
             )
         # Not ``ast``: that name would shadow the module for this whole function.
         src, ast_info = _get_src_ast_from_func(func)
         if ast_info is None:
-            return ([], ["Error getting ast for function, cannot transpile"], [], [], [])
+            return ([], ["Error getting ast for function, cannot transpile"], [], [], [], [])
         # Get the lambda body and parameters
         function_ast, extraction_error = _get_function_from_ast(ast_info, _held_code(func))
         if function_ast is None:
-            return ([], [extraction_error], [], [], [])
+            return ([], [extraction_error], [], [], [], [])
         # Default, variadic (``*args`` / ``**kwargs``) and keyword-only params
         # can't be represented by the positional ``_udf_param_N`` placeholder
         # scheme: a call site may omit a defaulted argument, leaving the
@@ -1390,6 +1401,7 @@ def _transpile_func(
                     "functions with default, variadic, or keyword-only "
                     "arguments are not supported by the transpiler"
                 ],
+                [],
                 [],
                 [],
                 [],
@@ -1431,6 +1443,7 @@ def _transpile_func(
                     [],
                     [],
                     [],
+                    [],
                 )
             spoken_for = int(
                 inspect.isfunction(call_entry) or isinstance(call_entry, classmethod)
@@ -1440,7 +1453,7 @@ def _transpile_func(
             # prepends the class ON TOP of the method's own ``__self__`` -- or one with
             # no parameter to hold it. Python raises for whatever the call site passes,
             # so there is nothing correct to lower.
-            return ([], ["callable leaves no parameter for the call site to bind"], [], [], [])
+            return ([], ["callable leaves no parameter for the call site to bind"], [], [], [], [])
         # Caller-facing params: callers match user-supplied kwargs against this,
         # and the receiver is not named at the call site. Everything downstream
         # indexes off THIS list, so the placeholder numbering needs no offset.
@@ -1458,7 +1471,7 @@ def _transpile_func(
         # option matching the actual column types (or fall back if none match).
         combos = _param_category_combos(function_ast, public_params)
         # Maybe multiple transpilers (think CUDA, etc.).
-        transpilers = _get_transpilers(session)
+        transpilers, unknown_transpilers = _get_transpilers(session)
         for transpiler in transpilers:
             for combo in combos:
                 try:
@@ -1478,9 +1491,10 @@ def _transpile_func(
             public_params,
             input_categories,
             positional_only_public_params,
+            unknown_transpilers,
         )
     except Exception as e:
         # Don't re-raise: an inability to transpile must never break a
         # working UDF. The caller treats an empty ``transpiled`` list as a
         # silent fall-back to interpreted Python.
-        return ([], [str(e)], [], [], [])
+        return ([], [str(e)], [], [], [], [])
