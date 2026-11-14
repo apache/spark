@@ -23,6 +23,7 @@ import pandas as pd
 from pandas.api.types import CategoricalDtype
 
 from pyspark import pandas as ps
+from pyspark.errors import AnalysisException
 from pyspark.pandas import option_context
 from pyspark.pandas.tests.data_type_ops.testing_utils import OpsTestBase
 from pyspark.pandas.typedef.typehints import (
@@ -405,6 +406,32 @@ class BooleanOpsTestsMixin:
         psser, other_psser = psdf["this"], psdf["that"]
         self.assert_eq(pser >= other_pser, psser >= other_psser)
         self.assert_eq(pser >= pser, psser >= psser)
+
+    def test_compare_with_numeric(self):
+        # SPARK-60648: ordering comparisons between booleans and numbers, in both directions
+        pdf, psdf = self.pdf, self.psdf
+        b_pser, b_psser = pdf["bool"], psdf["bool"]
+        ops = [
+            lambda x, y: x < y,
+            lambda x, y: x <= y,
+            lambda x, y: x > y,
+            lambda x, y: x >= y,
+        ]
+        for op in ops:
+            for col in ["int32", "int", "float32", "float", "float_nan"]:
+                pser, psser = pdf[col], psdf[col]
+                self.assert_eq(op(b_pser, pser), op(b_psser, psser))
+                self.assert_eq(op(pser, b_pser), op(psser, b_psser))
+            for scalar in [1, 0.5]:
+                self.assert_eq(op(b_pser, scalar), op(b_psser, scalar))
+            self.assert_eq(op(pdf["float"], True), op(psdf["float"], True))
+            self.assert_eq(
+                op(b_pser.astype("boolean"), pdf["float_nan"]),
+                op(b_psser.astype("boolean"), psdf["float_nan"]),
+            )
+            # Ordering comparisons are not supported for decimals, in either direction.
+            self.assertRaises(AnalysisException, lambda: op(b_psser, psdf["decimal"]).to_pandas())
+            self.assertRaises(TypeError, lambda: op(psdf["decimal"], b_psser))
 
 
 @unittest.skipIf(
