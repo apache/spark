@@ -76,6 +76,22 @@ class DataFrameTableValuedFunctionsSuite extends SharedSparkSession {
     }
   }
 
+  test("SPARK-60564: explode - left lateral join without a join condition") {
+    withView("t3") {
+      sql("CREATE VIEW t3(c1, c2) AS " +
+        "VALUES (0, ARRAY(0, 1)), (1, ARRAY(2)), (2, ARRAY()), (3, NULL)")
+      val t3 = spark.table("t3")
+      val expected = Seq(
+        Row(0, Seq(0, 1), 0), Row(0, Seq(0, 1), 1), Row(1, Seq(2), 2),
+        Row(2, Seq.empty, null), Row(3, null, null))
+
+      checkAnswer(t3.lateralJoin(spark.tvf.explode($"c2".outer()), "left"), expected)
+      checkAnswer(
+        t3.lateralJoin(spark.tvf.explode($"c2".outer()).toDF("v").as("t2"), "left"),
+        expected)
+    }
+  }
+
   test("explode_outer") {
     val actual1 = spark.tvf.explode_outer(array(lit(1), lit(2)))
     val expected1 = spark.sql("SELECT * FROM explode_outer(array(1, 2))")

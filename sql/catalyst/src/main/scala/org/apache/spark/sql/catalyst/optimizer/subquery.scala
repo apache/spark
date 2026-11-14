@@ -1126,9 +1126,13 @@ object OptimizeOneRowRelationSubquery extends Rule[LogicalPlan] {
    * if there is no nested subqueries in the subquery plan.
    */
   private def rewrite(plan: LogicalPlan): LogicalPlan = plan.transformUpWithSubqueries {
+    // A lateral subquery with a Generate over OneRowRelation, with or without a Project on top,
+    // becomes a Generate over the left side. That Generate drops the left rows for which the
+    // generator returns no rows, so it can not replace a left outer lateral join.
     case LateralJoin(
-      left, right @ LateralSubquery(OneRowSubquery(plan), _, _, _, _), _, None)
-        if !hasCorrelatedSubquery(right.plan) && right.joinCond.isEmpty =>
+      left, right @ LateralSubquery(OneRowSubquery(plan), _, _, _, _), joinType, None)
+        if !hasCorrelatedSubquery(right.plan) && right.joinCond.isEmpty &&
+          !(joinType == LeftOuter && plan.exists(_.isInstanceOf[Generate])) =>
       plan match {
         case Project(projectList, _: OneRowRelation) =>
           val newPList = stripOuterReferences(projectList)
