@@ -3272,17 +3272,61 @@ class UDFTranspileUnitTests(ReusedSQLTestCase):
 
     def test_param_category_combos_caps_preserve_typed_pins(self):
         # With more than three untyped params the cap collapses the untyped ones
-        # to integer/float/string but keeps each typed param pinned (here a: str).
+        # to numeric/string but keeps each typed param pinned (here a: str).
         import ast as _ast
 
         from pyspark.sql.transpile import _param_category_combos
 
         fn = _ast.parse("def f(a: str, b, c, d, e): return a").body[0]
         combos = _param_category_combos(fn, ["a", "b", "c", "d", "e"])
-        # Three fill values: integer / float / string -> 3 combos.
-        self.assertEqual(len(combos), 3)
+        # Two fill values: numeric / string -> 2 combos.
+        self.assertEqual(len(combos), 2)
         for combo in combos:
             self.assertEqual(combo[0], "string")
+
+    def test_udf_transpile_integral_return_does_not_truncate_a_double(self):
+        # An integral return type takes only Byte/Short/Int/Long from
+        # `EvaluatePython.makeFromJava`, so interpreted, a Python float comes back NULL.
+        # Nothing in `x * 2` *proves* a float -- that depends on the bound column -- so
+        # the option used to match a double column and lower to `cast((x * 2.0) as
+        # bigint)`, answering 7 where the interpreted UDF gives None. A silent wrong
+        # answer is the one outcome transpilation must never produce, so the option now
+        # narrows to integral and a double column falls back instead.
+        rows = [Row(x=3.7), Row(x=-3.7), Row(x=2.5)]
+        transpile_off = {**_TRANSPILE_ON}
+        transpile_off["spark.sql.experimental.optimizer.transpilePyUDFs"] = False
+        with self.sql_conf(transpile_off):
+            interpreted = [
+                r[0]
+                for r in self.spark.createDataFrame(rows)
+                .select(UserDefinedFunction(_times_two, LongType())("x"))
+                .collect()
+            ]
+        with self.sql_conf(_TRANSPILE_ON):
+            pudf = UserDefinedFunction(_times_two, LongType())
+            transpiled = [
+                r[0] for r in self.spark.createDataFrame(rows).select(pudf("x")).collect()
+            ]
+        self.assertEqual([None, None, None], interpreted, "makeFromJava should null a float")
+        self.assertEqual(interpreted, transpiled, "the lowered path must not truncate")
+        # The narrowing costs the integral case nothing: it still lowers and computes.
+        with self.sql_conf(_TRANSPILE_ON):
+            pudf = UserDefinedFunction(_times_two, LongType())
+            self.assertTrue(pudf.transpiled)
+            ints = self.spark.createDataFrame([Row(x=3)])
+            self.assertEqual([6], [r[0] for r in ints.select(pudf("x")).collect()])
+
+    def test_udf_transpile_repeat_count_ignores_a_condition_only_param(self):
+        # `n` only picks which literal is the repeat count, so its column type cannot
+        # make the lowering inexact. `_narrow` used to walk the whole subtree, including
+        # the IfExp's test, and tagged `n` integral -- which dropped the option for a
+        # double `n` for no reason. It now walks value positions only, the same line
+        # `_int32_exact` draws.
+        with self.sql_conf(_TRANSPILE_ON):
+            pudf = UserDefinedFunction(_repeat_with_condition, StringType())
+            self.assertTrue(pudf.transpiled)
+            df = self.spark.createDataFrame([Row(s="ab", n=2.0)])
+            self.assertEqual(["abab"], [r[0] for r in df.select(pudf("s", "n")).collect()])
 
     def test_udf_transpile_integer_eq_no_nan_guard(self):
         # `a == b` on BIGINT columns must NOT emit a NaN guard. Integers can never
@@ -3359,32 +3403,28 @@ class UDFTranspileUnitTests(ReusedSQLTestCase):
             self.assertEqual(neq_results, [True, True, False, True, False, True])
 
     def test_udf_transpile_int_float_annotation_categories(self):
-        # `int` annotation -> "integer" category; `float` annotation -> "float"
-        # category. For mixed-numeric comparisons the wider category is used.
+        # Refined `int` and `float` annotations select integral and fractional
+        # categories; an unrefined body keeps the coarse numeric category.
         import ast as _ast
 
         from pyspark.sql.transpile import _annotation_category, _param_category_combos
 
-        # _annotation_category: int -> "integer", float -> "float".
         fn_ann = _ast.parse("def f(x: int, y: float): pass").body[0]
         int_ann = fn_ann.args.args[0].annotation
         flt_ann = fn_ann.args.args[1].annotation
-        self.assertEqual(_annotation_category(int_ann), "integer")
-        self.assertEqual(_annotation_category(flt_ann), "float")
+        self.assertEqual(_annotation_category(int_ann, refined=True), "integral")
+        self.assertEqual(_annotation_category(flt_ann, refined=True), "fractional")
 
-        # _param_category_combos pins typed params and tries all three for untyped.
-        fn_typed = _ast.parse("def f(a: int, b: float): return a + b").body[0]
+        # Comparisons need the refined categories to omit impossible NaN guards.
+        fn_typed = _ast.parse("def f(a: int, b: float): return a == b").body[0]
         combos = _param_category_combos(fn_typed, ["a", "b"])
-        # One combo: both typed -> single variant {0: "integer", 1: "float"}.
-        self.assertEqual(len(combos), 1)
-        self.assertEqual(combos[0][0], "integer")
-        self.assertEqual(combos[0][1], "float")
+        self.assertEqual(combos, [{0: "integral", 1: "fractional"}])
 
         fn_untyped = _ast.parse("def f(a): return a").body[0]
         combos_u = _param_category_combos(fn_untyped, ["a"])
-        # Three combos for a single untyped param: integer / float / string.
-        self.assertEqual(len(combos_u), 3)
-        self.assertEqual({c[0] for c in combos_u}, {"integer", "float", "string"})
+        # An unrefined body tries the coarse numeric and string categories.
+        self.assertEqual(len(combos_u), 2)
+        self.assertEqual({c[0] for c in combos_u}, {"numeric", "string"})
 
     def test_udf_transpile_null_narrowing_skips_null_guard(self):
         # When a parameter is guarded by `x is not None` in an
@@ -3527,49 +3567,6 @@ class UDFTranspileUnitTests(ReusedSQLTestCase):
                         [r[0] for r in df.select(u("a")).collect()],
                         name,
                     )
-    def test_udf_transpile_integral_return_does_not_truncate_a_double(self):
-        # An integral return type takes only Byte/Short/Int/Long from
-        # `EvaluatePython.makeFromJava`, so interpreted, a Python float comes back NULL.
-        # Nothing in `x * 2` *proves* a float -- that depends on the bound column -- so
-        # the option used to match a double column and lower to `cast((x * 2.0) as
-        # bigint)`, answering 7 where the interpreted UDF gives None. A silent wrong
-        # answer is the one outcome transpilation must never produce, so the option now
-        # narrows to integral and a double column falls back instead.
-        rows = [Row(x=3.7), Row(x=-3.7), Row(x=2.5)]
-        transpile_off = {**_TRANSPILE_ON}
-        transpile_off["spark.sql.experimental.optimizer.transpilePyUDFs"] = False
-        with self.sql_conf(transpile_off):
-            interpreted = [
-                r[0]
-                for r in self.spark.createDataFrame(rows)
-                .select(UserDefinedFunction(_times_two, LongType())("x"))
-                .collect()
-            ]
-        with self.sql_conf(_TRANSPILE_ON):
-            pudf = UserDefinedFunction(_times_two, LongType())
-            transpiled = [
-                r[0] for r in self.spark.createDataFrame(rows).select(pudf("x")).collect()
-            ]
-        self.assertEqual([None, None, None], interpreted, "makeFromJava should null a float")
-        self.assertEqual(interpreted, transpiled, "the lowered path must not truncate")
-        # The narrowing costs the integral case nothing: it still lowers and computes.
-        with self.sql_conf(_TRANSPILE_ON):
-            pudf = UserDefinedFunction(_times_two, LongType())
-            self.assertTrue(pudf.transpiled)
-            ints = self.spark.createDataFrame([Row(x=3)])
-            self.assertEqual([6], [r[0] for r in ints.select(pudf("x")).collect()])
-
-    def test_udf_transpile_repeat_count_ignores_a_condition_only_param(self):
-        # `n` only picks which literal is the repeat count, so its column type cannot
-        # make the lowering inexact. `_narrow` used to walk the whole subtree, including
-        # the IfExp's test, and tagged `n` integral -- which dropped the option for a
-        # double `n` for no reason. It now walks value positions only, the same line
-        # `_int32_exact` draws.
-        with self.sql_conf(_TRANSPILE_ON):
-            pudf = UserDefinedFunction(_repeat_with_condition, StringType())
-            self.assertTrue(pudf.transpiled)
-            df = self.spark.createDataFrame([Row(s="ab", n=2.0)])
-            self.assertEqual(["abab"], [r[0] for r in df.select(pudf("s", "n")).collect()])
 
 
 if __name__ == "__main__":
