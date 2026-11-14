@@ -26,6 +26,7 @@ import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.codegen.{CodegenContext, CodeGenerator, ExprCode}
 import org.apache.spark.sql.catalyst.plans.physical._
+import org.apache.spark.sql.catalyst.types.DataTypeUtils
 import org.apache.spark.sql.execution.metric.{SQLMetric, SQLMetrics}
 
 /**
@@ -61,58 +62,38 @@ case class SortExec(
     "peakMemory" -> SQLMetrics.createSizeMetric(sparkContext, "peak memory"),
     "spillSize" -> SQLMetrics.createSizeMetric(sparkContext, "spill size"))
 
-  // WARNING: This is a shared mutable var on the SortExec instance. Do not access it from
-  // multiple threads concurrently - Spark operators do not guarantee thread-safety and one
-  // task's sorter could overwrite another's, causing a race condition.
-  private[sql] var rowSorter: UnsafeExternalRowSorter = _
+  /**
+   * Creates the sorter of this node in a task and keeps it until it is released. Everything that
+   * runs in a task captures this holder rather than the node: the generated code, the closure of
+   * [[doExecute]], operators above that release the sorter early (through
+   * [[taskResourceCleaner]]) and the concurrent output writers of `FileFormatWriter`. So the node
+   * and its child subtree are not serialized into every task for the sorter, and in a task they
+   * all share the copy of the holder deserialized from the task binary.
+   *
+   * It is transient, so that a node that is still serialized into a task by another operator
+   * does not carry it. A deserialized node therefore has a fresh holder that nothing else uses:
+   * code that runs in a task must not create or release the sorter through the node.
+   */
+  @transient private[sql] lazy val sorterHolder =
+    new SortExecSorterHolder(sortOrder, output, enableRadixSort, testSpillFrequency)
 
   /**
-   * This method gets invoked only once for each SortExec instance to initialize an
-   * UnsafeExternalRowSorter, both `plan.execute` and code generation are using it.
-   * In the code generation code path, we need to call this function outside the class so we
-   * should make it public.
+   * Creates a sorter for this node on the driver side, e.g. for a test. Code that runs in a task
+   * must use [[sorterHolder]] captured on the driver instead, see there.
    */
-  def createSorter(): UnsafeExternalRowSorter = {
-    val ordering = RowOrdering.create(sortOrder, output)
+  def createSorter(): UnsafeExternalRowSorter = sorterHolder.createSorter()
 
-    // The comparator for comparing prefix
-    val boundSortExpression = BindReferences.bindReference(sortOrder.head, output)
-    val prefixComparator = SortPrefixUtils.getPrefixComparator(boundSortExpression)
-
-    val canUseRadixSort = enableRadixSort && sortOrder.length == 1 &&
-      SortPrefixUtils.canSortFullyWithPrefix(boundSortExpression)
-
-    // The generator for prefix
-    val prefixExpr = SortPrefix(boundSortExpression)
-    val prefixProjection = UnsafeProjection.create(Seq(prefixExpr))
-    val prefixComputer = new UnsafeExternalRowSorter.PrefixComputer {
-      private val result = new UnsafeExternalRowSorter.PrefixComputer.Prefix
-      override def computePrefix(row: InternalRow):
-          UnsafeExternalRowSorter.PrefixComputer.Prefix = {
-        val prefix = prefixProjection.apply(row)
-        result.isNull = prefix.isNullAt(0)
-        result.value = if (result.isNull) prefixExpr.nullValue else prefix.getLong(0)
-        result
-      }
-    }
-
-    val pageSize = SparkEnv.get.memoryManager.pageSizeBytes
-    rowSorter = UnsafeExternalRowSorter.create(
-      schema, ordering, prefixComparator, prefixComputer, pageSize, canUseRadixSort)
-
-    if (testSpillFrequency > 0) {
-      rowSorter.setTestSpillFrequency(testSpillFrequency)
-    }
-    rowSorter
-  }
+  override protected[sql] def taskResourceCleaner: Option[TaskResourceCleaner] =
+    Some(sorterHolder)
 
   protected override def doExecute(): RDD[InternalRow] = {
     val peakMemory = longMetric("peakMemory")
     val spillSize = longMetric("spillSize")
     val sortTime = longMetric("sortTime")
 
+    val holder = sorterHolder
     child.execute().mapPartitionsInternal { iter =>
-      val sorter = createSorter()
+      val sorter = holder.createSorter()
 
       val metrics = TaskContext.get().taskMetrics()
       // Remember spill data size of this task before execute this operator so that we can
@@ -140,10 +121,10 @@ case class SortExec(
 
     // Initialize the class member variables. This includes the instance of the Sorter and
     // the iterator to return sorted rows.
-    val thisPlan = ctx.addReferenceObj("plan", this)
+    val holder = ctx.addReferenceObj("sorterHolder", sorterHolder)
     // Inline mutable state since not many Sort operations in a task
     sorterVariable = ctx.addMutableState(classOf[UnsafeExternalRowSorter].getName, "sorter",
-      v => s"$v = $thisPlan.createSorter();", forceInline = true)
+      v => s"$v = $holder.createSorter();", forceInline = true)
     val metrics = ctx.addMutableState(classOf[TaskMetrics].getName, "metrics",
       v => s"$v = org.apache.spark.TaskContext.get().taskMetrics();", forceInline = true)
     val sortedIterator = ctx.addMutableState("scala.collection.Iterator<InternalRow>", "sortedIter",
@@ -191,15 +172,11 @@ case class SortExec(
   }
 
   /**
-   * In SortExec, we overwrite cleanupResources to close UnsafeExternalRowSorter.
-   * There's possible for rowSorter to be null here, for example, in the scenario of empty iterator
-   * in the current task, the downstream physical node (like SortMergeJoinExec) will trigger
-   * cleanupResources before rowSorter is initialized in createSorter.
+   * In SortExec, we overwrite cleanupResources to close UnsafeExternalRowSorter. In a task, the
+   * operators above (like SortMergeJoinExec) close it through [[taskResourceCleaner]] instead.
    */
   override protected[sql] def cleanupResources(): Unit = {
-    if (rowSorter != null) {
-      rowSorter.cleanupResources()
-    }
+    sorterHolder.cleanupResources()
     super.cleanupResources()
   }
 
@@ -228,5 +205,68 @@ object SortExec {
     peakMemory += sorter.getPeakMemoryUsage
     spillSize += metrics.memoryBytesSpilled - spillSizeBefore
     metrics.incPeakExecutionMemory(sorter.getPeakMemoryUsage)
+  }
+}
+
+/**
+ * Creates the sorter of a [[SortExec]] in a task and holds it until [[cleanupResources]]. It
+ * holds only what the sorter needs, not the plan. See [[SortExec.sorterHolder]].
+ *
+ * WARNING: the sorter is per-task mutable state. Each task deserializes its own copy of the
+ * holder from the task binary, so it must not be shared across tasks or accessed from multiple
+ * threads concurrently.
+ */
+private[sql] class SortExecSorterHolder(
+    sortOrder: Seq[SortOrder],
+    output: Seq[Attribute],
+    enableRadixSort: Boolean,
+    testSpillFrequency: Int) extends TaskResourceCleaner {
+
+  @transient private var rowSorter: UnsafeExternalRowSorter = _
+
+  @transient private lazy val schema = DataTypeUtils.fromAttributes(output)
+
+  def createSorter(): UnsafeExternalRowSorter = {
+    val ordering = RowOrdering.create(sortOrder, output)
+
+    // The comparator for comparing prefix
+    val boundSortExpression = BindReferences.bindReference(sortOrder.head, output)
+    val prefixComparator = SortPrefixUtils.getPrefixComparator(boundSortExpression)
+
+    val canUseRadixSort = enableRadixSort && sortOrder.length == 1 &&
+      SortPrefixUtils.canSortFullyWithPrefix(boundSortExpression)
+
+    // The generator for prefix
+    val prefixExpr = SortPrefix(boundSortExpression)
+    val prefixProjection = UnsafeProjection.create(Seq(prefixExpr))
+    val prefixComputer = new UnsafeExternalRowSorter.PrefixComputer {
+      private val result = new UnsafeExternalRowSorter.PrefixComputer.Prefix
+      override def computePrefix(row: InternalRow):
+          UnsafeExternalRowSorter.PrefixComputer.Prefix = {
+        val prefix = prefixProjection.apply(row)
+        result.isNull = prefix.isNullAt(0)
+        result.value = if (result.isNull) prefixExpr.nullValue else prefix.getLong(0)
+        result
+      }
+    }
+
+    val pageSize = SparkEnv.get.memoryManager.pageSizeBytes
+    rowSorter = UnsafeExternalRowSorter.create(
+      schema, ordering, prefixComparator, prefixComputer, pageSize, canUseRadixSort)
+
+    if (testSpillFrequency > 0) {
+      rowSorter.setTestSpillFrequency(testSpillFrequency)
+    }
+    rowSorter
+  }
+
+  /**
+   * Closes the sorter, if any. It can be null, e.g. when a join above releases the resources of
+   * its children before this sorter is created.
+   */
+  override def cleanupResources(): Unit = {
+    if (rowSorter != null) {
+      rowSorter.cleanupResources()
+    }
   }
 }

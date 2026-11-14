@@ -21,7 +21,7 @@ import org.apache.spark.{PartitionEvaluator, PartitionEvaluatorFactory}
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.{Attribute, Expression, GenericInternalRow, JoinedRow, Predicate, Projection, RowOrdering, UnsafeProjection, UnsafeRow}
 import org.apache.spark.sql.catalyst.plans.{ExistenceJoin, FullOuter, InnerLike, JoinType, LeftAnti, LeftOuter, LeftSemi, RightOuter}
-import org.apache.spark.sql.execution.{ExternalAppendOnlyUnsafeRowArray, RowIterator, SparkPlan}
+import org.apache.spark.sql.execution.{ExternalAppendOnlyUnsafeRowArray, RowIterator, TaskResourceCleaner}
 import org.apache.spark.sql.execution.metric.SQLMetric
 
 class SortMergeJoinEvaluatorFactory(
@@ -29,8 +29,9 @@ class SortMergeJoinEvaluatorFactory(
     rightKeys: Seq[Expression],
     joinType: JoinType,
     condition: Option[Expression],
-    left: SparkPlan,
-    right: SparkPlan,
+    leftOutput: Seq[Attribute],
+    rightOutput: Seq[Attribute],
+    taskResourceCleaners: Array[TaskResourceCleaner],
     output: Seq[Attribute],
     inMemoryThreshold: Int,
     spillThreshold: Int,
@@ -47,13 +48,13 @@ class SortMergeJoinEvaluatorFactory(
   private class SortMergeJoinEvaluator extends PartitionEvaluator[InternalRow, InternalRow] {
 
     private def cleanupResources(): Unit = {
-      IndexedSeq(left, right).foreach(_.cleanupResources())
+      TaskResourceCleaner.cleanupAll(taskResourceCleaners)
     }
     private def createLeftKeyGenerator(): Projection =
-      UnsafeProjection.create(leftKeys, left.output)
+      UnsafeProjection.create(leftKeys, leftOutput)
 
     private def createRightKeyGenerator(): Projection =
-      UnsafeProjection.create(rightKeys, right.output)
+      UnsafeProjection.create(rightKeys, rightOutput)
 
     override def eval(
         partitionIndex: Int,
@@ -64,7 +65,7 @@ class SortMergeJoinEvaluatorFactory(
 
       val boundCondition: InternalRow => Boolean = {
         condition.map { cond =>
-          Predicate.create(cond, left.output ++ right.output).eval _
+          Predicate.create(cond, leftOutput ++ rightOutput).eval _
         }.getOrElse {
           (r: InternalRow) => true
         }
@@ -137,12 +138,12 @@ class SortMergeJoinEvaluatorFactory(
             sizeInBytesSpillThreshold,
             spillSize,
             cleanupResources)
-          val rightNullRow = new GenericInternalRow(right.output.length)
+          val rightNullRow = new GenericInternalRow(rightOutput.length)
           val boundStreamedOnly: InternalRow => Boolean = streamedOnlyCondition.map {
-            Predicate.create(_, left.output).eval _
+            Predicate.create(_, leftOutput).eval _
           }.getOrElse((_: InternalRow) => true)
           val boundRest: InternalRow => Boolean = restCondition.map {
-            Predicate.create(_, left.output ++ right.output).eval _
+            Predicate.create(_, leftOutput ++ rightOutput).eval _
           }.getOrElse((_: InternalRow) => true)
           new LeftOuterIterator(
             smjScanner,
@@ -164,12 +165,12 @@ class SortMergeJoinEvaluatorFactory(
             sizeInBytesSpillThreshold,
             spillSize,
             cleanupResources)
-          val leftNullRow = new GenericInternalRow(left.output.length)
+          val leftNullRow = new GenericInternalRow(leftOutput.length)
           val boundStreamedOnly: InternalRow => Boolean = streamedOnlyCondition.map {
-            Predicate.create(_, right.output).eval _
+            Predicate.create(_, rightOutput).eval _
           }.getOrElse((_: InternalRow) => true)
           val boundRest: InternalRow => Boolean = restCondition.map {
-            Predicate.create(_, left.output ++ right.output).eval _
+            Predicate.create(_, leftOutput ++ rightOutput).eval _
           }.getOrElse((_: InternalRow) => true)
           new RightOuterIterator(
             smjScanner,
@@ -180,8 +181,8 @@ class SortMergeJoinEvaluatorFactory(
             numOutputRows).toScala
 
         case FullOuter =>
-          val leftNullRow = new GenericInternalRow(left.output.length)
-          val rightNullRow = new GenericInternalRow(right.output.length)
+          val leftNullRow = new GenericInternalRow(leftOutput.length)
+          val rightNullRow = new GenericInternalRow(rightOutput.length)
           val smjScanner = new SortMergeFullOuterJoinScanner(
             leftKeyGenerator = createLeftKeyGenerator(),
             rightKeyGenerator = createRightKeyGenerator(),
@@ -234,10 +235,10 @@ class SortMergeJoinEvaluatorFactory(
 
         case LeftAnti =>
           val boundStreamedOnly: InternalRow => Boolean = streamedOnlyCondition.map {
-            Predicate.create(_, left.output).eval _
+            Predicate.create(_, leftOutput).eval _
           }.getOrElse((_: InternalRow) => true)
           val boundRest: InternalRow => Boolean = restCondition.map {
-            Predicate.create(_, left.output ++ right.output).eval _
+            Predicate.create(_, leftOutput ++ rightOutput).eval _
           }.getOrElse((_: InternalRow) => true)
           new RowIterator {
             private[this] var currentLeftRow: InternalRow = _
@@ -289,10 +290,10 @@ class SortMergeJoinEvaluatorFactory(
 
         case j: ExistenceJoin =>
           val boundStreamedOnly: InternalRow => Boolean = streamedOnlyCondition.map {
-            Predicate.create(_, left.output).eval _
+            Predicate.create(_, leftOutput).eval _
           }.getOrElse((_: InternalRow) => true)
           val boundRest: InternalRow => Boolean = restCondition.map {
-            Predicate.create(_, left.output ++ right.output).eval _
+            Predicate.create(_, leftOutput ++ rightOutput).eval _
           }.getOrElse((_: InternalRow) => true)
           new RowIterator {
             private[this] var currentLeftRow: InternalRow = _
