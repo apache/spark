@@ -17,12 +17,16 @@
 
 package org.apache.spark.sql.catalyst.analysis
 
+import org.apache.logging.log4j.Level
+
 import org.apache.spark.sql.catalyst.dsl.expressions._
-import org.apache.spark.sql.catalyst.expressions.{Attribute, AttributeReference, AttributeSet}
+import org.apache.spark.sql.catalyst.expressions.{Attribute, AttributeReference, AttributeSet, EqualTo, Expression, Literal, TimestampAddInterval}
 import org.apache.spark.sql.catalyst.optimizer.SimpleTestOptimizer
 import org.apache.spark.sql.catalyst.parser.CatalystSqlParser
 import org.apache.spark.sql.catalyst.plans.logical.{EventTimeWatermark, Filter, LeafNode, Statistics}
-import org.apache.spark.sql.types.{IntegerType, LongType, MetadataBuilder, TimestampType}
+import org.apache.spark.sql.internal.SQLConf
+import org.apache.spark.sql.types.{DayTimeIntervalType, IntegerType, LongType, MetadataBuilder, TimestampType}
+import org.apache.spark.unsafe.types.CalendarInterval
 
 class StreamingJoinHelperSuite extends AnalysisTest {
 
@@ -45,6 +49,235 @@ class StreamingJoinHelperSuite extends AnalysisTest {
           AttributeSet(Seq(leftTime)), AttributeSet(Seq(rightTime)),
           Some(condition), Some(10000L)) === expected)
       }
+    }
+  }
+
+  test("state watermark extraction ignores columns outside both attribute sets") {
+    val leftTime = AttributeReference("leftTime", TimestampType)()
+    val leftOffset = AttributeReference("leftOffset", LongType)()
+    val metadata = new MetadataBuilder().putLong(EventTimeWatermark.delayKey, 1000).build()
+    val rightTime = AttributeReference("rightTime", TimestampType, metadata = metadata)()
+    val rightDelay = AttributeReference("rightDelay", DayTimeIntervalType())()
+    val conditions = Seq(
+      leftTime > TimestampAddInterval(rightTime, rightDelay),
+      leftTime.cast(LongType) + leftOffset > rightTime.cast(LongType))
+    val logAppender = new LogAppender("state watermark extraction")
+    withLogAppender(logAppender, level = Some(Level.WARN)) {
+      conditions.foreach { condition =>
+        withClue(condition.sql) {
+          // The first condition reaches the references check through the V4 range scan and the
+          // left semi exact cutoff, which pass only the opposite event time; eviction passes the
+          // whole opposite input, so its occurrence check already returns None. The second
+          // condition also reaches it through eviction, which passes only the constrained column
+          // because leftOffset is in neither attribute set.
+          assert(StreamingJoinHelper.getStateValueWatermark(
+            AttributeSet(Seq(leftTime)), AttributeSet(Seq(rightTime)),
+            Some(condition), Some(10000L)) === None)
+        }
+      }
+    }
+    assert(!logAppender.loggingEvents.exists(
+      _.getMessage.getFormattedMessage.contains("Error trying to extract state constraint")))
+  }
+
+  test("equality key watermark on the event time plus a constant") {
+    val metadata = new MetadataBuilder().putLong(EventTimeWatermark.delayKey, 1000).build()
+    val eventTime = AttributeReference("eventTime", TimestampType, metadata = metadata)()
+    val other = AttributeReference("other", TimestampType)()
+
+    case class DummyLeafNode() extends LeafNode {
+      override def output: Seq[Attribute] = Seq(eventTime, other)
+      override def computeStats(): Statistics = Statistics(sizeInBytes = BigInt(0))
+    }
+
+    def key(keyStr: String): Expression = {
+      val plan = Filter(EqualTo(CatalystSqlParser.parseExpression(keyStr), Literal(null)),
+        DummyLeafNode())
+      SimpleAnalyzer.execute(plan).asInstanceOf[Filter].condition
+        .asInstanceOf[EqualTo].left
+    }
+
+    val cases = Seq(
+      // The event time itself is bounded by the watermark.
+      ("eventTime", Some(10000L), Some(10000L)),
+      // A constant shifts the bound, less 1 ms as for range conditions.
+      ("eventTime + INTERVAL 2 SECONDS", Some(11999L), Some(7999L)),
+      ("eventTime - INTERVAL 2 SECONDS", Some(7999L), Some(11999L)),
+      // A foldable interval expression gives the bound of its value.
+      ("eventTime + INTERVAL 1 SECOND * 2", Some(11999L), Some(7999L)),
+      ("eventTime - INTERVAL 1 SECOND * 2", Some(7999L), Some(11999L)),
+      ("eventTime + make_dt_interval(0, 2, 0, 0)", Some(7209999L), Some(-7190001L)),
+      ("eventTime + INTERVAL 2 HOURS", Some(7209999L), Some(-7190001L)),
+      // timestampadd adds a sub-day unit exactly.
+      ("timestampadd(SECOND, 2, eventTime)", Some(11999L), Some(7999L)),
+      ("timestampadd(SECOND, -2, eventTime)", Some(7999L), Some(11999L)),
+      ("timestampadd(HOUR, 2, eventTime)", Some(7209999L), Some(-7190001L)),
+      // Keys that the watermark does not bound.
+      ("other + INTERVAL 2 SECONDS", None, None),
+      ("other + INTERVAL 1 SECOND * 2", None, None),
+      ("timestampadd(SECOND, 2, other)", None, None),
+      ("date_trunc('MINUTE', eventTime)", None, None),
+      // Truncation can map a later event time below the watermark.
+      ("CAST(CAST(eventTime AS BIGINT) AS TIMESTAMP)", None, None),
+      ("CAST(CAST(eventTime AS BIGINT) + 10 AS TIMESTAMP)", None, None))
+    cases.foreach { case (keyStr, keyWatermark, eventTimeWatermark) =>
+      withClue(keyStr) {
+        val keys = Seq(key(keyStr))
+        assert(StreamingJoinHelper.getStateKeyWatermark(
+          keys, Seq(eventTime, other), 0, Some(10000L)) === keyWatermark)
+        assert(StreamingJoinHelper.getEventTimeWatermarkFromKey(
+          keys, Seq(eventTime, other), 0, 10000L) === eventTimeWatermark)
+        assert(StreamingJoinHelper.getStateKeyWatermarkOrdinal(
+          keys, Seq(eventTime, other)) === keyWatermark.map(_ => 0))
+      }
+    }
+  }
+
+  test("equality key watermark with whole days or months does not depend on the time zone") {
+    val metadata = new MetadataBuilder().putLong(EventTimeWatermark.delayKey, 1000).build()
+    val eventTime = AttributeReference("eventTime", TimestampType, metadata = metadata)()
+
+    case class DummyLeafNode() extends LeafNode {
+      override def output: Seq[Attribute] = Seq(eventTime)
+      override def computeStats(): Statistics = Statistics(sizeInBytes = BigInt(0))
+    }
+
+    def resolve(keyStr: String): Expression = {
+      val plan = Filter(EqualTo(CatalystSqlParser.parseExpression(keyStr), Literal(null)),
+        DummyLeafNode())
+      SimpleAnalyzer.execute(plan).asInstanceOf[Filter].condition.asInstanceOf[EqualTo].left
+    }
+    // The key cutoff, the event-time bound from the key, and the key ordinal.
+    def bounds(key: Expression): (Option[Long], Option[Long], Option[Int]) = (
+      StreamingJoinHelper.getStateKeyWatermark(Seq(key), Seq(eventTime), 0, Some(10000L)),
+      StreamingJoinHelper.getEventTimeWatermarkFromKey(Seq(key), Seq(eventTime), 0, 10000L),
+      StreamingJoinHelper.getStateKeyWatermarkOrdinal(Seq(key), Seq(eventTime)))
+    val forward = (Some(10000L), None, Some(0))
+    val unbounded = (None, None, None)
+
+    // Spark adds whole days in the session time zone, where a day can be 23 or 25 hours, and
+    // months vary in length. A shift that never moves a time backward keeps the unshifted
+    // cutoff and gives no event-time bound. Any other such shift gives no bound.
+    Seq(
+      "eventTime + INTERVAL 1 DAY" -> forward,
+      "eventTime + INTERVAL 1 MONTH" -> forward,
+      "eventTime + INTERVAL 1 YEAR" -> forward,
+      "eventTime - INTERVAL 1 DAY" -> unbounded,
+      "eventTime - INTERVAL 1 MONTH" -> unbounded,
+      "eventTime - INTERVAL 36 HOURS" -> unbounded,
+      // timestampadd adds days, weeks, months, quarters and years in the session time zone.
+      "timestampadd(DAY, 1, eventTime)" -> forward,
+      "timestampadd(WEEK, 1, eventTime)" -> forward,
+      "timestampadd(MONTH, 1, eventTime)" -> forward,
+      "timestampadd(YEAR, 1, eventTime)" -> forward,
+      "timestampadd(DAY, -1, eventTime)" -> unbounded,
+      "timestampadd(MONTH, -1, eventTime)" -> unbounded).foreach { case (keyStr, expected) =>
+      Seq("UTC", "America/Los_Angeles").foreach { zone =>
+        withSQLConf(SQLConf.SESSION_LOCAL_TIMEZONE.key -> zone) {
+          withClue(s"$keyStr $zone") {
+            assert(bounds(resolve(keyStr)) === expected)
+          }
+        }
+      }
+    }
+
+    // A calendar interval counts its days and months the same way; its microseconds are exact.
+    val day = 86400000L
+    Seq(
+      new CalendarInterval(0, 1, 0) -> forward,
+      new CalendarInterval(1, 0, 0) -> forward,
+      new CalendarInterval(1, -1, 0) -> unbounded,
+      new CalendarInterval(0, -1, 0) -> unbounded,
+      new CalendarInterval(0, 0, 2000000L) -> ((Some(11999L), Some(7999L), Some(0))),
+      new CalendarInterval(0, 0, 2 * day * 1000L) ->
+        ((Some(10000L + 2 * day - 1), Some(10000L - 2 * day - 1), Some(0)))).foreach {
+      case (interval, expected) =>
+        Seq("UTC", "America/Los_Angeles").foreach { zone =>
+          withClue(s"$interval $zone") {
+            assert(bounds(
+              TimestampAddInterval(eventTime, Literal(interval), Some(zone))) === expected)
+          }
+        }
+    }
+
+    // The smallest day-time interval is many days long, although its absolute value overflows.
+    assert(bounds(TimestampAddInterval(eventTime,
+      Literal(Long.MinValue, DayTimeIntervalType()), Some("UTC"))) === unbounded)
+  }
+
+  test("inexact arithmetic gives no cutoff for a column without a watermark") {
+    val watermark = new MetadataBuilder().putLong(EventTimeWatermark.delayKey, 1000).build()
+    val leftTime = AttributeReference("leftTime", TimestampType)()
+    val leftEventTime = AttributeReference("leftEventTime", TimestampType, metadata = watermark)()
+    val rightTime = AttributeReference("rightTime", TimestampType, metadata = watermark)()
+
+    case class DummyLeafNode() extends LeafNode {
+      override def output: Seq[Attribute] = Seq(leftTime, leftEventTime, rightTime)
+      override def computeStats(): Statistics = Statistics(sizeInBytes = BigInt(0))
+    }
+
+    def cutoff(conditionStr: String, column: Attribute, exact: Boolean): Option[Long] = {
+      val plan = Filter(CatalystSqlParser.parseExpression(conditionStr), DummyLeafNode())
+      val condition = SimpleTestOptimizer.execute(SimpleAnalyzer.execute(plan))
+        .asInstanceOf[Filter].condition
+      StreamingJoinHelper.getStateValueWatermark(AttributeSet(Seq(column)),
+        AttributeSet(Seq(rightTime)), Some(condition), Some(100000000L),
+        exactForUnwatermarkedColumns = exact)
+    }
+
+    val day = 86400000L
+    val dayBound = Some(100000000L - day - 1)
+    val castBound = Some(100000000L + 5000L - 1)
+    // (condition, session time zone, column, cutoff with the flag, cutoff without it)
+    Seq(
+      // Spark adds whole days in the session time zone, where a day can be 23 or 25 hours. They
+      // count as inexact in every zone, so whether a column gets a cutoff does not depend on it.
+      ("rightTime <= leftTime + INTERVAL 1 DAY", "America/Los_Angeles", leftTime, None, dayBound),
+      ("rightTime <= leftTime + INTERVAL 1 DAY", "UTC", leftTime, None, dayBound),
+      ("rightTime <= leftTime + INTERVAL 48 HOURS", "UTC", leftTime, None,
+        Some(100000000L - 2 * day - 1)),
+      ("rightTime - INTERVAL 1 DAY <= leftTime", "America/Los_Angeles", leftTime, None, dayBound),
+      ("rightTime <= leftTime + INTERVAL 2 HOURS", "America/Los_Angeles", leftTime,
+        Some(100000000L - 7200000L - 1), Some(100000000L - 7200000L - 1)),
+      // CAST(ts AS BIGINT) drops the fraction of a second.
+      ("CAST(leftTime AS BIGINT) >= CAST(rightTime AS BIGINT) + 5", "UTC", leftTime, None,
+        castBound),
+      ("leftTime >= CAST(CAST(rightTime AS BIGINT) AS TIMESTAMP)", "UTC", leftTime, None,
+        Some(100000000L - 1)),
+      ("CAST(leftTime AS DOUBLE) >= CAST(rightTime AS DOUBLE) + 5", "UTC", leftTime, castBound,
+        castBound),
+      // FLOAT, and DECIMAL with fewer than 6 fractional digits, drop part of a time too.
+      ("CAST(leftTime AS FLOAT) >= CAST(rightTime AS FLOAT) + 5", "UTC", leftTime, None,
+        castBound),
+      ("CAST(leftTime AS DECIMAL(20, 3)) >= CAST(rightTime AS DECIMAL(20, 3)) + 5", "UTC",
+        leftTime, None, castBound),
+      ("CAST(leftTime AS DECIMAL(20, 6)) >= CAST(rightTime AS DECIMAL(20, 6)) + 5", "UTC",
+        leftTime, castBound, castBound),
+      // A calendar interval adds its days in the session time zone too.
+      ("rightTime <= leftTime + make_interval(0, 0, 0, 1, 0, 0, 0)", "America/Los_Angeles",
+        leftTime, None, dayBound),
+      ("rightTime <= leftTime + make_interval(0, 0, 0, 1, 0, 0, 0)", "UTC", leftTime, None,
+        dayBound),
+      ("rightTime <= leftTime + make_interval(0, 0, 0, 0, 2, 0, 0)", "America/Los_Angeles",
+        leftTime, Some(100000000L - 7200000L - 1), Some(100000000L - 7200000L - 1)),
+      // A column with its own watermark keeps its cutoff.
+      ("rightTime <= leftEventTime + INTERVAL 1 DAY", "America/Los_Angeles", leftEventTime,
+        dayBound, dayBound),
+      ("CAST(leftEventTime AS BIGINT) >= CAST(rightTime AS BIGINT) + 5", "UTC", leftEventTime,
+        castBound, castBound),
+      ("CAST(leftEventTime AS FLOAT) >= CAST(rightTime AS FLOAT) + 5", "UTC", leftEventTime,
+        castBound, castBound),
+      ("CAST(leftEventTime AS DECIMAL(20, 3)) >= CAST(rightTime AS DECIMAL(20, 3)) + 5", "UTC",
+        leftEventTime, castBound, castBound),
+      ("rightTime <= leftEventTime + make_interval(0, 0, 0, 1, 0, 0, 0)", "America/Los_Angeles",
+        leftEventTime, dayBound, dayBound)).foreach {
+      case (conditionStr, zone, column, flagged, unflagged) =>
+        withSQLConf(SQLConf.SESSION_LOCAL_TIMEZONE.key -> zone) {
+          withClue(s"$conditionStr $zone") {
+            assert(cutoff(conditionStr, column, exact = true) === flagged)
+            assert(cutoff(conditionStr, column, exact = false) === unflagged)
+          }
+        }
     }
   }
 
