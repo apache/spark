@@ -115,12 +115,11 @@ private[sql] object PredicateUtils {
         val or = predicate.asInstanceOf[V2Or]
         val left = toV1(or.left())
         val right = toV1(or.right())
+        // Converting only one side would select fewer rows than the OR.
         if (left.nonEmpty && right.nonEmpty) {
           Some(Or(left.get, right.get))
-        } else if (left.nonEmpty) {
-          left
         } else {
-          right
+          None
         }
 
       case "NOT" =>

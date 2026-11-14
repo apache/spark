@@ -17,22 +17,21 @@
 
 package org.apache.spark.sql.connector
 
-import org.apache.spark.SparkConf
+import org.apache.spark.SparkFunSuite
+import org.apache.spark.sql.catalyst.SQLConfHelper
 import org.apache.spark.sql.catalyst.expressions.{Cast, Literal}
 import org.apache.spark.sql.connector.expressions.filter.{AlwaysTrue, Predicate => V2Predicate}
 import org.apache.spark.sql.execution.datasources.v2.PushablePredicate
 import org.apache.spark.sql.internal.SQLConf
-import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.sql.types.{BooleanType, TimestampType}
 
-class PushablePredicateSuite extends SharedSparkSession {
-
-  override def sparkConf: SparkConf = super.sparkConf.set(SQLConf.ANSI_ENABLED, true)
+class PushablePredicateSuite extends SparkFunSuite with SQLConfHelper {
 
   test("simple boolean expression should always return v2 Predicate") {
     Seq(true, false).foreach { createV2Predicate =>
       Seq(true, false).foreach { noAssert =>
         withSQLConf(
+          SQLConf.ANSI_ENABLED.key -> "true",
           SQLConf.DATA_SOURCE_ALWAYS_CREATE_V2_PREDICATE.key -> createV2Predicate.toString,
           SQLConf.DATA_SOURCE_DONT_ASSERT_ON_PREDICATE.key -> noAssert.toString) {
           val pushable = PushablePredicate.unapply(Literal.create(true))
@@ -47,6 +46,7 @@ class PushablePredicateSuite extends SharedSparkSession {
     Seq(true, false).foreach { createV2Predicate =>
       Seq(true, false).foreach { noAssert =>
         withSQLConf(
+          SQLConf.ANSI_ENABLED.key -> "true",
           SQLConf.DATA_SOURCE_ALWAYS_CREATE_V2_PREDICATE.key -> createV2Predicate.toString,
           SQLConf.DATA_SOURCE_DONT_ASSERT_ON_PREDICATE.key -> noAssert.toString) {
           val catalystExpr = Literal.create("string")
@@ -67,6 +67,7 @@ class PushablePredicateSuite extends SharedSparkSession {
     Seq(true, false).foreach { createV2Predicate =>
       Seq(true, false).foreach { noAssert =>
         withSQLConf(
+          SQLConf.ANSI_ENABLED.key -> "true",
           SQLConf.DATA_SOURCE_ALWAYS_CREATE_V2_PREDICATE.key -> createV2Predicate.toString,
           SQLConf.DATA_SOURCE_DONT_ASSERT_ON_PREDICATE.key -> noAssert.toString) {
           val catalystExpr =

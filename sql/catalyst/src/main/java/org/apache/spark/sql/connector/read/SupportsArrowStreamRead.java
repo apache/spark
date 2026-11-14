@@ -49,7 +49,10 @@ public interface SupportsArrowStreamRead extends PartitionReaderFactory {
    * data and fail. The caller owns
    * the stream, which it may move, and releases it, which may happen after the task ended: Spark
    * frees what the stream uses, such as the context of the task, once the stream is released. A
-   * stream that is never released leaks.
+   * stream that is never released leaks. The arrays and the schemas that the stream returns may
+   * outlive it, as the C stream interface allows: the caller may keep them after it released the
+   * stream, and release them later, since their release uses neither the stream nor the context of
+   * the task.
    *
    * @param partition a partition of the scan, as the scan planned it
    * @param streamAddress the address of a {@code struct ArrowArrayStream} that the caller

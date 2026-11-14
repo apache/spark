@@ -55,6 +55,7 @@ from pyspark.pandas.typedef.typehints import (
 from pyspark.pandas.utils import _floor_divide_func, is_ansi_mode_enabled
 from pyspark.sql import Column as PySparkColumn
 from pyspark.sql import functions as F
+from pyspark.sql.internal import InternalFunction as SF
 from pyspark.sql.types import (
     BooleanType,
     DataType,
@@ -98,6 +99,25 @@ def _cast_back_float(
     if is_left_float and is_right_numeric:
         return expr.cast(as_spark_type(left_dtype))
     return expr
+
+
+def _python_mod(left: Any, right: Any) -> PySparkColumn:
+    """
+    Python and NumPy style modulo, whose result takes the sign of the divisor.
+
+    A zero or null divisor gives null. The internal ``pandas_mod`` function evaluates each operand
+    once, and keeps the decimal result type of ``((left % right) + right) % right``.
+    """
+
+    def to_column(operand: Any) -> PySparkColumn:
+        if isinstance(operand, PySparkColumn):
+            return operand
+        # Like the Column operators, take a NumPy scalar as the Python number it holds.
+        if isinstance(operand, np.generic):
+            operand = operand.item()
+        return F.lit(operand)
+
+    return SF.mod(to_column(left), to_column(right))
 
 
 def _is_decimal_float_mixed(left: IndexOpsLike, right: Any) -> bool:
@@ -148,16 +168,9 @@ class NumericOps(DataTypeOps):
         _sanitize_list_like(right)
         if not is_valid_operand_for_numeric_arithmetic(right):
             raise TypeError("Modulo can not be applied to given types.")
-        spark_session = left._internal.spark_frame.sparkSession
 
         def mod(left_op: PySparkColumn, right_op: Any) -> PySparkColumn:
-            if is_ansi_mode_enabled(spark_session):
-                expr = F.when(F.lit(right_op == 0), F.lit(None)).otherwise(
-                    ((left_op % right_op) + right_op) % right_op
-                )
-            else:
-                expr = ((left_op % right_op) + right_op) % right_op
-            return _cast_back_float(expr, left.dtype, right)
+            return _cast_back_float(_python_mod(left_op, right_op), left.dtype, right)
 
         new_right = transform_boolean_operand_to_numeric(right, spark_type=left.spark.data_type)
 
@@ -226,19 +239,11 @@ class NumericOps(DataTypeOps):
         _sanitize_list_like(right)
         if not isinstance(right, numbers.Number):
             raise TypeError("Modulo can not be applied to given types.")
-        spark_session = left._internal.spark_frame.sparkSession
 
         new_right = transform_boolean_operand_to_numeric(right)
 
         def safe_rmod(left_op: PySparkColumn, right_op: Any) -> PySparkColumn:
-            if is_ansi_mode_enabled(spark_session):
-                # Java-style modulo -> Python-style modulo
-                result = F.when(
-                    left_op != 0, ((F.lit(right_op) % left_op) + left_op) % left_op
-                ).otherwise(F.lit(None))
-            else:
-                result = ((right_op % left_op) + left_op) % left_op
-            return _cast_back_float(result, left.dtype, right)
+            return _cast_back_float(_python_mod(right_op, left_op), left.dtype, right)
 
         return column_op(safe_rmod)(left, new_right)
 

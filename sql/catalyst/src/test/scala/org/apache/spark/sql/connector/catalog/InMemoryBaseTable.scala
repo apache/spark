@@ -30,7 +30,7 @@ import scala.jdk.CollectionConverters._
 
 import org.apache.spark.sql.catalyst.{InternalRow, ProjectingInternalRow, StructFilters}
 import org.apache.spark.sql.catalyst.expressions.{AttributeReference, BoundReference, Cast, EvalMode, Expression => CatalystExpression, GenericInternalRow, GetStructField, JoinedRow, Literal, MetadataStructFieldWithLogicalName, Predicate => CatalystPredicate}
-import org.apache.spark.sql.catalyst.util.{ArrayBasedMapData, ArrayData, CaseInsensitiveMap, CharVarcharUtils, DateTimeUtils, GenericArrayData, MapData, ResolveDefaultColumns}
+import org.apache.spark.sql.catalyst.util.{ArrayBasedMapData, ArrayData, CaseInsensitiveMap, CharVarcharUtils, DateTimeUtils, GeneratedColumn, GenericArrayData, MapData, ResolveDefaultColumns}
 import org.apache.spark.sql.connector.catalog.constraints.Constraint
 import org.apache.spark.sql.connector.catalog.functions.{FlipLowBitFunction, SelfReduceFunction}
 import org.apache.spark.sql.connector.distributions.{Distribution, Distributions}
@@ -1066,12 +1066,20 @@ abstract class InMemoryBaseTable(
       }
 
       override def toBatch: BatchWrite = {
+        val generationExpressions = columns().flatMap { col =>
+          GeneratedColumn.columnGenerationExpression(col).map(col.name -> _)
+        }.toMap
         val newSchema = info.schema()
         val mergedSchema = mergeSchema(
           oldType = CatalogV2Util.v2ColumnsToStructType(columns()),
           newType = newSchema)
         tableColumns = InMemoryBaseTable.assignMissingIds(
-          CatalogV2Util.structTypeToV2Columns(mergedSchema))
+          CatalogV2Util.structTypeToV2Columns(mergedSchema).map { col =>
+            // Restore the modeled form lost in the schema round trip.
+            generationExpressions.get(col.name).map { expr =>
+              Column.builderFrom(col).generationExpression(expr).build()
+            }.getOrElse(col)
+          })
         writer
       }
 

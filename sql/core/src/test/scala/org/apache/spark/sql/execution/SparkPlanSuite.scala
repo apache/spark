@@ -34,7 +34,7 @@ import org.apache.spark.sql.catalyst.expressions.codegen.{CodegenContext, ExprCo
 import org.apache.spark.sql.catalyst.plans.logical.Deduplicate
 import org.apache.spark.sql.catalyst.trees.LeafLike
 import org.apache.spark.sql.connector.read.{Batch, InputPartition, PartitionReaderFactory, Scan}
-import org.apache.spark.sql.execution.datasources.v2.{BatchScanExec, PlannedScan}
+import org.apache.spark.sql.execution.datasources.v2.BatchScanExec
 import org.apache.spark.sql.execution.exchange.ShuffleExchangeExec
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSparkSession
@@ -209,14 +209,14 @@ class SparkPlanSuite extends SharedSparkSession {
     // violating the contract that equal objects must have equal hash codes.
     val exec1 = BatchScanExec(
       output = Seq.empty,
-      plannedScan = null,
+      scan = null,
       runtimeFilters = Seq.empty,
       table = null,
       keyGroupedPartitioning = Some(Seq(Literal(1)))
     )
     val exec2 = BatchScanExec(
       output = Seq.empty,
-      plannedScan = null,
+      scan = null,
       runtimeFilters = Seq.empty,
       table = null,
       keyGroupedPartitioning = Some(Seq(Literal(2)))
@@ -307,7 +307,7 @@ class SparkPlanSuite extends SharedSparkSession {
     val data = AttributeReference("data", StringType)(ExprId(1))
     val scan = BatchScanExec(
       output = Seq(id, data),
-      plannedScan = null,
+      scan = null,
       runtimeFilters = Seq.empty,
       table = null,
       keyGroupedPartitioning = Some(Seq(id, data)))
@@ -333,17 +333,20 @@ class SparkPlanSuite extends SharedSparkSession {
           throw new UnsupportedOperationException()
       }
     }
-    val scan = BatchScanExec(Seq.empty, new PlannedScan(new NewBatchScan), Seq.empty, table = null)
+    val scan = BatchScanExec(Seq.empty, new NewBatchScan, Seq.empty, table = null)
     def sharesPlanning(copy: SparkPlan): Boolean = copy match {
       case c: BatchScanExec =>
         (c.batch eq scan.batch) && (c.inputPartitions eq scan.inputPartitions)
       case _ => false
     }
+    val args = scan.productIterator.map(_.asInstanceOf[AnyRef]).toArray
 
-    // Copies through `makeCopy`, `clone` or `copy` share what the node planned.
-    assert(sharesPlanning(scan.makeCopy(scan.productIterator.map(_.asInstanceOf[AnyRef]).toArray)))
+    // Copies through `makeCopy` or `clone` share what the node planned, but not over another
+    // `Scan`. A case-class `copy` plans its own.
+    assert(sharesPlanning(scan.makeCopy(args)))
     assert(sharesPlanning(scan.clone()))
-    assert(sharesPlanning(scan.copy(runtimeFilters = Nil)))
+    assert(!sharesPlanning(scan.makeCopy(args.updated(1, new NewBatchScan))))
+    assert(!sharesPlanning(scan.copy(runtimeFilters = Nil)))
   }
 }
 

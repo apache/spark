@@ -136,9 +136,10 @@ case class SortMergeAsOfJoinExec(
     SortMergeAsOfJoinScanner.supportsCursorScan(
       direction, asOfCondition, condition, leftSortExprs, rightSortExprs)
 
-  // Nearest joins keep the interpreted scan, as its distance compare is harder to generate. The
-  // codegen config is read once, when the join is planned.
-  override def supportCodegen: Boolean = direction != Nearest && codegenEnabled
+  // Only a direction with an [[AsOfScanStrategy]] has a generated scan. Nearest joins keep the
+  // interpreted scan, as its distance compare is harder to generate. The codegen config is read
+  // once, when the join is planned.
+  override def supportCodegen: Boolean = AsOfScanStrategy.of(direction).isDefined && codegenEnabled
 
   // ShuffledJoin already hides `isSkewJoin`, the last field. This also hides `codegenEnabled`,
   // the field before it, in the plan string.
@@ -261,21 +262,23 @@ case class SortMergeAsOfJoinExec(
          """.stripMargin
       (start, "")
     }
-    // Forward checks the kept row again first. On a failing row, forward drops it, since no
-    // later left row can match it, and backward stops there and keeps it for the next left row.
-    val (checkKeptRow, onPass, onFail) = direction match {
-      case Forward =>
-        val check =
-          s"""
-             |if ($cursorBest != null) {
-             |  if ($asOfHolds($leftRow, $cursorBest)) return $cursorBest;
-             |  $cursorBest = null;
-             |}
-           """.stripMargin
-        (check, s"return $cursorBest;", s"$rightPeek = $nextRight();")
-      case _ =>
-        ("", "", s"return $cursorBest;")
+    // The same decisions as the interpreted `SortMergeAsOfJoinScanner.findWithCursor`.
+    val strategy = AsOfScanStrategy(direction)
+    // A kept row that a later left row can fail is checked again first.
+    val checkKeptRow = if (strategy.matchOutlivesLeftRow) {
+      ""
+    } else {
+      s"""
+         |if ($cursorBest != null) {
+         |  if ($asOfHolds($leftRow, $cursorBest)) return $cursorBest;
+         |  $cursorBest = null;
+         |}
+       """.stripMargin
     }
+    val onPass = if (strategy.firstMatchWins) s"return $cursorBest;" else ""
+    // A failing row either waits for a later left row, or can match none and is dropped.
+    val onFail =
+      if (strategy.matchOutlivesLeftRow) s"return $cursorBest;" else s"$rightPeek = $nextRight();"
 
     val funcName = ctx.freshName("findWithCursor")
     val func = ctx.addNewFunction(funcName,
@@ -386,12 +389,9 @@ case class SortMergeAsOfJoinExec(
     val best = ctx.freshName("best")
     // A spilled group reuses one row on every next(), so a kept match must be copied.
     val retained = s"($needsCopy ? $rightRow.copy() : $rightRow)"
-    // Backward keeps the last passing row, and forward returns the first. Once the as-of
-    // condition has held, the first row that fails it ends the scan.
-    val (onMatch, onPastMatches, noMoreRows) = direction match {
-      case Forward => (s"return $retained;", "return null;", "return null;")
-      case _ => (s"$best = $retained;", s"return $best;", s"return $best;")
-    }
+    // The same decision as the interpreted `SortMergeAsOfJoinScanner.findInOrder`. Once the
+    // as-of condition has held, the first row that fails it ends the scan.
+    val stopAtMatch = if (AsOfScanStrategy(direction).firstMatchWins) s"return $best;" else ""
     val iter = ctx.freshName("iter")
     val asOfSeen = ctx.freshName("asOfSeen")
 
@@ -412,13 +412,14 @@ case class SortMergeAsOfJoinExec(
          |      if ($asOfHolds($leftRow, $rightRow)) {
          |        $asOfSeen = true;
          |        if ($residualHolds) {
-         |          $onMatch
+         |          $best = $retained;
+         |          $stopAtMatch
          |        }
          |      } else if ($asOfSeen) {
-         |        $onPastMatches
+         |        return $best;
          |      }
          |    }
-         |    $noMoreRows
+         |    return $best;
          |  } finally {
          |    if ($iter instanceof java.io.Closeable) {
          |      ((java.io.Closeable) $iter).close();
@@ -608,6 +609,9 @@ private[joins] class SortMergeAsOfJoinScanner(
           s"Unexpected nearest keys: $leftSortExprs and $rightSortExprs")
     }
 
+  // None for a nearest join, which has no ordered scan.
+  private val orderedScanStrategy: Option[AsOfScanStrategy] = AsOfScanStrategy.of(direction)
+
   // Lazy, since only the cursor scan reads the keys.
   private lazy val cursorKeys: (Expression, Expression) =
     (bindReference(leftSortExprs.head, leftOutput), bindReference(rightSortExprs.head, rightOutput))
@@ -648,6 +652,10 @@ private[joins] class SortMergeAsOfJoinScanner(
   }
 
   if (useCursorScan) {
+    // Only an ordered scan has a cursor. Checked here, so that it fails whatever the input is.
+    if (orderedScanStrategy.isEmpty) {
+      throw SparkException.internalError(s"The $direction AS-OF join has no cursor scan")
+    }
     numAsOfCursorTasks += 1
   }
 
@@ -781,10 +789,9 @@ private[joins] class SortMergeAsOfJoinScanner(
   }
 
   /** Finds the best right row in the current group for `leftRow`, or null if none passes. */
-  private def findBestInGroup(leftRow: InternalRow): InternalRow = direction match {
-    case Backward => findLastBackward(leftRow)
-    case Forward => findFirstForward(leftRow)
-    case Nearest => findNearest(leftRow)
+  private def findBestInGroup(leftRow: InternalRow): InternalRow = orderedScanStrategy match {
+    case Some(strategy) => findInOrder(leftRow, strategy)
+    case None => findNearest(leftRow)
   }
 
   /**
@@ -821,11 +828,15 @@ private[joins] class SortMergeAsOfJoinScanner(
   }
 
   /**
-   * Backward joins keep the last row that passes the as-of and residual conditions.
-   * Once the as-of condition has been true, the scan stops at the first row that fails
-   * it, as later sorted rows cannot satisfy it.
+   * Backward and forward joins scan the group in as-of key order for the row that passes the
+   * as-of and residual conditions and is closest to the left key: the first passing row or the
+   * last, as [[AsOfScanStrategy.firstMatchWins]] tells. Once the as-of condition has been true,
+   * the scan stops at the first row that fails it, as later sorted rows cannot satisfy it. That
+   * row is at or past the left key for a backward join, and at or past the tolerance bound for a
+   * forward join.
    */
-  private def findLastBackward(leftRow: InternalRow): InternalRow = {
+  private def findInOrder(leftRow: InternalRow, strategy: AsOfScanStrategy): InternalRow = {
+    val firstMatchWins = strategy.firstMatchWins
     var bestMatch: InternalRow = null
     val iter = rightGroupBuffer.generateIterator()
     val needsCopy = rightGroupBuffer.isSpillBacked
@@ -840,47 +851,14 @@ private[joins] class SortMergeAsOfJoinScanner(
         if (holds(boundAsOfCond)) {
           asOfSeen = true
           if (residualHolds) {
-            // Last match wins (closest right.t to left.t)
             bestMatch = retainMatch(rightRow, needsCopy)
+            if (firstMatchWins) return bestMatch
           }
         } else if (asOfSeen) {
-          // At or past left.t, so no later row passes the as-of condition.
           return bestMatch
         }
       }
       bestMatch
-    } finally {
-      closeIterator(iter)
-    }
-  }
-
-  /**
-   * Forward joins return the first row that passes the as-of and residual conditions.
-   * With a tolerance, if the scan enters the allowed range but finds no match, it
-   * stops at the first row beyond that range, as later sorted rows cannot qualify.
-   */
-  private def findFirstForward(leftRow: InternalRow): InternalRow = {
-    val iter = rightGroupBuffer.generateIterator()
-    val needsCopy = rightGroupBuffer.isSpillBacked
-    var asOfSeen = false
-
-    joinedRow.withLeft(leftRow)
-    try {
-      while (iter.hasNext) {
-        val rightRow = iter.next()
-        joinedRow.withRight(rightRow)
-
-        if (holds(boundAsOfCond)) {
-          asOfSeen = true
-          if (residualHolds) {
-            return retainMatch(rightRow, needsCopy)
-          }
-        } else if (asOfSeen) {
-          // Past the tolerance bound, so no later row passes the as-of condition.
-          return null
-        }
-      }
-      null
     } finally {
       closeIterator(iter)
     }
@@ -893,6 +871,7 @@ private[joins] class SortMergeAsOfJoinScanner(
    * left row also passes for the next (backward), and a row that fails stays failed (forward).
    * The cursor never steps back: backward stops at the first failing row and keeps it for the
    * next left row, and forward drops each failing row, since no later left row can match it.
+   * The [[AsOfScanStrategy]] of the direction makes these choices, as in the generated scan.
    */
   private def findWithCursor(leftRow: InternalRow, leftKey: UnsafeRow): InternalRow = {
     // Without equi-keys, all rows form one group, so only the first left row starts it.
@@ -908,8 +887,10 @@ private[joins] class SortMergeAsOfJoinScanner(
     // right rows that later left rows need.
     if (leftAsOfKey.eval(leftRow) == null) return null
 
+    // The scanner checked that the direction has a strategy when it was built.
+    val strategy = orderedScanStrategy.get
     joinedRow.withLeft(leftRow)
-    if (direction == Forward && cursorBest != null) {
+    if (!strategy.matchOutlivesLeftRow && cursorBest != null) {
       // The cursor is already past the best row, and every row before it failed.
       joinedRow.withRight(cursorBest)
       if (holds(boundAsOfCond)) return cursorBest
@@ -927,10 +908,12 @@ private[joins] class SortMergeAsOfJoinScanner(
           // The next right row overwrites `rightPeek`, so keep a copy.
           cursorBest = copyToCursorBestBuffer(rightPeek)
           advanceRightPeek()
-          if (direction == Forward) return cursorBest
-        } else if (direction == Backward) {
+          if (strategy.firstMatchWins) return cursorBest
+        } else if (strategy.matchOutlivesLeftRow) {
+          // The row waits for a later left row.
           return cursorBest
         } else {
+          // No later left row can match the row.
           advanceRightPeek()
         }
       }
@@ -1081,14 +1064,8 @@ private[execution] object SortMergeAsOfJoinScanner {
       residualCondition: Option[Expression],
       leftSortExprs: Seq[Expression],
       rightSortExprs: Seq[Expression]): Boolean = {
-    // The operands as (left, right): backward needs left >= right, forward left <= right.
-    val operands = (direction, asOfCondition) match {
-      case (Backward, GreaterThanOrEqual(left, right)) => Some((left, right))
-      case (Backward, GreaterThan(left, right)) => Some((left, right))
-      case (Forward, LessThanOrEqual(left, right)) => Some((left, right))
-      case (Forward, LessThan(left, right)) => Some((left, right))
-      case _ => None
-    }
+    // The operands as (left, right). A direction without an ordered scan has no cursor scan.
+    val operands = AsOfScanStrategy.of(direction).flatMap(_.cursorOperands(asOfCondition))
     (leftSortExprs, rightSortExprs, operands) match {
       case (Seq(leftKey), Seq(rightKey), Some((leftOperand, rightOperand))) =>
         residualCondition.isEmpty &&
@@ -1110,6 +1087,86 @@ private[execution] object SortMergeAsOfJoinScanner {
     case DateType | TimestampType | TimestampNTZType => true
     case _: YearMonthIntervalType | _: DayTimeIntervalType => true
     case _ => false
+  }
+}
+
+/**
+ * What a backward or forward scan of a right group does differently. The right rows of a group
+ * and its left rows both come in ascending as-of key order. The interpreted scans of
+ * [[SortMergeAsOfJoinScanner]] and the generated scans of [[SortMergeAsOfJoinExec]] both read
+ * the choices below. The scan loops themselves are still written once for each.
+ *
+ * A nearest join has no strategy: it compares the gaps on both sides of the left key, and only
+ * has an interpreted scan.
+ */
+private[joins] sealed abstract class AsOfScanStrategy {
+
+  /**
+   * Whether the first right row that passes the as-of and residual conditions is the closest to
+   * the left key, so the scan can stop there. Otherwise the last such row is the closest, and
+   * the scan reads on until a row fails the as-of condition.
+   */
+  def firstMatchWins: Boolean
+
+  /**
+   * The operands of an as-of condition that the cursor scan of this direction takes, as
+   * (left, right), or None for any other condition. The cursor scan only takes a comparison
+   * that the right rows at one end of a group pass: the start when the last match wins, and the
+   * end when the first match wins.
+   */
+  def cursorOperands(asOfCondition: Expression): Option[(Expression, Expression)]
+
+  /**
+   * For the cursor scan: whether a right row that passes for one left row also passes for every
+   * later left row of the group.
+   *
+   * If so, a failing row is at or ahead of the left key. The scan stops there, and keeps the row
+   * for the next left row. If not, a failing row is at or behind the left key. No later left row
+   * can match it, so the scan drops it, and it checks the kept best row again for every left
+   * row.
+   *
+   * This is the opposite of [[firstMatchWins]], as the conditions of [[cursorOperands]] tell.
+   * When the last match wins, the passing rows start the group, and a larger left key only adds
+   * rows to them. When the first match wins, they end the group, and a larger left key only
+   * takes rows from them.
+   */
+  final def matchOutlivesLeftRow: Boolean = !firstMatchWins
+}
+
+private[joins] object AsOfScanStrategy {
+
+  /** Backward (left.t >= right.t): the passing rows come first, and the last one is closest. */
+  case object LastMatch extends AsOfScanStrategy {
+    override def firstMatchWins: Boolean = false
+    override def cursorOperands(asOfCondition: Expression): Option[(Expression, Expression)] =
+      asOfCondition match {
+        case GreaterThanOrEqual(left, right) => Some((left, right))
+        case GreaterThan(left, right) => Some((left, right))
+        case _ => None
+      }
+  }
+
+  /** Forward (left.t <= right.t): the passing rows come last, and the first one is closest. */
+  case object FirstMatch extends AsOfScanStrategy {
+    override def firstMatchWins: Boolean = true
+    override def cursorOperands(asOfCondition: Expression): Option[(Expression, Expression)] =
+      asOfCondition match {
+        case LessThanOrEqual(left, right) => Some((left, right))
+        case LessThan(left, right) => Some((left, right))
+        case _ => None
+      }
+  }
+
+  /** The strategy of `direction`, or None for a direction that has no ordered scan. */
+  def of(direction: AsOfJoinDirection): Option[AsOfScanStrategy] = direction match {
+    case Backward => Some(LastMatch)
+    case Forward => Some(FirstMatch)
+    case Nearest => None
+  }
+
+  /** The strategy of `direction`, which must have one. */
+  def apply(direction: AsOfJoinDirection): AsOfScanStrategy = of(direction).getOrElse {
+    throw SparkException.internalError(s"The $direction AS-OF join has no ordered scan")
   }
 }
 

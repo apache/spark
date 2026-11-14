@@ -395,7 +395,7 @@ class V2PredicateSuite extends SparkFunSuite {
     val left = new Predicate("=", Array[Expression](ref("a"), LiteralValue(1, IntegerType)))
     val predicate3 = new Or(left,
       new Predicate("=", Array[Expression](LiteralValue(1, IntegerType))))
-    assert(PredicateUtils.toV1(predicate3) == PredicateUtils.toV1(left))
+    assert(PredicateUtils.toV1(predicate3) == None)
 
     val predicate4 = new Or(
       new Predicate("=", Array[Expression](LiteralValue(1, IntegerType))),

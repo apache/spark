@@ -113,6 +113,7 @@ case class AddColumns(
   columnsToAdd.foreach { c =>
     TypeUtils.failWithIntervalType(c.dataType)
     TypeUtils.failUnsupportedDataType(c.dataType, conf)
+    TypeUtils.checkFileTypeHasQualifier(c.dataType)
   }
 
   override lazy val resolved: Boolean = table.resolved && columnsToAdd.forall(_.resolved)
@@ -146,6 +147,7 @@ case class ReplaceColumns(
   columnsToAdd.foreach { c =>
     TypeUtils.failWithIntervalType(c.dataType)
     TypeUtils.failUnsupportedDataType(c.dataType, conf)
+    TypeUtils.checkFileTypeHasQualifier(c.dataType)
   }
 
   override lazy val resolved: Boolean = table.resolved && columnsToAdd.forall(_.resolved)
@@ -272,6 +274,8 @@ case class AlterColumns(
     table: LogicalPlan,
     specs: Seq[AlterColumnSpec],
     fromCommentOn: Boolean = false) extends AlterTableCommand {
+  specs.foreach(_.newDataType.foreach(TypeUtils.checkFileTypeHasQualifier))
+
   override def changes: Seq[TableChange] = {
     specs.flatMap { spec =>
       val column = spec.column
