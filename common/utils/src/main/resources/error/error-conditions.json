@@ -1285,6 +1285,12 @@
     ],
     "sqlState" : "22003"
   },
+  "COLUMN_STATISTICS_DESERIALIZATION_NOT_SUPPORTED" : {
+    "message" : [
+      "Column statistics deserialization is not supported for column <name> of data type: <dataType>."
+    ],
+    "sqlState" : "0A000"
+  },
   "COMPARATOR_RETURNS_NULL" : {
     "message" : [
       "The comparator has returned a NULL for a comparison between <firstValue> and <secondValue>.",
@@ -11006,11 +11012,6 @@
   "_LEGACY_ERROR_TEMP_1082" : {
     "message" : [
       "Partition [<specString>] did not specify locationUri."
-    ]
-  },
-  "_LEGACY_ERROR_TEMP_1089" : {
-    "message" : [
-      "Column statistics deserialization is not supported for column <name> of data type: <dataType>."
     ]
   },
   "_LEGACY_ERROR_TEMP_1090" : {
