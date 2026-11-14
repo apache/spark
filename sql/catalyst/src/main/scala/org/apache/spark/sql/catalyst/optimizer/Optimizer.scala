@@ -1430,13 +1430,9 @@ object ConvertToCatalyst extends Rule[LogicalPlan] with PredicateHelper {
           keepPython
         } else if (conf.preferIntExtDtype &&
             isPythonUDFWithEvalType(s.pythonUDFExpr, PythonEvalType.SQL_SCALAR_PANDAS_UDF)) {
-          // With the extension dtype a scalar pandas UDF's Series is a pandas masked array,
-          // which Arrow receives with mask=None (and whose isnull() is False for NaN), so a
-          // NaN result arrives as NaN. Without it the Series is numpy-backed and masked with
-          // isnull(), so the same NaN arrives as NULL. The transpiled option reproduces the
-          // latter via an isnan-to-NULL normalization, which would be wrong here. udf.py
-          // refuses to transpile when this is set, but it can also be enabled after the UDF
-          // was built, so re-check here like the ANSI gate above.
+          // This conf makes integral inputs masked arrays whose derived results can retain
+          // NaN. The default numpy-backed conversion masks NaN to NULL. Re-check the Python
+          // construction gate because the conf can change after the UDF was built.
           logWarning(log"Skipping Python UDF transpilation: " +
             log"${MDC(LogKeys.CONFIG,
               SQLConf.PYTHON_UDF_PANDAS_PREFER_INT_EXTENSION_DTYPE.key)} is enabled, which " +

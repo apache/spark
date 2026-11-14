@@ -37,7 +37,7 @@ Triaging a new type
 2. Run this module; the verdict tests report the observed verdict.
 3. ``NO_TRANSPILE``, ``REJECTED_BY_ARROW`` or ``REJECTED_CHAR_VARCHAR``: record it and
    stop.
-4. ``TRANSPILES``: verify parity against the interpreted path on both eval types *before*
+4. ``TRANSPILES``: verify parity against the interpreted path on all three eval types *before*
    recording. The pickled path NULLs a mismatched return value where Arrow raises or
    converts; the golden matrix in ``python/pyspark/sql/tests/coercion/`` is the authority. If
    they disagree, tighten the body-vs-return-type check in ``transpile.py`` instead.
@@ -84,6 +84,7 @@ NOT_A_COLUMN_TYPE = "NOT_A_COLUMN_TYPE"
 
 _PICKLED = PythonEvalType.SQL_BATCHED_UDF
 _ARROW = PythonEvalType.SQL_ARROW_BATCHED_UDF
+_PANDAS = PythonEvalType.SQL_SCALAR_PANDAS_UDF
 
 # Classes exported from pyspark.sql.types that are not usable column types: the abstract
 # root, StructField (a field descriptor rather than a type), and the bare UserDefinedType
@@ -119,6 +120,10 @@ def null_probe(x):
     # Deliberately unannotated: this is the realistic default, and an unannotated parameter
     # is only tried as numeric and string, which is what the input-type table records.
     return 1 if x is None else 2
+
+
+def series_null_probe(x):
+    return x.isnull()
 
 
 _BODIES = {
@@ -215,6 +220,11 @@ _ARROW_REJECTED_RETURN_TYPES = frozenset({"year_month_interval", "calendar_inter
 # parameter is only tried as numeric and string, so those columns match no category (see
 # test_annotated_parameters_widen_input_coverage). string_lcase is refused because the check
 # requires UTF8_BINARY -- under UTF8_LCASE 'abc' == 'ABC' is true where Python says False.
+_EXPECTED_PANDAS_RETURN_VERDICT = {
+    label: (REJECTED_BY_ARROW if label in _ARROW_REJECTED_RETURN_TYPES else verdict)
+    for label, verdict in _EXPECTED_RETURN_VERDICT.items()
+}
+
 _EXPECTED_INPUT_VERDICT = {
     "void": NO_TRANSPILE,
     "char": NOT_A_COLUMN_TYPE,
@@ -246,6 +256,8 @@ _EXPECTED_INPUT_VERDICT = {
     "geography": NO_TRANSPILE,
     "geometry": NO_TRANSPILE,
 }
+
+_EXPECTED_PANDAS_INPUT_VERDICT = dict(_EXPECTED_INPUT_VERDICT)
 
 # Parity fixture per TRANSPILES return type: an input column whose body result already
 # matches the declared return type. Pairing them avoids a known, accepted divergence -- a
@@ -383,7 +395,13 @@ class ArrowUDFTranspileTypeCanaryTests(ArrowUDFTranspileTestsMixin, ReusedSQLTes
                 and e.getCondition() == "CHAR_VARCHAR_NOT_SUPPORTED_IN_PYTHON"
             ):
                 return REJECTED_CHAR_VARCHAR
-            if "Invalid return type with Arrow-optimized Python UDF" in str(e):
+            if any(
+                message in str(e)
+                for message in (
+                    "Invalid return type with Arrow-optimized Python UDF",
+                    "Invalid return type with scalar Pandas UDFs",
+                )
+            ):
                 return REJECTED_BY_ARROW
             raise
         return TRANSPILES if pudf.transpiled else NO_TRANSPILE
@@ -451,6 +469,19 @@ class ArrowUDFTranspileTypeCanaryTests(ArrowUDFTranspileTestsMixin, ReusedSQLTes
             "listed in _ARROW_REJECTED_RETURN_TYPES.",
         )
 
+    def test_return_type_verdicts_pandas(self):
+        with self.sql_conf(_TRANSPILE_ON):
+            observed = {
+                label: self._return_verdict(dt, _BODIES[cat], _PANDAS)
+                for label, dt, cat in _SAMPLES
+            }
+        self._assert_verdicts(
+            _EXPECTED_PANDAS_RETURN_VERDICT,
+            observed,
+            "_EXPECTED_PANDAS_RETURN_VERDICT",
+            "Verify Series-valid parity before recording a new transpiling pandas type.",
+        )
+
     # -- input-type verdicts ------------------------------------------------------------
 
     def _null_row_df(self, dt):
@@ -463,7 +494,9 @@ class ArrowUDFTranspileTypeCanaryTests(ArrowUDFTranspileTestsMixin, ReusedSQLTes
             df.count()
         except Exception:  # the type simply cannot be a column
             return NOT_A_COLUMN_TYPE
-        pudf = UserDefinedFunction(null_probe, T.LongType(), evalType=eval_type)
+        body = series_null_probe if eval_type == _PANDAS else null_probe
+        return_type = T.BooleanType() if eval_type == _PANDAS else T.LongType()
+        pudf = UserDefinedFunction(body, return_type, evalType=eval_type)
         # Plan only: whether an option survived JVM-side pruning shows up as the presence
         # or absence of a Python-eval operator, and needs no Python execution.
         counts = _eval_python_nodes(df.select(pudf("a")))
@@ -500,6 +533,16 @@ class ArrowUDFTranspileTypeCanaryTests(ArrowUDFTranspileTestsMixin, ReusedSQLTes
             "side and must not depend on the eval type.",
         )
 
+    def test_input_type_verdicts_pandas(self):
+        with self.sql_conf(_TRANSPILE_ON):
+            observed = {label: self._input_verdict(dt, _PANDAS) for label, dt, _cat in _SAMPLES}
+        self._assert_verdicts(
+            _EXPECTED_PANDAS_INPUT_VERDICT,
+            observed,
+            "_EXPECTED_PANDAS_INPUT_VERDICT",
+            "Verify Series-valid input parity before recording a new pandas type.",
+        )
+
     def test_no_transpile_input_types_still_compute_correctly(self):
         # The point of a fallback: a column type the transpiler cannot bind to must still
         # produce the interpreted answer rather than an error or a wrong value.
@@ -508,10 +551,14 @@ class ArrowUDFTranspileTypeCanaryTests(ArrowUDFTranspileTestsMixin, ReusedSQLTes
                 continue
             with self.subTest(label=label):
                 df = self._null_row_df(dt)
-                pudf = UserDefinedFunction(null_probe, T.LongType(), evalType=_PICKLED)
                 with self.sql_conf(_TRANSPILE_ON):
-                    on = df.select(pudf("a")).collect()[0][0]
+                    pudf = UserDefinedFunction(null_probe, T.LongType(), evalType=_PICKLED)
+                    self._assert_transpiled(pudf, f"a fallback probe for {label}")
+                    query = df.select(pudf("a"))
+                    self.assertGreater(sum(_eval_python_nodes(query).values()), 0)
+                    on = query.collect()[0][0]
                 with self.sql_conf(_TRANSPILE_OFF):
+                    pudf = UserDefinedFunction(null_probe, T.LongType(), evalType=_PICKLED)
                     off = df.select(pudf("a")).collect()[0][0]
                 self.assertEqual(1, off, f"{label}: interpreted UDF should see None")
                 self.assertEqual(off, on, f"{label}: fallback changed the answer")
@@ -557,6 +604,25 @@ class ArrowUDFTranspileTypeCanaryTests(ArrowUDFTranspileTestsMixin, ReusedSQLTes
             with self.subTest(label=label):
                 df, body, _column_dtype = self._fixture_df(_PARITY_FIXTURES, label)
                 self._assert_matches_interpreted(body, dt, df, "a", eval_type=_ARROW)
+
+    def test_transpiling_return_types_have_verified_parity_pandas(self):
+        for label, dt, _cat in _SAMPLES:
+            if _EXPECTED_PANDAS_RETURN_VERDICT[label] != TRANSPILES:
+                continue
+            with self.subTest(label=label):
+                df, body, _column_dtype = self._fixture_df(_PARITY_FIXTURES, label)
+                self._assert_matches_interpreted(body, dt, df, "a", eval_type=_PANDAS)
+
+    def test_transpiling_input_types_have_verified_parity_pandas(self):
+        for label, dt, _cat in _SAMPLES:
+            if _EXPECTED_PANDAS_INPUT_VERDICT[label] != TRANSPILES:
+                continue
+            value = "ab" if label == "string" else (7.0 if label in ("float", "double") else 7)
+            df = self.spark.createDataFrame([(value,), (None,)], f"a {dt.simpleString()}")
+            with self.subTest(label=label):
+                self._assert_matches_interpreted(
+                    series_null_probe, T.BooleanType(), df, "a", eval_type=_PANDAS
+                )
 
     def test_annotated_parameters_widen_input_coverage(self):
         # Explains the boolean and binary NO_TRANSPILE rows in _EXPECTED_INPUT_VERDICT:

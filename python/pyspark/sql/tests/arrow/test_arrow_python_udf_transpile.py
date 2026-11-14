@@ -243,6 +243,30 @@ def str_concat(x: str):
     return x + x
 
 
+def repeat_negated(x):
+    return "ab" * -x
+
+
+def repeat_positive(x):
+    return "ab" * +x
+
+
+def repeat_negated_left(x, s: str):
+    return -x * s
+
+
+def repeat_negative_float(s: str):
+    return s * -1.5
+
+
+def negated_equals_two(x):
+    return -x == 2
+
+
+def guarded_negated_equals_two(x):
+    return False if x is None else -x == 2
+
+
 def str_repeat_right(x: str):
     return x * 3
 
@@ -502,6 +526,50 @@ class ArrowUDFTranspileEvalTypeGateTests(ArrowUDFTranspileTestsMixin, ReusedSQLT
             for name, value in vars(PythonEvalType).items()
             if name.startswith("SQL_") and isinstance(value, int)
         }
+        recorded = {
+            "SQL_BATCHED_UDF",
+            "SQL_ARROW_BATCHED_UDF",
+            "SQL_ARROW_ELEMENTWISE_UDF",
+            "SQL_SCALAR_PANDAS_ELEMENTWISE_UDF",
+            "SQL_SCALAR_PANDAS_ITER_ELEMENTWISE_UDF",
+            "SQL_SCALAR_ARROW_ELEMENTWISE_UDF",
+            "SQL_SCALAR_ARROW_ITER_ELEMENTWISE_UDF",
+            "SQL_SCALAR_PANDAS_UDF",
+            "SQL_GROUPED_MAP_PANDAS_UDF",
+            "SQL_GROUPED_AGG_PANDAS_UDF",
+            "SQL_WINDOW_AGG_PANDAS_UDF",
+            "SQL_SCALAR_PANDAS_ITER_UDF",
+            "SQL_MAP_PANDAS_ITER_UDF",
+            "SQL_COGROUPED_MAP_PANDAS_UDF",
+            "SQL_MAP_ARROW_ITER_UDF",
+            "SQL_GROUPED_MAP_PANDAS_UDF_WITH_STATE",
+            "SQL_GROUPED_MAP_ARROW_UDF",
+            "SQL_COGROUPED_MAP_ARROW_UDF",
+            "SQL_TRANSFORM_WITH_STATE_PANDAS_UDF",
+            "SQL_TRANSFORM_WITH_STATE_PANDAS_INIT_STATE_UDF",
+            "SQL_TRANSFORM_WITH_STATE_PYTHON_ROW_UDF",
+            "SQL_TRANSFORM_WITH_STATE_PYTHON_ROW_INIT_STATE_UDF",
+            "SQL_GROUPED_MAP_ARROW_ITER_UDF",
+            "SQL_GROUPED_MAP_PANDAS_ITER_UDF",
+            "SQL_GROUPED_AGG_PANDAS_ITER_UDF",
+            "SQL_SCALAR_ARROW_UDF",
+            "SQL_SCALAR_ARROW_ITER_UDF",
+            "SQL_GROUPED_AGG_ARROW_UDF",
+            "SQL_WINDOW_AGG_ARROW_UDF",
+            "SQL_GROUPED_AGG_ARROW_ITER_UDF",
+            "SQL_GROUPED_AGG_ARROW_INCREMENTAL_PARTIAL_UDF",
+            "SQL_GROUPED_AGG_ARROW_INCREMENTAL_FINAL_UDF",
+            "SQL_WINDOW_AGG_ARROW_INCREMENTAL_UDF",
+            "SQL_SCALAR_ARROW_INPROCESS_UDF",
+            "SQL_TABLE_UDF",
+            "SQL_ARROW_TABLE_UDF",
+            "SQL_ARROW_UDTF",
+        }
+        self.assertEqual(
+            recorded,
+            set(all_eval_types),
+            "An eval type needs triage: update the recorded inventory and admission tests.",
+        )
         self.assertGreater(len(all_eval_types), 20, "eval-type introspection found almost none")
 
         transpiling = {}
@@ -701,6 +769,49 @@ class ArrowUDFTranspileDifferentialTests(ArrowUDFTranspileTestsMixin, ReusedSQLT
             for body in _NUMERIC_ARITHMETIC:
                 with self.subTest(dtype=dtype, body=body.__name__):
                     self._assert_matches_interpreted(body, return_type, df, "a")
+
+    def test_unary_float_repeat_falls_back_and_raises(self):
+        for eval_type in (PythonEvalType.SQL_BATCHED_UDF, PythonEvalType.SQL_ARROW_BATCHED_UDF):
+            for dtype in ("float", "double"):
+                df = self.spark.createDataFrame([(-2.5, "ab"), (1.5, "cd")], f"a {dtype}, s string")
+                for body, cols in (
+                    (repeat_negated, ("a",)),
+                    (repeat_positive, ("a",)),
+                    (repeat_negated_left, ("a", "s")),
+                    (repeat_negative_float, ("s",)),
+                ):
+                    with self.subTest(eval_type=eval_type, dtype=dtype, body=body.__name__):
+                        for conf in (_TRANSPILE_OFF, _TRANSPILE_ON):
+                            with self.sql_conf(conf):
+                                pudf = UserDefinedFunction(body, StringType(), evalType=eval_type)
+                                query = df.select(pudf(*cols))
+                                self.assertGreater(sum(_eval_python_nodes(query).values()), 0)
+                                with self.assertRaisesRegex(Exception, "TypeError"):
+                                    query.collect()
+
+    def test_unary_integral_repeat_and_numeric_equality(self):
+        for eval_type in (PythonEvalType.SQL_BATCHED_UDF, PythonEvalType.SQL_ARROW_BATCHED_UDF):
+            integers = self.spark.createDataFrame([(-2,), (1,)], "a bigint")
+            with self.sql_conf(_TRANSPILE_ON):
+                pudf = UserDefinedFunction(repeat_negated, StringType(), evalType=eval_type)
+                query = integers.select(pudf("a"))
+                self.assertEqual(0, sum(_eval_python_nodes(query).values()))
+                self.assertEqual(["abab", ""], [r[0] for r in query.collect()])
+            self._assert_matches_interpreted(
+                repeat_negated, StringType(), integers, "a", eval_type=eval_type
+            )
+            for df in (
+                integers,
+                self.spark.createDataFrame([(-2.0,), (float("nan"),)], "a double"),
+            ):
+                self._assert_matches_interpreted(
+                    negated_equals_two, BooleanType(), df, "a", eval_type=eval_type
+                )
+
+            nullable = self.spark.createDataFrame([(-2.0,), (float("nan"),), (None,)], "a double")
+            self._assert_matches_interpreted(
+                guarded_negated_equals_two, BooleanType(), nullable, "a", eval_type=eval_type
+            )
 
     def test_numeric_boundary_values_match_interpreted_arrow(self):
         # Identity, because at the boundary any operation would overflow (pinned below).

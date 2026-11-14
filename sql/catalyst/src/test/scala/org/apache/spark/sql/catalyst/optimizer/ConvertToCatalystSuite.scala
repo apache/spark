@@ -280,10 +280,8 @@ class ConvertToCatalystSuite extends PlanTest {
   }
 
   test("falls back for a scalar pandas UDF when the int extension dtype is enabled") {
-    // The transpiled option normalizes a NaN result to NULL, which reproduces the default
-    // dtype regime. Under this conf the result Series is a pandas masked array whose NaN
-    // reaches Spark as NaN, so the normalization would be backwards. udf.py refuses to
-    // transpile when this is set, but it can be enabled after the UDF was built.
+    // Integral inputs become masked arrays whose derived results can retain NaN, unlike
+    // the default numpy-backed conversion. Re-check when the conf changes after construction.
     intExtDtypeOn {
       val tpudf = makeTPUDF(makeScalarPandasUDF(), catalystExpr)
       val result = ConvertToCatalyst.applyExpr(tpudf, parentIsUdf = false)

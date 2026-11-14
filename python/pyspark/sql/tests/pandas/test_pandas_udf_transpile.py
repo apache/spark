@@ -44,12 +44,9 @@ The tests come in three kinds, and the distinction matters when one fails:
     values so that a change is a test failure rather than a surprise in production. They all
     come from numpy computing in the input's fixed width: it wraps on integer overflow, it
     keeps ``float32`` through a ``float`` literal, it converts an integral column to
-    ``float64`` as soon as a batch contains a NULL, and it answers ``a % 0`` with a missing
-    value. In every case the transpiled expression is the exact or ANSI-correct one. Two are
-    worse than merely different interpreted, which is the argument for the rewrite rather
-    than against it: the precision one is *batch-dependent* (move the NULL to another
-    partition and the answer changes, so it is pinned with an explicit single-partition
-    DataFrame), and ``a % 0`` answers NULL or ``0`` depending on one conf.
+    ``float64`` as soon as a batch contains a NULL. The precision loss is batch-dependent:
+    moving the NULL to another partition changes the answer, so the test uses an explicit
+    single-partition DataFrame.
 
 UDF bodies are module-level ``def``s. ``inspect.getsource`` on a lambda passed as a call
 argument returns the enclosing statement, whose top-level node is a call rather than a lambda,
@@ -61,7 +58,9 @@ import unittest
 import warnings
 
 from pyspark.sql import Row
+from pyspark.sql import functions as F
 from pyspark.sql.functions import pandas_udf
+from pyspark.sql.tests.arrow.test_arrow_python_udf_transpile import _eval_python_nodes
 from pyspark.sql.types import (
     BooleanType,
     DecimalType,
@@ -118,6 +117,10 @@ LONG_MIN = -9223372036854775808
 
 def add_one(s):
     return s + 1
+
+
+def add_wide_literal(s):
+    return s + 1000
 
 
 def identity(s):
@@ -437,6 +440,34 @@ class PandasUDFTranspileSubsetTests(PandasUDFTranspileTestsMixin, ReusedSQLTestC
             with self.subTest(func=func.__name__):
                 self._assert_matches_interpreted(func, LongType(), df, "a")
 
+    def test_arithmetic_on_narrow_integrals(self):
+        for dtype in ("tinyint", "smallint", "int"):
+            df = self.spark.createDataFrame([(1,), (None,), (-3,), (0,)], f"a {dtype}")
+            for func in (add_one, subtract_two, times_three, negate, mod_three):
+                with self.subTest(dtype=dtype, func=func.__name__):
+                    self._assert_matches_interpreted(func, LongType(), df, "a")
+
+    def test_integral_options_do_not_duplicate_noncheap_arguments(self):
+        df = self.spark.createDataFrame([(0, 1), (0, None), (1, 3)], "k int, v bigint")
+        results = []
+        for conf in (_TRANSPILE_OFF, _TRANSPILE_ON):
+            with self.sql_conf(conf):
+                pudf = self._pandas_udf(add_one, LongType())
+                grouped = df.groupBy("k").agg(F.sum(pudf(F.col("v") + 1)).alias("total"))
+                left = df.alias("left")
+                right = df.alias("right")
+                joined = left.join(right, pudf(F.col("left.v") + 1) == F.col("right.v")).select(
+                    F.col("left.v"), F.col("right.v")
+                )
+                if conf is _TRANSPILE_ON:
+                    self.assertEqual(0, sum(_eval_python_nodes(grouped).values()))
+                    self.assertEqual(0, sum(_eval_python_nodes(joined).values()))
+                    self.assertNotIn(
+                        "isnan", grouped._jdf.queryExecution().optimizedPlan().toString()
+                    )
+                results.append((grouped.orderBy("k").collect(), joined.collect()))
+        self.assertEqual(results[0], results[1])
+
     def test_arithmetic_on_doubles_including_nan(self):
         # NaN is the case the isnan-to-NULL normalization exists for: interpreted, the result
         # Series is masked with `series.isnull()`, which is True for NaN, so NaN reaches Spark
@@ -444,7 +475,7 @@ class PandasUDFTranspileSubsetTests(PandasUDFTranspileTestsMixin, ReusedSQLTestC
         # every allowlisted operator, so the operator matrix stays on the long column above
         # and this covers the two shapes that differ: an int literal and a float one.
         df = self._doubles(1.0, None, NAN, -2.5, 0.0)
-        for func in (add_one, add_tenth):
+        for func in (add_one, add_tenth, negate):
             with self.subTest(func=func.__name__):
                 self._assert_matches_interpreted(func, DoubleType(), df, "a")
 
@@ -530,13 +561,8 @@ class PandasUDFTranspileSubsetTests(PandasUDFTranspileTestsMixin, ReusedSQLTestC
         self._assert_matches_interpreted(is_missing, BooleanType(), self._strings("x", None), "a")
 
     def test_int_extension_dtype_disables_transpilation(self):
-        # The isnan-to-NULL normalization models the default dtype regime, where the result
-        # Series is numpy-backed and masked with isnull(). Under this conf the Series is a
-        # pandas masked extension array, handed to Arrow with mask=None and whose isnull() is
-        # False for NaN anyway, so a NaN result arrives as NaN rather than NULL and the
-        # normalization would be exactly backwards. No single expression covers both regimes,
-        # so the whole eval type is refused here -- in udf.py and again in ConvertToCatalyst,
-        # since the conf can be flipped after the UDF is built.
+        # Integral inputs become masked arrays whose derived results can retain NaN.
+        # Refuse the regime at construction and again if the conf changes afterwards.
         ext_on = {"spark.sql.execution.pythonUDF.pandas.preferIntExtensionDtype": True}
         with self.sql_conf({**_TRANSPILE_ON, **ext_on}):
             with warnings.catch_warnings(record=True):
@@ -669,6 +695,11 @@ class PandasUDFTranspileRefusalTests(PandasUDFTranspileTestsMixin, ReusedSQLTest
             expect_reason="free variable",
         )
 
+    def test_early_return_reports_if_as_the_reason(self):
+        self._assert_falls_back(
+            branching, LongType(), self._longs(1, None), "a", expect_reason="an `if`"
+        )
+
     def test_multi_statement_body_reports_the_accurate_reason(self):
         # The Series allowlist walk only visits the first statement, so it must check the
         # statement count first -- otherwise a two-statement body is refused as "an
@@ -713,34 +744,14 @@ class PandasUDFTranspileDivergenceTests(PandasUDFTranspileTestsMixin, ReusedSQLT
             self.spark.sparkContext.parallelize(list(pairs), 1), "a bigint, b bigint"
         )
 
-    def test_modulo_by_zero_raises_where_numpy_yields_a_missing_value(self):
-        # pandas promotes int64 to float64 for `% 0` and yields NaN, which the return path
-        # masks to NULL. ANSI raises REMAINDER_BY_ZERO, and there is no single interpreted answer
-        # to reproduce anyway -- see the extension-dtype case below.
-        interpreted, transpiled = self._pin_divergence(
-            modulo, LongType(), self._mods((5, 0)), "a", "b"
-        )
-        self.assertEqual(([None], None), interpreted)
-        self.assertIs(transpiled[0], _RAISED)
-        self.assertIn("REMAINDER_BY_ZERO", str(transpiled[1]))
-
-    def test_modulo_by_zero_yields_zero_under_int_extension_dtype(self):
-        # The same body and data, one conf apart, and pandas answers 0 rather than NULL. That
-        # inconsistency is the reason `% 0` is documented rather than reproduced -- a guard
-        # emitting NULL would match one regime and contradict the other, as well as ANSI.
-        # Nothing is transpiled under this conf (see
-        # test_int_extension_dtype_disables_transpilation), so this pins the interpreted side
-        # only; the transpiled REMAINDER_BY_ZERO is pinned by the default-regime test above.
-        with self.sql_conf(
-            {
-                **_TRANSPILE_OFF,
-                "spark.sql.execution.pythonUDF.pandas.preferIntExtensionDtype": True,
-            }
+    def test_modulo_by_zero_matches_numpy_missing_value(self):
+        for schema, values, return_type in (
+            ("a bigint, b bigint", [(5, 0), (None, 0), (7, -3), (-7, 3)], LongType()),
+            ("a double, b double", [(5.0, 0.0), (5.0, -0.0), (7.0, -3.0)], DoubleType()),
         ):
-            interpreted = self._values_or_raised(
-                self._mods((5, 0)).select(self._pandas_udf(modulo, LongType())("a", "b"))
-            )
-        self.assertEqual(([0], None), interpreted)
+            with self.subTest(schema=schema):
+                df = self.spark.createDataFrame(values, schema)
+                self._assert_matches_interpreted(modulo, return_type, df, "a", "b")
 
     def test_modulo_overflow_boundary_raises_where_numpy_wraps(self):
         # The lowering is `sign(b) * pmod(sign(b) * a, abs(b))`, whose intermediate negation
@@ -764,6 +775,23 @@ class PandasUDFTranspileDivergenceTests(PandasUDFTranspileTestsMixin, ReusedSQLT
             "a",
             "b",
         )
+
+    def test_narrow_integer_overflow_and_wide_literal(self):
+        for dtype, maximum in (("tinyint", 127), ("smallint", 32767), ("int", 2**31 - 1)):
+            df = self.spark.createDataFrame([(maximum,)], f"a {dtype}")
+            interpreted, transpiled = self._pin_divergence(add_one, LongType(), df, "a")
+            self.assertEqual(([-maximum - 1], None), interpreted)
+            if dtype == "int":
+                self.assertIs(transpiled[0], _RAISED)
+                self.assertIn("ARITHMETIC_OVERFLOW", str(transpiled[1]))
+            else:
+                self.assertEqual(([maximum + 1], None), transpiled)
+
+        df = self.spark.createDataFrame([(1,)], "a tinyint")
+        interpreted, transpiled = self._pin_divergence(add_wide_literal, LongType(), df, "a")
+        self.assertIs(interpreted[0], _RAISED)
+        self.assertIn("OverflowError", str(interpreted[1]))
+        self.assertEqual(([1001], None), transpiled)
 
     def test_integer_overflow_raises_where_numpy_wraps(self):
         df = self._longs(LONG_MAX)
