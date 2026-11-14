@@ -57,6 +57,7 @@ object TimeWindowResolution {
     val newMetadata = new MetadataBuilder()
       .withMetadata(metadata)
       .putBoolean(TimeWindow.marker, true)
+      .putLong(TimeWindow.durationKey, window.windowDuration)
       .build()
 
     def getWindow(i: Int, dataType: DataType): Expression = {
@@ -209,6 +210,7 @@ object TimeWindowResolution {
       val newMetadata = new MetadataBuilder()
         .withMetadata(metadata)
         .remove(TimeWindow.marker)
+        .remove(TimeWindow.durationKey)
         .remove(SessionWindow.marker)
         .build()
 
