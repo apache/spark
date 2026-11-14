@@ -714,7 +714,8 @@ examples = Module(
     name="examples",
     dependencies=[graphx, mllib, streaming, hive],
     source_file_regexes=[
-        "examples/",
+        # The Rust examples are tested by the rust-sdk module instead.
+        "examples/(?!src/main/rust/)",
     ],
     sbt_test_goals=[
         "examples/test",
@@ -1925,6 +1926,18 @@ docs = Module(
     source_file_regexes=[
         "docs/",
         "python/docs/",
+    ],
+)
+
+# The Rust SDK of native data sources, a Cargo workspace that neither Maven nor SBT builds. The
+# rust-sdk job of build_and_test.yml tests it with its examples, against the C header it binds.
+rust_sdk = Module(
+    name="rust-sdk",
+    dependencies=[],
+    source_file_regexes=[
+        "sql/native/rust/",
+        "examples/src/main/rust/",
+        r"sql/core/src/main/resources/org/apache/spark/sql/datasource/spark_datasource\.h",
     ],
 )
 

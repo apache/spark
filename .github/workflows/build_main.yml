@@ -57,5 +57,6 @@ jobs:
           "oidc-e2e": "true",
           "buf": "true",
           "ui": "true",
+          "rust-sdk": "true",
           "transpile": "true"
         }' || '' }}

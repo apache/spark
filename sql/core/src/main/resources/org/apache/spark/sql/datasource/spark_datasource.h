@@ -65,7 +65,7 @@
  *   the columns to read and the location of the checkpoint of the source, and keeps it until the
  *   streaming query stops. When the checkpoint does not have the initial offset of the source yet,
  *   Spark asks for it with initial_offset, and keeps it in the checkpoint. For each micro-batch, it
- *   asks for the latest_offset, with the offset that the micro-batch starts after, plans the
+ *   asks for the latest_offset, with the starting progress boundary of the micro-batch, plans the
  *   partitions with stream_partitions, which also returns the state of the stream reader, then
  *   calls read on the executors. With Trigger.AvailableNow, a run reads the data that was
  *   available when it started: Spark asks for the latest_offset without a limit once, before the
@@ -484,7 +484,7 @@ typedef struct SparkDsLatestOffsetInfo {
   /* The size of this struct in the header that Spark was built with, as in SparkDsHost. */
   int64_t size;
   /*
-   * The offset, as JSON, that the next micro-batch starts after: the end of the last micro-batch,
+   * The starting progress boundary, as JSON: the end of the last micro-batch,
    * or the initial offset before the first one, for every trigger. With Trigger.AvailableNow,
    * Spark asks for the latest offset without a limit once, before the first micro-batch that it
    * plans, and reads up to it: in a single micro-batch, or with a limit, in micro-batches of
@@ -517,7 +517,12 @@ typedef struct SparkDsLatestOffsetInfo {
 typedef struct SparkDsStreamPartitionsInfo {
   /* The size of this struct in the header that Spark was built with, as in SparkDsHost. */
   int64_t size;
-  /* The offsets, as JSON, that the micro-batch reads the data after, up to and including end. */
+  /*
+   * The starting and ending progress boundaries, as JSON. The library defines how offsets map
+   * to records: if an offset is the next row to read, {"next":10} to {"next":13} reads rows
+   * 10, 11, and 12, the range [10, 13). Equal boundaries describe no data, and adjacent ranges
+   * must neither repeat nor skip records.
+   */
   const char* start;
   const char* end;
 } SparkDsStreamPartitionsInfo;
@@ -526,7 +531,7 @@ typedef struct SparkDsStreamPartitionsInfo {
 typedef struct SparkDsCommitOffsetInfo {
   /* The size of this struct in the header that Spark was built with, as in SparkDsHost. */
   int64_t size;
-  /* The offset, as JSON, up to and including which Spark processed the data. */
+  /* The progress boundary, as JSON, of the data that Spark processed. */
   const char* end;
 } SparkDsCommitOffsetInfo;
 
@@ -817,7 +822,7 @@ typedef struct SparkDsLibrary {
    * Returns the most recent offset available after start, within the limit and up to the end of
    * the run in its info. Spark may call it more than once for a micro-batch, see Streaming reads.
    *
-   * info: the offset that the next micro-batch starts after, the limit, and the end of the run
+   * info: the starting progress boundary of the next micro-batch, the limit, and the end of the run
    * set_offset: called once with the offset, as compact JSON on a single line
    */
   int (*latest_offset)(void* reader, const SparkDsLatestOffsetInfo* info, SparkDsSink set_offset,
@@ -828,7 +833,7 @@ typedef struct SparkDsLibrary {
    * both sides of a union of the source with itself, read the partitions of a single call, with
    * the state that it returned.
    *
-   * info: the offsets that the micro-batch reads the data after, up to and including the end
+   * info: the progress boundaries of the micro-batch, as described by SparkDsStreamPartitionsInfo
    * add_partition: called with each partition, serialized in a format defined by the library
    * set_state: called once with the state of the stream reader that read needs on the executors
    *            to read these partitions, or not at all if there is none
@@ -837,8 +842,8 @@ typedef struct SparkDsLibrary {
                            SparkDsSink add_partition, SparkDsSink set_state, void* sink);
 
   /*
-   * Tells the library that Spark has processed all the data up to and including an offset, and
-   * will not ask for it again.
+   * Tells the library that Spark has processed the data represented by an offset's progress
+   * boundary, and will not ask for that data again.
    *
    * info: the offset
    */
