@@ -592,6 +592,116 @@ private[spark] object BasePythonRunner extends Logging {
       } else log"") +
     log"hasInputs = ${MDC(LogKeys.PYTHON_WORKER_HAS_INPUTS, hasInputs)}"
   }
+
+  /**
+   * Handles the idle timeout of a Python worker on behalf of one stream that reads from it:
+   * logs every timeout, kills the worker on the first one if `killOnIdleTimeout` is set, and
+   * fails the read once the killed worker has closed the connection.
+   *
+   * The caller decides how a timeout is detected. Streams that wait on the worker's selector
+   * use `select`; a stream that relies on the socket read timeout calls `onIdleTimeout` when
+   * the read times out. Either way, the stream passes the result of each read to
+   * `throwIfKilled`.
+   *
+   * This class is not thread-safe. Use an instance only from the thread that reads from the
+   * worker.
+   *
+   * @param context the task that reads from the worker, or None on the driver. It is only used
+   *                to identify the task in the log messages.
+   * @param loggerName the name of the logger to use, so that the messages stay under the logger
+   *                   of the runner that owns the stream.
+   * @param workerName how the log messages refer to the worker.
+   */
+  private[spark] class IdleTimeoutHandler(
+      worker: PythonWorker,
+      handle: Option[PythonWorkerHandle],
+      idleTimeoutSeconds: Long,
+      killOnIdleTimeout: Boolean,
+      context: Option[TaskContext],
+      loggerName: String,
+      workerName: String = "Python worker") extends Logging {
+
+    private[this] val idleTimeoutMillis: Long = TimeUnit.SECONDS.toMillis(idleTimeoutSeconds)
+    private[this] val workerNameMessage =
+      MessageWithContext(workerName, java.util.Collections.emptyMap[String, String]())
+    private[this] var pythonWorkerKilled: Boolean = false
+
+    override protected def logName: String = loggerName
+
+    /**
+     * Waits on the selector of the worker for at most the idle timeout, or without a limit if
+     * there is no idle timeout, and handles the idle timeout if the wait ran into it.
+     *
+     * @param hasInputs whether there is still input to send to the worker, for the log message.
+     */
+    def select(hasInputs: => Boolean): Unit = {
+      val start = System.currentTimeMillis()
+      val selected = worker.selector.select(idleTimeoutMillis)
+      val end = System.currentTimeMillis()
+      if (selected == 0
+        // Avoid logging if no timeout or the selector doesn't wait for the idle timeout
+        // as it can return 0 in some case.
+        && idleTimeoutMillis > 0 && (end - start) >= idleTimeoutMillis) {
+        onIdleTimeout(hasInputs)
+      }
+    }
+
+    /**
+     * Called when no data arrived from the worker within the idle timeout.
+     *
+     * @param hasInputs whether there is still input to send to the worker, for the log message.
+     */
+    def onIdleTimeout(hasInputs: => Boolean): Unit = {
+      if (pythonWorkerKilled) {
+        logWarning(
+          log"Waiting for " + workerNameMessage +
+          log" process to terminate after idle timeout: " +
+          pythonWorkerStatusMessageWithContext(handle, worker, hasInputs))
+      } else {
+        logWarning(
+          log"Idle timeout reached for " + workerNameMessage + log" (timeout: " +
+          log"${MDC(PYTHON_WORKER_IDLE_TIMEOUT, idleTimeoutSeconds)} seconds). " +
+          log"No data received from the worker process" +
+          (context match {
+            case Some(c) =>
+              log" - " + pythonWorkerStatusMessageWithContext(handle, worker, hasInputs) +
+              log" - ${MDC(TASK_NAME, taskIdentifier(c))}"
+            case None =>
+              log": " + pythonWorkerStatusMessageWithContext(handle, worker, hasInputs)
+          }))
+        if (killOnIdleTimeout) {
+          handle.foreach { handle =>
+            if (handle.isAlive()) {
+              logWarning(
+                log"Terminating " + workerNameMessage +
+                log" process due to idle timeout (timeout: " +
+                log"${MDC(PYTHON_WORKER_IDLE_TIMEOUT, idleTimeoutSeconds)} seconds)" +
+                (context match {
+                  case Some(c) => log" - ${MDC(TASK_NAME, taskIdentifier(c))}"
+                  case None => log""
+                }))
+              pythonWorkerKilled = handle.destroy()
+            }
+          }
+        }
+      }
+    }
+
+    /**
+     * Throws a [[PythonWorkerException]] if `n`, the result of a read from the worker, is the
+     * end of the stream and the worker was killed because of the idle timeout.
+     */
+    def throwIfKilled(n: Int): Unit = {
+      if (n == -1 && pythonWorkerKilled) {
+        val base = "Python worker process terminated due to idle timeout " +
+          s"(timeout: $idleTimeoutSeconds seconds)"
+        val msg = handle.flatMap(_.terminationDiagnostics())
+          .map(error => s"$base: $error")
+          .getOrElse(base)
+        throw new PythonWorkerException(msg)
+      }
+    }
+  }
 }
 
 /**
@@ -854,9 +964,10 @@ private[spark] abstract class BasePythonRunner[IN, OUT](
     // - Log warning on each timeout
     // - If killOnIdleTimeout=true: kill worker, then throw PythonWorkerException
     // - If killOnIdleTimeout=false: log only, retry read (continue waiting)
+    val idleTimeoutHandler = new IdleTimeoutHandler(
+      worker, handle, idleTimeoutSeconds, killOnIdleTimeout, Some(context), logName)
     val socketInput = new InputStream {
       private val inner = worker.channel.socket().getInputStream
-      private var pythonWorkerKilled = false
       override def read(): Int = doRead(() => inner.read())
       override def read(b: Array[Byte], off: Int, len: Int): Int =
         doRead(() => inner.read(b, off, len))
@@ -869,42 +980,10 @@ private[spark] abstract class BasePythonRunner[IN, OUT](
             retry = false
           } catch {
             case _: java.net.SocketTimeoutException =>
-              if (pythonWorkerKilled) {
-                logWarning(
-                  log"Waiting for Python worker process to terminate after idle timeout: " +
-                  pythonWorkerStatusMessageWithContext(
-                    handle, worker, hasInputs = true))
-              } else {
-                logWarning(
-                  log"Idle timeout reached for Python worker (timeout: " +
-                  log"${MDC(PYTHON_WORKER_IDLE_TIMEOUT, idleTimeoutSeconds)} seconds). " +
-                  log"No data received from the worker process - " +
-                  pythonWorkerStatusMessageWithContext(
-                    handle, worker, hasInputs = true) +
-                  log" - ${MDC(TASK_NAME, taskIdentifier(context))}")
-                if (killOnIdleTimeout) {
-                  handle.foreach { h =>
-                    if (h.isAlive()) {
-                      logWarning(
-                        log"Terminating Python worker process due to idle timeout " +
-                        log"(timeout: " +
-                        log"${MDC(PYTHON_WORKER_IDLE_TIMEOUT, idleTimeoutSeconds)} " +
-                        log"seconds) - ${MDC(TASK_NAME, taskIdentifier(context))}")
-                      pythonWorkerKilled = h.destroy()
-                    }
-                  }
-                }
-              }
+              idleTimeoutHandler.onIdleTimeout(hasInputs = true)
           }
         }
-        if (result == -1 && pythonWorkerKilled) {
-          val base = "Python worker process terminated due to idle timeout " +
-            s"(timeout: $idleTimeoutSeconds seconds)"
-          val msg = handle.flatMap(_.terminationDiagnostics())
-            .map(error => s"$base: $error")
-            .getOrElse(base)
-          throw new PythonWorkerException(msg)
-        }
+        idleTimeoutHandler.throwIfKilled(result)
         result
       }
     }
@@ -1407,8 +1486,8 @@ private[spark] abstract class BasePythonRunner[IN, OUT](
       }
     }
 
-    private[this] val idleTimeoutMillis: Long = TimeUnit.SECONDS.toMillis(idleTimeoutSeconds)
-    private[this] var pythonWorkerKilled: Boolean = false
+    private[this] val idleTimeoutHandler = new IdleTimeoutHandler(
+      worker, handle, idleTimeoutSeconds, killOnIdleTimeout, Some(context), logName)
 
     override def read(b: Array[Byte], off: Int, len: Int): Int = {
       // The code below manipulates the InputFileBlockHolder thread local in order
@@ -1443,37 +1522,7 @@ private[spark] abstract class BasePythonRunner[IN, OUT](
       val buf = ByteBuffer.wrap(b, off, len)
       var n = 0
       while (n == 0) {
-        val start = System.currentTimeMillis()
-        val selected = worker.selector.select(idleTimeoutMillis)
-        val end = System.currentTimeMillis()
-        if (selected == 0
-          // Avoid logging if no timeout or the selector doesn't wait for the idle timeout
-          // as it can return 0 in some case.
-          && idleTimeoutMillis > 0 && (end - start) >= idleTimeoutMillis) {
-          if (pythonWorkerKilled) {
-            logWarning(
-              log"Waiting for Python worker process to terminate after idle timeout: " +
-              pythonWorkerStatusMessageWithContext(handle, worker, hasInput || buffer.hasRemaining))
-          } else {
-            logWarning(
-              log"Idle timeout reached for Python worker (timeout: " +
-              log"${MDC(PYTHON_WORKER_IDLE_TIMEOUT, idleTimeoutSeconds)} seconds). " +
-              log"No data received from the worker process - " +
-              pythonWorkerStatusMessageWithContext(
-                handle, worker, hasInput || buffer.hasRemaining) +
-              log" - ${MDC(TASK_NAME, taskIdentifier(context))}")
-            if (killOnIdleTimeout) {
-              handle.foreach { handle =>
-                if (handle.isAlive()) {
-                  logWarning(log"Terminating Python worker process due to idle timeout " +
-                    log"(timeout: ${MDC(PYTHON_WORKER_IDLE_TIMEOUT, idleTimeoutSeconds)} " +
-                    log"seconds) - ${MDC(TASK_NAME, taskIdentifier(context))}")
-                  pythonWorkerKilled = handle.destroy()
-                }
-              }
-            }
-          }
-        }
+        idleTimeoutHandler.select(hasInput || buffer.hasRemaining)
         if (worker.selectionKey.isReadable) {
           n = worker.channel.read(buf)
         }
@@ -1518,14 +1567,7 @@ private[spark] abstract class BasePythonRunner[IN, OUT](
           }
         }
       }
-      if (n == -1 && pythonWorkerKilled) {
-        val base = "Python worker process terminated due to idle timeout " +
-          s"(timeout: $idleTimeoutSeconds seconds)"
-        val msg = handle.flatMap(_.terminationDiagnostics())
-          .map(error => s"$base: $error")
-          .getOrElse(base)
-        throw new PythonWorkerException(msg)
-      }
+      idleTimeoutHandler.throwIfKilled(n)
       n
     }
 

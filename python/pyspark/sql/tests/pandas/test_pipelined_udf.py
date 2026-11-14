@@ -23,6 +23,7 @@ correctness of the pipelined data transfer path for various UDF types.
 """
 
 import os
+import time
 import unittest
 
 from pyspark import SparkConf
@@ -249,6 +250,32 @@ class PipelinedUDFTests(ReusedSQLTestCase):
 
         with self.assertRaisesRegex(Exception, "intentional error"):
             self.spark.range(10).select(bad_udf(col("id"))).collect()
+
+    def test_udf_kill_on_idle_timeout(self):
+        """A worker that produces no output within the idle timeout is killed."""
+        uds_enabled = self.spark.conf.get(
+            "spark.python.unix.domain.socket.enabled", os.environ.get("PYSPARK_UDS_MODE", "false")
+        )
+        if uds_enabled.lower() == "true":
+            self.skipTest("Pipelined mode has no idle timeout over Unix domain sockets.")
+
+        with self.sql_conf(
+            {
+                "spark.sql.execution.pyspark.udf.idleTimeoutSeconds": "1s",
+                "spark.sql.execution.pyspark.udf.killOnIdleTimeout": "true",
+            }
+        ):
+
+            @pandas_udf(LongType())
+            def slow_udf(x: pd.Series) -> pd.Series:
+                time.sleep(30)
+                return x
+
+            with self.assertRaisesRegex(
+                Exception,
+                "Python worker process terminated due to idle timeout \\(timeout: 1 seconds\\)",
+            ):
+                self.spark.range(1).select(slow_udf(col("id"))).collect()
 
     def test_offheap_reader_with_head_does_not_segfault(self):
         """Regression test: SPARK-33277 reproducer adapted for pipelined mode.
