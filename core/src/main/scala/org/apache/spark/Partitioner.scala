@@ -203,8 +203,7 @@ class RangePartitioner[K : Ordering : ClassTag, V](
       val sampleSize = math.min(samplePointsPerPartitionHint.toDouble * partitions, 1e6)
       // Assume the input partitions are roughly balanced and over-sample a little bit.
       val sampleSizePerPartition = math.ceil(3.0 * sampleSize / rdd.partitions.length).toInt
-      // Seeds derived from the RDD id move the bounds of the same data on every execution, which
-      // breaks seeded samples over a global sort.
+      // Keep range bounds stable across executions of the same input.
       val legacyRddIdSeed = rdd.sparkContext.conf.get(config.LEGACY_RANGE_PARTITIONER_RDD_ID_SEED)
       val (numItems, sketched) =
         RangePartitioner.sketch(rdd.map(_._1), sampleSizePerPartition, legacyRddIdSeed)

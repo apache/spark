@@ -2940,7 +2940,7 @@ package object config {
       .doc("When true, RangePartitioner seeds the samples that pick its range bounds with the " +
         "RDD id, so the bounds of the same data can change on every execution. When false, the " +
         "seeds depend only on the partition index.")
-      .version("5.0.0")
+      .version("4.4.0")
       .withBindingPolicy(ConfigBindingPolicy.NOT_APPLICABLE)
       .booleanConf
       .createWithDefault(false)
