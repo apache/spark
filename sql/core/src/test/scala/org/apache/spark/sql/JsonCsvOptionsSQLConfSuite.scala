@@ -21,6 +21,7 @@ import java.sql.{Date, Timestamp}
 import java.time.Instant
 
 import org.apache.spark.sql.catalyst.expressions.{EquivalentExpressions, Expression, JsonToStructs, StructsToCsv}
+import org.apache.spark.sql.catalyst.expressions.objects.Invoke
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSparkSession
 
@@ -210,6 +211,105 @@ class JsonCsvOptionsSQLConfSuite extends QueryTest with SharedSparkSession {
           else Row(s"$id,", s"$id,")
         }
         checkAnswer(result, expected)
+      }
+    }
+  }
+
+  test("cached CSV projections cannot substitute a different captured null-marker rendering") {
+    val key = SQLConf.LEGACY_NULL_VALUE_WRITTEN_AS_QUOTED_EMPTY_STRING_CSV.key
+    val query = """SELECT to_csv(named_struct('n', CAST(NULL AS STRING), 'id', CAST(id AS STRING)),
+                  |map('nullValue', ' ')) AS value FROM range(1, 3)""".stripMargin
+    def analyzed(value: Boolean): DataFrame = withSQLConf(key -> value.toString) {
+      val df = sql(query)
+      df.queryExecution.analyzed
+      df
+    }
+    // Both captures must precede cache registration, and cache lookup uses one common live conf.
+    val quoted = analyzed(true)
+    val unquoted = analyzed(false)
+    withSQLConf(key -> "false") {
+      quoted.cache()
+      try {
+        quoted.count()
+        checkAnswer(quoted, Seq(Row("\"\",1"), Row("\"\",2")))
+        checkAnswer(unquoted, Seq(Row(",1"), Row(",2")))
+      } finally {
+        quoted.unpersist(blocking = true)
+      }
+    }
+  }
+
+  for (conversion <- Seq("from_json", "to_csv", "to_json_array", "to_json_map")) {
+    test(s"saved functions share $conversion when captured defaults are ineffective") {
+      val (key, body, returnType) = conversion match {
+        case "from_json" =>
+          (fallbackKey, """from_json(concat('{"id":', id, ',"d":"1"}'), 'id BIGINT, d DATE')""",
+            "STRUCT<id: BIGINT, d: DATE>")
+        case "to_csv" =>
+          (SQLConf.LEGACY_NULL_VALUE_WRITTEN_AS_QUOTED_EMPTY_STRING_CSV.key,
+            "to_csv(named_struct('id', id))", "STRING")
+        case "to_json_array" =>
+          (SQLConf.JSON_GENERATOR_IGNORE_NULL_FIELDS.key,
+            "to_json(array(id, CAST(NULL AS BIGINT)))", "STRING")
+        case "to_json_map" =>
+          (SQLConf.JSON_GENERATOR_IGNORE_NULL_FIELDS.key,
+            "to_json(map('id', id, 'n', CAST(NULL AS BIGINT)))", "STRING")
+      }
+      withUserDefinedFunction("captured_fn_1" -> false, "captured_fn_2" -> false) {
+        val firstValue = if (conversion == "from_json") None else Some(false)
+        val definitions = Seq("captured_fn_1" -> firstValue, "captured_fn_2" -> Some(true))
+        for ((name, value) <- definitions) {
+          withBooleanConf(key, value) {
+            sql(s"CREATE FUNCTION $name(id BIGINT) RETURNS $returnType RETURN $body")
+          }
+        }
+        withSQLConf(SQLConf.LEGACY_TIME_PARSER_POLICY.key -> "CORRECTED") {
+          val result = sql("SELECT captured_fn_1(id), captured_fn_2(id) FROM range(1, 3)")
+          val conversions = result.queryExecution.optimizedPlan.flatMap { plan =>
+            plan.expressions.flatMap(_.collect {
+              case j: JsonToStructs => j: Expression
+              case c: StructsToCsv => c: Expression
+              case i: Invoke if i.functionName == "evaluate" => i: Expression
+            })
+          }
+          assert(conversions.size == 2)
+          val equivalents = new EquivalentExpressions
+          conversions.foreach(equivalents.addExprTree(_))
+          assert(equivalents.getCommonSubexpressions.exists(_.semanticEquals(conversions.head)))
+          val expected = (1 to 2).map { id =>
+            val value = conversion match {
+              case "from_json" => Row(id.toLong, Date.valueOf("1970-01-02"))
+              case "to_csv" => id.toString
+              case "to_json_array" => s"[$id,null]"
+              case "to_json_map" => s"""{"id":$id,"n":null}"""
+            }
+            Row(value, value)
+          }
+          checkAnswer(result, expected)
+        }
+      }
+    }
+  }
+
+  test("saved functions keep distinct full results for unset and false JSON fallback") {
+    val body = """from_json(concat('{"id":', id, ',"d":"1"}'), 'id BIGINT, d DATE')"""
+    withSQLConf(SQLConf.LEGACY_TIME_PARSER_POLICY.key -> "CORRECTED") {
+      withUserDefinedFunction("captured_fn_1" -> false, "captured_fn_2" -> false) {
+        for ((name, value) <- Seq("captured_fn_1" -> None, "captured_fn_2" -> Some(false))) {
+          withFallbackConf(value) {
+            sql(s"CREATE FUNCTION $name(id BIGINT) " +
+              s"RETURNS STRUCT<id: BIGINT, d: DATE> RETURN $body")
+          }
+        }
+        val result = sql("SELECT captured_fn_1(id), captured_fn_2(id) FROM range(1, 3)")
+        val conversions = result.queryExecution.optimizedPlan.flatMap { plan =>
+          plan.expressions.flatMap(_.collect { case j: JsonToStructs => j })
+        }
+        assert(conversions.size == 2)
+        assert(!conversions.head.semanticEquals(conversions.last))
+        checkAnswer(result, (1 to 2).map { id =>
+          Row(Row(id.toLong, Date.valueOf("1970-01-02")), Row(id.toLong, null))
+        })
       }
     }
   }

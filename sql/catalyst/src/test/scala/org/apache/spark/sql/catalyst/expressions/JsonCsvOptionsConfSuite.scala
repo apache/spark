@@ -20,6 +20,7 @@ package org.apache.spark.sql.catalyst.expressions
 import java.time.LocalDateTime
 
 import org.apache.spark.SparkFunSuite
+import org.apache.spark.sql.catalyst.analysis.UnresolvedAttribute
 import org.apache.spark.sql.catalyst.util.DateTimeUtils
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
@@ -29,6 +30,15 @@ class JsonCsvOptionsConfSuite extends SparkFunSuite with ExpressionEvalHelper {
 
   private val struct = CreateNamedStruct(Seq(Literal("id"),
     BoundReference(0, LongType, nullable = false), Literal("n"), Literal.create(null, IntegerType)))
+
+  private def assertShared(first: Expression, second: Expression): Unit = {
+    assert(first.semanticEquals(second))
+    assert(first.semanticHash() == second.semanticHash())
+    val equivalents = new EquivalentExpressions
+    equivalents.addExprTree(first)
+    equivalents.addExprTree(second)
+    assert(equivalents.getCommonSubexpressions.exists(_.semanticEquals(first)))
+  }
 
   for (ignoreNulls <- Seq(true, false)) {
     test(s"to_json captures ignoreNullFields=$ignoreNulls across copies and serialization") {
@@ -153,7 +163,7 @@ class JsonCsvOptionsConfSuite extends SparkFunSuite with ExpressionEvalHelper {
     assert(expression.copy(nullValueWrittenAsQuotedEmptyString = true).semanticEquals(
       expression.copy(nullValueWrittenAsQuotedEmptyString = false)))
     val nonEmptyNullValue = expression.copy(options = Map("nullValue" -> "NULL"))
-    assert(nonEmptyNullValue.copy(nullValueWrittenAsQuotedEmptyString = true).semanticEquals(
+    assert(!nonEmptyNullValue.copy(nullValueWrittenAsQuotedEmptyString = true).semanticEquals(
       nonEmptyNullValue.copy(nullValueWrittenAsQuotedEmptyString = false)))
     Seq(Map.empty[String, String], Map("treatNullAsEmptyString" -> null)).foreach { options =>
       val configured = expression.copy(options = options)
@@ -165,6 +175,97 @@ class JsonCsvOptionsConfSuite extends SparkFunSuite with ExpressionEvalHelper {
     JsonToStructs(new StructType().add("ts", TimestampType),
       Map("enableDateTimeParsingFallback" -> "invalid"),
       BoundReference(0, StringType, nullable = false), Some("UTC")).canonicalized
+  }
+
+  test("CSV null markers preserve result-affecting captured defaults and modes") {
+    val input = CreateNamedStruct(Seq(Literal("n"), Literal.create(null, StringType),
+      Literal("x"), BoundReference(0, StringType, nullable = false)))
+    for (marker <- Seq(" ", "\"\"")) {
+      val options = Map("nullValue" -> marker)
+      val quoted = StructsToCsv(options, input, Some("UTC"),
+        nullValueWrittenAsQuotedEmptyString = true)
+      val unquoted = quoted.copy(nullValueWrittenAsQuotedEmptyString = false)
+      assert(quoted.eval(create_row("x")) != unquoted.eval(create_row("x")))
+      assert(!quoted.semanticEquals(unquoted))
+      assert(!quoted.semanticEquals(quoted.copy(useCapturedOptionDefaults = false)))
+    }
+    checkEvaluation(StructsToCsv(Map("nullValue" -> " "), input, Some("UTC"),
+      nullValueWrittenAsQuotedEmptyString = true), "\"\",x", create_row("x"))
+    checkEvaluation(StructsToCsv(Map("nullValue" -> " "), input, Some("UTC"),
+      nullValueWrittenAsQuotedEmptyString = false), ",x", create_row("x"))
+  }
+
+  test("CSV conversions share when every top-level field is nonnullable") {
+    val schemas = Seq(new StructType().add("id", LongType, nullable = false),
+      new StructType().add("nested", ArrayType(IntegerType), nullable = false))
+    schemas.foreach { schema =>
+      val csv = StructsToCsv(Map.empty, BoundReference(0, schema, nullable = false), Some("UTC"))
+      assertShared(csv.copy(nullValueWrittenAsQuotedEmptyString = true),
+        csv.copy(nullValueWrittenAsQuotedEmptyString = false))
+      assertShared(csv.copy(useCapturedOptionDefaults = true),
+        csv.copy(useCapturedOptionDefaults = false))
+    }
+    // Identity checks must remain safe before resolution/type checking and option validation.
+    StructsToCsv(Map.empty, UnresolvedAttribute("s")).canonicalized
+    StructsToCsv(Map.empty, BoundReference(0, IntegerType, nullable = true)).canonicalized
+    StructsToCsv(Map("quoteAll" -> "invalid"),
+      BoundReference(0, schemas.head, nullable = false)).canonicalized
+  }
+
+  test("format-free captured unset and true share parsing but false remains distinct") {
+    for (policy <- Seq("CORRECTED", "LEGACY", "EXCEPTION")) {
+      withSQLConf(SQLConf.LEGACY_TIME_PARSER_POLICY.key -> policy) {
+        val parser = JsonToStructs(new StructType().add("d", DateType).add("ts", TimestampType),
+          Map.empty, BoundReference(0, StringType, nullable = false), Some("UTC"),
+          enableDateTimeParsingFallback = None)
+        assertShared(parser, parser.copy(enableDateTimeParsingFallback = Some(true)))
+        assert(!parser.semanticEquals(parser.copy(enableDateTimeParsingFallback = Some(false))))
+        assert(!parser.semanticEquals(parser.copy(useCapturedOptionDefaults = false)))
+        for (key <- Seq("DaTeFoRmAt", "TiMeStAmPfOrMaT"); value <- Seq(null, "invalid")) {
+          val configured = parser.copy(options = Map(key -> value))
+          assert(!configured.semanticEquals(
+            configured.copy(enableDateTimeParsingFallback = Some(true))))
+        }
+      }
+    }
+    withSQLConf(SQLConf.LEGACY_TIME_PARSER_POLICY.key -> "CORRECTED") {
+      val parser = JsonToStructs(new StructType().add("d", DateType), Map.empty,
+        BoundReference(0, StringType, nullable = false), Some("UTC"),
+        enableDateTimeParsingFallback = None)
+      checkEvaluation(parser, create_row(1), create_row("""{"d":"1"}"""))
+      checkEvaluation(parser.copy(enableDateTimeParsingFallback = Some(false)),
+        create_row(null), create_row("""{"d":"1"}"""))
+    }
+  }
+
+  test("JSON arrays and maps without structs share serialization across captured defaults") {
+    val types = Seq(ArrayType(LongType), MapType(StringType, LongType),
+      ArrayType(MapType(StringType, ArrayType(LongType))))
+    types.foreach { dataType =>
+      val json = StructsToJson(Map.empty,
+        BoundReference(0, dataType, nullable = false), Some("UTC"))
+      assertShared(json.copy(ignoreNullFields = true).replacement,
+        json.copy(ignoreNullFields = false).replacement)
+      assertShared(json.copy(useCapturedOptionDefaults = true).replacement,
+        json.copy(useCapturedOptionDefaults = false).replacement)
+    }
+    val withFields = Seq(ArrayType(new StructType().add("n", LongType)),
+      MapType(StringType, new StructType().add("n", LongType)),
+      ArrayType(new ExampleBaseTypeUDT))
+    withFields.foreach { dataType =>
+      val json = StructsToJson(Map.empty,
+        BoundReference(0, dataType, nullable = false), Some("UTC"))
+      assert(!json.copy(ignoreNullFields = true).replacement.semanticEquals(
+        json.copy(ignoreNullFields = false).replacement))
+    }
+    for (ignore <- Seq(true, false)) {
+      checkEvaluation(StructsToJson(Map.empty,
+        BoundReference(0, ArrayType(LongType), nullable = false), Some("UTC"),
+        ignoreNullFields = ignore), "[1,null]", create_row(Seq[java.lang.Long](1L, null)))
+      checkEvaluation(StructsToJson(Map.empty,
+        BoundReference(0, MapType(StringType, LongType), nullable = false), Some("UTC"),
+        ignoreNullFields = ignore), """{"a":null}""", create_row(create_map("a" -> null)))
+    }
   }
 
   test("conversion sharing respects the binding mode only when it can affect results") {
@@ -216,7 +317,10 @@ class JsonCsvOptionsConfSuite extends SparkFunSuite with ExpressionEvalHelper {
           val timestamp = if (creatorValue) null else {
             DateTimeUtils.localDateTimeToMicros(LocalDateTime.of(2024, 1, 2, 0, 0))
           }
-          checkEvaluation(parser, create_row(timestamp), create_row("""{"ts":"2024-01-02"}"""))
+          val input = create_row("""{"ts":"2024-01-02"}""")
+          // Preserve the exact evaluator created above, before testing fresh serialized copies.
+          checkEvaluationWithoutCodegen(parser, create_row(timestamp), input)
+          checkEvaluation(parser, create_row(timestamp), input)
         }
       }
     }

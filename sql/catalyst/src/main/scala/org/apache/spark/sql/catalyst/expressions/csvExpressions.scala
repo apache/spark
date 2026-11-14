@@ -339,9 +339,13 @@ case class StructsToCsv(
     val explicitDefault = parameters.get(CSVOptions.TREAT_NULL_AS_EMPTY_STRING).exists { value =>
       value != null && Set("true", "false").contains(value.toLowerCase(Locale.ROOT))
     }
-    val nonEmptyNullValue = parameters.get(CSVOptions.NULL_VALUE)
-      .exists(value => value != null && value.nonEmpty)
-    val relevant = !explicitDefault && !nonEmptyNullValue
+    val nonNullableFields = child.resolved && (child.dataType match {
+      case schema: StructType => schema.forall(!_.nullable)
+      case _ => false
+    })
+    // A nonempty nullValue is not a proof: quoting/whitespace processing can distinguish a
+    // literal marker from an actual null. Only schema guarantees or explicit options mask it.
+    val relevant = !explicitDefault && !nonNullableFields
     copy(
       child = child.canonicalized,
       nullValueWrittenAsQuotedEmptyString = relevant && useCapturedOptionDefaults &&

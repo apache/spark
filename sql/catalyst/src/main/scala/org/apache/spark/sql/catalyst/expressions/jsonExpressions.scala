@@ -2239,14 +2239,26 @@ case class JsonToStructs(
   override protected def stringArgs: Iterator[Any] = super.stringArgs.take(6)
 
   override lazy val canonicalized: Expression = {
-    val explicitFallback = CaseInsensitiveMap(options)
+    val parameters = CaseInsensitiveMap(options)
+    val explicitFallback = parameters
       .get(JSONOptions.ENABLE_DATETIME_PARSING_FALLBACK)
       .exists(value => value != null && value.toBooleanOption.isDefined)
     val relevant = !explicitFallback && JsonToStructs.usesDateTimeParsingFallback(schema)
+    val capturedFallback = if (relevant && useCapturedOptionDefaults) {
+      // Without either format key, automatic fallback enables both DATE and TIMESTAMP recovery.
+      // Keep the execution snapshot unchanged; only the comparison key needs normalization.
+      if (!parameters.contains(JSONOptions.DATE_FORMAT) &&
+          !parameters.contains(JSONOptions.TIMESTAMP_FORMAT)) {
+        enableDateTimeParsingFallback.orElse(Some(true))
+      } else {
+        enableDateTimeParsingFallback
+      }
+    } else {
+      None
+    }
     copy(
       child = child.canonicalized,
-      enableDateTimeParsingFallback =
-        if (relevant && useCapturedOptionDefaults) enableDateTimeParsingFallback else None,
+      enableDateTimeParsingFallback = capturedFallback,
       useCapturedOptionDefaults = !relevant || useCapturedOptionDefaults)
   }
 
@@ -2360,6 +2372,7 @@ case class StructsToJson(
   private lazy val evaluator = {
     val parameters = CaseInsensitiveMap(options)
     val effectiveOptions = if (useCapturedOptionDefaults &&
+        StructsToJson.usesNullFieldOmission(inputSchema) &&
         !parameters.contains(JSONOptions.IGNORE_NULL_FIELDS)) {
       parameters.updated(JSONOptions.IGNORE_NULL_FIELDS, ignoreNullFields.toString)
     } else {
@@ -2380,6 +2393,20 @@ case class StructsToJson(
 object StructsToJson {
   def unapply(j: StructsToJson): Option[(Map[String, String], Expression, Option[String])] =
     Some((j.options, j.child, j.timeZoneId))
+
+  private def usesNullFieldOmission(schema: DataType): Boolean = {
+    def containsStructOrUDT(dataType: DataType): Boolean = dataType match {
+      case _: StructType | _: UserDefinedType[_] => true
+      case ArrayType(elementType, _) => containsStructOrUDT(elementType)
+      case MapType(keyType, valueType, _) =>
+        containsStructOrUDT(keyType) || containsStructOrUDT(valueType)
+      case _ => false
+    }
+    schema match {
+      case _: ArrayType | _: MapType => containsStructOrUDT(schema)
+      case _ => true
+    }
+  }
 }
 
 /**
