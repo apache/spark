@@ -511,9 +511,11 @@ trait JoinSelectionHelper extends Logging {
       // supports cannot honor that hint either, so it does not veto here; the sizes then still
       // produce an answer, which over-approximates `JoinSelection` (it falls through to a sort
       // merge join). That over-approximation predates this method and is kept deliberately, so
-      // that `canPlanAsBroadcastHashJoin` keeps its truth table.
-      val noShufflePlannedBefore = !hashJoinSupported(leftKeys, rightKeys) ||
-        getShuffleHashJoinBuildSide(join, hintOnly = true, conf).isEmpty
+      // that `canPlanAsBroadcastHashJoin` keeps its truth table. `hashJoinSupported` comes last,
+      // as it logs a warning for keys that no hash join supports.
+      val noShufflePlannedBefore =
+        getShuffleHashJoinBuildSide(join, hintOnly = true, conf).isEmpty ||
+          !hashJoinSupported(leftKeys, rightKeys)
       getBroadcastBuildSide(join, hintOnly = true, conf).orElse {
         if (noShufflePlannedBefore) getBroadcastBuildSide(join, hintOnly = false, conf) else None
       }
