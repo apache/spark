@@ -21,6 +21,7 @@ import java.util.Arrays
 
 import org.apache.spark._
 import org.apache.spark.rdd.RDD
+import org.apache.spark.shuffle.BlockStoreShuffleReader
 import org.apache.spark.shuffle.sort.SortShuffleManager
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.execution.metric.{SQLMetric, SQLShuffleReadMetricsReporter}
@@ -162,6 +163,25 @@ class ShuffledRowRDD(
       Array.tabulate(dependency.partitioner.numPartitions)(i => CoalescedPartitionSpec(i, i + 1)))
   }
 
+  // Set when the map outputs must be returned in map index order. See `enableOrderedGather`.
+  private var orderedGather: Option[(OrderedGatherOptions, OrderedGatherMetrics)] = None
+
+  /** Makes this single-partition RDD return the map outputs in map index order. */
+  private[execution] def enableOrderedGather(
+      options: OrderedGatherOptions,
+      gatherMetrics: OrderedGatherMetrics): this.type = {
+    // The ordered gather reads all map outputs into this RDD's only partition, in map index order.
+    // With more than one output partition, each would only hold part of every map output.
+    require(partitionSpecs.length == 1 && dependency.partitioner.numPartitions == 1,
+      "The ordered gather requires a single-partition shuffle")
+    // Merged map outputs would lose the map index of their rows.
+    dependency.setShuffleMergeAllowed(false)
+    orderedGather = Some((options, gatherMetrics))
+    this
+  }
+
+  private[execution] def isOrderedGather: Boolean = orderedGather.isDefined
+
   dependency.rdd.context.setLocalProperty(
     SortShuffleManager.FETCH_SHUFFLE_BLOCKS_IN_BATCH_ENABLED_KEY,
     SQLConf.get.fetchShuffleBlocksInBatch.toString)
@@ -207,7 +227,51 @@ class ShuffledRowRDD(
     }
   }
 
+  /**
+   * Reads this RDD's only partition with an [[OrderedGatherIterator]], which returns the map
+   * outputs in map index order instead of the order they arrive in. It reads them in batches of map
+   * index ranges, each through its own shuffle reader, which this method creates.
+   */
+  private def computeOrderedGather(
+      options: OrderedGatherOptions,
+      gatherMetrics: OrderedGatherMetrics,
+      context: TaskContext): Iterator[InternalRow] = {
+    val tempMetrics = context.taskMetrics().createTempShuffleReadMetrics()
+    val sqlMetricsReporter = new SQLShuffleReadMetricsReporter(tempMetrics, metrics)
+    val readMapOutputs = (startMapIndex: Int, endMapIndex: Int) => {
+      val reader = SparkEnv.get.shuffleManagerFor(dependency).getReader(
+        dependency.shuffleHandle,
+        startMapIndex,
+        endMapIndex,
+        0,
+        1,
+        context,
+        sqlMetricsReporter)
+      reader match {
+        case blockReader: BlockStoreShuffleReader[_, _] =>
+          val (mapIndexes, mapOutputs) = blockReader.readMapOutputs()
+          new MapOutputBatch(mapIndexes, mapOutputs.map { case (mapIndex, records) =>
+            (mapIndex, records.map(_._2.asInstanceOf[InternalRow]))
+          })
+        case _ =>
+          // Without per-map reads, the map outputs could not be returned in order.
+          throw SparkException.internalError(
+            s"The ordered CollectLimitExec gather requires a BlockStoreShuffleReader, but got " +
+              s"${reader.getClass.getName}.", category = "SHUFFLE")
+      }
+    }
+    new OrderedGatherIterator(
+      context, options, gatherMetrics, dependency.serializer, readMapOutputs)
+  }
+
   override def compute(split: Partition, context: TaskContext): Iterator[InternalRow] = {
+    orderedGather match {
+      case Some((options, gatherMetrics)) =>
+        // The CollectLimitExec gather returns the map outputs in map index order, so that LIMIT
+        // and OFFSET apply to the same rows as driver collection. See `enableOrderedGather`.
+        return computeOrderedGather(options, gatherMetrics, context)
+      case None =>
+    }
     val tempMetrics = context.taskMetrics().createTempShuffleReadMetrics()
     // `SQLShuffleReadMetricsReporter` will update its own metrics for SQL exchange operator,
     // as well as the `tempMetrics` for basic shuffle metrics.

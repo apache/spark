@@ -37,7 +37,7 @@ import org.apache.spark.network.shuffle.ExternalBlockStoreClient
 import org.apache.spark.rpc.{RpcAddress, RpcCallContext, RpcEndpoint, RpcEndpointRef, RpcEnv}
 import org.apache.spark.scheduler.{CompressedMapStatus, HighlyCompressedMapStatus, MapStatus, MergeStatus}
 import org.apache.spark.shuffle.FetchFailedException
-import org.apache.spark.storage.{BlockManagerId, BlockManagerMasterEndpoint, ShuffleBlockId, ShuffleMergedBlockId}
+import org.apache.spark.storage.{BlockId, BlockManagerId, BlockManagerMasterEndpoint, ShuffleBlockId, ShuffleMergedBlockId}
 import org.apache.spark.util.collection.Utils.createArray
 
 class MapOutputTrackerSuite extends SparkFunSuite with LocalSparkContext {
@@ -434,6 +434,32 @@ class MapOutputTrackerSuite extends SparkFunSuite with LocalSparkContext {
     tracker.unregisterShuffle(10)
     tracker.stop()
     rpcEnv.shutdown()
+  }
+
+  test("map status conversion returns the blocks of the map index range") {
+    val shuffleId = 10
+    val numMaps = 10
+    // Map output 4 is empty for reduce partition 0.
+    val statuses = Array.tabulate[MapStatus](numMaps) { mapIndex =>
+      MapStatus(BlockManagerId(s"exec${mapIndex % 2}", s"host${mapIndex % 2}", 1000),
+        Array(if (mapIndex == 4) 0L else 1000L + mapIndex, 2000L), 100 + mapIndex)
+    }
+    def blocksByAddress(
+        result: MapSizesByExecutorId): Map[BlockManagerId, Seq[(BlockId, Long, Int)]] =
+      result.iter.map { case (address, blocks) => address -> blocks.toSeq }.toMap
+
+    for ((start, end) <- Seq((0, numMaps), (3, 7), (8, 20), (numMaps, numMaps + 2), (5, 5))) {
+      val mapIndexes = start until math.min(end, numMaps)
+      val converted = MapOutputTracker.convertMapStatuses(shuffleId, 0, 1, statuses, start, end)
+      val expected = mapIndexes
+        .filter(i => statuses(i).getSizeForBlock(0) != 0)
+        .map { i =>
+          statuses(i).location ->
+            ((ShuffleBlockId(shuffleId, 100 + i, 0), statuses(i).getSizeForBlock(0), i))
+        }
+        .groupBy(_._1).map { case (address, blocks) => address -> blocks.map(_._2) }
+      assert(blocksByAddress(converted) === expected, s"map index range [$start, $end)")
+    }
   }
 
   test("SPARK-32921: master register and unregister merge result") {

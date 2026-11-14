@@ -1949,8 +1949,9 @@ private[spark] object MapOutputTracker extends Logging {
         }
       }
     } else {
-      val iter = mapStatuses.iterator.zipWithIndex
-      for ((status, mapIndex) <- iter.slice(startMapIndex, endMapIndex)) {
+      // Index the statuses directly, so that the work is proportional to the map index range.
+      for (mapIndex <- startMapIndex until math.min(endMapIndex, mapStatuses.length)) {
+        val status = mapStatuses(mapIndex)
         validateStatus(status, shuffleId, startPartition)
         for (part <- startPartition until endPartition) {
           val size = status.getSizeForBlock(part)
