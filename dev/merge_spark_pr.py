@@ -41,6 +41,7 @@ import argparse
 import json
 import os
 import re
+import shlex
 import subprocess
 import sys
 import time
@@ -119,6 +120,34 @@ BRANCH_PREFIX = "PR_TOOL"
 SKIP_VERSION_CHECK = os.environ.get("SKIP_VERSION_CHECK", "")
 # Path of this script relative to the repo root, used to fetch the canonical copy from master.
 MERGE_SCRIPT_REPO_PATH = "dev/merge_spark_pr.py"
+# Optional pre-push check offered by maybe_compile_check: a clean SBT compile of the main and
+# test sources in the backport's working tree. A smoke test, not CI: only the default modules
+# plus Hive, since the full CI profile list pulls in flaky ones. `clean` deletes every module's
+# build output, so the offer says so -- declining is a reasonable answer.
+# -Phive is not optional: with no -P at all SparkBuild falls back to the `sbt` profile, which
+# puts guava and pmml-model on every compile classpath and turns CI failures into local passes.
+COMPILE_CHECK_CMD = ["build/sbt", "-Phive", ";clean;compile;Test/compile"]
+# Precise patterns for the 4.2+ ConfigBindingPolicy API. A backport to a pre-4.2 branch
+# that adds either will not compile there (the API arrived in SPARK-55928): the
+# .withBindingPolicy(...) call and the ConfigBindingPolicy import have to be dropped. Nothing
+# else -- in particular .version(...) names the release the config shipped in, so it is only
+# wrong on the backport if the config itself is new. maybe_binding_policy_warning scans the diff
+# about to be pushed (Scala/Java only) for these as a pre-push check. The call is anchored on "."
+# so a comment that merely says "withBindingPolicy" is not flagged; ConfigBindingPolicy in a
+# comment still can be, which is fine -- the prompt is advisory and the remedy (drop the import)
+# is the same either way.
+BINDING_POLICY_PATTERNS = (
+    ("withBindingPolicy", re.compile(r"\.withBindingPolicy\s*\(")),
+    ("ConfigBindingPolicy", re.compile(r"\bConfigBindingPolicy\b")),
+)
+# git pathspecs -- not suffixes -- the binding-policy diff is restricted to; the Scala API these
+# patterns match only appears in Scala/Java. The proto enum behind it (BindingPolicy in
+# common/config/src/main/protobuf/.../config_schema.proto) is spelled differently and is not
+# covered; the optional compile check is what catches a backport that touches it. The :(top)
+# magic anchors the match at the repo root: a bare pathspec is relative to the cwd, and the
+# script's own usage line has it running from dev/, where no Scala/Java file exists -- the
+# check would scan nothing while looking like it ran.
+BINDING_POLICY_PATHSPECS = (":(top)*.scala", ":(top)*.java")
 
 # Run the push-triggered post-merge workflows at each branch's configured commit interval.
 # Other commits get GitHub's documented workflow-skip trailer after a visible warning, unless
@@ -1010,17 +1039,63 @@ class SkipCherryPick(Exception):
     """
 
 
-def continue_maybe(prompt, cherry=False):
+def continue_maybe(prompt: str, cherry: bool = False) -> None:
+    """Prompt to continue; on "no" either skip this cherry-pick (`cherry`) or exit the script.
+
+    `cherry` is the decline semantics, not a statement that a cherry-pick is mid-flight: the
+    pre-push checks run after the pick is committed, and declining there must still skip only
+    that branch. So the abort is attempted only when git says one is actually in progress.
+
+    >>> from contextlib import redirect_stdout
+    >>> from io import StringIO
+    >>> from unittest.mock import call, patch
+
+    Declining with `cherry` while a pick is mid-flight aborts the pick before skipping --
+    the first git call is the probe, the second the abort:
+
+    >>> with (
+    ...     patch("builtins.input", return_value=""),
+    ...     patch.object(git, "run", side_effect=["", ""]) as run,
+    ...     redirect_stdout(StringIO()),
+    ... ):
+    ...     try:
+    ...         continue_maybe("Resolved?", cherry=True)
+    ...         skipped = False
+    ...     except SkipCherryPick:
+    ...         skipped = True
+    >>> skipped
+    True
+    >>> run.call_args_list[0]
+    call(['git', 'rev-parse', '--verify', '--quiet', 'CHERRY_PICK_HEAD'])
+    >>> run.call_args_list[1]
+    call('git cherry-pick --abort')
+    >>> run.call_count
+    2
+    """
     if get_input(f"{prompt} (y/N): ", ["y", "n", ""]) != "y":
         if cherry:
-            try:
-                git.run("git cherry-pick --abort")
-            except Exception:
-                print_error("Unable to abort and get back to the state before cherry-pick")
+            if _cherry_pick_in_progress():
+                try:
+                    git.run("git cherry-pick --abort")
+                except Exception:
+                    print_error("Unable to abort and get back to the state before cherry-pick")
             print("Skipping this cherry-pick; the merge continues.")
             clean_up()
             raise SkipCherryPick()
         fail("Okay, exiting")
+
+
+def _cherry_pick_in_progress() -> bool:
+    """True if the repo is mid-cherry-pick. With --quiet, exit 1 is git's "no such ref" answer,
+    i.e. no pick in progress. Any other trouble answers "yes", so the caller still attempts
+    the abort and keeps the pre-change behaviour."""
+    try:
+        git.run(["git", "rev-parse", "--verify", "--quiet", "CHERRY_PICK_HEAD"])
+        return True
+    except subprocess.CalledProcessError as e:
+        return e.returncode != 1
+    except Exception:
+        return True
 
 
 def clean_up():
@@ -1033,6 +1108,353 @@ def clean_up():
         for branch in list(filter(lambda x: x.startswith(BRANCH_PREFIX), branches)):
             print("Deleting local branch %s" % branch)
             git.run("git branch -D %s" % branch)
+
+
+def maybe_compile_check(ref_name: str) -> None:
+    """Offer to run a clean SBT compile of main and test sources before pushing `ref_name`.
+
+    `ref_name` is the checked-out cherry-pick, so a clean compile here catches a mis-resolved
+    conflict, or a PR that bit-rotted against the target branch, before it lands. It is a smoke
+    test (see COMPILE_CHECK_CMD), not CI: modules behind other profiles are not compiled.
+    Declining skips the check. A red build asks rather than aborts, because a non-zero sbt is
+    as easily a JDK the branch rejects or a failed download as it is the backport; declining
+    there skips this branch (see continue_maybe). Output streams so a long compile does not
+    look like a hang.
+
+    What is compiled is the working tree, not the commit: a file re-edited after the merge
+    commit, or an untracked source file left over from a manual conflict resolution, compiles
+    here and is absent from the push. (A resolved-but-never-`git add`ed conflict is NOT the
+    case -- the commit itself fails while files are unmerged, so the check is never reached.)
+    So warn when the tree is dirty rather than report a green that is about something else,
+    and name the remedy (`git add` + `git commit --amend`) since the fix is the commit, not
+    the build.
+
+    Declining runs no build and no git -- the git.run mock raises if a regression moves a
+    git call above the prompt, which otherwise would run real git in the committer's repo on
+    every startup (doctest.testmod() runs on invocation):
+
+    >>> from contextlib import redirect_stdout
+    >>> from io import StringIO
+    >>> from unittest.mock import call, patch
+    >>> with (
+    ...     patch("builtins.input", return_value=""),
+    ...     patch.object(git, "run", side_effect=AssertionError("should not run git")),
+    ...     patch("subprocess.call") as run,
+    ...     redirect_stdout(StringIO()),
+    ... ):
+    ...     maybe_compile_check("PR_TOOL_PICK_PR_1_BRANCH-4.1")
+    >>> run.call_count
+    0
+
+    Accepting runs the SBT compile once, from the repo root, with an explicit -P so SparkBuild
+    does not fall back to `-Psbt`; a green build returns quietly. The two git calls are pinned
+    too -- transposing them or dropping --porcelain would otherwise stay green:
+
+    >>> with (
+    ...     patch("builtins.input", return_value="y"),
+    ...     patch.object(git, "run", side_effect=["/repo\\n", ""]) as grun,
+    ...     patch("subprocess.call", return_value=0) as run,
+    ...     redirect_stdout(StringIO()),
+    ... ):
+    ...     maybe_compile_check("PR_TOOL_PICK_PR_1_BRANCH-4.1")
+    >>> grun.call_args_list[0]
+    call(['git', 'rev-parse', '--show-toplevel'])
+    >>> grun.call_args_list[1]
+    call(['git', 'status', '--porcelain'])
+    >>> run.call_count
+    1
+    >>> run.call_args[0][0][0], run.call_args[0][0][-1]
+    ('build/sbt', ';clean;compile;Test/compile')
+    >>> [a for a in run.call_args[0][0] if a.startswith("-P")]
+    ['-Phive']
+    >>> run.call_args[1]["cwd"]
+    '/repo'
+
+    A dirty tree still builds, but warns first -- and the warning names the remedy
+    (`git add` + `git commit --amend`) alongside the porcelain output:
+
+    >>> with (
+    ...     patch("builtins.input", return_value="y"),
+    ...     patch.object(git, "run", side_effect=["/repo\\n", " M foo.scala\\n"]),
+    ...     patch("subprocess.call", return_value=0),
+    ...     redirect_stdout(StringIO()) as out,
+    ... ):
+    ...     maybe_compile_check("PR_TOOL_PICK_PR_1_BRANCH-4.1")
+    >>> "git commit --amend" in out.getvalue()
+    True
+    >>> "M foo.scala" in out.getvalue()  # porcelain output is strip()ed before printing
+    True
+    >>> "Compile check passed." in out.getvalue()
+    True
+
+    The experts-only override continues past a red build:
+
+    >>> with (
+    ...     patch("builtins.input", side_effect=["y", "y"]),
+    ...     patch.object(git, "run", side_effect=["/repo\\n", ""]),
+    ...     patch("subprocess.call", return_value=1),
+    ...     redirect_stdout(StringIO()),
+    ... ):
+    ...     maybe_compile_check("PR_TOOL_PICK_PR_1_BRANCH-4.1")
+
+    Ctrl-C during the build, and a build/sbt that cannot be run at all, are "did not pass" and
+    get the same override prompt -- never a traceback, which would reach the top-level handler
+    and let clean_up() delete the unpushed pick:
+
+    >>> for boom in (KeyboardInterrupt(), OSError("no build/sbt")):
+    ...     with (
+    ...         patch("builtins.input", side_effect=["y", "y"]),
+    ...         patch.object(git, "run", side_effect=["/repo\\n", ""]),
+    ...         patch("subprocess.call", side_effect=boom),
+    ...         redirect_stdout(StringIO()),
+    ...     ):
+    ...         maybe_compile_check("PR_TOOL_PICK_PR_1_BRANCH-4.1")
+
+    Declining the override skips just this branch instead of exiting:
+
+    >>> with (
+    ...     patch("builtins.input", side_effect=["y", ""]),
+    ...     patch.object(
+    ...         git, "run", side_effect=["/repo\\n", "", subprocess.CalledProcessError(1, "g")]
+    ...     ),
+    ...     patch("subprocess.call", return_value=1),
+    ...     redirect_stdout(StringIO()),
+    ... ):
+    ...     try:
+    ...         maybe_compile_check("PR_TOOL_PICK_PR_1_BRANCH-4.1")
+    ...         skipped = False
+    ...     except SkipCherryPick:
+    ...         skipped = True
+    >>> skipped
+    True
+    """
+    # The command is too long to read inside a prompt, so print it on its own line first.
+    # shlex.join quotes the ";clean;..." argument, so the printed line can be copy-pasted
+    # into a shell without the semicolons splitting it into four commands.
+    print("Optional pre-push check: %s" % shlex.join(COMPILE_CHECK_CMD))
+    print("Note: 'clean' deletes every module's build output, including under --dry-run.")
+    prompt = "Run an optional clean compile on %s before pushing? (y/N): " % ref_name
+    if get_input(prompt, ["y", "n", ""]) != "y":
+        return
+    # build/sbt is repo-relative and SPARK_HOME defaults to the cwd, which is dev/ when the
+    # script is run as ./merge_spark_pr.py per its own usage line. Ask git for the root instead.
+    root = git.run(["git", "rev-parse", "--show-toplevel"]).strip()
+    dirty = git.run(["git", "status", "--porcelain"]).strip()
+    if dirty:
+        print_error(
+            "Working tree is not clean, so what compiles below is not exactly the commit that "
+            "would be pushed -- the uncommitted or untracked changes below compile here but "
+            "are not in the push. If any of them belong in the pick, 'git add' them and "
+            "'git commit --amend' before pushing; if they are unrelated scratch, ignore this "
+            "and carry on:\n%s" % dirty
+        )
+    try:
+        status = subprocess.call(COMPILE_CHECK_CMD, cwd=root)
+    except KeyboardInterrupt:
+        # Interrupting the build must not unwind into the top-level handler: clean_up() there
+        # force-deletes the PR_TOOL_* branch holding the unpushed commit and any hand-resolved
+        # conflicts. Treat it as "the check did not finish" and let the committer decide.
+        print_error("Compile check interrupted.")
+    except OSError as e:
+        print_error("Could not run %s in %s: %s" % (COMPILE_CHECK_CMD[0], root, e))
+    else:
+        if status == 0:
+            print("Compile check passed.")
+            return
+        print_error(
+            "Compile check exited %d. That is the backport, or your toolchain -- a JDK this "
+            "branch rejects and a failed dependency download look the same here." % status
+        )
+    continue_maybe(
+        "Compile check did not pass on %s. Push anyway? (experts only!)" % ref_name, True
+    )
+
+
+def _is_pre_binding_policy_branch(ref: str) -> bool:
+    """True if `ref` is a Spark branch that predates the ConfigBindingPolicy API (4.2+).
+
+    master and branch-M.x (M >= 4) carry the API; branch-4.0/branch-4.1 and any branch-3.x
+    do not. Ranking is semver_branch_rank's job -- branch-M.x sorts above every branch-M.N,
+    and a ref it cannot classify as a maintenance branch gets its (-1, -1) sentinel. Those
+    refs are treated as carrying the API: fail-open, so master, a tag, or a custom ref never
+    raises a false warning -- none of them is a pre-4.2 branch anyway.
+
+    >>> _is_pre_binding_policy_branch("master")
+    False
+    >>> _is_pre_binding_policy_branch("branch-4.x")
+    False
+    >>> _is_pre_binding_policy_branch("branch-4.2")
+    False
+    >>> [_is_pre_binding_policy_branch(b) for b in ("branch-4.1", "branch-4.0", "branch-3.x")]
+    [True, True, True]
+    >>> _is_pre_binding_policy_branch("branch-3.5")
+    True
+    >>> _is_pre_binding_policy_branch("HEAD")
+    False
+    >>> _is_pre_binding_policy_branch("my-custom-ref")
+    False
+    """
+    rank = semver_branch_rank(ref)
+    return rank != (-1, -1) and rank < (4, 2)
+
+
+def _added_binding_policy_tokens(diff: str) -> list[str]:
+    """Return the sorted subset of BINDING_POLICY_PATTERNS matched on added (``+``) lines.
+
+    Only scans lines the diff added (a leading ``+`` that is not the ``+++ `` file header --
+    the trailing space keeps an added line whose own text starts with ``++`` counted, apart
+    from the ``++ <space>`` case no real Scala/Java line starts with), so a cherry-pick that
+    *removes* a stray .withBindingPolicy is not flagged. Matching uses the
+    precise patterns from BINDING_POLICY_PATTERNS, so a comment that merely mentions
+    ``withBindingPolicy`` (no leading dot, no call) is not flagged; ``ConfigBindingPolicy`` in
+    a comment still can match, which is fine -- the prompt is advisory.
+
+    >>> _added_binding_policy_tokens(
+    ...     "+++ b/foo\\n"
+    ...     "+.withBindingPolicy(X)\\n"
+    ...     "-.withBindingPolicy(Y)\\n"
+    ...     "+import ...ConfigBindingPolicy\\n"
+    ...     "+// see withBindingPolicy usage\\n"
+    ...     " context\\n"
+    ... )
+    ['ConfigBindingPolicy', 'withBindingPolicy']
+    >>> _added_binding_policy_tokens("-.withBindingPolicy(X)\\n")
+    []
+    >>> _added_binding_policy_tokens("+// mentions ConfigBindingPolicy in a comment\\n")
+    ['ConfigBindingPolicy']
+    >>> _added_binding_policy_tokens("")
+    []
+    """
+    found = set()
+    for line in diff.splitlines():
+        if line.startswith("+") and not line.startswith("+++ "):
+            for token, pattern in BINDING_POLICY_PATTERNS:
+                if pattern.search(line):
+                    found.add(token)
+    return sorted(found)
+
+
+def maybe_binding_policy_warning(ref: str, base_head: str) -> None:
+    """Warn before pushing to a pre-4.2 `ref` a cherry-pick that adds ConfigBindingPolicy.
+
+    A cherry-pick onto branch-4.1/4.0/3.x that introduces ``.withBindingPolicy(...)`` or
+    ``ConfigBindingPolicy`` will not compile there (the API arrived in SPARK-55928, 4.2+).
+    This is a git-diff + grep pre-push check: it diffs `base_head` (the branch tip before the
+    pick) against HEAD restricted to Scala/Java sources, scans only the added lines for the
+    precise patterns in BINDING_POLICY_PATTERNS, and on a hit prints the remedy and asks the
+    committer to confirm the push; declining skips this branch (see continue_maybe). No-op on
+    branches that carry the API. Only backports are checked: a PR opened straight against a
+    maintenance branch already ran that branch's CI.
+
+    The diff is forced plain: without --no-color a committer with ``color.ui = always`` gets
+    added lines behind an ANSI escape, no line starts with "+", and the check reports nothing
+    while looking like it ran. Like branches_with_merge_footer, a git failure only warns: this
+    runs after the merge has already been pushed.
+
+    `never` below is how these tests assert "does not prompt": a bare input mock would return a
+    MagicMock that get_input's loop never accepts, so a regressed guard would hang the script at
+    startup -- doctest.testmod() runs on every invocation -- instead of failing.
+
+    >>> from contextlib import redirect_stdout
+    >>> from io import StringIO
+    >>> from unittest.mock import patch
+    >>> never = AssertionError("should not prompt")
+
+    No-op on a branch that carries the API (no diff fetched, no prompt):
+
+    >>> with (
+    ...     patch.object(git, "run") as run,
+    ...     patch("builtins.input", side_effect=never),
+    ...     redirect_stdout(StringIO()),
+    ... ):
+    ...     maybe_binding_policy_warning("branch-4.2", "deadbeef")
+    >>> run.call_count
+    0
+
+    No-op when the change added none of the tokens. The git command is pinned here because
+    nothing else in these tests would notice it being wrong -- transposing the two endpoints
+    inverts the whole check, and dropping the pathspec or --no-color silently defeats it:
+
+    >>> with (
+    ...     patch.object(git, "run", return_value="+ unrelated change\\n") as run,
+    ...     patch("builtins.input", side_effect=never),
+    ...     redirect_stdout(StringIO()),
+    ... ):
+    ...     maybe_binding_policy_warning("branch-4.1", "deadbeef")
+    >>> run.call_args[0][0][:6]
+    ['git', 'diff', '--no-color', '--no-ext-diff', 'deadbeef', 'HEAD']
+    >>> run.call_args[0][0][6:]
+    ['--', ':(top)*.scala', ':(top)*.java']
+
+    Warns and prompts when the change adds a token on a pre-4.2 branch; accepting continues
+    (no abort), so input is called once by the continue_maybe prompt:
+
+    >>> with (
+    ...     patch.object(git, "run", return_value="+.withBindingPolicy(X)\\n"),
+    ...     patch("builtins.input", return_value="y") as inp,
+    ...     redirect_stdout(StringIO()),
+    ... ):
+    ...     maybe_binding_policy_warning("branch-4.1", "deadbeef")
+    >>> inp.call_count
+    1
+
+    Declining skips just that branch, so an already-pushed branch-M.x pick
+    and the JIRA resolution survive (the second git.run is the CHERRY_PICK_HEAD probe):
+
+    >>> with (
+    ...     patch.object(
+    ...         git,
+    ...         "run",
+    ...         side_effect=[
+    ...             "+.withBindingPolicy(X)\\n",
+    ...             subprocess.CalledProcessError(1, "git"),
+    ...         ],
+    ...     ),
+    ...     patch("builtins.input", return_value=""),
+    ...     redirect_stdout(StringIO()),
+    ... ):
+    ...     try:
+    ...         maybe_binding_policy_warning("branch-4.1", "deadbeef")
+    ...         skipped = False
+    ...     except SkipCherryPick:
+    ...         skipped = True
+    >>> skipped
+    True
+
+    A git failure warns and scans nothing rather than aborting a half-pushed merge:
+
+    >>> with (
+    ...     patch.object(git, "run", side_effect=OSError("git is sad")),
+    ...     patch("builtins.input", side_effect=never),
+    ...     redirect_stdout(StringIO()) as out,
+    ... ):
+    ...     maybe_binding_policy_warning("branch-4.1", "deadbeef")
+    >>> "git is sad" in out.getvalue()
+    True
+    """
+    if not _is_pre_binding_policy_branch(ref):
+        return
+    try:
+        diff = git.run(
+            ["git", "diff", "--no-color", "--no-ext-diff", base_head, "HEAD", "--"]
+            + list(BINDING_POLICY_PATHSPECS)
+        )
+    except Exception as e:
+        print_error(
+            "Could not diff %s..HEAD; skipping the ConfigBindingPolicy check: %s" % (base_head, e)
+        )
+        return
+    tokens = _added_binding_policy_tokens(diff)
+    if not tokens:
+        return
+    print_error(
+        "Warning: what would be pushed to %s adds %s, which does not exist before branch-4.2 "
+        "(SPARK-55928). Drop the .withBindingPolicy(...) call and the ConfigBindingPolicy "
+        "import. Leave .version(...) alone -- it names the release the config shipped in -- "
+        "unless the config itself is new on this branch, in which case retarget it to this "
+        "branch's next release." % (ref, " / ".join(tokens))
+    )
+    continue_maybe("Push to %s anyway? (experts only!)" % ref, True)
 
 
 def should_skip_post_merge_ci(target_ref, pr_num):
@@ -1213,8 +1635,31 @@ def _do_cherry_pick(pr_num, merge_hash, pick_ref):
     """Cherry-pick `merge_hash` onto `pick_ref` and push.
 
     Returns the (pushed ref, pushed commit hash) pair. Raises `SkipCherryPick` if the
-    cherry-pick conflicts and the committer declines to resolve it, after attempting to
-    abort the cherry-pick and restore the working tree.
+    cherry-pick conflicts and the committer declines to resolve it, or declines a pre-push
+    check, after attempting to abort the cherry-pick and restore the working tree.
+
+    Both pre-push checks run once, before the push prompt, and a declined check pushes nothing:
+
+    >>> from contextlib import redirect_stdout
+    >>> from io import StringIO
+    >>> from unittest.mock import Mock, patch
+    >>> def pick(check=Mock()):
+    ...     with (
+    ...         patch("builtins.input", return_value="y"),
+    ...         patch.object(git, "run", return_value="head\\n"),
+    ...         patch.object(git, "push") as push,
+    ...         patch.multiple(sys.modules[__name__], clean_up=Mock(), maybe_compile_check=check,
+    ...                        maybe_binding_policy_warning=Mock()),
+    ...         redirect_stdout(StringIO()),
+    ...     ):
+    ...         try:
+    ...             return _do_cherry_pick(1, "feed", "branch-4.2"), push.call_count
+    ...         except SkipCherryPick:
+    ...             return "skipped", push.call_count
+    >>> pick()
+    (('branch-4.2', 'head'), 1)
+    >>> pick(Mock(side_effect=SkipCherryPick()))
+    ('skipped', 0)
     """
     pick_branch_name = "%s_PICK_PR_%s_%s" % (BRANCH_PREFIX, pr_num, pick_ref.upper())
 
@@ -1269,6 +1714,9 @@ def _do_cherry_pick(pr_num, merge_hash, pick_ref):
         updated_message = append_post_merge_ci_skip(updated_message)
     if updated_message != raw_message:
         amend_commit_message(updated_message)
+
+    maybe_binding_policy_warning(pick_ref, pick_head)
+    maybe_compile_check(pick_branch_name)
 
     continue_maybe(
         "Pick complete (local ref %s). Push to %s?" % (pick_branch_name, PUSH_REMOTE_NAME)
