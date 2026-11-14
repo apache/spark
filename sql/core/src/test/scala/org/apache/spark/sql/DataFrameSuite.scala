@@ -27,13 +27,13 @@ import scala.util.Random
 
 import org.scalatest.matchers.should.Matchers._
 
-import org.apache.spark.SparkException
+import org.apache.spark.{SparkArithmeticException, SparkException}
 import org.apache.spark.api.python.PythonEvalType
 import org.apache.spark.sql.catalyst.{InternalRow, TableIdentifier}
 import org.apache.spark.sql.catalyst.analysis.MultiInstanceRelation
 import org.apache.spark.sql.catalyst.encoders.ExpressionEncoder
 import org.apache.spark.sql.catalyst.expressions.{Attribute, AttributeReference, Cast, EqualTo, ExpressionSet, GreaterThan, Literal, PythonUDF, ScalarSubquery}
-import org.apache.spark.sql.catalyst.optimizer.ConvertToLocalRelation
+import org.apache.spark.sql.catalyst.optimizer.{ConvertToLocalRelation, NullPropagation}
 import org.apache.spark.sql.catalyst.parser.ParseException
 import org.apache.spark.sql.catalyst.plans.logical.{Filter, LeafNode, LocalRelation, LogicalPlan, OneRowRelation}
 import org.apache.spark.sql.catalyst.util.RandomUUIDGenerator
@@ -3029,6 +3029,43 @@ class DataFrameSuite extends SharedSparkSession
         .where($"id" >= 0)
         .where(rand(10) * 10 > 100 && lit(10L) / ($"id" - 3) > 0)
       checkAnswer(df, Nil)
+    }
+  }
+
+  test("SPARK-61704: ConstantPropagation does not propagate an EqualTo with a NULL literal " +
+      "under a NOT") {
+    // `NullPropagation` would turn `id = NULL` into a NULL literal first, so it is excluded. Under
+    // the `NOT`, `id = NULL` is NULL on every row, so a row passes only where the other conjunct is
+    // FALSE. Each condition gives the result that it gives with the default rules. The NULL is a
+    // `typedLit`: with `lit(null).cast("bigint")`, the first query returns the right rows also
+    // without this fix.
+    val df = spark.range(4, 7, 1, 1).toDF()
+    val nullLong = typedLit[java.lang.Long](null)
+    Seq("true", "false").foreach { ansi =>
+      withSQLConf(SQLConf.ANSI_ENABLED.key -> ansi,
+          SQLConf.OPTIMIZER_EXCLUDED_RULES.key -> NullPropagation.ruleName) {
+        // Propagating the NULL made the condition TRUE for id 5 ...
+        checkAnswer(df.where(!($"id" === nullLong && ($"id" + 0 <=> 5))), Seq(Row(4L), Row(6L)))
+        // ... also from a projection below ...
+        checkAnswer(
+          df.select($"id", nullLong as "n").where(!($"id" === $"n" && ($"id" + 0 <=> 5)))
+            .select($"id"),
+          Seq(Row(4L), Row(6L)))
+        // ... and NULL for the ids 4 and 5.
+        checkAnswer(df.where(!($"id" === nullLong && $"id" > 5)), Seq(Row(4L), Row(5L)))
+      }
+    }
+    withSQLConf(SQLConf.ANSI_ENABLED.key -> "true",
+        SQLConf.OPTIMIZER_EXCLUDED_RULES.key -> NullPropagation.ruleName) {
+      // The division runs on id 4 and fails, as it does with the default rules. Propagating the
+      // NULL folded it away, so that no row was returned.
+      val e = intercept[SparkArithmeticException] {
+        df.where(!($"id" === nullLong && lit(10L) / ($"id" - 4) > 0)).collect()
+      }
+      assert(e.getCondition === "DIVIDE_BY_ZERO")
+      // Outside a `NOT` it is still propagated, so the division over `id - 4` is folded with NULL
+      // and does not run, as before.
+      checkAnswer(df.where(lit(10L) / ($"id" - 4) > 0 && $"id" === nullLong), Seq.empty)
     }
   }
 

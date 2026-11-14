@@ -137,7 +137,8 @@ object ConstantFolding extends Rule[LogicalPlan] {
  * }}}
  *
  * Approach used:
- * - Populate a mapping of attribute => constant value by looking at all the equals predicates
+ * - Populate a mapping of attribute => constant value by looking at all the equals predicates,
+ *   except, under a `NOT`, the ones over a nullable attribute and any `EqualTo` with a NULL literal
  * - Using this mapping, replace occurrence of the attributes with the corresponding constant values
  *   in the AND node.
  */
@@ -159,7 +160,8 @@ object ConstantPropagation extends Rule[LogicalPlan] with PredicateHelper {
    *   If the current node is not child of another [[And]], replace all occurrences of the
    *   attributes with the corresponding constant values.
    * - If a child of [[And]] is [[EqualTo]] or [[EqualNullSafe]], propagate the mapping
-   *   of attribute => constant.
+   *   of attribute => constant, except, under a [[Not]], for one over a nullable attribute and
+   *   for an [[EqualTo]] with a NULL literal.
    * - On matching [[Or]] or [[Not]], recursively traverse each children, propagate empty mapping.
    * - Otherwise, stop traversal and propagate empty mapping.
    * @param condition condition to be traversed
@@ -176,11 +178,18 @@ object ConstantPropagation extends Rule[LogicalPlan] with PredicateHelper {
     condition match {
       case _ if !condition.containsAllPatterns(LITERAL, BINARY_COMPARISON) =>
         (None, AttributeMap.empty)
+      // An `EqualTo` with a NULL literal is NULL on every row, also when the attribute is not
+      // nullable, so under a `NOT`, where `safeToReplace` relies on the equalities not being NULL,
+      // replacing the attribute could change another conjunct, e.g. from TRUE to FALSE or from
+      // FALSE to NULL, and so the `NOT` from NULL to TRUE or from TRUE to NULL. Where a NULL counts
+      // as FALSE, such an `AND` is never TRUE whatever the attribute is replaced with, so it is
+      // still propagated there. An `EqualNullSafe` with a NULL literal is never NULL, so it is
+      // propagated in both cases, under a `NOT` only over an attribute that is not nullable.
       case e @ EqualTo(left: AttributeReference, right: Literal)
-        if safeToReplace(left, nullIsFalse) =>
+        if safeToReplace(left, nullIsFalse) && (nullIsFalse || right.value != null) =>
         (None, AttributeMap(Map(left -> (right, e))))
       case e @ EqualTo(left: Literal, right: AttributeReference)
-        if safeToReplace(right, nullIsFalse) =>
+        if safeToReplace(right, nullIsFalse) && (nullIsFalse || left.value != null) =>
         (None, AttributeMap(Map(right -> (left, e))))
       case e @ EqualNullSafe(left: AttributeReference, right: Literal)
         if safeToReplace(left, nullIsFalse) =>
@@ -227,7 +236,8 @@ object ConstantPropagation extends Rule[LogicalPlan] with PredicateHelper {
   // expression. E.g. `SELECT * FROM t WHERE NOT(c = 1 AND c + 1 = 1)` where attribute `c` can be
   // substituted into `1 + 1 = 1` if 'c' isn't nullable. If 'c' is nullable then the enclosing
   // NOT prevents us to do the substitution as NOT flips the context (`nullIsFalse`) of what a
-  // null result of the enclosed expression means.
+  // null result of the enclosed expression means. An `EqualTo` with a NULL literal is NULL even
+  // if 'c' isn't nullable, so `traverse` does not propagate it under a NOT either.
   private def safeToReplace(ar: AttributeReference, nullIsFalse: Boolean) =
     !ar.nullable || nullIsFalse
 
