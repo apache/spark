@@ -21,7 +21,7 @@ import java.sql.Timestamp
 
 import org.scalatest.BeforeAndAfter
 
-import org.apache.spark.sql.{DataFrame, SparkSession}
+import org.apache.spark.sql.{AnalysisException, DataFrame, SparkSession}
 import org.apache.spark.sql.execution.exchange.ReusedExchangeExec
 import org.apache.spark.sql.execution.streaming.operators.stateful.{EventTimeWatermarkExec, StateStoreSaveExec}
 import org.apache.spark.sql.execution.streaming.operators.stateful.join.StreamingSymmetricHashJoinExec
@@ -492,7 +492,8 @@ class MultiStatefulOperatorsSuite
     )
   }
 
-  test("join with range join on non-time intervals -> window agg, append mode, shouldn't fail") {
+  testWithAppendAndUpdate(
+    "join with range join on non-time intervals -> window agg") { outputMode =>
     val input1 = MemoryStream[Int]
     val inputDF1 = input1.toDF()
       .withColumnRenamed("value", "value1")
@@ -514,13 +515,38 @@ class MultiStatefulOperatorsSuite
       .agg(count("*") as Symbol("count"))
       .select($"window".getField("start").cast("long").as[Long], $"count".as[Long])
 
-    testStream(stream)(
-      AddData(input1, 1, 2, 3, 4),
-      AddData(input2, (1, 2), (2, 3), (3, 4), (4, 5)),
-      CheckNewAnswer(),
-      assertNumStateRows(Seq(1, 0)),
-      assertNumRowsDroppedByWatermark(Seq(0, 0))
-    )
+    // The right watermark column is projected away before the join. Its equality key does not
+    // filter late input, so left state and the aggregation window must stay open.
+    if (outputMode == OutputMode.Append()) {
+      // An append-mode aggregation over that event time would never emit, so it fails at start.
+      testStream(stream, outputMode)(
+        AddData(input1, 1, 2, 3, 4),
+        ExpectFailure[AnalysisException](assertFailure = error => {
+          checkError(error.asInstanceOf[AnalysisException],
+            condition = "STREAMING_JOIN_UNBOUNDED_DOWNSTREAM_EVENT_TIME",
+            parameters = Map(
+              "eventTime" -> "eventTime1",
+              "side" -> "left",
+              "requirement" -> ("a watermark on the right input and a time constraint that " +
+                "limits how late a matching right row can arrive"),
+              "config" -> SQLConf.STREAMING_JOIN_CHECK_FINALIZATION_ENABLED.key))
+        }))
+    } else {
+      testStream(stream, outputMode)(
+        AddData(input1, 1, 2, 3, 4),
+        AddData(input2, (1, 2), (2, 3), (3, 4), (4, 5)),
+        CheckNewAnswer((0, 4)),
+        assertNumStateRows(Seq(1, 4)),
+        assertNumRowsDroppedByWatermark(Seq(0, 0)),
+        AddData(input1, 10),
+        AddData(input2, (10, 11)),
+        CheckNewAnswer((10, 1)),
+        AddData(input2, (1, 2)),
+        CheckNewAnswer((0, 5)),
+        assertNumStateRows(Seq(2, 5)),
+        assertNumRowsDroppedByWatermark(Seq(0, 0))
+      )
+    }
   }
 
   test("stream-stream time interval left outer join -> aggregation, append mode") {

@@ -1297,6 +1297,11 @@ joined <- join(
 Outer joins have the same guarantees as [inner joins](#semantic-guarantees-of-stream-stream-inner-joins-with-watermarking)
 regarding watermark delays and whether data will be dropped or not.
 
+Unmatched output and state removal use the same cutoff, derived from the opposite input's
+watermark and the time constraint. In the example above, the `clickTime` watermark finalizes
+impressions. Full outer joins require watermarks and time constraints in both directions to
+finalize both sides.
+
 ###### Caveats
 There are a few important characteristics to note regarding how the outer results are generated.
 
@@ -1392,35 +1397,46 @@ regarding watermark delays and whether data will be dropped or not.
     <td style="vertical-align: middle;">Inner</td>
     <td style="vertical-align: middle;">
       Supported, optionally specify watermark on both sides +
-      time constraints for state cleanup
+      time constraints for state cleanup. A stateful operator after the join makes progress only
+      when the state of the input whose event time it uses is cleaned up.
     </td>
   </tr>
   <tr>
     <td style="vertical-align: middle;">Left Outer</td>
     <td style="vertical-align: middle;">
-      Conditionally supported, must specify watermark on right + time constraints for correct
-      results, optionally specify watermark on left for all state cleanup
+      Conditionally supported, requires a watermark on the right and a time constraint that
+      limits how late a right row can match a left row. A watermark on the left and a reverse
+      time constraint also allow right-side state cleanup, which a stateful operator after the
+      join needs to make progress when it uses the right event time. That constraint is an
+      equality with an exact shift (an interval under one day, or <code>timestampadd</code> in
+      hours, minutes or seconds), or a range condition in place of a shifted equality.
     </td>
   </tr>
   <tr>
     <td style="vertical-align: middle;">Right Outer</td>
     <td style="vertical-align: middle;">
-      Conditionally supported, must specify watermark on left + time constraints for correct
-      results, optionally specify watermark on right for all state cleanup
+      Conditionally supported, requires a watermark on the left and a time constraint that
+      limits how late a left row can match a right row. A watermark on the right and a reverse
+      time constraint also allow left-side state cleanup, which a stateful operator after the
+      join needs to make progress when it uses the left event time. That constraint is an
+      equality with an exact shift (an interval under one day, or <code>timestampadd</code> in
+      hours, minutes or seconds), or a range condition in place of a shifted equality.
     </td>
   </tr>
   <tr>
     <td style="vertical-align: middle;">Full Outer</td>
     <td style="vertical-align: middle;">
-      Conditionally supported, must specify watermark on one side + time constraints for correct
-      results, optionally specify watermark on the other side for all state cleanup
+      Conditionally supported, requires watermarks on both inputs and time constraints that
+      limit how late matching rows can arrive on each side. These allow unmatched rows to be
+      output and state to be cleaned up on both sides.
     </td>
   </tr>
   <tr>
     <td style="vertical-align: middle;">Left Semi</td>
     <td style="vertical-align: middle;">
-      Conditionally supported, must specify watermark on right + time constraints for correct
-      results, optionally specify watermark on left for all state cleanup
+      Conditionally supported, requires a watermark on the right and a time constraint that
+      limits how late a right row can match a left row. A watermark on the left and a reverse
+      time constraint also allow right-side state cleanup.
     </td>
   </tr>
   <tr>
@@ -1432,6 +1448,17 @@ regarding watermark delays and whether data will be dropped or not.
 </table>
 
 Additional details on supported joins:
+
+- For stream-stream outer and semi joins, an equality key counts as the time constraint in the
+  table above when it is the other input's event time, or that event time shifted by constant
+  intervals, such as `leftTime = rightTime + INTERVAL 10 MINUTES`. A key shifted backward by
+  months, years, or a day-time interval of 24 hours or more, such as
+  `leftTime = rightTime - INTERVAL 1 DAY` or `leftTime = rightTime - INTERVAL 36 HOURS`, or
+  truncated from the other input's event time, such as
+  `leftTime = CAST(CAST(rightTime AS BIGINT) AS TIMESTAMP)`, does not count, while
+  `timestampadd` in hours, minutes or seconds does, whatever the amount. When both inputs
+  have watermarks, a time range condition between the two event times, as in the time-interval
+  join example above, can bound such a join instead.
 
 - Joins can be cascaded, that is, you can do `df1.join(df2, ...).join(df3, ...).join(df4, ....)`.
 
@@ -3587,7 +3614,8 @@ the effect of the change is not well-defined. For all of them:
   - *Streaming deduplication*: For example, `sdf.dropDuplicates("a")`. Any change in number or type of deduplicating columns is not allowed.
 
   - *Stream-stream join*: For example, `sdf1.join(sdf2, ...)` (i.e. both inputs are generated with `sparkSession.readStream`). Changes
-    in the schema or equi-joining columns are not allowed. Changes in join type (outer or inner) are not allowed. Other changes in the join condition are ill-defined.
+    in the schema or equi-joining columns are not allowed. Changes in join type (outer or inner) are not allowed. Other changes in the join condition are ill-defined. In particular, the join condition and the watermarks decide
+    which column Spark uses to find rows to remove from the state, so changing either can remove rows that could still match.
 
   - *Arbitrary stateful operation*: For example, `sdf.groupByKey(...).mapGroupsWithState(...)` or `sdf.groupByKey(...).flatMapGroupsWithState(...)`.
     Any change to the schema of the user-defined state and the type of timeout is not allowed.
