@@ -24,7 +24,7 @@ import scala.collection.mutable
 import org.apache.spark.{SparkException, SparkIllegalArgumentException}
 import org.apache.spark.internal.LogKeys.{AGGREGATE_FUNCTIONS, COLUMN_NAME, COLUMN_NAMES, EXPR, GROUP_BY_EXPRS, JOIN_CONDITION, JOIN_TYPE, POST_SCAN_FILTERS, PUSHED_FILTERS, RELATION_NAME, RELATION_OUTPUT}
 import org.apache.spark.sql.AnalysisException
-import org.apache.spark.sql.catalyst.expressions.{aggregate, Alias, And, Attribute, AttributeMap, AttributeReference, AttributeSet, BoundReference, Cast, Expression, ExpressionSet, ExprId, GetArrayStructFields, GetStructField, IntegerLiteral, LateralColumnAliasReference, Literal, NamedExpression, OuterReference, OuterScopeReference, PredicateHelper, ProjectionOverSchema, RuntimeReplaceable, SortOrder, SubqueryExpression, Unevaluable, UserDefinedExpression}
+import org.apache.spark.sql.catalyst.expressions.{aggregate, Alias, And, Attribute, AttributeMap, AttributeReference, AttributeSet, BoundReference, Cast, Coalesce, Expression, ExpressionSet, ExprId, GetArrayStructFields, GetStructField, IntegerLiteral, LateralColumnAliasReference, Literal, NamedExpression, OuterReference, OuterScopeReference, PredicateHelper, ProjectionOverSchema, RuntimeReplaceable, SortOrder, SubqueryExpression, Unevaluable, UserDefinedExpression}
 import org.apache.spark.sql.catalyst.expressions.aggregate.AggregateExpression
 import org.apache.spark.sql.catalyst.optimizer.{CollapseGroupedSumOfCount, CollapseProject}
 import org.apache.spark.sql.catalyst.planning.{PhysicalOperation, ScanOperation}
@@ -794,7 +794,9 @@ object V2ScanRelationPushDown extends Rule[LogicalPlan] with PredicateHelper {
         // +- RelationV2[c2#10, min(c1)#21, max(c1)#22] ...
         // scalastyle:on
         val aggExprs = finalResultExprs.map(_.transform {
-          case agg: AggregateExpression =>
+          // Do not revisit aggregate expressions introduced by the rewrite.
+          case agg: AggregateExpression
+              if aggExprToOutputOrdinal.contains(agg.canonicalized) =>
             val ordinal = aggExprToOutputOrdinal(agg.canonicalized)
             val aggAttribute = aggOutput(ordinal)
             val aggFunction: aggregate.AggregateFunction =
@@ -817,7 +819,13 @@ object V2ScanRelationPushDown extends Rule[LogicalPlan] with PredicateHelper {
                   aggregate.Sum(aggAttribute)
                 case other => other
               }
-            agg.copy(aggregateFunction = aggFunction)
+            val rewritten = agg.copy(aggregateFunction = aggFunction)
+            agg.aggregateFunction match {
+              case _: aggregate.Count =>
+                // A scan may produce no partial counts, but COUNT must still return zero.
+                Coalesce(Seq(rewritten, Literal(0L)))
+              case _ => rewritten
+            }
           case expr if groupByExprToOutputOrdinal.contains(expr.canonicalized) =>
             val ordinal = groupByExprToOutputOrdinal(expr.canonicalized)
             expr match {
