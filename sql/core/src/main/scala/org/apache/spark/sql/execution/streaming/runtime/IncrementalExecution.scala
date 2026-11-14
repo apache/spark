@@ -21,20 +21,22 @@ import java.util.UUID
 import java.util.concurrent.atomic.AtomicInteger
 
 import scala.collection.mutable.{Map => MutableMap}
+import scala.util.Try
 
 import org.apache.hadoop.fs.Path
 
 import org.apache.spark.internal.Logging
 import org.apache.spark.internal.LogKeys.{BATCH_TIMESTAMP, ERROR}
+import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.QueryPlanningTracker
 import org.apache.spark.sql.catalyst.analysis.WidenStatefulOperatorAttributeNullability
-import org.apache.spark.sql.catalyst.expressions.{CurrentBatchTimestamp, ExpressionWithRandomSeed}
+import org.apache.spark.sql.catalyst.expressions.{Alias, Attribute, CurrentBatchTimestamp, Expression, ExpressionWithRandomSeed, SessionWindow, TimeWindow}
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.rules.Rule
 import org.apache.spark.sql.catalyst.trees.TreePattern._
 import org.apache.spark.sql.classic.SparkSession
 import org.apache.spark.sql.errors.QueryExecutionErrors
-import org.apache.spark.sql.execution.{CommandExecutionMode, LocalLimitExec, QueryExecution, SerializeFromObjectExec, SparkPlan, SparkPlanner, SparkStrategy => Strategy, UnaryExecNode}
+import org.apache.spark.sql.execution.{CommandExecutionMode, ExpandExec, LocalLimitExec, ProjectExec, QueryExecution, SerializeFromObjectExec, SparkPlan, SparkPlanner, SparkStrategy => Strategy, UnaryExecNode, UnionExec}
 import org.apache.spark.sql.execution.aggregate.{HashAggregateExec, MergingSessionsExec, ObjectHashAggregateExec, SortAggregateExec, UpdatingSessionsExec}
 import org.apache.spark.sql.execution.datasources.v2.RealTimeStreamScanExec
 import org.apache.spark.sql.execution.datasources.v2.state.metadata.StateMetadataPartitionReader
@@ -42,14 +44,15 @@ import org.apache.spark.sql.execution.exchange.{ShuffleExchangeExec, ShuffleExch
 import org.apache.spark.sql.execution.python.streaming.{FlatMapGroupsInPandasWithStateExec, TransformWithStateInPySparkExec}
 import org.apache.spark.sql.execution.streaming.{ProjectAggregationBufferExec, StatefulStreamlineAggregateExec, StreamingErrors, StreamingQueryPlanTraverseHelper}
 import org.apache.spark.sql.execution.streaming.checkpointing.{CheckpointFileManager, OffsetSeqMetadata, OffsetSeqMetadataBase}
-import org.apache.spark.sql.execution.streaming.operators.stateful.{SessionWindowStateStoreRestoreExec, SessionWindowStateStoreSaveExec, StatefulOperator, StatefulOperatorStateInfo, StateStoreRestoreExec, StateStoreSaveExec, StateStoreWriter, StreamingDeduplicateExec, StreamingDeduplicateWithinWatermarkExec, StreamingGlobalLimitExec, StreamingLocalLimitExec, UpdateEventTimeColumnExec}
+import org.apache.spark.sql.execution.streaming.operators.stateful.{EventTimeWatermarkExec, SessionWindowStateStoreRestoreExec, SessionWindowStateStoreSaveExec, StatefulOperator, StatefulOperatorStateInfo, StateStoreRestoreExec, StateStoreSaveExec, StateStoreWriter, StreamingDeduplicateExec, StreamingDeduplicateWithinWatermarkExec, StreamingGlobalLimitExec, StreamingLocalLimitExec, UpdateEventTimeColumnExec, WatermarkSupport}
 import org.apache.spark.sql.execution.streaming.operators.stateful.flatmapgroupswithstate.FlatMapGroupsWithStateExec
 import org.apache.spark.sql.execution.streaming.operators.stateful.join.{StreamingSymmetricHashJoinExec, StreamingSymmetricHashJoinHelper}
+import org.apache.spark.sql.execution.streaming.operators.stateful.join.StreamingSymmetricHashJoinHelper.{JoinSide, LeftSide, RightSide}
 import org.apache.spark.sql.execution.streaming.operators.stateful.transformwithstate.TransformWithStateExec
 import org.apache.spark.sql.execution.streaming.sources.WriteToMicroBatchDataSourceV1
 import org.apache.spark.sql.execution.streaming.state.{OperatorStateMetadata, OperatorStateMetadataReader, OperatorStateMetadataV1, OperatorStateMetadataV2, OperatorStateMetadataWriter, StateSchemaBroadcast, StateSchemaMetadata}
 import org.apache.spark.sql.internal.SQLConf
-import org.apache.spark.sql.streaming.OutputMode
+import org.apache.spark.sql.streaming.{OutputMode, TimeMode}
 import org.apache.spark.util.{SerializableConfiguration, Utils}
 
 /**
@@ -166,6 +169,16 @@ class IncrementalExecution(
 
   private val allowMultipleStatefulOperators: Boolean =
     sparkSession.sessionState.conf.getConf(SQLConf.STATEFUL_OPERATOR_ALLOW_MULTIPLE)
+
+  /**
+   * Whether this is the first batch of a run that restores a checkpoint pinned to older
+   * stream-stream join watermark semantics. Such a batch re-simulates the previous batch with
+   * this version's output watermarks, which the older version may not have evicted with.
+   */
+  private lazy val isFirstBatchWithOlderJoinWatermarkSemantics: Boolean = isFirstBatch &&
+    sparkSession.sessionState.conf.getConf(
+      SQLConf.STREAMING_JOIN_CHECKPOINT_WATERMARK_SEMANTICS_VERSION) <
+      SQLConf.STREAMING_JOIN_CHECKPOINT_WATERMARK_SEMANTICS_VERSION.defaultValue.get
 
   /**
    * Records the current id for a given stateful operator in the query plan as the `state`
@@ -603,8 +616,25 @@ class IncrementalExecution(
         // The prevOffsetSeqMetadata.isDefined check guards against the first batch, where
         // watermark propagation yields Some(0) for late events even though no state has been
         // evicted yet, which would incorrectly skip entries at timestamp 0.
+        //
+        // On the first batch of a run, the late-events watermark comes from re-simulating the
+        // previous batch with this run's plan and semantics. An upstream stream-stream join's
+        // output watermark can then be above the one the previous batch evicted with, so this
+        // join scans from the start in that batch in two cases:
+        // - The checkpoint is pinned to older join watermark semantics. Older versions included
+        //   every bounded input in a join's output watermark; this version leaves out one that
+        //   the next stateful operator does not read. The pinned marker never advances, so this
+        //   recurs on the first batch of every run of such a checkpoint. Limiting it to the first
+        //   run after the upgrade would mean guessing which version ran the previous batch, and
+        //   a wrong guess skips rows that were never evicted.
+        // - Another stream-stream join is below this one. Its output watermark depends on the
+        //   plan above it (see withJoinOutputWatermarkSides), which can change between runs,
+        //   for example when a stream-static join between the two joins is removed.
+        val hasJoinBelow =
+          j.children.exists(_.exists(_.isInstanceOf[StreamingSymmetricHashJoinExec]))
         val prevBatchLateEventsWm =
-          if (prevOffsetSeqMetadata.isDefined && allowMultipleStatefulOperators) {
+          if (prevOffsetSeqMetadata.isDefined && allowMultipleStatefulOperators &&
+              !isFirstBatchWithOlderJoinWatermarkSemantics && !(isFirstBatch && hasJoinBelow)) {
             iwLateEvents
           } else {
             None
@@ -629,6 +659,183 @@ class IncrementalExecution(
       watermarkPropagator.propagate(currentBatchId - 1, plan, watermarkForPrevBatch)
       // This is to simulate watermark propagation for eviction.
       watermarkPropagator.propagate(currentBatchId, plan, watermarkForCurrBatch)
+    }
+
+    /**
+     * Find, for each stateful operator that applies its input watermark to an event-time column,
+     * which stream-stream join inputs' event times that column carries. The walk follows the
+     * column down through nodes that pass it on unchanged, to the same position in every input
+     * of a union, and through windows built from it, which end after it. It stops at a join, at
+     * another operator that writes state or sets an event time, and at any node it does not
+     * recognize; a join that no traced column reaches holds back for both inputs.
+     */
+    private def joinWatermarkConsumers(plan: SparkPlan): Seq[JoinWatermarkConsumer] = {
+      def eventTime(output: Seq[Attribute]): Option[Attribute] =
+        output.find(_.metadata.contains(EventTimeWatermark.delayKey))
+
+      // A time or session window built from one column, plus constants, ends after that column.
+      def windowSource(window: Attribute, expression: Expression): Option[Attribute] = {
+        val isWindow = window.metadata.contains(TimeWindow.marker) ||
+          window.metadata.contains(SessionWindow.marker)
+        expression.references.toSeq match {
+          case Seq(source) if isWindow => Some(source)
+          case _ => None
+        }
+      }
+
+      def passThrough(child: SparkPlan, attribute: Attribute): Seq[(Long, JoinSide, Attribute)] =
+        child.output.find(_.exprId == attribute.exprId).toSeq.flatMap(findJoinSides(child, _))
+
+      def findJoinSides(
+          node: SparkPlan,
+          attribute: Attribute): Seq[(Long, JoinSide, Attribute)] = {
+        node match {
+          case j: StreamingSymmetricHashJoinExec =>
+            val side = if (eventTime(j.left.output).exists(_.exprId == attribute.exprId)) {
+              Some(LeftSide)
+            } else if (eventTime(j.right.output).exists(_.exprId == attribute.exprId)) {
+              Some(RightSide)
+            } else {
+              None
+            }
+            j.stateInfo.map(_.operatorId).zip(side).map { case (id, s) => (id, s, attribute) }
+              .toSeq
+          case p: ProjectExec =>
+            p.projectList.find(_.exprId == attribute.exprId).toSeq.flatMap {
+              case a: Attribute => passThrough(p.child, a)
+              case Alias(a: Attribute, _) => passThrough(p.child, a)
+              case alias: Alias =>
+                windowSource(alias.toAttribute, alias.child).toSeq.flatMap(passThrough(p.child, _))
+              case _ => Nil
+            }
+          case e: ExpandExec =>
+            // A sliding window is one projection per window; each must carry the same column.
+            val index = e.output.indexWhere(_.exprId == attribute.exprId)
+            val traced = e.projections.map { projection =>
+              projection.lift(index).toSeq.flatMap {
+                case a: Attribute => passThrough(e.child, a)
+                case expression =>
+                  windowSource(e.output(index), expression).toSeq.flatMap(passThrough(e.child, _))
+              }
+            }
+            if (traced.nonEmpty && traced.forall(_.nonEmpty) && traced.distinct.size == 1) {
+              traced.head
+            } else {
+              Nil
+            }
+          case u: UnionExec =>
+            val index = u.output.indexWhere(_.exprId == attribute.exprId)
+            if (index < 0) Nil else u.children.flatMap(c => findJoinSides(c, c.output(index)))
+          case _: StateStoreWriter | _: EventTimeWatermarkExec | _: UpdateEventTimeColumnExec =>
+            Nil
+          case u: UnaryExecNode if u.output.exists(_.exprId == attribute.exprId) =>
+            passThrough(u.child, attribute)
+          case _ => Nil
+        }
+      }
+
+      // The inputs whose event-time column each operator compares with its input watermark.
+      def watermarkedInputs(node: SparkPlan): Seq[SparkPlan] = node match {
+        case _: StateStoreSaveExec | _: StatefulStreamlineAggregateExec |
+            _: SessionWindowStateStoreSaveExec | _: StreamingDeduplicateExec |
+            _: StreamingDeduplicateWithinWatermarkExec | _: StreamingSymmetricHashJoinExec =>
+          node.children
+        case f: FlatMapGroupsWithStateExec if f.timeoutConf == EventTimeTimeout => Seq(f.child)
+        case f: FlatMapGroupsInPandasWithStateExec if f.timeoutConf == EventTimeTimeout =>
+          Seq(f.child)
+        case t: TransformWithStateExec if t.timeMode == TimeMode.EventTime() => Seq(t.child)
+        case t: TransformWithStateInPySparkExec if t.timeMode == TimeMode.EventTime() =>
+          Seq(t.child)
+        case _ => Nil
+      }
+
+      plan.flatMap { consumer =>
+        watermarkedInputs(consumer).flatMap { input =>
+          Try(WatermarkSupport.findEventTimeColumn(input.output,
+            allowMultipleEventTimeColumns = false)).toOption.flatten.toSeq.flatMap { column =>
+            findJoinSides(input, column).map { case (joinOperatorId, side, joinEventTime) =>
+              JoinWatermarkConsumer(consumer, joinOperatorId, side, joinEventTime)
+            }
+          }
+        }
+      }
+    }
+
+    /**
+     * Tell each stream-stream join which inputs' event times reach the stateful operator that
+     * consumes its output watermark, so that the join holds back that watermark only for those
+     * inputs' state. A join without a traced consumer holds back for both inputs.
+     */
+    private def withJoinOutputWatermarkSides(plan: SparkPlan): SparkPlan = {
+      val sides = joinWatermarkConsumers(plan).groupMap(_.joinOperatorId)(_.side)
+      if (sides.isEmpty) {
+        plan
+      } else {
+        plan transform {
+          case j: StreamingSymmetricHashJoinExec
+              if j.stateInfo.exists(info => sides.contains(info.operatorId)) =>
+            j.copy(outputWatermarkSides = Some(sides(j.stateInfo.get.operatorId).toSet))
+        }
+      }
+    }
+
+    /**
+     * Reject an append-mode aggregation whose event time comes from a stream-stream join input
+     * that the join cannot bound: the join holds back its output watermark for that input, so
+     * the aggregation would never emit a result. Only an aggregation that the tracer of
+     * [[joinWatermarkConsumers]] reaches fails; with the finalization check disabled, it is only
+     * logged.
+     */
+    private def checkJoinOutputWatermarkConsumers(plan: SparkPlan): Unit = {
+      val joins = plan.collect {
+        case j: StreamingSymmetricHashJoinExec if j.stateInfo.isDefined =>
+          j.stateInfo.get.operatorId -> j
+      }.toMap
+      // A bounded input's state watermark advances with the input watermark; an input the join
+      // cannot bound contributes 0 at every input watermark.
+      def holdsOutputWatermark(join: StreamingSymmetricHashJoinExec, side: JoinSide): Boolean = {
+        Seq(1000000L, 2000000L).forall { inputWatermark =>
+          val (left, right) = StreamingSymmetricHashJoinHelper.getStateWatermark(
+            join.left.output, join.right.output, join.leftKeys, join.rightKeys,
+            join.condition.full, Some(inputWatermark), !allowMultipleStatefulOperators)
+          (if (side == LeftSide) left else right).contains(0L)
+        }
+      }
+      def isAppendAggregation(consumer: SparkPlan): Boolean = consumer match {
+        case s: StateStoreSaveExec => s.outputMode.contains(OutputMode.Append())
+        case s: SessionWindowStateStoreSaveExec => s.outputMode.contains(OutputMode.Append())
+        case s: StatefulStreamlineAggregateExec => s.outputMode.contains(OutputMode.Append())
+        case _ => false
+      }
+      joinWatermarkConsumers(plan).distinct.foreach {
+        case JoinWatermarkConsumer(consumer, joinOperatorId, side, eventTime)
+            if isAppendAggregation(consumer) &&
+              joins.get(joinOperatorId).exists(holdsOutputWatermark(_, side)) =>
+          val join = joins(joinOperatorId)
+          val (other, otherOutput) =
+            if (side == LeftSide) ("right", join.right.output) else ("left", join.left.output)
+          val constraint = s"a time constraint that limits how late a matching $other row can " +
+            "arrive"
+          val requirement =
+            if (otherOutput.exists(_.metadata.contains(EventTimeWatermark.delayKey))) {
+              constraint
+            } else {
+              s"a watermark on the $other input and $constraint"
+            }
+          val error = new AnalysisException(
+            errorClass = "STREAMING_JOIN_UNBOUNDED_DOWNSTREAM_EVENT_TIME",
+            messageParameters = Map(
+              "eventTime" -> eventTime.name,
+              "side" -> side.toString,
+              "requirement" -> requirement,
+              "config" -> SQLConf.STREAMING_JOIN_CHECK_FINALIZATION_ENABLED.key))
+          if (conf.getConf(SQLConf.STREAMING_JOIN_CHECK_FINALIZATION_ENABLED)) {
+            throw error
+          } else {
+            logWarning(log"${MDC(ERROR, error.getMessage)}")
+          }
+        case _ =>
+      }
     }
 
     private lazy val composedRule: PartialFunction[SparkPlan, SparkPlan] = {
@@ -722,6 +929,65 @@ class IncrementalExecution(
 
     override def apply(plan: SparkPlan): SparkPlan = {
       val planWithStateOpId = plan transform composedRule
+      // Validate the checkpoint-pinned semantics before writing state metadata or opening state,
+      // including a restart retrying an incomplete batch zero.
+      if (isFirstBatchWithOlderJoinWatermarkSemantics) {
+        def watermarkColumns(input: SparkPlan): String = {
+          val columns = input.output.filter(
+            _.metadata.contains(EventTimeWatermark.delayKey))
+          if (columns.isEmpty) "none" else columns.map(_.name).mkString(", ")
+        }
+        // A join's output watermark reaches every stateful operator above it. One that uses its
+        // input watermark reads the inputs that the tracer names, or both inputs when it cannot
+        // be traced. An operator uses it when an input carries an event-time column, when it
+        // fires event-time timeouts, or when it passes the watermark to user code, as
+        // transformWithState does in every time mode. The join's output watermark changes
+        // nothing for any other operator, such as an update-mode count on a key.
+        def usesInputWatermark(operator: StatefulOperator): Boolean = operator match {
+          case _: TransformWithStateExec | _: TransformWithStateInPySparkExec => true
+          case f: FlatMapGroupsWithStateExec if f.timeoutConf == EventTimeTimeout => true
+          case f: FlatMapGroupsInPandasWithStateExec if f.timeoutConf == EventTimeTimeout => true
+          case _ => operator.children.exists(
+            _.output.exists(_.metadata.contains(EventTimeWatermark.delayKey)))
+        }
+        val joinsBelowStatefulOperators = planWithStateOpId.collect {
+          case s: StatefulOperator if usesInputWatermark(s) => s.children.flatMap(_.collect {
+            case j: StreamingSymmetricHashJoinExec => j.stateInfo.map(_.operatorId)
+          }.flatten)
+        }.flatten.toSet
+        val tracedSides = joinWatermarkConsumers(planWithStateOpId)
+          .groupMap(_.joinOperatorId)(_.side)
+        def consumedSides(j: StreamingSymmetricHashJoinExec): Set[JoinSide] =
+          j.stateInfo.map(_.operatorId) match {
+            case Some(id) if joinsBelowStatefulOperators.contains(id) =>
+              tracedSides.get(id).map(_.toSet).getOrElse(Set(LeftSide, RightSide))
+            case _ => Set.empty
+          }
+        planWithStateOpId.foreach {
+          case j: StreamingSymmetricHashJoinExec
+              if !StreamingSymmetricHashJoinHelper.isWatermarkCheckpointCompatible(
+                j.left.output, j.right.output, j.leftKeys, j.rightKeys, j.condition.full,
+                consumedSides(j)) =>
+            // Name the side of each equality key; both inputs often use the same column names.
+            val keyConditions = j.leftKeys.zip(j.rightKeys).map { case (left, right) =>
+              s"left.${left.sql} = right.${right.sql}"
+            }
+            val conditions = keyConditions ++ j.condition.full.map(_.sql)
+            val joinCondition = if (conditions.isEmpty) "none" else conditions.mkString(" AND ")
+            throw new AnalysisException(
+              errorClass = "STREAMING_JOIN_CHECKPOINT_INCOMPATIBLE",
+              messageParameters = Map(
+                "joinCondition" -> joinCondition,
+                "leftWatermarkColumns" -> watermarkColumns(j.left),
+                "rightWatermarkColumns" -> watermarkColumns(j.right)))
+          case _ =>
+        }
+      }
+      // Like the checkpoint check, this runs before state metadata is written or state opened.
+      // With a single global watermark, the join's output watermark does not reach the consumers.
+      if (isFirstBatch && allowMultipleStatefulOperators) {
+        checkJoinOutputWatermarkConsumers(planWithStateOpId)
+      }
       // Need to check before write to metadata because we need to detect add operator
       // Only check when streaming is restarting and is first batch
       if (isFirstBatch && currentBatchId != 0) {
@@ -729,7 +995,8 @@ class IncrementalExecution(
       }
 
       stateStoreWritersWithMetadata = Some(Seq.empty)
-      val planWithSchemas = planWithStateOpId transform StateSchemaAndOperatorMetadataRule.rule
+      val planWithSchemas = withJoinOutputWatermarkSides(
+        planWithStateOpId transform StateSchemaAndOperatorMetadataRule.rule)
 
       simulateWatermarkPropagation(planWithSchemas)
       planWithSchemas transform WatermarkPropagationRule.rule
@@ -879,3 +1146,13 @@ class IncrementalExecution(
       }.exists(_ == true)
   }
 }
+
+/**
+ * A stateful operator that compares its input watermark with an event-time column carrying the
+ * event time `eventTime` of one input, `side`, of the stream-stream join `joinOperatorId`.
+ */
+private[runtime] case class JoinWatermarkConsumer(
+    consumer: SparkPlan,
+    joinOperatorId: Long,
+    side: JoinSide,
+    eventTime: Attribute)

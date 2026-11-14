@@ -4309,6 +4309,40 @@ object SQLConf {
       .checkValue(v => Set(1, 2, 3, 4).contains(v), "Valid versions are 1, 2, 3, and 4")
       .createWithDefault(2)
 
+  val STREAMING_JOIN_CHECKPOINT_WATERMARK_SEMANTICS_VERSION =
+    buildConf("spark.sql.streaming.join.checkpointWatermarkSemanticsVersion")
+      .internal()
+      .doc("Checkpoint generation for stream-stream join watermark semantics, persisted in " +
+        "the offset log. Older generations are accepted only when the query plan proves that " +
+        "its state and output watermark semantics are unchanged. The generation validates " +
+        "compatibility; it does not select a legacy execution path.")
+      .version("4.4.0")
+      .withBindingPolicy(ConfigBindingPolicy.NOT_APPLICABLE)
+      .intConf
+      .checkValue(v => v >= 0 && v <= 4, "Supported versions are 0 through 4")
+      .createWithDefault(4)
+
+  val STREAMING_JOIN_CHECK_FINALIZATION_ENABLED =
+    buildConf("spark.sql.streaming.join.checkFinalization.enabled")
+      .internal()
+      .doc("When true, a stream-stream left outer, right outer, full outer or left semi join " +
+        "fails analysis unless the watermarks and time constraints let Spark finalize the " +
+        "rows of each input whose unmatched rows it outputs or whose state it must bound for " +
+        "a semi join: such an input needs a bound derived from the other input's watermark. " +
+        "When false, Spark logs a warning instead and runs the query, as long as the join " +
+        "has a watermarked equality key or a range bound for a finalized input, which earlier " +
+        "versions required; other joins still fail analysis. Unmatched rows are " +
+        "still finalized only with that bound, so such a query keeps the input's state " +
+        "without bound, and an outer join never outputs the rows that the bound would " +
+        "finalize. Before Spark 4.4, a weaker check that ignored the direction of each " +
+        "watermark admitted some of these joins. The conf also controls the start-time check " +
+        "that rejects an append-mode aggregation after a stream-stream join whose event time " +
+        "comes from an input the join cannot bound.")
+      .version("4.4.0")
+      .withBindingPolicy(ConfigBindingPolicy.NOT_APPLICABLE)
+      .booleanConf
+      .createWithDefault(true)
+
   val STREAMING_SESSION_WINDOW_MERGE_SESSIONS_IN_LOCAL_PARTITION =
     buildConf("spark.sql.streaming.sessionWindow.merge.sessions.in.local.partition")
       .doc("When true, streaming session window sorts and merge sessions in local partition " +
@@ -9830,6 +9864,9 @@ class SQLConf extends Serializable with Logging with SqlApiConf {
 
   def statefulOperatorCorrectnessCheckEnabled: Boolean =
     getConf(STATEFUL_OPERATOR_CHECK_CORRECTNESS_ENABLED)
+
+  def streamingJoinCheckFinalizationEnabled: Boolean =
+    getConf(STREAMING_JOIN_CHECK_FINALIZATION_ENABLED)
 
   def fileStreamSinkMetadataIgnored: Boolean = getConf(FILESTREAM_SINK_METADATA_IGNORED)
 
