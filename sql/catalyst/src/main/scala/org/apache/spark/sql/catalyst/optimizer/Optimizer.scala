@@ -1588,7 +1588,7 @@ object ColumnPruning extends Rule[LogicalPlan] {
         requiredLookupOutput = j.requiredLookupOutput.filter(p.references.contains)))
 
     // A semi or anti external lookup join outputs no lookup column, like a Left Existence Join.
-    case j @ ExternalLookupJoin(_, right, LeftSemi | LeftAnti, _, _)
+    case j @ ExternalLookupJoin(_, right, LeftSemi | LeftAnti, _, _, _)
         if j.requiredLookupOutput.nonEmpty || !right.outputSet.subsetOf(j.references) =>
       val withoutLookupOutput = j.copy(requiredLookupOutput = Seq.empty)
       withoutLookupOutput.copy(right = prunedChild(right, withoutLookupOutput.references))

@@ -121,10 +121,13 @@ SKIP_VERSION_CHECK = os.environ.get("SKIP_VERSION_CHECK", "")
 MERGE_SCRIPT_REPO_PATH = "dev/merge_spark_pr.py"
 
 # Run the push-triggered post-merge workflows at each branch's configured commit interval.
-# Other commits get GitHub's documented workflow-skip trailer after a visible warning.
+# Other commits get GitHub's documented workflow-skip trailer after a visible warning, unless
+# the PR has the do-not-skip-ci label.
 # See https://docs.github.com/en/actions/how-tos/manage-workflow-runs/skip-workflow-runs
 POST_MERGE_CI_INTERVALS = {"master": 10, "branch-4.x": 10}
 POST_MERGE_CI_SKIP_TRAILER = "skip-checks: true"
+# A PR carrying this GitHub label is exempt from the interval and never gets the skip trailer.
+POST_MERGE_CI_FORCE_LABEL = "do-not-skip-ci"
 # Covers the trailer plus the cherry-pick attribution and committer sign-off added by -sx.
 POST_MERGE_CI_TRAILER_SEARCH_LENGTH = 256
 
@@ -546,12 +549,20 @@ def red(text):
     return "\033[91m%s\033[0m" % text
 
 
+def yellow(text):
+    return "\033[33m%s\033[0m" % text
+
+
 def bold(text):
     return "\033[1m%s\033[0m" % text
 
 
 def print_error(msg):
     print(red(msg))
+
+
+def print_warning(msg):
+    print(yellow(msg))
 
 
 def bold_input(prompt) -> str:
@@ -1024,10 +1035,13 @@ def clean_up():
             git.run("git branch -D %s" % branch)
 
 
-def should_skip_post_merge_ci(target_ref):
+def should_skip_post_merge_ci(target_ref, pr_num):
     """Return whether the next commit on ``target_ref`` should skip post-merge CI.
 
     The branch history count matches the check formerly performed in ``build_main.yml``.
+    A commit that would skip is exempt when PR ``pr_num`` carries ``POST_MERGE_CI_FORCE_LABEL``.
+    The labels are read only then, on every call, so a label added during the run reaches the
+    later picks.
     """
     interval = POST_MERGE_CI_INTERVALS.get(target_ref)
     if interval is None:
@@ -1041,10 +1055,26 @@ def should_skip_post_merge_ci(target_ref):
         )
         return False
 
-    print_error(
+    labels = get_json_pages("%s/issues/%s/labels" % (GITHUB_API_BASE, pr_num))
+    # GitHub matches label names case-insensitively.
+    if any(label["name"].lower() == POST_MERGE_CI_FORCE_LABEL for label in labels):
+        print(
+            "Post-merge CI is exempt from sampling on %s: the PR has the %r label."
+            % (target_ref, POST_MERGE_CI_FORCE_LABEL)
+        )
+        return False
+
+    print_warning(
         "WARNING: Post-merge CI will be skipped on %s because commit count %s is not "
-        "divisible by %s. GitHub's %r trailer will be added."
-        % (target_ref, commit_count, interval, POST_MERGE_CI_SKIP_TRAILER)
+        "divisible by %s. GitHub's %r trailer will be added. To force post-merge CI to "
+        "run, add the %r label to the PR and rerun this script."
+        % (
+            target_ref,
+            commit_count,
+            interval,
+            POST_MERGE_CI_SKIP_TRAILER,
+            POST_MERGE_CI_FORCE_LABEL,
+        )
     )
     return True
 
@@ -1104,7 +1134,7 @@ def merge_pr(pr_num, target_ref, title, body, pr_repo_desc, pr_author, co_author
     git.run("git fetch %s pull/%s/head:%s" % (PR_REMOTE_NAME, pr_num, pr_branch_name))
     git.run("git fetch %s %s:%s" % (PUSH_REMOTE_NAME, target_ref, target_branch_name))
     git.run("git checkout %s" % target_branch_name)
-    skip_post_merge_ci = should_skip_post_merge_ci(target_ref)
+    skip_post_merge_ci = should_skip_post_merge_ci(target_ref, pr_num)
 
     had_conflicts = False
     try:
@@ -1191,7 +1221,15 @@ def _do_cherry_pick(pr_num, merge_hash, pick_ref):
     git.run("git fetch %s %s:%s" % (PUSH_REMOTE_NAME, pick_ref, pick_branch_name))
     git.run("git checkout %s" % pick_branch_name)
     pick_head = git.run("git rev-parse HEAD").strip()
-    skip_post_merge_ci = should_skip_post_merge_ci(pick_ref)
+    skip_post_merge_ci = should_skip_post_merge_ci(pick_ref, pr_num)
+    if skip_post_merge_ci:
+        # The merge is already pushed, so stopping here still reaches the JIRA update in main().
+        # Resolving the ticket then and again on the rerun leaves e.g. both 5.0.0 and 4.4.0,
+        # where a single run records only 4.4.0.
+        print_warning(
+            "If you stop this pick to rerun, answer N to 'Would you like to update an "
+            "associated JIRA?' first. The rerun updates the JIRA."
+        )
 
     try:
         git.run(

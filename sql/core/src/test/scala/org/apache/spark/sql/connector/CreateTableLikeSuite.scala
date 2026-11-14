@@ -20,7 +20,9 @@ package org.apache.spark.sql.connector
 import org.apache.spark.sql.catalyst.analysis.TableAlreadyExistsException
 import org.apache.spark.sql.connector.catalog.{CatalogV2Util, Identifier, InMemoryCatalog, TableCatalog}
 import org.apache.spark.sql.types.{CharType, IntegerType, LongType, StringType, VarcharType}
+import org.apache.spark.tags.DataSourceV2Test
 
+@DataSourceV2Test
 class CreateTableLikeSuite extends DatasourceV2SQLBase {
 
   private def testCatalog: InMemoryCatalog =
