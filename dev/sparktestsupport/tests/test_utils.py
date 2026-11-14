@@ -37,6 +37,40 @@ class DetermineModulesForFilesTests(unittest.TestCase):
                     determine_modules_for_files([".github/workflows/build_main.yml"]), expected
                 )
 
+    def test_lint_js_inputs_select_lint_js(self):
+        for filename in (
+            "core/src/main/resources/org/apache/spark/ui/static/webui.js",
+            "sql/core/src/main/resources/org/apache/spark/sql/execution/ui/static/spark-sql-viz.js",
+            "docs/js/main.js",
+            "ui-test/tests/utils.test.js",
+            "dev/lint-js",
+            "dev/eslint.js",
+            "dev/package.json",
+            "dev/package-lock.json",
+        ):
+            with self.subTest(filename=filename):
+                self.assertIn(modules.lint_js, determine_modules_for_files([filename]))
+
+    def test_non_lint_js_inputs_do_not_select_lint_js(self):
+        for filename in (
+            "core/src/main/resources/org/apache/spark/ui/static/webui.css",
+            "core/src/main/scala/org/apache/spark/SparkContext.scala",
+            "docs/_layouts/global.html",
+            ".github/workflows/update_build_status.js",
+            "python/docs/source/_static/copybutton.js",
+        ):
+            with (
+                self.subTest(filename=filename),
+                mock.patch.dict(os.environ, {"GITHUB_ACTIONS": "true"}),
+            ):
+                self.assertNotIn(modules.lint_js, determine_modules_for_files([filename]))
+
+    def test_ui_test_harness_files_are_ignored(self):
+        self.assertEqual(
+            determine_modules_for_files(["ui-test/package.json", "ui-test/package-lock.json"]),
+            set(),
+        )
+
 
 class IdentifyChangedFilesFromGitHistoryTests(unittest.TestCase):
     def changed_modules(self, patch_sha, target_ref):

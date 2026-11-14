@@ -22,6 +22,7 @@ set -o pipefail
 SCRIPT_DIR="$( cd "$( dirname "$0" )" && pwd )"
 SPARK_ROOT_DIR="$(dirname $SCRIPT_DIR)"
 LINT_JS_REPORT_FILE_NAME="$SPARK_ROOT_DIR/dev/lint-js-report.log"
+# Keep in sync with the lint-js module in dev/sparktestsupport/modules.py.
 LINT_TARGET_FILES=(
   "$SPARK_ROOT_DIR/core/src/main/resources/org/apache/spark/ui/static/"
   "$SPARK_ROOT_DIR/sql/core/src/main/resources/org/apache/spark/sql/execution/ui/static/"
