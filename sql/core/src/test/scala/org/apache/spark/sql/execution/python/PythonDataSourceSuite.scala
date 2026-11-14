@@ -19,10 +19,12 @@ package org.apache.spark.sql.execution.python
 
 import java.io.{File, FileWriter}
 
+import scala.collection.mutable.ArrayBuffer
+
 import org.apache.spark.api.python.PythonException
 import org.apache.spark.api.python.PythonUtils
 import org.apache.spark.sql.{AnalysisException, IntegratedUDFTestUtils, Row}
-import org.apache.spark.sql.execution.{FilterExec, LimitExec}
+import org.apache.spark.sql.execution.{FilterExec, LimitExec, QueryExecution}
 import org.apache.spark.sql.execution.adaptive.AdaptiveSparkPlanHelper
 import org.apache.spark.sql.execution.datasources.DataSourceManager
 import org.apache.spark.sql.execution.datasources.v2.{BatchScanExec, DataSourceV2ScanRelation}
@@ -30,6 +32,7 @@ import org.apache.spark.sql.execution.datasources.v2.python.PythonScan
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.sql.types.StructType
+import org.apache.spark.sql.util.QueryExecutionListener
 import org.apache.spark.util.Utils
 
 abstract class PythonDataSourceSuiteBase
@@ -988,6 +991,101 @@ class PythonDataSourceSuite extends PythonDataSourceSuiteBase {
         df.write.format(dataSourceName).mode("append").save(path)
         val df2 = spark.read.json(path)
         checkAnswer(df, df2)
+      }
+    }
+  }
+
+  private def writeRequirementsDataSourceScript(requirements: String): String =
+    s"""
+       |import json
+       |import os
+       |from pyspark import TaskContext
+       |from pyspark.sql.datasource import (
+       |    ClusteredDistribution,
+       |    DataSource,
+       |    DataSourceWriter,
+       |    SortDirection,
+       |    SortOrder,
+       |    WriterCommitMessage,
+       |)
+       |
+       |class SimpleDataSourceWriter(DataSourceWriter):
+       |    def __init__(self, options):
+       |        self.options = options
+       |
+       |$requirements
+       |
+       |    def write(self, iterator):
+       |        path = self.options.get("path")
+       |        assert path is not None
+       |        output = os.path.join(path, f"{TaskContext.get().partitionId()}.json")
+       |        with open(output, "w") as file:
+       |            for row in iterator:
+       |                file.write(json.dumps(row.asDict()) + "\\n")
+       |        return WriterCommitMessage()
+       |
+       |class SimpleDataSource(DataSource):
+       |    def writer(self, schema, overwrite):
+       |        return SimpleDataSourceWriter(self.options)
+       |""".stripMargin
+
+  test("SPARK-61646: write required distribution and ordering") {
+    assume(shouldTestPandasUDFs)
+    val dataSource = createUserDefinedPythonDataSource(
+      dataSourceName,
+      writeRequirementsDataSourceScript(
+        """    def requiredDistribution(self):
+          |        return ClusteredDistribution(clustering=(("id",),))
+          |
+          |    def requiredOrdering(self):
+          |        return [SortOrder(("id",), SortDirection.DESCENDING)]""".stripMargin))
+    spark.dataSource.registerPython(dataSourceName, dataSource)
+
+    withSQLConf(
+      SQLConf.PYTHON_WRITE_DISTRIBUTION_AND_ORDERING_ENABLED.key -> "true",
+      SQLConf.ADAPTIVE_EXECUTION_ENABLED.key -> "false") {
+      withTempDir { dir =>
+        val df = spark.range(0, 10, 1, 3).toDF("id")
+        val plans = ArrayBuffer.empty[String]
+        val listener = new QueryExecutionListener {
+          override def onSuccess(
+              funcName: String, qe: QueryExecution, duration: Long): Unit =
+            plans += qe.executedPlan.toString
+          override def onFailure(
+              funcName: String, qe: QueryExecution, exception: Exception): Unit = {}
+        }
+        spark.listenerManager.register(listener)
+        try {
+          df.write.format(dataSourceName).mode("append").save(dir.getAbsolutePath)
+          sparkContext.listenerBus.waitUntilEmpty()
+          // The required distribution becomes an exchange and the ordering a sort.
+          assert(plans.exists(p => p.contains("Exchange hashpartitioning(id") &&
+            p.contains("Sort [id") && p.contains("DESC NULLS LAST")),
+            s"expected a hash exchange and a sort in:\n${plans.mkString("\n")}")
+        } finally {
+          spark.listenerManager.unregister(listener)
+        }
+        // The data still round-trips correctly.
+        checkAnswer(spark.read.json(dir.getAbsolutePath), df)
+      }
+    }
+  }
+
+  test("SPARK-61646: write requirements are not requested when disabled") {
+    assume(shouldTestPandasUDFs)
+    // `requiredDistribution` raises, so the write only succeeds if it is never called.
+    val dataSource = createUserDefinedPythonDataSource(
+      dataSourceName,
+      writeRequirementsDataSourceScript(
+        """    def requiredDistribution(self):
+          |        raise AssertionError("should not be called")""".stripMargin))
+    spark.dataSource.registerPython(dataSourceName, dataSource)
+
+    withSQLConf(SQLConf.PYTHON_WRITE_DISTRIBUTION_AND_ORDERING_ENABLED.key -> "false") {
+      withTempDir { dir =>
+        val df = spark.range(0, 10, 1, 3).toDF("id")
+        df.write.format(dataSourceName).mode("append").save(dir.getAbsolutePath)
+        checkAnswer(spark.read.json(dir.getAbsolutePath), df)
       }
     }
   }

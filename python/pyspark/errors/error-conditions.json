@@ -197,9 +197,19 @@
       "Remote client cannot create a SparkContext. Create SparkSession instead."
     ]
   },
+  "DATA_SOURCE_EMPTY_DISTRIBUTION": {
+    "message": [
+      "<type>.requiredDistribution() returned a <distribution> with an empty '<field>'. Provide at least one entry, or return UnspecifiedDistribution() to require no particular distribution."
+    ]
+  },
   "DATA_SOURCE_EXTRANEOUS_FILTERS": {
     "message": [
       "<type>.pushFilters() returned filters that are not part of the input. Make sure that each returned filter is one of the input filters by reference. Input filters: <input>. Extraneous filters: <extraneous>."
+    ]
+  },
+  "DATA_SOURCE_INVALID_COLUMN_PATH": {
+    "message": [
+      "<type> returned an invalid column reference: <column>. A column must be a non-empty tuple of strings, for example ('col1',) for `col1` or ('a', 'b') for `a.b`."
     ]
   },
   "DATA_SOURCE_INVALID_RETURN_TYPE": {
