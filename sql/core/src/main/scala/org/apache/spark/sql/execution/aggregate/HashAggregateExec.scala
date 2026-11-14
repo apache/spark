@@ -21,7 +21,6 @@ import java.util.concurrent.TimeUnit._
 
 import scala.collection.mutable
 
-import org.apache.spark.TaskContext
 import org.apache.spark.internal.LogKeys.CONFIG
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.catalyst.InternalRow
@@ -292,134 +291,22 @@ case class HashAggregateExec(
   /**
    * This is called by generated Java class, should be public.
    */
-  def createHashMap(): UnsafeFixedWidthAggregationMap = {
-    // create initialized aggregate buffer
-    val initExpr = declFunctions.flatMap(f => f.initialValues)
-    val initialBuffer = UnsafeProjection.create(initExpr)(EmptyRow)
-
-    // create hashMap
-    new UnsafeFixedWidthAggregationMap(
-      initialBuffer,
-      bufferSchema,
-      groupingKeySchema,
-      TaskContext.get(),
-      1024 * 16, // initial capacity
-      TaskContext.get().taskMemoryManager().pageSizeBytes
-    )
-  }
-
-  def getTaskContext(): TaskContext = {
-    TaskContext.get()
-  }
-
-  /**
-   * Registers a task-completion hook to close the generated fast hash map, so that the close hook
-   * is a plain method call on this plan, with the listener being a lambda in compiled Scala code,
-   * rather than an anonymous `TaskCompletionListener` emitted per fast hash map (one fewer
-   * generated inner class per map). This is called by the generated Java class, should be public.
-   */
-  def addFastHashMapCloseHook(fastHashMap: AutoCloseable): Unit = {
-    TaskContext.get().addTaskCompletionListener[Unit](_ => fastHashMap.close())
-  }
-
-  def getEmptyAggregationBuffer(): InternalRow = {
-    val initExpr = declFunctions.flatMap(f => f.initialValues)
-    val initialBuffer = UnsafeProjection.create(initExpr)(EmptyRow)
-    initialBuffer
-  }
-
-  /**
-   * This is called by generated Java class, should be public.
-   */
   def createUnsafeJoiner(): UnsafeRowJoiner = {
     GenerateUnsafeRowJoiner.create(groupingKeySchema, bufferSchema)
   }
 
   /**
-   * Called by generated Java class to finish the aggregate and return a KVIterator.
+   * Creates the helper that the generated code calls at runtime. It holds only what those calls
+   * need, so the generated code does not reference this plan node and its child subtree.
    */
-  def finishAggregate(
-      hashMap: UnsafeFixedWidthAggregationMap,
-      sorter: UnsafeKVExternalSorter,
-      peakMemory: SQLMetric,
-      spillSize: SQLMetric,
-      avgHashProbe: SQLMetric,
-      numTasksFallBacked: SQLMetric): KVIterator[UnsafeRow, UnsafeRow] = {
-
-    // update peak execution memory
-    val mapMemory = hashMap.getPeakMemoryUsedBytes
-    val sorterMemory = Option(sorter).map(_.getPeakMemoryUsedBytes).getOrElse(0L)
-    val maxMemory = Math.max(mapMemory, sorterMemory)
-    val metrics = TaskContext.get().taskMetrics()
-    peakMemory.add(maxMemory)
-    metrics.incPeakExecutionMemory(maxMemory)
-
-    // Update average hashmap probe
-    avgHashProbe.set(hashMap.getAvgHashProbesPerKey)
-
-    if (sorter == null) {
-      // not spilled
-      return hashMap.iterator()
-    }
-
-    // merge the final hashMap into sorter
-    numTasksFallBacked += 1
-    sorter.merge(hashMap.destructAndCreateExternalSorter())
-    hashMap.free()
-    val sortedIter = sorter.sortedIterator()
-
-    // Create a KVIterator based on the sorted iterator.
-    new KVIterator[UnsafeRow, UnsafeRow] {
-
-      // Create a MutableProjection to merge the rows of same key together
-      val mergeExpr = declFunctions.flatMap(_.mergeExpressions)
-      val mergeProjection = MutableProjection.create(
-        mergeExpr,
-        aggregateBufferAttributes ++ declFunctions.flatMap(_.inputAggBufferAttributes))
-      val joinedRow = new JoinedRow()
-
-      var currentKey: UnsafeRow = null
-      var currentRow: UnsafeRow = null
-      var nextKey: UnsafeRow = if (sortedIter.next()) {
-        sortedIter.getKey
-      } else {
-        null
-      }
-
-      override def next(): Boolean = {
-        if (nextKey != null) {
-          currentKey = nextKey.copy()
-          currentRow = sortedIter.getValue.copy()
-          nextKey = null
-          // use the first row as aggregate buffer
-          mergeProjection.target(currentRow)
-
-          // merge the following rows with same key together
-          var findNextGroup = false
-          while (!findNextGroup && sortedIter.next()) {
-            val key = sortedIter.getKey
-            if (hashMap.keysEqual(currentKey, key)) {
-              mergeProjection(joinedRow(currentRow, sortedIter.getValue))
-            } else {
-              // We find a new group.
-              findNextGroup = true
-              nextKey = key
-            }
-          }
-
-          true
-        } else {
-          spillSize.add(sorter.getSpillSize)
-          false
-        }
-      }
-
-      override def getKey: UnsafeRow = currentKey
-      override def getValue: UnsafeRow = currentRow
-      override def close(): Unit = {
-        sortedIter.close()
-      }
-    }
+  private def createCodegenHelper(): HashAggregateCodegenHelper = {
+    new HashAggregateCodegenHelper(
+      groupingKeySchema,
+      bufferSchema,
+      initialValues = declFunctions.flatMap(_.initialValues),
+      boundMergeExpressions = bindReferences(
+        declFunctions.flatMap(_.mergeExpressions),
+        aggregateBufferAttributes ++ declFunctions.flatMap(_.inputAggBufferAttributes)))
   }
 
   /**
@@ -612,11 +499,14 @@ case class HashAggregateExec(
       case _ => conf.fastHashAggregateRowMaxCapacityBit
     }
 
-    val thisPlan = ctx.addReferenceObj("plan", this)
+    // The generated code calls into a helper rather than into this plan node: a reference to the
+    // node would serialize its whole child subtree into every task binary (see
+    // `HashAggregateCodegenHelper`).
+    val aggHelper = ctx.addReferenceObj("aggHelper", createCodegenHelper())
 
     if (adaptivePartialAggEnabled) {
       adaptiveEmptyBufferTerm = ctx.addMutableState("UnsafeRow", "adaptiveEmptyBuffer",
-        v => s"$v = (UnsafeRow) $thisPlan.getEmptyAggregationBuffer();", forceInline = true)
+        v => s"$v = (UnsafeRow) $aggHelper.getEmptyAggregationBuffer();", forceInline = true)
       adaptivePassThroughBufferTerm = ctx.addMutableState("UnsafeRow",
         "adaptivePassThroughBuffer", v => s"$v = $adaptiveEmptyBufferTerm.copy();",
         forceInline = true)
@@ -652,8 +542,8 @@ case class HashAggregateExec(
           "org.apache.spark.unsafe.KVIterator<UnsafeRow, UnsafeRow>",
           "fastHashMapIter", forceInline = true)
         val create = s"$fastHashMapTerm = new $fastHashMapClassName(" +
-          s"$thisPlan.getTaskContext().taskMemoryManager(), " +
-          s"$thisPlan.getEmptyAggregationBuffer());"
+          s"$aggHelper.getTaskContext().taskMemoryManager(), " +
+          s"$aggHelper.getEmptyAggregationBuffer());"
         (iter, create)
       }
     } else ("", "")
@@ -664,7 +554,7 @@ case class HashAggregateExec(
     // output (e.g. aggregate followed by limit).
     val addHookToCloseFastHashMap = if (isFastHashMapEnabled) {
       s"""
-         |$thisPlan.addFastHashMapCloseHook($fastHashMapTerm);
+         |$aggHelper.addFastHashMapCloseHook($fastHashMapTerm);
        """.stripMargin
     } else ""
 
@@ -684,7 +574,7 @@ case class HashAggregateExec(
     val avgHashProbe = metricTerm(ctx, "avgHashProbe")
     val numTasksFallBacked = metricTerm(ctx, "numTasksFallBacked")
 
-    val finishRegularHashMap = s"$iterTerm = $thisPlan.finishAggregate(" +
+    val finishRegularHashMap = s"$iterTerm = $aggHelper.finishAggregate(" +
       s"$hashMapTerm, $sorterTerm, $peakMemory, $spillSize, $avgHashProbe, $numTasksFallBacked);"
     val finishHashMap = if (isFastHashMapEnabled) {
       s"""
@@ -926,7 +816,7 @@ case class HashAggregateExec(
        |  $initAgg = true;
        |  $createFastHashMap
        |  $addHookToCloseFastHashMap
-       |  $hashMapTerm = $thisPlan.createHashMap();
+       |  $hashMapTerm = $aggHelper.createHashMap();
        |  $startBuildTimer
        |  $doAggFuncName(partitionIndex);
        |  $stopBuildTimer
@@ -1047,7 +937,7 @@ case class HashAggregateExec(
 
       val spillMap =
         s"""
-           |$sorterTerm = org.apache.spark.sql.execution.aggregate.HashAggregateExec
+           |$sorterTerm = ${classOf[HashAggregateCodegenHelper].getName}
            |  .spillHashMapToSorter($hashMapTerm, $sorterTerm);
            |$resetCounter
            |// the hash map had been spilled, so it should have enough memory now,
@@ -1432,27 +1322,4 @@ case class HashAggregateExec(
 
   override protected def withNewChildInternal(newChild: SparkPlan): HashAggregateExec =
     copy(child = newChild)
-}
-
-object HashAggregateExec {
-  /**
-   * Spills the in-memory hash map to disk and returns the sorter holding the spilled data. Called
-   * by the generated code of [[HashAggregateExec]] (through the static forwarder) when a buffer
-   * cannot be allocated from the hash map: the first spill destructs the map into a new sorter, and
-   * later spills merge into the existing one. Returning the sorter lets the generated code keep it
-   * in a single mutable field.
-   *
-   * Extracting this type-independent spill machinery into a shared helper keeps it compiled once
-   * per JVM instead of being re-emitted into every HashAggregateExec stage's generated code.
-   */
-  def spillHashMapToSorter(
-      hashMap: UnsafeFixedWidthAggregationMap,
-      sorter: UnsafeKVExternalSorter): UnsafeKVExternalSorter = {
-    if (sorter == null) {
-      hashMap.destructAndCreateExternalSorter()
-    } else {
-      sorter.merge(hashMap.destructAndCreateExternalSorter())
-      sorter
-    }
-  }
 }

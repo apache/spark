@@ -17,10 +17,12 @@
 
 package org.apache.spark.sql.execution
 
+import java.io.{ByteArrayOutputStream, ObjectOutputStream}
 import java.math.{BigDecimal => JBigDecimal}
 import java.time.Duration
 import java.util.concurrent.{ConcurrentLinkedQueue, CountDownLatch, TimeUnit}
 
+import scala.collection.mutable
 import scala.util.{Failure, Success, Try}
 
 import org.apache.logging.log4j.Level
@@ -379,6 +381,63 @@ class WholeStageCodegenSuite extends SharedSparkSession
       p.isInstanceOf[WholeStageCodegenExec] &&
         p.asInstanceOf[WholeStageCodegenExec].child.isInstanceOf[HashAggregateExec]))
     assert(df.collect() === Array(Row(0, 1), Row(2, 1), Row(4, 1)))
+  }
+
+  test("SPARK-61661: HashAggregate codegen references do not serialize plan nodes") {
+    // What a codegen stage adds to the task binary (its closure, with the references of the
+    // generated code) is serialized into every task. A plan node in it would drag its whole child
+    // subtree along (for the final aggregate, the whole map-side plan through the exchange).
+    def serializedPlanNodes(stage: WholeStageCodegenExec): Seq[String] = {
+      // Serialize the RDD that the stage adds on top of its input RDDs, as the task binary does:
+      // its closure or evaluator factory with the generated code references. The input RDDs are
+      // not followed, since they belong to the operators below this stage.
+      val rdd = stage.execute()
+      val planNodes = mutable.ArrayBuffer[String]()
+      val out = new ObjectOutputStream(new ByteArrayOutputStream()) {
+        enableReplaceObject(true)
+        override def replaceObject(obj: AnyRef): AnyRef = obj match {
+          case p: SparkPlan => planNodes += p.nodeName; p
+          case r: RDD[_] if r ne rdd => null
+          case o => o
+        }
+      }
+      out.writeObject(rdd)
+      out.close()
+      planNodes.toSeq
+    }
+
+    for {
+      (twoLevel, vectorized, adaptivePartialAgg) <- Seq(
+        (false, false, false),
+        (true, false, false),
+        (true, true, false),
+        (true, false, true))
+      usePartitionEvaluator <- Seq(false, true)
+    } {
+      withSQLConf(
+        SQLConf.USE_PARTITION_EVALUATOR.key -> usePartitionEvaluator.toString,
+        SQLConf.ENABLE_TWOLEVEL_AGG_MAP.key -> twoLevel.toString,
+        SQLConf.ENABLE_VECTORIZED_HASH_MAP.key -> vectorized.toString,
+        SQLConf.ADAPTIVE_PARTIAL_AGGREGATION_ENABLED.key -> adaptivePartialAgg.toString) {
+        val df = spark.range(0, 100, 1, 2)
+          .select(($"id" % 5).as("k"), when($"id" > 50, $"id").otherwise(-$"id").as("v"))
+          .groupBy("k")
+          .agg(sum("v"), avg("v"))
+        val aggStages = df.queryExecution.executedPlan.collect {
+          case s: WholeStageCodegenExec if s.exists(_.isInstanceOf[HashAggregateExec]) => s
+        }
+        // The partial and the final aggregate.
+        assert(aggStages.length == 2)
+        aggStages.foreach { stage =>
+          val planNodes = serializedPlanNodes(stage)
+          assert(planNodes.isEmpty, s"$planNodes referenced by\n${stage.treeString}")
+        }
+        val expected = (0 until 100).map(i => (i % 5, if (i > 50) i else -i))
+          .groupBy(_._1).toSeq.sortBy(_._1)
+          .map { case (k, vs) => Row(k, vs.map(_._2).sum, vs.map(_._2).sum.toDouble / vs.size) }
+        checkAnswer(df, expected)
+      }
+    }
   }
 
   test("BroadcastHashJoin should be included in WholeStageCodegen") {
