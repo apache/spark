@@ -1585,6 +1585,23 @@ class JDBCV2Suite extends SharedSparkSession with ExplainSuiteHelper {
     }
   }
 
+  test("SPARK-58372: fractional to integral cast pushed down to H2 truncates like Spark") {
+    withSQLConf(SQLConf.ANSI_ENABLED.key -> "true") {
+      // Each value is between 1 and 2 (bonus / 800 up to 1.625, salary / 8000 up to 1.5), so
+      // truncation gives 1 everywhere while H2's own cast rounds some of them to 2.
+      Seq("bonus / 800", "salary / 8000").foreach { expr =>
+        val filtered = sql(s"SELECT name FROM h2.test.employee WHERE CAST($expr AS INT) = 1")
+        checkFiltersRemoved(filtered)
+        checkAnswer(filtered,
+          Seq(Row("amy"), Row("alex"), Row("cathy"), Row("david"), Row("jen")))
+
+        val aggregated = sql(s"SELECT SUM(CAST($expr AS INT)) FROM h2.test.employee")
+        checkAggregateRemoved(aggregated)
+        checkAnswer(aggregated, Seq(Row(5L)))
+      }
+    }
+  }
+
   test("scan with filter push-down with date time functions") {
     val df1 = sql("SELECT name FROM h2.test.datetime WHERE " +
       "dayofyear(date1) > 100 AND dayofmonth(date1) > 10 ")
