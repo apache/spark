@@ -83,6 +83,7 @@
     <module>common/unsafe</module>
     <module>common/utils</module>
     <module>common/utils-java</module>
+    <module>common/libmpd</module>
     <module>common/variant</module>
     <module>common/tags</module>
     <module>common/config</module>
