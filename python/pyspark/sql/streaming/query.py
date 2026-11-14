@@ -18,7 +18,7 @@
 import json
 from typing import TYPE_CHECKING, Any, Dict, List, Optional
 
-from pyspark.errors import PySparkValueError, StreamingQueryException
+from pyspark.errors import PySparkTypeError, PySparkValueError, StreamingQueryException
 from pyspark.errors.exceptions.captured import (
     StreamingQueryException as CapturedStreamingQueryException,
 )
@@ -33,6 +33,18 @@ if TYPE_CHECKING:
 # TODO: Add StreamingCheckpointManager to __all__ once we add streaming checkpoint manager to the
 # public API
 __all__ = ["StreamingQuery", "StreamingQueryManager"]
+
+
+def _validate_timeout_type(timeout: Any) -> None:
+    if not isinstance(timeout, (int, float)):
+        raise PySparkTypeError(
+            errorClass="NOT_EXPECTED_TYPE",
+            messageParameters={
+                "arg_name": "timeout",
+                "expected_type": "float or int",
+                "arg_type": type(timeout).__name__,
+            },
+        )
 
 
 class StreamingQuery:
@@ -217,7 +229,8 @@ class StreamingQuery:
         >>> sq.stop()
         """
         if timeout is not None:
-            if not isinstance(timeout, (int, float)) or timeout <= 0:
+            _validate_timeout_type(timeout)
+            if timeout <= 0:
                 raise PySparkValueError(
                     errorClass="VALUE_NOT_POSITIVE",
                     messageParameters={"arg_name": "timeout", "arg_value": type(timeout).__name__},
@@ -595,7 +608,8 @@ class StreamingQueryManager:
         >>> sq.stop()
         """
         if timeout is not None:
-            if not isinstance(timeout, (int, float)) or timeout < 0:
+            _validate_timeout_type(timeout)
+            if timeout < 0:
                 raise PySparkValueError(
                     errorClass="VALUE_NOT_POSITIVE",
                     messageParameters={"arg_name": "timeout", "arg_value": type(timeout).__name__},
