@@ -1,0 +1,110 @@
+// Licensed to the Apache Software Foundation (ASF) under one or more
+// contributor license agreements. See the NOTICE file distributed with
+// this work for additional information regarding copyright ownership.
+// The ASF licenses this file to You under the Apache License, Version 2.0
+// (the "License"); you may not use this file except in compliance with
+// the License. You may obtain a copy of the License at
+//
+//    http://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+
+// The serialization of the values that the executors restore, and of offsets.
+
+#pragma once
+
+#include <memory>
+#include <string>
+#include <string_view>
+#include <type_traits>
+#include <utility>
+
+#include <arrow/result.h>
+#include <arrow/status.h>
+#include <nlohmann/json.hpp>
+
+#include "spark/native/internal/abi.h"
+
+namespace spark::native::internal {
+
+// The version of the format of the values that the SDK serializes for the executors: the state of
+// readers and writers, which is their factory, partitions, and commit messages. It is an
+// implementation detail of the SDK, so the driver and the executors must use the same build of a
+// library.
+inline constexpr int kStateVersion = 2;
+
+/// Whether nlohmann::json serializes T in both directions, as the SDK requires of factories,
+/// partitions, offsets, and commit messages.
+template <typename T>
+concept Serializable =
+    std::is_default_constructible_v<T> && requires(const T& value, const nlohmann::json& json) {
+      nlohmann::json(value);
+      json.template get<T>();
+    };
+
+/// Serializes a factory, a partition, or a commit message.
+template <typename T>
+arrow::Result<std::string> Encode(const T& value) {
+  return Guard([&]() -> arrow::Result<std::string> {
+    nlohmann::json envelope = nlohmann::json::object();
+    envelope["version"] = kStateVersion;
+    envelope["value"] = value;
+    return envelope.dump();
+  });
+}
+
+/// Parses an envelope of a value that the SDK serialized, checks its version, and deserializes
+/// its value.
+template <typename T>
+arrow::Result<T> Decode(std::string_view bytes) {
+  nlohmann::json envelope = nlohmann::json::parse(bytes, nullptr, /*allow_exceptions=*/false);
+  if (envelope.is_discarded() || !envelope.is_object()) {
+    return arrow::Status::Invalid("cannot decode a native value: it is not a JSON object");
+  }
+  auto version = envelope.find("version");
+  if (version == envelope.end() || !version->is_number_integer()) {
+    return arrow::Status::Invalid("cannot decode a native value without a version");
+  }
+  if (*version != kStateVersion) {
+    return arrow::Status::Invalid("unsupported native state version: ", version->dump());
+  }
+  auto value = envelope.find("value");
+  if (value == envelope.end()) {
+    return arrow::Status::Invalid("cannot decode a native value without a value");
+  }
+  try {
+    return value->get<T>();
+  } catch (const std::exception& error) {
+    return arrow::Status::Invalid("cannot decode a native value: ", error.what());
+  } catch (...) {
+    return arrow::Status::Invalid("cannot decode a native value");
+  }
+}
+
+/// Offsets are compact JSON on a single line, which Spark stores in the checkpoint as they are,
+/// so they have no envelope: the library owns their format.
+template <typename T>
+arrow::Result<std::string> EncodeOffset(const T& offset) {
+  return Guard([&]() -> arrow::Result<std::string> { return nlohmann::json(offset).dump(); });
+}
+
+template <typename T>
+arrow::Result<T> DecodeOffset(std::string_view json) {
+  nlohmann::json value = nlohmann::json::parse(json, nullptr, /*allow_exceptions=*/false);
+  if (value.is_discarded()) {
+    return arrow::Status::Invalid("cannot decode the offset ", json, ": it is not valid JSON");
+  }
+  try {
+    return value.get<T>();
+  } catch (const std::exception& error) {
+    return arrow::Status::Invalid("cannot decode the offset ", json, ": ", error.what());
+  } catch (...) {
+    return arrow::Status::Invalid("cannot decode the offset ", json);
+  }
+}
+
+}  // namespace spark::native::internal
