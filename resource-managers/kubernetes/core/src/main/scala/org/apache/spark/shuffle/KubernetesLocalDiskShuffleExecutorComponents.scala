@@ -131,10 +131,10 @@ object KubernetesLocalDiskShuffleExecutorComponents extends Logging {
           .flatMap { executorDir =>
             val children = listEntriesOrEmpty(executorDir).filter(_.isDirectory)
             // Kubernetes puts blockmgr directly below executor; standalone adds an app dir.
-            children.filter(_.getName.startsWith("blockmgr-")) ++
-              children.flatMap(listEntriesOrEmpty).filter { f =>
-                f.isDirectory && f.getName.startsWith("blockmgr-")
-              }
+            val (blockMgrDirs, appDirs) = children.partition(_.getName.startsWith("blockmgr-"))
+            blockMgrDirs ++ appDirs.flatMap(listEntriesOrEmpty).filter { f =>
+              f.getName.startsWith("blockmgr-") && f.isDirectory
+            }
           }
           .flatMap(listEntriesOrEmpty).filter(_.isDirectory) // 00
           .flatMap(listEntriesOrEmpty)

@@ -55,49 +55,53 @@ class ExternalShuffleServiceLocalDirsSuite extends SparkFunSuite with LocalRootD
     }
   }
 
-  test("requireAppScopedLocalDirs restricts localDirs to the registering app's directory") {
-    val sparkConf = new SparkConf()
-      .set(SHUFFLE_SERVICE_ENABLED, true)
-      .set(SHUFFLE_SERVICE_DB_ENABLED, false)
-      .set(SHUFFLE_SERVICE_REQUIRE_APP_SCOPED_LOCAL_DIRS, true)
-      .set("spark.local.dir", System.getProperty("java.io.tmpdir"))
-    val service = new ExternalShuffleService(sparkConf, new SecurityManager(sparkConf))
-    val handler = service.getBlockHandler
+  gridTest("requireAppScopedLocalDirs restricts localDirs to the registering app's directory")(
+      Seq(false, true)) { dbEnabled =>
+    withTempDir { root =>
+      val sparkConf = new SparkConf()
+        .set(SHUFFLE_SERVICE_ENABLED, true)
+        .set(SHUFFLE_SERVICE_DB_ENABLED, dbEnabled)
+        .set(SHUFFLE_SERVICE_REQUIRE_APP_SCOPED_LOCAL_DIRS, true)
+        .set("spark.local.dir", root.getAbsolutePath)
+      val service = new ExternalShuffleService(sparkConf, new SecurityManager(sparkConf))
+      val handler = service.getBlockHandler
 
-    val root = new File(Utils.getConfiguredLocalDirs(sparkConf).head)
-    val appId = s"app-${UUID.randomUUID()}"
-    val otherAppId = s"app-${UUID.randomUUID()}"
-    // The layout the Worker creates: <root>/spark-*/executor-*/<appId>.
-    val workerRoot = new File(root, s"spark-${UUID.randomUUID()}")
-    val executorRoot = new File(workerRoot, s"executor-${UUID.randomUUID()}")
-    val appScoped = new File(executorRoot, appId)
-    val otherAppScoped = new File(executorRoot, otherAppId)
-    // The pre-upgrade Worker layout: directly under a root, no appId segment.
-    val unscoped = new File(root, s"blockmgr-${UUID.randomUUID()}")
-    assert(appScoped.mkdirs() && otherAppScoped.mkdirs() && unscoped.mkdirs())
-    try {
-      // A localDir inside the registering application's own directory is accepted.
-      handler.validateLocalDirs(Array(appScoped.getAbsolutePath), appId)
+      val appId = s"app-${UUID.randomUUID()}"
+      val otherAppId = s"app-${UUID.randomUUID()}"
+      // The layout the Worker creates: <root>/spark-*/executor-*/<appId>.
+      val workerRoot = new File(root, s"spark-${UUID.randomUUID()}")
+      val executorRoot = new File(workerRoot, s"executor-${UUID.randomUUID()}")
+      val appScoped = new File(executorRoot, appId)
+      val otherAppScoped = new File(executorRoot, otherAppId)
+      // The pre-upgrade Worker layout has blockmgr in place of the app leaf.
+      val unscoped = new File(executorRoot, s"blockmgr-${UUID.randomUUID()}")
+      assert(appScoped.mkdirs() && otherAppScoped.mkdirs() && unscoped.mkdirs())
+      try {
+        // A localDir inside the registering application's own directory is accepted.
+        handler.validateLocalDirs(Array(appScoped.getAbsolutePath), appId)
 
-      // A directory under a different application id is rejected even though it is contained
-      // under a configured root.
-      intercept[IllegalArgumentException] {
-        handler.validateLocalDirs(Array(otherAppScoped.getAbsolutePath), appId)
+        // A directory under a different application id is rejected even though it is contained
+        // under a configured root.
+        intercept[IllegalArgumentException] {
+          handler.validateLocalDirs(Array(otherAppScoped.getAbsolutePath), appId)
+        }
+
+        // A contained directory without the appId as a path segment (what a Worker without
+        // the per-app layout would report) is rejected.
+        intercept[IllegalArgumentException] {
+          handler.validateLocalDirs(Array(unscoped.getAbsolutePath), appId)
+        }
+
+        // Root containment is still enforced with app scoping on.
+        intercept[IllegalArgumentException] {
+          val outside = new File(root.getParentFile, s"outside/appcache/$appId/blockmgr-x")
+          handler.validateLocalDirs(Array(outside.getAbsolutePath), appId)
+        }
+      } finally {
+        handler.close()
+        Utils.deleteRecursively(workerRoot)
+        Utils.deleteRecursively(unscoped)
       }
-
-      // A contained directory without the appId as a path segment (what a Worker without
-      // the per-app layout would report) is rejected.
-      intercept[IllegalArgumentException] {
-        handler.validateLocalDirs(Array(unscoped.getAbsolutePath), appId)
-      }
-
-      // Root containment is still enforced with app scoping on.
-      intercept[IllegalArgumentException] {
-        handler.validateLocalDirs(Array("/etc"), appId)
-      }
-    } finally {
-      Utils.deleteRecursively(workerRoot)
-      Utils.deleteRecursively(unscoped)
     }
   }
 
@@ -122,7 +126,8 @@ class ExternalShuffleServiceLocalDirsSuite extends SparkFunSuite with LocalRootD
       sc = new SparkContext(conf)
       val appId = sc.applicationId
       // One core per worker, so the application's two executors land on different Workers.
-      // If the shuffle service rejected the registrations, the executors would never come up.
+      // A rejected shuffle registration makes an executor exit after driver registration,
+      // so the shuffle job below fails even if the driver briefly reports both executors.
       TestUtils.waitUntilExecutorsUp(sc, 2, 60000)
       assert(sc.parallelize(1 to 100, 4).map(i => (i % 10, i)).groupByKey().count() === 10)
 
