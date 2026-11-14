@@ -80,6 +80,11 @@ class TryCastSuite extends CastWithAnsiOnSuite {
     assert(!cast("abcdef", BinaryType).nullable)
   }
 
+  test("try_cast decimal to timestamp is nullable") {
+    val decimal = Literal(Decimal(new java.math.BigDecimal("1"), 10, 0))
+    assert(cast(decimal, TimestampType, UTC_OPT).nullable)
+  }
+
   test("only require timezone for datetime types") {
     assert(cast("abc", IntegerType).resolved)
     assert(!cast("abc", TimestampType).resolved)

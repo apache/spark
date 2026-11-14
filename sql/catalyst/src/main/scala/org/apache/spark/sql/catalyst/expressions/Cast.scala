@@ -568,6 +568,25 @@ object Cast extends QueryErrorsBase {
     case _ => false  // overflow
   }
 
+  private def decimalToTimestampMayOverflow(from: DecimalType): Boolean = {
+    val scaleDifference = from.scale.toLong - 6L
+    val maxMicrosDigits = from.precision.toLong - scaleDifference
+    val maxLongDigits = Long.MaxValue.toString.length
+    if (maxMicrosDigits != maxLongDigits) {
+      maxMicrosDigits > maxLongDigits
+    } else {
+      val maxUnscaled = java.math.BigInteger.TEN.pow(from.precision)
+        .subtract(java.math.BigInteger.ONE)
+      val scaleFactor = java.math.BigInteger.TEN.pow(Math.toIntExact(Math.abs(scaleDifference)))
+      val maxMicros = if (scaleDifference > 0) {
+        maxUnscaled.divide(scaleFactor)
+      } else {
+        maxUnscaled.multiply(scaleFactor)
+      }
+      maxMicros.compareTo(java.math.BigInteger.valueOf(Long.MaxValue)) > 0
+    }
+  }
+
   /**
    * Returns `true` if casting non-nullable values from `from` type to `to` type
    * may return null. Note that the caller side should take care of input nullability
@@ -585,6 +604,7 @@ object Cast extends QueryErrorsBase {
     case (TimestampType, ByteType | ShortType | IntegerType) => true
     case (_: TimeType, ByteType | ShortType) => true
     case (FloatType | DoubleType, TimestampType) => true
+    case (from: DecimalType, TimestampType) => decimalToTimestampMayOverflow(from)
     case (TimestampType, DateType) => false
     case (_: TimestampLTZNanosType, DateType) => false
     case (_: TimestampNTZNanosType, DateType) => false
@@ -818,7 +838,11 @@ case class Cast(
   }
 
   override def nullable: Boolean = if (!isTryCast) {
-    child.nullable || Cast.forceNullable(child.dataType, dataType)
+    child.nullable || ((child.dataType, dataType) match {
+      // Decimal-to-timestamp overflow raises CAST_OVERFLOW in ANSI mode.
+      case (_: DecimalType, TimestampType) if evalMode == EvalMode.ANSI => false
+      case (from, to) => Cast.forceNullable(from, to)
+    })
   } else {
     (child.dataType, dataType) match {
       case (_: StringType, BinaryType) => child.nullable
@@ -943,8 +967,8 @@ case class Cast(
     case _: TimestampNTZNanosType =>
       buildCast[TimestampNanosVal](_, v => convertTz(v.epochMicros, zoneId, ZoneOffset.UTC))
     // TimestampWritable.decimalToTimestamp
-    case DecimalType() =>
-      buildCast[Decimal](_, d => decimalToTimestamp(d))
+    case from: DecimalType =>
+      buildCast[Decimal](_, d => decimalToTimestamp(d, from))
     // TimestampWritable.doubleToTimestamp
     case DoubleType =>
       if (ansiEnabled) {
@@ -1057,8 +1081,12 @@ case class Cast(
         DateTimeUtils.makeTimestampNTZNanos(currentDate(zoneId), nanos, precision))
   }
 
-  private[this] def decimalToTimestamp(d: Decimal): Long = {
-    (d.toBigDecimal * MICROS_PER_SECOND).longValue
+  private[this] def decimalToTimestamp(d: Decimal, from: DecimalType): Any = {
+    try {
+      DateTimeUtils.decimalToTimestamp(d)
+    } catch {
+      case _: ArithmeticException => errorOrNull(d, from, TimestampType)
+    }
   }
   private[this] def doubleToTimestamp(d: Double): Any = {
     if (d.isNaN || d.isInfinite) null else (d * MICROS_PER_SECOND).toLong
@@ -2055,7 +2083,21 @@ case class Cast(
       (c, evPrim, evNull) =>
         code"$evPrim = $dateTimeUtilsCls.convertTz($c.epochMicros, $zid, java.time.ZoneOffset.UTC);"
     case DecimalType() =>
-      (c, evPrim, evNull) => code"$evPrim = ${decimalToTimestampCode(c)};"
+      val fromDt = ctx.addReferenceObj("from", from, from.getClass.getName)
+      val toDt = ctx.addReferenceObj("to", TimestampType, TimestampType.getClass.getName)
+      (c, evPrim, evNull) =>
+        val overflow = if (ansiEnabled) {
+          code"""throw QueryExecutionErrors.castingCauseOverflowError($c, $fromDt, $toDt);"""
+        } else {
+          code"$evNull = true;"
+        }
+        code"""
+          try {
+            $evPrim = $dateTimeUtilsCls.decimalToTimestamp($c);
+          } catch (java.lang.ArithmeticException e) {
+            $overflow
+          }
+        """
     case DoubleType =>
       (c, evPrim, evNull) =>
         if (ansiEnabled) {
@@ -2319,10 +2361,6 @@ case class Cast(
         """
   }
 
-  private[this] def decimalToTimestampCode(d: ExprValue): Block = {
-    val block = inline"new java.math.BigDecimal($MICROS_PER_SECOND)"
-    code"($d.toBigDecimal().bigDecimal().multiply($block)).longValue()"
-  }
   private[this] def longToTimeStampCode(l: ExprValue): Block =
     code"java.util.concurrent.TimeUnit.SECONDS.toMicros($l)"
   private[this] def timestampToLongCode(ts: ExprValue): Block =
