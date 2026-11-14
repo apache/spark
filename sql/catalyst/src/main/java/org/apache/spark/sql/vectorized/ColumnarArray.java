@@ -218,7 +218,7 @@ public final class ColumnarArray extends ArrayData {
 
   @Override
   public Object get(int ordinal, DataType dataType) {
-    return SpecializedGettersReader.read(this, ordinal, dataType, false, true);
+    return SpecializedGettersReader.read(this, ordinal, dataType, true, true);
   }
 
   @Override
