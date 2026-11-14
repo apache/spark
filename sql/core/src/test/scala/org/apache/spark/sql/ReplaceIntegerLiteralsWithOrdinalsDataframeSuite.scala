@@ -19,7 +19,7 @@ package org.apache.spark.sql
 
 import org.apache.spark.sql.catalyst.analysis.UnresolvedOrdinal
 import org.apache.spark.sql.catalyst.expressions.SortOrder
-import org.apache.spark.sql.functions.lit
+import org.apache.spark.sql.functions.{col, lit}
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSparkSession
 
@@ -49,6 +49,42 @@ class ReplaceIntegerLiteralsWithOrdinalsDataframeSuite extends SharedSparkSessio
       assert(groupedDataset.groupingExprs.collect {
         case ordinal @ UnresolvedOrdinal(1) => ordinal
       }.isEmpty)
+    }
+  }
+
+  test("SPARK-60750: Rollup, cube and grouping sets by ordinal - Dataframe") {
+    val data = "SELECT * FROM VALUES(1,2),(1,3),(2,4)"
+    val base = sql(data)
+
+    // With ordinals, `lit(1)` refers to the first column of the select list, which is `col2`, and
+    // not to `col1`, the first input column. Without ordinals, it is a constant grouping column.
+    val methods = Seq[(String, DataFrame => RelationalGroupedDataset)](
+      ("ROLLUP(col2, 1)", _.rollup(col("col2"), lit(1))),
+      ("CUBE(col2, 1)", _.cube(col("col2"), lit(1))),
+      ("col2, 1 GROUPING SETS ((col2), (1))",
+        _.groupingSets(Seq(Seq(col("col2")), Seq(lit(1))), col("col2"), lit(1))))
+
+    for (ordinals <- Seq(true, false); (sqlGroupBy, group) <- methods) {
+      withSQLConf(SQLConf.GROUP_BY_ORDINAL.key -> ordinals.toString) {
+        checkAnswer(
+          group(base).count(),
+          sql(s"SELECT col2, 1, count(*) FROM ($data) GROUP BY $sqlGroupBy"))
+      }
+    }
+
+    withSQLConf(SQLConf.GROUP_BY_ORDINAL.key -> "true") {
+      checkError(
+        exception = intercept[AnalysisException](base.cube(lit(-1)).count()),
+        condition = "GROUP_BY_POS_OUT_OF_RANGE",
+        parameters = Map("index" -> "-1", "size" -> "2"),
+        context = ExpectedContext(fragment = "lit", getCurrentClassCallSitePattern)
+      )
+
+      // Without retained group columns the select list is `[count]`, so position 1 is `count`.
+      withSQLConf(SQLConf.DATAFRAME_RETAIN_GROUP_COLUMNS.key -> "false") {
+        val e = intercept[AnalysisException](base.cube(lit(1)).count())
+        assert(e.getCondition == "GROUP_BY_POS_AGGREGATE")
+      }
     }
   }
 
