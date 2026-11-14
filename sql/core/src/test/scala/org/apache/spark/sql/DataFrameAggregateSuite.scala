@@ -2024,6 +2024,22 @@ class DataFrameAggregateSuite extends SharedSparkSession
     )
   }
 
+  test("SPARK-61530: approximate percentiles with NaN across partitions") {
+    val finite = Seq(1.0, 2.0, 3.0, 4.0)
+    val partitions = Seq(finite, Seq(Double.NaN))
+    withSQLConf(SQLConf.ADAPTIVE_EXECUTION_ENABLED.key -> "false") {
+      for (parts <- Seq(partitions, partitions.reverse, Seq(finite :+ Double.NaN))) {
+        val df = spark.sparkContext.parallelize(parts, parts.size).flatMap(_.iterator).toDF("value")
+        val expected = Seq(1.0, 3.0, Double.NaN)
+        checkAnswer(
+          df.selectExpr(
+            "percentile_approx(value, array(0D, 0.5D, 1D), 1000000)",
+            "approx_percentile(value, array(0D, 0.5D, 1D), 1000000)"),
+          Row(expected, expected))
+      }
+    }
+  }
+
   test("approx_percentile") {
     checkAnswer(
       courseSales.groupBy("course").agg(
