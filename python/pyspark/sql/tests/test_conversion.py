@@ -16,6 +16,8 @@
 #
 import datetime
 import decimal
+import os
+import time
 import unittest
 import unittest.mock
 from zoneinfo import ZoneInfo
@@ -716,6 +718,45 @@ class ConversionTests(unittest.TestCase):
             schema = StructType([StructField("x", row_schema)])
             with self.assertRaises(PySparkValueError):
                 LocalDataToArrowConversion.convert([(value,)], schema, use_large_var_types=False)
+
+    @unittest.skipIf(not hasattr(time, "tzset"), "time.tzset is not available")
+    def test_naive_timestamp_at_datetime_range_ends(self):
+        schema = StructType([StructField("ts", TimestampType())])
+        values = [
+            datetime.datetime(9999, 12, 31),
+            datetime.datetime(9999, 12, 31, 12, 0, 0, 1),
+            datetime.datetime(9999, 12, 31, 23, 59, 59, 999999),
+            datetime.datetime(1, 1, 1),
+            datetime.datetime(1, 1, 1, 23, 59, 59, 999999),
+            datetime.datetime(9999, 12, 30, 23, 59, 59),
+        ]
+        orig_tz = os.environ.get("TZ")
+        try:
+            for tz in ["America/Los_Angeles", "Asia/Tokyo", "UTC"]:
+                os.environ["TZ"] = tz
+                time.tzset()
+                for value in values:
+                    with self.subTest(tz=tz, value=value):
+                        table = LocalDataToArrowConversion.convert(
+                            [(value,)], schema, use_large_var_types=False
+                        )
+                        self.assertEqual(
+                            table.column(0)[0].value, TimestampType().toInternal(value)
+                        )
+        finally:
+            if orig_tz is None:
+                os.environ.pop("TZ", None)
+            else:
+                os.environ["TZ"] = orig_tz
+            time.tzset()
+
+    def test_aware_timestamp_overflowing_utc_raises(self):
+        schema = StructType([StructField("ts", TimestampType())])
+        value = datetime.datetime(
+            9999, 12, 31, 23, tzinfo=datetime.timezone(-datetime.timedelta(hours=1))
+        )
+        with self.assertRaises(OverflowError):
+            LocalDataToArrowConversion.convert([(value,)], schema, use_large_var_types=False)
 
     def test_arrow_array_localize_tz(self):
         import pyarrow as pa
