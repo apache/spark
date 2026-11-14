@@ -195,6 +195,15 @@ object UnsupportedOperationChecker extends Logging {
         "Queries without streaming sources cannot be executed with writeStream.start()")(plan)
     }
 
+    // Execution reads the same pairs from the same analyzed plan; see
+    // StreamingJoinHelper.findEventTimeCopies.
+    lazy val eventTimeCopies =
+      if (SQLConf.get.getConf(SQLConf.STATEFUL_OPERATOR_ALLOW_MULTIPLE)) {
+        EventTimeCopies.empty
+      } else {
+        StreamingJoinHelper.findEventTimeCopies(plan)
+      }
+
     /** Collect all the streaming aggregates in a sub plan */
     def collectStreamingAggregates(subplan: LogicalPlan): Seq[Aggregate] = {
       subplan.collect {
@@ -526,7 +535,7 @@ object UnsupportedOperationChecker extends Logging {
                 throwError("FullOuter joins with streaming DataFrames/Datasets on the right " +
                   "and a static DataFrame/Dataset on the left is not supported")
               } else if (left.isStreaming && right.isStreaming) {
-                checkForStreamStreamJoinWatermark(j)
+                checkForStreamStreamJoinWatermark(j, eventTimeCopies)
               }
 
             case LeftAnti =>
@@ -542,7 +551,7 @@ object UnsupportedOperationChecker extends Logging {
                 throwError(s"$joinType join with a streaming DataFrame/Dataset " +
                   "on the right and a static DataFrame/Dataset on the left is not supported")
               } else if (left.isStreaming && right.isStreaming) {
-                checkForStreamStreamJoinWatermark(j)
+                checkForStreamStreamJoinWatermark(j, eventTimeCopies)
               }
 
             // We support streaming right outer joins with static on the left always, and with
@@ -552,7 +561,7 @@ object UnsupportedOperationChecker extends Logging {
                 throwError("RightOuter join with a streaming DataFrame/Dataset on the left and " +
                     "a static DataFrame/DataSet on the right not supported")
               } else if (left.isStreaming && right.isStreaming) {
-                checkForStreamStreamJoinWatermark(j)
+                checkForStreamStreamJoinWatermark(j, eventTimeCopies)
               }
 
             case NaturalJoin(_) | UsingJoin(_, _) =>
@@ -706,7 +715,9 @@ object UnsupportedOperationChecker extends Logging {
       plan = operator)
   }
 
-  private def checkForStreamStreamJoinWatermark(join: Join): Unit = {
+  private def checkForStreamStreamJoinWatermark(
+      join: Join,
+      eventTimeCopies: EventTimeCopies): Unit = {
     val keys = ExtractEquiJoinKeys.unapply(join)
     val leftKeys = keys.map(_._2).getOrElse(Nil)
     val rightKeys = keys.map(_._3).getOrElse(Nil)
@@ -721,7 +732,8 @@ object UnsupportedOperationChecker extends Logging {
         otherKeys: Seq[Expression],
         exactForUnwatermarkedColumns: Boolean = true): Boolean = {
       val eventTime = otherInput.output.find(_.metadata.contains(EventTimeWatermark.delayKey))
-      StreamingJoinHelper.getStateKeyWatermarkOrdinal(otherKeys, otherInput.output).isDefined ||
+      StreamingJoinHelper.getStateKeyWatermarkOrdinal(
+        otherKeys, otherInput.output, eventTimeCopies).isDefined ||
         StreamingJoinHelper.getStateValueWatermark(stateInput.outputSet,
           AttributeSet(eventTime.toSeq), join.condition, Some(1000000),
           exactForUnwatermarkedColumns).isDefined
@@ -766,31 +778,38 @@ object UnsupportedOperationChecker extends Logging {
         case RightOuter => Some(("left", "right"))
         case _ => None
       }
-      val downstreamNote = downstreamRequirement.map { case (eventTimeInput, boundingInput) =>
-        s" A stateful operator after the join that uses the $eventTimeInput input's event time " +
-          s"also needs a watermark on the $boundingInput input and a reverse time constraint; " +
-          "otherwise the join holds back its output watermark for that input, so an " +
-          "append-mode aggregation over that event time fails at start, and other operators " +
-          "keep that input's rows in state and do not emit results that wait for the watermark."
-      }.getOrElse("")
-      // In legacy mode an input can keep its event time and a window over it, both watermarked.
-      // Late rows are filtered by the first of them, so only that column bounds state.
+      // The error says that such an aggregation fails at start. The warning is logged only with
+      // the finalization check disabled, which lets the query start, so it never emits instead.
+      def downstreamNote(aggregationOutcome: String): String =
+        downstreamRequirement.map { case (eventTimeInput, boundingInput) =>
+          s" A stateful operator after the join that uses the $eventTimeInput input's event " +
+            s"time also needs a watermark on the $boundingInput input and a reverse time " +
+            "constraint; otherwise the join holds back its output watermark for that input, so " +
+            s"an append-mode aggregation over that event time $aggregationOutcome, and other " +
+            "operators keep that input's rows in state and do not emit results that wait for " +
+            "the watermark."
+        }.getOrElse("")
+      // In legacy mode an input can keep its event time and a window, both watermarked. Late
+      // rows are filtered by the first of them, so a window after it bounds state only when the
+      // input builds it from that column.
       val legacyWindowNote = if (SQLConf.get.getConf(SQLConf.STATEFUL_OPERATOR_ALLOW_MULTIPLE)) {
         ""
       } else {
         def windowNote(input: LogicalPlan, inputKeys: Seq[Expression], side: String): String = {
           val eventTime = input.output.find(_.metadata.contains(EventTimeWatermark.delayKey))
           val windowKey = inputKeys.collectFirst {
-            case a: Attribute if a.metadata.contains(TimeWindow.marker) &&
+            case a: Attribute if (a.metadata.contains(TimeWindow.marker) ||
+                a.metadata.contains(SessionWindow.marker)) &&
                 a.metadata.contains(EventTimeWatermark.delayKey) &&
                 !eventTime.exists(_.semanticEquals(a)) => a
           }
           val note = for (first <- eventTime; window <- windowKey) yield {
             s" With ${SQLConf.STATEFUL_OPERATOR_ALLOW_MULTIPLE.key}=false, the $side input " +
               s"filters late rows by its first watermarked column, ${first.name}, so its window " +
-              s"key ${window.name} is not a time constraint. Put ${window.name} before " +
-              s"${first.name} in that input's columns, or drop ${first.name}, to bound state " +
-              "by the window."
+              s"key ${window.name} is a time constraint only if that input computes it as a " +
+              s"tumbling or sliding window over ${first.name} itself, through projections, " +
+              s"filters and unions only. Otherwise, put ${window.name} before ${first.name} in " +
+              s"that input's columns, or drop ${first.name}, to bound state by the window."
           }
           note.getOrElse("")
         }
@@ -836,7 +855,7 @@ object UnsupportedOperationChecker extends Logging {
           "The time constraint may be equality on event time or a time range condition. " +
           "When upgrading an existing query, correct its watermarks and time constraints, " +
           "then use a new checkpoint and replay the input, reconciling prior sink output." +
-          legacyWindowNote + inexactNote + downstreamNote + disableNote
+          legacyWindowNote + inexactNote + downstreamNote("fails at start") + disableNote
       if (SQLConf.get.streamingJoinCheckFinalizationEnabled || !canDisableCheck) {
         throwError(message)(join)
       } else {
@@ -844,7 +863,7 @@ object UnsupportedOperationChecker extends Logging {
           s"Stream-stream ${join.joinType} join runs with $checkConf set to false, although " +
             s"it requires $requirement that allow unmatched state to be finalized. The query " +
             "keeps that state without bound, and an outer join never outputs those unmatched " +
-            "rows." + legacyWindowNote + downstreamNote
+            "rows." + legacyWindowNote + downstreamNote("never emits results")
         logWarning(log"${MDC(ANALYSIS_ERROR, warning)};\n${MDC(QUERY_PLAN, join)}")
       }
     }

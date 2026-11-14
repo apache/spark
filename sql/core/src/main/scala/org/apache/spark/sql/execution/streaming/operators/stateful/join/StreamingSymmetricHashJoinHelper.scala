@@ -22,7 +22,7 @@ import scala.reflect.ClassTag
 import org.apache.spark.{Partition, SparkContext, TaskContext}
 import org.apache.spark.internal.Logging
 import org.apache.spark.rdd.{RDD, ZippedPartitionsBaseRDD, ZippedPartitionsPartition}
-import org.apache.spark.sql.catalyst.analysis.StreamingJoinHelper
+import org.apache.spark.sql.catalyst.analysis.{EventTimeCopies, StreamingJoinHelper}
 import org.apache.spark.sql.catalyst.expressions.{And, Attribute, AttributeSet, Between, BinaryComparison, BoundReference, Cast, Expression, GreaterThan, GreaterThanOrEqual, LessThan, LessThanOrEqual, Literal, NamedExpression, PredicateHelper, TimestampAddInterval}
 import org.apache.spark.sql.catalyst.plans.logical.EventTimeWatermark._
 import org.apache.spark.sql.catalyst.util.DateTimeConstants.MICROS_PER_DAY
@@ -211,7 +211,11 @@ object StreamingSymmetricHashJoinHelper extends Logging {
     (leftStateWatermark, rightStateWatermark)
   }
 
-  /** Get the predicates defining the state watermarks for both sides of the join */
+  /**
+   * Get the predicates defining the state watermarks for both sides of the join. In legacy mode,
+   * `eventTimeCopies` names the equality keys that copy an input's late-filtered column or are a
+   * time window over it; see [[StreamingJoinHelper.findEventTimeCopies]].
+   */
   def getStateWatermarkPredicates(
       leftAttributes: Seq[Attribute],
       rightAttributes: Seq[Attribute],
@@ -220,7 +224,8 @@ object StreamingSymmetricHashJoinHelper extends Logging {
       condition: Option[Expression],
       eventTimeWatermarkForEviction: Option[Long],
       eventTimeWatermarkForLateEvents: Option[Long],
-      useFirstEventTimeColumn: Boolean): JoinStateWatermarkPredicates = {
+      useFirstEventTimeColumn: Boolean,
+      eventTimeCopies: EventTimeCopies = EventTimeCopies.empty): JoinStateWatermarkPredicates = {
 
     // Perform assertions against multiple event time columns in the same DataFrame. This method
     // assumes there is only one event time column per each side (left / right) and it is not very
@@ -238,7 +243,7 @@ object StreamingSymmetricHashJoinHelper extends Logging {
         otherSideJoinKeys: Seq[Expression]): Option[JoinStateWatermarkPredicate] = {
       // State is bounded by future input from the opposite side, not by its own watermark.
       val joinKeyOrdinalForWatermark = StreamingJoinHelper.getStateKeyWatermarkOrdinal(
-        otherSideJoinKeys, otherSideInputAttributes)
+        otherSideJoinKeys, otherSideInputAttributes, eventTimeCopies)
       val isWatermarkDefinedOnJoinKey = joinKeyOrdinalForWatermark.isDefined
 
       if (isWatermarkDefinedOnJoinKey) { // case 1 and 3 in the StreamingSymmetricHashJoinExec docs
@@ -251,7 +256,7 @@ object StreamingSymmetricHashJoinHelper extends Logging {
         // StreamingJoinHelper.getStateKeyWatermark for which shifts qualify.
         def keyWatermark(watermark: Option[Long]): Option[Long] =
           StreamingJoinHelper.getStateKeyWatermark(
-            otherSideJoinKeys, otherSideInputAttributes, ordinal, watermark)
+            otherSideJoinKeys, otherSideInputAttributes, ordinal, watermark, eventTimeCopies)
         keyWatermark(eventTimeWatermarkForEviction).flatMap { stateWatermark =>
           watermarkExpression(Some(keyExprWithWatermark), Some(stateWatermark)).map { e =>
             // V4 can skip keys at or below the previous watermark only if late-input filtering
@@ -342,20 +347,23 @@ object StreamingSymmetricHashJoinHelper extends Logging {
    * A side evicted by key uses the key that the opposite input's watermark bounds. Any other side
    * stores each row at its own event time, unless it is evicted on another column. When that
    * event time is an equality key, its ordinal gives the same stored timestamps and lets a lookup
-   * read one timestamp instead of scanning every timestamp of the key.
+   * read one timestamp instead of scanning every timestamp of the key. `eventTimeCopies` must be
+   * the one that [[getStateWatermarkPredicates]] used, so that both pick the same bounded key.
    */
   def getStateKeyOrdinalForLookup(
       oneSideAttributes: Seq[Attribute],
       oneSideKeys: Seq[Expression],
       otherSideAttributes: Seq[Attribute],
       otherSideKeys: Seq[Expression],
-      predicate: Option[JoinStateWatermarkPredicate]): Option[Int] = {
+      predicate: Option[JoinStateWatermarkPredicate],
+      eventTimeCopies: EventTimeCopies = EventTimeCopies.empty): Option[Int] = {
     def storesRowsAtKey(ordinal: Int): Boolean = predicate match {
       case Some(p: JoinStateValueWatermarkPredicate) =>
         p.expr.references.forall(_.semanticEquals(oneSideKeys(ordinal)))
       case _ => true
     }
-    StreamingJoinHelper.getStateKeyWatermarkOrdinal(otherSideKeys, otherSideAttributes).orElse(
+    StreamingJoinHelper.getStateKeyWatermarkOrdinal(
+      otherSideKeys, otherSideAttributes, eventTimeCopies).orElse(
       StreamingJoinHelper.getEventTimeKeyOrdinal(oneSideKeys, oneSideAttributes)
         .filter(storesRowsAtKey))
   }

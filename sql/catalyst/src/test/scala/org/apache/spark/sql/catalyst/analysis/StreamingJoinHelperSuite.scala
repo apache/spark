@@ -112,6 +112,14 @@ class StreamingJoinHelperSuite extends AnalysisTest {
       ("timestampadd(SECOND, 2, eventTime)", Some(11999L), Some(7999L)),
       ("timestampadd(SECOND, -2, eventTime)", Some(7999L), Some(11999L)),
       ("timestampadd(HOUR, 2, eventTime)", Some(7209999L), Some(-7190001L)),
+      // Each amount below has a different value in milliseconds if the unit had the length of a
+      // neighboring unit, so a wrong constant for MICROSECOND, MILLISECOND or MINUTE fails.
+      ("timestampadd(MICROSECOND, 3000000, eventTime)", Some(12999L), Some(6999L)),
+      ("timestampadd(MICROSECOND, -3000000, eventTime)", Some(6999L), Some(12999L)),
+      ("timestampadd(MILLISECOND, 2500, eventTime)", Some(12499L), Some(7499L)),
+      ("timestampadd(MILLISECOND, -2500, eventTime)", Some(7499L), Some(12499L)),
+      ("timestampadd(MINUTE, 2, eventTime)", Some(129999L), Some(-110001L)),
+      ("timestampadd(MINUTE, -2, eventTime)", Some(-110001L), Some(129999L)),
       // Keys that the watermark does not bound.
       ("other + INTERVAL 2 SECONDS", None, None),
       ("other + INTERVAL 1 SECOND * 2", None, None),

@@ -79,14 +79,18 @@ Please refer [Migration Guide: SQL, Datasets and DataFrame](../sql-migration-gui
   deduplication still emit rows. Add a watermark on the other input to bound those rows.
 
 - With `spark.sql.streaming.statefulOperator.allowMultiple` set to `false`, an input of a
-  stream-stream join can keep both its event time and a time window over it, and late rows are
-  filtered by whichever of them comes first. Since Spark 4.4, a window equality key bounds the
-  other input's state only when the window comes first. Earlier versions also used a window that
-  came after another watermarked column, which could remove rows that could still match when
-  the window was over a different column. An input built with
-  `withColumn("window", window($"ts", ...))` keeps `ts` first, so outer and left semi joins on
-  its window now fail, and inner joins keep the other input's rows for the life of the query.
-  To bound state by the window, select the window column before `ts`, or drop `ts`.
+  stream-stream join can keep its event time together with a copy of it or a time window over
+  it, all watermarked, and late rows are filtered by whichever of them comes first. Since Spark
+  4.4, an equality key on a watermarked column that comes after the first one bounds the other
+  input's state only when Spark can see that the input builds it from the first one: as a copy,
+  or as a tumbling or sliding window over it, through projections, filters and unions whose
+  inputs all build it that way. So an input built with `withColumn("window", window($"ts", ...))`
+  is still bounded by its window. Earlier versions also used such a key when it was built in any
+  other way, for example as a window over a different column, which could remove rows that could
+  still match. Outer and left semi joins on such a key, including a session window, now fail,
+  and inner joins keep the other input's rows for the life of the query. To bound state by such a
+  key, select it before the other watermarked columns of its input. Checkpoints of these inputs
+  from earlier versions are rejected at restart, as described below.
 
 - Spark 4.4 holds back the output watermark of a stream-stream join when retained state can
   still emit old event times. Downstream stateful operators may retain more state, take longer
