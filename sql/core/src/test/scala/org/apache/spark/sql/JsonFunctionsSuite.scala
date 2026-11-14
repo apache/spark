@@ -1548,6 +1548,66 @@ class JsonFunctionsSuite extends SharedSparkSession {
       Seq(Row("STRING")))
   }
 
+  test("SPARK-61726: schema_of_json - PERMISSIVE mode returns the corrupt record schema") {
+    Seq("""{"a":""", "}", """{"a" 1}""").foreach { input =>
+      checkAnswer(
+        spark.range(1).select(schema_of_json(lit(input))),
+        Seq(Row("STRUCT<_corrupt_record: STRING>")))
+      checkAnswer(
+        spark.range(1).select(schema_of_json(lit(input), Map("mode" -> "PERMISSIVE").asJava)),
+        Seq(Row("STRUCT<_corrupt_record: STRING>")))
+    }
+  }
+
+  test("SPARK-61726: schema_of_json - PERMISSIVE mode honors columnNameOfCorruptRecord") {
+    checkAnswer(
+      spark.range(1).select(
+        schema_of_json(lit("""{"a":"""), Map("columnNameOfCorruptRecord" -> "bad").asJava)),
+      Seq(Row("STRUCT<bad: STRING>")))
+    withSQLConf(SQLConf.COLUMN_NAME_OF_CORRUPT_RECORD.key -> "bad_conf") {
+      checkAnswer(
+        sql("""SELECT schema_of_json('{"a":')"""),
+        Seq(Row("STRUCT<bad_conf: STRING>")))
+    }
+  }
+
+  test("SPARK-61726: schema_of_json - FAILFAST mode fails on malformed input") {
+    checkError(
+      exception = intercept[SparkException] {
+        spark.range(1).select(
+          schema_of_json(lit("""{"a":"""), Map("mode" -> "FAILFAST").asJava)).collect()
+      },
+      condition = "MALFORMED_RECORD_IN_PARSING.WITHOUT_SUGGESTION",
+      parameters = Map("badRecord" -> "_corrupt_record", "failFastMode" -> "FAILFAST"))
+  }
+
+  test("SPARK-61726: schema_of_json - DROPMALFORMED mode returns an empty struct") {
+    checkAnswer(
+      spark.range(1).select(
+        schema_of_json(lit("""{"a":"""), Map("mode" -> "DROPMALFORMED").asJava)),
+      Seq(Row("STRUCT<>")))
+    // Well-formed input is not affected.
+    checkAnswer(
+      spark.range(1).select(
+        schema_of_json(lit("""{"a": 1}"""), Map("mode" -> "DROPMALFORMED").asJava)),
+      Seq(Row("STRUCT<a: BIGINT>")))
+  }
+
+  test("SPARK-61726: schema_of_json - nesting depth over the limit is a malformed record") {
+    val depth = StreamReadConstraints.DEFAULT_MAX_DEPTH + 1
+    val deep = "[" * depth + "]" * depth
+    checkAnswer(
+      spark.range(1).select(schema_of_json(lit(deep))),
+      Seq(Row("STRUCT<_corrupt_record: STRING>")))
+    checkError(
+      exception = intercept[SparkException] {
+        spark.range(1).select(
+          schema_of_json(lit(deep), Map("mode" -> "FAILFAST").asJava)).collect()
+      },
+      condition = "MALFORMED_RECORD_IN_PARSING.WITHOUT_SUGGESTION",
+      parameters = Map("badRecord" -> "_corrupt_record", "failFastMode" -> "FAILFAST"))
+  }
+
   test("optional datetime parser does not affect json time formatting") {
     val s = "2015-08-26 12:34:46"
     def toDF(p: String): DataFrame = sql(
