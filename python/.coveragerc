@@ -26,6 +26,8 @@ omit =
     */pyspark/loose_version.py
     # Tests
     */pyspark/errors/tests/*
+    */pyspark/eval_handlers/tests/*
+    */pyspark/logger/tests/*
     */pyspark/ml/tests/*
     */pyspark/ml/deepspeed/tests/*
     */pyspark/ml/torch/tests/*
