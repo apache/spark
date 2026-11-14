@@ -110,6 +110,7 @@ object InjectRuntimeFilter extends Rule[LogicalPlan] with PredicateHelper with J
       plan: LogicalPlan,
       filterCreationSideKey: Expression,
       allowMaterializedCache: Boolean,
+      binaryStableKeys: Boolean,
       applicationDistinctCount: => Option[BigInt],
       onMaterializedLeaf: => Unit = ()): Option[FilterCreationSide] = {
     def extract(
@@ -249,8 +250,12 @@ object InjectRuntimeFilter extends Rule[LogicalPlan] with PredicateHelper with J
       // A filter that a DSv2 scan took in fully leaves no `Filter` for it, as a built-in file scan
       // does with its partition filters, so a selective one counts as a selective `Filter` does.
       // The size check still uses the scan's estimate, which for a V2 file scan covers all its
-      // partitions.
-      case leaf: LeafNode if hasHitSelectiveFilter || hasSelectivePushedFilters(leaf) =>
+      // partitions. Such a side is taken only if its keys compare by their bytes, since the bloom
+      // filter hashes them, and it fits the size check of `injectBloomFilter`, so that a join
+      // above can still take its other side.
+      case leaf: LeafNode if hasHitSelectiveFilter || (binaryStableKeys &&
+          hasSelectivePushedFilters(leaf) &&
+          currentPlan.stats.sizeInBytes <= conf.runtimeFilterCreationSideThreshold) =>
         Some(FilterCreationSide(
           targetKey,
           currentPlan,
@@ -332,7 +337,7 @@ object InjectRuntimeFilter extends Rule[LogicalPlan] with PredicateHelper with J
     if (findExpressionAndTrackLineageDown(
       filterApplicationSideKey, filterApplicationSide).isDefined &&
       satisfyByteSizeRequirement(filterApplicationSide)) {
-      val allowMaterializedCache = UnsafeRowUtils.isBinaryStable(filterCreationSideKey.dataType) &&
+      val binaryStableKeys = UnsafeRowUtils.isBinaryStable(filterCreationSideKey.dataType) &&
         UnsafeRowUtils.isBinaryStable(filterApplicationSideKey.dataType)
       def distinctCount(key: Expression, plan: LogicalPlan): Option[BigInt] = key match {
         case attribute: Attribute =>
@@ -367,12 +372,13 @@ object InjectRuntimeFilter extends Rule[LogicalPlan] with PredicateHelper with J
           currentDistinctCount
         }
       }
-      if (allowMaterializedCache) {
+      if (binaryStableKeys) {
         var sawMaterializedLeaf = false
         val selectiveCreationSide = extractSelectiveFilterOverScan(
           filterCreationSide,
           filterCreationSideKey,
           allowMaterializedCache = false,
+          binaryStableKeys = true,
           applicationDistinctCount = None,
           onMaterializedLeaf = { sawMaterializedLeaf = true })
         selectiveCreationSide
@@ -383,6 +389,7 @@ object InjectRuntimeFilter extends Rule[LogicalPlan] with PredicateHelper with J
                 filterCreationSide,
                 filterCreationSideKey,
                 allowMaterializedCache = true,
+                binaryStableKeys = true,
                 applicationDistinctCount = applicationDistinctCount)
             } else {
               selectiveCreationSide
@@ -393,6 +400,7 @@ object InjectRuntimeFilter extends Rule[LogicalPlan] with PredicateHelper with J
           filterCreationSide,
           filterCreationSideKey,
           allowMaterializedCache = false,
+          binaryStableKeys = false,
           applicationDistinctCount = None)
       }
     } else {

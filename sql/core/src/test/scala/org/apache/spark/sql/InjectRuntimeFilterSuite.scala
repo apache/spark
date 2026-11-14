@@ -2193,6 +2193,54 @@ class InjectRuntimeFilterSuite extends SharedSparkSession
             assert(keyNames(InjectRuntimeFilter(rewritten)) == expected,
               s"repeatableRead = $repeatable:\n$rewritten")
           }
+
+          // A scan whose pushed filters are selective but which is too large for the creation side
+          // does not stop the search: the join it is in gives the bloom filter from its other side,
+          // which the selective `b2 = 23` filters. The source's size comes from its row count.
+          spark.read.format(classOf[CatalystFilterLimitDataSourceV2].getName)
+            .option(CatalystFilterScanBuilder.REPORTED_ROW_COUNT, "1000000000").load()
+            .createOrReplaceTempView("rf_lim")
+          val nested = sql("SELECT f.id FROM rf_fact f JOIN (SELECT l.i FROM rf_lim l " +
+            "JOIN bf2 ON l.i = bf2.a2 WHERE l.j < -3 AND bf2.b2 = 23) x ON f.part = x.i")
+          val nestedPlan = nested.queryExecution.optimizedPlan
+          assert(keyNames(nestedPlan).contains("part"), s"expected a bloom filter on part:\n" +
+            nestedPlan)
+          checkAnswer(nested, factRows(_ == 5))
+        }
+      }
+    }
+  }
+
+  test("SPARK-61173: no bloom filter from pushed filters on a key that does not compare by its " +
+    "bytes") {
+    // The bloom filter hashes the bytes of the key, so `'abc'` and `'ABC'` would not match. The
+    // V2 dimension's only selective filter is the partition filter its scan takes in fully.
+    withTempDir { dir =>
+      val factPath = new File(dir, "fact").getCanonicalPath
+      val dimPath = new File(dir, "dim").getCanonicalPath
+      spark.sql("SELECT 'abc' AS k, 1 AS v").write.parquet(factPath)
+      spark.sql("SELECT * FROM VALUES ('ABC', 1), ('zzz', 0) AS t(k, dp)")
+        .write.partitionBy("dp").parquet(dimPath)
+      withTempView("cf", "cd") {
+        withSQLConf(SQLConf.USE_V1_SOURCE_LIST.key -> "",
+            SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key -> "-1",
+            SQLConf.RUNTIME_BLOOM_FILTER_APPLICATION_SIDE_SCAN_SIZE_THRESHOLD.key -> "0",
+            SQLConf.DYNAMIC_PARTITION_PRUNING_ENABLED.key -> "false") {
+          spark.read.schema("k string collate utf8_lcase, v int").parquet(factPath)
+            .createOrReplaceTempView("cf")
+          spark.read.schema("k string collate utf8_lcase, dp int").parquet(dimPath)
+            .createOrReplaceTempView("cd")
+          // A plain collated key, and one in a struct.
+          Seq("k", "named_struct('s', k)").foreach { key =>
+            val query = s"select v from cf where $key in (select $key from cd where dp = 1)"
+            val optimized = sql(query).queryExecution.optimizedPlan
+            assert(optimized.exists {
+              case r: DataSourceV2ScanRelation => r.hasSelectivePushedFilters
+              case _ => false
+            }, s"expected the dimension to take `dp = 1` in fully:\n$optimized")
+            assert(bloomFilterKeys(query).isEmpty, s"$key:\n$optimized")
+            checkAnswer(sql(query), Row(1))
+          }
         }
       }
     }
