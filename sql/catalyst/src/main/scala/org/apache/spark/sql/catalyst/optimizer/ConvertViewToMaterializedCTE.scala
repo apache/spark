@@ -20,85 +20,61 @@ package org.apache.spark.sql.catalyst.optimizer
 import scala.collection.mutable
 
 import org.apache.spark.sql.catalyst.TableIdentifier
-import org.apache.spark.sql.catalyst.expressions.{Alias, Attribute}
+import org.apache.spark.sql.catalyst.expressions.{
+  InputFileBlockLength, InputFileBlockStart, InputFileName}
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.rules.Rule
 import org.apache.spark.sql.internal.SQLConf
 
 /**
- * Rewrites multiple references to the same view into a single `CTERelationDef` with multiple
- * `CTERelationRef`s, so that the view's underlying plan is computed once (through exchange
- * reuse at the physical layer) instead of once per reference.
+ * Rewrites multiple references to the same view into one `CTERelationDef` with multiple
+ * `CTERelationRef`s, so the view's underlying plan is computed once (through exchange
+ * reuse at the physical layer) instead of once per reference. The conversion trades that
+ * recomputation for the shuffle `ReplaceCTERefWithRepartition` adds at each reference.
+ * It is off by default ([[SQLConf.CONVERT_VIEW_TO_MATERIALIZED_CTE]]) and does nothing
+ * when exchange reuse is disabled, since the added shuffles would then not be shared.
  *
- * The rule runs first in `FinishAnalysis`, before `EliminateResolvedHint`,
- * `EliminateSubqueryAliases` and `EliminatePipeOperators` strip analysis-only nodes from
- * the plan. Those rules are applied to the main plan before its subquery plans, so a
- * definition body taken from a first-visited subquery occurrence may still hold such
- * nodes; running the conversion first lets the cleanup rules reach the body at the top
- * level, wherever it was taken from. `EliminateView` runs after the cleanup rules: no
- * `View` nodes remain and every reference site holds an independent copy of the view's
- * plan.
+ * It runs first in `FinishAnalysis`, while `View` nodes are still present, so a definition
+ * body taken from a subquery occurrence is cleaned by the rules that run next on the main
+ * plan (`Optimizer.scala`).
  *
- * A join hint written at the top of a view body binds to the join(s) the view takes part
- * in (see `SubqueryHintPropagationSuite`): `EliminateResolvedHint` extracts hints from
- * Join children by walking down unary nodes, and processes the body inline today so the
- * hint reaches the consuming join. After this rule the body lives inside a `CTERelationDef`
- * the walk cannot reach, so the rule strips those top-of-body hints itself and re-attaches
- * them above every reference site. Hints deeper in the body bind to the body's own joins
- * and are left in place.
+ * Which occurrences of one view may convert, and why hint differences and seedless
+ * samples disqualify a body, is defined on `qualifies` and its helpers below.
  *
- * A converted definition keeps `forceSkipInline = true` only when at least two references
- * survive the rewrite; otherwise `InlineCTE` would immediately flatten it back into
- * duplicated subtrees (the definition body is deterministic in every case we convert),
- * making the rule a no-op. Definitions with fewer than two surviving references keep the
- * flag off and are inlined: their occurrences do not all survive the rewrite (a later
- * occurrence's body is dropped, taking references to nested converted views with it), and
- * some references may sit inside unreferenced user-written CTEs - materializing either
- * way would add a shuffle that exchange reuse cannot deduplicate.
- *
- * Only deterministic, batch views are eligible: a multi-reference CTE guarantees that its
- * definition is evaluated exactly once (even for non-deterministic definitions), while
- * multiple references to a non-deterministic view are evaluated independently today.
- * Converting such views would change query results.
- *
- * A view body may contain correlated subqueries whose outer references resolve to relations
- * inside the same body (e.g. `t WHERE x IN (SELECT y FROM s WHERE s.k = t.k)`). The view is
- * analyzed standalone when it is created, so an outer reference that does not resolve inside
- * the body fails view analysis and can never escape to the outer query. The converted
- * definition contains the whole body, so internal correlations resolve within it and these
- * bodies are safe to convert. `InlineCTE`'s rejection of boundary-crossing outer references
- * is only a generic safety net for non-view `forceSkipInline` producers.
- *
- * Each reference site gains a shuffle boundary added by `ReplaceCTERefWithRepartition` and
- * deduplicated by exchange reuse, so the conversion trades recomputation for a
- * shuffle plus reuse; it is therefore gated behind
- * [[SQLConf.CONVERT_VIEW_TO_MATERIALIZED_CTE]] and off by default.
+ * A view is analyzed by itself when created, so an outer reference that does not resolve
+ * inside the body fails view analysis and never reaches this rule. Correlations internal
+ * to the body resolve within the converted definition.
  */
 object ConvertViewToMaterializedCTE extends Rule[LogicalPlan] {
 
   override def apply(plan: LogicalPlan): LogicalPlan = {
-    if (!SQLConf.get.getConf(SQLConf.CONVERT_VIEW_TO_MATERIALIZED_CTE)) return plan
+    val conf = SQLConf.get
+    if (!conf.getConf(SQLConf.CONVERT_VIEW_TO_MATERIALIZED_CTE) || !conf.exchangeReuseEnabled) {
+      return plan
+    }
     // FinishAnalysis re-runs the rule batch on Subquery roots and requires the result
     // to stay a Subquery; the top-level pass already covers views inside subqueries.
     if (plan.isInstanceOf[Subquery]) return plan
     val occurrences = plan.collectWithSubqueries { case v: View => v }
     if (occurrences.length < 2) return plan
 
-    // Admit an identifier only when every occurrence of it forms one qualifying group.
-    // Grouping is by identifier first because the rewrite below matches occurrences by
-    // identifier: an identifier carried by occurrences with divergent bodies (e.g. one
-    // occurrence resolved against a view definition that was replaced after another
-    // occurrence captured it), or whose occurrences fail qualification for any other
-    // reason, must not convert at all - otherwise the rewrite would rebind those
-    // occurrences against a definition their plan does not match, silently changing
-    // query results.
-    //
-    // Inner CTE definition ids are normalized before the bodies are compared: a view
-    // body is re-analyzed per occurrence, and the re-analysis re-substitutes the body's
-    // inner CTEs, minting a fresh `CTERelationDef` id each time (e.g. for a SQL view
-    // whose body has a WITH clause over a persistent table). The re-minted ids are the
-    // only difference between such occurrences' bodies, so the normalization lets them
-    // group together; bodies that differ in anything else still stay apart.
+    // input_file_name() and friends read the scanning task's current file block, which is
+    // gone above the added shuffle. Leave the whole plan unchanged so they keep running on
+    // the scan.
+    val readsInputFile = plan.collectFirstWithSubqueries {
+      case p if p.expressions.exists(_.exists {
+        case _: InputFileName | _: InputFileBlockStart | _: InputFileBlockLength => true
+        case _ => false
+      }) => true
+    }.nonEmpty
+    if (readsInputFile) return plan
+
+    // The rewrite below matches occurrences by view name (`desc.identifier`). Convert a
+    // name only when every occurrence of it qualifies and shares one canonical body: a
+    // captured Dataset can hold a view body that was replaced after another occurrence
+    // captured it, and such an occurrence must not be rebound to the new definition.
+    // Inner CTE ids are re-minted on each re-analysis; `normalizeCteIds` removes that
+    // noise before the bodies are compared.
     val qualifiedIdentifiers = occurrences
       .groupBy(_.desc.identifier)
       .collect {
@@ -109,40 +85,30 @@ object ConvertViewToMaterializedCTE extends Rule[LogicalPlan] {
       .toSet
     if (qualifiedIdentifiers.isEmpty) return plan
 
-    // Bottom-up rewrite: nested views are visited (and their definitions appended) before
-    // the views containing them, so a referenced definition always precedes its referrer
-    // in `cteDefs`. The first occurrence of a group creates the definition, replaced by a
-    // bare reference; later occurrences are wrapped in a `Project` re-minting the
-    // occurrence's ids from the definition output, so consumers above need no rewriting.
+    // transformUp visits nested views first, so each definition is appended before the
+    // definitions that reference it. Every occurrence becomes a bare reference with its
+    // own output attributes, so duplicated expressions that contained the same view stay
+    // equal; later CTE rules rebind the attributes to the definition by position.
     val cteDefs = mutable.ArrayBuffer.empty[CTERelationDef]
     val defByGroup = mutable.HashMap.empty[TableIdentifier, (CTERelationDef, Seq[HintInfo])]
 
     val rewritten = plan.transformUpWithSubqueries {
       case v: View if qualifiedIdentifiers.contains(v.desc.identifier) =>
-        // The body's top-of-node hints must not stay in the definition, where neither
-        // this rule nor `EliminateResolvedHint` can hoist them into the consuming joins;
-        // build the definition from the hint-free body and re-apply the hints above each
-        // reference site instead. All occurrences share one canonicalized body, so the
-        // hints extracted from the first one describe every reference site uniformly.
+        // Hints at the top of the body bind to the consuming join, but
+        // `EliminateResolvedHint` cannot walk into a `CTERelationDef`. Build the
+        // definition from the hint-free body and re-attach those hints above every
+        // reference. `qualifies` has already required the occurrences' hints to match.
         defByGroup.get(v.desc.identifier) match {
           case Some((cteDef, bodyHints)) =>
-            // Later occurrence: re-bind the reference output to this occurrence's
-            // attributes positionally. The group qualification has already asserted that
-            // name, type and nullability align element-wise.
-            val ref = CTERelationRef(
+            withBodyHints(bodyHints, CTERelationRef(
               cteDef.id,
               _resolved = true,
-              output = cteDef.output,
+              output = v.output,
               isStreaming = false,
-              maxRows = cteDef.maxRows)
-            withBodyHints(bodyHints,
-              Project(rebindingProjectList(v.output, cteDef.output), ref))
+              maxRows = cteDef.maxRows))
 
           case None =>
-            // First occurrence: consumers above already reference this occurrence's
-            // expression ids, which are exactly the definition output, so the bare
-            // reference is output-compatible. `forceSkipInline` is decided after the
-            // rewrite, by the number of surviving references.
+            // `forceSkipInline` is set below, once live references are counted.
             val (hintFreeBody, bodyHints) =
               EliminateResolvedHint.extractHintsFromPlan(v.child)
             val cteDef = CTERelationDef(hintFreeBody)
@@ -151,7 +117,7 @@ object ConvertViewToMaterializedCTE extends Rule[LogicalPlan] {
             withBodyHints(bodyHints, CTERelationRef(
               cteDef.id,
               _resolved = true,
-              output = v.child.output,
+              output = v.output,
               isStreaming = false,
               maxRows = cteDef.maxRows))
         }
@@ -160,12 +126,9 @@ object ConvertViewToMaterializedCTE extends Rule[LogicalPlan] {
     if (cteDefs.isEmpty) {
       plan
     } else {
-      // Not every occurrence survives the rewrite as a reference: the body of a later
-      // occurrence is dropped (taking references to nested converted views with it), and
-      // some references sit inside unreferenced user-written CTEs. Materializing a
-      // definition with fewer than two live references would add a shuffle that exchange
-      // reuse cannot deduplicate, so re-count after the rewrite and leave such definitions
-      // inlinable - InlineCTE flattens them back into their consumers.
+      // Two or more live references can share the added shuffle, so materialize only
+      // those. A dropped occurrence body, or a reference inside an unreferenced user
+      // CTE, can leave fewer; keep those inlinable and let `InlineCTE` flatten them.
       val newDefIds = cteDefs.map(_.id).toSet
       val withDefs = attachDefs(rewritten, cteDefs.toSeq)
       val liveRefCounts = countLiveRefs(withDefs)
@@ -176,10 +139,9 @@ object ConvertViewToMaterializedCTE extends Rule[LogicalPlan] {
     }
   }
 
-  // Counts, per definition id, the references reachable from the query root: a reference
-  // inside a definition counts only when the definition itself is live, mirroring how
-  // `InlineCTE` discounts references held by unreferenced definitions. Recursive CTEs are
-  // handled by the visited-set worklist.
+  // References reachable from the query root, per definition. A reference inside a
+  // definition counts only when that definition is itself live, matching `InlineCTE`.
+  // The visited set stops a recursive CTE from being walked forever.
   private def countLiveRefs(plan: LogicalPlan): Map[Long, Int] = {
     // The region of a reference is its innermost enclosing definition's id, or
     // ROOT_REGION at the query root.
@@ -211,18 +173,12 @@ object ConvertViewToMaterializedCTE extends Rule[LogicalPlan] {
     liveRefCounts.toMap
   }
 
-  // Group by view identity: the rule dedupes references of the SAME view, not distinct
-  // views with coincidentally equal bodies, and all occurrences of one view resolve
-  // through the same (db-qualified) identifier. The canonicalized body comparison is a
-  // precondition guard in the identifier admission above: if occurrences of one view
-  // ever diverge structurally, we skip conversion instead of building a wrong shared
-  // definition.
-  //
-  // Rewrites every inner CTE definition id and reference to an appearance ordinal, so
-  // that bodies differing only in re-minted inner CTE ids canonicalize equal. Same tree
-  // shapes are visited in the same order, so equal bodies map to equal ordinals, while
-  // genuinely different structures (e.g. two sibling identical CTEs) still produce
-  // distinct ordinals and stay distinguishable.
+  // Re-analysis mints a fresh id for each inner `CTERelationDef`, so equal bodies would
+  // otherwise canonicalize apart. Rewriting ids to appearance ordinals lets them compare
+  // equal: the same shape is walked in the same order, so genuinely different wiring keeps
+  // different ordinals. Recursive CTEs also re-mint `UnionLoop.id`, `UnionLoopRef.loopId`,
+  // and `UnionLoop.outputAttrIds`; those are not rewritten, so WITH RECURSIVE bodies stay
+  // distinct and are never converted.
   private def normalizeCteIds(plan: LogicalPlan): LogicalPlan = {
     val ids = mutable.HashMap.empty[Long, Long]
     plan.transformUpWithSubqueries {
@@ -231,32 +187,40 @@ object ConvertViewToMaterializedCTE extends Rule[LogicalPlan] {
     }
   }
 
+  // Canonicalization drops `ResolvedHint`, so the hint check cannot come from the body
+  // comparison; compare them here.
+  private def hintsOf(v: View): Seq[HintInfo] =
+    v.child.collectWithSubqueries { case h: ResolvedHint => h.hints }
+
+  // Deterministic and non-streaming alone do not cover a seedless `Sample`: it has no
+  // expressions, so `deterministic` is true, but `SampleExec` draws a fresh seed per
+  // physical node. One shared definition would make every reference read one sample.
   private def qualifies(occs: Seq[View]): Boolean = {
     val first = occs.head
     occs.length >= 2 && occs.forall { v =>
       v.resolved &&
         v.child.deterministic &&
         !v.child.isStreaming &&
+        v.child.collectWithSubqueries { case s: Sample if s.seed.isEmpty => s }.isEmpty &&
         !hasMainRegionSort(v.child) &&
+        hintsOf(v) == hintsOf(first) &&
         v.desc.viewSQLConfigs == first.desc.viewSQLConfigs &&
         schemasAlign(first, v)
     }
   }
 
-  // The per-reference shuffle boundary is added above the whole definition, so it buries
-  // every ordering the body computes: not only a top-level ORDER BY, but also sorts
-  // reachable deeper through operator children - under LIMIT/OFFSET, in inner views,
-  // inline subqueries, the WITH clause's re-substituted definitions, and branches of set
-  // operations - whose order consumers observe today. Sorts confined to subquery
-  // expressions cannot affect the body's exposed rows and are skipped: their plans are
-  // not `children`, so plain child traversal never enters them.
+  // The added shuffle drops any order the body's main plan exposes, including sorts
+  // reachable through `children`: under LIMIT/OFFSET, in inner views, in WITH
+  // definitions, and in set-operation branches. Sorts inside subquery expressions can
+  // choose which rows the body produces, but they do not order its output, and they are
+  // not reachable through `children`.
   private def hasMainRegionSort(plan: LogicalPlan): Boolean =
     plan.isInstanceOf[Sort] || plan.children.exists(hasMainRegionSort)
 
   /**
-   * Occurrences of the same view are produced by resolution-time attribute renewal, which
-   * preserves column order, name, type and nullability. Assert the invariant element-wise
-   * before zipping positions: silent wrong results are the failure mode we cannot tolerate.
+   * Resolution renews a view's attributes and preserves column order, name, type, and
+   * nullability. A mismatch would zip occurrences against the wrong columns and silently
+   * change results.
    */
   private def schemasAlign(first: View, other: View): Boolean =
     first.output.length == other.output.length &&
@@ -264,29 +228,16 @@ object ConvertViewToMaterializedCTE extends Rule[LogicalPlan] {
         l.name == r.name && l.dataType == r.dataType && l.nullable == r.nullable
       }
 
-  // Restores the hints extracted from the definition body above a reference site,
-  // preserving the original nesting order (the extracted list is top-down).
+  // The extracted hint list is top-down; foldRight re-nests it in that order above the
+  // reference.
   private def withBodyHints(hints: Seq[HintInfo], site: LogicalPlan): LogicalPlan =
     hints.foldRight(site)((h, acc) => ResolvedHint(acc, h))
 
   /**
-   * Builds a project list that re-mints `target`'s attributes from the definition output
-   * positionally, preserving names, expression ids, qualifiers and metadata so that
-   * consumers referencing `target` resolve unchanged.
-   */
-  private def rebindingProjectList(target: Seq[Attribute], source: Seq[Attribute]): Seq[Alias] =
-    target.zip(source).map { case (t, s) =>
-      Alias(s, t.name)(exprId = t.exprId, qualifier = t.qualifier,
-        explicitMetadata = Some(t.metadata))
-    }
-
-  /**
-   * Attaches the new definitions at the scope root, mirroring how `CTESubstitution` groups
-   * definitions: merged into an existing top-level `WithCTE`, spread onto command children
-   * for plans implementing `CTEInChildren`, or wrapped around the plan otherwise. References
-   * inside subquery expressions resolve against the top-level scope, as they do for regular
-   * user-written CTEs. The top-level pass is the only one that attaches definitions: apply
-   * returns early for `Subquery` roots, whose wrapper must be preserved for the caller.
+   * Places definitions where `CTESubstitution` would: into an existing top-level
+   * `WithCTE`, onto a `CTEInChildren` command, or in a wrapping `WithCTE`. Subquery
+   * expressions resolve against that top-level scope. Only the top-level pass attaches
+   * definitions; `apply` returns early for `Subquery` roots.
    */
   private def attachDefs(plan: LogicalPlan, newDefs: Seq[CTERelationDef]): LogicalPlan =
     plan match {

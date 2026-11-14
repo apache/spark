@@ -1073,16 +1073,21 @@ object SQLConf {
 
   val CONVERT_VIEW_TO_MATERIALIZED_CTE =
     buildConf("spark.sql.optimizer.convertViewToMaterializedCTE.enabled")
-      .doc("When true, the optimizer rewrites multiple references to the same view " +
-        "into a single materialized CTE definition with multiple references, so the " +
-        "view's underlying plan is computed once (through exchange reuse) instead of " +
-        "once per reference. Views that contain non-deterministic expressions, " +
-        "streaming sources, or an ORDER BY outside subquery expressions (its order " +
-        "would be lost across the added shuffle boundary, the same as MATERIALIZED " +
-        "CTEs) are never converted, as the conversion would change their semantics. " +
-        "Note that each " +
-        "reference site gains a shuffle boundary, so this helps only when the view " +
-        "subtree is expensive relative to a shuffle of its output.")
+      .doc("When true, multiple references to the same view are rewritten into one " +
+        "materialized CTE, so the view's plan runs once (through exchange reuse) " +
+        "instead of once per reference. Enable it for queries that repeatedly read an " +
+        "expensive view. Each reference gains a shuffle of the view's output, and " +
+        "per-reference pushdown, dynamic partition pruning, and scalar-subquery " +
+        "merging no longer reach the view body, so it can also make queries slower; " +
+        "that trade is the user's to make. It does nothing when exchange reuse is " +
+        "disabled. A view is not converted when conversion could change results: " +
+        "non-deterministic or streaming bodies, seedless TABLESAMPLE, an ORDER BY " +
+        "outside subquery expressions, or occurrences of the name whose bodies, " +
+        "hints, or effective SQL configs differ. A view whose body contains a " +
+        "recursive CTE is never converted, because re-analysis re-mints the " +
+        "loop's ids, so its occurrences never share one canonical body. The " +
+        "query is left unchanged when it evaluates input file functions, whose " +
+        "file context does not survive the shuffle.")
       .version("4.4.0")
       .withBindingPolicy(ConfigBindingPolicy.NOT_APPLICABLE)
       .booleanConf

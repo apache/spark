@@ -17,9 +17,11 @@
 
 package org.apache.spark.sql
 
-import org.apache.spark.sql.catalyst.plans.logical.{BROADCAST, Join, RepartitionByExpression, ResolvedHint}
+import org.apache.spark.sql.catalyst.plans.logical.{
+  BROADCAST, CommandResult, Join, JoinHint, LogicalPlan, RepartitionByExpression}
+import org.apache.spark.sql.catalyst.plans.physical.RoundRobinPartitioning
 import org.apache.spark.sql.execution.adaptive.AdaptiveSparkPlanHelper
-import org.apache.spark.sql.execution.exchange.ReusedExchangeExec
+import org.apache.spark.sql.execution.exchange.{ReusedExchangeExec, ShuffleExchangeExec}
 import org.apache.spark.sql.execution.joins.BroadcastHashJoinExec
 import org.apache.spark.sql.functions.rand
 import org.apache.spark.sql.internal.SQLConf
@@ -28,8 +30,8 @@ import org.apache.spark.sql.test.SharedSparkSession
 /**
  * Integration tests for the `ConvertViewToMaterializedCTE` optimizer rule: repeated
  * references to the same view are rewritten into one CTE definition with multiple
- * references when `spark.sql.optimizer.convertViewToMaterializedCTE.enabled` is enabled. After
- * the final `Replace CTE with Repartition` batch, a converted view shows up as one
+ * references when `spark.sql.optimizer.convertViewToMaterializedCTE.enabled` is enabled.
+ * After the final `Replace CTE with Repartition` batch, a converted view shows up as one
  * repartition node per reference site; exchange reuse deduplicates them at execution
  * time.
  */
@@ -51,7 +53,10 @@ class ConvertViewToMaterializedCTEQuerySuite extends QueryTest with SharedSparkS
     countRepartitions(spark.sql(query))
 
   private def countRepartitions(df: DataFrame): Int =
-    df.queryExecution.optimizedPlan.collect {
+    countRepartitions(df.queryExecution.optimizedPlan)
+
+  private def countRepartitions(plan: LogicalPlan): Int =
+    plan.collectWithSubqueries {
       case _: RepartitionByExpression => true
     }.length
 
@@ -74,21 +79,40 @@ class ConvertViewToMaterializedCTEQuerySuite extends QueryTest with SharedSparkS
     }
   }
 
+  test("conversion is disabled when exchange reuse is disabled") {
+    withSelfJoinedView {
+      withSQLConf(SQLConf.EXCHANGE_REUSE_ENABLED.key -> "false") {
+        assert(countRepartitions(selfJoinQuery) == 0)
+        withSQLConf(SQLConf.CONVERT_VIEW_TO_MATERIALIZED_CTE.key -> "true") {
+          assert(countRepartitions(selfJoinQuery) == 0)
+        }
+      }
+    }
+  }
+
   test("the converted view body is computed once") {
-    // Exchange reuse deduplicates the per-reference shuffles added by the conversion,
-    // so the view's body is evaluated once. Pin it on the executed plan: with AQE on
-    // the reused exchange hides behind AdaptiveSparkPlanExec and query stage nodes,
-    // whose subtrees are not reachable through plain `children` traversal; the
-    // `collect` from AdaptiveSparkPlanHelper descends through them.
+    // Assert on the executed plan. With AQE on, the reused exchange sits behind
+    // AdaptiveSparkPlanExec query stages, which `collect` descends through. Count
+    // only the conversion's round-robin exchanges, excluding any join shuffles.
     withSelfJoinedView {
       Seq(true, false).foreach { aqeEnabled =>
-        withSQLConf(SQLConf.CONVERT_VIEW_TO_MATERIALIZED_CTE.key -> "true",
-          SQLConf.ADAPTIVE_EXECUTION_ENABLED.key -> aqeEnabled.toString) {
+        def viewExchanges: Int = {
           val df = spark.sql(selfJoinQuery)
           df.collect()
-          assert(collect(df.queryExecution.executedPlan) {
-            case _: ReusedExchangeExec => 1
-          }.length == 1)
+          collect(df.queryExecution.executedPlan) {
+            case e: ShuffleExchangeExec
+              if e.outputPartitioning.isInstanceOf[RoundRobinPartitioning] => 1
+            case e: ReusedExchangeExec
+              if e.outputPartitioning.isInstanceOf[RoundRobinPartitioning] => 1
+          }.length
+        }
+        withSQLConf(SQLConf.ADAPTIVE_EXECUTION_ENABLED.key -> aqeEnabled.toString) {
+          // Without conversion there is no round-robin repartition to reuse.
+          assert(viewExchanges == 0)
+          withSQLConf(SQLConf.CONVERT_VIEW_TO_MATERIALIZED_CTE.key -> "true") {
+            // One live exchange plus one reuse of it: the body is computed once.
+            assert(viewExchanges == 2)
+          }
         }
       }
     }
@@ -105,25 +129,50 @@ class ConvertViewToMaterializedCTEQuerySuite extends QueryTest with SharedSparkS
     }
   }
 
+  test("input file expressions above a view prevent conversion") {
+    withTable("t") {
+      sql("CREATE TABLE t USING parquet AS SELECT id, id % 10 AS k FROM range(4)")
+      withTempView("v") {
+        sql("CREATE TEMP VIEW v AS SELECT id, k FROM t")
+        val query =
+          """
+            |SELECT input_file_name() <> '' AS has_file,
+            |  input_file_block_start() >= 0 AS has_start,
+            |  input_file_block_length() >= 0 AS has_length, id
+            |FROM v WHERE id < 2
+            |UNION ALL
+            |SELECT input_file_name() <> '', input_file_block_start() >= 0,
+            |  input_file_block_length() >= 0, id
+            |FROM v WHERE id < 2
+            |""".stripMargin
+        val expected = sql(query).collect()
+        assert(expected.nonEmpty && expected.forall(row =>
+          row.getBoolean(0) && row.getBoolean(1) && row.getBoolean(2)))
+        withSQLConf(SQLConf.CONVERT_VIEW_TO_MATERIALIZED_CTE.key -> "true") {
+          checkAnswer(sql(query), expected)
+          assert(countRepartitions(query) == 0)
+        }
+      }
+    }
+  }
+
   test("a divergent view occurrence is not rebound to a converted definition") {
-    // Two references to v are resolved while v has one body; a third reference sees a
-    // replaced body. The identifier maps to two distinct canonicalized bodies, so the
-    // rule must not convert at all: rewriting the divergent occurrence against the
-    // qualifying pair's definition would return the old body's rows for it.
+    // `held` captures v's first body; the third reference is analyzed after v is
+    // replaced. The two bodies diverge, so the name must not convert: rebinding the
+    // stale occurrence to the new definition would return the wrong rows.
     withTempView("v") {
       sql("CREATE OR REPLACE TEMP VIEW v AS SELECT id, id AS k FROM range(4)")
       val held = spark.table("v")
       val pair = held.join(held.as("b"), "id").select($"id")
       sql("CREATE OR REPLACE TEMP VIEW v AS SELECT id, id + 100 AS k FROM range(4)")
-      // A fresh Dataset per setting so each collect analyzes a new plan (the rule runs
-      // during analysis; reusing one Dataset would reuse its cached analyzed plan).
+      // A fresh Dataset per setting so each check optimizes anew; reusing one Dataset
+      // would reuse its cached optimized plan.
       def mkQuery(): DataFrame = pair.join(spark.table("v"), "id").select($"id", $"k")
       assert(countRepartitions(mkQuery()) == 0)
       val expected = mkQuery().collect()
       withSQLConf(SQLConf.CONVERT_VIEW_TO_MATERIALIZED_CTE.key -> "true") {
-        // Pin the no-conversion contract on the plan as well: rows matching the
-        // baseline would not catch a conversion that is semantically harmless here,
-        // but no repartition boundary may appear even then.
+        // Rows alone cannot tell conversion off from a conversion that happens to
+        // match them; assert the plan adds no repartition either.
         assert(countRepartitions(mkQuery()) == 0)
         checkAnswer(mkQuery(), expected)
       }
@@ -131,11 +180,9 @@ class ConvertViewToMaterializedCTEQuerySuite extends QueryTest with SharedSparkS
   }
 
   test("stale view pair inside a scalar subquery does not crash") {
-    // The stale-view scenario where the pair sits inside a scalar subquery: the
-    // top-level pass declines the identifier (divergent bodies), so the rule must
-    // not convert inside the Subquery-rooted pass either - attaching definitions
-    // there would wrap the Subquery root in WithCTE and break FinishAnalysis's
-    // destructuring of the subquery result.
+    // The same divergence as above, but the occurrences sit inside scalar subqueries.
+    // Converting there would wrap the Subquery root in WithCTE and break FinishAnalysis,
+    // which destructures that root.
     withTempView("v", "w") {
       sql("CREATE OR REPLACE TEMP VIEW v AS SELECT id, id AS k FROM range(4)")
       val held = spark.table("v")
@@ -152,10 +199,9 @@ class ConvertViewToMaterializedCTEQuerySuite extends QueryTest with SharedSparkS
   }
 
   test("converted definition picked from a subquery occurrence is cleaned") {
-    // FinishAnalysis runs its rules on the main plan before any subquery plan, so a
-    // definition whose body is taken from a first-visited subquery occurrence still holds
-    // analysis-only nodes (the table's SubqueryAlias). Moving that body into a top-level
-    // WithCTE after the cleanup rules ran must not leak them to the planner.
+    // The definition body is taken from a first-visited subquery occurrence, which can
+    // still hold analysis-only nodes (the table's SubqueryAlias). They must not reach
+    // the planner.
     withTable("t") {
       sql("CREATE TABLE t USING parquet AS SELECT id, id % 10 AS k FROM range(0, 20)")
       withTempView("v") {
@@ -169,11 +215,11 @@ class ConvertViewToMaterializedCTEQuerySuite extends QueryTest with SharedSparkS
     }
   }
 
-  test("converted definition picked from a subquery occurrence drops view hints") {
-    // Same leak scenario as above with a hint in the body. The hint resolves onto the
-    // table reference, so the leaked body holds ResolvedHint ABOVE the same SubqueryAlias;
-    // the planner hits the deeper node first and the crash alone cannot single out the
-    // hint, so pin it on the optimized plan instead: no ResolvedHint may survive.
+  test("converted definition picked from a subquery occurrence, with view hints") {
+    // Same as above, with a hint in the body. A plan assertion on surviving
+    // ResolvedHint would be vacuous - EliminateResolvedHint runs whether or not
+    // conversion fires - so this is the no-crash and result-correctness variant
+    // for a hinted body whose definition is lifted from a subquery occurrence.
     withTable("t") {
       sql("CREATE TABLE t USING parquet AS SELECT id, id % 10 AS k FROM range(0, 20)")
       withTempView("v") {
@@ -181,9 +227,6 @@ class ConvertViewToMaterializedCTEQuerySuite extends QueryTest with SharedSparkS
         val query = "SELECT (SELECT count(*) FROM v) AS c, (SELECT max(id) FROM v) AS m"
         val expected = spark.sql(query).collect()
         withSQLConf(SQLConf.CONVERT_VIEW_TO_MATERIALIZED_CTE.key -> "true") {
-          val optimizedPlan = spark.sql(query).queryExecution.optimizedPlan
-          assert(optimizedPlan.collect { case _: ResolvedHint => true }.isEmpty,
-            s"ResolvedHint survived the conversion: $optimizedPlan")
           checkAnswer(spark.sql(query), expected)
         }
       }
@@ -191,20 +234,17 @@ class ConvertViewToMaterializedCTEQuerySuite extends QueryTest with SharedSparkS
   }
 
   test("join hints in the view body are applied to the consuming joins") {
-    // A join strategy hint written in the view body applies to the join(s) the view
-    // takes part in (SPARK-40999). Conversion replaces the View with a leaf
-    // CTERelationRef, which would strand the hint in the definition body and silently
-    // downgrade a broadcast self-join to SortMergeJoin, so the rule must re-attach the
-    // body's hints above the reference sites.
+    // A hint in the view body applies to the join the view takes part in (SPARK-40999).
+    // Left in the definition, the leaf CTERelationRef would strand it and downgrade the
+    // self-join to SortMergeJoin.
     withTable("t", "big") {
       sql("CREATE TABLE t USING parquet AS SELECT id, id % 10 AS k FROM range(0, 100)")
       sql("CREATE TABLE big USING parquet AS SELECT id FROM range(0, 1000)")
       withTempView("v") {
         sql("CREATE TEMP VIEW v AS SELECT /*+ BROADCAST(t) */ id, k FROM t WHERE k < 4")
 
-        // Covers both rewrite branches: in the self join both occurrences are direct
-        // references on opposite join sides; in the chain of two joins the second join
-        // reuses the definition created by the first occurrence.
+        // The self join rewrites both occurrences as new references; the chained joins
+        // reuse the definition the first occurrence created.
         val queries = Seq(
           "SELECT t1.id FROM v t1 JOIN v t2 ON t1.id = t2.id",
           "SELECT b.id FROM big b JOIN v t1 ON b.id = t1.id JOIN v t2 ON b.id = t2.id")
@@ -233,6 +273,33 @@ class ConvertViewToMaterializedCTEQuerySuite extends QueryTest with SharedSparkS
     }
   }
 
+  test("occurrences with divergent view hints are not converted") {
+    // Canonicalization ignores ResolvedHint, so `held` and its unhinted replacement look
+    // alike; converting would copy the first occurrence's hint onto the second join.
+    withTable("t", "big") {
+      sql("CREATE TABLE t USING parquet AS SELECT id, id % 10 AS k FROM range(0, 100)")
+      sql("CREATE TABLE big USING parquet AS SELECT id FROM range(0, 1000)")
+      withTempView("v") {
+        sql("CREATE TEMP VIEW v AS SELECT /*+ BROADCAST(t) */ id, k FROM t WHERE k < 4")
+        val held = spark.table("v")
+        sql("CREATE OR REPLACE TEMP VIEW v AS SELECT id, k FROM t WHERE k < 4")
+        val big = spark.table("big")
+        def mkQuery(): DataFrame = big.join(held, "id").join(spark.table("v"), "id")
+        def joinHints(df: DataFrame): Seq[JoinHint] =
+          df.queryExecution.optimizedPlan.collectWithSubqueries { case j: Join => j.hint }
+
+        val expectedHints = joinHints(mkQuery())
+        assert(expectedHints.count(h =>
+          h.leftHint.exists(_.strategy.contains(BROADCAST)) ||
+            h.rightHint.exists(_.strategy.contains(BROADCAST))) == 1)
+        withSQLConf(SQLConf.CONVERT_VIEW_TO_MATERIALIZED_CTE.key -> "true") {
+          assert(countRepartitions(mkQuery()) == 0)
+          assert(joinHints(mkQuery()) == expectedHints)
+        }
+      }
+    }
+  }
+
   private def countBroadcastHintedJoins(query: String): Int =
     spark.sql(query).queryExecution.optimizedPlan.collect {
       case j: Join => j.hint
@@ -253,10 +320,8 @@ class ConvertViewToMaterializedCTEQuerySuite extends QueryTest with SharedSparkS
   }
 
   test("view with top-level ORDER BY is not converted") {
-    // The shuffle boundary added above the definition would destroy the view's
-    // ORDER BY, changing what an outer LIMIT sees; the view must stay unconverted.
-    // OFFSET composes into Offset/limit nodes wrapping the Sort, so those bodies
-    // must be rejected as well.
+    // The added shuffle would drop the ORDER BY an outer LIMIT observes. OFFSET wraps
+    // the Sort in Offset/limit nodes, which must be rejected too.
     val bodies = Seq(
       "SELECT id FROM range(100) ORDER BY id",
       "SELECT id FROM range(100) ORDER BY id OFFSET 1",
@@ -276,12 +341,9 @@ class ConvertViewToMaterializedCTEQuerySuite extends QueryTest with SharedSparkS
   }
 
   test("a Sort buried in the body's main plan region is not converted") {
-    // The shuffle boundary added above the definition buries every ordering the body
-    // computes, not only a top-level ORDER BY: an inner view's ORDER BY, a DISTINCT or
-    // LIMIT over it, ordering inside the WITH clause's own definitions, and branches of
-    // set operations all expose their sort to consumers today, and the shuffle changes
-    // their observed rows. Sorts confined to subquery expressions cannot reach the
-    // exposed rows and must not block conversion (pinned by the next test).
+    // The shuffle drops order the body's main plan exposes, not only a top-level ORDER
+    // BY. The subquery case is the opposite and is covered by "a Sort confined to a
+    // subquery expression does not block conversion".
     withTable("t") {
       sql("CREATE TABLE t USING parquet AS SELECT id, id % 10 AS k FROM range(0, 100)")
       withTempView("v1") {
@@ -310,14 +372,13 @@ class ConvertViewToMaterializedCTEQuerySuite extends QueryTest with SharedSparkS
   }
 
   test("a TABLESAMPLE over a sorted inner view is not converted") {
-    // Rows of a sample body cannot be pinned (sampling without REPEATABLE is not
-    // guaranteed to select the same rows across executions), so the rejection is
-    // checked on the plan only.
+    // REPEATABLE keeps the seedless-sample guard from rejecting the view before
+    // hasMainRegionSort sees the inner ORDER BY.
     withTable("t") {
       sql("CREATE TABLE t USING parquet AS SELECT id, id % 10 AS k FROM range(0, 100)")
       withTempView("v1", "v") {
         sql("CREATE TEMP VIEW v1 AS SELECT id FROM t ORDER BY id DESC")
-        sql("CREATE TEMP VIEW v AS SELECT id FROM v1 TABLESAMPLE(50 PERCENT)")
+        sql("CREATE TEMP VIEW v AS SELECT id FROM v1 TABLESAMPLE(50 PERCENT) REPEATABLE(7)")
         val query = "SELECT t1.id FROM v t1 JOIN v t2 ON t1.id = t2.id LIMIT 3"
         withSQLConf(SQLConf.CONVERT_VIEW_TO_MATERIALIZED_CTE.key -> "true") {
           assert(countRepartitions(query) == 0)
@@ -326,10 +387,41 @@ class ConvertViewToMaterializedCTEQuerySuite extends QueryTest with SharedSparkS
     }
   }
 
+  test("an unseeded TABLESAMPLE view is not converted") {
+    // Sample has no expressions, so `deterministic` is true even though SampleExec draws
+    // a fresh seed. References must keep their independent samples.
+    withTable("t") {
+      sql("CREATE TABLE t USING parquet AS SELECT id, id % 10 AS k FROM range(0, 100)")
+      withTempView("v") {
+        sql("CREATE TEMP VIEW v AS SELECT id, k FROM t TABLESAMPLE(50 PERCENT)")
+        val query = "SELECT count(*) FROM (SELECT id FROM v UNION ALL SELECT id FROM v)"
+        withSQLConf(SQLConf.CONVERT_VIEW_TO_MATERIALIZED_CTE.key -> "true") {
+          assert(countRepartitions(query) == 0)
+        }
+      }
+    }
+  }
+
+  test("a repeatable TABLESAMPLE view is converted") {
+    // An explicit seed makes the body deterministic, so both references can share it.
+    withTable("t") {
+      sql("CREATE TABLE t USING parquet AS SELECT id, id % 10 AS k FROM range(0, 100)")
+      withTempView("v") {
+        sql("CREATE TEMP VIEW v AS " +
+          "SELECT id, k FROM t TABLESAMPLE(50 PERCENT) REPEATABLE(7)")
+        val query = "SELECT count(*) FROM (SELECT id FROM v UNION ALL SELECT id FROM v)"
+        val expected = spark.sql(query).collect()
+        withSQLConf(SQLConf.CONVERT_VIEW_TO_MATERIALIZED_CTE.key -> "true") {
+          assert(countRepartitions(query) == 2)
+          checkAnswer(spark.sql(query), expected)
+        }
+      }
+    }
+  }
+
   test("a Sort confined to a subquery expression does not block conversion") {
-    // The IN-subquery's ORDER BY cannot affect the body's exposed row order, so v
-    // still converts: one shuffle boundary per reference site, deduplicated by
-    // exchange reuse, with identical results to conversion off.
+    // The IN-subquery's ORDER BY picks which rows the body produces but does not order
+    // the body's output, so v still converts.
     withTable("t") {
       sql("CREATE TABLE t USING parquet AS SELECT id, id % 10 AS k FROM range(0, 100)")
       withTempView("v") {
@@ -350,9 +442,50 @@ class ConvertViewToMaterializedCTEQuerySuite extends QueryTest with SharedSparkS
       withSelfJoinedView {
         sql("CREATE TABLE dest (id BIGINT, k BIGINT) USING parquet")
         withSQLConf(SQLConf.CONVERT_VIEW_TO_MATERIALIZED_CTE.key -> "true") {
-          sql(s"INSERT INTO dest $selfJoinQuery")
+          val insert = sql(s"INSERT INTO dest $selfJoinQuery")
+          // The command's logical child is analyzed rather than optimized. Inspect the
+          // physical plan and count only the conversion's round-robin exchanges, excluding
+          // any join shuffles.
+          val insertPlan = insert.queryExecution.optimizedPlan.collectFirst {
+            case c: CommandResult => c.commandPhysicalPlan
+          }.getOrElse(fail("expected an INSERT command plan"))
+          val viewShuffles = collect(insertPlan) {
+            case e: ShuffleExchangeExec
+              if e.outputPartitioning.isInstanceOf[RoundRobinPartitioning] => 1
+            case e: ReusedExchangeExec
+              if e.outputPartitioning.isInstanceOf[RoundRobinPartitioning] => 1
+          }
+          assert(viewShuffles.sum == 2, s"INSERT plan: $insertPlan")
         }
         checkAnswer(spark.table("dest"), spark.range(0, 10).select($"id", ($"id" % 10)))
+      }
+    }
+  }
+
+  test("grouping by a correlated scalar subquery over a converted view") {
+    // The select list and GROUP BY contain equivalent scalar subqueries. Every converted
+    // view occurrence must have the same reference shape so PullOutGroupingExpressions
+    // still recognizes those copies as one grouping expression.
+    withTable("l", "tr") {
+      withTempView("vr") {
+        sql("CREATE TABLE tr (c BIGINT, d DOUBLE) USING parquet")
+        sql("INSERT INTO tr VALUES (1, 1.0), (2, 2.0), (2, 4.0), (3, 2.0)")
+        sql("CREATE TABLE l (a BIGINT) USING parquet")
+        sql("INSERT INTO l VALUES (1), (2), (3), (4)")
+        sql("CREATE TEMP VIEW vr AS SELECT * FROM tr")
+        val queries = Seq(
+          "SELECT a, (SELECT sum(d) FROM vr WHERE a = c) sum_d " +
+            "FROM l l1 GROUP BY 1, 2 ORDER BY a",
+          "SELECT a, (SELECT sum(d) FROM vr WHERE a = c) sum_d FROM l l1 " +
+            "GROUP BY a, (SELECT sum(d) FROM vr WHERE a = c) ORDER BY a")
+        val expected = Seq(
+          Row(1L, 1.0), Row(2L, 6.0), Row(3L, 2.0), Row(4L, null))
+        queries.foreach { query =>
+          withSQLConf(SQLConf.CONVERT_VIEW_TO_MATERIALIZED_CTE.key -> "true") {
+            assert(countRepartitions(query) > 0)
+            checkAnswer(sql(query), expected)
+          }
+        }
       }
     }
   }
@@ -368,10 +501,8 @@ class ConvertViewToMaterializedCTEQuerySuite extends QueryTest with SharedSparkS
       assert(countRepartitions(query) == 0)
       withSQLConf(SQLConf.CONVERT_VIEW_TO_MATERIALIZED_CTE.key -> "true") {
         checkAnswer(spark.sql(query), expected)
-        // Only v converts: t and s occur once per v body copy at rule time, but after the
-        // rewrite each has a single reference inside v's definition, so InlineCTE flattens
-        // them instead of materializing them behind shuffles nothing reuses. Each of the
-        // two v sites carries exactly one (reused) shuffle boundary.
+        // Only v converts. t and s each keep one reference inside v's definition, so
+        // InlineCTE flattens them rather than materializing a shuffle nothing reuses.
         assert(countRepartitions(query) == 2)
       }
     }
@@ -386,20 +517,16 @@ class ConvertViewToMaterializedCTEQuerySuite extends QueryTest with SharedSparkS
       assert(countRepartitions(query) == 0)
       withSQLConf(SQLConf.CONVERT_VIEW_TO_MATERIALIZED_CTE.key -> "true") {
         checkAnswer(spark.sql(query), expected)
-        // Only v2 converts into a materialized definition: v1's second reference dies with
-        // the dropped second occurrence's body, leaving v1 with a single reference inside
-        // v2's definition, which InlineCTE flattens back. So each of the 2 v2 sites carries
-        // exactly one (reused) shuffle boundary.
+        // Only v2 converts. v1 keeps one reference inside v2's definition, so InlineCTE
+        // flattens it rather than materializing a shuffle nothing reuses.
         assert(countRepartitions(query) == 2)
       }
     }
   }
 
   test("a reference inside an unreferenced CTE does not trigger materialization") {
-    // `WITH c AS (SELECT id FROM v) SELECT id FROM v WHERE id < 5` reads v once, but the
-    // unreferenced `c` still holds a second occurrence when the rule runs. Materializing
-    // v for it would add a shuffle over a single live reference; instead the converted
-    // definition must stay inlinable, so InlineCTE drops `c` and flattens v's definition.
+    // `c` is never referenced, so it does not count: v keeps one live reference and its
+    // definition must stay inlinable.
     withTempView("v") {
       spark.range(0, 10).select($"id", ($"id" % 10).as("k")).createOrReplaceTempView("v")
       val query = "WITH c AS (SELECT id FROM v) SELECT id FROM v WHERE id < 5"
@@ -412,9 +539,8 @@ class ConvertViewToMaterializedCTEQuerySuite extends QueryTest with SharedSparkS
   }
 
   test("converts a temp view whose body has a WITH clause over a persistent table") {
-    // A SQL view's body is re-analyzed per occurrence, and the re-analysis re-substitutes
-    // the body's inner CTEs, minting a fresh definition id each time. The rule normalizes
-    // inner CTE ids before grouping, so occurrences of such a view still convert.
+    // Re-analysis re-substitutes the body's inner CTEs with fresh definition ids. The
+    // rule normalizes those ids before grouping, so the occurrences still convert.
     withTable("t") {
       sql("CREATE TABLE t USING parquet AS SELECT id, id % 10 AS k FROM range(0, 20)")
       withTempView("v") {
