@@ -292,6 +292,34 @@ class CsvFunctionsSuite extends SharedSparkSession {
     checkAnswer(df, Seq(Row("STRUCT<_c0: DOUBLE, _c1: INT>")))
   }
 
+  test("SPARK-61727: schema_of_csv surfaces MALFORMED_CSV_RECORD for input exceeding " +
+    "maxColumns") {
+    val e = intercept[SparkRuntimeException] {
+      spark.range(1)
+        .select(schema_of_csv(lit("a,b,c"), Map("maxColumns" -> "2").asJava))
+        .collect()
+    }
+    checkError(
+      exception = e,
+      condition = "MALFORMED_CSV_RECORD",
+      parameters = Map("badRecord" -> "a,b,c"),
+      sqlState = "KD000")
+  }
+
+  test("SPARK-61727: schema_of_csv surfaces MALFORMED_CSV_RECORD for input exceeding " +
+    "maxCharsPerColumn") {
+    val e = intercept[SparkRuntimeException] {
+      spark.range(1)
+        .select(schema_of_csv(lit("abcdef"), Map("maxCharsPerColumn" -> "3").asJava))
+        .collect()
+    }
+    checkError(
+      exception = e,
+      condition = "MALFORMED_CSV_RECORD",
+      parameters = Map("badRecord" -> "abcdef"),
+      sqlState = "KD000")
+  }
+
   test("to_csv - struct") {
     val df = Seq(Tuple1(Tuple1(1))).toDF("a")
 
