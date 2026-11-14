@@ -442,12 +442,31 @@ case class Add(
   // scalastyle:on
   override def resultDecimalType(p1: Int, s1: Int, p2: Int, s2: Int): DecimalType = {
     val resultScale = max(s1, s2)
-    val resultPrecision = max(p1 - s1, p2 - s2) + resultScale + 1
+    val resultPrecision = unboundedResultPrecision(p1, s1, p2, s2)
     if (allowPrecisionLoss) {
       DecimalType.adjustPrecisionScale(resultPrecision, resultScale)
     } else {
       DecimalType.bounded(resultPrecision, resultScale)
     }
+  }
+
+  // The result precision before it is bounded by the maximum precision. A result type of this
+  // precision holds every exact sum.
+  private def unboundedResultPrecision(p1: Int, s1: Int, p2: Int, s2: Int): Int =
+    max(p1 - s1, p2 - s2) + max(s1, s2) + 1
+
+  // Whether canonicalization can regroup this step with an enclosing Add of the same evaluation
+  // context. A TRY step returns NULL exactly when its own operation overflows. So does a non-ANSI
+  // decimal step whose result type is bounded by the maximum precision, which can also round under
+  // precision loss. Regrouping such a step can change the result.
+  private def canBeRegrouped: Boolean = evalMode match {
+    case EvalMode.TRY => false
+    case EvalMode.LEGACY if childrenResolved => (left.dataType, right.dataType) match {
+      case (DecimalType.Fixed(p1, s1), DecimalType.Fixed(p2, s2)) =>
+        unboundedResultPrecision(p1, s1, p2, s2) <= DecimalType.MAX_PRECISION
+      case _ => true
+    }
+    case _ => true
   }
 
   override def calendarIntervalMethod: String = if (failOnError) "addExact" else "add"
@@ -481,7 +500,9 @@ case class Add(
 
   override lazy val canonicalized: Expression = {
     val reorderResult = buildCanonicalizedPlan(
-      { case Add(l, r, em) if em == evalContext => Seq(l, r) },
+      // A nested step that cannot be regrouped stays one operand, canonicalized on its own.
+      { case a @ Add(l, r, em) if em == evalContext && ((a eq this) || a.canBeRegrouped) =>
+        Seq(l, r) },
       { case (l: Expression, r: Expression) => Add(l, r, evalContext)},
       Some(evalContext)
     )
@@ -629,12 +650,27 @@ case class Multiply(
   // scalastyle:on
   override def resultDecimalType(p1: Int, s1: Int, p2: Int, s2: Int): DecimalType = {
     val resultScale = s1 + s2
-    val resultPrecision = p1 + p2 + 1
+    val resultPrecision = unboundedResultPrecision(p1, p2)
     if (allowPrecisionLoss) {
       DecimalType.adjustPrecisionScale(resultPrecision, resultScale)
     } else {
       DecimalType.bounded(resultPrecision, resultScale)
     }
+  }
+
+  // The result precision before it is bounded by the maximum precision. A result type of this
+  // precision holds every exact product.
+  private def unboundedResultPrecision(p1: Int, p2: Int): Int = p1 + p2 + 1
+
+  // See Add.canBeRegrouped.
+  private def canBeRegrouped: Boolean = evalMode match {
+    case EvalMode.TRY => false
+    case EvalMode.LEGACY if childrenResolved => (left.dataType, right.dataType) match {
+      case (DecimalType.Fixed(p1, _), DecimalType.Fixed(p2, _)) =>
+        unboundedResultPrecision(p1, p2) <= DecimalType.MAX_PRECISION
+      case _ => true
+    }
+    case _ => true
   }
 
   private lazy val numeric = TypeUtils.getNumeric(dataType, failOnError)
@@ -662,7 +698,9 @@ case class Multiply(
 
   override lazy val canonicalized: Expression = {
     buildCanonicalizedPlan(
-      { case Multiply(l, r, ec) if ec == evalContext => Seq(l, r) },
+      // A nested step that cannot be regrouped stays one operand, canonicalized on its own.
+      { case m @ Multiply(l, r, ec) if ec == evalContext && ((m eq this) || m.canBeRegrouped) =>
+        Seq(l, r) },
       { case (l: Expression, r: Expression) => Multiply(l, r, evalContext) },
       Some(evalContext)
     )

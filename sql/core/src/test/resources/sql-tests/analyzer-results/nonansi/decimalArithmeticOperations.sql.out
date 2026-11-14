@@ -262,6 +262,68 @@ Union false, false
 
 
 -- !query
+create table decimal_chains(a decimal(38,0), b decimal(38,0), c decimal(38,0)) using parquet
+-- !query analysis
+CreateDataSourceTableCommand `spark_catalog`.`default`.`decimal_chains`, false
+
+
+-- !query
+insert into decimal_chains values (99999999999999999999999999999999999999, 1, -5),
+  (10000000000000000000, 10000000000000000000, 0)
+-- !query analysis
+InsertIntoHadoopFsRelationCommand file:[not included in comparison]/{warehouse_dir}/decimal_chains, false, Parquet, [path=file:[not included in comparison]/{warehouse_dir}/decimal_chains], Append, `spark_catalog`.`default`.`decimal_chains`, org.apache.spark.sql.execution.datasources.InMemoryFileIndex(file:[not included in comparison]/{warehouse_dir}/decimal_chains), [a, b, c]
++- Project [col1#x AS a#x, cast(col2#x as decimal(38,0)) AS b#x, cast(col3#x as decimal(38,0)) AS c#x]
+   +- LocalRelation [col1#x, col2#x, col3#x]
+
+
+-- !query
+select (a + b) + c, (a + c) + b from decimal_chains where c = -5
+-- !query analysis
+Project [((a#x + b#x) + c#x) AS ((a + b) + c)#x, ((a#x + c#x) + b#x) AS ((a + c) + b)#x]
++- Filter (c#x = cast(cast(-5 as decimal(1,0)) as decimal(38,0)))
+   +- SubqueryAlias spark_catalog.default.decimal_chains
+      +- Relation spark_catalog.default.decimal_chains[a#x,b#x,c#x] parquet
+
+
+-- !query
+select (a + c) + b from decimal_chains where c = -5 group by (a + b) + c
+-- !query analysis
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
+{
+  "errorClass" : "MISSING_AGGREGATION",
+  "sqlState" : "42803",
+  "messageParameters" : {
+    "expression" : "\"a\"",
+    "expressionAnyValue" : "\"any_value(a)\""
+  }
+}
+
+
+-- !query
+select (a * b) * c, (a * c) * b from decimal_chains where c = 0
+-- !query analysis
+Project [((a#x * b#x) * c#x) AS ((a * b) * c)#x, ((a#x * c#x) * b#x) AS ((a * c) * b)#x]
++- Filter (c#x = cast(cast(0 as decimal(1,0)) as decimal(38,0)))
+   +- SubqueryAlias spark_catalog.default.decimal_chains
+      +- Relation spark_catalog.default.decimal_chains[a#x,b#x,c#x] parquet
+
+
+-- !query
+drop table decimal_chains
+-- !query analysis
+DropTable false, false
++- ResolvedIdentifier V2SessionCatalog(spark_catalog), default.decimal_chains
+
+
+-- !query
+select (x + z) + y from values (1.25, 2.5, 3.75) as t(x, y, z) group by (x + y) + z
+-- !query analysis
+Aggregate [((x#x + y#x) + z#x)], [((x#x + z#x) + y#x) AS ((x + z) + y)#x]
++- SubqueryAlias t
+   +- LocalRelation [x#x, y#x, z#x]
+
+
+-- !query
 set spark.sql.decimalOperations.allowPrecisionLoss=false
 -- !query analysis
 SetCommand (spark.sql.decimalOperations.allowPrecisionLoss,Some(false))

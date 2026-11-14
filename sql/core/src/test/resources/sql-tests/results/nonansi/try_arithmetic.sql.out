@@ -703,3 +703,153 @@ SELECT try_multiply(interval 106751991 day, 2)
 struct<try_multiply(INTERVAL '106751991' DAY, 2):interval day to second>
 -- !query output
 NULL
+
+
+-- !query
+CREATE TABLE try_arithmetic_chains(a INT, b INT) USING parquet
+-- !query schema
+struct<>
+-- !query output
+
+
+
+-- !query
+INSERT INTO try_arithmetic_chains VALUES (2147483647, 1), (-10, 0), (2147483643, 0), (1073741824, 2)
+-- !query schema
+struct<>
+-- !query output
+
+
+
+-- !query
+SELECT try_add(try_add(a, -5), b) FROM try_arithmetic_chains WHERE a = 2147483647
+-- !query schema
+struct<try_add(try_add(a, -5), b):int>
+-- !query output
+2147483643
+
+
+-- !query
+SELECT try_add(try_add(a, -5), b) + 1 FROM try_arithmetic_chains WHERE a = 2147483647
+-- !query schema
+struct<(try_add(try_add(a, -5), b) + 1):int>
+-- !query output
+2147483644
+
+
+-- !query
+SELECT try_add(try_add(a, 2147483647), 1) FROM try_arithmetic_chains WHERE a = -10
+-- !query schema
+struct<try_add(try_add(a, 2147483647), 1):int>
+-- !query output
+2147483638
+
+
+-- !query
+SELECT -5 + try_add(try_add(a, 2147483647), 1) FROM try_arithmetic_chains WHERE a = -10
+-- !query schema
+struct<(-5 + try_add(try_add(a, 2147483647), 1)):int>
+-- !query output
+2147483633
+
+
+-- !query
+SELECT try_add(try_add(a, 5), -3) FROM try_arithmetic_chains WHERE a = 2147483643
+-- !query schema
+struct<try_add(try_add(a, 5), -3):int>
+-- !query output
+NULL
+
+
+-- !query
+SELECT try_multiply(try_multiply(a, -1), b) FROM try_arithmetic_chains WHERE a = 1073741824
+-- !query schema
+struct<try_multiply(try_multiply(a, -1), b):int>
+-- !query output
+-2147483648
+
+
+-- !query
+SELECT try_multiply(try_multiply(a, -1), b) * 3 FROM try_arithmetic_chains WHERE a = 1073741824
+-- !query schema
+struct<(try_multiply(try_multiply(a, -1), b) * 3):int>
+-- !query output
+-2147483648
+
+
+-- !query
+SELECT try_add(try_add(a, 1), 2) FROM try_arithmetic_chains WHERE a = 2147483643
+-- !query schema
+struct<try_add(try_add(a, 1), 2):int>
+-- !query output
+2147483646
+
+
+-- !query
+SELECT try_add(try_add(a, 2), 3) FROM try_arithmetic_chains WHERE a = 2147483643
+-- !query schema
+struct<try_add(try_add(a, 2), 3):int>
+-- !query output
+NULL
+
+
+-- !query
+SELECT try_multiply(try_multiply(a, 2), 3) FROM try_arithmetic_chains WHERE a = -10
+-- !query schema
+struct<try_multiply(try_multiply(a, 2), 3):int>
+-- !query output
+-60
+
+
+-- !query
+SELECT try_multiply(try_multiply(a, 2), 2) FROM try_arithmetic_chains WHERE a = 1073741824
+-- !query schema
+struct<try_multiply(try_multiply(a, 2), 2):int>
+-- !query output
+NULL
+
+
+-- !query
+SELECT a, b, try_add(try_add(try_add(a, b), 2), 3) FROM try_arithmetic_chains ORDER BY a
+-- !query schema
+struct<a:int,b:int,try_add(try_add(try_add(a, b), 2), 3):int>
+-- !query output
+-10	0	-5
+1073741824	2	1073741831
+2147483643	0	NULL
+2147483647	1	NULL
+
+
+-- !query
+SELECT a, b, try_multiply(try_multiply(try_multiply(a, b), 2), 3) FROM try_arithmetic_chains ORDER BY a
+-- !query schema
+struct<a:int,b:int,try_multiply(try_multiply(try_multiply(a, b), 2), 3):int>
+-- !query output
+-10	0	0
+1073741824	2	NULL
+2147483643	0	0
+2147483647	1	NULL
+
+
+-- !query
+SELECT try_add(try_add(a, -5), b), try_add(try_add(a, b), -5) FROM try_arithmetic_chains WHERE a = 2147483647
+-- !query schema
+struct<try_add(try_add(a, -5), b):int,try_add(try_add(a, b), -5):int>
+-- !query output
+2147483643	NULL
+
+
+-- !query
+SELECT try_multiply(try_multiply(a, -1), b), try_multiply(try_multiply(a, b), -1) FROM try_arithmetic_chains WHERE a = 1073741824
+-- !query schema
+struct<try_multiply(try_multiply(a, -1), b):int,try_multiply(try_multiply(a, b), -1):int>
+-- !query output
+-2147483648	NULL
+
+
+-- !query
+DROP TABLE try_arithmetic_chains
+-- !query schema
+struct<>
+-- !query output
+
