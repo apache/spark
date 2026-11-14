@@ -35,7 +35,7 @@ import org.apache.spark.sql.catalyst.ExtendedAnalysisException
 import org.apache.spark.sql.catalyst.expressions.{CodegenObjectFactoryMode, GenericRow, Hex}
 import org.apache.spark.sql.catalyst.expressions.Cast._
 import org.apache.spark.sql.catalyst.expressions.aggregate.{Complete, Partial}
-import org.apache.spark.sql.catalyst.optimizer.{ConvertToLocalRelation, EliminateOffsets, NestedColumnAliasingSuite, RewriteWithExpression}
+import org.apache.spark.sql.catalyst.optimizer.{ConstantFolding, ConvertToLocalRelation, EliminateOffsets, NestedColumnAliasingSuite, RewriteWithExpression}
 import org.apache.spark.sql.catalyst.parser.ParseException
 import org.apache.spark.sql.catalyst.plans.logical.{LocalLimit, Project, RepartitionByExpression, Sort}
 import org.apache.spark.sql.connector.catalog.CatalogManager
@@ -5399,6 +5399,51 @@ class SQLQuerySuite extends SharedSparkSession with AdaptiveSparkPlanHelper
       checkAnswer(
         sql("SELECT * FROM (SELECT id FROM range(3) OFFSET 0) ORDER BY id"),
         Seq(Row(0), Row(1), Row(2)))
+    }
+  }
+
+  test("SPARK-57125: LIMIT and OFFSET succeed when ConstantFolding is in excludedRules") {
+    // LimitPushDown and EliminateOffsets merge limit and offset values. The planner only plans
+    // these operators with integer literals, so the merged values must be folded by those rules
+    // themselves; before the fix this failed with "No plan for LocalLimit (1 + 2)".
+    // A single partition keeps the rows that LIMIT and OFFSET return deterministic.
+    withSQLConf(SQLConf.OPTIMIZER_EXCLUDED_RULES.key -> ConstantFolding.ruleName) {
+      // Collected to the driver -> SpecialLimits -> CollectLimitExec path.
+      checkAnswer(sql("SELECT id FROM range(0, 10, 1, 1) LIMIT 1 OFFSET 2"), Row(2))
+      // Non-terminal LIMIT -> BasicOperators -> LocalLimitExec path.
+      checkAnswer(
+        sql("SELECT count(*) FROM (SELECT id FROM range(0, 10, 1, 1) LIMIT 2 OFFSET 2)"), Row(2))
+      // Stacked OFFSETs merged by EliminateOffsets.
+      checkAnswer(
+        sql("SELECT * FROM (SELECT id FROM range(0, 10, 1, 1) OFFSET 1) LIMIT 3 OFFSET 2"),
+        Seq(Row(3), Row(4), Row(5)))
+    }
+  }
+
+  test("SPARK-61109: LIMIT and OFFSET whose merged value overflows return the right rows") {
+    // The optimizer merges a limit and an offset that the analyzer did not check together, e.g.
+    // after it pushes the limit into a Union branch or removes a Project between them. All rows
+    // are equal, so that the result does not depend on which rows OFFSET skips. The table has no
+    // known row count, so that the limits are not removed before they are merged.
+    withTable("t") {
+      spark.range(3).selectExpr("0 AS id").write.saveAsTable("t")
+      Seq("true", "false").foreach { ansi =>
+        Seq("", ConstantFolding.ruleName).foreach { excludedRules =>
+          withSQLConf(
+              SQLConf.ANSI_ENABLED.key -> ansi,
+              SQLConf.OPTIMIZER_EXCLUDED_RULES.key -> excludedRules) {
+            checkAnswer(
+              sql("(SELECT * FROM t OFFSET 1) UNION ALL (SELECT * FROM t) LIMIT 2147483647"),
+              Seq.fill(5)(Row(0)))
+            checkAnswer(
+              sql("SELECT * FROM (SELECT * FROM t OFFSET 10) LIMIT 2147483647"),
+              Seq.empty)
+            checkAnswer(
+              sql("SELECT * FROM (SELECT * FROM t OFFSET 2147483647) OFFSET 10"),
+              Seq.empty)
+          }
+        }
+      }
     }
   }
 }

@@ -926,6 +926,35 @@ object RemoveNoopUnion extends Rule[LogicalPlan] {
 }
 
 /**
+ * Helpers for the values of [[LocalLimit]], [[GlobalLimit]] and [[Offset]] operators.
+ */
+private[optimizer] object LimitAndOffsetValues {
+  /**
+   * Returns false if both values are integer literals and their sum does not fit in an Int. The
+   * analyzer only rejects such a sum for a [[LocalLimit]] directly over an [[Offset]], but rules
+   * can build that pair later, e.g. by pushing a limit into a [[Union]] branch. Rules that merge
+   * two values must not merge them in that case, since the sum would overflow when it is
+   * evaluated: with ANSI mode on, the query fails, and with it off, the sum wraps to a negative
+   * value and the query returns wrong rows.
+   */
+  def canAdd(left: Expression, right: Expression): Boolean = (left, right) match {
+    case (IntegerLiteral(l), IntegerLiteral(r)) => (l.toLong + r).isValidInt
+    case _ => true
+  }
+
+  /**
+   * Returns the sum of two limit or offset values. If both are integer literals and the sum fits
+   * in an Int, the sum is folded into a literal, so that the operator can be planned without a
+   * later ConstantFolding run: the planner only plans these operators with an IntegerLiteral.
+   * Otherwise an unevaluated `Add` is returned, which a later ConstantFolding run folds.
+   */
+  def add(left: Expression, right: Expression): Expression = (left, right) match {
+    case (IntegerLiteral(l), IntegerLiteral(r)) if (l.toLong + r).isValidInt => Literal(l + r)
+    case _ => Add(left, right)
+  }
+}
+
+/**
  * Pushes down [[LocalLimit]] beneath UNION ALL, OFFSET and joins.
  */
 object LimitPushDown extends Rule[LogicalPlan] {
@@ -1028,8 +1057,10 @@ object LimitPushDown extends Rule[LogicalPlan] {
     case Limit(le @ IntegerLiteral(1), p @ Project(_, a: Aggregate)) if a.groupOnly =>
       Limit(le, p.copy(child = pushLimitOneThroughGroupOnlyAggregate(le, a)))
     // Merge offset value and limit value into LocalLimit and pushes down LocalLimit through Offset.
-    case LocalLimit(le, Offset(oe, grandChild)) =>
-      Offset(oe, LocalLimit(Add(le, oe), grandChild))
+    // If the sum overflows, the LocalLimit stays above the Offset. Pushing a limit that large down
+    // would not reduce the rows read in practice.
+    case LocalLimit(le, Offset(oe, grandChild)) if LimitAndOffsetValues.canAdd(le, oe) =>
+      Offset(oe, LocalLimit(LimitAndOffsetValues.add(le, oe), grandChild))
     // Push down local limit 1 if join type is LeftSemiOrAnti and join condition is empty.
     case j @ Join(_, right, LeftSemiOrAnti(_), None, _) if !right.maxRows.exists(_ <= 1) =>
       j.copy(right = maybePushLocalLimit(Literal(1, IntegerType), right))
@@ -3402,8 +3433,8 @@ object EliminateOffsets extends Rule[LogicalPlan] {
     case Offset(oe, child)
       if oe.foldable && child.maxRows.exists(_ <= oe.eval().asInstanceOf[Int]) =>
       LocalRelation(child.output, data = Seq.empty, isStreaming = child.isStreaming)
-    case Offset(oe1, Offset(oe2, child)) =>
-      Offset(Add(oe1, oe2), child)
+    case Offset(oe1, Offset(oe2, child)) if LimitAndOffsetValues.canAdd(oe1, oe2) =>
+      Offset(LimitAndOffsetValues.add(oe1, oe2), child)
   }
 }
 
