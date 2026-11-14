@@ -41,6 +41,7 @@ import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.internal.connector.SupportsRuntimeCatalystFiltering
 import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.sql.types.{IntegerType, StringType, StructType}
+import org.apache.spark.tags.DataSourceV2Test
 import org.apache.spark.util.Utils
 
 /**
@@ -49,6 +50,7 @@ import org.apache.spark.util.Utils
  * where runtime filters are pushed once as Catalyst expressions instead of connector
  * predicates.
  */
+@DataSourceV2Test
 class DataSourceV2CatalystRuntimeFilterSuite extends SharedSparkSession {
 
   protected val v2Source = classOf[FakeV2ProviderWithCustomSchema].getName

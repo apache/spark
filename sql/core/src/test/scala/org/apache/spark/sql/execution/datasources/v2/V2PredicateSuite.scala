@@ -27,8 +27,10 @@ import org.apache.spark.sql.execution.datasources.v2.V2PredicateSuite.ref
 import org.apache.spark.sql.internal.connector.PredicateUtils
 import org.apache.spark.sql.sources.{AlwaysFalse => V1AlwaysFalse, AlwaysTrue => V1AlwaysTrue, And => V1And, EqualNullSafe, EqualTo, GreaterThan, GreaterThanOrEqual, In, IsNotNull, IsNull, LessThan, LessThanOrEqual, Not => V1Not, Or => V1Or, StringContains, StringEndsWith, StringStartsWith}
 import org.apache.spark.sql.types.{BooleanType, IntegerType, StringType}
+import org.apache.spark.tags.DataSourceV2Test
 import org.apache.spark.unsafe.types.UTF8String
 
+@DataSourceV2Test
 class V2PredicateSuite extends SparkFunSuite {
 
   test("nested columns") {

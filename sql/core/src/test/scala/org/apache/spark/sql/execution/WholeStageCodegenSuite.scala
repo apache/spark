@@ -385,6 +385,69 @@ class WholeStageCodegenSuite extends SharedSparkSession
     assert(df.collect() === Array(Row(0, 1), Row(2, 1), Row(4, 1)))
   }
 
+  /**
+   * The names of the plan nodes serialized with the RDD that a codegen stage adds on top of its
+   * input RDDs: its closure or evaluator factory, with the references of the generated code. That
+   * RDD is serialized into every task binary, so a plan node in it would drag its whole child
+   * subtree along, through the exchanges below the stage.
+   */
+  private def serializedPlanNodes(stage: WholeStageCodegenExec): Seq[String] = {
+    val rdd = stage.execute()
+    // The input RDDs are cached by the plans below, so these are the ones `rdd` reads.
+    val inputs = stage.child.asInstanceOf[CodegenSupport].inputRDDs()
+    val planNodes = mutable.ArrayBuffer[String]()
+    val out = new ObjectOutputStream(OutputStream.nullOutputStream()) {
+      enableReplaceObject(true)
+      override def replaceObject(obj: AnyRef): AnyRef = obj match {
+        // Cut the lineage below the stage: the input RDDs belong to other stages.
+        case r: RDD[_] if inputs.exists(_ eq r) => "input RDD"
+        case p: SparkPlan =>
+          planNodes += p.nodeName
+          p
+        case _ => obj
+      }
+    }
+    try out.writeObject(rdd) finally out.close()
+    planNodes.toSeq
+  }
+
+  test("SPARK-61661: HashAggregate codegen references do not serialize plan nodes") {
+    // The generated code must not reference a plan node: for the final aggregate, it would carry
+    // the whole map-side plan through the exchange (see `serializedPlanNodes`).
+    for {
+      (twoLevel, vectorized, adaptivePartialAgg) <- Seq(
+        (false, false, false),
+        (true, false, false),
+        (true, true, false),
+        (true, false, true))
+      usePartitionEvaluator <- Seq(false, true)
+    } {
+      withSQLConf(
+        SQLConf.USE_PARTITION_EVALUATOR.key -> usePartitionEvaluator.toString,
+        SQLConf.ENABLE_TWOLEVEL_AGG_MAP.key -> twoLevel.toString,
+        SQLConf.ENABLE_VECTORIZED_HASH_MAP.key -> vectorized.toString,
+        SQLConf.ADAPTIVE_PARTIAL_AGGREGATION_ENABLED.key -> adaptivePartialAgg.toString) {
+        val df = spark.range(0, 100, 1, 2)
+          .select(($"id" % 5).as("k"), when($"id" > 50, $"id").otherwise(-$"id").as("v"))
+          .groupBy("k")
+          .agg(sum("v"), avg("v"))
+        val aggStages = df.queryExecution.executedPlan.collect {
+          case s: WholeStageCodegenExec if s.exists(_.isInstanceOf[HashAggregateExec]) => s
+        }
+        // The partial and the final aggregate.
+        assert(aggStages.length == 2)
+        aggStages.foreach { stage =>
+          val planNodes = serializedPlanNodes(stage)
+          assert(planNodes.isEmpty, s"$planNodes referenced by\n${stage.treeString}")
+        }
+        val expected = (0 until 100).map(i => (i % 5, if (i > 50) i else -i))
+          .groupBy(_._1).toSeq.sortBy(_._1)
+          .map { case (k, vs) => Row(k, vs.map(_._2).sum, vs.map(_._2).sum.toDouble / vs.size) }
+        checkAnswer(df, expected)
+      }
+    }
+  }
+
   test("BroadcastHashJoin should be included in WholeStageCodegen") {
     val rdd = spark.sparkContext.makeRDD(Seq(Row(1, "1"), Row(1, "1"), Row(2, "2")))
     val schema = new StructType().add("k", IntegerType).add("v", StringType)
@@ -568,29 +631,8 @@ class WholeStageCodegenSuite extends SharedSparkSession
   }
 
   test("SPARK-61668: ShuffledHashJoin codegen references do not serialize plan nodes") {
-    // The RDD a codegen stage adds on top of its input RDDs, with the references of its generated
-    // code, is serialized into every task binary. A plan node written with it would drag its whole
-    // child subtrees along, through the exchanges below the join.
-    def serializedPlanNodes(stage: WholeStageCodegenExec): Seq[String] = {
-      val rdd = stage.execute()
-      // The input RDDs are cached by the plans below, so these are the ones `rdd` reads.
-      val inputs = stage.child.asInstanceOf[CodegenSupport].inputRDDs()
-      val planNodes = mutable.ArrayBuffer[String]()
-      val out = new ObjectOutputStream(OutputStream.nullOutputStream()) {
-        enableReplaceObject(true)
-        override def replaceObject(obj: AnyRef): AnyRef = obj match {
-          // Cut the lineage below the stage: the input RDDs belong to other stages.
-          case r: RDD[_] if inputs.exists(_ eq r) => "input RDD"
-          case p: SparkPlan =>
-            planNodes += p.nodeName
-            p
-          case _ => obj
-        }
-      }
-      try out.writeObject(rdd) finally out.close()
-      planNodes.toSeq
-    }
-
+    // The generated code must not reference a plan node: it would carry both child subtrees,
+    // through the exchanges below the join (see `serializedPlanNodes`).
     withTempView("l", "r") {
       spark.range(0, 20, 1, 2).select(($"id" % 7).as("k1"), $"id".as("v1"))
         .createOrReplaceTempView("l")
