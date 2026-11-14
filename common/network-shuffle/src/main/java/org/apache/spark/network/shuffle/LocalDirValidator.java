@@ -41,8 +41,8 @@ import org.apache.spark.internal.MDC;
  * {@code yarn.nodemanager.local-dirs}; standalone passes the configured local directories). When
  * app scoping is required, entries must either be below {@code appcache/<appId>} (the YARN
  * layout) or have the standalone form
- * <code>spark-&#42;/executor-&#42;/&lt;url-encoded-appId&gt;[/blockmgr-&#42;]</code> below the root.
- * Both layouts are accepted by either service.
+ * <code>spark-&#42;/executor-&#42;/&lt;url-encoded-appId&gt;[/blockmgr-&#42;]</code>
+ * below the root. Both layouts are accepted by either service.
  * When no roots are configured there is nothing to contain the entries against and they are
  * accepted. An empty array is always allowed.
  */
