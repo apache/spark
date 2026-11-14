@@ -291,9 +291,11 @@ releases imported resources on failures. Input slices need not have zero offsets
 the zero-offset restriction applies to arrays exported to Spark by readers. When Spark
 writes the batches of a native scan without converting them to rows, it copies their
 values as the scan returned them, without the checks of a conversion, such as the
-precision of a decimal. The SDK does validate each incoming batch fully, since the safe
-Arrow accessors rely on it, so a write fails on a string that is not UTF-8, such as one
-cast from binary, which a JVM sink writes through as it is. Check cancellation during
+precision of a decimal. The SDK does validate the layout and values of each incoming batch,
+since the safe Arrow accessors rely on them, so a write fails on a string that is not UTF-8,
+such as one cast from binary, which a JVM sink writes through as it is. It leaves nullability
+to Spark, which accepts nulls under a null parent, even for an element that is not nullable.
+Check cancellation during
 lengthy writes and use I/O timeouts.
 
 Task `commit()` returns a typed, serde-serializable message, the `Message` of the

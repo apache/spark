@@ -19,7 +19,8 @@
 use std::ffi::c_void;
 
 use arrow_array::{ffi, Array, RecordBatch, StructArray};
-use arrow_schema::{DataType, SchemaRef};
+use arrow_data::ArrayData;
+use arrow_schema::{ArrowError, DataType, SchemaRef};
 use serde::Serialize;
 
 use crate::abi::{self, ArrowArray, SparkDsTaskContext};
@@ -258,9 +259,28 @@ pub unsafe fn write_batch(handle: *mut c_void, array: *mut ArrowArray) -> Result
 /// As for write_batch: the array must be Arrow C data of `data_type`.
 unsafe fn import(array: ArrowArray, data_type: &DataType) -> Result<StructArray> {
     let data = unsafe { ffi::from_ffi_and_data_type(array, data_type.clone())? };
-    data.validate_full()
-        .map_err(|e| format!("write input is not valid Arrow data: {e}"))?;
+    validate(&data).map_err(|e| format!("write input is not valid Arrow data: {e}"))?;
     Ok(StructArray::from(data))
+}
+
+/// Validates `data` and its children as `ArrayData::validate_full` does, except that it does not
+/// check nulls against the nullability of fields. Arrow rejects any null in the child of a list
+/// or map whose element is not nullable, even one under a null slot, a layout that Spark accepts
+/// from a native scan: Spark checks nullability itself, masked by the parent, before it passes a
+/// batch to write.
+fn validate(data: &ArrayData) -> std::result::Result<(), ArrowError> {
+    data.validate()?;
+    if let Some(nulls) = data.nulls() {
+        let actual = nulls.len() - nulls.inner().count_set_bits();
+        if actual != nulls.null_count() {
+            return Err(ArrowError::InvalidArgumentError(format!(
+                "null count {} does not match the {actual} nulls of the validity buffer",
+                nulls.null_count()
+            )));
+        }
+    }
+    data.validate_values()?;
+    data.child_data().iter().try_for_each(validate)
 }
 
 /// Commits a task, and returns its serialized message.
@@ -293,7 +313,7 @@ pub unsafe fn close_task(handle: *mut c_void) -> Result<()> {
 mod tests {
     use std::sync::Arc;
 
-    use arrow_array::builder::{ListBuilder, StringBuilder};
+    use arrow_array::builder::{Int64Builder, ListBuilder, StringBuilder};
     use arrow_array::cast::AsArray;
     use arrow_array::ffi::FFI_ArrowArray;
     use arrow_array::types::Int64Type;
@@ -369,5 +389,26 @@ mod tests {
             error.contains("Invalid UTF8 sequence at string index 1"),
             "{error}"
         );
+    }
+
+    #[test]
+    fn import_accepts_nulls_under_null_slots_of_non_nullable_elements() {
+        // [[1], null] of array<bigint not null>, where the null list still spans a null element,
+        // as a native scan may return and Spark accepts.
+        let mut labels = ListBuilder::new(Int64Builder::new());
+        labels.values().append_value(1);
+        labels.append(true);
+        labels.values().append_null();
+        labels.append(false);
+        let labels: ListArray = labels.finish();
+        let element = Arc::new(Field::new("element", DataType::Int64, false));
+        let labels = labels
+            .to_data()
+            .into_builder()
+            .data_type(DataType::List(element));
+        let batch = import_batch(unsafe { labels.build_unchecked() }).unwrap();
+        let labels = batch.column(1).as_list::<i32>();
+        assert!(labels.is_null(1));
+        assert_eq!(labels.value(0).as_primitive::<Int64Type>().value(0), 1);
     }
 }
