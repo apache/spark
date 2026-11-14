@@ -202,6 +202,20 @@ class SizeEstimatorSuite
     assert(estimatedSize <= 4200, "Estimated size " + estimatedSize + " should be less than 4200")
   }
 
+  test("complete traversal counts shared payloads once in large reference arrays") {
+    val blocks = Array.fill(64)(new DummyClass3)
+    val rows = Array.tabulate(1024)(i => new DummyClass4(blocks(i / 16)))
+    val rowArrayBytes = SizeEstimator.estimate(new Array[DummyClass4](rows.length))
+    val rowBytes = SizeEstimator.estimate(new DummyClass4(null))
+    val blockBytes = SizeEstimator.estimate(new DummyClass3)
+    val expected = rowArrayBytes + rows.length * rowBytes + blocks.length * blockBytes
+    assert(SizeEstimator.estimateWithoutSampling(rows) == expected)
+
+    val root = Array(rows, rows)
+    val rootBytes = SizeEstimator.estimate(new Array[Array[DummyClass4]](2))
+    assert(SizeEstimator.estimateWithoutSampling(root) == rootBytes + expected)
+  }
+
   test("32-bit arch") {
     reinitializeSizeEstimator("x86", "true", "false")
     assertResult(40)(SizeEstimator.estimate(DummyString("")))
